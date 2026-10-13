@@ -34,7 +34,7 @@ func Dialector(t testing.TB, fixture string) gorm.Dialector {
 	t.Helper()
 	dsn := os.Getenv("DOCKLET_TEST_POSTGRES_DSN")
 	if dsn == "" {
-		t.Skip("PostgreSQL integration requires DOCKLET_TEST_POSTGRES_DSN")
+		t.Fatal("PostgreSQL integration requires DOCKLET_TEST_POSTGRES_DSN")
 	}
 
 	schemas.Lock()
