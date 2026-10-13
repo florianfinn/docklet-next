@@ -1,5 +1,10 @@
 # Provenance and inventories
 
+The imported Arcane PostgreSQL migration history was removed before release
+and replaced by the [retained-model baseline](database-baseline.md). That
+document records the source revision, removed feature schema and generation
+method as the provenance deviation for those 90 deleted files.
+
 Each adopted file retains existing legal notices and adds a short native
 comment:
 

@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace
+// Deviations: Local module namespace; agent routes exclude manager backup and upgrade operations.
 
 // Package system owns Docker system-wide operations — prune, disk usage, host
 // info, self-upgrade, system backups — and the HTTP surface that exposes them.
@@ -68,6 +68,19 @@ func (m *Module) RegisterRoutes(api huma.API, appCtx handlerutil.ActivityAppCont
 	prune.RegisterRoutes(api, prune.NewHandler(service.prune, appCtx.Context()))
 	upgrade.RegisterRoutes(api, upgrade.NewHandler(service.upgrade, m.environmentService, m.cfg, appCtx.Context()))
 	backup.RegisterRoutes(api, backup.NewHandler(service.backup, m.activityService, appCtx.Context()))
+}
+
+// RegisterAgentRoutes exposes Docker host operations without hub backup or upgrade control.
+func (m *Module) RegisterAgentRoutes(api huma.API, appCtx handlerutil.ActivityAppContext) {
+	if m == nil {
+		m = &Module{}
+	}
+	service := m.service
+	if service == nil {
+		service = &SystemService{}
+	}
+	RegisterSystem(api, NewHandler(m.dockerService, m.service, appCtx.Context()))
+	prune.RegisterRoutes(api, prune.NewHandler(service.prune, appCtx.Context()))
 }
 
 // RegisterSystem registers system management endpoints using Huma.

@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace
+// Deviations: Local module namespace; Removed downgrade setting test for forward-only migrations.
 
 package config
 
@@ -340,25 +340,6 @@ func TestConfig_OptionsToLower(t *testing.T) {
 
 		cfg := Load()
 		assert.Equal(t, "disabled", cfg.EdgeMTLSMode)
-	})
-}
-
-func TestConfig_AllowDowngrade(t *testing.T) {
-	origAllowDowngrade := os.Getenv("ALLOW_DOWNGRADE")
-	defer restoreEnv("ALLOW_DOWNGRADE", origAllowDowngrade)
-
-	t.Run("defaults to false", func(t *testing.T) {
-		unsetEnv(t, "ALLOW_DOWNGRADE")
-
-		cfg := Load()
-		assert.False(t, cfg.AllowDowngrade)
-	})
-
-	t.Run("loads explicit true from env", func(t *testing.T) {
-		setEnv(t, "ALLOW_DOWNGRADE", "true")
-
-		cfg := Load()
-		assert.True(t, cfg.AllowDowngrade)
 	})
 }
 

@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace
+// Deviations: Local module namespace; Uses forward-only database initialization.
 
 package admin
 
@@ -65,9 +65,7 @@ func runResetPasswordCommandInternal(cmd *cobra.Command, _ []string) error {
 		return errors.New("username cannot be empty")
 	}
 
-	db, err := database.Initialize(cmd.Context(), cfg.DatabaseURL, database.MigrationOptions{
-		AllowDowngrade: cfg.AllowDowngrade,
-	})
+	db, err := database.Initialize(cmd.Context(), cfg.DatabaseURL, database.MigrationOptions{})
 	if err != nil {
 		return fmt.Errorf("failed to initialize database: %w", err)
 	}

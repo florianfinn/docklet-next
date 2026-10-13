@@ -8,3 +8,4 @@ set -eu
 cd "$(git rev-parse --show-toplevel)"
 node scripts/check-publication.mjs --staged
 node scripts/check-structure.mjs --staged
+node scripts/check-migrations.mjs --staged

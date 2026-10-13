@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; functional cut: removed OIDC and passkeys.
+// Deviations: Local module namespace; functional cut: removed OIDC and passkeys.; Service-account filter removed with the federated account cut.
 
 package role
 
@@ -499,8 +499,7 @@ func (s *RoleService) countEffectiveGlobalAdminsInternal(ctx context.Context, tx
 		Table("users AS u").
 		Select("u.id AS user_id, r.permissions AS permissions").
 		Joins("INNER JOIN user_role_assignments ura ON ura.user_id = u.id AND ura.environment_id IS NULL").
-		Joins("INNER JOIN roles r ON r.id = ura.role_id").
-		Where("u.is_service_account = ?", false)
+		Joins("INNER JOIN roles r ON r.id = ura.role_id")
 	if strings.TrimSpace(excludedUserID) != "" {
 		query = query.Where("u.id <> ?", excludedUserID)
 	}

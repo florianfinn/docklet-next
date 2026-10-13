@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace
+// Deviations: Local module namespace; Edge agent mode excludes the manager tunnel listener.
 
 package bootstrap
 
@@ -156,7 +156,7 @@ func configureTunnelServerInternal(appCtx context.Context, cfg *config.Config, r
 	httpHandler := router
 	var grpcServer *grpc.Server
 
-	if !cfg.AgentMode && tunnelServer != nil {
+	if !cfg.AgentMode && !cfg.EdgeAgent && tunnelServer != nil {
 		//nolint:contextcheck // Stream interceptors receive request-scoped context from grpc.ServerStream.
 		grpcServer = grpc.NewServer(tunnelServer.GRPCServerOptions()...)
 		tunnelpb.RegisterTunnelServiceServer(grpcServer, tunnelServer)

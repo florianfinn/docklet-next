@@ -4,7 +4,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; functional cut: removed template catalogue; functional cut: removed central variables and .env.global; functional cut: removed OIDC and passkeys; functional cut: removed SQLite runtime and migrations; functional cut: PostgreSQL integration test fixture.
+// Deviations: Local module namespace; functional cut: removed template catalogue; functional cut: removed central variables and .env.global; functional cut: removed OIDC and passkeys; functional cut: removed SQLite runtime and migrations; functional cut: PostgreSQL integration test fixture.; Service-account fixture removed with the federated account cut.
 
 package role_test
 
@@ -121,7 +121,7 @@ func TestEffectiveGlobalAdminCountIncludesCustomAllPermissionsRole(t *testing.T)
 	require.ErrorIs(t, err, common.ErrNoGlobalAdminRemains)
 }
 
-func TestEffectiveGlobalAdminCountIgnoresEnvScopedAndServiceAccounts(t *testing.T) {
+func TestEffectiveGlobalAdminCountIgnoresEnvScopedAssignments(t *testing.T) {
 	ctx := t.Context()
 	userSvc, roleSvc := setupUserAndRoleServices(t)
 	customRole, err := roleSvc.CreateRole(ctx, "Custom Admin", nil, authz.AllPermissions())
@@ -131,12 +131,6 @@ func TestEffectiveGlobalAdminCountIgnoresEnvScopedAndServiceAccounts(t *testing.
 
 	globalAdmin := createTestUser(t, userSvc, "global-admin", "global-admin")
 	envScopedAdmin := createTestUser(t, userSvc, "env-scoped-admin", "env-scoped-admin")
-	serviceAdmin := &user.User{
-		ID:               "service-admin",
-		Username:         "service-admin",
-		IsServiceAccount: true,
-	}
-	require.NoError(t, userSvc.WithContext(ctx).Create(serviceAdmin).Error)
 
 	require.NoError(t, roleSvc.SetUserAssignments(ctx, globalAdmin.ID, []role.UserRoleAssignment{
 		{RoleID: customRole.ID, EnvironmentID: nil},
@@ -144,10 +138,6 @@ func TestEffectiveGlobalAdminCountIgnoresEnvScopedAndServiceAccounts(t *testing.
 	require.NoError(t, roleSvc.SetUserAssignments(ctx, envScopedAdmin.ID, []role.UserRoleAssignment{
 		{RoleID: customRole.ID, EnvironmentID: &envID},
 	}))
-	require.NoError(t, roleSvc.SetUserAssignments(ctx, serviceAdmin.ID, []role.UserRoleAssignment{
-		{RoleID: customRole.ID, EnvironmentID: nil},
-	}))
-
 	count, err := roleSvc.CountGlobalAdminsExcludingUser(ctx, "")
 	require.NoError(t, err)
 	require.Equal(t, 1, count)

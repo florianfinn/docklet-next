@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; functional cut: removed OIDC and passkeys.
+// Deviations: Local module namespace; functional cut: removed OIDC and passkeys.; Service-account filter removed with the federated account cut.
 
 package user
 
@@ -515,9 +515,7 @@ func (s *UserService) DeleteUser(ctx context.Context, id string, actorPerms *aut
 
 func (s *UserService) ListUsersPaginated(ctx context.Context, params pagination.QueryParams) ([]user.User, pagination.Response, error) {
 	var users []User
-	query := s.db.WithContext(ctx).
-		Model(&User{}).
-		Where("is_service_account = ?", false)
+	query := s.db.WithContext(ctx).Model(&User{})
 
 	if term := strings.TrimSpace(params.Search); term != "" {
 		searchPattern := "%" + term + "%"

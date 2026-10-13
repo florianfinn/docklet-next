@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; functional cut: removed Svelte-specific metadata or asset paths; functional cut: removed federated credentials; functional cut: removed Swarm; functional cut: removed OIDC and passkeys.
+// Deviations: Local module namespace; functional cut: removed Svelte-specific metadata or asset paths; functional cut: removed federated credentials; functional cut: removed Swarm; functional cut: removed OIDC and passkeys.; Agent Echo routes omit hub-only ingress, UI and test endpoints.
 
 package bootstrap
 
@@ -243,18 +243,20 @@ func newRouter(p RouterParams) (*echo.Echo, *edge.TunnelServer) {
 		return env.ApiUrl, env.AccessToken, env.Enabled, nil
 	}
 
-	// Register public webhook trigger endpoint before auth middleware (token in URL is the sole auth)
-	api.RegisterWebhookTrigger(apiGroup, deps.Webhook.Service(), handlerAppCtx)
-	deps.Event.RegisterAgentRoutes(apiGroup, func(ctx context.Context, token string) (string, error) {
-		env, err := deps.Environment.Service().ResolveEnvironmentByAccessToken(ctx, token)
-		if err != nil {
-			return "", err
-		}
-		if env == nil || !env.Enabled || env.ID == "0" {
-			return "", nil
-		}
-		return env.ID, nil
-	})
+	if !cfg.AgentMode && !cfg.EdgeAgent {
+		// These token ingress endpoints belong to the hub only.
+		api.RegisterWebhookTrigger(apiGroup, deps.Webhook.Service(), handlerAppCtx)
+		deps.Event.RegisterAgentRoutes(apiGroup, func(ctx context.Context, token string) (string, error) {
+			env, err := deps.Environment.Service().ResolveEnvironmentByAccessToken(ctx, token)
+			if err != nil {
+				return "", err
+			}
+			if env == nil || !env.Enabled || env.ID == "0" {
+				return "", nil
+			}
+			return env.ID, nil
+		})
+	}
 
 	permissionMatcher := authz.NewPermissionMatcher()
 
@@ -278,8 +280,10 @@ func newRouter(p RouterParams) (*echo.Echo, *edge.TunnelServer) {
 	permissionMatcher.CollectFromHumaAPI(humaAPI)
 	ws.AddProxiedPermissions(permissionMatcher)
 
-	for _, register := range registerBuildableRoutes {
-		register(apiGroup, deps)
+	if !cfg.AgentMode && !cfg.EdgeAgent {
+		for _, register := range registerBuildableRoutes {
+			register(apiGroup, deps)
+		}
 	}
 
 	// Remaining echo handlers (WebSocket/streaming)
@@ -288,11 +292,11 @@ func newRouter(p RouterParams) (*echo.Echo, *edge.TunnelServer) {
 	// Register edge tunnel endpoint for manager to accept agent connections
 	// This is only registered when NOT in agent mode (i.e., running as manager)
 	var tunnelServer *edge.TunnelServer
-	if !cfg.AgentMode {
+	if !cfg.AgentMode && !cfg.EdgeAgent {
 		tunnelServer = registerEdgeTunnelRoutes(ctx, p.Lifecycle, cfg, apiGroup, deps.Environment.Service(), deps.Event.Service(), deps.Notification.Service(), p.TunnelRegistry)
 	}
 
-	if cfg.Environment != "production" {
+	if !cfg.AgentMode && !cfg.EdgeAgent && cfg.Environment != "production" {
 		for _, registerFunc := range registerPlaywrightRoutes {
 			registerFunc(apiGroup, deps)
 		}
@@ -307,12 +311,14 @@ func newRouter(p RouterParams) (*echo.Echo, *edge.TunnelServer) {
 	apiGroup.RouteNotFound("", apiNotFound)
 	apiGroup.RouteNotFound("/*", apiNotFound)
 
-	//nolint:staticcheck,nolintlint // SA4023 only under exclude_frontend: the stub always returns ErrFrontendNotIncluded
-	if err := frontend.RegisterFrontend(e); err != nil {
-		if errors.Is(err, frontend.ErrFrontendNotIncluded) {
-			slog.DebugContext(ctx, "Frontend not included in this build; skipping frontend registration")
-		} else {
-			slog.ErrorContext(ctx, "Failed to register frontend", "error", err)
+	if !cfg.AgentMode && !cfg.EdgeAgent {
+		//nolint:staticcheck,nolintlint // SA4023 only under exclude_frontend: the stub always returns ErrFrontendNotIncluded
+		if err := frontend.RegisterFrontend(e); err != nil {
+			if errors.Is(err, frontend.ErrFrontendNotIncluded) {
+				slog.DebugContext(ctx, "Frontend not included in this build; skipping frontend registration")
+			} else {
+				slog.ErrorContext(ctx, "Failed to register frontend", "error", err)
+			}
 		}
 	}
 

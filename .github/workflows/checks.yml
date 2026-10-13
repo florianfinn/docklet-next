@@ -2,7 +2,7 @@
 # Revision: a4484c910bb5d6a8f8df97b4f23f4ee5e6359081
 # Retrieved: 2026-10-13
 # License: Apache-2.0
-# Deviations: Root, Go and web checks, pinned toolchains, baseline comparison and Docker isolation.
+# Deviations: Root, Go and web checks, pinned toolchains, baseline comparison, Docker isolation and PostgreSQL integration gate.
 name: Repository checks
 on:
   pull_request:
@@ -12,12 +12,11 @@ on:
 permissions:
   contents: read
 jobs:
-  checks:
-    name: checks
-    timeout-minutes: 15
+  scope:
     runs-on: ubuntu-24.04
-    env:
-      CHECK_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+    timeout-minutes: 5
+    outputs:
+      value: ${{ steps.detect.outputs.scope }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -26,21 +25,81 @@ jobs:
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version: 24
-      - run: node scripts/setup-git-hooks.mjs
-      - id: scope
+      - id: detect
         run: echo "scope=$(node scripts/change-scope.mjs --ci)" >> "$GITHUB_OUTPUT"
+  postgres-integration:
+    needs: scope
+    if: needs.scope.outputs.value != 'text'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    env:
+      GOFLAGS: -p=2
+      VITEST_MAX_WORKERS: 2
+      DATABASE_URL: postgres://docklet:test-only@127.0.0.1:5432/docklet?sslmode=disable
+      DOCKLET_TEST_POSTGRES_DSN: postgres://docklet:test-only@127.0.0.1:5432/docklet?sslmode=disable
+      ARCANE_TEST_POSTGRES_DSN: postgres://docklet:test-only@127.0.0.1:5432/docklet?sslmode=disable
+    services:
+      postgres:
+        image: postgres:18.6-alpine@sha256:77f585114c32fbca283dc835b0596f4e52b51b4c6662d7810b2f4084f60a1873
+        env:
+          POSTGRES_DB: docklet
+          POSTGRES_USER: docklet
+          POSTGRES_PASSWORD: test-only
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U docklet -d docklet"
+          --health-interval 5s --health-timeout 5s --health-retries 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: backend/go.mod
+          cache-dependency-path: |
+            backend/go.sum
+            cli/go.sum
+            types/go.sum
+            third_party/arcane/**/go.sum
+            third_party/francis/go.sum
+      - name: Run PostgreSQL integration tests
+        working-directory: backend
+        run: go test -tags=postgres_integration ./...
+  checks:
+    name: checks
+    needs: [scope, postgres-integration]
+    if: always()
+    timeout-minutes: 15
+    runs-on: ubuntu-24.04
+    env:
+      CHECK_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+      GOFLAGS: -p=2
+      VITEST_MAX_WORKERS: 2
+    steps:
+      - name: Require successful PostgreSQL integration
+        if: needs.scope.outputs.value != 'text'
+        run: test '${{ needs.postgres-integration.result }}' = success
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 24
+      - run: node scripts/setup-git-hooks.mjs
       - run: node scripts/check-publication.mjs --history
-      - if: steps.scope.outputs.scope == 'text'
+      - if: needs.scope.outputs.value == 'text'
         run: node scripts/change-scope.mjs --run-text-tests
       - name: Enable pinned pnpm
-        if: steps.scope.outputs.scope != 'text'
+        if: needs.scope.outputs.value != 'text'
         run: |
           corepack enable
           corepack prepare pnpm@11.21.0 --activate
       - name: Install frozen web dependencies
-        if: steps.scope.outputs.scope != 'text'
+        if: needs.scope.outputs.value != 'text'
         run: pnpm --dir web install --frozen-lockfile
-      - if: steps.scope.outputs.scope != 'text'
+      - if: needs.scope.outputs.value != 'text'
         uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version-file: backend/go.mod
@@ -50,7 +109,7 @@ jobs:
             types/go.sum
             third_party/arcane/**/go.sum
             third_party/francis/go.sum
-      - if: steps.scope.outputs.scope != 'text'
+      - if: needs.scope.outputs.value != 'text'
         name: Isolate checks from Docker daemons
         run: |
           sudo systemctl stop docker.service docker.socket containerd.service
@@ -58,9 +117,9 @@ jobs:
           unset DOCKER_HOST
           test ! -S /var/run/docker.sock
           test ! -S /run/docker.sock
-      - if: steps.scope.outputs.scope != 'text'
+      - if: needs.scope.outputs.value != 'text'
         run: pnpm run lint
-      - if: steps.scope.outputs.scope != 'text'
+      - if: needs.scope.outputs.value != 'text'
         run: pnpm run test
-      - if: steps.scope.outputs.scope != 'text'
+      - if: needs.scope.outputs.value != 'text'
         run: pnpm run build

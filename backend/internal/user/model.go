@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; functional cut: removed OIDC and passkeys.
+// Deviations: Local module namespace; functional cut: removed OIDC, passkeys and federated accounts; PostgreSQL avatar storage.
 
 package user
 
@@ -27,7 +27,6 @@ type User struct {
 	FontSize               *int             `json:"fontSize,omitempty" gorm:"column:font_size"`
 	Preferences            user.Preferences `json:"preferences" gorm:"column:preferences;serializer:json"`
 	RequiresPasswordChange bool             `json:"requiresPasswordChange" gorm:"column:requires_password_change"`
-	IsServiceAccount       bool             `json:"isServiceAccount" gorm:"column:is_service_account;not null;default:false"`
 
 	// Avatar metadata
 	HasAvatar bool `json:"hasAvatar" gorm:"column:has_avatar;not null;default:false"`
@@ -42,7 +41,7 @@ func (User) TableName() string {
 // loading up to 2MB of binary data on every user query.
 type UserAvatar struct {
 	UserID   string `json:"userId" gorm:"column:user_id;primaryKey"`
-	Data     []byte `json:"-" gorm:"column:data;type:blob;not null"`
+	Data     []byte `json:"-" gorm:"column:data;type:bytea;not null"`
 	MimeType string `json:"mimeType" gorm:"column:mime_type;not null"`
 }
 

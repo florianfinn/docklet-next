@@ -1,8 +1,8 @@
 # Contributing
 
-Use Node 24 and pnpm 11.21.0 (pinned in package.json). M0 has no dependencies;
-no install is needed to run its checks. Go requirements will come from go.mod
-when the core arrives in M1. The web package follows in M2.
+Use Node 24, pnpm 11.21.0 (pinned in package.json), and the Go version in
+backend/go.mod. The default test suite needs no database, Docker socket or
+running agent.
 
 ```sh
 node scripts/setup-git-hooks.mjs
@@ -14,8 +14,29 @@ pnpm run build
 
 The setup sets core.hooksPath to .githooks and fails on a conflicting local
 setting. Source archives without Git may skip hook setup, but verification runs
-in a checkout. build currently verifies the foundation; it produces no product.
-Root commands have module integration points for future Go and web commands.
+in a checkout. The build compiles Go commands and the web bundle. The root
+commands run Go and web checks.
+
+PostgreSQL integration tests need a dedicated PostgreSQL 18 test service. Use
+its test-only connection URL as `DATABASE_URL`, `DOCKLET_TEST_POSTGRES_DSN`
+and `ARCANE_TEST_POSTGRES_DSN`; the tests create and drop
+temporary databases and may modify the configured test database. If Go runs
+inside a toolchain container, forward `DATABASE_URL` into that container.
+Run the tagged suite serially relative to other test suites and cap Go package
+parallelism on constrained machines:
+
+```sh
+cd backend
+GOFLAGS=-p=2 VITEST_MAX_WORKERS=2 \
+  DATABASE_URL='postgres://docklet:test-only@127.0.0.1:5432/docklet?sslmode=disable' \
+  DOCKLET_TEST_POSTGRES_DSN='postgres://docklet:test-only@127.0.0.1:5432/docklet?sslmode=disable' \
+  ARCANE_TEST_POSTGRES_DSN='postgres://docklet:test-only@127.0.0.1:5432/docklet?sslmode=disable' \
+  go test -tags=postgres_integration ./...
+```
+
+CI runs this suite in a separate required gate against a pinned PostgreSQL 18
+service. The [baseline design](docs/design/database-baseline.md) describes the
+fresh database and model comparison tests.
 
 Read [AGENTS.md](AGENTS.md) and [review-workflow.md](docs/design/review-workflow.md)
 before work. Follow module ownership and the ready gate. Keep changes local until
