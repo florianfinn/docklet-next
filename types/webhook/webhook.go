@@ -12,7 +12,7 @@ import "time"
 type CreateInput struct {
 	Name       string `json:"name" minLength:"1" maxLength:"255" doc:"Human-readable name for this webhook" unorm:"nfc" trim:"true"`
 	TargetType string `json:"targetType" doc:"Resource type this webhook targets: 'container', 'project', or 'updater'" enum:"container,project,updater"`
-	ActionType string `json:"actionType" doc:"Action to run for the selected target type. Supported values depend on targetType." enum:"update,start,stop,restart,redeploy,up,down,run,sync"`
+	ActionType string `json:"actionType" doc:"Action to run for the selected target type. Supported values depend on targetType." enum:"update,start,stop,restart,redeploy,up,down,run"`
 	TargetID   string `json:"targetId" doc:"Container ID, project ID,  to target. Leave empty for 'updater' webhooks."`
 }
 

@@ -1668,15 +1668,6 @@ func (s *ProjectService) enrichComposeDetails(ctx context.Context, proj *Project
 	resp.HasBuildDirective = resp.HasBuildDirective || hasBuildDirective
 }
 
-func (s *ProjectService) CountServicesFromCompose(ctx context.Context, p Project) (int, error) {
-	proj, _, err := s.loadComposeProjectForProject(ctx, &p, nil)
-	if err != nil {
-		return 0, err
-	}
-
-	return len(proj.Services), nil
-}
-
 func (s *ProjectService) ListAllProjects(ctx context.Context) ([]Project, error) {
 	var items []Project
 	if err := s.db.WithContext(ctx).Find(&items).Error; err != nil {

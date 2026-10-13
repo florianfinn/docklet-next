@@ -276,7 +276,6 @@ func DefaultSettingsConfig() *Settings {
 		ImagePatchAllPlatforms: SettingVariable{Value: "false"},
 		ImageAutoPatchEnabled:  SettingVariable{Value: "false"},
 		ImageAutoPatchInterval: SettingVariable{Value: "0 0 3 * * *"},
-		GitOperationTimeout:    SettingVariable{Value: "300"},
 		HTTPClientTimeout:      SettingVariable{Value: "30"},
 		RegistryTimeout:        SettingVariable{Value: "30"},
 		RegistryTagTimeout:     SettingVariable{Value: "120"},

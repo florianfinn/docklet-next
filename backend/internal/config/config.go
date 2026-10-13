@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; functional cut: removed upstream analytics heartbeat and APNS mobile push and Svelte-specific metadata or asset paths; functional cut: removed template catalogue; functional cut: removed OIDC and passkeys; functional cut: removed SQLite runtime and migrations.; Removed downgrade runtime setting for forward-only migrations.
+// Deviations: Local module namespace; functional cut: removed upstream analytics heartbeat, APNS, Svelte assets, templates, OIDC, passkeys, SQLite and GitOps work directory; removed downgrade setting for forward-only migrations.
 
 package config
 
@@ -90,7 +90,6 @@ type Config struct {
 	TrustedProxies    string      `env:"TRUSTED_PROXIES" default:""`
 	FilePerm          os.FileMode `env:"FILE_PERM" default:"0644"`
 	DirPerm           os.FileMode `env:"DIR_PERM" default:"0755"`
-	GitWorkDir        string      `env:"GIT_WORK_DIR" default:"data/git"`
 	HTTPClientTimeout int         `env:"HTTP_CLIENT_TIMEOUT" default:"0"`
 	BackupVolumeName  string      `env:"ARCANE_BACKUP_VOLUME_NAME" default:"arcane-backups"`
 	HTTPProxy         string      `env:"HTTP_PROXY" default:""`
@@ -377,14 +376,6 @@ func setFieldValueInternal(field reflect.Value, fieldType reflect.StructField, v
 			field.Set(reflect.ValueOf(os.FileMode(i)))
 		}
 	}
-}
-
-func (a AppEnvironment) IsProdEnvironment() bool {
-	return a == AppEnvironmentProduction
-}
-
-func (a AppEnvironment) IsTestEnvironment() bool {
-	return a == AppEnvironmentTest
 }
 
 // ListenAddr returns the effective address for the HTTP server to bind to.

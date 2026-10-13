@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace
+// Deviations: Local module namespace; removed unused activity ID reader after snapshot cut.
 
 package activity
 
@@ -38,14 +38,6 @@ const (
 var ErrCanceled = errors.New("activity cancelled by user")
 
 type handlerActivityIDContextKey struct{}
-
-func IDFromContext(ctx context.Context) string {
-	if ctx == nil {
-		return ""
-	}
-	activityID, _ := ctx.Value(handlerActivityIDContextKey{}).(string)
-	return strings.TrimSpace(activityID)
-}
 
 // CancelledByContext reports whether ctx was cancelled by a user cancellation
 // request (as opposed to app shutdown or a deadline). Callers that finalize an

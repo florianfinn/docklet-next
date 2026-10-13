@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: None
+// Deviations: Functional cut: removed Git repository timeout default.
 
 package timeouts
 
@@ -16,7 +16,6 @@ const (
 	DefaultDockerAPI       = 30 * time.Second
 	DefaultDockerImagePull = 10 * time.Minute
 	DefaultTrivyScan       = 15 * time.Minute
-	DefaultGitOperation    = 5 * time.Minute
 	DefaultHTTPClient      = 30 * time.Second
 	DefaultRegistry        = 30 * time.Second
 	DefaultRegistryTags    = 120 * time.Second

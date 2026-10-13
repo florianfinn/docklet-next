@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: functional cut: removed standalone build workshop.
+// Deviations: Functional cut: removed standalone build workshop and GitOps timeout key.
 
 package libarcane
 
@@ -44,7 +44,6 @@ var timeoutSettingKeys = []string{
 	"dockerApiTimeout",
 	"dockerImagePullTimeout",
 	"trivyScanTimeout",
-	"gitOperationTimeout",
 	"httpClientTimeout",
 	"registryTimeout",
 	"registryTagTimeout",

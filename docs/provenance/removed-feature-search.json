@@ -7,10 +7,13 @@
     {"feature": "analytics heartbeat", "pattern": "AnalyticsJob|analytics-heartbeat|ANALYTICS_DISABLED", "expectedMatches": []},
     {"feature": "APNS", "pattern": "Apns|APNS|/apns", "expectedMatches": []},
     {"feature": "Svelte", "pattern": "Svelte|/_app", "expectedMatches": []},
-    {"feature": "template catalogue", "pattern": "PermTemplates|TEMPLATES_DIRECTORY|/api/templates|TemplateService|template\\.NewModule", "expectedMatches": []},
+    {"feature": "template catalogue", "pattern": "PermTemplates|TEMPLATES_DIRECTORY|/api/templates|TemplateService|template\\.NewModule|ErrTemplateNotFound", "expectedMatches": []},
     {"feature": "federated credentials", "pattern": "federated", "expectedMatches": []},
     {"feature": "central variables", "pattern": "VariableService|PermVariables|GlobalEnvFileName|GlobalVariable|\\.env\\.global|/api/variables", "expectedMatches": []},
     {"feature": "GitOps and repositories", "pattern": "GitOps|GitRepository|git_sync|\\.env\\.git|/git-repositories", "expectedMatches": []},
+    {"feature": "GitOps settings and environment reads", "pattern": "gitOperationTimeout|GitOperationTimeout|GIT_OPERATION_TIMEOUT|GIT_WORK_DIR|GitWorkDir|DefaultGitOperation|ErrRedeployAfterSyncFailed|CountServicesFromCompose|\\bCurrentActor\\b", "expectedMatches": []},
+    {"feature": "orphaned helpers from removed features", "pattern": "\\b(IDFromContext|IsProdEnvironment|IsTestEnvironment)\\b", "expectedMatches": []},
+    {"feature": "GitOps webhook enum", "pattern": "WebhookActionTypeSync|enum:\"[^\"]*sync", "expectedMatches": []},
     {"feature": "Swarm", "pattern": "SwarmService|PermSwarm|/swarm|swarm\\.NewModule|SwarmMode|swarmEnabled", "expectedMatches": []},
     {"feature": "S3 destinations", "pattern": "S3Backup|S3Destination|S3Endpoint|s3_endpoint|S3_ACCESS|/s3", "expectedMatches": []},
     {"feature": "standalone build workshop", "pattern": "BuildWorkspace|buildsDirectory|ImageBuild|BuildRecord|PermImagesBuild|/images/build", "expectedMatches": []},
@@ -20,7 +23,7 @@
   "environment": {
     "scope": [".env.example"],
     "queries": [
-      {"feature": "removed configuration keys", "pattern": "ANALYTICS_DISABLED|APNS|TEMPLATES_DIRECTORY|GITOPS|SWARM|S3_|OIDC|PASSKEY|WEBAUTHN|MFA|SQLITE|\\.env\\.global|\\.env\\.git", "expectedMatches": []}
+      {"feature": "removed configuration keys", "pattern": "ANALYTICS_DISABLED|APNS|TEMPLATES_DIRECTORY|GITOPS|SWARM|S3_|OIDC|PASSKEY|WEBAUTHN|MFA|SQLITE|\\.env\\.global|\\.env\\.git|gitOperationTimeout|GIT_OPERATION_TIMEOUT|GIT_WORK_DIR", "expectedMatches": []}
     ]
   }
 }
