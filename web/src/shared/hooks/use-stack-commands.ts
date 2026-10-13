@@ -2,10 +2,11 @@ import { useQueryClient } from "@tanstack/react-query";
 import { useCallback } from "react";
 import { toast } from "sonner";
 
-import type { FailAt, StackCommand } from "@/data/adapter";
+import type { StackCommand } from "@/data/adapter";
 import { isRunBusy } from "@/data/run-gate";
 import { useAdapter } from "@/data/use-adapter";
 import { queryKeys } from "@/data/query-keys";
+import { queueDemoFailure, type DemoFailure } from "@/runtime";
 import type { AutoUpdatePolicy, Stack, StackDetail } from "@/domain/model";
 import { useDemoText } from "@/shared/hooks/use-demo-text";
 
@@ -50,7 +51,10 @@ export function useStackCommands() {
   );
 
   return {
-    run: (stackId: string, command: StackCommand, failAt?: FailAt) => guard(() => adapter.runStackCommand(stackId, command, failAt)),
+    run: (stackId: string, command: StackCommand, failAt?: DemoFailure["at"]) => guard(() => {
+      if (failAt) queueDemoFailure(adapter, { operation: "runStackCommand", at: failAt });
+      return adapter.runStackCommand(stackId, command);
+    }),
     installUpdates: (stackId: string, services?: string[]) => guard(() => adapter.installStackUpdates(stackId, services)),
     checkUpdates: (stackId: string) => guard(() => adapter.checkUpdates({ stackId })),
     restartService: (stackId: string, service: string) => guard(() => adapter.restartService(stackId, service)),

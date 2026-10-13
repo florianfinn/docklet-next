@@ -1,4 +1,5 @@
 import type { ActionRun } from "@/domain/model";
+import type { CodedActionRun, MessageCode } from "./message-code";
 
 import type { DockletAdapter } from "./adapter";
 
@@ -17,7 +18,7 @@ export interface GateNotice {
   key: string;
   /** Run that answers the start (inflight, fresh) or that blocks it (busy). */
   runId?: string;
-  title?: string;
+  title?: MessageCode;
   finishedAt?: string;
   /** Fresh results only: starts the same check once more, bypassing freshness. */
   retry?: () => Promise<unknown>;
@@ -119,7 +120,7 @@ type Status = ActionRun["status"] | "pending";
 const active = (s: Status) => s === "pending" || s === "running";
 
 /** Target scopes of a run, also for runs started outside the gate (schedules, other tabs). */
-function scopesOf(run: ActionRun): string[] {
+function scopesOf(run: CodedActionRun): string[] {
   if (run.kind === "check-updates" || run.kind === "scan") return [];
   return [run.stackId && `stack:${run.stackId}`, run.containerId && `container:${run.containerId}`].filter((x): x is string => !!x);
 }
@@ -135,7 +136,7 @@ export type ParentResolver = (scope: string) => string | undefined;
  */
 export class RunGate {
   private readonly entries = new Map<string, Entry>();
-  private readonly runs = new Map<string, ActionRun>();
+  private readonly runs = new Map<string, CodedActionRun>();
   private readonly listeners = new Set<(notice: GateNotice) => void>();
   private unwatch: (() => void) | undefined;
   private parentOf: ParentResolver = () => undefined;

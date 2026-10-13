@@ -22,7 +22,7 @@ const versionOf = (tag: string) => (/\d/.test(tag) ? tag.replace(/^v/, "").split
  * fixtures and earlier versions left behind after updates. Consumers are
  * computed on every read, so an update or recreate moves them at once.
  */
-export function createImagesApi({ db, runner, forcedFailure }: DemoContext): ImagesApi {
+export function createImagesApi({ db, runner, forcedFailure, demoFailure }: DemoContext): ImagesApi {
   const store = new Map<string, StoredImage>();
 
   const fromContainer = (c: ContainerInfo): StoredImage => {
@@ -102,13 +102,14 @@ export function createImagesApi({ db, runner, forcedFailure }: DemoContext): Ima
   return {
     listImages: () => simulateRead("images", () => (simulationStore.get().empty ? [] : structuredClone(list()))),
 
-    async pullImage({ hostId, reference, fail }) {
+    async pullImage({ hostId, reference }) {
       const host = requireConnected(hostId);
       const parsed = parseImageReference(reference);
       if (!parsed) throw new DemoError("invalid-name");
       const ref = `${parsed.repository}:${parsed.tag}`;
       const id = imageIdFor(hostId, parsed.repository, parsed.tag);
       const known = store.has(id);
+      const requested = !!demoFailure("pullImage");
       const forced = forcedFailure();
       return runner.start({
         kind: "pull",
@@ -122,8 +123,8 @@ export function createImagesApi({ db, runner, forcedFailure }: DemoContext): Ima
           { key: "save", label: "Image registrieren", detail: architecture(host) },
         ],
         output: pullScript(ref, known),
-        failAt: fail || forced ? "pull" : undefined,
-        failMessage: fail ? `Registry meldet: Repository ${parsed.repository} nicht gefunden oder Anmeldung nötig (Simulation)` : failMessage,
+        failAt: requested || forced ? "pull" : undefined,
+        failMessage: requested ? `Registry meldet: Repository ${parsed.repository} nicht gefunden oder Anmeldung nötig (Simulation)` : failMessage,
         onSuccess: () => {
           const now = new Date().toISOString();
           const prev = store.get(id);

@@ -5,6 +5,8 @@ import { sampleRun } from "@/features/activity/sample-run";
 import { MINECRAFT, PLEX_STREAMS } from "@/features/dashboard/services/service-data";
 
 import { createDemoAdapter } from "../demo-adapter";
+import { renderEvent, renderRun } from "../../message-code";
+import { queueDemoFailure } from "../options";
 import { BACKUP_RUNS } from "../fixtures/backups";
 import { STANDALONE } from "../fixtures/containers";
 import { EVENTS, SCHEDULE, SEED_RESTORE_POINTS, SEED_RUNS } from "../fixtures/events";
@@ -16,7 +18,7 @@ import { agentContainer } from "../fixtures/system";
 import { simulateImport } from "../import-simulator";
 import { SIMULATED_NOTE } from "../run-output";
 import { simulationStore } from "../simulation";
-import { localizeDemoText, localizeRun } from ".";
+import { localizeDemoText, localizeEvents, localizeRun } from ".";
 
 const en = (s: string) => localizeDemoText(s, "en-US");
 
@@ -107,7 +109,7 @@ describe("texts the demo backend writes while running actions", () => {
       adapter.runStackCommand("media", "restart"),
       adapter.runStackCommand("paperless", "redeploy"),
       adapter.runStackCommand("monitoring", "stop"),
-      adapter.runStackCommand("dns", "start", "pull"),
+      (() => { queueDemoFailure(adapter, { operation: "runStackCommand", at: "pull" }); return adapter.runStackCommand("dns", "start"); })(),
       adapter.installStackUpdates("cloud"),
       adapter.checkUpdates({}),
       adapter.restartService("craft", "minecraft"),
@@ -115,7 +117,7 @@ describe("texts the demo backend writes while running actions", () => {
       adapter.reconnectHost("cedar"),
       adapter.restartAgent("cedar"),
       adapter.pullImage({ hostId: "atlas", reference: "nginx:1.27" }),
-      adapter.pullImage({ hostId: "boreal", reference: "example/missing", fail: true }),
+      (() => { queueDemoFailure(adapter, { operation: "pullImage" }); return adapter.pullImage({ hostId: "boreal", reference: "example/missing" }); })(),
       adapter.pruneImages({ hostIds: ["atlas"], mode: "unused" }),
       adapter.runBackup("vol-atlas-paperless_pg_data"),
       adapter.runContainerCommand(STANDALONE[0]!.id, "restart"),
@@ -126,10 +128,14 @@ describe("texts the demo backend writes while running actions", () => {
     expect(started.filter((s) => s.status === "fulfilled").length).toBeGreaterThan(14);
     await waitFor(async () => expect((await adapter.listActions()).filter((r) => r.status === "running")).toEqual([]), { timeout: 15000 });
 
-    const runs = await adapter.listActions();
-    const events = await adapter.listEvents();
+    const codedRuns = await adapter.listActions();
+    const codedEvents = await adapter.listEvents();
+    const runs = codedRuns.map((run) => renderRun(run, "de"));
+    const events = codedEvents.map((event) => renderEvent(event, "de"));
     const results = started.flatMap((s) => (s.status === "fulfilled" && s.value && typeof s.value === "object" && "message" in s.value ? [s.value.message] : []));
     expect(runs.length).toBeGreaterThan(12);
     expect(germanIn([...runs.flatMap(runTexts), ...events.map((e) => e.title), ...results])).toEqual([]);
+    expect(codedRuns.map((run) => renderRun(run, "en-US"))).toEqual(runs.map((run) => localizeRun(run, "en-US")));
+    expect(codedEvents.map((event) => renderEvent(event, "en-US"))).toEqual(localizeEvents(events, "en-US"));
   }, 20000);
 });

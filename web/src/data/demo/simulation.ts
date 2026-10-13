@@ -1,6 +1,6 @@
 import { createStore, mergeShallow } from "@/shared/lib/store";
 
-import type { FailAt } from "../adapter";
+import type { FailAt } from "./options";
 
 export type Latency = "instant" | "short" | "long" | "endless";
 export type FailArea = "none" | "all" | "dashboard" | "stacks" | "containers" | "security" | "networks" | "volumes" | "hosts" | "settings" | "images";

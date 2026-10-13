@@ -2,7 +2,8 @@ import { useCallback } from "react";
 import { toast } from "sonner";
 import { useTranslations } from "use-intl";
 
-import type { ContainerCommand, FailAt, RecreateInput } from "@/data/adapter";
+import type { ContainerCommand, RecreateInput } from "@/data/adapter";
+import { queueDemoFailure, type DemoFailure } from "@/runtime";
 import { isRunBusy } from "@/data/run-gate";
 import { useAdapter } from "@/data/use-adapter";
 import type { ContainerOrigin } from "@/domain/model";
@@ -31,7 +32,10 @@ export function useContainerCommands() {
   );
   return {
     run: (id: string, command: ContainerCommand) => guard(() => adapter.runContainerCommand(id, command)),
-    recreate: (id: string, input: RecreateInput, failAt?: FailAt) => guard(() => adapter.recreateContainer(id, input, failAt)),
+    recreate: (id: string, input: RecreateInput, failAt?: DemoFailure["at"]) => guard(() => {
+      if (failAt) queueDemoFailure(adapter, { operation: "recreateContainer", at: failAt });
+      return adapter.recreateContainer(id, input);
+    }),
     update: (id: string) => guard(() => adapter.installContainerUpdate(id)),
     check: (id: string) => guard(() => adapter.checkUpdates({ containerId: id })),
     setOrigin: (id: string, origin: ContainerOrigin) => guard(() => adapter.setContainerOrigin(id, origin)),

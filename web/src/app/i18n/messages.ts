@@ -3,6 +3,7 @@ import { deActivity } from "@/features/activity/messages/de";
 import { deLogin } from "@/features/auth/login/messages/de";
 import { deContainers } from "@/features/containers/messages/de";
 import { deDashboard } from "@/features/dashboard/messages/de";
+import { deRunMessages } from "@/data/messages/run-de";
 import { deHosts } from "@/features/hosts/messages/de";
 import { deImages } from "@/features/images/messages/de";
 import { deSettings } from "@/features/settings/messages/de";
@@ -37,6 +38,7 @@ export const messages: typeof enMessages = {
   lab: deLab,
   visual: deVisual,
   dashboard: deDashboard,
+  runMessages: deRunMessages,
   stacks: deStacks,
   editor: deEditor,
   containers: deContainers,

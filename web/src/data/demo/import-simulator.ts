@@ -21,7 +21,6 @@ export function simulateImport({ kind, ref }: ImportRequest): ImportResult {
     if (repo === "example/notes-app") {
       return {
         title: `${repo} · deploy/compose.yaml`,
-        simulated: true,
         found: ["Compose-Datei unter deploy/compose.yaml", "2 Services: app, db", "Port 3000 veröffentlicht"],
         missing: ["DATABASE_URL hat keinen Wert", "POSTGRES_PASSWORD hat keinen Wert"],
         services: [
@@ -50,7 +49,6 @@ export function simulateImport({ kind, ref }: ImportRequest): ImportResult {
     const short = repo.split("/").pop() ?? "app";
     return {
       title: `${repo} · keine Compose-Datei`,
-      simulated: true,
       found: ["README gefunden", "Dockerfile gefunden – eigenständige Builds sind nicht Teil von Docklet"],
       missing: ["Image fehlt – bitte ein veröffentlichtes Image angeben", "Ports unbekannt"],
       services: [{ key: short, body: { image: "", restart: "unless-stopped" } }],
@@ -60,7 +58,6 @@ export function simulateImport({ kind, ref }: ImportRequest): ImportResult {
   if (image.startsWith("traefik/whoami")) {
     return {
       title: "traefik/whoami · Docker Hub",
-      simulated: true,
       found: ["Neuester Tag: v1.11", "EXPOSE 80/tcp"],
       missing: ["Host-Port für 80/tcp festlegen"],
       services: [{ key: "whoami", body: { image: "traefik/whoami:v1.11", restart: "unless-stopped", ports: ["80"] } }],
@@ -69,7 +66,6 @@ export function simulateImport({ kind, ref }: ImportRequest): ImportResult {
   if (image.includes("syncthing")) {
     return {
       title: "linuxserver/syncthing · Docker Hub",
-      simulated: true,
       found: ["Tag: 1.30.0", "EXPOSE 8384, 22000/tcp, 22000/udp", "VOLUME /config"],
       missing: ["Quelle für /config wählen", "PUID/PGID passend zu Dateirechten setzen"],
       services: [
@@ -90,7 +86,6 @@ export function simulateImport({ kind, ref }: ImportRequest): ImportResult {
   const withTag = image.includes(":") ? image : `${image}:latest`;
   return {
     title: `${image} · Docker Hub`,
-    simulated: true,
     found: [`Image-Referenz: ${withTag}`],
     missing: ["Keine Metadaten zu Ports oder Volumes vorhanden"],
     services: [{ key: base, body: { image: withTag, restart: "unless-stopped" } }],

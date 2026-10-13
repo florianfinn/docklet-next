@@ -45,7 +45,7 @@ export function PullDialog({ open, onOpenChange, hosts, images, initial }: { ope
 
   // Busy only for the request; the pull itself continues as an action toast after the dialog closes.
   const pull = useBusyAction(async () => {
-    const id = await cmd.pull({ hostId, reference: reference.trim(), fail });
+    const id = await cmd.pull({ hostId, reference: reference.trim() }, fail);
     if (id) onOpenChange(false);
   });
   const submit = async () => {

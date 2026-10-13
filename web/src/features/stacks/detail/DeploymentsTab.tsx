@@ -1,8 +1,7 @@
 import { CheckCircle2, ChevronRight, History, Loader2, RotateCcw, XCircle } from "lucide-react";
 import { useRef, useState } from "react";
-import { useLocale, useTranslations } from "use-intl";
+import { useTranslations } from "use-intl";
 
-import { localizeRun } from "@/runtime";
 import { useActionRuns } from "@/data/live";
 import { formatDateTime, formatRelative } from "@/domain/format";
 import type { ActionRun, RestorePoint, StackDetail } from "@/domain/model";
@@ -144,11 +143,10 @@ export function DeploymentsTab({ stack }: { stack: StackDetail }) {
   const cmd = useStackCommands();
   const live = useActionRuns();
   const dt = useDemoText();
-  const locale = useLocale();
   const [confirm, setConfirm] = useState<RestorePoint | null>(null);
   const [pick, setPick] = useState<HistoryPick | null>(null);
   const mainRef = useRef<HTMLHeadingElement>(null);
-  const runs = deployRuns(live, stack.deployments.map((r) => localizeRun(r, locale)), stack.id);
+  const runs = deployRuns(live, stack.deployments, stack.id);
   const latest = runs[0];
   const shown = shownRun(runs, pick);
   const points = [...stack.restorePoints].sort((a, b) => b.createdAt.localeCompare(a.createdAt));

@@ -7,6 +7,7 @@ import { useAdapter } from "@/data/use-adapter";
 import { withPercent } from "@/domain/locale";
 import { SegmentedToggle } from "@/shared/components/segmented-toggle";
 import { useDemoText } from "@/shared/hooks/use-demo-text";
+import { queueDemoFailure } from "@/runtime";
 import { cn } from "@/shared/lib/utils";
 import { ACTION_DIALOG_DESIGNS, ACTION_PRESENTATION_OVERRIDES, RUN_MOTIONS, setUiStyle, TOAST_DESIGNS, TOAST_SCALE, toastDetail, useUiStyle, type ActionPresentationOverride } from "@/shared/preferences/ui-style-store";
 import { Button } from "@/shared/ui/button";
@@ -114,7 +115,7 @@ export function NotificationLabSection() {
           <Button type="button" variant="outline" size="sm" onClick={() => run(() => adapter.runStackCommand("cloud", "redeploy"))}>
             {t("sampleMajor")}
           </Button>
-          <Button type="button" variant="outline" size="sm" onClick={() => run(() => adapter.runStackCommand("home", "redeploy", "pull"))}>
+          <Button type="button" variant="outline" size="sm" onClick={() => run(() => { queueDemoFailure(adapter, { operation: "runStackCommand", at: "pull" }); return adapter.runStackCommand("home", "redeploy"); })}>
             {t("sampleMajorFail")}
           </Button>
           <Button type="button" variant="outline" size="sm" onClick={() => run(() => Promise.all([adapter.runStackCommand("media", "redeploy"), adapter.runStackCommand("craft", "redeploy")]))}>

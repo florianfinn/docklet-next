@@ -71,19 +71,16 @@ export interface UpdateHostInput {
 export interface HostsApi {
   /** Renames or recolours a host; every view reads hosts from one query, so names and colours follow at once. */
   updateHost(hostId: string, input: UpdateHostInput): Promise<Host>;
-  /** Simulated restart of the host's own agent container; returns the action id. */
+  /** Restarts the host's own agent container and returns the action id. */
   restartAgent(hostId: string): Promise<string>;
   /** Registers a host that waits for its agent (status "pending"). */
   registerHost(input: RegisterHostInput): Promise<Host>;
-  /**
-   * Simulates the agent coming up; returns the action id of the connection run.
-   * On success the host carries the agent's report of the installer's local checks.
-   */
-  connectHost(hostId: string, options?: { fail?: boolean }): Promise<string>;
+  /** Connects the agent and returns the connection run's action id. */
+  connectHost(hostId: string): Promise<string>;
   removeHost(hostId: string): Promise<void>;
   /** Docklet's own components per host; they never appear in stack or container lists. */
   listSystemComponents(): Promise<SystemComponent[]>;
-  /** Demo placeholder token; never a usable credential. */
+  /** Issues an agent registration token. */
   issueAgentToken(hostName: string): Promise<string>;
 }
 
@@ -161,14 +158,12 @@ export interface PullImageInput {
   hostId: string;
   /** "repository[:tag]"; the tag defaults to latest. */
   reference: string;
-  /** Demo: end the pull with a registry error. */
-  fail?: boolean;
 }
 
 export interface ImagesApi {
   /** Images of all connected and disconnected hosts with consumers derived from the containers. */
   listImages(): Promise<DockerImage[]>;
-  /** Simulated pull with layer progress; returns the action id. */
+  /** Pulls an image and returns the action id. */
   pullImage(input: PullImageInput): Promise<string>;
   /** Refused with "in-use" while any container (running or stopped) uses the image. */
   removeImage(id: string): Promise<void>;
@@ -179,7 +174,6 @@ export interface ImagesApi {
 export interface TestResult {
   ok: boolean;
   message: string;
-  simulated: true;
 }
 
 export interface SettingsApi {

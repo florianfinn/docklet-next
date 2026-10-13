@@ -4,6 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { ActionRunner } from "@/data/demo/action-runner";
 import { createDemoAdapter } from "@/data/demo/demo-adapter";
+import { renderRun } from "@/data/message-code";
 import { composeScript } from "@/data/demo/run-output";
 import { simulationStore } from "@/data/demo/simulation";
 import { setUiStyle, uiStyleStore } from "@/shared/preferences/ui-style-store";
@@ -62,7 +63,7 @@ describe("raw action output", () => {
 
   it("gives seeded deploy history the same Compose output, timed by its steps", async () => {
     const adapter = createDemoAdapter();
-    const craft = (await adapter.listActions()).find((r) => r.id === "run-craft-1")!;
+    const craft = renderRun((await adapter.listActions()).find((r) => r.id === "run-craft-1")!, "de");
     expect(craft.output.some((l) => /docker compose --project-name craft pull minecraft/.test(l.text))).toBe(true);
     expect(craft.output.filter((l) => l.level === "error").length).toBeGreaterThan(0);
     expect(craft.output.every((l) => l.at >= craft.startedAt)).toBe(true);

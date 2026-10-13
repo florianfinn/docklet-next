@@ -1,12 +1,12 @@
 import { useEffect, useLayoutEffect, useRef } from "react";
 import { toast } from "sonner";
-import { useTranslations } from "use-intl";
+import { useLocale, useTranslations } from "use-intl";
 
 import { useActionRun } from "@/data/live";
+import { renderMessage, renderRun } from "@/data/message-code";
 import { useSettings } from "@/data/queries";
 import { runGateOf, type GateNotice } from "@/data/run-gate";
 import { useAdapter } from "@/data/use-adapter";
-import { useDemoText } from "@/shared/hooks/use-demo-text";
 import { effectivePresentation, toastDetail, uiStyleStore, useUiStyle } from "@/shared/preferences/ui-style-store";
 
 import { actionDialogStore, offerActionDialog, openActionDialog } from "./action-dialog-store";
@@ -45,12 +45,12 @@ function ActionToast({ id, toastId }: { id: string; toastId: string | number }) 
 export function ActionToasts() {
   const adapter = useAdapter();
   const t = useTranslations("activity.gate");
-  const dt = useDemoText();
+  const locale = useLocale();
   const tRef = useRef(t);
-  const dtRef = useRef(dt);
+  const localeRef = useRef(locale);
   useLayoutEffect(() => {
     tRef.current = t;
-    dtRef.current = dt;
+    localeRef.current = locale;
   });
   // The hub setting decides for new runs; the design-lab override wins in this browser.
   const hubPresentation = useSettings().data?.activity.actionPresentation;
@@ -72,13 +72,13 @@ export function ActionToasts() {
         state: () => presentationStore.get(),
       },
     );
-    const offRuns = adapter.subscribeActions((runs) => coordinator.sync(runs));
+    const offRuns = adapter.subscribeActions((runs) => coordinator.sync(runs.map((run) => renderRun(run, localeRef.current))));
     const offDialog = actionDialogStore.subscribe(() => coordinator.sync());
     const offSurfaces = presentationStore.subscribe(() => coordinator.sync());
     // One notice per target, replaced on every repeat (stable toast id), never a new run toast.
     const offGate = runGateOf(adapter)?.subscribe((n: GateNotice) => {
       const tr = tRef.current;
-      const title = n.title && dtRef.current(n.title);
+      const title = n.title && renderMessage(n.title, localeRef.current);
       if (n.reason === "inflight") {
         if (n.runId) coordinator.reveal(n.runId);
       } else if (n.reason === "busy") {

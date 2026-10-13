@@ -5,6 +5,7 @@ import { useTranslations } from "use-intl";
 import { errorCode, type PullImageInput } from "@/data/api";
 import { isRunBusy } from "@/data/run-gate";
 import { useAdapter } from "@/data/use-adapter";
+import { queueDemoFailure } from "@/runtime";
 import type { PruneMode } from "@/domain/images";
 import { useDemoText } from "@/shared/hooks/use-demo-text";
 
@@ -30,7 +31,10 @@ export function useImageCommands() {
     [t, dt],
   );
   return {
-    pull: (input: PullImageInput) => guard(() => adapter.pullImage(input)),
+    pull: (input: PullImageInput, fail = false) => guard(() => {
+      if (fail) queueDemoFailure(adapter, { operation: "pullImage" });
+      return adapter.pullImage(input);
+    }),
     remove: (id: string, name: string) =>
       guard(async () => {
         await adapter.removeImage(id);

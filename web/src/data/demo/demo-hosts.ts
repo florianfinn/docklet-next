@@ -16,7 +16,7 @@ function randomBlock(n: number): string {
   return out;
 }
 
-export function createHostsApi({ db, runner, forcedFailure }: DemoContext): HostsApi {
+export function createHostsApi({ db, runner, forcedFailure, demoFailure }: DemoContext): HostsApi {
   /** Edge agents dial the internal hub address; nothing is exposed to the internet. */
   const hubHost = () => {
     const url = agentHubUrl(db.settings.general);
@@ -62,7 +62,7 @@ export function createHostsApi({ db, runner, forcedFailure }: DemoContext): Host
       return structuredClone(host);
     },
 
-    async connectHost(hostId, options) {
+    async connectHost(hostId) {
       const host = db.host(hostId);
       if (!host) throw new DemoError("not-found");
       const running = runner.list().find((r) => r.hostId === hostId && r.kind === "onboard" && r.status === "running");
@@ -79,7 +79,8 @@ export function createHostsApi({ db, runner, forcedFailure }: DemoContext): Host
             { key: "connect", label: "Agent authentifiziert", detail: "Demo-Token – Simulation" },
             { key: "health", label: "Agent meldet lokale Prüfung", detail: "Verzeichnisbesitzer, Schreibrechte, Socket-Gruppe" },
           ];
-      const fail = options?.fail || forcedFailure();
+      const requested = !!demoFailure("connectHost");
+      const fail = requested || forcedFailure();
       const failAt = fail ? (direct ? "connect" : "wait") : undefined;
       return runner.start({
         kind: "onboard",
@@ -88,7 +89,7 @@ export function createHostsApi({ db, runner, forcedFailure }: DemoContext): Host
         hostId,
         steps,
         failAt,
-        failMessage: options?.fail
+        failMessage: requested
           ? direct
             ? `${host.address} antwortet nicht (Simulation: Port gesperrt oder Agent nicht gestartet)`
             : `Keine Verbindung vom Agent (Simulation: interne Hub-Adresse ${hubHost()} vom Host aus nicht erreichbar)`

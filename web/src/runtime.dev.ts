@@ -1,5 +1,7 @@
 export { createDemoAdapter as createAdapter } from "@/data/demo/demo-adapter";
-export { localizeDemoText, localizeRun, localizeContainers, localizeEvents, localizeSchedule, localizeSecurity } from "@/data/demo/demo-text";
+export { queueDemoFailure } from "@/data/demo/options";
+export type { DemoFailure } from "@/data/demo/options";
+export { localizeDemoText, localizeContainers, localizeSchedule, localizeSecurity } from "@/data/demo/demo-text";
 export { DesignLabPanel } from "@/features/design-lab/DesignLabPanel";
 export { LiveToggle } from "@/features/design-lab/LiveToggle";
 export { LabMenuItem } from "@/features/design-lab/LabMenuItem";

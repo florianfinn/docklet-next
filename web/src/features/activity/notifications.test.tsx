@@ -1,8 +1,10 @@
+import { renderRun, renderStackDetail } from "@/data/message-code";
 import { act, fireEvent, screen, within } from "@testing-library/react";
 import { toast } from "sonner";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { createDemoAdapter } from "@/data/demo/demo-adapter";
+import { queueDemoFailure } from "@/data/demo/options";
 import { simulationStore } from "@/data/demo/simulation";
 import { DeploymentsTab } from "@/features/stacks/detail/DeploymentsTab";
 import { setUiStyle, uiStyleStore, type ToastDesign } from "@/shared/preferences/ui-style-store";
@@ -113,7 +115,8 @@ describe("action toast size", () => {
     setUiStyle({ toastDesign: design, toastScale: 1.5, actionPresentationOverride: "toast" });
     const adapter = renderNotifications();
     await act(async () => {
-      await adapter.runStackCommand("home", "redeploy", "pull");
+      queueDemoFailure(adapter, { operation: "runStackCommand", at: "pull" });
+      await adapter.runStackCommand("home", "redeploy");
       await vi.advanceTimersByTimeAsync(50);
     });
     const running = rows(toastFor("Pull & Redeploy · Home")!);
@@ -160,14 +163,14 @@ describe("notices and side sheets", () => {
 describe("deploy history", () => {
   it("shows one current run with its output, older runs collapsed, and a new run replaces the main view", async () => {
     const adapter = createDemoAdapter();
-    const stack = await adapter.getStack("craft");
+    const stack = renderStackDetail(await adapter.getStack("craft"), "de");
     const view = renderWithApp(<DeploymentsTab stack={stack} />, adapter);
     const current = () => [...document.querySelectorAll<HTMLElement>('[data-slot="deployment-current"]')].map((n) => n.dataset.run);
     await act(async () => {
       await adapter.runStackCommand("craft", "redeploy");
       await vi.advanceTimersByTimeAsync(20000);
     });
-    const all = deployRuns(await adapter.listActions(), stack.deployments, "craft");
+    const all = deployRuns((await adapter.listActions()).map((run) => renderRun(run, "de")), stack.deployments, "craft");
     const older = all.length - 1;
     expect([older > 0, current(), screen.getByRole("button", { name: new RegExp(`^${older} frühere?`) }).getAttribute("aria-expanded")]).toEqual([true, [all[0]!.id], "false"]);
 
@@ -189,7 +192,7 @@ describe("deploy history", () => {
 
   it("folds layer download progress into one updating line per layer", async () => {
     const adapter = createDemoAdapter();
-    const stack = await adapter.getStack("craft");
+    const stack = renderStackDetail(await adapter.getStack("craft"), "de");
     renderWithApp(<DeploymentsTab stack={stack} />, adapter);
     await act(async () => {
       await adapter.runStackCommand("craft", "redeploy");

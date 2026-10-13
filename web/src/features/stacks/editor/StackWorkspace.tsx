@@ -4,7 +4,7 @@ import { useNavigate } from "react-router";
 import { toast } from "sonner";
 import { useTranslations } from "use-intl";
 
-import type { FailAt } from "@/data/adapter";
+import { queueDemoFailure, type DemoFailure } from "@/runtime";
 import { isRunBusy } from "@/data/run-gate";
 import { useAdapter } from "@/data/use-adapter";
 import { ops, uniqueKey, type Mutator } from "@/domain/compose/ops";
@@ -90,11 +90,12 @@ export function StackWorkspace({ draft, stack, hosts, labelSuggestions, mode, on
     }
   };
 
-  const deploy = async (failAt?: FailAt) => {
+  const deploy = async (failAt?: DemoFailure["at"]) => {
     if (!model) return;
     let stackId: string;
     try {
-      ({ stackId } = await adapter.deployStack({ stackId: stack?.id ?? null, hostId: draft.hostId, name: model.name, compose: draft.compose, env: draft.env, labels: draft.labels, failAt }));
+      if (failAt) queueDemoFailure(adapter, { operation: "deployStack", at: failAt });
+      ({ stackId } = await adapter.deployStack({ stackId: stack?.id ?? null, hostId: draft.hostId, name: model.name, compose: draft.compose, env: draft.env, labels: draft.labels }));
     } catch (e) {
       // A busy stack keeps the draft; the gate notice names the running action.
       if (isRunBusy(e)) return;

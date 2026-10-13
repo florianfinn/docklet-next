@@ -121,7 +121,7 @@ export function ImportSourceDialog({ open, onOpenChange, onApply }: ImportSource
           <div className="flex flex-col gap-3 rounded-xl border bg-muted/20 p-3">
             <div className="flex items-center gap-2 text-sm font-medium">
               {dt(result.title)}
-              {result.simulated && <ToneBadge tone="violet">Simulation</ToneBadge>}
+              {adapter.kind === "demo" && <ToneBadge tone="violet">Simulation</ToneBadge>}
             </div>
             <div className="grid gap-3 md:grid-cols-2">
               <div>

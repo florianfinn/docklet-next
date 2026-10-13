@@ -3,7 +3,7 @@ import { SegmentedToggle } from "@/shared/components/segmented-toggle";
 import { Moon, RotateCw, Sun } from "lucide-react";
 import { useTranslations } from "use-intl";
 
-import type { FailAt } from "@/data/adapter";
+import type { FailAt } from "@/data/demo/options";
 import { simulationStore, type FailArea, type Latency } from "@/data/demo/simulation";
 import { useStore } from "@/shared/lib/store";
 import { cn } from "@/shared/lib/utils";

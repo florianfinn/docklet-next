@@ -5,12 +5,12 @@ import { build, type Plugin } from "vite";
 const root = fileURLToPath(new URL("..", import.meta.url));
 const configFile = fileURLToPath(new URL("../vite.config.ts", import.meta.url));
 
-async function inspect(injected?: string, mode = "production") {
+async function inspect(injected?: string, mode = "production", target = "/src/main.tsx") {
   const injection: Plugin = {
     name: "production-boundary-red-proof",
     enforce: "pre",
     transform(code, id) {
-      if (injected && id.endsWith("/src/main.tsx")) return `import ${JSON.stringify(injected)};\n${code}`;
+      if (injected && id.endsWith(target)) return `import ${JSON.stringify(injected)};\n${code}`;
     },
   };
   return build({ root, configFile, mode, logLevel: "silent", plugins: [injection], build: { write: false } });
@@ -35,4 +35,6 @@ if (process.argv.includes("--prove")) {
     await assert.rejects(inspect(injected, mode), /Production boundary: forbidden module/);
     console.log(`Red proof passed: injected ${injected} rejected in ${mode} build.`);
   }
+  await assert.rejects(inspect("@/data/demo/demo-text", "production", "/src/shared/hooks/use-demo-text.ts"), /Production boundary: forbidden module/);
+  console.log("Red proof passed: shared hook import of demo text rejected in production build.");
 }
