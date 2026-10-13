@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace
+// Deviations: Local module namespace; functional cut: removed Svelte-specific metadata or asset paths.
 
 package bootstrap
 
@@ -50,7 +50,7 @@ var loggerSkipPatterns = []string{
 	"GET /api/environments/*/ws/projects/*/logs",
 	"GET /api/environments/*/ws/system/stats",
 	"GET /api/stream",
-	"GET /_app/*",
+	"GET /assets/*",
 	"GET /img",
 	"GET /api/health",
 	"HEAD /api/health",

@@ -2,18 +2,17 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: None
+// Deviations: ; functional cut: removed Svelte-specific metadata or asset paths.
 
 package config
 
 import "runtime"
 
 var (
-	Version          = "dev"
-	Revision         = "unknown"
-	BuildTime        = "unknown"
-	NodeVersion      = "unknown"
-	SvelteKitVersion = "unknown"
+	Version     = "dev"
+	Revision    = "unknown"
+	BuildTime   = "unknown"
+	NodeVersion = "unknown"
 )
 
 // ShortRevision returns the first 8 characters of the revision hash

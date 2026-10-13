@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; omit two tests and their helpers requiring the excluded Svelte source tree.
+// Deviations: Local module namespace; omit two tests and their helpers requiring the unimported frontend source tree; functional cut: removed Svelte-specific metadata or asset paths.
 
 package authz_test
 

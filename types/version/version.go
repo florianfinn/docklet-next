@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: None
+// Deviations: ; functional cut: removed Svelte-specific metadata or asset paths.
 
 package version
 
@@ -48,11 +48,6 @@ type Info struct {
 	//
 	// Required: true
 	NodeVersion string `json:"nodeVersion"`
-
-	// SvelteKitVersion is the SvelteKit version used to build the frontend.
-	//
-	// Required: true
-	SvelteKitVersion string `json:"svelteKitVersion"`
 
 	// BuildTime is the timestamp when the application was built.
 	//

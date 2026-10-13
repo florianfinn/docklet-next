@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; functional cut: removed upstream analytics heartbeat and APNS mobile push.
+// Deviations: Local module namespace; functional cut: removed upstream analytics heartbeat and APNS mobile push and Svelte-specific metadata or asset paths.
 
 package config
 
@@ -80,7 +80,7 @@ type Config struct {
 	ProjectWorkspaceMaxDepth      int    `env:"PROJECT_WORKSPACE_MAX_DEPTH" default:"20"`
 	ProjectWorkspaceMaxEntries    int    `env:"PROJECT_WORKSPACE_MAX_ENTRIES" default:"2000"`
 	ProjectWorkspaceMaxFileSizeMB int    `env:"PROJECT_WORKSPACE_MAX_FILE_SIZE_MB" default:"10"`
-	ProjectScanSkipDirs           string `env:"PROJECT_SCAN_SKIP_DIRS" default:".git,node_modules,vendor,.venv,venv,__pycache__,.cache,dist,build,target,.next,.nuxt,.svelte-kit"`
+	ProjectScanSkipDirs           string `env:"PROJECT_SCAN_SKIP_DIRS" default:".git,node_modules,vendor,.venv,venv,__pycache__,.cache,dist,build,target,.next,.nuxt"`
 	VolumeWorkspaceMaxDepth       int    `env:"VOLUME_WORKSPACE_MAX_DEPTH" default:"50"`
 	VolumeWorkspaceMaxEntries     int    `env:"VOLUME_WORKSPACE_MAX_ENTRIES" default:"10000"`
 	VolumeWorkspaceMaxFileSizeMB  int    `env:"VOLUME_WORKSPACE_MAX_FILE_SIZE_MB" default:"10"`
