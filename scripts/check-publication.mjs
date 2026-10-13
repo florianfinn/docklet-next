@@ -7,7 +7,7 @@ import { readFileSync, existsSync } from "node:fs";
 import { resolve } from "node:path";
 import { files, git, main, run, finish } from "./repository.mjs";
 import { inspectText, inspectPath, safePath, publicIdentity } from "./publication-patterns.mjs";
-import { ALLOWLIST_PATH, reviewedFindings } from "./publication-allowlist-core.mjs";
+import { ALLOWLIST_PATH, reviewedFindings, parseAllowlist } from "./publication-allowlist-core.mjs";
 import { messageProblems } from "./commit-subject.mjs";
 export { inspectText } from "./publication-patterns.mjs";
 
@@ -20,7 +20,7 @@ export function loadDenylist(root) {
   return list;
 }
 function inspectFiles(list, denylist) {
-  const allowlist = JSON.parse(list.find((file) => file.path === ALLOWLIST_PATH)?.content.toString("utf8") ?? "[]");
+  const allowlist = parseAllowlist(list.find((file) => file.path === ALLOWLIST_PATH)?.content.toString("utf8") ?? "[]");
   const findings = list.flatMap(({ path, mode, content }) => {
     const findings = inspectPath(path, denylist);
     const label = safePath(path, denylist);

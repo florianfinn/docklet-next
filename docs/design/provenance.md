@@ -40,13 +40,16 @@ After adoption, ceilings may only shrink or disappear. A file may not exceed its
 ceiling or its actual count in the comparison base, even under an older, higher
 ceiling. Git rename/copy detection against the base includes unchanged copy
 sources and retains both the source ceiling and actual source line count.
-Similarity detection is limited to 200 candidates instead of unbounded quadratic
-search. When that limit can skip an origin search, a new oversized adoption with
-an unknown origin fails with size-origin-limit. Exact Git-detected moves/copies
-still retain their ceilings. Split oversized adoption into reviewed batches with
-a small comparison tree, or make a separately reviewed guard change; never raise
-ceilings to bypass an uncertain origin. Git uses its default 50% similarity
-threshold; a heavily rewritten file may no longer be recognized as a move or
+Similarity search includes previously adopted sources and size-compatible own
+sources, with new oversized or baseline-listed destinations under adopted
+prefixes. Own-source blob sizes must be within Git's 50% similarity range of a
+candidate destination; line counts alone cannot filter long-line own files.
+Sorted destination sizes bound candidate selection without a pairwise scan.
+Literal pathspecs exclude unrelated files. There is no global file-count cap: first
+adoption can add a complete upstream tree even to a large repository. Search
+uses unchanged copy sources and does not skip candidate similarity comparisons.
+Git uses its default 50% similarity threshold; a heavily rewritten file may no
+longer be recognized as a move or
 copy and still needs human review. Count LF, CRLF and CR as one line ending
 each; a terminal ending does not add an empty line. CI uses the target base;
 local checks default to HEAD, or an empty base for an unborn repository. The

@@ -96,12 +96,12 @@ test("root prototype source keeps its base count when copied into adoption roots
   writeJSON(root, "scripts/size-baseline.json", { adopted: { "backend/moved.go": 1001 }, generated: [] });
   fails(check(root, base), "size-baseline-new-entry");
 });
-test("bounded similarity search cannot grant an unknown oversized adoption", (t) => {
+test("large base permits a genuinely new oversized adoption", (t) => {
   const root = scratch(t);
   for (let i = 0; i < 201; i++) write(root, `docs/base-${i}.txt`, `base ${i}\n`);
   git(root, "add", ".");
   const base = rawCommit(root);
   stage(root, "backend/import.go", content(1001));
   writeJSON(root, "scripts/size-baseline.json", { adopted: { "backend/import.go": 1001 }, generated: [] });
-  fails(check(root, base), "size-origin-limit");
+  ok(check(root, base));
 });

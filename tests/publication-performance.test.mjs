@@ -12,6 +12,7 @@ test("scan budget stays at two seconds", () => {
   assert.deepEqual(source.match(/timeout: \d+/g), ["timeout: " + 5000]);
 });
 const cases = [
+  ["4 MB nested block scalars", 'Array.from({length: 2890}, (_, i) => " ".repeat(i) + ["password", ": |\\n"].join("")).join("")', "inspectText", "example.yml"],
   ["coauthor spaces", '"Co-authored-by:" + " ".repeat(1000000 - 15)'],
   ["coauthor email domain", '"Co-authored-by: Example <person@" + "a.".repeat(500000) + "invalid>"'],
   ["repeated assignments", '["password", "="].join("").repeat(111112)'],

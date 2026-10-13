@@ -41,15 +41,17 @@ or AI co-author.
 Names are case insensitive: password, passwd, secret, token, passphrase,
 api_key/apikey, access_key/accessKey and private_key (also hyphens) match within
 names. Credentials matches a word suffix; pwd is a whole name or underscore/
-hyphen-separated suffix. OLDPWD is not a secret name. A credentials or pwd value
-that starts with /, ./, ../ or a drive prefix is a path, not a credential. Other
-categories still check that path for private workstation information.
+hyphen-separated suffix. OLDPWD is not a secret name. For credentials, pwd and
+sensitive names ending in _file, -file, _path or -path, a value starting with /,
+./, ../ or a drive prefix denotes a path. Other categories still check that path
+for private workstation information.
 
 The scanner classifies syntax before judging the value. Source extensions are
 JS/TS (including JSX/TSX, CJS/MJS), Go, Rust, Java, C#, Python, Ruby, PHP, Vue
 and Svelte. Quotes, raw/template strings and comments establish embedded text
 contexts; keywords never turn an env or configuration file into source code.
-Each row below has a rejected/accepted twin in publication-decisions.test.mjs.
+Each row has rejected/accepted twins in publication-decisions.test.mjs or
+publication-final-round.test.mjs.
 
 | Row | Context | Finding | Non-finding |
 | --- | --- | --- | --- |
@@ -71,6 +73,13 @@ Each row below has a rejected/accepted twin in publication-decisions.test.mjs.
 | D16 | Source right-hand side | Direct quoted value | Identifier, call, member access |
 | D17 | Type annotation | Annotation followed by literal assignment | Annotation without value |
 | D18 | Source equals operator | Literal assignment | Comparison |
+| D19 | Shell/compose reference | Literal value or default | $VAR, $(command), backtick command |
+| D20 | Workflow secret/permission mode | Other literal | Inherited secrets; read/write/none permissions |
+| D21 | Human message string | Embedded key=value or a leading key: value | Prose colon, format verb, closing quote |
+| D22 | Python prefix or Rust reference type | Quoted prefixed/typed value | Placeholder or identifier |
+| D23 | Source value on the next line | Quoted literal | Placeholder or identifier |
+| D24 | Set/setItem method call | Sensitive literal key and literal value | Non-sensitive key, placeholder or expression |
+| D25 | Adjacent Key/Value or name/value fields | Sensitive literal key and literal value | Non-sensitive key, placeholder or expression |
 
 Every nonempty direct literal is rejected, including short values. Placeholders
 are empty strings, changeme, example, test-only (case insensitive), all-asterisk
@@ -79,11 +88,13 @@ expression substitutions. Shell -, +, ?, = operators, with or without a colon,
 are accepted only with empty or placeholder operands. A literal fallback is a
 finding. Suffixes outside a substitution are not placeholders.
 
-This is lexical recognition, not a language parser. Calls with literal
-arguments, expression fallbacks and constructed strings need manual review,
+This is lexical recognition, not a language parser. Only the listed setter calls
+and immediately adjacent named-value fields are recognized; reordered fields,
+indirect names and other calls with literal arguments need manual review.
+Expression fallbacks and constructed strings also need review,
 including byte conversions, environment reads followed by an OR literal, cmp.Or
-and t.Setenv. PHP/Ruby arrow pairs are outside the assignment grammar. TS/Python
-annotations are recognized up to 256 characters of simple type syntax; complex
+and t.Setenv. PHP/Ruby arrow pairs are outside the assignment grammar.
+TS/Python/Rust annotations are recognized up to 256 characters of simple type syntax; complex
 declarations, escaped/encoded secret names and template interpolation need
 semantic review. Quoted public labels and translations under secret-like names
 remain findings; use the exact reviewed procedure below instead of broad label
@@ -98,16 +109,21 @@ and must be a positive safe integer. It is the exact number of occurrences of
 that path/category/line-hash key, including multiple matches on one line. Fewer
 actual occurrences fail as stale, including zero; extra occurrences remain
 findings. No unused allowance survives a scan. Duplicate keys are rejected even
-with different counts, reasons or digest spellings. Invalid categories, empty
-or whitespace-only reasons, the trimmed reason "TODO", and directory/glob paths
-also fail.
+with different counts, reasons or digest spellings. Duplicate JSON object fields
+also fail, including escaped spellings of the same key. Reasons must have at
+least 12 trimmed characters and cannot start with TODO, TBD, FIXME or reason
+(case insensitive), or contain angle-bracket placeholders. Invalid categories
+and directory/glob paths also fail.
 
 The digest is SHA-256 of the complete UTF-8 matched line without its line
 ending; CRLF and CR normalize to LF. Indentation and trailing spaces remain
 significant. For a multiline scalar, the matched line is the scalar value line.
 Changing a line or moving its file invalidates the exception. Other categories
 on the same line remain blocked too. Operator denylist, path, identity and
-structural findings cannot be exempted here.
+structural findings cannot be exempted here. The only eligible categories are
+literal-secret, credential-pattern, non-example-email, network-address,
+workstation-path and private-hostname. AI co-authors, session links, corrupted
+or invisible text and invalid UTF-8 are never exemptable.
 
 Before an import, prepare a temporary repository copy with the destination paths
 and stage new files so the scanner can see them. From that repository root run:
@@ -152,8 +168,9 @@ codeium.com, windsurf.com and aider.chat.
 Scanners consume complete tokens or lines without overlapping retries.
 Assignment values are consumed once, IPv6 validation uses bounded candidates,
 and trailer parsing splits delimiters directly. Adversarial tests scan at least
-1 MB per family with a two-second bound and a subprocess timeout. This is a
-regression budget pinned by mutation tests; each CI job has a 15-minute timeout.
+1 MB per family (4 MB for nested block scalars) with a two-second bound and a
+subprocess timeout. This is a regression budget pinned by mutation tests; each
+CI job has a 15-minute timeout.
 This is not a throughput promise for every machine or arbitrary denylist size.
 
 Synthetic matches in the guard tests have exact path/category/value exceptions

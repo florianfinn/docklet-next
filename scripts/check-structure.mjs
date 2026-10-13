@@ -191,27 +191,42 @@ export function inspectStructure(root, { only, base, staged = false } = {}) {
     : { adopted: {} };
   const previousCounts = Object.create(null);
   const origins = new Map();
-  let originLimit = false;
   const baseFiles = base ? files(root, { revision: base }) : [];
+  for (const file of baseFiles) previousCounts[file.path] = lineCount(file.content);
   if (base) {
-    // Copy detection includes unchanged sources; NUL fields preserve arbitrary path names.
-    const changes = git([
-      "diff", ...(staged ? ["--cached"] : []), "--name-status", "-z",
-      "--find-renames", "--find-copies", "--find-copies-harder", "-l200", base, "--",
-    ], root).split("\0");
-    let additions = 0;
-    for (let i = 0; i < changes.length && changes[i];) {
-      const status = changes[i++];
-      const from = changes[i++];
-      if (status === "A") additions++;
-      if (/^[RC]/.test(status)) origins.set(changes[i++], from);
+    const prefixes = policy("scripts/provenance.json").adoptedPrefixes ?? [];
+    const current = policy("scripts/size-baseline.json").adopted;
+    const destinations = list.filter((file) => !Object.hasOwn(previousCounts, file.path) &&
+      prefixes.some((prefix) => file.path.startsWith(prefix)) &&
+      (Object.hasOwn(current, file.path) || lineCount(file.content) > 1000));
+    const sizes = destinations.map((file) => file.content.length).sort((a, b) => a - b);
+    // Git's 50% similarity requires the smaller blob to be at least half the larger.
+    // Keep adopted sources and size-compatible own sources, including short long-line files.
+    const sources = baseFiles.filter((file) => {
+      if (Object.hasOwn(previous.adopted, file.path)) return true;
+      let low = 0, high = sizes.length;
+      while (low < high) {
+        const middle = (low + high) >>> 1;
+        if (sizes[middle] * 2 < file.content.length) low = middle + 1;
+        else high = middle;
+      }
+      return low < sizes.length && sizes[low] <= file.content.length * 2;
+    });
+    if (sources.length && destinations.length) {
+      const paths = [...new Set([...sources, ...destinations].map((file) => file.path))];
+      // Literal pathspecs constrain similarity work; no repository-wide candidate cap.
+      const changes = git([
+        "diff", ...(staged ? ["--cached"] : []), "--name-status", "-z",
+        "--find-renames", "--find-copies", "--find-copies-harder", "-l0", base, "--",
+        ...paths.map((path) => ":(literal)" + path),
+      ], root).split("\0");
+      for (let i = 0; i < changes.length && changes[i];) {
+        const status = changes[i++];
+        const from = changes[i++];
+        if (/^[RC]/.test(status)) origins.set(changes[i++], from);
+      }
     }
-    originLimit = additions > 0 && (additions > 200 || baseFiles.length > 200);
   }
-  if (base)
-    for (const file of baseFiles) {
-      previousCounts[file.path] = lineCount(file.content);
-    }
   const checks = {
     size: () =>
       sizeProblems(
@@ -228,13 +243,6 @@ export function inspectStructure(root, { only, base, staged = false } = {}) {
   };
   if (only && !checks[only]) throw new Error("unknown-check");
   const found = (only ? [checks[only]] : Object.values(checks)).flatMap((check) => check());
-  // If similarity search can be skipped, unknown origins cannot gain new ceilings.
-  if (originLimit && (!only || only === "size")) {
-    for (const path of Object.keys(policy("scripts/size-baseline.json").adopted)) {
-      if (!Object.hasOwn(previousCounts, path) && !origins.has(path))
-        found.push({ path, category: "size-origin-limit" });
-    }
-  }
   return found;
 }
 if (main(import.meta.url))
