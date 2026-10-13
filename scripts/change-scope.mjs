@@ -8,7 +8,7 @@ import { spawnSync } from "node:child_process";
 import { git, main, run } from "./repository.mjs";
 
 const EXECUTED =
-  /^(?:scripts|tests|backend|types|third_party|web|api|deploy|\.githooks|\.github|\.claude)\/|(?:^|\/)src\//;
+  /^(?:scripts|tests|backend|cli|types|third_party|web|api|deploy|\.githooks|\.github|\.claude)\/|(?:^|\/)src\//;
 export function isTextOnly(paths) {
   return (
     paths.length > 0 &&

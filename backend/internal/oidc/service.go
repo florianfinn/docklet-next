@@ -1,0 +1,891 @@
+// Source: getarcaneapp/arcane/backend/internal/oidc/service.go
+// Revision: 095cb778daba1034e2a39961199e712a75d4ba29
+// Retrieved: 2026-10-13
+// License: BSD-3-Clause
+// Deviations: Local module namespace
+
+package oidc
+
+import (
+	"cmp"
+	"context"
+	"crypto/tls"
+	"encoding/base64"
+	"encoding/json/v2"
+	"errors"
+	"fmt"
+	"log/slog"
+	"net/http"
+	"net/url"
+	"slices"
+	"strings"
+	"sync"
+	"time"
+
+	"github.com/coreos/go-oidc/v3/oidc"
+	authtypes "github.com/florianfinn/docklet-next/types/auth"
+	"github.com/samber/hot"
+	"go.getarcane.app/kit/pkg"
+	"golang.org/x/oauth2"
+
+	"github.com/florianfinn/docklet-next/backend/internal/auth"
+	"github.com/florianfinn/docklet-next/backend/internal/config"
+	"github.com/florianfinn/docklet-next/backend/internal/settings"
+	"github.com/florianfinn/docklet-next/backend/pkg/utils/jwtclaims"
+	"github.com/florianfinn/docklet-next/backend/pkg/utils/oidcjwk"
+)
+
+type OidcService struct {
+	authService        *auth.AuthService
+	settingsService    *settings.SettingsService
+	config             *config.Config
+	httpClient         *http.Client
+	insecureHttpClient *http.Client
+	providerMutex      sync.RWMutex
+	providerCache      *hot.HotCache[oidcProviderKey, *oidc.Provider]
+	keySetManager      *oidcjwk.KeySetManager
+}
+
+type oidcProviderKey struct {
+	issuer  string
+	skipTLS bool
+}
+
+type OidcState struct {
+	State        string    `json:"state"`
+	Nonce        string    `json:"nonce"`
+	CodeVerifier string    `json:"code_verifier"`
+	RedirectTo   string    `json:"redirect_to"`
+	CreatedAt    time.Time `json:"created_at"`
+}
+
+func NewOidcService(authService *auth.AuthService, settingsService *settings.SettingsService, cfg *config.Config, httpClient *http.Client, keySetManager *oidcjwk.KeySetManager) *OidcService {
+	if httpClient == nil {
+		httpClient = http.DefaultClient
+	}
+
+	// Create a copy of the client to avoid modifying the shared one
+	// and remove the timeout so we can control it via context
+	oidcClient := *httpClient
+	oidcClient.Timeout = 0
+
+	service := &OidcService{
+		authService:     authService,
+		settingsService: settingsService,
+		config:          cfg,
+		httpClient:      &oidcClient,
+		keySetManager:   keySetManager,
+	}
+	service.providerCache = hot.NewHotCache[oidcProviderKey, *oidc.Provider](hot.LRU, 4).Build()
+	return service
+}
+
+func (s *OidcService) keySetInternal(ctx context.Context, jwksURL string, skipTLS bool) (oidc.KeySet, error) {
+	if s.keySetManager == nil {
+		return nil, errors.New("JWK set manager is not configured")
+	}
+	return s.keySetManager.KeySet(context.WithoutCancel(ctx), s.getHttpClientInternal(skipTLS), jwksURL)
+}
+
+func (s *OidcService) getEffectiveConfigInternal(ctx context.Context) (*settings.OidcConfig, error) {
+	oidcConfig, err := s.authService.GetOidcConfig(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get OIDC config: %w", err)
+	}
+	if oidcConfig.IssuerURL == "" {
+		return nil, errors.New("issuer URL must be configured")
+	}
+	return oidcConfig, nil
+}
+
+func (s *OidcService) getHttpClientInternal(skipTlsVerify bool) *http.Client {
+	if skipTlsVerify {
+		return s.getInsecureHttpClientInternal()
+	}
+	return s.httpClient
+}
+
+func (s *OidcService) getInsecureHttpClientInternal() *http.Client {
+	s.providerMutex.RLock()
+	if s.insecureHttpClient != nil {
+		s.providerMutex.RUnlock()
+		return s.insecureHttpClient
+	}
+	s.providerMutex.RUnlock()
+
+	s.providerMutex.Lock()
+	defer s.providerMutex.Unlock()
+
+	if s.insecureHttpClient != nil {
+		return s.insecureHttpClient
+	}
+
+	// Create insecure client
+	insecureClient := *s.httpClient
+
+	var insecureTransport *http.Transport
+	if transport, ok := insecureClient.Transport.(*http.Transport); ok {
+		insecureTransport = transport.Clone()
+	} else {
+		// Transport is nil or not *http.Transport - create a new default transport
+		if defaultTransport, localOk := http.DefaultTransport.(*http.Transport); localOk {
+			insecureTransport = defaultTransport.Clone()
+		} else {
+			insecureTransport = &http.Transport{}
+		}
+	}
+
+	if insecureTransport.TLSClientConfig == nil {
+		// #nosec G402 - This is explicitly an insecure client for OIDC discovery when TLS verification is skipped
+		insecureTransport.TLSClientConfig = &tls.Config{
+			MinVersion:         tls.VersionTLS12,
+			InsecureSkipVerify: true,
+		}
+	} else {
+		insecureTransport.TLSClientConfig.InsecureSkipVerify = true
+	}
+	// Enable HTTP/2 even with a custom TLS configuration.
+	if insecureTransport.Protocols == nil {
+		insecureTransport.Protocols = new(http.Protocols)
+		insecureTransport.Protocols.SetHTTP1(true)
+	}
+	insecureTransport.Protocols.SetHTTP2(true)
+	insecureClient.Transport = insecureTransport
+	s.insecureHttpClient = &insecureClient
+	return s.insecureHttpClient
+}
+
+func (s *OidcService) ensureOpenIDScopeInternal(scopes []string) []string {
+	hasOpenID := slices.Contains(scopes, oidc.ScopeOpenID)
+	if !hasOpenID {
+		scopes = append([]string{oidc.ScopeOpenID}, scopes...)
+	}
+	return scopes
+}
+
+func (s *OidcService) hasManualEndpointsInternal(cfg *settings.OidcConfig) bool {
+	return cfg.AuthorizationEndpoint != "" || cfg.TokenEndpoint != "" || cfg.UserinfoEndpoint != ""
+}
+
+func (s *OidcService) getOauth2ConfigInternal(cfg *settings.OidcConfig, provider *oidc.Provider, origin, mobileRedirectURI string) (oauth2.Config, error) {
+	scopes := strings.Fields(cfg.Scopes)
+	if len(scopes) == 0 {
+		scopes = []string{"email", "profile"}
+	}
+	scopes = s.ensureOpenIDScopeInternal(scopes)
+
+	var endpoint oauth2.Endpoint
+	if provider != nil {
+		endpoint = provider.Endpoint()
+	} else {
+		endpoint = oauth2.Endpoint{
+			AuthURL:  cfg.AuthorizationEndpoint,
+			TokenURL: cfg.TokenEndpoint,
+		}
+	}
+	if endpoint.AuthURL == "" || endpoint.TokenURL == "" {
+		return oauth2.Config{}, errors.New("authorization and token endpoints must be configured")
+	}
+
+	redirectURL := mobileRedirectURI
+	if redirectURL == "" {
+		redirectURL = s.GetOidcRedirectURL(origin)
+	}
+
+	return oauth2.Config{
+		ClientID:     cfg.ClientID,
+		ClientSecret: cfg.ClientSecret,
+		Endpoint:     endpoint,
+		RedirectURL:  redirectURL,
+		Scopes:       scopes,
+	}, nil
+}
+
+// GetMobileRedirectAllowlist returns the configured list of acceptable mobile OAuth redirect URIs.
+func (s *OidcService) GetMobileRedirectAllowlist(ctx context.Context) []string {
+	raw := ""
+	if s.config != nil {
+		raw = s.config.OidcMobileRedirectUris
+	}
+	if s.settingsService != nil {
+		raw = s.settingsService.GetStringSetting(ctx, "oidcMobileRedirectUris", raw)
+	}
+	return kit.TrimNonEmpty(strings.Split(raw, ","))
+}
+
+// ValidateMobileRedirectURI returns nil if uri exactly matches one of the
+// configured mobile redirect URIs. Full-string match is required — partial
+// matches on scheme or host could be abused for open-redirect attacks.
+func (s *OidcService) ValidateMobileRedirectURI(ctx context.Context, uri string) error {
+	if uri == "" {
+		return errors.New("mobile redirect URI is empty")
+	}
+	if slices.Contains(s.GetMobileRedirectAllowlist(ctx), uri) {
+		return nil
+	}
+	return fmt.Errorf("mobile redirect URI %q is not in the configured allowlist", uri)
+}
+
+func (s *OidcService) GenerateAuthURL(ctx context.Context, redirectTo, origin, mobileRedirectURI string) (string, string, error) {
+	oidcConfig, err := s.getEffectiveConfigInternal(ctx)
+	if err != nil {
+		slog.ErrorContext(ctx, "GenerateAuthURL: failed to get OIDC config", "error", err)
+		return "", "", err
+	}
+
+	var provider *oidc.Provider
+	if !s.hasManualEndpointsInternal(oidcConfig) {
+		var discoverProviderErr error
+		provider, discoverProviderErr = s.getOrDiscoverProviderInternal(ctx, oidcConfig)
+		if discoverProviderErr != nil {
+			slog.ErrorContext(ctx, "GenerateAuthURL: provider discovery failed", "issuer", oidcConfig.IssuerURL, "error", discoverProviderErr)
+			return "", "", fmt.Errorf("failed to discover provider: %w", discoverProviderErr)
+		}
+	}
+
+	state := kit.RandomString(32)
+	nonce := kit.RandomString(32)
+	codeVerifier := kit.RandomString(128)
+
+	oauth2Config, err := s.getOauth2ConfigInternal(oidcConfig, provider, origin, mobileRedirectURI)
+	if err != nil {
+		slog.ErrorContext(ctx, "GenerateAuthURL: invalid OIDC endpoints", "error", err)
+		return "", "", err
+	}
+
+	authURL := oauth2Config.AuthCodeURL(state,
+		oauth2.SetAuthURLParam("nonce", nonce),
+		oauth2.S256ChallengeOption(codeVerifier),
+	)
+
+	stateData := OidcState{
+		State:        state,
+		Nonce:        nonce,
+		CodeVerifier: codeVerifier,
+		RedirectTo:   redirectTo,
+		CreatedAt:    time.Now(),
+	}
+
+	stateJSON, err := json.Marshal(stateData)
+	if err != nil {
+		slog.ErrorContext(ctx, "GenerateAuthURL: failed to marshal state", "error", err)
+		return "", "", fmt.Errorf("failed to encode state: %w", err)
+	}
+	encodedState := base64.URLEncoding.EncodeToString(stateJSON)
+
+	slog.DebugContext(ctx, "GenerateAuthURL: generated authorization URL", "issuer", oidcConfig.IssuerURL, "scopes", oauth2Config.Scopes)
+	return authURL, encodedState, nil
+}
+
+func (s *OidcService) GetOidcRedirectURL(origin string) string {
+	baseUrl := origin
+	if baseUrl == "" {
+		baseUrl = strings.TrimSuffix(s.config.GetAppURL(), "/")
+	}
+	return baseUrl + "/auth/oidc/callback"
+}
+
+func (s *OidcService) getOrDiscoverProviderInternal(ctx context.Context, cfg *settings.OidcConfig) (*oidc.Provider, error) {
+	if s.providerCache == nil {
+		s.providerCache = hot.NewHotCache[oidcProviderKey, *oidc.Provider](hot.LRU, 4).Build()
+	}
+	key := oidcProviderKey{issuer: cfg.IssuerURL, skipTLS: cfg.SkipTlsVerify}
+	provider, found, err := s.providerCache.GetWithLoaders(key, func(keys []oidcProviderKey) (map[oidcProviderKey]*oidc.Provider, error) {
+		providers := make(map[oidcProviderKey]*oidc.Provider, len(keys))
+		for _, providerKey := range keys {
+			discoveryCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 30*time.Second)
+			providerCtx := oidc.ClientContext(discoveryCtx, s.getHttpClientInternal(providerKey.skipTLS))
+			discovered, discoveredIssuer, discoverErr := s.discoverProviderInternal(providerCtx, providerKey.issuer)
+			cancel()
+			if discoverErr != nil {
+				slog.ErrorContext(ctx, "getOrDiscoverProviderInternal: discovery failed", "issuer", providerKey.issuer, "skipTls", providerKey.skipTLS, "error", discoverErr)
+				return nil, fmt.Errorf("failed to discover provider at %s: %w", providerKey.issuer, discoverErr)
+			}
+			providers[providerKey] = discovered
+			slog.DebugContext(ctx, "getOrDiscoverProviderInternal: provider cached", "issuer", providerKey.issuer, "effectiveIssuer", discoveredIssuer, "skipTls", providerKey.skipTLS)
+		}
+		return providers, nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	if !found {
+		return nil, errors.New("OIDC provider cache loader returned no provider")
+	}
+	return provider, nil
+}
+
+func (s *OidcService) discoverProviderInternal(ctx context.Context, issuer string) (*oidc.Provider, string, error) {
+	provider, err := oidc.NewProvider(ctx, issuer)
+	if err == nil {
+		return provider, issuer, nil
+	}
+
+	altIssuer := strings.TrimRight(issuer, "/")
+	if altIssuer == issuer {
+		altIssuer = issuer + "/"
+	}
+
+	slog.WarnContext(ctx, "getOrDiscoverProviderInternal: retrying discovery with alternate issuer", "configured", issuer, "alternate", altIssuer)
+	provider, altErr := oidc.NewProvider(ctx, altIssuer)
+	if altErr == nil {
+		return provider, altIssuer, nil
+	}
+
+	slog.ErrorContext(ctx, "getOrDiscoverProviderInternal: discovery failed with alternate issuer", "issuer", altIssuer, "error", altErr)
+	return nil, issuer, err
+}
+
+func (s *OidcService) exchangeTokenInternal(ctx context.Context, cfg *settings.OidcConfig, provider *oidc.Provider, code, verifier, origin, mobileRedirectURI string) (*oauth2.Token, error) {
+	oauth2Config, err := s.getOauth2ConfigInternal(cfg, provider, origin, mobileRedirectURI)
+	if err != nil {
+		return nil, err
+	}
+
+	providerCtx := oidc.ClientContext(ctx, s.getHttpClientInternal(cfg.SkipTlsVerify))
+	token, err := oauth2Config.Exchange(providerCtx, code, oauth2.VerifierOption(verifier))
+	if err != nil {
+		slog.ErrorContext(ctx, "exchangeTokenInternal: token exchange failed", "tokenEndpoint", oauth2Config.Endpoint.TokenURL, "error", err)
+		return nil, fmt.Errorf("failed to exchange authorization code: %w", err)
+	}
+
+	slog.DebugContext(ctx, "exchangeTokenInternal: token exchange successful", "hasAccessToken", token.AccessToken != "", "hasRefreshToken", token.RefreshToken != "")
+	return token, nil
+}
+
+func (s *OidcService) fetchClaimsInternal(ctx context.Context, cfg *settings.OidcConfig, provider *oidc.Provider, token *oauth2.Token, idToken *oidc.IDToken) (map[string]any, error) {
+	providerCtx := oidc.ClientContext(ctx, s.getHttpClientInternal(cfg.SkipTlsVerify))
+	var claims map[string]any
+
+	if idToken != nil {
+		if err := idToken.Claims(&claims); err != nil {
+			slog.WarnContext(ctx, "fetchClaimsInternal: failed to extract claims from ID token", "error", err)
+		} else {
+			slog.DebugContext(ctx, "fetchClaimsInternal: extracted claims from ID token")
+		}
+	}
+
+	var userInfoClaims map[string]any
+	switch {
+	case provider != nil:
+		userInfo, err := provider.UserInfo(providerCtx, oauth2.StaticTokenSource(token))
+		if err != nil {
+			slog.DebugContext(ctx, "fetchClaimsInternal: userinfo endpoint call failed", "error", err)
+			if claims != nil {
+				return claims, nil
+			}
+			return nil, fmt.Errorf("failed to fetch userinfo: %w", err)
+		}
+		if claimsErr := userInfo.Claims(&userInfoClaims); claimsErr != nil {
+			slog.WarnContext(ctx, "fetchClaimsInternal: failed to decode userinfo claims", "error", claimsErr)
+			if claims != nil {
+				return claims, nil
+			}
+			return nil, fmt.Errorf("failed to decode userinfo claims: %w", claimsErr)
+		}
+		slog.DebugContext(ctx, "fetchClaimsInternal: fetched userinfo claims successfully")
+	case cfg.UserinfoEndpoint != "":
+		manualClaims, err := s.fetchUserInfoClaimsInternal(providerCtx, cfg, token)
+		if err != nil {
+			slog.DebugContext(ctx, "fetchClaimsInternal: userinfo endpoint call failed", "error", err)
+			if claims != nil {
+				return claims, nil
+			}
+			return nil, fmt.Errorf("failed to fetch userinfo: %w", err)
+		}
+		userInfoClaims = manualClaims
+		slog.DebugContext(ctx, "fetchClaimsInternal: fetched userinfo claims successfully")
+	case claims != nil:
+		return claims, nil
+	default:
+		return nil, errors.New("userinfo endpoint not configured")
+	}
+
+	if claims == nil {
+		claims = make(map[string]any)
+	}
+	for k, v := range userInfoClaims {
+		if _, exists := claims[k]; !exists {
+			claims[k] = v
+		}
+	}
+
+	return claims, nil
+}
+
+func (s *OidcService) fetchUserInfoClaimsInternal(ctx context.Context, cfg *settings.OidcConfig, token *oauth2.Token) (map[string]any, error) {
+	if cfg.UserinfoEndpoint == "" {
+		return nil, errors.New("userinfo endpoint not configured")
+	}
+	if token == nil || token.AccessToken == "" {
+		return nil, errors.New("missing access token for userinfo request")
+	}
+
+	request, err := http.NewRequestWithContext(ctx, http.MethodGet, cfg.UserinfoEndpoint, http.NoBody)
+	if err != nil {
+		return nil, err
+	}
+
+	tokenType := cmp.Or(token.TokenType, "Bearer")
+	request.Header.Set("Authorization", fmt.Sprintf("%s %s", tokenType, token.AccessToken))
+	request.Header.Set("Accept", "application/json")
+
+	client := s.getHttpClientInternal(cfg.SkipTlsVerify)
+	resp, err := client.Do(request)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return nil, fmt.Errorf("userinfo endpoint returned status %d", resp.StatusCode)
+	}
+
+	var claims map[string]any
+	if unmarshalReadErr := json.UnmarshalRead(resp.Body, &claims); unmarshalReadErr != nil {
+		return nil, unmarshalReadErr
+	}
+
+	return claims, nil
+}
+
+func (s *OidcService) HandleCallback(ctx context.Context, code, state, storedState, origin, mobileRedirectURI string) (*authtypes.OidcUserInfo, *authtypes.OidcTokenResponse, error) {
+	slog.DebugContext(ctx, "HandleCallback: processing callback", "codePresent", code != "", "statePresent", state != "")
+
+	stateData, err := s.validateStateInternal(ctx, state, storedState)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	cfg, err := s.getEffectiveConfigInternal(ctx)
+	if err != nil {
+		slog.ErrorContext(ctx, "HandleCallback: failed to get OIDC config", "error", err)
+		return nil, nil, err
+	}
+
+	var provider *oidc.Provider
+	if !s.hasManualEndpointsInternal(cfg) {
+		provider, err = s.getOrDiscoverProviderInternal(ctx, cfg)
+		if err != nil {
+			return nil, nil, err
+		}
+	}
+
+	token, err := s.exchangeTokenInternal(ctx, cfg, provider, code, stateData.CodeVerifier, origin, mobileRedirectURI)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	idToken, rawIDToken, err := s.verifyIDTokenInternal(ctx, provider, cfg, token, stateData.Nonce)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	return s.buildUserInfoInternal(ctx, provider, cfg, token, idToken, rawIDToken)
+}
+
+func (s *OidcService) validateStateInternal(ctx context.Context, state, storedState string) (*OidcState, error) {
+	stateData, err := s.decodeStateInternal(ctx, storedState)
+	if err != nil {
+		slog.ErrorContext(ctx, "HandleCallback: failed to decode stored state", "error", err)
+		return nil, fmt.Errorf("invalid state parameter: %w", err)
+	}
+
+	if state != stateData.State {
+		slog.ErrorContext(ctx, "HandleCallback: state mismatch", "receivedLen", len(state), "expectedLen", len(stateData.State))
+		return nil, errors.New("state parameter mismatch")
+	}
+
+	if time.Since(stateData.CreatedAt) > 10*time.Minute {
+		slog.ErrorContext(ctx, "HandleCallback: state expired", "age", time.Since(stateData.CreatedAt))
+		return nil, errors.New("authentication state has expired")
+	}
+	return stateData, nil
+}
+
+func (s *OidcService) verifyIDTokenInternal(ctx context.Context, provider *oidc.Provider, cfg *settings.OidcConfig, token *oauth2.Token, nonce string) (*oidc.IDToken, string, error) {
+	var rawIDToken string
+	if idTokenValue := token.Extra("id_token"); idTokenValue != nil {
+		if idTokenStr, ok := idTokenValue.(string); ok {
+			rawIDToken = idTokenStr
+		}
+	}
+
+	if rawIDToken == "" {
+		slog.WarnContext(ctx, "HandleCallback: no ID token in response (non-compliant OIDC response)")
+		return nil, "", nil
+	}
+
+	verifierConfig := &oidc.Config{
+		ClientID:             cfg.ClientID,
+		SupportedSigningAlgs: oidcjwk.SupportedSigningAlgs(),
+	}
+
+	var issuer, jwksURL string
+	if provider != nil {
+		var meta struct {
+			Issuer  string `json:"issuer"`
+			JWKSURL string `json:"jwks_uri"`
+		}
+		if err := provider.Claims(&meta); err != nil {
+			return nil, "", fmt.Errorf("failed to read provider metadata: %w", err)
+		}
+		issuer, jwksURL = meta.Issuer, meta.JWKSURL
+	} else {
+		issuer, jwksURL = cfg.IssuerURL, cfg.JwksURI
+	}
+	if jwksURL == "" {
+		return nil, "", errors.New("jwks URI must be configured when using manual OIDC endpoints")
+	}
+
+	keySet, err := s.keySetInternal(ctx, jwksURL, cfg.SkipTlsVerify)
+	if err != nil {
+		return nil, "", fmt.Errorf("failed to configure provider JWK set: %w", err)
+	}
+	providerCtx := oidc.ClientContext(ctx, s.getHttpClientInternal(cfg.SkipTlsVerify))
+	verifier := oidc.NewVerifier(issuer, keySet, verifierConfig)
+
+	idToken, err := verifier.Verify(providerCtx, rawIDToken)
+	if err != nil {
+		slog.ErrorContext(ctx, "HandleCallback: ID token verification failed", "error", err)
+		return nil, "", fmt.Errorf("failed to verify ID token: %w", err)
+	}
+
+	if nonce != "" {
+		var claims struct {
+			Nonce string `json:"nonce"`
+		}
+		if claimsErr := idToken.Claims(&claims); claimsErr != nil {
+			slog.ErrorContext(ctx, "HandleCallback: failed to extract nonce from ID token", "error", claimsErr)
+			return nil, "", fmt.Errorf("failed to verify nonce: %w", claimsErr)
+		}
+		if claims.Nonce != nonce {
+			slog.ErrorContext(ctx, "HandleCallback: nonce mismatch", "expected", nonce, "got", claims.Nonce)
+			return nil, "", errors.New("nonce verification failed")
+		}
+	}
+
+	slog.DebugContext(ctx, "HandleCallback: ID token verified successfully", "subject", idToken.Subject, "issuer", idToken.Issuer)
+	return idToken, rawIDToken, nil
+}
+
+func (
+	s *OidcService,
+) buildUserInfoInternal(
+	ctx context.Context,
+	provider *oidc.Provider,
+	cfg *settings.OidcConfig,
+	token *oauth2.Token,
+	idToken *oidc.IDToken,
+	rawIDToken string,
+) (
+	*authtypes.OidcUserInfo,
+	*authtypes.OidcTokenResponse,
+	error,
+) {
+	claims, err := s.fetchClaimsInternal(ctx, cfg, provider, token, idToken)
+	if err != nil {
+		slog.ErrorContext(ctx, "HandleCallback: failed to fetch claims", "error", err)
+		return nil, nil, fmt.Errorf("failed to fetch user claims: %w", err)
+	}
+
+	subject := jwtclaims.GetStringClaim(claims, "sub")
+	if subject == "" {
+		slog.ErrorContext(ctx, "HandleCallback: missing required 'sub' claim")
+		return nil, nil, errors.New("missing required 'sub' claim in user info")
+	}
+
+	userInfoDto := authtypes.OidcUserInfo{
+		Subject:           subject,
+		Name:              jwtclaims.GetStringClaim(claims, "name"),
+		Email:             jwtclaims.GetStringClaim(claims, "email"),
+		EmailVerified:     jwtclaims.GetBoolClaim(claims, "email_verified"),
+		PreferredUsername: jwtclaims.GetStringClaim(claims, "preferred_username"),
+		GivenName:         jwtclaims.GetStringClaim(claims, "given_name"),
+		FamilyName:        jwtclaims.GetStringClaim(claims, "family_name"),
+		Admin:             jwtclaims.GetBoolClaim(claims, "admin"),
+		Roles:             jwtclaims.GetStringSliceClaim(claims, "roles"),
+		Groups:            jwtclaims.GetStringSliceClaim(claims, "groups"),
+		Extra:             claims,
+	}
+
+	tokenType := cmp.Or(token.TokenType, "Bearer")
+
+	tokenResp := &authtypes.OidcTokenResponse{
+		AccessToken:  token.AccessToken,
+		TokenType:    tokenType,
+		RefreshToken: token.RefreshToken,
+		IDToken:      rawIDToken,
+	}
+	if !token.Expiry.IsZero() {
+		expiresIn := max(int(time.Until(token.Expiry).Seconds()), 0)
+		tokenResp.ExpiresIn = expiresIn
+	}
+
+	slog.InfoContext(ctx, "HandleCallback: authentication successful", "subject", userInfoDto.Subject, "email", userInfoDto.Email)
+	return &userInfoDto, tokenResp, nil
+}
+
+func (s *OidcService) decodeStateInternal(ctx context.Context, encodedState string) (*OidcState, error) {
+	stateJSON, err := base64.URLEncoding.DecodeString(encodedState)
+	if err != nil {
+		slog.ErrorContext(ctx, "decodeStateInternal: failed to decode base64 state", "error", err)
+		return nil, err
+	}
+
+	var stateData OidcState
+	if unmarshalErr := json.Unmarshal(stateJSON, &stateData); unmarshalErr != nil {
+		slog.ErrorContext(ctx, "decodeStateInternal: failed to unmarshal state JSON", "error", unmarshalErr)
+		return nil, unmarshalErr
+	}
+
+	return &stateData, nil
+}
+
+// InitiateDeviceAuth initiates the OIDC device authorization flow.
+func (s *OidcService) InitiateDeviceAuth(ctx context.Context) (*authtypes.OidcDeviceAuthResponse, error) {
+	cfg, err := s.getEffectiveConfigInternal(ctx)
+	if err != nil {
+		slog.ErrorContext(ctx, "InitiateDeviceAuth: failed to get OIDC config", "error", err)
+		return nil, err
+	}
+
+	deviceEndpoint, err := s.getDeviceAuthorizationEndpointInternal(ctx, cfg)
+	if err != nil {
+		slog.ErrorContext(ctx, "InitiateDeviceAuth: failed to get device endpoint", "error", err)
+		return nil, err
+	}
+
+	scopes := strings.Fields(cfg.Scopes)
+	if len(scopes) == 0 {
+		scopes = []string{"email", "profile"}
+	}
+	scopes = s.ensureOpenIDScopeInternal(scopes)
+
+	values := url.Values{}
+	values.Set("client_id", cfg.ClientID)
+	values.Set("scope", strings.Join(scopes, " "))
+	if cfg.ClientSecret != "" {
+		values.Set("client_secret", cfg.ClientSecret)
+	}
+
+	respData, err := s.makeDeviceAuthRequestInternal(ctx, deviceEndpoint, values, cfg.SkipTlsVerify)
+	if err != nil {
+		return nil, err
+	}
+
+	deviceCode, ok := respData["device_code"].(string)
+	if !ok || deviceCode == "" {
+		return nil, errors.New("invalid device_code in response")
+	}
+	userCode, ok := respData["user_code"].(string)
+	if !ok || userCode == "" {
+		return nil, errors.New("invalid user_code in response")
+	}
+	verificationUri, ok := respData["verification_uri"].(string)
+	if !ok || verificationUri == "" {
+		return nil, errors.New("invalid verification_uri in response")
+	}
+	expiresIn, ok := respData["expires_in"].(float64)
+	if !ok {
+		return nil, errors.New("invalid expires_in in response")
+	}
+
+	response := &authtypes.OidcDeviceAuthResponse{
+		DeviceCode:      deviceCode,
+		UserCode:        userCode,
+		VerificationUri: verificationUri,
+		ExpiresIn:       int(expiresIn),
+	}
+
+	if uri, localOk := respData["verification_uri_complete"].(string); localOk {
+		response.VerificationUriComplete = uri
+	}
+	if interval, localOk2 := respData["interval"].(float64); localOk2 {
+		response.Interval = int(interval)
+	} else {
+		response.Interval = 5
+	}
+
+	slog.DebugContext(ctx, "InitiateDeviceAuth: device authorization initiated", "userCode", response.UserCode, "expiresIn", response.ExpiresIn)
+	return response, nil
+}
+
+// getDeviceAuthorizationEndpointInternal discovers or returns the configured device authorization endpoint.
+func (s *OidcService) getDeviceAuthorizationEndpointInternal(ctx context.Context, cfg *settings.OidcConfig) (string, error) {
+	if cfg.DeviceAuthorizationEndpoint != "" {
+		return cfg.DeviceAuthorizationEndpoint, nil
+	}
+
+	provider, err := s.getOrDiscoverProviderInternal(ctx, cfg)
+	if err != nil {
+		return "", fmt.Errorf("failed to discover provider: %w", err)
+	}
+
+	var claims struct {
+		DeviceAuthorizationEndpoint string `json:"device_authorization_endpoint"`
+	}
+	if claimsErr := provider.Claims(&claims); claimsErr != nil {
+		return "", fmt.Errorf("failed to get device authorization endpoint from provider: %w", claimsErr)
+	}
+
+	if claims.DeviceAuthorizationEndpoint == "" {
+		return "", errors.New("device authorization endpoint not found in provider configuration")
+	}
+
+	return claims.DeviceAuthorizationEndpoint, nil
+}
+
+// makeDeviceAuthRequestInternal makes a device authorization request.
+func (s *OidcService) makeDeviceAuthRequestInternal(ctx context.Context, endpoint string, params url.Values, skipTls bool) (map[string]any, error) {
+	body := params.Encode()
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, strings.NewReader(body))
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req.Header.Set("Accept", "application/json")
+
+	client := s.getHttpClientInternal(skipTls)
+	resp, err := client.Do(req)
+	if err != nil {
+		slog.ErrorContext(ctx, "makeDeviceAuthRequestInternal: request failed", "error", err)
+		return nil, fmt.Errorf("device authorization request failed: %w", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		var errorResp map[string]any
+		if unmarshalReadErr := json.UnmarshalRead(resp.Body, &errorResp); unmarshalReadErr == nil {
+			if errMsg, ok := errorResp["error"].(string); ok {
+				return nil, fmt.Errorf("device authorization failed: %s", errMsg)
+			}
+		}
+		return nil, fmt.Errorf("device authorization endpoint returned status %d", resp.StatusCode)
+	}
+
+	var respData map[string]any
+	if decodeDeviceAuthorizationErr := json.UnmarshalRead(resp.Body, &respData); decodeDeviceAuthorizationErr != nil {
+		return nil, fmt.Errorf("failed to decode device authorization response: %w", decodeDeviceAuthorizationErr)
+	}
+
+	return respData, nil
+}
+
+// ExchangeDeviceToken exchanges a device code for tokens.
+func (s *OidcService) ExchangeDeviceToken(ctx context.Context, deviceCode string) (*authtypes.OidcUserInfo, *authtypes.OidcTokenResponse, error) {
+	cfg, err := s.getEffectiveConfigInternal(ctx)
+	if err != nil {
+		slog.ErrorContext(ctx, "ExchangeDeviceToken: failed to get OIDC config", "error", err)
+		return nil, nil, err
+	}
+
+	var tokenEndpoint string
+	if cfg.TokenEndpoint != "" {
+		tokenEndpoint = cfg.TokenEndpoint
+	} else {
+		provider, getOrDiscoverProviderErr := s.getOrDiscoverProviderInternal(ctx, cfg)
+		if getOrDiscoverProviderErr != nil {
+			return nil, nil, getOrDiscoverProviderErr
+		}
+		tokenEndpoint = provider.Endpoint().TokenURL
+	}
+
+	params := map[string]string{
+		"grant_type":  "urn:ietf:params:oauth:grant-type:device_code",
+		"device_code": deviceCode,
+		"client_id":   cfg.ClientID,
+	}
+	if cfg.ClientSecret != "" {
+		params["client_secret"] = cfg.ClientSecret
+	}
+
+	tokenResp, err := s.makeTokenRequestInternal(ctx, tokenEndpoint, params, cfg.SkipTlsVerify)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	var provider *oidc.Provider
+	if !s.hasManualEndpointsInternal(cfg) {
+		provider, err = s.getOrDiscoverProviderInternal(ctx, cfg)
+		if err != nil {
+			return nil, nil, err
+		}
+	}
+
+	accessToken, ok := tokenResp["access_token"].(string)
+	if !ok || accessToken == "" {
+		return nil, nil, errors.New("invalid access_token in response")
+	}
+
+	token := &oauth2.Token{
+		AccessToken: accessToken,
+		TokenType:   kit.As(tokenResp["token_type"], "Bearer"),
+	}
+	if refreshToken, localOk := tokenResp["refresh_token"].(string); localOk {
+		token.RefreshToken = refreshToken
+	}
+	if expiresIn, localOk2 := tokenResp["expires_in"].(float64); localOk2 {
+		token.Expiry = time.Now().Add(time.Duration(expiresIn) * time.Second)
+	}
+	if idToken, localOk3 := tokenResp["id_token"].(string); localOk3 {
+		token = token.WithExtra(map[string]any{"id_token": idToken})
+	}
+
+	idToken, rawIDToken, err := s.verifyIDTokenInternal(ctx, provider, cfg, token, "")
+	if err != nil {
+		return nil, nil, err
+	}
+
+	return s.buildUserInfoInternal(ctx, provider, cfg, token, idToken, rawIDToken)
+}
+
+// makeTokenRequestInternal makes a token exchange request.
+func (s *OidcService) makeTokenRequestInternal(ctx context.Context, endpoint string, params map[string]string, skipTls bool) (map[string]any, error) {
+	values := url.Values{}
+	for k, v := range params {
+		values.Set(k, v)
+	}
+	body := values.Encode()
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, strings.NewReader(body))
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req.Header.Set("Accept", "application/json")
+
+	client := s.getHttpClientInternal(skipTls)
+	resp, err := client.Do(req)
+	if err != nil {
+		slog.ErrorContext(ctx, "makeTokenRequestInternal: request failed", "error", err)
+		return nil, fmt.Errorf("token request failed: %w", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	var tokenResp map[string]any
+	if unmarshalReadErr := json.UnmarshalRead(resp.Body, &tokenResp); unmarshalReadErr != nil {
+		return nil, fmt.Errorf("failed to decode token response: %w", unmarshalReadErr)
+	}
+
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		if errMsg, ok := tokenResp["error"].(string); ok {
+			switch errMsg {
+			case "authorization_pending":
+				return nil, errors.New("authorization_pending")
+			case "slow_down":
+				return nil, errors.New("slow_down")
+			case "expired_token":
+				return nil, errors.New("expired_token")
+			case "access_denied":
+				return nil, errors.New("access_denied")
+			default:
+				return nil, fmt.Errorf("token exchange failed: %s", errMsg)
+			}
+		}
+		return nil, fmt.Errorf("token endpoint returned status %d", resp.StatusCode)
+	}
+
+	return tokenResp, nil
+}

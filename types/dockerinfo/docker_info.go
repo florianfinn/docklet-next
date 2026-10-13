@@ -1,0 +1,51 @@
+// Source: getarcaneapp/arcane/types/dockerinfo/docker_info.go
+// Revision: 095cb778daba1034e2a39961199e712a75d4ba29
+// Retrieved: 2026-10-13
+// License: BSD-3-Clause
+// Deviations: None
+
+package dockerinfo
+
+import "github.com/moby/moby/api/types/system"
+
+type Info struct {
+	// Embedded system.Info from the Docker daemon.
+	//
+	// Required: true
+	system.Info
+
+	// Success indicates if the Docker daemon information was successfully retrieved.
+	//
+	// Required: true
+	Success bool `json:"success"`
+
+	// APIVersion is the API version of the Docker daemon.
+	//
+	// Required: true
+	APIVersion string `json:"apiVersion"`
+
+	// GitCommit is the Git commit hash of the Docker daemon.
+	//
+	// Required: true
+	GitCommit string `json:"gitCommit"`
+
+	// GoVersion is the Go version used to build the Docker daemon.
+	//
+	// Required: true
+	GoVersion string `json:"goVersion"`
+
+	// Os is the operating system the Docker daemon is running on.
+	//
+	// Required: true
+	Os string `json:"os"`
+
+	// Arch is the architecture the Docker daemon is running on.
+	//
+	// Required: true
+	Arch string `json:"arch"`
+
+	// BuildTime is the build time of the Docker daemon.
+	//
+	// Required: true
+	BuildTime string `json:"buildTime"`
+}

@@ -1,5 +1,59 @@
 {
   "source": "LICENSES/BSD-3-Clause-Arcane.txt",
   "sha256": "9618cc2d4716242ffc576d177e3c325da67c27cd973d449b1bdb31ecefde57c5",
-  "artifactCopies": []
+  "artifactCopies": [],
+  "adoptedSources": [
+    {
+      "path": "third_party/arcane/acfs/LICENSE",
+      "sha256": "a59e647da475c8fb084f571521350d623f47bd3221d696e111f8730a6e1f7de8"
+    },
+    {
+      "path": "third_party/arcane/builds/LICENSE",
+      "sha256": "49c6aa1dea05d7fc17ccf95c10723cec42fcf518df1ffa8bafb5209a64cb38a5"
+    },
+    {
+      "path": "third_party/arcane/docker/LICENSE",
+      "sha256": "9d371b9f228795be4e033d01901dd42822f8e5ce82a0710fcec2769b99d81027"
+    },
+    {
+      "path": "third_party/arcane/docker/compat/LICENSE",
+      "sha256": "9d371b9f228795be4e033d01901dd42822f8e5ce82a0710fcec2769b99d81027"
+    },
+    {
+      "path": "third_party/arcane/docker/convert/LICENSE",
+      "sha256": "9d371b9f228795be4e033d01901dd42822f8e5ce82a0710fcec2769b99d81027"
+    },
+    {
+      "path": "third_party/arcane/kit/LICENSE",
+      "sha256": "9d371b9f228795be4e033d01901dd42822f8e5ce82a0710fcec2769b99d81027"
+    },
+    {
+      "path": "third_party/arcane/kit/sys/LICENSE",
+      "sha256": "9618cc2d4716242ffc576d177e3c325da67c27cd973d449b1bdb31ecefde57c5"
+    },
+    {
+      "path": "third_party/arcane/streams/LICENSE",
+      "sha256": "9618cc2d4716242ffc576d177e3c325da67c27cd973d449b1bdb31ecefde57c5"
+    },
+    {
+      "path": "third_party/arcane/sys/LICENSE",
+      "sha256": "9618cc2d4716242ffc576d177e3c325da67c27cd973d449b1bdb31ecefde57c5"
+    },
+    {
+      "path": "third_party/arcane/sys/bytes/LICENSE",
+      "sha256": "9d371b9f228795be4e033d01901dd42822f8e5ce82a0710fcec2769b99d81027"
+    },
+    {
+      "path": "third_party/arcane/sys/cgroup/LICENSE",
+      "sha256": "9d371b9f228795be4e033d01901dd42822f8e5ce82a0710fcec2769b99d81027"
+    },
+    {
+      "path": "third_party/arcane/sys/crypto/LICENSE",
+      "sha256": "9d371b9f228795be4e033d01901dd42822f8e5ce82a0710fcec2769b99d81027"
+    },
+    {
+      "path": "third_party/arcane/updater/LICENSE",
+      "sha256": "9618cc2d4716242ffc576d177e3c325da67c27cd973d449b1bdb31ecefde57c5"
+    }
+  ]
 }

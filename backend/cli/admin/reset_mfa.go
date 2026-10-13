@@ -1,0 +1,112 @@
+// Source: getarcaneapp/arcane/backend/cli/admin/reset_mfa.go
+// Revision: 095cb778daba1034e2a39961199e712a75d4ba29
+// Retrieved: 2026-10-13
+// License: BSD-3-Clause
+// Deviations: Local module namespace
+
+package admin
+
+import (
+	"bufio"
+	"errors"
+	"fmt"
+	"io"
+	"log/slog"
+	"strings"
+
+	"github.com/spf13/cobra"
+
+	"github.com/florianfinn/docklet-next/backend/internal/common"
+	"github.com/florianfinn/docklet-next/backend/internal/config"
+	"github.com/florianfinn/docklet-next/backend/internal/database"
+	"github.com/florianfinn/docklet-next/backend/internal/passkey"
+	"github.com/florianfinn/docklet-next/backend/internal/session"
+	"github.com/florianfinn/docklet-next/backend/internal/user"
+)
+
+var resetMFAUsername string
+
+var resetMFACmd = &cobra.Command{
+	Use:          "reset-mfa",
+	Short:        "Reset passkey MFA for a user",
+	Long:         "Disable passkey MFA, remove recovery codes, cancel pending MFA transactions, and revoke the user's sessions. This command must be explicitly enabled with ALLOW_CLI_MFA_RESET=true.",
+	Args:         cobra.NoArgs,
+	SilenceUsage: true,
+	RunE:         runResetMFACommandInternal,
+}
+
+func init() {
+	resetMFACmd.Flags().StringVar(&resetMFAUsername, "username", defaultAdminUsername, "Username whose passkey MFA should be reset")
+	AdminCmd.AddCommand(resetMFACmd)
+}
+
+func runResetMFACommandInternal(cmd *cobra.Command, _ []string) error {
+	cfg := config.Load()
+	if err := ensureMFAResetEnabledInternal(cfg); err != nil {
+		return err
+	}
+
+	username := strings.TrimSpace(resetMFAUsername)
+	if username == "" {
+		return errors.New("username cannot be empty")
+	}
+	if err := confirmMFAResetInternal(cmd.InOrStdin(), cmd.OutOrStdout(), username); err != nil {
+		return err
+	}
+
+	db, err := database.Initialize(cmd.Context(), cfg.DatabaseURL, database.MigrationOptions{AllowDowngrade: cfg.AllowDowngrade})
+	if err != nil {
+		return fmt.Errorf("failed to initialize database: %w", err)
+	}
+	defer func() {
+		if closeErr := db.Close(); closeErr != nil {
+			slog.WarnContext(cmd.Context(), "Failed to close database after MFA reset", "error", closeErr)
+		}
+	}()
+
+	userService := user.NewUserService(db, nil, session.RevokeAllUserSessionsExceptInDB)
+	localUser, err := userService.GetUserByUsername(cmd.Context(), username)
+	if err != nil {
+		if errors.Is(err, common.ErrUserNotFound) {
+			return fmt.Errorf("user %q not found", username)
+		}
+		return fmt.Errorf("failed to find user: %w", err)
+	}
+
+	passkeyService := passkey.NewPasskeyService(db, cfg)
+	if resetMFAForUserErr := passkeyService.ResetMFAForUser(cmd.Context(), localUser.ID); resetMFAForUserErr != nil {
+		return fmt.Errorf("failed to reset passkey MFA: %w", resetMFAForUserErr)
+	}
+
+	if _, fprintfErr := fmt.Fprintf(cmd.OutOrStdout(), "Passkey MFA reset successfully for %q\n", username); fprintfErr != nil {
+		return fmt.Errorf("failed to write MFA reset result: %w", fprintfErr)
+	}
+	return nil
+}
+
+func ensureMFAResetEnabledInternal(cfg *config.Config) error {
+	if cfg == nil {
+		return errors.New("MFA reset config is nil")
+	}
+	if !cfg.AllowCLIMFAReset {
+		return errors.New("CLI MFA reset is disabled; set ALLOW_CLI_MFA_RESET=true to enable it")
+	}
+	return nil
+}
+
+func confirmMFAResetInternal(in io.Reader, out io.Writer, username string) error {
+	if in == nil || out == nil {
+		return errors.New("confirmation input and output are required")
+	}
+	if _, err := fmt.Fprintf(out, "This will disable passkey MFA and revoke all sessions for %q. Type RESET to continue: ", username); err != nil {
+		return fmt.Errorf("failed to write MFA reset confirmation: %w", err)
+	}
+	answer, err := bufio.NewReader(in).ReadString('\n')
+	if err != nil && !errors.Is(err, io.EOF) {
+		return fmt.Errorf("failed to read MFA reset confirmation: %w", err)
+	}
+	if strings.TrimSpace(answer) != "RESET" {
+		return errors.New("MFA reset cancelled")
+	}
+	return nil
+}

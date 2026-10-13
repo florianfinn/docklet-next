@@ -1,0 +1,126 @@
+// Source: getarcaneapp/arcane/cli/internal/integrationtest/command_helpers_test.go
+// Revision: 095cb778daba1034e2a39961199e712a75d4ba29
+// Retrieved: 2026-10-13
+// License: BSD-3-Clause
+// Deviations: Local module namespace
+
+package integrationtest
+
+import (
+	"io"
+	"os"
+	"path/filepath"
+	"runtime"
+	"strings"
+	"sync"
+	"testing"
+
+	"github.com/spf13/cobra"
+	"github.com/spf13/pflag"
+	"github.com/stretchr/testify/require"
+
+	clipkg "github.com/florianfinn/docklet-next/cli/pkg"
+)
+
+var stdoutCaptureMuInternal sync.Mutex
+
+func writeCLIIntegrationConfigInternal(t *testing.T, serverURL string) string {
+	t.Helper()
+
+	tempDir := t.TempDir()
+	configPath := filepath.Join(tempDir, "arcanecli.yml")
+	configContent := strings.Join([]string{
+		"server_url: " + serverURL,
+		"api_key: arc_test_key",
+		"default_environment: \"0\"",
+		"log_level: info",
+		"",
+	}, "\n")
+	{
+		err := os.WriteFile(configPath, []byte(configContent), 0o600)
+		require.NoError(t, err,
+			"write config: %v", err)
+	}
+
+	return configPath
+}
+
+func executeCLIIntegrationCommandInternal(t *testing.T, args []string) (string, string, error) {
+	t.Helper()
+
+	root := clipkg.RootCommand()
+	resetCommandFlagsInternal(t, root)
+	errOut := &strings.Builder{}
+	root.SetErr(errOut)
+	root.SetArgs(args)
+
+	stdoutCaptureMuInternal.Lock()
+	defer stdoutCaptureMuInternal.Unlock()
+
+	stdout := os.Stdout
+	reader, writer, err := os.Pipe()
+
+	require.NoError(t, err,
+		"pipe: %v", err)
+
+	os.Stdout = writer
+	defer func() {
+		_ = writer.Close()
+		os.Stdout = stdout
+	}()
+
+	runErr := root.Execute()
+
+	_ = writer.Close()
+	stdoutBytes, readErr := io.ReadAll(reader)
+
+	require.NoError(t, readErr,
+		"read stdout: %v", readErr)
+
+	outBuf := string(stdoutBytes)
+	if runtime.GOOS == "windows" {
+		outBuf = strings.ReplaceAll(outBuf, "\r\n", "\n")
+	}
+
+	return outBuf, errOut.String(), runErr
+}
+
+func resetCommandFlagsInternal(t *testing.T, root *cobra.Command) {
+	t.Helper()
+
+	if root == nil {
+		return
+	}
+
+	resetFlagSetInternal(t, root.PersistentFlags())
+	resetFlagSetInternal(t, root.Flags())
+	for _, cmd := range root.Commands() {
+		resetCommandFlagsInternal(t, cmd)
+	}
+}
+
+func resetFlagSetInternal(t *testing.T, flagSet *pflag.FlagSet) {
+	t.Helper()
+
+	if flagSet == nil {
+		return
+	}
+
+	flagSet.VisitAll(func(flag *pflag.Flag) {
+		defValue := flag.DefValue
+		switch flag.Value.Type() {
+		case "stringSlice", "stringArray":
+			if defValue == "[]" {
+				defValue = ""
+			}
+		}
+		{
+
+			err := flag.Value.Set(defValue)
+			require.NoError(t, err,
+				"reset flag %s: %v", flag.Name, err)
+		}
+
+		flag.Changed = false
+	})
+}

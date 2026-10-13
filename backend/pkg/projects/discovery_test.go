@@ -1,0 +1,319 @@
+// Source: getarcaneapp/arcane/backend/pkg/projects/discovery_test.go
+// Revision: 095cb778daba1034e2a39961199e712a75d4ba29
+// Retrieved: 2026-10-13
+// License: BSD-3-Clause
+// Deviations: None
+
+package projects
+
+import (
+	"os"
+	"path/filepath"
+	"runtime"
+	"testing"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+)
+
+// writeComposeFileInternal creates an empty compose.yml at the given directory.
+func writeComposeFileInternal(t *testing.T, dir string) {
+	t.Helper()
+	require.NoError(t, os.MkdirAll(dir, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "compose.yml"), []byte("services: {}\n"), 0o644))
+}
+
+// discoveredNamesInternal returns the DirName of each discovered project, preserving order.
+func discoveredNamesInternal(dirs []DiscoveredProjectDir) []string {
+	out := make([]string, 0, len(dirs))
+	for _, d := range dirs {
+		out = append(out, d.DirName)
+	}
+	return out
+}
+
+// TestDiscoverProjectDirectories_StopsDescentAtCompose verifies that once a
+// compose file is found at a given level, children are not discovered as
+// separate top-level projects (they are assumed to belong to the parent,
+// e.g. via compose include: directives).
+func TestDiscoverProjectDirectories_StopsDescentAtCompose(t *testing.T) {
+	root := t.TempDir()
+
+	// A Compose file in networking owns both nested project directories.
+	writeComposeFileInternal(t, filepath.Join(root, "networking"))
+	writeComposeFileInternal(t, filepath.Join(root, "networking", "adguardhome"))
+	writeComposeFileInternal(t, filepath.Join(root, "networking", "nginx-proxy-manager"))
+
+	discovered, err := DiscoverProjectDirectories(t.Context(), root, false, 0)
+	require.NoError(t, err)
+
+	names := discoveredNamesInternal(discovered)
+	require.Equal(t, []string{"networking"}, names,
+		"only the parent compose project should be discovered; children are assumed to be included")
+}
+
+// TestDiscoverProjectDirectories_SiblingProjectsAtRoot verifies that multiple
+// sibling projects directly under the root are all discovered when the root
+// itself has no compose file.
+func TestDiscoverProjectDirectories_SiblingProjectsAtRoot(t *testing.T) {
+	root := t.TempDir()
+
+	writeComposeFileInternal(t, filepath.Join(root, "app1"))
+	writeComposeFileInternal(t, filepath.Join(root, "app2"))
+
+	discovered, err := DiscoverProjectDirectories(t.Context(), root, false, 0)
+	require.NoError(t, err)
+
+	names := discoveredNamesInternal(discovered)
+	require.ElementsMatch(t, []string{"app1", "app2"}, names)
+}
+
+// TestDiscoverProjectDirectories_RootWithComposeAndSiblings verifies the
+// projects root directory is exempt from the stop-at-compose rule, so siblings
+// under the root are still discovered even if the root itself contains a
+// compose file.
+func TestDiscoverProjectDirectories_RootWithComposeAndSiblings(t *testing.T) {
+	root := t.TempDir()
+
+	// root/compose.yml (a root-level "project")
+	// root/app1/compose.yml
+	// root/app2/compose.yml
+	writeComposeFileInternal(t, root)
+	writeComposeFileInternal(t, filepath.Join(root, "app1"))
+	writeComposeFileInternal(t, filepath.Join(root, "app2"))
+
+	discovered := discoverProjectDirectoriesInternal(t, root)
+
+	names := discoveredNamesInternal(discovered)
+	require.Len(t, names, 3)
+	require.Contains(t, names, "app1")
+	require.Contains(t, names, "app2")
+	// The root project is discovered using the base name of the temp dir.
+	require.Contains(t, names, filepath.Base(root))
+}
+
+// TestDiscoverProjectDirectories_NestedStandaloneProject verifies that a
+// deeply nested compose file (with no intermediate compose files) is still
+// discovered.
+func TestDiscoverProjectDirectories_NestedStandaloneProject(t *testing.T) {
+	root := t.TempDir()
+
+	// root/sub/nested/compose.yml (no compose file at root/sub/)
+	writeComposeFileInternal(t, filepath.Join(root, "sub", "nested"))
+
+	discovered, err := DiscoverProjectDirectories(t.Context(), root, false, 0)
+	require.NoError(t, err)
+
+	names := discoveredNamesInternal(discovered)
+	require.Equal(t, []string{"nested"}, names)
+}
+
+func TestDiscoverProjectDirectories_SupportsCustomComposeFilename(t *testing.T) {
+	root := t.TempDir()
+	projectDir := filepath.Join(root, "Radarr-3")
+	require.NoError(t, os.MkdirAll(projectDir, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(projectDir, "radarr.yaml"), []byte("services: {}\n"), 0o644))
+
+	discovered, err := DiscoverProjectDirectories(t.Context(), root, false, 0)
+	require.NoError(t, err)
+	require.Len(t, discovered, 1)
+	require.Equal(t, "Radarr-3", discovered[0].DirName)
+	require.Equal(t, projectDir, discovered[0].Path)
+}
+
+// discoverProjectDirectoriesInternal is a tiny helper so tests can share the
+// err-check boilerplate.
+func discoverProjectDirectoriesInternal(t *testing.T, root string) []DiscoveredProjectDir {
+	t.Helper()
+	d, err := DiscoverProjectDirectories(t.Context(), root, false, 0)
+	require.NoError(t, err)
+	return d
+}
+
+func TestDiscoverProjectDirectories_RespectsMaxDepth(t *testing.T) {
+	root := t.TempDir()
+
+	writeComposeFileInternal(t, filepath.Join(root, "top-level"))
+	writeComposeFileInternal(t, filepath.Join(root, "group", "nested"))
+
+	discovered, err := DiscoverProjectDirectories(t.Context(), root, false, 1)
+	require.NoError(t, err)
+
+	names := discoveredNamesInternal(discovered)
+	require.Equal(t, []string{"top-level"}, names)
+}
+
+func TestDiscoverProjectDirectories_UnlimitedDepthStillFindsNestedProject(t *testing.T) {
+	root := t.TempDir()
+
+	writeComposeFileInternal(t, filepath.Join(root, "group", "nested"))
+
+	discovered, err := DiscoverProjectDirectories(t.Context(), root, false, 0)
+	require.NoError(t, err)
+
+	names := discoveredNamesInternal(discovered)
+	require.Equal(t, []string{"nested"}, names)
+}
+
+func TestIsInternalScratchDirName(t *testing.T) {
+	scratch := []string{
+		".project-update-preview-123",
+		".project-update-backup-123",
+		".gitops-sync-stage-1219810203",
+		".gitops-backup-456",
+		"Makerra.gitops-backup-1780656786384743013", // legacy name-embedded form
+		".arcane-trash-app-1234567890",              // quarantined (soft-deleted) project files
+	}
+	for _, name := range scratch {
+		require.True(t, IsInternalScratchDirName(name), "expected %q to be an internal scratch dir", name)
+	}
+
+	notScratch := []string{
+		"app",
+		"Dozzle",
+		"Dozzle-1",
+		"my.gitops-backup-notes", // non-numeric tail: a real user project, not scratch
+		"app.gitops-backup-2024", // short year-like tail: not a UnixNano scratch suffix
+		"gitops-backup-1",        // no leading dot before the marker
+	}
+	for _, name := range notScratch {
+		require.False(t, IsInternalScratchDirName(name), "expected %q NOT to be an internal scratch dir", name)
+	}
+
+	// IsGitOpsScratchDirName is the gitops-only subset used by the startup FS sweep.
+	require.True(t, IsGitOpsScratchDirName(".gitops-sync-stage-1"))
+	require.True(t, IsGitOpsScratchDirName("Makerra.gitops-backup-1780656786384743013"))
+	require.False(t, IsGitOpsScratchDirName(".project-update-backup-1"))
+}
+
+// TestDiscoverProjectDirectories_SkipsGitOpsScratchDirs verifies that leaked
+// gitops scratch directories (in both the hidden and legacy name-embedded forms)
+// are never discovered as projects, while a lookalike user project is kept.
+func TestDiscoverProjectDirectories_SkipsGitOpsScratchDirs(t *testing.T) {
+	root := t.TempDir()
+
+	writeComposeFileInternal(t, filepath.Join(root, "app"))
+	writeComposeFileInternal(t, filepath.Join(root, ".gitops-sync-stage-1219810203"))
+	writeComposeFileInternal(t, filepath.Join(root, ".gitops-backup-456"))
+	writeComposeFileInternal(t, filepath.Join(root, "Makerra.gitops-backup-1780656786384743013"))
+	writeComposeFileInternal(t, filepath.Join(root, "notes.gitops-backup-final")) // lookalike user project
+
+	names := discoveredNamesInternal(discoverProjectDirectoriesInternal(t, root))
+	require.ElementsMatch(t, []string{"app", "notes.gitops-backup-final"}, names)
+}
+
+func TestDiscoverProjectDirectories_SkipsArcaneTrashDirs(t *testing.T) {
+	root := t.TempDir()
+
+	writeComposeFileInternal(t, filepath.Join(root, "app"))
+	writeComposeFileInternal(t, filepath.Join(root, ".arcane-trash-app-1234567890"))
+	writeComposeFileInternal(t, filepath.Join(root, ".hidden"))
+
+	names := discoveredNamesInternal(discoverProjectDirectoriesInternal(t, root))
+	require.ElementsMatch(t, []string{"app", ".hidden"}, names)
+}
+
+// TestDiscoverProjectDirectories_SkipsUnreadableNestedSibling is a regression
+// test for #3080: a permission-denied error on a non-root nested directory
+// must be logged and skipped, not abort the entire discovery walk. Without the
+// fix, one unreadable sibling directory would cause every other project under
+// the root to go undiscovered.
+func TestDiscoverProjectDirectories_SkipsUnreadableNestedSibling(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("POSIX permission-denied behavior is not portable to Windows")
+	}
+	if os.Geteuid() == 0 {
+		t.Skip("test requires a non-root UID to trigger permission-denied on ReadDir")
+	}
+
+	root := t.TempDir()
+
+	writeComposeFileInternal(t, filepath.Join(root, "project1"))
+
+	unreadableDir := filepath.Join(root, "adguard-cheetah", "workingdir")
+	require.NoError(t, os.MkdirAll(unreadableDir, 0o755))
+	t.Cleanup(func() { _ = os.Chmod(unreadableDir, 0o700) })
+	require.NoError(t, os.Chmod(unreadableDir, 0))
+
+	discovered, err := DiscoverProjectDirectories(t.Context(), root, false, 0)
+	require.NoError(t, err, "discovery must not fail when only a nested, non-root directory is unreadable")
+
+	// os.ReadDir returns entries sorted, so "adguard-cheetah" is walked before
+	// "project1" alphabetically. Finding project1 in the results proves the
+	// walk continued past the permission-denied failure rather than merely
+	// tolerating a failure at the very end of the scan.
+	assert.Equal(t, []string{"project1"}, discoveredNamesInternal(discovered))
+}
+
+// TestDiscoverProjectDirectories_SkipsFilesystemSnapshotDirs verifies that
+// point-in-time copies inside filesystem snapshot/trash directories (e.g.
+// Synology BTRFS #snapshot) are never discovered as projects.
+func TestDiscoverProjectDirectories_SkipsFilesystemSnapshotDirs(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	writeComposeFileInternal(t, filepath.Join(root, "arcane"))
+	writeComposeFileInternal(t, filepath.Join(root, "#snapshot", "GMT+10-2026.07.04-03.30.01", "arcane"))
+	writeComposeFileInternal(t, filepath.Join(root, "#recycle", "arcane"))
+	writeComposeFileInternal(t, filepath.Join(root, ".snapshots", "1", "arcane"))
+
+	discovered, err := DiscoverProjectDirectories(t.Context(), root, false, 0)
+	require.NoError(t, err)
+	assert.Equal(t, []string{"arcane"}, discoveredNamesInternal(discovered))
+}
+
+func TestComposeContentProjectName(t *testing.T) {
+	tests := []struct {
+		name    string
+		content string
+		want    string
+	}{
+		{"literal name", "name: sabnzbd\nservices:\n  sabnzbd:\n    image: nginx\n", "sabnzbd"},
+		{"normalized", "name: My_App 2\nservices: {}\n", "my_app2"},
+		{"absent", "services: {}\n", ""},
+		{"interpolated", "name: ${PROJECT}\nservices: {}\n", ""},
+		{"invalid yaml", "name: [unclosed\n", ""},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			{
+				got := ComposeContentProjectName(tt.content)
+				assert.Equal(t, tt.want, got,
+					"ComposeContentProjectName() = %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestNormalizeProjectName(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    string
+		expected string
+	}{
+		{
+			name:     "simple",
+			input:    "myproject",
+			expected: "myproject",
+		},
+		{
+			name:     "with special chars",
+			input:    "My Project!",
+			expected: "myproject",
+		},
+		{
+			name:     "empty",
+			input:    "",
+			expected: "",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := NormalizeProjectName(tt.input)
+
+			require.Equal(t, tt.expected, got,
+				"NormalizeProjectName() = %q, want %q", got, tt.expected)
+		})
+	}
+}

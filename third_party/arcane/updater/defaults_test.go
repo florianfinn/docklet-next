@@ -1,0 +1,102 @@
+// Source: getarcaneapp/kit/updater/defaults_test.go
+// Revision: 119f68956cee6d5aba8a5463561aaf9be9943b65
+// Retrieved: 2026-10-13
+// License: BSD-3-Clause
+// Deviations: None
+
+package updater
+
+import (
+	"net/http"
+	"net/http/httptest"
+	"net/url"
+	"testing"
+
+	"github.com/moby/moby/client"
+	"github.com/opencontainers/go-digest"
+)
+
+func TestDefaultRegistryDigestResolverFetchesDigest(t *testing.T) {
+	want := digest.FromString("manifest").String()
+	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/v2/":
+		case "/v2/owner/app/manifests/1.0":
+			writeManifestHeadersForTest(w, want)
+		default:
+			http.Error(w, "unexpected manifest path", http.StatusNotFound)
+		}
+	}))
+	defer server.Close()
+
+	serverURL, err := url.Parse(server.URL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	resolver := newRegistryDigestResolver(server.Client())
+
+	got, err := resolver.ImageDigest(t.Context(), serverURL.Host+"/owner/app:1.0")
+	if err != nil {
+		t.Fatalf("ImageDigest() error = %v", err)
+	}
+	if got != want {
+		t.Fatalf("ImageDigest() = %q, want %q", got, want)
+	}
+}
+
+func TestDefaultDockerClientProviderCachesAndRecreatesAfterPingFailure(t *testing.T) {
+	var pingCalls int
+	failPing := false
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if dockerAPIPath(r.URL.Path) != "/_ping" {
+			http.Error(w, "unexpected path: "+r.URL.Path, http.StatusNotFound)
+			return
+		}
+		pingCalls++
+		if failPing {
+			http.Error(w, "daemon unavailable", http.StatusServiceUnavailable)
+			return
+		}
+		_, _ = w.Write([]byte("OK"))
+	}))
+	defer server.Close()
+
+	provider := NewDockerClientProvider(client.WithHost(server.URL), client.WithAPIVersion("1.41"))
+	first, err := provider.DockerClient(t.Context())
+	if err != nil {
+		t.Fatalf("first DockerClient() error = %v", err)
+	}
+	second, err := provider.DockerClient(t.Context())
+	if err != nil {
+		t.Fatalf("second DockerClient() error = %v", err)
+	}
+	if first != second {
+		t.Fatal("DockerClient() returned different clients before ping failure")
+	}
+
+	failPing = true
+	if _, err = provider.DockerClient(t.Context()); err == nil {
+		t.Fatal("DockerClient() after ping failure returned nil error")
+	}
+	failPing = false
+	third, err := provider.DockerClient(t.Context())
+	if err != nil {
+		t.Fatalf("third DockerClient() error = %v", err)
+	}
+	if third == first {
+		t.Fatal("DockerClient() reused client evicted after ping failure")
+	}
+	if err = provider.Close(); err != nil {
+		t.Fatalf("Close() error = %v", err)
+	}
+	if pingCalls < 4 {
+		t.Fatalf("pingCalls = %d, want at least 4", pingCalls)
+	}
+}
+
+func writeManifestHeadersForTest(w http.ResponseWriter, manifestDigest string) {
+	w.Header().Set("Content-Type", "application/vnd.oci.image.index.v1+json")
+	w.Header().Set("Content-Length", "2")
+	w.Header().Set("Docker-Content-Digest", manifestDigest)
+	w.WriteHeader(http.StatusOK)
+}

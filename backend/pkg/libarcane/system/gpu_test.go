@@ -1,0 +1,45 @@
+// Source: getarcaneapp/arcane/backend/pkg/libarcane/system/gpu_test.go
+// Revision: 095cb778daba1034e2a39961199e712a75d4ba29
+// Retrieved: 2026-10-13
+// License: BSD-3-Clause
+// Deviations: None
+
+//go:build !windows
+
+package system
+
+import (
+	"os"
+	"path/filepath"
+	"testing"
+
+	"github.com/stretchr/testify/require"
+)
+
+// TestGPUMonitorStatsCachedWithinTTL verifies that repeated Stats calls
+// within gpuStatsTTL share one vendor-tool fork instead of launching
+// nvidia-smi per call.
+func TestGPUMonitorStatsCachedWithinTTL(t *testing.T) {
+	binDir := t.TempDir()
+	countFile := filepath.Join(binDir, "calls")
+
+	script := "#!/bin/sh\necho run >> " + countFile + "\necho '0, Fake GPU, 512, 8192'\n"
+	require.NoError(t, os.WriteFile(filepath.Join(binDir, "nvidia-smi"), []byte(script), 0o755))
+	t.Setenv("PATH", binDir)
+
+	monitor := NewGPUMonitor(true, "nvidia")
+
+	stats, err := monitor.Stats(t.Context())
+	require.NoError(t, err)
+	require.Len(t, stats, 1)
+	require.Equal(t, "Fake GPU", stats[0].Name)
+	require.InDelta(t, float64(512*1024*1024), stats[0].MemoryUsed, 0)
+
+	again, err := monitor.Stats(t.Context())
+	require.NoError(t, err)
+	require.Equal(t, stats, again)
+
+	invocations, err := os.ReadFile(countFile)
+	require.NoError(t, err)
+	require.Equal(t, "run\n", string(invocations), "nvidia-smi should have been forked exactly once within the TTL")
+}

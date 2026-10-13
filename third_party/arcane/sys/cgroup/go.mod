@@ -1,0 +1,51 @@
+// Source: getarcaneapp/kit/sys/cgroup/go.mod
+// Revision: cefb3a12f0e22cbd2123d51cf397508db9aedcf8
+// Retrieved: 2026-10-13
+// License: BSD-3-Clause
+// Deviations: Relative local helper replacements
+
+module go.getarcane.app/sys/cgroup
+
+go 1.27
+
+require (
+	github.com/samber/hot v0.13.1
+	github.com/shirou/gopsutil/v4 v4.26.9
+	github.com/stretchr/testify v1.12.1
+)
+
+require (
+	github.com/DmitriyVTitov/size v1.5.0 // indirect
+	github.com/beorn7/perks v1.0.1 // indirect
+	github.com/cespare/xxhash/v2 v2.3.0 // indirect
+	github.com/ebitengine/purego v0.11.1 // indirect
+	github.com/go-ole/go-ole v1.3.0 // indirect
+	github.com/golang/groupcache v0.0.0-20241129210726-2c02b8208cf8 // indirect
+	github.com/lufia/plan9stats v0.0.0-20260802145828-341c2f0c90b5 // indirect
+	github.com/munnerz/goautoneg v0.0.0-20191010083416-a7dc8b61c822 // indirect
+	github.com/power-devops/perfstat v0.0.0-20260805114148-88456608a4f6 // indirect
+	github.com/prometheus/client_golang v1.24.1 // indirect
+	github.com/prometheus/client_model v0.6.3 // indirect
+	github.com/prometheus/common v0.71.0 // indirect
+	github.com/prometheus/procfs v0.22.0 // indirect
+	github.com/samber/go-singleflightx v0.3.2 // indirect
+	github.com/tklauser/go-sysconf v0.4.0 // indirect
+	github.com/tklauser/numcpus v0.12.0 // indirect
+	github.com/yusufpapurcu/wmi v1.2.4 // indirect
+	go.yaml.in/yaml/v3 v3.0.5 // indirect
+	golang.org/x/sys v0.48.0 // indirect
+	google.golang.org/protobuf v1.36.12 // indirect
+)
+
+replace (
+	go.getarcane.app/acfs => ../../acfs
+	go.getarcane.app/builds => ../../builds
+	go.getarcane.app/docker => ../../docker
+	go.getarcane.app/docker/compat => ../../docker/compat
+	go.getarcane.app/docker/convert => ../../docker/convert
+	go.getarcane.app/kit => ../../kit
+	go.getarcane.app/streams => ../../streams
+	go.getarcane.app/sys/bytes => ../bytes
+	go.getarcane.app/sys/crypto => ../crypto
+	go.getarcane.app/updater => ../../updater
+)

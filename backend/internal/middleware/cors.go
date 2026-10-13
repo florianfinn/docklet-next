@@ -1,0 +1,109 @@
+// Source: getarcaneapp/arcane/backend/internal/middleware/cors.go
+// Revision: 095cb778daba1034e2a39961199e712a75d4ba29
+// Retrieved: 2026-10-13
+// License: BSD-3-Clause
+// Deviations: Local module namespace
+
+package middleware
+
+import (
+	"context"
+	"log/slog"
+	"net/url"
+	"strings"
+
+	"github.com/labstack/echo/v5"
+	"github.com/labstack/echo/v5/middleware"
+	"go.getarcane.app/kit/pkg"
+
+	"github.com/florianfinn/docklet-next/backend/internal/config"
+)
+
+type CORSMiddleware struct {
+	cfg           *config.Config
+	customOrigins []string
+}
+
+func NewCORSMiddleware(cfg *config.Config) *CORSMiddleware {
+	return &CORSMiddleware{cfg: cfg}
+}
+
+func (m *CORSMiddleware) Add() echo.MiddlewareFunc {
+	// Edge Agent mode: skip CORS entirely. The agent only receives server-to-server
+	// requests through the edge tunnel from the manager — never from browsers.
+	if m.cfg != nil && m.cfg.EdgeAgent {
+		return func(next echo.HandlerFunc) echo.HandlerFunc {
+			return func(c *echo.Context) error { return next(c) }
+		}
+	}
+
+	return middleware.CORSWithConfig(middleware.CORSConfig{
+		AllowOrigins:     deriveAllowedOriginsInternal(m.cfg, m.customOrigins),
+		AllowCredentials: true,
+		AllowMethods:     []string{"GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH", "HEAD"},
+		AllowHeaders: []string{
+			"Authorization",
+			"Content-Type",
+			"X-CSRF-Token",
+			"X-Requested-With",
+			"Accept",
+			"Accept-Language",
+			"Accept-Encoding",
+			"User-Agent",
+			"Cache-Control",
+			"Origin",
+			"Referer",
+			HeaderAgentToken,
+			"X-API-Key",
+		},
+		ExposeHeaders: []string{
+			"Content-Length",
+			"Content-Type",
+			"X-Total-Count",
+			"X-Page",
+			"X-Per-Page",
+		},
+		MaxAge: 300,
+	})
+}
+
+func deriveAllowedOriginsInternal(cfg *config.Config, custom []string) []string {
+	ctx := context.Background() //nolint:forbidigo // Middleware configuration is derived at startup without a request context.
+	if len(custom) > 0 {
+		return kit.Unique(custom)
+	}
+
+	var origins []string
+	if cfg != nil {
+		appURL := cfg.GetAppURL()
+		if appURL != "" {
+			if !strings.HasPrefix(appURL, "http://") && !strings.HasPrefix(appURL, "https://") {
+				appURL = "https://" + appURL
+			}
+			if u, err := url.Parse(appURL); err == nil {
+				origins = append(origins, u.Scheme+"://"+u.Host)
+			} else {
+				slog.WarnContext(ctx, "Failed to parse APP_URL for CORS origins", "url", appURL, "error", err)
+			}
+		}
+	}
+
+	if cfg == nil || cfg.Environment != "production" {
+		origins = append(origins,
+			"http://localhost:3000", "http://127.0.0.1:3000",
+			"http://localhost:3552", "http://127.0.0.1:3552",
+		)
+	}
+
+	origins = kit.Unique(origins)
+
+	if len(origins) == 0 {
+		if cfg != nil && cfg.Environment == "production" {
+			slog.WarnContext(ctx, "CORS: No origins specified for production - defaulting to https://localhost")
+			return []string{"https://localhost"}
+		}
+		return []string{"http://localhost:3000"}
+	}
+
+	return origins
+}

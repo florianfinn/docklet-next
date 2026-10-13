@@ -1,0 +1,363 @@
+// Source: getarcaneapp/arcane/cli/pkg/projects/actions.go
+// Revision: 095cb778daba1034e2a39961199e712a75d4ba29
+// Retrieved: 2026-10-13
+// License: BSD-3-Clause
+// Deviations: Local module namespace
+
+package projects
+
+import (
+	"errors"
+	"fmt"
+	"net/http"
+	"net/url"
+	"os"
+	"path"
+	"strings"
+	"time"
+
+	"github.com/florianfinn/docklet-next/types/base"
+	"github.com/florianfinn/docklet-next/types/project"
+	workspacetypes "github.com/florianfinn/docklet-next/types/workspace"
+	"github.com/spf13/cobra"
+
+	"github.com/florianfinn/docklet-next/cli/internal/cmdutil"
+	"github.com/florianfinn/docklet-next/cli/internal/output"
+	"github.com/florianfinn/docklet-next/cli/internal/types"
+)
+
+var (
+	tagAdd    string
+	tagRemove string
+	tagColor  string
+
+	buildServices []string
+	buildProvider string
+	buildPush     bool
+	buildLoad     bool
+)
+
+var tagsCmd = &cobra.Command{
+	Use:          "tags",
+	Short:        "List project tags for the environment",
+	SilenceUsage: true,
+	RunE: func(cmd *cobra.Command, args []string) error {
+		c, err := cmdutil.ClientFromCommand(cmd)
+		if err != nil {
+			return err
+		}
+
+		result, err := c.GetJSON[[]project.TagOption](cmd.Context(), types.ProjectsTags(c.EnvID()))
+		if err != nil {
+			return fmt.Errorf("failed to list project tags: %w", err)
+		}
+
+		if jsonOutput {
+			return cmdutil.PrintJSON(result.Data)
+		}
+
+		output.Header("Project Tags")
+		headers := []string{"NAME", "COLOR"}
+		rows := make([][]string, len(result.Data))
+		for i, tag := range result.Data {
+			rows[i] = []string{tag.Name, string(tag.Color)}
+		}
+		return output.Table(headers, rows)
+	},
+}
+
+var tagCmd = &cobra.Command{
+	Use:          "tag <project-id|name>",
+	Short:        "Attach or detach a project tag",
+	Args:         cobra.ExactArgs(1),
+	SilenceUsage: true,
+	RunE: func(cmd *cobra.Command, args []string) error {
+		if (tagAdd == "") == (tagRemove == "") {
+			return errors.New("exactly one of --add or --remove is required")
+		}
+		if tagRemove != "" && tagColor != "" {
+			return errors.New("--color can only be used with --add")
+		}
+
+		c, err := cmdutil.ClientFromCommand(cmd)
+		if err != nil {
+			return err
+		}
+
+		resolved, _, err := projectRef.Resolve(cmd.Context(), c, args[0], false)
+		if err != nil {
+			return err
+		}
+
+		body := project.UpdateTag{
+			Name:     tagAdd,
+			Attached: tagAdd != "",
+			Color:    project.TagColor(tagColor),
+		}
+		if tagRemove != "" {
+			body.Name = tagRemove
+		}
+
+		result, err := c.DoJSON[base.ApiResponse[project.UpdateTagResponse]](cmd.Context(), http.MethodPatch, types.ProjectTags(c.EnvID(), resolved.ID), body)
+		if err != nil {
+			return fmt.Errorf("failed to update project tag: %w", err)
+		}
+
+		if jsonOutput {
+			return cmdutil.PrintJSON(result.Data)
+		}
+
+		names := make([]string, len(result.Data.Tags))
+		for i, tag := range result.Data.Tags {
+			names[i] = tag.Name
+		}
+		output.Success("Tags updated for project %s", resolved.Name)
+		output.KeyValue("Tags", strings.Join(names, ", "))
+		return nil
+	},
+}
+
+var archiveCmd = &cobra.Command{
+	Use:          "archive <project-id|name>",
+	Short:        "Archive a stopped project",
+	Args:         cobra.ExactArgs(1),
+	SilenceUsage: true,
+	RunE: func(cmd *cobra.Command, args []string) error {
+		c, err := cmdutil.ClientFromCommand(cmd)
+		if err != nil {
+			return err
+		}
+		resolved, _, err := projectRef.Resolve(cmd.Context(), c, args[0], false)
+		if err != nil {
+			return err
+		}
+		return cmdutil.RunPostAction[base.MessageResponse](cmd, c, cmdutil.PostActionSpec{
+			Path:           types.ProjectArchive(c.EnvID(), resolved.ID),
+			FailureMessage: "failed to archive project",
+			SuccessMessage: fmt.Sprintf("Project %s archived successfully", resolved.Name),
+			JSON:           jsonOutput,
+		})
+	},
+}
+
+var unarchiveCmd = &cobra.Command{
+	Use:          "unarchive <project-id|name>",
+	Short:        "Unarchive a project",
+	Args:         cobra.ExactArgs(1),
+	SilenceUsage: true,
+	RunE: func(cmd *cobra.Command, args []string) error {
+		c, err := cmdutil.ClientFromCommand(cmd)
+		if err != nil {
+			return err
+		}
+		resolved, _, err := projectRef.Resolve(cmd.Context(), c, args[0], false)
+		if err != nil {
+			return err
+		}
+		return cmdutil.RunPostAction[base.MessageResponse](cmd, c, cmdutil.PostActionSpec{
+			Path:           types.ProjectUnarchive(c.EnvID(), resolved.ID),
+			FailureMessage: "failed to unarchive project",
+			SuccessMessage: fmt.Sprintf("Project %s unarchived successfully", resolved.Name),
+			JSON:           jsonOutput,
+		})
+	},
+}
+
+var buildCmd = &cobra.Command{
+	Use:          "build <project-id|name>",
+	Short:        "Build project images",
+	Args:         cobra.ExactArgs(1),
+	SilenceUsage: true,
+	RunE: func(cmd *cobra.Command, args []string) error {
+		c, err := cmdutil.ClientFromCommand(cmd)
+		if err != nil {
+			return err
+		}
+
+		resolved, _, err := projectRef.Resolve(cmd.Context(), c, args[0], false)
+		if err != nil {
+			return err
+		}
+
+		c.SetTimeout(30 * time.Minute)
+
+		body := struct {
+			Services []string `json:"services,omitempty"`
+			Provider string   `json:"provider,omitempty"`
+			Push     *bool    `json:"push,omitempty"`
+			Load     *bool    `json:"load,omitempty"`
+		}{Services: buildServices, Provider: buildProvider}
+		if cmd.Flags().Changed("push") {
+			body.Push = &buildPush
+		}
+		if cmd.Flags().Changed("load") {
+			body.Load = &buildLoad
+		}
+
+		resp, err := c.Post(cmd.Context(), types.ProjectBuild(c.EnvID(), resolved.ID), body)
+		if err != nil {
+			return fmt.Errorf("failed to build project images: %w", err)
+		}
+		defer func() { _ = resp.Body.Close() }()
+		if ensureSuccessStatusErr := cmdutil.EnsureSuccessStatus(resp); ensureSuccessStatusErr != nil {
+			return fmt.Errorf("failed to build project images: %w", ensureSuccessStatusErr)
+		}
+
+		if printOperationStreamErr := printOperationStreamInternal(resp.Body); printOperationStreamErr != nil {
+			return fmt.Errorf("failed to build project images: %w", printOperationStreamErr)
+		}
+
+		output.Success("Images built successfully for project %s", resolved.Name)
+		return nil
+	},
+}
+
+var updateServicesCmd = &cobra.Command{
+	Use:          "upgrade <project-id|name> [services...]",
+	Short:        "Pull latest images and recreate services (all services when none are given)",
+	Args:         cobra.MinimumNArgs(1),
+	SilenceUsage: true,
+	RunE: func(cmd *cobra.Command, args []string) error {
+		c, err := cmdutil.ClientFromCommand(cmd)
+		if err != nil {
+			return err
+		}
+
+		resolved, _, err := projectRef.Resolve(cmd.Context(), c, args[0], false)
+		if err != nil {
+			return err
+		}
+
+		c.SetTimeout(30 * time.Minute)
+
+		body := struct {
+			Services []string `json:"services,omitempty"`
+		}{Services: args[1:]}
+
+		result, err := c.PostJSON[base.MessageResponse](cmd.Context(), types.ProjectUpdateServices(c.EnvID(), resolved.ID), body)
+		if err != nil {
+			return fmt.Errorf("failed to update project services: %w", err)
+		}
+
+		if jsonOutput {
+			return cmdutil.PrintJSON(result.Data)
+		}
+
+		output.Success("Services updated successfully for project %s", resolved.Name)
+		return nil
+	},
+}
+
+var workspaceCmd = &cobra.Command{
+	Use:   "workspace",
+	Short: "Work with project workspace files",
+}
+
+var workspaceCatCmd = &cobra.Command{
+	Use:          "cat <project-id|name> <path>",
+	Short:        "Print a project workspace file",
+	Args:         cobra.ExactArgs(2),
+	SilenceUsage: true,
+	RunE: func(cmd *cobra.Command, args []string) error {
+		c, err := cmdutil.ClientFromCommand(cmd)
+		if err != nil {
+			return err
+		}
+
+		resolved, _, err := projectRef.Resolve(cmd.Context(), c, args[0], false)
+		if err != nil {
+			return err
+		}
+
+		reqPath := types.ProjectWorkspaceFile(c.EnvID(), resolved.ID) + "?relativePath=" + url.QueryEscape(args[1])
+		result, err := c.GetJSON[workspacetypes.FileContent](cmd.Context(), reqPath)
+		if err != nil {
+			return fmt.Errorf("failed to get workspace file: %w", err)
+		}
+
+		if jsonOutput {
+			return cmdutil.PrintJSON(result.Data)
+		}
+
+		if result.Data.Content == "" && result.Data.ReadOnlyReason != "" {
+			return fmt.Errorf("file %s has no inline content (%s); use `arcane projects workspace download` instead", args[1], result.Data.ReadOnlyReason)
+		}
+		_, _ = fmt.Fprint(output.Stdout(), result.Data.Content)
+		return nil
+	},
+}
+
+var workspaceDownloadCmd = &cobra.Command{
+	Use:          "download <project-id|name> <path> [output-file]",
+	Short:        "Download a project workspace file",
+	Args:         cobra.RangeArgs(2, 3),
+	SilenceUsage: true,
+	RunE: func(cmd *cobra.Command, args []string) error {
+		c, err := cmdutil.ClientFromCommand(cmd)
+		if err != nil {
+			return err
+		}
+
+		resolved, _, err := projectRef.Resolve(cmd.Context(), c, args[0], false)
+		if err != nil {
+			return err
+		}
+
+		reqPath := types.ProjectWorkspaceFileDownload(c.EnvID(), resolved.ID) + "?relativePath=" + url.QueryEscape(args[1])
+		resp, err := c.Get(cmd.Context(), reqPath)
+		if err != nil {
+			return fmt.Errorf("failed to download workspace file: %w", err)
+		}
+		defer func() { _ = resp.Body.Close() }()
+		if ensureSuccessStatusErr := cmdutil.EnsureSuccessStatus(resp); ensureSuccessStatusErr != nil {
+			return fmt.Errorf("failed to download workspace file: %w", ensureSuccessStatusErr)
+		}
+
+		outputFile := path.Base(args[1])
+		if len(args) == 3 {
+			outputFile = args[2]
+		}
+
+		file, err := os.Create(outputFile)
+		if err != nil {
+			return fmt.Errorf("failed to create file %s: %w", outputFile, err)
+		}
+		written, copyErr := output.Copy(cmd.Context(), file, resp.Body, resp.ContentLength, "Downloading workspace file", !cmdutil.JSONOutputEnabled(cmd))
+		closeErr := file.Close()
+		if copyErr != nil {
+			return fmt.Errorf("failed to write workspace file: %w", copyErr)
+		}
+		if closeErr != nil {
+			return fmt.Errorf("failed to write workspace file: %w", closeErr)
+		}
+
+		output.Success("Downloaded %s (%d bytes) to %s", args[1], written, outputFile)
+		return nil
+	},
+}
+
+func init() {
+	ProjectsCmd.AddCommand(tagsCmd)
+	ProjectsCmd.AddCommand(tagCmd)
+	ProjectsCmd.AddCommand(archiveCmd)
+	ProjectsCmd.AddCommand(unarchiveCmd)
+	ProjectsCmd.AddCommand(buildCmd)
+	ProjectsCmd.AddCommand(updateServicesCmd)
+	ProjectsCmd.AddCommand(workspaceCmd)
+	workspaceCmd.AddCommand(workspaceCatCmd)
+	workspaceCmd.AddCommand(workspaceDownloadCmd)
+
+	tagCmd.Flags().StringVar(&tagAdd, "add", "", "Tag name to attach")
+	tagCmd.Flags().StringVar(&tagRemove, "remove", "", "Tag name to detach")
+	tagCmd.Flags().StringVar(&tagColor, "color", "", "Tag color (used with --add)")
+
+	buildCmd.Flags().StringArrayVar(&buildServices, "service", nil, "Service to build (repeatable; all services with build directives when omitted)")
+	buildCmd.Flags().StringVar(&buildProvider, "provider", "", "Build provider override")
+	buildCmd.Flags().BoolVar(&buildPush, "push", false, "Push built images")
+	buildCmd.Flags().BoolVar(&buildLoad, "load", false, "Load built images into Docker")
+
+	tagsCmd.Flags().BoolVar(&jsonOutput, "json", false, "Output in JSON format")
+	tagCmd.Flags().BoolVar(&jsonOutput, "json", false, "Output in JSON format")
+	updateServicesCmd.Flags().BoolVar(&jsonOutput, "json", false, "Output in JSON format")
+	workspaceCatCmd.Flags().BoolVar(&jsonOutput, "json", false, "Output in JSON format")
+}

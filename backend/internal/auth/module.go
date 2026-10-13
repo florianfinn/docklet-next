@@ -1,0 +1,187 @@
+// Source: getarcaneapp/arcane/backend/internal/auth/module.go
+// Revision: 095cb778daba1034e2a39961199e712a75d4ba29
+// Retrieved: 2026-10-13
+// License: BSD-3-Clause
+// Deviations: Local module namespace
+
+// Package auth owns authentication, token issuance and verification, login
+// session policy, and the authentication HTTP surface.
+package auth
+
+import (
+	"context"
+	"net/http"
+
+	"github.com/danielgtaylor/huma/v2"
+	"github.com/florianfinn/docklet-next/types/auth"
+
+	"github.com/florianfinn/docklet-next/backend/internal/settings"
+	"github.com/florianfinn/docklet-next/backend/internal/user"
+	"github.com/florianfinn/docklet-next/backend/pkg/utils/handlerutil"
+)
+
+type Module struct {
+	service                *AuthService
+	user                   *user.UserService
+	settings               *settings.SettingsService
+	beginMFAAuthentication func(context.Context, string, auth.SessionMeta, string) (*auth.MFAChallenge, error)
+}
+
+func New(
+	service *AuthService,
+	userService *user.UserService,
+	settingsService *settings.SettingsService,
+	beginMFAAuthentication func(
+		context.Context,
+		string,
+		auth.SessionMeta,
+		string,
+	) (
+		*auth.MFAChallenge,
+		error,
+	),
+) *Module {
+	return &Module{service: service, user: userService, settings: settingsService, beginMFAAuthentication: beginMFAAuthentication}
+}
+
+func (m *Module) Service() *AuthService {
+	if m == nil {
+		return nil
+	}
+	return m.service
+}
+
+func (m *Module) RegisterRoutes(api huma.API) {
+	if m == nil {
+		RegisterAuth(api, nil, nil, nil, nil)
+		return
+	}
+	RegisterAuth(api, m.user, m.service, m.settings, m.beginMFAAuthentication)
+}
+
+// RegisterAuth registers authentication routes using Huma.
+func RegisterAuth(
+	api huma.API,
+	userService *user.UserService,
+	authService *AuthService,
+	settingsService *settings.SettingsService,
+	beginMFAAuthentication func(
+		context.Context,
+		string,
+		auth.SessionMeta,
+		string,
+	) (
+		*auth.MFAChallenge,
+		error,
+	),
+) {
+	h := &AuthHandler{
+		userService:            userService,
+		authService:            authService,
+		beginMFAAuthentication: beginMFAAuthentication,
+		settingsService:        settingsService,
+	}
+
+	huma.Register(api, huma.Operation{
+		OperationID: "login",
+		Method:      http.MethodPost,
+		Path:        "/auth/login",
+		Summary:     "Login",
+		Description: "Authenticate a user with username and password",
+		Tags:        []string{"Auth"},
+		Security:    []map[string][]string{},
+	}, h.Login)
+
+	huma.Register(api, huma.Operation{
+		OperationID: "logout",
+		Method:      http.MethodPost,
+		Path:        "/auth/logout",
+		Summary:     "Logout",
+		Description: "Clear authentication session",
+		Tags:        []string{"Auth"},
+		Security:    []map[string][]string{},
+	}, h.Logout)
+
+	huma.Register(api, huma.Operation{
+		OperationID: "get-current-user",
+		Method:      http.MethodGet,
+		Path:        "/auth/me",
+		Summary:     "Get current user",
+		Description: "Get the currently authenticated user's information",
+		Tags:        []string{"Auth"},
+		Security:    handlerutil.DefaultOperationSecurity(),
+	}, h.GetCurrentUser)
+
+	huma.Register(api, huma.Operation{
+		OperationID: "refresh-token",
+		Method:      http.MethodPost,
+		Path:        "/auth/refresh",
+		Summary:     "Refresh token",
+		Description: "Obtain a new access token using a refresh token",
+		Tags:        []string{"Auth"},
+		Security:    []map[string][]string{},
+	}, h.RefreshToken)
+
+	huma.Register(api, huma.Operation{
+		OperationID: "change-password",
+		Method:      http.MethodPost,
+		Path:        "/auth/password",
+		Summary:     "Change password",
+		Description: "Change the current user's password",
+		Tags:        []string{"Auth"},
+		Security:    handlerutil.DefaultOperationSecurity(),
+	}, h.ChangePassword)
+
+	huma.Register(api, huma.Operation{
+		OperationID: "logout-all-other-sessions",
+		Method:      http.MethodPost,
+		Path:        "/auth/sessions/logout-all",
+		Summary:     "Logout all other sessions",
+		Description: "Revoke every session for the current user except the one making this request",
+		Tags:        []string{"Auth"},
+		Security:    handlerutil.DefaultOperationSecurity(),
+	}, h.LogoutAllOtherSessions)
+
+	huma.Register(api, huma.Operation{
+		OperationID: "update-my-profile",
+		Method:      http.MethodPut,
+		Path:        "/auth/me/profile",
+		Summary:     "Update own profile",
+		Description: "Update the current user's display name and email. Forbidden for OIDC-managed accounts.",
+		Tags:        []string{"Auth"},
+		Security:    handlerutil.DefaultOperationSecurity(),
+	}, h.UpdateMyProfile)
+
+	huma.Register(api, huma.Operation{
+		OperationID: "upload-my-avatar",
+		Method:      http.MethodPost,
+		Path:        "/auth/me/avatar",
+		Summary:     "Upload own avatar",
+		Description: "Upload a custom profile picture (PNG, JPEG or WebP). Replaces any existing avatar.",
+		Tags:        []string{"Auth"},
+		Security:    handlerutil.DefaultOperationSecurity(),
+		RequestBody: &huma.RequestBody{
+			Required: true,
+			Content: map[string]*huma.MediaType{
+				"multipart/form-data": {
+					Schema: &huma.Schema{
+						Type: "object",
+						Properties: map[string]*huma.Schema{
+							"file": {Type: "string", Format: "binary"},
+						},
+					},
+				},
+			},
+		},
+	}, h.UploadMyAvatar)
+
+	huma.Register(api, huma.Operation{
+		OperationID: "delete-my-avatar",
+		Method:      http.MethodDelete,
+		Path:        "/auth/me/avatar",
+		Summary:     "Delete own avatar",
+		Description: "Remove the current user's custom profile picture, reverting to the default avatar.",
+		Tags:        []string{"Auth"},
+		Security:    handlerutil.DefaultOperationSecurity(),
+	}, h.DeleteMyAvatar)
+}

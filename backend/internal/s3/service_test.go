@@ -1,0 +1,370 @@
+// Source: getarcaneapp/arcane/backend/internal/s3/service_test.go
+// Revision: 095cb778daba1034e2a39961199e712a75d4ba29
+// Retrieved: 2026-10-13
+// License: BSD-3-Clause
+// Deviations: Local module namespace
+
+package s3
+
+import (
+	"io"
+	"net/http"
+	"net/http/httptest"
+	"strconv"
+	"strings"
+	"testing"
+	"time"
+
+	"github.com/florianfinn/docklet-next/types/backup"
+	"github.com/libtnb/sqlite"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+	"go.getarcane.app/kit/pkg"
+	"go.getarcane.app/sys/crypto"
+	"gorm.io/gorm"
+
+	"github.com/florianfinn/docklet-next/backend/internal/database"
+	"github.com/florianfinn/docklet-next/backend/internal/settings"
+	"github.com/florianfinn/docklet-next/backend/pkg/pagination"
+	"github.com/florianfinn/docklet-next/backend/pkg/utils/s3"
+)
+
+func setupS3DestinationServiceTestInternal(t *testing.T) (*S3DestinationService, *gorm.DB) {
+	t.Helper()
+
+	gormDB, err := gorm.Open(sqlite.Open("file:"+t.Name()+"?mode=memory&cache=shared"), &gorm.Config{})
+	require.NoError(t, err)
+	require.NoError(t, gormDB.AutoMigrate(
+		&S3Destination{},
+		&settings.SettingVariable{},
+	))
+	require.NoError(t, gormDB.Exec("CREATE TABLE system_backup_runs (s3_destination_id text, remote_snapshot_id text)").Error)
+	require.NoError(t, gormDB.Exec("CREATE TABLE system_backup_policies (s3_destination_id text, s3_enabled numeric)").Error)
+	require.NoError(t, gormDB.Exec("CREATE TABLE volume_backups (s3_destination_id text, remote_snapshot_id text)").Error)
+	require.NoError(t, gormDB.Exec("CREATE TABLE volume_backup_policies (s3_destination_id text, s3_enabled numeric)").Error)
+	crypto.InitEncryption(&crypto.Config{
+		EncryptionKey: "test-encryption-key-for-s3-destination-32bytes",
+		Environment:   "test",
+	})
+	return NewS3DestinationService(&database.DB{DB: gormDB}, nil), gormDB
+}
+
+func TestS3DestinationService_CRUD(t *testing.T) {
+	service, gormDB := setupS3DestinationServiceTestInternal(t)
+	ctx := t.Context()
+
+	created, err := service.CreateS3Destination(ctx, backup.CreateS3Destination{
+		Name:            "  Cafe\u0301 offsite  ",
+		Endpoint:        "https://s3.example.com",
+		Bucket:          "arcane-backups",
+		Region:          "eu-central-1",
+		AccessKeyID:     "access-key",
+		SecretAccessKey: "secret-key",
+		Prefix:          "/production/",
+		UseSSL:          true,
+		ForcePathStyle:  true,
+	})
+	require.NoError(t, err)
+	require.NotEmpty(t, created.ID)
+	require.Equal(t, "Café offsite", created.Name)
+	require.True(t, created.SecretConfigured)
+	require.Equal(t, "production", created.Prefix)
+
+	var stored S3Destination
+	require.NoError(t, gormDB.First(&stored, "id = ?", created.ID).Error)
+	require.NotEqual(t, "secret-key", stored.SecretAccessKey)
+
+	listed, page, err := service.ListS3Destinations(ctx, pagination.QueryParams{
+		Search: "arcane-backups",
+		Limit:  20,
+	})
+	require.NoError(t, err)
+	require.EqualValues(t, 1, page.TotalItems)
+	require.Len(t, listed, 1)
+
+	updated, err := service.UpdateS3Destination(ctx, created.ID, backup.UpdateS3Destination{
+		Name:           "  Primary cafe\u0301 offsite  ",
+		Endpoint:       created.Endpoint,
+		Bucket:         created.Bucket,
+		Region:         created.Region,
+		AccessKeyID:    created.AccessKeyID,
+		Prefix:         created.Prefix,
+		UseSSL:         created.UseSSL,
+		ForcePathStyle: created.ForcePathStyle,
+	})
+	require.NoError(t, err)
+	require.Equal(t, "Primary café offsite", updated.Name)
+
+	var updatedStored S3Destination
+	require.NoError(t, gormDB.First(&updatedStored, "id = ?", created.ID).Error)
+	require.Equal(t, stored.SecretAccessKey, updatedStored.SecretAccessKey)
+
+	require.NoError(t, service.DeleteS3Destination(ctx, created.ID))
+	_, err = service.GetS3Destination(ctx, created.ID)
+	require.ErrorIs(t, err, ErrS3DestinationNotFound)
+}
+
+func TestS3DestinationService_DeleteRejectsConfiguredDestination(t *testing.T) {
+	service, gormDB := setupS3DestinationServiceTestInternal(t)
+	ctx := t.Context()
+	destination, err := service.CreateS3Destination(ctx, backup.CreateS3Destination{
+		Name:            "In use",
+		Bucket:          "arcane-backups",
+		Region:          "us-east-1",
+		AccessKeyID:     "access-key",
+		SecretAccessKey: "secret-key",
+		UseSSL:          true,
+	})
+	require.NoError(t, err)
+	require.NoError(t, gormDB.Exec("INSERT INTO volume_backup_policies (s3_destination_id, s3_enabled) VALUES (?, 1)", destination.ID).Error)
+
+	err = service.DeleteS3Destination(ctx, destination.ID)
+	require.ErrorIs(t, err, ErrS3DestinationInUse)
+}
+
+func TestS3DestinationService_SyncS3Destinations(t *testing.T) {
+	service, gormDB := setupS3DestinationServiceTestInternal(t)
+	ctx := t.Context()
+
+	legacy, err := service.CreateS3Destination(ctx, backup.CreateS3Destination{
+		Name:            "Legacy",
+		Bucket:          "legacy-bucket",
+		Region:          "us-east-1",
+		AccessKeyID:     "legacy-access-key",
+		SecretAccessKey: "legacy-secret",
+		UseSSL:          true,
+	})
+	require.NoError(t, err)
+
+	createdAt := time.Now().Add(-time.Hour).UTC().Truncate(time.Second)
+	require.NoError(t, service.SyncS3Destinations(ctx, []backup.S3DestinationSync{
+		{
+			ID:              "destination-1",
+			Name:            "Remote primary",
+			Endpoint:        "https://s3.example.com",
+			Bucket:          "volume-backups",
+			Region:          "eu-central-1",
+			AccessKeyID:     "remote-access-key",
+			SecretAccessKey: "remote-secret",
+			Prefix:          "/agents/",
+			UseSSL:          true,
+			ForcePathStyle:  true,
+			CreatedAt:       createdAt,
+		},
+	}))
+
+	var synced S3Destination
+	require.NoError(t, gormDB.First(&synced, "id = ?", "destination-1").Error)
+	require.Equal(t, "Remote primary", synced.Name)
+	require.Equal(t, "agents", synced.Prefix)
+	require.NotEqual(t, "remote-secret", synced.SecretAccessKey)
+	secret, err := crypto.Decrypt(synced.SecretAccessKey)
+	require.NoError(t, err)
+	require.Equal(t, "remote-secret", secret)
+
+	_, err = service.GetS3Destination(ctx, legacy.ID)
+	require.ErrorIs(t, err, ErrS3DestinationNotFound)
+
+	require.NoError(t, service.SyncS3Destinations(ctx, []backup.S3DestinationSync{
+		{
+			ID:              "destination-1",
+			Name:            "Remote primary updated",
+			Bucket:          "updated-volume-backups",
+			Region:          "eu-west-1",
+			AccessKeyID:     "updated-access-key",
+			SecretAccessKey: "updated-secret",
+			UseSSL:          true,
+		},
+	}))
+
+	require.NoError(t, gormDB.First(&synced, "id = ?", "destination-1").Error)
+	require.Equal(t, "Remote primary updated", synced.Name)
+	require.Equal(t, "updated-volume-backups", synced.Bucket)
+	secret, err = crypto.Decrypt(synced.SecretAccessKey)
+	require.NoError(t, err)
+	require.Equal(t, "updated-secret", secret)
+}
+
+func TestS3DestinationService_TestS3DestinationRoundTrip(t *testing.T) {
+	var object []byte
+	var requestMethods []string
+	expectedPathPrefix := "/arcane-backups/production/.arcane-connection-test-"
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if !assert.NotEmpty(t, r.Header.Get("Authorization")) {
+			return
+		}
+		if !assert.True(t, strings.HasPrefix(r.URL.Path, expectedPathPrefix)) {
+			return
+		}
+		requestMethods = append(requestMethods, r.Method)
+		switch r.Method {
+		case http.MethodPut:
+			var err error
+			object, err = io.ReadAll(r.Body)
+			if !assert.NoError(t, err) {
+				return
+			}
+			w.Header().Set("ETag", `"test-etag"`)
+			w.WriteHeader(http.StatusOK)
+		case http.MethodGet:
+			w.Header().Set("Content-Length", strconv.Itoa(len(object)))
+			w.WriteHeader(http.StatusOK)
+			_, _ = w.Write(object)
+		case http.MethodDelete:
+			object = nil
+			w.WriteHeader(http.StatusNoContent)
+		default:
+			http.Error(w, "unsupported method", http.StatusMethodNotAllowed)
+		}
+	}))
+	defer server.Close()
+
+	service, _ := setupS3DestinationServiceTestInternal(t)
+	require.NoError(t, service.TestS3DestinationConfiguration(t.Context(), backup.CreateS3Destination{
+		Name:            "Unsaved destination",
+		Endpoint:        server.URL,
+		Bucket:          "arcane-backups",
+		Region:          "",
+		AccessKeyID:     "access-key",
+		SecretAccessKey: "secret-key",
+		Prefix:          "production",
+		UseSSL:          false,
+		ForcePathStyle:  true,
+	}))
+	destination, err := service.CreateS3Destination(t.Context(), backup.CreateS3Destination{
+		Name:            "Test destination",
+		Endpoint:        server.URL,
+		Bucket:          "arcane-backups",
+		Region:          "",
+		AccessKeyID:     "access-key",
+		SecretAccessKey: "secret-key",
+		Prefix:          "production",
+		UseSSL:          false,
+		ForcePathStyle:  true,
+	})
+	require.NoError(t, err)
+
+	require.NoError(t, service.TestS3Destination(t.Context(), destination.ID, nil))
+
+	// Changing a connection field without re-supplying the secret is rejected
+	// before any outbound request: the stored secret must never sign requests
+	// against caller-modified connection settings.
+	requestsBeforeRejection := len(requestMethods)
+	err = service.TestS3Destination(t.Context(), destination.ID, &backup.UpdateS3Destination{
+		Name:           destination.Name,
+		Endpoint:       server.URL,
+		Bucket:         "edited-bucket",
+		Region:         "",
+		AccessKeyID:    destination.AccessKeyID,
+		Prefix:         "edited",
+		UseSSL:         false,
+		ForcePathStyle: true,
+	})
+	require.ErrorContains(t, err, "re-enter the secret access key")
+	require.Len(t, requestMethods, requestsBeforeRejection)
+
+	expectedPathPrefix = "/edited-bucket/edited/.arcane-connection-test-"
+	require.NoError(t, service.TestS3Destination(t.Context(), destination.ID, &backup.UpdateS3Destination{
+		Name:            destination.Name,
+		Endpoint:        server.URL,
+		Bucket:          "edited-bucket",
+		Region:          "",
+		AccessKeyID:     destination.AccessKeyID,
+		SecretAccessKey: "secret-key",
+		Prefix:          "edited",
+		UseSSL:          false,
+		ForcePathStyle:  true,
+	}))
+
+	require.Equal(t, []string{
+		http.MethodPut, http.MethodGet, http.MethodDelete,
+		http.MethodPut, http.MethodGet, http.MethodDelete,
+		http.MethodPut, http.MethodGet, http.MethodDelete,
+	}, requestMethods)
+	require.Empty(t, object)
+	persisted, err := service.GetS3Destination(t.Context(), destination.ID)
+	require.NoError(t, err)
+	require.Equal(t, "arcane-backups", persisted.Bucket)
+	require.Equal(t, "production", persisted.Prefix)
+	require.Empty(t, persisted.Region)
+
+	for _, scenario := range []struct {
+		name          string
+		code          string
+		status        int
+		reason        string
+		wantError     bool
+		snapshotError bool
+		configOnly    bool
+	}{
+		{name: "only the requested snapshot is read"},
+		{name: "repository check reads only config", configOnly: true},
+		{name: "confirmed bucket loss", code: "NoSuchBucket", status: http.StatusNotFound, reason: "missing_bucket"},
+		{name: "confirmed repository loss", code: "NoSuchKey", status: http.StatusNotFound, reason: "missing_repository"},
+		{name: "access denied is not deletion", code: "AccessDenied", status: http.StatusForbidden, wantError: true},
+		{name: "generic not found is inconclusive", code: "NotFound", status: http.StatusNotFound, wantError: true},
+		{name: "missing snapshot leaves repository available", code: "NoSuchKey", status: http.StatusNotFound, snapshotError: true},
+		{name: "snapshot access denied is inconclusive", code: "AccessDenied", status: http.StatusForbidden, snapshotError: true, wantError: true},
+	} {
+		t.Run(scenario.name, func(t *testing.T) {
+			snapshotID := strings.Repeat("a", 64)
+			metadataServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				isConfig := r.URL.Path == "/arcane-backups/production/repository/config"
+				isSnapshot := !scenario.configOnly && r.URL.Path == "/arcane-backups/production/repository/snapshots/"+snapshotID
+				if r.Method != http.MethodGet || (!isConfig && !isSnapshot) || r.URL.Query().Get("list-type") != "" {
+					t.Errorf("unexpected metadata request: %s %s", r.Method, r.URL)
+					w.WriteHeader(http.StatusBadRequest)
+					return
+				}
+				if r.Header.Get("Range") != "bytes=0-0" {
+					t.Errorf("metadata request must be limited to one byte")
+				}
+				if scenario.code != "" && (!scenario.snapshotError || !isConfig) {
+					w.Header().Set("Content-Type", "application/xml")
+					w.WriteHeader(scenario.status)
+					_, _ = io.WriteString(w, "<Error><Code>"+scenario.code+"</Code><Message>test response</Message></Error>")
+					return
+				}
+				w.Header().Set("Content-Range", "bytes 0-0/100")
+				w.WriteHeader(http.StatusPartialContent)
+				_, _ = io.WriteString(w, "x")
+			}))
+			defer metadataServer.Close()
+			configuration := s3.Configuration{
+				Name: "Metadata destination", Endpoint: metadataServer.URL, Bucket: "arcane-backups",
+				AccessKeyID: "test-access", SecretAccessKey: "test-secret", Prefix: "production", ForcePathStyle: true,
+			}
+			requestedID := kit.Ternary(scenario.configOnly, "", snapshotID)
+			observation, checkErr := s3.CheckRepository(t.Context(), configuration, "repository", requestedID)
+			if scenario.wantError {
+				require.Error(t, checkErr)
+				require.Empty(t, observation.Reason)
+				return
+			}
+			require.NoError(t, checkErr)
+			require.Equal(t, scenario.reason, observation.Reason)
+			require.Equal(t, scenario.reason == "", observation.Available)
+			require.Equal(t, scenario.reason == "" && !scenario.configOnly && !scenario.snapshotError, observation.SnapshotAvailable)
+		})
+	}
+}
+
+func TestListS3DestinationsByIDInternal(t *testing.T) {
+	service, db := setupS3DestinationServiceTestInternal(t)
+	indexed, err := service.ListS3DestinationsByID(t.Context())
+	require.NoError(t, err)
+	require.Empty(t, indexed)
+	destination := S3Destination{Name: "Offsite", Bucket: "backups", SecretAccessKey: "encrypted"}
+	require.NoError(t, db.Create(&destination).Error)
+	indexed, err = service.ListS3DestinationsByID(t.Context())
+	require.NoError(t, err)
+	require.Len(t, indexed, 1)
+	require.Equal(t, "Offsite", indexed[destination.ID].Name)
+	require.Equal(t, "backups", indexed[destination.ID].Bucket)
+	require.True(t, indexed[destination.ID].SecretConfigured)
+	require.Empty(t, indexed["missing"].Name)
+	require.NoError(t, db.Migrator().DropTable(&S3Destination{}))
+	indexed, err = service.ListS3DestinationsByID(t.Context())
+	require.ErrorContains(t, err, "failed to list S3 destinations")
+	require.Nil(t, indexed)
+}

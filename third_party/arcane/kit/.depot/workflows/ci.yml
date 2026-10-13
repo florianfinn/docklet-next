@@ -1,0 +1,106 @@
+# Source: getarcaneapp/kit/.depot/workflows/ci.yml
+# Revision: 9c61043fc52d1977d644f075d9c168335c3a6df7
+# Retrieved: 2026-10-13
+# License: BSD-3-Clause
+# Deviations: None
+
+name: CI
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: "${{ github.workflow }}-${{ github.ref }}"
+  cancel-in-progress: true
+
+jobs:
+  quality:
+    name: Quality
+    runs-on: depot-ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+      - name: Setup Go
+        uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+          cache: false
+
+      - name: Setup Just
+        uses: extractions/setup-just@v4
+
+      - name: Test with race detector
+        run: just test-race
+
+      - name: Check GoReleaser configuration
+        uses: goreleaser/goreleaser-action@v7
+        with:
+          distribution: goreleaser-pro
+          version: latest
+          workdir: acfs
+          args: check
+        env:
+          GORELEASER_KEY: ${{ secrets.GORELEASER_KEY }}
+
+  lint:
+    name: Lint
+    runs-on: depot-ubuntu-latest
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        module:
+          - name: kit
+            dir: "."
+            args: --config=.golangci.yml
+          - name: acfs
+            dir: acfs
+            args: --config=../.golangci.yml
+          - name: builds
+            dir: builds
+            args: --config=../.golangci.yml
+          - name: docker
+            dir: docker
+            args: --config=../.golangci.yml
+          - name: docker-compat
+            dir: docker/compat
+            args: --config=../../.golangci.yml
+          - name: docker-convert
+            dir: docker/convert
+            args: --config=../../.golangci.yml
+          - name: streams
+            dir: streams
+            args: --config=../.golangci.yml
+          - name: sys-bytes
+            dir: sys/bytes
+            args: --config=../../.golangci.yml
+          - name: sys-cgroup
+            dir: sys/cgroup
+            args: --config=../../.golangci.yml
+          - name: sys-crypto
+            dir: sys/crypto
+            args: --config=../../.golangci.yml
+          - name: updater
+            dir: updater
+            args: --config=../.golangci.yml
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+      - name: Setup Go
+        uses: actions/setup-go@v7
+        with:
+          go-version-file: ${{ matrix.module.dir }}/go.mod
+          cache: false
+
+      - name: Run Golangci-lint
+        uses: golangci/golangci-lint-action@v9
+        with:
+          version: latest
+          args: ${{ matrix.module.args }} ./...
+          working-directory: ${{ matrix.module.dir }}
+          only-new-issues: false

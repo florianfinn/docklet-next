@@ -1,0 +1,462 @@
+// Source: getarcaneapp/arcane/backend/internal/config/schema/schema.go
+// Revision: 095cb778daba1034e2a39961199e712a75d4ba29
+// Retrieved: 2026-10-13
+// License: BSD-3-Clause
+// Deviations: Local module namespace
+
+package schema
+
+import (
+	"bytes"
+	"cmp"
+	"encoding/json/jsontext"
+	"encoding/json/v2"
+	"errors"
+	"fmt"
+	"go/ast"
+	"go/format"
+	"go/parser"
+	"go/token"
+	"os"
+	"path/filepath"
+	"reflect"
+	"slices"
+	"sort"
+	"strconv"
+	"strings"
+
+	kit "go.getarcane.app/kit/pkg"
+
+	"github.com/florianfinn/docklet-next/backend/internal/settings"
+	"github.com/florianfinn/docklet-next/backend/pkg/utils"
+)
+
+const (
+	schemaVersion                = 1
+	sourceFileConfig             = "backend/internal/config/config.go"
+	sourceFileBuildablesConfig   = "backend/internal/config/buildables_config.go"
+	sourceFileSettings           = "backend/internal/settings/model.go"
+	sourceSymbolConfig           = "config.Config"
+	sourceSymbolBuildablesConfig = "config.BuildablesConfig"
+)
+
+var documentNotes = []string{
+	"When AGENT_MODE=true or UI_CONFIGURATION_DISABLED=true, Arcane manages non-internal settings through environment variables more broadly than the always-on envOverride path.",
+	"The settingEnvOverrides section includes stable envOverride settings plus non-internal settings that are env-managed in env-only modes.",
+}
+
+// SchemaDocument is the canonical JSON artifact consumed by the docs site.
+type SchemaDocument struct {
+	SchemaVersion       int                    `json:"schemaVersion"`
+	Notes               []string               `json:"notes,omitempty"`
+	EnvConfig           []ConfigEntry          `json:"envConfig"`
+	SettingEnvOverrides []SettingOverrideEntry `json:"settingEnvOverrides"`
+}
+
+// ConfigEntry describes an environment-backed runtime config value.
+type ConfigEntry struct {
+	Env          string   `json:"env"`
+	Field        string   `json:"field"`
+	Type         string   `json:"type"`
+	DefaultValue string   `json:"defaultValue,omitempty"`
+	Description  string   `json:"description,omitempty"`
+	Options      []string `json:"options,omitempty"`
+	SupportsFile bool     `json:"supportsFile,omitempty"`
+	Deprecated   bool     `json:"deprecated,omitempty"`
+	Conditional  bool     `json:"conditional,omitempty"`
+	BuildTags    []string `json:"buildTags,omitempty"`
+	Source       string   `json:"source"`
+	SourceFile   string   `json:"sourceFile"`
+	SourceSymbol string   `json:"sourceSymbol"`
+}
+
+// SettingOverrideEntry describes a database-backed setting that can be controlled by env vars.
+type SettingOverrideEntry struct {
+	Env          string `json:"env"`
+	SettingKey   string `json:"settingKey"`
+	Description  string `json:"description,omitempty"`
+	DefaultValue string `json:"defaultValue,omitempty"`
+	Type         string `json:"type"`
+	Category     string `json:"category,omitempty"`
+	Requires     string `json:"requires,omitempty"`
+	Note         string `json:"note,omitempty"`
+	Source       string `json:"source"`
+	SourceFile   string `json:"sourceFile"`
+	SourceSymbol string `json:"sourceSymbol"`
+	Sensitive    bool   `json:"sensitive"`
+	Deprecated   bool   `json:"deprecated"`
+	Public       bool   `json:"public"`
+}
+
+type envFieldOptions struct {
+	conditional bool
+	buildTags   []string
+	sourceFile  string
+	sourceType  string
+}
+
+type overrideDocRule struct {
+	requires   string
+	note       string
+	deprecated bool
+}
+
+var overrideDocRules = map[string]overrideDocRule{
+	"autoUpdateInterval": {
+		requires: "AUTO_UPDATE=true to have effect at runtime.",
+	},
+	"scheduledPruneInterval": {
+		requires: "SCHEDULED_PRUNE_ENABLED=true to have effect at runtime.",
+	},
+	"pruneContainerMode": {
+		requires: "SCHEDULED_PRUNE_ENABLED=true to have effect at runtime.",
+	},
+	"pruneContainerUntil": {
+		requires: "SCHEDULED_PRUNE_ENABLED=true and PRUNE_CONTAINER_MODE=olderThan to have effect at runtime.",
+	},
+	"pruneImageMode": {
+		requires: "SCHEDULED_PRUNE_ENABLED=true to have effect at runtime.",
+	},
+	"pruneImageUntil": {
+		requires: "SCHEDULED_PRUNE_ENABLED=true and PRUNE_IMAGE_MODE=olderThan to have effect at runtime.",
+	},
+	"pruneVolumeMode": {
+		requires: "SCHEDULED_PRUNE_ENABLED=true to have effect at runtime.",
+	},
+	"pruneNetworkMode": {
+		requires: "SCHEDULED_PRUNE_ENABLED=true to have effect at runtime.",
+	},
+	"pruneNetworkUntil": {
+		requires: "SCHEDULED_PRUNE_ENABLED=true and PRUNE_NETWORK_MODE=olderThan to have effect at runtime.",
+	},
+	"pruneBuildCacheMode": {
+		requires: "SCHEDULED_PRUNE_ENABLED=true to have effect at runtime.",
+	},
+	"pruneBuildCacheUntil": {
+		requires: "SCHEDULED_PRUNE_ENABLED=true and PRUNE_BUILD_CACHE_MODE=olderThan to have effect at runtime.",
+	},
+	"featureVulnerabilityManagementEnabled": {
+		note: "Disabling retains existing reports and scanner settings, allows active work to finish, and leaves standalone image patching available.",
+	},
+	"featureSwarmEnabled": {
+		note: "An active swarm cluster keeps Swarm enabled regardless of this value.",
+	},
+	"vulnerabilityScanInterval": {
+		requires: "FEATURE_VULNERABILITY_MANAGEMENT_ENABLED=true and VULNERABILITY_SCAN_ENABLED=true to have effect at runtime.",
+	},
+	"vulnerabilityThreatIntelEnabled": {
+		requires: "FEATURE_VULNERABILITY_MANAGEMENT_ENABLED=true to have effect at runtime.",
+	},
+	"autoHealInterval": {
+		requires: "AUTO_HEAL_ENABLED=true to have effect at runtime.",
+	},
+	"autoHealExcludedContainers": {
+		requires: "AUTO_HEAL_ENABLED=true to have effect at runtime.",
+	},
+	"autoHealMaxRestarts": {
+		requires: "AUTO_HEAL_ENABLED=true to have effect at runtime.",
+	},
+	"autoHealRestartWindow": {
+		requires: "AUTO_HEAL_ENABLED=true to have effect at runtime.",
+	},
+}
+
+// GenerateWithSourceRoot builds the canonical schema document for config and settings docs.
+func GenerateWithSourceRoot(sourceRoot string) (*SchemaDocument, error) {
+	envConfig, err := collectEnvConfigInternal(sourceRoot)
+	if err != nil {
+		return nil, fmt.Errorf("collect env config: %w", err)
+	}
+
+	settingOverrides, err := collectSettingEnvOverridesInternal()
+	if err != nil {
+		return nil, fmt.Errorf("collect setting env overrides: %w", err)
+	}
+
+	doc := &SchemaDocument{
+		SchemaVersion:       schemaVersion,
+		Notes:               slices.Clone(documentNotes),
+		EnvConfig:           envConfig,
+		SettingEnvOverrides: settingOverrides,
+	}
+
+	return doc, nil
+}
+
+// MarshalJSON returns a stable, indented JSON encoding of the schema document.
+func MarshalJSON(doc *SchemaDocument) ([]byte, error) {
+	output, err := json.Marshal(doc, json.Deterministic(true), jsontext.WithIndent("  "))
+	if err != nil {
+		return nil, fmt.Errorf("marshal schema document: %w", err)
+	}
+
+	output = append(output, '\n')
+	return output, nil
+}
+
+func collectEnvConfigInternal(sourceRoot string) ([]ConfigEntry, error) {
+	root, err := resolveSourceRootInternal(sourceRoot)
+	if err != nil {
+		return nil, err
+	}
+
+	configEntries, err := parseStructEnvFieldsInternal(
+		filepath.Join(root, "internal", "config", "config.go"),
+		"Config",
+		envFieldOptions{
+			sourceFile: sourceFileConfig,
+			sourceType: sourceSymbolConfig,
+		},
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	buildablesEntries, err := parseStructEnvFieldsInternal(
+		filepath.Join(root, "internal", "config", "buildables_config.go"),
+		"BuildablesConfig",
+		envFieldOptions{
+			conditional: true,
+			buildTags:   []string{"buildables"},
+			sourceFile:  sourceFileBuildablesConfig,
+			sourceType:  sourceSymbolBuildablesConfig,
+		},
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	configEntries = append(configEntries, buildablesEntries...)
+	sort.Slice(configEntries, func(i, j int) bool {
+		return configEntries[i].Env < configEntries[j].Env
+	})
+
+	return configEntries, nil
+}
+
+func parseStructEnvFieldsInternal(filename, structName string, opts envFieldOptions) ([]ConfigEntry, error) {
+	fset := token.NewFileSet()
+	file, err := parser.ParseFile(fset, filename, nil, parser.ParseComments)
+	if err != nil {
+		return nil, fmt.Errorf("parse %s: %w", filename, err)
+	}
+
+	structType, err := findStructTypeInternal(file, structName)
+	if err != nil {
+		return nil, err
+	}
+
+	entries := make([]ConfigEntry, 0, len(structType.Fields.List))
+	for _, field := range structType.Fields.List {
+		if len(field.Names) == 0 || field.Tag == nil {
+			continue
+		}
+
+		tagValue, unquoteErr := strconv.Unquote(field.Tag.Value)
+		if unquoteErr != nil {
+			return nil, fmt.Errorf("unquote struct tag for %s: %w", structName, unquoteErr)
+		}
+
+		structTag := reflect.StructTag(tagValue)
+		envName := structTag.Get("env")
+		if envName == "" {
+			continue
+		}
+
+		options := kit.TrimNonEmpty(strings.Split(structTag.Get("options"), ","))
+		typeName, unquoteErr := exprStringInternal(field.Type)
+		if unquoteErr != nil {
+			return nil, fmt.Errorf("render type for %s.%s: %w", structName, field.Names[0].Name, unquoteErr)
+		}
+
+		description := cmp.Or(strings.Join(strings.Fields(field.Doc.Text()), " "), strings.Join(strings.Fields(field.Comment.Text()), " "))
+
+		for _, name := range field.Names {
+			entries = append(entries, ConfigEntry{
+				Env:          envName,
+				Field:        name.Name,
+				Type:         typeName,
+				DefaultValue: structTag.Get("default"),
+				Description:  description,
+				Options:      options,
+				SupportsFile: slices.Contains(options, "file"),
+				Deprecated:   slices.Contains(options, "deprecated"),
+				Conditional:  opts.conditional,
+				BuildTags:    slices.Clone(opts.buildTags),
+				Source:       opts.sourceType,
+				SourceFile:   opts.sourceFile,
+				SourceSymbol: opts.sourceType + "." + name.Name,
+			})
+		}
+	}
+
+	return entries, nil
+}
+
+func collectSettingEnvOverridesInternal() ([]SettingOverrideEntry, error) {
+	defaults := settings.DefaultSettingsConfig()
+	settingsType := reflect.TypeFor[settings.Settings]()
+	entries := make([]SettingOverrideEntry, 0, settingsType.NumField())
+
+	for field := range settingsType.Fields() {
+		keyTag := field.Tag.Get("key")
+		if keyTag == "" {
+			continue
+		}
+
+		tagParts := kit.TrimNonEmpty(strings.Split(keyTag, ","))
+		if len(tagParts) == 0 {
+			continue
+		}
+
+		key := tagParts[0]
+		attrs := tagParts[1:]
+		hasEnvOverride := slices.Contains(attrs, "envOverride")
+		isInternal := slices.Contains(attrs, "internal")
+		if !hasEnvOverride && isInternal {
+			continue
+		}
+
+		defaultValue, isPublic, isSensitive, err := defaults.FieldByKey(key)
+		if err != nil {
+			return nil, fmt.Errorf("lookup default value for %q: %w", key, err)
+		}
+		if isSensitive {
+			defaultValue = ""
+		}
+
+		meta := utils.ParseMetaTag(field.Tag.Get("meta"))
+		rule := overrideDocRules[key]
+		requires := rule.requires
+		if !hasEnvOverride {
+			requires = strings.Join(kit.TrimNonEmpty([]string{"AGENT_MODE=true or UI_CONFIGURATION_DISABLED=true to manage this setting via env.", requires}), " ")
+		}
+
+		entries = append(entries, SettingOverrideEntry{
+			Env:          strings.ToUpper(kit.SnakeCase(key)),
+			SettingKey:   key,
+			Description:  meta["description"],
+			DefaultValue: defaultValue,
+			Type:         kit.Ternary(strings.TrimSpace(meta["type"]) == "", "text", meta["type"]),
+			Sensitive:    isSensitive,
+			Deprecated:   rule.deprecated || slices.Contains(attrs, "deprecated"),
+			Category:     meta["category"],
+			Public:       isPublic,
+			Requires:     requires,
+			Note:         rule.note,
+			Source:       "settings.Settings + settings.DefaultSettingsConfig",
+			SourceFile:   sourceFileSettings,
+			SourceSymbol: "settings.Settings." + field.Name,
+		})
+	}
+
+	sort.Slice(entries, func(i, j int) bool {
+		if entries[i].Category == entries[j].Category {
+			return entries[i].Env < entries[j].Env
+		}
+		return entries[i].Category < entries[j].Category
+	})
+
+	return entries, nil
+}
+
+func findStructTypeInternal(file *ast.File, structName string) (*ast.StructType, error) {
+	for _, decl := range file.Decls {
+		genDecl, ok := decl.(*ast.GenDecl)
+		if !ok || genDecl.Tok != token.TYPE {
+			continue
+		}
+
+		for _, spec := range genDecl.Specs {
+			typeSpec, localOk := spec.(*ast.TypeSpec)
+			if !localOk || typeSpec.Name.Name != structName {
+				continue
+			}
+
+			structType, localOk := typeSpec.Type.(*ast.StructType)
+			if !localOk {
+				return nil, fmt.Errorf("%s is not a struct", structName)
+			}
+
+			return structType, nil
+		}
+	}
+
+	return nil, fmt.Errorf("struct %s not found", structName)
+}
+
+func exprStringInternal(expr ast.Expr) (string, error) {
+	var buf bytes.Buffer
+	if err := format.Node(&buf, token.NewFileSet(), expr); err != nil {
+		return "", err
+	}
+	return buf.String(), nil
+}
+
+func resolveSourceRootInternal(sourceRoot string) (string, error) {
+	candidates := make([]string, 0, 2)
+	if strings.TrimSpace(sourceRoot) != "" {
+		candidates = append(candidates, sourceRoot)
+	} else {
+		wd, err := os.Getwd()
+		if err != nil {
+			return "", fmt.Errorf("get working directory: %w", err)
+		}
+		candidates = append(candidates, wd)
+	}
+
+	for _, candidate := range candidates {
+		resolved, err := resolveSourceRootCandidateInternal(candidate)
+		if err == nil {
+			return resolved, nil
+		}
+	}
+
+	if strings.TrimSpace(sourceRoot) != "" {
+		return "", fmt.Errorf("resolve source root from %q: expected backend/internal/config/config.go", sourceRoot)
+	}
+
+	return "", errors.New("resolve source root: run from the repository root/backend directory or pass --source-root")
+}
+
+func resolveSourceRootCandidateInternal(candidate string) (string, error) {
+	candidate, err := filepath.Abs(candidate)
+	if err != nil {
+		return "", fmt.Errorf("abs path for %q: %w", candidate, err)
+	}
+
+	for current := candidate; ; current = filepath.Dir(current) {
+		if hasSchemaSourceFilesInternal(current) {
+			return current, nil
+		}
+
+		backendRoot := filepath.Join(current, "backend")
+		if hasSchemaSourceFilesInternal(backendRoot) {
+			return backendRoot, nil
+		}
+
+		parent := filepath.Dir(current)
+		if parent == current {
+			break
+		}
+	}
+
+	return "", fmt.Errorf("schema sources not found from %q", candidate)
+}
+
+func hasSchemaSourceFilesInternal(root string) bool {
+	required := []string{
+		filepath.Join(root, "internal", "config", "config.go"),
+		filepath.Join(root, "internal", "config", "buildables_config.go"),
+	}
+
+	// os.* rather than acfs: this probes repo source files while walking up
+	// arbitrary ancestor directories at codegen time, so no confinement root exists.
+	for _, filename := range required {
+		if _, err := os.Stat(filename); err != nil {
+			return false
+		}
+	}
+
+	return true
+}

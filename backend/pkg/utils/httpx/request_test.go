@@ -1,0 +1,48 @@
+// Source: getarcaneapp/arcane/backend/pkg/utils/httpx/request_test.go
+// Revision: 095cb778daba1034e2a39961199e712a75d4ba29
+// Retrieved: 2026-10-13
+// License: BSD-3-Clause
+// Deviations: None
+
+package httpx
+
+import (
+	"net/http"
+	"net/http/httptest"
+	"testing"
+
+	"github.com/stretchr/testify/assert"
+)
+
+func TestIsWebSocketUpgradeRequest(t *testing.T) {
+	tests := []struct {
+		name       string
+		connection string
+		upgrade    string
+		want       bool
+	}{
+		{"websocket upgrade", "Upgrade", "websocket", true},
+		{"case insensitive with token list", "keep-alive, UPGRADE", "WebSocket", true},
+		{"plain request", "", "", false},
+		{"upgrade to h2c", "Upgrade", "h2c", false},
+		{"only upgrade header from reverse proxy", "", "websocket", false},
+		{"only connection upgrade from reverse proxy", "upgrade, keep-alive", "", false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			r := httptest.NewRequest("GET", "/", http.NoBody)
+			if tt.connection != "" {
+				r.Header.Set("Connection", tt.connection)
+			}
+			if tt.upgrade != "" {
+				r.Header.Set("Upgrade", tt.upgrade)
+			}
+			{
+				got := IsWebSocketUpgradeRequest(r)
+				assert.Equal(t, tt.want, got,
+					"IsWebSocketUpgradeRequest() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}

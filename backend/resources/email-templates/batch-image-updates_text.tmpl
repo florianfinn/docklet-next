@@ -1,0 +1,34 @@
+{{/*
+Source: getarcaneapp/arcane/backend/resources/email-templates/batch-image-updates_text.tmpl
+Revision: 095cb778daba1034e2a39961199e712a75d4ba29
+Retrieved: 2026-10-13
+License: BSD-3-Clause
+Deviations: None
+*/}}{{define "root"}}IMAGE UPDATES AVAILABLE
+
+{{.UpdateCount}} container images have updates available.
+
+Environment:
+
+{{.Environment}}
+
+----------------------------------------
+
+Updates Available:
+
+{{.UpdateCount}}
+
+----------------------------------------
+
+Checked At:
+
+{{.CheckTime}}
+
+Images with Updates:
+
+{{range .ImageList}}• {{.}}
+{{end}}
+
+Log in to Arcane to view details and update your containers.
+
+Open Arcane Dashboard → {{.AppURL}}{{end}}

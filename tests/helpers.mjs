@@ -106,7 +106,12 @@ export function stubModuleChecks(root) {
 import { appendFileSync } from "node:fs";
 import { basename, relative } from "node:path";
 const program = basename(process.argv[1]);
-const args = process.argv.slice(2);
+let args = process.argv.slice(2);
+// Record the tool command inside the Docker-isolating Go launcher.
+if (program === "go" && args[0] === "run" && basename(args[1]) === "go-command.go") {
+  args = args.slice(3);
+  if (args[0] === "--work-off") args = args.slice(1);
+}
 appendFileSync(process.env.MODULE_CHECK_LOG, JSON.stringify({
   program, args, cwd: relative(process.env.MODULE_CHECK_ROOT, process.cwd()),
 }) + "\\n");

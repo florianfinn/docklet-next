@@ -1,0 +1,388 @@
+// Source: getarcaneapp/arcane/backend/pkg/libarcane/edge/proxy.go
+// Revision: 095cb778daba1034e2a39961199e712a75d4ba29
+// Retrieved: 2026-10-13
+// License: BSD-3-Clause
+// Deviations: None
+
+package edge
+
+import (
+	"bytes"
+	"context"
+	"errors"
+	"fmt"
+	"io"
+	"log/slog"
+	"net/http"
+	"time"
+
+	"github.com/labstack/echo/v5"
+	"github.com/samber/mo"
+)
+
+const (
+	// DefaultProxyTimeout is the default timeout for proxied requests
+	DefaultProxyTimeout = 5 * time.Minute
+	// DefaultTunnelAcquirePollEvery is how frequently the manager checks for a
+	// newly activated edge tunnel while waiting for poll mode to connect.
+	DefaultTunnelAcquirePollEvery = 100 * time.Millisecond
+)
+
+// DefaultTunnelAcquireTimeout returns a poll-aware wait timeout for acquiring
+// an on-demand edge tunnel.
+func DefaultTunnelAcquireTimeout() time.Duration {
+	return DefaultTunnelPollInterval + 2*time.Second
+}
+
+// ProxyRequest sends an HTTP request through an edge tunnel
+// Returns the response status, headers, and body
+func ProxyRequest(ctx context.Context, tunnel *AgentTunnel, method, path, query string, headers map[string]string, body []byte) (int, map[string]string, []byte, error) {
+	result, err := DefaultCommandClient.Execute(ctx, tunnel, &CommandRequest{
+		Method:  method,
+		Path:    path,
+		Query:   query,
+		Headers: headers,
+		Body:    body,
+	})
+	if err != nil {
+		return 0, nil, nil, err
+	}
+
+	return result.Status, result.Headers, result.Body, nil
+}
+
+func registerPendingRequestInternal(tunnel *AgentTunnel, requestID string) (*PendingRequest, error) {
+	if requestID == "" {
+		return nil, errors.New("request ID is required")
+	}
+
+	pending := &PendingRequest{
+		ResponseCh: make(chan *TunnelMessage, 256),
+		failureCh:  make(chan error, 1),
+	}
+	tunnel.Pending.Store(requestID, pending)
+	return pending, nil
+}
+
+func collectCommandResponseInternal(ctx context.Context, tunnel *AgentTunnel, pending *PendingRequest, method string) (int, map[string]string, []byte, error) {
+	state := &grpcResponseState{}
+
+	for {
+		select {
+		case <-ctx.Done():
+			return 0, nil, nil, ctx.Err()
+		case <-tunnel.done:
+			if done, status, headers, body, err := state.drainTerminalResponseInternal(pending.ResponseCh, method); done {
+				return status, headers, body, err
+			}
+			return 0, nil, nil, fmt.Errorf("edge tunnel closed while waiting for response: %w", ErrTunnelConnectionClosed)
+		case err := <-pending.failureCh:
+			if done, status, headers, body, drainTerminalResponseErr := state.drainTerminalResponseInternal(pending.ResponseCh, method); done {
+				return status, headers, body, drainTerminalResponseErr
+			}
+			return 0, nil, nil, err
+		case incoming, ok := <-pending.ResponseCh:
+			if !ok {
+				return 0, nil, nil, fmt.Errorf("edge tunnel response channel closed before a response was received: %w", ErrTunnelConnectionClosed)
+			}
+			if done, status, headers, body, err := state.handleTunnelMessageInternal(method, incoming); done {
+				return status, headers, body, err
+			}
+		}
+	}
+}
+
+func (s *grpcResponseState) handleTunnelMessageInternal(method string, incoming *TunnelMessage) (bool, int, map[string]string, []byte, error) {
+	if incoming == nil {
+		return false, 0, nil, nil, nil
+	}
+
+	switch incoming.Type {
+	case MessageTypeResponse:
+		done, status, headers, body := s.handleResponse(method, incoming)
+		return done, status, headers, body, nil
+	case MessageTypeCommandOutput, MessageTypeStreamData, MessageTypeFileChunk:
+		s.handleStreamData(incoming)
+	case MessageTypeCommandComplete:
+		status, headers, body, err := s.handleCommandComplete(incoming)
+		return true, status, headers, body, err
+	case MessageTypeStreamEnd:
+		done, status, headers, body := s.handleStreamEnd()
+		return done, status, headers, body, nil
+	case MessageTypeRequest,
+		MessageTypeHeartbeat,
+		MessageTypeHeartbeatAck,
+		MessageTypeWebSocketStart,
+		MessageTypeWebSocketData,
+		MessageTypeWebSocketClose,
+		MessageTypeRegister,
+		MessageTypeRegisterResponse,
+		MessageTypeEvent,
+		MessageTypeCommandRequest,
+		MessageTypeCommandAck,
+		MessageTypeStreamOpen,
+		MessageTypeStreamClose,
+		MessageTypeCancelRequest:
+	}
+	return false, 0, nil, nil, nil
+}
+
+func (s *grpcResponseState) drainTerminalResponseInternal(respCh <-chan *TunnelMessage, method string) (bool, int, map[string]string, []byte, error) {
+	for {
+		select {
+		case incoming, ok := <-respCh:
+			if !ok {
+				return true, 0, nil, nil, fmt.Errorf("edge tunnel response channel closed before a response was received: %w", ErrTunnelConnectionClosed)
+			}
+			if done, status, headers, body, err := s.handleTunnelMessageInternal(method, incoming); done {
+				return true, status, headers, body, err
+			}
+		default:
+			return false, 0, nil, nil, nil
+		}
+	}
+}
+
+func (s *grpcResponseState) handleResponse(method string, incoming *TunnelMessage) (bool, int, map[string]string, []byte) {
+	if !s.gotResponse {
+		s.gotResponse = true
+		s.status = incoming.Status
+		s.respHeaders = incoming.Headers
+	}
+
+	if s.respHeaders["X-Arcane-Tunnel-Stream"] == "1" {
+		if len(incoming.Body) > 0 {
+			s.respBody.Write(incoming.Body)
+		}
+		return false, 0, nil, nil
+	}
+
+	if len(incoming.Body) > 0 {
+		s.respBody.Write(incoming.Body)
+		return true, s.status, stripInternalTunnelHeaders(s.respHeaders), s.respBody.Bytes()
+	}
+
+	if method == http.MethodHead || s.status == http.StatusNoContent || s.status == http.StatusNotModified {
+		return true, s.status, stripInternalTunnelHeaders(s.respHeaders), nil
+	}
+
+	return false, 0, nil, nil
+}
+
+func (s *grpcResponseState) handleStreamData(incoming *TunnelMessage) {
+	if len(incoming.Body) > 0 {
+		s.respBody.Write(incoming.Body)
+	}
+}
+
+func (s *grpcResponseState) handleStreamEnd() (bool, int, map[string]string, []byte) {
+	if !s.gotResponse {
+		return false, 0, nil, nil
+	}
+	return true, s.status, stripInternalTunnelHeaders(s.respHeaders), s.respBody.Bytes()
+}
+
+func (s *grpcResponseState) handleCommandComplete(incoming *TunnelMessage) (int, map[string]string, []byte, error) {
+	if !s.gotResponse {
+		s.gotResponse = true
+		s.status = incoming.Status
+		s.respHeaders = incoming.Headers
+	}
+	if len(incoming.Body) > 0 {
+		s.respBody.Write(incoming.Body)
+	}
+	if incoming.Error != "" && incoming.Status >= http.StatusBadRequest {
+		return incoming.Status, stripInternalTunnelHeaders(s.respHeaders), s.respBody.Bytes(), errors.New(incoming.Error)
+	}
+	return incoming.Status, stripInternalTunnelHeaders(s.respHeaders), s.respBody.Bytes(), nil
+}
+
+// ProxyHTTPRequest is a helper that proxies an echo context through a tunnel
+func ProxyHTTPRequest(c *echo.Context, tunnel *AgentTunnel, targetPath string) error {
+	req := c.Request()
+	ctx := req.Context()
+
+	proxyCtx, cancel := context.WithTimeout(ctx, DefaultProxyTimeout)
+	defer cancel()
+
+	var body []byte
+	if req.Body != nil {
+		var err error
+		body, err = io.ReadAll(req.Body)
+		if err != nil {
+			slog.ErrorContext(ctx, "Failed to read request body for tunnel proxy", "error", err)
+			return c.JSON(http.StatusInternalServerError, map[string]any{"error": "failed to read request body"})
+		}
+		req.Body = io.NopCloser(bytes.NewReader(body))
+	}
+
+	headers := make(map[string]string)
+	for k, v := range req.Header {
+		if len(v) > 0 {
+			if isHopByHopHeader(k) || isBrowserSecurityHeader(k) {
+				continue
+			}
+			headers[k] = v[0]
+		}
+	}
+
+	slog.DebugContext(ctx, "Proxying request through edge tunnel",
+		"environmentId", tunnel.EnvironmentID,
+		"method", req.Method,
+		"path", targetPath,
+		"bodyLength", len(body),
+	)
+
+	status, respHeaders, respBody, err := ProxyRequest(proxyCtx, tunnel, req.Method, targetPath, req.URL.RawQuery, headers, body)
+	if err != nil {
+		slog.ErrorContext(ctx, "Edge tunnel proxy failed",
+			"environmentId", tunnel.EnvironmentID,
+			"error", err,
+		)
+
+		if proxyCtx.Err() != nil {
+			return c.JSON(http.StatusGatewayTimeout, map[string]any{"error": "request timed out"})
+		}
+
+		return c.JSON(http.StatusBadGateway, map[string]any{"error": "failed to proxy request through tunnel"})
+	}
+
+	for k, v := range respHeaders {
+		if !isHopByHopHeader(k) {
+			c.Response().Header().Set(k, v)
+		}
+	}
+
+	return c.Blob(status, respHeaders["Content-Type"], respBody)
+}
+
+// isHopByHopHeader returns true if the header should not be forwarded
+func isHopByHopHeader(header string) bool {
+	hopByHop := map[string]bool{
+		"Connection":          true,
+		"Keep-Alive":          true,
+		"Proxy-Authenticate":  true,
+		"Proxy-Authorization": true,
+		"Te":                  true,
+		"Trailers":            true,
+		"Transfer-Encoding":   true,
+		"Upgrade":             true,
+	}
+	return hopByHop[http.CanonicalHeaderKey(header)]
+}
+
+// isBrowserSecurityHeader returns true for headers that are browser-enforced
+// security headers. These must NOT be forwarded through the edge tunnel because
+// the agent's CORS middleware will reject requests whose Origin does not match
+// its allowed origins, returning 403. The agent authenticates via
+// X-Arcane-Agent-Token instead of browser cookies/origin checks.
+func isBrowserSecurityHeader(header string) bool {
+	browserHeaders := map[string]bool{
+		"Origin":                         true,
+		"Referer":                        true,
+		"Cookie":                         true,
+		"Access-Control-Request-Method":  true,
+		"Access-Control-Request-Headers": true,
+		"Sec-Fetch-Mode":                 true,
+		"Sec-Fetch-Site":                 true,
+		"Sec-Fetch-Dest":                 true,
+	}
+	return browserHeaders[http.CanonicalHeaderKey(header)]
+}
+
+func stripInternalTunnelHeaders(headers map[string]string) map[string]string {
+	if len(headers) == 0 {
+		return headers
+	}
+	cleaned := make(map[string]string, len(headers))
+	for k, v := range headers {
+		if http.CanonicalHeaderKey(k) == "X-Arcane-Tunnel-Stream" {
+			continue
+		}
+		cleaned[k] = v
+	}
+	return cleaned
+}
+
+// HasActiveTunnel checks if an environment has an active edge tunnel
+func HasActiveTunnel(envID string) bool {
+	return GetActiveTunnel(envID).IsPresent()
+}
+
+// GetActiveTunnel returns the active tunnel for an environment, if one exists.
+func GetActiveTunnel(envID string) mo.Option[*AgentTunnel] {
+	tunnel, ok := GetRegistry().Get(envID).Get()
+	if !ok || tunnel == nil || tunnel.Conn == nil || tunnel.Conn.IsClosed() {
+		return mo.None[*AgentTunnel]()
+	}
+	return mo.Some(tunnel)
+}
+
+// WaitForActiveTunnel waits for an environment to establish a live tunnel.
+func WaitForActiveTunnel(ctx context.Context, envID string, timeout time.Duration) mo.Option[*AgentTunnel] {
+	if timeout <= 0 {
+		return GetActiveTunnel(envID)
+	}
+
+	if tunnel, ok := GetActiveTunnel(envID).Get(); ok {
+		return mo.Some(tunnel)
+	}
+
+	waitCtx, cancel := context.WithTimeout(ctx, timeout)
+	defer cancel()
+
+	ticker := time.NewTicker(DefaultTunnelAcquirePollEvery)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-waitCtx.Done():
+			return mo.None[*AgentTunnel]()
+		case <-ticker.C:
+			if tunnel, ok := GetActiveTunnel(envID).Get(); ok {
+				return mo.Some(tunnel)
+			}
+		}
+	}
+}
+
+// RequestTunnelAndWait marks an edge environment as needed and waits for the
+// agent to establish a live tunnel.
+func RequestTunnelAndWait(ctx context.Context, envID string, demandTTL, timeout time.Duration) mo.Option[*AgentTunnel] {
+	TouchTunnelDemand(envID, demandTTL)
+	return WaitForActiveTunnel(ctx, envID, timeout)
+}
+
+// DoRequest performs an HTTP request through an edge tunnel.
+// This is for service-level calls that need to route through the tunnel.
+// Returns (statusCode, responseBody, error)
+func DoRequest(ctx context.Context, envID, method, path string, body []byte) (int, []byte, error) {
+	if ctx == nil {
+		return 0, nil, errors.New("context is required")
+	}
+	if _, hasDeadline := ctx.Deadline(); !hasDeadline {
+		var cancel context.CancelFunc
+		ctx, cancel = context.WithTimeout(ctx, DefaultProxyTimeout)
+		defer cancel()
+	}
+
+	tunnel, ok := GetRegistry().Get(envID).Get()
+	if !ok {
+		return 0, nil, fmt.Errorf("no active tunnel for environment %s", envID)
+	}
+	if tunnel.Conn.IsClosed() {
+		return 0, nil, fmt.Errorf("tunnel for environment %s is closed", envID)
+	}
+
+	headers := make(map[string]string)
+	if method != http.MethodGet && len(body) > 0 {
+		headers["Content-Type"] = "application/json"
+	}
+
+	status, _, respBody, err := ProxyRequest(ctx, tunnel, method, path, "", headers, body)
+	if err != nil {
+		return 0, nil, err
+	}
+
+	return status, respBody, nil
+}

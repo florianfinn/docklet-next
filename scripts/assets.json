@@ -1,1 +1,107 @@
-[]
+[
+  {
+    "path": "backend/resources/images/profile.webp",
+    "sha256": "8297d2c35a2d9a32442f602ee468ba40bf2d3a2bcc6378de2c217b980c096979",
+    "source": "getarcaneapp/arcane/backend/resources/images/profile.webp@095cb778daba1034e2a39961199e712a75d4ba29",
+    "license": "BSD-3-Clause",
+    "purpose": "Upstream embedded Arcane logo/icon or generic profile silhouette; no environment screenshot or endorsement."
+  },
+  {
+    "path": "backend/resources/images/favicon.ico",
+    "sha256": "0238c4ca90bcc24ed5e0e92814e545b5d98c22e5ea03c1105f3b0412c59bfe56",
+    "source": "getarcaneapp/arcane/backend/resources/images/favicon.ico@095cb778daba1034e2a39961199e712a75d4ba29",
+    "license": "BSD-3-Clause",
+    "purpose": "Upstream embedded Arcane logo/icon or generic profile silhouette; no environment screenshot or endorsement."
+  },
+  {
+    "path": "backend/resources/images/icon-144x144.png",
+    "sha256": "5b7df3b05a9a90c40f5d8b96c4a7c03f74e49ee43d7f1b9eaa99b907daa9a940",
+    "source": "getarcaneapp/arcane/backend/resources/images/icon-144x144.png@095cb778daba1034e2a39961199e712a75d4ba29",
+    "license": "BSD-3-Clause",
+    "purpose": "Upstream embedded Arcane logo/icon or generic profile silhouette; no environment screenshot or endorsement."
+  },
+  {
+    "path": "backend/resources/images/icon-128x128.png",
+    "sha256": "4e2b504da3f2f20d98b8c524cbe6cb608dcc437acba653623df8a057cb4fcc6e",
+    "source": "getarcaneapp/arcane/backend/resources/images/icon-128x128.png@095cb778daba1034e2a39961199e712a75d4ba29",
+    "license": "BSD-3-Clause",
+    "purpose": "Upstream embedded Arcane logo/icon or generic profile silhouette; no environment screenshot or endorsement."
+  },
+  {
+    "path": "backend/resources/images/icon-192x192.png",
+    "sha256": "e963a2a8d824675a662b3fddf7b32509253a4bf548f7219c18e6fc849527ccd9",
+    "source": "getarcaneapp/arcane/backend/resources/images/icon-192x192.png@095cb778daba1034e2a39961199e712a75d4ba29",
+    "license": "BSD-3-Clause",
+    "purpose": "Upstream embedded Arcane logo/icon or generic profile silhouette; no environment screenshot or endorsement."
+  },
+  {
+    "path": "backend/resources/images/icon-72x72.png",
+    "sha256": "fc16769f985fde96b71b0fa72fd12f46a8c0ad06d436664b26b4d0cf8d7e68fd",
+    "source": "getarcaneapp/arcane/backend/resources/images/icon-72x72.png@095cb778daba1034e2a39961199e712a75d4ba29",
+    "license": "BSD-3-Clause",
+    "purpose": "Upstream embedded Arcane logo/icon or generic profile silhouette; no environment screenshot or endorsement."
+  },
+  {
+    "path": "backend/resources/images/logo-full.svg",
+    "sha256": "98a1d1190dc9d93e4fa3c44c0958ef4c2a1bbc28cea5ff62057e6173df5b17bb",
+    "source": "getarcaneapp/arcane/backend/resources/images/logo-full.svg@095cb778daba1034e2a39961199e712a75d4ba29",
+    "license": "BSD-3-Clause",
+    "purpose": "Upstream embedded Arcane logo/icon or generic profile silhouette; no environment screenshot or endorsement."
+  },
+  {
+    "path": "backend/resources/images/logo-animated.svg",
+    "sha256": "67ed4f8a486d9fd732b66a524f255938cb1aea34be543104ef5fcc8cfb0dfdfa",
+    "source": "getarcaneapp/arcane/backend/resources/images/logo-animated.svg@095cb778daba1034e2a39961199e712a75d4ba29",
+    "license": "BSD-3-Clause",
+    "purpose": "Upstream embedded Arcane logo/icon or generic profile silhouette; no environment screenshot or endorsement."
+  },
+  {
+    "path": "backend/resources/images/icon-152x152.png",
+    "sha256": "54c293a357e82b211aa0ee633df3055785ae9b201f77a287114db86f0f8db5df",
+    "source": "getarcaneapp/arcane/backend/resources/images/icon-152x152.png@095cb778daba1034e2a39961199e712a75d4ba29",
+    "license": "BSD-3-Clause",
+    "purpose": "Upstream embedded Arcane logo/icon or generic profile silhouette; no environment screenshot or endorsement."
+  },
+  {
+    "path": "backend/resources/images/logo.svg",
+    "sha256": "7aced5f76d1886525bb61b9413a2316f8a4c1297fdb2a7944e4e150281b29215",
+    "source": "getarcaneapp/arcane/backend/resources/images/logo.svg@095cb778daba1034e2a39961199e712a75d4ba29",
+    "license": "BSD-3-Clause",
+    "purpose": "Upstream embedded Arcane logo/icon or generic profile silhouette; no environment screenshot or endorsement."
+  },
+  {
+    "path": "backend/resources/images/icon-384x384.png",
+    "sha256": "251dfa4c515713de7b9323330887e199ce1838b414404c5240bf9bdf04731315",
+    "source": "getarcaneapp/arcane/backend/resources/images/icon-384x384.png@095cb778daba1034e2a39961199e712a75d4ba29",
+    "license": "BSD-3-Clause",
+    "purpose": "Upstream embedded Arcane logo/icon or generic profile silhouette; no environment screenshot or endorsement."
+  },
+  {
+    "path": "backend/resources/images/logo-email.png",
+    "sha256": "f695bc57514dd3c11b4955b65c0b0ae7a33f417f3f58a644d085842a144f5afd",
+    "source": "getarcaneapp/arcane/backend/resources/images/logo-email.png@095cb778daba1034e2a39961199e712a75d4ba29",
+    "license": "BSD-3-Clause",
+    "purpose": "Upstream embedded Arcane logo/icon or generic profile silhouette; no environment screenshot or endorsement."
+  },
+  {
+    "path": "backend/resources/images/logo-full-animated.svg",
+    "sha256": "b6980e56510352aa862701a3b28a71a8101d0bc2f253f6396f111d0b2fa9c3d0",
+    "source": "getarcaneapp/arcane/backend/resources/images/logo-full-animated.svg@095cb778daba1034e2a39961199e712a75d4ba29",
+    "license": "BSD-3-Clause",
+    "purpose": "Upstream embedded Arcane logo/icon or generic profile silhouette; no environment screenshot or endorsement."
+  },
+  {
+    "path": "backend/resources/images/icon-96x96.png",
+    "sha256": "8f20eb2e885649e4e075e37fa1be28b737dfa74e64b42ba42552b00b990f94a2",
+    "source": "getarcaneapp/arcane/backend/resources/images/icon-96x96.png@095cb778daba1034e2a39961199e712a75d4ba29",
+    "license": "BSD-3-Clause",
+    "purpose": "Upstream embedded Arcane logo/icon or generic profile silhouette; no environment screenshot or endorsement."
+  },
+  {
+    "path": "backend/resources/images/icon-512x512.png",
+    "sha256": "c7cd49a605b9bde192b8366a455151ec81bb4ddf371079323ee19503fe42420c",
+    "source": "getarcaneapp/arcane/backend/resources/images/icon-512x512.png@095cb778daba1034e2a39961199e712a75d4ba29",
+    "license": "BSD-3-Clause",
+    "purpose": "Upstream embedded Arcane logo/icon or generic profile silhouette; no environment screenshot or endorsement."
+  }
+]

@@ -1,0 +1,70 @@
+// Source: getarcaneapp/arcane/types/project/marshal_utils.go
+// Revision: 095cb778daba1034e2a39961199e712a75d4ba29
+// Retrieved: 2026-10-13
+// License: BSD-3-Clause
+// Deviations: None
+
+package project
+
+import (
+	"encoding/json/jsontext"
+	"encoding/json/v2"
+	"fmt"
+	"strconv"
+	"strings"
+
+	compose "github.com/compose-spec/compose-go/v2/types"
+	"github.com/docker/go-units"
+)
+
+var unitBytesUnmarshalers = json.UnmarshalFromFunc(func(decoder *jsontext.Decoder, value *compose.UnitBytes) error {
+	token, err := decoder.ReadToken()
+	if err != nil {
+		return err
+	}
+
+	switch token.Kind() {
+	case jsontext.KindNull:
+		return nil
+	case jsontext.KindString:
+		parsed, parseMemoryErr := units.RAMInBytes(strings.TrimSpace(token.String()))
+		if parseMemoryErr != nil {
+			return parseMemoryErr
+		}
+		*value = compose.UnitBytes(parsed)
+		return nil
+	case jsontext.KindNumber:
+		raw := token.String()
+		parsed, parseIntErr := strconv.ParseInt(raw, 10, 64)
+		if parseIntErr != nil {
+			floatValue, parseErr := strconv.ParseFloat(raw, 64)
+			if parseErr != nil {
+				return parseErr
+			}
+			parsed = int64(floatValue)
+			if floatValue != float64(parsed) {
+				return fmt.Errorf("invalid UnitBytes value %q", raw)
+			}
+		}
+		*value = compose.UnitBytes(parsed)
+		return nil
+	case jsontext.KindInvalid, jsontext.KindFalse, jsontext.KindTrue,
+		jsontext.KindBeginObject, jsontext.KindEndObject,
+		jsontext.KindBeginArray, jsontext.KindEndArray:
+		return fmt.Errorf("unsupported JSON kind %s for UnitBytes", token.Kind())
+	}
+
+	return fmt.Errorf("unsupported JSON kind %s for UnitBytes", token.Kind())
+})
+
+type runtimeServiceAlias RuntimeService
+
+func (r *RuntimeService) UnmarshalJSON(data []byte) error {
+	return json.Unmarshal(data, (*runtimeServiceAlias)(r), json.WithUnmarshalers(unitBytesUnmarshalers))
+}
+
+type detailsAlias Details
+
+func (d *Details) UnmarshalJSON(data []byte) error {
+	return json.Unmarshal(data, (*detailsAlias)(d), json.WithUnmarshalers(unitBytesUnmarshalers))
+}

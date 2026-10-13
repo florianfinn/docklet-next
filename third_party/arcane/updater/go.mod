@@ -1,0 +1,71 @@
+// Source: getarcaneapp/kit/updater/go.mod
+// Revision: 119f68956cee6d5aba8a5463561aaf9be9943b65
+// Retrieved: 2026-10-13
+// License: BSD-3-Clause
+// Deviations: Relative local helper replacements
+
+module go.getarcane.app/updater
+
+go 1.27
+
+
+require (
+	github.com/Masterminds/semver/v3 v3.5.0
+	github.com/distribution/reference v0.6.0
+	github.com/docker/cli v29.8.2+incompatible
+	github.com/google/go-containerregistry v0.22.1
+	github.com/moby/moby/api v1.56.1
+	github.com/moby/moby/client v0.6.1
+	github.com/opencontainers/go-digest v1.0.0
+	github.com/samber/hot v0.13.1
+	go.getarcane.app/docker/compat v0.1.2
+	go.getarcane.app/kit v0.4.0
+)
+
+require (
+	github.com/DmitriyVTitov/size v1.5.0 // indirect
+	github.com/Microsoft/go-winio v0.6.3-0.20251027160822-ad3df93bed29 // indirect
+	github.com/beorn7/perks v1.0.1 // indirect
+	github.com/cespare/xxhash/v2 v2.3.0 // indirect
+	github.com/containerd/errdefs v1.0.0 // indirect
+	github.com/containerd/errdefs/pkg v0.3.0 // indirect
+	github.com/docker/docker-credential-helpers v0.9.9 // indirect
+	github.com/docker/go-connections v0.8.1 // indirect
+	github.com/docker/go-units v0.5.0 // indirect
+	github.com/felixge/httpsnoop v1.1.0 // indirect
+	github.com/go-logr/logr v1.4.4 // indirect
+	github.com/go-logr/stdr v1.2.2 // indirect
+	github.com/golang/groupcache v0.0.0-20241129210726-2c02b8208cf8 // indirect
+	github.com/klauspost/compress v1.20.0 // indirect
+	github.com/moby/docker-image-spec v1.3.1 // indirect
+	github.com/munnerz/goautoneg v0.0.0-20191010083416-a7dc8b61c822 // indirect
+	github.com/opencontainers/image-spec v1.1.1 // indirect
+	github.com/prometheus/client_golang v1.24.1 // indirect
+	github.com/prometheus/client_model v0.6.3 // indirect
+	github.com/prometheus/common v0.71.0 // indirect
+	github.com/prometheus/procfs v0.22.0 // indirect
+	github.com/samber/go-singleflightx v0.3.2 // indirect
+	github.com/sirupsen/logrus v1.10.2 // indirect
+	go.opentelemetry.io/auto/sdk v1.2.1 // indirect
+	go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp v0.71.0 // indirect
+	go.opentelemetry.io/otel v1.46.0 // indirect
+	go.opentelemetry.io/otel/metric v1.46.0 // indirect
+	go.opentelemetry.io/otel/trace v1.46.0 // indirect
+	golang.org/x/sync v0.23.0 // indirect
+	golang.org/x/sys v0.48.0 // indirect
+	google.golang.org/protobuf v1.36.12 // indirect
+)
+
+
+replace (
+	go.getarcane.app/acfs => ../acfs
+	go.getarcane.app/builds => ../builds
+	go.getarcane.app/docker => ../docker
+	go.getarcane.app/docker/compat => ../docker/compat
+	go.getarcane.app/docker/convert => ../docker/convert
+	go.getarcane.app/kit => ../kit
+	go.getarcane.app/streams => ../streams
+	go.getarcane.app/sys/bytes => ../sys/bytes
+	go.getarcane.app/sys/cgroup => ../sys/cgroup
+	go.getarcane.app/sys/crypto => ../sys/crypto
+)
