@@ -30,12 +30,13 @@ The required six duties are:
    verifies licences and free-component origins before public release.
 
 The examined Go binary graph used go list -deps for backend/cmd and go-licenses
-v2.0.1: 297 modules, with 535 reported packages. Five MPL-2.0 packages require
+v2.0.1: 297 modules, with 535 reported licence groups (not individual imported packages). Five MPL-2.0 packages require
 file-level notices and source references: filepath-securejoin, errwrap,
 go-cleanhttp, go-multierror and go-version. Select EDL-1.0 for eclipse/paho.golang
 from its dual EPL-2.0/EDL-1.0 licence and say so in NOTICE. All other package
-copyright/licence texts also travel in the licence bundle. The prior assessment
-excluded the web runtime and image contents; M2 and release acceptance cover them.
+copyright/licence texts also travel in the licence bundle. The refreshed [adoption inventory](arcane-adoption.md) records 1,587 imported
+packages, module-specific evidence and the resolved scanner gaps. Both assessments
+exclude the web runtime and image contents; M2 and release acceptance cover them.
 
 M0 copies the Arcane licence byte-for-byte and checks its recorded SHA-256. It
 contains no Arcane product code, executable product or completed dependency

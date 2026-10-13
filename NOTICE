@@ -10,23 +10,71 @@ No endorsement or partnership is implied.
 Governance tooling adapted from florianfinn/docklet-hub under Apache-2.0.
 Source revision: a4484c910bb5d6a8f8df97b4f23f4ee5e6359081.
 
-Third-party notices — inventory hook point
-No Go or web dependencies are shipped by this foundation. M1 must replace these
-pending entries with exact versions, source references, copyright notices and
-licence copies from the adopted binary graph; M2 adds the web runtime graph.
-These entries document known obligations, not a claim of installed dependencies.
+Third-party Go notices — Arcane adoption assessment, 2026-10-13
 
-MPL-2.0, source references pending M1 inventory:
-- github.com/cyphar/filepath-securejoin
-- github.com/hashicorp/errwrap
-- github.com/hashicorp/go-cleanhttp
-- github.com/hashicorp/go-multierror
-- github.com/hashicorp/go-version
-Retain file-level notices and provide the corresponding source reference.
+The selected pre-cut Arcane input is v2.15.1 at
+095cb778daba1034e2a39961199e712a75d4ba29. This repository change imports no Go
+source or binary. The assessed linux/amd64 command graph contains 297 modules
+and 1,587 non-standard-library packages. docs/provenance/arcane-binary.json
+records exact versions, sources, licence evidence and redistribution duties;
+docs/provenance/arcane-license-packages.json resolves all 535 scanner groups.
+docs/provenance/arcane-modules.json additionally covers all 419 require entries
+in backend/cli/types and all eleven go.getarcane.app helper modules.
 
-EDL-1.0, source reference pending M1 inventory:
-- github.com/eclipse/paho.golang: select EDL-1.0 from the upstream dual licence
-  (EPL-2.0 OR EDL-1.0), and include the selected licence and copyright notice.
+MPL-2.0 covered source
+Retain all covered-file notices and the MPL-2.0 text. When distributing binaries,
+make the corresponding covered source, including modifications, available to
+recipients and explain how to obtain it. Separate larger-work files retain their
+own licences. The assessed sources are unmodified:
 
-All adopted sibling modules and go.getarcane.app modules require their own
-inventory entries. Unknown or incompatible licences block a release.
+- github.com/cyphar/filepath-securejoin v0.7.0
+  Source: https://github.com/cyphar/filepath-securejoin/tree/8096a959c5d7a248976a3531a030f5c4da0a44d0
+- github.com/hashicorp/errwrap v1.1.0
+  Source: https://proxy.golang.org/github.com/hashicorp/errwrap/@v/v1.1.0.zip
+- github.com/hashicorp/go-cleanhttp v0.5.2
+  Source: https://proxy.golang.org/github.com/hashicorp/go-cleanhttp/@v/v0.5.2.zip
+- github.com/hashicorp/go-multierror v1.1.1
+  Source: https://proxy.golang.org/github.com/hashicorp/go-multierror/@v/v1.1.1.zip
+- github.com/hashicorp/go-version v1.9.0
+  Source: https://github.com/hashicorp/go-version/tree/b80b1e68c4854757b38663ec02bada2d839b6f56
+
+filepath-securejoin has BSD-3-Clause AND MPL-2.0 files; its COPYING.md and file
+headers determine the applicable terms. Its BSD notice names:
+Copyright (C) 2014-2015 Docker Inc & Go Authors. All rights reserved.
+Copyright (C) 2017-2024 SUSE LLC. All rights reserved.
+go-version source headers state: Copyright IBM Corp. 2014, 2025.
+For errwrap, go-cleanhttp and go-multierror, the inspected texts supply no
+additional copyright statement; retain their original notices and MPL text.
+
+EDL-1.0 selected alternative
+- github.com/eclipse/paho.golang v0.23.0
+  Source: https://github.com/eclipse/paho.golang/tree/1aa03969c5932464359b3e4ed752d9ac61abccc9
+  Select EDL-1.0 from the upstream EPL-2.0 OR EDL-1.0 dual licence.
+  Include edl-v10 and applicable source notices in the redistribution bundle.
+  The selected licence text states:
+  Copyright (c) 2007, Eclipse Foundation, Inc. and its licensors.
+
+Arcane helper notices
+All eleven go.getarcane.app modules are BSD-3-Clause, with separate revisions
+recorded in the map. Retain their original notices, including:
+- acfs: Copyright (c) 2026, Kyle Mendell
+- builds, streams, updater: Copyright (c) 2025, Kyle Mendell
+- kit, docker, docker/compat, docker/convert: Copyright (c) 2026, Arcane
+- sys/bytes, sys/cgroup, sys/crypto: retain both the module ZIP's notice,
+  Copyright (c) 2026, Arcane, and repository sys/LICENSE,
+  Copyright (c) 2025, Kyle Mendell.
+Sibling backend, CLI and types use the Arcane root BSD notice above.
+
+Other dependencies
+Preserve all applicable licence, copyright and NOTICE texts identified by the
+inventory, including nested notices and mixed Apache-2.0/MIT YAML sources.
+go-localereader v0.0.1 declares MIT in README.md and credits Yasuhiro Matsumoto;
+retain that declaration and credit. The inventory's public-safe copyright
+excerpts are not a substitute for original legal notices in a release bundle.
+
+Recompute the graph and inventory after the functional cut. Product packaging
+must include verbatim licence texts, corresponding-source references and tested
+extracted-artefact copies before any release. Web dependencies and container
+contents require their own inventories. No release licence bundle is claimed by
+this documentation-only assessment. Unknown/incompatible shipped licences block
+release; no unknown licence or unavailable module remains in this selected map.
