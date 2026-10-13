@@ -40,9 +40,9 @@ describe("login model", () => {
 
   it("simulates outcomes after a delay without comparing a stored password; abort cancels", async () => {
     vi.useFakeTimers();
-    const run = (username: string, forced: "none" | "invalid" | "unavailable" | "locked" = "none", variant: "local" | "proxy" = "local") => {
+    const run = async (username: string, forced: "none" | "invalid" | "unavailable" | "locked" = "none", variant: "local" | "proxy" = "local") => {
       const p = simulateLogin(variant, { username, password: "irgendwas" }, { auth, forced, delayMs: 100 });
-      void vi.advanceTimersByTimeAsync(100);
+      await vi.advanceTimersByTimeAsync(100);
       return p;
     };
     expect(await run("admin")).toEqual({ ok: true, user: "admin" });

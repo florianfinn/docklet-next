@@ -1,4 +1,4 @@
-import { screen, waitFor, within } from "@testing-library/react";
+import { act, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
@@ -36,7 +36,7 @@ describe("explanations in hub settings", () => {
     await userEvent.click(screen.getByRole("button", { name: "Speichern" }));
     await waitFor(() => expect(helpStore.get().mode).toBe("off"));
 
-    await router.navigate("/settings/general");
+    await act(() => router.navigate("/settings/general"));
     await screen.findByLabelText("Interne Hub-Adresse");
     expect(screen.queryAllByRole("button", { name: /^Erklärung: / }).length).toBe(0);
   });

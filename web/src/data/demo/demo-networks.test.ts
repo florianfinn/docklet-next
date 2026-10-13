@@ -56,7 +56,7 @@ describe("compose networks in the demo topology", () => {
     const after = await adapter.getTopology();
     expect(after.networks.filter((n) => n.stackId === stackId).length).toBe(2);
     expect(after.attachments.filter((a) => a.containerId === "c-werkstatt-app").map((a) => a.ip)).toEqual(topo.attachments.filter((a) => a.containerId === "c-werkstatt-app").map((a) => a.ip));
-  }, 20_000);
+  });
 
   it("rejects a connect when the address pool is exhausted and leaves no attachment behind", async () => {
     const adapter = createDemoAdapter();

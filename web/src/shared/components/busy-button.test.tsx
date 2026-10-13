@@ -1,4 +1,4 @@
-import { screen, waitFor } from "@testing-library/react";
+import { act, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { useState } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -55,6 +55,7 @@ describe("busy action", () => {
 
   it("ends the busy state on a failed call and clears the error on the next run", async () => {
     let fail = true;
+    let finish!: () => void;
     function Flaky() {
       const [calls, setCalls] = useState(0);
       return (
@@ -62,7 +63,8 @@ describe("busy action", () => {
           <Probe
             fn={async () => {
               setCalls((c) => c + 1);
-              await new Promise((r) => setTimeout(r, 20));
+              // Hold the response until the test has observed the pending state.
+              await new Promise<void>((resolve) => { finish = resolve; });
               if (fail) throw new Error("hub-offline");
               return undefined;
             }}
@@ -74,10 +76,13 @@ describe("busy action", () => {
     renderWithApp(<Flaky />);
     await userEvent.click(button());
     expect(busy()).toBe(true);
+    await act(async () => finish());
     await waitFor(() => expect(screen.getByTestId("state").textContent).toBe("failed"));
     expect([busy(), screen.getByTestId("error").textContent]).toEqual([false, "Error: hub-offline"]);
     fail = false;
     await userEvent.click(button());
+    expect([busy(), screen.getByTestId("error").textContent]).toEqual([true, ""]);
+    await act(async () => finish());
     await waitFor(() => expect(screen.getByTestId("state").textContent).toBe("idle"));
     expect([screen.getByTestId("error").textContent, screen.getByTestId("calls").textContent]).toEqual(["", "2"]);
   });
