@@ -3,13 +3,13 @@ import { useRouteError } from "react-router";
 import { useTranslations } from "use-intl";
 
 import { EmptyState } from "@/shared/components/page";
-import { useDemoText } from "@/shared/hooks/use-demo-text";
+import { useAdapterText } from "@/data/use-adapter-text";
 import { Button } from "@/shared/ui/button";
 
 /** Route-level fallback, e.g. when a lazy chunk fails to load after a deploy. */
 export function RouteError() {
   const t = useTranslations("shell.routeError");
-  const dt = useDemoText();
+  const dt = useAdapterText();
   const error = useRouteError();
   return (
     <EmptyState

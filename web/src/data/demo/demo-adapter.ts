@@ -1,10 +1,10 @@
-import type { ActionKind, ContainerInfo, DeployStepKey, Service, Stack, StackDetail } from "@/domain/model";
+import type { ActionKind, ContainerInfo, DeployStepKey, Service, Stack } from "@/domain/model";
 import { parseCompose } from "@/domain/compose/model";
 import { withoutSystem } from "@/domain/system";
 import { normalizeStackLabels } from "@/domain/stack-labels";
 import { hasUpdate, imageRef } from "@/domain/updates";
 
-import type { DeployInput, DockletAdapter, FailAt, StackCommand } from "../adapter";
+import type { DeployInput, DockletAdapter, StackCommand } from "../adapter";
 import { ActionRunner, type RunPlan, type StepPlan } from "./action-runner";
 import { composeScript, containerScript, genericScript, type ComposeTarget } from "./run-output";
 import type { DemoContext } from "./demo-context";
@@ -18,6 +18,9 @@ import { SEED_RUNS } from "./fixtures/events";
 import { simulateImport } from "./import-simulator";
 import { LogSimulator } from "./log-simulator";
 import { MetricsSimulator } from "./metrics-simulator";
+import { encodeDemoEvent, encodeDemoRuns, encodeDemoStackDetail } from "./encode-message";
+import type { CodedStackDetail } from "../message-code";
+import { registerDemoOptions, takeDemoFailure, type DemoAdapterOptions, type FailAt } from "./options";
 import { simulateRead, simulateWrite, simulationStore, takeForcedFailure } from "./simulation";
 
 export class DemoCommandError extends Error {
@@ -32,7 +35,7 @@ export class DemoCommandError extends Error {
 const clone = <T>(v: T): T => structuredClone(v);
 
 /** In-memory adapter: synthetic data, simulated actions, no Docker calls. */
-export function createDemoAdapter(): DockletAdapter {
+export function createDemoAdapter(options: DemoAdapterOptions = {}): DockletAdapter {
   const db = new DemoDb();
   const composeTarget = (stack: Stack): ComposeTarget => ({ project: stack.id, services: stack.services.map((s) => ({ name: s.name, image: imageRef(s.image) })), hostName: db.host(stack.hostId)?.name ?? stack.hostId });
   const runner = new ActionRunner(SEED_RUNS, (run) => {
@@ -46,7 +49,7 @@ export function createDemoAdapter(): DockletAdapter {
   // Containers outside Compose get their own stream, keyed so it never collides with a stack id.
   const logs = new LogSimulator(() => [...db.stacks, ...db.containers().filter((c) => !c.stackId).map((c) => ({ id: `container:${c.id}`, services: [{ name: c.name, state: c.state }] }))]);
   const empty = () => simulationStore.get().empty;
-  const ctx: DemoContext = { db, runner, forcedFailure: () => takeForcedFailure() !== "none" };
+  const ctx: DemoContext = { db, runner, forcedFailure: () => takeForcedFailure() !== "none", demoFailure: (operation) => takeDemoFailure(adapter, operation) };
 
   function failStep(requested: FailAt | undefined): DeployStepKey | undefined {
     const forced = takeForcedFailure();
@@ -129,27 +132,27 @@ export function createDemoAdapter(): DockletAdapter {
     },
     listStacks: () => simulateRead("stacks", () => (empty() ? [] : clone(withoutSystem(db.discoveredStacks())))),
     getStack: (id) =>
-      simulateRead("stacks", (): StackDetail => {
+      simulateRead("stacks", (): CodedStackDetail => {
         const s = db.stack(id);
         if (!s) throw new DemoCommandError("not-found");
-        return clone({
+        return encodeDemoStackDetail(clone({
           ...s,
           compose: db.compose[id] ?? "",
           env: db.env[id] ?? "",
           deployments: db.deploymentsFor(id, runner.list()),
           restorePoints: db.restorePoints.filter((r) => r.stackId === id),
-        });
+        }));
       }),
     listContainers: () => simulateRead("containers", () => (empty() ? [] : clone(db.containers()))),
     getSecurity: () => simulateRead("security", () => (empty() ? { ...clone(db.security), images: [], findings: [], history: [] } : clone(db.security))),
-    listEvents: () => simulateRead("dashboard", () => (empty() ? [] : clone(db.events))),
+    listEvents: () => simulateRead("dashboard", () => (empty() ? [] : clone(db.events).map(encodeDemoEvent))),
     listSchedule: () => simulateRead("dashboard", () => (empty() ? [] : clone(db.schedule))),
-    listActions: async () => clone(runner.list()),
+    listActions: async () => clone(encodeDemoRuns(runner.list())),
 
-    async runStackCommand(stackId, command: StackCommand, failAt) {
+    async runStackCommand(stackId, command: StackCommand) {
       const stack = requireStack(stackId);
       const names = stack.services.map((s) => s.name).join(", ");
-      const fail = failStep(failAt);
+      const fail = failStep(takeDemoFailure(adapter, "runStackCommand")?.at);
       const labels: Record<StackCommand, string> = { start: "Start", stop: "Stopp", restart: "Neustart", redeploy: "Pull & Redeploy" };
       const steps: Record<StackCommand, StepPlan[]> = {
         start: [
@@ -191,11 +194,11 @@ export function createDemoAdapter(): DockletAdapter {
       });
     },
 
-    async installStackUpdates(stackId, services, failAt) {
+    async installStackUpdates(stackId, services) {
       const stack = requireStack(stackId);
       const pending = stack.services.filter((s) => hasUpdate(s.update) && (!services || services.includes(s.name)));
       const rp = db.saveRestorePoint(stack, `Vor Update · ${stack.name}`);
-      const fail = failStep(failAt);
+      const fail = failStep(takeDemoFailure(adapter, "installStackUpdates")?.at);
       const latest = (s: Service) => (s.update.state === "version" || s.update.state === "rebuild" ? s.update.latest : s.image);
       return runForStack(
         stack,
@@ -273,7 +276,7 @@ export function createDemoAdapter(): DockletAdapter {
     },
 
     async deployStack(input: DeployInput) {
-      const fail = failStep(input.failAt);
+      const fail = failStep(takeDemoFailure(adapter, "deployStack")?.at);
       let stack = input.stackId ? db.stack(input.stackId) : undefined;
       if (!stack) {
         const base = (input.name || "stack").toLowerCase().replace(/[^a-z0-9-]+/g, "-");
@@ -423,11 +426,11 @@ export function createDemoAdapter(): DockletAdapter {
       });
     },
 
-    async recreateContainer(id, input, failAt) {
+    async recreateContainer(id, input) {
       const c = findContainer(id);
       if (c.origin !== "standalone") throw new DemoCommandError("recreate-not-allowed");
       const [repository = c.image.repository, tag = "latest"] = input.image.split(/:(?=[^:/]+$)/);
-      const fail = failStep(failAt);
+      const fail = failStep(takeDemoFailure(adapter, "recreateContainer")?.at);
       return runner.start({
         kind: "recreate",
         title: `Neu erstellen · ${c.name}`,
@@ -522,7 +525,7 @@ export function createDemoAdapter(): DockletAdapter {
       db.changed("security", "settings");
     },
 
-    subscribeActions: (listener) => runner.subscribe(listener),
+    subscribeActions: (listener) => runner.subscribe((runs) => listener(encodeDemoRuns(runs))),
     subscribeMetrics: (listener) => metrics.subscribe(listener),
     subscribeLogs: (stackId, listener) => logs.subscribe(stackId, listener),
     subscribeContainerLogs: (containerId, listener) => {
@@ -546,6 +549,7 @@ export function createDemoAdapter(): DockletAdapter {
     return c;
   }
 
+  registerDemoOptions(adapter, options);
   return adapter;
 }
 

@@ -4,7 +4,8 @@ import { useLocale } from "use-intl";
 
 import type { AppLocale } from "@/domain/locale";
 
-import { localizeContainers, localizeEvents, localizeSchedule, localizeSecurity } from "@/runtime";
+import { localizeContainers, localizeSchedule, localizeSecurity } from "@/runtime";
+import { renderEvent, renderStackDetail, type CodedEvent, type CodedStackDetail } from "./message-code";
 import { useAdapter } from "./use-adapter";
 import { queryKeys } from "./query-keys";
 
@@ -31,7 +32,9 @@ export function useStacks() {
 
 export function useStack(id: string | undefined) {
   const adapter = useAdapter();
-  return useQuery({ queryKey: queryKeys.stack(id ?? ""), queryFn: () => adapter.getStack(id ?? ""), enabled: !!id });
+  const locale = useLocale();
+  const select = useMemo(() => (stack: CodedStackDetail) => renderStackDetail(stack, locale), [locale]);
+  return useQuery({ queryKey: queryKeys.stack(id ?? ""), queryFn: () => adapter.getStack(id ?? ""), enabled: !!id, select });
 }
 
 export function useContainers() {
@@ -51,7 +54,9 @@ export function useTopology() {
 
 export function useEvents() {
   const adapter = useAdapter();
-  return useQuery({ queryKey: queryKeys.events, queryFn: () => adapter.listEvents(), select: useLocalized(localizeEvents) });
+  const locale = useLocale();
+  const select = useMemo(() => (events: CodedEvent[]) => events.map((event) => renderEvent(event, locale)), [locale]);
+  return useQuery({ queryKey: queryKeys.events, queryFn: () => adapter.listEvents(), select });
 }
 
 export function useSchedule() {

@@ -6,16 +6,17 @@ import { errorCode, type RegisterHostInput } from "@/data/api";
 import { useActionRuns } from "@/data/live";
 import { isRunBusy } from "@/data/run-gate";
 import { useAdapter } from "@/data/use-adapter";
+import { queueDemoFailure } from "@/runtime";
 import type { ActionKind } from "@/domain/model";
 import { useBusyAction } from "@/shared/components/use-busy-action";
-import { useDemoText } from "@/shared/hooks/use-demo-text";
+import { useAdapterText } from "@/data/use-adapter-text";
 import { preferencesStore } from "@/shared/preferences/preferences-store";
 
 /** Host commands with translated errors; progress of connections is shown by action toasts. */
 export function useHostCommands() {
   const adapter = useAdapter();
   const t = useTranslations("hosts.errors");
-  const dt = useDemoText();
+  const dt = useAdapterText();
   const guard = useCallback(
     async <T,>(fn: () => Promise<T>): Promise<T | undefined> => {
       try {
@@ -32,7 +33,10 @@ export function useHostCommands() {
   );
   return {
     register: (input: RegisterHostInput) => guard(() => adapter.registerHost(input)),
-    connect: (hostId: string, fail?: boolean) => guard(() => adapter.connectHost(hostId, { fail })),
+    connect: (hostId: string, fail?: boolean) => guard(() => {
+      if (fail) queueDemoFailure(adapter, { operation: "connectHost" });
+      return adapter.connectHost(hostId);
+    }),
     reconnect: (hostId: string) => guard(() => adapter.reconnectHost(hostId)),
     restartAgent: (hostId: string) => guard(() => adapter.restartAgent(hostId)),
     remove: (hostId: string) =>

@@ -4,6 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { errorCode } from "@/data/api";
 import { createDemoAdapter } from "@/data/demo/demo-adapter";
+import { renderRun } from "@/data/message-code";
 import { simulationStore } from "@/data/demo/simulation";
 import { imageUsage, parseImageReference, pruneCandidates, type DockerImage } from "@/domain/images";
 import { preferencesStore } from "@/shared/preferences/preferences-store";
@@ -26,7 +27,7 @@ afterEach(() => {
 async function settle(adapter: ReturnType<typeof createDemoAdapter>, id: string) {
   for (let i = 0; i < 40; i++) {
     const run = (await adapter.listActions()).find((r) => r.id === id);
-    if (run && run.status !== "running") return run;
+    if (run && run.status !== "running") return renderRun(run, "de");
     await vi.advanceTimersByTimeAsync(500);
   }
   throw new Error("run did not settle");

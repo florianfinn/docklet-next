@@ -12,7 +12,7 @@ import { TextField } from "@/shared/components/form-field";
 import { RetentionEditor } from "@/shared/components/retention-editor";
 import { SegmentedToggle } from "@/shared/components/segmented-toggle";
 import { ToneBadge } from "@/shared/components/tone";
-import { useDemoText } from "@/shared/hooks/use-demo-text";
+import { useAdapterText } from "@/data/use-adapter-text";
 import { useHostScope } from "@/shared/hooks/use-host-scope";
 import { draftId } from "@/shared/lib/ids";
 import { Button } from "@/shared/ui/button";
@@ -144,7 +144,7 @@ function TargetDialog({ target, onClose, onApply }: { target: BackupTarget | nul
 export function BackupTargetsSection({ settings }: { settings: HubSettings }) {
   const t = useTranslations("settings");
   const tb = useTranslations("settings.backups");
-  const dt = useDemoText();
+  const dt = useAdapterText();
   const save = useSaveSettings();
   const volumes = useVolumes();
   const hosts = useHostScope();

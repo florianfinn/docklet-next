@@ -9,7 +9,7 @@ import type { Host, StackDetail } from "@/domain/model";
 import { IconTile } from "@/shared/components/tone";
 import { StackUpdatePanel } from "@/shared/components/updates/update-panel";
 import { useStackUpdateTimes } from "@/shared/components/updates/update-times";
-import { useDemoText } from "@/shared/hooks/use-demo-text";
+import { useAdapterText } from "@/data/use-adapter-text";
 import { Button } from "@/shared/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/shared/ui/card";
 import { AUTO_UPDATE_ANCHOR } from "@/domain/job-links";
@@ -28,7 +28,7 @@ import { ServicesCard } from "./ServicesCard";
 export function OverviewTab({ stack, host }: { stack: StackDetail; host: Host | undefined }) {
   const t = useTranslations("stacks.overview");
   const th = useTranslations("common.host");
-  const dt = useDemoText();
+  const dt = useAdapterText();
   const timeZone = useHubTimeZone();
   const navigate = useNavigate();
   const cmd = useStackCommands();

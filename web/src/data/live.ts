@@ -4,7 +4,7 @@ import { useLocale } from "use-intl";
 import type { ActionRun, LogLine, MetricsSnapshot } from "@/domain/model";
 
 import type { DockletAdapter } from "./adapter";
-import { localizeRun } from "@/runtime";
+import { renderRun, type CodedActionRun } from "./message-code";
 import { useAdapter } from "./use-adapter";
 
 interface Channel<T> {
@@ -53,26 +53,26 @@ function createChannel<T>(connect: Connect<T>) {
 }
 
 const useMetricsChannel = createChannel<MetricsSnapshot>((adapter, push) => adapter.subscribeMetrics(push));
-const useActionsChannel = createChannel<ActionRun[]>((adapter, push) => adapter.subscribeActions(push));
+const useActionsChannel = createChannel<CodedActionRun[]>((adapter, push) => adapter.subscribeActions(push));
 
-/** Live, simulated resource values; selectors keep re-renders narrow. */
+/** Resource values with selectors that keep re-renders narrow. */
 export function useMetrics<S>(selector: (snapshot: MetricsSnapshot | undefined) => S): S {
   return useMetricsChannel(selector);
 }
 
-const EMPTY_RUNS: ActionRun[] = [];
+const EMPTY_RUNS: CodedActionRun[] = [];
 
-/** Runs with their demo texts in the interface language. */
+/** Run codes rendered in the interface language. */
 export function useActionRuns(): ActionRun[] {
   const runs = useActionsChannel((r) => r ?? EMPTY_RUNS);
   const locale = useLocale();
-  return useMemo(() => (locale === "de" ? runs : runs.map((r) => localizeRun(r, locale))), [runs, locale]);
+  return useMemo(() => runs.map((r) => renderRun(r, locale)), [runs, locale]);
 }
 
 export function useActionRun(id: string | undefined): ActionRun | undefined {
   const run = useActionsChannel((runs) => (id ? runs?.find((r) => r.id === id) : undefined));
   const locale = useLocale();
-  return run && localizeRun(run, locale);
+  return run && renderRun(run, locale);
 }
 
 export function useContainerLogs(containerId: string, paused: boolean): LogLine[] {

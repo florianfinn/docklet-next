@@ -6,7 +6,7 @@ import { useTranslations } from "use-intl";
 
 import { errorCode } from "@/data/api";
 import { ConfirmDialog } from "@/shared/components/confirm-dialog";
-import { useDemoText } from "@/shared/hooks/use-demo-text";
+import { useAdapterText } from "@/data/use-adapter-text";
 import { cn } from "@/shared/lib/utils";
 import { Button } from "@/shared/ui/button";
 import { Card } from "@/shared/ui/card";
@@ -31,7 +31,7 @@ interface SettingsFormProps {
 export function SettingsForm({ title, description, dirty, valid = true, onSave, onDiscard, children, note }: SettingsFormProps) {
   const t = useTranslations("settings.form");
   const te = useTranslations("settings.errors");
-  const dt = useDemoText();
+  const dt = useAdapterText();
   const [busy, setBusy] = useState(false);
   const [tried, setTried] = useState(false);
   const blocker = useBlocker(({ currentLocation, nextLocation }) => dirty && currentLocation.pathname !== nextLocation.pathname);

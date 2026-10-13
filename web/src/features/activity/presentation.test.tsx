@@ -1,3 +1,4 @@
+import { renderStackDetail } from "@/data/message-code";
 import { act, fireEvent, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { toast } from "sonner";
@@ -7,7 +8,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { messages } from "@/app/i18n/messages";
 import { createDemoAdapter } from "@/data/demo/demo-adapter";
 import { simulationStore } from "@/data/demo/simulation";
-import type { UpdateInfo } from "@/domain/model";
+import type { StackDetail, UpdateInfo } from "@/domain/model";
 import { applySnapshot, captureSnapshot, decodeDesignCode, encodeDesignCode } from "@/shared/preferences/favorite-code";
 import { NotificationsSection } from "@/features/settings/sections/NotificationsSection";
 import { ActivitySection } from "@/features/settings/sections/SimpleSections";
@@ -63,7 +64,7 @@ function Notifications() {
 }
 
 const tabShown = createStore(true);
-function StackSurface({ stack, inline }: { stack: Awaited<ReturnType<ReturnType<typeof createDemoAdapter>["getStack"]>>; inline: boolean }) {
+function StackSurface({ stack, inline }: { stack: StackDetail; inline: boolean }) {
   const shown = useStore(tabShown, (v) => v);
   return (
     <>
@@ -79,7 +80,7 @@ describe("start sites decide the presentation", () => {
 
   it("shows a restore started in the Deployments tab only in the tab, and as a toast once the tab is left", async () => {
     const adapter = createDemoAdapter();
-    const stack = await adapter.getStack("craft");
+    const stack = renderStackDetail(await adapter.getStack("craft"), "de");
     renderWithApp(<StackSurface stack={stack} inline />, adapter);
     fireEvent.click(screen.getAllByRole("button", { name: /Manuell wiederherstellen/ })[0]!);
     await tick(50);
@@ -99,7 +100,7 @@ describe("start sites decide the presentation", () => {
 
   it("starts a redeploy from the stack header inline on the Deployments tab and in the dialog elsewhere", async () => {
     const adapter = createDemoAdapter();
-    const stack = await adapter.getStack("home");
+    const stack = renderStackDetail(await adapter.getStack("home"), "de");
     const view = renderWithApp(<StackSurface stack={stack} inline />, adapter);
     fireEvent.click(screen.getByRole("button", { name: /^Pull & Redeploy$/ }));
     await tick(50);
@@ -107,7 +108,7 @@ describe("start sites decide the presentation", () => {
     await tick(20000);
     view.unmount();
 
-    const other = await adapter.getStack("cloud");
+    const other = renderStackDetail(await adapter.getStack("cloud"), "de");
     renderWithApp(<StackSurface stack={other} inline={false} />, adapter);
     fireEvent.click(screen.getByRole("button", { name: /^Pull & Redeploy$/ }));
     await tick(50);
@@ -116,7 +117,7 @@ describe("start sites decide the presentation", () => {
 
   it("keeps start, stop and checks as toasts even on the Deployments tab", async () => {
     const adapter = createDemoAdapter();
-    const stack = await adapter.getStack("home");
+    const stack = renderStackDetail(await adapter.getStack("home"), "de");
     renderWithApp(<StackSurface stack={stack} inline />, adapter);
     fireEvent.click(screen.getByRole("button", { name: /^Neustart$/ }));
     await tick(50);

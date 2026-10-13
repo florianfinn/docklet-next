@@ -1,3 +1,4 @@
+import { renderStackDetail } from "@/data/message-code";
 import { screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
@@ -20,7 +21,7 @@ afterEach(() => {
 describe("single-service restart entrypoints", () => {
   it("the stack page service row asks first and names the service", async () => {
     const adapter = createDemoAdapter();
-    const stack = await adapter.getStack("paperless");
+    const stack = renderStackDetail(await adapter.getStack("paperless"), "de");
     renderWithApp(
       <>
         <ServicesCard stack={stack!} host={undefined} />

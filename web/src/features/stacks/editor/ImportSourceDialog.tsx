@@ -5,7 +5,7 @@ import { useTranslations } from "use-intl";
 import type { ImportRequest, ImportResult } from "@/data/adapter";
 import { useAdapter } from "@/data/use-adapter";
 import { ToneBadge } from "@/shared/components/tone";
-import { useDemoText } from "@/shared/hooks/use-demo-text";
+import { useAdapterText } from "@/data/use-adapter-text";
 import { Button } from "@/shared/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/shared/ui/dialog";
 import { Field, FieldDescription, FieldLabel } from "@/shared/ui/field";
@@ -28,7 +28,7 @@ interface ImportSourceDialogProps {
 export function ImportSourceDialog({ open, onOpenChange, onApply }: ImportSourceDialogProps) {
   const t = useTranslations("editor.source");
   const tc = useTranslations("common.actions");
-  const dt = useDemoText();
+  const dt = useAdapterText();
   const adapter = useAdapter();
   const [kind, setKind] = useState<ImportRequest["kind"]>("github");
   const [ref, setRef] = useState("");
@@ -121,7 +121,7 @@ export function ImportSourceDialog({ open, onOpenChange, onApply }: ImportSource
           <div className="flex flex-col gap-3 rounded-xl border bg-muted/20 p-3">
             <div className="flex items-center gap-2 text-sm font-medium">
               {dt(result.title)}
-              {result.simulated && <ToneBadge tone="violet">Simulation</ToneBadge>}
+              {adapter.kind === "demo" && <ToneBadge tone="violet">Simulation</ToneBadge>}
             </div>
             <div className="grid gap-3 md:grid-cols-2">
               <div>

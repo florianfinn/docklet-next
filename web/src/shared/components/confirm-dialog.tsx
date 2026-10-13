@@ -12,7 +12,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/shared/ui/alert-dialog";
-import { useDemoText } from "@/shared/hooks/use-demo-text";
+import { useAdapterText } from "@/data/use-adapter-text";
 import { buttonVariants } from "@/shared/ui/button";
 import { cn } from "@/shared/lib/utils";
 
@@ -37,7 +37,7 @@ const isPromise = (v: unknown): v is Promise<unknown> => !!v && typeof (v as Pro
 /** Confirmation for destructive or draft-discarding actions; Escape and Cancel keep everything. */
 export function ConfirmDialog({ open, onOpenChange, title, description, confirmLabel, onConfirm, destructive, children }: ConfirmDialogProps) {
   const t = useTranslations("common.actions");
-  const dt = useDemoText();
+  const dt = useAdapterText();
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const inFlight = useRef(false);

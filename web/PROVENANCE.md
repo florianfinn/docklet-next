@@ -3,7 +3,7 @@ Source: approved Docklet design prototype (maintainer's own work)/react-opus
 Revision: d75474089b87ab9f77c606cc7aa696d05157d8e9cd902f1ed5a0f2b904722a39
 Retrieved: 2026-10-13
 License: Apache-2.0 AND MIT AND BSD-3-Clause
-Deviations: Historical import proof with subsequent product boundary, English catalogue base and validation guards documented below.
+Deviations: Historical import proof with subsequent product boundary, English catalogue base, adapter port and validation guards documented below.
 -->
 
 # Frozen UI snapshot provenance
@@ -300,3 +300,23 @@ texts and follow the same English-base type and parity checks. Comparing the
 transpiled export-value map with the pre-change import record after normalizing
 the four relocated paths found all 6,638 original values unchanged and exactly
 four new backend title/hint values.
+
+## Adapter port and coded messages (#12)
+
+The 592-file snapshot hash above remains the historical import record. Per-file
+sidecars identify every file changed after the import. The adapter now returns
+run and event codes with parameters; `src/data/message-code.ts` renders them from
+the paired catalogues. `src/data/demo/message-codes.ts` maps the imported German
+demo phrases to stable names, and `src/data/demo/encode-message.ts` translates
+the in-memory fixtures at the adapter boundary. The new catalogue files under
+`src/data/messages/` derive their DE/EN wording from the imported demo text
+table. `src/data/demo/fixtures/legacy-run-messages.json` freezes that table's
+visible output before the port change for byte-for-byte tests.
+
+Demo failure injection now lives in `src/data/demo/options.ts`; the product
+interface has no failure parameter or simulation result marker. The imported
+`src/shared/hooks/use-demo-text.ts` moved to `src/data/use-adapter-text.ts` so
+adapter text is rendered at the data/UI boundary. Its upstream source revision
+is retained in the new sidecar; the historical snapshot entry is unchanged.
+The production bundle guard also proves that a demo-text import from a shared
+hook is rejected.

@@ -109,7 +109,7 @@ describe("ring hover and actions", () => {
     // No info card while the menu is open.
     expect(screen.queryByRole("tooltip")).toBe(null);
     fireEvent.click(within(menu).getAllByRole("menuitem").find((m) => m.textContent?.trim().startsWith("Neustart"))!);
-    await waitFor(() => expect(run).toHaveBeenCalledWith(units[index]!.stackId, "restart", undefined));
+    await waitFor(() => expect(run).toHaveBeenCalledWith(units[index]!.stackId, "restart"));
   });
 
   it("offers the menu by keyboard (Shift+F10) and locks commands for a disconnected host", async () => {

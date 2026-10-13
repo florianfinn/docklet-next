@@ -17,7 +17,7 @@ import { GeneralFields } from "@/features/settings/sections/GeneralSection";
 import { HostDefaultsFields } from "@/features/settings/sections/SimpleSections";
 import { BrandLogo } from "@/shared/brand/BrandLogo";
 import { StepRail } from "@/shared/components/step-rail";
-import { useDemoText } from "@/shared/hooks/use-demo-text";
+import { useAdapterText } from "@/data/use-adapter-text";
 import { cn } from "@/shared/lib/utils";
 import { ToneBadge } from "@/shared/components/tone";
 import { Button } from "@/shared/ui/button";
@@ -60,7 +60,7 @@ function ReviewBlock({ title, onEdit, rows }: { title: string; onEdit: () => voi
 export default function SetupPage() {
   const t = useTranslations("setup");
   const tr = useTranslations("setup.review");
-  const dt = useDemoText();
+  const dt = useAdapterText();
   const adapter = useAdapter();
   const tokens = useTokens();
   const motion = useMotionEnabled();

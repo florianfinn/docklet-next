@@ -3,6 +3,7 @@ import { enActivity } from "@/features/activity/messages/en";
 import { enLogin } from "@/features/auth/login/messages/en";
 import { enContainers } from "@/features/containers/messages/en";
 import { enDashboard } from "@/features/dashboard/messages/en";
+import { enRunMessages } from "@/data/messages/run-en";
 import { enHosts } from "@/features/hosts/messages/en";
 import { enImages } from "@/features/images/messages/en";
 import { enSettings } from "@/features/settings/messages/en";
@@ -35,6 +36,7 @@ export const enMessages = {
   lab: enLab,
   visual: enVisual,
   dashboard: enDashboard,
+  runMessages: enRunMessages,
   stacks: enStacks,
   editor: enEditor,
   containers: enContainers,

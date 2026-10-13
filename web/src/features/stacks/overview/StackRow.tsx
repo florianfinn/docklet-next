@@ -14,7 +14,7 @@ import { useScheduleText } from "@/shared/components/schedule/use-schedule-text"
 import { ServicesHover } from "@/shared/components/services-hover";
 import { IconTile } from "@/shared/components/tone";
 import { StackUpdateIndicator } from "@/shared/components/updates/update-indicator";
-import { useDemoText } from "@/shared/hooks/use-demo-text";
+import { useAdapterText } from "@/data/use-adapter-text";
 import type { FitView } from "@/shared/lib/fit-view";
 import { useRowNavigation } from "@/shared/lib/row-navigation";
 import { cn } from "@/shared/lib/utils";
@@ -63,7 +63,7 @@ function useStackLoad(stack: Stack): { cpu: number; memMb: number } | null {
 /** One stack as table row or card; the whole entry navigates, nested controls keep their own behaviour. */
 export const StackRow = memo(function StackRow({ stack, host, mode, view, columns, selecting, selected, onSelect, memLimitMb, inBlock }: StackRowProps) {
   const t = useTranslations("stacks");
-  const dt = useDemoText();
+  const dt = useAdapterText();
   const rowNav = useRowNavigation();
   const cmd = useStackCommands();
   const href = `/stacks/${stack.id}`;

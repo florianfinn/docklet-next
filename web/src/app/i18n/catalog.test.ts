@@ -60,7 +60,7 @@ describe("German catalogue", () => {
   it("is still the German catalogue the app renders, extended only by the language switch namespace", () => {
     expect(catalogs.de).toBe(messages);
     const { locale, ...older } = messages;
-    expect(Object.keys(older)).toHaveLength(21);
+    expect(Object.keys(older)).toHaveLength(22);
     expect(leaves(locale as unknown as Tree).map(([, v]) => v)).toContain("Sprache");
   });
 });
@@ -70,8 +70,8 @@ const catalogueModules = import.meta.glob<Record<string, Tree>>("/src/**/message
 describe("catalogue contracts", () => {
   it("validates every catalogue pair, including pool and disconnected backend messages", () => {
     const englishFiles = Object.keys(catalogueModules).filter((path) => path.endsWith("en.ts"));
-    expect(englishFiles).toHaveLength(24);
-    expect(Object.keys(catalogueModules)).toHaveLength(48);
+    expect(englishFiles).toHaveLength(25);
+    expect(Object.keys(catalogueModules)).toHaveLength(50);
     const used = new Set<string>();
     const errors = englishFiles.flatMap((path) => {
       const english = Object.values(catalogueModules[path]!)[0]!;

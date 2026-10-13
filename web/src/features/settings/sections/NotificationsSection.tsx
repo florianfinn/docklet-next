@@ -10,7 +10,7 @@ import { CHANNEL_KINDS, notificationBaseUrl, NOTIFICATION_EVENTS, type ChannelKi
 import { required } from "@/domain/validation";
 import { TextField } from "@/shared/components/form-field";
 import { ToneBadge } from "@/shared/components/tone";
-import { useDemoText } from "@/shared/hooks/use-demo-text";
+import { useAdapterText } from "@/data/use-adapter-text";
 import { draftId } from "@/shared/lib/ids";
 import { cn } from "@/shared/lib/utils";
 import { Button } from "@/shared/ui/button";
@@ -124,7 +124,7 @@ function ChannelDialog({ channel, onClose, onApply }: { channel: NotificationCha
 export function NotificationsSection({ settings }: { settings: HubSettings }) {
   const t = useTranslations("settings");
   const tn = useTranslations("settings.notifications");
-  const dt = useDemoText();
+  const dt = useAdapterText();
   const adapter = useAdapter();
   const save = useSaveSettings();
   const { draft, setDraft, dirty, reset, commit } = useSectionDraft(settings.notifications);
