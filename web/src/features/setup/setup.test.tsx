@@ -60,5 +60,5 @@ describe("first-run setup", () => {
 
     await userEvent.click(screen.getByRole("link", { name: "Ersten Host verbinden" }));
     expect(router.state.location.pathname).toBe("/hosts/new");
-  }, 20_000);
+  });
 });

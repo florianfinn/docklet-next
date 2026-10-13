@@ -50,7 +50,7 @@ describe("overview without horizontal scrolling", () => {
     await userEvent.click(screen.getByRole("button", { name: "Sortierrichtung umkehren: Aufsteigend" }));
     expect(screen.getByRole("button", { name: "Sortierrichtung umkehren: Absteigend" }) instanceof HTMLButtonElement).toBe(true);
     expect(screen.queryByRole("radiogroup", { name: "Lastwert für Anzeige-Sortierung" }) !== null).toBe(true);
-  }, 15_000);
+  });
 
   it("gives volumes the same table/host-block toggle, sortable headers and host headings", async () => {
     renderRoutes([{ path: "/volumes", element: <VolumesPage /> }], ["/volumes"]);

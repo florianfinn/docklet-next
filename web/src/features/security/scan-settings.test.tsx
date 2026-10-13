@@ -50,12 +50,16 @@ describe("scan schedule settings", () => {
     expect(screen.getByText(/^Nächste Ausführung: Mi\., .* 04:15 · in .* · Zeitzone Europe\/Berlin \((MEZ|MESZ)\)$/) !== null).toBe(true);
 
     await userEvent.click(screen.getByRole("button", { name: "Speichern" }));
-    await waitFor(() => expect(screen.getByRole("status").textContent).toBe("Alles gespeichert"), { timeout: 3000 });
-    expect((await adapter.getSettings()).security.schedule).toEqual({ mode: "weekly", day: "wed", time: "04:15" });
-    expect((await adapter.getSecurity()).schedule).toEqual({ mode: "weekly", day: "wed", time: "04:15" });
+    await waitFor(() => expect(screen.getByRole("status").textContent).toBe("Alles gespeichert"));
+    // Flush the saved render's navigation-blocker effect before programmatic navigation.
+    await act(async () => {
+      expect((await adapter.getSettings()).security.schedule).toEqual({ mode: "weekly", day: "wed", time: "04:15" });
+      expect((await adapter.getSecurity()).schedule).toEqual({ mode: "weekly", day: "wed", time: "04:15" });
+    });
 
     await act(() => router.navigate("/security"));
-    const link = await screen.findByRole("link", { name: /^Scan-Zeitplan: Mittwochs 04:15\. Nächster Scan Mi\., / }, { timeout: 5000 });
+    expect(router.state.location.pathname).toBe("/security");
+    const link = await screen.findByRole("link", { name: /^Scan-Zeitplan: Mittwochs 04:15\. Nächster Scan Mi\., / });
     expect(link.getAttribute("href")).toBe("/settings/security#scan-schedule");
     expect(link.textContent).toBe("Mittwochs 04:15");
   });

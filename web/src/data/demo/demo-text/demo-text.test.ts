@@ -131,5 +131,5 @@ describe("texts the demo backend writes while running actions", () => {
     const results = started.flatMap((s) => (s.status === "fulfilled" && s.value && typeof s.value === "object" && "message" in s.value ? [s.value.message] : []));
     expect(runs.length).toBeGreaterThan(12);
     expect(germanIn([...runs.flatMap(runTexts), ...events.map((e) => e.title), ...results])).toEqual([]);
-  }, 20000);
+  });
 });

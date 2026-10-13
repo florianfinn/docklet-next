@@ -85,7 +85,7 @@ describe("load sorting", () => {
     // Default order is still reachable from the host header.
     await userEvent.click(screen.getByRole("button", { name: "Nach Host sortieren" }));
     expect(loadHeader().getAttribute("aria-sort")).toBe("none");
-  }, 15_000);
+  });
 
   it("orders numerically with unknown values last and deterministic host/name ties", () => {
     const hosts = new Map(HOSTS.map((h) => [h.id, h]));
