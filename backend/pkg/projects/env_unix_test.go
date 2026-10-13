@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace
+// Deviations: Local module namespace; functional cut: removed GitOps and saved Git repositories.
 
 //go:build unix
 
@@ -23,7 +23,7 @@ import (
 // TestReadProjectEnvState_TreatsPermissionLockedEnvAsUnreadable verifies that a
 // chmod 000 .env (e.g. root-owned or foreign-owned) is reported as present but
 // unreadable instead of failing the whole read, so callers can leave it
-// untouched rather than aborting a git sync.
+// untouched rather than aborting the project operation.
 func TestReadProjectEnvState_TreatsPermissionLockedEnvAsUnreadable(t *testing.T) {
 	if os.Geteuid() == 0 {
 		t.Skip("permission bits are ignored when running as root")
@@ -46,24 +46,6 @@ func TestReadProjectEnvState_TreatsPermissionLockedEnvAsUnreadable(t *testing.T)
 	content, err := os.ReadFile(envPath)
 	require.NoError(t, err)
 	assert.Equal(t, "FOO=locked\n", string(content))
-}
-
-func TestReadProjectEnvState_TreatsDirectoryAsUnreadable(t *testing.T) {
-	for _, fileName := range []string{EffectiveEnvFileName, GitSourceEnvFileName, OverrideEnvFileName} {
-		t.Run(fileName, func(t *testing.T) {
-			projectDir := t.TempDir()
-			require.NoError(t, os.Mkdir(filepath.Join(projectDir, fileName), utils.DirPerm))
-
-			state, err := ReadProjectEnvState(projectDir)
-			require.NoError(t, err)
-			assert.False(t, state.HasEffective)
-			assert.False(t, state.HasGitSource)
-			assert.False(t, state.HasOverride)
-			assert.Equal(t, fileName == EffectiveEnvFileName, state.EffectiveUnreadable)
-			assert.Equal(t, fileName == GitSourceEnvFileName, state.GitSourceUnreadable)
-			assert.Equal(t, fileName == OverrideEnvFileName, state.OverrideUnreadable)
-		})
-	}
 }
 
 func TestParseEnvFile_IgnoresDirectory(t *testing.T) {

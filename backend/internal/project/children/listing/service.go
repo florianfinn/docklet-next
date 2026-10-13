@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace
+// Deviations: Local module namespace; functional cut: removed GitOps and saved Git repositories.
 
 // Package listing projects stored projects and live Compose containers into
 // paginated list rows, status counts and untracked-project update rows.
@@ -255,7 +255,6 @@ func row(projectsDir, catalog string, p project.Record, snapshot Snapshot) proje
 	resp.ArchivedAt = p.ArchivedAt
 	resp.DirName = mo.PointerToOption(p.DirName).OrEmpty()
 	resp.RelativePath = RelativePath(projectsDir, p.Path)
-	resp.GitOpsManagedBy = p.GitOpsManagedBy
 	resp.HasBuildDirective = p.BuildImageRefsJSON != nil && len(projects.ParseImageRefsJSON(*p.BuildImageRefsJSON)) > 0
 	// Use DB service count as the source of truth for "Total Services"
 	// since we are not parsing the YAML here.

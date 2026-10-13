@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; functional cut: removed APNS mobile push; functional cut: removed template catalogue; functional cut: removed federated credentials; functional cut: removed central variables and .env.global.
+// Deviations: Local module namespace; functional cut: removed APNS mobile push; functional cut: removed template catalogue; functional cut: removed federated credentials; functional cut: removed central variables and .env.global; functional cut: removed GitOps and saved Git repositories.
 
 package api
 
@@ -34,8 +34,6 @@ import (
 	"github.com/florianfinn/docklet-next/backend/internal/docker"
 	"github.com/florianfinn/docklet-next/backend/internal/environment"
 	"github.com/florianfinn/docklet-next/backend/internal/event"
-	"github.com/florianfinn/docklet-next/backend/internal/gitops"
-	"github.com/florianfinn/docklet-next/backend/internal/gitrepo"
 	"github.com/florianfinn/docklet-next/backend/internal/health"
 	"github.com/florianfinn/docklet-next/backend/internal/image"
 	"github.com/florianfinn/docklet-next/backend/internal/imageupdate"
@@ -272,8 +270,6 @@ type HandlerDeps struct {
 	Version           *version.VersionService
 	Notification      *notification.Module
 	ApiKey            *apikey.Module
-	GitRepository     *gitrepo.Module
-	GitOpsSync        *gitops.Module
 	Webhook           *webhook.Module
 	Vulnerability     *vulnerability.Module
 	Dashboard         *dashboard.Module
@@ -431,8 +427,6 @@ func registerHandlersInternal(api huma.API, deps HandlerDeps, handlerAppCtx hand
 	deps.Search.RegisterRoutes(api)
 	deps.System.RegisterRoutes(api, handlerAppCtx)
 	handlers.RegisterDiagnostics(api, deps.Diagnostics)
-	deps.GitRepository.RegisterRoutes(api)
-	deps.GitOpsSync.RegisterRoutes(api)
 	deps.Webhook.RegisterRoutes(api)
 	deps.Vulnerability.RegisterRoutes(api, handlerAppCtx)
 	deps.Dashboard.RegisterRoutes(api)

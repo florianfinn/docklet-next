@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace
+// Deviations: Local module namespace; functional cut: removed GitOps and saved Git repositories.
 
 package build
 
@@ -34,7 +34,6 @@ import (
 	"github.com/florianfinn/docklet-next/backend/internal/database"
 	dockerInternal "github.com/florianfinn/docklet-next/backend/internal/docker"
 	"github.com/florianfinn/docklet-next/backend/internal/event"
-	"github.com/florianfinn/docklet-next/backend/internal/gitrepo"
 	"github.com/florianfinn/docklet-next/backend/internal/registry"
 	"github.com/florianfinn/docklet-next/backend/internal/settings"
 	"github.com/florianfinn/docklet-next/backend/pkg/gitutil"
@@ -46,7 +45,7 @@ type BuildService struct {
 	settings        *settings.SettingsService
 	dockerService   *dockerInternal.DockerClientService
 	registryService *registry.ContainerRegistryService
-	gitRepository   *gitrepo.GitRepositoryService
+	gitClient       *git.Client
 	eventService    *event.EventService
 	workspace       *workspace.Service
 	builder         types.Builder
@@ -62,7 +61,6 @@ func NewBuildService(
 	localSettings *settings.SettingsService,
 	dockerService *dockerInternal.DockerClientService,
 	registryService *registry.ContainerRegistryService,
-	gitRepository *gitrepo.GitRepositoryService,
 	eventService *event.EventService,
 ) *BuildService {
 	svc := &BuildService{
@@ -70,7 +68,7 @@ func NewBuildService(
 		settings:        localSettings,
 		dockerService:   dockerService,
 		registryService: registryService,
-		gitRepository:   gitRepository,
+		gitClient:       git.NewClient(os.TempDir()),
 		eventService:    eventService,
 	}
 	var buildsDirectory func() string
@@ -309,13 +307,7 @@ func (s *BuildService) resolveBuildRequestInternal(
 
 	writeBuildProgressStatusInternal(ctx, progressWriter, serviceName, "resolving remote git context "+source.RepositoryURL)
 
-	authConfig, matchedRepository, err := s.resolveGitBuildAuthInternal(ctx, source.RepositoryURL)
-	if err != nil {
-		return types.BuildRequest{}, func() error { return nil }, err
-	}
-	if matchedRepository {
-		writeBuildProgressStatusInternal(ctx, progressWriter, serviceName, "using saved git credentials for "+source.RepositoryURL)
-	}
+	authConfig := git.AuthConfig{}
 	if gitkit.RequiresRemoteProbe(source.RepositoryURL) {
 		writeBuildProgressStatusInternal(ctx, progressWriter, serviceName, "verifying remote git repository "+source.RepositoryURL)
 		if probeGitContextErr := s.probeGitContextInternal(ctx, source.RepositoryURL, authConfig); probeGitContextErr != nil {
@@ -357,37 +349,12 @@ func (s *BuildService) resolveBuildRequestInternal(
 	return resolvedReq, func() error { return s.cleanupGitContextInternal(repoPath) }, nil
 }
 
-func (s *BuildService) resolveGitBuildAuthInternal(ctx context.Context, rawURL string) (git.AuthConfig, bool, error) {
-	if s.gitRepository == nil {
-		return git.AuthConfig{}, false, nil
-	}
-
-	repository, err := s.gitRepository.FindEnabledRepositoryByURL(ctx, rawURL)
-	if err != nil {
-		return git.AuthConfig{}, false, fmt.Errorf("failed to resolve git repository credentials: %w", err)
-	}
-	if repository == nil {
-		return git.AuthConfig{}, false, nil
-	}
-
-	authConfig, err := s.gitRepository.GetAuthConfig(ctx, repository)
-	if err != nil {
-		return git.AuthConfig{}, true, fmt.Errorf("failed to load git repository credentials: %w", err)
-	}
-
-	return authConfig, true, nil
-}
-
 func (s *BuildService) probeGitContextInternal(ctx context.Context, repositoryURL string, authConfig git.AuthConfig) error {
 	if s.gitProbeFn != nil {
 		return s.gitProbeFn(ctx, repositoryURL, authConfig)
 	}
 
-	if s.gitRepository != nil && s.gitRepository.Client != nil {
-		return s.gitRepository.ProbeRemote(ctx, repositoryURL, authConfig)
-	}
-
-	return errors.New("git repository service not available")
+	return s.gitClient.ProbeRemote(ctx, repositoryURL, authConfig)
 }
 
 func (s *BuildService) cloneGitContextInternal(ctx context.Context, repositoryURL, ref string, authConfig git.AuthConfig) (string, error) {
@@ -395,11 +362,7 @@ func (s *BuildService) cloneGitContextInternal(ctx context.Context, repositoryUR
 		return s.gitCloneFn(ctx, repositoryURL, ref, authConfig)
 	}
 
-	if s.gitRepository != nil && s.gitRepository.Client != nil {
-		return s.gitRepository.Clone(ctx, repositoryURL, ref, authConfig)
-	}
-
-	return "", errors.New("git repository service not available")
+	return s.gitClient.Clone(ctx, repositoryURL, ref, authConfig)
 }
 
 func (s *BuildService) cleanupGitContextInternal(repoPath string) error {
@@ -409,10 +372,7 @@ func (s *BuildService) cleanupGitContextInternal(repoPath string) error {
 	if s.gitCleanupFn != nil {
 		return s.gitCleanupFn(repoPath)
 	}
-	if s.gitRepository != nil && s.gitRepository.Client != nil {
-		return s.gitRepository.Cleanup(repoPath)
-	}
-	return errors.New("git repository service not available")
+	return s.gitClient.Cleanup(repoPath)
 }
 
 func writeBuildProgressStatusInternal(ctx context.Context, progressWriter io.Writer, serviceName, status string) {

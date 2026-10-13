@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: functional cut: removed central variables and .env.global.
+// Deviations: functional cut: removed central variables and .env.global; functional cut: removed GitOps and saved Git repositories.
 
 package projects
 
@@ -329,7 +329,7 @@ func TestLoadComposeProjectFromDir_SupportsCustomComposeNames(t *testing.T) {
 func TestLoadComposeProjectLenient_ToleratesUndefinedVariables(t *testing.T) {
 	t.Parallel()
 
-	// Reproduces the GitSync chicken-and-egg problem: a compose file references
+	// A compose file may reference
 	// ${CONFIG_FILE} in a bind-mount source, but no .env exists yet.  The strict
 	// loader would resolve ${CONFIG_FILE} to "" and produce ":/etc/app/app.conf"
 	// (empty section between colons).  The lenient loader must succeed instead.
@@ -354,8 +354,7 @@ func TestLoadComposeProjectLenient_ToleratesUndefinedTypedFieldVariables(t *test
 	// Same chicken-and-egg problem for typed fields: deploy.resources.limits.cpus
 	// is parsed as a float and memory as a size. With no .env the strict loader
 	// fails with `strconv.ParseFloat: parsing "": invalid syntax` and
-	// `invalid size: ''`. Lenient mode must succeed so the GitOps sync can
-	// create the project and let the user supply real values afterward.
+	// `invalid size: ''`. Lenient mode permits project creation before the user supplies real values.
 	dir := t.TempDir()
 	composePath := filepath.Join(dir, "compose.yaml")
 	require.NoError(t, os.WriteFile(composePath, []byte(`services:

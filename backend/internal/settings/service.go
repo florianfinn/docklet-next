@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; functional cut: removed APNS mobile push; functional cut: removed template catalogue.
+// Deviations: Local module namespace; functional cut: removed APNS mobile push; functional cut: removed template catalogue; functional cut: removed GitOps and saved Git repositories.
 
 package settings
 
@@ -285,12 +285,7 @@ func DefaultSettingsConfig() *Settings {
 		OidcProviderLogoUrl:                   SettingVariable{Value: ""},
 		OidcMobileRedirectUris:                SettingVariable{Value: "arcane-mobile://oidc-callback"},
 		MaxImageUploadSize:                    SettingVariable{Value: "500"},
-		GitSyncMaxFiles:                       SettingVariable{Value: "500"},
-		GitSyncMaxTotalSizeMb:                 SettingVariable{Value: "50"},
-		GitSyncMaxBinarySizeMb:                SettingVariable{Value: "10"},
 		EnvironmentHealthInterval:             SettingVariable{Value: "0 */2 * * * *"},
-		LifecycleEnabled:                      SettingVariable{Value: "false"},
-		LifecycleDefaultRunnerImage:           SettingVariable{Value: "alpine:latest"},
 		LifecycleMaxTimeoutSec:                SettingVariable{Value: "300"},
 
 		DockerAPITimeout:       SettingVariable{Value: "30"},

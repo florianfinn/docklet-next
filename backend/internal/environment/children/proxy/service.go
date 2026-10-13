@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace
+// Deviations: Local module namespace; functional cut: removed GitOps and saved Git repositories.
 
 // Package proxy owns the transport to remote environment agents: request
 // building, edge tunnel routing, JSON decoding and configuration pushes.
@@ -21,11 +21,9 @@ import (
 
 	"github.com/florianfinn/docklet-next/types/backup"
 	"github.com/florianfinn/docklet-next/types/containerregistry"
-	"github.com/florianfinn/docklet-next/types/gitops"
 	"go.getarcane.app/sys/crypto"
 
 	"github.com/florianfinn/docklet-next/backend/internal/database"
-	"github.com/florianfinn/docklet-next/backend/internal/gitrepo"
 	"github.com/florianfinn/docklet-next/backend/internal/middleware"
 	"github.com/florianfinn/docklet-next/backend/internal/registry"
 	"github.com/florianfinn/docklet-next/backend/internal/s3"
@@ -253,70 +251,6 @@ func (s *Service) SyncS3Destinations(ctx context.Context, target *Target) error 
 }
 
 // SyncRepositories syncs all git repositories from this manager to a remote environment
-func (s *Service) SyncRepositories(ctx context.Context, target *Target) error {
-	return s.fanOutSyncToEnvironment(ctx, target, "git repositories", "/api/git-repositories/sync",
-		func(repo gitrepo.GitRepository) (gitops.RepositorySync, bool, error) {
-			item := gitops.RepositorySync{
-				ID:                     repo.ID,
-				Name:                   repo.Name,
-				URL:                    repo.URL,
-				AuthType:               repo.AuthType,
-				Username:               repo.Username,
-				SSHHostKeyVerification: repo.SSHHostKeyVerification,
-				CommitAuthorName:       repo.CommitAuthorName,
-				CommitAuthorEmail:      repo.CommitAuthorEmail,
-				Description:            repo.Description,
-				Enabled:                repo.Enabled,
-				CreatedAt:              repo.CreatedAt,
-			}
-			if repo.UpdatedAt != nil {
-				item.UpdatedAt = *repo.UpdatedAt
-			}
-
-			if repo.Token != "" {
-				decryptedToken, err := crypto.Decrypt(repo.Token)
-				if err != nil {
-					return gitops.RepositorySync{}, false, fmt.Errorf("failed to decrypt token for repository %s for sync: %w", repo.ID, err)
-				}
-				item.Token = decryptedToken
-			}
-
-			if repo.SSHKey != "" {
-				decryptedSSHKey, err := crypto.Decrypt(repo.SSHKey)
-				if err != nil {
-					return gitops.RepositorySync{}, false, fmt.Errorf("failed to decrypt SSH key for repository %s for sync: %w", repo.ID, err)
-				}
-				item.SSHKey = decryptedSSHKey
-			}
-
-			if repo.SigningKey != "" {
-				decryptedSigningKey, err := crypto.Decrypt(repo.SigningKey)
-				if err != nil {
-					return gitops.RepositorySync{}, false, fmt.Errorf("failed to decrypt signing key for repository %s for sync: %w", repo.ID, err)
-				}
-				item.SigningKey = decryptedSigningKey
-			}
-
-			if repo.SigningKeyPassphrase != "" {
-				decryptedPassphrase, err := crypto.Decrypt(repo.SigningKeyPassphrase)
-				if err != nil {
-					return gitops.RepositorySync{}, false, fmt.Errorf("failed to decrypt signing key passphrase for repository %s for sync: %w", repo.ID, err)
-				}
-				item.SigningKeyPassphrase = decryptedPassphrase
-			}
-
-			return item, true, nil
-		},
-		func(items []gitops.RepositorySync) gitops.RepositorySyncRequest {
-			return gitops.RepositorySyncRequest{Repositories: items}
-		},
-	)
-}
-
-// fanOutSyncToEnvironment pushes every row of Model held by this
-// manager to one remote environment. toSyncItem maps a row to its wire form and
-// reports whether to keep it. Mapping errors abort before sending the snapshot.
-// wrap builds the request envelope the target endpoint expects.
 func (s *Service) fanOutSyncToEnvironment[Model, Item, Request any](
 	ctx context.Context,
 	target *Target,

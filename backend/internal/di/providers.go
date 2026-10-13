@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; functional cut: removed template catalogue.
+// Deviations: Local module namespace; functional cut: removed template catalogue; functional cut: removed GitOps and saved Git repositories.
 
 package di
 
@@ -29,7 +29,6 @@ import (
 	"github.com/florianfinn/docklet-next/backend/internal/docker"
 	"github.com/florianfinn/docklet-next/backend/internal/environment"
 	"github.com/florianfinn/docklet-next/backend/internal/event"
-	"github.com/florianfinn/docklet-next/backend/internal/gitrepo"
 	"github.com/florianfinn/docklet-next/backend/internal/image"
 	"github.com/florianfinn/docklet-next/backend/internal/imageupdate"
 	"github.com/florianfinn/docklet-next/backend/internal/kv"
@@ -229,10 +228,6 @@ func provideVersionServiceInternal(
 	return version.NewVersionService(httpClient, cfg.UpdateCheckDisabled, config.Version, config.Revision, localRegistry, localDocker, imageUpdate, settingsService)
 }
 
-func provideGitRepositoryServiceInternal(db *database.DB, cfg *config.Config, eventService *event.EventService, settingsService *settings.SettingsService) *gitrepo.GitRepositoryService {
-	return gitrepo.NewGitRepositoryService(db, cfg.GitWorkDir, eventService, settingsService)
-}
-
 func provideS3ModuleInternal(service *s3domain.S3DestinationService, localEnvironment *environment.EnvironmentService) *s3domain.Module {
 	return s3domain.New(service, localEnvironment.SyncS3DestinationsToRemoteEnvironments)
 }
@@ -265,13 +260,12 @@ func provideProjectServiceInternal(
 	localImage *image.ImageService,
 	localDocker *docker.DockerClientService,
 	localBuild *build.BuildService,
-	lifecycleService *project.LifecycleService,
 	localKv *kv.KVService,
 	localRegistry *registry.ContainerRegistryService,
 	localEnvironment *environment.EnvironmentService,
 	cfg *config.Config,
 ) *project.ProjectService {
-	return project.NewProjectService(db, localSettings, localEvent, localImage, localDocker, localBuild, lifecycleService, localRegistry, cfg, localKv, localEnvironment.GetEnabledRegistryCredentials)
+	return project.NewProjectService(db, localSettings, localEvent, localImage, localDocker, localBuild, localRegistry, cfg, localKv, localEnvironment.GetEnabledRegistryCredentials)
 }
 
 // updaterServiceParams includes actor registration and worker lifecycle dependencies.

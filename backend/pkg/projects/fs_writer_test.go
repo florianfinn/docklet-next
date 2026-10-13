@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace
+// Deviations: Local module namespace; functional cut: removed GitOps and saved Git repositories.
 
 package projects
 
@@ -197,7 +197,7 @@ func TestWriteProjectFile_StillRejectsNonEnvSymlink(t *testing.T) {
 
 			targetPath := filepath.Join(t.TempDir(), "compose.yaml")
 			require.NoError(t, os.WriteFile(targetPath, []byte("services: {}\n"), 0o600))
-			fileName := kit.Ternary(writer == "project", OverrideEnvFileName, DefaultComposeFileName)
+			fileName := kit.Ternary(writer == "project", "meta.yaml", DefaultComposeFileName)
 			linkPath := filepath.Join(projectDir, fileName)
 			if err := os.Symlink(targetPath, linkPath); err != nil {
 				t.Skipf("symlink creation is unavailable: %v", err)

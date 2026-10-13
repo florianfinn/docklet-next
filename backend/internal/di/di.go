@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; functional cut: removed upstream analytics heartbeat and APNS mobile push; functional cut: removed template catalogue; functional cut: removed federated credentials; functional cut: removed central variables and .env.global.
+// Deviations: Local module namespace; functional cut: removed upstream analytics heartbeat and APNS mobile push; functional cut: removed template catalogue; functional cut: removed federated credentials; functional cut: removed central variables and .env.global; functional cut: removed GitOps and saved Git repositories.
 
 // Package di owns the backend's dependency-injection graph.
 package di
@@ -25,8 +25,6 @@ import (
 	"github.com/florianfinn/docklet-next/backend/internal/diagnostics"
 	"github.com/florianfinn/docklet-next/backend/internal/environment"
 	"github.com/florianfinn/docklet-next/backend/internal/event"
-	"github.com/florianfinn/docklet-next/backend/internal/gitops"
-	"github.com/florianfinn/docklet-next/backend/internal/gitrepo"
 	"github.com/florianfinn/docklet-next/backend/internal/image"
 	"github.com/florianfinn/docklet-next/backend/internal/imageupdate"
 	"github.com/florianfinn/docklet-next/backend/internal/job"
@@ -85,7 +83,6 @@ var ServiceOptions = fx.Options(
 		imageupdate.NewImageUpdateService,
 		image.NewImageService,
 		build.NewBuildService,
-		project.NewLifecycleService,
 		container.NewContainerService,
 		dashboard.NewDashboardService,
 		network.NewNetworkService,
@@ -94,7 +91,6 @@ var ServiceOptions = fx.Options(
 		oidc.NewOidcService,
 		system.NewSystemService,
 		diagnostics.NewDiagnosticsService,
-		gitops.NewGitOpsSyncService,
 		backup.NewRecoveryKeyStore,
 		upload.NewUploadService,
 		auth.NewAuthService,
@@ -117,7 +113,6 @@ var ServiceOptions = fx.Options(
 		provideProjectServiceInternal,
 		provideBackupEngineInternal,
 		provideVersionServiceInternal,
-		provideGitRepositoryServiceInternal,
 		provideS3ServiceInternal,
 		provideContainerRegistryServiceInternal,
 		provideUpdaterServiceInternal,
@@ -127,7 +122,6 @@ var ServiceOptions = fx.Options(
 		event.New,
 		role.New,
 		apikey.New,
-		gitrepo.New,
 		job.New,
 		environment.New,
 		image.New,
@@ -141,7 +135,6 @@ var ServiceOptions = fx.Options(
 		notification.New,
 		vulnerability.New,
 		project.New,
-		gitops.New,
 		upload.New,
 		search.New,
 		provideActivityModuleInternal,
@@ -172,7 +165,6 @@ var JobOptions = fx.Options(
 		scheduler.NewAutoHealJob,
 		scheduler.NewActivitySweepJob,
 		scheduler.NewUploadSessionsCleanupJob,
-		scheduler.NewGitCloneCleanupJob,
 		fx.Annotate(scheduler.NewUpgradeLogCleanupJob, fx.ResultTags(`name:"upgrade-log-cleanup"`)),
 	),
 )

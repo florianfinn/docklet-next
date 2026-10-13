@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; functional cut: removed federated credentials.
+// Deviations: Local module namespace; functional cut: removed federated credentials; functional cut: removed GitOps and saved Git repositories.
 
 //go:build playwright
 
@@ -24,12 +24,12 @@ func init() {
 		func(apiGroup *echo.Group, deps api.HandlerDeps) {
 			apiKeyService := deps.ApiKey.Service()
 			userService := deps.User.Service()
-			if apiKeyService == nil || userService == nil || deps.GitRepository.Service() == nil || deps.GitOpsSync.Service() == nil {
+			if apiKeyService == nil || userService == nil {
 				slog.WarnContext(ctx, "Playwright service not available, skipping playwright routes")
 				return
 			}
 
-			playwrightService := playwright.NewPlaywrightService(apiKeyService, userService, deps.GitRepository.Service(), deps.GitOpsSync.Service(), deps.Project.Service())
+			playwrightService := playwright.NewPlaywrightService(apiKeyService, userService)
 			playwright.SetupRoutes(apiGroup, playwrightService)
 			slog.InfoContext(ctx, "Playwright routes registered for E2E testing")
 		},

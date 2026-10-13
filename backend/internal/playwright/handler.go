@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; functional cut: removed federated credentials.
+// Deviations: Local module namespace; functional cut: removed federated credentials; functional cut: removed GitOps and saved Git repositories.
 
 //go:build playwright
 
@@ -27,7 +27,6 @@ func SetupRoutes(api *echo.Group, service *PlaywrightService) {
 	group := api.Group("/playwright")
 	handler := &playwrightHandlerInternal{service: service}
 
-	group.POST("/create-test-gitops-project", handler.createTestGitOpsProjectInternal)
 	group.POST("/create-test-api-keys", handler.createTestAPIKeysInternal)
 	group.POST("/delete-test-api-keys", handler.deleteTestAPIKeysInternal)
 }
@@ -51,12 +50,5 @@ func (h *playwrightHandlerInternal) deleteTestAPIKeysInternal(c *echo.Context) e
 		return c.JSON(http.StatusInternalServerError, map[string]any{"error": err.Error()})
 	}
 
-	return c.NoContent(http.StatusNoContent)
-}
-
-func (h *playwrightHandlerInternal) createTestGitOpsProjectInternal(c *echo.Context) error {
-	if err := h.service.CreateTestGitOpsProject(c.Request().Context()); err != nil {
-		return c.JSON(http.StatusInternalServerError, map[string]any{"error": err.Error()})
-	}
 	return c.NoContent(http.StatusNoContent)
 }

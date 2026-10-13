@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; functional cut: removed APNS mobile push.
+// Deviations: Local module namespace; functional cut: removed APNS mobile push; functional cut: removed GitOps and saved Git repositories.
 
 package updater
 
@@ -538,7 +538,7 @@ func TestUpdaterService_PullImageAdapterInternal(t *testing.T) {
 		registrySvc := registry.NewContainerRegistryService(db, nil, kv.NewKVService(db), nil)
 		imageSvc := image.NewImageService(db, dockerSvc, registrySvc, nil, nil, event.NewEventService(db, nil, nil), nil, nil)
 		envSvc := environment.NewEnvironmentService(db, nil, nil, nil, nil, nil)
-		projectSvc := project.NewProjectService(db, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil)
+		projectSvc := project.NewProjectService(db, nil, nil, nil, nil, nil, nil, nil, nil, nil)
 		projectSvc.RegistryCredentialsProvider = envSvc.GetEnabledRegistryCredentials
 		svc, svcErr := NewUpdaterService(db, nil, dockerSvc, projectSvc, nil, nil, nil, imageSvc, nil, nil, nil, nil, nil, nil, nil)
 		require.NoError(t, svcErr)

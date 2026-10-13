@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Functional cut: removed template catalogue; functional cut: removed central variables and .env.global.
+// Deviations: Functional cut: removed template catalogue; functional cut: removed central variables and .env.global; functional cut: removed GitOps and saved Git repositories.
 
 package authz
 
@@ -42,7 +42,6 @@ type AccessSurface struct {
 var accessSurfacesInternal = []AccessSurface{
 	landingSurfaceInternal("landing.customize", "/customize", "Customize", []string{
 		"customize.category.registries",
-		"customize.category.git-repositories",
 	}, 40),
 	landingSurfaceInternal("landing.settings", "/settings", "Settings", []string{
 		"settings.category.activity",
@@ -66,7 +65,6 @@ var accessSurfacesInternal = []AccessSurface{
 	routeSurfaceInternal("route.projects.detail", "/projects/{projectId}", "Project", AccessScopeModeSelectedEnvPlusGlobal, []string{PermProjectsList, PermProjectsRead}, 0),
 	routeSurfaceInternal("route.environments", "/environments", "Environments", AccessScopeModeGlobalOnly, []string{PermEnvironmentsList, PermEnvironmentsRead}, 130),
 	routeSurfaceInternal("route.environments.detail", "/environments/{id}", "Environment", AccessScopeModeGlobalOnly, []string{PermEnvironmentsList, PermEnvironmentsRead}, 0),
-	routeSurfaceInternal("route.environments.gitops", "/environments/{id}/gitops", "GitOps Syncs", AccessScopeModeSelectedEnvPlusGlobal, []string{PermGitOpsList, PermGitOpsRead}, 0),
 	routeSurfaceInternal("route.containers", "/containers", "Containers", AccessScopeModeSelectedEnvPlusGlobal, []string{PermContainersList, PermContainersRead}, 20),
 	routeSurfaceInternal("route.containers.detail", "/containers/{containerId}", "Container", AccessScopeModeSelectedEnvPlusGlobal, []string{PermContainersList, PermContainersRead}, 0),
 	routeSurfaceInternal("route.images", "/images", "Images", AccessScopeModeSelectedEnvPlusGlobal, []string{PermImagesList, PermImagesRead}, 50),
@@ -115,7 +113,6 @@ var accessSurfacesInternal = []AccessSurface{
 	settingsCategorySurfaceInternal("diagnostics", "/settings/diagnostics", "Diagnostics", AccessScopeModeGlobalOnly, []string{PermDiagnosticsRead}),
 
 	customizeCategorySurfaceInternal("registries", "/customize/registries", "Container Registries", []string{PermCustomizeManage, PermRegistriesList, PermRegistriesRead}),
-	customizeCategorySurfaceInternal("git-repositories", "/customize/git-repositories", "Git Repositories", []string{PermCustomizeManage, PermGitReposList, PermGitReposRead}),
 }
 
 var accessSurfacesByIDInternal = buildAccessSurfaceIndexInternal(accessSurfacesInternal)

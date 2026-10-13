@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; functional cut: removed central variables and .env.global.
+// Deviations: Local module namespace; functional cut: removed central variables and .env.global; functional cut: removed GitOps and saved Git repositories.
 
 package bootstrap
 
@@ -34,7 +34,6 @@ import (
 	"github.com/florianfinn/docklet-next/backend/internal/di"
 	"github.com/florianfinn/docklet-next/backend/internal/docker"
 	"github.com/florianfinn/docklet-next/backend/internal/environment"
-	"github.com/florianfinn/docklet-next/backend/internal/gitops"
 	"github.com/florianfinn/docklet-next/backend/internal/project"
 	"github.com/florianfinn/docklet-next/backend/internal/role"
 	"github.com/florianfinn/docklet-next/backend/internal/settings"
@@ -183,7 +182,6 @@ type initializeStartupStateParams struct {
 	Volume        *volume.VolumeService
 	Settings      *settings.SettingsService
 	Environment   *environment.EnvironmentService
-	GitOpsSync    *gitops.GitOpsSyncService
 	Project       *project.ProjectService
 	Docker        *docker.DockerClientService
 	Swarm         *swarm.SwarmService
@@ -240,7 +238,6 @@ func initializeStartupState(p initializeStartupStateParams) {
 	if err := p.Environment.EnsureLocalEnvironment(appCtx, cfg.AppUrl); err != nil {
 		slog.WarnContext(appCtx, "Failed to ensure local environment", "error", err)
 	}
-	initializeGitOpsStartupStateInternal(appCtx, p.GitOpsSync)
 	p.Vulnerability.ImportLegacyReportFiles(appCtx)
 	p.Vulnerability.BackfillScanItems(appCtx)
 	if p.Project != nil {
@@ -311,25 +308,6 @@ func initializeStartupState(p initializeStartupStateParams) {
 		}
 	} else if cfg.AgentMode && !cfg.EdgeAgent {
 		slog.InfoContext(appCtx, "Direct mode active: agent operates as a passive HTTP server; no outbound connection to manager required")
-	}
-}
-
-func initializeGitOpsStartupStateInternal(appCtx context.Context, gitOpsSync *gitops.GitOpsSyncService) {
-	if gitOpsSync == nil {
-		return
-	}
-	if err := gitOpsSync.CleanupOrphanedSyncsOnStartup(appCtx); err != nil {
-		slog.WarnContext(appCtx, "Failed to clean up orphaned GitOps syncs on startup", "error", err)
-	}
-
-	if err := gitOpsSync.CleanupLeakedScratchDirsOnStartup(appCtx); err != nil {
-		slog.WarnContext(appCtx, "Failed to clean up leaked GitOps scratch directories on startup", "error", err)
-	}
-	if err := gitOpsSync.CleanupLeakedCloneDirsOnStartup(appCtx); err != nil {
-		slog.WarnContext(appCtx, "Failed to clean up leaked git clone directories on startup", "error", err)
-	}
-	if err := gitOpsSync.ReconcileDirectorySyncProjectsOnStartup(appCtx); err != nil {
-		slog.WarnContext(appCtx, "Failed to reconcile directory GitOps projects on startup", "error", err)
 	}
 }
 

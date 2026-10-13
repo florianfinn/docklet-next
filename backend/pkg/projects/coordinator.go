@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace
+// Deviations: Local module namespace; functional cut: removed GitOps and saved Git repositories.
 
 package projects
 
@@ -42,18 +42,13 @@ func NewCoordinator(commands projecttypes.ComposeCommands) projecttypes.ComposeC
 	return &composeCoordinatorInternal{commands: commands}
 }
 
-// Deploy runs hooks before loading, prepares images, then reconciles the project.
+// Deploy loads, prepares images, then reconciles the project.
 func (c *composeCoordinatorInternal) Deploy(ctx context.Context, request projecttypes.ComposeDeployment) (_ *composetypes.Project, err error) {
 	defer func() {
 		if err != nil && request.Recover != nil {
 			request.Recover(ctx)
 		}
 	}()
-	if request.PreDeploy != nil {
-		if preDeployErr := request.PreDeploy(ctx); preDeployErr != nil {
-			return nil, fmt.Errorf("pre-deploy lifecycle hook failed: %w", preDeployErr)
-		}
-	}
 	model, err := request.Load(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("failed to load compose project in %s: %w", request.ProjectPath, err)
@@ -75,7 +70,7 @@ func (c *composeCoordinatorInternal) Deploy(ctx context.Context, request project
 	if prepareImagesForDeployErr := c.PrepareImagesForDeploy(ctx, request.ProjectID, model, request.Progress, operations, pullPolicy); prepareImagesForDeployErr != nil {
 		return nil, fmt.Errorf("failed to prepare project images for deploy: %w", prepareImagesForDeployErr)
 	}
-	removeOrphans := ResolveRemoveOrphans(request.GitOpsManaged, request.Options)
+	removeOrphans := ResolveRemoveOrphans(request.Options)
 	slog.InfoContext(ctx, "starting compose up with health check support", "projectId", request.ProjectID, "projectName", model.Name, "services", len(model.Services), "removeOrphans", removeOrphans)
 	if upErr := c.commands.Up(ctx, model, nil, removeOrphans, forceRecreate, recreateVolumes, request.AuthConfigs, request.WaitTimeout); upErr != nil {
 		slog.ErrorContext(ctx, "compose up failed", "projectName", model.Name, "projectId", request.ProjectID, "error", upErr)
@@ -91,9 +86,9 @@ func (c *composeCoordinatorInternal) Deploy(ctx context.Context, request project
 	return model, nil
 }
 
-// ResolveRemoveOrphans preserves GitOps reconciliation and explicit caller opt-in.
-func ResolveRemoveOrphans(gitOpsManaged bool, options *projecttypes.DeployOptions) bool {
-	return gitOpsManaged || (options != nil && options.RemoveOrphans)
+// ResolveRemoveOrphans preserves explicit caller opt-in.
+func ResolveRemoveOrphans(options *projecttypes.DeployOptions) bool {
+	return options != nil && options.RemoveOrphans
 }
 
 // UpdateServices validates scope before pulling or stopping any service.

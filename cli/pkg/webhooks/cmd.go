@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace
+// Deviations: Local module namespace; functional cut: removed GitOps and saved Git repositories.
 
 // Package webhooks implements the `arcane webhooks` command group for
 // per-environment inbound webhooks that trigger actions.
@@ -235,9 +235,9 @@ func init() {
 
 	// Create command flags
 	createCmd.Flags().StringVar(&createName, "name", "", "Webhook name")
-	createCmd.Flags().StringVar(&createTarget, "target", "", "Target type: container, project, updater, or gitops")
+	createCmd.Flags().StringVar(&createTarget, "target", "", "Target type: container, project, or updater")
 	createCmd.Flags().StringVar(&createAction, "action", "", "Action to run: update, start, stop, restart, redeploy, up, down, run, or sync")
-	createCmd.Flags().StringVar(&createTargetID, "target-id", "", "Container ID, project ID, or GitOps sync ID to target (not needed for updater webhooks)")
+	createCmd.Flags().StringVar(&createTargetID, "target-id", "", "Container ID or project ID to target (not needed for updater webhooks)")
 	createCmd.Flags().BoolVar(&jsonOutput, "json", false, "Output in JSON format")
 	_ = createCmd.MarkFlagRequired("name")
 	_ = createCmd.MarkFlagRequired("target")

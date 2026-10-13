@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: None
+// Deviations: functional cut: removed GitOps and saved Git repositories.
 
 package project
 
@@ -39,11 +39,9 @@ type ComposeDeployment struct {
 	ProjectPath       string
 	Options           *DeployOptions
 	DefaultPullPolicy string
-	GitOpsManaged     bool
 	WaitTimeout       time.Duration
 	AuthConfigs       map[string]registry.AuthConfig
 	Progress          io.Writer
-	PreDeploy         func(context.Context) error
 	Load              func(context.Context) (*composetypes.Project, error)
 	ResolveImages     func(context.Context) (ComposeImageOperations, error)
 	Recover           func(context.Context)

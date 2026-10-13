@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace
+// Deviations: Local module namespace; functional cut: removed GitOps and saved Git repositories.
 
 package environment
 
@@ -25,7 +25,6 @@ import (
 	"github.com/florianfinn/docklet-next/types/backup"
 	"github.com/florianfinn/docklet-next/types/containerregistry"
 	"github.com/florianfinn/docklet-next/types/environment"
-	"github.com/florianfinn/docklet-next/types/gitops"
 	"github.com/florianfinn/docklet-next/types/scheduler"
 	"github.com/libtnb/sqlite"
 	"github.com/stretchr/testify/assert"
@@ -38,7 +37,6 @@ import (
 	"github.com/florianfinn/docklet-next/backend/internal/config"
 	"github.com/florianfinn/docklet-next/backend/internal/database"
 	"github.com/florianfinn/docklet-next/backend/internal/environment/children/snippets"
-	"github.com/florianfinn/docklet-next/backend/internal/gitrepo"
 	"github.com/florianfinn/docklet-next/backend/internal/registry"
 	"github.com/florianfinn/docklet-next/backend/internal/s3"
 	"github.com/florianfinn/docklet-next/backend/internal/session"
@@ -98,25 +96,12 @@ func newAdmissionGateForEnvironmentTestInternal(t testing.TB) *runs.Admission {
 // Project imports environment, so these rows avoid an import cycle in tests.
 type testProjectRow struct {
 	database.BaseModel
-	Name            string
-	Path            string
-	Status          string
-	GitOpsManagedBy *string `gorm:"column:gitops_managed_by"`
+	Name   string
+	Path   string
+	Status string
 }
 
 func (testProjectRow) TableName() string { return "projects" }
-
-type testGitOpsSyncRow struct {
-	database.BaseModel
-	Name          string
-	EnvironmentID string
-	RepositoryID  string
-	ComposePath   string
-	ProjectName   string
-	SyncInterval  int
-}
-
-func (testGitOpsSyncRow) TableName() string { return "gitops_syncs" }
 
 func setupEnvironmentServiceTestDB(t *testing.T) *database.DB {
 	t.Helper()
@@ -132,7 +117,6 @@ func setupEnvironmentServiceTestDB(t *testing.T) *database.DB {
 		&user.User{},
 		&apikey.ApiKey{},
 		&testProjectRow{},
-		&testGitOpsSyncRow{},
 	))
 
 	sqlDB, err := db.DB()
@@ -208,46 +192,6 @@ func createTestEnvironmentWithState(t *testing.T, db *database.DB, id, apiURL, s
 	require.NoError(t, db.WithContext(t.Context()).Create(env).Error)
 }
 
-func TestEnvironmentService_DeleteEnvironment_CascadesGitOpsSyncs(t *testing.T) {
-	ctx := t.Context()
-	db := setupEnvironmentServiceTestDB(t)
-	require.NoError(t, db.AutoMigrate(&testProjectRow{}, &testGitOpsSyncRow{}))
-
-	createTestEnvironment(t, db, "env-delete-gitops", "http://env.example", nil)
-	syncID := "sync-delete-env"
-	require.NoError(t, db.Create(&testGitOpsSyncRow{
-		ID:            syncID,
-		Name:          "delete-env-sync",
-		EnvironmentID: "env-delete-gitops",
-		RepositoryID:  "repo-1",
-		ComposePath:   "compose.yml",
-		ProjectName:   "demo",
-		SyncInterval:  15,
-	}).Error)
-	require.NoError(t, db.Create(&testProjectRow{
-		ID:              "project-managed-by-deleted-env",
-		Name:            "demo",
-		Path:            "/tmp/demo",
-		Status:          "stopped",
-		GitOpsManagedBy: &syncID,
-	}).Error)
-
-	jobScheduler := &environmentTestSchedulerInternal{}
-	svc := NewEnvironmentService(db, nil, nil, nil, nil, nil)
-	require.NoError(t, svc.SetScheduler(ctx, jobScheduler, newAdmissionGateForEnvironmentTestInternal(t)))
-
-	require.NoError(t, svc.DeleteEnvironment(ctx, "env-delete-gitops", nil, nil))
-
-	var syncCount int64
-	require.NoError(t, db.Model(&testGitOpsSyncRow{}).Where("id = ?", syncID).Count(&syncCount).Error)
-	require.Zero(t, syncCount)
-
-	var project testProjectRow
-	require.NoError(t, db.First(&project, "id = ?", "project-managed-by-deleted-env").Error)
-	require.Nil(t, project.GitOpsManagedBy)
-	require.Contains(t, jobScheduler.removed, entityjobs.GitOpsSyncJobPrefix+syncID)
-}
-
 func createTestRegistry(t *testing.T, db *database.DB, id string) {
 	t.Helper()
 
@@ -298,11 +242,6 @@ func createTestECRRegistry(t *testing.T, db *database.DB, id string) {
 	}
 
 	require.NoError(t, db.WithContext(t.Context()).Create(localRegistry).Error)
-}
-
-func createTestGitRepository(t *testing.T, db *database.DB, repository gitrepo.GitRepository) {
-	t.Helper()
-	require.NoError(t, db.Create(&repository).Error)
 }
 
 func encryptSecretForTest(t *testing.T, value string) string {
@@ -505,63 +444,6 @@ func TestEnvironmentService_SyncS3DestinationsToEnvironment(t *testing.T) {
 
 	createTestEnvironment(t, db, "env-s3", server.URL, &accessToken)
 	require.NoError(t, svc.SyncS3DestinationsToEnvironment(ctx, "env-s3"))
-}
-
-func TestEnvironmentService_SyncRepositoriesToEnvironment_UsesAgentHeaders(t *testing.T) {
-	ctx := t.Context()
-	db := setupEnvironmentServiceTestDB(t)
-	require.NoError(t, db.AutoMigrate(&gitrepo.GitRepository{}))
-	svc := NewEnvironmentService(db, nil, nil, nil, nil, nil)
-
-	createTestGitRepository(t, db, gitrepo.GitRepository{
-		ID: "repo-1", CreatedAt: time.Now(),
-		Name:        "repo-1",
-		URL:         "https://github.com/getarcaneapp/arcane.git",
-		AuthType:    "http",
-		Username:    "arcane",
-		Token:       encryptSecretForTest(t, "repo-token"),
-		Enabled:     true,
-		Description: new("test repo"),
-	})
-
-	accessToken := "token-1"
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if !assert.Equal(t, http.MethodPost, r.Method) {
-			return
-		}
-		if !assert.Equal(t, "/api/git-repositories/sync", r.URL.Path) {
-			return
-		}
-		if !assert.Equal(t, accessToken, r.Header.Get("X-API-Key")) {
-			return
-		}
-		if !assert.Equal(t, accessToken, r.Header.Get("X-Arcane-Agent-Token")) {
-			return
-		}
-
-		var syncReq gitops.RepositorySyncRequest
-		if !assert.NoError(t, json.NewDecoder(r.Body).Decode(&syncReq)) {
-			return
-		}
-		if !assert.Len(t, syncReq.Repositories, 1) {
-			return
-		}
-		if !assert.Equal(t, "repo-token", syncReq.Repositories[0].Token) {
-			return
-		}
-		if !assert.Equal(t, "arcane", syncReq.Repositories[0].Username) {
-			return
-		}
-
-		w.Header().Set("Content-Type", "application/json")
-		_, _ = w.Write([]byte(`{"success":true,"data":{"message":"ok"}}`))
-	}))
-	defer server.Close()
-
-	createTestEnvironment(t, db, "env-1", server.URL, &accessToken)
-
-	err := svc.SyncRepositoriesToEnvironment(ctx, "env-1")
-	require.NoError(t, err)
 }
 
 func TestEnvironmentService_SyncRegistriesToRemoteEnvironments_SkipsRemoteWithoutAccessToken(t *testing.T) {
@@ -1524,7 +1406,6 @@ func setupSyncDBInternal(t *testing.T) *database.DB {
 		db.AutoMigrate(
 			&Environment{},
 			&registry.ContainerRegistry{},
-			&gitrepo.GitRepository{},
 			&s3.S3Destination{},
 		),
 	)
@@ -1536,7 +1417,7 @@ func setupSyncDBInternal(t *testing.T) *database.DB {
 }
 
 func TestSyncCredentialDecryptionAbortsSnapshot(t *testing.T) {
-	for _, kind := range []string{"registry token", "ECR secret", "repository token", "repository SSH key", "S3 secret"} {
+	for _, kind := range []string{"registry token", "ECR secret", "S3 secret"} {
 		t.Run(kind, func(t *testing.T) {
 			db := setupSyncDBInternal(t)
 			var calls atomic.Int32
@@ -1557,15 +1438,6 @@ func TestSyncCredentialDecryptionAbortsSnapshot(t *testing.T) {
 				}
 				require.NoError(t, db.Create(&row).Error)
 				syncResource = service.SyncRegistriesToEnvironment
-			case "repository token", "repository SSH key":
-				row := gitrepo.GitRepository{ID: "bad-credential", Name: "Repository", URL: "https://example.com/repo.git"}
-				if kind == "repository token" {
-					row.Token = "invalid-ciphertext"
-				} else {
-					row.SSHKey = "invalid-ciphertext"
-				}
-				require.NoError(t, db.Create(&row).Error)
-				syncResource = service.SyncRepositoriesToEnvironment
 			case "S3 secret":
 				require.NoError(t, db.Create(&s3.S3Destination{ID: "bad-credential", Name: "Backup", SecretAccessKey: "invalid-ciphertext"}).Error)
 				syncResource = service.SyncS3DestinationsToEnvironment
@@ -1577,27 +1449,6 @@ func TestSyncCredentialDecryptionAbortsSnapshot(t *testing.T) {
 			require.Zero(t, calls.Load(), "an incomplete snapshot must never reach the agent")
 		})
 	}
-}
-
-func TestSyncRepositoriesPreservesEmptyCredentials(t *testing.T) {
-	db := setupSyncDBInternal(t)
-	require.NoError(t, db.Create(&gitrepo.GitRepository{ID: "public-repo", Name: "Public", URL: "https://example.com/public.git", AuthType: "none"}).Error)
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		var payload gitops.RepositorySyncRequest
-		if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
-			t.Error(err)
-			w.WriteHeader(http.StatusBadRequest)
-			return
-		}
-		if rows := payload.Repositories; len(rows) != 1 || rows[0].ID != "public-repo" {
-			t.Errorf("missing public repository: %v", payload)
-		}
-		_, _ = w.Write([]byte(`{"success":true}`))
-	}))
-	defer server.Close()
-	require.NoError(t, db.Create(&Environment{ID: "remote", ApiUrl: server.URL, AccessToken: new("token")}).Error)
-	service := NewEnvironmentService(db, server.Client(), nil, nil, nil, nil)
-	require.NoError(t, service.SyncRepositoriesToEnvironment(t.Context(), "remote"))
 }
 
 func TestSyncSkipsUnchangedPayloadUntilForgotten(t *testing.T) {

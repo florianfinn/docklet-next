@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace
+// Deviations: Local module namespace; functional cut: removed GitOps and saved Git repositories.
 
 package cmdutil
 
@@ -67,7 +67,7 @@ func DecodeJSON[T any](resp *http.Response, out *T) error {
 // ReadJSONBody enforces a successful HTTP status and returns the raw response body.
 // Use it when a command needs both to decode a response and to echo it verbatim,
 // so that fields the CLI does not model — such as the counts and groups objects
-// on the container, volume, network and gitops-sync list endpoints — survive
+// on the container, volume and network list endpoints — survive
 // --json output instead of being dropped by a re-marshal.
 func ReadJSONBody(resp *http.Response) ([]byte, error) {
 	if err := EnsureSuccessStatus(resp); err != nil {

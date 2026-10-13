@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace
+// Deviations: Local module namespace; functional cut: removed GitOps and saved Git repositories.
 
 package git
 
@@ -11,21 +11,15 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"io"
 	"io/fs"
 	"log/slog"
 	"net"
-	nethttp "net/http"
 	"os"
-	"path"
 	"path/filepath"
 	"regexp"
-	"slices"
-	"sort"
 	"strings"
 	"time"
 
-	"github.com/florianfinn/docklet-next/types/gitops"
 	"github.com/go-git/go-git/v5"
 	"github.com/go-git/go-git/v5/config"
 	"github.com/go-git/go-git/v5/plumbing"
@@ -35,19 +29,13 @@ import (
 	githttp "github.com/go-git/go-git/v5/plumbing/transport/http"
 	"github.com/go-git/go-git/v5/plumbing/transport/ssh"
 	"github.com/gofrs/flock"
-	"go.getarcane.app/acfs"
-	acfstypes "go.getarcane.app/acfs/types"
-	kit "go.getarcane.app/kit/pkg"
 	gossh "golang.org/x/crypto/ssh"
 	"golang.org/x/crypto/ssh/knownhosts"
 )
 
 const (
-	// binarySniffBytes is how much of a file is inspected to classify it as binary.
-	binarySniffBytes = 512
-
 	// cloneScratchPrefix names the per-run clone scratch dirs created by Clone.
-	cloneScratchPrefix = "gitops-"
+	cloneScratchPrefix = "git-build-"
 
 	errUnsupportedURL = "repository URL must use http(s)://, ssh://, git://, or git@host:path"
 
@@ -388,85 +376,6 @@ func (c *Client) Clone(ctx context.Context, url, branch string, auth AuthConfig)
 	return tmpDir, nil
 }
 
-// GetCurrentCommit returns the HEAD commit hash of a cloned repository
-func (c *Client) GetCurrentCommit(ctx context.Context, repoPath string) (string, error) {
-	if err := ctx.Err(); err != nil {
-		return "", err
-	}
-	repo, err := git.PlainOpen(repoPath)
-	if err != nil {
-		return "", fmt.Errorf("failed to open repository: %w", err)
-	}
-
-	ref, err := repo.Head()
-	if err != nil {
-		return "", fmt.Errorf("failed to get HEAD: %w", err)
-	}
-
-	return ref.Hash().String(), nil
-}
-
-// BranchInfo holds information about a git branch
-type BranchInfo struct {
-	Name      string
-	IsDefault bool
-}
-
-// ListBranches lists all branches in a remote repository
-func (c *Client) ListBranches(ctx context.Context, url string, auth AuthConfig) ([]BranchInfo, error) {
-	if err := ctx.Err(); err != nil {
-		return nil, err
-	}
-	refs, err := c.listRemoteReferencesInternal(ctx, url, auth)
-	if err != nil {
-		return nil, err
-	}
-
-	var branches []BranchInfo
-	var defaultBranch string
-
-	// Find the default branch (HEAD points to it)
-	for _, ref := range refs {
-		if ref.Name().String() == "HEAD" {
-			// HEAD is a symbolic reference that points to the default branch
-			if ref.Target().IsBranch() {
-				defaultBranch = ref.Target().Short()
-			}
-			break
-		}
-	}
-
-	// Collect all branches
-	seen := make(map[string]bool)
-	for _, ref := range refs {
-		if ref.Name().IsBranch() {
-			branchName := ref.Name().Short()
-			if seen[branchName] {
-				continue
-			}
-			seen[branchName] = true
-
-			branches = append(branches, BranchInfo{
-				Name:      branchName,
-				IsDefault: branchName == defaultBranch,
-			})
-		}
-	}
-
-	// Sort branches with default first
-	sort.Slice(branches, func(i, j int) bool {
-		if branches[i].IsDefault {
-			return true
-		}
-		if branches[j].IsDefault {
-			return false
-		}
-		return branches[i].Name < branches[j].Name
-	})
-
-	return branches, nil
-}
-
 // ProbeRemote verifies that a remote repository is reachable without cloning it.
 func (c *Client) ProbeRemote(ctx context.Context, url string, auth AuthConfig) error {
 	if err := ctx.Err(); err != nil {
@@ -528,54 +437,7 @@ func ValidatePath(repoPath, requestedPath string) error {
 	return nil
 }
 
-// BrowseTree returns the file tree at the specified path. The clone directory
-// is the confinement root: paths that escape it, and symbolic links pointing
-// outside it, are rejected rather than followed.
-func (c *Client) BrowseTree(ctx context.Context, repoPath, targetPath string) ([]gitops.FileTreeNode, error) {
-	if err := ctx.Err(); err != nil {
-		return nil, err
-	}
-
-	logicalPath := path.Join("/", filepath.ToSlash(targetPath))
-	entry, err := acfs.Stat(ctx, repoPath, logicalPath, true)
-	if err != nil {
-		return nil, fmt.Errorf("path not found: %w", err)
-	}
-	if !entry.IsDirectory {
-		return nil, errors.New("path is not a directory")
-	}
-
-	entries, err := acfs.List(ctx, repoPath, logicalPath)
-	if err != nil {
-		return nil, fmt.Errorf("failed to read directory: %w", err)
-	}
-
-	var nodes []gitops.FileTreeNode
-	for _, child := range entries {
-		if errErr := ctx.Err(); errErr != nil {
-			return nil, errErr
-		}
-		// Skip .git directory
-		if child.Name == ".git" {
-			continue
-		}
-
-		nodeType := kit.Ternary(child.IsDirectory, gitops.FileTreeNodeTypeDirectory, gitops.FileTreeNodeTypeFile)
-
-		nodes = append(nodes, gitops.FileTreeNode{
-			Name: child.Name,
-			Path: filepath.Join(targetPath, child.Name),
-			Type: nodeType,
-			Size: child.Size,
-		})
-	}
-
-	return nodes, nil
-}
-
-// Cleanup removes a temporary repository directory
-// Stays on os.RemoveAll: acfs refuses to remove its own root, and here the whole
-// clone directory itself is what gets deleted.
+// Cleanup removes a temporary checkout.
 func (c *Client) Cleanup(repoPath string) error {
 	return os.RemoveAll(repoPath)
 }
@@ -587,7 +449,7 @@ func (c *Client) Discard(ctx context.Context, repoPath string) {
 	}
 }
 
-// PurgeScratchDirs removes clone scratch dirs ("gitops-*") under the work dir
+// PurgeScratchDirs removes clone scratch dirs ("git-build-*") under the work dir
 // whose mtime is older than maxAge. maxAge <= 0 removes all (boot sweep).
 func (c *Client) PurgeScratchDirs(ctx context.Context, maxAge time.Duration) (int, error) {
 	root := c.workDir
@@ -629,213 +491,4 @@ func (c *Client) PurgeScratchDirs(ctx context.Context, maxAge time.Duration) (in
 		removed++
 	}
 	return removed, nil
-}
-
-// CommitInfo holds information about a git commit
-type CommitInfo struct {
-	Hash    string
-	Author  string
-	Message string
-	Date    time.Time
-}
-
-// TestConnection tests if the repository can be accessed with the given credentials
-func (c *Client) TestConnection(ctx context.Context, url, branch string, auth AuthConfig) error {
-	if err := ctx.Err(); err != nil {
-		return err
-	}
-
-	tmpDir, err := c.Clone(ctx, url, branch, auth)
-	if err != nil {
-		return err
-	}
-	defer func() {
-		_ = c.Cleanup(tmpDir)
-	}()
-	return nil
-}
-
-// FileExists checks if a file exists in the repository
-func (c *Client) FileExists(ctx context.Context, repoPath, filePath string) bool {
-	if err := ctx.Err(); err != nil {
-		return false
-	}
-	exists, err := acfs.Exists(ctx, repoPath, path.Join("/", filepath.ToSlash(filePath)))
-	return err == nil && exists
-}
-
-// ReadFile reads a file from the repository
-func (c *Client) ReadFile(ctx context.Context, repoPath, filePath string) (string, error) {
-	if err := ctx.Err(); err != nil {
-		return "", err
-	}
-	content, err := acfs.ReadFile(ctx, repoPath, path.Join("/", filepath.ToSlash(filePath)))
-	if err != nil {
-		return "", fmt.Errorf("failed to read file: %w", err)
-	}
-	return string(content), nil
-}
-
-// SyncFileInfo holds information about a file to be synced
-type SyncFileInfo struct {
-	RelativePath string // Path relative to the sync directory
-	Content      []byte
-	Size         int64
-	IsBinary     bool
-	// Executable mirrors git's +x bit so callers can preserve it on the
-	// destination. Required for lifecycle hooks: a script committed as
-	// 100755 must arrive in the project workspace runnable, otherwise the
-	// lifecycle runner fails to exec it.
-	Executable bool
-}
-
-// DirectoryWalkResult holds the result of walking a directory for sync
-type DirectoryWalkResult struct {
-	Files           []SyncFileInfo
-	TotalFiles      int
-	TotalSize       int64
-	SkippedBinaries int
-}
-
-// WalkDirectory walks the directory containing the compose file and returns all files.
-// It enforces limits on file count, total size, and skips large binary files.
-// The composePath is the path to the compose file within the repo - the directory
-// containing this file will be walked.
-func (c *Client) WalkDirectory(ctx context.Context, repoPath, composePath string,
-	maxFiles int, maxTotalSize, maxBinarySize int64,
-) (*DirectoryWalkResult, error) {
-	if err := ctx.Err(); err != nil {
-		return nil, err
-	}
-
-	// Validate compose path
-	if err := ValidatePath(repoPath, composePath); err != nil {
-		return nil, fmt.Errorf("invalid compose path: %w", err)
-	}
-
-	// Get the directory containing the compose file
-	syncDir := filepath.Dir(filepath.Join(repoPath, composePath))
-
-	result := &DirectoryWalkResult{
-		Files: make([]SyncFileInfo, 0),
-	}
-	err := acfs.Walk(ctx, syncDir, "/", func(entry acfstypes.Entry) error {
-		if err := ctx.Err(); err != nil {
-			return err
-		}
-		if entry.IsSymlink {
-			return nil
-		}
-		if entry.IsDirectory {
-			if entry.Name == ".git" {
-				return fs.SkipDir
-			}
-			return nil
-		}
-
-		relativePath := strings.TrimPrefix(entry.Path, "/")
-		if maxFiles > 0 && result.TotalFiles >= maxFiles {
-			return fmt.Errorf("file count limit exceeded (max %d files)", maxFiles)
-		}
-
-		if maxBinarySize > 0 && entry.Size > maxBinarySize {
-			reader, _, openErr := acfs.OpenRead(ctx, syncDir, entry.Path, binarySniffBytes)
-			if openErr != nil {
-				return fmt.Errorf("failed to inspect file %s: %w", relativePath, openErr)
-			}
-			buf := make([]byte, binarySniffBytes)
-			n, readErr := reader.Read(buf)
-			closeErr := reader.Close()
-			if readErr != nil && !errors.Is(readErr, io.EOF) {
-				return fmt.Errorf("failed to inspect file %s: %w", relativePath, errors.Join(readErr, closeErr))
-			}
-			if closeErr != nil {
-				return fmt.Errorf("failed to close file %s after inspection: %w", relativePath, closeErr)
-			}
-			if IsBinaryContent(buf[:n]) {
-				result.SkippedBinaries++
-				return nil
-			}
-		}
-
-		content, readErr := acfs.ReadFile(ctx, syncDir, entry.Path)
-		if readErr != nil {
-			return fmt.Errorf("failed to read file %s: %w", relativePath, readErr)
-		}
-
-		fileSize := int64(len(content))
-		isBinary := IsBinaryContent(content)
-		if isBinary && maxBinarySize > 0 && fileSize > maxBinarySize {
-			result.SkippedBinaries++
-			return nil
-		}
-		if maxTotalSize > 0 && result.TotalSize+fileSize > maxTotalSize {
-			return fmt.Errorf("total size limit exceeded (max %d bytes)", maxTotalSize)
-		}
-
-		result.Files = append(result.Files, SyncFileInfo{
-			RelativePath: relativePath,
-			Content:      content,
-			Size:         fileSize,
-			IsBinary:     isBinary,
-			Executable:   os.FileMode(entry.UnixMode)&0o111 != 0,
-		})
-		result.TotalFiles++
-		result.TotalSize += fileSize
-		return nil
-	})
-	switch {
-	case err != nil:
-		return nil, err
-	case len(result.Files) == 0:
-		return nil, errors.New("no files found in sync directory (directory may be empty or all files were skipped)")
-	}
-
-	return result, nil
-}
-
-// IsBinaryContent reports whether content looks binary rather than text.
-func IsBinaryContent(content []byte) bool {
-	if len(content) == 0 {
-		return false
-	}
-
-	// Check first 512 bytes (or less if file is smaller)
-	checkSize := min(len(content), 512)
-
-	// Use net/http's content type detection
-	contentType := nethttp.DetectContentType(content[:checkSize])
-
-	// Text types are not binary
-	if strings.HasPrefix(contentType, "text/") {
-		return false
-	}
-
-	// Common text-based application types
-	textAppTypes := []string{
-		"application/json",
-		"application/xml",
-		"application/javascript",
-		"application/x-yaml",
-		"application/yaml",
-		"application/toml",
-		"application/x-sh",
-	}
-	for _, t := range textAppTypes {
-		if strings.HasPrefix(contentType, t) {
-			return false
-		}
-	}
-
-	// For application/octet-stream, do additional null-byte check
-	// Text files rarely have null bytes, so their presence indicates binary
-	if contentType == "application/octet-stream" {
-		return slices.Contains(content[:checkSize], 0)
-	}
-
-	// Everything else is considered binary
-	return strings.HasPrefix(contentType, "application/") ||
-		strings.HasPrefix(contentType, "image/") ||
-		strings.HasPrefix(contentType, "video/") ||
-		strings.HasPrefix(contentType, "audio/")
 }

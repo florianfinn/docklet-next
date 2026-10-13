@@ -2,21 +2,18 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; functional cut: removed template catalogue.
+// Deviations: Local module namespace; functional cut: removed template catalogue; functional cut: removed GitOps and saved Git repositories.
 
 package projects
 
 import (
-	"bytes"
 	"cmp"
 	"context"
 	"errors"
 	"fmt"
-	"io/fs"
 	"log/slog"
 	"os"
 	"path/filepath"
-	"slices"
 	"strings"
 
 	"github.com/samber/mo"
@@ -172,24 +169,6 @@ func projectScanSkipDirectorySetInternal(skipDirectories string) map[string]bool
 	return dirs
 }
 
-func syncedProjectFileMatchesInternal(ctx context.Context, projectPath string, file SyncFile) (bool, error) {
-	logicalPath := "/" + filepath.ToSlash(file.RelativePath)
-	entry, err := acfs.Stat(ctx, projectPath, logicalPath, false)
-	if err != nil {
-		return false, kit.Ternary(errors.Is(err, fs.ErrNotExist), nil, err)
-	}
-	if entry.IsDirectory {
-		return false, nil
-	}
-
-	existingContent, err := acfs.ReadFile(ctx, projectPath, logicalPath)
-	if err != nil {
-		return false, kit.Ternary(errors.Is(err, fs.ErrNotExist), nil, err)
-	}
-
-	return bytes.Equal(existingContent, file.Content), nil
-}
-
 // pathExistsInternal stays on os.*: it probes arbitrary absolute paths,
 // including imported projects outside any acfs root.
 func pathExistsInternal(path string) (bool, error) {
@@ -200,121 +179,6 @@ func pathExistsInternal(path string) (bool, error) {
 	return false, kit.Ternary(os.IsNotExist(err), nil, err)
 }
 
-func DirectorySyncContentsChanged(ctx context.Context, projectPath string, syncFiles []SyncFile, oldSyncedFiles []string, composeFileName string) (bool, error) {
-	// os.Stat rather than acfs: projectPath is the would-be confinement root
-	// itself, which acfs cannot probe before it exists.
-	if info, err := os.Stat(projectPath); err != nil {
-		if os.IsNotExist(err) {
-			return true, nil
-		}
-		return false, err
-	} else if !info.IsDir() {
-		return false, fmt.Errorf("project path is not a directory: %s", projectPath)
-	}
-
-	newFileSet := make(map[string]struct{}, len(syncFiles))
-	for _, file := range syncFiles {
-		newFileSet[file.RelativePath] = struct{}{}
-		matches, err := syncedProjectFileMatchesInternal(ctx, projectPath, file)
-		if err != nil {
-			return false, err
-		}
-		if !matches {
-			return true, nil
-		}
-	}
-
-	for _, oldFile := range oldSyncedFiles {
-		if _, exists := newFileSet[oldFile]; exists {
-			continue
-		}
-		exists, err := acfs.Exists(ctx, projectPath, "/"+filepath.ToSlash(oldFile))
-		if err != nil {
-			return false, err
-		}
-		if exists {
-			return true, nil
-		}
-	}
-
-	for _, candidate := range ComposeFileCandidates() {
-		if candidate == composeFileName {
-			continue
-		}
-		if _, exists := newFileSet[candidate]; exists {
-			continue
-		}
-		exists, err := acfs.Exists(ctx, projectPath, "/"+candidate)
-		if err != nil {
-			return false, err
-		}
-		if exists {
-			return true, nil
-		}
-	}
-
-	return false, nil
-}
-
-// StaleComposeFiles lists project-root compose files a directory sync no longer
-// manages: other standard compose names, plus custom YAML files with compose
-// root keys that are not part of the synced set. A missing project directory
-// has nothing stale.
-func StaleComposeFiles(ctx context.Context, projectPath, composeFileName string, syncedFiles []string) ([]string, error) {
-	syncedFileSet := make(map[string]struct{}, len(syncedFiles))
-	for _, file := range syncedFiles {
-		syncedFileSet[file] = struct{}{}
-	}
-
-	entries, err := acfs.List(ctx, projectPath, "/")
-	if err != nil {
-		return nil, kit.Ternary(errors.Is(err, fs.ErrNotExist), nil, err)
-	}
-
-	var stale []string
-	for _, entry := range entries {
-		name := entry.Name
-		if entry.IsDirectory || name == composeFileName {
-			continue
-		}
-		if _, exists := syncedFileSet[name]; exists {
-			continue
-		}
-		if slices.Contains(ComposeFileCandidates(), name) {
-			stale = append(stale, name)
-			continue
-		}
-		if !IsProjectFile(name) {
-			continue
-		}
-
-		hasComposeRootKeys, rootKeysErr := HasComposeRootKeysInFile(filepath.Join(projectPath, name))
-		if rootKeysErr != nil || !hasComposeRootKeys {
-			continue
-		}
-		stale = append(stale, name)
-	}
-
-	return stale, nil
-}
-
-func RemoveStaleComposeFiles(ctx context.Context, projectPath, composeFileName string, syncedFiles []string) error {
-	stale, err := StaleComposeFiles(ctx, projectPath, composeFileName, syncedFiles)
-	if err != nil {
-		return err
-	}
-
-	for _, name := range stale {
-		if removeErr := acfs.Remove(ctx, projectPath, "/"+name); removeErr != nil && !errors.Is(removeErr, fs.ErrNotExist) {
-			return removeErr
-		}
-	}
-
-	return nil
-}
-
-// CreateUniqueDir creates a unique directory within the allowed projectsRoot,
-// suffixing "-N" until an unused name is found.
 func CreateUniqueDir(ctx context.Context, projectsRoot, basePath, name string, perm os.FileMode) (path, folderName string, err error) {
 	sanitized := SanitizeProjectName(name)
 
@@ -346,7 +210,7 @@ func CreateUniqueDir(ctx context.Context, projectsRoot, basePath, name string, p
 }
 
 // ErrProjectDirExists is returned by CreateExactDir when the target directory
-// already exists. Callers that must not auto-rename (e.g. GitOps creates, which
+// already exists. Callers that must not auto-rename (which
 // must never mint "-N" duplicate projects on a broken binding) use this to fail
 // loudly instead of suffixing.
 var ErrProjectDirExists = errors.New("project directory already exists")

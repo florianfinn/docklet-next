@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; functional cut: removed federated credentials.
+// Deviations: Local module namespace; functional cut: removed federated credentials; functional cut: removed GitOps and saved Git repositories.
 
 package event
 
@@ -59,18 +59,6 @@ const (
 	EventTypeProjectUpdate EventType = "project.update"
 	EventTypeProjectError  EventType = "project.error"
 
-	EventTypeGitRepositoryCreate EventType = "git.repository.create"
-	EventTypeGitRepositoryUpdate EventType = "git.repository.update"
-	EventTypeGitRepositoryDelete EventType = "git.repository.delete"
-	EventTypeGitRepositoryTest   EventType = "git.repository.test"
-	EventTypeGitRepositoryError  EventType = "git.repository.error"
-
-	EventTypeGitSyncCreate EventType = "git.sync.create"
-	EventTypeGitSyncUpdate EventType = "git.sync.update"
-	EventTypeGitSyncDelete EventType = "git.sync.delete"
-	EventTypeGitSyncRun    EventType = "git.sync.run"
-	EventTypeGitSyncError  EventType = "git.sync.error"
-
 	EventTypeVolumeCreate EventType = "volume.create"
 	EventTypeVolumeRename EventType = "volume.rename"
 	EventTypeVolumeDelete EventType = "volume.delete"
@@ -120,10 +108,8 @@ const (
 	// attempt; severity is success or error depending on the send result.
 	EventTypeNotificationSend EventType = "notification.send"
 
-	// EventTypeLifecycleExecute is emitted by LifecycleService each time a
 	// pre-deploy script runs. Severity is success on a clean exit and warning
 	// on non-zero exit or timeout.
-	EventTypeLifecycleExecute EventType = "lifecycle.execute"
 
 	// EventSeverityInfo and the constants below enumerate event severities.
 	EventSeverityInfo    EventSeverity = "info"

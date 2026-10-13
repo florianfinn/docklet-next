@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; functional cut: removed template catalogue.
+// Deviations: Local module namespace; functional cut: removed template catalogue; functional cut: removed GitOps and saved Git repositories.
 
 package settings
 
@@ -115,10 +115,6 @@ func TestSettingsService_EnsureDefaultSettings_Idempotent(t *testing.T) {
 		"trivyCpuLimit",
 		"trivyMemoryLimitMb",
 		"trivyConcurrentScanContainers",
-		"gitSyncMaxFiles",
-		"gitSyncMaxTotalSizeMb",
-		"gitSyncMaxBinarySizeMb",
-		"lifecycleDefaultRunnerImage",
 	} {
 		var sv SettingVariable
 		lookupSettingErr := svc.db.WithContext(ctx).Where("key = ?", key).First(&sv).Error
@@ -141,8 +137,6 @@ func TestSettingsService_EnsureDefaultSettings_Idempotent(t *testing.T) {
 			require.Equal(t, "auto", sv.Value)
 		case "trivyDbRegistry":
 			require.Equal(t, "ghcr.io", sv.Value)
-		case "lifecycleDefaultRunnerImage":
-			require.Equal(t, "alpine:latest", sv.Value)
 		case "trivyNetwork":
 			require.Empty(t, sv.Value)
 		case "trivySecurityOpts":
@@ -157,12 +151,6 @@ func TestSettingsService_EnsureDefaultSettings_Idempotent(t *testing.T) {
 			require.Equal(t, "0", sv.Value)
 		case "trivyConcurrentScanContainers":
 			require.Equal(t, "1", sv.Value)
-		case "gitSyncMaxFiles":
-			require.Equal(t, "500", sv.Value)
-		case "gitSyncMaxTotalSizeMb":
-			require.Equal(t, "50", sv.Value)
-		case "gitSyncMaxBinarySizeMb":
-			require.Equal(t, "10", sv.Value)
 		}
 	}
 }

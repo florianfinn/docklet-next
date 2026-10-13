@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Functional cut: removed APNS mobile push; functional cut: removed federated credentials; functional cut: removed central variables and .env.global.
+// Deviations: Functional cut: removed APNS mobile push; functional cut: removed federated credentials; functional cut: removed central variables and .env.global; functional cut: removed GitOps and saved Git repositories.
 
 package common
 
@@ -109,7 +109,6 @@ var (
 	ErrVulnerabilityScanNotFound          = Classify(ErrNotFound, errors.New("Vulnerability scan not found"))
 	ErrInvalidNotificationPayloadTemplate = Classify(ErrValidation, errors.New("invalid generic webhook payload template"))
 	ErrRedeployAfterSyncFailed            = errors.New("redeploy failed")
-	ErrGitOpsSyncProjectBindingBroken     = errors.New("GitOps sync project binding broken")
 	ErrUploadSessionNotFound              = Classify(ErrNotFound, errors.New("Upload session not found"))
 	ErrUploadSessionIncomplete            = Classify(ErrConflict, errors.New("Upload session is incomplete"))
 	ErrUploadKindMismatch                 = Classify(ErrBadRequest, errors.New("Upload session kind does not match this endpoint"))

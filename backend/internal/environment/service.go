@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; functional cut: removed central variables and .env.global.
+// Deviations: Local module namespace; functional cut: removed central variables and .env.global; functional cut: removed GitOps and saved Git repositories.
 
 package environment
 
@@ -415,42 +415,11 @@ func (s *EnvironmentService) DeleteEnvironment(ctx context.Context, id string, u
 	// Stop the per-environment health job before the row is removed.
 	s.removeHealthJobInternal(ctx, id)
 
-	var syncIDs []string
-	if transactionErr := s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
-		if loadSyncIDsErr := tx.Table("gitops_syncs").
-			Where("environment_id = ?", id).
-			Pluck("id", &syncIDs).Error; loadSyncIDsErr != nil {
-			return fmt.Errorf("failed to list environment gitops syncs: %w", loadSyncIDsErr)
-		}
-
-		if len(syncIDs) > 0 {
-			if clearProjectLinksErr := tx.Table("projects").
-				Where("gitops_managed_by IN ?", syncIDs).
-				Update("gitops_managed_by", nil).Error; clearProjectLinksErr != nil {
-				return fmt.Errorf("failed to clear environment gitops project references: %w", clearProjectLinksErr)
-			}
-			if deleteSyncsErr := tx.Exec("DELETE FROM gitops_syncs WHERE environment_id = ?", id).Error; deleteSyncsErr != nil {
-				return fmt.Errorf("failed to delete environment gitops syncs: %w", deleteSyncsErr)
-			}
-		}
-		if deleteEnvironmentErr := tx.Delete(&Environment{}, "id = ?", id).Error; deleteEnvironmentErr != nil {
-			return fmt.Errorf("failed to delete environment: %w", deleteEnvironmentErr)
-		}
-		return nil
-	}); transactionErr != nil {
+	if deleteEnvironmentErr := s.db.WithContext(ctx).Delete(&Environment{}, "id = ?", id).Error; deleteEnvironmentErr != nil {
 		if env.Enabled {
 			s.registerHealthJobInternal(ctx, env.ID)
 		}
-		return transactionErr
-	}
-
-	// Deleting an environment orphans its GitOps syncs, whose jobs belong to
-	// gitops.GitOpsSyncService's own registry — remove them by name here.
-	if jobScheduler := s.jobs.Scheduler(); jobScheduler != nil {
-		schedulerCtx := s.jobs.Context(ctx)
-		for _, syncID := range syncIDs {
-			jobScheduler.RemoveJob(schedulerCtx, entityjobs.GitOpsSyncJobPrefix+syncID)
-		}
+		return fmt.Errorf("failed to delete environment: %w", deleteEnvironmentErr)
 	}
 
 	s.edgeTokens.invalidate(id)
@@ -639,7 +608,7 @@ func (s *EnvironmentService) SyncResourcesToEnvironment(ctx context.Context, env
 		ResourceName:   environmentID,
 		User:           user,
 		Step:           "Syncing environment",
-		Message:        "Syncing container registries, S3 destinations, and git repositories",
+		Message:        "Syncing container registries and S3 destinations",
 		SuccessMessage: "Environment synced successfully",
 		Metadata:       database.JSON{"action": "sync_environment"},
 	}, func(ctx context.Context) error {
@@ -654,11 +623,6 @@ func (s *EnvironmentService) SyncResourcesToEnvironment(ctx context.Context, env
 		if err := s.SyncS3DestinationsToEnvironment(ctx, environmentID); err != nil {
 			slog.WarnContext(ctx, "Failed to sync S3 destinations", "environmentId", environmentID, "error", err.Error())
 			failedGroups = append(failedGroups, "S3 destinations")
-		}
-
-		if err := s.SyncRepositoriesToEnvironment(ctx, environmentID); err != nil {
-			slog.WarnContext(ctx, "Failed to sync git repositories", "environmentId", environmentID, "error", err.Error())
-			failedGroups = append(failedGroups, "git repositories")
 		}
 
 		if len(failedGroups) > 0 {
@@ -1122,7 +1086,7 @@ func (s *EnvironmentService) runHealthCheckInternal(ctx context.Context, envID s
 		return scheduler.Outcome{Status: scheduler.Retrying, Message: "Environment is offline"}, errors.New("environment is offline")
 	}
 
-	// Local environment (ID "0") has no registries/repositories to push.
+	// Local environment (ID "0") has no configuration to push.
 	if envID == "0" {
 		return scheduler.Outcome{Status: scheduler.Succeeded}, nil
 	}
@@ -1143,10 +1107,6 @@ func (s *EnvironmentService) runHealthCheckInternal(ctx context.Context, envID s
 	if syncS3DestinationsToEnvironmentErr := s.SyncS3DestinationsToEnvironment(syncCtx, envID); syncS3DestinationsToEnvironmentErr != nil {
 		slog.WarnContext(syncCtx, "failed to sync S3 destinations during health check", "environmentId", envID, "error", syncS3DestinationsToEnvironmentErr)
 		syncErrors = append(syncErrors, syncS3DestinationsToEnvironmentErr)
-	}
-	if syncRepositoriesToEnvironmentErr := s.SyncRepositoriesToEnvironment(syncCtx, envID); syncRepositoriesToEnvironmentErr != nil {
-		slog.WarnContext(syncCtx, "failed to sync git repositories during health check", "environmentId", envID, "error", syncRepositoriesToEnvironmentErr)
-		syncErrors = append(syncErrors, syncRepositoriesToEnvironmentErr)
 	}
 	if joinErr := errors.Join(syncErrors...); joinErr != nil {
 		return scheduler.Outcome{Status: scheduler.Partial}, joinErr
@@ -1173,14 +1133,6 @@ func (s *EnvironmentService) SyncS3DestinationsToEnvironment(ctx context.Context
 }
 
 // SyncRepositoriesToEnvironment syncs all git repositories from this manager to a remote environment.
-func (s *EnvironmentService) SyncRepositoriesToEnvironment(ctx context.Context, environmentID string) error {
-	target, err := s.resolveRemoteEnvironmentTargetInternal(ctx, environmentID)
-	if err != nil {
-		return err
-	}
-	return s.proxy.SyncRepositories(ctx, target)
-}
-
 func (s *EnvironmentService) TestConnection(ctx context.Context, id string, customApiUrl *string) (string, error) {
 	envRecord, err := s.GetEnvironmentByID(ctx, id)
 	if err != nil {

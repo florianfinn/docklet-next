@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace
+// Deviations: Local module namespace; functional cut: removed GitOps and saved Git repositories.
 
 package webhook
 
@@ -80,10 +80,10 @@ func (h *WebhookHandler) CreateWebhook(ctx context.Context, input *CreateWebhook
 	)
 	if err != nil {
 		if errors.Is(err, ErrWebhookInvalidType) {
-			return nil, huma.Error400BadRequest("invalid target type, must be 'container', 'project', 'updater', or 'gitops'")
+			return nil, huma.Error400BadRequest("invalid target type, must be 'container', 'project', or 'updater'")
 		}
 		if errors.Is(err, ErrWebhookMissingTarget) {
-			return nil, huma.Error400BadRequest("target ID is required for container, project, and gitops webhook types")
+			return nil, huma.Error400BadRequest("target ID is required for container and project webhook types")
 		}
 		if errors.Is(err, ErrWebhookInvalidAction) {
 			return nil, huma.Error400BadRequest("invalid action type for target type")

@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; functional cut: removed upstream analytics heartbeat.
+// Deviations: Local module namespace; functional cut: removed upstream analytics heartbeat; functional cut: removed GitOps and saved Git repositories.
 
 package job
 
@@ -221,8 +221,8 @@ func TestJobService_ListJobs_UsesRuntimeScheduleAndNextRun(t *testing.T) {
 		require.Empty(t, status.LastError)
 	}
 
-	cloneErr := errors.New("failed to clone repository: network is unreachable")
-	outcome, runErr := classifyOutcomeInternal("gitops-sync:project", scheduler.Outcome{}, cloneErr)
+	cloneErr := errors.New("failed to copy volume: network is unreachable")
+	outcome, runErr := classifyOutcomeInternal("volume-backup:project", scheduler.Outcome{}, cloneErr)
 	require.ErrorIs(t, runErr, cloneErr)
 	require.Equal(t, scheduler.Failed, outcome.Status)
 	outcome, runErr = classifyOutcomeInternal("environment-health:0", scheduler.Outcome{}, context.DeadlineExceeded)
@@ -609,7 +609,7 @@ func TestJobActivityVisibilityAndGrouping(t *testing.T) {
 		visible                   bool
 	}{
 		{"auto-update", "scheduled", "0", true},
-		{"gitops-sync:project", "scheduled", "0", true},
+		{"volume-backup:project", "scheduled", "0", true},
 		{"volume-backup:volume", "recovery", "0", true},
 		{"system-backup:system", "scheduled", "0", true},
 		{"image-polling", "manual", "0", true},

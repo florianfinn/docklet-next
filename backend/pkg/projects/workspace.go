@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace
+// Deviations: Local module namespace; functional cut: removed GitOps and saved Git repositories.
 
 package projects
 
@@ -306,8 +306,6 @@ func ProtectedProjectPaths(projectPath, composeFileName string) map[string]bool 
 func ProtectedProjectFilePaths(composeFileName string) map[string]bool {
 	protected := map[string]bool{
 		EffectiveEnvFileName: true,
-		GitSourceEnvFileName: true,
-		OverrideEnvFileName:  true,
 	}
 	for _, candidate := range ComposeFileCandidates() {
 		protected[candidate] = true

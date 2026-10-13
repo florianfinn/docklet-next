@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace
+// Deviations: Local module namespace; functional cut: removed GitOps and saved Git repositories.
 
 package webhook
 
@@ -57,7 +57,7 @@ func initWebhookTokenCryptoForTests() {
 	})
 }
 
-// newTestWebhookService returns a WebhookService with nil updater/project/gitops services,
+// newTestWebhookService returns a WebhookService with nil updater/project services,
 // sufficient for all tests that exercise lookup, hashing, and CRUD logic.
 // Tests that exercise the dispatch path use an unknown target type to avoid a nil dereference.
 func newTestWebhookService(db *database.DB) *WebhookService {
@@ -78,8 +78,6 @@ func defaultTestWebhookActionType(targetType string) string {
 		return WebhookActionTypeUpdate
 	case WebhookTargetTypeUpdater:
 		return WebhookActionTypeRun
-	case WebhookTargetTypeGitOps:
-		return WebhookActionTypeSync
 	default:
 		return WebhookActionTypeUpdate
 	}
@@ -291,7 +289,6 @@ func TestCreateWebhook_EmptyTargetIDRejectedForNonUpdaterTypes(t *testing.T) {
 	for _, targetType := range []string{
 		WebhookTargetTypeContainer,
 		WebhookTargetTypeProject,
-		WebhookTargetTypeGitOps,
 	} {
 		_, _, err := svc.CreateWebhook(ctx, "hook", targetType, defaultTestWebhookActionType(targetType), "", "env-1", user.Actor{})
 		assert.ErrorIs(t, err, ErrWebhookMissingTarget, "expected ErrWebhookMissingTarget for type %s with empty targetID", targetType)
@@ -364,17 +361,6 @@ func TestCreateWebhook_UpdaterTypeAccepted(t *testing.T) {
 	assert.Equal(t, WebhookActionTypeRun, wh.ActionType)
 }
 
-func TestCreateWebhook_GitOpsTypeAccepted(t *testing.T) {
-	ctx := t.Context()
-	db := setupWebhookServiceTestDB(t)
-	svc := newTestWebhookService(db)
-
-	wh, _, err := svc.CreateWebhook(ctx, "gitops-hook", WebhookTargetTypeGitOps, WebhookActionTypeSync, "sync-id", "env-1", user.Actor{})
-	require.NoError(t, err)
-	assert.Equal(t, WebhookTargetTypeGitOps, wh.TargetType)
-	assert.Equal(t, WebhookActionTypeSync, wh.ActionType)
-}
-
 func TestCreateWebhook_EnabledByDefault(t *testing.T) {
 	ctx := t.Context()
 	db := setupWebhookServiceTestDB(t)
@@ -430,20 +416,17 @@ func TestListWebhookSummaries_ResolvesTargetNames(t *testing.T) {
 	svc := newTestWebhookService(db)
 
 	require.NoError(t, db.WithContext(ctx).Exec(`CREATE TABLE projects (id TEXT PRIMARY KEY, name TEXT NOT NULL)`).Error)
-	require.NoError(t, db.WithContext(ctx).Exec(`CREATE TABLE gitops_syncs (id TEXT PRIMARY KEY, environment_id TEXT NOT NULL, name TEXT NOT NULL)`).Error)
 	require.NoError(t, db.WithContext(ctx).Exec(`INSERT INTO projects (id, name) VALUES (?, ?)`, "project-1", "Main Project").Error)
-	require.NoError(t, db.WithContext(ctx).Exec(`INSERT INTO gitops_syncs (id, environment_id, name) VALUES (?, ?, ?)`, "sync-1", types.LocalDockerEnvironmentID, "Deploy Sync").Error)
 
 	_, _, err := svc.CreateWebhook(ctx, "project-hook", WebhookTargetTypeProject, WebhookActionTypeUpdate, "project-1", types.LocalDockerEnvironmentID, user.Actor{})
 	require.NoError(t, err)
 	_, _, err = svc.CreateWebhook(ctx, "updater-hook", WebhookTargetTypeUpdater, WebhookActionTypeRun, "", types.LocalDockerEnvironmentID, user.Actor{})
 	require.NoError(t, err)
-	_, _, err = svc.CreateWebhook(ctx, "gitops-hook", WebhookTargetTypeGitOps, WebhookActionTypeSync, "sync-1", types.LocalDockerEnvironmentID, user.Actor{})
 	require.NoError(t, err)
 
 	summaries, err := svc.ListWebhookSummaries(ctx, types.LocalDockerEnvironmentID)
 	require.NoError(t, err)
-	require.Len(t, summaries, 3)
+	require.Len(t, summaries, 2)
 
 	targetNamesByType := make(map[string]string, len(summaries))
 	for _, summary := range summaries {
@@ -453,7 +436,6 @@ func TestListWebhookSummaries_ResolvesTargetNames(t *testing.T) {
 
 	assert.Equal(t, "Main Project", targetNamesByType[WebhookTargetTypeProject])
 	assert.Equal(t, "Environment updater", targetNamesByType[WebhookTargetTypeUpdater])
-	assert.Equal(t, "Deploy Sync", targetNamesByType[WebhookTargetTypeGitOps])
 }
 
 func TestListWebhookSummaries_DefaultsLegacyActionType(t *testing.T) {
@@ -766,13 +748,6 @@ func TestRemoteWebhookRequestInternal(t *testing.T) {
 			wantPath:   "/api/environments/0/projects/p1/update-services",
 		},
 		{
-			name:       "gitops sync",
-			wh:         Webhook{TargetType: WebhookTargetTypeGitOps, TargetID: "sync-1"},
-			actionType: WebhookActionTypeSync,
-			wantMethod: "POST",
-			wantPath:   "/api/environments/0/gitops-syncs/sync-1/sync",
-		},
-		{
 			name:       "updater run carries result",
 			wh:         Webhook{TargetType: WebhookTargetTypeUpdater},
 			actionType: WebhookActionTypeRun,
@@ -783,7 +758,7 @@ func TestRemoteWebhookRequestInternal(t *testing.T) {
 		{
 			name:       "invalid action rejected",
 			wh:         Webhook{TargetType: WebhookTargetTypeContainer, TargetID: "abc"},
-			actionType: WebhookActionTypeSync,
+			actionType: WebhookActionTypeRun,
 			wantErr:    ErrWebhookInvalidAction,
 		},
 	}

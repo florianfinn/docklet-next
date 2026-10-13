@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace
+// Deviations: Local module namespace; functional cut: removed GitOps and saved Git repositories.
 
 package runs
 
@@ -55,7 +55,7 @@ func TestLegacyImportSurvivesRestartAndDeduplicates(t *testing.T) {
 		}},
 	}
 	legacy.Runs[0].ActivityID = legacy.Runs[0].ID
-	for _, jobID := range []string{"gitops-sync:first", "gitops-sync:second"} {
+	for _, jobID := range []string{"volume-backup:first", "volume-backup:second"} {
 		record := st.QueueRecord{JobID: jobID, EnvironmentID: "0", Schedule: "@every 5m", NextRun: time.Now().UTC().Add(time.Hour)}
 		for i := range 1600 {
 			created := time.Now().UTC().Add(-time.Duration(1600-i) * 5 * time.Minute)
@@ -115,7 +115,7 @@ func TestLegacyImportSurvivesRestartAndDeduplicates(t *testing.T) {
 	require.NoError(t, restored.importLegacyInternal(t.Context()))
 	require.NoError(t, restored.Start(t.Context(), t.Context()))
 	t.Cleanup(func() { require.NoError(t, restored.Stop(context.WithoutCancel(t.Context()))) })
-	for _, jobID := range []string{"gitops-sync:first", "gitops-sync:second"} {
+	for _, jobID := range []string{"volume-backup:first", "volume-backup:second"} {
 		history, listErr := restored.List(t.Context(), "0", jobID, 1, 100)
 		require.NoError(t, listErr)
 		require.Equal(t, 100, history.Total)

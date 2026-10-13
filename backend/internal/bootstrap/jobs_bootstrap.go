@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; functional cut: removed upstream analytics heartbeat and APNS mobile push; functional cut: removed template catalogue.
+// Deviations: Local module namespace; functional cut: removed upstream analytics heartbeat and APNS mobile push; functional cut: removed template catalogue; functional cut: removed GitOps and saved Git repositories.
 
 package bootstrap
 
@@ -25,7 +25,6 @@ import (
 	"github.com/florianfinn/docklet-next/backend/internal/backup"
 	"github.com/florianfinn/docklet-next/backend/internal/config"
 	"github.com/florianfinn/docklet-next/backend/internal/environment"
-	"github.com/florianfinn/docklet-next/backend/internal/gitops"
 	"github.com/florianfinn/docklet-next/backend/internal/job"
 	"github.com/florianfinn/docklet-next/backend/internal/settings"
 	"github.com/florianfinn/docklet-next/backend/internal/system"
@@ -48,7 +47,6 @@ func newJobScheduler(
 	backupEngine *backup.Engine,
 	updaterService *updater.UpdaterService,
 	volumes *volume.VolumeService,
-	gitopsSync *gitops.GitOpsSyncService,
 ) (
 	schedulertypes.JobScheduler,
 	error,
@@ -74,12 +72,8 @@ func newJobScheduler(
 			if startErr := jobService.Coordinator().Start(ctx, schedulerCtx); startErr != nil {
 				return fmt.Errorf("initialize scheduler: %w", startErr)
 			}
-			if reconcileCoordinatorStartupErr := reconcileCoordinatorStartupInternal(ctx, jobService, backupEngine, updaterService, volumes, systemService, gitopsSync); reconcileCoordinatorStartupErr != nil {
+			if reconcileCoordinatorStartupErr := reconcileCoordinatorStartupInternal(ctx, jobService, backupEngine, updaterService, volumes, systemService); reconcileCoordinatorStartupErr != nil {
 				return fmt.Errorf("reconcile scheduler startup: %w", reconcileCoordinatorStartupErr)
-			}
-			if gitopsSync != nil {
-				gitopsSync.RegisterAutoSyncJobsOnStartup(ctx)
-				gitopsSync.SubscribeProjectFileChanges(schedulerCtx)
 			}
 			if imageUpdateWatcher != nil {
 				imageUpdateWatcher.SetCoordinator(jobService.Coordinator())
@@ -142,7 +136,6 @@ func reconcileCoordinatorStartupInternal(
 	updates *updater.UpdaterService,
 	volumes *volume.VolumeService,
 	systemService *system.SystemService,
-	syncService *gitops.GitOpsSyncService,
 ) error {
 	activities, backups, err := startupProtectionInternal(ctx, jobs, engine, updates)
 	if err != nil {
@@ -156,11 +149,6 @@ func reconcileCoordinatorStartupInternal(
 	if systemService != nil {
 		if reconcileSystemBackupsErr := systemService.ReconcileInterruptedBackups(ctx, backups...); reconcileSystemBackupsErr != nil {
 			return reconcileSystemBackupsErr
-		}
-	}
-	if syncService != nil {
-		if reconcileInterruptedBackupsOnStartupErr := syncService.ReconcileInterruptedBackupsOnStartup(ctx, backups...); reconcileInterruptedBackupsOnStartupErr != nil {
-			return reconcileInterruptedBackupsOnStartupErr
 		}
 	}
 	return jobs.ReconcileStartupActivities(ctx, activities...)
@@ -252,7 +240,6 @@ type registerJobsParams struct {
 	Scheduler schedulertypes.JobScheduler
 
 	Activity    *activity.ActivityService
-	GitOpsSync  *gitops.GitOpsSyncService
 	Environment *environment.EnvironmentService
 	JobSchedule *job.JobService
 	Settings    *settings.SettingsService
@@ -275,7 +262,6 @@ type registerJobsParams struct {
 	AutoHeal               *scheduler.AutoHealJob
 	ActivitySweep          *scheduler.ActivitySweepJob
 	UploadSessionsCleanup  *scheduler.UploadSessionsCleanupJob
-	GitCloneCleanup        *scheduler.GitCloneCleanupJob
 }
 
 func registerJobs(params registerJobsParams) error {
@@ -294,7 +280,6 @@ func registerJobs(params registerJobsParams) error {
 		params.AutoHeal,
 		params.ActivitySweep,
 		params.UploadSessionsCleanup,
-		params.GitCloneCleanup,
 		params.UpgradeLogCleanup,
 	} {
 		if err := params.Scheduler.RegisterJob(job); err != nil {
@@ -306,13 +291,11 @@ func registerJobs(params registerJobsParams) error {
 	// Internal self-healing sweep (managers and agents alike); intentionally
 	// absent from job_metadata so it stays out of the Jobs UI.
 
-	// GitOps sync and environment health are no longer single global jobs; each
-	// entity registers its own dynamic job.
+	// Environment health registers one dynamic job for each environment.
 	if err := registerDynamicJobs(dynamicJobsParams{
 		AppCtx:      params.AppCtx,
 		Config:      params.Config,
 		Scheduler:   params.Scheduler,
-		GitOpsSync:  params.GitOpsSync,
 		Environment: params.Environment,
 		JobSchedule: params.JobSchedule,
 		Volume:      params.Volume,
@@ -347,7 +330,6 @@ type dynamicJobsParams struct {
 	AppCtx      context.Context
 	Config      *config.Config
 	Scheduler   schedulertypes.JobScheduler
-	GitOpsSync  *gitops.GitOpsSyncService
 	Environment *environment.EnvironmentService
 	JobSchedule *job.JobService
 	Volume      *volume.VolumeService
@@ -374,13 +356,6 @@ func registerDynamicJobs(params dynamicJobsParams) error {
 		}
 		params.System.RegisterBackupJobOnStartup(params.AppCtx)
 	}
-	// GitOps startup submissions wait for Francis in the scheduler start hook.
-	if params.GitOpsSync != nil {
-		if err := params.GitOpsSync.SetScheduler(params.AppCtx, params.Scheduler, params.Admission); err != nil {
-			return err
-		}
-	}
-
 	// Environment health: one job per enabled environment (manager only). The Jobs
 	// UI still addresses "environment-health" by ID, so bridge its reschedule and
 	// run-now back to EnvironmentService.

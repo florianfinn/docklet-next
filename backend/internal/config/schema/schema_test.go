@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; functional cut: removed upstream analytics heartbeat and APNS mobile push; functional cut: removed template catalogue.
+// Deviations: Local module namespace; functional cut: removed upstream analytics heartbeat and APNS mobile push; functional cut: removed template catalogue; functional cut: removed GitOps and saved Git repositories.
 
 package schema
 
@@ -314,9 +314,6 @@ var expectedSettingOverrideKeys = []string{
 	"featureVulnerabilityManagementEnabled",
 	"followProjectSymlinks",
 	"gitOperationTimeout",
-	"gitSyncMaxBinarySizeMb",
-	"gitSyncMaxFiles",
-	"gitSyncMaxTotalSizeMb",
 	"httpClientTimeout",
 	"imageAutoPatchEnabled",
 	"imageAutoPatchInterval",
@@ -324,8 +321,6 @@ var expectedSettingOverrideKeys = []string{
 	"imagePatchAllPlatforms",
 	"imagePatchSuffix",
 	"imagePatchTimeoutSec",
-	"lifecycleDefaultRunnerImage",
-	"lifecycleEnabled",
 	"lifecycleMaxTimeoutSec",
 	"maxConcurrentActivities",
 	"maxImageUploadSize",

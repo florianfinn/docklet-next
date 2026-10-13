@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace
+// Deviations: Local module namespace; functional cut: removed GitOps and saved Git repositories.
 
 package runs
 
@@ -87,9 +87,9 @@ func TestResolvePreservesEvidenceWithoutBlockingSchedule(t *testing.T) {
 	require.True(t, resolved.Resolution.ResolvedAt.Equal(duplicate.Resolution.ResolvedAt))
 
 	// Startup closes legacy local failures and reconciles unsettled remote work.
-	localLegacy, err := q.Submit(ctx, st.Request{JobID: "gitops-sync:project", Trigger: "scheduled"})
+	localLegacy, err := q.Submit(ctx, st.Request{JobID: "volume-backup:project", Trigger: "scheduled"})
 	require.NoError(t, err)
-	remoteLegacy, err := q.Submit(ctx, st.Request{JobID: "gitops-sync:project", EnvironmentID: "remote", Trigger: "scheduled"})
+	remoteLegacy, err := q.Submit(ctx, st.Request{JobID: "volume-backup:project", EnvironmentID: "remote", Trigger: "scheduled"})
 	require.NoError(t, err)
 	for _, legacy := range []st.Run{localLegacy, remoteLegacy} {
 		require.NoError(t, q.UpdateRun(ctx, legacy, func(current *st.Run) error {

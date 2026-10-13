@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Functional cut: removed APNS mobile push; functional cut: removed template catalogue.
+// Deviations: Functional cut: removed APNS mobile push; functional cut: removed template catalogue; functional cut: removed GitOps and saved Git repositories.
 
 package settings
 
@@ -216,37 +216,6 @@ type Update struct {
 	//
 	// Required: false
 	MaxImageUploadSize *string `json:"maxImageUploadSize,omitzero"`
-
-	// GitSyncMaxFiles is the maximum number of repository files copied during a Git sync.
-	// Set to "0" to disable the environment cap.
-	//
-	// Required: false
-	GitSyncMaxFiles *string `json:"gitSyncMaxFiles,omitzero"`
-
-	// GitSyncMaxTotalSizeMb is the maximum combined size in megabytes for files copied during a Git sync.
-	// Set to "0" to disable the environment cap.
-	//
-	// Required: false
-	GitSyncMaxTotalSizeMb *string `json:"gitSyncMaxTotalSizeMb,omitzero"`
-
-	// GitSyncMaxBinarySizeMb is the maximum size in megabytes for a single binary file copied during a Git sync.
-	// Set to "0" to disable the environment cap.
-	//
-	// Required: false
-	GitSyncMaxBinarySizeMb *string `json:"gitSyncMaxBinarySizeMb,omitzero"`
-
-	// LifecycleEnabled gates whether GitOps syncs may configure pre-deploy
-	// lifecycle scripts. Disabled by default because scripts are repo-trusted
-	// code that runs on every deploy.
-	//
-	// Required: false
-	LifecycleEnabled *string `json:"lifecycleEnabled,omitzero"`
-
-	// LifecycleDefaultRunnerImage is the default container image used to run
-	// GitOps pre-deploy lifecycle scripts when a sync does not override it.
-	//
-	// Required: false
-	LifecycleDefaultRunnerImage *string `json:"lifecycleDefaultRunnerImage,omitzero"`
 
 	// LifecycleMaxTimeoutSec caps the per-sync pre-deploy timeout admins can
 	// configure. Zero disables the cap.

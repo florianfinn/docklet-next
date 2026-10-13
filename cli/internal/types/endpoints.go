@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Functional cut: removed template catalogue; functional cut: removed federated credentials; functional cut: removed central variables and .env.global.
+// Deviations: Functional cut: removed template catalogue; functional cut: removed federated credentials; functional cut: removed central variables and .env.global; functional cut: removed GitOps and saved Git repositories.
 
 // Package types provides the Arcane API endpoint path builders and CLI
 // configuration types.
@@ -575,43 +575,3 @@ func Webhook(envID, webhookID string) string {
 	return pathf("/api/environments/%s/webhooks/%s", envID, webhookID)
 }
 func WebhookTrigger(token string) string { return pathf("/api/webhooks/trigger/%s", token) }
-
-// GitOps sync endpoints
-
-func GitOpsSyncs(envID string) string { return pathf("/api/environments/%s/gitops-syncs", envID) }
-
-func GitOpsSync(envID, syncID string) string {
-	return pathf("/api/environments/%s/gitops-syncs/%s", envID, syncID)
-}
-
-func GitOpsSyncStatus(envID, syncID string) string {
-	return pathf("/api/environments/%s/gitops-syncs/%s/status", envID, syncID)
-}
-
-func GitOpsSyncTrigger(envID, syncID string) string {
-	return pathf("/api/environments/%s/gitops-syncs/%s/sync", envID, syncID)
-}
-
-func GitOpsSyncFiles(envID, syncID string) string {
-	return pathf("/api/environments/%s/gitops-syncs/%s/files", envID, syncID)
-}
-
-func GitOpsSyncsImport(envID string) string {
-	return pathf("/api/environments/%s/gitops-syncs/import", envID)
-}
-
-// Git repository endpoints
-
-func GitRepositories() string        { return "/api/customize/git-repositories" }
-func GitRepository(id string) string { return pathf("/api/customize/git-repositories/%s", id) }
-func GitRepositoryTest(id string) string {
-	return pathf("/api/customize/git-repositories/%s/test", id)
-}
-
-func GitRepositoryBranches(id string) string {
-	return pathf("/api/customize/git-repositories/%s/branches", id)
-}
-
-func GitRepositoryFiles(id string) string {
-	return pathf("/api/customize/git-repositories/%s/files", id)
-}

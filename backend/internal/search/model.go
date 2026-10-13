@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Functional cut: removed template catalogue; functional cut: removed central variables and .env.global.
+// Deviations: Functional cut: removed template catalogue; functional cut: removed central variables and .env.global; functional cut: removed GitOps and saved Git repositories.
 
 package search
 
@@ -22,9 +22,6 @@ type CustomizeItem struct {
 	RegistryMirrors     CustomizeVariable `key:"registryMirrors" meta:"label=Registry Mirrors;type=array;keywords=mirrors,proxy,cache,performance,cdn,regional;category=registries;description=Configure registry mirrors and proxies"`
 
 	// Git repositories category
-	GitRepositories        CustomizeVariable `key:"gitRepositories" meta:"label=Git Repositories;type=array;keywords=git,repository,repositories,source,code,version,control,github,gitlab,bitbucket;category=git-repositories;description=Manage git repository connections for GitOps" catmeta:"id=git-repositories;title=Git Repositories;icon=git-branch;url=/customize/git-repositories;description=Configure git repositories for Git synchronization"`
-	GitRepositoryDefaults  CustomizeVariable `key:"gitRepositoryDefaults" meta:"label=Repository Defaults;type=object;keywords=defaults,settings,configuration,branch,auth,authentication;category=git-repositories;description=Set default settings for git repositories"`
-	GitRepositoryTemplates CustomizeVariable `key:"gitRepositoryTemplates" meta:"label=Repository Templates;type=array;keywords=templates,presets,common,reusable,standard;category=git-repositories;description=Create reusable repository configurations"`
 }
 
 type CustomizeVariable struct {

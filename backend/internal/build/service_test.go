@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace
+// Deviations: Local module namespace; functional cut: removed GitOps and saved Git repositories.
 
 package build
 
@@ -23,13 +23,10 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.getarcane.app/builds/types"
-	"go.getarcane.app/sys/crypto"
 	"gorm.io/gorm"
 
-	"github.com/florianfinn/docklet-next/backend/internal/config"
 	"github.com/florianfinn/docklet-next/backend/internal/database"
 	"github.com/florianfinn/docklet-next/backend/internal/event"
-	"github.com/florianfinn/docklet-next/backend/internal/gitrepo"
 	"github.com/florianfinn/docklet-next/backend/pkg/gitutil"
 	"github.com/florianfinn/docklet-next/backend/pkg/pagination"
 )
@@ -56,7 +53,7 @@ func TestBuildService_ResolveBuildRequest_PassesThroughLocalContext(t *testing.T
 }
 
 func TestNewBuildService_NilRegistryServiceKeepsNilBuildRegistryProvider(t *testing.T) {
-	svc := NewBuildService(nil, nil, nil, nil, nil, nil)
+	svc := NewBuildService(nil, nil, nil, nil, nil)
 	require.NotNil(t, svc.builder)
 
 	builderValue := reflect.ValueOf(svc.builder)
@@ -139,20 +136,6 @@ func TestBuildService_ResolveBuildRequest_ProbesAndClonesRemoteGitContextWithout
 	require.NoError(t, cleanup())
 }
 
-func TestBuildService_ResolveBuildRequest_RequiresGitRepositoryServiceForRemoteContext(t *testing.T) {
-	svc := &BuildService{}
-
-	_, cleanup, err := svc.resolveBuildRequestInternal(
-		t.Context(),
-		types.BuildRequest{ContextDir: "https://github.com/getarcaneapp/arcane.git#main"},
-		nil,
-		"",
-	)
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "git repository service not available")
-	require.NoError(t, cleanup())
-}
-
 func TestBuildService_ResolveBuildRequest_RejectsNonGitHTTPContextViaProbeFailure(t *testing.T) {
 	svc := &BuildService{
 		gitProbeFn: func(_ context.Context, repositoryURL string, auth git.AuthConfig) error {
@@ -177,92 +160,6 @@ func TestBuildService_ResolveBuildRequest_RejectsNonGitHTTPContextViaProbeFailur
 	assert.Contains(t, err.Error(), "failed to verify remote git repository")
 	assert.Contains(t, err.Error(), "archive.tar.gz")
 	require.NoError(t, cleanup())
-}
-
-func TestBuildService_ResolveBuildRequest_UsesSavedGitCredentials(t *testing.T) {
-	gormDB, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
-	require.NoError(t, err)
-	require.NoError(t, gormDB.AutoMigrate(&gitrepo.GitRepository{}))
-	crypto.InitEncryption(&crypto.Config{
-		Environment:   string(config.AppEnvironmentTest),
-		EncryptionKey: "test-encryption-key-for-testing-32bytes-min",
-	})
-	db := &database.DB{DB: gormDB}
-
-	repoService := gitrepo.NewGitRepositoryService(db, t.TempDir(), nil, nil)
-	createTestGitRepository(t, db, gitrepo.GitRepository{
-		Name:                   "private-http",
-		URL:                    "https://github.com/getarcaneapp/private-build.git",
-		AuthType:               "http",
-		Username:               "builder",
-		Token:                  encryptSecretForTest(t, "token-123"),
-		SSHHostKeyVerification: "accept_new",
-		Enabled:                true,
-	})
-	createTestGitRepository(t, db, gitrepo.GitRepository{
-		Name:                   "private-ssh",
-		URL:                    "git@github.com:getarcaneapp/private-ssh.git",
-		AuthType:               "ssh",
-		SSHKey:                 encryptSecretForTest(t, "ssh-private-key"),
-		SSHHostKeyVerification: "strict",
-		Enabled:                true,
-	})
-
-	t.Run("http auth", func(t *testing.T) {
-		svc := &BuildService{
-			gitRepository: repoService,
-			gitProbeFn: func(_ context.Context, repositoryURL string, auth git.AuthConfig) error {
-				assert.Equal(t, "https://github.com/getarcaneapp/private-build", repositoryURL)
-				assert.Equal(t, "http", auth.AuthType)
-				assert.Equal(t, "builder", auth.Username)
-				assert.Equal(t, "token-123", auth.Token)
-				return nil
-			},
-			gitCloneFn: func(_ context.Context, repositoryURL, _ string, auth git.AuthConfig) (string, error) {
-				assert.Equal(t, "https://github.com/getarcaneapp/private-build", repositoryURL)
-				assert.Equal(t, "http", auth.AuthType)
-				assert.Equal(t, "builder", auth.Username)
-				assert.Equal(t, "token-123", auth.Token)
-				return t.TempDir(), nil
-			},
-			gitCleanupFn: func(string) error { return nil },
-		}
-
-		_, cleanup, resolveBuildRequestErr := svc.resolveBuildRequestInternal(
-			t.Context(),
-			types.BuildRequest{ContextDir: "https://github.com/getarcaneapp/private-build#main"},
-			nil,
-			"",
-		)
-		require.NoError(t, resolveBuildRequestErr)
-		require.NoError(t, cleanup())
-	})
-
-	t.Run("ssh auth", func(t *testing.T) {
-		svc := &BuildService{
-			gitRepository: repoService,
-			gitProbeFn: func(context.Context, string, git.AuthConfig) error {
-				require.FailNow(t, "git remote probe should not run for ssh URLs")
-				return nil
-			},
-			gitCloneFn: func(_ context.Context, _, _ string, auth git.AuthConfig) (string, error) {
-				assert.Equal(t, "ssh", auth.AuthType)
-				assert.Equal(t, "ssh-private-key", auth.SSHKey)
-				assert.Equal(t, "strict", auth.SSHHostKeyVerification)
-				return t.TempDir(), nil
-			},
-			gitCleanupFn: func(string) error { return nil },
-		}
-
-		_, cleanup, resolveBuildRequestErr := svc.resolveBuildRequestInternal(
-			t.Context(),
-			types.BuildRequest{ContextDir: "git@github.com:getarcaneapp/private-ssh.git#main"},
-			nil,
-			"",
-		)
-		require.NoError(t, resolveBuildRequestErr)
-		require.NoError(t, cleanup())
-	})
 }
 
 func TestBuildService_BuildImage_PreservesRemoteSourceInHistory(t *testing.T) {
@@ -483,16 +380,4 @@ func setupBuildHistoryTestDB() (*database.DB, error) {
 		return nil, autoMigrateErr
 	}
 	return &database.DB{DB: db}, nil
-}
-
-func createTestGitRepository(t *testing.T, db *database.DB, repository gitrepo.GitRepository) {
-	t.Helper()
-	require.NoError(t, db.WithContext(t.Context()).Create(&repository).Error)
-}
-
-func encryptSecretForTest(t *testing.T, value string) string {
-	t.Helper()
-	encrypted, err := crypto.Encrypt(value)
-	require.NoError(t, err)
-	return encrypted
 }

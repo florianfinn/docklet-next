@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; functional cut: removed upstream analytics heartbeat and APNS mobile push.
+// Deviations: Local module namespace; functional cut: removed upstream analytics heartbeat and APNS mobile push; functional cut: removed GitOps and saved Git repositories.
 
 package job
 
@@ -447,7 +447,7 @@ func (s *JobService) ActivityID(run scheduler.Run) string {
 	case "auto-update", "auto-patch", "auto-heal", "scheduled-prune", "vulnerability-scan":
 		visible = true
 	default:
-		visible = visible || strings.HasPrefix(run.JobID, "gitops-sync:") || strings.HasPrefix(run.JobID, "volume-backup:") || strings.HasPrefix(run.JobID, "system-backup:")
+		visible = visible || strings.HasPrefix(run.JobID, "volume-backup:") || strings.HasPrefix(run.JobID, "system-backup:")
 	}
 	if !visible {
 		return ""
@@ -536,7 +536,7 @@ func (s *JobService) Submit(ctx context.Context, request scheduler.Request) (sch
 			return scheduler.Run{}, errors.New("environment is disabled")
 		}
 		metadata, ok := meta.GetJobMetadata(request.JobID)
-		dynamicRemote := strings.HasPrefix(request.JobID, "gitops-sync:") || strings.HasPrefix(request.JobID, "volume-backup:")
+		dynamicRemote := strings.HasPrefix(request.JobID, "volume-backup:")
 		if !dynamicRemote && (!ok || metadata.ManagerOnly || !metadata.CanRunManually) {
 			return scheduler.Run{}, errors.New("job is not remotely runnable")
 		}
@@ -759,7 +759,7 @@ func requiresDockerInternal(jobID string) bool {
 	case "auto-update", "auto-patch", "auto-heal", "scheduled-prune", "vulnerability-scan", "image-polling":
 		return true
 	}
-	return strings.HasPrefix(jobID, "gitops-sync:") || strings.HasPrefix(jobID, "volume-backup:") || strings.HasPrefix(jobID, "system-backup:")
+	return strings.HasPrefix(jobID, "volume-backup:") || strings.HasPrefix(jobID, "system-backup:")
 }
 
 // ResolveRun authorizes the current operator independently of the original requester.

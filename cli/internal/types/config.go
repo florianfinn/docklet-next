@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Functional cut: removed template catalogue; functional cut: removed federated credentials.
+// Deviations: Functional cut: removed template catalogue; functional cut: removed federated credentials; functional cut: removed GitOps and saved Git repositories.
 
 package types
 
@@ -35,8 +35,6 @@ var KnownPaginatedResources = []string{
 	"projects",
 	"environments",
 	"registries",
-	"repos",
-	"gitops-syncs",
 	"users",
 	"roles",
 	"events",
@@ -65,10 +63,6 @@ func NormalizePaginatedResource(resource string) string {
 		return "environments"
 	case "registry", "registries":
 		return "registries"
-	case "repo", "repos", "gitrepository", "gitrepositories", "gitrepo", "gitrepos":
-		return "repos"
-	case "gitops", "gitop", "gitopssync", "gitopssyncs":
-		return "gitops-syncs"
 	case "user":
 		return "users"
 	case "role":

@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace
+// Deviations: Local module namespace; functional cut: removed GitOps and saved Git repositories.
 
 package projects
 
@@ -13,7 +13,6 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
-	"regexp"
 	"slices"
 	"strings"
 
@@ -200,30 +199,6 @@ func walkProjectDirectoriesInternal(ctx context.Context,
 	return nil
 }
 
-// gitOpsScratchEmbeddedNameRe matches the legacy name-embedded gitops scratch
-// directory form, e.g. "Makerra.gitops-backup-1780656786384743013". That form always
-// used a time.Now().UnixNano() suffix (≥18 digits), so a long digit run is required:
-// it keeps a real user project ending in "<base>.gitops-backup-notes" (non-numeric) or
-// "<base>.gitops-backup-2024" (short, year-like) from being mistaken for Arcane scratch.
-// The hidden os.MkdirTemp forms (".gitops-backup-*", ".gitops-sync-stage-*") are matched
-// by prefix, not by this regex.
-var gitOpsScratchEmbeddedNameRe = regexp.MustCompile(`\.gitops-(?:backup|sync-stage)-\d{10,}$`)
-
-// IsGitOpsScratchDirName reports whether name is an Arcane GitOps scratch directory:
-// the hidden staging/backup temp dirs (".gitops-sync-stage-*", ".gitops-backup-*")
-// or the legacy name-embedded backup form ("<name>.gitops-backup-<digits>"). These are
-// Arcane-internal working directories and must never be imported as user projects.
-func IsGitOpsScratchDirName(name string) bool {
-	name = strings.TrimSpace(name)
-	if name == "" {
-		return false
-	}
-	if strings.HasPrefix(name, ".gitops-sync-stage-") || strings.HasPrefix(name, ".gitops-backup-") {
-		return true
-	}
-	return gitOpsScratchEmbeddedNameRe.MatchString(name)
-}
-
 // filesystemSnapshotDirNames are directory names used by filesystems and NAS
 // appliances for read-only snapshots or trash. They contain point-in-time
 // copies of real project directories and must never be discovered as projects:
@@ -273,8 +248,7 @@ const ArcaneTrashPrefix = ".arcane-trash-"
 // IsInternalScratchDirName reports whether name is any Arcane-managed scratch
 // directory that must never be discovered or imported as a user project: the
 // project-update preview/backup temp dirs, the quarantine/trash dirs (see
-// ArcaneTrashPrefix), or the GitOps sync-stage/backup dirs (see
-// IsGitOpsScratchDirName). This is the single source of truth for the discovery
+// ArcaneTrashPrefix). This is the single source of truth for the discovery
 // walker and the DB cleanup pass.
 func IsInternalScratchDirName(name string) bool {
 	name = strings.TrimSpace(name)
@@ -287,7 +261,7 @@ func IsInternalScratchDirName(name string) bool {
 	if strings.HasPrefix(name, ArcaneTrashPrefix) {
 		return true
 	}
-	return IsGitOpsScratchDirName(name)
+	return false
 }
 
 // IsIgnoredProjectDirName reports whether discovery and the filesystem watcher

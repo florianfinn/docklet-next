@@ -37,10 +37,6 @@
     "backend/internal/vulnerability/children/query/service.go": 1267,
     "backend/internal/role/service.go": 1032,
     "backend/internal/backup/service.go": 1301,
-    "backend/internal/gitops/service.go": 1430,
-    "backend/internal/gitops/service_test.go": 1712,
-    "backend/internal/gitops/children/sync/service.go": 1589,
-    "backend/internal/gitops/children/sync/service_test.go": 1131,
     "backend/internal/passkey/service.go": 1491,
     "backend/pkg/libarcane/edge/client_test.go": 2436,
     "backend/pkg/libarcane/edge/client.go": 1541,
@@ -48,7 +44,6 @@
     "backend/pkg/projects/env.go": 954,
     "backend/proto/tunnel/v1/tunnel.pb.go": 2285,
     "types/container/container.go": 1893,
-    "types/gitops/gitops.go": 1268,
     "types/vulnerability/vulnerability.go": 1043
   },
   "generated": [

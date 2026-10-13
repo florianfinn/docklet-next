@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; functional cut: removed upstream analytics heartbeat; functional cut: removed template catalogue; functional cut: removed federated credentials; functional cut: removed central variables and .env.global.
+// Deviations: Local module namespace; functional cut: removed upstream analytics heartbeat; functional cut: removed template catalogue; functional cut: removed federated credentials; functional cut: removed central variables and .env.global; functional cut: removed GitOps and saved Git repositories.
 
 package di
 
@@ -37,8 +37,6 @@ import (
 	"github.com/florianfinn/docklet-next/backend/internal/docker"
 	"github.com/florianfinn/docklet-next/backend/internal/environment"
 	"github.com/florianfinn/docklet-next/backend/internal/event"
-	"github.com/florianfinn/docklet-next/backend/internal/gitops"
-	"github.com/florianfinn/docklet-next/backend/internal/gitrepo"
 	"github.com/florianfinn/docklet-next/backend/internal/image"
 	"github.com/florianfinn/docklet-next/backend/internal/imageupdate"
 	"github.com/florianfinn/docklet-next/backend/internal/job"
@@ -80,7 +78,6 @@ type graphParams struct {
 	Container         *container.Module
 	Image             *image.ImageService
 	Build             *build.BuildService
-	Lifecycle         *project.LifecycleService
 	Volume            *volume.Module
 	BackupEngine      *backup.Engine
 	S3Destination     *s3domain.Module
@@ -101,8 +98,6 @@ type graphParams struct {
 	Version           *version.VersionService
 	Notification      *notification.NotificationService
 	ApiKey            *apikey.ApiKeyService
-	GitRepository     *gitrepo.GitRepositoryService
-	GitOpsSync        *gitops.GitOpsSyncService
 	Webhook           *webhook.Module
 	Vulnerability     *vulnerability.VulnerabilityService
 	Dashboard         *dashboard.Module

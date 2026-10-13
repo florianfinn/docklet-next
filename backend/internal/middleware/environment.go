@@ -2,12 +2,11 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace
+// Deviations: Local module namespace; functional cut: removed GitOps and saved Git repositories.
 
 package middleware
 
 import (
-	"bytes"
 	"context"
 	"encoding/json/v2"
 	"errors"
@@ -19,12 +18,10 @@ import (
 	"net/http"
 	"os"
 	"path"
-	"slices"
 	"strings"
 	"time"
 
 	"github.com/florianfinn/docklet-next/types/container"
-	"github.com/florianfinn/docklet-next/types/gitops"
 	usertypes "github.com/florianfinn/docklet-next/types/user"
 	"github.com/florianfinn/docklet-next/types/volume"
 	"github.com/labstack/echo/v5"
@@ -47,7 +44,6 @@ const (
 	proxyTimeout = 30 * time.Minute
 
 	maxProxiedWorkspaceManifestBytes = 1024 * 1024
-	maxProxiedGitOpsSyncBodyBytes    = 1024 * 1024
 )
 
 // managementEndpointSet contains paths handled locally and never proxied to remote environments.
@@ -291,8 +287,6 @@ func (m *EnvironmentMiddleware) proxyPermissionDenied(c *echo.Context, ps *authz
 	var err error
 	if isVolumeWorkspaceUpdateRequestInternal(method, suffix) {
 		required, err = proxiedVolumeWorkspacePermissionsInternal(c.Request())
-	} else {
-		required, err = proxiedGitOpsSyncPermissionsInternal(c.Request(), method, suffix)
 	}
 	if err != nil {
 		slog.DebugContext(c.Request().Context(), "Denying proxied request with invalid body",
@@ -395,60 +389,6 @@ func proxiedVolumeWorkspacePermissionsInternal(request *http.Request) ([]string,
 		}
 		return required, nil
 	}
-}
-
-// proxiedGitOpsSyncPermissionsInternal mirrors the handler-level lifecycle and
-// backup gates for POST /gitops-syncs, POST /gitops-syncs/import, and PUT
-// /gitops-syncs/{syncId}. The agent authenticates forwarded requests as sudo,
-// so these body-dependent checks must run at the proxy. Returns nil for any
-// other route.
-func proxiedGitOpsSyncPermissionsInternal(request *http.Request, method, suffix string) ([]string, error) {
-	segments := strings.Split(strings.Trim(suffix, "/"), "/")
-	isCreate := len(segments) == 1 && segments[0] == "gitops-syncs" && method == http.MethodPost
-	isImport := len(segments) == 2 && segments[0] == "gitops-syncs" && segments[1] == "import" && method == http.MethodPost
-	isUpdate := len(segments) == 2 && segments[0] == "gitops-syncs" && segments[1] != "" && method == http.MethodPut
-	if !isCreate && !isImport && !isUpdate || request == nil || request.Body == nil {
-		return nil, nil
-	}
-
-	body, readErr := io.ReadAll(io.LimitReader(request.Body, maxProxiedGitOpsSyncBodyBytes+1))
-	closeErr := request.Body.Close()
-	if err := errors.Join(readErr, closeErr); err != nil {
-		return nil, fmt.Errorf("read gitops sync body: %w", err)
-	}
-	if len(body) > maxProxiedGitOpsSyncBodyBytes {
-		return nil, errors.New("gitops sync body is too large")
-	}
-	request.Body = io.NopCloser(bytes.NewReader(body))
-
-	type syncBodyInternal struct {
-		gitops.PreDeployConfigRequest
-
-		Mode string `json:"mode"`
-	}
-	var items []syncBodyInternal
-	if isImport {
-		if err := json.Unmarshal(body, &items); err != nil {
-			return nil, fmt.Errorf("decode gitops sync import body: %w", err)
-		}
-	} else {
-		var single syncBodyInternal
-		if err := json.Unmarshal(body, &single); err != nil {
-			return nil, fmt.Errorf("decode gitops sync body: %w", err)
-		}
-		items = []syncBodyInternal{single}
-	}
-
-	var required []string
-	for _, item := range items {
-		if item.HasPreDeployConfig() && !slices.Contains(required, authz.PermGitOpsLifecycle) {
-			required = append(required, authz.PermGitOpsLifecycle)
-		}
-		if isCreate && item.Mode == gitops.SyncModeBackup && !slices.Contains(required, authz.PermGitOpsBackup) {
-			required = append(required, authz.PermGitOpsBackup)
-		}
-	}
-	return required, nil
 }
 
 // withContainerResourceSortPermissionsInternal adds containers:read for

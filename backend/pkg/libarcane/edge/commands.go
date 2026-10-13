@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: None
+// Deviations: functional cut: removed GitOps and saved Git repositories.
 
 package edge
 
@@ -20,7 +20,6 @@ var commandRoutes = []commandRoute{
 	{Method: http.MethodGet, PathPattern: "/api/app-version", CommandName: "system.version"},
 	{Method: http.MethodGet, PathPattern: "/api/swarm/node-identity", CommandName: "swarm.node_identity"},
 	{Method: http.MethodPost, PathPattern: "/api/container-registries/sync", CommandName: "container_registry.sync"},
-	{Method: http.MethodPost, PathPattern: "/api/git-repositories/sync", CommandName: "git_repository.sync"},
 	{Method: http.MethodPost, PathPattern: "/api/backups/s3/sync", CommandName: "s3_destination.sync"},
 	{Method: http.MethodGet, PathPattern: "/api/backups/s3/{id}/in-use", CommandName: "s3_destination.in_use"},
 
@@ -106,16 +105,6 @@ var commandRoutes = []commandRoute{
 	{Method: http.MethodPost, PathPattern: "/api/environments/{id}/projects/{projectId}/build", CommandName: "project.build"},
 	{Method: http.MethodPost, PathPattern: "/api/environments/{id}/projects/{projectId}/archive", CommandName: "project.archive"},
 	{Method: http.MethodPost, PathPattern: "/api/environments/{id}/projects/{projectId}/unarchive", CommandName: "project.unarchive"},
-
-	{Method: http.MethodGet, PathPattern: "/api/environments/{id}/gitops-syncs", CommandName: "gitops_sync.list"},
-	{Method: http.MethodPost, PathPattern: "/api/environments/{id}/gitops-syncs", CommandName: "gitops_sync.create"},
-	{Method: http.MethodPost, PathPattern: "/api/environments/{id}/gitops-syncs/import", CommandName: "gitops_sync.import"},
-	{Method: http.MethodGet, PathPattern: "/api/environments/{id}/gitops-syncs/{syncId}", CommandName: "gitops_sync.inspect"},
-	{Method: http.MethodPut, PathPattern: "/api/environments/{id}/gitops-syncs/{syncId}", CommandName: "gitops_sync.update"},
-	{Method: http.MethodDelete, PathPattern: "/api/environments/{id}/gitops-syncs/{syncId}", CommandName: "gitops_sync.delete"},
-	{Method: http.MethodPost, PathPattern: "/api/environments/{id}/gitops-syncs/{syncId}/sync", CommandName: "gitops_sync.run"},
-	{Method: http.MethodGet, PathPattern: "/api/environments/{id}/gitops-syncs/{syncId}/status", CommandName: "gitops_sync.status"},
-	{Method: http.MethodGet, PathPattern: "/api/environments/{id}/gitops-syncs/{syncId}/files", CommandName: "gitops_sync.files"},
 
 	{Method: http.MethodGet, PathPattern: "/api/environments/{id}/volumes/counts", CommandName: "volume.counts"},
 	{Method: http.MethodGet, PathPattern: "/api/environments/{id}/volumes", CommandName: "volume.list"},

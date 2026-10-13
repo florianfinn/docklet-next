@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace
+// Deviations: Local module namespace; functional cut: removed GitOps and saved Git repositories.
 
 package webhook
 
@@ -36,7 +36,6 @@ import (
 	"github.com/florianfinn/docklet-next/backend/internal/database"
 	"github.com/florianfinn/docklet-next/backend/internal/environment"
 	"github.com/florianfinn/docklet-next/backend/internal/event"
-	"github.com/florianfinn/docklet-next/backend/internal/gitops"
 	"github.com/florianfinn/docklet-next/backend/internal/project"
 	"github.com/florianfinn/docklet-next/backend/internal/updater"
 	"github.com/florianfinn/docklet-next/backend/pkg/utils"
@@ -56,12 +55,11 @@ var (
 	ErrWebhookDisabled      = errors.New("webhook is disabled")
 	ErrWebhookInvalidType   = errors.New("invalid webhook target type")
 	ErrWebhookInvalidAction = errors.New("invalid webhook action type")
-	ErrWebhookMissingTarget = errors.New("target ID is required for container, project, and gitops webhook types")
+	ErrWebhookMissingTarget = errors.New("target ID is required for container and project webhook types")
 
 	// remoteWebhookTargetListPaths lists agent endpoints for target types whose records live in the agent's database.
 	remoteWebhookTargetListPaths = map[string]string{
 		WebhookTargetTypeProject: "/api/environments/" + types.LocalDockerEnvironmentID + "/projects/references",
-		WebhookTargetTypeGitOps:  "/api/environments/" + types.LocalDockerEnvironmentID + "/gitops-syncs?limit=-1",
 	}
 )
 
@@ -82,7 +80,6 @@ type WebhookService struct {
 	containerService   *container.ContainerService
 	updaterService     *updater.UpdaterService
 	projectService     *project.ProjectService
-	gitOpsSyncService  *gitops.GitOpsSyncService
 	eventService       *event.EventService
 	environmentService *environment.EnvironmentService
 }
@@ -92,7 +89,6 @@ func NewWebhookService(
 	containerService *container.ContainerService,
 	updaterService *updater.UpdaterService,
 	projectService *project.ProjectService,
-	gitOpsSyncService *gitops.GitOpsSyncService,
 	eventService *event.EventService,
 	environmentService *environment.EnvironmentService,
 ) *WebhookService {
@@ -101,7 +97,6 @@ func NewWebhookService(
 		containerService:   containerService,
 		updaterService:     updaterService,
 		projectService:     projectService,
-		gitOpsSyncService:  gitOpsSyncService,
 		eventService:       eventService,
 		environmentService: environmentService,
 	}
@@ -182,8 +177,6 @@ func defaultWebhookActionTypeInternal(targetType string) (string, error) {
 		return WebhookActionTypeUpdate, nil
 	case WebhookTargetTypeUpdater:
 		return WebhookActionTypeRun, nil
-	case WebhookTargetTypeGitOps:
-		return WebhookActionTypeSync, nil
 	default:
 		return "", ErrWebhookInvalidType
 	}
@@ -191,7 +184,7 @@ func defaultWebhookActionTypeInternal(targetType string) (string, error) {
 
 func resolveWebhookActionTypeInternal(targetType, actionType string) (string, error) {
 	switch targetType {
-	case WebhookTargetTypeContainer, WebhookTargetTypeProject, WebhookTargetTypeUpdater, WebhookTargetTypeGitOps:
+	case WebhookTargetTypeContainer, WebhookTargetTypeProject, WebhookTargetTypeUpdater:
 	default:
 		return "", ErrWebhookInvalidType
 	}
@@ -220,10 +213,6 @@ func resolveWebhookActionTypeInternal(targetType, actionType string) (string, er
 		if normalizedActionType == WebhookActionTypeRun {
 			return normalizedActionType, nil
 		}
-	case WebhookTargetTypeGitOps:
-		if normalizedActionType == WebhookActionTypeSync {
-			return normalizedActionType, nil
-		}
 	}
 
 	return "", ErrWebhookInvalidAction
@@ -237,7 +226,7 @@ func resolvedWebhookActionTypeInternal(targetType, actionType string) string {
 	return resolvedActionType
 }
 
-// CreateWebhook creates a new webhook targeting a stack, the environment-wide updater, or a gitops sync.
+// CreateWebhook creates a new webhook targeting a stack, the environment-wide updater, .
 // It returns the webhook record with the raw token populated (only available at creation time).
 func (s *WebhookService) CreateWebhook(ctx context.Context, name, targetType, actionType, targetID, environmentID string, actor user.Actor) (*Webhook, string, error) {
 	input := webhook.CreateInput{Name: name, TargetType: targetType, ActionType: actionType, TargetID: targetID}
@@ -419,15 +408,6 @@ func (s *WebhookService) resolveWebhookTargetNameInternal(ctx context.Context, w
 		return localProject.Name
 	case WebhookTargetTypeUpdater:
 		return "Environment updater"
-	case WebhookTargetTypeGitOps:
-		var localSync project.GitOpsSync
-		if err := s.db.WithContext(ctx).
-			Select("name").
-			Where("id = ? AND environment_id = ?", wh.TargetID, wh.EnvironmentID).
-			First(&localSync).Error; err != nil {
-			return ""
-		}
-		return localSync.Name
 	default:
 		return ""
 	}
@@ -604,8 +584,6 @@ func (s *WebhookService) executeWebhookActionInternal(ctx context.Context, wh *W
 		return s.executeProjectWebhookActionInternal(ctx, wh, actionType)
 	case WebhookTargetTypeUpdater:
 		return s.executeUpdaterWebhookActionInternal(ctx, wh, actionType)
-	case WebhookTargetTypeGitOps:
-		return s.executeGitOpsWebhookActionInternal(ctx, wh, actionType)
 	default:
 		return nil, ErrWebhookInvalidType
 	}
@@ -646,11 +624,6 @@ func remoteWebhookRequestInternal(wh *Webhook, actionType string) (method, path 
 			return "", "", false, ErrWebhookInvalidAction
 		}
 		return http.MethodPost, apiPrefix + "/updater/run", true, nil
-	case WebhookTargetTypeGitOps:
-		if actionType != WebhookActionTypeSync {
-			return "", "", false, ErrWebhookInvalidAction
-		}
-		return http.MethodPost, apiPrefix + "/gitops-syncs/" + url.PathEscape(wh.TargetID) + "/sync", false, nil
 	default:
 		return "", "", false, ErrWebhookInvalidType
 	}
@@ -823,18 +796,6 @@ func (s *WebhookService) executeUpdaterWebhookActionInternal(ctx context.Context
 	}
 
 	return result, nil
-}
-
-func (s *WebhookService) executeGitOpsWebhookActionInternal(ctx context.Context, wh *Webhook, actionType string) (*updatertypes.Result, error) {
-	if actionType != WebhookActionTypeSync {
-		return nil, ErrWebhookInvalidAction
-	}
-
-	if _, err := s.gitOpsSyncService.PerformSync(ctx, wh.EnvironmentID, wh.TargetID, user.SystemUser); err != nil {
-		return nil, s.wrapWebhookActionErrorInternal(ctx, wh, "gitops", actionType, err)
-	}
-
-	return nil, nil
 }
 
 func (s *WebhookService) wrapWebhookActionErrorInternal(ctx context.Context, wh *Webhook, targetKind, actionType string, err error) error {

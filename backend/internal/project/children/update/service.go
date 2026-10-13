@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace
+// Deviations: Local module namespace; functional cut: removed GitOps and saved Git repositories.
 
 // Package update owns project content updates: compose image edits and the
 // rename journal that makes project renames recoverable.
@@ -516,8 +516,8 @@ func EnsureProjectEnvReadable(ctx context.Context, projectsDirectory, projectPat
 }
 
 // ImageChanges discovers newer image tags allowed by each service's update
-// policy. GitOps-managed projects cannot have their source edited.
-func (s *Service) ImageChanges(ctx context.Context, effective *types.Project, gitOpsManaged bool) (map[string]updatertypes.ServiceImageChange, error) {
+// policy.
+func (s *Service) ImageChanges(ctx context.Context, effective *types.Project) (map[string]updatertypes.ServiceImageChange, error) {
 	policy := updater.DefaultLabelPolicy()
 	changes := make(map[string]updatertypes.ServiceImageChange)
 	for _, key := range effective.ServiceNames() {
@@ -543,8 +543,6 @@ func (s *Service) ImageChanges(ctx context.Context, effective *types.Project, gi
 			return nil, fmt.Errorf("updates are disabled for service %s", name)
 		case service.Build != nil:
 			return nil, fmt.Errorf("tag discovery is unsupported for locally built service %s", name)
-		case gitOpsManaged:
-			return nil, errors.New("tag updates cannot edit a GitOps-managed project; update image tags in the source repository")
 		case immutable:
 			return nil, fmt.Errorf("service %s has an immutable image reference", name)
 		}

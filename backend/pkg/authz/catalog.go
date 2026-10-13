@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Functional cut: removed template catalogue; functional cut: removed federated credentials; functional cut: removed central variables and .env.global.
+// Deviations: Functional cut: removed template catalogue; functional cut: removed federated credentials; functional cut: removed central variables and .env.global; functional cut: removed GitOps and saved Git repositories.
 
 package authz
 
@@ -70,15 +70,6 @@ var permissionCatalog = []PermissionCatalogResource{
 		{"test", PermRegistriesTest, "Test", ""},
 		{"browse", PermRegistriesBrowse, "Browse", "Browse repositories and tags stored in the registry (the pages also require Read)"},
 		{"delete-tags", PermRegistriesDeleteTags, "Delete tags", "Delete image manifests from the registry"},
-	}},
-	{"git-repositories", "Git Repositories", PermissionScopeGlobal, []PermissionCatalogAction{
-		{"list", PermGitReposList, "List", ""},
-		{"read", PermGitReposRead, "Read", ""},
-		{"create", PermGitReposCreate, "Create", ""},
-		{"update", PermGitReposUpdate, "Update", ""},
-		{"delete", PermGitReposDelete, "Delete", ""},
-		{"test", PermGitReposTest, "Test", ""},
-		{"sync", PermGitReposSync, "Sync", ""},
 	}},
 	{"s3-destinations", "S3 Destinations", PermissionScopeGlobal, []PermissionCatalogAction{
 		{"list", PermS3DestinationsList, "List", ""},
@@ -178,22 +169,6 @@ var permissionCatalog = []PermissionCatalogResource{
 		{"configs", PermSwarmConfigs, "Manage configs", ""},
 		{"secrets", PermSwarmSecrets, "Manage secrets", ""},
 		{"unlock", PermSwarmUnlock, "Unlock / join tokens", ""},
-	}},
-	{"gitops", "GitOps Syncs", PermissionScopeEnv, []PermissionCatalogAction{
-		{"list", PermGitOpsList, "List", ""},
-		{"read", PermGitOpsRead, "Read", ""},
-		{"create", PermGitOpsCreate, "Create", ""},
-		{"update", PermGitOpsUpdate, "Update", ""},
-		{"delete", PermGitOpsDelete, "Delete", ""},
-		{"sync", PermGitOpsSync, "Trigger sync", ""},
-		{
-			"lifecycle",
-			PermGitOpsLifecycle,
-			"Configure pre-deploy hooks",
-			"Create or modify a sync's pre-deploy lifecycle hook, which runs an arbitrary container with host bind mounts and env on every sync",
-		},
-
-		{"backup", PermGitOpsBackup, "Back up to Git", "View a project's Git backup preview and history, and manage the backup together with the matching sync permission (create, update, sync, delete)"},
 	}},
 	{"webhooks", "Webhooks", PermissionScopeEnv, []PermissionCatalogAction{
 		{"list", PermWebhooksList, "List", ""},

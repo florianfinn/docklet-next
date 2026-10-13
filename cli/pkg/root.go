@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; functional cut: removed template catalogue; functional cut: removed central variables and .env.global.
+// Deviations: Local module namespace; functional cut: removed template catalogue; functional cut: removed central variables and .env.global; functional cut: removed GitOps and saved Git repositories.
 
 // Package cli provides the root command and entry point for the Arcane CLI.
 //
@@ -65,13 +65,11 @@ import (
 	"github.com/florianfinn/docklet-next/cli/pkg/doctor"
 	"github.com/florianfinn/docklet-next/cli/pkg/environments"
 	"github.com/florianfinn/docklet-next/cli/pkg/generate"
-	"github.com/florianfinn/docklet-next/cli/pkg/gitops"
 	"github.com/florianfinn/docklet-next/cli/pkg/images"
 	"github.com/florianfinn/docklet-next/cli/pkg/jobs"
 	"github.com/florianfinn/docklet-next/cli/pkg/networks"
 	"github.com/florianfinn/docklet-next/cli/pkg/projects"
 	"github.com/florianfinn/docklet-next/cli/pkg/registries"
-	"github.com/florianfinn/docklet-next/cli/pkg/repos"
 	"github.com/florianfinn/docklet-next/cli/pkg/selfupdate"
 	"github.com/florianfinn/docklet-next/cli/pkg/settings"
 	"github.com/florianfinn/docklet-next/cli/pkg/system"
@@ -274,14 +272,12 @@ func init() {
 	rootCmd.AddCommand(projects.ProjectsCmd)
 	rootCmd.AddCommand(environments.EnvironmentsCmd)
 	rootCmd.AddCommand(registries.RegistriesCmd)
-	rootCmd.AddCommand(repos.ReposCmd)
 	rootCmd.AddCommand(settings.SettingsCmd)
 	rootCmd.AddCommand(jobs.JobsCmd)
 	rootCmd.AddCommand(system.SystemCmd)
 	rootCmd.AddCommand(updater.UpdaterCmd)
 	rootCmd.AddCommand(selfupdate.Cmd)
 	rootCmd.AddCommand(admin.AdminCmd)
-	rootCmd.AddCommand(gitops.GitopsCmd)
 	rootCmd.AddCommand(activities.ActivitiesCmd)
 	rootCmd.AddCommand(webhooks.WebhooksCmd)
 
