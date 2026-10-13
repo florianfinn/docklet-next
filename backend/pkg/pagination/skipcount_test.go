@@ -1,0 +1,95 @@
+//go:build postgres_integration
+
+// Source: getarcaneapp/arcane/backend/pkg/pagination/skipcount_test.go
+// Revision: 095cb778daba1034e2a39961199e712a75d4ba29
+// Retrieved: 2026-10-13
+// License: BSD-3-Clause
+// Deviations: functional cut: PostgreSQL integration test fixture.
+
+package pagination
+
+import (
+	"testing"
+
+	"github.com/florianfinn/docklet-next/backend/internal/testpg"
+	"github.com/stretchr/testify/require"
+	"gorm.io/gorm"
+	"gorm.io/gorm/logger"
+)
+
+type widget struct {
+	ID   string `gorm:"primaryKey"`
+	Name string `sortable:"true"`
+}
+
+func newSkipCountTestDB(t *testing.T) *gorm.DB {
+	t.Helper()
+	db, err := gorm.Open(testpg.Dialector(t, ":memory:"), &gorm.Config{Logger: logger.Default.LogMode(logger.Silent)})
+	require.NoError(t, err)
+	require.NoError(t, db.AutoMigrate(&widget{}))
+	for i := range 5 {
+		require.NoError(t, db.Create(&widget{ID: string(rune('a' + i)), Name: string(rune('A' + i))}).Error)
+	}
+	return db
+}
+
+func TestPaginateAndSortDB_SkipCountReturnsUnknownTotals(t *testing.T) {
+	db := newSkipCountTestDB(t)
+
+	var got []widget
+	resp, err := PaginateAndSortDB(QueryParams{
+		Start: 0, Limit: 2, SkipCount: true,
+		Sort: "Name", Order: "asc",
+	}, db.Model(&widget{}), &got)
+	require.NoError(t, err)
+	require.Len(t, got, 2)
+	require.Equal(t, UnknownTotal, resp.TotalItems)
+	require.Equal(t, UnknownTotal, resp.TotalPages)
+	require.Equal(t, 1, resp.CurrentPage)
+	require.Equal(t, 2, resp.ItemsPerPage)
+}
+
+func TestPaginateAndSortDB_DefaultStillCounts(t *testing.T) {
+	db := newSkipCountTestDB(t)
+
+	var got []widget
+	resp, err := PaginateAndSortDB(QueryParams{
+		Start: 0, Limit: 2,
+		Sort: "Name", Order: "asc",
+	}, db.Model(&widget{}), &got)
+	require.NoError(t, err)
+	require.Len(t, got, 2)
+	require.Equal(t, int64(5), resp.TotalItems)
+	require.Equal(t, int64(3), resp.TotalPages)
+}
+
+func TestPaginateAndSortDB_SkipCountShowAll(t *testing.T) {
+	db := newSkipCountTestDB(t)
+
+	var got []widget
+	resp, err := PaginateAndSortDB(QueryParams{
+		Start: 0, Limit: -1, SkipCount: true,
+		Sort: "Name", Order: "asc",
+	}, db.Model(&widget{}), &got)
+	require.NoError(t, err)
+	require.Len(t, got, 5)
+	require.Equal(t, int64(5), resp.TotalItems)
+	require.Equal(t, int64(1), resp.TotalPages)
+}
+
+// A start that does not land on a page boundary used to be rounded down to the
+// containing page: ?start=3&limit=2 returned rows 2-3 rather than 3-4.
+func TestPaginateAndSortDB_HonoursUnalignedStart(t *testing.T) {
+	db := newSkipCountTestDB(t)
+
+	var got []widget
+	resp, err := PaginateAndSortDB(QueryParams{
+		Start: 3, Limit: 2,
+		Sort: "Name", Order: "asc",
+	}, db.Model(&widget{}), &got)
+	require.NoError(t, err)
+	require.Len(t, got, 2)
+	require.Equal(t, "D", got[0].Name, "offset 3 must return the 4th row, not the start of its page")
+	require.Equal(t, "E", got[1].Name)
+	require.Equal(t, int64(5), resp.TotalItems)
+}

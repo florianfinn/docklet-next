@@ -1,0 +1,142 @@
+// Source: getarcaneapp/arcane/cli/pkg/settings/cmd.go
+// Revision: 095cb778daba1034e2a39961199e712a75d4ba29
+// Retrieved: 2026-10-13
+// License: BSD-3-Clause
+// Deviations: Local module namespace
+
+package settings
+
+import (
+	"encoding/json/v2"
+	"fmt"
+	"net/http"
+	"os"
+
+	"github.com/florianfinn/docklet-next/types/settings"
+	"github.com/spf13/cobra"
+
+	"github.com/florianfinn/docklet-next/cli/internal/client"
+	"github.com/florianfinn/docklet-next/cli/internal/cmdutil"
+	"github.com/florianfinn/docklet-next/cli/internal/output"
+	"github.com/florianfinn/docklet-next/cli/internal/types"
+)
+
+var jsonOutput bool
+
+// SettingsCmd is the parent command for settings operations
+var SettingsCmd = &cobra.Command{
+	Use:     "settings",
+	Aliases: []string{"setting"},
+	Short:   "Manage settings",
+}
+
+var listCmd = &cobra.Command{
+	Use:          "list",
+	Aliases:      []string{"ls"},
+	Short:        "List environment settings",
+	SilenceUsage: true,
+	RunE: func(cmd *cobra.Command, args []string) error {
+		return runSettingsList(cmd, settingsListConfig{
+			endpoint:       types.Settings,
+			failureMessage: "failed to get settings",
+			totalLabel:     "settings",
+		})
+	},
+}
+
+var settingsUpdateFile string
+
+var updateCmd = &cobra.Command{
+	Use:          "update",
+	Short:        "Update environment settings",
+	SilenceUsage: true,
+	RunE: func(cmd *cobra.Command, args []string) error {
+		c, err := client.NewFromConfig()
+		if err != nil {
+			return err
+		}
+
+		data, err := os.ReadFile(settingsUpdateFile)
+		if err != nil {
+			return fmt.Errorf("failed to read file %s: %w", settingsUpdateFile, err)
+		}
+
+		var req settings.Update
+		if unmarshalErr := json.Unmarshal(data, &req); unmarshalErr != nil {
+			return fmt.Errorf("failed to parse settings file: %w", unmarshalErr)
+		}
+
+		result, err := c.PutJSON[[]settings.SettingDto](cmd.Context(), types.Settings(c.EnvID()), req)
+		if err != nil {
+			return fmt.Errorf("failed to update settings: %w", err)
+		}
+
+		if jsonOutput {
+			return cmdutil.PrintJSON(result.Data)
+		}
+
+		output.Success("Settings updated successfully")
+		return nil
+	},
+}
+
+var publicCmd = &cobra.Command{
+	Use:          "public",
+	Short:        "List public settings",
+	SilenceUsage: true,
+	RunE: func(cmd *cobra.Command, args []string) error {
+		return runSettingsList(cmd, settingsListConfig{
+			endpoint:       types.SettingsPublic,
+			failureMessage: "failed to get public settings",
+			totalLabel:     "public settings",
+		})
+	},
+}
+
+type settingsListConfig struct {
+	endpoint       func(string) string
+	failureMessage string
+	totalLabel     string
+}
+
+func runSettingsList(cmd *cobra.Command, cfg settingsListConfig) error {
+	c, err := client.NewFromConfig()
+	if err != nil {
+		return err
+	}
+
+	result, err := c.DoJSON[[]settings.PublicSetting](cmd.Context(), http.MethodGet, cfg.endpoint(c.EnvID()), nil)
+	if err != nil {
+		return fmt.Errorf("%s: %w", cfg.failureMessage, err)
+	}
+
+	if jsonOutput {
+		return cmdutil.PrintJSON(result)
+	}
+
+	headers := []string{"KEY", "TYPE", "VALUE"}
+	rows := make([][]string, len(result))
+	for i, s := range result {
+		rows[i] = []string{s.Key, s.Type, s.Value}
+	}
+
+	if tableErr := output.Table(headers, rows); tableErr != nil {
+		return tableErr
+	}
+	_, _ = fmt.Fprintf(output.Stdout(), "\nTotal: %d %s\n", len(result), cfg.totalLabel)
+	return nil
+}
+
+func init() {
+	SettingsCmd.AddCommand(listCmd)
+	SettingsCmd.AddCommand(updateCmd)
+	SettingsCmd.AddCommand(publicCmd)
+
+	listCmd.Flags().BoolVar(&jsonOutput, "json", false, "Output in JSON format")
+
+	updateCmd.Flags().StringVarP(&settingsUpdateFile, "file", "f", "", "Settings JSON file")
+	updateCmd.Flags().BoolVar(&jsonOutput, "json", false, "Output in JSON format")
+	_ = updateCmd.MarkFlagRequired("file")
+
+	publicCmd.Flags().BoolVar(&jsonOutput, "json", false, "Output in JSON format")
+}

@@ -1,0 +1,327 @@
+//go:build postgres_integration
+
+// Source: getarcaneapp/arcane/backend/internal/build/service_test.go
+// Revision: 095cb778daba1034e2a39961199e712a75d4ba29
+// Retrieved: 2026-10-13
+// License: BSD-3-Clause
+// Deviations: Local module namespace; functional cut: removed GitOps and saved Git repositories; functional cut: removed standalone build workshop; functional cut: PostgreSQL integration test fixture.
+
+package build
+
+import (
+	"bytes"
+	"context"
+	"encoding/json/v2"
+	"errors"
+	"io"
+	"os"
+	"path/filepath"
+	"reflect"
+	"strings"
+	"testing"
+
+	"github.com/florianfinn/docklet-next/backend/internal/testpg"
+	usertypes "github.com/florianfinn/docklet-next/types/user"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+	"go.getarcane.app/builds/types"
+	"gorm.io/gorm"
+
+	"github.com/florianfinn/docklet-next/backend/internal/database"
+	"github.com/florianfinn/docklet-next/backend/internal/event"
+	"github.com/florianfinn/docklet-next/backend/pkg/gitutil"
+)
+
+func TestBuildService_ResolveBuildRequest_PassesThroughLocalContext(t *testing.T) {
+	contextDir := t.TempDir()
+	svc := &BuildService{
+		gitCloneFn: func(context.Context, string, string, git.AuthConfig) (string, error) {
+			require.FailNow(t, "git clone should not run for local contexts")
+			return "", nil
+		},
+	}
+
+	req := types.BuildRequest{
+		ContextDir: contextDir,
+		Dockerfile: "Dockerfile",
+	}
+
+	resolvedReq, cleanup, err := svc.resolveBuildRequestInternal(t.Context(), req, nil, "")
+	require.NoError(t, err)
+	require.NotNil(t, cleanup)
+	assert.Equal(t, req, resolvedReq)
+	require.NoError(t, cleanup())
+}
+
+func TestNewBuildService_NilRegistryServiceKeepsNilBuildRegistryProvider(t *testing.T) {
+	svc := NewBuildService(nil, nil, nil, nil)
+	require.NotNil(t, svc.builder)
+
+	builderValue := reflect.ValueOf(svc.builder)
+	require.Equal(t, reflect.Pointer, builderValue.Kind())
+
+	registryProvider := builderValue.Elem().FieldByName("registryAuthProvider")
+	require.True(t, registryProvider.IsValid())
+	require.True(t, registryProvider.IsNil())
+}
+
+func TestBuildService_ResolveBuildRequest_ClonesRemoteGitContext(t *testing.T) {
+	repoPath := t.TempDir()
+	require.NoError(t, os.MkdirAll(filepath.Join(repoPath, "docker", "app"), 0o755))
+
+	cleanupCalled := false
+	svc := &BuildService{
+		gitProbeFn: func(context.Context, string, git.AuthConfig) error {
+			require.FailNow(t, "git remote probe should not run for .git URLs")
+			return nil
+		},
+		gitCloneFn: func(_ context.Context, repositoryURL, ref string, auth git.AuthConfig) (string, error) {
+			assert.Equal(t, "https://github.com/getarcaneapp/arcane.git", repositoryURL)
+			assert.Equal(t, "main", ref)
+			assert.Equal(t, git.AuthConfig{}, auth)
+			return repoPath, nil
+		},
+		gitCleanupFn: func(path string) error {
+			cleanupCalled = true
+			assert.Equal(t, repoPath, path)
+			return nil
+		},
+	}
+
+	req := types.BuildRequest{
+		ContextDir: "https://github.com/getarcaneapp/arcane.git#main:docker/app",
+		Dockerfile: "Dockerfile",
+	}
+
+	resolvedReq, cleanup, err := svc.resolveBuildRequestInternal(t.Context(), req, nil, "manual")
+	require.NoError(t, err)
+	assert.Equal(t, filepath.Join(repoPath, "docker", "app"), resolvedReq.ContextDir)
+	require.NoError(t, cleanup())
+	assert.True(t, cleanupCalled)
+}
+
+func TestBuildService_ResolveBuildRequest_ProbesAndClonesRemoteGitContextWithoutGitSuffix(t *testing.T) {
+	repoPath := t.TempDir()
+	require.NoError(t, os.MkdirAll(filepath.Join(repoPath, "docker", "app"), 0o755))
+
+	probeCalled := false
+	cloneCalled := false
+	svc := &BuildService{
+		gitProbeFn: func(_ context.Context, repositoryURL string, auth git.AuthConfig) error {
+			probeCalled = true
+			assert.Equal(t, "https://git.sr.ht/~jordanreger/nws-alerts", repositoryURL)
+			assert.Equal(t, git.AuthConfig{}, auth)
+			return nil
+		},
+		gitCloneFn: func(_ context.Context, repositoryURL, ref string, auth git.AuthConfig) (string, error) {
+			cloneCalled = true
+			assert.True(t, probeCalled)
+			assert.Equal(t, "https://git.sr.ht/~jordanreger/nws-alerts", repositoryURL)
+			assert.Equal(t, "main", ref)
+			assert.Equal(t, git.AuthConfig{}, auth)
+			return repoPath, nil
+		},
+		gitCleanupFn: func(string) error { return nil },
+	}
+
+	resolvedReq, cleanup, err := svc.resolveBuildRequestInternal(
+		t.Context(),
+		types.BuildRequest{ContextDir: "https://git.sr.ht/~jordanreger/nws-alerts#main:docker/app"},
+		nil,
+		"",
+	)
+	require.NoError(t, err)
+	assert.True(t, probeCalled)
+	assert.True(t, cloneCalled)
+	assert.Equal(t, filepath.Join(repoPath, "docker", "app"), resolvedReq.ContextDir)
+	require.NoError(t, cleanup())
+}
+
+func TestBuildService_ResolveBuildRequest_RejectsNonGitHTTPContextViaProbeFailure(t *testing.T) {
+	svc := &BuildService{
+		gitProbeFn: func(_ context.Context, repositoryURL string, auth git.AuthConfig) error {
+			assert.Equal(t, "https://example.com/archive.tar.gz", repositoryURL)
+			assert.Equal(t, git.AuthConfig{}, auth)
+			return assert.AnError
+		},
+		gitCloneFn: func(context.Context, string, string, git.AuthConfig) (string, error) {
+			require.FailNow(t, "git clone should not run when remote probe fails")
+			return "", nil
+		},
+	}
+
+	_, cleanup, err := svc.resolveBuildRequestInternal(
+		t.Context(),
+		types.BuildRequest{ContextDir: "https://example.com/archive.tar.gz"},
+		nil,
+		"",
+	)
+	require.Error(t, err)
+	// HTTP(S) URLs without a .git suffix now reach the remote probe step instead of failing suffix validation.
+	assert.Contains(t, err.Error(), "failed to verify remote git repository")
+	assert.Contains(t, err.Error(), "archive.tar.gz")
+	require.NoError(t, cleanup())
+}
+
+func TestBuildService_BuildImage_PassesResolvedGitContextToBuilder(t *testing.T) {
+	repoPath := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(repoPath, "Dockerfile"), []byte("FROM alpine:3.20\n"), 0o644))
+
+	captured := types.BuildRequest{}
+	svc := &BuildService{
+		builder: testBuildRecorder{
+			onBuild: func(req types.BuildRequest) {
+				captured = req
+			},
+		},
+		gitCloneFn: func(_ context.Context, _, _ string, _ git.AuthConfig) (string, error) {
+			return repoPath, nil
+		},
+		gitCleanupFn: func(string) error { return nil },
+	}
+
+	req := types.BuildRequest{
+		ContextDir: "https://github.com/getarcaneapp/arcane.git#main",
+		Dockerfile: "Dockerfile",
+		Tags:       []string{"ghcr.io/getarcaneapp/arcane:test"},
+		Load:       true,
+	}
+
+	_, err := svc.BuildImage(t.Context(), "0", req, nil, "app", nil)
+	require.NoError(t, err)
+	assert.Equal(t, repoPath, captured.ContextDir)
+}
+
+func TestBuildService_BuildImage_FailureRecordsEvent(t *testing.T) {
+	db, err := setupBuildEventTestDB(t)
+	require.NoError(t, err)
+
+	buildErr := errors.New("BuildKit could not load the image with the docker exporter")
+	svc := &BuildService{
+		eventService: event.NewEventService(db, nil, nil),
+		builder: testBuildRecorder{
+			err: buildErr,
+		},
+	}
+	user := &usertypes.Actor{
+		ID:       "user-1",
+		Username: "tester",
+	}
+
+	req := types.BuildRequest{
+		ContextDir: "/workspace/demo",
+		Dockerfile: "Dockerfile",
+		Tags:       []string{"arcane.local/demo:test"},
+		Provider:   "local",
+		Load:       true,
+	}
+
+	_, err = svc.BuildImage(t.Context(), "0", req, nil, "web", user)
+	require.ErrorIs(t, err, buildErr)
+
+	var evt event.Event
+	require.NoError(t, db.WithContext(t.Context()).First(&evt, "type = ?", event.EventTypeImageError).Error)
+	assert.Equal(t, event.EventSeverityError, evt.Severity)
+	require.NotNil(t, evt.ResourceName)
+	assert.Equal(t, "arcane.local/demo:test", *evt.ResourceName)
+	assert.Equal(t, "build", evt.Metadata["action"])
+	assert.Equal(t, "local", evt.Metadata["provider"])
+	assert.Equal(t, "/workspace/demo", evt.Metadata["contextDir"])
+	assert.Contains(t, evt.Metadata["error"], "docker exporter")
+}
+
+func TestBuildService_BuildImage_FailureExporterErrorsAppearInProgressAndEvent(t *testing.T) {
+	db, err := setupBuildEventTestDB(t)
+	require.NoError(t, err)
+
+	buildErr := &types.BuildKitImageExporterError{
+		ProviderName: "depot",
+		Err:          errors.New(`failed to solve: failed to solve: exporter "image" could not be found`),
+	}
+	progress := &bytes.Buffer{}
+
+	svc := &BuildService{
+		eventService: event.NewEventService(db, nil, nil),
+		builder: testBuildRecorder{
+			err: buildErr,
+			onProgress: func(_ types.BuildRequest, w io.Writer) {
+				_, _ = w.Write([]byte(buildErr.Error()))
+			},
+		},
+	}
+
+	user := &usertypes.Actor{
+		ID:       "user-2",
+		Username: "registry-test",
+	}
+
+	req := types.BuildRequest{
+		ContextDir: "/workspace/demo",
+		Dockerfile: "Dockerfile",
+		Tags:       []string{"ghcr.io/getarcaneapp/arcane:test"},
+		Provider:   "depot",
+		Load:       true,
+	}
+
+	_, err = svc.BuildImage(t.Context(), "0", req, progress, "web", user)
+	require.ErrorIs(t, err, buildErr)
+
+	var evt event.Event
+	require.NoError(t, db.WithContext(t.Context()).First(&evt, "type = ?", event.EventTypeImageError).Error)
+	assert.Equal(t, event.EventSeverityError, evt.Severity)
+	require.NotNil(t, evt.ResourceName)
+	assert.Equal(t, "ghcr.io/getarcaneapp/arcane:test", *evt.ResourceName)
+	assert.Equal(t, "build", evt.Metadata["action"])
+	assert.Equal(t, "depot", evt.Metadata["provider"])
+	assert.Equal(t, "/workspace/demo", evt.Metadata["contextDir"])
+	assert.Equal(t, buildErr.Error(), evt.Metadata["error"])
+	// The progress writer is the wire transport: raw builder text arrives framed
+	// as {"log":...} NDJSON lines.
+	var frame map[string]string
+	require.NoError(t, json.Unmarshal([]byte(strings.TrimSpace(progress.String())), &frame))
+	assert.Equal(t, buildErr.Error(), frame["log"])
+}
+
+func TestSanitizeBuildContextForEventInternal_RedactsURLCredentials(t *testing.T) {
+	assert.Equal(
+		t,
+		"https://redacted@github.com/zeroZshadow/secretproject.git#main:app",
+		sanitizeBuildContextForEventInternal("https://myaccesstoken@github.com/zeroZshadow/secretproject.git#main:app"),
+	)
+	assert.Equal(
+		t,
+		"[unparseable URL]",
+		sanitizeBuildContextForEventInternal("https://user:pass@[bad-host/repo.git"),
+	)
+	assert.Equal(t, "/workspace/demo", sanitizeBuildContextForEventInternal("/workspace/demo"))
+}
+
+type testBuildRecorder struct {
+	onBuild    func(types.BuildRequest)
+	onProgress func(types.BuildRequest, io.Writer)
+	err        error
+}
+
+func (b testBuildRecorder) BuildImage(_ context.Context, req types.BuildRequest, writer io.Writer, _ string) (*types.BuildResult, error) {
+	if b.onBuild != nil {
+		b.onBuild(req)
+	}
+	if b.err != nil {
+		if b.onProgress != nil {
+			b.onProgress(req, writer)
+		}
+		return nil, b.err
+	}
+	return &types.BuildResult{Provider: "local"}, nil
+}
+
+func setupBuildEventTestDB(t *testing.T) (*database.DB, error) {
+	db, err := gorm.Open(testpg.Dialector(t, ":memory:"), &gorm.Config{})
+	if err != nil {
+		return nil, err
+	}
+	if autoMigrateErr := db.AutoMigrate(&event.Event{}); autoMigrateErr != nil {
+		return nil, autoMigrateErr
+	}
+	return &database.DB{DB: db}, nil
+}

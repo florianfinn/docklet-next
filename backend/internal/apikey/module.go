@@ -1,0 +1,143 @@
+// Source: getarcaneapp/arcane/backend/internal/apikey/module.go
+// Revision: 095cb778daba1034e2a39961199e712a75d4ba29
+// Retrieved: 2026-10-13
+// License: BSD-3-Clause
+// Deviations: Local module namespace
+
+// Package apikey owns API-key persistence, permission grants, validation, and
+// the API-key HTTP surface.
+package apikey
+
+import (
+	"net/http"
+
+	"github.com/danielgtaylor/huma/v2"
+
+	"github.com/florianfinn/docklet-next/backend/internal/middleware"
+	"github.com/florianfinn/docklet-next/backend/pkg/authz"
+	"github.com/florianfinn/docklet-next/backend/pkg/utils/handlerutil"
+)
+
+type Module struct {
+	service *ApiKeyService
+}
+
+func New(service *ApiKeyService) *Module {
+	return &Module{service: service}
+}
+
+func (m *Module) Service() *ApiKeyService {
+	if m == nil {
+		return nil
+	}
+	return m.service
+}
+
+func (m *Module) RegisterRoutes(api huma.API) {
+	if m == nil {
+		RegisterApiKeys(api, nil)
+		return
+	}
+	RegisterApiKeys(api, m.service)
+}
+
+// RegisterApiKeys registers API key management routes using Huma.
+func RegisterApiKeys(api huma.API, apiKeyService *ApiKeyService) {
+	h := &ApiKeyHandler{
+		apiKeyService: apiKeyService,
+	}
+
+	huma.Register(api, huma.Operation{
+		OperationID: "list-api-keys",
+		Method:      http.MethodGet,
+		Path:        "/api-keys",
+		Summary:     "List API keys",
+		Description: "Get a paginated list of API keys",
+		Tags:        []string{"API Keys"},
+		Security:    handlerutil.DefaultOperationSecurity(),
+		Middlewares: middleware.RequirePermission(api, authz.PermApiKeysList),
+	}, h.ListApiKeys)
+
+	huma.Register(api, huma.Operation{
+		OperationID: "create-api-key",
+		Method:      http.MethodPost,
+		Path:        "/api-keys",
+		Summary:     "Create an API key",
+		Description: "Create a new API key for programmatic access",
+		Tags:        []string{"API Keys"},
+		Security:    handlerutil.DefaultOperationSecurity(),
+		Middlewares: middleware.RequirePermission(api, authz.PermApiKeysCreate),
+	}, h.CreateApiKey)
+
+	huma.Register(api, huma.Operation{
+		OperationID: "get-api-key",
+		Method:      http.MethodGet,
+		Path:        "/api-keys/{id}",
+		Summary:     "Get an API key",
+		Description: "Get details of a specific API key by ID",
+		Tags:        []string{"API Keys"},
+		Security:    handlerutil.DefaultOperationSecurity(),
+		Middlewares: middleware.RequirePermission(api, authz.PermApiKeysRead),
+	}, h.GetApiKey)
+
+	huma.Register(api, huma.Operation{
+		OperationID: "update-api-key",
+		Method:      http.MethodPut,
+		Path:        "/api-keys/{id}",
+		Summary:     "Update an API key",
+		Description: "Update an existing API key's details",
+		Tags:        []string{"API Keys"},
+		Security:    handlerutil.DefaultOperationSecurity(),
+		Middlewares: middleware.RequirePermission(api, authz.PermApiKeysUpdate),
+	}, h.UpdateApiKey)
+
+	huma.Register(api, huma.Operation{
+		OperationID: "delete-api-key",
+		Method:      http.MethodDelete,
+		Path:        "/api-keys/{id}",
+		Summary:     "Delete an API key",
+		Description: "Delete an API key by ID",
+		Tags:        []string{"API Keys"},
+		Security:    handlerutil.DefaultOperationSecurity(),
+		Middlewares: middleware.RequirePermission(api, authz.PermApiKeysDelete),
+	}, h.DeleteApiKey)
+
+	// Self-service endpoints — no admin permission required, scoped to the
+	// caller's own keys via current-user context.
+	huma.Register(api, huma.Operation{
+		OperationID: "list-my-api-keys",
+		Method:      http.MethodGet,
+		Path:        "/auth/me/api-keys",
+		Summary:     "List my API keys",
+		Description: "List API keys owned by the current user",
+		Tags:        []string{"API Keys"},
+		Security:    handlerutil.DefaultOperationSecurity(),
+	}, h.ListMyApiKeys)
+
+	// Personal keys inherit the owner's permissions, so creating or deleting
+	// them is session-only (BearerAuth, no ApiKeyAuth): a stolen API key must
+	// not be able to mint or remove persistence credentials.
+	huma.Register(api, huma.Operation{
+		OperationID: "create-my-api-key",
+		Method:      http.MethodPost,
+		Path:        "/auth/me/api-keys",
+		Summary:     "Create my API key",
+		Description: "Create a new personal API key owned by the current user. Personal keys inherit the owner's role permissions.",
+		Tags:        []string{"API Keys"},
+		Security: []map[string][]string{
+			{"BearerAuth": {}},
+		},
+	}, h.CreateMyApiKey)
+
+	huma.Register(api, huma.Operation{
+		OperationID: "delete-my-api-key",
+		Method:      http.MethodDelete,
+		Path:        "/auth/me/api-keys/{id}",
+		Summary:     "Delete my API key",
+		Description: "Delete one of the current user's own API keys",
+		Tags:        []string{"API Keys"},
+		Security: []map[string][]string{
+			{"BearerAuth": {}},
+		},
+	}, h.DeleteMyApiKey)
+}

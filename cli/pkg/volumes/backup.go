@@ -1,0 +1,681 @@
+// Source: getarcaneapp/arcane/cli/pkg/volumes/backup.go
+// Revision: 095cb778daba1034e2a39961199e712a75d4ba29
+// Retrieved: 2026-10-13
+// License: BSD-3-Clause
+// Deviations: Local module namespace; functional cut: removed S3 backup destinations.
+
+package volumes
+
+import (
+	"context"
+	"encoding/json/v2"
+	"errors"
+	"fmt"
+	"io"
+	"mime"
+	"net/http"
+	"os"
+	"strconv"
+	"time"
+
+	"github.com/florianfinn/docklet-next/types/base"
+	uploadtypes "github.com/florianfinn/docklet-next/types/upload"
+	"github.com/florianfinn/docklet-next/types/volume"
+	"github.com/spf13/cobra"
+	kit "go.getarcane.app/kit/pkg"
+
+	"github.com/florianfinn/docklet-next/cli/internal/client"
+	"github.com/florianfinn/docklet-next/cli/internal/cmdutil"
+	"github.com/florianfinn/docklet-next/cli/internal/output"
+	"github.com/florianfinn/docklet-next/cli/internal/prompt"
+	"github.com/florianfinn/docklet-next/cli/internal/types"
+)
+
+var (
+	backupCreateDestination string
+	backupCreatePolicyID    string
+	restorePaths            []string
+	restoreArchiveFile      string
+	policyEnabled           bool
+	policySchedule          string
+	policyRetention         int
+	policyStopContainers    bool
+	policyLocal             bool
+	policyID                string
+	policyFile              string
+)
+
+// backupsListResponse mirrors the backend's paginated volume backup response,
+// which carries warnings alongside the standard pagination envelope.
+type backupsListResponse struct {
+	Success    bool                    `json:"success"`
+	Data       []volume.BackupEntry    `json:"data"`
+	Pagination base.PaginationResponse `json:"pagination"`
+	Warnings   []string                `json:"warnings,omitempty"`
+}
+
+var renameCmd = &cobra.Command{
+	Use:          "rename <volume-name> <new-name>",
+	Short:        "Rename an unused volume",
+	Args:         cobra.ExactArgs(2),
+	SilenceUsage: true,
+	RunE: func(cmd *cobra.Command, args []string) error {
+		c, err := cmdutil.ClientFromCommand(cmd)
+		if err != nil {
+			return err
+		}
+
+		allowPrompt := !forceFlag && !jsonOutput && prompt.IsInteractive()
+		resolved, _, err := volumeRef.Resolve(cmd.Context(), c, args[0], allowPrompt)
+		if err != nil {
+			return err
+		}
+
+		if !forceFlag {
+			confirmed, confirmErr := cmdutil.Confirm(cmd, fmt.Sprintf("Rename volume %s to %s? The volume is copied and the source is removed.", resolved.Name, args[1]))
+			if confirmErr != nil {
+				return confirmErr
+			}
+			if !confirmed {
+				_, _ = fmt.Fprintln(output.Stdout(), "Cancelled")
+				return nil
+			}
+		}
+
+		result, err := c.PostJSON[volume.Volume](cmd.Context(), types.VolumeRename(c.EnvID(), resolved.Name), volume.Rename{Name: args[1]})
+		if err != nil {
+			return fmt.Errorf("failed to rename volume: %w", err)
+		}
+
+		if jsonOutput {
+			return cmdutil.PrintJSON(result.Data)
+		}
+
+		output.Success("Volume %s renamed to %s", resolved.Name, result.Data.Name)
+		return nil
+	},
+}
+
+var backupsPolicyCmd = &cobra.Command{
+	Use:          "policy <volume-name>",
+	Short:        "Show volume backup policies",
+	Args:         cobra.ExactArgs(1),
+	SilenceUsage: true,
+	RunE: func(cmd *cobra.Command, args []string) error {
+		c, err := cmdutil.ClientFromCommand(cmd)
+		if err != nil {
+			return err
+		}
+
+		allowPrompt := !jsonOutput && prompt.IsInteractive()
+		resolved, _, err := volumeRef.Resolve(cmd.Context(), c, args[0], allowPrompt)
+		if err != nil {
+			return err
+		}
+
+		result, err := c.GetJSON[volume.BackupPolicyCollection](cmd.Context(), types.VolumeBackupPolicy(c.EnvID(), resolved.Name))
+		if err != nil {
+			return fmt.Errorf("failed to get backup policies: %w", err)
+		}
+
+		if jsonOutput {
+			return cmdutil.PrintJSON(result.Data)
+		}
+
+		return printBackupPolicies(resolved.Name, result.Data)
+	},
+}
+
+var backupsPolicyUpdateCmd = &cobra.Command{
+	Use:          "update <volume-name>",
+	Short:        "Update volume backup policies",
+	Args:         cobra.ExactArgs(1),
+	SilenceUsage: true,
+	RunE: func(cmd *cobra.Command, args []string) error {
+		c, err := cmdutil.ClientFromCommand(cmd)
+		if err != nil {
+			return err
+		}
+
+		allowPrompt := !jsonOutput && prompt.IsInteractive()
+		resolved, _, err := volumeRef.Resolve(cmd.Context(), c, args[0], allowPrompt)
+		if err != nil {
+			return err
+		}
+
+		var payload volume.UpdateBackupPolicies
+		if policyFile != "" {
+			raw, readFileErr := os.ReadFile(policyFile)
+			if readFileErr != nil {
+				return fmt.Errorf("failed to read policy file: %w", readFileErr)
+			}
+			if unmarshalErr := json.Unmarshal(raw, &payload); unmarshalErr != nil {
+				return fmt.Errorf("failed to parse policy file: %w", unmarshalErr)
+			}
+		} else {
+			payload, err = buildPolicyUpdate(cmd, c, resolved.Name)
+			if err != nil {
+				return err
+			}
+		}
+
+		result, err := c.PutJSON[volume.BackupPolicyCollection](cmd.Context(), types.VolumeBackupPolicy(c.EnvID(), resolved.Name), payload)
+		if err != nil {
+			return fmt.Errorf("failed to update backup policies: %w", err)
+		}
+
+		if jsonOutput {
+			return cmdutil.PrintJSON(result.Data)
+		}
+
+		output.Success("Backup policies for volume %s saved successfully", resolved.Name)
+		return printBackupPolicies(resolved.Name, result.Data)
+	},
+}
+
+// buildPolicyUpdate merges the flag values into the volume's current policy
+// collection: the whole collection is PUT back, with only the targeted policy
+// changed. A new policy is appended when the volume has none yet.
+func buildPolicyUpdate(cmd *cobra.Command, c *client.Client, volumeName string) (volume.UpdateBackupPolicies, error) {
+	var payload volume.UpdateBackupPolicies
+
+	current, err := c.GetJSON[volume.BackupPolicyCollection](cmd.Context(), types.VolumeBackupPolicy(c.EnvID(), volumeName))
+	if err != nil {
+		return payload, fmt.Errorf("failed to get current backup policies: %w", err)
+	}
+
+	payload.Policies = make([]volume.UpdateBackupPolicy, len(current.Data.Policies))
+	targetIndex := -1
+	for i, p := range current.Data.Policies {
+		payload.Policies[i] = volume.UpdateBackupPolicy{
+			ID:             p.ID,
+			Enabled:        p.Enabled,
+			Schedule:       p.Schedule,
+			RetentionCount: p.RetentionCount,
+			StopContainers: p.StopContainers,
+			LocalEnabled:   p.LocalEnabled,
+		}
+		if policyID != "" && p.ID == policyID {
+			targetIndex = i
+		}
+	}
+
+	switch {
+	case policyID != "" && targetIndex == -1:
+		return payload, fmt.Errorf("policy %q not found for volume %q", policyID, volumeName)
+	case policyID == "" && len(payload.Policies) > 1:
+		return payload, fmt.Errorf("volume %q has %d backup policies; select one with --policy-id", volumeName, len(payload.Policies))
+	case policyID == "" && len(payload.Policies) == 1:
+		targetIndex = 0
+	case targetIndex == -1:
+		if policySchedule == "" {
+			return payload, errors.New("--schedule is required when creating a new backup policy")
+		}
+		// New policies default to local storage unless --local was set explicitly.
+		payload.Policies = append(payload.Policies, volume.UpdateBackupPolicy{LocalEnabled: !cmd.Flags().Changed("local") || policyLocal})
+		targetIndex = len(payload.Policies) - 1
+	}
+
+	target := &payload.Policies[targetIndex]
+	if cmd.Flags().Changed("enabled") {
+		target.Enabled = policyEnabled
+	}
+	if cmd.Flags().Changed("schedule") {
+		target.Schedule = policySchedule
+	}
+	if cmd.Flags().Changed("retention") {
+		target.RetentionCount = policyRetention
+	}
+	if cmd.Flags().Changed("stop-containers") {
+		target.StopContainers = policyStopContainers
+	}
+	if cmd.Flags().Changed("local") {
+		target.LocalEnabled = policyLocal
+	}
+	return payload, nil
+}
+
+func printBackupPolicies(volumeName string, collection volume.BackupPolicyCollection) error {
+	output.Header("Backup Policies: %s", volumeName)
+	if len(collection.Policies) == 0 {
+		_, writeErr := fmt.Fprintln(output.Stdout(), "No backup policies configured")
+		return writeErr
+	}
+
+	headers := []string{"ID", "ENABLED", "SCHEDULE", "RETENTION", "STOP CONTAINERS", "LOCAL"}
+	rows := make([][]string, len(collection.Policies))
+	for i, p := range collection.Policies {
+		rows[i] = []string{
+			p.ID,
+			output.TintEnabled(yesNo(p.Enabled)),
+			p.Schedule,
+			strconv.Itoa(p.RetentionCount),
+			yesNo(p.StopContainers),
+			yesNo(p.LocalEnabled),
+		}
+	}
+	return output.Table(headers, rows)
+}
+
+func yesNo(v bool) string {
+	return kit.Ternary(v, "Yes", "No")
+}
+
+var backupsCmd = &cobra.Command{
+	Use:          "backups <volume-name>",
+	Short:        "Manage volume backups",
+	Args:         cobra.ExactArgs(1),
+	SilenceUsage: true,
+	RunE:         runListBackups,
+}
+
+var backupsListCmd = &cobra.Command{
+	Use:          "list <volume-name>",
+	Aliases:      []string{"ls"},
+	Short:        "List volume backups",
+	Args:         cobra.ExactArgs(1),
+	SilenceUsage: true,
+	RunE:         runListBackups,
+}
+
+func runListBackups(cmd *cobra.Command, args []string) error {
+	c, err := cmdutil.ClientFromCommand(cmd)
+	if err != nil {
+		return err
+	}
+
+	allowPrompt := !jsonOutput && prompt.IsInteractive()
+	resolved, _, err := volumeRef.Resolve(cmd.Context(), c, args[0], allowPrompt)
+	if err != nil {
+		return err
+	}
+
+	path, err := cmdutil.ApplyPaginationParams(cmd, types.VolumeBackups(c.EnvID(), resolved.Name), cmdutil.ListParams{
+		Resource:        "backups",
+		Limit:           limitFlag,
+		FallbackDefault: 20,
+		Start:           startFlag,
+		All:             allFlag,
+	})
+	if err != nil {
+		return fmt.Errorf("failed to build pagination query: %w", err)
+	}
+
+	result, err := c.DoJSON[backupsListResponse](cmd.Context(), http.MethodGet, path, nil)
+	if err != nil {
+		return fmt.Errorf("failed to list backups: %w", err)
+	}
+
+	if jsonOutput {
+		return cmdutil.PrintJSON(result)
+	}
+
+	headers := []string{"ID", "SIZE", "CREATED", "STATUS", "TRIGGER", "DESTINATION", "FORMAT"}
+	rows := make([][]string, len(result.Data))
+	for i, backup := range result.Data {
+		rows[i] = []string{
+			backup.ID,
+			output.Bytes(backup.Size),
+			backup.CreatedAt,
+			output.TintStatus(backup.Status),
+			backup.Trigger,
+			string(backup.Destination),
+			string(backup.Format),
+		}
+	}
+
+	if tableErr := output.Table(headers, rows); tableErr != nil {
+		return tableErr
+	}
+	output.Showing(len(result.Data), result.Pagination.TotalItems, "backups")
+	for _, warning := range result.Warnings {
+		output.Warning("%s", warning)
+	}
+	return nil
+}
+
+var backupsCreateCmd = &cobra.Command{
+	Use:          "create <volume-name>",
+	Short:        "Create a volume backup",
+	Args:         cobra.ExactArgs(1),
+	SilenceUsage: true,
+	RunE: func(cmd *cobra.Command, args []string) error {
+		c, err := cmdutil.ClientFromCommand(cmd)
+		if err != nil {
+			return err
+		}
+
+		allowPrompt := !jsonOutput && prompt.IsInteractive()
+		resolved, _, err := volumeRef.Resolve(cmd.Context(), c, args[0], allowPrompt)
+		if err != nil {
+			return err
+		}
+
+		req := volume.CreateBackupRequest{
+			Destination: volume.BackupDestination(backupCreateDestination),
+			PolicyID:    backupCreatePolicyID,
+		}
+
+		result, err := c.PostJSON[volume.BackupEntry](cmd.Context(), types.VolumeBackups(c.EnvID(), resolved.Name), req)
+		if err != nil {
+			return fmt.Errorf("failed to create backup: %w", err)
+		}
+
+		if jsonOutput {
+			return cmdutil.PrintJSON(result.Data)
+		}
+
+		output.Success("Backup started for volume %s", resolved.Name)
+		output.KeyValue("ID", result.Data.ID)
+		output.KeyValue("Status", result.Data.Status)
+		output.KeyValue("Destination", string(result.Data.Destination))
+		if result.Data.Size > 0 {
+			output.KeyValue("Size", output.Bytes(result.Data.Size))
+		}
+		return nil
+	},
+}
+
+var backupsRestoreCmd = &cobra.Command{
+	Use:   "restore <volume-name> [backup-id]",
+	Short: "Restore a volume from a backup",
+	Long: `Restore a volume from an existing backup, or from a local tar.gz archive.
+
+With a backup ID the whole backup is restored; add one or more --path flags to
+restore only those paths. With --file a local tar.gz backup archive is uploaded
+and restored instead (no backup ID).`,
+	Args:         cobra.RangeArgs(1, 2),
+	SilenceUsage: true,
+	RunE: func(cmd *cobra.Command, args []string) error {
+		if restoreArchiveFile != "" && len(args) == 2 {
+			return errors.New("--file and a backup ID are mutually exclusive")
+		}
+		if restoreArchiveFile == "" && len(args) < 2 {
+			return errors.New("a backup ID or --file is required")
+		}
+		if restoreArchiveFile != "" && len(restorePaths) > 0 {
+			return errors.New("--path cannot be used with --file")
+		}
+
+		c, err := cmdutil.ClientFromCommand(cmd)
+		if err != nil {
+			return err
+		}
+
+		allowPrompt := !forceFlag && prompt.IsInteractive()
+		resolved, _, err := volumeRef.Resolve(cmd.Context(), c, args[0], allowPrompt)
+		if err != nil {
+			return err
+		}
+
+		if restoreArchiveFile != "" {
+			return runUploadRestore(cmd, c, resolved.Name)
+		}
+
+		backupID := args[1]
+		if len(restorePaths) > 0 {
+			return runRestorePaths(cmd, c, resolved.Name, backupID)
+		}
+
+		if !forceFlag {
+			confirmed, confirmErr := cmdutil.Confirm(cmd, fmt.Sprintf("Restore volume %s from backup %s? Current volume contents will be replaced.", resolved.Name, backupID))
+			if confirmErr != nil {
+				return confirmErr
+			}
+			if !confirmed {
+				_, _ = fmt.Fprintln(output.Stdout(), "Cancelled")
+				return nil
+			}
+		}
+
+		result, err := c.PostJSON[base.MessageResponse](cmd.Context(), types.VolumeBackupRestore(c.EnvID(), resolved.Name, backupID), nil)
+		if err != nil {
+			return fmt.Errorf("failed to restore backup: %w", err)
+		}
+
+		if jsonOutput {
+			return cmdutil.PrintJSON(result.Data)
+		}
+
+		output.Success("Restore of volume %s from backup %s initiated", resolved.Name, backupID)
+		return nil
+	},
+}
+
+func runRestorePaths(cmd *cobra.Command, c *client.Client, volumeName, backupID string) error {
+	if !forceFlag {
+		confirmed, err := cmdutil.Confirm(cmd, fmt.Sprintf("Restore %d path(s) into volume %s from backup %s?", len(restorePaths), volumeName, backupID))
+		if err != nil {
+			return err
+		}
+		if !confirmed {
+			_, _ = fmt.Fprintln(output.Stdout(), "Cancelled")
+			return nil
+		}
+	}
+
+	body := struct {
+		Paths []string `json:"paths"`
+	}{Paths: restorePaths}
+
+	result, err := c.PostJSON[base.MessageResponse](cmd.Context(), types.VolumeBackupRestoreFiles(c.EnvID(), volumeName, backupID), body)
+	if err != nil {
+		return fmt.Errorf("failed to restore backup files: %w", err)
+	}
+
+	if jsonOutput {
+		return cmdutil.PrintJSON(result.Data)
+	}
+
+	output.Success("Restore of %d path(s) into volume %s initiated", len(restorePaths), volumeName)
+	return nil
+}
+
+func runUploadRestore(cmd *cobra.Command, c *client.Client, volumeName string) error {
+	if !forceFlag {
+		confirmed, err := cmdutil.Confirm(cmd, fmt.Sprintf("Restore volume %s from %s? Current volume contents will be replaced.", volumeName, restoreArchiveFile))
+		if err != nil {
+			return err
+		}
+		if !confirmed {
+			_, _ = fmt.Fprintln(output.Stdout(), "Cancelled")
+			return nil
+		}
+	}
+
+	// Uploading and restoring large backups can take a long time
+	c.SetTimeout(30 * time.Minute)
+
+	sessionID, err := cmdutil.UploadFileInChunks(cmd.Context(), c, uploadtypes.KindVolumeBackup, restoreArchiveFile, !jsonOutput)
+	if err != nil {
+		return err
+	}
+
+	respBody, err := c.DoRaw(cmd.Context(), http.MethodPost, types.VolumeBackupUploadRestore(c.EnvID(), volumeName), uploadtypes.ConsumeRequest{UploadID: sessionID})
+	if err != nil {
+		cmdutil.AbortUploadSession(cmd.Context(), c, uploadtypes.KindVolumeBackup, sessionID)
+		return fmt.Errorf("failed to upload and restore backup: %w", err)
+	}
+
+	if jsonOutput {
+		_, _ = fmt.Fprintln(output.Stdout(), string(respBody))
+		return nil
+	}
+
+	output.Success("Backup uploaded and restored into volume %s successfully", volumeName)
+	return nil
+}
+
+var backupsDeleteCmd = &cobra.Command{
+	Use:          "delete <backup-id>",
+	Aliases:      []string{"rm", "remove"},
+	Short:        "Delete a volume backup",
+	Args:         cobra.ExactArgs(1),
+	SilenceUsage: true,
+	RunE: func(cmd *cobra.Command, args []string) error {
+		if !forceFlag {
+			confirmed, err := cmdutil.Confirm(cmd, fmt.Sprintf("Are you sure you want to delete backup %s?", args[0]))
+			if err != nil {
+				return err
+			}
+			if !confirmed {
+				_, _ = fmt.Fprintln(output.Stdout(), "Cancelled")
+				return nil
+			}
+		}
+
+		c, err := cmdutil.ClientFromCommand(cmd)
+		if err != nil {
+			return err
+		}
+
+		if _, deleteBackupErr := c.DeleteJSON[base.MessageResponse](cmd.Context(), types.VolumeBackup(c.EnvID(), args[0])); deleteBackupErr != nil {
+			return fmt.Errorf("failed to delete backup: %w", deleteBackupErr)
+		}
+
+		output.Success("Backup %s deleted successfully", args[0])
+		return nil
+	},
+}
+
+var backupsDownloadCmd = &cobra.Command{
+	Use:          "download <backup-id> [output-file]",
+	Short:        "Download a volume backup archive",
+	Args:         cobra.RangeArgs(1, 2),
+	SilenceUsage: true,
+	RunE: func(cmd *cobra.Command, args []string) error {
+		c, err := cmdutil.ClientFromCommand(cmd)
+		if err != nil {
+			return err
+		}
+
+		// Downloading large backups can take a long time
+		c.SetTimeout(30 * time.Minute)
+
+		resp, err := c.Get(cmd.Context(), types.VolumeBackupDownload(c.EnvID(), args[0]))
+		if err != nil {
+			return fmt.Errorf("failed to download backup: %w", err)
+		}
+		defer func() { _ = resp.Body.Close() }()
+		if ensureSuccessStatusErr := cmdutil.EnsureSuccessStatus(resp); ensureSuccessStatusErr != nil {
+			return fmt.Errorf("failed to download backup: %w", ensureSuccessStatusErr)
+		}
+
+		outputFile := ""
+		if len(args) == 2 {
+			outputFile = args[1]
+		}
+		if outputFile == "" {
+			outputFile = downloadFilename(resp, args[0]+".tar.gz")
+		}
+
+		if writeResponseToFileErr := writeResponseToFileInternal(cmd.Context(), resp.Body, resp.ContentLength, outputFile, !cmdutil.JSONOutputEnabled(cmd)); writeResponseToFileErr != nil {
+			return writeResponseToFileErr
+		}
+
+		output.Success("Backup downloaded to %s", outputFile)
+		return nil
+	},
+}
+
+// downloadFilename extracts the filename from the response's
+// Content-Disposition header, falling back to the given default.
+func downloadFilename(resp *http.Response, fallback string) string {
+	if _, params, err := mime.ParseMediaType(resp.Header.Get("Content-Disposition")); err == nil {
+		if name := params["filename"]; name != "" {
+			return name
+		}
+	}
+	return fallback
+}
+
+func writeResponseToFileInternal(ctx context.Context, body io.Reader, total int64, path string, showProgress bool) error {
+	file, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0o600)
+	if err != nil {
+		return fmt.Errorf("failed to create file %s: %w", path, err)
+	}
+	if _, copyErr := output.Copy(ctx, file, body, total, "Downloading backup", showProgress); copyErr != nil {
+		_ = file.Close()
+		return fmt.Errorf("failed to write file %s: %w", path, copyErr)
+	}
+	if closeErr := file.Close(); closeErr != nil {
+		return fmt.Errorf("failed to write file %s: %w", path, closeErr)
+	}
+	return nil
+}
+
+var backupsFilesCmd = &cobra.Command{
+	Use:          "files <backup-id>",
+	Short:        "List files in a volume backup",
+	Args:         cobra.ExactArgs(1),
+	SilenceUsage: true,
+	RunE: func(cmd *cobra.Command, args []string) error {
+		c, err := cmdutil.ClientFromCommand(cmd)
+		if err != nil {
+			return err
+		}
+
+		result, err := c.GetJSON[[]string](cmd.Context(), types.VolumeBackupFiles(c.EnvID(), args[0]))
+		if err != nil {
+			return fmt.Errorf("failed to list backup files: %w", err)
+		}
+
+		if jsonOutput {
+			return cmdutil.PrintJSON(result.Data)
+		}
+
+		for _, file := range result.Data {
+			_, _ = fmt.Fprintln(output.Stdout(), file)
+		}
+		return nil
+	},
+}
+
+func init() {
+	VolumesCmd.AddCommand(renameCmd)
+	VolumesCmd.AddCommand(backupsCmd)
+
+	backupsCmd.AddCommand(backupsListCmd)
+	backupsCmd.AddCommand(backupsPolicyCmd)
+	backupsCmd.AddCommand(backupsCreateCmd)
+	backupsCmd.AddCommand(backupsRestoreCmd)
+	backupsCmd.AddCommand(backupsDeleteCmd)
+	backupsCmd.AddCommand(backupsDownloadCmd)
+	backupsCmd.AddCommand(backupsFilesCmd)
+
+	backupsPolicyCmd.AddCommand(backupsPolicyUpdateCmd)
+
+	renameCmd.Flags().BoolVarP(&forceFlag, "force", "f", false, "Rename without confirmation")
+	renameCmd.Flags().BoolVar(&jsonOutput, "json", false, "Output in JSON format")
+
+	backupsPolicyCmd.Flags().BoolVar(&jsonOutput, "json", false, "Output in JSON format")
+
+	backupsPolicyUpdateCmd.Flags().BoolVar(&policyEnabled, "enabled", false, "Enable or disable the policy")
+	backupsPolicyUpdateCmd.Flags().StringVar(&policySchedule, "schedule", "", "Backup schedule (cron expression)")
+	backupsPolicyUpdateCmd.Flags().IntVar(&policyRetention, "retention", 0, "Number of backups to retain")
+	backupsPolicyUpdateCmd.Flags().BoolVar(&policyStopContainers, "stop-containers", false, "Stop containers using the volume during backup")
+	backupsPolicyUpdateCmd.Flags().BoolVar(&policyLocal, "local", false, "Store backups locally")
+	backupsPolicyUpdateCmd.Flags().StringVar(&policyID, "policy-id", "", "Policy to update when the volume has multiple policies")
+	backupsPolicyUpdateCmd.Flags().StringVar(&policyFile, "file", "", "JSON file with the full policy collection to PUT")
+	backupsPolicyUpdateCmd.Flags().BoolVar(&jsonOutput, "json", false, "Output in JSON format")
+
+	for _, listLike := range []*cobra.Command{backupsCmd, backupsListCmd} {
+		listLike.Flags().IntVarP(&limitFlag, "limit", "n", 20, "Number of backups to show")
+		listLike.Flags().IntVar(&startFlag, "start", 0, cmdutil.StartFlagUsage)
+		listLike.Flags().BoolVarP(&allFlag, "all", "a", false, cmdutil.AllFlagUsage)
+		listLike.Flags().BoolVar(&jsonOutput, "json", false, "Output in JSON format")
+	}
+
+	backupsCreateCmd.Flags().StringVar(&backupCreateDestination, "destination", "", "Backup destination (local)")
+	backupsCreateCmd.Flags().StringVar(&backupCreatePolicyID, "policy-id", "", "Backup policy whose settings should be used")
+	backupsCreateCmd.Flags().BoolVar(&jsonOutput, "json", false, "Output in JSON format")
+
+	backupsRestoreCmd.Flags().StringArrayVar(&restorePaths, "path", nil, "Restore only this path from the backup (repeatable)")
+	backupsRestoreCmd.Flags().StringVar(&restoreArchiveFile, "file", "", "Local tar.gz backup archive to upload and restore")
+	backupsRestoreCmd.Flags().BoolVarP(&forceFlag, "force", "f", false, "Restore without confirmation")
+	backupsRestoreCmd.Flags().BoolVar(&jsonOutput, "json", false, "Output in JSON format")
+
+	backupsDeleteCmd.Flags().BoolVarP(&forceFlag, "force", "f", false, "Delete without confirmation")
+
+	backupsFilesCmd.Flags().BoolVar(&jsonOutput, "json", false, "Output in JSON format")
+}

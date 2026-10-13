@@ -1,0 +1,128 @@
+// Source: getarcaneapp/arcane/cli/internal/cmdutil/run.go
+// Revision: 095cb778daba1034e2a39961199e712a75d4ba29
+// Retrieved: 2026-10-13
+// License: BSD-3-Clause
+// Deviations: Local module namespace
+
+package cmdutil
+
+import (
+	"encoding/json/v2"
+	"fmt"
+	"net/url"
+	"time"
+
+	"github.com/florianfinn/docklet-next/types/base"
+	"github.com/spf13/cobra"
+
+	"github.com/florianfinn/docklet-next/cli/internal/client"
+	"github.com/florianfinn/docklet-next/cli/internal/output"
+)
+
+// ListSpec describes one standard list command: fetch a paginated endpoint,
+// echo the raw body for --json (so unmodeled fields like counts and groups
+// survive, see ReadJSONBody), otherwise render a table.
+type ListSpec[T any] struct {
+	// Resource names the collection in error messages and the trailing
+	// "Showing x of y <resource>" line.
+	Resource string
+	// Endpoint is the list path (environment already applied).
+	Endpoint string
+	// Params configures pagination from the command's flags.
+	Params ListParams
+	// Query holds extra query parameters, applied after pagination.
+	Query url.Values
+	// JSON selects raw JSON passthrough output.
+	JSON bool
+
+	Headers []string
+	Row     func(T) []string
+}
+
+// RunList executes one standard list command as described by spec.
+func RunList[T any](cmd *cobra.Command, c *client.Client, spec ListSpec[T]) error {
+	loading := output.StartTracker(cmd.Context(), cmd.ErrOrStderr(), !spec.JSON, "Loading "+spec.Resource)
+	loading.NextStep()
+	defer loading.Stop()
+	path, err := ApplyPaginationParams(cmd, spec.Endpoint, spec.Params)
+	if err != nil {
+		return fmt.Errorf("failed to build pagination query: %w", err)
+	}
+	if len(spec.Query) > 0 {
+		path = AppendQuery(path, spec.Query)
+	}
+
+	resp, err := c.Get(cmd.Context(), path)
+	if err != nil {
+		return fmt.Errorf("failed to list %s: %w", spec.Resource, err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	body, err := ReadJSONBody(resp)
+	if err != nil {
+		return fmt.Errorf("failed to list %s: %w", spec.Resource, err)
+	}
+
+	if spec.JSON {
+		return PrintRawJSON(body)
+	}
+
+	var result base.Paginated[T]
+	if unmarshalErr := json.Unmarshal(body, &result); unmarshalErr != nil {
+		return fmt.Errorf("failed to parse response: %w", unmarshalErr)
+	}
+
+	loading.Finish("", nil)
+	loading.Stop()
+	rows := make([][]string, len(result.Data))
+	for i, item := range result.Data {
+		rows[i] = spec.Row(item)
+	}
+
+	if tableErr := output.Table(spec.Headers, rows); tableErr != nil {
+		return tableErr
+	}
+	output.Showing(len(result.Data), result.Pagination.TotalItems, spec.Resource)
+	return nil
+}
+
+// PostActionSpec describes one resolve→POST→decode→report action command. T
+// is the API envelope's data payload.
+type PostActionSpec struct {
+	// Path is the fully built action path.
+	Path string
+	// Body is the optional JSON request body.
+	Body any
+	// FailureMessage wraps transport and status errors.
+	FailureMessage string
+	// SuccessMessage is the preformatted human-readable success line.
+	SuccessMessage string
+	// Timeout optionally extends the client timeout for slow actions.
+	Timeout time.Duration
+	// JSON prints the decoded response data instead of the success line.
+	JSON bool
+}
+
+// RunPostAction executes one POST action command as described by spec.
+func RunPostAction[T any](cmd *cobra.Command, c *client.Client, spec PostActionSpec) error {
+	if spec.Timeout > 0 {
+		c.SetTimeout(spec.Timeout)
+	}
+
+	loading := output.StartTracker(cmd.Context(), cmd.ErrOrStderr(), !spec.JSON, cmd.Short)
+	loading.NextStep()
+	defer loading.Stop()
+	result, err := c.PostJSON[T](cmd.Context(), spec.Path, spec.Body)
+	if err != nil {
+		return fmt.Errorf("%s: %w", spec.FailureMessage, err)
+	}
+
+	loading.Finish("", nil)
+	loading.Stop()
+	if spec.JSON {
+		return PrintJSON(result.Data)
+	}
+
+	output.Success("%s", spec.SuccessMessage)
+	return nil
+}

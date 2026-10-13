@@ -1,0 +1,77 @@
+// Source: getarcaneapp/arcane/backend/pkg/libarcane/volumes/volume_rename_runtime_test.go
+// Revision: 095cb778daba1034e2a39961199e712a75d4ba29
+// Retrieved: 2026-10-13
+// License: BSD-3-Clause
+// Deviations: Local module namespace
+
+package volumes
+
+import (
+	"encoding/json"
+	"net/http"
+	"net/http/httptest"
+	"strings"
+	"testing"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+
+	"github.com/florianfinn/docklet-next/backend/pkg/libarcane/volumehelper"
+)
+
+func TestGetProjectVolumeCopyRuntimeInternal_UsesToolsImageWhenAvailable(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.Method == http.MethodGet && strings.Contains(r.URL.Path, "/images/") && strings.HasSuffix(r.URL.Path, "/json"):
+			w.Header().Set("Content-Type", "application/json")
+			if !assert.NoError(t, json.NewEncoder(w).Encode(map[string]any{"Id": "tools-image"})) {
+				return
+			}
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	t.Cleanup(server.Close)
+
+	copyRuntime, err := getProjectVolumeCopyRuntimeInternal(t.Context(), newTestDockerClientInternal(t, server), volumehelper.ToolsImage(""))
+
+	require.NoError(t, err)
+	require.Equal(t, volumehelper.ToolsImage(""), copyRuntime.Image)
+}
+
+func TestCreateProjectVolumeCopyHolderContainerInternal_UsesPassiveHolderCommand(t *testing.T) {
+	var createBody map[string]any
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.Method == http.MethodPost && strings.HasSuffix(r.URL.Path, "/containers/create"):
+			if !assert.NoError(t, json.NewDecoder(r.Body).Decode(&createBody)) {
+				return
+			}
+			w.Header().Set("Content-Type", "application/json")
+			if !assert.NoError(t, json.NewEncoder(w).Encode(map[string]any{
+				"Id":       "helper-container",
+				"Warnings": []string{},
+			})) {
+				return
+			}
+		case r.Method == http.MethodDelete && strings.Contains(r.URL.Path, "/containers/helper-container"):
+			w.WriteHeader(http.StatusNoContent)
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	t.Cleanup(server.Close)
+
+	_, cleanup, err := createProjectVolumeCopyHolderContainerInternal(
+		t.Context(),
+		newTestDockerClientInternal(t, server),
+		projectVolumeCopyRuntimeInternal{Image: "arcane:local"},
+		"nginx_data",
+		true,
+	)
+	require.NoError(t, err)
+	defer cleanup()
+
+	require.Empty(t, createBody["Entrypoint"])
+	require.Equal(t, []any{"sleep", "infinity"}, createBody["Cmd"])
+}

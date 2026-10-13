@@ -1,0 +1,721 @@
+// Source: getarcaneapp/arcane/backend/cli/upgrade/upgrade.go
+// Revision: 095cb778daba1034e2a39961199e712a75d4ba29
+// Retrieved: 2026-10-13
+// License: BSD-3-Clause
+// Deviations: Local module namespace
+
+package upgrade
+
+import (
+	"cmp"
+	"context"
+	"errors"
+	"fmt"
+	"log/slog"
+	"maps"
+	"os"
+	"strings"
+	"time"
+
+	"github.com/moby/moby/api/types/container"
+	"github.com/moby/moby/api/types/network"
+	"github.com/moby/moby/client"
+	"github.com/spf13/cobra"
+	"go.getarcane.app/docker"
+	"go.getarcane.app/docker/compat"
+	kit "go.getarcane.app/kit/pkg"
+	"go.getarcane.app/sys/cgroup"
+	"go.getarcane.app/updater/labels"
+	"go.getarcane.app/updater/refs"
+
+	"github.com/florianfinn/docklet-next/backend/pkg/libarcane"
+	"github.com/florianfinn/docklet-next/backend/pkg/projects"
+)
+
+var (
+	containerName string
+	targetImage   string
+	pullImageRef  string
+	autoDetect    bool
+)
+
+// UpgradeCmd recreates a running Arcane container with a newer image while
+// preserving its configuration.
+var UpgradeCmd = &cobra.Command{
+	Use:   "upgrade",
+	Short: "Upgrade an Arcane container to the latest version",
+	Long: `Upgrade an Arcane container by pulling the latest image and recreating the container.
+This command should be run from outside the container (e.g., from the host or another container).`,
+	Example: `  # Auto-detect and upgrade the Arcane container
+  arcane upgrade --auto
+
+  # Upgrade a specific container
+  arcane upgrade --container arcane
+
+  # Upgrade to a specific image tag
+  arcane upgrade --container arcane --image ghcr.io/getarcaneapp/arcane:v1.2.3`,
+	// Use background context to ignore signals during upgrade
+	// This prevents the upgrade from being interrupted when the target container stops
+	RunE: runUpgrade,
+}
+
+func init() {
+	UpgradeCmd.Flags().StringVarP(&containerName, "container", "c", "", "Name of the container to upgrade")
+	UpgradeCmd.Flags().StringVarP(&targetImage, "image", "i", "", "Target image to upgrade to (defaults to current tag)")
+	UpgradeCmd.Flags().StringVar(&pullImageRef, "pull-image", "", "Immutable reference to pull and tag as --image (defaults to --image)")
+	UpgradeCmd.Flags().BoolVarP(&autoDetect, "auto", "a", false, "Auto-detect Arcane container")
+}
+
+func runUpgrade(cmd *cobra.Command, args []string) error {
+	// Use background context instead of command context to ignore signals
+	// This prevents interruption when stopping the target container
+	ctx := context.WithoutCancel(cmd.Context())
+
+	logFile, err := SetupMessageOnlyLogFile(libarcane.UpgradeLogDirectory, "arcane-upgrade", slog.LevelInfo)
+	if err != nil {
+		slog.WarnContext(ctx, "Failed to setup file logging", "error", err)
+	} else {
+		slog.InfoContext(ctx, "Upgrade log file created", "path", logFile.Name())
+	}
+
+	// Connect to Docker
+	dockerClient, err := client.New(client.FromEnv)
+	if err != nil {
+		return fmt.Errorf("failed to connect to Docker: %w", err)
+	}
+	defer func() { _ = dockerClient.Close() }()
+
+	// Find the container
+	var targetContainer container.InspectResponse
+	if autoDetect || containerName == "" {
+		slog.InfoContext(ctx, "Auto-detecting Arcane container...")
+		targetContainer, err = findArcaneContainer(ctx, dockerClient)
+		if err != nil {
+			return fmt.Errorf("failed to find Arcane container: %w", err)
+		}
+		containerName = strings.TrimPrefix(targetContainer.Name, "/")
+		slog.InfoContext(ctx, "Found Arcane container", "name", containerName, "id", targetContainer.ID[:12])
+	} else {
+		inspectResult, inspectErr := compat.ContainerInspectWithCompatibility(ctx, dockerClient, containerName, client.ContainerInspectOptions{})
+		if inspectErr != nil {
+			return fmt.Errorf("failed to inspect container %s: %w", containerName, inspectErr)
+		}
+		targetContainer = inspectResult.Container
+	}
+
+	// Determine the reference the container should run as, and what to pull.
+	newImage := targetImage
+	if newImage == "" {
+		newImage = determineImageName(ctx, dockerClient, targetContainer)
+		slog.InfoContext(ctx, "Determined image to pull", "image", newImage)
+	}
+	imageToPull := cmp.Or(strings.TrimSpace(pullImageRef), newImage)
+
+	// Pull the new image
+	slog.InfoContext(ctx, "Pulling new image", "image", imageToPull)
+	if pullImageErr := pullImage(ctx, dockerClient, imageToPull); pullImageErr != nil {
+		return fmt.Errorf("failed to pull image: %w", pullImageErr)
+	}
+	// A frozen pull is tagged back as the selected reference so the recreated
+	// container keeps its tag instead of an immutable digest.
+	if imageToPull != newImage {
+		if tagErr := tagPulledImage(ctx, dockerClient, imageToPull, newImage); tagErr != nil {
+			return fmt.Errorf("failed to tag pulled image: %w", tagErr)
+		}
+	}
+
+	// The pull always runs so a mutable tag gets re-resolved, but when it lands on
+	// the image the container already runs there is nothing to swap in. Skipping the
+	// recreate avoids needless downtime and, for agents, a dropped connection. A
+	// container running the right image under a different reference is still
+	// recreated so its reference is corrected.
+	same, pulledID := pulledImageAlreadyRunning(ctx, dockerClient, imageToPull, targetContainer.Image)
+	if pulledID == "" {
+		return fmt.Errorf("could not resolve pulled image %s; refusing to recreate", imageToPull)
+	}
+	if same && targetContainer.Config != nil && strings.TrimSpace(targetContainer.Config.Image) == newImage {
+		slog.InfoContext(ctx, "Image unchanged after pull; already up to date, skipping recreate",
+			"container", containerName, "image", newImage, "imageId", pulledID)
+		return nil
+	}
+
+	// Perform the upgrade
+	slog.InfoContext(ctx, "Starting container upgrade", "container", containerName)
+	if upgradeContainerErr := UpgradeContainer(ctx, dockerClient, targetContainer, newImage, pulledID, nil); upgradeContainerErr != nil {
+		return fmt.Errorf("failed to upgrade container: %w", upgradeContainerErr)
+	}
+
+	slog.InfoContext(ctx, "Upgrade completed successfully", "container", containerName, "image", newImage)
+	return nil
+}
+
+// tagPulledImage tags the pulled immutable reference as the selected one and
+// verifies the tag now resolves to the pulled image. Both must name the same
+// repository.
+func tagPulledImage(ctx context.Context, dockerClient *client.Client, pulled, selected string) error {
+	pulledRef, err := refs.NormalizeReference(pulled)
+	if err != nil {
+		return err
+	}
+	selectedRef, err := refs.NormalizeReference(selected)
+	if err != nil {
+		return err
+	}
+	if pulledRef.RegistryHost != selectedRef.RegistryHost || pulledRef.Repository != selectedRef.Repository {
+		return fmt.Errorf("pulled image %s does not belong to repository of %s", pulled, selected)
+	}
+	if _, tagErr := dockerClient.ImageTag(ctx, client.ImageTagOptions{Source: pulled, Target: selected}); tagErr != nil {
+		return tagErr
+	}
+	pulledInspect, err := dockerClient.ImageInspect(ctx, pulled)
+	if err != nil {
+		return fmt.Errorf("inspect pulled image: %w", err)
+	}
+	selectedInspect, err := dockerClient.ImageInspect(ctx, selected)
+	if err != nil {
+		return fmt.Errorf("inspect tagged image: %w", err)
+	}
+	if pulledInspect.ID != selectedInspect.ID {
+		return fmt.Errorf("%s resolves to %s after tagging, expected %s", selected, selectedInspect.ID, pulledInspect.ID)
+	}
+	return nil
+}
+
+func findArcaneContainer(ctx context.Context, dockerClient *client.Client) (container.InspectResponse, error) {
+	// Prefer explicit Arcane labels; fall back to image name heuristics.
+	filter := make(client.Filters)
+	filter = filter.Add("status", "running")
+
+	containers, err := dockerClient.ContainerList(ctx, client.ContainerListOptions{Filters: filter})
+	if err != nil {
+		return container.InspectResponse{}, err
+	}
+
+	selfID, _ := cgroup.CurrentContainerID()
+	slog.InfoContext(ctx, "Searching for Arcane container", "selfId", selfID, "totalContainers", len(containers.Items))
+
+	now := time.Now()
+
+	for _, c := range containers.Items {
+		if shouldSkipContainer(ctx, c, selfID, now) {
+			continue
+		}
+
+		inspectResult, containerInspectWithCompatibilityErr := compat.ContainerInspectWithCompatibility(ctx, dockerClient, c.ID, client.ContainerInspectOptions{})
+		if containerInspectWithCompatibilityErr != nil {
+			continue
+		}
+		inspect := inspectResult.Container
+
+		if isAgentContainer(inspect) {
+			slog.DebugContext(ctx, "Skipping agent container", "id", c.ID[:12], "names", c.Names)
+			continue
+		}
+
+		containerLabels := map[string]string{}
+		if inspect.Config != nil && inspect.Config.Labels != nil {
+			containerLabels = inspect.Config.Labels
+		}
+
+		// New label: com.getarcaneapp.arcane=true
+		if labels.IsArcaneContainer(containerLabels) {
+			slog.InfoContext(ctx, "Found Arcane container by label", "id", c.ID[:12], "image", c.Image, "names", c.Names)
+			return inspect, nil
+		}
+
+		// Legacy label (pre-migration): com.getarcaneapp.arcane.server=true
+		// NOTE: older agent images also used this label, so we must additionally exclude AGENT_MODE=true.
+		if isLegacyServerLabel(containerLabels) {
+			slog.InfoContext(ctx, "Found Arcane container by legacy label", "id", c.ID[:12], "image", c.Image, "names", c.Names)
+			return inspect, nil
+		}
+
+		// Fallback: image name heuristic
+		if strings.Contains(strings.ToLower(c.Image), "arcane") {
+			slog.InfoContext(ctx, "Found matching container by image name", "id", c.ID[:12], "image", c.Image, "names", c.Names)
+			return inspect, nil
+		}
+	}
+
+	return container.InspectResponse{}, errors.New("no running Arcane container found")
+}
+
+func isLegacyServerLabel(containerLabels map[string]string) bool {
+	if containerLabels == nil {
+		return false
+	}
+	for k, v := range containerLabels {
+		if strings.EqualFold(k, labels.LabelArcaneLegacyServer) {
+			return strings.EqualFold(strings.TrimSpace(v), "true")
+		}
+	}
+	return false
+}
+
+func normalizeRecreatedArcaneLabelsInternal(containerLabels map[string]string) map[string]string {
+	normalized := maps.Clone(containerLabels)
+	if normalized == nil {
+		return nil
+	}
+	if labels.IsArcaneContainer(containerLabels) || isLegacyServerLabel(containerLabels) {
+		normalized[labels.LabelArcane] = "true"
+	}
+	if labels.IsArcaneAgentContainer(containerLabels) {
+		normalized[labels.LabelArcaneAgent] = "true"
+		normalized[labels.LabelArcane] = "true"
+	}
+	return normalized
+}
+
+func refreshRecreatedImageLabelsInternal(containerLabels, previousImageLabels, imageLabels map[string]string, imageDigest string) map[string]string {
+	refreshed := maps.Clone(containerLabels)
+	for key, value := range containerLabels {
+		if !strings.HasPrefix(strings.ToLower(key), "org.opencontainers.image.") {
+			continue
+		}
+		for previousKey, previousValue := range previousImageLabels {
+			if strings.EqualFold(previousKey, key) && previousValue == value {
+				delete(refreshed, key)
+				break
+			}
+		}
+	}
+
+	for key, value := range imageLabels {
+		if !strings.HasPrefix(strings.ToLower(key), "org.opencontainers.image.") {
+			continue
+		}
+		preserved := false
+		for existingKey := range refreshed {
+			if strings.EqualFold(existingKey, key) {
+				preserved = true
+				break
+			}
+		}
+		if preserved {
+			continue
+		}
+		if refreshed == nil {
+			refreshed = make(map[string]string)
+		}
+		refreshed[key] = value
+	}
+
+	projects.RefreshComposeImageLabel(refreshed, imageDigest)
+
+	return refreshed
+}
+
+func refreshRecreatedContainerLabelsInternal(ctx context.Context, dockerClient *client.Client, containerLabels map[string]string, previousImage, targetImage string) map[string]string {
+	// Manifest data is needed to record the platform manifest digest compose
+	// v5.5.0 expects in com.docker.compose.image; older daemons may reject the
+	// option, so retry without it and fall back to the top-level image ID.
+	imageInspect, imageInspectErr := dockerClient.ImageInspect(ctx, targetImage, client.ImageInspectWithManifests(true))
+	if imageInspectErr != nil {
+		imageInspect, imageInspectErr = dockerClient.ImageInspect(ctx, targetImage)
+	}
+	if imageInspectErr != nil {
+		slog.WarnContext(ctx, "Could not inspect target image labels; preserving container OCI overrides",
+			"image", targetImage,
+			"error", imageInspectErr,
+		)
+		return maps.Clone(containerLabels)
+	}
+
+	imageLabels := map[string]string(nil)
+	previousImageLabels := map[string]string(nil)
+	if imageInspect.Config != nil {
+		imageLabels = imageInspect.Config.Labels
+		if hasOCIImageLabelInternal(containerLabels) && strings.TrimSpace(previousImage) != "" {
+			previousImageInspect, previousImageInspectErr := dockerClient.ImageInspect(ctx, previousImage)
+			if previousImageInspectErr != nil {
+				slog.WarnContext(ctx, "Could not inspect previous image labels; preserving existing OCI labels",
+					"image", previousImage,
+					"error", previousImageInspectErr,
+				)
+			} else if previousImageInspect.Config != nil {
+				previousImageLabels = previousImageInspect.Config.Labels
+			}
+		}
+	}
+	return refreshRecreatedImageLabelsInternal(containerLabels, previousImageLabels, imageLabels, projects.ComposeImageDigest(imageInspect))
+}
+
+func hasOCIImageLabelInternal(containerLabels map[string]string) bool {
+	for key := range containerLabels {
+		if strings.HasPrefix(strings.ToLower(key), "org.opencontainers.image.") {
+			return true
+		}
+	}
+	return false
+}
+
+func isAgentContainer(inspect container.InspectResponse) bool {
+	if inspect.Config == nil {
+		return false
+	}
+	// New label for agent containers
+	if inspect.Config.Labels != nil {
+		for k, v := range inspect.Config.Labels {
+			if strings.EqualFold(k, "com.getarcaneapp.arcane.agent") {
+				return strings.EqualFold(strings.TrimSpace(v), "true")
+			}
+		}
+	}
+	// Legacy agent detection: AGENT_MODE=true in env
+	for _, env := range inspect.Config.Env {
+		if strings.EqualFold(env, "AGENT_MODE=true") {
+			return true
+		}
+	}
+	return false
+}
+
+// shouldSkipContainer determines if a container should be skipped during search
+func shouldSkipContainer(ctx context.Context, c container.Summary, selfID string, now time.Time) bool {
+	// Skip ourselves (the upgrader container) by ID
+	if selfID != "" && strings.HasPrefix(c.ID, selfID) {
+		slog.InfoContext(ctx, "Skipping self by ID", "id", c.ID[:12], "names", c.Names)
+		return true
+	}
+
+	// Skip very recently created containers (likely the upgrader)
+	if c.Created > 0 {
+		createdTime := time.Unix(c.Created, 0)
+		age := now.Sub(createdTime)
+		if age < 30*time.Second {
+			slog.InfoContext(ctx, "Skipping recently created container", "id", c.ID[:12], "age", age, "names", c.Names)
+			return true
+		}
+	}
+
+	// Skip containers with "upgrader" in the name
+	for _, name := range c.Names {
+		if strings.Contains(strings.ToLower(name), "upgrader") {
+			slog.InfoContext(ctx, "Skipping upgrader container by name", "name", name)
+			return true
+		}
+	}
+
+	return false
+}
+
+func determineImageName(ctx context.Context, dockerClient *client.Client, cont container.InspectResponse) string {
+	imageName := extractImageNameFromConfig(cont)
+	imageName = stripDigest(imageName)
+
+	// If no explicit tag, try to infer from image RepoTags
+	if !hasExplicitTag(imageName) {
+		if inferredName := inferImageNameFromDocker(ctx, dockerClient, cont.Image); inferredName != "" {
+			imageName = inferredName
+		}
+	}
+
+	// Default to :latest if still no tag
+	if !hasExplicitTag(imageName) {
+		imageName = kit.Ternary(imageName == "", "ghcr.io/getarcaneapp/arcane:latest", imageName+":latest")
+	}
+
+	return imageName
+}
+
+// extractImageNameFromConfig gets the image name from container config
+func extractImageNameFromConfig(cont container.InspectResponse) string {
+	if cont.Config == nil {
+		return ""
+	}
+	return strings.TrimSpace(cont.Config.Image)
+}
+
+// stripDigest removes digest from image reference
+func stripDigest(imageName string) string {
+	if before, _, ok := strings.Cut(imageName, "@"); ok {
+		return before
+	}
+	return imageName
+}
+
+// hasExplicitTag checks if image reference has a tag
+func hasExplicitTag(ref string) bool {
+	if ref == "" {
+		return false
+	}
+	slash := strings.LastIndex(ref, "/")
+	colon := strings.LastIndex(ref, ":")
+	return colon > slash
+}
+
+// inferImageNameFromDocker attempts to find the best tag from Docker image inspect
+func inferImageNameFromDocker(ctx context.Context, dockerClient *client.Client, imageID string) string {
+	ii, err := dockerClient.ImageInspect(ctx, imageID)
+	if err != nil {
+		return ""
+	}
+
+	var arcaneNonLatest string
+	var arcaneAny string
+
+	for _, t := range ii.RepoTags {
+		if t == "" || t == "<none>:<none>" {
+			continue
+		}
+
+		t = stripDigest(t)
+
+		if strings.Contains(t, "arcane") {
+			arcaneAny = cmp.Or(arcaneAny, t)
+			if !strings.HasSuffix(t, ":latest") && arcaneNonLatest == "" {
+				arcaneNonLatest = t
+			}
+		}
+	}
+
+	// Prefer non-latest tags
+	return kit.Ternary(arcaneNonLatest != "", arcaneNonLatest, arcaneAny)
+}
+
+// pulledImageAlreadyRunning reports whether the freshly pulled reference resolves to
+// the image the target container is already running, along with the resolved image ID.
+// An inspect failure reports false and an empty ID; callers must resolve the
+// expected image before recreating the container.
+func pulledImageAlreadyRunning(ctx context.Context, dockerClient *client.Client, imageRef, runningImageID string) (bool, string) {
+	if runningImageID == "" {
+		return false, ""
+	}
+	inspect, err := dockerClient.ImageInspect(ctx, imageRef)
+	if err != nil {
+		slog.WarnContext(ctx, "Could not inspect pulled image", "image", imageRef, "error", err)
+		return false, ""
+	}
+	return inspect.ID == runningImageID, inspect.ID
+}
+
+func pullImage(ctx context.Context, dockerClient *client.Client, imageName string) error {
+	reader, err := dockerClient.ImagePull(ctx, imageName, client.ImagePullOptions{})
+	if err != nil {
+		return err
+	}
+	defer func() { _ = reader.Close() }()
+
+	return docker.RenderJSONMessageStream(reader, os.Stdout)
+}
+
+// UpgradeContainer recreates an Arcane container with the supplied image and
+// optional expected image ID and environment replacements. It runs from detached
+// maintenance containers so stopping the target cannot interrupt the operation.
+func UpgradeContainer(ctx context.Context, dockerClient *client.Client, oldContainer container.InspectResponse, newImage, expectedImageID string, environment map[string]string) error {
+	originalName := strings.TrimPrefix(oldContainer.Name, "/")
+	oldName := fmt.Sprintf("%s-old-%d", originalName, time.Now().UnixNano())
+
+	if oldContainer.Config == nil {
+		return fmt.Errorf("container %s inspection has no config; refusing to recreate", originalName)
+	}
+
+	// Create new container config
+	config := *oldContainer.Config
+	config.Image = newImage
+	config.Labels = normalizeRecreatedArcaneLabelsInternal(config.Labels)
+	if len(environment) > 0 {
+		config.Env = applyRecoveredEnvironmentInternal(config.Env, environment)
+	}
+
+	config.Labels = refreshRecreatedContainerLabelsInternal(ctx, dockerClient, config.Labels, oldContainer.Image, cmp.Or(expectedImageID, newImage))
+
+	hostConfig, sanitizedMemorySwappiness, engineInfo, err := compat.PrepareRecreateHostConfigForEngine(ctx, dockerClient, oldContainer.HostConfig)
+	if err != nil {
+		return fmt.Errorf("prepare host config: %w", err)
+	}
+	if sanitizedMemorySwappiness {
+		slog.InfoContext(ctx, "Stripped unsupported host config field for recreate",
+			"container", originalName,
+			"containerId", oldContainer.ID,
+			"engine", engineInfo.Name,
+			"cgroupVersion", engineInfo.CgroupVersion,
+			"field", "memorySwappiness",
+		)
+	}
+
+	// Pin every attached volume to its resolved name so the recreated container
+	// keeps its data instead of receiving fresh anonymous volumes (#3953).
+	if hostConfig == nil {
+		hostConfig = &container.HostConfig{}
+	}
+	hostConfig.Binds, hostConfig.Mounts, err = docker.PreserveVolumeMounts(ctx, hostConfig.Binds, hostConfig.Mounts, oldContainer.Mounts)
+	if err != nil {
+		return fmt.Errorf("preserve volumes of container %s: %w", originalName, err)
+	}
+
+	// Fix for "conflicting options: hostname and the network mode"
+	// When network mode is "host" or "container:...", Hostname must be empty
+	nm := hostConfig.NetworkMode
+	if nm.IsHost() || nm.IsContainer() {
+		config.Hostname = ""
+		config.Domainname = ""
+	}
+
+	// Clear hostname if it looks like a container ID (auto-generated by Docker)
+	// This allows Docker to assign the new container's ID as the hostname
+	if looksLikeContainerID(config.Hostname) {
+		slog.DebugContext(ctx, "Clearing auto-generated hostname", "oldHostname", config.Hostname)
+		config.Hostname = ""
+	}
+
+	// Fix for "conflicting options: port exposing and the container type network mode"
+	// When network mode is "container:...", port mappings are not allowed
+	if nm.IsContainer() {
+		config.ExposedPorts = nil
+		hostConfig.PortBindings = nil
+		hostConfig.PublishAllPorts = false
+	}
+
+	// Build network config - preserve all network settings including IP addresses
+	var (
+		apiVersion    string
+		networkConfig *network.NetworkingConfig
+	)
+	if !nm.IsContainer() {
+		apiVersion = compat.DetectDockerAPIVersion(ctx, dockerClient)
+		if apiVersion != "" && !compat.IsDockerAPIVersionAtLeast(apiVersion, compat.NetworkScopedMacAddressMinAPIVersion) {
+			slog.InfoContext(ctx, "daemon API does not support per-network mac-address on create; stripping endpoint mac addresses",
+				"dockerApiVersion", apiVersion,
+				"minimumRequiredApiVersion", compat.NetworkScopedMacAddressMinAPIVersion,
+			)
+		}
+
+		var endpoints map[string]*network.EndpointSettings
+		if oldContainer.NetworkSettings != nil {
+			endpoints = oldContainer.NetworkSettings.Networks
+		}
+
+		networkConfig = &network.NetworkingConfig{
+			EndpointsConfig: compat.SanitizeContainerCreateEndpointSettingsForDockerAPI(endpoints, apiVersion),
+		}
+	}
+
+	fmt.Println("PROGRESS:65:Renaming old container")
+	slog.InfoContext(ctx, "Renaming old container", "from", originalName, "to", oldName)
+	if _, containerRenameErr := dockerClient.ContainerRename(ctx, oldContainer.ID, client.ContainerRenameOptions{NewName: oldName}); containerRenameErr != nil {
+		return fmt.Errorf("rename old container: %w", containerRenameErr)
+	}
+
+	fmt.Println("PROGRESS:70:Stopping old container")
+	slog.InfoContext(ctx, "Stopping old container", "name", oldName)
+	// Allow graceful shutdown and longer finite timeouts, but never wait forever.
+	stopTimeout := 40
+	if configured := oldContainer.Config.StopTimeout; configured != nil && *configured > stopTimeout {
+		stopTimeout = *configured
+	}
+	if _, containerStopErr := dockerClient.ContainerStop(ctx, oldContainer.ID, client.ContainerStopOptions{Timeout: &stopTimeout}); containerStopErr != nil {
+		_, _ = dockerClient.ContainerRename(ctx, oldContainer.ID, client.ContainerRenameOptions{NewName: originalName})
+		return fmt.Errorf("stop old container: %w", containerStopErr)
+	}
+
+	fmt.Println("PROGRESS:75:Creating new container")
+	slog.InfoContext(ctx, "Creating new container", "name", originalName)
+	resp, err := compat.ContainerCreateWithCompatibilityForAPIVersion(ctx, dockerClient, client.ContainerCreateOptions{
+		Config:           &config,
+		HostConfig:       hostConfig,
+		NetworkingConfig: networkConfig,
+		Name:             originalName,
+	}, apiVersion)
+	if err != nil {
+		// Try to restart and restore old container on failure
+		_, _ = dockerClient.ContainerStart(ctx, oldContainer.ID, client.ContainerStartOptions{})
+		_, _ = dockerClient.ContainerRename(ctx, oldContainer.ID, client.ContainerRenameOptions{NewName: originalName})
+		return fmt.Errorf("create new container: %w", err)
+	}
+
+	// Docker resolves the tag at creation. Inspect the created container so a
+	// concurrent pull cannot cause an unselected image to start.
+	if expectedImageID != "" {
+		created, inspectErr := compat.ContainerInspectWithCompatibility(ctx, dockerClient, resp.ID, client.ContainerInspectOptions{})
+		if inspectErr != nil {
+			err = fmt.Errorf("inspect new container image: %w", inspectErr)
+		} else if created.Container.Image != expectedImageID {
+			err = fmt.Errorf("new container uses image %s, expected %s", created.Container.Image, expectedImageID)
+		}
+	}
+	if err == nil {
+		fmt.Println("PROGRESS:80:Starting new container")
+		slog.InfoContext(ctx, "Starting new container", "id", resp.ID[:12])
+		if _, startErr := dockerClient.ContainerStart(ctx, resp.ID, client.ContainerStartOptions{}); startErr != nil {
+			err = fmt.Errorf("start new container: %w", startErr)
+		}
+	}
+	if err != nil {
+		// Cleanup the rejected replacement and restore the original container.
+		if _, removeErr := dockerClient.ContainerRemove(ctx, resp.ID, client.ContainerRemoveOptions{Force: true}); removeErr != nil {
+			err = errors.Join(err, fmt.Errorf("remove new container: %w", removeErr))
+		}
+		if _, startErr := dockerClient.ContainerStart(ctx, oldContainer.ID, client.ContainerStartOptions{}); startErr != nil {
+			err = errors.Join(err, fmt.Errorf("restart old container: %w", startErr))
+		}
+		if _, renameErr := dockerClient.ContainerRename(ctx, oldContainer.ID, client.ContainerRenameOptions{NewName: originalName}); renameErr != nil {
+			err = errors.Join(err, fmt.Errorf("restore old container name: %w", renameErr))
+		}
+		return err
+	}
+
+	// Wait a moment for the new container to initialize
+	// Wait a moment for the new container to initialize
+	fmt.Println("PROGRESS:85:Waiting for container to start")
+	time.Sleep(2 * time.Second)
+
+	fmt.Println("PROGRESS:90:Removing old container")
+	slog.InfoContext(ctx, "Removing old container", "id", oldContainer.ID[:12])
+	if _, containerRemoveErr := dockerClient.ContainerRemove(ctx, oldContainer.ID, client.ContainerRemoveOptions{}); containerRemoveErr != nil {
+		slog.WarnContext(ctx, "Failed to remove old container", "error", containerRemoveErr)
+	}
+
+	fmt.Println("PROGRESS:95:Upgrade complete")
+
+	return nil
+}
+
+func applyRecoveredEnvironmentInternal(current []string, recovered map[string]string) []string {
+	seen := make(map[string]struct{}, len(recovered))
+	updated := make([]string, 0, len(current)+len(recovered))
+	for _, entry := range current {
+		name, _, found := strings.Cut(entry, "=")
+		if !found {
+			updated = append(updated, entry)
+			continue
+		}
+		if baseName, ok := strings.CutSuffix(name, "__FILE"); ok {
+			if _, localOk := recovered[baseName]; localOk {
+				continue
+			}
+		}
+		if baseName, ok := strings.CutSuffix(name, "_FILE"); ok {
+			if _, localOk2 := recovered[baseName]; localOk2 {
+				continue
+			}
+		}
+		if replacement, ok := recovered[name]; ok {
+			updated = append(updated, name+"="+replacement)
+			seen[name] = struct{}{}
+		} else {
+			updated = append(updated, entry)
+		}
+	}
+	for name, value := range recovered {
+		if _, ok := seen[name]; !ok {
+			updated = append(updated, name+"="+value)
+		}
+	}
+	return updated
+}
+
+// looksLikeContainerID checks if a string looks like a Docker container ID
+// (12 or 64 lowercase hex characters, which Docker auto-generates as hostnames)
+func looksLikeContainerID(s string) bool {
+	if len(s) != 12 && len(s) != 64 {
+		return false
+	}
+	for _, c := range s {
+		if (c < '0' || c > '9') && (c < 'a' || c > 'f') {
+			return false
+		}
+	}
+	return true
+}

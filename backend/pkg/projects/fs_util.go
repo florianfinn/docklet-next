@@ -1,0 +1,293 @@
+// Source: getarcaneapp/arcane/backend/pkg/projects/fs_util.go
+// Revision: 095cb778daba1034e2a39961199e712a75d4ba29
+// Retrieved: 2026-10-13
+// License: BSD-3-Clause
+// Deviations: Local module namespace; functional cut: removed template catalogue; functional cut: removed GitOps and saved Git repositories.
+
+package projects
+
+import (
+	"cmp"
+	"context"
+	"errors"
+	"fmt"
+	"log/slog"
+	"os"
+	"path/filepath"
+	"strings"
+
+	"github.com/samber/mo"
+	"go.getarcane.app/acfs"
+	kit "go.getarcane.app/kit/pkg"
+	"go.yaml.in/yaml/v4"
+
+	"github.com/florianfinn/docklet-next/backend/internal/common"
+	"github.com/florianfinn/docklet-next/backend/internal/config"
+	"github.com/florianfinn/docklet-next/backend/pkg/utils"
+)
+
+func ResolveConfiguredContainerDirectory(configuredPath, defaultPath string) string {
+	directory := cmp.Or(strings.TrimSpace(configuredPath), defaultPath)
+
+	// Handle mapping format: "container_path:host_path"
+	if parts := strings.SplitN(directory, ":", 2); len(parts) == 2 {
+		if !IsWindowsDrivePath(directory) && strings.HasPrefix(parts[0], "/") {
+			directory = parts[0]
+		}
+	}
+
+	return resolveProjectsDirectoryPath(directory)
+}
+
+func GetProjectsDirectory(ctx context.Context, projectsDir string) (string, error) {
+	projectsDirectory := ResolveConfiguredContainerDirectory(projectsDir, "/app/data/projects")
+
+	// os.* rather than acfs: this creates the confinement root itself, which
+	// has to exist before acfs can open it.
+	if _, err := os.Stat(projectsDirectory); os.IsNotExist(err) {
+		if mkdirAllErr := os.MkdirAll(projectsDirectory, utils.DirPerm); mkdirAllErr != nil {
+			return "", mkdirAllErr
+		}
+		slog.InfoContext(ctx, "Created projects directory", "path", projectsDirectory)
+	}
+
+	return projectsDirectory, nil
+}
+
+func resolveProjectsDirectoryPath(projectsDirectory string) string {
+	if filepath.IsAbs(projectsDirectory) {
+		return filepath.Clean(projectsDirectory)
+	}
+
+	if backendRoot, ok := findBackendModuleRoot().Get(); ok {
+		return filepath.Clean(filepath.Join(backendRoot, projectsDirectory))
+	}
+
+	absDir, err := filepath.Abs(projectsDirectory)
+	if err == nil {
+		return filepath.Clean(absDir)
+	}
+
+	return filepath.Clean(projectsDirectory)
+}
+
+func findBackendModuleRoot() mo.Option[string] {
+	cwd, err := os.Getwd()
+	if err != nil {
+		return mo.None[string]()
+	}
+
+	candidates := []string{
+		cwd,
+		filepath.Join(cwd, "backend"),
+	}
+
+	for _, candidate := range candidates {
+		if isBackendModuleRoot(candidate) {
+			return mo.Some(candidate)
+		}
+	}
+
+	return mo.None[string]()
+}
+
+func isBackendModuleRoot(path string) bool {
+	if _, err := os.Stat(filepath.Join(path, "go.mod")); err != nil {
+		return false
+	}
+	if _, err := os.Stat(filepath.Join(path, "internal")); err != nil {
+		return false
+	}
+	if _, err := os.Stat(filepath.Join(path, "pkg")); err != nil {
+		return false
+	}
+	return true
+}
+
+// ReadProjectFiles stays on os.*: compose and env files may be symlinks
+// resolving outside any confinement root, and projectPath can be an imported
+// project outside the projects directory; acfs cannot follow either.
+func ReadProjectFiles(ctx context.Context, projectPath, composePath string) (composeContent, envContent string, err error) {
+	if strings.TrimSpace(composePath) == "" {
+		detected, derr := DetectComposeFile(ctx, "", projectPath)
+		if derr != nil && !errors.Is(derr, common.ErrComposeFileNotFound) && (!errors.Is(derr, common.ErrProjectEnvUnreadable) || detected == "") {
+			return "", "", derr
+		}
+		composePath = detected
+	}
+
+	if strings.TrimSpace(composePath) != "" {
+		content, rerr := os.ReadFile(composePath)
+		if rerr != nil {
+			return "", "", fmt.Errorf("failed to read compose file %s: %w", composePath, rerr)
+		}
+		composeContent = string(content)
+	}
+
+	envPath := filepath.Join(projectPath, ".env")
+	if content, rerr := os.ReadFile(envPath); rerr == nil {
+		envContent = string(content)
+	}
+
+	return composeContent, envContent, nil
+}
+
+func HasComposeRootKeysInFile(path string) (bool, error) {
+	// Stays on os.*: callers pass paths in imported projects outside the
+	// projects directory, where no acfs root exists.
+	content, err := os.ReadFile(path)
+	if err != nil {
+		return false, err
+	}
+
+	composeData := map[string]any{}
+	if unmarshalErr := yaml.Unmarshal(content, &composeData); unmarshalErr != nil {
+		return false, unmarshalErr
+	}
+
+	_, hasServices := composeData["services"]
+	_, hasInclude := composeData["include"]
+	return hasServices || hasInclude, nil
+}
+
+func projectScanSkipDirectorySetInternal(skipDirectories string) map[string]bool {
+	if strings.TrimSpace(skipDirectories) == "" {
+		skipDirectories = config.LoadProjectWorkspaceConfig().ProjectScanSkipDirs
+	}
+
+	dirs := map[string]bool{}
+	for dir := range strings.SplitSeq(skipDirectories, ",") {
+		dir = strings.TrimSpace(dir)
+		if dir != "" {
+			dirs[dir] = true
+		}
+	}
+
+	// Never allow .git contents to be exposed through the project workspace.
+	dirs[".git"] = true
+
+	return dirs
+}
+
+// pathExistsInternal stays on os.*: it probes arbitrary absolute paths,
+// including imported projects outside any acfs root.
+func pathExistsInternal(path string) (bool, error) {
+	_, err := os.Stat(path)
+	if err == nil {
+		return true, nil
+	}
+	return false, kit.Ternary(os.IsNotExist(err), nil, err)
+}
+
+func CreateUniqueDir(ctx context.Context, projectsRoot, basePath, name string, perm os.FileMode) (path, folderName string, err error) {
+	sanitized := SanitizeProjectName(name)
+
+	// Reject empty or invalid sanitized names
+	if sanitized == "" || strings.Trim(sanitized, "_") == "" {
+		return "", "", errors.New("invalid project name: results in empty directory name")
+	}
+
+	candidate := basePath
+	folderName = sanitized
+
+	for counter := 1; ; counter++ {
+		logicalPath, logicalErr := acfs.LogicalPath(projectsRoot, candidate)
+		if logicalErr != nil {
+			return "", "", fmt.Errorf("project directory would be outside allowed projects root: %w", logicalErr)
+		}
+
+		mkErr := acfs.Mkdir(ctx, projectsRoot, logicalPath, perm)
+		if mkErr == nil {
+			return candidate, folderName, nil
+		}
+		if !errors.Is(mkErr, os.ErrExist) {
+			return "", "", mkErr
+		}
+
+		candidate = fmt.Sprintf("%s-%d", basePath, counter)
+		folderName = fmt.Sprintf("%s-%d", sanitized, counter)
+	}
+}
+
+// ErrProjectDirExists is returned by CreateExactDir when the target directory
+// already exists. Callers that must not auto-rename (which
+// must never mint "-N" duplicate projects on a broken binding) use this to fail
+// loudly instead of suffixing.
+var ErrProjectDirExists = errors.New("project directory already exists")
+
+// CreateExactDir creates basePath (the sanitized project directory) under
+// projectsRoot WITHOUT any "-N" collision suffixing. It returns ErrProjectDirExists
+// when the directory already exists, leaving the caller to decide how to proceed.
+func CreateExactDir(ctx context.Context, projectsRoot, basePath, name string, perm os.FileMode) (path, folderName string, err error) {
+	sanitized := SanitizeProjectName(name)
+	if sanitized == "" || strings.Trim(sanitized, "_") == "" {
+		return "", "", errors.New("invalid project name: results in empty directory name")
+	}
+
+	logicalPath, err := acfs.LogicalPath(projectsRoot, basePath)
+	if err != nil {
+		return "", "", fmt.Errorf("project directory would be outside allowed projects root: %w", err)
+	}
+
+	if mkdirErr := acfs.Mkdir(ctx, projectsRoot, logicalPath, perm); mkdirErr != nil {
+		return "", "", kit.Ternary[error](errors.Is(mkdirErr, os.ErrExist), ErrProjectDirExists, mkdirErr)
+	}
+
+	return basePath, sanitized, nil
+}
+
+func SanitizeProjectName(name string) string {
+	name = strings.TrimSpace(name)
+	return strings.Map(func(r rune) rune {
+		if (r >= 'a' && r <= 'z') ||
+			(r >= 'A' && r <= 'Z') ||
+			(r >= '0' && r <= '9') ||
+			r == '-' || r == '_' {
+			return r
+		}
+		return '_'
+	}, name)
+}
+
+// IsSafeSubdirectory returns true if subdir is a subdirectory of baseDir (absolute, normalized)
+func IsSafeSubdirectory(baseDir, subdir string) bool {
+	absBase, err1 := filepath.Abs(baseDir)
+	absSubdir, err2 := filepath.Abs(subdir)
+	if err1 != nil || err2 != nil {
+		return false
+	}
+
+	// Ensure both paths end consistently for comparison
+	absBase = filepath.Clean(absBase)
+	absSubdir = filepath.Clean(absSubdir)
+
+	rel, err := filepath.Rel(absBase, absSubdir)
+	if err != nil {
+		return false
+	}
+
+	// The path must not escape the base directory
+	return !strings.HasPrefix(rel, "..") && !filepath.IsAbs(rel)
+}
+
+// ResolvePathWithinDir resolves path and rejects paths that escape baseDir.
+func ResolvePathWithinDir(baseDir, path string) (string, error) {
+	resolvedBase, err := filepath.Abs(filepath.Clean(baseDir))
+	if err != nil {
+		return "", fmt.Errorf("failed to resolve base directory %q: %w", baseDir, err)
+	}
+
+	resolvedPath := path
+	if !filepath.IsAbs(resolvedPath) {
+		resolvedPath = filepath.Join(resolvedBase, resolvedPath)
+	}
+	resolvedPath, err = filepath.Abs(filepath.Clean(resolvedPath))
+	if err != nil {
+		return "", fmt.Errorf("failed to resolve path %q: %w", path, err)
+	}
+	if !IsSafeSubdirectory(resolvedBase, resolvedPath) {
+		return "", fmt.Errorf("path %q escapes directory %q", path, baseDir)
+	}
+
+	return resolvedPath, nil
+}

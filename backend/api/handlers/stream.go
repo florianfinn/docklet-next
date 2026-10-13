@@ -1,0 +1,266 @@
+// Source: getarcaneapp/arcane/backend/api/handlers/stream.go
+// Revision: 095cb778daba1034e2a39961199e712a75d4ba29
+// Retrieved: 2026-10-13
+// License: BSD-3-Clause
+// Deviations: Local module namespace
+
+package handlers
+
+import (
+	"context"
+	"log/slog"
+	"net/http"
+	"strings"
+	"sync"
+	"time"
+
+	"github.com/danielgtaylor/huma/v2"
+	"github.com/danielgtaylor/huma/v2/sse"
+	activitytypes "github.com/florianfinn/docklet-next/types/activity"
+	dashboardtypes "github.com/florianfinn/docklet-next/types/dashboard"
+	environmenttypes "github.com/florianfinn/docklet-next/types/environment"
+	eventtypes "github.com/florianfinn/docklet-next/types/event"
+	streamtypes "github.com/florianfinn/docklet-next/types/stream"
+	versiontypes "github.com/florianfinn/docklet-next/types/version"
+	"go.getarcane.app/streams/agg"
+
+	"github.com/florianfinn/docklet-next/backend/internal/activity"
+	"github.com/florianfinn/docklet-next/backend/internal/dashboard"
+	"github.com/florianfinn/docklet-next/backend/internal/environment"
+	"github.com/florianfinn/docklet-next/backend/internal/event"
+	"github.com/florianfinn/docklet-next/backend/internal/middleware"
+	"github.com/florianfinn/docklet-next/backend/internal/version"
+	"github.com/florianfinn/docklet-next/backend/pkg/authz"
+	"github.com/florianfinn/docklet-next/backend/pkg/utils/handlerutil"
+	"github.com/florianfinn/docklet-next/backend/pkg/utils/httpx"
+)
+
+const (
+	clientStreamHeartbeatInterval = 15 * time.Second
+	clientStreamDeadPeerTimeout   = 45 * time.Second
+	clientStreamEventBuffer       = 64
+	// Per-channel handoff buffer between a channel's producer and the envelope
+	// forwarder. Small on purpose: the shared writer is the real backpressure
+	// point, and a deep per-channel buffer would only delay noticing a stalled
+	// client.
+	clientStreamChannelBuffer = 16
+)
+
+// StreamHandler multiplexes every live feed onto one connection.
+type StreamHandler struct {
+	events      *event.EventService
+	dashboard   *dashboard.DashboardHandler
+	activity    *activity.ActivityHandler
+	environment *environment.EnvironmentHandler
+	version     *version.VersionService
+}
+
+type StreamClientInput struct {
+	Channels     string `query:"channels" doc:"Comma-separated channels to subscribe to: environments, dashboard, activities, events, version"`
+	DebugAllGood bool   `query:"debugAllGood" default:"false" doc:"Debug mode for the dashboard channel: force an empty action item list"`
+	Limit        int    `query:"limit" default:"0" doc:"Maximum activities to include in each activities-channel snapshot"`
+}
+
+// RegisterStream registers the multiplexed client stream. It builds its own
+// per-domain handlers from the same services the individual handlers use, so
+// each channel's producer stays the single implementation of that feed.
+func RegisterStream(
+	api huma.API,
+	dashboardHandler *dashboard.DashboardHandler,
+	activityHandler *activity.ActivityHandler,
+	environmentHandler *environment.EnvironmentHandler,
+	eventService *event.EventService,
+	versionService *version.VersionService,
+) {
+	h := &StreamHandler{
+		events:      eventService,
+		dashboard:   dashboardHandler,
+		activity:    activityHandler,
+		environment: environmentHandler,
+		version:     versionService,
+	}
+
+	sse.Register(api, huma.Operation{
+		OperationID: "streamClient",
+		Method:      http.MethodGet,
+		Path:        "/stream",
+		Summary:     "Multiplexed client stream",
+		Description: "Streams the requested channels (environments, dashboard, activities, events, version) as JSON envelopes over a single Server-Sent Events connection",
+		Tags:        []string{"Stream"},
+		Security:    handlerutil.DefaultOperationSecurity(),
+		Middlewares: huma.Middlewares{func(ctx huma.Context, next func(huma.Context)) {
+			httpx.SetStreamHeaders(ctx)
+			next(ctx)
+		}},
+		// Ungated: each channel applies its own permission check below, and a
+		// caller with access to none simply gets a heartbeat-only stream.
+	}, map[string]any{"message": streamtypes.Event{}}, h.StreamClient)
+}
+
+func (h *StreamHandler) StreamClient(ctx context.Context, input *StreamClientInput, send sse.Sender) {
+	ps, _ := middleware.PermissionsFromContext(ctx)
+	h.streamClientInternal(ctx, ps, input, send)
+}
+
+func (h *StreamHandler) streamClientInternal(ctx context.Context, ps *authz.PermissionSet, input *StreamClientInput, send sse.Sender) {
+	releaseDeadPeerTimeout, timeoutErr := httpx.AcquireDeadPeerTimeout(ctx, clientStreamDeadPeerTimeout)
+	if timeoutErr != nil {
+		slog.DebugContext(ctx, "could not bound client stream dead-peer timeout", "error", timeoutErr)
+	}
+	defer releaseDeadPeerTimeout()
+
+	streamCtx, cancel := context.WithCancel(ctx)
+	events := make(chan streamtypes.Event, clientStreamEventBuffer)
+	var producers sync.WaitGroup
+	for _, producer := range h.producersForInternal(ps, input) {
+		producers.Go(func() {
+			producer(streamCtx, events)
+		})
+	}
+	defer producers.Wait()
+	defer cancel()
+
+	heartbeat := time.NewTicker(clientStreamHeartbeatInterval)
+	defer heartbeat.Stop()
+
+	for {
+		var envelope streamtypes.Event
+		select {
+		case <-streamCtx.Done():
+			return
+		case envelope = <-events:
+		case <-heartbeat.C:
+			envelope = streamtypes.Event{Type: "heartbeat", Timestamp: time.Now()}
+		}
+		if streamCtx.Err() != nil {
+			return
+		}
+		if err := send.Data(envelope); err != nil {
+			slog.DebugContext(ctx, "client stream disconnected", "error", err)
+			return
+		}
+	}
+}
+
+// producersForInternal selects the producers for the requested channels,
+// dropping any the caller lacks permission for.
+func (h *StreamHandler) producersForInternal(ps *authz.PermissionSet, input *StreamClientInput) []agg.Producer[streamtypes.Event] {
+	requested := parseStreamChannelsInternal(input.Channels)
+	producers := make([]agg.Producer[streamtypes.Event], 0, 5)
+
+	if requested[streamtypes.ChannelEnvironments] {
+		// Ungated like listEnvironments; the producer filters to the caller's
+		// accessible environments.
+		producers = append(producers, forwardStreamChannelInternal(
+			streamtypes.ChannelEnvironments,
+			func(channel string, event environmenttypes.StreamEvent) streamtypes.Event {
+				return streamtypes.Event{Channel: channel, Environment: &event, Timestamp: event.Timestamp}
+			},
+			func(producerCtx context.Context, events chan<- environmenttypes.StreamEvent) {
+				h.environment.RunStreamProducer(producerCtx, ps, events)
+			},
+		))
+	}
+
+	if requested[streamtypes.ChannelDashboard] {
+		wrapDashboard := func(channel string, event dashboardtypes.StreamEvent) streamtypes.Event {
+			return streamtypes.Event{Channel: channel, Dashboard: &event, Timestamp: event.Timestamp}
+		}
+		if ps.Allows(authz.PermDashboardRead, environment.LocalEnvironmentID) {
+			producers = append(producers, forwardStreamChannelInternal(
+				streamtypes.ChannelDashboard, wrapDashboard,
+				func(producerCtx context.Context, events chan<- dashboardtypes.StreamEvent) {
+					h.dashboard.RunLocalStreamProducer(producerCtx, input.DebugAllGood, events)
+				},
+			))
+		}
+		if ps.AllowsAny(authz.PermDashboardRead) {
+			producers = append(producers, forwardStreamChannelInternal(
+				streamtypes.ChannelDashboard, wrapDashboard,
+				func(producerCtx context.Context, events chan<- dashboardtypes.StreamEvent) {
+					h.dashboard.RunRemoteStreamPollers(producerCtx, ps, input.DebugAllGood, events)
+				},
+			))
+		}
+	}
+
+	if requested[streamtypes.ChannelActivities] {
+		wrapActivity := func(channel string, event activitytypes.StreamEvent) streamtypes.Event {
+			return streamtypes.Event{Channel: channel, Activity: &event, Timestamp: event.Timestamp}
+		}
+		if ps.Allows(authz.PermActivitiesRead, environment.LocalEnvironmentID) {
+			producers = append(producers, forwardStreamChannelInternal(
+				streamtypes.ChannelActivities, wrapActivity,
+				func(producerCtx context.Context, events chan<- activitytypes.StreamEvent) {
+					h.activity.RunLocalStreamProducer(producerCtx, input.Limit, events)
+				},
+			))
+		}
+		if ps.AllowsAny(authz.PermActivitiesRead) {
+			producers = append(producers, forwardStreamChannelInternal(
+				streamtypes.ChannelActivities, wrapActivity,
+				func(producerCtx context.Context, events chan<- activitytypes.StreamEvent) {
+					h.activity.RunRemoteStreamPollers(producerCtx, ps, input.Limit, events)
+				},
+			))
+		}
+	}
+
+	if requested[streamtypes.ChannelEvents] && ps.Allows(authz.PermEventsRead, "") {
+		producers = append(producers, forwardStreamChannelInternal(
+			streamtypes.ChannelEvents,
+			func(channel string, event eventtypes.StreamEvent) streamtypes.Event {
+				return streamtypes.Event{Channel: channel, EventLog: &event, Timestamp: event.Timestamp}
+			},
+			h.events.RunStreamProducer,
+		))
+	}
+
+	if requested[streamtypes.ChannelVersion] {
+		// Ungated like GET /app-version.
+		producers = append(producers, forwardStreamChannelInternal(
+			streamtypes.ChannelVersion,
+			func(channel string, event versiontypes.StreamEvent) streamtypes.Event {
+				return streamtypes.Event{Channel: channel, Version: &event, Timestamp: event.Timestamp}
+			},
+			h.version.RunStreamProducer,
+		))
+	}
+	return producers
+}
+
+func parseStreamChannelsInternal(raw string) map[string]bool {
+	channels := make(map[string]bool, 5)
+	for name := range strings.SplitSeq(raw, ",") {
+		if trimmed := strings.TrimSpace(strings.ToLower(name)); trimmed != "" {
+			channels[trimmed] = true
+		}
+	}
+	return channels
+}
+
+// forwardStreamChannelInternal adapts a channel's own producer to the shared
+// envelope. Each producer keeps emitting its native event type, so adding a
+// channel never means rewriting its feed.
+func forwardStreamChannelInternal[T any](
+	channel string,
+	wrap func(string, T) streamtypes.Event,
+	producer func(context.Context, chan<- T),
+) agg.Producer[streamtypes.Event] {
+	return func(ctx context.Context, out chan<- streamtypes.Event) {
+		inner := make(chan T, clientStreamChannelBuffer)
+
+		var worker sync.WaitGroup
+		worker.Go(func() {
+			defer close(inner)
+			producer(ctx, inner)
+		})
+		defer worker.Wait()
+
+		for event := range inner {
+			if !agg.Send(ctx, out, wrap(channel, event)) {
+				return
+			}
+		}
+	}
+}

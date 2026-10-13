@@ -10,23 +10,95 @@ No endorsement or partnership is implied.
 Governance tooling adapted from florianfinn/docklet-hub under Apache-2.0.
 Source revision: a4484c910bb5d6a8f8df97b4f23f4ee5e6359081.
 
-Third-party notices — inventory hook point
-No Go or web dependencies are shipped by this foundation. M1 must replace these
-pending entries with exact versions, source references, copyright notices and
-licence copies from the adopted binary graph; M2 adds the web runtime graph.
-These entries document known obligations, not a claim of installed dependencies.
+Third-party Go notices — functional-cut source graph, 2026-10-13
 
-MPL-2.0, source references pending M1 inventory:
-- github.com/cyphar/filepath-securejoin
-- github.com/hashicorp/errwrap
-- github.com/hashicorp/go-cleanhttp
-- github.com/hashicorp/go-multierror
-- github.com/hashicorp/go-version
-Retain file-level notices and provide the corresponding source reference.
+The source import derives from Arcane v2.15.1 at
+095cb778daba1034e2a39961199e712a75d4ba29. The backend, CLI, wire types
+and eleven helper modules carry local module wiring and per-file provenance.
+The PostgreSQL-only Francis subset is adopted locally from revision
+23cd46831a543a73eec05ad034afd46245225876. No binary is distributed.
+The current linux/amd64 hub and agent command source graphs each contain 272
+modules and 1,491 non-standard-library packages. The current module inventory,
+local lockfile hashes and licence mapping are in docs/provenance/core-import.json.
+The archived pre-cut evidence remains in docs/provenance/arcane-binary.json,
+arcane-license-packages.json and arcane-modules.json.
 
-EDL-1.0, source reference pending M1 inventory:
-- github.com/eclipse/paho.golang: select EDL-1.0 from the upstream dual licence
-  (EPL-2.0 OR EDL-1.0), and include the selected licence and copyright notice.
+MPL-2.0 covered source
+Retain all covered-file notices and the MPL-2.0 text. When distributing binaries,
+make the corresponding covered source, including modifications, available to
+recipients and explain how to obtain it. Separate larger-work files retain their
+own licences. These upstream modules retain their source notices:
 
-All adopted sibling modules and go.getarcane.app modules require their own
-inventory entries. Unknown or incompatible licences block a release.
+- github.com/cyphar/filepath-securejoin v0.7.0
+  Source: https://github.com/cyphar/filepath-securejoin/tree/8096a959c5d7a248976a3531a030f5c4da0a44d0
+- github.com/hashicorp/errwrap v1.1.0
+  Source: https://proxy.golang.org/github.com/hashicorp/errwrap/@v/v1.1.0.zip
+- github.com/hashicorp/go-cleanhttp v0.5.2
+  Source: https://proxy.golang.org/github.com/hashicorp/go-cleanhttp/@v/v0.5.2.zip
+- github.com/hashicorp/go-multierror v1.1.1
+  Source: https://proxy.golang.org/github.com/hashicorp/go-multierror/@v/v1.1.1.zip
+- github.com/hashicorp/go-version v1.9.0
+  Source: https://github.com/hashicorp/go-version/tree/b80b1e68c4854757b38663ec02bada2d839b6f56
+
+filepath-securejoin has BSD-3-Clause AND MPL-2.0 files; its COPYING.md and file
+headers determine the applicable terms. Only the BSD root and internal/consts
+packages are in the measured source graph; MPL pathrs-lite is not. Its BSD
+notice names:
+Copyright (C) 2014-2015 Docker Inc & Go Authors. All rights reserved.
+Copyright (C) 2017-2024 SUSE LLC. All rights reserved.
+go-version source headers state: Copyright IBM Corp. 2014, 2025.
+For errwrap, go-cleanhttp and go-multierror, the inspected texts supply no
+additional copyright statement; retain their original notices and MPL text.
+
+BSD-3-Clause (EDL-1.0) selected alternative
+- github.com/eclipse/paho.golang v0.23.0
+  Source: https://github.com/eclipse/paho.golang/tree/1aa03969c5932464359b3e4ed752d9ac61abccc9
+  Select BSD-3-Clause, the SPDX identifier for Eclipse Distribution License 1.0
+  (EDL-1.0), from the upstream EPL-2.0 OR BSD-3-Clause dual licence.
+  Include edl-v10 and applicable source notices in the redistribution bundle.
+  The selected licence text states:
+  Copyright (c) 2007, Eclipse Foundation, Inc. and its licensors.
+  Compiled source headers additionally state:
+  Copyright (c) 2024 Contributors to the Eclipse Foundation
+
+Arcane helper notices
+All eleven go.getarcane.app modules carry BSD-3-Clause module licences, with
+separate revisions recorded in the map. The adopted builds/pkg/docker/buildkit.go
+and kit/pkg/signals/signals.go also preserve their upstream Apache-2.0 notices
+(Moby and Kubernetes respectively); core-import.json records the combined grants.
+Retain their original notices, including:
+- acfs: Copyright (c) 2026, Kyle Mendell
+- builds, streams, updater: Copyright (c) 2025, Kyle Mendell
+- kit, docker, docker/compat, docker/convert: Copyright (c) 2026, Arcane
+- sys/bytes, sys/cgroup, sys/crypto: retain both the module ZIP's notice,
+  Copyright (c) 2026, Arcane, and repository sys/LICENSE,
+  Copyright (c) 2025, Kyle Mendell.
+Sibling backend, CLI and types use the Arcane root BSD notice above.
+
+Francis actor-runtime notices
+The locally adopted PostgreSQL-only Francis subset retains its MIT licence in
+third_party/francis/LICENSE.md: Copyright (c) 2025-2026, Alessandro Segala &
+contributors. Its host, actor core and time helpers preserve embedded Apache-2.0
+notices from The Dapr Authors, dated 2023 or 2024 in their source headers.
+Retain the MIT and applicable Apache-2.0 texts and notices when packaging.
+
+Other dependencies
+Preserve all applicable licence, copyright and NOTICE texts identified by the
+inventory, including nested notices and mixed Apache-2.0/MIT YAML sources.
+go-localereader v0.0.1 declares MIT in README.md and credits Yasuhiro Matsumoto;
+retain that declaration and credit. The inventory's public-safe copyright
+excerpts are not a substitute for original legal notices in a release bundle.
+
+docs/provenance/core-import.json records the current hub/agent source graphs and
+all local Go manifest/checksum hashes. Root checks reject lockfile inventory
+drift. The source graphs exclude modernc.org/sqlite, modernc.org/libc,
+github.com/libtnb/sqlite and github.com/mattn/go-sqlite3. Indirect module
+requirements retained for upstream dependency tests are not part of either
+command graph.
+
+Product packaging must include verbatim licence texts, corresponding-source
+references and tested extracted-artefact copies before any release. Web
+dependencies and container contents require their own inventories. No release
+licence bundle is claimed by this source assessment. Unknown/incompatible
+shipped licences block release. All identified legal evidence has a
+classification or an explicit hash-bound review.

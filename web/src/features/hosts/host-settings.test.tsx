@@ -75,7 +75,7 @@ describe("host settings", () => {
     await userEvent.click(await screen.findByRole("button", { name: "Einstellungen von Cedar" }));
     const dialog = await screen.findByRole("dialog", { name: "Host Cedar" });
     await userEvent.click(within(dialog).getByRole("tab", { name: "Agent-Container" }));
-    expect(within(dialog).getAllByText("docklet-agent").length).toBeGreaterThan(0);
+    expect((await within(dialog).findAllByText("docklet-agent")).length).toBeGreaterThan(0);
     // Disconnected host: the restart needs a connection.
     expect((within(dialog).getByRole("button", { name: "Agent neu starten" }) as HTMLButtonElement).disabled).toBe(true);
     expect((await adapter.listContainers()).some((c) => c.name === "docklet-agent")).toBe(false);

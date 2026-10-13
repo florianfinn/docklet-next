@@ -1,0 +1,417 @@
+// Source: getarcaneapp/arcane/backend/pkg/projects/fs_writer_test.go
+// Revision: 095cb778daba1034e2a39961199e712a75d4ba29
+// Retrieved: 2026-10-13
+// License: BSD-3-Clause
+// Deviations: Local module namespace; functional cut: removed GitOps and saved Git repositories; functional cut: removed Swarm.
+
+package projects
+
+import (
+	"errors"
+	"os"
+	"path/filepath"
+	"runtime"
+	"testing"
+	"time"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+	"go.getarcane.app/acfs"
+	kit "go.getarcane.app/kit/pkg"
+
+	"github.com/florianfinn/docklet-next/backend/pkg/utils"
+)
+
+func TestWriteFilesPermissions(t *testing.T) {
+	// Save original perms
+	origFilePerm := utils.FilePerm
+	origDirPerm := utils.DirPerm
+	defer func() {
+		utils.FilePerm = origFilePerm
+		utils.DirPerm = origDirPerm
+	}()
+
+	tmpDir := t.TempDir()
+	projectsRoot := tmpDir
+	projectDir := filepath.Join(tmpDir, "test-project")
+
+	t.Run("WriteComposeFile uses custom permissions", func(t *testing.T) {
+		utils.FilePerm = 0o600
+		utils.DirPerm = 0o700
+
+		err := WriteComposeFile(t.Context(), projectsRoot, projectDir, "services: {}")
+		require.NoError(t, err)
+
+		composePath := filepath.Join(projectDir, "compose.yaml")
+		info, err := os.Stat(composePath)
+		require.NoError(t, err)
+
+		if runtime.GOOS != "windows" {
+			assert.Equal(t, os.FileMode(0o600), info.Mode().Perm())
+
+			dirInfo, statErr := os.Stat(projectDir)
+			require.NoError(t, statErr)
+			assert.Equal(t, os.FileMode(0o700), dirInfo.Mode().Perm())
+		}
+	})
+
+	t.Run("WriteEnvFile uses custom permissions", func(t *testing.T) {
+		utils.FilePerm = 0o600
+		utils.DirPerm = 0o700
+
+		err := WriteProjectFile(t.Context(), projectsRoot, projectDir, ".env", "VAR=VAL")
+		require.NoError(t, err)
+
+		envPath := filepath.Join(projectDir, ".env")
+		info, err := os.Stat(envPath)
+		require.NoError(t, err)
+
+		if runtime.GOOS != "windows" {
+			assert.Equal(t, os.FileMode(0o600), info.Mode().Perm())
+		}
+	})
+}
+
+func TestWriteProjectFile_DoesNotReplaceIdenticalContent(t *testing.T) {
+	projectsRoot := t.TempDir()
+	projectDir := filepath.Join(projectsRoot, "test-project")
+	require.NoError(t, os.MkdirAll(projectDir, 0o755))
+
+	filePath := filepath.Join(projectDir, EffectiveEnvFileName)
+	content := "VALUE=unchanged\n"
+	require.NoError(t, os.WriteFile(filePath, []byte(content), 0o600))
+
+	fixedTime := time.Unix(1_700_000_000, 0)
+	require.NoError(t, os.Chtimes(filePath, fixedTime, fixedTime))
+	original, err := os.Stat(filePath)
+	require.NoError(t, err)
+
+	require.NoError(t, WriteProjectFile(t.Context(), projectsRoot, projectDir, EffectiveEnvFileName, content))
+
+	info, err := os.Stat(filePath)
+	require.NoError(t, err)
+	assert.True(t, info.ModTime().Equal(fixedTime), "identical content should not replace the file")
+	assert.True(t, os.SameFile(original, info))
+	assert.Equal(t, original.Mode().Perm(), info.Mode().Perm())
+
+	require.NoError(t, WriteProjectFile(t.Context(), projectsRoot, projectDir, EffectiveEnvFileName, "VALUE=new\n"))
+	updated, err := os.Stat(filePath)
+	require.NoError(t, err)
+	assert.True(t, os.SameFile(original, updated), "changed content should preserve the inode")
+	if runtime.GOOS != "windows" {
+		assert.Equal(t, os.FileMode(0o600), updated.Mode().Perm(), "changed content should preserve the file mode")
+	}
+	actual, err := os.ReadFile(filePath)
+	require.NoError(t, err)
+	assert.Equal(t, "VALUE=new\n", string(actual))
+}
+
+func TestWriteEnvFile_WritesThroughExternalSymlink(t *testing.T) {
+	projectsRoot := t.TempDir()
+	projectDir := filepath.Join(projectsRoot, "test-project")
+	require.NoError(t, os.MkdirAll(projectDir, 0o755))
+
+	externalDir := t.TempDir()
+	targetPath := filepath.Join(externalDir, "project.env")
+	targetPerm := os.FileMode(0o640)
+	require.NoError(t, os.WriteFile(targetPath, []byte("VALUE=old\n"), targetPerm))
+	require.NoError(t, os.Chmod(targetPath, targetPerm))
+
+	envPath := filepath.Join(projectDir, EffectiveEnvFileName)
+	if err := os.Symlink(targetPath, envPath); err != nil {
+		t.Skipf("symlink creation is unavailable: %v", err)
+	}
+	originalLinkTarget, err := os.Readlink(envPath)
+	require.NoError(t, err)
+
+	require.NoError(t, WriteProjectFile(t.Context(), projectsRoot, projectDir, ".env", "VALUE=new\n"))
+
+	linkInfo, err := os.Lstat(envPath)
+	require.NoError(t, err)
+	require.NotZero(t, linkInfo.Mode()&os.ModeSymlink)
+	currentLinkTarget, err := os.Readlink(envPath)
+	require.NoError(t, err)
+	assert.Equal(t, originalLinkTarget, currentLinkTarget)
+
+	targetContent, err := os.ReadFile(targetPath)
+	require.NoError(t, err)
+	assert.Equal(t, "VALUE=new\n", string(targetContent))
+	if runtime.GOOS != "windows" {
+		targetInfo, statErr := os.Stat(targetPath)
+		require.NoError(t, statErr)
+		assert.Equal(t, targetPerm, targetInfo.Mode().Perm())
+	}
+}
+
+func TestWriteEnvFile_DanglingSymlinkRemainsUntouched(t *testing.T) {
+	projectsRoot := t.TempDir()
+	projectDir := filepath.Join(projectsRoot, "test-project")
+	require.NoError(t, os.MkdirAll(projectDir, 0o755))
+
+	missingTarget := filepath.Join(t.TempDir(), "missing.env")
+	envPath := filepath.Join(projectDir, EffectiveEnvFileName)
+	if err := os.Symlink(missingTarget, envPath); err != nil {
+		t.Skipf("symlink creation is unavailable: %v", err)
+	}
+
+	for range 2 {
+		err := WriteProjectFile(t.Context(), projectsRoot, projectDir, ".env", "VALUE=new\n")
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "resolve env file symlink")
+
+		linkInfo, statErr := os.Lstat(envPath)
+		require.NoError(t, statErr)
+		require.NotZero(t, linkInfo.Mode()&os.ModeSymlink)
+		linkTarget, readlinkErr := os.Readlink(envPath)
+		require.NoError(t, readlinkErr)
+		assert.Equal(t, missingTarget, linkTarget)
+		require.NoFileExists(t, missingTarget)
+	}
+}
+
+func TestWriteEnvFile_RejectsNonRegularSymlinkTarget(t *testing.T) {
+	projectsRoot := t.TempDir()
+	projectDir := filepath.Join(projectsRoot, "test-project")
+	require.NoError(t, os.MkdirAll(projectDir, 0o755))
+
+	targetDir := t.TempDir()
+	envPath := filepath.Join(projectDir, EffectiveEnvFileName)
+	if err := os.Symlink(targetDir, envPath); err != nil {
+		t.Skipf("symlink creation is unavailable: %v", err)
+	}
+
+	err := WriteProjectFile(t.Context(), projectsRoot, projectDir, ".env", "VALUE=new\n")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "not a regular file")
+	linkInfo, statErr := os.Lstat(envPath)
+	require.NoError(t, statErr)
+	require.NotZero(t, linkInfo.Mode()&os.ModeSymlink)
+}
+
+func TestWriteProjectFile_StillRejectsNonEnvSymlink(t *testing.T) {
+	for _, writer := range []string{"project", "compose"} {
+		t.Run(writer, func(t *testing.T) {
+			projectsRoot := t.TempDir()
+			projectDir := filepath.Join(projectsRoot, "test-project")
+			require.NoError(t, os.MkdirAll(projectDir, 0o755))
+
+			targetPath := filepath.Join(t.TempDir(), "compose.yaml")
+			require.NoError(t, os.WriteFile(targetPath, []byte("services: {}\n"), 0o600))
+			fileName := kit.Ternary(writer == "project", "meta.yaml", DefaultComposeFileName)
+			linkPath := filepath.Join(projectDir, fileName)
+			if err := os.Symlink(targetPath, linkPath); err != nil {
+				t.Skipf("symlink creation is unavailable: %v", err)
+			}
+
+			var err error
+			switch writer {
+			case "project":
+				err = WriteProjectFile(t.Context(), projectsRoot, projectDir, fileName, "services: { updated: true }")
+			case "compose":
+				err = WriteComposeFile(t.Context(), projectsRoot, projectDir, "services: { updated: true }")
+
+			}
+			require.Error(t, err)
+			if writer == "project" {
+				assert.Contains(t, err.Error(), "destination is a symlink")
+			} else {
+				require.ErrorIs(t, err, acfs.ErrSymlink)
+			}
+
+			targetContent, readErr := os.ReadFile(targetPath)
+			require.NoError(t, readErr)
+			assert.Equal(t, "services: {}\n", string(targetContent))
+			linkInfo, statErr := os.Lstat(linkPath)
+			require.NoError(t, statErr)
+			require.NotZero(t, linkInfo.Mode()&os.ModeSymlink)
+		})
+	}
+}
+
+func TestWriteProjectFiles(t *testing.T) {
+	tmpDir := t.TempDir()
+	projectsRoot := tmpDir
+	projectDir := filepath.Join(tmpDir, "test-project")
+
+	t.Run("creates new project with empty env when envContent is nil", func(t *testing.T) {
+		err := WriteProjectFiles(t.Context(), projectsRoot, projectDir, "services: {}", nil)
+		require.NoError(t, err)
+
+		envPath := filepath.Join(projectDir, ".env")
+		content, err := os.ReadFile(envPath)
+		require.NoError(t, err)
+		assert.Empty(t, string(content))
+	})
+
+	t.Run("preserves existing env when envContent is nil", func(t *testing.T) {
+		envPath := filepath.Join(projectDir, ".env")
+		expected := "EXISTING=true"
+		err := os.WriteFile(envPath, []byte(expected), 0o600)
+		require.NoError(t, err)
+
+		err = WriteProjectFiles(t.Context(), projectsRoot, projectDir, "services: { updated: true }", nil)
+		require.NoError(t, err)
+
+		content, err := os.ReadFile(envPath)
+		require.NoError(t, err)
+		assert.Equal(t, expected, string(content))
+	})
+
+	t.Run("overwrites env when envContent is provided", func(t *testing.T) {
+		envPath := filepath.Join(projectDir, ".env")
+		newContent := "NEW=true"
+		err := WriteProjectFiles(t.Context(), projectsRoot, projectDir, "services: {}", &newContent)
+		require.NoError(t, err)
+
+		content, err := os.ReadFile(envPath)
+		require.NoError(t, err)
+		assert.Equal(t, newContent, string(content))
+	})
+}
+
+func TestWriteComposeFile_PreservesExistingPodmanComposeNames(t *testing.T) {
+	testCases := []struct {
+		name     string
+		fileName string
+	}{
+		{name: "podman-compose.yaml", fileName: "podman-compose.yaml"},
+		{name: "podman-compose.yml", fileName: "podman-compose.yml"},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			tmpDir := t.TempDir()
+			projectsRoot := tmpDir
+			projectDir := filepath.Join(tmpDir, "test-project")
+			require.NoError(t, os.MkdirAll(projectDir, 0o755))
+
+			existingComposePath := filepath.Join(projectDir, tc.fileName)
+			require.NoError(t, os.WriteFile(existingComposePath, []byte("services: {}"), 0o600))
+			original, err := os.Stat(existingComposePath)
+			require.NoError(t, err)
+
+			expectedContent := "services:\n  app:\n    image: nginx:alpine\n"
+			err = WriteComposeFile(t.Context(), projectsRoot, projectDir, expectedContent)
+			require.NoError(t, err)
+
+			actualContent, err := os.ReadFile(existingComposePath)
+			require.NoError(t, err)
+			assert.Equal(t, expectedContent, string(actualContent))
+			updated, err := os.Stat(existingComposePath)
+			require.NoError(t, err)
+			assert.True(t, os.SameFile(original, updated), "compose updates should preserve the inode")
+			if runtime.GOOS != "windows" {
+				assert.Equal(t, os.FileMode(0o600), updated.Mode().Perm(), "compose updates should preserve the file mode")
+			}
+
+			_, err = os.Stat(filepath.Join(projectDir, "compose.yaml"))
+			assert.True(t, os.IsNotExist(err), "compose.yaml should not be created when existing podman-compose file is present")
+		})
+	}
+}
+
+func TestWriteComposeFile_PreservesExistingCustomComposeNames(t *testing.T) {
+	t.Parallel()
+
+	tmpDir := t.TempDir()
+	projectsRoot := tmpDir
+	projectDir := filepath.Join(tmpDir, "Radarr-3")
+	require.NoError(t, os.MkdirAll(projectDir, 0o755))
+
+	existingComposePath := filepath.Join(projectDir, "radarr.yaml")
+	require.NoError(t, os.WriteFile(existingComposePath, []byte("services: {}"), 0o600))
+	require.NoError(t, os.WriteFile(filepath.Join(projectDir, "config.yaml"), []byte("x-config: true\n"), 0o600))
+
+	expectedContent := "services:\n  app:\n    image: nginx:alpine\n"
+	err := WriteComposeFile(t.Context(), projectsRoot, projectDir, expectedContent)
+	require.NoError(t, err)
+
+	actualContent, err := os.ReadFile(existingComposePath)
+	require.NoError(t, err)
+	assert.Equal(t, expectedContent, string(actualContent))
+
+	_, err = os.Stat(filepath.Join(projectDir, "compose.yaml"))
+	assert.True(t, os.IsNotExist(err), "compose.yaml should not be created when an existing custom compose file is present")
+}
+
+func TestReadComposeOverrideContent(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	assert.Empty(t, ReadComposeOverrideContent(dir))
+
+	content := "services:\n  app:\n    image: busybox:latest\n"
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "compose.override.yaml"), []byte(content), 0o600))
+	assert.Equal(t, content, ReadComposeOverrideContent(dir))
+}
+
+func TestResolveComposeOverride(t *testing.T) {
+	t.Parallel()
+
+	t.Run("returns highest-preference match", func(t *testing.T) {
+		t.Parallel()
+		available := map[string]string{
+			"compose.override.yml":         "first\n",
+			"docker-compose.override.yaml": "second\n",
+		}
+		name, content, found, err := ResolveComposeOverride(
+			func(n string) bool { _, ok := available[n]; return ok },
+			func(n string) (string, error) { return available[n], nil },
+		)
+		require.NoError(t, err)
+		require.True(t, found)
+		// compose.override.yml precedes docker-compose.override.yaml in compose-go order.
+		assert.Equal(t, "compose.override.yml", name)
+		assert.Equal(t, "first\n", content)
+	})
+
+	t.Run("returns not found when nothing exists", func(t *testing.T) {
+		t.Parallel()
+		name, content, found, err := ResolveComposeOverride(
+			func(string) bool { return false },
+			func(string) (string, error) { return "", nil },
+		)
+		require.NoError(t, err)
+		assert.False(t, found)
+		assert.Empty(t, name)
+		assert.Empty(t, content)
+	})
+
+	t.Run("propagates read error", func(t *testing.T) {
+		t.Parallel()
+		_, _, found, err := ResolveComposeOverride(
+			func(string) bool { return true },
+			func(string) (string, error) { return "", errors.New("boom") },
+		)
+		require.Error(t, err)
+		assert.False(t, found)
+	})
+}
+
+func TestWriteComposeOverrideFile(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	dir := filepath.Join(root, "proj")
+	require.NoError(t, os.MkdirAll(dir, 0o755))
+
+	// A stale override under a different candidate name should be cleaned up.
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "docker-compose.override.yml"), []byte("stale\n"), 0o600))
+
+	content := "services:\n  app:\n    image: busybox:latest\n"
+	require.NoError(t, WriteComposeOverrideFile(t.Context(), root, dir, &content, "compose.override.yaml"))
+
+	written, err := os.ReadFile(filepath.Join(dir, "compose.override.yaml"))
+	require.NoError(t, err)
+	assert.Equal(t, content, string(written))
+
+	_, statErr := os.Stat(filepath.Join(dir, "docker-compose.override.yml"))
+	assert.True(t, os.IsNotExist(statErr))
+
+	// Nil content removes all override files.
+	require.NoError(t, WriteComposeOverrideFile(t.Context(), root, dir, nil, ""))
+	_, statErr = os.Stat(filepath.Join(dir, "compose.override.yaml"))
+	assert.True(t, os.IsNotExist(statErr))
+}

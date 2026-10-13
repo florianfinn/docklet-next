@@ -1,0 +1,750 @@
+//go:build postgres_integration
+
+// Source: getarcaneapp/arcane/backend/internal/auth/service_test.go
+// Revision: 095cb778daba1034e2a39961199e712a75d4ba29
+// Retrieved: 2026-10-13
+// License: BSD-3-Clause
+// Deviations: Local module namespace; functional cut: removed OIDC and passkeys; functional cut: PostgreSQL integration test fixture.
+
+package auth
+
+import (
+	"bytes"
+	"context"
+	"crypto/mldsa"
+	"encoding/base64"
+	"encoding/json/v2"
+	"testing"
+	"time"
+
+	"github.com/florianfinn/docklet-next/backend/internal/testpg"
+	"github.com/florianfinn/docklet-next/types/auth"
+	"github.com/lestrrat-go/jwx/v4/jwa"
+	"github.com/lestrrat-go/jwx/v4/jwt"
+	"github.com/samber/hot"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+	"gorm.io/gorm"
+
+	"github.com/florianfinn/docklet-next/backend/internal/apikey"
+	"github.com/florianfinn/docklet-next/backend/internal/common"
+	"github.com/florianfinn/docklet-next/backend/internal/config"
+	"github.com/florianfinn/docklet-next/backend/internal/database"
+	"github.com/florianfinn/docklet-next/backend/internal/environment"
+	"github.com/florianfinn/docklet-next/backend/internal/role"
+	"github.com/florianfinn/docklet-next/backend/internal/session"
+	"github.com/florianfinn/docklet-next/backend/internal/settings"
+	"github.com/florianfinn/docklet-next/backend/internal/user"
+)
+
+func setupAuthServiceTestDB(t *testing.T) *database.DB {
+	t.Helper()
+	db, err := gorm.Open(testpg.Dialector(t, ":memory:"), &gorm.Config{})
+	require.NoError(t, err)
+	// Each pooled connection to a ":memory:" DSN gets its own empty database;
+	// keep a single connection so every query sees the migrated schema.
+	sqlDB, err := db.DB()
+	require.NoError(t, err)
+	sqlDB.SetMaxOpenConns(1)
+	require.NoError(t, db.AutoMigrate(
+		&settings.SettingVariable{},
+		&user.User{},
+		&session.UserSession{},
+		&environment.Environment{},
+		&role.Role{},
+		&role.UserRoleAssignment{},
+		&apikey.ApiKey{},
+		&role.ApiKeyPermission{},
+	))
+	return &database.DB{DB: db}
+}
+
+func newSettingsServiceForAuthTestInternal(t testing.TB, ctx context.Context, db *database.DB) (*settings.SettingsService, error) {
+	t.Helper()
+	svc, err := settings.NewSettingsService(ctx, db)
+	if err == nil {
+		t.Cleanup(func() { require.NoError(t, svc.Stop(context.WithoutCancel(t.Context()))) })
+	}
+	return svc, err
+}
+
+func newTestSigningKeyInternal() *mldsa.PrivateKey {
+	key, err := mldsa.GenerateKey(mldsa.MLDSA87())
+	if err != nil {
+		panic(err)
+	}
+	return key
+}
+
+func newTestAuthService() *AuthService {
+	return &AuthService{
+		signingKey:        newTestSigningKeyInternal(),
+		browserSigningKey: bytes.Repeat([]byte{0x42}, browserSessionSigningKeySize),
+		refreshExpiry:     24 * time.Hour,
+		config:            &config.Config{},
+		tokenCache: hot.NewHotCache[string, verifiedTokenEntry](hot.LRU, 4096).
+			WithTTL(15 * time.Second).
+			WithJanitor().
+			Build(),
+	}
+}
+
+func signLegacyTokenInternal(t testing.TB, key *mldsa.PrivateKey, claims map[string]any) string {
+	t.Helper()
+	header, err := json.Marshal(map[string]string{"alg": jwa.MLDSA87().String(), "typ": "JWT"})
+	require.NoError(t, err)
+	payload, err := json.Marshal(claims)
+	require.NoError(t, err)
+	signingInput := base64.RawURLEncoding.EncodeToString(header) + "." + base64.RawURLEncoding.EncodeToString(payload)
+	signature, err := key.Sign(nil, []byte(signingInput), nil)
+	require.NoError(t, err)
+	return signingInput + "." + base64.RawURLEncoding.EncodeToString(signature)
+}
+
+func signJWXTokenInternal(t testing.TB, key *mldsa.PrivateKey, claims map[string]any) string {
+	t.Helper()
+	payload, err := json.Marshal(claims)
+	require.NoError(t, err)
+	token, err := jwt.ParseInsecure(payload)
+	require.NoError(t, err)
+	signed, err := jwt.Sign(token, jwt.WithKey(jwa.MLDSA87(), key))
+	require.NoError(t, err)
+	return string(signed)
+}
+
+func signUnsignedTokenInternal(t testing.TB, claims map[string]any) string {
+	t.Helper()
+	payload, err := json.Marshal(claims)
+	require.NoError(t, err)
+	token, err := jwt.ParseInsecure(payload)
+	require.NoError(t, err)
+	signed, err := jwt.Sign(token, jwt.WithInsecureNoSignature())
+	require.NoError(t, err)
+	return string(signed)
+}
+
+func makeAccessToken(t *testing.T, key *mldsa.PrivateKey, subject, id, username string, _ []string, email, displayName string, exp time.Time, sessionIDs ...string) string {
+	t.Helper()
+	sessionID := ""
+	if len(sessionIDs) > 0 {
+		sessionID = sessionIDs[0]
+	}
+	claims := map[string]any{
+		"jti":          id,
+		"sub":          subject,
+		"iat":          time.Now().Unix(),
+		"exp":          exp.Unix(),
+		"sid":          sessionID,
+		"user_id":      id,
+		"username":     username,
+		"email":        email,
+		"display_name": displayName,
+		"app_version":  config.Version,
+	}
+	return signLegacyTokenInternal(t, key, claims)
+}
+
+func makeRefreshTokenInternal(t *testing.T, key *mldsa.PrivateKey, id string, exp time.Time, userIDAndSessionID ...string) string {
+	t.Helper()
+	userID := id
+	sessionID := ""
+	if len(userIDAndSessionID) > 0 {
+		userID = userIDAndSessionID[0]
+	}
+	if len(userIDAndSessionID) > 1 {
+		sessionID = userIDAndSessionID[1]
+	}
+	claims := map[string]any{
+		"jti":         id,
+		"sub":         "refresh",
+		"iat":         time.Now().Unix(),
+		"exp":         exp.Unix(),
+		"user_id":     userID,
+		"sid":         sessionID,
+		"app_version": config.Version,
+	}
+	return signLegacyTokenInternal(t, key, claims)
+}
+
+func createTestSession(t *testing.T, db *database.DB, userID string, expiresAt time.Time) (*session.UserSession, string) {
+	t.Helper()
+	sessionSvc := session.NewSessionService(db)
+	localSession, refreshJTI, err := sessionSvc.CreateSession(t.Context(), userID, expiresAt, auth.SessionMeta{
+		UserAgent: "test-agent",
+		IPAddress: "127.0.0.1",
+	})
+	require.NoError(t, err)
+	return localSession, refreshJTI
+}
+
+func makeUnsignedToken(t *testing.T, claims map[string]any) string {
+	t.Helper()
+	return signUnsignedTokenInternal(t, claims)
+}
+
+func TestVerifyToken_ValidClaims(t *testing.T) {
+	db := setupAuthServiceTestDB(t)
+	userSvc := user.NewUserService(db, nil, session.RevokeAllUserSessionsExceptInDB)
+	s := newTestAuthService()
+	s.userService = userSvc
+	s.sessionService = session.NewSessionService(db)
+
+	// Create user in DB
+	localUser := &user.User{
+		ID:          "u123",
+		Username:    "alice",
+		Email:       new("a@example.com"),
+		DisplayName: new("Alice"),
+	}
+	_, err := userSvc.CreateUser(t.Context(), localUser)
+	require.NoError(t, err)
+
+	exp := time.Now().Add(5 * time.Minute)
+	localSession, _ := createTestSession(t, db, "u123", exp)
+	token := makeAccessToken(t, s.signingKey, "access", "u123", "alice", []string{"user", "admin"}, "a@example.com", "Alice", exp, localSession.ID)
+
+	verifiedUser, _, err := s.VerifyToken(t.Context(), token)
+
+	require.NoError(t, err,
+		"VerifyToken error: %v", err)
+
+	assert.Equal(t, "u123", verifiedUser.ID,
+		"id %q", verifiedUser.ID)
+
+	assert.Equal(t, "alice", verifiedUser.Username,
+		"username %q", verifiedUser.Username)
+
+	assert.False(t, verifiedUser.Email == nil || *verifiedUser.Email != "a@example.com",
+		"email %v", verifiedUser.Email)
+
+	assert.False(t, verifiedUser.DisplayName == nil || *verifiedUser.DisplayName != "Alice",
+		"displayName %v", verifiedUser.DisplayName)
+}
+
+func TestVerifyToken_RejectsNonMLDSAAlg(t *testing.T) {
+	s := newTestAuthService()
+	exp := time.Now().Add(5 * time.Minute)
+	payload, err := json.Marshal(map[string]any{
+		"jti":         "u1",
+		"sub":         "access",
+		"iat":         time.Now().Unix(),
+		"exp":         exp.Unix(),
+		"user_id":     "u1",
+		"username":    "bob",
+		"app_version": config.Version,
+	})
+	require.NoError(t, err)
+	parsed, err := jwt.ParseInsecure(payload)
+	require.NoError(t, err)
+	token, err := jwt.Sign(parsed, jwt.WithKey(jwa.HS512(), s.browserSigningKey))
+	require.NoError(t, err)
+
+	_, _, err = s.VerifyToken(t.Context(), string(token))
+
+	assert.ErrorIs(t, err, common.ErrInvalidToken,
+		"want common.ErrInvalidToken, got %v", err)
+}
+
+func TestVerifyToken_Expired(t *testing.T) {
+	db := setupAuthServiceTestDB(t)
+	userSvc := user.NewUserService(db, nil, session.RevokeAllUserSessionsExceptInDB)
+	s := newTestAuthService()
+	s.userService = userSvc
+	s.sessionService = session.NewSessionService(db)
+
+	// Create user in DB
+	localUser := &user.User{
+		ID:       "u1",
+		Username: "bob",
+	}
+	_, err := userSvc.CreateUser(t.Context(), localUser)
+	require.NoError(t, err)
+
+	exp := time.Now().Add(-1 * time.Minute)
+	token := makeAccessToken(t, s.signingKey, "access", "u1", "bob", []string{"user"}, "", "", exp)
+
+	_, _, err = s.VerifyToken(t.Context(), token)
+
+	assert.ErrorIs(t, err, common.ErrExpiredToken,
+		"want ErrExpiredToken, got %v", err)
+}
+
+func TestVerifyToken_InvalidSubject(t *testing.T) {
+	s := newTestAuthService()
+	exp := time.Now().Add(5 * time.Minute)
+	token := makeAccessToken(t, s.signingKey, "refresh", "u1", "bob", []string{"user"}, "", "", exp)
+
+	_, _, err := s.VerifyToken(t.Context(), token)
+	require.ErrorIs(t, err, common.ErrTokenValidation)
+}
+
+func TestVerifyToken_InvalidSignature(t *testing.T) {
+	s := newTestAuthService()
+	exp := time.Now().Add(5 * time.Minute)
+	otherKey := newTestSigningKeyInternal()
+
+	token := makeAccessToken(t, otherKey, "access", "u1", "bob", []string{"user"}, "", "", exp)
+
+	_, _, err := s.VerifyToken(t.Context(), token)
+
+	assert.ErrorIs(t, err, common.ErrInvalidToken,
+		"want common.ErrInvalidToken, got %v", err)
+}
+
+func TestVerifyToken_MissingUserID(t *testing.T) {
+	s := newTestAuthService()
+	exp := time.Now().Add(5 * time.Minute)
+	token := makeAccessToken(t, s.signingKey, "access", "", "bob", []string{"user"}, "", "", exp)
+
+	_, _, err := s.VerifyToken(t.Context(), token)
+	require.ErrorIs(t, err, common.ErrTokenValidation)
+}
+
+func TestVerifyToken_VersionMismatch(t *testing.T) {
+	s := newTestAuthService()
+	exp := time.Now().Add(5 * time.Minute)
+
+	oldVersion := config.Version
+	config.Version = "1.0.0"
+	token := makeAccessToken(t, s.signingKey, "access", "u1", "bob", []string{"user"}, "", "", exp, "session-version-mismatch")
+	config.Version = "2.0.0"
+
+	_, _, err := s.VerifyToken(t.Context(), token)
+
+	assert.ErrorIs(t, err, common.ErrTokenVersionMismatch,
+		"want ErrTokenVersionMismatch, got %v", err)
+
+	config.Version = oldVersion
+}
+
+func TestRefreshToken_Valid(t *testing.T) {
+	db := setupAuthServiceTestDB(t)
+	userSvc := user.NewUserService(db, nil, session.RevokeAllUserSessionsExceptInDB)
+	settingsSvc, err := newSettingsServiceForAuthTestInternal(t, t.Context(), db)
+	require.NoError(t, err)
+	s := newTestAuthService()
+	s.userService = userSvc
+	s.settingsService = settingsSvc
+	s.sessionService = session.NewSessionService(db)
+
+	localUser := &user.User{
+		ID:       "u-refresh",
+		Username: "refresh-user",
+	}
+	_, err = userSvc.CreateUser(t.Context(), localUser)
+	require.NoError(t, err)
+
+	exp := time.Now().Add(5 * time.Minute)
+	localSession, refreshJTI := createTestSession(t, db, "u-refresh", exp)
+	token := makeRefreshTokenInternal(t, s.signingKey, refreshJTI, exp, "u-refresh", localSession.ID)
+
+	tokenPair, err := s.RefreshToken(t.Context(), token, auth.SessionMeta{})
+	require.NoError(t, err)
+	require.NotNil(t, tokenPair)
+	require.NotEmpty(t, tokenPair.AccessToken)
+	require.NotEmpty(t, tokenPair.BrowserToken)
+	require.NotEmpty(t, tokenPair.RefreshToken)
+	require.Less(t, len(tokenPair.BrowserToken), 1024)
+
+	accessAlgorithm, ok := signedTokenAlgorithmInternal(tokenPair.AccessToken)
+	require.True(t, ok)
+	require.Equal(t, jwa.MLDSA87().String(), accessAlgorithm)
+	browserAlgorithm, ok := signedTokenAlgorithmInternal(tokenPair.BrowserToken)
+	require.True(t, ok)
+	require.Equal(t, jwa.HS512().String(), browserAlgorithm)
+	refreshAlgorithm, ok := signedTokenAlgorithmInternal(tokenPair.RefreshToken)
+	require.True(t, ok)
+	require.Equal(t, jwa.MLDSA87().String(), refreshAlgorithm)
+}
+
+// A refresh token minted under an older config.Version must still refresh successfully
+// and the newly issued tokens must carry the current config.Version. This is what keeps
+// users logged in across backend releases — see plans/how-can-we-make-compiled-quilt.md.
+func TestRefreshToken_VersionMismatchRotates(t *testing.T) {
+	db := setupAuthServiceTestDB(t)
+	userSvc := user.NewUserService(db, nil, session.RevokeAllUserSessionsExceptInDB)
+	settingsSvc, err := newSettingsServiceForAuthTestInternal(t, t.Context(), db)
+	require.NoError(t, err)
+	s := newTestAuthService()
+	s.userService = userSvc
+	s.settingsService = settingsSvc
+	s.sessionService = session.NewSessionService(db)
+
+	localUser := &user.User{
+		ID:       "u-versionmismatch",
+		Username: "versionmismatch-user",
+	}
+	_, err = userSvc.CreateUser(t.Context(), localUser)
+	require.NoError(t, err)
+
+	exp := time.Now().Add(5 * time.Minute)
+	localSession, refreshJTI := createTestSession(t, db, localUser.ID, exp)
+
+	oldVersion := config.Version
+	t.Cleanup(func() { config.Version = oldVersion })
+	config.Version = "1.0.0"
+	token := makeRefreshTokenInternal(t, s.signingKey, refreshJTI, exp, localUser.ID, localSession.ID)
+	config.Version = "2.0.0"
+
+	tokenPair, err := s.RefreshToken(t.Context(), token, auth.SessionMeta{})
+	require.NoError(t, err)
+	require.NotNil(t, tokenPair)
+	require.NotEmpty(t, tokenPair.AccessToken)
+	require.NotEmpty(t, tokenPair.RefreshToken)
+
+	parsedAccess, err := jwt.ParseString(tokenPair.AccessToken, jwt.WithKey(jwa.MLDSA87(), s.signingKey.PublicKey()))
+	require.NoError(t, err)
+	accessVersion, err := jwt.Get[string](parsedAccess, claimAppVersion)
+	require.NoError(t, err)
+	require.Equal(t, "2.0.0", accessVersion)
+
+	parsedBrowser, err := jwt.ParseString(tokenPair.BrowserToken, jwt.WithKey(jwa.HS512(), s.browserSigningKey))
+	require.NoError(t, err)
+	browserSubject, ok := parsedBrowser.Subject()
+	require.True(t, ok)
+	require.Equal(t, browserTokenSubject, browserSubject)
+	browserSessionID, err := jwt.Get[string](parsedBrowser, claimSessionID)
+	require.NoError(t, err)
+	require.Equal(t, localSession.ID, browserSessionID)
+	browserUserID, err := jwt.Get[string](parsedBrowser, claimUserID)
+	require.NoError(t, err)
+	require.Equal(t, localUser.ID, browserUserID)
+	browserVersion, err := jwt.Get[string](parsedBrowser, claimAppVersion)
+	require.NoError(t, err)
+	require.Equal(t, "2.0.0", browserVersion)
+
+	parsedRefresh, err := jwt.ParseString(tokenPair.RefreshToken, jwt.WithKey(jwa.MLDSA87(), s.signingKey.PublicKey()))
+	require.NoError(t, err)
+	refreshVersion, err := jwt.Get[string](parsedRefresh, claimAppVersion)
+	require.NoError(t, err)
+	require.Equal(t, "2.0.0", refreshVersion)
+}
+
+func TestVerifyToken_RejectsRevokedSession(t *testing.T) {
+	db := setupAuthServiceTestDB(t)
+	userSvc := user.NewUserService(db, nil, session.RevokeAllUserSessionsExceptInDB)
+	s := newTestAuthService()
+	s.userService = userSvc
+	s.sessionService = session.NewSessionService(db)
+
+	localUser := &user.User{
+		ID:       "u-revoked",
+		Username: "revoked-user",
+	}
+	_, err := userSvc.CreateUser(t.Context(), localUser)
+	require.NoError(t, err)
+
+	exp := time.Now().Add(5 * time.Minute)
+	localSession, _ := createTestSession(t, db, localUser.ID, exp)
+	token := makeAccessToken(t, s.signingKey, "access", localUser.ID, localUser.Username, []string{"user"}, "", "", exp, localSession.ID)
+	browser, err := jwt.NewBuilder().
+		JwtID("revoked-browser-token").
+		Subject(browserTokenSubject).
+		IssuedAt(time.Now()).
+		Expiration(exp).
+		Claim(claimSessionID, localSession.ID).
+		Claim(claimUserID, localUser.ID).
+		Build()
+	require.NoError(t, err)
+	browserToken, err := jwt.Sign(browser, jwt.WithKey(jwa.HS512(), s.browserSigningKey))
+	require.NoError(t, err)
+	require.NoError(t, s.RevokeSession(t.Context(), localSession.ID))
+
+	_, _, err = s.VerifyToken(t.Context(), token)
+	require.ErrorIs(t, err, common.ErrSessionRevoked)
+	_, _, err = s.VerifyBrowserToken(t.Context(), string(browserToken))
+	require.ErrorIs(t, err, common.ErrSessionRevoked)
+}
+
+func TestVerifyToken_RejectsMissingSessionID(t *testing.T) {
+	db := setupAuthServiceTestDB(t)
+	userSvc := user.NewUserService(db, nil, session.RevokeAllUserSessionsExceptInDB)
+	s := newTestAuthService()
+	s.userService = userSvc
+	s.sessionService = session.NewSessionService(db)
+
+	localUser := &user.User{
+		ID:       "u-no-sid",
+		Username: "no-sid-user",
+	}
+	_, err := userSvc.CreateUser(t.Context(), localUser)
+	require.NoError(t, err)
+
+	token := makeAccessToken(t, s.signingKey, "access", localUser.ID, localUser.Username, []string{"user"}, "", "", time.Now().Add(5*time.Minute))
+
+	_, _, err = s.VerifyToken(t.Context(), token)
+	require.ErrorIs(t, err, common.ErrTokenValidation)
+}
+
+func TestRevokeSessionThenVerifyTokenFails(t *testing.T) {
+	db := setupAuthServiceTestDB(t)
+	userSvc := user.NewUserService(db, nil, session.RevokeAllUserSessionsExceptInDB)
+	s := newTestAuthService()
+	s.userService = userSvc
+	s.sessionService = session.NewSessionService(db)
+
+	localUser := &user.User{
+		ID:       "u-logout",
+		Username: "logout-user",
+	}
+	_, err := userSvc.CreateUser(t.Context(), localUser)
+	require.NoError(t, err)
+
+	exp := time.Now().Add(5 * time.Minute)
+	localSession, _ := createTestSession(t, db, localUser.ID, exp)
+	token := makeAccessToken(t, s.signingKey, "access", localUser.ID, localUser.Username, []string{"user"}, "", "", exp, localSession.ID)
+	require.NoError(t, s.RevokeSession(t.Context(), localSession.ID))
+
+	_, _, err = s.VerifyToken(t.Context(), token)
+	require.ErrorIs(t, err, common.ErrSessionRevoked)
+}
+
+func TestVerifyToken_RejectsRevokedCachedSession(t *testing.T) {
+	db := setupAuthServiceTestDB(t)
+	userSvc := user.NewUserService(db, nil, session.RevokeAllUserSessionsExceptInDB)
+	s := newTestAuthService()
+	s.userService = userSvc
+	s.sessionService = session.NewSessionService(db)
+
+	localUser := &user.User{
+		ID:       "u-cached-revoked",
+		Username: "cached-revoked-user",
+	}
+	_, err := userSvc.CreateUser(t.Context(), localUser)
+	require.NoError(t, err)
+
+	exp := time.Now().Add(5 * time.Minute)
+	sessionRecord, _ := createTestSession(t, db, localUser.ID, exp)
+	token := makeAccessToken(t, s.signingKey, "access", localUser.ID, localUser.Username, []string{"user"}, "", "", exp, sessionRecord.ID)
+
+	_, _, err = s.VerifyToken(t.Context(), token)
+	require.NoError(t, err)
+	require.NoError(t, s.RevokeSession(t.Context(), sessionRecord.ID))
+
+	_, _, err = s.VerifyToken(t.Context(), token)
+	require.ErrorIs(t, err, common.ErrSessionRevoked, "expected cached access token to be rejected after revocation, got %v", err)
+}
+
+func TestRefreshToken_RotatesJTI(t *testing.T) {
+	db := setupAuthServiceTestDB(t)
+	userSvc := user.NewUserService(db, nil, session.RevokeAllUserSessionsExceptInDB)
+	settingsSvc, err := newSettingsServiceForAuthTestInternal(t, t.Context(), db)
+	require.NoError(t, err)
+	s := newTestAuthService()
+	s.userService = userSvc
+	s.settingsService = settingsSvc
+	s.sessionService = session.NewSessionService(db)
+
+	localUser := &user.User{
+		ID:       "u-rotate",
+		Username: "rotate-user",
+	}
+	_, err = userSvc.CreateUser(t.Context(), localUser)
+	require.NoError(t, err)
+
+	exp := time.Now().Add(5 * time.Minute)
+	localSession, refreshJTI := createTestSession(t, db, localUser.ID, exp)
+	token := makeRefreshTokenInternal(t, s.signingKey, refreshJTI, exp, localUser.ID, localSession.ID)
+
+	tokenPair, err := s.RefreshToken(t.Context(), token, auth.SessionMeta{})
+	require.NoError(t, err)
+	require.NotEmpty(t, tokenPair.RefreshToken)
+
+	_, err = s.RefreshToken(t.Context(), token, auth.SessionMeta{})
+	require.ErrorIs(t, err, common.ErrInvalidToken)
+}
+
+func TestRefreshToken_RejectsRevokedSession(t *testing.T) {
+	db := setupAuthServiceTestDB(t)
+	userSvc := user.NewUserService(db, nil, session.RevokeAllUserSessionsExceptInDB)
+	settingsSvc, err := newSettingsServiceForAuthTestInternal(t, t.Context(), db)
+	require.NoError(t, err)
+	s := newTestAuthService()
+	s.userService = userSvc
+	s.settingsService = settingsSvc
+	s.sessionService = session.NewSessionService(db)
+
+	localUser := &user.User{
+		ID:       "u-refresh-revoked",
+		Username: "refresh-revoked-user",
+	}
+	_, err = userSvc.CreateUser(t.Context(), localUser)
+	require.NoError(t, err)
+
+	exp := time.Now().Add(5 * time.Minute)
+	localSession, refreshJTI := createTestSession(t, db, localUser.ID, exp)
+	require.NoError(t, s.RevokeSession(t.Context(), localSession.ID))
+	token := makeRefreshTokenInternal(t, s.signingKey, refreshJTI, exp, localUser.ID, localSession.ID)
+
+	_, err = s.RefreshToken(t.Context(), token, auth.SessionMeta{})
+	require.ErrorIs(t, err, common.ErrSessionRevoked)
+}
+
+func TestChangePassword_RevokesAllSessions(t *testing.T) {
+	db := setupAuthServiceTestDB(t)
+	userSvc := user.NewUserService(db, nil, session.RevokeAllUserSessionsExceptInDB)
+	s := newTestAuthService()
+	s.userService = userSvc
+	s.sessionService = session.NewSessionService(db)
+
+	passwordHash, err := userSvc.HashPassword("old-password")
+	require.NoError(t, err)
+	localUser := &user.User{
+		ID:           "u-password",
+		Username:     "password-user",
+		PasswordHash: passwordHash,
+	}
+	_, err = userSvc.CreateUser(t.Context(), localUser)
+	require.NoError(t, err)
+
+	sessionA, _ := createTestSession(t, db, localUser.ID, time.Now().Add(time.Hour))
+	sessionB, _ := createTestSession(t, db, localUser.ID, time.Now().Add(time.Hour))
+
+	require.NoError(t, s.ChangePassword(t.Context(), localUser.ID, "old-password", "New-password1!", ""))
+
+	sessionA, err = s.sessionService.GetSessionByID(t.Context(), sessionA.ID)
+	require.NoError(t, err)
+	sessionB, err = s.sessionService.GetSessionByID(t.Context(), sessionB.ID)
+	require.NoError(t, err)
+	require.NotNil(t, sessionA.RevokedAt)
+	require.NotNil(t, sessionB.RevokedAt)
+}
+
+func TestChangePassword_KeepsCurrentSessionAlive(t *testing.T) {
+	db := setupAuthServiceTestDB(t)
+	userSvc := user.NewUserService(db, nil, session.RevokeAllUserSessionsExceptInDB)
+	s := newTestAuthService()
+	s.userService = userSvc
+	s.sessionService = session.NewSessionService(db)
+
+	passwordHash, err := userSvc.HashPassword("old-password")
+	require.NoError(t, err)
+	localUser := &user.User{
+		ID:           "u-keep",
+		Username:     "keep-user",
+		PasswordHash: passwordHash,
+	}
+	_, err = userSvc.CreateUser(t.Context(), localUser)
+	require.NoError(t, err)
+
+	current, _ := createTestSession(t, db, localUser.ID, time.Now().Add(time.Hour))
+	other, _ := createTestSession(t, db, localUser.ID, time.Now().Add(time.Hour))
+
+	require.NoError(t, s.ChangePassword(t.Context(), localUser.ID, "old-password", "New-password1!", current.ID))
+
+	current, err = s.sessionService.GetSessionByID(t.Context(), current.ID)
+	require.NoError(t, err)
+	other, err = s.sessionService.GetSessionByID(t.Context(), other.ID)
+	require.NoError(t, err)
+	require.Nil(t, current.RevokedAt, "current session should remain active")
+	require.NotNil(t, other.RevokedAt, "other sessions should be revoked")
+}
+
+func TestRefreshToken_RejectsNonHMACAlg(t *testing.T) {
+	s := newTestAuthService()
+	exp := time.Now().Add(5 * time.Minute)
+	token := makeUnsignedToken(t, map[string]any{
+		"jti": "u1",
+		"sub": "refresh",
+		"iat": time.Now().Unix(),
+		"exp": exp.Unix(),
+	})
+
+	_, err := s.RefreshToken(t.Context(), token, auth.SessionMeta{})
+
+	assert.ErrorIs(t, err, common.ErrInvalidToken,
+		"want common.ErrInvalidToken, got %v", err)
+}
+
+func TestAuthenticateLocalPrimary_EmailFallback(t *testing.T) {
+	db := setupAuthServiceTestDB(t)
+	userSvc := user.NewUserService(db, nil, session.RevokeAllUserSessionsExceptInDB)
+	settingsSvc, err := newSettingsServiceForAuthTestInternal(t, t.Context(), db)
+	require.NoError(t, err)
+	s := newTestAuthService()
+	s.userService = userSvc
+	s.settingsService = settingsSvc
+
+	hash, err := userSvc.HashPassword("hunter22!")
+	require.NoError(t, err)
+	dupHash, err := userSvc.HashPassword("dup-two-pass!")
+	require.NoError(t, err)
+	for _, u := range []*user.User{
+		{ID: "u-email-login", Username: "bob", Email: new("bob@example.com"), PasswordHash: hash},
+		{ID: "u-unicode", Username: "José", Email: new("josé@example.com"), PasswordHash: hash},
+		{ID: "u-decomposed", Username: "Jose\u0301", Email: new("jose\u0301@example.com"), PasswordHash: hash},
+		{ID: "u-dup-1", Username: "dup1", Email: new("dup@example.com"), PasswordHash: hash},
+		{ID: "u-dup-2", Username: "dup2", Email: new("dup@example.com"), PasswordHash: dupHash},
+		{ID: "u-carol", Username: "carol@example.com", Email: new("carol@example.com"), PasswordHash: hash},
+		{ID: "u-col-a", Username: "owner@example.com", PasswordHash: hash},
+		{ID: "u-col-b", Username: "colb", Email: new("owner@example.com"), PasswordHash: dupHash},
+	} {
+		_, err = userSvc.CreateUser(t.Context(), u)
+		require.NoError(t, err)
+	}
+
+	require.NoError(t, db.Create(&user.User{
+		ID: "u-legacy-spaces", Username: " Jose\u0301 ", Email: new(" spaced@example.com "), PasswordHash: hash,
+	}).Error)
+
+	tests := []struct {
+		name     string
+		login    string
+		password string
+		wantID   string
+		wantErr  error
+	}{
+		{name: "composed username", login: "José", password: "hunter22!", wantID: "u-unicode"},
+		{name: "decomposed username stays distinct", login: "Jose\u0301", password: "hunter22!", wantID: "u-decomposed"},
+		{name: "composed email", login: "josé@example.com", password: "hunter22!", wantID: "u-unicode"},
+		{name: "decomposed email stays distinct", login: "jose\u0301@example.com", password: "hunter22!", wantID: "u-decomposed"},
+		{name: "legacy username whitespace", login: " Jose\u0301 ", password: "hunter22!", wantID: "u-legacy-spaces"},
+		{name: "legacy email whitespace", login: " spaced@example.com ", password: "hunter22!", wantID: "u-legacy-spaces"},
+		{name: "username whitespace is not a new alias", login: " José ", password: "hunter22!", wantErr: ErrInvalidCredentials},
+		{name: "email whitespace is not a new alias", login: " josé@example.com ", password: "hunter22!", wantErr: ErrInvalidCredentials},
+		{name: "password not trimmed", login: "José", password: " hunter22! ", wantErr: ErrInvalidCredentials},
+		{name: "email resolves user", login: "bob@example.com", password: "hunter22!", wantID: "u-email-login"},
+		{name: "unknown email", login: "nobody@example.com", password: "hunter22!", wantErr: ErrInvalidCredentials},
+		{name: "duplicate email rejected", login: "dup@example.com", password: "dup-two-pass!", wantErr: ErrInvalidCredentials},
+		{name: "username equal to own email", login: "carol@example.com", password: "hunter22!", wantID: "u-carol"},
+		{name: "username-email collision rejected", login: "owner@example.com", password: "dup-two-pass!", wantErr: ErrInvalidCredentials},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			got, authenticateLocalPrimaryErr := s.AuthenticateLocalPrimary(t.Context(), tc.login, tc.password)
+			if tc.wantErr != nil {
+				require.ErrorIs(t, authenticateLocalPrimaryErr, tc.wantErr)
+				return
+			}
+			require.NoError(t, authenticateLocalPrimaryErr)
+			require.Equal(t, tc.wantID, got.ID)
+		})
+	}
+}
+
+func TestLoginIssuesLocalTokens(t *testing.T) {
+	db := setupAuthServiceTestDB(t)
+	userSvc := user.NewUserService(db, nil, session.RevokeAllUserSessionsExceptInDB)
+	settingsSvc, err := newSettingsServiceForAuthTestInternal(t, t.Context(), db)
+	require.NoError(t, err)
+	passwordHash, err := userSvc.HashPassword("local-password-123")
+	require.NoError(t, err)
+	_, err = userSvc.CreateUser(t.Context(), &user.User{ID: "local-user", Username: "local-user", PasswordHash: passwordHash})
+	require.NoError(t, err)
+	s := newTestAuthService()
+	s.userService = userSvc
+	s.settingsService = settingsSvc
+	s.sessionService = session.NewSessionService(db)
+
+	loggedIn, tokens, err := s.Login(t.Context(), "local-user", "local-password-123", auth.SessionMeta{UserAgent: "test-agent"})
+	require.NoError(t, err)
+	require.Equal(t, "local-user", loggedIn.ID)
+	require.NotEmpty(t, tokens.AccessToken)
+	require.NotEmpty(t, tokens.RefreshToken)
+	verified, sessionID, err := s.VerifyToken(t.Context(), tokens.AccessToken)
+	require.NoError(t, err)
+	require.Equal(t, loggedIn.ID, verified.ID)
+	createdSession, err := s.sessionService.GetSessionByID(t.Context(), sessionID)
+	require.NoError(t, err)
+	require.Equal(t, session.UserSessionSourceLocal, createdSession.Source)
+}

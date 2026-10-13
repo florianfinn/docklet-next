@@ -1,0 +1,86 @@
+//go:build postgres_integration
+
+// Source: getarcaneapp/arcane/backend/pkg/utils/dbutil/dbutil_test.go
+// Revision: 095cb778daba1034e2a39961199e712a75d4ba29
+// Retrieved: 2026-10-13
+// License: BSD-3-Clause
+// Deviations: functional cut: removed SQLite runtime and migrations; functional cut: PostgreSQL integration test fixture.
+
+package dbutil
+
+import (
+	"errors"
+	"testing"
+
+	"github.com/florianfinn/docklet-next/backend/internal/testpg"
+	"github.com/stretchr/testify/require"
+	"gorm.io/gorm"
+)
+
+type widget struct {
+	ID   string `gorm:"primaryKey"`
+	Name string
+}
+
+var errWidgetNotFound = errors.New("widget not found")
+
+func newTestDB(t *testing.T) *gorm.DB {
+	t.Helper()
+	db, err := gorm.Open(testpg.Dialector(t, ":memory:"), &gorm.Config{})
+	require.NoError(t, err)
+	require.NoError(t, db.AutoMigrate(&widget{}))
+	return db
+}
+
+func TestFirstWhereFound(t *testing.T) {
+	db := newTestDB(t)
+	require.NoError(t, db.Create(&widget{ID: "w-1", Name: "alpha"}).Error)
+
+	got, err := FirstWhere[widget](t.Context(), db, errWidgetNotFound, "name = ?", "alpha")
+	require.NoError(t, err)
+	require.Equal(t, "w-1", got.ID)
+}
+
+func TestFirstWhereNotFoundReturnsSentinel(t *testing.T) {
+	db := newTestDB(t)
+
+	_, err := FirstWhere[widget](t.Context(), db, errWidgetNotFound, "name = ?", "missing")
+	require.ErrorIs(t, err, errWidgetNotFound)
+}
+
+func TestFirstWhereNotFoundWithNilSentinel(t *testing.T) {
+	db := newTestDB(t)
+
+	_, err := FirstWhere[widget](t.Context(), db, nil, "name = ?", "missing")
+	require.Error(t, err)
+	require.ErrorIs(t, err, gorm.ErrRecordNotFound)
+}
+
+func TestWithTxCommit(t *testing.T) {
+	db := newTestDB(t)
+
+	err := WithTx(t.Context(), db, func(tx *gorm.DB) error {
+		return tx.Create(&widget{ID: "w-1", Name: "alpha"}).Error
+	})
+	require.NoError(t, err)
+
+	got, err := FirstWhere[widget](t.Context(), db, errWidgetNotFound, "id = ?", "w-1")
+	require.NoError(t, err)
+	require.Equal(t, "alpha", got.Name)
+}
+
+func TestWithTxRollback(t *testing.T) {
+	db := newTestDB(t)
+	boom := errors.New("boom")
+
+	err := WithTx(t.Context(), db, func(tx *gorm.DB) error {
+		if err := tx.Create(&widget{ID: "w-1", Name: "alpha"}).Error; err != nil {
+			return err
+		}
+		return boom
+	})
+	require.ErrorIs(t, err, boom)
+
+	_, err = FirstWhere[widget](t.Context(), db, errWidgetNotFound, "id = ?", "w-1")
+	require.ErrorIs(t, err, errWidgetNotFound)
+}

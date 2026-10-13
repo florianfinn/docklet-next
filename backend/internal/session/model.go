@@ -1,0 +1,34 @@
+// Source: getarcaneapp/arcane/backend/internal/session/model.go
+// Revision: 095cb778daba1034e2a39961199e712a75d4ba29
+// Retrieved: 2026-10-13
+// License: BSD-3-Clause
+// Deviations: Local module namespace; functional cut: removed federated credentials; functional cut: removed OIDC and passkeys.
+
+package session
+
+import (
+	"time"
+
+	"github.com/florianfinn/docklet-next/backend/internal/database"
+	"github.com/florianfinn/docklet-next/backend/internal/user"
+)
+
+const UserSessionSourceLocal = "local"
+
+type UserSession struct {
+	database.BaseModel
+
+	UserID           string     `json:"userId" gorm:"column:user_id;not null;index"`
+	User             *user.User `json:"user,omitempty" gorm:"foreignKey:UserID;constraint:OnDelete:CASCADE"`
+	RefreshTokenHash string     `json:"-" gorm:"column:refresh_token_hash;not null"`
+	UserAgent        *string    `json:"userAgent,omitempty" gorm:"column:user_agent"`
+	IPAddress        *string    `json:"ipAddress,omitempty" gorm:"column:ip_address"`
+	Source           string     `json:"source,omitempty" gorm:"column:source"`
+	LastUsedAt       time.Time  `json:"lastUsedAt" gorm:"column:last_used_at;not null"`
+	ExpiresAt        time.Time  `json:"expiresAt" gorm:"column:expires_at;not null;index"`
+	RevokedAt        *time.Time `json:"revokedAt,omitempty" gorm:"column:revoked_at"`
+}
+
+func (UserSession) TableName() string {
+	return "user_sessions"
+}

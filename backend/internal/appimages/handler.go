@@ -1,0 +1,115 @@
+// Source: getarcaneapp/arcane/backend/internal/appimages/handler.go
+// Revision: 095cb778daba1034e2a39961199e712a75d4ba29
+// Retrieved: 2026-10-13
+// License: BSD-3-Clause
+// Deviations: None
+
+package appimages
+
+import (
+	"context"
+	"path/filepath"
+	"strings"
+
+	"github.com/danielgtaylor/huma/v2"
+	"go.getarcane.app/kit/pkg"
+)
+
+// AppImagesHandler provides Huma-based application image endpoints.
+type AppImagesHandler struct {
+	appImagesService *ApplicationImagesService
+}
+
+type GetLogoInput struct {
+	Full     bool   `query:"full" default:"false" doc:"Return full logo instead of icon"`
+	Color    string `query:"color" doc:"Optional accent color override for preview (e.g., 'oklch(0.65 0.2 150)')"`
+	Animated bool   `query:"animated" default:"false" doc:"Return trace-and-fill animated logo variant"`
+	Loop     bool   `query:"loop" default:"false" doc:"Loop the animated icon indefinitely (loader mode; animated icon only)"`
+}
+
+type GetPWAIconInput struct {
+	Filename string `path:"filename" example:"icon-192x192.png" doc:"PWA icon filename"`
+}
+
+type GetAppImageOutput struct {
+	ContentType         string `header:"Content-Type"`
+	CacheControl        string `header:"Cache-Control"`
+	XContentTypeOptions string `header:"X-Content-Type-Options"`
+	Body                []byte
+}
+
+var allowedPWAIconFilenames = map[string]struct{}{
+	"icon-72x72.png":   {},
+	"icon-96x96.png":   {},
+	"icon-128x128.png": {},
+	"icon-144x144.png": {},
+	"icon-152x152.png": {},
+	"icon-192x192.png": {},
+	"icon-384x384.png": {},
+	"icon-512x512.png": {},
+}
+
+// GetLogo returns the application logo image.
+func (h *AppImagesHandler) GetLogo(ctx context.Context, input *GetLogoInput) (*GetAppImageOutput, error) {
+	name := kit.Ternary(input.Full, "logo-full", "logo")
+	if input.Animated {
+		name += "-animated"
+	}
+
+	return h.getImageWithColor(name, input.Color, input.Loop && name == "logo-animated")
+}
+
+// GetLogoEmail returns the application logo image for emails (PNG).
+func (h *AppImagesHandler) GetLogoEmail(ctx context.Context, input *struct{}) (*GetAppImageOutput, error) {
+	return h.getImage("logo-email")
+}
+
+// GetFavicon returns the application favicon image.
+func (h *AppImagesHandler) GetFavicon(ctx context.Context, input *struct{}) (*GetAppImageOutput, error) {
+	return h.getImage("favicon")
+}
+
+// GetDefaultProfile returns the default user profile image.
+func (h *AppImagesHandler) GetDefaultProfile(ctx context.Context, input *struct{}) (*GetAppImageOutput, error) {
+	return h.getImage("profile")
+}
+
+// GetPWAIcon returns a PWA icon image.
+func (h *AppImagesHandler) GetPWAIcon(ctx context.Context, input *GetPWAIconInput) (*GetAppImageOutput, error) {
+	return h.getImageByFilenameInternal(input.Filename)
+}
+
+func (h *AppImagesHandler) getImage(name string) (*GetAppImageOutput, error) {
+	return h.getImageWithColor(name, "", false)
+}
+
+func (h *AppImagesHandler) getImageByFilenameInternal(filename string) (*GetAppImageOutput, error) {
+	if _, ok := allowedPWAIconFilenames[filename]; !ok {
+		return nil, huma.Error400BadRequest("invalid PWA icon filename")
+	}
+
+	name := strings.TrimSuffix(filename, filepath.Ext(filename))
+	return h.getImage(name)
+}
+
+func (h *AppImagesHandler) getImageWithColor(name, colorOverride string, loop bool) (*GetAppImageOutput, error) {
+	imageData, mimeType, err := h.appImagesService.GetImageWithColor(name, colorOverride, loop)
+	if err != nil {
+		return nil, huma.Error500InternalServerError("Failed to retrieve image: " + err.Error())
+	}
+
+	// Always disable logo caching so theme/logo updates are reflected immediately.
+	// Keep cache for static app images that do not change at runtime.
+	cacheControl := kit.Ternary(
+		IsLogoVariant(name) || colorOverride != "",
+		"no-cache, no-store, must-revalidate",
+		"public, max-age=900, stale-while-revalidate=86400",
+	)
+
+	return &GetAppImageOutput{
+		ContentType:         mimeType,
+		CacheControl:        cacheControl,
+		XContentTypeOptions: "nosniff",
+		Body:                imageData,
+	}, nil
+}

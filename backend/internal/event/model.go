@@ -1,0 +1,141 @@
+// Source: getarcaneapp/arcane/backend/internal/event/model.go
+// Revision: 095cb778daba1034e2a39961199e712a75d4ba29
+// Retrieved: 2026-10-13
+// License: BSD-3-Clause
+// Deviations: Local module namespace; functional cut: removed federated credentials; functional cut: removed GitOps and saved Git repositories.
+
+package event
+
+import (
+	"time"
+
+	"github.com/florianfinn/docklet-next/backend/internal/database"
+)
+
+type (
+	EventType     string
+	EventSeverity string
+)
+
+const (
+	EventTypeContainerDie       EventType = "container.die"
+	EventTypeContainerOOM       EventType = "container.oom"
+	EventTypeContainerRename    EventType = "container.rename"
+	EventTypeContainerUnhealthy EventType = "container.unhealthy"
+	EventTypeImageUntag         EventType = "image.untag"
+	EventTypeImageImport        EventType = "image.import"
+	EventTypeImagePrune         EventType = "image.prune"
+	EventTypeVolumePrune        EventType = "volume.prune"
+	EventTypeNetworkPrune       EventType = "network.prune"
+
+	// EventTypeContainerStart and the constants below enumerate Arcane event types.
+	EventTypeContainerStart   EventType = "container.start"
+	EventTypeContainerStop    EventType = "container.stop"
+	EventTypeContainerRestart EventType = "container.restart"
+	EventTypeContainerDelete  EventType = "container.delete"
+	EventTypeContainerCreate  EventType = "container.create"
+	EventTypeContainerScan    EventType = "container.scan"
+	EventTypeContainerUpdate  EventType = "container.update"
+	EventTypeContainerDeploy  EventType = "container.deploy"
+	EventTypeContainerKill    EventType = "container.kill"
+	EventTypeContainerPause   EventType = "container.pause"
+	EventTypeContainerUnpause EventType = "container.unpause"
+	EventTypeContainerError   EventType = "container.error"
+
+	EventTypeImagePull              EventType = "image.pull"
+	EventTypeImageLoad              EventType = "image.load"
+	EventTypeImageTag               EventType = "image.tag"
+	EventTypeImageCommit            EventType = "image.commit"
+	EventTypeImageDelete            EventType = "image.delete"
+	EventTypeImageScan              EventType = "image.scan"
+	EventTypeImageError             EventType = "image.error"
+	EventTypeImageVulnerabilityScan EventType = "image.vulnerability_scan"
+
+	EventTypeProjectDeploy EventType = "project.deploy"
+	EventTypeProjectDelete EventType = "project.delete"
+	EventTypeProjectStart  EventType = "project.start"
+	EventTypeProjectStop   EventType = "project.stop"
+	EventTypeProjectCreate EventType = "project.create"
+	EventTypeProjectUpdate EventType = "project.update"
+	EventTypeProjectError  EventType = "project.error"
+
+	EventTypeVolumeCreate EventType = "volume.create"
+	EventTypeVolumeRename EventType = "volume.rename"
+	EventTypeVolumeDelete EventType = "volume.delete"
+	EventTypeVolumeError  EventType = "volume.error"
+
+	EventTypeVolumeFileCreate      EventType = "volume.file.create"
+	EventTypeVolumeFileDelete      EventType = "volume.file.delete"
+	EventTypeVolumeFileUpload      EventType = "volume.file.upload"
+	EventTypeVolumeFileUpdate      EventType = "volume.file.update"
+	EventTypeVolumeWorkspaceUpdate EventType = "volume.workspace.update"
+
+	EventTypeVolumeBackupCreate       EventType = "volume.backup.create"
+	EventTypeVolumeBackupDelete       EventType = "volume.backup.delete"
+	EventTypeVolumeBackupRestore      EventType = "volume.backup.restore"
+	EventTypeVolumeBackupRestoreFiles EventType = "volume.backup.restore_files"
+	EventTypeVolumeBackupDownload     EventType = "volume.backup.download"
+
+	EventTypeNetworkCreate     EventType = "network.create"
+	EventTypeNetworkDelete     EventType = "network.delete"
+	EventTypeNetworkConnect    EventType = "network.connect"
+	EventTypeNetworkDisconnect EventType = "network.disconnect"
+	EventTypeNetworkError      EventType = "network.error"
+
+	EventTypeSystemPrune      EventType = "system.prune"
+	EventTypeUserLogin        EventType = "user.login"
+	EventTypeUserLogout       EventType = "user.logout"
+	EventTypeSystemAutoUpdate EventType = "system.auto_update"
+	EventTypeSystemUpgrade    EventType = "system.upgrade"
+
+	EventTypeEnvironmentCreate            EventType = "environment.create"
+	EventTypeEnvironmentConnect           EventType = "environment.connect"
+	EventTypeEnvironmentDisconnect        EventType = "environment.disconnect"
+	EventTypeEnvironmentUpdate            EventType = "environment.update"
+	EventTypeEnvironmentDelete            EventType = "environment.delete"
+	EventTypeEnvironmentApiKeyRegenerated EventType = "environment.api_key.regenerated"
+	EventTypeEnvironmentMTLSCAGenerated   EventType = "environment.mtls.ca_generated"
+	EventTypeEnvironmentMTLSCertIssued    EventType = "environment.mtls.cert_issued"
+	EventTypeEnvironmentMTLSEnroll        EventType = "environment.mtls.enroll"
+	EventTypeEnvironmentMTLSDownload      EventType = "environment.mtls.download"
+
+	EventTypeWebhookCreate  EventType = "webhook.create"
+	EventTypeWebhookUpdate  EventType = "webhook.update"
+	EventTypeWebhookDelete  EventType = "webhook.delete"
+	EventTypeWebhookTrigger EventType = "webhook.trigger"
+
+	// EventTypeNotificationSend is emitted for every notification delivery
+	// attempt; severity is success or error depending on the send result.
+	EventTypeNotificationSend EventType = "notification.send"
+
+	// pre-deploy script runs. Severity is success on a clean exit and warning
+	// on non-zero exit or timeout.
+
+	// EventSeverityInfo and the constants below enumerate event severities.
+	EventSeverityInfo    EventSeverity = "info"
+	EventSeverityWarning EventSeverity = "warning"
+	EventSeverityError   EventSeverity = "error"
+	EventSeveritySuccess EventSeverity = "success"
+)
+
+type Event struct {
+	database.BaseModel
+
+	DeduplicationKey *string       `json:"-" gorm:"uniqueIndex:idx_events_deduplication_key"`
+	Type             EventType     `json:"type" sortable:"true"`
+	Severity         EventSeverity `json:"severity" sortable:"true"`
+	Title            string        `json:"title" sortable:"true"`
+	Description      string        `json:"description"`
+	ResourceType     *string       `json:"resourceType,omitempty" sortable:"true"`
+	ResourceID       *string       `json:"resourceId,omitempty" sortable:"true"`
+	ResourceName     *string       `json:"resourceName,omitempty" sortable:"true"`
+	UserID           *string       `json:"userId,omitempty" sortable:"true"`
+	Username         *string       `json:"username,omitempty" sortable:"true"`
+	EnvironmentID    *string       `json:"environmentId,omitempty"`
+	Metadata         database.JSON `json:"metadata,omitempty" gorm:"type:text"`
+	Timestamp        time.Time     `json:"timestamp" sortable:"true"`
+}
+
+func (Event) TableName() string {
+	return "events"
+}

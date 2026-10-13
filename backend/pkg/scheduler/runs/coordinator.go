@@ -1,0 +1,549 @@
+// Source: getarcaneapp/arcane/backend/pkg/scheduler/runs/coordinator.go
+// Revision: 095cb778daba1034e2a39961199e712a75d4ba29
+// Retrieved: 2026-10-13
+// License: BSD-3-Clause
+// Deviations: Local module namespace; functional cut: removed SQLite runtime and migrations.
+
+// Package runs coordinates durable scheduler execution and recovery.
+package runs
+
+import (
+	"cmp"
+	"context"
+	"crypto/rand"
+	"errors"
+	"fmt"
+	"io"
+	"log/slog"
+	"strings"
+	"sync"
+	"sync/atomic"
+	"time"
+	"uuid"
+
+	st "github.com/florianfinn/docklet-next/types/scheduler"
+	"github.com/italypaleale/francis/actor"
+	kit "go.getarcane.app/kit/pkg"
+
+	"github.com/florianfinn/docklet-next/backend/pkg/utils/francis"
+)
+
+// Coordinator persists work before dispatching it to the owning domain.
+type Coordinator struct {
+	service      *actor.Service
+	runtime      *francis.Runtime
+	owner        string
+	mu           sync.Mutex
+	checkpointed map[string]bool
+	stopping     bool
+	started      bool
+	cancel       context.CancelFunc
+	lifecycleCtx context.Context
+	done         chan struct{}
+	wake         chan struct{}
+	enabled      atomic.Bool
+	execute      func(context.Context, st.Run) (st.Outcome, error)
+	reconcile    func(context.Context, st.Run) (st.Outcome, error)
+	observer     st.RunObserver
+	observerMu   sync.Mutex
+	location     *time.Location
+}
+
+// Submit persists acceptance before waking the dispatcher. Run IDs deduplicate
+// requests within a job and environment. Manual and remote requests stay separate;
+// other triggers coalesce pending work.
+// Cancellation of ctx affects admission only, not an accepted run's lifetime.
+func (q *Coordinator) Submit(ctx context.Context, request st.Request) (st.Run, error) {
+	q.mu.Lock()
+	defer q.mu.Unlock()
+	if q.stopping {
+		return st.Run{}, errors.New("job queue is stopping")
+	}
+	request.EnvironmentID = cmp.Or(request.EnvironmentID, "0")
+	if request.JobID == "" {
+		return st.Run{}, errors.New("job ID required")
+	}
+	request.Trigger = cmp.Or(request.Trigger, "manual")
+	if request.RunID == "" {
+		request.RunID = uuid.New().String()
+	}
+	if _, err := uuid.Parse(request.RunID); err != nil {
+		return st.Run{}, errors.New("invalid run ID")
+	}
+	now := time.Now().UTC()
+	observed := st.Run{CreatedAt: now}
+	var remoteOutcome *st.Outcome
+	if agentRun := request.ObservedAgentRun; agentRun != nil {
+		switch {
+		case request.EnvironmentID == "0":
+			return st.Run{}, errors.New("observed agent run requires a remote environment")
+		case agentRun.EnvironmentID != "0":
+			return st.Run{}, errors.New("observed agent run must belong to the agent's local environment")
+		case agentRun.ID != request.RunID || agentRun.JobID != request.JobID:
+			return st.Run{}, errors.New("observed agent run does not match the requested run and job")
+		case agentRun.Status != st.NeedsAttention:
+			return st.Run{}, errors.New("observed agent run is not awaiting legacy resolution")
+		}
+		observed = *agentRun
+		remoteOutcome = new(observed.Outcome)
+		remoteOutcome.Status = observed.Status
+	}
+	result := st.Run{
+		ID:                      request.RunID,
+		JobID:                   request.JobID,
+		EnvironmentID:           request.EnvironmentID,
+		Trigger:                 request.Trigger,
+		RequestedBy:             request.RequestedBy,
+		RequestedWithKey:        request.RequestedWithKey,
+		Status:                  st.Queued,
+		CreatedAt:               observed.CreatedAt,
+		UpdatedAt:               now,
+		StartedAt:               observed.StartedAt,
+		FinishedAt:              observed.FinishedAt,
+		ActivityID:              observed.ActivityID,
+		Outcome:                 observed.Outcome,
+		RemoteAccepted:          request.Trigger == "remote" || request.ObservedAgentRun != nil,
+		RemoteDeliveryAttempted: request.ObservedAgentRun != nil,
+		RemoteAttemptCount:      observed.AttemptCount,
+		RemoteOutcome:           remoteOutcome,
+	}
+	q.associateActivityInternal(&result)
+	err := q.mutateInternal(ctx, request.EnvironmentID, request.JobID, func(record *st.QueueRecord) error {
+		if request.Trigger == "scheduled" || request.Trigger == "recovery" {
+			record.LastEnqueuedAt = now
+		}
+		for _, existing := range record.Runs {
+			if existing.ID == request.RunID || coalescesPendingInternal(request, existing) {
+				result = existing
+				return nil
+			}
+		}
+		if existing, ok := record.Receipts[request.RunID]; ok {
+			result = existing
+			return nil
+		}
+		pruneRunsInternal(record, now)
+		record.Runs = append(record.Runs, result)
+		return nil
+	})
+	if err == nil {
+		q.observeRunInternal(ctx, result)
+		q.signalInternal()
+	}
+	return result, err
+}
+
+func (q *Coordinator) signalInternal() {
+	select {
+	case q.wake <- struct{}{}:
+	default:
+	}
+}
+
+// Manual and remote work never joins another run. Scheduled and recovery work
+// joins an existing run only while it is still waiting to start.
+func coalescesPendingInternal(request st.Request, existing st.Run) bool {
+	if request.ObservedAgentRun != nil || separateTriggerInternal(request.Trigger) || separateTriggerInternal(existing.Trigger) {
+		return false
+	}
+	return existing.Status == st.Queued || existing.Status == st.Waiting || existing.Status == st.Retrying
+}
+
+func separateTriggerInternal(trigger string) bool {
+	switch trigger {
+	case "manual", "remote":
+		return true
+	default:
+		return false
+	}
+}
+
+// Checkpoint records the next due occurrence atomically with overdue recovery.
+func (q *Coordinator) Checkpoint(ctx context.Context, jobID, schedule string, next time.Time) error {
+	q.mu.Lock()
+	defer q.mu.Unlock()
+	first := !q.checkpointed[jobID]
+	recovered := false
+	var recoveredRun st.Run
+	err := q.mutateInternal(ctx, "0", jobID, func(record *st.QueueRecord) error {
+		recovered = false
+		recoveredRun = st.Run{}
+		now := time.Now().UTC()
+		if first && record.Schedule == schedule && !record.NextRun.IsZero() && !record.NextRun.After(now) && record.LastEnqueuedAt.Before(record.NextRun) {
+			pending := false
+			for _, run := range record.Runs {
+				if !run.Status.Terminal() && run.Status != st.NeedsAttention {
+					pending = true
+					break
+				}
+			}
+			if !pending {
+				recovered = true
+				record.LastEnqueuedAt = now
+				recoveredRun = st.Run{ID: uuid.New().String(), JobID: jobID, EnvironmentID: "0", Trigger: "recovery", Status: st.Queued, CreatedAt: now, UpdatedAt: now}
+				record.Runs = append(record.Runs, recoveredRun)
+			}
+		}
+		if record.Schedule != schedule || record.NextRun.IsZero() || (first && !record.NextRun.After(now)) {
+			record.Generation++
+			record.Sequence++
+			record.Schedule = schedule
+			record.NextRun = next
+		}
+		return nil
+	})
+	if err == nil {
+		q.checkpointed[jobID] = true
+		if recovered {
+			q.observeRunInternal(ctx, recoveredRun)
+			q.signalInternal()
+		}
+	}
+	return err
+}
+
+// Start validates persisted state on ctx and starts dispatching on appCtx. Repeated calls
+// are harmless, but a stopped queue cannot be restarted; create a new instance.
+func (q *Coordinator) Start(ctx, appCtx context.Context) error {
+	q.mu.Lock()
+	defer q.mu.Unlock()
+	if q.started {
+		return nil
+	}
+	if err := ctx.Err(); err != nil {
+		return fmt.Errorf("initialize job coordinator: %w", err)
+	}
+	if q.stopping {
+		return errors.New("job queue is stopping")
+	}
+	if q.execute == nil {
+		return errors.New("job executor unavailable")
+	}
+	// Fail startup if persisted state cannot be read. Never replace it with empty state.
+	records, err := q.Records(ctx)
+	if err != nil {
+		return fmt.Errorf("read startup job history: %w", err)
+	}
+	for _, record := range records {
+		changed := false
+		for _, run := range record.Runs {
+			if normalizeLegacyRunInternal(&run) {
+				changed = true
+				break
+			}
+		}
+		if !changed {
+			continue
+		}
+		if mutateErr := q.mutateInternal(ctx, record.EnvironmentID, record.JobID, func(current *st.QueueRecord) error {
+			for i := range current.Runs {
+				normalizeLegacyRunInternal(&current.Runs[i])
+			}
+			return nil
+		}); mutateErr != nil {
+			return fmt.Errorf("normalize startup job %q in environment %q: %w", record.JobID, record.EnvironmentID, mutateErr)
+		}
+	}
+	if pruneErr := q.pruneInternal(ctx); pruneErr != nil {
+		return fmt.Errorf("prune startup job history: %w", pruneErr)
+	}
+	if errErr := ctx.Err(); errErr != nil {
+		return fmt.Errorf("initialize job coordinator: %w", errErr)
+	}
+	if errErr2 := appCtx.Err(); errErr2 != nil {
+		return fmt.Errorf("start job dispatcher: %w", errErr2)
+	}
+
+	runCtx, cancel := context.WithCancel(appCtx)
+	q.cancel = cancel
+	q.lifecycleCtx = runCtx
+	q.started = true
+	go q.dispatchInternal(runCtx)
+	return nil
+}
+
+// Stop rejects new submissions, cancels execution, and waits for workers until
+// ctx expires. Unfinished claims remain persisted for startup reconciliation.
+func (q *Coordinator) Stop(ctx context.Context) error {
+	q.mu.Lock()
+	q.stopping = true
+	q.enabled.Store(false)
+	started := q.started
+	if q.cancel != nil {
+		q.cancel()
+	}
+	q.mu.Unlock()
+	if !started {
+		return nil
+	}
+	select {
+	case <-q.done:
+		return nil
+	case <-ctx.Done():
+		return ctx.Err()
+	}
+}
+
+func (q *Coordinator) dispatchInternal(ctx context.Context) {
+	defer close(q.done)
+
+	initialRetention := true
+	// Flush every coordinator once while enabled to restore schedule alarms; later passes only cover unfinished work.
+	fullRepair := true
+	nextRetention := time.Now()
+	for ctx.Err() == nil {
+		q.retryActivitySyncInternal(ctx)
+		if initialRetention || !time.Now().Before(nextRetention) {
+			if err := q.pruneInternal(ctx); err != nil {
+				if ctx.Err() == nil {
+					slog.ErrorContext(ctx, "Job retention failed", "error", err)
+				}
+			} else {
+				initialRetention = q.hasPendingActivitySyncInternal(ctx)
+			}
+			nextRetention = time.Now().Add(time.Hour)
+		}
+		nextWake := time.Now().Add(15 * time.Second)
+		enabled := q.enabled.Load()
+		if err := q.repairInternal(ctx, fullRepair); err != nil {
+			if ctx.Err() == nil {
+				slog.ErrorContext(ctx, "Job queue dispatch failed", "error", err)
+			}
+			nextWake = time.Now().Add(5 * time.Second)
+		} else if enabled {
+			fullRepair = false
+		}
+		if nextRetention.Before(nextWake) {
+			nextWake = nextRetention
+		}
+		if q.hasPendingActivitySyncInternal(ctx) {
+			activityRetry := time.Now().Add(5 * time.Second)
+			if activityRetry.Before(nextWake) {
+				nextWake = activityRetry
+			}
+		}
+		timer := time.NewTimer(max(time.Until(nextWake), 0))
+		select {
+		case <-ctx.Done():
+			timer.Stop()
+			return
+		case <-q.wake:
+		case <-timer.C:
+		}
+		timer.Stop()
+	}
+}
+
+func (q *Coordinator) persistOutcomeInternal(ctx context.Context, run st.Run, outcome st.Outcome) {
+	// Keep the execution slot until the terminal result has been durably recorded.
+	for {
+		err := q.UpdateRun(ctx, run, func(current *st.Run) error {
+			if current.Owner != run.Owner || current.Status != st.Running {
+				return ErrRunConflict
+			}
+			now := time.Now().UTC()
+			current.Status = outcome.Status
+			current.UpdatedAt = now
+			outcome = mergeTargetProgressInternal(current.Outcome, outcome)
+			current.Outcome = outcome
+			if outcome.Status == st.Retrying || outcome.Status == st.Waiting {
+				delay := 5 * time.Second * time.Duration(1<<min(run.AttemptCount-1, 6))
+				delay = min(delay, 5*time.Minute)
+				var jitter [1]byte
+				if _, jitterErr := io.ReadFull(rand.Reader, jitter[:]); jitterErr != nil {
+					// Keep the unjittered backoff when randomness is unavailable.
+					slog.WarnContext(ctx, "Retry jitter unavailable; using exponential backoff", "runId", run.ID, "error", jitterErr)
+				} else {
+					delay = time.Duration(float64(delay) * (0.8 + float64(jitter[0])/255*0.2))
+				}
+				next := now.Add(delay)
+				current.NextAttempt = &next
+			} else {
+				current.NextAttempt = nil
+			}
+			if outcome.Status.Terminal() && (current.EnvironmentID == "0" || current.FinishedAt == nil) {
+				current.FinishedAt = &now
+			}
+			if len(current.Attempts) > 0 {
+				last := &current.Attempts[len(current.Attempts)-1]
+				last.FinishedAt = &now
+				last.Outcome = outcome
+			}
+			return nil
+		})
+		if err == nil || errors.Is(err, ErrRunConflict) {
+			return
+		}
+		slog.ErrorContext(ctx, "Unable to persist job result; retaining execution guard", "runId", run.ID, "error", err)
+		timer := time.NewTimer(time.Second)
+		select {
+		case <-ctx.Done():
+			timer.Stop()
+			return
+		case <-timer.C:
+		}
+	}
+}
+
+func (q *Coordinator) invokeInternal(ctx context.Context, run st.Run, reconcile bool) (outcome st.Outcome, err error) {
+	defer func() {
+		if recovered := recover(); recovered != nil {
+			outcome = st.Outcome{Status: st.Failed, Message: "Job panicked; inspect logs before retrying"}
+			err = fmt.Errorf("job panic: %v", recovered)
+			slog.ErrorContext(ctx, "Job panicked", "runId", run.ID, "error", err)
+		}
+	}()
+	if reconcile && q.reconcile != nil {
+		return q.reconcile(ctx, run)
+	}
+	return q.execute(ctx, run)
+}
+
+// Cancel marks an unstarted queued run canceled. Runs already attempted locally
+// or dispatched remotely must be reconciled rather than canceled as pending work.
+func (q *Coordinator) Cancel(ctx context.Context, environmentID, jobID, runID string) (st.Run, error) {
+	run, err := q.Get(ctx, environmentID, jobID, runID)
+	if err != nil {
+		return run, err
+	}
+	err = q.UpdateRun(ctx, run, func(current *st.Run) error {
+		if current.Status != st.Queued || current.AttemptCount != 0 || current.RemoteDeliveryAttempted {
+			return errors.New("only unstarted pending runs can be canceled")
+		}
+		now := time.Now().UTC()
+		current.Status = st.Canceled
+		current.UpdatedAt = now
+		current.FinishedAt = &now
+		run = *current
+		return nil
+	})
+	if err == nil {
+		var state st.CoordinatorState
+		id := kit.SHA256Hex(environmentID + "\x00" + jobID)
+		actorType := executorTypeInternal
+		if strings.HasPrefix(jobID, "environment-health") || jobID == "docker-client-refresh" || jobID == "activity-sweep" {
+			actorType = healthExecutorTypeInternal
+		}
+		if readErr := q.service.GetState(ctx, coordinatorTypeInternal, id, &state); readErr == nil {
+			for _, intent := range state.Dispatches {
+				if intent.RunID == runID && intent.JobID != "" {
+					_ = q.service.DeleteJob(ctx, actorType, id, intent.JobID, actor.WithLiveJobsOnly())
+				}
+			}
+		}
+	}
+	return run, err
+}
+
+// Retry requeues a failed, partial, or attention-required run without changing its
+// ID or dropping target progress. Unconfirmed remote work cannot be retried here.
+func (q *Coordinator) Retry(ctx context.Context, environmentID, jobID, runID string) (st.Run, error) {
+	run, err := q.Get(ctx, environmentID, jobID, runID)
+	if err != nil {
+		return run, err
+	}
+	err = q.UpdateRun(ctx, run, func(current *st.Run) error {
+		if current.Status != st.Failed && current.Status != st.NeedsAttention && current.Status != st.Partial {
+			return errors.New("run is not eligible for retry")
+		}
+		if current.RemoteAccepted && !current.RemoteSettled {
+			return errors.New("remote outcome must be confirmed before retry")
+		}
+		current.Status = st.Queued
+		current.Owner = ""
+		current.NextAttempt = nil
+		current.FinishedAt = nil
+		current.UpdatedAt = time.Now().UTC()
+		run = *current
+		return nil
+	})
+	if err == nil {
+		q.signalInternal()
+	}
+	return run, err
+}
+
+func (q *Coordinator) nextRunInternal(runs []st.Run) (*st.Run, time.Time) {
+	var interrupted *st.Run
+	blocked := false
+	for index := range runs {
+		run := &runs[index]
+		if run.Status == st.Running && strings.HasPrefix(run.Owner, q.owner+"/") {
+			blocked = true
+		}
+		if run.Status == st.Running && !strings.HasPrefix(run.Owner, q.owner+"/") && interrupted == nil {
+			interrupted = run
+		}
+	}
+	if interrupted != nil || blocked {
+		return interrupted, time.Time{}
+	}
+	var nextRetry time.Time
+	now := time.Now()
+	for index := range runs {
+		run := &runs[index]
+		if run.Status.Terminal() || run.Status == st.NeedsAttention {
+			continue
+		}
+		if run.NextAttempt == nil || !run.NextAttempt.After(now) {
+			return run, time.Time{}
+		}
+		if nextRetry.IsZero() || run.NextAttempt.Before(nextRetry) {
+			nextRetry = *run.NextAttempt
+		}
+	}
+	return nil, nextRetry
+}
+
+func mergeTargetProgressInternal(previous, outcome st.Outcome) st.Outcome {
+	for _, target := range previous.Targets {
+		found := false
+		for _, updated := range outcome.Targets {
+			if updated.ID == target.ID {
+				found = true
+				break
+			}
+		}
+		if !found {
+			outcome.Targets = append(outcome.Targets, target)
+		}
+	}
+	outcome.ActivityID = cmp.Or(outcome.ActivityID, previous.ActivityID)
+	return outcome
+}
+
+func (q *Coordinator) Active() bool { return q.enabled.Load() }
+
+// Resolve releases legacy reviewed work without discarding execution evidence.
+// TODO(v3): remove this deprecated mixed-version compatibility contract.
+func (q *Coordinator) Resolve(ctx context.Context, environmentID, jobID, runID, resolvedBy string) (st.Run, error) {
+	run, err := q.Get(ctx, environmentID, jobID, runID)
+	if err != nil {
+		return run, err
+	}
+	err = q.UpdateRun(ctx, run, func(current *st.Run) error {
+		if current.Status == st.Canceled && current.Resolution != nil {
+			run = *current
+			return nil
+		}
+		if current.Status != st.NeedsAttention {
+			return errors.New("only runs needing attention can be resolved")
+		}
+		if current.EnvironmentID != "0" && (current.RemoteDeliveryAttempted || current.RemoteAccepted) && !current.RemoteSettled {
+			return errors.New("remote execution must be confirmed and acknowledged before resolution")
+		}
+		now := time.Now().UTC()
+		current.Status = st.Canceled
+		current.Resolution = &st.RunResolution{ResolvedBy: resolvedBy, ResolvedAt: now, Reason: "resolved_after_review"}
+		current.UpdatedAt = now
+		current.FinishedAt = &now
+		current.NextAttempt = nil
+		current.Owner = ""
+		run = *current
+		return nil
+	})
+	if err == nil {
+		q.signalInternal()
+	}
+	return run, err
+}

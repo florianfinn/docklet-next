@@ -1,0 +1,518 @@
+// Source: getarcaneapp/arcane/backend/pkg/projects/coordinator.go
+// Revision: 095cb778daba1034e2a39961199e712a75d4ba29
+// Retrieved: 2026-10-13
+// License: BSD-3-Clause
+// Deviations: Local module namespace; functional cut: removed GitOps and saved Git repositories.
+
+package projects
+
+import (
+	"cmp"
+	"context"
+	"errors"
+	"fmt"
+	"io"
+	"log/slog"
+	"maps"
+	"slices"
+	"strings"
+	"time"
+
+	composetypes "github.com/compose-spec/compose-go/v2/types"
+	"github.com/docker/compose/v5/pkg/api"
+	projecttypes "github.com/florianfinn/docklet-next/types/project"
+	kit "go.getarcane.app/kit/pkg"
+)
+
+type composeCoordinatorInternal struct {
+	commands projecttypes.ComposeCommands
+}
+
+// NewCoordinator owns Compose workflow sequencing using the configured SDK commands.
+func NewCoordinator(commands projecttypes.ComposeCommands) projecttypes.ComposeCoordinator {
+	if commands.Stop == nil {
+		commands.Stop = ComposeStop
+	}
+	if commands.Up == nil {
+		commands.Up = ComposeUp
+	}
+	if commands.Create == nil {
+		commands.Create = ComposeCreate
+	}
+	return &composeCoordinatorInternal{commands: commands}
+}
+
+// Deploy loads, prepares images, then reconciles the project.
+func (c *composeCoordinatorInternal) Deploy(ctx context.Context, request projecttypes.ComposeDeployment) (_ *composetypes.Project, err error) {
+	defer func() {
+		if err != nil && request.Recover != nil {
+			request.Recover(ctx)
+		}
+	}()
+	model, err := request.Load(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("failed to load compose project in %s: %w", request.ProjectPath, err)
+	}
+	operations, err := request.ResolveImages(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("resolve registry credentials: %w", err)
+	}
+	pullPolicy := ""
+	forceRecreate, recreateVolumes := false, false
+	if request.Options != nil {
+		pullPolicy = NormalizeDeployPullPolicy(request.Options.PullPolicy)
+		forceRecreate, recreateVolumes = request.Options.ForceRecreate, request.Options.RecreateVolumes
+	}
+	if pullPolicy == "" {
+		pullPolicy = NormalizeDeployPullPolicy(request.DefaultPullPolicy)
+	}
+	pullPolicy = cmp.Or(pullPolicy, "missing")
+	if prepareImagesForDeployErr := c.PrepareImagesForDeploy(ctx, request.ProjectID, model, request.Progress, operations, pullPolicy); prepareImagesForDeployErr != nil {
+		return nil, fmt.Errorf("failed to prepare project images for deploy: %w", prepareImagesForDeployErr)
+	}
+	removeOrphans := ResolveRemoveOrphans(request.Options)
+	slog.InfoContext(ctx, "starting compose up with health check support", "projectId", request.ProjectID, "projectName", model.Name, "services", len(model.Services), "removeOrphans", removeOrphans)
+	if upErr := c.commands.Up(ctx, model, nil, removeOrphans, forceRecreate, recreateVolumes, request.AuthConfigs, request.WaitTimeout); upErr != nil {
+		slog.ErrorContext(ctx, "compose up failed", "projectName", model.Name, "projectId", request.ProjectID, "error", upErr)
+		if strings.Contains(upErr.Error(), "timeout") || strings.Contains(upErr.Error(), "context deadline exceeded") {
+			return nil,
+				fmt.Errorf("deployment timed out waiting for services - long-running 'service_healthy'/'service_completed_successfully' dependencies "+
+					"may need a higher Deploy Wait Timeout setting, and 'service_healthy' requires a healthcheck: %w",
+					upErr)
+		}
+		return nil, fmt.Errorf("failed to deploy project: %w", upErr)
+	}
+	slog.InfoContext(ctx, "compose up completed successfully", "projectId", request.ProjectID, "projectName", model.Name)
+	return model, nil
+}
+
+// ResolveRemoveOrphans preserves explicit caller opt-in.
+func ResolveRemoveOrphans(options *projecttypes.DeployOptions) bool {
+	return options != nil && options.RemoveOrphans
+}
+
+// UpdateServices validates scope before pulling or stopping any service.
+func (c *composeCoordinatorInternal) UpdateServices(ctx context.Context, request projecttypes.ComposeServiceUpdate) error {
+	scope := slices.Concat(request.Services, request.Dependents)
+	selected, err := SelectServices(request.Project, slices.Concat(scope, request.StoppedDependents))
+	if err != nil {
+		if request.RestoreBeforeMutation != nil {
+			request.RestoreBeforeMutation(ctx)
+		}
+		return err
+	}
+	if pullServicesErr := c.PullServices(ctx, selected, request.Services, request.Images, request.Progress); pullServicesErr != nil {
+		if request.RestoreBeforeMutation != nil {
+			request.RestoreBeforeMutation(ctx)
+		}
+		return fmt.Errorf("pull updated service images: %w", pullServicesErr)
+	}
+	if stopErr := c.commands.Stop(ctx, selected, scope); stopErr != nil {
+		slog.WarnContext(ctx, "compose stop failed, continuing", "error", stopErr)
+	}
+	if upErr := c.commands.Up(ctx, selected, scope, false, true, false, request.AuthConfigs, request.WaitTimeout); upErr != nil {
+		if request.Recover != nil {
+			request.Recover(ctx)
+		}
+		return fmt.Errorf("failed to up services: %w", upErr)
+	}
+	// Stopped dependents are recreated after the up so they resolve the new
+	// provider containers, and are left stopped.
+	if len(request.StoppedDependents) > 0 {
+		if createErr := c.commands.Create(ctx, selected, request.StoppedDependents, request.AuthConfigs); createErr != nil {
+			if request.Recover != nil {
+				request.Recover(ctx)
+			}
+			return fmt.Errorf("failed to recreate stopped dependents: %w", createErr)
+		}
+	}
+	return nil
+}
+
+// SelectServices enables requested profiles and returns a separate, scoped model.
+func SelectServices(model *composetypes.Project, services []string) (*composetypes.Project, error) {
+	if model == nil {
+		return nil, errors.New("compose project is nil")
+	}
+	enabled, err := model.WithServicesEnabled(services...)
+	if err != nil {
+		return nil, err
+	}
+	selected, err := enabled.WithSelectedServices(services)
+	if err != nil {
+		return nil, err
+	}
+	return selected.WithoutUnnecessaryResources(), nil
+}
+
+// NamespaceDependents returns the services outside services that join a member's
+// network/ipc/pid namespace or use volumes_from it, transitively. Mirrors compose's
+// parentNamespaceRecreated cascade; services inactive for model.Profiles are skipped.
+func NamespaceDependents(model *composetypes.Project, services []string) []string {
+	if model == nil {
+		return nil
+	}
+	members := make(map[string]struct{}, len(services))
+	for _, name := range services {
+		members[name] = struct{}{}
+	}
+	added := map[string]struct{}{}
+	all := model.AllServices()
+	joins := func(svc composetypes.ServiceConfig) bool {
+		for _, mode := range []string{svc.NetworkMode, svc.Ipc, svc.Pid} {
+			if name, ok := strings.CutPrefix(mode, composetypes.ServicePrefix); ok {
+				if _, member := members[name]; member {
+					return true
+				}
+			}
+		}
+		for _, vol := range svc.VolumesFrom {
+			if strings.HasPrefix(vol, composetypes.ContainerPrefix) {
+				continue
+			}
+			name, _, _ := strings.Cut(vol, ":")
+			if _, member := members[name]; member {
+				return true
+			}
+		}
+		return false
+	}
+	for changed := true; changed; {
+		changed = false
+		for name, svc := range all {
+			if _, ok := members[name]; ok || !svc.HasProfile(model.Profiles) || !joins(svc) {
+				continue
+			}
+			members[name] = struct{}{}
+			added[name] = struct{}{}
+			changed = true
+		}
+	}
+	if len(added) == 0 {
+		return nil
+	}
+	return slices.Sorted(maps.Keys(added))
+}
+
+// PullServices pulls each selected registry image once through the application image service.
+func (c *composeCoordinatorInternal) PullServices(ctx context.Context, model *composetypes.Project, services []string, operations projecttypes.ComposeImageOperations, progress io.Writer) error {
+	for _, imageRef := range SelectedImageRefs(model, services) {
+		if err := operations.Pull(ctx, imageRef, progress); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (c *composeCoordinatorInternal) imageRefreshDueInternal(ctx context.Context, imageRef string, window time.Duration, operations projecttypes.ComposeImageOperations) bool {
+	lastTagged, err := operations.LastTagged(ctx, imageRef)
+	if err != nil {
+		slog.WarnContext(ctx, "failed to resolve image last-tag time; treating refresh as due", "image", imageRef, "error", err)
+		return true
+	}
+	return lastTagged.IsZero() || time.Now().After(lastTagged.Add(window))
+}
+
+func (c *composeCoordinatorInternal) EnsureImagesPresent(ctx context.Context, model *composetypes.Project, progressWriter io.Writer, operations projecttypes.ComposeImageOperations) error {
+	for img, step := range BuildImagePullPlan(model) {
+		exists, ierr := operations.Exists(ctx, img)
+		if ierr != nil && step.Mode != ImagePullModeAlways {
+			slog.WarnContext(ctx, "failed to check local image existence", "image", img, "error", ierr)
+			// Non-fatal: attempt to pull to be safe
+		}
+
+		if step.Mode == ImagePullModeNever {
+			if ierr != nil {
+				slog.WarnContext(ctx, "pull_policy is 'never' but image presence check failed; continuing without pull", "image", img, "error", ierr)
+				continue
+			}
+			if !exists {
+				return fmt.Errorf("image %s is not available locally and pull_policy is 'never'", img)
+			}
+			slog.DebugContext(ctx, "pull_policy is 'never'; using local image without pull", "image", img)
+			continue
+		}
+
+		if step.Mode == ImagePullModeIfMissing && exists {
+			slog.DebugContext(ctx, "image already present locally; skipping pull", "image", img)
+			continue
+		}
+
+		if step.Mode == ImagePullModeRefresh && exists && !c.imageRefreshDueInternal(ctx, img, step.RefreshAfter, operations) {
+			slog.DebugContext(ctx, "pull_policy refresh window has not elapsed; skipping pull", "image", img, "window", step.RefreshAfter)
+			continue
+		}
+
+		if err := operations.Pull(ctx, img, progressWriter); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (c *composeCoordinatorInternal) PrepareImagesForDeploy(
+	ctx context.Context,
+	projectID string,
+	project *composetypes.Project,
+	progressWriter io.Writer,
+	operations projecttypes.ComposeImageOperations,
+	pullPolicyOverride string,
+) error {
+	if project == nil {
+		return nil
+	}
+
+	for name, svc := range project.Services {
+		localSvc, imageName, updated := PrepareDeployServiceConfig(projectID, project.Name, name, svc)
+		if updated {
+			project.Services[name] = localSvc
+		}
+
+		if imageName == "" {
+			continue
+		}
+
+		decision := DecideDeployImageAction(localSvc, pullPolicyOverride)
+		if updated {
+			decision = DeployImageDecision{Build: true}
+		}
+		if err := c.ensureDeployServiceImageReadyInternal(ctx, projectID, project, name, localSvc, imageName, decision, progressWriter, operations); err != nil {
+			return err
+		}
+
+		// pre_start hook images and type:image volume sources cannot be built:
+		// they follow the service's pull decision minus the build/fallback paths.
+		dependentDecision := DeployImageDecision{PullIfMissing: true}
+		switch {
+		case decision.RequireLocalOnly:
+			dependentDecision = DeployImageDecision{RequireLocalOnly: true}
+		case decision.PullAlways:
+			dependentDecision = DeployImageDecision{PullAlways: true}
+		case decision.PullIfStale:
+			dependentDecision = DeployImageDecision{PullIfStale: true, StaleAfter: decision.StaleAfter}
+		}
+		dependentImages := api.GetDependentImages(localSvc, project.Name)
+		for _, vol := range localSvc.Volumes {
+			if vol.Type == composetypes.VolumeTypeImage && strings.TrimSpace(vol.Source) != "" {
+				dependentImages = append(dependentImages, strings.TrimSpace(vol.Source))
+			}
+		}
+		for _, img := range dependentImages {
+			if err := c.ensureDeployServiceImageReadyInternal(ctx, projectID, project, name, localSvc, img, dependentDecision, progressWriter, operations); err != nil {
+				return err
+			}
+		}
+	}
+
+	return nil
+}
+
+func (c *composeCoordinatorInternal) ensureDeployServiceImageReadyInternal(
+	ctx context.Context,
+	projectID string,
+	project *composetypes.Project,
+	serviceName string,
+	svc composetypes.ServiceConfig,
+	imageName string,
+	decision DeployImageDecision,
+	progressWriter io.Writer,
+	operations projecttypes.ComposeImageOperations,
+) error {
+	if decision.Build {
+		return c.buildServiceImageForDeployInternal(ctx, projectID, project, serviceName, svc, progressWriter, operations)
+	}
+
+	exists, err := operations.Exists(ctx, imageName)
+	if err != nil {
+		slog.WarnContext(ctx, "failed to check local image existence", "image", imageName, "error", err)
+	}
+
+	if decision.RequireLocalOnly {
+		if !exists {
+			return fmt.Errorf("image %s is not available locally and pull_policy is set to never", imageName)
+		}
+		return nil
+	}
+
+	var lastTagged time.Time
+	if decision.PullIfStale && exists {
+		var tagErr error
+		lastTagged, tagErr = operations.LastTagged(ctx, imageName)
+		if tagErr != nil {
+			// Unknown last-tag time counts as stale, matching the missing-record
+			// behavior of compose's refresh handling.
+			slog.WarnContext(ctx, "failed to resolve image last-tag time; treating refresh as due", "image", imageName, "error", tagErr)
+		}
+	}
+	if !ShouldPullDeployImage(decision, exists, lastTagged) {
+		return nil
+	}
+
+	err = operations.Pull(ctx, imageName, progressWriter)
+	if err == nil {
+		return nil
+	}
+	if svc.Build != nil && decision.FallbackBuildOnPullFail {
+		slog.WarnContext(ctx, "image pull failed, falling back to build", "service", serviceName, "image", imageName, "error", err)
+		return c.buildServiceImageForDeployInternal(ctx, projectID, project, serviceName, svc, progressWriter, operations)
+	}
+	return fmt.Errorf("failed to pull image %s: %w", imageName, err)
+}
+
+func (c *composeCoordinatorInternal) buildServiceImageForDeployInternal(
+	ctx context.Context,
+	projectID string,
+	project *composetypes.Project,
+	serviceName string,
+	svc composetypes.ServiceConfig,
+	progressWriter io.Writer,
+	operations projecttypes.ComposeImageOperations,
+) error {
+	if operations.Build == nil {
+		return fmt.Errorf("build service not available for service %s", serviceName)
+	}
+
+	buildReq, updatedSvc, updated, err := PrepareServiceBuildRequest(projectID, project, serviceName, svc, projecttypes.BuildOptions{}, operations.BuildProvider)
+	if err != nil {
+		return err
+	}
+	if updated {
+		project.Services[serviceName] = updatedSvc
+	}
+
+	if buildErr := operations.Build(ctx, buildReq, progressWriter, serviceName); buildErr != nil {
+		return buildErr
+	}
+
+	return nil
+}
+
+func (c *composeCoordinatorInternal) BuildServices(ctx context.Context,
+	projectID string,
+	project *composetypes.Project,
+	options projecttypes.BuildOptions,
+	progressWriter io.Writer,
+	operations projecttypes.ComposeImageOperations,
+) error {
+	if operations.Build == nil {
+		return nil
+	}
+	if project == nil {
+		return nil
+	}
+
+	selected := NormalizeBuildSelections(options.Services)
+
+	buildCount := 0
+	for name, svc := range project.Services {
+		if svc.Build == nil {
+			continue
+		}
+		if !ServiceSelected(selected, name) {
+			continue
+		}
+
+		buildReq, updatedSvc, updated, err := PrepareServiceBuildRequest(projectID, project, name, svc, options, operations.BuildProvider)
+		if err != nil {
+			return err
+		}
+		if updated {
+			project.Services[name] = updatedSvc
+		}
+
+		buildCount++
+		if buildErr := operations.Build(ctx, buildReq, progressWriter, name); buildErr != nil {
+			return buildErr
+		}
+	}
+
+	if buildCount == 0 && len(selected) > 0 {
+		return fmt.Errorf("no build-enabled services matched: %s", strings.Join(options.Services, ", "))
+	}
+
+	return nil
+}
+
+// NormalizeBuildSelections turns a user-supplied service list into a lookup set,
+// dropping blanks. An empty set means "every service".
+func NormalizeBuildSelections(services []string) map[string]struct{} {
+	selected := map[string]struct{}{}
+	for _, name := range services {
+		name = strings.TrimSpace(name)
+		if name == "" {
+			continue
+		}
+		selected[name] = struct{}{}
+	}
+	return selected
+}
+
+// ServiceSelected reports whether name is in the selection built by
+// NormalizeBuildSelections. An empty selection selects everything.
+func ServiceSelected(selected map[string]struct{}, name string) bool {
+	if len(selected) == 0 {
+		return true
+	}
+	_, ok := selected[name]
+	return ok
+}
+
+// EnsureServiceImage gives a build-only service a deterministic local image tag
+// so the built image has a stable name to deploy from. It reports whether the
+// service config was changed.
+func EnsureServiceImage(projectID, projectName, serviceName string, svc composetypes.ServiceConfig) (string, composetypes.ServiceConfig, bool) {
+	imageName := strings.TrimSpace(svc.Image)
+	if imageName == "" {
+		imageName = BuildLocalImageTag(projectID, projectName, serviceName)
+		svc.Image = imageName
+		return imageName, svc, true
+	}
+	return imageName, svc, false
+}
+
+// PrepareDeployServiceConfig resolves the image a service deploys as, naming
+// build-only services via EnsureServiceImage. It reports whether the service
+// config was changed.
+func PrepareDeployServiceConfig(projectID, projectName, serviceName string, svc composetypes.ServiceConfig) (composetypes.ServiceConfig, string, bool) {
+	if svc.Build == nil {
+		return svc, strings.TrimSpace(svc.Image), false
+	}
+
+	resolvedImage, updatedSvc, updated := EnsureServiceImage(projectID, projectName, serviceName, svc)
+	return updatedSvc, resolvedImage, updated
+}
+
+// ShouldPullDeployImage reports whether a deploy must pull, given the resolved
+// pull decision, whether the image is already present locally, and when the
+// local image was last tagged (zero when unknown). Refresh policies mirror
+// compose v5.5.0's `up`: a present image is re-pulled only once its window
+// has elapsed since the engine's last-tag time.
+func ShouldPullDeployImage(decision DeployImageDecision, exists bool, lastTagged time.Time) bool {
+	if decision.PullAlways {
+		return true
+	}
+	if !exists {
+		return decision.PullIfMissing || decision.PullIfStale
+	}
+	if decision.PullIfStale {
+		return lastTagged.IsZero() || time.Now().After(lastTagged.Add(decision.StaleAfter))
+	}
+	return false
+}
+
+// SelectedImageRefs returns the distinct pullable image refs of the selected
+// services — build services are excluded, since their images come from a build.
+func SelectedImageRefs(compProj *composetypes.Project, servicesToUpdate []string) []string {
+	if compProj == nil {
+		return nil
+	}
+
+	selected := NormalizeBuildSelections(servicesToUpdate)
+	refs := make([]string, 0, len(compProj.Services))
+	for name, svc := range compProj.Services {
+		if ServiceSelected(selected, name) && svc.Build == nil {
+			refs = append(refs, svc.Image)
+		}
+	}
+	return kit.Unique(kit.TrimNonEmpty(refs))
+}

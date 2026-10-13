@@ -1,0 +1,245 @@
+// Source: getarcaneapp/arcane/backend/internal/job/handler.go
+// Revision: 095cb778daba1034e2a39961199e712a75d4ba29
+// Retrieved: 2026-10-13
+// License: BSD-3-Clause
+// Deviations: Local module namespace
+
+package job
+
+import (
+	"context"
+	"errors"
+	"net/http"
+	"time"
+
+	"github.com/danielgtaylor/huma/v2"
+	"github.com/florianfinn/docklet-next/types/base"
+	"github.com/florianfinn/docklet-next/types/jobschedule"
+	"github.com/florianfinn/docklet-next/types/scheduler"
+
+	"github.com/florianfinn/docklet-next/backend/internal/middleware"
+	"github.com/florianfinn/docklet-next/backend/pkg/scheduler/runs"
+	"github.com/florianfinn/docklet-next/backend/pkg/utils/handlerutil"
+)
+
+type GetJobSchedulesInput struct {
+	ID string `path:"id" doc:"Environment ID"`
+}
+
+type GetJobSchedulesOutput struct {
+	Body jobschedule.Config
+}
+
+type UpdateJobSchedulesInput struct {
+	ID   string             `path:"id" doc:"Environment ID"`
+	Body jobschedule.Update `doc:"Job schedule update data"`
+}
+
+type ListJobsInput struct {
+	ID string `path:"id" doc:"Environment ID"`
+}
+
+type GetJobsOutput struct {
+	Body jobschedule.JobListResponse
+}
+
+type RunJobInput struct {
+	ID        string                      `path:"id" doc:"Environment ID"`
+	JobID     string                      `path:"jobId" minLength:"1" doc:"Job ID to run"`
+	RequestID string                      `header:"Idempotency-Key"`
+	Body      *jobschedule.SubmitRunInput `required:"false"`
+}
+
+type RunJobOutput struct {
+	Body jobschedule.JobRunResponse
+}
+
+type JobSchedulesHandler struct {
+	jobService      *JobService
+	proxyRemoteJSON handlerutil.RemoteJSONProxy
+}
+
+func (h *JobSchedulesHandler) ListJobs(ctx context.Context, input *ListJobsInput) (*GetJobsOutput, error) {
+	var jobs *jobschedule.JobListResponse
+	var err error
+	if input.ID != "0" {
+		jobs, err = h.jobService.ListRemoteJobs(ctx, input.ID)
+	} else {
+		jobs, err = h.jobService.ListJobs(ctx)
+	}
+	if err != nil {
+		return nil, jobHTTPErrorInternal(err)
+	}
+	return &GetJobsOutput{Body: *jobs}, nil
+}
+
+func (h *JobSchedulesHandler) RunJob(ctx context.Context, input *RunJobInput) (*RunJobOutput, error) {
+	runID := input.RequestID
+	if input.Body != nil && input.Body.RunID != "" {
+		if runID != "" && runID != input.Body.RunID {
+			return nil, huma.Error400BadRequest("Conflicting run IDs")
+		}
+		runID = input.Body.RunID
+	}
+	userID, _ := middleware.GetUserIDFromContext(ctx)
+	keyID, _ := ctx.Value(middleware.ContextKeyApiKeyID).(string)
+	trigger := "manual"
+	if h.jobService.cfg.AgentMode && userID == "agent" {
+		userID = ""
+		trigger = "remote"
+	}
+	run, err := h.jobService.Submit(ctx, scheduler.Request{RunID: runID, JobID: input.JobID, EnvironmentID: input.ID, Trigger: trigger, RequestedBy: userID, RequestedWithKey: keyID})
+	if err != nil {
+		return nil, jobHTTPErrorInternal(err)
+	}
+	return &RunJobOutput{Body: jobschedule.JobRunResponse{Success: true, Message: "Job accepted", RunID: run.ID, Status: run.Status}}, nil
+}
+
+func (h *JobSchedulesHandler) Get(ctx context.Context, input *GetJobSchedulesInput) (*GetJobSchedulesOutput, error) {
+	if input.ID != "0" {
+		cfg, err := h.proxyRemoteJSON.JSON[jobschedule.Config](ctx, input.ID, http.MethodGet, "/api/environments/0/job-schedules", nil)
+		if err != nil {
+			return nil, err
+		}
+		return &GetJobSchedulesOutput{Body: *cfg}, nil
+	}
+
+	cfg := h.jobService.GetJobSchedules(ctx)
+	return &GetJobSchedulesOutput{Body: cfg}, nil
+}
+
+func (h *JobSchedulesHandler) Update(ctx context.Context, input *UpdateJobSchedulesInput) (*handlerutil.Out[jobschedule.Config], error) {
+	if input.ID != "0" {
+		apiResp, err := h.proxyRemoteJSON.JSON[base.ApiResponse[jobschedule.Config]](ctx, input.ID, http.MethodPut, "/api/environments/0/job-schedules", input.Body)
+		if err != nil {
+			return nil, err
+		}
+
+		return &handlerutil.Out[jobschedule.Config]{Body: *apiResp}, nil
+	}
+
+	cfg, err := h.jobService.UpdateJobSchedules(ctx, input.Body)
+	if err != nil {
+		return nil, huma.Error400BadRequest(err.Error())
+	}
+
+	return &handlerutil.Out[jobschedule.Config]{
+		Body: base.ApiResponse[jobschedule.Config]{
+			Success: true,
+			Data:    cfg,
+		},
+	}, nil
+}
+
+// ListRuns returns paginated history for the requested job and environment.
+// Remote history combines agent runs with the manager's delivery records.
+func (h *JobSchedulesHandler) ListRuns(ctx context.Context, input *jobschedule.ListRunsInput) (*jobschedule.ListRunsOutput, error) {
+	result, err := h.jobService.ListRuns(ctx, input.ID, input.JobID, input.Page, input.Limit)
+	if err != nil {
+		return nil, jobHTTPErrorInternal(err)
+	}
+	return &jobschedule.ListRunsOutput{Body: result}, nil
+}
+
+// GetRun returns a persisted run or receipt. For remote work, it queries the
+// agent when the manager has no delivery record for the requested run.
+func (h *JobSchedulesHandler) GetRun(ctx context.Context, input *jobschedule.RunInput) (*jobschedule.RunOutput, error) {
+	result, err := h.jobService.GetRun(ctx, input.ID, input.JobID, input.RunID)
+	if err != nil {
+		return nil, jobHTTPErrorInternal(err)
+	}
+	return &jobschedule.RunOutput{Body: result}, nil
+}
+
+// RetryRun requests an explicit retry while preserving the run ID and target
+// progress. Eligibility and remote-outcome checks are enforced by the service.
+func (h *JobSchedulesHandler) RetryRun(ctx context.Context, input *jobschedule.RunInput) (*jobschedule.RunOutput, error) {
+	result, err := h.jobService.RetryRun(ctx, input.ID, input.JobID, input.RunID)
+	if err != nil {
+		return nil, jobHTTPErrorInternal(err)
+	}
+	return &jobschedule.RunOutput{Body: result}, nil
+}
+
+// CancelRun cancels queued work only when it has never been attempted or sent
+// remotely. Agent-owned cancellations are forwarded to the owning environment.
+func (h *JobSchedulesHandler) CancelRun(ctx context.Context, input *jobschedule.RunInput) (*jobschedule.RunOutput, error) {
+	result, err := h.jobService.CancelRun(ctx, input.ID, input.JobID, input.RunID)
+	if err != nil {
+		return nil, jobHTTPErrorInternal(err)
+	}
+	return &jobschedule.RunOutput{Body: result}, nil
+}
+
+// AcknowledgeRun marks a terminal run's remote delivery settled so retention can
+// compact its history. Nonterminal runs cannot be acknowledged.
+func (h *JobSchedulesHandler) AcknowledgeRun(ctx context.Context, input *jobschedule.RunInput) (*jobschedule.RunOutput, error) {
+	result, err := h.jobService.GetRun(ctx, input.ID, input.JobID, input.RunID)
+	if err != nil {
+		return nil, jobHTTPErrorInternal(err)
+	}
+	err = h.jobService.runs.UpdateRun(ctx, result, func(current *scheduler.Run) error {
+		if !current.Status.Terminal() {
+			return errors.New("run is not terminal")
+		}
+		current.RemoteSettled = true
+		current.UpdatedAt = time.Now().UTC()
+		result = *current
+		return nil
+	})
+	if err != nil {
+		return nil, jobHTTPErrorInternal(err)
+	}
+	return &jobschedule.RunOutput{Body: result}, nil
+}
+
+// RestartWorker requests a continuous watcher's restart on the owning runtime,
+// forwarding remote requests to the agent. It does not enqueue a scheduled run.
+func (h *JobSchedulesHandler) RestartWorker(ctx context.Context, input *jobschedule.JobInput) (*RunJobOutput, error) {
+	if input.ID != "0" {
+		result, err := h.proxyRemoteJSON.JSON[jobschedule.JobRunResponse](ctx, input.ID, http.MethodPost, "/api/environments/0/jobs/"+input.JobID+"/restart", nil)
+		if err != nil {
+			return nil, err
+		}
+		return &RunJobOutput{Body: *result}, nil
+	}
+	workers, ok := h.jobService.scheduler.(scheduler.WorkerController)
+	if !ok {
+		return nil, huma.Error503ServiceUnavailable("Scheduler unavailable")
+	}
+	if err := workers.RestartWatcher(ctx, input.JobID); err != nil {
+		return nil, jobHTTPErrorInternal(err)
+	}
+	return &RunJobOutput{Body: jobschedule.JobRunResponse{Success: true, Message: "Worker restart requested"}}, nil
+}
+
+func jobHTTPErrorInternal(err error) error {
+	if _, ok := errors.AsType[huma.StatusError](err); ok {
+		return err
+	}
+	if errors.Is(err, runs.ErrRunNotFound) {
+		return huma.Error404NotFound("Job run not found")
+	}
+	if errors.Is(err, runs.ErrRunConflict) {
+		return huma.Error409Conflict("Job run state changed")
+	}
+	return huma.Error400BadRequest(err.Error())
+}
+
+// ResolveRun records legacy operator review.
+// TODO(v3): remove this deprecated mixed-version compatibility contract.
+func (h *JobSchedulesHandler) ResolveRun(ctx context.Context, input *jobschedule.ResolveRunInput) (*jobschedule.RunOutput, error) {
+	actor, _ := middleware.GetUserIDFromContext(ctx)
+	permissions, _ := middleware.PermissionsFromContext(ctx)
+	if input.Body != nil && input.Body.ResolvedBy != "" {
+		if permissions == nil || !permissions.Sudo || !h.jobService.cfg.AgentMode {
+			return nil, huma.Error403Forbidden("only authenticated manager transport may forward an operator identity")
+		}
+		actor = input.Body.ResolvedBy
+	}
+	run, err := h.jobService.ResolveRun(ctx, input.ID, input.JobID, input.RunID, actor)
+	if err != nil {
+		return nil, jobHTTPErrorInternal(err)
+	}
+	return &jobschedule.RunOutput{Body: run}, nil
+}

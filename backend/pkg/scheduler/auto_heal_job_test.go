@@ -1,0 +1,283 @@
+//go:build postgres_integration
+
+// Source: getarcaneapp/arcane/backend/pkg/scheduler/auto_heal_job_test.go
+// Revision: 095cb778daba1034e2a39961199e712a75d4ba29
+// Retrieved: 2026-10-13
+// License: BSD-3-Clause
+// Deviations: Local module namespace; functional cut: removed upstream analytics heartbeat; functional cut: PostgreSQL integration test fixture.
+
+package scheduler
+
+import (
+	"context"
+	"sync/atomic"
+	"testing"
+	"time"
+
+	"github.com/florianfinn/docklet-next/backend/internal/testpg"
+	"github.com/moby/moby/api/types/container"
+	"github.com/moby/moby/client"
+	"github.com/stretchr/testify/require"
+	"gorm.io/gorm"
+
+	"github.com/florianfinn/docklet-next/backend/internal/database"
+	"github.com/florianfinn/docklet-next/backend/internal/settings"
+)
+
+func newTestAutoHealJob() *AutoHealJob {
+	return &AutoHealJob{
+		restarts: make(map[string]*restartRecord),
+	}
+}
+
+func TestAutoHeal_ListOptionsFilterUnhealthyAtDaemon(t *testing.T) {
+	opts := autoHealListOptionsInternal()
+	require.False(t, opts.All)
+	require.Equal(t, make(client.Filters).Add("health", string(container.Unhealthy)), opts.Filters)
+}
+
+func TestAutoHeal_FilterCandidates_SkipsSelfContainer(t *testing.T) {
+	job := newTestAutoHealJob()
+
+	selfFullID := "407163929c492b5c4b01a3981f5de4774c37aa8300bd214b4d62412a3dc56468"
+	containers := []container.Summary{
+		{ID: selfFullID, Names: []string{"/arcane"}},
+		{ID: "aaaabbbbccccddddeeeeffff0000111122223333444455556666777788889999", Names: []string{"/other"}},
+	}
+
+	// Hostname-based detection yields the short 12-char ID.
+	candidates := job.filterCandidatesInternal(containers, nil, selfFullID[:12])
+	require.Len(t, candidates, 1)
+	require.Equal(t, "/other", candidates[0].Names[0])
+
+	// cgroup/mountinfo-based detection yields the full ID.
+	candidates = job.filterCandidatesInternal(containers, nil, selfFullID)
+	require.Len(t, candidates, 1)
+	require.Equal(t, "/other", candidates[0].Names[0])
+
+	// Outside Docker no self ID is detected and the guard is a no-op.
+	candidates = job.filterCandidatesInternal(containers, nil, "")
+	require.Len(t, candidates, 2)
+}
+
+func TestAutoHeal_CanRestart_UnderLimit(t *testing.T) {
+	job := newTestAutoHealJob()
+
+	// No restarts recorded yet — should be allowed
+	require.True(t, job.CanRestartExported("container-1", 5, 30*time.Minute))
+
+	// Record 4 restarts (under limit of 5)
+	for range 4 {
+		job.RecordRestartExported("container-1")
+	}
+
+	require.True(t, job.CanRestartExported("container-1", 5, 30*time.Minute))
+}
+
+func TestAutoHeal_CanRestart_AtLimit(t *testing.T) {
+	job := newTestAutoHealJob()
+
+	// Record exactly 5 restarts (at limit)
+	for range 5 {
+		job.RecordRestartExported("container-1")
+	}
+
+	require.False(t, job.CanRestartExported("container-1", 5, 30*time.Minute))
+}
+
+func TestAutoHeal_CanRestart_WindowExpiry(t *testing.T) {
+	job := newTestAutoHealJob()
+
+	// Record 5 restarts 31 minutes ago (outside window)
+	oldTime := time.Now().Add(-31 * time.Minute)
+	for range 5 {
+		job.RecordRestartAtExported("container-1", oldTime)
+	}
+
+	// Should be allowed because all timestamps are outside the 30-minute window
+	require.True(t, job.CanRestartExported("container-1", 5, 30*time.Minute))
+}
+
+func TestAutoHeal_CanRestart_MixedTimestamps(t *testing.T) {
+	job := newTestAutoHealJob()
+
+	// Record 3 old restarts (outside window)
+	oldTime := time.Now().Add(-31 * time.Minute)
+	for range 3 {
+		job.RecordRestartAtExported("container-1", oldTime)
+	}
+
+	// Record 4 recent restarts (inside window)
+	for range 4 {
+		job.RecordRestartExported("container-1")
+	}
+
+	// Should still be allowed (only 4 recent, limit is 5)
+	require.True(t, job.CanRestartExported("container-1", 5, 30*time.Minute))
+
+	// Add one more recent restart
+	job.RecordRestartExported("container-1")
+
+	// Now should be blocked (5 recent)
+	require.False(t, job.CanRestartExported("container-1", 5, 30*time.Minute))
+}
+
+func TestAutoHeal_CanRestart_DifferentContainers(t *testing.T) {
+	job := newTestAutoHealJob()
+
+	// Fill up container-1
+	for range 5 {
+		job.RecordRestartExported("container-1")
+	}
+
+	// container-1 should be blocked
+	require.False(t, job.CanRestartExported("container-1", 5, 30*time.Minute))
+
+	// container-2 should still be allowed
+	require.True(t, job.CanRestartExported("container-2", 5, 30*time.Minute))
+}
+
+func TestAutoHeal_Schedule_Default(t *testing.T) {
+	job := newTestAutoHealJob()
+	// Without a settings service, Schedule would panic.
+	// We test the Name() method directly.
+	require.Equal(t, "auto-heal", job.Name())
+}
+
+func TestAutoHeal_ShouldSchedule(t *testing.T) {
+	ctx := t.Context()
+	_, settingsSvc, _ := setupSchedulerStateServicesInternal(t)
+	job, err := NewAutoHealJob(nil, settingsSvc, nil, nil, newTestAdmissionGateInternal(t))
+	require.NoError(t, err)
+
+	require.False(t, job.ShouldSchedule(ctx))
+
+	require.NoError(t, settingsSvc.SetBoolSetting(ctx, "autoHealEnabled", true))
+	require.True(t, job.ShouldSchedule(ctx))
+}
+
+func TestAutoHeal_ResetRestartTracking(t *testing.T) {
+	job := newTestAutoHealJob()
+
+	// Fill up container-1
+	for range 5 {
+		job.RecordRestartExported("container-1")
+	}
+	require.False(t, job.CanRestartExported("container-1", 5, 30*time.Minute))
+
+	// Reset tracking
+	job.ResetRestartTracking()
+
+	// Should be allowed again
+	require.True(t, job.CanRestartExported("container-1", 5, 30*time.Minute))
+}
+
+func TestAutoHeal_Run_UsesBoundedConcurrency(t *testing.T) {
+	ctx := t.Context()
+
+	db, err := gorm.Open(testpg.Dialector(t, ":memory:"), &gorm.Config{})
+	require.NoError(t, err)
+	require.NoError(t, db.AutoMigrate(&settings.SettingVariable{}))
+
+	settingsSvc, err := newSettingsServiceForTestInternal(t, ctx, &database.DB{DB: db})
+	require.NoError(t, err)
+	require.NoError(t, settingsSvc.SetBoolSetting(ctx, "autoHealEnabled", true))
+	require.NoError(t, settingsSvc.SetStringSetting(ctx, "autoHealExcludedContainers", "skip-me"))
+
+	job, err := NewAutoHealJob(nil, settingsSvc, nil, nil, newTestAdmissionGateInternal(t))
+	require.NoError(t, err)
+	job.getDockerClient = func() (*client.Client, error) { return nil, nil }
+	job.listContainers = func(ctx context.Context, dockerClient *client.Client) ([]container.Summary, error) {
+		return []container.Summary{
+			{ID: "c1", Names: []string{"/one"}},
+			{ID: "c2", Names: []string{"/two"}},
+			{ID: "c3", Names: []string{"/three"}},
+			{ID: "c4", Names: []string{"/four"}},
+			{ID: "c5", Names: []string{"/five"}},
+			{ID: "c6", Names: []string{"/six"}},
+			{ID: "skip", Names: []string{"/skip-me"}},
+		}, nil
+	}
+
+	var current atomic.Int32
+	var maxConcurrent atomic.Int32
+	var restarts atomic.Int32
+
+	job.inspectContainer = func(ctx context.Context, dockerClient *client.Client, containerID string) (container.InspectResponse, error) {
+		active := current.Add(1)
+		for {
+			maxSeen := maxConcurrent.Load()
+			if active <= maxSeen || maxConcurrent.CompareAndSwap(maxSeen, active) {
+				break
+			}
+		}
+		defer current.Add(-1)
+
+		time.Sleep(40 * time.Millisecond)
+
+		switch containerID {
+		case "c5":
+			return container.InspectResponse{State: &container.State{}}, nil
+		case "c6":
+			return container.InspectResponse{State: &container.State{Health: &container.Health{Status: container.Healthy}}}, nil
+		default:
+			return container.InspectResponse{State: &container.State{Health: &container.Health{Status: container.Unhealthy}}}, nil
+		}
+	}
+	job.restartContainer = func(ctx context.Context, dockerClient *client.Client, containerID string) error {
+		restarts.Add(1)
+		return nil
+	}
+
+	_, runErr1 := job.Run(ctx)
+	require.NoError(t, runErr1)
+
+	require.Greater(t, maxConcurrent.Load(), int32(1))
+	require.LessOrEqual(t, maxConcurrent.Load(), int32(autoHealInspectConcurrency))
+	require.Equal(t, int32(4), restarts.Load())
+}
+
+func TestAutoHealJob_OverlappingRunIsSkippedInternal(t *testing.T) {
+	ctx := t.Context()
+	_, settingsSvc, _ := setupSchedulerStateServicesInternal(t)
+	require.NoError(t, settingsSvc.SetBoolSetting(ctx, "autoHealEnabled", true))
+
+	job, err := NewAutoHealJob(nil, settingsSvc, nil, nil, newTestAdmissionGateInternal(t))
+	require.NoError(t, err)
+	job.getDockerClient = func() (*client.Client, error) { return nil, nil }
+	started := make(chan struct{}, 1)
+	release := make(chan struct{})
+	var calls atomic.Int32
+	job.listContainers = func(context.Context, *client.Client) ([]container.Summary, error) {
+		calls.Add(1)
+		select {
+		case started <- struct{}{}:
+		default:
+		}
+		<-release
+		return nil, nil
+	}
+
+	firstDone := make(chan struct{})
+	go func() {
+		_, runErr2 := job.Run(ctx)
+		if runErr2 != nil {
+			t.Errorf("first auto heal job run failed: %v", runErr2)
+			close(firstDone)
+			return
+		}
+		close(firstDone)
+	}()
+	<-started
+
+	_, runErr3 := job.Run(ctx)
+	require.NoError(t, runErr3)
+	require.Equal(t, int32(1), calls.Load())
+
+	close(release)
+	select {
+	case <-firstDone:
+	case <-time.After(time.Second):
+		require.FailNow(t, "first auto-heal run did not finish")
+	}
+}

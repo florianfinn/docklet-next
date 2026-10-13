@@ -1,0 +1,236 @@
+//go:build postgres_integration
+
+// Source: getarcaneapp/arcane/backend/internal/system/service_test.go
+// Revision: 095cb778daba1034e2a39961199e712a75d4ba29
+// Retrieved: 2026-10-13
+// License: BSD-3-Clause
+// Deviations: Local module namespace; functional cut: removed S3 backup destinations; functional cut: removed SQLite runtime and migrations; functional cut: PostgreSQL integration test fixture.
+
+package system
+
+import (
+	"context"
+	"errors"
+	"testing"
+	"time"
+
+	"github.com/florianfinn/docklet-next/backend/internal/testpg"
+	backuptypes "github.com/florianfinn/docklet-next/types/backup"
+	"github.com/florianfinn/docklet-next/types/scheduler"
+	volumetypes "github.com/florianfinn/docklet-next/types/volume"
+	"github.com/moby/moby/api/types/container"
+	"github.com/moby/moby/api/types/mount"
+	"github.com/moby/moby/api/types/network"
+	"github.com/stretchr/testify/require"
+	"go.getarcane.app/kit/pkg"
+	"go.getarcane.app/sys/crypto"
+	"gorm.io/gorm"
+
+	"github.com/florianfinn/docklet-next/backend/internal/backup"
+	"github.com/florianfinn/docklet-next/backend/internal/config"
+	"github.com/florianfinn/docklet-next/backend/internal/database"
+	systembackup "github.com/florianfinn/docklet-next/backend/internal/system/children/backup"
+	"github.com/florianfinn/docklet-next/backend/internal/volume"
+	"github.com/florianfinn/docklet-next/backend/pkg/pagination"
+	"github.com/florianfinn/docklet-next/backend/pkg/scheduler/runs"
+	francistest "github.com/florianfinn/docklet-next/backend/pkg/utils/francis/testing"
+)
+
+func TestResolveSystemUpgraderRuntimeOptionsInternal_TCPDockerHost(t *testing.T) {
+	currentContainer := &container.InspectResponse{
+		HostConfig: &container.HostConfig{NetworkMode: "bridge"},
+		NetworkSettings: &container.NetworkSettings{
+			Networks: map[string]*network.EndpointSettings{
+				"bridge":      {},
+				"arcane-test": {},
+			},
+		},
+	}
+
+	containerEnv, mounts, networkMode, err := resolveUpgraderRuntimeOptionsInternal(
+		t.Context(),
+		"tcp://docker-socket-proxy:2375",
+		currentContainer,
+		nil,
+		func() bool { return true },
+		nil,
+	)
+	require.NoError(t, err)
+	require.Equal(t, []string{"DOCKER_HOST=tcp://docker-socket-proxy:2375"}, containerEnv)
+	require.Empty(t, mounts)
+	require.Equal(t, container.NetworkMode("arcane-test"), networkMode)
+}
+
+func TestResolveSystemUpgraderRuntimeOptionsInternal_UnixDockerHost(t *testing.T) {
+	containerEnv, mounts, networkMode, err := resolveUpgraderRuntimeOptionsInternal(
+		t.Context(),
+		"unix:///var/run/docker.sock",
+		nil,
+		func(context.Context, string) (string, error) {
+			return "/host/run/docker.sock", nil
+		},
+		func() bool { return true },
+		nil,
+	)
+	require.NoError(t, err)
+	require.Equal(t, []string{"DOCKER_HOST=unix:///var/run/docker.sock"}, containerEnv)
+	require.Equal(t, container.NetworkMode(""), networkMode)
+	require.Equal(t, []mount.Mount{
+		{
+			Type:   mount.TypeBind,
+			Source: "/host/run/docker.sock",
+			Target: "/var/run/docker.sock",
+		},
+	}, mounts)
+}
+
+func TestResolveSystemUpgraderRuntimeOptionsInternal_DefaultDockerHost(t *testing.T) {
+	containerEnv, mounts, _, err := resolveUpgraderRuntimeOptionsInternal(
+		t.Context(),
+		"",
+		nil,
+		func(context.Context, string) (string, error) {
+			return "/var/run/docker.sock", nil
+		},
+		func() bool { return true },
+		nil,
+	)
+	require.NoError(t, err)
+	require.Nil(t, containerEnv)
+	require.Equal(t, []mount.Mount{
+		{
+			Type:   mount.TypeBind,
+			Source: "/var/run/docker.sock",
+			Target: "/var/run/docker.sock",
+		},
+	}, mounts)
+}
+
+func TestResolveSystemUpgraderRuntimeOptionsInternal_UnixDockerHostResolutionError(t *testing.T) {
+	_, _, _, err := resolveUpgraderRuntimeOptionsInternal(
+		t.Context(),
+		"unix:///var/run/docker.sock",
+		nil,
+		func(context.Context, string) (string, error) {
+			return "", errors.New("inspect failed")
+		},
+		func() bool { return true },
+		nil,
+	)
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "resolve unix socket source")
+}
+
+func TestListBackupHistoryClassifiesAndFiltersOrigins(t *testing.T) {
+	gormDB, err := gorm.Open(testpg.Dialector(t, "file:system-volume-history?mode=memory&cache=shared"), &gorm.Config{})
+	require.NoError(t, err)
+	require.NoError(t, gormDB.AutoMigrate(&SystemBackupRun{}, &volume.VolumeBackup{}))
+	now := time.Now().UTC()
+	require.NoError(t, gormDB.Create(&SystemBackupRun{
+		CreatedAt: now.Add(-2 * time.Minute), Status: SystemBackupStatusSucceeded, Trigger: SystemBackupTriggerManual,
+		Destination: backuptypes.SystemBackupDestinationLocal,
+	}).Error)
+	require.NoError(t, gormDB.Create(&volume.VolumeBackup{
+		VolumeName: "app-data", CreatedAt: now.Add(-time.Minute), Status: volume.VolumeBackupStatusSucceeded,
+		Trigger: volume.VolumeBackupTriggerScheduled, Destination: volumetypes.BackupDestinationLocal,
+		Format: volume.VolumeBackupFormatRustic, PolicyID: backuptypes.SystemVolumePolicyPrefix + "nightly:" + kit.SHA256Hex("app-data")[:16],
+	}).Error)
+	require.NoError(t, gormDB.Create(&volume.VolumeBackup{
+		VolumeName: "cache", CreatedAt: now, Status: volume.VolumeBackupStatusSucceeded,
+		Trigger: volume.VolumeBackupTriggerManual, Destination: volumetypes.BackupDestinationLocal,
+		Format: volume.VolumeBackupFormatRustic,
+	}).Error)
+	service := &SystemService{db: &database.DB{DB: gormDB}}
+	service.backup = systembackup.NewService(systembackup.Dependencies{Store: service.backupStoreInternal()})
+
+	systemRows, page, err := service.backup.ListBackupHistory(t.Context(), pagination.QueryParams{
+		Sort: "createdAt", Order: pagination.SortDesc, Limit: 20,
+		Filters: map[string]string{"type": "system"},
+	})
+	require.NoError(t, err)
+	require.EqualValues(t, 2, page.TotalItems)
+	require.Len(t, systemRows, 2)
+	require.Equal(t, backuptypes.ManagementTypeSystem, systemRows[0].Type)
+	require.Equal(t, "app-data", systemRows[0].ResourceName)
+	require.Equal(t, "volume", systemRows[0].ResourceType)
+
+	volumeRows, page, err := service.backup.ListBackupHistory(t.Context(), pagination.QueryParams{
+		Search: "cache", Sort: "createdAt", Order: pagination.SortDesc, Limit: 1,
+		Filters: map[string]string{"type": "volume"},
+	})
+	require.NoError(t, err)
+	require.EqualValues(t, 1, page.TotalItems)
+	require.Len(t, volumeRows, 1)
+	require.Equal(t, backuptypes.ManagementTypeVolume, volumeRows[0].Type)
+	require.Equal(t, "cache", volumeRows[0].ResourceName)
+}
+
+func newSystemBackupAdmissionGateForTestInternal(t testing.TB) *runs.Admission {
+	t.Helper()
+	runtime := francistest.New(t)
+	gate := runs.NewAdmission(runtime.Service(), t.Name())
+	require.NoError(t, gate.Register(runtime))
+	francistest.Start(t, runtime)
+	return gate
+}
+
+type systemBackupPolicySchedulerInternal struct {
+	submitted []scheduler.Request
+	jobs      map[string]scheduler.Job
+}
+
+func (s *systemBackupPolicySchedulerInternal) AddJob(_ context.Context, job scheduler.Job) error {
+	s.jobs[job.Name()] = job
+	return nil
+}
+
+func (s *systemBackupPolicySchedulerInternal) RemoveJob(_ context.Context, name string) {
+	delete(s.jobs, name)
+}
+
+func (s *systemBackupPolicySchedulerInternal) HasJob(name string) bool {
+	_, ok := s.jobs[name]
+	return ok
+}
+
+func (s *systemBackupPolicySchedulerInternal) Submit(_ context.Context, request scheduler.Request) (scheduler.Run, error) {
+	s.submitted = append(s.submitted, request)
+	return scheduler.Run{ID: request.RunID, JobID: request.JobID, EnvironmentID: request.EnvironmentID, Status: scheduler.Queued}, nil
+}
+
+func TestSystemBackupPoliciesRejectEnableUntilPostgresRecoveryExists(t *testing.T) {
+	gormDB, err := gorm.Open(testpg.Dialector(t, "file:system-backup-schedules?mode=memory&cache=shared"), &gorm.Config{})
+	require.NoError(t, err)
+	require.NoError(t, gormDB.AutoMigrate(&SystemBackupPolicy{}, &backup.SystemBackupRecoveryConfig{}))
+	crypto.InitEncryption(&crypto.Config{EncryptionKey: "system-backup-policy-test-key-32bytes", Environment: "test"})
+	db := &database.DB{DB: gormDB}
+	service := &SystemService{db: db}
+	service.backup = systembackup.NewService(systembackup.Dependencies{
+		Store: service.backupStoreInternal(), DB: db,
+		Config:       &config.Config{DatabaseURL: "postgres://test.invalid/docklet"},
+		RecoveryKeys: backup.NewRecoveryKeyStore(db),
+	})
+	_, err = service.backup.SetRecoveryKey(t.Context(), "QWERTY-ABCDEF-234567-GHIJKL-MNOPQR-STUVWX-YZ2345-ZXCVBN")
+	require.NoError(t, err)
+	_, err = service.backup.UpdatePolicies(t.Context(), []backuptypes.UpdateSystemBackupPolicy{{Enabled: true, Schedule: "0 0 2 * * *", RetentionCount: 5, LocalEnabled: true}})
+	require.ErrorIs(t, err, systembackup.ErrSystemBackupUnavailable)
+}
+
+func TestSystemBackupPolicyRequiresConfiguredRecoveryKeyWhenEnabled(t *testing.T) {
+	gormDB, err := gorm.Open(testpg.Dialector(t, "file:system-backup-key-required?mode=memory&cache=shared"), &gorm.Config{})
+	require.NoError(t, err)
+	require.NoError(t, gormDB.AutoMigrate(&SystemBackupPolicy{}, &backup.SystemBackupRecoveryConfig{}))
+	db := &database.DB{DB: gormDB}
+	service := &SystemService{db: db}
+	service.backup = systembackup.NewService(systembackup.Dependencies{
+		Store:        service.backupStoreInternal(),
+		DB:           db,
+		Config:       &config.Config{DatabaseURL: "file:system-backup-key-required-test.db"},
+		RecoveryKeys: backup.NewRecoveryKeyStore(db),
+	})
+
+	_, err = service.backup.UpdatePolicies(t.Context(), []backuptypes.UpdateSystemBackupPolicy{{
+		Enabled: true, Schedule: "0 0 2 * * *", RetentionCount: 7, LocalEnabled: true,
+	}})
+	require.ErrorContains(t, err, "configure a recovery key")
+}

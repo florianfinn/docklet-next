@@ -1,0 +1,103 @@
+// Source: getarcaneapp/arcane/cli/internal/cmdutil/response.go
+// Revision: 095cb778daba1034e2a39961199e712a75d4ba29
+// Retrieved: 2026-10-13
+// License: BSD-3-Clause
+// Deviations: Local module namespace; functional cut: removed GitOps and saved Git repositories.
+
+package cmdutil
+
+import (
+	"bytes"
+	"encoding/json/jsontext"
+	"encoding/json/v2"
+	"errors"
+	"fmt"
+	"io"
+	"net/http"
+	"strings"
+
+	"github.com/florianfinn/docklet-next/cli/internal/output"
+)
+
+const maxErrorBodyBytes = 4096
+
+// HTTPStatusError represents a non-2xx HTTP response.
+type HTTPStatusError struct {
+	StatusCode int
+	Body       string
+}
+
+func (e *HTTPStatusError) Error() string {
+	body := strings.TrimSpace(e.Body)
+	if body == "" {
+		return fmt.Sprintf("request failed with status %d", e.StatusCode)
+	}
+	return fmt.Sprintf("request failed with status %d: %s", e.StatusCode, body)
+}
+
+// EnsureSuccessStatus returns an error for non-2xx responses.
+func EnsureSuccessStatus(resp *http.Response) error {
+	if resp == nil {
+		return errors.New("nil HTTP response")
+	}
+	if resp.StatusCode >= 200 && resp.StatusCode < 300 {
+		return nil
+	}
+	body, _ := io.ReadAll(io.LimitReader(resp.Body, maxErrorBodyBytes))
+	return &HTTPStatusError{
+		StatusCode: resp.StatusCode,
+		Body:       string(body),
+	}
+}
+
+// DecodeJSON decodes JSON into out and enforces a successful HTTP status.
+func DecodeJSON[T any](resp *http.Response, out *T) error {
+	if err := EnsureSuccessStatus(resp); err != nil {
+		return err
+	}
+	if out == nil {
+		return errors.New("nil decode target")
+	}
+	if err := json.UnmarshalRead(resp.Body, out); err != nil {
+		return fmt.Errorf("failed to parse response: %w", err)
+	}
+	return nil
+}
+
+// ReadJSONBody enforces a successful HTTP status and returns the raw response body.
+// Use it when a command needs both to decode a response and to echo it verbatim,
+// so that fields the CLI does not model — such as the counts and groups objects
+// on the container, volume and network list endpoints — survive
+// --json output instead of being dropped by a re-marshal.
+func ReadJSONBody(resp *http.Response) ([]byte, error) {
+	if err := EnsureSuccessStatus(resp); err != nil {
+		return nil, err
+	}
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read response: %w", err)
+	}
+	return body, nil
+}
+
+// PrintRawJSON pretty-prints a raw JSON document, falling back to the bytes as-is.
+func PrintRawJSON(body []byte) error {
+	value := jsontext.Value(bytes.Clone(body))
+	if value.Indent(jsontext.WithIndent("  ")) == nil {
+		_, err := fmt.Fprintln(output.Stdout(), value.String())
+		return err
+	}
+	// Not valid JSON: echo the server's bytes verbatim rather than swallow them.
+	_, err := fmt.Fprintln(output.Stdout(), string(body))
+	return err
+}
+
+// PrintJSON prints indented JSON to stdout.
+func PrintJSON(v any) error {
+	b, err := json.Marshal(v, jsontext.WithIndent("  "))
+	if err != nil {
+		return fmt.Errorf("failed to marshal JSON: %w", err)
+	}
+	_, err = fmt.Fprintln(output.Stdout(), string(b))
+	return err
+}

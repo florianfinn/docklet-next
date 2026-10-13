@@ -1,0 +1,119 @@
+// Source: getarcaneapp/arcane/types/role/role.go
+// Revision: 095cb778daba1034e2a39961199e712a75d4ba29
+// Retrieved: 2026-10-13
+// License: BSD-3-Clause
+// Deviations: functional cut: removed OIDC and passkeys.
+
+// Package role holds the public DTOs for Arcane's RBAC API: roles,
+// per-user role assignments and the permission manifest exposed to the frontend.
+package role
+
+import "time"
+
+// Role represents a named permission set returned by the API.
+type Role struct {
+	ID                string     `json:"id" doc:"Unique identifier of the role" example:"role_admin"`
+	Name              string     `json:"name" doc:"Display name of the role" example:"Admin"`
+	Description       *string    `json:"description,omitempty" doc:"Optional human description"`
+	Permissions       []string   `json:"permissions" doc:"Permission strings granted by this role" example:"[\"containers:start\",\"projects:deploy\"]"`
+	BuiltIn           bool       `json:"builtIn" doc:"True for built-in roles (Admin/Editor/Deployer/Viewer); built-ins cannot be edited or deleted"`
+	AssignedUserCount int        `json:"assignedUserCount" doc:"How many users currently hold an assignment to this role"`
+	CreatedAt         time.Time  `json:"createdAt" doc:"Creation timestamp"`
+	UpdatedAt         *time.Time `json:"updatedAt,omitempty" doc:"Last update timestamp"`
+}
+
+// CreateRole is the request body for creating a custom role.
+// Fields tagged with unorm and trim are trimmed and normalized to Unicode NFC.
+type CreateRole struct {
+	Name        string   `json:"name" minLength:"1" maxLength:"100" doc:"Display name of the role" example:"Deploy Bot" unorm:"nfc" trim:"true"`
+	Description *string  `json:"description,omitempty" maxLength:"500" doc:"Optional human description" unorm:"nfc" trim:"true"`
+	Permissions []string `json:"permissions" minItems:"1" doc:"Permission strings granted by this role"`
+}
+
+// UpdateRole is the request body for editing a custom role. Built-in roles
+// cannot be updated and will return 403.
+type UpdateRole struct {
+	Name        string   `json:"name" minLength:"1" maxLength:"100" doc:"Display name of the role" unorm:"nfc" trim:"true"`
+	Description *string  `json:"description,omitzero" maxLength:"500" doc:"Optional human description" unorm:"nfc" trim:"true"`
+	Permissions []string `json:"permissions" minItems:"1" doc:"Permission strings granted by this role"`
+}
+
+// RoleAssignment binds a user to a role, optionally scoped to one environment.
+// EnvironmentID == nil means the assignment is global — it applies to every
+// environment and to org-level endpoints.
+type RoleAssignment struct {
+	ID            string    `json:"id" doc:"Unique identifier of the assignment"`
+	UserID        string    `json:"userId" doc:"ID of the user holding this assignment"`
+	RoleID        string    `json:"roleId" doc:"ID of the granted role"`
+	EnvironmentID *string   `json:"environmentId,omitempty" doc:"Environment ID this assignment is scoped to; omit for a global assignment"`
+	Source        string    `json:"source" doc:"How the assignment was created" enum:"manual"`
+	CreatedAt     time.Time `json:"createdAt" doc:"Creation timestamp"`
+}
+
+// SetUserAssignments replaces every role assignment for one user.
+type SetUserAssignments struct {
+	Assignments []UserAssignmentInput `json:"assignments" doc:"Desired manual role assignments for the user"`
+}
+
+// UserAssignmentInput is one row in a SetUserAssignments request.
+type UserAssignmentInput struct {
+	RoleID        string  `json:"roleId" doc:"ID of the role to grant"`
+	EnvironmentID *string `json:"environmentId,omitempty" doc:"Environment ID to scope the assignment to; omit for a global assignment"`
+}
+
+// PermissionsManifest describes every permission the server recognizes,
+// grouped by resource. The frontend uses this to render the permission
+// picker without hard-coding the taxonomy.
+type PermissionsManifest struct {
+	Resources      []PermissionResource `json:"resources" doc:"Resource groups, in display order"`
+	Presets        []PermissionPreset   `json:"presets,omitempty" doc:"Optional preset permission bundles for bulk selection in the UI"`
+	AccessSurfaces []AccessSurface      `json:"accessSurfaces,omitempty" doc:"Backend-owned route, landing, and category access metadata for frontend UX gating"`
+}
+
+// PermissionResource is one resource group in the manifest (e.g. "containers").
+type PermissionResource struct {
+	Key     string             `json:"key" doc:"Stable resource key" example:"containers"`
+	Label   string             `json:"label" doc:"Human-readable label" example:"Containers"`
+	Scope   string             `json:"scope" enum:"global,env" doc:"'global' for org-level perms; 'env' for per-environment perms"`
+	Actions []PermissionAction `json:"actions" doc:"Actions available on this resource"`
+}
+
+// PermissionAction is one permission inside a resource group.
+type PermissionAction struct {
+	Key         string   `json:"key" doc:"Action verb" example:"start"`
+	Permission  string   `json:"permission" doc:"Fully-qualified permission string used in role definitions" example:"containers:start"`
+	Label       string   `json:"label" doc:"Human-readable label" example:"Start"`
+	Description string   `json:"description,omitempty" doc:"Optional longer description"`
+	Requires    []string `json:"requires,omitempty" doc:"Permissions that should be auto-selected when this permission is chosen in the UI"`
+}
+
+// PermissionPreset is an optional bulk-selection bundle exposed to the UI.
+type PermissionPreset struct {
+	Key         string   `json:"key" doc:"Stable preset key" example:"editor"`
+	Label       string   `json:"label" doc:"Human-readable preset label" example:"All permissions (non-admin)"`
+	Description string   `json:"description,omitempty" doc:"Optional longer description for the preset"`
+	Permissions []string `json:"permissions" doc:"Permissions included when the preset is selected"`
+}
+
+// AccessSurface describes one UI surface whose visibility is driven by
+// backend-owned RBAC metadata. It is advisory UX metadata; backend handlers and
+// middleware remain authoritative for actual enforcement.
+type AccessSurface struct {
+	ID            string   `json:"id" doc:"Stable surface identifier" example:"settings.category.webhooks"`
+	Kind          string   `json:"kind" enum:"route,settings-category,customize-category,landing" doc:"Surface type"`
+	URL           string   `json:"url,omitempty" doc:"Route URL or prefix represented by this surface" example:"/settings/webhooks"`
+	Label         string   `json:"label" doc:"Human-readable surface label" example:"Webhooks"`
+	AccessMode    string   `json:"accessMode" enum:"permissions,any-child" doc:"How reachability is evaluated"`
+	MatchMode     string   `json:"matchMode" enum:"any-of,all-of" doc:"How permissions are combined when accessMode is permissions"`
+	ScopeMode     string   `json:"scopeMode" enum:"global-only,selected-env-plus-global,any-effective-scope" doc:"Which effective permission scope is considered"`
+	Permissions   []string `json:"permissions,omitempty" doc:"Permissions used by permission-based surfaces"`
+	Children      []string `json:"children,omitempty" doc:"Child surface IDs used by aggregate landing surfaces"`
+	FallbackOrder int      `json:"fallbackOrder,omitempty" doc:"Positive ordering hint for route fallback selection"`
+}
+
+// ApiKeyPermissionGrant is one permission grant on an API key, optionally
+// scoped to a single environment. Used by the API key create/update flow.
+type ApiKeyPermissionGrant struct {
+	Permission    string  `json:"permission" doc:"Permission string to grant" example:"containers:list"`
+	EnvironmentID *string `json:"environmentId,omitempty" doc:"Environment ID to scope the grant to; omit for a global grant"`
+}

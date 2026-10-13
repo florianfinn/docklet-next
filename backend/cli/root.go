@@ -1,0 +1,51 @@
+// Source: getarcaneapp/arcane/backend/cli/root.go
+// Revision: 095cb778daba1034e2a39961199e712a75d4ba29
+// Retrieved: 2026-10-13
+// License: BSD-3-Clause
+// Deviations: Local module namespace; functional cut: removed SQLite runtime and migrations.
+
+package cli
+
+import (
+	"context"
+	"log/slog"
+	"os"
+
+	"github.com/spf13/cobra"
+	"go.getarcane.app/kit/pkg/signals"
+
+	"github.com/florianfinn/docklet-next/backend/cli/admin"
+	"github.com/florianfinn/docklet-next/backend/cli/generate"
+	"github.com/florianfinn/docklet-next/backend/cli/upgrade"
+	"github.com/florianfinn/docklet-next/backend/internal/bootstrap"
+	"github.com/florianfinn/docklet-next/backend/internal/config"
+)
+
+var rootCmd = &cobra.Command{
+	Use:     "arcane",
+	Long:    "Arcane - Modern Docker Management, Designed for Everyone.",
+	Version: config.Version,
+	Run: func(cmd *cobra.Command, args []string) {
+		err := bootstrap.Bootstrap(cmd.Context())
+		if err != nil {
+			slog.ErrorContext(cmd.Context(), "Failed to run Arcane", "error", err)
+			os.Exit(1)
+		}
+	},
+	CompletionOptions: cobra.CompletionOptions{DisableDefaultCmd: true},
+}
+
+func Execute() {
+	ctx := signals.SignalContext(context.Background()) //nolint:forbidigo // Process entry point creates the signal-controlled application context.
+
+	err := rootCmd.ExecuteContext(ctx)
+	if err != nil {
+		os.Exit(1)
+	}
+}
+
+func init() {
+	rootCmd.AddCommand(admin.AdminCmd)
+	rootCmd.AddCommand(upgrade.UpgradeCmd)
+	rootCmd.AddCommand(generate.GenerateCmd)
+}

@@ -25,6 +25,8 @@ function modules(t) {
 }
 const calls = (root) => readFileSync(`${root}/.git/module-checks.log`, "utf8").trim().split("\n").map(JSON.parse);
 const expected = [
+  { program: "go", args: ["run", "./scripts/gofmt-check.go", "--",
+    "scripts/go-command.go", "scripts/gofmt-check.go"], cwd: "" },
   { program: "go", args: ["vet", "./..."], cwd: "backend" },
   { program: "pnpm", args: ["--dir", "web", "run", "lint"], cwd: "" },
   { program: "go", args: ["test", "./..."], cwd: "backend" },
@@ -37,7 +39,8 @@ test("real pre-push invokes Go and web lint and tests when synthetic modules exi
   assert.deepEqual(calls(root), expected);
 });
 
-for (const [index, command] of ["go vet ./...", "pnpm --dir web run lint",
+for (const [index, command] of ["go run ./scripts/gofmt-check.go -- scripts/go-command.go scripts/gofmt-check.go",
+  "go vet ./...", "pnpm --dir web run lint",
   "go test ./...", "pnpm --dir web run test"].entries()) {
   test(`real pre-push propagates module failure: ${command}`, (t) => {
     const { root, env, input } = modules(t);

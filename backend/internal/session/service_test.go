@@ -1,0 +1,110 @@
+//go:build postgres_integration
+
+// Source: getarcaneapp/arcane/backend/internal/session/service_test.go
+// Revision: 095cb778daba1034e2a39961199e712a75d4ba29
+// Retrieved: 2026-10-13
+// License: BSD-3-Clause
+// Deviations: Local module namespace; functional cut: removed Swarm; functional cut: removed OIDC and passkeys; functional cut: PostgreSQL integration test fixture.
+
+package session
+
+import (
+	"testing"
+	"time"
+
+	"github.com/florianfinn/docklet-next/backend/internal/testpg"
+	"github.com/florianfinn/docklet-next/types/auth"
+	"github.com/stretchr/testify/require"
+	"go.getarcane.app/kit/pkg"
+	"gorm.io/gorm"
+
+	"github.com/florianfinn/docklet-next/backend/internal/common"
+	"github.com/florianfinn/docklet-next/backend/internal/database"
+	"github.com/florianfinn/docklet-next/backend/internal/role"
+	"github.com/florianfinn/docklet-next/backend/internal/settings"
+	"github.com/florianfinn/docklet-next/backend/internal/user"
+)
+
+func TestSessionService_RotateRefreshTokenRequiresCurrentHash(t *testing.T) {
+	ctx := t.Context()
+	db := setupAuthServiceTestDB(t)
+	require.NoError(t, db.Create(&user.User{
+		ID:       "u-session",
+		Username: "session-user",
+	}).Error)
+
+	sessionSvc := NewSessionService(db)
+	session, refreshJTI, err := sessionSvc.CreateSession(ctx, "u-session", time.Now().Add(time.Hour), auth.SessionMeta{})
+	require.NoError(t, err)
+
+	rotated, newJTI, err := sessionSvc.RotateRefreshToken(ctx, session.ID, refreshJTI, auth.SessionMeta{})
+	require.NoError(t, err)
+	require.NotEmpty(t, newJTI)
+	require.NotEqual(t, refreshJTI, newJTI)
+	require.Equal(t, kit.SHA256Hex(newJTI), rotated.RefreshTokenHash)
+
+	_, _, err = sessionSvc.RotateRefreshToken(ctx, session.ID, refreshJTI, auth.SessionMeta{})
+	require.ErrorIs(t, err, common.ErrInvalidToken)
+}
+
+func TestSessionService_DeleteExpiredSessions(t *testing.T) {
+	ctx := t.Context()
+	db := setupAuthServiceTestDB(t)
+	require.NoError(t, db.Create(&user.User{
+		ID:       "u-cleanup",
+		Username: "cleanup-user",
+	}).Error)
+
+	sessionSvc := NewSessionService(db)
+	expired, _, err := sessionSvc.CreateSession(ctx, "u-cleanup", time.Now().Add(-time.Hour), auth.SessionMeta{})
+	require.NoError(t, err)
+	oldRevoked, _, err := sessionSvc.CreateSession(ctx, "u-cleanup", time.Now().Add(time.Hour), auth.SessionMeta{})
+	require.NoError(t, err)
+	active, _, err := sessionSvc.CreateSession(ctx, "u-cleanup", time.Now().Add(time.Hour), auth.SessionMeta{})
+	require.NoError(t, err)
+
+	oldRevokedAt := time.Now().Add(-8 * 24 * time.Hour)
+	require.NoError(t, db.WithContext(ctx).Model(&UserSession{}).
+		Where("id = ?", oldRevoked.ID).
+		Update("revoked_at", oldRevokedAt).Error)
+
+	deleted, err := sessionSvc.DeleteExpiredSessions(ctx, 7*24*time.Hour)
+	require.NoError(t, err)
+	require.EqualValues(t, 2, deleted)
+
+	var remaining []UserSession
+	require.NoError(t, db.WithContext(ctx).Order("id").Find(&remaining).Error)
+	require.Len(t, remaining, 1)
+	require.Equal(t, active.ID, remaining[0].ID)
+
+	var deletedCount int64
+	require.NoError(t, db.WithContext(ctx).Model(&UserSession{}).
+		Where("id IN ?", []string{expired.ID, oldRevoked.ID}).
+		Count(&deletedCount).Error)
+	require.Zero(t, deletedCount)
+}
+
+func setupAuthServiceTestDB(t *testing.T) *database.DB {
+	t.Helper()
+	db, err := gorm.Open(testpg.Dialector(t, ":memory:"), &gorm.Config{})
+	require.NoError(t, err)
+	require.NoError(t, db.AutoMigrate(
+		&settings.SettingVariable{},
+		&user.User{},
+		&UserSession{},
+		&role.Role{},
+		&role.UserRoleAssignment{},
+		&role.ApiKeyPermission{},
+	))
+	// environments and api_keys live in packages that import this one; the
+	// in-package tests only need the tables to exist.
+	require.NoError(
+		t,
+		db.Exec("CREATE TABLE IF NOT EXISTS environments (id text PRIMARY KEY, created_at timestamp, updated_at timestamp, name text, api_url text, status text, enabled numeric, is_edge numeric, last_seen timestamp, last_edge_transport text, access_token text, api_key_id text)").Error,
+	)
+	require.NoError(
+		t,
+		db.Exec("CREATE TABLE IF NOT EXISTS api_keys (id text PRIMARY KEY, created_at timestamp, updated_at timestamp, name text, description text, key_hash text, key_prefix text, kind text, user_id text, environment_id text, managed_by text, expires_at timestamp, last_used_at timestamp)").Error,
+	)
+	return &database.DB{DB: db}
+}

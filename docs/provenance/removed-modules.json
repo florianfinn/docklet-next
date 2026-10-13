@@ -1,0 +1,271 @@
+{
+  "baselineRevision": "7002a1006d0bc91f388e1679b922090935b69f0b",
+  "comparedManifests": [
+    "backend/go.mod",
+    "cli/go.mod",
+    "third_party/arcane/acfs/go.mod",
+    "third_party/arcane/builds/go.mod",
+    "third_party/arcane/docker/compat/go.mod",
+    "third_party/arcane/docker/convert/go.mod",
+    "third_party/arcane/docker/go.mod",
+    "third_party/arcane/kit/go.mod",
+    "third_party/arcane/streams/go.mod",
+    "third_party/arcane/sys/bytes/go.mod",
+    "third_party/arcane/sys/cgroup/go.mod",
+    "third_party/arcane/sys/crypto/go.mod",
+    "third_party/arcane/updater/go.mod",
+    "types/go.mod"
+  ],
+  "removedRequirements": [
+    {
+      "manifest": "backend/go.mod",
+      "module": "github.com/aws/aws-sdk-go-v2/aws/protocol/eventstream",
+      "version": "v1.7.20",
+      "wasDirect": false
+    },
+    {
+      "manifest": "backend/go.mod",
+      "module": "github.com/aws/aws-sdk-go-v2/service/internal/checksum",
+      "version": "v1.11.5",
+      "wasDirect": false
+    },
+    {
+      "manifest": "backend/go.mod",
+      "module": "github.com/aws/aws-sdk-go-v2/service/internal/s3shared",
+      "version": "v1.20.4",
+      "wasDirect": false
+    },
+    {
+      "manifest": "backend/go.mod",
+      "module": "github.com/aws/aws-sdk-go-v2/service/s3",
+      "version": "v1.114.0",
+      "wasDirect": true
+    },
+    {
+      "manifest": "backend/go.mod",
+      "module": "github.com/coreos/go-oidc/v3",
+      "version": "v3.21.0",
+      "wasDirect": true
+    },
+    {
+      "manifest": "backend/go.mod",
+      "module": "github.com/dustin/go-humanize",
+      "version": "v1.1.0",
+      "wasDirect": false
+    },
+    {
+      "manifest": "backend/go.mod",
+      "module": "github.com/fxamacker/cbor/v2",
+      "version": "v2.9.4",
+      "wasDirect": false
+    },
+    {
+      "manifest": "backend/go.mod",
+      "module": "github.com/go-jose/go-jose/v4",
+      "version": "v4.1.5",
+      "wasDirect": false
+    },
+    {
+      "manifest": "backend/go.mod",
+      "module": "github.com/go-webauthn/webauthn",
+      "version": "v0.18.2",
+      "wasDirect": true
+    },
+    {
+      "manifest": "backend/go.mod",
+      "module": "github.com/go-webauthn/x",
+      "version": "v0.3.1",
+      "wasDirect": false
+    },
+    {
+      "manifest": "backend/go.mod",
+      "module": "github.com/google/go-tpm",
+      "version": "v0.9.8",
+      "wasDirect": false
+    },
+    {
+      "manifest": "backend/go.mod",
+      "module": "github.com/google/go-tpm-tools",
+      "version": "v0.4.8",
+      "wasDirect": false
+    },
+    {
+      "manifest": "backend/go.mod",
+      "module": "github.com/jwx-go/jwkfetch/v4",
+      "version": "v4.0.4",
+      "wasDirect": true
+    },
+    {
+      "manifest": "backend/go.mod",
+      "module": "github.com/lestrrat-go/blackmagic",
+      "version": "v1.0.4",
+      "wasDirect": false
+    },
+    {
+      "manifest": "backend/go.mod",
+      "module": "github.com/lestrrat-go/httpcc",
+      "version": "v1.0.1",
+      "wasDirect": false
+    },
+    {
+      "manifest": "backend/go.mod",
+      "module": "github.com/lestrrat-go/httprc/v3",
+      "version": "v3.0.6",
+      "wasDirect": true
+    },
+    {
+      "manifest": "backend/go.mod",
+      "module": "github.com/lestrrat-go/option/v2",
+      "version": "v2.0.0",
+      "wasDirect": false
+    },
+    {
+      "manifest": "backend/go.mod",
+      "module": "github.com/libtnb/sqlite",
+      "version": "v1.2.2",
+      "wasDirect": true
+    },
+    {
+      "manifest": "backend/go.mod",
+      "module": "github.com/ncruces/go-strftime",
+      "version": "v1.0.0",
+      "wasDirect": false
+    },
+    {
+      "manifest": "backend/go.mod",
+      "module": "github.com/philhofer/fwd",
+      "version": "v1.2.0",
+      "wasDirect": false
+    },
+    {
+      "manifest": "backend/go.mod",
+      "module": "github.com/remyoudompheng/bigfft",
+      "version": "v0.0.0-20230129092748-24d4a6f8daec",
+      "wasDirect": false
+    },
+    {
+      "manifest": "backend/go.mod",
+      "module": "github.com/tinylib/msgp",
+      "version": "v1.6.4",
+      "wasDirect": false
+    },
+    {
+      "manifest": "backend/go.mod",
+      "module": "github.com/x448/float16",
+      "version": "v0.8.4",
+      "wasDirect": false
+    },
+    {
+      "manifest": "backend/go.mod",
+      "module": "modernc.org/libc",
+      "version": "v1.77.1",
+      "wasDirect": false
+    },
+    {
+      "manifest": "backend/go.mod",
+      "module": "modernc.org/mathutil",
+      "version": "v1.7.1",
+      "wasDirect": false
+    },
+    {
+      "manifest": "backend/go.mod",
+      "module": "modernc.org/memory",
+      "version": "v1.12.1",
+      "wasDirect": false
+    }
+  ],
+  "removedDirectRequirements": [
+    {
+      "manifest": "backend/go.mod",
+      "module": "github.com/ProtonMail/go-crypto",
+      "removedCompletely": false
+    },
+    {
+      "manifest": "backend/go.mod",
+      "module": "github.com/aws/aws-sdk-go-v2",
+      "removedCompletely": false
+    },
+    {
+      "manifest": "backend/go.mod",
+      "module": "github.com/aws/aws-sdk-go-v2/service/s3",
+      "removedCompletely": true
+    },
+    {
+      "manifest": "backend/go.mod",
+      "module": "github.com/aws/smithy-go",
+      "removedCompletely": false
+    },
+    {
+      "manifest": "backend/go.mod",
+      "module": "github.com/coreos/go-oidc/v3",
+      "removedCompletely": true
+    },
+    {
+      "manifest": "backend/go.mod",
+      "module": "github.com/go-git/go-billy/v5",
+      "removedCompletely": false
+    },
+    {
+      "manifest": "backend/go.mod",
+      "module": "github.com/go-webauthn/webauthn",
+      "removedCompletely": true
+    },
+    {
+      "manifest": "backend/go.mod",
+      "module": "github.com/jwx-go/jwkfetch/v4",
+      "removedCompletely": true
+    },
+    {
+      "manifest": "backend/go.mod",
+      "module": "github.com/lestrrat-go/httprc/v3",
+      "removedCompletely": true
+    },
+    {
+      "manifest": "backend/go.mod",
+      "module": "github.com/libtnb/sqlite",
+      "removedCompletely": true
+    },
+    {
+      "manifest": "backend/go.mod",
+      "module": "golang.org/x/oauth2",
+      "removedCompletely": false
+    },
+    {
+      "manifest": "backend/go.mod",
+      "module": "modernc.org/sqlite",
+      "removedCompletely": false
+    }
+  ],
+  "removedModulePaths": [
+    "github.com/aws/aws-sdk-go-v2/aws/protocol/eventstream",
+    "github.com/aws/aws-sdk-go-v2/service/internal/checksum",
+    "github.com/aws/aws-sdk-go-v2/service/internal/s3shared",
+    "github.com/aws/aws-sdk-go-v2/service/s3",
+    "github.com/coreos/go-oidc/v3",
+    "github.com/dustin/go-humanize",
+    "github.com/fxamacker/cbor/v2",
+    "github.com/go-jose/go-jose/v4",
+    "github.com/go-webauthn/webauthn",
+    "github.com/go-webauthn/x",
+    "github.com/google/go-tpm",
+    "github.com/google/go-tpm-tools",
+    "github.com/jwx-go/jwkfetch/v4",
+    "github.com/lestrrat-go/blackmagic",
+    "github.com/lestrrat-go/httpcc",
+    "github.com/lestrrat-go/httprc/v3",
+    "github.com/lestrrat-go/option/v2",
+    "github.com/libtnb/sqlite",
+    "github.com/ncruces/go-strftime",
+    "github.com/philhofer/fwd",
+    "github.com/remyoudompheng/bigfft",
+    "github.com/tinylib/msgp",
+    "github.com/x448/float16",
+    "modernc.org/libc",
+    "modernc.org/mathutil",
+    "modernc.org/memory"
+  ],
+  "remainingIndirectSqliteRequirements": [
+    "github.com/mattn/go-sqlite3",
+    "modernc.org/sqlite"
+  ]
+}

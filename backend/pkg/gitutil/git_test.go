@@ -1,0 +1,591 @@
+// Source: getarcaneapp/arcane/backend/pkg/gitutil/git_test.go
+// Revision: 095cb778daba1034e2a39961199e712a75d4ba29
+// Retrieved: 2026-10-13
+// License: BSD-3-Clause
+// Deviations: functional cut: removed GitOps and saved Git repositories.
+
+package git
+
+import (
+	"errors"
+	"net"
+	"os"
+	"path/filepath"
+	"strings"
+	"sync"
+	"testing"
+	"time"
+
+	"github.com/go-git/go-git/v5/plumbing/protocol/packp/capability"
+	"github.com/go-git/go-git/v5/plumbing/transport"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+	gossh "golang.org/x/crypto/ssh"
+)
+
+// Azure DevOps requires multi_ack/multi_ack_detailed in pack negotiation;
+// go-git's default UnsupportedCapabilities strips them and clones fail with
+// "invalid reset option: object not found" (#3168).
+
+func TestInitAllowsMultiAckCapabilities(t *testing.T) {
+	assert.False(t, len(transport.UnsupportedCapabilities) != 1 || transport.UnsupportedCapabilities[0] != capability.ThinPack,
+		"expected UnsupportedCapabilities to contain only thin-pack, got %v", transport.UnsupportedCapabilities)
+}
+
+func TestGetKnownHostsPath(t *testing.T) {
+	homePath := "/home/tester/.ssh/known_hosts"
+	tests := []struct {
+		name       string
+		workDir    string
+		override   string
+		dataDir    bool
+		homeDir    string
+		homeExists bool
+		workExists bool
+		homeErr    error
+		statErr    error
+		workErr    error
+		want       []string
+		wantErr    error
+	}{
+		{
+			name:    "returns SSH_KNOWN_HOSTS env var when set",
+			workDir: "/opt/arcane/data/git", override: "/custom/path/known_hosts",
+			dataDir: true, homeDir: "/home/tester", homeExists: true,
+			want: []string{"/custom/path/known_hosts"},
+		},
+		{
+			name:    "returns Arcane data path when data directory exists",
+			workDir: "/opt/arcane/data/git", dataDir: true,
+			homeDir: "/home/tester", homeExists: true,
+			want: []string{defaultKnownHostsPath},
+		},
+		{
+			name:    "preserves existing home trust file before native storage",
+			workDir: "/opt/arcane/data/git", homeDir: "/home/tester", homeExists: true,
+			want: []string{homePath},
+		},
+		{
+			name:       "trusts both native and home files when both exist",
+			workDir:    "/opt/arcane/data/git",
+			homeDir:    "/home/tester",
+			homeExists: true,
+			workExists: true,
+			want:       []string{"/opt/arcane/data/git/.ssh/known_hosts", homePath},
+		},
+		{
+			name:    "uses native storage when the home trust file is absent",
+			workDir: "/opt/arcane/data/git", homeDir: "/var/lib/arcane",
+			want: []string{"/opt/arcane/data/git/.ssh/known_hosts"},
+		},
+		{
+			name:    "keeps relative native storage relative to the working directory",
+			workDir: "data/git", homeDir: "/var/lib/arcane",
+			want: []string{filepath.Join("data", "git", ".ssh", "known_hosts")},
+		},
+		{
+			name:    "uses native storage without a resolvable home",
+			workDir: "/opt/arcane/data/git", homeErr: errors.New("no home directory"),
+			want: []string{"/opt/arcane/data/git/.ssh/known_hosts"},
+		},
+		{
+			name:    "falls back to home directory without a work directory",
+			homeDir: "/home/tester", want: []string{homePath},
+		},
+		{
+			name:    "falls back to temp dir when data directory and home are unavailable",
+			homeErr: errors.New("no home directory"),
+			want:    []string{filepath.Join(os.TempDir(), ".ssh", "known_hosts")},
+		},
+		{
+			name:    "uses native storage when the home trust file is inaccessible",
+			workDir: "/opt/arcane/data/git", homeDir: "/home/tester",
+			statErr: os.ErrPermission, want: []string{"/opt/arcane/data/git/.ssh/known_hosts"},
+		},
+		{
+			name:    "surfaces home trust file access errors without native storage",
+			homeDir: "/home/tester", statErr: os.ErrPermission, wantErr: os.ErrPermission,
+		},
+		{
+			name:    "does not replace inaccessible native trust with a home trust file",
+			workDir: "/opt/arcane/data/git", homeDir: "/home/tester", homeExists: true,
+			workErr: os.ErrPermission, wantErr: os.ErrPermission,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result, err := getKnownHostsPathsInternal(
+				tt.workDir,
+				func(key string) string {
+					require.Equal(t, "SSH_KNOWN_HOSTS", key)
+					return tt.override
+				},
+				func(path string) (os.FileInfo, error) {
+					if path == defaultKnownHostsDataDir && tt.dataDir {
+						return stubFileInfo{dir: true}, nil
+					}
+					if path == filepath.Join(tt.workDir, ".ssh", "known_hosts") {
+						if tt.workErr != nil {
+							return nil, tt.workErr
+						}
+						if tt.workExists {
+							return stubFileInfo{}, nil
+						}
+					}
+					if path == homePath {
+						if tt.statErr != nil {
+							return nil, tt.statErr
+						}
+						if tt.homeExists {
+							return stubFileInfo{}, nil
+						}
+					}
+					return nil, os.ErrNotExist
+				},
+				func() (string, error) { return tt.homeDir, tt.homeErr },
+			)
+			if tt.wantErr != nil {
+				require.ErrorIs(t, err, tt.wantErr)
+			} else {
+				require.NoError(t, err)
+			}
+			assert.Equal(t, tt.want, result)
+		})
+	}
+}
+
+type stubFileInfo struct {
+	dir bool
+}
+
+func (s stubFileInfo) Name() string       { return "stub" }
+func (s stubFileInfo) Size() int64        { return 0 }
+func (s stubFileInfo) Mode() os.FileMode  { return 0o755 }
+func (s stubFileInfo) ModTime() time.Time { return time.Time{} }
+func (s stubFileInfo) IsDir() bool        { return s.dir }
+func (s stubFileInfo) Sys() any           { return nil }
+
+func TestGetSSHHostKeyCallback(t *testing.T) {
+	client := NewClient("")
+
+	t.Run("skip mode returns InsecureIgnoreHostKey", func(t *testing.T) {
+		t.Setenv("SSH_KNOWN_HOSTS", filepath.Join(t.TempDir(), "missing", "known_hosts"))
+		callback, err := client.getSSHHostKeyCallbackInternal(t.Context(), SSHHostKeyVerificationSkip)
+
+		require.NoError(t, err,
+			"unexpected error: %v", err)
+
+		require.NotNil(t, callback,
+			"expected non-nil callback")
+
+		// InsecureIgnoreHostKey always returns nil
+		err = callback("example.com:22", &net.TCPAddr{}, nil)
+
+		assert.NoError(t, err,
+			"skip mode should not return error, got: %v", err)
+	})
+
+	t.Run("empty mode defaults to accept_new", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		knownHostsPath := filepath.Join(tmpDir, "known_hosts")
+		t.Setenv("SSH_KNOWN_HOSTS", knownHostsPath)
+
+		callback, err := client.getSSHHostKeyCallbackInternal(t.Context(), "")
+
+		require.NoError(t, err,
+			"unexpected error: %v", err)
+
+		require.NotNil(t, callback,
+			"expected non-nil callback")
+	})
+
+	t.Run("accept_new mode creates callback", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		knownHostsPath := filepath.Join(tmpDir, "known_hosts")
+		t.Setenv("SSH_KNOWN_HOSTS", knownHostsPath)
+
+		callback, err := client.getSSHHostKeyCallbackInternal(t.Context(), SSHHostKeyVerificationAcceptNew)
+
+		require.NoError(t, err,
+			"unexpected error: %v", err)
+
+		require.NotNil(t, callback,
+			"expected non-nil callback")
+	})
+}
+
+func TestAddHostKey(t *testing.T) {
+	t.Run("adds host key to file", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		knownHostsPath := filepath.Join(tmpDir, "known_hosts")
+
+		// Generate a test key
+		key := generateTestPublicKey(t)
+
+		t.Setenv("SSH_KNOWN_HOSTS", knownHostsPath)
+		callback, err := NewClient("").getSSHHostKeyCallbackInternal(t.Context(), SSHHostKeyVerificationAcceptNew)
+		require.NoError(t, err)
+		err = callback("example.com:22", &net.TCPAddr{}, key)
+
+		require.NoError(t, err,
+			"unexpected error: %v", err)
+
+		// Verify file was created and contains content
+		content, err := os.ReadFile(knownHostsPath)
+
+		require.NoError(t, err,
+			"failed to read known_hosts: %v", err)
+
+		assert.NotEmpty(t, content,
+			"expected non-empty known_hosts file")
+	})
+
+	t.Run("concurrent writes don't corrupt file", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		knownHostsPath := filepath.Join(tmpDir, "known_hosts")
+		t.Setenv("SSH_KNOWN_HOSTS", knownHostsPath)
+
+		key := generateTestPublicKey(t)
+		callback, callbackErr := NewClient("").getSSHHostKeyCallbackInternal(t.Context(), SSHHostKeyVerificationAcceptNew)
+		require.NoError(t, callbackErr)
+		var wg sync.WaitGroup
+		errChan := make(chan error, 10)
+
+		// Simulate concurrent writes
+		for i := range 10 {
+			wg.Add(1)
+			go func(idx int) {
+				defer wg.Done()
+				hostname := "host" + string(rune('0'+idx)) + ".example.com:22"
+				if err := callback(hostname, &net.TCPAddr{}, key); err != nil {
+					errChan <- err
+				}
+			}(i)
+		}
+
+		wg.Wait()
+		close(errChan)
+
+		for err := range errChan {
+			assert.Failf(t, "unexpected failure", "concurrent write error: %v", err)
+		}
+
+		// Verify file exists and has content
+		content, err := os.ReadFile(knownHostsPath)
+
+		require.NoError(t, err,
+			"failed to read known_hosts: %v", err)
+
+		assert.Len(t, strings.Split(strings.TrimSpace(string(content)), "\n"), 10,
+			"every concurrent callback must persist its host key")
+	})
+}
+
+func TestCreateAcceptNewHostKeyCallback(t *testing.T) {
+	t.Run("creates known_hosts directory and file", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		knownHostsPath := filepath.Join(tmpDir, "subdir", "known_hosts")
+		t.Setenv("SSH_KNOWN_HOSTS", knownHostsPath)
+
+		client := NewClient("")
+		callback, err := client.getSSHHostKeyCallbackInternal(t.Context(), SSHHostKeyVerificationAcceptNew)
+
+		require.NoError(t, err,
+			"unexpected error: %v", err)
+
+		require.NotNil(t, callback,
+			"expected non-nil callback")
+		{
+
+			// Verify directory was created
+			_, statErr := os.Stat(filepath.Dir(knownHostsPath))
+			assert.False(t, os.IsNotExist(statErr),
+				"expected known_hosts directory to be created")
+		}
+	})
+
+	t.Run("callback adds new host keys", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		knownHostsPath := filepath.Join(tmpDir, "known_hosts")
+		t.Setenv("SSH_KNOWN_HOSTS", knownHostsPath)
+
+		client := NewClient("")
+		callback, err := client.getSSHHostKeyCallbackInternal(t.Context(), SSHHostKeyVerificationAcceptNew)
+
+		require.NoError(t, err,
+			"unexpected error: %v", err)
+
+		key := generateTestPublicKey(t)
+		addr := &net.TCPAddr{IP: net.ParseIP("192.168.1.1"), Port: 22}
+
+		err = callback("192.168.1.1:22", addr, key)
+
+		require.NoError(t, err,
+			"callback returned error: %v", err)
+
+		// Verify host was added to file
+		content, err := os.ReadFile(knownHostsPath)
+
+		require.NoError(t, err,
+			"failed to read known_hosts: %v", err)
+
+		assert.NotEmpty(t, content,
+			"expected host key to be added to known_hosts")
+	})
+
+	t.Run("callback accepts known host", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		knownHostsPath := filepath.Join(tmpDir, "known_hosts")
+		t.Setenv("SSH_KNOWN_HOSTS", knownHostsPath)
+
+		client := NewClient("")
+		callback, err := client.getSSHHostKeyCallbackInternal(t.Context(), SSHHostKeyVerificationAcceptNew)
+
+		require.NoError(t, err,
+			"unexpected error: %v", err)
+
+		key := generateTestPublicKey(t)
+		addr := &net.TCPAddr{IP: net.ParseIP("192.168.1.1"), Port: 22}
+
+		// First call adds the key
+		err = callback("192.168.1.1:22", addr, key)
+
+		require.NoError(t, err,
+			"first callback returned error: %v", err)
+
+		// A new client must reuse the persisted trust file.
+		callback, err = NewClient("").getSSHHostKeyCallbackInternal(t.Context(), SSHHostKeyVerificationStrict)
+		require.NoError(t, err)
+		err = callback("192.168.1.1:22", addr, key)
+
+		assert.NoError(t, err,
+			"second callback returned error for known host: %v", err)
+	})
+
+	t.Run("callback detects host key mismatch", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		knownHostsPath := filepath.Join(tmpDir, "known_hosts")
+		t.Setenv("SSH_KNOWN_HOSTS", knownHostsPath)
+
+		client := NewClient("")
+		callback, err := client.getSSHHostKeyCallbackInternal(t.Context(), SSHHostKeyVerificationAcceptNew)
+
+		require.NoError(t, err,
+			"unexpected error: %v", err)
+
+		key1 := generateTestPublicKey(t)
+		key2 := generateTestPublicKeyVariant(t)
+		addr := &net.TCPAddr{IP: net.ParseIP("192.168.1.1"), Port: 22}
+
+		// First call adds key1
+		err = callback("192.168.1.1:22", addr, key1)
+
+		require.NoError(t, err,
+			"first callback returned error: %v", err)
+
+		// Second call with different key for same host should fail
+		err = callback("192.168.1.1:22", addr, key2)
+		if err == nil {
+			assert.Fail(t, "expected error for host key mismatch, got nil")
+		} else if !strings.Contains(err.Error(), "host key mismatch") {
+			assert.Contains(t, err.Error(), "host key mismatch",
+				"expected host key mismatch error, got: %v", err)
+		}
+	})
+}
+
+func TestValidatePath(t *testing.T) {
+	t.Run("allows valid paths", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		err := ValidatePath(tmpDir, "subdir/file.txt")
+
+		assert.NoError(t, err,
+			"expected valid path to be allowed: %v", err)
+	})
+
+	t.Run("rejects path traversal", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		err := ValidatePath(tmpDir, "../../../etc/passwd")
+
+		assert.Error(t, err,
+			"expected path traversal to be rejected")
+	})
+
+	t.Run("rejects absolute path escape", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		err := ValidatePath(tmpDir, "foo/../../..")
+
+		assert.Error(t, err,
+			"expected path escape to be rejected")
+	})
+}
+
+func TestNewClient(t *testing.T) {
+	t.Run("creates client with work dir", func(t *testing.T) {
+		client := NewClient("/tmp/test")
+
+		assert.Equal(t, "/tmp/test", client.workDir,
+			"expected workDir /tmp/test, got %s", client.workDir)
+	})
+
+	t.Run("creates client with empty work dir", func(t *testing.T) {
+		client := NewClient("")
+
+		assert.Empty(t, client.workDir,
+			"expected empty workDir, got %s", client.workDir)
+	})
+}
+
+func writeFileInternal(t *testing.T, dir, name string, content []byte) {
+	t.Helper()
+	targetPath := filepath.Join(dir, name)
+	{
+		err := os.MkdirAll(filepath.Dir(targetPath), 0o755)
+		require.NoError(t, err,
+			"failed to create parent directories for %s: %v", name, err)
+	}
+	{
+
+		err := os.WriteFile(targetPath, content, 0o644)
+		require.NoError(t, err,
+			"failed to write file %s: %v", name, err)
+	}
+}
+
+func minimalCompose() []byte {
+	return []byte("services:\n  test:\n    image: alpine\n")
+}
+
+func generateTestPublicKey(t *testing.T) gossh.PublicKey {
+	t.Helper()
+
+	// Use a fixed ED25519 public key for deterministic tests
+	// This is a valid ED25519 public key format
+	pubKeyBytes := []byte{
+		0x00, 0x00, 0x00, 0x0b, // key type length (11)
+		's', 's', 'h', '-', 'e', 'd', '2', '5', '5', '1', '9', // "ssh-ed25519"
+		0x00, 0x00, 0x00, 0x20, // key length (32)
+		// 32 bytes of key data
+		0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08,
+		0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f, 0x10,
+		0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17, 0x18,
+		0x19, 0x1a, 0x1b, 0x1c, 0x1d, 0x1e, 0x1f, 0x20,
+	}
+
+	key, err := gossh.ParsePublicKey(pubKeyBytes)
+
+	require.NoError(t, err,
+		"failed to parse test public key: %v", err)
+
+	return key
+}
+
+// generateTestPublicKeyVariant creates a different test ED25519 public key
+func generateTestPublicKeyVariant(t *testing.T) gossh.PublicKey {
+	t.Helper()
+
+	pubKeyBytes := []byte{
+		0x00, 0x00, 0x00, 0x0b, // key type length (11)
+		's', 's', 'h', '-', 'e', 'd', '2', '5', '5', '1', '9', // "ssh-ed25519"
+		0x00, 0x00, 0x00, 0x20, // key length (32)
+		// 32 bytes of different key data
+		0xFF, 0xFE, 0xFD, 0xFC, 0xFB, 0xFA, 0xF9, 0xF8,
+		0xF7, 0xF6, 0xF5, 0xF4, 0xF3, 0xF2, 0xF1, 0xF0,
+		0xEF, 0xEE, 0xED, 0xEC, 0xEB, 0xEA, 0xE9, 0xE8,
+		0xE7, 0xE6, 0xE5, 0xE4, 0xE3, 0xE2, 0xE1, 0xE0,
+	}
+
+	key, err := gossh.ParsePublicKey(pubKeyBytes)
+
+	require.NoError(t, err,
+		"failed to parse test public key variant: %v", err)
+
+	return key
+}
+
+func TestPurgeScratchDirs(t *testing.T) {
+	ctx := t.Context()
+	workDir := t.TempDir()
+	client := NewClient(workDir)
+
+	staleDir := filepath.Join(workDir, "git-build-stale")
+	freshDir := filepath.Join(workDir, "git-build-fresh")
+	keepDir := filepath.Join(workDir, ".ssh")
+	scratchFile := filepath.Join(workDir, "git-build-file")
+	require.NoError(t, os.MkdirAll(staleDir, 0o755))
+	require.NoError(t, os.MkdirAll(freshDir, 0o755))
+	require.NoError(t, os.MkdirAll(keepDir, 0o700))
+	knownHostsPath := filepath.Join(keepDir, "known_hosts")
+	require.NoError(t, os.WriteFile(knownHostsPath, []byte("persisted trust"), 0o600))
+	require.NoError(t, os.WriteFile(scratchFile, []byte("x"), 0o644))
+	staleTime := time.Now().Add(-3 * time.Hour)
+	require.NoError(t, os.Chtimes(staleDir, staleTime, staleTime))
+
+	removed, err := client.PurgeScratchDirs(ctx, 2*time.Hour)
+	require.NoError(t, err)
+	assert.Equal(t, 1, removed, "only the stale clone dir should be removed")
+
+	_, err = os.Stat(staleDir)
+	require.ErrorIs(t, err, os.ErrNotExist, "stale clone dir should be removed")
+	for _, p := range []string{freshDir, keepDir, knownHostsPath, scratchFile} {
+		_, statErr := os.Stat(p)
+		require.NoError(t, statErr, "must be kept by the age-cutoff purge: %s", p)
+	}
+
+	removed, err = client.PurgeScratchDirs(ctx, 0)
+	require.NoError(t, err)
+	assert.Equal(t, 1, removed, "boot sweep should remove the remaining clone dir")
+
+	_, err = os.Stat(freshDir)
+	require.ErrorIs(t, err, os.ErrNotExist, "boot sweep should remove fresh clone dirs")
+	for _, p := range []string{keepDir, knownHostsPath, scratchFile} {
+		_, statErr2 := os.Stat(p)
+		require.NoError(t, statErr2, "boot sweep must keep non-scratch entries: %s", p)
+	}
+
+	t.Run("missing work dir is not an error", func(t *testing.T) {
+		localRemoved, purgeErr := NewClient(filepath.Join(t.TempDir(), "missing")).PurgeScratchDirs(ctx, 0)
+		require.NoError(t, purgeErr)
+		assert.Equal(t, 0, localRemoved)
+	})
+}
+
+func TestNormalizeURL(t *testing.T) {
+	cases := []struct {
+		name    string
+		in      string
+		want    string
+		wantErr bool
+	}{
+		{name: "schemeless gets https prefix", in: "github.com/org/repo.git", want: "https://github.com/org/repo.git"},
+		{name: "https kept as-is", in: "https://github.com/org/repo.git", want: "https://github.com/org/repo.git"},
+		{name: "ssh kept as-is", in: "ssh://git@github.com/org/repo.git", want: "ssh://git@github.com/org/repo.git"},
+		{name: "git kept as-is", in: "git://github.com/org/repo.git", want: "git://github.com/org/repo.git"},
+		{name: "scp-like kept as-is", in: "git@github.com:org/repo.git", want: "git@github.com:org/repo.git"},
+		{name: "file scheme rejected", in: "file:///tmp/repo", wantErr: true},
+		{name: "unsupported scheme rejected", in: "ftp://github.com/org/repo.git", wantErr: true},
+		{name: "local path rejected", in: "/tmp/repo", wantErr: true},
+		{name: "relative path rejected", in: "./repo", wantErr: true},
+		{name: "home-relative path rejected", in: "~/repo", wantErr: true},
+		{name: "empty rejected", in: "", wantErr: true},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got, err := normalizeURLInternal(tc.in)
+			if tc.wantErr {
+
+				require.Error(t, err,
+					"expected error, got %q", got)
+
+				return
+			}
+
+			require.NoError(t, err,
+				"unexpected error: %v", err)
+
+			assert.Equal(t, tc.want, got,
+				"expected %q, got %q", tc.want, got)
+		})
+	}
+}

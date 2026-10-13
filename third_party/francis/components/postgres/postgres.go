@@ -1,0 +1,363 @@
+package postgres
+
+import (
+	"context"
+	"embed"
+	"errors"
+	"fmt"
+	"log/slog"
+	"path"
+	"slices"
+	"strings"
+	"sync/atomic"
+	"time"
+	"uuid"
+
+	"github.com/italypaleale/go-kit/utils"
+	postgresadapter "github.com/italypaleale/go-sql-utils/adapter/postgres"
+	"github.com/italypaleale/go-sql-utils/cleanup"
+	sqlinstrument "github.com/italypaleale/go-sql-utils/instrument"
+	postgresinstrument "github.com/italypaleale/go-sql-utils/instrument/postgres"
+	"github.com/italypaleale/go-sql-utils/migrations"
+	postgresmigrations "github.com/italypaleale/go-sql-utils/migrations/postgres"
+	"github.com/jackc/pgerrcode"
+	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
+	"github.com/jackc/pgx/v5/pgxpool"
+	"k8s.io/utils/clock"
+
+	"github.com/italypaleale/francis/components"
+)
+
+//go:embed migrations
+var migrationScripts embed.FS
+
+const (
+	DefaultTimeout         = 5 * time.Second
+	DefaultCleanupInterval = 10 * time.Minute
+	DefaultTablePrefix     = "francis"
+)
+
+type PostgresProvider struct {
+	cfg             components.ProviderConfig
+	db              *pgxpool.Pool
+	ownsDB          bool
+	closed          atomic.Bool
+	running         atomic.Bool
+	log             *slog.Logger
+	timeout         time.Duration
+	cleanupInterval time.Duration
+	gc              cleanup.GarbageCollector
+	clock           clock.WithTicker
+
+	// Prepended to the name of a table or other schema objects to reference it in a query
+	tablePrefix string
+	// Prefix alone, without the schema
+	namePrefix string
+	// Schema containing the provider's objects (unquoted), or empty to rely on the connection's search_path
+	schema string
+}
+
+func NewPostgresProvider(log *slog.Logger, postgresOpts PostgresProviderOptions, providerConfig components.ProviderConfig) (*PostgresProvider, error) {
+	err := providerConfig.Validate()
+	if err != nil {
+		return nil, fmt.Errorf("provider configuration is not valid: %w", err)
+	}
+
+	p := &PostgresProvider{
+		cfg:             providerConfig,
+		log:             log,
+		timeout:         postgresOpts.Timeout,
+		cleanupInterval: postgresOpts.CleanupInterval,
+		db:              postgresOpts.DB,
+		clock:           postgresOpts.clock,
+		schema:          postgresOpts.Schema,
+	}
+
+	// Resolve the table prefix
+	// An unset (empty) prefix falls back to the default
+	tablePrefix := postgresOpts.TablePrefix
+	if tablePrefix == "" {
+		tablePrefix = DefaultTablePrefix
+	}
+	if tablePrefix != "" {
+		// A non-empty prefix is stored with a trailing separator so tables are named e.g. "francis_hosts"
+		p.namePrefix = tablePrefix + "_"
+	}
+
+	// Queries qualify every object with the schema, because the search_path can't be changed on a connection that may be shared with the app
+	p.tablePrefix = p.namePrefix
+	if p.schema != "" {
+		p.tablePrefix = pgx.Identifier{p.schema}.Sanitize() + "." + p.namePrefix
+	}
+
+	// Set default values
+	p.timeout = utils.PositiveOr(p.timeout, DefaultTimeout)
+	if p.cleanupInterval == 0 {
+		// A zero value means the default
+		p.cleanupInterval = DefaultCleanupInterval
+	} else if p.cleanupInterval < 0 {
+		// A negative value means disabled
+		p.cleanupInterval = 0
+	}
+	if p.clock == nil {
+		p.clock = clock.RealClock{}
+	}
+
+	// The query timeout should be greater than HostHealthCheckDeadline
+	if p.timeout >= p.cfg.HostHealthCheckDeadline {
+		return nil, fmt.Errorf("the configured host health check deadline ('%v') must be bigger than the query timeout ('%v')", p.timeout, p.cfg.HostHealthCheckDeadline)
+	}
+
+	// Open a database connection unless we have one passed in already
+	if p.db == nil {
+		cfg, err := postgresOpts.GetPgxPoolConfig()
+		if err != nil {
+			return nil, err
+		}
+
+		// Attach the tracer that emits spans (and optional query logs) for every statement and pool acquisition, chaining any tracer the caller may have set on the pool config
+		cfg.ConnConfig.Tracer = postgresinstrument.NewTracer(&sqlinstrument.Options{
+			Log:               p.log,
+			QueryLog:          postgresOpts.QueryLog.Enabled,
+			IncludeParameters: postgresOpts.QueryLog.IncludeParameters,
+			SlowThreshold:     postgresOpts.QueryLog.SlowThreshold,
+		}, cfg.ConnConfig.Tracer)
+
+		// Open the database
+		connCtx, cancel := context.WithTimeout(context.Background(), p.timeout)
+		defer cancel()
+		p.db, err = pgxpool.NewWithConfig(connCtx, cfg)
+		if err != nil {
+			return nil, fmt.Errorf("failed to connect to Postgres database: %w", err)
+		}
+
+		// The provider owns this pool, so Close is responsible for closing it
+		p.ownsDB = true
+	}
+
+	return p, nil
+}
+
+func (p *PostgresProvider) Init(ctx context.Context) error {
+	// Perform schema migrations
+	err := p.performMigrations(ctx)
+	if err != nil {
+		return fmt.Errorf("failed to perform schema migrations: %w", err)
+	}
+
+	return nil
+}
+
+func (p *PostgresProvider) Run(ctx context.Context) error {
+	if !p.running.CompareAndSwap(false, true) {
+		return components.ErrAlreadyRunning
+	}
+	defer p.running.Store(false)
+
+	// Start the background garbage collection
+	err := p.initGC()
+	if err != nil {
+		return fmt.Errorf("failed to start garbage collector: %w", err)
+	}
+
+	// Wait for the context to be canceled
+	<-ctx.Done()
+
+	// Stop the garbage collector
+	err = p.gc.Close()
+	if err != nil {
+		return fmt.Errorf("failed to stop garbage collector: %w", err)
+	}
+
+	return nil
+}
+
+// Close releases the resources owned by the provider
+func (p *PostgresProvider) Close() error {
+	if !p.closed.CompareAndSwap(false, true) {
+		return nil
+	}
+
+	if !p.ownsDB || p.db == nil {
+		return nil
+	}
+
+	// The connection pool is closed only if the provider established it
+	p.db.Close()
+
+	return nil
+}
+
+func (p *PostgresProvider) HealthCheckPolicy() *components.HealthCheckPolicy {
+	return p.cfg.HealthCheckPolicy()
+}
+
+func (p *PostgresProvider) RenewLeaseInterval() time.Duration {
+	// The recommended interval is the bigger of: the lease duration less 10s, or half of the lease duration
+	if p.cfg.AlarmsLeaseDuration < 20*time.Second {
+		return p.cfg.AlarmsLeaseDuration / 2
+	}
+
+	return p.cfg.AlarmsLeaseDuration - 10*time.Second
+}
+
+func (p *PostgresProvider) performMigrations(ctx context.Context) error {
+	m := postgresmigrations.Migrations{
+		DB:                p.db,
+		MetadataTableName: p.tablePrefix + "metadata",
+		MetadataKey:       "migrations-version",
+	}
+
+	// Get all migration scripts
+	entries, err := migrationScripts.ReadDir("migrations")
+	if err != nil {
+		return fmt.Errorf("error while loading migration scripts: %w", err)
+	}
+	names := make([]string, 0, len(entries))
+	for _, e := range entries {
+		if e.IsDir() {
+			// Should not happen...
+			continue
+		}
+		names = append(names, e.Name())
+	}
+	slices.Sort(names)
+
+	migrationFns := make([]migrations.MigrationFn, len(names))
+	for i, e := range names {
+		data, err := migrationScripts.ReadFile(path.Join("migrations", e))
+		if err != nil {
+			return fmt.Errorf("error reading migration script '%s': %w", e, err)
+		}
+
+		// Apply the table prefix to the script's "%s" and "%p" placeholders
+		script := p.q(string(data))
+
+		migrationFns[i] = func(ctx context.Context) error {
+			p.log.InfoContext(ctx, "Performing Postgres database migration", slog.String("migration", e))
+			_, err := m.DB.Exec(ctx, script)
+			if err != nil {
+				return fmt.Errorf("failed to perform migration '%s': %w", e, err)
+			}
+			return nil
+		}
+	}
+
+	// Execute the migrations
+	err = m.Perform(ctx, migrationFns, p.log)
+	if err != nil {
+		return fmt.Errorf("migrations failed with error: %w", err)
+	}
+
+	return nil
+}
+
+func (p *PostgresProvider) initGC() (err error) {
+	p.gc, err = cleanup.ScheduleGarbageCollector(cleanup.GCOptions{
+		Logger: p.log,
+		UpdateLastCleanupQuery: func(arg any) (string, []any) {
+			return `
+				INSERT INTO ` + p.tablePrefix + `metadata (key, value)
+					VALUES ('last-cleanup', (now() AT TIME ZONE 'utc')::text)
+				ON CONFLICT (key)
+					DO UPDATE SET value = EXCLUDED.value
+				WHERE (EXTRACT('epoch' FROM (now() AT TIME ZONE 'utc') - ` + p.tablePrefix + `metadata.value::timestamp) * 1000)::bigint > $1`,
+				[]any{arg}
+		},
+		DeleteExpiredValuesQueries: map[string]cleanup.DeleteExpiredValuesQueryFn{
+			"hosts": func() (string, func() []any) {
+				q := `DELETE FROM ` + p.tablePrefix + `hosts WHERE host_last_health_check < ((now() AT TIME ZONE 'utc') - $1::interval)`
+				return q, func() []any {
+					return []any{p.cfg.HostHealthCheckDeadline}
+				}
+			},
+			"actor_state": func() (string, func() []any) {
+				q := `
+				DELETE FROM ` + p.tablePrefix + `actor_state
+				WHERE
+					actor_state_expiration_time IS NOT NULL
+					AND actor_state_expiration_time < (now() AT TIME ZONE 'utc')
+				`
+				return q, func() []any {
+					return nil
+				}
+			},
+			"terminal_jobs": func() (string, func() []any) {
+				q := `
+				DELETE FROM ` + p.tablePrefix + `terminal_jobs
+				WHERE
+					expiration_time IS NOT NULL
+					AND expiration_time < (now() AT TIME ZONE 'utc')
+				`
+				return q, func() []any {
+					return nil
+				}
+			},
+		},
+		CleanupInterval: p.cleanupInterval,
+		DB:              postgresadapter.AdaptPgxConn(p.db),
+	})
+	return err
+}
+
+// q applies the configured table prefix to a query loaded from an embedded migration script
+// In those files, every reference to a table (or other schema object) is written with a "%s" placeholder immediately before the name (e.g. "%shosts"), which this replaces with the prefix, including the schema if any
+// Names that Postgres doesn't allow to be schema-qualified use a "%p" placeholder instead, which this replaces with the prefix alone: this applies to the names of new indexes and triggers (which are always created in the schema of their table), and to the new name in "RENAME TO"
+// Note: Temporary tables are transaction/session-local and thus never prefixed
+func (p *PostgresProvider) q(query string) string {
+	// The only values interpolated here are the statically-derived prefixes (with the schema quoted), so there's no risk of SQL injection
+	return strings.
+		NewReplacer(
+			"%s", p.tablePrefix,
+			"%p", p.namePrefix,
+		).
+		Replace(query)
+}
+
+// tableIdentifier returns the identifier of a table, including the schema if one is configured, for APIs such as CopyFrom that quote the name themselves
+func (p *PostgresProvider) tableIdentifier(name string) pgx.Identifier {
+	if p.schema == "" {
+		return pgx.Identifier{p.namePrefix + name}
+	}
+	return pgx.Identifier{p.schema, p.namePrefix + name}
+}
+
+// utcPtr returns a pointer to the UTC representation of t, or nil if t is nil
+// All time columns store UTC values, so times must be normalized to UTC before being written
+func utcPtr(t *time.Time) *time.Time {
+	if t == nil {
+		return nil
+	}
+
+	u := t.UTC()
+	return &u
+}
+
+// Convert string slice to UUID slice for PostgreSQL
+func hostIDsToUUIDs(hosts []string) ([]uuid.UUID, error) {
+	hostUUIDs := make([]uuid.UUID, len(hosts))
+	for i, hostStr := range hosts {
+		hostUUID, err := uuid.Parse(hostStr)
+		if err != nil {
+			return nil, fmt.Errorf("invalid host UUID '%s': %w", hostStr, err)
+		}
+		hostUUIDs[i] = hostUUID
+	}
+
+	return hostUUIDs, nil
+}
+
+// Checks if an error returned by the database is a unique constraint violation error, such as a duplicate unique index or primary key.
+func isConstraintError(err error) bool {
+	if err == nil {
+		return false
+	}
+
+	pgErr, ok := errors.AsType[*pgconn.PgError](err)
+	if !ok {
+		return false
+	}
+
+	return pgerrcode.IsIntegrityConstraintViolation(pgErr.Code)
+}

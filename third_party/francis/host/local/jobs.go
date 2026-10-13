@@ -1,0 +1,208 @@
+package local
+
+import (
+	"bytes"
+	"context"
+	"errors"
+	"fmt"
+	"log/slog"
+	"time"
+	"uuid"
+
+	msgpack "github.com/vmihailenco/msgpack/v5"
+
+	"github.com/italypaleale/francis/actor"
+	"github.com/italypaleale/francis/components"
+	"github.com/italypaleale/francis/internal/ref"
+	"github.com/italypaleale/francis/internal/types"
+)
+
+// Dispatch sends a durable, fire-and-forget job to an actor, returning the server-issued job ID.
+func (h *Host) Dispatch(ctx context.Context, actorType string, actorID string, method string, data any, properties actor.JobProperties) (string, bool, error) {
+	err := ref.ValidateComponents(actorType, actorID)
+	if err != nil {
+		return "", false, err
+	}
+
+	err = properties.Validate()
+	if err != nil {
+		return "", false, err
+	}
+
+	// The idempotency key maps to the alarm name: without one each dispatch gets a fresh random name so it is a distinct job
+	name := properties.IdempotencyKey
+	if name != "" {
+		err = ref.ValidateComponents(name)
+		if err != nil {
+			return "", false, err
+		}
+	} else {
+		name = uuid.NewV4().String()
+	}
+
+	req, err := jobPropertiesToSetAlarmReq(properties, method, data, h.clock.Now())
+	if err != nil {
+		return "", false, err
+	}
+
+	// Offer this host for an immediate lease only when its in-memory scheduler can retain it
+	req.LeaseImmediate = h.immediateLeaseHosts()
+
+	// Store the job and acquire any immediate lease in the same provider operation
+	jobID, created, lease, err := h.actorProvider.DispatchJob(ctx, ref.NewAlarmRef(actorType, actorID, name), req)
+	if err != nil {
+		return "", false, fmt.Errorf("failed to dispatch job: %w", err)
+	}
+
+	// Attempt the in-memory handoff while preserving the durable job ID because an unqueued lease is fetched again after expiration
+	if lease != nil {
+		err = h.enqueueAlarms([]*ref.AlarmLease{lease})
+		if err != nil {
+			h.log.ErrorContext(ctx, "Failed to enqueue newly-created job; it will be fetched after the lease expires", slog.Any("error", err))
+		}
+	}
+
+	return jobID, created, nil
+}
+
+// GetJob returns a job by its ID, spanning both live and terminal jobs.
+func (h *Host) GetJob(ctx context.Context, jobID string) (actor.JobInfo, error) {
+	res, err := h.actorProvider.GetJob(ctx, jobID)
+	if errors.Is(err, components.ErrNoJob) {
+		return actor.JobInfo{}, actor.ErrJobNotFound
+	} else if err != nil {
+		return actor.JobInfo{}, fmt.Errorf("failed to get job: %w", err)
+	}
+
+	return jobInfoToActor(res), nil
+}
+
+// ListJobs returns all of an actor's jobs: the live ones, and any terminal record still retained.
+func (h *Host) ListJobs(ctx context.Context, actorType string, actorID string) ([]actor.JobInfo, error) {
+	err := ref.ValidateComponents(actorType, actorID)
+	if err != nil {
+		return nil, err
+	}
+
+	res, err := h.actorProvider.ListJobs(ctx, actorType, actorID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to list jobs: %w", err)
+	}
+
+	out := make([]actor.JobInfo, len(res))
+	for i := range res {
+		out[i] = jobInfoToActor(res[i])
+	}
+	return out, nil
+}
+
+// RetryJob re-dispatches a dead-lettered job as a fresh immediate job and removes the dead-letter record.
+func (h *Host) RetryJob(ctx context.Context, jobID string) (string, error) {
+	// The provider re-dispatches and removes the dead-letter record atomically, so a crash cannot duplicate the job
+	newID, err := h.actorProvider.RetryDeadJob(ctx, jobID)
+	if errors.Is(err, components.ErrNoJob) {
+		return "", actor.ErrJobNotFound
+	} else if err != nil {
+		return "", fmt.Errorf("failed to retry job: %w", err)
+	}
+
+	return newID, nil
+}
+
+// DeleteJob removes one of an actor's jobs, in the states the caller's options ask for.
+func (h *Host) DeleteJob(ctx context.Context, actorType string, actorID string, jobID string, opts ...actor.DeleteJobOption) error {
+	err := ref.ValidateComponents(actorType, actorID)
+	if err != nil {
+		return err
+	}
+
+	var o types.DeleteJobOpts
+	for _, opt := range opts {
+		opt(&o)
+	}
+
+	err = h.actorProvider.DeleteJob(ctx, actorType, actorID, jobID, components.DeleteJobReq{LiveOnly: o.LiveOnly})
+	if errors.Is(err, components.ErrNoJob) {
+		return actor.ErrJobNotFound
+	} else if err != nil {
+		return fmt.Errorf("failed to delete job: %w", err)
+	}
+
+	return nil
+}
+
+// jobPropertiesToSetAlarmReq builds a provider job request from the public job properties, encoding the input as MessagePack.
+func jobPropertiesToSetAlarmReq(p actor.JobProperties, method string, input any, now time.Time) (components.SetAlarmReq, error) {
+	req := components.SetAlarmReq{
+		DueTime:   p.EffectiveDueTime(now),
+		Interval:  p.Interval,
+		Cron:      p.Cron,
+		Kind:      components.AlarmKindJob,
+		JobMethod: method,
+	}
+
+	if input != nil {
+		var data bytes.Buffer
+		enc := msgpack.GetEncoder()
+		defer msgpack.PutEncoder(enc)
+		enc.Reset(&data)
+
+		err := enc.Encode(input)
+		if err != nil {
+			return components.SetAlarmReq{}, fmt.Errorf("failed to serialize data using msgpack: %w", err)
+		}
+		req.Data = data.Bytes()
+	}
+
+	if !p.TTL.IsZero() {
+		req.TTL = &p.TTL
+	}
+
+	// Encode any initial state the same way SetState does, so the actor reads it back as its own state
+	state, labels, ok := p.InitialState()
+	if ok {
+		encoded, err := msgpack.Marshal(state)
+		if err != nil {
+			return components.SetAlarmReq{}, fmt.Errorf("failed to serialize initial state using msgpack: %w", err)
+		}
+
+		req.InitialState = &components.InitialState{
+			Data:           encoded,
+			WorkflowLabels: &labels,
+		}
+	}
+
+	return req, nil
+}
+
+// jobInfoToActor maps a provider JobInfo to the public actor JobInfo.
+func jobInfoToActor(j components.JobInfo) actor.JobInfo {
+	return actor.JobInfo{
+		JobID:     j.JobID,
+		ActorType: j.ActorType,
+		ActorID:   j.ActorID,
+		Method:    j.Method,
+		Status:    jobStatusToActor(j.Status),
+		DueTime:   j.DueTime,
+		Interval:  j.Interval,
+		Cron:      j.Cron,
+		Attempts:  j.Attempts,
+		LastError: j.LastError,
+		CreatedAt: j.CreatedAt,
+		EndedAt:   j.EndedAt,
+	}
+}
+
+// jobStatusToActor maps a provider job status to the public actor job status.
+func jobStatusToActor(s components.JobStatus) actor.JobStatus {
+	switch s {
+	case components.JobStatusActive:
+		return actor.JobStatusActive
+	case components.JobStatusCompleted:
+		return actor.JobStatusCompleted
+	case components.JobStatusDeadLettered:
+		return actor.JobStatusDeadLettered
+	default:
+		return actor.JobStatusPending
+	}
+}

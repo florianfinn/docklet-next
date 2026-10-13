@@ -1,0 +1,396 @@
+// Source: getarcaneapp/arcane/backend/pkg/libarcane/startup/runtime_identity.go
+// Revision: 095cb778daba1034e2a39961199e712a75d4ba29
+// Retrieved: 2026-10-13
+// License: BSD-3-Clause
+// Deviations: Local module namespace; functional cut: removed standalone build workshop; functional cut: removed SQLite runtime and migrations.
+
+package startup
+
+import (
+	"context"
+	"fmt"
+	"log/slog"
+	"net/url"
+	"os"
+	"path/filepath"
+	"strconv"
+	"strings"
+
+	"github.com/samber/mo"
+	kit "go.getarcane.app/kit/pkg"
+
+	"github.com/florianfinn/docklet-next/backend/pkg/utils"
+)
+
+const (
+	defaultDataDirectory    = "/app/data"
+	defaultDockerConfigDir  = "/app/data/.docker"
+	defaultDockerSocketPath = "/var/run/docker.sock"
+	defaultRuntimeUID       = 65532
+	defaultRuntimeGID       = 65532
+	mountInfoPath           = "/proc/self/mountinfo"
+)
+
+var lchownFn = os.Lchown
+
+type runtimeIdentityRequest struct {
+	Enabled       bool
+	UID           int
+	GID           int
+	CredentialUID uint32
+	CredentialGID uint32
+	DockerHost    string
+}
+
+// RuntimeIdentityConfig contains the config-backed environment values used to
+// switch the process runtime identity before the application initializes.
+type RuntimeIdentityConfig struct {
+	PUID              string
+	PGID              string
+	DockerHost        string
+	DockerConfig      string
+	ProjectsDirectory string
+}
+
+// ApplyRequestedRuntimeIdentity switches the current process to the configured
+// runtime UID/GID before the rest of the app initializes.
+//
+// This whole bootstrap flow stays on os.* rather than acfs: it creates and
+// chowns the data/config roots before any confinement root exists, and acfs
+// has no chown API.
+func ApplyRequestedRuntimeIdentity(ctx context.Context, cfg *RuntimeIdentityConfig) error {
+	if cfg == nil {
+		cfg = &RuntimeIdentityConfig{}
+	}
+
+	projectsDir := ""
+	if strings.TrimSpace(cfg.ProjectsDirectory) != "" {
+		projectsDir = filepath.Clean(strings.TrimSpace(cfg.ProjectsDirectory))
+	}
+
+	inContainer := runningInContainerInternal(os.Getenv, os.Stat)
+	req, warning, err := loadRuntimeIdentityRequestInternal(cfg, inContainer)
+	if warning != "" {
+		slog.WarnContext(ctx, "Runtime identity warning", "warning", warning)
+	}
+	if err != nil {
+		return err
+	}
+	if !req.Enabled {
+		return nil
+	}
+
+	runtimeUID := req.UID
+	runtimeGID := req.GID
+
+	// Avoid re-execing forever when the requested runtime identity is already active.
+	if os.Geteuid() == runtimeUID && os.Getegid() == runtimeGID {
+		if ensureRuntimeDockerConfigErr := ensureRuntimeDockerConfigInternal(cfg, os.Setenv, runtimeUID, runtimeGID, inContainer); ensureRuntimeDockerConfigErr != nil {
+			return ensureRuntimeDockerConfigErr
+		}
+		return nil
+	}
+
+	if os.Geteuid() != 0 {
+		slog.WarnContext(ctx, "Runtime identity warning: process is not root, continuing as current user",
+			"euid", os.Geteuid(), "puid", runtimeUID, "pgid", runtimeGID)
+		if ensureRuntimeDockerConfigErr2 := ensureRuntimeDockerConfigInternal(cfg, os.Setenv, runtimeUID, runtimeGID, inContainer); ensureRuntimeDockerConfigErr2 != nil {
+			return ensureRuntimeDockerConfigErr2
+		}
+		return nil
+	}
+
+	if ensureRuntimeDockerConfigErr3 := ensureRuntimeDockerConfigInternal(cfg, os.Setenv, runtimeUID, runtimeGID, inContainer); ensureRuntimeDockerConfigErr3 != nil {
+		return ensureRuntimeDockerConfigErr3
+	}
+
+	if inContainer {
+		mountpoints, loadMountpointsErr := loadMountpointsInternal(mountInfoPath)
+		if loadMountpointsErr != nil {
+			return fmt.Errorf("load mountpoints: %w", loadMountpointsErr)
+		}
+
+		if prepareWritablePathsWithRootsErr := prepareWritablePathsWithRootsInternal(
+			runtimeUID, runtimeGID, mountpoints, projectsDir, defaultDataDirectory,
+		); prepareWritablePathsWithRootsErr != nil {
+			return prepareWritablePathsWithRootsErr
+		}
+	}
+
+	return reexecWithRuntimeIdentityInternal(ctx, req)
+}
+
+func loadRuntimeIdentityRequestInternal(cfg *RuntimeIdentityConfig, inContainer bool) (runtimeIdentityRequest, string, error) {
+	if cfg == nil {
+		cfg = &RuntimeIdentityConfig{}
+	}
+
+	puid := strings.TrimSpace(cfg.PUID)
+	pgid := strings.TrimSpace(cfg.PGID)
+
+	if puid == "" && pgid == "" {
+		return defaultRuntimeIdentityRequestInternal(cfg.DockerHost, inContainer), "", nil
+	}
+
+	if puid == "" || pgid == "" {
+		req := defaultRuntimeIdentityRequestInternal(cfg.DockerHost, inContainer)
+		warning := kit.Ternary(
+			inContainer,
+			"PUID and PGID must both be set to override the default non-root runtime user; continuing with the default non-root runtime user",
+			"PUID and PGID must both be set to enable runtime identity outside containers; continuing without runtime identity",
+		)
+		return req, warning, nil
+	}
+
+	uid, credentialUID, err := parseRuntimeIdentityValueInternal(puid, "PUID")
+	if err != nil {
+		return runtimeIdentityRequest{}, "", fmt.Errorf("invalid PUID %q: %w", puid, err)
+	}
+
+	gid, credentialGID, err := parseRuntimeIdentityValueInternal(pgid, "PGID")
+	if err != nil {
+		return runtimeIdentityRequest{}, "", fmt.Errorf("invalid PGID %q: %w", pgid, err)
+	}
+
+	return runtimeIdentityRequest{
+		Enabled:       true,
+		UID:           uid,
+		GID:           gid,
+		CredentialUID: credentialUID,
+		CredentialGID: credentialGID,
+		DockerHost:    cfg.DockerHost,
+	}, "", nil
+}
+
+func defaultRuntimeIdentityRequestInternal(dockerHost string, inContainer bool) runtimeIdentityRequest {
+	if !inContainer {
+		return runtimeIdentityRequest{
+			Enabled:    false,
+			DockerHost: dockerHost,
+		}
+	}
+
+	return runtimeIdentityRequest{
+		Enabled:       true,
+		UID:           defaultRuntimeUID,
+		GID:           defaultRuntimeGID,
+		CredentialUID: uint32(defaultRuntimeUID),
+		CredentialGID: uint32(defaultRuntimeGID),
+		DockerHost:    dockerHost,
+	}
+}
+
+func runningInContainerInternal(getenv func(string) string, stat func(string) (os.FileInfo, error)) bool {
+	if kit.ParseOrDefault(strings.TrimSpace(getenv("ARCANE_IN_CONTAINER")), false, strconv.ParseBool) {
+		return true
+	}
+
+	if strings.TrimSpace(getenv("container")) != "" {
+		return true
+	}
+
+	for _, markerPath := range []string{"/.dockerenv", "/run/.containerenv"} {
+		if _, err := stat(markerPath); err == nil {
+			return true
+		}
+	}
+
+	return false
+}
+
+func ensureRuntimeDockerConfigInternal(cfg *RuntimeIdentityConfig, setenv func(string, string) error, uid, gid int, inContainer bool) error {
+	configDir, err := configureRuntimeDockerConfigEnvInternal(cfg, setenv, uid, gid, inContainer)
+	if err != nil {
+		return err
+	}
+	if configDir == "" {
+		return nil
+	}
+
+	if mkdirAllErr := os.MkdirAll(configDir, utils.DirPerm); mkdirAllErr != nil {
+		return fmt.Errorf("create docker config directory: %w", mkdirAllErr)
+	}
+
+	if configDir == defaultDockerConfigDir && os.Geteuid() == 0 {
+		if chownErr := os.Chown(configDir, uid, gid); chownErr != nil {
+			return fmt.Errorf("chown docker config directory: %w", chownErr)
+		}
+	}
+
+	return nil
+}
+
+func configureRuntimeDockerConfigEnvInternal(cfg *RuntimeIdentityConfig, setenv func(string, string) error, uid, gid int, inContainer bool) (string, error) {
+	if cfg == nil {
+		cfg = &RuntimeIdentityConfig{}
+	}
+
+	if uid == 0 && gid == 0 {
+		// Both UID and GID are root; Docker uses /root/.docker by default.
+		return "", nil
+	}
+
+	configDir := strings.TrimSpace(cfg.DockerConfig)
+	if configDir != "" {
+		return configDir, nil
+	}
+
+	if !inContainer {
+		return "", nil
+	}
+
+	configDir = defaultDockerConfigDir
+	cfg.DockerConfig = configDir
+	if err := setenv("DOCKER_CONFIG", configDir); err != nil {
+		return "", fmt.Errorf("set DOCKER_CONFIG: %w", err)
+	}
+
+	return configDir, nil
+}
+
+func runtimeIdentitySupplementaryGroupsInternal(dockerHost string, resolveSocketGroup func(string) mo.Option[uint32]) []uint32 {
+	socketPath, ok := dockerSocketPathInternal(dockerHost).Get()
+	if !ok {
+		return nil
+	}
+
+	socketGID, ok := resolveSocketGroup(socketPath).Get()
+	if !ok {
+		return nil
+	}
+	return []uint32{socketGID}
+}
+
+func dockerSocketPathInternal(raw string) mo.Option[string] {
+	value := strings.TrimSpace(raw)
+	if value == "" {
+		return mo.Some(defaultDockerSocketPath)
+	}
+
+	parsed, err := url.Parse(value)
+	if err != nil || parsed.Scheme != "unix" {
+		return mo.None[string]()
+	}
+
+	if parsed.Host != "" || parsed.Path != "" {
+		socketPath := parsed.Host + parsed.Path
+		if !strings.HasPrefix(socketPath, "/") {
+			socketPath = "/" + socketPath
+		}
+		return mo.Some(filepath.Clean(socketPath))
+	}
+
+	if parsed.Opaque == "" {
+		return mo.None[string]()
+	}
+
+	socketPath := strings.TrimPrefix(parsed.Opaque, "//")
+	if !strings.HasPrefix(socketPath, "/") {
+		socketPath = "/" + socketPath
+	}
+
+	return mo.Some(filepath.Clean(socketPath))
+}
+
+func prepareWritablePathsWithRootsInternal(uid, gid int, mountpoints map[string]struct{}, projectsDir, dataDirectory string) error {
+	if err := os.MkdirAll(dataDirectory, utils.DirPerm); err != nil {
+		return fmt.Errorf("create data directory: %w", err)
+	}
+
+	if err := os.Chown(dataDirectory, uid, gid); err != nil {
+		return fmt.Errorf("chown data directory: %w", err)
+	}
+
+	entries, err := os.ReadDir(dataDirectory)
+	if err != nil {
+		return fmt.Errorf("read data directory: %w", err)
+	}
+
+	for _, entry := range entries {
+		entryPath := filepath.Join(dataDirectory, entry.Name())
+		if _, mounted := mountpoints[entryPath]; mounted {
+			if lchownErr := os.Lchown(entryPath, uid, gid); lchownErr != nil {
+				return fmt.Errorf("chown mounted %s: %w", entryPath, lchownErr)
+			}
+			continue
+		}
+		if projectsDir != "" && filepath.Clean(entryPath) == projectsDir {
+			if lchownFnErr := lchownFn(entryPath, uid, gid); lchownFnErr != nil {
+				return fmt.Errorf("chown %s: %w", entryPath, lchownFnErr)
+			}
+			continue
+		}
+		if chownRecursiveErr := chownRecursiveInternal(entryPath, uid, gid, mountpoints, projectsDir); chownRecursiveErr != nil {
+			return fmt.Errorf("chown %s: %w", entryPath, chownRecursiveErr)
+		}
+	}
+
+	return nil
+}
+
+func chownRecursiveInternal(path string, uid, gid int, mountpoints map[string]struct{}, projectsDir string) error {
+	return filepath.Walk(path, func(currentPath string, info os.FileInfo, err error) error {
+		if err != nil {
+			return err
+		}
+		// Skip any sub-tree that is a separate mountpoint.
+		if currentPath != path {
+			if _, mounted := mountpoints[filepath.Clean(currentPath)]; mounted {
+				return filepath.SkipDir
+			}
+		}
+		if projectsDir != "" && filepath.Clean(currentPath) == projectsDir {
+			if lchownFnErr := lchownFn(currentPath, uid, gid); lchownFnErr != nil {
+				return lchownFnErr
+			}
+			return filepath.SkipDir
+		}
+
+		return lchownFn(currentPath, uid, gid)
+	})
+}
+
+func loadMountpointsInternal(path string) (map[string]struct{}, error) {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return map[string]struct{}{}, nil
+		}
+		return nil, err
+	}
+	return parseMountpointsInternal(string(data)), nil
+}
+
+func parseMountpointsInternal(data string) map[string]struct{} {
+	mountpoints := make(map[string]struct{})
+
+	for line := range strings.SplitSeq(data, "\n") {
+		line = strings.TrimSpace(line)
+		if line == "" {
+			continue
+		}
+
+		fields := strings.Fields(line)
+		if len(fields) < 5 {
+			continue
+		}
+
+		mountpoint := filepath.Clean(unescapeMountInfoPathInternal(fields[4]))
+		mountpoints[mountpoint] = struct{}{}
+	}
+
+	return mountpoints
+}
+
+// unescapeMountInfoPathInternal decodes the kernel's octal escape sequences
+// used in /proc/self/mountinfo. The kernel only uses \040 (space), \011 (tab),
+// \012 (newline), and \134 (backslash) — no other escape forms appear.
+func unescapeMountInfoPathInternal(path string) string {
+	replacer := strings.NewReplacer(
+		`\040`, " ",
+		`\011`, "\t",
+		`\012`, "\n",
+		`\134`, `\`,
+	)
+	return replacer.Replace(path)
+}
