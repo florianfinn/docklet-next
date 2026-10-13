@@ -3,7 +3,7 @@ Source: getarcaneapp/arcane/cli/README.md
 Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 Retrieved: 2026-10-13
 License: BSD-3-Clause
-Deviations: Local module namespace; functional cut: local-account login replaces OIDC device-code login; removed upstream branding and missing logo.
+Deviations: Local module namespace; functional cut: local-account login replaces OIDC device-code login; removed upstream branding, missing logo and unsupported module-tag guidance; command examples use the installed binary name.
 -->
 
 # Command line client
@@ -14,34 +14,28 @@ The CLI module lives in this repository. To install it:
 
 - `go install github.com/florianfinn/docklet-next/cli@latest`
 
-## Versions
-
-CLI versions are tagged as `cli/vX.Y.Z` in the main repo. Use module tags to pin a specific release:
-
-- `go install github.com/florianfinn/docklet-next/cli@cli/vX.Y.Z`
-
 ## Configure
 
 The CLI stores config in `~/.config/arcanecli.yml`.
 
 Create a starter config file (all supported keys):
 
-- `arcane config init`
-- `arcane config backup` (moves current config to `~/.config/arcanecli.yml.bak`)
+- `cli config init`
+- `cli config backup` (moves current config to `~/.config/arcanecli.yml.bak`)
 
 Set the hub URL:
 
-- `arcane config set server-url http://localhost:3552`
+- `cli config set server-url http://localhost:3552`
 
 ### Authenticate (choose one)
 
 #### Option A: Local account
 
-- `arcane auth login --username <name>` (prompts for the password)
+- `cli auth login --username <name>` (prompts for the password)
 
 #### Option B: API key
 
-- `arcane config set api-key arc_xxxxxxxxxxxxx`
+- `cli config set api-key arc_xxxxxxxxxxxxx`
 
 ## Useful Global Flags
 
@@ -53,8 +47,8 @@ Set the hub URL:
 
 ## Utilities
 
-- `arcane completion bash|zsh|fish|powershell` to generate shell completions
-- `arcane doctor` to run local CLI diagnostics
+- `cli completion bash|zsh|fish|powershell` to generate shell completions
+- `cli doctor` to run local CLI diagnostics
 
 ## Pagination Config
 
@@ -82,9 +76,9 @@ CLI precedence is:
 4. command built-in default
 
 You can configure limits with:
-- `arcane config set default-limit 25`
-- `arcane config set pagination.resources.containers.limit 50 pagination.resources.images.limit 100`
+- `cli config set default-limit 25`
+- `cli config set pagination.resources.containers.limit 50 pagination.resources.images.limit 100`
 
 Legacy flag syntax remains supported:
-- `arcane config set --default-limit 25`
-- `arcane config set --resource-limit containers=50 --resource-limit images=100`
+- `cli config set --default-limit 25`
+- `cli config set --resource-limit containers=50 --resource-limit images=100`

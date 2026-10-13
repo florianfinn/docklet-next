@@ -378,14 +378,6 @@ func setFieldValueInternal(field reflect.Value, fieldType reflect.StructField, v
 	}
 }
 
-func (a AppEnvironment) IsProdEnvironment() bool {
-	return a == AppEnvironmentProduction
-}
-
-func (a AppEnvironment) IsTestEnvironment() bool {
-	return a == AppEnvironmentTest
-}
-
 // ListenAddr returns the effective address for the HTTP server to bind to.
 // It uses LISTEN as the host (if set) and PORT for the port.
 func (c *Config) ListenAddr() string {

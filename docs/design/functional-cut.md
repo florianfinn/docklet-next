@@ -81,7 +81,7 @@ The default test suite needs no database service. PostgreSQL persistence tests
 use an explicitly configured integration environment. PostgreSQL system backup
 creation, listing, recovery and scheduled policy runs currently return
 unavailable; [issue #32](https://github.com/florianfinn/docklet-next/issues/32)
-owns implementation of this gap. Local volume backups remain available.
+owns the decision to implement or remove this surface. Local volume backups remain available.
 
 The Docker info response embeds the Docker SDK's `system.Info`, including its
 Swarm status and nested OpenAPI schemas. This is daemon information passed

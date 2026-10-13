@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Functional cut: removed APNS mobile push; functional cut: removed federated credentials; functional cut: removed central variables and .env.global; functional cut: removed GitOps and saved Git repositories; functional cut: removed Swarm; functional cut: removed OIDC and passkeys.
+// Deviations: Functional cut: removed APNS mobile push, federated credentials, central variables, GitOps, saved Git repositories, templates, Swarm, OIDC and passkeys.
 
 package common
 
@@ -58,7 +58,6 @@ var (
 	ErrUpgradeInProgress                 = Classify(ErrConflict, errors.New("an upgrade is already in progress"))
 	ErrUpdateAllInProgress               = Classify(ErrConflict, errors.New("an update-all job is already in progress"))
 	ErrUpdaterNoContainersMatched        = Classify(ErrBadRequest, errors.New("no compose-managed containers matched the requested resources"))
-	ErrTemplateNotFound                  = Classify(ErrNotFound, errors.New("Template not found"))
 	ErrInvalidEnvKey                     = Classify(ErrValidation, errors.New("Invalid environment key"))
 	ErrImageUntagged                     = Classify(ErrBadRequest, errors.New("image has no tag; only tagged images can be patched"))
 	ErrImageLocalOnly                    = Classify(ErrBadRequest, errors.New("locally built image has no registry source to patch from; rebuild it to update its packages"))
@@ -104,7 +103,6 @@ var (
 	ErrImageScanInProgress                = Classify(ErrConflict, errors.New("an image update check is already in progress"))
 	ErrVulnerabilityScanNotFound          = Classify(ErrNotFound, errors.New("Vulnerability scan not found"))
 	ErrInvalidNotificationPayloadTemplate = Classify(ErrValidation, errors.New("invalid generic webhook payload template"))
-	ErrRedeployAfterSyncFailed            = errors.New("redeploy failed")
 	ErrUploadSessionNotFound              = Classify(ErrNotFound, errors.New("Upload session not found"))
 	ErrUploadSessionIncomplete            = Classify(ErrConflict, errors.New("Upload session is incomplete"))
 	ErrUploadKindMismatch                 = Classify(ErrBadRequest, errors.New("Upload session kind does not match this endpoint"))

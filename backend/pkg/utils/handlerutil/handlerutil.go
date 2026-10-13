@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace
+// Deviations: Local module namespace; removed unused actor helper after GitOps cut.
 
 package handlerutil
 
@@ -173,14 +173,6 @@ func Operation(operationID, method, path, summary, description string, tags ...s
 		Description: description,
 		Tags:        tags,
 	}
-}
-
-func CurrentActor(ctx context.Context) usertypes.Actor {
-	actor := usertypes.Actor{}
-	if currentUser, exists := userctx.CurrentUserFromContext(ctx); exists && currentUser != nil {
-		actor = *currentUser
-	}
-	return actor
 }
 
 func MapOneAPIResponse[S, D any](source S, mappingMessage func(error) string) (base.ApiResponse[D], error) {
