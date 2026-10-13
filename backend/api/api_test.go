@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; functional cut: removed template catalogue; functional cut: removed central variables and .env.global; functional cut: removed Swarm.
+// Deviations: Local module namespace; functional cut: removed template catalogue; functional cut: removed central variables and .env.global; functional cut: removed Swarm; functional cut: removed standalone build workshop.
 
 package api
 
@@ -47,8 +47,8 @@ func TestWorkspaceRoutesReplaceProjectAndVolumeLegacyRoutes(t *testing.T) {
 		{path: "/environments/{id}/volumes/{volumeName}/workspace", method: http.MethodPut},
 		{path: "/environments/{id}/volumes/{volumeName}/workspace/file", method: http.MethodGet},
 		{path: "/environments/{id}/volumes/{volumeName}/workspace/file/download", method: http.MethodGet},
-		{path: "/environments/{id}/builds/browse", method: http.MethodGet},
 	}
+	require.Nil(t, paths["/environments/{id}/builds/browse"])
 	for _, route := range canonical {
 		t.Run(route.method+" "+route.path, func(t *testing.T) {
 			item := paths[route.path]

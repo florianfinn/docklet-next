@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace
+// Deviations: Local module namespace; functional cut: removed standalone build workshop.
 
 package startup
 
@@ -25,7 +25,6 @@ import (
 
 const (
 	defaultDataDirectory    = "/app/data"
-	defaultBuildsDirectory  = "/builds"
 	defaultDatabaseURL      = "file:data/arcane.db?_pragma=journal_mode(WAL)&_pragma=busy_timeout(2500)&_txlock=immediate"
 	defaultDockerConfigDir  = "/app/data/.docker"
 	defaultDockerSocketPath = "/var/run/docker.sock"
@@ -115,7 +114,7 @@ func ApplyRequestedRuntimeIdentity(ctx context.Context, cfg *RuntimeIdentityConf
 		}
 
 		if prepareWritablePathsWithRootsErr := prepareWritablePathsWithRootsInternal(
-			runtimeUID, runtimeGID, mountpoints, projectsDir, defaultDataDirectory, defaultBuildsDirectory,
+			runtimeUID, runtimeGID, mountpoints, projectsDir, defaultDataDirectory,
 		); prepareWritablePathsWithRootsErr != nil {
 			return prepareWritablePathsWithRootsErr
 		}
@@ -296,7 +295,7 @@ func dockerSocketPathInternal(raw string) mo.Option[string] {
 	return mo.Some(filepath.Clean(socketPath))
 }
 
-func prepareWritablePathsWithRootsInternal(uid, gid int, mountpoints map[string]struct{}, projectsDir, dataDirectory, buildsDirectory string) error {
+func prepareWritablePathsWithRootsInternal(uid, gid int, mountpoints map[string]struct{}, projectsDir, dataDirectory string) error {
 	if err := os.MkdirAll(dataDirectory, utils.DirPerm); err != nil {
 		return fmt.Errorf("create data directory: %w", err)
 	}
@@ -327,24 +326,6 @@ func prepareWritablePathsWithRootsInternal(uid, gid int, mountpoints map[string]
 		if chownRecursiveErr := chownRecursiveInternal(entryPath, uid, gid, mountpoints, projectsDir); chownRecursiveErr != nil {
 			return fmt.Errorf("chown %s: %w", entryPath, chownRecursiveErr)
 		}
-	}
-
-	if _, mounted := mountpoints[buildsDirectory]; mounted {
-		if lchownErr2 := os.Lchown(buildsDirectory, uid, gid); lchownErr2 != nil {
-			return fmt.Errorf("chown mounted builds directory: %w", lchownErr2)
-		}
-		return nil
-	}
-
-	if _, statErr := os.Stat(buildsDirectory); statErr != nil {
-		if os.IsNotExist(statErr) {
-			return nil
-		}
-		return fmt.Errorf("stat builds directory: %w", statErr)
-	}
-
-	if chownRecursiveErr2 := chownRecursiveInternal(buildsDirectory, uid, gid, mountpoints, projectsDir); chownRecursiveErr2 != nil {
-		return fmt.Errorf("chown builds directory: %w", chownRecursiveErr2)
 	}
 
 	return nil

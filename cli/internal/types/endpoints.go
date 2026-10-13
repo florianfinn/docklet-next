@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Functional cut: removed template catalogue; functional cut: removed federated credentials; functional cut: removed central variables and .env.global; functional cut: removed GitOps and saved Git repositories; functional cut: removed S3 backup destinations.
+// Deviations: Functional cut: removed template catalogue; functional cut: removed federated credentials; functional cut: removed central variables and .env.global; functional cut: removed GitOps and saved Git repositories; functional cut: removed S3 backup destinations; functional cut: removed standalone build workshop.
 
 // Package types provides the Arcane API endpoint path builders and CLI
 // configuration types.
@@ -174,14 +174,6 @@ func ImageExport(envID, name string) string {
 func ImageAttestations(envID, name string) string {
 	return pathf("/api/environments/%s/images/%s/attestations", envID, name)
 }
-func ImagesBuild(envID string) string { return pathf("/api/environments/%s/images/build", envID) }
-func ImageBuilds(envID string) string { return pathf("/api/environments/%s/images/builds", envID) }
-func ImageBuild(envID, buildID string) string {
-	return pathf("/api/environments/%s/images/builds/%s", envID, buildID)
-}
-
-// Upload session endpoints
-
 func UploadSessions(envID, kind string) string {
 	return pathf("/api/environments/%s/uploads/%s", envID, kind)
 }

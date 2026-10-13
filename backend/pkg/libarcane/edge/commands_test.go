@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: functional cut: removed Swarm.
+// Deviations: functional cut: removed Swarm; functional cut: removed standalone build workshop.
 
 package edge
 
@@ -71,7 +71,7 @@ func TestResolveEdgeCommandName(t *testing.T) {
 			shouldHit: true,
 		},
 		{name: "project workspace update", method: "PUT", path: "/api/environments/0/projects/p1/workspace", command: "project.workspace.update", shouldHit: true},
-		{name: "build workspace browse retained", method: "GET", path: "/api/environments/0/builds/browse", command: "build_workspace.browse.list", shouldHit: true},
+		{name: "build workspace browse removed", method: "GET", path: "/api/environments/0/builds/browse", shouldHit: false},
 		{name: "legacy project files absent", method: "GET", path: "/api/environments/0/projects/p1/files", shouldHit: false},
 		{name: "legacy project includes absent", method: "PUT", path: "/api/environments/0/projects/p1/includes", shouldHit: false},
 		{name: "legacy volume browse absent", method: "GET", path: "/api/environments/0/volumes/data/browse", shouldHit: false},

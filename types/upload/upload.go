@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: None
+// Deviations: functional cut: removed standalone build workshop.
 
 // Package upload defines the chunked upload-session wire types shared by the
 // backend, frontend contract, and CLI.
@@ -14,9 +14,8 @@ const (
 	// Session kinds tie an upload session to the domain endpoint allowed to
 	// consume it.
 
-	KindImage          = "image"
-	KindVolumeBackup   = "volume-backup"
-	KindBuildWorkspace = "build-workspace"
+	KindImage        = "image"
+	KindVolumeBackup = "volume-backup"
 
 	// Chunk size bounds keep every chunk request safely under common reverse-proxy
 	// and WAF body limits (~100 MB).

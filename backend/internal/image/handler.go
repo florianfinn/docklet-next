@@ -2,14 +2,13 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace
+// Deviations: Local module namespace; functional cut: removed standalone build workshop.
 
 package image
 
 import (
 	"cmp"
 	"context"
-	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -21,12 +20,9 @@ import (
 	"github.com/florianfinn/docklet-next/types/image"
 	"github.com/florianfinn/docklet-next/types/system"
 	uploadtypes "github.com/florianfinn/docklet-next/types/upload"
-	"go.getarcane.app/builds/types"
 	"go.getarcane.app/kit/pkg"
-	"gorm.io/gorm"
 
 	"github.com/florianfinn/docklet-next/backend/internal/activity"
-	"github.com/florianfinn/docklet-next/backend/internal/build"
 	"github.com/florianfinn/docklet-next/backend/internal/database"
 	"github.com/florianfinn/docklet-next/backend/internal/docker"
 	"github.com/florianfinn/docklet-next/backend/internal/imageupdate"
@@ -44,7 +40,6 @@ type ImageHandler struct {
 	imageService       *ImageService
 	imageUpdateService *imageupdate.ImageUpdateService
 	settingsService    *settings.SettingsService
-	buildService       *build.BuildService
 	activityService    *activity.ActivityService
 	uploadService      *upload.UploadService
 	appCtx             context.Context
@@ -101,27 +96,6 @@ type RemoveImageInput struct {
 type PullImageInput struct {
 	EnvironmentID string `path:"id" doc:"Environment ID"`
 	Body          image.PullOptions
-}
-
-type BuildImageInput struct {
-	EnvironmentID string `path:"id" doc:"Environment ID"`
-	Body          types.BuildRequest
-}
-
-type ListImageBuildsInput struct {
-	EnvironmentID string `path:"id" doc:"Environment ID"`
-	Search        string `query:"search" doc:"Search query"`
-	Sort          string `query:"sort" doc:"Column to sort by"`
-	Order         string `query:"order" default:"desc" doc:"Sort direction (asc or desc)"`
-	Start         int    `query:"start" default:"0" doc:"Start index for pagination"`
-	Limit         int    `query:"limit" default:"20" doc:"Number of items per page"`
-	Status        string `query:"status" doc:"Filter by status"`
-	Provider      string `query:"provider" doc:"Filter by provider"`
-}
-
-type GetImageBuildInput struct {
-	EnvironmentID string `path:"id" doc:"Environment ID"`
-	BuildID       string `path:"buildId" doc:"Build ID"`
 }
 
 type PruneImagesInput struct {
@@ -374,122 +348,6 @@ func (h *ImageHandler) PullImage(ctx context.Context, input *PullImageInput) (*h
 			activitylib.FlushWriter(writer)
 			activitylib.WriteDoneLine(rawWriter)
 			activitylib.CompleteHandlerActivity(runtimeCtx, h.activityService, activityID, "Image pull completed", nil)
-		},
-	}, nil
-}
-
-// BuildImage builds a Docker image with streaming progress.
-func (h *ImageHandler) BuildImage(ctx context.Context, input *BuildImageInput) (*huma.StreamResponse, error) {
-	if strings.TrimSpace(input.Body.ContextDir) == "" {
-		return nil, huma.Error400BadRequest("contextDir is required")
-	}
-
-	user, err := handlerutil.RequireUser(ctx)
-	if err != nil {
-		return nil, err
-	}
-
-	return &huma.StreamResponse{
-		Body: func(humaCtx huma.Context) { //nolint:contextcheck // context is obtained from humaCtx.Context()
-			httpx.SetJSONStreamHeaders(humaCtx)
-
-			runtimeCtx := utils.ActivityRuntimeContext(humaCtx.Context(), h.appCtx)
-			rawWriter := humaCtx.BodyWriter()
-			resourceName := strings.Join(input.Body.Tags, ", ")
-			if strings.TrimSpace(resourceName) == "" {
-				resourceName = input.Body.ContextDir
-			}
-			activityID, runtimeCtx := activitylib.StartHandlerActivity(
-				runtimeCtx,
-				h.activityService,
-				input.EnvironmentID,
-				activitytypes.TypeImageBuild,
-				"image",
-				"",
-				resourceName,
-				user,
-				"Building image",
-				"Image build started",
-				database.JSON{"contextDir": input.Body.ContextDir, "tags": input.Body.Tags},
-				true,
-			)
-			activitylib.WriteStartedLine(rawWriter, activityID)
-			if f, ok := rawWriter.(http.Flusher); ok {
-				f.Flush()
-			}
-			activitylib.AwaitHandlerActivitySlot(runtimeCtx, h.activityService, activityID, input.EnvironmentID)
-
-			writer := activitylib.NewWriter(runtimeCtx, h.activityService, activityID, rawWriter, "Building image")
-			if _, buildImageErr := h.buildService.BuildImage(runtimeCtx, input.EnvironmentID, input.Body, writer, "", user); buildImageErr != nil {
-				activitylib.FlushWriter(writer)
-				activitylib.CompleteHandlerActivity(runtimeCtx, h.activityService, activityID, "Image build failed", buildImageErr)
-				_, _ = fmt.Fprintf(writer, "{\"error\":%q}\n", buildImageErr.Error())
-				if f, ok := writer.(http.Flusher); ok {
-					f.Flush()
-				}
-				return
-			}
-			activitylib.FlushWriter(writer)
-			activitylib.WriteDoneLine(rawWriter)
-			activitylib.CompleteHandlerActivity(runtimeCtx, h.activityService, activityID, "Image build completed", nil)
-		},
-	}, nil
-}
-
-// ListImageBuilds returns a paginated list of image build history entries.
-func (h *ImageHandler) ListImageBuilds(ctx context.Context, input *ListImageBuildsInput) (*handlerutil.Page[image.BuildRecord], error) {
-	if input.EnvironmentID == "" {
-		return nil, huma.Error400BadRequest("Environment ID is required")
-	}
-
-	params := handlerutil.PaginationParams(input.Start, input.Limit, input.Sort, input.Order, input.Search)
-	if input.Status != "" {
-		params.Filters["status"] = input.Status
-	}
-	if input.Provider != "" {
-		params.Filters["provider"] = input.Provider
-	}
-
-	builds, paginationResp, err := h.buildService.ListImageBuildsByEnvironmentPaginated(ctx, input.EnvironmentID, params)
-	if err != nil {
-		return nil, huma.Error500InternalServerError("Failed to list build history: " + err.Error())
-	}
-
-	if builds == nil {
-		builds = []image.BuildRecord{}
-	}
-
-	return &handlerutil.Page[image.BuildRecord]{
-		Body: base.Paginated[image.BuildRecord]{
-			Success:    true,
-			Data:       builds,
-			Pagination: handlerutil.PaginationResponse(paginationResp),
-		},
-	}, nil
-}
-
-// GetImageBuild returns a single build history entry.
-func (h *ImageHandler) GetImageBuild(ctx context.Context, input *GetImageBuildInput) (*handlerutil.Out[image.BuildRecord], error) {
-	if input.EnvironmentID == "" {
-		return nil, huma.Error400BadRequest("Environment ID is required")
-	}
-
-	if input.BuildID == "" {
-		return nil, huma.Error400BadRequest("buildId is required")
-	}
-
-	buildRecord, err := h.buildService.GetImageBuildByID(ctx, input.EnvironmentID, input.BuildID)
-	if err != nil {
-		if errors.Is(err, gorm.ErrRecordNotFound) {
-			return nil, huma.Error404NotFound("build not found")
-		}
-		return nil, huma.Error500InternalServerError("Failed to retrieve build history: " + err.Error())
-	}
-
-	return &handlerutil.Out[image.BuildRecord]{
-		Body: base.ApiResponse[image.BuildRecord]{
-			Success: true,
-			Data:    *buildRecord,
 		},
 	}, nil
 }

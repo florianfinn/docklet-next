@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Functional cut: removed APNS mobile push; functional cut: removed template catalogue; functional cut: removed federated credentials; functional cut: removed GitOps and saved Git repositories; functional cut: removed Swarm; functional cut: removed S3 backup destinations.
+// Deviations: Functional cut: removed APNS mobile push; functional cut: removed template catalogue; functional cut: removed federated credentials; functional cut: removed GitOps and saved Git repositories; functional cut: removed Swarm; functional cut: removed S3 backup destinations; functional cut: removed standalone build workshop.
 
 package settings
 
@@ -118,7 +118,6 @@ type Settings struct {
 	MaxImageUploadSize             SettingVariable `key:"maxImageUploadSize" meta:"label=Max Image Upload Size;type=number;keywords=upload,size,limit,maximum,image,tar,file,megabytes,mb,storage;category=internal;description=Maximum size in MB for image archive uploads (default: 500)"`
 	DockerHost                     SettingVariable `key:"dockerHost,authrequired,envOverride" meta:"label=Docker Host;type=text;keywords=docker,host,daemon,socket,unix,remote;category=internal;description=URI for Docker daemon"`
 	BuildProvider                  SettingVariable `key:"buildProvider,envOverride" meta:"label=Build Provider;type=select;keywords=build,buildkit,depot,provider,remote,local;category=build;description=Default build provider (local or depot)" catmeta:"id=build;title=Build;icon=code;url=/settings/builds;description=Configure BuildKit and Depot build settings"`
-	BuildsDirectory                SettingVariable `key:"buildsDirectory,envOverride" meta:"label=Builds Directory;type=text;keywords=builds,directory,path,workspace,context;category=build;description=Root directory for manual build workspaces"`
 	BuildTimeout                   SettingVariable `key:"buildTimeout,envOverride" meta:"label=Build Timeout;type=number;keywords=build,timeout,seconds,buildkit;category=build;description=Timeout for BuildKit builds in seconds (default: 1800 = 30 minutes)"`
 	DepotProjectId                 SettingVariable `key:"depotProjectId,envOverride" meta:"label=Depot Project ID;type=text;keywords=depot,project,id,build,provider;category=build;description=Depot project identifier"`
 	DepotToken                     SettingVariable `key:"depotToken,envOverride,sensitive" meta:"label=Depot Token;type=password;keywords=depot,token,api,secret,build,provider;category=build;description=Depot API token"`

@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; functional cut: removed APNS mobile push; functional cut: removed template catalogue; functional cut: removed GitOps and saved Git repositories; functional cut: removed Swarm.
+// Deviations: Local module namespace; functional cut: removed APNS mobile push; functional cut: removed template catalogue; functional cut: removed GitOps and saved Git repositories; functional cut: removed Swarm; functional cut: removed standalone build workshop.
 
 package settings
 
@@ -246,7 +246,6 @@ func DefaultSettingsConfig() *Settings {
 		AvatarMaxUploadSizeMb:                 SettingVariable{Value: "2"},
 		DefaultShell:                          SettingVariable{Value: "/bin/sh"},
 		DockerHost:                            SettingVariable{Value: "unix:///var/run/docker.sock"},
-		BuildsDirectory:                       SettingVariable{Value: "/builds"},
 		AuthLocalEnabled:                      SettingVariable{Value: "true"},
 		AuthSessionTimeout:                    SettingVariable{Value: "1440"},
 		AuthPasswordPolicy:                    SettingVariable{Value: "strong"},
@@ -1229,53 +1228,6 @@ func (s *SettingsService) NormalizeProjectsDirectory(ctx context.Context, projec
 	}
 	slog.InfoContext(ctx, "Successfully normalized projects directory")
 	s.publishSettingsChangesInternal([]libarcane.SettingUpdate{{Key: "projectsDirectory", Value: absPath}})
-	return nil
-}
-
-func (s *SettingsService) NormalizeBuildsDirectory(ctx context.Context) error {
-	const buildsKey = "buildsDirectory"
-	envVarName := strings.ToUpper(kit.SnakeCase(buildsKey))
-	if envVal, ok, _ := utils.LookupEnvOrFile(envVarName); ok && strings.TrimSpace(envVal) != "" {
-		slog.DebugContext(ctx, "BUILDS_DIRECTORY environment variable is set, skipping normalization", "value", envVal)
-		return nil
-	}
-
-	s.writes.Lock()
-	defer s.writes.Unlock()
-	if err := ctx.Err(); err != nil {
-		return err
-	}
-
-	var buildsDirSetting SettingVariable
-	err := s.db.WithContext(ctx).Where("key = ?", buildsKey).First(&buildsDirSetting).Error
-	if errors.Is(err, gorm.ErrRecordNotFound) {
-		slog.DebugContext(ctx, "No buildsDirectory setting found, skipping normalization")
-		return nil
-	}
-	if err != nil {
-		return fmt.Errorf("failed to load buildsDirectory setting: %w", err)
-	}
-
-	value := strings.TrimSpace(buildsDirSetting.Value)
-	if value == "" || filepath.IsAbs(value) {
-		slog.DebugContext(ctx, "Builds directory already normalized or empty, skipping", "value", buildsDirSetting.Value)
-		return nil
-	}
-
-	cwd, _ := os.Getwd()
-	absPath, absErr := filepath.Abs(value)
-	if absErr != nil {
-		return fmt.Errorf("failed to resolve relative path to absolute: %w", absErr)
-	}
-	slog.InfoContext(ctx, "Normalizing builds directory from relative to absolute path", "from", value, "to", absPath, "base", cwd)
-	if updateSettingValueNoRefreshErr := s.updateSettingValueNoRefreshInternal(ctx, buildsKey, absPath); updateSettingValueNoRefreshErr != nil {
-		return fmt.Errorf("failed to update buildsDirectory: %w", updateSettingValueNoRefreshErr)
-	}
-	if refreshSettingsCacheErr := s.refreshSettingsCacheInternal(context.WithoutCancel(ctx)); refreshSettingsCacheErr != nil {
-		return refreshSettingsCacheErr
-	}
-	slog.InfoContext(ctx, "Successfully normalized builds directory")
-	s.publishSettingsChangesInternal([]libarcane.SettingUpdate{{Key: buildsKey, Value: absPath}})
 	return nil
 }
 

@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Functional cut: removed template catalogue; functional cut: removed federated credentials; functional cut: removed central variables and .env.global; functional cut: removed GitOps and saved Git repositories; functional cut: removed Swarm; functional cut: removed S3 backup destinations.
+// Deviations: Functional cut: removed template catalogue; functional cut: removed federated credentials; functional cut: removed central variables and .env.global; functional cut: removed GitOps and saved Git repositories; functional cut: removed Swarm; functional cut: removed S3 backup destinations; functional cut: removed standalone build workshop.
 
 // Package authz defines the permission taxonomy and authorization primitives
 // used across Arcane handlers. Permissions are strings of the form
@@ -119,7 +119,6 @@ const (
 	PermImagesRead   = "images:read"
 	PermImagesPull   = "images:pull"
 	PermImagesPush   = "images:push"
-	PermImagesBuild  = "images:build"
 	PermImagesTag    = "images:tag"
 	PermImagesCommit = "images:commit"
 	PermImagesPrune  = "images:prune"
@@ -162,8 +161,6 @@ const (
 	PermVulnsRead   = "vulnerabilities:read"
 	PermVulnsScan   = "vulnerabilities:scan"
 	PermVulnsManage = "vulnerabilities:manage"
-
-	PermBuildWorkspacesManage = "build-workspaces:manage"
 
 	PermActivitiesRead   = "activities:read"
 	PermActivitiesCancel = "activities:cancel"
@@ -279,7 +276,7 @@ func BuiltInEditorPermissions() []string {
 		PermContainersAutoUpdate,
 
 		PermProjectsList, PermProjectsRead, PermProjectsLogs, PermProjectsCreate, PermProjectsUpdate, PermProjectsDeploy, PermProjectsDown, PermProjectsRestart, PermProjectsDelete, PermProjectsArchive,
-		PermImagesList, PermImagesRead, PermImagesPull, PermImagesPush, PermImagesBuild, PermImagesTag, PermImagesCommit, PermImagesPrune, PermImagesDelete, PermImagesUpload, PermImagesPatch,
+		PermImagesList, PermImagesRead, PermImagesPull, PermImagesPush, PermImagesTag, PermImagesCommit, PermImagesPrune, PermImagesDelete, PermImagesUpload, PermImagesPatch,
 		PermVolumesList, PermVolumesRead, PermVolumesCreate, PermVolumesRename, PermVolumesDelete, PermVolumesPrune, PermVolumesUpload, PermVolumesBackup,
 		PermNetworksList, PermNetworksRead, PermNetworksCreate, PermNetworksDelete, PermNetworksPrune, PermNetworksConnect, PermNetworksDisconnect,
 		PermWebhooksList, PermWebhooksCreate, PermWebhooksUpdate, PermWebhooksDelete,
@@ -287,7 +284,6 @@ func BuiltInEditorPermissions() []string {
 		PermSystemRead, PermSystemPrune,
 		PermImageUpdatesRead, PermImageUpdatesCheck,
 		PermVulnsRead, PermVulnsScan, PermVulnsManage,
-		PermBuildWorkspacesManage,
 		PermActivitiesRead, PermActivitiesCancel, PermActivitiesDelete,
 	}
 }

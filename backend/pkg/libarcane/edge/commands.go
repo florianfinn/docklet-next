@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: functional cut: removed GitOps and saved Git repositories; functional cut: removed Swarm; functional cut: removed S3 backup destinations.
+// Deviations: functional cut: removed GitOps and saved Git repositories; functional cut: removed Swarm; functional cut: removed S3 backup destinations; functional cut: removed standalone build workshop.
 
 package edge
 
@@ -41,9 +41,6 @@ var commandRoutes = []commandRoute{
 	{Method: http.MethodGet, PathPattern: "/api/environments/{id}/images/{imageId}", CommandName: "image.inspect"},
 	{Method: http.MethodDelete, PathPattern: "/api/environments/{id}/images/{imageId}", CommandName: "image.delete"},
 	{Method: http.MethodPost, PathPattern: "/api/environments/{id}/images/pull", CommandName: "image.pull"},
-	{Method: http.MethodPost, PathPattern: "/api/environments/{id}/images/build", CommandName: "image.build.start"},
-	{Method: http.MethodGet, PathPattern: "/api/environments/{id}/images/builds", CommandName: "image.build.list"},
-	{Method: http.MethodGet, PathPattern: "/api/environments/{id}/images/builds/{buildId}", CommandName: "image.build.inspect"},
 	{Method: http.MethodPost, PathPattern: "/api/environments/{id}/images/prune", CommandName: "image.prune"},
 	{Method: http.MethodPost, PathPattern: "/api/environments/{id}/images/upload", CommandName: "image.upload"},
 
@@ -127,13 +124,6 @@ var commandRoutes = []commandRoute{
 	{Method: http.MethodGet, PathPattern: "/api/environments/{id}/volumes/backups/{backupId}/files", CommandName: "volume.backup.files"},
 	{Method: http.MethodGet, PathPattern: "/api/environments/{id}/volumes/backups/{backupId}/files/browse", CommandName: "volume.backup.files_browse"},
 	{Method: http.MethodPost, PathPattern: "/api/environments/{id}/volumes/backups/{backupId}/upload", CommandName: "volume.backup.upload"},
-
-	{Method: http.MethodGet, PathPattern: "/api/environments/{id}/builds/browse", CommandName: "build_workspace.browse.list"},
-	{Method: http.MethodGet, PathPattern: "/api/environments/{id}/builds/browse/content", CommandName: "build_workspace.browse.read_file"},
-	{Method: http.MethodGet, PathPattern: "/api/environments/{id}/builds/browse/download", CommandName: "build_workspace.browse.download"},
-	{Method: http.MethodPost, PathPattern: "/api/environments/{id}/builds/browse/upload", CommandName: "build_workspace.browse.upload"},
-	{Method: http.MethodPost, PathPattern: "/api/environments/{id}/builds/browse/mkdir", CommandName: "build_workspace.browse.mkdir"},
-	{Method: http.MethodDelete, PathPattern: "/api/environments/{id}/builds/browse", CommandName: "build_workspace.browse.delete"},
 
 	{Method: http.MethodGet, PathPattern: "/api/environments/{id}/networks", CommandName: "network.list"},
 	{Method: http.MethodGet, PathPattern: "/api/environments/{id}/networks/counts", CommandName: "network.counts"},

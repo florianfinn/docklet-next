@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; functional cut: removed APNS mobile push; functional cut: removed template catalogue; functional cut: removed federated credentials; functional cut: removed central variables and .env.global; functional cut: removed GitOps and saved Git repositories; functional cut: removed Swarm; functional cut: removed S3 backup destinations.
+// Deviations: Local module namespace; functional cut: removed APNS mobile push; functional cut: removed template catalogue; functional cut: removed federated credentials; functional cut: removed central variables and .env.global; functional cut: removed GitOps and saved Git repositories; functional cut: removed Swarm; functional cut: removed S3 backup destinations; functional cut: removed standalone build workshop.
 
 package api
 
@@ -26,7 +26,6 @@ import (
 	"github.com/florianfinn/docklet-next/backend/internal/apikey"
 	"github.com/florianfinn/docklet-next/backend/internal/appimages"
 	"github.com/florianfinn/docklet-next/backend/internal/auth"
-	"github.com/florianfinn/docklet-next/backend/internal/build"
 	"github.com/florianfinn/docklet-next/backend/internal/config"
 	"github.com/florianfinn/docklet-next/backend/internal/container"
 	"github.com/florianfinn/docklet-next/backend/internal/dashboard"
@@ -248,7 +247,6 @@ type HandlerDeps struct {
 	Search            *search.Module
 	Container         *container.Module
 	Image             *image.Module
-	Build             *build.BuildService
 	Volume            *volume.Module
 	Network           *network.NetworkService
 	Port              *port.PortService
@@ -408,7 +406,6 @@ func registerHandlersInternal(api huma.API, deps HandlerDeps, handlerAppCtx hand
 	deps.ContainerRegistry.RegisterRoutes(api)
 	deps.Image.RegisterRoutes(api, handlerAppCtx)
 	deps.Upload.RegisterRoutes(api)
-	build.RegisterBuildWorkspaces(api, deps.Build, deps.Upload.Service())
 	deps.ImageUpdate.RegisterRoutes(api, handlerAppCtx)
 	deps.Settings.RegisterRoutes(api)
 	deps.JobSchedule.RegisterRoutes(api)

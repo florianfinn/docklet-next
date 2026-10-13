@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; functional cut: removed central variables and .env.global; functional cut: removed GitOps and saved Git repositories; functional cut: removed Swarm.
+// Deviations: Local module namespace; functional cut: removed central variables and .env.global; functional cut: removed GitOps and saved Git repositories; functional cut: removed Swarm; functional cut: removed standalone build workshop.
 
 package bootstrap
 
@@ -227,10 +227,6 @@ func initializeStartupState(p initializeStartupStateParams) {
 
 	if err := p.Settings.NormalizeProjectsDirectory(appCtx, cfg.ProjectsDirectory); err != nil {
 		slog.WarnContext(appCtx, "Failed to normalize projects directory", "error", err)
-	}
-
-	if err := p.Settings.NormalizeBuildsDirectory(appCtx); err != nil {
-		slog.WarnContext(appCtx, "Failed to normalize builds directory", "error", err)
 	}
 
 	if err := p.Environment.EnsureLocalEnvironment(appCtx, cfg.AppUrl); err != nil {

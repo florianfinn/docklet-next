@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Functional cut: removed template catalogue; functional cut: removed federated credentials; functional cut: removed central variables and .env.global; functional cut: removed GitOps and saved Git repositories; functional cut: removed Swarm; functional cut: removed S3 backup destinations.
+// Deviations: Functional cut: removed template catalogue; functional cut: removed federated credentials; functional cut: removed central variables and .env.global; functional cut: removed GitOps and saved Git repositories; functional cut: removed Swarm; functional cut: removed S3 backup destinations; functional cut: removed standalone build workshop.
 
 package authz
 
@@ -120,7 +120,6 @@ var permissionCatalog = []PermissionCatalogResource{
 		{"read", PermImagesRead, "Read", ""},
 		{"pull", PermImagesPull, "Pull", ""},
 		{"push", PermImagesPush, "Push", ""},
-		{"build", PermImagesBuild, "Build", ""},
 		{"tag", PermImagesTag, "Tag", ""},
 		{"commit", PermImagesCommit, "Commit container", ""},
 		{"prune", PermImagesPrune, "Prune", ""},
@@ -175,9 +174,6 @@ var permissionCatalog = []PermissionCatalogResource{
 		{"read", PermVulnsRead, "Read", ""},
 		{"scan", PermVulnsScan, "Scan", ""},
 		{"manage", PermVulnsManage, "Manage ignores", ""},
-	}},
-	{"build-workspaces", "Build Workspaces", PermissionScopeEnv, []PermissionCatalogAction{
-		{"manage", PermBuildWorkspacesManage, "Manage", ""},
 	}},
 	{"activities", "Activities", PermissionScopeEnv, []PermissionCatalogAction{
 		{"read", PermActivitiesRead, "Read", ""},

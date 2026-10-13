@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Functional cut: removed template catalogue; functional cut: removed central variables and .env.global; functional cut: removed GitOps and saved Git repositories; functional cut: removed Swarm; functional cut: removed S3 backup destinations.
+// Deviations: Functional cut: removed template catalogue; functional cut: removed central variables and .env.global; functional cut: removed GitOps and saved Git repositories; functional cut: removed Swarm; functional cut: removed S3 backup destinations; functional cut: removed standalone build workshop.
 
 package authz
 
@@ -68,7 +68,6 @@ var accessSurfacesInternal = []AccessSurface{
 	routeSurfaceInternal("route.containers.detail", "/containers/{containerId}", "Container", AccessScopeModeSelectedEnvPlusGlobal, []string{PermContainersList, PermContainersRead}, 0),
 	routeSurfaceInternal("route.images", "/images", "Images", AccessScopeModeSelectedEnvPlusGlobal, []string{PermImagesList, PermImagesRead}, 50),
 	routeSurfaceInternal("route.images.detail", "/images/{imageId}", "Image", AccessScopeModeSelectedEnvPlusGlobal, []string{PermImagesList, PermImagesRead}, 0),
-	routeSurfaceInternal("route.images.builds", "/images/builds", "Builds", AccessScopeModeSelectedEnvPlusGlobal, []string{PermImagesBuild}, 0),
 	// The security page moved from /images/vulnerabilities; the surface ID stays
 	// stable so saved role access scopes keep working.
 	routeSurfaceInternal("route.images.vulnerabilities", "/security", "Security", AccessScopeModeSelectedEnvPlusGlobal, []string{PermVulnsRead}, 55),

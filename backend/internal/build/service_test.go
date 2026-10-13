@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; functional cut: removed GitOps and saved Git repositories.
+// Deviations: Local module namespace; functional cut: removed GitOps and saved Git repositories; functional cut: removed standalone build workshop.
 
 package build
 
@@ -28,7 +28,6 @@ import (
 	"github.com/florianfinn/docklet-next/backend/internal/database"
 	"github.com/florianfinn/docklet-next/backend/internal/event"
 	"github.com/florianfinn/docklet-next/backend/pkg/gitutil"
-	"github.com/florianfinn/docklet-next/backend/pkg/pagination"
 )
 
 func TestBuildService_ResolveBuildRequest_PassesThroughLocalContext(t *testing.T) {
@@ -53,7 +52,7 @@ func TestBuildService_ResolveBuildRequest_PassesThroughLocalContext(t *testing.T
 }
 
 func TestNewBuildService_NilRegistryServiceKeepsNilBuildRegistryProvider(t *testing.T) {
-	svc := NewBuildService(nil, nil, nil, nil, nil)
+	svc := NewBuildService(nil, nil, nil, nil)
 	require.NotNil(t, svc.builder)
 
 	builderValue := reflect.ValueOf(svc.builder)
@@ -162,16 +161,12 @@ func TestBuildService_ResolveBuildRequest_RejectsNonGitHTTPContextViaProbeFailur
 	require.NoError(t, cleanup())
 }
 
-func TestBuildService_BuildImage_PreservesRemoteSourceInHistory(t *testing.T) {
-	db, err := setupBuildHistoryTestDB()
-	require.NoError(t, err)
-
+func TestBuildService_BuildImage_PassesResolvedGitContextToBuilder(t *testing.T) {
 	repoPath := t.TempDir()
 	require.NoError(t, os.WriteFile(filepath.Join(repoPath, "Dockerfile"), []byte("FROM alpine:3.20\n"), 0o644))
 
 	captured := types.BuildRequest{}
 	svc := &BuildService{
-		db: db,
 		builder: testBuildRecorder{
 			onBuild: func(req types.BuildRequest) {
 				captured = req
@@ -190,22 +185,17 @@ func TestBuildService_BuildImage_PreservesRemoteSourceInHistory(t *testing.T) {
 		Load:       true,
 	}
 
-	_, err = svc.BuildImage(t.Context(), "0", req, nil, "manual", nil)
+	_, err := svc.BuildImage(t.Context(), "0", req, nil, "app", nil)
 	require.NoError(t, err)
 	assert.Equal(t, repoPath, captured.ContextDir)
-
-	var record ImageBuild
-	require.NoError(t, db.WithContext(t.Context()).First(&record).Error)
-	assert.Equal(t, req.ContextDir, record.ContextDir)
 }
 
-func TestBuildService_BuildImage_FailureRecordsHistoryAndEvent(t *testing.T) {
-	db, err := setupBuildHistoryTestDB()
+func TestBuildService_BuildImage_FailureRecordsEvent(t *testing.T) {
+	db, err := setupBuildEventTestDB()
 	require.NoError(t, err)
 
 	buildErr := errors.New("BuildKit could not load the image with the docker exporter")
 	svc := &BuildService{
-		db:           db,
 		eventService: event.NewEventService(db, nil, nil),
 		builder: testBuildRecorder{
 			err: buildErr,
@@ -217,7 +207,7 @@ func TestBuildService_BuildImage_FailureRecordsHistoryAndEvent(t *testing.T) {
 	}
 
 	req := types.BuildRequest{
-		ContextDir: "/builds/demo",
+		ContextDir: "/workspace/demo",
 		Dockerfile: "Dockerfile",
 		Tags:       []string{"arcane.local/demo:test"},
 		Provider:   "local",
@@ -227,12 +217,6 @@ func TestBuildService_BuildImage_FailureRecordsHistoryAndEvent(t *testing.T) {
 	_, err = svc.BuildImage(t.Context(), "0", req, nil, "web", user)
 	require.ErrorIs(t, err, buildErr)
 
-	var record ImageBuild
-	require.NoError(t, db.WithContext(t.Context()).First(&record).Error)
-	assert.Equal(t, ImageBuildStatusFailed, record.Status)
-	require.NotNil(t, record.ErrorMessage)
-	assert.Contains(t, *record.ErrorMessage, "docker exporter")
-
 	var evt event.Event
 	require.NoError(t, db.WithContext(t.Context()).First(&evt, "type = ?", event.EventTypeImageError).Error)
 	assert.Equal(t, event.EventSeverityError, evt.Severity)
@@ -240,14 +224,12 @@ func TestBuildService_BuildImage_FailureRecordsHistoryAndEvent(t *testing.T) {
 	assert.Equal(t, "arcane.local/demo:test", *evt.ResourceName)
 	assert.Equal(t, "build", evt.Metadata["action"])
 	assert.Equal(t, "local", evt.Metadata["provider"])
-	assert.Equal(t, "/builds/demo", evt.Metadata["contextDir"])
+	assert.Equal(t, "/workspace/demo", evt.Metadata["contextDir"])
 	assert.Contains(t, evt.Metadata["error"], "docker exporter")
-	require.NotEmpty(t, evt.Metadata["buildRecordId"])
-	assert.Equal(t, record.ID, evt.Metadata["buildRecordId"])
 }
 
-func TestBuildService_BuildImage_FailureExporterErrorsAppearInOutputHistoryAndEvent(t *testing.T) {
-	db, err := setupBuildHistoryTestDB()
+func TestBuildService_BuildImage_FailureExporterErrorsAppearInProgressAndEvent(t *testing.T) {
+	db, err := setupBuildEventTestDB()
 	require.NoError(t, err)
 
 	buildErr := &types.BuildKitImageExporterError{
@@ -257,7 +239,6 @@ func TestBuildService_BuildImage_FailureExporterErrorsAppearInOutputHistoryAndEv
 	progress := &bytes.Buffer{}
 
 	svc := &BuildService{
-		db:           db,
 		eventService: event.NewEventService(db, nil, nil),
 		builder: testBuildRecorder{
 			err: buildErr,
@@ -273,7 +254,7 @@ func TestBuildService_BuildImage_FailureExporterErrorsAppearInOutputHistoryAndEv
 	}
 
 	req := types.BuildRequest{
-		ContextDir: "/builds/demo",
+		ContextDir: "/workspace/demo",
 		Dockerfile: "Dockerfile",
 		Tags:       []string{"ghcr.io/getarcaneapp/arcane:test"},
 		Provider:   "depot",
@@ -283,14 +264,6 @@ func TestBuildService_BuildImage_FailureExporterErrorsAppearInOutputHistoryAndEv
 	_, err = svc.BuildImage(t.Context(), "0", req, progress, "web", user)
 	require.ErrorIs(t, err, buildErr)
 
-	var record ImageBuild
-	require.NoError(t, db.WithContext(t.Context()).First(&record).Error)
-	assert.Equal(t, ImageBuildStatusFailed, record.Status)
-	require.NotNil(t, record.Output)
-	assert.Contains(t, *record.Output, buildErr.Error())
-	require.NotNil(t, record.ErrorMessage)
-	assert.Contains(t, *record.ErrorMessage, "exporter \"image\"")
-
 	var evt event.Event
 	require.NoError(t, db.WithContext(t.Context()).First(&evt, "type = ?", event.EventTypeImageError).Error)
 	assert.Equal(t, event.EventSeverityError, evt.Severity)
@@ -298,16 +271,13 @@ func TestBuildService_BuildImage_FailureExporterErrorsAppearInOutputHistoryAndEv
 	assert.Equal(t, "ghcr.io/getarcaneapp/arcane:test", *evt.ResourceName)
 	assert.Equal(t, "build", evt.Metadata["action"])
 	assert.Equal(t, "depot", evt.Metadata["provider"])
-	assert.Equal(t, "/builds/demo", evt.Metadata["contextDir"])
+	assert.Equal(t, "/workspace/demo", evt.Metadata["contextDir"])
 	assert.Equal(t, buildErr.Error(), evt.Metadata["error"])
 	// The progress writer is the wire transport: raw builder text arrives framed
 	// as {"log":...} NDJSON lines.
 	var frame map[string]string
 	require.NoError(t, json.Unmarshal([]byte(strings.TrimSpace(progress.String())), &frame))
 	assert.Equal(t, buildErr.Error(), frame["log"])
-	assert.Equal(t, buildErr.Error(), *record.ErrorMessage)
-	assert.NotEmpty(t, evt.Metadata["buildRecordId"])
-	assert.Equal(t, record.ID, evt.Metadata["buildRecordId"])
 }
 
 func TestSanitizeBuildContextForEventInternal_RedactsURLCredentials(t *testing.T) {
@@ -321,7 +291,7 @@ func TestSanitizeBuildContextForEventInternal_RedactsURLCredentials(t *testing.T
 		"[unparseable URL]",
 		sanitizeBuildContextForEventInternal("https://user:pass@[bad-host/repo.git"),
 	)
-	assert.Equal(t, "/builds/demo", sanitizeBuildContextForEventInternal("/builds/demo"))
+	assert.Equal(t, "/workspace/demo", sanitizeBuildContextForEventInternal("/workspace/demo"))
 }
 
 type testBuildRecorder struct {
@@ -343,40 +313,12 @@ func (b testBuildRecorder) BuildImage(_ context.Context, req types.BuildRequest,
 	return &types.BuildResult{Provider: "local"}, nil
 }
 
-func TestBuildService_ListImageBuilds_OmitsOutputColumn(t *testing.T) {
-	db, err := setupBuildHistoryTestDB()
-	require.NoError(t, err)
-	svc := &BuildService{db: db}
-
-	output := "large build output"
-	require.NoError(t, db.WithContext(t.Context()).Create(&ImageBuild{
-		ID:            "build-omit-output",
-		EnvironmentID: "0",
-		Status:        ImageBuildStatusSuccess,
-		ContextDir:    "/ctx",
-		Output:        &output,
-	}).Error)
-
-	records, _, err := svc.ListImageBuildsByEnvironmentPaginated(t.Context(), "0", pagination.QueryParams{
-		Limit: 10,
-	})
-	require.NoError(t, err)
-	require.Len(t, records, 1)
-	assert.Nil(t, records[0].Output)
-
-	// The detail endpoint must still return the stored output.
-	detail, err := svc.GetImageBuildByID(t.Context(), "0", "build-omit-output")
-	require.NoError(t, err)
-	require.NotNil(t, detail.Output)
-	assert.Equal(t, output, *detail.Output)
-}
-
-func setupBuildHistoryTestDB() (*database.DB, error) {
+func setupBuildEventTestDB() (*database.DB, error) {
 	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
 	if err != nil {
 		return nil, err
 	}
-	if autoMigrateErr := db.AutoMigrate(&ImageBuild{}, &event.Event{}); autoMigrateErr != nil {
+	if autoMigrateErr := db.AutoMigrate(&event.Event{}); autoMigrateErr != nil {
 		return nil, autoMigrateErr
 	}
 	return &database.DB{DB: db}, nil

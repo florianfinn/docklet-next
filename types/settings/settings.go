@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Functional cut: removed APNS mobile push; functional cut: removed template catalogue; functional cut: removed GitOps and saved Git repositories; functional cut: removed Swarm.
+// Deviations: Functional cut: removed APNS mobile push; functional cut: removed template catalogue; functional cut: removed GitOps and saved Git repositories; functional cut: removed Swarm; functional cut: removed standalone build workshop.
 
 package settings
 
@@ -499,11 +499,6 @@ type Update struct {
 	//
 	// Required: false
 	BuildProvider *string `json:"buildProvider,omitzero"`
-
-	// BuildsDirectory is the root directory for manual build workspaces.
-	//
-	// Required: false
-	BuildsDirectory *string `json:"buildsDirectory,omitzero"`
 
 	// BuildTimeout is the timeout for BuildKit builds in seconds.
 	//

@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: None
+// Deviations: functional cut: removed standalone build workshop.
 
 package startup
 
@@ -343,13 +343,13 @@ func TestParseMountpoints(t *testing.T) {
 	data := `36 25 0:32 / /proc rw,nosuid,nodev,noexec,relatime - proc proc rw
 97 92 0:44 / /app/data rw,relatime - ext4 /dev/sda1 rw
 98 92 0:45 / /app/data/projects rw,relatime - ext4 /dev/sdb1 rw
-99 92 0:46 / /builds rw,relatime - ext4 /dev/sdc1 rw
+99 92 0:46 / /assets rw,relatime - ext4 /dev/sdc1 rw
 `
 
 	parsed := parseMountpointsInternal(data)
 	require.Contains(t, parsed, "/app/data")
 	require.Contains(t, parsed, "/app/data/projects")
-	require.Contains(t, parsed, "/builds")
+	require.Contains(t, parsed, "/assets")
 }
 
 func TestSQLiteDatabasePath(t *testing.T) {
@@ -476,7 +476,6 @@ func TestChownRecursiveInternalSkipsProjects(t *testing.T) {
 func TestPrepareWritablePathsInternalChownsTopLevelProjectsShallowly(t *testing.T) {
 	tempDir := t.TempDir()
 	dataDir := filepath.Join(tempDir, "data")
-	buildsDir := filepath.Join(tempDir, "builds")
 	projectsDir := filepath.Join(dataDir, "projects")
 	demoDir := filepath.Join(projectsDir, "demo")
 	keepFile := filepath.Join(demoDir, "keep.txt")
@@ -496,7 +495,7 @@ func TestPrepareWritablePathsInternalChownsTopLevelProjectsShallowly(t *testing.
 		lchownFn = oldLchownFn
 	})
 
-	err := prepareWritablePathsWithRootsInternal(os.Getuid(), os.Getgid(), map[string]struct{}{}, filepath.Clean(projectsDir), dataDir, buildsDir)
+	err := prepareWritablePathsWithRootsInternal(os.Getuid(), os.Getgid(), map[string]struct{}{}, filepath.Clean(projectsDir), dataDir)
 	require.NoError(t, err)
 
 	require.True(t, visited[filepath.Clean(projectsDir)], "top-level projects dir must be chowned")
