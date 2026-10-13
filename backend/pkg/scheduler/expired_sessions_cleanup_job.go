@@ -1,0 +1,64 @@
+// Source: getarcaneapp/arcane/backend/pkg/scheduler/expired_sessions_cleanup_job.go
+// Revision: 095cb778daba1034e2a39961199e712a75d4ba29
+// Retrieved: 2026-10-13
+// License: BSD-3-Clause
+// Deviations: Local module namespace
+
+package scheduler
+
+import (
+	"context"
+	"log/slog"
+	"time"
+
+	schedulertypes "github.com/florianfinn/docklet-next/types/scheduler"
+	kit "go.getarcane.app/kit/pkg"
+
+	"github.com/florianfinn/docklet-next/backend/internal/session"
+	"github.com/florianfinn/docklet-next/backend/internal/settings"
+)
+
+const ExpiredSessionsCleanupJobName = "expired-sessions-cleanup"
+
+type ExpiredSessionsCleanupJob struct {
+	sessionService  *session.SessionService
+	settingsService *settings.SettingsService
+}
+
+func NewExpiredSessionsCleanupJob(sessionService *session.SessionService, settingsService *settings.SettingsService) *ExpiredSessionsCleanupJob {
+	return &ExpiredSessionsCleanupJob{
+		sessionService:  sessionService,
+		settingsService: settingsService,
+	}
+}
+
+func (j *ExpiredSessionsCleanupJob) Name() string {
+	return ExpiredSessionsCleanupJobName
+}
+
+func (j *ExpiredSessionsCleanupJob) Schedule(ctx context.Context) string {
+	s := j.settingsService.GetStringSetting(ctx, "expiredSessionsCleanupInterval", "0 0 0 * * *")
+	return kit.Ternary(s == "", "0 0 0 * * *", s)
+}
+
+func (j *ExpiredSessionsCleanupJob) Run(ctx context.Context) (schedulertypes.Outcome, error) {
+	slog.InfoContext(ctx, "Running expired sessions cleanup job", "jobName", ExpiredSessionsCleanupJobName)
+
+	revokedRetention := 7 * 24 * time.Hour
+	deleted, err := j.sessionService.DeleteExpiredSessions(ctx, revokedRetention)
+	if err != nil {
+		slog.ErrorContext(ctx, "Failed to delete expired user sessions", "jobName", ExpiredSessionsCleanupJobName, "revokedRetention", revokedRetention.String(), "error", err)
+		return schedulertypes.Outcome{}, err
+	}
+
+	slog.InfoContext(ctx, "Expired sessions cleanup job completed successfully",
+		"jobName", ExpiredSessionsCleanupJobName,
+		"revokedRetention", revokedRetention.String(),
+		"deleted", deleted)
+	return schedulertypes.Outcome{Status: schedulertypes.Succeeded}, nil
+}
+
+func (j *ExpiredSessionsCleanupJob) Reschedule(ctx context.Context) error {
+	slog.InfoContext(ctx, "rescheduling expired sessions cleanup job in new scheduler; currently requires restart")
+	return nil
+}

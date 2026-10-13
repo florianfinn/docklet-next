@@ -1,12 +1,7 @@
 import { spawnSync } from "node:child_process";
 import { existsSync } from "node:fs";
 import { git, tracked, main, run } from "./repository.mjs";
-
-const GO_COMMANDS = {
-  lint: ["vet", "./..."],
-  test: ["test", "./..."],
-  build: ["build", "./..."],
-};
+import { checkGo } from "./go-checks.mjs";
 
 function command(program, args, cwd = process.cwd()) {
   const result = spawnSync(program, args, { cwd, stdio: "inherit" });
@@ -28,9 +23,8 @@ export function check(mode) {
     if (!tests.length) throw new Error("missing-tests");
     command(process.execPath, ["--test", ...tests]);
   }
-  // Module owners extend these integration points when their first package lands.
   if (mode !== "text" && existsSync("backend/go.mod")) {
-    command("go", GO_COMMANDS[mode], "backend");
+    checkGo(mode);
   }
   if (mode !== "text" && existsSync("web/package.json")) command("pnpm", ["--dir", "web", "run", mode]);
   if (mode === "build" && !existsSync("backend/go.mod") && !existsSync("web/package.json"))

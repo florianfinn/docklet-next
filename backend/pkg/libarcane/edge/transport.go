@@ -1,0 +1,124 @@
+// Source: getarcaneapp/arcane/backend/pkg/libarcane/edge/transport.go
+// Revision: 095cb778daba1034e2a39961199e712a75d4ba29
+// Retrieved: 2026-10-13
+// License: BSD-3-Clause
+// Deviations: None
+
+package edge
+
+import (
+	"strings"
+
+	"github.com/samber/mo"
+)
+
+const (
+	// EdgeTransportAuto prefers gRPC and falls back to WebSocket automatically.
+	EdgeTransportAuto = "auto"
+	// EdgeTransportWebSocket forces WebSocket tunnel transport.
+	EdgeTransportWebSocket = "websocket"
+	// EdgeTransportGRPC forces gRPC transport without WebSocket fallback.
+	EdgeTransportGRPC = "grpc"
+	// EdgeTransportPoll uses an HTTP polling control plane with the existing
+	// websocket tunnel as an on-demand data plane.
+	EdgeTransportPoll = "poll"
+
+	// EdgeMTLSModeDisabled disables edge tunnel mTLS.
+	EdgeMTLSModeDisabled = "disabled"
+	// EdgeMTLSModeOptional enables edge tunnel mTLS when certificates are configured.
+	EdgeMTLSModeOptional = "optional"
+	// EdgeMTLSModeRequired requires a verified client certificate on edge tunnel endpoints
+	// when Arcane terminates TLS; external TLS terminators must enforce mTLS before proxying.
+	EdgeMTLSModeRequired = "required"
+)
+
+// NormalizeEdgeTransport normalizes transport config and defaults to auto-negotiation.
+func NormalizeEdgeTransport(value string) string {
+	switch strings.ToLower(strings.TrimSpace(value)) {
+	case EdgeTransportAuto:
+		return EdgeTransportAuto
+	case EdgeTransportWebSocket:
+		return EdgeTransportWebSocket
+	case EdgeTransportGRPC:
+		return EdgeTransportGRPC
+	case EdgeTransportPoll:
+		return EdgeTransportPoll
+	default:
+		return EdgeTransportAuto
+	}
+}
+
+// NormalizeEdgeMTLSMode normalizes edge mTLS config and defaults to disabled.
+func NormalizeEdgeMTLSMode(value string) string {
+	switch strings.ToLower(strings.TrimSpace(value)) {
+	case EdgeMTLSModeOptional:
+		return EdgeMTLSModeOptional
+	case EdgeMTLSModeRequired:
+		return EdgeMTLSModeRequired
+	default:
+		return EdgeMTLSModeDisabled
+	}
+}
+
+// UseGRPCEdgeTransport reports whether gRPC managed tunnel mode should be attempted.
+func UseGRPCEdgeTransport(cfg *Config) bool {
+	if cfg == nil {
+		return false
+	}
+	transport := NormalizeEdgeTransport(cfg.EdgeTransport)
+	return transport == EdgeTransportGRPC || transport == EdgeTransportAuto
+}
+
+// UseWebSocketEdgeTransport reports whether websocket managed tunnel mode is allowed.
+func UseWebSocketEdgeTransport(cfg *Config) bool {
+	if cfg == nil {
+		return false
+	}
+	transport := NormalizeEdgeTransport(cfg.EdgeTransport)
+	return transport == EdgeTransportWebSocket || transport == EdgeTransportAuto
+}
+
+// UsePollEdgeTransport reports whether the Portainer-style polling control plane
+// should be used.
+func UsePollEdgeTransport(cfg *Config) bool {
+	if cfg == nil {
+		return false
+	}
+	return NormalizeEdgeTransport(cfg.EdgeTransport) == EdgeTransportPoll
+}
+
+// GetActiveTunnelTransport returns the currently active tunnel transport for an environment.
+func GetActiveTunnelTransport(envID string) mo.Option[string] {
+	tunnel, ok := GetRegistry().Get(envID).Get()
+	if !ok || tunnel == nil || tunnel.Conn == nil || tunnel.Conn.IsClosed() {
+		return mo.None[string]()
+	}
+
+	if transport := tunnel.Conn.Transport(); transport != "" {
+		return mo.Some(transport)
+	}
+	return mo.None[string]()
+}
+
+// GetTunnelRuntimeState returns live metadata for an active tunnel.
+func GetTunnelRuntimeState(envID string) mo.Option[*TunnelRuntimeState] {
+	tunnel, ok := GetRegistry().Get(envID).Get()
+	if !ok || tunnel == nil || tunnel.Conn == nil || tunnel.Conn.IsClosed() {
+		return mo.None[*TunnelRuntimeState]()
+	}
+
+	// One snapshot under a single read lock, so the reported fields all describe
+	// the same moment and none of them race the tunnel's writers.
+	meta := tunnel.MetadataSnapshot()
+
+	return mo.Some(&TunnelRuntimeState{
+		Transport:     tunnel.Conn.Transport(),
+		ConnectedAt:   new(meta.ConnectedAt),
+		LastHeartbeat: new(meta.LastHeartbeat),
+		SessionID:     meta.SessionID,
+		AgentInstance: meta.AgentInstance,
+		SecurityMode:  meta.SecurityMode,
+		Capabilities:  meta.Capabilities,
+		State:         meta.State,
+	})
+}

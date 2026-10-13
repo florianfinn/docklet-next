@@ -1,0 +1,127 @@
+// Source: getarcaneapp/kit/builds/api/builder_core_test.go
+// Revision: 83d91f19f60b2967cc85c46161c98203e80e4989
+// Retrieved: 2026-10-13
+// License: BSD-3-Clause
+// Deviations: None
+
+package api
+
+import (
+	"context"
+	"errors"
+	"testing"
+
+	configtypes "github.com/docker/cli/cli/config/types"
+	"github.com/moby/buildkit/session/auth/authprovider"
+	dockerregistry "github.com/moby/moby/api/types/registry"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+
+	"go.getarcane.app/builds/types"
+)
+
+type fakeRegistryAuthProvider struct {
+	authConfigs map[string]dockerregistry.AuthConfig
+	err         error
+}
+
+func (f fakeRegistryAuthProvider) GetAllRegistryAuthConfigs(_ context.Context) (map[string]dockerregistry.AuthConfig, error) {
+	return f.authConfigs, f.err
+}
+
+func TestBuildkitAuthConfigProvider_UsesRegistryAuthProviderForHost(t *testing.T) {
+	registryCfg := dockerregistry.AuthConfig{
+		Username:      "db-user",
+		Password:      "db-token",
+		ServerAddress: "ghcr.io",
+	}
+
+	provider := buildkitAuthConfigProviderInternal(
+		func(_ context.Context, _ string, _ []string, _ authprovider.ExpireCachedAuthCheck) (configtypes.AuthConfig, error) {
+			return configtypes.AuthConfig{Username: "default"}, nil
+		},
+		fakeRegistryAuthProvider{authConfigs: map[string]dockerregistry.AuthConfig{"ghcr.io": registryCfg}},
+	)
+
+	cfg, err := provider(t.Context(), "ghcr.io", nil, nil)
+	require.NoError(t, err)
+	assert.Equal(t, "db-user", cfg.Username)
+	assert.Equal(t, "db-token", cfg.Password)
+	assert.Equal(t, "ghcr.io", cfg.ServerAddress)
+}
+
+func TestBuildkitAuthConfigProvider_FallsBackToDefaultProvider(t *testing.T) {
+	defaultCalled := false
+	defaultCfg := configtypes.AuthConfig{Username: "default-user", Password: "default-token", ServerAddress: "docker.io"}
+
+	t.Run("registry provider error", func(t *testing.T) {
+		defaultCalled = false
+		provider := buildkitAuthConfigProviderInternal(
+			func(_ context.Context, _ string, _ []string, _ authprovider.ExpireCachedAuthCheck) (configtypes.AuthConfig, error) {
+				defaultCalled = true
+				return defaultCfg, nil
+			},
+			fakeRegistryAuthProvider{err: errors.New("db unavailable")},
+		)
+
+		cfg, err := provider(t.Context(), "docker.io", nil, nil)
+		require.NoError(t, err)
+		assert.True(t, defaultCalled)
+		assert.Equal(t, defaultCfg, cfg)
+	})
+
+	t.Run("registry provider missing host", func(t *testing.T) {
+		defaultCalled = false
+		provider := buildkitAuthConfigProviderInternal(
+			func(_ context.Context, _ string, _ []string, _ authprovider.ExpireCachedAuthCheck) (configtypes.AuthConfig, error) {
+				defaultCalled = true
+				return defaultCfg, nil
+			},
+			fakeRegistryAuthProvider{authConfigs: map[string]dockerregistry.AuthConfig{"ghcr.io": {Username: "db-user"}}},
+		)
+
+		cfg, err := provider(t.Context(), "docker.io", nil, nil)
+		require.NoError(t, err)
+		assert.True(t, defaultCalled)
+		assert.Equal(t, defaultCfg, cfg)
+	})
+}
+
+func TestWrapBuildkitSolveErrorInternal_LeavesGenericErrorsUnchanged(t *testing.T) {
+	err := errors.New("failed to solve: Dockerfile parse error on line 3")
+
+	wrapped := wrapBuildkitSolveErrorInternal(err, "local")
+
+	require.ErrorIs(t, wrapped, err)
+	assert.Equal(t, err.Error(), wrapped.Error())
+}
+
+func TestWrapBuildkitSolveErrorInternal_WrapsDockerAndImageExporterErrors(t *testing.T) {
+	t.Run("docker exporter", func(t *testing.T) {
+		rawErr := errors.New(`failed to solve: exporter "docker" could not be found`)
+		wrapped := wrapBuildkitSolveErrorInternal(rawErr, "local")
+
+		require.ErrorIs(t, wrapped, rawErr)
+		assert.Contains(t, wrapped.Error(), "the Docker Engine embedded BuildKit requires the docker image-store exporter")
+	})
+
+	t.Run("image exporter", func(t *testing.T) {
+		rawErr := errors.New(`failed to solve: exporter "image" could not be found`)
+		wrapped := wrapBuildkitSolveErrorInternal(rawErr, "depot")
+
+		require.ErrorIs(t, wrapped, rawErr)
+		assert.Contains(t, wrapped.Error(), "depot and remote BuildKit providers require the image exporter")
+	})
+}
+
+type testSettingsProviderInternal struct{}
+
+func (testSettingsProviderInternal) BuildSettings() types.BuildSettings {
+	return types.BuildSettings{}
+}
+
+func TestNewServiceReturnsBuildEngine(t *testing.T) {
+	service := NewService(Config{SettingsProvider: testSettingsProviderInternal{}})
+
+	var _ types.Builder = service
+}

@@ -1,0 +1,18 @@
+# Source: getarcaneapp/arcane/backend/proto/buf.gen.yaml
+# Revision: 095cb778daba1034e2a39961199e712a75d4ba29
+# Retrieved: 2026-10-13
+# License: BSD-3-Clause
+# Deviations: None
+
+version: v2
+
+plugins:
+  - remote: buf.build/protocolbuffers/go
+    out: .
+    opt:
+      - paths=source_relative
+  - remote: buf.build/grpc/go
+    out: .
+    opt:
+      - paths=source_relative
+      - require_unimplemented_servers=false

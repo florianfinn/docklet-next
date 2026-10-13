@@ -1,0 +1,67 @@
+// Source: getarcaneapp/arcane/backend/cli/openapi.go
+// Revision: 095cb778daba1034e2a39961199e712a75d4ba29
+// Retrieved: 2026-10-13
+// License: BSD-3-Clause
+// Deviations: Local module namespace
+
+package cli
+
+import (
+	"os"
+
+	"github.com/spf13/cobra"
+	"go.getarcane.app/acfs/atomic"
+
+	"github.com/florianfinn/docklet-next/backend/api"
+)
+
+var openapiCmd = &cobra.Command{
+	Use:   "openapi",
+	Short: "Export the OpenAPI specification",
+	Long:  "Export the OpenAPI 3.1 specification in YAML or JSON format",
+	Run: func(cmd *cobra.Command, args []string) {
+		format, _ := cmd.Flags().GetString("format")
+		downgrade, _ := cmd.Flags().GetBool("downgrade")
+		outputFile, _ := cmd.Flags().GetString("output")
+
+		// Create Huma API for spec generation (no services needed)
+		humaAPI := api.SetupAPIForSpec()
+
+		// Generate output
+		var output []byte
+		var err error
+
+		if format == "json" {
+			output, err = humaAPI.OpenAPI().MarshalJSON()
+		} else {
+			if downgrade {
+				output, err = humaAPI.OpenAPI().DowngradeYAML()
+			} else {
+				output, err = humaAPI.OpenAPI().YAML()
+			}
+		}
+
+		if err != nil {
+			cmd.PrintErrf("Error generating OpenAPI spec: %v\n", err)
+			os.Exit(1)
+		}
+
+		// Write to file or stdout
+		if outputFile != "" {
+			if writeFileErr := atomic.WriteFile(outputFile, output, 0o600); writeFileErr != nil {
+				cmd.PrintErrf("Error writing file: %v\n", writeFileErr)
+				os.Exit(1)
+			}
+			cmd.PrintErrf("OpenAPI spec written to %s\n", outputFile)
+		} else {
+			cmd.Println(string(output))
+		}
+	},
+}
+
+func init() {
+	openapiCmd.Flags().StringP("format", "f", "yaml", "Output format: yaml or json")
+	openapiCmd.Flags().BoolP("downgrade", "d", false, "Downgrade to OpenAPI 3.0.3 for compatibility")
+	openapiCmd.Flags().StringP("output", "o", "", "Output file (default: stdout)")
+	rootCmd.AddCommand(openapiCmd)
+}

@@ -1,0 +1,34 @@
+-- Source: getarcaneapp/arcane/backend/resources/migrations/sqlite/013_stacks_to_projects.sql
+-- Revision: 095cb778daba1034e2a39961199e712a75d4ba29
+-- Retrieved: 2026-10-13
+-- License: BSD-3-Clause
+-- Deviations: None
+
+-- +goose Up
+-- Rename stacks -> projects
+ALTER TABLE stacks RENAME TO projects;
+
+-- Remove legacy cache table
+DROP TABLE IF EXISTS project_cache;
+
+-- +goose Down
+-- Recreate legacy cache table
+CREATE TABLE IF NOT EXISTS project_cache (
+  id TEXT PRIMARY KEY,
+  created_at DATETIME,
+  updated_at DATETIME,
+  deleted_at DATETIME,
+  stack_id TEXT NOT NULL,
+  name TEXT NOT NULL,
+  status TEXT NOT NULL,
+  service_count INTEGER NOT NULL DEFAULT 0,
+  running_count INTEGER NOT NULL DEFAULT 0,
+  auto_update INTEGER NOT NULL DEFAULT 0,
+  last_modified DATETIME,
+  compose_hash TEXT NOT NULL DEFAULT '',
+  cached_at DATETIME
+);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_project_cache_stack_id ON project_cache(stack_id);
+
+-- Rename projects -> stacks
+ALTER TABLE projects RENAME TO stacks;

@@ -1,0 +1,217 @@
+// Source: getarcaneapp/arcane/cli/pkg/jobs/cmd.go
+// Revision: 095cb778daba1034e2a39961199e712a75d4ba29
+// Retrieved: 2026-10-13
+// License: BSD-3-Clause
+// Deviations: Local module namespace
+
+package jobs
+
+import (
+	"crypto/rand"
+	"errors"
+	"fmt"
+	"net/http"
+	"strconv"
+	"time"
+
+	"github.com/florianfinn/docklet-next/types/jobschedule"
+	"github.com/spf13/cobra"
+
+	"github.com/florianfinn/docklet-next/cli/internal/client"
+	"github.com/florianfinn/docklet-next/cli/internal/cmdutil"
+	"github.com/florianfinn/docklet-next/cli/internal/output"
+	"github.com/florianfinn/docklet-next/cli/internal/types"
+)
+
+var (
+	jsonOutput bool
+	requestID  string
+)
+
+// JobsCmd is the parent command for background jobs and their schedules.
+var JobsCmd = &cobra.Command{
+	Use:     "jobs",
+	Aliases: []string{"job"},
+	Short:   "Manage background jobs",
+}
+
+var schedulesCmd = &cobra.Command{
+	Use:   "schedules",
+	Short: "Manage job schedule intervals",
+}
+
+var getCmd = &cobra.Command{
+	Use:          "get",
+	Short:        "Get configured job schedule intervals",
+	SilenceUsage: true,
+	RunE: func(cmd *cobra.Command, args []string) error {
+		c, err := client.NewFromConfig()
+		if err != nil {
+			return err
+		}
+
+		cfg, err := c.DoJSON[jobschedule.Config](cmd.Context(), http.MethodGet, types.JobSchedules(c.EnvID()), nil)
+		if err != nil {
+			return fmt.Errorf("failed to get job schedules: %w", err)
+		}
+
+		if jsonOutput {
+			return cmdutil.PrintJSON(cfg)
+		}
+
+		output.Header("Job Schedules")
+		output.KeyValue("Environment health interval", cfg.EnvironmentHealthInterval)
+		output.KeyValue("Event cleanup interval", cfg.EventCleanupInterval)
+		output.KeyValue("Expired sessions cleanup interval", cfg.ExpiredSessionsCleanupInterval)
+		return nil
+	},
+}
+
+var (
+	environmentHealthInterval      string
+	eventCleanupInterval           string
+	expiredSessionsCleanupInterval string
+)
+
+var updateCmd = &cobra.Command{
+	Use:          "update",
+	Short:        "Update job schedule intervals",
+	SilenceUsage: true,
+	RunE: func(cmd *cobra.Command, args []string) error {
+		c, err := client.NewFromConfig()
+		if err != nil {
+			return err
+		}
+
+		var req jobschedule.Update
+		if cmd.Flags().Changed("environment-health-interval") {
+			req.EnvironmentHealthInterval = &environmentHealthInterval
+		}
+		if cmd.Flags().Changed("event-cleanup-interval") {
+			req.EventCleanupInterval = &eventCleanupInterval
+		}
+		if cmd.Flags().Changed("expired-sessions-cleanup-interval") {
+			req.ExpiredSessionsCleanupInterval = &expiredSessionsCleanupInterval
+		}
+
+		if req.EnvironmentHealthInterval == nil && req.EventCleanupInterval == nil && req.ExpiredSessionsCleanupInterval == nil {
+			return errors.New("no updates provided (set at least one interval flag)")
+		}
+
+		result, err := c.PutJSON[jobschedule.Config](cmd.Context(), types.JobSchedules(c.EnvID()), req)
+		if err != nil {
+			return fmt.Errorf("failed to update job schedules: %w", err)
+		}
+
+		if jsonOutput {
+			return cmdutil.PrintJSON(result.Data)
+		}
+
+		output.Success("Job schedules updated")
+		output.KeyValue("Environment health interval", result.Data.EnvironmentHealthInterval)
+		output.KeyValue("Event cleanup interval", result.Data.EventCleanupInterval)
+		output.KeyValue("Expired sessions cleanup interval", result.Data.ExpiredSessionsCleanupInterval)
+		return nil
+	},
+}
+
+var listCmd = &cobra.Command{
+	Use:          "list",
+	Aliases:      []string{"ls"},
+	Short:        "List background jobs",
+	SilenceUsage: true,
+	RunE: func(cmd *cobra.Command, args []string) error {
+		c, err := cmdutil.ClientFromCommand(cmd)
+		if err != nil {
+			return err
+		}
+
+		result, err := c.DoJSON[jobschedule.JobListResponse](cmd.Context(), http.MethodGet, types.Jobs(c.EnvID()), nil)
+		if err != nil {
+			return fmt.Errorf("failed to list jobs: %w", err)
+		}
+
+		if jsonOutput {
+			return cmdutil.PrintJSON(result)
+		}
+
+		headers := []string{"ID", "NAME", "CATEGORY", "SCHEDULE", "NEXT RUN", "ENABLED"}
+		rows := make([][]string, len(result.Jobs))
+		for i, job := range result.Jobs {
+			nextRun := "-"
+			if job.NextRun != nil {
+				nextRun = job.NextRun.Format(time.RFC3339)
+			}
+			rows[i] = []string{
+				job.ID,
+				job.Name,
+				job.Category,
+				job.Schedule,
+				nextRun,
+				strconv.FormatBool(job.Enabled),
+			}
+		}
+
+		if tableErr := output.Table(headers, rows); tableErr != nil {
+			return tableErr
+		}
+		_, _ = fmt.Fprintf(output.Stdout(), "\nTotal: %d jobs\n", len(result.Jobs))
+		return nil
+	},
+}
+
+var runCmd = &cobra.Command{
+	Use:          "run <job-id>",
+	Short:        "Queue a background job now",
+	Args:         cobra.ExactArgs(1),
+	SilenceUsage: true,
+	RunE: func(cmd *cobra.Command, args []string) error {
+		c, err := cmdutil.ClientFromCommand(cmd)
+		if err != nil {
+			return err
+		}
+
+		id := requestID
+		if id == "" {
+			var value [16]byte
+			_, _ = rand.Read(value[:])
+			value[6] = (value[6] & 0x0f) | 0x40
+			value[8] = (value[8] & 0x3f) | 0x80
+			id = fmt.Sprintf("%x-%x-%x-%x-%x", value[0:4], value[4:6], value[6:8], value[8:10], value[10:16])
+		}
+		result, err := c.DoJSON[jobschedule.JobRunResponse](cmd.Context(), http.MethodPost, types.JobRun(c.EnvID(), args[0]), nil, http.Header{"Idempotency-Key": []string{id}})
+		if err != nil {
+			return fmt.Errorf("failed to queue job (reuse --request-id %s if delivery is uncertain): %w", id, err)
+		}
+
+		if jsonOutput {
+			return cmdutil.PrintJSON(result)
+		}
+
+		if !result.Success {
+			return fmt.Errorf("job %s failed: %s", args[0], result.Message)
+		}
+		output.Success("%s", result.Message)
+		output.KeyValue("Run ID", result.RunID)
+		output.KeyValue("Status", string(result.Status))
+		return nil
+	},
+}
+
+func init() {
+	JobsCmd.AddCommand(schedulesCmd)
+	schedulesCmd.AddCommand(getCmd)
+	schedulesCmd.AddCommand(updateCmd)
+	JobsCmd.AddCommand(listCmd)
+	JobsCmd.AddCommand(runCmd)
+
+	getCmd.Flags().BoolVar(&jsonOutput, "json", false, "Output in JSON format")
+	updateCmd.Flags().BoolVar(&jsonOutput, "json", false, "Output in JSON format")
+	listCmd.Flags().BoolVar(&jsonOutput, "json", false, "Output in JSON format")
+	runCmd.Flags().StringVar(&requestID, "request-id", "", "Stable request ID to reuse when retrying an uncertain submission")
+	runCmd.Flags().BoolVar(&jsonOutput, "json", false, "Output in JSON format")
+
+	updateCmd.Flags().StringVar(&environmentHealthInterval, "environment-health-interval", "", "Environment health job interval (cron expression)")
+	updateCmd.Flags().StringVar(&eventCleanupInterval, "event-cleanup-interval", "", "Event cleanup job interval (cron expression)")
+	updateCmd.Flags().StringVar(&expiredSessionsCleanupInterval, "expired-sessions-cleanup-interval", "", "Expired sessions cleanup job interval (cron expression)")
+}

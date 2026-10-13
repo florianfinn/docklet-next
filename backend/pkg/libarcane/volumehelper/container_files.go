@@ -1,0 +1,73 @@
+// Source: getarcaneapp/arcane/backend/pkg/libarcane/volumehelper/container_files.go
+// Revision: 095cb778daba1034e2a39961199e712a75d4ba29
+// Retrieved: 2026-10-13
+// License: BSD-3-Clause
+// Deviations: None
+
+package volumehelper
+
+import (
+	"archive/tar"
+	"context"
+	"errors"
+	"fmt"
+	"io"
+
+	"github.com/moby/moby/client"
+)
+
+type cleanupReadCloserInternal struct {
+	io.Reader
+	io.Closer
+
+	cleanup func()
+}
+
+func (c *cleanupReadCloserInternal) Close() error {
+	err := c.Closer.Close()
+	c.cleanup()
+	return err
+}
+
+func DownloadFileFromContainer(
+	ctx context.Context,
+	dockerClient *client.Client,
+	containerID string,
+	containerPath string,
+	cleanup func(),
+) (io.ReadCloser, int64, error) {
+	copyResult, err := dockerClient.CopyFromContainer(ctx, containerID, client.CopyFromContainerOptions{
+		SourcePath: containerPath,
+	})
+	if err != nil {
+		cleanup()
+		return nil, 0, fmt.Errorf("failed to download: %w", err)
+	}
+	reader := copyResult.Content
+
+	tr := tar.NewReader(reader)
+	hdr, err := tr.Next()
+	if err != nil {
+		_ = reader.Close()
+		cleanup()
+		return nil, 0, fmt.Errorf("failed to read tar stream: %w", err)
+	}
+	if validateDownloadHeaderErr := validateDownloadHeaderInternal(hdr); validateDownloadHeaderErr != nil {
+		_ = reader.Close()
+		cleanup()
+		return nil, 0, validateDownloadHeaderErr
+	}
+
+	return &cleanupReadCloserInternal{
+		Reader:  tr,
+		Closer:  reader,
+		cleanup: cleanup,
+	}, hdr.Size, nil
+}
+
+func validateDownloadHeaderInternal(header *tar.Header) error {
+	if header.FileInfo().IsDir() {
+		return errors.New("path is a directory")
+	}
+	return nil
+}

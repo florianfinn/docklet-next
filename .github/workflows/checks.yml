@@ -2,7 +2,7 @@
 # Revision: a4484c910bb5d6a8f8df97b4f23f4ee5e6359081
 # Retrieved: 2026-10-13
 # License: Apache-2.0
-# Deviations: Dependency-free M0 chain, structural guards and baseline comparison; no caching/install.
+# Deviations: Repository guards and Go core checks, pinned toolchains, module caching and Docker isolation.
 name: Repository checks
 on:
   pull_request:
@@ -32,6 +32,23 @@ jobs:
       - run: node scripts/check-publication.mjs --history
       - if: steps.scope.outputs.scope == 'text'
         run: node scripts/change-scope.mjs --run-text-tests
+      - if: steps.scope.outputs.scope != 'text'
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: backend/go.mod
+          cache-dependency-path: |
+            backend/go.sum
+            cli/go.sum
+            types/go.sum
+            third_party/arcane/**/go.sum
+      - if: steps.scope.outputs.scope != 'text'
+        name: Isolate checks from Docker daemons
+        run: |
+          sudo systemctl stop docker.service docker.socket containerd.service
+          sudo rm -f /var/run/docker.sock /run/docker.sock
+          unset DOCKER_HOST
+          test ! -S /var/run/docker.sock
+          test ! -S /run/docker.sock
       - if: steps.scope.outputs.scope != 'text'
         run: node scripts/run-checks.mjs lint
       - if: steps.scope.outputs.scope != 'text'

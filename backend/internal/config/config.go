@@ -1,0 +1,483 @@
+// Source: getarcaneapp/arcane/backend/internal/config/config.go
+// Revision: 095cb778daba1034e2a39961199e712a75d4ba29
+// Retrieved: 2026-10-13
+// License: BSD-3-Clause
+// Deviations: Local module namespace
+
+package config
+
+import (
+	"cmp"
+	"context"
+	"fmt"
+	"log/slog"
+	"net"
+	"os"
+	"reflect"
+	"slices"
+	"strconv"
+	"strings"
+	"time"
+
+	kit "go.getarcane.app/kit/pkg"
+
+	"github.com/florianfinn/docklet-next/backend/pkg/utils"
+	"github.com/florianfinn/docklet-next/backend/pkg/utils/httpx"
+)
+
+type AppEnvironment string
+
+const (
+	AppEnvironmentProduction  AppEnvironment = "production"
+	AppEnvironmentDevelopment AppEnvironment = "development"
+	AppEnvironmentTest        AppEnvironment = "test"
+)
+
+// Config holds all application configuration.
+// Fields tagged with `env` will be loaded from the corresponding environment variable.
+// Fields with `options:"file"` support Docker secrets via the _FILE suffix.
+// Available options: file, toLower, trimTrailingSlash, deprecated
+type Config struct {
+	BuildablesConfig
+
+	AppUrl                string         `env:"APP_URL" default:"http://localhost:3552"`
+	DatabaseURL           string         `env:"DATABASE_URL" default:"file:data/arcane.db?_pragma=journal_mode(WAL)&_pragma=busy_timeout(2500)&_txlock=immediate" options:"file"`
+	AllowDowngrade        bool           `env:"ALLOW_DOWNGRADE" default:"false"`
+	AllowCLIPasswordReset bool           `env:"ALLOW_CLI_PASSWORD_RESET" default:"false"`
+	AllowCLIMFAReset      bool           `env:"ALLOW_CLI_MFA_RESET" default:"false"`
+	ActorPort             string         `env:"ACTOR_PORT" default:"3551"`
+	Port                  string         `env:"PORT" default:"3552"`
+	Listen                string         `env:"LISTEN" default:""`
+	TLSEnabled            bool           `env:"TLS_ENABLED" default:"false"`
+	TLSCertFile           string         `env:"TLS_CERT_FILE" default:""`
+	TLSKeyFile            string         `env:"TLS_KEY_FILE" default:""`
+	Environment           AppEnvironment `env:"ENVIRONMENT" default:"production"`
+	JWTSecret             string         `env:"JWT_SECRET" options:"file,deprecated"`
+	JWTRefreshExpiry      time.Duration  `env:"JWT_REFRESH_EXPIRY" default:"168h"`
+	EncryptionKey         string         `env:"ENCRYPTION_KEY" default:"arcane-dev-key-32-characters!!!" options:"file"`
+	AdminStaticAPIKey     string         `env:"ADMIN_STATIC_API_KEY" default:"" options:"file"`
+	ApnsRelayUrl          string         `env:"APNS_RELAY_URL" default:"https://apns.getarcane.app" options:"trimTrailingSlash"`
+	ApnsKeyAlgorithm      string         `env:"APNS_KEY_ALGORITHM" default:"ed25519" options:"toLower"`
+
+	OidcEnabled                bool   `env:"OIDC_ENABLED" default:"false"`
+	OidcClientID               string `env:"OIDC_CLIENT_ID" default:"" options:"file"`
+	OidcClientSecret           string `env:"OIDC_CLIENT_SECRET" default:"" options:"file"`
+	OidcIssuerURL              string `env:"OIDC_ISSUER_URL" default:""`
+	OidcScopes                 string `env:"OIDC_SCOPES" default:"openid email profile"`
+	OidcGroupsClaim            string `env:"OIDC_GROUPS_CLAIM" default:"groups"`
+	OidcSkipTlsVerify          bool   `env:"OIDC_SKIP_TLS_VERIFY" default:"false"`
+	OidcAutoRedirectToProvider bool   `env:"OIDC_AUTO_REDIRECT_TO_PROVIDER" default:"false"`
+	OidcProviderName           string `env:"OIDC_PROVIDER_NAME" default:""`
+	OidcProviderLogoUrl        string `env:"OIDC_PROVIDER_LOGO_URL" default:""`
+	OidcMobileRedirectUris     string `env:"OIDC_MOBILE_REDIRECT_URIS" default:"arcane-mobile://oidc-callback"`
+	OidcRoleMappings           string `env:"OIDC_ROLE_MAPPINGS" default:"" options:"file"`
+
+	PUID                          string `env:"PUID" default:""`
+	PGID                          string `env:"PGID" default:""`
+	DockerHost                    string `env:"DOCKER_HOST" default:"unix:///var/run/docker.sock"`
+	DockerConfig                  string `env:"DOCKER_CONFIG" default:""`
+	ProjectsDirectory             string `env:"PROJECTS_DIRECTORY" default:"/app/data/projects"`
+	TemplatesDirectory            string `env:"TEMPLATES_DIRECTORY" default:"/app/data/templates"`
+	ProjectScanMaxDepth           int    `env:"PROJECT_SCAN_MAX_DEPTH" default:"3"`
+	ProjectWorkspaceMaxDepth      int    `env:"PROJECT_WORKSPACE_MAX_DEPTH" default:"20"`
+	ProjectWorkspaceMaxEntries    int    `env:"PROJECT_WORKSPACE_MAX_ENTRIES" default:"2000"`
+	ProjectWorkspaceMaxFileSizeMB int    `env:"PROJECT_WORKSPACE_MAX_FILE_SIZE_MB" default:"10"`
+	ProjectScanSkipDirs           string `env:"PROJECT_SCAN_SKIP_DIRS" default:".git,node_modules,vendor,.venv,venv,__pycache__,.cache,dist,build,target,.next,.nuxt,.svelte-kit"`
+	VolumeWorkspaceMaxDepth       int    `env:"VOLUME_WORKSPACE_MAX_DEPTH" default:"50"`
+	VolumeWorkspaceMaxEntries     int    `env:"VOLUME_WORKSPACE_MAX_ENTRIES" default:"10000"`
+	VolumeWorkspaceMaxFileSizeMB  int    `env:"VOLUME_WORKSPACE_MAX_FILE_SIZE_MB" default:"10"`
+	LogJson                       bool   `env:"LOG_JSON" default:"false"`
+	LogLevel                      string `env:"LOG_LEVEL" default:"info" options:"toLower"`
+	AgentMode                     bool   `env:"AGENT_MODE" default:"false"`
+	AgentToken                    string `env:"AGENT_TOKEN" default:"" options:"file"`
+	ManagerApiUrl                 string `env:"MANAGER_API_URL" default:""`
+	UpdateCheckDisabled           bool   `env:"UPDATE_CHECK_DISABLED" default:"false"`
+	UIConfigurationDisabled       bool   `env:"UI_CONFIGURATION_DISABLED" default:"false"`
+	AnalyticsDisabled             bool   `env:"ANALYTICS_DISABLED" default:"false"`
+	GPUMonitoringEnabled          bool   `env:"GPU_MONITORING_ENABLED" default:"false"`
+	GPUType                       string `env:"GPU_TYPE" default:"auto"`
+	EdgeAgent                     bool   `env:"EDGE_AGENT" default:"false"`
+	EdgeTransport                 string `env:"EDGE_TRANSPORT" default:"auto" options:"toLower"`
+	EdgeReconnectInterval         int    `env:"EDGE_RECONNECT_INTERVAL" default:"5"` // seconds
+	EdgeMTLSMode                  string `env:"EDGE_MTLS_MODE" default:"disabled" options:"toLower"`
+	EdgeMTLSCAFile                string `env:"EDGE_MTLS_CA_FILE" default:""`
+	EdgeMTLSCertFile              string `env:"EDGE_MTLS_CERT_FILE" default:""`
+	EdgeMTLSKeyFile               string `env:"EDGE_MTLS_KEY_FILE" default:""`
+	EdgeMTLSServerName            string `env:"EDGE_MTLS_SERVER_NAME" default:""`
+	EdgeMTLSAssetsDir             string `env:"EDGE_MTLS_ASSETS_DIR" default:""`
+
+	TrustedProxies    string      `env:"TRUSTED_PROXIES" default:""`
+	FilePerm          os.FileMode `env:"FILE_PERM" default:"0644"`
+	DirPerm           os.FileMode `env:"DIR_PERM" default:"0755"`
+	GitWorkDir        string      `env:"GIT_WORK_DIR" default:"data/git"`
+	HTTPClientTimeout int         `env:"HTTP_CLIENT_TIMEOUT" default:"0"`
+	BackupVolumeName  string      `env:"ARCANE_BACKUP_VOLUME_NAME" default:"arcane-backups"`
+	HTTPProxy         string      `env:"HTTP_PROXY" default:""`
+	HTTPSProxy        string      `env:"HTTPS_PROXY" default:""`
+	NoProxy           string      `env:"NO_PROXY" default:""`
+	Timezone          string      `env:"TZ" default:"Local"`
+}
+
+func Load() *Config {
+	cfg := &Config{}
+	loadFromEnv(cfg)
+	applyOptions(cfg)
+	applyAgentModeDefaults(cfg)
+	applyProxyDefaults(cfg)
+	applyWorkspaceDefaults(cfg)
+
+	// Set global file permissions
+	utils.FilePerm = cfg.FilePerm
+	utils.DirPerm = cfg.DirPerm
+
+	return cfg
+}
+
+type ProjectWorkspaceConfig struct {
+	ProjectScanMaxDepth           int
+	ProjectWorkspaceMaxDepth      int
+	ProjectWorkspaceMaxEntries    int
+	ProjectWorkspaceMaxFileSizeMB int
+	ProjectScanSkipDirs           string
+}
+
+func LoadProjectWorkspaceConfig() ProjectWorkspaceConfig {
+	cfg := &Config{}
+	loadFromEnv(cfg)
+	applyWorkspaceDefaults(cfg)
+
+	return ProjectWorkspaceConfig{
+		ProjectScanMaxDepth:           cfg.ProjectScanMaxDepth,
+		ProjectWorkspaceMaxDepth:      cfg.ProjectWorkspaceMaxDepth,
+		ProjectWorkspaceMaxEntries:    cfg.ProjectWorkspaceMaxEntries,
+		ProjectWorkspaceMaxFileSizeMB: cfg.ProjectWorkspaceMaxFileSizeMB,
+		ProjectScanSkipDirs:           cfg.ProjectScanSkipDirs,
+	}
+}
+
+func applyWorkspaceDefaults(cfg *Config) {
+	if cfg.ProjectWorkspaceMaxDepth <= 0 {
+		cfg.ProjectWorkspaceMaxDepth = 20
+	}
+	if cfg.ProjectWorkspaceMaxEntries <= 0 {
+		cfg.ProjectWorkspaceMaxEntries = 2000
+	}
+	if cfg.ProjectWorkspaceMaxFileSizeMB <= 0 {
+		cfg.ProjectWorkspaceMaxFileSizeMB = 10
+	}
+	if cfg.VolumeWorkspaceMaxDepth <= 0 {
+		cfg.VolumeWorkspaceMaxDepth = 50
+	}
+	if cfg.VolumeWorkspaceMaxEntries <= 0 {
+		cfg.VolumeWorkspaceMaxEntries = 10000
+	}
+	if cfg.VolumeWorkspaceMaxFileSizeMB <= 0 {
+		cfg.VolumeWorkspaceMaxFileSizeMB = 10
+	}
+}
+
+func applyAgentModeDefaults(cfg *Config) {
+	if cfg.EdgeAgent {
+		cfg.AgentMode = true
+	}
+}
+
+// applyProxyDefaults auto-trusts loopback proxies when LISTEN binds to a
+// loopback address. This is the canonical convenience-script setup
+// (LISTEN=127.0.0.1 + local reverse proxy like Caddy/Nginx/Traefik); auto-
+// detecting it lets X-Forwarded-* headers work without operators having to
+// discover TRUSTED_PROXIES.
+func applyProxyDefaults(cfg *Config) {
+	if cfg.TrustedProxies != "" {
+		return
+	}
+	host := strings.Trim(strings.TrimSpace(cfg.Listen), "[]")
+	if host == "" {
+		return
+	}
+	// Require an explicit loopback IP literal. Hostnames like "localhost" are
+	// intentionally not auto-trusted: /etc/hosts can map them to non-loopback
+	// addresses, in which case auto-trusting would silently trust external
+	// X-Forwarded-* headers. Operators using a hostname must set
+	// TRUSTED_PROXIES explicitly.
+	ip := net.ParseIP(host)
+	if ip == nil || !ip.IsLoopback() {
+		return
+	}
+	cfg.TrustedProxies = "127.0.0.0/8,::1/128"
+	slog.InfoContext(context.Background(), "LISTEN bound to loopback; trusting loopback proxies for X-Forwarded headers", //nolint:forbidigo // Configuration loads before any request context exists.
+		"listen", cfg.Listen, "trustedProxies", cfg.TrustedProxies)
+}
+
+// loadFromEnv uses reflection to load configuration from environment variables.
+func loadFromEnv(cfg *Config) {
+	v := reflect.ValueOf(cfg).Elem()
+	visitConfigFields(v, func(field reflect.Value, fieldType reflect.StructField) {
+		envTag := fieldType.Tag.Get("env")
+		if envTag == "" {
+			return
+		}
+
+		envValue := os.Getenv(envTag)
+		var fromFile bool
+		if hasOptionInternal(fieldType, "file") {
+			envValue, _, fromFile = utils.LookupEnvOrFile(envTag)
+		}
+		if !fromFile {
+			envValue = kit.TrimQuotes(envValue)
+			if envValue == "" {
+				envValue = fieldType.Tag.Get("default")
+			}
+		}
+
+		setFieldValueInternal(field, fieldType, envValue)
+	})
+}
+
+// hasOptionInternal reports whether the field's `options` tag lists option.
+func hasOptionInternal(fieldType reflect.StructField, option string) bool {
+	return slices.Contains(strings.Split(fieldType.Tag.Get("options"), ","), option)
+}
+
+// DeprecatedEnvVarsSet returns the env names of fields tagged deprecated that
+// still carry a value, so bootstrap can warn once logging is configured.
+func (c *Config) DeprecatedEnvVarsSet() []string {
+	var envNames []string
+	v := reflect.ValueOf(c).Elem()
+	visitConfigFields(v, func(field reflect.Value, fieldType reflect.StructField) {
+		if !hasOptionInternal(fieldType, "deprecated") {
+			return
+		}
+		if field.Kind() == reflect.String && field.String() == "" {
+			return
+		}
+		envNames = append(envNames, fieldType.Tag.Get("env"))
+	})
+	return envNames
+}
+
+// applyOptions processes special options for Config fields after initial load.
+func applyOptions(cfg *Config) {
+	v := reflect.ValueOf(cfg).Elem()
+	visitConfigFields(v, func(field reflect.Value, fieldType reflect.StructField) {
+		optionsTag := fieldType.Tag.Get("options")
+		if optionsTag == "" {
+			return
+		}
+
+		options := strings.SplitSeq(optionsTag, ",")
+		for option := range options {
+			switch strings.TrimSpace(option) {
+			case "toLower":
+				if field.Kind() == reflect.String {
+					field.SetString(strings.ToLower(field.String()))
+				}
+			case "trimTrailingSlash":
+				if field.Kind() == reflect.String {
+					field.SetString(strings.TrimRight(field.String(), "/"))
+				}
+			}
+		}
+	})
+}
+
+func visitConfigFields(v reflect.Value, fn func(reflect.Value, reflect.StructField)) {
+	if v.Kind() == reflect.Pointer {
+		if v.IsNil() {
+			return
+		}
+		v = v.Elem()
+	}
+	if v.Kind() != reflect.Struct {
+		return
+	}
+
+	t := v.Type()
+	for i := range v.NumField() {
+		field := v.Field(i)
+		fieldType := t.Field(i)
+
+		if fieldType.Anonymous {
+			if field.Kind() == reflect.Struct {
+				visitConfigFields(field, fn)
+				continue
+			}
+			if field.Kind() == reflect.Pointer && field.Type().Elem().Kind() == reflect.Struct {
+				if field.IsNil() {
+					if field.CanSet() {
+						field.Set(reflect.New(field.Type().Elem()))
+					} else {
+						continue
+					}
+				}
+				visitConfigFields(field.Elem(), fn)
+				continue
+			}
+		}
+
+		fn(field, fieldType)
+	}
+}
+
+// setFieldValueInternal sets a reflect.Value from a string based on the field's type.
+func setFieldValueInternal(field reflect.Value, fieldType reflect.StructField, value string) {
+	ctx := context.Background() //nolint:forbidigo // Configuration loads before any request context exists.
+	if !field.CanSet() {
+		return
+	}
+
+	if field.Kind() == reflect.String {
+		field.SetString(value)
+		return
+	}
+
+	if field.Kind() == reflect.Bool {
+		if b, err := strconv.ParseBool(value); err == nil {
+			field.SetBool(b)
+		}
+		return
+	}
+
+	if field.Kind() == reflect.Uint32 {
+		// Handle os.FileMode (which is uint32)
+		if i, err := strconv.ParseUint(value, 8, 32); err == nil {
+			field.SetUint(i)
+		}
+		return
+	}
+
+	if field.Kind() == reflect.Int {
+		if i, err := strconv.Atoi(value); err == nil {
+			field.SetInt(int64(i))
+		}
+		return
+	}
+
+	if field.Type() == reflect.TypeFor[time.Duration]() {
+		applyDurationDefault := func(reason string) {
+			envTag := fieldType.Tag.Get("env")
+			defaultValue := fieldType.Tag.Get("default")
+
+			if fallback, fallbackErr := time.ParseDuration(defaultValue); fallbackErr == nil {
+				slog.WarnContext(ctx, "Invalid duration for config field, using tagged default",
+					"reason", reason,
+					"field", envTag,
+					"value", value,
+					"default", defaultValue)
+				field.SetInt(int64(fallback))
+			} else {
+				slog.WarnContext(ctx, "Invalid duration for config field and invalid tagged default",
+					"reason", reason,
+					"field", envTag,
+					"value", value,
+					"default", defaultValue)
+			}
+		}
+
+		if d, err := time.ParseDuration(value); err == nil {
+			if d > 0 {
+				field.SetInt(int64(d))
+			} else {
+				applyDurationDefault("Non-positive duration for config field")
+			}
+		} else {
+			applyDurationDefault("Invalid duration for config field")
+		}
+		return
+	}
+
+	// Handle custom types based on underlying kind
+	if field.Type().ConvertibleTo(reflect.TypeFor[string]()) {
+		// String-based types like AppEnvironment
+		field.Set(reflect.ValueOf(value).Convert(field.Type()))
+	} else if field.Type() == reflect.TypeFor[os.FileMode]() {
+		// os.FileMode
+		if i, err := strconv.ParseUint(value, 8, 32); err == nil {
+			field.Set(reflect.ValueOf(os.FileMode(i)))
+		}
+	}
+}
+
+func (a AppEnvironment) IsProdEnvironment() bool {
+	return a == AppEnvironmentProduction
+}
+
+func (a AppEnvironment) IsTestEnvironment() bool {
+	return a == AppEnvironmentTest
+}
+
+// ListenAddr returns the effective address for the HTTP server to bind to.
+// It uses LISTEN as the host (if set) and PORT for the port.
+func (c *Config) ListenAddr() string {
+	host := strings.TrimSpace(c.Listen)
+	port := cmp.Or(c.Port, "3552")
+	if host == "" {
+		return ":" + port
+	}
+	return net.JoinHostPort(host, port)
+}
+
+// GetLocation returns the timezone location for cron scheduling.
+// It parses the Timezone config (TZ env var) into a *time.Location.
+// Returns the system's local timezone if Timezone is "Local".
+// Defaults to UTC if not set or if the timezone cannot be loaded.
+func (c *Config) GetLocation() *time.Location {
+	tz := strings.TrimSpace(c.Timezone)
+	if tz == "" {
+		return time.UTC
+	}
+
+	loc, err := time.LoadLocation(tz)
+	if err != nil {
+		slog.WarnContext(context.Background(), "Failed to load timezone, falling back to UTC", "timezone", tz, "error", err) //nolint:forbidigo // Timezone resolution is a process-wide setting lookup.
+		return time.UTC
+	}
+	return loc
+}
+
+// GetAppURL returns the effective application URL.
+// If in agent mode and APP_URL is not explicitly set, it returns the manager's URL.
+func (c *Config) GetAppURL() string {
+	// If APP_URL is explicitly set to something other than the default, use it
+	if os.Getenv("APP_URL") != "" {
+		return c.AppUrl
+	}
+
+	// If in agent mode and we have a manager URL, use the manager URL
+	if c.AgentMode {
+		if managerBase := httpx.ManagerBaseURL(c.ManagerApiUrl); managerBase != "" {
+			return managerBase
+		}
+	}
+
+	return c.AppUrl
+}
+
+// MaskSensitive returns a copy of the config with sensitive fields masked.
+// Useful for logging configuration without exposing secrets.
+func (c *Config) MaskSensitive() map[string]any {
+	result := make(map[string]any)
+	v := reflect.ValueOf(c).Elem()
+	t := v.Type()
+
+	for i := range v.NumField() {
+		field := v.Field(i)
+		fieldType := t.Field(i)
+
+		envTag := cmp.Or(fieldType.Tag.Get("env"), fieldType.Name)
+
+		// Fields with "file" option are considered sensitive
+		optionsTag := fieldType.Tag.Get("options")
+		isSensitive := strings.Contains(optionsTag, "file")
+
+		if isSensitive {
+			// Mask sensitive values
+			strVal := fmt.Sprintf("%v", field.Interface())
+			result[envTag] = kit.Ternary(strVal != "", "****", "(empty)")
+		} else {
+			result[envTag] = field.Interface()
+		}
+	}
+
+	return result
+}

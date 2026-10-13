@@ -1,0 +1,23 @@
+# Source: getarcaneapp/arcane/backend/proto/buf.yaml
+# Revision: 095cb778daba1034e2a39961199e712a75d4ba29
+# Retrieved: 2026-10-13
+# License: BSD-3-Clause
+# Deviations: None
+
+version: v2
+
+modules:
+  - path: .
+
+lint:
+  use:
+    - STANDARD
+  # Connect is a bidirectional transport envelope, so directional names are
+  # clearer than unary-style ConnectRequest and ConnectResponse names.
+  except:
+    - RPC_REQUEST_STANDARD_NAME
+    - RPC_RESPONSE_STANDARD_NAME
+
+breaking:
+  use:
+    - FILE

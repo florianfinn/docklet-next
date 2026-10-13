@@ -1,0 +1,37 @@
+// Source: getarcaneapp/arcane/backend/internal/registry/model.go
+// Revision: 095cb778daba1034e2a39961199e712a75d4ba29
+// Retrieved: 2026-10-13
+// License: BSD-3-Clause
+// Deviations: Local module namespace
+
+package registry
+
+import (
+	"time"
+
+	"github.com/florianfinn/docklet-next/backend/internal/database"
+)
+
+type ContainerRegistry struct {
+	database.BaseModel
+
+	URL                 string               `json:"url" sortable:"true"`
+	Username            string               `json:"username" sortable:"true"`
+	Token               string               `json:"token"`
+	Description         *string              `json:"description,omitempty" sortable:"true"`
+	Insecure            bool                 `json:"insecure" sortable:"true"`
+	Enabled             bool                 `json:"enabled" sortable:"true"`
+	RegistryType        string               `json:"registryType" sortable:"true"`
+	RepositoryNames     database.StringSlice `json:"repositoryNames" gorm:"column:repository_names;type:text;not null;default:'[]'"`
+	AWSAccessKeyID      string               `json:"awsAccessKeyId"`
+	AWSSecretAccessKey  string               `json:"awsSecretAccessKey"`
+	AWSRegion           string               `json:"awsRegion"`
+	ECRToken            string               `json:"ecrToken"`
+	ECRTokenGeneratedAt *time.Time           `json:"ecrTokenGeneratedAt"`
+	CreatedAt           time.Time            `json:"createdAt" sortable:"true"`
+	UpdatedAt           time.Time            `json:"updatedAt" sortable:"true"`
+}
+
+func (ContainerRegistry) TableName() string {
+	return "container_registries"
+}

@@ -1,0 +1,104 @@
+// Source: getarcaneapp/kit/builds/api/build_provider.go
+// Revision: 83d91f19f60b2967cc85c46161c98203e80e4989
+// Retrieved: 2026-10-13
+// License: BSD-3-Clause
+// Deviations: None
+
+package api
+
+import (
+	"context"
+	"errors"
+	"fmt"
+	"runtime"
+	"strings"
+	"time"
+
+	"github.com/containerd/platforms"
+	depotbuild "github.com/depot/depot-go/build"
+	depotmachine "github.com/depot/depot-go/machine"
+	cliv1 "github.com/depot/depot-go/proto/depot/cli/v1"
+	"github.com/moby/buildkit/client"
+	kit "go.getarcane.app/kit/pkg"
+
+	"go.getarcane.app/builds/types"
+)
+
+type buildSession struct {
+	Client *client.Client
+	Close  func(buildErr error) error
+}
+
+type buildProvider interface {
+	Name() string
+	NewSession(ctx context.Context, req types.BuildRequest) (*buildSession, error)
+}
+
+type depotBuildKitProvider struct {
+	settings types.SettingsProvider
+}
+
+func (p *depotBuildKitProvider) Name() string {
+	return "depot"
+}
+
+func (p *depotBuildKitProvider) NewSession(ctx context.Context, req types.BuildRequest) (*buildSession, error) {
+	if p.settings == nil {
+		return nil, &types.BuildSettingsProviderUnavailableError{}
+	}
+
+	settings := p.settings.BuildSettings()
+	projectID := strings.TrimSpace(settings.DepotProjectID)
+	token := strings.TrimSpace(settings.DepotToken)
+	if projectID == "" || token == "" {
+		return nil, &types.DepotProjectCredentialsRequiredError{}
+	}
+
+	buildReq := &cliv1.CreateBuildRequest{ProjectId: projectID}
+	build, err := depotbuild.NewBuild(ctx, buildReq, token)
+	if err != nil {
+		return nil, fmt.Errorf("failed to initialize Depot build: %w", err)
+	}
+
+	arch := selectDepotArchInternal(req.Platforms)
+	machine, err := depotmachine.Acquire(ctx, build.ID, build.Token, arch)
+	if err != nil {
+		build.Finish(err)
+		return nil, fmt.Errorf("failed to acquire Depot BuildKit machine: %w", err)
+	}
+
+	connectCtx, cancel := context.WithTimeout(ctx, 5*time.Minute)
+	defer cancel()
+
+	bk, err := machine.Connect(connectCtx)
+	if err != nil {
+		_ = machine.Release()
+		build.Finish(err)
+		return nil, fmt.Errorf("failed to connect to Depot BuildKit: %w", err)
+	}
+
+	return &buildSession{
+		Client: bk,
+		Close: func(buildErr error) error {
+			build.Finish(buildErr)
+			releaseErr := machine.Release()
+			closeErr := bk.Close()
+			return errors.Join(releaseErr, closeErr)
+		},
+	}, nil
+}
+
+func selectDepotArchInternal(requested []string) string {
+	for _, value := range requested {
+		platform, err := platforms.Parse(strings.TrimSpace(value))
+		if err != nil {
+			continue
+		}
+		switch platform.Architecture {
+		case "arm64", "amd64":
+			return platform.Architecture
+		}
+	}
+
+	return kit.Ternary(runtime.GOARCH == "arm64", "arm64", "amd64")
+}
