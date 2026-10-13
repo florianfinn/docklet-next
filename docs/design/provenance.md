@@ -91,9 +91,10 @@ and identifies development packages separately. Record generated copies, fonts
 Unknown/incompatible licences block release.
 
 M1/M2 implement lockfile-to-inventory drift checks alongside the first
-respective lockfiles. M0 has no Go/npm dependencies or product lockfiles and
-claims no inventory completeness. See NOTICE for explicit pending MPL-2.0 and
-EDL-1.0 duties.
+respective lockfiles. The [Arcane adoption assessment](arcane-adoption.md)
+supplies a pinned upstream Go inventory before code import; it is not a
+shipped-product inventory. See NOTICE for the selected MPL-2.0 source references
+and the EDL-1.0 alternative.
 
 ## Asset allowlist
 

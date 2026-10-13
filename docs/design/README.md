@@ -5,6 +5,8 @@ GitHub issues and milestones hold implementation and acceptance evidence.
 
 | Document | Decision or procedure |
 | --- | --- |
+| [Arcane revision and module map](arcane-adoption.md) | Selected revision, local module identities and reproducible Go licence inventory |
+| [SQLite removal map](arcane-sqlite-removal.md) | Exact source, test, migration and build paths for the PostgreSQL-only cut |
 | [Core adoption](core-adoption.md) | One-time Go adoption, scope boundaries and evaluation gates |
 | [Frontend consolidation](frontend-consolidation.md) | Frozen React reference and product/demo boundary |
 | [Language](language.md) | English repository and UI base, complete German |
