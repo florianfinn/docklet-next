@@ -191,20 +191,25 @@ export function inspectStructure(root, { only, base, staged = false } = {}) {
     : { adopted: {} };
   const previousCounts = Object.create(null);
   const origins = new Map();
+  let originLimit = false;
+  const baseFiles = base ? files(root, { revision: base }) : [];
   if (base) {
     // Copy detection includes unchanged sources; NUL fields preserve arbitrary path names.
     const changes = git([
       "diff", ...(staged ? ["--cached"] : []), "--name-status", "-z",
-      "--find-renames", "--find-copies", "--find-copies-harder", "-l0", base, "--",
+      "--find-renames", "--find-copies", "--find-copies-harder", "-l200", base, "--",
     ], root).split("\0");
+    let additions = 0;
     for (let i = 0; i < changes.length && changes[i];) {
       const status = changes[i++];
       const from = changes[i++];
+      if (status === "A") additions++;
       if (/^[RC]/.test(status)) origins.set(changes[i++], from);
     }
+    originLimit = additions > 0 && (additions > 200 || baseFiles.length > 200);
   }
   if (base)
-    for (const file of files(root, { revision: base })) {
+    for (const file of baseFiles) {
       previousCounts[file.path] = lineCount(file.content);
     }
   const checks = {
@@ -222,7 +227,15 @@ export function inspectStructure(root, { only, base, staged = false } = {}) {
     license: () => licenseProblems(list, policy("scripts/license-policy.json"), root),
   };
   if (only && !checks[only]) throw new Error("unknown-check");
-  return (only ? [checks[only]] : Object.values(checks)).flatMap((check) => check());
+  const found = (only ? [checks[only]] : Object.values(checks)).flatMap((check) => check());
+  // If similarity search can be skipped, unknown origins cannot gain new ceilings.
+  if (originLimit && (!only || only === "size")) {
+    for (const path of Object.keys(policy("scripts/size-baseline.json").adopted)) {
+      if (!Object.hasOwn(previousCounts, path) && !origins.has(path))
+        found.push({ path, category: "size-origin-limit" });
+    }
+  }
+  return found;
 }
 if (main(import.meta.url))
   run(() => {

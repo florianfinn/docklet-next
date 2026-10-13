@@ -87,3 +87,21 @@ test("pre-commit checks staged policies rather than unstaged repairs", (t) => {
   git(root, "add", "scripts/size-baseline.json");
   ok(invoke(root, "git", ["commit", "-m", "fix: synthetic staged policy"]));
 });
+
+test("root prototype source keeps its base count when copied into adoption roots", (t) => {
+  const root = scratch(t);
+  stage(root, "__proto__", content(1000));
+  const base = rawCommit(root);
+  stage(root, "backend/moved.go", content(1001));
+  writeJSON(root, "scripts/size-baseline.json", { adopted: { "backend/moved.go": 1001 }, generated: [] });
+  fails(check(root, base), "size-baseline-new-entry");
+});
+test("bounded similarity search cannot grant an unknown oversized adoption", (t) => {
+  const root = scratch(t);
+  for (let i = 0; i < 201; i++) write(root, `docs/base-${i}.txt`, `base ${i}\n`);
+  git(root, "add", ".");
+  const base = rawCommit(root);
+  stage(root, "backend/import.go", content(1001));
+  writeJSON(root, "scripts/size-baseline.json", { adopted: { "backend/import.go": 1001 }, generated: [] });
+  fails(check(root, base), "size-origin-limit");
+});

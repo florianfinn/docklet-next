@@ -7,7 +7,9 @@ const SCAN_BUDGET_MS = 2000;
 test("scan budget stays at two seconds", () => {
   assert.equal(SCAN_BUDGET_MS, 2 * 1000);
   const source = readFileSync(new URL(import.meta.url), "utf8");
-  assert.equal(source.match(/assert[.]equal\((timing[.]ms < [A-Z_]+)/)?.[1], "timing.ms < SCAN_BUDGET_MS");
+  assert.deepEqual(source.split("\n").filter((line) => /^\s*assert[.]equal\(timing[.]ms/.test(line)).map((line) => line.trim()),
+    ['assert.equal(timing.ms < SCAN_BUDGET_MS, true, `${label}: ${timing.ms.toFixed(1)} ms`);']);
+  assert.deepEqual(source.match(/timeout: \d+/g), ["timeout: " + 5000]);
 });
 const cases = [
   ["coauthor spaces", '"Co-authored-by:" + " ".repeat(1000000 - 15)'],
@@ -31,6 +33,12 @@ const cases = [
   ["runtime env filename", '"/.env.x".repeat(142858) + "\\nunsafe"', "inspectPath"],
   ["operator denylist", '"a".repeat(1000000)'],
 ];
+// Exercise the source lexer and detailed line hashes as well as plain text.
+cases.push(
+  ["source lexer strings", '("const config = `" + ["password", "=example"].join("") + "`;\\n").repeat(40000)', "inspectText", "example.ts"],
+  ["source typed candidates", '["token", ": string | "].join("").repeat(70000)', "inspectText", "example.ts"],
+  ["source raw lines", '["const token", " = `\\n"].join("") + "example\\n".repeat(125000) + "`"', "inspectText", "example.go"],
+);
 // Every credential alternative gets mixed case and separator/boundary stress.
 const prefixes = ["ghp_", "gho_", "ghu_", "ghs_", "ghr_", "github_pat_", "AKIA", "sk-",
   "xoxa-", "xoxb-", "xoxp-", "xoxr-", "xoxs-", "Bearer ", "eyJ",
@@ -44,13 +52,13 @@ for (const prefix of prefixes) {
     }
   }
 }
-for (const [label, expression, scanner = "inspectText"] of cases) {
+for (const [label, expression, scanner = "inspectText", path = "synthetic"] of cases) {
   test(`1 MB adversarial scan: ${label}`, (t) => {
     const source = `
       import { inspectText, inspectPath } from "./scripts/publication-patterns.mjs";
       const input = (${expression});
       const start = performance.now();
-      ${scanner === "inspectPath" ? "inspectPath(input)" : 'inspectText(input, "synthetic", ["absent-term"])'};
+      ${scanner === "inspectPath" ? "inspectPath(input)" : `inspectText(input, ${JSON.stringify(path)}, ["absent-term"], { detailed: ${path !== "synthetic"} })`};
       console.log(JSON.stringify({ bytes: Buffer.byteLength(input), ms: performance.now() - start }));
     `;
     // A subprocess timeout also stops a synchronous scanner that never returns.

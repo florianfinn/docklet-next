@@ -7,6 +7,7 @@ import { readFileSync, existsSync } from "node:fs";
 import { resolve } from "node:path";
 import { files, git, main, run, finish } from "./repository.mjs";
 import { inspectText, inspectPath, safePath, publicIdentity } from "./publication-patterns.mjs";
+import { ALLOWLIST_PATH, reviewedFindings } from "./publication-allowlist.mjs";
 import { messageProblems } from "./commit-subject.mjs";
 export { inspectText } from "./publication-patterns.mjs";
 
@@ -19,7 +20,8 @@ export function loadDenylist(root) {
   return list;
 }
 function inspectFiles(list, denylist) {
-  return list.flatMap(({ path, mode, content }) => {
+  const allowlist = JSON.parse(list.find((file) => file.path === ALLOWLIST_PATH)?.content.toString("utf8") ?? "[]");
+  const findings = list.flatMap(({ path, mode, content }) => {
     const findings = inspectPath(path, denylist);
     const label = safePath(path, denylist);
     if (!["100644", "100755"].includes(mode))
@@ -31,11 +33,12 @@ function inspectFiles(list, denylist) {
         findings.push({ path: label, category: "invalid-utf8" });
       }
       findings.push(
-        ...inspectText(content.toString("utf8"), path, denylist).map((f) => ({ ...f, path: label })),
+        ...inspectText(content.toString("utf8"), path, denylist, { detailed: true }),
       );
     }
     return findings;
   });
+  return reviewedFindings(allowlist, findings).map((f) => ({ ...f, path: safePath(f.path, denylist) }));
 }
 export function inspectRepository(root, { staged = false, history = false, revisions = [] } = {}) {
   const denylist = loadDenylist(root);
@@ -46,7 +49,6 @@ export function inspectRepository(root, { staged = false, history = false, revis
       .trim()
       .split("\n")
       .filter(Boolean);
-    const seen = new Set();
     for (const commit of commits) {
       const fields = git(["show", "-s", "--format=%an%x00%ae%x00%cn%x00%ce%x00%P%x00%B", commit], root).split(
         "\0",
@@ -56,12 +58,7 @@ export function inspectRepository(root, { staged = false, history = false, revis
         findings.push({ path: "commit", category: "private-commit-identity" });
       findings.push(...messageProblems(body, parents.trim().split(" ").filter(Boolean).length));
       findings.push(...inspectText(body, "commit-message", denylist));
-      const list = files(root, { revision: commit }).filter((entry) => {
-        const key = entry.path + "\0" + entry.oid;
-        if (seen.has(key)) return false;
-        seen.add(key);
-        return true;
-      });
+      const list = files(root, { revision: commit });
       findings.push(...inspectFiles(list, denylist));
     }
   }
@@ -72,7 +69,7 @@ if (main(import.meta.url))
     const args = process.argv.slice(2);
     const at = args.indexOf("--text");
     const revisions = args.filter((v) => /^[a-f0-9]{40}(?:\.\.[a-f0-9]{40})?$/.test(v));
-    if (!revisions.length && process.env.GITHUB_EVENT_NAME === "pull_request") {
+    if (args.includes("--history") && !revisions.length && process.env.GITHUB_EVENT_NAME === "pull_request") {
       const event = JSON.parse(readFileSync(process.env.GITHUB_EVENT_PATH, "utf8"));
       const head = event.pull_request?.head?.sha;
       if (!/^[a-f0-9]{40}$/.test(head ?? "")) throw new Error("invalid-pull-request-head");

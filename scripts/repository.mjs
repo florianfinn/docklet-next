@@ -29,15 +29,31 @@ export function entries(root = ROOT, revision) {
       return { path, mode, oid: revision ? third : second };
     });
 }
-function readEntry(entry, mode, root) {
-  if (mode === "git") return git(["cat-file", "blob", entry.oid], root, { encoding: null });
-  const path = resolve(root, entry.path);
-  if (lstatSync(path).isSymbolicLink()) return Buffer.from("unsupported symlink");
-  return readFileSync(path);
-}
 export function files(root = ROOT, { staged = false, revision } = {}) {
-  const mode = staged || revision ? "git" : "worktree";
-  return entries(root, revision).map((entry) => ({ ...entry, content: readEntry(entry, mode, root) }));
+  const list = entries(root, revision);
+  if (staged || revision) {
+    if (!list.length) return [];
+    // One batch avoids a process per blob on large import commits.
+    const output = git(["cat-file", "--batch"], root, {
+      input: list.map((entry) => entry.oid).join("\n") + "\n", encoding: null,
+    });
+    let at = 0;
+    return list.map((entry) => {
+      const end = output.indexOf(10, at);
+      const header = output.subarray(at, end).toString("ascii").split(" ");
+      const length = Number(header[2]);
+      if (header[1] !== "blob" || !Number.isSafeInteger(length)) throw new Error("invalid-blob");
+      at = end + 1;
+      const content = output.subarray(at, at + length);
+      at += length + 1;
+      return { ...entry, content };
+    });
+  }
+  return list.map((entry) => {
+    const path = resolve(root, entry.path);
+    const content = lstatSync(path).isSymbolicLink() ? Buffer.from("unsupported symlink") : readFileSync(path);
+    return { ...entry, content };
+  });
 }
 export const main = (url) => process.argv[1] && url === pathToFileURL(resolve(process.argv[1])).href;
 export function run(action) {

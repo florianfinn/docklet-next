@@ -3,6 +3,7 @@
 // Retrieved: 2026-10-13
 // License: Apache-2.0
 // Deviations: Reserved networks only; IPv6, POSIX paths, corrupt text and literal credentials; no prose spelling guard.
+import { lineHash } from "./publication-allowlist.mjs";
 import { isIP } from "node:net";
 import { scanAssignments } from "./publication-assignments.mjs";
 import { fixtureAllowed } from "./publication-fixtures.mjs";
@@ -111,35 +112,47 @@ function safeAddress(value) {
   const canonical = new URL(`http://[${value}]/`).hostname.slice(1, -1);
   return canonical === "::1" || canonical.startsWith("2001:db8:");
 }
-export function inspectText(text, path = "text", denylist = []) {
+export function inspectText(text, path = "text", denylist = [], { detailed = false } = {}) {
   const findings = [];
-  const report = (category, value) => {
-    if (!fixtureAllowed(path, category, value)) findings.push({ path, category });
+  const starts = [0];
+  if (detailed) for (const match of text.matchAll(/\r\n|\r|\n/g)) starts.push(match.index + match[0].length);
+  const hashes = new Map();
+  const report = (category, value, offset = 0) => {
+    if (fixtureAllowed(path, category, value)) return;
+    if (!detailed) { findings.push({ path, category }); return; }
+    let low = 0, high = starts.length;
+    while (low + 1 < high) {
+      const middle = (low + high) >>> 1;
+      if (starts[middle] <= offset) low = middle; else high = middle;
+    }
+    if (!hashes.has(low)) hashes.set(low, lineHash(text.slice(starts[low], starts[low + 1] ?? text.length).replace(/[\r\n]+$/, "")));
+    findings.push({ path, category, sha256: hashes.get(low) });
   };
   for (const [category, pattern] of Object.entries(PATTERNS)) {
-    for (const match of text.matchAll(pattern)) report(category, match[0]);
+    for (const match of text.matchAll(pattern)) report(category, match[0], match.index);
   }
   scanAssignments(text, report, path);
   for (const match of text.matchAll(HOSTNAME)) {
     const dotfile = text[match.index - 1] === "." && match[0].toLowerCase() === "env." + "local";
-    if (!dotfile && PRIVATE_SUFFIX.test(match[0])) report("private-hostname", match[0]);
+    if (!dotfile && PRIVATE_SUFFIX.test(match[0])) report("private-hostname", match[0], match.index);
   }
   for (const match of text.matchAll(/(?<![A-Z0-9._%+-])[A-Z0-9._%+-]+@(?:[A-Z0-9-]+\.)+[A-Z][A-Z0-9-]*/gi)) {
     if (!EXAMPLE_EMAIL.test(match[0]) && match[0].toLowerCase() !== "noreply@github.com")
-      report("non-example-email", match[0]);
+      report("non-example-email", match[0], match.index);
   }
   for (const match of text.matchAll(/(?<![\d.])(?:\d{1,3}\.){3}\d{1,3}(?!\d|\.\d)/g)) {
-    if (isIP(match[0]) && !safeAddress(match[0])) report("network-address", match[0]);
+    if (isIP(match[0]) && !safeAddress(match[0])) report("network-address", match[0], match.index);
   }
   // Maximal tokens avoid retrying overlapping IPv6 candidates. Valid addresses are short.
   for (const match of text.matchAll(/[a-z0-9:.]+/gi)) {
     if (match[0].length > 46 || !match[0].includes(":")) continue;
     const value = match[0].replace(/\.$/, "");
     const scopeName = text[match.index - 1] !== "[" && /^[a-f]+::[a-f]+$/i.test(value);
-    if (!scopeName && isIP(value) === 6 && !safeAddress(value)) report("network-address", value);
+    if (!scopeName && isIP(value) === 6 && !safeAddress(value)) report("network-address", value, match.index);
   }
   // Split trailers at delimiters instead of overlapping whitespace captures.
-  for (const line of text.split(/\r\n|\r|\n/)) {
+  for (const lineMatch of text.matchAll(/[^\r\n]+/g)) {
+    const line = lineMatch[0];
     const trailer = line.trimStart();
     if (!trailer.toLowerCase().startsWith("co-authored-by:")) continue;
     const identity = trailer.slice(15).trim();
@@ -147,7 +160,7 @@ export function inspectText(text, path = "text", denylist = []) {
     const end = identity.indexOf(">", at + 1);
     const name = at < 0 ? identity : identity.slice(0, at);
     const email = at >= 0 && end > at ? identity.slice(at + 1, end) : "";
-    if (aiIdentity(name, email)) report("ai-co-author", line);
+    if (aiIdentity(name, email)) report("ai-co-author", line, lineMatch.index);
   }
   const folded = denylist.length ? text.toLowerCase() : "";
   for (const term of denylist)
@@ -155,7 +168,7 @@ export function inspectText(text, path = "text", denylist = []) {
       findings.push({ path, category: "operator-denylist" });
       break;
     }
-  return [...new Map(findings.map((f) => [f.category, f])).values()];
+  return detailed ? findings : [...new Map(findings.map((f) => [f.category, f])).values()];
 }
 export function inspectPath(path, denylist = []) {
   const found = inspectText(path, "file-name", denylist);
