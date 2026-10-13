@@ -2,15 +2,13 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; functional cut: removed S3 backup destinations.
+// Deviations: Local module namespace; functional cut: removed S3 backup destinations; functional cut: removed SQLite runtime and migrations.
 
 package backup
 
 import (
 	"context"
 	"errors"
-	"os"
-	"strings"
 	"testing"
 	"time"
 
@@ -33,13 +31,21 @@ import (
 	francistest "github.com/florianfinn/docklet-next/backend/pkg/utils/francis/testing"
 )
 
+type volumeBackupTestRow struct {
+	ID              string `gorm:"primaryKey"`
+	VolumeName      string
+	Size            int64
+	CreatedAt       time.Time
+	PolicyID        string
+	Status          string
+	LocalSnapshotID string
+}
+
+func (volumeBackupTestRow) TableName() string { return "volume_backups" }
+
 func applyVolumeBackupMigrationsInternal(t *testing.T, gormDB *gorm.DB) {
 	t.Helper()
-	for _, name := range []string{"032_add_volume_backups.sql", "073_add_backup_support.sql", "087_add_volume_backup_remote_instance.sql"} {
-		migration, err := os.ReadFile("../../../../resources/migrations/sqlite/" + name)
-		require.NoError(t, err)
-		require.NoError(t, gormDB.Exec(strings.Split(string(migration), "-- +goose Down")[0]).Error)
-	}
+	require.NoError(t, gormDB.AutoMigrate(&volumeBackupTestRow{}, &policies.VolumeBackupPolicy{}))
 }
 
 func newVolumeAdmissionForTestInternal(t testing.TB) *runs.Admission {

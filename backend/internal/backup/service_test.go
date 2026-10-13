@@ -2,13 +2,13 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace
+// Deviations: Local module namespace; functional cut: removed SQLite runtime and migrations.
 
 package backup
 
 import (
 	"context"
-	"path/filepath"
+	"os"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -157,8 +157,11 @@ func TestSnapshotCommandInternal(t *testing.T) {
 	require.ErrorContains(t, err, "at least one snapshot source")
 }
 
-func TestDurableBackupRestartKeepsCompletionInternal(t *testing.T) {
-	url := "file:" + filepath.Join(t.TempDir(), "actors.db")
+func TestPostgresDurableBackupRestartKeepsCompletionInternal(t *testing.T) {
+	url := os.Getenv("ARCANE_TEST_POSTGRES_DSN")
+	if url == "" {
+		t.Skip("PostgreSQL integration requires ARCANE_TEST_POSTGRES_DSN")
+	}
 	var calls atomic.Int32
 	runtime := francistest.New(t, url)
 	engine := NewEngine(t.Context(), nil, nil)
@@ -188,8 +191,11 @@ func TestDurableBackupRestartKeepsCompletionInternal(t *testing.T) {
 	require.EqualValues(t, 1, calls.Load())
 }
 
-func TestDurableBackupShutdownKeepsInterruptedEvidenceInternal(t *testing.T) {
-	url := "file:" + filepath.Join(t.TempDir(), "actors.db")
+func TestPostgresDurableBackupShutdownKeepsInterruptedEvidenceInternal(t *testing.T) {
+	url := os.Getenv("ARCANE_TEST_POSTGRES_DSN")
+	if url == "" {
+		t.Skip("PostgreSQL integration requires ARCANE_TEST_POSTGRES_DSN")
+	}
 	runtime := francistest.New(t, url)
 	admission := runs.NewAdmission(runtime.Service(), t.Name())
 	require.NoError(t, admission.Register(runtime))

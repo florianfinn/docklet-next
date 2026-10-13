@@ -2,12 +2,11 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; functional cut: removed template catalogue; functional cut: removed central variables and .env.global; functional cut: removed OIDC and passkeys.
+// Deviations: Local module namespace; functional cut: removed template catalogue; functional cut: removed central variables and .env.global; functional cut: removed OIDC and passkeys; functional cut: removed SQLite runtime and migrations.
 
 package role_test
 
 import (
-	"path/filepath"
 	"testing"
 	"time"
 
@@ -74,57 +73,6 @@ func TestBackfillLegacyRoleAssignments(t *testing.T) {
 		require.NoError(t, roleSvc.BackfillLegacyRoleAssignments(ctx))
 	})
 
-	t.Run("converts legacy roles once", func(t *testing.T) {
-		db, err := database.Initialize(ctx, "file:"+filepath.Join(t.TempDir(), "arcane.db"), database.MigrationOptions{})
-		require.NoError(t, err)
-		t.Cleanup(func() { require.NoError(t, db.Close()) })
-		require.True(t, db.Migrator().HasColumn("users", "roles"))
-		roleSvc := role.NewRoleService(db)
-		require.NoError(t, roleSvc.EnsureBuiltInRoles(ctx))
-		require.NoError(t, db.Exec("INSERT INTO environments (id, name, api_url) VALUES (?, ?, ?)", "env-1", "env-1", "http://env-1").Error)
-
-		for id, roles := range map[string]string{
-			"seed-admin":    `[]`,
-			"legacy-admin":  `["user", " ADMIN "]`,
-			"legacy-user":   `["user"]`,
-			"legacy-empty":  `[]`,
-			"legacy-null":   `null`,
-			"legacy-blank":  `[" "]`,
-			"legacy-broken": `not json`,
-			"scoped-manual": `["admin"]`,
-			"global-manual": `["admin"]`,
-		} {
-			require.NoError(t, db.Exec("INSERT INTO users (id, username, password_hash, roles) VALUES (?, ?, ?, ?)", id, id, "unused", roles).Error)
-		}
-		require.NoError(t, db.Create(&role.UserRoleAssignment{UserID: "seed-admin", RoleID: authz.BuiltInRoleAdmin, Source: role.RoleAssignmentSourceManual}).Error)
-		envID := "env-1"
-		require.NoError(t, roleSvc.SetUserAssignments(ctx, "scoped-manual", []role.UserRoleAssignment{{RoleID: authz.BuiltInRoleViewer, EnvironmentID: &envID}}))
-		require.NoError(t, roleSvc.SetUserAssignments(ctx, "global-manual", []role.UserRoleAssignment{{RoleID: authz.BuiltInRoleViewer}}))
-
-		require.NoError(t, roleSvc.BackfillLegacyRoleAssignments(ctx))
-		require.Equal(t, []string{authz.BuiltInRoleAdmin}, assignedRoleIDs(t, roleSvc, "legacy-admin"))
-		for _, id := range []string{"legacy-user", "legacy-empty", "legacy-null", "legacy-blank", "legacy-broken"} {
-			require.Equal(t, []string{authz.BuiltInRoleViewer}, assignedRoleIDs(t, roleSvc, id), id)
-		}
-		scoped, err := roleSvc.ListUserAssignments(ctx, "scoped-manual")
-		require.NoError(t, err)
-		require.Len(t, scoped, 1)
-		require.Equal(t, &envID, scoped[0].EnvironmentID)
-		manual, err := roleSvc.ListUserAssignments(ctx, "global-manual")
-		require.NoError(t, err)
-		require.Len(t, manual, 1)
-		require.Equal(t, role.RoleAssignmentSourceManual, manual[0].Source)
-		ps, err := roleSvc.ResolveUserPermissionsInDB(ctx, db.DB, "scoped-manual")
-		require.NoError(t, err)
-		require.True(t, ps.Allows(authz.PermContainersList, "env-1"))
-		require.False(t, ps.Allows(authz.PermContainersList, ""))
-
-		require.NoError(t, roleSvc.SetUserAssignments(ctx, "legacy-user", nil))
-		require.NoError(t, db.Exec("INSERT INTO users (id, username, password_hash, roles) VALUES (?, ?, ?, ?)", "later-admin", "later-admin", "unused", `["admin"]`).Error)
-		require.NoError(t, role.NewRoleService(db).BackfillLegacyRoleAssignments(ctx))
-		require.Empty(t, assignedRoleIDs(t, roleSvc, "legacy-user"))
-		require.Empty(t, assignedRoleIDs(t, roleSvc, "later-admin"))
-	})
 }
 
 func assignedRoleIDs(t *testing.T, roleSvc *role.RoleService, userID string) []string {

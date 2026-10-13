@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: None
+// Deviations: functional cut: removed SQLite runtime and migrations.
 
 package scheduler
 
@@ -12,8 +12,6 @@ import "time"
 type CoordinatorState struct {
 	Revision            uint64
 	Record              QueueRecord
-	Imported            bool
-	ImportHash          string
 	Dispatches          map[string]DispatchIntent
 	PendingActivitySync map[string]time.Time
 }
@@ -62,10 +60,4 @@ type AdmissionCommand struct {
 type ActivitySyncCommand struct {
 	RunID     string
 	UpdatedAt time.Time
-}
-
-// CoordinatorImport binds imported state to the exact inactive legacy row.
-type CoordinatorImport struct {
-	Record     QueueRecord
-	SourceHash string
 }

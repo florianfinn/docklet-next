@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; functional cut: removed GitOps and saved Git repositories; functional cut: removed S3 backup destinations.
+// Deviations: Local module namespace; functional cut: removed GitOps and saved Git repositories; functional cut: removed S3 backup destinations; functional cut: removed SQLite runtime and migrations.
 
 package activity
 
@@ -10,8 +10,6 @@ import (
 	"context"
 	"net/http"
 	"net/http/httptest"
-	"os"
-	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -875,9 +873,7 @@ func TestJobSummaryReopensAndRejectsStaleSnapshots(t *testing.T) {
 	require.NoError(t, db.First(&legacy, "id = ?", run.ActivityID).Error)
 	legacy.Metadata["environmentId"] = "remote"
 	require.NoError(t, db.Model(&legacy).Update("metadata", legacy.Metadata).Error)
-	migration, err := os.ReadFile("../../resources/migrations/sqlite/084_route_job_activities_to_environment.sql")
-	require.NoError(t, err)
-	require.NoError(t, db.Exec(strings.Split(string(migration), "-- +goose Down")[0]).Error)
+	require.NoError(t, db.Model(&legacy).Update("environment_id", "remote").Error)
 	require.NoError(t, db.First(&legacy, "id = ?", run.ActivityID).Error)
 	require.Equal(t, "remote", legacy.EnvironmentID)
 	// Startup reconciliation also repairs legacy rows without replaying the job.

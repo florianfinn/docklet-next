@@ -6,7 +6,6 @@
     "backend/internal/apikey/service.go": 1087,
     "backend/internal/system/children/prune/service.go": 1042,
     "backend/internal/system/children/backup/service.go": 1722,
-    "backend/internal/system/children/backup/children/snapshots/service.go": 1218,
     "backend/internal/system/children/upgrade/service.go": 1478,
     "backend/internal/image/service.go": 1365,
     "backend/internal/container/service_test.go": 1274,

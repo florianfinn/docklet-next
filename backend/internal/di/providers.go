@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; functional cut: removed template catalogue; functional cut: removed GitOps and saved Git repositories; functional cut: removed S3 backup destinations; functional cut: removed OIDC and passkeys.
+// Deviations: Local module namespace; functional cut: removed template catalogue; functional cut: removed GitOps and saved Git repositories; functional cut: removed S3 backup destinations; functional cut: removed OIDC and passkeys; functional cut: removed SQLite runtime and migrations.
 
 package di
 
@@ -111,7 +111,6 @@ func provideBackupEngineInternal(
 func provideActorRuntimeInternal(
 	appCtx context.Context,
 	cfg *config.Config,
-	db *database.DB,
 	settingsService *settings.SettingsService,
 	lc fx.Lifecycle,
 	cancelApp context.CancelFunc,
@@ -121,13 +120,6 @@ func provideActorRuntimeInternal(
 		return nil, err
 	}
 	lc.Append(fx.Hook{OnStart: func(ctx context.Context) error {
-		sqlDB, sqlDBErr := db.SQLDB()
-		if sqlDBErr != nil {
-			return sqlDBErr
-		}
-		if migrateErr := francis.MigrateLegacyStore(ctx, sqlDB, cfg.DatabaseURL); migrateErr != nil {
-			return migrateErr
-		}
 		if configureIdentityErr := runtime.ConfigureIdentity(cfg.EncryptionKey, settingsService.GetSettingsConfig().InstanceID.Value); configureIdentityErr != nil {
 			return configureIdentityErr
 		}
@@ -136,8 +128,8 @@ func provideActorRuntimeInternal(
 	return runtime, nil
 }
 
-func provideRunCoordinatorInternal(runtime *francis.Runtime, store *kv.KVService, cfg *config.Config) (*runs.Coordinator, error) {
-	coordinator := runs.New(store, runtime.Service(), cfg.GetLocation())
+func provideRunCoordinatorInternal(runtime *francis.Runtime, cfg *config.Config) (*runs.Coordinator, error) {
+	coordinator := runs.New(runtime.Service(), cfg.GetLocation())
 	if err := coordinator.Register(runtime); err != nil {
 		return nil, err
 	}

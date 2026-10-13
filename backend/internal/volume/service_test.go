@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; functional cut: removed S3 backup destinations.
+// Deviations: Local module namespace; functional cut: removed S3 backup destinations; functional cut: removed SQLite runtime and migrations.
 
 package volume
 
@@ -16,7 +16,6 @@ import (
 	"net"
 	"net/http"
 	"net/http/httptest"
-	"os"
 	"slices"
 	"strings"
 	"testing"
@@ -37,6 +36,7 @@ import (
 	"github.com/florianfinn/docklet-next/backend/internal/common"
 	"github.com/florianfinn/docklet-next/backend/internal/database"
 	"github.com/florianfinn/docklet-next/backend/internal/docker"
+	"github.com/florianfinn/docklet-next/backend/internal/volume/children/backup/children/policies"
 	"github.com/florianfinn/docklet-next/backend/pkg/pagination"
 )
 
@@ -115,18 +115,14 @@ func TestRenameVolumeRejectsInvalidAndProtectedNames(t *testing.T) {
 
 func applyVolumeBackupMigrationsInternal(t *testing.T, gormDB *gorm.DB) {
 	t.Helper()
-	for _, name := range []string{"032_add_volume_backups.sql", "073_add_backup_support.sql", "087_add_volume_backup_remote_instance.sql"} {
-		migration, err := os.ReadFile("../../resources/migrations/sqlite/" + name)
-		require.NoError(t, err)
-		require.NoError(t, gormDB.Exec(strings.Split(string(migration), "-- +goose Down")[0]).Error)
-	}
+	require.NoError(t, gormDB.AutoMigrate(&policies.VolumeBackupPolicy{}, &VolumeBackup{}))
 }
 
 func TestRenameVolumeMetadataInternalPreservesPoliciesAndHistory(t *testing.T) {
 	gormDB, err := gorm.Open(sqlite.Open("file:volume-rename-metadata?mode=memory&cache=shared"), &gorm.Config{})
 	require.NoError(t, err)
 	applyVolumeBackupMigrationsInternal(t, gormDB)
-	require.NoError(t, gormDB.Exec("INSERT INTO volume_backup_policies (id, volume_name, schedule) VALUES (?, ?, ?)", "policy-1", "source-data", "0 0 2 * * *").Error)
+	require.NoError(t, gormDB.Exec("INSERT INTO volume_backup_policies (id, volume_name, schedule, local_enabled) VALUES (?, ?, ?, ?)", "policy-1", "source-data", "0 0 2 * * *", true).Error)
 	require.NoError(t, gormDB.Create(&VolumeBackup{VolumeName: "source-data", PolicyID: "policy-1"}).Error)
 
 	service := NewVolumeService(&database.DB{DB: gormDB}, nil, nil, nil, nil, nil, nil, nil, nil, nil)

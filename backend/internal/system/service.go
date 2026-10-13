@@ -2,14 +2,13 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; functional cut: removed S3 backup destinations.
+// Deviations: Local module namespace; functional cut: removed S3 backup destinations; functional cut: removed SQLite runtime and migrations.
 
 package system
 
 import (
 	"cmp"
 	"context"
-	"database/sql"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -57,7 +56,6 @@ import (
 	"github.com/florianfinn/docklet-next/backend/pkg/pagination"
 	"github.com/florianfinn/docklet-next/backend/pkg/scheduler/runs"
 	"github.com/florianfinn/docklet-next/backend/pkg/utils"
-	"github.com/florianfinn/docklet-next/backend/pkg/utils/francis"
 )
 
 // SystemService owns Docker system-wide operations and coordinates the prune
@@ -89,7 +87,6 @@ func NewSystemService(
 	projectService *project.ProjectService,
 	backupEngine *backup.Engine,
 	recoveryKeys *backup.RecoveryKeyStore,
-	actors *francis.Runtime,
 	cfg *config.Config,
 ) *SystemService {
 	location := time.UTC
@@ -108,23 +105,16 @@ func NewSystemService(
 		prune:   prune.NewService(location, dockerService.GetClient, activityService, imageUpdateService, volumeService, networkService),
 		upgrade: upgrade.NewService(db, dockerService, versionService, eventService, settingsService, projectService, resolveUpgraderRuntimeOptionsInternal),
 	}
-	var sqlDB func() (*sql.DB, error)
-	if db != nil {
-		sqlDB = db.SQLDB
-	}
 	s.backup = systembackup.NewService(systembackup.Dependencies{
-		Store:                 s.backupStoreInternal(),
-		DB:                    db,
-		SQLDB:                 sqlDB,
-		ActorStore:            actors.Store,
-		Docker:                dockerService,
-		Volumes:               volumeService,
-		Engine:                backupEngine,
-		Activity:              activityService,
-		Settings:              settingsService,
-		Config:                cfg,
-		RecoveryKeys:          recoveryKeys,
-		ResolveRuntimeOptions: resolveUpgraderRuntimeOptionsInternal,
+		Store:        s.backupStoreInternal(),
+		DB:           db,
+		Docker:       dockerService,
+		Volumes:      volumeService,
+		Engine:       backupEngine,
+		Activity:     activityService,
+		Settings:     settingsService,
+		Config:       cfg,
+		RecoveryKeys: recoveryKeys,
 	})
 	return s
 }

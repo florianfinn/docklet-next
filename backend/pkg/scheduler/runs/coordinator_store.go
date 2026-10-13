@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace
+// Deviations: Local module namespace; functional cut: removed SQLite runtime and migrations.
 
 package runs
 
@@ -21,11 +21,7 @@ import (
 	"github.com/florianfinn/docklet-next/types/user"
 	"github.com/italypaleale/francis/actor"
 	"go.getarcane.app/kit/pkg"
-
-	"github.com/florianfinn/docklet-next/backend/internal/kv"
 )
-
-const queuePrefixInternal = "jobs."
 
 func (q *Coordinator) mutateInternal(ctx context.Context, environmentID, jobID string, change func(*st.QueueRecord) error) error {
 	id := kit.SHA256Hex(environmentID + "\x00" + jobID)
@@ -313,11 +309,11 @@ var ErrRunNotFound = errors.New("job run not found")
 // ErrRunConflict indicates that execution ownership or state changed.
 var ErrRunConflict = errors.New("job run state changed")
 
-func New(store *kv.KVService, service *actor.Service, location *time.Location) *Coordinator {
+func New(service *actor.Service, location *time.Location) *Coordinator {
 	if location == nil {
 		location = time.UTC
 	}
-	return &Coordinator{store: store, service: service, location: location, owner: uuid.New().String(), checkpointed: make(map[string]bool), wake: make(chan struct{}, 1), done: make(chan struct{})}
+	return &Coordinator{service: service, location: location, owner: uuid.New().String(), checkpointed: make(map[string]bool), wake: make(chan struct{}, 1), done: make(chan struct{})}
 }
 
 func (q *Coordinator) SetExecutor(execute, reconcile func(context.Context, st.Run) (st.Outcome, error)) {

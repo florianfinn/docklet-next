@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace
+// Deviations: Local module namespace; functional cut: removed SQLite runtime and migrations.
 
 package cli
 
@@ -16,7 +16,6 @@ import (
 
 	"github.com/florianfinn/docklet-next/backend/cli/admin"
 	"github.com/florianfinn/docklet-next/backend/cli/generate"
-	"github.com/florianfinn/docklet-next/backend/cli/recovery"
 	"github.com/florianfinn/docklet-next/backend/cli/upgrade"
 	"github.com/florianfinn/docklet-next/backend/internal/bootstrap"
 	"github.com/florianfinn/docklet-next/backend/internal/config"
@@ -48,6 +47,5 @@ func Execute() {
 func init() {
 	rootCmd.AddCommand(admin.AdminCmd)
 	rootCmd.AddCommand(upgrade.UpgradeCmd)
-	rootCmd.AddCommand(recovery.RestoreCmd)
 	rootCmd.AddCommand(generate.GenerateCmd)
 }

@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; functional cut: removed central variables and .env.global; functional cut: removed GitOps and saved Git repositories.
+// Deviations: Local module namespace; functional cut: removed central variables and .env.global; functional cut: removed GitOps and saved Git repositories; functional cut: removed SQLite runtime and migrations.
 
 package project
 
@@ -78,8 +78,7 @@ import (
 
 const (
 	maxConcurrentComposeReads = 8
-	// inferredServiceCountBatchSize keeps one inferred count update under
-	// SQLite's bound variable limit (three placeholders per id).
+	// inferredServiceCountBatchSize bounds the number of placeholders in each update.
 	inferredServiceCountBatchSize = 200
 )
 

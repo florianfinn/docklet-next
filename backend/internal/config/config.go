@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; functional cut: removed upstream analytics heartbeat and APNS mobile push and Svelte-specific metadata or asset paths; functional cut: removed template catalogue; functional cut: removed OIDC and passkeys.
+// Deviations: Local module namespace; functional cut: removed upstream analytics heartbeat and APNS mobile push and Svelte-specific metadata or asset paths; functional cut: removed template catalogue; functional cut: removed OIDC and passkeys; functional cut: removed SQLite runtime and migrations.
 
 package config
 
@@ -41,7 +41,7 @@ type Config struct {
 	BuildablesConfig
 
 	AppUrl                string         `env:"APP_URL" default:"http://localhost:3552"`
-	DatabaseURL           string         `env:"DATABASE_URL" default:"file:data/arcane.db?_pragma=journal_mode(WAL)&_pragma=busy_timeout(2500)&_txlock=immediate" options:"file"`
+	DatabaseURL           string         `env:"DATABASE_URL" default:"postgres://docklet:docklet@localhost:5432/docklet"`
 	AllowDowngrade        bool           `env:"ALLOW_DOWNGRADE" default:"false"`
 	AllowCLIPasswordReset bool           `env:"ALLOW_CLI_PASSWORD_RESET" default:"false"`
 	ActorPort             string         `env:"ACTOR_PORT" default:"3551"`

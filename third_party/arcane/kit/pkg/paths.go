@@ -2,27 +2,16 @@
 // Revision: 9c61043fc52d1977d644f075d9c168335c3a6df7
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: None
+// Deviations: functional cut: removed SQLite runtime and migrations.
 
 package kit
 
 import (
 	"errors"
-	"net/url"
 	"path"
 	"path/filepath"
 	"strings"
 )
-
-// SQLitePathFromDSN returns the filesystem portion of a SQLite file DSN.
-// "file:data/arcane.db?..." carries the path in Opaque, "file:/abs/path.db" in Path.
-func SQLitePathFromDSN(dsn string) (string, error) {
-	parsed, err := url.Parse(dsn)
-	if err != nil {
-		return "", err
-	}
-	return Ternary(parsed.Opaque != "", parsed.Opaque, parsed.Path), nil
-}
 
 // NormalizeRelativePath validates and cleans a slash-delimited path rooted at a
 // managed file tree. The result never begins with a slash or escapes the root.

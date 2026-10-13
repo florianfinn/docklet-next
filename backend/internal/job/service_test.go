@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; functional cut: removed upstream analytics heartbeat; functional cut: removed GitOps and saved Git repositories.
+// Deviations: Local module namespace; functional cut: removed upstream analytics heartbeat; functional cut: removed GitOps and saved Git repositories; functional cut: removed SQLite runtime and migrations.
 
 package job
 
@@ -70,7 +70,7 @@ func newSettingsServiceForTestInternal(t testing.TB, ctx context.Context, db *da
 func newJobCoordinatorForTestInternal(t *testing.T, db *database.DB) *runs.Coordinator {
 	t.Helper()
 	francisRuntime := francistest.New(t)
-	coordinator := runs.New(kv.NewKVService(db), francisRuntime.Service(), time.UTC)
+	coordinator := runs.New(francisRuntime.Service(), time.UTC)
 	require.NoError(t, coordinator.Register(francisRuntime))
 	francistest.Start(t, francisRuntime)
 	return coordinator

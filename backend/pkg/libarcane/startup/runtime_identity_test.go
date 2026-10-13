@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: functional cut: removed standalone build workshop.
+// Deviations: functional cut: removed standalone build workshop; functional cut: removed SQLite runtime and migrations.
 
 package startup
 
@@ -351,57 +351,6 @@ func TestParseMountpoints(t *testing.T) {
 	require.Contains(t, parsed, "/app/data/projects")
 	require.Contains(t, parsed, "/assets")
 }
-
-func TestSQLiteDatabasePath(t *testing.T) {
-	t.Run("uses default sqlite path when unset", func(t *testing.T) {
-		path, ok, err := sqliteDatabasePathInternal("")
-		require.NoError(t, err)
-		require.True(t, ok)
-		require.Equal(t, "data/arcane.db", path)
-	})
-
-	t.Run("preserves absolute sqlite path", func(t *testing.T) {
-		path, ok, err := sqliteDatabasePathInternal("file:/app/custom/arcane.db?_pragma=journal_mode(WAL)")
-		require.NoError(t, err)
-		require.True(t, ok)
-		require.Equal(t, "/app/custom/arcane.db", path)
-	})
-
-	t.Run("returns relative sqlite path", func(t *testing.T) {
-		path, ok, err := sqliteDatabasePathInternal("file:data/arcane.db?_pragma=journal_mode(WAL)")
-		require.NoError(t, err)
-		require.True(t, ok)
-		require.Equal(t, "data/arcane.db", path)
-	})
-
-	t.Run("skips non sqlite database urls", func(t *testing.T) {
-		path, ok, err := sqliteDatabasePathInternal("postgres://arcane:secret@db/arcane")
-		require.NoError(t, err)
-		require.False(t, ok)
-		require.Empty(t, path)
-	})
-}
-
-func TestEnsureSQLiteFilesExistInternal(t *testing.T) {
-	tempDir := t.TempDir()
-	dbPath := filepath.Join(tempDir, "arcane.db")
-
-	require.NoError(t, ensureSQLiteFilesExistInternal("file:"+dbPath))
-
-	require.FileExists(t, dbPath)
-	require.NoFileExists(t, dbPath+"-wal")
-	require.NoFileExists(t, dbPath+"-shm")
-}
-
-func TestEnsureSQLiteFilesExistInternalCreatesParentDir(t *testing.T) {
-	tempDir := t.TempDir()
-	dbPath := filepath.Join(tempDir, "subdir", "arcane.db")
-
-	require.NoError(t, ensureSQLiteFilesExistInternal("file:"+dbPath))
-
-	require.FileExists(t, dbPath)
-}
-
 func TestUnescapeMountInfoPath(t *testing.T) {
 	tests := []struct {
 		name   string

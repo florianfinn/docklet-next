@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; functional cut: removed GitOps and saved Git repositories.
+// Deviations: Local module namespace; functional cut: removed GitOps and saved Git repositories; functional cut: removed SQLite runtime and migrations.
 
 package runs
 
@@ -12,26 +12,15 @@ import (
 	"time"
 
 	st "github.com/florianfinn/docklet-next/types/scheduler"
-	"github.com/libtnb/sqlite"
 	"github.com/stretchr/testify/require"
-	"gorm.io/gorm"
 
-	"github.com/florianfinn/docklet-next/backend/internal/database"
-	"github.com/florianfinn/docklet-next/backend/internal/kv"
 	francistest "github.com/florianfinn/docklet-next/backend/pkg/utils/francis/testing"
 )
 
 func newResolutionQueueInternal(t *testing.T) *Coordinator {
 	t.Helper()
-	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
-	require.NoError(t, err)
-	require.NoError(t, db.AutoMigrate(&kv.KVEntry{}))
-	sqlDB, err := db.DB()
-	require.NoError(t, err)
-	sqlDB.SetMaxOpenConns(1)
-	t.Cleanup(func() { require.NoError(t, sqlDB.Close()) })
 	runtime := francistest.New(t)
-	q := New(kv.NewKVService(&database.DB{DB: db}), runtime.Service(), time.UTC)
+	q := New(runtime.Service(), time.UTC)
 	require.NoError(t, q.Register(runtime))
 	francistest.Start(t, runtime)
 	return q

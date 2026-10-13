@@ -2,145 +2,27 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; functional cut: removed GitOps and saved Git repositories.
+// Deviations: Local module namespace; functional cut: removed GitOps and saved Git repositories; functional cut: removed SQLite runtime and migrations.
 
 package runs
 
 import (
 	"context"
-	"encoding/json/jsontext"
-	"encoding/json/v2"
 	"errors"
 	"fmt"
-	"path/filepath"
 	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
-	"uuid"
 
 	st "github.com/florianfinn/docklet-next/types/scheduler"
 	"github.com/italypaleale/francis/actor"
-	"github.com/libtnb/sqlite"
 	"github.com/stretchr/testify/require"
 	kit "go.getarcane.app/kit/pkg"
-	"gorm.io/gorm"
 
-	"github.com/florianfinn/docklet-next/backend/internal/database"
-	"github.com/florianfinn/docklet-next/backend/internal/kv"
 	francistest "github.com/florianfinn/docklet-next/backend/pkg/utils/francis/testing"
 )
-
-func TestLegacyImportSurvivesRestartAndDeduplicates(t *testing.T) {
-	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
-	require.NoError(t, err)
-	require.NoError(t, db.AutoMigrate(&kv.KVEntry{}))
-	sqlDB, err := db.DB()
-	require.NoError(t, err)
-	sqlDB.SetMaxOpenConns(1)
-	t.Cleanup(func() { require.NoError(t, sqlDB.Close()) })
-	store := kv.NewKVService(&database.DB{DB: db})
-	legacy := st.QueueRecord{
-		JobID:         "legacy",
-		EnvironmentID: "0",
-		Runs: []st.Run{{
-			ID:            uuid.New().String(),
-			JobID:         "legacy",
-			EnvironmentID: "0",
-			Trigger:       "manual",
-			Status:        st.Succeeded,
-			CreatedAt:     time.Now().UTC(),
-			UpdatedAt:     time.Now().UTC(),
-		}},
-	}
-	legacy.Runs[0].ActivityID = legacy.Runs[0].ID
-	for _, jobID := range []string{"volume-backup:first", "volume-backup:second"} {
-		record := st.QueueRecord{JobID: jobID, EnvironmentID: "0", Schedule: "@every 5m", NextRun: time.Now().UTC().Add(time.Hour)}
-		for i := range 1600 {
-			created := time.Now().UTC().Add(-time.Duration(1600-i) * 5 * time.Minute)
-			record.Runs = append(
-				record.Runs,
-				st.Run{
-					ID:            uuid.New().String(),
-					ActivityID:    uuid.New().String(),
-					JobID:         jobID,
-					EnvironmentID: "0",
-					Trigger:       "scheduled",
-					Status:        st.NeedsAttention,
-					CreatedAt:     created,
-					UpdatedAt:     created,
-				},
-			)
-		}
-		data, marshalErr := json.Marshal(record)
-		require.NoError(t, marshalErr)
-		require.NoError(t, store.Set(t.Context(), queuePrefixInternal+kit.SHA256Hex("0\x00"+jobID), string(data)))
-	}
-	encoded, err := json.Marshal(legacy)
-	require.NoError(t, err)
-	key := queuePrefixInternal + kit.SHA256Hex("0\x00"+legacy.JobID)
-	require.NoError(t, store.Set(t.Context(), key, string(encoded)))
-	databaseURL := "file:" + filepath.ToSlash(filepath.Join(t.TempDir(), "actors.db"))
-	first := francistest.New(t, databaseURL)
-	q := New(store, first.Service(), time.UTC)
-	require.NoError(t, q.Register(first))
-	francistest.Start(t, first)
-	require.NoError(t, q.importLegacyInternal(t.Context()))
-	require.NoError(t, q.importLegacyInternal(t.Context()))
-	observer := &activityObserverFakeInternal{existingOnly: true}
-	observer.unavailable.Store(true)
-	q.SetObserver(observer)
-	_, err = q.Submit(t.Context(), st.Request{JobID: legacy.JobID, RunID: legacy.Runs[0].ID, Trigger: "manual"})
-	require.NoError(t, err)
-	require.NoError(t, q.UpdateRun(t.Context(), legacy.Runs[0], func(run *st.Run) error {
-		run.Outcome.Targets = []st.TargetOutcome{{ID: "artifact", Status: st.Succeeded, RecoveryData: jsontext.Value(`{"backupId":"artifact"}`)}}
-		return nil
-	}))
-	require.True(t, q.hasPendingActivitySyncInternal(t.Context()))
-	q.SetExecutor(func(context.Context, st.Run) (st.Outcome, error) {
-		t.Error("startup must not execute jobs before activation")
-		return st.Outcome{Status: st.Failed}, nil
-	}, nil)
-	require.NoError(t, q.Start(t.Context(), t.Context()))
-	require.NoError(t, q.Stop(t.Context()))
-	require.NoError(t, first.Stop(t.Context()))
-
-	second := francistest.New(t, databaseURL)
-	restored := New(store, second.Service(), time.UTC)
-	restored.SetObserver(observer)
-	restored.SetExecutor(q.execute, nil)
-	require.NoError(t, restored.Register(second))
-	francistest.Start(t, second)
-	require.NoError(t, restored.importLegacyInternal(t.Context()))
-	require.NoError(t, restored.Start(t.Context(), t.Context()))
-	t.Cleanup(func() { require.NoError(t, restored.Stop(context.WithoutCancel(t.Context()))) })
-	for _, jobID := range []string{"volume-backup:first", "volume-backup:second"} {
-		history, listErr := restored.List(t.Context(), "0", jobID, 1, 100)
-		require.NoError(t, listErr)
-		require.Equal(t, 100, history.Total)
-		require.Equal(t, st.Failed, history.Runs[0].Status)
-		state, stateErr := restored.ScheduleState(t.Context(), jobID)
-		require.NoError(t, stateErr)
-		require.Equal(t, "@every 5m", state.Schedule)
-		require.True(t, state.NextRun.After(time.Now()))
-	}
-	duplicate, err := restored.Submit(t.Context(), st.Request{JobID: legacy.JobID, RunID: legacy.Runs[0].ID, Trigger: "manual"})
-	require.NoError(t, err)
-	require.Equal(t, st.Succeeded, duplicate.Status)
-	require.Equal(t, jsontext.Value(`{"backupId":"artifact"}`), duplicate.Outcome.Targets[0].RecoveryData)
-	history, err := restored.List(t.Context(), "0", legacy.JobID, 1, 20)
-	require.NoError(t, err)
-	require.Equal(t, 1, history.Total)
-	require.Equal(t, time.UTC, history.Runs[0].CreatedAt.Location())
-	observer.unavailable.Store(false)
-	restored.retryActivitySyncInternal(t.Context())
-	require.False(t, restored.hasPendingActivitySyncInternal(t.Context()))
-	require.Positive(t, observer.observed.Load())
-	_, exists, err := store.Get(t.Context(), key)
-	require.NoError(t, err)
-	require.True(t, exists)
-}
 
 type occurrenceEnvelopeInternal struct{ occurrence st.ScheduleOccurrence }
 
