@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace
+// Deviations: Local module namespace; functional cut: removed central variables and .env.global.
 
 package projects
 
@@ -77,9 +77,6 @@ func (c *composeCacheInternal[T]) Set(projectID, fingerprint, projectPath, proje
 		mtimes[path] = info.ModTime()
 	}
 	dependencies := append([]string{filepath.Join(projectPath, EffectiveEnvFileName)}, envFiles...)
-	if projectsDirectory != "" {
-		dependencies = append(dependencies, filepath.Join(projectsDirectory, GlobalEnvFileName))
-	}
 	// A later standard override must invalidate a model loaded before it existed.
 	for _, name := range composeOverrideFileCandidates {
 		dependencies = append(dependencies, filepath.Join(filepath.Dir(composePath), name))

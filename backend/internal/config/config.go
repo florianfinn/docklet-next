@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace
+// Deviations: Local module namespace; functional cut: removed upstream analytics heartbeat and APNS mobile push and Svelte-specific metadata or asset paths; functional cut: removed template catalogue; functional cut: removed OIDC and passkeys; functional cut: removed SQLite runtime and migrations.
 
 package config
 
@@ -41,10 +41,9 @@ type Config struct {
 	BuildablesConfig
 
 	AppUrl                string         `env:"APP_URL" default:"http://localhost:3552"`
-	DatabaseURL           string         `env:"DATABASE_URL" default:"file:data/arcane.db?_pragma=journal_mode(WAL)&_pragma=busy_timeout(2500)&_txlock=immediate" options:"file"`
+	DatabaseURL           string         `env:"DATABASE_URL" default:"postgres://docklet:docklet@localhost:5432/docklet"`
 	AllowDowngrade        bool           `env:"ALLOW_DOWNGRADE" default:"false"`
 	AllowCLIPasswordReset bool           `env:"ALLOW_CLI_PASSWORD_RESET" default:"false"`
-	AllowCLIMFAReset      bool           `env:"ALLOW_CLI_MFA_RESET" default:"false"`
 	ActorPort             string         `env:"ACTOR_PORT" default:"3551"`
 	Port                  string         `env:"PORT" default:"3552"`
 	Listen                string         `env:"LISTEN" default:""`
@@ -56,33 +55,17 @@ type Config struct {
 	JWTRefreshExpiry      time.Duration  `env:"JWT_REFRESH_EXPIRY" default:"168h"`
 	EncryptionKey         string         `env:"ENCRYPTION_KEY" default:"arcane-dev-key-32-characters!!!" options:"file"`
 	AdminStaticAPIKey     string         `env:"ADMIN_STATIC_API_KEY" default:"" options:"file"`
-	ApnsRelayUrl          string         `env:"APNS_RELAY_URL" default:"https://apns.getarcane.app" options:"trimTrailingSlash"`
-	ApnsKeyAlgorithm      string         `env:"APNS_KEY_ALGORITHM" default:"ed25519" options:"toLower"`
-
-	OidcEnabled                bool   `env:"OIDC_ENABLED" default:"false"`
-	OidcClientID               string `env:"OIDC_CLIENT_ID" default:"" options:"file"`
-	OidcClientSecret           string `env:"OIDC_CLIENT_SECRET" default:"" options:"file"`
-	OidcIssuerURL              string `env:"OIDC_ISSUER_URL" default:""`
-	OidcScopes                 string `env:"OIDC_SCOPES" default:"openid email profile"`
-	OidcGroupsClaim            string `env:"OIDC_GROUPS_CLAIM" default:"groups"`
-	OidcSkipTlsVerify          bool   `env:"OIDC_SKIP_TLS_VERIFY" default:"false"`
-	OidcAutoRedirectToProvider bool   `env:"OIDC_AUTO_REDIRECT_TO_PROVIDER" default:"false"`
-	OidcProviderName           string `env:"OIDC_PROVIDER_NAME" default:""`
-	OidcProviderLogoUrl        string `env:"OIDC_PROVIDER_LOGO_URL" default:""`
-	OidcMobileRedirectUris     string `env:"OIDC_MOBILE_REDIRECT_URIS" default:"arcane-mobile://oidc-callback"`
-	OidcRoleMappings           string `env:"OIDC_ROLE_MAPPINGS" default:"" options:"file"`
 
 	PUID                          string `env:"PUID" default:""`
 	PGID                          string `env:"PGID" default:""`
 	DockerHost                    string `env:"DOCKER_HOST" default:"unix:///var/run/docker.sock"`
 	DockerConfig                  string `env:"DOCKER_CONFIG" default:""`
 	ProjectsDirectory             string `env:"PROJECTS_DIRECTORY" default:"/app/data/projects"`
-	TemplatesDirectory            string `env:"TEMPLATES_DIRECTORY" default:"/app/data/templates"`
 	ProjectScanMaxDepth           int    `env:"PROJECT_SCAN_MAX_DEPTH" default:"3"`
 	ProjectWorkspaceMaxDepth      int    `env:"PROJECT_WORKSPACE_MAX_DEPTH" default:"20"`
 	ProjectWorkspaceMaxEntries    int    `env:"PROJECT_WORKSPACE_MAX_ENTRIES" default:"2000"`
 	ProjectWorkspaceMaxFileSizeMB int    `env:"PROJECT_WORKSPACE_MAX_FILE_SIZE_MB" default:"10"`
-	ProjectScanSkipDirs           string `env:"PROJECT_SCAN_SKIP_DIRS" default:".git,node_modules,vendor,.venv,venv,__pycache__,.cache,dist,build,target,.next,.nuxt,.svelte-kit"`
+	ProjectScanSkipDirs           string `env:"PROJECT_SCAN_SKIP_DIRS" default:".git,node_modules,vendor,.venv,venv,__pycache__,.cache,dist,build,target,.next,.nuxt"`
 	VolumeWorkspaceMaxDepth       int    `env:"VOLUME_WORKSPACE_MAX_DEPTH" default:"50"`
 	VolumeWorkspaceMaxEntries     int    `env:"VOLUME_WORKSPACE_MAX_ENTRIES" default:"10000"`
 	VolumeWorkspaceMaxFileSizeMB  int    `env:"VOLUME_WORKSPACE_MAX_FILE_SIZE_MB" default:"10"`
@@ -93,7 +76,6 @@ type Config struct {
 	ManagerApiUrl                 string `env:"MANAGER_API_URL" default:""`
 	UpdateCheckDisabled           bool   `env:"UPDATE_CHECK_DISABLED" default:"false"`
 	UIConfigurationDisabled       bool   `env:"UI_CONFIGURATION_DISABLED" default:"false"`
-	AnalyticsDisabled             bool   `env:"ANALYTICS_DISABLED" default:"false"`
 	GPUMonitoringEnabled          bool   `env:"GPU_MONITORING_ENABLED" default:"false"`
 	GPUType                       string `env:"GPU_TYPE" default:"auto"`
 	EdgeAgent                     bool   `env:"EDGE_AGENT" default:"false"`

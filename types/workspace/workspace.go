@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: None
+// Deviations: functional cut: removed GitOps and saved Git repositories.
 
 package workspace
 
@@ -16,11 +16,10 @@ const (
 	FileOpMove         = "move"
 	FileOpDelete       = "delete"
 
-	FileReadOnlyBinary        = "binary"
-	FileReadOnlyTooLarge      = "too_large"
-	FileReadOnlySymlink       = "symlink"
-	FileReadOnlySpecial       = "special"
-	FileReadOnlyGitOpsManaged = "gitops_managed"
+	FileReadOnlyBinary   = "binary"
+	FileReadOnlyTooLarge = "too_large"
+	FileReadOnlySymlink  = "symlink"
+	FileReadOnlySpecial  = "special"
 )
 
 type FileEntry struct {
@@ -34,7 +33,7 @@ type FileEntry struct {
 	IsDirectory    bool      `json:"isDirectory" doc:"Whether this entry is a directory"`
 	IsSymlink      bool      `json:"isSymlink" doc:"Whether this entry is a symbolic link"`
 	Editable       bool      `json:"editable" doc:"Whether this entry can be edited"`
-	ReadOnlyReason string    `json:"readOnlyReason,omitempty" enum:"binary,too_large,symlink,special,gitops_managed"`
+	ReadOnlyReason string    `json:"readOnlyReason,omitempty" enum:"binary,too_large,symlink,special"`
 }
 
 type FileChange struct {
@@ -68,5 +67,5 @@ type FileContent struct {
 	MimeType       string `json:"mimeType"`
 	Size           int64  `json:"size"`
 	Editable       bool   `json:"editable"`
-	ReadOnlyReason string `json:"readOnlyReason,omitempty" enum:"binary,too_large,symlink,special,gitops_managed"`
+	ReadOnlyReason string `json:"readOnlyReason,omitempty" enum:"binary,too_large,symlink,special"`
 }

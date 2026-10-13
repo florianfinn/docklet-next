@@ -1,0 +1,845 @@
+package local
+
+import (
+	"bytes"
+	"context"
+	"errors"
+	"fmt"
+	"log/slog"
+	"math"
+	"math/rand/v2"
+	"strconv"
+	"time"
+
+	msgpack "github.com/vmihailenco/msgpack/v5"
+	"go.opentelemetry.io/otel/trace"
+
+	"github.com/italypaleale/francis/actor"
+	"github.com/italypaleale/francis/components"
+	"github.com/italypaleale/francis/internal/actorcore"
+	"github.com/italypaleale/francis/internal/ref"
+	"github.com/italypaleale/francis/internal/tracing"
+)
+
+// alarmsInitialFetchThreshold is the poll interval above which the fetcher performs an early first fetch after startup, rather than waiting for the first tick
+const alarmsInitialFetchThreshold = 5 * time.Second
+
+// alarmsInitialFetchDelay is how long after startup the early first fetch happens
+const alarmsInitialFetchDelay = 250 * time.Millisecond
+
+func (h *Host) runAlarmFetcher(ctx context.Context) error {
+	h.log.DebugContext(ctx, "Starting background alarm fetcher", slog.Any("interval", h.alarmsPollInterval))
+	defer h.log.Debug("Stopped background alarm fetcher")
+
+	// Close the processor when the fetcher exits, then wait for all in-flight alarm goroutines to finish
+	defer h.closeAndDrainAlarmProcessor()
+
+	t := h.clock.NewTicker(h.alarmsPollInterval)
+	defer t.Stop()
+
+	// With a long poll interval the first tick is far away, so an alarm that is already due would not fire until then
+	// Perform an early first fetch in that case: the host is registered before the services start, so there is something to fetch for right away
+	var initialCh <-chan time.Time
+	if h.alarmsPollInterval > alarmsInitialFetchThreshold {
+		initialTimer := h.clock.NewTimer(alarmsInitialFetchDelay)
+		defer initialTimer.Stop()
+		initialCh = initialTimer.C()
+	}
+
+	var err error
+	hostList := []string{h.HostID()}
+	for {
+		select {
+		case <-initialCh:
+			initialCh = nil
+			err = h.fetchAndEnqueueAlarms(ctx, hostList)
+			if err != nil {
+				h.log.ErrorContext(ctx, "Failed to fetch alarms", slog.Any("error", err))
+			}
+		case <-t.C():
+			err = h.fetchAndEnqueueAlarms(ctx, hostList)
+			if err != nil {
+				// Log the error only
+				h.log.ErrorContext(ctx, "Failed to fetch alarms", slog.Any("error", err))
+			}
+		case <-ctx.Done():
+			// Stop when the context is canceled
+			return ctx.Err()
+		}
+	}
+}
+
+// closeAndDrainAlarmProcessor prevents new executions before waiting for every execution that already crossed the drain barrier
+func (h *Host) closeAndDrainAlarmProcessor() {
+	// Establish the shutdown barrier under the same lock used by both WaitGroup Add sites
+	h.activeAlarmsLock.Lock()
+	h.alarmsDraining = true
+	processor := h.alarmProcessor
+	h.activeAlarmsLock.Unlock()
+
+	// Stop queued alarms while leaving the processor field intact so late re-enqueues fail without panicking
+	if processor != nil {
+		apErr := processor.Close()
+		if apErr != nil {
+			h.log.Error("Failed to close alarm processor", slog.Any("error", apErr))
+		}
+	}
+
+	// Every future Add is now excluded, so waiting concurrently with caller goroutines is safe
+	h.alarmWg.Wait()
+}
+
+func (h *Host) fetchAndEnqueueAlarms(ctx context.Context, hostList []string) error {
+	// Fetch all upcoming alarms
+	res, err := h.actorProvider.FetchAndLeaseUpcomingAlarms(ctx, components.FetchAndLeaseUpcomingAlarmsReq{
+		Hosts: hostList,
+	})
+	if err != nil {
+		return fmt.Errorf("error fetching alarms: %w", err)
+	}
+
+	// Enqueue all alarms
+	return h.enqueueAlarms(res)
+}
+
+func (h *Host) enqueueAlarms(leases []*ref.AlarmLease) (err error) {
+	// Get the lock
+	h.activeAlarmsLock.Lock()
+
+	// Do not start new executions after shutdown has established the drain barrier
+	if h.alarmsDraining {
+		h.activeAlarmsLock.Unlock()
+		return nil
+	}
+
+	var (
+		i  int
+		ok bool
+	)
+	for _, a := range leases {
+		// If the alarm is already ok, skip it
+		// We also skip alarms that are being retried, otherwise their attempt counter and delay would be overwritten
+		// (retries are not persisted and are managed in-memory only)
+		_, ok = h.activeAlarms[a.Key()]
+		if ok {
+			continue
+		}
+		_, ok = h.retryingAlarms[a.Key()]
+		if ok {
+			continue
+		}
+
+		// If the alarm is to be executed immediately (within the next 0.1ms), skip enqueuing it and execute it right away
+		if a.DueTime().Sub(h.clock.Now()) < 100*time.Microsecond {
+			h.activeAlarms[a.Key()] = struct{}{}
+			h.alarmWg.Add(1)
+			go h.executeActiveAlarm(a)
+			continue
+		}
+
+		leases[i] = a
+		i++
+	}
+
+	// Unlock
+	h.activeAlarmsLock.Unlock()
+
+	if i > 0 {
+		// Enqueue the alarms all at once as this is more efficient (we lock the processor only once)
+		err = h.alarmProcessor.Enqueue(leases[:i]...)
+		if err != nil {
+			return fmt.Errorf("error enqueueing alarms: %w", err)
+		}
+	}
+
+	return nil
+}
+
+type executeAlarmStatus int
+
+const (
+	// executeAlarmStatusCompleted means the alarm or job ran successfully
+	executeAlarmStatusCompleted = executeAlarmStatus(iota)
+	// executeAlarmStatusFatal means the occurrence failed terminally, so an alarm is deleted and a job is dead-lettered
+	executeAlarmStatusFatal
+	// executeAlarmStatusRetryable means the occurrence failed but may succeed later, so it is retried with backoff on this host
+	executeAlarmStatusRetryable
+	// executeAlarmStatusAbandoned means the lease was lost or the occurrence no longer exists, so there is nothing to do
+	executeAlarmStatusAbandoned
+	// executeAlarmStatusReleased means the host declined a job occurrence (its capacity group was full, or the handler returned ErrJobRejected) and it must be handed back for another host to run
+	executeAlarmStatusReleased
+)
+
+// Callback for the alarm processor
+func (h *Host) executeAlarm(lease *ref.AlarmLease) {
+	// Mark the alarm as active before spawning the goroutine so concurrent processor firings cannot start duplicate executions
+	h.activeAlarmsLock.Lock()
+	if h.alarmsDraining {
+		h.activeAlarmsLock.Unlock()
+		return
+	}
+	_, active := h.activeAlarms[lease.Key()]
+	if active {
+		// Already active, so nothing to do
+		h.activeAlarmsLock.Unlock()
+		return
+	}
+
+	h.activeAlarms[lease.Key()] = struct{}{}
+	h.alarmWg.Add(1)
+	h.activeAlarmsLock.Unlock()
+
+	// Now we can execute the alarm
+	// Each execution runs on its own goroutine so the processor loop can continue without blocking
+	go h.executeActiveAlarm(lease)
+}
+
+// Executes an active alarm, that is already in the activeAlarms map
+func (h *Host) executeActiveAlarm(lease *ref.AlarmLease) {
+	// Release the shutdown drain barrier when this execution finishes
+	defer h.alarmWg.Done()
+
+	// Use a background context so an in-flight execution can finish during the shutdown grace period
+	// Individual operations are bounded by providerRequestTimeout
+	ctx := context.Background()
+
+	// A fired alarm is not triggered by a caller request, so it begins its own trace
+	ctx, span := tracing.Start(ctx, "alarm.execute",
+		trace.WithSpanKind(trace.SpanKindConsumer),
+		trace.WithAttributes(
+			tracing.ActorRef(lease.ActorRef().String()),
+			tracing.AlarmName(lease.AlarmRef().Name),
+		),
+	)
+	defer span.End()
+
+	key := lease.Key()
+	log := h.log.With(
+		slog.String("id", lease.AlarmRef().String()),
+		slog.Any("due", lease.DueTime()),
+	)
+	log.Debug("Executing alarm")
+
+	// Job-specific state captured inside the closure so the terminal-failure path can dead-letter the job and fire its JobFailed hook
+	var (
+		isJob     bool
+		jobMethod string
+		jobData   []byte
+		jobProps  ref.AlarmProperties
+	)
+
+	// Set when the alarm repeats and its lease was kept for the next occurrence, so the deferred cleanup below re-enqueues it
+	reEnqueue := false
+
+	// Remove from the list of active alarms upon returning
+	// Registered before the placement check below so an occurrence this host declines still clears its active flag and can fire again later
+	isRetrying := false
+	defer func() {
+		h.activeAlarmsLock.Lock()
+		delete(h.activeAlarms, key)
+
+		// If it's retrying, we add it to the list of retrying alarms
+		if isRetrying {
+			h.retryingAlarms[key] = struct{}{}
+		} else {
+			delete(h.retryingAlarms, key)
+		}
+
+		h.activeAlarmsLock.Unlock()
+
+		// Re-enqueue a repeating alarm whose lease we kept, only after the active flag is cleared above
+		// Otherwise enqueueAlarms would skip it as already active and the alarm would never re-fire on schedule
+		if reEnqueue {
+			enqErr := h.enqueueAlarms([]*ref.AlarmLease{lease})
+			if enqErr != nil {
+				log.Error("Error re-enqueueing leased alarm", slog.Any("error", enqErr))
+			}
+		}
+	}()
+
+	aRef := lease.ActorRef()
+
+	// Confirm the actor is still placed on this host before running the occurrence (the lookup has a cache)
+	placement, lookupErr := h.lookupActor(ctx, aRef, false, false)
+	if lookupErr != nil || !h.isLocal(placement) {
+		h.releaseForeignAlarm(ctx, lease, log, lookupErr)
+		return
+	}
+
+	// Get and lock the actor
+	statusAny, err := h.core.LockAndInvoke(ctx, aRef, func(parentCtx context.Context, act *actorcore.ActiveActor) (status any, err error) {
+		// A successfully-executed occurrence is finalized in the provider before the actor's turn lock is released
+		// An actor that halts itself from its own handler is removed from the placement store as soon as the lock is released, and the provider drops the leases of a deactivated actor's alarms
+		// Finalizing here keeps the deletion ahead of that, so the occurrence is not left behind to be delivered a second time
+		defer func() {
+			if status != executeAlarmStatusCompleted {
+				return
+			}
+
+			// The completion uses the outer context on purpose: parentCtx is canceled once the actor's halt grace period elapses
+			var completeErr error
+			reEnqueue, completeErr = h.completeAlarm(ctx, lease, log)
+			if completeErr != nil {
+				// Log the error only - we are in a background goroutine
+				log.ErrorContext(ctx, "Error completing alarm", slog.Any("error", completeErr))
+			}
+		}()
+
+		// Before we execute an alarm we need to fetch it again using the lease
+		// This is because alarms we have in-memory could have been here for a few seconds, and they may not represent the accurate
+		// state of the data in the provider. For example, it could have been edited or deleted, or the lease could have been broken.
+		// Note we do this after we acquired the lock on the actor, since that operation can take time.
+		ctx, cancel := context.WithTimeout(parentCtx, h.providerRequestTimeout)
+		defer cancel()
+		a, err := h.actorProvider.GetLeasedAlarm(ctx, lease)
+		if errors.Is(err, components.ErrNoAlarm) {
+			// If we get ErrNoAlarm, the alarm was modified/deleted, or the lease was canceled for other reasons
+			// We return executeAlarmAbandoned, indicating there's nothing else left to do
+			return executeAlarmStatusAbandoned, nil
+		} else if err != nil {
+			// This is a retryable error, possibly something transient with the component, and it could be retried later
+			return executeAlarmStatusRetryable, fmt.Errorf("error retrieving alarm from provider: %w", err)
+		}
+
+		// Jobs ride on the alarm engine but differ in delivery (Job vs Alarm) and terminal-failure handling (dead-letter vs delete)
+		if a.Kind == components.AlarmKindJob {
+			return h.executeJob(parentCtx, lease, act, a, &isJob, &jobMethod, &jobData, &jobProps)
+		}
+
+		// Mark the alarm as executed now
+		lease.SetExecutionTime(h.clock.Now())
+
+		// Invoke the actor
+		err = h.core.RunOccurrence(parentCtx, act, actorcore.Occurrence{
+			Name:      a.Name,
+			Data:      a.Data,
+			RequestID: alarmRequestID(lease),
+		})
+		if errors.Is(err, actorcore.ErrActorMethodUnsupported) {
+			// This is a fatal error, which causes us to drop the alarm since there's no way it can be completed
+			return executeAlarmStatusFatal, err
+		} else if err != nil {
+			// Consider this as a retryable condition unless we've exhausted the configured max attempts
+			code := executeAlarmStatusRetryable
+			maxAttempts := h.core.ActorsConfig[aRef.ActorType].MaxAttempts
+			if lease.Attempts() >= maxAttempts {
+				code = executeAlarmStatusFatal
+			}
+			return code, fmt.Errorf("error from actor (attempt %d of %d): %w", lease.Attempts(), maxAttempts, err)
+		}
+
+		return executeAlarmStatusCompleted, nil
+	})
+
+	status, ok := statusAny.(executeAlarmStatus)
+	if !ok {
+		// If result was not executeAlarmStatus, it means that something failed getting or locking the actor, rather than the handler failing
+		// An actor that is halting, or is no longer active or placed here, says nothing about this occurrence: the placement we checked above has gone stale underneath us
+		// Handing the lease back has the next poll re-resolve and re-activate, which costs one poll interval instead of a full retry backoff and does not spend an attempt
+		// A workflow instance halts its activation the moment it terminates, so a job that arrives for it in that window (a parent unwinding a completed child, say) takes this path
+		switch {
+		case errors.Is(err, actor.ErrActorHalted),
+			errors.Is(err, actor.ErrActorNotActive),
+			errors.Is(err, actor.ErrActorNotHosted):
+			status = executeAlarmStatusReleased
+		default:
+			status = executeAlarmStatusRetryable
+		}
+	}
+	switch status {
+	case executeAlarmStatusAbandoned:
+		// Nothing to do here - the alarm was abandoned (either edited, or we lost the lease)
+		// Whatever the case, we don't need to do anything else
+		log.Warn("Lease was lost for alarm - skipping execution")
+		return
+
+	case executeAlarmStatusFatal:
+		// For jobs, a terminal failure dead-letters the occurrence rather than silently dropping it
+		if isJob {
+			h.deadLetterJob(ctx, lease, jobProps, jobMethod, jobData, err, log)
+			return
+		}
+
+		// Fatal error - we delete the alarm
+		log.Error("Fatal error executing alarm - alarm will be removed", slog.Any("error", err))
+		err = h.actorProvider.DeleteLeasedAlarm(ctx, lease)
+		if err != nil && !errors.Is(err, components.ErrNoAlarm) {
+			// Log the error only - we are in background goroutine
+			// Note we ignore ErrNoAlarm since that means the lease was lost or the alarm was deleted in the meanwhile
+			log.Error("Error deleting leased alarm after fatal error", slog.Any("error", err))
+		}
+		return
+
+	case executeAlarmStatusReleased:
+		// The host declined this occurrence (capacity group full, or the handler returned ErrJobRejected), or could not lock the actor because its placement went stale
+		// Hand it back so another host, or this one on a later poll, runs it without counting an attempt or dead-lettering
+		log.Debug("Alarm released for re-routing", slog.Any("error", err))
+		h.releaseForReroute(ctx, lease, aRef, log)
+		return
+
+	case executeAlarmStatusRetryable:
+		// We can retry this
+		h.log.Warn("Error executing alarm - will retry", slog.Any("error", err))
+		// We still hold the lease, so just increment the due time and add re-add it to the queue
+		// We increment it by taking the initial retry delay and multiplying it by 1.5^attempts, with a max of 10, and some jitter
+		// Disable the "G404: Use of weak random number generator " gosec warning, since this is not used for anything security-related
+		// #nosec G404
+		jitter := rand.Float64()*0.2 + 0.9
+		multiplier := min(math.Pow(1.5, float64(lease.Attempts())), 10) * jitter
+		delay := h.core.ActorsConfig[aRef.ActorType].InitialRetryDelay * time.Duration(multiplier)
+		lease.IncreaseAttempts(h.clock.Now().Add(delay))
+		err = h.alarmProcessor.Enqueue(lease)
+		if err != nil {
+			// Log the error only - we are in background goroutine
+			log.Error("Error re-enqueueing alarm", slog.Any("error", err))
+		}
+
+		// Here, we add it to the list of alarms that we're retrying
+		// Otherwise, if the lease renewal happens in background, it will clear the attempt counter
+		isRetrying = true
+		return
+
+	case executeAlarmStatusCompleted:
+		// The alarm was already completed while the actor's turn lock was held
+		// The deferred cleanup above re-enqueues it when its lease was kept for the next occurrence
+		return
+
+	default:
+		// Indicates a development-time error
+		panic(fmt.Errorf("unknown alarm completion status: %v", statusAny))
+	}
+}
+
+// executeJob delivers a job occurrence to the actor's Job method, classifying the outcome like an alarm execution
+// It records the job's method, data, and schedule into the caller's variables so the terminal-failure path can dead-letter the occurrence and fire the JobFailed hook
+func (h *Host) executeJob(parentCtx context.Context, lease *ref.AlarmLease, act *actorcore.ActiveActor, a components.GetLeasedAlarmRes, isJob *bool, jobMethod *string, jobData *[]byte, jobProps *ref.AlarmProperties) (executeAlarmStatus, error) {
+	aRef := lease.ActorRef()
+
+	// Capture the job details for the terminal-failure path, which runs after this closure returns
+	*isJob = true
+	*jobMethod = a.JobMethod
+	*jobData = a.Data
+	*jobProps = a.AlarmProperties
+
+	// Mark the occurrence as executed now, so the dead-letter path can compute the next occurrence even on a hard failure
+	lease.SetExecutionTime(h.clock.Now())
+
+	// Invoke the actor's Job method
+	err := h.core.RunOccurrence(parentCtx, act, actorcore.Occurrence{
+		Job:       true,
+		JobMethod: a.JobMethod,
+		Data:      a.Data,
+		RequestID: alarmRequestID(lease),
+	})
+	switch {
+	case errors.Is(err, actorcore.ErrActorMethodUnsupported):
+		// A hard-fatal error: the actor type can never service this job, so it is dead-lettered immediately
+		return executeAlarmStatusFatal, err
+	case errors.Is(err, actorcore.ErrCapacityExhausted):
+		// A full capacity group means this host declines the occurrence, which the release path hands to another host without counting an attempt
+		return executeAlarmStatusReleased, err
+	case errors.Is(err, actor.ErrJobRejected):
+		// ErrJobRejected declines the occurrence on this host without failing it, so it is re-routed to another host
+		return executeAlarmStatusReleased, fmt.Errorf("job rejected by host: %w", err)
+	case errors.Is(err, actor.ErrJobPermanentFailure):
+		// ErrJobPermanentFailure skips the remaining retries and dead-letters the job immediately
+		return executeAlarmStatusFatal, fmt.Errorf("job failed permanently: %w", err)
+	case err != nil:
+		// Otherwise retry until the actor type's max attempts are exhausted, then dead-letter
+		code := executeAlarmStatusRetryable
+		maxAttempts := h.core.ActorsConfig[aRef.ActorType].MaxAttempts
+		if lease.Attempts() >= maxAttempts {
+			code = executeAlarmStatusFatal
+		}
+
+		return code, fmt.Errorf("error from actor job (attempt %d of %d): %w", lease.Attempts(), maxAttempts, err)
+	}
+
+	return executeAlarmStatusCompleted, nil
+}
+
+// deadLetterJob moves a terminally-failed job occurrence to the dead-letter store, then fires the optional JobFailed hook best-effort
+// For a repeating job the recurrence is rescheduled in the same provider transaction, so a single failed occurrence does not stop the recurrence
+func (h *Host) deadLetterJob(ctx context.Context, lease *ref.AlarmLease, props ref.AlarmProperties, method string, data []byte, jobErr error, log *slog.Logger) {
+	req := components.DeadLetterAlarmReq{
+		Reason:    jobErr.Error(),
+		Attempts:  lease.Attempts(),
+		Retention: h.core.ActorsConfig[lease.ActorRef().ActorType].DeadLetteredJobRecordRetention(),
+	}
+
+	// Keep a repeating job's recurrence alive by rescheduling its next occurrence as part of the dead-letter move
+	next, err := props.NextExecution(lease.ExecutionTime())
+	if err != nil {
+		log.Error("Failed to compute next execution for repeating job; recurrence will not continue", slog.Any("error", err))
+	} else if !next.IsZero() {
+		req.Reschedule = true
+		req.NextDueTime = next
+	}
+
+	log.Error("Job failed permanently - dead-lettering", slog.Any("error", jobErr))
+	err = h.actorProvider.DeadLetterAlarm(ctx, lease, req)
+	if errors.Is(err, components.ErrNoAlarm) {
+		// The lease was lost or the occurrence was already moved, so there is nothing else to do
+		return
+	} else if err != nil {
+		// Log the error only - we are in a background goroutine
+		log.Error("Error dead-lettering job", slog.Any("error", err))
+		return
+	}
+
+	// The dead-letter record is now the source of truth, so the JobFailed hook is best-effort
+	h.fireJobFailed(ctx, lease, method, data, jobErr)
+}
+
+// fireJobFailed delivers the optional JobFailed reaction hook on the actor's turn-based lock, best-effort
+// It is never itself dead-lettered: an error here is only logged, leaving the dead_jobs record in place
+func (h *Host) fireJobFailed(parentCtx context.Context, lease *ref.AlarmLease, method string, data []byte, jobErr error) {
+	jobID := lease.Key()
+
+	// The hook is optional, so an actor that does not implement it is a no-op
+	err := h.core.RunJobFailed(parentCtx, lease.ActorRef(), jobID, method, data, jobErr)
+	if err != nil {
+		h.log.Warn("JobFailed hook returned an error; dead-letter record is kept", slog.String("jobId", jobID), slog.Any("error", err))
+	}
+}
+
+// releaseForReroute hands a declined job occurrence back to the pool so another host can run it
+// It first halts the actor to clear its placement, otherwise the re-fetch would route the occurrence straight back here, then drops the lease with a short backoff so a cluster with no free capacity does not spin re-leasing it
+// It never counts an attempt or dead-letters, since a reject is not a failure
+func (h *Host) releaseForReroute(parentCtx context.Context, lease *ref.AlarmLease, aRef ref.ActorRef, log *slog.Logger) {
+	// Clear the actor's placement so the occurrence is re-allocated to a host with free capacity rather than back to this one
+	err := h.core.Halt(aRef.ActorType, aRef.ActorID)
+	if err != nil && !errors.Is(err, actor.ErrActorNotHosted) {
+		log.Warn("Failed to halt actor while releasing job for re-route", slog.Any("error", err))
+	}
+
+	// Push the due time out by a jittered backoff and drop the lease
+	// The lease is still held until this update, so no other host claims the occurrence in between
+	ctx, cancel := context.WithTimeout(parentCtx, h.providerRequestTimeout)
+	defer cancel()
+	next := h.clock.Now().Add(rerouteBackoff(h.alarmsPollInterval))
+	err = h.actorProvider.UpdateLeasedAlarm(ctx, lease, components.UpdateLeasedAlarmReq{DueTime: next})
+	if err != nil && !errors.Is(err, components.ErrNoAlarm) {
+		// Log only: if this fails the lease simply expires on its own and the occurrence is re-fetched later
+		log.Warn("Failed to release lease for re-route", slog.Any("error", err))
+	}
+}
+
+// releaseForeignAlarm hands back the lease on an occurrence whose actor this host could not confirm it still owns
+// Releasing rather than letting the lease lapse lets the actor's current host pick the occurrence up on its next poll, instead of waiting out the remaining lease duration
+func (h *Host) releaseForeignAlarm(parentCtx context.Context, lease *ref.AlarmLease, log *slog.Logger, lookupErr error) {
+	if lookupErr != nil {
+		log.WarnContext(parentCtx, "Could not confirm actor placement before executing alarm - skipping execution", slog.Any("error", lookupErr))
+	} else {
+		log.DebugContext(parentCtx, "Actor is no longer placed on this host - releasing alarm lease")
+	}
+
+	ctx, cancel := context.WithTimeout(parentCtx, h.providerRequestTimeout)
+	defer cancel()
+	err := h.actorProvider.ReleaseAlarmLease(ctx, lease)
+	if err != nil && !errors.Is(err, components.ErrNoAlarm) {
+		// Log only: if this fails the lease simply expires on its own and the occurrence is re-fetched later
+		log.WarnContext(ctx, "Error releasing alarm lease", slog.Any("error", err))
+	}
+}
+
+// rerouteBackoff returns the delay before a released occurrence becomes due again
+// It scales with the configured alarm poll interval so a re-route reaches another host on its next poll rather than immediately, with jitter to spread re-fetches across hosts and avoid a full cluster spinning on the same occurrence
+func rerouteBackoff(pollInterval time.Duration) time.Duration {
+	// #nosec G404 -- not security-sensitive, only used to spread re-route timing
+	jitter := 1.0 + rand.Float64()
+	return time.Duration(float64(pollInterval) * jitter)
+}
+
+// completeAlarm reschedules a repeating alarm or deletes a one-shot alarm after a successful execution
+// It returns true when the lease was kept for the next occurrence and must be re-enqueued by the caller once the active flag is cleared
+func (h *Host) completeAlarm(parentCtx context.Context, lease *ref.AlarmLease, log *slog.Logger) (bool, error) {
+	// First, retrieve the alarm again
+	// We do this again first to check that the alarm is repeating, and second to make sure our lease is still valid
+	// In fact, the actor itself may have modified the alarm after executing it
+	ctx, cancel := context.WithTimeout(parentCtx, h.providerRequestTimeout)
+	defer cancel()
+	alarm, err := h.actorProvider.GetLeasedAlarm(ctx, lease)
+	if errors.Is(err, components.ErrNoAlarm) {
+		// If we get ErrNoAlarm, the alarm was modified/deleted, or the lease was canceled for other reasons
+		// Let's just return no error
+		return false, nil
+	} else if err != nil {
+		// Something went wrong
+		return false, fmt.Errorf("error retrieving alarm from provider: %w", err)
+	}
+
+	// Check if the alarm repeats
+	next, err := alarm.NextExecution(lease.ExecutionTime())
+	if err != nil {
+		// The stored interval is corrupt
+		// Keep the alarm rather than silently deleting it
+		log.Error("Failed to compute next execution time for alarm; alarm will be kept", slog.Any("error", err))
+		return false, nil
+	}
+
+	// A job whose actor type asked to keep its successes leaves a record behind, so a successful run is visible afterwards
+	var (
+		record    bool
+		retention time.Duration
+	)
+	if alarm.Kind == components.AlarmKindJob {
+		record, retention = h.core.ActorsConfig[lease.ActorRef().ActorType].CompletedJobRecord()
+	}
+
+	if next.IsZero() {
+		ctx, cancel = context.WithTimeout(parentCtx, h.providerRequestTimeout)
+		defer cancel()
+
+		if record {
+			log.Debug("Recording completed job")
+			err = h.actorProvider.CompleteJob(ctx, lease, components.CompleteJobReq{
+				Attempts:  lease.Attempts() + 1,
+				Retention: retention,
+			})
+			if err != nil && !errors.Is(err, components.ErrNoAlarm) {
+				return false, fmt.Errorf("error recording completed job in provider: %w", err)
+			}
+			return false, nil
+		}
+
+		log.Debug("Removing completed alarm")
+
+		// Alarm doesn't repeat, delete it as it's completed
+		err = h.actorProvider.DeleteLeasedAlarm(ctx, lease)
+		if err != nil && !errors.Is(err, components.ErrNoAlarm) {
+			// If we get ErrNoAlarm, the alarm was modified/deleted, or the lease was canceled for other reasons
+			// We can ignore that error
+			return false, fmt.Errorf("error removing completed alarm in provider: %w", err)
+		}
+
+		// We're done!
+		return false, nil
+	}
+
+	// A repeating job that is retained records this occurrence and re-creates the recurrence in one transaction, rather than updating the row in place
+	// That costs the lease it might otherwise have kept for a near occurrence, which the next poll picks up instead
+	if record {
+		log.Debug("Recording completed job occurrence and rescheduling", slog.Any("due", next))
+		ctx, cancel = context.WithTimeout(parentCtx, h.providerRequestTimeout)
+		defer cancel()
+		err = h.actorProvider.CompleteJob(ctx, lease, components.CompleteJobReq{
+			Attempts:    lease.Attempts() + 1,
+			Retention:   retention,
+			Reschedule:  true,
+			NextDueTime: next,
+		})
+		if err != nil && !errors.Is(err, components.ErrNoAlarm) {
+			return false, fmt.Errorf("error recording completed job in provider: %w", err)
+		}
+		return false, nil
+	}
+
+	// If we're here, the alarm repeats, so we need to update it instead
+	updateReq := components.UpdateLeasedAlarmReq{
+		DueTime: next,
+	}
+
+	// If the due time is within alarmsPollInterval, we can preserve the lease
+	if next.Sub(h.clock.Now()) <= h.alarmsPollInterval {
+		updateReq.RefreshLease = true
+	}
+
+	log.Debug("Re-scheduling alarm for next iteration", slog.Any("due", next), slog.Bool("leased", updateReq.RefreshLease))
+
+	// Do the update
+	ctx, cancel = context.WithTimeout(parentCtx, h.providerRequestTimeout)
+	defer cancel()
+	err = h.actorProvider.UpdateLeasedAlarm(ctx, lease, updateReq)
+	if errors.Is(err, components.ErrNoAlarm) {
+		// If we get ErrNoAlarm, the alarm was modified/deleted, or the lease was canceled for other reasons
+		// Let's just return no error
+		return false, nil
+	} else if err != nil {
+		// Something went wrong
+		return false, fmt.Errorf("error updating alarm in provider: %w", err)
+	}
+
+	// If we kept the lease, advance the in-memory due time to the next occurrence and signal the caller to re-enqueue it
+	// The actual re-enqueue happens after the active flag is cleared, otherwise enqueueAlarms would skip it as already active
+	if updateReq.RefreshLease {
+		lease.ResetForNextExecution(next)
+		return true, nil
+	}
+
+	// The next occurrence is too far out to keep the lease, so a later fetch will pick it up
+	return false, nil
+}
+
+func (h *Host) runLeaseRenewal(parentCtx context.Context) (err error) {
+	var res components.RenewAlarmLeasesRes
+
+	// Renew the alarm leases on a loop
+	interval := h.actorProvider.RenewLeaseInterval()
+	h.log.DebugContext(parentCtx, "Starting background alarm lease renewal", slog.Any("interval", interval))
+	defer h.log.Debug("Stopped background lease renewal")
+
+	t := h.clock.NewTicker(interval)
+	defer t.Stop()
+
+	hostList := []string{h.HostID()}
+	for {
+		select {
+		case <-t.C():
+			ctx, cancel := context.WithTimeout(parentCtx, h.providerRequestTimeout)
+			defer cancel()
+			res, err = h.actorProvider.RenewAlarmLeases(ctx, components.RenewAlarmLeasesReq{
+				Hosts: hostList,
+			})
+			if err != nil {
+				// Log the error only
+				h.log.ErrorContext(parentCtx, "Error while renewing leases for alarms", slog.Any("error", err))
+			} else if len(res.Leases) > 0 {
+				h.log.DebugContext(parentCtx, "Renewed alarm leases", slog.Int("count", len(res.Leases)))
+
+				// Re-enqueue all leases
+				// The method is safe for concurrent access
+				err = h.enqueueAlarms(res.Leases)
+				if err != nil {
+					h.log.ErrorContext(parentCtx, "Error while re-enqueueing alarms", slog.Any("error", err))
+				}
+			}
+		case <-parentCtx.Done():
+			// Stop when the context is canceled
+			return parentCtx.Err()
+		}
+	}
+}
+
+func (h *Host) GetAlarm(ctx context.Context, actorType string, actorID string, name string) (actor.AlarmProperties, error) {
+	err := ref.ValidateComponents(actorType, actorID, name)
+	if err != nil {
+		return actor.AlarmProperties{}, err
+	}
+
+	res, err := h.actorProvider.GetAlarm(ctx, ref.NewAlarmRef(actorType, actorID, name))
+	if errors.Is(err, components.ErrNoAlarm) {
+		return actor.AlarmProperties{}, actor.ErrAlarmNotFound
+	} else if err != nil {
+		return actor.AlarmProperties{}, fmt.Errorf("failed to get alarm: %w", err)
+	}
+
+	return alarmPropertiesFromAlarmRes(res)
+}
+
+func (h *Host) SetAlarm(ctx context.Context, actorType string, actorID string, name string, properties actor.AlarmProperties) error {
+	err := ref.ValidateComponents(actorType, actorID, name)
+	if err != nil {
+		return err
+	}
+
+	err = properties.Validate()
+	if err != nil {
+		return err
+	}
+
+	req, err := alarmPropertiesToAlarmReq(properties)
+	if err != nil {
+		return err
+	}
+
+	// Offer this host for an immediate lease only when its in-memory scheduler can retain it
+	req.LeaseImmediate = h.immediateLeaseHosts()
+
+	// Store the alarm and acquire any immediate lease in the same provider operation
+	lease, err := h.actorProvider.SetAlarm(ctx, ref.NewAlarmRef(actorType, actorID, name), req)
+	if err != nil {
+		return fmt.Errorf("failed to set alarm: %w", err)
+	}
+
+	// Attempt the in-memory handoff while preserving durable success because an unqueued lease is fetched again after expiration
+	if lease != nil {
+		err = h.enqueueAlarms([]*ref.AlarmLease{lease})
+		if err != nil {
+			h.log.ErrorContext(ctx, "Failed to enqueue newly-created alarm; it will be fetched after the lease expires", slog.Any("error", err))
+		}
+	}
+
+	return nil
+}
+
+func (h *Host) immediateLeaseHosts() []string {
+	hostID := h.HostID()
+	h.activeAlarmsLock.Lock()
+	defer h.activeAlarmsLock.Unlock()
+
+	if h.alarmProcessor == nil || h.alarmsDraining || h.draining.Load() || hostID == "" {
+		return nil
+	}
+	return []string{hostID}
+}
+
+func (h *Host) DeleteAlarm(ctx context.Context, actorType string, actorID string, name string) error {
+	err := ref.ValidateComponents(actorType, actorID, name)
+	if err != nil {
+		return err
+	}
+
+	err = h.actorProvider.DeleteAlarm(ctx, ref.NewAlarmRef(actorType, actorID, name))
+	if errors.Is(err, components.ErrNoAlarm) {
+		return actor.ErrAlarmNotFound
+	} else if err != nil {
+		return fmt.Errorf("failed to delete alarm: %w", err)
+	}
+
+	return nil
+}
+
+func alarmPropertiesFromAlarmRes(res components.GetAlarmRes) (actor.AlarmProperties, error) {
+	o := actor.AlarmProperties{
+		DueTime:  res.DueTime,
+		Interval: res.Interval,
+	}
+
+	if len(res.Data) > 0 {
+		dec := msgpack.GetDecoder()
+		dec.Reset(bytes.NewReader(res.Data))
+		defer msgpack.PutDecoder(dec)
+		err := dec.Decode(&o.Data)
+		if err != nil {
+			return actor.AlarmProperties{}, fmt.Errorf("failed to deserialize data using msgpack: %w", err)
+		}
+	}
+
+	if res.TTL != nil {
+		o.TTL = *res.TTL
+	}
+
+	return o, nil
+}
+
+func alarmPropertiesToAlarmReq(o actor.AlarmProperties) (components.SetAlarmReq, error) {
+	req := components.SetAlarmReq{
+		DueTime:  o.DueTime,
+		Interval: o.Interval,
+	}
+
+	if o.Data != nil {
+		var data bytes.Buffer
+		enc := msgpack.GetEncoder()
+		defer msgpack.PutEncoder(enc)
+		enc.Reset(&data)
+
+		err := enc.Encode(o.Data)
+		if err != nil {
+			return components.SetAlarmReq{}, fmt.Errorf("failed to serialize data using msgpack: %w", err)
+		}
+
+		req.Data = data.Bytes()
+	}
+
+	if !o.TTL.IsZero() {
+		req.TTL = &o.TTL
+	}
+
+	return req, nil
+}
+
+func alarmRequestID(lease *ref.AlarmLease) string {
+	return lease.Key() + "|" + strconv.FormatInt(lease.DueTime().UnixMilli(), 10)
+}

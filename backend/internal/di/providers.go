@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace
+// Deviations: Local module namespace; functional cut: removed template catalogue; functional cut: removed GitOps and saved Git repositories; functional cut: removed S3 backup destinations; functional cut: removed OIDC and passkeys; functional cut: removed SQLite runtime and migrations.
 
 package di
 
@@ -29,19 +29,15 @@ import (
 	"github.com/florianfinn/docklet-next/backend/internal/docker"
 	"github.com/florianfinn/docklet-next/backend/internal/environment"
 	"github.com/florianfinn/docklet-next/backend/internal/event"
-	"github.com/florianfinn/docklet-next/backend/internal/gitrepo"
 	"github.com/florianfinn/docklet-next/backend/internal/image"
 	"github.com/florianfinn/docklet-next/backend/internal/imageupdate"
 	"github.com/florianfinn/docklet-next/backend/internal/kv"
 	"github.com/florianfinn/docklet-next/backend/internal/notification"
-	"github.com/florianfinn/docklet-next/backend/internal/passkey"
 	"github.com/florianfinn/docklet-next/backend/internal/project"
 	"github.com/florianfinn/docklet-next/backend/internal/registry"
 	"github.com/florianfinn/docklet-next/backend/internal/role"
-	s3domain "github.com/florianfinn/docklet-next/backend/internal/s3"
 	"github.com/florianfinn/docklet-next/backend/internal/settings"
 	"github.com/florianfinn/docklet-next/backend/internal/system"
-	"github.com/florianfinn/docklet-next/backend/internal/template"
 	"github.com/florianfinn/docklet-next/backend/internal/updater"
 	"github.com/florianfinn/docklet-next/backend/internal/user"
 	"github.com/florianfinn/docklet-next/backend/internal/version"
@@ -51,7 +47,6 @@ import (
 	"github.com/florianfinn/docklet-next/backend/pkg/scheduler/runs"
 	"github.com/florianfinn/docklet-next/backend/pkg/utils/concurrency"
 	"github.com/florianfinn/docklet-next/backend/pkg/utils/francis"
-	"github.com/florianfinn/docklet-next/backend/pkg/utils/oidcjwk"
 )
 
 func provideActivityModuleInternal(service *activity.ActivityService, localEnvironment *environment.EnvironmentService) *activity.Module {
@@ -116,7 +111,6 @@ func provideBackupEngineInternal(
 func provideActorRuntimeInternal(
 	appCtx context.Context,
 	cfg *config.Config,
-	db *database.DB,
 	settingsService *settings.SettingsService,
 	lc fx.Lifecycle,
 	cancelApp context.CancelFunc,
@@ -126,13 +120,6 @@ func provideActorRuntimeInternal(
 		return nil, err
 	}
 	lc.Append(fx.Hook{OnStart: func(ctx context.Context) error {
-		sqlDB, sqlDBErr := db.SQLDB()
-		if sqlDBErr != nil {
-			return sqlDBErr
-		}
-		if migrateErr := francis.MigrateLegacyStore(ctx, sqlDB, cfg.DatabaseURL); migrateErr != nil {
-			return migrateErr
-		}
 		if configureIdentityErr := runtime.ConfigureIdentity(cfg.EncryptionKey, settingsService.GetSettingsConfig().InstanceID.Value); configureIdentityErr != nil {
 			return configureIdentityErr
 		}
@@ -141,8 +128,8 @@ func provideActorRuntimeInternal(
 	return runtime, nil
 }
 
-func provideRunCoordinatorInternal(runtime *francis.Runtime, store *kv.KVService, cfg *config.Config) (*runs.Coordinator, error) {
-	coordinator := runs.New(store, runtime.Service(), cfg.GetLocation())
+func provideRunCoordinatorInternal(runtime *francis.Runtime, cfg *config.Config) (*runs.Coordinator, error) {
+	coordinator := runs.New(runtime.Service(), cfg.GetLocation())
 	if err := coordinator.Register(runtime); err != nil {
 		return nil, err
 	}
@@ -230,20 +217,8 @@ func provideVersionServiceInternal(
 	return version.NewVersionService(httpClient, cfg.UpdateCheckDisabled, config.Version, config.Revision, localRegistry, localDocker, imageUpdate, settingsService)
 }
 
-func provideGitRepositoryServiceInternal(db *database.DB, cfg *config.Config, eventService *event.EventService, settingsService *settings.SettingsService) *gitrepo.GitRepositoryService {
-	return gitrepo.NewGitRepositoryService(db, cfg.GitWorkDir, eventService, settingsService)
-}
-
-func provideS3ModuleInternal(service *s3domain.S3DestinationService, localEnvironment *environment.EnvironmentService) *s3domain.Module {
-	return s3domain.New(service, localEnvironment.SyncS3DestinationsToRemoteEnvironments)
-}
-
-func provideS3ServiceInternal(db *database.DB, localEnvironment *environment.EnvironmentService) *s3domain.S3DestinationService {
-	return s3domain.NewS3DestinationService(db, localEnvironment.CheckS3DestinationReferences)
-}
-
-func provideAuthModuleInternal(service *auth.AuthService, userService *user.UserService, settingsService *settings.SettingsService, passkeyService *passkey.PasskeyService) *auth.Module {
-	return auth.New(service, userService, settingsService, passkeyService.BeginMFAAuthentication)
+func provideAuthModuleInternal(service *auth.AuthService, userService *user.UserService, settingsService *settings.SettingsService) *auth.Module {
+	return auth.New(service, userService, settingsService)
 }
 
 func provideContainerRegistryServiceInternal(
@@ -266,13 +241,12 @@ func provideProjectServiceInternal(
 	localImage *image.ImageService,
 	localDocker *docker.DockerClientService,
 	localBuild *build.BuildService,
-	lifecycleService *project.LifecycleService,
 	localKv *kv.KVService,
 	localRegistry *registry.ContainerRegistryService,
 	localEnvironment *environment.EnvironmentService,
 	cfg *config.Config,
 ) *project.ProjectService {
-	return project.NewProjectService(db, localSettings, localEvent, localImage, localDocker, localBuild, lifecycleService, localRegistry, cfg, localKv, localEnvironment.GetEnabledRegistryCredentials)
+	return project.NewProjectService(db, localSettings, localEvent, localImage, localDocker, localBuild, localRegistry, cfg, localKv, localEnvironment.GetEnabledRegistryCredentials)
 }
 
 // updaterServiceParams includes actor registration and worker lifecycle dependencies.
@@ -342,12 +316,6 @@ func provideUserModuleInternal(service *user.UserService, localAuth *auth.AuthSe
 	return user.New(service, localAuth.InvalidateUserTokenCache, settingsService)
 }
 
-func provideJWKSetManagerInternal(ctx context.Context, lc fx.Lifecycle) *oidcjwk.KeySetManager {
-	manager := oidcjwk.NewKeySetManager(ctx)
-	lc.Append(fx.Hook{OnStop: manager.Shutdown})
-	return manager
-}
-
 func provideAuthMiddlewareInternal(
 	authService *auth.AuthService,
 	apiKey *apikey.ApiKeyService,
@@ -365,14 +333,13 @@ func provideFilesystemWatcherJobInternal(
 	ctx context.Context,
 	lc fx.Lifecycle,
 	localProject *project.ProjectService,
-	localTemplate *template.TemplateService,
 	localSettings *settings.SettingsService,
 	cfg *config.Config,
 ) (
 	*scheduler.FilesystemWatcherJob,
 	error,
 ) {
-	job, err := scheduler.NewFilesystemWatcherJob(ctx, localProject, localTemplate, localSettings, cfg.ProjectScanMaxDepth)
+	job, err := scheduler.NewFilesystemWatcherJob(ctx, localProject, localSettings, cfg.ProjectScanMaxDepth)
 	if err != nil {
 		return nil, err
 	}

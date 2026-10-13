@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: None
+// Deviations: ; functional cut: removed Svelte-specific metadata or asset paths.
 
 //go:build !exclude_frontend
 
@@ -18,11 +18,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// TestRegisterFrontend_ServesSPA verifies the RouteNotFound fallback serves
-// index.html for both the root path and unmatched client-side routes, while
-// registered routes stay untouched. Regression test for the echo v5
-// migration, where the router's not-found sentinel stopped matching
-// *echo.HTTPError and every page load returned a 500.
+// TestRegisterFrontend_ServesSPA checks client routes, missing assets and API routes.
 func TestRegisterFrontend_ServesSPA(t *testing.T) {
 	e := echo.New()
 	e.GET("/api/health", func(c *echo.Context) error {
@@ -38,7 +34,7 @@ func TestRegisterFrontend_ServesSPA(t *testing.T) {
 	}
 
 	missingChunk := httptest.NewRecorder()
-	e.ServeHTTP(missingChunk, httptest.NewRequest(http.MethodGet, "/_app/immutable/missing.js", nil))
+	e.ServeHTTP(missingChunk, httptest.NewRequest(http.MethodGet, "/assets/missing.js", nil))
 	require.Equal(t, http.StatusNotFound, missingChunk.Code)
 	require.NotContains(t, missingChunk.Body.String(), "<!doctype html")
 

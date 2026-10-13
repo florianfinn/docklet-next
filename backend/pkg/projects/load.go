@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace
+// Deviations: Local module namespace; functional cut: removed central variables and .env.global; functional cut: removed GitOps and saved Git repositories.
 
 package projects
 
@@ -76,7 +76,7 @@ func stripTrailingProjectCounterInternal(name string) string {
 
 // DetectComposeFile returns the base compose file for dir. COMPOSE_FILE in the
 // project's .env takes precedence over standard detection, mirroring `docker
-// compose`; projectsDir locates .env.global for the COMPOSE_DISABLE_ENV_FILE
+// compose`; projectsDir identifies the managed project root
 // check and may be empty where no projects directory applies. An unreadable
 // project .env falls back to filename detection and returns the found path
 // together with a common.ErrProjectEnvUnreadable error: that pairing is an
@@ -349,7 +349,7 @@ type PrepareProjectFunc func(ctx context.Context, project *composetypes.Project)
 // ${VAR} references are tolerated: instead of substituting them with an empty
 // string (which produces invalid volume/bind specs like ":/path"), they are
 // replaced with a placeholder value so structural validation can succeed. This
-// is useful during GitSync validation where a .env file may not yet exist.
+// is useful during validation where a .env file may not yet exist.
 func LoadComposeProject(
 	ctx context.Context,
 	composeFile string,

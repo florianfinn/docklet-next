@@ -2,12 +2,11 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace
+// Deviations: Local module namespace; functional cut: removed standalone build workshop; functional cut: removed SQLite runtime and migrations.
 
 package startup
 
 import (
-	"cmp"
 	"context"
 	"fmt"
 	"log/slog"
@@ -25,8 +24,6 @@ import (
 
 const (
 	defaultDataDirectory    = "/app/data"
-	defaultBuildsDirectory  = "/builds"
-	defaultDatabaseURL      = "file:data/arcane.db?_pragma=journal_mode(WAL)&_pragma=busy_timeout(2500)&_txlock=immediate"
 	defaultDockerConfigDir  = "/app/data/.docker"
 	defaultDockerSocketPath = "/var/run/docker.sock"
 	defaultRuntimeUID       = 65532
@@ -52,7 +49,6 @@ type RuntimeIdentityConfig struct {
 	PGID              string
 	DockerHost        string
 	DockerConfig      string
-	DatabaseURL       string
 	ProjectsDirectory string
 }
 
@@ -81,7 +77,7 @@ func ApplyRequestedRuntimeIdentity(ctx context.Context, cfg *RuntimeIdentityConf
 		return err
 	}
 	if !req.Enabled {
-		return ensureSQLiteFilesExistInternal(cfg.DatabaseURL)
+		return nil
 	}
 
 	runtimeUID := req.UID
@@ -92,7 +88,7 @@ func ApplyRequestedRuntimeIdentity(ctx context.Context, cfg *RuntimeIdentityConf
 		if ensureRuntimeDockerConfigErr := ensureRuntimeDockerConfigInternal(cfg, os.Setenv, runtimeUID, runtimeGID, inContainer); ensureRuntimeDockerConfigErr != nil {
 			return ensureRuntimeDockerConfigErr
 		}
-		return ensureSQLiteFilesExistInternal(cfg.DatabaseURL)
+		return nil
 	}
 
 	if os.Geteuid() != 0 {
@@ -101,7 +97,7 @@ func ApplyRequestedRuntimeIdentity(ctx context.Context, cfg *RuntimeIdentityConf
 		if ensureRuntimeDockerConfigErr2 := ensureRuntimeDockerConfigInternal(cfg, os.Setenv, runtimeUID, runtimeGID, inContainer); ensureRuntimeDockerConfigErr2 != nil {
 			return ensureRuntimeDockerConfigErr2
 		}
-		return ensureSQLiteFilesExistInternal(cfg.DatabaseURL)
+		return nil
 	}
 
 	if ensureRuntimeDockerConfigErr3 := ensureRuntimeDockerConfigInternal(cfg, os.Setenv, runtimeUID, runtimeGID, inContainer); ensureRuntimeDockerConfigErr3 != nil {
@@ -115,7 +111,7 @@ func ApplyRequestedRuntimeIdentity(ctx context.Context, cfg *RuntimeIdentityConf
 		}
 
 		if prepareWritablePathsWithRootsErr := prepareWritablePathsWithRootsInternal(
-			runtimeUID, runtimeGID, mountpoints, projectsDir, defaultDataDirectory, defaultBuildsDirectory,
+			runtimeUID, runtimeGID, mountpoints, projectsDir, defaultDataDirectory,
 		); prepareWritablePathsWithRootsErr != nil {
 			return prepareWritablePathsWithRootsErr
 		}
@@ -296,7 +292,7 @@ func dockerSocketPathInternal(raw string) mo.Option[string] {
 	return mo.Some(filepath.Clean(socketPath))
 }
 
-func prepareWritablePathsWithRootsInternal(uid, gid int, mountpoints map[string]struct{}, projectsDir, dataDirectory, buildsDirectory string) error {
+func prepareWritablePathsWithRootsInternal(uid, gid int, mountpoints map[string]struct{}, projectsDir, dataDirectory string) error {
 	if err := os.MkdirAll(dataDirectory, utils.DirPerm); err != nil {
 		return fmt.Errorf("create data directory: %w", err)
 	}
@@ -329,84 +325,7 @@ func prepareWritablePathsWithRootsInternal(uid, gid int, mountpoints map[string]
 		}
 	}
 
-	if _, mounted := mountpoints[buildsDirectory]; mounted {
-		if lchownErr2 := os.Lchown(buildsDirectory, uid, gid); lchownErr2 != nil {
-			return fmt.Errorf("chown mounted builds directory: %w", lchownErr2)
-		}
-		return nil
-	}
-
-	if _, statErr := os.Stat(buildsDirectory); statErr != nil {
-		if os.IsNotExist(statErr) {
-			return nil
-		}
-		return fmt.Errorf("stat builds directory: %w", statErr)
-	}
-
-	if chownRecursiveErr2 := chownRecursiveInternal(buildsDirectory, uid, gid, mountpoints, projectsDir); chownRecursiveErr2 != nil {
-		return fmt.Errorf("chown builds directory: %w", chownRecursiveErr2)
-	}
-
 	return nil
-}
-
-func ensureSQLiteFilesExistInternal(databaseURL string) error {
-	sqlitePath, ok, err := sqliteDatabasePathInternal(databaseURL)
-	if err != nil {
-		return err
-	}
-	if !ok {
-		return nil
-	}
-
-	// Ensure the parent directory exists before creating the file.
-	// This covers the "already the right user" early-return path where
-	// prepareWritablePathsWithRootsInternal is not called.
-	dir := filepath.Dir(sqlitePath)
-	if dir != "" && dir != "." {
-		if mkdirAllErr := os.MkdirAll(dir, utils.DirPerm); mkdirAllErr != nil {
-			return fmt.Errorf("create sqlite directory %s: %w", dir, mkdirAllErr)
-		}
-	}
-
-	file, err := os.OpenFile(sqlitePath, os.O_CREATE|os.O_RDWR, utils.FilePerm)
-	if err != nil {
-		return fmt.Errorf("create sqlite file %s: %w", sqlitePath, err)
-	}
-	if closeErr := file.Close(); closeErr != nil {
-		return fmt.Errorf("close sqlite file %s: %w", sqlitePath, closeErr)
-	}
-
-	return nil
-}
-
-func sqliteDatabasePathInternal(databaseURL string) (string, bool, error) {
-	value := cmp.Or(strings.TrimSpace(databaseURL), defaultDatabaseURL)
-	if !strings.HasPrefix(value, "file:") {
-		return "", false, nil
-	}
-
-	parsed, err := url.Parse(value)
-	if err != nil {
-		return "", false, fmt.Errorf("parse sqlite database url: %w", err)
-	}
-
-	// For relative URLs like "file:data/arcane.db", url.Parse puts the path in
-	// Opaque (without a leading slash). For absolute URLs like "file:/app/data/arcane.db",
-	// Opaque is empty and Path contains the absolute path. Only strip the leading
-	// slash from the opaque portion to preserve absolute paths.
-	var pathPart string
-	if parsed.Opaque != "" {
-		pathPart = strings.TrimPrefix(parsed.Opaque, "/")
-	} else {
-		pathPart = parsed.Path
-	}
-
-	if pathPart == "" || strings.HasPrefix(pathPart, ":memory:") {
-		return "", false, nil
-	}
-
-	return filepath.Clean(pathPart), true, nil
 }
 
 func chownRecursiveInternal(path string, uid, gid int, mountpoints map[string]struct{}, projectsDir string) error {

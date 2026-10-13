@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace
+// Deviations: Local module namespace; functional cut: removed APNS mobile push; functional cut: removed template catalogue; functional cut: removed GitOps and saved Git repositories; functional cut: removed Swarm; functional cut: removed standalone build workshop; functional cut: removed OIDC and passkeys.
 
 package settings
 
@@ -27,7 +27,6 @@ import (
 	"time"
 	"uuid"
 
-	"github.com/florianfinn/docklet-next/types/base"
 	"github.com/florianfinn/docklet-next/types/category"
 	"github.com/florianfinn/docklet-next/types/features"
 	searchtypes "github.com/florianfinn/docklet-next/types/search"
@@ -204,9 +203,7 @@ func (s *SettingsService) getDefaultSettings() *Settings {
 func DefaultSettingsConfig() *Settings {
 	return &Settings{
 		ProjectsDirectory:                     SettingVariable{Value: "/app/data/projects"},
-		TemplatesDirectory:                    SettingVariable{Value: "/app/data/templates"},
 		FollowProjectSymlinks:                 SettingVariable{Value: "false"},
-		SwarmStackSourcesDirectory:            SettingVariable{Value: "/app/data/swarm/sources"},
 		DiskUsagePath:                         SettingVariable{Value: "/app/data/projects"},
 		AutoUpdate:                            SettingVariable{Value: "false"},
 		AutoUpdateInterval:                    SettingVariable{Value: "0 0 0 * * *"},
@@ -248,12 +245,10 @@ func DefaultSettingsConfig() *Settings {
 		AvatarMaxUploadSizeMb:                 SettingVariable{Value: "2"},
 		DefaultShell:                          SettingVariable{Value: "/bin/sh"},
 		DockerHost:                            SettingVariable{Value: "unix:///var/run/docker.sock"},
-		BuildsDirectory:                       SettingVariable{Value: "/builds"},
 		AuthLocalEnabled:                      SettingVariable{Value: "true"},
 		AuthSessionTimeout:                    SettingVariable{Value: "1440"},
 		AuthPasswordPolicy:                    SettingVariable{Value: "strong"},
 		FeatureVulnerabilityManagementEnabled: SettingVariable{Value: "true"},
-		FeatureSwarmEnabled:                   SettingVariable{Value: "false"},
 		VulnerabilityScanEnabled:              SettingVariable{Value: "false"},
 		VulnerabilityScanInterval:             SettingVariable{Value: "0 0 0 * * *"},
 		VulnerabilityThreatIntelEnabled:       SettingVariable{Value: "true"},
@@ -269,29 +264,8 @@ func DefaultSettingsConfig() *Settings {
 		TrivyServerUrl:                        SettingVariable{Value: ""},
 		TrivyServerToken:                      SettingVariable{Value: ""},
 		TrivyIgnoreUnfixed:                    SettingVariable{Value: "true"},
-		OidcEnabled:                           SettingVariable{Value: "false"},
-		OidcClientId:                          SettingVariable{Value: ""},
-		OidcClientSecret:                      SettingVariable{Value: ""},
-		OidcIssuerUrl:                         SettingVariable{Value: ""},
-		OidcAuthorizationEndpoint:             SettingVariable{Value: ""},
-		OidcTokenEndpoint:                     SettingVariable{Value: ""},
-		OidcUserinfoEndpoint:                  SettingVariable{Value: ""},
-		OidcJwksEndpoint:                      SettingVariable{Value: ""},
-		OidcScopes:                            SettingVariable{Value: "openid email profile"},
-		OidcGroupsClaim:                       SettingVariable{Value: "groups"},
-		OidcSkipTlsVerify:                     SettingVariable{Value: "false"},
-		OidcAutoRedirectToProvider:            SettingVariable{Value: "false"},
-		OidcMergeAccounts:                     SettingVariable{Value: "false"},
-		OidcProviderName:                      SettingVariable{Value: ""},
-		OidcProviderLogoUrl:                   SettingVariable{Value: ""},
-		OidcMobileRedirectUris:                SettingVariable{Value: "arcane-mobile://oidc-callback"},
 		MaxImageUploadSize:                    SettingVariable{Value: "500"},
-		GitSyncMaxFiles:                       SettingVariable{Value: "500"},
-		GitSyncMaxTotalSizeMb:                 SettingVariable{Value: "50"},
-		GitSyncMaxBinarySizeMb:                SettingVariable{Value: "10"},
 		EnvironmentHealthInterval:             SettingVariable{Value: "0 */2 * * * *"},
-		LifecycleEnabled:                      SettingVariable{Value: "false"},
-		LifecycleDefaultRunnerImage:           SettingVariable{Value: "alpine:latest"},
 		LifecycleMaxTimeoutSec:                SettingVariable{Value: "300"},
 
 		DockerAPITimeout:       SettingVariable{Value: "30"},
@@ -312,10 +286,6 @@ func DefaultSettingsConfig() *Settings {
 		BuildTimeout:           SettingVariable{Value: "1800"},
 		DepotProjectId:         SettingVariable{Value: ""},
 		DepotToken:             SettingVariable{Value: ""},
-
-		ApnsEnabled:    SettingVariable{Value: "false"},
-		ApnsChannelID:  SettingVariable{Value: ""},
-		ApnsSigningKey: SettingVariable{Value: ""},
 
 		InstanceID:               SettingVariable{Value: ""},
 		SystemVolumeBackupConfig: SettingVariable{Value: `{"policies":[]}`},
@@ -569,9 +539,6 @@ func (s *SettingsService) UpdateSettingValues(ctx context.Context, updates []lib
 }
 
 func (s *SettingsService) updateSettingValueNoRefreshInternal(ctx context.Context, key, value string) error {
-	if key == "oidcProviderName" {
-		value = normalization.Text(value, true, true)
-	}
 	return s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		settingVar := &SettingVariable{
 			Key:   key,
@@ -620,7 +587,6 @@ func (s *SettingsService) publishSettingsChangesInternal(updates []libarcane.Set
 func (s *SettingsService) updateSettingsInternal(ctx context.Context, updates settings.Update) (settingsUpdateResultInternal, error) {
 	defaultCfg := s.getDefaultSettings()
 	cfg := s.GetSettingsConfig().Clone()
-	oidcClientSecretUpdated := updates.OidcClientSecret != nil && !s.IsEnvOverrideActive("oidcClientSecret")
 	trivyServerTokenUpdated := updates.TrivyServerToken != nil && *updates.TrivyServerToken != "" && !s.IsEnvOverrideActive("trivyServerToken")
 	normalizeTargetURL := func(value string) string {
 		normalized, err := httpx.NormalizeBaseURL(value)
@@ -628,49 +594,6 @@ func (s *SettingsService) updateSettingsInternal(ctx context.Context, updates se
 			return strings.TrimSpace(value)
 		}
 		return normalized
-	}
-
-	if err := validation.ValidateCredentialTargetChange(
-		"OIDC issuer URL",
-		cfg.OidcIssuerUrl.Value,
-		updates.OidcIssuerUrl,
-		normalizeTargetURL,
-		map[string]bool{"oidcClientSecret": cfg.OidcClientSecret.Value != ""},
-		map[string]bool{"oidcClientSecret": updates.OidcClientSecret != nil},
-	); err != nil {
-		return settingsUpdateResultInternal{}, err
-	}
-
-	effectiveValue := func(current SettingVariable, next *string) string {
-		if next != nil {
-			return *next
-		}
-		return current.Value
-	}
-	oidcClientSecret := cfg.OidcClientSecret.Value
-	if oidcClientSecretUpdated {
-		oidcClientSecret = *updates.OidcClientSecret
-	}
-	if effectiveValue(cfg.OidcEnabled, updates.OidcEnabled) == "true" {
-		required := []struct{ key, value string }{
-			{"oidcClientId", effectiveValue(cfg.OidcClientId, updates.OidcClientId)},
-			{"oidcClientSecret", oidcClientSecret},
-			{"oidcIssuerUrl", effectiveValue(cfg.OidcIssuerUrl, updates.OidcIssuerUrl)},
-		}
-		for _, field := range required {
-			if strings.TrimSpace(field.value) == "" {
-				return settingsUpdateResultInternal{}, common.Classify(
-					common.ErrValidation,
-					&base.FieldError{
-						Field: field.key,
-						Err: fmt.Errorf(
-							"enabling OIDC requires %s",
-							field.key,
-						),
-					},
-				)
-			}
-		}
 	}
 
 	if err := validation.ValidateCredentialTargetChange(
@@ -687,9 +610,6 @@ func (s *SettingsService) updateSettingsInternal(ctx context.Context, updates se
 	valuesToUpdate, err := s.prepareUpdateValues(updates, cfg, defaultCfg)
 	if err != nil {
 		return settingsUpdateResultInternal{}, err
-	}
-	if oidcClientSecretUpdated {
-		valuesToUpdate = append(valuesToUpdate, SettingVariable{Key: "oidcClientSecret", Value: *updates.OidcClientSecret})
 	}
 	if trivyServerTokenUpdated {
 		valuesToUpdate = append(valuesToUpdate, SettingVariable{Key: "trivyServerToken", Value: *updates.TrivyServerToken})
@@ -797,9 +717,6 @@ func extractUpdateValue(field reflect.StructField, fieldValue reflect.Value) (st
 func (s *SettingsService) persistSettings(ctx context.Context, values []SettingVariable) error {
 	return s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		for _, setting := range values {
-			if setting.Key == "oidcProviderName" {
-				setting.Value = normalization.Text(setting.Value, true, true)
-			}
 			if err := tx.Save(&setting).Error; err != nil {
 				return fmt.Errorf("failed to update setting %s: %w", setting.Key, err)
 			}
@@ -1241,53 +1158,6 @@ func (s *SettingsService) NormalizeProjectsDirectory(ctx context.Context, projec
 	}
 	slog.InfoContext(ctx, "Successfully normalized projects directory")
 	s.publishSettingsChangesInternal([]libarcane.SettingUpdate{{Key: "projectsDirectory", Value: absPath}})
-	return nil
-}
-
-func (s *SettingsService) NormalizeBuildsDirectory(ctx context.Context) error {
-	const buildsKey = "buildsDirectory"
-	envVarName := strings.ToUpper(kit.SnakeCase(buildsKey))
-	if envVal, ok, _ := utils.LookupEnvOrFile(envVarName); ok && strings.TrimSpace(envVal) != "" {
-		slog.DebugContext(ctx, "BUILDS_DIRECTORY environment variable is set, skipping normalization", "value", envVal)
-		return nil
-	}
-
-	s.writes.Lock()
-	defer s.writes.Unlock()
-	if err := ctx.Err(); err != nil {
-		return err
-	}
-
-	var buildsDirSetting SettingVariable
-	err := s.db.WithContext(ctx).Where("key = ?", buildsKey).First(&buildsDirSetting).Error
-	if errors.Is(err, gorm.ErrRecordNotFound) {
-		slog.DebugContext(ctx, "No buildsDirectory setting found, skipping normalization")
-		return nil
-	}
-	if err != nil {
-		return fmt.Errorf("failed to load buildsDirectory setting: %w", err)
-	}
-
-	value := strings.TrimSpace(buildsDirSetting.Value)
-	if value == "" || filepath.IsAbs(value) {
-		slog.DebugContext(ctx, "Builds directory already normalized or empty, skipping", "value", buildsDirSetting.Value)
-		return nil
-	}
-
-	cwd, _ := os.Getwd()
-	absPath, absErr := filepath.Abs(value)
-	if absErr != nil {
-		return fmt.Errorf("failed to resolve relative path to absolute: %w", absErr)
-	}
-	slog.InfoContext(ctx, "Normalizing builds directory from relative to absolute path", "from", value, "to", absPath, "base", cwd)
-	if updateSettingValueNoRefreshErr := s.updateSettingValueNoRefreshInternal(ctx, buildsKey, absPath); updateSettingValueNoRefreshErr != nil {
-		return fmt.Errorf("failed to update buildsDirectory: %w", updateSettingValueNoRefreshErr)
-	}
-	if refreshSettingsCacheErr := s.refreshSettingsCacheInternal(context.WithoutCancel(ctx)); refreshSettingsCacheErr != nil {
-		return refreshSettingsCacheErr
-	}
-	slog.InfoContext(ctx, "Successfully normalized builds directory")
-	s.publishSettingsChangesInternal([]libarcane.SettingUpdate{{Key: buildsKey, Value: absPath}})
 	return nil
 }
 

@@ -2,26 +2,11 @@
 // Revision: 9c61043fc52d1977d644f075d9c168335c3a6df7
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: None
+// Deviations: functional cut: removed SQLite runtime and migrations.
 
 package kit
 
 import "testing"
-
-func TestSQLitePathFromDSN(t *testing.T) {
-	t.Parallel()
-
-	for dsn, want := range map[string]string{
-		"file:data/arcane.db?_pragma=busy_timeout(5000)": "data/arcane.db",
-		"file:/abs/path.db": "/abs/path.db",
-		"file::memory:":     ":memory:",
-	} {
-		got, err := SQLitePathFromDSN(dsn)
-		if err != nil || got != want {
-			t.Errorf("SQLitePathFromDSN(%q) = %q, %v; want %q", dsn, got, err, want)
-		}
-	}
-}
 
 func TestNormalizeRelativePath(t *testing.T) {
 	t.Parallel()

@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace
+// Deviations: Local module namespace; functional cut: removed upstream analytics heartbeat.
 
 package meta
 
@@ -85,23 +85,6 @@ var jobMetadataRegistry = map[string]JobMetadata{
 		IsContinuous:   false,
 		CanRunManually: true,
 		Prerequisites:  []JobPrerequisiteMetadata{},
-	},
-	"analytics-heartbeat": {
-		ID:             "analytics-heartbeat",
-		Name:           "Analytics Heartbeat",
-		Description:    "Checks hourly and sends anonymous telemetry at most once per 24 hours",
-		Category:       "telemetry",
-		SettingsKey:    "",
-		ManagerOnly:    false,
-		IsContinuous:   false,
-		CanRunManually: true,
-		Prerequisites: []JobPrerequisiteMetadata{
-			{
-				SettingKey:  "analyticsEnabled",
-				Label:       "Analytics enabled",
-				SettingsURL: "/settings/general",
-			},
-		},
 	},
 	"auto-update": {
 		ID:             "auto-update",

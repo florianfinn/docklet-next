@@ -1,8 +1,10 @@
+//go:build postgres_integration
+
 // Source: getarcaneapp/arcane/backend/internal/di/di_test.go
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace
+// Deviations: Local module namespace; functional cut: removed upstream analytics heartbeat; functional cut: removed template catalogue; functional cut: removed federated credentials; functional cut: removed central variables and .env.global; functional cut: removed GitOps and saved Git repositories; functional cut: removed Swarm; functional cut: removed S3 backup destinations; functional cut: removed OIDC and passkeys; functional cut: PostgreSQL integration test fixture.
 
 package di
 
@@ -16,7 +18,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/libtnb/sqlite"
+	"github.com/florianfinn/docklet-next/backend/internal/testpg"
 	"github.com/moby/moby/api/types/events"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/fx"
@@ -37,36 +39,27 @@ import (
 	"github.com/florianfinn/docklet-next/backend/internal/docker"
 	"github.com/florianfinn/docklet-next/backend/internal/environment"
 	"github.com/florianfinn/docklet-next/backend/internal/event"
-	"github.com/florianfinn/docklet-next/backend/internal/federated"
-	"github.com/florianfinn/docklet-next/backend/internal/gitops"
-	"github.com/florianfinn/docklet-next/backend/internal/gitrepo"
 	"github.com/florianfinn/docklet-next/backend/internal/image"
 	"github.com/florianfinn/docklet-next/backend/internal/imageupdate"
 	"github.com/florianfinn/docklet-next/backend/internal/job"
 	"github.com/florianfinn/docklet-next/backend/internal/kv"
 	"github.com/florianfinn/docklet-next/backend/internal/network"
 	"github.com/florianfinn/docklet-next/backend/internal/notification"
-	"github.com/florianfinn/docklet-next/backend/internal/oidc"
 	"github.com/florianfinn/docklet-next/backend/internal/port"
 	"github.com/florianfinn/docklet-next/backend/internal/project"
 	"github.com/florianfinn/docklet-next/backend/internal/registry"
 	"github.com/florianfinn/docklet-next/backend/internal/role"
-	s3domain "github.com/florianfinn/docklet-next/backend/internal/s3"
 	"github.com/florianfinn/docklet-next/backend/internal/search"
 	"github.com/florianfinn/docklet-next/backend/internal/session"
 	"github.com/florianfinn/docklet-next/backend/internal/settings"
-	"github.com/florianfinn/docklet-next/backend/internal/swarm"
 	"github.com/florianfinn/docklet-next/backend/internal/system"
-	"github.com/florianfinn/docklet-next/backend/internal/template"
 	"github.com/florianfinn/docklet-next/backend/internal/updater"
 	"github.com/florianfinn/docklet-next/backend/internal/user"
-	"github.com/florianfinn/docklet-next/backend/internal/variable"
 	"github.com/florianfinn/docklet-next/backend/internal/version"
 	"github.com/florianfinn/docklet-next/backend/internal/volume"
 	"github.com/florianfinn/docklet-next/backend/internal/vulnerability"
 	"github.com/florianfinn/docklet-next/backend/internal/webhook"
 	"github.com/florianfinn/docklet-next/backend/pkg/scheduler"
-	"github.com/florianfinn/docklet-next/backend/pkg/utils/oidcjwk"
 )
 
 type graphParams struct {
@@ -83,19 +76,14 @@ type graphParams struct {
 	Container         *container.Module
 	Image             *image.ImageService
 	Build             *build.BuildService
-	Lifecycle         *project.LifecycleService
 	Volume            *volume.Module
 	BackupEngine      *backup.Engine
-	S3Destination     *s3domain.Module
 	Network           *network.NetworkService
 	Port              *port.PortService
-	Swarm             *swarm.SwarmService
 	ImageUpdate       *imageupdate.ImageUpdateService
 	Session           *session.SessionService
 	Auth              *auth.AuthService
-	Oidc              *oidc.OidcService
 	Docker            *docker.DockerClientService
-	Template          *template.TemplateService
 	ContainerRegistry *registry.ContainerRegistryService
 	System            *system.Module
 	Diagnostics       *diagnostics.DiagnosticsService
@@ -105,21 +93,15 @@ type graphParams struct {
 	Version           *version.VersionService
 	Notification      *notification.NotificationService
 	ApiKey            *apikey.ApiKeyService
-	Federated         *federated.FederatedCredentialService
-	GitRepository     *gitrepo.GitRepositoryService
-	GitOpsSync        *gitops.GitOpsSyncService
 	Webhook           *webhook.Module
 	Vulnerability     *vulnerability.VulnerabilityService
 	Dashboard         *dashboard.Module
 	Role              *role.RoleService
-	Variable          *variable.VariableService
 	AuthMiddleware    *auth.AuthMiddleware
-	JWKSetManager     *oidcjwk.KeySetManager
 
 	AutoUpdate             *scheduler.AutoUpdateJob
 	ImageUpdateWatcher     *scheduler.ImageUpdateWatcher
 	DockerClientRefresh    *scheduler.DockerClientRefreshJob
-	Analytics              *scheduler.AnalyticsJob
 	EventCleanup           *scheduler.EventCleanupJob
 	PruningVolumeHelper    *scheduler.PruningVolumeHelperJob
 	ExpiredSessionsCleanup *scheduler.ExpiredSessionsCleanupJob
@@ -182,7 +164,7 @@ func TestDockerEventLifecycleInternal(t *testing.T) {
 				stopped.Do(func() { close(streamStopped) })
 			}))
 			t.Cleanup(server.Close)
-			db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
+			db, err := gorm.Open(testpg.Dialector(t, ":memory:"), &gorm.Config{})
 			require.NoError(t, err)
 			sqlDB, err := db.DB()
 			require.NoError(t, err)

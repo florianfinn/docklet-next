@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: None
+// Deviations: functional cut: removed GitOps and saved Git repositories.
 
 package scheduler
 
@@ -83,12 +83,12 @@ type JobScheduler interface {
 }
 
 // GenericJob is a reusable Job built from closures. It lets a service register a
-// per-entity dynamic job (e.g. one per GitOps sync or one per environment) without
+// per-entity dynamic job (e.g. one per environment) without
 // importing the scheduler package: the service constructs a GenericJob and hands it
 // to the scheduler through the types/scheduler.Job interface.
 //
 // JobName must be unique per logical job; per-entity jobs use a "<subsystem>:<entityID>"
-// scheme (e.g. "gitops-sync:abc123"). ShouldRunFn is optional — when nil the job is
+// scheme (e.g. "environment-health:abc123"). ShouldRunFn is optional — when nil the job is
 // always scheduled, matching the behavior of a Job that does not implement
 // ConditionalJob.
 type GenericJob struct {

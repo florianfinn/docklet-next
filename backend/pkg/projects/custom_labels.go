@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace
+// Deviations: Local module namespace; functional cut: removed central variables and .env.global.
 
 package projects
 
@@ -73,7 +73,7 @@ type ArcaneComposeMetadata struct {
 }
 
 // ParseArcaneComposeMetadata reads a Docker Compose file and extracts Arcane-specific metadata.
-// When projectsDirectory is set, Arcane's project env loading is used so .env.global is available.
+// When projectsDirectory is set, Arcane's project env loading is used to resolve project .env.
 func ParseArcaneComposeMetadata(ctx context.Context, composeFilePath, projectsDirectory string, autoInjectEnv bool) (ArcaneComposeMetadata, error) {
 	if composeFilePath == "" {
 		return emptyArcaneComposeMetadataInternal(), nil

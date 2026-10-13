@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace
+// Deviations: Local module namespace; functional cut: removed S3 backup destinations.
 
 package policies
 
@@ -10,7 +10,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"log/slog"
 	"net/http"
 	"net/url"
 
@@ -103,24 +102,6 @@ func (h *Handler) UpdateBackupPolicy(ctx context.Context, input *UpdateVolumeBac
 			if h.environmentService == nil {
 				errorStatus = http.StatusInternalServerError
 				return errors.New("environment service not available")
-			}
-			hasS3 := false
-			for _, policy := range input.Body.Policies {
-				if policy.S3Enabled {
-					hasS3 = true
-					break
-				}
-			}
-			// Destinations are reconciled before every policy write so the agent
-			// can validate S3 references. Only batches that actually need S3
-			// fail on a sync error; local-only edits proceed.
-			h.environmentService.ForgetSyncState(input.EnvironmentID)
-			if syncErr := h.environmentService.SyncS3DestinationsToEnvironment(activityCtx, input.EnvironmentID); syncErr != nil {
-				if hasS3 {
-					errorStatus = http.StatusBadGateway
-					return fmt.Errorf("failed to synchronize S3 destinations to environment: %w", syncErr)
-				}
-				slog.WarnContext(activityCtx, "S3 destination sync failed before local-only volume backup policy write", "environmentId", input.EnvironmentID, "error", syncErr)
 			}
 			remotePath := fmt.Sprintf("/api/environments/0/volumes/%s/backup-policy", url.PathEscape(input.VolumeName))
 			var proxyErr error

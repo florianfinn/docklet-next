@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace
+// Deviations: Local module namespace; functional cut: removed GitOps and saved Git repositories.
 
 // Package workspace reads and edits project directories as bounded,
 // revision-checked workspaces.
@@ -10,7 +10,6 @@ package workspace
 
 import (
 	"context"
-	"encoding/json/v2"
 	"errors"
 	"fmt"
 	"io"
@@ -41,8 +40,8 @@ func New(cfg *config.Config) *Service {
 	return &Service{config: cfg}
 }
 
-// Read lists the workspace files, marking GitOps-owned paths read-only.
-func (s *Service) Read(ctx context.Context, projectPath, composeFileName string, owned map[string]struct{}) (*workspacetypes.Workspace, error) {
+// Read lists the workspace files.
+func (s *Service) Read(ctx context.Context, projectPath, composeFileName string) (*workspacetypes.Workspace, error) {
 	files, revision, truncated, err := projects.ReadProjectWorkspace(
 		ctx,
 		projectPath,
@@ -55,17 +54,11 @@ func (s *Service) Read(ctx context.Context, projectPath, composeFileName string,
 	if err != nil {
 		return nil, fmt.Errorf("read project workspace: %w", err)
 	}
-	for i := range files {
-		if _, ok := owned[files[i].RelativePath]; ok {
-			files[i].Editable = false
-			files[i].ReadOnlyReason = workspacetypes.FileReadOnlyGitOpsManaged
-		}
-	}
 	return &workspacetypes.Workspace{Files: files, FileTreeRevision: revision, FileTreeTruncated: truncated}, nil
 }
 
 // File returns one workspace file's content and whether it may be edited.
-func (s *Service) File(ctx context.Context, projectPath, composeFileName, relativePath string, owned map[string]struct{}) (*workspacetypes.FileContent, error) {
+func (s *Service) File(ctx context.Context, projectPath, composeFileName, relativePath string) (*workspacetypes.FileContent, error) {
 	rel, fullPath, entry, err := resolvePath(ctx, projectPath, composeFileName, relativePath)
 	if err != nil {
 		return nil, err
@@ -107,12 +100,6 @@ func (s *Service) File(ctx context.Context, projectPath, composeFileName, relati
 		return response, nil
 	}
 	response.Content = string(content)
-	if _, ok := owned[rel]; ok {
-		// Sync-owned files stay viewable but read-only: git is their
-		// source of truth (#3634).
-		response.ReadOnlyReason = workspacetypes.FileReadOnlyGitOpsManaged
-		return response, nil
-	}
 	response.Editable = true
 	return response, nil
 }
@@ -168,31 +155,6 @@ func (s *Service) Apply(
 	return nil
 }
 
-// OwnedPaths returns the workspace paths a GitOps sync writes on every sync.
-// It fails closed: an incomplete ownership set would expose synced files as
-// editable, and the next sync would silently overwrite the edits.
-func OwnedPaths(syncedFiles *string, composePath string) (map[string]struct{}, error) {
-	owned := make(map[string]struct{})
-	add := func(p string) {
-		if rel, normalizeRelativePathErr := kit.NormalizeRelativePath(p); normalizeRelativePathErr == nil {
-			owned[rel] = struct{}{}
-		}
-	}
-	if syncedFiles != nil && *syncedFiles != "" {
-		var files []string
-		if unmarshalErr := json.Unmarshal([]byte(*syncedFiles), &files); unmarshalErr != nil {
-			return nil, fmt.Errorf("parse gitops synced files for workspace: %w", unmarshalErr)
-		}
-		for _, f := range files {
-			add(f)
-		}
-	}
-	if composePath != "" {
-		add(filepath.Base(composePath))
-	}
-	return owned, nil
-}
-
 // resolvePath validates a workspace path outside protected config and stats it.
 func resolvePath(ctx context.Context, projectPath, composeFileName, relativePath string) (string, string, types.Entry, error) {
 	rel, err := kit.NormalizeRelativePath(relativePath)
@@ -239,36 +201,8 @@ func WrapProjectWorkspaceError(err error) error {
 	}
 }
 
-// ValidateWorkspaceChangesAgainstGitOps rejects changes that touch a sync-owned
-// path, directly or by deleting/renaming a folder that still holds one.
-func ValidateWorkspaceChangesAgainstGitOps(changes []project.WorkspaceFileChange, owned map[string]struct{}) error {
-	if len(owned) == 0 {
-		return nil
-	}
-	touchesOwned := func(target string) bool {
-		if _, ok := owned[target]; ok {
-			return true
-		}
-		prefix := target + "/"
-		for ownedPath := range owned {
-			if strings.HasPrefix(ownedPath, prefix) {
-				return true
-			}
-		}
-		return false
-	}
-	for _, change := range changes {
-		for _, target := range changeTargetPaths(change) {
-			if touchesOwned(target) {
-				return common.Classify(common.ErrProjectWorkspaceForbidden, fmt.Errorf("%q is managed by git sync and can only be changed in the git repository", target))
-			}
-		}
-	}
-	return nil
-}
-
 // changeTargetPaths lists every normalized path a change can create, overwrite or
-// delete; backup scope and GitOps ownership share it so they cannot diverge.
+// delete, including source and destination paths for move operations.
 func changeTargetPaths(change project.WorkspaceFileChange) []string {
 	rel, err := kit.NormalizeRelativePath(change.RelativePath)
 	if err != nil {

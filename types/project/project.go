@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace
+// Deviations: Local module namespace; functional cut: removed GitOps and saved Git repositories.
 
 package project
 
@@ -380,12 +380,7 @@ type CreateReponse struct {
 	//
 	// Required: true
 	RunningCount int `json:"runningCount"`
-
-	// GitOpsManagedBy is the ID of the GitOps sync managing this project (if any).
 	//
-	// Required: false
-	GitOpsManagedBy *string `json:"gitOpsManagedBy,omitempty"`
-
 	// IsArchived indicates whether the project is hidden from the default project list.
 	//
 	// Required: true
@@ -458,17 +453,7 @@ type Details struct {
 	//
 	// Required: false
 	ActivityID *string `json:"activityId,omitempty"`
-
-	// LastSyncCommit is the last commit synced from Git (if GitOps managed).
-	//
-	// Required: false
-	LastSyncCommit *string `json:"lastSyncCommit,omitempty"`
-
-	// GitOpsManagedBy is the ID of the GitOps sync managing this project (if any).
-	//
-	// Required: false
-	GitOpsManagedBy *string `json:"gitOpsManagedBy,omitempty"`
-
+	//	//
 	// UpdateInfo contains aggregated image update status for the project.
 	//
 	// Required: false
@@ -526,12 +511,7 @@ type Details struct {
 	//
 	// Required: true
 	Name string `json:"name"`
-
-	// GitRepositoryURL is the URL of the Git repository (if GitOps managed).
 	//
-	// Required: false
-	GitRepositoryURL string `json:"gitRepositoryURL,omitempty"`
-
 	// IconLightURL is the optional light stack icon URL for dark themes.
 	//
 	// Required: false

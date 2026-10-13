@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace
+// Deviations: Local module namespace; functional cut: removed GitOps and saved Git repositories.
 
 package projects
 
@@ -24,8 +24,6 @@ func TestReadProjectWorkspace_ExcludesProtectedFilesAndReturnsFolders(t *testing
 	projectDir := t.TempDir()
 	require.NoError(t, os.WriteFile(filepath.Join(projectDir, "compose.yaml"), []byte("services: {}\n"), 0o644))
 	require.NoError(t, os.WriteFile(filepath.Join(projectDir, ".env"), []byte("APP_VALUE=sample\n"), 0o644))
-	require.NoError(t, os.WriteFile(filepath.Join(projectDir, ".env.git"), []byte("APP_VALUE=git\n"), 0o644))
-	require.NoError(t, os.WriteFile(filepath.Join(projectDir, "project.env"), []byte("APP_VALUE=local\n"), 0o644))
 	require.NoError(t, os.WriteFile(filepath.Join(projectDir, "README.md"), []byte("hello\n"), 0o644))
 	require.NoError(t, os.MkdirAll(filepath.Join(projectDir, "config", "nested"), 0o755))
 	require.NoError(t, os.WriteFile(filepath.Join(projectDir, "config", "app.yaml"), []byte("value: true\n"), 0o644))
@@ -472,7 +470,6 @@ func TestReadProjectWorkspace_ListsEnvDirectoryContents(t *testing.T) {
 
 	projectDir := t.TempDir()
 	require.NoError(t, os.WriteFile(filepath.Join(projectDir, "compose.yaml"), []byte("services: {}\n"), 0o644))
-	require.NoError(t, os.WriteFile(filepath.Join(projectDir, "project.env"), []byte("APP_VALUE=local\n"), 0o644))
 	require.NoError(t, os.Mkdir(filepath.Join(projectDir, ".env"), 0o755))
 	require.NoError(t, os.WriteFile(filepath.Join(projectDir, ".env", "app.env"), []byte("APP_VALUE=sub\n"), 0o644))
 

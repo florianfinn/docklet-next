@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: None
+// Deviations: Functional cut: removed APNS mobile push; functional cut: removed template catalogue; functional cut: removed GitOps and saved Git repositories; functional cut: removed Swarm; functional cut: removed standalone build workshop; functional cut: removed OIDC and passkeys.
 
 package settings
 
@@ -43,22 +43,10 @@ type Update struct {
 	// Required: false
 	ProjectsDirectory *string `json:"projectsDirectory,omitzero"`
 
-	// TemplatesDirectory is the directory path where local compose template folders are discovered.
-	// Must be an absolute path.
-	//
-	// Required: false
-	TemplatesDirectory *string `json:"templatesDirectory,omitzero"`
-
 	// FollowProjectSymlinks controls whether symlinked child directories in the projects directory are discovered as projects.
 	//
 	// Required: false
 	FollowProjectSymlinks *string `json:"followProjectSymlinks,omitzero"`
-
-	// SwarmStackSourcesDirectory is the directory path where swarm stack source files are stored.
-	// Must be an absolute path.
-	//
-	// Required: false
-	SwarmStackSourcesDirectory *string `json:"swarmStackSourcesDirectory,omitzero"`
 
 	// DiskUsagePath is the path to monitor for disk usage.
 	//
@@ -200,9 +188,6 @@ type Update struct {
 	// FeatureVulnerabilityManagementEnabled controls vulnerability management for this environment.
 	FeatureVulnerabilityManagementEnabled *string `json:"featureVulnerabilityManagementEnabled,omitzero" enum:"true,false"`
 
-	// FeatureSwarmEnabled controls Docker Swarm for this environment. An active swarm cluster keeps it enabled.
-	FeatureSwarmEnabled *string `json:"featureSwarmEnabled,omitzero" enum:"true,false"`
-
 	// VulnerabilityScanEnabled indicates if scheduled vulnerability scanning is enabled.
 	//
 	// Required: false
@@ -222,37 +207,6 @@ type Update struct {
 	//
 	// Required: false
 	MaxImageUploadSize *string `json:"maxImageUploadSize,omitzero"`
-
-	// GitSyncMaxFiles is the maximum number of repository files copied during a Git sync.
-	// Set to "0" to disable the environment cap.
-	//
-	// Required: false
-	GitSyncMaxFiles *string `json:"gitSyncMaxFiles,omitzero"`
-
-	// GitSyncMaxTotalSizeMb is the maximum combined size in megabytes for files copied during a Git sync.
-	// Set to "0" to disable the environment cap.
-	//
-	// Required: false
-	GitSyncMaxTotalSizeMb *string `json:"gitSyncMaxTotalSizeMb,omitzero"`
-
-	// GitSyncMaxBinarySizeMb is the maximum size in megabytes for a single binary file copied during a Git sync.
-	// Set to "0" to disable the environment cap.
-	//
-	// Required: false
-	GitSyncMaxBinarySizeMb *string `json:"gitSyncMaxBinarySizeMb,omitzero"`
-
-	// LifecycleEnabled gates whether GitOps syncs may configure pre-deploy
-	// lifecycle scripts. Disabled by default because scripts are repo-trusted
-	// code that runs on every deploy.
-	//
-	// Required: false
-	LifecycleEnabled *string `json:"lifecycleEnabled,omitzero"`
-
-	// LifecycleDefaultRunnerImage is the default container image used to run
-	// GitOps pre-deploy lifecycle scripts when a sync does not override it.
-	//
-	// Required: false
-	LifecycleDefaultRunnerImage *string `json:"lifecycleDefaultRunnerImage,omitzero"`
 
 	// LifecycleMaxTimeoutSec caps the per-sync pre-deploy timeout admins can
 	// configure. Zero disables the cap.
@@ -292,15 +246,11 @@ type Update struct {
 	// Required: false
 	AuthLocalEnabled *string `json:"authLocalEnabled,omitzero"`
 
-	// OidcEnabled indicates if OIDC authentication is enabled.
 	//
 	// Required: false
-	OidcEnabled *string `json:"oidcEnabled,omitzero"`
 
-	// OidcMergeAccounts indicates if OIDC accounts should be merged with local accounts.
 	//
 	// Required: false
-	OidcMergeAccounts *string `json:"oidcMergeAccounts,omitzero"`
 
 	// AuthSessionTimeout is the session timeout duration.
 	//
@@ -414,51 +364,32 @@ type Update struct {
 	// Required: false
 	ImageAutoPatchInterval *string `json:"imageAutoPatchInterval,omitzero"`
 
-	// OidcClientId is the OIDC client identifier.
 	//
 	// Required: false
-	OidcClientId *string `json:"oidcClientId,omitzero"`
 
-	// OidcClientSecret is the OIDC client secret.
 	//
 	// Required: false
-	OidcClientSecret *string `json:"oidcClientSecret,omitzero"`
 
-	// OidcIssuerUrl is the OIDC issuer URL.
 	//
 	// Required: false
-	OidcIssuerUrl *string `json:"oidcIssuerUrl,omitzero"`
 
-	// OidcScopes is the list of OIDC scopes to request.
 	//
 	// Required: false
-	OidcScopes *string `json:"oidcScopes,omitzero"`
 
-	// OidcGroupsClaim is the OIDC claim path read on every login to drive
-	// role assignment via oidc_role_mappings. Default: "groups".
 	//
 	// Required: false
-	OidcGroupsClaim *string `json:"oidcGroupsClaim,omitzero"`
 
-	// OidcSkipTlsVerify indicates if TLS verification should be skipped for OIDC.
 	//
 	// Required: false
-	OidcSkipTlsVerify *string `json:"oidcSkipTlsVerify,omitzero"`
 
-	// OidcAutoRedirectToProvider indicates if the login page should automatically redirect to OIDC provider.
 	//
 	// Required: false
-	OidcAutoRedirectToProvider *string `json:"oidcAutoRedirectToProvider,omitzero"`
 
-	// OidcProviderName is the custom display name for the OIDC provider.
 	//
 	// Required: false
-	OidcProviderName *string `json:"oidcProviderName,omitzero" unorm:"nfc" trim:"true"`
 
-	// OidcProviderLogoUrl is the custom logo URL for the OIDC provider.
 	//
 	// Required: false
-	OidcProviderLogoUrl *string `json:"oidcProviderLogoUrl,omitzero"`
 
 	// DockerApiTimeout is the timeout for Docker API operations in seconds.
 	//
@@ -546,11 +477,6 @@ type Update struct {
 	// Required: false
 	BuildProvider *string `json:"buildProvider,omitzero"`
 
-	// BuildsDirectory is the root directory for manual build workspaces.
-	//
-	// Required: false
-	BuildsDirectory *string `json:"buildsDirectory,omitzero"`
-
 	// BuildTimeout is the timeout for BuildKit builds in seconds.
 	//
 	// Required: false
@@ -565,9 +491,4 @@ type Update struct {
 	//
 	// Required: false
 	DepotToken *string `json:"depotToken,omitzero"`
-
-	// ApnsEnabled lets users pair the mobile app for native push notifications.
-	//
-	// Required: false
-	ApnsEnabled *string `json:"apnsEnabled,omitzero"`
 }

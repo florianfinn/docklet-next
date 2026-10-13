@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace
+// Deviations: Local module namespace; functional cut: removed template catalogue; functional cut: removed federated credentials; functional cut: removed GitOps and saved Git repositories.
 
 package config
 
@@ -81,12 +81,11 @@ func TestSaveAndLoadRoundTripPagination(t *testing.T) {
 			cfg.APIKey = "k_test"
 			cfg.JWTToken = "jwt_test"
 			cfg.RefreshToken = "refresh_test"
-			cfg.FederatedAudience = "audience_test"
 			cfg.CLIUpdateChannel = "next"
 			cfg.SetDefaultLimit(42)
 			cfg.SetResourceLimit("images", 17)
 			cfg.SetResourceLimit("Containers", 9)
-			cfg.Pagination.Resources["GitOps"] = types.PaginationResourceConfig{Limit: 8}
+			cfg.Pagination.Resources["Projects"] = types.PaginationResourceConfig{Limit: 8}
 			cfg.Pagination.Resources[" "] = types.PaginationResourceConfig{Limit: 5}
 			cfg.Pagination.Resources["volumes"] = types.PaginationResourceConfig{Limit: -1}
 			{
@@ -103,8 +102,8 @@ func TestSaveAndLoadRoundTripPagination(t *testing.T) {
 
 			text := string(raw)
 			require.NotContains(t, text, "volumes:")
-			require.Contains(t, text, "gitops-syncs:")
-			require.NotContains(t, text, "GitOps:")
+			require.Contains(t, text, "projects:")
+			require.NotContains(t, text, "Projects:")
 
 			require.Contains(t, text, "pagination:",
 				"expected saved YAML to include pagination block:\n%s", text)
@@ -132,8 +131,8 @@ func TestSaveAndLoadRoundTripPagination(t *testing.T) {
 			require.NoError(t, cacheErr)
 			require.Equal(t, "k_test", cached.APIKey)
 			require.Equal(t, 17, cached.LimitFor("images"))
-			require.Equal(t, 8, cached.LimitFor("gitops-syncs"))
-			require.NotContains(t, cached.Pagination.Resources, "GitOps")
+			require.Equal(t, 8, cached.LimitFor("projects"))
+			require.NotContains(t, cached.Pagination.Resources, "Projects")
 			require.NotContains(t, cached.Pagination.Resources, "volumes")
 			invalidateCacheInternal()
 			loaded, err := Load()
@@ -161,8 +160,7 @@ func TestSaveAndLoadRoundTripPagination(t *testing.T) {
 			require.Equal(t, "k_test", loaded.APIKey)
 			require.Equal(t, "jwt_test", loaded.JWTToken)
 			require.Equal(t, "refresh_test", loaded.RefreshToken)
-			require.Equal(t, "audience_test", loaded.FederatedAudience)
-			require.Equal(t, 8, loaded.LimitFor("gitops-syncs"))
+			require.Equal(t, 8, loaded.LimitFor("projects"))
 			loaded.SetResourceLimit("images", 101)
 			reloaded, reloadErr := Load()
 			require.NoError(t, reloadErr)
@@ -336,7 +334,7 @@ func TestInitDefaultFileCreatesTemplate(t *testing.T) {
 	text := string(raw)
 	var values map[string]any
 	require.NoError(t, yaml.Unmarshal(raw, &values))
-	for _, key := range []string{"api_key", "jwt_token", "refresh_token", "federated_audience"} {
+	for _, key := range []string{"api_key", "jwt_token", "refresh_token"} {
 		require.Contains(t, values, key)
 		require.Empty(t, values[key])
 	}
@@ -361,7 +359,7 @@ func TestInitDefaultFileCreatesTemplate(t *testing.T) {
 		require.Contains(t, text, key,
 			"expected generated config to contain %q:\n%s", key, text)
 	}
-	for _, resource := range []string{"containers", "images", "volumes", "networks", "projects", "environments", "registries", "templates", "users", "events", "apikeys"} {
+	for _, resource := range []string{"containers", "images", "volumes", "networks", "projects", "environments", "registries", "users", "events", "apikeys"} {
 		require.Contains(t, text, resource+":",
 			"expected generated config to contain resource key %q:\n%s", resource, text)
 	}
@@ -374,7 +372,7 @@ func TestInitDefaultFileCreatesTemplate(t *testing.T) {
 	require.Equal(t, defaultPaginationInitLimit, cfg.Pagination.Default.Limit,
 		"Pagination.Default.Limit=%d, want %d", cfg.Pagination.Default.Limit, defaultPaginationInitLimit)
 
-	for _, resource := range []string{"containers", "images", "volumes", "networks", "projects", "environments", "registries", "templates", "users", "events", "apikeys"} {
+	for _, resource := range []string{"containers", "images", "volumes", "networks", "projects", "environments", "registries", "users", "events", "apikeys"} {
 		{
 			got := cfg.LimitFor(resource)
 			require.Equal(t, defaultPaginationInitLimit, got,

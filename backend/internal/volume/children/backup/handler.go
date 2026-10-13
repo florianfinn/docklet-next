@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace
+// Deviations: Local module namespace; functional cut: removed S3 backup destinations.
 
 package backup
 
@@ -67,15 +67,6 @@ type CreateBackupInput struct {
 	Body          *volume.CreateBackupRequest `json:"body,omitempty"`
 }
 
-type DiscoverVolumeBackupsInput struct {
-	EnvironmentID string                        `path:"id" doc:"Environment ID"`
-	Body          volume.DiscoverBackupsRequest `doc:"Destination to scan"`
-}
-
-type DiscoverVolumeBackupsOutput struct {
-	Body base.ApiResponse[volume.DiscoverBackupsResponse]
-}
-
 type DeleteBackupInput struct {
 	EnvironmentID string `path:"id" doc:"Environment ID"`
 	BackupID      string `path:"backupId" doc:"Backup ID"`
@@ -84,12 +75,6 @@ type DeleteBackupInput struct {
 type DownloadBackupInput struct {
 	EnvironmentID string `path:"id" doc:"Environment ID"`
 	BackupID      string `path:"backupId" doc:"Backup ID"`
-}
-
-type UploadBackupInput struct {
-	EnvironmentID string `path:"id" doc:"Environment ID"`
-	BackupID      string `path:"backupId" doc:"Backup ID"`
-	Body          volume.UploadBackupRequest
 }
 
 func NewHandler(
@@ -209,57 +194,4 @@ func (h *Handler) DeleteBackup(ctx context.Context, input *DeleteBackupInput) (*
 			Data:    base.MessageResponse{Message: "Backup deleted successfully", ActivityID: mo.EmptyableToOption(strings.TrimSpace(activityID)).ToPointer()},
 		},
 	}, nil
-}
-
-func (h *Handler) DiscoverBackups(ctx context.Context, input *DiscoverVolumeBackupsInput) (*DiscoverVolumeBackupsOutput, error) {
-	if _, err := handlerutil.RequireUser(ctx); err != nil {
-		return nil, err
-	}
-	if strings.TrimSpace(input.Body.S3DestinationID) == "" {
-		return nil, huma.Error400BadRequest("select an S3 destination to discover")
-	}
-	created, failures, err := h.service.DiscoverRemoteBackups(ctx, input.Body.S3DestinationID)
-	if err != nil {
-		return nil, huma.Error400BadRequest(err.Error())
-	}
-	return &DiscoverVolumeBackupsOutput{
-		Body: base.ApiResponse[volume.DiscoverBackupsResponse]{
-			Success: true,
-			Data:    volume.DiscoverBackupsResponse{Count: created, Errors: failures},
-		},
-	}, nil
-}
-
-func (h *Handler) UploadBackup(ctx context.Context, input *UploadBackupInput) (*handlerutil.Out[*volume.Backup], error) {
-	if h.service == nil {
-		return nil, huma.Error500InternalServerError("service not available")
-	}
-	user, _ := userctx.CurrentUserFromContext(ctx)
-	var uploaded *volume.Backup
-	runtimeCtx := utils.ActivityRuntimeContext(ctx, h.appCtx)
-	activityID, err := activitylib.RunHandlerActivity(runtimeCtx, h.activityService, activitylib.HandlerOptions{
-		EnvironmentID:  input.EnvironmentID,
-		Type:           activitytypes.TypeResourceAction,
-		ResourceType:   "volume_backup",
-		ResourceID:     input.BackupID,
-		ResourceName:   input.BackupID,
-		User:           user,
-		Step:           "Uploading backup",
-		Message:        "Uploading volume backup to S3",
-		SuccessMessage: "Volume backup uploaded successfully",
-		Metadata: database.JSON{
-			"action":          "upload_volume_backup",
-			"backupId":        input.BackupID,
-			"s3DestinationId": input.Body.S3DestinationID,
-		},
-	}, func(runtimeCtx context.Context) error {
-		var uploadErr error
-		uploaded, uploadErr = h.service.UploadBackup(runtimeCtx, input.BackupID, input.Body.S3DestinationID)
-		return uploadErr
-	})
-	if err != nil {
-		return nil, huma.Error500InternalServerError(err.Error())
-	}
-	uploaded.ActivityID = mo.EmptyableToOption(strings.TrimSpace(activityID)).ToPointer()
-	return &handlerutil.Out[*volume.Backup]{Body: base.ApiResponse[*volume.Backup]{Success: true, Data: uploaded}}, nil
 }

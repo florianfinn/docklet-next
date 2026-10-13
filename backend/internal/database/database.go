@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace
+// Deviations: Local module namespace; functional cut: removed SQLite runtime and migrations.
 
 package database
 
@@ -13,23 +13,17 @@ import (
 	"fmt"
 	"io/fs"
 	"log/slog"
-	"net/url"
-	"os"
-	"path/filepath"
 	"slices"
 	"strconv"
 	"strings"
 	"time"
 
-	"github.com/libtnb/sqlite"
 	"github.com/pressly/goose/v3"
 	"github.com/pressly/goose/v3/lock"
-	kit "go.getarcane.app/kit/pkg"
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
 	"gorm.io/gorm/logger"
 
-	sqliteutil "github.com/florianfinn/docklet-next/backend/pkg/utils/sqlite"
 	"github.com/florianfinn/docklet-next/backend/resources"
 )
 
@@ -42,7 +36,6 @@ type MigrationOptions struct {
 }
 
 const (
-	dbProviderSQLite   = "sqlite"
 	dbProviderPostgres = "postgres"
 	gooseVersionTable  = "goose_db_version"
 	legacyVersionTable = "schema_migrations"
@@ -51,10 +44,9 @@ const (
 	// by SQL text. When PrepareStmtMaxSize/PrepareStmtTTL are left at zero, GORM falls
 	// back to math.MaxInt entries with a 24h TTL, i.e. effectively unbounded. Because
 	// this codebase emits highly variable SQL (dynamic filter/sort/pagination and
-	// GORM's IN (?,?,...) slice expansion, whose placeholder count changes the query
-	// text), the cache — and the modernc.org/sqlite compiled statements it retains on
-	// the Go heap — grows steadily under normal use. Bounding size and TTL keeps hot
-	// queries prepared while evicting the long tail (evicted statements are closed).
+	// GORM's IN (...) slice expansion, whose placeholder count changes the query
+	// text), the cache grows steadily under normal use. Bounding size and TTL keeps
+	// hot queries prepared while evicting the long tail.
 	preparedStmtMaxSize = 256
 	preparedStmtTTL     = 15 * time.Minute
 )
@@ -91,29 +83,14 @@ func Initialize(ctx context.Context, databaseURL string, options MigrationOption
 		return nil, fmt.Errorf("failed to get sql.DB: %w", err)
 	}
 
-	var dbProvider string
-	switch {
-	case strings.HasPrefix(databaseURL, "file:"):
-		dbProvider = dbProviderSQLite
-	case strings.HasPrefix(databaseURL, "postgres"):
-		dbProvider = dbProviderPostgres
-	default:
-		return nil, fmt.Errorf("unsupported database type in URL: %s", databaseURL)
-	}
-
-	if migrateDatabaseErr := migrateDatabaseInternal(ctx, sqlDB, dbProvider, options); migrateDatabaseErr != nil {
+	if migrateDatabaseErr := migrateDatabaseInternal(ctx, sqlDB, dbProviderPostgres, options); migrateDatabaseErr != nil {
 		slog.ErrorContext(ctx, "Failed to run migrations", "error", migrateDatabaseErr)
 		return nil, fmt.Errorf("failed to run migrations: %w", migrateDatabaseErr)
 	}
 
 	// Set connection pool settings
-	if db.Name() == "postgres" {
-		sqlDB.SetMaxIdleConns(15)
-		sqlDB.SetMaxOpenConns(50)
-	} else {
-		sqlDB.SetMaxIdleConns(5)
-		sqlDB.SetMaxOpenConns(20)
-	}
+	sqlDB.SetMaxIdleConns(15)
+	sqlDB.SetMaxOpenConns(50)
 	sqlDB.SetConnMaxLifetime(5 * time.Minute)
 	sqlDB.SetConnMaxIdleTime(3 * time.Minute)
 
@@ -121,26 +98,10 @@ func Initialize(ctx context.Context, databaseURL string, options MigrationOption
 }
 
 func connectDatabaseInternal(ctx context.Context, databaseURL string) (*DB, error) {
-	var dialector gorm.Dialector
-
-	switch {
-	case strings.HasPrefix(databaseURL, "file:"):
-		if err := sqliteutil.RegisterFunctions(); err != nil {
-			return nil, fmt.Errorf("failed to register SQLite functions: %w", err)
-		}
-		connString, err := ParseSQLiteConnectionString(databaseURL)
-		if err != nil {
-			return nil, fmt.Errorf("failed to parse SQLite connection string: %w", err)
-		}
-		if ensureSQLiteDirectoryErr := ensureSQLiteDirectoryInternal(connString); ensureSQLiteDirectoryErr != nil {
-			return nil, fmt.Errorf("failed to prepare SQLite directory: %w", ensureSQLiteDirectoryErr)
-		}
-		dialector = sqlite.Open(connString)
-	case strings.HasPrefix(databaseURL, "postgres"):
-		dialector = postgres.Open(databaseURL)
-	default:
-		return nil, fmt.Errorf("unsupported database type in URL: %s", databaseURL)
+	if !strings.HasPrefix(databaseURL, "postgres://") && !strings.HasPrefix(databaseURL, "postgresql://") {
+		return nil, errors.New("DATABASE_URL must be a PostgreSQL URL")
 	}
+	dialector := postgres.Open(databaseURL)
 
 	// Retry connection up to 3 times
 	var db *gorm.DB
@@ -263,8 +224,7 @@ func newGooseProviderInternal(db *sql.DB, dbProvider string) (*goose.Provider, e
 
 	// Two Arcane processes pointed at the same Postgres (a rolling deploy, or a
 	// replica set) would otherwise run migrations concurrently and race on the
-	// same DDL. A session-level advisory lock serializes them; SQLite needs no
-	// equivalent because it is single-writer by construction.
+	// same DDL. A session-level advisory lock serializes them.
 	var options []goose.ProviderOption
 	if dialect == goose.DialectPostgres {
 		sessionLocker, newPostgresSessionLockerErr := lock.NewPostgresSessionLocker()
@@ -288,8 +248,6 @@ func embeddedMigrationFSInternal(dbProvider string) (fs.FS, error) {
 
 func gooseDialectInternal(dbProvider string) (goose.Dialect, error) {
 	switch dbProvider {
-	case dbProviderSQLite:
-		return goose.DialectSQLite3, nil
 	case dbProviderPostgres:
 		return goose.DialectPostgres, nil
 	default:
@@ -407,22 +365,14 @@ func legacyMigrationStateInternal(ctx context.Context, db *sql.DB, dbProvider st
 }
 
 func legacyVersionTableExistsInternal(ctx context.Context, db *sql.DB, dbProvider string) (bool, error) {
-	switch dbProvider {
-	case dbProviderSQLite:
-		var count int
-		if err := db.QueryRowContext(ctx, `SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = ?`, legacyVersionTable).Scan(&count); err != nil {
-			return false, fmt.Errorf("failed to check legacy migration table for sqlite: %w", err)
-		}
-		return count > 0, nil
-	case dbProviderPostgres:
-		var exists bool
-		if err := db.QueryRowContext(ctx, `SELECT to_regclass($1) IS NOT NULL`, legacyVersionTable).Scan(&exists); err != nil {
-			return false, fmt.Errorf("failed to check legacy migration table for postgres: %w", err)
-		}
-		return exists, nil
-	default:
+	if dbProvider != dbProviderPostgres {
 		return false, fmt.Errorf("unsupported database provider: %s", dbProvider)
 	}
+	var exists bool
+	if err := db.QueryRowContext(ctx, `SELECT to_regclass($1) IS NOT NULL`, legacyVersionTable).Scan(&exists); err != nil {
+		return false, fmt.Errorf("failed to check legacy migration table for postgres: %w", err)
+	}
+	return exists, nil
 }
 
 func clearLegacyMigrationDirtyInternal(ctx context.Context, db *sql.DB, dbProvider string, version int64) error {
@@ -444,7 +394,7 @@ func gooseVersionTableHasAppliedMigrationsInternal(ctx context.Context, db *sql.
 	}
 
 	var version int64
-	applied := kit.Ternary(dbProvider == dbProviderPostgres, "true", "1")
+	applied := "true"
 	if scanErr := db.QueryRowContext(ctx, fmt.Sprintf("SELECT COALESCE(MAX(version_id), 0) FROM %s WHERE is_applied = %s", gooseVersionTable, applied)).Scan(&version); scanErr != nil {
 		return false, fmt.Errorf("failed to read Goose migration state for %s: %w", dbProvider, scanErr)
 	}
@@ -452,22 +402,14 @@ func gooseVersionTableHasAppliedMigrationsInternal(ctx context.Context, db *sql.
 }
 
 func gooseVersionTableExistsInternal(ctx context.Context, db *sql.DB, dbProvider string) (bool, error) {
-	switch dbProvider {
-	case dbProviderSQLite:
-		var count int
-		if err := db.QueryRowContext(ctx, `SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = ?`, gooseVersionTable).Scan(&count); err != nil {
-			return false, fmt.Errorf("failed to check Goose version table for sqlite: %w", err)
-		}
-		return count > 0, nil
-	case dbProviderPostgres:
-		var exists bool
-		if err := db.QueryRowContext(ctx, `SELECT to_regclass($1) IS NOT NULL`, gooseVersionTable).Scan(&exists); err != nil {
-			return false, fmt.Errorf("failed to check Goose version table for postgres: %w", err)
-		}
-		return exists, nil
-	default:
+	if dbProvider != dbProviderPostgres {
 		return false, fmt.Errorf("unsupported database provider: %s", dbProvider)
 	}
+	var exists bool
+	if err := db.QueryRowContext(ctx, `SELECT to_regclass($1) IS NOT NULL`, gooseVersionTable).Scan(&exists); err != nil {
+		return false, fmt.Errorf("failed to check Goose version table for postgres: %w", err)
+	}
+	return exists, nil
 }
 
 type sqlExecerInternal interface {
@@ -475,26 +417,15 @@ type sqlExecerInternal interface {
 }
 
 func createGooseVersionTableInternal(ctx context.Context, execer sqlExecerInternal, dbProvider string) error {
-	var query string
-	switch dbProvider {
-	case dbProviderSQLite:
-		query = fmt.Sprintf(`CREATE TABLE IF NOT EXISTS %s (
-	id INTEGER PRIMARY KEY AUTOINCREMENT,
-	version_id INTEGER NOT NULL,
-	is_applied INTEGER NOT NULL,
-	tstamp TIMESTAMP DEFAULT (datetime('now'))
-)`, gooseVersionTable)
-	case dbProviderPostgres:
-		query = fmt.Sprintf(`CREATE TABLE IF NOT EXISTS %s (
-	id integer PRIMARY KEY GENERATED BY DEFAULT AS IDENTITY,
-	version_id bigint NOT NULL,
-	is_applied boolean NOT NULL,
-	tstamp timestamp NOT NULL DEFAULT now()
-)`, gooseVersionTable)
-	default:
+	if dbProvider != dbProviderPostgres {
 		return fmt.Errorf("unsupported database provider: %s", dbProvider)
 	}
-
+	query := fmt.Sprintf(`CREATE TABLE IF NOT EXISTS %s (
+ id integer PRIMARY KEY GENERATED BY DEFAULT AS IDENTITY,
+ version_id bigint NOT NULL,
+ is_applied boolean NOT NULL,
+ tstamp timestamp NOT NULL DEFAULT now()
+)`, gooseVersionTable)
 	if _, err := execer.ExecContext(ctx, query); err != nil {
 		return fmt.Errorf("failed to create Goose version table for %s: %w", dbProvider, err)
 	}
@@ -509,30 +440,20 @@ func clearGooseVersionTableInternal(ctx context.Context, execer sqlExecerInterna
 }
 
 func insertGooseMigrationVersionInternal(ctx context.Context, execer sqlExecerInternal, dbProvider string, version int64) error {
-	switch dbProvider {
-	case dbProviderSQLite:
-		if _, err := execer.ExecContext(ctx, fmt.Sprintf("INSERT INTO %s (version_id, is_applied) VALUES (?, ?)", gooseVersionTable), version, true); err != nil {
-			return fmt.Errorf("failed to insert Goose migration version %d for sqlite: %w", version, err)
-		}
-	case dbProviderPostgres:
-		if _, err := execer.ExecContext(ctx, fmt.Sprintf("INSERT INTO %s (version_id, is_applied) VALUES ($1, $2)", gooseVersionTable), version, true); err != nil {
-			return fmt.Errorf("failed to insert Goose migration version %d for postgres: %w", version, err)
-		}
-	default:
+	if dbProvider != dbProviderPostgres {
 		return fmt.Errorf("unsupported database provider: %s", dbProvider)
+	}
+	if _, err := execer.ExecContext(ctx, fmt.Sprintf("INSERT INTO %s (version_id, is_applied) VALUES ($1, $2)", gooseVersionTable), version, true); err != nil {
+		return fmt.Errorf("failed to insert Goose migration version %d for postgres: %w", version, err)
 	}
 	return nil
 }
 
 func sqlWithProviderPlaceholderInternal(dbProvider, queryFormat string, arg any) (string, []any, error) {
-	switch dbProvider {
-	case dbProviderSQLite:
-		return fmt.Sprintf(queryFormat, "?"), []any{arg}, nil
-	case dbProviderPostgres:
-		return fmt.Sprintf(queryFormat, "$1"), []any{arg}, nil
-	default:
+	if dbProvider != dbProviderPostgres {
 		return "", nil, fmt.Errorf("unsupported database provider: %s", dbProvider)
 	}
+	return fmt.Sprintf(queryFormat, "$1"), []any{arg}, nil
 }
 
 func getHighestEmbeddedMigrationVersionInternal(dbProvider string) (int64, error) {
@@ -597,7 +518,7 @@ func missingEmbeddedDowngradeMigrationsInternal(ctx context.Context, db *sql.DB,
 	}
 
 	queryFormat := "SELECT DISTINCT version_id FROM " + gooseVersionTable +
-		" WHERE is_applied = " + kit.Ternary(dbProvider == dbProviderPostgres, "true", "1") +
+		" WHERE is_applied = true" +
 		" AND version_id > %s ORDER BY version_id"
 	query, args, err := sqlWithProviderPlaceholderInternal(dbProvider, queryFormat, requiredVersion)
 	if err != nil {
@@ -629,48 +550,6 @@ func missingEmbeddedDowngradeMigrationsInternal(ctx context.Context, db *sql.DB,
 	return missing, nil
 }
 
-func ParseSQLiteConnectionString(connString string) (string, error) {
-	if !strings.HasPrefix(connString, "file:") {
-		connString = "file:" + connString
-	}
-
-	connStringUrl, err := url.Parse(connString)
-	if err != nil {
-		return "", fmt.Errorf("failed to parse SQLite connection string: %w", err)
-	}
-
-	qs := make(url.Values, len(connStringUrl.Query()))
-	for k, v := range connStringUrl.Query() {
-		switch k {
-		case "_auto_vacuum", "_vacuum":
-			qs.Add("_pragma", "auto_vacuum("+v[0]+")")
-		case "_busy_timeout", "_timeout":
-			qs.Add("_pragma", "busy_timeout("+v[0]+")")
-		case "_case_sensitive_like", "_cslike":
-			qs.Add("_pragma", "case_sensitive_like("+v[0]+")")
-		case "_foreign_keys", "_fk":
-			qs.Add("_pragma", "foreign_keys("+v[0]+")")
-		case "_locking_mode", "_locking":
-			qs.Add("_pragma", "locking_mode("+v[0]+")")
-		case "_secure_delete":
-			qs.Add("_pragma", "secure_delete("+v[0]+")")
-		case "_synchronous", "_sync":
-			qs.Add("_pragma", "synchronous("+v[0]+")")
-		case "_journal_mode":
-			qs.Add("_pragma", "journal_mode("+v[0]+")")
-		case "_txlock":
-			qs.Add("_txlock", v[0])
-		case "_pragma":
-			qs["_pragma"] = append(qs["_pragma"], v...)
-		default:
-			qs[k] = v
-		}
-	}
-
-	connStringUrl.RawQuery = qs.Encode()
-	return connStringUrl.String(), nil
-}
-
 // FindEnvironmentIDByApiKey finds the environment ID that is associated with the given API key.
 // It queries the api_keys table to validate the key and find the associated environment.
 func (db *DB) FindEnvironmentIDByApiKey(ctx context.Context, apiKey string) (string, error) {
@@ -699,26 +578,4 @@ func (db *DB) Close() error {
 
 func (db *DB) SQLDB() (*sql.DB, error) {
 	return db.DB.DB()
-}
-
-// Create parent directory for file-based SQLite if needed
-func ensureSQLiteDirectoryInternal(connString string) error {
-	if !strings.HasPrefix(connString, "file:") {
-		return nil
-	}
-	pathPart, err := kit.SQLitePathFromDSN(connString)
-	if err != nil {
-		return fmt.Errorf("failed to parse SQLite DSN: %w", err)
-	}
-	if pathPart == "" || strings.HasPrefix(pathPart, ":memory:") {
-		return nil
-	}
-
-	dir := filepath.Dir(pathPart)
-	if dir == "" || dir == "." {
-		return nil
-	}
-	// os.* rather than acfs: this creates the sqlite data directory itself,
-	// which has to exist before any acfs root could be opened on it.
-	return os.MkdirAll(dir, 0o755)
 }

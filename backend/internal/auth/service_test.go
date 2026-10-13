@@ -1,8 +1,10 @@
+//go:build postgres_integration
+
 // Source: getarcaneapp/arcane/backend/internal/auth/service_test.go
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace
+// Deviations: Local module namespace; functional cut: removed OIDC and passkeys; functional cut: PostgreSQL integration test fixture.
 
 package auth
 
@@ -15,10 +17,10 @@ import (
 	"testing"
 	"time"
 
+	"github.com/florianfinn/docklet-next/backend/internal/testpg"
 	"github.com/florianfinn/docklet-next/types/auth"
 	"github.com/lestrrat-go/jwx/v4/jwa"
 	"github.com/lestrrat-go/jwx/v4/jwt"
-	"github.com/libtnb/sqlite"
 	"github.com/samber/hot"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -37,7 +39,7 @@ import (
 
 func setupAuthServiceTestDB(t *testing.T) *database.DB {
 	t.Helper()
-	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
+	db, err := gorm.Open(testpg.Dialector(t, ":memory:"), &gorm.Config{})
 	require.NoError(t, err)
 	// Each pooled connection to a ":memory:" DSN gets its own empty database;
 	// keep a single connection so every query sees the migrated schema.
@@ -53,7 +55,6 @@ func setupAuthServiceTestDB(t *testing.T) *database.DB {
 		&role.UserRoleAssignment{},
 		&apikey.ApiKey{},
 		&role.ApiKeyPermission{},
-		&role.OidcRoleMapping{},
 	))
 	return &database.DB{DB: db}
 }
@@ -297,64 +298,6 @@ func TestVerifyToken_MissingUserID(t *testing.T) {
 
 	_, _, err := s.VerifyToken(t.Context(), token)
 	require.ErrorIs(t, err, common.ErrTokenValidation)
-}
-
-func TestGenerateUsernameFromEmail(t *testing.T) {
-	u := generateUsernameFromEmail("john.doe@example.com", "sub-abcdef01")
-
-	assert.Equal(t, "john.doe", u,
-		"username %q", u)
-
-	u2 := generateUsernameFromEmail("", "1234567890abcdef")
-
-	assert.Equal(t, "user_90abcdef", u2,
-		"fallback username %q", u2)
-
-	u3 := generateUsernameFromEmail("", "short")
-
-	assert.Equal(t, "user_short", u3,
-		"short subject username %q", u3)
-}
-
-func TestUniqueOidcUsernameInternal(t *testing.T) {
-	u := uniqueOidcUsernameInternal("alice", "1234567890abcdef")
-
-	assert.Equal(t, "alice_90abcdef", u,
-		"suffixed username %q", u)
-
-	u2 := uniqueOidcUsernameInternal("alice", "short")
-
-	assert.Equal(t, "alice_short", u2,
-		"short subject username %q", u2)
-}
-
-func TestPersistOidcTokens_SetsFields(t *testing.T) {
-	s := newTestAuthService()
-	localUser := &user.User{}
-	start := time.Now()
-	resp := &auth.OidcTokenResponse{
-		AccessToken:  "at-123",
-		RefreshToken: "rt-456",
-		ExpiresIn:    7,
-		IDToken:      "",
-	}
-	s.persistOidcTokens(localUser, resp)
-
-	assert.False(t, localUser.OidcAccessToken == nil || *localUser.OidcAccessToken != "at-123",
-		"access token %v", localUser.OidcAccessToken)
-
-	assert.False(t, localUser.OidcRefreshToken == nil || *localUser.OidcRefreshToken != "rt-456",
-		"refresh token %v", localUser.OidcRefreshToken)
-
-	assert.NotNil(t, localUser.OidcAccessTokenExpiresAt,
-		"expiresAt nil")
-
-	// Check approx expiry within [start+7s, start+12s] to allow CI slop
-	earliest := start.Add(7 * time.Second)
-	latest := start.Add(12 * time.Second)
-
-	assert.False(t, localUser.OidcAccessTokenExpiresAt.Before(earliest) || localUser.OidcAccessTokenExpiresAt.After(latest),
-		"expiresAt %v not in [%v,%v]", localUser.OidcAccessTokenExpiresAt, earliest, latest)
 }
 
 func TestVerifyToken_VersionMismatch(t *testing.T) {
@@ -713,208 +656,6 @@ func TestRefreshToken_RejectsNonHMACAlg(t *testing.T) {
 		"want common.ErrInvalidToken, got %v", err)
 }
 
-func TestGetOidcConfigurationStatus(t *testing.T) {
-	db := setupAuthServiceTestDB(t)
-	// Disabled
-	s := newTestAuthService()
-	s.config = &config.Config{}
-	settingsSvc, err := newSettingsServiceForAuthTestInternal(t, t.Context(), db)
-	require.NoError(t, err)
-	s.settingsService = settingsSvc
-
-	status, err := s.GetOidcConfigurationStatus(t.Context())
-
-	require.NoError(t, err,
-		"GetOidcConfigurationStatus error: %v", err)
-
-	assert.False(t, status.EnvForced || status.EnvConfigured,
-		"expected disabled, got forced=%v configured=%v", status.EnvForced, status.EnvConfigured)
-
-	// MergeAccounts will be false since GetSettings will fail
-
-	assert.False(t, status.MergeAccounts,
-		"expected mergeAccounts=false, got true")
-
-	// Explicit env override to false should still be treated as forced
-	t.Setenv("OIDC_ENABLED", "false")
-	settingsSvc, err = newSettingsServiceForAuthTestInternal(t, t.Context(), db)
-	require.NoError(t, err)
-	s.settingsService = settingsSvc
-	s.config.OidcEnabled = false
-	status, err = s.GetOidcConfigurationStatus(t.Context())
-
-	require.NoError(t, err,
-		"GetOidcConfigurationStatus error: %v", err)
-
-	assert.False(t, !status.EnvForced || status.EnvConfigured,
-		"expected forced=false-override and not configured, got forced=%v configured=%v", status.EnvForced, status.EnvConfigured)
-
-	// Enabled but missing fields
-	t.Setenv("OIDC_ENABLED", "true")
-	settingsSvc, err = newSettingsServiceForAuthTestInternal(t, t.Context(), db)
-	require.NoError(t, err)
-	s.settingsService = settingsSvc
-	s.config.OidcEnabled = true
-	status, err = s.GetOidcConfigurationStatus(t.Context())
-
-	require.NoError(t, err,
-		"GetOidcConfigurationStatus error: %v", err)
-
-	assert.False(t, !status.EnvForced || status.EnvConfigured,
-		"expected enabled but not configured, got forced=%v configured=%v", status.EnvForced, status.EnvConfigured)
-
-	// Enabled and configured
-	s.config.OidcClientID = "client-id"
-	s.config.OidcIssuerURL = "https://example.com"
-	status, err = s.GetOidcConfigurationStatus(t.Context())
-
-	require.NoError(t, err,
-		"GetOidcConfigurationStatus error: %v", err)
-
-	assert.False(t, !status.EnvForced || !status.EnvConfigured,
-		"expected enabled and configured, got forced=%v configured=%v", status.EnvForced, status.EnvConfigured)
-}
-
-func TestFindOrCreateOidcUser_MergeEnabled_EmailNotVerified_NoExistingUser_CreatesNewUser(t *testing.T) {
-	ctx := t.Context()
-	db := setupAuthServiceTestDB(t)
-
-	settingsSvc, err := newSettingsServiceForAuthTestInternal(t, ctx, db)
-	require.NoError(t, err)
-	require.NoError(t, settingsSvc.EnsureDefaultSettings(ctx))
-	require.NoError(t, settingsSvc.SetBoolSetting(ctx, "oidcMergeAccounts", true))
-
-	userSvc := user.NewUserService(db, nil, session.RevokeAllUserSessionsExceptInDB)
-	authSvc := newTestAuthService()
-	authSvc.userService = userSvc
-	authSvc.settingsService = settingsSvc
-
-	existing, err := userSvc.CreateUser(ctx, &user.User{
-		ID: "existing-canonical-identity", Username: "José", Email: new("néw@example.com"),
-	})
-	require.NoError(t, err)
-
-	userInfo := auth.OidcUserInfo{
-		Subject:           "sub-123",
-		Email:             " ne\u0301w@example.com ",
-		PreferredUsername: " Jose\u0301 ",
-		Name:              " Jose\u0301 ",
-		EmailVerified:     false, // provider omitted/false
-	}
-
-	created, isNew, err := authSvc.findOrCreateOidcUser(ctx, userInfo, &auth.OidcTokenResponse{AccessToken: "at"})
-	require.NoError(t, err)
-	require.True(t, isNew)
-	require.NotEqual(t, existing.ID, created.ID)
-	require.NotNil(t, created)
-	require.NotNil(t, created.OidcSubjectId)
-	require.Equal(t, userInfo.Subject, *created.OidcSubjectId)
-	require.NotNil(t, created.Email)
-	require.Equal(t, userInfo.Email, *created.Email)
-	require.Equal(t, "Jose\u0301", created.Username)
-	require.Equal(t, "José", *created.DisplayName)
-	require.NotEmpty(t, created.Username)
-
-	// Ensure the user actually persisted
-	fetched, err := userSvc.GetUserByOidcSubjectId(ctx, userInfo.Subject)
-	require.NoError(t, err)
-	require.Equal(t, created.ID, fetched.ID)
-	otherInfo := userInfo
-	otherInfo.Subject = "another-subject"
-	otherInfo.Email = "other@example.com"
-	other, isNew, err := authSvc.findOrCreateOidcUser(ctx, otherInfo, &auth.OidcTokenResponse{AccessToken: "other-token"})
-	require.NoError(t, err)
-	require.True(t, isNew)
-	require.NotEqual(t, created.ID, other.ID)
-	require.NotEqual(t, created.Username, other.Username)
-}
-
-func TestFindOrCreateOidcUser_MergeEnabled_EmailNotVerified_WithExistingUser_ReturnsError(t *testing.T) {
-	ctx := t.Context()
-	db := setupAuthServiceTestDB(t)
-
-	settingsSvc, err := newSettingsServiceForAuthTestInternal(t, ctx, db)
-	require.NoError(t, err)
-	require.NoError(t, settingsSvc.EnsureDefaultSettings(ctx))
-	require.NoError(t, settingsSvc.SetBoolSetting(ctx, "oidcMergeAccounts", true))
-
-	userSvc := user.NewUserService(db, nil, session.RevokeAllUserSessionsExceptInDB)
-	// Seed an existing local user with matching email
-	email := "existing@example.com"
-	existing := &user.User{
-		ID:       "u1",
-		Username: "existing",
-		Email:    &email,
-	}
-	_, err = userSvc.CreateUser(ctx, existing)
-	require.NoError(t, err)
-
-	authSvc := newTestAuthService()
-	authSvc.userService = userSvc
-	authSvc.settingsService = settingsSvc
-
-	userInfo := auth.OidcUserInfo{
-		Subject:       "sub-merge",
-		Email:         email,
-		EmailVerified: false,
-		Extra: map[string]any{
-			"email_verified": false,
-		},
-	}
-
-	_, _, err = authSvc.findOrCreateOidcUser(ctx, userInfo, &auth.OidcTokenResponse{AccessToken: "at"})
-	require.Error(t, err)
-
-	// Ensure existing user is not linked
-	fetched, err := userSvc.GetUserByID(ctx, existing.ID)
-	require.NoError(t, err)
-	require.True(t, fetched.OidcSubjectId == nil || *fetched.OidcSubjectId == "")
-}
-
-func TestFindOrCreateOidcUser_MergeEnabled_EmailVerificationMissing_WithExistingUser_Merges(t *testing.T) {
-	ctx := t.Context()
-	db := setupAuthServiceTestDB(t)
-
-	settingsSvc, err := newSettingsServiceForAuthTestInternal(t, ctx, db)
-	require.NoError(t, err)
-	require.NoError(t, settingsSvc.EnsureDefaultSettings(ctx))
-	require.NoError(t, settingsSvc.SetBoolSetting(ctx, "oidcMergeAccounts", true))
-
-	userSvc := user.NewUserService(db, nil, session.RevokeAllUserSessionsExceptInDB)
-	// Seed an existing local user with matching email
-	email := "existing@example.com"
-	existing := &user.User{
-		ID:       "u1",
-		Username: "existing",
-		Email:    &email,
-	}
-	_, err = userSvc.CreateUser(ctx, existing)
-	require.NoError(t, err)
-
-	authSvc := newTestAuthService()
-	authSvc.userService = userSvc
-	authSvc.settingsService = settingsSvc
-
-	userInfo := auth.OidcUserInfo{
-		Subject:       "sub-merge-missing-verified",
-		Email:         email,
-		EmailVerified: false,
-		Extra:         map[string]any{},
-	}
-
-	mergedUser, isNew, err := authSvc.findOrCreateOidcUser(ctx, userInfo, &auth.OidcTokenResponse{AccessToken: "at"})
-	require.NoError(t, err)
-	require.False(t, isNew)
-	require.NotNil(t, mergedUser)
-	require.Equal(t, existing.ID, mergedUser.ID)
-
-	// Ensure existing user is linked
-	fetched, err := userSvc.GetUserByID(ctx, existing.ID)
-	require.NoError(t, err)
-	require.NotNil(t, fetched.OidcSubjectId)
-	require.Equal(t, userInfo.Subject, *fetched.OidcSubjectId)
-}
-
 func TestAuthenticateLocalPrimary_EmailFallback(t *testing.T) {
 	db := setupAuthServiceTestDB(t)
 	userSvc := user.NewUserService(db, nil, session.RevokeAllUserSessionsExceptInDB)
@@ -979,4 +720,31 @@ func TestAuthenticateLocalPrimary_EmailFallback(t *testing.T) {
 			require.Equal(t, tc.wantID, got.ID)
 		})
 	}
+}
+
+func TestLoginIssuesLocalTokens(t *testing.T) {
+	db := setupAuthServiceTestDB(t)
+	userSvc := user.NewUserService(db, nil, session.RevokeAllUserSessionsExceptInDB)
+	settingsSvc, err := newSettingsServiceForAuthTestInternal(t, t.Context(), db)
+	require.NoError(t, err)
+	passwordHash, err := userSvc.HashPassword("local-password-123")
+	require.NoError(t, err)
+	_, err = userSvc.CreateUser(t.Context(), &user.User{ID: "local-user", Username: "local-user", PasswordHash: passwordHash})
+	require.NoError(t, err)
+	s := newTestAuthService()
+	s.userService = userSvc
+	s.settingsService = settingsSvc
+	s.sessionService = session.NewSessionService(db)
+
+	loggedIn, tokens, err := s.Login(t.Context(), "local-user", "local-password-123", auth.SessionMeta{UserAgent: "test-agent"})
+	require.NoError(t, err)
+	require.Equal(t, "local-user", loggedIn.ID)
+	require.NotEmpty(t, tokens.AccessToken)
+	require.NotEmpty(t, tokens.RefreshToken)
+	verified, sessionID, err := s.VerifyToken(t.Context(), tokens.AccessToken)
+	require.NoError(t, err)
+	require.Equal(t, loggedIn.ID, verified.ID)
+	createdSession, err := s.sessionService.GetSessionByID(t.Context(), sessionID)
+	require.NoError(t, err)
+	require.Equal(t, session.UserSessionSourceLocal, createdSession.Source)
 }

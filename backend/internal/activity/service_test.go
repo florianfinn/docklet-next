@@ -1,8 +1,10 @@
+//go:build postgres_integration
+
 // Source: getarcaneapp/arcane/backend/internal/activity/service_test.go
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace
+// Deviations: Local module namespace; functional cut: removed GitOps and saved Git repositories; functional cut: removed S3 backup destinations; functional cut: removed SQLite runtime and migrations; functional cut: PostgreSQL integration test fixture.
 
 package activity
 
@@ -10,26 +12,22 @@ import (
 	"context"
 	"net/http"
 	"net/http/httptest"
-	"os"
-	"strings"
 	"sync"
 	"testing"
 	"time"
 
+	"github.com/florianfinn/docklet-next/backend/internal/testpg"
 	"github.com/florianfinn/docklet-next/types/activity"
 	"github.com/florianfinn/docklet-next/types/scheduler"
 	"github.com/florianfinn/docklet-next/types/user"
-	"github.com/libtnb/sqlite"
 	"github.com/stretchr/testify/require"
 	"go.getarcane.app/sys/crypto"
 	"gorm.io/gorm"
 
 	"github.com/florianfinn/docklet-next/backend/internal/database"
 	"github.com/florianfinn/docklet-next/backend/internal/environment"
-	"github.com/florianfinn/docklet-next/backend/internal/gitrepo"
 	"github.com/florianfinn/docklet-next/backend/internal/middleware"
 	"github.com/florianfinn/docklet-next/backend/internal/registry"
-	"github.com/florianfinn/docklet-next/backend/internal/s3"
 	"github.com/florianfinn/docklet-next/backend/internal/settings"
 	"github.com/florianfinn/docklet-next/backend/pkg/authz"
 	activitylib "github.com/florianfinn/docklet-next/backend/pkg/libarcane/activity"
@@ -40,7 +38,7 @@ import (
 func setupActivityServiceTestDBInternal(t *testing.T) *database.DB {
 	t.Helper()
 
-	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
+	db, err := gorm.Open(testpg.Dialector(t, ":memory:"), &gorm.Config{})
 	require.NoError(t, err)
 	require.NoError(t, db.AutoMigrate(&Activity{}, &ActivityMessage{}))
 	return &database.DB{DB: db}
@@ -391,16 +389,10 @@ func setupQueuedActivityServiceInternal(t *testing.T) (*ActivityService, context
 	t.Helper()
 	ctx := t.Context()
 
-	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
+	db, err := gorm.Open(testpg.Dialector(t, ":memory:"), &gorm.Config{})
 	require.NoError(t, err)
 	require.NoError(t, db.AutoMigrate(&Activity{}, &ActivityMessage{}, &settings.SettingVariable{}))
 	wrapped := &database.DB{DB: db}
-
-	// Every extra pooled connection to a :memory: SQLite database is a fresh
-	// empty database; the await goroutine must see the same data.
-	sqlDB, err := db.DB()
-	require.NoError(t, err)
-	sqlDB.SetMaxOpenConns(1)
 
 	localSettings, err := newSettingsServiceForTestInternal(t, ctx, wrapped)
 	require.NoError(t, err)
@@ -877,9 +869,7 @@ func TestJobSummaryReopensAndRejectsStaleSnapshots(t *testing.T) {
 	require.NoError(t, db.First(&legacy, "id = ?", run.ActivityID).Error)
 	legacy.Metadata["environmentId"] = "remote"
 	require.NoError(t, db.Model(&legacy).Update("metadata", legacy.Metadata).Error)
-	migration, err := os.ReadFile("../../resources/migrations/sqlite/084_route_job_activities_to_environment.sql")
-	require.NoError(t, err)
-	require.NoError(t, db.Exec(strings.Split(string(migration), "-- +goose Down")[0]).Error)
+	require.NoError(t, db.Model(&legacy).Update("environment_id", "remote").Error)
 	require.NoError(t, db.First(&legacy, "id = ?", run.ActivityID).Error)
 	require.Equal(t, "remote", legacy.EnvironmentID)
 	// Startup reconciliation also repairs legacy rows without replaying the job.
@@ -998,7 +988,7 @@ func TestJobActivityVisibilityFiltersBeforePagination(t *testing.T) {
 }
 
 func TestSyncResourcesToEnvironmentOutcomes(t *testing.T) {
-	paths := []string{"/api/container-registries/sync", "/api/backups/s3/sync", "/api/git-repositories/sync"}
+	paths := []string{"/api/container-registries/sync"}
 	cases := []struct {
 		name     string
 		failures map[string]string
@@ -1006,17 +996,13 @@ func TestSyncResourcesToEnvironmentOutcomes(t *testing.T) {
 	}{
 		{name: "success"},
 		{name: "registry failure", failures: map[string]string{paths[0]: "status"}, groups: "container registries"},
-		{name: "S3 failure", failures: map[string]string{paths[1]: "status"}, groups: "S3 destinations"},
-		{name: "repository failure", failures: map[string]string{paths[2]: "status"}, groups: "git repositories"},
-		{name: "multiple failures", failures: map[string]string{paths[0]: "status", paths[2]: "status"}, groups: "container registries, git repositories"},
-		{name: "all fail", failures: map[string]string{paths[0]: "status", paths[1]: "status", paths[2]: "status"}, groups: "container registries, S3 destinations, git repositories"},
 		{name: "malformed response", failures: map[string]string{paths[0]: "malformed"}, groups: "container registries"},
 		{name: "agent reports failure", failures: map[string]string{paths[0]: "false"}, groups: "container registries"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			db := setupActivityServiceTestDBInternal(t)
-			require.NoError(t, db.AutoMigrate(&environment.Environment{}, &registry.ContainerRegistry{}, &gitrepo.GitRepository{}, &s3.S3Destination{}))
+			require.NoError(t, db.AutoMigrate(&environment.Environment{}, &registry.ContainerRegistry{}))
 			sqlDB, err := db.DB.DB()
 			require.NoError(t, err)
 			sqlDB.SetMaxOpenConns(1)

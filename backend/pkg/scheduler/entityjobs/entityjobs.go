@@ -2,10 +2,9 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace
+// Deviations: Local module namespace; functional cut: removed GitOps and saved Git repositories.
 
 // Package entityjobs holds the per-entity dynamic-job registry shared by the
-// services that schedule one job per database row (GitOps syncs, environment
 // health checks). It lives beside the scheduler rather than inside it because
 // package scheduler imports the services that would use this registry.
 package entityjobs
@@ -19,9 +18,6 @@ import (
 
 	"github.com/florianfinn/docklet-next/backend/pkg/scheduler/runs"
 )
-
-// GitOpsSyncJobPrefix is shared by the GitOps registry and environment cleanup.
-const GitOpsSyncJobPrefix = "gitops-sync:"
 
 // Registry owns one dynamic scheduler job per entity ID, plus the admission
 // gate that keeps a single run of any one entity in flight at a time.

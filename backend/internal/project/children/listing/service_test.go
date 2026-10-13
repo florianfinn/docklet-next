@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace
+// Deviations: Local module namespace; functional cut: removed S3 backup destinations.
 
 package listing
 
@@ -228,7 +228,7 @@ func TestServiceCounts(t *testing.T) {
 			services: []project.RuntimeService{
 				{Name: "s1", Status: "running"},
 				{Name: "s2", Status: "exited"},
-				{Name: "s3", Status: "up"},
+				{Name: "storage", Status: "up"},
 			},
 			wantTotal:   3,
 			wantRunning: 2,

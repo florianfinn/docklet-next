@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace
+// Deviations: Local module namespace; functional cut: removed APNS mobile push; functional cut: removed template catalogue; functional cut: removed federated credentials; functional cut: removed central variables and .env.global; functional cut: removed GitOps and saved Git repositories; functional cut: removed Swarm; functional cut: removed S3 backup destinations; functional cut: removed standalone build workshop; functional cut: removed OIDC and passkeys.
 
 package api
 
@@ -24,10 +24,8 @@ import (
 	"github.com/florianfinn/docklet-next/backend/api/handlers"
 	"github.com/florianfinn/docklet-next/backend/internal/activity"
 	"github.com/florianfinn/docklet-next/backend/internal/apikey"
-	"github.com/florianfinn/docklet-next/backend/internal/apns"
 	"github.com/florianfinn/docklet-next/backend/internal/appimages"
 	"github.com/florianfinn/docklet-next/backend/internal/auth"
-	"github.com/florianfinn/docklet-next/backend/internal/build"
 	"github.com/florianfinn/docklet-next/backend/internal/config"
 	"github.com/florianfinn/docklet-next/backend/internal/container"
 	"github.com/florianfinn/docklet-next/backend/internal/dashboard"
@@ -35,9 +33,6 @@ import (
 	"github.com/florianfinn/docklet-next/backend/internal/docker"
 	"github.com/florianfinn/docklet-next/backend/internal/environment"
 	"github.com/florianfinn/docklet-next/backend/internal/event"
-	"github.com/florianfinn/docklet-next/backend/internal/federated"
-	"github.com/florianfinn/docklet-next/backend/internal/gitops"
-	"github.com/florianfinn/docklet-next/backend/internal/gitrepo"
 	"github.com/florianfinn/docklet-next/backend/internal/health"
 	"github.com/florianfinn/docklet-next/backend/internal/image"
 	"github.com/florianfinn/docklet-next/backend/internal/imageupdate"
@@ -45,22 +40,16 @@ import (
 	"github.com/florianfinn/docklet-next/backend/internal/middleware"
 	"github.com/florianfinn/docklet-next/backend/internal/network"
 	"github.com/florianfinn/docklet-next/backend/internal/notification"
-	"github.com/florianfinn/docklet-next/backend/internal/oidc"
-	"github.com/florianfinn/docklet-next/backend/internal/passkey"
 	"github.com/florianfinn/docklet-next/backend/internal/port"
 	"github.com/florianfinn/docklet-next/backend/internal/project"
 	"github.com/florianfinn/docklet-next/backend/internal/registry"
 	"github.com/florianfinn/docklet-next/backend/internal/role"
-	"github.com/florianfinn/docklet-next/backend/internal/s3"
 	"github.com/florianfinn/docklet-next/backend/internal/search"
 	"github.com/florianfinn/docklet-next/backend/internal/settings"
-	"github.com/florianfinn/docklet-next/backend/internal/swarm"
 	"github.com/florianfinn/docklet-next/backend/internal/system"
-	"github.com/florianfinn/docklet-next/backend/internal/template"
 	"github.com/florianfinn/docklet-next/backend/internal/updater"
 	"github.com/florianfinn/docklet-next/backend/internal/upload"
 	"github.com/florianfinn/docklet-next/backend/internal/user"
-	"github.com/florianfinn/docklet-next/backend/internal/variable"
 	"github.com/florianfinn/docklet-next/backend/internal/version"
 	"github.com/florianfinn/docklet-next/backend/internal/volume"
 	"github.com/florianfinn/docklet-next/backend/internal/vulnerability"
@@ -103,13 +92,13 @@ var dockerSchemaPrefixes = map[string]string{
 	"container": "DockerContainer",
 	"network":   "DockerNetwork",
 	"volume":    "DockerVolume",
-	"swarm":     "DockerSwarm",
 	"mount":     "DockerMount",
 	"filters":   "DockerFilters",
 	"blkiodev":  "DockerBlkiodev",
 	"strslice":  "DockerStrslice",
 	"events":    "DockerEvents",
 	"image":     "DockerImage",
+	"swarm":     "DockerSwarm",
 }
 
 var jsonV2Format = huma.Format{
@@ -256,18 +245,12 @@ type HandlerDeps struct {
 	Search            *search.Module
 	Container         *container.Module
 	Image             *image.Module
-	Build             *build.BuildService
 	Volume            *volume.Module
-	S3Destination     *s3.Module
 	Network           *network.NetworkService
 	Port              *port.PortService
-	Swarm             *swarm.Module
 	ImageUpdate       *imageupdate.Module
 	Auth              *auth.Module
-	Passkey           *passkey.PasskeyService
-	Oidc              *oidc.OidcService
 	Docker            *docker.DockerClientService
-	Template          *template.Module
 	ContainerRegistry *registry.Module
 	System            *system.Module
 	Diagnostics       *diagnostics.DiagnosticsService
@@ -277,15 +260,10 @@ type HandlerDeps struct {
 	Version           *version.VersionService
 	Notification      *notification.Module
 	ApiKey            *apikey.Module
-	Apns              *apns.Module
-	Federated         *federated.FederatedCredentialService
-	GitRepository     *gitrepo.Module
-	GitOpsSync        *gitops.Module
 	Webhook           *webhook.Module
 	Vulnerability     *vulnerability.Module
 	Dashboard         *dashboard.Module
 	Role              *role.Module
-	Variable          *variable.Module
 	Upload            *upload.Module
 }
 
@@ -410,9 +388,7 @@ func SetupAPIForSpec() huma.API {
 func registerHandlersInternal(api huma.API, deps HandlerDeps, handlerAppCtx handlerutil.ActivityAppContext, cfg *config.Config) {
 	health.RegisterRoutes(api)
 	deps.Auth.RegisterRoutes(api)
-	passkey.RegisterPasskeys(api, deps.Passkey, deps.Auth.Service(), deps.User.Service())
 	deps.ApiKey.RegisterRoutes(api)
-	federated.RegisterFederatedCredentials(api, deps.Federated)
 	deps.Role.RegisterRoutes(api)
 	appimages.RegisterAppImages(api, deps.AppImages)
 	deps.User.RegisterRoutes(api)
@@ -420,31 +396,22 @@ func registerHandlersInternal(api huma.API, deps HandlerDeps, handlerAppCtx hand
 	version.RegisterVersion(api, deps.Version)
 	deps.Event.RegisterRoutes(api)
 	deps.Activity.RegisterRoutes(api)
-	oidc.RegisterOidc(api, deps.Auth.Service(), deps.Passkey, deps.Oidc, deps.Role.Service(), deps.User.Service(), cfg)
 	deps.Environment.RegisterRoutes(api, handlerAppCtx)
 	deps.ContainerRegistry.RegisterRoutes(api)
-	deps.Template.RegisterRoutes(api)
-	deps.Variable.RegisterRoutes(api, cfg)
 	deps.Image.RegisterRoutes(api, handlerAppCtx)
 	deps.Upload.RegisterRoutes(api)
-	build.RegisterBuildWorkspaces(api, deps.Build, deps.Upload.Service())
 	deps.ImageUpdate.RegisterRoutes(api, handlerAppCtx)
 	deps.Settings.RegisterRoutes(api)
-	deps.S3Destination.RegisterRoutes(api)
 	deps.JobSchedule.RegisterRoutes(api)
 	deps.Volume.RegisterRoutes(api, handlerAppCtx)
 	deps.Container.RegisterRoutes(api, handlerAppCtx)
 	port.RegisterPorts(api, deps.Port)
 	network.RegisterNetworks(api, deps.Network, deps.Docker, deps.Activity.Service(), handlerAppCtx)
-	deps.Swarm.RegisterRoutes(api)
 	deps.Notification.RegisterRoutes(api)
-	deps.Apns.RegisterRoutes(api)
 	deps.Updater.RegisterRoutes(api, handlerAppCtx)
 	deps.Search.RegisterRoutes(api)
 	deps.System.RegisterRoutes(api, handlerAppCtx)
 	handlers.RegisterDiagnostics(api, deps.Diagnostics)
-	deps.GitRepository.RegisterRoutes(api)
-	deps.GitOpsSync.RegisterRoutes(api)
 	deps.Webhook.RegisterRoutes(api)
 	deps.Vulnerability.RegisterRoutes(api, handlerAppCtx)
 	deps.Dashboard.RegisterRoutes(api)

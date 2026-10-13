@@ -1,8 +1,10 @@
+//go:build postgres_integration
+
 // Source: getarcaneapp/arcane/backend/internal/settings/service_test.go
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace
+// Deviations: Local module namespace; functional cut: removed template catalogue; functional cut: removed GitOps and saved Git repositories; functional cut: removed Swarm; functional cut: removed OIDC and passkeys; functional cut: PostgreSQL integration test fixture.
 
 package settings
 
@@ -17,9 +19,9 @@ import (
 	"testing"
 	"time"
 
+	"github.com/florianfinn/docklet-next/backend/internal/testpg"
 	"github.com/florianfinn/docklet-next/types/features"
 	"github.com/florianfinn/docklet-next/types/settings"
-	"github.com/libtnb/sqlite"
 	"github.com/stretchr/testify/require"
 	"go.getarcane.app/sys/crypto"
 	"gorm.io/gorm"
@@ -32,7 +34,7 @@ import (
 
 func setupSettingsTestDB(t *testing.T) *database.DB {
 	t.Helper()
-	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
+	db, err := gorm.Open(testpg.Dialector(t, ":memory:"), &gorm.Config{})
 	require.NoError(t, err)
 	require.NoError(t, db.AutoMigrate(&SettingVariable{}))
 	return &database.DB{DB: db}
@@ -96,7 +98,6 @@ func TestSettingsService_EnsureDefaultSettings_Idempotent(t *testing.T) {
 	require.NoError(t, svc.db.WithContext(ctx).Model(&SettingVariable{}).Count(&count2).Error)
 	require.Equal(t, count1, count2)
 
-	// Spot-check core and automation defaults exist with correct values
 	for _, key := range []string{
 		"authLocalEnabled",
 		"projectsDirectory",
@@ -115,10 +116,6 @@ func TestSettingsService_EnsureDefaultSettings_Idempotent(t *testing.T) {
 		"trivyCpuLimit",
 		"trivyMemoryLimitMb",
 		"trivyConcurrentScanContainers",
-		"gitSyncMaxFiles",
-		"gitSyncMaxTotalSizeMb",
-		"gitSyncMaxBinarySizeMb",
-		"lifecycleDefaultRunnerImage",
 	} {
 		var sv SettingVariable
 		lookupSettingErr := svc.db.WithContext(ctx).Where("key = ?", key).First(&sv).Error
@@ -141,8 +138,6 @@ func TestSettingsService_EnsureDefaultSettings_Idempotent(t *testing.T) {
 			require.Equal(t, "auto", sv.Value)
 		case "trivyDbRegistry":
 			require.Equal(t, "ghcr.io", sv.Value)
-		case "lifecycleDefaultRunnerImage":
-			require.Equal(t, "alpine:latest", sv.Value)
 		case "trivyNetwork":
 			require.Empty(t, sv.Value)
 		case "trivySecurityOpts":
@@ -157,12 +152,6 @@ func TestSettingsService_EnsureDefaultSettings_Idempotent(t *testing.T) {
 			require.Equal(t, "0", sv.Value)
 		case "trivyConcurrentScanContainers":
 			require.Equal(t, "1", sv.Value)
-		case "gitSyncMaxFiles":
-			require.Equal(t, "500", sv.Value)
-		case "gitSyncMaxTotalSizeMb":
-			require.Equal(t, "50", sv.Value)
-		case "gitSyncMaxBinarySizeMb":
-			require.Equal(t, "10", sv.Value)
 		}
 	}
 }
@@ -232,90 +221,6 @@ func TestSettingsService_AvatarMaxUploadSizeDefaultAndUpdate(t *testing.T) {
 	current, err = svc.GetSettings(ctx)
 	require.NoError(t, err)
 	require.Equal(t, "8", current.AvatarMaxUploadSizeMb.Value)
-}
-
-func TestSettingsServiceUpdateSettingsRejectsOIDCIssuerChangeWithStoredSecretInternal(t *testing.T) {
-	ctx := t.Context()
-	db := setupSettingsTestDB(t)
-	svc, err := newSettingsServiceForTestInternal(t, ctx, db)
-	require.NoError(t, err)
-	require.NoError(t, svc.UpdateSetting(ctx, "oidcIssuerUrl", "https://issuer.example.com"))
-	require.NoError(t, svc.UpdateSetting(ctx, "oidcClientSecret", "old-client-secret"))
-
-	_, err = svc.UpdateSettings(ctx, settings.Update{
-		OidcIssuerUrl: new("https://attacker.example.com"),
-	})
-	require.ErrorIs(t, err, common.ErrValidation)
-
-	current, loadErr := svc.GetSettings(ctx)
-	require.NoError(t, loadErr)
-	require.Equal(t, "https://issuer.example.com", current.OidcIssuerUrl.Value)
-	require.Equal(t, "old-client-secret", current.OidcClientSecret.Value)
-}
-
-func TestSettingsServiceUpdateSettingsAllowsOIDCIssuerChangeWhenClearingSecretInternal(t *testing.T) {
-	ctx := t.Context()
-	db := setupSettingsTestDB(t)
-	svc, err := newSettingsServiceForTestInternal(t, ctx, db)
-	require.NoError(t, err)
-	require.NoError(t, svc.UpdateSetting(ctx, "oidcIssuerUrl", "https://issuer.example.com"))
-	require.NoError(t, svc.UpdateSetting(ctx, "oidcClientSecret", "old-client-secret"))
-
-	_, err = svc.UpdateSettings(ctx, settings.Update{
-		OidcIssuerUrl:    new("https://replacement.example.com"),
-		OidcClientSecret: new(""),
-	})
-	require.NoError(t, err)
-
-	current, loadErr := svc.GetSettings(ctx)
-	require.NoError(t, loadErr)
-	require.Equal(t, "https://replacement.example.com", current.OidcIssuerUrl.Value)
-	require.Empty(t, current.OidcClientSecret.Value)
-}
-
-func TestSettingsServiceUpdateSettingsRejectsEnablingOIDCWithoutSecretInternal(t *testing.T) {
-	ctx := t.Context()
-	db := setupSettingsTestDB(t)
-	svc, err := newSettingsServiceForTestInternal(t, ctx, db)
-	require.NoError(t, err)
-
-	_, err = svc.UpdateSettings(ctx, settings.Update{
-		OidcEnabled:   new("true"),
-		OidcClientId:  new("arcane"),
-		OidcIssuerUrl: new("https://issuer.example.com"),
-	})
-	require.ErrorIs(t, err, common.ErrValidation)
-
-	current, loadErr := svc.GetSettings(ctx)
-	require.NoError(t, loadErr)
-	require.Equal(t, "false", current.OidcEnabled.Value)
-}
-
-func TestSettingsServiceUpdateSettingsAllowsOIDCIssuerChangeWithReplacementSecretInternal(t *testing.T) {
-	ctx := t.Context()
-	db := setupSettingsTestDB(t)
-	svc, err := newSettingsServiceForTestInternal(t, ctx, db)
-	require.NoError(t, err)
-	require.NoError(t, svc.UpdateSetting(ctx, "oidcIssuerUrl", "https://issuer.example.com"))
-	require.NoError(t, svc.UpdateSetting(ctx, "oidcClientSecret", "old-client-secret"))
-
-	require.NoError(t, svc.UpdateSetting(ctx, "oidcProviderName", "  Cafe\u0301 SSO  "))
-	before, loadErr := svc.GetSettings(ctx)
-	require.NoError(t, loadErr)
-	require.Equal(t, "Café SSO", before.OidcProviderName.Value)
-
-	_, err = svc.UpdateSettings(ctx, settings.Update{
-		OidcProviderName: new("  Cafe\u0301 Login  "),
-		OidcIssuerUrl:    new("https://replacement.example.com"),
-		OidcClientSecret: new("new-client-secret"),
-	})
-	require.NoError(t, err)
-
-	current, loadErr := svc.GetSettings(ctx)
-	require.NoError(t, loadErr)
-	require.Equal(t, "https://replacement.example.com", current.OidcIssuerUrl.Value)
-	require.Equal(t, "new-client-secret", current.OidcClientSecret.Value)
-	require.Equal(t, "Café Login", current.OidcProviderName.Value)
 }
 
 func TestSettingsServiceUpdateSettingsRejectsTrivyServerChangeWithStoredTokenInternal(t *testing.T) {
@@ -418,20 +323,6 @@ func TestSettingsService_PruneUnknownSettings_RemovesStaleKeys(t *testing.T) {
 	require.NoError(t, err)
 }
 
-func TestSettingsService_GetSettings_EnvOverride_OidcMergeAccounts(t *testing.T) {
-	ctx := t.Context()
-	db := setupSettingsTestDB(t)
-	t.Setenv("OIDC_MERGE_ACCOUNTS", "true")
-
-	svc, err := newSettingsServiceForTestInternal(t, ctx, db)
-	require.NoError(t, err)
-	require.NoError(t, svc.EnsureDefaultSettings(ctx))
-
-	settingsCfg, err := svc.GetSettings(ctx)
-	require.NoError(t, err)
-	require.True(t, settingsCfg.OidcMergeAccounts.IsTrue())
-}
-
 func TestSettingsService_GetSettings_EnvOverride_TrivyScanTimeout(t *testing.T) {
 	ctx := t.Context()
 	db := setupSettingsTestDB(t)
@@ -508,45 +399,12 @@ func TestSettingsService_GetSettings_EnvOverride_TrivyRuntimeSecurity(t *testing
 	require.True(t, settingsCfg.TrivyPrivileged.IsTrue())
 }
 
-func TestSettingsService_GetStringSetting_EnvOverride_SwarmStackSourcesDirectory(t *testing.T) {
-	ctx := t.Context()
-	db := setupSettingsTestDB(t)
-	t.Setenv("SWARM_STACK_SOURCES_DIRECTORY", "/mnt/swarm-from-env")
-
-	svc, err := newSettingsServiceForTestInternal(t, ctx, db)
-	require.NoError(t, err)
-	require.NoError(t, svc.UpdateSetting(ctx, "swarmStackSourcesDirectory", "/tmp/swarm-from-db"))
-
-	require.Equal(t, "/mnt/swarm-from-env", svc.GetStringSetting(ctx, "swarmStackSourcesDirectory", "/fallback"))
-	require.Equal(t, "/mnt/swarm-from-env", svc.GetSettingsConfig().SwarmStackSourcesDirectory.Value)
-}
-
-func TestSettingsService_isEnvOverrideActiveInternal(t *testing.T) {
-	ctx := t.Context()
-	db := setupSettingsTestDB(t)
-
-	svc, err := newSettingsServiceForTestInternal(t, ctx, db)
-	require.NoError(t, err)
-	require.False(t, svc.IsEnvOverrideActive("oidcEnabled"))
-
-	t.Setenv("OIDC_ENABLED", "false")
-	svcWithOverride, err := newSettingsServiceForTestInternal(t, ctx, db)
-	require.NoError(t, err)
-	require.True(t, svcWithOverride.IsEnvOverrideActive("oidcEnabled"))
-
-	t.Setenv("AUTH_SESSION_TIMEOUT", "120")
-	svcWithNonOverrideEnv, err := newSettingsServiceForTestInternal(t, ctx, db)
-	require.NoError(t, err)
-	require.False(t, svcWithNonOverrideEnv.IsEnvOverrideActive("authSessionTimeout"))
-}
-
 func TestSettingsService_GetSetHelpers(t *testing.T) {
 	ctx := t.Context()
 	db := setupSettingsTestDB(t)
 	svc, err := newSettingsServiceForTestInternal(t, ctx, db)
 	require.NoError(t, err)
 
-	// Defaults for missing keys
 	require.True(t, svc.GetBoolSetting(ctx, "nonexistentBool", true))
 	require.Equal(t, 42, svc.GetIntSetting(ctx, "nonexistentInt", 42))
 	require.Equal(t, "def", svc.GetStringSetting(ctx, "nonexistentStr", "def"))
@@ -660,7 +518,7 @@ func TestSettingsServiceActorSerializesConcurrentUpdatesInternal(t *testing.T) {
 	}()
 	go func() {
 		<-start
-		_, updateErr := svc.UpdateSettings(ctx, settings.Update{TemplatesDirectory: new("/data/templates-b")})
+		_, updateErr := svc.UpdateSettings(ctx, settings.Update{FollowProjectSymlinks: new("true")})
 		results <- updateErr
 	}()
 	close(start)
@@ -669,7 +527,7 @@ func TestSettingsServiceActorSerializesConcurrentUpdatesInternal(t *testing.T) {
 	require.NoError(t, <-results)
 	current := svc.GetSettingsConfig()
 	require.Equal(t, "/data/projects-a", current.ProjectsDirectory.Value)
-	require.Equal(t, "/data/templates-b", current.TemplatesDirectory.Value)
+	require.Equal(t, "true", current.FollowProjectSymlinks.Value)
 }
 
 func TestSettingsServiceActorPublishesSnapshotBeforeAsynchronousNotificationInternal(t *testing.T) {
@@ -745,10 +603,10 @@ func TestSettingsServiceActorDoesNotPublishSensitiveValuesInternal(t *testing.T)
 	require.NoError(t, svc.EnsureDefaultSettings(ctx))
 
 	var calls atomic.Int32
-	svc.SubscribeSettingsChanges([]string{"oidcClientSecret"}, func([]libarcane.SettingUpdate) {
+	svc.SubscribeSettingsChanges([]string{"trivyServerToken"}, func([]libarcane.SettingUpdate) {
 		calls.Add(1)
 	})
-	_, err = svc.UpdateSettings(ctx, settings.Update{OidcClientSecret: new("should-not-leave-settings-service")})
+	_, err = svc.UpdateSettings(ctx, settings.Update{TrivyServerToken: new("should-not-leave-settings-service")})
 	require.NoError(t, err)
 	waitForSettingsNotificationsInternal(t, svc)
 	require.Zero(t, calls.Load())
@@ -778,7 +636,7 @@ func TestSettingsServiceActorSerializesContainerExclusionUpdatesInternal(t *test
 
 func BenchmarkSettingsService_GetSettings(b *testing.B) {
 	ctx := b.Context()
-	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
+	db, err := gorm.Open(testpg.Dialector(b, ":memory:"), &gorm.Config{})
 	if err != nil {
 		require.FailNowf(b, "benchmark database setup failed", "%v", err)
 	}
@@ -1343,23 +1201,4 @@ func TestSettingsService_RejectInvalidFeatureBoolean(t *testing.T) {
 			require.True(t, svc.IsFeatureEnabled(t.Context(), features.VulnerabilityManagement))
 		})
 	}
-}
-
-func TestSettingsService_SwarmFeatureDefaultsOffAndPersists(t *testing.T) {
-	var nilService *SettingsService
-	require.False(t, nilService.IsFeatureEnabled(t.Context(), features.Swarm))
-
-	svc, err := newSettingsServiceForTestInternal(t, t.Context(), setupSettingsTestDB(t))
-	require.NoError(t, err)
-	require.False(t, svc.IsFeatureEnabled(t.Context(), features.Swarm))
-	require.Contains(t, svc.ListSettings(SettingVisibilityPublic), SettingVariable{Key: features.SwarmSettingKey, Value: "false"})
-
-	enabled := "true"
-	_, err = svc.UpdateSettings(t.Context(), settings.Update{FeatureSwarmEnabled: &enabled})
-	require.NoError(t, err)
-	require.True(t, svc.IsFeatureEnabled(t.Context(), features.Swarm))
-
-	invalid := "yes"
-	_, err = svc.UpdateSettings(t.Context(), settings.Update{FeatureSwarmEnabled: &invalid})
-	require.ErrorIs(t, err, common.ErrValidation)
 }

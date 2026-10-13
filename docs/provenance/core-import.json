@@ -8,11 +8,11 @@
   "lockfiles": [
     {
       "path": "backend/go.mod",
-      "sha256": "0ab3fd4aac8cb05225e55cb75320116eb07db3a296a0741d99cccdc31e58ccda"
+      "sha256": "dc33c5449e26b06c8f0fb9b44b90c090497ba7894eeebdd68dc15685175d9b67"
     },
     {
       "path": "backend/go.sum",
-      "sha256": "c37d87a1a444f4249c10c9a3146f5077ade386b8e1e993cd990eb0aecb561370"
+      "sha256": "b218097e433a9af7bed3f2ef964eb7bf08184b355220a8b66692d02e840ac134"
     },
     {
       "path": "cli/go.mod",
@@ -20,7 +20,7 @@
     },
     {
       "path": "cli/go.sum",
-      "sha256": "f6f3759859734e46d5284b799867c7b0559d169ec45ef232bce3b0bf6ee722fb"
+      "sha256": "d9a356284b4300b1fc051ea39791ac0e0aa68cde7b5917d11d0dde5279bfcd9a"
     },
     {
       "path": "go.work",
@@ -28,11 +28,11 @@
     },
     {
       "path": "go.work.sum",
-      "sha256": "3c9aa35214e753fb6d048f80c85a51a85307b2e0961653e5ea204ab5ae3428de"
+      "sha256": "79201e7b98edc4958236f4c30e58860ecbc967de9755e502b8c9afc5020c305e"
     },
     {
       "path": "third_party/arcane/acfs/go.mod",
-      "sha256": "f5f185bfcdbec7744fbd28f7090e53001a5440f99000e79af184fb87da41c7ec"
+      "sha256": "0d19500a34164f024c155d0b48d36cf433bcf97022be700d6b09dccc667ffbc4"
     },
     {
       "path": "third_party/arcane/acfs/go.sum",
@@ -40,7 +40,7 @@
     },
     {
       "path": "third_party/arcane/builds/go.mod",
-      "sha256": "f8343951102b06856ec569e2122e0e6e91568838ea98cbdbcb5eab959c8cbe68"
+      "sha256": "7a9e6f6162b225f939fc802d3c048dcfbdac801aa9ec96f3e22ee406f9fa0af3"
     },
     {
       "path": "third_party/arcane/builds/go.sum",
@@ -64,7 +64,7 @@
     },
     {
       "path": "third_party/arcane/docker/go.mod",
-      "sha256": "cdb7acecd64c7bc4930c7f970fed32458004fb971a1ad33003f7036ef6eccb95"
+      "sha256": "587deabd4e741353cf768674ca535bb1f8014a1669ae03bae38407fff49322e1"
     },
     {
       "path": "third_party/arcane/docker/go.sum",
@@ -100,19 +100,27 @@
     },
     {
       "path": "third_party/arcane/sys/crypto/go.mod",
-      "sha256": "99f2d18696dd9e6d72254ea2cd11f329c90263d3e8f85f77250ab922343e64ab"
+      "sha256": "3fb7e3c47e96771615ad4d8da756673e9a0b7bdc479d6aa460a0bfd551ffe659"
     },
     {
       "path": "third_party/arcane/sys/crypto/go.sum",
-      "sha256": "14810682b259ff2a4cf0f7d5e641aabd433127f68a5c453ab33d34a96995bed6"
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
     },
     {
       "path": "third_party/arcane/updater/go.mod",
-      "sha256": "ff2ad7de106971e05b1fd7e4506e61cb43b8031a45a2c59005df1b7e526b5afc"
+      "sha256": "d89edfa95ff6186280ecdab557254cf5477d31dae0cdb3c2d801c3f4dbbabffa"
     },
     {
       "path": "third_party/arcane/updater/go.sum",
       "sha256": "bf685492b897ad9dbc201144eb8662d96cd2d9f834869ce726404c0e243b0a30"
+    },
+    {
+      "path": "third_party/francis/go.mod",
+      "sha256": "48194922f59eb6a410011e3d77541ea30848f16f37d44f6770b5017757cf7daf"
+    },
+    {
+      "path": "third_party/francis/go.sum",
+      "sha256": "b903c6c14f4d70a773d4ef6f50b56428422e17ada63e159a83662df2425a7406"
     },
     {
       "path": "types/go.mod",
@@ -120,7 +128,7 @@
     },
     {
       "path": "types/go.sum",
-      "sha256": "4ebb4ca0d4e2fc37515b52dee7c0d3e246a8209afa70da34f3496796d6b085cd"
+      "sha256": "8682469f20e2f952899f22442ab25e3d37bca7712ba6a1e373be58cb0bec3a25"
     }
   ],
   "targets": [
@@ -128,8 +136,8 @@
       "target": "hub",
       "cgo": "1",
       "tags": [],
-      "packages": 1587,
-      "packageGraphSha256": "115c2b0a4102166aa5229888f0952eae25b8c3920724863b5808c86ae862cc38"
+      "packages": 1491,
+      "packageGraphSha256": "7da3d970a7aba56f3be4307e747574503a79e9b15bca3f5c2b2cc94bf7c9a2bd"
     },
     {
       "target": "agent",
@@ -137,11 +145,11 @@
       "tags": [
         "-tags=exclude_frontend"
       ],
-      "packages": 1587,
-      "packageGraphSha256": "115c2b0a4102166aa5229888f0952eae25b8c3920724863b5808c86ae862cc38"
+      "packages": 1491,
+      "packageGraphSha256": "7da3d970a7aba56f3be4307e747574503a79e9b15bca3f5c2b2cc94bf7c9a2bd"
     }
   ],
-  "limitations": "Pre-cut core; no release package, standalone CLI binary licence graph or container inventory. Exact upstream licence evidence remains in arcane-modules.json and arcane-binary.json.",
+  "limitations": "Post-cut hub and agent source graphs; no release package, standalone CLI binary licence graph or container inventory. Exact upstream licence evidence remains in arcane-modules.json and arcane-binary.json.",
   "packages": [
     {"name":"connectrpc.com/connect","version":"v1.20.0","localPath":null,"upstream":"connectrpc.com/connect","upstreamVersion":"v1.20.0","license":"Apache-2.0","evidence":"arcane-modules.json","targets":["hub","agent"],"modifications":"None"},
     {"name":"dario.cat/mergo","version":"v1.0.2","localPath":null,"upstream":"dario.cat/mergo","upstreamVersion":"v1.0.2","license":"BSD-3-Clause","evidence":"arcane-modules.json","targets":["hub","agent"],"modifications":"None"},
@@ -152,7 +160,6 @@
     {"name":"github.com/aquasecurity/trivy","version":"v0.72.0","localPath":null,"upstream":"github.com/aquasecurity/trivy","upstreamVersion":"v0.72.0","license":"Apache-2.0","evidence":"arcane-modules.json","targets":["hub","agent"],"modifications":"None"},
     {"name":"github.com/aquasecurity/trivy-db","version":"v0.0.0-20260629102122-a0049d7ad12f","localPath":null,"upstream":"github.com/aquasecurity/trivy-db","upstreamVersion":"v0.0.0-20260629102122-a0049d7ad12f","license":"Apache-2.0","evidence":"arcane-modules.json","targets":["hub","agent"],"modifications":"None"},
     {"name":"github.com/aws/aws-sdk-go-v2","version":"v1.47.1","localPath":null,"upstream":"github.com/aws/aws-sdk-go-v2","upstreamVersion":"v1.47.1","license":"Apache-2.0 AND BSD-3-Clause","evidence":"arcane-modules.json","targets":["hub","agent"],"modifications":"None"},
-    {"name":"github.com/aws/aws-sdk-go-v2/aws/protocol/eventstream","version":"v1.7.20","localPath":null,"upstream":"github.com/aws/aws-sdk-go-v2/aws/protocol/eventstream","upstreamVersion":"v1.7.20","license":"Apache-2.0","evidence":"arcane-modules.json","targets":["hub","agent"],"modifications":"None"},
     {"name":"github.com/aws/aws-sdk-go-v2/config","version":"v1.33.6","localPath":null,"upstream":"github.com/aws/aws-sdk-go-v2/config","upstreamVersion":"v1.33.6","license":"Apache-2.0","evidence":"arcane-modules.json","targets":["hub","agent"],"modifications":"None"},
     {"name":"github.com/aws/aws-sdk-go-v2/credentials","version":"v1.20.6","localPath":null,"upstream":"github.com/aws/aws-sdk-go-v2/credentials","upstreamVersion":"v1.20.6","license":"Apache-2.0","evidence":"arcane-modules.json","targets":["hub","agent"],"modifications":"None"},
     {"name":"github.com/aws/aws-sdk-go-v2/feature/ec2/imds","version":"v1.20.1","localPath":null,"upstream":"github.com/aws/aws-sdk-go-v2/feature/ec2/imds","upstreamVersion":"v1.20.1","license":"Apache-2.0","evidence":"arcane-modules.json","targets":["hub","agent"],"modifications":"None"},
@@ -161,10 +168,7 @@
     {"name":"github.com/aws/aws-sdk-go-v2/internal/v4a","version":"v1.5.4","localPath":null,"upstream":"github.com/aws/aws-sdk-go-v2/internal/v4a","upstreamVersion":"v1.5.4","license":"Apache-2.0","evidence":"arcane-modules.json","targets":["hub","agent"],"modifications":"None"},
     {"name":"github.com/aws/aws-sdk-go-v2/service/ecr","version":"v1.66.1","localPath":null,"upstream":"github.com/aws/aws-sdk-go-v2/service/ecr","upstreamVersion":"v1.66.1","license":"Apache-2.0","evidence":"arcane-modules.json","targets":["hub","agent"],"modifications":"None"},
     {"name":"github.com/aws/aws-sdk-go-v2/service/internal/accept-encoding","version":"v1.13.19","localPath":null,"upstream":"github.com/aws/aws-sdk-go-v2/service/internal/accept-encoding","upstreamVersion":"v1.13.19","license":"Apache-2.0","evidence":"arcane-modules.json","targets":["hub","agent"],"modifications":"None"},
-    {"name":"github.com/aws/aws-sdk-go-v2/service/internal/checksum","version":"v1.11.5","localPath":null,"upstream":"github.com/aws/aws-sdk-go-v2/service/internal/checksum","upstreamVersion":"v1.11.5","license":"Apache-2.0","evidence":"arcane-modules.json","targets":["hub","agent"],"modifications":"None"},
     {"name":"github.com/aws/aws-sdk-go-v2/service/internal/presigned-url","version":"v1.14.4","localPath":null,"upstream":"github.com/aws/aws-sdk-go-v2/service/internal/presigned-url","upstreamVersion":"v1.14.4","license":"Apache-2.0","evidence":"arcane-modules.json","targets":["hub","agent"],"modifications":"None"},
-    {"name":"github.com/aws/aws-sdk-go-v2/service/internal/s3shared","version":"v1.20.4","localPath":null,"upstream":"github.com/aws/aws-sdk-go-v2/service/internal/s3shared","upstreamVersion":"v1.20.4","license":"Apache-2.0","evidence":"arcane-modules.json","targets":["hub","agent"],"modifications":"None"},
-    {"name":"github.com/aws/aws-sdk-go-v2/service/s3","version":"v1.114.0","localPath":null,"upstream":"github.com/aws/aws-sdk-go-v2/service/s3","upstreamVersion":"v1.114.0","license":"Apache-2.0","evidence":"arcane-modules.json","targets":["hub","agent"],"modifications":"None"},
     {"name":"github.com/aws/aws-sdk-go-v2/service/signin","version":"v1.10.1","localPath":null,"upstream":"github.com/aws/aws-sdk-go-v2/service/signin","upstreamVersion":"v1.10.1","license":"Apache-2.0","evidence":"arcane-modules.json","targets":["hub","agent"],"modifications":"None"},
     {"name":"github.com/aws/aws-sdk-go-v2/service/sso","version":"v1.38.1","localPath":null,"upstream":"github.com/aws/aws-sdk-go-v2/service/sso","upstreamVersion":"v1.38.1","license":"Apache-2.0","evidence":"arcane-modules.json","targets":["hub","agent"],"modifications":"None"},
     {"name":"github.com/aws/aws-sdk-go-v2/service/ssooidc","version":"v1.43.1","localPath":null,"upstream":"github.com/aws/aws-sdk-go-v2/service/ssooidc","upstreamVersion":"v1.43.1","license":"Apache-2.0","evidence":"arcane-modules.json","targets":["hub","agent"],"modifications":"None"},
@@ -198,7 +202,6 @@
     {"name":"github.com/containerd/platforms","version":"v1.0.0-rc.5","localPath":null,"upstream":"github.com/containerd/platforms","upstreamVersion":"v1.0.0-rc.5","license":"Apache-2.0","evidence":"arcane-modules.json","targets":["hub","agent"],"modifications":"None"},
     {"name":"github.com/containerd/ttrpc","version":"v1.2.9","localPath":null,"upstream":"github.com/containerd/ttrpc","upstreamVersion":"v1.2.9","license":"Apache-2.0","evidence":"arcane-modules.json","targets":["hub","agent"],"modifications":"None"},
     {"name":"github.com/containerd/typeurl/v2","version":"v2.3.0","localPath":null,"upstream":"github.com/containerd/typeurl/v2","upstreamVersion":"v2.3.0","license":"Apache-2.0","evidence":"arcane-modules.json","targets":["hub","agent"],"modifications":"None"},
-    {"name":"github.com/coreos/go-oidc/v3","version":"v3.21.0","localPath":null,"upstream":"github.com/coreos/go-oidc/v3","upstreamVersion":"v3.21.0","license":"Apache-2.0","evidence":"arcane-modules.json","targets":["hub","agent"],"modifications":"None"},
     {"name":"github.com/cpuguy83/dockercfg","version":"v0.3.2","localPath":null,"upstream":"github.com/cpuguy83/dockercfg","upstreamVersion":"v0.3.2","license":"MIT","evidence":"arcane-modules.json","targets":["hub","agent"],"modifications":"None"},
     {"name":"github.com/cpuguy83/go-docker","version":"v0.4.0","localPath":null,"upstream":"github.com/cpuguy83/go-docker","upstreamVersion":"v0.4.0","license":"MIT","evidence":"arcane-modules.json","targets":["hub","agent"],"modifications":"None"},
     {"name":"github.com/cyphar/filepath-securejoin","version":"v0.7.0","localPath":null,"upstream":"github.com/cyphar/filepath-securejoin","upstreamVersion":"v0.7.0","license":"BSD-3-Clause AND MPL-2.0","evidence":"arcane-modules.json","targets":["hub","agent"],"modifications":"None"},
@@ -214,7 +217,6 @@
     {"name":"github.com/docker/go-connections","version":"v0.8.1","localPath":null,"upstream":"github.com/docker/go-connections","upstreamVersion":"v0.8.1","license":"Apache-2.0","evidence":"arcane-modules.json","targets":["hub","agent"],"modifications":"None"},
     {"name":"github.com/docker/go-units","version":"v0.5.0","localPath":null,"upstream":"github.com/docker/go-units","upstreamVersion":"v0.5.0","license":"Apache-2.0","evidence":"arcane-modules.json","targets":["hub","agent"],"modifications":"None"},
     {"name":"github.com/dunglas/httpsfv","version":"v1.1.1","localPath":null,"upstream":"github.com/dunglas/httpsfv","upstreamVersion":"v1.1.1","license":"BSD-3-Clause","evidence":"arcane-modules.json","targets":["hub","agent"],"modifications":"None"},
-    {"name":"github.com/dustin/go-humanize","version":"v1.1.0","localPath":null,"upstream":"github.com/dustin/go-humanize","upstreamVersion":"v1.1.0","license":"MIT","evidence":"arcane-modules.json","targets":["hub","agent"],"modifications":"None"},
     {"name":"github.com/eclipse/paho.golang","version":"v0.23.0","localPath":null,"upstream":"github.com/eclipse/paho.golang","upstreamVersion":"v0.23.0","license":"EPL-2.0 OR BSD-3-Clause","evidence":"arcane-modules.json","targets":["hub","agent"],"modifications":"None"},
     {"name":"github.com/eiannone/keyboard","version":"v0.0.0-20220611211555-0d226195f203","localPath":null,"upstream":"github.com/eiannone/keyboard","upstreamVersion":"v0.0.0-20220611211555-0d226195f203","license":"MIT","evidence":"arcane-modules.json","targets":["hub","agent"],"modifications":"None"},
     {"name":"github.com/emirpasic/gods","version":"v1.18.1","localPath":null,"upstream":"github.com/emirpasic/gods","upstreamVersion":"v1.18.1","license":"BSD-2-Clause AND ISC","evidence":"arcane-modules.json","targets":["hub","agent"],"modifications":"None"},
@@ -225,22 +227,17 @@
     {"name":"github.com/fogleman/ease","version":"v0.0.0-20170301025033-8da417bf1776","localPath":null,"upstream":"github.com/fogleman/ease","upstreamVersion":"v0.0.0-20170301025033-8da417bf1776","license":"MIT","evidence":"arcane-modules.json","targets":["hub","agent"],"modifications":"None"},
     {"name":"github.com/fsnotify/fsnotify","version":"v1.10.1","localPath":null,"upstream":"github.com/fsnotify/fsnotify","upstreamVersion":"v1.10.1","license":"BSD-3-Clause","evidence":"arcane-modules.json","targets":["hub","agent"],"modifications":"None"},
     {"name":"github.com/fvbommel/sortorder","version":"v1.2.0","localPath":null,"upstream":"github.com/fvbommel/sortorder","upstreamVersion":"v1.2.0","license":"MIT","evidence":"arcane-modules.json","targets":["hub","agent"],"modifications":"None"},
-    {"name":"github.com/fxamacker/cbor/v2","version":"v2.9.4","localPath":null,"upstream":"github.com/fxamacker/cbor/v2","upstreamVersion":"v2.9.4","license":"MIT","evidence":"arcane-modules.json","targets":["hub","agent"],"modifications":"None"},
     {"name":"github.com/go-git/gcfg","version":"v1.5.1-0.20230307220236-3a3c6141e376","localPath":null,"upstream":"github.com/go-git/gcfg","upstreamVersion":"v1.5.1-0.20230307220236-3a3c6141e376","license":"BSD-3-Clause","evidence":"arcane-modules.json","targets":["hub","agent"],"modifications":"None"},
     {"name":"github.com/go-git/go-billy/v5","version":"v5.9.2","localPath":null,"upstream":"github.com/go-git/go-billy/v5","upstreamVersion":"v5.9.2","license":"Apache-2.0","evidence":"arcane-modules.json","targets":["hub","agent"],"modifications":"None"},
     {"name":"github.com/go-git/go-git/v5","version":"v5.19.3","localPath":null,"upstream":"github.com/go-git/go-git/v5","upstreamVersion":"v5.19.3","license":"Apache-2.0","evidence":"arcane-modules.json","targets":["hub","agent"],"modifications":"None"},
-    {"name":"github.com/go-jose/go-jose/v4","version":"v4.1.5","localPath":null,"upstream":"github.com/go-jose/go-jose/v4","upstreamVersion":"v4.1.5","license":"Apache-2.0 AND BSD-3-Clause","evidence":"arcane-modules.json","targets":["hub","agent"],"modifications":"None"},
     {"name":"github.com/go-logr/logr","version":"v1.4.4","localPath":null,"upstream":"github.com/go-logr/logr","upstreamVersion":"v1.4.4","license":"Apache-2.0","evidence":"arcane-modules.json","targets":["hub","agent"],"modifications":"None"},
     {"name":"github.com/go-logr/stdr","version":"v1.2.2","localPath":null,"upstream":"github.com/go-logr/stdr","upstreamVersion":"v1.2.2","license":"Apache-2.0","evidence":"arcane-modules.json","targets":["hub","agent"],"modifications":"None"},
     {"name":"github.com/go-viper/mapstructure/v2","version":"v2.5.0","localPath":null,"upstream":"github.com/go-viper/mapstructure/v2","upstreamVersion":"v2.5.0","license":"MIT","evidence":"arcane-modules.json","targets":["hub","agent"],"modifications":"None"},
-    {"name":"github.com/go-webauthn/webauthn","version":"v0.18.2","localPath":null,"upstream":"github.com/go-webauthn/webauthn","upstreamVersion":"v0.18.2","license":"BSD-3-Clause","evidence":"arcane-modules.json","targets":["hub","agent"],"modifications":"None"},
-    {"name":"github.com/go-webauthn/x","version":"v0.3.1","localPath":null,"upstream":"github.com/go-webauthn/x","upstreamVersion":"v0.3.1","license":"BSD-2-Clause AND BSD-3-Clause AND ISC","evidence":"arcane-modules.json","targets":["hub","agent"],"modifications":"None"},
     {"name":"github.com/gofrs/flock","version":"v0.13.1","localPath":null,"upstream":"github.com/gofrs/flock","upstreamVersion":"v0.13.1","license":"BSD-3-Clause","evidence":"arcane-modules.json","targets":["hub","agent"],"modifications":"None"},
     {"name":"github.com/golang-jwt/jwt/v5","version":"v5.3.1","localPath":null,"upstream":"github.com/golang-jwt/jwt/v5","upstreamVersion":"v5.3.1","license":"MIT","evidence":"arcane-modules.json","targets":["hub","agent"],"modifications":"None"},
     {"name":"github.com/golang/groupcache","version":"v0.0.0-20241129210726-2c02b8208cf8","localPath":null,"upstream":"github.com/golang/groupcache","upstreamVersion":"v0.0.0-20241129210726-2c02b8208cf8","license":"Apache-2.0","evidence":"arcane-modules.json","targets":["hub","agent"],"modifications":"None"},
     {"name":"github.com/google/go-cmp","version":"v0.7.0","localPath":null,"upstream":"github.com/google/go-cmp","upstreamVersion":"v0.7.0","license":"BSD-3-Clause","evidence":"arcane-modules.json","targets":["hub","agent"],"modifications":"None"},
     {"name":"github.com/google/go-containerregistry","version":"v0.22.1","localPath":null,"upstream":"github.com/google/go-containerregistry","upstreamVersion":"v0.22.1","license":"Apache-2.0","evidence":"arcane-modules.json","targets":["hub","agent"],"modifications":"None"},
-    {"name":"github.com/google/go-tpm","version":"v0.9.8","localPath":null,"upstream":"github.com/google/go-tpm","upstreamVersion":"v0.9.8","license":"Apache-2.0","evidence":"arcane-modules.json","targets":["hub","agent"],"modifications":"None"},
     {"name":"github.com/google/shlex","version":"v0.0.0-20191202100458-e7afc7fbc510","localPath":null,"upstream":"github.com/google/shlex","upstreamVersion":"v0.0.0-20191202100458-e7afc7fbc510","license":"Apache-2.0","evidence":"arcane-modules.json","targets":["hub","agent"],"modifications":"None"},
     {"name":"github.com/google/uuid","version":"v1.6.0","localPath":null,"upstream":"github.com/google/uuid","upstreamVersion":"v1.6.0","license":"BSD-3-Clause","evidence":"arcane-modules.json","targets":["hub","agent"],"modifications":"None"},
     {"name":"github.com/gorilla/websocket","version":"v1.5.4-0.20250319132907-e064f32e3674","localPath":null,"upstream":"github.com/gorilla/websocket","upstreamVersion":"v1.5.4-0.20250319132907-e064f32e3674","license":"BSD-2-Clause","evidence":"arcane-modules.json","targets":["hub","agent"],"modifications":"None"},
@@ -252,7 +249,7 @@
     {"name":"github.com/in-toto/attestation","version":"v1.2.0","localPath":null,"upstream":"github.com/in-toto/attestation","upstreamVersion":"v1.2.0","license":"Apache-2.0","evidence":"arcane-modules.json","targets":["hub","agent"],"modifications":"None"},
     {"name":"github.com/in-toto/in-toto-golang","version":"v0.11.0","localPath":null,"upstream":"github.com/in-toto/in-toto-golang","upstreamVersion":"v0.11.0","license":"Apache-2.0","evidence":"arcane-modules.json","targets":["hub","agent"],"modifications":"None"},
     {"name":"github.com/inhies/go-bytesize","version":"v0.0.0-20220417184213-4913239db9cf","localPath":null,"upstream":"github.com/inhies/go-bytesize","upstreamVersion":"v0.0.0-20220417184213-4913239db9cf","license":"BSD-3-Clause","evidence":"arcane-modules.json","targets":["hub","agent"],"modifications":"None"},
-    {"name":"github.com/italypaleale/francis","version":"v0.1.0","localPath":null,"upstream":"github.com/italypaleale/francis","upstreamVersion":"v0.1.0","license":"MIT","evidence":"arcane-modules.json","targets":["hub","agent"],"modifications":"None"},
+    {"name":"github.com/italypaleale/francis","version":"23cd46831a543a73eec05ad034afd46245225876","localPath":"third_party/francis","upstream":"github.com/italypaleale/francis","upstreamVersion":"v0.1.0","license":"MIT","evidence":"arcane-modules.json","targets":["hub","agent"],"modifications":"PostgreSQL-only local subset; exact file deviations in scripts/provenance.json."},
     {"name":"github.com/italypaleale/go-kit","version":"v1.2.4","localPath":null,"upstream":"github.com/italypaleale/go-kit","upstreamVersion":"v1.2.4","license":"MIT","evidence":"arcane-modules.json","targets":["hub","agent"],"modifications":"None"},
     {"name":"github.com/italypaleale/go-sql-utils","version":"v0.3.9","localPath":null,"upstream":"github.com/italypaleale/go-sql-utils","upstreamVersion":"v0.3.9","license":"MIT","evidence":"arcane-modules.json","targets":["hub","agent"],"modifications":"None"},
     {"name":"github.com/jackc/pgerrcode","version":"v0.0.0-20250907135507-afb5586c32a6","localPath":null,"upstream":"github.com/jackc/pgerrcode","upstreamVersion":"v0.0.0-20250907135507-afb5586c32a6","license":"MIT AND PostgreSQL","evidence":"arcane-modules.json","targets":["hub","agent"],"modifications":"None"},
@@ -265,7 +262,6 @@
     {"name":"github.com/jinzhu/inflection","version":"v1.0.0","localPath":null,"upstream":"github.com/jinzhu/inflection","upstreamVersion":"v1.0.0","license":"MIT","evidence":"arcane-modules.json","targets":["hub","agent"],"modifications":"None"},
     {"name":"github.com/jinzhu/now","version":"v1.1.5","localPath":null,"upstream":"github.com/jinzhu/now","upstreamVersion":"v1.1.5","license":"MIT","evidence":"arcane-modules.json","targets":["hub","agent"],"modifications":"None"},
     {"name":"github.com/jonboulle/clockwork","version":"v0.5.0","localPath":null,"upstream":"github.com/jonboulle/clockwork","upstreamVersion":"v0.5.0","license":"Apache-2.0","evidence":"arcane-modules.json","targets":["hub","agent"],"modifications":"None"},
-    {"name":"github.com/jwx-go/jwkfetch/v4","version":"v4.0.4","localPath":null,"upstream":"github.com/jwx-go/jwkfetch/v4","upstreamVersion":"v4.0.4","license":"MIT","evidence":"arcane-modules.json","targets":["hub","agent"],"modifications":"None"},
     {"name":"github.com/kevinburke/ssh_config","version":"v1.6.0","localPath":null,"upstream":"github.com/kevinburke/ssh_config","upstreamVersion":"v1.6.0","license":"MIT","evidence":"arcane-modules.json","targets":["hub","agent"],"modifications":"None"},
     {"name":"github.com/klauspost/compress","version":"v1.20.1","localPath":null,"upstream":"github.com/klauspost/compress","upstreamVersion":"v1.20.1","license":"Apache-2.0 AND BSD-3-Clause AND MIT","evidence":"arcane-modules.json","targets":["hub","agent"],"modifications":"None"},
     {"name":"github.com/knqyf263/go-apk-version","version":"v0.0.0-20200609155635-041fdbb8563f","localPath":null,"upstream":"github.com/knqyf263/go-apk-version","upstreamVersion":"v0.0.0-20200609155635-041fdbb8563f","license":"Apache-2.0","evidence":"arcane-modules.json","targets":["hub","agent"],"modifications":"None"},
@@ -274,14 +270,9 @@
     {"name":"github.com/labstack/echo/v4","version":"v4.15.4","localPath":null,"upstream":"github.com/labstack/echo/v4","upstreamVersion":"v4.15.4","license":"MIT","evidence":"arcane-modules.json","targets":["hub","agent"],"modifications":"None"},
     {"name":"github.com/labstack/echo/v5","version":"v5.4.0","localPath":null,"upstream":"github.com/labstack/echo/v5","upstreamVersion":"v5.4.0","license":"MIT","evidence":"arcane-modules.json","targets":["hub","agent"],"modifications":"None"},
     {"name":"github.com/labstack/gommon","version":"v0.5.0","localPath":null,"upstream":"github.com/labstack/gommon","upstreamVersion":"v0.5.0","license":"MIT","evidence":"arcane-modules.json","targets":["hub","agent"],"modifications":"None"},
-    {"name":"github.com/lestrrat-go/blackmagic","version":"v1.0.4","localPath":null,"upstream":"github.com/lestrrat-go/blackmagic","upstreamVersion":"v1.0.4","license":"MIT","evidence":"arcane-modules.json","targets":["hub","agent"],"modifications":"None"},
     {"name":"github.com/lestrrat-go/dsig","version":"v1.4.0","localPath":null,"upstream":"github.com/lestrrat-go/dsig","upstreamVersion":"v1.4.0","license":"MIT","evidence":"arcane-modules.json","targets":["hub","agent"],"modifications":"None"},
-    {"name":"github.com/lestrrat-go/httpcc","version":"v1.0.1","localPath":null,"upstream":"github.com/lestrrat-go/httpcc","upstreamVersion":"v1.0.1","license":"MIT","evidence":"arcane-modules.json","targets":["hub","agent"],"modifications":"None"},
-    {"name":"github.com/lestrrat-go/httprc/v3","version":"v3.0.6","localPath":null,"upstream":"github.com/lestrrat-go/httprc/v3","upstreamVersion":"v3.0.6","license":"MIT","evidence":"arcane-modules.json","targets":["hub","agent"],"modifications":"None"},
     {"name":"github.com/lestrrat-go/jwx/v4","version":"v4.5.0","localPath":null,"upstream":"github.com/lestrrat-go/jwx/v4","upstreamVersion":"v4.5.0","license":"MIT","evidence":"arcane-modules.json","targets":["hub","agent"],"modifications":"None"},
-    {"name":"github.com/lestrrat-go/option/v2","version":"v2.0.0","localPath":null,"upstream":"github.com/lestrrat-go/option/v2","upstreamVersion":"v2.0.0","license":"MIT","evidence":"arcane-modules.json","targets":["hub","agent"],"modifications":"None"},
     {"name":"github.com/lestrrat-go/option/v3","version":"v3.0.0-alpha1","localPath":null,"upstream":"github.com/lestrrat-go/option/v3","upstreamVersion":"v3.0.0-alpha1","license":"MIT","evidence":"arcane-modules.json","targets":["hub","agent"],"modifications":"None"},
-    {"name":"github.com/libtnb/sqlite","version":"v1.2.2","localPath":null,"upstream":"github.com/libtnb/sqlite","upstreamVersion":"v1.2.2","license":"MIT","evidence":"arcane-modules.json","targets":["hub","agent"],"modifications":"None"},
     {"name":"github.com/lmittmann/tint","version":"v1.2.1","localPath":null,"upstream":"github.com/lmittmann/tint","upstreamVersion":"v1.2.1","license":"MIT","evidence":"arcane-modules.json","targets":["hub","agent"],"modifications":"None"},
     {"name":"github.com/lucasb-eyer/go-colorful","version":"v1.4.1","localPath":null,"upstream":"github.com/lucasb-eyer/go-colorful","upstreamVersion":"v1.4.1","license":"MIT","evidence":"arcane-modules.json","targets":["hub","agent"],"modifications":"None"},
     {"name":"github.com/Masterminds/semver","version":"v1.5.0","localPath":null,"upstream":"github.com/Masterminds/semver","upstreamVersion":"v1.5.0","license":"MIT","evidence":"arcane-modules.json","targets":["hub","agent"],"modifications":"None"},
@@ -321,7 +312,6 @@
     {"name":"github.com/orandin/slog-gorm","version":"v1.4.0","localPath":null,"upstream":"github.com/orandin/slog-gorm","upstreamVersion":"v1.4.0","license":"MIT","evidence":"arcane-modules.json","targets":["hub","agent"],"modifications":"None"},
     {"name":"github.com/package-url/packageurl-go","version":"v0.1.6","localPath":null,"upstream":"github.com/package-url/packageurl-go","upstreamVersion":"v0.1.6","license":"MIT","evidence":"arcane-modules.json","targets":["hub","agent"],"modifications":"None"},
     {"name":"github.com/parthivsaikia/go-pacman-version","version":"v0.0.0-20260212091406-8640ae78daee","localPath":null,"upstream":"github.com/parthivsaikia/go-pacman-version","upstreamVersion":"v0.0.0-20260212091406-8640ae78daee","license":"MIT","evidence":"arcane-modules.json","targets":["hub","agent"],"modifications":"None"},
-    {"name":"github.com/philhofer/fwd","version":"v1.2.0","localPath":null,"upstream":"github.com/philhofer/fwd","upstreamVersion":"v1.2.0","license":"MIT","evidence":"arcane-modules.json","targets":["hub","agent"],"modifications":"None"},
     {"name":"github.com/pjbgf/sha1cd","version":"v0.7.0","localPath":null,"upstream":"github.com/pjbgf/sha1cd","upstreamVersion":"v0.7.0","license":"Apache-2.0","evidence":"arcane-modules.json","targets":["hub","agent"],"modifications":"None"},
     {"name":"github.com/pkg/browser","version":"v0.0.0-20240102092130-5ac0b6a4141c","localPath":null,"upstream":"github.com/pkg/browser","upstreamVersion":"v0.0.0-20240102092130-5ac0b6a4141c","license":"BSD-2-Clause","evidence":"arcane-modules.json","targets":["hub","agent"],"modifications":"None"},
     {"name":"github.com/pkg/errors","version":"v0.9.1","localPath":null,"upstream":"github.com/pkg/errors","upstreamVersion":"v0.9.1","license":"BSD-2-Clause","evidence":"arcane-modules.json","targets":["hub","agent"],"modifications":"None"},
@@ -336,7 +326,6 @@
     {"name":"github.com/quic-go/qpack","version":"v0.6.0","localPath":null,"upstream":"github.com/quic-go/qpack","upstreamVersion":"v0.6.0","license":"MIT","evidence":"arcane-modules.json","targets":["hub","agent"],"modifications":"None"},
     {"name":"github.com/quic-go/quic-go","version":"v0.63.0","localPath":null,"upstream":"github.com/quic-go/quic-go","upstreamVersion":"v0.63.0","license":"MIT","evidence":"arcane-modules.json","targets":["hub","agent"],"modifications":"None"},
     {"name":"github.com/quic-go/webtransport-go","version":"v0.13.0","localPath":null,"upstream":"github.com/quic-go/webtransport-go","upstreamVersion":"v0.13.0","license":"MIT","evidence":"arcane-modules.json","targets":["hub","agent"],"modifications":"None"},
-    {"name":"github.com/remyoudompheng/bigfft","version":"v0.0.0-20230129092748-24d4a6f8daec","localPath":null,"upstream":"github.com/remyoudompheng/bigfft","upstreamVersion":"v0.0.0-20230129092748-24d4a6f8daec","license":"BSD-3-Clause","evidence":"arcane-modules.json","targets":["hub","agent"],"modifications":"None"},
     {"name":"github.com/rivo/uniseg","version":"v0.4.7","localPath":null,"upstream":"github.com/rivo/uniseg","upstreamVersion":"v0.4.7","license":"MIT","evidence":"arcane-modules.json","targets":["hub","agent"],"modifications":"None"},
     {"name":"github.com/robfig/cron/v3","version":"v3.0.1","localPath":null,"upstream":"github.com/robfig/cron/v3","upstreamVersion":"v3.0.1","license":"MIT","evidence":"arcane-modules.json","targets":["hub","agent"],"modifications":"None"},
     {"name":"github.com/samber/go-singleflightx","version":"v0.3.2","localPath":null,"upstream":"github.com/samber/go-singleflightx","upstreamVersion":"v0.3.2","license":"MIT","evidence":"arcane-modules.json","targets":["hub","agent"],"modifications":"None"},
@@ -358,7 +347,6 @@
     {"name":"github.com/spf13/pflag","version":"v1.0.10","localPath":null,"upstream":"github.com/spf13/pflag","upstreamVersion":"v1.0.10","license":"BSD-3-Clause","evidence":"arcane-modules.json","targets":["hub","agent"],"modifications":"None"},
     {"name":"github.com/subosito/gotenv","version":"v1.6.0","localPath":null,"upstream":"github.com/subosito/gotenv","upstreamVersion":"v1.6.0","license":"MIT","evidence":"arcane-modules.json","targets":["hub","agent"],"modifications":"None"},
     {"name":"github.com/tilt-dev/fsnotify","version":"v1.4.8-0.20220602155310-fff9c274a375","localPath":null,"upstream":"github.com/tilt-dev/fsnotify","upstreamVersion":"v1.4.8-0.20220602155310-fff9c274a375","license":"BSD-3-Clause","evidence":"arcane-modules.json","targets":["hub","agent"],"modifications":"None"},
-    {"name":"github.com/tinylib/msgp","version":"v1.6.4","localPath":null,"upstream":"github.com/tinylib/msgp","upstreamVersion":"v1.6.4","license":"MIT","evidence":"arcane-modules.json","targets":["hub","agent"],"modifications":"None"},
     {"name":"github.com/tklauser/go-sysconf","version":"v0.4.0","localPath":null,"upstream":"github.com/tklauser/go-sysconf","upstreamVersion":"v0.4.0","license":"BSD-3-Clause","evidence":"arcane-modules.json","targets":["hub","agent"],"modifications":"None"},
     {"name":"github.com/tklauser/numcpus","version":"v0.12.0","localPath":null,"upstream":"github.com/tklauser/numcpus","upstreamVersion":"v0.12.0","license":"Apache-2.0","evidence":"arcane-modules.json","targets":["hub","agent"],"modifications":"None"},
     {"name":"github.com/tonistiigi/fsutil","version":"v0.0.0-20260819142231-83cac42c1c52","localPath":null,"upstream":"github.com/tonistiigi/fsutil","upstreamVersion":"v0.0.0-20260819142231-83cac42c1c52","license":"MIT","evidence":"arcane-modules.json","targets":["hub","agent"],"modifications":"None"},
@@ -373,7 +361,6 @@
     {"name":"github.com/vmihailenco/msgpack/v5","version":"v5.4.1","localPath":null,"upstream":"github.com/vmihailenco/msgpack/v5","upstreamVersion":"v5.4.1","license":"BSD-2-Clause","evidence":"arcane-modules.json","targets":["hub","agent"],"modifications":"None"},
     {"name":"github.com/vmihailenco/tagparser/v2","version":"v2.0.0","localPath":null,"upstream":"github.com/vmihailenco/tagparser/v2","upstreamVersion":"v2.0.0","license":"BSD-2-Clause","evidence":"arcane-modules.json","targets":["hub","agent"],"modifications":"None"},
     {"name":"github.com/wneessen/go-mail","version":"v0.8.1","localPath":null,"upstream":"github.com/wneessen/go-mail","upstreamVersion":"v0.8.1","license":"BSD-3-Clause AND MIT","evidence":"arcane-modules.json","targets":["hub","agent"],"modifications":"None"},
-    {"name":"github.com/x448/float16","version":"v0.8.4","localPath":null,"upstream":"github.com/x448/float16","upstreamVersion":"v0.8.4","license":"MIT","evidence":"arcane-modules.json","targets":["hub","agent"],"modifications":"None"},
     {"name":"github.com/xanzy/ssh-agent","version":"v0.3.3","localPath":null,"upstream":"github.com/xanzy/ssh-agent","upstreamVersion":"v0.3.3","license":"Apache-2.0","evidence":"arcane-modules.json","targets":["hub","agent"],"modifications":"None"},
     {"name":"github.com/xhit/go-str2duration/v2","version":"v2.1.0","localPath":null,"upstream":"github.com/xhit/go-str2duration/v2","upstreamVersion":"v2.1.0","license":"BSD-3-Clause","evidence":"arcane-modules.json","targets":["hub","agent"],"modifications":"None"},
     {"name":"github.com/zmb3/spotify/v2","version":"v2.3.1","localPath":null,"upstream":"github.com/zmb3/spotify/v2","upstreamVersion":"v2.3.1","license":"Apache-2.0","evidence":"arcane-modules.json","targets":["hub","agent"],"modifications":"None"},
@@ -435,10 +422,6 @@
     {"name":"mellium.im/sasl","version":"v0.3.2","localPath":null,"upstream":"mellium.im/sasl","upstreamVersion":"v0.3.2","license":"BSD-2-Clause","evidence":"arcane-modules.json","targets":["hub","agent"],"modifications":"None"},
     {"name":"mellium.im/xmlstream","version":"v0.15.4","localPath":null,"upstream":"mellium.im/xmlstream","upstreamVersion":"v0.15.4","license":"BSD-2-Clause AND BSD-3-Clause","evidence":"arcane-modules.json","targets":["hub","agent"],"modifications":"None"},
     {"name":"mellium.im/xmpp","version":"v0.23.0","localPath":null,"upstream":"mellium.im/xmpp","upstreamVersion":"v0.23.0","license":"BSD-2-Clause AND BSD-3-Clause AND MIT","evidence":"arcane-modules.json","targets":["hub","agent"],"modifications":"None"},
-    {"name":"modernc.org/libc","version":"v1.77.1","localPath":null,"upstream":"modernc.org/libc","upstreamVersion":"v1.77.1","license":"BSD-3-Clause AND MIT","evidence":"arcane-modules.json","targets":["hub","agent"],"modifications":"None"},
-    {"name":"modernc.org/mathutil","version":"v1.7.1","localPath":null,"upstream":"modernc.org/mathutil","upstreamVersion":"v1.7.1","license":"BSD-3-Clause","evidence":"arcane-modules.json","targets":["hub","agent"],"modifications":"None"},
-    {"name":"modernc.org/memory","version":"v1.12.1","localPath":null,"upstream":"modernc.org/memory","upstreamVersion":"v1.12.1","license":"BSD-3-Clause","evidence":"arcane-modules.json","targets":["hub","agent"],"modifications":"None"},
-    {"name":"modernc.org/sqlite","version":"v1.60.1","localPath":null,"upstream":"modernc.org/sqlite","upstreamVersion":"v1.60.1","license":"Apache-2.0 AND BSD-3-Clause AND LicenseRef-SQLite-Public-Domain AND MIT AND MPL-2.0","evidence":"arcane-modules.json","targets":["hub","agent"],"modifications":"None"},
     {"name":"tags.cncf.io/container-device-interface","version":"v1.1.1","localPath":null,"upstream":"tags.cncf.io/container-device-interface","upstreamVersion":"v1.1.1","license":"Apache-2.0","evidence":"arcane-modules.json","targets":["hub","agent"],"modifications":"None"}
   ]
 }

@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace
+// Deviations: Local module namespace; functional cut: removed S3 backup destinations.
 
 package backup
 
@@ -406,39 +406,10 @@ func (s *Service) localRusticRepositoryInternal(ctx context.Context, dockerClien
 	}, nil
 }
 
-func (s *Service) remoteRusticRepositoryInternal(ctx context.Context, destinationID string) (backup.Repository, error) {
-	return s.remoteRusticRepositoryForInstanceInternal(ctx, destinationID, "")
-}
-
-// remoteRusticRepositoryForInstanceInternal addresses one instance's root on the destination; empty means this instance.
-func (s *Service) remoteRusticRepositoryForInstanceInternal(ctx context.Context, destinationID, instanceID string) (backup.Repository, error) {
-	if s.deps.S3Destinations == nil {
-		return backup.Repository{}, errors.New("S3 backup service is unavailable")
-	}
-	if strings.TrimSpace(instanceID) == "" {
-		instanceID = strings.TrimSpace(s.deps.Settings.GetSettingsConfig().InstanceID.Value)
-	}
-	if instanceID == "" {
-		return backup.Repository{}, errors.New("arcane instance ID is unavailable")
-	}
-	configuration, err := s.deps.S3Destinations.Configuration(ctx, destinationID)
-	if err != nil {
-		return backup.Repository{}, errors.New("the selected S3 backup destination is not configured")
-	}
-	return backup.Repository{
-		ID:          "volumes:s3:" + destinationID + ":" + instanceID,
-		Environment: configuration.RusticEnvironment("arcane-volume-backups", instanceID),
-	}, nil
-}
-
 func (s *Service) rusticRepositoryForBackupInternal(ctx context.Context, dockerClient *client.Client, entry *volume.Backup) (backup.Repository, string, error) {
 	if entry.LocalSnapshotID != "" {
 		repository, err := s.localRusticRepositoryInternal(ctx, dockerClient, true)
 		return repository, entry.LocalSnapshotID, err
-	}
-	if entry.RemoteSnapshotID != "" {
-		repository, err := s.remoteRusticRepositoryForInstanceInternal(ctx, entry.S3DestinationID, entry.RemoteInstanceID)
-		return repository, entry.RemoteSnapshotID, err
 	}
 	return backup.Repository{}, "", errors.New("volume backup has no Rustic snapshot")
 }

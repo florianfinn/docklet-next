@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace
+// Deviations: Local module namespace; functional cut: removed upstream analytics heartbeat and APNS mobile push; functional cut: removed template catalogue; functional cut: removed GitOps and saved Git repositories.
 
 package bootstrap
 
@@ -22,11 +22,9 @@ import (
 	"go.uber.org/fx"
 
 	"github.com/florianfinn/docklet-next/backend/internal/activity"
-	"github.com/florianfinn/docklet-next/backend/internal/apns"
 	"github.com/florianfinn/docklet-next/backend/internal/backup"
 	"github.com/florianfinn/docklet-next/backend/internal/config"
 	"github.com/florianfinn/docklet-next/backend/internal/environment"
-	"github.com/florianfinn/docklet-next/backend/internal/gitops"
 	"github.com/florianfinn/docklet-next/backend/internal/job"
 	"github.com/florianfinn/docklet-next/backend/internal/settings"
 	"github.com/florianfinn/docklet-next/backend/internal/system"
@@ -44,13 +42,11 @@ func newJobScheduler(
 	runtime *runs.Coordinator,
 	_ *runs.Admission,
 	imageUpdateWatcher *scheduler.ImageUpdateWatcher,
-	analytics *scheduler.AnalyticsJob,
 	systemService *system.SystemService,
 	jobService *job.JobService,
 	backupEngine *backup.Engine,
 	updaterService *updater.UpdaterService,
 	volumes *volume.VolumeService,
-	gitopsSync *gitops.GitOpsSyncService,
 ) (
 	schedulertypes.JobScheduler,
 	error,
@@ -76,12 +72,8 @@ func newJobScheduler(
 			if startErr := jobService.Coordinator().Start(ctx, schedulerCtx); startErr != nil {
 				return fmt.Errorf("initialize scheduler: %w", startErr)
 			}
-			if reconcileCoordinatorStartupErr := reconcileCoordinatorStartupInternal(ctx, jobService, backupEngine, updaterService, volumes, systemService, gitopsSync); reconcileCoordinatorStartupErr != nil {
+			if reconcileCoordinatorStartupErr := reconcileCoordinatorStartupInternal(ctx, jobService, backupEngine, updaterService, volumes, systemService); reconcileCoordinatorStartupErr != nil {
 				return fmt.Errorf("reconcile scheduler startup: %w", reconcileCoordinatorStartupErr)
-			}
-			if gitopsSync != nil {
-				gitopsSync.RegisterAutoSyncJobsOnStartup(ctx)
-				gitopsSync.SubscribeProjectFileChanges(schedulerCtx)
 			}
 			if imageUpdateWatcher != nil {
 				imageUpdateWatcher.SetCoordinator(jobService.Coordinator())
@@ -99,11 +91,6 @@ func newJobScheduler(
 					defer close(repairDone)
 					repairBackupDispatchesInternal(schedulerCtx, backupEngine)
 				}()
-			}
-			if analytics != nil {
-				if _, submitErr := jobService.Coordinator().Submit(ctx, schedulertypes.Request{JobID: analytics.Name(), EnvironmentID: "0", Trigger: "startup"}); submitErr != nil {
-					return fmt.Errorf("submit startup job %q: %w", analytics.Name(), submitErr)
-				}
 			}
 			if !cfg.AgentMode && systemService != nil {
 				resumeDone = make(chan struct{})
@@ -149,7 +136,6 @@ func reconcileCoordinatorStartupInternal(
 	updates *updater.UpdaterService,
 	volumes *volume.VolumeService,
 	systemService *system.SystemService,
-	syncService *gitops.GitOpsSyncService,
 ) error {
 	activities, backups, err := startupProtectionInternal(ctx, jobs, engine, updates)
 	if err != nil {
@@ -163,11 +149,6 @@ func reconcileCoordinatorStartupInternal(
 	if systemService != nil {
 		if reconcileSystemBackupsErr := systemService.ReconcileInterruptedBackups(ctx, backups...); reconcileSystemBackupsErr != nil {
 			return reconcileSystemBackupsErr
-		}
-	}
-	if syncService != nil {
-		if reconcileInterruptedBackupsOnStartupErr := syncService.ReconcileInterruptedBackupsOnStartup(ctx, backups...); reconcileInterruptedBackupsOnStartupErr != nil {
-			return reconcileInterruptedBackupsOnStartupErr
 		}
 	}
 	return jobs.ReconcileStartupActivities(ctx, activities...)
@@ -259,19 +240,16 @@ type registerJobsParams struct {
 	Scheduler schedulertypes.JobScheduler
 
 	Activity    *activity.ActivityService
-	GitOpsSync  *gitops.GitOpsSyncService
 	Environment *environment.EnvironmentService
 	JobSchedule *job.JobService
 	Settings    *settings.SettingsService
 	Volume      *volume.VolumeService
 	System      *system.SystemService
 	Admission   *runs.Admission
-	Apns        *apns.ApnsService
 
 	AutoUpdate             *scheduler.AutoUpdateJob
 	ImageUpdateWatcher     *scheduler.ImageUpdateWatcher
 	DockerClientRefresh    *scheduler.DockerClientRefreshJob
-	Analytics              *scheduler.AnalyticsJob
 	UpgradeLogCleanup      schedulertypes.Job `name:"upgrade-log-cleanup"`
 	EventCleanup           *scheduler.EventCleanupJob
 	PruningVolumeHelper    *scheduler.PruningVolumeHelperJob
@@ -284,8 +262,6 @@ type registerJobsParams struct {
 	AutoHeal               *scheduler.AutoHealJob
 	ActivitySweep          *scheduler.ActivitySweepJob
 	UploadSessionsCleanup  *scheduler.UploadSessionsCleanupJob
-	GitCloneCleanup        *scheduler.GitCloneCleanupJob
-	ApnsOutbox             *scheduler.ApnsOutboxJob
 }
 
 func registerJobs(params registerJobsParams) error {
@@ -294,7 +270,6 @@ func registerJobs(params registerJobsParams) error {
 	for _, job := range []schedulertypes.Job{
 		params.AutoUpdate,
 		params.DockerClientRefresh,
-		params.Analytics,
 		params.EventCleanup,
 		params.PruningVolumeHelper,
 		params.ExpiredSessionsCleanup,
@@ -305,9 +280,7 @@ func registerJobs(params registerJobsParams) error {
 		params.AutoHeal,
 		params.ActivitySweep,
 		params.UploadSessionsCleanup,
-		params.GitCloneCleanup,
 		params.UpgradeLogCleanup,
-		params.ApnsOutbox,
 	} {
 		if err := params.Scheduler.RegisterJob(job); err != nil {
 			return err
@@ -318,13 +291,11 @@ func registerJobs(params registerJobsParams) error {
 	// Internal self-healing sweep (managers and agents alike); intentionally
 	// absent from job_metadata so it stays out of the Jobs UI.
 
-	// GitOps sync and environment health are no longer single global jobs; each
-	// entity registers its own dynamic job.
+	// Environment health registers one dynamic job for each environment.
 	if err := registerDynamicJobs(dynamicJobsParams{
 		AppCtx:      params.AppCtx,
 		Config:      params.Config,
 		Scheduler:   params.Scheduler,
-		GitOpsSync:  params.GitOpsSync,
 		Environment: params.Environment,
 		JobSchedule: params.JobSchedule,
 		Volume:      params.Volume,
@@ -349,8 +320,6 @@ func registerJobs(params registerJobsParams) error {
 		VulnerabilityRisk:  params.VulnerabilityRisk,
 		AutoPatch:          params.AutoPatch,
 		AutoHeal:           params.AutoHeal,
-		Apns:               params.Apns,
-		ApnsOutbox:         params.ApnsOutbox,
 	}); err != nil {
 		return err
 	}
@@ -361,7 +330,6 @@ type dynamicJobsParams struct {
 	AppCtx      context.Context
 	Config      *config.Config
 	Scheduler   schedulertypes.JobScheduler
-	GitOpsSync  *gitops.GitOpsSyncService
 	Environment *environment.EnvironmentService
 	JobSchedule *job.JobService
 	Volume      *volume.VolumeService
@@ -388,13 +356,6 @@ func registerDynamicJobs(params dynamicJobsParams) error {
 		}
 		params.System.RegisterBackupJobOnStartup(params.AppCtx)
 	}
-	// GitOps startup submissions wait for Francis in the scheduler start hook.
-	if params.GitOpsSync != nil {
-		if err := params.GitOpsSync.SetScheduler(params.AppCtx, params.Scheduler, params.Admission); err != nil {
-			return err
-		}
-	}
-
 	// Environment health: one job per enabled environment (manager only). The Jobs
 	// UI still addresses "environment-health" by ID, so bridge its reschedule and
 	// run-now back to EnvironmentService.
@@ -429,8 +390,6 @@ type settingsSubscriptionsParams struct {
 	VulnerabilityRisk  *scheduler.VulnerabilityRiskJob
 	AutoPatch          *scheduler.AutoPatchJob
 	AutoHeal           *scheduler.AutoHealJob
-	Apns               *apns.ApnsService
-	ApnsOutbox         *scheduler.ApnsOutboxJob
 }
 
 type settingsChangeSubscriberInternal interface {
@@ -470,26 +429,12 @@ func setupSettingsSubscriptionsInternal(params settingsSubscriptionsParams) erro
 		}
 	})
 
-	subscribe([]string{"apnsEnabled"}, func(updates []libarcane.SettingUpdate) {
-		params.Apns.ApplyEnabledUpdates(params.LifecycleCtx, updates, func() error {
-			return params.Scheduler.RescheduleJob(params.LifecycleCtx, params.ApnsOutbox)
-		})
-	})
-
 	rescheduleOn([]string{"autoUpdate", "autoUpdateInterval"}, params.AutoUpdate)
 
 	subscribe([]string{"projectsDirectory", "followProjectSymlinks"}, func(_ []libarcane.SettingUpdate) {
 		if params.FilesystemWatcher != nil {
 			if err := params.FilesystemWatcher.RestartProjectsWatcher(params.LifecycleCtx); err != nil {
 				slog.WarnContext(params.LifecycleCtx, "Failed to restart projects filesystem watcher", "error", err)
-			}
-		}
-	})
-
-	subscribe([]string{"templatesDirectory"}, func(_ []libarcane.SettingUpdate) {
-		if params.FilesystemWatcher != nil {
-			if err := params.FilesystemWatcher.RestartTemplatesWatcher(params.LifecycleCtx); err != nil {
-				slog.WarnContext(params.LifecycleCtx, "Failed to restart templates filesystem watcher", "error", err)
 			}
 		}
 	})

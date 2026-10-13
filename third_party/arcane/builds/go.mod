@@ -2,12 +2,11 @@
 // Revision: 83d91f19f60b2967cc85c46161c98203e80e4989
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Relative local helper replacements
+// Deviations: Relative local helper replacements; functional cut: module tidy.
 
 module go.getarcane.app/builds
 
 go 1.27
-
 
 require (
 	github.com/containerd/platforms v1.0.0-rc.5

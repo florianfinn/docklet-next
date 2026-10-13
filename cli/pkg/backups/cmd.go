@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace
+// Deviations: Local module namespace; functional cut: removed S3 backup destinations.
 
 package backups
 
@@ -34,31 +34,21 @@ var (
 	forceFlag  bool
 	jsonOutput bool
 
-	createDestination   string
-	createS3Destination string
-	createLocal         bool
-	createRecoveryKey   string
-	createPolicyID      string
+	createDestination string
+	createRecoveryKey string
+	createPolicyID    string
 
 	deleteRecoveryKey string
 
 	restoreRecoveryKey string
 
-	uploadS3Destination string
-	uploadRecoveryKey   string
-
-	discoverS3Destination string
-	discoverRecoveryKey   string
-
-	policiesUpdateFile          string
-	policiesUpdateID            string
-	policiesUpdateEnabled       bool
-	policiesUpdateDisabled      bool
-	policiesUpdateSchedule      string
-	policiesUpdateRetention     int
-	policiesUpdateLocal         bool
-	policiesUpdateS3            bool
-	policiesUpdateS3Destination string
+	policiesUpdateFile      string
+	policiesUpdateID        string
+	policiesUpdateEnabled   bool
+	policiesUpdateDisabled  bool
+	policiesUpdateSchedule  string
+	policiesUpdateRetention int
+	policiesUpdateLocal     bool
 
 	generateSave   bool
 	setRecoveryKey string
@@ -70,7 +60,7 @@ var BackupsCmd = &cobra.Command{
 	Aliases: []string{"backup"},
 	Short:   "Manage Arcane system backups (admin only)",
 	Long: `System backups snapshot Arcane's database and configuration, encrypted with the recovery key.
-Backups are stored in the local repository, a saved S3 destination, or both; policies schedule automatic runs.`,
+Backups are stored in the local repository; policies schedule automatic runs.`,
 }
 
 var listCmd = &cobra.Command{
@@ -89,7 +79,7 @@ var listCmd = &cobra.Command{
 			Endpoint: types.Backups(),
 			Params:   cmdutil.ListParams{Resource: "backups", Limit: limitFlag, FallbackDefault: 20, Start: startFlag, All: allFlag},
 			JSON:     cmdutil.JSONOutputEnabled(cmd),
-			Headers:  []string{"ID", "STATUS", "TRIGGER", "DESTINATION", "SIZE", "S3 DESTINATION", "CREATED"},
+			Headers:  []string{"ID", "STATUS", "TRIGGER", "DESTINATION", "SIZE", "CREATED"},
 			Row: func(run backup.SystemBackupRun) []string {
 				size := ""
 				if run.Size > 0 {
@@ -101,7 +91,6 @@ var listCmd = &cobra.Command{
 					run.Trigger,
 					string(run.Destination),
 					size,
-					run.S3DestinationName,
 					run.CreatedAt.Format("2006-01-02 15:04"),
 				}
 			},
@@ -110,10 +99,9 @@ var listCmd = &cobra.Command{
 }
 
 var createCmd = &cobra.Command{
-	Use:   "create",
-	Short: "Create an Arcane system backup",
-	Long: `Create a system backup. With no flags the backup is stored locally; --s3-destination
-alone stores it in S3, and --local together with --s3-destination stores it in both.`,
+	Use:          "create",
+	Short:        "Create an Arcane system backup",
+	Long:         "Create a local system backup.",
 	Args:         cobra.NoArgs,
 	SilenceUsage: true,
 	RunE: func(cmd *cobra.Command, args []string) error {
@@ -122,41 +110,13 @@ alone stores it in S3, and --local together with --s3-destination stores it in b
 			return err
 		}
 
-		s3DestinationID := ""
-		if createS3Destination != "" {
-			resolved, _, resolveErr := s3DestinationRef.Resolve(cmd.Context(), c, createS3Destination, !cmdutil.JSONOutputEnabled(cmd) && prompt.IsInteractive())
-			if resolveErr != nil {
-				return resolveErr
-			}
-			s3DestinationID = resolved.ID
+		if createDestination != "" && createDestination != string(backup.SystemBackupDestinationLocal) {
+			return fmt.Errorf("invalid --destination %q: must be local", createDestination)
 		}
-
-		destination := backup.SystemBackupDestination(createDestination)
-		if cmd.Flags().Changed("destination") {
-			switch destination {
-			case backup.SystemBackupDestinationLocal, backup.SystemBackupDestinationS3, backup.SystemBackupDestinationLocalS3:
-			default:
-				return fmt.Errorf("invalid --destination %q: must be local, s3, or local_s3", createDestination)
-			}
-		} else {
-			switch {
-			case s3DestinationID != "" && createLocal:
-				destination = backup.SystemBackupDestinationLocalS3
-			case s3DestinationID != "":
-				destination = backup.SystemBackupDestinationS3
-			default:
-				destination = backup.SystemBackupDestinationLocal
-			}
-		}
-		if (destination == backup.SystemBackupDestinationS3 || destination == backup.SystemBackupDestinationLocalS3) && s3DestinationID == "" {
-			return fmt.Errorf("--destination %s requires --s3-destination", destination)
-		}
-
 		req := backup.CreateSystemBackupRequest{
-			Destination:     destination,
-			S3DestinationID: s3DestinationID,
-			RecoveryKey:     createRecoveryKey,
-			PolicyID:        createPolicyID,
+			Destination: backup.SystemBackupDestinationLocal,
+			RecoveryKey: createRecoveryKey,
+			PolicyID:    createPolicyID,
 		}
 
 		run, err := c.DoJSON[backup.SystemBackupRun](cmd.Context(), http.MethodPost, types.Backups(), req)
@@ -174,9 +134,6 @@ alone stores it in S3, and --local together with --s3-destination stores it in b
 		output.KeyValue("Destination", string(run.Destination))
 		if run.Size > 0 {
 			output.KeyValue("Size", output.Bytes(run.Size))
-		}
-		if run.S3DestinationName != "" {
-			output.KeyValue("S3 Destination", run.S3DestinationName)
 		}
 		return nil
 	},
@@ -269,81 +226,6 @@ var restoreCmd = &cobra.Command{
 	},
 }
 
-var uploadCmd = &cobra.Command{
-	Use:          "upload <backup-id>",
-	Short:        "Upload an Arcane system backup to an S3 destination",
-	Args:         cobra.ExactArgs(1),
-	SilenceUsage: true,
-	RunE: func(cmd *cobra.Command, args []string) error {
-		c, err := cmdutil.ClientFromCommand(cmd)
-		if err != nil {
-			return err
-		}
-
-		resolved, _, err := s3DestinationRef.Resolve(cmd.Context(), c, uploadS3Destination, !cmdutil.JSONOutputEnabled(cmd) && prompt.IsInteractive())
-		if err != nil {
-			return err
-		}
-
-		req := backup.UploadSystemBackupRequest{
-			S3DestinationID: resolved.ID,
-			RecoveryKey:     uploadRecoveryKey,
-		}
-
-		run, err := c.DoJSON[backup.SystemBackupRun](cmd.Context(), http.MethodPost, types.BackupUpload(args[0]), req)
-		if err != nil {
-			return fmt.Errorf("failed to upload backup: %w", err)
-		}
-
-		if cmdutil.JSONOutputEnabled(cmd) {
-			return cmdutil.PrintJSON(run)
-		}
-
-		output.Success("Backup %s uploaded successfully", run.ID)
-		output.KeyValue("Destination", string(run.Destination))
-		if run.S3DestinationName != "" {
-			output.KeyValue("S3 Destination", run.S3DestinationName)
-		}
-		return nil
-	},
-}
-
-var discoverCmd = &cobra.Command{
-	Use:          "discover",
-	Short:        "Discover Arcane system backups stored in an S3 destination",
-	Long:         `Discover scans an S3 destination for backups and imports records for any not already known to this Arcane instance.`,
-	Args:         cobra.NoArgs,
-	SilenceUsage: true,
-	RunE: func(cmd *cobra.Command, args []string) error {
-		c, err := cmdutil.ClientFromCommand(cmd)
-		if err != nil {
-			return err
-		}
-
-		resolved, _, err := s3DestinationRef.Resolve(cmd.Context(), c, discoverS3Destination, !cmdutil.JSONOutputEnabled(cmd) && prompt.IsInteractive())
-		if err != nil {
-			return err
-		}
-
-		req := backup.DiscoverSystemBackupsRequest{
-			S3DestinationID: resolved.ID,
-			RecoveryKey:     discoverRecoveryKey,
-		}
-
-		result, err := c.PostJSON[int](cmd.Context(), types.BackupsDiscover(), req)
-		if err != nil {
-			return fmt.Errorf("failed to discover backups: %w", err)
-		}
-
-		if cmdutil.JSONOutputEnabled(cmd) {
-			return cmdutil.PrintJSON(result.Data)
-		}
-
-		output.Success("Discovered %d backup(s)", result.Data)
-		return nil
-	},
-}
-
 var policiesCmd = &cobra.Command{
 	Use:          "policies",
 	Short:        "Show Arcane system backup policies",
@@ -373,7 +255,7 @@ func printPolicies(result backup.SystemBackupPolicyCollection) error {
 	recoveryKey := kit.Ternary(result.RecoveryKeyStored, "Configured", "Not configured")
 	output.KeyValue("Recovery Key", recoveryKey)
 
-	headers := []string{"ID", "ENABLED", "SCHEDULE", "RETENTION", "LOCAL", "S3", "S3 DESTINATION", "LAST RUN"}
+	headers := []string{"ID", "ENABLED", "SCHEDULE", "RETENTION", "LOCAL", "LAST RUN"}
 	rows := make([][]string, len(result.Policies))
 	for i, policy := range result.Policies {
 		lastRun := ""
@@ -386,8 +268,6 @@ func printPolicies(result backup.SystemBackupPolicyCollection) error {
 			policy.Schedule,
 			strconv.Itoa(policy.RetentionCount),
 			strconv.FormatBool(policy.LocalEnabled),
-			strconv.FormatBool(policy.S3Enabled),
-			policy.S3DestinationName,
 			lastRun,
 		}
 	}
@@ -410,7 +290,7 @@ Alternatively, --file replaces all policies from a raw JSON payload.`,
 
 		var req backup.UpdateSystemBackupPolicies
 		if policiesUpdateFile != "" {
-			for _, name := range []string{"policy-id", "enabled", "disabled", "schedule", "retention", "local", "s3", "s3-destination"} {
+			for _, name := range []string{"policy-id", "enabled", "disabled", "schedule", "retention", "local"} {
 				if cmd.Flags().Changed(name) {
 					return fmt.Errorf("--file cannot be combined with --%s", name)
 				}
@@ -441,13 +321,11 @@ Alternatively, --file replaces all policies from a raw JSON payload.`,
 			targetIndex := -1
 			for i, p := range current.Policies {
 				req.Policies[i] = backup.UpdateSystemBackupPolicy{
-					ID:              p.ID,
-					Enabled:         p.Enabled,
-					Schedule:        p.Schedule,
-					RetentionCount:  p.RetentionCount,
-					LocalEnabled:    p.LocalEnabled,
-					S3Enabled:       p.S3Enabled,
-					S3DestinationID: p.S3DestinationID,
+					ID:             p.ID,
+					Enabled:        p.Enabled,
+					Schedule:       p.Schedule,
+					RetentionCount: p.RetentionCount,
+					LocalEnabled:   p.LocalEnabled,
 				}
 				if policiesUpdateID != "" && p.ID == policiesUpdateID {
 					targetIndex = i
@@ -485,19 +363,6 @@ Alternatively, --file replaces all policies from a raw JSON payload.`,
 			}
 			if cmd.Flags().Changed("local") {
 				target.LocalEnabled = policiesUpdateLocal
-			}
-			if cmd.Flags().Changed("s3") {
-				target.S3Enabled = policiesUpdateS3
-			}
-			if cmd.Flags().Changed("s3-destination") {
-				resolved, _, resolveErr := s3DestinationRef.Resolve(cmd.Context(), c, policiesUpdateS3Destination, !cmdutil.JSONOutputEnabled(cmd) && prompt.IsInteractive())
-				if resolveErr != nil {
-					return resolveErr
-				}
-				target.S3DestinationID = resolved.ID
-				if !cmd.Flags().Changed("s3") {
-					target.S3Enabled = true
-				}
 			}
 		}
 
@@ -617,8 +482,6 @@ func init() {
 	BackupsCmd.AddCommand(createCmd)
 	BackupsCmd.AddCommand(deleteCmd)
 	BackupsCmd.AddCommand(restoreCmd)
-	BackupsCmd.AddCommand(uploadCmd)
-	BackupsCmd.AddCommand(discoverCmd)
 	BackupsCmd.AddCommand(policiesCmd)
 	BackupsCmd.AddCommand(recoveryKeyCmd)
 
@@ -631,30 +494,18 @@ func init() {
 	listCmd.Flags().BoolVarP(&allFlag, "all", "a", false, cmdutil.AllFlagUsage)
 	listCmd.Flags().BoolVar(&jsonOutput, "json", false, "Output in JSON format")
 
-	createCmd.Flags().StringVar(&createDestination, "destination", "", "Backup destination: local, s3, or local_s3 (inferred from --local/--s3-destination when omitted)")
-	createCmd.Flags().StringVar(&createS3Destination, "s3-destination", "", "S3 destination name or ID")
-	createCmd.Flags().BoolVar(&createLocal, "local", false, "Also keep a local copy when backing up to S3")
+	createCmd.Flags().StringVar(&createDestination, "destination", "local", "Backup destination: local")
 	createCmd.Flags().StringVar(&createRecoveryKey, "recovery-key", "", "Recovery key used to encrypt the backup")
 	createCmd.Flags().StringVar(&createPolicyID, "policy", "", "Backup policy ID to associate with the run")
 	createCmd.Flags().BoolVar(&jsonOutput, "json", false, "Output in JSON format")
 
-	deleteCmd.Flags().StringVar(&deleteRecoveryKey, "recovery-key", "", "Recovery key (required to delete remote snapshots)")
+	deleteCmd.Flags().StringVar(&deleteRecoveryKey, "recovery-key", "", "Recovery key used to encrypt the backup")
 	deleteCmd.Flags().BoolVarP(&forceFlag, "force", "f", false, "Delete without confirmation")
 	deleteCmd.Flags().BoolVar(&jsonOutput, "json", false, "Output in JSON format")
 
 	restoreCmd.Flags().StringVar(&restoreRecoveryKey, "recovery-key", "", "Recovery key the backup was encrypted with (prompted for when omitted)")
 	restoreCmd.Flags().BoolVarP(&forceFlag, "force", "f", false, "Restore without confirmation")
 	restoreCmd.Flags().BoolVar(&jsonOutput, "json", false, "Output in JSON format")
-
-	uploadCmd.Flags().StringVar(&uploadS3Destination, "s3-destination", "", "S3 destination name or ID to upload to")
-	uploadCmd.Flags().StringVar(&uploadRecoveryKey, "recovery-key", "", "Recovery key the backup was encrypted with")
-	uploadCmd.Flags().BoolVar(&jsonOutput, "json", false, "Output in JSON format")
-	_ = uploadCmd.MarkFlagRequired("s3-destination")
-
-	discoverCmd.Flags().StringVar(&discoverS3Destination, "s3-destination", "", "S3 destination name or ID to search")
-	discoverCmd.Flags().StringVar(&discoverRecoveryKey, "recovery-key", "", "Recovery key the backups were encrypted with")
-	discoverCmd.Flags().BoolVar(&jsonOutput, "json", false, "Output in JSON format")
-	_ = discoverCmd.MarkFlagRequired("s3-destination")
 
 	policiesCmd.Flags().BoolVar(&jsonOutput, "json", false, "Output in JSON format")
 
@@ -665,8 +516,6 @@ func init() {
 	policiesUpdateCmd.Flags().StringVar(&policiesUpdateSchedule, "schedule", "", "Cron schedule for automatic backups")
 	policiesUpdateCmd.Flags().IntVar(&policiesUpdateRetention, "retention", 0, "Number of backups to retain")
 	policiesUpdateCmd.Flags().BoolVar(&policiesUpdateLocal, "local", false, "Store backups in the local repository")
-	policiesUpdateCmd.Flags().BoolVar(&policiesUpdateS3, "s3", false, "Store backups in the S3 destination")
-	policiesUpdateCmd.Flags().StringVar(&policiesUpdateS3Destination, "s3-destination", "", "S3 destination name or ID (implies --s3)")
 	policiesUpdateCmd.Flags().BoolVar(&jsonOutput, "json", false, "Output in JSON format")
 	policiesUpdateCmd.MarkFlagsMutuallyExclusive("enabled", "disabled")
 

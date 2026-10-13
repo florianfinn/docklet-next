@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: None
+// Deviations: functional cut: removed Swarm.
 
 package projects
 
@@ -47,26 +47,26 @@ func TestGetProjectsDirectory_ResolvesRelativePathFromBackendWorkingDirectory(t 
 
 func TestResolveConfiguredContainerDirectory(t *testing.T) {
 	t.Run("uses default when empty", func(t *testing.T) {
-		got := ResolveConfiguredContainerDirectory("", "/app/data/swarm/sources")
-		assert.Equal(t, "/app/data/swarm/sources", got)
+		got := ResolveConfiguredContainerDirectory("", "/app/data/projects")
+		assert.Equal(t, "/app/data/projects", got)
 	})
 
 	t.Run("preserves plain absolute path", func(t *testing.T) {
-		got := ResolveConfiguredContainerDirectory("/app/data/custom/stacks", "/app/data/swarm/sources")
+		got := ResolveConfiguredContainerDirectory("/app/data/custom/stacks", "/app/data/projects")
 		assert.Equal(t, "/app/data/custom/stacks", got)
 	})
 
 	t.Run("extracts container path from bind mapping", func(t *testing.T) {
-		got := ResolveConfiguredContainerDirectory("/app/data/swarm/sources:/srv/arcane/swarm", "/app/data/swarm/sources")
-		assert.Equal(t, "/app/data/swarm/sources", got)
+		got := ResolveConfiguredContainerDirectory("/app/data/projects:/srv/projects", "/app/data/projects")
+		assert.Equal(t, "/app/data/projects", got)
 	})
 
 	t.Run("normalizes relative path", func(t *testing.T) {
 		cwd := t.TempDir()
 		t.Chdir(cwd)
 
-		got := ResolveConfiguredContainerDirectory("data/swarm/sources", "/app/data/swarm/sources")
-		assert.Equal(t, filepath.Join(cwd, "data", "swarm", "sources"), got)
+		got := ResolveConfiguredContainerDirectory("data/projects", "/app/data/projects")
+		assert.Equal(t, filepath.Join(cwd, "data", "projects"), got)
 	})
 }
 

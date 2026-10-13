@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace
+// Deviations: Local module namespace; functional cut: removed SQLite runtime and migrations.
 
 // Package testing starts isolated Francis hosts for owning-logic tests.
 package testing
@@ -22,7 +22,7 @@ import (
 
 // New constructs a host whose factories can be registered before Start.
 // With no database URL it uses an isolated in-memory provider. Pass a temporary
-// SQLite URL or the gated Postgres test URL to exercise durable persistence.
+// PostgreSQL URL to exercise durable persistence in an explicit integration test.
 func New(t stdtesting.TB, databaseURLs ...string) *francis.Runtime {
 	t.Helper()
 	var lc net.ListenConfig
@@ -34,7 +34,7 @@ func New(t stdtesting.TB, databaseURLs ...string) *francis.Runtime {
 	if closeErr := listener.Close(); closeErr != nil {
 		t.Fatal(closeErr)
 	}
-	databaseURL := "file:actor-test-unused.db"
+	databaseURL := "postgres://actor-test.invalid/unused"
 	options := []local.HostOption{
 		local.WithShutdownGracePeriod(time.Second),
 		local.WithAlarmsPollInterval(110 * time.Millisecond),

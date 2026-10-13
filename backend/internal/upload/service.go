@@ -2,11 +2,11 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace
+// Deviations: Local module namespace; functional cut: removed standalone build workshop.
 
 // Package upload owns chunked upload sessions: filesystem-backed staging for
 // large files that arrive as independently retryable chunks, consumed by the
-// image, volume-backup, and build-workspace endpoints.
+// image and volume-backup endpoints.
 package upload
 
 import (
@@ -67,8 +67,6 @@ func validFilenameForKindInternal(kind, filename string) bool {
 			strings.HasSuffix(lower, ".tgz") || strings.HasSuffix(lower, ".tar.xz")
 	case upload.KindVolumeBackup:
 		return strings.HasSuffix(lower, ".tar.gz") || strings.HasSuffix(lower, ".tgz")
-	case upload.KindBuildWorkspace:
-		return true
 	}
 	return false
 }

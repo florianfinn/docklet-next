@@ -2,12 +2,11 @@
 // Revision: 3da7cfd43c4da62bc06fd384b7da5f109ce010fb
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Relative local helper replacements
+// Deviations: Relative local helper replacements; functional cut: module tidy.
 
 module go.getarcane.app/acfs
 
 go 1.27
-
 
 require go.getarcane.app/kit v0.1.0
 

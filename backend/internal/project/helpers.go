@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace
+// Deviations: Local module namespace; functional cut: removed GitOps and saved Git repositories.
 
 package project
 
@@ -14,10 +14,8 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
-	"strings"
 	"sync"
 
-	"github.com/florianfinn/docklet-next/types/gitops"
 	projecttypes "github.com/florianfinn/docklet-next/types/project"
 	usertypes "github.com/florianfinn/docklet-next/types/user"
 	"github.com/samber/mo"
@@ -42,11 +40,6 @@ type projectMetadataEnv struct {
 	autoInjectEnv     bool
 	// settings is the snapshot shared by compose loads; nil resolves lazily.
 	settings *settings.Settings
-	// gitOpsComposePaths maps preloaded GitOps sync IDs to their configured
-	// compose paths. Sync IDs that were preloaded but have no row map to "",
-	// which resolves the same way as a missing row; sync IDs absent from the
-	// map are queried per project.
-	gitOpsComposePaths map[string]string
 
 	// composeFiles memoizes successfully resolved compose files by project ID.
 	// Failures are not stored so a later phase in the same request retries
@@ -55,16 +48,6 @@ type projectMetadataEnv struct {
 	composeFiles   map[string]string
 }
 
-func gitOpsSyncID(proj *Project) string {
-	if proj == nil || proj.GitOpsManagedBy == nil {
-		return ""
-	}
-	return strings.TrimSpace(*proj.GitOpsManagedBy)
-}
-
-// composeFile memoizes successful compose file resolutions for the request.
-// The lock is not held across resolve, which does I/O; workers resolve
-// distinct projects, so a rare duplicate resolution is harmless.
 func (env *projectMetadataEnv) composeFile(projectID string, resolve func() (string, error)) (string, error) {
 	if env == nil || projectID == "" {
 		return resolve()
@@ -153,9 +136,6 @@ func deleteProjectWithTags(tx *gorm.DB, projectID string) error {
 	if err := tx.Where("project_id = ?", projectID).Delete(&ProjectTag{}).Error; err != nil {
 		return fmt.Errorf("delete project tags: %w", err)
 	}
-	if err := tx.Where("mode = ? AND project_id = ?", gitops.SyncModeBackup, projectID).Delete(&GitOpsSync{}).Error; err != nil {
-		return fmt.Errorf("delete project git backups: %w", err)
-	}
 	if err := tx.Delete(&Project{}, "id = ?", projectID).Error; err != nil {
 		return fmt.Errorf("delete project: %w", err)
 	}
@@ -230,7 +210,6 @@ func projectRecord(p Project) projecttypes.Record {
 		StatusReason:       p.StatusReason,
 		ServiceCount:       p.ServiceCount,
 		RunningCount:       p.RunningCount,
-		GitOpsManagedBy:    p.GitOpsManagedBy,
 		ComposeProjectName: p.ComposeProjectName,
 		BuildImageRefsJSON: p.BuildImageRefsJSON,
 		IsArchived:         p.IsArchived,

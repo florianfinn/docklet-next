@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: None
+// Deviations: Functional cut: removed template catalogue; functional cut: removed federated credentials; functional cut: removed central variables and .env.global; functional cut: removed GitOps and saved Git repositories; functional cut: removed Swarm; functional cut: removed S3 backup destinations; functional cut: removed standalone build workshop.
 
 package authz
 
@@ -48,13 +48,6 @@ var permissionCatalog = []PermissionCatalogResource{
 		{"update", PermApiKeysUpdate, "Update", ""},
 		{"delete", PermApiKeysDelete, "Delete", ""},
 	}},
-	{"federated", "Federated Credentials", PermissionScopeGlobal, []PermissionCatalogAction{
-		{"list", PermFederatedList, "List", ""},
-		{"read", PermFederatedRead, "Read", ""},
-		{"create", PermFederatedCreate, "Create", ""},
-		{"update", PermFederatedUpdate, "Update", ""},
-		{"delete", PermFederatedDelete, "Delete", ""},
-	}},
 	{"settings", "Settings", PermissionScopeGlobal, []PermissionCatalogAction{
 		{"read", PermSettingsRead, "Read", ""},
 		{"write", PermSettingsWrite, "Write", ""},
@@ -77,38 +70,6 @@ var permissionCatalog = []PermissionCatalogResource{
 		{"test", PermRegistriesTest, "Test", ""},
 		{"browse", PermRegistriesBrowse, "Browse", "Browse repositories and tags stored in the registry (the pages also require Read)"},
 		{"delete-tags", PermRegistriesDeleteTags, "Delete tags", "Delete image manifests from the registry"},
-	}},
-	{"templates", "Templates", PermissionScopeGlobal, []PermissionCatalogAction{
-		{"list", PermTemplatesList, "List", ""},
-		{"read", PermTemplatesRead, "Read", ""},
-		{"create", PermTemplatesCreate, "Create", ""},
-		{"update", PermTemplatesUpdate, "Update", ""},
-		{"delete", PermTemplatesDelete, "Delete", ""},
-	}},
-	{"variables", "Variables", PermissionScopeGlobal, []PermissionCatalogAction{
-		{"read", PermVariablesRead, "Read", ""},
-		{"create", PermVariablesCreate, "Create", ""},
-		{"update", PermVariablesUpdate, "Update", ""},
-		{"delete", PermVariablesDelete, "Delete", ""},
-		{"sync", PermVariablesSync, "Sync", ""},
-	}},
-	{"git-repositories", "Git Repositories", PermissionScopeGlobal, []PermissionCatalogAction{
-		{"list", PermGitReposList, "List", ""},
-		{"read", PermGitReposRead, "Read", ""},
-		{"create", PermGitReposCreate, "Create", ""},
-		{"update", PermGitReposUpdate, "Update", ""},
-		{"delete", PermGitReposDelete, "Delete", ""},
-		{"test", PermGitReposTest, "Test", ""},
-		{"sync", PermGitReposSync, "Sync", ""},
-	}},
-	{"s3-destinations", "S3 Destinations", PermissionScopeGlobal, []PermissionCatalogAction{
-		{"list", PermS3DestinationsList, "List", ""},
-		{"read", PermS3DestinationsRead, "Read", ""},
-		{"create", PermS3DestinationsCreate, "Create", ""},
-		{"update", PermS3DestinationsUpdate, "Update", ""},
-		{"delete", PermS3DestinationsDelete, "Delete", ""},
-		{"test", PermS3DestinationsTest, "Test", ""},
-		{"sync", PermS3DestinationsSync, "Sync", ""},
 	}},
 	{"system-backups", "System Backups", PermissionScopeGlobal, []PermissionCatalogAction{
 		{"read", PermSystemBackupsRead, "Read", ""},
@@ -159,7 +120,6 @@ var permissionCatalog = []PermissionCatalogResource{
 		{"read", PermImagesRead, "Read", ""},
 		{"pull", PermImagesPull, "Pull", ""},
 		{"push", PermImagesPush, "Push", ""},
-		{"build", PermImagesBuild, "Build", ""},
 		{"tag", PermImagesTag, "Tag", ""},
 		{"commit", PermImagesCommit, "Commit container", ""},
 		{"prune", PermImagesPrune, "Prune", ""},
@@ -185,36 +145,6 @@ var permissionCatalog = []PermissionCatalogResource{
 		{"prune", PermNetworksPrune, "Prune", ""},
 		{"connect", PermNetworksConnect, "Connect container", ""},
 		{"disconnect", PermNetworksDisconnect, "Disconnect container", ""},
-	}},
-	{"swarm", "Swarm", PermissionScopeEnv, []PermissionCatalogAction{
-		{"read", PermSwarmRead, "Read", ""},
-		{"init", PermSwarmInit, "Initialize", ""},
-		{"join", PermSwarmJoin, "Join", ""},
-		{"leave", PermSwarmLeave, "Leave", ""},
-		{"spec", PermSwarmSpec, "Update spec", ""},
-		{"nodes", PermSwarmNodes, "Manage nodes", ""},
-		{"services", PermSwarmServices, "Manage services", ""},
-		{"services:logs", PermSwarmServicesLogs, "View service logs", ""},
-		{"stacks", PermSwarmStacks, "Manage stacks", ""},
-		{"configs", PermSwarmConfigs, "Manage configs", ""},
-		{"secrets", PermSwarmSecrets, "Manage secrets", ""},
-		{"unlock", PermSwarmUnlock, "Unlock / join tokens", ""},
-	}},
-	{"gitops", "GitOps Syncs", PermissionScopeEnv, []PermissionCatalogAction{
-		{"list", PermGitOpsList, "List", ""},
-		{"read", PermGitOpsRead, "Read", ""},
-		{"create", PermGitOpsCreate, "Create", ""},
-		{"update", PermGitOpsUpdate, "Update", ""},
-		{"delete", PermGitOpsDelete, "Delete", ""},
-		{"sync", PermGitOpsSync, "Trigger sync", ""},
-		{
-			"lifecycle",
-			PermGitOpsLifecycle,
-			"Configure pre-deploy hooks",
-			"Create or modify a sync's pre-deploy lifecycle hook, which runs an arbitrary container with host bind mounts and env on every sync",
-		},
-
-		{"backup", PermGitOpsBackup, "Back up to Git", "View a project's Git backup preview and history, and manage the backup together with the matching sync permission (create, update, sync, delete)"},
 	}},
 	{"webhooks", "Webhooks", PermissionScopeEnv, []PermissionCatalogAction{
 		{"list", PermWebhooksList, "List", ""},
@@ -244,9 +174,6 @@ var permissionCatalog = []PermissionCatalogResource{
 		{"read", PermVulnsRead, "Read", ""},
 		{"scan", PermVulnsScan, "Scan", ""},
 		{"manage", PermVulnsManage, "Manage ignores", ""},
-	}},
-	{"build-workspaces", "Build Workspaces", PermissionScopeEnv, []PermissionCatalogAction{
-		{"manage", PermBuildWorkspacesManage, "Manage", ""},
 	}},
 	{"activities", "Activities", PermissionScopeEnv, []PermissionCatalogAction{
 		{"read", PermActivitiesRead, "Read", ""},

@@ -1,8 +1,10 @@
+//go:build postgres_integration
+
 // Source: getarcaneapp/arcane/backend/internal/volume/children/backup/children/policies/service_test.go
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace
+// Deviations: Local module namespace; functional cut: removed S3 backup destinations; functional cut: PostgreSQL integration test fixture.
 
 package policies
 
@@ -10,16 +12,14 @@ import (
 	"context"
 	"testing"
 
+	"github.com/florianfinn/docklet-next/backend/internal/testpg"
 	"github.com/florianfinn/docklet-next/types/backup"
 	"github.com/florianfinn/docklet-next/types/scheduler"
 	"github.com/florianfinn/docklet-next/types/volume"
-	"github.com/libtnb/sqlite"
 	"github.com/stretchr/testify/require"
-	"go.getarcane.app/sys/crypto"
 	"gorm.io/gorm"
 
 	"github.com/florianfinn/docklet-next/backend/internal/database"
-	"github.com/florianfinn/docklet-next/backend/internal/s3"
 	"github.com/florianfinn/docklet-next/backend/pkg/scheduler/runs"
 	francistest "github.com/florianfinn/docklet-next/backend/pkg/utils/francis/testing"
 )
@@ -57,7 +57,7 @@ func (s *volumeBackupPolicySchedulerInternal) HasJob(name string) bool {
 }
 
 func TestVolumeBackupPolicy_UpdateRegistersIndependentJobsAndSettings(t *testing.T) {
-	gormDB, err := gorm.Open(sqlite.Open("file:volume-backup-schedule?mode=memory&cache=shared"), &gorm.Config{})
+	gormDB, err := gorm.Open(testpg.Dialector(t, "file:volume-backup-schedule?mode=memory&cache=shared"), &gorm.Config{})
 	require.NoError(t, err)
 	require.NoError(t, gormDB.AutoMigrate(&VolumeBackupPolicy{}))
 	db := &database.DB{DB: gormDB}
@@ -89,7 +89,7 @@ func TestVolumeBackupPolicy_UpdateRegistersIndependentJobsAndSettings(t *testing
 }
 
 func TestVolumeBackupPolicy_GetReturnsLastRunForEachPolicy(t *testing.T) {
-	gormDB, err := gorm.Open(sqlite.Open("file:volume-backup-last-runs?mode=memory&cache=shared"), &gorm.Config{})
+	gormDB, err := gorm.Open(testpg.Dialector(t, "file:volume-backup-last-runs?mode=memory&cache=shared"), &gorm.Config{})
 	require.NoError(t, err)
 	require.NoError(t, gormDB.AutoMigrate(&VolumeBackupPolicy{}))
 	first := &VolumeBackupPolicy{VolumeName: "app-data", Schedule: "0 0 2 * * *", LocalEnabled: true}
@@ -112,74 +112,6 @@ func TestVolumeBackupPolicy_GetReturnsLastRunForEachPolicy(t *testing.T) {
 	require.Len(t, collection.Policies, 2)
 	require.Equal(t, "succeeded", collection.Policies[0].LastRun.Status)
 	require.Equal(t, "failed", collection.Policies[1].LastRun.Status)
-}
-
-func TestVolumeBackupPolicy_UpdateUsesSelectedS3Destination(t *testing.T) {
-	gormDB, err := gorm.Open(sqlite.Open("file:volume-backup-s3-secret?mode=memory&cache=shared"), &gorm.Config{})
-	require.NoError(t, err)
-	require.NoError(t, gormDB.AutoMigrate(&VolumeBackupPolicy{}, &s3.S3Destination{}))
-	db := &database.DB{DB: gormDB}
-	crypto.InitEncryption(&crypto.Config{
-		EncryptionKey: "test-encryption-key-for-volume-backups-32bytes",
-		Environment:   "test",
-	})
-	encryptedSecret, err := crypto.Encrypt("destination-s3-secret")
-	require.NoError(t, err)
-	destination := &s3.S3Destination{
-		Name:            "Offsite",
-		Bucket:          "volume-backups",
-		Region:          "us-east-1",
-		AccessKeyID:     "destination-access-key",
-		SecretAccessKey: encryptedSecret,
-		UseSSL:          true,
-	}
-	require.NoError(t, gormDB.Create(destination).Error)
-	service := NewService(Dependencies{
-		DB:             db,
-		S3Destinations: s3.NewS3DestinationService(db, nil),
-		LatestRun:      noLatestRunInternal,
-	})
-	collection, err := service.UpdateBackupPolicies(t.Context(), "app-data", []volume.UpdateBackupPolicy{{
-		Schedule:        "0 0 2 * * *",
-		RetentionCount:  7,
-		S3Enabled:       true,
-		S3DestinationID: destination.ID,
-	}})
-	require.NoError(t, err)
-	require.Len(t, collection.Policies, 1)
-	policy := collection.Policies[0]
-	require.False(t, policy.LocalEnabled)
-	require.True(t, policy.S3Enabled)
-	require.True(t, policy.S3Available)
-	require.Equal(t, destination.ID, policy.S3DestinationID)
-	require.Equal(t, "Offsite", policy.S3DestinationName)
-	require.Equal(t, "volume-backups", policy.S3Bucket)
-
-	var stored VolumeBackupPolicy
-	require.NoError(t, gormDB.Where("volume_name = ?", "app-data").First(&stored).Error)
-	require.False(t, stored.LocalEnabled)
-	require.True(t, stored.S3Enabled)
-	require.Equal(t, destination.ID, stored.S3DestinationID)
-}
-
-func TestBackupPolicyDestinationLookupFailureInternal(t *testing.T) {
-	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
-	require.NoError(t, err)
-	require.NoError(t, db.AutoMigrate(&VolumeBackupPolicy{}, &s3.S3Destination{}))
-	policy := &VolumeBackupPolicy{VolumeName: "app-data", Schedule: "0 0 2 * * *", S3DestinationID: "missing"}
-	require.NoError(t, db.Create(policy).Error)
-	service := NewService(Dependencies{DB: &database.DB{DB: db}, S3Destinations: s3.NewS3DestinationService(&database.DB{DB: db}, nil), LatestRun: noLatestRunInternal})
-	for _, drop := range []bool{false, true} {
-		if drop {
-			require.NoError(t, db.Migrator().DropTable(&s3.S3Destination{}))
-		}
-		collection, getBackupPoliciesErr := service.GetBackupPolicies(t.Context(), "app-data")
-		require.NoError(t, getBackupPoliciesErr)
-		require.Len(t, collection.Policies, 1)
-		require.False(t, collection.S3Available)
-		require.Empty(t, collection.Policies[0].S3DestinationName)
-		require.Empty(t, collection.Policies[0].S3Bucket)
-	}
 }
 
 func (s *volumeBackupPolicySchedulerInternal) Submit(_ context.Context, request scheduler.Request) (scheduler.Run, error) {

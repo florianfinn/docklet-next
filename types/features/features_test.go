@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace
+// Deviations: Local module namespace; functional cut: removed Swarm.
 
 package features_test
 
@@ -28,7 +28,6 @@ func TestRegistry(t *testing.T) {
 			name: "returned definitions are independent", id: features.VulnerabilityManagement, mutateCopy: true, wantFound: true,
 			want: features.Definition{ID: features.VulnerabilityManagement, SettingKey: "featureVulnerabilityManagementEnabled", DefaultEnabled: true},
 		},
-		{name: "swarm defaults off", id: features.Swarm, wantFound: true, want: features.Definition{ID: features.Swarm, SettingKey: "featureSwarmEnabled", DefaultEnabled: false}},
 		{name: "unknown feature", id: features.ID("unknown")},
 	}
 	for _, tt := range tests {

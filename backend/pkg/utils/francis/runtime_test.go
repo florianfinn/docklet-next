@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: None
+// Deviations: functional cut: removed SQLite runtime and migrations.
 
 package francis
 
@@ -12,7 +12,6 @@ import (
 	"log/slog"
 	"net"
 	"os"
-	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -21,10 +20,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestSQLiteHostRestartPersistence(t *testing.T) {
-	databaseURL := "file:" + filepath.ToSlash(filepath.Join(t.TempDir(), "actors.db"))
-	testRestartPersistenceInternal(t, databaseURL)
-
+func TestActorLogHandler(t *testing.T) {
 	var output bytes.Buffer
 	runtime := &Runtime{}
 	logger := slog.New(&actorLogHandlerInternal{

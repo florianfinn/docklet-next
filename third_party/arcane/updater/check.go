@@ -2,7 +2,7 @@
 // Revision: 119f68956cee6d5aba8a5463561aaf9be9943b65
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: None
+// Deviations: functional cut: removed Swarm.
 
 package updater
 
@@ -174,7 +174,7 @@ func (s *Service) CheckContainerUpdate(ctx context.Context, containerID string) 
 }
 
 // containerEligibilityInternal reports why a container cannot be updated, or
-// "" when it can. The label, Swarm, and configuration checks always apply;
+// "" when it can. The label and configuration checks always apply;
 // policy decides whether the settings exclusion list is consulted too.
 func (s *Service) containerEligibilityInternal(ctx context.Context, inspect container.InspectResponse, policy exclusionPolicy) (string, error) {
 	if inspect.Config == nil {
@@ -183,9 +183,6 @@ func (s *Service) containerEligibilityInternal(ctx context.Context, inspect cont
 	labels := inspect.Config.Labels
 	if s.config.LabelPolicy.IsUpdateDisabled(labels) {
 		return "updates disabled by label", nil
-	}
-	if s.config.LabelPolicy.IsSwarmTask(labels) && !s.isSelfUpdateCandidate(inspect.ID, labels) {
-		return "swarm service; update at the service level", nil
 	}
 	if policy == ignoreSettingsExclusions {
 		return "", nil

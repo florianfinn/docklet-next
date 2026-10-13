@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: None
+// Deviations: ; functional cut: removed Svelte-specific metadata or asset paths.
 
 //go:build !exclude_frontend
 
@@ -36,9 +36,9 @@ func RegisterFrontend(e *echo.Echo) error {
 	if err := mime.AddExtensionType(".webmanifest", "application/manifest+json"); err != nil {
 		return fmt.Errorf("failed to register web manifest MIME type: %w", err)
 	}
-	appFS, err := fs.Sub(distFS, "_app")
+	assetsFS, err := fs.Sub(distFS, "assets")
 	if err != nil {
-		return fmt.Errorf("failed to create app sub FS: %w", err)
+		return fmt.Errorf("failed to create assets sub FS: %w", err)
 	}
 
 	skipAPI := func(c *echo.Context) bool {
@@ -66,17 +66,17 @@ func RegisterFrontend(e *echo.Echo) error {
 			}
 
 			p := cmp.Or(strings.TrimPrefix(c.Request().URL.Path, "/"), indexHtmlFileConstant)
-			if _, statErr := fs.Stat(distFS, p); statErr != nil && !strings.HasPrefix(p, "_app/") {
+			if _, statErr := fs.Stat(distFS, p); statErr != nil && !strings.HasPrefix(p, "assets/") {
 				p = indexHtmlFileConstant
 			}
 
 			header := c.Response().Header()
 			switch {
-			case p == indexHtmlFileConstant || p == "service-worker.js" || p == "app.webmanifest" || p == "_app/version.json":
+			case p == indexHtmlFileConstant || p == "service-worker.js" || p == "app.webmanifest" || p == "version.json":
 				header.Set("Cache-Control", "no-cache, no-store, must-revalidate")
 				header.Set("Pragma", "no-cache")
 				header.Set("Expires", "0")
-			case strings.HasPrefix(p, "_app/immutable/"):
+			case strings.HasPrefix(p, "assets/"):
 				header.Set("Cache-Control", "public, max-age=31536000, immutable")
 			default:
 				header.Set("Cache-Control", "public, max-age=86400")
@@ -85,14 +85,14 @@ func RegisterFrontend(e *echo.Echo) error {
 		}
 	})
 
-	// Missing chunks must return 404 so SvelteKit can recover after a redeploy.
-	e.StaticFS("/_app/", appFS)
+	// Missing assets return 404 so a stale page does not receive HTML as JavaScript.
+	e.StaticFS("/assets/", assetsFS)
 	e.Use(middleware.StaticWithConfig(middleware.StaticConfig{
 		Root:       ".",
 		Filesystem: distFS,
 		HTML5:      true,
 		Skipper: func(c *echo.Context) bool {
-			return skipAPI(c) || strings.HasPrefix(c.Request().URL.Path, "/_app/")
+			return skipAPI(c) || strings.HasPrefix(c.Request().URL.Path, "/assets/")
 		},
 	}))
 

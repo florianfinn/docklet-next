@@ -19,7 +19,8 @@ test("repository lint rejects drift in the real imported workspace before module
   ok(lint());
   const log = resolve(root, ".git/module-checks.log");
   const calls = readFileSync(log, "utf8").trim().split("\n").map(JSON.parse);
-  assert.equal(calls.filter((call) => call.args[0] === "vet").length, 14);
+  assert.equal(calls.filter((call) => call.args[0] === "vet").length,
+    paths.filter((path) => path.endsWith("/go.mod")).length);
   assert.equal(calls.filter((call) => call.args[1] === "./scripts/gofmt-check.go").length, 1);
 
   for (const path of ["backend/go.mod", "backend/go.sum", "go.work", "go.work.sum"]) {

@@ -2,12 +2,11 @@
 // Revision: e3d12f637964a6edd495f9b31a10d2f0a40fa127
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Relative local helper replacements
+// Deviations: Relative local helper replacements; functional cut: module tidy.
 
 module go.getarcane.app/docker
 
 go 1.27
-
 
 require (
 	github.com/moby/moby/api v1.56.1

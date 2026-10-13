@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: None
+// Deviations: functional cut: removed standalone build workshop.
 
 package activity
 
@@ -19,7 +19,6 @@ const (
 	StatusCancelled Status = "cancelled"
 
 	TypeImagePull         Type = "image_pull"
-	TypeImageBuild        Type = "image_build"
 	TypeImageUpdateCheck  Type = "image_update_check"
 	TypeProjectPull       Type = "project_pull"
 	TypeProjectBuild      Type = "project_build"

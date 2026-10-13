@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: None
+// Deviations: Functional cut: removed template catalogue; functional cut: removed federated credentials; functional cut: removed GitOps and saved Git repositories.
 
 package types
 
@@ -35,9 +35,6 @@ var KnownPaginatedResources = []string{
 	"projects",
 	"environments",
 	"registries",
-	"templates",
-	"repos",
-	"gitops-syncs",
 	"users",
 	"roles",
 	"events",
@@ -66,12 +63,6 @@ func NormalizePaginatedResource(resource string) string {
 		return "environments"
 	case "registry", "registries":
 		return "registries"
-	case "template":
-		return "templates"
-	case "repo", "repos", "gitrepository", "gitrepositories", "gitrepo", "gitrepos":
-		return "repos"
-	case "gitops", "gitop", "gitopssync", "gitopssyncs":
-		return "gitops-syncs"
 	case "user":
 		return "users"
 	case "role":
@@ -96,8 +87,6 @@ type Config struct {
 	RefreshToken string `yaml:"refresh_token,omitempty"`
 	// DefaultEnvironment is the default environment ID to use
 	DefaultEnvironment string `yaml:"default_environment,omitempty"`
-	// FederatedAudience is the default token audience for `arcane-cli auth federated`
-	FederatedAudience string `yaml:"federated_audience,omitempty"`
 	// LogLevel is the logging level (debug, info, warn, error, fatal, panic)
 	LogLevel string `yaml:"log_level,omitempty"`
 	// CLIUpdateChannel controls which channel self-update uses (stable or next).

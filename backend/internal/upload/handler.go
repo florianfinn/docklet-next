@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace
+// Deviations: Local module namespace; functional cut: removed standalone build workshop.
 
 package upload
 
@@ -34,13 +34,13 @@ type UploadHandler struct {
 
 type CreateUploadSessionInput struct {
 	EnvironmentID string `path:"id"`
-	Kind          string `path:"kind" enum:"image,volume-backup,build-workspace"`
+	Kind          string `path:"kind" enum:"image,volume-backup"`
 	Body          upload.CreateSessionRequest
 }
 
 type UploadChunkInput struct {
 	EnvironmentID string `path:"id"`
-	Kind          string `path:"kind" enum:"image,volume-backup,build-workspace"`
+	Kind          string `path:"kind" enum:"image,volume-backup"`
 	UploadID      string `path:"uploadId"`
 	Index         int    `path:"index"`
 	RawBody       []byte `contentType:"application/octet-stream"`
@@ -48,13 +48,13 @@ type UploadChunkInput struct {
 
 type GetUploadSessionInput struct {
 	EnvironmentID string `path:"id"`
-	Kind          string `path:"kind" enum:"image,volume-backup,build-workspace"`
+	Kind          string `path:"kind" enum:"image,volume-backup"`
 	UploadID      string `path:"uploadId"`
 }
 
 type DeleteUploadSessionInput struct {
 	EnvironmentID string `path:"id"`
-	Kind          string `path:"kind" enum:"image,volume-backup,build-workspace"`
+	Kind          string `path:"kind" enum:"image,volume-backup"`
 	UploadID      string `path:"uploadId"`
 }
 

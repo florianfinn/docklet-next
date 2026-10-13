@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace
+// Deviations: Local module namespace; functional cut: removed S3 backup destinations.
 
 package volumes
 
@@ -27,7 +27,6 @@ import (
 	"github.com/florianfinn/docklet-next/backend/internal/backup"
 	"github.com/florianfinn/docklet-next/backend/internal/database"
 	"github.com/florianfinn/docklet-next/backend/internal/middleware"
-	"github.com/florianfinn/docklet-next/backend/internal/s3"
 	"github.com/florianfinn/docklet-next/backend/internal/settings"
 	"github.com/florianfinn/docklet-next/backend/internal/volume"
 	"github.com/florianfinn/docklet-next/backend/pkg/authz"
@@ -43,7 +42,6 @@ type Dependencies struct {
 	DB                *database.DB
 	Engine            *backup.Engine
 	Volumes           *volume.VolumeService
-	S3Destinations    *s3.S3DestinationService
 	Activity          *activity.ActivityService
 	Settings          *settings.SettingsService
 	Jobs              *entityjobs.Registry
@@ -57,7 +55,6 @@ type Service struct {
 	db                *database.DB
 	engine            *backup.Engine
 	volumes           *volume.VolumeService
-	s3Destinations    *s3.S3DestinationService
 	activity          *activity.ActivityService
 	settings          *settings.SettingsService
 	jobs              *entityjobs.Registry
@@ -71,7 +68,6 @@ func NewService(deps Dependencies) *Service {
 		db:                deps.DB,
 		engine:            deps.Engine,
 		volumes:           deps.Volumes,
-		s3Destinations:    deps.S3Destinations,
 		activity:          deps.Activity,
 		settings:          deps.Settings,
 		jobs:              deps.Jobs,
@@ -118,15 +114,8 @@ func (s *Service) GetConfig(ctx context.Context) (*backuptypes.SystemVolumeBacku
 	if err != nil {
 		return nil, err
 	}
-	destinations := make(map[string]backuptypes.S3Destination)
-	if s.s3Destinations != nil {
-		if available, listErr := s.s3Destinations.ListS3DestinationsByID(ctx); listErr == nil {
-			destinations = available
-		}
-	}
 	for i := range collection.Policies {
 		policy := &collection.Policies[i]
-		policy.S3DestinationName = destinations[policy.S3DestinationID].Name
 		if s.db == nil {
 			continue
 		}
@@ -138,9 +127,8 @@ func (s *Service) GetConfig(ctx context.Context) (*backuptypes.SystemVolumeBacku
 			policy.LastRun = &backuptypes.SystemBackupRun{
 				ID: lastRun.ID, Size: lastRun.Size, CreatedAt: lastRun.CreatedAt, Status: string(lastRun.Status),
 				Trigger: string(lastRun.Trigger), Destination: backuptypes.SystemBackupDestination(lastRun.Destination),
-				LocalSnapshotID: lastRun.LocalSnapshotID, RemoteSnapshotID: lastRun.RemoteSnapshotID,
-				S3DestinationID: lastRun.S3DestinationID, S3DestinationName: destinations[lastRun.S3DestinationID].Name,
-				PolicyID: lastRun.PolicyID, Error: lastRun.Error,
+				LocalSnapshotID: lastRun.LocalSnapshotID,
+				PolicyID:        lastRun.PolicyID, Error: lastRun.Error,
 			}
 		} else if !errors.Is(runErr, gorm.ErrRecordNotFound) {
 			return nil, fmt.Errorf("load latest system-managed volume backup: %w", runErr)
@@ -153,7 +141,7 @@ func (s *Service) normalizeSystemVolumePolicyUpdateInternal(ctx context.Context,
 	if err := validateSystemVolumeSelectionInternal(input.SelectionMode); err != nil {
 		return backuptypes.SystemVolumeBackupPolicy{}, err
 	}
-	update, err := backup.ValidatePolicyUpdate(ctx, "system-managed volume", input.UpdateBackupPolicy, s.s3Destinations)
+	update, err := backup.ValidatePolicyUpdate(ctx, "system-managed volume", input.UpdateBackupPolicy)
 	if err != nil {
 		return backuptypes.SystemVolumeBackupPolicy{}, err
 	}
@@ -164,8 +152,7 @@ func (s *Service) normalizeSystemVolumePolicyUpdateInternal(ctx context.Context,
 	}
 	return backuptypes.SystemVolumeBackupPolicy{
 		ID: input.ID, Enabled: update.Enabled, Schedule: update.Schedule, RetentionCount: update.RetentionCount,
-		StopContainers: update.StopContainers, LocalEnabled: update.LocalEnabled, S3Enabled: update.S3Enabled,
-		S3DestinationID: update.S3DestinationID, SelectionMode: input.SelectionMode,
+		StopContainers: update.StopContainers, LocalEnabled: update.LocalEnabled, SelectionMode: input.SelectionMode,
 		VolumeNames: names, IgnoreAnonymous: input.IgnoreAnonymous,
 	}, nil
 }
@@ -253,11 +240,8 @@ func (s *Service) resolveSystemVolumeRunPolicyInternal(ctx context.Context, requ
 		return *policy, false, nil
 	}
 	custom := request.Custom
-	if custom != nil &&
-		custom.Destination != backuptypes.SystemBackupDestinationLocal &&
-		custom.Destination != backuptypes.SystemBackupDestinationS3 &&
-		custom.Destination != backuptypes.SystemBackupDestinationLocalS3 {
-		return backuptypes.SystemVolumeBackupPolicy{}, false, errors.New("destination must be local, s3, or local_s3")
+	if custom != nil && custom.Destination != backuptypes.SystemBackupDestinationLocal {
+		return backuptypes.SystemVolumeBackupPolicy{}, false, errors.New("destination must be local")
 	}
 	policy, err := s.normalizeSystemVolumePolicyUpdateInternal(ctx, customSystemVolumePolicyInternal(custom))
 	return policy, true, err
@@ -345,8 +329,7 @@ func (
 
 	policy := backuptypes.UpdateBackupPolicy{
 		Enabled: true, Schedule: policyConfig.Schedule, RetentionCount: policyConfig.RetentionCount,
-		StopContainers: policyConfig.StopContainers, LocalEnabled: policyConfig.LocalEnabled, S3Enabled: policyConfig.S3Enabled,
-		S3DestinationID: policyConfig.S3DestinationID,
+		StopContainers: policyConfig.StopContainers, LocalEnabled: policyConfig.LocalEnabled,
 	}
 	for _, candidate := range candidates {
 		status := completedVolumeBackupStatusInternal(ctx, candidate.Name)
@@ -405,13 +388,6 @@ func (s *Service) runScheduledSystemVolumeBackupInternal(ctx context.Context, po
 	if policy == nil || !policy.Enabled {
 		return scheduler.Outcome{Status: scheduler.Skipped}, nil
 	}
-	remoteDisabled, checkErr := s.disableMissingVolumeS3Internal(ctx, policy)
-	if checkErr != nil {
-		return scheduler.Outcome{}, checkErr
-	}
-	if remoteDisabled && !policy.LocalEnabled {
-		return scheduler.Outcome{Status: scheduler.NeedsAttention, Message: backup.RemoteDisabledMessage}, nil
-	}
 	result, err := s.runSystemVolumeBackupsInternal(ctx, backuptypes.RunSystemVolumeBackupsRequest{PolicyID: policyID}, volume.VolumeBackupTriggerScheduled)
 	if errors.Is(err, s.alreadyRunning) {
 		slog.InfoContext(ctx, "Scheduled system-managed volume backups skipped; a system backup is running", "policyId", policyID)
@@ -436,10 +412,7 @@ func (s *Service) runScheduledSystemVolumeBackupInternal(ctx context.Context, po
 		result.Skipped,
 	)
 	outcome := scheduler.Outcome{Status: scheduler.Succeeded}
-	if remoteDisabled {
-		outcome.Message = backup.RemoteDisabledMessage
-	}
-	if result.Failed > 0 || remoteDisabled {
+	if result.Failed > 0 {
 		outcome.Status = scheduler.Partial
 	}
 	for _, failure := range result.Failures {
@@ -486,42 +459,6 @@ func (s *Service) saveSystemVolumeBackupPoliciesInternal(ctx context.Context, po
 		return fmt.Errorf("encode policies: %w", err)
 	}
 	return s.settings.UpdateSetting(ctx, systemVolumeBackupConfigKey, string(encoded))
-}
-
-func (s *Service) disableMissingVolumeS3Internal(ctx context.Context, policy *backuptypes.SystemVolumeBackupPolicy) (bool, error) {
-	if !policy.S3Enabled {
-		return false, nil
-	}
-	root := "arcane-volume-backups/" + s.settings.GetSettingsConfig().InstanceID.Value
-	err := backup.CheckScheduledRemote(ctx, s.db, s.s3Destinations, "volume_backups", policy.S3DestinationID, root)
-	if !errors.Is(err, backup.ErrRemoteRepositoryMissing) {
-		return false, nil
-	}
-	collection, err := s.loadSystemVolumeBackupPoliciesInternal()
-	if err != nil {
-		return false, err
-	}
-	for i := range collection.Policies {
-		current := &collection.Policies[i]
-		if current.ID != policy.ID {
-			continue
-		}
-		if current.S3DestinationID != policy.S3DestinationID || current.S3Enabled != policy.S3Enabled || current.Enabled != policy.Enabled || current.LocalEnabled != policy.LocalEnabled {
-			return false, nil
-		}
-		if current.LocalEnabled {
-			current.S3Enabled = false
-		} else {
-			current.Enabled = false
-		}
-		if saveSystemVolumeBackupPoliciesErr := s.saveSystemVolumeBackupPoliciesInternal(ctx, collection.Policies); saveSystemVolumeBackupPoliciesErr != nil {
-			return false, saveSystemVolumeBackupPoliciesErr
-		}
-		*policy = *current
-		s.rescheduleSystemVolumeBackupInternal(ctx, policy)
-		return true, nil
-	}
-	return false, nil
 }
 
 // Start freezes the selected policy and volumes before returning.
@@ -725,11 +662,9 @@ func customSystemVolumePolicyInternal(custom *backuptypes.SystemVolumeBackupCust
 			SelectionMode: backuptypes.SystemVolumeSelectionAll, VolumeNames: []string{}, IgnoreAnonymous: true,
 		}
 	}
-	localEnabled := custom.Destination == backuptypes.SystemBackupDestinationLocal || custom.Destination == backuptypes.SystemBackupDestinationLocalS3
-	s3Enabled := custom.Destination == backuptypes.SystemBackupDestinationS3 || custom.Destination == backuptypes.SystemBackupDestinationLocalS3
 	return backuptypes.UpdateSystemVolumeBackupPolicy{
 		Enabled: true, Schedule: defaultSystemVolumeSchedule, RetentionCount: 0, StopContainers: custom.StopContainers,
-		LocalEnabled: localEnabled, S3Enabled: s3Enabled, S3DestinationID: custom.S3DestinationID,
+		LocalEnabled:  true,
 		SelectionMode: custom.SelectionMode, VolumeNames: custom.VolumeNames, IgnoreAnonymous: custom.IgnoreAnonymous,
 	}
 }

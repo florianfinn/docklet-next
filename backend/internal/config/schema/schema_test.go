@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace
+// Deviations: Local module namespace; functional cut: removed upstream analytics heartbeat and APNS mobile push; functional cut: removed template catalogue; functional cut: removed GitOps and saved Git repositories; functional cut: removed Swarm; functional cut: removed standalone build workshop; functional cut: removed OIDC and passkeys.
 
 package schema
 
@@ -79,19 +79,6 @@ func TestGenerate_SettingEnvOverridesMatchModelMetadata(t *testing.T) {
 	assert.Equal(t, "number", dockerTimeout.Type)
 	assert.Equal(t, "timeouts", dockerTimeout.Category)
 	assert.Equal(t, "settings.Settings + settings.DefaultSettingsConfig", dockerTimeout.Source)
-
-	oidcSecret, ok := entries["oidcClientSecret"]
-	require.True(t, ok)
-	assert.True(t, oidcSecret.Sensitive)
-	assert.Equal(t, "OIDC_CLIENT_SECRET", oidcSecret.Env)
-
-	oidcMobileRedirectURIs, ok := entries["oidcMobileRedirectUris"]
-	require.True(t, ok)
-	assert.Equal(t, "OIDC_MOBILE_REDIRECT_URIS", oidcMobileRedirectURIs.Env)
-	assert.Equal(t, "arcane-mobile://oidc-callback", oidcMobileRedirectURIs.DefaultValue)
-	assert.Equal(t, "authentication", oidcMobileRedirectURIs.Category)
-
-	assert.Empty(t, oidcSecret.DefaultValue)
 
 	_, hasRuntimeDerived := entries["uiConfigDisabled"]
 	assert.False(t, hasRuntimeDerived)
@@ -206,12 +193,8 @@ var expectedEnvConfigVars = []string{
 	"ADMIN_STATIC_API_KEY",
 	"AGENT_MODE",
 	"AGENT_TOKEN",
-	"ALLOW_CLI_MFA_RESET",
 	"ALLOW_CLI_PASSWORD_RESET",
 	"ALLOW_DOWNGRADE",
-	"ANALYTICS_DISABLED",
-	"APNS_KEY_ALGORITHM",
-	"APNS_RELAY_URL",
 	"APP_URL",
 	"ARCANE_BACKUP_VOLUME_NAME",
 	"AUTO_LOGIN_PASSWORD",
@@ -245,18 +228,6 @@ var expectedEnvConfigVars = []string{
 	"LOG_LEVEL",
 	"MANAGER_API_URL",
 	"NO_PROXY",
-	"OIDC_AUTO_REDIRECT_TO_PROVIDER",
-	"OIDC_CLIENT_ID",
-	"OIDC_CLIENT_SECRET",
-	"OIDC_ENABLED",
-	"OIDC_GROUPS_CLAIM",
-	"OIDC_ISSUER_URL",
-	"OIDC_MOBILE_REDIRECT_URIS",
-	"OIDC_PROVIDER_LOGO_URL",
-	"OIDC_PROVIDER_NAME",
-	"OIDC_ROLE_MAPPINGS",
-	"OIDC_SCOPES",
-	"OIDC_SKIP_TLS_VERIFY",
 	"PGID",
 	"PORT",
 	"PROJECTS_DIRECTORY",
@@ -266,7 +237,6 @@ var expectedEnvConfigVars = []string{
 	"PROJECT_WORKSPACE_MAX_ENTRIES",
 	"PROJECT_WORKSPACE_MAX_FILE_SIZE_MB",
 	"PUID",
-	"TEMPLATES_DIRECTORY",
 	"TLS_CERT_FILE",
 	"TLS_ENABLED",
 	"TLS_KEY_FILE",
@@ -282,7 +252,6 @@ var expectedEnvConfigVars = []string{
 var expectedSettingOverrideKeys = []string{
 	"activityHistoryMaxEntries",
 	"activityHistoryRetentionDays",
-	"apnsEnabled",
 	"authLocalEnabled",
 	"authPasswordPolicy",
 	"authSessionTimeout",
@@ -299,7 +268,6 @@ var expectedSettingOverrideKeys = []string{
 	"baseServerUrl",
 	"buildProvider",
 	"buildTimeout",
-	"buildsDirectory",
 	"defaultDeployPullPolicy",
 	"defaultShell",
 	"deployWaitTimeout",
@@ -315,13 +283,9 @@ var expectedSettingOverrideKeys = []string{
 	"eventCleanupInterval",
 	"experimentalFeaturesEnabled",
 	"expiredSessionsCleanupInterval",
-	"featureSwarmEnabled",
 	"featureVulnerabilityManagementEnabled",
 	"followProjectSymlinks",
 	"gitOperationTimeout",
-	"gitSyncMaxBinarySizeMb",
-	"gitSyncMaxFiles",
-	"gitSyncMaxTotalSizeMb",
 	"httpClientTimeout",
 	"imageAutoPatchEnabled",
 	"imageAutoPatchInterval",
@@ -329,28 +293,9 @@ var expectedSettingOverrideKeys = []string{
 	"imagePatchAllPlatforms",
 	"imagePatchSuffix",
 	"imagePatchTimeoutSec",
-	"lifecycleDefaultRunnerImage",
-	"lifecycleEnabled",
 	"lifecycleMaxTimeoutSec",
 	"maxConcurrentActivities",
 	"maxImageUploadSize",
-	"oidcAuthorizationEndpoint",
-	"oidcAutoRedirectToProvider",
-	"oidcClientId",
-	"oidcClientSecret",
-	"oidcDeviceAuthorizationEndpoint",
-	"oidcEnabled",
-	"oidcGroupsClaim",
-	"oidcIssuerUrl",
-	"oidcJwksEndpoint",
-	"oidcMergeAccounts",
-	"oidcMobileRedirectUris",
-	"oidcProviderLogoUrl",
-	"oidcProviderName",
-	"oidcScopes",
-	"oidcSkipTlsVerify",
-	"oidcTokenEndpoint",
-	"oidcUserinfoEndpoint",
 	"pollingEnabled",
 	"pollingInterval",
 	"projectsDirectory",
@@ -368,8 +313,6 @@ var expectedSettingOverrideKeys = []string{
 	"registryTimeout",
 	"scheduledPruneEnabled",
 	"scheduledPruneInterval",
-	"swarmStackSourcesDirectory",
-	"templatesDirectory",
 	"toolsImageRegistry",
 	"trivyConcurrentScanContainers",
 	"trivyConfig",

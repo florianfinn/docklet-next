@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace
+// Deviations: Local module namespace; functional cut: removed central variables and .env.global; functional cut: removed GitOps and saved Git repositories; functional cut: removed Swarm; functional cut: removed S3 backup destinations.
 
 package environment
 
@@ -13,7 +13,6 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
-	"net/url"
 	"slices"
 	"strings"
 	"sync/atomic"
@@ -40,7 +39,6 @@ import (
 	"github.com/florianfinn/docklet-next/backend/internal/environment/children/health"
 	"github.com/florianfinn/docklet-next/backend/internal/environment/children/proxy"
 	"github.com/florianfinn/docklet-next/backend/internal/environment/children/snippets"
-	"github.com/florianfinn/docklet-next/backend/internal/environment/children/swarm"
 	"github.com/florianfinn/docklet-next/backend/internal/event"
 	"github.com/florianfinn/docklet-next/backend/internal/registry"
 	"github.com/florianfinn/docklet-next/backend/internal/settings"
@@ -73,22 +71,18 @@ type EnvironmentService struct {
 	// environment-health job.
 	jobs *entityjobs.Registry
 
-	// variableSyncer is injected post-construction via SetVariableSyncer
-	// (manager-only) to avoid a wire cycle with variable.VariableService.
-	variableSyncer VariableSyncer
-
 	// runtimeWatchers receive a coalesced wake-up whenever an environment's
 	// liveness changes. See environment_runtime_notify.go.
 	runtimeWatchers runtimeWatchersInternal
 
-	// syncGate skips the periodic registry/S3/repository pushes to an agent
+	// syncGate skips the periodic registry pushes to an agent
 	// while the payload it last accepted is unchanged.
 	syncGate utils.SyncGate
 
 	proxy    *proxy.Service
 	health   *health.Service
 	snippets *snippets.Service
-	swarm    *swarm.Service
+	apiKeys  *apikey.ApiKeyService
 }
 
 const (
@@ -108,20 +102,10 @@ var (
 	ErrEnvironmentNotFound            = errors.New("environment not found")
 )
 
-// VariableSyncer pushes the effective global-variable set to one environment.
-// Implemented by variable.VariableService.
-type VariableSyncer interface {
-	SyncEnvironment(ctx context.Context, envID string) error
-	ForgetSyncState(envID string)
-}
-
 // ForgetSyncState makes the next sync of every resource group resend to the
 // environment regardless of whether the payload changed.
 func (s *EnvironmentService) ForgetSyncState(environmentID string) {
 	s.syncGate.Forget(environmentID)
-	if s.variableSyncer != nil {
-		s.variableSyncer.ForgetSyncState(environmentID)
-	}
 }
 
 func NewEnvironmentService(
@@ -148,16 +132,10 @@ func NewEnvironmentService(
 		jobs:             entityjobs.New(environmentHealthJobPrefix, environmentHealthAdmissionScopeInternal),
 		health:           health.New(httpClient, dockerService),
 		snippets:         snippets.New(eventService),
-		swarm:            swarm.New(apiKeyService),
+		apiKeys:          apiKeyService,
 	}
 	s.proxy = proxy.New(db, httpClient, settingsService, &s.syncGate)
 	return s
-}
-
-// SetVariableSyncer injects the global-variable syncer. Called during
-// bootstrap on the manager only; agents leave it nil.
-func (s *EnvironmentService) SetVariableSyncer(syncer VariableSyncer) {
-	s.variableSyncer = syncer
 }
 
 func (s *EnvironmentService) ResolveEdgeEnvironmentByToken(ctx context.Context, token string) (string, error) {
@@ -435,42 +413,11 @@ func (s *EnvironmentService) DeleteEnvironment(ctx context.Context, id string, u
 	// Stop the per-environment health job before the row is removed.
 	s.removeHealthJobInternal(ctx, id)
 
-	var syncIDs []string
-	if transactionErr := s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
-		if loadSyncIDsErr := tx.Table("gitops_syncs").
-			Where("environment_id = ?", id).
-			Pluck("id", &syncIDs).Error; loadSyncIDsErr != nil {
-			return fmt.Errorf("failed to list environment gitops syncs: %w", loadSyncIDsErr)
-		}
-
-		if len(syncIDs) > 0 {
-			if clearProjectLinksErr := tx.Table("projects").
-				Where("gitops_managed_by IN ?", syncIDs).
-				Update("gitops_managed_by", nil).Error; clearProjectLinksErr != nil {
-				return fmt.Errorf("failed to clear environment gitops project references: %w", clearProjectLinksErr)
-			}
-			if deleteSyncsErr := tx.Exec("DELETE FROM gitops_syncs WHERE environment_id = ?", id).Error; deleteSyncsErr != nil {
-				return fmt.Errorf("failed to delete environment gitops syncs: %w", deleteSyncsErr)
-			}
-		}
-		if deleteEnvironmentErr := tx.Delete(&Environment{}, "id = ?", id).Error; deleteEnvironmentErr != nil {
-			return fmt.Errorf("failed to delete environment: %w", deleteEnvironmentErr)
-		}
-		return nil
-	}); transactionErr != nil {
+	if deleteEnvironmentErr := s.db.WithContext(ctx).Delete(&Environment{}, "id = ?", id).Error; deleteEnvironmentErr != nil {
 		if env.Enabled {
 			s.registerHealthJobInternal(ctx, env.ID)
 		}
-		return transactionErr
-	}
-
-	// Deleting an environment orphans its GitOps syncs, whose jobs belong to
-	// gitops.GitOpsSyncService's own registry — remove them by name here.
-	if jobScheduler := s.jobs.Scheduler(); jobScheduler != nil {
-		schedulerCtx := s.jobs.Context(ctx)
-		for _, syncID := range syncIDs {
-			jobScheduler.RemoveJob(schedulerCtx, entityjobs.GitOpsSyncJobPrefix+syncID)
-		}
+		return fmt.Errorf("failed to delete environment: %w", deleteEnvironmentErr)
 	}
 
 	s.edgeTokens.invalidate(id)
@@ -533,10 +480,25 @@ func (s *EnvironmentService) RegenerateEnvironmentApiKey(ctx context.Context, en
 	if env == nil {
 		return "", errors.New("environment is required")
 	}
-	return s.swarm.EnsureApiKey(ctx, env.ID, env.AccessToken, env.ApiKeyID, true,
-		func(linkCtx context.Context, apiKeyID, apiKey string) error {
-			return s.linkEnvironmentApiKey(linkCtx, env.ID, apiKeyID, apiKey, userID, username, env.Name)
-		})
+	if s.apiKeys == nil {
+		return "", errors.New("api key service not configured")
+	}
+	created, err := s.apiKeys.CreateEnvironmentApiKey(ctx, env.ID)
+	if err != nil {
+		return "", fmt.Errorf("failed to create environment API key: %w", err)
+	}
+	if err := s.linkEnvironmentApiKey(ctx, env.ID, created.ID, created.Key, userID, username, env.Name); err != nil {
+		if deleteErr := s.apiKeys.DeleteApiKey(ctx, created.ID); deleteErr != nil && !errors.Is(deleteErr, apikey.ErrApiKeyNotFound) {
+			slog.ErrorContext(ctx, "Failed to clean up unlinked environment API key", "environmentId", env.ID, "error", deleteErr)
+		}
+		return "", err
+	}
+	if env.ApiKeyID != nil && *env.ApiKeyID != created.ID {
+		if err := s.apiKeys.DeleteApiKey(ctx, *env.ApiKeyID); err != nil && !errors.Is(err, apikey.ErrApiKeyNotFound) {
+			slog.ErrorContext(ctx, "Failed to delete previous environment API key; the old key remains valid until deleted manually", "environmentId", env.ID, "error", err)
+		}
+	}
+	return created.Key, nil
 }
 
 func (s *EnvironmentService) linkEnvironmentApiKey(ctx context.Context, envID, newApiKeyID, apiKey, userID, username, envName string) error {
@@ -659,7 +621,7 @@ func (s *EnvironmentService) SyncResourcesToEnvironment(ctx context.Context, env
 		ResourceName:   environmentID,
 		User:           user,
 		Step:           "Syncing environment",
-		Message:        "Syncing container registries, S3 destinations, and git repositories",
+		Message:        "Syncing container registries",
 		SuccessMessage: "Environment synced successfully",
 		Metadata:       database.JSON{"action": "sync_environment"},
 	}, func(ctx context.Context) error {
@@ -669,16 +631,6 @@ func (s *EnvironmentService) SyncResourcesToEnvironment(ctx context.Context, env
 		if err := s.SyncRegistriesToEnvironment(ctx, environmentID); err != nil {
 			slog.WarnContext(ctx, "Failed to sync registries", "environmentId", environmentID, "error", err.Error())
 			failedGroups = append(failedGroups, "container registries")
-		}
-
-		if err := s.SyncS3DestinationsToEnvironment(ctx, environmentID); err != nil {
-			slog.WarnContext(ctx, "Failed to sync S3 destinations", "environmentId", environmentID, "error", err.Error())
-			failedGroups = append(failedGroups, "S3 destinations")
-		}
-
-		if err := s.SyncRepositoriesToEnvironment(ctx, environmentID); err != nil {
-			slog.WarnContext(ctx, "Failed to sync git repositories", "environmentId", environmentID, "error", err.Error())
-			failedGroups = append(failedGroups, "git repositories")
 		}
 
 		if len(failedGroups) > 0 {
@@ -791,7 +743,7 @@ func (s *EnvironmentService) ListEnvironmentsPaginated(ctx context.Context, para
 	}
 
 	var envs []Environment
-	q := s.db.WithContext(ctx).Model(&Environment{}).Where("hidden = ?", false)
+	q := s.db.WithContext(ctx).Model(&Environment{})
 	// accessibleEnvIDs == nil means "no restriction". A non-nil slice limits the
 	// result to those environment IDs; an empty slice therefore matches nothing.
 	switch {
@@ -841,7 +793,6 @@ func (
 	var envs []Environment
 	if err := s.db.WithContext(ctx).
 		Model(&Environment{}).
-		Where("hidden = ?", false).
 		Find(&envs).Error; err != nil {
 		return nil, pagination.Response{}, fmt.Errorf("failed to list environments: %w", err)
 	}
@@ -932,7 +883,6 @@ func (s *EnvironmentService) ListVisibleEnvironments(ctx context.Context) ([]env
 	var envs []Environment
 	if err := s.db.WithContext(ctx).
 		Model(&Environment{}).
-		Where("hidden = ?", false).
 		Order("created_at asc, id asc").
 		Find(&envs).Error; err != nil {
 		return nil, fmt.Errorf("failed to list visible environments: %w", err)
@@ -972,7 +922,6 @@ func (s *EnvironmentService) ListRemoteEnvironments(ctx context.Context) ([]Envi
 			Model(&Environment{}).
 			Where("id != ?", "0").
 			Where("enabled = ?", true).
-			Where("hidden = ?", false).
 			Find(&envs).Error
 		if err != nil {
 			return nil, fmt.Errorf("failed to list remote environments: %w", err)
@@ -1142,7 +1091,7 @@ func (s *EnvironmentService) runHealthCheckInternal(ctx context.Context, envID s
 		return scheduler.Outcome{Status: scheduler.Retrying, Message: "Environment is offline"}, errors.New("environment is offline")
 	}
 
-	// Local environment (ID "0") has no registries/repositories to push.
+	// Local environment (ID "0") has no configuration to push.
 	if envID == "0" {
 		return scheduler.Outcome{Status: scheduler.Succeeded}, nil
 	}
@@ -1160,20 +1109,6 @@ func (s *EnvironmentService) runHealthCheckInternal(ctx context.Context, envID s
 		slog.WarnContext(syncCtx, "failed to sync registries during health check", "environmentId", envID, "error", syncRegistriesToEnvironmentErr)
 		syncErrors = append(syncErrors, syncRegistriesToEnvironmentErr)
 	}
-	if syncS3DestinationsToEnvironmentErr := s.SyncS3DestinationsToEnvironment(syncCtx, envID); syncS3DestinationsToEnvironmentErr != nil {
-		slog.WarnContext(syncCtx, "failed to sync S3 destinations during health check", "environmentId", envID, "error", syncS3DestinationsToEnvironmentErr)
-		syncErrors = append(syncErrors, syncS3DestinationsToEnvironmentErr)
-	}
-	if syncRepositoriesToEnvironmentErr := s.SyncRepositoriesToEnvironment(syncCtx, envID); syncRepositoriesToEnvironmentErr != nil {
-		slog.WarnContext(syncCtx, "failed to sync git repositories during health check", "environmentId", envID, "error", syncRepositoriesToEnvironmentErr)
-		syncErrors = append(syncErrors, syncRepositoriesToEnvironmentErr)
-	}
-	if s.variableSyncer != nil {
-		if syncEnvironmentErr := s.variableSyncer.SyncEnvironment(syncCtx, envID); syncEnvironmentErr != nil {
-			slog.WarnContext(syncCtx, "failed to sync global variables during health check", "environmentId", envID, "error", syncEnvironmentErr)
-			syncErrors = append(syncErrors, syncEnvironmentErr)
-		}
-	}
 	if joinErr := errors.Join(syncErrors...); joinErr != nil {
 		return scheduler.Outcome{Status: scheduler.Partial}, joinErr
 	}
@@ -1187,24 +1122,6 @@ func (s *EnvironmentService) SyncRegistriesToEnvironment(ctx context.Context, en
 		return err
 	}
 	return s.proxy.SyncRegistries(ctx, target)
-}
-
-// SyncS3DestinationsToEnvironment sends manager-owned destinations to one remote environment.
-func (s *EnvironmentService) SyncS3DestinationsToEnvironment(ctx context.Context, environmentID string) error {
-	target, err := s.resolveRemoteEnvironmentTargetInternal(ctx, environmentID)
-	if err != nil {
-		return err
-	}
-	return s.proxy.SyncS3Destinations(ctx, target)
-}
-
-// SyncRepositoriesToEnvironment syncs all git repositories from this manager to a remote environment.
-func (s *EnvironmentService) SyncRepositoriesToEnvironment(ctx context.Context, environmentID string) error {
-	target, err := s.resolveRemoteEnvironmentTargetInternal(ctx, environmentID)
-	if err != nil {
-		return err
-	}
-	return s.proxy.SyncRepositories(ctx, target)
 }
 
 func (s *EnvironmentService) TestConnection(ctx context.Context, id string, customApiUrl *string) (string, error) {
@@ -1435,68 +1352,6 @@ func (s *EnvironmentService) SyncRegistriesToRemoteEnvironments(ctx context.Cont
 	return nil
 }
 
-// SyncS3DestinationsToRemoteEnvironments refreshes the destination cache on every enabled remote environment.
-func (s *EnvironmentService) SyncS3DestinationsToRemoteEnvironments(ctx context.Context) error {
-	envs, err := s.ListRemoteEnvironments(ctx)
-	if err != nil {
-		return fmt.Errorf("failed to list remote environments for S3 destination sync: %w", err)
-	}
-
-	var failedCount int
-	for _, env := range envs {
-		if env.AccessToken == nil || strings.TrimSpace(*env.AccessToken) == "" {
-			slog.DebugContext(ctx, "Skipping S3 destination sync for environment without access token", "environmentId", env.ID, "environmentName", env.Name)
-			continue
-		}
-		if syncS3DestinationsToEnvironmentErr := s.SyncS3DestinationsToEnvironment(ctx, env.ID); syncS3DestinationsToEnvironmentErr != nil {
-			failedCount++
-			slog.WarnContext(ctx, "Failed to sync S3 destinations to remote environment", "environmentId", env.ID, "environmentName", env.Name, "error", syncS3DestinationsToEnvironmentErr)
-		}
-	}
-
-	if failedCount > 0 {
-		return fmt.Errorf("failed to sync S3 destinations to %d remote environment(s)", failedCount)
-	}
-	return nil
-}
-
-// CheckS3DestinationReferences returns an error while any managed environment
-// still references the destination, or when a synced environment cannot be
-// checked conclusively. Deleting credentials that a remote environment still
-// needs would strand its policies and retained backups.
-func (s *EnvironmentService) CheckS3DestinationReferences(ctx context.Context, destinationID string) error {
-	envs, err := s.ListRemoteEnvironments(ctx)
-	if err != nil {
-		return fmt.Errorf("failed to list remote environments for S3 destination reference check: %w", err)
-	}
-	for _, env := range envs {
-		if env.AccessToken == nil || strings.TrimSpace(*env.AccessToken) == "" {
-			// Environments without an access token never receive destination
-			// syncs, so they cannot hold a reference.
-			continue
-		}
-		var result struct {
-			InUse bool `json:"inUse"`
-		}
-		if proxyJSONRequestForEnvironmentErr := s.ProxyJSONRequestForEnvironment(
-			ctx,
-			env,
-			http.MethodGet,
-			"/api/backups/s3/"+url.PathEscape(
-				destinationID,
-			)+"/in-use",
-			nil,
-			&result,
-		); proxyJSONRequestForEnvironmentErr != nil {
-			return fmt.Errorf("cannot verify S3 destination references on environment %s; restore connectivity before deleting: %w", env.Name, proxyJSONRequestForEnvironmentErr)
-		}
-		if result.InUse {
-			return fmt.Errorf("still referenced by environment %s", env.Name)
-		}
-	}
-	return nil
-}
-
 func (s *EnvironmentService) resolveRemoteEnvironmentTargetInternal(ctx context.Context, envID string) (*proxy.Target, error) {
 	envRecord, err := s.GetEnvironmentByID(ctx, envID)
 	if err != nil {
@@ -1627,191 +1482,4 @@ func (s *EnvironmentService) GenerateEdgeDeploymentSnippets(ctx context.Context,
 		HostDirHint:   strings.TrimSpace(generatedAssets.HostDirHint),
 	}
 	return result, nil
-}
-
-func (s *EnvironmentService) ListSwarmNodeAgentEnvironments(ctx context.Context, parentEnvironmentID string) ([]Environment, error) {
-	var envs []Environment
-	if err := s.db.WithContext(ctx).
-		Model(&Environment{}).
-		Where("parent_environment_id = ?", parentEnvironmentID).
-		Find(&envs).Error; err != nil {
-		return nil, fmt.Errorf("failed to list swarm node agent environments: %w", err)
-	}
-	return envs, nil
-}
-
-// ListSwarmNodeCandidateEnvironments returns enabled visible environments that
-// can provide swarm-node coverage for a manager environment.
-func (s *EnvironmentService) ListSwarmNodeCandidateEnvironments(ctx context.Context) ([]Environment, error) {
-	var envs []Environment
-	if err := s.db.WithContext(ctx).
-		Model(&Environment{}).
-		Where("hidden = ?", false).
-		Where("enabled = ?", true).
-		Where("id <> ?", "0").
-		Order("name ASC").
-		Find(&envs).Error; err != nil {
-		return nil, fmt.Errorf("failed to list swarm node candidate environments: %w", err)
-	}
-	return envs, nil
-}
-
-// BindSwarmNodeEnvironment binds an existing visible environment to a swarm
-// node without modifying its connection details or agent token.
-func (s *EnvironmentService) BindSwarmNodeEnvironment(
-	ctx context.Context,
-	parentEnvironmentID, nodeID, environmentID string,
-	rebind bool,
-) (*Environment, error) {
-	var envRecord Environment
-	err := s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
-		if err := tx.Where("id = ?", environmentID).First(&envRecord).Error; err != nil {
-			return fmt.Errorf("failed to load environment for swarm node binding: %w", err)
-		}
-		if err := s.swarm.AuthorizeBinding(environment.SwarmBindingCandidate{
-			Hidden:              envRecord.Hidden,
-			Enabled:             envRecord.Enabled,
-			ParentEnvironmentID: envRecord.ParentEnvironmentID,
-			SwarmNodeID:         envRecord.SwarmNodeID,
-		}, parentEnvironmentID, nodeID, rebind, func() (int64, error) {
-			var existingVisibleBindings int64
-			err := tx.Model(&Environment{}).
-				Where("hidden = ? AND parent_environment_id = ? AND swarm_node_id = ? AND id <> ?", false, parentEnvironmentID, nodeID, environmentID).
-				Count(&existingVisibleBindings).Error
-			return existingVisibleBindings, err
-		}); err != nil {
-			return err
-		}
-		if rebind {
-			if err := tx.Model(&Environment{}).
-				Where("hidden = ? AND parent_environment_id = ? AND swarm_node_id = ? AND id <> ?", false, parentEnvironmentID, nodeID, environmentID).
-				Updates(map[string]any{"parent_environment_id": nil, "swarm_node_id": nil, "updated_at": new(time.Now())}).Error; err != nil {
-				return fmt.Errorf("failed to clear previous swarm node binding: %w", err)
-			}
-		}
-
-		if err := tx.Model(&Environment{}).Where("id = ?", environmentID).Updates(map[string]any{
-			"parent_environment_id": parentEnvironmentID,
-			"swarm_node_id":         nodeID,
-			"updated_at":            new(time.Now()),
-		}).Error; err != nil {
-			return fmt.Errorf("failed to bind environment to swarm node: %w", err)
-		}
-
-		return tx.Where("id = ?", environmentID).First(&envRecord).Error
-	})
-	if err != nil {
-		return nil, err
-	}
-
-	s.remoteEnvs.put(envRecord)
-	// A rebind also clears the binding on other environments.
-	if rebind {
-		s.invalidateAllEnvironmentCacheInternal()
-	} else {
-		s.invalidateEnvironmentCacheInternal(envRecord.ID)
-	}
-	s.NotifyRuntimeStateChanged()
-	return &envRecord, nil
-}
-
-// DetachSwarmNodeEnvironment clears a visible environment binding from a node.
-func (s *EnvironmentService) DetachSwarmNodeEnvironment(ctx context.Context, parentEnvironmentID, nodeID string) error {
-	now := time.Now()
-	if err := s.db.WithContext(ctx).Model(&Environment{}).
-		Where("hidden = ? AND parent_environment_id = ? AND swarm_node_id = ?", false, parentEnvironmentID, nodeID).
-		Updates(map[string]any{"parent_environment_id": nil, "swarm_node_id": nil, "updated_at": &now}).Error; err != nil {
-		return fmt.Errorf("failed to detach swarm node environment: %w", err)
-	}
-	s.invalidateAllEnvironmentCacheInternal()
-	s.NotifyRuntimeStateChanged()
-
-	return nil
-}
-
-// DeleteSwarmNodeAgentDeployment removes a dedicated hidden agent registration
-// while leaving visible remote environments untouched.
-func (s *EnvironmentService) DeleteSwarmNodeAgentDeployment(ctx context.Context, parentEnvironmentID, nodeID string, userID, username *string) error {
-	var envRecord Environment
-	if err := s.db.WithContext(ctx).
-		Where("hidden = ? AND parent_environment_id = ? AND swarm_node_id = ?", true, parentEnvironmentID, nodeID).
-		First(&envRecord).Error; err != nil {
-		if errors.Is(err, gorm.ErrRecordNotFound) {
-			return nil
-		}
-		return fmt.Errorf("failed to load swarm node agent deployment: %w", err)
-	}
-
-	return s.DeleteEnvironment(ctx, envRecord.ID, userID, username)
-}
-
-func (s *EnvironmentService) EnsureSwarmNodeAgentEnvironment(
-	ctx context.Context,
-	parentEnvironmentID, nodeID, hostname, userID, username string,
-	rotate bool,
-) (*Environment, string, error) {
-	agentName, agentURL, err := s.swarm.AgentIdentity(parentEnvironmentID, nodeID, hostname)
-	if err != nil {
-		return nil, "", err
-	}
-
-	var env Environment
-	// Prefer an existing visible binding. Legacy hidden registrations remain
-	// reusable, but all newly provisioned node agents are normal Remote
-	// Environments so one token and one agent can serve both use cases.
-	err = s.db.WithContext(ctx).
-		Where("parent_environment_id = ?", parentEnvironmentID).
-		Where("swarm_node_id = ?", nodeID).
-		Order("hidden ASC").
-		First(&env).Error
-	if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
-		return nil, "", fmt.Errorf("failed to load swarm node agent environment: %w", err)
-	}
-
-	if errors.Is(err, gorm.ErrRecordNotFound) {
-		createdEnv := &Environment{
-			Name:                agentName,
-			ApiUrl:              agentURL,
-			Status:              string(EnvironmentStatusPending),
-			Enabled:             true,
-			IsEdge:              true,
-			Hidden:              false,
-			ParentEnvironmentID: new(parentEnvironmentID),
-			SwarmNodeID:         new(nodeID),
-		}
-
-		if _, createErr := s.CreateEnvironment(ctx, createdEnv, new(userID), new(username)); createErr != nil {
-			return nil, "", fmt.Errorf("failed to create swarm node agent environment: %w", createErr)
-		}
-		env = *createdEnv
-	}
-
-	apiKey, err := s.swarm.EnsureApiKey(ctx, env.ID, env.AccessToken, env.ApiKeyID, rotate, func(ctx context.Context, apiKeyID, apiKey string) error {
-		return s.linkEnvironmentApiKey(ctx, env.ID, apiKeyID, apiKey, userID, username, env.Name)
-	})
-	if err != nil {
-		return nil, "", err
-	}
-
-	refreshedEnv, err := s.GetEnvironmentByID(ctx, env.ID)
-	if err != nil {
-		return nil, "", fmt.Errorf("failed to refresh swarm node agent environment: %w", err)
-	}
-
-	return refreshedEnv, apiKey, nil
-}
-
-func (s *EnvironmentService) UpdateSwarmNodeIdentity(ctx context.Context, envID, swarmNodeID string) error {
-	updates := map[string]any{
-		"swarm_node_id": swarmNodeID,
-		"updated_at":    new(time.Now()),
-	}
-
-	if err := s.db.WithContext(ctx).Model(&Environment{}).Where("id = ?", envID).Updates(updates).Error; err != nil {
-		return fmt.Errorf("failed to update swarm node identity: %w", err)
-	}
-	s.invalidateEnvironmentCacheInternal(envID)
-	s.NotifyRuntimeStateChanged()
-
-	return nil
 }

@@ -2,11 +2,10 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: None
+// Deviations: functional cut: removed OIDC and passkeys.
 
 // Package role holds the public DTOs for Arcane's RBAC API: roles,
-// per-user role assignments, OIDC group→role mappings, and the
-// permission manifest exposed to the frontend.
+// per-user role assignments and the permission manifest exposed to the frontend.
 package role
 
 import "time"
@@ -47,12 +46,11 @@ type RoleAssignment struct {
 	UserID        string    `json:"userId" doc:"ID of the user holding this assignment"`
 	RoleID        string    `json:"roleId" doc:"ID of the granted role"`
 	EnvironmentID *string   `json:"environmentId,omitempty" doc:"Environment ID this assignment is scoped to; omit for a global assignment"`
-	Source        string    `json:"source" doc:"How the assignment was created" enum:"manual,oidc"`
+	Source        string    `json:"source" doc:"How the assignment was created" enum:"manual"`
 	CreatedAt     time.Time `json:"createdAt" doc:"Creation timestamp"`
 }
 
-// SetUserAssignments replaces every manual role assignment for one user. OIDC-
-// sourced assignments are not affected and are managed via OIDC role mappings.
+// SetUserAssignments replaces every role assignment for one user.
 type SetUserAssignments struct {
 	Assignments []UserAssignmentInput `json:"assignments" doc:"Desired manual role assignments for the user"`
 }
@@ -61,44 +59,6 @@ type SetUserAssignments struct {
 type UserAssignmentInput struct {
 	RoleID        string  `json:"roleId" doc:"ID of the role to grant"`
 	EnvironmentID *string `json:"environmentId,omitempty" doc:"Environment ID to scope the assignment to; omit for a global assignment"`
-}
-
-// OidcRoleMapping maps an OIDC group/claim value to a role assignment. On
-// every OIDC login, mappings whose ClaimValue is present in the user's
-// configured groups claim are converted into source='oidc' role assignments.
-type OidcRoleMapping struct {
-	ID            string     `json:"id" doc:"Unique identifier of the mapping"`
-	ClaimValue    string     `json:"claimValue" doc:"OIDC claim value that triggers this mapping" example:"docker-admins"`
-	RoleID        string     `json:"roleId" doc:"Role to assign when the claim matches"`
-	EnvironmentID *string    `json:"environmentId,omitempty" doc:"Environment ID to scope the assignment to; omit for a global assignment"`
-	Source        string     `json:"source" enum:"manual,env" doc:"Origin: manual rows are editable via UI/API; env rows come from OIDC_ROLE_MAPPINGS and are read-only"`
-	CreatedAt     time.Time  `json:"createdAt"`
-	UpdatedAt     *time.Time `json:"updatedAt,omitempty"`
-}
-
-// OidcRoleMappingSpec is the schema for one entry in the OIDC_ROLE_MAPPINGS
-// env var. Operators can declare OIDC group→role mappings at deploy time;
-// each spec is reconciled into a source='env' row at boot. Distinct from
-// OidcRoleMapping (the API DTO) so the env-var format can evolve without
-// breaking the API and vice versa.
-type OidcRoleMappingSpec struct {
-	ClaimValue    string  `json:"claimValue" doc:"OIDC claim value to match"`
-	RoleID        string  `json:"roleId" doc:"Role ID to assign when the claim matches"`
-	EnvironmentID *string `json:"environmentId,omitempty" doc:"Environment ID to scope the assignment to; omit for a global assignment"`
-}
-
-// CreateOidcRoleMapping is the request body for adding a mapping.
-type CreateOidcRoleMapping struct {
-	ClaimValue    string  `json:"claimValue" minLength:"1" doc:"OIDC claim value to match"`
-	RoleID        string  `json:"roleId" minLength:"1" doc:"Role to grant"`
-	EnvironmentID *string `json:"environmentId,omitempty" doc:"Environment ID to scope the assignment to; omit for a global assignment"`
-}
-
-// UpdateOidcRoleMapping is the request body for editing a mapping.
-type UpdateOidcRoleMapping struct {
-	ClaimValue    string  `json:"claimValue" minLength:"1"`
-	RoleID        string  `json:"roleId" minLength:"1"`
-	EnvironmentID *string `json:"environmentId,omitzero"`
 }
 
 // PermissionsManifest describes every permission the server recognizes,

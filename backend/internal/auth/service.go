@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace
+// Deviations: Local module namespace; functional cut: removed federated credentials; functional cut: removed OIDC and passkeys.
 
 package auth
 
@@ -12,8 +12,6 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
-	"maps"
-	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -24,27 +22,22 @@ import (
 	"github.com/lestrrat-go/jwx/v4/jwa"
 	"github.com/lestrrat-go/jwx/v4/jwt"
 	"github.com/samber/hot"
-	"go.getarcane.app/kit/normalization"
 	"go.getarcane.app/kit/pkg"
 
 	"github.com/florianfinn/docklet-next/backend/internal/common"
 	"github.com/florianfinn/docklet-next/backend/internal/config"
 	"github.com/florianfinn/docklet-next/backend/internal/database"
 	"github.com/florianfinn/docklet-next/backend/internal/event"
-	"github.com/florianfinn/docklet-next/backend/internal/role"
 	"github.com/florianfinn/docklet-next/backend/internal/session"
 	"github.com/florianfinn/docklet-next/backend/internal/settings"
 	"github.com/florianfinn/docklet-next/backend/internal/user"
 	"github.com/florianfinn/docklet-next/backend/pkg/utils"
-	"github.com/florianfinn/docklet-next/backend/pkg/utils/jwtclaims"
 	"github.com/florianfinn/docklet-next/backend/pkg/utils/validation"
 )
 
 var (
 	ErrInvalidCredentials = errors.New("invalid credentials")
 	ErrLocalAuthDisabled  = errors.New("local authentication is disabled")
-	ErrOidcAuthDisabled   = errors.New("OIDC authentication is disabled")
-	ErrMFARequired        = errors.New("multi-factor authentication is required")
 )
 
 type TokenPair struct {
@@ -52,13 +45,6 @@ type TokenPair struct {
 	BrowserToken string    `json:"-"`
 	RefreshToken string    `json:"refreshToken"`
 	ExpiresAt    time.Time `json:"expiresAt"`
-}
-
-type AuthSettings struct {
-	LocalAuthEnabled bool                 `json:"localAuthEnabled"`
-	OidcEnabled      bool                 `json:"oidcEnabled"`
-	SessionTimeout   int                  `json:"sessionTimeout"`
-	Oidc             *settings.OidcConfig `json:"oidc,omitempty"`
 }
 
 type verifiedTokenEntry struct {
@@ -73,7 +59,6 @@ type AuthService struct {
 	settingsService   *settings.SettingsService
 	eventService      *event.EventService
 	sessionService    *session.SessionService
-	roleService       *role.RoleService
 	signingKeyMu      sync.Mutex
 	signingKey        *mldsa.PrivateKey
 	browserSigningKey []byte
@@ -93,7 +78,6 @@ func NewAuthService(
 	settingsService *settings.SettingsService,
 	eventService *event.EventService,
 	sessionService *session.SessionService,
-	roleService *role.RoleService,
 	cfg *config.Config,
 ) *AuthService {
 	return &AuthService{
@@ -101,7 +85,6 @@ func NewAuthService(
 		settingsService: settingsService,
 		eventService:    eventService,
 		sessionService:  sessionService,
-		roleService:     roleService,
 		refreshExpiry:   cfg.JWTRefreshExpiry,
 		config:          cfg,
 		tokenCache: hot.NewHotCache[string, verifiedTokenEntry](hot.LRU, 4096).
@@ -109,81 +92,6 @@ func NewAuthService(
 			WithJanitor().
 			Build(),
 	}
-}
-
-func (s *AuthService) getAuthSettings(ctx context.Context) (*AuthSettings, error) {
-	appSettings, err := s.settingsService.GetSettings(ctx)
-	if err != nil {
-		return nil, fmt.Errorf("failed to get settings: %w", err)
-	}
-
-	timeoutMinutes, _ := s.GetSessionTimeout(ctx)
-
-	authSettings := &AuthSettings{
-		LocalAuthEnabled: appSettings.AuthLocalEnabled.IsTrue(),
-		OidcEnabled:      appSettings.OidcEnabled.IsTrue(),
-		SessionTimeout:   timeoutMinutes,
-	}
-
-	if authSettings.OidcEnabled {
-		oidcConfig := &settings.OidcConfig{
-			ClientID:                    appSettings.OidcClientId.Value,
-			ClientSecret:                appSettings.OidcClientSecret.Value,
-			IssuerURL:                   appSettings.OidcIssuerUrl.Value,
-			AuthorizationEndpoint:       appSettings.OidcAuthorizationEndpoint.Value,
-			TokenEndpoint:               appSettings.OidcTokenEndpoint.Value,
-			UserinfoEndpoint:            appSettings.OidcUserinfoEndpoint.Value,
-			JwksURI:                     appSettings.OidcJwksEndpoint.Value,
-			DeviceAuthorizationEndpoint: appSettings.OidcDeviceAuthorizationEndpoint.Value,
-			Scopes:                      appSettings.OidcScopes.Value,
-			GroupsClaim:                 appSettings.OidcGroupsClaim.Value,
-			SkipTlsVerify:               appSettings.OidcSkipTlsVerify.IsTrue(),
-		}
-
-		if oidcConfig.ClientID != "" || oidcConfig.IssuerURL != "" {
-			authSettings.Oidc = oidcConfig
-		}
-	}
-
-	return authSettings, nil
-}
-
-func (s *AuthService) GetOidcConfigurationStatus(ctx context.Context) (*auth.OidcStatusInfo, error) {
-	oidcEnvForced := s.settingsService != nil && s.settingsService.IsEnvOverrideActive("oidcEnabled")
-
-	mergeAccounts := false
-	providerName := ""
-	providerLogoUrl := ""
-	if s.settingsService != nil {
-		func() {
-			defer func() {
-				// In tests, a zero-valued settings.SettingsService may panic; treat as merge disabled
-				_ = recover()
-			}()
-			if localSettings, err := s.settingsService.GetSettings(ctx); err == nil {
-				mergeAccounts = localSettings.OidcMergeAccounts.IsTrue()
-				providerName = localSettings.OidcProviderName.Value
-				providerLogoUrl = localSettings.OidcProviderLogoUrl.Value
-			}
-		}()
-	}
-
-	status := &auth.OidcStatusInfo{
-		EnvForced:       oidcEnvForced,
-		MergeAccounts:   mergeAccounts,
-		ProviderName:    providerName,
-		ProviderLogoUrl: providerLogoUrl,
-	}
-	if oidcEnvForced {
-		status.EnvConfigured = s.config.OidcClientID != "" && s.config.OidcIssuerURL != ""
-		if status.ProviderName == "" {
-			status.ProviderName = s.config.OidcProviderName
-		}
-		if status.ProviderLogoUrl == "" {
-			status.ProviderLogoUrl = s.config.OidcProviderLogoUrl
-		}
-	}
-	return status, nil
 }
 
 func (s *AuthService) GetSessionTimeout(ctx context.Context) (int, error) {
@@ -214,30 +122,8 @@ func (s *AuthService) IsLocalAuthEnabled(ctx context.Context) (bool, error) {
 	return localSettings.AuthLocalEnabled.IsTrue(), nil
 }
 
-func (s *AuthService) IsOidcEnabled(ctx context.Context) (bool, error) {
-	localSettings, err := s.settingsService.GetSettings(ctx)
-	if err != nil {
-		return false, err
-	}
-	return localSettings.OidcEnabled.IsTrue(), nil
-}
-
-func (s *AuthService) GetOidcConfig(ctx context.Context) (*settings.OidcConfig, error) {
-	authSettings, err := s.getAuthSettings(ctx)
-	if err != nil {
-		return nil, err
-	}
-
-	if !authSettings.OidcEnabled || authSettings.Oidc == nil {
-		return nil, ErrOidcAuthDisabled
-	}
-
-	return authSettings.Oidc, nil
-}
-
 // AuthenticateLocalPrimary validates the local primary factor without
-// creating a session. Callers must complete passkey MFA, when enabled, before
-// issuing a bearer or refresh token.
+// creating a session.
 func (s *AuthService) AuthenticateLocalPrimary(ctx context.Context, username, password string) (*user.User, error) {
 	localEnabled, err := s.IsLocalAuthEnabled(ctx)
 	if err != nil {
@@ -289,48 +175,21 @@ func (s *AuthService) AuthenticateLocalPrimary(ctx context.Context, username, pa
 	return localUser, nil
 }
 
-// PrepareOidcLogin reconciles the provider identity without creating a
-// session. The caller must complete passkey MFA, when enabled, before issuing
-// tokens.
-func (s *AuthService) PrepareOidcLogin(ctx context.Context, userInfo auth.OidcUserInfo, tokenResp *auth.OidcTokenResponse) (*user.User, bool, error) {
-	if userInfo.Subject == "" {
-		return nil, false, errors.New("missing OIDC subject identifier")
-	}
-	return s.findOrCreateOidcUser(ctx, userInfo, tokenResp)
-}
-
-// CompleteLogin creates the authenticated session after all required factors
-// have succeeded. Source is server-selected and is persisted with the session.
-func (s *AuthService) CompleteLogin(ctx context.Context, localUser *user.User, meta auth.SessionMeta, source, mfaMethod string, eventMetadata ...database.JSON) (*TokenPair, error) {
+// CompleteLogin creates a session after local credentials are verified.
+func (s *AuthService) CompleteLogin(ctx context.Context, localUser *user.User, meta auth.SessionMeta, source string) (*TokenPair, error) {
 	if localUser == nil {
 		return nil, common.ErrUserNotFound
 	}
 	if strings.TrimSpace(source) == "" {
 		source = session.UserSessionSourceLocal
 	}
-	mfaMethod = strings.TrimSpace(mfaMethod)
-	if localUser.PasskeyMFAEnabled && source != session.UserSessionSourcePasskey && mfaMethod != session.PasskeyMFAMethod && mfaMethod != session.RecoveryCodeMFAMethod {
-		return nil, ErrMFARequired
-	}
 	meta.Source = source
-	meta.MFAMethod = mfaMethod
-	if meta.MFAMethod != "" && meta.MFAVerifiedAt == nil {
-		now := time.Now()
-		meta.MFAVerifiedAt = &now
-	}
-
 	tokenPair, err := s.createSessionAndTokensInternal(ctx, localUser, meta)
 	if err != nil {
 		return nil, err
 	}
 
 	metadata := database.JSON{"action": "login", "method": source}
-	if len(eventMetadata) > 0 {
-		maps.Copy(metadata, eventMetadata[0])
-	}
-	if meta.MFAMethod != "" {
-		metadata["mfa"] = meta.MFAMethod
-	}
 	if s.eventService != nil {
 		logUserID := localUser.ID
 		logUsername := localUser.Username
@@ -347,28 +206,7 @@ func (s *AuthService) Login(ctx context.Context, username, password string, meta
 	if err != nil {
 		return nil, nil, err
 	}
-	if localUser.PasskeyMFAEnabled {
-		return nil, nil, ErrMFARequired
-	}
-	tokenPair, err := s.CompleteLogin(ctx, localUser, meta, session.UserSessionSourceLocal, "")
-	if err != nil {
-		return nil, nil, err
-	}
-	return localUser, tokenPair, nil
-}
-
-func (s *AuthService) OidcLogin(ctx context.Context, userInfo auth.OidcUserInfo, tokenResp *auth.OidcTokenResponse, meta auth.SessionMeta) (*user.User, *TokenPair, error) {
-	localUser, isNewUser, err := s.PrepareOidcLogin(ctx, userInfo, tokenResp)
-	if err != nil {
-		return nil, nil, err
-	}
-	if localUser.PasskeyMFAEnabled {
-		return nil, nil, ErrMFARequired
-	}
-	tokenPair, err := s.CompleteLogin(ctx, localUser, meta, session.UserSessionSourceOidc, "", database.JSON{
-		"newUser": isNewUser,
-		"subject": userInfo.Subject,
-	})
+	tokenPair, err := s.CompleteLogin(ctx, localUser, meta, session.UserSessionSourceLocal)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -389,311 +227,6 @@ func (s *AuthService) LogLogout(ctx context.Context, localUser *user.User) {
 	s.runInBackground(ctx, "log_user_logout", func(ctx context.Context) error {
 		return s.eventService.LogUserEvent(ctx, event.EventTypeUserLogout, userID, username, metadata)
 	})
-}
-
-func (s *AuthService) findOrCreateOidcUser(ctx context.Context, userInfo auth.OidcUserInfo, tokenResp *auth.OidcTokenResponse) (*user.User, bool, error) {
-	if err := normalization.Normalize(&userInfo); err != nil {
-		return nil, false, err
-	}
-	localUser, err := s.userService.GetUserByOidcSubjectId(ctx, userInfo.Subject)
-	if err != nil && !errors.Is(err, common.ErrUserNotFound) {
-		return nil, false, err
-	}
-
-	if localUser != nil {
-		return s.updateExistingOidcUser(ctx, localUser, userInfo, tokenResp)
-	}
-
-	mergedUser, merged, err := s.tryMergeOidcUser(ctx, userInfo, tokenResp)
-	if err != nil {
-		return nil, false, err
-	}
-	if merged {
-		return mergedUser, false, nil
-	}
-
-	created, err := s.createOidcUser(ctx, userInfo, tokenResp)
-	if err != nil {
-		// A concurrent login for the same subject may have created the
-		// account between our lookup and the insert; resolve to it
-		// instead of failing the login.
-		if existing, lookupErr := s.userService.GetUserByOidcSubjectId(ctx, userInfo.Subject); lookupErr == nil {
-			return s.updateExistingOidcUser(ctx, existing, userInfo, tokenResp)
-		}
-		return nil, false, err
-	}
-	return created, true, nil
-}
-
-func (s *AuthService) updateExistingOidcUser(ctx context.Context, localUser *user.User, userInfo auth.OidcUserInfo, tokenResp *auth.OidcTokenResponse) (*user.User, bool, error) {
-	if err := s.updateOidcUser(ctx, localUser, userInfo, tokenResp); err != nil {
-		return nil, false, err
-	}
-	return localUser, false, nil
-}
-
-func (s *AuthService) tryMergeOidcUser(ctx context.Context, userInfo auth.OidcUserInfo, tokenResp *auth.OidcTokenResponse) (*user.User, bool, error) {
-	if userInfo.Email == "" || !s.isOidcMergeEnabled(ctx) {
-		return nil, false, nil
-	}
-
-	existingUser, emailErr := s.userService.GetUserByEmail(ctx, userInfo.Email)
-	if emailErr != nil {
-		return nil, false, kit.Ternary(errors.Is(emailErr, common.ErrUserNotFound), nil, emailErr)
-	}
-	if existingUser == nil {
-		return nil, false, nil
-	}
-
-	if err := s.validateMergeEmailVerification(ctx, userInfo); err != nil {
-		return nil, false, err
-	}
-
-	slog.InfoContext(ctx, "Merging OIDC account with existing user", "email", userInfo.Email, "subject", userInfo.Subject)
-	if mergeErr := s.mergeOidcWithExistingUser(ctx, existingUser, userInfo, tokenResp); mergeErr != nil {
-		return nil, false, mergeErr
-	}
-	return existingUser, true, nil
-}
-
-func (s *AuthService) isOidcMergeEnabled(ctx context.Context) bool {
-	localSettings, settingsErr := s.settingsService.GetSettings(ctx)
-	return settingsErr == nil && localSettings.OidcMergeAccounts.IsTrue()
-}
-
-func (s *AuthService) validateMergeEmailVerification(ctx context.Context, userInfo auth.OidcUserInfo) error {
-	emailVerifiedPresent := false
-	if userInfo.Extra != nil {
-		if _, ok := userInfo.Extra["email_verified"]; ok {
-			emailVerifiedPresent = true
-		}
-	}
-	if emailVerifiedPresent && !userInfo.EmailVerified {
-		return errors.New("email not verified by OIDC provider; cannot merge accounts")
-	}
-	if !emailVerifiedPresent {
-		slog.WarnContext(ctx, "OIDC email_verified claim missing; allowing merge", "email", userInfo.Email, "subject", userInfo.Subject)
-	}
-	return nil
-}
-
-func (s *AuthService) createOidcUser(ctx context.Context, userInfo auth.OidcUserInfo, tokenResp *auth.OidcTokenResponse) (*user.User, error) {
-	username, err := s.resolveOidcUsernameInternal(ctx, userInfo)
-	if err != nil {
-		return nil, err
-	}
-
-	var displayName *string
-	switch {
-	case userInfo.Name != "":
-		displayName = new(userInfo.Name)
-	case userInfo.GivenName != "" || userInfo.FamilyName != "":
-		displayName = new(strings.TrimSpace(fmt.Sprintf("%s %s", userInfo.GivenName, userInfo.FamilyName)))
-	default:
-		displayName = new(username)
-	}
-
-	localUser := &user.User{
-		ID:            uuid.New().String(),
-		Username:      username,
-		DisplayName:   displayName,
-		Email:         new(userInfo.Email),
-		OidcSubjectId: new(userInfo.Subject),
-		LastLogin:     new(time.Now()),
-	}
-
-	s.persistOidcTokens(localUser, tokenResp)
-
-	// The username probe is not atomic with the insert: a concurrent
-	// first-time login can claim the candidate in between, failing the
-	// unique constraint. Probe again for a fresh candidate and retry.
-	var createErr error
-	for attempt := range 3 {
-		if attempt > 0 {
-			if localUser.Username, err = s.resolveOidcUsernameInternal(ctx, userInfo); err != nil {
-				return nil, err
-			}
-		}
-		if _, createErr = s.userService.CreateUser(ctx, localUser); createErr == nil {
-			break
-		}
-	}
-	if createErr != nil {
-		return nil, createErr
-	}
-	if syncOidcRoleAssignmentsErr := s.syncOidcRoleAssignments(ctx, localUser, userInfo, tokenResp); syncOidcRoleAssignmentsErr != nil {
-		slog.WarnContext(ctx, "failed to sync OIDC role assignments on user create", "error", syncOidcRoleAssignmentsErr, "userId", localUser.ID)
-	}
-	return localUser, nil
-}
-
-// resolveOidcUsernameInternal returns the preferred username for a new OIDC
-// user, or a currently unclaimed collision-free candidate when an existing
-// account already owns it.
-func (s *AuthService) resolveOidcUsernameInternal(ctx context.Context, userInfo auth.OidcUserInfo) (string, error) {
-	var username string
-	if userInfo.PreferredUsername == "" {
-		username = generateUsernameFromEmail(userInfo.Email, userInfo.Subject)
-	} else {
-		username = userInfo.PreferredUsername
-	}
-
-	// CreateUser trims usernames; check availability using the same value.
-	username = strings.TrimSpace(username)
-
-	if _, lookupErr := s.userService.GetUserByUsername(ctx, username); errors.Is(lookupErr, common.ErrUserNotFound) {
-		return username, nil
-	} else if lookupErr != nil {
-		return "", lookupErr
-	}
-
-	base := uniqueOidcUsernameInternal(username, userInfo.Subject)
-	unique := base
-	for i := 2; ; i++ {
-		_, candidateErr := s.userService.GetUserByUsername(ctx, unique)
-		if errors.Is(candidateErr, common.ErrUserNotFound) {
-			slog.InfoContext(ctx, "OIDC username already taken by an existing account; assigning a unique username instead",
-				"username", username, "uniqueUsername", unique, "subject", userInfo.Subject)
-			return unique, nil
-		}
-		if candidateErr != nil {
-			return "", candidateErr
-		}
-		unique = base + "_" + strconv.Itoa(i)
-	}
-}
-
-func (s *AuthService) updateOidcUser(ctx context.Context, localUser *user.User, userInfo auth.OidcUserInfo, tokenResp *auth.OidcTokenResponse) error {
-	if userInfo.Name != "" && localUser.DisplayName == nil {
-		localUser.DisplayName = new(userInfo.Name)
-	}
-	if userInfo.Email != "" && localUser.Email == nil {
-		localUser.Email = new(userInfo.Email)
-	}
-
-	s.persistOidcTokens(localUser, tokenResp)
-
-	localUser.LastLogin = new(time.Now())
-	if _, err := s.userService.UpdateUser(ctx, localUser, nil); err != nil {
-		return err
-	}
-	if err := s.syncOidcRoleAssignments(ctx, localUser, userInfo, tokenResp); err != nil {
-		slog.WarnContext(ctx, "failed to sync OIDC role assignments on user update", "error", err, "userId", localUser.ID)
-	}
-	return nil
-}
-
-func (s *AuthService) mergeOidcWithExistingUser(ctx context.Context, localUser *user.User, userInfo auth.OidcUserInfo, tokenResp *auth.OidcTokenResponse) error {
-	// Perform the merge atomically to avoid races when multiple OIDC subjects share the same email
-	merged, err := s.userService.AttachOidcSubjectTransactional(ctx, localUser.ID, userInfo.Subject, func(u *user.User) {
-		if userInfo.Name != "" && u.DisplayName == nil {
-			u.DisplayName = new(userInfo.Name)
-		}
-		s.persistOidcTokens(u, tokenResp)
-		u.LastLogin = new(time.Now())
-	})
-	if err != nil {
-		return err
-	}
-	if merged != nil {
-		if syncErr := s.syncOidcRoleAssignments(ctx, merged, userInfo, tokenResp); syncErr != nil {
-			slog.WarnContext(ctx, "failed to sync OIDC role assignments on user merge", "error", syncErr, "userId", merged.ID)
-		}
-	}
-	return nil
-}
-
-// syncOidcRoleAssignments rebuilds the user's `source='oidc'` role assignments
-// based on the OIDC group claim and the configured OidcRoleMapping rows.
-// Manual assignments are untouched.
-func (s *AuthService) syncOidcRoleAssignments(ctx context.Context, localUser *user.User, userInfo auth.OidcUserInfo, tokenResp *auth.OidcTokenResponse) error {
-	if s.roleService == nil || localUser == nil {
-		return nil
-	}
-
-	groups := s.extractOidcGroups(ctx, userInfo, tokenResp)
-	mappings, err := s.roleService.ListOidcMappings(ctx)
-	if err != nil {
-		return fmt.Errorf("list oidc mappings: %w", err)
-	}
-
-	groupSet := make(map[string]struct{}, len(groups))
-	for _, g := range groups {
-		groupSet[g] = struct{}{}
-	}
-
-	var desired []role.UserRoleAssignment
-	seen := make(map[string]struct{}) // dedup by roleID|envID
-	for _, m := range mappings {
-		if _, ok := groupSet[m.ClaimValue]; !ok {
-			continue
-		}
-		key := m.RoleID + "|"
-		if m.EnvironmentID != nil {
-			key += *m.EnvironmentID
-		}
-		if _, dup := seen[key]; dup {
-			continue
-		}
-		seen[key] = struct{}{}
-		desired = append(desired, role.UserRoleAssignment{
-			RoleID:        m.RoleID,
-			EnvironmentID: m.EnvironmentID,
-		})
-	}
-
-	return s.roleService.ReplaceOidcAssignments(ctx, localUser.ID, desired)
-}
-
-// extractOidcGroups reads the user's group memberships from the OIDC userinfo
-// and ID token, using the claim path configured in OidcGroupsClaim (defaults
-// to "groups"). Falls back to userInfo.Groups if no value is found at the
-// configured path.
-func (s *AuthService) extractOidcGroups(ctx context.Context, userInfo auth.OidcUserInfo, tokenResp *auth.OidcTokenResponse) []string {
-	claim := s.oidcGroupsClaim(ctx)
-
-	if claim != "" {
-		if v, ok := jwtclaims.GetByPath(userInfo.Extra, claim).Get(); ok {
-			if groups := jwtclaims.GetStringSliceClaim(map[string]any{"groups": v}, "groups"); len(groups) > 0 {
-				return groups
-			}
-		}
-		if tokenResp != nil && tokenResp.IDToken != "" {
-			if parsed := jwtclaims.ParseJWTClaims(tokenResp.IDToken); parsed != nil {
-				if v, ok := jwtclaims.GetByPath(parsed, claim).Get(); ok {
-					if groups := jwtclaims.GetStringSliceClaim(map[string]any{"groups": v}, "groups"); len(groups) > 0 {
-						return groups
-					}
-				}
-			}
-		}
-	}
-
-	return userInfo.Groups
-}
-
-func (s *AuthService) oidcGroupsClaim(ctx context.Context) string {
-	localSettings, err := s.settingsService.GetSettings(ctx)
-	if err != nil {
-		return "groups"
-	}
-	v := strings.TrimSpace(localSettings.OidcGroupsClaim.Value)
-	return kit.Ternary(v == "", "groups", v)
-}
-
-func (s *AuthService) persistOidcTokens(localUser *user.User, tokenResp *auth.OidcTokenResponse) {
-	if tokenResp == nil {
-		return
-	}
-	if tokenResp.AccessToken != "" {
-		localUser.OidcAccessToken = new(tokenResp.AccessToken)
-	}
-	if tokenResp.RefreshToken != "" {
-		localUser.OidcRefreshToken = new(tokenResp.RefreshToken)
-	}
-	if tokenResp.ExpiresIn > 0 {
-		localUser.OidcAccessTokenExpiresAt = new(time.Now().Add(time.Duration(tokenResp.ExpiresIn) * time.Second))
-	}
 }
 
 func (s *AuthService) WithSigningKey(key *mldsa.PrivateKey) *AuthService {
@@ -1060,88 +593,6 @@ func (s *AuthService) buildTokenPairInternal(ctx context.Context, localUser *use
 	}, nil
 }
 
-func (s *AuthService) IssueFederatedToken(ctx context.Context, localUser *user.User, credentialID string, ttlSeconds int) (*TokenPair, error) {
-	if s.sessionService == nil {
-		return nil, common.Classify(common.ErrUnavailable, errors.New("Session service is not configured")) //nolint:staticcheck // Preserve the existing error message.
-	}
-	if localUser == nil {
-		return nil, common.ErrUserNotFound
-	}
-
-	ttlSeconds = ClampFederatedTokenTTLSeconds(ttlSeconds)
-	now := time.Now()
-	accessTokenExpiry := now.Add(time.Duration(ttlSeconds) * time.Second)
-
-	federatedSession, err := s.sessionService.CreateFederatedSession(ctx, localUser.ID, accessTokenExpiry, credentialID)
-	if err != nil {
-		return nil, err
-	}
-
-	signingKey, err := s.signingKeyInternal(ctx)
-	if err != nil {
-		return nil, err
-	}
-	builder := jwt.NewBuilder().
-		JwtID(localUser.ID).
-		Subject(accessTokenSubject).
-		IssuedAt(now).
-		Expiration(accessTokenExpiry).
-		Claim(claimSessionID, federatedSession.ID).
-		Claim(claimUserID, localUser.ID).
-		Claim(claimTokenType, session.UserSessionSourceFederated).
-		Claim(claimFederatedCredentialID, credentialID)
-	if localUser.Username != "" {
-		builder.Claim(claimUsername, localUser.Username)
-	}
-	if localUser.Email != nil && *localUser.Email != "" {
-		builder.Claim(claimEmail, *localUser.Email)
-	}
-	if localUser.DisplayName != nil && *localUser.DisplayName != "" {
-		builder.Claim(claimDisplayName, *localUser.DisplayName)
-	}
-	if config.Version != "" {
-		builder.Claim(claimAppVersion, config.Version)
-	}
-	accessToken, err := builder.Build()
-	if err != nil {
-		return nil, err
-	}
-	accessTokenBytes, err := jwt.Sign(accessToken, jwt.WithKey(jwa.MLDSA87(), signingKey))
-	if err != nil {
-		return nil, err
-	}
-
-	return &TokenPair{
-		AccessToken: string(accessTokenBytes),
-		ExpiresAt:   accessTokenExpiry,
-	}, nil
-}
-
-func generateUsernameFromEmail(email, subject string) string {
-	if email != "" {
-		parts := strings.Split(email, "@")
-		if len(parts) > 0 && parts[0] != "" {
-			return parts[0]
-		}
-	}
-
-	if len(subject) >= 8 {
-		return "user_" + subject[len(subject)-8:]
-	}
-	return "user_" + subject
-}
-
-// uniqueOidcUsernameInternal derives a collision-free username candidate by
-// suffixing the tail of the OIDC subject, mirroring generateUsernameFromEmail's
-// fallback format.
-func uniqueOidcUsernameInternal(base, subject string) string {
-	suffix := subject
-	if len(suffix) > 8 {
-		suffix = suffix[len(suffix)-8:]
-	}
-	return base + "_" + suffix
-}
-
 func (s *AuthService) runInBackground(ctx context.Context, name string, fn func(ctx context.Context) error) {
 	// Detach context to prevent cancellation when the parent request finishes
 	bgCtx := context.WithoutCancel(ctx)
@@ -1161,16 +612,4 @@ func (s *AuthService) runInBackground(ctx context.Context, name string, fn func(
 			slog.ErrorContext(taskCtx, "Background task failed", "task", name, "error", err)
 		}
 	}()
-}
-
-// ClampFederatedTokenTTLSeconds bounds a requested federated-token lifetime to
-// the range Arcane will mint.
-func ClampFederatedTokenTTLSeconds(ttlSeconds int) int {
-	if ttlSeconds <= 0 {
-		return 900
-	}
-	if ttlSeconds < 60 {
-		return 60
-	}
-	return kit.Ternary(ttlSeconds > 3600, 3600, ttlSeconds)
 }

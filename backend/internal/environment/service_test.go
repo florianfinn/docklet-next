@@ -1,8 +1,10 @@
+//go:build postgres_integration
+
 // Source: getarcaneapp/arcane/backend/internal/environment/service_test.go
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace
+// Deviations: Local module namespace; functional cut: removed GitOps and saved Git repositories; functional cut: removed Swarm; functional cut: removed S3 backup destinations; functional cut: PostgreSQL integration test fixture.
 
 package environment
 
@@ -22,12 +24,10 @@ import (
 	"time"
 
 	"github.com/coder/websocket"
-	"github.com/florianfinn/docklet-next/types/backup"
+	"github.com/florianfinn/docklet-next/backend/internal/testpg"
 	"github.com/florianfinn/docklet-next/types/containerregistry"
 	"github.com/florianfinn/docklet-next/types/environment"
-	"github.com/florianfinn/docklet-next/types/gitops"
 	"github.com/florianfinn/docklet-next/types/scheduler"
-	"github.com/libtnb/sqlite"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.getarcane.app/sys/crypto"
@@ -38,10 +38,7 @@ import (
 	"github.com/florianfinn/docklet-next/backend/internal/config"
 	"github.com/florianfinn/docklet-next/backend/internal/database"
 	"github.com/florianfinn/docklet-next/backend/internal/environment/children/snippets"
-	"github.com/florianfinn/docklet-next/backend/internal/gitrepo"
 	"github.com/florianfinn/docklet-next/backend/internal/registry"
-	"github.com/florianfinn/docklet-next/backend/internal/s3"
-	"github.com/florianfinn/docklet-next/backend/internal/session"
 	"github.com/florianfinn/docklet-next/backend/internal/settings"
 	"github.com/florianfinn/docklet-next/backend/internal/user"
 	"github.com/florianfinn/docklet-next/backend/pkg/libarcane/edge"
@@ -98,41 +95,26 @@ func newAdmissionGateForEnvironmentTestInternal(t testing.TB) *runs.Admission {
 // Project imports environment, so these rows avoid an import cycle in tests.
 type testProjectRow struct {
 	database.BaseModel
-	Name            string
-	Path            string
-	Status          string
-	GitOpsManagedBy *string `gorm:"column:gitops_managed_by"`
+	Name   string
+	Path   string
+	Status string
 }
 
 func (testProjectRow) TableName() string { return "projects" }
-
-type testGitOpsSyncRow struct {
-	database.BaseModel
-	Name          string
-	EnvironmentID string
-	RepositoryID  string
-	ComposePath   string
-	ProjectName   string
-	SyncInterval  int
-}
-
-func (testGitOpsSyncRow) TableName() string { return "gitops_syncs" }
 
 func setupEnvironmentServiceTestDB(t *testing.T) *database.DB {
 	t.Helper()
 
 	dsn := fmt.Sprintf("file:%s?mode=memory&cache=shared", strings.NewReplacer("/", "_", " ", "_").Replace(t.Name()))
-	db, err := gorm.Open(sqlite.Open(dsn), &gorm.Config{})
+	db, err := gorm.Open(testpg.Dialector(t, dsn), &gorm.Config{})
 	require.NoError(t, err)
 	require.NoError(t, db.AutoMigrate(
 		&Environment{},
 		&registry.ContainerRegistry{},
-		&s3.S3Destination{},
 		&settings.SettingVariable{},
 		&user.User{},
 		&apikey.ApiKey{},
 		&testProjectRow{},
-		&testGitOpsSyncRow{},
 	))
 
 	sqlDB, err := db.DB()
@@ -189,6 +171,36 @@ func createNamedTestEnvironmentInternal(t *testing.T, db *database.DB, id, name,
 	require.NoError(t, db.WithContext(t.Context()).Create(env).Error)
 }
 
+func TestEnvironmentService_RegenerateEnvironmentApiKeyKeepsPairing(t *testing.T) {
+	ctx := t.Context()
+	db := setupEnvironmentServiceTestDB(t)
+	keys := apikey.NewApiKeyService(db, user.NewUserService(db, nil, nil), nil)
+	old, err := keys.CreateEnvironmentApiKey(ctx, "env-rotation")
+	require.NoError(t, err)
+	createTestEnvironment(t, db, "env-rotation", "http://agent.example", &old.Key)
+	require.NoError(t, db.WithContext(ctx).Model(&Environment{}).Where("id = ?", "env-rotation").Updates(map[string]any{
+		"api_key_id": old.ID,
+		"is_edge":    true,
+	}).Error)
+
+	service := NewEnvironmentService(db, nil, nil, nil, nil, keys)
+	env, err := service.GetEnvironmentByID(ctx, "env-rotation")
+	require.NoError(t, err)
+	rotated, err := service.RegenerateEnvironmentApiKey(ctx, env, "user-1", "operator")
+	require.NoError(t, err)
+	require.NotEqual(t, old.Key, rotated)
+
+	var persisted Environment
+	require.NoError(t, db.WithContext(ctx).First(&persisted, "id = ?", "env-rotation").Error)
+	require.Equal(t, rotated, *persisted.AccessToken)
+	require.NotEqual(t, old.ID, *persisted.ApiKeyID)
+	resolved, err := service.ResolveEdgeEnvironmentByToken(ctx, rotated)
+	require.NoError(t, err)
+	require.Equal(t, persisted.ID, resolved)
+	_, err = keys.GetApiKey(ctx, old.ID)
+	require.ErrorIs(t, err, apikey.ErrApiKeyNotFound)
+}
+
 func createTestEnvironmentWithState(t *testing.T, db *database.DB, id, apiURL, status string, isEdge bool, accessToken *string) {
 	t.Helper()
 
@@ -206,46 +218,6 @@ func createTestEnvironmentWithState(t *testing.T, db *database.DB, id, apiURL, s
 	}
 
 	require.NoError(t, db.WithContext(t.Context()).Create(env).Error)
-}
-
-func TestEnvironmentService_DeleteEnvironment_CascadesGitOpsSyncs(t *testing.T) {
-	ctx := t.Context()
-	db := setupEnvironmentServiceTestDB(t)
-	require.NoError(t, db.AutoMigrate(&testProjectRow{}, &testGitOpsSyncRow{}))
-
-	createTestEnvironment(t, db, "env-delete-gitops", "http://env.example", nil)
-	syncID := "sync-delete-env"
-	require.NoError(t, db.Create(&testGitOpsSyncRow{
-		ID:            syncID,
-		Name:          "delete-env-sync",
-		EnvironmentID: "env-delete-gitops",
-		RepositoryID:  "repo-1",
-		ComposePath:   "compose.yml",
-		ProjectName:   "demo",
-		SyncInterval:  15,
-	}).Error)
-	require.NoError(t, db.Create(&testProjectRow{
-		ID:              "project-managed-by-deleted-env",
-		Name:            "demo",
-		Path:            "/tmp/demo",
-		Status:          "stopped",
-		GitOpsManagedBy: &syncID,
-	}).Error)
-
-	jobScheduler := &environmentTestSchedulerInternal{}
-	svc := NewEnvironmentService(db, nil, nil, nil, nil, nil)
-	require.NoError(t, svc.SetScheduler(ctx, jobScheduler, newAdmissionGateForEnvironmentTestInternal(t)))
-
-	require.NoError(t, svc.DeleteEnvironment(ctx, "env-delete-gitops", nil, nil))
-
-	var syncCount int64
-	require.NoError(t, db.Model(&testGitOpsSyncRow{}).Where("id = ?", syncID).Count(&syncCount).Error)
-	require.Zero(t, syncCount)
-
-	var project testProjectRow
-	require.NoError(t, db.First(&project, "id = ?", "project-managed-by-deleted-env").Error)
-	require.Nil(t, project.GitOpsManagedBy)
-	require.Contains(t, jobScheduler.removed, entityjobs.GitOpsSyncJobPrefix+syncID)
 }
 
 func createTestRegistry(t *testing.T, db *database.DB, id string) {
@@ -298,11 +270,6 @@ func createTestECRRegistry(t *testing.T, db *database.DB, id string) {
 	}
 
 	require.NoError(t, db.WithContext(t.Context()).Create(localRegistry).Error)
-}
-
-func createTestGitRepository(t *testing.T, db *database.DB, repository gitrepo.GitRepository) {
-	t.Helper()
-	require.NoError(t, db.Create(&repository).Error)
 }
 
 func encryptSecretForTest(t *testing.T, value string) string {
@@ -446,124 +413,6 @@ func TestEnvironmentService_SyncRegistriesToEnvironment_IncludesECRFields(t *tes
 	require.NoError(t, err)
 }
 
-func TestEnvironmentService_SyncS3DestinationsToEnvironment(t *testing.T) {
-	ctx := t.Context()
-	db := setupEnvironmentServiceTestDB(t)
-	svc := NewEnvironmentService(db, nil, nil, nil, nil, nil)
-
-	encryptedSecret, err := crypto.Encrypt("s3-secret")
-	require.NoError(t, err)
-	require.NoError(t, db.WithContext(ctx).Create(&s3.S3Destination{
-		ID:              "s3-1",
-		Name:            "Offsite",
-		Endpoint:        "https://s3.example.com",
-		Bucket:          "volume-backups",
-		Region:          "eu-central-1",
-		AccessKeyID:     "s3-access-key",
-		SecretAccessKey: encryptedSecret,
-		Prefix:          "agents",
-		UseSSL:          true,
-		ForcePathStyle:  true,
-	}).Error)
-
-	accessToken := "agent-token"
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if !assert.Equal(t, http.MethodPost, r.Method) {
-			return
-		}
-		if !assert.Equal(t, "/api/backups/s3/sync", r.URL.Path) {
-			return
-		}
-		if !assert.Equal(t, accessToken, r.Header.Get("X-API-Key")) {
-			return
-		}
-		if !assert.Equal(t, accessToken, r.Header.Get("X-Arcane-Agent-Token")) {
-			return
-		}
-
-		var syncReq backup.S3DestinationSyncRequest
-		if !assert.NoError(t, json.NewDecoder(r.Body).Decode(&syncReq)) {
-			return
-		}
-		if !assert.Len(t, syncReq.Destinations, 1) {
-			return
-		}
-		if !assert.Equal(t, "s3-1", syncReq.Destinations[0].ID) {
-			return
-		}
-		if !assert.Equal(t, "s3-secret", syncReq.Destinations[0].SecretAccessKey) {
-			return
-		}
-		if !assert.Equal(t, "volume-backups", syncReq.Destinations[0].Bucket) {
-			return
-		}
-
-		w.Header().Set("Content-Type", "application/json")
-		_, _ = w.Write([]byte(`{"success":true,"data":{"message":"ok"}}`))
-	}))
-	defer server.Close()
-
-	createTestEnvironment(t, db, "env-s3", server.URL, &accessToken)
-	require.NoError(t, svc.SyncS3DestinationsToEnvironment(ctx, "env-s3"))
-}
-
-func TestEnvironmentService_SyncRepositoriesToEnvironment_UsesAgentHeaders(t *testing.T) {
-	ctx := t.Context()
-	db := setupEnvironmentServiceTestDB(t)
-	require.NoError(t, db.AutoMigrate(&gitrepo.GitRepository{}))
-	svc := NewEnvironmentService(db, nil, nil, nil, nil, nil)
-
-	createTestGitRepository(t, db, gitrepo.GitRepository{
-		ID: "repo-1", CreatedAt: time.Now(),
-		Name:        "repo-1",
-		URL:         "https://github.com/getarcaneapp/arcane.git",
-		AuthType:    "http",
-		Username:    "arcane",
-		Token:       encryptSecretForTest(t, "repo-token"),
-		Enabled:     true,
-		Description: new("test repo"),
-	})
-
-	accessToken := "token-1"
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if !assert.Equal(t, http.MethodPost, r.Method) {
-			return
-		}
-		if !assert.Equal(t, "/api/git-repositories/sync", r.URL.Path) {
-			return
-		}
-		if !assert.Equal(t, accessToken, r.Header.Get("X-API-Key")) {
-			return
-		}
-		if !assert.Equal(t, accessToken, r.Header.Get("X-Arcane-Agent-Token")) {
-			return
-		}
-
-		var syncReq gitops.RepositorySyncRequest
-		if !assert.NoError(t, json.NewDecoder(r.Body).Decode(&syncReq)) {
-			return
-		}
-		if !assert.Len(t, syncReq.Repositories, 1) {
-			return
-		}
-		if !assert.Equal(t, "repo-token", syncReq.Repositories[0].Token) {
-			return
-		}
-		if !assert.Equal(t, "arcane", syncReq.Repositories[0].Username) {
-			return
-		}
-
-		w.Header().Set("Content-Type", "application/json")
-		_, _ = w.Write([]byte(`{"success":true,"data":{"message":"ok"}}`))
-	}))
-	defer server.Close()
-
-	createTestEnvironment(t, db, "env-1", server.URL, &accessToken)
-
-	err := svc.SyncRepositoriesToEnvironment(ctx, "env-1")
-	require.NoError(t, err)
-}
-
 func TestEnvironmentService_SyncRegistriesToRemoteEnvironments_SkipsRemoteWithoutAccessToken(t *testing.T) {
 	ctx := t.Context()
 	db := setupEnvironmentServiceTestDB(t)
@@ -689,9 +538,7 @@ func TestEnvironmentService_UpdateEnvironmentStatusInternal_DoesNotDemotePending
 
 	createTestEnvironmentWithState(t, db, "direct-pending", "http://agent:3553", string(EnvironmentStatusPending), false, nil)
 
-	// A transient health-check failure before pairing completes must NOT flip a
-	// pending Direct env to offline/error — the env should stay pending so a later
-	// successful tick can still promote it to online.
+	// A failed health check leaves an unpaired Direct environment pending.
 	require.NoError(t, svc.updateEnvironmentStatusInternal(ctx, "direct-pending", string(EnvironmentStatusOffline)))
 	require.NoError(t, svc.updateEnvironmentStatusInternal(ctx, "direct-pending", string(EnvironmentStatusError)))
 
@@ -956,273 +803,6 @@ func TestAgentHostPortInternal(t *testing.T) {
 	}
 }
 
-func TestEnvironmentService_EnsureSwarmNodeAgentEnvironment_CreatesVisibleEnvironmentAndReusesToken(t *testing.T) {
-	ctx := t.Context()
-	db := setupEnvironmentServiceTestDB(t)
-	userService := user.NewUserService(db, nil, session.RevokeAllUserSessionsExceptInDB)
-	apiKeyService := apikey.NewApiKeyService(db, userService, nil)
-	svc := NewEnvironmentService(db, nil, nil, nil, nil, apiKeyService)
-	localUser := createTestEnvironmentServiceUser(t, ctx, userService, "swarm-admin")
-
-	createdEnv, createdToken, err := svc.EnsureSwarmNodeAgentEnvironment(
-		ctx,
-		"manager-env",
-		"node-1234567890abcdef",
-		"worker-1",
-		localUser.ID,
-		localUser.Username,
-		false,
-	)
-	require.NoError(t, err)
-	require.NotNil(t, createdEnv)
-	require.NotEmpty(t, createdToken)
-	require.Equal(t, "worker-1", createdEnv.Name)
-	require.Equal(t, "edge://swarm-node-node-1234567", createdEnv.ApiUrl)
-	require.False(t, createdEnv.Hidden)
-	require.True(t, createdEnv.IsEdge)
-	require.True(t, createdEnv.Enabled)
-	require.Equal(t, string(EnvironmentStatusPending), createdEnv.Status)
-	require.NotNil(t, createdEnv.ParentEnvironmentID)
-	require.Equal(t, "manager-env", *createdEnv.ParentEnvironmentID)
-	require.NotNil(t, createdEnv.SwarmNodeID)
-	require.Equal(t, "node-1234567890abcdef", *createdEnv.SwarmNodeID)
-	require.NotNil(t, createdEnv.AccessToken)
-	require.Equal(t, createdToken, *createdEnv.AccessToken)
-	require.NotNil(t, createdEnv.ApiKeyID)
-
-	var childEnvironments []Environment
-	require.NoError(t, db.WithContext(ctx).
-		Where("parent_environment_id = ?", "manager-env").
-		Where("swarm_node_id = ?", "node-1234567890abcdef").
-		Find(&childEnvironments).Error)
-	require.Len(t, childEnvironments, 1)
-
-	var apiKeys []apikey.ApiKey
-	require.NoError(t, db.WithContext(ctx).
-		Where("environment_id = ?", createdEnv.ID).
-		Order("created_at asc").
-		Find(&apiKeys).Error)
-	require.Len(t, apiKeys, 1)
-	require.Nil(t, apiKeys[0].UserID) // environment bootstrap keys have no owner
-
-	reusedEnv, reusedToken, err := svc.EnsureSwarmNodeAgentEnvironment(
-		ctx,
-		"manager-env",
-		"node-1234567890abcdef",
-		"worker-1",
-		localUser.ID,
-		localUser.Username,
-		false,
-	)
-	require.NoError(t, err)
-	require.NotNil(t, reusedEnv)
-	require.Equal(t, createdEnv.ID, reusedEnv.ID)
-	require.Equal(t, createdToken, reusedToken)
-	require.Equal(t, createdEnv.ApiKeyID, reusedEnv.ApiKeyID)
-
-	var apiKeysAfterReuse []apikey.ApiKey
-	require.NoError(t, db.WithContext(ctx).
-		Where("environment_id = ?", createdEnv.ID).
-		Order("created_at asc").
-		Find(&apiKeysAfterReuse).Error)
-	require.Len(t, apiKeysAfterReuse, 1)
-}
-
-func TestEnvironmentService_EnsureSwarmNodeAgentEnvironment_ReusesLegacyHiddenRegistration(t *testing.T) {
-	ctx := t.Context()
-	db := setupEnvironmentServiceTestDB(t)
-	svc := NewEnvironmentService(db, nil, nil, nil, nil, nil)
-	parentEnvironmentID := "manager-env"
-	nodeID := "legacy-node"
-	token := "legacy-agent-token"
-	legacy := &Environment{
-		ID:                  "legacy-agent",
-		Name:                "Legacy node agent",
-		ApiUrl:              "edge://legacy-node",
-		Status:              string(EnvironmentStatusOffline),
-		Enabled:             true,
-		IsEdge:              true,
-		Hidden:              true,
-		AccessToken:         &token,
-		ParentEnvironmentID: &parentEnvironmentID,
-		SwarmNodeID:         &nodeID,
-	}
-	{
-		err := db.WithContext(ctx).Create(legacy).Error
-		require.NoError(t, err,
-			"create legacy environment: %v", err)
-	}
-
-	reused, reusedToken, err := svc.EnsureSwarmNodeAgentEnvironment(
-		ctx,
-		parentEnvironmentID,
-		nodeID,
-		"legacy-host",
-		"user-id",
-		"username",
-		false,
-	)
-
-	require.NoError(t, err,
-		"EnsureSwarmNodeAgentEnvironment() error = %v", err)
-
-	require.Equal(t, legacy.ID, reused.ID,
-		"environment ID = %q, want %q", reused.ID, legacy.ID)
-
-	require.True(t, reused.Hidden,
-		"legacy environment was unexpectedly converted to visible")
-
-	require.Equal(t, token, reusedToken,
-		"token = %q, want existing token", reusedToken)
-
-	var environments []Environment
-	{
-		operationErr := db.WithContext(ctx).
-			Where("parent_environment_id = ? AND swarm_node_id = ?", parentEnvironmentID, nodeID).
-			Find(&environments).Error
-		require.NoError(t, operationErr,
-			"list node environments: %v", operationErr)
-	}
-
-	require.Len(t, environments, 1,
-		"environment count = %d, want 1", len(environments))
-}
-
-// TestEnvironmentService_EnsureSwarmNodeAgentEnvironment_TokenResolvesEndToEnd
-// pins the agent token round-trip: the token returned from the swarm node
-// agent provisioning flow must resolve back to the same environment via
-// ResolveEdgeEnvironmentByToken, and rotation must invalidate the previous
-// token while making the new one resolvable. This is the end-to-end gap that
-// would have caught the v1.18.1 "invalid agent token" bug if any silent
-// transformation (trim, encode, hash) were ever introduced between the
-// command-generation path and the poll-validation path.
-func TestEnvironmentService_EnsureSwarmNodeAgentEnvironment_TokenResolvesEndToEnd(t *testing.T) {
-	ctx := t.Context()
-	db := setupEnvironmentServiceTestDB(t)
-	userService := user.NewUserService(db, nil, session.RevokeAllUserSessionsExceptInDB)
-	apiKeyService := apikey.NewApiKeyService(db, userService, nil)
-	svc := NewEnvironmentService(db, nil, nil, nil, nil, apiKeyService)
-	localUser := createTestEnvironmentServiceUser(t, ctx, userService, "swarm-resolve-admin")
-
-	createdEnv, createdToken, err := svc.EnsureSwarmNodeAgentEnvironment(
-		ctx,
-		"manager-env-resolve",
-		"node-resolve-1234567890",
-		"resolve-host",
-		localUser.ID,
-		localUser.Username,
-		false,
-	)
-	require.NoError(t, err)
-	require.NotEmpty(t, createdToken)
-
-	resolvedID, err := svc.ResolveEdgeEnvironmentByToken(ctx, createdToken)
-	require.NoError(t, err)
-	require.Equal(t, createdEnv.ID, resolvedID)
-
-	// Whitespace normalization on the wire (e.g. a proxy adding a trailing
-	// newline) must still resolve.
-	resolvedID, err = svc.ResolveEdgeEnvironmentByToken(ctx, "  "+createdToken+"\n")
-	require.NoError(t, err)
-	require.Equal(t, createdEnv.ID, resolvedID)
-
-	// Rotate the token: the new token must resolve and the old token must not.
-	rotatedEnv, rotatedToken, err := svc.EnsureSwarmNodeAgentEnvironment(
-		ctx,
-		"manager-env-resolve",
-		"node-resolve-1234567890",
-		"resolve-host",
-		localUser.ID,
-		localUser.Username,
-		true,
-	)
-	require.NoError(t, err)
-	require.Equal(t, createdEnv.ID, rotatedEnv.ID)
-	require.NotEqual(t, createdToken, rotatedToken)
-
-	resolvedID, err = svc.ResolveEdgeEnvironmentByToken(ctx, rotatedToken)
-	require.NoError(t, err)
-	require.Equal(t, createdEnv.ID, resolvedID)
-
-	_, err = svc.ResolveEdgeEnvironmentByToken(ctx, createdToken)
-	require.Error(t, err)
-	require.Contains(t, err.Error(), "invalid agent token")
-}
-
-func TestEnvironmentService_BindSwarmNodeEnvironment_PreservesVisibleEnvironmentToken(t *testing.T) {
-	ctx := t.Context()
-	db := setupEnvironmentServiceTestDB(t)
-	token := "existing-agent-token"
-	createTestEnvironment(t, db, "visible-env", "http://visible.example", &token)
-	svc := NewEnvironmentService(db, nil, nil, nil, nil, nil)
-
-	bound, err := svc.BindSwarmNodeEnvironment(ctx, "manager-env", "node-1", "visible-env", false)
-	require.NoError(t, err)
-	require.False(t, bound.Hidden)
-	require.Equal(t, "manager-env", *bound.ParentEnvironmentID)
-	require.Equal(t, "node-1", *bound.SwarmNodeID)
-	require.Equal(t, token, *bound.AccessToken)
-
-	require.NoError(t, svc.DetachSwarmNodeEnvironment(ctx, "manager-env", "node-1"))
-	detached, err := svc.GetEnvironmentByID(ctx, "visible-env")
-	require.NoError(t, err)
-	require.Nil(t, detached.ParentEnvironmentID)
-	require.Nil(t, detached.SwarmNodeID)
-	require.Equal(t, token, *detached.AccessToken)
-}
-
-func TestEnvironmentService_BindSwarmNodeEnvironment_RequiresExplicitRebind(t *testing.T) {
-	ctx := t.Context()
-	db := setupEnvironmentServiceTestDB(t)
-	createTestEnvironment(t, db, "visible-env", "http://visible.example", nil)
-	svc := NewEnvironmentService(db, nil, nil, nil, nil, nil)
-
-	_, err := svc.BindSwarmNodeEnvironment(ctx, "manager-a", "node-a", "visible-env", false)
-	require.NoError(t, err)
-	_, err = svc.BindSwarmNodeEnvironment(ctx, "manager-b", "node-b", "visible-env", false)
-	require.ErrorContains(t, err, "explicit rebinding is required")
-
-	rebound, err := svc.BindSwarmNodeEnvironment(ctx, "manager-b", "node-b", "visible-env", true)
-	require.NoError(t, err)
-	require.Equal(t, "manager-b", *rebound.ParentEnvironmentID)
-	require.Equal(t, "node-b", *rebound.SwarmNodeID)
-}
-
-func TestEnvironmentService_ListMethods_ExcludeHiddenEnvironments(t *testing.T) {
-	ctx := t.Context()
-	db := setupEnvironmentServiceTestDB(t)
-	svc := NewEnvironmentService(db, nil, nil, nil, nil, nil)
-
-	createTestEnvironment(t, db, "0", "http://localhost:3552", nil)
-	createNamedTestEnvironmentInternal(t, db, "env-visible", "Visible Remote", "http://visible.example", new("visible-token"))
-	createNamedTestEnvironmentInternal(t, db, "env-hidden", "Hidden Node Agent", "edge://swarm-node-hidden", new("hidden-token"))
-
-	require.NoError(t, db.WithContext(ctx).
-		Model(&Environment{}).
-		Where("id = ?", "env-hidden").
-		Updates(map[string]any{
-			"hidden":                true,
-			"is_edge":               true,
-			"parent_environment_id": "0",
-			"swarm_node_id":         "node-hidden",
-		}).Error)
-
-	listedEnvironments, _, err := svc.ListEnvironmentsPaginated(ctx, pagination.QueryParams{
-		Start: 0, Limit: 20,
-		Filters: map[string]string{},
-	}, nil)
-	require.NoError(t, err)
-	require.Len(t, listedEnvironments, 2)
-	for _, env := range listedEnvironments {
-		require.NotEqual(t, "env-hidden", env.ID)
-	}
-
-	remoteEnvironments, err := svc.ListRemoteEnvironments(ctx)
-	require.NoError(t, err)
-	require.Len(t, remoteEnvironments, 1)
-	require.Equal(t, "env-visible", remoteEnvironments[0].ID)
-}
-
 func TestEnvironmentService_ListEnvironmentsPaginated_FiltersByAccessibleEnvIDs(t *testing.T) {
 	ctx := t.Context()
 	db := setupEnvironmentServiceTestDB(t)
@@ -1241,7 +821,7 @@ func TestEnvironmentService_ListEnvironmentsPaginated_FiltersByAccessibleEnvIDs(
 		}
 	}
 
-	// nil = no restriction: every non-hidden environment is returned.
+	// nil = no restriction: every environment is returned.
 	all, _, err := svc.ListEnvironmentsPaginated(ctx, newParams(""), nil)
 	require.NoError(t, err)
 	require.ElementsMatch(t, []string{"0", "env-a", "env-b"}, environmentIDsInternal(all))
@@ -1517,15 +1097,13 @@ func (s *environmentTestSchedulerInternal) Submit(_ context.Context, request sch
 
 func setupSyncDBInternal(t *testing.T) *database.DB {
 	t.Helper()
-	db, err := gorm.Open(sqlite.Open(filepath.Join(t.TempDir(), "sync.db")), &gorm.Config{})
+	db, err := gorm.Open(testpg.Dialector(t, filepath.Join(t.TempDir(), "sync.db")), &gorm.Config{})
 	require.NoError(t, err)
 	require.NoError(
 		t,
 		db.AutoMigrate(
 			&Environment{},
 			&registry.ContainerRegistry{},
-			&gitrepo.GitRepository{},
-			&s3.S3Destination{},
 		),
 	)
 	sqlDB, err := db.DB()
@@ -1536,7 +1114,7 @@ func setupSyncDBInternal(t *testing.T) *database.DB {
 }
 
 func TestSyncCredentialDecryptionAbortsSnapshot(t *testing.T) {
-	for _, kind := range []string{"registry token", "ECR secret", "repository token", "repository SSH key", "S3 secret"} {
+	for _, kind := range []string{"registry token", "ECR secret"} {
 		t.Run(kind, func(t *testing.T) {
 			db := setupSyncDBInternal(t)
 			var calls atomic.Int32
@@ -1557,18 +1135,7 @@ func TestSyncCredentialDecryptionAbortsSnapshot(t *testing.T) {
 				}
 				require.NoError(t, db.Create(&row).Error)
 				syncResource = service.SyncRegistriesToEnvironment
-			case "repository token", "repository SSH key":
-				row := gitrepo.GitRepository{ID: "bad-credential", Name: "Repository", URL: "https://example.com/repo.git"}
-				if kind == "repository token" {
-					row.Token = "invalid-ciphertext"
-				} else {
-					row.SSHKey = "invalid-ciphertext"
-				}
-				require.NoError(t, db.Create(&row).Error)
-				syncResource = service.SyncRepositoriesToEnvironment
-			case "S3 secret":
-				require.NoError(t, db.Create(&s3.S3Destination{ID: "bad-credential", Name: "Backup", SecretAccessKey: "invalid-ciphertext"}).Error)
-				syncResource = service.SyncS3DestinationsToEnvironment
+
 			}
 			err := syncResource(t.Context(), "remote")
 			require.Error(t, err)
@@ -1577,27 +1144,6 @@ func TestSyncCredentialDecryptionAbortsSnapshot(t *testing.T) {
 			require.Zero(t, calls.Load(), "an incomplete snapshot must never reach the agent")
 		})
 	}
-}
-
-func TestSyncRepositoriesPreservesEmptyCredentials(t *testing.T) {
-	db := setupSyncDBInternal(t)
-	require.NoError(t, db.Create(&gitrepo.GitRepository{ID: "public-repo", Name: "Public", URL: "https://example.com/public.git", AuthType: "none"}).Error)
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		var payload gitops.RepositorySyncRequest
-		if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
-			t.Error(err)
-			w.WriteHeader(http.StatusBadRequest)
-			return
-		}
-		if rows := payload.Repositories; len(rows) != 1 || rows[0].ID != "public-repo" {
-			t.Errorf("missing public repository: %v", payload)
-		}
-		_, _ = w.Write([]byte(`{"success":true}`))
-	}))
-	defer server.Close()
-	require.NoError(t, db.Create(&Environment{ID: "remote", ApiUrl: server.URL, AccessToken: new("token")}).Error)
-	service := NewEnvironmentService(db, server.Client(), nil, nil, nil, nil)
-	require.NoError(t, service.SyncRepositoriesToEnvironment(t.Context(), "remote"))
 }
 
 func TestSyncSkipsUnchangedPayloadUntilForgotten(t *testing.T) {

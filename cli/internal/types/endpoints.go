@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: None
+// Deviations: Functional cut: removed template catalogue; functional cut: removed federated credentials; functional cut: removed central variables and .env.global; functional cut: removed GitOps and saved Git repositories; functional cut: removed S3 backup destinations; functional cut: removed standalone build workshop; functional cut: removed OIDC and passkeys.
 
 // Package types provides the Arcane API endpoint path builders and CLI
 // configuration types.
@@ -38,17 +38,11 @@ const (
 
 // Auth endpoints
 
-func AuthLogout() string    { return "/api/auth/logout" }
-func AuthMe() string        { return "/api/auth/me" }
-func AuthPassword() string  { return "/api/auth/password" }
-func AuthRefresh() string   { return "/api/auth/refresh" }
-func AuthFederated() string { return "/api/auth/federated/token" }
-
-// OIDC endpoints
-
-func OIDCDeviceCode() string  { return "/api/oidc/device/code" }
-func OIDCDeviceToken() string { return "/api/oidc/device/token" }
-func OIDCStatus() string      { return "/api/oidc/status" }
+func AuthLogin() string    { return "/api/auth/login" }
+func AuthLogout() string   { return "/api/auth/logout" }
+func AuthMe() string       { return "/api/auth/me" }
+func AuthPassword() string { return "/api/auth/password" }
+func AuthRefresh() string  { return "/api/auth/refresh" }
 
 // API key endpoints
 
@@ -73,16 +67,6 @@ func UserRoleAssignments(userID string) string {
 func Roles() string                     { return "/api/roles" }
 func Role(id string) string             { return pathf("/api/roles/%s", id) }
 func RolesAvailablePermissions() string { return "/api/roles/available-permissions" }
-
-// OIDC role mapping endpoints
-
-func OidcRoleMappings() string         { return "/api/oidc/role-mappings" }
-func OidcRoleMapping(id string) string { return pathf("/api/oidc/role-mappings/%s", id) }
-
-// Federated credential endpoints
-
-func FederatedCredentials() string         { return "/api/federated-credentials" }
-func FederatedCredential(id string) string { return pathf("/api/federated-credentials/%s", id) }
 
 // Environment endpoints
 
@@ -180,14 +164,6 @@ func ImageExport(envID, name string) string {
 func ImageAttestations(envID, name string) string {
 	return pathf("/api/environments/%s/images/%s/attestations", envID, name)
 }
-func ImagesBuild(envID string) string { return pathf("/api/environments/%s/images/build", envID) }
-func ImageBuilds(envID string) string { return pathf("/api/environments/%s/images/builds", envID) }
-func ImageBuild(envID, buildID string) string {
-	return pathf("/api/environments/%s/images/builds/%s", envID, buildID)
-}
-
-// Upload session endpoints
-
 func UploadSessions(envID, kind string) string {
 	return pathf("/api/environments/%s/uploads/%s", envID, kind)
 }
@@ -484,27 +460,6 @@ func EventsEnvironment(envID string) string {
 }
 func EventsStats() string { return "/api/events/stats" }
 
-// Template endpoints
-
-func Templates() string           { return "/api/templates" }
-func Template(id string) string   { return pathf("/api/templates/%s", id) }
-func TemplatesAll() string        { return "/api/templates/all" }
-func TemplatesDefault() string    { return "/api/templates/default" }
-func TemplatesRegistries() string { return "/api/templates/registries" }
-func TemplateRegistry(id string) string {
-	return pathf("/api/templates/registries/%s", id)
-}
-func TemplateContent(id string) string  { return pathf("/api/templates/%s/content", id) }
-func TemplateDownload(id string) string { return pathf("/api/templates/%s/download", id) }
-func TemplateFetch() string             { return "/api/templates/fetch" }
-
-// Variable endpoints
-
-func Variables() string           { return "/api/variables" }
-func Variable(id string) string   { return pathf("/api/variables/%s", id) }
-func VariablesSync() string       { return "/api/variables/sync" }
-func VariablesSyncStatus() string { return "/api/variables/sync-status" }
-
 // System backup endpoints (admin-only)
 
 func Backups() string                    { return "/api/backups" }
@@ -512,25 +467,7 @@ func Backup(id string) string            { return pathf("/api/backups/%s", id) }
 func BackupsPolicies() string            { return "/api/backups/policies" }
 func BackupsRecoveryKey() string         { return "/api/backups/recovery-key" }
 func BackupsRecoveryKeyGenerate() string { return "/api/backups/recovery-key/generate" }
-func BackupsDiscover() string            { return "/api/backups/discover" }
 func BackupRestore(id string) string     { return pathf("/api/backups/%s/restore", id) }
-func BackupUpload(id string) string      { return pathf("/api/backups/%s/upload", id) }
-
-// S3 backup destination endpoints (admin-only)
-
-func BackupsS3() string        { return "/api/backups/s3" }
-func BackupsS3Options() string { return "/api/backups/s3/options" }
-func BackupsS3Destination(id string) string {
-	return pathf("/api/backups/s3/%s", id)
-}
-func BackupsS3Test() string { return "/api/backups/s3/test" }
-func BackupsS3DestinationTest(id string) string {
-	return pathf("/api/backups/s3/%s/test", id)
-}
-
-func BackupsS3DestinationInUse(id string) string {
-	return pathf("/api/backups/s3/%s/in-use", id)
-}
 
 // Vulnerability endpoints
 
@@ -602,43 +539,3 @@ func Webhook(envID, webhookID string) string {
 	return pathf("/api/environments/%s/webhooks/%s", envID, webhookID)
 }
 func WebhookTrigger(token string) string { return pathf("/api/webhooks/trigger/%s", token) }
-
-// GitOps sync endpoints
-
-func GitOpsSyncs(envID string) string { return pathf("/api/environments/%s/gitops-syncs", envID) }
-
-func GitOpsSync(envID, syncID string) string {
-	return pathf("/api/environments/%s/gitops-syncs/%s", envID, syncID)
-}
-
-func GitOpsSyncStatus(envID, syncID string) string {
-	return pathf("/api/environments/%s/gitops-syncs/%s/status", envID, syncID)
-}
-
-func GitOpsSyncTrigger(envID, syncID string) string {
-	return pathf("/api/environments/%s/gitops-syncs/%s/sync", envID, syncID)
-}
-
-func GitOpsSyncFiles(envID, syncID string) string {
-	return pathf("/api/environments/%s/gitops-syncs/%s/files", envID, syncID)
-}
-
-func GitOpsSyncsImport(envID string) string {
-	return pathf("/api/environments/%s/gitops-syncs/import", envID)
-}
-
-// Git repository endpoints
-
-func GitRepositories() string        { return "/api/customize/git-repositories" }
-func GitRepository(id string) string { return pathf("/api/customize/git-repositories/%s", id) }
-func GitRepositoryTest(id string) string {
-	return pathf("/api/customize/git-repositories/%s/test", id)
-}
-
-func GitRepositoryBranches(id string) string {
-	return pathf("/api/customize/git-repositories/%s/branches", id)
-}
-
-func GitRepositoryFiles(id string) string {
-	return pathf("/api/customize/git-repositories/%s/files", id)
-}

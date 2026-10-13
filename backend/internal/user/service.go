@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace
+// Deviations: Local module namespace; functional cut: removed OIDC and passkeys.
 
 package user
 
@@ -176,13 +176,6 @@ func (s *UserService) GetUserByID(ctx context.Context, id string) (*User, error)
 	return dbutil.FirstWhere[User](ctx, s.db.DB, common.ErrUserNotFound, "id = ?", id)
 }
 
-func (s *UserService) GetUserByOidcSubjectId(ctx context.Context, subjectId string) (*User, error) {
-	return dbutil.FirstWhere[User](ctx, s.db.DB, common.ErrUserNotFound, "oidc_subject_id = ?", subjectId)
-}
-
-// GetUserByEmail returns the user with the given email. The schema does not
-// enforce email uniqueness, so a lookup matching more than one account returns
-// common.ErrAmbiguousUserEmail instead of arbitrarily selecting one.
 func (s *UserService) GetUserByEmail(ctx context.Context, email string) (*User, error) {
 	var users []User
 	if err := s.db.DB.WithContext(ctx).Where("email = ?", email).Limit(2).Find(&users).Error; err != nil {
@@ -374,57 +367,6 @@ func (s *UserService) SetPasswordAndRevokeSessionsExcept(ctx context.Context, lo
 	return localUser, nil
 }
 
-// AttachOidcSubjectTransactional safely links an OIDC subject to the given user inside a DB transaction.
-// It uses a row lock (FOR UPDATE) to prevent concurrent merges from racing and validates that the
-// user isn't already linked to a different subject. The provided updateFn can mutate the user (e.g.,
-// roles, display name, tokens, last login) before persisting.
-//
-// Note: The clause.Locking{Strength: "UPDATE"} statement is used to acquire a row-level lock.
-// This MUST be done inside a transaction to ensure the lock is held until the update is committed.
-func (s *UserService) AttachOidcSubjectTransactional(ctx context.Context, userID, subject string, updateFn func(u *User)) (*User, error) {
-	var out *User
-	err := dbutil.WithTx(ctx, s.db.DB, func(tx *gorm.DB) error {
-		var u User
-		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).
-			Where("id = ?", userID).
-			First(&u).Error; err != nil {
-			if errors.Is(err, gorm.ErrRecordNotFound) {
-				return common.ErrUserNotFound
-			}
-			return fmt.Errorf("failed to load user for OIDC merge: %w", err)
-		}
-
-		// If already linked to a different subject, abort
-		if u.OidcSubjectId != nil && *u.OidcSubjectId != "" && *u.OidcSubjectId != subject {
-			return errors.New("user already linked to another OIDC subject")
-		}
-
-		// Link subject
-		u.OidcSubjectId = new(subject)
-
-		if updateFn != nil {
-			updateFn(&u)
-		}
-
-		if err := normalization.Normalize(&u); err != nil {
-			return err
-		}
-		if err := tx.Save(&u).Error; err != nil {
-			// Bubble up uniqueness violations with a clearer message
-			if strings.Contains(strings.ToLower(err.Error()), "unique") || strings.Contains(strings.ToLower(err.Error()), "duplicate key") {
-				return fmt.Errorf("oidc subject is already linked to another user: %w", err)
-			}
-			return fmt.Errorf("failed to persist OIDC merge: %w", err)
-		}
-		out = &u
-		return nil
-	})
-	if err != nil {
-		return nil, err
-	}
-	return out, nil
-}
-
 func (s *UserService) CreateDefaultAdmin(ctx context.Context) error {
 	// If users already exist and at least one effective global admin remains,
 	// there is nothing to bootstrap or recover — bail before touching the
@@ -509,7 +451,6 @@ func (s *UserService) CreateDefaultAdmin(ctx context.Context) error {
 // grantDefaultAdminRoleInternal grants the global Admin role to the bootstrap
 // user. Reached only on fresh bootstrap or zero-admin recovery.
 // SetUserAssignments replaces manual-source rows, so carry forward only the
-// existing manual assignments — copying OIDC-sourced rows here would duplicate
 // them as manual and pin them forever.
 func (s *UserService) grantDefaultAdminRoleInternal(ctx context.Context, adminUserID string) error {
 	assignments, err := s.roleService.ListUserAssignments(ctx, adminUserID)
@@ -637,7 +578,6 @@ func (s *UserService) toUserResponseDtoInternal(ctx context.Context, u User) use
 		DisplayName:            u.DisplayName,
 		Email:                  u.Email,
 		CanDelete:              true,
-		OidcSubjectId:          u.OidcSubjectId,
 		Locale:                 u.Locale,
 		TimeFormat:             u.TimeFormat,
 		FontSize:               u.FontSize,

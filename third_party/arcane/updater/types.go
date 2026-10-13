@@ -2,7 +2,7 @@
 // Revision: 119f68956cee6d5aba8a5463561aaf9be9943b65
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: None
+// Deviations: functional cut: removed Swarm.
 
 package updater
 
@@ -23,7 +23,7 @@ type Options struct {
 	// requested container even when the SettingsProvider excludes it from
 	// automatic updates. It applies only to that target: ApplyPending and the
 	// restart and dependency passes keep honoring exclusions, and a container
-	// that is disabled by label, a Swarm task, or on an immutable reference
+	// that is disabled by label or on an immutable reference
 	// stays ineligible. The exclusion itself is never modified.
 	IgnoreSettingsExclusions bool `json:"ignoreSettingsExclusions,omitempty"`
 }

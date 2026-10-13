@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace
+// Deviations: Local module namespace; functional cut: removed GitOps and saved Git repositories; functional cut: removed Swarm.
 
 package middleware
 
@@ -321,26 +321,6 @@ func TestEnvironmentMiddleware_CreateProxyRequest_RejectsInvalidProxyTarget(t *t
 	assert.Contains(t, err.Error(), "Invalid proxy target URL")
 }
 
-func TestEnvironmentMiddleware_KeepsNodeAgentDeploymentCreationLocal(t *testing.T) {
-	middleware := newTestEnvironmentMiddleware()
-	router := echo.New()
-	api := attachMiddleware(router, middleware)
-
-	localHandlerHit := false
-	api.POST("/environments/:id/swarm/nodes/:nodeId/agent/deployment", func(c *echo.Context) error {
-		localHandlerHit = true
-		return c.JSON(http.StatusOK, map[string]any{"success": true})
-	})
-
-	req := httptest.NewRequest(http.MethodPost, "/api/environments/env-edge/swarm/nodes/node-1/agent/deployment", http.NoBody)
-	recorder := httptest.NewRecorder()
-	router.ServeHTTP(recorder, req)
-
-	assert.Equal(t, http.StatusOK, recorder.Code)
-	assert.Contains(t, recorder.Body.String(), "\"success\":true")
-	assert.True(t, localHandlerHit)
-}
-
 func TestEnvironmentMiddleware_ForwardsResolvedIconCatalogHeaderOnly(t *testing.T) {
 	tests := []struct {
 		name           string
@@ -408,16 +388,6 @@ func TestEnvironmentMiddleware_ForwardsResolvedIconCatalogHeaderOnly(t *testing.
 			assert.Equal(t, tt.userName, forwardedName)
 		})
 	}
-}
-
-func TestIsCentralSwarmManagementPathInternal_IsMethodAware(t *testing.T) {
-	assert.True(t, isCentralSwarmManagementPathInternal(http.MethodGet, "/swarm/nodes"))
-	assert.True(t, isCentralSwarmManagementPathInternal(http.MethodGet, "/swarm/nodes/node-1"))
-	assert.False(t, isCentralSwarmManagementPathInternal(http.MethodPatch, "/swarm/nodes/node-1"))
-	assert.True(t, isCentralSwarmManagementPathInternal(http.MethodPost, "/swarm/nodes/node-1/agent/deployment"))
-	assert.True(t, isCentralSwarmManagementPathInternal(http.MethodDelete, "/swarm/nodes/node-1/agent/deployment"))
-	assert.True(t, isCentralSwarmManagementPathInternal(http.MethodPut, "/swarm/nodes/node-1/agent/binding"))
-	assert.True(t, isCentralSwarmManagementPathInternal(http.MethodDelete, "/swarm/nodes/node-1/agent/binding"))
 }
 
 func TestIsCentralVolumeBackupPolicyPathInternal_IsMethodAware(t *testing.T) {
@@ -582,41 +552,6 @@ func TestProxyPermissionDeniedChecksVolumeWorkspaceManifestPermissions(t *testin
 	require.Equal(t, rawBody, replayed)
 }
 
-func gitOpsSyncMatcher() *authz.PermissionMatcher {
-	m := authz.NewPermissionMatcher()
-	m.Add(http.MethodPost, "/gitops-syncs/import", authz.PermGitOpsCreate)
-	return m
-}
-
-func newProxyGitOpsImportContext(body string) *echo.Context {
-	e := echo.New()
-	req := httptest.NewRequest(http.MethodPost, "/api/environments/"+proxyTestEnvID+"/gitops-syncs/import", bytes.NewReader([]byte(body)))
-	req.Header.Set("Content-Type", "application/json")
-	return e.NewContext(req, httptest.NewRecorder())
-}
-
-func TestProxyPermissionDeniedChecksGitOpsImportLifecyclePermission(t *testing.T) {
-	m := newProxyAuthzMiddleware(gitOpsSyncMatcher())
-	hookBody := `[{"syncName":"a","gitRepo":"r","branch":"main","dockerComposePath":"compose.yaml","preDeployScriptPath":"scripts/run.sh"}]`
-	plainBody := `[{"syncName":"a","gitRepo":"r","branch":"main","dockerComposePath":"compose.yaml"}]`
-
-	createOnly := authz.NewPermissionSet()
-	createOnly.AddEnv(proxyTestEnvID, authz.PermGitOpsCreate)
-	require.True(t, m.proxyPermissionDenied(newProxyGitOpsImportContext(hookBody), createOnly, proxyTestEnvID))
-	require.False(t, m.proxyPermissionDenied(newProxyGitOpsImportContext(plainBody), createOnly, proxyTestEnvID))
-
-	withLifecycle := authz.NewPermissionSet()
-	withLifecycle.AddEnv(proxyTestEnvID, authz.PermGitOpsCreate, authz.PermGitOpsLifecycle)
-	c := newProxyGitOpsImportContext(hookBody)
-	require.False(t, m.proxyPermissionDenied(c, withLifecycle, proxyTestEnvID))
-	replayed, err := io.ReadAll(c.Request().Body)
-	require.NoError(t, err)
-	require.Equal(t, hookBody, string(replayed))
-}
-
-// wsTerminalMatcher mirrors ws.AddProxiedPermissions for the container terminal
-// stream: the proxy computes the suffix "/ws/containers/{id}/terminal" for a
-// forwarded WebSocket request, and the matcher requires containers:exec for it.
 func wsTerminalMatcher() *authz.PermissionMatcher {
 	m := authz.NewPermissionMatcher()
 	m.Add(http.MethodGet, "/ws/containers/{containerId}/terminal", authz.PermContainersExec)

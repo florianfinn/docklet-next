@@ -2,12 +2,11 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace
+// Deviations: Local module namespace; functional cut: removed central variables and .env.global; functional cut: removed GitOps and saved Git repositories; functional cut: removed SQLite runtime and migrations.
 
 package project
 
 import (
-	"bufio"
 	"cmp"
 	"context"
 	"errors"
@@ -16,7 +15,6 @@ import (
 	"log/slog"
 	"maps"
 	"os"
-	"path"
 	"path/filepath"
 	"slices"
 	"strconv"
@@ -27,7 +25,6 @@ import (
 	"github.com/compose-spec/compose-go/v2/types"
 	"github.com/florianfinn/docklet-next/types/containerregistry"
 	imagetypes "github.com/florianfinn/docklet-next/types/image"
-	lifecycletype "github.com/florianfinn/docklet-next/types/lifecycle"
 	projecttypes "github.com/florianfinn/docklet-next/types/project"
 	usertypes "github.com/florianfinn/docklet-next/types/user"
 	"github.com/florianfinn/docklet-next/types/volume"
@@ -60,7 +57,6 @@ import (
 	"github.com/florianfinn/docklet-next/backend/internal/kv"
 	"github.com/florianfinn/docklet-next/backend/internal/project/children/deployment"
 	projectdetails "github.com/florianfinn/docklet-next/backend/internal/project/children/details"
-	"github.com/florianfinn/docklet-next/backend/internal/project/children/lifecycle"
 	"github.com/florianfinn/docklet-next/backend/internal/project/children/listing"
 	projectsync "github.com/florianfinn/docklet-next/backend/internal/project/children/sync"
 	"github.com/florianfinn/docklet-next/backend/internal/project/children/tags"
@@ -74,7 +70,6 @@ import (
 	"github.com/florianfinn/docklet-next/backend/pkg/pagination"
 	"github.com/florianfinn/docklet-next/backend/pkg/projects"
 	"github.com/florianfinn/docklet-next/backend/pkg/utils"
-	"github.com/florianfinn/docklet-next/backend/pkg/utils/concurrency"
 	"github.com/florianfinn/docklet-next/backend/pkg/utils/iconcatalog"
 	"github.com/florianfinn/docklet-next/backend/pkg/utils/imageref"
 	"github.com/florianfinn/docklet-next/backend/pkg/utils/userctx"
@@ -83,8 +78,7 @@ import (
 
 const (
 	maxConcurrentComposeReads = 8
-	// inferredServiceCountBatchSize keeps one inferred count update under
-	// SQLite's bound variable limit (three placeholders per id).
+	// inferredServiceCountBatchSize bounds the number of placeholders in each update.
 	inferredServiceCountBatchSize = 200
 )
 
@@ -100,7 +94,6 @@ type ProjectService struct {
 	eventService                *event.EventService
 	imageService                *image.ImageService
 	dockerService               *dockerInternal.DockerClientService
-	lifecycleService            *LifecycleService
 	workspace                   *workspace.Service
 	details                     *projectdetails.Service
 	listing                     *listing.Service
@@ -116,137 +109,11 @@ type ProjectService struct {
 
 	composeNames  composeNameCache
 	parsedCompose projecttypes.ComposeCache[*types.Project]
-	// metaCache holds per-project icon/URL metadata, keyed by project ID. Deriving
-	// it costs a full compose load (interpolation plus .env reads) and, for GitOps
-	// projects, a gitops_syncs lookup — per project, on every list request.
+	// metaCache holds per-project icon/URL metadata, keyed by project ID.
 	// Entries are validated by compose/include/env file mtimes rather than a TTL.
 	metaCache projecttypes.ComposeCache[projects.ArcaneComposeMetadata]
-
-	// FilesChanged fires with the project ID after project files are saved
-	// through Arcane, so Git backups can react without polling.
-	FilesChanged *concurrency.Signal[string]
 }
 
-// EnsureGitOpsProjectLinked persists the bidirectional GitOps/project binding
-// and refreshes the compose-name cache as one domain operation.
-func (s *ProjectService) EnsureGitOpsProjectLinked(ctx context.Context, gitOpsSync *GitOpsSync, project *Project) error {
-	if gitOpsSync == nil || project == nil {
-		return nil
-	}
-	if project.GitOpsManagedBy != nil && *project.GitOpsManagedBy != "" && *project.GitOpsManagedBy != gitOpsSync.ID {
-		return fmt.Errorf("project %s is already managed by a different GitOps sync", project.ID)
-	}
-
-	cacheBinding := func() {
-		s.composeNames.put(projects.NormalizeProjectName(project.Name), project.ID)
-	}
-	if gitOpsSync.ProjectID != nil && *gitOpsSync.ProjectID == project.ID && project.GitOpsManagedBy != nil && *project.GitOpsManagedBy == gitOpsSync.ID {
-		cacheBinding()
-		return nil
-	}
-
-	updatesSync := map[string]any{}
-	updatesProject := map[string]any{}
-	if gitOpsSync.ProjectID == nil || *gitOpsSync.ProjectID != project.ID {
-		updatesSync["project_id"] = project.ID
-	}
-	if project.GitOpsManagedBy == nil || *project.GitOpsManagedBy != gitOpsSync.ID {
-		updatesProject["gitops_managed_by"] = gitOpsSync.ID
-	}
-	if len(updatesSync) == 0 && len(updatesProject) == 0 {
-		cacheBinding()
-		return nil
-	}
-
-	if err := s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
-		if len(updatesSync) > 0 {
-			if err := tx.Model(&GitOpsSync{}).Where("id = ?", gitOpsSync.ID).Updates(updatesSync).Error; err != nil {
-				return fmt.Errorf("failed to relink GitOps sync %s: %w", gitOpsSync.ID, err)
-			}
-		}
-		if len(updatesProject) > 0 {
-			if err := tx.Model(&Project{}).Where("id = ?", project.ID).Updates(updatesProject).Error; err != nil {
-				return fmt.Errorf("failed to relink project %s to GitOps sync %s: %w", project.ID, gitOpsSync.ID, err)
-			}
-		}
-		return nil
-	}); err != nil {
-		return err
-	}
-
-	gitOpsSync.ProjectID = &project.ID
-	project.GitOpsManagedBy = &gitOpsSync.ID
-	cacheBinding()
-	return nil
-}
-
-// ValidateComposeDirectory loads a staged compose tree with the same settings,
-// Docker path mapping, and validation rules used by managed projects.
-func (s *ProjectService) ValidateComposeDirectory(ctx context.Context, projectName, projectPath, composeFileName string) (int, error) {
-	projectsDirectory, err := s.GetProjectsDirectory(ctx)
-	if err != nil {
-		return 0, err
-	}
-	pathMapper := s.projectPathMapper(ctx)
-	composeProject, err := projects.LoadComposeProject(
-		ctx,
-		filepath.Join(projectPath, composeFileName),
-		projects.NormalizeProjectName(projectName),
-		projectsDirectory,
-		s.settingsService.GetBoolSetting(ctx, "autoInjectEnv", false),
-		pathMapper,
-		nil,
-		nil,
-		true, nil, nil, nil,
-	)
-	if err != nil {
-		return 0, err
-	}
-	return len(composeProject.Services), nil
-}
-
-// CreateGitOpsManagedProject persists a promoted GitOps project, links both
-// records, updates the compose-name cache, and records the creation event.
-func (s *ProjectService) CreateGitOpsManagedProject(ctx context.Context, gitOpsSync *GitOpsSync, project *Project, actor usertypes.Actor, logEventOptions ...bool) error {
-	if gitOpsSync == nil || project == nil {
-		return errors.New("GitOps sync and project are required")
-	}
-	if err := s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
-		if err := tx.Create(project).Error; err != nil {
-			return fmt.Errorf("failed to create project: %w", err)
-		}
-		if err := tx.Model(&GitOpsSync{}).Where("id = ?", gitOpsSync.ID).Update("project_id", project.ID).Error; err != nil {
-			return fmt.Errorf("failed to update sync with project ID: %w", err)
-		}
-		if err := tx.Model(&Project{}).Where("id = ?", project.ID).Update("gitops_managed_by", gitOpsSync.ID).Error; err != nil {
-			return fmt.Errorf("failed to mark project as GitOps-managed: %w", err)
-		}
-		return nil
-	}); err != nil {
-		return err
-	}
-
-	gitOpsSync.ProjectID = &project.ID
-	project.GitOpsManagedBy = &gitOpsSync.ID
-	s.composeNames.put(projects.NormalizeProjectName(project.Name), project.ID)
-	if err := s.reconcileComposeTagsForProject(ctx, project); err != nil {
-		slog.WarnContext(ctx, "failed to reconcile Compose project tags during GitOps project creation", "projectId", project.ID, "error", err)
-	}
-	logEvent := true
-	if len(logEventOptions) > 0 {
-		logEvent = logEventOptions[0]
-	}
-	if logEvent && s.eventService != nil {
-		metadata := database.JSON{"action": "create", "projectID": project.ID, "projectName": project.Name, "path": project.Path}
-		if err := s.eventService.LogProjectEvent(ctx, event.EventTypeProjectCreate, project.ID, project.Name, actor.ID, actor.Username, "0", metadata); err != nil {
-			slog.ErrorContext(ctx, "could not log project creation", "error", err)
-		}
-	}
-	return nil
-}
-
-// newProjectMetadataEnv resolves the shared inputs once and preloads
-// the GitOps compose paths of every listed project in a single query.
 func (s *ProjectService) newProjectMetadataEnv(ctx context.Context, projectsList []Project) *projectMetadataEnv {
 	projectsDirectory, err := s.GetProjectsDirectory(ctx)
 	if err != nil {
@@ -258,39 +125,7 @@ func (s *ProjectService) newProjectMetadataEnv(ctx context.Context, projectsList
 		settings:          s.settingsService.GetSettingsOrDefaults(ctx),
 		composeFiles:      make(map[string]string, len(projectsList)),
 	}
-	s.preloadGitOpsComposePaths(ctx, env, projectsList)
 	return env
-}
-
-// preloadGitOpsComposePaths fetches the GitOps compose paths of the
-// given projects in one query and merges them into env, so list paths can
-// widen the preloaded set to the rows they end up enriching.
-func (s *ProjectService) preloadGitOpsComposePaths(ctx context.Context, env *projectMetadataEnv, projectsList []Project) {
-	syncIDs := make([]string, 0, len(projectsList))
-	for _, proj := range projectsList {
-		if id := gitOpsSyncID(&proj); id != "" {
-			syncIDs = append(syncIDs, id)
-		}
-	}
-	if len(syncIDs) == 0 {
-		return
-	}
-	var syncRecords []GitOpsSync
-	if err := s.db.WithContext(ctx).Select("id", "compose_path").Where("id IN ?", syncIDs).Find(&syncRecords).Error; err != nil {
-		// Leave these IDs unloaded so each project falls back to its own lookup
-		// and surfaces the failure the same way it did before batching.
-		slog.WarnContext(ctx, "failed to batch resolve GitOps compose paths", "error", err)
-		return
-	}
-	if env.gitOpsComposePaths == nil {
-		env.gitOpsComposePaths = make(map[string]string, len(syncIDs))
-	}
-	for _, id := range syncIDs {
-		env.gitOpsComposePaths[id] = ""
-	}
-	for _, record := range syncRecords {
-		env.gitOpsComposePaths[record.ID] = record.ComposePath
-	}
 }
 
 func NewProjectService(
@@ -300,7 +135,6 @@ func NewProjectService(
 	imageService *image.ImageService,
 	dockerService *dockerInternal.DockerClientService,
 	buildService builder,
-	lifecycleService *LifecycleService,
 	containerRegistryService *registry.ContainerRegistryService,
 	cfg *config.Config,
 	kvService *kv.KVService,
@@ -314,12 +148,10 @@ func NewProjectService(
 		eventService:                eventService,
 		imageService:                imageService,
 		dockerService:               dockerService,
-		lifecycleService:            lifecycleService,
 		containerRegistryService:    containerRegistryService,
 		config:                      cfg,
 		parsedCompose:               projects.NewParsedComposeCache(),
 		metaCache:                   projects.NewComposeCache[projects.ArcaneComposeMetadata](1024, nil),
-		FilesChanged:                concurrency.NewSignal[string](),
 	}
 	s.initChildren(kvService, buildService)
 	return s
@@ -588,8 +420,7 @@ func (s *ProjectService) lookupProjectByCachedComposeName(ctx context.Context, n
 
 // ResolveProjectComposeFile returns the base compose file for a project. The
 // precedence mirrors `docker compose`: COMPOSE_FILE in the merged environment
-// (.env.global first, the project's .env on top) wins, then a GitOps sync's
-// configured compose path, then standard detection.
+// (the project .env) wins, then standard detection.
 func (s *ProjectService) ResolveProjectComposeFile(ctx context.Context, proj *Project) (string, error) {
 	return s.resolveProjectComposeFile(ctx, proj, nil)
 }
@@ -609,7 +440,7 @@ func (s *ProjectService) resolveProjectComposeFile(ctx context.Context, proj *Pr
 			var dirErr error
 			projectsDirectory, dirErr = s.GetProjectsDirectory(ctx)
 			if dirErr != nil {
-				// The .env.global layer is skipped for an empty projects directory;
+				// The project root is unavailable for an empty projects directory;
 				// keep resolution working but surface the misconfiguration.
 				slog.WarnContext(ctx, "failed to resolve projects directory for compose selection", "projectId", proj.ID, "error", dirErr)
 			}
@@ -618,37 +449,6 @@ func (s *ProjectService) resolveProjectComposeFile(ctx context.Context, proj *Pr
 			return "", selErr
 		} else if len(files) > 0 {
 			return files[0], nil
-		}
-
-		// A GitOps sync's configured compose path comes from the preloaded request
-		// map when available; a sync without a row resolves like a missing one.
-		composePath := ""
-		if syncID := gitOpsSyncID(proj); syncID != "" {
-			preloaded := false
-			if env != nil {
-				composePath, preloaded = env.gitOpsComposePaths[syncID]
-			}
-			if !preloaded {
-				var syncRecord GitOpsSync
-				if err := s.db.WithContext(ctx).Select("compose_path").Where("id = ?", syncID).First(&syncRecord).Error; err == nil {
-					composePath = syncRecord.ComposePath
-				} else if !errors.Is(err, gorm.ErrRecordNotFound) {
-					return "", fmt.Errorf("failed to resolve GitOps compose path for project %s: %w", proj.ID, err)
-				}
-			}
-		}
-		if composeFileName := strings.TrimSpace(filepath.Base(composePath)); composeFileName != "" && composeFileName != "." {
-			candidate := filepath.Join(proj.Path, composeFileName)
-			// os.Stat rather than acfs: proj.Path may be an imported project
-			// outside the projects directory, and the compose file may be a
-			// symlink resolving outside it.
-			info, statErr := os.Stat(candidate)
-			if statErr == nil && !info.IsDir() {
-				return candidate, nil
-			}
-			if statErr != nil && !os.IsNotExist(statErr) {
-				return "", fmt.Errorf("failed to inspect GitOps compose file %s: %w", candidate, statErr)
-			}
 		}
 
 		composeFile, err := projects.DetectComposeFile(ctx, projectsDirectory, proj.Path)
@@ -765,222 +565,6 @@ func (s *ProjectService) refreshComposeProjectName(ctx context.Context, proj *Pr
 	}
 }
 
-// LifecycleService runs a GitOps sync's pre-deploy script in a throwaway container.
-// The script is trusted like the repo's compose.yaml; configuring its path is the trust event.
-type LifecycleService struct {
-	db              *database.DB
-	settingsService *settings.SettingsService
-	eventService    *event.EventService
-	hooks           *lifecycle.Service
-}
-
-// NewLifecycleService constructs a LifecycleService wired against shared
-// infrastructure. The Docker client is obtained lazily on each hook run via
-// dockerService.GetClient so reconnects are transparent. Runner image pulls go
-// through imageService so configured registry credentials apply.
-func NewLifecycleService(
-	db *database.DB,
-	settingsService *settings.SettingsService,
-	eventService *event.EventService,
-	dockerService *dockerInternal.DockerClientService,
-	imageService *image.ImageService,
-) *LifecycleService {
-	return &LifecycleService{
-		db:              db,
-		settingsService: settingsService,
-		eventService:    eventService,
-		hooks:           lifecycle.New(settingsService, dockerService, imageService),
-	}
-}
-
-// runPreDeploy runs the sync's pre-deploy hook, if configured and enabled. Any
-// failure aborts the deploy; every run records its last-run state on the sync.
-func (s *LifecycleService) runPreDeploy(ctx context.Context, project *Project, actor usertypes.Actor) error {
-	if gitOpsSyncID(project) == "" || !s.settingsService.GetBoolSetting(ctx, "lifecycleEnabled", false) {
-		return nil
-	}
-
-	var syncRecord GitOpsSync
-	switch err := s.db.WithContext(ctx).Where("project_id = ?", project.ID).First(&syncRecord).Error; {
-	case errors.Is(err, gorm.ErrRecordNotFound):
-		return nil
-	case err != nil:
-		return fmt.Errorf("failed to load gitops sync for lifecycle hook: %w", err)
-	}
-	if syncRecord.PreDeployScriptPath == nil || strings.TrimSpace(*syncRecord.PreDeployScriptPath) == "" {
-		return nil
-	}
-
-	runnerImage := cmp.Or(
-		strings.TrimSpace(mo.PointerToOption(syncRecord.PreDeployRunnerImage).OrEmpty()),
-		strings.TrimSpace(s.settingsService.GetStringSetting(ctx, "lifecycleDefaultRunnerImage", "alpine:latest")),
-	)
-	if runnerImage == "" {
-		return fmt.Errorf("pre-deploy script %q is configured but no runner image is set on the GitOps sync or lifecycleDefaultRunnerImage setting", *syncRecord.PreDeployScriptPath)
-	}
-
-	scriptPath := strings.TrimSpace(*syncRecord.PreDeployScriptPath)
-	if validateErr := lifecycle.ValidateScriptPath(ctx, project.Path, scriptPath); validateErr != nil {
-		return fmt.Errorf("invalid pre-deploy script path: %w", validateErr)
-	}
-
-	hookEnv, err := ParseEnvText(syncRecord.PreDeployEnv)
-	if err != nil {
-		return fmt.Errorf("invalid lifecycle env config: %w", err)
-	}
-	extraMounts, err := ParseExtraMountsText(syncRecord.PreDeployExtraMounts)
-	if err != nil {
-		return fmt.Errorf("invalid lifecycle extra mounts config: %w", err)
-	}
-
-	timeoutSec := kit.Ternary(syncRecord.PreDeployTimeoutSec > 0, syncRecord.PreDeployTimeoutSec, lifecycletype.DefaultTimeoutSec)
-	if maxTimeoutSec := s.settingsService.GetIntSetting(ctx, "lifecycleMaxTimeoutSec", lifecycletype.DefaultMaxTimeoutSec); maxTimeoutSec > 0 {
-		timeoutSec = min(timeoutSec, maxTimeoutSec)
-	}
-	timeout := time.Duration(timeoutSec) * time.Second
-	slog.InfoContext(ctx, "running pre-deploy lifecycle hook",
-		"projectId", project.ID,
-		"syncId", syncRecord.ID,
-		"scriptPath", scriptPath,
-		"runnerImage", runnerImage,
-		"timeoutSec", int(timeout/time.Second),
-	)
-
-	start := time.Now()
-	stdoutContent, stderrContent, exitCode, runErr := s.hooks.RunScript(ctx, runnerImage, project.Path, scriptPath, hookEnv, extraMounts, syncRecord.PreDeployNetworkMode, timeout, actor)
-	durationMs := time.Since(start).Milliseconds()
-	status := lifecycle.LifecycleStatusSuccess
-	switch {
-	case errors.Is(runErr, context.DeadlineExceeded):
-		status = lifecycle.LifecycleStatusTimeout
-	case runErr != nil || exitCode != 0:
-		status = lifecycle.LifecycleStatusFailed
-	}
-
-	// Each stream is already bounded with a truncation marker; cutting the
-	// combined output again could split a UTF-8 codepoint.
-	if persistErr := s.db.WithContext(context.WithoutCancel(ctx)).Model(&GitOpsSync{}).Where("id = ?", syncRecord.ID).Updates(map[string]any{
-		"pre_deploy_last_run_at":     start,
-		"pre_deploy_last_run_status": status,
-		"pre_deploy_last_run_output": lifecycle.CombineLifecycleOutput(stdoutContent, stderrContent),
-	}).Error; persistErr != nil {
-		slog.WarnContext(ctx, "failed to persist lifecycle last-run state", "syncId", syncRecord.ID, "error", persistErr)
-	}
-
-	scriptPathValue := mo.PointerToOption(syncRecord.PreDeployScriptPath).OrEmpty()
-	severity := event.EventSeveritySuccess
-	title := "Pre-deploy lifecycle hook succeeded: " + project.Name
-	description := fmt.Sprintf("Script %s exited with code %d in %dms", scriptPathValue, exitCode, durationMs)
-	if status != lifecycle.LifecycleStatusSuccess {
-		severity = event.EventSeverityWarning
-		title = fmt.Sprintf("Pre-deploy lifecycle hook %s: %s", status, project.Name)
-		if runErr != nil {
-			description = runErr.Error()
-		}
-	}
-	if _, eventErr := s.eventService.CreateEvent(ctx, event.CreateEventRequest{
-		Type:          event.EventTypeLifecycleExecute,
-		Severity:      severity,
-		Title:         title,
-		Description:   description,
-		ResourceType:  new("project"),
-		ResourceID:    new(project.ID),
-		ResourceName:  new(project.Name),
-		EnvironmentID: new(syncRecord.EnvironmentID),
-		UserID:        new(actor.ID),
-		Username:      new(actor.Username),
-		Metadata: database.JSON{
-			"scriptPath":   scriptPathValue,
-			"runnerImage":  runnerImage,
-			"exitCode":     exitCode,
-			"durationMs":   durationMs,
-			"gitopsSyncId": syncRecord.ID,
-			"status":       status,
-		},
-	}); eventErr != nil {
-		slog.WarnContext(ctx, "failed to emit lifecycle.execute event", "syncId", syncRecord.ID, "error", eventErr)
-	}
-
-	if runErr != nil {
-		return runErr
-	}
-	if exitCode != 0 {
-		return fmt.Errorf("pre-deploy script exited with status %d", exitCode)
-	}
-	return nil
-}
-
-// ParseEnvText reads admin-configured env config as the
-// same KEY=VALUE text format used by .env files: one entry per line, blank
-// and "#"-prefixed lines ignored, keys must match POSIX identifier syntax.
-// Reuses the strict parser also used for stdout-capture.
-func ParseEnvText(raw *string) (map[string]string, error) {
-	if raw == nil || strings.TrimSpace(*raw) == "" {
-		return map[string]string{}, nil
-	}
-	env, err := lifecycle.ParseKeyValueEnv(*raw)
-	if err != nil {
-		return nil, fmt.Errorf("invalid env entry: %w", err)
-	}
-	return env, nil
-}
-
-// ParseExtraMountsText reads admin-configured bind mounts
-// in docker-CLI "src:tgt[:ro|:rw]" form, one per line. Blank and
-// "#"-prefixed lines are ignored. Both source and target must be absolute
-// paths; mode defaults to read-write.
-func ParseExtraMountsText(raw *string) ([]lifecycletype.ExtraMount, error) {
-	if raw == nil || strings.TrimSpace(*raw) == "" {
-		return nil, nil
-	}
-
-	var mounts []lifecycletype.ExtraMount
-	scanner := bufio.NewScanner(strings.NewReader(*raw))
-	scanner.Buffer(make([]byte, 0, 4*1024), 64*1024)
-
-	lineNum := 0
-	for scanner.Scan() {
-		lineNum++
-		line := strings.TrimSpace(scanner.Text())
-		if line == "" || strings.HasPrefix(line, "#") {
-			continue
-		}
-
-		parts := strings.Split(line, ":")
-		if len(parts) < 2 || len(parts) > 3 {
-			return nil, fmt.Errorf("line %d: expected src:tgt[:ro|:rw], got %q", lineNum, line)
-		}
-
-		mount := lifecycletype.ExtraMount{Source: parts[0], Target: parts[1]}
-		if len(parts) == 3 {
-			switch parts[2] {
-			case "ro":
-				mount.Readonly = true
-			case "rw":
-				mount.Readonly = false
-			default:
-				return nil, fmt.Errorf("line %d: invalid mode %q (expected \"ro\" or \"rw\")", lineNum, parts[2])
-			}
-		}
-
-		// Mount sources/targets are interpreted by the Docker daemon as POSIX
-		// host/container paths, so use path.IsAbs to avoid host-OS quirks
-		// (filepath.IsAbs("/x") returns false on Windows).
-		if !path.IsAbs(filepath.ToSlash(mount.Source)) {
-			return nil, fmt.Errorf("line %d: source %q must be an absolute path", lineNum, mount.Source)
-		}
-		if !path.IsAbs(filepath.ToSlash(mount.Target)) {
-			return nil, fmt.Errorf("line %d: target %q must be an absolute path", lineNum, mount.Target)
-		}
-
-		mounts = append(mounts, mount)
-	}
-	if err := scanner.Err(); err != nil {
-		return nil, fmt.Errorf("read extra mounts config: %w", err)
-	}
-	return mounts, nil
-}
-
 func (s *ProjectService) UpdateProjectServices(ctx context.Context, projectID string, servicesToUpdate []string, user usertypes.Actor, discoverTags bool) error {
 	proj, err := s.getMutableProject(ctx, projectID)
 	if err != nil {
@@ -991,7 +575,7 @@ func (s *ProjectService) UpdateProjectServices(ctx context.Context, projectID st
 		if loadErr != nil {
 			return fmt.Errorf("load project for service image checks: %w", loadErr)
 		}
-		changes, changesErr := s.updates.ImageChanges(ctx, effective, gitOpsSyncID(proj) != "")
+		changes, changesErr := s.updates.ImageChanges(ctx, effective)
 		if changesErr != nil {
 			return changesErr
 		}
@@ -1182,16 +766,9 @@ func (s *ProjectService) DeployProject(ctx context.Context, projectID string, us
 	projectModel, err := s.composeCoordinator.Deploy(ctx, projecttypes.ComposeDeployment{
 		ProjectID: projectID, ProjectPath: projectFromDb.Path, Options: options,
 		DefaultPullPolicy: s.settingsService.GetStringSetting(ctx, "defaultDeployPullPolicy", "missing"),
-		GitOpsManaged:     gitOpsSyncID(projectFromDb) != "",
 		WaitTimeout:       timeouts.GetDuration(s.settingsService.GetSettingsConfig().DeployWaitTimeout.AsInt(), timeouts.DefaultDeployWait),
 		AuthConfigs:       authConfigs,
 		Progress:          progressWriter,
-		PreDeploy: func(ctx context.Context) error {
-			if s.lifecycleService == nil {
-				return nil
-			}
-			return s.lifecycleService.runPreDeploy(ctx, projectFromDb, user)
-		},
 		Load: func(ctx context.Context) (*types.Project, error) {
 			model, _, loadComposeProjectForProjectErr := s.loadComposeProjectForProject(ctx, projectFromDb, deployment.PrepareProjectBindDirectories(projectFromDb.Path))
 			if loadComposeProjectForProjectErr == nil {
@@ -1347,8 +924,8 @@ func (s *ProjectService) CreateProject(
 		return nil, workspace.WrapProjectWorkspaceError(applyProjectWorkspaceChangesErr)
 	}
 
-	// GitOps-originated creates (allowNameSuffix=false) tolerate not-yet-supplied
-	// ${VAR} references the same way single-file git sync updates do; interactive
+	// Creates without automatic name suffixes (allowNameSuffix=false) tolerate not-yet-supplied
+	// ${VAR} references while the env file is still being supplied; interactive
 	// creates (allowNameSuffix=true) stay strict.
 	if validateComposeContentForUpdateErr := projects.ValidateComposeContentForUpdate(
 		ctx,
@@ -1673,7 +1250,7 @@ func (s *ProjectService) GetProjectDetails(ctx context.Context, projectID string
 	}
 	projectsDir, projectsDirErr := s.GetProjectsDirectory(ctx)
 	if projectsDirErr != nil {
-		// Relative paths and the .env.global selection layer degrade without a
+		// Relative paths and project environment selection degrade without a
 		// projects directory; keep the details response intact but log it.
 		slog.WarnContext(ctx, "failed to resolve projects directory for project details", "projectId", projectID, "error", projectsDirErr)
 	}
@@ -1690,7 +1267,6 @@ func (s *ProjectService) GetProjectDetails(ctx context.Context, projectID string
 	resp.HasBuildDirective = proj.BuildImageRefsJSON != nil && len(projects.ParseImageRefsJSON(*proj.BuildImageRefsJSON)) > 0
 	resp.DirName = mo.PointerToOption(proj.DirName).OrEmpty()
 	resp.RelativePath = listing.RelativePath(projectsDir, proj.Path)
-	resp.GitOpsManagedBy = proj.GitOpsManagedBy
 	meta := s.ProjectMetadata(ctx, *proj, nil)
 	icon := iconcatalog.Resolve(IconCatalogForContext(ctx), meta.ProjectIcon)
 	resp.IconLightURL, resp.IconDarkURL = icon.IconLightURL, icon.IconDarkURL
@@ -1737,15 +1313,6 @@ func (s *ProjectService) GetProjectDetails(ctx context.Context, projectID string
 	}
 
 	s.enrichComposeDetails(ctx, proj, opts, &resp)
-	if syncID := gitOpsSyncID(proj); syncID != "" {
-		var syncRecord GitOpsSync
-		if syncErr := s.db.WithContext(ctx).Preload("Repository").Where("id = ?", syncID).First(&syncRecord).Error; syncErr == nil {
-			resp.LastSyncCommit = syncRecord.LastSyncCommit
-			if syncRecord.Repository != nil {
-				resp.GitRepositoryURL = syncRecord.Repository.URL
-			}
-		}
-	}
 
 	// Refresh runtime status/counts even when callers do not request the full
 	// runtime service array. DB values are only a fallback when Docker lookup
@@ -2207,7 +1774,6 @@ func (s *ProjectService) ListProjects(ctx context.Context, params pagination.Que
 		items[i].Tags = tagsByProject[items[i].ID]
 	}
 	if updatesFilter != "" {
-		s.preloadGitOpsComposePaths(ctx, env, projectsArray)
 		s.enrichProjectsWithUpdateInfo(ctx, projectsArray, items, true, env)
 		// Untracked compose projects only join an unfiltered-by-tag has_update view.
 		if strings.EqualFold(updatesFilter, "has_update") && strings.TrimSpace(params.Filters["tags"]) == "" {
@@ -2237,7 +1803,6 @@ func (s *ProjectService) ListProjects(ctx context.Context, params pagination.Que
 		pageDetails = append(pageDetails, result.Items[i])
 	}
 	if updatesFilter == "" {
-		s.preloadGitOpsComposePaths(ctx, env, pageProjects)
 		s.enrichProjectsWithUpdateInfo(ctx, pageProjects, pageDetails, true, env)
 	}
 	metas := make([]projects.ArcaneComposeMetadata, len(pageProjects))
@@ -2513,16 +2078,11 @@ func (s *ProjectService) SyncProjectsFromFileSystem(ctx context.Context) error {
 		if _, ok := seen[p.Path]; ok {
 			continue
 		}
-		// GitOps owns these projects' lifecycle: their compose files may not exist
-		// yet during a sync or after an SSH/clone failure.
-		if gitOpsSyncID(&p) != "" {
-			continue
-		}
 		// Rows imported from Arcane's own scratch dirs (project-update preview/backup,
-		// GitOps stage/backup) or from filesystem snapshot/trash dirs are never real
+		// project update previews) or from filesystem snapshot/trash dirs are never real
 		// projects. The decision is name-based, so it bypasses the mass-wipe guard.
 		if projects.IsInternalScratchDirName(p.Name) || projects.IsInternalScratchDirName(filepath.Base(p.Path)) || (p.DirName != nil && projects.IsInternalScratchDirName(*p.DirName)) {
-			deletions = append(deletions, projectCleanupDecision{project: p, reason: "removed internal Arcane scratch record (project-update/gitops temp dir)"})
+			deletions = append(deletions, projectCleanupDecision{project: p, reason: "removed internal Arcane scratch record (project-update temp dir)"})
 			continue
 		}
 		if rel := listing.RelativePath(projectsDir, p.Path); rel != "" && projects.PathContainsSnapshotDirectory(rel) {
@@ -2693,13 +2253,6 @@ func (s *ProjectService) evaluateProjectCleanup(ctx context.Context, p Project, 
 	return mo.Some(projectCleanupDecision{project: p, reason: "removed orphaned project: directory present but contains no compose file"})
 }
 
-// ApplyGitSyncEnvToDirectory applies the same managed three-file environment
-// merge used by single-file project syncs and returns the effective content
-// before and after the update.
-func (s *ProjectService) ApplyGitSyncEnvToDirectory(ctx context.Context, projectPath, projectsDirectory string, gitEnvContent *string) (before, after string, err error) {
-	return projectsync.ApplyGitSyncEnv(ctx, projectPath, projectsDirectory, gitEnvContent)
-}
-
 func (s *ProjectService) reconcileComposeTagsForProject(ctx context.Context, projectModel *Project) error {
 	if projectModel == nil {
 		return nil
@@ -2820,7 +2373,6 @@ func (s *ProjectService) UpdateProject(ctx context.Context, projectID string, na
 	}
 	s.logProjectEvent(ctx, event.EventTypeProjectUpdate, proj.ID, proj.Name, user, metadata, "could not log project update action")
 	if contentChanged {
-		s.FilesChanged.Publish(proj.ID)
 	}
 
 	slog.InfoContext(ctx, "project updated", "projectId", proj.ID, "name", proj.Name)
@@ -2908,96 +2460,6 @@ func (s *ProjectService) refreshProjectAfterContentUpdate(ctx context.Context, p
 	if err := s.updateProjectStatusAndCounts(ctx, proj.ID, proj.Status); err != nil {
 		slog.WarnContext(ctx, "failed to update service counts after project content update", "projectId", proj.ID, "error", err)
 	}
-}
-
-func (s *ProjectService) ApplyGitSyncProjectFiles(
-	ctx context.Context,
-	projectID, composeContent string,
-	gitEnvContent, gitOverrideContent *string,
-	gitOverrideFileName string,
-	user usertypes.Actor,
-) (*Project, bool, error) {
-	proj, projectsDirectory, err := s.getProjectForUpdate(ctx, projectID)
-	if err != nil {
-		return nil, false, err
-	}
-	if proj.IsArchived {
-		return nil, false, common.Classify(common.ErrProjectArchived, errors.New("project is archived and must be unarchived before this action"))
-	}
-	beforeCompose, beforeEnv, beforeOverride, beforeErr := s.projectContent(ctx, proj.ID)
-
-	envUpdate, err := projectsync.PrepareGitSyncEnvUpdate(proj.Path, gitEnvContent)
-	if err != nil {
-		return nil, false, fmt.Errorf("failed to resolve git env state: %w", err)
-	}
-
-	if validateComposeContentForUpdateErr := projects.ValidateComposeContentForUpdate(
-		ctx,
-		projectsDirectory,
-		proj.Path,
-		proj.Name,
-		composeContent,
-		envUpdate.EffectiveContent,
-		gitOverrideContent,
-		gitOverrideFileName,
-		true,
-	); validateComposeContentForUpdateErr != nil {
-		return nil, false, fmt.Errorf("invalid compose file: %w", validateComposeContentForUpdateErr)
-	}
-
-	backup, cleanupBackup, err := projects.BackupProjectDirectory(ctx, projectsDirectory, proj.Path, ".project-update-backup-*", projects.ProjectUpdateBackupScope{TopLevelFiles: true})
-	if err != nil {
-		return nil, false, err
-	}
-	defer cleanupBackup()
-
-	// The env is persisted first so WriteComposeFile targets the COMPOSE_FILE base
-	// the updated .env selects. A failure before the row save restores the backup,
-	// so new env values never pair with an old or partial compose file set.
-	var applyErr error
-	if envErr := projectsync.PersistGitSyncEnvFiles(ctx, proj.Path, projectsDirectory, envUpdate); envErr != nil {
-		applyErr = fmt.Errorf("failed to sync git env files: %w", envErr)
-	} else if composeErr := projects.WriteComposeFile(ctx, projectsDirectory, proj.Path, composeContent); composeErr != nil {
-		applyErr = fmt.Errorf("failed to save compose file: %w", composeErr)
-	} else if overrideErr := projects.WriteComposeOverrideFile(ctx, projectsDirectory, proj.Path, gitOverrideContent, gitOverrideFileName); overrideErr != nil {
-		applyErr = fmt.Errorf("failed to sync git override file: %w", overrideErr)
-	} else if saveErr := s.db.WithContext(ctx).Save(&proj).Error; saveErr != nil {
-		applyErr = fmt.Errorf("failed to update project: %w", saveErr)
-	}
-	if applyErr != nil {
-		journalActive := false
-		return nil, false, s.handleProjectUpdateFailure(ctx, projectID, projectsDirectory, &proj, backup, &journalActive, false, applyErr)
-	}
-
-	s.refreshProjectAfterContentUpdate(ctx, &proj)
-
-	// Unreadable content on either side always compares as changed.
-	afterCompose, afterEnv, afterOverride, afterErr := s.projectContent(ctx, proj.ID)
-	unreadable := beforeErr != nil || afterErr != nil
-	if unreadable {
-		slog.WarnContext(ctx, "failed to read project content for git sync change detection; treating as changed", "projectId", proj.ID, "error", errors.Join(beforeErr, afterErr))
-	}
-	composeChanged := unreadable || beforeCompose != afterCompose
-	envChanged := unreadable || projects.EnvContentChanged(beforeEnv, afterEnv)
-	overrideChanged := unreadable || beforeOverride != afterOverride
-	contentChanged := composeChanged || envChanged || overrideChanged
-	envSourceRemoved := gitEnvContent == nil && envUpdate.State.HasGitSource
-	if contentChanged || envSourceRemoved {
-		metadata := database.JSON{
-			"action":          "git_sync_update",
-			"projectID":       proj.ID,
-			"projectName":     proj.Name,
-			"composeUpdated":  composeChanged,
-			"envUpdated":      envChanged,
-			"overrideUpdated": overrideChanged,
-		}
-		if envSourceRemoved {
-			metadata["envSourceRemoved"] = true
-		}
-		s.logProjectEvent(ctx, event.EventTypeProjectUpdate, proj.ID, proj.Name, user, metadata, "could not log git sync project update action")
-	}
-
-	return &proj, contentChanged, nil
 }
 
 func (s *ProjectService) getProjectForUpdate(ctx context.Context, projectID string) (Project, string, error) {
@@ -3209,9 +2671,6 @@ func (s *ProjectService) SaveProjectServiceImages(ctx context.Context, projectID
 	if err != nil {
 		return nil, err
 	}
-	if gitOpsSyncID(proj) != "" {
-		return nil, errors.New("tag updates cannot edit a GitOps-managed project; update image tags in the source repository")
-	}
 	// Selecting the changed services keeps profile-gated ones active.
 	effective, _, err := s.loadComposeProjectForProject(ctx, proj, nil, slices.Collect(maps.Keys(changes))...)
 	if err != nil {
@@ -3233,11 +2692,7 @@ func (s *ProjectService) GetProjectWorkspace(ctx context.Context, projectID stri
 	if ensureProjectPathUnderRootErr := s.EnsureProjectPathUnderRoot(ctx, proj, false); ensureProjectPathUnderRootErr != nil {
 		return nil, ensureProjectPathUnderRootErr
 	}
-	ownedPaths, ownedErr := s.gitOpsOwnedWorkspacePaths(ctx, proj)
-	if ownedErr != nil {
-		ownedPaths = nil
-	}
-	return s.workspace.Read(ctx, proj.Path, s.workspaceComposeFileName(ctx, proj), ownedPaths)
+	return s.workspace.Read(ctx, proj.Path, s.workspaceComposeFileName(ctx, proj))
 }
 
 func (s *ProjectService) GetProjectWorkspaceFile(ctx context.Context, projectID, relativePath string) (*workspacetypes.FileContent, error) {
@@ -3245,11 +2700,7 @@ func (s *ProjectService) GetProjectWorkspaceFile(ctx context.Context, projectID,
 	if err != nil {
 		return nil, err
 	}
-	ownedPaths, ownedErr := s.gitOpsOwnedWorkspacePaths(ctx, proj)
-	if ownedErr != nil {
-		ownedPaths = nil
-	}
-	return s.workspace.File(ctx, proj.Path, s.workspaceComposeFileName(ctx, proj), relativePath, ownedPaths)
+	return s.workspace.File(ctx, proj.Path, s.workspaceComposeFileName(ctx, proj), relativePath)
 }
 
 func (s *ProjectService) DownloadProjectWorkspaceFile(ctx context.Context, projectID, relativePath string) (io.ReadCloser, int64, string, error) {
@@ -3274,16 +2725,6 @@ func (s *ProjectService) UpdateProjectWorkspace(
 	if err != nil {
 		return nil, err
 	}
-	// Only the paths the GitOps sync owns are locked; the rest of the
-	// directory is operator-owned overlay (e.g. secret env files a public
-	// repo cannot carry) and stays editable (#3634).
-	ownedPaths, err := s.gitOpsOwnedWorkspacePaths(ctx, proj)
-	if err != nil {
-		return nil, err
-	}
-	if validateWorkspaceChangesAgainstGitOpsErr := workspace.ValidateWorkspaceChangesAgainstGitOps(manifest.FileChanges, ownedPaths); validateWorkspaceChangesAgainstGitOpsErr != nil {
-		return nil, validateWorkspaceChangesAgainstGitOpsErr
-	}
 	if ensureProjectPathUnderRootErr := s.EnsureProjectPathUnderRoot(ctx, proj, true); ensureProjectPathUnderRootErr != nil {
 		return nil, ensureProjectPathUnderRootErr
 	}
@@ -3307,7 +2748,6 @@ func (s *ProjectService) UpdateProjectWorkspace(
 		"action":          "update_project_workspace",
 		"fileChangeCount": len(manifest.FileChanges),
 	}, "could not log project workspace update")
-	s.FilesChanged.Publish(proj.ID)
 	return s.GetProjectWorkspace(ctx, projectID)
 }
 
@@ -3316,23 +2756,6 @@ func (s *ProjectService) workspaceComposeFileName(ctx context.Context, proj *Pro
 		return filepath.Base(composeFile)
 	}
 	return projects.DefaultComposeFileName
-}
-
-// gitOpsOwnedWorkspacePaths returns the workspace-relative paths owned
-// by the project's GitOps sync. Returns nil for projects without a live sync,
-// including a stale gitops_managed_by marker.
-func (s *ProjectService) gitOpsOwnedWorkspacePaths(ctx context.Context, proj *Project) (map[string]struct{}, error) {
-	if gitOpsSyncID(proj) == "" {
-		return nil, nil
-	}
-	var syncRecord GitOpsSync
-	switch err := s.db.WithContext(ctx).Where("project_id = ?", proj.ID).First(&syncRecord).Error; {
-	case errors.Is(err, gorm.ErrRecordNotFound):
-		return nil, nil
-	case err != nil:
-		return nil, fmt.Errorf("load gitops sync for workspace: %w", err)
-	}
-	return workspace.OwnedPaths(syncRecord.SyncedFiles, syncRecord.ComposePath)
 }
 
 func (s *ProjectService) projectServices(ctx context.Context, projectID string) ([]projecttypes.RuntimeService, error) {

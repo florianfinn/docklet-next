@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace
+// Deviations: Local module namespace; functional cut: removed federated credentials.
 
 package role
 
@@ -310,11 +310,6 @@ func requiredPermissionsForPickerInternal(permission string) []string {
 		authz.PermApiKeysCreate,
 		authz.PermApiKeysUpdate,
 		authz.PermApiKeysDelete,
-		authz.PermFederatedList,
-		authz.PermFederatedRead,
-		authz.PermFederatedCreate,
-		authz.PermFederatedUpdate,
-		authz.PermFederatedDelete,
 		authz.PermUsersList,
 		authz.PermUsersRead,
 		authz.PermUsersCreate,

@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace
+// Deviations: Local module namespace; functional cut: removed S3 backup destinations.
 
 // Package backup owns the shared Rustic backup engine used by volume and
 // system backups: typed repository operations, per-repository serialization
@@ -45,7 +45,6 @@ import (
 
 	"github.com/florianfinn/docklet-next/backend/internal/database"
 	"github.com/florianfinn/docklet-next/backend/internal/image"
-	"github.com/florianfinn/docklet-next/backend/internal/s3"
 	"github.com/florianfinn/docklet-next/backend/pkg/libarcane"
 	"github.com/florianfinn/docklet-next/backend/pkg/libarcane/rustic"
 	"github.com/florianfinn/docklet-next/backend/pkg/libarcane/volumehelper"
@@ -54,7 +53,6 @@ import (
 	"github.com/florianfinn/docklet-next/backend/pkg/scheduler/schedule"
 	"github.com/florianfinn/docklet-next/backend/pkg/utils"
 	"github.com/florianfinn/docklet-next/backend/pkg/utils/francis"
-	s3util "github.com/florianfinn/docklet-next/backend/pkg/utils/s3"
 )
 
 const (
@@ -784,7 +782,7 @@ func (r PolicyReconciliation[P, U]) persistInternal(ctx context.Context, policie
 }
 
 // ValidatePolicyUpdate applies the shared cron, retention, and destination rules used by backup policies.
-func ValidatePolicyUpdate(ctx context.Context, domain string, update backup.UpdateBackupPolicy, s3Service *s3.S3DestinationService) (backup.UpdateBackupPolicy, error) {
+func ValidatePolicyUpdate(_ context.Context, domain string, update backup.UpdateBackupPolicy) (backup.UpdateBackupPolicy, error) {
 	normalized, err := schedule.NormalizeSixField(update.Schedule, domain+" backup")
 	if err != nil {
 		return update, err
@@ -793,21 +791,8 @@ func ValidatePolicyUpdate(ctx context.Context, domain string, update backup.Upda
 	if update.RetentionCount < 0 || update.RetentionCount > 3650 {
 		return update, errors.New("retentionCount must be between 0 and 3650")
 	}
-	if !update.LocalEnabled && !update.S3Enabled {
-		return update, fmt.Errorf("select at least one %s backup destination", domain)
-	}
-	if update.S3Enabled {
-		if strings.TrimSpace(update.S3DestinationID) == "" {
-			return update, fmt.Errorf("select an S3 destination for %s backups", domain)
-		}
-		if s3Service == nil {
-			return update, errors.New("S3 backup destinations are unavailable")
-		}
-		if _, configurationErr := s3Service.Configuration(ctx, update.S3DestinationID); configurationErr != nil {
-			return update, fmt.Errorf("select a valid S3 destination for %s backups", domain)
-		}
-	} else {
-		update.S3DestinationID = ""
+	if !update.LocalEnabled {
+		return update, fmt.Errorf("select a local %s backup destination", domain)
 	}
 	return update, nil
 }
@@ -843,78 +828,6 @@ func (r PolicyReconciliation[P, U]) buildInternal(ctx context.Context, updates [
 		policies = append(policies, policy)
 	}
 	return policies, kept, nil
-}
-
-var ErrRemoteRepositoryMissing = errors.New("S3 backup storage is missing")
-
-const RemoteDisabledMessage = "S3 backup storage is missing. Remote backups were disabled; edit the policy to resume."
-
-// RemoteSnapshotChecker memoizes targeted checks within one response budget.
-// A nil result means the remote copy could not be verified.
-func RemoteSnapshotChecker(ctx context.Context, destinations *s3.S3DestinationService, root string) func(string, string) *bool {
-	checked := make(map[string]*backup.RepositoryObservation)
-	deadline := time.Now().Add(10 * time.Second)
-	return func(destinationID, snapshotID string) *bool {
-		if destinations == nil || root == "" || destinationID == "" || snapshotID == "" {
-			return nil
-		}
-		key := destinationID + ":" + snapshotID
-		observation, seen := checked[key]
-		if !seen {
-			checked[key] = nil
-			checkCtx, cancel := context.WithDeadline(ctx, deadline)
-			defer cancel()
-			configuration, err := destinations.Configuration(checkCtx, destinationID)
-			if err != nil {
-				return nil
-			}
-			result, err := s3util.CheckRepository(checkCtx, configuration, root, snapshotID)
-			if err != nil {
-				return nil
-			}
-			observation = &result
-			checked[key] = observation
-		}
-		if observation == nil {
-			return nil
-		}
-		return new(observation.Available && observation.SnapshotAvailable)
-	}
-}
-
-// CheckRemoteRepository probes the destination's repository config within a bounded budget.
-// Transport and credential failures are returned as errors so callers never forget snapshots blindly.
-func CheckRemoteRepository(ctx context.Context, destinations *s3.S3DestinationService, destinationID, root string) (backup.RepositoryObservation, error) {
-	if destinations == nil {
-		return backup.RepositoryObservation{}, errors.New("S3 destinations are unavailable")
-	}
-	configuration, err := destinations.Configuration(ctx, destinationID)
-	if err != nil {
-		return backup.RepositoryObservation{}, err
-	}
-	checkCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
-	defer cancel()
-	return s3util.CheckRepository(checkCtx, configuration, root, "")
-}
-
-// CheckScheduledRemote permits first-use initialization, but detects lost repositories.
-func CheckScheduledRemote(ctx context.Context, db *database.DB, destinations *s3.S3DestinationService, table, destinationID, root string) error {
-	result, err := CheckRemoteRepository(ctx, destinations, destinationID, root)
-	if err != nil || result.Available {
-		return err
-	}
-	if result.Reason == s3util.RepositoryReasonMissingRepository {
-		var retained int64
-		if countRetainedSnapshotsErr := db.WithContext(ctx).Table(table).
-			Where("s3_destination_id = ? AND COALESCE(remote_snapshot_id, '') <> ''", destinationID).
-			Count(&retained).Error; countRetainedSnapshotsErr != nil {
-			return countRetainedSnapshotsErr
-		}
-		if retained == 0 {
-			return nil
-		}
-	}
-	return fmt.Errorf("%w: %s", ErrRemoteRepositoryMissing, result.Reason)
 }
 
 const backupRunTypeInternal = "backup-run"
@@ -1290,7 +1203,7 @@ func ExpiredRunIDs(ctx context.Context, db *database.DB, table, policyID string,
 	err := db.WithContext(ctx).
 		Table(table).
 		Where(
-			"policy_id = ? AND status = ? AND (COALESCE(local_snapshot_id, '') <> '' OR COALESCE(remote_snapshot_id, '') <> '')",
+			"policy_id = ? AND status = ? AND COALESCE(local_snapshot_id, '') <> ''",
 			policyID,
 			"succeeded",
 		).

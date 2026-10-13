@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace
+// Deviations: Local module namespace; functional cut: removed OIDC and passkeys.
 
 package role
 
@@ -377,11 +377,9 @@ func (s *RoleService) ListUserAssignments(ctx context.Context, userID string) ([
 }
 
 // replaceUserAssignmentsForSourceInternal replaces the user's assignments for a
-// single source (manual or oidc), leaving other sources untouched. References
-// are validated inside the tx so a concurrent role/env delete yields a typed
-// error (→ 400) rather than an opaque FK violation, and the global-admin guard
-// is enforced before commit. Shared by SetUserAssignments and
-// ReplaceOidcAssignments.
+// one source. References are validated inside the transaction and the
+// global-admin guard is enforced before commit.
+
 func (s *RoleService) replaceUserAssignmentsForSourceInternal(ctx context.Context, userID, source string, desired []UserRoleAssignment) error {
 	for i := range desired {
 		desired[i].UserID = userID
@@ -431,8 +429,7 @@ func (s *RoleService) replaceUserAssignmentsForSourceInternal(ctx context.Contex
 }
 
 // SetUserAssignments replaces the user's source='manual' assignments with the
-// given desired set. Source='oidc' rows are preserved (use
-// ReplaceOidcAssignments for those). Enforces the global-admin guard.
+// given desired set. Enforces the global-admin guard.
 func (s *RoleService) SetUserAssignments(ctx context.Context, userID string, desired []UserRoleAssignment) error {
 	return s.replaceUserAssignmentsForSourceInternal(ctx, userID, RoleAssignmentSourceManual, desired)
 }
@@ -487,19 +484,6 @@ func validateAssignmentsExistInternal(tx *gorm.DB, desired []UserRoleAssignment)
 	return nil
 }
 
-// ReplaceOidcAssignments replaces the user's source='oidc' assignments. Manual
-// assignments are untouched. An OIDC mapping referencing a since-deleted role or
-// environment fails with a typed error; the caller logs and continues login so
-// the user simply receives no OIDC-derived assignments. Enforces the
-// global-admin guard after the swap.
-func (s *RoleService) ReplaceOidcAssignments(ctx context.Context, userID string, desired []UserRoleAssignment) error {
-	return s.replaceUserAssignmentsForSourceInternal(ctx, userID, RoleAssignmentSourceOidc, desired)
-}
-
-// CountGlobalAdminsExcludingUser returns the number of non-service users (other
-// than excludedUserID) whose resolved global permissions satisfy IsGlobalAdmin.
-// Used as the authoritative check for "removing this user / demoting this
-// assignment would leave the system with no admin."
 func (s *RoleService) CountGlobalAdminsExcludingUser(ctx context.Context, excludedUserID string) (int, error) {
 	return s.countEffectiveGlobalAdminsInternal(ctx, s.db.WithContext(ctx), excludedUserID)
 }
@@ -737,211 +721,6 @@ func (s *RoleService) SetApiKeyPermissionsInDB(ctx context.Context, tx *gorm.DB,
 	return nil
 }
 
-// ---------- OIDC role mappings ----------
-
-func (s *RoleService) ListOidcMappings(ctx context.Context) ([]OidcRoleMapping, error) {
-	var out []OidcRoleMapping
-	if err := s.db.WithContext(ctx).Order("claim_value, role_id").Find(&out).Error; err != nil {
-		return nil, fmt.Errorf("failed to list oidc mappings: %w", err)
-	}
-	return out, nil
-}
-
-func (s *RoleService) GetOidcMapping(ctx context.Context, id string) (*OidcRoleMapping, error) {
-	return dbutil.FirstWhere[OidcRoleMapping](ctx, s.db.DB, common.Classify(common.ErrOidcMappingNotFound, errors.New("OIDC role mapping not found")), "id = ?", id)
-}
-
-func (s *RoleService) CreateOidcMapping(ctx context.Context, claimValue, roleID string, environmentID *string) (*OidcRoleMapping, error) {
-	claimValue = strings.TrimSpace(claimValue)
-	roleID = strings.TrimSpace(roleID)
-	if claimValue == "" {
-		return nil, errors.New("claim value is required")
-	}
-	if roleID == "" {
-		return nil, errors.New("role id is required")
-	}
-	var mapping OidcRoleMapping
-	err := dbutil.WithTx(ctx, s.db.DB, func(tx *gorm.DB) error {
-		if err := validateRoleIDsExistInternal(tx, []string{roleID}); err != nil {
-			return err
-		}
-		mapping = OidcRoleMapping{
-			ClaimValue:    claimValue,
-			RoleID:        roleID,
-			EnvironmentID: environmentID,
-			Source:        OidcMappingSourceManual,
-		}
-		if err := tx.Create(&mapping).Error; err != nil {
-			return fmt.Errorf("failed to create oidc mapping: %w", err)
-		}
-		return nil
-	})
-	if err != nil {
-		return nil, err
-	}
-	return &mapping, nil
-}
-
-func (s *RoleService) UpdateOidcMapping(ctx context.Context, id, claimValue, roleID string, environmentID *string) (*OidcRoleMapping, error) {
-	claimValue = strings.TrimSpace(claimValue)
-	roleID = strings.TrimSpace(roleID)
-	if claimValue == "" {
-		return nil, errors.New("claim value is required")
-	}
-	if roleID == "" {
-		return nil, errors.New("role id is required")
-	}
-	var out OidcRoleMapping
-	err := dbutil.WithTx(ctx, s.db.DB, func(tx *gorm.DB) error {
-		var existing OidcRoleMapping
-		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).Where("id = ?", id).First(&existing).Error; err != nil {
-			if errors.Is(err, gorm.ErrRecordNotFound) {
-				return common.Classify(common.ErrOidcMappingNotFound, errors.New("OIDC role mapping not found"))
-			}
-			return fmt.Errorf("failed to load mapping: %w", err)
-		}
-		if existing.Source == OidcMappingSourceEnv {
-			return common.Classify(common.ErrOidcMappingEnvManaged, errors.New("OIDC role mapping is managed by OIDC_ROLE_MAPPINGS and cannot be edited at runtime"))
-		}
-		if err := validateRoleIDsExistInternal(tx, []string{roleID}); err != nil {
-			return err
-		}
-		existing.ClaimValue = claimValue
-		existing.RoleID = roleID
-		existing.EnvironmentID = environmentID
-		if err := tx.Save(&existing).Error; err != nil {
-			return fmt.Errorf("failed to update mapping: %w", err)
-		}
-		out = existing
-		return nil
-	})
-	if err != nil {
-		return nil, err
-	}
-	return &out, nil
-}
-
-func validateRoleIDsExistInternal(tx *gorm.DB, roleIDs []string) error {
-	if len(roleIDs) == 0 {
-		return nil
-	}
-	roleIDSet := make(map[string]struct{}, len(roleIDs))
-	for _, roleID := range roleIDs {
-		if roleID == "" {
-			return errors.New("role id is required")
-		}
-		roleIDSet[roleID] = struct{}{}
-	}
-
-	normalized := slices.Collect(maps.Keys(roleIDSet))
-	var found []string
-	if err := tx.Model(&Role{}).Where("id IN ?", normalized).Pluck("id", &found).Error; err != nil {
-		return fmt.Errorf("failed to verify role ids: %w", err)
-	}
-	foundSet := make(map[string]struct{}, len(found))
-	for _, id := range found {
-		foundSet[id] = struct{}{}
-	}
-	for _, id := range normalized {
-		if _, ok := foundSet[id]; !ok {
-			return common.Classify(common.ErrInvalidRoleAssignment, fmt.Errorf("invalid role assignment: role %q does not exist", id))
-		}
-	}
-	return nil
-}
-
-func (s *RoleService) DeleteOidcMapping(ctx context.Context, id string) error {
-	return dbutil.WithTx(ctx, s.db.DB, func(tx *gorm.DB) error {
-		var existing OidcRoleMapping
-		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).Where("id = ?", id).First(&existing).Error; err != nil {
-			if errors.Is(err, gorm.ErrRecordNotFound) {
-				return common.Classify(common.ErrOidcMappingNotFound, errors.New("OIDC role mapping not found"))
-			}
-			return fmt.Errorf("failed to load mapping: %w", err)
-		}
-		if existing.Source == OidcMappingSourceEnv {
-			return common.Classify(common.ErrOidcMappingEnvManaged, errors.New("OIDC role mapping is managed by OIDC_ROLE_MAPPINGS and cannot be edited at runtime"))
-		}
-		if err := tx.Delete(&OidcRoleMapping{}, "id = ?", id).Error; err != nil {
-			return fmt.Errorf("failed to delete mapping: %w", err)
-		}
-		return nil
-	})
-}
-
-// ReconcileEnvOidcMappings replaces every source='env' row in oidc_role_mappings
-// with the set declared by `rawSpec` (a JSON array of role.OidcRoleMappingSpec).
-// Called once at boot. Behavior is declarative:
-//
-//   - rawSpec empty / unset → leaves DB rows alone (purely UI-managed mode).
-//   - rawSpec is `[]` → wipes any previously-env-managed rows.
-//   - rawSpec is a valid JSON array → upserts each spec, deletes stale env rows.
-//
-// Manual rows (source='manual') are never touched. Bad JSON or an unknown role
-// ID returns an error so a misconfigured deployment fails loudly rather than
-// silently dropping mappings.
-func (s *RoleService) ReconcileEnvOidcMappings(ctx context.Context, rawSpec string) error {
-	rawSpec = strings.TrimSpace(rawSpec)
-	if rawSpec == "" {
-		return nil
-	}
-	var specs []roletypes.OidcRoleMappingSpec
-	if err := json.Unmarshal([]byte(rawSpec), &specs); err != nil {
-		return fmt.Errorf("invalid OIDC_ROLE_MAPPINGS JSON: %w", err)
-	}
-	for i, sp := range specs {
-		if strings.TrimSpace(sp.ClaimValue) == "" {
-			return fmt.Errorf("OIDC_ROLE_MAPPINGS[%d]: claimValue is required", i)
-		}
-		if strings.TrimSpace(sp.RoleID) == "" {
-			return fmt.Errorf("OIDC_ROLE_MAPPINGS[%d]: roleId is required", i)
-		}
-	}
-
-	return dbutil.WithTx(ctx, s.db.DB, func(tx *gorm.DB) error {
-		// Verify every referenced role exists. Done inside the tx so a concurrent
-		// role delete can't race past this check.
-		for i, sp := range specs {
-			var count int64
-			if err := tx.Model(&Role{}).Where("id = ?", sp.RoleID).Count(&count).Error; err != nil {
-				return fmt.Errorf("OIDC_ROLE_MAPPINGS[%d]: failed to verify role: %w", i, err)
-			}
-			if count == 0 {
-				return fmt.Errorf("OIDC_ROLE_MAPPINGS[%d]: role %q does not exist", i, sp.RoleID)
-			}
-		}
-
-		// Declarative replace: drop every env-managed row, then insert the new
-		// set. Manual rows are untouched.
-		if err := tx.Where("source = ?", OidcMappingSourceEnv).Delete(&OidcRoleMapping{}).Error; err != nil {
-			return fmt.Errorf("failed to clear env-managed mappings: %w", err)
-		}
-		if len(specs) == 0 {
-			slog.InfoContext(ctx, "OIDC_ROLE_MAPPINGS reconciled (empty)", "envManagedCount", 0)
-			return nil
-		}
-		rows := make([]OidcRoleMapping, len(specs))
-		for i, sp := range specs {
-			rows[i] = OidcRoleMapping{
-				ClaimValue:    sp.ClaimValue,
-				RoleID:        sp.RoleID,
-				EnvironmentID: sp.EnvironmentID,
-				Source:        OidcMappingSourceEnv,
-			}
-		}
-		if err := tx.Create(&rows).Error; err != nil {
-			return fmt.Errorf("failed to insert env-managed mappings: %w", err)
-		}
-		slog.InfoContext(ctx, "OIDC_ROLE_MAPPINGS reconciled", "envManagedCount", len(rows))
-		return nil
-	})
-}
-
-// ---------- Cache helpers ----------
-
-// InvalidateUser drops the cached PermissionSet for one user. Called from
-// auth_service after a login that mutates assignments, and from any mutation
-// path that doesn't already invalidate explicitly.
 func (s *RoleService) InvalidateUser(userID string) {
 	s.cacheFillMu.Lock()
 	defer s.cacheFillMu.Unlock()

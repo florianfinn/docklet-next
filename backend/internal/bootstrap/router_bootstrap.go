@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace
+// Deviations: Local module namespace; functional cut: removed Svelte-specific metadata or asset paths; functional cut: removed federated credentials; functional cut: removed Swarm; functional cut: removed OIDC and passkeys.
 
 package bootstrap
 
@@ -28,7 +28,6 @@ import (
 	"github.com/florianfinn/docklet-next/backend/internal/apikey"
 	"github.com/florianfinn/docklet-next/backend/internal/auth"
 	"github.com/florianfinn/docklet-next/backend/internal/config"
-	"github.com/florianfinn/docklet-next/backend/internal/federated"
 	"github.com/florianfinn/docklet-next/backend/internal/middleware"
 	"github.com/florianfinn/docklet-next/backend/pkg/authz"
 	"github.com/florianfinn/docklet-next/backend/pkg/libarcane/edge"
@@ -50,7 +49,7 @@ var loggerSkipPatterns = []string{
 	"GET /api/environments/*/ws/projects/*/logs",
 	"GET /api/environments/*/ws/system/stats",
 	"GET /api/stream",
-	"GET /_app/*",
+	"GET /assets/*",
 	"GET /img",
 	"GET /api/health",
 	"HEAD /api/health",
@@ -222,18 +221,7 @@ func newRouter(p RouterParams) (*echo.Echo, *edge.TunnelServer) {
 		[]string{
 			"/api/auth/login",
 			"/api/auth/refresh",
-			"/api/auth/passkey/login/begin",
-			"/api/auth/passkey/login/finish",
-			"/api/auth/passkey/mobile/finish",
-			"/api/auth/passkey/mobile/exchange",
-			"/api/auth/mfa/passkey/begin",
-			"/api/auth/mfa/passkey/finish",
-			"/api/auth/mfa/recovery",
-			"/api/oidc/callback",
 		}, 5, 5,
-	))
-	apiGroup.Use(middleware.PerIPRateLimitForPaths(
-		[]string{"/api/auth/federated/token"}, 10, 10,
 	))
 	// Keyed per token for stored tokens, per source IP for everything else.
 	apiGroup.Use(middleware.PerTokenRateLimitForPaths(
@@ -257,7 +245,6 @@ func newRouter(p RouterParams) (*echo.Echo, *edge.TunnelServer) {
 
 	// Register public webhook trigger endpoint before auth middleware (token in URL is the sole auth)
 	api.RegisterWebhookTrigger(apiGroup, deps.Webhook.Service(), handlerAppCtx)
-	federated.RegisterFederatedTokenExchange(apiGroup, deps.Federated)
 	deps.Event.RegisterAgentRoutes(apiGroup, func(ctx context.Context, token string) (string, error) {
 		env, err := deps.Environment.Service().ResolveEnvironmentByAccessToken(ctx, token)
 		if err != nil {
@@ -296,7 +283,7 @@ func newRouter(p RouterParams) (*echo.Echo, *edge.TunnelServer) {
 	}
 
 	// Remaining echo handlers (WebSocket/streaming)
-	ws.NewWebSocketHandler(apiGroup, deps.Project.Service(), deps.Container.Service(), deps.Swarm.Service(), deps.System.Service(), deps.Diagnostics, authMiddleware, cfg)
+	ws.NewWebSocketHandler(apiGroup, deps.Project.Service(), deps.Container.Service(), deps.System.Service(), deps.Diagnostics, authMiddleware, cfg)
 
 	// Register edge tunnel endpoint for manager to accept agent connections
 	// This is only registered when NOT in agent mode (i.e., running as manager)

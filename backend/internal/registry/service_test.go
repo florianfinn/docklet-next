@@ -1,8 +1,10 @@
+//go:build postgres_integration
+
 // Source: getarcaneapp/arcane/backend/internal/registry/service_test.go
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace
+// Deviations: Local module namespace; functional cut: PostgreSQL integration test fixture.
 
 package registry
 
@@ -20,6 +22,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/florianfinn/docklet-next/backend/internal/testpg"
 	"github.com/florianfinn/docklet-next/types/base"
 	"github.com/florianfinn/docklet-next/types/containerregistry"
 	"github.com/google/go-containerregistry/pkg/name"
@@ -28,7 +31,6 @@ import (
 	"github.com/google/go-containerregistry/pkg/v1/mutate"
 	"github.com/google/go-containerregistry/pkg/v1/random"
 	"github.com/google/go-containerregistry/pkg/v1/remote"
-	"github.com/libtnb/sqlite"
 	"github.com/moby/moby/api/pkg/authconfig"
 	dockerregistry "github.com/moby/moby/api/types/registry"
 	"github.com/moby/moby/client"
@@ -52,7 +54,7 @@ type fakeRegistryDaemonClient struct {
 func setupContainerRegistryTestDBInternal(t *testing.T) *database.DB {
 	t.Helper()
 
-	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
+	db, err := gorm.Open(testpg.Dialector(t, ":memory:"), &gorm.Config{})
 	require.NoError(t, err)
 	require.NoError(t, db.AutoMigrate(&ContainerRegistry{}, &kv.KVEntry{}))
 	require.NoError(t, db.Exec("CREATE TABLE IF NOT EXISTS projects (id text PRIMARY KEY, name text, path text)").Error)
@@ -930,8 +932,6 @@ func TestContainerRegistryService_InspectImageDigest_UsesStoredCredentialsForNon
 	assert.True(t, result.UsedCredential)
 }
 
-// A rate limited anonymous request is not an unauthorized one, so before this was
-// fixed a stored ghcr.io credential was never reached. See issue #2635.
 func TestContainerRegistryService_InspectImageDigest_UsesStoredCredentialsInsteadOfRateLimitedAnonymous(t *testing.T) {
 	db := setupContainerRegistryTestDBInternal(t)
 	createTestPullRegistryInternal(t, db, "ghcr.io", "ghcr-user", "ghcr-token")

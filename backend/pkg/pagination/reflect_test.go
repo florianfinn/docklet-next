@@ -1,15 +1,17 @@
+//go:build postgres_integration
+
 // Source: getarcaneapp/arcane/backend/pkg/pagination/reflect_test.go
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: None
+// Deviations: functional cut: PostgreSQL integration test fixture.
 
 package pagination
 
 import (
 	"testing"
 
-	"github.com/libtnb/sqlite"
+	"github.com/florianfinn/docklet-next/backend/internal/testpg"
 	"github.com/stretchr/testify/require"
 	"gorm.io/gorm"
 	"gorm.io/gorm/logger"
@@ -19,7 +21,7 @@ import (
 // only a deterministic ORDER BY yields a stable page walk.
 func newTieBreakTestDB(t *testing.T) *gorm.DB {
 	t.Helper()
-	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{Logger: logger.Default.LogMode(logger.Silent)})
+	db, err := gorm.Open(testpg.Dialector(t, ":memory:"), &gorm.Config{Logger: logger.Default.LogMode(logger.Silent)})
 	require.NoError(t, err)
 	require.NoError(t, db.AutoMigrate(&widget{}))
 	for _, w := range []widget{

@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: None
+// Deviations: functional cut: removed Swarm.
 
 // Package features defines runtime features and their settings contracts.
 package features
@@ -16,13 +16,6 @@ const (
 
 	// VulnerabilityManagementSettingKey is the persisted toggle for vulnerability management.
 	VulnerabilityManagementSettingKey = "featureVulnerabilityManagementEnabled"
-
-	// Swarm identifies the Docker Swarm pages. An active swarm cluster keeps it enabled
-	// regardless of the persisted toggle.
-	Swarm ID = "swarm"
-
-	// SwarmSettingKey is the persisted toggle for Docker Swarm.
-	SwarmSettingKey = "featureSwarmEnabled"
 )
 
 // Definition connects a runtime feature to its persisted setting and default.
@@ -34,7 +27,6 @@ type Definition struct {
 
 var registryInternal = [...]Definition{
 	{ID: VulnerabilityManagement, SettingKey: VulnerabilityManagementSettingKey, DefaultEnabled: true},
-	{ID: Swarm, SettingKey: SwarmSettingKey, DefaultEnabled: false},
 }
 
 // All returns the supported runtime features.

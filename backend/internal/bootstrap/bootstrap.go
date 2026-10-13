@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace
+// Deviations: Local module namespace; functional cut: removed central variables and .env.global; functional cut: removed GitOps and saved Git repositories; functional cut: removed Swarm; functional cut: removed standalone build workshop; functional cut: removed OIDC and passkeys; functional cut: removed SQLite runtime and migrations.
 
 package bootstrap
 
@@ -34,13 +34,10 @@ import (
 	"github.com/florianfinn/docklet-next/backend/internal/di"
 	"github.com/florianfinn/docklet-next/backend/internal/docker"
 	"github.com/florianfinn/docklet-next/backend/internal/environment"
-	"github.com/florianfinn/docklet-next/backend/internal/gitops"
 	"github.com/florianfinn/docklet-next/backend/internal/project"
 	"github.com/florianfinn/docklet-next/backend/internal/role"
 	"github.com/florianfinn/docklet-next/backend/internal/settings"
-	"github.com/florianfinn/docklet-next/backend/internal/swarm"
 	"github.com/florianfinn/docklet-next/backend/internal/user"
-	"github.com/florianfinn/docklet-next/backend/internal/variable"
 	"github.com/florianfinn/docklet-next/backend/internal/volume"
 	"github.com/florianfinn/docklet-next/backend/internal/vulnerability"
 	"github.com/florianfinn/docklet-next/backend/pkg/libarcane/edge"
@@ -59,7 +56,6 @@ func Bootstrap(ctx context.Context) error {
 		PGID:              cfg.PGID,
 		DockerHost:        cfg.DockerHost,
 		DockerConfig:      cfg.DockerConfig,
-		DatabaseURL:       cfg.DatabaseURL,
 		ProjectsDirectory: cfg.ProjectsDirectory,
 	}
 	if err := startup.ApplyRequestedRuntimeIdentity(ctx, runtimeIdentityCfg); err != nil {
@@ -184,11 +180,8 @@ type initializeStartupStateParams struct {
 	Volume        *volume.VolumeService
 	Settings      *settings.SettingsService
 	Environment   *environment.EnvironmentService
-	GitOpsSync    *gitops.GitOpsSyncService
 	Project       *project.ProjectService
-	Variable      *variable.VariableService
 	Docker        *docker.DockerClientService
-	Swarm         *swarm.SwarmService
 	Role          *role.RoleService
 	User          *user.UserService
 	ApiKey        *apikey.ApiKeyService
@@ -235,14 +228,9 @@ func initializeStartupState(p initializeStartupStateParams) {
 		slog.WarnContext(appCtx, "Failed to normalize projects directory", "error", err)
 	}
 
-	if err := p.Settings.NormalizeBuildsDirectory(appCtx); err != nil {
-		slog.WarnContext(appCtx, "Failed to normalize builds directory", "error", err)
-	}
-
 	if err := p.Environment.EnsureLocalEnvironment(appCtx, cfg.AppUrl); err != nil {
 		slog.WarnContext(appCtx, "Failed to ensure local environment", "error", err)
 	}
-	initializeGitOpsStartupStateInternal(appCtx, p.GitOpsSync)
 	p.Vulnerability.ImportLegacyReportFiles(appCtx)
 	p.Vulnerability.BackfillScanItems(appCtx)
 	if p.Project != nil {
@@ -256,14 +244,6 @@ func initializeStartupState(p initializeStartupStateParams) {
 			slog.WarnContext(appCtx, "Failed to reconcile edge environment statuses on startup", "error", err)
 		}
 
-		// Global variables are a manager resource: import any pre-existing local
-		// .env.global once, then materialize the effective set everywhere. Agents
-		// only serve the per-environment variables endpoint the manager pushes to.
-		p.Environment.SetVariableSyncer(p.Variable)
-		if err := p.Variable.ImportLegacyLocalEnvFile(appCtx); err != nil {
-			slog.WarnContext(appCtx, "Failed to import legacy global variables", "error", err)
-		}
-		go p.Variable.SyncAll(appCtx)
 	}
 
 	startup.TestDockerConnection(appCtx, func(ctx context.Context) error {
@@ -281,11 +261,6 @@ func initializeStartupState(p initializeStartupStateParams) {
 		slog.InfoContext(ctx, "Docker API versions detected", "clientApiVersion", dockerClient.ClientVersion(), "serverApiVersion", version.APIVersion, "effectiveApiVersion", effectiveAPIVersion)
 		return nil
 	})
-	if p.Swarm != nil {
-		if err := p.Swarm.SyncSwarmEnabledState(appCtx); err != nil {
-			slog.WarnContext(appCtx, "Failed to persist swarm enabled state", "error", err)
-		}
-	}
 
 	startup.InitializeNonAgentFeatures(appCtx, runtimeCfg,
 		p.Role.EnsureBuiltInRoles,
@@ -324,25 +299,6 @@ func initializeStartupState(p initializeStartupStateParams) {
 	}
 }
 
-func initializeGitOpsStartupStateInternal(appCtx context.Context, gitOpsSync *gitops.GitOpsSyncService) {
-	if gitOpsSync == nil {
-		return
-	}
-	if err := gitOpsSync.CleanupOrphanedSyncsOnStartup(appCtx); err != nil {
-		slog.WarnContext(appCtx, "Failed to clean up orphaned GitOps syncs on startup", "error", err)
-	}
-
-	if err := gitOpsSync.CleanupLeakedScratchDirsOnStartup(appCtx); err != nil {
-		slog.WarnContext(appCtx, "Failed to clean up leaked GitOps scratch directories on startup", "error", err)
-	}
-	if err := gitOpsSync.CleanupLeakedCloneDirsOnStartup(appCtx); err != nil {
-		slog.WarnContext(appCtx, "Failed to clean up leaked git clone directories on startup", "error", err)
-	}
-	if err := gitOpsSync.ReconcileDirectorySyncProjectsOnStartup(appCtx); err != nil {
-		slog.WarnContext(appCtx, "Failed to reconcile directory GitOps projects on startup", "error", err)
-	}
-}
-
 func runRoleStartupTasks(ctx context.Context, roleService *role.RoleService, apiKeyService *apikey.ApiKeyService, cfg *config.Config, agentMode bool) {
 	if roleService == nil {
 		return
@@ -360,11 +316,6 @@ func runRoleStartupTasks(ctx context.Context, roleService *role.RoleService, api
 	if apiKeyService != nil {
 		if err := apiKeyService.BackfillApiKeyPermissions(ctx); err != nil {
 			slog.WarnContext(ctx, "Failed to backfill API key permissions", "error", err)
-		}
-	}
-	if cfg != nil {
-		if err := roleService.ReconcileEnvOidcMappings(ctx, cfg.OidcRoleMappings); err != nil {
-			slog.ErrorContext(ctx, "Failed to reconcile OIDC_ROLE_MAPPINGS", "error", err)
 		}
 	}
 	if agentMode {

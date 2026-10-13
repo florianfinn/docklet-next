@@ -2,13 +2,12 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace
+// Deviations: Local module namespace; functional cut: removed SQLite runtime and migrations.
 
 package runs
 
 import (
 	"context"
-	"encoding/json/v2"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -104,28 +103,6 @@ func (a *coordinatorActorInternal) Invoke(ctx context.Context, method string, da
 		return nil, a.q.service.SetState(ctx, coordinatorTypeInternal, a.id, state, nil)
 	case "repair":
 		return nil, a.flushInternal(ctx, &state)
-	case "import":
-		var command st.CoordinatorImport
-		if err := data.Decode(&command); err != nil {
-			return nil, err
-		}
-		if state.Imported {
-			if state.ImportHash != command.SourceHash {
-				return nil, errors.New("legacy job record changed during import")
-			}
-			return true, nil
-		}
-		if state.Revision != 0 {
-			return nil, errors.New("native job state exists before legacy import")
-		}
-		state.ImportHash = command.SourceHash
-		state.Record = command.Record
-		for _, run := range state.Record.Runs {
-			markActivitySyncInternal(&state, run)
-		}
-		state.Imported = true
-		state.Revision = 1
-		return true, a.q.service.SetState(ctx, coordinatorTypeInternal, a.id, state, nil)
 	default:
 		return nil, fmt.Errorf("unknown coordinator command: %s", method)
 	}
@@ -362,50 +339,6 @@ func (q *Coordinator) repairInternal(ctx context.Context, all bool) error {
 		}
 		if _, invokeErr := q.service.Invoke(ctx, coordinatorTypeInternal, kit.SHA256Hex(record.EnvironmentID+"\x00"+record.JobID), "repair", nil); invokeErr != nil {
 			return invokeErr
-		}
-	}
-	return nil
-}
-
-func (q *Coordinator) importLegacyInternal(ctx context.Context) error {
-	entries, err := q.store.ListByPrefix(ctx, queuePrefixInternal)
-	if err != nil {
-		return fmt.Errorf("list legacy job records: %w", err)
-	}
-	for _, entry := range entries {
-		marker := "francis-import/" + entry.Key
-		_, done, getErr := q.store.Get(ctx, marker)
-		if getErr != nil {
-			return fmt.Errorf("import legacy job record %q: %w", entry.Key, getErr)
-		}
-		if done {
-			continue
-		}
-		var record st.QueueRecord
-		if unmarshalErr := json.Unmarshal([]byte(entry.Value), &record); unmarshalErr != nil {
-			return fmt.Errorf("decode legacy job record %q: %w", entry.Key, unmarshalErr)
-		}
-		id := kit.SHA256Hex(record.EnvironmentID + "\x00" + record.JobID)
-		if entry.Key != queuePrefixInternal+id {
-			return fmt.Errorf("invalid legacy job key %q for job %q in environment %q", entry.Key, record.JobID, record.EnvironmentID)
-		}
-		sourceHash := kit.SHA256Hex(entry.Value)
-		command := st.CoordinatorImport{Record: record, SourceHash: sourceHash}
-		if _, invokeErr := q.service.Invoke(ctx, coordinatorTypeInternal, id, "import", command); invokeErr != nil {
-			return fmt.Errorf("import legacy job record %q: %w", entry.Key, invokeErr)
-		}
-		var imported st.CoordinatorState
-		if getStateErr := q.service.GetState(ctx, coordinatorTypeInternal, id, &imported); getStateErr != nil {
-			return fmt.Errorf("import legacy job record %q: %w", entry.Key, getStateErr)
-		}
-		if !imported.Imported || imported.ImportHash != sourceHash {
-			return fmt.Errorf("legacy import verification failed for job %q in environment %q", record.JobID, record.EnvironmentID)
-		}
-		if imported.Record.EnvironmentID != record.EnvironmentID || imported.Record.JobID != record.JobID {
-			return fmt.Errorf("legacy import identity mismatch for record %q", entry.Key)
-		}
-		if setErr := q.store.Set(ctx, marker, "complete"); setErr != nil {
-			return fmt.Errorf("import legacy job record %q: %w", entry.Key, setErr)
 		}
 	}
 	return nil

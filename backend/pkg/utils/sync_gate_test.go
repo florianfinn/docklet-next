@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: None
+// Deviations: functional cut: removed S3 backup destinations.
 
 package utils
 
@@ -29,7 +29,7 @@ func TestSyncGate_TracksLastDeliveredPayloadPerScopeAndKey(t *testing.T) {
 	require.False(t, deliverInternal(t, &gate, "env", "/registries", body), "nothing delivered yet")
 	require.True(t, deliverInternal(t, &gate, "env", "/registries", body))
 	require.False(t, deliverInternal(t, &gate, "env", "/registries", []byte(`{"registries":[{"id":"a"}]}`)))
-	require.False(t, deliverInternal(t, &gate, "env", "/s3", body), "keys are independent")
+	require.False(t, deliverInternal(t, &gate, "env", "/other", body), "keys are independent")
 	require.False(t, deliverInternal(t, &gate, "other", "/registries", body), "scopes are independent")
 
 	gate.Forget("env")

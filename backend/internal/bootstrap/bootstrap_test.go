@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace
+// Deviations: Local module namespace; functional cut: removed upstream analytics heartbeat; functional cut: removed GitOps and saved Git repositories; functional cut: removed Swarm.
 
 package bootstrap
 
@@ -16,50 +16,24 @@ import (
 	"testing"
 	"time"
 
-	schedulertypes "github.com/florianfinn/docklet-next/types/scheduler"
 	"github.com/labstack/echo/v5"
-	"github.com/libtnb/sqlite"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	libcrypto "go.getarcane.app/sys/crypto"
 	"go.uber.org/fx"
 	"go.uber.org/fx/fxtest"
-	"gorm.io/gorm"
 
 	"github.com/florianfinn/docklet-next/backend/api"
 	"github.com/florianfinn/docklet-next/backend/internal/auth"
 	"github.com/florianfinn/docklet-next/backend/internal/config"
 	"github.com/florianfinn/docklet-next/backend/internal/container"
 	"github.com/florianfinn/docklet-next/backend/internal/database"
-	"github.com/florianfinn/docklet-next/backend/internal/environment"
-	"github.com/florianfinn/docklet-next/backend/internal/gitops"
-	"github.com/florianfinn/docklet-next/backend/internal/job"
-	"github.com/florianfinn/docklet-next/backend/internal/kv"
 	"github.com/florianfinn/docklet-next/backend/internal/project"
-	"github.com/florianfinn/docklet-next/backend/internal/swarm"
 	"github.com/florianfinn/docklet-next/backend/internal/system"
 	"github.com/florianfinn/docklet-next/backend/pkg/libarcane/edge"
-	"github.com/florianfinn/docklet-next/backend/pkg/scheduler/runs"
-	francistest "github.com/florianfinn/docklet-next/backend/pkg/utils/francis/testing"
 	"github.com/florianfinn/docklet-next/backend/pkg/utils/httpx"
 	tunnelpb "github.com/florianfinn/docklet-next/backend/proto/tunnel/v1"
 )
-
-type blockingBusWatcherInternal struct {
-	started chan struct{}
-	stopped chan struct{}
-}
-
-func (w *blockingBusWatcherInternal) Name() string { return "blocking" }
-
-func (w *blockingBusWatcherInternal) Start(ctx context.Context) error {
-	close(w.started)
-	<-ctx.Done()
-	close(w.stopped)
-	return nil
-}
-
-func (w *blockingBusWatcherInternal) RunNow(context.Context) error { return nil }
 
 func TestNormalizeTunnelGRPCRequestPathInternal(t *testing.T) {
 	fullMethodPath := tunnelpb.TunnelService_Connect_FullMethodName
@@ -204,7 +178,6 @@ func TestHTTP2APIResponsesDoNotUseAPIGzipInternal(t *testing.T) {
 		HandlerDeps: api.HandlerDeps{
 			Project:   project.New(&project.ProjectService{}, nil),
 			Container: container.New(&container.ContainerService{}, nil, nil, nil),
-			Swarm:     swarm.New(&swarm.SwarmService{}, nil, nil, nil),
 			System:    system.New(&system.SystemService{}, nil, nil, nil, nil),
 		},
 		AuthMiddleware: auth.NewAuthMiddleware(nil, cfg),
@@ -388,74 +361,6 @@ func TestRegisterAppCancelHookRunsAfterLaterStopHooks(t *testing.T) {
 	lifecycle.RequireStop()
 	require.True(t, appActiveDuringDependencyStop)
 	require.ErrorIs(t, appCtx.Err(), context.Canceled)
-}
-
-func TestJobSchedulerStopCancelsItsPrivateContextInternal(t *testing.T) {
-	appCtx := t.Context()
-
-	lifecycle := fxtest.NewLifecycle(t)
-	runtime := francistest.New(t)
-	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
-	require.NoError(t, err)
-	require.NoError(t, db.AutoMigrate(&kv.KVEntry{}, &environment.Environment{}, &project.GitOpsSync{}))
-	sqlDB, err := db.DB()
-	require.NoError(t, err)
-	sqlDB.SetMaxOpenConns(1)
-	t.Cleanup(func() { _ = sqlDB.Close() })
-	coordinator := runs.New(kv.NewKVService(&database.DB{DB: db}), runtime.Service(), time.UTC)
-	require.NoError(t, coordinator.Register(runtime))
-	admission := runs.NewAdmission(runtime.Service(), t.Name())
-	require.NoError(t, admission.Register(runtime))
-	lifecycle.Append(fx.Hook{
-		OnStart: func(ctx context.Context) error { return runtime.Start(ctx, appCtx, nil) },
-		OnStop:  runtime.Stop,
-	})
-	t.Cleanup(func() { lifecycle.RequireStop() })
-	jobService := job.NewJobService(&database.DB{DB: db}, nil, &config.Config{}, coordinator, nil, nil, nil)
-	gitopsSync := gitops.NewGitOpsSyncService(&database.DB{DB: db}, nil, nil, nil, nil, nil)
-	require.NoError(t, db.Create(&environment.Environment{ID: "0", Name: "Local", Enabled: true}).Error)
-	require.NoError(t, db.Create(&project.GitOpsSync{ID: "overdue", EnvironmentID: "0", AutoSync: true, SyncInterval: 1}).Error)
-	jobScheduler, err := newJobScheduler(appCtx, lifecycle, &config.Config{}, coordinator, admission, nil, nil, nil, jobService, nil, nil, nil, gitopsSync)
-	require.NoError(t, err)
-	require.NoError(t, registerDynamicJobs(dynamicJobsParams{
-		AppCtx: appCtx, Config: &config.Config{}, Scheduler: jobScheduler,
-		GitOpsSync: gitopsSync, Admission: admission,
-	}))
-	executed := make(chan schedulertypes.Run, 1)
-	coordinator.SetExecutor(func(_ context.Context, run schedulertypes.Run) (schedulertypes.Outcome, error) {
-		executed <- run
-		return schedulertypes.Outcome{Status: schedulertypes.Succeeded}, nil
-	}, nil)
-	watcher := &blockingBusWatcherInternal{
-		started: make(chan struct{}),
-		stopped: make(chan struct{}),
-	}
-	require.NoError(t, jobScheduler.RegisterBusWatcher(watcher, false))
-
-	startCtx, cancelStart := context.WithTimeout(appCtx, 5*time.Second)
-	defer cancelStart()
-	require.NoError(t, lifecycle.Start(startCtx))
-	cancelStart()
-	select {
-	case run := <-executed:
-		require.Equal(t, "gitops-sync:overdue", run.JobID)
-		require.Equal(t, "startup", run.Trigger)
-		require.True(t, jobScheduler.HasJob(run.JobID))
-	case <-time.After(5 * time.Second):
-		require.FailNow(t, "overdue GitOps startup job did not execute through Francis")
-	}
-	select {
-	case <-watcher.started:
-	case <-time.After(time.Second):
-		require.FailNow(t, "watcher did not start")
-	}
-	lifecycle.RequireStop()
-	select {
-	case <-watcher.stopped:
-	case <-time.After(time.Second):
-		require.FailNow(t, "watcher did not stop")
-	}
-	require.NoError(t, appCtx.Err())
 }
 
 func TestApplicationOptionsValidate(t *testing.T) {

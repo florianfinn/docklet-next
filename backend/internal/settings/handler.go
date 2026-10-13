@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace
+// Deviations: Local module namespace; functional cut: removed Swarm; functional cut: removed OIDC and passkeys.
 
 package settings
 
@@ -298,15 +298,6 @@ func (h *SettingsHandler) validateSettingsUpdateInput(input settings.Update) err
 		}
 	}
 
-	if input.SwarmStackSourcesDirectory != nil && *input.SwarmStackSourcesDirectory != "" {
-		currentDir := h.settingsService.GetSettingsConfig().SwarmStackSourcesDirectory.Value
-		if *input.SwarmStackSourcesDirectory != currentDir {
-			if err := validateAbsoluteDirectoryPathInternal(*input.SwarmStackSourcesDirectory); err != nil {
-				return huma.Error400BadRequest("swarmStackSourcesDirectory " + err.Error())
-			}
-		}
-	}
-
 	if input.AvatarMaxUploadSizeMb != nil && strings.TrimSpace(*input.AvatarMaxUploadSizeMb) != "" {
 		value, err := strconv.Atoi(strings.TrimSpace(*input.AvatarMaxUploadSizeMb))
 		if err != nil || value < 1 || value > 50 {
@@ -388,15 +379,7 @@ func (h *SettingsHandler) updateSettingsForLocalEnvironment(ctx context.Context,
 }
 
 func hasAuthSettingsUpdateInternal(req settings.Update) bool {
-	return req.AuthLocalEnabled != nil || req.OidcEnabled != nil ||
-		req.AuthSessionTimeout != nil || req.AuthPasswordPolicy != nil ||
-		req.OidcClientId != nil ||
-		req.OidcClientSecret != nil || req.OidcIssuerUrl != nil ||
-		req.OidcScopes != nil ||
-		req.OidcMergeAccounts != nil ||
-		req.OidcSkipTlsVerify != nil || req.OidcAutoRedirectToProvider != nil ||
-		req.OidcProviderName != nil || req.OidcProviderLogoUrl != nil ||
-		req.OidcGroupsClaim != nil
+	return req.AuthLocalEnabled != nil || req.AuthSessionTimeout != nil || req.AuthPasswordPolicy != nil
 }
 
 // Search searches settings by query.

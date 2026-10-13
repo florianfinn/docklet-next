@@ -1,8 +1,10 @@
+//go:build postgres_integration
+
 // Source: getarcaneapp/arcane/backend/internal/dashboard/service_test.go
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace
+// Deviations: Local module namespace; functional cut: removed GitOps and saved Git repositories; functional cut: removed S3 backup destinations; functional cut: PostgreSQL integration test fixture.
 
 package dashboard
 
@@ -17,10 +19,10 @@ import (
 	"testing"
 	"time"
 
+	"github.com/florianfinn/docklet-next/backend/internal/testpg"
 	"github.com/florianfinn/docklet-next/types/dashboard"
 	"github.com/florianfinn/docklet-next/types/user"
 	volumetypes "github.com/florianfinn/docklet-next/types/volume"
-	"github.com/libtnb/sqlite"
 	dockercontainer "github.com/moby/moby/api/types/container"
 	dockerimage "github.com/moby/moby/api/types/image"
 	"github.com/moby/moby/api/types/mount"
@@ -48,7 +50,7 @@ import (
 func setupDashboardServiceTestDB(t *testing.T) (*database.DB, *settings.SettingsService) {
 	t.Helper()
 
-	db, err := gorm.Open(sqlite.Open("file:"+t.Name()+"?mode=memory&cache=shared"), &gorm.Config{})
+	db, err := gorm.Open(testpg.Dialector(t, "file:"+t.Name()+"?mode=memory&cache=shared"), &gorm.Config{})
 	require.NoError(t, err)
 	require.NoError(t, db.AutoMigrate(&apikey.ApiKey{}, &environment.Environment{}, &imageupdate.ImageUpdateRecord{}, &project.Project{}, &settings.SettingVariable{}))
 
@@ -202,8 +204,8 @@ func TestDashboardService_GetSnapshot_ReturnsDashboardSnapshot(t *testing.T) {
 		Status:  project.ProjectStatusStopped,
 	}).Error)
 	imageSvc := image.NewImageService(db, nil, nil, nil, nil, nil, nil, nil)
-	projectSvc := project.NewProjectService(db, settingsSvc, nil, imageSvc, nil, nil, nil, nil, config.Load(), nil, nil)
-	svc := NewDashboardService(db, dockerSvc, nil, projectSvc, imageSvc, settingsSvc, nil, nil, nil, volume.NewVolumeService(db, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil))
+	projectSvc := project.NewProjectService(db, settingsSvc, nil, imageSvc, nil, nil, nil, config.Load(), nil, nil)
+	svc := NewDashboardService(db, dockerSvc, nil, projectSvc, imageSvc, settingsSvc, nil, nil, nil, volume.NewVolumeService(db, nil, nil, nil, nil, nil, nil, nil, nil, nil))
 
 	snapshot, err := svc.GetSnapshot(t.Context(), DashboardActionItemsOptions{}, true)
 	require.NoError(t, err)

@@ -1,16 +1,18 @@
+//go:build postgres_integration
+
 // Source: getarcaneapp/arcane/backend/pkg/scheduler/scheduled_prune_job_test.go
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace
+// Deviations: Local module namespace; functional cut: PostgreSQL integration test fixture.
 
 package scheduler
 
 import (
 	"testing"
 
+	"github.com/florianfinn/docklet-next/backend/internal/testpg"
 	"github.com/florianfinn/docklet-next/types/system"
-	"github.com/libtnb/sqlite"
 	"github.com/stretchr/testify/require"
 	"gorm.io/gorm"
 
@@ -21,7 +23,7 @@ import (
 func setupScheduledPruneSettingsServiceInternal(t *testing.T) *settings.SettingsService {
 	t.Helper()
 
-	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
+	db, err := gorm.Open(testpg.Dialector(t, ":memory:"), &gorm.Config{})
 	require.NoError(t, err)
 	require.NoError(t, db.AutoMigrate(&settings.SettingVariable{}))
 

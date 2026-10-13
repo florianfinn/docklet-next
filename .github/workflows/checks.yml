@@ -49,6 +49,7 @@ jobs:
             cli/go.sum
             types/go.sum
             third_party/arcane/**/go.sum
+            third_party/francis/go.sum
       - if: steps.scope.outputs.scope != 'text'
         name: Isolate checks from Docker daemons
         run: |

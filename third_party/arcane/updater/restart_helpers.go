@@ -2,7 +2,7 @@
 // Revision: 119f68956cee6d5aba8a5463561aaf9be9943b65
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: None
+// Deviations: functional cut: removed Swarm.
 
 package updater
 
@@ -27,7 +27,7 @@ func shouldSkipSummary(summary container.Summary, excludedContainers map[string]
 	if policy.IsUpdateDisabled(summary.Labels) {
 		return true
 	}
-	return policy.IsSwarmTask(summary.Labels) && !policy.IsSelfUpdateTarget(summary.Labels)
+	return false
 }
 
 func fallbackImageForPlan(plan *restartPlan) string {

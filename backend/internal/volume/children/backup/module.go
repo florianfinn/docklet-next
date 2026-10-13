@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace
+// Deviations: Local module namespace; functional cut: removed S3 backup destinations.
 
 package backup
 
@@ -59,26 +59,6 @@ func RegisterRoutes(api huma.API, h *Handler) {
 		Tags:        []string{"Volume Backup"},
 		Security:    handlerutil.DefaultOperationSecurity(),
 	}, authz.PermVolumesBackup, h.DeleteBackup)
-
-	middleware.RegisterWithPermission(api, huma.Operation{
-		OperationID: "discover-volume-backups",
-		Method:      http.MethodPost,
-		Path:        "/environments/{id}/volumes/backups/discover",
-		Summary:     "Discover volume backups on an S3 destination",
-		Description: "Import existing volume backups stored on the destination by this or other Arcane instances",
-		Tags:        []string{"Volume Backup"},
-		Security:    handlerutil.DefaultOperationSecurity(),
-	}, authz.PermVolumesBackup, h.DiscoverBackups)
-
-	middleware.RegisterWithPermission(api, huma.Operation{
-		OperationID: "upload-retained-volume-backup-to-s3",
-		Method:      http.MethodPost,
-		Path:        "/environments/{id}/volumes/backups/{backupId}/upload",
-		Summary:     "Upload volume backup",
-		Description: "Upload an existing local volume backup to the selected S3 destination",
-		Tags:        []string{"Volume Backup"},
-		Security:    handlerutil.DefaultOperationSecurity(),
-	}, authz.PermVolumesBackup, h.UploadBackup)
 
 	middleware.RegisterWithPermission(api, huma.Operation{
 		OperationID: "download-volume-backup",

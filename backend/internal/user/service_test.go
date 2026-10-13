@@ -1,8 +1,10 @@
+//go:build postgres_integration
+
 // Source: getarcaneapp/arcane/backend/internal/user/service_test.go
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace
+// Deviations: Local module namespace; functional cut: removed Swarm; functional cut: removed OIDC and passkeys; functional cut: PostgreSQL integration test fixture.
 
 package user_test
 
@@ -11,8 +13,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/florianfinn/docklet-next/backend/internal/testpg"
 	"github.com/florianfinn/docklet-next/types/user"
-	"github.com/libtnb/sqlite"
 	"github.com/stretchr/testify/require"
 	"gorm.io/gorm"
 
@@ -28,7 +30,7 @@ import (
 
 func setupAuthServiceTestDBInternal(t *testing.T) *database.DB {
 	t.Helper()
-	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
+	db, err := gorm.Open(testpg.Dialector(t, ":memory:"), &gorm.Config{})
 	require.NoError(t, err)
 	require.NoError(t, db.AutoMigrate(
 		&settings.SettingVariable{},
@@ -37,7 +39,6 @@ func setupAuthServiceTestDBInternal(t *testing.T) *database.DB {
 		&role.Role{},
 		&role.UserRoleAssignment{},
 		&role.ApiKeyPermission{},
-		&role.OidcRoleMapping{},
 	))
 	// Production migrations define username as UNIQUE. AutoMigrate cannot infer
 	// that SQL-only constraint from the model, so mirror it in the test schema.
@@ -46,16 +47,11 @@ func setupAuthServiceTestDBInternal(t *testing.T) *database.DB {
 	// in-package tests only need the tables to exist.
 	require.NoError(
 		t,
-		db.Exec("CREATE TABLE IF NOT EXISTS environments (id text PRIMARY KEY, created_at datetime, updated_at dateti"+
-			"me, name text, api_url text, status text, enabled numeric, is_edge numeric, hidden numeric, last_see"+
-			"n datetime, last_edge_transport text, access_token text, api_key_id text, parent_environment_id text"+
-			", swarm_node_id text)").Error,
+		db.Exec("CREATE TABLE IF NOT EXISTS environments (id text PRIMARY KEY, created_at timestamp, updated_at timestamp, name text, api_url text, status text, enabled numeric, is_edge numeric, last_seen timestamp, last_edge_transport text, access_token text, api_key_id text)").Error,
 	)
 	require.NoError(
 		t,
-		db.Exec("CREATE TABLE IF NOT EXISTS api_keys (id text PRIMARY KEY, created_at datetime, updated_at datetime, "+
-			"name text, description text, key_hash text, key_prefix text, kind text, user_id text, environment_id"+
-			" text, managed_by text, expires_at datetime, last_used_at datetime)").Error,
+		db.Exec("CREATE TABLE IF NOT EXISTS api_keys (id text PRIMARY KEY, created_at timestamp, updated_at timestamp, name text, description text, key_hash text, key_prefix text, kind text, user_id text, environment_id text, managed_by text, expires_at timestamp, last_used_at timestamp)").Error,
 	)
 	return &database.DB{DB: db}
 }

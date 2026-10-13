@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace
+// Deviations: Local module namespace; functional cut: removed S3 backup destinations.
 
 package backup
 
@@ -129,21 +129,6 @@ func RegisterRoutes(api huma.API, h *Handler) {
 	middleware.RegisterWithPermission(
 		api,
 		huma.Operation{
-			OperationID: "discover-system-backups",
-			Method:      http.MethodPost,
-			Path:        "/backups/discover",
-			Summary:     "Discover Arcane system backups in S3",
-			Tags: []string{
-				"System Backups",
-			},
-			Middlewares: adminOnly,
-		},
-		authz.PermSystemBackupsManage,
-		h.Discover,
-	)
-	middleware.RegisterWithPermission(
-		api,
-		huma.Operation{
 			OperationID: "restore-system-backup",
 			Method:      http.MethodPost,
 			Path:        "/backups/{id}/restore",
@@ -185,21 +170,6 @@ func RegisterRoutes(api huma.API, h *Handler) {
 		},
 		authz.PermSystemBackupsRestore,
 		h.RestoreFiles,
-	)
-	middleware.RegisterWithPermission(
-		api,
-		huma.Operation{
-			OperationID: "upload-system-backup",
-			Method:      http.MethodPost,
-			Path:        "/backups/{id}/upload",
-			Summary:     "Upload Arcane system backup",
-			Tags: []string{
-				"System Backups",
-			},
-			Middlewares: adminOnly,
-		},
-		authz.PermSystemBackupsManage,
-		h.Upload,
 	)
 	middleware.RegisterWithPermission(
 		api,

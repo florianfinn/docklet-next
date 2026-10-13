@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace
+// Deviations: Local module namespace; functional cut: removed upstream analytics heartbeat and APNS mobile push; functional cut: removed template catalogue; functional cut: removed federated credentials; functional cut: removed central variables and .env.global; functional cut: removed GitOps and saved Git repositories; functional cut: removed Swarm; functional cut: removed S3 backup destinations; functional cut: removed OIDC and passkeys.
 
 // Package di owns the backend's dependency-injection graph.
 package di
@@ -15,7 +15,6 @@ import (
 
 	"github.com/florianfinn/docklet-next/backend/internal/activity"
 	"github.com/florianfinn/docklet-next/backend/internal/apikey"
-	"github.com/florianfinn/docklet-next/backend/internal/apns"
 	"github.com/florianfinn/docklet-next/backend/internal/appimages"
 	"github.com/florianfinn/docklet-next/backend/internal/auth"
 	"github.com/florianfinn/docklet-next/backend/internal/backup"
@@ -26,30 +25,22 @@ import (
 	"github.com/florianfinn/docklet-next/backend/internal/diagnostics"
 	"github.com/florianfinn/docklet-next/backend/internal/environment"
 	"github.com/florianfinn/docklet-next/backend/internal/event"
-	"github.com/florianfinn/docklet-next/backend/internal/federated"
-	"github.com/florianfinn/docklet-next/backend/internal/gitops"
-	"github.com/florianfinn/docklet-next/backend/internal/gitrepo"
 	"github.com/florianfinn/docklet-next/backend/internal/image"
 	"github.com/florianfinn/docklet-next/backend/internal/imageupdate"
 	"github.com/florianfinn/docklet-next/backend/internal/job"
 	"github.com/florianfinn/docklet-next/backend/internal/kv"
 	"github.com/florianfinn/docklet-next/backend/internal/network"
 	"github.com/florianfinn/docklet-next/backend/internal/notification"
-	"github.com/florianfinn/docklet-next/backend/internal/oidc"
-	"github.com/florianfinn/docklet-next/backend/internal/passkey"
 	"github.com/florianfinn/docklet-next/backend/internal/port"
 	"github.com/florianfinn/docklet-next/backend/internal/project"
 	"github.com/florianfinn/docklet-next/backend/internal/role"
 	"github.com/florianfinn/docklet-next/backend/internal/search"
 	"github.com/florianfinn/docklet-next/backend/internal/session"
 	"github.com/florianfinn/docklet-next/backend/internal/settings"
-	"github.com/florianfinn/docklet-next/backend/internal/swarm"
 	"github.com/florianfinn/docklet-next/backend/internal/system"
-	"github.com/florianfinn/docklet-next/backend/internal/template"
 	"github.com/florianfinn/docklet-next/backend/internal/updater"
 	"github.com/florianfinn/docklet-next/backend/internal/upload"
 	"github.com/florianfinn/docklet-next/backend/internal/user"
-	"github.com/florianfinn/docklet-next/backend/internal/variable"
 	"github.com/florianfinn/docklet-next/backend/internal/volume"
 	"github.com/florianfinn/docklet-next/backend/internal/vulnerability"
 	"github.com/florianfinn/docklet-next/backend/internal/webhook"
@@ -79,30 +70,21 @@ var ServiceOptions = fx.Options(
 		func(db *database.DB, roles *role.RoleService) *user.UserService {
 			return user.NewUserService(db, roles, session.RevokeAllUserSessionsExceptInDB)
 		},
-		federated.NewFederatedCredentialService,
 		kv.NewKVService,
 		appimages.NewApplicationImagesService,
 		session.NewSessionService,
-		passkey.NewPasskeyService,
 		environment.NewEnvironmentService,
-		apns.NewApnsService,
 		notification.NewNotificationService,
 		vulnerability.NewVulnerabilityService,
 		imageupdate.NewImageUpdateService,
 		image.NewImageService,
 		build.NewBuildService,
-		project.NewLifecycleService,
 		container.NewContainerService,
 		dashboard.NewDashboardService,
 		network.NewNetworkService,
 		port.NewPortService,
-		swarm.NewSwarmService,
-		template.NewTemplateService,
-		oidc.NewOidcService,
 		system.NewSystemService,
 		diagnostics.NewDiagnosticsService,
-		gitops.NewGitOpsSyncService,
-		variable.NewVariableService,
 		backup.NewRecoveryKeyStore,
 		upload.NewUploadService,
 		auth.NewAuthService,
@@ -120,13 +102,10 @@ var ServiceOptions = fx.Options(
 	),
 	// These providers bind config values, callbacks, or managed resource lifetimes.
 	fx.Provide(
-		provideJWKSetManagerInternal,
 		provideDockerClientServiceInternal,
 		provideProjectServiceInternal,
 		provideBackupEngineInternal,
 		provideVersionServiceInternal,
-		provideGitRepositoryServiceInternal,
-		provideS3ServiceInternal,
 		provideContainerRegistryServiceInternal,
 		provideUpdaterServiceInternal,
 		provideAuthMiddlewareInternal,
@@ -135,30 +114,23 @@ var ServiceOptions = fx.Options(
 		event.New,
 		role.New,
 		apikey.New,
-		template.New,
-		gitrepo.New,
 		job.New,
 		environment.New,
 		image.New,
 		container.New,
 		dashboard.New,
-		swarm.New,
 		system.New,
 		volume.New,
 		updater.New,
 		webhook.New,
-		apns.New,
 		notification.New,
 		vulnerability.New,
 		project.New,
-		gitops.New,
-		variable.New,
 		upload.New,
 		search.New,
 		provideActivityModuleInternal,
 		provideImageUpdateModuleInternal,
 		provideSettingsModuleInternal,
-		provideS3ModuleInternal,
 		provideContainerRegistryModuleInternal,
 		provideAuthModuleInternal,
 		provideUserModuleInternal,
@@ -172,7 +144,6 @@ var JobOptions = fx.Options(
 		scheduler.NewAutoUpdateJob,
 		scheduler.NewImageUpdateWatcher,
 		scheduler.NewDockerClientRefreshJob,
-		scheduler.NewAnalyticsJob,
 		scheduler.NewEventCleanupJob,
 		scheduler.NewPruningVolumeHelperJob,
 		scheduler.NewExpiredSessionsCleanupJob,
@@ -184,8 +155,6 @@ var JobOptions = fx.Options(
 		scheduler.NewAutoHealJob,
 		scheduler.NewActivitySweepJob,
 		scheduler.NewUploadSessionsCleanupJob,
-		scheduler.NewGitCloneCleanupJob,
 		fx.Annotate(scheduler.NewUpgradeLogCleanupJob, fx.ResultTags(`name:"upgrade-log-cleanup"`)),
-		scheduler.NewApnsOutboxJob,
 	),
 )

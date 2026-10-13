@@ -1,8 +1,10 @@
+//go:build postgres_integration
+
 // Source: getarcaneapp/arcane/backend/pkg/scheduler/auto_update_job_test.go
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace
+// Deviations: Local module namespace; functional cut: removed upstream analytics heartbeat; functional cut: PostgreSQL integration test fixture.
 
 package scheduler
 
@@ -21,7 +23,7 @@ import (
 
 func TestAutoUpdateJob_ShouldSchedule_RequiresAutoUpdateAndPolling(t *testing.T) {
 	ctx := t.Context()
-	_, settingsSvc, _ := setupAnalyticsStateServicesInternal(t)
+	_, settingsSvc, _ := setupSchedulerStateServicesInternal(t)
 	job, err := NewAutoUpdateJob(nil, settingsSvc, newTestAdmissionGateInternal(t))
 	require.NoError(t, err)
 
@@ -55,7 +57,7 @@ func (f *blockingApplierFakeInternal) ApplyPending(context.Context, updater.Opti
 
 func TestAutoUpdateJob_OverlappingRunIsSkippedInternal(t *testing.T) {
 	ctx := t.Context()
-	_, settingsSvc, _ := setupAnalyticsStateServicesInternal(t)
+	_, settingsSvc, _ := setupSchedulerStateServicesInternal(t)
 	require.NoError(t, settingsSvc.SetBoolSetting(ctx, "autoUpdate", true))
 
 	applier := &blockingApplierFakeInternal{

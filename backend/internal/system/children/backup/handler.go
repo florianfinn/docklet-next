@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace
+// Deviations: Local module namespace; functional cut: removed S3 backup destinations.
 
 package backup
 
@@ -96,18 +96,9 @@ type RestoreSystemBackupFilesInput struct {
 	Body backup.RestoreSystemBackupFilesRequest
 }
 
-type UploadSystemBackupInput struct {
-	ID   string `path:"id"`
-	Body backup.UploadSystemBackupRequest
-}
-
 type DeleteSystemBackupInput struct {
 	ID   string `path:"id"`
 	Body backup.DeleteSystemBackupRequest
-}
-
-type DiscoverSystemBackupsInput struct {
-	Body backup.DiscoverSystemBackupsRequest
 }
 
 func NewHandler(service *Service, activityService *activity.ActivityService, appCtx context.Context) *Handler {
@@ -203,27 +194,6 @@ func (h *Handler) SetRecoveryKey(ctx context.Context, input *SetSystemBackupReco
 	return &SystemBackupRecoveryKeyOutput{Body: *status}, nil
 }
 
-func (h *Handler) Discover(ctx context.Context, input *DiscoverSystemBackupsInput) (*handlerutil.Out[int], error) {
-	user, err := handlerutil.RequireUser(ctx)
-	if err != nil {
-		return nil, err
-	}
-	count := 0
-	_, err = activitylib.RunHandlerActivity(utils.ActivityRuntimeContext(ctx, h.appCtx), h.activity, activitylib.HandlerOptions{
-		EnvironmentID: "0", Type: activitytypes.TypeResourceAction, ResourceType: "system_backup", ResourceID: "s3", ResourceName: "Arcane", User: user,
-		Step: "Discovering system backups", Message: "Discovering Arcane system backups in S3", SuccessMessage: "Arcane system backup discovery completed",
-		Metadata: database.JSON{"action": "discover_system_backups", "s3DestinationId": input.Body.S3DestinationID},
-	}, func(activityCtx context.Context) error {
-		var discoverErr error
-		count, discoverErr = h.service.DiscoverRemoteBackups(activityCtx, input.Body)
-		return discoverErr
-	})
-	if err != nil {
-		return nil, huma.Error400BadRequest(err.Error())
-	}
-	return &handlerutil.Out[int]{Body: base.ApiResponse[int]{Success: true, Data: count}}, nil
-}
-
 func (h *Handler) Create(ctx context.Context, input *CreateSystemBackupInput) (*SystemBackupOutput, error) {
 	user, err := handlerutil.RequireUser(ctx)
 	if err != nil {
@@ -292,27 +262,6 @@ func (h *Handler) RestoreFiles(ctx context.Context, input *RestoreSystemBackupFi
 		return nil, huma.Error500InternalServerError(err.Error())
 	}
 	return messageOutputInternal("Arcane project files restored successfully", activityID), nil
-}
-
-func (h *Handler) Upload(ctx context.Context, input *UploadSystemBackupInput) (*SystemBackupOutput, error) {
-	user, err := handlerutil.RequireUser(ctx)
-	if err != nil {
-		return nil, err
-	}
-	var run *backup.SystemBackupRun
-	_, err = activitylib.RunHandlerActivity(utils.ActivityRuntimeContext(ctx, h.appCtx), h.activity, activitylib.HandlerOptions{
-		EnvironmentID: "0", Type: activitytypes.TypeResourceAction, ResourceType: "system_backup", ResourceID: input.ID, ResourceName: "Arcane", User: user,
-		Step: "Uploading system backup", Message: "Uploading Arcane system backup", SuccessMessage: "Arcane system backup uploaded successfully",
-		Metadata: database.JSON{"action": "upload_system_backup", "backupId": input.ID, "s3DestinationId": input.Body.S3DestinationID},
-	}, func(activityCtx context.Context) error {
-		var e error
-		run, e = h.service.UploadBackup(activityCtx, input.ID, input.Body)
-		return e
-	})
-	if err != nil {
-		return nil, huma.Error500InternalServerError(err.Error())
-	}
-	return &SystemBackupOutput{Body: *run}, nil
 }
 
 func (h *Handler) Delete(ctx context.Context, input *DeleteSystemBackupInput) (*handlerutil.Out[base.MessageResponse], error) {

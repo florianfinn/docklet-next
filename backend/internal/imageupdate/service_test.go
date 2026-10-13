@@ -1,8 +1,10 @@
+//go:build postgres_integration
+
 // Source: getarcaneapp/arcane/backend/internal/imageupdate/service_test.go
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace
+// Deviations: Local module namespace; functional cut: removed APNS mobile push; functional cut: PostgreSQL integration test fixture.
 
 package imageupdate
 
@@ -20,10 +22,10 @@ import (
 	"time"
 
 	"github.com/distribution/reference"
+	"github.com/florianfinn/docklet-next/backend/internal/testpg"
 	activitytypes "github.com/florianfinn/docklet-next/types/activity"
 	"github.com/florianfinn/docklet-next/types/containerregistry"
 	"github.com/florianfinn/docklet-next/types/imageupdate"
-	"github.com/libtnb/sqlite"
 	"github.com/moby/moby/api/pkg/authconfig"
 	"github.com/moby/moby/api/types/container"
 	"github.com/moby/moby/api/types/image"
@@ -88,13 +90,8 @@ func newImageUpdateTestDockerClientInternal(t *testing.T, server *httptest.Serve
 
 func setupImageUpdateRegistryTestDBInternal(t *testing.T) *database.DB {
 	t.Helper()
-	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
+	db, err := gorm.Open(testpg.Dialector(t, ":memory:"), &gorm.Config{})
 	require.NoError(t, err)
-	// Every pooled connection to a private in-memory database sees its own
-	// empty schema, so concurrent scan workers must share a single connection.
-	sqlDB, err := db.DB()
-	require.NoError(t, err)
-	sqlDB.SetMaxOpenConns(1)
 	require.NoError(t, db.AutoMigrate(
 		&registry.ContainerRegistry{},
 		&kv.KVEntry{},
@@ -356,7 +353,7 @@ func TestImageUpdateService_DockerReferenceCompatibility(t *testing.T) {
 func setupImageUpdateTestDB(t *testing.T) *database.DB {
 	t.Helper()
 	dsn := fmt.Sprintf("file:image-update-test-%d?mode=memory&cache=shared", time.Now().UnixNano())
-	db, err := gorm.Open(sqlite.Open(dsn), &gorm.Config{})
+	db, err := gorm.Open(testpg.Dialector(t, dsn), &gorm.Config{})
 	require.NoError(t, err)
 	require.NoError(t, db.AutoMigrate(&ImageUpdateRecord{}, &event.Event{}, &testProjectRow{}))
 	return &database.DB{DB: db}
@@ -1845,7 +1842,7 @@ func TestImageUpdateService_SendBatchNotifications_FiltersByUpdateCheckEligibili
 		{ID: "shared-monitored", ImageID: "sha256:shared", Image: "test/shared:latest", Labels: map[string]string{labels.LabelUpdater: "false"}},
 		{ID: "ref-only-unmonitored", ImageID: "sha256:rebuilt", Image: "test/ref-only:2.0", Labels: map[string]string{imageref.UpdateCheckLabel: "false"}},
 	}
-	notif := notification.NewNotificationService(db, nil, nil, nil, nil)
+	notif := notification.NewNotificationService(db, nil, nil, nil)
 	svc := NewImageUpdateService(db, nil, nil, newImageUpdateNotificationDockerServiceInternal(t, containers), nil, notif, nil)
 
 	records := []ImageUpdateRecord{
@@ -1909,7 +1906,7 @@ func TestImageUpdateService_SendBatchNotifications_UnresolvedEligibilityLeavesUn
 	require.NoError(t, db.AutoMigrate(&notification.NotificationSettings{}))
 	calls := newImageUpdateGenericWebhookProviderInternal(t, db)
 
-	notif := notification.NewNotificationService(db, nil, nil, nil, nil)
+	notif := notification.NewNotificationService(db, nil, nil, nil)
 	svc := NewImageUpdateService(db, nil, nil, nil, nil, notif, nil)
 	require.NoError(t, db.Create(&ImageUpdateRecord{ID: "sha256:img", Repository: "test/repo", Tag: "latest", HasUpdate: true}).Error)
 
@@ -1943,7 +1940,7 @@ func TestImageUpdateService_SendBatchNotifications_DetachesCanceledContext(t *te
 		},
 	}).Error)
 
-	notif := notification.NewNotificationService(db, nil, nil, nil, nil)
+	notif := notification.NewNotificationService(db, nil, nil, nil)
 	svc := NewImageUpdateService(db, nil, nil, newImageUpdateNotificationDockerServiceInternal(t, nil), nil, notif, nil)
 
 	rec := ImageUpdateRecord{
@@ -1982,7 +1979,7 @@ func TestImageUpdateService_SendBatchNotifications_NoEligibleProviders_LeavesUnn
 	db := setupImageUpdateTestDB(t)
 	require.NoError(t, db.AutoMigrate(&notification.NotificationSettings{}))
 
-	notif := notification.NewNotificationService(db, nil, nil, nil, nil)
+	notif := notification.NewNotificationService(db, nil, nil, nil)
 	svc := NewImageUpdateService(db, nil, nil, newImageUpdateNotificationDockerServiceInternal(t, nil), nil, notif, nil)
 
 	rec := ImageUpdateRecord{
@@ -2034,7 +2031,7 @@ func TestImageUpdateService_SendBatchNotifications_PartialFailureStillMarksNotif
 		}).Error)
 	}
 
-	notif := notification.NewNotificationService(db, nil, nil, nil, nil)
+	notif := notification.NewNotificationService(db, nil, nil, nil)
 	svc := NewImageUpdateService(db, nil, nil, newImageUpdateNotificationDockerServiceInternal(t, nil), nil, notif, nil)
 
 	rec := ImageUpdateRecord{
@@ -2155,7 +2152,7 @@ func newImageUpdateTestSettingsServiceInternal(t *testing.T, registryTimeout, do
 	t.Setenv("REGISTRY_TIMEOUT", registryTimeout)
 	t.Setenv("DOCKER_API_TIMEOUT", dockerAPITimeout)
 	ctx := t.Context()
-	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
+	db, err := gorm.Open(testpg.Dialector(t, ":memory:"), &gorm.Config{})
 	require.NoError(t, err)
 	require.NoError(t, db.AutoMigrate(&settings.SettingVariable{}))
 	dbWrap := &database.DB{DB: db}

@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace
+// Deviations: Local module namespace; functional cut: removed GitOps and saved Git repositories.
 
 package project
 
@@ -535,7 +535,6 @@ func (h *ProjectHandler) CreateProject(ctx context.Context, input *CreateProject
 	response.UpdatedAt = proj.UpdatedAt.Format(time.RFC3339)
 	response.DirName = mo.PointerToOption(proj.DirName).OrEmpty()
 	response.RelativePath = h.projectService.GetProjectRelativePath(ctx, proj.Path)
-	response.GitOpsManagedBy = proj.GitOpsManagedBy
 	response.IsArchived = proj.IsArchived
 	response.ArchivedAt = proj.ArchivedAt
 	response.ActivityID = mo.EmptyableToOption(strings.TrimSpace(activityID)).ToPointer()

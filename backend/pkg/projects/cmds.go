@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace
+// Deviations: Local module namespace; functional cut: removed GitOps and saved Git repositories.
 
 package projects
 
@@ -164,7 +164,7 @@ func composeUpOptionsInternal(proj *composetypes.Project,
 		Services:             services,
 		Recreate:             recreatePolicy,
 		RecreateDependencies: api.RecreateDiverged,
-		// A caller opt-in (or GitOps-forced true) still wins over COMPOSE_REMOVE_ORPHANS.
+		// A caller opt-in still wins over COMPOSE_REMOVE_ORPHANS.
 		RemoveOrphans: removeOrphans || envOpts.RemoveOrphans,
 		IgnoreOrphans: envOpts.IgnoreOrphans,
 	}

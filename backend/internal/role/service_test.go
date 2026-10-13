@@ -1,18 +1,18 @@
+//go:build postgres_integration
+
 // Source: getarcaneapp/arcane/backend/internal/role/service_test.go
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace
+// Deviations: Local module namespace; functional cut: removed template catalogue; functional cut: removed central variables and .env.global; functional cut: removed OIDC and passkeys; functional cut: removed SQLite runtime and migrations; functional cut: PostgreSQL integration test fixture.
 
 package role_test
 
 import (
-	"path/filepath"
-	"slices"
 	"testing"
 	"time"
 
-	"github.com/libtnb/sqlite"
+	"github.com/florianfinn/docklet-next/backend/internal/testpg"
 	"github.com/stretchr/testify/require"
 	"gorm.io/gorm"
 
@@ -75,57 +75,6 @@ func TestBackfillLegacyRoleAssignments(t *testing.T) {
 		require.NoError(t, roleSvc.BackfillLegacyRoleAssignments(ctx))
 	})
 
-	t.Run("converts legacy roles once", func(t *testing.T) {
-		db, err := database.Initialize(ctx, "file:"+filepath.Join(t.TempDir(), "arcane.db"), database.MigrationOptions{})
-		require.NoError(t, err)
-		t.Cleanup(func() { require.NoError(t, db.Close()) })
-		require.True(t, db.Migrator().HasColumn("users", "roles"))
-		roleSvc := role.NewRoleService(db)
-		require.NoError(t, roleSvc.EnsureBuiltInRoles(ctx))
-		require.NoError(t, db.Exec("INSERT INTO environments (id, name, api_url) VALUES (?, ?, ?)", "env-1", "env-1", "http://env-1").Error)
-
-		for id, roles := range map[string]string{
-			"seed-admin":    `[]`,
-			"legacy-admin":  `["user", " ADMIN "]`,
-			"legacy-user":   `["user"]`,
-			"legacy-empty":  `[]`,
-			"legacy-null":   `null`,
-			"legacy-blank":  `[" "]`,
-			"legacy-broken": `not json`,
-			"scoped-manual": `["admin"]`,
-			"global-oidc":   `["admin"]`,
-		} {
-			require.NoError(t, db.Exec("INSERT INTO users (id, username, password_hash, roles) VALUES (?, ?, ?, ?)", id, id, "unused", roles).Error)
-		}
-		require.NoError(t, db.Create(&role.UserRoleAssignment{UserID: "seed-admin", RoleID: authz.BuiltInRoleAdmin, Source: role.RoleAssignmentSourceManual}).Error)
-		envID := "env-1"
-		require.NoError(t, roleSvc.SetUserAssignments(ctx, "scoped-manual", []role.UserRoleAssignment{{RoleID: authz.BuiltInRoleViewer, EnvironmentID: &envID}}))
-		require.NoError(t, roleSvc.ReplaceOidcAssignments(ctx, "global-oidc", []role.UserRoleAssignment{{RoleID: authz.BuiltInRoleViewer}}))
-
-		require.NoError(t, roleSvc.BackfillLegacyRoleAssignments(ctx))
-		require.Equal(t, []string{authz.BuiltInRoleAdmin}, assignedRoleIDs(t, roleSvc, "legacy-admin"))
-		for _, id := range []string{"legacy-user", "legacy-empty", "legacy-null", "legacy-blank", "legacy-broken"} {
-			require.Equal(t, []string{authz.BuiltInRoleViewer}, assignedRoleIDs(t, roleSvc, id), id)
-		}
-		scoped, err := roleSvc.ListUserAssignments(ctx, "scoped-manual")
-		require.NoError(t, err)
-		require.Len(t, scoped, 1)
-		require.Equal(t, &envID, scoped[0].EnvironmentID)
-		oidc, err := roleSvc.ListUserAssignments(ctx, "global-oidc")
-		require.NoError(t, err)
-		require.Len(t, oidc, 1)
-		require.Equal(t, role.RoleAssignmentSourceOidc, oidc[0].Source)
-		ps, err := roleSvc.ResolveUserPermissionsInDB(ctx, db.DB, "scoped-manual")
-		require.NoError(t, err)
-		require.True(t, ps.Allows(authz.PermContainersList, "env-1"))
-		require.False(t, ps.Allows(authz.PermContainersList, ""))
-
-		require.NoError(t, roleSvc.SetUserAssignments(ctx, "legacy-user", nil))
-		require.NoError(t, db.Exec("INSERT INTO users (id, username, password_hash, roles) VALUES (?, ?, ?, ?)", "later-admin", "later-admin", "unused", `["admin"]`).Error)
-		require.NoError(t, role.NewRoleService(db).BackfillLegacyRoleAssignments(ctx))
-		require.Empty(t, assignedRoleIDs(t, roleSvc, "legacy-user"))
-		require.Empty(t, assignedRoleIDs(t, roleSvc, "later-admin"))
-	})
 }
 
 func assignedRoleIDs(t *testing.T, roleSvc *role.RoleService, userID string) []string {
@@ -139,79 +88,6 @@ func assignedRoleIDs(t *testing.T, roleSvc *role.RoleService, userID string) []s
 	return ids
 }
 
-func TestEnsureBuiltInRolesMigratesVariablePermissionsWithoutBackfillingCustomGrants(t *testing.T) {
-	ctx := t.Context()
-	userSvc, roleSvc := setupUserAndRoleServices(t)
-
-	customRole, err := roleSvc.CreateRole(ctx, "Template Reader", nil, []string{authz.PermTemplatesRead})
-	require.NoError(t, err)
-	owner := createTestUser(t, userSvc, "variable-migration-owner", "variable-migration-owner")
-	scopedKey := testApiKeyRow{
-		Name:      "Custom scoped key",
-		KeyHash:   "variable-migration-hash",
-		KeyPrefix: "arc_vars",
-		Kind:      "scoped",
-		UserID:    &owner.ID,
-	}
-	require.NoError(t, userSvc.WithContext(ctx).Create(&scopedKey).Error)
-	require.NoError(t, userSvc.WithContext(ctx).Create(&role.ApiKeyPermission{
-		ApiKeyID:   scopedKey.ID,
-		Permission: authz.PermTemplatesRead,
-	}).Error)
-
-	oldEditorPermissions := slices.DeleteFunc(authz.BuiltInEditorPermissions(), func(permission string) bool {
-		return slices.Contains([]string{
-			authz.PermVariablesRead,
-			authz.PermVariablesCreate,
-			authz.PermVariablesUpdate,
-			authz.PermVariablesDelete,
-			authz.PermVariablesSync,
-		}, permission)
-	})
-	require.NoError(t, userSvc.WithContext(ctx).Model(&role.Role{}).
-		Where("id = ?", authz.BuiltInRoleEditor).
-		Update("permissions", database.StringSlice(oldEditorPermissions)).Error)
-
-	require.NoError(t, roleSvc.EnsureBuiltInRoles(ctx))
-
-	allVariablePermissions := []string{
-		authz.PermVariablesRead,
-		authz.PermVariablesCreate,
-		authz.PermVariablesUpdate,
-		authz.PermVariablesDelete,
-		authz.PermVariablesSync,
-	}
-	for _, roleID := range []string{authz.BuiltInRoleAdmin, authz.BuiltInRoleEditor, authz.BuiltInRoleNoShellEditor} {
-		builtIn, getErr := roleSvc.GetRole(ctx, roleID)
-		require.NoError(t, getErr)
-		for _, permission := range allVariablePermissions {
-			require.Contains(t, []string(builtIn.Permissions), permission, "role %s", roleID)
-		}
-	}
-	for _, roleID := range []string{authz.BuiltInRoleViewer, authz.BuiltInRoleDeployer} {
-		builtIn, getErr := roleSvc.GetRole(ctx, roleID)
-		require.NoError(t, getErr)
-		require.Contains(t, []string(builtIn.Permissions), authz.PermVariablesRead)
-		for _, permission := range allVariablePermissions[1:] {
-			require.NotContains(t, []string(builtIn.Permissions), permission, "role %s", roleID)
-		}
-	}
-	monitor, err := roleSvc.GetRole(ctx, authz.BuiltInRoleMonitor)
-	require.NoError(t, err)
-	for _, permission := range allVariablePermissions {
-		require.NotContains(t, []string(monitor.Permissions), permission)
-	}
-
-	preservedCustomRole, err := roleSvc.GetRole(ctx, customRole.ID)
-	require.NoError(t, err)
-	require.Equal(t, []string{authz.PermTemplatesRead}, []string(preservedCustomRole.Permissions))
-
-	var keyPermissions []role.ApiKeyPermission
-	require.NoError(t, userSvc.WithContext(ctx).Where("api_key_id = ?", scopedKey.ID).Find(&keyPermissions).Error)
-	require.Len(t, keyPermissions, 1)
-	require.Equal(t, authz.PermTemplatesRead, keyPermissions[0].Permission)
-}
-
 func TestSetUserAssignmentsRejectsUnknownRole(t *testing.T) {
 	ctx := t.Context()
 	userSvc, roleSvc := setupUserAndRoleServices(t)
@@ -219,33 +95,6 @@ func TestSetUserAssignmentsRejectsUnknownRole(t *testing.T) {
 
 	err := roleSvc.SetUserAssignments(ctx, victim.ID, []role.UserRoleAssignment{
 		{RoleID: "role_does_not_exist"},
-	})
-	require.Error(t, err)
-	require.ErrorIs(t, err, common.ErrInvalidRoleAssignment)
-}
-
-func TestReplaceOidcAssignmentsRejectsUnknownRole(t *testing.T) {
-	ctx := t.Context()
-	userSvc, roleSvc := setupUserAndRoleServices(t)
-	oidcUser := createTestUser(t, userSvc, "oidc-user", "oidc-user")
-
-	err := roleSvc.ReplaceOidcAssignments(ctx, oidcUser.ID, []role.UserRoleAssignment{
-		{RoleID: "role_does_not_exist"},
-	})
-	require.Error(t, err)
-	require.ErrorIs(t, err, common.ErrInvalidRoleAssignment)
-}
-
-func TestReplaceOidcAssignmentsRejectsUnknownEnvironment(t *testing.T) {
-	ctx := t.Context()
-	userSvc, roleSvc := setupUserAndRoleServices(t)
-	oidcUser := createTestUser(t, userSvc, "oidc-user-env", "oidc-user-env")
-	missingEnv := "env_does_not_exist"
-
-	// A valid role scoped to a non-existent environment must fail existence
-	// validation (mirrors SetUserAssignments) rather than attempting an insert.
-	err := roleSvc.ReplaceOidcAssignments(ctx, oidcUser.ID, []role.UserRoleAssignment{
-		{RoleID: authz.BuiltInRoleViewer, EnvironmentID: &missingEnv},
 	})
 	require.Error(t, err)
 	require.ErrorIs(t, err, common.ErrInvalidRoleAssignment)
@@ -306,7 +155,7 @@ func TestEffectiveGlobalAdminCountIgnoresEnvScopedAndServiceAccounts(t *testing.
 
 func setupAuthServiceTestDB(t *testing.T) *database.DB {
 	t.Helper()
-	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
+	db, err := gorm.Open(testpg.Dialector(t, ":memory:"), &gorm.Config{})
 	require.NoError(t, err)
 	require.NoError(t, db.AutoMigrate(
 		&settings.SettingVariable{},
@@ -317,7 +166,6 @@ func setupAuthServiceTestDB(t *testing.T) *database.DB {
 		&role.UserRoleAssignment{},
 		&testApiKeyRow{},
 		&role.ApiKeyPermission{},
-		&role.OidcRoleMapping{},
 	))
 	return &database.DB{DB: db}
 }

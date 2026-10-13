@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: None
+// Deviations: Functional cut: removed template catalogue; functional cut: removed central variables and .env.global; functional cut: removed S3 backup destinations.
 
 package authz
 
@@ -211,61 +211,6 @@ func TestBuiltInRolesOnlyReferenceKnownPermissions(t *testing.T) {
 	}
 }
 
-func TestVariablePermissionsAreSeparateGlobalGrantsWithBuiltInAccess(t *testing.T) {
-	variablePermissions := []string{
-		PermVariablesRead,
-		PermVariablesCreate,
-		PermVariablesUpdate,
-		PermVariablesDelete,
-		PermVariablesSync,
-	}
-
-	for _, permission := range variablePermissions {
-
-		require.True(t, IsKnownPermission(permission),
-			"variable permission %q must be known", permission)
-
-		require.True(t, IsOrgLevel(permission),
-			"variable permission %q must be global", permission)
-
-		require.NotContains(t, BuiltInMonitorPermissions(), permission,
-			"Monitor must not receive %q", permission)
-
-	}
-
-	for name, permissions := range map[string][]string{
-		"Admin":           AllPermissions(),
-		"Editor":          BuiltInEditorPermissions(),
-		"No-Shell Editor": BuiltInNoShellEditorPermissions(),
-	} {
-		for _, permission := range variablePermissions {
-			require.Contains(t, permissions, permission,
-				"%s must receive %q", name, permission)
-		}
-	}
-
-	for name, permissions := range map[string][]string{
-		"Viewer":   BuiltInViewerPermissions(),
-		"Deployer": BuiltInDeployerPermissions(),
-	} {
-
-		require.Contains(t, permissions, PermVariablesRead,
-			"%s must receive %q", name, PermVariablesRead)
-
-		for _, permission := range variablePermissions[1:] {
-			require.NotContains(t, permissions, permission,
-				"%s must not receive %q", name, permission)
-		}
-	}
-
-	templatesOnly := NewPermissionSet()
-	templatesOnly.AddGlobal(PermTemplatesRead, PermTemplatesCreate, PermTemplatesUpdate, PermTemplatesDelete)
-	for _, permission := range variablePermissions {
-		require.False(t, templatesOnly.Allows(permission, ""),
-			"template grants must not satisfy %q", permission)
-	}
-}
-
 func TestSystemBackupPermissionsAreAdminOnlyGlobalGrants(t *testing.T) {
 	builtInRoles := map[string][]string{
 		"Editor":          BuiltInEditorPermissions(),
@@ -281,63 +226,6 @@ func TestSystemBackupPermissionsAreAdminOnlyGlobalGrants(t *testing.T) {
 		for name, permissions := range builtInRoles {
 			require.NotContains(t, permissions, permission, "%s must not receive %q", name, permission)
 		}
-	}
-}
-
-func TestS3DestinationPermissionsAreSeparateGlobalGrantsWithBuiltInAccess(t *testing.T) {
-	s3Permissions := []string{
-		PermS3DestinationsList,
-		PermS3DestinationsRead,
-		PermS3DestinationsCreate,
-		PermS3DestinationsUpdate,
-		PermS3DestinationsDelete,
-		PermS3DestinationsTest,
-		PermS3DestinationsSync,
-	}
-
-	for _, permission := range s3Permissions {
-
-		require.True(t, IsKnownPermission(permission),
-			"S3 destination permission %q must be known", permission)
-
-		require.True(t, IsOrgLevel(permission),
-			"S3 destination permission %q must be global", permission)
-
-		require.Contains(t, AllPermissions(), permission,
-			"Admin must receive %q", permission)
-
-		require.NotContains(t, BuiltInMonitorPermissions(), permission,
-			"Monitor must not receive %q", permission)
-
-		require.NotContains(t, BuiltInDeployerPermissions(), permission,
-			"Deployer must not receive %q", permission)
-
-	}
-
-	// Roles that can run backups pick a destination, so they read but never
-	// manage the stored credentials.
-	for name, permissions := range map[string][]string{
-		"Editor":          BuiltInEditorPermissions(),
-		"No-Shell Editor": BuiltInNoShellEditorPermissions(),
-		"Viewer":          BuiltInViewerPermissions(),
-	} {
-		require.Contains(t, permissions, PermS3DestinationsList,
-			"%s must receive %q", name, PermS3DestinationsList)
-
-		require.Contains(t, permissions, PermS3DestinationsRead,
-			"%s must receive %q", name, PermS3DestinationsRead)
-
-		for _, permission := range s3Permissions[2:] {
-			require.NotContains(t, permissions, permission,
-				"%s must not receive %q", name, permission)
-		}
-	}
-
-	settingsOnly := NewPermissionSet()
-	settingsOnly.AddGlobal(PermSettingsRead, PermSettingsWrite)
-	for _, permission := range s3Permissions {
-		require.False(t, settingsOnly.Allows(permission, ""),
-			"settings grants must not satisfy %q", permission)
 	}
 }
 

@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: None
+// Deviations: functional cut: removed SQLite runtime and migrations.
 
 // Package dbutil provides small generic helpers around GORM that consolidate
 // repetitive single-row lookup and transaction boilerplate found across services.
@@ -14,6 +14,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/jackc/pgx/v5/pgconn"
 	"gorm.io/gorm"
 )
 
@@ -24,12 +25,16 @@ func IsRetryableWriteError(err error) bool {
 		return false
 	}
 
+	var pgError *pgconn.PgError
+	if errors.As(err, &pgError) {
+		switch pgError.Code {
+		case "40001", "40P01", "55P03":
+			return true
+		}
+	}
+
 	errMsg := strings.ToLower(strings.TrimSpace(err.Error()))
-	return strings.Contains(errMsg, "database is locked") ||
-		strings.Contains(errMsg, "database table is locked") ||
-		strings.Contains(errMsg, "database is busy") ||
-		strings.Contains(errMsg, "resource busy") ||
-		strings.Contains(errMsg, "timeout")
+	return strings.Contains(errMsg, "timeout")
 }
 
 // FirstWhere fetches a single row of T matching the provided WHERE clause.

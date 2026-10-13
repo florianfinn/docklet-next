@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace
+// Deviations: Local module namespace; functional cut: removed Swarm.
 
 package ws
 
@@ -32,7 +32,6 @@ func (h *WebSocketHandler) proxiedRoutes() []proxiedWSRoute {
 		{"/containers/:containerId/logs", h.ContainerLogs, authz.PermContainersLogs},
 		{"/containers/:containerId/stats", h.ContainerStats, authz.PermContainersRead},
 		{"/containers/:containerId/terminal", h.ContainerExec, authz.PermContainersExec},
-		{"/swarm/services/:serviceId/logs", h.ServiceLogs, authz.PermSwarmServicesLogs},
 		{"/system/stats", h.SystemStats, authz.PermSystemRead},
 	}
 }

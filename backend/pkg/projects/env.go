@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace
+// Deviations: Local module namespace; functional cut: removed central variables and .env.global; functional cut: removed GitOps and saved Git repositories.
 
 package projects
 
@@ -14,8 +14,6 @@ import (
 	"maps"
 	"os"
 	"path/filepath"
-	"regexp"
-	"slices"
 	"strconv"
 	"strings"
 	"syscall"
@@ -32,12 +30,8 @@ import (
 )
 
 const (
-	GlobalEnvFileName                     = ".env.global"
-	EffectiveEnvFileName                  = ".env"
-	GitSourceEnvFileName                  = ".env.git"
-	OverrideEnvFileName                   = "project.env"
-	ProjectEnvModeDirect   ProjectEnvMode = "direct"
-	ProjectEnvModeOverride ProjectEnvMode = "override"
+	EffectiveEnvFileName                = ".env"
+	ProjectEnvModeDirect ProjectEnvMode = "direct"
 
 	// Docker Compose pre-defined variable names that compose-go's consts package
 	// does not export. See https://docs.docker.com/compose/how-tos/environment-variables/envvars.
@@ -59,11 +53,7 @@ type ProjectEnvState struct {
 	EditableContent  string
 	EffectiveContent string
 	DirectContent    string
-	GitContent       string
-	OverrideContent  string
 	HasEffective     bool
-	HasGitSource     bool
-	HasOverride      bool
 	// The *Unreadable fields report a file that exists on disk but could not be
 	// read because of a permission error (e.g. a chmod 000 or foreign-owned
 	// file reachable through a bind mount). Such a file is treated as absent
@@ -71,8 +61,6 @@ type ProjectEnvState struct {
 	// write or remove it — its contents are unknown, so writing could either
 	// fail (bricking the caller) or silently clobber operator intent.
 	EffectiveUnreadable bool
-	GitSourceUnreadable bool
-	OverrideUnreadable  bool
 }
 
 type EnvLoader struct {
@@ -89,7 +77,6 @@ type envFileCacheEntry struct {
 }
 
 var (
-	globalEnvFileCache  = hot.NewHotCache[string, envFileCacheEntry](hot.LRU, 4096).Build()
 	projectEnvFileCache = hot.NewHotCache[string, envFileCacheEntry](hot.LRU, 4096).Build()
 )
 
@@ -122,25 +109,15 @@ func allowedProcessEnvInternal() EnvMap {
 
 // LoadEnvironment loads and merges environment variables from all sources:
 // 1. Allowlisted process environment (TZ)
-// 2. Global .env.global file (from projects directory)
-// 3. Project-specific .env file (from workdir)
+// 2. Project-specific .env file (from workdir)
 // The rest of the Arcane process environment is intentionally excluded so its
 // own variables never leak into compose interpolation of managed projects.
 func (l *EnvLoader) LoadEnvironment(ctx context.Context) (envMap, injectionVars EnvMap, err error) {
 	envMap = allowedProcessEnvInternal()
 	injectionVars = make(EnvMap)
 
-	if strings.TrimSpace(l.projectsDir) != "" {
-		globalEnvPath := filepath.Join(l.projectsDir, GlobalEnvFileName)
-		if loadAndMergeGlobalEnvErr := l.loadAndMergeGlobalEnv(ctx, globalEnvPath, envMap, injectionVars); loadAndMergeGlobalEnvErr != nil && !errors.Is(loadAndMergeGlobalEnvErr, os.ErrNotExist) {
-			slog.WarnContext(ctx, "Failed to load global env", "path", globalEnvPath, "error", loadAndMergeGlobalEnvErr)
-		}
-	}
-
-	// COMPOSE_DISABLE_ENV_FILE skips the project .env entirely, as `docker
-	// compose` does. It is read from the sources merged so far — in practice
-	// only .env.global, since the process-env allowlist never includes
-	// COMPOSE_* variables.
+	// COMPOSE_DISABLE_ENV_FILE skips the project .env when supplied by an
+	// allowed process source.
 	if parseComposeBoolInternal(envMap, consts.ComposeDisableDefaultEnvFile) {
 		slog.DebugContext(ctx, "COMPOSE_DISABLE_ENV_FILE set; skipping project .env", "workdir", l.workdir)
 	} else {
@@ -186,24 +163,6 @@ func (l *EnvLoader) mergeComposeEnvFilesInternal(ctx context.Context, envMap, in
 		}
 	}
 	mergeComposeEnvFilesInternal(ctx, l.workdir, envMap, parse, onMerged)
-}
-
-func (l *EnvLoader) loadAndMergeGlobalEnv(ctx context.Context, path string, envMap, injectionVars EnvMap) error {
-	entry, err := loadCachedEnvFileInternal(ctx, globalEnvFileCache, path, path, envMap)
-	if err != nil {
-		return err
-	}
-	if !entry.exists {
-		return os.ErrNotExist
-	}
-
-	for k, v := range entry.values {
-		envMap[k] = v
-		injectionVars[k] = v
-	}
-
-	slog.DebugContext(ctx, "Merged global env into environment map", "totalEnvCount", len(envMap))
-	return nil
 }
 
 func (l *EnvLoader) loadAndMergeProjectEnv(ctx context.Context, path string, envMap, injectionVars EnvMap) error {
@@ -387,211 +346,6 @@ func WithTransientValidationEnvFile(ctx context.Context, projectPath string, eff
 	return run()
 }
 
-// BuildEffectiveEnvContent merges git and override env sources into the effective
-// .env content written to disk. Keys present in both layers are rewritten in place
-// on the Git line, preserving ordering and inline comments; override-only keys are
-// appended after the Git content. When the in-place rewrite cannot be verified to
-// parse identically to plain concatenation (e.g. multiline values), the override
-// is appended verbatim instead so duplicate keys resolve to the override value.
-func BuildEffectiveEnvContent(gitContent, overrideContent string) (string, error) {
-	contextEnv := make(EnvMap)
-
-	gitEnv, err := ParseProjectEnvContent(gitContent, contextEnv)
-	if err != nil {
-		return "", fmt.Errorf("parse git env content: %w", err)
-	}
-	maps.Copy(contextEnv, gitEnv)
-
-	overrideEnv, err := ParseProjectEnvContent(overrideContent, contextEnv)
-	if err != nil {
-		return "", fmt.Errorf("parse override env content: %w", err)
-	}
-
-	switch {
-	case gitContent == "":
-		return overrideContent, nil
-	case overrideContent == "":
-		return gitContent, nil
-	}
-
-	separated := strings.HasSuffix(gitContent, "\n") || strings.HasPrefix(overrideContent, "\n")
-	concatenated := kit.Ternary(separated, gitContent+overrideContent, gitContent+"\n"+overrideContent)
-
-	candidate, ok := mergeEnvOverridesInPlaceInternal(gitContent, overrideContent, overrideEnv)
-	if !ok {
-		return concatenated, nil
-	}
-
-	candidateEnv, candidateErr := ParseProjectEnvContent(candidate, make(EnvMap))
-	expectedEnv, expectedErr := ParseProjectEnvContent(concatenated, make(EnvMap))
-	if candidateErr == nil && expectedErr == nil && maps.Equal(candidateEnv, expectedEnv) {
-		return candidate, nil
-	}
-	return concatenated, nil
-}
-
-// EnvContentChanged reports whether two env contents differ semantically,
-// ignoring ordering and comments. Unparseable content is compared verbatim.
-func EnvContentChanged(oldContent, newContent string) bool {
-	oldEnv, oldErr := ParseProjectEnvContent(oldContent, nil)
-	newEnv, newErr := ParseProjectEnvContent(newContent, nil)
-	if oldErr != nil || newErr != nil {
-		return oldContent != newContent
-	}
-	return !maps.Equal(oldEnv, newEnv)
-}
-
-var envKeyLineRegexInternal = regexp.MustCompile(`^(\s*(?:export\s+)?)([A-Za-z_][A-Za-z0-9_.-]*)(\s*=)(.*)$`)
-
-// mergeEnvOverridesInPlaceInternal rewrites the value of every gitContent line
-// whose key has an override — keeping line order and trailing inline comments —
-// then appends the override lines whose keys were not rewritten. ok is false when
-// no git line matched an override and the caller should fall back to plain
-// concatenation.
-func mergeEnvOverridesInPlaceInternal(gitContent, overrideContent string, overrideEnv EnvMap) (merged string, ok bool) {
-	rewritten := make(map[string]struct{})
-	gitLines := strings.Split(gitContent, "\n")
-
-	for i, line := range gitLines {
-		body, hadCR := strings.CutSuffix(line, "\r")
-		match := envKeyLineRegexInternal.FindStringSubmatch(body)
-		if match == nil {
-			continue
-		}
-		overrideValue, exists := overrideEnv[match[2]]
-		if !exists {
-			continue
-		}
-
-		value, comment := splitEnvValueCommentInternal(match[4])
-		separator := value[len(strings.TrimRight(value, " \t")):]
-		if comment != "" && separator == "" {
-			separator = " "
-		}
-
-		body = match[1] + match[2] + match[3] + formatEnvValueInternal(overrideValue) + separator + comment
-		if hadCR {
-			body += "\r"
-		}
-		gitLines[i] = body
-		rewritten[match[2]] = struct{}{}
-	}
-
-	if len(rewritten) == 0 {
-		return "", false
-	}
-
-	remainderLines := make([]string, 0)
-	for line := range strings.SplitSeq(overrideContent, "\n") {
-		if match := envKeyLineRegexInternal.FindStringSubmatch(strings.TrimSuffix(line, "\r")); match != nil {
-			if _, drop := rewritten[match[2]]; drop {
-				continue
-			}
-		}
-		remainderLines = append(remainderLines, line)
-	}
-
-	merged = strings.Join(gitLines, "\n")
-	remainder := strings.Join(remainderLines, "\n")
-	switch {
-	case strings.TrimSpace(remainder) == "":
-		return merged, true
-	case strings.HasSuffix(merged, "\n"), strings.HasPrefix(remainder, "\n"):
-		return merged + remainder, true
-	default:
-		return merged + "\n" + remainder, true
-	}
-}
-
-// splitEnvValueCommentInternal splits a raw single-line env value into the value
-// part and a trailing inline comment. A comment starts at an unquoted '#' that is
-// at the start of the value or preceded by whitespace.
-func splitEnvValueCommentInternal(raw string) (value, comment string) {
-	var quote byte
-	for i := 0; i < len(raw); i++ {
-		c := raw[i]
-		switch {
-		case quote != 0:
-			if c == quote {
-				quote = 0
-			} else if c == '\\' && quote == '"' {
-				i++
-			}
-		case c == '\'' || c == '"':
-			quote = c
-		case c == '#' && (i == 0 || raw[i-1] == ' ' || raw[i-1] == '\t'):
-			return raw[:i], raw[i:]
-		}
-	}
-	return raw, ""
-}
-
-// BuildAdditiveOverrideEnvContent derives override content from a pre-git local
-// .env file. Like other generated env helpers, the result is normalized and does
-// not preserve comments or original key ordering.
-func BuildAdditiveOverrideEnvContent(gitContent, localContent string) (string, error) {
-	contextEnv := make(EnvMap)
-
-	gitEnv, err := ParseProjectEnvContent(gitContent, contextEnv)
-	if err != nil {
-		return "", fmt.Errorf("parse git env content: %w", err)
-	}
-	maps.Copy(contextEnv, gitEnv)
-
-	localEnv, err := ParseProjectEnvContent(localContent, contextEnv)
-	if err != nil {
-		return "", fmt.Errorf("parse local env content: %w", err)
-	}
-
-	override := make(EnvMap)
-	for key, value := range localEnv {
-		if _, exists := gitEnv[key]; !exists {
-			override[key] = value
-		}
-	}
-
-	return formatEnvMapInternal(override), nil
-}
-
-// BuildOverrideEnvContent derives the editable override file from git-backed and
-// effective env content. Content that already contains only real overrides is
-// returned verbatim; derived or cleaned output uses Arcane's canonical format.
-func BuildOverrideEnvContent(gitContent, effectiveContent string) (string, error) {
-	contextEnv := make(EnvMap)
-
-	gitEnv, err := ParseProjectEnvContent(gitContent, contextEnv)
-	if err != nil {
-		return "", fmt.Errorf("parse git env content: %w", err)
-	}
-	maps.Copy(contextEnv, gitEnv)
-
-	effectiveEnv, err := ParseProjectEnvContent(effectiveContent, contextEnv)
-	if err != nil {
-		return "", fmt.Errorf("parse effective env content: %w", err)
-	}
-
-	override := make(EnvMap)
-	for key, value := range effectiveEnv {
-		gitValue, exists := gitEnv[key]
-		switch {
-		case !exists:
-			override[key] = value
-		case value == "":
-			// Empty values for Git-backed keys are treated as deleting the local override,
-			// so the Git value is restored on the next effective merge.
-			continue
-		case gitValue != value:
-			override[key] = value
-		}
-	}
-
-	if maps.Equal(effectiveEnv, override) {
-		return effectiveContent, nil
-	}
-
-	return formatEnvMapInternal(override), nil
-}
-
 // CheckProjectEnvAccess reports a configuration error when the runtime user
 // lacks permission to open dir's .env or traverse its path.
 func CheckProjectEnvAccess(ctx context.Context, projectsDir, dir string) *projecttypes.ConfigurationError {
@@ -607,22 +361,12 @@ func CheckProjectEnvAccess(ctx context.Context, projectsDir, dir string) *projec
 		return nil
 	}
 
-	disabled := false
-	if strings.TrimSpace(projectsDir) != "" {
-		globalEnv, globalErr := ParseProjectEnvFile(filepath.Join(projectsDir, GlobalEnvFileName), make(EnvMap))
-		if globalErr != nil {
-			slog.DebugContext(ctx, "Failed to read global env while checking project env access", "path", projectsDir, "error", globalErr)
-		} else {
-			disabled = parseComposeBoolInternal(globalEnv, consts.ComposeDisableDefaultEnvFile)
-		}
-	}
-
 	return &projecttypes.ConfigurationError{
 		Code:             common.ConfigurationErrorCodeEnvFileUnreadable,
 		Path:             envPath,
 		UID:              os.Geteuid(),
 		GID:              os.Getegid(),
-		BlocksOperations: !disabled,
+		BlocksOperations: true,
 	}
 }
 
@@ -632,87 +376,28 @@ func ReadProjectEnvState(projectPath string) (ProjectEnvState, error) {
 		return ProjectEnvState{}, err
 	}
 
-	gitContent, hasGitSource, gitSourceUnreadable, err := readOptionalProjectFileInternal(projectPath, GitSourceEnvFileName)
-	if err != nil {
-		return ProjectEnvState{}, err
-	}
-
-	overrideContent, hasOverride, overrideUnreadable, err := readOptionalProjectFileInternal(projectPath, OverrideEnvFileName)
-	if err != nil {
-		return ProjectEnvState{}, err
-	}
-
-	if effectiveUnreadable || gitSourceUnreadable || overrideUnreadable {
-		ctx := context.Background() //nolint:forbidigo // Compose environment parsing is a pure helper without a request context.
-		slog.WarnContext(ctx, "skipping unreadable project env file(s); leaving them untouched",
-			"projectPath", projectPath,
-			"effectiveUnreadable", effectiveUnreadable,
-			"gitSourceUnreadable", gitSourceUnreadable,
-			"overrideUnreadable", overrideUnreadable,
-		)
-	}
-
 	state := ProjectEnvState{
+		Mode:                ProjectEnvModeDirect,
+		EditableFileName:    EffectiveEnvFileName,
+		EditableContent:     effectiveContent,
 		DirectContent:       effectiveContent,
 		EffectiveContent:    effectiveContent,
 		HasEffective:        hasEffective,
 		EffectiveUnreadable: effectiveUnreadable,
-		GitContent:          gitContent,
-		HasGitSource:        hasGitSource,
-		GitSourceUnreadable: gitSourceUnreadable,
-		OverrideContent:     overrideContent,
-		HasOverride:         hasOverride,
-		OverrideUnreadable:  overrideUnreadable,
 	}
-
-	if hasGitSource || hasOverride {
-		state.Mode = ProjectEnvModeOverride
-		state.EditableFileName = OverrideEnvFileName
-		state.EditableContent = overrideContent
-
-		if !hasEffective {
-			mergedContent, mergeErr := BuildEffectiveEnvContent(gitContent, overrideContent)
-			if mergeErr != nil {
-				return ProjectEnvState{}, mergeErr
-			}
-			state.EffectiveContent = mergedContent
-		}
-
-		return state, nil
-	}
-
-	state.Mode = ProjectEnvModeDirect
-	state.EditableFileName = EffectiveEnvFileName
-	state.EditableContent = effectiveContent
-
 	return state, nil
 }
 
-// WriteManagedEnvFile writes (or, for project.env, removes) one of the three
-// env-merge bookkeeping files — fileName must be EffectiveEnvFileName,
-// GitSourceEnvFileName, or OverrideEnvFileName. If the existing path is
-// unreadable (permission-locked or a directory), the write is skipped and a
-// warning logged instead: its contents can't be verified, and such a path is
-// typically unwritable too, so attempting the write would abort the whole caller.
+// WriteManagedEnvFile writes the project's effective .env file.
 func WriteManagedEnvFile(ctx context.Context, projectsDirectory, projectPath, fileName string, unreadable bool, content string) error {
+	if fileName != EffectiveEnvFileName {
+		return fmt.Errorf("write managed env file: unsupported file name %q", fileName)
+	}
 	if unreadable {
 		slog.WarnContext(ctx, "skipping unreadable project env file; leaving it untouched", "projectPath", projectPath, "file", fileName)
 		return nil
 	}
-
-	switch fileName {
-	case EffectiveEnvFileName:
-		return WriteProjectFile(ctx, projectsDirectory, projectPath, ".env", content)
-	case GitSourceEnvFileName:
-		return WriteProjectFile(ctx, projectsDirectory, projectPath, GitSourceEnvFileName, content)
-	case OverrideEnvFileName:
-		if strings.TrimSpace(content) == "" {
-			return RemoveProjectFile(ctx, projectsDirectory, projectPath, OverrideEnvFileName)
-		}
-		return WriteProjectFile(ctx, projectsDirectory, projectPath, OverrideEnvFileName, content)
-	default:
-		return fmt.Errorf("write managed env file: unsupported file name %q", fileName)
-	}
+	return WriteProjectFile(ctx, projectsDirectory, projectPath, EffectiveEnvFileName, content)
 }
 
 // readOptionalProjectFileInternal reads fileName from projectPath. A missing
@@ -736,49 +421,6 @@ func readOptionalProjectFileInternal(projectPath, fileName string) (content stri
 		return "", false, true, nil
 	}
 	return "", false, false, fmt.Errorf("read %s: %w", fileName, readErr)
-}
-
-// formatEnvMapInternal serializes env maps into Arcane's canonical generated
-// format. This is intentionally lossy: comments are omitted and keys are sorted
-// alphabetically to keep persisted merge output stable.
-func formatEnvMapInternal(envMap EnvMap) string {
-	if len(envMap) == 0 {
-		return ""
-	}
-
-	keys := slices.Sorted(maps.Keys(envMap))
-
-	var builder strings.Builder
-	for _, key := range keys {
-		builder.WriteString(key)
-		builder.WriteByte('=')
-		builder.WriteString(formatEnvValueInternal(envMap[key]))
-		builder.WriteByte('\n')
-	}
-
-	return builder.String()
-}
-
-func formatEnvValueInternal(value string) string {
-	if value == "" {
-		return value
-	}
-
-	value = strings.ReplaceAll(value, "$", "$$")
-	needsQuotes := strings.ContainsAny(value, " \t\r\n#\"'") || strings.TrimSpace(value) != value
-	if !needsQuotes {
-		return value
-	}
-
-	escaped := strings.NewReplacer(
-		"\\", "\\\\",
-		`"`, `\"`,
-		"\t", `\t`,
-		"\n", `\n`,
-		"\r", `\r`,
-	).Replace(value)
-
-	return `"` + escaped + `"`
 }
 
 // ComposeEnvOptions holds the deployment-relevant Docker Compose pre-defined
@@ -843,24 +485,10 @@ func ParseComposeEnvOptions(workdir string, env EnvMap) (ComposeEnvOptions, erro
 }
 
 // ComposeFileEnvSelection resolves the COMPOSE_FILE selection for dir with the
-// same layering EnvLoader.LoadEnvironment uses at deployment: .env.global from
-// projectsDir first, the project .env on top, then any COMPOSE_ENV_FILES
-// entries. Returns nil when the merged environment does not set COMPOSE_FILE.
-// COMPOSE_DISABLE_ENV_FILE (declared in .env.global) skips the project .env, as
-// `docker compose` does; a global COMPOSE_FILE still applies. An empty
-// projectsDir skips the global layer.
+// project .env and COMPOSE_ENV_FILES entries. Returns nil when the merged
+// environment does not set COMPOSE_FILE.
 func ComposeFileEnvSelection(ctx context.Context, projectsDir, dir string) ([]string, error) {
 	envMap := make(EnvMap)
-	if strings.TrimSpace(projectsDir) != "" {
-		globalEnv, err := ParseProjectEnvFile(filepath.Join(projectsDir, GlobalEnvFileName), envMap)
-		if err != nil {
-			return nil, err
-		}
-		maps.Copy(envMap, globalEnv)
-	}
-
-	// COMPOSE_DISABLE_ENV_FILE skips the project .env; it is read only from the
-	// sources merged so far (.env.global), matching LoadEnvironment.
 	if !parseComposeBoolInternal(envMap, consts.ComposeDisableDefaultEnvFile) {
 		projectEnvPath := filepath.Join(dir, EffectiveEnvFileName)
 		projectEnv, err := ParseProjectEnvFile(projectEnvPath, envMap)

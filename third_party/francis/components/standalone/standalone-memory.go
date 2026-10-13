@@ -1,0 +1,49 @@
+package standalone
+
+import (
+	"log/slog"
+	"time"
+
+	"k8s.io/utils/clock"
+
+	"github.com/italypaleale/francis/components"
+	"github.com/italypaleale/francis/components/standalone/internal"
+)
+
+// StandaloneMemory is a pure in-memory provider with no persistence.
+// All data is lost when the process exits.
+type StandaloneMemory struct {
+	*internal.Provider
+}
+
+// StandaloneMemoryOptions contains options for creating a StandaloneMemory provider.
+type StandaloneMemoryOptions struct {
+	components.ProviderOptions
+
+	// OperationLog is applied by the host and runtime provider factory
+	// Direct callers of this low-level constructor can apply it explicitly with instrument.WrapProvider
+	OperationLog components.OperationLogConfig
+
+	// Clock, used to pass a mock one for testing
+	Clock clock.WithTicker
+
+	// Interval at which to purge expired state from memory
+	// Default is 5 minutes
+	// Set to a negative value to disable
+	CleanupInterval time.Duration
+}
+
+// NewStandaloneMemory creates a new pure in-memory ActorProvider.
+func NewStandaloneMemory(log *slog.Logger, opts StandaloneMemoryOptions, providerConfig components.ProviderConfig) (*StandaloneMemory, error) {
+	p, err := internal.NewProvider(log, internal.ProviderOptions{
+		ProviderOptions: opts.ProviderOptions,
+		Clock:           opts.Clock,
+		CleanupInterval: opts.CleanupInterval,
+		PersistHook:     &internal.NoopPersistHook{},
+	}, providerConfig)
+	if err != nil {
+		return nil, err
+	}
+
+	return &StandaloneMemory{Provider: p}, nil
+}

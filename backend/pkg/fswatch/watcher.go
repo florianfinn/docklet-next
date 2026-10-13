@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace
+// Deviations: Local module namespace; functional cut: removed GitOps and saved Git repositories.
 
 // Package fswatch stays on os.* rather than acfs: it watches arbitrary
 // user-configured paths and deliberately follows symlinks that may resolve
@@ -315,7 +315,7 @@ func (fw *Watcher) shouldHandleEventInternal(event fsnotify.Event) bool {
 	if !event.Has(fsnotify.Write) && !event.Has(fsnotify.Create) && !event.Has(fsnotify.Rename) && !event.Has(fsnotify.Remove) && !event.Has(fsnotify.Chmod) {
 		return false
 	}
-	// Arcane's own scratch directories (update backups, GitOps staging) churn
+	// Arcane's own scratch directories (update backups) churn
 	// compose files that must not re-sync the live projects.
 	rel, err := filepath.Rel(fw.watchedPath, fw.logicalPathForWatchEventInternal(event.Name))
 	if err == nil && projects.PathContainsIgnoredDirectory(rel) {

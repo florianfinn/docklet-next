@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: None
+// Deviations: functional cut: removed SQLite runtime and migrations.
 
 // Package francis owns the embedded Francis host lifecycle.
 package francis
@@ -17,7 +17,6 @@ import (
 	"log/slog"
 	"net"
 	"strconv"
-	"strings"
 	"sync"
 	"syscall"
 	"time"
@@ -25,7 +24,6 @@ import (
 	"github.com/italypaleale/francis/actor"
 	"github.com/italypaleale/francis/components"
 	"github.com/italypaleale/francis/host/local"
-	"github.com/libtnb/sqlite"
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
 	"gorm.io/gorm/logger"
@@ -121,11 +119,7 @@ func (r *Runtime) Store() (*gorm.DB, error) {
 	if r.store != nil {
 		return r.store, nil
 	}
-	dialector := postgres.Open(r.storeURL)
-	if strings.HasPrefix(r.storeURL, "file:") {
-		dialector = sqlite.Open(r.storeURL + "?_pragma=busy_timeout(2500)")
-	}
-	store, err := gorm.Open(dialector, &gorm.Config{Logger: logger.Discard})
+	store, err := gorm.Open(postgres.Open(r.storeURL), &gorm.Config{Logger: logger.Discard})
 	if err != nil {
 		return nil, fmt.Errorf("open actor storage: %w", err)
 	}

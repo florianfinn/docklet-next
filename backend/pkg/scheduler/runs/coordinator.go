@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace
+// Deviations: Local module namespace; functional cut: removed SQLite runtime and migrations.
 
 // Package runs coordinates durable scheduler execution and recovery.
 package runs
@@ -25,13 +25,11 @@ import (
 	"github.com/italypaleale/francis/actor"
 	kit "go.getarcane.app/kit/pkg"
 
-	"github.com/florianfinn/docklet-next/backend/internal/kv"
 	"github.com/florianfinn/docklet-next/backend/pkg/utils/francis"
 )
 
 // Coordinator persists work before dispatching it to the owning domain.
 type Coordinator struct {
-	store        *kv.KVService
 	service      *actor.Service
 	runtime      *francis.Runtime
 	owner        string
@@ -220,9 +218,6 @@ func (q *Coordinator) Start(ctx, appCtx context.Context) error {
 	}
 	if q.execute == nil {
 		return errors.New("job executor unavailable")
-	}
-	if err := q.importLegacyInternal(ctx); err != nil {
-		return fmt.Errorf("import legacy job history: %w", err)
 	}
 	// Fail startup if persisted state cannot be read. Never replace it with empty state.
 	records, err := q.Records(ctx)

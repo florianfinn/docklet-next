@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace
+// Deviations: Local module namespace; functional cut: removed SQLite runtime and migrations.
 
 package scheduler
 
@@ -13,12 +13,9 @@ import (
 	"time"
 
 	schedulertypes "github.com/florianfinn/docklet-next/types/scheduler"
-	"github.com/libtnb/sqlite"
 	"github.com/stretchr/testify/require"
-	"gorm.io/gorm"
 
 	"github.com/florianfinn/docklet-next/backend/internal/database"
-	"github.com/florianfinn/docklet-next/backend/internal/kv"
 	"github.com/florianfinn/docklet-next/backend/internal/settings"
 	"github.com/florianfinn/docklet-next/backend/pkg/scheduler/jobcontext"
 	"github.com/florianfinn/docklet-next/backend/pkg/scheduler/runs"
@@ -44,15 +41,8 @@ func newTestCoordinatorInternal(t testing.TB,
 		schedulertypes.Run) (schedulertypes.Outcome, error),
 ) (*runs.Coordinator, *francis.Runtime) {
 	t.Helper()
-	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
-	require.NoError(t, err)
-	require.NoError(t, db.AutoMigrate(&kv.KVEntry{}))
-	sqlDB, err := db.DB()
-	require.NoError(t, err)
-	sqlDB.SetMaxOpenConns(1)
-	t.Cleanup(func() { require.NoError(t, sqlDB.Close()) })
 	runtime := francistest.New(t)
-	coordinator := runs.New(kv.NewKVService(&database.DB{DB: db}), runtime.Service(), location)
+	coordinator := runs.New(runtime.Service(), location)
 	coordinator.SetExecutor(execute, nil)
 	require.NoError(t, coordinator.Register(runtime))
 	require.NoError(t, runtime.Start(t.Context(), ctx, nil))

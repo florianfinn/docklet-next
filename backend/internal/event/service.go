@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace
+// Deviations: Local module namespace; functional cut: removed federated credentials.
 
 package event
 
@@ -735,9 +735,8 @@ var eventDefinitions = map[EventType]eventDefinition{
 	EventTypeSystemAutoUpdate: {"System auto-update completed", "System auto-update process has completed", EventSeverityInfo},
 	EventTypeSystemUpgrade:    {"System upgrade completed", "System upgrade process has completed", EventSeverityInfo},
 
-	EventTypeUserLogin:         {"User logged in: %s", "User '%s' has logged in", EventSeverityInfo},
-	EventTypeUserLogout:        {"User logged out: %s", "User '%s' has logged out", EventSeverityInfo},
-	EventTypeFederatedExchange: {"Federated credential exchange: %s", "Federated credential exchange for '%s'", EventSeverityInfo},
+	EventTypeUserLogin:  {"User logged in: %s", "User '%s' has logged in", EventSeverityInfo},
+	EventTypeUserLogout: {"User logged out: %s", "User '%s' has logged out", EventSeverityInfo},
 }
 
 func (s *EventService) generateEventTitle(eventType EventType, resourceName string) string {

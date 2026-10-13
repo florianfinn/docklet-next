@@ -2,14 +2,13 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace
+// Deviations: Local module namespace; functional cut: removed S3 backup destinations; functional cut: removed SQLite runtime and migrations.
 
 package system
 
 import (
 	"cmp"
 	"context"
-	"database/sql"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -47,7 +46,6 @@ import (
 	"github.com/florianfinn/docklet-next/backend/internal/imageupdate"
 	"github.com/florianfinn/docklet-next/backend/internal/network"
 	"github.com/florianfinn/docklet-next/backend/internal/project"
-	"github.com/florianfinn/docklet-next/backend/internal/s3"
 	"github.com/florianfinn/docklet-next/backend/internal/settings"
 	systembackup "github.com/florianfinn/docklet-next/backend/internal/system/children/backup"
 	"github.com/florianfinn/docklet-next/backend/internal/system/children/prune"
@@ -58,7 +56,6 @@ import (
 	"github.com/florianfinn/docklet-next/backend/pkg/pagination"
 	"github.com/florianfinn/docklet-next/backend/pkg/scheduler/runs"
 	"github.com/florianfinn/docklet-next/backend/pkg/utils"
-	"github.com/florianfinn/docklet-next/backend/pkg/utils/francis"
 )
 
 // SystemService owns Docker system-wide operations and coordinates the prune
@@ -89,9 +86,7 @@ func NewSystemService(
 	eventService *event.EventService,
 	projectService *project.ProjectService,
 	backupEngine *backup.Engine,
-	s3Destinations *s3.S3DestinationService,
 	recoveryKeys *backup.RecoveryKeyStore,
-	actors *francis.Runtime,
 	cfg *config.Config,
 ) *SystemService {
 	location := time.UTC
@@ -110,24 +105,16 @@ func NewSystemService(
 		prune:   prune.NewService(location, dockerService.GetClient, activityService, imageUpdateService, volumeService, networkService),
 		upgrade: upgrade.NewService(db, dockerService, versionService, eventService, settingsService, projectService, resolveUpgraderRuntimeOptionsInternal),
 	}
-	var sqlDB func() (*sql.DB, error)
-	if db != nil {
-		sqlDB = db.SQLDB
-	}
 	s.backup = systembackup.NewService(systembackup.Dependencies{
-		Store:                 s.backupStoreInternal(s3Destinations),
-		DB:                    db,
-		SQLDB:                 sqlDB,
-		ActorStore:            actors.Store,
-		Docker:                dockerService,
-		Volumes:               volumeService,
-		Engine:                backupEngine,
-		S3Destinations:        s3Destinations,
-		Activity:              activityService,
-		Settings:              settingsService,
-		Config:                cfg,
-		RecoveryKeys:          recoveryKeys,
-		ResolveRuntimeOptions: resolveUpgraderRuntimeOptionsInternal,
+		Store:        s.backupStoreInternal(),
+		DB:           db,
+		Docker:       dockerService,
+		Volumes:      volumeService,
+		Engine:       backupEngine,
+		Activity:     activityService,
+		Settings:     settingsService,
+		Config:       cfg,
+		RecoveryKeys: recoveryKeys,
 	})
 	return s
 }
@@ -473,14 +460,13 @@ func resolveUpgraderRuntimeOptionsInternal(
 }
 
 const systemBackupHistoryUnion = "SELECT id, size, created_at, status, trigger, destination, '' AS format, local_snapshot_id, " +
-	"remote_snapshot_id, s3_destination_id, policy_id, error, 'system' AS type, 'system' AS " +
-	"resource_type, 'Arcane' AS resource_name FROM system_backup_runs UNION ALL SELECT id, size, " +
-	"created_at, status, trigger, destination, format, local_snapshot_id, remote_snapshot_id, " +
-	"s3_destination_id, policy_id, error, CASE WHEN policy_id LIKE 'system-volume:%' THEN 'system' ELSE " +
+	"policy_id, error, 'system' AS type, 'system' AS resource_type, 'Arcane' AS resource_name " +
+	"FROM system_backup_runs UNION ALL SELECT id, size, created_at, status, trigger, destination, format, " +
+	"local_snapshot_id, policy_id, error, CASE WHEN policy_id LIKE 'system-volume:%' THEN 'system' ELSE " +
 	"'volume' END AS type, 'volume' AS resource_type, volume_name AS resource_name FROM volume_backups"
 
 // backupStoreInternal persists system backup runs and policies for the backup child.
-func (s *SystemService) backupStoreInternal(s3Destinations *s3.S3DestinationService) systembackup.Store {
+func (s *SystemService) backupStoreInternal() systembackup.Store {
 	return systembackup.Store{
 		CreateRun: func(ctx context.Context, dto *backuptypes.SystemBackupRun) error {
 			run := systemBackupRunFromDTOInternal(*dto)
@@ -549,13 +535,6 @@ func (s *SystemService) backupStoreInternal(s3Destinations *s3.S3DestinationServ
 			}
 			return new(run.ToDTO()), nil
 		},
-		RemoteSnapshotIDs: func(ctx context.Context, destinationID string) ([]string, error) {
-			var ids []string
-			err := s.db.WithContext(ctx).Model(&SystemBackupRun{}).
-				Where("s3_destination_id = ? AND remote_snapshot_id <> ''", destinationID).
-				Pluck("remote_snapshot_id", &ids).Error
-			return ids, err
-		},
 		CountRuns: func(ctx context.Context) (int64, error) {
 			var count int64
 			err := s.db.WithContext(ctx).Model(&SystemBackupRun{}).Count(&count).Error
@@ -622,19 +601,6 @@ func (s *SystemService) backupStoreInternal(s3Destinations *s3.S3DestinationServ
 					reschedule(ctx, new(policy.ToDTO()))
 				},
 			}.Run(ctx, updates)
-		},
-		DisablePolicyRemote: func(ctx context.Context, policy *backuptypes.SystemBackupPolicy) (bool, error) {
-			column := "enabled"
-			if policy.LocalEnabled {
-				column = "s3_enabled"
-			}
-			result := s.db.WithContext(ctx).Model(&SystemBackupPolicy{}).
-				Where("id = ? AND s3_destination_id = ? AND enabled = ? AND s3_enabled = ? AND local_enabled = ?", policy.ID, policy.S3DestinationID, true, true, policy.LocalEnabled).
-				Update(column, false)
-			return result.Error == nil && result.RowsAffected > 0, result.Error
-		},
-		CheckScheduledRemote: func(ctx context.Context, destinationID string) error {
-			return backup.CheckScheduledRemote(ctx, s.db, s3Destinations, "system_backup_runs", destinationID, "arcane-system-recovery")
 		},
 		ListHistory: func(ctx context.Context, params pagination.QueryParams) ([]backuptypes.HistoryEntry, pagination.Response, error) {
 			query := s.db.WithContext(ctx).Table("(?) AS backup_history", s.db.Raw(systemBackupHistoryUnion))

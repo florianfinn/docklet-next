@@ -1,8 +1,10 @@
+//go:build postgres_integration
+
 // Source: getarcaneapp/arcane/backend/internal/image/service_test.go
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace
+// Deviations: Local module namespace; functional cut: PostgreSQL integration test fixture.
 
 package image
 
@@ -18,10 +20,10 @@ import (
 	"testing"
 	"time"
 
+	"github.com/florianfinn/docklet-next/backend/internal/testpg"
 	"github.com/florianfinn/docklet-next/types/containerregistry"
 	imagetypes "github.com/florianfinn/docklet-next/types/image"
 	"github.com/florianfinn/docklet-next/types/user"
-	"github.com/libtnb/sqlite"
 	"github.com/moby/moby/api/pkg/authconfig"
 	"github.com/moby/moby/api/types/container"
 	"github.com/moby/moby/api/types/image"
@@ -52,7 +54,7 @@ func imageDockerTestPathInternal(path string) string {
 
 func setupImageProjectTestDBInternal(t *testing.T) *database.DB {
 	t.Helper()
-	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
+	db, err := gorm.Open(testpg.Dialector(t, ":memory:"), &gorm.Config{})
 	require.NoError(t, err)
 	require.NoError(t, db.AutoMigrate(
 		&testProjectRow{},
@@ -279,7 +281,7 @@ func TestImagePaginationConfig_SearchesPinnedReferencesInternal(t *testing.T) {
 }
 
 func TestImageService_GetUpdateInfoByImageRefs_MatchesCanonicalAndFamiliarRepos(t *testing.T) {
-	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
+	db, err := gorm.Open(testpg.Dialector(t, ":memory:"), &gorm.Config{})
 	require.NoError(t, err)
 	require.NoError(t, db.AutoMigrate(&imageupdate.ImageUpdateRecord{}))
 
@@ -329,7 +331,7 @@ func TestImageService_GetUpdateInfoByImageRefs_MatchesCanonicalAndFamiliarRepos(
 func setupImageServiceAuthTest(t *testing.T) (*ImageService, *database.DB) {
 	t.Helper()
 
-	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
+	db, err := gorm.Open(testpg.Dialector(t, ":memory:"), &gorm.Config{})
 	require.NoError(t, err)
 	require.NoError(t, db.AutoMigrate(&registry.ContainerRegistry{}, &kv.KVEntry{}, &testProjectRow{}))
 
@@ -600,7 +602,7 @@ type testProjectRow struct {
 func (testProjectRow) TableName() string { return "projects" }
 
 func TestImageServiceContainerTagUpdatesStayScoped(t *testing.T) {
-	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
+	db, err := gorm.Open(testpg.Dialector(t, ":memory:"), &gorm.Config{})
 	require.NoError(t, err)
 	require.NoError(t, db.AutoMigrate(&imageupdate.ImageUpdateRecord{}))
 	svc := &ImageService{db: &database.DB{DB: db}}

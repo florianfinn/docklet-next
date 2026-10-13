@@ -1,8 +1,10 @@
+//go:build postgres_integration
+
 // Source: getarcaneapp/arcane/backend/internal/notification/service_test.go
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace
+// Deviations: Local module namespace; functional cut: removed APNS mobile push; functional cut: PostgreSQL integration test fixture.
 
 package notification
 
@@ -21,10 +23,10 @@ import (
 	"testing"
 	"time"
 
+	"github.com/florianfinn/docklet-next/backend/internal/testpg"
 	"github.com/florianfinn/docklet-next/types/imageupdate"
 	"github.com/florianfinn/docklet-next/types/notification"
 	"github.com/florianfinn/docklet-next/types/system"
-	"github.com/libtnb/sqlite"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.getarcane.app/sys/crypto"
@@ -41,7 +43,7 @@ import (
 
 func setupNotificationTestDB(t *testing.T) *database.DB {
 	t.Helper()
-	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
+	db, err := gorm.Open(testpg.Dialector(t, ":memory:"), &gorm.Config{})
 	require.NoError(t, err)
 	require.NoError(t, db.AutoMigrate(&NotificationSettings{}, &settings.SettingVariable{}, &environment.Environment{}, &event.Event{}))
 
@@ -69,7 +71,7 @@ func setupNotificationTestServiceInternal(t *testing.T) (*database.DB, *Notifica
 		AppUrl: "http://localhost:3552",
 	}
 
-	return db, NewNotificationService(db, cfg, envSvc, event.NewEventService(db, cfg, nil), nil)
+	return db, NewNotificationService(db, cfg, envSvc, event.NewEventService(db, cfg, nil))
 }
 
 func newNotificationTestUpdateInfoInternal() *imageupdate.Response {
@@ -255,7 +257,7 @@ func TestNotificationService_SendImageUpdateNotification_AgentModeDispatchesToMa
 		AgentMode:     true,
 		AgentToken:    "agent-token",
 		ManagerApiUrl: server.URL,
-	}, envSvc, nil, nil)
+	}, envSvc, nil)
 
 	delivered, err := svc.SendImageUpdateNotification(ctx, "nginx:latest", newNotificationTestUpdateInfoInternal(), notifications.NotificationEventImageUpdate)
 	require.NoError(t, err)
@@ -302,7 +304,7 @@ func TestNotificationService_SendBatchImageUpdateNotification_AgentModeUsesManag
 		AgentMode:     true,
 		AgentToken:    "agent-token",
 		ManagerApiUrl: server.URL,
-	}, envSvc, nil, nil)
+	}, envSvc, nil)
 
 	delivered, err := svc.SendBatchImageUpdateNotification(ctx, map[string]*imageupdate.Response{
 		"nginx:latest": newNotificationTestUpdateInfoInternal(),
@@ -322,7 +324,7 @@ func TestNotificationService_SendImageUpdateNotification_AgentModeRequiresUpdate
 	svc := NewNotificationService(db, &config.Config{
 		AppUrl:    "http://localhost:3552",
 		AgentMode: true,
-	}, envSvc, nil, nil)
+	}, envSvc, nil)
 
 	_, err := svc.SendImageUpdateNotification(ctx, "nginx:latest", nil, notifications.NotificationEventImageUpdate)
 	require.Error(t, err)
@@ -346,7 +348,7 @@ func TestNotificationService_SendBatchImageUpdateNotification_AgentModeSkipsNoOp
 		AgentMode:     true,
 		AgentToken:    "agent-token",
 		ManagerApiUrl: server.URL,
-	}, envSvc, nil, nil)
+	}, envSvc, nil)
 
 	t.Run("empty updates", func(t *testing.T) {
 		delivered, err := svc.SendBatchImageUpdateNotification(ctx, map[string]*imageupdate.Response{})
@@ -483,7 +485,7 @@ func TestNotificationCredentialInternal_LeavesEmptyValuesEmpty(t *testing.T) {
 func TestNotificationService_CreateOrUpdateSettingsEncryptsCredentialFieldsInternal(t *testing.T) {
 	ctx := t.Context()
 	db := setupNotificationTestDB(t)
-	svc := NewNotificationService(db, &config.Config{}, nil, nil, nil)
+	svc := NewNotificationService(db, &config.Config{}, nil, nil)
 
 	_, err := svc.CreateOrUpdateSettings(ctx, notifications.NotificationProviderDiscord, true, database.JSON{
 		"webhookId": "123456789",
@@ -506,7 +508,7 @@ func TestNotificationService_CreateOrUpdateSettingsEncryptsCredentialFieldsInter
 func TestNotificationService_CreateOrUpdateSettingsPreservesStoredCredentialWhenEmptyInternal(t *testing.T) {
 	ctx := t.Context()
 	db := setupNotificationTestDB(t)
-	svc := NewNotificationService(db, &config.Config{}, nil, nil, nil)
+	svc := NewNotificationService(db, &config.Config{}, nil, nil)
 
 	_, err := svc.CreateOrUpdateSettings(ctx, notifications.NotificationProviderGotify, true, database.JSON{
 		"host":  "gotify.example",
@@ -534,7 +536,7 @@ func TestNotificationService_CreateOrUpdateSettingsPreservesStoredCredentialWhen
 func TestNotificationService_CreateOrUpdateSettingsRejectsTargetChangeWithStoredCredentialInternal(t *testing.T) {
 	ctx := t.Context()
 	db := setupNotificationTestDB(t)
-	svc := NewNotificationService(db, &config.Config{}, nil, nil, nil)
+	svc := NewNotificationService(db, &config.Config{}, nil, nil)
 
 	created, err := svc.CreateOrUpdateSettings(ctx, notifications.NotificationProviderGotify, true, database.JSON{
 		"host":  "gotify.example",
@@ -569,7 +571,7 @@ func TestNotificationService_CreateOrUpdateSettingsRejectsTargetChangeWithStored
 func TestNotificationService_CreateOrUpdateSettingsClearsEmailPasswordWhenAuthModeNoneInternal(t *testing.T) {
 	ctx := t.Context()
 	db := setupNotificationTestDB(t)
-	svc := NewNotificationService(db, &config.Config{}, nil, nil, nil)
+	svc := NewNotificationService(db, &config.Config{}, nil, nil)
 
 	_, err := svc.CreateOrUpdateSettings(ctx, notifications.NotificationProviderEmail, true, database.JSON{
 		"smtpHost":     "smtp.example",
@@ -593,7 +595,7 @@ func TestNotificationService_CreateOrUpdateSettingsClearsEmailPasswordWhenAuthMo
 func TestNotificationService_CreateOrUpdateSettingsPreservesCredentialAcrossDisableInternal(t *testing.T) {
 	ctx := t.Context()
 	db := setupNotificationTestDB(t)
-	svc := NewNotificationService(db, &config.Config{}, nil, nil, nil)
+	svc := NewNotificationService(db, &config.Config{}, nil, nil)
 
 	_, err := svc.CreateOrUpdateSettings(ctx, notifications.NotificationProviderGotify, true, database.JSON{
 		"host":  "gotify.example",
@@ -624,7 +626,7 @@ func TestNotificationService_CreateOrUpdateSettingsPreservesCredentialAcrossDisa
 func TestNotificationService_CreateOrUpdateSettingsKeepsConfigWhenDisabledInternal(t *testing.T) {
 	ctx := t.Context()
 	db := setupNotificationTestDB(t)
-	svc := NewNotificationService(db, &config.Config{}, nil, nil, nil)
+	svc := NewNotificationService(db, &config.Config{}, nil, nil)
 
 	_, err := svc.CreateOrUpdateSettings(ctx, notifications.NotificationProviderNtfy, true, database.JSON{
 		"host":  "ntfy.example",
@@ -660,7 +662,7 @@ func TestNotificationService_CreateOrUpdateSettingsKeepsConfigWhenDisabledIntern
 func TestNotificationService_NotifyEnabledProvidersInternal_SkipsFiltersAndAggregatesInternal(t *testing.T) {
 	ctx := t.Context()
 	db := setupNotificationTestDB(t)
-	svc := NewNotificationService(db, &config.Config{}, nil, event.NewEventService(db, nil, nil), nil)
+	svc := NewNotificationService(db, &config.Config{}, nil, event.NewEventService(db, nil, nil))
 
 	rows := []NotificationSettings{
 		{Provider: notifications.NotificationProviderDiscord, Enabled: false, Config: database.JSON{}},
@@ -789,7 +791,7 @@ func TestNotificationService_DispatchNotificationForEnvironment_ResolvesTunnelSe
 func TestNotificationService_AgentDispatchWithoutHTTPConfigFallsBackToTunnel(t *testing.T) {
 	ctx := t.Context()
 	db := setupNotificationTestDB(t)
-	svc := NewNotificationService(db, &config.Config{AgentMode: true}, nil, event.NewEventService(db, &config.Config{AgentMode: true}, nil), nil)
+	svc := NewNotificationService(db, &config.Config{AgentMode: true}, nil, event.NewEventService(db, &config.Config{AgentMode: true}, nil))
 
 	// No MANAGER_API_URL/AGENT_TOKEN and no active tunnel: the error must point
 	// at both options instead of only the HTTP env vars (#3002).
@@ -808,7 +810,7 @@ func TestNotificationService_AgentDispatchHTTPFailureFallsBackToTunnel(t *testin
 	ctx := t.Context()
 	db := setupNotificationTestDB(t)
 	cfg := &config.Config{AgentMode: true, ManagerApiUrl: "http://127.0.0.1:0", AgentToken: "token"}
-	svc := NewNotificationService(db, cfg, nil, event.NewEventService(db, cfg, nil), nil)
+	svc := NewNotificationService(db, cfg, nil, event.NewEventService(db, cfg, nil))
 
 	// HTTP dispatch fails and no tunnel is connected either: the fallback must
 	// not mask the HTTP transport error.

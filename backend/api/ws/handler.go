@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace
+// Deviations: Local module namespace; functional cut: removed Swarm.
 
 package ws
 
@@ -26,7 +26,6 @@ import (
 	"github.com/florianfinn/docklet-next/backend/internal/diagnostics"
 	"github.com/florianfinn/docklet-next/backend/internal/middleware"
 	"github.com/florianfinn/docklet-next/backend/internal/project"
-	"github.com/florianfinn/docklet-next/backend/internal/swarm"
 	"github.com/florianfinn/docklet-next/backend/internal/system"
 	systemlib "github.com/florianfinn/docklet-next/backend/pkg/libarcane/system"
 	wshub "github.com/florianfinn/docklet-next/backend/pkg/libarcane/ws"
@@ -41,7 +40,6 @@ var defaultWebSocketMetrics = wshub.NewWebSocketMetrics()
 type WebSocketHandler struct {
 	projectService      *project.ProjectService
 	containerService    *container.ContainerService
-	swarmService        *swarm.SwarmService
 	systemService       *system.SystemService
 	diagnosticsService  *diagnostics.DiagnosticsService
 	checkWSOrigin       func(*http.Request) bool
@@ -82,7 +80,6 @@ func NewWebSocketHandler(
 	group *echo.Group,
 	projectService *project.ProjectService,
 	containerService *container.ContainerService,
-	swarmService *swarm.SwarmService,
 	systemService *system.SystemService,
 	diagnosticsService *diagnostics.DiagnosticsService,
 	authMiddleware *auth.AuthMiddleware,
@@ -91,7 +88,6 @@ func NewWebSocketHandler(
 	handler := &WebSocketHandler{
 		projectService:     projectService,
 		containerService:   containerService,
-		swarmService:       swarmService,
 		systemService:      systemService,
 		diagnosticsService: diagnosticsService,
 		wsMetrics:          defaultWebSocketMetrics,

@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace
+// Deviations: Local module namespace; functional cut: removed SQLite runtime and migrations.
 
 package activity
 
@@ -551,15 +551,9 @@ func (s *ActivityService) AppendMessage(ctx context.Context, activityID string, 
 	return &messages[0], nil
 }
 
-// AppendMessages persists a batch of output lines in one transaction — a
-// single multi-row message INSERT plus one coalesced Activity update —
-// instead of an INSERT+UPDATE+re-SELECT transaction per line, which turned
-// an image pull into hundreds of fsync'd SQLite transactions. The activity
-// publish DTO is re-SELECTed inside the transaction after the update (once
-// per batch, not per line) so it reflects lifecycle fields a concurrent
-// CompleteActivity/UpdateActivity committed first; a terminal write that
-// commits after this transaction but publishes before this snapshot is
-// handled by admitActivityPublishInternal dropping the stale event.
+// AppendMessages persists a batch in one transaction. Re-read the activity
+// after the update so its published state includes earlier concurrent writes;
+// stale later publications are dropped by admitActivityPublishInternal.
 func (s *ActivityService) AppendMessages(ctx context.Context, activityID string, reqs []AppendActivityMessageRequest) ([]activity.Message, error) {
 	if err := s.checkInitInternal(); err != nil {
 		return nil, err
@@ -652,11 +646,8 @@ func buildAppendBatchInternal(activityID string, reqs []AppendActivityMessageReq
 	return messages, updates
 }
 
-// appendBatchWithRetryInternal commits the batch INSERT plus Activity update in
-// one transaction. Bulk appends contend with terminal-status writes for the
-// SQLite write lock, and a batch lost to transient SQLITE_BUSY silently drops
-// up to 32 output lines — the Writer drain has no error path to replay them —
-// so retry like CompleteActivity does.
+// appendBatchWithRetryInternal retries transient write contention because the
+// Writer drain cannot replay a failed batch.
 func (s *ActivityService) appendBatchWithRetryInternal(ctx context.Context, activityID string, messages []*ActivityMessage, updates map[string]any) (*Activity, error) {
 	var current Activity
 	const appendWriteAttempts = 3
@@ -735,9 +726,7 @@ func (
 
 	now := time.Now()
 	var model Activity
-	// A lost terminal write leaves the activity stuck in running forever, so
-	// retry transient DB contention (SQLITE_BUSY under bulk activity writes)
-	// instead of surfacing it once and giving up.
+	// Retry transient write contention so completion is persisted.
 	const completeWriteAttempts = 3
 	var writeErr error
 	for attempt := 1; attempt <= completeWriteAttempts; attempt++ {

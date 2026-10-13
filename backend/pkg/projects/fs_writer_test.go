@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace
+// Deviations: Local module namespace; functional cut: removed GitOps and saved Git repositories; functional cut: removed Swarm.
 
 package projects
 
@@ -189,7 +189,7 @@ func TestWriteEnvFile_RejectsNonRegularSymlinkTarget(t *testing.T) {
 }
 
 func TestWriteProjectFile_StillRejectsNonEnvSymlink(t *testing.T) {
-	for _, writer := range []string{"project", "compose", "sync"} {
+	for _, writer := range []string{"project", "compose"} {
 		t.Run(writer, func(t *testing.T) {
 			projectsRoot := t.TempDir()
 			projectDir := filepath.Join(projectsRoot, "test-project")
@@ -197,7 +197,7 @@ func TestWriteProjectFile_StillRejectsNonEnvSymlink(t *testing.T) {
 
 			targetPath := filepath.Join(t.TempDir(), "compose.yaml")
 			require.NoError(t, os.WriteFile(targetPath, []byte("services: {}\n"), 0o600))
-			fileName := kit.Ternary(writer == "project", OverrideEnvFileName, DefaultComposeFileName)
+			fileName := kit.Ternary(writer == "project", "meta.yaml", DefaultComposeFileName)
 			linkPath := filepath.Join(projectDir, fileName)
 			if err := os.Symlink(targetPath, linkPath); err != nil {
 				t.Skipf("symlink creation is unavailable: %v", err)
@@ -209,10 +209,7 @@ func TestWriteProjectFile_StillRejectsNonEnvSymlink(t *testing.T) {
 				err = WriteProjectFile(t.Context(), projectsRoot, projectDir, fileName, "services: { updated: true }")
 			case "compose":
 				err = WriteComposeFile(t.Context(), projectsRoot, projectDir, "services: { updated: true }")
-			case "sync":
-				_, err = WriteSyncedDirectory(t.Context(), projectsRoot, projectDir, []SyncFile{
-					{RelativePath: DefaultComposeFileName, Content: []byte("services: { updated: true }")},
-				})
+
 			}
 			require.Error(t, err)
 			if writer == "project" {
@@ -313,89 +310,6 @@ func TestWriteComposeFile_PreservesExistingPodmanComposeNames(t *testing.T) {
 			assert.True(t, os.IsNotExist(err), "compose.yaml should not be created when existing podman-compose file is present")
 		})
 	}
-}
-
-func TestWriteSyncedDirectory_HonorsExecutableBit(t *testing.T) {
-	if runtime.GOOS == "windows" {
-		t.Skip("file mode bits are not represented on Windows FS")
-	}
-
-	root := t.TempDir()
-	project := filepath.Join(root, "myproject")
-	files := []SyncFile{
-		{RelativePath: "compose.yml", Content: []byte("services:\n  app:\n    image: alpine\n"), Executable: false},
-		{RelativePath: "scripts/pre-deploy.sh", Content: []byte("#!/bin/sh\necho hi\n"), Executable: true},
-		{RelativePath: "README.md", Content: []byte("readme"), Executable: false},
-	}
-
-	_, err := WriteSyncedDirectory(t.Context(), root, project, files)
-	require.NoError(t, err)
-
-	composeInfo, err := os.Stat(filepath.Join(project, "compose.yml"))
-	require.NoError(t, err)
-	assert.Equal(t, os.FileMode(0), composeInfo.Mode().Perm()&0o111, "compose.yml should not be executable")
-
-	scriptInfo, err := os.Stat(filepath.Join(project, "scripts", "pre-deploy.sh"))
-	require.NoError(t, err)
-	assert.NotEqual(t, os.FileMode(0), scriptInfo.Mode().Perm()&0o111, "scripts/pre-deploy.sh should be executable")
-}
-
-func TestWriteSyncedDirectory_DowngradesExecutableBit(t *testing.T) {
-	if runtime.GOOS == "windows" {
-		t.Skip("file mode bits are not represented on Windows FS")
-	}
-
-	root := t.TempDir()
-	project := filepath.Join(root, "myproject")
-	// First write: script committed as +x.
-	_, err := WriteSyncedDirectory(t.Context(), root, project, []SyncFile{
-		{RelativePath: "scripts/hook.sh", Content: []byte("#!/bin/sh\n"), Executable: true},
-	})
-	require.NoError(t, err)
-	first, err := os.Stat(filepath.Join(project, "scripts", "hook.sh"))
-	require.NoError(t, err)
-	require.NotEqual(t, os.FileMode(0), first.Mode().Perm()&0o111)
-
-	// Second write: same file, now without +x (e.g. the repo dropped the bit).
-	// The write path must re-chmod so the on-disk mode tracks the repo, not
-	// the previous write.
-	_, err = WriteSyncedDirectory(t.Context(), root, project, []SyncFile{
-		{RelativePath: "scripts/hook.sh", Content: []byte("#!/bin/sh\necho updated\n"), Executable: false},
-	})
-	require.NoError(t, err)
-	second, err := os.Stat(filepath.Join(project, "scripts", "hook.sh"))
-	require.NoError(t, err)
-	assert.True(t, os.SameFile(first, second), "sync updates should preserve the inode")
-	assert.Equal(t, os.FileMode(0), second.Mode().Perm()&0o111, "executable bit should clear on update when repo no longer marks +x")
-}
-
-func TestWriteSyncedDirectory_UpgradesExecutableBitOnUpdate(t *testing.T) {
-	if runtime.GOOS == "windows" {
-		t.Skip("file mode bits are not represented on Windows FS")
-	}
-
-	root := t.TempDir()
-	project := filepath.Join(root, "myproject")
-
-	// First write: file committed without +x.
-	_, err := WriteSyncedDirectory(t.Context(), root, project, []SyncFile{
-		{RelativePath: "scripts/hook.sh", Content: []byte("#!/bin/sh\n"), Executable: false},
-	})
-	require.NoError(t, err)
-	first, err := os.Stat(filepath.Join(project, "scripts", "hook.sh"))
-	require.NoError(t, err)
-	require.Equal(t, os.FileMode(0), first.Mode().Perm()&0o111)
-
-	// Second write: same file, now with +x (e.g. the repo added the bit).
-	// The write path must apply the new mode on an update, not just on create.
-	_, err = WriteSyncedDirectory(t.Context(), root, project, []SyncFile{
-		{RelativePath: "scripts/hook.sh", Content: []byte("#!/bin/sh\n"), Executable: true},
-	})
-	require.NoError(t, err)
-	second, err := os.Stat(filepath.Join(project, "scripts", "hook.sh"))
-	require.NoError(t, err)
-	assert.True(t, os.SameFile(first, second), "permission updates should preserve the inode")
-	assert.NotEqual(t, os.FileMode(0), second.Mode().Perm()&0o111, "executable bit should set on update when repo marks +x")
 }
 
 func TestWriteComposeFile_PreservesExistingCustomComposeNames(t *testing.T) {

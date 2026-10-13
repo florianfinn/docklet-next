@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: None
+// Deviations: functional cut: removed Swarm.
 
 package projects
 
@@ -154,30 +154,30 @@ func TestPathMapper_TranslateVolumeSources(t *testing.T) {
 }
 
 func TestPathMapper_TranslateVolumeSourcesKeepsArcaneReadFiles(t *testing.T) {
-	pm := NewPathMapper("/app/data/swarm/sources", "/host/swarm/sources")
+	pm := NewPathMapper("/app/data/projects", "/host/projects")
 	project := &composetypes.Project{
 		Services: composetypes.Services{
 			"app": {
 				Name: "app",
 				Volumes: []composetypes.ServiceVolumeConfig{{
 					Type:   composetypes.VolumeTypeBind,
-					Source: "/app/data/swarm/sources/0/stack/data",
+					Source: "/app/data/projects/0/stack/data",
 					Target: "/data",
 				}},
 			},
 		},
 		Secrets: composetypes.Secrets{
-			"secret": {File: "/app/data/swarm/sources/0/stack/secret.txt"},
+			"secret": {File: "/app/data/projects/0/stack/secret.txt"},
 		},
 		Configs: composetypes.Configs{
-			"config": {File: "/app/data/swarm/sources/0/stack/config.yaml"},
+			"config": {File: "/app/data/projects/0/stack/config.yaml"},
 		},
 	}
 
 	require.NoError(t, pm.TranslateVolumeSources(project, false))
-	assert.Equal(t, "/host/swarm/sources/0/stack/data", project.Services["app"].Volumes[0].Source)
-	assert.Equal(t, "/app/data/swarm/sources/0/stack/secret.txt", project.Secrets["secret"].File)
-	assert.Equal(t, "/app/data/swarm/sources/0/stack/config.yaml", project.Configs["config"].File)
+	assert.Equal(t, "/host/projects/0/stack/data", project.Services["app"].Volumes[0].Source)
+	assert.Equal(t, "/app/data/projects/0/stack/secret.txt", project.Secrets["secret"].File)
+	assert.Equal(t, "/app/data/projects/0/stack/config.yaml", project.Configs["config"].File)
 }
 
 // A bind-backed named volume's device is opened by the Docker daemon, so it needs

@@ -2,12 +2,11 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace
+// Deviations: Local module namespace; functional cut: removed S3 backup destinations.
 
 package volumes
 
 import (
-	"cmp"
 	"context"
 	"encoding/json/v2"
 	"errors"
@@ -33,21 +32,17 @@ import (
 )
 
 var (
-	backupCreateDestination   string
-	backupCreateS3Destination string
-	backupCreatePolicyID      string
-	backupUploadS3Destination string
-	restorePaths              []string
-	restoreArchiveFile        string
-	policyEnabled             bool
-	policySchedule            string
-	policyRetention           int
-	policyStopContainers      bool
-	policyLocal               bool
-	policyS3                  bool
-	policyS3Destination       string
-	policyID                  string
-	policyFile                string
+	backupCreateDestination string
+	backupCreatePolicyID    string
+	restorePaths            []string
+	restoreArchiveFile      string
+	policyEnabled           bool
+	policySchedule          string
+	policyRetention         int
+	policyStopContainers    bool
+	policyLocal             bool
+	policyID                string
+	policyFile              string
 )
 
 // backupsListResponse mirrors the backend's paginated volume backup response,
@@ -193,14 +188,12 @@ func buildPolicyUpdate(cmd *cobra.Command, c *client.Client, volumeName string) 
 	targetIndex := -1
 	for i, p := range current.Data.Policies {
 		payload.Policies[i] = volume.UpdateBackupPolicy{
-			ID:              p.ID,
-			Enabled:         p.Enabled,
-			Schedule:        p.Schedule,
-			RetentionCount:  p.RetentionCount,
-			StopContainers:  p.StopContainers,
-			LocalEnabled:    p.LocalEnabled,
-			S3Enabled:       p.S3Enabled,
-			S3DestinationID: p.S3DestinationID,
+			ID:             p.ID,
+			Enabled:        p.Enabled,
+			Schedule:       p.Schedule,
+			RetentionCount: p.RetentionCount,
+			StopContainers: p.StopContainers,
+			LocalEnabled:   p.LocalEnabled,
 		}
 		if policyID != "" && p.ID == policyID {
 			targetIndex = i
@@ -239,27 +232,19 @@ func buildPolicyUpdate(cmd *cobra.Command, c *client.Client, volumeName string) 
 	if cmd.Flags().Changed("local") {
 		target.LocalEnabled = policyLocal
 	}
-	if cmd.Flags().Changed("s3") {
-		target.S3Enabled = policyS3
-	}
-	if cmd.Flags().Changed("s3-destination") {
-		target.S3DestinationID = policyS3Destination
-	}
 	return payload, nil
 }
 
 func printBackupPolicies(volumeName string, collection volume.BackupPolicyCollection) error {
 	output.Header("Backup Policies: %s", volumeName)
-	output.KeyValue("S3 Available", collection.S3Available)
 	if len(collection.Policies) == 0 {
 		_, writeErr := fmt.Fprintln(output.Stdout(), "No backup policies configured")
 		return writeErr
 	}
 
-	headers := []string{"ID", "ENABLED", "SCHEDULE", "RETENTION", "STOP CONTAINERS", "LOCAL", "S3", "S3 DESTINATION"}
+	headers := []string{"ID", "ENABLED", "SCHEDULE", "RETENTION", "STOP CONTAINERS", "LOCAL"}
 	rows := make([][]string, len(collection.Policies))
 	for i, p := range collection.Policies {
-		s3Destination := cmp.Or(p.S3DestinationName, p.S3DestinationID)
 		rows[i] = []string{
 			p.ID,
 			output.TintEnabled(yesNo(p.Enabled)),
@@ -267,8 +252,6 @@ func printBackupPolicies(volumeName string, collection volume.BackupPolicyCollec
 			strconv.Itoa(p.RetentionCount),
 			yesNo(p.StopContainers),
 			yesNo(p.LocalEnabled),
-			yesNo(p.S3Enabled),
-			s3Destination,
 		}
 	}
 	return output.Table(headers, rows)
@@ -369,9 +352,8 @@ var backupsCreateCmd = &cobra.Command{
 		}
 
 		req := volume.CreateBackupRequest{
-			Destination:     volume.BackupDestination(backupCreateDestination),
-			PolicyID:        backupCreatePolicyID,
-			S3DestinationID: backupCreateS3Destination,
+			Destination: volume.BackupDestination(backupCreateDestination),
+			PolicyID:    backupCreatePolicyID,
 		}
 
 		result, err := c.PostJSON[volume.BackupEntry](cmd.Context(), types.VolumeBackups(c.EnvID(), resolved.Name), req)
@@ -556,35 +538,6 @@ var backupsDeleteCmd = &cobra.Command{
 	},
 }
 
-var backupsUploadCmd = &cobra.Command{
-	Use:          "upload <backup-id>",
-	Short:        "Upload an existing local backup to an S3 destination",
-	Args:         cobra.ExactArgs(1),
-	SilenceUsage: true,
-	RunE: func(cmd *cobra.Command, args []string) error {
-		c, err := cmdutil.ClientFromCommand(cmd)
-		if err != nil {
-			return err
-		}
-
-		// Uploading large backups can take a long time
-		c.SetTimeout(30 * time.Minute)
-
-		req := volume.UploadBackupRequest{S3DestinationID: backupUploadS3Destination}
-		result, err := c.PostJSON[volume.BackupEntry](cmd.Context(), types.VolumeBackupUpload(c.EnvID(), args[0]), req)
-		if err != nil {
-			return fmt.Errorf("failed to upload backup: %w", err)
-		}
-
-		if jsonOutput {
-			return cmdutil.PrintJSON(result.Data)
-		}
-
-		output.Success("Backup %s uploaded to S3 successfully", args[0])
-		return nil
-	},
-}
-
 var backupsDownloadCmd = &cobra.Command{
 	Use:          "download <backup-id> [output-file]",
 	Short:        "Download a volume backup archive",
@@ -687,7 +640,6 @@ func init() {
 	backupsCmd.AddCommand(backupsCreateCmd)
 	backupsCmd.AddCommand(backupsRestoreCmd)
 	backupsCmd.AddCommand(backupsDeleteCmd)
-	backupsCmd.AddCommand(backupsUploadCmd)
 	backupsCmd.AddCommand(backupsDownloadCmd)
 	backupsCmd.AddCommand(backupsFilesCmd)
 
@@ -703,8 +655,6 @@ func init() {
 	backupsPolicyUpdateCmd.Flags().IntVar(&policyRetention, "retention", 0, "Number of backups to retain")
 	backupsPolicyUpdateCmd.Flags().BoolVar(&policyStopContainers, "stop-containers", false, "Stop containers using the volume during backup")
 	backupsPolicyUpdateCmd.Flags().BoolVar(&policyLocal, "local", false, "Store backups locally")
-	backupsPolicyUpdateCmd.Flags().BoolVar(&policyS3, "s3", false, "Store backups in S3")
-	backupsPolicyUpdateCmd.Flags().StringVar(&policyS3Destination, "s3-destination", "", "Saved S3 destination ID")
 	backupsPolicyUpdateCmd.Flags().StringVar(&policyID, "policy-id", "", "Policy to update when the volume has multiple policies")
 	backupsPolicyUpdateCmd.Flags().StringVar(&policyFile, "file", "", "JSON file with the full policy collection to PUT")
 	backupsPolicyUpdateCmd.Flags().BoolVar(&jsonOutput, "json", false, "Output in JSON format")
@@ -716,8 +666,7 @@ func init() {
 		listLike.Flags().BoolVar(&jsonOutput, "json", false, "Output in JSON format")
 	}
 
-	backupsCreateCmd.Flags().StringVar(&backupCreateDestination, "destination", "", "Backup destination (local, s3, local_s3)")
-	backupsCreateCmd.Flags().StringVar(&backupCreateS3Destination, "s3-destination", "", "Saved S3 destination ID for a remote backup")
+	backupsCreateCmd.Flags().StringVar(&backupCreateDestination, "destination", "", "Backup destination (local)")
 	backupsCreateCmd.Flags().StringVar(&backupCreatePolicyID, "policy-id", "", "Backup policy whose settings should be used")
 	backupsCreateCmd.Flags().BoolVar(&jsonOutput, "json", false, "Output in JSON format")
 
@@ -727,10 +676,6 @@ func init() {
 	backupsRestoreCmd.Flags().BoolVar(&jsonOutput, "json", false, "Output in JSON format")
 
 	backupsDeleteCmd.Flags().BoolVarP(&forceFlag, "force", "f", false, "Delete without confirmation")
-
-	backupsUploadCmd.Flags().StringVar(&backupUploadS3Destination, "s3-destination", "", "S3 destination for the uploaded backup")
-	backupsUploadCmd.Flags().BoolVar(&jsonOutput, "json", false, "Output in JSON format")
-	_ = backupsUploadCmd.MarkFlagRequired("s3-destination")
 
 	backupsFilesCmd.Flags().BoolVar(&jsonOutput, "json", false, "Output in JSON format")
 }

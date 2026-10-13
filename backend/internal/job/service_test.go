@@ -1,8 +1,10 @@
+//go:build postgres_integration
+
 // Source: getarcaneapp/arcane/backend/internal/job/service_test.go
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace
+// Deviations: Local module namespace; functional cut: removed upstream analytics heartbeat; functional cut: removed GitOps and saved Git repositories; functional cut: removed SQLite runtime and migrations; functional cut: PostgreSQL integration test fixture.
 
 package job
 
@@ -17,11 +19,11 @@ import (
 	"time"
 	"uuid"
 
+	"github.com/florianfinn/docklet-next/backend/internal/testpg"
 	activitytypes "github.com/florianfinn/docklet-next/types/activity"
 	"github.com/florianfinn/docklet-next/types/jobschedule"
 	"github.com/florianfinn/docklet-next/types/scheduler"
 	"github.com/florianfinn/docklet-next/types/user"
-	"github.com/libtnb/sqlite"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"gorm.io/gorm"
@@ -44,7 +46,7 @@ import (
 
 func setupSettingsTestDBInternal(t *testing.T) *database.DB {
 	t.Helper()
-	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
+	db, err := gorm.Open(testpg.Dialector(t, ":memory:"), &gorm.Config{})
 	require.NoError(t, err)
 	require.NoError(t, db.AutoMigrate(&settings.SettingVariable{}, &kv.KVEntry{}))
 	sqlDB, err := db.DB()
@@ -70,7 +72,7 @@ func newSettingsServiceForTestInternal(t testing.TB, ctx context.Context, db *da
 func newJobCoordinatorForTestInternal(t *testing.T, db *database.DB) *runs.Coordinator {
 	t.Helper()
 	francisRuntime := francistest.New(t)
-	coordinator := runs.New(kv.NewKVService(db), francisRuntime.Service(), time.UTC)
+	coordinator := runs.New(francisRuntime.Service(), time.UTC)
 	require.NoError(t, coordinator.Register(francisRuntime))
 	francistest.Start(t, francisRuntime)
 	return coordinator
@@ -93,25 +95,6 @@ func TestJobService_GetJobSchedules_DefaultDockerClientRefreshInterval(t *testin
 
 	require.Equal(t, "0 */5 * * * *", cfg.DockerClientRefreshInterval)
 	require.Equal(t, "0 0 * * * *", cfg.PollingInterval)
-}
-
-func TestJobService_ListJobs_AnalyticsHeartbeatIsManagedInternally(t *testing.T) {
-	ctx := t.Context()
-	db := setupSettingsTestDBInternal(t)
-
-	settingsSvc, err := newSettingsServiceForTestInternal(t, ctx, db)
-	require.NoError(t, err)
-
-	jobSvc := newJobServiceForTestInternal(t, db, settingsSvc, &config.Config{})
-	jobs, err := jobSvc.ListJobs(ctx)
-	require.NoError(t, err)
-
-	analyticsJob := findJobStatusByIDInternal(t, jobs.Jobs, "analytics-heartbeat")
-	require.Equal(t, "automatic (checked hourly; sent once per 24h)", analyticsJob.Schedule)
-	require.Empty(t, analyticsJob.SettingsKey)
-	require.Nil(t, analyticsJob.NextRun)
-	require.True(t, analyticsJob.CanRunManually)
-	require.False(t, analyticsJob.IsContinuous)
 }
 
 func TestJobService_ListJobs_IncludesDisabledAutoHealJob(t *testing.T) {
@@ -240,8 +223,8 @@ func TestJobService_ListJobs_UsesRuntimeScheduleAndNextRun(t *testing.T) {
 		require.Empty(t, status.LastError)
 	}
 
-	cloneErr := errors.New("failed to clone repository: network is unreachable")
-	outcome, runErr := classifyOutcomeInternal("gitops-sync:project", scheduler.Outcome{}, cloneErr)
+	cloneErr := errors.New("failed to copy volume: network is unreachable")
+	outcome, runErr := classifyOutcomeInternal("volume-backup:project", scheduler.Outcome{}, cloneErr)
 	require.ErrorIs(t, runErr, cloneErr)
 	require.Equal(t, scheduler.Failed, outcome.Status)
 	outcome, runErr = classifyOutcomeInternal("environment-health:0", scheduler.Outcome{}, context.DeadlineExceeded)
@@ -628,7 +611,7 @@ func TestJobActivityVisibilityAndGrouping(t *testing.T) {
 		visible                   bool
 	}{
 		{"auto-update", "scheduled", "0", true},
-		{"gitops-sync:project", "scheduled", "0", true},
+		{"volume-backup:project", "scheduled", "0", true},
 		{"volume-backup:volume", "recovery", "0", true},
 		{"system-backup:system", "scheduled", "0", true},
 		{"image-polling", "manual", "0", true},

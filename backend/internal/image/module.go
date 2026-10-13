@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace
+// Deviations: Local module namespace; functional cut: removed standalone build workshop.
 
 // Package image owns Docker image operations, metadata, attestations, patching, and routes.
 package image
@@ -14,7 +14,6 @@ import (
 	uploadtypes "github.com/florianfinn/docklet-next/types/upload"
 
 	"github.com/florianfinn/docklet-next/backend/internal/activity"
-	"github.com/florianfinn/docklet-next/backend/internal/build"
 	"github.com/florianfinn/docklet-next/backend/internal/docker"
 	"github.com/florianfinn/docklet-next/backend/internal/image/children/attestations"
 	"github.com/florianfinn/docklet-next/backend/internal/image/children/patch"
@@ -31,7 +30,6 @@ type Module struct {
 	docker      *docker.DockerClientService
 	imageUpdate *imageupdate.ImageUpdateService
 	settings    *settings.SettingsService
-	build       *build.BuildService
 	activity    *activity.ActivityService
 	upload      *upload.UploadService
 
@@ -43,7 +41,6 @@ func New(
 	dockerService *docker.DockerClientService,
 	imageUpdate *imageupdate.ImageUpdateService,
 	settingsService *settings.SettingsService,
-	buildService *build.BuildService,
 	activityService *activity.ActivityService,
 	uploadService *upload.UploadService,
 ) *Module {
@@ -52,7 +49,6 @@ func New(
 		docker:              dockerService,
 		imageUpdate:         imageUpdate,
 		settings:            settingsService,
-		build:               buildService,
 		activity:            activityService,
 		upload:              uploadService,
 		attestationsHandler: attestations.NewHandler(service.newAttestationsServiceInternal()),
@@ -68,12 +64,12 @@ func (m *Module) Service() *ImageService {
 
 func (m *Module) RegisterRoutes(api huma.API, appCtx handlerutil.ActivityAppContext) {
 	if m == nil {
-		RegisterImages(api, nil, nil, nil, nil, nil, nil, nil, appCtx)
+		RegisterImages(api, nil, nil, nil, nil, nil, nil, appCtx)
 		attestations.RegisterRoutes(api, attestations.NewHandler(nil))
 		patch.RegisterRoutes(api, nil, appCtx)
 		return
 	}
-	RegisterImages(api, m.docker, m.service, m.imageUpdate, m.settings, m.build, m.activity, m.upload, appCtx)
+	RegisterImages(api, m.docker, m.service, m.imageUpdate, m.settings, m.activity, m.upload, appCtx)
 	attestations.RegisterRoutes(api, m.attestationsHandler)
 	var patchService *patch.Service
 	if m.service != nil {
@@ -89,7 +85,6 @@ func RegisterImages(
 	imageService *ImageService,
 	imageUpdateService *imageupdate.ImageUpdateService,
 	settingsService *settings.SettingsService,
-	buildService *build.BuildService,
 	activityService *activity.ActivityService,
 	uploadService *upload.UploadService,
 	appCtx handlerutil.ActivityAppContext,
@@ -99,7 +94,6 @@ func RegisterImages(
 		imageService:       imageService,
 		imageUpdateService: imageUpdateService,
 		settingsService:    settingsService,
-		buildService:       buildService,
 		activityService:    activityService,
 		uploadService:      uploadService,
 		appCtx:             appCtx.Context(),
@@ -194,36 +188,6 @@ func RegisterImages(
 		Tags:        []string{"Images"},
 		Security:    handlerutil.DefaultOperationSecurity(),
 	}, authz.PermImagesPull, h.PullImage)
-
-	middleware.RegisterWithPermission(api, huma.Operation{
-		OperationID: "build-image",
-		Method:      http.MethodPost,
-		Path:        "/environments/{id}/images/build",
-		Summary:     "Build an image",
-		Description: "Build a Docker image using BuildKit with streaming progress output",
-		Tags:        []string{"Images"},
-		Security:    handlerutil.DefaultOperationSecurity(),
-	}, authz.PermImagesBuild, h.BuildImage)
-
-	middleware.RegisterWithPermission(api, huma.Operation{
-		OperationID: "list-image-builds",
-		Method:      http.MethodGet,
-		Path:        "/environments/{id}/images/builds",
-		Summary:     "List image builds",
-		Description: "Get a paginated list of image build history for an environment",
-		Tags:        []string{"Images"},
-		Security:    handlerutil.DefaultOperationSecurity(),
-	}, authz.PermImagesList, h.ListImageBuilds)
-
-	middleware.RegisterWithPermission(api, huma.Operation{
-		OperationID: "get-image-build",
-		Method:      http.MethodGet,
-		Path:        "/environments/{id}/images/builds/{buildId}",
-		Summary:     "Get image build",
-		Description: "Get a single image build history entry with output",
-		Tags:        []string{"Images"},
-		Security:    handlerutil.DefaultOperationSecurity(),
-	}, authz.PermImagesRead, h.GetImageBuild)
 
 	middleware.RegisterWithPermission(api, huma.Operation{
 		OperationID: "prune-images",

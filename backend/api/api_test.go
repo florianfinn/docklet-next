@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace
+// Deviations: Local module namespace; functional cut: removed template catalogue; functional cut: removed central variables and .env.global; functional cut: removed Swarm; functional cut: removed standalone build workshop; functional cut: removed OIDC and passkeys.
 
 package api
 
@@ -23,15 +23,12 @@ import (
 	networktypes "github.com/florianfinn/docklet-next/types/network"
 	projecttypes "github.com/florianfinn/docklet-next/types/project"
 	volumetypes "github.com/florianfinn/docklet-next/types/volume"
-	"github.com/labstack/echo/v5"
 	dockercontainer "github.com/moby/moby/api/types/container"
 	dockernetwork "github.com/moby/moby/api/types/network"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/florianfinn/docklet-next/backend/internal/config"
 	"github.com/florianfinn/docklet-next/backend/pkg/authz"
-	"github.com/florianfinn/docklet-next/backend/pkg/utils/handlerutil"
 )
 
 func TestWorkspaceRoutesReplaceProjectAndVolumeLegacyRoutes(t *testing.T) {
@@ -50,8 +47,8 @@ func TestWorkspaceRoutesReplaceProjectAndVolumeLegacyRoutes(t *testing.T) {
 		{path: "/environments/{id}/volumes/{volumeName}/workspace", method: http.MethodPut},
 		{path: "/environments/{id}/volumes/{volumeName}/workspace/file", method: http.MethodGet},
 		{path: "/environments/{id}/volumes/{volumeName}/workspace/file/download", method: http.MethodGet},
-		{path: "/environments/{id}/builds/browse", method: http.MethodGet},
 	}
+	require.Nil(t, paths["/environments/{id}/builds/browse"])
 	for _, route := range canonical {
 		t.Run(route.method+" "+route.path, func(t *testing.T) {
 			item := paths[route.path]
@@ -257,12 +254,6 @@ func TestSetupAPIForSpec_PublicRoutesOverrideSecurity(t *testing.T) {
 		{path: "/auth/refresh", method: "POST"},
 		{path: "/health", method: "GET"},
 		{path: "/health", method: "HEAD"},
-		{path: "/oidc/status", method: "GET"},
-		{path: "/oidc/config", method: "GET"},
-		{path: "/oidc/url", method: "POST"},
-		{path: "/oidc/callback", method: "POST"},
-		{path: "/oidc/device/code", method: "POST"},
-		{path: "/oidc/device/token", method: "POST"},
 		{path: "/environments/{id}/settings/public", method: "GET"},
 		{path: "/environments/pair", method: "POST"},
 		{path: "/version", method: "GET"},
@@ -285,39 +276,6 @@ func TestSetupAPIForSpec_PublicRoutesOverrideSecurity(t *testing.T) {
 	}
 }
 
-func TestSetupAPIForSpec_TemplateReadRoutesProtected(t *testing.T) {
-	api := SetupAPIForSpec()
-
-	expectedSecurity := []map[string][]string{
-		{"BearerAuth": {}},
-		{"ApiKeyAuth": {}},
-	}
-
-	testCases := []struct {
-		path string
-	}{
-		{path: "/templates"},
-		{path: "/templates/all"},
-		{path: "/templates/{id}"},
-		{path: "/templates/{id}/content"},
-	}
-
-	for _, testCase := range testCases {
-		t.Run(testCase.path, func(t *testing.T) {
-			pathItem := api.OpenAPI().Paths[testCase.path]
-
-			require.False(t, pathItem == nil || pathItem.Get == nil,
-				"expected GET %s to be registered", testCase.path)
-
-			require.Nil(t, pathItem.Get.Security,
-				"expected GET %s to inherit API security, got explicit security %v", testCase.path, pathItem.Get.Security)
-
-			require.True(t, reflect.DeepEqual(api.OpenAPI().Security, expectedSecurity),
-				"expected API security %v, got %v", expectedSecurity, api.OpenAPI().Security)
-		})
-	}
-}
-
 func TestSetupAPIForSpec_DoesNotRegisterPublicCreateEvent(t *testing.T) {
 	api := SetupAPIForSpec()
 
@@ -328,67 +286,6 @@ func TestSetupAPIForSpec_DoesNotRegisterPublicCreateEvent(t *testing.T) {
 
 	require.Nil(t, pathItem.Post,
 		"expected POST /events to be absent from the public API")
-}
-
-func TestVariableMaterializationRoutesAreAgentOnly(t *testing.T) {
-	managerAPI := SetupAPIForSpec()
-	require.NotNil(t, managerAPI.OpenAPI().Paths["/variables"])
-	require.Nil(t, managerAPI.OpenAPI().Paths["/environments/{id}/templates/variables"])
-
-	managerMatcher := authz.NewPermissionMatcher()
-	managerMatcher.CollectFromHumaAPI(managerAPI)
-	_, found := managerMatcher.Lookup("GET", "/templates/variables").Get()
-	require.False(t, found)
-	_, found = managerMatcher.Lookup("PUT", "/templates/variables").Get()
-	require.False(t, found)
-
-	router := echo.New()
-	agentAPI := SetupAPI(
-		router,
-		router.Group("/api"),
-		handlerutil.NewActivityAppContext(t.Context()),
-		&config.Config{AgentMode: true},
-		HandlerDeps{},
-	)
-	require.Nil(t, agentAPI.OpenAPI().Paths["/variables"])
-	materialized := agentAPI.OpenAPI().Paths["/environments/{id}/templates/variables"]
-	require.NotNil(t, materialized)
-	require.NotNil(t, materialized.Get)
-	require.NotNil(t, materialized.Put)
-}
-
-func TestEasyJoinRoutesDeclareSwarmJoinPermission(t *testing.T) {
-	api := SetupAPIForSpec()
-	tests := []struct {
-		path   string
-		method string
-	}{
-		{path: "/environments/{id}/swarm/join-candidates", method: "GET"},
-		{path: "/environments/{id}/swarm/join-environments", method: "POST"},
-	}
-
-	matcher := authz.NewPermissionMatcher()
-	matcher.CollectFromHumaAPI(api)
-	for _, tt := range tests {
-		t.Run(tt.method+" "+tt.path, func(t *testing.T) {
-			pathItem := api.OpenAPI().Paths[tt.path]
-			require.NotNil(t, pathItem)
-			var operation *humav2.Operation
-			switch tt.method {
-			case "GET":
-				operation = pathItem.Get
-			case "POST":
-				operation = pathItem.Post
-			}
-			require.NotNil(t, operation)
-			require.Equal(t, authz.PermSwarmJoin, operation.Metadata[authz.MetaRequiredPermission])
-
-			suffix := strings.TrimPrefix(tt.path, "/environments/{id}")
-			permission, found := matcher.Lookup(tt.method, suffix).Get()
-			require.True(t, found)
-			require.Equal(t, authz.PermSwarmJoin, permission)
-		})
-	}
 }
 
 // TestEnvScopedOperationsDeclarePermission guards the remote-environment proxy

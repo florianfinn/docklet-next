@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace
+// Deviations: Local module namespace; functional cut: removed Swarm.
 
 package networks
 
@@ -34,16 +34,15 @@ var (
 )
 
 var (
-	networkCreateName       string
-	networkCreateDriver     string
-	networkCreateSubnet     string
-	networkCreateGateway    string
-	networkCreateIPRange    string
-	networkCreateInternal   bool
-	networkCreateAttachable bool
-	networkCreateIPv6       bool
-	networkCreateLabels     []string
-	networkCreateOpts       []string
+	networkCreateName     string
+	networkCreateDriver   string
+	networkCreateSubnet   string
+	networkCreateGateway  string
+	networkCreateIPRange  string
+	networkCreateInternal bool
+	networkCreateIPv6     bool
+	networkCreateLabels   []string
+	networkCreateOpts     []string
 )
 
 var (
@@ -285,7 +284,6 @@ var createCmd = &cobra.Command{
 			Options: network.CreateOptions{
 				Driver:     networkCreateDriver,
 				Internal:   networkCreateInternal,
-				Attachable: networkCreateAttachable,
 				EnableIPv6: networkCreateIPv6,
 			},
 		}
@@ -522,7 +520,6 @@ func init() {
 	createCmd.Flags().StringVar(&networkCreateGateway, "gateway", "", "IPv4 or IPv6 gateway for the subnet")
 	createCmd.Flags().StringVar(&networkCreateIPRange, "ip-range", "", "Allocate container IPs from a sub-range")
 	createCmd.Flags().BoolVar(&networkCreateInternal, "internal", false, "Restrict external access to the network")
-	createCmd.Flags().BoolVar(&networkCreateAttachable, "attachable", false, "Allow manual container attachment")
 	createCmd.Flags().BoolVar(&networkCreateIPv6, "ipv6", false, "Enable IPv6 networking")
 	createCmd.Flags().StringArrayVar(&networkCreateLabels, "label", nil, "Label (KEY=VALUE)")
 	createCmd.Flags().StringArrayVar(&networkCreateOpts, "opt", nil, "Driver option (KEY=VALUE)")
