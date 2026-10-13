@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Functional cut: removed template catalogue; functional cut: removed federated credentials.
+// Deviations: Functional cut: removed template catalogue; functional cut: removed federated credentials; functional cut: removed central variables and .env.global.
 
 // Package types provides the Arcane API endpoint path builders and CLI
 // configuration types.
@@ -477,13 +477,6 @@ func EventsEnvironment(envID string) string {
 	return pathf("/api/events/environment/%s", envID)
 }
 func EventsStats() string { return "/api/events/stats" }
-
-// Variable endpoints
-
-func Variables() string           { return "/api/variables" }
-func Variable(id string) string   { return pathf("/api/variables/%s", id) }
-func VariablesSync() string       { return "/api/variables/sync" }
-func VariablesSyncStatus() string { return "/api/variables/sync-status" }
 
 // System backup endpoints (admin-only)
 

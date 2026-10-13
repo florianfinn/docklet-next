@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; functional cut: removed upstream analytics heartbeat and APNS mobile push; functional cut: removed template catalogue; functional cut: removed federated credentials.
+// Deviations: Local module namespace; functional cut: removed upstream analytics heartbeat and APNS mobile push; functional cut: removed template catalogue; functional cut: removed federated credentials; functional cut: removed central variables and .env.global.
 
 // Package di owns the backend's dependency-injection graph.
 package di
@@ -46,7 +46,6 @@ import (
 	"github.com/florianfinn/docklet-next/backend/internal/updater"
 	"github.com/florianfinn/docklet-next/backend/internal/upload"
 	"github.com/florianfinn/docklet-next/backend/internal/user"
-	"github.com/florianfinn/docklet-next/backend/internal/variable"
 	"github.com/florianfinn/docklet-next/backend/internal/volume"
 	"github.com/florianfinn/docklet-next/backend/internal/vulnerability"
 	"github.com/florianfinn/docklet-next/backend/internal/webhook"
@@ -96,7 +95,6 @@ var ServiceOptions = fx.Options(
 		system.NewSystemService,
 		diagnostics.NewDiagnosticsService,
 		gitops.NewGitOpsSyncService,
-		variable.NewVariableService,
 		backup.NewRecoveryKeyStore,
 		upload.NewUploadService,
 		auth.NewAuthService,
@@ -144,7 +142,6 @@ var ServiceOptions = fx.Options(
 		vulnerability.New,
 		project.New,
 		gitops.New,
-		variable.New,
 		upload.New,
 		search.New,
 		provideActivityModuleInternal,

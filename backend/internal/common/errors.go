@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Functional cut: removed APNS mobile push; functional cut: removed federated credentials.
+// Deviations: Functional cut: removed APNS mobile push; functional cut: removed federated credentials; functional cut: removed central variables and .env.global.
 
 package common
 
@@ -60,10 +60,6 @@ var (
 	ErrUpdaterNoContainersMatched        = Classify(ErrBadRequest, errors.New("no compose-managed containers matched the requested resources"))
 	ErrTemplateNotFound                  = Classify(ErrNotFound, errors.New("Template not found"))
 	ErrInvalidEnvKey                     = Classify(ErrValidation, errors.New("Invalid environment key"))
-	ErrGlobalVariableNotFound            = Classify(ErrNotFound, errors.New("Global variable not found"))
-	ErrGlobalVariableConflict            = Classify(ErrConflict, errors.New("Global variable already exists"))
-	ErrGlobalVariableScopeRequired       = Classify(ErrValidation, errors.New("At least one environment is required when a variable is not scoped to all environments"))
-	ErrGlobalVariableSecretValueRequired = Classify(ErrValidation, errors.New("A new value is required when making a secret variable readable"))
 	ErrImageUntagged                     = Classify(ErrBadRequest, errors.New("image has no tag; only tagged images can be patched"))
 	ErrImageLocalOnly                    = Classify(ErrBadRequest, errors.New("locally built image has no registry source to patch from; rebuild it to update its packages"))
 	ErrPatchRequiresContainerdImageStore = Classify(

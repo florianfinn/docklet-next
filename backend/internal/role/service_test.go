@@ -2,13 +2,12 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; functional cut: removed template catalogue.
+// Deviations: Local module namespace; functional cut: removed template catalogue; functional cut: removed central variables and .env.global.
 
 package role_test
 
 import (
 	"path/filepath"
-	"slices"
 	"testing"
 	"time"
 
@@ -137,79 +136,6 @@ func assignedRoleIDs(t *testing.T, roleSvc *role.RoleService, userID string) []s
 		ids = append(ids, a.RoleID)
 	}
 	return ids
-}
-
-func TestEnsureBuiltInRolesMigratesVariablePermissionsWithoutBackfillingCustomGrants(t *testing.T) {
-	ctx := t.Context()
-	userSvc, roleSvc := setupUserAndRoleServices(t)
-
-	customRole, err := roleSvc.CreateRole(ctx, "Registry Reader", nil, []string{authz.PermRegistriesRead})
-	require.NoError(t, err)
-	owner := createTestUser(t, userSvc, "variable-migration-owner", "variable-migration-owner")
-	scopedKey := testApiKeyRow{
-		Name:      "Custom scoped key",
-		KeyHash:   "variable-migration-hash",
-		KeyPrefix: "arc_vars",
-		Kind:      "scoped",
-		UserID:    &owner.ID,
-	}
-	require.NoError(t, userSvc.WithContext(ctx).Create(&scopedKey).Error)
-	require.NoError(t, userSvc.WithContext(ctx).Create(&role.ApiKeyPermission{
-		ApiKeyID:   scopedKey.ID,
-		Permission: authz.PermRegistriesRead,
-	}).Error)
-
-	oldEditorPermissions := slices.DeleteFunc(authz.BuiltInEditorPermissions(), func(permission string) bool {
-		return slices.Contains([]string{
-			authz.PermVariablesRead,
-			authz.PermVariablesCreate,
-			authz.PermVariablesUpdate,
-			authz.PermVariablesDelete,
-			authz.PermVariablesSync,
-		}, permission)
-	})
-	require.NoError(t, userSvc.WithContext(ctx).Model(&role.Role{}).
-		Where("id = ?", authz.BuiltInRoleEditor).
-		Update("permissions", database.StringSlice(oldEditorPermissions)).Error)
-
-	require.NoError(t, roleSvc.EnsureBuiltInRoles(ctx))
-
-	allVariablePermissions := []string{
-		authz.PermVariablesRead,
-		authz.PermVariablesCreate,
-		authz.PermVariablesUpdate,
-		authz.PermVariablesDelete,
-		authz.PermVariablesSync,
-	}
-	for _, roleID := range []string{authz.BuiltInRoleAdmin, authz.BuiltInRoleEditor, authz.BuiltInRoleNoShellEditor} {
-		builtIn, getErr := roleSvc.GetRole(ctx, roleID)
-		require.NoError(t, getErr)
-		for _, permission := range allVariablePermissions {
-			require.Contains(t, []string(builtIn.Permissions), permission, "role %s", roleID)
-		}
-	}
-	for _, roleID := range []string{authz.BuiltInRoleViewer, authz.BuiltInRoleDeployer} {
-		builtIn, getErr := roleSvc.GetRole(ctx, roleID)
-		require.NoError(t, getErr)
-		require.Contains(t, []string(builtIn.Permissions), authz.PermVariablesRead)
-		for _, permission := range allVariablePermissions[1:] {
-			require.NotContains(t, []string(builtIn.Permissions), permission, "role %s", roleID)
-		}
-	}
-	monitor, err := roleSvc.GetRole(ctx, authz.BuiltInRoleMonitor)
-	require.NoError(t, err)
-	for _, permission := range allVariablePermissions {
-		require.NotContains(t, []string(monitor.Permissions), permission)
-	}
-
-	preservedCustomRole, err := roleSvc.GetRole(ctx, customRole.ID)
-	require.NoError(t, err)
-	require.Equal(t, []string{authz.PermRegistriesRead}, []string(preservedCustomRole.Permissions))
-
-	var keyPermissions []role.ApiKeyPermission
-	require.NoError(t, userSvc.WithContext(ctx).Where("api_key_id = ?", scopedKey.ID).Find(&keyPermissions).Error)
-	require.Len(t, keyPermissions, 1)
-	require.Equal(t, authz.PermRegistriesRead, keyPermissions[0].Permission)
 }
 
 func TestSetUserAssignmentsRejectsUnknownRole(t *testing.T) {

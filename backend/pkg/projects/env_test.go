@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace
+// Deviations: Local module namespace; functional cut: removed central variables and .env.global.
 
 package projects
 
@@ -20,83 +20,20 @@ import (
 	"github.com/florianfinn/docklet-next/backend/pkg/utils"
 )
 
-func TestLoadEnvironment(t *testing.T) {
-	// Setup temp dirs
-	tmpDir := t.TempDir()
-	projectsDir := filepath.Join(tmpDir, "projects")
+func TestLoadEnvironmentUsesProjectEnvOnly(t *testing.T) {
+	projectsDir := t.TempDir()
 	workdir := filepath.Join(projectsDir, "myproject")
-
-	err := os.MkdirAll(workdir, utils.DirPerm)
-	require.NoError(t, err)
-
-	// Create .env.global
-	globalEnvContent := "GLOBAL_VAR=global_value\nSHARED_VAR=global_shared"
-	err = os.WriteFile(filepath.Join(projectsDir, ".env.global"), []byte(globalEnvContent), utils.FilePerm)
-	require.NoError(t, err)
-
-	// Create .env
-	projectEnvContent := "PROJECT_VAR=project_value\nSHARED_VAR=project_shared"
-	err = os.WriteFile(filepath.Join(workdir, ".env"), []byte(projectEnvContent), utils.FilePerm)
-	require.NoError(t, err)
-
-	t.Run("AutoInjectEnv=false", func(t *testing.T) {
-		loader := NewEnvLoader(projectsDir, workdir, false)
-		ctx := t.Context()
-
-		envMap, injectionVars, loadEnvironmentErr := loader.LoadEnvironment(ctx)
-		require.NoError(t, loadEnvironmentErr)
-
-		// Verify envMap (should contain all vars, project overrides global)
-		assert.Equal(t, "global_value", envMap["GLOBAL_VAR"])
-		assert.Equal(t, "project_value", envMap["PROJECT_VAR"])
-		assert.Equal(t, "project_shared", envMap["SHARED_VAR"])
-
-		// Verify injectionVars (should ONLY contain global vars)
-		assert.Equal(t, "global_value", injectionVars["GLOBAL_VAR"])
-		assert.Equal(t, "global_shared", injectionVars["SHARED_VAR"])
-
-		_, projectVarInInjection := injectionVars["PROJECT_VAR"]
-		assert.False(t, projectVarInInjection, "Project variable should not be in injectionVars")
-	})
-
-	t.Run("AutoInjectEnv=true", func(t *testing.T) {
-		loader := NewEnvLoader(projectsDir, workdir, true)
-		ctx := t.Context()
-
-		envMap, injectionVars, loadEnvironmentErr := loader.LoadEnvironment(ctx)
-		require.NoError(t, loadEnvironmentErr)
-
-		// Verify envMap
-		assert.Equal(t, "global_value", envMap["GLOBAL_VAR"])
-		assert.Equal(t, "project_value", envMap["PROJECT_VAR"])
-		assert.Equal(t, "project_shared", envMap["SHARED_VAR"])
-
-		// Verify injectionVars (should contain both global and project vars)
-		assert.Equal(t, "global_value", injectionVars["GLOBAL_VAR"])
-		assert.Equal(t, "project_value", injectionVars["PROJECT_VAR"])
-		assert.Equal(t, "project_shared", injectionVars["SHARED_VAR"])
-	})
-}
-
-func TestLoadEnvironment_DoesNotCreateMissingGlobalEnvFile(t *testing.T) {
-	tmpDir := t.TempDir()
-	projectsDir := filepath.Join(tmpDir, "projects")
-	workdir := filepath.Join(projectsDir, "myproject")
-
 	require.NoError(t, os.MkdirAll(workdir, utils.DirPerm))
-	require.NoError(t, os.WriteFile(filepath.Join(workdir, ".env"), []byte("PROJECT_VAR=project_value\n"), utils.FilePerm))
+	require.NoError(t, os.WriteFile(filepath.Join(projectsDir, ".env.global"), []byte("SHARED_VAR=global\n"), utils.FilePerm))
+	require.NoError(t, os.WriteFile(filepath.Join(workdir, ".env"), []byte("PROJECT_VAR=project\n"), utils.FilePerm))
 
-	loader := NewEnvLoader(projectsDir, workdir, false)
-	ctx := t.Context()
-
-	envMap, injectionVars, err := loader.LoadEnvironment(ctx)
-	require.NoError(t, err)
-
-	assert.Equal(t, "project_value", envMap["PROJECT_VAR"])
-	assert.Empty(t, injectionVars)
-
-	_, statErr := os.Stat(filepath.Join(projectsDir, GlobalEnvFileName))
-	assert.ErrorIs(t, statErr, os.ErrNotExist)
+	for _, autoInject := range []bool{false, true} {
+		envMap, injectionVars, err := NewEnvLoader(projectsDir, workdir, autoInject).LoadEnvironment(t.Context())
+		require.NoError(t, err)
+		assert.Equal(t, "project", envMap["PROJECT_VAR"])
+		assert.NotContains(t, envMap, "SHARED_VAR")
+		assert.Equal(t, autoInject, injectionVars["PROJECT_VAR"] == "project")
+	}
 }
 
 func TestWithTransientValidationEnvFile_PreservesExternalSymlink(t *testing.T) {
@@ -452,61 +389,6 @@ func TestComposeFileEnvSelection(t *testing.T) {
 		assert.Equal(t, []string{filepath.Join(dir, "base.yml")}, files)
 	})
 
-	t.Run("global COMPOSE_DISABLE_ENV_FILE skips project .env", func(t *testing.T) {
-		t.Parallel()
-		projectsDir := t.TempDir()
-		dir := filepath.Join(projectsDir, "proj")
-		require.NoError(t, os.MkdirAll(dir, 0o755))
-		require.NoError(t, os.WriteFile(filepath.Join(projectsDir, GlobalEnvFileName), []byte("COMPOSE_DISABLE_ENV_FILE=true\n"), 0o600))
-		require.NoError(t, os.WriteFile(filepath.Join(dir, "base.yml"), []byte("services: {}\n"), 0o600))
-		require.NoError(t, os.WriteFile(filepath.Join(dir, ".env"), []byte("COMPOSE_FILE=base.yml\n"), 0o600))
-
-		files, err := ComposeFileEnvSelection(t.Context(), projectsDir, dir)
-		require.NoError(t, err)
-		assert.Nil(t, files)
-	})
-
-	t.Run("global COMPOSE_FILE selects the base when the project .env is silent", func(t *testing.T) {
-		t.Parallel()
-		projectsDir := t.TempDir()
-		dir := filepath.Join(projectsDir, "proj")
-		require.NoError(t, os.MkdirAll(dir, 0o755))
-		require.NoError(t, os.WriteFile(filepath.Join(projectsDir, GlobalEnvFileName), []byte("COMPOSE_FILE=base.yml\n"), 0o600))
-		require.NoError(t, os.WriteFile(filepath.Join(dir, "base.yml"), []byte("services: {}\n"), 0o600))
-
-		files, err := ComposeFileEnvSelection(t.Context(), projectsDir, dir)
-		require.NoError(t, err)
-		assert.Equal(t, []string{filepath.Join(dir, "base.yml")}, files)
-	})
-
-	t.Run("project .env COMPOSE_FILE overrides the global value", func(t *testing.T) {
-		t.Parallel()
-		projectsDir := t.TempDir()
-		dir := filepath.Join(projectsDir, "proj")
-		require.NoError(t, os.MkdirAll(dir, 0o755))
-		require.NoError(t, os.WriteFile(filepath.Join(projectsDir, GlobalEnvFileName), []byte("COMPOSE_FILE=global.yml\n"), 0o600))
-		require.NoError(t, os.WriteFile(filepath.Join(dir, "base.yml"), []byte("services: {}\n"), 0o600))
-		require.NoError(t, os.WriteFile(filepath.Join(dir, "global.yml"), []byte("services: {}\n"), 0o600))
-		require.NoError(t, os.WriteFile(filepath.Join(dir, ".env"), []byte("COMPOSE_FILE=base.yml\n"), 0o600))
-
-		files, err := ComposeFileEnvSelection(t.Context(), projectsDir, dir)
-		require.NoError(t, err)
-		assert.Equal(t, []string{filepath.Join(dir, "base.yml")}, files)
-	})
-
-	t.Run("COMPOSE_DISABLE_ENV_FILE still honors a global COMPOSE_FILE", func(t *testing.T) {
-		t.Parallel()
-		projectsDir := t.TempDir()
-		dir := filepath.Join(projectsDir, "proj")
-		require.NoError(t, os.MkdirAll(dir, 0o755))
-		require.NoError(t, os.WriteFile(filepath.Join(projectsDir, GlobalEnvFileName), []byte("COMPOSE_DISABLE_ENV_FILE=true\nCOMPOSE_FILE=base.yml\n"), 0o600))
-		require.NoError(t, os.WriteFile(filepath.Join(dir, "base.yml"), []byte("services: {}\n"), 0o600))
-		require.NoError(t, os.WriteFile(filepath.Join(dir, ".env"), []byte("COMPOSE_FILE=other.yml\n"), 0o600))
-
-		files, err := ComposeFileEnvSelection(t.Context(), projectsDir, dir)
-		require.NoError(t, err)
-		assert.Equal(t, []string{filepath.Join(dir, "base.yml")}, files)
-	})
 }
 
 func TestEnvContentChanged(t *testing.T) {

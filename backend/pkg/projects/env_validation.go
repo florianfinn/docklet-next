@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace
+// Deviations: Local module namespace; functional cut: removed central variables and .env.global.
 
 package projects
 
@@ -30,13 +30,6 @@ func BuildValidationEnvironment(ctx context.Context, projectsDirectory, projectP
 	} else {
 		fullEnvMap["PWD"] = projectPath
 	}
-
-	globalEnvPath := filepath.Join(projectsDirectory, GlobalEnvFileName)
-	globalEnv, err := ParseValidationEnvFile(globalEnvPath, fullEnvMap)
-	if err != nil {
-		return nil, fmt.Errorf("parse global env file: %w", err)
-	}
-	maps.Copy(fullEnvMap, globalEnv)
 
 	// Mirror LoadEnvironment's COMPOSE_DISABLE_ENV_FILE / COMPOSE_ENV_FILES
 	// handling so the validation env matches the runtime env exactly.

@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace
+// Deviations: Local module namespace; functional cut: removed central variables and .env.global.
 
 package environment
 
@@ -73,10 +73,6 @@ type EnvironmentService struct {
 	// environment-health job.
 	jobs *entityjobs.Registry
 
-	// variableSyncer is injected post-construction via SetVariableSyncer
-	// (manager-only) to avoid a wire cycle with variable.VariableService.
-	variableSyncer VariableSyncer
-
 	// runtimeWatchers receive a coalesced wake-up whenever an environment's
 	// liveness changes. See environment_runtime_notify.go.
 	runtimeWatchers runtimeWatchersInternal
@@ -108,20 +104,10 @@ var (
 	ErrEnvironmentNotFound            = errors.New("environment not found")
 )
 
-// VariableSyncer pushes the effective global-variable set to one environment.
-// Implemented by variable.VariableService.
-type VariableSyncer interface {
-	SyncEnvironment(ctx context.Context, envID string) error
-	ForgetSyncState(envID string)
-}
-
 // ForgetSyncState makes the next sync of every resource group resend to the
 // environment regardless of whether the payload changed.
 func (s *EnvironmentService) ForgetSyncState(environmentID string) {
 	s.syncGate.Forget(environmentID)
-	if s.variableSyncer != nil {
-		s.variableSyncer.ForgetSyncState(environmentID)
-	}
 }
 
 func NewEnvironmentService(
@@ -152,12 +138,6 @@ func NewEnvironmentService(
 	}
 	s.proxy = proxy.New(db, httpClient, settingsService, &s.syncGate)
 	return s
-}
-
-// SetVariableSyncer injects the global-variable syncer. Called during
-// bootstrap on the manager only; agents leave it nil.
-func (s *EnvironmentService) SetVariableSyncer(syncer VariableSyncer) {
-	s.variableSyncer = syncer
 }
 
 func (s *EnvironmentService) ResolveEdgeEnvironmentByToken(ctx context.Context, token string) (string, error) {
@@ -1167,12 +1147,6 @@ func (s *EnvironmentService) runHealthCheckInternal(ctx context.Context, envID s
 	if syncRepositoriesToEnvironmentErr := s.SyncRepositoriesToEnvironment(syncCtx, envID); syncRepositoriesToEnvironmentErr != nil {
 		slog.WarnContext(syncCtx, "failed to sync git repositories during health check", "environmentId", envID, "error", syncRepositoriesToEnvironmentErr)
 		syncErrors = append(syncErrors, syncRepositoriesToEnvironmentErr)
-	}
-	if s.variableSyncer != nil {
-		if syncEnvironmentErr := s.variableSyncer.SyncEnvironment(syncCtx, envID); syncEnvironmentErr != nil {
-			slog.WarnContext(syncCtx, "failed to sync global variables during health check", "environmentId", envID, "error", syncEnvironmentErr)
-			syncErrors = append(syncErrors, syncEnvironmentErr)
-		}
 	}
 	if joinErr := errors.Join(syncErrors...); joinErr != nil {
 		return scheduler.Outcome{Status: scheduler.Partial}, joinErr

@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace
+// Deviations: Local module namespace; functional cut: removed central variables and .env.global.
 
 package bootstrap
 
@@ -40,7 +40,6 @@ import (
 	"github.com/florianfinn/docklet-next/backend/internal/settings"
 	"github.com/florianfinn/docklet-next/backend/internal/swarm"
 	"github.com/florianfinn/docklet-next/backend/internal/user"
-	"github.com/florianfinn/docklet-next/backend/internal/variable"
 	"github.com/florianfinn/docklet-next/backend/internal/volume"
 	"github.com/florianfinn/docklet-next/backend/internal/vulnerability"
 	"github.com/florianfinn/docklet-next/backend/pkg/libarcane/edge"
@@ -186,7 +185,6 @@ type initializeStartupStateParams struct {
 	Environment   *environment.EnvironmentService
 	GitOpsSync    *gitops.GitOpsSyncService
 	Project       *project.ProjectService
-	Variable      *variable.VariableService
 	Docker        *docker.DockerClientService
 	Swarm         *swarm.SwarmService
 	Role          *role.RoleService
@@ -256,14 +254,6 @@ func initializeStartupState(p initializeStartupStateParams) {
 			slog.WarnContext(appCtx, "Failed to reconcile edge environment statuses on startup", "error", err)
 		}
 
-		// Global variables are a manager resource: import any pre-existing local
-		// .env.global once, then materialize the effective set everywhere. Agents
-		// only serve the per-environment variables endpoint the manager pushes to.
-		p.Environment.SetVariableSyncer(p.Variable)
-		if err := p.Variable.ImportLegacyLocalEnvFile(appCtx); err != nil {
-			slog.WarnContext(appCtx, "Failed to import legacy global variables", "error", err)
-		}
-		go p.Variable.SyncAll(appCtx)
 	}
 
 	startup.TestDockerConnection(appCtx, func(ctx context.Context) error {

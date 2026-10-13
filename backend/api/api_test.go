@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; functional cut: removed template catalogue.
+// Deviations: Local module namespace; functional cut: removed template catalogue; functional cut: removed central variables and .env.global.
 
 package api
 
@@ -23,15 +23,12 @@ import (
 	networktypes "github.com/florianfinn/docklet-next/types/network"
 	projecttypes "github.com/florianfinn/docklet-next/types/project"
 	volumetypes "github.com/florianfinn/docklet-next/types/volume"
-	"github.com/labstack/echo/v5"
 	dockercontainer "github.com/moby/moby/api/types/container"
 	dockernetwork "github.com/moby/moby/api/types/network"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/florianfinn/docklet-next/backend/internal/config"
 	"github.com/florianfinn/docklet-next/backend/pkg/authz"
-	"github.com/florianfinn/docklet-next/backend/pkg/utils/handlerutil"
 )
 
 func TestWorkspaceRoutesReplaceProjectAndVolumeLegacyRoutes(t *testing.T) {
@@ -295,33 +292,6 @@ func TestSetupAPIForSpec_DoesNotRegisterPublicCreateEvent(t *testing.T) {
 
 	require.Nil(t, pathItem.Post,
 		"expected POST /events to be absent from the public API")
-}
-
-func TestVariableMaterializationRoutesAreAgentOnly(t *testing.T) {
-	managerAPI := SetupAPIForSpec()
-	require.NotNil(t, managerAPI.OpenAPI().Paths["/variables"])
-	require.Nil(t, managerAPI.OpenAPI().Paths["/environments/{id}/templates/variables"])
-
-	managerMatcher := authz.NewPermissionMatcher()
-	managerMatcher.CollectFromHumaAPI(managerAPI)
-	_, found := managerMatcher.Lookup("GET", "/templates/variables").Get()
-	require.False(t, found)
-	_, found = managerMatcher.Lookup("PUT", "/templates/variables").Get()
-	require.False(t, found)
-
-	router := echo.New()
-	agentAPI := SetupAPI(
-		router,
-		router.Group("/api"),
-		handlerutil.NewActivityAppContext(t.Context()),
-		&config.Config{AgentMode: true},
-		HandlerDeps{},
-	)
-	require.Nil(t, agentAPI.OpenAPI().Paths["/variables"])
-	materialized := agentAPI.OpenAPI().Paths["/environments/{id}/templates/variables"]
-	require.NotNil(t, materialized)
-	require.NotNil(t, materialized.Get)
-	require.NotNil(t, materialized.Put)
 }
 
 func TestEasyJoinRoutesDeclareSwarmJoinPermission(t *testing.T) {

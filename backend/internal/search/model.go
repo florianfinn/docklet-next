@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Functional cut: removed template catalogue.
+// Deviations: Functional cut: removed template catalogue; functional cut: removed central variables and .env.global.
 
 package search
 
@@ -20,11 +20,6 @@ type CustomizeItem struct {
 	ContainerRegistries CustomizeVariable `key:"containerRegistries" meta:"label=Container Registries;type=array;keywords=registry,docker,images,hub,private,authentication,credentials;category=registries;description=Manage container registry connections" catmeta:"id=registries;title=Container Registries;icon=package;url=/customize/registries;description=Configure container registries and authentication"`
 	RegistryCredentials CustomizeVariable `key:"registryCredentials" meta:"label=Registry Credentials;type=secure;keywords=credentials,auth,username,password,token,login,security;category=registries;description=Configure authentication for container registries"`
 	RegistryMirrors     CustomizeVariable `key:"registryMirrors" meta:"label=Registry Mirrors;type=array;keywords=mirrors,proxy,cache,performance,cdn,regional;category=registries;description=Configure registry mirrors and proxies"`
-
-	// Variables category
-	GlobalVariables   CustomizeVariable `key:"globalVariables" meta:"label=Global Variables;type=object;keywords=variables,environment,env,global,config,settings,parameters;category=variables;description=Define reusable variables for all projects" catmeta:"id=variables;title=Variables;icon=code;url=/customize/variables;description=Manage global variables and environment configuration"`
-	SecretVariables   CustomizeVariable `key:"secretVariables" meta:"label=Secret Variables;type=secure;keywords=secrets,sensitive,secure,encrypted,password,api,key;category=variables;description=Manage sensitive and encrypted variables"`
-	VariableTemplates CustomizeVariable `key:"variableTemplates" meta:"label=Variable Templates;type=array;keywords=templates,reusable,preset,configuration,standard,common;category=variables;description=Create reusable variable configurations"`
 
 	// Git repositories category
 	GitRepositories        CustomizeVariable `key:"gitRepositories" meta:"label=Git Repositories;type=array;keywords=git,repository,repositories,source,code,version,control,github,gitlab,bitbucket;category=git-repositories;description=Manage git repository connections for GitOps" catmeta:"id=git-repositories;title=Git Repositories;icon=git-branch;url=/customize/git-repositories;description=Configure git repositories for Git synchronization"`

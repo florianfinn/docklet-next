@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace
+// Deviations: Local module namespace; functional cut: removed central variables and .env.global.
 
 // Package backup commits saved project files to a Git branch and reports the
 // remote backup state, history and revisions.
@@ -583,7 +583,7 @@ func (s *Service) buildBackupSnapshotInternal(ctx context.Context, localSync *pr
 		MaxTotalSize: maxTotalSize,
 		SkipDir:      projects.IsInternalScratchDirName,
 		SkipFile: func(name string) bool {
-			return name == projects.GitSourceEnvFileName || name == projects.GlobalEnvFileName || name == projects.EffectiveEnvFileName || strings.HasPrefix(name, ".env.") || strings.HasSuffix(name, ".env")
+			return name == projects.GitSourceEnvFileName || name == ".env.global" || name == projects.EffectiveEnvFileName || strings.HasPrefix(name, ".env.") || strings.HasSuffix(name, ".env")
 		},
 	}
 
@@ -800,7 +800,7 @@ func normalizeBackupPaths(raw []string) ([]string, error) {
 			return nil, fmt.Errorf("invalid backup path %q: %w", entry, err)
 		}
 		localBase := path.Base(cleaned)
-		if localBase == projects.GitSourceEnvFileName || localBase == projects.GlobalEnvFileName || slices.Contains(strings.Split(cleaned, "/"), ".git") {
+		if localBase == projects.GitSourceEnvFileName || localBase == ".env.global" || slices.Contains(strings.Split(cleaned, "/"), ".git") {
 			return nil, fmt.Errorf("backup path %q is reserved", entry)
 		}
 		normalized = append(normalized, cleaned)

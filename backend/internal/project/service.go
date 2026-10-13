@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace
+// Deviations: Local module namespace; functional cut: removed central variables and .env.global.
 
 package project
 
@@ -588,7 +588,7 @@ func (s *ProjectService) lookupProjectByCachedComposeName(ctx context.Context, n
 
 // ResolveProjectComposeFile returns the base compose file for a project. The
 // precedence mirrors `docker compose`: COMPOSE_FILE in the merged environment
-// (.env.global first, the project's .env on top) wins, then a GitOps sync's
+// (the project .env) wins, then a GitOps sync's
 // configured compose path, then standard detection.
 func (s *ProjectService) ResolveProjectComposeFile(ctx context.Context, proj *Project) (string, error) {
 	return s.resolveProjectComposeFile(ctx, proj, nil)
@@ -609,7 +609,7 @@ func (s *ProjectService) resolveProjectComposeFile(ctx context.Context, proj *Pr
 			var dirErr error
 			projectsDirectory, dirErr = s.GetProjectsDirectory(ctx)
 			if dirErr != nil {
-				// The .env.global layer is skipped for an empty projects directory;
+				// The project root is unavailable for an empty projects directory;
 				// keep resolution working but surface the misconfiguration.
 				slog.WarnContext(ctx, "failed to resolve projects directory for compose selection", "projectId", proj.ID, "error", dirErr)
 			}
@@ -1673,7 +1673,7 @@ func (s *ProjectService) GetProjectDetails(ctx context.Context, projectID string
 	}
 	projectsDir, projectsDirErr := s.GetProjectsDirectory(ctx)
 	if projectsDirErr != nil {
-		// Relative paths and the .env.global selection layer degrade without a
+		// Relative paths and project environment selection degrade without a
 		// projects directory; keep the details response intact but log it.
 		slog.WarnContext(ctx, "failed to resolve projects directory for project details", "projectId", projectID, "error", projectsDirErr)
 	}

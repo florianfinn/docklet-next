@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Functional cut: removed template catalogue.
+// Deviations: Functional cut: removed template catalogue; functional cut: removed central variables and .env.global.
 
 package authz
 
@@ -42,7 +42,6 @@ type AccessSurface struct {
 var accessSurfacesInternal = []AccessSurface{
 	landingSurfaceInternal("landing.customize", "/customize", "Customize", []string{
 		"customize.category.registries",
-		"customize.category.variables",
 		"customize.category.git-repositories",
 	}, 40),
 	landingSurfaceInternal("landing.settings", "/settings", "Settings", []string{
@@ -116,7 +115,6 @@ var accessSurfacesInternal = []AccessSurface{
 	settingsCategorySurfaceInternal("diagnostics", "/settings/diagnostics", "Diagnostics", AccessScopeModeGlobalOnly, []string{PermDiagnosticsRead}),
 
 	customizeCategorySurfaceInternal("registries", "/customize/registries", "Container Registries", []string{PermCustomizeManage, PermRegistriesList, PermRegistriesRead}),
-	customizeCategorySurfaceInternal("variables", "/customize/variables", "Variables", []string{PermVariablesRead}),
 	customizeCategorySurfaceInternal("git-repositories", "/customize/git-repositories", "Git Repositories", []string{PermCustomizeManage, PermGitReposList, PermGitReposRead}),
 }
 

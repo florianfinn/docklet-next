@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace
+// Deviations: Local module namespace; functional cut: removed central variables and .env.global.
 
 package projects
 
@@ -32,7 +32,6 @@ import (
 )
 
 const (
-	GlobalEnvFileName                     = ".env.global"
 	EffectiveEnvFileName                  = ".env"
 	GitSourceEnvFileName                  = ".env.git"
 	OverrideEnvFileName                   = "project.env"
@@ -89,7 +88,6 @@ type envFileCacheEntry struct {
 }
 
 var (
-	globalEnvFileCache  = hot.NewHotCache[string, envFileCacheEntry](hot.LRU, 4096).Build()
 	projectEnvFileCache = hot.NewHotCache[string, envFileCacheEntry](hot.LRU, 4096).Build()
 )
 
@@ -122,25 +120,15 @@ func allowedProcessEnvInternal() EnvMap {
 
 // LoadEnvironment loads and merges environment variables from all sources:
 // 1. Allowlisted process environment (TZ)
-// 2. Global .env.global file (from projects directory)
-// 3. Project-specific .env file (from workdir)
+// 2. Project-specific .env file (from workdir)
 // The rest of the Arcane process environment is intentionally excluded so its
 // own variables never leak into compose interpolation of managed projects.
 func (l *EnvLoader) LoadEnvironment(ctx context.Context) (envMap, injectionVars EnvMap, err error) {
 	envMap = allowedProcessEnvInternal()
 	injectionVars = make(EnvMap)
 
-	if strings.TrimSpace(l.projectsDir) != "" {
-		globalEnvPath := filepath.Join(l.projectsDir, GlobalEnvFileName)
-		if loadAndMergeGlobalEnvErr := l.loadAndMergeGlobalEnv(ctx, globalEnvPath, envMap, injectionVars); loadAndMergeGlobalEnvErr != nil && !errors.Is(loadAndMergeGlobalEnvErr, os.ErrNotExist) {
-			slog.WarnContext(ctx, "Failed to load global env", "path", globalEnvPath, "error", loadAndMergeGlobalEnvErr)
-		}
-	}
-
-	// COMPOSE_DISABLE_ENV_FILE skips the project .env entirely, as `docker
-	// compose` does. It is read from the sources merged so far — in practice
-	// only .env.global, since the process-env allowlist never includes
-	// COMPOSE_* variables.
+	// COMPOSE_DISABLE_ENV_FILE skips the project .env when supplied by an
+	// allowed process source.
 	if parseComposeBoolInternal(envMap, consts.ComposeDisableDefaultEnvFile) {
 		slog.DebugContext(ctx, "COMPOSE_DISABLE_ENV_FILE set; skipping project .env", "workdir", l.workdir)
 	} else {
@@ -186,24 +174,6 @@ func (l *EnvLoader) mergeComposeEnvFilesInternal(ctx context.Context, envMap, in
 		}
 	}
 	mergeComposeEnvFilesInternal(ctx, l.workdir, envMap, parse, onMerged)
-}
-
-func (l *EnvLoader) loadAndMergeGlobalEnv(ctx context.Context, path string, envMap, injectionVars EnvMap) error {
-	entry, err := loadCachedEnvFileInternal(ctx, globalEnvFileCache, path, path, envMap)
-	if err != nil {
-		return err
-	}
-	if !entry.exists {
-		return os.ErrNotExist
-	}
-
-	for k, v := range entry.values {
-		envMap[k] = v
-		injectionVars[k] = v
-	}
-
-	slog.DebugContext(ctx, "Merged global env into environment map", "totalEnvCount", len(envMap))
-	return nil
 }
 
 func (l *EnvLoader) loadAndMergeProjectEnv(ctx context.Context, path string, envMap, injectionVars EnvMap) error {
@@ -607,22 +577,12 @@ func CheckProjectEnvAccess(ctx context.Context, projectsDir, dir string) *projec
 		return nil
 	}
 
-	disabled := false
-	if strings.TrimSpace(projectsDir) != "" {
-		globalEnv, globalErr := ParseProjectEnvFile(filepath.Join(projectsDir, GlobalEnvFileName), make(EnvMap))
-		if globalErr != nil {
-			slog.DebugContext(ctx, "Failed to read global env while checking project env access", "path", projectsDir, "error", globalErr)
-		} else {
-			disabled = parseComposeBoolInternal(globalEnv, consts.ComposeDisableDefaultEnvFile)
-		}
-	}
-
 	return &projecttypes.ConfigurationError{
 		Code:             common.ConfigurationErrorCodeEnvFileUnreadable,
 		Path:             envPath,
 		UID:              os.Geteuid(),
 		GID:              os.Getegid(),
-		BlocksOperations: !disabled,
+		BlocksOperations: true,
 	}
 }
 
@@ -843,24 +803,10 @@ func ParseComposeEnvOptions(workdir string, env EnvMap) (ComposeEnvOptions, erro
 }
 
 // ComposeFileEnvSelection resolves the COMPOSE_FILE selection for dir with the
-// same layering EnvLoader.LoadEnvironment uses at deployment: .env.global from
-// projectsDir first, the project .env on top, then any COMPOSE_ENV_FILES
-// entries. Returns nil when the merged environment does not set COMPOSE_FILE.
-// COMPOSE_DISABLE_ENV_FILE (declared in .env.global) skips the project .env, as
-// `docker compose` does; a global COMPOSE_FILE still applies. An empty
-// projectsDir skips the global layer.
+// project .env and COMPOSE_ENV_FILES entries. Returns nil when the merged
+// environment does not set COMPOSE_FILE.
 func ComposeFileEnvSelection(ctx context.Context, projectsDir, dir string) ([]string, error) {
 	envMap := make(EnvMap)
-	if strings.TrimSpace(projectsDir) != "" {
-		globalEnv, err := ParseProjectEnvFile(filepath.Join(projectsDir, GlobalEnvFileName), envMap)
-		if err != nil {
-			return nil, err
-		}
-		maps.Copy(envMap, globalEnv)
-	}
-
-	// COMPOSE_DISABLE_ENV_FILE skips the project .env; it is read only from the
-	// sources merged so far (.env.global), matching LoadEnvironment.
 	if !parseComposeBoolInternal(envMap, consts.ComposeDisableDefaultEnvFile) {
 		projectEnvPath := filepath.Join(dir, EffectiveEnvFileName)
 		projectEnv, err := ParseProjectEnvFile(projectEnvPath, envMap)

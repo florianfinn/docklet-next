@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace
+// Deviations: Local module namespace; functional cut: removed central variables and .env.global.
 
 package project
 
@@ -2656,99 +2656,6 @@ func TestProjectService_UpdateProject_ReturnsEnvParseErrorDuringComposeValidatio
 	assert.Contains(t, err.Error(), "parse env")
 }
 
-func TestProjectService_UpdateProject_UsesGlobalEnvDuringComposeValidation(t *testing.T) {
-	db := setupProjectTestDB(t)
-	ctx := t.Context()
-
-	projectsDir := t.TempDir()
-	t.Setenv("PROJECTS_DIRECTORY", projectsDir)
-
-	settingsService, err := newSettingsServiceForTest(t, ctx, db)
-	require.NoError(t, err)
-
-	eventService := event.NewEventService(db, nil, nil)
-	svc := NewProjectService(db, settingsService, eventService, nil, nil, nil, nil, nil, config.Load(), nil, nil)
-
-	dirName := "global-env-update"
-	projectPath := filepath.Join(projectsDir, dirName)
-	require.NoError(t, os.MkdirAll(projectPath, 0o755))
-	require.NoError(t, os.WriteFile(filepath.Join(projectsDir, projects.GlobalEnvFileName), []byte("DATA_NAS_FOLDER=/srv/media\nMYPATH=/containers/\n"), 0o600))
-
-	project := &Project{
-		ID:      "proj-global-env-update",
-		Name:    dirName,
-		DirName: &dirName,
-		Path:    projectPath,
-		Status:  ProjectStatusStopped,
-	}
-	require.NoError(t, db.Create(project).Error)
-
-	compose := `services:
-  cats:
-    image: mikesir87/cats:1.0
-    volumes:
-      - ${DATA_NAS_FOLDER}:/data
-      - ${MYPATH}cats/templates:/app/templates
-`
-
-	updated, err := svc.UpdateProject(ctx, project.ID, nil, new(compose), nil, nil, usertypes.Actor{
-		ID:       "u1",
-		Username: "tester",
-	})
-
-	require.NoError(t, err)
-	require.NotNil(t, updated)
-
-	composeBytes, readErr := os.ReadFile(filepath.Join(projectPath, "compose.yaml"))
-	require.NoError(t, readErr)
-	assert.Equal(t, compose, string(composeBytes))
-}
-
-func TestProjectService_UpdateProject_DoesNotResolveHostEnvThroughGlobalEnvDuringComposeValidation(t *testing.T) {
-	db := setupProjectTestDB(t)
-	ctx := t.Context()
-
-	projectsDir := t.TempDir()
-	t.Setenv("PROJECTS_DIRECTORY", projectsDir)
-	t.Setenv("HOST_ONLY_PATH", "/host/secret")
-
-	settingsService, err := newSettingsServiceForTest(t, ctx, db)
-	require.NoError(t, err)
-
-	eventService := event.NewEventService(db, nil, nil)
-	svc := NewProjectService(db, settingsService, eventService, nil, nil, nil, nil, nil, config.Load(), nil, nil)
-
-	dirName := "host-env-guard"
-	projectPath := filepath.Join(projectsDir, dirName)
-	require.NoError(t, os.MkdirAll(projectPath, 0o755))
-	require.NoError(t, os.WriteFile(filepath.Join(projectsDir, projects.GlobalEnvFileName), []byte("DATA_NAS_FOLDER=${HOST_ONLY_PATH}\n"), 0o600))
-
-	project := &Project{
-		ID:      "proj-host-env-guard",
-		Name:    dirName,
-		DirName: &dirName,
-		Path:    projectPath,
-		Status:  ProjectStatusStopped,
-	}
-	require.NoError(t, db.Create(project).Error)
-
-	compose := `services:
-  app:
-    image: nginx:alpine
-    volumes:
-      - ${DATA_NAS_FOLDER}:/data
-`
-
-	updated, err := svc.UpdateProject(ctx, project.ID, nil, new(compose), nil, nil, usertypes.Actor{
-		ID:       "u1",
-		Username: "tester",
-	})
-
-	require.Error(t, err)
-	assert.Nil(t, updated)
-	assert.Contains(t, err.Error(), "invalid compose file")
-}
-
 func TestProjectService_UpdateProject_DerivesProjectOverrideEnvWhenGitSourceExists(t *testing.T) {
 	db := setupProjectTestDB(t)
 	ctx := t.Context()
@@ -3248,57 +3155,6 @@ func TestProjectService_ApplyGitSyncProjectFiles_WritesAndRemovesComposeOverride
 	assert.True(t, os.IsNotExist(statErr))
 }
 
-func TestProjectService_ApplyGitSyncProjectFiles_UsesGlobalEnvDuringComposeValidation(t *testing.T) {
-	db := setupProjectTestDB(t)
-	ctx := t.Context()
-
-	projectsDir := t.TempDir()
-	t.Setenv("PROJECTS_DIRECTORY", projectsDir)
-
-	settingsService, err := newSettingsServiceForTest(t, ctx, db)
-	require.NoError(t, err)
-
-	eventService := event.NewEventService(db, nil, nil)
-	svc := NewProjectService(db, settingsService, eventService, nil, nil, nil, nil, nil, config.Load(), nil, nil)
-
-	dirName := "git-sync-global-env"
-	projectPath := filepath.Join(projectsDir, dirName)
-	require.NoError(t, os.MkdirAll(projectPath, 0o755))
-	require.NoError(t, os.WriteFile(filepath.Join(projectsDir, projects.GlobalEnvFileName), []byte("DATA_NAS_FOLDER=/srv/media\nMYPATH=/containers/\n"), 0o600))
-
-	project := &Project{
-		ID:      "proj-git-sync-global-env",
-		Name:    dirName,
-		DirName: &dirName,
-		Path:    projectPath,
-		Status:  ProjectStatusStopped,
-	}
-	require.NoError(t, db.Create(project).Error)
-
-	compose := `services:
-  cats:
-    image: mikesir87/cats:1.0
-    volumes:
-      - ${DATA_NAS_FOLDER}:/data
-      - ${MYPATH}cats/templates:/app/templates
-`
-
-	updated, _, err := svc.ApplyGitSyncProjectFiles(ctx, project.ID, compose, nil, nil, "", usertypes.Actor{
-		ID:       "u1",
-		Username: "tester",
-	})
-	require.NoError(t, err)
-	require.NotNil(t, updated)
-
-	composeBytes, readErr := os.ReadFile(filepath.Join(projectPath, "compose.yaml"))
-	require.NoError(t, readErr)
-	assert.Equal(t, compose, string(composeBytes))
-}
-
-// TestProjectService_ApplyGitSyncProjectFiles_TolerantOfUndefinedComposeVar verifies
-// a git sync updating a compose file that references an undefined ${VAR} (with no
-// .env supplying it yet) succeeds instead of failing compose validation with a
-// typed-decode error like `strconv.ParseFloat: parsing "": invalid syntax`.
 func TestProjectService_ApplyGitSyncProjectFiles_TolerantOfUndefinedComposeVar(t *testing.T) {
 	db := setupProjectTestDB(t)
 	ctx := t.Context()
@@ -4398,57 +4254,6 @@ func TestProjectService_SyncProjectsFromFileSystem_RespectsConfiguredScanMaxDept
 	require.Len(t, items, 1)
 	assert.Equal(t, "project1", items[0].Name)
 	assert.Equal(t, topLevelPath, items[0].Path)
-}
-
-func TestProjectService_ListProjects_LoadsProjectIconFromGlobalEnvInIncludedMetadata(t *testing.T) {
-	db := setupProjectTestDB(t)
-	ctx := t.Context()
-
-	settingsService, err := newSettingsServiceForTest(t, ctx, db)
-	require.NoError(t, err)
-
-	projectsRoot := t.TempDir()
-	projectPath := filepath.Join(projectsRoot, "demo")
-	require.NoError(t, os.MkdirAll(projectPath, 0o755))
-
-	require.NoError(t, os.WriteFile(
-		filepath.Join(projectsRoot, projects.GlobalEnvFileName),
-		[]byte("ICON_CDN_URL=https://cdn.jsdelivr.net/gh/selfhst/icons@main\n"),
-		0o600,
-	))
-
-	require.NoError(t, os.WriteFile(filepath.Join(projectPath, "compose.yaml"), []byte(`include:
-  - metadata.yaml
-services:
-  watchtower:
-    image: nickfedor/watchtower:latest
-`), 0o600))
-
-	require.NoError(t, os.WriteFile(filepath.Join(projectPath, "metadata.yaml"), []byte(`x-watchtower-icon-light: &watchtower-icon "${ICON_CDN_URL:+${ICON_CDN_URL}/svg/watchtower.svg}"
-x-arcane:
-  icon-light: *watchtower-icon
-  icon-dark: *watchtower-icon
-services:
-  watchtower:
-    labels:
-      com.getarcaneapp.arcane.icon-light: *watchtower-icon
-      com.getarcaneapp.arcane.icon-dark: *watchtower-icon
-`), 0o600))
-
-	require.NoError(t, settingsService.SetStringSetting(ctx, "projectsDirectory", projectsRoot))
-
-	svc := NewProjectService(db, settingsService, nil, nil, nil, nil, nil, nil, config.Load(), nil, nil)
-	require.NoError(t, svc.SyncProjectsFromFileSystem(ctx))
-
-	items, page, err := svc.ListProjects(ctx, pagination.QueryParams{
-		Sort: "path", Order: pagination.SortAsc,
-		Limit: -1,
-	})
-	require.NoError(t, err)
-	require.EqualValues(t, 1, page.TotalItems)
-	require.Len(t, items, 1)
-	assert.Equal(t, "https://cdn.jsdelivr.net/gh/selfhst/icons@main/svg/watchtower.svg", items[0].IconLightURL)
-	assert.Equal(t, "https://cdn.jsdelivr.net/gh/selfhst/icons@main/svg/watchtower.svg", items[0].IconDarkURL)
 }
 
 func TestProjectService_SyncProjectsFromFileSystem_RemovesDeletedNestedProject(t *testing.T) {

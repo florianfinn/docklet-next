@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; functional cut: removed template catalogue.
+// Deviations: Local module namespace; functional cut: removed template catalogue; functional cut: removed central variables and .env.global.
 
 // Package cli provides the root command and entry point for the Arcane CLI.
 //
@@ -33,7 +33,6 @@
 //   - images: Manage Docker images and updates
 //   - jobs: Manage background jobs
 //   - generate: Generate secrets and tokens
-//   - variables: Manage global variables
 //   - version: Display version information
 package cli
 
@@ -77,7 +76,6 @@ import (
 	"github.com/florianfinn/docklet-next/cli/pkg/settings"
 	"github.com/florianfinn/docklet-next/cli/pkg/system"
 	"github.com/florianfinn/docklet-next/cli/pkg/updater"
-	"github.com/florianfinn/docklet-next/cli/pkg/variables"
 	"github.com/florianfinn/docklet-next/cli/pkg/version"
 	"github.com/florianfinn/docklet-next/cli/pkg/volumes"
 	"github.com/florianfinn/docklet-next/cli/pkg/vulnerabilities"
@@ -284,7 +282,6 @@ func init() {
 	rootCmd.AddCommand(selfupdate.Cmd)
 	rootCmd.AddCommand(admin.AdminCmd)
 	rootCmd.AddCommand(gitops.GitopsCmd)
-	rootCmd.AddCommand(variables.VariablesCmd)
 	rootCmd.AddCommand(activities.ActivitiesCmd)
 	rootCmd.AddCommand(webhooks.WebhooksCmd)
 

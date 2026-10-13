@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; omit two tests and their helpers requiring the unimported frontend source tree; functional cut: removed Svelte-specific metadata or asset paths; functional cut: removed template catalogue.
+// Deviations: Local module namespace; omit two tests and their helpers requiring the unimported frontend source tree; functional cut: removed Svelte-specific metadata or asset paths; functional cut: removed template catalogue; functional cut: removed central variables and .env.global.
 
 package authz_test
 
@@ -37,12 +37,6 @@ func TestAccessSurfaceRegistryDefinesSettingsCustomizeAndLandingSemantics(t *tes
 	notifications := requireAccessSurfaceInternal(t, "settings.category.notifications")
 	require.Equal(t, authz.AccessScopeModeGlobalOnly, notifications.ScopeMode)
 	require.ElementsMatch(t, []string{authz.PermNotificationsManage}, notifications.Permissions)
-
-	variables := requireAccessSurfaceInternal(t, "customize.category.variables")
-	require.Equal(t, authz.AccessSurfaceKindCustomizeCategory, variables.Kind)
-	require.Equal(t, authz.AccessScopeModeGlobalOnly, variables.ScopeMode)
-	require.Equal(t, authz.AccessMatchModeAnyOf, variables.MatchMode)
-	require.ElementsMatch(t, []string{authz.PermVariablesRead}, variables.Permissions)
 
 	activities := requireAccessSurfaceInternal(t, "route.activities")
 	require.Equal(t, authz.AccessSurfaceKindRoute, activities.Kind)
@@ -101,10 +95,6 @@ func TestCanAccessSurfaceEvaluatesScopeModesAndLandingChildren(t *testing.T) {
 	require.True(t, authz.CanAccessSurface(customizePS, "customize.category.registries", "env-a"))
 	require.True(t, authz.CanAccessSurface(customizePS, "landing.customize", "env-a"))
 
-	variablePS := authz.NewPermissionSet()
-	variablePS.AddGlobal(authz.PermVariablesRead)
-	require.True(t, authz.CanAccessSurface(variablePS, "customize.category.variables", "env-a"))
-	require.True(t, authz.CanAccessSurface(variablePS, "landing.customize", "env-a"))
 	activitiesPS := authz.NewPermissionSet()
 	activitiesPS.AddEnv("env-a", authz.PermActivitiesRead)
 	require.True(t, authz.CanAccessSurface(activitiesPS, "route.activities", "env-b"))

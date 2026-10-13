@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: None
+// Deviations: functional cut: removed central variables and .env.global.
 
 package projects
 
@@ -324,24 +324,6 @@ func TestLoadComposeProjectFromDir_SupportsCustomComposeNames(t *testing.T) {
 	require.NotNil(t, project)
 	assert.Equal(t, expectedPath, composePath)
 	assert.Equal(t, []string{expectedPath}, project.ComposeFiles)
-}
-
-func TestLoadComposeProjectFromDir_EmptyProjectsDirectoryDoesNotCreateParentGlobalEnv(t *testing.T) {
-	t.Parallel()
-
-	projectsRoot := t.TempDir()
-	projectDir := filepath.Join(projectsRoot, "nested", "services")
-	require.NoError(t, os.MkdirAll(projectDir, 0o755))
-	require.NoError(t, os.WriteFile(filepath.Join(projectDir, "compose.yaml"), []byte("services:\n  app:\n    image: nginx:alpine\n"), 0o600))
-
-	project, composePath, err := LoadComposeProjectFromDir(t.Context(), projectDir, "nested-services", "", false, nil)
-	require.NoError(t, err)
-	require.NotNil(t, project)
-
-	assert.Equal(t, filepath.Join(projectDir, "compose.yaml"), composePath)
-
-	_, statErr := os.Stat(filepath.Join(projectsRoot, "nested", GlobalEnvFileName))
-	assert.ErrorIs(t, statErr, os.ErrNotExist)
 }
 
 func TestLoadComposeProjectLenient_ToleratesUndefinedVariables(t *testing.T) {

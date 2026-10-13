@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Functional cut: removed template catalogue; functional cut: removed federated credentials.
+// Deviations: Functional cut: removed template catalogue; functional cut: removed federated credentials; functional cut: removed central variables and .env.global.
 
 // Package authz defines the permission taxonomy and authorization primitives
 // used across Arcane handlers. Permissions are strings of the form
@@ -64,12 +64,6 @@ const (
 	PermRegistriesTest       = "registries:test"
 	PermRegistriesBrowse     = "registries:browse"
 	PermRegistriesDeleteTags = "registries:delete-tags"
-
-	PermVariablesRead   = "variables:read"
-	PermVariablesCreate = "variables:create"
-	PermVariablesUpdate = "variables:update"
-	PermVariablesDelete = "variables:delete"
-	PermVariablesSync   = "variables:sync"
 
 	PermGitReposList   = "git-repositories:list"
 	PermGitReposRead   = "git-repositories:read"
@@ -318,7 +312,6 @@ func BuiltInEditorPermissions() []string {
 		PermSettingsRead,
 		PermEnvironmentsList, PermEnvironmentsRead, PermEnvironmentsSync,
 		PermRegistriesList, PermRegistriesRead, PermRegistriesBrowse,
-		PermVariablesRead, PermVariablesCreate, PermVariablesUpdate, PermVariablesDelete, PermVariablesSync,
 		PermGitReposList, PermGitReposRead,
 		// Editor can run volume backups, so it needs to pick a destination.
 		PermS3DestinationsList, PermS3DestinationsRead,
@@ -362,7 +355,6 @@ func BuiltInDeployerPermissions() []string {
 	return []string{
 		PermEnvironmentsList, PermEnvironmentsRead,
 		PermRegistriesList, PermRegistriesRead,
-		PermVariablesRead,
 		PermEventsRead,
 		PermContainersList,
 		PermContainersRead,
@@ -399,7 +391,6 @@ func BuiltInViewerPermissions() []string {
 		PermSettingsRead,
 		PermEnvironmentsList, PermEnvironmentsRead,
 		PermRegistriesList, PermRegistriesRead,
-		PermVariablesRead,
 		PermGitReposList, PermGitReposRead,
 		PermS3DestinationsList, PermS3DestinationsRead,
 		PermEventsRead,

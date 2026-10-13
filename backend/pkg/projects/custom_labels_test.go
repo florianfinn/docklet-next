@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace
+// Deviations: Local module namespace; functional cut: removed central variables and .env.global.
 
 package projects
 
@@ -127,66 +127,6 @@ services: {}
 		{Name: "database", Color: projecttypes.TagColorPurple},
 		{Name: "maintenance-window", Color: projecttypes.TagColorOrange},
 	}, meta.ProjectTags)
-}
-
-func TestParseArcaneComposeMetadata_LoadsGlobalEnvForIncludedMetadata(t *testing.T) {
-	projectsRoot := t.TempDir()
-	projectDir := filepath.Join(projectsRoot, "demo")
-	require.NoError(t, os.MkdirAll(projectDir, 0o755))
-
-	require.NoError(t, os.WriteFile(
-		filepath.Join(projectsRoot, GlobalEnvFileName),
-		[]byte("ICON_CDN_URL=https://cdn.jsdelivr.net/gh/selfhst/icons@main\n"),
-		0o600,
-	))
-
-	require.NoError(t, os.WriteFile(filepath.Join(projectDir, "compose.yaml"), []byte(`include:
-  - metadata.yaml
-services:
-  watchtower:
-    image: nickfedor/watchtower:latest
-`), 0o600))
-
-	require.NoError(t, os.WriteFile(filepath.Join(projectDir, "metadata.yaml"), []byte(`x-watchtower-icon-light: &watchtower-icon "${ICON_CDN_URL:+${ICON_CDN_URL}/svg/watchtower.svg}"
-x-arcane:
-  icon-light: *watchtower-icon
-  icon-dark: *watchtower-icon
-`), 0o600))
-
-	meta, err := ParseArcaneComposeMetadata(t.Context(), filepath.Join(projectDir, "compose.yaml"), projectsRoot, false)
-	require.NoError(t, err)
-	require.Equal(t, "https://cdn.jsdelivr.net/gh/selfhst/icons@main/svg/watchtower.svg", meta.ProjectIcon.Light)
-	require.Equal(t, "https://cdn.jsdelivr.net/gh/selfhst/icons@main/svg/watchtower.svg", meta.ProjectIcon.Dark)
-}
-
-func TestParseArcaneComposeMetadata_LoadsGlobalEnvForNestedProjects(t *testing.T) {
-	projectsRoot := t.TempDir()
-	projectDir := filepath.Join(projectsRoot, "group", "demo")
-	require.NoError(t, os.MkdirAll(projectDir, 0o755))
-
-	require.NoError(t, os.WriteFile(
-		filepath.Join(projectsRoot, GlobalEnvFileName),
-		[]byte("ICON_CDN_URL=https://cdn.jsdelivr.net/gh/selfhst/icons@main\n"),
-		0o600,
-	))
-
-	require.NoError(t, os.WriteFile(filepath.Join(projectDir, "compose.yaml"), []byte(`include:
-  - metadata.yaml
-services:
-  watchtower:
-    image: nickfedor/watchtower:latest
-`), 0o600))
-
-	require.NoError(t, os.WriteFile(filepath.Join(projectDir, "metadata.yaml"), []byte(`x-watchtower-icon-light: &watchtower-icon "${ICON_CDN_URL:+${ICON_CDN_URL}/svg/watchtower.svg}"
-x-arcane:
-  icon-light: *watchtower-icon
-  icon-dark: *watchtower-icon
-`), 0o600))
-
-	meta, err := ParseArcaneComposeMetadata(t.Context(), filepath.Join(projectDir, "compose.yaml"), projectsRoot, false)
-	require.NoError(t, err)
-	require.Equal(t, "https://cdn.jsdelivr.net/gh/selfhst/icons@main/svg/watchtower.svg", meta.ProjectIcon.Light)
-	require.Equal(t, "https://cdn.jsdelivr.net/gh/selfhst/icons@main/svg/watchtower.svg", meta.ProjectIcon.Dark)
 }
 
 func TestNormalizeProjectTags(t *testing.T) {

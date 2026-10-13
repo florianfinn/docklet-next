@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace
+// Deviations: Local module namespace; functional cut: removed central variables and .env.global.
 
 // Package sync applies deployment GitOps syncs: it clones the source, stages
 // and promotes project files, and redeploys the linked project or stack.
@@ -1493,7 +1493,7 @@ func partitionReservedRootEnvFiles(ctx context.Context, syncFiles []projects.Syn
 		case projects.EffectiveEnvFileName:
 			content := string(file.Content)
 			gitEnvContent = &content
-		case projects.GlobalEnvFileName:
+		case ".env.global":
 			slog.WarnContext(ctx, "dropping .env.global from git payload; project-root env files are not raw-written from git and .env.global is not project-scoped",
 				"path", file.RelativePath,
 			)
@@ -1515,7 +1515,7 @@ func partitionReservedRootEnvFiles(ctx context.Context, syncFiles []projects.Syn
 // merge-managed.
 func isReservedRootEnvFile(relPath string) bool {
 	switch relPath {
-	case projects.EffectiveEnvFileName, projects.GitSourceEnvFileName, projects.OverrideEnvFileName, projects.GlobalEnvFileName:
+	case projects.EffectiveEnvFileName, projects.GitSourceEnvFileName, projects.OverrideEnvFileName, ".env.global":
 		return true
 	default:
 		return false

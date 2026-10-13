@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; functional cut: removed upstream analytics heartbeat; functional cut: removed template catalogue; functional cut: removed federated credentials.
+// Deviations: Local module namespace; functional cut: removed upstream analytics heartbeat; functional cut: removed template catalogue; functional cut: removed federated credentials; functional cut: removed central variables and .env.global.
 
 package di
 
@@ -58,7 +58,6 @@ import (
 	"github.com/florianfinn/docklet-next/backend/internal/system"
 	"github.com/florianfinn/docklet-next/backend/internal/updater"
 	"github.com/florianfinn/docklet-next/backend/internal/user"
-	"github.com/florianfinn/docklet-next/backend/internal/variable"
 	"github.com/florianfinn/docklet-next/backend/internal/version"
 	"github.com/florianfinn/docklet-next/backend/internal/volume"
 	"github.com/florianfinn/docklet-next/backend/internal/vulnerability"
@@ -108,7 +107,6 @@ type graphParams struct {
 	Vulnerability     *vulnerability.VulnerabilityService
 	Dashboard         *dashboard.Module
 	Role              *role.RoleService
-	Variable          *variable.VariableService
 	AuthMiddleware    *auth.AuthMiddleware
 	JWKSetManager     *oidcjwk.KeySetManager
 

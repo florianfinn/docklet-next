@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Functional cut: removed template catalogue.
+// Deviations: Functional cut: removed template catalogue; functional cut: removed central variables and .env.global.
 
 package authz
 
@@ -209,55 +209,6 @@ func TestBuiltInRolesOnlyReferenceKnownPermissions(t *testing.T) {
 		assert.True(t, IsKnownPermission(p),
 			"viewer references unknown perm %q", p)
 	}
-}
-
-func TestVariablePermissionsAreSeparateGlobalGrantsWithBuiltInAccess(t *testing.T) {
-	variablePermissions := []string{
-		PermVariablesRead,
-		PermVariablesCreate,
-		PermVariablesUpdate,
-		PermVariablesDelete,
-		PermVariablesSync,
-	}
-
-	for _, permission := range variablePermissions {
-
-		require.True(t, IsKnownPermission(permission),
-			"variable permission %q must be known", permission)
-
-		require.True(t, IsOrgLevel(permission),
-			"variable permission %q must be global", permission)
-
-		require.NotContains(t, BuiltInMonitorPermissions(), permission,
-			"Monitor must not receive %q", permission)
-
-	}
-
-	for name, permissions := range map[string][]string{
-		"Admin":           AllPermissions(),
-		"Editor":          BuiltInEditorPermissions(),
-		"No-Shell Editor": BuiltInNoShellEditorPermissions(),
-	} {
-		for _, permission := range variablePermissions {
-			require.Contains(t, permissions, permission,
-				"%s must receive %q", name, permission)
-		}
-	}
-
-	for name, permissions := range map[string][]string{
-		"Viewer":   BuiltInViewerPermissions(),
-		"Deployer": BuiltInDeployerPermissions(),
-	} {
-
-		require.Contains(t, permissions, PermVariablesRead,
-			"%s must receive %q", name, PermVariablesRead)
-
-		for _, permission := range variablePermissions[1:] {
-			require.NotContains(t, permissions, permission,
-				"%s must not receive %q", name, permission)
-		}
-	}
-
 }
 
 func TestSystemBackupPermissionsAreAdminOnlyGlobalGrants(t *testing.T) {
