@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; functional cut: removed upstream analytics heartbeat and APNS mobile push; functional cut: removed template catalogue; functional cut: removed federated credentials; functional cut: removed central variables and .env.global; functional cut: removed GitOps and saved Git repositories; functional cut: removed Swarm; functional cut: removed S3 backup destinations.
+// Deviations: Local module namespace; functional cut: removed upstream analytics heartbeat and APNS mobile push; functional cut: removed template catalogue; functional cut: removed federated credentials; functional cut: removed central variables and .env.global; functional cut: removed GitOps and saved Git repositories; functional cut: removed Swarm; functional cut: removed S3 backup destinations; functional cut: removed OIDC and passkeys.
 
 // Package di owns the backend's dependency-injection graph.
 package di
@@ -31,8 +31,6 @@ import (
 	"github.com/florianfinn/docklet-next/backend/internal/kv"
 	"github.com/florianfinn/docklet-next/backend/internal/network"
 	"github.com/florianfinn/docklet-next/backend/internal/notification"
-	"github.com/florianfinn/docklet-next/backend/internal/oidc"
-	"github.com/florianfinn/docklet-next/backend/internal/passkey"
 	"github.com/florianfinn/docklet-next/backend/internal/port"
 	"github.com/florianfinn/docklet-next/backend/internal/project"
 	"github.com/florianfinn/docklet-next/backend/internal/role"
@@ -75,7 +73,6 @@ var ServiceOptions = fx.Options(
 		kv.NewKVService,
 		appimages.NewApplicationImagesService,
 		session.NewSessionService,
-		passkey.NewPasskeyService,
 		environment.NewEnvironmentService,
 		notification.NewNotificationService,
 		vulnerability.NewVulnerabilityService,
@@ -86,7 +83,6 @@ var ServiceOptions = fx.Options(
 		dashboard.NewDashboardService,
 		network.NewNetworkService,
 		port.NewPortService,
-		oidc.NewOidcService,
 		system.NewSystemService,
 		diagnostics.NewDiagnosticsService,
 		backup.NewRecoveryKeyStore,
@@ -106,7 +102,6 @@ var ServiceOptions = fx.Options(
 	),
 	// These providers bind config values, callbacks, or managed resource lifetimes.
 	fx.Provide(
-		provideJWKSetManagerInternal,
 		provideDockerClientServiceInternal,
 		provideProjectServiceInternal,
 		provideBackupEngineInternal,

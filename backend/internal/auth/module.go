@@ -2,18 +2,16 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace
+// Deviations: Local module namespace; functional cut: removed OIDC and passkeys.
 
 // Package auth owns authentication, token issuance and verification, login
 // session policy, and the authentication HTTP surface.
 package auth
 
 import (
-	"context"
 	"net/http"
 
 	"github.com/danielgtaylor/huma/v2"
-	"github.com/florianfinn/docklet-next/types/auth"
 
 	"github.com/florianfinn/docklet-next/backend/internal/settings"
 	"github.com/florianfinn/docklet-next/backend/internal/user"
@@ -21,27 +19,17 @@ import (
 )
 
 type Module struct {
-	service                *AuthService
-	user                   *user.UserService
-	settings               *settings.SettingsService
-	beginMFAAuthentication func(context.Context, string, auth.SessionMeta, string) (*auth.MFAChallenge, error)
+	service  *AuthService
+	user     *user.UserService
+	settings *settings.SettingsService
 }
 
 func New(
 	service *AuthService,
 	userService *user.UserService,
 	settingsService *settings.SettingsService,
-	beginMFAAuthentication func(
-		context.Context,
-		string,
-		auth.SessionMeta,
-		string,
-	) (
-		*auth.MFAChallenge,
-		error,
-	),
 ) *Module {
-	return &Module{service: service, user: userService, settings: settingsService, beginMFAAuthentication: beginMFAAuthentication}
+	return &Module{service: service, user: userService, settings: settingsService}
 }
 
 func (m *Module) Service() *AuthService {
@@ -53,10 +41,10 @@ func (m *Module) Service() *AuthService {
 
 func (m *Module) RegisterRoutes(api huma.API) {
 	if m == nil {
-		RegisterAuth(api, nil, nil, nil, nil)
+		RegisterAuth(api, nil, nil, nil)
 		return
 	}
-	RegisterAuth(api, m.user, m.service, m.settings, m.beginMFAAuthentication)
+	RegisterAuth(api, m.user, m.service, m.settings)
 }
 
 // RegisterAuth registers authentication routes using Huma.
@@ -65,21 +53,11 @@ func RegisterAuth(
 	userService *user.UserService,
 	authService *AuthService,
 	settingsService *settings.SettingsService,
-	beginMFAAuthentication func(
-		context.Context,
-		string,
-		auth.SessionMeta,
-		string,
-	) (
-		*auth.MFAChallenge,
-		error,
-	),
 ) {
 	h := &AuthHandler{
-		userService:            userService,
-		authService:            authService,
-		beginMFAAuthentication: beginMFAAuthentication,
-		settingsService:        settingsService,
+		userService:     userService,
+		authService:     authService,
+		settingsService: settingsService,
 	}
 
 	huma.Register(api, huma.Operation{
@@ -147,7 +125,7 @@ func RegisterAuth(
 		Method:      http.MethodPut,
 		Path:        "/auth/me/profile",
 		Summary:     "Update own profile",
-		Description: "Update the current user's display name and email. Forbidden for OIDC-managed accounts.",
+		Description: "Update the current user's display name and email.",
 		Tags:        []string{"Auth"},
 		Security:    handlerutil.DefaultOperationSecurity(),
 	}, h.UpdateMyProfile)

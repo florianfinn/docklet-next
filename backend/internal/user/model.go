@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace
+// Deviations: Local module namespace; functional cut: removed OIDC and passkeys.
 
 package user
 
@@ -21,7 +21,6 @@ type User struct {
 	PasswordHash           string           `json:"-" gorm:"column:password_hash"`
 	DisplayName            *string          `json:"displayName,omitempty" gorm:"column:display_name" sortable:"true" unorm:"nfc" trim:"true"`
 	Email                  *string          `json:"email,omitempty" sortable:"true"`
-	OidcSubjectId          *string          `json:"oidcSubjectId,omitempty" gorm:"column:oidc_subject_id"`
 	LastLogin              *time.Time       `json:"lastLogin,omitempty" gorm:"column:last_login" sortable:"true"`
 	Locale                 *string          `json:"locale,omitempty" gorm:"column:locale"`
 	TimeFormat             user.TimeFormat  `json:"timeFormat" gorm:"column:time_format;not null;default:auto"`
@@ -29,15 +28,9 @@ type User struct {
 	Preferences            user.Preferences `json:"preferences" gorm:"column:preferences;serializer:json"`
 	RequiresPasswordChange bool             `json:"requiresPasswordChange" gorm:"column:requires_password_change"`
 	IsServiceAccount       bool             `json:"isServiceAccount" gorm:"column:is_service_account;not null;default:false"`
-	PasskeyMFAEnabled      bool             `json:"passkeyMfaEnabled" gorm:"column:passkey_mfa_enabled;not null;default:false"`
 
 	// Avatar metadata
 	HasAvatar bool `json:"hasAvatar" gorm:"column:has_avatar;not null;default:false"`
-
-	// OIDC provider tokens
-	OidcAccessToken          *string    `json:"-" gorm:"type:text"`
-	OidcRefreshToken         *string    `json:"-" gorm:"type:text"`
-	OidcAccessTokenExpiresAt *time.Time `json:"-"`
 }
 
 func (User) TableName() string {

@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: None
+// Deviations: functional cut: removed OIDC and passkeys.
 
 package utils
 
@@ -14,7 +14,6 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/go-webauthn/webauthn/protocol"
 	"github.com/samber/mo"
 	"go.getarcane.app/sys/crypto"
 )
@@ -102,20 +101,4 @@ func LookupEnvOrFile(name string) (value string, found, fromFile bool) {
 
 	value, found = os.LookupEnv(name)
 	return value, found, false
-}
-
-// NormalizePasskeyAssertionExtensions drops an unrequested appid=false output, which Safari
-// reports even though it means the legacy AppID was not used.
-func NormalizePasskeyAssertionExtensions(session protocol.SessionExtensions, assertion *protocol.ParsedCredentialAssertionData) {
-	if assertion == nil {
-		return
-	}
-	appID := assertion.ClientExtensionResults.AppID
-	if appID == nil || *appID {
-		return
-	}
-	if session.AppID != "" || slices.Contains(session.Requested, protocol.ExtensionAppID) {
-		return
-	}
-	assertion.ClientExtensionResults.AppID = nil
 }

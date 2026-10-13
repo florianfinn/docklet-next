@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Functional cut: removed template catalogue; functional cut: removed federated credentials; functional cut: removed central variables and .env.global; functional cut: removed GitOps and saved Git repositories; functional cut: removed Swarm; functional cut: removed S3 backup destinations; functional cut: removed standalone build workshop.
+// Deviations: Functional cut: removed template catalogue; functional cut: removed federated credentials; functional cut: removed central variables and .env.global; functional cut: removed GitOps and saved Git repositories; functional cut: removed Swarm; functional cut: removed S3 backup destinations; functional cut: removed standalone build workshop; functional cut: removed OIDC and passkeys.
 
 // Package authz defines the permission taxonomy and authorization primitives
 // used across Arcane handlers. Permissions are strings of the form
@@ -34,7 +34,6 @@ const (
 	// (Create / Update / Delete) and role assignment to users. They are reserved
 	// for global admins and intentionally not exposed as delegated permissions —
 	// see backend/internal/middleware/role.go::RequireGlobalAdmin. Likewise, managing
-	// OIDC group → role mappings is admin-only because it is effectively another
 	// path for granting role assignments.
 	PermRolesList = "roles:list"
 	PermRolesRead = "roles:read"

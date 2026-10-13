@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace
+// Deviations: Local module namespace; functional cut: removed OIDC and passkeys.
 
 // Package roles provides the `arcane admin roles` command tree for RBAC.
 // Roles are named permission sets that can be granted to users (globally or
@@ -331,8 +331,7 @@ var assignmentsCmd = &cobra.Command{
 var assignCmd = &cobra.Command{
 	Use:   "assign <user-id>",
 	Short: "Replace a user's manual role assignments",
-	Long: "Replace every MANUAL role assignment on the user with the set passed via --role. OIDC-sourced assignments are " +
-		"left untouched — manage those via OIDC role mappings.\n\nEach --role flag accepts `<roleId>[:<envId>]`. Omit " +
+	Long: "Replace every role assignment on the user with the set passed via --role.\n\nEach --role flag accepts `<roleId>[:<envId>]`. Omit " +
 		"the env id for a global assignment. Pass --role multiple times to assign more than one role. Pass --role \"\" " +
 		"(empty) once to clear every manual assignment.",
 

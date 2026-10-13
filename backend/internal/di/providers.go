@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; functional cut: removed template catalogue; functional cut: removed GitOps and saved Git repositories; functional cut: removed S3 backup destinations.
+// Deviations: Local module namespace; functional cut: removed template catalogue; functional cut: removed GitOps and saved Git repositories; functional cut: removed S3 backup destinations; functional cut: removed OIDC and passkeys.
 
 package di
 
@@ -33,7 +33,6 @@ import (
 	"github.com/florianfinn/docklet-next/backend/internal/imageupdate"
 	"github.com/florianfinn/docklet-next/backend/internal/kv"
 	"github.com/florianfinn/docklet-next/backend/internal/notification"
-	"github.com/florianfinn/docklet-next/backend/internal/passkey"
 	"github.com/florianfinn/docklet-next/backend/internal/project"
 	"github.com/florianfinn/docklet-next/backend/internal/registry"
 	"github.com/florianfinn/docklet-next/backend/internal/role"
@@ -48,7 +47,6 @@ import (
 	"github.com/florianfinn/docklet-next/backend/pkg/scheduler/runs"
 	"github.com/florianfinn/docklet-next/backend/pkg/utils/concurrency"
 	"github.com/florianfinn/docklet-next/backend/pkg/utils/francis"
-	"github.com/florianfinn/docklet-next/backend/pkg/utils/oidcjwk"
 )
 
 func provideActivityModuleInternal(service *activity.ActivityService, localEnvironment *environment.EnvironmentService) *activity.Module {
@@ -227,8 +225,8 @@ func provideVersionServiceInternal(
 	return version.NewVersionService(httpClient, cfg.UpdateCheckDisabled, config.Version, config.Revision, localRegistry, localDocker, imageUpdate, settingsService)
 }
 
-func provideAuthModuleInternal(service *auth.AuthService, userService *user.UserService, settingsService *settings.SettingsService, passkeyService *passkey.PasskeyService) *auth.Module {
-	return auth.New(service, userService, settingsService, passkeyService.BeginMFAAuthentication)
+func provideAuthModuleInternal(service *auth.AuthService, userService *user.UserService, settingsService *settings.SettingsService) *auth.Module {
+	return auth.New(service, userService, settingsService)
 }
 
 func provideContainerRegistryServiceInternal(
@@ -324,12 +322,6 @@ func provideUpdaterServiceInternal(p updaterServiceParams) (*updater.UpdaterServ
 
 func provideUserModuleInternal(service *user.UserService, localAuth *auth.AuthService, settingsService *settings.SettingsService) *user.Module {
 	return user.New(service, localAuth.InvalidateUserTokenCache, settingsService)
-}
-
-func provideJWKSetManagerInternal(ctx context.Context, lc fx.Lifecycle) *oidcjwk.KeySetManager {
-	manager := oidcjwk.NewKeySetManager(ctx)
-	lc.Append(fx.Hook{OnStop: manager.Shutdown})
-	return manager
 }
 
 func provideAuthMiddlewareInternal(

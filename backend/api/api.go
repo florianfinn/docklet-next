@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; functional cut: removed APNS mobile push; functional cut: removed template catalogue; functional cut: removed federated credentials; functional cut: removed central variables and .env.global; functional cut: removed GitOps and saved Git repositories; functional cut: removed Swarm; functional cut: removed S3 backup destinations; functional cut: removed standalone build workshop.
+// Deviations: Local module namespace; functional cut: removed APNS mobile push; functional cut: removed template catalogue; functional cut: removed federated credentials; functional cut: removed central variables and .env.global; functional cut: removed GitOps and saved Git repositories; functional cut: removed Swarm; functional cut: removed S3 backup destinations; functional cut: removed standalone build workshop; functional cut: removed OIDC and passkeys.
 
 package api
 
@@ -40,8 +40,6 @@ import (
 	"github.com/florianfinn/docklet-next/backend/internal/middleware"
 	"github.com/florianfinn/docklet-next/backend/internal/network"
 	"github.com/florianfinn/docklet-next/backend/internal/notification"
-	"github.com/florianfinn/docklet-next/backend/internal/oidc"
-	"github.com/florianfinn/docklet-next/backend/internal/passkey"
 	"github.com/florianfinn/docklet-next/backend/internal/port"
 	"github.com/florianfinn/docklet-next/backend/internal/project"
 	"github.com/florianfinn/docklet-next/backend/internal/registry"
@@ -252,8 +250,6 @@ type HandlerDeps struct {
 	Port              *port.PortService
 	ImageUpdate       *imageupdate.Module
 	Auth              *auth.Module
-	Passkey           *passkey.PasskeyService
-	Oidc              *oidc.OidcService
 	Docker            *docker.DockerClientService
 	ContainerRegistry *registry.Module
 	System            *system.Module
@@ -392,7 +388,6 @@ func SetupAPIForSpec() huma.API {
 func registerHandlersInternal(api huma.API, deps HandlerDeps, handlerAppCtx handlerutil.ActivityAppContext, cfg *config.Config) {
 	health.RegisterRoutes(api)
 	deps.Auth.RegisterRoutes(api)
-	passkey.RegisterPasskeys(api, deps.Passkey, deps.Auth.Service(), deps.User.Service())
 	deps.ApiKey.RegisterRoutes(api)
 	deps.Role.RegisterRoutes(api)
 	appimages.RegisterAppImages(api, deps.AppImages)
@@ -401,7 +396,6 @@ func registerHandlersInternal(api huma.API, deps HandlerDeps, handlerAppCtx hand
 	version.RegisterVersion(api, deps.Version)
 	deps.Event.RegisterRoutes(api)
 	deps.Activity.RegisterRoutes(api)
-	oidc.RegisterOidc(api, deps.Auth.Service(), deps.Passkey, deps.Oidc, deps.Role.Service(), deps.User.Service(), cfg)
 	deps.Environment.RegisterRoutes(api, handlerAppCtx)
 	deps.ContainerRegistry.RegisterRoutes(api)
 	deps.Image.RegisterRoutes(api, handlerAppCtx)

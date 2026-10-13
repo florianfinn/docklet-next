@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; functional cut: removed upstream analytics heartbeat; functional cut: removed template catalogue; functional cut: removed federated credentials; functional cut: removed central variables and .env.global; functional cut: removed GitOps and saved Git repositories; functional cut: removed Swarm; functional cut: removed S3 backup destinations.
+// Deviations: Local module namespace; functional cut: removed upstream analytics heartbeat; functional cut: removed template catalogue; functional cut: removed federated credentials; functional cut: removed central variables and .env.global; functional cut: removed GitOps and saved Git repositories; functional cut: removed Swarm; functional cut: removed S3 backup destinations; functional cut: removed OIDC and passkeys.
 
 package di
 
@@ -43,7 +43,6 @@ import (
 	"github.com/florianfinn/docklet-next/backend/internal/kv"
 	"github.com/florianfinn/docklet-next/backend/internal/network"
 	"github.com/florianfinn/docklet-next/backend/internal/notification"
-	"github.com/florianfinn/docklet-next/backend/internal/oidc"
 	"github.com/florianfinn/docklet-next/backend/internal/port"
 	"github.com/florianfinn/docklet-next/backend/internal/project"
 	"github.com/florianfinn/docklet-next/backend/internal/registry"
@@ -59,7 +58,6 @@ import (
 	"github.com/florianfinn/docklet-next/backend/internal/vulnerability"
 	"github.com/florianfinn/docklet-next/backend/internal/webhook"
 	"github.com/florianfinn/docklet-next/backend/pkg/scheduler"
-	"github.com/florianfinn/docklet-next/backend/pkg/utils/oidcjwk"
 )
 
 type graphParams struct {
@@ -83,7 +81,6 @@ type graphParams struct {
 	ImageUpdate       *imageupdate.ImageUpdateService
 	Session           *session.SessionService
 	Auth              *auth.AuthService
-	Oidc              *oidc.OidcService
 	Docker            *docker.DockerClientService
 	ContainerRegistry *registry.ContainerRegistryService
 	System            *system.Module
@@ -99,7 +96,6 @@ type graphParams struct {
 	Dashboard         *dashboard.Module
 	Role              *role.RoleService
 	AuthMiddleware    *auth.AuthMiddleware
-	JWKSetManager     *oidcjwk.KeySetManager
 
 	AutoUpdate             *scheduler.AutoUpdateJob
 	ImageUpdateWatcher     *scheduler.ImageUpdateWatcher

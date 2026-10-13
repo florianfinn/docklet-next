@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; functional cut: removed template catalogue.
+// Deviations: Local module namespace; functional cut: removed template catalogue; functional cut: removed OIDC and passkeys.
 
 package apikey
 
@@ -44,7 +44,6 @@ func setupAPIKeyServiceTestDB(t *testing.T) *database.DB {
 		&role.UserRoleAssignment{},
 		&ApiKey{},
 		&role.ApiKeyPermission{},
-		&role.OidcRoleMapping{},
 	))
 
 	sqlDB, err := db.DB()

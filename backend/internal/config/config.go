@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; functional cut: removed upstream analytics heartbeat and APNS mobile push and Svelte-specific metadata or asset paths; functional cut: removed template catalogue.
+// Deviations: Local module namespace; functional cut: removed upstream analytics heartbeat and APNS mobile push and Svelte-specific metadata or asset paths; functional cut: removed template catalogue; functional cut: removed OIDC and passkeys.
 
 package config
 
@@ -44,7 +44,6 @@ type Config struct {
 	DatabaseURL           string         `env:"DATABASE_URL" default:"file:data/arcane.db?_pragma=journal_mode(WAL)&_pragma=busy_timeout(2500)&_txlock=immediate" options:"file"`
 	AllowDowngrade        bool           `env:"ALLOW_DOWNGRADE" default:"false"`
 	AllowCLIPasswordReset bool           `env:"ALLOW_CLI_PASSWORD_RESET" default:"false"`
-	AllowCLIMFAReset      bool           `env:"ALLOW_CLI_MFA_RESET" default:"false"`
 	ActorPort             string         `env:"ACTOR_PORT" default:"3551"`
 	Port                  string         `env:"PORT" default:"3552"`
 	Listen                string         `env:"LISTEN" default:""`
@@ -56,19 +55,6 @@ type Config struct {
 	JWTRefreshExpiry      time.Duration  `env:"JWT_REFRESH_EXPIRY" default:"168h"`
 	EncryptionKey         string         `env:"ENCRYPTION_KEY" default:"arcane-dev-key-32-characters!!!" options:"file"`
 	AdminStaticAPIKey     string         `env:"ADMIN_STATIC_API_KEY" default:"" options:"file"`
-
-	OidcEnabled                bool   `env:"OIDC_ENABLED" default:"false"`
-	OidcClientID               string `env:"OIDC_CLIENT_ID" default:"" options:"file"`
-	OidcClientSecret           string `env:"OIDC_CLIENT_SECRET" default:"" options:"file"`
-	OidcIssuerURL              string `env:"OIDC_ISSUER_URL" default:""`
-	OidcScopes                 string `env:"OIDC_SCOPES" default:"openid email profile"`
-	OidcGroupsClaim            string `env:"OIDC_GROUPS_CLAIM" default:"groups"`
-	OidcSkipTlsVerify          bool   `env:"OIDC_SKIP_TLS_VERIFY" default:"false"`
-	OidcAutoRedirectToProvider bool   `env:"OIDC_AUTO_REDIRECT_TO_PROVIDER" default:"false"`
-	OidcProviderName           string `env:"OIDC_PROVIDER_NAME" default:""`
-	OidcProviderLogoUrl        string `env:"OIDC_PROVIDER_LOGO_URL" default:""`
-	OidcMobileRedirectUris     string `env:"OIDC_MOBILE_REDIRECT_URIS" default:"arcane-mobile://oidc-callback"`
-	OidcRoleMappings           string `env:"OIDC_ROLE_MAPPINGS" default:"" options:"file"`
 
 	PUID                          string `env:"PUID" default:""`
 	PGID                          string `env:"PGID" default:""`

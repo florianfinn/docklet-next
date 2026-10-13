@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; functional cut: removed S3 backup destinations.
+// Deviations: Local module namespace; functional cut: removed S3 backup destinations; functional cut: removed OIDC and passkeys.
 
 package backup
 
@@ -38,14 +38,12 @@ func TestRecoveryEnvironmentInternalIncludesRuntimeSecrets(t *testing.T) {
 		JWTSecret:         "jwt-secret",
 		EncryptionKey:     "encryption-secret",
 		AdminStaticAPIKey: "admin-key",
-		OidcClientSecret:  "oidc-secret",
 		FilePerm:          0o640,
 	}
 	environment := (&Service{config: cfg}).recoveryEnvironmentInternal(t.Context())
 	require.Equal(t, "jwt-secret", environment["JWT_SECRET"])
 	require.Equal(t, "encryption-secret", environment["ENCRYPTION_KEY"])
 	require.Equal(t, "admin-key", environment["ADMIN_STATIC_API_KEY"])
-	require.Equal(t, "oidc-secret", environment["OIDC_CLIENT_SECRET"])
 	require.Equal(t, "0640", environment["FILE_PERM"])
 }
 

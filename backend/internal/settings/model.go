@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Functional cut: removed APNS mobile push; functional cut: removed template catalogue; functional cut: removed federated credentials; functional cut: removed GitOps and saved Git repositories; functional cut: removed Swarm; functional cut: removed S3 backup destinations; functional cut: removed standalone build workshop.
+// Deviations: Functional cut: removed APNS mobile push; functional cut: removed template catalogue; functional cut: removed federated credentials; functional cut: removed GitOps and saved Git repositories; functional cut: removed Swarm; functional cut: removed S3 backup destinations; functional cut: removed standalone build workshop; functional cut: removed OIDC and passkeys.
 
 package settings
 
@@ -150,23 +150,6 @@ type Settings struct {
 	ImageAutoPatchEnabled                 SettingVariable `key:"imageAutoPatchEnabled" meta:"label=Scheduled Image Patching;type=boolean;keywords=patch,copa,copacetic,image,automatic,schedule,vulnerability,security,cve;category=security;description=Automatically patch images whose latest vulnerability scan found fixable OS package vulnerabilities"`
 	ImageAutoPatchInterval                SettingVariable `key:"imageAutoPatchInterval" meta:"label=Image Patch Interval;type=cron;keywords=patch,copa,copacetic,image,interval,schedule,frequency,cron,security;category=security;description=How often to run scheduled image patching (cron expression)"`
 	LifecycleMaxTimeoutSec                SettingVariable `key:"lifecycleMaxTimeoutSec,envOverride" meta:"label=Lifecycle Hook Max Timeout (seconds);type=number;keywords=lifecycle,hook,timeout,seconds,limit,maximum,script,pre-deploy;category=security;description=Maximum allowed timeout for lifecycle scripts in seconds (default: 300)"`
-	OidcEnabled                           SettingVariable `key:"oidcEnabled,public,envOverride" meta:"label=OIDC Authentication;type=boolean;keywords=oidc,openid,connect,sso,oauth,external,provider,federation;category=authentication;description=Enable OpenID Connect (OIDC) authentication"`
-	OidcClientId                          SettingVariable `key:"oidcClientId,authrequired,envOverride" meta:"label=OIDC Client ID;type=text;keywords=oidc,client,id,oauth,openid;category=authentication;description=OIDC provider client ID"`
-	OidcClientSecret                      SettingVariable `key:"oidcClientSecret,sensitive,envOverride" meta:"label=OIDC Client Secret;type=password;keywords=oidc,client,secret,oauth,openid;category=authentication;description=OIDC provider client secret"`
-	OidcIssuerUrl                         SettingVariable `key:"oidcIssuerUrl,authrequired,envOverride" meta:"label=OIDC Issuer URL;type=text;keywords=oidc,issuer,url,oauth,openid,provider;category=authentication;description=OIDC provider issuer URL"`
-	OidcAuthorizationEndpoint             SettingVariable `key:"oidcAuthorizationEndpoint,envOverride" meta:"label=OIDC Authorization Endpoint;type=text;keywords=oidc,authorization,endpoint,oauth,openid;category=authentication;description=Override OIDC authorization endpoint"`
-	OidcTokenEndpoint                     SettingVariable `key:"oidcTokenEndpoint,envOverride" meta:"label=OIDC Token Endpoint;type=text;keywords=oidc,token,endpoint,oauth,openid;category=authentication;description=Override OIDC token endpoint"`
-	OidcUserinfoEndpoint                  SettingVariable `key:"oidcUserinfoEndpoint,envOverride" meta:"label=OIDC Userinfo Endpoint;type=text;keywords=oidc,userinfo,endpoint,oauth,openid;category=authentication;description=Override OIDC userinfo endpoint"`
-	OidcJwksEndpoint                      SettingVariable `key:"oidcJwksEndpoint,envOverride" meta:"label=OIDC JWKS Endpoint;type=text;keywords=oidc,jwks,keys,endpoint,oauth,openid;category=authentication;description=Override OIDC JWKS endpoint"`
-	OidcDeviceAuthorizationEndpoint       SettingVariable `key:"oidcDeviceAuthorizationEndpoint,envOverride" meta:"label=OIDC Device Authorization Endpoint;type=text;keywords=oidc,device,authorization,endpoint,oauth,openid,cli;category=authentication;description=Override OIDC device authorization endpoint for CLI authentication"`
-	OidcScopes                            SettingVariable `key:"oidcScopes,authrequired,envOverride" meta:"label=OIDC Scopes;type=text;keywords=oidc,scopes,oauth,openid,permissions;category=authentication;description=OIDC scopes to request"`
-	OidcGroupsClaim                       SettingVariable `key:"oidcGroupsClaim,authrequired,envOverride" meta:"label=OIDC Groups Claim;type=text;keywords=oidc,groups,claim,role,mapping,rbac;category=authentication;description=Claim name to read group memberships from for role mapping (default: groups)"`
-	OidcSkipTlsVerify                     SettingVariable `key:"oidcSkipTlsVerify,authrequired,envOverride" meta:"label=OIDC Skip TLS Verify;type=boolean;keywords=oidc,tls,verify,skip,insecure;category=authentication;description=Skip TLS verification for OIDC provider"`
-	OidcAutoRedirectToProvider            SettingVariable `key:"oidcAutoRedirectToProvider,public,envOverride" meta:"label=OIDC Auto Redirect;type=boolean;keywords=oidc,auto,redirect,automatic,login,provider,sso;category=authentication;description=Automatically redirect to OIDC provider on login page"`
-	OidcMergeAccounts                     SettingVariable `key:"oidcMergeAccounts,authrequired,envOverride" meta:"label=OIDC Account Merging;type=boolean;keywords=oidc,merge,link,accounts,email,match,existing,users,combine;category=authentication;description=Allow OIDC logins to merge with existing accounts by email"`
-	OidcProviderName                      SettingVariable `key:"oidcProviderName,public,envOverride" meta:"label=OIDC Provider Name;type=text;keywords=oidc,provider,name,display,label,sso;category=authentication;description=Custom name for the OIDC provider (e.g., Authentik, Keycloak)"`
-	OidcProviderLogoUrl                   SettingVariable `key:"oidcProviderLogoUrl,public,envOverride" meta:"label=OIDC Provider Logo URL;type=text;keywords=oidc,provider,logo,url,image,icon,sso;category=authentication;description=Custom logo URL for the OIDC provider"`
-	OidcMobileRedirectUris                SettingVariable `key:"oidcMobileRedirectUris,envOverride" meta:"label=OIDC Mobile Redirect URIs;type=text;keywords=oidc,mobile,redirect,uri,callback,scheme,ios,android,native;category=authentication;description=Comma-separated allowlist of native app redirect URIs (e.g., arcane-mobile://oidc-callback)"`
 
 	// Notifications category (placeholder for category metadata only - actual settings managed via notification service)
 	NotificationsCategoryPlaceholder SettingVariable `key:"notificationsCategory,internal" meta:"label=Notifications;type=internal;keywords=notifications,alerts,email,discord,webhooks,events,messages;category=notifications;description=Configure notification providers and alerts" catmeta:"id=notifications;title=Notifications;icon=bell;url=/settings/notifications;description=Configure email and Discord notifications for container and image updates"`
@@ -350,24 +333,4 @@ func (e SettingSensitiveForbiddenError) Error() string {
 func (e SettingSensitiveForbiddenError) Is(target error) bool {
 	x := SettingSensitiveForbiddenError{}
 	return errors.As(target, &x)
-}
-
-type OidcConfig struct {
-	ClientID     string `json:"clientId"`
-	ClientSecret string `json:"clientSecret"`
-	IssuerURL    string `json:"issuerUrl"`
-	Scopes       string `json:"scopes"`
-
-	AuthorizationEndpoint       string `json:"authorizationEndpoint,omitempty"`
-	TokenEndpoint               string `json:"tokenEndpoint,omitempty"`
-	UserinfoEndpoint            string `json:"userinfoEndpoint,omitempty"`
-	JwksURI                     string `json:"jwksUri,omitempty"`
-	DeviceAuthorizationEndpoint string `json:"deviceAuthorizationEndpoint,omitempty"`
-
-	// GroupsClaim is the claim path Arcane reads group memberships from on
-	// every OIDC login. Matched against oidc_role_mappings to produce role
-	// assignments. Default: "groups".
-	GroupsClaim string `json:"groupsClaim,omitempty"`
-
-	SkipTlsVerify bool `json:"skipTlsVerify"`
 }

@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; omit two tests and their helpers requiring the unimported frontend source tree; functional cut: removed Svelte-specific metadata or asset paths; functional cut: removed template catalogue; functional cut: removed central variables and .env.global.
+// Deviations: Local module namespace; omit two tests and their helpers requiring the unimported frontend source tree; functional cut: removed Svelte-specific metadata or asset paths; functional cut: removed template catalogue; functional cut: removed central variables and .env.global; functional cut: removed OIDC and passkeys.
 
 package authz_test
 
@@ -43,13 +43,6 @@ func TestAccessSurfaceRegistryDefinesSettingsCustomizeAndLandingSemantics(t *tes
 	require.Empty(t, activities.URL)
 	require.Equal(t, authz.AccessScopeModeAnyEffectiveScope, activities.ScopeMode)
 	require.ElementsMatch(t, []string{authz.PermActivitiesRead}, activities.Permissions)
-
-	oidcRoleMappings := requireAccessSurfaceInternal(t, "route.oidc-role-mappings")
-	require.Equal(t, authz.AccessSurfaceKindRoute, oidcRoleMappings.Kind)
-	require.Empty(t, oidcRoleMappings.URL)
-	require.Equal(t, authz.AccessScopeModeGlobalOnly, oidcRoleMappings.ScopeMode)
-	require.Equal(t, authz.AccessMatchModeAllOf, oidcRoleMappings.MatchMode)
-	require.ElementsMatch(t, authz.AllPermissions(), oidcRoleMappings.Permissions)
 
 	settingsLanding := requireAccessSurfaceInternal(t, "landing.settings")
 	require.Equal(t, authz.AccessSurfaceKindLanding, settingsLanding.Kind)
@@ -102,16 +95,12 @@ func TestCanAccessSurfaceEvaluatesScopeModesAndLandingChildren(t *testing.T) {
 
 	globalAdminPS := authz.NewPermissionSet()
 	globalAdminPS.AddGlobal(authz.AllPermissions()...)
-	require.True(t, authz.CanAccessSurface(globalAdminPS, "route.oidc-role-mappings", "env-a"))
-	require.True(t, authz.CanAccessSurface(authz.SudoPermissionSet(), "route.oidc-role-mappings", "env-a"))
 
 	nonAdminPS := authz.NewPermissionSet()
 	nonAdminPS.AddGlobal(authz.BuiltInEditorPermissions()...)
-	require.False(t, authz.CanAccessSurface(nonAdminPS, "route.oidc-role-mappings", "env-a"))
 
 	environmentAdminPS := authz.NewPermissionSet()
 	environmentAdminPS.AddEnv("env-a", authz.AllPermissions()...)
-	require.False(t, authz.CanAccessSurface(environmentAdminPS, "route.oidc-role-mappings", "env-a"))
 
 	require.False(t, authz.CanAccessSurface(authz.NewPermissionSet(), "missing.surface", "env-a"))
 }

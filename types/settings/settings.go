@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Functional cut: removed APNS mobile push; functional cut: removed template catalogue; functional cut: removed GitOps and saved Git repositories; functional cut: removed Swarm; functional cut: removed standalone build workshop.
+// Deviations: Functional cut: removed APNS mobile push; functional cut: removed template catalogue; functional cut: removed GitOps and saved Git repositories; functional cut: removed Swarm; functional cut: removed standalone build workshop; functional cut: removed OIDC and passkeys.
 
 package settings
 
@@ -246,15 +246,11 @@ type Update struct {
 	// Required: false
 	AuthLocalEnabled *string `json:"authLocalEnabled,omitzero"`
 
-	// OidcEnabled indicates if OIDC authentication is enabled.
 	//
 	// Required: false
-	OidcEnabled *string `json:"oidcEnabled,omitzero"`
 
-	// OidcMergeAccounts indicates if OIDC accounts should be merged with local accounts.
 	//
 	// Required: false
-	OidcMergeAccounts *string `json:"oidcMergeAccounts,omitzero"`
 
 	// AuthSessionTimeout is the session timeout duration.
 	//
@@ -368,51 +364,32 @@ type Update struct {
 	// Required: false
 	ImageAutoPatchInterval *string `json:"imageAutoPatchInterval,omitzero"`
 
-	// OidcClientId is the OIDC client identifier.
 	//
 	// Required: false
-	OidcClientId *string `json:"oidcClientId,omitzero"`
 
-	// OidcClientSecret is the OIDC client secret.
 	//
 	// Required: false
-	OidcClientSecret *string `json:"oidcClientSecret,omitzero"`
 
-	// OidcIssuerUrl is the OIDC issuer URL.
 	//
 	// Required: false
-	OidcIssuerUrl *string `json:"oidcIssuerUrl,omitzero"`
 
-	// OidcScopes is the list of OIDC scopes to request.
 	//
 	// Required: false
-	OidcScopes *string `json:"oidcScopes,omitzero"`
 
-	// OidcGroupsClaim is the OIDC claim path read on every login to drive
-	// role assignment via oidc_role_mappings. Default: "groups".
 	//
 	// Required: false
-	OidcGroupsClaim *string `json:"oidcGroupsClaim,omitzero"`
 
-	// OidcSkipTlsVerify indicates if TLS verification should be skipped for OIDC.
 	//
 	// Required: false
-	OidcSkipTlsVerify *string `json:"oidcSkipTlsVerify,omitzero"`
 
-	// OidcAutoRedirectToProvider indicates if the login page should automatically redirect to OIDC provider.
 	//
 	// Required: false
-	OidcAutoRedirectToProvider *string `json:"oidcAutoRedirectToProvider,omitzero"`
 
-	// OidcProviderName is the custom display name for the OIDC provider.
 	//
 	// Required: false
-	OidcProviderName *string `json:"oidcProviderName,omitzero" unorm:"nfc" trim:"true"`
 
-	// OidcProviderLogoUrl is the custom logo URL for the OIDC provider.
 	//
 	// Required: false
-	OidcProviderLogoUrl *string `json:"oidcProviderLogoUrl,omitzero"`
 
 	// DockerApiTimeout is the timeout for Docker API operations in seconds.
 	//

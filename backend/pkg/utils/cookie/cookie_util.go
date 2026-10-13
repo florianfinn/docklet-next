@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: None
+// Deviations: functional cut: removed OIDC and passkeys.
 
 package cookie
 
@@ -18,7 +18,6 @@ import (
 var (
 	TokenCookieName         = "__Host-token" // #nosec G101: cookie name label, not a credential
 	InsecureTokenCookieName = "token"        // #nosec G101: cookie name label, not a credential
-	OidcStateCookieName     = "oidc_state"
 )
 
 // Legacy ML-DSA browser tokens exceed the 4096-byte cookie limit, so readers
@@ -151,37 +150,6 @@ func BuildClearTokenCookieStringsFor(secure bool) []string {
 func buildClearTokenCookieStringInternal(name string, secure bool) string {
 	cookie := &http.Cookie{ // #nosec G124: Secure mirrors the caller-provided TLS state so the clear directive matches whichever cookie variant (__Host-token vs. token) was originally set.
 		Name:     name,
-		Value:    "",
-		Path:     "/",
-		MaxAge:   -1,
-		HttpOnly: true,
-		Secure:   secure,
-		SameSite: http.SameSiteLaxMode,
-	}
-	return cookie.String()
-}
-
-// BuildOidcStateCookieString builds a Set-Cookie header string for the OIDC state cookie.
-func BuildOidcStateCookieString(value string, maxAgeInSeconds int, secure bool) string {
-	if maxAgeInSeconds < 0 {
-		maxAgeInSeconds = 0
-	}
-	cookie := &http.Cookie{ // #nosec G124: secure is provided by the caller based on request context.
-		Name:     OidcStateCookieName,
-		Value:    value,
-		Path:     "/",
-		MaxAge:   maxAgeInSeconds,
-		HttpOnly: true,
-		Secure:   secure,
-		SameSite: http.SameSiteLaxMode,
-	}
-	return cookie.String()
-}
-
-// BuildClearOidcStateCookieString builds a Set-Cookie header string to clear the OIDC state cookie.
-func BuildClearOidcStateCookieString(secure bool) string {
-	cookie := &http.Cookie{ // #nosec G124: secure is provided by the caller based on request context.
-		Name:     OidcStateCookieName,
 		Value:    "",
 		Path:     "/",
 		MaxAge:   -1,

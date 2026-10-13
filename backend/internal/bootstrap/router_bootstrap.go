@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; functional cut: removed Svelte-specific metadata or asset paths; functional cut: removed federated credentials; functional cut: removed Swarm.
+// Deviations: Local module namespace; functional cut: removed Svelte-specific metadata or asset paths; functional cut: removed federated credentials; functional cut: removed Swarm; functional cut: removed OIDC and passkeys.
 
 package bootstrap
 
@@ -221,14 +221,6 @@ func newRouter(p RouterParams) (*echo.Echo, *edge.TunnelServer) {
 		[]string{
 			"/api/auth/login",
 			"/api/auth/refresh",
-			"/api/auth/passkey/login/begin",
-			"/api/auth/passkey/login/finish",
-			"/api/auth/passkey/mobile/finish",
-			"/api/auth/passkey/mobile/exchange",
-			"/api/auth/mfa/passkey/begin",
-			"/api/auth/mfa/passkey/finish",
-			"/api/auth/mfa/recovery",
-			"/api/oidc/callback",
 		}, 5, 5,
 	))
 	// Keyed per token for stored tokens, per source IP for everything else.

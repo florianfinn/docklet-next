@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: None
+// Deviations: functional cut: removed OIDC and passkeys.
 
 package user
 
@@ -64,7 +64,7 @@ type UpdateUser struct {
 type RoleAssignmentSummary struct {
 	RoleID        string  `json:"roleId" doc:"Role ID granted by this assignment"`
 	EnvironmentID *string `json:"environmentId,omitempty" doc:"Environment ID this assignment is scoped to; omit for a global assignment"`
-	Source        string  `json:"source" doc:"How the assignment was created" enum:"manual,oidc"`
+	Source        string  `json:"source" doc:"How the assignment was created" enum:"manual"`
 }
 
 // User represents a user in API responses.
@@ -73,7 +73,6 @@ type User struct {
 	DisplayName            *string                 `json:"displayName,omitempty" doc:"Display name of the user" example:"John Doe"`
 	Email                  *string                 `json:"email,omitempty" doc:"Email address of the user" example:"john@example.com"`
 	AvatarURL              *string                 `json:"avatarUrl,omitempty" doc:"URL to the user's custom avatar image; omitted when using the default profile picture"`
-	OidcSubjectId          *string                 `json:"oidcSubjectId,omitempty" doc:"OIDC subject identifier for SSO users"`
 	Locale                 *string                 `json:"locale,omitempty" doc:"Locale preference of the user" example:"en-US"`
 	LastLogin              *string                 `json:"lastLogin,omitempty" doc:"Date and time of the user's most recent sign-in; omitted when the user has never signed in"`
 	PermissionsByEnv       map[string][]string     `json:"permissionsByEnv" doc:"Permissions by environment ID; 'global' applies to all environments and organization endpoints"`

@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace
+// Deviations: Local module namespace; functional cut: removed OIDC and passkeys.
 
 //go:build buildables
 
@@ -79,8 +79,6 @@ func registerAutoLoginRoutes(apiGroup *echo.Group, authService *auth.AuthService
 				return c.JSON(http.StatusUnauthorized, base.ErrorResponse{Error: "Invalid username or password"})
 			case errors.Is(err, auth.ErrLocalAuthDisabled):
 				return c.JSON(http.StatusBadRequest, base.ErrorResponse{Error: "Local authentication is disabled"})
-			case errors.Is(err, auth.ErrMFARequired):
-				return c.JSON(http.StatusForbidden, base.ErrorResponse{Error: "passkey MFA is required; auto-login cannot bypass MFA"})
 			default:
 				return c.JSON(http.StatusInternalServerError, base.ErrorResponse{Error: "Authentication failed"})
 			}

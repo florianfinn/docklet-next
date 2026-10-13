@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace
+// Deviations: Local module namespace; functional cut: removed OIDC and passkeys.
 
 package auth
 
@@ -49,10 +49,9 @@ import (
 )
 
 type AuthHandler struct {
-	userService            *userdomain.UserService
-	authService            *AuthService
-	beginMFAAuthentication func(context.Context, string, auth.SessionMeta, string) (*auth.MFAChallenge, error)
-	settingsService        *settings.SettingsService
+	userService     *userdomain.UserService
+	authService     *AuthService
+	settingsService *settings.SettingsService
 }
 
 type LoginInput struct {
@@ -124,24 +123,7 @@ func (h *AuthHandler) Login(ctx context.Context, input *LoginInput) (*LoginOutpu
 		}
 	}
 
-	if userModel.PasskeyMFAEnabled {
-		challenge, beginMFAAuthenticationErr := h.beginMFAAuthentication(ctx, userModel.ID, meta, session.UserSessionSourceLocal)
-		if beginMFAAuthenticationErr != nil {
-			return nil, huma.Error500InternalServerError("Authentication failed")
-		}
-		return &LoginOutput{
-			Body: base.ApiResponse[auth.AuthenticationResponse]{
-				Success: true,
-				Data: auth.AuthenticationResponse{
-					Success: true,
-					Status:  auth.AuthenticationStatusMFARequired,
-					MFA:     challenge,
-				},
-			},
-		}, nil
-	}
-
-	tokenPair, err := h.authService.CompleteLogin(ctx, userModel, meta, session.UserSessionSourceLocal, "")
+	tokenPair, err := h.authService.CompleteLogin(ctx, userModel, meta, session.UserSessionSourceLocal)
 	if err != nil {
 		return nil, huma.Error500InternalServerError("Authentication failed")
 	}
@@ -344,18 +326,11 @@ func mergePreferencesInternal(dst, src *user.Preferences) {
 	}
 }
 
-// UpdateMyProfile lets the current user update their own displayName and email.
-// OIDC-managed accounts are read-only here.
+// UpdateMyProfile lets the current user update their own display name and email.
 func (h *AuthHandler) UpdateMyProfile(ctx context.Context, input *UpdateMyProfileInput) (*handlerutil.Out[user.User], error) {
 	currentUser, err := requireUser(ctx)
 	if err != nil {
 		return nil, err
-	}
-
-	isOidcUser := currentUser.OidcSubjectId != nil && *currentUser.OidcSubjectId != ""
-	touchesIdpFields := input.Body.DisplayName != nil || input.Body.Email != nil
-	if isOidcUser && touchesIdpFields {
-		return nil, huma.Error403Forbidden("display name and email are managed by your identity provider")
 	}
 
 	userModel, err := h.userService.GetUser(ctx, currentUser.ID)

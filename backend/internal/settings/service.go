@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; functional cut: removed APNS mobile push; functional cut: removed template catalogue; functional cut: removed GitOps and saved Git repositories; functional cut: removed Swarm; functional cut: removed standalone build workshop.
+// Deviations: Local module namespace; functional cut: removed APNS mobile push; functional cut: removed template catalogue; functional cut: removed GitOps and saved Git repositories; functional cut: removed Swarm; functional cut: removed standalone build workshop; functional cut: removed OIDC and passkeys.
 
 package settings
 
@@ -27,7 +27,6 @@ import (
 	"time"
 	"uuid"
 
-	"github.com/florianfinn/docklet-next/types/base"
 	"github.com/florianfinn/docklet-next/types/category"
 	"github.com/florianfinn/docklet-next/types/features"
 	searchtypes "github.com/florianfinn/docklet-next/types/search"
@@ -265,22 +264,6 @@ func DefaultSettingsConfig() *Settings {
 		TrivyServerUrl:                        SettingVariable{Value: ""},
 		TrivyServerToken:                      SettingVariable{Value: ""},
 		TrivyIgnoreUnfixed:                    SettingVariable{Value: "true"},
-		OidcEnabled:                           SettingVariable{Value: "false"},
-		OidcClientId:                          SettingVariable{Value: ""},
-		OidcClientSecret:                      SettingVariable{Value: ""},
-		OidcIssuerUrl:                         SettingVariable{Value: ""},
-		OidcAuthorizationEndpoint:             SettingVariable{Value: ""},
-		OidcTokenEndpoint:                     SettingVariable{Value: ""},
-		OidcUserinfoEndpoint:                  SettingVariable{Value: ""},
-		OidcJwksEndpoint:                      SettingVariable{Value: ""},
-		OidcScopes:                            SettingVariable{Value: "openid email profile"},
-		OidcGroupsClaim:                       SettingVariable{Value: "groups"},
-		OidcSkipTlsVerify:                     SettingVariable{Value: "false"},
-		OidcAutoRedirectToProvider:            SettingVariable{Value: "false"},
-		OidcMergeAccounts:                     SettingVariable{Value: "false"},
-		OidcProviderName:                      SettingVariable{Value: ""},
-		OidcProviderLogoUrl:                   SettingVariable{Value: ""},
-		OidcMobileRedirectUris:                SettingVariable{Value: "arcane-mobile://oidc-callback"},
 		MaxImageUploadSize:                    SettingVariable{Value: "500"},
 		EnvironmentHealthInterval:             SettingVariable{Value: "0 */2 * * * *"},
 		LifecycleMaxTimeoutSec:                SettingVariable{Value: "300"},
@@ -556,9 +539,6 @@ func (s *SettingsService) UpdateSettingValues(ctx context.Context, updates []lib
 }
 
 func (s *SettingsService) updateSettingValueNoRefreshInternal(ctx context.Context, key, value string) error {
-	if key == "oidcProviderName" {
-		value = normalization.Text(value, true, true)
-	}
 	return s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		settingVar := &SettingVariable{
 			Key:   key,
@@ -607,7 +587,6 @@ func (s *SettingsService) publishSettingsChangesInternal(updates []libarcane.Set
 func (s *SettingsService) updateSettingsInternal(ctx context.Context, updates settings.Update) (settingsUpdateResultInternal, error) {
 	defaultCfg := s.getDefaultSettings()
 	cfg := s.GetSettingsConfig().Clone()
-	oidcClientSecretUpdated := updates.OidcClientSecret != nil && !s.IsEnvOverrideActive("oidcClientSecret")
 	trivyServerTokenUpdated := updates.TrivyServerToken != nil && *updates.TrivyServerToken != "" && !s.IsEnvOverrideActive("trivyServerToken")
 	normalizeTargetURL := func(value string) string {
 		normalized, err := httpx.NormalizeBaseURL(value)
@@ -615,49 +594,6 @@ func (s *SettingsService) updateSettingsInternal(ctx context.Context, updates se
 			return strings.TrimSpace(value)
 		}
 		return normalized
-	}
-
-	if err := validation.ValidateCredentialTargetChange(
-		"OIDC issuer URL",
-		cfg.OidcIssuerUrl.Value,
-		updates.OidcIssuerUrl,
-		normalizeTargetURL,
-		map[string]bool{"oidcClientSecret": cfg.OidcClientSecret.Value != ""},
-		map[string]bool{"oidcClientSecret": updates.OidcClientSecret != nil},
-	); err != nil {
-		return settingsUpdateResultInternal{}, err
-	}
-
-	effectiveValue := func(current SettingVariable, next *string) string {
-		if next != nil {
-			return *next
-		}
-		return current.Value
-	}
-	oidcClientSecret := cfg.OidcClientSecret.Value
-	if oidcClientSecretUpdated {
-		oidcClientSecret = *updates.OidcClientSecret
-	}
-	if effectiveValue(cfg.OidcEnabled, updates.OidcEnabled) == "true" {
-		required := []struct{ key, value string }{
-			{"oidcClientId", effectiveValue(cfg.OidcClientId, updates.OidcClientId)},
-			{"oidcClientSecret", oidcClientSecret},
-			{"oidcIssuerUrl", effectiveValue(cfg.OidcIssuerUrl, updates.OidcIssuerUrl)},
-		}
-		for _, field := range required {
-			if strings.TrimSpace(field.value) == "" {
-				return settingsUpdateResultInternal{}, common.Classify(
-					common.ErrValidation,
-					&base.FieldError{
-						Field: field.key,
-						Err: fmt.Errorf(
-							"enabling OIDC requires %s",
-							field.key,
-						),
-					},
-				)
-			}
-		}
 	}
 
 	if err := validation.ValidateCredentialTargetChange(
@@ -674,9 +610,6 @@ func (s *SettingsService) updateSettingsInternal(ctx context.Context, updates se
 	valuesToUpdate, err := s.prepareUpdateValues(updates, cfg, defaultCfg)
 	if err != nil {
 		return settingsUpdateResultInternal{}, err
-	}
-	if oidcClientSecretUpdated {
-		valuesToUpdate = append(valuesToUpdate, SettingVariable{Key: "oidcClientSecret", Value: *updates.OidcClientSecret})
 	}
 	if trivyServerTokenUpdated {
 		valuesToUpdate = append(valuesToUpdate, SettingVariable{Key: "trivyServerToken", Value: *updates.TrivyServerToken})
@@ -784,9 +717,6 @@ func extractUpdateValue(field reflect.StructField, fieldValue reflect.Value) (st
 func (s *SettingsService) persistSettings(ctx context.Context, values []SettingVariable) error {
 	return s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		for _, setting := range values {
-			if setting.Key == "oidcProviderName" {
-				setting.Value = normalization.Text(setting.Value, true, true)
-			}
 			if err := tx.Save(&setting).Error; err != nil {
 				return fmt.Errorf("failed to update setting %s: %w", setting.Key, err)
 			}

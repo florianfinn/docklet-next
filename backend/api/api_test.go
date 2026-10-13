@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; functional cut: removed template catalogue; functional cut: removed central variables and .env.global; functional cut: removed Swarm; functional cut: removed standalone build workshop.
+// Deviations: Local module namespace; functional cut: removed template catalogue; functional cut: removed central variables and .env.global; functional cut: removed Swarm; functional cut: removed standalone build workshop; functional cut: removed OIDC and passkeys.
 
 package api
 
@@ -254,12 +254,6 @@ func TestSetupAPIForSpec_PublicRoutesOverrideSecurity(t *testing.T) {
 		{path: "/auth/refresh", method: "POST"},
 		{path: "/health", method: "GET"},
 		{path: "/health", method: "HEAD"},
-		{path: "/oidc/status", method: "GET"},
-		{path: "/oidc/config", method: "GET"},
-		{path: "/oidc/url", method: "POST"},
-		{path: "/oidc/callback", method: "POST"},
-		{path: "/oidc/device/code", method: "POST"},
-		{path: "/oidc/device/token", method: "POST"},
 		{path: "/environments/{id}/settings/public", method: "GET"},
 		{path: "/environments/pair", method: "POST"},
 		{path: "/version", method: "GET"},

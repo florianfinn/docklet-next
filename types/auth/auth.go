@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace
+// Deviations: Local module namespace; functional cut: removed OIDC and passkeys.
 
 package auth
 
@@ -25,39 +25,24 @@ type Refresh struct {
 
 // PasswordChange represents the password change request body.
 type PasswordChange struct {
-	CurrentPassword string `json:"currentPassword,omitempty" doc:"Current password of the user (required for non-OIDC users)"`
+	CurrentPassword string `json:"currentPassword,omitempty" doc:"Current password of the user"`
 	NewPassword     string `json:"newPassword" minLength:"8" doc:"New password for the user"`
 }
 
 // SessionMeta captures request metadata associated with an authenticated session.
 type SessionMeta struct {
-	UserAgent     string
-	IPAddress     string
-	Source        string
-	MFAMethod     string
-	MFAVerifiedAt *time.Time
+	UserAgent string
+	IPAddress string
+	Source    string
 }
 
 type AuthenticationStatus string
 
 const (
 	AuthenticationStatusAuthenticated AuthenticationStatus = "authenticated"
-	AuthenticationStatusMFARequired   AuthenticationStatus = "mfa_required"
 )
 
-// MFAChallenge describes a pending server-side second-factor transaction.
-// Options contains the WebAuthn public-key request options and is safe to
-// expose; the matching SessionData is retained by the backend.
-type MFAChallenge struct {
-	TransactionID string    `json:"transactionId" doc:"Opaque MFA transaction identifier"`
-	Method        string    `json:"method" doc:"MFA method"`
-	Options       any       `json:"options" doc:"WebAuthn assertion options"`
-	ExpiresAt     time.Time `json:"expiresAt" doc:"MFA transaction expiration time"`
-}
-
-// AuthenticationResponse is returned by local, OIDC, and passkey login
-// endpoints. An authenticated response contains tokens and user data; an MFA
-// response contains only status and a pending challenge.
+// AuthenticationResponse contains local login tokens and user data.
 type AuthenticationResponse struct {
 	Success      bool                 `json:"success" doc:"Whether the authentication request was accepted"`
 	Status       AuthenticationStatus `json:"status" doc:"Authentication state"`
@@ -65,14 +50,6 @@ type AuthenticationResponse struct {
 	RefreshToken string               `json:"refreshToken,omitempty" doc:"Refresh token for obtaining new access tokens"`
 	ExpiresAt    *time.Time           `json:"expiresAt,omitempty" doc:"Expiration time of the access token"`
 	User         *user.User           `json:"user,omitempty" doc:"Authenticated user information"`
-	MFA          *MFAChallenge        `json:"mfa,omitempty" doc:"Pending MFA challenge"`
-}
-
-// MobilePasskeyCompletion identifies a validated passkey login waiting for
-// its initiating mobile client to perform the one-time verifier exchange.
-type MobilePasskeyCompletion struct {
-	TransactionID string    `json:"transactionId" doc:"Opaque mobile passkey transaction identifier"`
-	ExpiresAt     time.Time `json:"expiresAt" doc:"Mobile passkey transaction expiration time"`
 }
 
 // TokenRefreshResponse represents the successful token refresh response data.
@@ -87,9 +64,4 @@ type TokenRefreshResponse struct {
 type AutoLoginConfig struct {
 	Enabled  bool   `json:"enabled" doc:"Whether auto-login is enabled"`
 	Username string `json:"username" doc:"Username for auto-login (only returned if enabled)"`
-}
-
-// PasskeyLoginAvailability reports whether the instance has a usable passkey.
-type PasskeyLoginAvailability struct {
-	Available bool `json:"available" doc:"Whether a passkey is registered for the current WebAuthn domain"`
 }

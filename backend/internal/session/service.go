@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; functional cut: removed federated credentials.
+// Deviations: Local module namespace; functional cut: removed federated credentials; functional cut: removed OIDC and passkeys.
 
 package session
 
@@ -46,8 +46,6 @@ func (s *SessionService) CreateSession(ctx context.Context, userID string, expir
 		UserAgent:        mo.EmptyableToOption(strings.TrimSpace(meta.UserAgent)).ToPointer(),
 		IPAddress:        mo.EmptyableToOption(strings.TrimSpace(meta.IPAddress)).ToPointer(),
 		Source:           source,
-		MFAMethod:        mo.EmptyableToOption(strings.TrimSpace(meta.MFAMethod)).ToPointer(),
-		MFAVerifiedAt:    meta.MFAVerifiedAt,
 		LastUsedAt:       now,
 		ExpiresAt:        expiresAt,
 	}

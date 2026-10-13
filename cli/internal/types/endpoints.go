@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Functional cut: removed template catalogue; functional cut: removed federated credentials; functional cut: removed central variables and .env.global; functional cut: removed GitOps and saved Git repositories; functional cut: removed S3 backup destinations; functional cut: removed standalone build workshop.
+// Deviations: Functional cut: removed template catalogue; functional cut: removed federated credentials; functional cut: removed central variables and .env.global; functional cut: removed GitOps and saved Git repositories; functional cut: removed S3 backup destinations; functional cut: removed standalone build workshop; functional cut: removed OIDC and passkeys.
 
 // Package types provides the Arcane API endpoint path builders and CLI
 // configuration types.
@@ -38,16 +38,11 @@ const (
 
 // Auth endpoints
 
+func AuthLogin() string    { return "/api/auth/login" }
 func AuthLogout() string   { return "/api/auth/logout" }
 func AuthMe() string       { return "/api/auth/me" }
 func AuthPassword() string { return "/api/auth/password" }
 func AuthRefresh() string  { return "/api/auth/refresh" }
-
-// OIDC endpoints
-
-func OIDCDeviceCode() string  { return "/api/oidc/device/code" }
-func OIDCDeviceToken() string { return "/api/oidc/device/token" }
-func OIDCStatus() string      { return "/api/oidc/status" }
 
 // API key endpoints
 
@@ -72,11 +67,6 @@ func UserRoleAssignments(userID string) string {
 func Roles() string                     { return "/api/roles" }
 func Role(id string) string             { return pathf("/api/roles/%s", id) }
 func RolesAvailablePermissions() string { return "/api/roles/available-permissions" }
-
-// OIDC role mapping endpoints
-
-func OidcRoleMappings() string         { return "/api/oidc/role-mappings" }
-func OidcRoleMapping(id string) string { return pathf("/api/oidc/role-mappings/%s", id) }
 
 // Environment endpoints
 

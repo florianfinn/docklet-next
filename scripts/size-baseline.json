@@ -37,7 +37,6 @@
     "backend/internal/vulnerability/children/query/service.go": 1267,
     "backend/internal/role/service.go": 1032,
     "backend/internal/backup/service.go": 1301,
-    "backend/internal/passkey/service.go": 1491,
     "backend/pkg/libarcane/edge/client_test.go": 2436,
     "backend/pkg/libarcane/edge/client.go": 1541,
     "backend/pkg/libarcane/edge/tls.go": 1313,

@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace
+// Deviations: Local module namespace; functional cut: removed OIDC and passkeys.
 
 // Package role owns RBAC roles, assignments, permission resolution, and role HTTP routes.
 package role
@@ -127,7 +127,7 @@ func RegisterRoles(api huma.API, roleService *RoleService) {
 		Method:      http.MethodPut,
 		Path:        "/users/{userId}/role-assignments",
 		Summary:     "Replace a user's manual role assignments",
-		Description: "Replaces every source='manual' assignment for the user. source='oidc' assignments are not touched. Reserved for global admins; enforces the last-admin guard.",
+		Description: "Replaces every role assignment for the user. Reserved for global admins; enforces the last-admin guard.",
 		Tags:        []string{"Roles"},
 		Security:    handlerutil.DefaultOperationSecurity(),
 		Middlewares: middleware.RequireGlobalAdmin(api),

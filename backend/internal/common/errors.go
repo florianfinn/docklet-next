@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Functional cut: removed APNS mobile push; functional cut: removed federated credentials; functional cut: removed central variables and .env.global; functional cut: removed GitOps and saved Git repositories; functional cut: removed Swarm.
+// Deviations: Functional cut: removed APNS mobile push; functional cut: removed federated credentials; functional cut: removed central variables and .env.global; functional cut: removed GitOps and saved Git repositories; functional cut: removed Swarm; functional cut: removed OIDC and passkeys.
 
 package common
 
@@ -79,8 +79,6 @@ var (
 	ErrUnknownPermission                  = Classify(ErrValidation, errors.New("Unknown permission"))
 	ErrRolePermissionEscalation           = Classify(ErrForbidden, errors.New("cannot grant a permission you do not hold"))
 	ErrInvalidRoleAssignment              = Classify(ErrBadRequest, errors.New("invalid role assignment"))
-	ErrOidcMappingNotFound                = Classify(ErrNotFound, errors.New("OIDC role mapping not found"))
-	ErrOidcMappingEnvManaged              = Classify(ErrConflict, errors.New("OIDC role mapping is managed by OIDC_ROLE_MAPPINGS and cannot be edited at runtime"))
 	ErrNoGlobalAdminRemains               = Classify(ErrConflict, errors.New("At least one user must retain a global Admin role assignment"))
 	ErrProjectNotFound                    = Classify(ErrNotFound, errors.New("Project not found"))
 	ErrContainerRegistryNotFound          = Classify(ErrNotFound, errors.New("Container registry not found"))

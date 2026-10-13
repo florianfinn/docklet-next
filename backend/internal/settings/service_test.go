@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; functional cut: removed template catalogue; functional cut: removed GitOps and saved Git repositories; functional cut: removed Swarm.
+// Deviations: Local module namespace; functional cut: removed template catalogue; functional cut: removed GitOps and saved Git repositories; functional cut: removed Swarm; functional cut: removed OIDC and passkeys.
 
 package settings
 
@@ -222,90 +222,6 @@ func TestSettingsService_AvatarMaxUploadSizeDefaultAndUpdate(t *testing.T) {
 	require.Equal(t, "8", current.AvatarMaxUploadSizeMb.Value)
 }
 
-func TestSettingsServiceUpdateSettingsRejectsOIDCIssuerChangeWithStoredSecretInternal(t *testing.T) {
-	ctx := t.Context()
-	db := setupSettingsTestDB(t)
-	svc, err := newSettingsServiceForTestInternal(t, ctx, db)
-	require.NoError(t, err)
-	require.NoError(t, svc.UpdateSetting(ctx, "oidcIssuerUrl", "https://issuer.example.com"))
-	require.NoError(t, svc.UpdateSetting(ctx, "oidcClientSecret", "old-client-secret"))
-
-	_, err = svc.UpdateSettings(ctx, settings.Update{
-		OidcIssuerUrl: new("https://attacker.example.com"),
-	})
-	require.ErrorIs(t, err, common.ErrValidation)
-
-	current, loadErr := svc.GetSettings(ctx)
-	require.NoError(t, loadErr)
-	require.Equal(t, "https://issuer.example.com", current.OidcIssuerUrl.Value)
-	require.Equal(t, "old-client-secret", current.OidcClientSecret.Value)
-}
-
-func TestSettingsServiceUpdateSettingsAllowsOIDCIssuerChangeWhenClearingSecretInternal(t *testing.T) {
-	ctx := t.Context()
-	db := setupSettingsTestDB(t)
-	svc, err := newSettingsServiceForTestInternal(t, ctx, db)
-	require.NoError(t, err)
-	require.NoError(t, svc.UpdateSetting(ctx, "oidcIssuerUrl", "https://issuer.example.com"))
-	require.NoError(t, svc.UpdateSetting(ctx, "oidcClientSecret", "old-client-secret"))
-
-	_, err = svc.UpdateSettings(ctx, settings.Update{
-		OidcIssuerUrl:    new("https://replacement.example.com"),
-		OidcClientSecret: new(""),
-	})
-	require.NoError(t, err)
-
-	current, loadErr := svc.GetSettings(ctx)
-	require.NoError(t, loadErr)
-	require.Equal(t, "https://replacement.example.com", current.OidcIssuerUrl.Value)
-	require.Empty(t, current.OidcClientSecret.Value)
-}
-
-func TestSettingsServiceUpdateSettingsRejectsEnablingOIDCWithoutSecretInternal(t *testing.T) {
-	ctx := t.Context()
-	db := setupSettingsTestDB(t)
-	svc, err := newSettingsServiceForTestInternal(t, ctx, db)
-	require.NoError(t, err)
-
-	_, err = svc.UpdateSettings(ctx, settings.Update{
-		OidcEnabled:   new("true"),
-		OidcClientId:  new("arcane"),
-		OidcIssuerUrl: new("https://issuer.example.com"),
-	})
-	require.ErrorIs(t, err, common.ErrValidation)
-
-	current, loadErr := svc.GetSettings(ctx)
-	require.NoError(t, loadErr)
-	require.Equal(t, "false", current.OidcEnabled.Value)
-}
-
-func TestSettingsServiceUpdateSettingsAllowsOIDCIssuerChangeWithReplacementSecretInternal(t *testing.T) {
-	ctx := t.Context()
-	db := setupSettingsTestDB(t)
-	svc, err := newSettingsServiceForTestInternal(t, ctx, db)
-	require.NoError(t, err)
-	require.NoError(t, svc.UpdateSetting(ctx, "oidcIssuerUrl", "https://issuer.example.com"))
-	require.NoError(t, svc.UpdateSetting(ctx, "oidcClientSecret", "old-client-secret"))
-
-	require.NoError(t, svc.UpdateSetting(ctx, "oidcProviderName", "  Cafe\u0301 SSO  "))
-	before, loadErr := svc.GetSettings(ctx)
-	require.NoError(t, loadErr)
-	require.Equal(t, "Café SSO", before.OidcProviderName.Value)
-
-	_, err = svc.UpdateSettings(ctx, settings.Update{
-		OidcProviderName: new("  Cafe\u0301 Login  "),
-		OidcIssuerUrl:    new("https://replacement.example.com"),
-		OidcClientSecret: new("new-client-secret"),
-	})
-	require.NoError(t, err)
-
-	current, loadErr := svc.GetSettings(ctx)
-	require.NoError(t, loadErr)
-	require.Equal(t, "https://replacement.example.com", current.OidcIssuerUrl.Value)
-	require.Equal(t, "new-client-secret", current.OidcClientSecret.Value)
-	require.Equal(t, "Café Login", current.OidcProviderName.Value)
-}
-
 func TestSettingsServiceUpdateSettingsRejectsTrivyServerChangeWithStoredTokenInternal(t *testing.T) {
 	ctx := t.Context()
 	db := setupSettingsTestDB(t)
@@ -406,20 +322,6 @@ func TestSettingsService_PruneUnknownSettings_RemovesStaleKeys(t *testing.T) {
 	require.NoError(t, err)
 }
 
-func TestSettingsService_GetSettings_EnvOverride_OidcMergeAccounts(t *testing.T) {
-	ctx := t.Context()
-	db := setupSettingsTestDB(t)
-	t.Setenv("OIDC_MERGE_ACCOUNTS", "true")
-
-	svc, err := newSettingsServiceForTestInternal(t, ctx, db)
-	require.NoError(t, err)
-	require.NoError(t, svc.EnsureDefaultSettings(ctx))
-
-	settingsCfg, err := svc.GetSettings(ctx)
-	require.NoError(t, err)
-	require.True(t, settingsCfg.OidcMergeAccounts.IsTrue())
-}
-
 func TestSettingsService_GetSettings_EnvOverride_TrivyScanTimeout(t *testing.T) {
 	ctx := t.Context()
 	db := setupSettingsTestDB(t)
@@ -494,25 +396,6 @@ func TestSettingsService_GetSettings_EnvOverride_TrivyRuntimeSecurity(t *testing
 	require.NoError(t, err)
 	require.Equal(t, "label=disable,\nlabel=type:container_runtime_t", settingsCfg.TrivySecurityOpts.Value)
 	require.True(t, settingsCfg.TrivyPrivileged.IsTrue())
-}
-
-func TestSettingsService_isEnvOverrideActiveInternal(t *testing.T) {
-	ctx := t.Context()
-	db := setupSettingsTestDB(t)
-
-	svc, err := newSettingsServiceForTestInternal(t, ctx, db)
-	require.NoError(t, err)
-	require.False(t, svc.IsEnvOverrideActive("oidcEnabled"))
-
-	t.Setenv("OIDC_ENABLED", "false")
-	svcWithOverride, err := newSettingsServiceForTestInternal(t, ctx, db)
-	require.NoError(t, err)
-	require.True(t, svcWithOverride.IsEnvOverrideActive("oidcEnabled"))
-
-	t.Setenv("AUTH_SESSION_TIMEOUT", "120")
-	svcWithNonOverrideEnv, err := newSettingsServiceForTestInternal(t, ctx, db)
-	require.NoError(t, err)
-	require.False(t, svcWithNonOverrideEnv.IsEnvOverrideActive("authSessionTimeout"))
 }
 
 func TestSettingsService_GetSetHelpers(t *testing.T) {
@@ -720,10 +603,10 @@ func TestSettingsServiceActorDoesNotPublishSensitiveValuesInternal(t *testing.T)
 	require.NoError(t, svc.EnsureDefaultSettings(ctx))
 
 	var calls atomic.Int32
-	svc.SubscribeSettingsChanges([]string{"oidcClientSecret"}, func([]libarcane.SettingUpdate) {
+	svc.SubscribeSettingsChanges([]string{"trivyServerToken"}, func([]libarcane.SettingUpdate) {
 		calls.Add(1)
 	})
-	_, err = svc.UpdateSettings(ctx, settings.Update{OidcClientSecret: new("should-not-leave-settings-service")})
+	_, err = svc.UpdateSettings(ctx, settings.Update{TrivyServerToken: new("should-not-leave-settings-service")})
 	require.NoError(t, err)
 	waitForSettingsNotificationsInternal(t, svc)
 	require.Zero(t, calls.Load())

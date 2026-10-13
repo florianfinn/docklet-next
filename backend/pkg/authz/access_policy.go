@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Functional cut: removed template catalogue; functional cut: removed central variables and .env.global; functional cut: removed GitOps and saved Git repositories; functional cut: removed Swarm; functional cut: removed S3 backup destinations; functional cut: removed standalone build workshop.
+// Deviations: Functional cut: removed template catalogue; functional cut: removed central variables and .env.global; functional cut: removed GitOps and saved Git repositories; functional cut: removed Swarm; functional cut: removed S3 backup destinations; functional cut: removed standalone build workshop; functional cut: removed OIDC and passkeys.
 
 package authz
 
@@ -80,7 +80,6 @@ var accessSurfacesInternal = []AccessSurface{
 	routeSurfaceInternal("route.volumes.detail", "/volumes/{volumeName}", "Volume", AccessScopeModeSelectedEnvPlusGlobal, []string{PermVolumesList, PermVolumesRead}, 0),
 	routeSurfaceInternal("route.events", "/events", "Events", AccessScopeModeGlobalOnly, []string{PermEventsRead}, 110),
 	routeSurfaceInternal("route.activities", "", "Activities", AccessScopeModeAnyEffectiveScope, []string{PermActivitiesRead}, 0),
-	allOfRouteSurfaceInternal("route.oidc-role-mappings", "", "OIDC Role Mappings", AllPermissions()),
 	allOfRouteSurfaceInternal("route.customize.registries.browse", "/customize/registries/{id}", "Registry browser", []string{PermRegistriesRead, PermRegistriesBrowse}),
 
 	settingsCategorySurfaceInternal("activity", "/settings/activity", "Activity", AccessScopeModeGlobalOnly, []string{PermSettingsRead}),

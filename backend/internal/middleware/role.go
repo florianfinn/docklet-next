@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace
+// Deviations: Local module namespace; functional cut: removed OIDC and passkeys.
 
 package middleware
 
@@ -88,7 +88,7 @@ func RequirePermission(api huma.API, perm string) huma.Middlewares {
 // RequireGlobalAdmin returns a per-operation Huma middleware that rejects any
 // caller who is not a global admin (or sudo). Used for operations that are
 // intentionally not exposed as delegated permissions — role creation/edits,
-// user role assignment, and OIDC mapping management. Keeping these admin-only
+// user role assignment management. Keeping these admin-only
 // avoids the meta-escalation surface where a holder of `roles:assign` could
 // promote themselves via a custom role.
 func RequireGlobalAdmin(api huma.API) huma.Middlewares {
