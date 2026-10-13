@@ -78,9 +78,11 @@ export function RunOutput({ run, defaultOpen = false, fill = false, className }:
           <Terminal className="size-3.5 text-muted-foreground" aria-hidden />
           {t("title")}
         </CollapsibleTrigger>
-        <ToneBadge tone="violet" className="h-5 px-1.5 text-[10.5px]" title={`${t("hint")} ${t("stderrNote")} ${t("foldNote")}`}>
-          {t("simulated")}
-        </ToneBadge>
+        {import.meta.env.DEV && (
+          <ToneBadge tone="violet" className="h-5 px-1.5 text-[10.5px]" title={`${t("hint")} ${t("stderrNote")} ${t("foldNote")}`}>
+            {t("simulated")}
+          </ToneBadge>
+        )}
         <span className="text-[11px] text-muted-foreground tabular-nums">{t("lines", { count: rows.length })}</span>
         {errors > 0 && (
           <ToneBadge tone="err" className="h-5 px-1.5 text-[10.5px]">

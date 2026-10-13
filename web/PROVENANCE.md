@@ -333,3 +333,14 @@ omits demo-only modules. The disconnected adapter now presents a stable error
 for stack creation and rejected source imports. Responsive width changes do not
 alter the imported copy. The production bundle guard and route tests provide
 the product-boundary evidence.
+
+## Production review follow-up
+
+The historical 592-file import snapshot remains unchanged. Nine updated web files
+have current content hashes in their per-file sidecars. The production sidebar
+derives its visible entries from the registered route tree. The boundary guard
+rejects nested `.dev` modules and the setup, onboarding and preview pages when
+imported into a production build. Route tests load the production branches and
+check visible navigation against that same tree. The production host list hides
+its unavailable onboarding action, and run output omits the development-only
+simulation badge.

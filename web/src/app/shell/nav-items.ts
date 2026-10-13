@@ -13,6 +13,7 @@ import {
   Waypoints,
   type LucideIcon,
 } from "lucide-react";
+import { matchRoutes, type RouteObject } from "react-router";
 
 export type NavKey =
   | "dashboard"
@@ -75,6 +76,16 @@ export const NAV: NavGroup[] = [
     ],
   },
 ];
+
+export function navigationForRoutes(routes: RouteObject[]): NavGroup[] {
+  return NAV.map((group) => ({
+    ...group,
+    items: group.items.filter((item) => {
+      const matches = matchRoutes(routes, item.to);
+      return matches !== null && matches.every(({ route }) => route.path !== "*");
+    }),
+  })).filter((group) => group.items.length > 0);
+}
 
 export const PREVIEW_ICONS: Record<string, LucideIcon> = {
   proxy: Waypoints,

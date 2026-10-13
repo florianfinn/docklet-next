@@ -24,7 +24,7 @@ import {
 } from "@/shared/ui/sidebar";
 
 import { HostFilter } from "../HostFilter";
-import { NAV, type NavItem } from "../nav-items";
+import { type NavGroup, type NavItem } from "../nav-items";
 import { isNavActive, useNavCounts, useRunningActionCount, type NavCounts } from "../use-nav-counts";
 import { FreeUserMenu } from "./FreeUserMenu";
 
@@ -61,7 +61,7 @@ function NavEntry({ item, count, active, onNavigate, groupBadge }: { item: NavIt
  * grouped navigation, clearly marked active rows and counters, and the profile at the
  * bottom. Own composition on the free primitives.
  */
-export function FreeSidebar() {
+export function FreeSidebar({ navigation }: { navigation: NavGroup[] }) {
   const t = useTranslations("shell");
   const ta = useTranslations("activity");
   const counts = useNavCounts();
@@ -123,7 +123,7 @@ export function FreeSidebar() {
             </SidebarMenuItem>
           </SidebarMenu>
         </SidebarGroup>
-        {NAV.map((group) => (
+        {navigation.map((group) => (
           <SidebarGroup key={group.key}>
             <SidebarGroupLabel className="text-[11px] font-medium tracking-wide">
               {t(`groups.${group.key}`)}

@@ -32,14 +32,14 @@ export default function HostsPage() {
       <PageHeader
         title={t("title")}
         description={t("description")}
-        actions={
+        actions={import.meta.env.DEV ? (
           <Button asChild className="group">
             <Link to="/hosts/new">
               <Plus data-icon="inline-start" className="transition-transform duration-(--dur) group-hover:rotate-90" />
               {t("add")}
             </Link>
           </Button>
-        }
+        ) : undefined}
       />
       <StatStrip
         items={[
@@ -61,11 +61,11 @@ export default function HostsPage() {
         <EmptyState
           icon={<Server />}
           title={t("title")}
-          action={
+          action={import.meta.env.DEV ? (
             <Button asChild>
               <Link to="/hosts/new">{t("add")}</Link>
             </Button>
-          }
+          ) : undefined}
         />
       ) : (
         <div className="grid grid-cols-[repeat(auto-fill,minmax(min(100%,34rem),1fr))] gap-4">

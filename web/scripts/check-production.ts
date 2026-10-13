@@ -39,6 +39,15 @@ if (process.argv.includes("--prove")) {
   console.log("Red proof passed: shared hook import of demo text rejected in production build.");
   await assert.rejects(inspect("@/test/layout"), /Production boundary: forbidden module/);
   console.log("Red proof passed: test helper rejected in production build.");
+  for (const module of [
+    "@/features/hosts/InstallSheet.dev",
+    "@/features/setup/SetupPage",
+    "@/features/hosts/onboarding/OnboardingPage",
+    "@/app/preview/PreviewPage",
+  ]) {
+    await assert.rejects(inspect(module), /Production boundary: forbidden module/);
+    console.log(`Red proof passed: injected ${module} rejected in production build.`);
+  }
   await assert.rejects(inspect(undefined, "production", "/src/main.tsx", 'document.title = "Design-Labor";'), /Production boundary: forbidden text/);
   console.log("Red proof passed: lab text rejected in production assets.");
 }
