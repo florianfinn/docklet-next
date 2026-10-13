@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace
+// Deviations: Local module namespace; functional cut: removed APNS mobile push.
 
 package updater
 
@@ -628,7 +628,7 @@ func newEmptyContainerListDockerServiceInternal(t *testing.T) *docker.DockerClie
 func TestUpdaterService_PendingImageUpdatesAbortsWhenNotificationEligibilityUnresolvedInternal(t *testing.T) {
 	db := setupProjectTestDBInternal(t)
 	require.NoError(t, db.AutoMigrate(&imageupdate.ImageUpdateRecord{}, &notification.NotificationSettings{}))
-	notif := notification.NewNotificationService(db, nil, nil, nil, nil)
+	notif := notification.NewNotificationService(db, nil, nil, nil)
 	imageUpdates := imageupdate.NewImageUpdateService(db, nil, nil, nil, nil, notif, nil)
 	svc, err := NewUpdaterService(db, nil, nil, nil, imageUpdates, nil, nil, nil, notif, nil, nil, nil, nil, nil, nil)
 	require.NoError(t, err)
@@ -667,7 +667,7 @@ func TestUpdaterService_PendingImageUpdatesFlushesPendingNotificationsInternal(t
 		},
 	}).Error)
 
-	notif := notification.NewNotificationService(db, nil, nil, nil, nil)
+	notif := notification.NewNotificationService(db, nil, nil, nil)
 	imageUpdates := imageupdate.NewImageUpdateService(db, nil, nil, newEmptyContainerListDockerServiceInternal(t), nil, notif, nil)
 	svc, svcErr := NewUpdaterService(db, nil, nil, nil, imageUpdates, nil, nil, nil, notif, nil, nil, nil, nil, nil, nil)
 	require.NoError(t, svcErr)
@@ -698,7 +698,7 @@ func TestUpdaterService_PendingImageUpdatesNoProvidersLeavesUnnotifiedInternal(t
 	db := setupProjectTestDBInternal(t)
 	require.NoError(t, db.AutoMigrate(&imageupdate.ImageUpdateRecord{}, &notification.NotificationSettings{}))
 
-	notif := notification.NewNotificationService(db, nil, nil, nil, nil)
+	notif := notification.NewNotificationService(db, nil, nil, nil)
 	imageUpdates := imageupdate.NewImageUpdateService(db, nil, nil, newEmptyContainerListDockerServiceInternal(t), nil, notif, nil)
 	svc, svcErr := NewUpdaterService(db, nil, nil, nil, imageUpdates, nil, nil, nil, notif, nil, nil, nil, nil, nil, nil)
 	require.NoError(t, svcErr)

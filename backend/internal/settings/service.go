@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace
+// Deviations: Local module namespace; functional cut: removed APNS mobile push.
 
 package settings
 
@@ -312,10 +312,6 @@ func DefaultSettingsConfig() *Settings {
 		BuildTimeout:           SettingVariable{Value: "1800"},
 		DepotProjectId:         SettingVariable{Value: ""},
 		DepotToken:             SettingVariable{Value: ""},
-
-		ApnsEnabled:    SettingVariable{Value: "false"},
-		ApnsChannelID:  SettingVariable{Value: ""},
-		ApnsSigningKey: SettingVariable{Value: ""},
 
 		InstanceID:               SettingVariable{Value: ""},
 		SystemVolumeBackupConfig: SettingVariable{Value: `{"policies":[]}`},

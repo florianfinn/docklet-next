@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace
+// Deviations: Local module namespace; functional cut: removed APNS mobile push.
 
 package api
 
@@ -24,7 +24,6 @@ import (
 	"github.com/florianfinn/docklet-next/backend/api/handlers"
 	"github.com/florianfinn/docklet-next/backend/internal/activity"
 	"github.com/florianfinn/docklet-next/backend/internal/apikey"
-	"github.com/florianfinn/docklet-next/backend/internal/apns"
 	"github.com/florianfinn/docklet-next/backend/internal/appimages"
 	"github.com/florianfinn/docklet-next/backend/internal/auth"
 	"github.com/florianfinn/docklet-next/backend/internal/build"
@@ -277,7 +276,6 @@ type HandlerDeps struct {
 	Version           *version.VersionService
 	Notification      *notification.Module
 	ApiKey            *apikey.Module
-	Apns              *apns.Module
 	Federated         *federated.FederatedCredentialService
 	GitRepository     *gitrepo.Module
 	GitOpsSync        *gitops.Module
@@ -438,7 +436,6 @@ func registerHandlersInternal(api huma.API, deps HandlerDeps, handlerAppCtx hand
 	network.RegisterNetworks(api, deps.Network, deps.Docker, deps.Activity.Service(), handlerAppCtx)
 	deps.Swarm.RegisterRoutes(api)
 	deps.Notification.RegisterRoutes(api)
-	deps.Apns.RegisterRoutes(api)
 	deps.Updater.RegisterRoutes(api, handlerAppCtx)
 	deps.Search.RegisterRoutes(api)
 	deps.System.RegisterRoutes(api, handlerAppCtx)

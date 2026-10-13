@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; functional cut: removed upstream analytics heartbeat.
+// Deviations: Local module namespace; functional cut: removed upstream analytics heartbeat and APNS mobile push.
 
 package config
 
@@ -56,8 +56,6 @@ type Config struct {
 	JWTRefreshExpiry      time.Duration  `env:"JWT_REFRESH_EXPIRY" default:"168h"`
 	EncryptionKey         string         `env:"ENCRYPTION_KEY" default:"arcane-dev-key-32-characters!!!" options:"file"`
 	AdminStaticAPIKey     string         `env:"ADMIN_STATIC_API_KEY" default:"" options:"file"`
-	ApnsRelayUrl          string         `env:"APNS_RELAY_URL" default:"https://apns.getarcane.app" options:"trimTrailingSlash"`
-	ApnsKeyAlgorithm      string         `env:"APNS_KEY_ALGORITHM" default:"ed25519" options:"toLower"`
 
 	OidcEnabled                bool   `env:"OIDC_ENABLED" default:"false"`
 	OidcClientID               string `env:"OIDC_CLIENT_ID" default:"" options:"file"`

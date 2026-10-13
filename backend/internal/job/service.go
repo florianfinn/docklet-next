@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; functional cut: removed upstream analytics heartbeat.
+// Deviations: Local module namespace; functional cut: removed upstream analytics heartbeat and APNS mobile push.
 
 package job
 
@@ -676,8 +676,7 @@ func classifyOutcomeInternal(jobID string, outcome scheduler.Outcome, err error)
 
 func safeJobInternal(jobID string) bool {
 	switch jobID {
-	case "image-polling", "environment-health", "docker-client-refresh", "event-cleanup", "expired-sessions-cleanup", "activity-sweep", "upload-sessions-cleanup",
-		"git-clone-scratch-cleanup", "apns-outbox", "vulnerability-scan":
+	case "image-polling", "environment-health", "docker-client-refresh", "event-cleanup", "expired-sessions-cleanup", "activity-sweep", "upload-sessions-cleanup":
 		return true
 	}
 	return strings.HasPrefix(jobID, "environment-health:")

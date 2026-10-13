@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace
+// Deviations: Local module namespace; functional cut: removed APNS mobile push.
 
 package version
 
@@ -29,7 +29,6 @@ import (
 	"golang.org/x/mod/semver"
 
 	"github.com/florianfinn/docklet-next/backend/buildables"
-	"github.com/florianfinn/docklet-next/backend/internal/apns"
 	"github.com/florianfinn/docklet-next/backend/internal/config"
 	"github.com/florianfinn/docklet-next/backend/internal/docker"
 	"github.com/florianfinn/docklet-next/backend/internal/imageupdate"
@@ -335,7 +334,7 @@ func (s *VersionService) GetAppVersionInfo(ctx context.Context) *version.Info {
 		GoVersion:        config.GoVersion(),
 		NodeVersion:      config.NodeVersion,
 		SvelteKitVersion: config.SvelteKitVersion,
-		EnabledFeatures:  append(kit.Unique(kit.TrimNonEmpty(strings.Split(strings.ToLower(buildables.EnabledFeatures), ","))), apns.FeatureName),
+		EnabledFeatures:  kit.Unique(kit.TrimNonEmpty(strings.Split(strings.ToLower(buildables.EnabledFeatures), ","))),
 		BuildTime:        config.BuildTime,
 		IsSemverVersion:  isSemver,
 		UpdateAvailable:  false,

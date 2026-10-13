@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; functional cut: removed upstream analytics heartbeat.
+// Deviations: Local module namespace; functional cut: removed upstream analytics heartbeat and APNS mobile push.
 
 package bootstrap
 
@@ -22,7 +22,6 @@ import (
 	"go.uber.org/fx"
 
 	"github.com/florianfinn/docklet-next/backend/internal/activity"
-	"github.com/florianfinn/docklet-next/backend/internal/apns"
 	"github.com/florianfinn/docklet-next/backend/internal/backup"
 	"github.com/florianfinn/docklet-next/backend/internal/config"
 	"github.com/florianfinn/docklet-next/backend/internal/environment"
@@ -260,7 +259,6 @@ type registerJobsParams struct {
 	Volume      *volume.VolumeService
 	System      *system.SystemService
 	Admission   *runs.Admission
-	Apns        *apns.ApnsService
 
 	AutoUpdate             *scheduler.AutoUpdateJob
 	ImageUpdateWatcher     *scheduler.ImageUpdateWatcher
@@ -278,7 +276,6 @@ type registerJobsParams struct {
 	ActivitySweep          *scheduler.ActivitySweepJob
 	UploadSessionsCleanup  *scheduler.UploadSessionsCleanupJob
 	GitCloneCleanup        *scheduler.GitCloneCleanupJob
-	ApnsOutbox             *scheduler.ApnsOutboxJob
 }
 
 func registerJobs(params registerJobsParams) error {
@@ -299,7 +296,6 @@ func registerJobs(params registerJobsParams) error {
 		params.UploadSessionsCleanup,
 		params.GitCloneCleanup,
 		params.UpgradeLogCleanup,
-		params.ApnsOutbox,
 	} {
 		if err := params.Scheduler.RegisterJob(job); err != nil {
 			return err
@@ -341,8 +337,6 @@ func registerJobs(params registerJobsParams) error {
 		VulnerabilityRisk:  params.VulnerabilityRisk,
 		AutoPatch:          params.AutoPatch,
 		AutoHeal:           params.AutoHeal,
-		Apns:               params.Apns,
-		ApnsOutbox:         params.ApnsOutbox,
 	}); err != nil {
 		return err
 	}
@@ -421,8 +415,6 @@ type settingsSubscriptionsParams struct {
 	VulnerabilityRisk  *scheduler.VulnerabilityRiskJob
 	AutoPatch          *scheduler.AutoPatchJob
 	AutoHeal           *scheduler.AutoHealJob
-	Apns               *apns.ApnsService
-	ApnsOutbox         *scheduler.ApnsOutboxJob
 }
 
 type settingsChangeSubscriberInternal interface {
@@ -460,12 +452,6 @@ func setupSettingsSubscriptionsInternal(params settingsSubscriptionsParams) erro
 		if err := params.Scheduler.RescheduleJob(params.LifecycleCtx, params.AutoUpdate); err != nil {
 			slog.WarnContext(params.LifecycleCtx, "Failed to reschedule auto-update job", "error", err)
 		}
-	})
-
-	subscribe([]string{"apnsEnabled"}, func(updates []libarcane.SettingUpdate) {
-		params.Apns.ApplyEnabledUpdates(params.LifecycleCtx, updates, func() error {
-			return params.Scheduler.RescheduleJob(params.LifecycleCtx, params.ApnsOutbox)
-		})
 	})
 
 	rescheduleOn([]string{"autoUpdate", "autoUpdateInterval"}, params.AutoUpdate)

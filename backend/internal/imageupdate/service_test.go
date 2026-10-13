@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace
+// Deviations: Local module namespace; functional cut: removed APNS mobile push.
 
 package imageupdate
 
@@ -1845,7 +1845,7 @@ func TestImageUpdateService_SendBatchNotifications_FiltersByUpdateCheckEligibili
 		{ID: "shared-monitored", ImageID: "sha256:shared", Image: "test/shared:latest", Labels: map[string]string{labels.LabelUpdater: "false"}},
 		{ID: "ref-only-unmonitored", ImageID: "sha256:rebuilt", Image: "test/ref-only:2.0", Labels: map[string]string{imageref.UpdateCheckLabel: "false"}},
 	}
-	notif := notification.NewNotificationService(db, nil, nil, nil, nil)
+	notif := notification.NewNotificationService(db, nil, nil, nil)
 	svc := NewImageUpdateService(db, nil, nil, newImageUpdateNotificationDockerServiceInternal(t, containers), nil, notif, nil)
 
 	records := []ImageUpdateRecord{
@@ -1909,7 +1909,7 @@ func TestImageUpdateService_SendBatchNotifications_UnresolvedEligibilityLeavesUn
 	require.NoError(t, db.AutoMigrate(&notification.NotificationSettings{}))
 	calls := newImageUpdateGenericWebhookProviderInternal(t, db)
 
-	notif := notification.NewNotificationService(db, nil, nil, nil, nil)
+	notif := notification.NewNotificationService(db, nil, nil, nil)
 	svc := NewImageUpdateService(db, nil, nil, nil, nil, notif, nil)
 	require.NoError(t, db.Create(&ImageUpdateRecord{ID: "sha256:img", Repository: "test/repo", Tag: "latest", HasUpdate: true}).Error)
 
@@ -1943,7 +1943,7 @@ func TestImageUpdateService_SendBatchNotifications_DetachesCanceledContext(t *te
 		},
 	}).Error)
 
-	notif := notification.NewNotificationService(db, nil, nil, nil, nil)
+	notif := notification.NewNotificationService(db, nil, nil, nil)
 	svc := NewImageUpdateService(db, nil, nil, newImageUpdateNotificationDockerServiceInternal(t, nil), nil, notif, nil)
 
 	rec := ImageUpdateRecord{
@@ -1982,7 +1982,7 @@ func TestImageUpdateService_SendBatchNotifications_NoEligibleProviders_LeavesUnn
 	db := setupImageUpdateTestDB(t)
 	require.NoError(t, db.AutoMigrate(&notification.NotificationSettings{}))
 
-	notif := notification.NewNotificationService(db, nil, nil, nil, nil)
+	notif := notification.NewNotificationService(db, nil, nil, nil)
 	svc := NewImageUpdateService(db, nil, nil, newImageUpdateNotificationDockerServiceInternal(t, nil), nil, notif, nil)
 
 	rec := ImageUpdateRecord{
@@ -2034,7 +2034,7 @@ func TestImageUpdateService_SendBatchNotifications_PartialFailureStillMarksNotif
 		}).Error)
 	}
 
-	notif := notification.NewNotificationService(db, nil, nil, nil, nil)
+	notif := notification.NewNotificationService(db, nil, nil, nil)
 	svc := NewImageUpdateService(db, nil, nil, newImageUpdateNotificationDockerServiceInternal(t, nil), nil, notif, nil)
 
 	rec := ImageUpdateRecord{

@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace
+// Deviations: Local module namespace; functional cut: removed APNS mobile push.
 
 package notification
 
@@ -28,7 +28,6 @@ import (
 	"go.getarcane.app/sys/crypto"
 	"golang.org/x/sync/errgroup"
 
-	"github.com/florianfinn/docklet-next/backend/internal/apns"
 	"github.com/florianfinn/docklet-next/backend/internal/common"
 	"github.com/florianfinn/docklet-next/backend/internal/config"
 	"github.com/florianfinn/docklet-next/backend/internal/database"
@@ -87,7 +86,6 @@ type NotificationService struct {
 	config         *config.Config
 	environmentSvc *environment.EnvironmentService
 	eventSvc       *event.EventService
-	apnsSvc        *apns.ApnsService
 	templates      *templates.Service
 	httpClient     *http.Client
 }
@@ -110,13 +108,12 @@ func (s *NotificationService) ResolveNotificationTarget(ctx context.Context, env
 	return s.resolveNotificationTargetInternal(ctx, environmentID)
 }
 
-func NewNotificationService(db *database.DB, cfg *config.Config, environmentSvc *environment.EnvironmentService, eventSvc *event.EventService, apnsSvc *apns.ApnsService) *NotificationService {
+func NewNotificationService(db *database.DB, cfg *config.Config, environmentSvc *environment.EnvironmentService, eventSvc *event.EventService) *NotificationService {
 	return &NotificationService{
 		db:             db,
 		config:         cfg,
 		environmentSvc: environmentSvc,
 		eventSvc:       eventSvc,
-		apnsSvc:        apnsSvc,
 		templates:      templates.NewService(cfg.GetAppURL),
 		httpClient:     &http.Client{Timeout: 15 * time.Second},
 	}
@@ -671,12 +668,6 @@ func (s *NotificationService) notifyEnabledProvidersInternal(
 		}
 		status, errMsg := collectNotificationSendResultInternal(&errs, setting.Provider, sendErrs[i])
 		s.logNotificationInternal(ctx, target.EnvironmentID, setting.Provider, logRef, status, errMsg, metadata)
-	}
-
-	if s.apnsSvc != nil {
-		if enqueueErr := s.apnsSvc.Enqueue(ctx, target.EnvironmentID, target.EnvironmentName, eventType, logRef, metadata); enqueueErr != nil {
-			slog.WarnContext(ctx, "Failed to enqueue mobile push notification", "error", enqueueErr)
-		}
 	}
 
 	if len(errs) > 0 {

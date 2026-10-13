@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; functional cut: removed upstream analytics heartbeat.
+// Deviations: Local module namespace; functional cut: removed upstream analytics heartbeat and APNS mobile push.
 
 package schema
 
@@ -209,8 +209,6 @@ var expectedEnvConfigVars = []string{
 	"ALLOW_CLI_MFA_RESET",
 	"ALLOW_CLI_PASSWORD_RESET",
 	"ALLOW_DOWNGRADE",
-	"APNS_KEY_ALGORITHM",
-	"APNS_RELAY_URL",
 	"APP_URL",
 	"ARCANE_BACKUP_VOLUME_NAME",
 	"AUTO_LOGIN_PASSWORD",
@@ -281,7 +279,6 @@ var expectedEnvConfigVars = []string{
 var expectedSettingOverrideKeys = []string{
 	"activityHistoryMaxEntries",
 	"activityHistoryRetentionDays",
-	"apnsEnabled",
 	"authLocalEnabled",
 	"authPasswordPolicy",
 	"authSessionTimeout",

@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; functional cut: removed upstream analytics heartbeat.
+// Deviations: Local module namespace; functional cut: removed upstream analytics heartbeat and APNS mobile push.
 
 // Package di owns the backend's dependency-injection graph.
 package di
@@ -15,7 +15,6 @@ import (
 
 	"github.com/florianfinn/docklet-next/backend/internal/activity"
 	"github.com/florianfinn/docklet-next/backend/internal/apikey"
-	"github.com/florianfinn/docklet-next/backend/internal/apns"
 	"github.com/florianfinn/docklet-next/backend/internal/appimages"
 	"github.com/florianfinn/docklet-next/backend/internal/auth"
 	"github.com/florianfinn/docklet-next/backend/internal/backup"
@@ -85,7 +84,6 @@ var ServiceOptions = fx.Options(
 		session.NewSessionService,
 		passkey.NewPasskeyService,
 		environment.NewEnvironmentService,
-		apns.NewApnsService,
 		notification.NewNotificationService,
 		vulnerability.NewVulnerabilityService,
 		imageupdate.NewImageUpdateService,
@@ -147,7 +145,6 @@ var ServiceOptions = fx.Options(
 		volume.New,
 		updater.New,
 		webhook.New,
-		apns.New,
 		notification.New,
 		vulnerability.New,
 		project.New,
@@ -185,6 +182,5 @@ var JobOptions = fx.Options(
 		scheduler.NewUploadSessionsCleanupJob,
 		scheduler.NewGitCloneCleanupJob,
 		fx.Annotate(scheduler.NewUpgradeLogCleanupJob, fx.ResultTags(`name:"upgrade-log-cleanup"`)),
-		scheduler.NewApnsOutboxJob,
 	),
 )
