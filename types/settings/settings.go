@@ -406,11 +406,6 @@ type Update struct {
 	// Required: false
 	TrivyScanTimeout *string `json:"trivyScanTimeout,omitzero"`
 
-	// GitOperationTimeout is the timeout for Git clone/fetch operations in seconds.
-	//
-	// Required: false
-	GitOperationTimeout *string `json:"gitOperationTimeout,omitzero"`
-
 	// HttpClientTimeout is the default timeout for HTTP requests in seconds.
 	//
 	// Required: false

@@ -3,25 +3,14 @@ Source: getarcaneapp/arcane/cli/README.md
 Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 Retrieved: 2026-10-13
 License: BSD-3-Clause
-Deviations: Local module namespace
+Deviations: Local module namespace; functional cut: local-account login replaces OIDC device-code login; removed upstream branding and missing logo.
 -->
 
-<div align="center">
-
-  <img src="../.github/assets/img/PNG-3.png" alt="Arcane Logo" width="500" />
-  <p>The Official Command Line Client</p>
-
-<a href="https://pkg.go.dev/github.com/florianfinn/docklet-next/cli"><img src="https://pkg.go.dev/badge/github.com/florianfinn/docklet-next/cli.svg" alt="Go Reference"></a>
-<a href="https://goreportcard.com/report/github.com/florianfinn/docklet-next/cli"><img src="https://goreportcard.com/badge/github.com/florianfinn/docklet-next/cli" alt="Go Report Card"></a>
-<a href="https://github.com/getarcaneapp/cli/blob/main/LICENSE"><img src="https://img.shields.io/badge/license-BSD--3--Clause-blue.svg" alt="License"></a>
-
-<br />
-
-</div>
+# Command line client
 
 ## Install
 
-This module lives inside the main Arcane repo. To build the CLI locally:
+The CLI module lives in this repository. To install it:
 
 - `go install github.com/florianfinn/docklet-next/cli@latest`
 
@@ -40,15 +29,15 @@ Create a starter config file (all supported keys):
 - `arcane config init`
 - `arcane config backup` (moves current config to `~/.config/arcanecli.yml.bak`)
 
-Set the Arcane server URL:
+Set the hub URL:
 
 - `arcane config set server-url http://localhost:3552`
 
 ### Authenticate (choose one)
 
-#### Option A: Device code (OIDC must be enabled for this method, as it uses your external provider.)
+#### Option A: Local account
 
-- `arcane auth login`
+- `arcane auth login --username <name>` (prompts for the password)
 
 #### Option B: API key
 

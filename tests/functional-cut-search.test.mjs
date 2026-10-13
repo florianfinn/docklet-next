@@ -32,3 +32,12 @@ test("removed feature identifiers have expected-empty source and configuration s
     assert.deepEqual(search(query.pattern, manifest.environment.scope), query.expectedMatches, query.feature);
   }
 });
+
+test("checked-in OpenAPI excludes removed settings and webhook enum values", () => {
+  const document = JSON.parse(readFileSync(new URL("../api/openapi.json", import.meta.url), "utf8"));
+  const schemas = document.components.schemas;
+  assert.equal(Object.hasOwn(schemas.SettingsUpdate.properties, "gitOperationTimeout"), false);
+  assert.deepEqual(schemas.WebhookCreateInput.properties.actionType.enum,
+    ["update", "start", "stop", "restart", "redeploy", "up", "down", "run"]);
+  assert.equal(/gitOperationTimeout|GIT_OPERATION_TIMEOUT|GIT_WORK_DIR/.test(JSON.stringify(document)), false);
+});

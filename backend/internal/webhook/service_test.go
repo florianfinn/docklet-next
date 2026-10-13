@@ -304,6 +304,8 @@ func TestCreateWebhook_InvalidActionTypeRejected(t *testing.T) {
 
 	_, _, err := svc.CreateWebhook(ctx, "bad-action", WebhookTargetTypeContainer, WebhookActionTypeDown, "container-id", "env-1", user.Actor{})
 	assert.ErrorIs(t, err, ErrWebhookInvalidAction)
+	_, _, err = svc.CreateWebhook(ctx, "removed-action", WebhookTargetTypeProject, "sync", "project-id", "env-1", user.Actor{})
+	assert.ErrorIs(t, err, ErrWebhookInvalidAction)
 }
 
 func TestCreateWebhook_EmptyActionTypeDefaultsPerTarget(t *testing.T) {

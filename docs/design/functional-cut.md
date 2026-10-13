@@ -2,8 +2,8 @@
 
 The binding scope is [core adoption](core-adoption.md). Features explicitly marked
 for removal there leave the API, runtime, exclusive jobs, settings and code in M1.
-The PostgreSQL migration baseline is owned by #8, so this cut removes references
-to obsolete models without rewriting the imported migration sequence. The R5
+The PostgreSQL migration baseline was delivered in #8 after this cut, so the
+cut removed obsolete model references before baseline generation. The R5
 items below were assessed against the approved product scope and the imported
 implementation. A retained item remains subject to later feature acceptance;
 retention here does not approve its current interface or security model.
@@ -60,26 +60,29 @@ paths.
 
 ## Database ownership
 
-The PostgreSQL migrations imported with Arcane still contain schema operations
-for some removed features. Issue #8 owns rebuilding a fresh migration baseline
-and must omit Swarm, GitOps, Git repositories, templates, central variables,
-S3 destinations, build workshop records, OIDC, passkeys, federated credentials,
-APNS and SQLite artefacts. No earlier Arcane database is imported.
+The [fresh PostgreSQL baseline](database-baseline.md) replaces the imported
+Arcane migration chain. Issue #8 generated it from retained models and schema
+integrity properties; it omits Swarm, GitOps, Git repositories, templates,
+central variables, S3 destinations, build workshop records, OIDC, passkeys,
+federated credentials, APNS and SQLite artefacts. No earlier Arcane database
+is imported.
 
-## Francis-Speicher
+## Francis storage
 
-Francis v0.1.0 bindet seinen SQLite-Provider bereits durch den Import von
-`host/local` in beide Binärdateien ein. Docklet Next führt deshalb die
-benötigten Francis-Pakete lokal unter `third_party/francis/` mit derselben
-Modulkennung und dem Quellstand
-`23cd46831a543a73eec05ad034afd46245225876`. Die Kopie enthält
-PostgreSQL- und In-Memory-Provider; die SQLite-Provider und ihre Migrationen
-entfallen. `scripts/provenance.json` belegt Herkunft und Abweichung je Datei.
-Die MIT-Lizenz und die Apache-2.0-Hinweise für übernommene Dapr-Teile bleiben
-erhalten.
+Francis v0.1.0 links its SQLite provider into both binaries through the
+`host/local` import. Docklet Next therefore keeps the required Francis packages
+under `third_party/francis/` with the same module identity at revision
+`23cd46831a543a73eec05ad034afd46245225876`. The local subset has
+PostgreSQL and in-memory providers; SQLite providers and migrations are removed.
+`scripts/provenance.json` records each file's source and deviation. The MIT
+licence and the Apache-2.0 notices for adopted Dapr code remain intact.
 
-Der Standard-Testlauf benötigt weiterhin keinen Datenbankdienst.
-Persistenzprüfungen gegen PostgreSQL verwenden eine explizit konfigurierte
-Integrationsumgebung. Die Wiederherstellung eines vollständigen Systems meldet
-bis zu einer PostgreSQL-Implementierung ihre fehlende Verfügbarkeit; lokale
-Volume-Backups bleiben nutzbar.
+The default test suite needs no database service. PostgreSQL persistence tests
+use an explicitly configured integration environment. PostgreSQL system backup
+creation, listing, recovery and scheduled policy runs currently return
+unavailable; [issue #32](https://github.com/florianfinn/docklet-next/issues/32)
+owns implementation of this gap. Local volume backups remain available.
+
+The Docker info response embeds the Docker SDK's `system.Info`, including its
+Swarm status and nested OpenAPI schemas. This is daemon information passed
+through by the retained Docker info route; no Swarm management operation remains.
