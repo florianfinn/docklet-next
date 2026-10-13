@@ -1,13 +1,16 @@
 import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, chmodSync, rmSync } from "node:fs";
 import { resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
+import { tmpdir } from "node:os";
 import { spawnSync } from "node:child_process";
 import assert from "node:assert/strict";
 
 export const ROOT = fileURLToPath(new URL("../", import.meta.url));
-const env = { ...process.env };
-for (const key of Object.keys(env))
-  if (key.startsWith("GIT_") || key.startsWith("GITHUB_") || key === "CI" || key === "CHECK_BASE_SHA" || key === "NODE_TEST_CONTEXT") delete env[key];
+export function cleanEnvironment(input = process.env) {
+  return Object.fromEntries(Object.entries(input).filter(([key]) =>
+    !/^(?:GIT_|GITHUB_|RUNNER_|ACTIONS_|CI(?:_|$)|NODE_|NPM_|npm_|PNPM_|CHECK_BASE_SHA$)/.test(key)));
+}
+const env = cleanEnvironment();
 export function invoke(root, program, args, options = {}) {
   return spawnSync(program, args, { cwd: root, encoding: "utf8", env, ...options });
 }
@@ -26,8 +29,7 @@ export function write(root, path, content) {
 export const git = (root, ...args) => ok(invoke(root, "git", args));
 export const node = (root, script, ...args) => invoke(root, process.execPath, [script, ...args]);
 export function scratch(t) {
-  mkdirSync(resolve(ROOT, ".scratch"), { recursive: true });
-  const root = mkdtempSync(resolve(ROOT, ".scratch/case-"));
+  const root = mkdtempSync(resolve(tmpdir(), "docklet-case-"));
   t.after(() => rmSync(root, { recursive: true, force: true }));
   const paths = git(ROOT, "ls-files", "-z").split("\0").filter(Boolean);
   for (const path of paths) {

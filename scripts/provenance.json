@@ -25,7 +25,8 @@
     ".githooks/pre-push",
     ".github/workflows/checks.yml",
     ".github/workflows/pr-text.yml",
-    ".github/workflows/review-status.yml"
+    ".github/workflows/review-status.yml",
+    "scripts/publication-assignments.mjs"
   ],
   "sidecars": {
     ".claude/settings.json": {
@@ -36,5 +37,10 @@
       "deviations": "None; byte-identical JSON without comment support.",
       "sha256": "36be273fcad892f73c6caa83808cf1f98cadbcb1b419fbee4b83ed4eea0fabff"
     }
-  }
+  },
+  "adoptedPrefixes": [
+    "backend/",
+    "types/",
+    "third_party/arcane/"
+  ]
 }
