@@ -102,7 +102,7 @@ interface HostCardProps {
   stacks: number;
   containers: number;
   allIds: string[];
-  onFiles: (host: Host) => void;
+  onFiles?: (host: Host) => void;
 }
 
 /** One host with connection, directories, file IDs and actions; filter state stays visible. */
@@ -197,10 +197,10 @@ export function HostCard({ host, system, stacks, containers, allIds, onFiles }: 
             {t("card.check")}
           </BusyButton>
         )}
-        <Button size="sm" variant="outline" onClick={() => onFiles(host)}>
+        {onFiles && <Button size="sm" variant="outline" onClick={() => onFiles(host)}>
           <FileArchive data-icon="inline-start" />
           {t("card.files")}
-        </Button>
+        </Button>}
         <Button size="sm" variant="ghost" onClick={() => setPreference("hostSelection", allIds.length === 1 ? [] : [host.id])}>
           <Eye data-icon="inline-start" />
           {t("onlyThis")}

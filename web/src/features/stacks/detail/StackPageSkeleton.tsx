@@ -4,10 +4,10 @@ import { Skeleton } from "@/shared/ui/skeleton";
 export function StackPageSkeleton() {
   return (
     <div aria-busy="true" className="flex flex-col">
-      <div className="mb-5 flex items-start gap-4">
+      <div className="mb-5 flex flex-wrap items-start gap-4">
         <Skeleton className="size-11 rounded-xl" />
-        <div className="flex flex-1 flex-col gap-2">
-          <div className="flex gap-2">
+        <div className="flex min-w-0 flex-1 flex-col gap-2">
+          <div className="flex flex-wrap gap-2">
             <Skeleton className="h-8 w-40" />
             <Skeleton className="h-6 w-24 rounded-lg" />
             <Skeleton className="h-6 w-20 rounded-lg" />

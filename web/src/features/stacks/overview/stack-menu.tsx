@@ -37,6 +37,6 @@ export function useStackMenu(stack: Stack, hidden: boolean): MenuGroups {
       { id: "check", label: t("check"), icon: <ScanSearch />, disabled: busy, onSelect: () => void cmd.checkUpdates(stack.id) },
     ],
     [hide(stack.id, stack.name, hidden)],
-    [{ id: "fail-demo", label: t("failDemo"), icon: <FlaskConical />, disabled: busy, muted: true, onSelect: () => void cmd.run(stack.id, "redeploy", "pull") }],
+    ...(import.meta.env.DEV ? [[{ id: "fail-demo", label: t("failDemo"), icon: <FlaskConical />, disabled: busy, muted: true, onSelect: () => void cmd.run(stack.id, "redeploy", "pull") }]] : []),
   ];
 }

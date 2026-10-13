@@ -2,7 +2,7 @@
 
 export const enImages = {
   title: "Images",
-  description: "{scope} · Images per host with usage by stacks and containers. Pulling, removing and cleanup are simulated.",
+  description: (import.meta.env.DEV ? "{scope} · Images per host with usage by stacks and containers. Pulling, removing and cleanup are simulated." : "{scope} · Images per host with usage by stacks and containers."),
   pull: "Pull image",
   prune: "Clean up",
   strip: { images: "Images", size: "Used space", unused: "Unused", dangling: "Dangling", updates: "With update" },
@@ -64,7 +64,7 @@ export const enImages = {
   },
   pullDialog: {
     title: "Pull image",
-    description: "Downloads an image to a connected host (simulation: no registry is contacted). Containers only use a new image after a deploy or recreate.",
+    description: (import.meta.env.DEV ? "Downloads an image to a connected host (simulation: no registry is contacted). Containers only use a new image after a deploy or recreate." : ""),
     host: "Host",
     hostOffline: "{name} (disconnected)",
     reference: "Image reference",
@@ -72,7 +72,7 @@ export const enImages = {
     referenceInvalid: "Not a valid reference (lowercase letters, optional registry and :tag, no digest).",
     known: "Already present on this host – pulling checks whether it is up to date.",
     suggestions: "Suggestions",
-    fail: "With registry error (demo)",
+    fail: (import.meta.env.DEV ? "With registry error (demo)" : ""),
     submit: "Pull",
     cancel: "Cancel",
   },
@@ -93,7 +93,7 @@ export const enImages = {
   },
   removeDialog: {
     title: "Remove {name}?",
-    body: "The image is deleted on {host}. A later deploy downloads it again if needed (demo: in memory only).",
+    body: (import.meta.env.DEV ? "The image is deleted on {host}. A later deploy downloads it again if needed (demo: in memory only)." : ""),
     confirm: "Remove image",
   },
   toast: { removed: "{name} removed", nothing: "No images to clean up" },

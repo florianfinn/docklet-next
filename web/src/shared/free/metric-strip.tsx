@@ -19,7 +19,7 @@ export function MetricStrip({ items, className }: StatStripProps) {
             "border-border/60 max-md:odd:border-r max-md:[&:nth-child(n+3)]:border-t md:not-first:border-l",
           )}
         >
-          <dt className="flex items-center gap-1.5 text-[13px] text-muted-foreground [&_svg]:size-3.5 [&_svg]:opacity-80">
+          <dt className="flex min-w-0 flex-wrap items-center justify-center gap-1.5 text-[13px] text-muted-foreground [&_svg]:size-3.5 [&_svg]:opacity-80">
             {item.icon}
             <span className="truncate">{item.label}</span>
           </dt>

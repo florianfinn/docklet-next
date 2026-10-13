@@ -46,12 +46,12 @@ export const deCommon: typeof enCommon = {
   },
   query: {
     errorTitle: "Daten konnten nicht geladen werden",
-    errorHint: "Im Design-Labor ist eine Fehlersimulation aktiv oder die Quelle antwortet nicht.",
+    errorHint: (import.meta.env.DEV ? "Im Design-Labor ist eine Fehlersimulation aktiv oder die Quelle antwortet nicht." : "Die Quelle ist nicht erreichbar."),
     emptyTitle: "Keine Einträge",
   },
   simulation: {
-    badge: "Simulation",
-    hint: "Simulierte Live-Werte – keine Messung an einem echten Host",
+    badge: (import.meta.env.DEV ? "Simulation" : ""),
+    hint: (import.meta.env.DEV ? "Simulierte Live-Werte – keine Messung an einem echten Host" : ""),
     paused: "Pausiert",
   },
   host: {
@@ -221,12 +221,12 @@ export const deCommon: typeof enCommon = {
     ram: "RAM",
     off: "aus",
     unavailable: "nicht verfügbar – Container gestoppt oder Host getrennt",
-    cpuValue: "{value} % CPU (simuliert)",
-    ramValue: "{used} von {limit} ({percent} % des Limits, simuliert)",
+    cpuValue: (import.meta.env.DEV ? "{value} % CPU (simuliert)" : ""),
+    ramValue: (import.meta.env.DEV ? "{used} von {limit} ({percent} % des Limits, simuliert)" : ""),
   },
   demo: {
-    inMemory: "Demo im Arbeitsspeicher – nichts wird auf einem Host ausgeführt; Neuladen setzt zurück.",
-    saved: "Gespeichert (Demo)",
+    inMemory: (import.meta.env.DEV ? "Demo im Arbeitsspeicher – nichts wird auf einem Host ausgeführt; Neuladen setzt zurück." : ""),
+    saved: (import.meta.env.DEV ? "Gespeichert (Demo)" : ""),
     copied: "Kopiert",
     copy: "Kopieren",
     download: "Herunterladen",

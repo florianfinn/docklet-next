@@ -2,7 +2,7 @@
 
 export const enSettings = {
   title: "Hub settings",
-  description: "Apply to the whole hub, regardless of the host filter. Saving affects this tab's demo data.",
+  description: (import.meta.env.DEV ? "Apply to the whole hub, regardless of the host filter. Saving affects this tab's demo data." : "Applies to the whole hub, regardless of the host filter."),
   navLabel: "Hub settings sections",
   groups: { hub: "Hub", operations: "Operations", system: "System" },
   sections: {
@@ -66,7 +66,7 @@ export const enSettings = {
     stacksMode: "Default stacks view",
     containersMode: "Default containers view",
     modes: { compact: "Compact", advanced: "Advanced" },
-    labHint: "The design lab (prototype only) edits the same palette immediately and without saving; a change there replaces the corresponding field of this draft.",
+    labHint: (import.meta.env.DEV ? "The design lab (prototype only) edits the same palette immediately and without saving; a change there replaces the corresponding field of this draft." : "Palette changes take effect after saving."),
   },
   auth: {
     mode: "Sign-in mode",
@@ -80,7 +80,7 @@ export const enSettings = {
     username: "Username",
     password: "New password",
     passwordConfirm: "Repeat password",
-    passwordHint: "At least 12 characters. Not saved in the prototype.",
+    passwordHint: (import.meta.env.DEV ? "At least 12 characters. Not saved in the prototype." : "At least 12 characters."),
     passwordSet: "A password is set. Leave empty to keep it.",
     passwordMismatch: "Passwords do not match",
     passwordShort: "At least 12 characters",
@@ -178,7 +178,7 @@ export const enSettings = {
     username: "Username",
     password: "Password",
     passwordKeep: "Saved – leave empty to keep it",
-    passwordDemo: "Not saved in the prototype.",
+    passwordDemo: (import.meta.env.DEV ? "Not saved in the prototype." : "Stored passwords are not shown."),
     options: "Mount options",
     test: "Test connection",
     testing: "Testing …",
@@ -193,7 +193,7 @@ export const enSettings = {
     retention: "Default retention for new plans",
     retentionScope: "Applies as the default for newly created backup plans; existing plans keep their own retention.",
     dialogDescription: "Local directory, existing host mount, SMB share or NFS export. Credentials stay in the hub; the test checks reachability and write access.",
-    permissionsNote: "The exact permission and mount implementation is still being evaluated; the prototype simulates tests.",
+    permissionsNote: (import.meta.env.DEV ? "The exact permission and mount implementation is still being evaluated; the prototype simulates tests." : ""),
     targetInUse: "At least one backup plan uses a removed target. Switch the plans over first.",
   },
   notifications: {
@@ -233,7 +233,7 @@ export const enSettings = {
     },
     secret: "Token / password",
     secretKeep: "Saved – leave empty to keep it",
-    secretDemo: "Not saved in the prototype.",
+    secretDemo: (import.meta.env.DEV ? "Not saved in the prototype." : "Stored secrets are not shown."),
     events: "Events",
     eventNames: {
       updates: "Updates available",
@@ -313,7 +313,7 @@ export const enSettings = {
     sessionLocal: "Local session as “{user}”.",
     sessionProxy: "Signed in via the reverse proxy (header {header}). The proxy manages profile and password.",
     password: "Change password",
-    passwordChanged: "Password changed (demo – nothing saved)",
+    passwordChanged: (import.meta.env.DEV ? "Password changed (demo – nothing saved)" : ""),
     passwordOnlyLocal: "Only in “Local admin” mode.",
     appearance: "Appearance",
     appearanceLink: "Customize appearance",

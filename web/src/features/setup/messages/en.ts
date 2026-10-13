@@ -3,7 +3,7 @@
 export const enSetup = {
   badge: "First-run setup · Preview",
   title: "Set up Docklet",
-  lead: "A new hub asks for these details once. In the prototype you start the flow from the design lab; the dashboard remains available unchanged.",
+  lead: (import.meta.env.DEV ? "A new hub asks for these details once. In the prototype you start the flow from the design lab; the dashboard remains available unchanged." : "A new hub asks for these details once."),
   exit: "Leave preview",
   railLabel: "First-run setup steps",
   steps: {
@@ -27,7 +27,7 @@ export const enSetup = {
   discovery: {
     title: "Internal address from hub discovery",
     lead: "The hub inspects its container and its Docker networks on the server. The browser itself cannot see Docker addresses.",
-    simulated: "Simulated",
+    simulated: (import.meta.env.DEV ? "Simulated" : ""),
     loading: "Hub is discovering its networks …",
     failed: "Discovery not possible – please enter the address yourself.",
     retry: "Discover again",
@@ -85,7 +85,7 @@ export const enSetup = {
   },
   done: {
     title: "{name} is set up",
-    body: "The details are now in the hub settings of this demo tab. Passwords were discarded, not saved.",
+    body: (import.meta.env.DEV ? "The details are now in the hub settings of this demo tab. Passwords were discarded, not saved." : "The details are available in hub settings. Passwords were discarded."),
     host: "Connect first host",
     dashboard: "Go to dashboard",
     settings: "View hub settings",

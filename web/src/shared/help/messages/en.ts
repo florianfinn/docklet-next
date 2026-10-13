@@ -165,7 +165,7 @@ export const enHelp = {
       test: {
         title: "Test connection",
         short: "Checks reachability and write access of the target.",
-        full: "The test writes a trial file to the target and reports free space or the error. In the prototype the result is simulated.",
+        full: (import.meta.env.DEV ? "The test writes a trial file to the target and reports free space or the error. In the prototype the result is simulated." : "The test writes a trial file to the target and reports free space or an error."),
         impact: "No backups are created.",
       },
     },
@@ -179,13 +179,13 @@ export const enHelp = {
       secret: {
         title: "Token or password",
         short: "The channel's credentials; they stay in the hub.",
-        full: "Never shown again after saving. Leaving it empty keeps the stored value. In the prototype nothing is saved.",
+        full: (import.meta.env.DEV ? "Never shown again after saving. Leaving it empty keeps the stored value. In the prototype nothing is saved." : "The stored value is never shown again after saving. Leaving this empty keeps the stored value."),
         impact: "Without valid credentials sending fails.",
       },
       test: {
         title: "Send test",
         short: "Sends a test message through this channel.",
-        full: "Checks target and credentials with a short message. In the prototype sending is only simulated.",
+        full: (import.meta.env.DEV ? "Checks target and credentials with a short message. In the prototype sending is only simulated." : "Checks the target and credentials with a short message."),
         impact: "Does not change any settings.",
       },
     },
@@ -200,7 +200,7 @@ export const enHelp = {
         title: "Scan schedule",
         short: "Manual, daily at a set time or weekly on a weekday.",
         full: "“Manual” scans only on demand. Daily needs a time, weekly a weekday and a time, optionally a first date. The time applies in the hub time zone.",
-        impact: "The prototype does not schedule real runs; it only shows the next date.",
+        impact: (import.meta.env.DEV ? "The prototype does not schedule real runs; it only shows the next date." : "Shows the next scheduled run."),
       },
     },
     settingsHeal: {
@@ -315,7 +315,7 @@ export const enHelp = {
       importSource: {
         title: "One-time import",
         short: "Takes over values once from GitHub or Docker Hub.",
-        full: "Reads the image and example values from a source. No permanent Git connection is created. In the prototype the request is simulated.",
+        full: (import.meta.env.DEV ? "Reads the image and example values from a source. No permanent Git connection is created. In the prototype the request is simulated." : "Reads the image and example values from a source. No permanent Git connection is created."),
         impact: "Later changes to the source are not picked up.",
       },
     },
@@ -559,7 +559,7 @@ export const enHelp = {
       scan: {
         title: "Scan now",
         short: "Immediately starts a scan of all images on the hosts.",
-        full: "Runs independently of the schedule. A second click during a run does not start another scan. In the prototype the scan is simulated.",
+        full: (import.meta.env.DEV ? "Runs independently of the schedule. A second click during a run does not start another scan. In the prototype the scan is simulated." : "Runs independently of the schedule. A second click during a run does not start another scan."),
         impact: "Results replace the findings of the last scan.",
       },
     },

@@ -162,7 +162,7 @@ export default function BackupsPage() {
             </p>
           )}
         </Card>
-        <Card className="gap-3 py-4">
+        <Card className="min-w-0 gap-3 py-4">
           <CardHeader className="px-4">
             <CardTitle className="flex items-center gap-2">
               <ServerCog className="size-4 text-muted-foreground" aria-hidden />

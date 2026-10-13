@@ -173,7 +173,7 @@ function OverseerrBody() {
 }
 
 /** Body of a service widget by connection state; content is synthetic. */
-export function ServiceWidgetBody({ kind, config, onConfigure }: { kind: ServiceKind; config: ServiceConfig; onConfigure: () => void }) {
+export function ServiceWidgetBody({ kind, config, onConfigure }: { kind: ServiceKind; config: ServiceConfig; onConfigure?: () => void }) {
   const t = useTranslations("dashboard.services");
   const connecting = useStore(connectingStore, (s) => s.includes(kind));
   if (connecting) return <Rows />;
@@ -184,10 +184,10 @@ export function ServiceWidgetBody({ kind, config, onConfigure }: { kind: Service
           <Plug className="size-6 text-muted-foreground" aria-hidden />
           <p className="text-sm font-medium">{t("missing")}</p>
           <p className="text-xs text-muted-foreground">{t("missingBody")}</p>
-          <Button size="sm" onClick={onConfigure}>
+          {onConfigure && <Button size="sm" onClick={onConfigure}>
             <Settings2 data-icon="inline-start" />
             {t("configure")}
-          </Button>
+          </Button>}
         </div>
       </div>
     );
@@ -198,10 +198,10 @@ export function ServiceWidgetBody({ kind, config, onConfigure }: { kind: Service
           <TriangleAlert className="size-6 text-destructive" aria-hidden />
           <p className="text-sm font-medium">{t("error")}</p>
           <p className="text-xs text-muted-foreground">{t("errorBody", { address: config.address })}</p>
-          <Button size="sm" variant="outline" onClick={onConfigure}>
+          {onConfigure && <Button size="sm" variant="outline" onClick={onConfigure}>
             <Settings2 data-icon="inline-start" />
             {t("configure")}
-          </Button>
+          </Button>}
         </div>
       </div>
     );

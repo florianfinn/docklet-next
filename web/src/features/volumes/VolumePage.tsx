@@ -48,7 +48,7 @@ function OverviewTab({ volume: v, host }: { volume: VolumeDetail; host: Host | u
   ];
   return (
     <div className="grid gap-4 lg:grid-cols-3">
-      <Card className="gap-3 py-4 lg:col-span-2">
+      <Card className="min-w-0 gap-3 py-4 lg:col-span-2">
         <CardHeader className="px-4">
           <CardTitle>{t("consumers")}</CardTitle>
         </CardHeader>
@@ -99,7 +99,7 @@ function OverviewTab({ volume: v, host }: { volume: VolumeDetail; host: Host | u
           )}
         </CardContent>
       </Card>
-      <Card className="gap-3 py-4">
+      <Card className="min-w-0 gap-3 py-4">
         <CardHeader className="px-4">
           <CardTitle>{t("usage")}</CardTitle>
         </CardHeader>
@@ -109,7 +109,7 @@ function OverviewTab({ volume: v, host }: { volume: VolumeDetail; host: Host | u
           <p className="text-[11px] text-muted-foreground">{t("usageSub")}</p>
         </CardContent>
       </Card>
-      <Card className="gap-3 py-4 lg:col-span-3">
+      <Card className="min-w-0 gap-3 py-4 lg:col-span-3">
         <CardHeader className="px-4">
           <CardTitle className="flex items-center gap-2">
             <Info className="size-4 text-muted-foreground" aria-hidden />
@@ -128,7 +128,7 @@ function OverviewTab({ volume: v, host }: { volume: VolumeDetail; host: Host | u
             <dd className="flex flex-wrap gap-1 font-mono text-[11.5px]">
               {Object.entries(v.labels).length
                 ? Object.entries(v.labels).map(([k, val]) => (
-                    <span key={k} className="rounded-md border bg-muted/30 px-1.5 py-0.5">
+                    <span key={k} className="max-w-full break-all rounded-md border bg-muted/30 px-1.5 py-0.5">
                       {k}={val}
                     </span>
                   ))

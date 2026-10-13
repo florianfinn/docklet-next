@@ -108,9 +108,9 @@ export function RecreateDialog({ container, open, onOpenChange }: { container: C
           <Button variant="ghost" onClick={() => onOpenChange(false)}>
             {tc("cancel")}
           </Button>
-          <Button variant="outline" onClick={() => submit(true)}>
+          {import.meta.env.DEV && <Button variant="outline" onClick={() => submit(true)}>
             <FlaskConical data-icon="inline-start" /> {t("failDemo")}
-          </Button>
+          </Button>}
           <HelpTarget topic="container.recreate">
             <Button disabled={!image.trim()} onClick={() => submit()}>
               {t("submit")}

@@ -17,7 +17,7 @@ interface CatalogProps {
   onOpenChange: (o: boolean) => void;
   animate: boolean;
   meta: Record<string, { icon: ReactNode; tone: Tone }>;
-  onConfigure: (kind: (typeof SERVICE_KINDS)[number]) => void;
+  onConfigure?: (kind: (typeof SERVICE_KINDS)[number]) => void;
 }
 
 function CatalogItem({ shown, onToggle, icon, title, desc, extra }: { shown: boolean; onToggle: () => void; icon: ReactNode; title: string; desc: string; extra?: ReactNode }) {
@@ -57,7 +57,7 @@ export function CustomizeSheet({ open, onOpenChange, animate, meta, onConfigure 
           <SheetDescription>{t("customizeSheet.description")}</SheetDescription>
         </SheetHeader>
         <div className="flex min-h-0 flex-col gap-5 overflow-auto px-4">
-          <section aria-labelledby="cat-services">
+          {import.meta.env.DEV && <section aria-labelledby="cat-services">
             <h3 id="cat-services" className="mb-2 text-xs font-semibold tracking-wide text-muted-foreground uppercase">
               {t("customizeSheet.services")}
             </h3>
@@ -77,18 +77,18 @@ export function CustomizeSheet({ open, onOpenChange, animate, meta, onConfigure 
                         <ToneBadge tone={cfg.status === "connected" ? "ok" : cfg.status === "error" ? "err" : "gray"} className="h-5 px-1.5 text-[10.5px]">
                           {ts(`status.${cfg.status}`)}
                         </ToneBadge>
-                        <Button size="sm" variant="ghost" className="h-6 px-2 text-xs" onClick={() => onConfigure(k)}>
+                        {onConfigure && <Button size="sm" variant="ghost" className="h-6 px-2 text-xs" onClick={() => onConfigure(k)}>
                           <Settings2 data-icon="inline-start" />
                           {ts("configure")}
-                        </Button>
+                        </Button>}
                       </div>
                     }
                   />
                 );
               })}
             </ul>
-            <p className="mt-2 text-[11px] text-muted-foreground">{ts("demoNote")}</p>
-          </section>
+            {import.meta.env.DEV && <p className="mt-2 text-[11px] text-muted-foreground">{ts("demoNote")}</p>}
+          </section>}
           <section aria-labelledby="cat-core">
             <h3 id="cat-core" className="mb-2 text-xs font-semibold tracking-wide text-muted-foreground uppercase">
               {t("customizeSheet.core")}
