@@ -1,0 +1,568 @@
+// American English texts of the extended explanation tooltips. Every topic has
+// a title, a one-sentence short text (compact mode), the full explanation and
+// its impact (full mode). Texts describe Docklet's behavior; the prototype only
+// simulates it, which the pages say where it matters.
+import type { deHelp } from "./de";
+
+export const enHelp: typeof deHelp = {
+  trigger: "Explanation: {title}",
+  impact: "Impact",
+  topics: {
+    settingsGeneral: {
+      hubName: {
+        title: "Hub name",
+        short: "Display name in the browser tab and notifications.",
+        full: "A freely chosen name that appears in the browser tab, in notifications and in the sidebar. It has no effect on addresses or agents.",
+        impact: "Helps tell several Docklet hubs apart.",
+      },
+      hubAddress: {
+        title: "Internal hub address",
+        short: "Address at which agents reach the hub.",
+        full: "IP address or internal URL of the hub on the LAN or in an existing VPN. Edge agents connect to this address; links in notifications use it when no domain is selected.",
+        impact: "A wrong address disconnects edge agents from the hub. Exposing it to the internet is not required.",
+      },
+      domainUrl: {
+        title: "Domain",
+        short: "Optional additional address, e.g. behind a reverse proxy.",
+        full: "Only needed if the hub is also reachable through a domain. Docklet uses it for links in notifications but does not open any ports or set up a proxy for it.",
+        impact: "Links in messages then also work outside the LAN, as long as the proxy allows it.",
+      },
+      linkBase: {
+        title: "Links in notifications",
+        short: "Sets whether links use the domain or the internal address.",
+        full: "“Automatic” uses the domain if one is set, otherwise the internal address. The fixed options force one of the two.",
+        impact: "Internal links only open on the LAN or VPN.",
+      },
+      timeZone: {
+        title: "Hub time zone",
+        short: "All schedules run in this time zone, not in the browser's.",
+        full: "Updates, backups and scans are scheduled in this time zone so every viewer sees the same times. Daylight saving time is taken into account; a time in the hour skipped by the change runs one hour later, e.g. 02:30 at 03:30.",
+        impact: "A change moves all scheduled runs to the new local time.",
+      },
+    },
+    settingsAppearance: {
+      theme: {
+        title: "Color scheme",
+        short: "Dark or light interface for this browser.",
+        full: "Switches between the dark and light scheme. The color roles are adjusted for both schemes so text stays readable.",
+        impact: "Applies only in this browser, not to other users.",
+      },
+      palette: {
+        title: "Color palette",
+        short: "Three color roles: primary, secondary and surfaces.",
+        full: "Primary colors everything interactive, such as buttons, navigation and switches. Secondary colors highlights, glow effects and charts. Surfaces define the background and cards. Status colors are not affected.",
+        impact: "Docklet only lightens or darkens colors as far as needed for sufficient contrast.",
+      },
+      density: {
+        title: "Density",
+        short: "Spacing and row heights of the interface.",
+        full: "Compact shows more rows at once, Spacious more room between elements. Content and functions do not change.",
+        impact: "Applies only in this browser.",
+      },
+      motion: {
+        title: "Animations",
+        short: "How strongly transitions and effects are animated.",
+        full: "From Off to Playful. The system setting “Reduce motion” always takes precedence and turns motion off, even if more is selected here.",
+        impact: "Less motion can help with distraction or dizziness.",
+      },
+      overviewModes: {
+        title: "Default view",
+        short: "View in which the stack and container lists open.",
+        full: "Compact shows roomy rows without selection. Advanced shows denser rows, more columns and checkboxes for bulk actions.",
+        impact: "You can switch at any time on the page itself.",
+      },
+    },
+    settingsAuth: {
+      mode: {
+        title: "Sign-in mode",
+        short: "Who may use the hub with or without signing in.",
+        full: "No login gives full access to anyone who can reach the address. Local admin checks username and password in the hub. Reverse proxy leaves sign-in to an upstream service and reads the user from headers.",
+        impact: "Without login no user permissions apply; use only in trusted networks.",
+      },
+      trustedProxies: {
+        title: "Trusted proxy addresses",
+        short: "User headers are accepted only from these addresses.",
+        full: "CIDR ranges from which the reverse proxy sends requests to the hub. Docklet ignores headers from other senders so nobody can spoof a username.",
+        impact: "A range that is too wide allows forged sign-ins.",
+      },
+      userHeader: {
+        title: "Username header",
+        short: "Header in which the proxy passes the signed-in user.",
+        full: "Name of the HTTP header the proxy sets after sign-in, e.g. from an Authentik outpost. Docklet assigns permissions by this name.",
+        impact: "A wrong header means nobody is recognized.",
+      },
+      access: {
+        title: "Access",
+        short: "Full access or only operating the assigned stacks.",
+        full: "Full access allows updates, Compose editor, start, stop, logs and shell. Operate allows only start, stop, restart, logs and shell. The scope sets which stacks are affected.",
+        impact: "Full access is not a secure boundary: Compose can mount host paths.",
+      },
+    },
+    settingsHosts: {
+      projectDir: {
+        title: "Default project directory",
+        short: "Suggested folder in which stack folders are created.",
+        full: "Suggested during host onboarding and can be changed there per host. Each stack gets its own folder inside it with compose.yaml and .env.",
+        impact: "Existing hosts keep their directory.",
+      },
+      installDir: {
+        title: "Agent install directory",
+        short: "Separate folder for the agent's compose.yaml, .env and data.",
+        full: "Separate from the project directory, but may sit directly inside it. Docklet recognizes the agent by its label and never shows it as a stack.",
+        impact: "Applies as a suggestion for new hosts.",
+      },
+      connection: {
+        title: "Connection mode",
+        short: "Direct: the hub connects to the agent. Edge: the agent dials in to the hub.",
+        full: "Direct needs a reachable agent port on the host. Edge needs no inbound port because the agent dials the internal hub address, for example from another network.",
+        impact: "Default for new hosts; each host can differ.",
+      },
+      ids: {
+        title: "File IDs (PUID/PGID)",
+        short: "User and group ID for files the agent creates.",
+        full: "Leave empty so the installer suggests the IDs from the owner of the project directory. Docklet does not change ownership on the host.",
+        impact: "Wrong IDs can cause write errors in stack folders.",
+      },
+      socket: {
+        title: "Docker socket group",
+        short: "Detects the group through which the agent may control Docker.",
+        full: "Separate from PUID/PGID. Without detection, the group ID of the Docker socket must be specified per host.",
+        impact: "Without a matching group the agent cannot reach Docker.",
+      },
+    },
+    settingsUpdates: {
+      interval: {
+        title: "Check interval",
+        short: "How often Docklet asks for new image versions.",
+        full: "Docklet compares the images in use with the registries and shows new versions. Checking installs nothing.",
+        impact: "Shorter intervals show updates sooner and send more requests to the registries.",
+      },
+      notify: {
+        title: "Update notification",
+        short: "Reports new updates through the configured channels.",
+        full: "Uses the channels under Notifications that subscribe to the “Updates available” event.",
+        impact: "Without a matching channel nothing is sent.",
+      },
+      autoInstall: {
+        title: "Automatic installation",
+        short: "Installs updates per stack or container in a fixed time window.",
+        full: "“Check only” shows updates. “Scheduled” installs them at the selected time in the hub time zone with pull and redeploy. Unraid and unclear containers are excluded.",
+        impact: "If an update fails, nothing is rolled back automatically.",
+      },
+    },
+    settingsBackups: {
+      targetKind: {
+        title: "Backup target type",
+        short: "Where backups are written.",
+        full: "Local directory and existing host mount are on a connected host. Docklet mounts SMB and NFS only for the backup run; credentials stay in the hub.",
+        impact: "A target used by plans can only be removed after the plans are switched over.",
+      },
+      retention: {
+        title: "Default retention",
+        short: "Default for new backup plans: number and size of archives.",
+        full: "With both limits, an older archive is deleted as soon as either would be exceeded. The newest archive is always kept. Without limits Docklet deletes nothing.",
+        impact: "Existing plans keep their own retention.",
+      },
+      test: {
+        title: "Test connection",
+        short: "Checks reachability and write access of the target.",
+        full: "The test writes a trial file to the target and reports free space or the error. In the prototype the result is simulated.",
+        impact: "No backups are created.",
+      },
+    },
+    settingsNotifications: {
+      events: {
+        title: "Events",
+        short: "Which events this channel reports.",
+        full: "Each channel subscribes only to the selected events, such as failed deploys or disconnected hosts. Links in messages follow the setting under General.",
+        impact: "Unselected events appear only in the action center.",
+      },
+      secret: {
+        title: "Token or password",
+        short: "The channel's credentials; they stay in the hub.",
+        full: "Never shown again after saving. Leaving it empty keeps the stored value. In the prototype nothing is saved.",
+        impact: "Without valid credentials sending fails.",
+      },
+      test: {
+        title: "Send test",
+        short: "Sends a test message through this channel.",
+        full: "Checks target and credentials with a short message. In the prototype sending is only simulated.",
+        impact: "Does not change any settings.",
+      },
+    },
+    settingsScans: {
+      enabled: {
+        title: "Vulnerability scans",
+        short: "Checks images for known vulnerabilities, separately from updates.",
+        full: "Docklet compares the images' packages with a vulnerability database. The results are under Security. An update notice does not mean a vulnerability is fixed.",
+        impact: "When off, neither scheduled nor automatic scans run; manual scans remain possible.",
+      },
+      schedule: {
+        title: "Scan schedule",
+        short: "Manual, daily at a set time or weekly on a weekday.",
+        full: "“Manual” scans only on demand. Daily needs a time, weekly a weekday and a time, optionally a first date. The time applies in the hub time zone.",
+        impact: "The prototype does not schedule real runs; it only shows the next date.",
+      },
+    },
+    settingsHeal: {
+      enabled: {
+        title: "Auto Heal",
+        short: "Restarts containers with a failing healthcheck.",
+        full: "Only applies to containers with a healthcheck that become unhealthy. Unexpected stops are still handled by Docker's restart policy.",
+        impact: "Once the limit is reached, the container stays unhealthy and is reported.",
+      },
+      maxRestarts: {
+        title: "Maximum restarts",
+        short: "How often Auto Heal restarts per time window.",
+        full: "Limits restarts within the time window so a permanently broken container is not restarted endlessly.",
+        impact: "A higher limit bridges more outages but hides errors longer.",
+      },
+      window: {
+        title: "Time window",
+        short: "Period in which restarts are counted.",
+        full: "When the time window expires, counting starts over.",
+        impact: "A long window slows repeated restarts more.",
+      },
+      cooldown: {
+        title: "Pause after restart",
+        short: "Wait time before Auto Heal steps in again.",
+        full: "Gives the container time to start before its healthcheck is evaluated again.",
+        impact: "Too short can needlessly restart slow-starting services.",
+      },
+      excluded: {
+        title: "Excluded stacks",
+        short: "Auto Heal never restarts these stacks automatically.",
+        full: "Useful for services whose restart puts data or sessions at risk or that are allowed to run unhealthy on purpose.",
+        impact: "Docklet still reports the state.",
+      },
+    },
+    settingsActivity: {
+      events: {
+        title: "Maximum events",
+        short: "How many events the action center keeps.",
+        full: "Once the number is reached, each new event drops the oldest one, such as an old connection loss or a saved setting.",
+        impact: "More entries need more storage in the hub; 500 last several weeks with a few hosts.",
+      },
+      actions: {
+        title: "Maximum completed actions",
+        short: "How many finished deploys, updates, backups and scans stay visible.",
+        full: "Running actions do not count and are never removed. Once the number is reached, the oldest completed action is dropped along with its output.",
+        impact: "Older runs can no longer be traced afterward; events follow their own limit.",
+      },
+      output: {
+        title: "Save output",
+        short: "Saves the step logs of every action.",
+        full: "With saving, the complete output of a run can be read later. Without it only the result and error message remain.",
+        impact: "Logs can contain sensitive values and take up storage.",
+      },
+      presentation: {
+        title: "Display of large actions",
+        short: "Whether deploys and updates open a dialog or only show a notice.",
+        full: "The dialog shows the steps large and stays open. The notice at the top right runs in the background and lets you keep working.",
+        impact: "The action itself runs the same either way.",
+      },
+    },
+    settingsHelp: {
+      mode: {
+        title: "Explanations",
+        short: "How thoroughly the info icons explain fields and actions.",
+        full: "Detailed shows title, explanation and impact. Short shows one sentence. Off hides only these additional explanations.",
+        impact: "Status, origin and data notes stay visible in every mode.",
+      },
+    },
+    stack: {
+      mode: {
+        title: "Easy and Advanced",
+        short: "Form or raw editor for the same draft.",
+        full: "Easy guides you through stack, services and review in three steps. Advanced edits compose.yaml and .env directly. Both work on the same draft; unknown fields are preserved.",
+        impact: "With invalid YAML, Easy is locked until the error is fixed in Advanced.",
+      },
+      name: {
+        title: "Stack name",
+        short: "Name of the Compose project; matches “name:” in compose.yaml.",
+        full: "Lowercase letters, digits, - and _. Docker names the stack's containers, networks and volumes after this name.",
+        impact: "Renaming after the deploy creates new containers and networks.",
+      },
+      host: {
+        title: "Target host",
+        short: "Host on which the stack will run.",
+        full: "Applies only to this stack and does not change the host filter. Disconnected hosts are marked.",
+        impact: "An existing stack changes hosts only by being created again.",
+      },
+      labels: {
+        title: "Labels",
+        short: "Free keywords for overview and filters.",
+        full: "Appear as chips in the stack overview and can be filtered there. They change nothing about how the containers run.",
+        impact: "Organization and search only.",
+      },
+      projectDir: {
+        title: "Project directory",
+        short: "The stack's folder with compose.yaml and .env.",
+        full: "Located in the host's project directory. Relative paths in compose.yaml refer to this folder. Not to be confused with the agent's install directory.",
+        impact: "Bind mounts with relative paths end up here.",
+      },
+      env: {
+        title: "Stack .env",
+        short: "Variables for placeholders in compose.yaml.",
+        full: "The same file as “.env” in Advanced. Compose inserts the values into placeholders such as $ variables; containers only see them if a service passes them on.",
+        impact: "Changed values only take effect after the next deploy.",
+      },
+      importRun: {
+        title: "From docker run",
+        short: "Converts a docker run command into a service.",
+        full: "Takes over image, ports, volumes, variables and restart policy. Options without a Compose equivalent are listed as notes.",
+        impact: "The service goes into the draft; deploying happens later.",
+      },
+      importSource: {
+        title: "One-time import",
+        short: "Takes over values once from GitHub or Docker Hub.",
+        full: "Reads the image and example values from a source. No permanent Git connection is created. In the prototype the request is simulated.",
+        impact: "Later changes to the source are not picked up.",
+      },
+    },
+    service: {
+      key: {
+        title: "Service name",
+        short: "Key under “services:” and DNS name in the stack network.",
+        full: "Other services reach this one by its name on the shared network. Renaming changes only this key, not references such as depends_on.",
+        impact: "A new name creates a new container on deploy.",
+      },
+      image: {
+        title: "Image",
+        short: "Repository and tag the container is created from.",
+        full: "A fixed version tag such as 1.29-alpine makes updates traceable. “latest” changes without warning.",
+        impact: "A new tag is pulled on the next deploy.",
+      },
+      containerName: {
+        title: "Container name",
+        short: "Optional fixed name instead of the one assigned by Compose.",
+        full: "A fixed name must be unique on the host and prevents multiple replicas.",
+        impact: "Leaving it empty is usually the better choice.",
+      },
+      restart: {
+        title: "Restart policy",
+        short: "When Docker starts the container after a crash or host reboot.",
+        full: "“unless-stopped” starts after a crash and host reboot unless the container was stopped on purpose. “always” always starts, “on-failure” only after errors, “no” never.",
+        impact: "Without a value, a crashed container stays stopped.",
+      },
+      command: {
+        title: "Command",
+        short: "Overrides the image's default command.",
+        full: "Only needed if the image should start differently. Leaving it empty uses the command defined in the image.",
+        impact: "A wrong command makes the container exit immediately.",
+      },
+      ports: {
+        title: "Ports",
+        short: "Host port on the left, container port on the right, e.g. 8080:80.",
+        full: "Publishes a container port on the host. A host port can only be used once per host. Containers on the same network reach each other even without published ports.",
+        impact: "Published ports are reachable from other devices on the network.",
+      },
+      volumes: {
+        title: "Volumes and bind mounts",
+        short: "Persistent data outside the container.",
+        full: "A name such as data uses a Docker volume, an absolute path mounts a host folder. “Read only” prevents writes from the container.",
+        impact: "Data outside volumes is lost when recreating.",
+      },
+      env: {
+        title: "Environment",
+        short: "Variables the container sees at startup.",
+        full: "One name and value per row. The notation as mapping or list is preserved when saving.",
+        impact: "Changes only take effect after the next deploy.",
+      },
+      health: {
+        title: "Healthcheck",
+        short: "Command Docker uses to check whether the service responds.",
+        full: "Runs inside the container at the interval. After the specified failed attempts the container counts as unhealthy; Auto Heal can then restart it.",
+        impact: "Without a healthcheck Docklet only detects stopped containers.",
+      },
+      healthPreset: {
+        title: "Healthcheck suggestions",
+        short: "Ready-made checks that are only filled in after clicking “Apply”.",
+        full: "For official PostgreSQL, MariaDB, MySQL, Redis and Valkey images, the suggestion uses the tool from the image. Otherwise generic HTTP checks with curl or wget are available; they assume the tool is in the image and the service responds on the assumed port.",
+        impact: "An existing test command is only replaced after confirmation. Whether the check works in the container only shows on the next deploy.",
+      },
+      networks: {
+        title: "Networks",
+        short: "Networks the service joins.",
+        full: "Without a value, the service uses the stack's default network. Custom networks are defined under “networks:”, external ones are marked as external.",
+        impact: "Services only reach each other through shared networks.",
+      },
+    },
+    network: {
+      driver: {
+        title: "Network driver",
+        short: "Bridge for a network on the host, macvlan or ipvlan for LAN addresses.",
+        full: "Bridge connects containers on this host; outward only through published ports. macvlan gives each container its own LAN address and MAC. ipvlan uses the host's MAC if the network allows only one MAC per port.",
+        impact: "The driver cannot be changed later.",
+      },
+      name: {
+        title: "Network name",
+        short: "Unique name on this host.",
+        full: "Letters, digits, _ . and -. The Docker names bridge, host, none and default are reserved.",
+        impact: "Compose files refer to the network as external by this name.",
+      },
+      subnet: {
+        title: "IPv4 subnet",
+        short: "Address range of the network in CIDR notation.",
+        full: "Optional for bridge: if empty, Docker picks a free block. For macvlan and ipvlan, the LAN in which the containers get addresses. Must not overlap other networks on the host.",
+        impact: "Fixed container addresses are only possible with a custom subnet.",
+      },
+      gateway: {
+        title: "Gateway",
+        short: "Router address of the network.",
+        full: "Optional for bridge, otherwise the first address of the subnet. For macvlan and ipvlan, the LAN router.",
+        impact: "A wrong gateway cuts the containers off from the rest of the network.",
+      },
+      ipRange: {
+        title: "Range for automatic assignment",
+        short: "Part of the subnet from which Docker assigns addresses.",
+        full: "For macvlan and ipvlan, choose a range the router's DHCP server does not assign so no address is used twice.",
+        impact: "Overlaps with DHCP cause address conflicts on the LAN.",
+      },
+      parent: {
+        title: "Parent interface",
+        short: "The host's network interface on the LAN, e.g. br0.",
+        full: "Containers leave the host through this interface. Only one macvlan network is possible per interface.",
+        impact: "The host itself cannot reach macvlan containers directly.",
+      },
+      internal: {
+        title: "Internal network",
+        short: "Containers on this network only reach each other.",
+        full: "No access to the LAN or internet through this network; published ports are not reachable through it.",
+        impact: "Useful for databases that only one service should reach.",
+      },
+      ipv6: {
+        title: "IPv6",
+        short: "Turns on IPv6 in addition to or instead of IPv4.",
+        full: "Dual stack uses both address families. Without IPv4 you get an IPv6-only network, which requires Docker 27 or newer. Both families are validated independently.",
+        impact: "Fixed IPv6 addresses need a custom prefix.",
+      },
+      subnet6: {
+        title: "IPv6 prefix",
+        short: "Prefix of the network in CIDR notation, usually /64.",
+        full: "Optional for bridge, otherwise Docker assigns a prefix from its pool. Docker sets no fixed prefix length; Docklet requires at most /126 so gateway and containers have room. The address must lie on the prefix boundary; multicast and link-local are excluded.",
+        impact: "Fixed IPv6 addresses are only possible with a custom prefix.",
+      },
+      gateway6: {
+        title: "IPv6 gateway",
+        short: "Router address of the network within the prefix.",
+        full: "Optional for bridge, otherwise Docker takes the first address of the prefix. For macvlan and ipvlan, the address of the LAN router. Short and long notation are equivalent; validation shows the short form.",
+        impact: "A wrong gateway leaves containers without an outside connection.",
+      },
+      ipRange6: {
+        title: "IPv6 address range",
+        short: "Part of the prefix from which Docker assigns addresses automatically.",
+        full: "Optional. Must lie within the prefix, e.g. a /120 in the /64. Fixed addresses may also lie outside the range, but within the prefix.",
+        impact: "Without a range, Docker assigns from the whole prefix.",
+      },
+      review: {
+        title: "Review and create",
+        short: "Only “Create” changes the host.",
+        full: "The summary shows all values before creating. Until then, every step can be changed without consequences.",
+        impact: "Existing containers are not connected automatically.",
+      },
+    },
+    connect: {
+      container: {
+        title: "Connect container",
+        short: "Adds a container to another network.",
+        full: "The container stays in its existing networks. For Compose containers the change lasts until the next deploy; to make it permanent, the network belongs in compose.yaml.",
+        impact: "Unraid templates reset the networks on the next update.",
+      },
+      ip: {
+        title: "Fixed address",
+        short: "Optional fixed IP in the selected network.",
+        full: "Only in networks with a custom subnet. Leaving it empty assigns the next free address. Network, broadcast and gateway addresses are excluded.",
+        impact: "A fixed address stays the same across restarts.",
+      },
+      disconnect: {
+        title: "Disconnect container",
+        short: "Removes the container from this network.",
+        full: "Other containers that wait for it over this network can no longer reach it afterward. Without a remaining network it is unreachable.",
+        impact: "The review shows affected dependencies before disconnecting.",
+      },
+    },
+    container: {
+      recreate: {
+        title: "Edit and recreate",
+        short: "Replaces the container with a new configuration.",
+        full: "Only for containers created with docker run. Docklet stops the old container, creates a new one and starts it. The previous configuration is kept for manual restore.",
+        impact: "Data outside volumes is lost; brief downtime.",
+      },
+      ports: {
+        title: "Ports",
+        short: "One host:container mapping per line.",
+        full: "E.g. 8080:80 publishes the container's port 80 on the host's port 8080. Each host port can only be used once.",
+        impact: "Takes effect only after recreating.",
+      },
+      env: {
+        title: "Environment",
+        short: "KEY=value, one variable per line.",
+        full: "Values with secrets are masked in the detail view but set in plain text in the container.",
+        impact: "Takes effect only after recreating.",
+      },
+      origin: {
+        title: "Origin",
+        short: "Determines what Docklet may change on a container.",
+        full: "Compose containers are edited through the stack page, docker run containers directly. Unraid containers and those of unclear origin stay locked for editing.",
+        impact: "The origin badge in the list shows details.",
+      },
+    },
+    action: {
+      deploy: {
+        title: "Deploy",
+        short: "Applies the saved draft on the host.",
+        full: "Validates the file, pulls missing images, recreates changed containers, starts them and waits for their state. Progress appears at the top right.",
+        impact: "Changed containers are briefly interrupted.",
+      },
+      saveDeploy: {
+        title: "Save and redeploy",
+        short: "Saves the draft and deploys it immediately.",
+        full: "Writes compose.yaml and .env and then starts a deploy. Save alone does not change running containers.",
+        impact: "Changed containers are briefly interrupted.",
+      },
+      redeploy: {
+        title: "Pull and redeploy",
+        short: "Pulls the images again and recreates changed containers.",
+        full: "Downloads the current version of each image tag and replaces containers whose image or configuration has changed. Volumes are preserved.",
+        impact: "Brief interruption; without changes everything stays as it is.",
+      },
+      restart: {
+        title: "Restart",
+        short: "Restarts the containers without recreating them.",
+        full: "Fixes hung processes. Changes to compose.yaml or .env are not applied; that requires a deploy.",
+        impact: "Brief interruption.",
+      },
+      stop: {
+        title: "Stop",
+        short: "Stops the containers without deleting them.",
+        full: "Configuration, volumes and networks are preserved. “Start” resumes operation.",
+        impact: "The service is unreachable until started.",
+      },
+      checkUpdates: {
+        title: "Check for updates",
+        short: "Asks the registries for new versions, installs nothing.",
+        full: "Compares the images in use with the registries and refreshes the update display.",
+        impact: "No change to containers.",
+      },
+      installUpdates: {
+        title: "Install update",
+        short: "Pulls the new version and redeploys.",
+        full: "Downloads the new images and replaces the affected containers. The previous image is kept for a manual restore.",
+        impact: "If the update fails, nothing is rolled back automatically.",
+      },
+      hide: {
+        title: "Hide from overview",
+        short: "Moves the entry to the “Hidden” category.",
+        full: "Affects only the display in this browser. The stack or container keeps running unchanged and can be shown again at any time.",
+        impact: "Nothing is stopped or deleted.",
+      },
+      scan: {
+        title: "Scan now",
+        short: "Immediately starts a scan of all images on the hosts.",
+        full: "Runs independently of the schedule. A second click during a run does not start another scan. In the prototype the scan is simulated.",
+        impact: "Results replace the findings of the last scan.",
+      },
+    },
+  },
+};
