@@ -7,11 +7,18 @@ const root = new URL("../", import.meta.url);
 const manifest = JSON.parse(readFileSync(new URL("../docs/provenance/removed-feature-search.json", import.meta.url), "utf8"));
 const provenance = /:\d+:\s*\/\/ (?:Source|Revision|Retrieved|License|Deviations):/;
 
+// git grep searches tracked files only and is available wherever the repository is checked out.
 function search(pattern, paths, globs = []) {
-  const args = ["--no-heading", "--line-number", "--color", "never", "--ignore-case"];
-  for (const glob of globs) args.push("--glob", glob);
-  args.push("--regexp", pattern, ...paths);
-  const result = spawnSync("rg", args, { cwd: root, encoding: "utf8" });
+  const pathspecs = [];
+  const includes = globs.filter((glob) => !glob.startsWith("!"));
+  const excludes = globs.filter((glob) => glob.startsWith("!")).map((glob) => glob.slice(1));
+  for (const path of paths) {
+    if (includes.length === 0) pathspecs.push(`:(glob)${path}`);
+    for (const glob of includes) pathspecs.push(`:(glob)${path}/**/${glob}`);
+  }
+  for (const glob of excludes) pathspecs.push(`:(exclude,glob)${glob}`);
+  const args = ["grep", "--no-color", "--line-number", "--ignore-case", "--extended-regexp", "-e", pattern, "--", ...pathspecs];
+  const result = spawnSync("git", args, { cwd: root, encoding: "utf8" });
   if (result.error) throw result.error;
   assert.ok(result.status === 0 || result.status === 1, result.stderr);
   return result.stdout.trim().split("\n").filter(Boolean).filter((line) => !provenance.test(line));

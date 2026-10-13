@@ -1,5 +1,5 @@
 {
-  "tool": "rg",
+  "tool": "git grep",
   "scope": ["backend", "cli", "types", "third_party/francis"],
   "globs": ["*.go", "!**/*_test.go"],
   "excludedEvidence": "Adopted-source provenance headers and PostgreSQL migration history reserved for issue #8.",
