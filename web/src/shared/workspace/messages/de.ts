@@ -1,5 +1,7 @@
 // German texts of the shared file workspace (tree, tabs, editor states).
-export const deWorkspace = {
+import type { enWorkspace } from "./en";
+
+export const deWorkspace: typeof enWorkspace = {
   unsaved: "Ungespeicherte Änderungen",
   closeTab: "{name} schließen",
   closeHint: "Entf schließt den Tab.",

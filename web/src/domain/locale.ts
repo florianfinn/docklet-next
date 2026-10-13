@@ -1,4 +1,4 @@
-/** Interface languages; German is the default and the reference catalogue. */
+/** Interface languages; German remains the default; English defines catalogue types. */
 export const LOCALES = ["de", "en-US"] as const;
 export type AppLocale = (typeof LOCALES)[number];
 export const DEFAULT_LOCALE: AppLocale = "de";

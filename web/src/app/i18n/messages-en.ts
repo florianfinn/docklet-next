@@ -1,4 +1,4 @@
-// American English interface texts; same namespaces and keys as the German catalogue.
+// American English interface texts define the catalogue shape for every locale.
 import { enActivity } from "@/features/activity/messages/en";
 import { enLogin } from "@/features/auth/login/messages/en";
 import { enContainers } from "@/features/containers/messages/en";
@@ -23,9 +23,8 @@ import { enWorkspace } from "@/shared/workspace/messages/en";
 import { enPreview } from "../preview/messages/en";
 import { enShell } from "../shell/messages/en";
 import { enLocale } from "./messages/en";
-import type { messages } from "./messages";
 
-export const enMessages: typeof messages = {
+export const enMessages = {
   common: enCommon,
   help: enHelp,
   workspace: enWorkspace,

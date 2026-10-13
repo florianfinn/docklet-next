@@ -1,5 +1,7 @@
 // German texts of the first-run setup wizard (preview, started from the design lab).
-export const deSetup = {
+import type { enSetup } from "./en";
+
+export const deSetup: typeof enSetup = {
   badge: "Ersteinrichtung · Vorschau",
   title: "Docklet einrichten",
   lead: "Ein neuer Hub fragt diese Angaben einmal ab. Im Prototyp startest du den Ablauf über das Design-Labor; das Dashboard bleibt unverändert erreichbar.",

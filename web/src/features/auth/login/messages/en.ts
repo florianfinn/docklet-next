@@ -1,7 +1,6 @@
 // American English texts of the login demo (full-screen route, started from the design lab).
-import type { deLogin } from "./de";
 
-export const enLogin: typeof deLogin = {
+export const enLogin = {
   badge: "Demo · not a real sign-in",
   title: "Sign in to {hub}",
   exit: "Leave demo",

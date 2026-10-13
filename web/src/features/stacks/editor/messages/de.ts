@@ -1,5 +1,7 @@
 // German texts of the stack editor workspace (Easy wizard and Advanced raw editor).
-export const deEditor = {
+import type { enEditor } from "./en";
+
+export const deEditor: typeof enEditor = {
   mode: { label: "Bearbeitungsmodus", easy: "Easy", advanced: "Advanced", easyHint: "Geführter Entwurf für Stack und Services", advancedHint: "Raw-Editor für compose.yaml und .env" },
   importRun: "Aus docker run",
   importSource: "GitHub / Docker Hub",

@@ -1,7 +1,6 @@
 // American English texts of the networks page, topology and network wizards.
-import type { deNetworks } from "./de";
 
-export const enNetworks: typeof deNetworks = {
+export const enNetworks = {
   title: "Networks",
   description: "Docker networks of one host at a time: LAN networks, custom and stack networks, then the Docker default networks, each with their containers. Click a node or focus it with the keyboard (Tab, Enter); Escape or a click on empty space clears the focus.",
   hostPicker: "Topology host",

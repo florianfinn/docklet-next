@@ -1,7 +1,6 @@
 // American English texts of the activity feature (progress toasts, action center, events).
-import type { deActivity } from "./de";
 
-export const enActivity: typeof deActivity = {
+export const enActivity = {
   open: "Activity",
   openWithCount: "Activity, {count, plural, one {# running} other {# running}}",
   running: "{count} running",
