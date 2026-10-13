@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; functional cut: removed GitOps and saved Git repositories.
+// Deviations: Local module namespace; functional cut: removed GitOps and saved Git repositories; functional cut: removed Swarm.
 
 package middleware
 
@@ -471,9 +471,6 @@ func isManagementPathInternal(method, suffix string) bool {
 	if suffix == "/jobs" || strings.HasPrefix(suffix, "/jobs/") {
 		return true
 	}
-	if isCentralSwarmManagementPathInternal(method, suffix) {
-		return true
-	}
 	if isCentralVolumeBackupPolicyPathInternal(method, suffix) {
 		return true
 	}
@@ -505,30 +502,6 @@ func isCentralVolumeBackupPolicyPathInternal(method, suffix string) bool {
 	}
 	parts := strings.Split(strings.Trim(suffix, "/"), "/")
 	return len(parts) == 3 && parts[0] == "volumes" && parts[1] != "" && parts[2] == "backup-policy"
-}
-
-func isCentralSwarmManagementPathInternal(method, suffix string) bool {
-	if method == http.MethodGet && (suffix == "/swarm/join-candidates" || suffix == "/swarm/nodes") {
-		return true
-	}
-	if method == http.MethodPost && (suffix == "/swarm/join-environments" || suffix == "/swarm/nodes/agents/reconcile") {
-		return true
-	}
-
-	parts := strings.Split(strings.Trim(suffix, "/"), "/")
-	if len(parts) == 3 && method == http.MethodGet && parts[0] == "swarm" && parts[1] == "nodes" {
-		return true
-	}
-	if len(parts) == 5 && parts[0] == "swarm" && parts[1] == "nodes" && parts[3] == "agent" {
-		if parts[4] == "binding" {
-			return method == http.MethodPut || method == http.MethodDelete
-		}
-		if parts[4] == "deployment" {
-			return method == http.MethodPost || method == http.MethodDelete
-		}
-	}
-
-	return false
 }
 
 // extractEnvironmentID gets the environment ID from the request.

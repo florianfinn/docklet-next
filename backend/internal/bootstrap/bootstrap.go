@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; functional cut: removed central variables and .env.global; functional cut: removed GitOps and saved Git repositories.
+// Deviations: Local module namespace; functional cut: removed central variables and .env.global; functional cut: removed GitOps and saved Git repositories; functional cut: removed Swarm.
 
 package bootstrap
 
@@ -37,7 +37,6 @@ import (
 	"github.com/florianfinn/docklet-next/backend/internal/project"
 	"github.com/florianfinn/docklet-next/backend/internal/role"
 	"github.com/florianfinn/docklet-next/backend/internal/settings"
-	"github.com/florianfinn/docklet-next/backend/internal/swarm"
 	"github.com/florianfinn/docklet-next/backend/internal/user"
 	"github.com/florianfinn/docklet-next/backend/internal/volume"
 	"github.com/florianfinn/docklet-next/backend/internal/vulnerability"
@@ -184,7 +183,6 @@ type initializeStartupStateParams struct {
 	Environment   *environment.EnvironmentService
 	Project       *project.ProjectService
 	Docker        *docker.DockerClientService
-	Swarm         *swarm.SwarmService
 	Role          *role.RoleService
 	User          *user.UserService
 	ApiKey        *apikey.ApiKeyService
@@ -268,11 +266,6 @@ func initializeStartupState(p initializeStartupStateParams) {
 		slog.InfoContext(ctx, "Docker API versions detected", "clientApiVersion", dockerClient.ClientVersion(), "serverApiVersion", version.APIVersion, "effectiveApiVersion", effectiveAPIVersion)
 		return nil
 	})
-	if p.Swarm != nil {
-		if err := p.Swarm.SyncSwarmEnabledState(appCtx); err != nil {
-			slog.WarnContext(appCtx, "Failed to persist swarm enabled state", "error", err)
-		}
-	}
 
 	startup.InitializeNonAgentFeatures(appCtx, runtimeCfg,
 		p.Role.EnsureBuiltInRoles,

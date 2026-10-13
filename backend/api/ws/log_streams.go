@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace
+// Deviations: Local module namespace; functional cut: removed Swarm.
 
 package ws
 
@@ -437,46 +437,6 @@ func (h *WebSocketHandler) ContainerLogs(c *echo.Context) error {
 			"container",
 			params,
 			streamLogs,
-			normalizeContainerLogMessageInternal,
-			nil,
-			onEmpty,
-		)
-	})
-	return nil
-}
-
-// ============================================================================
-// Swarm Service WebSocket/Streaming Endpoints
-// ============================================================================
-
-// ServiceLogs streams swarm service logs over WebSocket.
-//
-//	@Summary		Get swarm service logs via WebSocket
-//	@Description	Stream swarm service logs over WebSocket connection
-//	@Tags			WebSocket
-//	@Param			id			path	string	true	"Environment ID"
-//	@Param			serviceId	path	string	true	"Service ID"
-//	@Param			follow		query	bool	false	"Follow log output"						default(true)
-//	@Param			tail		query	string	false	"Number of lines to show from the end"	default(100)
-//	@Param			since		query	string	false	"Show logs since timestamp"
-//	@Param			timestamps	query	bool	false	"Show timestamps"				default(false)
-//	@Param			format		query	string	false	"Output format (text or json)"	default(text)
-//	@Param			batched		query	bool	false	"Batch log messages"			default(false)
-//	@Router			/api/environments/{id}/ws/swarm/services/{serviceId}/logs [get]
-func (h *WebSocketHandler) ServiceLogs(c *echo.Context) error {
-	serviceID := c.Param("serviceId")
-	if strings.TrimSpace(serviceID) == "" {
-		return c.JSON(http.StatusBadRequest, map[string]any{"success": false, "error": "Service ID is required"})
-	}
-
-	params := parseLogStreamParamsInternal(c)
-	h.serveLogStreamInternal(c, systemtypes.WSKindServiceLogs, serviceID, params, func(streamKey string, onEmpty func(*wsLogStream)) *wsLogStream {
-		return h.startLogHubInternal(
-			streamKey,
-			serviceID,
-			"service",
-			params,
-			h.swarmService.StreamServiceLogs,
 			normalizeContainerLogMessageInternal,
 			nil,
 			onEmpty,

@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; functional cut: removed APNS mobile push; functional cut: removed template catalogue; functional cut: removed federated credentials; functional cut: removed central variables and .env.global; functional cut: removed GitOps and saved Git repositories.
+// Deviations: Local module namespace; functional cut: removed APNS mobile push; functional cut: removed template catalogue; functional cut: removed federated credentials; functional cut: removed central variables and .env.global; functional cut: removed GitOps and saved Git repositories; functional cut: removed Swarm.
 
 package api
 
@@ -50,7 +50,6 @@ import (
 	"github.com/florianfinn/docklet-next/backend/internal/s3"
 	"github.com/florianfinn/docklet-next/backend/internal/search"
 	"github.com/florianfinn/docklet-next/backend/internal/settings"
-	"github.com/florianfinn/docklet-next/backend/internal/swarm"
 	"github.com/florianfinn/docklet-next/backend/internal/system"
 	"github.com/florianfinn/docklet-next/backend/internal/updater"
 	"github.com/florianfinn/docklet-next/backend/internal/upload"
@@ -97,13 +96,13 @@ var dockerSchemaPrefixes = map[string]string{
 	"container": "DockerContainer",
 	"network":   "DockerNetwork",
 	"volume":    "DockerVolume",
-	"swarm":     "DockerSwarm",
 	"mount":     "DockerMount",
 	"filters":   "DockerFilters",
 	"blkiodev":  "DockerBlkiodev",
 	"strslice":  "DockerStrslice",
 	"events":    "DockerEvents",
 	"image":     "DockerImage",
+	"swarm":     "DockerSwarm",
 }
 
 var jsonV2Format = huma.Format{
@@ -255,7 +254,6 @@ type HandlerDeps struct {
 	S3Destination     *s3.Module
 	Network           *network.NetworkService
 	Port              *port.PortService
-	Swarm             *swarm.Module
 	ImageUpdate       *imageupdate.Module
 	Auth              *auth.Module
 	Passkey           *passkey.PasskeyService
@@ -421,7 +419,6 @@ func registerHandlersInternal(api huma.API, deps HandlerDeps, handlerAppCtx hand
 	deps.Container.RegisterRoutes(api, handlerAppCtx)
 	port.RegisterPorts(api, deps.Port)
 	network.RegisterNetworks(api, deps.Network, deps.Docker, deps.Activity.Service(), handlerAppCtx)
-	deps.Swarm.RegisterRoutes(api)
 	deps.Notification.RegisterRoutes(api)
 	deps.Updater.RegisterRoutes(api, handlerAppCtx)
 	deps.Search.RegisterRoutes(api)

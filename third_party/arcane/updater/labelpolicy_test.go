@@ -2,7 +2,7 @@
 // Revision: 119f68956cee6d5aba8a5463561aaf9be9943b65
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: None
+// Deviations: functional cut: removed Swarm.
 
 package updater
 
@@ -36,9 +36,6 @@ func TestDefaultLabelPolicy(t *testing.T) {
 	if policy.IsUpdateDisabled(map[string]string{labels.LabelUpdater: "true"}) {
 		t.Fatal("updater true label was treated as disabled")
 	}
-	if !policy.IsSwarmTask(map[string]string{labels.LabelSwarmServiceID: "svc"}) {
-		t.Fatal("swarm service label was not detected")
-	}
 	if got := policy.StopSignal(map[string]string{labels.LabelStopSignal: " sigint "}); got != "SIGINT" {
 		t.Fatalf("StopSignal() = %q, want SIGINT", got)
 	}
@@ -61,9 +58,6 @@ func TestMergeLabelPolicyDefaultsFillsPerField(t *testing.T) {
 	}
 	if !merged.IsServer(map[string]string{labels.LabelArcane: "true"}) {
 		t.Fatal("IsServerFunc was not filled in from the defaults")
-	}
-	if !merged.IsSwarmTask(map[string]string{labels.LabelSwarmServiceID: "svc"}) {
-		t.Fatal("IsSwarmTaskFunc was not filled in from the defaults")
 	}
 	if got := merged.StopSignal(map[string]string{labels.LabelStopSignal: "sigterm"}); got != "SIGTERM" {
 		t.Fatalf("StopSignalFunc was not filled in from the defaults: StopSignal() = %q", got)

@@ -2,7 +2,7 @@
 // Revision: 119f68956cee6d5aba8a5463561aaf9be9943b65
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: None
+// Deviations: functional cut: removed Swarm.
 
 package updater
 
@@ -23,7 +23,6 @@ type LabelPolicy struct {
 	IsSelfUpdateTargetFunc func(map[string]string) bool
 	IsAgentFunc            func(map[string]string) bool
 	IsServerFunc           func(map[string]string) bool
-	IsSwarmTaskFunc        func(map[string]string) bool
 	StopSignalFunc         func(map[string]string) string
 }
 
@@ -42,7 +41,6 @@ func DefaultLabelPolicy() LabelPolicy {
 		IsSelfUpdateTargetFunc: labels.IsArcaneContainer,
 		IsAgentFunc:            labels.IsArcaneAgentContainer,
 		IsServerFunc:           labels.IsArcaneServerContainer,
-		IsSwarmTaskFunc:        labels.IsSwarmTask,
 		StopSignalFunc:         labels.StopSignal,
 	}
 }
@@ -66,9 +64,6 @@ func mergeLabelPolicyDefaults(policy LabelPolicy) LabelPolicy {
 	}
 	if policy.IsServerFunc == nil {
 		policy.IsServerFunc = defaults.IsServerFunc
-	}
-	if policy.IsSwarmTaskFunc == nil {
-		policy.IsSwarmTaskFunc = defaults.IsSwarmTaskFunc
 	}
 	if policy.StopSignalFunc == nil {
 		policy.StopSignalFunc = defaults.StopSignalFunc
@@ -94,11 +89,6 @@ func (p LabelPolicy) IsAgent(containerLabels map[string]string) bool {
 // IsServer reports whether labels identify a server self-update target.
 func (p LabelPolicy) IsServer(containerLabels map[string]string) bool {
 	return p.IsServerFunc != nil && p.IsServerFunc(containerLabels)
-}
-
-// IsSwarmTask reports whether labels identify a Docker Swarm task container.
-func (p LabelPolicy) IsSwarmTask(containerLabels map[string]string) bool {
-	return p.IsSwarmTaskFunc != nil && p.IsSwarmTaskFunc(containerLabels)
 }
 
 // StopSignal returns the configured stop signal for a container, or "" when the

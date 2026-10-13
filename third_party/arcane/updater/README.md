@@ -93,14 +93,14 @@ service, err := updater.New(updater.Config{
 })
 ```
 
-`LabelPolicy` merges per field: overriding `IsUpdateDisabledFunc` above keeps the default behavior for self-update, agent, server, swarm, and stop-signal detection. See `DefaultLabelPolicy`.
+`LabelPolicy` merges per field: overriding `IsUpdateDisabledFunc` above keeps the default behavior for self-update, agent, server, and stop-signal detection. See `DefaultLabelPolicy`.
 
 `Service.Close` shuts down the Docker client `New` created. If you supplied your own `DockerClientProvider`, its lifecycle stays yours and `Close` is a no-op.
 
 ## How it works
 
 1. Resolve a pullable image reference for each in-scope container, skipping image IDs and digest-pinned references — re-pulling those can never yield a newer image.
-2. Skip containers the `LabelPolicy` disables, containers the host excludes via `SettingsProvider`, and Swarm tasks.
+2. Skip containers the `LabelPolicy` disables, containers the host excludes via `SettingsProvider`,.
 3. Select a newer eligible version tag, or compare the configured tag's digest. `Options{Force: true}` bypasses unchanged-image checks while preserving the selection policy.
 4. Pull the target image.
 5. Recreate the container — through the `ProjectUpdater` for Compose services (grouped by project, then verified to no longer run the old image), or by a direct stop/create/start with rollback for standalone containers.
@@ -261,8 +261,7 @@ still updates the configured reference when both tags share the same image ID.
 `Options{IgnoreSettingsExclusions: true}` lets the explicitly requested container
 update even when the `SettingsProvider` excludes it from automatic updates. It
 applies only to that target and leaves the exclusion in place; `ApplyPending`
-and the restart pass keep honoring exclusions, and disabled labels, Swarm tasks
-and immutable references stay ineligible.
+and the restart pass keep honoring exclusions, and disabled labels and immutable references stay ineligible.
 
 ### Compose host adapters
 

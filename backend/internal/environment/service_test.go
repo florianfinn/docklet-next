@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; functional cut: removed GitOps and saved Git repositories.
+// Deviations: Local module namespace; functional cut: removed GitOps and saved Git repositories; functional cut: removed Swarm.
 
 package environment
 
@@ -39,7 +39,6 @@ import (
 	"github.com/florianfinn/docklet-next/backend/internal/environment/children/snippets"
 	"github.com/florianfinn/docklet-next/backend/internal/registry"
 	"github.com/florianfinn/docklet-next/backend/internal/s3"
-	"github.com/florianfinn/docklet-next/backend/internal/session"
 	"github.com/florianfinn/docklet-next/backend/internal/settings"
 	"github.com/florianfinn/docklet-next/backend/internal/user"
 	"github.com/florianfinn/docklet-next/backend/pkg/libarcane/edge"
@@ -171,6 +170,36 @@ func createNamedTestEnvironmentInternal(t *testing.T, db *database.DB, id, name,
 	}
 
 	require.NoError(t, db.WithContext(t.Context()).Create(env).Error)
+}
+
+func TestEnvironmentService_RegenerateEnvironmentApiKeyKeepsPairing(t *testing.T) {
+	ctx := t.Context()
+	db := setupEnvironmentServiceTestDB(t)
+	keys := apikey.NewApiKeyService(db, user.NewUserService(db, nil, nil), nil)
+	old, err := keys.CreateEnvironmentApiKey(ctx, "env-rotation")
+	require.NoError(t, err)
+	createTestEnvironment(t, db, "env-rotation", "http://agent.example", &old.Key)
+	require.NoError(t, db.WithContext(ctx).Model(&Environment{}).Where("id = ?", "env-rotation").Updates(map[string]any{
+		"api_key_id": old.ID,
+		"is_edge":    true,
+	}).Error)
+
+	service := NewEnvironmentService(db, nil, nil, nil, nil, keys)
+	env, err := service.GetEnvironmentByID(ctx, "env-rotation")
+	require.NoError(t, err)
+	rotated, err := service.RegenerateEnvironmentApiKey(ctx, env, "user-1", "operator")
+	require.NoError(t, err)
+	require.NotEqual(t, old.Key, rotated)
+
+	var persisted Environment
+	require.NoError(t, db.WithContext(ctx).First(&persisted, "id = ?", "env-rotation").Error)
+	require.Equal(t, rotated, *persisted.AccessToken)
+	require.NotEqual(t, old.ID, *persisted.ApiKeyID)
+	resolved, err := service.ResolveEdgeEnvironmentByToken(ctx, rotated)
+	require.NoError(t, err)
+	require.Equal(t, persisted.ID, resolved)
+	_, err = keys.GetApiKey(ctx, old.ID)
+	require.ErrorIs(t, err, apikey.ErrApiKeyNotFound)
 }
 
 func createTestEnvironmentWithState(t *testing.T, db *database.DB, id, apiURL, status string, isEdge bool, accessToken *string) {
@@ -838,273 +867,6 @@ func TestAgentHostPortInternal(t *testing.T) {
 	}
 }
 
-func TestEnvironmentService_EnsureSwarmNodeAgentEnvironment_CreatesVisibleEnvironmentAndReusesToken(t *testing.T) {
-	ctx := t.Context()
-	db := setupEnvironmentServiceTestDB(t)
-	userService := user.NewUserService(db, nil, session.RevokeAllUserSessionsExceptInDB)
-	apiKeyService := apikey.NewApiKeyService(db, userService, nil)
-	svc := NewEnvironmentService(db, nil, nil, nil, nil, apiKeyService)
-	localUser := createTestEnvironmentServiceUser(t, ctx, userService, "swarm-admin")
-
-	createdEnv, createdToken, err := svc.EnsureSwarmNodeAgentEnvironment(
-		ctx,
-		"manager-env",
-		"node-1234567890abcdef",
-		"worker-1",
-		localUser.ID,
-		localUser.Username,
-		false,
-	)
-	require.NoError(t, err)
-	require.NotNil(t, createdEnv)
-	require.NotEmpty(t, createdToken)
-	require.Equal(t, "worker-1", createdEnv.Name)
-	require.Equal(t, "edge://swarm-node-node-1234567", createdEnv.ApiUrl)
-	require.False(t, createdEnv.Hidden)
-	require.True(t, createdEnv.IsEdge)
-	require.True(t, createdEnv.Enabled)
-	require.Equal(t, string(EnvironmentStatusPending), createdEnv.Status)
-	require.NotNil(t, createdEnv.ParentEnvironmentID)
-	require.Equal(t, "manager-env", *createdEnv.ParentEnvironmentID)
-	require.NotNil(t, createdEnv.SwarmNodeID)
-	require.Equal(t, "node-1234567890abcdef", *createdEnv.SwarmNodeID)
-	require.NotNil(t, createdEnv.AccessToken)
-	require.Equal(t, createdToken, *createdEnv.AccessToken)
-	require.NotNil(t, createdEnv.ApiKeyID)
-
-	var childEnvironments []Environment
-	require.NoError(t, db.WithContext(ctx).
-		Where("parent_environment_id = ?", "manager-env").
-		Where("swarm_node_id = ?", "node-1234567890abcdef").
-		Find(&childEnvironments).Error)
-	require.Len(t, childEnvironments, 1)
-
-	var apiKeys []apikey.ApiKey
-	require.NoError(t, db.WithContext(ctx).
-		Where("environment_id = ?", createdEnv.ID).
-		Order("created_at asc").
-		Find(&apiKeys).Error)
-	require.Len(t, apiKeys, 1)
-	require.Nil(t, apiKeys[0].UserID) // environment bootstrap keys have no owner
-
-	reusedEnv, reusedToken, err := svc.EnsureSwarmNodeAgentEnvironment(
-		ctx,
-		"manager-env",
-		"node-1234567890abcdef",
-		"worker-1",
-		localUser.ID,
-		localUser.Username,
-		false,
-	)
-	require.NoError(t, err)
-	require.NotNil(t, reusedEnv)
-	require.Equal(t, createdEnv.ID, reusedEnv.ID)
-	require.Equal(t, createdToken, reusedToken)
-	require.Equal(t, createdEnv.ApiKeyID, reusedEnv.ApiKeyID)
-
-	var apiKeysAfterReuse []apikey.ApiKey
-	require.NoError(t, db.WithContext(ctx).
-		Where("environment_id = ?", createdEnv.ID).
-		Order("created_at asc").
-		Find(&apiKeysAfterReuse).Error)
-	require.Len(t, apiKeysAfterReuse, 1)
-}
-
-func TestEnvironmentService_EnsureSwarmNodeAgentEnvironment_ReusesLegacyHiddenRegistration(t *testing.T) {
-	ctx := t.Context()
-	db := setupEnvironmentServiceTestDB(t)
-	svc := NewEnvironmentService(db, nil, nil, nil, nil, nil)
-	parentEnvironmentID := "manager-env"
-	nodeID := "legacy-node"
-	token := "legacy-agent-token"
-	legacy := &Environment{
-		ID:                  "legacy-agent",
-		Name:                "Legacy node agent",
-		ApiUrl:              "edge://legacy-node",
-		Status:              string(EnvironmentStatusOffline),
-		Enabled:             true,
-		IsEdge:              true,
-		Hidden:              true,
-		AccessToken:         &token,
-		ParentEnvironmentID: &parentEnvironmentID,
-		SwarmNodeID:         &nodeID,
-	}
-	{
-		err := db.WithContext(ctx).Create(legacy).Error
-		require.NoError(t, err,
-			"create legacy environment: %v", err)
-	}
-
-	reused, reusedToken, err := svc.EnsureSwarmNodeAgentEnvironment(
-		ctx,
-		parentEnvironmentID,
-		nodeID,
-		"legacy-host",
-		"user-id",
-		"username",
-		false,
-	)
-
-	require.NoError(t, err,
-		"EnsureSwarmNodeAgentEnvironment() error = %v", err)
-
-	require.Equal(t, legacy.ID, reused.ID,
-		"environment ID = %q, want %q", reused.ID, legacy.ID)
-
-	require.True(t, reused.Hidden,
-		"legacy environment was unexpectedly converted to visible")
-
-	require.Equal(t, token, reusedToken,
-		"token = %q, want existing token", reusedToken)
-
-	var environments []Environment
-	{
-		operationErr := db.WithContext(ctx).
-			Where("parent_environment_id = ? AND swarm_node_id = ?", parentEnvironmentID, nodeID).
-			Find(&environments).Error
-		require.NoError(t, operationErr,
-			"list node environments: %v", operationErr)
-	}
-
-	require.Len(t, environments, 1,
-		"environment count = %d, want 1", len(environments))
-}
-
-// TestEnvironmentService_EnsureSwarmNodeAgentEnvironment_TokenResolvesEndToEnd
-// pins the agent token round-trip: the token returned from the swarm node
-// agent provisioning flow must resolve back to the same environment via
-// ResolveEdgeEnvironmentByToken, and rotation must invalidate the previous
-// token while making the new one resolvable. This is the end-to-end gap that
-// would have caught the v1.18.1 "invalid agent token" bug if any silent
-// transformation (trim, encode, hash) were ever introduced between the
-// command-generation path and the poll-validation path.
-func TestEnvironmentService_EnsureSwarmNodeAgentEnvironment_TokenResolvesEndToEnd(t *testing.T) {
-	ctx := t.Context()
-	db := setupEnvironmentServiceTestDB(t)
-	userService := user.NewUserService(db, nil, session.RevokeAllUserSessionsExceptInDB)
-	apiKeyService := apikey.NewApiKeyService(db, userService, nil)
-	svc := NewEnvironmentService(db, nil, nil, nil, nil, apiKeyService)
-	localUser := createTestEnvironmentServiceUser(t, ctx, userService, "swarm-resolve-admin")
-
-	createdEnv, createdToken, err := svc.EnsureSwarmNodeAgentEnvironment(
-		ctx,
-		"manager-env-resolve",
-		"node-resolve-1234567890",
-		"resolve-host",
-		localUser.ID,
-		localUser.Username,
-		false,
-	)
-	require.NoError(t, err)
-	require.NotEmpty(t, createdToken)
-
-	resolvedID, err := svc.ResolveEdgeEnvironmentByToken(ctx, createdToken)
-	require.NoError(t, err)
-	require.Equal(t, createdEnv.ID, resolvedID)
-
-	// Whitespace normalization on the wire (e.g. a proxy adding a trailing
-	// newline) must still resolve.
-	resolvedID, err = svc.ResolveEdgeEnvironmentByToken(ctx, "  "+createdToken+"\n")
-	require.NoError(t, err)
-	require.Equal(t, createdEnv.ID, resolvedID)
-
-	// Rotate the token: the new token must resolve and the old token must not.
-	rotatedEnv, rotatedToken, err := svc.EnsureSwarmNodeAgentEnvironment(
-		ctx,
-		"manager-env-resolve",
-		"node-resolve-1234567890",
-		"resolve-host",
-		localUser.ID,
-		localUser.Username,
-		true,
-	)
-	require.NoError(t, err)
-	require.Equal(t, createdEnv.ID, rotatedEnv.ID)
-	require.NotEqual(t, createdToken, rotatedToken)
-
-	resolvedID, err = svc.ResolveEdgeEnvironmentByToken(ctx, rotatedToken)
-	require.NoError(t, err)
-	require.Equal(t, createdEnv.ID, resolvedID)
-
-	_, err = svc.ResolveEdgeEnvironmentByToken(ctx, createdToken)
-	require.Error(t, err)
-	require.Contains(t, err.Error(), "invalid agent token")
-}
-
-func TestEnvironmentService_BindSwarmNodeEnvironment_PreservesVisibleEnvironmentToken(t *testing.T) {
-	ctx := t.Context()
-	db := setupEnvironmentServiceTestDB(t)
-	token := "existing-agent-token"
-	createTestEnvironment(t, db, "visible-env", "http://visible.example", &token)
-	svc := NewEnvironmentService(db, nil, nil, nil, nil, nil)
-
-	bound, err := svc.BindSwarmNodeEnvironment(ctx, "manager-env", "node-1", "visible-env", false)
-	require.NoError(t, err)
-	require.False(t, bound.Hidden)
-	require.Equal(t, "manager-env", *bound.ParentEnvironmentID)
-	require.Equal(t, "node-1", *bound.SwarmNodeID)
-	require.Equal(t, token, *bound.AccessToken)
-
-	require.NoError(t, svc.DetachSwarmNodeEnvironment(ctx, "manager-env", "node-1"))
-	detached, err := svc.GetEnvironmentByID(ctx, "visible-env")
-	require.NoError(t, err)
-	require.Nil(t, detached.ParentEnvironmentID)
-	require.Nil(t, detached.SwarmNodeID)
-	require.Equal(t, token, *detached.AccessToken)
-}
-
-func TestEnvironmentService_BindSwarmNodeEnvironment_RequiresExplicitRebind(t *testing.T) {
-	ctx := t.Context()
-	db := setupEnvironmentServiceTestDB(t)
-	createTestEnvironment(t, db, "visible-env", "http://visible.example", nil)
-	svc := NewEnvironmentService(db, nil, nil, nil, nil, nil)
-
-	_, err := svc.BindSwarmNodeEnvironment(ctx, "manager-a", "node-a", "visible-env", false)
-	require.NoError(t, err)
-	_, err = svc.BindSwarmNodeEnvironment(ctx, "manager-b", "node-b", "visible-env", false)
-	require.ErrorContains(t, err, "explicit rebinding is required")
-
-	rebound, err := svc.BindSwarmNodeEnvironment(ctx, "manager-b", "node-b", "visible-env", true)
-	require.NoError(t, err)
-	require.Equal(t, "manager-b", *rebound.ParentEnvironmentID)
-	require.Equal(t, "node-b", *rebound.SwarmNodeID)
-}
-
-func TestEnvironmentService_ListMethods_ExcludeHiddenEnvironments(t *testing.T) {
-	ctx := t.Context()
-	db := setupEnvironmentServiceTestDB(t)
-	svc := NewEnvironmentService(db, nil, nil, nil, nil, nil)
-
-	createTestEnvironment(t, db, "0", "http://localhost:3552", nil)
-	createNamedTestEnvironmentInternal(t, db, "env-visible", "Visible Remote", "http://visible.example", new("visible-token"))
-	createNamedTestEnvironmentInternal(t, db, "env-hidden", "Hidden Node Agent", "edge://swarm-node-hidden", new("hidden-token"))
-
-	require.NoError(t, db.WithContext(ctx).
-		Model(&Environment{}).
-		Where("id = ?", "env-hidden").
-		Updates(map[string]any{
-			"hidden":                true,
-			"is_edge":               true,
-			"parent_environment_id": "0",
-			"swarm_node_id":         "node-hidden",
-		}).Error)
-
-	listedEnvironments, _, err := svc.ListEnvironmentsPaginated(ctx, pagination.QueryParams{
-		Start: 0, Limit: 20,
-		Filters: map[string]string{},
-	}, nil)
-	require.NoError(t, err)
-	require.Len(t, listedEnvironments, 2)
-	for _, env := range listedEnvironments {
-		require.NotEqual(t, "env-hidden", env.ID)
-	}
-
-	remoteEnvironments, err := svc.ListRemoteEnvironments(ctx)
-	require.NoError(t, err)
-	require.Len(t, remoteEnvironments, 1)
-	require.Equal(t, "env-visible", remoteEnvironments[0].ID)
-}
-
 func TestEnvironmentService_ListEnvironmentsPaginated_FiltersByAccessibleEnvIDs(t *testing.T) {
 	ctx := t.Context()
 	db := setupEnvironmentServiceTestDB(t)
@@ -1123,7 +885,7 @@ func TestEnvironmentService_ListEnvironmentsPaginated_FiltersByAccessibleEnvIDs(
 		}
 	}
 
-	// nil = no restriction: every non-hidden environment is returned.
+	// nil = no restriction: every environment is returned.
 	all, _, err := svc.ListEnvironmentsPaginated(ctx, newParams(""), nil)
 	require.NoError(t, err)
 	require.ElementsMatch(t, []string{"0", "env-a", "env-b"}, environmentIDsInternal(all))

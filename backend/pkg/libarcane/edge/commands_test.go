@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: None
+// Deviations: functional cut: removed Swarm.
 
 package edge
 
@@ -84,12 +84,10 @@ func TestResolveEdgeCommandName(t *testing.T) {
 		{name: "activity cancel", method: "POST", path: "/api/environments/0/activities/activity-1/cancel", command: "activity.cancel", shouldHit: true},
 		{name: "activity history clear", method: "DELETE", path: "/api/environments/0/activities/history", command: "activity.history.clear", shouldHit: true},
 		{name: "health", method: "HEAD", path: "/api/environments/0/system/health", command: "system.health", shouldHit: true},
-		{name: "swarm node identity", method: "GET", path: "/api/swarm/node-identity", command: "swarm.node_identity", shouldHit: true},
 		{name: "ports list", method: "GET", path: "/api/environments/0/ports?limit=20", command: "port.list", shouldHit: true},
 		{name: "network topology", method: "GET", path: "/api/environments/0/networks/topology", command: "network.topology", shouldHit: true},
 		{name: "container auto-update", method: "PUT", path: "/api/environments/0/containers/abc/auto-update", command: "container.auto_update.set", shouldHit: true},
 		{name: "project update services", method: "POST", path: "/api/environments/0/projects/p1/update-services", command: "project.update_services", shouldHit: true},
-		{name: "swarm services list", method: "GET", path: "/api/environments/0/swarm/services", command: "swarm.service.list", shouldHit: true},
 		{name: "unknown", method: "PATCH", path: "/api/environments/0/containers", shouldHit: false},
 	}
 

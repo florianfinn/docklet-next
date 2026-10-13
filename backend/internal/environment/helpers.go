@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace
+// Deviations: Local module namespace; functional cut: removed Swarm.
 
 package environment
 
@@ -28,7 +28,7 @@ type edgeTokenCacheInternal struct {
 }
 
 // remoteEnvSnapshotCacheInternal holds the latest in-process copy of every
-// enabled, visible, non-local environment, so hot paths avoid a DB round trip.
+// enabled, non-local environment, so hot paths avoid a DB round trip.
 type remoteEnvSnapshotCacheInternal struct {
 	mu       sync.RWMutex
 	envs     map[string]Environment
@@ -152,7 +152,7 @@ func (c *edgeTokenCacheInternal) sync(envID, token string) {
 }
 
 func isActiveRemoteEnvironmentInternal(env Environment) bool {
-	return env.ID != "" && env.ID != "0" && env.Enabled && !env.Hidden
+	return env.ID != "" && env.ID != "0" && env.Enabled
 }
 
 func (c *remoteEnvSnapshotCacheInternal) get(environmentID string) mo.Option[Environment] {

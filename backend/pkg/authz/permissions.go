@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Functional cut: removed template catalogue; functional cut: removed federated credentials; functional cut: removed central variables and .env.global; functional cut: removed GitOps and saved Git repositories.
+// Deviations: Functional cut: removed template catalogue; functional cut: removed federated credentials; functional cut: removed central variables and .env.global; functional cut: removed GitOps and saved Git repositories; functional cut: removed Swarm.
 
 // Package authz defines the permission taxonomy and authorization primitives
 // used across Arcane handlers. Permissions are strings of the form
@@ -152,19 +152,6 @@ const (
 	PermNetworksConnect    = "networks:connect"
 	PermNetworksDisconnect = "networks:disconnect"
 
-	PermSwarmRead         = "swarm:read"
-	PermSwarmInit         = "swarm:init"
-	PermSwarmJoin         = "swarm:join"
-	PermSwarmLeave        = "swarm:leave"
-	PermSwarmSpec         = "swarm:spec"
-	PermSwarmNodes        = "swarm:nodes"
-	PermSwarmServices     = "swarm:services"
-	PermSwarmServicesLogs = "swarm:services:logs"
-	PermSwarmStacks       = "swarm:stacks"
-	PermSwarmConfigs      = "swarm:configs"
-	PermSwarmSecrets      = "swarm:secrets"
-	PermSwarmUnlock       = "swarm:unlock"
-
 	PermWebhooksList   = "webhooks:list"
 	PermWebhooksCreate = "webhooks:create"
 	PermWebhooksUpdate = "webhooks:update"
@@ -304,7 +291,6 @@ func BuiltInEditorPermissions() []string {
 		PermImagesList, PermImagesRead, PermImagesPull, PermImagesPush, PermImagesBuild, PermImagesTag, PermImagesCommit, PermImagesPrune, PermImagesDelete, PermImagesUpload, PermImagesPatch,
 		PermVolumesList, PermVolumesRead, PermVolumesCreate, PermVolumesRename, PermVolumesDelete, PermVolumesPrune, PermVolumesUpload, PermVolumesBackup,
 		PermNetworksList, PermNetworksRead, PermNetworksCreate, PermNetworksDelete, PermNetworksPrune, PermNetworksConnect, PermNetworksDisconnect,
-		PermSwarmRead, PermSwarmSpec, PermSwarmNodes, PermSwarmServices, PermSwarmServicesLogs, PermSwarmStacks, PermSwarmConfigs, PermSwarmSecrets,
 		PermWebhooksList, PermWebhooksCreate, PermWebhooksUpdate, PermWebhooksDelete,
 		PermJobsManage, PermNotificationsManage, PermDashboardRead,
 		PermSystemRead, PermSystemPrune,
@@ -338,7 +324,6 @@ func BuiltInDeployerPermissions() []string {
 		PermImagesList, PermImagesRead, PermImagesPull, PermImagesTag, PermImagesCommit,
 		PermVolumesList, PermVolumesRead,
 		PermNetworksList, PermNetworksRead,
-		PermSwarmRead, PermSwarmServicesLogs,
 		PermDashboardRead,
 		PermSystemRead,
 		PermImageUpdatesRead, PermImageUpdatesCheck,
@@ -364,7 +349,6 @@ func BuiltInViewerPermissions() []string {
 		PermImagesList, PermImagesRead,
 		PermVolumesList, PermVolumesRead,
 		PermNetworksList, PermNetworksRead,
-		PermSwarmRead, PermSwarmServicesLogs,
 		PermWebhooksList,
 		PermDashboardRead,
 		PermSystemRead,
@@ -386,7 +370,6 @@ func BuiltInMonitorPermissions() []string {
 		PermImagesList, PermImagesRead,
 		PermVolumesList, PermVolumesRead,
 		PermNetworksList, PermNetworksRead,
-		PermSwarmRead, PermSwarmServicesLogs,
 		PermDashboardRead,
 		PermSystemRead,
 		PermImageUpdatesRead,

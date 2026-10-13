@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: None
+// Deviations: functional cut: removed Swarm.
 
 package network
 
@@ -262,12 +262,6 @@ type CreateOptions struct {
 
 	// Internal restricts external access to the network.
 	Internal bool `json:"internal,omitempty" doc:"Restrict external access to the network"`
-
-	// Attachable allows manual container attachment in swarm mode.
-	Attachable bool `json:"attachable,omitempty" doc:"Allow manual container attachment"`
-
-	// Ingress enables routing-mesh for swarm cluster.
-	Ingress bool `json:"ingress,omitempty" doc:"Enable routing-mesh for swarm cluster"`
 
 	// EnableIPv6 enables IPv6 networking.
 	EnableIPv6 bool `json:"enableIPv6,omitempty" doc:"Enable IPv6 networking"`

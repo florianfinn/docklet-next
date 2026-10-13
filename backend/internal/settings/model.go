@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Functional cut: removed APNS mobile push; functional cut: removed template catalogue; functional cut: removed federated credentials; functional cut: removed GitOps and saved Git repositories.
+// Deviations: Functional cut: removed APNS mobile push; functional cut: removed template catalogue; functional cut: removed federated credentials; functional cut: removed GitOps and saved Git repositories; functional cut: removed Swarm.
 
 package settings
 
@@ -72,7 +72,6 @@ type Settings struct {
 	// General category
 	ProjectsDirectory           SettingVariable `key:"projectsDirectory,envOverride" meta:"label=Projects Directory;type=text;keywords=projects,directory,path,folder,location,storage,files,compose,docker-compose;category=internal;description=Configure where project files are stored"`
 	FollowProjectSymlinks       SettingVariable `key:"followProjectSymlinks,envOverride" meta:"label=Follow Project Symlinks;type=boolean;keywords=projects,symlink,symlinks,symbolic links,compose,directory,discovery;category=general;description=Treat symlinked child directories inside the projects directory as Docker Compose projects"`
-	SwarmStackSourcesDirectory  SettingVariable `key:"swarmStackSourcesDirectory,envOverride" meta:"label=Swarm Stack Sources Directory;type=text;keywords=swarm,stacks,stack,source,sources,directory,path,folder,location,storage,compose,env;category=internal;description=Configure where swarm stack source files are stored"`
 	DiskUsagePath               SettingVariable `key:"diskUsagePath" meta:"label=Disk Usage Path;type=text;keywords=disk,usage,path,storage,folder,files;category=general;description=Path used for disk usage calculations"`
 	BaseServerURL               SettingVariable `key:"baseServerUrl" meta:"label=Base Server URL;type=text;keywords=base,url,server,domain,host,endpoint,address,link;category=general;description=Set the base URL for the application"`
 	EnableGravatar              SettingVariable `key:"enableGravatar,authrequired" meta:"label=Enable Gravatar;type=boolean;keywords=gravatar,avatar,profile,picture,image,user,photo;category=users;description=Enable Gravatar profile pictures for users"`
@@ -129,7 +128,6 @@ type Settings struct {
 	AuthSessionTimeout                    SettingVariable `key:"authSessionTimeout" meta:"label=Session Timeout;type=number;keywords=session,timeout,expire,duration,lifetime,minutes,logout;category=authentication;description=How long user sessions remain active"`
 	AuthPasswordPolicy                    SettingVariable `key:"authPasswordPolicy" meta:"label=Password Policy;type=select;keywords=password,policy,strength,complexity,requirements,security,rules;category=authentication;description=Set password strength requirements"`
 	FeatureVulnerabilityManagementEnabled SettingVariable `key:"featureVulnerabilityManagementEnabled,public,envOverride" meta:"label=Vulnerability management;type=boolean;keywords=features,vulnerability,security,scan,enable,disable;category=general;description=Enable vulnerability management for this environment. Disabling retains reports and configuration and leaves standalone image patching available"`
-	FeatureSwarmEnabled                   SettingVariable `key:"featureSwarmEnabled,public,envOverride" meta:"label=Docker Swarm;type=boolean;keywords=features,swarm,cluster,stacks,services,nodes,enable,disable;category=general;description=Show Docker Swarm for this environment. An active swarm cluster keeps it enabled"`
 	VulnerabilityScanEnabled              SettingVariable `key:"vulnerabilityScanEnabled" meta:"label=Scheduled Vulnerability Scan;type=boolean;keywords=vulnerability,scan,security,trivy,schedule,automatic,cve;category=security;description=Enable scheduled vulnerability scanning of all Docker images" catmeta:"id=security;title=Security;icon=shield;url=/settings/security;description=Configure vulnerability scanning and runtime security settings"`
 	VulnerabilityScanInterval             SettingVariable `key:"vulnerabilityScanInterval" meta:"label=Vulnerability Scan Interval;type=cron;keywords=vulnerability,scan,interval,schedule,frequency,trivy,cve;category=security;description=How often to run scheduled vulnerability scans (cron expression)"`
 	VulnerabilityThreatIntelEnabled       SettingVariable `key:"vulnerabilityThreatIntelEnabled,envOverride" meta:"label=Threat Intelligence;type=boolean;keywords=kev,cisa,epss,first,exploit,threat,intel,risk,airgap,offline,security;category=security;description=Fetch the CISA KEV catalog and FIRST EPSS scores to prioritize exploited vulnerabilities. Disable for air-gapped installs."`

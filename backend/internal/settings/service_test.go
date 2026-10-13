@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; functional cut: removed template catalogue; functional cut: removed GitOps and saved Git repositories.
+// Deviations: Local module namespace; functional cut: removed template catalogue; functional cut: removed GitOps and saved Git repositories; functional cut: removed Swarm.
 
 package settings
 
@@ -494,19 +494,6 @@ func TestSettingsService_GetSettings_EnvOverride_TrivyRuntimeSecurity(t *testing
 	require.NoError(t, err)
 	require.Equal(t, "label=disable,\nlabel=type:container_runtime_t", settingsCfg.TrivySecurityOpts.Value)
 	require.True(t, settingsCfg.TrivyPrivileged.IsTrue())
-}
-
-func TestSettingsService_GetStringSetting_EnvOverride_SwarmStackSourcesDirectory(t *testing.T) {
-	ctx := t.Context()
-	db := setupSettingsTestDB(t)
-	t.Setenv("SWARM_STACK_SOURCES_DIRECTORY", "/mnt/swarm-from-env")
-
-	svc, err := newSettingsServiceForTestInternal(t, ctx, db)
-	require.NoError(t, err)
-	require.NoError(t, svc.UpdateSetting(ctx, "swarmStackSourcesDirectory", "/tmp/swarm-from-db"))
-
-	require.Equal(t, "/mnt/swarm-from-env", svc.GetStringSetting(ctx, "swarmStackSourcesDirectory", "/fallback"))
-	require.Equal(t, "/mnt/swarm-from-env", svc.GetSettingsConfig().SwarmStackSourcesDirectory.Value)
 }
 
 func TestSettingsService_isEnvOverrideActiveInternal(t *testing.T) {
@@ -1331,23 +1318,4 @@ func TestSettingsService_RejectInvalidFeatureBoolean(t *testing.T) {
 			require.True(t, svc.IsFeatureEnabled(t.Context(), features.VulnerabilityManagement))
 		})
 	}
-}
-
-func TestSettingsService_SwarmFeatureDefaultsOffAndPersists(t *testing.T) {
-	var nilService *SettingsService
-	require.False(t, nilService.IsFeatureEnabled(t.Context(), features.Swarm))
-
-	svc, err := newSettingsServiceForTestInternal(t, t.Context(), setupSettingsTestDB(t))
-	require.NoError(t, err)
-	require.False(t, svc.IsFeatureEnabled(t.Context(), features.Swarm))
-	require.Contains(t, svc.ListSettings(SettingVisibilityPublic), SettingVariable{Key: features.SwarmSettingKey, Value: "false"})
-
-	enabled := "true"
-	_, err = svc.UpdateSettings(t.Context(), settings.Update{FeatureSwarmEnabled: &enabled})
-	require.NoError(t, err)
-	require.True(t, svc.IsFeatureEnabled(t.Context(), features.Swarm))
-
-	invalid := "yes"
-	_, err = svc.UpdateSettings(t.Context(), settings.Update{FeatureSwarmEnabled: &invalid})
-	require.ErrorIs(t, err, common.ErrValidation)
 }

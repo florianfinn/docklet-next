@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace
+// Deviations: Local module namespace; functional cut: removed Swarm.
 
 package projects
 
@@ -13,7 +13,6 @@ import (
 	"io/fs"
 	"log/slog"
 	"os"
-	"path"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -346,125 +345,6 @@ func relocateRenameConflictDirectoryInternal(ctx context.Context, localPath stri
 		return filepath.Join(parent, conflictName), nil
 	}
 	return "", fmt.Errorf("relocate project rename target path: no available conflict path for %s", localPath)
-}
-
-// SyncFile represents a file to be written during directory sync
-type SyncFile struct {
-	RelativePath string // Path relative to the project directory
-	Content      []byte
-	// Executable preserves the source's +x bit so lifecycle hooks and other
-	// repo-committed scripts arrive runnable in the project workspace.
-	Executable bool
-}
-
-// WriteSyncedDirectory writes multiple files to a project directory.
-// It validates all paths are within the project directory and creates
-// subdirectories as needed. Returns the list of written file paths.
-func WriteSyncedDirectory(ctx context.Context, projectsRoot, projectPath string, files []SyncFile) ([]string, error) {
-	if _, err := acfs.LogicalPath(projectsRoot, projectPath); err != nil {
-		return nil, fmt.Errorf("project path is outside projects root: %w", err)
-	}
-
-	// The project directory is the confinement root for every write below, so
-	// it has to exist before acfs can open it.
-	if err := os.MkdirAll(projectPath, utils.DirPerm); err != nil {
-		return nil, fmt.Errorf("failed to create project directory: %w", err)
-	}
-
-	writtenPaths := make([]string, 0, len(files))
-
-	for _, file := range files {
-		logicalPath, err := acfs.LogicalPath(projectPath, filepath.Join(projectPath, file.RelativePath))
-		if err != nil {
-			return nil, fmt.Errorf("file path %s would escape project directory", file.RelativePath)
-		}
-
-		if mkdirAllErr := acfs.MkdirAll(ctx, projectPath, path.Dir(logicalPath), utils.DirPerm); mkdirAllErr != nil {
-			return nil, fmt.Errorf("failed to create directory for %s: %w", file.RelativePath, mkdirAllErr)
-		}
-
-		entry, statErr := acfs.Stat(ctx, projectPath, logicalPath, false)
-		switch {
-		case statErr == nil && entry.IsDirectory:
-			if removeAllErr := acfs.RemoveAll(ctx, projectPath, logicalPath); removeAllErr != nil {
-				return nil, fmt.Errorf("failed to replace directory at %s: %w", file.RelativePath, removeAllErr)
-			}
-		case statErr != nil && !errors.Is(statErr, fs.ErrNotExist):
-			return nil, fmt.Errorf("failed to inspect target path for %s: %w", file.RelativePath, statErr)
-		}
-
-		// Write the file. Honor the source's executable bit so scripts arrive
-		// runnable for lifecycle hooks and similar consumers.
-		perm := kit.Ternary(file.Executable, 0o755, utils.FilePerm)
-		if writeErr := acfs.Write(ctx, projectPath, logicalPath, file.Content, acfs.WriteOptions{Mode: perm, InPlace: true}); writeErr != nil {
-			return nil, fmt.Errorf("failed to write file %s: %w", file.RelativePath, writeErr)
-		}
-
-		writtenPaths = append(writtenPaths, file.RelativePath)
-	}
-
-	return writtenPaths, nil
-}
-
-// CleanupRemovedFiles deletes files that were in the old sync but are not in the new sync.
-// It only removes files that were previously synced (tracked in oldFiles).
-// Empty directories are removed after file deletion.
-// This is a best-effort operation - errors are logged but don't cause failure.
-func CleanupRemovedFiles(ctx context.Context, projectsRoot, projectPath string, oldFiles, newFiles []string) error {
-	if _, err := acfs.LogicalPath(projectsRoot, projectPath); err != nil {
-		return fmt.Errorf("project path is outside projects root: %w", err)
-	}
-
-	// Build set of new files for quick lookup
-	newFileSet := make(map[string]bool, len(newFiles))
-	for _, f := range newFiles {
-		newFileSet[f] = true
-	}
-
-	// Track directories that may need cleanup
-	dirsToCheck := make(map[string]bool)
-
-	// Delete files that are in old but not in new
-	for _, oldFile := range oldFiles {
-		if newFileSet[oldFile] {
-			continue // File still exists in new sync
-		}
-
-		logicalPath, err := acfs.LogicalPath(projectPath, filepath.Join(projectPath, oldFile))
-		if err != nil {
-			continue // Skip files that would be outside project
-		}
-
-		// Delete the file (best effort)
-		if removeErr := acfs.Remove(ctx, projectPath, logicalPath); removeErr != nil && !errors.Is(removeErr, fs.ErrNotExist) {
-			// Log but continue - this is best effort
-			slog.WarnContext(ctx, "Failed to remove old synced file", "file", oldFile, "error", removeErr)
-		}
-
-		// Track parent directory for potential cleanup
-		if parentLogical := path.Dir(logicalPath); parentLogical != "/" {
-			dirsToCheck[parentLogical] = true
-		}
-	}
-
-	// Clean up empty directories (best effort, deepest first)
-	for dir := range dirsToCheck {
-		cleanupEmptyDirs(ctx, projectPath, dir)
-	}
-
-	return nil
-}
-
-// cleanupEmptyDirs removes empty directories starting from the given logical
-// path up to (but not including) the project directory. It stops at the first
-// error of any kind: a non-empty directory, an already-removed one, or
-// anything else.
-func cleanupEmptyDirs(ctx context.Context, projectPath, startLogical string) {
-	for current := startLogical; current != "/"; current = path.Dir(current) {
-		if err := acfs.Remove(ctx, projectPath, current); err != nil {
-			return
-		}
-	}
 }
 
 // composeOverrideFileCandidates lists supported compose override filenames in

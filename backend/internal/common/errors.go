@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Functional cut: removed APNS mobile push; functional cut: removed federated credentials; functional cut: removed central variables and .env.global; functional cut: removed GitOps and saved Git repositories.
+// Deviations: Functional cut: removed APNS mobile push; functional cut: removed federated credentials; functional cut: removed central variables and .env.global; functional cut: removed GitOps and saved Git repositories; functional cut: removed Swarm.
 
 package common
 
@@ -73,8 +73,6 @@ var (
 	ErrContainerComposeManaged            = Classify(ErrConflict, errors.New("container is managed by a compose project; edit it via the project editor"))
 	ErrContainerNameTaken                 = Classify(ErrConflict, errors.New("a container with this name already exists"))
 	ErrInvalidBackupSelection             = Classify(ErrBadRequest, errors.New("invalid backup file selection"))
-	ErrSwarmNotEnabled                    = Classify(ErrBadRequest, errors.New("Swarm mode is not enabled"))
-	ErrSwarmManagerRequired               = Classify(ErrForbidden, errors.New("Swarm manager access required"))
 	ErrRoleNotFound                       = Classify(ErrNotFound, errors.New("Role not found"))
 	ErrRoleBuiltIn                        = Classify(ErrForbidden, errors.New("Built-in role cannot be modified"))
 	ErrRoleNameTaken                      = Classify(ErrConflict, errors.New("Role name already in use"))

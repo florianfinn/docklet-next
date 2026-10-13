@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace
+// Deviations: Local module namespace; functional cut: removed Swarm.
 
 package schema
 
@@ -137,9 +137,6 @@ var overrideDocRules = map[string]overrideDocRule{
 	},
 	"featureVulnerabilityManagementEnabled": {
 		note: "Disabling retains existing reports and scanner settings, allows active work to finish, and leaves standalone image patching available.",
-	},
-	"featureSwarmEnabled": {
-		note: "An active swarm cluster keeps Swarm enabled regardless of this value.",
 	},
 	"vulnerabilityScanInterval": {
 		requires: "FEATURE_VULNERABILITY_MANAGEMENT_ENABLED=true and VULNERABILITY_SCAN_ENABLED=true to have effect at runtime.",

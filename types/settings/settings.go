@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Functional cut: removed APNS mobile push; functional cut: removed template catalogue; functional cut: removed GitOps and saved Git repositories.
+// Deviations: Functional cut: removed APNS mobile push; functional cut: removed template catalogue; functional cut: removed GitOps and saved Git repositories; functional cut: removed Swarm.
 
 package settings
 
@@ -47,12 +47,6 @@ type Update struct {
 	//
 	// Required: false
 	FollowProjectSymlinks *string `json:"followProjectSymlinks,omitzero"`
-
-	// SwarmStackSourcesDirectory is the directory path where swarm stack source files are stored.
-	// Must be an absolute path.
-	//
-	// Required: false
-	SwarmStackSourcesDirectory *string `json:"swarmStackSourcesDirectory,omitzero"`
 
 	// DiskUsagePath is the path to monitor for disk usage.
 	//
@@ -193,9 +187,6 @@ type Update struct {
 
 	// FeatureVulnerabilityManagementEnabled controls vulnerability management for this environment.
 	FeatureVulnerabilityManagementEnabled *string `json:"featureVulnerabilityManagementEnabled,omitzero" enum:"true,false"`
-
-	// FeatureSwarmEnabled controls Docker Swarm for this environment. An active swarm cluster keeps it enabled.
-	FeatureSwarmEnabled *string `json:"featureSwarmEnabled,omitzero" enum:"true,false"`
 
 	// VulnerabilityScanEnabled indicates if scheduled vulnerability scanning is enabled.
 	//

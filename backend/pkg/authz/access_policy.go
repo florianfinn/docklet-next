@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Functional cut: removed template catalogue; functional cut: removed central variables and .env.global; functional cut: removed GitOps and saved Git repositories.
+// Deviations: Functional cut: removed template catalogue; functional cut: removed central variables and .env.global; functional cut: removed GitOps and saved Git repositories; functional cut: removed Swarm.
 
 package authz
 
@@ -80,17 +80,6 @@ var accessSurfacesInternal = []AccessSurface{
 	routeSurfaceInternal("route.networks.topology", "/networks/topology", "Network Topology", AccessScopeModeSelectedEnvPlusGlobal, []string{PermNetworksRead}, 0),
 	routeSurfaceInternal("route.volumes", "/volumes", "Volumes", AccessScopeModeSelectedEnvPlusGlobal, []string{PermVolumesList, PermVolumesRead}, 60),
 	routeSurfaceInternal("route.volumes.detail", "/volumes/{volumeName}", "Volume", AccessScopeModeSelectedEnvPlusGlobal, []string{PermVolumesList, PermVolumesRead}, 0),
-	routeSurfaceInternal("route.swarm", "/swarm", "Swarm", AccessScopeModeSelectedEnvPlusGlobal, []string{PermSwarmRead}, 0),
-	routeSurfaceInternal("route.swarm.services", "/swarm/services", "Services", AccessScopeModeSelectedEnvPlusGlobal, []string{PermSwarmRead}, 80),
-	routeSurfaceInternal("route.swarm.services.detail", "/swarm/services/{serviceId}", "Service", AccessScopeModeSelectedEnvPlusGlobal, []string{PermSwarmRead}, 0),
-	routeSurfaceInternal("route.swarm.nodes", "/swarm/nodes", "Nodes", AccessScopeModeSelectedEnvPlusGlobal, []string{PermSwarmRead}, 0),
-	routeSurfaceInternal("route.swarm.tasks", "/swarm/tasks", "Tasks", AccessScopeModeSelectedEnvPlusGlobal, []string{PermSwarmRead}, 0),
-	routeSurfaceInternal("route.swarm.stacks", "/swarm/stacks", "Stacks", AccessScopeModeSelectedEnvPlusGlobal, []string{PermSwarmRead}, 90),
-	routeSurfaceInternal("route.swarm.stacks.new", "/swarm/stacks/new", "Create stack", AccessScopeModeSelectedEnvPlusGlobal, []string{PermSwarmStacks}, 0),
-	routeSurfaceInternal("route.swarm.stacks.detail", "/swarm/stacks/{name}", "Stack", AccessScopeModeSelectedEnvPlusGlobal, []string{PermSwarmRead}, 0),
-	routeSurfaceInternal("route.swarm.cluster", "/swarm/cluster", "Cluster", AccessScopeModeSelectedEnvPlusGlobal, []string{PermSwarmRead}, 100),
-	routeSurfaceInternal("route.swarm.configs", "/swarm/configs", "Configs", AccessScopeModeSelectedEnvPlusGlobal, []string{PermSwarmRead}, 0),
-	routeSurfaceInternal("route.swarm.secrets", "/swarm/secrets", "Secrets", AccessScopeModeSelectedEnvPlusGlobal, []string{PermSwarmRead}, 0),
 	routeSurfaceInternal("route.events", "/events", "Events", AccessScopeModeGlobalOnly, []string{PermEventsRead}, 110),
 	routeSurfaceInternal("route.activities", "", "Activities", AccessScopeModeAnyEffectiveScope, []string{PermActivitiesRead}, 0),
 	allOfRouteSurfaceInternal("route.oidc-role-mappings", "", "OIDC Role Mappings", AllPermissions()),

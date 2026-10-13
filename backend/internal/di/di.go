@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; functional cut: removed upstream analytics heartbeat and APNS mobile push; functional cut: removed template catalogue; functional cut: removed federated credentials; functional cut: removed central variables and .env.global; functional cut: removed GitOps and saved Git repositories.
+// Deviations: Local module namespace; functional cut: removed upstream analytics heartbeat and APNS mobile push; functional cut: removed template catalogue; functional cut: removed federated credentials; functional cut: removed central variables and .env.global; functional cut: removed GitOps and saved Git repositories; functional cut: removed Swarm.
 
 // Package di owns the backend's dependency-injection graph.
 package di
@@ -39,7 +39,6 @@ import (
 	"github.com/florianfinn/docklet-next/backend/internal/search"
 	"github.com/florianfinn/docklet-next/backend/internal/session"
 	"github.com/florianfinn/docklet-next/backend/internal/settings"
-	"github.com/florianfinn/docklet-next/backend/internal/swarm"
 	"github.com/florianfinn/docklet-next/backend/internal/system"
 	"github.com/florianfinn/docklet-next/backend/internal/updater"
 	"github.com/florianfinn/docklet-next/backend/internal/upload"
@@ -87,7 +86,6 @@ var ServiceOptions = fx.Options(
 		dashboard.NewDashboardService,
 		network.NewNetworkService,
 		port.NewPortService,
-		swarm.NewSwarmService,
 		oidc.NewOidcService,
 		system.NewSystemService,
 		diagnostics.NewDiagnosticsService,
@@ -127,7 +125,6 @@ var ServiceOptions = fx.Options(
 		image.New,
 		container.New,
 		dashboard.New,
-		swarm.New,
 		system.New,
 		volume.New,
 		updater.New,

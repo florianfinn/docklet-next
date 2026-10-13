@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; functional cut: removed central variables and .env.global; functional cut: removed GitOps and saved Git repositories.
+// Deviations: Local module namespace; functional cut: removed central variables and .env.global; functional cut: removed GitOps and saved Git repositories; functional cut: removed Swarm.
 
 package environment
 
@@ -40,7 +40,6 @@ import (
 	"github.com/florianfinn/docklet-next/backend/internal/environment/children/health"
 	"github.com/florianfinn/docklet-next/backend/internal/environment/children/proxy"
 	"github.com/florianfinn/docklet-next/backend/internal/environment/children/snippets"
-	"github.com/florianfinn/docklet-next/backend/internal/environment/children/swarm"
 	"github.com/florianfinn/docklet-next/backend/internal/event"
 	"github.com/florianfinn/docklet-next/backend/internal/registry"
 	"github.com/florianfinn/docklet-next/backend/internal/settings"
@@ -84,7 +83,7 @@ type EnvironmentService struct {
 	proxy    *proxy.Service
 	health   *health.Service
 	snippets *snippets.Service
-	swarm    *swarm.Service
+	apiKeys  *apikey.ApiKeyService
 }
 
 const (
@@ -134,7 +133,7 @@ func NewEnvironmentService(
 		jobs:             entityjobs.New(environmentHealthJobPrefix, environmentHealthAdmissionScopeInternal),
 		health:           health.New(httpClient, dockerService),
 		snippets:         snippets.New(eventService),
-		swarm:            swarm.New(apiKeyService),
+		apiKeys:          apiKeyService,
 	}
 	s.proxy = proxy.New(db, httpClient, settingsService, &s.syncGate)
 	return s
@@ -482,10 +481,25 @@ func (s *EnvironmentService) RegenerateEnvironmentApiKey(ctx context.Context, en
 	if env == nil {
 		return "", errors.New("environment is required")
 	}
-	return s.swarm.EnsureApiKey(ctx, env.ID, env.AccessToken, env.ApiKeyID, true,
-		func(linkCtx context.Context, apiKeyID, apiKey string) error {
-			return s.linkEnvironmentApiKey(linkCtx, env.ID, apiKeyID, apiKey, userID, username, env.Name)
-		})
+	if s.apiKeys == nil {
+		return "", errors.New("api key service not configured")
+	}
+	created, err := s.apiKeys.CreateEnvironmentApiKey(ctx, env.ID)
+	if err != nil {
+		return "", fmt.Errorf("failed to create environment API key: %w", err)
+	}
+	if err := s.linkEnvironmentApiKey(ctx, env.ID, created.ID, created.Key, userID, username, env.Name); err != nil {
+		if deleteErr := s.apiKeys.DeleteApiKey(ctx, created.ID); deleteErr != nil && !errors.Is(deleteErr, apikey.ErrApiKeyNotFound) {
+			slog.ErrorContext(ctx, "Failed to clean up unlinked environment API key", "environmentId", env.ID, "error", deleteErr)
+		}
+		return "", err
+	}
+	if env.ApiKeyID != nil && *env.ApiKeyID != created.ID {
+		if err := s.apiKeys.DeleteApiKey(ctx, *env.ApiKeyID); err != nil && !errors.Is(err, apikey.ErrApiKeyNotFound) {
+			slog.ErrorContext(ctx, "Failed to delete previous environment API key; the old key remains valid until deleted manually", "environmentId", env.ID, "error", err)
+		}
+	}
+	return created.Key, nil
 }
 
 func (s *EnvironmentService) linkEnvironmentApiKey(ctx context.Context, envID, newApiKeyID, apiKey, userID, username, envName string) error {
@@ -735,7 +749,7 @@ func (s *EnvironmentService) ListEnvironmentsPaginated(ctx context.Context, para
 	}
 
 	var envs []Environment
-	q := s.db.WithContext(ctx).Model(&Environment{}).Where("hidden = ?", false)
+	q := s.db.WithContext(ctx).Model(&Environment{})
 	// accessibleEnvIDs == nil means "no restriction". A non-nil slice limits the
 	// result to those environment IDs; an empty slice therefore matches nothing.
 	switch {
@@ -785,7 +799,6 @@ func (
 	var envs []Environment
 	if err := s.db.WithContext(ctx).
 		Model(&Environment{}).
-		Where("hidden = ?", false).
 		Find(&envs).Error; err != nil {
 		return nil, pagination.Response{}, fmt.Errorf("failed to list environments: %w", err)
 	}
@@ -876,7 +889,6 @@ func (s *EnvironmentService) ListVisibleEnvironments(ctx context.Context) ([]env
 	var envs []Environment
 	if err := s.db.WithContext(ctx).
 		Model(&Environment{}).
-		Where("hidden = ?", false).
 		Order("created_at asc, id asc").
 		Find(&envs).Error; err != nil {
 		return nil, fmt.Errorf("failed to list visible environments: %w", err)
@@ -916,7 +928,6 @@ func (s *EnvironmentService) ListRemoteEnvironments(ctx context.Context) ([]Envi
 			Model(&Environment{}).
 			Where("id != ?", "0").
 			Where("enabled = ?", true).
-			Where("hidden = ?", false).
 			Find(&envs).Error
 		if err != nil {
 			return nil, fmt.Errorf("failed to list remote environments: %w", err)
@@ -1553,191 +1564,4 @@ func (s *EnvironmentService) GenerateEdgeDeploymentSnippets(ctx context.Context,
 		HostDirHint:   strings.TrimSpace(generatedAssets.HostDirHint),
 	}
 	return result, nil
-}
-
-func (s *EnvironmentService) ListSwarmNodeAgentEnvironments(ctx context.Context, parentEnvironmentID string) ([]Environment, error) {
-	var envs []Environment
-	if err := s.db.WithContext(ctx).
-		Model(&Environment{}).
-		Where("parent_environment_id = ?", parentEnvironmentID).
-		Find(&envs).Error; err != nil {
-		return nil, fmt.Errorf("failed to list swarm node agent environments: %w", err)
-	}
-	return envs, nil
-}
-
-// ListSwarmNodeCandidateEnvironments returns enabled visible environments that
-// can provide swarm-node coverage for a manager environment.
-func (s *EnvironmentService) ListSwarmNodeCandidateEnvironments(ctx context.Context) ([]Environment, error) {
-	var envs []Environment
-	if err := s.db.WithContext(ctx).
-		Model(&Environment{}).
-		Where("hidden = ?", false).
-		Where("enabled = ?", true).
-		Where("id <> ?", "0").
-		Order("name ASC").
-		Find(&envs).Error; err != nil {
-		return nil, fmt.Errorf("failed to list swarm node candidate environments: %w", err)
-	}
-	return envs, nil
-}
-
-// BindSwarmNodeEnvironment binds an existing visible environment to a swarm
-// node without modifying its connection details or agent token.
-func (s *EnvironmentService) BindSwarmNodeEnvironment(
-	ctx context.Context,
-	parentEnvironmentID, nodeID, environmentID string,
-	rebind bool,
-) (*Environment, error) {
-	var envRecord Environment
-	err := s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
-		if err := tx.Where("id = ?", environmentID).First(&envRecord).Error; err != nil {
-			return fmt.Errorf("failed to load environment for swarm node binding: %w", err)
-		}
-		if err := s.swarm.AuthorizeBinding(environment.SwarmBindingCandidate{
-			Hidden:              envRecord.Hidden,
-			Enabled:             envRecord.Enabled,
-			ParentEnvironmentID: envRecord.ParentEnvironmentID,
-			SwarmNodeID:         envRecord.SwarmNodeID,
-		}, parentEnvironmentID, nodeID, rebind, func() (int64, error) {
-			var existingVisibleBindings int64
-			err := tx.Model(&Environment{}).
-				Where("hidden = ? AND parent_environment_id = ? AND swarm_node_id = ? AND id <> ?", false, parentEnvironmentID, nodeID, environmentID).
-				Count(&existingVisibleBindings).Error
-			return existingVisibleBindings, err
-		}); err != nil {
-			return err
-		}
-		if rebind {
-			if err := tx.Model(&Environment{}).
-				Where("hidden = ? AND parent_environment_id = ? AND swarm_node_id = ? AND id <> ?", false, parentEnvironmentID, nodeID, environmentID).
-				Updates(map[string]any{"parent_environment_id": nil, "swarm_node_id": nil, "updated_at": new(time.Now())}).Error; err != nil {
-				return fmt.Errorf("failed to clear previous swarm node binding: %w", err)
-			}
-		}
-
-		if err := tx.Model(&Environment{}).Where("id = ?", environmentID).Updates(map[string]any{
-			"parent_environment_id": parentEnvironmentID,
-			"swarm_node_id":         nodeID,
-			"updated_at":            new(time.Now()),
-		}).Error; err != nil {
-			return fmt.Errorf("failed to bind environment to swarm node: %w", err)
-		}
-
-		return tx.Where("id = ?", environmentID).First(&envRecord).Error
-	})
-	if err != nil {
-		return nil, err
-	}
-
-	s.remoteEnvs.put(envRecord)
-	// A rebind also clears the binding on other environments.
-	if rebind {
-		s.invalidateAllEnvironmentCacheInternal()
-	} else {
-		s.invalidateEnvironmentCacheInternal(envRecord.ID)
-	}
-	s.NotifyRuntimeStateChanged()
-	return &envRecord, nil
-}
-
-// DetachSwarmNodeEnvironment clears a visible environment binding from a node.
-func (s *EnvironmentService) DetachSwarmNodeEnvironment(ctx context.Context, parentEnvironmentID, nodeID string) error {
-	now := time.Now()
-	if err := s.db.WithContext(ctx).Model(&Environment{}).
-		Where("hidden = ? AND parent_environment_id = ? AND swarm_node_id = ?", false, parentEnvironmentID, nodeID).
-		Updates(map[string]any{"parent_environment_id": nil, "swarm_node_id": nil, "updated_at": &now}).Error; err != nil {
-		return fmt.Errorf("failed to detach swarm node environment: %w", err)
-	}
-	s.invalidateAllEnvironmentCacheInternal()
-	s.NotifyRuntimeStateChanged()
-
-	return nil
-}
-
-// DeleteSwarmNodeAgentDeployment removes a dedicated hidden agent registration
-// while leaving visible remote environments untouched.
-func (s *EnvironmentService) DeleteSwarmNodeAgentDeployment(ctx context.Context, parentEnvironmentID, nodeID string, userID, username *string) error {
-	var envRecord Environment
-	if err := s.db.WithContext(ctx).
-		Where("hidden = ? AND parent_environment_id = ? AND swarm_node_id = ?", true, parentEnvironmentID, nodeID).
-		First(&envRecord).Error; err != nil {
-		if errors.Is(err, gorm.ErrRecordNotFound) {
-			return nil
-		}
-		return fmt.Errorf("failed to load swarm node agent deployment: %w", err)
-	}
-
-	return s.DeleteEnvironment(ctx, envRecord.ID, userID, username)
-}
-
-func (s *EnvironmentService) EnsureSwarmNodeAgentEnvironment(
-	ctx context.Context,
-	parentEnvironmentID, nodeID, hostname, userID, username string,
-	rotate bool,
-) (*Environment, string, error) {
-	agentName, agentURL, err := s.swarm.AgentIdentity(parentEnvironmentID, nodeID, hostname)
-	if err != nil {
-		return nil, "", err
-	}
-
-	var env Environment
-	// Prefer an existing visible binding. Legacy hidden registrations remain
-	// reusable, but all newly provisioned node agents are normal Remote
-	// Environments so one token and one agent can serve both use cases.
-	err = s.db.WithContext(ctx).
-		Where("parent_environment_id = ?", parentEnvironmentID).
-		Where("swarm_node_id = ?", nodeID).
-		Order("hidden ASC").
-		First(&env).Error
-	if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
-		return nil, "", fmt.Errorf("failed to load swarm node agent environment: %w", err)
-	}
-
-	if errors.Is(err, gorm.ErrRecordNotFound) {
-		createdEnv := &Environment{
-			Name:                agentName,
-			ApiUrl:              agentURL,
-			Status:              string(EnvironmentStatusPending),
-			Enabled:             true,
-			IsEdge:              true,
-			Hidden:              false,
-			ParentEnvironmentID: new(parentEnvironmentID),
-			SwarmNodeID:         new(nodeID),
-		}
-
-		if _, createErr := s.CreateEnvironment(ctx, createdEnv, new(userID), new(username)); createErr != nil {
-			return nil, "", fmt.Errorf("failed to create swarm node agent environment: %w", createErr)
-		}
-		env = *createdEnv
-	}
-
-	apiKey, err := s.swarm.EnsureApiKey(ctx, env.ID, env.AccessToken, env.ApiKeyID, rotate, func(ctx context.Context, apiKeyID, apiKey string) error {
-		return s.linkEnvironmentApiKey(ctx, env.ID, apiKeyID, apiKey, userID, username, env.Name)
-	})
-	if err != nil {
-		return nil, "", err
-	}
-
-	refreshedEnv, err := s.GetEnvironmentByID(ctx, env.ID)
-	if err != nil {
-		return nil, "", fmt.Errorf("failed to refresh swarm node agent environment: %w", err)
-	}
-
-	return refreshedEnv, apiKey, nil
-}
-
-func (s *EnvironmentService) UpdateSwarmNodeIdentity(ctx context.Context, envID, swarmNodeID string) error {
-	updates := map[string]any{
-		"swarm_node_id": swarmNodeID,
-		"updated_at":    new(time.Now()),
-	}
-
-	if err := s.db.WithContext(ctx).Model(&Environment{}).Where("id = ?", envID).Updates(updates).Error; err != nil {
-		return fmt.Errorf("failed to update swarm node identity: %w", err)
-	}
-	s.invalidateEnvironmentCacheInternal(envID)
-	s.NotifyRuntimeStateChanged()
-
-	return nil
 }

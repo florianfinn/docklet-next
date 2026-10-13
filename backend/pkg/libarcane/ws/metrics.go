@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace
+// Deviations: Local module namespace; functional cut: removed Swarm.
 
 package ws
 
@@ -22,7 +22,6 @@ type WebSocketMetrics struct {
 	containerStats      atomic.Int64
 	containerExec       atomic.Int64
 	systemStats         atomic.Int64
-	serviceLogsActive   atomic.Int64
 	diagnosticsActive   atomic.Int64
 	seq                 atomic.Uint64
 	mu                  sync.RWMutex
@@ -44,7 +43,6 @@ func (m *WebSocketMetrics) Snapshot() systemtypes.WebSocketMetricsSnapshot {
 		ContainerStats:      m.containerStats.Load(),
 		ContainerExec:       m.containerExec.Load(),
 		SystemStats:         m.systemStats.Load(),
-		ServiceLogsActive:   m.serviceLogsActive.Load(),
 		DiagnosticsActive:   m.diagnosticsActive.Load(),
 	}
 }
@@ -106,8 +104,6 @@ func (m *WebSocketMetrics) applyDelta(kind string, delta int64) {
 		m.containerExec.Add(delta)
 	case systemtypes.WSKindSystemStats:
 		m.systemStats.Add(delta)
-	case systemtypes.WSKindServiceLogs:
-		m.serviceLogsActive.Add(delta)
 	case systemtypes.WSKindDiagnostics:
 		m.diagnosticsActive.Add(delta)
 	}

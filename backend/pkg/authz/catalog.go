@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Functional cut: removed template catalogue; functional cut: removed federated credentials; functional cut: removed central variables and .env.global; functional cut: removed GitOps and saved Git repositories.
+// Deviations: Functional cut: removed template catalogue; functional cut: removed federated credentials; functional cut: removed central variables and .env.global; functional cut: removed GitOps and saved Git repositories; functional cut: removed Swarm.
 
 package authz
 
@@ -155,20 +155,6 @@ var permissionCatalog = []PermissionCatalogResource{
 		{"prune", PermNetworksPrune, "Prune", ""},
 		{"connect", PermNetworksConnect, "Connect container", ""},
 		{"disconnect", PermNetworksDisconnect, "Disconnect container", ""},
-	}},
-	{"swarm", "Swarm", PermissionScopeEnv, []PermissionCatalogAction{
-		{"read", PermSwarmRead, "Read", ""},
-		{"init", PermSwarmInit, "Initialize", ""},
-		{"join", PermSwarmJoin, "Join", ""},
-		{"leave", PermSwarmLeave, "Leave", ""},
-		{"spec", PermSwarmSpec, "Update spec", ""},
-		{"nodes", PermSwarmNodes, "Manage nodes", ""},
-		{"services", PermSwarmServices, "Manage services", ""},
-		{"services:logs", PermSwarmServicesLogs, "View service logs", ""},
-		{"stacks", PermSwarmStacks, "Manage stacks", ""},
-		{"configs", PermSwarmConfigs, "Manage configs", ""},
-		{"secrets", PermSwarmSecrets, "Manage secrets", ""},
-		{"unlock", PermSwarmUnlock, "Unlock / join tokens", ""},
 	}},
 	{"webhooks", "Webhooks", PermissionScopeEnv, []PermissionCatalogAction{
 		{"list", PermWebhooksList, "List", ""},

@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace
+// Deviations: Local module namespace; functional cut: removed Swarm.
 
 package settings
 
@@ -294,15 +294,6 @@ func (h *SettingsHandler) validateSettingsUpdateInput(input settings.Update) err
 		if *input.ProjectsDirectory != currentDir {
 			if err := validateProjectsDirectoryValueInternal(*input.ProjectsDirectory); err != nil {
 				return huma.Error400BadRequest(err.Error())
-			}
-		}
-	}
-
-	if input.SwarmStackSourcesDirectory != nil && *input.SwarmStackSourcesDirectory != "" {
-		currentDir := h.settingsService.GetSettingsConfig().SwarmStackSourcesDirectory.Value
-		if *input.SwarmStackSourcesDirectory != currentDir {
-			if err := validateAbsoluteDirectoryPathInternal(*input.SwarmStackSourcesDirectory); err != nil {
-				return huma.Error400BadRequest("swarmStackSourcesDirectory " + err.Error())
 			}
 		}
 	}

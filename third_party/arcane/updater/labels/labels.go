@@ -2,12 +2,11 @@
 // Revision: 119f68956cee6d5aba8a5463561aaf9be9943b65
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: None
+// Deviations: functional cut: removed Swarm.
 
 // Package labels reads the container labels that tell the updater what a
 // container is: whether it opts out of updates, whether it is an Arcane server
-// or agent that must update itself, whether it belongs to Docker Swarm, and how
-// it wants to be stopped.
+// or agent that must update itself, and how it wants to be stopped.
 package labels
 
 import (
@@ -31,10 +30,6 @@ const (
 	LabelUpdateConstraint = LabelUpdater + ".constraint"
 	// LabelUpdateTagPattern selects tags and optionally captures their version.
 	LabelUpdateTagPattern = LabelUpdater + ".tag-pattern"
-	// LabelSwarmServiceID identifies a Docker Swarm task.
-	LabelSwarmServiceID = "com.docker.swarm.service.id"
-	// LabelSwarmServiceName identifies a Docker Swarm task.
-	LabelSwarmServiceName = "com.docker.swarm.service.name"
 	// LabelDependsOn declares updater restart dependencies.
 	LabelDependsOn = "com.getarcaneapp.arcane.depends-on"
 	// LabelStopSignal declares a custom stop signal.
@@ -79,11 +74,6 @@ func IsUpdateDisabled(labels map[string]string) bool {
 	return ok && recognized && !enabled
 }
 
-// IsSwarmTask reports whether labels identify a Docker Swarm task.
-func IsSwarmTask(labels map[string]string) bool {
-	return hasNonEmptyLabel(labels, LabelSwarmServiceID) || hasNonEmptyLabel(labels, LabelSwarmServiceName)
-}
-
 // StopSignal returns a custom stop signal from labels.
 func StopSignal(labels map[string]string) string {
 	value, ok := lookupLabel(labels, LabelStopSignal)
@@ -97,11 +87,6 @@ func hasTruthyLabel(labels map[string]string, target string) bool {
 	value, ok := lookupLabel(labels, target)
 	truthy, _ := kit.ParseBool(value)
 	return ok && truthy
-}
-
-func hasNonEmptyLabel(labels map[string]string, target string) bool {
-	value, ok := lookupLabel(labels, target)
-	return ok && strings.TrimSpace(value) != ""
 }
 
 func lookupLabel(labels map[string]string, target string) (string, bool) {

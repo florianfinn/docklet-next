@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; functional cut: removed upstream analytics heartbeat; functional cut: removed GitOps and saved Git repositories.
+// Deviations: Local module namespace; functional cut: removed upstream analytics heartbeat; functional cut: removed GitOps and saved Git repositories; functional cut: removed Swarm.
 
 package bootstrap
 
@@ -29,7 +29,6 @@ import (
 	"github.com/florianfinn/docklet-next/backend/internal/container"
 	"github.com/florianfinn/docklet-next/backend/internal/database"
 	"github.com/florianfinn/docklet-next/backend/internal/project"
-	"github.com/florianfinn/docklet-next/backend/internal/swarm"
 	"github.com/florianfinn/docklet-next/backend/internal/system"
 	"github.com/florianfinn/docklet-next/backend/pkg/libarcane/edge"
 	"github.com/florianfinn/docklet-next/backend/pkg/utils/httpx"
@@ -179,7 +178,6 @@ func TestHTTP2APIResponsesDoNotUseAPIGzipInternal(t *testing.T) {
 		HandlerDeps: api.HandlerDeps{
 			Project:   project.New(&project.ProjectService{}, nil),
 			Container: container.New(&container.ContainerService{}, nil, nil, nil),
-			Swarm:     swarm.New(&swarm.SwarmService{}, nil, nil, nil),
 			System:    system.New(&system.SystemService{}, nil, nil, nil, nil),
 		},
 		AuthMiddleware: auth.NewAuthMiddleware(nil, cfg),

@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; functional cut: removed template catalogue; functional cut: removed central variables and .env.global.
+// Deviations: Local module namespace; functional cut: removed template catalogue; functional cut: removed central variables and .env.global; functional cut: removed Swarm.
 
 package api
 
@@ -292,40 +292,6 @@ func TestSetupAPIForSpec_DoesNotRegisterPublicCreateEvent(t *testing.T) {
 
 	require.Nil(t, pathItem.Post,
 		"expected POST /events to be absent from the public API")
-}
-
-func TestEasyJoinRoutesDeclareSwarmJoinPermission(t *testing.T) {
-	api := SetupAPIForSpec()
-	tests := []struct {
-		path   string
-		method string
-	}{
-		{path: "/environments/{id}/swarm/join-candidates", method: "GET"},
-		{path: "/environments/{id}/swarm/join-environments", method: "POST"},
-	}
-
-	matcher := authz.NewPermissionMatcher()
-	matcher.CollectFromHumaAPI(api)
-	for _, tt := range tests {
-		t.Run(tt.method+" "+tt.path, func(t *testing.T) {
-			pathItem := api.OpenAPI().Paths[tt.path]
-			require.NotNil(t, pathItem)
-			var operation *humav2.Operation
-			switch tt.method {
-			case "GET":
-				operation = pathItem.Get
-			case "POST":
-				operation = pathItem.Post
-			}
-			require.NotNil(t, operation)
-			require.Equal(t, authz.PermSwarmJoin, operation.Metadata[authz.MetaRequiredPermission])
-
-			suffix := strings.TrimPrefix(tt.path, "/environments/{id}")
-			permission, found := matcher.Lookup(tt.method, suffix).Get()
-			require.True(t, found)
-			require.Equal(t, authz.PermSwarmJoin, permission)
-		})
-	}
 }
 
 // TestEnvScopedOperationsDeclarePermission guards the remote-environment proxy

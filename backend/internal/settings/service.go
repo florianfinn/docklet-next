@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; functional cut: removed APNS mobile push; functional cut: removed template catalogue; functional cut: removed GitOps and saved Git repositories.
+// Deviations: Local module namespace; functional cut: removed APNS mobile push; functional cut: removed template catalogue; functional cut: removed GitOps and saved Git repositories; functional cut: removed Swarm.
 
 package settings
 
@@ -205,7 +205,6 @@ func DefaultSettingsConfig() *Settings {
 	return &Settings{
 		ProjectsDirectory:                     SettingVariable{Value: "/app/data/projects"},
 		FollowProjectSymlinks:                 SettingVariable{Value: "false"},
-		SwarmStackSourcesDirectory:            SettingVariable{Value: "/app/data/swarm/sources"},
 		DiskUsagePath:                         SettingVariable{Value: "/app/data/projects"},
 		AutoUpdate:                            SettingVariable{Value: "false"},
 		AutoUpdateInterval:                    SettingVariable{Value: "0 0 0 * * *"},
@@ -252,7 +251,6 @@ func DefaultSettingsConfig() *Settings {
 		AuthSessionTimeout:                    SettingVariable{Value: "1440"},
 		AuthPasswordPolicy:                    SettingVariable{Value: "strong"},
 		FeatureVulnerabilityManagementEnabled: SettingVariable{Value: "true"},
-		FeatureSwarmEnabled:                   SettingVariable{Value: "false"},
 		VulnerabilityScanEnabled:              SettingVariable{Value: "false"},
 		VulnerabilityScanInterval:             SettingVariable{Value: "0 0 0 * * *"},
 		VulnerabilityThreatIntelEnabled:       SettingVariable{Value: "true"},
