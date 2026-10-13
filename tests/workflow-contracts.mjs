@@ -15,11 +15,11 @@ export function assertWorkflow(file, text) {
   assert.equal(permissions, PERMISSIONS[file]);
   assert.equal(/^ +permissions:/m.test(text), false);
   const actions = [...text.matchAll(/^\s+- uses: ([^\s]+)/gm)];
-  assert.equal(actions.length, 2);
+  assert.equal(actions.length, file === "checks" ? 6 : 2);
   for (const match of actions) assert.match(match[1], /@[a-f0-9]{40}$/);
   assert.equal(/actions\/cache\b/.test(text), false);
   assert.equal(text.includes("secrets."), false);
-  assert.match(text, /persist-credentials: false/);
+  assert.equal((text.match(/persist-credentials: false/g) ?? []).length, file === "checks" ? 3 : 1);
   assert.match(text, /branches: \[main\]/);
   // Expressions in run blocks must not interpolate attacker-controlled event text.
   const runBlocks = [...text.matchAll(/^\s*(?:- )?run:([^\n]*(?:\n {10,}[^\n]*)*)/gm)];

@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; functional cut: removed APNS mobile push; functional cut: removed template catalogue; functional cut: removed federated credentials; functional cut: removed central variables and .env.global; functional cut: removed GitOps and saved Git repositories; functional cut: removed Swarm; functional cut: removed S3 backup destinations; functional cut: removed standalone build workshop; functional cut: removed OIDC and passkeys.
+// Deviations: Local module namespace; functional cut: removed APNS mobile push; functional cut: removed template catalogue; functional cut: removed federated credentials; functional cut: removed central variables and .env.global; functional cut: removed GitOps and saved Git repositories; functional cut: removed Swarm; functional cut: removed S3 backup destinations; functional cut: removed standalone build workshop; functional cut: removed OIDC and passkeys; agent route allowlist.
 
 package api
 
@@ -310,6 +310,11 @@ func SetupAPI(e *echo.Echo, apiGroup *echo.Group, appCtx handlerutil.ActivityApp
 		{"BearerAuth": {}},
 		{"ApiKeyAuth": {}},
 	}
+	if cfg != nil && (cfg.AgentMode || cfg.EdgeAgent) {
+		humaConfig.OpenAPIPath = ""
+		humaConfig.SchemasPath = ""
+		humaConfig.DocsPath = ""
+	}
 
 	// Use custom schema namer to avoid conflicts between types with same name
 	// from different packages (e.g., image.Summary vs env.Summary)
@@ -327,7 +332,9 @@ func SetupAPI(e *echo.Echo, apiGroup *echo.Group, appCtx handlerutil.ActivityApp
 	registerHandlersInternal(api, deps, appCtx, cfg)
 
 	// Register Scalar API docs endpoint with dark mode
-	registerScalarDocs(apiGroup)
+	if cfg == nil || (!cfg.AgentMode && !cfg.EdgeAgent) {
+		registerScalarDocs(apiGroup)
+	}
 
 	return api
 }
@@ -342,6 +349,10 @@ func registerScalarDocs(apiGroup *echo.Group) {
 // SetupAPIForSpec creates a Huma API instance for OpenAPI spec generation only.
 // No services are required - this is purely for schema generation.
 func SetupAPIForSpec() huma.API {
+	return setupAPIForSpecMode(nil)
+}
+
+func setupAPIForSpecMode(cfg *config.Config) huma.API {
 	e := echo.New()
 	apiGroup := e.Group("/api")
 
@@ -371,6 +382,11 @@ func SetupAPIForSpec() huma.API {
 		{"BearerAuth": {}},
 		{"ApiKeyAuth": {}},
 	}
+	if cfg != nil && (cfg.AgentMode || cfg.EdgeAgent) {
+		humaConfig.OpenAPIPath = ""
+		humaConfig.SchemasPath = ""
+		humaConfig.DocsPath = ""
+	}
 
 	// Use custom schema namer to avoid conflicts between types with same name
 	humaConfig.Components.Schemas = huma.NewMapRegistry("#/components/schemas/", customSchemaNamer)
@@ -379,41 +395,133 @@ func SetupAPIForSpec() huma.API {
 
 	// Register handlers with zero-value dependencies for schema discovery only.
 	registerNormalizationInternal(api)
-	registerHandlersInternal(api, HandlerDeps{}, handlerutil.NewActivityAppContext(context.Background()), nil) //nolint:forbidigo // Schema discovery has no running request or application lifecycle.
+	registerHandlersInternal(api, HandlerDeps{}, handlerutil.NewActivityAppContext(context.Background()), cfg) //nolint:forbidigo // Schema discovery has no running request or application lifecycle.
 
 	return api
 }
 
-// registerHandlersInternal registers all Huma-based API handlers.
+// routeModule is the only registration source for hub, agent and Edge agent APIs.
+// Agent modules run with host privileges, so each addition requires review.
+type routeModule struct {
+	name     string
+	agent    bool
+	register func(huma.API, HandlerDeps, handlerutil.ActivityAppContext, *config.Config)
+}
+
+var routeModules = []routeModule{
+	{"health", true, func(api huma.API, _ HandlerDeps, _ handlerutil.ActivityAppContext, _ *config.Config) {
+		health.RegisterRoutes(api)
+	}},
+	{"auth", false, func(api huma.API, d HandlerDeps, _ handlerutil.ActivityAppContext, _ *config.Config) {
+		d.Auth.RegisterRoutes(api)
+	}},
+	{"api-key", false, func(api huma.API, d HandlerDeps, _ handlerutil.ActivityAppContext, _ *config.Config) {
+		d.ApiKey.RegisterRoutes(api)
+	}},
+	{"role", false, func(api huma.API, d HandlerDeps, _ handlerutil.ActivityAppContext, _ *config.Config) {
+		d.Role.RegisterRoutes(api)
+	}},
+	{"app-images", false, func(api huma.API, d HandlerDeps, _ handlerutil.ActivityAppContext, _ *config.Config) {
+		appimages.RegisterAppImages(api, d.AppImages)
+	}},
+	{"user", false, func(api huma.API, d HandlerDeps, _ handlerutil.ActivityAppContext, _ *config.Config) {
+		d.User.RegisterRoutes(api)
+	}},
+	{"project", true, func(api huma.API, d HandlerDeps, c handlerutil.ActivityAppContext, _ *config.Config) {
+		d.Project.RegisterRoutes(api, c)
+	}},
+	{"version", true, func(api huma.API, d HandlerDeps, _ handlerutil.ActivityAppContext, _ *config.Config) {
+		version.RegisterVersion(api, d.Version)
+	}},
+	{"event", false, func(api huma.API, d HandlerDeps, _ handlerutil.ActivityAppContext, _ *config.Config) {
+		d.Event.RegisterRoutes(api)
+	}},
+	{"activity", true, func(api huma.API, d HandlerDeps, _ handlerutil.ActivityAppContext, _ *config.Config) {
+		d.Activity.RegisterRoutes(api)
+	}},
+	{"environment", false, func(api huma.API, d HandlerDeps, c handlerutil.ActivityAppContext, _ *config.Config) {
+		d.Environment.RegisterRoutes(api, c)
+	}},
+	{"registry", true, func(api huma.API, d HandlerDeps, _ handlerutil.ActivityAppContext, cfg *config.Config) {
+		if cfg != nil && (cfg.AgentMode || cfg.EdgeAgent) {
+			d.ContainerRegistry.RegisterAgentRoutes(api)
+		} else {
+			d.ContainerRegistry.RegisterRoutes(api)
+		}
+	}},
+	{"image", true, func(api huma.API, d HandlerDeps, c handlerutil.ActivityAppContext, _ *config.Config) {
+		d.Image.RegisterRoutes(api, c)
+	}},
+	{"upload", true, func(api huma.API, d HandlerDeps, _ handlerutil.ActivityAppContext, _ *config.Config) {
+		d.Upload.RegisterRoutes(api)
+	}},
+	{"image-update", true, func(api huma.API, d HandlerDeps, c handlerutil.ActivityAppContext, _ *config.Config) {
+		d.ImageUpdate.RegisterRoutes(api, c)
+	}},
+	{"settings", true, func(api huma.API, d HandlerDeps, _ handlerutil.ActivityAppContext, _ *config.Config) {
+		d.Settings.RegisterRoutes(api)
+	}},
+	{"job", true, func(api huma.API, d HandlerDeps, _ handlerutil.ActivityAppContext, _ *config.Config) {
+		d.JobSchedule.RegisterRoutes(api)
+	}},
+	{"volume", true, func(api huma.API, d HandlerDeps, c handlerutil.ActivityAppContext, _ *config.Config) {
+		d.Volume.RegisterRoutes(api, c)
+	}},
+	{"container", true, func(api huma.API, d HandlerDeps, c handlerutil.ActivityAppContext, _ *config.Config) {
+		d.Container.RegisterRoutes(api, c)
+	}},
+	{"port", true, func(api huma.API, d HandlerDeps, _ handlerutil.ActivityAppContext, _ *config.Config) {
+		port.RegisterPorts(api, d.Port)
+	}},
+	{"network", true, func(api huma.API, d HandlerDeps, c handlerutil.ActivityAppContext, _ *config.Config) {
+		network.RegisterNetworks(api, d.Network, d.Docker, d.Activity.Service(), c)
+	}},
+	{"notification", false, func(api huma.API, d HandlerDeps, _ handlerutil.ActivityAppContext, _ *config.Config) {
+		d.Notification.RegisterRoutes(api)
+	}},
+	{"updater", true, func(api huma.API, d HandlerDeps, c handlerutil.ActivityAppContext, _ *config.Config) {
+		d.Updater.RegisterRoutes(api, c)
+	}},
+	{"search", false, func(api huma.API, d HandlerDeps, _ handlerutil.ActivityAppContext, _ *config.Config) {
+		d.Search.RegisterRoutes(api)
+	}},
+	{"system", true, func(api huma.API, d HandlerDeps, c handlerutil.ActivityAppContext, cfg *config.Config) {
+		if cfg != nil && (cfg.AgentMode || cfg.EdgeAgent) {
+			d.System.RegisterAgentRoutes(api, c)
+		} else {
+			d.System.RegisterRoutes(api, c)
+		}
+	}},
+	{"diagnostics", true, func(api huma.API, d HandlerDeps, _ handlerutil.ActivityAppContext, _ *config.Config) {
+		handlers.RegisterDiagnostics(api, d.Diagnostics)
+	}},
+	{"webhook", false, func(api huma.API, d HandlerDeps, _ handlerutil.ActivityAppContext, _ *config.Config) {
+		d.Webhook.RegisterRoutes(api)
+	}},
+	{"vulnerability", true, func(api huma.API, d HandlerDeps, c handlerutil.ActivityAppContext, _ *config.Config) {
+		d.Vulnerability.RegisterRoutes(api, c)
+	}},
+	{"dashboard", false, func(api huma.API, d HandlerDeps, _ handlerutil.ActivityAppContext, _ *config.Config) {
+		d.Dashboard.RegisterRoutes(api)
+	}},
+	{"stream", false, func(api huma.API, d HandlerDeps, _ handlerutil.ActivityAppContext, _ *config.Config) {
+		handlers.RegisterStream(api, d.Dashboard.Handler(), d.Activity.Handler(), d.Environment.Handler(), d.Event.Service(), d.Version)
+	}},
+}
+
+func registeredModulesForMode(cfg *config.Config) []routeModule {
+	agent := cfg != nil && (cfg.AgentMode || cfg.EdgeAgent)
+	modules := make([]routeModule, 0, len(routeModules))
+	for _, module := range routeModules {
+		if !agent || module.agent {
+			modules = append(modules, module)
+		}
+	}
+	return modules
+}
+
 func registerHandlersInternal(api huma.API, deps HandlerDeps, handlerAppCtx handlerutil.ActivityAppContext, cfg *config.Config) {
-	health.RegisterRoutes(api)
-	deps.Auth.RegisterRoutes(api)
-	deps.ApiKey.RegisterRoutes(api)
-	deps.Role.RegisterRoutes(api)
-	appimages.RegisterAppImages(api, deps.AppImages)
-	deps.User.RegisterRoutes(api)
-	deps.Project.RegisterRoutes(api, handlerAppCtx)
-	version.RegisterVersion(api, deps.Version)
-	deps.Event.RegisterRoutes(api)
-	deps.Activity.RegisterRoutes(api)
-	deps.Environment.RegisterRoutes(api, handlerAppCtx)
-	deps.ContainerRegistry.RegisterRoutes(api)
-	deps.Image.RegisterRoutes(api, handlerAppCtx)
-	deps.Upload.RegisterRoutes(api)
-	deps.ImageUpdate.RegisterRoutes(api, handlerAppCtx)
-	deps.Settings.RegisterRoutes(api)
-	deps.JobSchedule.RegisterRoutes(api)
-	deps.Volume.RegisterRoutes(api, handlerAppCtx)
-	deps.Container.RegisterRoutes(api, handlerAppCtx)
-	port.RegisterPorts(api, deps.Port)
-	network.RegisterNetworks(api, deps.Network, deps.Docker, deps.Activity.Service(), handlerAppCtx)
-	deps.Notification.RegisterRoutes(api)
-	deps.Updater.RegisterRoutes(api, handlerAppCtx)
-	deps.Search.RegisterRoutes(api)
-	deps.System.RegisterRoutes(api, handlerAppCtx)
-	handlers.RegisterDiagnostics(api, deps.Diagnostics)
-	deps.Webhook.RegisterRoutes(api)
-	deps.Vulnerability.RegisterRoutes(api, handlerAppCtx)
-	deps.Dashboard.RegisterRoutes(api)
-	handlers.RegisterStream(api, deps.Dashboard.Handler(), deps.Activity.Handler(), deps.Environment.Handler(), deps.Event.Service(), deps.Version)
+	for _, module := range registeredModulesForMode(cfg) {
+		module.register(api, deps, handlerAppCtx, cfg)
+	}
 }

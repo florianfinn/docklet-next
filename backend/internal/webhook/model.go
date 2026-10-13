@@ -31,7 +31,7 @@ type Webhook struct {
 	database.BaseModel
 
 	Name            string     `json:"name" gorm:"column:name;not null"`
-	TokenHash       string     `json:"-" gorm:"column:token_hash;not null;uniqueIndex"`
+	TokenHash       string     `json:"-" gorm:"column:token_hash;not null"`
 	TokenPrefix     string     `json:"tokenPrefix" gorm:"column:token_prefix;not null"`
 	TargetType      string     `json:"targetType" gorm:"column:target_type;not null"`
 	ActionType      string     `json:"actionType" gorm:"column:action_type;not null;default:''"`

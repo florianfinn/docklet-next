@@ -25,8 +25,9 @@ export function checkGo(mode) {
     for (const module of modules) go(["test", "./..."], module);
   } else if (mode === "build") {
     mkdirSync(".scratch/build", { recursive: true });
-    go(["build", "-o", ".scratch/build/hub", "./backend/cmd/..."]);
-    go(["build", "-tags=exclude_frontend", "-o", ".scratch/build/agent", "./backend/cmd/..."], process.cwd(), { CGO_ENABLED: "0" });
+    go(["build", "-o", ".scratch/build/hub", "./backend/cmd"]);
+    go(["build", "-tags=exclude_frontend", "-o", ".scratch/build/agent", "./backend/cmd"], process.cwd(), { CGO_ENABLED: "0" });
+    go(["build", "-o", ".scratch/build/schema-baseline", "./backend/cmd/schema-baseline"]);
     go(["build", "-o", ".scratch/build/cli", "./cli"]);
   } else throw new Error("unknown-go-check");
 }

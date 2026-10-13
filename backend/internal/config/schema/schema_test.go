@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; functional cut: removed upstream analytics heartbeat and APNS mobile push; functional cut: removed template catalogue; functional cut: removed GitOps and saved Git repositories; functional cut: removed Swarm; functional cut: removed standalone build workshop; functional cut: removed OIDC and passkeys.
+// Deviations: Local module namespace; functional cut: removed upstream analytics heartbeat and APNS mobile push; functional cut: removed template catalogue; functional cut: removed GitOps and saved Git repositories; functional cut: removed Swarm; functional cut: removed standalone build workshop; functional cut: removed OIDC and passkeys.; Removed downgrade setting from the configuration contract.
 
 package schema
 
@@ -194,7 +194,6 @@ var expectedEnvConfigVars = []string{
 	"AGENT_MODE",
 	"AGENT_TOKEN",
 	"ALLOW_CLI_PASSWORD_RESET",
-	"ALLOW_DOWNGRADE",
 	"APP_URL",
 	"ARCANE_BACKUP_VOLUME_NAME",
 	"AUTO_LOGIN_PASSWORD",

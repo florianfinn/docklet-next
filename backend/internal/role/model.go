@@ -13,7 +13,7 @@ import "github.com/florianfinn/docklet-next/backend/internal/database"
 type Role struct {
 	database.BaseModel
 
-	Name        string               `json:"name" gorm:"column:name;not null;uniqueIndex" sortable:"true"`
+	Name        string               `json:"name" gorm:"column:name;not null" sortable:"true"`
 	Description *string              `json:"description,omitempty" gorm:"column:description"`
 	Permissions database.StringSlice `json:"permissions" gorm:"column:permissions;type:text;not null"`
 	BuiltIn     bool                 `json:"builtIn" gorm:"column:built_in;not null;default:false" sortable:"true"`

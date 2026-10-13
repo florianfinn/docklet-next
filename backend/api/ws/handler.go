@@ -103,7 +103,7 @@ func NewWebSocketHandler(
 	for _, r := range handler.proxiedRoutes() {
 		wsGroup.GET(r.path, r.handler, middleware.RequireEchoPermission(r.perm))
 	}
-	handler.registerDiagnosticsRoutesInternal(group, authMiddleware)
+	handler.registerDiagnosticsRoutesInternal(group, authMiddleware, cfg)
 }
 
 func buildWSConnectionInfoInternal(c *echo.Context, kind, resourceID string) systemtypes.WebSocketConnectionInfo {

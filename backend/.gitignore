@@ -1,3 +1,5 @@
 # Build artifacts
 *.txt
+!api/testdata/agent-routes.txt
+!internal/bootstrap/testdata/agent-echo-routes.txt
 *.log

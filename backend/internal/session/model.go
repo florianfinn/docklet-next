@@ -20,7 +20,7 @@ type UserSession struct {
 
 	UserID           string     `json:"userId" gorm:"column:user_id;not null;index"`
 	User             *user.User `json:"user,omitempty" gorm:"foreignKey:UserID;constraint:OnDelete:CASCADE"`
-	RefreshTokenHash string     `json:"-" gorm:"column:refresh_token_hash;not null;uniqueIndex"`
+	RefreshTokenHash string     `json:"-" gorm:"column:refresh_token_hash;not null"`
 	UserAgent        *string    `json:"userAgent,omitempty" gorm:"column:user_agent"`
 	IPAddress        *string    `json:"ipAddress,omitempty" gorm:"column:ip_address"`
 	Source           string     `json:"source,omitempty" gorm:"column:source"`

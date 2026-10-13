@@ -13,6 +13,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strconv"
+	"strings"
 	"testing"
 	"time"
 
@@ -183,6 +184,10 @@ func TestHTTP2APIResponsesDoNotUseAPIGzipInternal(t *testing.T) {
 		AuthMiddleware: auth.NewAuthMiddleware(nil, cfg),
 		TunnelRegistry: edge.NewTunnelRegistry(),
 	})
+	const largePath = "/api/test-large-response"
+	router.GET(largePath, func(c *echo.Context) error {
+		return c.String(http.StatusOK, strings.Repeat("agent-response-", 1024))
+	})
 	handler, protocols := configureHTTPProtocolsInternal(false, router)
 
 	listener, err := net.Listen("tcp", "127.0.0.1:0")
@@ -207,9 +212,12 @@ func TestHTTP2APIResponsesDoNotUseAPIGzipInternal(t *testing.T) {
 	transport := &http.Transport{Protocols: clientProtocols, DisableCompression: true}
 	client := &http.Client{Transport: transport}
 
-	for _, path := range []string{"/api/health", "/api/openapi.json"} {
-		t.Run(path, func(t *testing.T) {
-			req, requestErr := http.NewRequest(http.MethodGet, "http://"+listener.Addr().String()+path, http.NoBody)
+	for _, route := range []struct {
+		path   string
+		status int
+	}{{"/api/health", http.StatusOK}, {"/api/openapi.json", http.StatusNotFound}, {largePath, http.StatusOK}} {
+		t.Run(route.path, func(t *testing.T) {
+			req, requestErr := http.NewRequest(http.MethodGet, "http://"+listener.Addr().String()+route.path, http.NoBody)
 			require.NoError(t, requestErr)
 			req.Header.Set("Accept-Encoding", "gzip")
 
@@ -221,8 +229,11 @@ func TestHTTP2APIResponsesDoNotUseAPIGzipInternal(t *testing.T) {
 			require.NoError(t, readErr)
 
 			require.Equal(t, "HTTP/2.0", resp.Proto)
-			require.Equal(t, http.StatusOK, resp.StatusCode)
+			require.Equal(t, route.status, resp.StatusCode)
 			require.Empty(t, resp.Header.Get("Content-Encoding"))
+			if route.path == largePath {
+				require.Equal(t, strings.Repeat("agent-response-", 1024), string(body))
+			}
 
 			if contentLength := resp.Header.Get("Content-Length"); contentLength != "" {
 				parsedLength, parseErr := strconv.Atoi(contentLength)
