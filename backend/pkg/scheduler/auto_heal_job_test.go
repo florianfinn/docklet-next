@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace
+// Deviations: Local module namespace; functional cut: removed upstream analytics heartbeat.
 
 package scheduler
 
@@ -144,7 +144,7 @@ func TestAutoHeal_Schedule_Default(t *testing.T) {
 
 func TestAutoHeal_ShouldSchedule(t *testing.T) {
 	ctx := t.Context()
-	_, settingsSvc, _ := setupAnalyticsStateServicesInternal(t)
+	_, settingsSvc, _ := setupSchedulerStateServicesInternal(t)
 	job, err := NewAutoHealJob(nil, settingsSvc, nil, nil, newTestAdmissionGateInternal(t))
 	require.NoError(t, err)
 
@@ -237,7 +237,7 @@ func TestAutoHeal_Run_UsesBoundedConcurrency(t *testing.T) {
 
 func TestAutoHealJob_OverlappingRunIsSkippedInternal(t *testing.T) {
 	ctx := t.Context()
-	_, settingsSvc, _ := setupAnalyticsStateServicesInternal(t)
+	_, settingsSvc, _ := setupSchedulerStateServicesInternal(t)
 	require.NoError(t, settingsSvc.SetBoolSetting(ctx, "autoHealEnabled", true))
 
 	job, err := NewAutoHealJob(nil, settingsSvc, nil, nil, newTestAdmissionGateInternal(t))

@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace
+// Deviations: Local module namespace; functional cut: removed upstream analytics heartbeat.
 
 package config
 
@@ -93,7 +93,6 @@ type Config struct {
 	ManagerApiUrl                 string `env:"MANAGER_API_URL" default:""`
 	UpdateCheckDisabled           bool   `env:"UPDATE_CHECK_DISABLED" default:"false"`
 	UIConfigurationDisabled       bool   `env:"UI_CONFIGURATION_DISABLED" default:"false"`
-	AnalyticsDisabled             bool   `env:"ANALYTICS_DISABLED" default:"false"`
 	GPUMonitoringEnabled          bool   `env:"GPU_MONITORING_ENABLED" default:"false"`
 	GPUType                       string `env:"GPU_TYPE" default:"auto"`
 	EdgeAgent                     bool   `env:"EDGE_AGENT" default:"false"`

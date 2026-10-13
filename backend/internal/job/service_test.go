@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace
+// Deviations: Local module namespace; functional cut: removed upstream analytics heartbeat.
 
 package job
 
@@ -93,25 +93,6 @@ func TestJobService_GetJobSchedules_DefaultDockerClientRefreshInterval(t *testin
 
 	require.Equal(t, "0 */5 * * * *", cfg.DockerClientRefreshInterval)
 	require.Equal(t, "0 0 * * * *", cfg.PollingInterval)
-}
-
-func TestJobService_ListJobs_AnalyticsHeartbeatIsManagedInternally(t *testing.T) {
-	ctx := t.Context()
-	db := setupSettingsTestDBInternal(t)
-
-	settingsSvc, err := newSettingsServiceForTestInternal(t, ctx, db)
-	require.NoError(t, err)
-
-	jobSvc := newJobServiceForTestInternal(t, db, settingsSvc, &config.Config{})
-	jobs, err := jobSvc.ListJobs(ctx)
-	require.NoError(t, err)
-
-	analyticsJob := findJobStatusByIDInternal(t, jobs.Jobs, "analytics-heartbeat")
-	require.Equal(t, "automatic (checked hourly; sent once per 24h)", analyticsJob.Schedule)
-	require.Empty(t, analyticsJob.SettingsKey)
-	require.Nil(t, analyticsJob.NextRun)
-	require.True(t, analyticsJob.CanRunManually)
-	require.False(t, analyticsJob.IsContinuous)
 }
 
 func TestJobService_ListJobs_IncludesDisabledAutoHealJob(t *testing.T) {

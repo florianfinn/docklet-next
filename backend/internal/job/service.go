@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace
+// Deviations: Local module namespace; functional cut: removed upstream analytics heartbeat.
 
 package job
 
@@ -368,10 +368,6 @@ func (s *JobService) getJobScheduleInternal(ctx context.Context, localMeta meta.
 		return "continuous"
 	}
 
-	if localMeta.ID == "analytics-heartbeat" {
-		return "automatic (checked hourly; sent once per 24h)"
-	}
-
 	if localMeta.SettingsKey == "" {
 		return ""
 	}
@@ -681,7 +677,7 @@ func classifyOutcomeInternal(jobID string, outcome scheduler.Outcome, err error)
 func safeJobInternal(jobID string) bool {
 	switch jobID {
 	case "image-polling", "environment-health", "docker-client-refresh", "event-cleanup", "expired-sessions-cleanup", "activity-sweep", "upload-sessions-cleanup",
-		"git-clone-scratch-cleanup", "analytics-heartbeat", "apns-outbox", "vulnerability-scan":
+		"git-clone-scratch-cleanup", "apns-outbox", "vulnerability-scan":
 		return true
 	}
 	return strings.HasPrefix(jobID, "environment-health:")

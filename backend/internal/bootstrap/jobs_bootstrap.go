@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace
+// Deviations: Local module namespace; functional cut: removed upstream analytics heartbeat.
 
 package bootstrap
 
@@ -44,7 +44,6 @@ func newJobScheduler(
 	runtime *runs.Coordinator,
 	_ *runs.Admission,
 	imageUpdateWatcher *scheduler.ImageUpdateWatcher,
-	analytics *scheduler.AnalyticsJob,
 	systemService *system.SystemService,
 	jobService *job.JobService,
 	backupEngine *backup.Engine,
@@ -99,11 +98,6 @@ func newJobScheduler(
 					defer close(repairDone)
 					repairBackupDispatchesInternal(schedulerCtx, backupEngine)
 				}()
-			}
-			if analytics != nil {
-				if _, submitErr := jobService.Coordinator().Submit(ctx, schedulertypes.Request{JobID: analytics.Name(), EnvironmentID: "0", Trigger: "startup"}); submitErr != nil {
-					return fmt.Errorf("submit startup job %q: %w", analytics.Name(), submitErr)
-				}
 			}
 			if !cfg.AgentMode && systemService != nil {
 				resumeDone = make(chan struct{})
@@ -271,7 +265,6 @@ type registerJobsParams struct {
 	AutoUpdate             *scheduler.AutoUpdateJob
 	ImageUpdateWatcher     *scheduler.ImageUpdateWatcher
 	DockerClientRefresh    *scheduler.DockerClientRefreshJob
-	Analytics              *scheduler.AnalyticsJob
 	UpgradeLogCleanup      schedulertypes.Job `name:"upgrade-log-cleanup"`
 	EventCleanup           *scheduler.EventCleanupJob
 	PruningVolumeHelper    *scheduler.PruningVolumeHelperJob
@@ -294,7 +287,6 @@ func registerJobs(params registerJobsParams) error {
 	for _, job := range []schedulertypes.Job{
 		params.AutoUpdate,
 		params.DockerClientRefresh,
-		params.Analytics,
 		params.EventCleanup,
 		params.PruningVolumeHelper,
 		params.ExpiredSessionsCleanup,
