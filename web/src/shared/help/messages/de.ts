@@ -166,7 +166,7 @@ export const deHelp: typeof enHelp = {
       test: {
         title: "Verbindung testen",
         short: "Prüft Erreichbarkeit und Schreibrecht des Ziels.",
-        full: "Der Test schreibt probeweise auf das Ziel und meldet freien Platz oder den Fehler. Im Prototyp ist das Ergebnis simuliert.",
+        full: (import.meta.env.DEV ? "Der Test schreibt probeweise auf das Ziel und meldet freien Platz oder den Fehler. Im Prototyp ist das Ergebnis simuliert." : "Der Test schreibt probeweise auf das Ziel und meldet freien Platz oder einen Fehler."),
         impact: "Es werden keine Backups angelegt.",
       },
     },
@@ -180,13 +180,13 @@ export const deHelp: typeof enHelp = {
       secret: {
         title: "Token oder Passwort",
         short: "Zugangsdaten des Kanals; sie bleiben im Hub.",
-        full: "Wird nach dem Speichern nie wieder angezeigt. Leer lassen behält den gespeicherten Wert. Im Prototyp wird nichts gespeichert.",
+        full: (import.meta.env.DEV ? "Wird nach dem Speichern nie wieder angezeigt. Leer lassen behält den gespeicherten Wert. Im Prototyp wird nichts gespeichert." : "Der gespeicherte Wert wird nach dem Speichern nicht erneut angezeigt. Leer lassen behält den gespeicherten Wert."),
         impact: "Ohne gültige Zugangsdaten schlägt der Versand fehl.",
       },
       test: {
         title: "Test senden",
         short: "Schickt eine Testnachricht über diesen Kanal.",
-        full: "Prüft Ziel und Zugangsdaten mit einer kurzen Nachricht. Im Prototyp wird der Versand nur simuliert.",
+        full: (import.meta.env.DEV ? "Prüft Ziel und Zugangsdaten mit einer kurzen Nachricht. Im Prototyp wird der Versand nur simuliert." : "Prüft Ziel und Zugangsdaten mit einer kurzen Nachricht."),
         impact: "Ändert keine Einstellungen.",
       },
     },
@@ -201,7 +201,7 @@ export const deHelp: typeof enHelp = {
         title: "Scan-Zeitplan",
         short: "Manuell, täglich zu einer Uhrzeit oder wöchentlich an einem Wochentag.",
         full: "„Manuell“ scannt nur auf Knopfdruck. Täglich braucht eine Uhrzeit, wöchentlich einen Wochentag und eine Uhrzeit, optional einen ersten Termin. Die Zeit gilt in der Hub-Zeitzone.",
-        impact: "Der Prototyp plant keine echten Läufe; er zeigt nur den nächsten Termin.",
+        impact: (import.meta.env.DEV ? "Der Prototyp plant keine echten Läufe; er zeigt nur den nächsten Termin." : "Zeigt den nächsten geplanten Lauf."),
       },
     },
     settingsHeal: {
@@ -316,7 +316,7 @@ export const deHelp: typeof enHelp = {
       importSource: {
         title: "Einmaliger Import",
         short: "Übernimmt Werte einmalig aus GitHub oder Docker Hub.",
-        full: "Liest Image und Beispielwerte aus einer Quelle. Es entsteht keine dauerhafte Git-Verbindung. Im Prototyp ist die Abfrage simuliert.",
+        full: (import.meta.env.DEV ? "Liest Image und Beispielwerte aus einer Quelle. Es entsteht keine dauerhafte Git-Verbindung. Im Prototyp ist die Abfrage simuliert." : "Liest Image und Beispielwerte aus einer Quelle. Es entsteht keine dauerhafte Git-Verbindung."),
         impact: "Spätere Änderungen an der Quelle werden nicht übernommen.",
       },
     },
@@ -560,7 +560,7 @@ export const deHelp: typeof enHelp = {
       scan: {
         title: "Jetzt scannen",
         short: "Startet sofort einen Scan aller Images der Hosts.",
-        full: "Läuft unabhängig vom Zeitplan. Ein zweiter Klick während eines Laufs startet keinen weiteren Scan. Im Prototyp ist der Scan simuliert.",
+        full: (import.meta.env.DEV ? "Läuft unabhängig vom Zeitplan. Ein zweiter Klick während eines Laufs startet keinen weiteren Scan. Im Prototyp ist der Scan simuliert." : "Läuft unabhängig vom Zeitplan. Ein zweiter Klick während eines Laufs startet keinen weiteren Scan."),
         impact: "Ergebnisse ersetzen die Befunde des letzten Scans.",
       },
     },

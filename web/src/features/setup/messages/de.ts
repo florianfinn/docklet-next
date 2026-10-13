@@ -4,7 +4,7 @@ import type { enSetup } from "./en";
 export const deSetup: typeof enSetup = {
   badge: "Ersteinrichtung · Vorschau",
   title: "Docklet einrichten",
-  lead: "Ein neuer Hub fragt diese Angaben einmal ab. Im Prototyp startest du den Ablauf über das Design-Labor; das Dashboard bleibt unverändert erreichbar.",
+  lead: (import.meta.env.DEV ? "Ein neuer Hub fragt diese Angaben einmal ab. Im Prototyp startest du den Ablauf über das Design-Labor; das Dashboard bleibt unverändert erreichbar." : "Ein neuer Hub fragt diese Angaben einmal ab."),
   exit: "Vorschau verlassen",
   railLabel: "Schritte der Ersteinrichtung",
   steps: {
@@ -28,7 +28,7 @@ export const deSetup: typeof enSetup = {
   discovery: {
     title: "Interne Adresse aus der Hub-Erkennung",
     lead: "Der Hub prüft auf dem Server seinen Container und seine Docker-Netzwerke. Der Browser selbst kann Docker-Adressen nicht sehen.",
-    simulated: "Simuliert",
+    simulated: (import.meta.env.DEV ? "Simuliert" : ""),
     loading: "Hub erkennt seine Netzwerke …",
     failed: "Erkennung nicht möglich – Adresse bitte selbst eintragen.",
     retry: "Erneut erkennen",
@@ -86,7 +86,7 @@ export const deSetup: typeof enSetup = {
   },
   done: {
     title: "{name} ist eingerichtet",
-    body: "Die Angaben stehen jetzt in den Hub-Einstellungen dieses Demo-Tabs. Passwörter wurden verworfen, nicht gespeichert.",
+    body: (import.meta.env.DEV ? "Die Angaben stehen jetzt in den Hub-Einstellungen dieses Demo-Tabs. Passwörter wurden verworfen, nicht gespeichert." : "Die Angaben stehen in den Hub-Einstellungen. Passwörter wurden verworfen."),
     host: "Ersten Host verbinden",
     dashboard: "Zum Dashboard",
     settings: "Hub-Einstellungen ansehen",

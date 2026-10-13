@@ -3,7 +3,7 @@ import type { enSettings } from "./en";
 
 export const deSettings: typeof enSettings = {
   title: "Hub-Einstellungen",
-  description: "Gelten für den ganzen Hub – unabhängig vom Hostfilter. Speichern wirkt im Demo-Datenbestand dieses Tabs.",
+  description: (import.meta.env.DEV ? "Gelten für den ganzen Hub – unabhängig vom Hostfilter. Speichern wirkt im Demo-Datenbestand dieses Tabs." : "Gilt für den ganzen Hub – unabhängig vom Hostfilter."),
   navLabel: "Bereiche der Hub-Einstellungen",
   groups: { hub: "Hub", operations: "Betrieb", system: "System" },
   sections: {
@@ -67,7 +67,7 @@ export const deSettings: typeof enSettings = {
     stacksMode: "Standardansicht Stacks",
     containersMode: "Standardansicht Container",
     modes: { compact: "Compact", advanced: "Advanced" },
-    labHint: "Das Design-Labor (nur Prototyp) bearbeitet dieselbe Palette sofort und ohne Speichern; eine Änderung dort ersetzt das entsprechende Feld dieses Entwurfs.",
+    labHint: (import.meta.env.DEV ? "Das Design-Labor (nur Prototyp) bearbeitet dieselbe Palette sofort und ohne Speichern; eine Änderung dort ersetzt das entsprechende Feld dieses Entwurfs." : "Änderungen an der Palette gelten nach dem Speichern."),
   },
   auth: {
     mode: "Anmeldemodus",
@@ -81,7 +81,7 @@ export const deSettings: typeof enSettings = {
     username: "Benutzername",
     password: "Neues Passwort",
     passwordConfirm: "Passwort wiederholen",
-    passwordHint: "Mindestens 12 Zeichen. Wird im Prototyp nicht gespeichert.",
+    passwordHint: (import.meta.env.DEV ? "Mindestens 12 Zeichen. Wird im Prototyp nicht gespeichert." : "Mindestens 12 Zeichen."),
     passwordSet: "Ein Passwort ist gesetzt. Leer lassen, um es zu behalten.",
     passwordMismatch: "Passwörter stimmen nicht überein",
     passwordShort: "Mindestens 12 Zeichen",
@@ -179,7 +179,7 @@ export const deSettings: typeof enSettings = {
     username: "Benutzername",
     password: "Passwort",
     passwordKeep: "Gespeichert – leer lassen, um es zu behalten",
-    passwordDemo: "Wird im Prototyp nicht gespeichert.",
+    passwordDemo: (import.meta.env.DEV ? "Wird im Prototyp nicht gespeichert." : "Gespeicherte Passwörter werden nicht angezeigt."),
     options: "Mount-Optionen",
     test: "Verbindung testen",
     testing: "Teste …",
@@ -194,7 +194,7 @@ export const deSettings: typeof enSettings = {
     retention: "Standard-Aufbewahrung für neue Pläne",
     retentionScope: "Gilt als Vorgabe für neu angelegte Backup-Pläne; bestehende Pläne behalten ihre eigene Aufbewahrung.",
     dialogDescription: "Lokales Verzeichnis, vorhandener Host-Mount, SMB-Freigabe oder NFS-Export. Zugangsdaten bleiben im Hub; der Test prüft Erreichbarkeit und Schreibrecht.",
-    permissionsNote: "Genaue Rechte- und Mount-Umsetzung wird noch evaluiert; der Prototyp simuliert Tests.",
+    permissionsNote: (import.meta.env.DEV ? "Genaue Rechte- und Mount-Umsetzung wird noch evaluiert; der Prototyp simuliert Tests." : ""),
     targetInUse: "Mindestens ein Backup-Plan nutzt ein entferntes Ziel. Erst die Pläne umstellen.",
   },
   notifications: {
@@ -234,7 +234,7 @@ export const deSettings: typeof enSettings = {
     },
     secret: "Token / Passwort",
     secretKeep: "Gespeichert – leer lassen, um es zu behalten",
-    secretDemo: "Wird im Prototyp nicht gespeichert.",
+    secretDemo: (import.meta.env.DEV ? "Wird im Prototyp nicht gespeichert." : "Gespeicherte Geheimnisse werden nicht angezeigt."),
     events: "Ereignisse",
     eventNames: {
       updates: "Updates verfügbar",
@@ -314,7 +314,7 @@ export const deSettings: typeof enSettings = {
     sessionLocal: "Lokale Sitzung als „{user}“.",
     sessionProxy: "Angemeldet über den Reverse Proxy (Header {header}). Profil und Passwort verwaltet der Proxy.",
     password: "Passwort ändern",
-    passwordChanged: "Passwort geändert (Demo – nichts gespeichert)",
+    passwordChanged: (import.meta.env.DEV ? "Passwort geändert (Demo – nichts gespeichert)" : ""),
     passwordOnlyLocal: "Nur im Modus „Lokaler Admin“.",
     appearance: "Darstellung",
     appearanceLink: "Darstellung anpassen",

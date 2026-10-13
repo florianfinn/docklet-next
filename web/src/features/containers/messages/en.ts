@@ -88,7 +88,7 @@ export const enContainers = {
     env: "Environment",
     envHint: "KEY=value, one variable per line",
     submit: "Recreate",
-    failDemo: "With error (demo)",
+    failDemo: (import.meta.env.DEV ? "With error (demo)" : ""),
   },
   errors: {
     "recreate-not-allowed": "Recreating is not allowed for this container.",

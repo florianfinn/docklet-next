@@ -40,8 +40,8 @@ export default function ProfilePage() {
       ) : !auth ? (
         <Skeleton className="h-80 rounded-2xl" />
       ) : (
-        <div className="grid max-w-6xl items-start gap-4 lg:grid-cols-2">
-          <Card className="gap-4 py-5">
+        <div className="grid max-w-6xl grid-cols-[minmax(0,1fr)] items-start gap-4 lg:grid-cols-2">
+          <Card className="min-w-0 gap-4 py-5">
             <CardHeader className="px-5">
               <CardTitle className="flex items-center gap-2">
                 <UserRound className="size-4 text-muted-foreground" aria-hidden />
@@ -49,11 +49,11 @@ export default function ProfilePage() {
               </CardTitle>
             </CardHeader>
             <CardContent className="flex flex-col gap-4 px-5">
-              <div className="flex items-center gap-3">
+              <div className="flex min-w-0 flex-wrap items-center gap-3">
                 <Avatar className="size-12 rounded-xl">
                   <AvatarFallback className="rounded-xl bg-primary/20 font-semibold text-primary-text">{initials}</AvatarFallback>
                 </Avatar>
-                <div>
+                <div className="min-w-0 break-all">
                   <div className="font-semibold">{tu("name")}</div>
                   <div className="text-sm text-muted-foreground">{tu("email")}</div>
                 </div>
@@ -79,7 +79,7 @@ export default function ProfilePage() {
               </div>
             </CardContent>
           </Card>
-          <Card className="gap-4 py-5">
+          <Card className="min-w-0 gap-4 py-5">
             <CardHeader className="px-5">
               <CardTitle className="flex items-center gap-2">
                 <KeyRound className="size-4 text-muted-foreground" aria-hidden />

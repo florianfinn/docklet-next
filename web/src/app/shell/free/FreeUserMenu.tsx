@@ -4,6 +4,7 @@ import { useNavigate } from "react-router";
 import { useTranslations } from "use-intl";
 
 import { LOCALES, setAppLocale, useAppLocale } from "@/app/i18n/locale-store";
+import { useAdapter } from "@/data/use-adapter";
 import { setTokens } from "@/shared/theme/design-tokens";
 import { useTokens } from "@/shared/theme/use-design-tokens";
 import { LabMenuItem } from "@/runtime";
@@ -35,7 +36,8 @@ export function FreeUserMenu({ onNavigate }: { onNavigate: () => void }) {
   const tokens = useTokens();
   const { isMobile } = useSidebar();
   const [logout, setLogout] = useState(false);
-  const name = t("name");
+  const disconnected = useAdapter().kind === "disconnected";
+  const name = t(disconnected ? "unknownName" : "name");
   const initials = name
     .split(" ")
     .map((part) => part[0])
@@ -56,18 +58,18 @@ export function FreeUserMenu({ onNavigate }: { onNavigate: () => void }) {
               </Avatar>
               <span className="grid flex-1 text-left leading-tight">
                 <span className="truncate text-sm font-medium">{name}</span>
-                <span className="truncate text-xs text-muted-foreground">{t("email")}</span>
+                <span className="truncate text-xs text-muted-foreground">{t(disconnected ? "unknownStatus" : "email")}</span>
               </span>
               <ChevronsUpDown className="ml-auto size-4 text-muted-foreground" />
             </SidebarMenuButton>
           </DropdownMenuTrigger>
           <DropdownMenuContent side={isMobile ? "top" : "right"} align="end" sideOffset={10} className="w-64">
-            <DropdownMenuLabel className="font-normal">
+            {!disconnected && <DropdownMenuLabel className="font-normal">
               <span className="block text-xs text-muted-foreground">{t("signedInAs")}</span>
               <span className="block truncate text-sm font-medium">{t("email")}</span>
               <span className="block truncate text-xs text-muted-foreground">{t("role")}</span>
-            </DropdownMenuLabel>
-            <DropdownMenuSeparator />
+            </DropdownMenuLabel>}
+            {!disconnected && <DropdownMenuSeparator />}
             <DropdownMenuItem onSelect={() => go("/profile")}>
               <UserRound />
               {t("profile")}
@@ -97,15 +99,15 @@ export function FreeUserMenu({ onNavigate }: { onNavigate: () => void }) {
                 </DropdownMenuRadioItem>
               ))}
             </DropdownMenuRadioGroup>
-            <DropdownMenuSeparator />
+            {!disconnected && <DropdownMenuSeparator />}
             <LabMenuItem />
-            <DropdownMenuItem variant="destructive" onSelect={() => setLogout(true)}>
+            {!disconnected && <DropdownMenuItem variant="destructive" onSelect={() => setLogout(true)}>
               <LogOut />
               {t("logout")}
-            </DropdownMenuItem>
+            </DropdownMenuItem>}
           </DropdownMenuContent>
         </DropdownMenu>
-        <LogoutDialog open={logout} onOpenChange={setLogout} />
+        {!disconnected && <LogoutDialog open={logout} onOpenChange={setLogout} />}
       </SidebarMenuItem>
     </SidebarMenu>
   );

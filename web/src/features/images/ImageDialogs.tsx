@@ -95,12 +95,12 @@ export function PullDialog({ open, onOpenChange, hosts, images, initial }: { ope
               </Button>
             ))}
           </div>
-          <div className="flex items-center gap-2">
+          {import.meta.env.DEV && <div className="flex items-center gap-2">
             <Checkbox id="pull-fail" checked={fail} onCheckedChange={(v) => setFail(v === true)} />
             <Label htmlFor="pull-fail" className="text-sm font-normal text-muted-foreground">
               {t("fail")}
             </Label>
-          </div>
+          </div>}
         </form>
         <DialogFooter>
           <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>

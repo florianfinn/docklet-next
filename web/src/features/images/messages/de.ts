@@ -3,7 +3,7 @@ import type { enImages } from "./en";
 
 export const deImages: typeof enImages = {
   title: "Images",
-  description: "{scope} · Images je Host mit Nutzung durch Stacks und Container. Ziehen, Entfernen und Aufräumen sind simuliert.",
+  description: (import.meta.env.DEV ? "{scope} · Images je Host mit Nutzung durch Stacks und Container. Ziehen, Entfernen und Aufräumen sind simuliert." : "{scope} · Images je Host mit Nutzung durch Stacks und Container."),
   pull: "Image ziehen",
   prune: "Aufräumen",
   strip: { images: "Images", size: "Belegt", unused: "Ungenutzt", dangling: "Dangling", updates: "Mit Update" },
@@ -65,7 +65,7 @@ export const deImages: typeof enImages = {
   },
   pullDialog: {
     title: "Image ziehen",
-    description: "Lädt ein Image auf einen verbundenen Host (Simulation: keine Registry wird kontaktiert). Container nutzen ein neues Image erst nach Deploy oder Neu-Erstellen.",
+    description: (import.meta.env.DEV ? "Lädt ein Image auf einen verbundenen Host (Simulation: keine Registry wird kontaktiert). Container nutzen ein neues Image erst nach Deploy oder Neu-Erstellen." : ""),
     host: "Host",
     hostOffline: "{name} (getrennt)",
     reference: "Image-Referenz",
@@ -73,7 +73,7 @@ export const deImages: typeof enImages = {
     referenceInvalid: "Keine gültige Referenz (Kleinbuchstaben, optional Registry und :tag, kein Digest).",
     known: "Liegt auf diesem Host bereits vor – Ziehen prüft, ob der Stand aktuell ist.",
     suggestions: "Vorschläge",
-    fail: "Mit Registry-Fehler (Demo)",
+    fail: (import.meta.env.DEV ? "Mit Registry-Fehler (Demo)" : ""),
     submit: "Ziehen",
     cancel: "Abbrechen",
   },
@@ -94,7 +94,7 @@ export const deImages: typeof enImages = {
   },
   removeDialog: {
     title: "{name} entfernen?",
-    body: "Das Image wird auf {host} gelöscht. Ein späterer Deploy lädt es bei Bedarf neu (Demo: nur im Arbeitsspeicher).",
+    body: (import.meta.env.DEV ? "Das Image wird auf {host} gelöscht. Ein späterer Deploy lädt es bei Bedarf neu (Demo: nur im Arbeitsspeicher)." : ""),
     confirm: "Image entfernen",
   },
   toast: { removed: "{name} entfernt", nothing: "Keine Images zum Aufräumen" },

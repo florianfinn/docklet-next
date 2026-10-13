@@ -113,7 +113,7 @@ export function StackWorkspace({ draft, stack, hosts, labelSuggestions, mode, on
           {isNew ? t("deploy") : t("saveDeploy")}
         </Button>
       </HelpTarget>
-      <DropdownMenu>
+      {import.meta.env.DEV && <DropdownMenu>
         <DropdownMenuTrigger asChild>
           <Button size="sm" className="rounded-l-none border-l border-primary-foreground/20 px-2" disabled={!model || errors > 0} aria-label={t("deployMenu")}>
             <ChevronDown />
@@ -126,7 +126,7 @@ export function StackWorkspace({ draft, stack, hosts, labelSuggestions, mode, on
             </DropdownMenuItem>
           </DropdownMenuGroup>
         </DropdownMenuContent>
-      </DropdownMenu>
+      </DropdownMenu>}
     </div>
   );
 
@@ -158,7 +158,7 @@ export function StackWorkspace({ draft, stack, hosts, labelSuggestions, mode, on
           </>
         )}
         <span className="flex-1" />
-        <ToneBadge tone={!model || errors ? "err" : warns ? "warn" : "ok"}>
+        <ToneBadge tone={!model || errors ? "err" : warns ? "warn" : "ok"} className="h-auto max-w-full flex-wrap whitespace-normal">
           {model ? <CheckCircle2 /> : <AlertTriangle />}
           {model ? t("valid") : t("invalid")}
           {model && <span className="text-(--tone)/80">· {t("issues", { errors, warns })}</span>}

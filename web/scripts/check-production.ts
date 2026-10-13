@@ -5,12 +5,12 @@ import { build, type Plugin } from "vite";
 const root = fileURLToPath(new URL("..", import.meta.url));
 const configFile = fileURLToPath(new URL("../vite.config.ts", import.meta.url));
 
-async function inspect(injected?: string, mode = "production", target = "/src/main.tsx") {
+async function inspect(injected?: string, mode = "production", target = "/src/main.tsx", extraCode = "") {
   const injection: Plugin = {
     name: "production-boundary-red-proof",
     enforce: "pre",
     transform(code, id) {
-      if (injected && id.endsWith(target)) return `import ${JSON.stringify(injected)};\n${code}`;
+      if (id.endsWith(target) && (injected || extraCode)) return `${injected ? `import ${JSON.stringify(injected)};\n` : ""}${code}\n${extraCode}`;
     },
   };
   return build({ root, configFile, mode, logLevel: "silent", plugins: [injection], build: { write: false } });
@@ -37,4 +37,8 @@ if (process.argv.includes("--prove")) {
   }
   await assert.rejects(inspect("@/data/demo/demo-text", "production", "/src/shared/hooks/use-stack-commands.ts"), /Production boundary: forbidden module/);
   console.log("Red proof passed: shared hook import of demo text rejected in production build.");
+  await assert.rejects(inspect("@/test/layout"), /Production boundary: forbidden module/);
+  console.log("Red proof passed: test helper rejected in production build.");
+  await assert.rejects(inspect(undefined, "production", "/src/main.tsx", 'document.title = "Design-Labor";'), /Production boundary: forbidden text/);
+  console.log("Red proof passed: lab text rejected in production assets.");
 }

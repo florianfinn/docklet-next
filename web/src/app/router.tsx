@@ -1,5 +1,7 @@
 import { lazy, Suspense } from "react";
 import { createBrowserRouter, Navigate } from "react-router";
+import { QueryError } from "@/shared/components/page";
+import { BackendNotice } from "@/data/BackendNotice";
 
 import { NotFound } from "./shell/NotFound";
 import { RouteError } from "./shell/RouteError";
@@ -13,16 +15,16 @@ const ContainerPage = lazy(() => import("@/features/containers/ContainerPage"));
 const SecurityPage = lazy(() => import("@/features/security/SecurityPage"));
 const NetworksPage = lazy(() => import("@/features/networks/NetworksPage"));
 const HostsPage = lazy(() => import("@/features/hosts/HostsPage"));
-const OnboardingPage = lazy(() => import("@/features/hosts/onboarding/OnboardingPage"));
+const OnboardingPage = import.meta.env.DEV ? lazy(() => import("@/features/hosts/onboarding/OnboardingPage")) : null;
 const VolumesPage = lazy(() => import("@/features/volumes/VolumesPage"));
 const ImagesPage = lazy(() => import("@/features/images/ImagesPage"));
 const VolumePage = lazy(() => import("@/features/volumes/VolumePage"));
 const BackupsPage = lazy(() => import("@/features/volumes/BackupsPage"));
 const SettingsPage = lazy(() => import("@/features/settings/SettingsPage"));
 const ProfilePage = lazy(() => import("@/features/settings/ProfilePage"));
-const SetupPage = lazy(() => import("@/features/setup/SetupPage"));
+const SetupPage = import.meta.env.DEV ? lazy(() => import("@/features/setup/SetupPage")) : null;
 const LoginPage = lazy(() => import("@/features/auth/login/LoginPage"));
-const PreviewPage = lazy(() => import("./preview/PreviewPage"));
+const PreviewPage = import.meta.env.DEV ? lazy(() => import("./preview/PreviewPage")) : null;
 
 export const routes = [
   {
@@ -31,7 +33,7 @@ export const routes = [
     errorElement: <RouteError />,
     element: (
       <Suspense fallback={null}>
-        <SetupPage />
+        {SetupPage ? <SetupPage /> : <main className="mx-auto max-w-3xl p-6"><BackendNotice /></main>}
       </Suspense>
     ),
   },
@@ -61,7 +63,7 @@ export const routes = [
           { path: "security", element: <SecurityPage /> },
           { path: "networks", element: <NetworksPage /> },
           { path: "hosts", element: <HostsPage /> },
-          { path: "hosts/new", element: <OnboardingPage /> },
+          { path: "hosts/new", element: OnboardingPage ? <OnboardingPage /> : <QueryError /> },
           { path: "volumes", element: <VolumesPage /> },
           { path: "images", element: <ImagesPage /> },
           { path: "volumes/:volumeId", element: <VolumePage /> },
@@ -69,7 +71,7 @@ export const routes = [
           { path: "settings", element: <Navigate to="/settings/general" replace /> },
           { path: "settings/:section", element: <SettingsPage /> },
           { path: "profile", element: <ProfilePage /> },
-          { path: "preview/:section", element: <PreviewPage /> },
+          ...(PreviewPage ? [{ path: "preview/:section", element: <PreviewPage /> }] : []),
           { path: "*", element: <NotFound /> },
         ],
       },

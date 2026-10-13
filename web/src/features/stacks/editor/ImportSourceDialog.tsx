@@ -24,7 +24,7 @@ interface ImportSourceDialogProps {
   onApply: (result: ImportResult) => void;
 }
 
-/** One-time import through the adapter; the demo adapter simulates sources. */
+/** One-time import through the adapter. */
 export function ImportSourceDialog({ open, onOpenChange, onApply }: ImportSourceDialogProps) {
   const t = useTranslations("editor.source");
   const tc = useTranslations("common.actions");
@@ -34,17 +34,20 @@ export function ImportSourceDialog({ open, onOpenChange, onApply }: ImportSource
   const [ref, setRef] = useState("");
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<ImportResult | null>(null);
-  const [error, setError] = useState(false);
+  const [error, setError] = useState<"missing" | "unavailable" | null>(null);
 
   const fetchSource = async (value = ref) => {
     if (!value.trim()) {
-      setError(true);
+      setError("missing");
       return;
     }
-    setError(false);
+    setError(null);
     setLoading(true);
     try {
       setResult(await adapter.importSource({ kind, ref: value }));
+    } catch {
+      setResult(null);
+      setError("unavailable");
     } finally {
       setLoading(false);
     }
@@ -89,16 +92,16 @@ export function ImportSourceDialog({ open, onOpenChange, onApply }: ImportSource
             void fetchSource();
           }}
         >
-          <Field data-invalid={error || undefined}>
+          <Field data-invalid={Boolean(error) || undefined}>
             <FieldLabel htmlFor="import-ref">{t("ref")}</FieldLabel>
             <div className="flex gap-2">
-              <Input id="import-ref" className="font-mono" aria-invalid={error || undefined} placeholder={kind === "github" ? t("githubPlaceholder") : t("dockerhubPlaceholder")} value={ref} onChange={(e) => setRef(e.target.value)} />
+              <Input id="import-ref" className="font-mono" aria-invalid={Boolean(error) || undefined} placeholder={kind === "github" ? t("githubPlaceholder") : t("dockerhubPlaceholder")} value={ref} onChange={(e) => setRef(e.target.value)} />
               <Button type="submit" disabled={loading}>
                 {loading && <Spinner data-icon="inline-start" />}
                 {t("fetch")}
               </Button>
             </div>
-            <FieldDescription className={error ? "text-destructive" : undefined}>{error ? t("refMissing") : t("simulated")}</FieldDescription>
+            <FieldDescription className={error ? "text-destructive" : undefined}>{error === "missing" ? t("refMissing") : error === "unavailable" ? t("fetchFailed") : t("simulated")}</FieldDescription>
           </Field>
           <div className="flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground">
             {t("examples")}:
@@ -121,7 +124,7 @@ export function ImportSourceDialog({ open, onOpenChange, onApply }: ImportSource
           <div className="flex flex-col gap-3 rounded-xl border bg-muted/20 p-3">
             <div className="flex items-center gap-2 text-sm font-medium">
               {dt(result.title)}
-              {adapter.kind === "demo" && <ToneBadge tone="violet">Simulation</ToneBadge>}
+              {import.meta.env.DEV && adapter.kind === "demo" && <ToneBadge tone="violet">Simulation</ToneBadge>}
             </div>
             <div className="grid gap-3 md:grid-cols-2">
               <div>

@@ -108,7 +108,7 @@ export default function DashboardPage() {
   const critical = images.filter((i) => i.usage === "running").reduce((n, i) => n + i.counts.critical, 0);
 
   const coreLoading = hosts.isPending || stacks.isPending || containers.isPending;
-  const visible = visibleWidgets(layout);
+  const visible = visibleWidgets(layout).filter((id) => import.meta.env.DEV || !isServiceWidget(id));
   const apply = (fn: () => void) => withTransition(() => flushSync(fn), animate);
   const title = (id: WidgetId) => (isServiceWidget(id) ? t(`services.${id}.name`) : t(`widget.${id}.title`));
   const onCommit = useCallback(
@@ -140,7 +140,7 @@ export default function DashboardPage() {
   };
 
   const body = (id: WidgetId): ReactNode => {
-    if (isServiceWidget(id)) return <ServiceWidgetBody kind={id} config={layout.services[id]} onConfigure={() => setConfigure(id)} />;
+    if (isServiceWidget(id)) return import.meta.env.DEV ? <ServiceWidgetBody kind={id} config={layout.services[id]} onConfigure={() => setConfigure(id)} /> : null;
     switch (id) {
       case "attention":
         return <AttentionWidget items={attention} hosts={hosts.byId} />;
@@ -242,7 +242,7 @@ export default function DashboardPage() {
                     onPointerDown: (e) => grid.onPointerDown(id, e),
                     onMove: (delta) => move(id, delta),
                     onHide: () => apply(() => layoutStore.set((l) => toggleWidget(l, id))),
-                    onConfigure: isServiceWidget(id) ? () => setConfigure(id) : undefined,
+                    onConfigure: import.meta.env.DEV && isServiceWidget(id) ? () => setConfigure(id) : undefined,
                     size: sizeOf(id),
                     columns: columns,
                     limits: { minW: WIDGET_MIN[id].w, maxW: Math.min(MAX_WIDGET_COLUMNS, columns), minH: WIDGET_MIN[id].h, maxH: MAX_WIDGET_ROWS },
@@ -258,8 +258,8 @@ export default function DashboardPage() {
           )}
         </>
       )}
-      <CustomizeSheet open={sheet} onOpenChange={setSheet} animate={animate} meta={META} onConfigure={setConfigure} />
-      <ServiceConfigDialog kind={configure} onOpenChange={(o) => !o && setConfigure(null)} />
+      <CustomizeSheet open={sheet} onOpenChange={setSheet} animate={animate} meta={META} onConfigure={import.meta.env.DEV ? setConfigure : undefined} />
+      {import.meta.env.DEV && <ServiceConfigDialog kind={configure} onOpenChange={(o) => !o && setConfigure(null)} />}
     </>
   );
 }

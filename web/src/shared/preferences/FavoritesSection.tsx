@@ -45,7 +45,7 @@ export function FavoritesSection() {
   };
 
   return (
-    <FieldSet data-slot="design-favorites">
+    <FieldSet data-slot="design-favorites" className="min-w-0">
       <FieldLegend variant="label">{t("title")}</FieldLegend>
       <p className="-mt-2 text-xs text-muted-foreground">{t("hint")}</p>
 
@@ -102,6 +102,7 @@ export function FavoritesSection() {
           <Button
             variant="outline"
             size="sm"
+            className="h-auto max-w-full whitespace-normal"
             onClick={() => {
               saveFavorite();
               toast.success(t("savedFavorite"));
@@ -113,6 +114,7 @@ export function FavoritesSection() {
           <Button
             variant="outline"
             size="sm"
+            className="h-auto max-w-full whitespace-normal"
             onClick={() => {
               toast.success(resetToFavorite() === "favorite" ? t("resetDone") : t("resetShippedDone"));
             }}
@@ -144,7 +146,7 @@ export function FavoritesSection() {
         <Button
           variant="outline"
           size="sm"
-          className="self-start"
+            className="h-auto max-w-full self-start whitespace-normal"
           onClick={() => {
             resetToShipped();
             toast.success(t("resetShippedDone"));

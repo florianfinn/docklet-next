@@ -95,12 +95,12 @@ export function StackHeader({ stack, host, inline = false }: { stack: StackDetai
                     <ScanSearch /> {t("actions.check")}
                   </DropdownMenuItem>
                 </DropdownMenuGroup>
-                <DropdownMenuSeparator />
-                <DropdownMenuGroup>
+                {import.meta.env.DEV && <DropdownMenuSeparator />}
+                {import.meta.env.DEV && <DropdownMenuGroup>
                   <DropdownMenuItem onSelect={() => present(() => cmd.run(stack.id, "redeploy", "pull"))}>
                     <FlaskConical /> {t("actions.failDemo")}
                   </DropdownMenuItem>
-                </DropdownMenuGroup>
+                </DropdownMenuGroup>}
               </DropdownMenuContent>
             </DropdownMenu>
           </div>

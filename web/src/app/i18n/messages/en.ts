@@ -5,7 +5,7 @@ export const enLocale = {
     names: { de: "Deutsch", enUS: "English (US)" },
   },
   ui: {
-    documentTitle: "Docklet · React prototype",
+    documentTitle: (import.meta.env.DEV ? "Docklet · React prototype" : "Docklet Next"),
     loading: "Loading",
     newStack: "New stack",
   },

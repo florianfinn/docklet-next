@@ -89,7 +89,7 @@ export const deContainers: typeof enContainers = {
     env: "Umgebung",
     envHint: "KEY=Wert, eine Variable pro Zeile",
     submit: "Neu erstellen",
-    failDemo: "Mit Fehler (Demo)",
+    failDemo: (import.meta.env.DEV ? "Mit Fehler (Demo)" : ""),
   },
   errors: {
     "recreate-not-allowed": "Neu erstellen ist für diesen Container nicht erlaubt.",

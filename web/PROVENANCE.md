@@ -320,3 +320,16 @@ adapter text is rendered at the data/UI boundary. Its upstream source revision
 is retained in the new sidecar; the historical snapshot entry is unchanged.
 The production bundle guard also proves that a demo-text import from a shared
 hook is rejected.
+
+## Production shell corrections (#11)
+
+The 592-file aggregate remains the historical import record. Current per-file
+sidecars record the post-import bytes of the production shell correction. The
+host installation sheet was extracted from the imported `HostsPage.tsx` into
+`InstallSheet.dev.tsx`; its sidecar retains the original host-page source hash.
+Development-only routes, controls and catalogue values retain their imported
+wording in development builds, while the product build uses neutral values or
+omits demo-only modules. The disconnected adapter now presents a stable error
+for stack creation and rejected source imports. Responsive width changes do not
+alter the imported copy. The production bundle guard and route tests provide
+the product-boundary evidence.

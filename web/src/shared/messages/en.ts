@@ -45,12 +45,12 @@ export const enCommon = {
   },
   query: {
     errorTitle: "Data could not be loaded",
-    errorHint: "A failure simulation is active in the design lab or the source is not responding.",
+    errorHint: (import.meta.env.DEV ? "A failure simulation is active in the design lab or the source is not responding." : "The source could not be reached."),
     emptyTitle: "No entries",
   },
   simulation: {
-    badge: "Simulation",
-    hint: "Simulated live values – not measured on a real host",
+    badge: (import.meta.env.DEV ? "Simulation" : ""),
+    hint: (import.meta.env.DEV ? "Simulated live values – not measured on a real host" : ""),
     paused: "Paused",
   },
   host: {
@@ -220,12 +220,12 @@ export const enCommon = {
     ram: "RAM",
     off: "off",
     unavailable: "not available – container stopped or host disconnected",
-    cpuValue: "{value}% CPU (simulated)",
-    ramValue: "{used} of {limit} ({percent}% of the limit, simulated)",
+    cpuValue: (import.meta.env.DEV ? "{value}% CPU (simulated)" : ""),
+    ramValue: (import.meta.env.DEV ? "{used} of {limit} ({percent}% of the limit, simulated)" : ""),
   },
   demo: {
-    inMemory: "In-memory demo – nothing runs on a host; reloading resets it.",
-    saved: "Saved (demo)",
+    inMemory: (import.meta.env.DEV ? "In-memory demo – nothing runs on a host; reloading resets it." : ""),
+    saved: (import.meta.env.DEV ? "Saved (demo)" : ""),
     copied: "Copied",
     copy: "Copy",
     download: "Download",

@@ -8,7 +8,7 @@ export const deLocale: typeof enLocale = {
     names: { de: "Deutsch", enUS: "English (US)" },
   },
   ui: {
-    documentTitle: "Docklet · React-Prototyp",
+    documentTitle: (import.meta.env.DEV ? "Docklet · React-Prototyp" : "Docklet Next"),
     loading: "Lädt",
     newStack: "Neuer Stack",
   },
