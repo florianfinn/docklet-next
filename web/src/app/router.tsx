@@ -1,11 +1,12 @@
 import { lazy, Suspense } from "react";
-import { createBrowserRouter, Navigate } from "react-router";
+import { createBrowserRouter, Navigate, type RouteObject } from "react-router";
 import { QueryError } from "@/shared/components/page";
 import { BackendNotice } from "@/data/BackendNotice";
 
 import { NotFound } from "./shell/NotFound";
 import { RouteError } from "./shell/RouteError";
 import { AppShell } from "./shell/AppShell";
+import { navigationForRoutes } from "./shell/nav-items";
 
 const DashboardPage = lazy(() => import("@/features/dashboard/DashboardPage"));
 const StacksPage = lazy(() => import("@/features/stacks/overview/StacksPage"));
@@ -26,7 +27,37 @@ const SetupPage = import.meta.env.DEV ? lazy(() => import("@/features/setup/Setu
 const LoginPage = lazy(() => import("@/features/auth/login/LoginPage"));
 const PreviewPage = import.meta.env.DEV ? lazy(() => import("./preview/PreviewPage")) : null;
 
-export const routes = [
+const shellRoutes: RouteObject[] = [
+  {
+    errorElement: <RouteError />,
+    children: [
+      { index: true, element: <Navigate to="/dashboard" replace /> },
+      { path: "dashboard", element: <DashboardPage /> },
+      { path: "stacks", element: <StacksPage /> },
+      { path: "stacks/new", element: <StackPage /> },
+      { path: "stacks/:stackId", element: <StackPage /> },
+      { path: "containers", element: <ContainersPage /> },
+      { path: "containers/:containerId", element: <ContainerPage /> },
+      { path: "security", element: <SecurityPage /> },
+      { path: "networks", element: <NetworksPage /> },
+      { path: "hosts", element: <HostsPage /> },
+      { path: "hosts/new", element: OnboardingPage ? <OnboardingPage /> : <QueryError /> },
+      { path: "volumes", element: <VolumesPage /> },
+      { path: "images", element: <ImagesPage /> },
+      { path: "volumes/:volumeId", element: <VolumePage /> },
+      { path: "backups", element: <BackupsPage /> },
+      { path: "settings", element: <Navigate to="/settings/general" replace /> },
+      { path: "settings/:section", element: <SettingsPage /> },
+      { path: "profile", element: <ProfilePage /> },
+      ...(PreviewPage ? [{ path: "preview/:section", element: <PreviewPage /> }] : []),
+      { path: "*", element: <NotFound /> },
+    ],
+  },
+];
+
+export const navigation = navigationForRoutes(shellRoutes);
+
+export const routes: RouteObject[] = [
   {
     // First-run setup is a full-screen preview outside the shell.
     path: "setup",
@@ -48,34 +79,8 @@ export const routes = [
     ),
   },
   {
-    element: <AppShell />,
-    children: [
-      {
-        errorElement: <RouteError />,
-        children: [
-          { index: true, element: <Navigate to="/dashboard" replace /> },
-          { path: "dashboard", element: <DashboardPage /> },
-          { path: "stacks", element: <StacksPage /> },
-          { path: "stacks/new", element: <StackPage /> },
-          { path: "stacks/:stackId", element: <StackPage /> },
-          { path: "containers", element: <ContainersPage /> },
-          { path: "containers/:containerId", element: <ContainerPage /> },
-          { path: "security", element: <SecurityPage /> },
-          { path: "networks", element: <NetworksPage /> },
-          { path: "hosts", element: <HostsPage /> },
-          { path: "hosts/new", element: OnboardingPage ? <OnboardingPage /> : <QueryError /> },
-          { path: "volumes", element: <VolumesPage /> },
-          { path: "images", element: <ImagesPage /> },
-          { path: "volumes/:volumeId", element: <VolumePage /> },
-          { path: "backups", element: <BackupsPage /> },
-          { path: "settings", element: <Navigate to="/settings/general" replace /> },
-          { path: "settings/:section", element: <SettingsPage /> },
-          { path: "profile", element: <ProfilePage /> },
-          ...(PreviewPage ? [{ path: "preview/:section", element: <PreviewPage /> }] : []),
-          { path: "*", element: <NotFound /> },
-        ],
-      },
-    ],
+    element: <AppShell navigation={navigation} />,
+    children: shellRoutes,
   },
 ];
 

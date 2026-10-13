@@ -23,6 +23,7 @@ import { SidebarInset, SidebarProvider, SidebarTrigger } from "@/shared/ui/sideb
 import { Skeleton } from "@/shared/ui/skeleton";
 
 import { PAGE_MAX_WIDTH, pageWidth } from "./page-width";
+import { NAV, PREVIEW_ICONS, type NavGroup } from "./nav-items";
 import { ShellEffects } from "./ShellEffects";
 import { ShellSidebar } from "./ShellSidebar";
 
@@ -41,7 +42,7 @@ function useCrumbs(): Crumb[] {
   const containers = useContainers();
   const volume = useVolume(first === "volumes" && second ? second : undefined);
   const known = ["dashboard", "stacks", "containers", "security", "networks", "images", "hosts", "volumes", "backups", "settings", "profile"] as const;
-  if (first === "preview" && second) {
+  if (import.meta.env.DEV && first === "preview" && second && Object.hasOwn(PREVIEW_ICONS, second)) {
     const key = second as Parameters<typeof t>[0];
     return [{ label: t(key) }];
   }
@@ -69,7 +70,7 @@ function PageFallback() {
   );
 }
 
-export function AppShell() {
+export function AppShell({ navigation = NAV }: { navigation?: NavGroup[] }) {
   const t = useTranslations("shell");
   const ta = useTranslations("activity");
   const crumbs = useCrumbs();
@@ -84,7 +85,7 @@ export function AppShell() {
         {t("skip")}
       </a>
       <ShellEffects />
-      <ShellSidebar />
+      <ShellSidebar navigation={navigation} />
       <SidebarInset className="min-w-0 bg-transparent">
         <header className="glass sticky top-0 z-30 flex h-14 shrink-0 items-center gap-2 border-b border-border/50 px-4">
           <SidebarTrigger className="-ml-1" aria-label={t("toggleSidebar")} />
