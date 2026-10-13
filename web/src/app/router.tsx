@@ -36,7 +36,7 @@ export const routes = [
     ),
   },
   {
-    // Login demo: full screen like setup; it guards no route.
+    // The build selects the login entry; authentication arrives with the backend.
     path: "login",
     errorElement: <RouteError />,
     element: (

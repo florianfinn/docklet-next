@@ -8,7 +8,7 @@ import { useEvents, useSchedule, useSecurity } from "@/data/queries";
 import { isHostVisible } from "@/domain/hosts";
 import type { Tone } from "@/domain/model";
 import { hasUpdate } from "@/domain/updates";
-import { useMotionEnabled, useTokens } from "@/features/design-lab/use-design-lab";
+import { useMotionEnabled, useTokens } from "@/shared/theme/use-design-tokens";
 import { EmptyState, PageHeader, QueryError } from "@/shared/components/page";
 import { useHostScope, useVisibleContainers, useVisibleStacks } from "@/shared/hooks/use-host-scope";
 import { Button } from "@/shared/ui/button";

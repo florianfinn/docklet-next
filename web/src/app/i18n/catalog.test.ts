@@ -68,10 +68,10 @@ describe("German catalogue", () => {
 const catalogueModules = import.meta.glob<Record<string, Tree>>("/src/**/messages/*{en,de}.ts", { eager: true });
 
 describe("catalogue contracts", () => {
-  it("validates every catalogue pair, including the additional pool errors", () => {
+  it("validates every catalogue pair, including pool and disconnected backend messages", () => {
     const englishFiles = Object.keys(catalogueModules).filter((path) => path.endsWith("en.ts"));
-    expect(englishFiles).toHaveLength(23);
-    expect(Object.keys(catalogueModules)).toHaveLength(46);
+    expect(englishFiles).toHaveLength(24);
+    expect(Object.keys(catalogueModules)).toHaveLength(48);
     const used = new Set<string>();
     const errors = englishFiles.flatMap((path) => {
       const english = Object.values(catalogueModules[path]!)[0]!;

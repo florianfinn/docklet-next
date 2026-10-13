@@ -7,7 +7,7 @@ import { Button } from "@/shared/ui/button";
 import { Field, FieldDescription, FieldError, FieldLabel, FieldLegend, FieldSet } from "@/shared/ui/field";
 import { Textarea } from "@/shared/ui/textarea";
 
-import { applySnapshot, captureSnapshot, clearFavorite, decodeDesignCode, encodeDesignCode, resetToFavorite, resetToShipped, saveFavorite, SHIPPED_DEFAULT_CODE, useFavorite, type DecodeError } from "./favorite-code";
+import { applySnapshot, captureSnapshot, clearFavorite, decodeDesignCode, encodeDesignCode, resetToFavorite, resetToShipped, saveFavorite, SHIPPED_DEFAULT_CODE, useFavorite, type DecodeError } from "@/shared/preferences/favorite-code";
 
 /**
  * Design code export and import plus the local favourite. Lets a user send

@@ -3,7 +3,7 @@ Source: approved Docklet design prototype (maintainer's own work)/react-opus
 Revision: d75474089b87ab9f77c606cc7aa696d05157d8e9cd902f1ed5a0f2b904722a39
 Retrieved: 2026-10-13
 License: Apache-2.0 AND MIT AND BSD-3-Clause
-Deviations: Initial unchanged import followed by the English catalogue base and test guards described below.
+Deviations: Historical import proof with subsequent product boundary, English catalogue base and validation guards documented below.
 -->
 
 # Frozen UI snapshot provenance
@@ -60,8 +60,8 @@ CI enables pinned pnpm 11.21.0 and installs the web lockfile before running root
 lint (ESLint plus TypeScript), tests and build. The existing SHA-pinned actions,
 read-only permissions, text-only fast path and 15-minute timeout are retained.
 
-No dependencies, build output, lab documentation tree, design book, environment
-files, screenshots, videos, renders or prototype README are copied. This new
+No installed dependency tree, build output, lab documentation tree, design book,
+environment files, screenshots, videos, renders or prototype README are copied. This new
 provenance record and repository policy entries are import metadata.
 The generated lockfile alone has an exact size-policy exemption; no source
 file receives an oversized-file allowance.
@@ -147,14 +147,43 @@ paths, code member access and a package version. The favicon is geometric SVG
 without external content; the twelve logo modules generate own vector artwork.
 There are no checked-in font binaries or other media under `src/`.
 
-This is the approved prototype snapshot. Demo transport and design-lab controls
-remain present intentionally; their production separation, locale base changes,
-HTTP/WebSocket integration and live product acceptance belong to later steps.
+This section records the approved prototype snapshot. The product boundary and
+English catalogue changes after the import are documented below. HTTP/WebSocket
+integration and live product acceptance belong to later steps.
+
+## Product boundary after the import
+
+Issue #11 relocates design tokens and hooks to `shared/theme`, and favourite
+codes, their controls, explanation preferences and shared catalogues to
+`shared/preferences`. Exact per-file sidecars retain the original source path
+and hash while recording the current hash and deviation. Removed source paths
+have no stale sidecar. The aggregate above remains the historical import proof.
+Existing catalogue bytes, storage keys and version 1 records are preserved.
+
+`src/test/fixtures/lab-preferences-v1.json` contains nine synthetic localStorage
+records captured by executing the pre-move stores at commit
+`3d449aa` with non-default preferences. It includes a favourite encoded by that
+implementation. Regression tests load these records through the product stores
+and require an identical design-code export.
+
+The build selects `src/runtime.ts` (disconnected product adapter) or
+`src/runtime.dev.ts` (development server and tests). All distributable builds,
+including custom modes, use the product entry. No URL or browser preference
+selects a runtime. The login simulator, lab controls, simulation badges and demo
+translation tables stay behind this boundary. Setup writes fail honestly until
+a backend is connected; personal appearance and help settings remain available.
+
+Root lint and test build and inspect the complete production module graph.
+`build/production-boundary.ts` rejects demo and lab modules, including modules
+removed by tree shaking. It emits `production-modules.json` with repository-relative
+graph and shipped module paths. Root tests additionally inject forbidden imports
+into the real application in memory and require the guard to reject them.
+The normal build uses the same guard. No HTTP adapter is implemented here.
 
 ## English catalogue base and continuing validation
 
 The M2-01 import commit is `ce68e4343dbf5b774bcdeb93d85036ea158e61ab`.
-On 2026-10-13, all **46 catalogue files (23 DE/EN pairs)** matched their
+On 2026-10-13, all **46 imported catalogue files (23 DE/EN pairs)** matched their
 prototype source SHA-256, and the **21** pre-English German file hashes embedded
 in the imported catalogue test matched this import. The table below records
 those import bytes, including the locale switch and L1a address-pool additions.
@@ -210,8 +239,8 @@ These are historical evidence, not ongoing byte-freeze checks.
 | `src/shared/workspace/messages/de.ts` | `36b5c87153633eb2951721264481f743c430669c6a9111d70125f5cc164240eb` |
 | `src/shared/workspace/messages/en.ts` | `31d3be462d416e43fcce8dd7b81e63c9fae4d295dd0cf3e30ea3c95d3f360620` |
 
-English now defines each feature/platform catalogue type, including visual and
-address-pool messages, the aggregate `Messages` type and use-intl's configuration.
+English now defines each feature/platform catalogue type, including relocated
+preference/visual messages, address-pool and disconnected-backend messages, the aggregate `Messages` type and use-intl's configuration.
 German follows those types. The default and invalid-preference fallback remain
 German; the locale store, storage key, switching and formatting behaviour stay
 unchanged. The original snapshot aggregate remains the historical import record.
@@ -228,8 +257,9 @@ Its **6,638 values** are byte-identical in UTF-8. SHA-256 of the compact
 both before and after. Only imports, type annotations and catalogue comments
 changed; no existing DE/EN message was rewritten.
 
-The lab's German file-hash assertion is retired. Tests now validate every separate
-catalogue pair and the merged catalogue: keys/array entries, ICU syntax in both
+The lab's German file-hash assertion is retired. Tests now validate all 24
+current catalogue pairs, including the relocated preference and new backend
+pairs, and the merged catalogue: keys/array entries, ICU syntax in both
 languages, argument names/types, rich tags, plural/select branch keys, nested
 branch arguments, ordinal/cardinal kind, offsets and apostrophes. Mutation tests
 cover missing/extra keys, mismatched arguments, malformed syntax and branch drift.
@@ -262,3 +292,11 @@ notation/input examples, developer diagnostics, paired formatter words and
 installer output. No file-wide UI exemption is added. Changed, duplicated or stale
 exception lines fail. Existing labels remain an explicit localization follow-up;
 new JSX or accessible-attribute literals fail, with injected-source red proofs.
+
+The four imported design-lab catalogue files now live under
+`src/shared/preferences/messages/`; the hash table retains their import paths.
+The two disconnected-backend catalogues under `src/data/messages/` are new product
+texts and follow the same English-base type and parity checks. Comparing the
+transpiled export-value map with the pre-change import record after normalizing
+the four relocated paths found all 6,638 original values unchanged and exactly
+four new backend title/hint values.

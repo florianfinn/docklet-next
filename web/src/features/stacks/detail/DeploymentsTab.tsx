@@ -2,7 +2,7 @@ import { CheckCircle2, ChevronRight, History, Loader2, RotateCcw, XCircle } from
 import { useRef, useState } from "react";
 import { useLocale, useTranslations } from "use-intl";
 
-import { localizeRun } from "@/data/demo/demo-text";
+import { localizeRun } from "@/runtime";
 import { useActionRuns } from "@/data/live";
 import { formatDateTime, formatRelative } from "@/domain/format";
 import type { ActionRun, RestorePoint, StackDetail } from "@/domain/model";

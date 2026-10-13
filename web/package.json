@@ -13,8 +13,8 @@
     "build": "tsc -b && vite build",
     "preview": "vite preview",
     "typecheck": "tsc -b --noEmit",
-    "lint": "eslint . && tsc -b --noEmit",
-    "test": "vitest run"
+    "lint": "eslint . && tsc -b --noEmit && node scripts/check-production.ts",
+    "test": "node scripts/check-production.ts --prove && vitest run"
   },
   "dependencies": {
     "@codemirror/commands": "6.11.1",

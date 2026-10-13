@@ -1,13 +1,13 @@
 import { DEFAULT_LAYOUT, layoutStore, mergeLayout, type DashboardLayout } from "@/features/dashboard/dashboard-layout";
 import { DEFAULT_FLEET_VIEW, fleetViewStore, mergeFleetView, type FleetView } from "@/features/dashboard/fleet-view-store";
-import { DEFAULT_HELP, helpStore, mergeHelp, type HelpPrefs } from "@/shared/help/help-store";
+import { DEFAULT_HELP, helpStore, mergeHelp, type HelpPrefs } from "@/shared/preferences/help-store";
 import { createStore, useStore } from "@/shared/lib/store";
 import { DEFAULT_PREFERENCES, preferencesStore, type Preferences } from "@/shared/preferences/preferences-store";
 import { SHIPPED_DESIGN } from "@/shared/preferences/shipped-design";
 import { DEFAULT_UI_STYLE, mergeUiStyle, uiStyleStore, type UiStyle } from "@/shared/preferences/ui-style-store";
 import { DEFAULT_VISUAL_STYLE, mergeVisualStyle, visualStyleStore, type VisualStyle } from "@/shared/preferences/visual-style-store";
 
-import { DEFAULT_TOKENS, labStore, normalizeTokens, type DesignTokens } from "./design-tokens";
+import { DEFAULT_TOKENS, designStore, normalizeTokens, type DesignTokens } from "@/shared/theme/design-tokens";
 
 /**
  * Shareable design code: presentation settings only, so a user can send the
@@ -115,7 +115,7 @@ export function sanitizeSnapshot(raw: unknown): DesignSnapshot {
 export function captureSnapshot(): DesignSnapshot {
   const prefs = preferencesStore.get();
   return sanitizeSnapshot({
-    tokens: labStore.get().tokens,
+    tokens: designStore.get().tokens,
     uiStyle: uiStyleStore.get(),
     visual: visualStyleStore.get(),
     dashboard: layoutStore.get(),
@@ -181,7 +181,7 @@ export function applySnapshot(raw: DesignSnapshot): SectionId[] {
   const s = sanitizeSnapshot(raw);
   if (s.tokens) {
     const tokens = s.tokens;
-    labStore.set((lab) => ({ ...lab, tokens: { ...tokens, ignoreReducedMotion: lab.tokens.ignoreReducedMotion }, active: null }));
+    designStore.set((lab) => ({ ...lab, tokens: { ...tokens, ignoreReducedMotion: lab.tokens.ignoreReducedMotion }, active: null }));
   }
   if (s.uiStyle) uiStyleStore.set(s.uiStyle);
   if (s.visual) visualStyleStore.set(s.visual);

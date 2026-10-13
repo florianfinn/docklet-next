@@ -14,8 +14,8 @@ import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectVa
 import { Slider } from "@/shared/ui/slider";
 import { Switch } from "@/shared/ui/switch";
 
-import { setTokens, TOKEN_RANGES, tokenPreviewStore, type Density, type MotionLevel } from "./design-tokens";
-import { usePrefersReducedMotion, useTokens } from "./use-design-lab";
+import { setTokens, TOKEN_RANGES, tokenPreviewStore, type Density, type MotionLevel } from "@/shared/theme/design-tokens";
+import { usePrefersReducedMotion, useTokens } from "@/shared/theme/use-design-tokens";
 
 function SliderField({ id, label, hint, value, min, max, step, display, onChange }: { id: string; label: string; hint?: string; value: number; min: number; max: number; step: number; display: string; onChange: (v: number) => void }) {
   return (

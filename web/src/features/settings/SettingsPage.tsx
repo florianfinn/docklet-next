@@ -4,6 +4,7 @@ import { useTranslations } from "use-intl";
 
 import { useSettings } from "@/data/queries";
 import { PageHeader, QueryError } from "@/shared/components/page";
+import { FavoritesSection } from "@/shared/preferences/FavoritesSection";
 import { Skeleton } from "@/shared/ui/skeleton";
 
 import { AuthSection } from "./sections/AuthSection";
@@ -60,12 +61,17 @@ export default function SettingsPage() {
           </div>
         </nav>
         <div key={id} className="min-w-0">
-          {settings.isError ? (
-            <QueryError onRetry={() => void settings.refetch()} />
-          ) : id === "appearance" ? (
-            <AppearanceSection />
+          {id === "appearance" ? (
+            <div className="flex flex-col gap-5">
+              <AppearanceSection />
+              <div className="rounded-xl border bg-card p-6">
+                <FavoritesSection />
+              </div>
+            </div>
           ) : id === "help" ? (
             <HelpSection />
+          ) : settings.isError ? (
+            <QueryError onRetry={() => void settings.refetch()} />
           ) : !s ? (
             <div className="flex flex-col gap-3" aria-busy="true">
               <Skeleton className="h-16 rounded-2xl" />

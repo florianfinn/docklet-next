@@ -3,7 +3,7 @@ import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import { simulationStore } from "@/data/demo/simulation";
-import { helpStore } from "@/shared/help/help-store";
+import { helpStore } from "@/shared/preferences/help-store";
 import { renderRoutes } from "@/test/render";
 
 import SettingsPage from "./SettingsPage";

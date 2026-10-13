@@ -2,7 +2,7 @@ import { Moon, Sun } from "lucide-react";
 import { useEffect } from "react";
 import { useTranslations } from "use-intl";
 
-import { labStore, setTokens, tokenPreviewStore, type DesignTokens } from "@/features/design-lab/design-tokens";
+import { designStore, setTokens, tokenPreviewStore, type DesignTokens } from "@/shared/theme/design-tokens";
 import { SegmentedToggle } from "@/shared/components/segmented-toggle";
 import { useStore } from "@/shared/lib/store";
 import { preferencesStore, type OverviewMode } from "@/shared/preferences/preferences-store";
@@ -27,16 +27,13 @@ function tokenChanges(draft: Appearance, base: Appearance): Partial<DesignTokens
 }
 
 /**
- * Personal appearance, saved into the browser-local token, preference and
- * visual style stores that the design lab uses as well. Edits show at once as a preview;
- * Discard or leaving the page restores the saved state. Saving writes only
- * changed fields, and fields changed elsewhere (lab, profile menu) replace
- * the matching draft field instead of being overwritten later.
+ * Preview personal appearance until Save; Discard or navigation restores it.
+ * Rebase fields changed through another preference control before saving.
  */
 export function AppearanceSection() {
   const t = useTranslations("settings");
   const ta = useTranslations("settings.appearance");
-  const tokens = useStore(labStore, (s) => s.tokens);
+  const tokens = useStore(designStore, (s) => s.tokens);
   const prefs = useStore(preferencesStore, (p) => p);
   const sidebarWidth = useVisualStyle("sidebarWidth");
   const saved: Appearance = { theme: tokens.theme, palette: tokens.palette, density: tokens.density, motion: tokens.motion, stacksMode: prefs.stacksMode, containersMode: prefs.containersMode, sidebarWidth };

@@ -15,19 +15,19 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/shared/ui/tabs";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/shared/ui/tooltip";
 
 import { ControlsSection, FlowsSection } from "./ControlsSection";
-import { labStore, PRESETS, type DesignTokens } from "./design-tokens";
-import { FavoritesSection } from "./FavoritesSection";
+import { designStore, PRESETS, type DesignTokens } from "@/shared/theme/design-tokens";
+import { FavoritesSection } from "@/shared/preferences/FavoritesSection";
 import { LayoutSection, LookSection, MotionSection, SimulationSection } from "./LabSections";
-import { labOpenStore } from "./use-design-lab";
+import { labOpenStore } from "@/features/design-lab/lab-open-store";
 
 const STORAGE_PREFIX = "docklet-react-opus.";
 
 function applyPreset(tokens: DesignTokens) {
-  labStore.set((s) => ({ ...s, tokens, active: null }));
+  designStore.set((s) => ({ ...s, tokens, active: null }));
 }
 
 function toggleSlots() {
-  labStore.set((s) => {
+  designStore.set((s) => {
     const next = s.active === "A" ? "B" : "A";
     const tokens = next === "A" ? s.slotA : s.slotB;
     return tokens ? { ...s, tokens, active: next } : s;
@@ -36,7 +36,7 @@ function toggleSlots() {
 
 function PresetsSection() {
   const t = useTranslations("lab.presets");
-  const state = useStore(labStore, (s) => s);
+  const state = useStore(designStore, (s) => s);
   return (
     <div className="flex flex-col gap-4">
       <p className="text-xs text-muted-foreground">{t("hint")}</p>
@@ -70,10 +70,10 @@ function PresetsSection() {
         })}
       </ul>
       <div className="grid grid-cols-2 gap-2">
-        <Button variant="outline" size="sm" onClick={() => labStore.set((s) => ({ ...s, slotA: s.tokens, active: "A" }))}>
+        <Button variant="outline" size="sm" onClick={() => designStore.set((s) => ({ ...s, slotA: s.tokens, active: "A" }))}>
           {t("slotA")}
         </Button>
-        <Button variant="outline" size="sm" onClick={() => labStore.set((s) => ({ ...s, slotB: s.tokens, active: "B" }))}>
+        <Button variant="outline" size="sm" onClick={() => designStore.set((s) => ({ ...s, slotB: s.tokens, active: "B" }))}>
           {t("slotB")}
         </Button>
         <Button variant="secondary" size="sm" className="col-span-2" disabled={!state.slotA || !state.slotB} onClick={toggleSlots}>

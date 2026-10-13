@@ -19,7 +19,7 @@ import { Switch } from "@/shared/ui/switch";
 
 import { FleetLabSection } from "./FleetLabSection";
 import { VisualLabSection } from "./VisualLabSection";
-import { labOpenStore } from "./use-design-lab";
+import { labOpenStore } from "@/features/design-lab/lab-open-store";
 
 function OptionCard({ active, onSelect, title, description, children }: { active: boolean; onSelect: () => void; title: string; description: string; children?: React.ReactNode }) {
   return (

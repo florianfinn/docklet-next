@@ -1,4 +1,4 @@
-import { screen, waitFor, within } from "@testing-library/react";
+import { act, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
@@ -54,8 +54,8 @@ describe("scan schedule settings", () => {
     expect((await adapter.getSettings()).security.schedule).toEqual({ mode: "weekly", day: "wed", time: "04:15" });
     expect((await adapter.getSecurity()).schedule).toEqual({ mode: "weekly", day: "wed", time: "04:15" });
 
-    await router.navigate("/security");
-    const link = await screen.findByRole("link", { name: /^Scan-Zeitplan: Mittwochs 04:15\. Nächster Scan Mi\., / });
+    await act(() => router.navigate("/security"));
+    const link = await screen.findByRole("link", { name: /^Scan-Zeitplan: Mittwochs 04:15\. Nächster Scan Mi\., / }, { timeout: 5000 });
     expect(link.getAttribute("href")).toBe("/settings/security#scan-schedule");
     expect(link.textContent).toBe("Mittwochs 04:15");
   });

@@ -6,7 +6,7 @@ import { OriginBadge } from "@/features/containers/OriginBadge";
 import { renderWithApp } from "@/test/render";
 import { Input } from "@/shared/ui/input";
 
-import { DEFAULT_HELP, helpStore, mergeHelp, setHelpMode } from "./help-store";
+import { DEFAULT_HELP, helpStore, mergeHelp, setHelpMode } from "@/shared/preferences/help-store";
 import { HelpLabel, HelpTarget } from "./help-tooltip";
 import { deHelp } from "./messages/de";
 

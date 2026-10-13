@@ -1,9 +1,8 @@
-import { Activity, Pause, Play } from "lucide-react";
+import { Activity } from "lucide-react";
 import { Fragment, Suspense } from "react";
 import { Link, Outlet, useLocation } from "react-router";
 import { useTranslations } from "use-intl";
 
-import { simulationStore } from "@/data/demo/simulation";
 import { useActionRuns } from "@/data/live";
 import { useContainers, useStacks, useVolume } from "@/data/queries";
 import { ActionDialog } from "@/features/activity/ActionDialog";
@@ -11,10 +10,10 @@ import { ActionToasts } from "@/features/activity/ActionToasts";
 import { ActivityCenter } from "@/features/activity/ActivityCenter";
 import { openActivity } from "@/features/activity/activity-store";
 import { AppToaster } from "@/features/activity/AppToaster";
-import { DesignLabPanel } from "@/features/design-lab/DesignLabPanel";
+import { DesignLabPanel, LiveToggle } from "@/runtime";
+import { BackendNotice } from "@/data/BackendNotice";
 import { deSettings } from "@/features/settings/messages/de";
 import { ServiceRestartDialog } from "@/shared/components/service-restart";
-import { useStore } from "@/shared/lib/store";
 import { sidebarWidthCss, useSidebarWidth } from "@/shared/preferences/visual-style-store";
 import { Badge } from "@/shared/ui/badge";
 import { Breadcrumb, BreadcrumbItem, BreadcrumbLink, BreadcrumbList, BreadcrumbPage, BreadcrumbSeparator } from "@/shared/ui/breadcrumb";
@@ -22,7 +21,6 @@ import { Button } from "@/shared/ui/button";
 import { Separator } from "@/shared/ui/separator";
 import { SidebarInset, SidebarProvider, SidebarTrigger } from "@/shared/ui/sidebar";
 import { Skeleton } from "@/shared/ui/skeleton";
-import { Tooltip, TooltipContent, TooltipTrigger } from "@/shared/ui/tooltip";
 
 import { PAGE_MAX_WIDTH, pageWidth } from "./page-width";
 import { ShellEffects } from "./ShellEffects";
@@ -59,33 +57,6 @@ function useCrumbs(): Crumb[] {
   if (first === "volumes") return [root, { label: volume.data?.composeName ?? volume.data?.name ?? "…" }];
   if (first === "settings" && second in deSettings.sections) return [root, { label: ts(second as keyof typeof deSettings.sections) }];
   return [{ label: root.label }];
-}
-
-function LiveToggle() {
-  const t = useTranslations("shell.live");
-  const live = useStore(simulationStore, (s) => s.live);
-  return (
-    <Tooltip>
-      <TooltipTrigger asChild>
-        <Button
-          variant="ghost"
-          size="sm"
-          className="h-8 gap-1.5 text-xs text-muted-foreground"
-          aria-pressed={live}
-          aria-label={live ? t("on") : t("off")}
-          onClick={() => simulationStore.set((s) => ({ ...s, live: !s.live }))}
-        >
-          {live ? <Pause /> : <Play />}
-          <span className="relative flex size-2" aria-hidden>
-            {live && <span className="absolute inline-flex size-full animate-ping rounded-full bg-violet opacity-60" />}
-            <span className={live ? "relative inline-flex size-2 rounded-full bg-violet" : "relative inline-flex size-2 rounded-full bg-muted-foreground"} />
-          </span>
-          <span className="hidden sm:inline">Live</span>
-        </Button>
-      </TooltipTrigger>
-      <TooltipContent>{live ? t("on") : t("off")}</TooltipContent>
-    </Tooltip>
-  );
 }
 
 function PageFallback() {
@@ -151,6 +122,7 @@ export function AppShell() {
         </header>
         <div id="main-content" tabIndex={-1} key={location.pathname} className="w-full min-w-0 flex-1 px-4 pt-6 pb-24 outline-none md:px-7 2xl:px-10">
           <div className="mx-auto w-full min-w-0" data-page-width={width} style={{ maxWidth: PAGE_MAX_WIDTH[width] }}>
+            <BackendNotice />
             <Suspense fallback={<PageFallback />}>
               <Outlet />
             </Suspense>

@@ -1,6 +1,6 @@
 // Exact imported literals retained by the no-text-rewrite boundary; stale lines fail.
 export const uiLiteralExceptions = [
-  {"file": "src/app/shell/AppShell.tsx", "lineSha256": "0ab739a09bf9d84342b5ff4074c0f138d47c1c5e1d00a4b6406479f1cdf8481a", "count": 1, "reason": "Existing UI label retained byte-identically; no new untranslated copy is permitted."},
+  {"file": "src/features/design-lab/LiveToggle.tsx", "lineSha256": "0ab739a09bf9d84342b5ff4074c0f138d47c1c5e1d00a4b6406479f1cdf8481a", "count": 1, "reason": "Existing UI label retained byte-identically; no new untranslated copy is permitted."},
   {"file": "src/data/use-adapter.ts", "lineSha256": "ecefcfe380b76f386285897364b16e850d7d32bb76cc8f34ba9f2c6cb70a8a25", "count": 1, "reason": "Developer invariant diagnostic outside the UI."},
   {"file": "src/domain/agent-install.ts", "lineSha256": "1cf27bbaaa0fc51fee7208e9d3d31aced6c91c1ad119d8a4ec539761f658e993", "count": 1, "reason": "Generated installer, shell commands and artifact documentation, not translated UI."},
   {"file": "src/domain/agent-install.ts", "lineSha256": "34cb017dd6f385d3a48c13b7a43e00b1202e07adef37727f4763ea1f7dbe0b00", "count": 1, "reason": "Generated installer, shell commands and artifact documentation, not translated UI."},

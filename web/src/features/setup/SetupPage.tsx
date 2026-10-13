@@ -8,8 +8,8 @@ import { useTranslations } from "use-intl";
 import { LanguageSwitch } from "@/app/i18n/LanguageSwitch";
 import { errorCode } from "@/data/api";
 import { useAdapter } from "@/data/use-adapter";
-import { DesignLabPanel } from "@/features/design-lab/DesignLabPanel";
-import { useMotionEnabled, useTokens } from "@/features/design-lab/use-design-lab";
+import { DesignLabPanel } from "@/runtime";
+import { useMotionEnabled, useTokens } from "@/shared/theme/use-design-tokens";
 import { onboardingStore } from "@/features/hosts/onboarding/onboarding-store";
 import { useAuthErrors, useGeneralErrors, useHostDefaultErrors } from "@/features/settings/field-rules";
 import { AuthModeFields } from "@/features/settings/sections/AuthModeFields";
@@ -240,17 +240,19 @@ export default function SetupPage() {
                         {t("done.settings")}
                       </Link>
                     </Button>
-                    <Button
-                      variant="ghost"
-                      onClick={() => {
-                        restartSetup();
-                        setAttempted([]);
-                        go("hub");
-                      }}
-                    >
-                      <RotateCcw data-icon="inline-start" />
-                      {t("done.replay")}
-                    </Button>
+                    {import.meta.env.DEV && (
+                      <Button
+                        variant="ghost"
+                        onClick={() => {
+                          restartSetup();
+                          setAttempted([]);
+                          go("hub");
+                        }}
+                      >
+                        <RotateCcw data-icon="inline-start" />
+                        {t("done.replay")}
+                      </Button>
+                    )}
                   </div>
                 </div>
               )}

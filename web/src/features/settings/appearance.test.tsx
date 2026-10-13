@@ -3,8 +3,8 @@ import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import { simulationStore } from "@/data/demo/simulation";
-import { DEFAULT_TOKENS, labStore, setTokens, tokenPreviewStore } from "@/features/design-lab/design-tokens";
-import { useApplyDesignTokens } from "@/features/design-lab/use-design-lab";
+import { DEFAULT_TOKENS, designStore, setTokens, tokenPreviewStore } from "@/shared/theme/design-tokens";
+import { useApplyDesignTokens } from "@/shared/theme/use-design-tokens";
 import { PALETTE_PRESETS, paletteTokens, type Palette } from "@/shared/theme/palette";
 import { renderRoutes } from "@/test/render";
 
@@ -40,7 +40,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
-  labStore.reset();
+  designStore.reset();
   tokenPreviewStore.set(null);
   simulationStore.reset();
   localStorage.clear();
@@ -51,12 +51,12 @@ describe("appearance palette", () => {
     renderRoutes(routes, ["/settings/appearance"]);
     const presets = await screen.findByRole("radiogroup", { name: "Vorlagen" });
     expect(css("--primary")).toBe(SHIPPED.primary);
-    const motion = labStore.get().tokens.motion;
+    const motion = designStore.get().tokens.motion;
 
     await userEvent.click(within(presets).getByRole("radio", { name: /Mitternacht/ }));
     // Live preview: primary drives buttons and controls, secondary the accents; nothing is saved yet.
     expect(css("--primary") === "#4f39f6" && css("--control") === control(preset("midnight")) && css("--brand-accent") === "#00bbfd").toBe(true);
-    expect(labStore.get().tokens.palette.primary).toBe(SHIPPED.primary);
+    expect(designStore.get().tokens.palette.primary).toBe(SHIPPED.primary);
     expect(screen.getByRole("status").textContent).toBe("Ungespeicherte Änderungen");
 
     await userEvent.click(screen.getByRole("button", { name: "Verwerfen" }));
@@ -77,8 +77,8 @@ describe("appearance palette", () => {
 
     await userEvent.click(screen.getByRole("button", { name: "Speichern" }));
     await waitFor(() => expect(screen.getByRole("status").textContent).toBe("Alles gespeichert"));
-    expect(labStore.get().tokens.palette).toEqual({ ...preset("midnight"), secondary: "#00b6d4" });
-    expect(labStore.get().tokens.motion).toBe(motion);
+    expect(designStore.get().tokens.palette).toEqual({ ...preset("midnight"), secondary: "#00b6d4" });
+    expect(designStore.get().tokens.motion).toBe(motion);
     expect(JSON.parse(localStorage.getItem("docklet-react-opus.design-lab") ?? "{}").data.tokens.palette).toEqual({ primary: "#4f39f6", secondary: "#00b6d4", surface: "#131721" });
     expect(tokenPreviewStore.get()).toBe(null);
   });
@@ -97,8 +97,8 @@ describe("appearance palette", () => {
     expect(tokenPreviewStore.get()).toEqual({ density: "spacious" });
 
     await userEvent.click(screen.getByRole("button", { name: "Speichern" }));
-    await waitFor(() => expect(labStore.get().tokens.density).toBe("spacious"));
-    expect(labStore.get().tokens.palette).toEqual(preset("glacier"));
+    await waitFor(() => expect(designStore.get().tokens.density).toBe("spacious"));
+    expect(designStore.get().tokens.palette).toEqual(preset("glacier"));
   });
 
   it("drops the preview when leaving the page without saving", async () => {
@@ -110,6 +110,6 @@ describe("appearance palette", () => {
     await userEvent.click(within(await screen.findByRole("alertdialog")).getByRole("button", { name: "Verwerfen und wechseln" }));
     await waitFor(() => expect(router.state.location.pathname).toBe("/settings/general"));
     expect(css("--primary") === SHIPPED.primary && document.documentElement.classList.contains("dark")).toBe(true);
-    expect(labStore.get().tokens.theme).toBe("dark");
+    expect(designStore.get().tokens.theme).toBe("dark");
   });
 });

@@ -12,7 +12,7 @@ import { useTopology } from "@/data/queries";
 import { hostTone } from "@/domain/hosts";
 import type { ContainerInfo, Host, Topology, TopologyNetwork } from "@/domain/model";
 import { sortNetworks } from "@/domain/networks";
-import { useMotionEnabled, useTokens } from "@/features/design-lab/use-design-lab";
+import { useMotionEnabled, useTokens } from "@/shared/theme/use-design-tokens";
 import { ConfirmDialog } from "@/shared/components/confirm-dialog";
 import { EmptyState, PageHeader, QueryError } from "@/shared/components/page";
 import { SimulationBadge } from "@/shared/components/simulation-badge";

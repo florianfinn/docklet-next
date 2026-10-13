@@ -1,7 +1,7 @@
 import { useMemo } from "react";
 import { useLocale } from "use-intl";
 
-import { localizeDemoText } from "@/data/demo/demo-text";
+import { localizeDemoText } from "@/runtime";
 
 interface DemoText {
   (text: string): string;
