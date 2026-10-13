@@ -21,7 +21,7 @@ invoke the host operations below, so additions require an explicit review.
 | upload | Accepts bounded uploads used by image and restore operations. |
 | settings | Reads and updates environment settings, including host operational configuration. |
 | updater | Checks and applies configured host resource updates. |
-| system | Reports Docker host state and runs Docker-wide lifecycle/prune operations. Hub backup and hub upgrade routes are excluded. |
+| system | Reports Docker host state, runs Docker-wide lifecycle/prune operations, and exposes agent self-upgrade checks and trigger. A manager credential can replace the agent binary; hub backup and update-all remain excluded. |
 | diagnostics | Exposes host actor diagnostics for support and fault investigation. |
 | registry | Accepts registry credential synchronization from the hub for private pulls. Listing, editing and testing credentials are excluded; a manager credential can still replace agent pull credentials. |
 | job | Exposes environment-scoped schedules, jobs and run controls for hub orchestration. A manager credential can trigger host jobs, retry runs and alter schedules. |
@@ -32,5 +32,6 @@ invoke the host operations below, so additions require an explicit review.
 Identity, users, roles, API keys, environment enrollment and management,
 notifications, webhooks, dashboard, search and hub event ingress
 remain hub routes. Agent mode also omits the browser UI, API documentation,
-pprof profiling endpoints, test-only Playwright routes and manager Edge tunnel listener. Agent self-upgrade checks and trigger are exposed through system; a manager credential can replace the running agent binary, while update-all and hub backup controls stay on the hub. An Edge agent
+pprof profiling endpoints, test-only Playwright routes and manager Edge tunnel
+listener. An Edge agent
 connects outward; this allowlist does not open a public Edge listener.

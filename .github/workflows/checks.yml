@@ -64,9 +64,32 @@ jobs:
             types/go.sum
             third_party/arcane/**/go.sum
             third_party/francis/go.sum
+      - name: Isolate PostgreSQL tests from Docker daemons
+        run: |
+          declare -A seen=()
+          for socket in /var/run/docker.sock /run/docker.sock; do
+            if test -S "$socket"; then
+              resolved=$(readlink -f "$socket")
+              if [[ -z ${seen[$resolved]+x} ]]; then
+                printf '%s %s\n' "$resolved" "$(stat -Lc %a "$socket")" >> "$RUNNER_TEMP/postgres-docker-socket-modes"
+                seen[$resolved]=1
+                sudo chmod 000 "$socket"
+              fi
+              test ! -r "$socket"
+              test ! -w "$socket"
+            fi
+          done
       - name: Run PostgreSQL integration tests
         working-directory: backend
         run: go test -tags=postgres_integration ./...
+      - name: Restore Docker access for service cleanup
+        if: always()
+        run: |
+          if test -f "$RUNNER_TEMP/postgres-docker-socket-modes"; then
+            while read -r socket mode; do
+              if test -S "$socket"; then sudo chmod "$mode" "$socket"; fi
+            done < "$RUNNER_TEMP/postgres-docker-socket-modes"
+          fi
   checks:
     name: checks
     needs: [scope, postgres-integration]

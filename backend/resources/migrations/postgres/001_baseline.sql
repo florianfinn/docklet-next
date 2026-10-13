@@ -528,13 +528,11 @@ CREATE INDEX idx_notification_settings_provider ON public.notification_settings 
 CREATE INDEX idx_projects_is_archived ON public.projects USING btree (is_archived);
 CREATE INDEX idx_projects_name ON public.projects USING btree (name);
 CREATE UNIQUE INDEX idx_projects_path ON public.projects USING btree (path);
-CREATE UNIQUE INDEX idx_roles_name ON public.roles USING btree (name);
 CREATE INDEX idx_system_backup_runs_policy_id ON public.system_backup_runs USING btree (policy_id);
 CREATE INDEX idx_user_role_assignments_environment_id ON public.user_role_assignments USING btree (environment_id);
 CREATE INDEX idx_user_role_assignments_role_id ON public.user_role_assignments USING btree (role_id);
 CREATE INDEX idx_user_role_assignments_user_id ON public.user_role_assignments USING btree (user_id);
 CREATE INDEX idx_user_sessions_expires_at ON public.user_sessions USING btree (expires_at);
-CREATE UNIQUE INDEX idx_user_sessions_refresh_token_hash ON public.user_sessions USING btree (refresh_token_hash);
 CREATE INDEX idx_user_sessions_user_id ON public.user_sessions USING btree (user_id);
 CREATE INDEX idx_volume_backup_policies_volume_name ON public.volume_backup_policies USING btree (volume_name);
 CREATE INDEX idx_volume_backups_policy_id ON public.volume_backups USING btree (policy_id);
@@ -545,7 +543,6 @@ CREATE INDEX idx_vulnerability_ignores_vulnerability_id ON public.vulnerability_
 CREATE INDEX idx_vulnerability_scan_items_image_id ON public.vulnerability_scan_items USING btree (image_id);
 CREATE INDEX idx_vulnerability_scan_items_severity ON public.vulnerability_scan_items USING btree (severity);
 CREATE INDEX idx_vulnerability_scan_items_vulnerability_id ON public.vulnerability_scan_items USING btree (vulnerability_id);
-CREATE UNIQUE INDEX idx_webhooks_token_hash ON public.webhooks USING btree (token_hash);
 /*
 * Source: getarcaneapp/arcane/backend/resources/migrations/postgres
 * Revision: 095cb778daba1034e2a39961199e712a75d4ba29

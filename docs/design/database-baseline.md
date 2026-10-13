@@ -31,6 +31,53 @@ applied to an empty database, excluding columns and objects removed by the
 functional cut. The independent test reference in
 `backend/internal/schema/testdata/retained-integrity.json` records 500 expected
 properties from that old chain. The generated SQL has no seed rows.
+
+To rederive the integrity reference and overlay before release, apply the
+upstream PostgreSQL migrations `001` through `090` at revision
+`095cb778daba1034e2a39961199e712a75d4ba29` to an empty PostgreSQL 18
+database. Generate a second, model-only database with `go run
+./cmd/schema-baseline`. Query both databases with the `integrityCatalog` SQL
+in `backend/internal/schema/schema_integration_test.go`: it emits sorted
+`notnull`, `default`, `constraint` and `index` properties using
+`pg_get_expr`, `pg_get_constraintdef` and `pg_get_indexdef`. Query the model
+database's retained table and column names with:
+
+```sql
+SELECT c.relname, a.attname
+FROM pg_class c
+JOIN pg_namespace n ON n.oid = c.relnamespace
+JOIN pg_attribute a ON a.attrelid = c.oid
+WHERE n.nspname = 'public' AND c.relkind = 'r'
+  AND a.attnum > 0 AND NOT a.attisdropped
+ORDER BY c.relname, a.attname;
+```
+
+Keep old-chain properties only for those tables. Keep `notnull` and `default`
+properties only for retained columns. Keep constraints only when every local
+and referenced column and table survives; `pg_constraint.conkey`, `confrelid`
+and `confkey` give the exact dependencies. Keep indexes only when their table
+and indexed columns survive. The removed `s3_destination_id` column excludes
+exactly four indexes: `idx_volume_backups_s3_destination_id`,
+`idx_volume_backup_policies_s3_destination_id`,
+`idx_system_backup_runs_s3_destination_id` and
+`idx_system_backup_policies_s3_destination_id`. No other old-chain property
+on a retained table or column is excluded. Sort the retained properties by
+type, table, column or definition and write them as JSON arrays in
+`retained-integrity.json`, matching the parsing in the tagged test. The
+current reference has 223 nullability, 111 default, 54 constraint and 112
+index entries.
+
+Compare that reference with the model-only `integrityCatalog`. For missing
+nullability and defaults, add `ALTER TABLE ... ALTER COLUMN ... SET NOT NULL`
+or `SET DEFAULT` statements to `retained_integrity.sql`. For missing
+constraints, use `pg_constraint.conname` and `pg_get_constraintdef` from the
+old database to add named `ALTER TABLE ... ADD CONSTRAINT` statements. For
+missing indexes, use the old `pg_get_indexdef` as `CREATE INDEX` statements.
+Sort each statement group by table and column or object name. Apply the
+overlay to the model database, then require all reference entries to occur
+in its catalog and regenerate the baseline byte for byte. The tagged schema
+test verifies that result against the shipped baseline.
+
 `scripts/migration-hashes.json` records its SHA-256, and
 `scripts/check-migrations.mjs` pins the baseline SHA-256 independently of the
 manifest. Changing the baseline before first release requires an explicit
