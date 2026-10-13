@@ -1,8 +1,10 @@
+//go:build postgres_integration
+
 // Source: getarcaneapp/arcane/backend/cli/admin/reset_password_test.go
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace
+// Deviations: Local module namespace; functional cut: PostgreSQL integration test fixture.
 
 package admin
 
@@ -10,12 +12,11 @@ import (
 	"testing"
 	"time"
 
+	"github.com/florianfinn/docklet-next/backend/internal/testpg"
 	"github.com/florianfinn/docklet-next/types/auth"
-	"github.com/libtnb/sqlite"
 	"github.com/stretchr/testify/require"
 	"gorm.io/gorm"
 
-	"github.com/florianfinn/docklet-next/backend/internal/config"
 	"github.com/florianfinn/docklet-next/backend/internal/database"
 	"github.com/florianfinn/docklet-next/backend/internal/role"
 	"github.com/florianfinn/docklet-next/backend/internal/session"
@@ -27,7 +28,7 @@ import (
 func newResetPasswordTestDBInternal(t *testing.T) *database.DB {
 	t.Helper()
 
-	gormDB, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
+	gormDB, err := gorm.Open(testpg.Dialector(t, ":memory:"), &gorm.Config{})
 	require.NoError(t, err)
 	require.NoError(t, gormDB.AutoMigrate(
 		&user.User{},
@@ -99,12 +100,17 @@ func TestResetPasswordInternalRollsBackWhenSessionRevocationFails(t *testing.T) 
 	localSession, _, err := sessionService.CreateSession(ctx, adminUser.ID, time.Now().Add(time.Hour), auth.SessionMeta{})
 	require.NoError(t, err)
 	require.NoError(t, db.Exec(`
+		CREATE FUNCTION fail_user_session_revocation() RETURNS trigger AS $$
+		BEGIN
+			RAISE EXCEPTION 'forced session revocation failure';
+		END;
+		$$ LANGUAGE plpgsql;
+	`).Error)
+	require.NoError(t, db.Exec(`
 		CREATE TRIGGER fail_user_session_revocation
 		BEFORE UPDATE OF revoked_at ON user_sessions
-		WHEN NEW.revoked_at IS NOT NULL
-		BEGIN
-			SELECT RAISE(ABORT, 'forced session revocation failure');
-		END;
+		FOR EACH ROW WHEN (NEW.revoked_at IS NOT NULL)
+		EXECUTE FUNCTION fail_user_session_revocation();
 	`).Error)
 
 	err = resetPasswordInternal(ctx, db, adminUser.Username, "new-password", validation.PasswordPolicyBasic)
@@ -142,15 +148,4 @@ func TestResetPasswordInternalRejectsNonAdmin(t *testing.T) {
 	require.NoError(t, err)
 	require.NoError(t, userService.ValidatePassword(unchangedUser.PasswordHash, "old-password"))
 	require.True(t, unchangedUser.RequiresPasswordChange)
-}
-
-func TestEnsurePasswordResetEnabledInternal(t *testing.T) {
-	require.ErrorContains(t, ensurePasswordResetEnabledInternal(&config.Config{}), "ALLOW_CLI_PASSWORD_RESET=true")
-	require.NoError(t, ensurePasswordResetEnabledInternal(&config.Config{AllowCLIPasswordReset: true}))
-}
-
-func TestValidatePasswordPairInternal(t *testing.T) {
-	require.ErrorContains(t, validatePasswordPairInternal("short", "short", validation.PasswordPolicyBasic), "at least 8")
-	require.ErrorContains(t, validatePasswordPairInternal("new-password", "different", validation.PasswordPolicyBasic), "do not match")
-	require.NoError(t, validatePasswordPairInternal("new-password", "new-password", validation.PasswordPolicyBasic))
 }

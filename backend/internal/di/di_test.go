@@ -1,8 +1,10 @@
+//go:build postgres_integration
+
 // Source: getarcaneapp/arcane/backend/internal/di/di_test.go
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; functional cut: removed upstream analytics heartbeat; functional cut: removed template catalogue; functional cut: removed federated credentials; functional cut: removed central variables and .env.global; functional cut: removed GitOps and saved Git repositories; functional cut: removed Swarm; functional cut: removed S3 backup destinations; functional cut: removed OIDC and passkeys.
+// Deviations: Local module namespace; functional cut: removed upstream analytics heartbeat; functional cut: removed template catalogue; functional cut: removed federated credentials; functional cut: removed central variables and .env.global; functional cut: removed GitOps and saved Git repositories; functional cut: removed Swarm; functional cut: removed S3 backup destinations; functional cut: removed OIDC and passkeys; functional cut: PostgreSQL integration test fixture.
 
 package di
 
@@ -16,7 +18,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/libtnb/sqlite"
+	"github.com/florianfinn/docklet-next/backend/internal/testpg"
 	"github.com/moby/moby/api/types/events"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/fx"
@@ -162,7 +164,7 @@ func TestDockerEventLifecycleInternal(t *testing.T) {
 				stopped.Do(func() { close(streamStopped) })
 			}))
 			t.Cleanup(server.Close)
-			db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
+			db, err := gorm.Open(testpg.Dialector(t, ":memory:"), &gorm.Config{})
 			require.NoError(t, err)
 			sqlDB, err := db.DB()
 			require.NoError(t, err)

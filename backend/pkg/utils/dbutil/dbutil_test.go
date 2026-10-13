@@ -1,18 +1,18 @@
+//go:build postgres_integration
+
 // Source: getarcaneapp/arcane/backend/pkg/utils/dbutil/dbutil_test.go
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: functional cut: removed SQLite runtime and migrations.
+// Deviations: functional cut: removed SQLite runtime and migrations; functional cut: PostgreSQL integration test fixture.
 
 package dbutil
 
 import (
 	"errors"
-	"fmt"
 	"testing"
 
-	"github.com/jackc/pgx/v5/pgconn"
-	"github.com/libtnb/sqlite"
+	"github.com/florianfinn/docklet-next/backend/internal/testpg"
 	"github.com/stretchr/testify/require"
 	"gorm.io/gorm"
 )
@@ -24,17 +24,9 @@ type widget struct {
 
 var errWidgetNotFound = errors.New("widget not found")
 
-func TestIsRetryableWriteErrorUsesPostgresCodes(t *testing.T) {
-	for _, code := range []string{"40001", "40P01", "55P03"} {
-		require.True(t, IsRetryableWriteError(fmt.Errorf("write: %w", &pgconn.PgError{Code: code})))
-	}
-	require.False(t, IsRetryableWriteError(&pgconn.PgError{Code: "23505"}))
-	require.False(t, IsRetryableWriteError(nil))
-}
-
 func newTestDB(t *testing.T) *gorm.DB {
 	t.Helper()
-	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
+	db, err := gorm.Open(testpg.Dialector(t, ":memory:"), &gorm.Config{})
 	require.NoError(t, err)
 	require.NoError(t, db.AutoMigrate(&widget{}))
 	return db

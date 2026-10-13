@@ -1,8 +1,10 @@
+//go:build postgres_integration
+
 // Source: getarcaneapp/arcane/backend/internal/updater/service_test.go
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; functional cut: removed APNS mobile push; functional cut: removed GitOps and saved Git repositories.
+// Deviations: Local module namespace; functional cut: removed APNS mobile push; functional cut: removed GitOps and saved Git repositories; functional cut: PostgreSQL integration test fixture.
 
 package updater
 
@@ -25,12 +27,12 @@ import (
 	"time"
 
 	"github.com/compose-spec/compose-go/v2/types"
+	"github.com/florianfinn/docklet-next/backend/internal/testpg"
 	activitytypes "github.com/florianfinn/docklet-next/types/activity"
 	projecttypes "github.com/florianfinn/docklet-next/types/project"
 	"github.com/florianfinn/docklet-next/types/scheduler"
 	arcaneupdater "github.com/florianfinn/docklet-next/types/updater"
 	usertypes "github.com/florianfinn/docklet-next/types/user"
-	"github.com/libtnb/sqlite"
 	"github.com/moby/moby/api/pkg/authconfig"
 	"github.com/moby/moby/api/types/container"
 	dockertypesimage "github.com/moby/moby/api/types/image"
@@ -603,9 +605,7 @@ func TestUpdaterService_PendingImageUpdatesAdapterInternal(t *testing.T) {
 	assert.Equal(t, &lastError, records[0].LastError)
 }
 
-// TestUpdaterService_PendingImageUpdatesFlushesPendingNotificationsInternal guards
-// newEmptyContainerListDockerServiceInternal stubs the container listing the
-// notification flush uses to resolve update-check eligibility.
+// The notification flush needs an empty container listing.
 func newEmptyContainerListDockerServiceInternal(t *testing.T) *docker.DockerClientService {
 	t.Helper()
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -1443,7 +1443,7 @@ func newImagePullServerWithObserverInternal(t *testing.T, inspectByRef map[strin
 // setupProjectTestDBInternal builds an in-memory DB migrated for project-related tests.
 func setupProjectTestDBInternal(t *testing.T) *database.DB {
 	t.Helper()
-	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
+	db, err := gorm.Open(testpg.Dialector(t, ":memory:"), &gorm.Config{})
 	require.NoError(t, err)
 	require.NoError(t, db.AutoMigrate(&project.Project{}, &settings.SettingVariable{}, &imageupdate.ImageUpdateRecord{}, &event.Event{}))
 	return &database.DB{DB: db}

@@ -1,8 +1,10 @@
+//go:build postgres_integration
+
 // Source: getarcaneapp/arcane/backend/internal/project/service_test.go
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; functional cut: removed central variables and .env.global; functional cut: removed GitOps and saved Git repositories.
+// Deviations: Local module namespace; functional cut: removed central variables and .env.global; functional cut: removed GitOps and saved Git repositories; functional cut: PostgreSQL integration test fixture.
 
 package project
 
@@ -29,12 +31,12 @@ import (
 
 	"github.com/compose-spec/compose-go/v2/types"
 	"github.com/docker/compose/v5/pkg/api"
+	"github.com/florianfinn/docklet-next/backend/internal/testpg"
 	"github.com/florianfinn/docklet-next/types/containerregistry"
 	imagetypes "github.com/florianfinn/docklet-next/types/image"
 	projecttypes "github.com/florianfinn/docklet-next/types/project"
 	usertypes "github.com/florianfinn/docklet-next/types/user"
 	volumetypes "github.com/florianfinn/docklet-next/types/volume"
-	"github.com/libtnb/sqlite"
 	"github.com/moby/moby/api/pkg/authconfig"
 	"github.com/moby/moby/api/types/container"
 	dockertypesimage "github.com/moby/moby/api/types/image"
@@ -93,7 +95,7 @@ var _ builder = testBuildBuilder{}
 
 func setupProjectTestDB(t *testing.T) *database.DB {
 	t.Helper()
-	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
+	db, err := gorm.Open(testpg.Dialector(t, ":memory:"), &gorm.Config{})
 	require.NoError(t, err)
 	require.NoError(t, db.AutoMigrate(&Project{}, &ProjectTag{}, &settings.SettingVariable{}, &imageupdate.ImageUpdateRecord{}, &event.Event{}))
 	return &database.DB{DB: db}
@@ -353,11 +355,9 @@ func TestProjectService_GetProjectFromDatabaseByID(t *testing.T) {
 	db := setupProjectTestDB(t)
 	ctx := t.Context()
 
-	// Setup dependencies
 	settingsService, _ := newSettingsServiceForTest(t, ctx, db)
 	svc := NewProjectService(db, settingsService, nil, nil, nil, nil, nil, config.Load(), nil, nil)
 
-	// Create test project
 	proj := &Project{
 		ID:   "p1",
 		Name: "test-project",

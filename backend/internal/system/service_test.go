@@ -1,8 +1,10 @@
+//go:build postgres_integration
+
 // Source: getarcaneapp/arcane/backend/internal/system/service_test.go
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; functional cut: removed S3 backup destinations; functional cut: removed SQLite runtime and migrations.
+// Deviations: Local module namespace; functional cut: removed S3 backup destinations; functional cut: removed SQLite runtime and migrations; functional cut: PostgreSQL integration test fixture.
 
 package system
 
@@ -12,10 +14,10 @@ import (
 	"testing"
 	"time"
 
+	"github.com/florianfinn/docklet-next/backend/internal/testpg"
 	backuptypes "github.com/florianfinn/docklet-next/types/backup"
 	"github.com/florianfinn/docklet-next/types/scheduler"
 	volumetypes "github.com/florianfinn/docklet-next/types/volume"
-	"github.com/libtnb/sqlite"
 	"github.com/moby/moby/api/types/container"
 	"github.com/moby/moby/api/types/mount"
 	"github.com/moby/moby/api/types/network"
@@ -120,7 +122,7 @@ func TestResolveSystemUpgraderRuntimeOptionsInternal_UnixDockerHostResolutionErr
 }
 
 func TestListBackupHistoryClassifiesAndFiltersOrigins(t *testing.T) {
-	gormDB, err := gorm.Open(sqlite.Open("file:system-volume-history?mode=memory&cache=shared"), &gorm.Config{})
+	gormDB, err := gorm.Open(testpg.Dialector(t, "file:system-volume-history?mode=memory&cache=shared"), &gorm.Config{})
 	require.NoError(t, err)
 	require.NoError(t, gormDB.AutoMigrate(&SystemBackupRun{}, &volume.VolumeBackup{}))
 	now := time.Now().UTC()
@@ -197,7 +199,7 @@ func (s *systemBackupPolicySchedulerInternal) Submit(_ context.Context, request 
 }
 
 func TestSystemBackupPoliciesRejectEnableUntilPostgresRecoveryExists(t *testing.T) {
-	gormDB, err := gorm.Open(sqlite.Open("file:system-backup-schedules?mode=memory&cache=shared"), &gorm.Config{})
+	gormDB, err := gorm.Open(testpg.Dialector(t, "file:system-backup-schedules?mode=memory&cache=shared"), &gorm.Config{})
 	require.NoError(t, err)
 	require.NoError(t, gormDB.AutoMigrate(&SystemBackupPolicy{}, &backup.SystemBackupRecoveryConfig{}))
 	crypto.InitEncryption(&crypto.Config{EncryptionKey: "system-backup-policy-test-key-32bytes", Environment: "test"})
@@ -215,7 +217,7 @@ func TestSystemBackupPoliciesRejectEnableUntilPostgresRecoveryExists(t *testing.
 }
 
 func TestSystemBackupPolicyRequiresConfiguredRecoveryKeyWhenEnabled(t *testing.T) {
-	gormDB, err := gorm.Open(sqlite.Open("file:system-backup-key-required?mode=memory&cache=shared"), &gorm.Config{})
+	gormDB, err := gorm.Open(testpg.Dialector(t, "file:system-backup-key-required?mode=memory&cache=shared"), &gorm.Config{})
 	require.NoError(t, err)
 	require.NoError(t, gormDB.AutoMigrate(&SystemBackupPolicy{}, &backup.SystemBackupRecoveryConfig{}))
 	db := &database.DB{DB: gormDB}

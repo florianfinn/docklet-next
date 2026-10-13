@@ -1,8 +1,10 @@
+//go:build postgres_integration
+
 // Source: getarcaneapp/arcane/backend/internal/apikey/service_test.go
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; functional cut: removed template catalogue; functional cut: removed OIDC and passkeys.
+// Deviations: Local module namespace; functional cut: removed template catalogue; functional cut: removed OIDC and passkeys; functional cut: PostgreSQL integration test fixture.
 
 package apikey
 
@@ -15,8 +17,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/florianfinn/docklet-next/backend/internal/testpg"
 	"github.com/florianfinn/docklet-next/types/apikey"
-	"github.com/libtnb/sqlite"
 	"github.com/stretchr/testify/require"
 	"gorm.io/gorm"
 
@@ -33,7 +35,7 @@ func setupAPIKeyServiceTestDB(t *testing.T) *database.DB {
 	t.Helper()
 
 	dsn := fmt.Sprintf("file:%s?mode=memory&cache=shared", strings.NewReplacer("/", "_", " ", "_").Replace(t.Name()))
-	db, err := gorm.Open(sqlite.Open(dsn), &gorm.Config{})
+	db, err := gorm.Open(testpg.Dialector(t, dsn), &gorm.Config{})
 	require.NoError(t, err)
 	require.NoError(t, db.AutoMigrate(
 		&settings.SettingVariable{},
@@ -179,8 +181,7 @@ func TestListApiKeysPermissionQueryCountIsConstant(t *testing.T) {
 		})
 	}
 
-	// Each list call spends one extra constant query on the set of
-	// environment-referenced key ids (bootstrap-protection flag).
+	// Each list spends one query on environment-referenced key IDs.
 	require.Equal(t, int64(4), queryCounts[1])
 	require.Equal(t, int64(4), queryCounts[5])
 	require.Equal(t, int64(3), userQueryCounts[1])
@@ -433,11 +434,6 @@ func TestReconcileDefaultAdminAPIKeyRotationEvictsRacingCacheFill(t *testing.T) 
 	require.NoError(t, service.ReconcileDefaultAdminAPIKey(ctx, oldKey))
 	oldRow := listAPIKeysForUser(t, db, adminUser.ID)[0]
 
-	// Mid-transaction — after the old key's delete, before commit — simulate a
-	// concurrent validation that read the old committed row and publishes it
-	// with a fresh generation snapshot; the hook fires on the new managed
-	// key's insert. With pre-commit invalidation this entry survived the
-	// commit and kept authenticating the deleted key.
 	published := false
 	require.NoError(t, db.Callback().Create().After("gorm:create").Register("simulate_racing_validation", func(*gorm.DB) {
 		if published {

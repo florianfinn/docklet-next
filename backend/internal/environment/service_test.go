@@ -1,8 +1,10 @@
+//go:build postgres_integration
+
 // Source: getarcaneapp/arcane/backend/internal/environment/service_test.go
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; functional cut: removed GitOps and saved Git repositories; functional cut: removed Swarm; functional cut: removed S3 backup destinations.
+// Deviations: Local module namespace; functional cut: removed GitOps and saved Git repositories; functional cut: removed Swarm; functional cut: removed S3 backup destinations; functional cut: PostgreSQL integration test fixture.
 
 package environment
 
@@ -22,10 +24,10 @@ import (
 	"time"
 
 	"github.com/coder/websocket"
+	"github.com/florianfinn/docklet-next/backend/internal/testpg"
 	"github.com/florianfinn/docklet-next/types/containerregistry"
 	"github.com/florianfinn/docklet-next/types/environment"
 	"github.com/florianfinn/docklet-next/types/scheduler"
-	"github.com/libtnb/sqlite"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.getarcane.app/sys/crypto"
@@ -104,7 +106,7 @@ func setupEnvironmentServiceTestDB(t *testing.T) *database.DB {
 	t.Helper()
 
 	dsn := fmt.Sprintf("file:%s?mode=memory&cache=shared", strings.NewReplacer("/", "_", " ", "_").Replace(t.Name()))
-	db, err := gorm.Open(sqlite.Open(dsn), &gorm.Config{})
+	db, err := gorm.Open(testpg.Dialector(t, dsn), &gorm.Config{})
 	require.NoError(t, err)
 	require.NoError(t, db.AutoMigrate(
 		&Environment{},
@@ -536,9 +538,7 @@ func TestEnvironmentService_UpdateEnvironmentStatusInternal_DoesNotDemotePending
 
 	createTestEnvironmentWithState(t, db, "direct-pending", "http://agent:3553", string(EnvironmentStatusPending), false, nil)
 
-	// A transient health-check failure before pairing completes must NOT flip a
-	// pending Direct env to offline/error — the env should stay pending so a later
-	// successful tick can still promote it to online.
+	// A failed health check leaves an unpaired Direct environment pending.
 	require.NoError(t, svc.updateEnvironmentStatusInternal(ctx, "direct-pending", string(EnvironmentStatusOffline)))
 	require.NoError(t, svc.updateEnvironmentStatusInternal(ctx, "direct-pending", string(EnvironmentStatusError)))
 
@@ -1097,7 +1097,7 @@ func (s *environmentTestSchedulerInternal) Submit(_ context.Context, request sch
 
 func setupSyncDBInternal(t *testing.T) *database.DB {
 	t.Helper()
-	db, err := gorm.Open(sqlite.Open(filepath.Join(t.TempDir(), "sync.db")), &gorm.Config{})
+	db, err := gorm.Open(testpg.Dialector(t, filepath.Join(t.TempDir(), "sync.db")), &gorm.Config{})
 	require.NoError(t, err)
 	require.NoError(
 		t,

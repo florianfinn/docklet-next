@@ -1,8 +1,10 @@
+//go:build postgres_integration
+
 // Source: getarcaneapp/arcane/backend/internal/build/service_test.go
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; functional cut: removed GitOps and saved Git repositories; functional cut: removed standalone build workshop.
+// Deviations: Local module namespace; functional cut: removed GitOps and saved Git repositories; functional cut: removed standalone build workshop; functional cut: PostgreSQL integration test fixture.
 
 package build
 
@@ -18,8 +20,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/florianfinn/docklet-next/backend/internal/testpg"
 	usertypes "github.com/florianfinn/docklet-next/types/user"
-	"github.com/libtnb/sqlite"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.getarcane.app/builds/types"
@@ -191,7 +193,7 @@ func TestBuildService_BuildImage_PassesResolvedGitContextToBuilder(t *testing.T)
 }
 
 func TestBuildService_BuildImage_FailureRecordsEvent(t *testing.T) {
-	db, err := setupBuildEventTestDB()
+	db, err := setupBuildEventTestDB(t)
 	require.NoError(t, err)
 
 	buildErr := errors.New("BuildKit could not load the image with the docker exporter")
@@ -229,7 +231,7 @@ func TestBuildService_BuildImage_FailureRecordsEvent(t *testing.T) {
 }
 
 func TestBuildService_BuildImage_FailureExporterErrorsAppearInProgressAndEvent(t *testing.T) {
-	db, err := setupBuildEventTestDB()
+	db, err := setupBuildEventTestDB(t)
 	require.NoError(t, err)
 
 	buildErr := &types.BuildKitImageExporterError{
@@ -313,8 +315,8 @@ func (b testBuildRecorder) BuildImage(_ context.Context, req types.BuildRequest,
 	return &types.BuildResult{Provider: "local"}, nil
 }
 
-func setupBuildEventTestDB() (*database.DB, error) {
-	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
+func setupBuildEventTestDB(t *testing.T) (*database.DB, error) {
+	db, err := gorm.Open(testpg.Dialector(t, ":memory:"), &gorm.Config{})
 	if err != nil {
 		return nil, err
 	}

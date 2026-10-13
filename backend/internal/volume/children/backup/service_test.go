@@ -1,8 +1,10 @@
+//go:build postgres_integration
+
 // Source: getarcaneapp/arcane/backend/internal/volume/children/backup/service_test.go
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; functional cut: removed S3 backup destinations; functional cut: removed SQLite runtime and migrations.
+// Deviations: Local module namespace; functional cut: removed S3 backup destinations; functional cut: removed SQLite runtime and migrations; functional cut: PostgreSQL integration test fixture.
 
 package backup
 
@@ -12,12 +14,12 @@ import (
 	"testing"
 	"time"
 
+	"github.com/florianfinn/docklet-next/backend/internal/testpg"
 	activitytypes "github.com/florianfinn/docklet-next/types/activity"
 	backuptypes "github.com/florianfinn/docklet-next/types/backup"
 	"github.com/florianfinn/docklet-next/types/scheduler"
 	"github.com/florianfinn/docklet-next/types/user"
 	"github.com/florianfinn/docklet-next/types/volume"
-	"github.com/libtnb/sqlite"
 	"github.com/stretchr/testify/require"
 	"go.getarcane.app/kit/pkg"
 	"go.getarcane.app/sys/crypto"
@@ -80,7 +82,7 @@ func (s *volumeBackupPolicySchedulerInternal) Submit(_ context.Context, request 
 }
 
 func TestVolumeBackupPolicy_RetentionIgnoresFailedRuns(t *testing.T) {
-	gormDB, err := gorm.Open(sqlite.Open("file:volume-backup-retention-failed?mode=memory&cache=shared"), &gorm.Config{})
+	gormDB, err := gorm.Open(testpg.Dialector(t, "file:volume-backup-retention-failed?mode=memory&cache=shared"), &gorm.Config{})
 	require.NoError(t, err)
 	applyVolumeBackupMigrationsInternal(t, gormDB)
 
@@ -105,7 +107,7 @@ func TestVolumeBackupPolicy_RetentionIgnoresFailedRuns(t *testing.T) {
 }
 
 func TestVolumeBackupPolicy_ScheduledRunCreatesActivity(t *testing.T) {
-	gormDB, err := gorm.Open(sqlite.Open("file:volume-backup-scheduled-activity?mode=memory&cache=shared"), &gorm.Config{})
+	gormDB, err := gorm.Open(testpg.Dialector(t, "file:volume-backup-scheduled-activity?mode=memory&cache=shared"), &gorm.Config{})
 	require.NoError(t, err)
 	require.NoError(t, gormDB.AutoMigrate(&policies.VolumeBackupPolicy{}, &activity.Activity{}))
 	db := &database.DB{DB: gormDB}
@@ -151,7 +153,7 @@ func TestVolumeBackupPolicy_ScheduledRunCreatesActivity(t *testing.T) {
 }
 
 func TestVolumeBackup_ValidationErrors(t *testing.T) {
-	gormDB, err := gorm.Open(sqlite.Open("file:volume-backup-validation?mode=memory&cache=shared"), &gorm.Config{})
+	gormDB, err := gorm.Open(testpg.Dialector(t, "file:volume-backup-validation?mode=memory&cache=shared"), &gorm.Config{})
 	require.NoError(t, err)
 	require.NoError(t, gormDB.AutoMigrate(&policies.VolumeBackupPolicy{}))
 	service := NewService(Dependencies{DB: &database.DB{DB: gormDB}})
@@ -169,7 +171,7 @@ func TestVolumeBackup_ValidationErrors(t *testing.T) {
 }
 
 func TestVolumeBackupPasswordPrefersRecoveryKey(t *testing.T) {
-	gormDB, err := gorm.Open(sqlite.Open("file:volume-backup-password?mode=memory&cache=shared"), &gorm.Config{})
+	gormDB, err := gorm.Open(testpg.Dialector(t, "file:volume-backup-password?mode=memory&cache=shared"), &gorm.Config{})
 	require.NoError(t, err)
 	require.NoError(t, gormDB.AutoMigrate(&backup.SystemBackupRecoveryConfig{}))
 	crypto.InitEncryption(&crypto.Config{EncryptionKey: "volume-backup-password-test-key-32bytes", Environment: "test"})

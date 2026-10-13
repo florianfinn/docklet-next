@@ -1,8 +1,10 @@
+//go:build postgres_integration
+
 // Source: getarcaneapp/arcane/backend/internal/backup/service_test.go
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; functional cut: removed SQLite runtime and migrations.
+// Deviations: Local module namespace; functional cut: removed SQLite runtime and migrations; functional cut: PostgreSQL integration test fixture.
 
 package backup
 
@@ -13,9 +15,9 @@ import (
 	"testing"
 	"time"
 
+	"github.com/florianfinn/docklet-next/backend/internal/testpg"
 	"github.com/florianfinn/docklet-next/types/backup"
 	"github.com/florianfinn/docklet-next/types/scheduler"
-	"github.com/libtnb/sqlite"
 	"github.com/moby/moby/api/types/mount"
 	"github.com/stretchr/testify/require"
 	"go.getarcane.app/sys/crypto"
@@ -88,7 +90,7 @@ func TestQualifySnapshotListingInternal(t *testing.T) {
 }
 
 func TestRecoveryKeyStoreRoundTrip(t *testing.T) {
-	gormDB, err := gorm.Open(sqlite.Open("file:recovery-key-store?mode=memory&cache=shared"), &gorm.Config{})
+	gormDB, err := gorm.Open(testpg.Dialector(t, "file:recovery-key-store?mode=memory&cache=shared"), &gorm.Config{})
 	require.NoError(t, err)
 	require.NoError(t, gormDB.AutoMigrate(&SystemBackupRecoveryConfig{}))
 	crypto.InitEncryption(&crypto.Config{EncryptionKey: "recovery-key-store-test-key-32bytes", Environment: "test"})

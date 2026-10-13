@@ -8,11 +8,11 @@
   "lockfiles": [
     {
       "path": "backend/go.mod",
-      "sha256": "3099414a7555985073d7065059e14f2ddbc5f4997b91332517f9d914e5fb7a8d"
+      "sha256": "dc33c5449e26b06c8f0fb9b44b90c090497ba7894eeebdd68dc15685175d9b67"
     },
     {
       "path": "backend/go.sum",
-      "sha256": "c37d87a1a444f4249c10c9a3146f5077ade386b8e1e993cd990eb0aecb561370"
+      "sha256": "b218097e433a9af7bed3f2ef964eb7bf08184b355220a8b66692d02e840ac134"
     },
     {
       "path": "cli/go.mod",
@@ -28,7 +28,7 @@
     },
     {
       "path": "go.work.sum",
-      "sha256": "3c9aa35214e753fb6d048f80c85a51a85307b2e0961653e5ea204ab5ae3428de"
+      "sha256": "79201e7b98edc4958236f4c30e58860ecbc967de9755e502b8c9afc5020c305e"
     },
     {
       "path": "third_party/arcane/acfs/go.mod",

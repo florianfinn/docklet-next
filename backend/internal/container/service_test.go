@@ -1,8 +1,10 @@
+//go:build postgres_integration
+
 // Source: getarcaneapp/arcane/backend/internal/container/service_test.go
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace
+// Deviations: Local module namespace; functional cut: PostgreSQL integration test fixture.
 
 package container
 
@@ -26,10 +28,10 @@ import (
 	"time"
 
 	"github.com/containerd/errdefs"
+	"github.com/florianfinn/docklet-next/backend/internal/testpg"
 	containertypes "github.com/florianfinn/docklet-next/types/container"
 	"github.com/florianfinn/docklet-next/types/image"
 	"github.com/florianfinn/docklet-next/types/user"
-	"github.com/libtnb/sqlite"
 	"github.com/moby/moby/api/types/container"
 	"github.com/moby/moby/api/types/mount"
 	"github.com/moby/moby/api/types/network"
@@ -378,8 +380,7 @@ func newGroupedContainerSummary(name, localProject string) containertypes.Summar
 	}
 }
 
-// dockerTestPathInternal strips the /v1.NN version prefix Docker clients prepend, so
-// fake Docker servers can match on the bare path.
+// dockerTestPathInternal strips the Docker API version for fake servers.
 func dockerTestPathInternal(path string) string {
 	return dockerAPIVersionPrefixInternal.ReplaceAllString(path, "")
 }
@@ -403,10 +404,9 @@ func newTestDockerClientInternal(t *testing.T, server *httptest.Server) *client.
 	return cli
 }
 
-// setupProjectTestDBInternal builds an in-memory DB migrated for project-related tests.
 func setupProjectTestDBInternal(t *testing.T) *database.DB {
 	t.Helper()
-	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
+	db, err := gorm.Open(testpg.Dialector(t, ":memory:"), &gorm.Config{})
 	require.NoError(t, err)
 	require.NoError(t, db.AutoMigrate(&project.Project{}, &settings.SettingVariable{}, &imageupdate.ImageUpdateRecord{}, &event.Event{}))
 	return &database.DB{DB: db}

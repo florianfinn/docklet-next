@@ -1,8 +1,10 @@
+//go:build postgres_integration
+
 // Source: getarcaneapp/arcane/backend/internal/activity/service_test.go
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; functional cut: removed GitOps and saved Git repositories; functional cut: removed S3 backup destinations; functional cut: removed SQLite runtime and migrations.
+// Deviations: Local module namespace; functional cut: removed GitOps and saved Git repositories; functional cut: removed S3 backup destinations; functional cut: removed SQLite runtime and migrations; functional cut: PostgreSQL integration test fixture.
 
 package activity
 
@@ -14,10 +16,10 @@ import (
 	"testing"
 	"time"
 
+	"github.com/florianfinn/docklet-next/backend/internal/testpg"
 	"github.com/florianfinn/docklet-next/types/activity"
 	"github.com/florianfinn/docklet-next/types/scheduler"
 	"github.com/florianfinn/docklet-next/types/user"
-	"github.com/libtnb/sqlite"
 	"github.com/stretchr/testify/require"
 	"go.getarcane.app/sys/crypto"
 	"gorm.io/gorm"
@@ -36,7 +38,7 @@ import (
 func setupActivityServiceTestDBInternal(t *testing.T) *database.DB {
 	t.Helper()
 
-	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
+	db, err := gorm.Open(testpg.Dialector(t, ":memory:"), &gorm.Config{})
 	require.NoError(t, err)
 	require.NoError(t, db.AutoMigrate(&Activity{}, &ActivityMessage{}))
 	return &database.DB{DB: db}
@@ -387,16 +389,10 @@ func setupQueuedActivityServiceInternal(t *testing.T) (*ActivityService, context
 	t.Helper()
 	ctx := t.Context()
 
-	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
+	db, err := gorm.Open(testpg.Dialector(t, ":memory:"), &gorm.Config{})
 	require.NoError(t, err)
 	require.NoError(t, db.AutoMigrate(&Activity{}, &ActivityMessage{}, &settings.SettingVariable{}))
 	wrapped := &database.DB{DB: db}
-
-	// Every extra pooled connection to a :memory: SQLite database is a fresh
-	// empty database; the await goroutine must see the same data.
-	sqlDB, err := db.DB()
-	require.NoError(t, err)
-	sqlDB.SetMaxOpenConns(1)
 
 	localSettings, err := newSettingsServiceForTestInternal(t, ctx, wrapped)
 	require.NoError(t, err)
