@@ -50,8 +50,8 @@ The scanner classifies syntax before judging the value. Source extensions are
 JS/TS (including JSX/TSX, CJS/MJS), Go, Rust, Java, C#, Python, Ruby, PHP, Vue
 and Svelte. Quotes, raw/template strings and comments establish embedded text
 contexts; keywords never turn an env or configuration file into source code.
-Each row has rejected/accepted twins in publication-decisions.test.mjs or
-publication-final-round.test.mjs.
+Each row has rejected/accepted twins in publication-decisions.test.mjs,
+publication-final-round.test.mjs or publication-r3.test.mjs.
 
 | Row | Context | Finding | Non-finding |
 | --- | --- | --- | --- |
@@ -73,9 +73,9 @@ publication-final-round.test.mjs.
 | D16 | Source right-hand side | Direct quoted value | Identifier, call, member access |
 | D17 | Type annotation | Annotation followed by literal assignment | Annotation without value |
 | D18 | Source equals operator | Literal assignment | Comparison |
-| D19 | Shell/compose reference | Literal value or default | $VAR, $(command), backtick command |
+| D19 | Shell/compose reference | Literal value or default; backticks outside shell files | $VAR, $(command); backtick command only in .sh/.bash/.zsh files and Dockerfiles |
 | D20 | Workflow secret/permission mode | Other literal | Inherited secrets; read/write/none permissions |
-| D21 | Human message string | Embedded key=value or a leading key: value | Prose colon, format verb, closing quote |
+| D21 | Human message string | Embedded key=value, leading key: value or Default key: value, including after escaped line endings | Other prose colons, format verb, closing quote |
 | D22 | Python prefix or Rust reference type | Quoted prefixed/typed value | Placeholder or identifier |
 | D23 | Source value on the next line | Quoted literal | Placeholder or identifier |
 | D24 | Set/setItem method call | Sensitive literal key and literal value | Non-sensitive key, placeholder or expression |

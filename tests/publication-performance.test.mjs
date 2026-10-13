@@ -12,6 +12,8 @@ test("scan budget stays at two seconds", () => {
   assert.deepEqual(source.match(/timeout: \d+/g), ["timeout: " + 5000]);
 });
 const cases = [
+  ["78 KB adjacent name/value spaces", '\'{ name: "x"\' + " ".repeat(80000)', "inspectText", "example.ts", 80000],
+  ["78 KB adjacent name/value newlines", '\'{ name: "x"\' + "\\n".repeat(80000)', "inspectText", "example.ts", 80000],
   ["4 MB nested block scalars", 'Array.from({length: 2890}, (_, i) => " ".repeat(i) + ["password", ": |\\n"].join("")).join("")', "inspectText", "example.yml"],
   ["coauthor spaces", '"Co-authored-by:" + " ".repeat(1000000 - 15)'],
   ["coauthor email domain", '"Co-authored-by: Example <person@" + "a.".repeat(500000) + "invalid>"'],
@@ -53,8 +55,8 @@ for (const prefix of prefixes) {
     }
   }
 }
-for (const [label, expression, scanner = "inspectText", path = "synthetic"] of cases) {
-  test(`1 MB adversarial scan: ${label}`, (t) => {
+for (const [label, expression, scanner = "inspectText", path = "synthetic", minimumBytes = 1000000] of cases) {
+  test(`adversarial scan: ${label}`, (t) => {
     const source = `
       import { inspectText, inspectPath } from "./scripts/publication-patterns.mjs";
       const input = (${expression});
@@ -70,7 +72,7 @@ for (const [label, expression, scanner = "inspectText", path = "synthetic"] of c
     });
     assert.equal(result.status, 0, result.error?.code ?? result.stderr);
     const timing = JSON.parse(result.stdout);
-    assert.equal(timing.bytes >= 1000000, true);
+    assert.equal(timing.bytes >= minimumBytes, true);
     assert.equal(timing.ms < SCAN_BUDGET_MS, true, `${label}: ${timing.ms.toFixed(1)} ms`);
     t.diagnostic(`${label}: ${timing.bytes} bytes, ${timing.ms.toFixed(1)} ms`);
   });

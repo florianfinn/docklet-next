@@ -16,6 +16,7 @@ function placeholder(value) {
 function contexts(line, state) {
   const result = new Uint8Array(line.length);
   result.leading = new Set();
+  result.lineBreaks = new Set();
   let leading = true;
   for (let i = 0; i < line.length; i++) {
     if (state.block) {
@@ -23,8 +24,16 @@ function contexts(line, state) {
       if (line[i] === "*" && line[i + 1] === "/") { result[++i] = 2; state.block = false; }
     } else if (state.quote) {
       result[i] = 1;
-      if (leading && !/\s/.test(line[i])) { result.leading.add(i); leading = false; }
-      if (line[i] === "\\" && state.quote !== "`") { if (i + 1 < line.length) result[++i] = 1; }
+      if (leading && !/\s/.test(line[i])) {
+        result.leading.add(i);
+        const prefix = line.slice(i).match(/^default[ \t]+/i);
+        if (prefix) result.leading.add(i + prefix[0].length);
+        leading = false;
+      }
+      if (line[i] === "\\" && state.quote !== "`") {
+        if (line[i + 1] === "n" || line[i + 1] === "r") { result.lineBreaks.add(i); leading = true; }
+        if (i + 1 < line.length) result[++i] = 1;
+      }
       else if (line[i] === state.quote) state.quote = "";
     } else if (line[i] === "#" || line.slice(i, i + 2) === "//") {
       result.fill(2, i); break;
@@ -34,7 +43,7 @@ function contexts(line, state) {
   }
   return result;
 }
-function readValue(line, start) {
+function readValue(line, start, lineBreaks) {
   let at = start;
   const prefix = line.slice(at).match(/^(?:br|rb|[bruf])(?=["'])/i);
   if (prefix) at += prefix[0].length;
@@ -66,7 +75,7 @@ function readValue(line, start) {
     while (at < line.length && line[at] !== ">") at++;
     if (line[at] === ">") at++;
   }
-  while (at < line.length && !VALUE_END.test(line[at])) at++;
+  while (at < line.length && !VALUE_END.test(line[at]) && !lineBreaks?.has(at)) at++;
   return { value: line.slice(start, at), end: at, quoted: false };
 }
 export function scanAssignments(text, report, path = "text") {
@@ -88,6 +97,8 @@ export function scanAssignments(text, report, path = "text") {
     const words = /[a-z0-9_.-]+/gi;
     let match;
     while ((match = words.exec(line))) {
+      // Escaped line endings delimit configuration keys and unquoted values.
+      if (context?.lineBreaks.has(match.index - 1)) { match[0] = match[0].slice(1); match.index++; }
       const name = match[0];
       if (!SENSITIVE_NAME.test(name) || line.slice(match.index - 2, match.index) === "${") continue;
       let at = words.lastIndex;
@@ -145,10 +156,10 @@ export function scanAssignments(text, report, path = "text") {
       if (!code && separator === ":" && (line[at] === "{" || line[at] === "[")) continue;
       // An enclosing string's closing quote is not a new value opener.
       if (embedded && context[at] === 1 && !context[at + 1] && '"\'`'.includes(line[at] ?? "\0")) continue;
-      // A colon in prose is punctuation; a string starting with a key is configuration text.
+      // Leading keys and "Default key" labels are configuration; other prose colons are punctuation.
       if (source && context[match.index] === 1 && !quotedKey && separator === ":" &&
           (line[at] === "%" || !context.leading.has(match.index))) continue;
-      const { value, end: valueEnd, quoted, closed } = readValue(line, at);
+      const { value, end: valueEnd, quoted, closed } = readValue(line, at, context?.lineBreaks);
       if (code && line[at] === "`" && !closed) {
         let nextOffset = offset + line.length + (text[offset + line.length] === "\r" && text[offset + line.length + 1] === "\n" ? 2 : 1);
         for (let nextRow = row + 1; nextRow < lines.length; nextRow++) {
@@ -165,7 +176,8 @@ export function scanAssignments(text, report, path = "text") {
         (path === "text" && (/^(?:string|number|boolean|unknown|never|any|void)(?:\[\])?$/.test(value) || /[([]/.test(line[valueEnd] ?? "") || /[([]/.test(value))));
       const credentialMode = /credentials$/i.test(name) && /^(?:include|same-origin|omit)$/.test(value);
       const credentialPath = /(?:credentials|pwd|[_-](?:file|path))$/i.test(name) && /^(?:\/|\.\.?\/|[A-Z]:[\\/])/.test(value);
-      const shellReference = !source && (/^\$[a-z_][a-z0-9_]*$/i.test(value) || /^\$\([\s\S]*\)$/.test(value) || line[at] === "`");
+      const shellReference = !source && (/^\$[a-z_][a-z0-9_]*$/i.test(value) || /^\$\([\s\S]*\)$/.test(value) ||
+        (line[at] === "`" && /(?:\.(?:sh|bash|zsh)|(?:^|\/)Dockerfile[^/]*)$/.test(path)));
       const workflowMode = !source && ((name === "id-token" && /^(?:write|read|none)$/.test(value)) || (name === "secrets" && value === "inherit"));
       if (!expression && !credentialMode && !credentialPath && !shellReference && !workflowMode && !placeholder(value))
         report("literal-secret", line.slice(match.index, valueEnd), offset + match.index);
@@ -178,7 +190,7 @@ export function scanAssignments(text, report, path = "text") {
 function scanNamedValues(text, report) {
   const patterns = [
     /\.(?:Set|setItem)\(\s*["']([a-z0-9_-]+)["']\s*,\s*/gi,
-    /["']?(?:key|name)["']?\s*:\s*["']([a-z0-9_-]+)["']\s*,?\s*["']?value["']?\s*:\s*/gi,
+    /["']?(?:key|name)["']?\s*:\s*["']([a-z0-9_-]+)["'](?:\s*,)?\s*["']?value["']?\s*:\s*/gi,
   ];
   for (const pattern of patterns) {
     let match;
