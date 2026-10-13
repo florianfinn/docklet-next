@@ -1,0 +1,74 @@
+import { Database, FileCode2, FolderOpen, KeyRound } from "lucide-react";
+import { useState } from "react";
+import { useTranslations } from "use-intl";
+
+import { useVolumes } from "@/data/queries";
+import type { ComposeModel } from "@/domain/compose/model";
+import { mountRef } from "@/domain/volumes";
+import { filesHref } from "@/features/volumes/files/files-href";
+import { FileTree, type TreeNode } from "@/shared/workspace/file-tree";
+
+export type WorkspaceFile = "compose" | "env";
+
+const PROJECT_OPEN: ReadonlySet<string> = new Set(["project"]);
+const NONE: ReadonlySet<string> = new Set();
+
+interface ComposeFileTreeProps {
+  projectName: string;
+  projectDir: string;
+  hostProjectDir?: string;
+  hostId: string;
+  /** Null for a draft that was never deployed. */
+  stackId: string | null;
+  active: WorkspaceFile | null;
+  composeDirty: boolean;
+  envDirty: boolean;
+  model: ComposeModel | null;
+  onOpen: (file: WorkspaceFile) => void;
+}
+
+/** Compose adapter for the shared file tree: project files plus mounts linked to their file workspace. */
+export function ComposeFileTree({ projectName, projectDir, hostProjectDir, hostId, stackId, active, composeDirty, envDirty, model, onOpen }: ComposeFileTreeProps) {
+  const t = useTranslations("editor.files");
+  const volumes = useVolumes();
+  const [open, setOpen] = useState(true);
+  const known = new Map((volumes.data ?? []).map((v) => [v.id, v]));
+  const specs = [...new Map((model?.services ?? []).flatMap((s) => s.mounts.filter((m) => m.editable && m.source && m.target)).map((m) => [m.source, `${m.source}:${m.target}`])).entries()];
+
+  const mounts: TreeNode[] = specs.map(([source, spec]) => {
+    const ref = stackId ? mountRef({ hostId, stackId }, spec, hostProjectDir) : undefined;
+    const volume = ref ? known.get(ref.id) : undefined;
+    const isBind = /^[./~]/.test(source);
+    return {
+      id: `mount:${source}`,
+      name: source,
+      kind: "link",
+      icon: isBind ? <FolderOpen className="size-4 shrink-0" aria-hidden /> : <Database className="size-4 shrink-0" aria-hidden />,
+      href: volume ? filesHref(volume) : undefined,
+      hint: volume ? t("mountedOpen") : t("mountedLater"),
+    };
+  });
+
+  const project: TreeNode = {
+    id: "project",
+    name: projectName || t("project"),
+    kind: "dir",
+    children: [
+      { id: "compose", name: "compose.yaml", kind: "file", icon: <FileCode2 className="nudge size-4 shrink-0" aria-hidden />, dirty: composeDirty },
+      { id: "env", name: ".env", kind: "file", icon: <KeyRound className="nudge size-4 shrink-0" aria-hidden />, dirty: envDirty },
+    ],
+  };
+
+  return (
+    <FileTree
+      label={t("title")}
+      sections={[{ id: "project", nodes: [project] }, ...(mounts.length ? [{ id: "mounts", title: t("mounted"), nodes: mounts }] : [])]}
+      activeId={active}
+      expanded={open ? PROJECT_OPEN : NONE}
+      onOpen={(node) => (node.id === "compose" || node.id === "env" ? onOpen(node.id) : setOpen((o) => !o))}
+      onToggle={(_, on) => setOpen(on)}
+      footer={projectDir}
+      footerTitle={t("projectDir")}
+    />
+  );
+}

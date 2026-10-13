@@ -2,7 +2,7 @@
 # Revision: a4484c910bb5d6a8f8df97b4f23f4ee5e6359081
 # Retrieved: 2026-10-13
 # License: Apache-2.0
-# Deviations: Dependency-free M0 chain, structural guards and baseline comparison; no caching/install.
+# Deviations: Root and web checks, structural guards, baseline comparison and frozen web dependency installation.
 name: Repository checks
 on:
   pull_request:
@@ -32,9 +32,20 @@ jobs:
       - run: node scripts/check-publication.mjs --history
       - if: steps.scope.outputs.scope == 'text'
         run: node scripts/change-scope.mjs --run-text-tests
-      - if: steps.scope.outputs.scope != 'text'
-        run: node scripts/run-checks.mjs lint
-      - if: steps.scope.outputs.scope != 'text'
-        run: node scripts/run-checks.mjs test
-      - if: steps.scope.outputs.scope != 'text'
-        run: node scripts/run-checks.mjs build
+      - name: Enable pinned pnpm
+        if: steps.scope.outputs.scope != 'text'
+        run: |
+          corepack enable
+          corepack prepare pnpm@11.21.0 --activate
+      - name: Install frozen web dependencies
+        if: steps.scope.outputs.scope != 'text'
+        run: pnpm --dir web install --frozen-lockfile
+      - name: Root and web lint with TypeScript checks
+        if: steps.scope.outputs.scope != 'text'
+        run: pnpm run lint
+      - name: Root guards and web tests
+        if: steps.scope.outputs.scope != 'text'
+        run: pnpm run test
+      - name: Root checks and web build
+        if: steps.scope.outputs.scope != 'text'
+        run: pnpm run build
