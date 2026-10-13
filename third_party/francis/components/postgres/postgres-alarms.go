@@ -1,0 +1,493 @@
+package postgres
+
+import (
+	"context"
+	"errors"
+	"fmt"
+	"time"
+	"uuid"
+
+	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
+
+	"github.com/italypaleale/francis/components"
+	"github.com/italypaleale/francis/internal/ref"
+)
+
+func (p *PostgresProvider) GetAlarm(ctx context.Context, req ref.AlarmRef) (res components.GetAlarmRes, err error) {
+	queryCtx, cancel := context.WithTimeout(ctx, p.timeout)
+	defer cancel()
+
+	var (
+		interval  *string
+		cron      *string
+		jobMethod *string
+		kind      string
+	)
+	// #nosec G202 -- the only concatenated value is the static table prefix, not user input
+	err = p.db.
+		QueryRow(queryCtx, `
+			SELECT
+				alarm_due_time, alarm_interval, alarm_cron, alarm_data, alarm_ttl_time, alarm_kind, job_method
+			FROM `+p.tablePrefix+`alarms
+			WHERE
+				actor_type = $1
+				AND actor_id = $2
+				AND alarm_name = $3`,
+			req.ActorType, req.ActorID, req.Name,
+		).
+		Scan(&res.DueTime, &interval, &cron, &res.Data, &res.TTL, &kind, &jobMethod)
+
+	if errors.Is(err, pgx.ErrNoRows) {
+		return res, components.ErrNoAlarm
+	} else if err != nil {
+		return res, fmt.Errorf("error executing query: %w", err)
+	}
+
+	if interval != nil {
+		res.Interval = *interval
+	}
+	if cron != nil {
+		res.Cron = *cron
+	}
+	res.Kind = components.AlarmKind(kind)
+	if jobMethod != nil {
+		res.JobMethod = *jobMethod
+	}
+	return res, nil
+}
+
+func (p *PostgresProvider) SetAlarm(ctx context.Context, alarmRef ref.AlarmRef, req components.SetAlarmReq) (*ref.AlarmLease, error) {
+	var interval *string
+	if req.Interval != "" {
+		interval = &req.Interval
+	}
+
+	if req.Data != nil && len(req.Data) == 0 {
+		req.Data = nil
+	}
+
+	alarmID := uuid.NewV7()
+
+	queryCtx, cancel := context.WithTimeout(ctx, p.timeout)
+	defer cancel()
+
+	// Trying to acquire a lease requires using the slower path
+	// We skip that when there are no allowed hosts or when the local clock places the alarm outside of the fetch-ahead interval
+	if len(req.LeaseImmediate) > 0 && !req.DueTime.After(p.clock.Now().Add(p.cfg.AlarmsFetchAheadInterval)) {
+		return p.setAndLeaseAlarm(queryCtx, alarmRef, req, alarmID, interval)
+	}
+
+	// We do an upsert to replace alarms with the same actor ID, actor type, and alarm name
+	// Any upsert will cause the lease to be lost
+	// To avoid updating rows if there's nothing changed and canceling leases, we add conditions so if the alarm being added is the same as the existing, nothing is changed
+	// #nosec G202 -- the only concatenated value is the static table prefix, not user input
+	_, err := p.db.
+		Exec(queryCtx,
+			`
+			INSERT INTO `+p.tablePrefix+`alarms
+				(alarm_id, actor_type, actor_id, alarm_name,
+				alarm_due_time, alarm_interval, alarm_ttl_time, alarm_data,
+				alarm_lease_id, alarm_lease_expiration_time)
+			VALUES
+				($1, $2, $3, $4, $5, $6, $7, $8, NULL, NULL)
+			ON CONFLICT (actor_type, actor_id, alarm_name) DO UPDATE SET
+				alarm_id = EXCLUDED.alarm_id,
+				alarm_due_time = EXCLUDED.alarm_due_time,
+				alarm_interval = EXCLUDED.alarm_interval,
+				alarm_ttl_time = EXCLUDED.alarm_ttl_time,
+				alarm_data = EXCLUDED.alarm_data,
+				alarm_lease_id = NULL,
+				alarm_lease_expiration_time = NULL
+			WHERE
+				`+p.tablePrefix+`alarms.alarm_due_time != EXCLUDED.alarm_due_time
+				OR `+p.tablePrefix+`alarms.alarm_interval IS DISTINCT FROM EXCLUDED.alarm_interval
+				OR `+p.tablePrefix+`alarms.alarm_ttl_time IS DISTINCT FROM EXCLUDED.alarm_ttl_time
+				OR `+p.tablePrefix+`alarms.alarm_data IS DISTINCT FROM EXCLUDED.alarm_data
+			`,
+			// alarm_due_time and alarm_ttl_time are stored as UTC
+			alarmID, alarmRef.ActorType, alarmRef.ActorID, alarmRef.Name,
+			req.DueTime.UTC(), interval, utcPtr(req.TTL), req.Data)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create alarm: %w", err)
+	}
+	return nil, nil
+}
+
+// setAndLeaseAlarm atomically stores an alarm and attempts to place and lease it
+func (p *PostgresProvider) setAndLeaseAlarm(ctx context.Context, alarmRef ref.AlarmRef, req components.SetAlarmReq, alarmID uuid.UUID, interval *string) (*ref.AlarmLease, error) {
+	hostUUIDs, err := hostIDsToUUIDs(req.LeaseImmediate)
+	if err != nil {
+		return nil, err
+	}
+
+	// The database rechecks its own clock and returns no row when the stored alarm is not currently eligible for a lease
+	var (
+		storedAlarmID uuid.UUID
+		dueTime       time.Time
+		leaseID       uuid.UUID
+	)
+	// #nosec G202 -- the only concatenated value is the static table prefix, not user input
+	err = p.db.
+		QueryRow(ctx,
+			`SELECT r_alarm_id, r_alarm_due_time, r_lease_id
+		FROM `+p.tablePrefix+`set_and_lease_alarm_v1($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)`,
+			alarmID, alarmRef.ActorType, alarmRef.ActorID, alarmRef.Name,
+			req.DueTime.UTC(), interval,
+			utcPtr(req.TTL), req.Data, hostUUIDs,
+			p.cfg.HostHealthCheckDeadline, p.cfg.AlarmsFetchAheadInterval, p.cfg.AlarmsLeaseDuration,
+		).
+		Scan(&storedAlarmID, &dueTime, &leaseID)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, nil
+	} else if err != nil {
+		return nil, fmt.Errorf("failed to atomically set and lease alarm: %w", err)
+	}
+
+	return ref.NewAlarmLease(alarmRef, storedAlarmID.String(), dueTime, leaseID.String()), nil
+}
+
+func (p *PostgresProvider) DeleteAlarm(ctx context.Context, ref ref.AlarmRef) error {
+	queryCtx, cancel := context.WithTimeout(ctx, p.timeout)
+	defer cancel()
+	// #nosec G202 -- the only concatenated value is the static table prefix, not user input
+	res, err := p.db.Exec(queryCtx,
+		`DELETE FROM `+p.tablePrefix+`alarms
+		WHERE
+			actor_type = $1
+			AND actor_id = $2
+			AND alarm_name = $3`,
+		ref.ActorType, ref.ActorID, ref.Name,
+	)
+	if err != nil {
+		return fmt.Errorf("error executing query: %w", err)
+	}
+
+	if res.RowsAffected() == 0 {
+		return components.ErrNoAlarm
+	}
+
+	return nil
+}
+
+func (p *PostgresProvider) FetchAndLeaseUpcomingAlarms(ctx context.Context, req components.FetchAndLeaseUpcomingAlarmsReq) ([]*ref.AlarmLease, error) {
+	// The list of hosts is required
+	// If there's no host, return an empty list
+	if len(req.Hosts) == 0 {
+		return nil, nil
+	}
+
+	hostUUIDs, err := hostIDsToUUIDs(req.Hosts)
+	if err != nil {
+		return nil, err
+	}
+
+	queryCtx, cancel := context.WithTimeout(ctx, p.timeout)
+	defer cancel()
+
+	// #nosec G202 -- the only concatenated value is the static table prefix, not user input
+	rows, err := p.db.Query(queryCtx,
+		`SELECT r_alarm_id, r_actor_type, r_actor_id, r_alarm_name, r_alarm_due_time, r_lease_id
+		FROM `+p.tablePrefix+`fetch_and_lease_upcoming_alarms_v1($1, $2, $3, $4, $5)`,
+		hostUUIDs,
+		p.cfg.HostHealthCheckDeadline,
+		p.cfg.AlarmsFetchAheadInterval,
+		p.cfg.AlarmsLeaseDuration,
+		p.cfg.AlarmsFetchAheadBatchSize,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("error executing fetch_and_lease_upcoming_alarms function: %w", err)
+	}
+	defer rows.Close()
+
+	result := make([]*ref.AlarmLease, 0, p.cfg.AlarmsFetchAheadBatchSize)
+	for rows.Next() {
+		var (
+			alarmID   uuid.UUID
+			actorType string
+			actorID   string
+			alarmName string
+			dueTime   time.Time
+			leaseID   uuid.UUID
+		)
+
+		err := rows.Scan(&alarmID, &actorType, &actorID, &alarmName, &dueTime, &leaseID)
+		if err != nil {
+			return nil, fmt.Errorf("error scanning row: %w", err)
+		}
+
+		alarmRef := ref.AlarmRef{
+			ActorType: actorType,
+			ActorID:   actorID,
+			Name:      alarmName,
+		}
+
+		lease := ref.NewAlarmLease(
+			alarmRef,
+			alarmID.String(),
+			dueTime,
+			leaseID.String(),
+		)
+
+		result = append(result, lease)
+	}
+
+	err = rows.Err()
+	if err != nil {
+		return nil, fmt.Errorf("error iterating rows: %w", err)
+	}
+
+	return result, nil
+}
+
+func (p *PostgresProvider) GetLeasedAlarm(ctx context.Context, lease *ref.AlarmLease) (res components.GetLeasedAlarmRes, err error) {
+	queryCtx, cancel := context.WithTimeout(ctx, p.timeout)
+	defer cancel()
+
+	var (
+		interval  *string
+		cron      *string
+		jobMethod *string
+		kind      string
+	)
+	// #nosec G202 -- the only concatenated value is the static table prefix, not user input
+	err = p.db.
+		QueryRow(queryCtx, `
+			SELECT
+				actor_type, actor_id, alarm_name, alarm_data,
+				alarm_due_time, alarm_interval, alarm_cron, alarm_ttl_time, alarm_kind, job_method
+			FROM `+p.tablePrefix+`alarms
+			WHERE
+				alarm_id = $1
+				AND alarm_lease_id = $2
+				AND alarm_lease_expiration_time IS NOT NULL
+				AND alarm_lease_expiration_time >= (now() AT TIME ZONE 'utc')`,
+			lease.Key(), lease.LeaseID(),
+		).
+		Scan(
+			&res.ActorType, &res.ActorID, &res.Name, &res.Data,
+			&res.DueTime, &interval, &cron, &res.TTL, &kind, &jobMethod,
+		)
+
+	if errors.Is(err, pgx.ErrNoRows) {
+		return res, components.ErrNoAlarm
+	} else if err != nil {
+		return res, fmt.Errorf("error executing query: %w", err)
+	}
+
+	if interval != nil {
+		res.Interval = *interval
+	}
+	if cron != nil {
+		res.Cron = *cron
+	}
+	res.Kind = components.AlarmKind(kind)
+	if jobMethod != nil {
+		res.JobMethod = *jobMethod
+	}
+
+	return res, nil
+}
+
+func (p *PostgresProvider) RenewAlarmLeases(ctx context.Context, req components.RenewAlarmLeasesReq) (res components.RenewAlarmLeasesRes, err error) {
+	hostUUIDs, err := hostIDsToUUIDs(req.Hosts)
+	if err != nil {
+		return components.RenewAlarmLeasesRes{}, err
+	}
+
+	args := make([]any, 0, 3)
+	args = append(args,
+		p.cfg.AlarmsLeaseDuration,
+		hostUUIDs,
+	)
+
+	// If we have a list of leases, we restrict by them too
+	var leaseCondition string
+	if len(req.Leases) > 0 {
+		leaseIDs := make([]uuid.UUID, len(req.Leases))
+		for i, lease := range req.Leases {
+			var u uuid.UUID
+			switch l := lease.LeaseID().(type) {
+			case string:
+				u, err = uuid.Parse(l)
+				if err != nil {
+					return components.RenewAlarmLeasesRes{}, fmt.Errorf("invalid lease ID '%s': not a valid UUID: %w", l, err)
+				}
+			case uuid.UUID:
+				u = l
+			default:
+				return components.RenewAlarmLeasesRes{}, fmt.Errorf("invalid lease ID '%v': type %T is not supported", lease, lease)
+			}
+			leaseIDs[i] = u
+		}
+
+		leaseCondition = `AND alarm_lease_id = ANY($3)`
+		args = append(args, leaseIDs)
+	}
+
+	queryCtx, cancel := context.WithTimeout(ctx, p.timeout)
+	defer cancel()
+	// #nosec G202 -- the only concatenated values are static table prefixes and an internally-built lease clause, not user input
+	rows, err := p.db.Query(queryCtx,
+		`
+		UPDATE `+p.tablePrefix+`alarms
+		SET alarm_lease_expiration_time = (now() AT TIME ZONE 'utc') + $1::interval
+		WHERE
+			alarm_lease_expiration_time IS NOT NULL
+			AND alarm_lease_expiration_time >= (now() AT TIME ZONE 'utc')
+			AND alarm_id IN (
+				SELECT alarm_id FROM `+p.tablePrefix+`alarms a
+				JOIN `+p.tablePrefix+`active_actors aa ON a.actor_type = aa.actor_type AND a.actor_id = aa.actor_id
+				WHERE aa.host_id = ANY($2)
+				)
+			`+leaseCondition+`
+		RETURNING actor_type, actor_id, alarm_name, alarm_id, alarm_lease_id, alarm_due_time`,
+		args...,
+	)
+	if err != nil {
+		return res, fmt.Errorf("query error: %w", err)
+	}
+	defer rows.Close()
+
+	var renewedLeases []*ref.AlarmLease
+	for rows.Next() {
+		var (
+			aRef             ref.AlarmRef
+			alarmID, leaseID string
+			dueTime          time.Time
+		)
+		err = rows.Scan(&aRef.ActorType, &aRef.ActorID, &aRef.Name, &alarmID, &leaseID, &dueTime)
+		if err != nil {
+			return res, fmt.Errorf("error scanning rows: %w", err)
+		}
+
+		renewedLeases = append(renewedLeases,
+			ref.NewAlarmLease(aRef, alarmID, dueTime, leaseID),
+		)
+	}
+
+	err = rows.Err()
+	if err != nil {
+		return res, fmt.Errorf("error scanning rows: %w", err)
+	}
+
+	res.Leases = renewedLeases
+	return res, nil
+}
+
+func (p *PostgresProvider) ReleaseAlarmLease(ctx context.Context, lease *ref.AlarmLease) error {
+	queryCtx, cancel := context.WithTimeout(ctx, p.timeout)
+	defer cancel()
+
+	// #nosec G202 -- the only concatenated value is the static table prefix, not user input
+	res, err := p.db.Exec(queryCtx, `
+		UPDATE `+p.tablePrefix+`alarms
+		SET
+			alarm_lease_id = NULL,
+			alarm_lease_expiration_time = NULL
+		WHERE
+			alarm_id = $1
+			AND alarm_lease_id = $2
+			AND alarm_lease_expiration_time IS NOT NULL
+			AND alarm_lease_expiration_time >= (now() AT TIME ZONE 'utc')`,
+		lease.Key(), lease.LeaseID(),
+	)
+	if err != nil {
+		return fmt.Errorf("error executing query: %w", err)
+	}
+
+	if res.RowsAffected() == 0 {
+		return components.ErrNoAlarm
+	}
+
+	return nil
+}
+
+func (p *PostgresProvider) UpdateLeasedAlarm(ctx context.Context, lease *ref.AlarmLease, req components.UpdateLeasedAlarmReq) (err error) {
+	queryCtx, cancel := context.WithTimeout(ctx, p.timeout)
+	defer cancel()
+
+	// If we want to refresh the lease...
+	var res pgconn.CommandTag
+	if req.RefreshLease {
+		// #nosec G202 -- the only concatenated value is the static table prefix, not user input
+		res, err = p.db.Exec(queryCtx,
+			`
+			UPDATE `+p.tablePrefix+`alarms
+			SET
+				alarm_lease_expiration_time = (now() AT TIME ZONE 'utc') + $1::interval,
+				alarm_due_time = $2
+			WHERE
+				alarm_id = $3
+				AND alarm_lease_id = $4
+				AND alarm_lease_expiration_time IS NOT NULL
+				AND alarm_lease_expiration_time >= (now() AT TIME ZONE 'utc')
+			`,
+			// alarm_due_time is stored as UTC
+			p.cfg.AlarmsLeaseDuration, req.DueTime.UTC(),
+			lease.Key(), lease.LeaseID(),
+		)
+	} else {
+		// #nosec G202 -- the only concatenated value is the static table prefix, not user input
+		res, err = p.db.Exec(queryCtx, `
+			UPDATE `+p.tablePrefix+`alarms
+			SET
+				alarm_lease_id = NULL,
+				alarm_lease_expiration_time = NULL,
+				alarm_due_time = $1
+			WHERE
+				alarm_id = $2
+				AND alarm_lease_id = $3
+				AND alarm_lease_expiration_time IS NOT NULL
+				AND alarm_lease_expiration_time >= (now() AT TIME ZONE 'utc')
+			`,
+			// alarm_due_time is stored as UTC
+			req.DueTime.UTC(),
+			lease.Key(), lease.LeaseID(),
+		)
+	}
+	if err != nil {
+		return fmt.Errorf("error executing query: %w", err)
+	}
+
+	if res.RowsAffected() == 0 {
+		return components.ErrNoAlarm
+	}
+
+	return nil
+}
+
+func (p *PostgresProvider) DeleteLeasedAlarm(ctx context.Context, lease *ref.AlarmLease) error {
+	queryCtx, cancel := context.WithTimeout(ctx, p.timeout)
+	defer cancel()
+
+	// Note on the query:
+	// A job handler that halts its own actor is the common case for a worker, and deactivating an actor drops the leases of its alarms so another host can pick them up
+	// For the occurrence being finalized right now that release must not undo the finalization, so a lease this execution owns and a lease that was released both count
+	// A lease that merely expired keeps its id, and one another replica took holds its own id, so neither is matched here
+	// An unleased row is only this execution's occurrence while it still carries the due time this execution leased, since a repeating alarm's next occurrence is always scheduled later
+	// #nosec G202 -- the only concatenated value is the static table prefix, not user input
+	res, err := p.db.Exec(queryCtx, `
+		DELETE FROM `+p.tablePrefix+`alarms
+		WHERE
+			alarm_id = $1
+			AND (
+				(
+					alarm_lease_id = $2
+					AND alarm_lease_expiration_time IS NOT NULL
+					AND alarm_lease_expiration_time >= (now() AT TIME ZONE 'utc')
+				)
+				OR (alarm_lease_id IS NULL AND alarm_due_time = $3)
+			)`,
+		lease.Key(), lease.LeaseID(), lease.DueTime().UTC(),
+	)
+	if err != nil {
+		return fmt.Errorf("error executing query: %w", err)
+	}
+
+	if res.RowsAffected() == 0 {
+		return components.ErrNoAlarm
+	}
+
+	return nil
+}

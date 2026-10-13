@@ -32,22 +32,25 @@ if (check) {
     for (const line of packages) {
       const [, name, declared, replacement, version] = line.split("|");
       const upstream = namespace(name);
-      const local = name !== upstream || name.startsWith("go.getarcane.app/");
-      const selected = local ? source.packages.find((p) => p.name === upstream && (p.sourceTree || p.version === source.revision)) :
+      const localFrancis = name === "github.com/italypaleale/francis" &&
+        ["./third_party/francis", "../third_party/francis"].includes(replacement);
+      const local = name !== upstream || name.startsWith("go.getarcane.app/") || localFrancis;
+      const selected = local ? source.packages.find((p) => p.name === upstream && (p.sourceTree || p.version === source.revision || (localFrancis && p.version === declared))) :
         original.packages.find((p) => p.name === name && p.version === (version || declared));
       if (!selected) throw new Error(`unassessed-core-module: ${name}`);
       const record = records.get(name) ?? { name, version: local ? selected.sourceRevision : version || declared,
-        localPath: local ? (name !== upstream ? name.split("/").at(-1) : "third_party/arcane/" + name.slice("go.getarcane.app/".length)) : null,
+        localPath: local ? (localFrancis ? "third_party/francis" : name !== upstream ? name.split("/").at(-1) : "third_party/arcane/" + name.slice("go.getarcane.app/".length)) : null,
         upstream: selected.name, upstreamVersion: selected.version,
         license: ["go.getarcane.app/builds", "go.getarcane.app/kit"].includes(name) ? "BSD-3-Clause AND Apache-2.0" : selected.license, evidence: "arcane-modules.json", targets: [],
-        modifications: local ? "Provenance; local module wiring; exact file deviations in source headers or scripts/provenance.json." : "None" };
+        modifications: localFrancis ? "PostgreSQL-only local subset; exact file deviations in scripts/provenance.json." :
+          local ? "Provenance; local module wiring; exact file deviations in source headers or scripts/provenance.json." : "None" };
       if (!record.targets.includes(target)) record.targets.push(target);
       records.set(name, record);
     }
   }
   const metadata = { schemaVersion: 1, ecosystem: "go", date: "2026-10-13", sourceRevision: source.revision,
     target: "linux/amd64", tool: "go list -deps (Go 1.27.2)", lockfiles, targets,
-    limitations: "Pre-cut core; no release package, standalone CLI binary licence graph or container inventory. Exact upstream licence evidence remains in arcane-modules.json and arcane-binary.json." };
+    limitations: "Post-cut hub and agent source graphs; no release package, standalone CLI binary licence graph or container inventory. Exact upstream licence evidence remains in arcane-modules.json and arcane-binary.json." };
   const packages = [...records.values()].sort((a, b) => a.name.localeCompare(b.name, "en"));
   writeFileSync(file, JSON.stringify(metadata, null, 2).slice(0, -2) + ',\n  "packages": [\n' + packages.map((p) => '    ' + JSON.stringify(p)).join(',\n') + '\n  ]\n}\n');
   console.log(JSON.stringify({ modules: packages.length, targets }));

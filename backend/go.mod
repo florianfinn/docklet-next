@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; Relative local helper replacements
+// Deviations: Local module namespace; Relative local helper replacements; functional cut: removed SQLite runtime and migrations.
 
 module github.com/florianfinn/docklet-next/backend
 
@@ -12,6 +12,7 @@ replace (
 	github.com/docker/buildx => github.com/docker/buildx v0.32.1
 	github.com/florianfinn/docklet-next/cli => ../cli
 	github.com/florianfinn/docklet-next/types => ../types
+	github.com/italypaleale/francis => ../third_party/francis
 )
 
 require (

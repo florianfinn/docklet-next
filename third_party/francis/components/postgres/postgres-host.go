@@ -1,0 +1,642 @@
+package postgres
+
+import (
+	"context"
+	"errors"
+	"fmt"
+	"log/slog"
+	"time"
+	"uuid"
+
+	postgresadapter "github.com/italypaleale/go-sql-utils/adapter/postgres"
+	postgrestransactions "github.com/italypaleale/go-sql-utils/transactions/postgres"
+	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
+
+	"github.com/italypaleale/francis/components"
+	"github.com/italypaleale/francis/internal/ref"
+)
+
+func (p *PostgresProvider) RegisterHost(ctx context.Context, req components.RegisterHostReq) (components.RegisterHostRes, error) {
+	// If the host wants to reattach to an existing registration, take the dedicated path
+	if req.ExistingHostID != "" {
+		return p.reattachHost(ctx, req)
+	}
+
+	hostID := uuid.NewV7().String()
+
+	_, oErr := postgrestransactions.ExecuteInTransaction(ctx, p.log, p.db, p.timeout, func(ctx context.Context, tx pgx.Tx) (zero struct{}, err error) {
+		// To start, we need to delete any actor host with the same address that has not sent a health check in the maximum allotted time
+		// We need to do this because the hosts table has a unique index on the address, so two apps can't have the same address
+		// If it's the same app that's restarted after a crash, then it will be able to re-register once the health checks have timed out
+		// Because of the foreign key references, deleting a host also causes all actors hosted there to be deleted
+		queryCtx, cancel := context.WithTimeout(ctx, p.timeout)
+		defer cancel()
+		// #nosec G202 -- the only concatenated value is the static table prefix, not user input
+		_, err = tx.Exec(queryCtx,
+			`DELETE FROM `+p.tablePrefix+`hosts
+			WHERE host_last_health_check < ((now() AT TIME ZONE 'utc') - $1::interval)`,
+			p.cfg.HostHealthCheckDeadline,
+		)
+		if err != nil {
+			return zero, fmt.Errorf("error removing failed hosts: %w", err)
+		}
+
+		// Enforce cluster admission (exclusive-access lease, host limit, and limit agreement)
+		// This locks the cluster row FOR UPDATE, serializing the count and insert below against other registrations
+		err = p.enforceClusterAdmission(ctx, tx)
+		if err != nil {
+			return zero, err
+		}
+
+		// Let's try to insert the host now
+		// We don't do an upsert here on purpose, so if there's already an active host at the same address, this will cause a conflict
+		queryCtx, cancel = context.WithTimeout(ctx, p.timeout)
+		defer cancel()
+		// #nosec G202 -- the only concatenated value is the static table prefix, not user input
+		_, err = tx.Exec(queryCtx,
+			`INSERT INTO `+p.tablePrefix+`hosts (host_id, host_address, host_last_health_check, host_session_id)
+			VALUES ($1, $2, now() AT TIME ZONE 'utc', $3)`,
+			hostID,
+			req.Address,
+			nullString(req.SessionID),
+		)
+		if isConstraintError(err) {
+			return zero, components.ErrHostAlreadyRegistered
+		} else if err != nil {
+			return zero, fmt.Errorf("error inserting host: %w", err)
+		}
+
+		// Consume the join token inside the same transaction too
+		if req.JoinToken != "" {
+			err = p.consumeJoinToken(ctx, tx, req.JoinToken, hostID, req.JoinTokenExpiresAt)
+			if err != nil {
+				return zero, err
+			}
+		}
+
+		// Insert all supported host types
+		err = p.insertHostActorTypes(ctx, tx, hostID, req.ActorTypes, false)
+		if err != nil {
+			return zero, fmt.Errorf("error inserting supported actor types: %w", err)
+		}
+
+		return zero, nil
+	})
+	if oErr != nil {
+		return components.RegisterHostRes{}, fmt.Errorf("failed to register host: %w", oErr)
+	}
+
+	return components.RegisterHostRes{
+		HostID: hostID,
+	}, nil
+}
+
+// reattachHost reattaches a reconnecting host to its existing registration, identified by req.ExistingHostID
+// It refreshes the registration in place only while its health record is still live, so a host that reconnects quickly (e.g. after a runtime failover) keeps its identity and its actors
+// A registration whose health record has expired is not reclaimable: the cluster has already written that host off and may have placed its actors elsewhere, so it is cleaned up like any other dead host and the caller is given a brand-new registration, whose Reattached of false tells it to drop everything it was still holding
+// A brand-new registration is also created when the previous one no longer exists at all
+func (p *PostgresProvider) reattachHost(ctx context.Context, req components.RegisterHostReq) (components.RegisterHostRes, error) {
+	newHostID := uuid.NewV7().String()
+
+	var (
+		hostID     string
+		reattached bool
+	)
+	_, oErr := postgrestransactions.ExecuteInTransaction(ctx, p.log, p.db, p.timeout, func(ctx context.Context, tx pgx.Tx) (zero struct{}, err error) {
+		// Clean up unhealthy hosts
+		queryCtx, cancel := context.WithTimeout(ctx, p.timeout)
+		defer cancel()
+		// #nosec G202 -- the only concatenated value is the static table prefix, not user input
+		_, err = tx.Exec(queryCtx,
+			`DELETE FROM `+p.tablePrefix+`hosts
+			WHERE host_last_health_check < ((now() AT TIME ZONE 'utc') - $1::interval)`,
+			p.cfg.HostHealthCheckDeadline,
+		)
+		if err != nil {
+			return zero, fmt.Errorf("error removing failed hosts: %w", err)
+		}
+
+		// Reject a reattach while an exclusive-access lease is held, so a locked cluster stays empty
+		// A reattach never adds a host beyond the limit, so the host count and limit agreement are not re-checked here
+		err = p.checkClusterNotLocked(ctx, tx)
+		if err != nil {
+			return zero, err
+		}
+
+		// Try to refresh the existing registration in place, handing it to the new session
+		// A unique constraint violation here means a different, healthy host already holds the address
+		queryCtx, cancel = context.WithTimeout(ctx, p.timeout)
+		defer cancel()
+		var tag pgconn.CommandTag
+		// #nosec G202 -- the only concatenated value is the static table prefix, not user input
+		tag, err = tx.Exec(queryCtx,
+			`UPDATE `+p.tablePrefix+`hosts
+			SET host_address = $1, host_last_health_check = now() AT TIME ZONE 'utc', host_session_id = $3, host_draining = false
+			WHERE host_id = $2`,
+			req.Address, req.ExistingHostID, nullString(req.SessionID),
+		)
+		if isConstraintError(err) {
+			return zero, components.ErrHostAlreadyRegistered
+		} else if err != nil {
+			return zero, fmt.Errorf("error updating host: %w", err)
+		}
+
+		var activeHostID string
+		if tag.RowsAffected() == 1 {
+			activeHostID = req.ExistingHostID
+			reattached = true
+		} else {
+			// The existing registration was not found (already cleaned up): create a new one
+			queryCtx, cancel = context.WithTimeout(ctx, p.timeout)
+			defer cancel()
+			// #nosec G202 -- the only concatenated value is the static table prefix, not user input
+			_, err = tx.Exec(queryCtx,
+				`INSERT INTO `+p.tablePrefix+`hosts (host_id, host_address, host_last_health_check, host_session_id)
+				VALUES ($1, $2, now() AT TIME ZONE 'utc', $3)`,
+				newHostID, req.Address, nullString(req.SessionID),
+			)
+			if isConstraintError(err) {
+				return zero, components.ErrHostAlreadyRegistered
+			} else if err != nil {
+				return zero, fmt.Errorf("error inserting host: %w", err)
+			}
+			activeHostID = newHostID
+			reattached = false
+		}
+
+		// Consume the join token inside the same transaction too
+		if req.JoinToken != "" {
+			err = p.consumeJoinToken(ctx, tx, req.JoinToken, activeHostID, req.JoinTokenExpiresAt)
+			if err != nil {
+				return zero, err
+			}
+		}
+
+		err = p.insertHostActorTypes(ctx, tx, activeHostID, req.ActorTypes, reattached)
+		if err != nil {
+			return zero, fmt.Errorf("error inserting supported actor types: %w", err)
+		}
+
+		hostID = activeHostID
+		return zero, nil
+	})
+	if oErr != nil {
+		return components.RegisterHostRes{}, fmt.Errorf("failed to register host: %w", oErr)
+	}
+
+	return components.RegisterHostRes{
+		HostID:     hostID,
+		Reattached: reattached,
+	}, nil
+}
+
+func (p *PostgresProvider) UpdateActorHost(ctx context.Context, hostID string, req components.UpdateActorHostReq) error {
+	// At this stage, there are three things we can update here (any combination):
+	// - The last health check
+	// - The list of supported actor types (if non-nil)
+	// - The draining flag (only ever set, never cleared)
+	if !req.UpdateLastHealthCheck && req.ActorTypes == nil && !req.Draining {
+		// Nothing to do/update
+		return nil
+	}
+
+	// If we're only updating the health check, we can skip obtaining a transaction to reduce the DB roundtrips
+	if req.UpdateLastHealthCheck && req.ActorTypes == nil && !req.Draining {
+		// A retry may repeat an attempt that committed after the caller stopped waiting
+		// Skip the redundant write when the last committed health check is already fresh enough
+		if req.Retry {
+			// Note: we run this outside of a transaction to avoid 2 extra roundtrips
+			// The extra consistency offered by a transaction is not necessary here
+			ok, err := p.actorHostHealthCheckedWithin(ctx, hostID, p.cfg.HealthCheckPolicy().Budget())
+			switch {
+			case err != nil:
+				// Fall through to the write, which produces the definitive answer
+				p.log.WarnContext(ctx, "Failed to check whether the last health check is recent, retrying the update", slog.Any("error", err))
+			case ok:
+				// A recent committed health check makes another write unnecessary
+				return nil
+			}
+		}
+
+		err := p.updateActorHostLastHealthCheck(ctx, hostID, p.db)
+		if err != nil {
+			return fmt.Errorf("failed to update last health check: %w", err)
+		}
+
+		return nil
+	}
+
+	_, err := postgrestransactions.ExecuteInTransaction(ctx, p.log, p.db, p.timeout, func(ctx context.Context, tx pgx.Tx) (zero struct{}, rErr error) {
+		// Update the last health check if needed
+		if req.UpdateLastHealthCheck {
+			rErr = p.updateActorHostLastHealthCheck(ctx, hostID, tx)
+			if rErr != nil {
+				return zero, fmt.Errorf("failed to update last health check: %w", rErr)
+			}
+		}
+
+		// Mark the host draining, which only applies to a host that is still registered and healthy
+		if req.Draining {
+			rErr = p.setActorHostDraining(ctx, hostID, tx)
+			if rErr != nil {
+				return zero, fmt.Errorf("failed to mark host draining: %w", rErr)
+			}
+		}
+
+		// Also update the list of supported actor types if non-nil
+		// Note that a nil list means "do not update", while an empty, non-nil list causes the removal of all supported actor types
+		if req.ActorTypes != nil {
+			// When updating actor types without updating health check or draining, we need to verify the host exists and is healthy
+			if !req.UpdateLastHealthCheck && !req.Draining {
+				queryCtx, cancel := context.WithTimeout(ctx, p.timeout)
+				defer cancel()
+				var ok bool
+				// #nosec G202 -- the only concatenated value is the static table prefix, not user input
+				rErr = tx.QueryRow(queryCtx,
+					`SELECT EXISTS (
+						SELECT 1 FROM `+p.tablePrefix+`hosts
+						WHERE
+							host_id = $1
+							AND host_last_health_check >= ((now() AT TIME ZONE 'utc') - $2::interval)
+					)`,
+					hostID,
+					p.cfg.HostHealthCheckDeadline,
+				).Scan(&ok)
+				if rErr != nil {
+					return zero, fmt.Errorf("error checking host health: %w", rErr)
+				}
+				if !ok {
+					// Host doesn't exist, or exists but is un-healthy
+					return zero, components.ErrHostUnregistered
+				}
+			}
+
+			// Replace all supported actor types for the host
+			rErr = p.insertHostActorTypes(ctx, tx, hostID, req.ActorTypes, true)
+			if rErr != nil {
+				return zero, fmt.Errorf("error inserting supported actor types: %w", rErr)
+			}
+		}
+
+		return zero, nil
+	})
+	if err != nil {
+		return fmt.Errorf("failed to update host: %w", err)
+	}
+
+	return nil
+}
+
+// actorHostHealthCheckedWithin reports whether the host's last health check is within window and the host is still admitted to the cluster
+// The predicates match those of updateActorHostLastHealthCheck so a positive result is one the update would have accepted
+func (p *PostgresProvider) actorHostHealthCheckedWithin(ctx context.Context, hostID string, window time.Duration) (bool, error) {
+	queryCtx, cancel := context.WithTimeout(ctx, p.timeout)
+	defer cancel()
+
+	var ok bool
+	// #nosec G202 -- the only concatenated value is the static table prefix, not user input
+	err := p.db.QueryRow(queryCtx,
+		`SELECT EXISTS (
+			SELECT 1 FROM `+p.tablePrefix+`hosts
+			WHERE
+				host_id = $1
+				AND host_last_health_check >= ((now() AT TIME ZONE 'utc') - $2::interval)
+				AND NOT EXISTS (
+					SELECT 1 FROM `+p.tablePrefix+`cluster_config
+					WHERE cluster_config_id = 1
+						AND exclusive_expires_at >= `+nowMsExpr+`
+				)
+		)`,
+		hostID,
+		window,
+	).Scan(&ok)
+	if err != nil {
+		return false, fmt.Errorf("error executing query: %w", err)
+	}
+
+	return ok, nil
+}
+
+func (p *PostgresProvider) updateActorHostLastHealthCheck(ctx context.Context, hostID string, db postgresadapter.PGXQuerier) error {
+	queryCtx, cancel := context.WithTimeout(ctx, p.timeout)
+	defer cancel()
+	// #nosec G202 -- the only concatenated value is the static table prefix, not user input
+	res, err := db.
+		Exec(queryCtx,
+			`UPDATE `+p.tablePrefix+`hosts
+		SET
+			host_last_health_check = now() AT TIME ZONE 'utc'
+		WHERE
+			host_id = $1
+			AND host_last_health_check >= ((now() AT TIME ZONE 'utc') - $2::interval)
+			AND NOT EXISTS (
+				SELECT 1 FROM `+p.tablePrefix+`cluster_config
+				WHERE cluster_config_id = 1
+					AND exclusive_expires_at >= `+nowMsExpr+`
+			)`,
+			hostID,
+			p.cfg.HostHealthCheckDeadline,
+		)
+	if err != nil {
+		return fmt.Errorf("error executing query: %w", err)
+	}
+
+	// Check how many rows were updated.
+	// Because we added a check for the last health check, if the host hadn't been updated in too long,
+	// it may have been considered un-healthy already, and no row would be updated.
+	// A live exclusive-access lease also blocks the update, which is how a locked cluster evicts running hosts: the failed health check surfaces as ErrHostUnregistered and the host shuts down.
+	if res.RowsAffected() == 0 {
+		return components.ErrHostUnregistered
+	}
+
+	return nil
+}
+
+// setActorHostDraining marks a registered, healthy host as draining
+func (p *PostgresProvider) setActorHostDraining(ctx context.Context, hostID string, db postgresadapter.PGXQuerier) error {
+	queryCtx, cancel := context.WithTimeout(ctx, p.timeout)
+	defer cancel()
+	// #nosec G202 -- the only concatenated value is the static table prefix, not user input
+	res, err := db.Exec(queryCtx,
+		`UPDATE `+p.tablePrefix+`hosts
+		SET host_draining = true
+		WHERE
+			host_id = $1
+			AND host_last_health_check >= ((now() AT TIME ZONE 'utc') - $2::interval)`,
+		hostID,
+		p.cfg.HostHealthCheckDeadline,
+	)
+	if err != nil {
+		return fmt.Errorf("error executing query: %w", err)
+	}
+
+	// No row means the host doesn't exist or exists but is un-healthy
+	if res.RowsAffected() == 0 {
+		return components.ErrHostUnregistered
+	}
+
+	return nil
+}
+
+func (p *PostgresProvider) UnregisterHost(ctx context.Context, hostID string, opts components.UnregisterHostOpts) error {
+	// Deleting from the hosts table causes all actors to be deactivate
+	// With a session ID, only the registration that session still owns is deleted
+	queryCtx, cancel := context.WithTimeout(ctx, p.timeout)
+	defer cancel()
+	var hostActive bool
+	// #nosec G202 -- the only concatenated value is the static table prefix, not user input
+	err := p.db.
+		QueryRow(queryCtx,
+			`DELETE FROM `+p.tablePrefix+`hosts
+			WHERE
+				host_id = $1
+				AND ($3 = '' OR host_session_id = $3)
+			RETURNING host_last_health_check >= ((now() AT TIME ZONE 'utc') - $2::interval)`,
+			hostID,
+			p.cfg.HostHealthCheckDeadline,
+			opts.SessionID,
+		).
+		Scan(&hostActive)
+	if errors.Is(err, pgx.ErrNoRows) {
+		// Nothing was deleted: tell a registration owned by another session apart from one that doesn't exist
+		if opts.SessionID != "" {
+			return p.unregisterHostMissError(ctx, hostID)
+		}
+		return components.ErrHostUnregistered
+	} else if err != nil {
+		return fmt.Errorf("error executing query: %w", err)
+	}
+
+	// If hostActive is false, there was a host, but it was unhealthy
+	// In this case too, we return ErrHostUnregistered, because what we just did was essentially a "garbage collection"
+	if !hostActive {
+		return components.ErrHostUnregistered
+	}
+
+	return nil
+}
+
+// unregisterHostMissError returns the error for a conditional UnregisterHost that deleted nothing
+// A host that still exists is owned by a different session, while a missing one was already unregistered
+func (p *PostgresProvider) unregisterHostMissError(ctx context.Context, hostID string) error {
+	queryCtx, cancel := context.WithTimeout(ctx, p.timeout)
+	defer cancel()
+	var exists bool
+	// #nosec G202 -- the only concatenated value is the static table prefix, not user input
+	err := p.db.
+		QueryRow(queryCtx,
+			`SELECT EXISTS (SELECT 1 FROM `+p.tablePrefix+`hosts WHERE host_id = $1)`,
+			hostID,
+		).
+		Scan(&exists)
+	switch {
+	case err != nil:
+		return fmt.Errorf("error checking host existence: %w", err)
+	case exists:
+		return components.ErrHostSuperseded
+	default:
+		return components.ErrHostUnregistered
+	}
+}
+
+func (p *PostgresProvider) ListHosts(ctx context.Context) ([]components.HostInfo, error) {
+	// Select only hosts whose last health check is within the deadline, so unhealthy hosts that have not been garbage-collected yet are excluded
+	queryCtx, cancel := context.WithTimeout(ctx, p.timeout)
+	defer cancel()
+	// #nosec G202 -- the only concatenated value is the static table prefix, not user input
+	rows, err := p.db.Query(queryCtx,
+		`SELECT host_id, host_address, host_last_health_check
+		FROM `+p.tablePrefix+`hosts
+		WHERE host_last_health_check >= ((now() AT TIME ZONE 'utc') - $1::interval)`,
+		p.cfg.HostHealthCheckDeadline,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("error querying hosts: %w", err)
+	}
+	defer rows.Close()
+
+	// Read each host row into the result slice
+	hosts := make([]components.HostInfo, 0)
+	for rows.Next() {
+		var h components.HostInfo
+		err = rows.Scan(&h.HostID, &h.Address, &h.LastHealthCheck)
+		if err != nil {
+			return nil, fmt.Errorf("error scanning host row: %w", err)
+		}
+		hosts = append(hosts, h)
+	}
+
+	// Surface any error encountered while iterating the result set
+	err = rows.Err()
+	if err != nil {
+		return nil, fmt.Errorf("error reading host rows: %w", err)
+	}
+
+	return hosts, nil
+}
+
+func (p *PostgresProvider) LookupActor(ctx context.Context, ref ref.ActorRef, opts components.LookupActorOpts) (components.LookupActorRes, error) {
+	var res components.LookupActorRes
+	queryCtx, cancel := context.WithTimeout(ctx, p.timeout)
+	defer cancel()
+
+	var funcName string
+	if opts.ActiveOnly {
+		funcName = p.tablePrefix + "lookup_active_actor_v1"
+	} else {
+		funcName = p.tablePrefix + "lookup_allocate_actor_v1"
+	}
+
+	// #nosec G202 -- the only concatenated values are the static table prefix and a fixed function name, not user input
+	err := p.db.
+		QueryRow(queryCtx,
+			`SELECT host_id, host_address, idle_timeout
+			FROM `+funcName+`($1, $2, $3, $4)`,
+			ref.ActorType,
+			ref.ActorID,
+			p.cfg.HostHealthCheckDeadline,
+			opts.Hosts,
+		).
+		Scan(&res.HostID, &res.Address, &res.IdleTimeout)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			// This shouldn't happen with the function design, but handle it just in case
+			if opts.ActiveOnly {
+				return components.LookupActorRes{}, components.ErrNoActor
+			}
+			return components.LookupActorRes{}, components.ErrNoHost
+		}
+
+		// Check for our custom error code indicating no host available
+		pgErr, ok := errors.AsType[*pgconn.PgError](err)
+		if ok && pgErr.Code == "P0001" && pgErr.Message == "NO_HOST_AVAILABLE" {
+			if opts.ActiveOnly {
+				return components.LookupActorRes{}, components.ErrNoActor
+			}
+			return components.LookupActorRes{}, components.ErrNoHost
+		}
+
+		return components.LookupActorRes{}, fmt.Errorf("failed to lookup actor: %w", err)
+	}
+
+	return res, nil
+}
+
+func (p *PostgresProvider) RemoveActor(ctx context.Context, ref ref.ActorRef) error {
+	queryCtx, queryCancel := context.WithTimeout(ctx, p.timeout)
+	defer queryCancel()
+	// #nosec G202 -- the only concatenated value is the static table prefix, not user input
+	res, err := p.db.
+		Exec(queryCtx,
+			`DELETE FROM `+p.tablePrefix+`active_actors
+			WHERE actor_type = $1 AND actor_id = $2`,
+			ref.ActorType, ref.ActorID,
+		)
+	if err != nil {
+		return fmt.Errorf("error removing actor: %w", err)
+	}
+	if res.RowsAffected() == 0 {
+		return components.ErrNoActor
+	}
+
+	return nil
+}
+
+// consumeJoinToken records a join token as consumed to prevent replay, pruning expired rows first
+func (p *PostgresProvider) consumeJoinToken(ctx context.Context, tx pgx.Tx, joinToken, hostID string, expiresAt time.Time) error {
+	// Lazily delete expired join tokens
+	queryCtx, cancel := context.WithTimeout(ctx, p.timeout)
+	defer cancel()
+	// #nosec G202 -- the only concatenated value is the static table prefix, not user input
+	_, err := tx.Exec(queryCtx, `DELETE FROM `+p.tablePrefix+`consumed_join_tokens WHERE expires_at < (now() AT TIME ZONE 'utc')`)
+	if err != nil {
+		return fmt.Errorf("error pruning expired join tokens: %w", err)
+	}
+
+	// Insert the token
+	queryCtx, cancel = context.WithTimeout(ctx, p.timeout)
+	defer cancel()
+	// #nosec G202 -- the only concatenated value is the static table prefix, not user input
+	_, err = tx.Exec(queryCtx,
+		`INSERT INTO `+p.tablePrefix+`consumed_join_tokens (join_token, host_id, expires_at)
+		VALUES ($1, $2, $3)`,
+		// expires_at is stored as UTC
+		joinToken, hostID, expiresAt.UTC(),
+	)
+	if isConstraintError(err) {
+		// A unique-constraint violation means the same token was already used
+		return components.ErrJoinTokenAlreadyConsumed
+	} else if err != nil {
+		return fmt.Errorf("error consuming join token: %w", err)
+	}
+	return nil
+}
+
+// insertHostActorTypes inserts the supported actor types for a host
+// When deleteExisting is true, all existing actor types for the host are removed first, so the host's supported types are replaced rather than appended
+func (p *PostgresProvider) insertHostActorTypes(ctx context.Context, tx pgx.Tx, hostID string, actorTypes []components.ActorHostType, deleteExisting bool) error {
+	if deleteExisting {
+		queryCtx, cancel := context.WithTimeout(ctx, p.timeout)
+		defer cancel()
+		// #nosec G202 -- the only concatenated value is the static table prefix, not user input
+		_, err := tx.Exec(queryCtx,
+			`DELETE FROM `+p.tablePrefix+`host_actor_types WHERE host_id = $1`,
+			hostID,
+		)
+		if err != nil {
+			return fmt.Errorf("error removing existing actor types: %w", err)
+		}
+	}
+
+	if len(actorTypes) == 0 {
+		return nil
+	}
+
+	// We use "CopyFrom" to efficiently insert multiple rows
+	queryCtx, cancel := context.WithTimeout(ctx, p.timeout)
+	defer cancel()
+	_, err := tx.CopyFrom(
+		queryCtx,
+		p.tableIdentifier("host_actor_types"),
+		[]string{"host_id", "actor_type", "actor_idle_timeout", "actor_concurrency_limit"},
+		&actorHostTypeColl{
+			hostID:     hostID,
+			actorTypes: actorTypes,
+		},
+	)
+	if err != nil {
+		return fmt.Errorf("error executing copy: %w", err)
+	}
+
+	return nil
+}
+
+// Implement pgx.CopyFromSource for a slice of components.ActorHostType
+type actorHostTypeColl struct {
+	hostID     string
+	actorTypes []components.ActorHostType
+
+	// Do not set
+	idx int
+}
+
+func (ahtc *actorHostTypeColl) Next() bool {
+	ahtc.idx++
+	return ahtc.idx <= len(ahtc.actorTypes)
+}
+
+func (ahtc *actorHostTypeColl) Values() ([]any, error) {
+	row := ahtc.actorTypes[ahtc.idx-1]
+	res := []any{
+		ahtc.hostID,
+		row.ActorType,
+		row.IdleTimeout,
+		row.ConcurrencyLimit,
+	}
+	return res, nil
+}
+
+func (ahtc *actorHostTypeColl) Err() error {
+	return nil
+}

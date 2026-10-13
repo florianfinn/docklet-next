@@ -65,3 +65,21 @@ for some removed features. Issue #8 owns rebuilding a fresh migration baseline
 and must omit Swarm, GitOps, Git repositories, templates, central variables,
 S3 destinations, build workshop records, OIDC, passkeys, federated credentials,
 APNS and SQLite artefacts. No earlier Arcane database is imported.
+
+## Francis-Speicher
+
+Francis v0.1.0 bindet seinen SQLite-Provider bereits durch den Import von
+`host/local` in beide Binärdateien ein. Docklet Next führt deshalb die
+benötigten Francis-Pakete lokal unter `third_party/francis/` mit derselben
+Modulkennung und dem Quellstand
+`23cd46831a543a73eec05ad034afd46245225876`. Die Kopie enthält
+PostgreSQL- und In-Memory-Provider; die SQLite-Provider und ihre Migrationen
+entfallen. `scripts/provenance.json` belegt Herkunft und Abweichung je Datei.
+Die MIT-Lizenz und die Apache-2.0-Hinweise für übernommene Dapr-Teile bleiben
+erhalten.
+
+Der Standard-Testlauf benötigt weiterhin keinen Datenbankdienst.
+Persistenzprüfungen gegen PostgreSQL verwenden eine explizit konfigurierte
+Integrationsumgebung. Die Wiederherstellung eines vollständigen Systems meldet
+bis zu einer PostgreSQL-Implementierung ihre fehlende Verfügbarkeit; lokale
+Volume-Backups bleiben nutzbar.

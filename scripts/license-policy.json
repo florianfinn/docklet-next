@@ -54,6 +54,10 @@
     {
       "path": "third_party/arcane/updater/LICENSE",
       "sha256": "9618cc2d4716242ffc576d177e3c325da67c27cd973d449b1bdb31ecefde57c5"
+    },
+    {
+      "path": "third_party/francis/LICENSE.md",
+      "sha256": "43e1d69fa26fa83d6443af160f26fbd21912791324b183db334130c0a11cfffc"
     }
   ]
 }
