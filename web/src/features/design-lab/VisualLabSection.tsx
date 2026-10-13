@@ -12,7 +12,7 @@ import { Slider } from "@/shared/ui/slider";
 import { Switch } from "@/shared/ui/switch";
 import { DotField } from "@/shared/visual/DotField";
 
-import { useMotionEnabled } from "./use-design-lab";
+import { useMotionEnabled } from "@/shared/theme/use-design-tokens";
 
 type RangeKey = keyof typeof VISUAL_RANGES;
 

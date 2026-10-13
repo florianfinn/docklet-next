@@ -6,8 +6,8 @@ import { setUiStyle, uiStyleStore } from "@/shared/preferences/ui-style-store";
 import { DEFAULT_VISUAL_STYLE, visualStyleStore } from "@/shared/preferences/visual-style-store";
 import { renderWithApp } from "@/test/render";
 
-import { encodeDesignCode, favoriteStore } from "./favorite-code";
-import { FavoritesSection } from "./FavoritesSection";
+import { encodeDesignCode, favoriteStore } from "@/shared/preferences/favorite-code";
+import { FavoritesSection } from "@/shared/preferences/FavoritesSection";
 import { VisualLabSection } from "./VisualLabSection";
 
 afterEach(() => {

@@ -3,7 +3,7 @@ import { NavLink, useLocation } from "react-router";
 import { useTranslations } from "use-intl";
 
 import { openActivity } from "@/features/activity/activity-store";
-import { useMotionEnabled } from "@/features/design-lab/use-design-lab";
+import { useMotionEnabled } from "@/shared/theme/use-design-tokens";
 import { BrandLogo } from "@/shared/brand/BrandLogo";
 import { cn } from "@/shared/lib/utils";
 import { useVisualStyle } from "@/shared/preferences/visual-style-store";

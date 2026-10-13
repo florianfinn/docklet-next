@@ -131,8 +131,8 @@ const GERMAN_FILES: Record<string, string> = {
   "src/features/hosts/messages/de.ts": "ddd3810607eb5094002af5ba297ec0bc823d4f8dc397e416363215e4599918f3",
   "src/features/security/messages/de.ts": "74c9115bc1eefadb4c0de0c2322d709bdbde87d0dec0cb4318363bdfcbb86dd1",
   "src/features/dashboard/messages/de.ts": "7689127e3c7df69cc342990e1f0b8685434c934edecaac243c3250e9a6215f64",
-  "src/features/design-lab/messages/de.ts": "f941181f5098d40bed583469bc7c2729dc6c0891cf46d59a4a6022865b5f206c",
-  "src/features/design-lab/messages/visual-de.ts": "8af269911687ecf5fc9ec4be6dd7ed05ad6fd210a25e018dc7c23a16313d0443",
+  "src/shared/preferences/messages/de.ts": "f941181f5098d40bed583469bc7c2729dc6c0891cf46d59a4a6022865b5f206c",
+  "src/shared/preferences/messages/visual-de.ts": "8af269911687ecf5fc9ec4be6dd7ed05ad6fd210a25e018dc7c23a16313d0443",
   "src/features/settings/messages/de.ts": "cb93d80db5b6979f6ae3f3253884563643ea35ba57ac2588a380d7ed63713312",
   "src/features/stacks/editor/messages/de.ts": "697291f92d37180a45c0189ef149032bc03218f738f3864072208ac4773a9e28",
   "src/features/stacks/messages/de.ts": "3b038aae5bc4f534ad39cc5a9a7138ea098bb2eee99dd310652fb1ccdab7d6b7",
@@ -153,8 +153,8 @@ describe("German catalogue", () => {
     const changed: string[] = [];
     for (const [path, sha] of Object.entries(GERMAN_FILES)) if ((await sha256(germanSources[`/${path}`] ?? "")) !== sha) changed.push(path);
     expect(changed).toEqual([]);
-    // German files added since: the language switch namespace and the address-pool errors.
-    expect(Object.keys(germanSources).filter((p) => !(p.slice(1) in GERMAN_FILES)).sort()).toEqual(["/src/app/i18n/messages/de.ts", "/src/features/networks/messages/pool-de.ts"]);
+    // Additional catalogues: language switching, the disconnected backend and address-pool errors.
+    expect(Object.keys(germanSources).filter((p) => !(p.slice(1) in GERMAN_FILES)).sort()).toEqual(["/src/app/i18n/messages/de.ts", "/src/data/messages/de.ts", "/src/features/networks/messages/pool-de.ts"]);
   });
 
   it("is still the German catalogue the app renders, extended only by the language switch namespace", () => {

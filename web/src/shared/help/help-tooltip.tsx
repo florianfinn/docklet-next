@@ -8,7 +8,7 @@ import { cn } from "@/shared/lib/utils";
 import { FieldLabel, FieldLegend } from "@/shared/ui/field";
 import { Tooltip, TooltipTrigger } from "@/shared/ui/tooltip";
 
-import { useHelpMode, type HelpMode } from "./help-store";
+import { useHelpMode, type HelpMode } from "@/shared/preferences/help-store";
 import type { deHelp } from "./messages/de";
 
 type Topics = (typeof deHelp)["topics"];

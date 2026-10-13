@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { DEFAULT_TOKENS, normalizeTokens } from "@/features/design-lab/design-tokens";
+import { DEFAULT_TOKENS, normalizeTokens } from "@/shared/theme/design-tokens";
 
 import { hexToOklch, normalizeHex, oklchToHex } from "./color";
 import { matchPreset, PALETTE_PRESETS, PALETTE_VARS, paletteTokens, sanitizePalette, type Palette } from "./palette";

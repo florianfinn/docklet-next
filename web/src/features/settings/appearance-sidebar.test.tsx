@@ -4,8 +4,8 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import { AppShell } from "@/app/shell/AppShell";
 import { simulationStore } from "@/data/demo/simulation";
-import { labStore, tokenPreviewStore } from "@/features/design-lab/design-tokens";
-import { captureSnapshot, decodeDesignCode, encodeDesignCode } from "@/features/design-lab/favorite-code";
+import { designStore, tokenPreviewStore } from "@/shared/theme/design-tokens";
+import { captureSnapshot, decodeDesignCode, encodeDesignCode } from "@/shared/preferences/favorite-code";
 import { DEFAULT_VISUAL_STYLE, setVisualStyle, sidebarWidthCss, sidebarWidthPreviewStore, visualStyleStore } from "@/shared/preferences/visual-style-store";
 import { renderRoutes } from "@/test/render";
 
@@ -22,7 +22,7 @@ beforeEach(() => {
 afterEach(() => {
   visualStyleStore.reset();
   sidebarWidthPreviewStore.set(null);
-  labStore.reset();
+  designStore.reset();
   tokenPreviewStore.set(null);
   simulationStore.reset();
   localStorage.clear();

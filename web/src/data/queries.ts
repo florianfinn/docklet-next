@@ -4,7 +4,7 @@ import { useLocale } from "use-intl";
 
 import type { AppLocale } from "@/domain/locale";
 
-import { localizeContainers, localizeEvents, localizeSchedule, localizeSecurity } from "./demo/demo-text";
+import { localizeContainers, localizeEvents, localizeSchedule, localizeSecurity } from "@/runtime";
 import { useAdapter } from "./use-adapter";
 import { queryKeys } from "./query-keys";
 

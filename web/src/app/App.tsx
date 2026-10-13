@@ -3,8 +3,8 @@ import { RouterProvider } from "react-router";
 import { IntlProvider } from "use-intl";
 
 import { AdapterProvider } from "@/data/AdapterProvider";
-import { createDemoAdapter } from "@/data/demo/demo-adapter";
-import { useApplyDesignTokens, usePrefersReducedMotion, useTokens } from "@/features/design-lab/use-design-lab";
+import { createAdapter } from "@/runtime";
+import { useApplyDesignTokens, usePrefersReducedMotion, useTokens } from "@/shared/theme/use-design-tokens";
 import { usePointerGlow } from "@/shared/lib/pointer-glow";
 import { useApplyUiStyle, useUiStyle } from "@/shared/preferences/ui-style-store";
 import { useApplyVisualStyle, useVisualStyle } from "@/shared/preferences/visual-style-store";
@@ -14,9 +14,9 @@ import { catalogs } from "./i18n/catalog";
 import { useAppLocale } from "./i18n/locale-store";
 import { router } from "./router";
 
-/** Root providers. Swap createDemoAdapter for an HTTP adapter to leave the demo. */
+/** Root providers with the adapter selected by the build. */
 export function App() {
-  const [adapter] = useState(createDemoAdapter);
+  const [adapter] = useState(createAdapter);
   useApplyDesignTokens();
   useApplyUiStyle();
   const tokens = useTokens();

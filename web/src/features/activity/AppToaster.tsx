@@ -1,6 +1,6 @@
 import { useTranslations } from "use-intl";
 
-import { useTokens } from "@/features/design-lab/use-design-lab";
+import { useTokens } from "@/shared/theme/use-design-tokens";
 import { Toaster } from "@/shared/ui/sonner";
 
 import { useToasterPointerFocus } from "./layer-coordination";

@@ -1,7 +1,7 @@
 import { useTranslations } from "use-intl";
 
 import { SegmentedToggle } from "@/shared/components/segmented-toggle";
-import { HELP_MODES, helpStore, type HelpPrefs } from "@/shared/help/help-store";
+import { HELP_MODES, helpStore, type HelpPrefs } from "@/shared/preferences/help-store";
 import { HelpBody, HelpLabel } from "@/shared/help/help-tooltip";
 import { useStore } from "@/shared/lib/store";
 import { Field, FieldDescription } from "@/shared/ui/field";

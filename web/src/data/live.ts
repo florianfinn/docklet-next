@@ -4,7 +4,7 @@ import { useLocale } from "use-intl";
 import type { ActionRun, LogLine, MetricsSnapshot } from "@/domain/model";
 
 import type { DockletAdapter } from "./adapter";
-import { localizeRun } from "./demo/demo-text";
+import { localizeRun } from "@/runtime";
 import { useAdapter } from "./use-adapter";
 
 interface Channel<T> {

@@ -8,7 +8,7 @@ import { messages } from "@/app/i18n/messages";
 import { createDemoAdapter } from "@/data/demo/demo-adapter";
 import { simulationStore } from "@/data/demo/simulation";
 import type { UpdateInfo } from "@/domain/model";
-import { applySnapshot, captureSnapshot, decodeDesignCode, encodeDesignCode } from "@/features/design-lab/favorite-code";
+import { applySnapshot, captureSnapshot, decodeDesignCode, encodeDesignCode } from "@/shared/preferences/favorite-code";
 import { NotificationsSection } from "@/features/settings/sections/NotificationsSection";
 import { ActivitySection } from "@/features/settings/sections/SimpleSections";
 import { DeploymentsTab } from "@/features/stacks/detail/DeploymentsTab";

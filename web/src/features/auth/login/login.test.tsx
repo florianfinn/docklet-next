@@ -6,7 +6,7 @@ import { routes } from "@/app/router";
 import { createDemoAdapter } from "@/data/demo/demo-adapter";
 import { simulationStore } from "@/data/demo/simulation";
 import { SETTINGS } from "@/data/demo/fixtures/settings";
-import { labOpenStore } from "@/features/design-lab/use-design-lab";
+import { labOpenStore } from "@/features/design-lab/lab-open-store";
 import { FlowsSection } from "@/features/design-lab/ControlsSection";
 import { renderRoutes, renderWithApp } from "@/test/render";
 

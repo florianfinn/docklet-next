@@ -1,11 +1,12 @@
-import { ChevronsUpDown, FlaskConical, Languages, LogOut, Moon, Settings2, Sun, UserRound } from "lucide-react";
+import { ChevronsUpDown, Languages, LogOut, Moon, Settings2, Sun, UserRound } from "lucide-react";
 import { useState } from "react";
 import { useNavigate } from "react-router";
 import { useTranslations } from "use-intl";
 
 import { LOCALES, setAppLocale, useAppLocale } from "@/app/i18n/locale-store";
-import { setTokens } from "@/features/design-lab/design-tokens";
-import { labOpenStore, useTokens } from "@/features/design-lab/use-design-lab";
+import { setTokens } from "@/shared/theme/design-tokens";
+import { useTokens } from "@/shared/theme/use-design-tokens";
+import { LabMenuItem } from "@/runtime";
 import { Avatar, AvatarFallback } from "@/shared/ui/avatar";
 import {
   DropdownMenu,
@@ -15,7 +16,6 @@ import {
   DropdownMenuRadioGroup,
   DropdownMenuRadioItem,
   DropdownMenuSeparator,
-  DropdownMenuShortcut,
   DropdownMenuTrigger,
 } from "@/shared/ui/dropdown-menu";
 import { SidebarMenu, SidebarMenuButton, SidebarMenuItem, useSidebar } from "@/shared/ui/sidebar";
@@ -98,11 +98,7 @@ export function FreeUserMenu({ onNavigate }: { onNavigate: () => void }) {
               ))}
             </DropdownMenuRadioGroup>
             <DropdownMenuSeparator />
-            <DropdownMenuItem onSelect={() => labOpenStore.set(true)}>
-              <FlaskConical />
-              {t("lab")}
-              <DropdownMenuShortcut>{t("labShortcut")}</DropdownMenuShortcut>
-            </DropdownMenuItem>
+            <LabMenuItem />
             <DropdownMenuItem variant="destructive" onSelect={() => setLogout(true)}>
               <LogOut />
               {t("logout")}

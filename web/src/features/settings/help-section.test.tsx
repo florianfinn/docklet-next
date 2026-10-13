@@ -2,7 +2,7 @@ import { screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it } from "vitest";
 
-import { DEFAULT_HELP, helpStore, mergeHelp } from "@/shared/help/help-store";
+import { DEFAULT_HELP, helpStore, mergeHelp } from "@/shared/preferences/help-store";
 import { renderWithApp } from "@/test/render";
 
 import { HelpSection } from "./sections/HelpSection";

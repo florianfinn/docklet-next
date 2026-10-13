@@ -3,7 +3,7 @@ import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { simulationStore } from "@/data/demo/simulation";
-import { applySnapshot, captureSnapshot, decodeDesignCode, encodeDesignCode } from "@/features/design-lab/favorite-code";
+import { applySnapshot, captureSnapshot, decodeDesignCode, encodeDesignCode } from "@/shared/preferences/favorite-code";
 import { renderWithApp } from "@/test/render";
 
 import DashboardPage from "./DashboardPage";

@@ -2,16 +2,16 @@ import { afterEach, describe, expect, it } from "vitest";
 
 import { DEFAULT_LAYOUT, layoutStore, setService } from "@/features/dashboard/dashboard-layout";
 import { DEFAULT_FLEET_VIEW, fleetViewStore } from "@/features/dashboard/fleet-view-store";
-import { helpStore } from "@/shared/help/help-store";
+import { helpStore } from "@/shared/preferences/help-store";
 import { DEFAULT_PREFERENCES, preferencesStore } from "@/shared/preferences/preferences-store";
 import { DEFAULT_UI_STYLE, uiStyleStore } from "@/shared/preferences/ui-style-store";
 import { DEFAULT_VISUAL_STYLE, visualStyleStore } from "@/shared/preferences/visual-style-store";
 
-import { DEFAULT_TOKENS, labStore, normalizeTokens, TOKEN_RANGES } from "./design-tokens";
-import { applySnapshot, captureSnapshot, clearFavorite, decodeDesignCode, defaultSnapshot, encodeDesignCode, favoriteStore, mergeFavorite, resetToFavorite, resetToShipped, saveFavorite, SHIPPED_DEFAULT_CODE } from "./favorite-code";
+import { DEFAULT_TOKENS, designStore, normalizeTokens, TOKEN_RANGES } from "@/shared/theme/design-tokens";
+import { applySnapshot, captureSnapshot, clearFavorite, decodeDesignCode, defaultSnapshot, encodeDesignCode, favoriteStore, mergeFavorite, resetToFavorite, resetToShipped, saveFavorite, SHIPPED_DEFAULT_CODE } from "@/shared/preferences/favorite-code";
 
 afterEach(() => {
-  for (const store of [layoutStore, fleetViewStore, preferencesStore, uiStyleStore, visualStyleStore, labStore, favoriteStore, helpStore]) store.reset();
+  for (const store of [layoutStore, fleetViewStore, preferencesStore, uiStyleStore, visualStyleStore, designStore, favoriteStore, helpStore]) store.reset();
   localStorage.clear();
 });
 
@@ -70,11 +70,11 @@ describe("design code", () => {
     layoutStore.set((l) => setService(l, "plex", { address: "http://plex.example.test", status: "connected" }));
     fleetViewStore.set((f) => ({ ...f, hostOrder: ["cedar"] }));
     preferencesStore.set((p) => ({ ...p, hostSelection: ["atlas"] }));
-    const before = labStore.get().tokens.ignoreReducedMotion;
+    const before = designStore.get().tokens.ignoreReducedMotion;
     const r = decodeDesignCode(`DOCKLET-DESIGN-1:${b64({ schema: "docklet-design", sections: { visual: { dotWave: false }, dashboard: { order: ["security"], hidden: ["load"], sizes: {} }, fleet: { mode: "line" }, overview: { containersMode: "advanced" } } })}`);
     if (!r.ok) throw new Error("decode");
     expect(applySnapshot(r.snapshot)).toEqual(["visual", "dashboard", "fleet", "overview"]);
-    expect([visualStyleStore.get().dotWave, layoutStore.get().order[0], layoutStore.get().hidden.includes("load"), layoutStore.get().services.plex.address, fleetViewStore.get().mode, fleetViewStore.get().hostOrder, preferencesStore.get().hostSelection, preferencesStore.get().containersMode, labStore.get().tokens.ignoreReducedMotion]).toEqual([
+    expect([visualStyleStore.get().dotWave, layoutStore.get().order[0], layoutStore.get().hidden.includes("load"), layoutStore.get().services.plex.address, fleetViewStore.get().mode, fleetViewStore.get().hostOrder, preferencesStore.get().hostSelection, preferencesStore.get().containersMode, designStore.get().tokens.ignoreReducedMotion]).toEqual([
       false,
       "security",
       true,
@@ -154,7 +154,7 @@ describe("shipped default design", () => {
     // Every visual field of the code, plus the new 3D depth on its default; the old orbit key is gone.
     expect([{ ...shipped.visual, dotDepth: undefined }, (shipped.visual?.dotDepth ?? 0) > 0]).toEqual([{ ...visual, dotDepth: undefined }, true]);
     // Fresh stores start from the same data, independently of each other.
-    expect([labStore.get().tokens.palette, uiStyleStore.get().runMotion, layoutStore.get().hidden, fleetViewStore.get().placement, fleetViewStore.get().hostArea, preferencesStore.get().stacksLayout, visualStyleStore.get().logoMotion]).toEqual([USER_FAVORITE.sections.tokens.palette, "sweep", USER_FAVORITE.sections.dashboard.hidden, "right", { w: 5, h: 2 }, "hosts", "relay"]);
+    expect([designStore.get().tokens.palette, uiStyleStore.get().runMotion, layoutStore.get().hidden, fleetViewStore.get().placement, fleetViewStore.get().hostArea, preferencesStore.get().stacksLayout, visualStyleStore.get().logoMotion]).toEqual([USER_FAVORITE.sections.tokens.palette, "sweep", USER_FAVORITE.sections.dashboard.hidden, "right", { w: 5, h: 2 }, "hosts", "relay"]);
     expect([DEFAULT_LAYOUT.services.plex.status, DEFAULT_FLEET_VIEW.hostOrder, DEFAULT_PREFERENCES.hostSelection]).toEqual(["unconfigured", [], []]);
   });
 

@@ -8,7 +8,7 @@ import { useActionRuns } from "@/data/live";
 import { useSecurity, useStacks } from "@/data/queries";
 import { isHostVisible } from "@/domain/hosts";
 import { withPercent } from "@/domain/locale";
-import { useMotionEnabled } from "@/features/design-lab/use-design-lab";
+import { useMotionEnabled } from "@/shared/theme/use-design-tokens";
 import { NAV_TAB, NAV_TABS_LIST } from "@/shared/components/nav-tabs";
 import { EmptyState, PageHeader, QueryError } from "@/shared/components/page";
 import { HelpTarget } from "@/shared/help/help-tooltip";

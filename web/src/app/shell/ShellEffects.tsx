@@ -2,7 +2,7 @@ import { useEffect } from "react";
 import { useLocation } from "react-router";
 
 import { activityStore } from "@/features/activity/activity-store";
-import { labOpenStore } from "@/features/design-lab/use-design-lab";
+import { subscribeLabPopups } from "@/runtime";
 import { closeAllPopups } from "@/shared/lib/popup-coordinator";
 import { useSidebar } from "@/shared/ui/sidebar";
 
@@ -24,7 +24,7 @@ export function ShellEffects() {
   }, [pathname, search]);
 
   useEffect(() => {
-    const unsubLab = labOpenStore.subscribe(() => labOpenStore.get() && closeAllPopups());
+    const unsubLab = subscribeLabPopups(closeAllPopups);
     const unsubActivity = activityStore.subscribe(() => activityStore.get().open && closeAllPopups());
     return () => {
       unsubLab();

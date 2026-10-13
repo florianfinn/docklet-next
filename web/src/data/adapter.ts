@@ -63,7 +63,7 @@ export type Unsubscribe = () => void;
  * in memory; a future HTTP/SSE adapter implements the same interface.
  */
 export interface DockletAdapter extends HostsApi, VolumesApi, SettingsApi, ImagesApi, NetworksApi, HubApi {
-  readonly kind: "demo" | "http";
+  readonly kind: "demo" | "http" | "disconnected";
 
   listHosts(): Promise<Host[]>;
   listStacks(): Promise<Stack[]>;

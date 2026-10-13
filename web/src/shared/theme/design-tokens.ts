@@ -72,7 +72,7 @@ export const PRESETS: Preset[] = [
   { id: "light", tokens: { ...ARCANE_TOKENS, theme: "light", glow: 0.3 } },
 ];
 
-export interface LabState {
+export interface DesignState {
   tokens: DesignTokens;
   slotA?: DesignTokens;
   slotB?: DesignTokens;
@@ -111,7 +111,7 @@ export function normalizeTokens(raw: unknown, d: DesignTokens = DEFAULT_TOKENS):
   };
 }
 
-export const labStore = createStore<LabState>(
+export const designStore = createStore<DesignState>(
   { tokens: DEFAULT_TOKENS, active: null },
   {
     key: "docklet-react-opus.design-lab",
@@ -124,13 +124,13 @@ export const labStore = createStore<LabState>(
 );
 
 /**
- * Unsaved appearance edits shown live by the settings page. Only the fields a
- * draft changes are listed, so lab edits to other fields stay visible.
+ * Unsaved appearance edits shown live by the settings page. Only changed
+ * fields override saved preferences, so other edits remain visible.
  */
 export const tokenPreviewStore = createStore<Partial<DesignTokens> | null>(null);
 
 export function setTokens(patch: Partial<DesignTokens>): void {
-  labStore.set((s) => ({ ...s, tokens: { ...s.tokens, ...patch }, active: null }));
+  designStore.set((s) => ({ ...s, tokens: { ...s.tokens, ...patch }, active: null }));
 }
 
 const MOTION_SCALE: Record<MotionLevel, number> = { off: 0, calm: 0.45, normal: 1, playful: 1.6 };

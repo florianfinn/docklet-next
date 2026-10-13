@@ -3,7 +3,7 @@ Source: approved Docklet design prototype (maintainer's own work)/react-opus
 Revision: d75474089b87ab9f77c606cc7aa696d05157d8e9cd902f1ed5a0f2b904722a39
 Retrieved: 2026-10-13
 License: Apache-2.0 AND MIT AND BSD-3-Clause
-Deviations: Sources unchanged; package name and root CI wiring only, as detailed below.
+Deviations: Historical import proof with subsequent product-boundary changes documented below.
 -->
 
 # Frozen UI snapshot provenance
@@ -20,9 +20,9 @@ preserved byte-for-byte. The source `PROVENANCE.md` content SHA-256 is
 
 ## Snapshot identity and reproducible proof
 
-`web/src/` contains **592 files**. Its SHA-256 aggregate is
+At the initial import, `web/src/` contained **592 files**. Its SHA-256 aggregate was
 `d75474089b87ab9f77c606cc7aa696d05157d8e9cd902f1ed5a0f2b904722a39`.
-Each file is byte-identical to the frozen source, including catalogues, comments,
+Each imported file was byte-identical to the frozen source, including catalogues, comments,
 styles, tests and the vendor provenance record. There are no added source headers.
 Exact sidecars in `scripts/provenance.json` bind every imported file to its source
 content hash and current bytes; the snapshot entry records the aggregate.
@@ -47,7 +47,7 @@ Copied: `src/`, `public/`, `index.html`, `eslint.config.js`, `tsconfig*.json`,
 `vite.config.ts`, `vitest.config.ts`, `components.json`, `package.json`,
 `pnpm-lock.yaml` and `pnpm-workspace.yaml`.
 
-The only changed imported file is `package.json`: its name is `docklet-next-web`
+The only file changed during the initial import was `package.json`: its name is `docklet-next-web`
 instead of the prototype package name. All dependency versions, scripts and
 other package fields are unchanged. The lockfile and workspace settings are
 byte-identical, including the reviewed esbuild build permission.
@@ -150,3 +150,32 @@ There are no checked-in font binaries or other media under `src/`.
 This is the approved prototype snapshot. Demo transport and design-lab controls
 remain present intentionally; their production separation, locale base changes,
 HTTP/WebSocket integration and live product acceptance belong to later steps.
+
+## Product boundary after the import
+
+Issue #11 relocates design tokens and hooks to `shared/theme`, and favourite
+codes, their controls, explanation preferences and shared catalogues to
+`shared/preferences`. Exact per-file sidecars retain the original source path
+and hash while recording the current hash and deviation. Removed source paths
+have no stale sidecar. The aggregate above remains the historical import proof.
+Existing catalogue bytes, storage keys and version 1 records are preserved.
+
+`src/test/fixtures/lab-preferences-v1.json` contains nine synthetic localStorage
+records captured by executing the pre-move stores at commit
+`3d449aa` with non-default preferences. It includes a favourite encoded by that
+implementation. Regression tests load these records through the product stores
+and require an identical design-code export.
+
+The build selects `src/runtime.ts` (disconnected product adapter) or
+`src/runtime.dev.ts` (development server and tests). All distributable builds,
+including custom modes, use the product entry. No URL or browser preference
+selects a runtime. The login simulator, lab controls, simulation badges and demo
+translation tables stay behind this boundary. Setup writes fail honestly until
+a backend is connected; personal appearance and help settings remain available.
+
+Root lint and test build and inspect the complete production module graph.
+`build/production-boundary.ts` rejects demo and lab modules, including modules
+removed by tree shaking. It emits `production-modules.json` with repository-relative
+graph and shipped module paths. Root tests additionally inject forbidden imports
+into the real application in memory and require the guard to reject them.
+The normal build uses the same guard. No HTTP adapter is implemented here.
