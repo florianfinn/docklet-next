@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Functional cut: removed template catalogue.
+// Deviations: Functional cut: removed template catalogue; functional cut: removed federated credentials.
 
 // Package types provides the Arcane API endpoint path builders and CLI
 // configuration types.
@@ -38,11 +38,10 @@ const (
 
 // Auth endpoints
 
-func AuthLogout() string    { return "/api/auth/logout" }
-func AuthMe() string        { return "/api/auth/me" }
-func AuthPassword() string  { return "/api/auth/password" }
-func AuthRefresh() string   { return "/api/auth/refresh" }
-func AuthFederated() string { return "/api/auth/federated/token" }
+func AuthLogout() string   { return "/api/auth/logout" }
+func AuthMe() string       { return "/api/auth/me" }
+func AuthPassword() string { return "/api/auth/password" }
+func AuthRefresh() string  { return "/api/auth/refresh" }
 
 // OIDC endpoints
 
@@ -78,11 +77,6 @@ func RolesAvailablePermissions() string { return "/api/roles/available-permissio
 
 func OidcRoleMappings() string         { return "/api/oidc/role-mappings" }
 func OidcRoleMapping(id string) string { return pathf("/api/oidc/role-mappings/%s", id) }
-
-// Federated credential endpoints
-
-func FederatedCredentials() string         { return "/api/federated-credentials" }
-func FederatedCredential(id string) string { return pathf("/api/federated-credentials/%s", id) }
 
 // Environment endpoints
 

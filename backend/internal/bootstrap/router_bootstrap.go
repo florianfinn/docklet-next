@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; functional cut: removed Svelte-specific metadata or asset paths.
+// Deviations: Local module namespace; functional cut: removed Svelte-specific metadata or asset paths; functional cut: removed federated credentials.
 
 package bootstrap
 
@@ -28,7 +28,6 @@ import (
 	"github.com/florianfinn/docklet-next/backend/internal/apikey"
 	"github.com/florianfinn/docklet-next/backend/internal/auth"
 	"github.com/florianfinn/docklet-next/backend/internal/config"
-	"github.com/florianfinn/docklet-next/backend/internal/federated"
 	"github.com/florianfinn/docklet-next/backend/internal/middleware"
 	"github.com/florianfinn/docklet-next/backend/pkg/authz"
 	"github.com/florianfinn/docklet-next/backend/pkg/libarcane/edge"
@@ -232,9 +231,6 @@ func newRouter(p RouterParams) (*echo.Echo, *edge.TunnelServer) {
 			"/api/oidc/callback",
 		}, 5, 5,
 	))
-	apiGroup.Use(middleware.PerIPRateLimitForPaths(
-		[]string{"/api/auth/federated/token"}, 10, 10,
-	))
 	// Keyed per token for stored tokens, per source IP for everything else.
 	apiGroup.Use(middleware.PerTokenRateLimitForPaths(
 		[]string{"/api/webhooks/trigger/:token"}, 60, 10, deps.Webhook.Service().IsKnownToken,
@@ -257,7 +253,6 @@ func newRouter(p RouterParams) (*echo.Echo, *edge.TunnelServer) {
 
 	// Register public webhook trigger endpoint before auth middleware (token in URL is the sole auth)
 	api.RegisterWebhookTrigger(apiGroup, deps.Webhook.Service(), handlerAppCtx)
-	federated.RegisterFederatedTokenExchange(apiGroup, deps.Federated)
 	deps.Event.RegisterAgentRoutes(apiGroup, func(ctx context.Context, token string) (string, error) {
 		env, err := deps.Environment.Service().ResolveEnvironmentByAccessToken(ctx, token)
 		if err != nil {

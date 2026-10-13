@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace
+// Deviations: Local module namespace; functional cut: removed federated credentials.
 
 package auth
 
@@ -1060,63 +1060,6 @@ func (s *AuthService) buildTokenPairInternal(ctx context.Context, localUser *use
 	}, nil
 }
 
-func (s *AuthService) IssueFederatedToken(ctx context.Context, localUser *user.User, credentialID string, ttlSeconds int) (*TokenPair, error) {
-	if s.sessionService == nil {
-		return nil, common.Classify(common.ErrUnavailable, errors.New("Session service is not configured")) //nolint:staticcheck // Preserve the existing error message.
-	}
-	if localUser == nil {
-		return nil, common.ErrUserNotFound
-	}
-
-	ttlSeconds = ClampFederatedTokenTTLSeconds(ttlSeconds)
-	now := time.Now()
-	accessTokenExpiry := now.Add(time.Duration(ttlSeconds) * time.Second)
-
-	federatedSession, err := s.sessionService.CreateFederatedSession(ctx, localUser.ID, accessTokenExpiry, credentialID)
-	if err != nil {
-		return nil, err
-	}
-
-	signingKey, err := s.signingKeyInternal(ctx)
-	if err != nil {
-		return nil, err
-	}
-	builder := jwt.NewBuilder().
-		JwtID(localUser.ID).
-		Subject(accessTokenSubject).
-		IssuedAt(now).
-		Expiration(accessTokenExpiry).
-		Claim(claimSessionID, federatedSession.ID).
-		Claim(claimUserID, localUser.ID).
-		Claim(claimTokenType, session.UserSessionSourceFederated).
-		Claim(claimFederatedCredentialID, credentialID)
-	if localUser.Username != "" {
-		builder.Claim(claimUsername, localUser.Username)
-	}
-	if localUser.Email != nil && *localUser.Email != "" {
-		builder.Claim(claimEmail, *localUser.Email)
-	}
-	if localUser.DisplayName != nil && *localUser.DisplayName != "" {
-		builder.Claim(claimDisplayName, *localUser.DisplayName)
-	}
-	if config.Version != "" {
-		builder.Claim(claimAppVersion, config.Version)
-	}
-	accessToken, err := builder.Build()
-	if err != nil {
-		return nil, err
-	}
-	accessTokenBytes, err := jwt.Sign(accessToken, jwt.WithKey(jwa.MLDSA87(), signingKey))
-	if err != nil {
-		return nil, err
-	}
-
-	return &TokenPair{
-		AccessToken: string(accessTokenBytes),
-		ExpiresAt:   accessTokenExpiry,
-	}, nil
-}
-
 func generateUsernameFromEmail(email, subject string) string {
 	if email != "" {
 		parts := strings.Split(email, "@")
@@ -1161,16 +1104,4 @@ func (s *AuthService) runInBackground(ctx context.Context, name string, fn func(
 			slog.ErrorContext(taskCtx, "Background task failed", "task", name, "error", err)
 		}
 	}()
-}
-
-// ClampFederatedTokenTTLSeconds bounds a requested federated-token lifetime to
-// the range Arcane will mint.
-func ClampFederatedTokenTTLSeconds(ttlSeconds int) int {
-	if ttlSeconds <= 0 {
-		return 900
-	}
-	if ttlSeconds < 60 {
-		return 60
-	}
-	return kit.Ternary(ttlSeconds > 3600, 3600, ttlSeconds)
 }

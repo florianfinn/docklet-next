@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; functional cut: removed upstream analytics heartbeat; functional cut: removed template catalogue.
+// Deviations: Local module namespace; functional cut: removed upstream analytics heartbeat; functional cut: removed template catalogue; functional cut: removed federated credentials.
 
 package di
 
@@ -37,7 +37,6 @@ import (
 	"github.com/florianfinn/docklet-next/backend/internal/docker"
 	"github.com/florianfinn/docklet-next/backend/internal/environment"
 	"github.com/florianfinn/docklet-next/backend/internal/event"
-	"github.com/florianfinn/docklet-next/backend/internal/federated"
 	"github.com/florianfinn/docklet-next/backend/internal/gitops"
 	"github.com/florianfinn/docklet-next/backend/internal/gitrepo"
 	"github.com/florianfinn/docklet-next/backend/internal/image"
@@ -103,7 +102,6 @@ type graphParams struct {
 	Version           *version.VersionService
 	Notification      *notification.NotificationService
 	ApiKey            *apikey.ApiKeyService
-	Federated         *federated.FederatedCredentialService
 	GitRepository     *gitrepo.GitRepositoryService
 	GitOpsSync        *gitops.GitOpsSyncService
 	Webhook           *webhook.Module

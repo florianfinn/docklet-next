@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; functional cut: removed template catalogue.
+// Deviations: Local module namespace; functional cut: removed template catalogue; functional cut: removed federated credentials.
 
 package config
 
@@ -81,7 +81,6 @@ func TestSaveAndLoadRoundTripPagination(t *testing.T) {
 			cfg.APIKey = "k_test"
 			cfg.JWTToken = "jwt_test"
 			cfg.RefreshToken = "refresh_test"
-			cfg.FederatedAudience = "audience_test"
 			cfg.CLIUpdateChannel = "next"
 			cfg.SetDefaultLimit(42)
 			cfg.SetResourceLimit("images", 17)
@@ -161,7 +160,6 @@ func TestSaveAndLoadRoundTripPagination(t *testing.T) {
 			require.Equal(t, "k_test", loaded.APIKey)
 			require.Equal(t, "jwt_test", loaded.JWTToken)
 			require.Equal(t, "refresh_test", loaded.RefreshToken)
-			require.Equal(t, "audience_test", loaded.FederatedAudience)
 			require.Equal(t, 8, loaded.LimitFor("gitops-syncs"))
 			loaded.SetResourceLimit("images", 101)
 			reloaded, reloadErr := Load()
@@ -336,7 +334,7 @@ func TestInitDefaultFileCreatesTemplate(t *testing.T) {
 	text := string(raw)
 	var values map[string]any
 	require.NoError(t, yaml.Unmarshal(raw, &values))
-	for _, key := range []string{"api_key", "jwt_token", "refresh_token", "federated_audience"} {
+	for _, key := range []string{"api_key", "jwt_token", "refresh_token"} {
 		require.Contains(t, values, key)
 		require.Empty(t, values[key])
 	}

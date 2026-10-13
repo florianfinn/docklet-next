@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Functional cut: removed template catalogue.
+// Deviations: Functional cut: removed template catalogue; functional cut: removed federated credentials.
 
 package authz
 
@@ -47,13 +47,6 @@ var permissionCatalog = []PermissionCatalogResource{
 		{"create", PermApiKeysCreate, "Create", ""},
 		{"update", PermApiKeysUpdate, "Update", ""},
 		{"delete", PermApiKeysDelete, "Delete", ""},
-	}},
-	{"federated", "Federated Credentials", PermissionScopeGlobal, []PermissionCatalogAction{
-		{"list", PermFederatedList, "List", ""},
-		{"read", PermFederatedRead, "Read", ""},
-		{"create", PermFederatedCreate, "Create", ""},
-		{"update", PermFederatedUpdate, "Update", ""},
-		{"delete", PermFederatedDelete, "Delete", ""},
 	}},
 	{"settings", "Settings", PermissionScopeGlobal, []PermissionCatalogAction{
 		{"read", PermSettingsRead, "Read", ""},

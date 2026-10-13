@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace
+// Deviations: Local module namespace; functional cut: removed federated credentials.
 
 package auth
 
@@ -29,14 +29,13 @@ const (
 	browserTokenSubject = "browser_session"
 	refreshTokenSubject = "refresh"
 
-	claimSessionID             = "sid"
-	claimUserID                = "user_id"
-	claimUsername              = "username"
-	claimEmail                 = "email"
-	claimDisplayName           = "display_name"
-	claimAppVersion            = "app_version"
-	claimTokenType             = "token_type"
-	claimFederatedCredentialID = "federated_credential_id"
+	claimSessionID   = "sid"
+	claimUserID      = "user_id"
+	claimUsername    = "username"
+	claimEmail       = "email"
+	claimDisplayName = "display_name"
+	claimAppVersion  = "app_version"
+	claimTokenType   = "token_type"
 )
 
 type accessTokenClaims struct {

@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; functional cut: removed upstream analytics heartbeat and APNS mobile push; functional cut: removed template catalogue.
+// Deviations: Local module namespace; functional cut: removed upstream analytics heartbeat and APNS mobile push; functional cut: removed template catalogue; functional cut: removed federated credentials.
 
 // Package di owns the backend's dependency-injection graph.
 package di
@@ -25,7 +25,6 @@ import (
 	"github.com/florianfinn/docklet-next/backend/internal/diagnostics"
 	"github.com/florianfinn/docklet-next/backend/internal/environment"
 	"github.com/florianfinn/docklet-next/backend/internal/event"
-	"github.com/florianfinn/docklet-next/backend/internal/federated"
 	"github.com/florianfinn/docklet-next/backend/internal/gitops"
 	"github.com/florianfinn/docklet-next/backend/internal/gitrepo"
 	"github.com/florianfinn/docklet-next/backend/internal/image"
@@ -77,7 +76,6 @@ var ServiceOptions = fx.Options(
 		func(db *database.DB, roles *role.RoleService) *user.UserService {
 			return user.NewUserService(db, roles, session.RevokeAllUserSessionsExceptInDB)
 		},
-		federated.NewFederatedCredentialService,
 		kv.NewKVService,
 		appimages.NewApplicationImagesService,
 		session.NewSessionService,

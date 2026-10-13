@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Functional cut: removed template catalogue.
+// Deviations: Functional cut: removed template catalogue; functional cut: removed federated credentials.
 
 package types
 
@@ -93,8 +93,6 @@ type Config struct {
 	RefreshToken string `yaml:"refresh_token,omitempty"`
 	// DefaultEnvironment is the default environment ID to use
 	DefaultEnvironment string `yaml:"default_environment,omitempty"`
-	// FederatedAudience is the default token audience for `arcane-cli auth federated`
-	FederatedAudience string `yaml:"federated_audience,omitempty"`
 	// LogLevel is the logging level (debug, info, warn, error, fatal, panic)
 	LogLevel string `yaml:"log_level,omitempty"`
 	// CLIUpdateChannel controls which channel self-update uses (stable or next).

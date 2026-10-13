@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace
+// Deviations: Local module namespace; functional cut: removed federated credentials.
 
 // Package config handles CLI configuration loading and persistence.
 //
@@ -232,7 +232,7 @@ func InitDefaultFile() (bool, error) {
 		return false, fmt.Errorf("failed to encode config template: %w", encodeErr)
 	}
 	// Show empty authentication fields even though normal saves omit them.
-	for _, key := range []string{"api_key", "jwt_token", "refresh_token", "federated_audience"} {
+	for _, key := range []string{"api_key", "jwt_token", "refresh_token"} {
 		template.Content = append(template.Content,
 			&yaml.Node{Kind: yaml.ScalarNode, Tag: "!!str", Value: key},
 			&yaml.Node{Kind: yaml.ScalarNode, Tag: "!!str", Value: ""},

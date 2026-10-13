@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Functional cut: removed template catalogue.
+// Deviations: Functional cut: removed template catalogue; functional cut: removed federated credentials.
 
 // Package authz defines the permission taxonomy and authorization primitives
 // used across Arcane handlers. Permissions are strings of the form
@@ -44,12 +44,6 @@ const (
 	PermApiKeysCreate = "apikeys:create"
 	PermApiKeysUpdate = "apikeys:update"
 	PermApiKeysDelete = "apikeys:delete"
-
-	PermFederatedList   = "federated:list"
-	PermFederatedRead   = "federated:read"
-	PermFederatedCreate = "federated:create"
-	PermFederatedUpdate = "federated:update"
-	PermFederatedDelete = "federated:delete"
 
 	PermSettingsRead  = "settings:read"
 	PermSettingsWrite = "settings:write"
@@ -321,7 +315,6 @@ func BuiltInEditorPermissions() []string {
 		PermUsersList, PermUsersRead,
 		PermRolesList, PermRolesRead,
 		PermApiKeysList, PermApiKeysRead,
-		PermFederatedList, PermFederatedRead,
 		PermSettingsRead,
 		PermEnvironmentsList, PermEnvironmentsRead, PermEnvironmentsSync,
 		PermRegistriesList, PermRegistriesRead, PermRegistriesBrowse,
@@ -403,7 +396,6 @@ func BuiltInViewerPermissions() []string {
 		PermUsersList, PermUsersRead,
 		PermRolesList, PermRolesRead,
 		PermApiKeysList, PermApiKeysRead,
-		PermFederatedList, PermFederatedRead,
 		PermSettingsRead,
 		PermEnvironmentsList, PermEnvironmentsRead,
 		PermRegistriesList, PermRegistriesRead,

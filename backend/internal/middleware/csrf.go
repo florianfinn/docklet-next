@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace
+// Deviations: Local module namespace; functional cut: removed federated credentials.
 
 package middleware
 
@@ -25,7 +25,6 @@ import (
 // an Origin header. Patterns use net/http ServeMux syntax, matched against URL path.
 var publicCrossOriginBypassPaths = []string{
 	"/api/webhooks/trigger/{token}",
-	"/api/auth/federated/token",
 }
 
 // CSRFMiddleware rejects cross-origin state-changing requests to the cookie-backed

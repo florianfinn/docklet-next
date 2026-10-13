@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace
+// Deviations: Local module namespace; functional cut: removed federated credentials.
 
 package session
 
@@ -55,24 +55,6 @@ func (s *SessionService) CreateSession(ctx context.Context, userID string, expir
 		return nil, "", fmt.Errorf("failed to create user session: %w", err)
 	}
 	return session, refreshJTI, nil
-}
-
-func (s *SessionService) CreateFederatedSession(ctx context.Context, userID string, expiresAt time.Time, credentialID string) (*UserSession, error) {
-	refreshHash := kit.SHA256Hex(uuid.New().String())
-	now := time.Now()
-
-	session := &UserSession{
-		UserID:                userID,
-		RefreshTokenHash:      refreshHash,
-		Source:                UserSessionSourceFederated,
-		FederatedCredentialID: mo.EmptyableToOption(strings.TrimSpace(credentialID)).ToPointer(),
-		LastUsedAt:            now,
-		ExpiresAt:             expiresAt,
-	}
-	if err := s.db.WithContext(ctx).Create(session).Error; err != nil {
-		return nil, fmt.Errorf("failed to create federated user session: %w", err)
-	}
-	return session, nil
 }
 
 func (s *SessionService) GetSessionByID(ctx context.Context, sessionID string) (*UserSession, error) {

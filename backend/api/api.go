@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; functional cut: removed APNS mobile push; functional cut: removed template catalogue.
+// Deviations: Local module namespace; functional cut: removed APNS mobile push; functional cut: removed template catalogue; functional cut: removed federated credentials.
 
 package api
 
@@ -34,7 +34,6 @@ import (
 	"github.com/florianfinn/docklet-next/backend/internal/docker"
 	"github.com/florianfinn/docklet-next/backend/internal/environment"
 	"github.com/florianfinn/docklet-next/backend/internal/event"
-	"github.com/florianfinn/docklet-next/backend/internal/federated"
 	"github.com/florianfinn/docklet-next/backend/internal/gitops"
 	"github.com/florianfinn/docklet-next/backend/internal/gitrepo"
 	"github.com/florianfinn/docklet-next/backend/internal/health"
@@ -274,7 +273,6 @@ type HandlerDeps struct {
 	Version           *version.VersionService
 	Notification      *notification.Module
 	ApiKey            *apikey.Module
-	Federated         *federated.FederatedCredentialService
 	GitRepository     *gitrepo.Module
 	GitOpsSync        *gitops.Module
 	Webhook           *webhook.Module
@@ -408,7 +406,6 @@ func registerHandlersInternal(api huma.API, deps HandlerDeps, handlerAppCtx hand
 	deps.Auth.RegisterRoutes(api)
 	passkey.RegisterPasskeys(api, deps.Passkey, deps.Auth.Service(), deps.User.Service())
 	deps.ApiKey.RegisterRoutes(api)
-	federated.RegisterFederatedCredentials(api, deps.Federated)
 	deps.Role.RegisterRoutes(api)
 	appimages.RegisterAppImages(api, deps.AppImages)
 	deps.User.RegisterRoutes(api)

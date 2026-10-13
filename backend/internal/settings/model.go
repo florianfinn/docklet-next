@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Functional cut: removed APNS mobile push; functional cut: removed template catalogue.
+// Deviations: Functional cut: removed APNS mobile push; functional cut: removed template catalogue; functional cut: removed federated credentials.
 
 package settings
 
@@ -194,8 +194,6 @@ type Settings struct {
 
 	SystemBackupsCategoryPlaceholder SettingVariable `key:"systemBackupsCategory,internal" meta:"label=Backups;type=internal;keywords=backup,recovery,restore,configuration,secrets;category=systembackups;description=Back up and restore this Arcane instance" catmeta:"id=systembackups;title=Backups;icon=backup;url=/settings/backups;description=Create encrypted recovery backups of Arcane data and configuration"`
 	SystemVolumeBackupConfig         SettingVariable `key:"systemVolumeBackupConfig,internal"`
-
-	FederatedCredentialsCategoryPlaceholder SettingVariable `key:"federatedCredentialsCategory,internal" meta:"label=Federated Credentials;type=internal;keywords=federated,credentials,workload,identity,oidc,token exchange,ci,github,gitlab;category=authentication;description=Manage workload identity federation credentials"`
 
 	// Webhooks category (management page - no actual settings)
 	WebhooksCategoryPlaceholder SettingVariable `key:"webhooksCategory,internal" meta:"label=Webhooks;type=internal;keywords=webhooks,trigger,inbound,http,container,stack,gitops,updater,automation,ci,cd;category=webhooks;description=Manage inbound webhooks to trigger updates" catmeta:"id=webhooks;title=Webhooks;icon=globe;url=/settings/webhooks;description=Create and manage inbound webhooks to trigger container, stack, or GitOps updates"`

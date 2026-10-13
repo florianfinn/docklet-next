@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace
+// Deviations: Local module namespace; functional cut: removed federated credentials.
 
 package event
 
@@ -94,12 +94,11 @@ const (
 	EventTypeNetworkDisconnect EventType = "network.disconnect"
 	EventTypeNetworkError      EventType = "network.error"
 
-	EventTypeSystemPrune       EventType = "system.prune"
-	EventTypeUserLogin         EventType = "user.login"
-	EventTypeUserLogout        EventType = "user.logout"
-	EventTypeFederatedExchange EventType = "federated.exchange"
-	EventTypeSystemAutoUpdate  EventType = "system.auto_update"
-	EventTypeSystemUpgrade     EventType = "system.upgrade"
+	EventTypeSystemPrune      EventType = "system.prune"
+	EventTypeUserLogin        EventType = "user.login"
+	EventTypeUserLogout       EventType = "user.logout"
+	EventTypeSystemAutoUpdate EventType = "system.auto_update"
+	EventTypeSystemUpgrade    EventType = "system.upgrade"
 
 	EventTypeEnvironmentCreate            EventType = "environment.create"
 	EventTypeEnvironmentConnect           EventType = "environment.connect"
