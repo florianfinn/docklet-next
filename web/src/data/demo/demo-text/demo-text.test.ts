@@ -137,5 +137,5 @@ describe("texts the demo backend writes while running actions", () => {
     expect(germanIn([...runs.flatMap(runTexts), ...events.map((e) => e.title), ...results])).toEqual([]);
     expect(codedRuns.map((run) => renderRun(run, "en-US"))).toEqual(runs.map((run) => localizeRun(run, "en-US")));
     expect(codedEvents.map((event) => renderEvent(event, "en-US"))).toEqual(localizeEvents(events, "en-US"));
-  }, 20000);
+  });
 });

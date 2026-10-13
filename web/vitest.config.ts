@@ -13,6 +13,8 @@ export default defineConfig({
   },
   test: {
     environment: "happy-dom",
+    // Multi-step user workflows share CPU with other isolated workers on CI.
+    testTimeout: 30_000,
     include: ["src/**/*.test.{ts,tsx}"],
     setupFiles: ["./src/test/setup.ts"],
     // Style tests read these files as raw text; every other stylesheet stays unprocessed.

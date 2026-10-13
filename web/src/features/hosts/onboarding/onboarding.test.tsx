@@ -109,5 +109,5 @@ describe("host onboarding", () => {
     expect(within(card).getByText("In dieser Sitzung hinzugefügt") !== null).toBe(true);
     expect(within(card).getByText(/^docker:docker \(1000:1000\)/) !== null).toBe(true);
     expect(await within(card).findByText(/^Liegt im Projektverzeichnis und wird per Label/) !== null).toBe(true);
-  }, 20_000);
+  });
 });

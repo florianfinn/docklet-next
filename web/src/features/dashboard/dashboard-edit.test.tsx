@@ -125,5 +125,5 @@ describe("dashboard edit mode", () => {
     await userEvent.click(within(mc).getByLabelText("Fehler beim Verbinden simulieren"));
     await userEvent.click(within(mc).getByRole("button", { name: "Verbinden (simuliert)" }));
     await waitFor(() => expect(within(minecraft).getByText("Verbindung fehlgeschlagen") !== null).toBe(true), { timeout: 3000 });
-  }, 20_000);
+  });
 });

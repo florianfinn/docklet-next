@@ -106,5 +106,5 @@ describe("demo storage contract", () => {
     const after = await adapter.getVolume(id);
     expect(after.backups.filter((r) => r.status === "succeeded").length).toBe(2);
     expect(after.backups[0]?.trigger).toBe("manual");
-  }, 10_000);
+  });
 });

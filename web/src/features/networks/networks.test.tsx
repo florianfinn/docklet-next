@@ -171,7 +171,7 @@ describe("network list beside the graph", () => {
     await userEvent.click(within(list).getByRole("button", { name: "media_default in der Topologie fokussieren" }));
     expect(router.state.location.search).toContain("node=n-atlas-media");
     expect(within(list).getByRole("button", { name: "media_default in der Topologie fokussieren" }).getAttribute("aria-pressed")).toBe("true");
-    act(() => void router.navigate("/networks?host=atlas&node=c-krusader"));
+    await act(() => router.navigate("/networks?host=atlas&node=c-krusader"));
     await waitFor(() => expect(list.querySelector('[data-related="true"]')?.textContent?.startsWith("br0")).toBe(true));
   });
 

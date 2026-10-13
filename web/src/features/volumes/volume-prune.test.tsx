@@ -77,7 +77,7 @@ describe("demo prune contract", () => {
     const result = await adapter.pruneVolumes({ hostIds: ["boreal"], volumeIds: plan.candidates.map((v) => v.id) });
     expect(result.skipped).toEqual([{ id: created.id, reason: "in-use" }]);
     expect(await adapter.deleteVolume(created.id).catch((e: unknown) => errorCode(e))).toBe("in-use");
-  }, 12_000);
+  });
 });
 
 describe("volumes page actions", () => {
