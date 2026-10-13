@@ -6,7 +6,7 @@ import { errorCode, type CreateVolumeInput } from "@/data/api";
 import { isRunBusy } from "@/data/run-gate";
 import { useAdapter } from "@/data/use-adapter";
 import type { BackupPolicy } from "@/domain/volumes";
-import { useDemoText } from "@/shared/hooks/use-demo-text";
+import { useAdapterText } from "@/data/use-adapter-text";
 
 type Known = "not-found" | "exists" | "invalid-name" | "in-use" | "host-offline" | "bind-not-deletable" | "not-editable" | "no-policy" | "target-missing" | "invalid-plan";
 const KNOWN = new Set<string>(["not-found", "exists", "invalid-name", "in-use", "host-offline", "bind-not-deletable", "not-editable", "no-policy", "target-missing", "invalid-plan"]);
@@ -15,7 +15,7 @@ const KNOWN = new Set<string>(["not-found", "exists", "invalid-name", "in-use", 
 export function useVolumeCommands() {
   const adapter = useAdapter();
   const t = useTranslations("volumes.errors");
-  const dt = useDemoText();
+  const dt = useAdapterText();
   const guard = useCallback(
     async <T,>(fn: () => Promise<T>): Promise<T | undefined> => {
       try {

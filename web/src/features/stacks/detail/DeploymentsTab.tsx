@@ -13,7 +13,7 @@ import { startPresented, useInlineRunSurface } from "@/features/activity/run-pre
 import { RunFocusView } from "@/features/activity/RunFocus";
 import { EmptyState } from "@/shared/components/page";
 import { IconTile, ToneBadge } from "@/shared/components/tone";
-import { useDemoText } from "@/shared/hooks/use-demo-text";
+import { useAdapterText } from "@/data/use-adapter-text";
 import { cn } from "@/shared/lib/utils";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/shared/ui/alert-dialog";
 import { Button } from "@/shared/ui/button";
@@ -103,7 +103,7 @@ function HistoryList({ runs, shownId, onPick }: { runs: ActionRun[]; shownId: st
 }
 
 function RestoreCard({ point, onRestore, busy }: { point: RestorePoint; onRestore: () => void; busy: boolean }) {
-  const dt = useDemoText();
+  const dt = useAdapterText();
   const t = useTranslations("stacks.deployments");
   return (
     <li className="flex flex-col gap-2 rounded-xl border bg-muted/20 p-3">
@@ -142,7 +142,7 @@ export function DeploymentsTab({ stack }: { stack: StackDetail }) {
   const tc = useTranslations("common.actions");
   const cmd = useStackCommands();
   const live = useActionRuns();
-  const dt = useDemoText();
+  const dt = useAdapterText();
   const [confirm, setConfirm] = useState<RestorePoint | null>(null);
   const [pick, setPick] = useState<HistoryPick | null>(null);
   const mainRef = useRef<HTMLHeadingElement>(null);

@@ -9,7 +9,7 @@ import { LabelChips } from "@/shared/components/label-chips";
 import { IconTile, ToneBadge } from "@/shared/components/tone";
 import { StackUpdateIndicator } from "@/shared/components/updates/update-indicator";
 import { useStackUpdateTimes } from "@/shared/components/updates/update-times";
-import { useDemoText } from "@/shared/hooks/use-demo-text";
+import { useAdapterText } from "@/data/use-adapter-text";
 import { Alert, AlertDescription } from "@/shared/ui/alert";
 import { HelpTarget } from "@/shared/help/help-tooltip";
 import { Button } from "@/shared/ui/button";
@@ -26,7 +26,7 @@ import { useStackCommands } from "@/shared/hooks/use-stack-commands";
  */
 export function StackHeader({ stack, host, inline = false }: { stack: StackDetail; host: Host | undefined; inline?: boolean }) {
   const t = useTranslations("stacks.detail");
-  const dt = useDemoText();
+  const dt = useAdapterText();
   const cmd = useStackCommands();
   const present = (start: () => Promise<string | undefined>) => void (inline ? startPresented({ stackId: stack.id }, "inline", start) : start());
   const busy = !!stack.busyActionId;

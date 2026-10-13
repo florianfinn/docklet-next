@@ -7,7 +7,7 @@ import { queueDemoFailure, type DemoFailure } from "@/runtime";
 import { isRunBusy } from "@/data/run-gate";
 import { useAdapter } from "@/data/use-adapter";
 import type { ContainerOrigin } from "@/domain/model";
-import { useDemoText } from "@/shared/hooks/use-demo-text";
+import { useAdapterText } from "@/data/use-adapter-text";
 
 const KNOWN = new Set(["recreate-not-allowed", "managed-by-unraid", "not-found"]);
 
@@ -15,7 +15,7 @@ const KNOWN = new Set(["recreate-not-allowed", "managed-by-unraid", "not-found"]
 export function useContainerCommands() {
   const adapter = useAdapter();
   const t = useTranslations("containers.errors");
-  const dt = useDemoText();
+  const dt = useAdapterText();
   const guard = useCallback(
     async <T,>(fn: () => Promise<T>): Promise<T | undefined> => {
       try {

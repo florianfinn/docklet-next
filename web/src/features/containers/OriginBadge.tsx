@@ -5,7 +5,7 @@ import { useTranslations } from "use-intl";
 import type { ContainerOrigin, Tone } from "@/domain/model";
 import { InfoHoverCard } from "@/shared/component-set/info-hover-card";
 import { ToneBadge } from "@/shared/components/tone";
-import { useDemoText } from "@/shared/hooks/use-demo-text";
+import { useAdapterText } from "@/data/use-adapter-text";
 
 const META: Record<ContainerOrigin, { tone: Tone; icon: ReactNode }> = {
   compose: { tone: "accent", icon: <Layers /> },
@@ -16,7 +16,7 @@ const META: Record<ContainerOrigin, { tone: Tone; icon: ReactNode }> = {
 
 /** Origin chip with an explanation of what Docklet may change. */
 export function OriginBadge({ origin, note }: { origin: ContainerOrigin; note?: string }) {
-  const dt = useDemoText();
+  const dt = useAdapterText();
   const t = useTranslations("containers.origin");
   const m = META[origin];
   return (

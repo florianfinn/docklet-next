@@ -7,7 +7,7 @@ import { isRunBusy } from "@/data/run-gate";
 import { useAdapter } from "@/data/use-adapter";
 import { queueDemoFailure } from "@/runtime";
 import type { PruneMode } from "@/domain/images";
-import { useDemoText } from "@/shared/hooks/use-demo-text";
+import { useAdapterText } from "@/data/use-adapter-text";
 
 const KNOWN = ["in-use", "host-offline", "invalid-name", "not-found"] as const;
 
@@ -15,7 +15,7 @@ const KNOWN = ["in-use", "host-offline", "invalid-name", "not-found"] as const;
 export function useImageCommands() {
   const adapter = useAdapter();
   const t = useTranslations("images");
-  const dt = useDemoText();
+  const dt = useAdapterText();
   const guard = useCallback(
     async <T,>(fn: () => Promise<T>): Promise<T | undefined> => {
       try {

@@ -6,7 +6,7 @@ import { isRunBusy } from "@/data/run-gate";
 import { useAdapter } from "@/data/use-adapter";
 import { withPercent } from "@/domain/locale";
 import { SegmentedToggle } from "@/shared/components/segmented-toggle";
-import { useDemoText } from "@/shared/hooks/use-demo-text";
+import { useAdapterText } from "@/data/use-adapter-text";
 import { queueDemoFailure } from "@/runtime";
 import { cn } from "@/shared/lib/utils";
 import { ACTION_DIALOG_DESIGNS, ACTION_PRESENTATION_OVERRIDES, RUN_MOTIONS, setUiStyle, TOAST_DESIGNS, TOAST_SCALE, toastDetail, useUiStyle, type ActionPresentationOverride } from "@/shared/preferences/ui-style-store";
@@ -38,7 +38,7 @@ function Choice({ active, onSelect, title, description, children }: { active: bo
 /** Design-lab controls for notices, action toasts and the action dialog, with live samples. */
 export function NotificationLabSection() {
   const t = useTranslations("lab.notifications");
-  const dt = useDemoText();
+  const dt = useAdapterText();
   const adapter = useAdapter();
   const design = useUiStyle("toastDesign");
   const dialogDesign = useUiStyle("actionDialogDesign");

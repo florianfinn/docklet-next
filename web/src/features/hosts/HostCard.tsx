@@ -10,7 +10,7 @@ import { versionLabel } from "@/domain/updates";
 import { BusyButton } from "@/shared/components/busy-button";
 import { ConfirmDialog } from "@/shared/components/confirm-dialog";
 import { ToneBadge, ToneDot } from "@/shared/components/tone";
-import { useDemoText } from "@/shared/hooks/use-demo-text";
+import { useAdapterText } from "@/data/use-adapter-text";
 import { cn } from "@/shared/lib/utils";
 import { setPreference, useHostSelection } from "@/shared/preferences/preferences-store";
 import { Button } from "@/shared/ui/button";
@@ -109,7 +109,7 @@ interface HostCardProps {
 export function HostCard({ host, system, stacks, containers, allIds, onFiles }: HostCardProps) {
   const t = useTranslations("hosts");
   const tc = useTranslations("common.host");
-  const dt = useDemoText();
+  const dt = useAdapterText();
   const cmd = useHostCommands();
   const selection = useHostSelection();
   const [confirm, setConfirm] = useState(false);

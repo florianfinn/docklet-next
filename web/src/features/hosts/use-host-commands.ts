@@ -9,14 +9,14 @@ import { useAdapter } from "@/data/use-adapter";
 import { queueDemoFailure } from "@/runtime";
 import type { ActionKind } from "@/domain/model";
 import { useBusyAction } from "@/shared/components/use-busy-action";
-import { useDemoText } from "@/shared/hooks/use-demo-text";
+import { useAdapterText } from "@/data/use-adapter-text";
 import { preferencesStore } from "@/shared/preferences/preferences-store";
 
 /** Host commands with translated errors; progress of connections is shown by action toasts. */
 export function useHostCommands() {
   const adapter = useAdapter();
   const t = useTranslations("hosts.errors");
-  const dt = useDemoText();
+  const dt = useAdapterText();
   const guard = useCallback(
     async <T,>(fn: () => Promise<T>): Promise<T | undefined> => {
       try {

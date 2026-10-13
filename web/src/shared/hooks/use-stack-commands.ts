@@ -8,13 +8,13 @@ import { useAdapter } from "@/data/use-adapter";
 import { queryKeys } from "@/data/query-keys";
 import { queueDemoFailure, type DemoFailure } from "@/runtime";
 import type { AutoUpdatePolicy, Stack, StackDetail } from "@/domain/model";
-import { useDemoText } from "@/shared/hooks/use-demo-text";
+import { useAdapterText } from "@/data/use-adapter-text";
 
 /** Stack commands; progress is reported by action toasts, errors here. */
 export function useStackCommands() {
   const adapter = useAdapter();
   const client = useQueryClient();
-  const dt = useDemoText();
+  const dt = useAdapterText();
 
   const guard = useCallback(async <T,>(fn: () => Promise<T>): Promise<T | undefined> => {
     try {

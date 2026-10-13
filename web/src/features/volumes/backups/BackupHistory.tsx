@@ -8,7 +8,7 @@ import type { BackupRun, VolumeDetail } from "@/domain/volumes";
 import { ConfirmDialog } from "@/shared/components/confirm-dialog";
 import { ChoiceCards } from "@/shared/components/form-field";
 import { ToneBadge } from "@/shared/components/tone";
-import { useDemoText } from "@/shared/hooks/use-demo-text";
+import { useAdapterText } from "@/data/use-adapter-text";
 import { Button } from "@/shared/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/shared/ui/card";
 import { OverviewRowView, OverviewTable } from "@/shared/components/overview/overview-table";
@@ -19,7 +19,7 @@ const STATUS_TONE = { running: "accent", succeeded: "ok", failed: "err" } as con
 
 export function BackupHistory({ volume, targets, hostOnline }: { volume: VolumeDetail; targets: BackupTarget[]; hostOnline: boolean }) {
   const t = useTranslations("volumes.backups");
-  const dt = useDemoText();
+  const dt = useAdapterText();
   const cmd = useVolumeCommands();
   const [restore, setRestore] = useState<BackupRun | null>(null);
   const [mode, setMode] = useState<"replace" | "new">("replace");

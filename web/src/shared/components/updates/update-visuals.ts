@@ -3,7 +3,7 @@ import { useTranslations } from "use-intl";
 
 import type { ImageVersion, UpdateInfo } from "@/domain/model";
 import { UPDATE_TONE, updateVisual, type UpdateVisual } from "@/domain/updates";
-import { useDemoText } from "@/shared/hooks/use-demo-text";
+import { useAdapterText } from "@/data/use-adapter-text";
 
 export const UPDATE_ICON: Record<UpdateVisual, LucideIcon> = {
   current: BadgeCheck,
@@ -23,7 +23,7 @@ export function latestOf(update: UpdateInfo): ImageVersion | undefined {
 /** Title/description pair for an update result; never derives fix types. */
 export function useUpdateCopy() {
   const t = useTranslations("common.updates");
-  const dt = useDemoText();
+  const dt = useAdapterText();
   return (update: UpdateInfo) => {
     const visual = updateVisual(update);
     const version = latestOf(update)?.version ?? "";

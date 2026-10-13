@@ -4,7 +4,7 @@ import { useTranslations } from "use-intl";
 
 import { errorCode, type ConnectNetworkInput, type CreateNetworkInput } from "@/data/api";
 import { useAdapter } from "@/data/use-adapter";
-import { useDemoText } from "@/shared/hooks/use-demo-text";
+import { useAdapterText } from "@/data/use-adapter-text";
 
 const KNOWN = ["not-found", "exists", "invalid-network", "builtin-network", "compose-managed", "in-use", "host-offline", "host-mismatch", "network-mode", "already-connected", "not-connected", "invalid-ip"] as const;
 type Known = (typeof KNOWN)[number];
@@ -13,7 +13,7 @@ type Known = (typeof KNOWN)[number];
 export function useNetworkCommands() {
   const adapter = useAdapter();
   const t = useTranslations("networks.errors");
-  const dt = useDemoText();
+  const dt = useAdapterText();
   const guard = useCallback(
     async <T,>(fn: () => Promise<T>): Promise<T | undefined> => {
       try {

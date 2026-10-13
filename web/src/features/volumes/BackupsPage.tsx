@@ -12,7 +12,7 @@ import { OverviewRowView, OverviewTable, type OverviewColumn, type TableView } f
 import { EmptyState, PageHeader, QueryError } from "@/shared/components/page";
 import { useScheduleText } from "@/shared/components/schedule/use-schedule-text";
 import { ToneBadge } from "@/shared/components/tone";
-import { useDemoText } from "@/shared/hooks/use-demo-text";
+import { useAdapterText } from "@/data/use-adapter-text";
 import { useHostScope } from "@/shared/hooks/use-host-scope";
 import { useHubTimeZone } from "@/shared/hooks/use-hub-time-zone";
 import { useRowNavigation } from "@/shared/lib/row-navigation";
@@ -29,7 +29,7 @@ import { useVolumeCommands } from "./use-volume-commands";
 /** All backup plans of the filtered hosts plus the configured targets. */
 export default function BackupsPage() {
   const t = useTranslations("volumes.backups");
-  const dt = useDemoText();
+  const dt = useAdapterText();
   const volumes = useVolumes();
   const settings = useSettings();
   const hosts = useHostScope();

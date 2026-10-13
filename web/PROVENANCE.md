@@ -314,6 +314,9 @@ table. `src/data/demo/fixtures/legacy-run-messages.json` freezes that table's
 visible output before the port change for byte-for-byte tests.
 
 Demo failure injection now lives in `src/data/demo/options.ts`; the product
-interface has no failure parameter or simulation result marker. No original
-snapshot file was moved or removed in this step. The production bundle guard
-also proves that a demo-text import from a shared hook is rejected.
+interface has no failure parameter or simulation result marker. The imported
+`src/shared/hooks/use-demo-text.ts` moved to `src/data/use-adapter-text.ts` so
+adapter text is rendered at the data/UI boundary. Its upstream source revision
+is retained in the new sidecar; the historical snapshot entry is unchanged.
+The production bundle guard also proves that a demo-text import from a shared
+hook is rejected.

@@ -35,6 +35,6 @@ if (process.argv.includes("--prove")) {
     await assert.rejects(inspect(injected, mode), /Production boundary: forbidden module/);
     console.log(`Red proof passed: injected ${injected} rejected in ${mode} build.`);
   }
-  await assert.rejects(inspect("@/data/demo/demo-text", "production", "/src/shared/hooks/use-demo-text.ts"), /Production boundary: forbidden module/);
+  await assert.rejects(inspect("@/data/demo/demo-text", "production", "/src/shared/hooks/use-stack-commands.ts"), /Production boundary: forbidden module/);
   console.log("Red proof passed: shared hook import of demo text rejected in production build.");
 }

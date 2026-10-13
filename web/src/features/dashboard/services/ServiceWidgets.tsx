@@ -6,7 +6,7 @@ import { useTranslations } from "use-intl";
 
 import { formatNumber } from "@/domain/locale";
 import { ToneBadge } from "@/shared/components/tone";
-import { useDemoText } from "@/shared/hooks/use-demo-text";
+import { useAdapterText } from "@/data/use-adapter-text";
 import { useStore } from "@/shared/lib/store";
 import { Button } from "@/shared/ui/button";
 import { Skeleton } from "@/shared/ui/skeleton";
@@ -52,7 +52,7 @@ function Rows() {
 
 function PlexBody() {
   const t = useTranslations("dashboard.services.plex");
-  const dt = useDemoText();
+  const dt = useAdapterText();
   const now = useNow(5000);
   const transcodes = PLEX_STREAMS.filter((s) => s.mode === "transcode").length;
   return (

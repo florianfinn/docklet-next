@@ -13,7 +13,7 @@ import { nextScan, SCAN_SCHEDULE_ANCHOR, type ScanSchedule } from "@/domain/scan
 import { DEFAULT_TIME_ZONE } from "@/domain/schedule";
 import { useScheduleText } from "@/shared/components/schedule/use-schedule-text";
 import { HelpTarget } from "@/shared/help/help-tooltip";
-import { useDemoText } from "@/shared/hooks/use-demo-text";
+import { useAdapterText } from "@/data/use-adapter-text";
 import { Button } from "@/shared/ui/button";
 import { Label } from "@/shared/ui/label";
 import { Spinner } from "@/shared/ui/spinner";
@@ -26,7 +26,7 @@ import { Switch } from "@/shared/ui/switch";
  */
 export function ScanToggle({ enabled }: { enabled: boolean }) {
   const t = useTranslations("security");
-  const dt = useDemoText();
+  const dt = useAdapterText();
   const adapter = useAdapter();
   const client = useQueryClient();
   const [pending, setPending] = useState(false);
