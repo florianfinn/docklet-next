@@ -1,22 +1,8 @@
 [
   {
-    "path": "backend/resources/images/profile.webp",
-    "sha256": "8297d2c35a2d9a32442f602ee468ba40bf2d3a2bcc6378de2c217b980c096979",
-    "source": "getarcaneapp/arcane/backend/resources/images/profile.webp@095cb778daba1034e2a39961199e712a75d4ba29",
-    "license": "BSD-3-Clause",
-    "purpose": "Upstream embedded Arcane logo/icon or generic profile silhouette; no environment screenshot or endorsement."
-  },
-  {
     "path": "backend/resources/images/favicon.ico",
     "sha256": "0238c4ca90bcc24ed5e0e92814e545b5d98c22e5ea03c1105f3b0412c59bfe56",
     "source": "getarcaneapp/arcane/backend/resources/images/favicon.ico@095cb778daba1034e2a39961199e712a75d4ba29",
-    "license": "BSD-3-Clause",
-    "purpose": "Upstream embedded Arcane logo/icon or generic profile silhouette; no environment screenshot or endorsement."
-  },
-  {
-    "path": "backend/resources/images/icon-144x144.png",
-    "sha256": "5b7df3b05a9a90c40f5d8b96c4a7c03f74e49ee43d7f1b9eaa99b907daa9a940",
-    "source": "getarcaneapp/arcane/backend/resources/images/icon-144x144.png@095cb778daba1034e2a39961199e712a75d4ba29",
     "license": "BSD-3-Clause",
     "purpose": "Upstream embedded Arcane logo/icon or generic profile silhouette; no environment screenshot or endorsement."
   },
@@ -28,30 +14,9 @@
     "purpose": "Upstream embedded Arcane logo/icon or generic profile silhouette; no environment screenshot or endorsement."
   },
   {
-    "path": "backend/resources/images/icon-192x192.png",
-    "sha256": "e963a2a8d824675a662b3fddf7b32509253a4bf548f7219c18e6fc849527ccd9",
-    "source": "getarcaneapp/arcane/backend/resources/images/icon-192x192.png@095cb778daba1034e2a39961199e712a75d4ba29",
-    "license": "BSD-3-Clause",
-    "purpose": "Upstream embedded Arcane logo/icon or generic profile silhouette; no environment screenshot or endorsement."
-  },
-  {
-    "path": "backend/resources/images/icon-72x72.png",
-    "sha256": "fc16769f985fde96b71b0fa72fd12f46a8c0ad06d436664b26b4d0cf8d7e68fd",
-    "source": "getarcaneapp/arcane/backend/resources/images/icon-72x72.png@095cb778daba1034e2a39961199e712a75d4ba29",
-    "license": "BSD-3-Clause",
-    "purpose": "Upstream embedded Arcane logo/icon or generic profile silhouette; no environment screenshot or endorsement."
-  },
-  {
-    "path": "backend/resources/images/logo-full.svg",
-    "sha256": "98a1d1190dc9d93e4fa3c44c0958ef4c2a1bbc28cea5ff62057e6173df5b17bb",
-    "source": "getarcaneapp/arcane/backend/resources/images/logo-full.svg@095cb778daba1034e2a39961199e712a75d4ba29",
-    "license": "BSD-3-Clause",
-    "purpose": "Upstream embedded Arcane logo/icon or generic profile silhouette; no environment screenshot or endorsement."
-  },
-  {
-    "path": "backend/resources/images/logo-animated.svg",
-    "sha256": "67ed4f8a486d9fd732b66a524f255938cb1aea34be543104ef5fcc8cfb0dfdfa",
-    "source": "getarcaneapp/arcane/backend/resources/images/logo-animated.svg@095cb778daba1034e2a39961199e712a75d4ba29",
+    "path": "backend/resources/images/icon-144x144.png",
+    "sha256": "5b7df3b05a9a90c40f5d8b96c4a7c03f74e49ee43d7f1b9eaa99b907daa9a940",
+    "source": "getarcaneapp/arcane/backend/resources/images/icon-144x144.png@095cb778daba1034e2a39961199e712a75d4ba29",
     "license": "BSD-3-Clause",
     "purpose": "Upstream embedded Arcane logo/icon or generic profile silhouette; no environment screenshot or endorsement."
   },
@@ -63,9 +28,9 @@
     "purpose": "Upstream embedded Arcane logo/icon or generic profile silhouette; no environment screenshot or endorsement."
   },
   {
-    "path": "backend/resources/images/logo.svg",
-    "sha256": "7aced5f76d1886525bb61b9413a2316f8a4c1297fdb2a7944e4e150281b29215",
-    "source": "getarcaneapp/arcane/backend/resources/images/logo.svg@095cb778daba1034e2a39961199e712a75d4ba29",
+    "path": "backend/resources/images/icon-192x192.png",
+    "sha256": "e963a2a8d824675a662b3fddf7b32509253a4bf548f7219c18e6fc849527ccd9",
+    "source": "getarcaneapp/arcane/backend/resources/images/icon-192x192.png@095cb778daba1034e2a39961199e712a75d4ba29",
     "license": "BSD-3-Clause",
     "purpose": "Upstream embedded Arcane logo/icon or generic profile silhouette; no environment screenshot or endorsement."
   },
@@ -73,6 +38,34 @@
     "path": "backend/resources/images/icon-384x384.png",
     "sha256": "251dfa4c515713de7b9323330887e199ce1838b414404c5240bf9bdf04731315",
     "source": "getarcaneapp/arcane/backend/resources/images/icon-384x384.png@095cb778daba1034e2a39961199e712a75d4ba29",
+    "license": "BSD-3-Clause",
+    "purpose": "Upstream embedded Arcane logo/icon or generic profile silhouette; no environment screenshot or endorsement."
+  },
+  {
+    "path": "backend/resources/images/icon-512x512.png",
+    "sha256": "c7cd49a605b9bde192b8366a455151ec81bb4ddf371079323ee19503fe42420c",
+    "source": "getarcaneapp/arcane/backend/resources/images/icon-512x512.png@095cb778daba1034e2a39961199e712a75d4ba29",
+    "license": "BSD-3-Clause",
+    "purpose": "Upstream embedded Arcane logo/icon or generic profile silhouette; no environment screenshot or endorsement."
+  },
+  {
+    "path": "backend/resources/images/icon-72x72.png",
+    "sha256": "fc16769f985fde96b71b0fa72fd12f46a8c0ad06d436664b26b4d0cf8d7e68fd",
+    "source": "getarcaneapp/arcane/backend/resources/images/icon-72x72.png@095cb778daba1034e2a39961199e712a75d4ba29",
+    "license": "BSD-3-Clause",
+    "purpose": "Upstream embedded Arcane logo/icon or generic profile silhouette; no environment screenshot or endorsement."
+  },
+  {
+    "path": "backend/resources/images/icon-96x96.png",
+    "sha256": "8f20eb2e885649e4e075e37fa1be28b737dfa74e64b42ba42552b00b990f94a2",
+    "source": "getarcaneapp/arcane/backend/resources/images/icon-96x96.png@095cb778daba1034e2a39961199e712a75d4ba29",
+    "license": "BSD-3-Clause",
+    "purpose": "Upstream embedded Arcane logo/icon or generic profile silhouette; no environment screenshot or endorsement."
+  },
+  {
+    "path": "backend/resources/images/logo-animated.svg",
+    "sha256": "67ed4f8a486d9fd732b66a524f255938cb1aea34be543104ef5fcc8cfb0dfdfa",
+    "source": "getarcaneapp/arcane/backend/resources/images/logo-animated.svg@095cb778daba1034e2a39961199e712a75d4ba29",
     "license": "BSD-3-Clause",
     "purpose": "Upstream embedded Arcane logo/icon or generic profile silhouette; no environment screenshot or endorsement."
   },
@@ -91,17 +84,115 @@
     "purpose": "Upstream embedded Arcane logo/icon or generic profile silhouette; no environment screenshot or endorsement."
   },
   {
-    "path": "backend/resources/images/icon-96x96.png",
-    "sha256": "8f20eb2e885649e4e075e37fa1be28b737dfa74e64b42ba42552b00b990f94a2",
-    "source": "getarcaneapp/arcane/backend/resources/images/icon-96x96.png@095cb778daba1034e2a39961199e712a75d4ba29",
+    "path": "backend/resources/images/logo-full.svg",
+    "sha256": "98a1d1190dc9d93e4fa3c44c0958ef4c2a1bbc28cea5ff62057e6173df5b17bb",
+    "source": "getarcaneapp/arcane/backend/resources/images/logo-full.svg@095cb778daba1034e2a39961199e712a75d4ba29",
     "license": "BSD-3-Clause",
     "purpose": "Upstream embedded Arcane logo/icon or generic profile silhouette; no environment screenshot or endorsement."
   },
   {
-    "path": "backend/resources/images/icon-512x512.png",
-    "sha256": "c7cd49a605b9bde192b8366a455151ec81bb4ddf371079323ee19503fe42420c",
-    "source": "getarcaneapp/arcane/backend/resources/images/icon-512x512.png@095cb778daba1034e2a39961199e712a75d4ba29",
+    "path": "backend/resources/images/logo.svg",
+    "sha256": "7aced5f76d1886525bb61b9413a2316f8a4c1297fdb2a7944e4e150281b29215",
+    "source": "getarcaneapp/arcane/backend/resources/images/logo.svg@095cb778daba1034e2a39961199e712a75d4ba29",
     "license": "BSD-3-Clause",
     "purpose": "Upstream embedded Arcane logo/icon or generic profile silhouette; no environment screenshot or endorsement."
+  },
+  {
+    "path": "backend/resources/images/profile.webp",
+    "sha256": "8297d2c35a2d9a32442f602ee468ba40bf2d3a2bcc6378de2c217b980c096979",
+    "source": "getarcaneapp/arcane/backend/resources/images/profile.webp@095cb778daba1034e2a39961199e712a75d4ba29",
+    "license": "BSD-3-Clause",
+    "purpose": "Upstream embedded Arcane logo/icon or generic profile silhouette; no environment screenshot or endorsement."
+  },
+  {
+    "path": "web/public/favicon.svg",
+    "sha256": "e1912def0732d28935281a6d389f779e13cd26424206e9a1f0587ecc9df1ba80",
+    "source": "react-opus/public/favicon.svg",
+    "license": "Apache-2.0",
+    "purpose": "Own geometric favicon for the imported UI."
+  },
+  {
+    "path": "web/src/shared/brand/vendor/candidates-first.js",
+    "sha256": "126af16c2c6d85d26721e3ade4ba9a0de9f075c30d2d73a5d6ee13802d5bb167",
+    "source": "logo-next/src/candidates-first.js",
+    "license": "Apache-2.0",
+    "purpose": "Unchanged own vector logo renderer/motion module; source hash recorded in web/src/shared/brand/vendor/PROVENANCE.md."
+  },
+  {
+    "path": "web/src/shared/brand/vendor/candidates-second.js",
+    "sha256": "db99280e7e1b38c006d7e8ba9b857cdf821706db22740d8bcbc43a262b78a7a3",
+    "source": "logo-next/src/candidates-second.js",
+    "license": "Apache-2.0",
+    "purpose": "Unchanged own vector logo renderer/motion module; source hash recorded in web/src/shared/brand/vendor/PROVENANCE.md."
+  },
+  {
+    "path": "web/src/shared/brand/vendor/candidates.js",
+    "sha256": "5f0150f31531090889f4c2298a3f7ea867db6eddb7f15d851738bbf0d275d1c6",
+    "source": "logo-next/src/candidates.js",
+    "license": "Apache-2.0",
+    "purpose": "Unchanged own vector logo renderer/motion module; source hash recorded in web/src/shared/brand/vendor/PROVENANCE.md."
+  },
+  {
+    "path": "web/src/shared/brand/vendor/construction.js",
+    "sha256": "0afe45998f8426e1253a6f9be4accf8be56e2e53d37d04e493c6ffd38b74b231",
+    "source": "logo-next/src/construction.js",
+    "license": "Apache-2.0",
+    "purpose": "Unchanged own vector logo renderer/motion module; source hash recorded in web/src/shared/brand/vendor/PROVENANCE.md."
+  },
+  {
+    "path": "web/src/shared/brand/vendor/glyphs.js",
+    "sha256": "13b57d642dc6e168ba7b8998bd5f541ad5563ec494fa67334460133562fce7e6",
+    "source": "logo-next/src/glyphs.js",
+    "license": "Apache-2.0",
+    "purpose": "Unchanged own vector logo renderer/motion module; source hash recorded in web/src/shared/brand/vendor/PROVENANCE.md."
+  },
+  {
+    "path": "web/src/shared/brand/vendor/lettering.js",
+    "sha256": "aa3dbd6ef44190384dbc4880fb40ab9084307816835bcc4bb56c1af3fa44b968",
+    "source": "logo-next/src/lettering.js",
+    "license": "Apache-2.0",
+    "purpose": "Unchanged own vector logo renderer/motion module; source hash recorded in web/src/shared/brand/vendor/PROVENANCE.md."
+  },
+  {
+    "path": "web/src/shared/brand/vendor/logo-motion.js",
+    "sha256": "2961ca7be752e302709ab418a62ab8b1cb77a88ad108b8a1e7ba9a536180bc5a",
+    "source": "logo-next/src/logo-motion.js",
+    "license": "Apache-2.0",
+    "purpose": "Unchanged own vector logo renderer/motion module; source hash recorded in web/src/shared/brand/vendor/PROVENANCE.md."
+  },
+  {
+    "path": "web/src/shared/brand/vendor/logo-svg.js",
+    "sha256": "e61c2fbc142e826a0652db7ec12bd0d920585a26b15acaaf36f60c4920ad404d",
+    "source": "logo-next/src/logo-svg.js",
+    "license": "Apache-2.0",
+    "purpose": "Unchanged own vector logo renderer/motion module; source hash recorded in web/src/shared/brand/vendor/PROVENANCE.md."
+  },
+  {
+    "path": "web/src/shared/brand/vendor/motion-blueprint.js",
+    "sha256": "67f24e0fed7d9d64d5acaec3271799c61e2bc9bedd189e2dab8c653e1c691ad1",
+    "source": "logo-next/src/motion-blueprint.js",
+    "license": "Apache-2.0",
+    "purpose": "Unchanged own vector logo renderer/motion module; source hash recorded in web/src/shared/brand/vendor/PROVENANCE.md."
+  },
+  {
+    "path": "web/src/shared/brand/vendor/motion-shared.js",
+    "sha256": "d08427f9f4bab3f02afe2868aec69d7a4d7781d4b8c82ad2cb7b757a9c62a2df",
+    "source": "logo-next/src/motion-shared.js",
+    "license": "Apache-2.0",
+    "purpose": "Unchanged own vector logo renderer/motion module; source hash recorded in web/src/shared/brand/vendor/PROVENANCE.md."
+  },
+  {
+    "path": "web/src/shared/brand/vendor/motion-stack.js",
+    "sha256": "4c0e8ccaafbc90641c90ec8af15db9cadad56ac5b2434ff0f26915288e74c923",
+    "source": "logo-next/src/motion-stack.js",
+    "license": "Apache-2.0",
+    "purpose": "Unchanged own vector logo renderer/motion module; source hash recorded in web/src/shared/brand/vendor/PROVENANCE.md."
+  },
+  {
+    "path": "web/src/shared/brand/vendor/shapes.js",
+    "sha256": "d59670bc2b0f1a4cc2146bdaa53435badfae0ca99a1a4aa966024ccdc96ba06b",
+    "source": "logo-next/src/shapes.js",
+    "license": "Apache-2.0",
+    "purpose": "Unchanged own vector logo renderer/motion module; source hash recorded in web/src/shared/brand/vendor/PROVENANCE.md."
   }
 ]

@@ -1,0 +1,27 @@
+import { Download, Eye, Layers, ShieldAlert, Trash2 } from "lucide-react";
+import { useNavigate } from "react-router";
+import { useTranslations } from "use-intl";
+
+import type { DockerImage, ImageUsage } from "@/domain/images";
+import type { Host, Tone } from "@/domain/model";
+import { hasUpdate } from "@/domain/updates";
+import type { MenuGroups } from "@/shared/components/action-menu";
+
+export const USAGE_TONE: Record<ImageUsage, Tone> = { "in-use": "ok", unused: "warn", dangling: "orange" };
+
+/** Actions of one image; the ellipsis button and the row's context menu share them. */
+export function useImageMenu(image: DockerImage, host: Host | undefined, open: { details: (id: string) => void; pull: (image: DockerImage) => void; remove: (image: DockerImage) => void }): MenuGroups {
+  const t = useTranslations("images.menu");
+  const navigate = useNavigate();
+  const online = host?.status === "online";
+  const stack = image.consumers.find((c) => c.stackId && !c.system)?.stackId;
+  return [
+    [{ id: "details", label: t("details"), icon: <Eye />, onSelect: () => open.details(image.id) }],
+    [
+      { id: "pull", label: t("pullAgain"), icon: <Download />, disabled: !online || image.tag === null, onSelect: () => open.pull(image) },
+      ...(image.update && hasUpdate(image.update) && stack ? [{ id: "update", label: t("openUpdate"), icon: <Layers />, onSelect: () => navigate(`/stacks/${stack}`) }] : []),
+      ...(image.vulnerabilities ? [{ id: "security", label: t("security"), icon: <ShieldAlert />, onSelect: () => navigate("/security?tab=images") }] : []),
+    ],
+    [{ id: "remove", label: t("remove"), icon: <Trash2 />, disabled: !online || image.consumers.length > 0, onSelect: () => open.remove(image) }],
+  ];
+}
