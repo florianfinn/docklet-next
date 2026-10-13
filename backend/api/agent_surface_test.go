@@ -26,8 +26,8 @@ const routeSnapshotHeader = "# Source: docklet-next/docs/design/core-adoption.md
 
 func TestAgentAndEdgeAgentRouteAllowlist(t *testing.T) {
 	wantModules := []string{
-		"container", "diagnostics", "health", "image", "image-update",
-		"network", "port", "project", "settings", "system", "updater", "upload",
+		"activity", "container", "diagnostics", "health", "image", "image-update",
+		"job", "network", "port", "project", "registry", "settings", "system", "updater", "upload",
 		"version", "volume", "vulnerability",
 	}
 	wantRoutes, err := os.ReadFile(filepath.Join("testdata", "agent-routes.txt"))

@@ -23,11 +23,14 @@ invoke the host operations below, so additions require an explicit review.
 | updater | Checks and applies configured host resource updates. |
 | system | Reports Docker host state and runs Docker-wide lifecycle/prune operations. Hub backup and hub upgrade routes are excluded. |
 | diagnostics | Exposes host actor diagnostics for support and fault investigation. |
+| registry | Accepts registry credential synchronization from the hub for private pulls. Listing, editing and testing credentials are excluded; a manager credential can still replace agent pull credentials. |
+| job | Exposes environment-scoped schedules, jobs and run controls for hub orchestration. A manager credential can trigger host jobs, retry runs and alter schedules. |
+| activity | Exposes environment-scoped activity history, detail and cancellation. A manager credential can read task output, cancel work and clear history. |
 | vulnerability | Scans images and records vulnerability findings and ignore rules. |
 | WebSocket routes | Streams container/project logs, stats and shell traffic; the Echo route snapshot protects these non-Huma endpoints. |
 
 Identity, users, roles, API keys, environment enrollment and management,
-notifications, schedules, webhooks, dashboard, search and hub event ingress
+notifications, webhooks, dashboard, search and hub event ingress
 remain hub routes. Agent mode also omits the browser UI, API documentation,
-test-only Playwright routes and manager Edge tunnel listener. An Edge agent
+pprof profiling endpoints, test-only Playwright routes and manager Edge tunnel listener. Agent self-upgrade checks and trigger are exposed through system; a manager credential can replace the running agent binary, while update-all and hub backup controls stay on the hub. An Edge agent
 connects outward; this allowlist does not open a public Edge listener.

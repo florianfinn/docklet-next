@@ -22,12 +22,14 @@ its test-only connection URL as `DATABASE_URL`, `DOCKLET_TEST_POSTGRES_DSN`
 and `ARCANE_TEST_POSTGRES_DSN`; the tests create and drop
 temporary databases and may modify the configured test database. If Go runs
 inside a toolchain container, forward `DATABASE_URL` into that container.
+Use a fresh configured test database for each full tagged run because durable
+actor tests persist state there.
 Run the tagged suite serially relative to other test suites and cap Go package
 parallelism on constrained machines:
 
 ```sh
 cd backend
-GOFLAGS=-p=2 VITEST_MAX_WORKERS=2 \
+GOFLAGS=-p=2 \
   DATABASE_URL='postgres://docklet:test-only@127.0.0.1:5432/docklet?sslmode=disable' \
   DOCKLET_TEST_POSTGRES_DSN='postgres://docklet:test-only@127.0.0.1:5432/docklet?sslmode=disable' \
   ARCANE_TEST_POSTGRES_DSN='postgres://docklet:test-only@127.0.0.1:5432/docklet?sslmode=disable' \

@@ -10,10 +10,13 @@ package schema
 
 import (
 	"crypto/rand"
+	_ "embed"
 	"encoding/hex"
+	"encoding/json"
 	"fmt"
 	"net/url"
 	"os"
+	"slices"
 	"strings"
 	"testing"
 
@@ -23,6 +26,12 @@ import (
 
 	"github.com/florianfinn/docklet-next/backend/internal/database"
 )
+
+//go:embed retained_integrity.sql
+var retainedIntegritySQL string
+
+//go:embed testdata/retained-integrity.json
+var retainedIntegrityReference []byte
 
 func freshDatabase(t *testing.T, admin *gorm.DB, source *url.URL) string {
 	t.Helper()
@@ -65,6 +74,32 @@ SELECT object FROM (
 	return rows
 }
 
+func integrityCatalog(t *testing.T, db *gorm.DB) []string {
+	t.Helper()
+	const query = `
+SELECT object FROM (
+ SELECT 'notnull:' || c.relname || '.' || a.attname AS object
+ FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace JOIN pg_attribute a ON a.attrelid=c.oid
+ WHERE n.nspname='public' AND c.relkind='r' AND a.attnum>0 AND NOT a.attisdropped AND a.attnotnull
+ UNION ALL
+ SELECT 'default:' || c.relname || '.' || a.attname || ':' || pg_get_expr(d.adbin,d.adrelid)
+ FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace JOIN pg_attribute a ON a.attrelid=c.oid
+ JOIN pg_attrdef d ON d.adrelid=c.oid AND d.adnum=a.attnum
+ WHERE n.nspname='public' AND c.relkind='r' AND c.relname<>'goose_db_version'
+ UNION ALL
+ SELECT 'constraint:' || c.relname || ':' || pg_get_constraintdef(x.oid)
+ FROM pg_constraint x JOIN pg_class c ON c.oid=x.conrelid JOIN pg_namespace n ON n.oid=c.relnamespace
+ WHERE n.nspname='public' AND c.relname<>'goose_db_version' AND x.contype<>'n'
+ UNION ALL
+ SELECT 'index:' || c.relname || ':' || substr(pg_get_indexdef(i.indexrelid), strpos(pg_get_indexdef(i.indexrelid),' ON public.'))
+ FROM pg_index i JOIN pg_class c ON c.oid=i.indrelid JOIN pg_namespace n ON n.oid=c.relnamespace
+ WHERE n.nspname='public' AND c.relname<>'goose_db_version'
+) objects ORDER BY object`
+	var rows []string
+	require.NoError(t, db.Raw(query).Scan(&rows).Error)
+	return rows
+}
+
 func TestFreshMigrationMatchesRetainedModels(t *testing.T) {
 	dsn := os.Getenv("DATABASE_URL")
 	require.NotEmpty(t, dsn, "DATABASE_URL must point to the test PostgreSQL service")
@@ -87,7 +122,34 @@ func TestFreshMigrationMatchesRetainedModels(t *testing.T) {
 	require.NoError(t, err)
 	t.Cleanup(func() { require.NoError(t, modelSQL.Close()) })
 	require.NoError(t, modelDB.AutoMigrate(Models()...))
+	for _, statement := range strings.Split(retainedIntegritySQL, ";") {
+		if strings.TrimSpace(statement) != "" {
+			require.NoError(t, modelDB.Exec(statement).Error)
+		}
+	}
 	require.Equal(t, catalog(t, modelDB), catalog(t, migrated.DB))
+	var expected [][]string
+	require.NoError(t, json.Unmarshal(retainedIntegrityReference, &expected))
+	actual := integrityCatalog(t, migrated.DB)
+	var missing []string
+	for _, parts := range expected {
+		var entry string
+		switch parts[0] {
+		case "notnull":
+			require.Len(t, parts, 3)
+			entry = "notnull:" + parts[1] + "." + parts[2]
+		case "default":
+			require.Len(t, parts, 4)
+			entry = "default:" + parts[1] + "." + parts[2] + ":" + parts[3]
+		default:
+			require.Len(t, parts, 3)
+			entry = parts[0] + ":" + parts[1] + ":" + parts[2]
+		}
+		if !slices.Contains(actual, entry) {
+			missing = append(missing, entry)
+		}
+	}
+	require.Empty(t, missing, "baseline must retain the independent old-chain integrity reference")
 
 	var tableNames []string
 	require.NoError(t, migrated.Raw("SELECT tablename FROM pg_tables WHERE schemaname='public' AND tablename<>'goose_db_version' ORDER BY tablename").Scan(&tableNames).Error)

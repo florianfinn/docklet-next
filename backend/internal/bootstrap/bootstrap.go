@@ -265,13 +265,6 @@ func initializeStartupState(p initializeStartupStateParams) {
 	startup.InitializeNonAgentFeatures(appCtx, runtimeCfg,
 		p.Role.EnsureBuiltInRoles,
 		func(ctx context.Context) error {
-			// Backfill legacy users.roles first so CreateDefaultAdmin's
-			// zero-global-admin recovery gate sees upgraded assignments.
-			// Runs once (kv completion marker); runRoleStartupTasks repeats
-			// the call for agent-mode and error-retry coverage.
-			if err := p.Role.BackfillLegacyRoleAssignments(ctx); err != nil {
-				slog.WarnContext(ctx, "Failed to backfill legacy role assignments before admin bootstrap", "error", err)
-			}
 			return p.User.CreateDefaultAdmin(ctx)
 		},
 		func(ctx context.Context) error {
@@ -305,13 +298,6 @@ func runRoleStartupTasks(ctx context.Context, roleService *role.RoleService, api
 	}
 	if err := roleService.EnsureBuiltInRoles(ctx); err != nil {
 		slog.ErrorContext(ctx, "Failed to reconcile built-in roles", "error", err)
-	}
-	// Backfill must run AFTER EnsureBuiltInRoles (it references the role IDs
-	// seeded there) and BEFORE BackfillApiKeyPermissions / AssertGlobalAdminExists
-	// (both consult the assignments table this populates). It is a no-op once
-	// its kv completion marker exists.
-	if err := roleService.BackfillLegacyRoleAssignments(ctx); err != nil {
-		slog.ErrorContext(ctx, "Failed to backfill legacy users.roles into user_role_assignments", "error", err)
 	}
 	if apiKeyService != nil {
 		if err := apiKeyService.BackfillApiKeyPermissions(ctx); err != nil {

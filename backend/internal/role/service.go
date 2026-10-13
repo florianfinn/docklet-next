@@ -11,7 +11,6 @@ import (
 	"encoding/json/v2"
 	"errors"
 	"fmt"
-	"log/slog"
 	"maps"
 	"slices"
 	"strings"
@@ -23,21 +22,18 @@ import (
 	"github.com/samber/hot"
 	"github.com/samber/mo"
 	"go.getarcane.app/kit/normalization"
-	"go.getarcane.app/kit/pkg"
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
 
 	"github.com/florianfinn/docklet-next/backend/internal/common"
 	"github.com/florianfinn/docklet-next/backend/internal/database"
-	"github.com/florianfinn/docklet-next/backend/internal/kv"
 	"github.com/florianfinn/docklet-next/backend/pkg/authz"
 	"github.com/florianfinn/docklet-next/backend/pkg/pagination"
 	"github.com/florianfinn/docklet-next/backend/pkg/utils/dbutil"
 )
 
 const (
-	permissionCacheTTL             = 60 * time.Second
-	legacyRoleBackfillCompletedKey = "migration.legacy_user_roles.v1.completed"
+	permissionCacheTTL = 60 * time.Second
 )
 
 type RoleService struct {
@@ -94,74 +90,9 @@ func (s *RoleService) EnsureBuiltInRoles(ctx context.Context) error {
 	})
 }
 
-// BackfillLegacyRoleAssignments converts pre-RBAC users.roles into global assignments once, gated by a kv marker committed with the rows.
-func (s *RoleService) BackfillLegacyRoleAssignments(ctx context.Context) error {
-	migrator := s.db.WithContext(ctx).Migrator()
-	if !migrator.HasColumn("users", "roles") {
-		return nil
-	}
-
-	type legacyUser struct {
-		ID    string `gorm:"column:id"`
-		Roles string `gorm:"column:roles"`
-	}
-
-	var inserted int64
-	err := dbutil.WithTx(ctx, s.db.DB, func(tx *gorm.DB) error {
-		claimed, err := kv.NewKVService(&database.DB{DB: tx}).CreateIfAbsent(ctx, legacyRoleBackfillCompletedKey, time.Now().UTC().Format(time.RFC3339))
-		if err != nil {
-			return fmt.Errorf("failed to claim legacy role backfill marker: %w", err)
-		}
-		if !claimed {
-			return nil
-		}
-		var rows []legacyUser
-		if loadLegacyUsersErr := tx.Table("users").Select("id, roles").
-			Where("NOT EXISTS (SELECT 1 FROM user_role_assignments ura WHERE ura.user_id = users.id)").
-			Scan(&rows).Error; loadLegacyUsersErr != nil {
-			return fmt.Errorf("failed to read legacy users.roles for backfill: %w", loadLegacyUsersErr)
-		}
-		for _, u := range rows {
-			roleID := kit.Ternary(legacyRolesContainsAdminInternal(u.Roles), authz.BuiltInRoleAdmin, authz.BuiltInRoleViewer)
-			assignment := UserRoleAssignment{
-				UserID: u.ID,
-				RoleID: roleID,
-				Source: RoleAssignmentSourceManual,
-			}
-			result := tx.Clauses(clause.OnConflict{DoNothing: true}).Create(&assignment)
-			if result.Error != nil {
-				return fmt.Errorf("failed to backfill assignment for user %s: %w", u.ID, result.Error)
-			}
-			inserted += result.RowsAffected
-		}
-		return nil
-	})
-	if err != nil {
-		return err
-	}
-	if inserted > 0 {
-		slog.InfoContext(ctx, "Backfilled legacy users.roles into user_role_assignments", "assignmentCount", inserted)
-	}
-	return nil
-}
-
-// legacyRolesContainsAdminInternal reports whether a legacy users.roles JSON value names "admin"; anything else was a regular user.
-func legacyRolesContainsAdminInternal(raw string) bool {
-	var roles []string
-	if err := json.Unmarshal([]byte(raw), &roles); err != nil {
-		return false
-	}
-	for _, r := range roles {
-		if strings.EqualFold(strings.TrimSpace(r), "admin") {
-			return true
-		}
-	}
-	return false
-}
-
 // AssertGlobalAdminExists returns common.ErrNoGlobalAdminRemains if zero
 // non-service users resolve to global administrator permissions. Called at boot
-// after the backfill migration; also called from inside mutation paths.
+// after role reconciliation; also called from inside mutation paths.
 func (s *RoleService) AssertGlobalAdminExists(ctx context.Context) error {
 	count, err := s.countEffectiveGlobalAdminsInternal(ctx, s.db.WithContext(ctx), "")
 	if err != nil {

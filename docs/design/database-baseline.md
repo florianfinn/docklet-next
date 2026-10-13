@@ -19,20 +19,31 @@ cd ..
 pg_dump --schema-only --no-owner --no-privileges "$DATABASE_URL" \
   | python3 scripts/normalize-baseline.py \
   > backend/resources/migrations/postgres/001_baseline.sql
+cat backend/internal/schema/retained_integrity.sql \
+  >> backend/resources/migrations/postgres/001_baseline.sql
 ```
 
 The dump normalizer retains table, sequence, constraint and index definitions,
-without PostgreSQL session settings or dump comments. The generated SQL has no
-seed rows. `scripts/migration-hashes.json` records its SHA-256. The migration
-guard checks that hash and every later shipped migration, and requires later
-version numbers to sort after `001`. Regeneration is only a pre-release
-operation; changing a shipped baseline requires a new migration instead.
+without PostgreSQL session settings or dump comments. It rejects unknown SQL
+statements. The overlay contains retained-column defaults, nullability,
+foreign keys, checks and indexes derived from the 90 old PostgreSQL migrations
+applied to an empty database, excluding columns and objects removed by the
+functional cut. The independent test reference in
+`backend/internal/schema/testdata/retained-integrity.json` records 500 expected
+properties from that old chain. The generated SQL has no seed rows.
+`scripts/migration-hashes.json` records its SHA-256, and
+`scripts/check-migrations.mjs` pins the baseline SHA-256 independently of the
+manifest. Changing the baseline before first release requires an explicit
+reviewed update of both pins and the old-chain reference when applicable;
+shipped baselines require a new forward migration instead. The guard rejects
+missing manifests, missing baselines and version numbers not after `001`.
 
 The tagged PostgreSQL integration test creates two empty databases: it applies
-Goose to one and GORM AutoMigrate to the other. It compares the catalog in both
-directions, excluding only Goose's bookkeeping objects, and checks that all
-model tables start empty. A separate test starts hub wiring against another
-empty database and requests `/api/health`.
+Goose to one and GORM AutoMigrate plus the retained integrity overlay to the
+other. It compares the catalog in both directions, excludes only Goose's
+bookkeeping objects, checks all 500 independently recorded old-chain integrity
+properties, and checks that all model tables start empty. A separate test
+starts hub wiring against another empty database and requests `/api/health`.
 
 The 90 imported Arcane migration files at source revision
 `095cb778daba1034e2a39961199e712a75d4ba29` were removed before release.

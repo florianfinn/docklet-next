@@ -42,8 +42,10 @@ function foundationPath(path) {
 function scopePolicies(root, paths) {
   const retained = new Set(paths);
   const has = (path) => retained.has(path);
-  if (!has("backend/resources/migrations/postgres/001_baseline.sql"))
+  if (!has("backend/resources/migrations/postgres/001_baseline.sql")) {
     rmSync(resolve(root, "scripts/migration-hashes.json"), { force: true });
+    rmSync(resolve(root, "backend/resources/migrations"), { recursive: true, force: true });
+  }
   const entries = (value) => Object.fromEntries(Object.entries(value).filter(([path]) => has(path)));
   for (const path of ["scripts/assets.json", "scripts/publication-allowlist.json"])
     writeJSON(root, path, readJSON(root, path).filter((entry) => has(entry.path)));

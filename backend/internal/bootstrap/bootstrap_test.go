@@ -207,9 +207,12 @@ func TestHTTP2APIResponsesDoNotUseAPIGzipInternal(t *testing.T) {
 	transport := &http.Transport{Protocols: clientProtocols, DisableCompression: true}
 	client := &http.Client{Transport: transport}
 
-	for _, path := range []string{"/api/health", "/api/openapi.json"} {
-		t.Run(path, func(t *testing.T) {
-			req, requestErr := http.NewRequest(http.MethodGet, "http://"+listener.Addr().String()+path, http.NoBody)
+	for _, route := range []struct {
+		path   string
+		status int
+	}{{"/api/health", http.StatusOK}, {"/api/openapi.json", http.StatusNotFound}} {
+		t.Run(route.path, func(t *testing.T) {
+			req, requestErr := http.NewRequest(http.MethodGet, "http://"+listener.Addr().String()+route.path, http.NoBody)
 			require.NoError(t, requestErr)
 			req.Header.Set("Accept-Encoding", "gzip")
 
@@ -221,7 +224,7 @@ func TestHTTP2APIResponsesDoNotUseAPIGzipInternal(t *testing.T) {
 			require.NoError(t, readErr)
 
 			require.Equal(t, "HTTP/2.0", resp.Proto)
-			require.Equal(t, http.StatusOK, resp.StatusCode)
+			require.Equal(t, route.status, resp.StatusCode)
 			require.Empty(t, resp.Header.Get("Content-Encoding"))
 
 			if contentLength := resp.Header.Get("Content-Length"); contentLength != "" {

@@ -57,6 +57,31 @@ func (m *Module) RegisterRoutes(api huma.API) {
 	browse.RegisterRoutes(api, m.browseHandler)
 }
 
+// RegisterAgentRoutes accepts credential synchronization from the manager only.
+func (m *Module) RegisterAgentRoutes(api huma.API) {
+	var h *ContainerRegistryHandler
+	if m != nil {
+		h = m.handler
+	}
+	if h == nil {
+		h = NewHandler(nil, nil)
+	}
+	registerSyncRoute(api, h)
+}
+
+func registerSyncRoute(api huma.API, h *ContainerRegistryHandler) {
+	huma.Register(api, huma.Operation{
+		OperationID: "syncContainerRegistries",
+		Method:      "POST",
+		Path:        "/container-registries/sync",
+		Summary:     "Sync container registries",
+		Description: "Sync container registries from a remote source",
+		Tags:        []string{"Container Registries"},
+		Security:    handlerutil.DefaultOperationSecurity(),
+		Middlewares: middleware.RequirePermission(api, authz.PermRegistriesUpdate),
+	}, h.SyncRegistries)
+}
+
 func RegisterContainerRegistries(api huma.API, h *ContainerRegistryHandler) {
 	huma.Register(api, huma.Operation{
 		OperationID: "listContainerRegistries",
@@ -80,16 +105,7 @@ func RegisterContainerRegistries(api huma.API, h *ContainerRegistryHandler) {
 		Middlewares: middleware.RequirePermission(api, authz.PermRegistriesCreate),
 	}, h.CreateRegistry)
 
-	huma.Register(api, huma.Operation{
-		OperationID: "syncContainerRegistries",
-		Method:      "POST",
-		Path:        "/container-registries/sync",
-		Summary:     "Sync container registries",
-		Description: "Sync container registries from a remote source",
-		Tags:        []string{"Container Registries"},
-		Security:    handlerutil.DefaultOperationSecurity(),
-		Middlewares: middleware.RequirePermission(api, authz.PermRegistriesUpdate),
-	}, h.SyncRegistries)
+	registerSyncRoute(api, h)
 
 	huma.Register(api, huma.Operation{
 		OperationID: "getContainerRegistryPullUsage",

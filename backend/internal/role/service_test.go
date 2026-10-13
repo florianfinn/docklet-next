@@ -65,18 +65,6 @@ func TestValidatePermissionsAgainstCallerRejectsUnknownPermissionBeforeEscalatio
 	require.NotErrorIs(t, err, common.ErrRolePermissionEscalation)
 }
 
-func TestBackfillLegacyRoleAssignments(t *testing.T) {
-	ctx := t.Context()
-
-	t.Run("no-op without legacy column", func(t *testing.T) {
-		db, roleSvc := setupUserAndRoleServices(t)
-		require.False(t, db.Migrator().HasColumn("users", "roles"))
-		require.NoError(t, roleSvc.BackfillLegacyRoleAssignments(ctx))
-		require.NoError(t, roleSvc.BackfillLegacyRoleAssignments(ctx))
-	})
-
-}
-
 func assignedRoleIDs(t *testing.T, roleSvc *role.RoleService, userID string) []string {
 	t.Helper()
 	assignments, err := roleSvc.ListUserAssignments(t.Context(), userID)

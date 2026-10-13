@@ -1,16 +1,55 @@
 #!/usr/bin/env python3
 """Turn a schema-only pg_dump of the model registry into one Goose migration."""
 
-import re
 import sys
 
-source = sys.stdin.read()
-source = "\n".join(line for line in source.splitlines() if not line.startswith("--"))
+def split_sql(source):
+    statements, current = [], []
+    quote = None
+    i = 0
+    while i < len(source):
+        char = source[i]
+        if quote is None and source.startswith("--", i):
+            end = source.find("\n", i)
+            i = len(source) if end == -1 else end
+            continue
+        if quote is None and source.startswith("/*", i):
+            end = source.find("*/", i + 2)
+            if end == -1:
+                raise SystemExit("unterminated SQL comment")
+            i = end + 2
+            continue
+        if quote is None and char in ("'", '"'):
+            quote = char
+        elif quote == char:
+            if source[i:i + 2] == char * 2:
+                current.extend((char, char))
+                i += 2
+                continue
+            quote = None
+        elif quote is None and char == ";":
+            statements.append("".join(current).strip())
+            current = []
+            i += 1
+            continue
+        current.append(char)
+        i += 1
+    if quote or "".join(current).strip():
+        raise SystemExit("unterminated SQL statement")
+    return [statement for statement in statements if statement]
+
+source = "\n".join(line for line in sys.stdin.read().splitlines()
+                   if not line.startswith("\\restrict") and not line.startswith("\\unrestrict"))
 statements = []
-for chunk in source.split(";"):
-    statement = chunk.strip()
-    if re.match(r"^(CREATE (?:TABLE|SEQUENCE|(?:UNIQUE )?INDEX)|ALTER (?:TABLE|SEQUENCE))\b", statement):
-        statements.append(statement + ";")
+for statement in split_sql(source):
+    normalized = " ".join(statement.upper().split())
+    if normalized.startswith("SET ") or normalized.startswith("SELECT PG_CATALOG.SET_CONFIG("):
+        continue
+    if not normalized.startswith(("CREATE TABLE ", "CREATE SEQUENCE ", "CREATE INDEX ",
+                                  "CREATE UNIQUE INDEX ", "ALTER TABLE ", "ALTER SEQUENCE ",
+                                  "CREATE TYPE ", "COMMENT ON ")):
+        raise SystemExit("unsupported pg_dump statement: " + statement.split()[0])
+    statements.append(statement + ";")
 
 if not statements or not any(s.startswith("CREATE TABLE") for s in statements):
     raise SystemExit("input does not contain a PostgreSQL schema")

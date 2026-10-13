@@ -310,6 +310,11 @@ func SetupAPI(e *echo.Echo, apiGroup *echo.Group, appCtx handlerutil.ActivityApp
 		{"BearerAuth": {}},
 		{"ApiKeyAuth": {}},
 	}
+	if cfg != nil && (cfg.AgentMode || cfg.EdgeAgent) {
+		humaConfig.OpenAPIPath = ""
+		humaConfig.SchemasPath = ""
+		humaConfig.DocsPath = ""
+	}
 
 	// Use custom schema namer to avoid conflicts between types with same name
 	// from different packages (e.g., image.Summary vs env.Summary)
@@ -377,6 +382,11 @@ func setupAPIForSpecMode(cfg *config.Config) huma.API {
 		{"BearerAuth": {}},
 		{"ApiKeyAuth": {}},
 	}
+	if cfg != nil && (cfg.AgentMode || cfg.EdgeAgent) {
+		humaConfig.OpenAPIPath = ""
+		humaConfig.SchemasPath = ""
+		humaConfig.DocsPath = ""
+	}
 
 	// Use custom schema namer to avoid conflicts between types with same name
 	humaConfig.Components.Schemas = huma.NewMapRegistry("#/components/schemas/", customSchemaNamer)
@@ -426,14 +436,18 @@ var routeModules = []routeModule{
 	{"event", false, func(api huma.API, d HandlerDeps, _ handlerutil.ActivityAppContext, _ *config.Config) {
 		d.Event.RegisterRoutes(api)
 	}},
-	{"activity", false, func(api huma.API, d HandlerDeps, _ handlerutil.ActivityAppContext, _ *config.Config) {
+	{"activity", true, func(api huma.API, d HandlerDeps, _ handlerutil.ActivityAppContext, _ *config.Config) {
 		d.Activity.RegisterRoutes(api)
 	}},
 	{"environment", false, func(api huma.API, d HandlerDeps, c handlerutil.ActivityAppContext, _ *config.Config) {
 		d.Environment.RegisterRoutes(api, c)
 	}},
-	{"registry", false, func(api huma.API, d HandlerDeps, _ handlerutil.ActivityAppContext, _ *config.Config) {
-		d.ContainerRegistry.RegisterRoutes(api)
+	{"registry", true, func(api huma.API, d HandlerDeps, _ handlerutil.ActivityAppContext, cfg *config.Config) {
+		if cfg != nil && (cfg.AgentMode || cfg.EdgeAgent) {
+			d.ContainerRegistry.RegisterAgentRoutes(api)
+		} else {
+			d.ContainerRegistry.RegisterRoutes(api)
+		}
 	}},
 	{"image", true, func(api huma.API, d HandlerDeps, c handlerutil.ActivityAppContext, _ *config.Config) {
 		d.Image.RegisterRoutes(api, c)
@@ -447,7 +461,7 @@ var routeModules = []routeModule{
 	{"settings", true, func(api huma.API, d HandlerDeps, _ handlerutil.ActivityAppContext, _ *config.Config) {
 		d.Settings.RegisterRoutes(api)
 	}},
-	{"job", false, func(api huma.API, d HandlerDeps, _ handlerutil.ActivityAppContext, _ *config.Config) {
+	{"job", true, func(api huma.API, d HandlerDeps, _ handlerutil.ActivityAppContext, _ *config.Config) {
 		d.JobSchedule.RegisterRoutes(api)
 	}},
 	{"volume", true, func(api huma.API, d HandlerDeps, c handlerutil.ActivityAppContext, _ *config.Config) {

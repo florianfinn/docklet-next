@@ -7,11 +7,16 @@ import { dirname, join, relative } from "node:path";
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
 const migrationDir = "backend/resources/migrations/postgres";
 const baseline = "001_baseline.sql";
+// Independent of the manifest so rehashing a shipped baseline cannot certify it.
+const baselineHash = "44ece0ce97d7605dd165f2859203dc63235dafda041a86c547423a3d2c2e7396";
 
-export function migrationProblems(files, manifest) {
+export function migrationProblems(files, manifest, pinnedBaselineHash = baselineHash) {
   const problems = [];
   const names = Object.keys(manifest).sort();
   if (!names.includes(baseline)) problems.push("missing-baseline-manifest");
+  if (!files.has(baseline)) problems.push("missing-baseline");
+  else if (createHash("sha256").update(files.get(baseline)).digest("hex") !== pinnedBaselineHash)
+    problems.push("changed-baseline");
   for (const name of names) {
     if (!files.has(name)) problems.push(`deleted:${name}`);
     else if (createHash("sha256").update(files.get(name)).digest("hex") !== manifest[name])
@@ -30,38 +35,54 @@ export function migrationProblems(files, manifest) {
   return problems;
 }
 
+function baseManifestProblems(manifest) {
+  const base = process.env.CHECK_BASE_SHA;
+  if (!base) return [];
+  if (!/^[a-f0-9]{40}$/.test(base)) throw new Error("migration-integrity: invalid base revision");
+  const previous = spawnSync("git", ["show", `${base}:scripts/migration-hashes.json`], { cwd: root });
+  if (previous.status !== 0) return [];
+  return Object.entries(JSON.parse(previous.stdout.toString("utf8")))
+    .filter(([name, hash]) => manifest[name] !== hash)
+    .map(([name]) => `changed-shipped:${name}`);
+}
+
 export function checkMigrations() {
   const staged = process.argv.includes("--staged");
   const manifestPath = join(root, "scripts/migration-hashes.json");
   if (staged) {
+    const listing = spawnSync("git", ["ls-files", "-z", "--", migrationDir], { cwd: root, encoding: "utf8" });
+    if (listing.status !== 0) throw new Error("migration-integrity: cannot read index");
+    const paths = listing.stdout.split("\0").filter(Boolean);
+    const product = spawnSync("git", ["ls-files", "--error-unmatch", "backend/internal/schema/models.go"],
+      { cwd: root, stdio: "ignore" }).status === 0;
     const manifestBlob = spawnSync("git", ["show", ":scripts/migration-hashes.json"], { cwd: root });
     if (manifestBlob.status !== 0) {
-      const baselineBlob = spawnSync("git", ["show", `:${migrationDir}/${baseline}`], { cwd: root, stdio: "ignore" });
-      if (baselineBlob.status === 0) throw new Error("migration-integrity: deleted manifest");
+      if (paths.length || product) throw new Error("migration-integrity: deleted manifest");
       return;
     }
     const manifest = JSON.parse(manifestBlob.stdout.toString("utf8"));
-    const listing = spawnSync("git", ["ls-files", "-z", "--", migrationDir], { cwd: root, encoding: "utf8" });
-    if (listing.status !== 0) throw new Error("migration-integrity: cannot read index");
-    const files = new Map(listing.stdout.split("\0").filter(Boolean).map((path) => {
+    const files = new Map(paths.map((path) => {
       const blob = spawnSync("git", ["show", `:${path}`], { cwd: root });
       if (blob.status !== 0) throw new Error(`migration-integrity: unreadable staged file ${path}`);
       return [path.slice(migrationDir.length + 1), blob.stdout];
     }));
-    const problems = migrationProblems(files, manifest);
+    const problems = [...migrationProblems(files, manifest), ...baseManifestProblems(manifest)];
     if (problems.length) throw new Error(`migration-integrity: ${problems.join(", ")}`);
     return;
   }
+  const migrationPath = join(root, migrationDir);
+  if (!existsSync(migrationPath) && !existsSync(manifestPath) &&
+      !existsSync(join(root, "backend/internal/schema/models.go"))) return;
   if (!existsSync(manifestPath)) {
-    const tracked = spawnSync("git", ["ls-files", "--error-unmatch", "scripts/migration-hashes.json"],
-      { cwd: root, stdio: "ignore" });
-    if (tracked.status === 0) throw new Error("migration-integrity: deleted manifest");
-    return;
+    throw new Error("migration-integrity: deleted manifest");
+  }
+  if (!existsSync(migrationPath)) {
+    throw new Error("migration-integrity: deleted baseline");
   }
   const manifest = JSON.parse(readFileSync(manifestPath, "utf8"));
   const files = new Map(readdirSync(join(root, migrationDir)).filter((name) => name.endsWith(".sql"))
     .map((name) => [name, readFileSync(join(root, migrationDir, name))]));
-  const problems = migrationProblems(files, manifest);
+  const problems = [...migrationProblems(files, manifest), ...baseManifestProblems(manifest)];
   if (problems.length) throw new Error(`migration-integrity: ${problems.join(", ")}`);
 }
 

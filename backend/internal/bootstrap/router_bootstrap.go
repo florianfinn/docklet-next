@@ -189,6 +189,7 @@ func newRouter(p RouterParams) (*echo.Echo, *edge.TunnelServer) {
 	ctx := p.Context
 	cfg := p.Config
 	deps := p.HandlerDeps
+	hubMode := !cfg.AgentMode && !cfg.EdgeAgent
 
 	e := newEchoInternal()
 
@@ -243,7 +244,7 @@ func newRouter(p RouterParams) (*echo.Echo, *edge.TunnelServer) {
 		return env.ApiUrl, env.AccessToken, env.Enabled, nil
 	}
 
-	if !cfg.AgentMode && !cfg.EdgeAgent {
+	if hubMode {
 		// These token ingress endpoints belong to the hub only.
 		api.RegisterWebhookTrigger(apiGroup, deps.Webhook.Service(), handlerAppCtx)
 		deps.Event.RegisterAgentRoutes(apiGroup, func(ctx context.Context, token string) (string, error) {
@@ -280,7 +281,7 @@ func newRouter(p RouterParams) (*echo.Echo, *edge.TunnelServer) {
 	permissionMatcher.CollectFromHumaAPI(humaAPI)
 	ws.AddProxiedPermissions(permissionMatcher)
 
-	if !cfg.AgentMode && !cfg.EdgeAgent {
+	if hubMode {
 		for _, register := range registerBuildableRoutes {
 			register(apiGroup, deps)
 		}
@@ -292,11 +293,11 @@ func newRouter(p RouterParams) (*echo.Echo, *edge.TunnelServer) {
 	// Register edge tunnel endpoint for manager to accept agent connections
 	// This is only registered when NOT in agent mode (i.e., running as manager)
 	var tunnelServer *edge.TunnelServer
-	if !cfg.AgentMode && !cfg.EdgeAgent {
+	if hubMode {
 		tunnelServer = registerEdgeTunnelRoutes(ctx, p.Lifecycle, cfg, apiGroup, deps.Environment.Service(), deps.Event.Service(), deps.Notification.Service(), p.TunnelRegistry)
 	}
 
-	if !cfg.AgentMode && !cfg.EdgeAgent && cfg.Environment != "production" {
+	if hubMode && cfg.Environment != "production" {
 		for _, registerFunc := range registerPlaywrightRoutes {
 			registerFunc(apiGroup, deps)
 		}
@@ -311,7 +312,7 @@ func newRouter(p RouterParams) (*echo.Echo, *edge.TunnelServer) {
 	apiGroup.RouteNotFound("", apiNotFound)
 	apiGroup.RouteNotFound("/*", apiNotFound)
 
-	if !cfg.AgentMode && !cfg.EdgeAgent {
+	if hubMode {
 		//nolint:staticcheck,nolintlint // SA4023 only under exclude_frontend: the stub always returns ErrFrontendNotIncluded
 		if err := frontend.RegisterFrontend(e); err != nil {
 			if errors.Is(err, frontend.ErrFrontendNotIncluded) {

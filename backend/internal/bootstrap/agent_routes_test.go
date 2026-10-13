@@ -54,6 +54,11 @@ func TestAgentAndEdgeAgentEchoRoutes(t *testing.T) {
 			for _, route := range router.Router().Routes() {
 				routes = append(routes, route.Method+" "+route.Path)
 			}
+			for _, route := range routes {
+				require.NotContains(t, route, "/openapi")
+				require.NotContains(t, route, "/schemas/")
+				require.NotContains(t, route, "/debug/pprof")
+			}
 			slices.Sort(routes)
 			actual := echoRouteHeader + strings.Join(routes, "\n") + "\n"
 			if os.Getenv("UPDATE_AGENT_ECHO_ROUTES") == "1" {

@@ -160,6 +160,13 @@ func migrateDatabaseToVersionInternal(ctx context.Context, db *sql.DB, dbProvide
 		return fmt.Errorf("read migration version: %w", err)
 	}
 	if currentVersion > requiredVersion {
+		var legacyRolesColumn bool
+		if err := db.QueryRowContext(ctx, `SELECT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema='public' AND table_name='users' AND column_name='roles')`).Scan(&legacyRolesColumn); err != nil {
+			return fmt.Errorf("check migration provenance: %w", err)
+		}
+		if legacyRolesColumn {
+			return errors.New("legacy databases are not supported; start with an empty PostgreSQL database")
+		}
 		return fmt.Errorf("database schema version %d is newer than supported version %d", currentVersion, requiredVersion)
 	}
 	if currentVersion == requiredVersion {

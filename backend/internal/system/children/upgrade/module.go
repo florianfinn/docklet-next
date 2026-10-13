@@ -18,6 +18,12 @@ import (
 
 // RegisterRoutes registers the self-upgrade and update-all endpoints.
 func RegisterRoutes(api huma.API, h *Handler) {
+	RegisterAgentRoutes(api, h)
+	registerUpdateAllRoutes(api, h)
+}
+
+// RegisterAgentRoutes exposes only checks and self-upgrade for one agent.
+func RegisterAgentRoutes(api huma.API, h *Handler) {
 	middleware.RegisterWithPermission(api, huma.Operation{
 		OperationID: "check-upgrade",
 		Method:      http.MethodGet,
@@ -38,6 +44,10 @@ func RegisterRoutes(api huma.API, h *Handler) {
 		Tags:          []string{"System"},
 		Security:      handlerutil.DefaultOperationSecurity(),
 	}, authz.PermSystemUpgrade, h.TriggerUpgrade)
+
+}
+
+func registerUpdateAllRoutes(api huma.API, h *Handler) {
 
 	middleware.RegisterWithPermission(api, huma.Operation{
 		OperationID:   "trigger-update-all",

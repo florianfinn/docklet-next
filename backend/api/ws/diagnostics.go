@@ -22,6 +22,7 @@ import (
 	"go.getarcane.app/streams/logs"
 
 	"github.com/florianfinn/docklet-next/backend/internal/auth"
+	"github.com/florianfinn/docklet-next/backend/internal/config"
 	"github.com/florianfinn/docklet-next/backend/internal/diagnostics"
 	"github.com/florianfinn/docklet-next/backend/internal/middleware"
 	"github.com/florianfinn/docklet-next/backend/pkg/authz"
@@ -58,10 +59,8 @@ func buildDiagnosticsInternal(diag *diagnostics.DiagnosticsService) systemtypes.
 	return d
 }
 
-// registerDiagnosticsRoutesInternal wires the global diagnostics WebSocket streams and the
-// net/http/pprof debug endpoints. Streams require the diagnostics permission;
-// pprof keeps the stricter admin-required gate. Called from NewWebSocketHandler.
-func (h *WebSocketHandler) registerDiagnosticsRoutesInternal(group *echo.Group, authMiddleware *auth.AuthMiddleware) {
+// registerDiagnosticsRoutesInternal wires diagnostics streams and hub-only pprof.
+func (h *WebSocketHandler) registerDiagnosticsRoutesInternal(group *echo.Group, authMiddleware *auth.AuthMiddleware, cfg *config.Config) {
 	diag := group.Group("/diagnostics",
 		authMiddleware.WithAdminNotRequired().Add(),
 		middleware.RequireEchoPermission(authz.PermDiagnosticsRead),
@@ -69,6 +68,9 @@ func (h *WebSocketHandler) registerDiagnosticsRoutesInternal(group *echo.Group, 
 	diag.GET("/stream", h.DiagnosticsStream)
 	diag.GET("/actors/stream", h.ActorDiagnosticsStream)
 	diag.GET("/logs/stream", h.ServerLogsStream)
+	if cfg.AgentMode || cfg.EdgeAgent {
+		return
+	}
 
 	pprofGroup := group.Group("/debug/pprof", authMiddleware.WithAdminRequired().Add())
 	pprofGroup.GET("", echo.WrapHandler(http.HandlerFunc(pprof.Index)))
