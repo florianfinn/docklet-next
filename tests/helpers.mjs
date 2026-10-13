@@ -28,15 +28,48 @@ export function write(root, path, content) {
 }
 export const git = (root, ...args) => ok(invoke(root, "git", args));
 export const node = (root, script, ...args) => invoke(root, process.execPath, [script, ...args]);
-export function scratch(t) {
+// Scratch repositories contain guard infrastructure, never imported product trees.
+const FOUNDATION_FILES = new Set([
+  "package.json", "pnpm-lock.yaml", "LICENSE", "NOTICE", "AGENTS.md",
+  "README.md", "CONTRIBUTING.md", "SECURITY.md", ".gitignore", ".editorconfig",
+  ".env.example", ".claude/settings.json", "docs/design/publication-policy.md",
+  "docs/design/review-workflow.md", "tests/helpers.mjs", "tests/workflow-contracts.mjs",
+]);
+function foundationPath(path) {
+  return FOUNDATION_FILES.has(path) ||
+    ["scripts/", ".githooks/", ".github/", "LICENSES/"].some((prefix) => path.startsWith(prefix));
+}
+function scopePolicies(root, paths) {
+  const retained = new Set(paths);
+  const has = (path) => retained.has(path);
+  const entries = (value) => Object.fromEntries(Object.entries(value).filter(([path]) => has(path)));
+  for (const path of ["scripts/assets.json", "scripts/publication-allowlist.json"])
+    writeJSON(root, path, readJSON(root, path).filter((entry) => has(entry.path)));
+  const size = readJSON(root, "scripts/size-baseline.json");
+  size.adopted = entries(size.adopted);
+  size.generated = size.generated.filter(has);
+  writeJSON(root, "scripts/size-baseline.json", size);
+  const provenance = readJSON(root, "scripts/provenance.json");
+  provenance.files = provenance.files.filter(has);
+  provenance.sidecars = entries(provenance.sidecars);
+  if (provenance.snapshots) provenance.snapshots = Object.fromEntries(
+    Object.entries(provenance.snapshots).filter(([prefix]) => paths.some((path) => path.startsWith(prefix))),
+  );
+  // Keep prefix rules so explicitly added product fixtures still require provenance.
+  writeJSON(root, "scripts/provenance.json", provenance);
+  const license = readJSON(root, "scripts/license-policy.json");
+  license.artifactCopies = license.artifactCopies.filter(has);
+  writeJSON(root, "scripts/license-policy.json", license);
+}
+export function scratch(t, source = ROOT) {
   const root = mkdtempSync(resolve(tmpdir(), "docklet-case-"));
   t.after(() => rmSync(root, { recursive: true, force: true }));
-  const paths = git(ROOT, "ls-files", "-z").split("\0").filter(Boolean);
+  const paths = git(source, "ls-files", "-z").split("\0").filter(foundationPath);
   for (const path of paths) {
-    if (path.startsWith("tests/")) continue;
-    write(root, path, readFileSync(resolve(ROOT, path)));
+    write(root, path, readFileSync(resolve(source, path)));
     if (path.startsWith(".githooks/")) chmodSync(resolve(root, path), 0o755);
   }
+  scopePolicies(root, paths);
   write(root, "tests/smoke.test.mjs", 'import test from "node:test"; test("scratch smoke", () => {});\n');
   git(root, "init", "-b", "main");
   git(root, "config", "user.name", "Example Contributor");
@@ -63,4 +96,24 @@ export function rawCommit(root, message = "test: synthetic history", identity = 
   const sha = ok(invoke(root, "git", args, { input: message + "\n", env: { ...env, ...identity } }));
   git(root, "update-ref", "refs/heads/main", sha);
   return sha;
+}
+
+// Explicit PATH stubs exercise module dispatch without depending on installed tools.
+export function stubModuleChecks(root) {
+  for (const program of ["go", "pnpm"]) {
+    const path = `.git/tools/${program}`;
+    write(root, path, `#!/usr/bin/env node
+import { appendFileSync } from "node:fs";
+import { basename, relative } from "node:path";
+const program = basename(process.argv[1]);
+const args = process.argv.slice(2);
+appendFileSync(process.env.MODULE_CHECK_LOG, JSON.stringify({
+  program, args, cwd: relative(process.env.MODULE_CHECK_ROOT, process.cwd()),
+}) + "\\n");
+if ([program, ...args].join(" ") === process.env.MODULE_CHECK_FAIL) process.exit(1);
+`);
+    chmodSync(resolve(root, path), 0o755);
+  }
+  return { ...env, PATH: `${resolve(root, ".git/tools")}:${env.PATH}`,
+    MODULE_CHECK_ROOT: root, MODULE_CHECK_LOG: resolve(root, ".git/module-checks.log") };
 }
