@@ -2,12 +2,11 @@
 // Revision: e2a909ce45597a3c101dca4d218baef4f89bb643
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Relative local helper replacements
+// Deviations: Relative local helper replacements; functional cut: module tidy.
 
 module go.getarcane.app/sys/crypto
 
 go 1.27
-
 
 require go.getarcane.app/acfs v0.6.2
 

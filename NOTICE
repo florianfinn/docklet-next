@@ -10,22 +10,24 @@ No endorsement or partnership is implied.
 Governance tooling adapted from florianfinn/docklet-hub under Apache-2.0.
 Source revision: a4484c910bb5d6a8f8df97b4f23f4ee5e6359081.
 
-Third-party Go notices — Arcane adoption assessment, 2026-10-13
+Third-party Go notices — functional-cut source graph, 2026-10-13
 
-The selected pre-cut Arcane input is v2.15.1 at
-095cb778daba1034e2a39961199e712a75d4ba29. The backend, CLI, wire types and eleven helper modules are imported
-with local module wiring and per-file provenance. No binary is distributed. The assessed linux/amd64 command graph contains 297 modules
-and 1,587 non-standard-library packages. docs/provenance/arcane-binary.json
-records exact versions, sources, licence evidence and redistribution duties;
-docs/provenance/arcane-license-packages.json resolves all 535 scanner groups.
-docs/provenance/arcane-modules.json additionally covers all 419 require entries
-in backend/cli/types and all eleven go.getarcane.app helper modules.
+The source import derives from Arcane v2.15.1 at
+095cb778daba1034e2a39961199e712a75d4ba29. The backend, CLI, wire types
+and eleven helper modules carry local module wiring and per-file provenance.
+The PostgreSQL-only Francis subset is adopted locally from revision
+23cd46831a543a73eec05ad034afd46245225876. No binary is distributed.
+The current linux/amd64 hub and agent command source graphs each contain 272
+modules and 1,491 non-standard-library packages. The current module inventory,
+local lockfile hashes and licence mapping are in docs/provenance/core-import.json.
+The archived pre-cut evidence remains in docs/provenance/arcane-binary.json,
+arcane-license-packages.json and arcane-modules.json.
 
 MPL-2.0 covered source
 Retain all covered-file notices and the MPL-2.0 text. When distributing binaries,
 make the corresponding covered source, including modifications, available to
 recipients and explain how to obtain it. Separate larger-work files retain their
-own licences. The assessed sources are unmodified:
+own licences. These upstream modules retain their source notices:
 
 - github.com/cyphar/filepath-securejoin v0.7.0
   Source: https://github.com/cyphar/filepath-securejoin/tree/8096a959c5d7a248976a3531a030f5c4da0a44d0
@@ -40,7 +42,7 @@ own licences. The assessed sources are unmodified:
 
 filepath-securejoin has BSD-3-Clause AND MPL-2.0 files; its COPYING.md and file
 headers determine the applicable terms. Only the BSD root and internal/consts
-packages are compiled in the measured graph; MPL pathrs-lite is not. Its BSD
+packages are in the measured source graph; MPL pathrs-lite is not. Its BSD
 notice names:
 Copyright (C) 2014-2015 Docker Inc & Go Authors. All rights reserved.
 Copyright (C) 2017-2024 SUSE LLC. All rights reserved.
@@ -59,20 +61,6 @@ BSD-3-Clause (EDL-1.0) selected alternative
   Compiled source headers additionally state:
   Copyright (c) 2024 Contributors to the Eclipse Foundation
 
-Compiled libc header notices (pre-cut assessment only)
-modernc.org/libc v1.77.1 sys/types/types_linux_amd64.go and
-uuid/uuid/uuid_linux_amd64.go retain glibc LGPL-2.1-or-later notices, including
-Copyright (C) 1991-2020 Free Software Foundation, Inc.
-The reviewed content is header-derived type layouts and constants; LGPL-2.1
-section 5 permits the limited header material described in the adoption decision.
-The UUID file also retains a GCC stddef.h GPL-3.0-or-later notice with explicit
-GCC Runtime Library Exception 3.1, Copyright (C) 1989-2020 Free Software Foundation,
-Inc. Retain those source notices. Exact-file hashes and assessment reasons are
-in arcane-binary.json; no general LGPL/GPL or libc distribution approval follows.
-Both targets reach these files only through modernc.org/sqlite. Issue #7 must
-prove modernc.org/libc and modernc.org/sqlite absent from both post-cut binary
-graphs before product release.
-
 Arcane helper notices
 All eleven go.getarcane.app modules carry BSD-3-Clause module licences, with
 separate revisions recorded in the map. The adopted builds/pkg/docker/buildkit.go
@@ -87,6 +75,13 @@ Retain their original notices, including:
   Copyright (c) 2025, Kyle Mendell.
 Sibling backend, CLI and types use the Arcane root BSD notice above.
 
+Francis actor-runtime notices
+The locally adopted PostgreSQL-only Francis subset retains its MIT licence in
+third_party/francis/LICENSE.md: Copyright (c) 2025-2026, Alessandro Segala &
+contributors. Its host, actor core and time helpers preserve embedded Apache-2.0
+notices from The Dapr Authors, dated 2023 or 2024 in their source headers.
+Retain the MIT and applicable Apache-2.0 texts and notices when packaging.
+
 Other dependencies
 Preserve all applicable licence, copyright and NOTICE texts identified by the
 inventory, including nested notices and mixed Apache-2.0/MIT YAML sources.
@@ -94,14 +89,16 @@ go-localereader v0.0.1 declares MIT in README.md and credits Yasuhiro Matsumoto;
 retain that declaration and credit. The inventory's public-safe copyright
 excerpts are not a substitute for original legal notices in a release bundle.
 
-docs/provenance/core-import.json records the imported hub/agent graph and all
-local Go manifest/checksum hashes. The local graph preserves 297 modules and
-1,587 packages in each mode. Root checks reject lockfile inventory drift.
+docs/provenance/core-import.json records the current hub/agent source graphs and
+all local Go manifest/checksum hashes. Root checks reject lockfile inventory
+drift. The source graphs exclude modernc.org/sqlite, modernc.org/libc,
+github.com/libtnb/sqlite and github.com/mattn/go-sqlite3. Indirect module
+requirements retained for upstream dependency tests are not part of either
+command graph.
 
-Recompute the graph and inventory after the functional cut. Product packaging
-must include verbatim licence texts, corresponding-source references and tested
-extracted-artefact copies before any release. Web dependencies and container
-contents require their own inventories. No release licence bundle is claimed by
-this pre-cut source import. Unknown/incompatible shipped licences block
-release. All identified legal evidence has a classification or an explicit
-hash-bound review; the pre-cut libc header exceptions require removal.
+Product packaging must include verbatim licence texts, corresponding-source
+references and tested extracted-artefact copies before any release. Web
+dependencies and container contents require their own inventories. No release
+licence bundle is claimed by this source assessment. Unknown/incompatible
+shipped licences block release. All identified legal evidence has a
+classification or an explicit hash-bound review.
