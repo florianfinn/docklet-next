@@ -1,5 +1,7 @@
 // German texts of the image management (list, details, pull and cleanup).
-export const deImages = {
+import type { enImages } from "./en";
+
+export const deImages: typeof enImages = {
   title: "Images",
   description: "{scope} · Images je Host mit Nutzung durch Stacks und Container. Ziehen, Entfernen und Aufräumen sind simuliert.",
   pull: "Image ziehen",

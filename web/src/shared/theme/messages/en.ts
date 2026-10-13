@@ -1,7 +1,6 @@
 // American English texts of the palette editor shared by the appearance settings and the design lab.
-import type { deTheme } from "./de";
 
-export const enTheme: typeof deTheme = {
+export const enTheme = {
   presets: {
     label: "Presets",
     active: "Active: {name}",

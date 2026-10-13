@@ -1,6 +1,4 @@
-import type { deLocale } from "./de";
-
-export const enLocale: typeof deLocale = {
+export const enLocale = {
   switcher: {
     label: "Language",
     hint: "Applies to this browser only, right away; not a hub setting.",

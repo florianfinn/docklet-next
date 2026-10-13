@@ -1,7 +1,6 @@
 // American English texts of the operations dashboard.
-import type { deDashboard } from "./de";
 
-export const enDashboard: typeof deDashboard = {
+export const enDashboard = {
   title: "Dashboard",
   description: "Situation overview of all filtered hosts. You manage stacks and containers in their own sections.",
   customize: "Customize",

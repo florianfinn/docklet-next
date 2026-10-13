@@ -1,7 +1,6 @@
 // American English texts of shared components (status, updates, query states).
-import type { deCommon } from "./de";
 
-export const enCommon: typeof deCommon = {
+export const enCommon = {
   status: {
     running: "Running",
     partial: "Partial",

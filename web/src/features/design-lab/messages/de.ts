@@ -1,5 +1,7 @@
 // German texts of the design lab (developer menu of the prototype).
-export const deLab = {
+import type { enLab } from "./en";
+
+export const deLab: typeof enLab = {
   open: "Design-Labor öffnen",
   title: "Design-Labor",
   description: "Tokens wirken sofort in allen Ansichten und bleiben lokal gespeichert. Nur für die Prototyp-Bewertung.",

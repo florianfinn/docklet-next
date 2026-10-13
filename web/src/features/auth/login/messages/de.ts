@@ -1,5 +1,7 @@
 // German texts of the login demo (full-screen route, started from the design lab).
-export const deLogin = {
+import type { enLogin } from "./en";
+
+export const deLogin: typeof enLogin = {
   badge: "Demo · keine echte Anmeldung",
   title: "Bei {hub} anmelden",
   exit: "Demo verlassen",

@@ -1,7 +1,6 @@
 // American English texts of the honest preview pages for sections outside phase one.
-import type { dePreview } from "./de";
 
-export const enPreview: typeof dePreview = {
+export const enPreview = {
   badge: "Later · Preview",
   lead: "This section is not yet part of the first prototype phase. Planned scope according to product decisions:",
   noFake: "There are deliberately no buttons without effect here.",

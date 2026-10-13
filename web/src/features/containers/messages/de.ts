@@ -1,5 +1,7 @@
 // German texts of the containers overview and inspector.
-export const deContainers = {
+import type { enContainers } from "./en";
+
+export const deContainers: typeof enContainers = {
   title: "Container",
   description: "{scope} · alle Container inklusive Compose-Services, mit docker run erstellten Containern und Unraid-Vorlagen.",
   strip: { total: "Container", running: "Laufend", unhealthy: "Probleme", standalone: "Ohne Compose" },

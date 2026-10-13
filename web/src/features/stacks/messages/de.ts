@@ -1,5 +1,7 @@
 // German texts of the stacks feature: overview, stack page, logs and deployments.
-export const deStacks = {
+import type { enStacks } from "./en";
+
+export const deStacks: typeof enStacks = {
   title: "Stacks",
   description: "{scope} · nur Stacks. Run-, Unraid- und andere Container ohne Compose stehen unter Container.",
   scopeAll: "Alle Hosts gemeinsam",

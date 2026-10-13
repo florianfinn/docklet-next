@@ -1,5 +1,7 @@
 // German texts of the brand, edge light, background and favourites (namespace "visual").
-export const deVisual = {
+import type { enVisual } from "./visual-en";
+
+export const deVisual: typeof enVisual = {
   brand: {
     label: "Docklet Next",
     home: "Docklet Next – zum Dashboard",

@@ -1,5 +1,7 @@
 // German texts of shared components (status, updates, query states).
-export const deCommon = {
+import type { enCommon } from "./en";
+
+export const deCommon: typeof enCommon = {
   status: {
     running: "Läuft",
     partial: "Teilweise",

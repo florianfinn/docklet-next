@@ -1,7 +1,6 @@
 // American English texts of volumes, bind mounts, the file browser and backups.
-import type { deVolumes } from "./de";
 
-export const enVolumes: typeof deVolumes = {
+export const enVolumes = {
   title: "Volumes",
   description: "{scope} · Docker volumes and bind mounts together, with file browser and backups.",
   create: "Create volume",
