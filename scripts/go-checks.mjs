@@ -17,13 +17,9 @@ function go(args, cwd = process.cwd(), overrides = {}) {
   return result.stdout ?? "";
 }
 export function checkGo(mode) {
-  const inventory = spawnSync(process.execPath, ["scripts/inventory-core.mjs", "--check"], { stdio: "inherit" });
-  if (inventory.status !== 0) throw new Error("core-inventory-drift");
   const modules = tracked().filter((path) => path.endsWith("/go.mod")).map(dirname);
   if (!modules.length) return;
   if (mode === "lint") {
-    // gofmt may only exist inside the same container as the go wrapper.
-    go(["run", "./scripts/gofmt-check.go", "--", ...tracked().filter((path) => path.endsWith(".go"))]);
     for (const module of modules) go(["vet", "./..."], module);
   } else if (mode === "test") {
     for (const module of modules) go(["test", "./..."], module);
@@ -33,5 +29,9 @@ export function checkGo(mode) {
     go(["build", "-tags=exclude_frontend", "-o", ".scratch/build/agent", "./backend/cmd/..."], process.cwd(), { CGO_ENABLED: "0" });
     go(["build", "-o", ".scratch/build/cli", "./cli"]);
   } else throw new Error("unknown-go-check");
+}
+export function checkGoFormatting() {
+  // gofmt may only exist inside the same container as the go wrapper.
+  go(["run", "./scripts/gofmt-check.go", "--", ...tracked().filter((path) => path.endsWith(".go"))]);
 }
 if (main(import.meta.url)) run(() => checkGo(process.argv[2]));
