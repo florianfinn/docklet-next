@@ -1,26 +1,36 @@
-import { createHash } from "node:crypto";
+import { files, main, run } from "./repository.mjs";
+import { inspectText, inspectPath } from "./publication-patterns.mjs";
+import { loadDenylist } from "./check-publication.mjs";
+import { categories, findingKey } from "./publication-allowlist-core.mjs";
+export { lineHash, reviewedFindings, ALLOWLIST_PATH } from "./publication-allowlist-core.mjs";
 
-export const ALLOWLIST_PATH = "scripts/publication-allowlist.json";
-// Only line terminators are normalized; indentation and trailing spaces stay significant.
-export const lineHash = (line) => createHash("sha256").update(line.replace(/\r\n|\r/g, "\n")).digest("hex");
-const categories = new Set([
-  "credential-pattern", "literal-secret", "workstation-path", "corrupted-text",
-  "session-link", "private-hostname", "non-example-email", "network-address", "ai-co-author",
-]);
-const key = (entry) => JSON.stringify([entry.path, entry.category, entry.sha256]);
-export function reviewedFindings(list, findings) {
-  if (!Array.isArray(list)) throw new Error("publication-allowlist-format");
-  const unused = new Map();
-  for (const entry of list) {
-    if (!entry || Object.keys(entry).sort().join(",") !== "category,path,reason,sha256" ||
-        typeof entry.path !== "string" || /[\\*?\[\]\x00-\x1f]/.test(entry.path) ||
-        entry.path.split("/").some((part) => !part || part === "." || part === "..") ||
-        !categories.has(entry.category) || !/^[a-f0-9]{64}$/.test(entry.sha256) ||
-        typeof entry.reason !== "string" || !entry.reason.trim() || unused.has(key(entry)))
-      throw new Error("publication-allowlist-entry");
-    unused.set(key(entry), entry);
+export function proposeFindings(root, prefixes) {
+  if (!prefixes.length || prefixes.some((prefix) => typeof prefix !== "string" ||
+      /[\\*?\[\]\x00-\x1f]/.test(prefix) ||
+      prefix.replace(/\/$/, "").split("/").some((part) => !part || part === "." || part === "..")))
+    throw new Error("publication-proposal-prefix");
+  const roots = prefixes.map((prefix) => prefix.replace(/\/$/, ""));
+  const denylist = loadDenylist(root);
+  const proposed = new Map();
+  for (const { path, mode, content } of files(root)) {
+    if (!roots.some((prefix) => path === prefix || path.startsWith(prefix + "/"))) continue;
+    // Unsafe filenames cannot be included even in an unreviewed proposal.
+    if (inspectPath(path, denylist).length || !["100644", "100755"].includes(mode))
+      throw new Error("publication-proposal-path");
+    if (content.includes(0)) continue;
+    const text = new TextDecoder("utf-8", { fatal: true }).decode(content);
+    for (const finding of inspectText(text, path, denylist, { detailed: true })) {
+      if (!categories.has(finding.category)) continue;
+      const id = findingKey(finding);
+      const entry = proposed.get(id);
+      if (entry) entry.count++;
+      else proposed.set(id, { path, category: finding.category, lineSha256: finding.sha256, count: 1, reason: "TODO" });
+    }
   }
-  const remaining = findings.filter((finding) => !unused.delete(key(finding)));
-  for (const entry of unused.values()) remaining.push({ path: ALLOWLIST_PATH, category: "stale-publication-allowlist" });
-  return remaining.map(({ path, category }) => ({ path, category }));
+  return [...proposed.values()];
 }
+if (main(import.meta.url)) run(() => {
+  const [mode, ...prefixes] = process.argv.slice(2);
+  if (mode !== "--propose") throw new Error("publication-proposal-usage");
+  console.log(JSON.stringify(proposeFindings(process.cwd(), prefixes), null, 2));
+});

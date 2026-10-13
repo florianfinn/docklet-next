@@ -92,25 +92,50 @@ heuristics.
 ## Reviewed imported findings
 
 scripts/publication-allowlist.json contains exact objects with path, category,
-sha256 and reason. Each entry consumes exactly one finding. Duplicate entries,
-invalid categories, empty reasons, directory/glob paths and unused entries fail.
+lineSha256, reason and an optional count. The previous sha256 spelling remains
+accepted instead of lineSha256; supplying both is invalid. Count defaults to 1
+and must be a positive safe integer. It is the exact number of occurrences of
+that path/category/line-hash key, including multiple matches on one line. Fewer
+actual occurrences fail as stale, including zero; extra occurrences remain
+findings. No unused allowance survives a scan. Duplicate keys are rejected even
+with different counts, reasons or digest spellings. Invalid categories, empty
+or whitespace-only reasons, the trimmed reason "TODO", and directory/glob paths
+also fail.
+
 The digest is SHA-256 of the complete UTF-8 matched line without its line
 ending; CRLF and CR normalize to LF. Indentation and trailing spaces remain
 significant. For a multiline scalar, the matched line is the scalar value line.
-Changing a line or moving its file invalidates the exception. Repeated identical
-findings remain blocked after one entry is consumed. Other categories on the
-same line remain blocked too. Operator denylist, path, identity and structural
-findings cannot be exempted here.
+Changing a line or moving its file invalidates the exception. Other categories
+on the same line remain blocked too. Operator denylist, path, identity and
+structural findings cannot be exempted here.
 
-Before an import, scan a temporary copy, inspect each finding privately and
-confirm that it is public upstream code, a public label or synthetic data.
-Record its exact destination path, category, line digest and a specific public
-reason. Do not record matched values in reports or the allowlist. Review each
-entry with its code and provenance, including licence and publication safety. Do
-not exempt actual secrets. Remove entries when the code stops producing the
-finding. The index uses the staged policy; each historical tree uses its own
-policy. A later exception cannot excuse earlier unsafe history. The initial list
-is empty; imports add only independently reviewed entries.
+Before an import, prepare a temporary repository copy with the destination paths
+and stage new files so the scanner can see them. From that repository root run:
+
+```sh
+node scripts/publication-allowlist.mjs --propose backend/ types/ cli/ web/src/
+```
+
+The command prints a JSON array with path, category, lineSha256, count and
+reason "TODO" for all current tracked working-file findings in those scopes,
+including findings already covered by a policy. Prefixes select an exact file
+or a directory boundary, not similarly named siblings; overlapping prefixes do
+not multiply counts. Untracked files are excluded. Only eligible content
+categories are proposed; binary content is skipped. Unsafe filenames, invalid
+UTF-8, unsupported entries and read/configuration errors fail without partial
+output. Matched values and source lines are never printed. The command does not
+write or approve a policy. Other guards and operator-denylist findings still
+require separate remediation.
+
+Inspect each finding privately and confirm that it is public upstream code, a
+public label or synthetic data. Replace every TODO with a specific public
+reason, review the exact count, and add the reviewed entries to the policy. Do
+not record matched values in reports or the allowlist. Review each entry with
+its code and provenance, including licence and publication safety. Do not exempt
+actual secrets. Remove or adjust entries when the code stops producing the
+recorded count. The index uses the staged policy; each historical tree uses its
+own policy. A later exception cannot excuse earlier unsafe history. The initial
+list is empty; imports add only independently reviewed entries.
 
 Wildcard listeners 0.0.0.0 and [::] are allowed, as are documented example and
 loopback addresses. Unbracketed all-letter forms such as a::b are treated as

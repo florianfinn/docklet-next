@@ -7,7 +7,7 @@ import { readFileSync, existsSync } from "node:fs";
 import { resolve } from "node:path";
 import { files, git, main, run, finish } from "./repository.mjs";
 import { inspectText, inspectPath, safePath, publicIdentity } from "./publication-patterns.mjs";
-import { ALLOWLIST_PATH, reviewedFindings } from "./publication-allowlist.mjs";
+import { ALLOWLIST_PATH, reviewedFindings } from "./publication-allowlist-core.mjs";
 import { messageProblems } from "./commit-subject.mjs";
 export { inspectText } from "./publication-patterns.mjs";
 

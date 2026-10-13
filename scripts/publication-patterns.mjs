@@ -3,7 +3,7 @@
 // Retrieved: 2026-10-13
 // License: Apache-2.0
 // Deviations: Reserved networks only; IPv6, POSIX paths, corrupt text and literal credentials; no prose spelling guard.
-import { lineHash } from "./publication-allowlist.mjs";
+import { lineHash } from "./publication-allowlist-core.mjs";
 import { isIP } from "node:net";
 import { scanAssignments } from "./publication-assignments.mjs";
 import { fixtureAllowed } from "./publication-fixtures.mjs";
