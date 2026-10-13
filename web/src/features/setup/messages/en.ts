@@ -1,7 +1,6 @@
 // American English texts of the first-run setup wizard (preview, started from the design lab).
-import type { deSetup } from "./de";
 
-export const enSetup: typeof deSetup = {
+export const enSetup = {
   badge: "First-run setup · Preview",
   title: "Set up Docklet",
   lead: "A new hub asks for these details once. In the prototype you start the flow from the design lab; the dashboard remains available unchanged.",

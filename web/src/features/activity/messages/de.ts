@@ -1,5 +1,7 @@
 // German texts of the activity feature (progress toasts, action centre, events).
-export const deActivity = {
+import type { enActivity } from "./en";
+
+export const deActivity: typeof enActivity = {
   open: "Aktivitäten",
   openWithCount: "Aktivitäten, {count, plural, one {# läuft} other {# laufen}}",
   running: "{count} laufend",

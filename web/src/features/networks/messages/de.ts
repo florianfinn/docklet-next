@@ -1,5 +1,7 @@
 // German texts of the networks page, topology and network wizards.
-export const deNetworks = {
+import type { enNetworks } from "./en";
+
+export const deNetworks: typeof enNetworks = {
   title: "Netzwerke",
   description: "Docker-Netzwerke eines Hosts zur Zeit: LAN-Netze, eigene und Stack-Netze, dann die Docker-Standardnetze, jeweils mit ihren Containern. Knoten anklicken oder per Tastatur (Tab, Eingabe) fokussieren; Escape oder ein Klick ins Leere hebt den Fokus auf.",
   hostPicker: "Host der Topologie",

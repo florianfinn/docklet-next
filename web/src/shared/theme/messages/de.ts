@@ -1,5 +1,7 @@
 // German texts of the palette editor shared by the appearance settings and the design lab.
-export const deTheme = {
+import type { enTheme } from "./en";
+
+export const deTheme: typeof enTheme = {
   presets: {
     label: "Vorlagen",
     active: "Aktiv: {name}",

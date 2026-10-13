@@ -1,5 +1,7 @@
 // German texts of the honest preview pages for sections outside phase one.
-export const dePreview = {
+import type { enPreview } from "./en";
+
+export const dePreview: typeof enPreview = {
   badge: "Später · Vorschau",
   lead: "Dieser Bereich ist noch nicht Teil der ersten Prototyp-Phase. Geplanter Umfang laut Produktentscheidungen:",
   noFake: "Hier gibt es bewusst keine Schaltflächen ohne Wirkung.",

@@ -1,5 +1,7 @@
 // German texts of hub settings and the profile page.
-export const deSettings = {
+import type { enSettings } from "./en";
+
+export const deSettings: typeof enSettings = {
   title: "Hub-Einstellungen",
   description: "Gelten für den ganzen Hub – unabhängig vom Hostfilter. Speichern wirkt im Demo-Datenbestand dieses Tabs.",
   navLabel: "Bereiche der Hub-Einstellungen",

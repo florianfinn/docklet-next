@@ -1,5 +1,7 @@
 // German texts of the security (vulnerability scan) page.
-export const deSecurity = {
+import type { enSecurity } from "./en";
+
+export const deSecurity: typeof enSecurity = {
   title: "Sicherheit",
   description: "Schwachstellen in Images der gefilterten Hosts. Optional und unabhängig von Image-Updates. Befunde sind synthetisch.",
   scan: "Jetzt scannen",

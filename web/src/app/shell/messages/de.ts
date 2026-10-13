@@ -1,5 +1,7 @@
 // German texts of the application shell (navigation, host filter, profile menu).
-export const deShell = {
+import type { enShell } from "./en";
+
+export const deShell: typeof enShell = {
   brand: "Docklet",
   brandSub: "React-Prototyp · Demo-Daten",
   skip: "Zum Inhalt springen",

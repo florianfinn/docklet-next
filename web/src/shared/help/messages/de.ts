@@ -2,7 +2,9 @@
 // a one-sentence short text (compact mode), the full explanation and its
 // impact (full mode). Texts describe Docklet's behaviour; the prototype only
 // simulates it, which the pages say where it matters.
-export const deHelp = {
+import type { enHelp } from "./en";
+
+export const deHelp: typeof enHelp = {
   trigger: "Erklärung: {title}",
   impact: "Auswirkung",
   topics: {

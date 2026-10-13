@@ -1,5 +1,4 @@
-// German interface texts, merged per namespace; the reference catalogue for
-// every other language. Feature files own their texts.
+// German interface texts follow the English base. Feature files own their texts.
 import { deActivity } from "@/features/activity/messages/de";
 import { deLogin } from "@/features/auth/login/messages/de";
 import { deContainers } from "@/features/containers/messages/de";
@@ -25,7 +24,9 @@ import { dePreview } from "../preview/messages/de";
 import { deShell } from "../shell/messages/de";
 import { deLocale } from "./messages/de";
 
-export const messages = {
+import type { enMessages } from "./messages-en";
+
+export const messages: typeof enMessages = {
   common: deCommon,
   help: deHelp,
   workspace: deWorkspace,

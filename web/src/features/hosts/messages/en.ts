@@ -1,7 +1,6 @@
 // American English texts of host management and host onboarding.
-import type { deHosts } from "./de";
 
-export const enHosts: typeof deHosts = {
+export const enHosts = {
   title: "Hosts",
   description: "All connected hosts together. The host filter in the navigation only hides hosts – it does not switch environments.",
   add: "Add host",

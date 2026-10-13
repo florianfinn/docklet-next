@@ -1,9 +1,9 @@
 import type { AppLocale } from "./locale-store";
-import type { messages } from "./messages";
+import type { Messages } from "./catalog";
 
 declare module "use-intl" {
   interface AppConfig {
-    Messages: typeof messages;
+    Messages: Messages;
     Locale: AppLocale;
   }
 }
