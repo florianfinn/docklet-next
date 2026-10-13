@@ -1,0 +1,1 @@
+export { SimulationBadge } from "@/runtime";

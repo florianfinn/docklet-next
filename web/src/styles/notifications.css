@@ -1,0 +1,292 @@
+/*
+ * Notifications: small notices (sonner's styled toasts), the toaster layer and
+ * its coordination with sheets and modal dialogs. Action toasts style
+ * themselves in ActionToastView; their countdown lives in motion.css.
+ */
+/*
+ * Toasts float above side sheets (z-50), which are non-modal, so they stay usable
+ * beside an open action centre or design lab. A modal dialog, the action dialog
+ * included, keeps its normal modal semantics: toasts sit under its overlay until
+ * it closes, without pointer or focus overrides.
+ */
+:root {
+  --layer-toast: 100;
+}
+
+[data-sonner-toaster][data-sonner-theme] {
+  z-index: var(--layer-toast);
+}
+
+/*
+ * Toasts fade in and out where they stand. Sonner starts a new toast one
+ * toast height beyond its edge (--y: translateY(-100%)) and lets the front one
+ * leave the same way; both would fly in from outside the screen.
+ */
+[data-sonner-toaster] [data-sonner-toast][data-mounted="false"],
+[data-sonner-toaster] [data-sonner-toast][data-removed="true"][data-front="true"][data-swipe-out="false"] {
+  --y: translateY(0);
+}
+
+body:has(:is([data-slot="dialog-overlay"], [data-slot="alert-dialog-overlay"], [data-slot="sheet-overlay"])[data-state="open"]) [data-sonner-toaster][data-sonner-theme] {
+  z-index: 40;
+}
+
+@keyframes notice-life {
+  from {
+    background-size:
+      100% 3px,
+      100% 100%;
+  }
+  to {
+    background-size:
+      0% 3px,
+      100% 100%;
+  }
+}
+
+/* Small notice: status colour as left stripe, tint and icon; a neutral frame lit only by the edge light; a countdown bar along the bottom edge. */
+[data-sonner-toast][data-styled="true"] {
+  --tone: var(--muted-foreground);
+  --notice-life: 6000ms;
+  --notice-steps: steps(6, end);
+}
+[data-sonner-toaster] [data-sonner-toast][data-styled="true"] {
+  align-items: flex-start;
+  gap: 10px;
+  padding: 12px 40px 15px 14px;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: calc(var(--radius) + 4px);
+  background:
+    linear-gradient(color-mix(in oklch, var(--tone) 72%, transparent), color-mix(in oklch, var(--tone) 72%, transparent)) left bottom / 100% 3px no-repeat,
+    linear-gradient(135deg, color-mix(in oklch, var(--tone) 13%, var(--popover)), var(--popover));
+  box-shadow:
+    inset 3px 0 0 var(--tone),
+    0 14px 34px -14px rgb(0 0 0 / 0.5);
+  color: var(--popover-foreground);
+  font-size: 13px;
+}
+/*
+ * The bar is the notice's timer (notice-life.ts closes the notice when it ends), so
+ * every pause here also pauses the lifetime. Loading notices have no lifetime.
+ */
+[data-sonner-toaster] [data-sonner-toast][data-styled="true"]:not([data-swipe-out="true"], [data-type="loading"]) {
+  animation: notice-life var(--notice-life) linear forwards;
+}
+[data-sonner-toaster]:hover [data-sonner-toast][data-styled="true"],
+[data-sonner-toaster]:focus-within [data-sonner-toast][data-styled="true"],
+[data-page-hidden] [data-sonner-toast][data-styled="true"],
+[data-page-hidden] .action-toast [data-slot="toast-life"] {
+  animation-play-state: paused !important;
+}
+
+[data-sonner-toast][data-styled="true"][data-type="success"] {
+  --tone: var(--success);
+}
+[data-sonner-toast][data-styled="true"][data-type="error"] {
+  --tone: var(--destructive);
+  --notice-life: 10000ms;
+  --notice-steps: steps(10, end);
+}
+[data-sonner-toast][data-styled="true"][data-type="warning"] {
+  --tone: var(--warning);
+}
+[data-sonner-toast][data-styled="true"][data-type="info"] {
+  --tone: var(--info);
+}
+[data-sonner-toast][data-styled="true"][data-type="loading"] {
+  --tone: var(--brand-accent-text);
+}
+
+[data-sonner-toaster] [data-sonner-toast][data-styled="true"] [data-icon] {
+  width: 26px;
+  height: 26px;
+  margin: -2px 0 0;
+  justify-content: center;
+  border-radius: 999px;
+  background: color-mix(in oklch, var(--tone) 18%, transparent);
+  color: var(--tone);
+}
+[data-sonner-toaster] [data-sonner-toast][data-styled="true"] [data-icon] svg {
+  margin: 0;
+  animation: pop-in var(--dur) var(--ease-spring) both;
+}
+[data-sonner-toaster] [data-sonner-toast][data-styled="true"] [data-title] {
+  font-weight: 600;
+  line-height: 1.35;
+}
+[data-sonner-toaster] [data-sonner-toast][data-styled="true"] [data-description] {
+  color: var(--muted-foreground);
+}
+
+[data-sonner-toaster] [data-sonner-toast][data-styled="true"] [data-close-button] {
+  inset: 8px 8px auto auto;
+  width: 26px;
+  height: 26px;
+  transform: none;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--muted-foreground);
+}
+[data-sonner-toaster] [data-sonner-toast][data-styled="true"] [data-close-button]:hover {
+  background: var(--muted);
+  color: var(--foreground);
+}
+[data-sonner-toaster] [data-sonner-toast][data-styled="true"] [data-close-button]:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px var(--ring);
+}
+
+/* A timer, not decoration: reduced motion and motion "off" advance it in whole seconds; sonner's own reduced-motion rule would stop it. */
+[data-motion="reduced"] [data-sonner-toaster] [data-sonner-toast][data-styled="true"]:not([data-swipe-out="true"], [data-type="loading"]),
+[data-motion="off"] [data-sonner-toaster] [data-sonner-toast][data-styled="true"]:not([data-swipe-out="true"], [data-type="loading"]) {
+  animation: notice-life var(--notice-life) var(--notice-steps) forwards !important;
+}
+@media (prefers-reduced-motion: reduce) {
+  [data-sonner-toaster] [data-sonner-toast][data-styled="true"]:not([data-swipe-out="true"], [data-type="loading"]) {
+    animation: notice-life var(--notice-life) var(--notice-steps) forwards !important;
+  }
+}
+
+/*
+ * Action toasts: brand tone while running; the whole card opens the run. The
+ * frame stays neutral in every state and status: the pointer edge light
+ * (primary/secondary branding, design-lab glow settings) is the only lit edge,
+ * and the status shows in icon, text and step bar, never as a coloured outline.
+ */
+[data-tone] {
+  --tone-edge: var(--tone);
+}
+[data-tone][data-tone="run"] {
+  --tone: var(--primary-text);
+  --tone-edge: var(--brand-accent);
+}
+.action-toast .toast-card {
+  border-color: var(--border);
+  transition: box-shadow var(--dur-fast) var(--ease-out);
+}
+.action-toast .toast-card-edge {
+  border-left-color: var(--tone-edge);
+}
+.action-toast .toast-edge {
+  background: linear-gradient(90deg, var(--tone), var(--tone-edge));
+}
+/* Sonner's list item takes focus on click and Alt+T; only the card's own ring shows, never the browser outline. */
+[data-sonner-toaster] [data-sonner-toast]:focus {
+  outline: none;
+}
+.action-toast:has([data-slot="toast-open"]:focus-visible) .toast-card,
+[data-sonner-toast]:focus-visible > .action-toast .toast-card {
+  border-color: var(--ring);
+  box-shadow:
+    0 0 0 2px var(--ring),
+    0 14px 34px -14px rgb(0 0 0 / 0.5);
+}
+
+/*
+ * Running step segment. The design lab picks the motion (data-variant);
+ * reduced or switched-off motion shows a static half fill with the edge colour.
+ */
+@keyframes run-stripes {
+  to {
+    background-position: 17px 0;
+  }
+}
+@keyframes run-pulse {
+  50% {
+    opacity: 0.35;
+  }
+}
+[data-slot="step-motion"] {
+  background: linear-gradient(90deg, transparent, var(--tone) 40%, var(--tone-edge) 60%, transparent);
+  animation: sweep calc(1.6s * var(--speed)) linear infinite;
+}
+[data-slot="step-motion"][data-variant="stripes"] {
+  transform: none;
+  background: repeating-linear-gradient(-45deg, var(--tone) 0 6px, color-mix(in oklch, var(--tone-edge) 75%, transparent) 6px 12px);
+  background-size: 17px 100%;
+  animation: run-stripes calc(0.9s * var(--speed)) linear infinite;
+}
+[data-slot="step-motion"][data-variant="pulse"] {
+  transform: none;
+  background: linear-gradient(90deg, var(--tone), var(--tone-edge));
+  animation: run-pulse calc(1.4s * var(--speed)) ease-in-out infinite;
+}
+[data-motion="reduced"] [data-slot="step-motion"],
+[data-motion="off"] [data-slot="step-motion"] {
+  transform: none !important;
+  opacity: 1 !important;
+  background: linear-gradient(90deg, var(--tone) 0 46%, var(--tone-edge) 46% 52%, transparent 52%) !important;
+  animation: none !important;
+}
+@media (prefers-reduced-motion: reduce) {
+  [data-slot="step-motion"] {
+    transform: none !important;
+    opacity: 1 !important;
+    background: linear-gradient(90deg, var(--tone) 0 46%, var(--tone-edge) 46% 52%, transparent 52%) !important;
+    animation: none !important;
+  }
+}
+
+/*
+ * Action dialog on short screens (below 36rem height, e.g. phones in landscape):
+ * the fixed rows no longer leave room for an output pane, so the output drops
+ * its own scrolling and the dialog body is the one scroll area.
+ */
+@media (max-height: 36rem) {
+  .action-dialog[data-expanded="true"] {
+    height: calc(100dvh - 1rem);
+  }
+  .action-dialog [data-slot="run-output"],
+  .action-dialog [data-slot="run-output"] [data-slot="collapsible-content"],
+  .action-dialog [data-slot="run-output"] ol {
+    flex: none !important;
+    min-height: auto !important;
+    max-height: none !important;
+    overflow: visible !important;
+  }
+}
+
+/* Action and cancel buttons of small notices (e.g. "Rückgängig"): tinted by the notice tone instead of sonner's inverted default. */
+[data-sonner-toaster] [data-sonner-toast][data-styled="true"] [data-content] {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+[data-sonner-toaster] [data-sonner-toast][data-styled="true"] [data-button] {
+  flex-shrink: 0;
+  height: 28px;
+  margin: -2px 0 0 4px;
+  padding: 0 10px;
+  border: 1px solid color-mix(in oklch, var(--tone) 40%, var(--border));
+  border-radius: calc(var(--radius) - 2px);
+  background: color-mix(in oklch, var(--tone) 16%, var(--popover));
+  color: var(--foreground);
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+  transition: background-color var(--dur-fast) var(--ease-out);
+}
+[data-sonner-toaster] [data-sonner-toast][data-styled="true"] [data-button]:hover {
+  background: color-mix(in oklch, var(--tone) 28%, var(--popover));
+}
+[data-sonner-toaster] [data-sonner-toast][data-styled="true"] [data-button]:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px var(--ring);
+}
+[data-sonner-toaster] [data-sonner-toast][data-styled="true"] [data-button][data-cancel] {
+  border-color: var(--border);
+  background: transparent;
+  color: var(--muted-foreground);
+}
+/* A notice with an action (undo) lives as long as an error, so there is time to use it. */
+[data-sonner-toast][data-styled="true"]:has([data-button]) {
+  --notice-life: 10000ms;
+  --notice-steps: steps(10, end);
+}
+
+/* The action centre's run list only knows semantic tones; running rows take the brand run tone. */
+[data-layer="activity"] [data-slot="progress-list"] > [data-tone="accent"] {
+  --tone: var(--primary-text);
+  --tone-edge: var(--brand-accent);
+}

@@ -2,7 +2,7 @@
 # Revision: a4484c910bb5d6a8f8df97b4f23f4ee5e6359081
 # Retrieved: 2026-10-13
 # License: Apache-2.0
-# Deviations: Repository guards and Go core checks, pinned toolchains, module caching and Docker isolation.
+# Deviations: Root, Go and web checks, pinned toolchains, baseline comparison and Docker isolation.
 name: Repository checks
 on:
   pull_request:
@@ -32,6 +32,14 @@ jobs:
       - run: node scripts/check-publication.mjs --history
       - if: steps.scope.outputs.scope == 'text'
         run: node scripts/change-scope.mjs --run-text-tests
+      - name: Enable pinned pnpm
+        if: steps.scope.outputs.scope != 'text'
+        run: |
+          corepack enable
+          corepack prepare pnpm@11.21.0 --activate
+      - name: Install frozen web dependencies
+        if: steps.scope.outputs.scope != 'text'
+        run: pnpm --dir web install --frozen-lockfile
       - if: steps.scope.outputs.scope != 'text'
         uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
@@ -41,6 +49,7 @@ jobs:
             cli/go.sum
             types/go.sum
             third_party/arcane/**/go.sum
+            third_party/francis/go.sum
       - if: steps.scope.outputs.scope != 'text'
         name: Isolate checks from Docker daemons
         run: |
@@ -50,8 +59,8 @@ jobs:
           test ! -S /var/run/docker.sock
           test ! -S /run/docker.sock
       - if: steps.scope.outputs.scope != 'text'
-        run: node scripts/run-checks.mjs lint
+        run: pnpm run lint
       - if: steps.scope.outputs.scope != 'text'
-        run: node scripts/run-checks.mjs test
+        run: pnpm run test
       - if: steps.scope.outputs.scope != 'text'
-        run: node scripts/run-checks.mjs build
+        run: pnpm run build

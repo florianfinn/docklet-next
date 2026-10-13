@@ -1,0 +1,34 @@
+// American English texts of the login demo (full-screen route, started from the design lab).
+
+export const enLogin = {
+  badge: "Demo · not a real sign-in",
+  title: "Sign in to {hub}",
+  exit: "Leave demo",
+  loading: "Loading sign-in method …",
+  settingsError: "The sign-in method could not be loaded. You can choose it below in the demo controls.",
+  retry: "Reload",
+  username: "Username",
+  password: "Password",
+  required: "Required",
+  submit: "Sign in",
+  submitting: "Signing in …",
+  localHint: "Demo: the username must be “{user}”. The password is not checked, stored or sent.",
+  proxyLead: "Your reverse proxy handles sign-in, e.g. Authentik. Docklet takes the user from the {header} header when the request comes from {proxies}.",
+  proxySubmit: "Continue via the proxy (simulated)",
+  proxySubmitting: "Checking proxy header …",
+  errors: {
+    invalid: "Username or password is incorrect.",
+    unavailable: "The hub is currently unreachable. Try again in a moment.",
+    locked: "Too many attempts. Sign-in is locked for a short time.",
+    proxyUnavailable: "The proxy did not send a user header or is not registered as trusted.",
+  },
+  demo: {
+    title: "Demo controls",
+    hint: "For the preview only: sign-in method and result of the next attempt.",
+    variant: "Sign-in method",
+    variants: { settings: "From settings", local: "Local", proxy: "Proxy", none: "None" },
+    outcome: "Next attempt",
+    outcomes: { none: "Success", invalid: "Wrong credentials", unavailable: "Unreachable", locked: "Locked" },
+    noneHint: "If the hub is set to “No sign-in”, /login redirects straight to the dashboard. Local and proxy remain available via this selection and the design lab (Flows).",
+  },
+};

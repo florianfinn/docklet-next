@@ -1,0 +1,75 @@
+import type { Topology } from "@/domain/model";
+
+/*
+ * Subnets use documentation ranges only: RFC 5737 192.0.2.0/24 stands for the
+ * LAN of atlas (its br0 macvlan network), 198.51.100.0/24 and 203.0.113.0/24
+ * for Docker bridges; RFC 3849 2001:db8::/32 for IPv6 (dual-stack br0 and
+ * shared_proxy, IPv6-only lab_v6). Dependencies are derived from compose.yaml
+ * on read.
+ */
+export const TOPOLOGY: Topology = {
+  networks: [
+    {
+      id: "n-atlas-br0",
+      name: "br0",
+      hostId: "atlas",
+      driver: "macvlan",
+      parent: "br0",
+      subnet: "192.0.2.0/24",
+      gateway: "192.0.2.1",
+      ipRange: "192.0.2.192/27",
+      subnetConfigured: true,
+      ipv6: true,
+      subnet6: "2001:db8:a::/64",
+      gateway6: "2001:db8:a::1",
+      subnet6Configured: true,
+      internal: false,
+    },
+    { id: "n-atlas-media", name: "media_default", hostId: "atlas", driver: "bridge", subnet: "198.51.100.144/28", gateway: "198.51.100.145", internal: false, stackId: "media" },
+    { id: "n-atlas-paperless", name: "paperless_default", hostId: "atlas", driver: "bridge", subnet: "198.51.100.160/28", gateway: "198.51.100.161", internal: false, stackId: "paperless" },
+    { id: "n-atlas-home", name: "home_default", hostId: "atlas", driver: "bridge", subnet: "198.51.100.176/28", gateway: "198.51.100.177", internal: false, stackId: "home" },
+    { id: "n-atlas-bridge", name: "bridge", hostId: "atlas", driver: "bridge", subnet: "198.51.100.128/28", gateway: "198.51.100.129", internal: false, builtIn: true },
+    { id: "n-atlas-host", name: "host", hostId: "atlas", driver: "host", internal: false, builtIn: true },
+    { id: "n-boreal-web", name: "cloud_web", hostId: "boreal", driver: "bridge", subnet: "198.51.100.0/28", gateway: "198.51.100.1", internal: false, stackId: "cloud" },
+    { id: "n-boreal-internal", name: "cloud_internal", hostId: "boreal", driver: "bridge", subnet: "198.51.100.16/28", gateway: "198.51.100.17", internal: true, stackId: "cloud" },
+    { id: "n-boreal-craft", name: "craft_default", hostId: "boreal", driver: "bridge", subnet: "198.51.100.32/28", gateway: "198.51.100.33", internal: false, stackId: "craft" },
+    { id: "n-boreal-monitoring", name: "monitoring_default", hostId: "boreal", driver: "bridge", subnet: "198.51.100.48/28", gateway: "198.51.100.49", internal: false, stackId: "monitoring" },
+    { id: "n-boreal-shared", name: "shared_proxy", hostId: "boreal", driver: "bridge", subnet: "198.51.100.96/28", gateway: "198.51.100.97", subnetConfigured: true, ipv6: true, subnet6: "2001:db8:b::/64", gateway6: "2001:db8:b::1", subnet6Configured: true, internal: false },
+    { id: "n-boreal-v6", name: "lab_v6", hostId: "boreal", driver: "bridge", ipv4: false, ipv6: true, subnet6: "2001:db8:c::/64", gateway6: "2001:db8:c::1", subnet6Configured: true, internal: false },
+    { id: "n-boreal-bridge", name: "bridge", hostId: "boreal", driver: "bridge", subnet: "198.51.100.64/28", gateway: "198.51.100.65", internal: false, builtIn: true },
+    { id: "n-boreal-host", name: "host", hostId: "boreal", driver: "host", internal: false, builtIn: true },
+    { id: "n-delta-dns", name: "dns_default", hostId: "delta", driver: "bridge", subnet: "203.0.113.0/28", gateway: "203.0.113.1", internal: false, stackId: "dns" },
+    { id: "n-delta-git", name: "git_default", hostId: "delta", driver: "bridge", subnet: "203.0.113.16/28", gateway: "203.0.113.17", internal: false, stackId: "git" },
+    { id: "n-delta-bridge", name: "bridge", hostId: "delta", driver: "bridge", subnet: "203.0.113.64/28", gateway: "203.0.113.65", internal: false, builtIn: true },
+    { id: "n-cedar-wiki", name: "wiki_default", hostId: "cedar", driver: "bridge", subnet: "203.0.113.32/28", gateway: "203.0.113.33", internal: false, stackId: "wiki" },
+    { id: "n-cedar-bridge", name: "bridge", hostId: "cedar", driver: "bridge", subnet: "203.0.113.80/28", gateway: "203.0.113.81", internal: false, builtIn: true },
+  ],
+  attachments: [
+    { containerId: "c-krusader", networkId: "n-atlas-br0", ip: "192.0.2.201", staticIp: true, ip6: "2001:db8:a::201", staticIp6: true },
+    { containerId: "c-media-jellyfin", networkId: "n-atlas-media", ip: "198.51.100.146" },
+    { containerId: "c-media-redis", networkId: "n-atlas-media", ip: "198.51.100.147" },
+    { containerId: "c-paperless-webserver", networkId: "n-atlas-paperless", ip: "198.51.100.162" },
+    { containerId: "c-paperless-db", networkId: "n-atlas-paperless", ip: "198.51.100.163" },
+    { containerId: "c-paperless-broker", networkId: "n-atlas-paperless", ip: "198.51.100.164" },
+    { containerId: "c-home-homeassistant", networkId: "n-atlas-host" },
+    { containerId: "c-home-mosquitto", networkId: "n-atlas-home", ip: "198.51.100.178" },
+    { containerId: "c-duplicati", networkId: "n-atlas-bridge", ip: "198.51.100.130" },
+    { containerId: "c-netdata", networkId: "n-atlas-bridge", ip: "198.51.100.131" },
+    { containerId: "c-cloud-nextcloud", networkId: "n-boreal-web", ip: "198.51.100.2" },
+    { containerId: "c-cloud-nextcloud", networkId: "n-boreal-internal", ip: "198.51.100.18" },
+    { containerId: "c-cloud-postgres", networkId: "n-boreal-internal", ip: "198.51.100.19" },
+    { containerId: "c-cloud-cache", networkId: "n-boreal-internal", ip: "198.51.100.20" },
+    { containerId: "c-craft-minecraft", networkId: "n-boreal-craft", ip: "198.51.100.34" },
+    { containerId: "c-monitoring-prometheus", networkId: "n-boreal-monitoring", ip: "198.51.100.50" },
+    { containerId: "c-monitoring-grafana", networkId: "n-boreal-monitoring", ip: "198.51.100.51" },
+    { containerId: "c-monitoring-node-exporter", networkId: "n-boreal-host" },
+    { containerId: "c-uptime-kuma", networkId: "n-boreal-bridge", ip: "198.51.100.66" },
+    { containerId: "c-whoami-test", networkId: "n-boreal-bridge", ip: "198.51.100.67" },
+    { containerId: "c-dns-adguard", networkId: "n-delta-dns", ip: "203.0.113.2" },
+    { containerId: "c-dns-unbound", networkId: "n-delta-dns", ip: "203.0.113.3" },
+    { containerId: "c-git-forgejo", networkId: "n-delta-git", ip: "203.0.113.18" },
+    { containerId: "c-wiki-wikijs", networkId: "n-cedar-wiki", ip: "203.0.113.34" },
+    { containerId: "c-wiki-db", networkId: "n-cedar-wiki", ip: "203.0.113.35" },
+  ],
+  dependencies: [],
+};

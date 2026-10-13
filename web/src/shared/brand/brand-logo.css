@@ -1,0 +1,72 @@
+/*
+ * Colour hooks of the Docklet Next logo, ported from logo-next/src/docklet-logo.css
+ * (first-party study, same project). Deviation: the defaults map to the app's
+ * palette roles instead of fixed cyan steps. The mark and "Docklet" use the
+ * saturated primary (--control), "Next" the saturated secondary (--highlight):
+ * the chosen colours as they are, shifted in lightness only where a scheme
+ * needs it for 3:1 graphic contrast.
+ */
+.brand-logo {
+  --docklet-logo-primary: var(--control);
+  --docklet-logo-secondary: var(--highlight);
+  display: inline-flex;
+  align-items: center;
+  height: var(--brand-logo-size, 32px);
+  line-height: 0;
+}
+
+.brand-logo > .dln-logo {
+  display: block;
+  width: auto;
+  height: 100%;
+  max-width: 100%;
+  overflow: visible;
+}
+
+.dln-logo {
+  --dln-primary: var(--docklet-logo-primary, currentColor);
+  --dln-secondary: var(--docklet-logo-secondary, currentColor);
+  --dln-text: var(--docklet-logo-text, currentColor);
+  --dln-next: var(--docklet-logo-next, var(--dln-secondary));
+  --dln-c-mark: var(--dln-primary);
+  --dln-c-main: var(--dln-primary);
+  --dln-c-next: var(--dln-next);
+}
+
+.dln-logo[data-tone="brand"] {
+  --dln-c-next: var(--dln-primary);
+}
+
+.dln-logo[data-tone="accent"] {
+  --dln-c-main: var(--dln-text);
+  --dln-c-next: var(--dln-primary);
+}
+
+.dln-logo[data-tone="mono"] {
+  --dln-c-mark: var(--dln-text);
+  --dln-c-main: var(--dln-text);
+  --dln-c-next: var(--dln-text);
+}
+
+.dln-logo .dln-fill {
+  fill: var(--dln-c-mark);
+}
+
+.dln-logo .dln-stroke,
+.dln-logo .dln-bp-ink {
+  stroke: var(--dln-c-mark);
+}
+
+.dln-logo .dln-word-main,
+.dln-logo .dln-bp-main {
+  stroke: var(--dln-c-main);
+}
+
+.dln-logo .dln-word-next,
+.dln-logo .dln-bp-next {
+  stroke: var(--dln-c-next);
+}
+
+.dln-logo .dln-bp-guide {
+  stroke: var(--docklet-logo-guide, var(--dln-c-next));
+}
