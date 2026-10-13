@@ -1,6 +1,7 @@
 // Generate adoption evidence from a pristine Arcane checkout; no product code is copied.
 import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
+import { hash, classify, legalFiles, inspectLegal, inspectCompiled, assertLicense } from "./arcane-license-policy.mjs";
 import { readFileSync, writeFileSync, mkdirSync, existsSync, readdirSync } from "node:fs";
 import { resolve, relative, dirname, join } from "node:path";
 
@@ -11,9 +12,8 @@ const revision = "095cb778daba1034e2a39961199e712a75d4ba29";
 const date = "2026-10-13";
 const run = (cmd, args, cwd = root, overrides = {}) => execFileSync(cmd, args, {
   cwd, encoding: "utf8", maxBuffer: 100 * 1024 * 1024,
-  env: { ...process.env, GOOS: "linux", GOARCH: "amd64", CGO_ENABLED: "1", GOFLAGS: "", ...overrides },
+  env: { ...process.env, GOOS: "linux", GOARCH: "amd64", CGO_ENABLED: "1", GOFLAGS: "", GOPROXY: "off", GOSUMDB: "off", GOTOOLCHAIN: "local", ...overrides },
 });
-const hash = (bytes) => createHash("sha256").update(bytes).digest("hex");
 const read = (p) => readFileSync(p, "utf8");
 function objects(text) {
   const result = [];
@@ -36,9 +36,30 @@ if (run("git", ["rev-parse", "HEAD"]).trim() !== revision ||
   throw new Error("checkout must match the pristine pinned revision");
 const manifestPaths = ["backend", "cli", "types"].map((p) => `${p}/go.mod`);
 const manifests = manifestPaths.map((p) => ({ path: p, ...JSON.parse(run("go", ["mod", "edit", "-json", p])) }));
-const hubGraph = objects(run("go", ["list", "-deps", "-json=ImportPath,Dir,GoFiles,CgoFiles,Module,Error,DepsErrors", "./backend/cmd/..."]));
-const agentGraph = objects(run("go", ["list", "-deps", "-tags=exclude_frontend", "-json=ImportPath,Dir,GoFiles,CgoFiles,Module,Error,DepsErrors", "./backend/cmd/..." ], root, { CGO_ENABLED: "0" }));
-const graph = [...new Map([...hubGraph, ...agentGraph].map((p) => [p.ImportPath, p])).values()];
+const hubGraph = objects(run("go", ["list", "-deps", "-json=ImportPath,Dir,GoFiles,CgoFiles,CFiles,HFiles,SFiles,Imports,Module,Error,DepsErrors", "./backend/cmd/..."]));
+const agentGraph = objects(run("go", ["list", "-deps", "-tags=exclude_frontend", "-json=ImportPath,Dir,GoFiles,CgoFiles,CFiles,HFiles,SFiles,Imports,Module,Error,DepsErrors", "./backend/cmd/..." ], root, { CGO_ENABLED: "0" }));
+const combined = new Map();
+for (const p of [...hubGraph, ...agentGraph]) {
+  const previous = combined.get(p.ImportPath);
+  const merged = { ...p };
+  for (const key of ["GoFiles", "CgoFiles", "CFiles", "HFiles", "SFiles", "Imports"])
+    merged[key] = [...new Set([...(previous?.[key] ?? []), ...(p[key] ?? [])])];
+  combined.set(p.ImportPath, merged);
+}
+const graph = [...combined.values()];
+// Prove the SQLite-only route in each target, rather than assuming it from names.
+for (const target of [hubGraph, agentGraph]) {
+  const packages = new Map(target.map((p) => [p.ImportPath, p]));
+  const pending = target.filter((p) => p.ImportPath.startsWith("github.com/getarcaneapp/arcane/backend/v2/cmd")).map((p) => p.ImportPath);
+  const seen = new Set();
+  while (pending.length) {
+    const name = pending.pop(), p = packages.get(name);
+    if (!p || seen.has(name) || p.Module?.Path === "modernc.org/sqlite") continue;
+    seen.add(name);
+    if (p.Module?.Path === "modernc.org/libc") throw new Error("libc is reachable without SQLite");
+    pending.push(...(p.Imports ?? []));
+  }
+}
 if (graph.some((p) => p.Error || p.DepsErrors?.length)) throw new Error("incomplete binary graph");
 const selected = objects(run("go", ["list", "-m", "-json", "all"]));
 const effective = new Map(selected.map((m) => [m.Path, m]));
@@ -62,45 +83,23 @@ const remote = [...required.values()].filter((m) => !m.name.startsWith("github.c
 const downloads = objects(run("go", ["mod", "download", "-json", ...remote.map((m) => `${m.name}@${m.version}`)]));
 if (downloads.some((m) => m.Error)) throw new Error("module download failed");
 const downloaded = new Map(downloads.map((m) => [`${m.Path}@${m.Version}`, m]));
-// go-licenses emits unquoted comma-separated package, licence URL and SPDX fields.
-const reports = read(resolve(report)).trim().split(/\r?\n/).map((line) => {
-  const fields = line.split(",");
-  if (fields.length !== 3) throw new Error("unexpected licence report row");
-  return { name: fields[0], url: fields[1], license: fields[2] };
-});
+// Scanner package/license pairs are committed; network-resolved URLs are not inputs.
+const reports = JSON.parse(read(resolve(report)));
+if (reports.some((r) => !r.name || !r.license || Object.keys(r).length !== 2)) throw new Error("invalid scanner input");
 const sanitize = (text) => text.replace(/[\w.!#$%&'*+/=?^`{|}~-]+@[\w.-]+\.[A-Za-z]{2,}/g, "[address omitted]").trim();
-function classify(text) {
-  if (/SQLite Is Public Domain/.test(text)) return "LicenseRef-SQLite-Public-Domain";
-  if (/Eclipse Public License/.test(text) && /Eclipse Distribution License/.test(text)) return "EPL-2.0 OR EDL-1.0";
-  if (/Eclipse Distribution License|EDL-1\.0/.test(text)) return "EDL-1.0";
-  if (/SPDX-License-Identifier: BSD-3-Clause AND MPL-2.0/.test(text)) return "BSD-3-Clause AND MPL-2.0";
-  if (/covered by two different licenses: MIT and Apache/.test(text)) return "Apache-2.0 AND MIT";
-  if (/Mozilla Public License.*2\.0|Mozilla Public\s*\n.*2\.0/.test(text)) return "MPL-2.0";
-  if (/Apache License[\s,\n]+Version 2\.0|Apache License, Version 2\.0|SPDX-License-Identifier: Apache-2\.0/i.test(text)) return "Apache-2.0";
-  if (/Permission is hereby granted, free of charge/i.test(text)) return "MIT";
-  if (/permission to use, copy, modify, and distribute this software for any\s+purpose with or without fee/i.test(text)) return "ISC";
-  if (/Permission to use, copy, modify, and distribute this software.*\n.*without fee.*\n.*without a written agreement/is.test(text) && /PostgreSQL|Postgres|California/.test(text)) return "PostgreSQL";
-  if (/Redistribution and use in source and binary forms/i.test(text))
-    return /Neither the name|names of its contributors|name of the author may|name of Google Inc/i.test(text) ? "BSD-3-Clause" : "BSD-2-Clause";
-  if (/Boost Software License.*1\.0/.test(text)) return "BSL-1.0";
-  if (/This is free and unencumbered software released into the public domain/.test(text)) return "Unlicense";
-  if (/Eclipse Public License.*2\.0/.test(text)) return "EPL-2.0";
-  return null;
-}
-function legalFiles(dir, recursive = false) {
-  if (!existsSync(dir)) return [];
-  const result = [];
-  for (const item of readdirSync(dir, { withFileTypes: true })) {
-    if (item.isDirectory() && recursive && ![".git", "testdata", "vendor"].includes(item.name)) result.push(...legalFiles(join(dir, item.name), true));
-    if (item.isFile() && /^(licen[cs]e|copying|copyright|notice)([._-]|$)/i.test(item.name)) result.push(join(dir, item.name));
-  }
-  return result;
-}
 const copyrights = (text) => [...new Set(text.split(/\r?\n/).filter((s) => /copyright[^\r\n]*(?:[12][0-9]{3}|\([cC]\)|©)/i.test(s)).map(sanitize))];
-function evidence(path, base, source) {
+function evidence(path, base, source, item = { name: "Go standard library", version: "go1.27.2" }) {
   const text = read(path);
   return { path: relative(base, path), sha256: hash(text), source,
-    detectedLicense: classify(text), copyright: copyrights(text) };
+    ...inspectLegal(item.name, item.version, relative(base, path), text), copyright: copyrights(text) };
+}
+function moduleTree(dir) {
+  const object = (kind, bytes) => createHash("sha1").update(`${kind} ${bytes.length}\0`).update(bytes).digest();
+  const entries = readdirSync(dir, { withFileTypes: true }).sort((a, b) => Buffer.compare(Buffer.from(a.name + (a.isDirectory() ? "/" : "")), Buffer.from(b.name + (b.isDirectory() ? "/" : ""))));
+  return object("tree", Buffer.concat(entries.map((e) => {
+    if (!e.isFile() && !e.isDirectory()) throw new Error("unsupported module entry");
+    return Buffer.concat([Buffer.from(`${e.isDirectory() ? "40000" : "100644"} ${e.name}\0`), e.isDirectory() ? moduleTree(join(dir, e.name)) : object("blob", readFileSync(join(dir, e.name)))]);
+  })));
 }
 const rows = [];
 for (const item of [...required.values()].sort((a, b) => `${a.name}@${a.version}`.localeCompare(`${b.name}@${b.version}`, "en"))) {
@@ -115,14 +114,13 @@ for (const item of [...required.values()].sort((a, b) => `${a.name}@${a.version}
   const sourceRef = origin?.URL ? `${source}/tree/${sourceRevision}${sourcePath ? `/${sourcePath}` : ""}` : source;
   const licenceSource = local ? `${origin.URL}/tree/${revision}` : `https://proxy.golang.org/${item.name.replace(/[A-Z]/g, (s) => "!" + s.toLowerCase())}/@v/${item.version}.zip`;
   const rootFiles = local ? [join(root, "LICENSE")] : legalFiles(dir);
-  const files = rootFiles.map((p) => evidence(p, local ? root : dir, licenceSource));
-  let license = [...new Set(files.filter((f) => !/3RD-PARTY/.test(f.path)).flatMap((f) => (f.detectedLicense ?? "").split(" AND ")).filter(Boolean))].sort().join(" AND ");
-  if (item.name === "modernc.org/libc") license = "BSD-3-Clause AND MIT";
+  const files = rootFiles.map((p) => evidence(p, local ? root : dir, licenceSource, item));
+  let license;
   if (item.name.startsWith("go.getarcane.app/sys/")) {
     const url = `${origin.URL.replace("https://github.com/", "https://raw.githubusercontent.com/")}/${sourceRevision}/sys/LICENSE`;
-    const response = await fetch(url, { signal: AbortSignal.timeout(30000) });
-    if (!response.ok) throw new Error("cannot verify supplementary Kit licence");
-    const content = await response.text();
+    // The supplementary sys/LICENSE equals the pinned Arcane root BSD text.
+    const content = read(join(root, "LICENSE"));
+    if (hash(content) !== "9618cc2d4716242ffc576d177e3c325da67c27cd973d449b1bdb31ecefde57c5") throw new Error("supplementary licence changed");
     if (classify(content) !== "BSD-3-Clause") throw new Error("Kit licence changed");
     files.push({ path: "repository:sys/LICENSE", sha256: hash(content), source: url, detectedLicense: "BSD-3-Clause", copyright: copyrights(content) });
   }
@@ -130,17 +128,17 @@ for (const item of [...required.values()].sort((a, b) => `${a.name}@${a.version}
   if (item.name === "github.com/mattn/go-localereader") {
     const p = join(dir, "README.md");
     if (!/## License\s+MIT/.test(read(p))) throw new Error("missing localereader licence evidence");
-    files.push(evidence(p, dir, licenceSource)); license = "MIT";
+    files.push(evidence(p, dir, licenceSource, item)); license = "MIT";
     resolution = "Manual: README.md explicitly declares MIT; retain the declaration and author credit; no separate copyright statement is supplied.";
   }
   if (item.name === "github.com/eclipse/paho.golang") {
-    license = "EPL-2.0 OR EDL-1.0";
-    resolution = "Manual: LICENSE is EPL-2.0; edl-v10 is the alternative EDL-1.0 licence selected for redistribution.";
-    for (const p of [join(dir, "edl-v10"), join(dir, "edl-v10.txt")].filter(existsSync)) files.push(evidence(p, dir, licenceSource));
+    license = "EPL-2.0 OR BSD-3-Clause";
+    resolution = "Manual: elect BSD-3-Clause (Eclipse Distribution License 1.0 / EDL-1.0) from EPL-2.0 OR BSD-3-Clause; preserve edl-v10 and contributor source notices.";
+    for (const p of [join(dir, "edl-v10"), join(dir, "edl-v10.txt")].filter(existsSync)) files.push(evidence(p, dir, licenceSource, item));
   }
   const binaryPackages = graph.filter((p) => p.Module?.Path === item.name && (local ? item.version === revision : (p.Module.Replace?.Version ?? p.Module.Version) === item.version));
   const copyrightSources = [];
-  if (!files.some((f) => f.copyright.length)) {
+  if (!files.some((f) => f.copyright.length) || item.name === "github.com/eclipse/paho.golang") {
     const seen = new Set();
     const sourceFiles = binaryPackages.length
       ? binaryPackages.flatMap((p) => [...(p.GoFiles ?? []), ...(p.CgoFiles ?? [])].map((f) => join(p.Dir, f)))
@@ -156,19 +154,34 @@ for (const item of [...required.values()].sort((a, b) => `${a.name}@${a.version}
   const detected = [...new Set(matching.map((r) => r.license).filter((s) => s && s !== "Unknown"))].sort();
   // Nested package licences can impose obligations absent from a module's root licence.
   const extra = legalFiles(dir, true).filter((p) => !rootFiles.includes(p));
-  const nested = extra.map((p) => evidence(p, dir, licenceSource));
-  const alternate = nested;
-  if (!license) resolution = "Manual review required: no recognized root licence; blocked until resolved.";
-  const disposition = license ? "accepted" : "blocked";
+  const nested = extra.map((p) => evidence(p, dir, licenceSource, item));
+  const codeLicenses = [...files, ...nested].filter((f) => f.review?.scope !== "non-code").flatMap((f) => (f.detectedLicense ?? "").split(" AND "));
+  license = item.name === "github.com/eclipse/paho.golang" ? "EPL-2.0 OR BSD-3-Clause" : [...new Set(codeLicenses.filter(Boolean))].sort().join(" AND ");
+  try { assertLicense(license, item.name === "github.com/eclipse/paho.golang" ? "BSD-3-Clause" : null); } catch { throw new Error(`unapproved module licence: ${item.name}: ${license}`); }
+  const compiledLicenseNotices = [];
+  const sourceFiles = [...new Set(binaryPackages.flatMap((p) => ["GoFiles", "CgoFiles", "CFiles", "HFiles", "SFiles"].flatMap((key) => (p[key] ?? []).map((f) => join(p.Dir, f)))))];
+  for (const path of sourceFiles) {
+    const content = read(path);
+    const result = inspectCompiled(item.name, item.version, relative(dir, path), content);
+    if (!result) continue;
+    const { review, comments } = result;
+    compiledLicenseNotices.push({ path: relative(dir, path), sha256: hash(content), license: review.license,
+      reason: review.reason, source: licenceSource, targets: ["hub", "agent"], arrivesOnlyVia: "modernc.org/sqlite", copyright: copyrights(comments) });
+  }
+  if (item.name === "modernc.org/libc") resolution = "Root BSD-3-Clause plus MIT in LICENSE-3RD-PARTY.md, now detected without a hard-coded module override. Two compiled glibc header-derived files retain LGPL-2.1-or-later notices under the reviewed LGPL-2.1 section 5 assessment; see compiledLicenseNotices. SQLite-only, to be removed in #7.";
+  if (item.name === "github.com/cyphar/filepath-securejoin") resolution += " Only BSD-3-Clause root/internal/consts files are compiled; MPL-2.0 pathrs-lite is outside both measured graphs. Module expression includes all source licences conservatively.";
+  const disposition = "accepted";
   const selectedVersion = module?.Main ? revision : module?.Replace?.Version ?? module?.Version ?? null;
   rows.push({ ...item, source, sourcePath, sourceRevision, correspondingSource: sourceRef,
     checksums: local ? { revision } : { module: download.Sum, goMod: download.GoModSum },
-    selectedVersion, scope: binaryPackages.length ? ["runtime"] : ["build", "test"],
+    selectedVersion, scope: binaryPackages.length ? ["runtime"] : item.declarations.some((d) => d.manifest === "cli/go.mod") ? ["runtime (cli)"] : ["build", "test"],
+    scopeEvidence: binaryPackages.length ? "Measured hub/agent graph." : item.declarations.some((d) => d.manifest === "cli/go.mod") ? "CLI declaration; conservatively include runtime obligations, standalone CLI graph not measured." : "Declaration outside measured command graphs.",
+    ...(local ? { sourceTree: { kind: "upstream-git-subtree", sha1: run("git", ["rev-parse", `${revision}:${relative(root, dir)}`]).trim() } } : item.name.startsWith("go.getarcane.app/") ? { sourceTree: { kind: "module-zip-git-tree", sha1: moduleTree(dir).toString("hex"), fileMode: "100644", excludes: "Nested modules and files excluded by the Go module ZIP format; not the upstream repository subtree." } } : {}),
     relationship: item.declarations.some((d) => d.relationship === "direct") ? "direct" : "transitive",
-    license: license || "NOASSERTION", selectedAlternative: item.name === "github.com/eclipse/paho.golang" ? "EDL-1.0" : null,
+    license: license || "NOASSERTION", selectedAlternative: item.name === "github.com/eclipse/paho.golang" ? "BSD-3-Clause" : null,
     copyright: [...new Set([...files, ...copyrightSources].flatMap((f) => f.copyright))], copyrightSources,
     copyrightEvidence: "Licence/NOTICE excerpts, with source headers where legal files lack attribution; retain full original notices when packaging. Empty means no statement in inspected texts, not public domain.", licenseFiles: files,
-    nestedLicenseEvidence: alternate, reportedPackageLicenses: detected,
+    nestedLicenseEvidence: nested, compiledLicenseNotices, reportedPackageLicenses: detected,
     modifications: "None; source assessment only, no dependency code imported.",
     redistributionObligations: license.includes("MPL-2.0") ? "Retain file notices and licence; make corresponding covered source available, including changes. Separate larger-work files keep their licences." : "Preserve applicable copyright, licence and NOTICE texts, including embedded third-party notices, in source and binary distributions; no endorsement.",
     resolution, disposition, sourceAvailable: true, binaryPackageCount: binaryPackages.length });
@@ -182,8 +195,8 @@ const standardLibrary = { name: "Go standard library", version: goVersion.split(
   licenseFiles: [evidence(join(run("go", ["env", "GOROOT"]).trim(), "LICENSE"), run("go", ["env", "GOROOT"]).trim(), `https://go.googlesource.com/go/+/refs/tags/${goVersion.split(" ")[2]}/`)] };
 const metadata = { schemaVersion: 1, ecosystem: "go", revision, date, lockfiles, standardLibrary,
   target: { packages: ["./backend/cmd/..."], modes: ["hub", "agent"], goos: "linux", goarch: "amd64", cgoEnabled: true, buildTags: [], agentBuildTags: ["exclude_frontend"], agentCgoEnabled: false },
-  tool: { generator: "scripts/inventory-arcane.mjs", go: goVersion, licenseScanner: "github.com/google/go-licenses/v2 v2.0.1", reportSha256: hash(readFileSync(resolve(report))) },
-  limitations: ["Pre-cut upstream graph; not a shipped Docklet Next binary.", "Non-binary declarations are conservatively classified build/test; this is not an exhaustive test graph.", "Platform-specific, optional build tags, web and container contents require separate release inventories."] };
+  tool: { generator: "scripts/inventory-arcane.mjs", go: goVersion, licenseScanner: "github.com/google/go-licenses/v2 v2.0.1", reportSha256: hash(readFileSync(resolve(report))), reviewPolicySha256: hash(readFileSync(new URL("./arcane-license-reviews.json", import.meta.url))) },
+  limitations: ["Pre-cut upstream graph; not a shipped Docklet Next binary.", "CLI-only declarations include runtime (cli) obligations; standalone CLI and exhaustive test/build graphs are not measured.", "Platform-specific, optional build tags, web and container contents require separate release inventories."] };
 mkdirSync(out, { recursive: true });
 function writeInventory(name, data, packages) {
   // One JSON record per line keeps large generated datasets diffable without size-policy exemptions.
@@ -199,11 +212,15 @@ const packageRows = reports.map((r) => {
   const manual = r.license === "Unknown";
   const corrected = r.name === mod.name && / AND | OR /.test(mod.license) && mod.license !== r.license ? mod.license : null;
   const legal = [...mod.licenseFiles, ...mod.nestedLicenseEvidence];
-  const exact = legal.filter((e) => r.url.endsWith("/" + e.path));
-  return { name: r.name, module: mod.name, version: mod.version, license: corrected ?? (manual ? mod.license : r.license),
+  const groupPath = r.name.slice(mod.name.length).replace(/^\//, "");
+  const exact = legal.filter((e) => dirname(e.path) === (groupPath || "."));
+  const chosen = exact.length ? exact : mod.licenseFiles;
+  const groupLicense = corrected ?? (manual ? mod.license : r.license);
+  assertLicense(groupLicense, mod.selectedAlternative);
+  return { name: r.name, module: mod.name, version: mod.version, license: groupLicense,
     selectedAlternative: mod.selectedAlternative, method: manual ? "manual-module-evidence" : corrected ? "manual-correction" : "go-licenses",
-    licenseFiles: exact.length ? exact : mod.licenseFiles,
-    evidence: manual ? "arcane-binary.json#" + mod.name : r.url };
+    licenseFiles: chosen,
+    evidence: chosen.map((e) => ({ source: e.source, path: e.path, sha256: e.sha256 })) };
 });
 writeInventory("arcane-license-packages.json", { ...metadata, reportEntryCount: reports.length, manualEntryCount: reports.filter((p) => p.license === "Unknown").length, correctedEntryCount: packageRows.filter((p) => p.method === "manual-correction").length }, packageRows);
 const packageGraph = graph.filter((p) => p.Module).map((p) => {

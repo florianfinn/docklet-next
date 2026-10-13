@@ -39,20 +39,39 @@ own licences. The assessed sources are unmodified:
   Source: https://github.com/hashicorp/go-version/tree/b80b1e68c4854757b38663ec02bada2d839b6f56
 
 filepath-securejoin has BSD-3-Clause AND MPL-2.0 files; its COPYING.md and file
-headers determine the applicable terms. Its BSD notice names:
+headers determine the applicable terms. Only the BSD root and internal/consts
+packages are compiled in the measured graph; MPL pathrs-lite is not. Its BSD
+notice names:
 Copyright (C) 2014-2015 Docker Inc & Go Authors. All rights reserved.
 Copyright (C) 2017-2024 SUSE LLC. All rights reserved.
 go-version source headers state: Copyright IBM Corp. 2014, 2025.
 For errwrap, go-cleanhttp and go-multierror, the inspected texts supply no
 additional copyright statement; retain their original notices and MPL text.
 
-EDL-1.0 selected alternative
+BSD-3-Clause (EDL-1.0) selected alternative
 - github.com/eclipse/paho.golang v0.23.0
   Source: https://github.com/eclipse/paho.golang/tree/1aa03969c5932464359b3e4ed752d9ac61abccc9
-  Select EDL-1.0 from the upstream EPL-2.0 OR EDL-1.0 dual licence.
+  Select BSD-3-Clause, the SPDX identifier for Eclipse Distribution License 1.0
+  (EDL-1.0), from the upstream EPL-2.0 OR BSD-3-Clause dual licence.
   Include edl-v10 and applicable source notices in the redistribution bundle.
   The selected licence text states:
   Copyright (c) 2007, Eclipse Foundation, Inc. and its licensors.
+  Compiled source headers additionally state:
+  Copyright (c) 2024 Contributors to the Eclipse Foundation
+
+Compiled libc header notices (pre-cut assessment only)
+modernc.org/libc v1.77.1 sys/types/types_linux_amd64.go and
+uuid/uuid/uuid_linux_amd64.go retain glibc LGPL-2.1-or-later notices, including
+Copyright (C) 1991-2020 Free Software Foundation, Inc.
+The reviewed content is header-derived type layouts and constants; LGPL-2.1
+section 5 permits the limited header material described in the adoption decision.
+The UUID file also retains a GCC stddef.h GPL-3.0-or-later notice with explicit
+GCC Runtime Library Exception 3.1, Copyright (C) 1989-2020 Free Software Foundation,
+Inc. Retain those source notices. Exact-file hashes and assessment reasons are
+in arcane-binary.json; no general LGPL/GPL or libc distribution approval follows.
+Both targets reach these files only through modernc.org/sqlite. Issue #7 must
+prove modernc.org/libc and modernc.org/sqlite absent from both post-cut binary
+graphs before product release.
 
 Arcane helper notices
 All eleven go.getarcane.app modules are BSD-3-Clause, with separate revisions
@@ -77,4 +96,5 @@ must include verbatim licence texts, corresponding-source references and tested
 extracted-artefact copies before any release. Web dependencies and container
 contents require their own inventories. No release licence bundle is claimed by
 this documentation-only assessment. Unknown/incompatible shipped licences block
-release; no unknown licence or unavailable module remains in this selected map.
+release. All identified legal evidence has a classification or an explicit
+hash-bound review; the pre-cut libc header exceptions require removal.

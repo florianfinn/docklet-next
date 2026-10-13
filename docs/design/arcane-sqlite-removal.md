@@ -249,3 +249,13 @@ meaning, including generated sums and historical text. After the cut, repeat
 of SQLite driver/provider packages. Run retained behaviour tests and the
 separately configured PostgreSQL migration/persistence checks. The inventory
 from #5 is a pre-cut reference and must not be relabelled as post-cut evidence.
+
+
+Acceptance for #7 explicitly requires fresh linux/amd64 hub (CGO=1, default tags)
+and agent (CGO=0, `exclude_frontend`) `go list -deps -json` evidence showing **zero
+packages whose module path is `modernc.org/libc` or `modernc.org/sqlite`** in each
+graph. Record the commands, counts and post-cut revision. This removes the two
+compiled glibc LGPL-2.1-or-later header notices and the UUID header's GCC notice
+recorded in the adoption inventory; the narrow pre-cut header assessment does not
+permit retaining those modules in the product. A missing driver import alone,
+a module-name deletion from sums, or only one measured target is insufficient.

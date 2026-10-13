@@ -1,0 +1,511 @@
+[
+  {
+    "module": "github.com/aquasecurity/trivy-db",
+    "version": "v0.0.0-20260629102122-a0049d7ad12f",
+    "path": "NOTICE",
+    "sha256": "33886b726b32f94ae3ac2d1adf4f5bfb3911f774807b271d27256e4fdc2f77f3",
+    "classification": "attribution",
+    "scope": "code",
+    "reason": "Copyright and attribution notice; retain alongside the module licence."
+  },
+  {
+    "module": "github.com/aquasecurity/trivy",
+    "version": "v0.72.0",
+    "path": "NOTICE",
+    "sha256": "aed9bc6dab87c6f6567d20bf0f5c0433a8ccd3ad7873322cf79b9244eb720a1f",
+    "classification": "attribution",
+    "scope": "code",
+    "reason": "Copyright and attribution notice; retain alongside the module licence."
+  },
+  {
+    "module": "github.com/aquasecurity/trivy",
+    "version": "v0.72.0",
+    "path": "docs/guide/scanner/license.md",
+    "sha256": "d0a0f194d6c25cec3bf10d8162b7eb2f2c289ab3e16b61534d19ecc1bd266343",
+    "classification": "scanner-documentation",
+    "scope": "non-code",
+    "reason": "Scanner documentation names licence risk categories; these are examples, not grants covering Trivy. Not compiled or adopted.",
+    "allowedMarkers": [
+      "LGPL",
+      "AGPL",
+      "GPL"
+    ]
+  },
+  {
+    "module": "github.com/aquasecurity/trivy",
+    "version": "v0.72.0",
+    "path": "pkg/fanal/analyzer/language/nodejs/license/license.go",
+    "sha256": "7ba525cf36bd5a3f778f683d71491244ae91bdae761893ebceb08e07e878c5c4",
+    "classification": "excluded-source",
+    "scope": "excluded",
+    "reason": "Source or workflow, not a legal text. Legal-file discovery excludes this extension; compiled source notices are scanned separately."
+  },
+  {
+    "module": "github.com/aquasecurity/trivy",
+    "version": "v0.72.0",
+    "path": "pkg/fanal/analyzer/language/nodejs/license/license_test.go",
+    "sha256": "e0fda49a67b15310ec38f9cb1e7e1d2dd308c71935176c6c86c89e1d09a5ac8c",
+    "classification": "excluded-source",
+    "scope": "excluded",
+    "reason": "Source or workflow, not a legal text. Legal-file discovery excludes this extension; compiled source notices are scanned separately."
+  },
+  {
+    "module": "github.com/aquasecurity/trivy",
+    "version": "v0.72.0",
+    "path": "pkg/fanal/analyzer/licensing/license.go",
+    "sha256": "72ce4824ea940ad9a330b81e42ae368102f3f3fa5afb98ee7f9b7f091e3961b6",
+    "classification": "excluded-source",
+    "scope": "excluded",
+    "reason": "Source or workflow, not a legal text. Legal-file discovery excludes this extension; compiled source notices are scanned separately."
+  },
+  {
+    "module": "github.com/aquasecurity/trivy",
+    "version": "v0.72.0",
+    "path": "pkg/fanal/analyzer/licensing/license_test.go",
+    "sha256": "9d46b5dc292f2701a9de85b6ef229db30ba6bf56ed995371b166feb3662e7ac0",
+    "classification": "excluded-source",
+    "scope": "excluded",
+    "reason": "Source or workflow, not a legal text. Legal-file discovery excludes this extension; compiled source notices are scanned separately."
+  },
+  {
+    "module": "github.com/aquasecurity/trivy",
+    "version": "v0.72.0",
+    "path": "pkg/fanal/analyzer/pkg/dpkg/copyright.go",
+    "sha256": "134caaf9b07a5d628627617f85d8006a67ac7f24e61286b17a6dbcf33a63e0f6",
+    "classification": "excluded-source",
+    "scope": "excluded",
+    "reason": "Source or workflow, not a legal text. Legal-file discovery excludes this extension; compiled source notices are scanned separately."
+  },
+  {
+    "module": "github.com/aquasecurity/trivy",
+    "version": "v0.72.0",
+    "path": "pkg/fanal/analyzer/pkg/dpkg/copyright_test.go",
+    "sha256": "f8ce958a53d9a07748864d00f0256e613af27e4591b0e55955d12312e99af18b",
+    "classification": "excluded-source",
+    "scope": "excluded",
+    "reason": "Source or workflow, not a legal text. Legal-file discovery excludes this extension; compiled source notices are scanned separately."
+  },
+  {
+    "module": "github.com/aquasecurity/trivy",
+    "version": "v0.72.0",
+    "path": "pkg/fanal/types/license.go",
+    "sha256": "19dbe59ce2aecc0e89941545982d165dd928cc1e4715f5d84c6db32d58c3bcfc",
+    "classification": "excluded-source",
+    "scope": "excluded",
+    "reason": "Source or workflow, not a legal text. Legal-file discovery excludes this extension; compiled source notices are scanned separately."
+  },
+  {
+    "module": "github.com/aquasecurity/trivy",
+    "version": "v0.72.0",
+    "path": "pkg/flag/license_flags.go",
+    "sha256": "59b67ea6edc89d98a60bad4347efadeb26746c864900b236c9e33c0286277549",
+    "classification": "excluded-source",
+    "scope": "excluded",
+    "reason": "Source or workflow, not a legal text. Legal-file discovery excludes this extension; compiled source notices are scanned separately."
+  },
+  {
+    "module": "github.com/aquasecurity/trivy",
+    "version": "v0.72.0",
+    "path": "pkg/notification/notice.go",
+    "sha256": "034e8cd98ff94e4645ced0bd78c48bd547bbd0d03eaff710ca27ceaf64cc3ff4",
+    "classification": "excluded-source",
+    "scope": "excluded",
+    "reason": "Source or workflow, not a legal text. Legal-file discovery excludes this extension; compiled source notices are scanned separately."
+  },
+  {
+    "module": "github.com/aquasecurity/trivy",
+    "version": "v0.72.0",
+    "path": "pkg/notification/notice_test.go",
+    "sha256": "3cd2bb663001183d087f189ad617b12de6a9d664989d8e9e59738212bbc869ad",
+    "classification": "excluded-source",
+    "scope": "excluded",
+    "reason": "Source or workflow, not a legal text. Legal-file discovery excludes this extension; compiled source notices are scanned separately."
+  },
+  {
+    "module": "github.com/aquasecurity/trivy",
+    "version": "v0.72.0",
+    "path": "pkg/types/license.go",
+    "sha256": "b30b9a6f2a91d28a928b9ce74da880a1a7cdb057ef09beb6514cdf8017caa38c",
+    "classification": "excluded-source",
+    "scope": "excluded",
+    "reason": "Source or workflow, not a legal text. Legal-file discovery excludes this extension; compiled source notices are scanned separately."
+  },
+  {
+    "module": "github.com/aws/aws-sdk-go-v2",
+    "version": "v1.47.1",
+    "path": "NOTICE.txt",
+    "sha256": "a6e830174d62dafad3a718384772ea1f4c0e27989f050932dc442a5e3ddad080",
+    "classification": "attribution",
+    "scope": "code",
+    "reason": "Copyright and attribution notice; retain alongside the module licence."
+  },
+  {
+    "module": "github.com/aws/aws-sdk-go-v2",
+    "version": "v1.47.1",
+    "path": ".github/workflows/license-check.yml",
+    "sha256": "f19d6aac3a063b4ea43196472248ff68e277b7c2a9e0a193799134677d496cda",
+    "classification": "excluded-source",
+    "scope": "excluded",
+    "reason": "Source or workflow, not a legal text. Legal-file discovery excludes this extension; compiled source notices are scanned separately."
+  },
+  {
+    "module": "github.com/aws/smithy-go",
+    "version": "v1.28.2",
+    "path": "NOTICE",
+    "sha256": "d4290ed64c2edd0fce1d84e3f9dfb2881240fe534def76b8cd29ed6af683e287",
+    "classification": "attribution",
+    "scope": "code",
+    "reason": "Copyright and attribution notice; retain alongside the module licence."
+  },
+  {
+    "module": "github.com/compose-spec/compose-go/v2",
+    "version": "v2.16.1",
+    "path": "NOTICE",
+    "sha256": "b81015606d10bb8640c2f5bf6d71ecbbad62bb8182a760bf7ef5ae36c52f2d86",
+    "classification": "attribution",
+    "scope": "code",
+    "reason": "Copyright and attribution notice; retain alongside the module licence."
+  },
+  {
+    "module": "github.com/containerd/containerd/v2",
+    "version": "v2.4.1",
+    "path": "NOTICE",
+    "sha256": "03f0b4bcaecfdb491ef5a7d320e2c2adf886c732d34e3fff87d52dbaec64d8c3",
+    "classification": "attribution",
+    "scope": "code",
+    "reason": "Copyright and attribution notice; retain alongside the module licence."
+  },
+  {
+    "module": "github.com/coreos/go-oidc/v3",
+    "version": "v3.21.0",
+    "path": "NOTICE",
+    "sha256": "dccd26c6fd9c296daf44d0bc56bb4efc566edd4880381b3331c9a63e6e471338",
+    "classification": "attribution",
+    "scope": "code",
+    "reason": "Copyright and attribution notice; retain alongside the module licence."
+  },
+  {
+    "module": "github.com/docker/cli",
+    "version": "v29.8.2+incompatible",
+    "path": "NOTICE",
+    "sha256": "a8c869fbda819afb8d80e0ac19bac52e766bc6c19cb38cf94f52d64c4be2aab6",
+    "classification": "mixed-notice",
+    "scope": "code",
+    "reason": "NOTICE explicitly identifies the included creack/pty component as MIT.",
+    "license": "MIT"
+  },
+  {
+    "module": "github.com/docker/compose/v5",
+    "version": "v5.6.0",
+    "path": "NOTICE",
+    "sha256": "b7dca0a6b01fa7365e4892877a6321179ee343d72ee87a96cfc222141b99a1e6",
+    "classification": "attribution",
+    "scope": "code",
+    "reason": "Copyright and attribution notice; retain alongside the module licence."
+  },
+  {
+    "module": "github.com/jackc/pgx/v5",
+    "version": "v5.11.0",
+    "path": "pgproto3/notice_response.go",
+    "sha256": "4b9071daf5f9975eb936c370200709bb7433862c5d4a32d21db65620133f4a8e",
+    "classification": "excluded-source",
+    "scope": "excluded",
+    "reason": "Source or workflow, not a legal text. Legal-file discovery excludes this extension; compiled source notices are scanned separately."
+  },
+  {
+    "module": "github.com/mattn/go-localereader",
+    "version": "v0.0.1",
+    "path": "README.md",
+    "sha256": "0c5c52517f13becd7a1e1234f1e8a5ba370f5a5078cee9ac058c2d534e267fcb",
+    "classification": "manual-grant",
+    "scope": "code",
+    "reason": "README License section explicitly selects MIT and credits Yasuhiro Matsumoto.",
+    "license": "MIT"
+  },
+  {
+    "module": "github.com/moby/patternmatcher",
+    "version": "v0.6.1",
+    "path": "NOTICE",
+    "sha256": "7a3adb8e71d95e4536be8dab1aab2c21eedecf3ee45d2c968d034ee594d7b144",
+    "classification": "attribution",
+    "scope": "code",
+    "reason": "Copyright and attribution notice; retain alongside the module licence."
+  },
+  {
+    "module": "github.com/opencontainers/go-digest",
+    "version": "v1.0.0",
+    "path": "LICENSE.docs",
+    "sha256": "a1d1adec3ba691ef6e377a78bbe9e9e2501f2f4a1723d08857da1ac6564e4fed",
+    "classification": "documentation-license",
+    "scope": "non-code",
+    "reason": "CC-BY-SA-4.0 applies to documentation, not compiled Go packages; re-review before redistributing documentation.",
+    "allowedMarkers": []
+  },
+  {
+    "module": "github.com/prometheus/client_golang",
+    "version": "v1.24.1",
+    "path": "NOTICE",
+    "sha256": "8548bfb2bc1913396df38c548a6ec60b8dbcac3b0800485a40569c8bdd184471",
+    "classification": "attribution",
+    "scope": "code",
+    "reason": "Copyright and attribution notice; retain alongside the module licence."
+  },
+  {
+    "module": "github.com/prometheus/client_model",
+    "version": "v0.6.3",
+    "path": "NOTICE",
+    "sha256": "6c79faa15168885fb88a316ae0df18f486deafddefdc16826cdc56dfbd421e24",
+    "classification": "attribution",
+    "scope": "code",
+    "reason": "Copyright and attribution notice; retain alongside the module licence."
+  },
+  {
+    "module": "github.com/prometheus/common",
+    "version": "v0.71.0",
+    "path": "NOTICE",
+    "sha256": "600244c8052c8c1d307043fafacbc83b429c171dd8e08f5a537c0a54014585ee",
+    "classification": "attribution",
+    "scope": "code",
+    "reason": "Copyright and attribution notice; retain alongside the module licence."
+  },
+  {
+    "module": "github.com/prometheus/procfs",
+    "version": "v0.22.0",
+    "path": "NOTICE",
+    "sha256": "497fcdb9fae55924c12f55f05cbe83a096662e5c591d79b74e4a8f23bab5ffee",
+    "classification": "attribution",
+    "scope": "code",
+    "reason": "Copyright and attribution notice; retain alongside the module licence."
+  },
+  {
+    "module": "github.com/quic-go/quic-go",
+    "version": "v0.63.0",
+    "path": "assets/LICENSE.md",
+    "sha256": "2c8d4ff4244edf09d99dcd428d278e47a059d24f0030b38c1ab38e93b1c8030c",
+    "classification": "asset-policy",
+    "scope": "non-code",
+    "reason": "Restricted logo/trademark policy, not the Go source licence. Brand assets are not compiled or adopted."
+  },
+  {
+    "module": "github.com/stretchr/testify",
+    "version": "v1.12.1",
+    "path": "internal/spew/LICENSE",
+    "sha256": "1b93a317849ee09d3d7e4f1d20c2b78ddb230b4becb12d7c224c927b9d470251",
+    "classification": "manual-grant",
+    "scope": "code",
+    "reason": "ISC grant includes the and/or spelling; classifier accepts both spellings.",
+    "license": "ISC"
+  },
+  {
+    "module": "go.yaml.in/yaml/v4",
+    "version": "v4.0.0-rc.6",
+    "path": "NOTICE",
+    "sha256": "257bb2d062ee0b9226e3b5f9c3c5d6aa3d38a450df27a9e060f061d4d4a4eb6f",
+    "classification": "mixed-notice",
+    "scope": "code",
+    "reason": "NOTICE assigns MIT to internal/libyaml and Apache-2.0 to remaining files.",
+    "license": "Apache-2.0 AND MIT"
+  },
+  {
+    "module": "golang.org/x/tools",
+    "version": "v0.50.0",
+    "path": "copyright/copyright.go",
+    "sha256": "9160e93ef0a14f58772d8ba5eafa4949ea2a3b43ca3aef0351328910cbecd6c8",
+    "classification": "excluded-source",
+    "scope": "excluded",
+    "reason": "Source or workflow, not a legal text. Legal-file discovery excludes this extension; compiled source notices are scanned separately."
+  },
+  {
+    "module": "golang.org/x/tools",
+    "version": "v0.50.0",
+    "path": "copyright/copyright_test.go",
+    "sha256": "4496ed3ad571fb90f8abd650c6973565c834d650cff2d2c57cb970ff462dc4bf",
+    "classification": "excluded-source",
+    "scope": "excluded",
+    "reason": "Source or workflow, not a legal text. Legal-file discovery excludes this extension; compiled source notices are scanned separately."
+  },
+  {
+    "module": "modernc.org/memory",
+    "version": "v1.12.1",
+    "path": "LICENSE-LOGO",
+    "sha256": "5ae5bee3072a841376451b48d8cfcec7188e10543926d5870828d36c8a750dc5",
+    "classification": "asset-reference",
+    "scope": "non-code",
+    "reason": "Reference to a Wikimedia logo asset; no permission inferred. Asset is not compiled or adopted; separate review required for reuse."
+  },
+  {
+    "module": "github.com/cyphar/filepath-securejoin",
+    "version": "v0.7.0",
+    "path": "COPYING.md",
+    "sha256": "83e36e42b3dacc3d447eca3049848b3e2ff66b6e1768a6a3cf3f27a57079bda4",
+    "classification": "licence-reference",
+    "scope": "code",
+    "allowedMarkers": [
+      "LGPL",
+      "AGPL",
+      "GPL"
+    ],
+    "reason": "COPYING explains MPL/GPL-family compatibility, not a GPL-family grant. Source files are BSD-3-Clause or MPL-2.0 as specified by their headers."
+  },
+  {
+    "module": "github.com/cyphar/filepath-securejoin",
+    "version": "v0.7.0",
+    "path": "LICENSE.MPL-2.0",
+    "sha256": "3f3d9e0024b1921b067d6f7f88deb4a60cbe7a78e76c64e3f1d7fc3b779b9d04",
+    "classification": "licence-reference",
+    "scope": "code",
+    "allowedMarkers": [
+      "LGPL",
+      "AGPL",
+      "GPL"
+    ],
+    "reason": "MPL-2.0 Secondary License definition names GPL/LGPL/AGPL; no GPL-family component grant. Preserve the MPL text and all other grants in the file."
+  },
+  {
+    "module": "github.com/docker/buildx",
+    "version": "v0.32.1",
+    "path": "bake/hclparser/LICENSE",
+    "sha256": "28ca54ff46a27183631aa262673d13e3c829d909059f5c861da835fe1783fbec",
+    "classification": "licence-reference",
+    "scope": "code",
+    "allowedMarkers": [
+      "LGPL",
+      "AGPL",
+      "GPL"
+    ],
+    "reason": "MPL-2.0 Secondary License definition names GPL/LGPL/AGPL; no GPL-family component grant. Preserve the MPL text and all other grants in the file."
+  },
+  {
+    "module": "github.com/docker/buildx",
+    "version": "v0.36.1",
+    "path": "bake/hclparser/LICENSE",
+    "sha256": "28ca54ff46a27183631aa262673d13e3c829d909059f5c861da835fe1783fbec",
+    "classification": "licence-reference",
+    "scope": "code",
+    "allowedMarkers": [
+      "LGPL",
+      "AGPL",
+      "GPL"
+    ],
+    "reason": "MPL-2.0 Secondary License definition names GPL/LGPL/AGPL; no GPL-family component grant. Preserve the MPL text and all other grants in the file."
+  },
+  {
+    "module": "github.com/eclipse/paho.golang",
+    "version": "v0.23.0",
+    "path": "LICENSE",
+    "sha256": "e2bcf9854f46a58b6e6f014d64e102a6b4e35a87d117094903e66fb68454a3fd",
+    "classification": "licence-reference",
+    "scope": "code",
+    "allowedMarkers": [
+      "GPL"
+    ],
+    "reason": "EPL text describes GPL secondary licensing; the independent BSD-3-Clause (EDL-1.0) election applies instead."
+  },
+  {
+    "module": "github.com/hashicorp/errwrap",
+    "version": "v1.1.0",
+    "path": "LICENSE",
+    "sha256": "bef1747eda88b9ed46e94830b0d978c3499dad5dfe38d364971760881901dadd",
+    "classification": "licence-reference",
+    "scope": "code",
+    "allowedMarkers": [
+      "LGPL",
+      "AGPL",
+      "GPL"
+    ],
+    "reason": "MPL-2.0 Secondary License definition names GPL/LGPL/AGPL; no GPL-family component grant. Preserve the MPL text and all other grants in the file."
+  },
+  {
+    "module": "github.com/hashicorp/go-cleanhttp",
+    "version": "v0.5.2",
+    "path": "LICENSE",
+    "sha256": "60222c28c1a7f6a92c7df98e5c5f4459e624e6e285e0b9b94467af5f6ab3343d",
+    "classification": "licence-reference",
+    "scope": "code",
+    "allowedMarkers": [
+      "LGPL",
+      "AGPL",
+      "GPL"
+    ],
+    "reason": "MPL-2.0 Secondary License definition names GPL/LGPL/AGPL; no GPL-family component grant. Preserve the MPL text and all other grants in the file."
+  },
+  {
+    "module": "github.com/hashicorp/go-multierror",
+    "version": "v1.1.1",
+    "path": "LICENSE",
+    "sha256": "a830016911a348a54e89bd54f2f8b0d8fffdeac20aecfba8e36ebbf38a03f5ff",
+    "classification": "licence-reference",
+    "scope": "code",
+    "allowedMarkers": [
+      "LGPL",
+      "AGPL",
+      "GPL"
+    ],
+    "reason": "MPL-2.0 Secondary License definition names GPL/LGPL/AGPL; no GPL-family component grant. Preserve the MPL text and all other grants in the file."
+  },
+  {
+    "module": "github.com/hashicorp/go-version",
+    "version": "v1.9.0",
+    "path": "LICENSE",
+    "sha256": "b31266a0a4ade23e6c0cb5a6ae1c7933b390f30b80550a715579989639b4f55e",
+    "classification": "licence-reference",
+    "scope": "code",
+    "allowedMarkers": [
+      "LGPL",
+      "AGPL",
+      "GPL"
+    ],
+    "reason": "MPL-2.0 Secondary License definition names GPL/LGPL/AGPL; no GPL-family component grant. Preserve the MPL text and all other grants in the file."
+  },
+  {
+    "module": "github.com/wneessen/go-mail",
+    "version": "v0.8.1",
+    "path": "LICENSES/CC-BY-ND-4.0.txt",
+    "sha256": "4a9d465e981ae6bde7f117abbfb0e24f2cc1820e99a47efbe58593fa5c43fa29",
+    "classification": "asset-license",
+    "scope": "non-code",
+    "allowedMarkers": [],
+    "reason": "REUSE sidecars assets/gopher2.svg.license and testdata/logo.svg*.license assign CC-BY-ND-4.0 to artwork/test fixtures. Compiled Go headers are MIT or BSD-3-Clause AND MIT. Assets are not adopted; review before redistribution."
+  },
+  {
+    "module": "modernc.org/sqlite",
+    "version": "v1.60.1",
+    "path": "LICENSE-3RD-PARTY.md",
+    "sha256": "b4366b9c27a9364633e015011a231913ed19bf1228f335bf617e50a6f7b168a6",
+    "classification": "licence-reference",
+    "scope": "code",
+    "allowedMarkers": [
+      "LGPL",
+      "AGPL",
+      "GPL"
+    ],
+    "reason": "MPL-2.0 Secondary License definition names GPL/LGPL/AGPL; no GPL-family component grant. Preserve the MPL text and all other grants in the file."
+  },
+  {
+    "module": "modernc.org/libc",
+    "version": "v1.77.1",
+    "path": "sys/types/types_linux_amd64.go",
+    "sha256": "1ada8b2599b13281b8fe191cfb24c02896ec3781b95a3b5cf76e1d74424eea2e",
+    "classification": "compiled-header-exception",
+    "scope": "compiled-header",
+    "license": "LGPL-2.1-or-later",
+    "allowedMarkers": [
+      "LGPL"
+    ],
+    "reason": "Reviewed glibc-derived type layouts and constants, with LGPL-2.1-or-later notices. LGPL-2.1 section 5 permits object code using only numerical parameters, data-structure layouts/accessors and small macros/inline functions from headers without restriction. This assessment is limited to these exact header-derived files, not a general libc licence exemption. Keep source notices. Both targets reach them only through SQLite; #7 must prove modernc.org/libc and modernc.org/sqlite absent from both binary graphs."
+  },
+  {
+    "module": "modernc.org/libc",
+    "version": "v1.77.1",
+    "path": "uuid/uuid/uuid_linux_amd64.go",
+    "sha256": "c677ffac9af69102fabc82443b8799b4071c7ead9f02237bb2f01af7782af428",
+    "classification": "compiled-header-exception",
+    "scope": "compiled-header",
+    "license": "LGPL-2.1-or-later AND (GPL-3.0-or-later WITH GCC-exception-3.1)",
+    "allowedMarkers": [
+      "LGPL",
+      "GPL"
+    ],
+    "reason": "Reviewed glibc-derived type layouts and constants, with LGPL-2.1-or-later notices. LGPL-2.1 section 5 permits object code using only numerical parameters, data-structure layouts/accessors and small macros/inline functions from headers without restriction. This assessment is limited to these exact header-derived files, not a general libc licence exemption. Keep source notices. Both targets reach them only through SQLite; #7 must prove modernc.org/libc and modernc.org/sqlite absent from both binary graphs. The same generated file also preserves the GCC stddef.h GPL-3.0-or-later notice with explicit GCC Runtime Library Exception 3.1. It supplies basic C type definitions, not a linked GCC implementation. This exact-file pre-cut assessment preserves that notice and requires removal before product release; it does not approve importing or shipping libc."
+  }
+]

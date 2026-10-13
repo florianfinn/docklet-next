@@ -24,7 +24,7 @@ to the effective source revision; local sibling requirements select the checkout
 | github.com/aquasecurity/trivy-db | v0.0.0-20260629102122-a0049d7ad12f | B:I | v0.0.0-20260629102122-a0049d7ad12f | Apache-2.0 | [source](https://github.com/aquasecurity/trivy-db/tree/a0049d7ad12f983e2a14b3c74a0aa914de741af0) |
 | github.com/aquasecurity/trivy | v0.72.0 | B:I | v0.72.0 | Apache-2.0 | [source](https://github.com/aquasecurity/trivy/tree/8a32853686209a428179bb3a1688802b25691564) |
 | github.com/atotto/clipboard | v0.1.4 | C:I | v0.1.4 | BSD-3-Clause | [source](https://proxy.golang.org/github.com/atotto/clipboard/@v/v0.1.4.zip) |
-| github.com/aws/aws-sdk-go-v2 | v1.47.1 | B:D | v1.47.1 | Apache-2.0 | [source](https://github.com/aws/aws-sdk-go-v2/tree/52ba2565aefa81106ba8aca112e7c42176cc28a7) |
+| github.com/aws/aws-sdk-go-v2 | v1.47.1 | B:D | v1.47.1 | Apache-2.0 AND BSD-3-Clause | [source](https://github.com/aws/aws-sdk-go-v2/tree/52ba2565aefa81106ba8aca112e7c42176cc28a7) |
 | github.com/aws/aws-sdk-go-v2/aws/protocol/eventstream | v1.7.20 | B:I | v1.7.20 | Apache-2.0 | [source](https://github.com/aws/aws-sdk-go-v2/tree/a30468cff35d6e385287a0cbff0ac11aa7202529/aws/protocol/eventstream) |
 | github.com/aws/aws-sdk-go-v2/config | v1.33.6 | B:D | v1.33.6 | Apache-2.0 | [source](https://github.com/aws/aws-sdk-go-v2/tree/52ba2565aefa81106ba8aca112e7c42176cc28a7/config) |
 | github.com/aws/aws-sdk-go-v2/credentials | v1.20.6 | B:D | v1.20.6 | Apache-2.0 | [source](https://github.com/aws/aws-sdk-go-v2/tree/52ba2565aefa81106ba8aca112e7c42176cc28a7/credentials) |
@@ -42,7 +42,7 @@ to the effective source revision; local sibling requirements select the checkout
 | github.com/aws/aws-sdk-go-v2/service/sso | v1.38.1 | B:I | v1.38.1 | Apache-2.0 | [source](https://github.com/aws/aws-sdk-go-v2/tree/52ba2565aefa81106ba8aca112e7c42176cc28a7/service/sso) |
 | github.com/aws/aws-sdk-go-v2/service/ssooidc | v1.43.1 | B:I | v1.43.1 | Apache-2.0 | [source](https://github.com/aws/aws-sdk-go-v2/tree/52ba2565aefa81106ba8aca112e7c42176cc28a7/service/ssooidc) |
 | github.com/aws/aws-sdk-go-v2/service/sts | v1.51.1 | B:I | v1.51.1 | Apache-2.0 | [source](https://github.com/aws/aws-sdk-go-v2/tree/52ba2565aefa81106ba8aca112e7c42176cc28a7/service/sts) |
-| github.com/aws/smithy-go | v1.28.2 | B:D | v1.28.2 | Apache-2.0 | [source](https://github.com/aws/smithy-go/tree/9b28af0b8afffb9debb149a07df6fc40edc6e529) |
+| github.com/aws/smithy-go | v1.28.2 | B:D | v1.28.2 | Apache-2.0 AND BSD-3-Clause | [source](https://github.com/aws/smithy-go/tree/9b28af0b8afffb9debb149a07df6fc40edc6e529) |
 | github.com/aymanbagabas/go-osc52/v2 | v2.0.1 | B:I | v2.0.1 | MIT | [source](https://github.com/aymanbagabas/go-osc52/tree/ce73587a0f72cf077e55f163e71ea1b5496a133c) |
 | github.com/Azure/go-ansiterm | v0.0.0-20250102033503-faa5f7b0171c | B:I | v0.0.0-20250102033503-faa5f7b0171c | MIT | [source](https://github.com/Azure/go-ansiterm/tree/faa5f7b0171c46bb398a91b4a0c906324d3664cf) |
 | github.com/beorn7/perks | v1.0.1 | B:I, C:I | v1.0.1 | MIT | [source](https://proxy.golang.org/github.com/beorn7/perks/@v/v1.0.1.zip) |
@@ -66,7 +66,7 @@ to the effective source revision; local sibling requirements select the checkout
 | github.com/clipperhouse/uax29/v2 | v2.7.0 | B:I, C:I | v2.7.0 | MIT | [source](https://github.com/clipperhouse/uax29/tree/b03477d1fbba89df95a6b55da0a222b2e2228610) |
 | github.com/cloudflare/circl | v1.6.3 | B:I | v1.6.3 | BSD-3-Clause | [source](https://github.com/cloudflare/circl/tree/24ae53c5d6f7fe18203adc125ba3ed76a38703e1) |
 | github.com/coder/websocket | v1.8.15 | B:D | v1.8.15 | ISC | [source](https://github.com/coder/websocket/tree/9c8faadccd1b679e811a79ce506f8a10237251ad) |
-| github.com/compose-spec/compose-go/v2 | v2.16.1 | B:D, C:I, T:D | v2.16.1 | Apache-2.0 | [source](https://github.com/compose-spec/compose-go/tree/32d8d5d602975fae367ba521b2af2ce97753ff05) |
+| github.com/compose-spec/compose-go/v2 | v2.16.1 | B:D, C:I, T:D | v2.16.1 | Apache-2.0 AND MIT | [source](https://github.com/compose-spec/compose-go/tree/32d8d5d602975fae367ba521b2af2ce97753ff05) |
 | github.com/containerd/console | v1.0.5 | B:I | v1.0.5 | Apache-2.0 | [source](https://github.com/containerd/console/tree/c8d962180f543ac07c008ecc79a413406ea10c0b) |
 | github.com/containerd/containerd/api | v1.12.0 | B:I | v1.12.0 | Apache-2.0 | [source](https://github.com/containerd/containerd/tree/c6d0192ebb9da70c39a1b5ef4938e7c41cb0a997/api) |
 | github.com/containerd/containerd/v2 | v2.4.1 | B:I | v2.4.1 | Apache-2.0 | [source](https://github.com/containerd/containerd/tree/f2551031d7276a770f65f98c9b52e57e7dad07e8) |
@@ -87,9 +87,9 @@ to the effective source revision; local sibling requirements select the checkout
 | github.com/depot/depot-go | v0.5.3 | B:I | v0.5.3 | MIT | [source](https://github.com/depot/depot-go/tree/047914260d4cc5b2672da0e7b66f2684367a93f0) |
 | github.com/distribution/reference | v0.6.0 | B:D, C:I, T:I | v0.6.0 | Apache-2.0 | [source](https://github.com/distribution/reference/tree/ff14fafe2236e51c2894ac07d4bdfc778e96d682) |
 | github.com/DmitriyVTitov/size | v1.5.0 | B:I, C:I | v1.5.0 | MIT | [source](https://proxy.golang.org/github.com/!dmitriy!v!titov/size/@v/v1.5.0.zip) |
-| github.com/docker/buildx | v0.32.1 | — | v0.32.1 | Apache-2.0 | [source](https://github.com/docker/buildx/tree/a953c9b4b457d29a1559364f1006865fd042c66d) |
-| github.com/docker/buildx | v0.36.1 | B:I | v0.32.1 | Apache-2.0 | [source](https://github.com/docker/buildx/tree/1d8dde89b8aba914e05e45366770736fea1fd690) |
-| github.com/docker/cli | v29.8.2+incompatible | B:D | v29.8.2+incompatible | Apache-2.0 | [source](https://github.com/docker/cli/tree/7fc2dff9bceb96b266a3b2c3117c0955a0d9e616) |
+| github.com/docker/buildx | v0.32.1 | — | v0.32.1 | Apache-2.0 AND MPL-2.0 | [source](https://github.com/docker/buildx/tree/a953c9b4b457d29a1559364f1006865fd042c66d) |
+| github.com/docker/buildx | v0.36.1 | B:I | v0.32.1 | Apache-2.0 AND MPL-2.0 | [source](https://github.com/docker/buildx/tree/1d8dde89b8aba914e05e45366770736fea1fd690) |
+| github.com/docker/cli | v29.8.2+incompatible | B:D | v29.8.2+incompatible | Apache-2.0 AND BSD-3-Clause AND MIT | [source](https://github.com/docker/cli/tree/7fc2dff9bceb96b266a3b2c3117c0955a0d9e616) |
 | github.com/docker/compose/v5 | v5.6.0 | B:D | v5.6.0 | Apache-2.0 | [source](https://github.com/docker/compose/tree/42f48072bbf92ee9b0e43f9fdf2008d03546e7ca) |
 | github.com/docker/docker-credential-helpers | v0.9.9 | B:I | v0.9.9 | MIT | [source](https://github.com/docker/docker-credential-helpers/tree/59e7cc081fa197b0578d4156baefba15499973ba) |
 | github.com/docker/go-connections | v0.8.1 | B:I, C:I, T:I | v0.8.1 | Apache-2.0 | [source](https://github.com/docker/go-connections/tree/9c9e2db764937383effc099843914897c8838056) |
@@ -97,9 +97,9 @@ to the effective source revision; local sibling requirements select the checkout
 | github.com/dunglas/httpsfv | v1.1.1 | B:I | v1.1.1 | BSD-3-Clause | [source](https://github.com/dunglas/httpsfv/tree/f2c11c271b47ad836b1d9732ba62e9a9ea6826e0) |
 | github.com/dustin/go-humanize | v1.1.0 | B:I | v1.1.0 | MIT | [source](https://github.com/dustin/go-humanize/tree/40736da3e8ed16369b5e6f109548f243d43a7e34) |
 | github.com/ebitengine/purego | v0.11.1 | B:I | v0.11.1 | Apache-2.0 | [source](https://github.com/ebitengine/purego/tree/15800b5b0a4f3febc099cf663d75ab558a6db8f2) |
-| github.com/eclipse/paho.golang | v0.23.0 | B:I | v0.23.0 | EPL-2.0 OR EDL-1.0 | [source](https://github.com/eclipse/paho.golang/tree/1aa03969c5932464359b3e4ed752d9ac61abccc9) |
+| github.com/eclipse/paho.golang | v0.23.0 | B:I | v0.23.0 | EPL-2.0 OR BSD-3-Clause | [source](https://github.com/eclipse/paho.golang/tree/1aa03969c5932464359b3e4ed752d9ac61abccc9) |
 | github.com/eiannone/keyboard | v0.0.0-20220611211555-0d226195f203 | B:I | v0.0.0-20220611211555-0d226195f203 | MIT | [source](https://proxy.golang.org/github.com/eiannone/keyboard/@v/v0.0.0-20220611211555-0d226195f203.zip) |
-| github.com/emirpasic/gods | v1.18.1 | B:I | v1.18.1 | ISC | [source](https://proxy.golang.org/github.com/emirpasic/gods/@v/v1.18.1.zip) |
+| github.com/emirpasic/gods | v1.18.1 | B:I | v1.18.1 | BSD-2-Clause AND ISC | [source](https://proxy.golang.org/github.com/emirpasic/gods/@v/v1.18.1.zip) |
 | github.com/felixge/httpsnoop | v1.1.0 | B:I, C:I, T:I | v1.1.0 | MIT | [source](https://github.com/felixge/httpsnoop/tree/0fc9006be0bfd68ee14bc3db0d58f7c7241892e0) |
 | github.com/fogleman/ease | v0.0.0-20170301025033-8da417bf1776 | B:I | v0.0.0-20170301025033-8da417bf1776 | MIT | [source](https://proxy.golang.org/github.com/fogleman/ease/@v/v0.0.0-20170301025033-8da417bf1776.zip) |
 | github.com/fsnotify/fsevents | v0.2.0 | B:I | v0.2.0 | BSD-3-Clause | [source](https://github.com/fsnotify/fsevents/tree/f73112e4ef0540a922ff546752e95a70fb8f035d) |
@@ -114,20 +114,20 @@ to the effective source revision; local sibling requirements select the checkout
 | github.com/go-git/gcfg | v1.5.1-0.20230307220236-3a3c6141e376 | B:I | v1.5.1-0.20230307220236-3a3c6141e376 | BSD-3-Clause | [source](https://github.com/go-git/gcfg/tree/3a3c6141e376c06bf6ca92f0450e974250b4367a) |
 | github.com/go-git/go-billy/v5 | v5.9.2 | B:D | v5.9.2 | Apache-2.0 | [source](https://github.com/go-git/go-billy/tree/19ea4dd91ebc56e1b6cdea6890a180a789bea20d) |
 | github.com/go-git/go-git/v5 | v5.19.3 | B:D | v5.19.3 | Apache-2.0 | [source](https://github.com/go-git/go-git/tree/bdae57cc427f94a6f7c627201bfe14508b5e19bd) |
-| github.com/go-jose/go-jose/v4 | v4.1.5 | B:I | v4.1.5 | Apache-2.0 | [source](https://github.com/go-jose/go-jose/tree/b10771e937ddcce419e30fc0c2b9e38464a333d0) |
+| github.com/go-jose/go-jose/v4 | v4.1.5 | B:I | v4.1.5 | Apache-2.0 AND BSD-3-Clause | [source](https://github.com/go-jose/go-jose/tree/b10771e937ddcce419e30fc0c2b9e38464a333d0) |
 | github.com/go-logfmt/logfmt | v0.6.1 | C:I | v0.6.1 | MIT | [source](https://github.com/go-logfmt/logfmt/tree/804e98fff868b206344991c57a8182172e5ba41e) |
 | github.com/go-logr/logr | v1.4.4 | B:I, C:I, T:I | v1.4.4 | Apache-2.0 | [source](https://github.com/go-logr/logr/tree/96a9abaa56526dd5d51745e817732a2d61505fb7) |
 | github.com/go-logr/stdr | v1.2.2 | B:I, C:I, T:I | v1.2.2 | Apache-2.0 | [source](https://proxy.golang.org/github.com/go-logr/stdr/@v/v1.2.2.zip) |
 | github.com/go-ole/go-ole | v1.3.0 | B:I | v1.3.0 | MIT | [source](https://github.com/go-ole/go-ole/tree/de26f2b218c772f7a1000022d58d2df1d2428a2d) |
 | github.com/go-viper/mapstructure/v2 | v2.5.0 | B:I, C:I, T:I | v2.5.0 | MIT | [source](https://github.com/go-viper/mapstructure/tree/9aa3f77c68e2a56222ea436c1bfa631f1b1072d5) |
 | github.com/go-webauthn/webauthn | v0.18.2 | B:D | v0.18.2 | BSD-3-Clause | [source](https://github.com/go-webauthn/webauthn/tree/a4c6fc6a4399bcd1ba982c116189f1598d9d5eec) |
-| github.com/go-webauthn/x | v0.3.1 | B:I | v0.3.1 | BSD-3-Clause | [source](https://github.com/go-webauthn/x/tree/48b3dfde0cdb8239eb3a90e780c60bb06bc63a66) |
+| github.com/go-webauthn/x | v0.3.1 | B:I | v0.3.1 | BSD-2-Clause AND BSD-3-Clause AND ISC | [source](https://github.com/go-webauthn/x/tree/48b3dfde0cdb8239eb3a90e780c60bb06bc63a66) |
 | github.com/gofrs/flock | v0.13.1 | B:D | v0.13.1 | BSD-3-Clause | [source](https://github.com/gofrs/flock/tree/4e0f4a7fe60f38a4d79b3aeaa67b94f23f57323a) |
 | github.com/golang-jwt/jwt/v5 | v5.3.1 | B:I | v5.3.1 | MIT | [source](https://github.com/golang-jwt/jwt/tree/7ceae619e739dc8a7bf577214aa8ebf26668e9db) |
 | github.com/golang/groupcache | v0.0.0-20241129210726-2c02b8208cf8 | B:I, C:I | v0.0.0-20241129210726-2c02b8208cf8 | Apache-2.0 | [source](https://github.com/golang/groupcache/tree/2c02b8208cf8c02a3e358cb1d9b60950647543fc) |
 | github.com/google/go-cmp | v0.7.0 | B:I | v0.7.0 | BSD-3-Clause | [source](https://github.com/google/go-cmp/tree/9b12f366a942ebc7254abc7f32ca05068b455fb7) |
 | github.com/google/go-containerregistry | v0.22.1 | B:D | v0.22.1 | Apache-2.0 | [source](https://github.com/google/go-containerregistry/tree/8a72a424fdecb4caa14f2d525e5d2503331442b5) |
-| github.com/google/go-tpm-tools | v0.4.8 | B:I | v0.4.8 | Apache-2.0 | [source](https://github.com/google/go-tpm-tools/tree/91d41b0a4da5b9b8386d9567e445aacc068de552) |
+| github.com/google/go-tpm-tools | v0.4.8 | B:I | v0.4.8 | Apache-2.0 AND BSD-2-Clause | [source](https://github.com/google/go-tpm-tools/tree/91d41b0a4da5b9b8386d9567e445aacc068de552) |
 | github.com/google/go-tpm | v0.9.8 | B:I | v0.9.8 | Apache-2.0 | [source](https://github.com/google/go-tpm/tree/6a7f64318ba9e8e7a0f8c5710b07ca47bf911f4c) |
 | github.com/google/shlex | v0.0.0-20191202100458-e7afc7fbc510 | B:I | v0.0.0-20191202100458-e7afc7fbc510 | Apache-2.0 | [source](https://proxy.golang.org/github.com/google/shlex/@v/v0.0.0-20191202100458-e7afc7fbc510.zip) |
 | github.com/google/uuid | v1.6.0 | B:I | v1.6.0 | BSD-3-Clause | [source](https://github.com/google/uuid/tree/0f11ee6918f41a04c201eceeadf612a377bc7fbc) |
@@ -144,7 +144,7 @@ to the effective source revision; local sibling requirements select the checkout
 | github.com/italypaleale/francis | v0.1.0 | B:D | v0.1.0 | MIT | [source](https://github.com/italypaleale/francis/tree/23cd46831a543a73eec05ad034afd46245225876) |
 | github.com/italypaleale/go-kit | v1.2.4 | B:I | v1.2.4 | MIT | [source](https://github.com/italypaleale/go-kit/tree/370bd5c6e34773d5a9481d595b93746595b594db) |
 | github.com/italypaleale/go-sql-utils | v0.3.9 | B:I | v0.3.9 | MIT | [source](https://github.com/italypaleale/go-sql-utils/tree/aedcd2da1a3463686e6b07edf15a4231c46e6cb8) |
-| github.com/jackc/pgerrcode | v0.0.0-20250907135507-afb5586c32a6 | B:I | v0.0.0-20250907135507-afb5586c32a6 | MIT | [source](https://github.com/jackc/pgerrcode/tree/afb5586c32a6b5f5dbf33ebe3d11933cdf0652db) |
+| github.com/jackc/pgerrcode | v0.0.0-20250907135507-afb5586c32a6 | B:I | v0.0.0-20250907135507-afb5586c32a6 | MIT AND PostgreSQL | [source](https://github.com/jackc/pgerrcode/tree/afb5586c32a6b5f5dbf33ebe3d11933cdf0652db) |
 | github.com/jackc/pgpassfile | v1.0.0 | B:I | v1.0.0 | MIT | [source](https://proxy.golang.org/github.com/jackc/pgpassfile/@v/v1.0.0.zip) |
 | github.com/jackc/pgservicefile | v0.0.0-20240606120523-5a60cdf6a761 | B:I | v0.0.0-20240606120523-5a60cdf6a761 | MIT | [source](https://github.com/jackc/pgservicefile/tree/5a60cdf6a76120dc3d5152b95f3b5fd8aa7cc9eb) |
 | github.com/jackc/pgx/v5 | v5.11.0 | B:I | v5.11.0 | MIT | [source](https://github.com/jackc/pgx/tree/5e583fa7aabfa88b796292f849fc9d7d75ac159d) |
@@ -156,7 +156,7 @@ to the effective source revision; local sibling requirements select the checkout
 | github.com/jonboulle/clockwork | v0.5.0 | B:I | v0.5.0 | Apache-2.0 | [source](https://github.com/jonboulle/clockwork/tree/6d8d032a18422c2e3ef651170a8a55012d1f704c) |
 | github.com/jwx-go/jwkfetch/v4 | v4.0.4 | B:D | v4.0.4 | MIT | [source](https://github.com/jwx-go/jwkfetch/tree/447b00d87c58dbc5c67ea6b718f0500658749dc9) |
 | github.com/kevinburke/ssh_config | v1.6.0 | B:I | v1.6.0 | MIT | [source](https://github.com/kevinburke/ssh_config/tree/68fe499c7888e71e9e77108e4f187ae497bca342) |
-| github.com/klauspost/compress | v1.20.1 | B:D | v1.20.1 | Apache-2.0 | [source](https://github.com/klauspost/compress/tree/5d880f230c38a0fc806b9ca1613103a44feff0ac) |
+| github.com/klauspost/compress | v1.20.1 | B:D | v1.20.1 | Apache-2.0 AND BSD-3-Clause AND MIT | [source](https://github.com/klauspost/compress/tree/5d880f230c38a0fc806b9ca1613103a44feff0ac) |
 | github.com/knqyf263/go-apk-version | v0.0.0-20200609155635-041fdbb8563f | B:I | v0.0.0-20200609155635-041fdbb8563f | Apache-2.0 | [source](https://proxy.golang.org/github.com/knqyf263/go-apk-version/@v/v0.0.0-20200609155635-041fdbb8563f.zip) |
 | github.com/knqyf263/go-deb-version | v0.0.0-20241115132648-6f4aee6ccd23 | B:I | v0.0.0-20241115132648-6f4aee6ccd23 | MIT | [source](https://github.com/knqyf263/go-deb-version/tree/6f4aee6ccd23ac99bc42d410aa85fa407b8f7ef4) |
 | github.com/knqyf263/go-rpm-version | v0.0.0-20220614171824-631e686d1075 | B:I | v0.0.0-20220614171824-631e686d1075 | MIT | [source](https://proxy.golang.org/github.com/knqyf263/go-rpm-version/@v/v0.0.0-20220614171824-631e686d1075.zip) |
@@ -222,11 +222,11 @@ to the effective source revision; local sibling requirements select the checkout
 | github.com/pjbgf/sha1cd | v0.7.0 | B:I | v0.7.0 | Apache-2.0 | [source](https://github.com/pjbgf/sha1cd/tree/92b7ba74b2ae6606ce9fd10640b4a46b3f12a5be) |
 | github.com/pkg/browser | v0.0.0-20240102092130-5ac0b6a4141c | B:I | v0.0.0-20240102092130-5ac0b6a4141c | BSD-2-Clause | [source](https://github.com/pkg/browser/tree/5ac0b6a4141c771a0d3a081c36b87c977cf9c7db) |
 | github.com/pkg/errors | v0.9.1 | B:I | v0.9.1 | BSD-2-Clause | [source](https://proxy.golang.org/github.com/pkg/errors/@v/v0.9.1.zip) |
-| github.com/planetscale/vtprotobuf | v0.6.1-0.20240319094008-0393e58bdf10 | B:I | v0.6.1-0.20240319094008-0393e58bdf10 | BSD-3-Clause | [source](https://github.com/planetscale/vtprotobuf/tree/0393e58bdf106fe0347e554d272a8f2c84d12461) |
+| github.com/planetscale/vtprotobuf | v0.6.1-0.20240319094008-0393e58bdf10 | B:I | v0.6.1-0.20240319094008-0393e58bdf10 | BSD-3-Clause AND MIT | [source](https://github.com/planetscale/vtprotobuf/tree/0393e58bdf106fe0347e554d272a8f2c84d12461) |
 | github.com/power-devops/perfstat | v0.0.0-20260805114148-88456608a4f6 | B:I | v0.0.0-20260805114148-88456608a4f6 | MIT | [source](https://github.com/power-devops/perfstat/tree/88456608a4f64370a1b43fd5d347e0a5f2d1b18a) |
 | github.com/pressly/goose/v3 | v3.28.0 | B:D | v3.28.0 | MIT | [source](https://github.com/pressly/goose/tree/43d2d9c819ed6c9ba2b67a86bdf9fc08562495b7) |
 | github.com/project-copacetic/copacetic | v0.15.0 | B:D | v0.15.0 | Apache-2.0 | [source](https://github.com/project-copacetic/copacetic/tree/bce7b4305e378558f20420aa2ca48686cec850d0) |
-| github.com/prometheus/client_golang | v1.24.1 | B:I, C:I | v1.24.1 | Apache-2.0 | [source](https://github.com/prometheus/client_golang/tree/d6087ee482e06716ee21dc03819432d5d40f72db) |
+| github.com/prometheus/client_golang | v1.24.1 | B:I, C:I | v1.24.1 | Apache-2.0 AND BSD-3-Clause | [source](https://github.com/prometheus/client_golang/tree/d6087ee482e06716ee21dc03819432d5d40f72db) |
 | github.com/prometheus/client_model | v0.6.3 | B:I, C:I | v0.6.3 | Apache-2.0 | [source](https://github.com/prometheus/client_model/tree/a834711dbe83d46508daa32d3389f109cc85f53b) |
 | github.com/prometheus/common | v0.71.0 | B:I, C:I | v0.71.0 | Apache-2.0 | [source](https://github.com/prometheus/common/tree/9a4aff03c12e71d3fc29e32a4581deb8e456d88e) |
 | github.com/prometheus/procfs | v0.22.0 | B:I, C:I | v0.22.0 | Apache-2.0 | [source](https://github.com/prometheus/procfs/tree/e81f9e1a1a27c41b2c23dc1d58b56a85ebb7da4d) |
@@ -255,7 +255,7 @@ to the effective source revision; local sibling requirements select the checkout
 | github.com/skratchdot/open-golang | v0.0.0-20200116055534-eef842397966 | B:I | v0.0.0-20200116055534-eef842397966 | MIT | [source](https://proxy.golang.org/github.com/skratchdot/open-golang/@v/v0.0.0-20200116055534-eef842397966.zip) |
 | github.com/spf13/cobra | v1.10.2 | B:D, C:D | v1.10.2 | Apache-2.0 | [source](https://github.com/spf13/cobra/tree/88b30ab89da2d0d0abb153818746c5a2d30eccec) |
 | github.com/spf13/pflag | v1.0.10 | B:I, C:D | v1.0.10 | BSD-3-Clause | [source](https://github.com/spf13/pflag/tree/0491e5702ad2bb108bc519a5221bcc0f52aa9564) |
-| github.com/stretchr/testify | v1.12.1 | B:D, C:D, T:D | v1.12.1 | MIT | [source](https://github.com/stretchr/testify/tree/959dbdacf1533e155162811ea90c90117a420463) |
+| github.com/stretchr/testify | v1.12.1 | B:D, C:D, T:D | v1.12.1 | BSD-3-Clause AND ISC AND MIT | [source](https://github.com/stretchr/testify/tree/959dbdacf1533e155162811ea90c90117a420463) |
 | github.com/subosito/gotenv | v1.6.0 | B:D | v1.6.0 | MIT | [source](https://github.com/subosito/gotenv/tree/14a05352a5cf0f66fd7cbce114374f56065891f0) |
 | github.com/tilt-dev/fsnotify | v1.4.8-0.20220602155310-fff9c274a375 | B:I | v1.4.8-0.20220602155310-fff9c274a375 | BSD-3-Clause | [source](https://proxy.golang.org/github.com/tilt-dev/fsnotify/@v/v1.4.8-0.20220602155310-fff9c274a375.zip) |
 | github.com/tinylib/msgp | v1.6.4 | B:I | v1.6.4 | MIT | [source](https://github.com/tinylib/msgp/tree/6f99c863451752e6aa9c7aacde4215a471a64242) |
@@ -272,7 +272,7 @@ to the effective source revision; local sibling requirements select the checkout
 | github.com/vito/progrock | v0.10.1 | B:I | v0.10.1 | Apache-2.0 | [source](https://github.com/vito/progrock/tree/4851551aa6130c113042fd442c0e0a7689e66810) |
 | github.com/vmihailenco/msgpack/v5 | v5.4.1 | B:I | v5.4.1 | BSD-2-Clause | [source](https://github.com/vmihailenco/msgpack/tree/19c91dfdfa062658c39d9321be26163fc5833bd1) |
 | github.com/vmihailenco/tagparser/v2 | v2.0.0 | B:I | v2.0.0 | BSD-2-Clause | [source](https://proxy.golang.org/github.com/vmihailenco/tagparser/v2/@v/v2.0.0.zip) |
-| github.com/wneessen/go-mail | v0.8.1 | B:D | v0.8.1 | MIT | [source](https://github.com/wneessen/go-mail/tree/2ac36f08567b2a215ebaffdfebcd8f82f165f256) |
+| github.com/wneessen/go-mail | v0.8.1 | B:D | v0.8.1 | BSD-3-Clause AND MIT | [source](https://github.com/wneessen/go-mail/tree/2ac36f08567b2a215ebaffdfebcd8f82f165f256) |
 | github.com/x448/float16 | v0.8.4 | B:I | v0.8.4 | MIT | [source](https://proxy.golang.org/github.com/x448/float16/@v/v0.8.4.zip) |
 | github.com/xanzy/ssh-agent | v0.3.3 | B:I | v0.3.3 | Apache-2.0 | [source](https://github.com/xanzy/ssh-agent/tree/0fa644ba07f41bbe341c7f3d59bd30443ff13002) |
 | github.com/xhit/go-str2duration/v2 | v2.1.0 | B:I, C:I, T:I | v2.1.0 | BSD-3-Clause | [source](https://github.com/xhit/go-str2duration/tree/017325bfda0895fe02177e4ebb07962e58735bbf) |
@@ -291,26 +291,26 @@ to the effective source revision; local sibling requirements select the checkout
 | go.getarcane.app/sys/crypto | v0.3.0 | B:D | v0.3.0 | BSD-3-Clause | [source](https://github.com/getarcaneapp/kit/tree/e2a909ce45597a3c101dca4d218baef4f89bb643/sys/crypto) |
 | go.getarcane.app/updater | v0.11.5 | B:D | v0.11.5 | BSD-3-Clause | [source](https://github.com/getarcaneapp/kit/tree/119f68956cee6d5aba8a5463561aaf9be9943b65/updater) |
 | go.opentelemetry.io/auto/sdk | v1.2.1 | B:I, C:I, T:I | v1.2.1 | Apache-2.0 | [source](https://github.com/open-telemetry/opentelemetry-go-instrumentation/tree/715f58ce2f17e2176b8e53b871e47531a259cc1d/sdk) |
-| go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc | v0.71.0 | B:I | v0.71.0 | Apache-2.0 | [source](https://github.com/open-telemetry/opentelemetry-go-contrib/tree/c4c6248ec2289133b6a51f554ca9367ece1de8e7/instrumentation/google.golang.org/grpc/otelgrpc) |
-| go.opentelemetry.io/contrib/instrumentation/net/http/httptrace/otelhttptrace | v0.71.0 | B:I | v0.71.0 | Apache-2.0 | [source](https://github.com/open-telemetry/opentelemetry-go-contrib/tree/c4c6248ec2289133b6a51f554ca9367ece1de8e7/instrumentation/net/http/httptrace/otelhttptrace) |
-| go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp | v0.71.0 | B:I, C:I, T:I | v0.71.0 | Apache-2.0 | [source](https://github.com/open-telemetry/opentelemetry-go-contrib/tree/c4c6248ec2289133b6a51f554ca9367ece1de8e7/instrumentation/net/http/otelhttp) |
-| go.opentelemetry.io/otel | v1.46.0 | B:I, C:I, T:I | v1.46.0 | Apache-2.0 | [source](https://github.com/open-telemetry/opentelemetry-go/tree/58db4c898f5b5594f8ba78f156475bf48486e2f2) |
-| go.opentelemetry.io/otel/exporters/otlp/otlpmetric/otlpmetricgrpc | v1.46.0 | B:I | v1.46.0 | Apache-2.0 | [source](https://github.com/open-telemetry/opentelemetry-go/tree/58db4c898f5b5594f8ba78f156475bf48486e2f2/exporters/otlp/otlpmetric/otlpmetricgrpc) |
-| go.opentelemetry.io/otel/exporters/otlp/otlpmetric/otlpmetrichttp | v1.46.0 | B:I | v1.46.0 | Apache-2.0 | [source](https://github.com/open-telemetry/opentelemetry-go/tree/58db4c898f5b5594f8ba78f156475bf48486e2f2/exporters/otlp/otlpmetric/otlpmetrichttp) |
-| go.opentelemetry.io/otel/exporters/otlp/otlptrace | v1.46.0 | B:I | v1.46.0 | Apache-2.0 | [source](https://github.com/open-telemetry/opentelemetry-go/tree/58db4c898f5b5594f8ba78f156475bf48486e2f2/exporters/otlp/otlptrace) |
-| go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracegrpc | v1.46.0 | B:I | v1.46.0 | Apache-2.0 | [source](https://github.com/open-telemetry/opentelemetry-go/tree/58db4c898f5b5594f8ba78f156475bf48486e2f2/exporters/otlp/otlptrace/otlptracegrpc) |
-| go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracehttp | v1.46.0 | B:I | v1.46.0 | Apache-2.0 | [source](https://github.com/open-telemetry/opentelemetry-go/tree/58db4c898f5b5594f8ba78f156475bf48486e2f2/exporters/otlp/otlptrace/otlptracehttp) |
-| go.opentelemetry.io/otel/metric | v1.46.0 | B:I, C:I, T:I | v1.46.0 | Apache-2.0 | [source](https://github.com/open-telemetry/opentelemetry-go/tree/58db4c898f5b5594f8ba78f156475bf48486e2f2/metric) |
-| go.opentelemetry.io/otel/sdk | v1.46.0 | B:I | v1.46.0 | Apache-2.0 | [source](https://github.com/open-telemetry/opentelemetry-go/tree/58db4c898f5b5594f8ba78f156475bf48486e2f2/sdk) |
-| go.opentelemetry.io/otel/sdk/metric | v1.46.0 | B:I | v1.46.0 | Apache-2.0 | [source](https://github.com/open-telemetry/opentelemetry-go/tree/58db4c898f5b5594f8ba78f156475bf48486e2f2/sdk/metric) |
-| go.opentelemetry.io/otel/trace | v1.46.0 | B:I, C:I, T:I | v1.46.0 | Apache-2.0 | [source](https://github.com/open-telemetry/opentelemetry-go/tree/58db4c898f5b5594f8ba78f156475bf48486e2f2/trace) |
+| go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc | v0.71.0 | B:I | v0.71.0 | Apache-2.0 AND BSD-3-Clause | [source](https://github.com/open-telemetry/opentelemetry-go-contrib/tree/c4c6248ec2289133b6a51f554ca9367ece1de8e7/instrumentation/google.golang.org/grpc/otelgrpc) |
+| go.opentelemetry.io/contrib/instrumentation/net/http/httptrace/otelhttptrace | v0.71.0 | B:I | v0.71.0 | Apache-2.0 AND BSD-3-Clause | [source](https://github.com/open-telemetry/opentelemetry-go-contrib/tree/c4c6248ec2289133b6a51f554ca9367ece1de8e7/instrumentation/net/http/httptrace/otelhttptrace) |
+| go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp | v0.71.0 | B:I, C:I, T:I | v0.71.0 | Apache-2.0 AND BSD-3-Clause | [source](https://github.com/open-telemetry/opentelemetry-go-contrib/tree/c4c6248ec2289133b6a51f554ca9367ece1de8e7/instrumentation/net/http/otelhttp) |
+| go.opentelemetry.io/otel | v1.46.0 | B:I, C:I, T:I | v1.46.0 | Apache-2.0 AND BSD-3-Clause | [source](https://github.com/open-telemetry/opentelemetry-go/tree/58db4c898f5b5594f8ba78f156475bf48486e2f2) |
+| go.opentelemetry.io/otel/exporters/otlp/otlpmetric/otlpmetricgrpc | v1.46.0 | B:I | v1.46.0 | Apache-2.0 AND BSD-3-Clause | [source](https://github.com/open-telemetry/opentelemetry-go/tree/58db4c898f5b5594f8ba78f156475bf48486e2f2/exporters/otlp/otlpmetric/otlpmetricgrpc) |
+| go.opentelemetry.io/otel/exporters/otlp/otlpmetric/otlpmetrichttp | v1.46.0 | B:I | v1.46.0 | Apache-2.0 AND BSD-3-Clause | [source](https://github.com/open-telemetry/opentelemetry-go/tree/58db4c898f5b5594f8ba78f156475bf48486e2f2/exporters/otlp/otlpmetric/otlpmetrichttp) |
+| go.opentelemetry.io/otel/exporters/otlp/otlptrace | v1.46.0 | B:I | v1.46.0 | Apache-2.0 AND BSD-3-Clause | [source](https://github.com/open-telemetry/opentelemetry-go/tree/58db4c898f5b5594f8ba78f156475bf48486e2f2/exporters/otlp/otlptrace) |
+| go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracegrpc | v1.46.0 | B:I | v1.46.0 | Apache-2.0 AND BSD-3-Clause | [source](https://github.com/open-telemetry/opentelemetry-go/tree/58db4c898f5b5594f8ba78f156475bf48486e2f2/exporters/otlp/otlptrace/otlptracegrpc) |
+| go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracehttp | v1.46.0 | B:I | v1.46.0 | Apache-2.0 AND BSD-3-Clause | [source](https://github.com/open-telemetry/opentelemetry-go/tree/58db4c898f5b5594f8ba78f156475bf48486e2f2/exporters/otlp/otlptrace/otlptracehttp) |
+| go.opentelemetry.io/otel/metric | v1.46.0 | B:I, C:I, T:I | v1.46.0 | Apache-2.0 AND BSD-3-Clause | [source](https://github.com/open-telemetry/opentelemetry-go/tree/58db4c898f5b5594f8ba78f156475bf48486e2f2/metric) |
+| go.opentelemetry.io/otel/sdk | v1.46.0 | B:I | v1.46.0 | Apache-2.0 AND BSD-3-Clause | [source](https://github.com/open-telemetry/opentelemetry-go/tree/58db4c898f5b5594f8ba78f156475bf48486e2f2/sdk) |
+| go.opentelemetry.io/otel/sdk/metric | v1.46.0 | B:I | v1.46.0 | Apache-2.0 AND BSD-3-Clause | [source](https://github.com/open-telemetry/opentelemetry-go/tree/58db4c898f5b5594f8ba78f156475bf48486e2f2/sdk/metric) |
+| go.opentelemetry.io/otel/trace | v1.46.0 | B:I, C:I, T:I | v1.46.0 | Apache-2.0 AND BSD-3-Clause | [source](https://github.com/open-telemetry/opentelemetry-go/tree/58db4c898f5b5594f8ba78f156475bf48486e2f2/trace) |
 | go.opentelemetry.io/proto/otlp | v1.11.0 | B:I | v1.11.0 | Apache-2.0 | [source](https://github.com/open-telemetry/opentelemetry-proto-go/tree/bc625d6e040020737ab65c675c87e03bc841fd60/otlp) |
 | go.uber.org/dig | v1.19.0 | B:I | v1.19.0 | MIT | [source](https://github.com/uber-go/dig/tree/af45368b8ef9faaff2102eceac6535b62bebb185) |
 | go.uber.org/fx | v1.24.0 | B:D | v1.24.0 | MIT | [source](https://github.com/uber-go/fx/tree/443b55a9f03efcacafac0b7777d5c91425cf2c35) |
 | go.uber.org/multierr | v1.11.0 | B:I | v1.11.0 | MIT | [source](https://github.com/uber-go/multierr/tree/de75ae527b39a27afcb50a84427ec7b84021d5f4) |
 | go.uber.org/zap | v1.28.0 | B:I | v1.28.0 | MIT | [source](https://github.com/uber-go/zap/tree/5b81b37b81b8e2ed447a6f57991e372ee4fa5c8f) |
 | go.yaml.in/yaml/v3 | v3.0.5 | B:I, C:I, T:I | v3.0.5 | Apache-2.0 AND MIT | [source](https://github.com/yaml/go-yaml/tree/e16c7af9361b241fa02d91582fb59ce4954d8afc) |
-| go.yaml.in/yaml/v4 | v4.0.0-rc.6 | B:D, C:D, T:I | v4.0.0-rc.6 | Apache-2.0 | [source](https://github.com/yaml/go-yaml/tree/1c17b9cee72bf81ae73a8be50fbd7dd3a9985125) |
+| go.yaml.in/yaml/v4 | v4.0.0-rc.6 | B:D, C:D, T:I | v4.0.0-rc.6 | Apache-2.0 AND MIT | [source](https://github.com/yaml/go-yaml/tree/1c17b9cee72bf81ae73a8be50fbd7dd3a9985125) |
 | golang.org/x/crypto | v0.57.0 | B:D | v0.57.0 | BSD-3-Clause | [source](https://go.googlesource.com/crypto/tree/3f62bf119e84c6e35e8518a2958089ade622d1a3) |
 | golang.org/x/exp | v0.0.0-20260908205506-85c1c2202aba | B:I, C:I | v0.0.0-20260908205506-85c1c2202aba | BSD-3-Clause | [source](https://go.googlesource.com/exp/tree/85c1c2202aba13ab812be55279024d8594344c1f) |
 | golang.org/x/mod | v0.41.0 | B:D | v0.41.0 | BSD-3-Clause | [source](https://go.googlesource.com/mod/tree/d0a27b2d4a48460806692bf5c87fc157c3c65292) |
@@ -332,15 +332,15 @@ to the effective source revision; local sibling requirements select the checkout
 | gopkg.in/yaml.v3 | v3.0.1 | B:I | v3.0.1 | Apache-2.0 AND MIT | [source](https://proxy.golang.org/gopkg.in/yaml.v3/@v/v3.0.1.zip) |
 | gorm.io/driver/postgres | v1.6.3 | B:D | v1.6.3 | MIT | [source](https://github.com/go-gorm/postgres/tree/1a2d67b91586ce34c989a2b2be91f9c37c0cfb86) |
 | gorm.io/gorm | v1.31.2 | B:D | v1.31.2 | MIT | [source](https://github.com/go-gorm/gorm/tree/1d6ce99528060be18a42be09aca8d39efcb47f28) |
-| gotest.tools/v3 | v3.5.2 | B:I | v3.5.2 | Apache-2.0 | [source](https://github.com/gotestyourself/gotest.tools/tree/0b81523ff268a1f1b0baf4a5da67e42fbb86880b) |
-| k8s.io/apimachinery | v0.37.0 | B:I | v0.37.0 | Apache-2.0 | [source](https://github.com/kubernetes/apimachinery/tree/7164e39885ced1e843757da6423a337f6eae75f7) |
-| k8s.io/utils | v0.0.0-20260707023825-cf1189d6abe3 | B:I | v0.0.0-20260707023825-cf1189d6abe3 | Apache-2.0 | [source](https://github.com/kubernetes/utils/tree/cf1189d6abe3a7522bbd54a1bc1068a0a56011c8) |
+| gotest.tools/v3 | v3.5.2 | B:I | v3.5.2 | Apache-2.0 AND BSD-3-Clause | [source](https://github.com/gotestyourself/gotest.tools/tree/0b81523ff268a1f1b0baf4a5da67e42fbb86880b) |
+| k8s.io/apimachinery | v0.37.0 | B:I | v0.37.0 | Apache-2.0 AND BSD-3-Clause | [source](https://github.com/kubernetes/apimachinery/tree/7164e39885ced1e843757da6423a337f6eae75f7) |
+| k8s.io/utils | v0.0.0-20260707023825-cf1189d6abe3 | B:I | v0.0.0-20260707023825-cf1189d6abe3 | Apache-2.0 AND BSD-3-Clause | [source](https://github.com/kubernetes/utils/tree/cf1189d6abe3a7522bbd54a1bc1068a0a56011c8) |
 | mellium.im/reader | v0.1.0 | B:I | v0.1.0 | BSD-2-Clause | [source](https://proxy.golang.org/mellium.im/reader/@v/v0.1.0.zip) |
 | mellium.im/sasl | v0.3.2 | B:I | v0.3.2 | BSD-2-Clause | [source](https://codeberg.org/mellium/sasl/tree/33407e95e7ed512504470747a1d2d34af6c07edf) |
 | mellium.im/xmlstream | v0.15.4 | B:I | v0.15.4 | BSD-2-Clause AND BSD-3-Clause | [source](https://codeberg.org/mellium/xmlstream/tree/815d0dd1c3cd6f7e01356174837c34e1bfb9a9c1) |
-| mellium.im/xmpp | v0.23.0 | B:I | v0.23.0 | BSD-2-Clause AND BSD-3-Clause | [source](https://codeberg.org/mellium/xmpp/tree/d5a1c5e32dde38485f4350c823192c76798a635d) |
+| mellium.im/xmpp | v0.23.0 | B:I | v0.23.0 | BSD-2-Clause AND BSD-3-Clause AND MIT | [source](https://codeberg.org/mellium/xmpp/tree/d5a1c5e32dde38485f4350c823192c76798a635d) |
 | modernc.org/libc | v1.77.1 | B:I | v1.77.1 | BSD-3-Clause AND MIT | [source](https://gitlab.com/cznic/libc/tree/9176651b0b6d3fb661a848553e5d608e47e2285e) |
 | modernc.org/mathutil | v1.7.1 | B:I | v1.7.1 | BSD-3-Clause | [source](https://gitlab.com/cznic/mathutil/tree/28129eec384c30a304561c3c8779e4bb29cbff12) |
 | modernc.org/memory | v1.12.1 | B:I | v1.12.1 | BSD-3-Clause | [source](https://gitlab.com/cznic/memory/tree/bb3d99379ed7361ae4c08f11c2876aef046c2a18) |
-| modernc.org/sqlite | v1.60.1 | B:D | v1.60.1 | BSD-3-Clause AND LicenseRef-SQLite-Public-Domain AND MIT | [source](https://gitlab.com/cznic/sqlite/tree/b122d0417c01508beb55158faedeb64a0c5bfd8a) |
+| modernc.org/sqlite | v1.60.1 | B:D | v1.60.1 | Apache-2.0 AND BSD-3-Clause AND LicenseRef-SQLite-Public-Domain AND MIT AND MPL-2.0 | [source](https://gitlab.com/cznic/sqlite/tree/b122d0417c01508beb55158faedeb64a0c5bfd8a) |
 | tags.cncf.io/container-device-interface | v1.1.1 | B:I | v1.1.1 | Apache-2.0 | [source](https://github.com/cncf-tags/container-device-interface/tree/cb98bcf66dc68530012483bd56e33e14d815e167) |

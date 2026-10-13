@@ -7,7 +7,7 @@ import assert from "node:assert/strict";
 export const ROOT = fileURLToPath(new URL("../", import.meta.url));
 const env = { ...process.env };
 for (const key of Object.keys(env))
-  if (key.startsWith("GIT_") || key === "CHECK_BASE_SHA" || key === "NODE_TEST_CONTEXT") delete env[key];
+  if (key.startsWith("GIT_") || key.startsWith("GITHUB_") || key === "CI" || key === "CHECK_BASE_SHA" || key === "NODE_TEST_CONTEXT") delete env[key];
 export function invoke(root, program, args, options = {}) {
   return spawnSync(program, args, { cwd: root, encoding: "utf8", env, ...options });
 }
