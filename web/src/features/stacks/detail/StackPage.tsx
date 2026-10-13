@@ -123,7 +123,7 @@ export default function StackPage() {
     return (
       <>
         <BackLink />
-        {hosts.isPending ? <StackPageSkeleton /> : <NewStack />}
+        {hosts.isPending ? <StackPageSkeleton /> : hosts.isError ? <QueryError onRetry={() => void hosts.refetch()} /> : <NewStack />}
       </>
     );
   }
@@ -132,6 +132,8 @@ export default function StackPage() {
       <BackLink />
       {stack.isPending || hosts.isPending ? (
         <StackPageSkeleton />
+      ) : hosts.isError ? (
+        <QueryError onRetry={() => void hosts.refetch()} />
       ) : stack.isError ? (
         stack.error.message === "not-found" ? (
           <EmptyState icon={<Layers />} title={t("notFound")} description={t("notFoundBody")} />
