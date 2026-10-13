@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace
+// Deviations: Local module namespace; functional cut: removed S3 backup destinations.
 
 package recovery
 
@@ -220,12 +220,6 @@ func finalizeRestoredRunInternal(db *gorm.DB, manifestBackupID string, request r
 	if run.LocalSnapshotID == "" {
 		values["local_snapshot_id"] = request.LocalSnapshotID
 	}
-	if run.RemoteSnapshotID == "" {
-		values["remote_snapshot_id"] = request.RemoteSnapshotID
-	}
-	if run.S3DestinationID == "" {
-		values["s3_destination_id"] = request.S3DestinationID
-	}
 	return db.Model(&system.SystemBackupRun{}).Where("id = ?", run.ID).Updates(values).Error
 }
 
@@ -245,8 +239,8 @@ func preserveSafetyBackupInternal(db *gorm.DB, backup *recoverytypes.SafetyBacku
 			"status":            system.SystemBackupStatusSucceeded,
 			"trigger":           system.SystemBackupTriggerSafety,
 			"destination":       backuptypes.SystemBackupDestinationLocal,
-			"local_snapshot_id": backup.LocalSnapshotID, "remote_snapshot_id": "", "s3_destination_id": "",
-			"policy_id": "", "error": "",
+			"local_snapshot_id": backup.LocalSnapshotID,
+			"policy_id":         "", "error": "",
 		}).Error
 }
 

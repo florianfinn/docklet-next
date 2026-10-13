@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; functional cut: removed template catalogue; functional cut: removed GitOps and saved Git repositories.
+// Deviations: Local module namespace; functional cut: removed template catalogue; functional cut: removed GitOps and saved Git repositories; functional cut: removed S3 backup destinations.
 
 package di
 
@@ -37,7 +37,6 @@ import (
 	"github.com/florianfinn/docklet-next/backend/internal/project"
 	"github.com/florianfinn/docklet-next/backend/internal/registry"
 	"github.com/florianfinn/docklet-next/backend/internal/role"
-	s3domain "github.com/florianfinn/docklet-next/backend/internal/s3"
 	"github.com/florianfinn/docklet-next/backend/internal/settings"
 	"github.com/florianfinn/docklet-next/backend/internal/system"
 	"github.com/florianfinn/docklet-next/backend/internal/updater"
@@ -226,14 +225,6 @@ func provideVersionServiceInternal(
 	settingsService *settings.SettingsService,
 ) *version.VersionService {
 	return version.NewVersionService(httpClient, cfg.UpdateCheckDisabled, config.Version, config.Revision, localRegistry, localDocker, imageUpdate, settingsService)
-}
-
-func provideS3ModuleInternal(service *s3domain.S3DestinationService, localEnvironment *environment.EnvironmentService) *s3domain.Module {
-	return s3domain.New(service, localEnvironment.SyncS3DestinationsToRemoteEnvironments)
-}
-
-func provideS3ServiceInternal(db *database.DB, localEnvironment *environment.EnvironmentService) *s3domain.S3DestinationService {
-	return s3domain.NewS3DestinationService(db, localEnvironment.CheckS3DestinationReferences)
 }
 
 func provideAuthModuleInternal(service *auth.AuthService, userService *user.UserService, settingsService *settings.SettingsService, passkeyService *passkey.PasskeyService) *auth.Module {

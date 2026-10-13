@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; functional cut: removed GitOps and saved Git repositories.
+// Deviations: Local module namespace; functional cut: removed GitOps and saved Git repositories; functional cut: removed S3 backup destinations.
 
 package environment
 
@@ -744,18 +744,6 @@ func (h *EnvironmentHandler) triggerEnvironmentResourceSyncInternal(ctx context.
 		defer cancel()
 		if err := h.environmentService.SyncRegistriesToEnvironment(syncCtx, envID); err != nil {
 			slog.WarnContext(syncCtx, "Failed to sync registries to environment",
-				"environmentId", envID,
-				"environmentName", envName,
-				"reason", syncReason,
-				"error", err.Error())
-		}
-	}(detachedCtx, environmentID, environmentName, reason)
-
-	go func(syncCtx context.Context, envID, envName, syncReason string) {
-		syncCtx, cancel := context.WithTimeout(syncCtx, edge.DefaultProxyTimeout)
-		defer cancel()
-		if err := h.environmentService.SyncS3DestinationsToEnvironment(syncCtx, envID); err != nil {
-			slog.WarnContext(syncCtx, "Failed to sync S3 destinations to environment",
 				"environmentId", envID,
 				"environmentName", envName,
 				"reason", syncReason,

@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace
+// Deviations: Local module namespace; functional cut: removed S3 backup destinations.
 
 package volume
 
@@ -37,7 +37,6 @@ import (
 	"github.com/florianfinn/docklet-next/backend/internal/common"
 	"github.com/florianfinn/docklet-next/backend/internal/database"
 	"github.com/florianfinn/docklet-next/backend/internal/docker"
-	"github.com/florianfinn/docklet-next/backend/internal/s3"
 	"github.com/florianfinn/docklet-next/backend/pkg/pagination"
 )
 
@@ -130,7 +129,7 @@ func TestRenameVolumeMetadataInternalPreservesPoliciesAndHistory(t *testing.T) {
 	require.NoError(t, gormDB.Exec("INSERT INTO volume_backup_policies (id, volume_name, schedule) VALUES (?, ?, ?)", "policy-1", "source-data", "0 0 2 * * *").Error)
 	require.NoError(t, gormDB.Create(&VolumeBackup{VolumeName: "source-data", PolicyID: "policy-1"}).Error)
 
-	service := NewVolumeService(&database.DB{DB: gormDB}, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil)
+	service := NewVolumeService(&database.DB{DB: gormDB}, nil, nil, nil, nil, nil, nil, nil, nil, nil)
 	require.NoError(t, service.renameVolumeMetadataInternal(t.Context(), "source-data", "renamed-data"))
 
 	var renamedPolicy string
@@ -277,7 +276,7 @@ func TestVolumeWorkspaceReadsWaitForMutationLock(t *testing.T) {
 			t.Cleanup(server.Close)
 
 			dockerService := docker.NewDockerClientService(t.Context(), nil, nil, nil).WithClient(newVolumeWorkspaceTestDockerClientInternal(t, server))
-			service := NewVolumeService(nil, dockerService, nil, nil, nil, nil, nil, nil, nil, nil, nil)
+			service := NewVolumeService(nil, dockerService, nil, nil, nil, nil, nil, nil, nil, nil)
 			unlockMutation := service.workspaceLocks.Lock("workspace-volume")
 			readStarted := make(chan struct{})
 			readDone := make(chan error, 1)
@@ -357,7 +356,7 @@ func TestDownloadVolumeWorkspaceFileHoldsReadLockUntilClosed(t *testing.T) {
 	t.Cleanup(server.Close)
 
 	dockerService := docker.NewDockerClientService(t.Context(), nil, nil, nil).WithClient(newVolumeWorkspaceTestDockerClientInternal(t, server))
-	service := NewVolumeService(nil, dockerService, nil, nil, nil, nil, nil, nil, nil, nil, nil)
+	service := NewVolumeService(nil, dockerService, nil, nil, nil, nil, nil, nil, nil, nil)
 	service.helperByVolume["workspace-volume"] = &volumeHelper{id: "helper", lastUsedAt: time.Now(), protocol: types.ProtocolVersion}
 	reader, size, err := service.workspace.DownloadVolumeWorkspaceFile(t.Context(), "workspace-volume", "file.txt")
 	require.NoError(t, err)
@@ -423,7 +422,7 @@ func TestUpdateVolumeWorkspaceRejectsStaleRevisionBeforeStaging(t *testing.T) {
 	t.Cleanup(server.Close)
 
 	dockerClient := newVolumeWorkspaceTestDockerClientInternal(t, server)
-	service := NewVolumeService(nil, docker.NewDockerClientService(t.Context(), nil, nil, nil).WithClient(dockerClient), nil, nil, nil, nil, nil, nil, nil, nil, nil)
+	service := NewVolumeService(nil, docker.NewDockerClientService(t.Context(), nil, nil, nil).WithClient(dockerClient), nil, nil, nil, nil, nil, nil, nil, nil)
 	uploadIndex := 0
 	workspace, err := service.workspace.UpdateVolumeWorkspace(t.Context(), "workspace-volume", volumetypes.WorkspaceUpdateManifest{
 		FileTreeRevision: "stale",
@@ -442,35 +441,6 @@ func TestUpdateVolumeWorkspaceRejectsStaleRevisionBeforeStaging(t *testing.T) {
 	require.Zero(t, archiveCopies)
 }
 
-func TestVolumeBackup_ListResolvesDestinationName(t *testing.T) {
-	gormDB, err := gorm.Open(sqlite.Open("file:volume-backup-destination-name?mode=memory&cache=shared"), &gorm.Config{})
-	require.NoError(t, err)
-	require.NoError(t, gormDB.AutoMigrate(&VolumeBackup{}, &s3.S3Destination{}))
-	db := &database.DB{DB: gormDB}
-	destination := &s3.S3Destination{
-		Name:            "Offsite",
-		Bucket:          "volume-backups",
-		Region:          "us-east-1",
-		AccessKeyID:     "access-key",
-		SecretAccessKey: "encrypted-secret",
-	}
-	require.NoError(t, gormDB.Create(destination).Error)
-	require.NoError(t, gormDB.Create(&VolumeBackup{
-		VolumeName:      "app-data",
-		Status:          VolumeBackupStatusSucceeded,
-		Trigger:         VolumeBackupTriggerManual,
-		Destination:     volumetypes.BackupDestinationLocalS3,
-		S3DestinationID: destination.ID,
-	}).Error)
-
-	service := NewVolumeService(db, nil, nil, nil, nil, nil, nil, nil, s3.NewS3DestinationService(db, nil), nil, nil)
-	backups, _, err := service.backup.List(t.Context(), "app-data", pagination.QueryParams{})
-	require.NoError(t, err)
-	require.Len(t, backups, 1)
-	require.Equal(t, volumetypes.BackupDestinationLocalS3, backups[0].Destination)
-	require.Equal(t, "Offsite", backups[0].S3DestinationName)
-}
-
 func TestVolumeBackupPolicy_GetReturnsLastRunForEachPolicyFromStore(t *testing.T) {
 	gormDB, err := gorm.Open(sqlite.Open("file:volume-backup-last-runs-store?mode=memory&cache=shared"), &gorm.Config{})
 	require.NoError(t, err)
@@ -478,7 +448,7 @@ func TestVolumeBackupPolicy_GetReturnsLastRunForEachPolicyFromStore(t *testing.T
 	require.NoError(t, gormDB.Create(&VolumeBackup{VolumeName: "app-data", PolicyID: "first-policy", Status: VolumeBackupStatusSucceeded}).Error)
 	require.NoError(t, gormDB.Create(&VolumeBackup{VolumeName: "app-data", PolicyID: "second-policy", Status: VolumeBackupStatusFailed}).Error)
 
-	store := NewVolumeService(&database.DB{DB: gormDB}, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil).backupStoreInternal()
+	store := NewVolumeService(&database.DB{DB: gormDB}, nil, nil, nil, nil, nil, nil, nil, nil, nil).backupStoreInternal()
 	first, err := store.Latest(t.Context(), "first-policy")
 	require.NoError(t, err)
 	require.Equal(t, "succeeded", first.Status)

@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; functional cut: removed GitOps and saved Git repositories; functional cut: removed Swarm.
+// Deviations: Local module namespace; functional cut: removed GitOps and saved Git repositories; functional cut: removed Swarm; functional cut: removed S3 backup destinations.
 
 package environment
 
@@ -22,7 +22,6 @@ import (
 	"time"
 
 	"github.com/coder/websocket"
-	"github.com/florianfinn/docklet-next/types/backup"
 	"github.com/florianfinn/docklet-next/types/containerregistry"
 	"github.com/florianfinn/docklet-next/types/environment"
 	"github.com/florianfinn/docklet-next/types/scheduler"
@@ -38,7 +37,6 @@ import (
 	"github.com/florianfinn/docklet-next/backend/internal/database"
 	"github.com/florianfinn/docklet-next/backend/internal/environment/children/snippets"
 	"github.com/florianfinn/docklet-next/backend/internal/registry"
-	"github.com/florianfinn/docklet-next/backend/internal/s3"
 	"github.com/florianfinn/docklet-next/backend/internal/settings"
 	"github.com/florianfinn/docklet-next/backend/internal/user"
 	"github.com/florianfinn/docklet-next/backend/pkg/libarcane/edge"
@@ -111,7 +109,6 @@ func setupEnvironmentServiceTestDB(t *testing.T) *database.DB {
 	require.NoError(t, db.AutoMigrate(
 		&Environment{},
 		&registry.ContainerRegistry{},
-		&s3.S3Destination{},
 		&settings.SettingVariable{},
 		&user.User{},
 		&apikey.ApiKey{},
@@ -412,67 +409,6 @@ func TestEnvironmentService_SyncRegistriesToEnvironment_IncludesECRFields(t *tes
 
 	err := svc.SyncRegistriesToEnvironment(ctx, "env-1")
 	require.NoError(t, err)
-}
-
-func TestEnvironmentService_SyncS3DestinationsToEnvironment(t *testing.T) {
-	ctx := t.Context()
-	db := setupEnvironmentServiceTestDB(t)
-	svc := NewEnvironmentService(db, nil, nil, nil, nil, nil)
-
-	encryptedSecret, err := crypto.Encrypt("s3-secret")
-	require.NoError(t, err)
-	require.NoError(t, db.WithContext(ctx).Create(&s3.S3Destination{
-		ID:              "s3-1",
-		Name:            "Offsite",
-		Endpoint:        "https://s3.example.com",
-		Bucket:          "volume-backups",
-		Region:          "eu-central-1",
-		AccessKeyID:     "s3-access-key",
-		SecretAccessKey: encryptedSecret,
-		Prefix:          "agents",
-		UseSSL:          true,
-		ForcePathStyle:  true,
-	}).Error)
-
-	accessToken := "agent-token"
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if !assert.Equal(t, http.MethodPost, r.Method) {
-			return
-		}
-		if !assert.Equal(t, "/api/backups/s3/sync", r.URL.Path) {
-			return
-		}
-		if !assert.Equal(t, accessToken, r.Header.Get("X-API-Key")) {
-			return
-		}
-		if !assert.Equal(t, accessToken, r.Header.Get("X-Arcane-Agent-Token")) {
-			return
-		}
-
-		var syncReq backup.S3DestinationSyncRequest
-		if !assert.NoError(t, json.NewDecoder(r.Body).Decode(&syncReq)) {
-			return
-		}
-		if !assert.Len(t, syncReq.Destinations, 1) {
-			return
-		}
-		if !assert.Equal(t, "s3-1", syncReq.Destinations[0].ID) {
-			return
-		}
-		if !assert.Equal(t, "s3-secret", syncReq.Destinations[0].SecretAccessKey) {
-			return
-		}
-		if !assert.Equal(t, "volume-backups", syncReq.Destinations[0].Bucket) {
-			return
-		}
-
-		w.Header().Set("Content-Type", "application/json")
-		_, _ = w.Write([]byte(`{"success":true,"data":{"message":"ok"}}`))
-	}))
-	defer server.Close()
-
-	createTestEnvironment(t, db, "env-s3", server.URL, &accessToken)
-	require.NoError(t, svc.SyncS3DestinationsToEnvironment(ctx, "env-s3"))
 }
 
 func TestEnvironmentService_SyncRegistriesToRemoteEnvironments_SkipsRemoteWithoutAccessToken(t *testing.T) {
@@ -1168,7 +1104,6 @@ func setupSyncDBInternal(t *testing.T) *database.DB {
 		db.AutoMigrate(
 			&Environment{},
 			&registry.ContainerRegistry{},
-			&s3.S3Destination{},
 		),
 	)
 	sqlDB, err := db.DB()
@@ -1179,7 +1114,7 @@ func setupSyncDBInternal(t *testing.T) *database.DB {
 }
 
 func TestSyncCredentialDecryptionAbortsSnapshot(t *testing.T) {
-	for _, kind := range []string{"registry token", "ECR secret", "S3 secret"} {
+	for _, kind := range []string{"registry token", "ECR secret"} {
 		t.Run(kind, func(t *testing.T) {
 			db := setupSyncDBInternal(t)
 			var calls atomic.Int32
@@ -1200,9 +1135,7 @@ func TestSyncCredentialDecryptionAbortsSnapshot(t *testing.T) {
 				}
 				require.NoError(t, db.Create(&row).Error)
 				syncResource = service.SyncRegistriesToEnvironment
-			case "S3 secret":
-				require.NoError(t, db.Create(&s3.S3Destination{ID: "bad-credential", Name: "Backup", SecretAccessKey: "invalid-ciphertext"}).Error)
-				syncResource = service.SyncS3DestinationsToEnvironment
+
 			}
 			err := syncResource(t.Context(), "remote")
 			require.Error(t, err)

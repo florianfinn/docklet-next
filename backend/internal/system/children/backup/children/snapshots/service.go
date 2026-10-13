@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace
+// Deviations: Local module namespace; functional cut: removed S3 backup destinations.
 
 package snapshots
 
@@ -64,7 +64,6 @@ type Service struct {
 	sqlDB               func() (*sql.DB, error)
 	actorStore          func() (*gorm.DB, error)
 	localRepository     func(ctx context.Context, dockerClient *client.Client, readOnly bool) (backup.Repository, error)
-	remoteRepository    func(ctx context.Context, destinationID string) (backup.Repository, error)
 	databaseFile        func() (string, error)
 	projectsDirectory   func(ctx context.Context) string
 	recoveryEnvironment func(ctx context.Context) map[string]string
@@ -75,7 +74,6 @@ func NewService(
 	sqlDB func() (*sql.DB, error),
 	actorStore func() (*gorm.DB, error),
 	localRepository func(ctx context.Context, dockerClient *client.Client, readOnly bool) (backup.Repository, error),
-	remoteRepository func(ctx context.Context, destinationID string) (backup.Repository, error),
 	databaseFile func() (string, error),
 	projectsDirectory func(ctx context.Context) string,
 	recoveryEnvironment func(ctx context.Context) map[string]string,
@@ -85,7 +83,6 @@ func NewService(
 		sqlDB:               sqlDB,
 		actorStore:          actorStore,
 		localRepository:     localRepository,
-		remoteRepository:    remoteRepository,
 		databaseFile:        databaseFile,
 		projectsDirectory:   projectsDirectory,
 		recoveryEnvironment: recoveryEnvironment,
@@ -93,11 +90,9 @@ func NewService(
 }
 
 type systemBackupSnapshotLocation struct {
-	name            string
-	destination     backuptypes.SystemBackupDestination
-	s3DestinationID string
-	repository      backup.Repository
-	snapshotID      string
+	name       string
+	repository backup.Repository
+	snapshotID string
 }
 
 type systemBackupSnapshot struct {
@@ -136,19 +131,8 @@ func (s *Service) backupSnapshotLocations(ctx context.Context, dockerClient *cli
 			setupErr = errors.Join(setupErr, fmt.Errorf("open local system backup repository: %w", err))
 		} else {
 			locations = append(locations, systemBackupSnapshotLocation{
-				name: "local", destination: backuptypes.SystemBackupDestinationLocal,
+				name:       "local",
 				repository: repository, snapshotID: run.LocalSnapshotID,
-			})
-		}
-	}
-	if run.RemoteSnapshotID != "" {
-		repository, err := s.remoteRepository(ctx, run.S3DestinationID)
-		if err != nil {
-			setupErr = errors.Join(setupErr, fmt.Errorf("open S3 system backup repository: %w", err))
-		} else {
-			locations = append(locations, systemBackupSnapshotLocation{
-				name: "S3", destination: backuptypes.SystemBackupDestinationS3, s3DestinationID: run.S3DestinationID,
-				repository: repository, snapshotID: run.RemoteSnapshotID,
 			})
 		}
 	}
@@ -326,11 +310,7 @@ func (session systemBackupSnapshotSession) openSafetySnapshot(
 ) {
 	location := source.systemBackupSnapshotLocation
 	location.name = "safety"
-	if source.destination == backuptypes.SystemBackupDestinationS3 {
-		location.snapshotID = safetyRun.RemoteSnapshotID
-	} else {
-		location.snapshotID = safetyRun.LocalSnapshotID
-	}
+	location.snapshotID = safetyRun.LocalSnapshotID
 	if location.snapshotID == "" {
 		return systemBackupSafetySnapshot{}, errors.New("pre-restore system backup has no snapshot in the selected repository")
 	}
@@ -498,10 +478,6 @@ func (s *Service) RestoreFiles(
 	// lives in the repository the restore is already reading from.
 	source := snapshots[0]
 	safetyRequest := backuptypes.CreateSystemBackupRequest{Destination: backuptypes.SystemBackupDestinationLocal, RecoveryKey: key}
-	if source.destination == backuptypes.SystemBackupDestinationS3 {
-		safetyRequest.Destination = backuptypes.SystemBackupDestinationS3
-		safetyRequest.S3DestinationID = source.s3DestinationID
-	}
 	safetyRun, err := createSafety(ctx, safetyRequest)
 	if err != nil {
 		return fmt.Errorf("failed to create pre-restore system backup: %w", err)
@@ -557,7 +533,7 @@ func (s *Service) PlanRollback(
 		return nil, err
 	}
 	session := s.snapshotSession(dockerClient, key)
-	safetyLocation := systemBackupSnapshotLocation{name: "safety", destination: backuptypes.SystemBackupDestinationLocal, repository: localRepository, snapshotID: localSnapshotID}
+	safetyLocation := systemBackupSnapshotLocation{name: "safety", repository: localRepository, snapshotID: localSnapshotID}
 	safetyLayout, err := session.readSnapshotLayout(ctx, safetyLocation)
 	if err != nil {
 		return nil, fmt.Errorf("open pre-restore system backup: %w", err)

@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; functional cut: removed central variables and .env.global; functional cut: removed GitOps and saved Git repositories; functional cut: removed Swarm.
+// Deviations: Local module namespace; functional cut: removed central variables and .env.global; functional cut: removed GitOps and saved Git repositories; functional cut: removed Swarm; functional cut: removed S3 backup destinations.
 
 package environment
 
@@ -13,7 +13,6 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
-	"net/url"
 	"slices"
 	"strings"
 	"sync/atomic"
@@ -76,7 +75,7 @@ type EnvironmentService struct {
 	// liveness changes. See environment_runtime_notify.go.
 	runtimeWatchers runtimeWatchersInternal
 
-	// syncGate skips the periodic registry/S3/repository pushes to an agent
+	// syncGate skips the periodic registry pushes to an agent
 	// while the payload it last accepted is unchanged.
 	syncGate utils.SyncGate
 
@@ -622,7 +621,7 @@ func (s *EnvironmentService) SyncResourcesToEnvironment(ctx context.Context, env
 		ResourceName:   environmentID,
 		User:           user,
 		Step:           "Syncing environment",
-		Message:        "Syncing container registries and S3 destinations",
+		Message:        "Syncing container registries",
 		SuccessMessage: "Environment synced successfully",
 		Metadata:       database.JSON{"action": "sync_environment"},
 	}, func(ctx context.Context) error {
@@ -632,11 +631,6 @@ func (s *EnvironmentService) SyncResourcesToEnvironment(ctx context.Context, env
 		if err := s.SyncRegistriesToEnvironment(ctx, environmentID); err != nil {
 			slog.WarnContext(ctx, "Failed to sync registries", "environmentId", environmentID, "error", err.Error())
 			failedGroups = append(failedGroups, "container registries")
-		}
-
-		if err := s.SyncS3DestinationsToEnvironment(ctx, environmentID); err != nil {
-			slog.WarnContext(ctx, "Failed to sync S3 destinations", "environmentId", environmentID, "error", err.Error())
-			failedGroups = append(failedGroups, "S3 destinations")
 		}
 
 		if len(failedGroups) > 0 {
@@ -1115,10 +1109,6 @@ func (s *EnvironmentService) runHealthCheckInternal(ctx context.Context, envID s
 		slog.WarnContext(syncCtx, "failed to sync registries during health check", "environmentId", envID, "error", syncRegistriesToEnvironmentErr)
 		syncErrors = append(syncErrors, syncRegistriesToEnvironmentErr)
 	}
-	if syncS3DestinationsToEnvironmentErr := s.SyncS3DestinationsToEnvironment(syncCtx, envID); syncS3DestinationsToEnvironmentErr != nil {
-		slog.WarnContext(syncCtx, "failed to sync S3 destinations during health check", "environmentId", envID, "error", syncS3DestinationsToEnvironmentErr)
-		syncErrors = append(syncErrors, syncS3DestinationsToEnvironmentErr)
-	}
 	if joinErr := errors.Join(syncErrors...); joinErr != nil {
 		return scheduler.Outcome{Status: scheduler.Partial}, joinErr
 	}
@@ -1134,16 +1124,6 @@ func (s *EnvironmentService) SyncRegistriesToEnvironment(ctx context.Context, en
 	return s.proxy.SyncRegistries(ctx, target)
 }
 
-// SyncS3DestinationsToEnvironment sends manager-owned destinations to one remote environment.
-func (s *EnvironmentService) SyncS3DestinationsToEnvironment(ctx context.Context, environmentID string) error {
-	target, err := s.resolveRemoteEnvironmentTargetInternal(ctx, environmentID)
-	if err != nil {
-		return err
-	}
-	return s.proxy.SyncS3Destinations(ctx, target)
-}
-
-// SyncRepositoriesToEnvironment syncs all git repositories from this manager to a remote environment.
 func (s *EnvironmentService) TestConnection(ctx context.Context, id string, customApiUrl *string) (string, error) {
 	envRecord, err := s.GetEnvironmentByID(ctx, id)
 	if err != nil {
@@ -1369,68 +1349,6 @@ func (s *EnvironmentService) SyncRegistriesToRemoteEnvironments(ctx context.Cont
 		return fmt.Errorf("failed to sync registries to %d remote environment(s)", failedCount)
 	}
 
-	return nil
-}
-
-// SyncS3DestinationsToRemoteEnvironments refreshes the destination cache on every enabled remote environment.
-func (s *EnvironmentService) SyncS3DestinationsToRemoteEnvironments(ctx context.Context) error {
-	envs, err := s.ListRemoteEnvironments(ctx)
-	if err != nil {
-		return fmt.Errorf("failed to list remote environments for S3 destination sync: %w", err)
-	}
-
-	var failedCount int
-	for _, env := range envs {
-		if env.AccessToken == nil || strings.TrimSpace(*env.AccessToken) == "" {
-			slog.DebugContext(ctx, "Skipping S3 destination sync for environment without access token", "environmentId", env.ID, "environmentName", env.Name)
-			continue
-		}
-		if syncS3DestinationsToEnvironmentErr := s.SyncS3DestinationsToEnvironment(ctx, env.ID); syncS3DestinationsToEnvironmentErr != nil {
-			failedCount++
-			slog.WarnContext(ctx, "Failed to sync S3 destinations to remote environment", "environmentId", env.ID, "environmentName", env.Name, "error", syncS3DestinationsToEnvironmentErr)
-		}
-	}
-
-	if failedCount > 0 {
-		return fmt.Errorf("failed to sync S3 destinations to %d remote environment(s)", failedCount)
-	}
-	return nil
-}
-
-// CheckS3DestinationReferences returns an error while any managed environment
-// still references the destination, or when a synced environment cannot be
-// checked conclusively. Deleting credentials that a remote environment still
-// needs would strand its policies and retained backups.
-func (s *EnvironmentService) CheckS3DestinationReferences(ctx context.Context, destinationID string) error {
-	envs, err := s.ListRemoteEnvironments(ctx)
-	if err != nil {
-		return fmt.Errorf("failed to list remote environments for S3 destination reference check: %w", err)
-	}
-	for _, env := range envs {
-		if env.AccessToken == nil || strings.TrimSpace(*env.AccessToken) == "" {
-			// Environments without an access token never receive destination
-			// syncs, so they cannot hold a reference.
-			continue
-		}
-		var result struct {
-			InUse bool `json:"inUse"`
-		}
-		if proxyJSONRequestForEnvironmentErr := s.ProxyJSONRequestForEnvironment(
-			ctx,
-			env,
-			http.MethodGet,
-			"/api/backups/s3/"+url.PathEscape(
-				destinationID,
-			)+"/in-use",
-			nil,
-			&result,
-		); proxyJSONRequestForEnvironmentErr != nil {
-			return fmt.Errorf("cannot verify S3 destination references on environment %s; restore connectivity before deleting: %w", env.Name, proxyJSONRequestForEnvironmentErr)
-		}
-		if result.InUse {
-			return fmt.Errorf("still referenced by environment %s", env.Name)
-		}
-	}
 	return nil
 }
 

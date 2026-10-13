@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Functional cut: removed template catalogue; functional cut: removed federated credentials; functional cut: removed central variables and .env.global; functional cut: removed GitOps and saved Git repositories; functional cut: removed Swarm.
+// Deviations: Functional cut: removed template catalogue; functional cut: removed federated credentials; functional cut: removed central variables and .env.global; functional cut: removed GitOps and saved Git repositories; functional cut: removed Swarm; functional cut: removed S3 backup destinations.
 
 package authz
 
@@ -70,15 +70,6 @@ var permissionCatalog = []PermissionCatalogResource{
 		{"test", PermRegistriesTest, "Test", ""},
 		{"browse", PermRegistriesBrowse, "Browse", "Browse repositories and tags stored in the registry (the pages also require Read)"},
 		{"delete-tags", PermRegistriesDeleteTags, "Delete tags", "Delete image manifests from the registry"},
-	}},
-	{"s3-destinations", "S3 Destinations", PermissionScopeGlobal, []PermissionCatalogAction{
-		{"list", PermS3DestinationsList, "List", ""},
-		{"read", PermS3DestinationsRead, "Read", ""},
-		{"create", PermS3DestinationsCreate, "Create", ""},
-		{"update", PermS3DestinationsUpdate, "Update", ""},
-		{"delete", PermS3DestinationsDelete, "Delete", ""},
-		{"test", PermS3DestinationsTest, "Test", ""},
-		{"sync", PermS3DestinationsSync, "Sync", ""},
 	}},
 	{"system-backups", "System Backups", PermissionScopeGlobal, []PermissionCatalogAction{
 		{"read", PermSystemBackupsRead, "Read", ""},

@@ -2,15 +2,13 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace
+// Deviations: Local module namespace; functional cut: removed S3 backup destinations.
 
 package system
 
 import (
 	"context"
 	"errors"
-	"net/http"
-	"net/http/httptest"
 	"testing"
 	"time"
 
@@ -29,7 +27,6 @@ import (
 	"github.com/florianfinn/docklet-next/backend/internal/backup"
 	"github.com/florianfinn/docklet-next/backend/internal/config"
 	"github.com/florianfinn/docklet-next/backend/internal/database"
-	"github.com/florianfinn/docklet-next/backend/internal/s3"
 	systembackup "github.com/florianfinn/docklet-next/backend/internal/system/children/backup"
 	"github.com/florianfinn/docklet-next/backend/internal/volume"
 	"github.com/florianfinn/docklet-next/backend/pkg/pagination"
@@ -142,7 +139,7 @@ func TestListBackupHistoryClassifiesAndFiltersOrigins(t *testing.T) {
 		Format: volume.VolumeBackupFormatRustic,
 	}).Error)
 	service := &SystemService{db: &database.DB{DB: gormDB}}
-	service.backup = systembackup.NewService(systembackup.Dependencies{Store: service.backupStoreInternal(nil)})
+	service.backup = systembackup.NewService(systembackup.Dependencies{Store: service.backupStoreInternal()})
 
 	systemRows, page, err := service.backup.ListBackupHistory(t.Context(), pagination.QueryParams{
 		Sort: "createdAt", Order: pagination.SortDesc, Limit: 20,
@@ -202,19 +199,17 @@ func (s *systemBackupPolicySchedulerInternal) Submit(_ context.Context, request 
 func TestSystemBackupPoliciesRegisterIndependentJobs(t *testing.T) {
 	gormDB, err := gorm.Open(sqlite.Open("file:system-backup-schedules?mode=memory&cache=shared"), &gorm.Config{})
 	require.NoError(t, err)
-	require.NoError(t, gormDB.AutoMigrate(&SystemBackupPolicy{}, &SystemBackupRun{}, &backup.SystemBackupRecoveryConfig{}, &s3.S3Destination{}))
+	require.NoError(t, gormDB.AutoMigrate(&SystemBackupPolicy{}, &SystemBackupRun{}, &backup.SystemBackupRecoveryConfig{}))
 	crypto.InitEncryption(&crypto.Config{EncryptionKey: "system-backup-policy-test-key-32bytes", Environment: "test"})
 	db := &database.DB{DB: gormDB}
 	recoveryKeys := backup.NewRecoveryKeyStore(db)
-	s3Destinations := s3.NewS3DestinationService(db, nil)
 	service := &SystemService{db: db}
 	service.backup = systembackup.NewService(systembackup.Dependencies{
-		Store:          service.backupStoreInternal(s3Destinations),
-		DB:             db,
-		SQLDB:          db.SQLDB,
-		S3Destinations: s3Destinations,
-		Config:         &config.Config{DatabaseURL: "file:system-backup-schedules-test.db"},
-		RecoveryKeys:   recoveryKeys,
+		Store:        service.backupStoreInternal(),
+		DB:           db,
+		SQLDB:        db.SQLDB,
+		Config:       &config.Config{DatabaseURL: "file:system-backup-schedules-test.db"},
+		RecoveryKeys: recoveryKeys,
 	})
 	jobScheduler := &systemBackupPolicySchedulerInternal{jobs: make(map[string]scheduler.Job)}
 	require.NoError(t, service.SetBackupScheduler(t.Context(), jobScheduler, newSystemBackupAdmissionGateForTestInternal(t)))
@@ -245,39 +240,6 @@ func TestSystemBackupPoliciesRegisterIndependentJobs(t *testing.T) {
 	require.Equal(t, 9, collection.Policies[0].RetentionCount)
 	require.Len(t, jobScheduler.jobs, 1)
 
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		w.Header().Set("Content-Type", "application/xml")
-		w.WriteHeader(http.StatusNotFound)
-		_, _ = w.Write([]byte("<Error><Code>NoSuchBucket</Code></Error>"))
-	}))
-	defer server.Close()
-	destination, err := s3Destinations.CreateS3Destination(t.Context(), backuptypes.CreateS3Destination{
-		Name: "Missing storage", Endpoint: server.URL, Bucket: "backups", AccessKeyID: "test", SecretAccessKey: "test", ForcePathStyle: true,
-	})
-	require.NoError(t, err)
-	for _, local := range []bool{false, true} {
-		policy := &SystemBackupPolicy{Enabled: true, LocalEnabled: local, S3Enabled: true, S3DestinationID: destination.ID, Schedule: "0 0 2 * * *"}
-		require.NoError(t, gormDB.Create(policy).Error)
-		require.NoError(t, gormDB.Model(policy).Update("local_enabled", local).Error)
-		service.RegisterBackupJobOnStartup(t.Context())
-		jobName := "system-backup:" + policy.ID
-		job, registered := jobScheduler.jobs[jobName]
-		require.True(t, registered)
-		// The scheduled run checks the remote first; a local policy then
-		// attempts its backup, which has no engine in this test.
-		outcome, runErr := job.Run(t.Context())
-		if local {
-			require.ErrorContains(t, runErr, "backup engine is unavailable")
-		} else {
-			require.NoError(t, runErr)
-			require.Equal(t, scheduler.NeedsAttention, outcome.Status)
-			require.Equal(t, backup.RemoteDisabledMessage, outcome.Message)
-		}
-		require.NoError(t, gormDB.First(policy, "id = ?", policy.ID).Error)
-		require.Equal(t, local, policy.Enabled)
-		require.Equal(t, !local, policy.S3Enabled)
-		require.Equal(t, local, jobScheduler.HasJob(jobName))
-	}
 }
 
 func TestSystemBackupPolicyRequiresConfiguredRecoveryKeyWhenEnabled(t *testing.T) {
@@ -287,7 +249,7 @@ func TestSystemBackupPolicyRequiresConfiguredRecoveryKeyWhenEnabled(t *testing.T
 	db := &database.DB{DB: gormDB}
 	service := &SystemService{db: db}
 	service.backup = systembackup.NewService(systembackup.Dependencies{
-		Store:        service.backupStoreInternal(nil),
+		Store:        service.backupStoreInternal(),
 		DB:           db,
 		Config:       &config.Config{DatabaseURL: "file:system-backup-key-required-test.db"},
 		RecoveryKeys: backup.NewRecoveryKeyStore(db),

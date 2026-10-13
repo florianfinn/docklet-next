@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; functional cut: removed GitOps and saved Git repositories.
+// Deviations: Local module namespace; functional cut: removed GitOps and saved Git repositories; functional cut: removed S3 backup destinations.
 
 package dashboard
 
@@ -203,7 +203,7 @@ func TestDashboardService_GetSnapshot_ReturnsDashboardSnapshot(t *testing.T) {
 	}).Error)
 	imageSvc := image.NewImageService(db, nil, nil, nil, nil, nil, nil, nil)
 	projectSvc := project.NewProjectService(db, settingsSvc, nil, imageSvc, nil, nil, nil, config.Load(), nil, nil)
-	svc := NewDashboardService(db, dockerSvc, nil, projectSvc, imageSvc, settingsSvc, nil, nil, nil, volume.NewVolumeService(db, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil))
+	svc := NewDashboardService(db, dockerSvc, nil, projectSvc, imageSvc, settingsSvc, nil, nil, nil, volume.NewVolumeService(db, nil, nil, nil, nil, nil, nil, nil, nil, nil))
 
 	snapshot, err := svc.GetSnapshot(t.Context(), DashboardActionItemsOptions{}, true)
 	require.NoError(t, err)

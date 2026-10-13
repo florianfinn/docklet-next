@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace
+// Deviations: Local module namespace; functional cut: removed S3 backup destinations.
 
 package volume
 
@@ -41,7 +41,6 @@ import (
 	dockerInternal "github.com/florianfinn/docklet-next/backend/internal/docker"
 	"github.com/florianfinn/docklet-next/backend/internal/event"
 	"github.com/florianfinn/docklet-next/backend/internal/image"
-	"github.com/florianfinn/docklet-next/backend/internal/s3"
 	"github.com/florianfinn/docklet-next/backend/internal/settings"
 	volumebackup "github.com/florianfinn/docklet-next/backend/internal/volume/children/backup"
 	"github.com/florianfinn/docklet-next/backend/internal/volume/children/workspace"
@@ -86,7 +85,6 @@ func NewVolumeService(
 	containerService *containerdomain.ContainerService,
 	imageService *image.ImageService,
 	engine *backup.Engine,
-	s3Destinations *s3.S3DestinationService,
 	cfg *config.Config,
 	recoveryKeys *backup.RecoveryKeyStore,
 ) *VolumeService {
@@ -120,9 +118,7 @@ func NewVolumeService(
 		Docker:           dockerService,
 		Events:           eventService,
 		Activity:         activityService,
-		Settings:         settingsService,
 		Engine:           engine,
-		S3Destinations:   s3Destinations,
 		RecoveryKeys:     recoveryKeys,
 		Locks:            &service.workspaceLocks,
 		AlreadyRunning:   ErrVolumeBackupAlreadyRunning,
@@ -267,13 +263,6 @@ func (s *VolumeService) backupStoreInternal() volumebackup.Store {
 			return entry.recordInternal(), nil
 		},
 		List: s.listBackupsInternal,
-		RemoteSnapshotIDs: func(ctx context.Context, destinationID string) ([]string, error) {
-			var knownIDs []string
-			err := s.db.WithContext(ctx).Model(&VolumeBackup{}).
-				Where("s3_destination_id = ? AND remote_snapshot_id <> ''", destinationID).
-				Pluck("remote_snapshot_id", &knownIDs).Error
-			return knownIDs, err
-		},
 	}
 }
 

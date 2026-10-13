@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; functional cut: removed GitOps and saved Git repositories.
+// Deviations: Local module namespace; functional cut: removed GitOps and saved Git repositories; functional cut: removed S3 backup destinations.
 
 // Package proxy owns the transport to remote environment agents: request
 // building, edge tunnel routing, JSON decoding and configuration pushes.
@@ -19,14 +19,12 @@ import (
 	"strings"
 	"time"
 
-	"github.com/florianfinn/docklet-next/types/backup"
 	"github.com/florianfinn/docklet-next/types/containerregistry"
 	"go.getarcane.app/sys/crypto"
 
 	"github.com/florianfinn/docklet-next/backend/internal/database"
 	"github.com/florianfinn/docklet-next/backend/internal/middleware"
 	"github.com/florianfinn/docklet-next/backend/internal/registry"
-	"github.com/florianfinn/docklet-next/backend/internal/s3"
 	"github.com/florianfinn/docklet-next/backend/internal/settings"
 	"github.com/florianfinn/docklet-next/backend/pkg/libarcane/edge"
 	"github.com/florianfinn/docklet-next/backend/pkg/libarcane/timeouts"
@@ -234,23 +232,6 @@ func (s *Service) SyncRegistries(ctx context.Context, target *Target) error {
 	)
 }
 
-// SyncS3Destinations sends manager-owned destinations to one remote environment.
-func (s *Service) SyncS3Destinations(ctx context.Context, target *Target) error {
-	return s.fanOutSyncToEnvironment(ctx, target, "S3 destinations", "/api/backups/s3/sync",
-		func(destination s3.S3Destination) (backup.S3DestinationSync, bool, error) {
-			secret, err := crypto.Decrypt(destination.SecretAccessKey)
-			if err != nil {
-				return backup.S3DestinationSync{}, false, fmt.Errorf("failed to decrypt S3 destination %s for sync: %w", destination.ID, err)
-			}
-			return destination.ToSync(secret), true, nil
-		},
-		func(items []backup.S3DestinationSync) backup.S3DestinationSyncRequest {
-			return backup.S3DestinationSyncRequest{Destinations: items}
-		},
-	)
-}
-
-// SyncRepositories syncs all git repositories from this manager to a remote environment
 func (s *Service) fanOutSyncToEnvironment[Model, Item, Request any](
 	ctx context.Context,
 	target *Target,

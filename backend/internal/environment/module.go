@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace
+// Deviations: Local module namespace; functional cut: removed S3 backup destinations.
 
 // Package environment owns environment persistence, remote runtime state, pairing,
 // synchronization, and its HTTP and stream surfaces.
@@ -158,7 +158,7 @@ func RegisterEnvironments(api huma.API, h *EnvironmentHandler) {
 		Method:      "POST",
 		Path:        "/environments/{id}/sync",
 		Summary:     "Sync environment",
-		Description: "Sync container registries, S3 destinations, and git repositories to a remote environment. Returns an error if any resource group fails; other groups may still sync successfully.",
+		Description: "Sync container registries to a remote environment.",
 		Tags:        []string{"Environments"},
 		Security:    handlerutil.DefaultOperationSecurity(),
 	}, authz.PermEnvironmentsSync, h.SyncEnvironment)

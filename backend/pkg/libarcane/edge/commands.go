@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: functional cut: removed GitOps and saved Git repositories; functional cut: removed Swarm.
+// Deviations: functional cut: removed GitOps and saved Git repositories; functional cut: removed Swarm; functional cut: removed S3 backup destinations.
 
 package edge
 
@@ -19,8 +19,6 @@ var commandRoutes = []commandRoute{
 	{Method: http.MethodHead, PathPattern: "/api/health", CommandName: "system.health"},
 	{Method: http.MethodGet, PathPattern: "/api/app-version", CommandName: "system.version"},
 	{Method: http.MethodPost, PathPattern: "/api/container-registries/sync", CommandName: "container_registry.sync"},
-	{Method: http.MethodPost, PathPattern: "/api/backups/s3/sync", CommandName: "s3_destination.sync"},
-	{Method: http.MethodGet, PathPattern: "/api/backups/s3/{id}/in-use", CommandName: "s3_destination.in_use"},
 
 	{Method: http.MethodGet, PathPattern: "/api/environments/{id}/containers", CommandName: "container.list"},
 	{Method: http.MethodGet, PathPattern: "/api/environments/{id}/containers/counts", CommandName: "container.counts"},

@@ -2,13 +2,12 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace
+// Deviations: Local module namespace; functional cut: removed S3 backup destinations.
 
 package backup
 
 import (
 	"context"
-	"encoding/json/v2"
 	"errors"
 	"os"
 	"strings"
@@ -90,7 +89,7 @@ func TestVolumeBackupPolicy_RetentionIgnoresFailedRuns(t *testing.T) {
 	).Error)
 
 	service := NewService(Dependencies{DB: &database.DB{DB: gormDB}})
-	require.NoError(t, service.applyVolumeBackupRetentionInternal(t.Context(), policyID, 1, true))
+	require.NoError(t, service.applyVolumeBackupRetentionInternal(t.Context(), policyID, 1))
 
 	var backups []volume.Backup
 	require.NoError(t, gormDB.Table("volume_backups").Order("created_at ASC").Find(&backups).Error)
@@ -156,13 +155,11 @@ func TestVolumeBackup_ValidationErrors(t *testing.T) {
 	require.ErrorContains(t, err, "invalid volume backup schedule")
 
 	_, err = service.policies.UpdateBackupPolicies(ctx, "app-data", []volume.UpdateBackupPolicy{{Schedule: "0 0 2 * * *", RetentionCount: 7}})
-	require.ErrorContains(t, err, "select at least one volume backup destination")
+	require.ErrorContains(t, err, "select a local volume backup destination")
 
 	_, err = service.StartBackup(ctx, "0", "app-data", user.Actor{}, volume.CreateBackupRequest{Destination: volume.BackupDestination("invalid")})
 	require.EqualError(t, err, "invalid volume backup destination")
 
-	_, err = service.StartBackup(ctx, "0", "app-data", user.Actor{}, volume.CreateBackupRequest{Destination: volume.BackupDestinationS3})
-	require.EqualError(t, err, "select an S3 destination for the volume backup")
 }
 
 func TestVolumeBackupPasswordPrefersRecoveryKey(t *testing.T) {
@@ -186,44 +183,4 @@ func TestVolumeBackupPasswordPrefersRecoveryKey(t *testing.T) {
 	password, err = service.volumeBackupPasswordInternal(t.Context(), nil)
 	require.NoError(t, err)
 	require.Equal(t, recoveryKey, password)
-}
-
-func TestDiscoveredVolumeBackupMapping(t *testing.T) {
-	snapshot := backup.DiscoveredSnapshot{ID: "abc123", Label: "app-data", Time: time.Unix(1700000000, 0).UTC()}
-	snapshot.Summary.TotalBytesProcessed = 2048
-
-	entry := discoveredVolumeBackupInternal("destination-1", "instance-a", snapshot)
-	require.NotNil(t, entry)
-	require.Equal(t, "app-data", entry.VolumeName)
-	require.Equal(t, "remote-destination-1-instance-a-abc123", entry.ID)
-	require.Equal(t, backuptypes.VolumeBackupStatusSucceeded, entry.Status)
-	require.Equal(t, backuptypes.VolumeBackupTriggerManual, entry.Trigger)
-	require.Equal(t, volume.BackupDestinationS3, entry.Destination)
-	require.Equal(t, volume.BackupFormatRustic, entry.Format)
-	require.Equal(t, "instance-a", entry.RemoteInstanceID)
-	require.Equal(t, "destination-1", entry.S3DestinationID)
-	require.Equal(t, int64(2048), entry.Size)
-	require.True(t, entry.CreatedAt.Equal(time.Unix(1700000000, 0).UTC()))
-
-	// Snapshots without a volume label, and system recovery snapshots, never
-	// map to a volume backup.
-	require.Nil(t, discoveredVolumeBackupInternal("destination-1", "instance-a", backup.DiscoveredSnapshot{ID: "x"}))
-	require.Nil(t, discoveredVolumeBackupInternal("destination-1", "instance-a", backup.DiscoveredSnapshot{ID: "x", Label: "arcane-system-recovery"}))
-
-	// A missing snapshot timestamp falls back to now.
-	fallback := discoveredVolumeBackupInternal("d", "r", backup.DiscoveredSnapshot{ID: "x", Label: "vol"})
-	require.NotNil(t, fallback)
-	require.False(t, fallback.CreatedAt.IsZero())
-}
-
-func TestDiscoveredSnapshotDecodesRusticLabel(t *testing.T) {
-	// Rustic snapshot JSON carries the volume name in the label field written
-	// by CreateSnapshot; discovery maps it back to the volume.
-	payload := `{"id":"abc123","label":"app-data","time":"2026-09-08T10:00:00Z","summary":{"total_bytes_processed":2048}}`
-	var snapshot backup.DiscoveredSnapshot
-	require.NoError(t, json.Unmarshal([]byte(payload), &snapshot))
-	require.Equal(t, "abc123", snapshot.ID)
-	require.Equal(t, "app-data", snapshot.Label)
-	require.Equal(t, int64(2048), snapshot.Summary.TotalBytesProcessed)
-	require.False(t, snapshot.Time.IsZero())
 }

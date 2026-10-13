@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Functional cut: removed template catalogue; functional cut: removed federated credentials; functional cut: removed central variables and .env.global; functional cut: removed GitOps and saved Git repositories.
+// Deviations: Functional cut: removed template catalogue; functional cut: removed federated credentials; functional cut: removed central variables and .env.global; functional cut: removed GitOps and saved Git repositories; functional cut: removed S3 backup destinations.
 
 // Package types provides the Arcane API endpoint path builders and CLI
 // configuration types.
@@ -485,25 +485,7 @@ func Backup(id string) string            { return pathf("/api/backups/%s", id) }
 func BackupsPolicies() string            { return "/api/backups/policies" }
 func BackupsRecoveryKey() string         { return "/api/backups/recovery-key" }
 func BackupsRecoveryKeyGenerate() string { return "/api/backups/recovery-key/generate" }
-func BackupsDiscover() string            { return "/api/backups/discover" }
 func BackupRestore(id string) string     { return pathf("/api/backups/%s/restore", id) }
-func BackupUpload(id string) string      { return pathf("/api/backups/%s/upload", id) }
-
-// S3 backup destination endpoints (admin-only)
-
-func BackupsS3() string        { return "/api/backups/s3" }
-func BackupsS3Options() string { return "/api/backups/s3/options" }
-func BackupsS3Destination(id string) string {
-	return pathf("/api/backups/s3/%s", id)
-}
-func BackupsS3Test() string { return "/api/backups/s3/test" }
-func BackupsS3DestinationTest(id string) string {
-	return pathf("/api/backups/s3/%s/test", id)
-}
-
-func BackupsS3DestinationInUse(id string) string {
-	return pathf("/api/backups/s3/%s/in-use", id)
-}
 
 // Vulnerability endpoints
 

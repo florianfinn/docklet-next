@@ -2,23 +2,18 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace
+// Deviations: Local module namespace; functional cut: removed S3 backup destinations.
 
 package backup
 
 import (
 	"testing"
 
-	"github.com/florianfinn/docklet-next/types/backup"
-	"github.com/libtnb/sqlite"
 	"github.com/moby/moby/api/types/container"
 	"github.com/moby/moby/api/types/mount"
 	"github.com/stretchr/testify/require"
-	"gorm.io/gorm"
 
 	"github.com/florianfinn/docklet-next/backend/internal/config"
-	"github.com/florianfinn/docklet-next/backend/internal/database"
-	"github.com/florianfinn/docklet-next/backend/internal/s3"
 )
 
 func TestRecoveryHelperExecutableInternal(t *testing.T) {
@@ -58,22 +53,4 @@ func TestProjectsDirectoryInternalUsesContainerPathOfMapping(t *testing.T) {
 	service := &Service{config: &config.Config{ProjectsDirectory: "/app/data/projects:/host/projects"}}
 	require.Equal(t, "/app/data/projects", service.projectsDirectoryInternal(t.Context()))
 	require.Equal(t, "/app/data/projects:/host/projects", service.projectsSettingInternal(t.Context()))
-}
-
-func TestHistoryDestinationDecorationInternal(t *testing.T) {
-	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
-	require.NoError(t, err)
-	require.NoError(t, db.AutoMigrate(&s3.S3Destination{}))
-	destination := s3.S3Destination{Name: "Offsite", Bucket: "backups"}
-	require.NoError(t, db.Create(&destination).Error)
-	service := s3.NewS3DestinationService(&database.DB{DB: db}, nil)
-	history := []backup.HistoryEntry{{S3DestinationID: destination.ID}, {S3DestinationID: "missing"}}
-	decorateHistoryDestinationsInternal(t.Context(), service, history)
-	require.Equal(t, "Offsite", history[0].S3DestinationName)
-	require.Empty(t, history[1].S3DestinationName)
-	require.NoError(t, db.Migrator().DropTable(&s3.S3Destination{}))
-	decorateHistoryDestinationsInternal(t.Context(), service, history)
-	require.Equal(t, "Offsite", history[0].S3DestinationName)
-	decorateHistoryDestinationsInternal(t.Context(), nil, history)
-	require.Equal(t, "Offsite", history[0].S3DestinationName)
 }

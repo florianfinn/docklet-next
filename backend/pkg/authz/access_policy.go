@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Functional cut: removed template catalogue; functional cut: removed central variables and .env.global; functional cut: removed GitOps and saved Git repositories; functional cut: removed Swarm.
+// Deviations: Functional cut: removed template catalogue; functional cut: removed central variables and .env.global; functional cut: removed GitOps and saved Git repositories; functional cut: removed Swarm; functional cut: removed S3 backup destinations.
 
 package authz
 
@@ -51,7 +51,6 @@ var accessSurfacesInternal = []AccessSurface{
 		"settings.category.jobschedule",
 		"settings.category.notifications",
 		"settings.category.roles",
-		"settings.category.s3destinations",
 		"settings.category.systembackups",
 		"settings.category.timeouts",
 		"settings.category.users",
@@ -92,7 +91,6 @@ var accessSurfacesInternal = []AccessSurface{
 	settingsCategorySurfaceInternal("jobschedule", "/settings/jobs", "Automations", AccessScopeModeSelectedEnvPlusGlobal, []string{PermJobsManage}),
 	settingsCategorySurfaceInternal("notifications", "/settings/notifications", "Notifications", AccessScopeModeGlobalOnly, []string{PermNotificationsManage}),
 	settingsCategorySurfaceInternal("roles", "/settings/roles", "Roles", AccessScopeModeGlobalOnly, []string{PermRolesList, PermRolesRead}),
-	settingsCategorySurfaceInternal("s3destinations", "/settings/backups/s3", "S3 Destinations", AccessScopeModeGlobalOnly, []string{PermS3DestinationsList, PermS3DestinationsRead}),
 	globalAdminSettingsCategorySurfaceInternal("systembackups", "/settings/backups", "Backups"),
 	routeSurfaceInternal("route.settings.roles.new", "/settings/roles/new", "Create role", AccessScopeModeGlobalOnly, []string{PermRolesList, PermRolesRead}, 0),
 	routeSurfaceInternal("route.settings.roles.detail", "/settings/roles/{id}", "Role", AccessScopeModeGlobalOnly, []string{PermRolesList, PermRolesRead}, 0),

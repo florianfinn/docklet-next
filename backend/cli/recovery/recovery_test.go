@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace
+// Deviations: Local module namespace; functional cut: removed S3 backup destinations.
 
 package recovery
 
@@ -54,7 +54,7 @@ func TestFinalizeRestoredBackupInternal(t *testing.T) {
 	databaseURL, dsn := newRestoredDatabaseForTestInternal(t, "older", "selected")
 
 	require.NoError(t, finalizeRestoredBackupInternal(t.Context(), databaseURL, "selected", "activity-1", recoverytypes.RestoreRequest{
-		BackupID: "request-id", RemoteSnapshotID: "snapshot-1", S3DestinationID: "destination-1", Size: 1234,
+		BackupID: "request-id", LocalSnapshotID: "snapshot-1", Size: 1234,
 		ProjectsSetting: "/srv/projects",
 		SafetyBackup: &recoverytypes.SafetyBackup{
 			ID: "safety", LocalSnapshotID: "safety-snapshot", Size: 4321,
@@ -68,8 +68,7 @@ func TestFinalizeRestoredBackupInternal(t *testing.T) {
 	require.NoError(t, db.First(&selected, "id = ?", "selected").Error)
 	require.Equal(t, system.SystemBackupStatusSucceeded, selected.Status)
 	require.EqualValues(t, 1234, selected.Size)
-	require.Equal(t, "snapshot-1", selected.RemoteSnapshotID)
-	require.Equal(t, "destination-1", selected.S3DestinationID)
+	require.Equal(t, "snapshot-1", selected.LocalSnapshotID)
 	require.NoError(t, db.First(&older, "id = ?", "older").Error)
 	require.Equal(t, system.SystemBackupStatusRunning, older.Status)
 	require.NoError(t, db.First(&safety, "id = ?", "safety").Error)

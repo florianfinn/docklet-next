@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Functional cut: removed template catalogue; functional cut: removed federated credentials; functional cut: removed central variables and .env.global; functional cut: removed GitOps and saved Git repositories; functional cut: removed Swarm.
+// Deviations: Functional cut: removed template catalogue; functional cut: removed federated credentials; functional cut: removed central variables and .env.global; functional cut: removed GitOps and saved Git repositories; functional cut: removed Swarm; functional cut: removed S3 backup destinations.
 
 // Package authz defines the permission taxonomy and authorization primitives
 // used across Arcane handlers. Permissions are strings of the form
@@ -64,14 +64,6 @@ const (
 	PermRegistriesTest       = "registries:test"
 	PermRegistriesBrowse     = "registries:browse"
 	PermRegistriesDeleteTags = "registries:delete-tags"
-
-	PermS3DestinationsList   = "s3-destinations:list"
-	PermS3DestinationsRead   = "s3-destinations:read"
-	PermS3DestinationsCreate = "s3-destinations:create"
-	PermS3DestinationsUpdate = "s3-destinations:update"
-	PermS3DestinationsDelete = "s3-destinations:delete"
-	PermS3DestinationsTest   = "s3-destinations:test"
-	PermS3DestinationsSync   = "s3-destinations:sync"
 
 	// PermSystemBackupsRead and siblings gate Arcane's own system backups.
 	// Every route additionally requires a global admin; the dedicated grants
@@ -269,7 +261,6 @@ func BuiltInEditorPermissions() []string {
 		PermEnvironmentsList, PermEnvironmentsRead, PermEnvironmentsSync,
 		PermRegistriesList, PermRegistriesRead, PermRegistriesBrowse,
 		// Editor can run volume backups, so it needs to pick a destination.
-		PermS3DestinationsList, PermS3DestinationsRead,
 		PermEventsRead,
 		// Full env-scoped Docker management
 		PermContainersList,
@@ -342,7 +333,6 @@ func BuiltInViewerPermissions() []string {
 		PermSettingsRead,
 		PermEnvironmentsList, PermEnvironmentsRead,
 		PermRegistriesList, PermRegistriesRead,
-		PermS3DestinationsList, PermS3DestinationsRead,
 		PermEventsRead,
 		PermContainersList, PermContainersRead, PermContainersLogs,
 		PermProjectsList, PermProjectsRead, PermProjectsLogs,

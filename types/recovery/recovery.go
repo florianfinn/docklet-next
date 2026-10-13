@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: None
+// Deviations: functional cut: removed S3 backup destinations.
 
 package recovery
 
@@ -55,16 +55,14 @@ type RestoreStage struct {
 
 // RestoreRequest is handed to the detached recovery helper.
 type RestoreRequest struct {
-	BackupID         string        `json:"backupId"`
-	ContainerID      string        `json:"containerId"`
-	ContainerImage   string        `json:"containerImage"`
-	SnapshotID       string        `json:"snapshotId"`
-	LocalSnapshotID  string        `json:"localSnapshotId,omitempty"`
-	RemoteSnapshotID string        `json:"remoteSnapshotId,omitempty"`
-	S3DestinationID  string        `json:"s3DestinationId,omitempty"`
-	Size             int64         `json:"size,omitempty"`
-	SafetyBackup     *SafetyBackup `json:"safetyBackup,omitempty"`
-	RecoveryKey      string        `json:"recoveryKey"`
+	BackupID        string        `json:"backupId"`
+	ContainerID     string        `json:"containerId"`
+	ContainerImage  string        `json:"containerImage"`
+	SnapshotID      string        `json:"snapshotId"`
+	LocalSnapshotID string        `json:"localSnapshotId,omitempty"`
+	Size            int64         `json:"size,omitempty"`
+	SafetyBackup    *SafetyBackup `json:"safetyBackup,omitempty"`
+	RecoveryKey     string        `json:"recoveryKey"`
 	// ProjectsSetting is the current projectsDirectory setting; it survives the
 	// restore so projects keep resolving to where they were restored.
 	ProjectsSetting string `json:"projectsSetting,omitempty"`
@@ -75,10 +73,7 @@ type RestoreRequest struct {
 	// snapshot when any stage fails.
 	Stages         []RestoreStage `json:"stages"`
 	RollbackStages []RestoreStage `json:"rollbackStages,omitempty"`
-	// NetworkMode attaches the detached Rustic restore container to one of
-	// Arcane's networks so network-local S3 endpoints stay reachable while
-	// Arcane itself is stopped.
-	NetworkMode string `json:"networkMode,omitempty"`
+	NetworkMode    string         `json:"networkMode,omitempty"`
 }
 
 type SafetyBackup struct {

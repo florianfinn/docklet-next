@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; functional cut: removed GitOps and saved Git repositories.
+// Deviations: Local module namespace; functional cut: removed GitOps and saved Git repositories; functional cut: removed S3 backup destinations.
 
 package activity
 
@@ -28,7 +28,6 @@ import (
 	"github.com/florianfinn/docklet-next/backend/internal/environment"
 	"github.com/florianfinn/docklet-next/backend/internal/middleware"
 	"github.com/florianfinn/docklet-next/backend/internal/registry"
-	"github.com/florianfinn/docklet-next/backend/internal/s3"
 	"github.com/florianfinn/docklet-next/backend/internal/settings"
 	"github.com/florianfinn/docklet-next/backend/pkg/authz"
 	activitylib "github.com/florianfinn/docklet-next/backend/pkg/libarcane/activity"
@@ -997,7 +996,7 @@ func TestJobActivityVisibilityFiltersBeforePagination(t *testing.T) {
 }
 
 func TestSyncResourcesToEnvironmentOutcomes(t *testing.T) {
-	paths := []string{"/api/container-registries/sync", "/api/backups/s3/sync"}
+	paths := []string{"/api/container-registries/sync"}
 	cases := []struct {
 		name     string
 		failures map[string]string
@@ -1005,14 +1004,13 @@ func TestSyncResourcesToEnvironmentOutcomes(t *testing.T) {
 	}{
 		{name: "success"},
 		{name: "registry failure", failures: map[string]string{paths[0]: "status"}, groups: "container registries"},
-		{name: "S3 failure", failures: map[string]string{paths[1]: "status"}, groups: "S3 destinations"},
 		{name: "malformed response", failures: map[string]string{paths[0]: "malformed"}, groups: "container registries"},
 		{name: "agent reports failure", failures: map[string]string{paths[0]: "false"}, groups: "container registries"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			db := setupActivityServiceTestDBInternal(t)
-			require.NoError(t, db.AutoMigrate(&environment.Environment{}, &registry.ContainerRegistry{}, &s3.S3Destination{}))
+			require.NoError(t, db.AutoMigrate(&environment.Environment{}, &registry.ContainerRegistry{}))
 			sqlDB, err := db.DB.DB()
 			require.NoError(t, err)
 			sqlDB.SetMaxOpenConns(1)
