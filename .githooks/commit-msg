@@ -1,0 +1,10 @@
+#!/bin/sh
+# Source: docklet-hub/.githooks/commit-msg
+# Revision: a4484c910bb5d6a8f8df97b4f23f4ee5e6359081
+# Retrieved: 2026-10-13
+# License: Apache-2.0
+# Deviations: Conventional subject plus publication and AI/session checks; no spelling guard.
+set -eu
+root="$(git rev-parse --show-toplevel)"
+node "$root/scripts/commit-subject.mjs" "$1"
+node "$root/scripts/check-publication.mjs" --text "$1"

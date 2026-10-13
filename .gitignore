@@ -1,0 +1,10 @@
+node_modules/
+dist/
+coverage/
+.scratch/
+.env
+.env.*
+!.env.example
+.publication-denylist.local.json
+.claude/*
+!.claude/settings.json

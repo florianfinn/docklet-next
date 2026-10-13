@@ -1,0 +1,11 @@
+# Changes to governance and its guards require the maintainer's review.
+/scripts/ @florianfinn
+/tests/ @florianfinn
+/LICENSE @florianfinn
+/LICENSES/ @florianfinn
+/NOTICE @florianfinn
+/AGENTS.md @florianfinn
+/.claude/ @florianfinn
+/.github/ @florianfinn
+/.githooks/ @florianfinn
+/docs/design/ @florianfinn

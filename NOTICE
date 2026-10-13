@@ -1,0 +1,32 @@
+Docklet Next
+
+Own code: Apache License, Version 2.0 (see LICENSE).
+Arcane-derived parts: BSD 3-Clause License (see LICENSES/BSD-3-Clause-Arcane.txt).
+Based on Arcane (getarcaneapp/arcane).
+Copyright (c) 2025, Kyle Mendell
+Reference: v2.15.1, 095cb778daba1034e2a39961199e712a75d4ba29.
+No endorsement or partnership is implied.
+
+Governance tooling adapted from florianfinn/docklet-hub under Apache-2.0.
+Source revision: a4484c910bb5d6a8f8df97b4f23f4ee5e6359081.
+
+Third-party notices — inventory hook point
+No Go or web dependencies are shipped by this foundation. M1 must replace these
+pending entries with exact versions, source references, copyright notices and
+licence copies from the adopted binary graph; M2 adds the web runtime graph.
+These entries document known obligations, not a claim of installed dependencies.
+
+MPL-2.0, source references pending M1 inventory:
+- github.com/cyphar/filepath-securejoin
+- github.com/hashicorp/errwrap
+- github.com/hashicorp/go-cleanhttp
+- github.com/hashicorp/go-multierror
+- github.com/hashicorp/go-version
+Retain file-level notices and provide the corresponding source reference.
+
+EDL-1.0, source reference pending M1 inventory:
+- github.com/eclipse/paho.golang: select EDL-1.0 from the upstream dual licence
+  (EPL-2.0 OR EDL-1.0), and include the selected licence and copyright notice.
+
+All adopted sibling modules and go.getarcane.app modules require their own
+inventory entries. Unknown or incompatible licences block a release.

@@ -1,0 +1,9 @@
+#!/bin/sh
+# Source: docklet-hub/.githooks/pre-commit
+# Revision: a4484c910bb5d6a8f8df97b4f23f4ee5e6359081
+# Retrieved: 2026-10-13
+# License: Apache-2.0
+# Deviations: Check the full index with Node-only publication rules.
+set -eu
+cd "$(git rev-parse --show-toplevel)"
+node scripts/check-publication.mjs --staged

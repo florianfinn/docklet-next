@@ -1,0 +1,39 @@
+# Source: docklet-hub/.github/workflows/checks.yml
+# Revision: a4484c910bb5d6a8f8df97b4f23f4ee5e6359081
+# Retrieved: 2026-10-13
+# License: Apache-2.0
+# Deviations: Dependency-free M0 chain, structural guards and baseline comparison; no caching/install.
+name: Repository checks
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+  push:
+    branches: [main]
+permissions:
+  contents: read
+jobs:
+  checks:
+    name: checks
+    runs-on: ubuntu-24.04
+    env:
+      CHECK_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 24
+      - run: node scripts/setup-git-hooks.mjs
+      - id: scope
+        run: echo "scope=$(node scripts/change-scope.mjs --ci)" >> "$GITHUB_OUTPUT"
+      - run: node scripts/check-publication.mjs --history
+      - if: steps.scope.outputs.scope == 'text'
+        run: node scripts/change-scope.mjs --run-text-tests
+      - if: steps.scope.outputs.scope != 'text'
+        run: node scripts/run-checks.mjs lint
+      - if: steps.scope.outputs.scope != 'text'
+        run: node scripts/run-checks.mjs test
+      - if: steps.scope.outputs.scope != 'text'
+        run: node scripts/run-checks.mjs build
