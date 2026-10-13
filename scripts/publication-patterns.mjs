@@ -4,6 +4,7 @@
 // License: Apache-2.0
 // Deviations: Reserved networks only; IPv6, POSIX paths, corrupt text and literal credentials; no prose spelling guard.
 import { isIP } from "node:net";
+import { scanAssignments } from "./publication-assignments.mjs";
 import { fixtureAllowed } from "./publication-fixtures.mjs";
 
 const AI_TOOLS = new Set([
@@ -22,21 +23,27 @@ const AI_TOOLS = new Set([
   "grok",
   "llama",
   "deepseek",
+  "windsurf",
+  "aider",
+  "junie",
+  "amazon q",
 ]);
 export function aiIdentity(name, email = "") {
   const words = name
     .trim()
     .toLowerCase()
     .replace(/^github\s+/, "")
+    .replace(/^amazon[ _-]+q\b/, "amazon.q")
+    .replace(/\[bot\]/g, " bot")
     .split(/[\s_()-]+/)
     .filter(Boolean);
   const toolName =
-    AI_TOOLS.has(words[0]) &&
+    AI_TOOLS.has(words[0]?.replace("amazon.q", "amazon q")) &&
     words
       .slice(1)
       .every(
         (w) =>
-          /^(?:ai|agent|code|coding|cli|assist|assistant|gpt|bot|\[bot\]|opus|sonnet|haiku|pro|flash)$/.test(
+          /^(?:ai|agent|code|coding|cli|developer|assist|assistant|gpt|bot|\[bot\]|opus|sonnet|haiku|pro|flash)$/.test(
             w,
           ) || /\d/.test(w),
       );
@@ -46,7 +53,7 @@ export function aiIdentity(name, email = "") {
     .replace(/^\d+\+/, "");
   return (
     toolName ||
-    ["anthropic.com", "openai.com", "cursor.com", "cursor.sh", "devin.ai", "cognition.ai"].some((domain) => {
+    ["anthropic.com", "openai.com", "cursor.com", "cursor.sh", "devin.ai", "cognition.ai", "codeium.com", "windsurf.com", "aider.chat"].some((domain) => {
       const host = email.slice(email.lastIndexOf("@") + 1).toLowerCase();
       return email.includes("@") && (host === domain || host.endsWith("." + domain));
     }) ||
@@ -64,8 +71,8 @@ export function publicIdentity(name, email) {
 const EXAMPLE_EMAIL =
   /@(?:users\.noreply\.github\.com|(?:[a-z0-9-]+\.)*example\.(?:com|net|org)|(?:[a-z0-9-]+\.)*(?:test|invalid))$/i;
 // Token prefixes are anchored so failed candidates are not retried at every character.
-const CREDENTIAL_START = String.raw`(?<![a-z0-9_-])`;
-const CREDENTIAL_END = String.raw`(?![a-z0-9_-])`;
+const CREDENTIAL_START = String.raw`(?<![A-Za-z0-9_-])`;
+const CREDENTIAL_END = String.raw`(?![A-Za-z0-9_-])`;
 const CREDENTIALS = [
   /-----BEGIN (?:[A-Z0-9]+ )?PRIVATE KEY-----/.source,
   `${CREDENTIAL_START}(?:gh[pousr]_[A-Za-z0-9]{30,}|github_pat_[A-Za-z0-9_]{30,})${CREDENTIAL_END}`,
@@ -74,67 +81,6 @@ const CREDENTIALS = [
   String.raw`\bBearer[ \t]+[A-Za-z0-9._-]{20,}`,
   `${CREDENTIAL_START}eyJ[A-Za-z0-9_-]+\\.[A-Za-z0-9_-]+\\.[A-Za-z0-9_-]+${CREDENTIAL_END}`,
 ];
-// Consume keys and values once, including CLI flags and unquoted YAML scalars.
-const SENSITIVE_NAME = /password|passwd|secret|token|api[_-]?key|private[_-]?key/i;
-const VALUE_END = /[\s"'\x60,;)&]/;
-function placeholder(value) {
-  const lower = value.toLowerCase();
-  return (
-    !value ||
-    ["changeme", "example", "test-only"].includes(lower) ||
-    /^\*+$/.test(value) ||
-    /^<[^<>]*>$/.test(value) ||
-    /^\$\{[a-z0-9_]+\}$/i.test(value) ||
-    /^\$\{\{[^{}]+\}\}$/.test(value)
-  );
-}
-function scanAssignments(text, report) {
-  const words = /[a-z0-9_.-]+/gi;
-  let match;
-  while ((match = words.exec(text))) {
-    if (!SENSITIVE_NAME.test(match[0])) continue;
-    let at = words.lastIndex;
-    if (text[at] === '"' || text[at] === "'") at++;
-    const end = at;
-    while (text[at] === " " || text[at] === "\t") at++;
-    if (text[at] === "=" || text[at] === ":") {
-      at++;
-      while (text[at] === " " || text[at] === "\t") at++;
-    } else if (!(match[0].startsWith("--") && at > end)) continue;
-    const start = at;
-    const quote = text[at];
-    let value;
-    if (quote === '"' || quote === "'") {
-      at++;
-      const first = at;
-      while (at < text.length && text[at] !== quote && text[at] !== "\r" && text[at] !== "\n") at++;
-      value = text.slice(first, at);
-      if (text[at] === quote) at++;
-    } else if (text[at] === "$" && text[at + 1] === "{") {
-      let depth = 1;
-      at += 2;
-      while (at < text.length && depth && text[at] !== "\r" && text[at] !== "\n") {
-        if (text[at] === "{") depth++;
-        if (text[at] === "}") depth--;
-        at++;
-      }
-      value = text.slice(start, at);
-    } else if (text[at] === "<") {
-      while (at < text.length && !/[>\r\n]/.test(text[at])) at++;
-      if (text[at] === ">") at++;
-      value = text.slice(start, at);
-    } else {
-      while (at < text.length && !VALUE_END.test(text[at]) && text[at] !== "}") at++;
-      value = text.slice(start, at);
-    }
-    if (quote !== '"' && quote !== "'") {
-      while (at < text.length && !VALUE_END.test(text[at]) && text[at] !== "}") at++;
-      value = text.slice(start, at);
-    }
-    words.lastIndex = Math.max(words.lastIndex, at);
-    if (!placeholder(value)) report("literal-secret", text.slice(match.index, at));
-  }
-}
 // Home roots include Unix, macOS, Windows and shell home expansion.
 const HOME_PATHS = [
   String.raw`/(?:home|Users|u)/[a-z0-9._-]+(?:/[^\s"'<>\x60,;()]*)?`,
@@ -152,7 +98,7 @@ const PATTERNS = {
     [
       String.raw`\uFFFD|\u00C3[\u0080-\u00BF]|\u00C2[\u0080-\u00BF]|\u00E2\u20AC.`,
       String.raw`[\u0001-\u0008\u000B\u000C\u000E-\u001F\u007F]`,
-      String.raw`[\u200B-\u200F\u202A-\u202E\u2060-\u2069\uFEFF]`,
+      String.raw`[\u00AD\u034F\u061C\u115F\u1160\u180E\u2028\u2029\u3164\uFFA0\u200B-\u200F\u202A-\u202E\u2060-\u2069\uFEFF]`,
     ].join("|"),
     "gu",
   ),
@@ -173,7 +119,7 @@ export function inspectText(text, path = "text", denylist = []) {
   for (const [category, pattern] of Object.entries(PATTERNS)) {
     for (const match of text.matchAll(pattern)) report(category, match[0]);
   }
-  scanAssignments(text, report);
+  scanAssignments(text, report, path);
   for (const match of text.matchAll(HOSTNAME)) {
     const dotfile = text[match.index - 1] === "." && match[0].toLowerCase() === "env." + "local";
     if (!dotfile && PRIVATE_SUFFIX.test(match[0])) report("private-hostname", match[0]);

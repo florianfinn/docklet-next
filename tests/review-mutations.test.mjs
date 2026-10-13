@@ -5,6 +5,27 @@ import { scratch, write, invoke, ok, ROOT } from "./helpers.mjs";
 
 const mutations = [
   {
+    name: "loosened scan budget",
+    path: "tests/publication-performance.test.mjs",
+    mutate: (text) => text.replace("SCAN_BUDGET_MS = 2000", "SCAN_BUDGET_MS = 200000"),
+    tests: ["tests/publication-performance.test.mjs"],
+    pattern: "scan budget stays",
+  },
+  {
+    name: "bypassed scan budget comparison",
+    path: "tests/publication-performance.test.mjs",
+    mutate: (text) => text.replace("timing.ms < SCAN_BUDGET_MS,", "timing.ms < 200000,"),
+    tests: ["tests/publication-performance.test.mjs"],
+    pattern: "scan budget stays",
+  },
+  {
+    name: "case-sensitive credential start",
+    path: "scripts/publication-patterns.mjs",
+    mutate: (text) => text.replace("(?<![A-Za-z0-9_-])", "(?<![a-z0-9_-])"),
+    tests: ["tests/publication-performance.test.mjs"],
+    pattern: "JWT upper-case overlap",
+  },
+  {
     name: "unknown Conventional type",
     path: "scripts/commit-subject.mjs",
     mutate: (text) => text.replace("feat|fix|docs|style|refactor|perf|test|build|ci|chore|revert", ".*"),
@@ -18,7 +39,7 @@ const mutations = [
   },
   {
     name: "missing access token alternative",
-    path: "scripts/publication-patterns.mjs",
+    path: "scripts/publication-assignments.mjs",
     mutate: (text) => text.replace("|token|", "|"),
     tests: ["tests/publication-patterns.test.mjs"],
   },
@@ -27,7 +48,7 @@ for (const mutation of mutations) {
   test(`regression suite kills mutation: ${mutation.name}`, (t) => {
     const root = scratch(t);
     for (const path of mutation.tests) write(root, path, readFileSync(`${ROOT}/${path}`));
-    const args = ["--test", "--test-reporter=tap", mutation.tests[0]];
+    const args = ["--test", "--test-reporter=tap", ...(mutation.pattern ? ["--test-name-pattern", mutation.pattern] : []), mutation.tests[0]];
     ok(invoke(root, process.execPath, args));
     const original = readFileSync(`${root}/${mutation.path}`, "utf8");
     const changed = mutation.mutate(original);

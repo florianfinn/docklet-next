@@ -88,6 +88,7 @@ in GitHub issues and milestones; rationale belongs in docs/design/ and its index
 
 ## Checks and boundaries
 
+- Pre-commit checks publication and structure against staged blobs and policies.
 - Stage new files before checks. core.hooksPath must be .githooks. Before push run
   pnpm run lint and pnpm run test; CI also builds. The root commands integrate Go
   vet/tests and web lint/typechecks/tests when those modules arrive in M1/M2.
@@ -100,7 +101,9 @@ in GitHub issues and milestones; rationale belongs in docs/design/ and its index
 - Own files stay at or below 1,000 lines. Adopted oversized files have reviewed
   ceilings in scripts/size-baseline.json that may only shrink; split them when
   making substantive changes. First adoption requires a new path under configured
-  provenance coverage, a valid header and an exact line ceiling. Generated files
+  Arcane adoption roots in provenance.json adoptedPrefixes, a valid header and an
+  exact line ceiling. Git-detected renames and copies retain their source ceiling
+  and base line count. Provenance coverage alone grants no size exemption. Generated files
   need exact entries matching reviewed lockfile names or generated directories
   with a generated marker; arbitrary entries and stale exemptions fail.
 - DOM assertions compare booleans, not cyclic nodes. Open Radix Select with the

@@ -25,17 +25,23 @@ instead protected by the licence hash manifest. Source licences remain intact.
 scripts/size-baseline.json maps adopted oversized files to reviewed line ceilings.
 Own files have a hard 1,000-line limit without exemptions. A first adoption may
 add an oversized file and its ceiling together only if the path is absent from
-the comparison base, belongs to a configured adopted prefix or exact file entry,
+the comparison base, belongs to the separate adoptedPrefixes list in
+scripts/provenance.json (backend/, types/, third_party/arcane/),
 has a valid provenance header in its first 40 lines, and the ceiling equals its
 exact line count. An existing own file cannot acquire an adoption exemption.
 This is the import path for oversized upstream files; no separate oversized base
-or comparison override is needed. Review each imported file and ceiling together.
+or comparison override is needed. Review each imported file and ceiling together. Broader provenance coverage
+(web/, api/, cli/, deploy/ or exact file entries) does not grant size exemptions.
 
 After adoption, ceilings may only shrink or disappear. A file may not exceed
 its ceiling or its actual count in the comparison base, even under an older,
-higher ceiling. Count LF, CRLF and CR as one line ending each; a terminal ending
+higher ceiling. Git rename/copy detection against the base includes unchanged
+copy sources and retains both the source ceiling and actual source line count.
+Git uses its default 50% similarity threshold; a heavily rewritten file may no
+longer be recognized as a move or copy and still needs human review. Count LF, CRLF and CR as one line ending each; a terminal ending
 does not add an empty line. CI uses the target base; local checks default to HEAD,
-or an empty base for an unborn repository. Lower ceilings when shrinking files.
+or an empty base for an unborn repository. The pre-commit hook scans staged
+blobs and policy files, including staged renames/copies. Lower ceilings when shrinking files.
 
 Generated exemptions are exact paths in the separate generated list. Each must
 exist and match the short reviewed classifier in scripts/check-structure.mjs:

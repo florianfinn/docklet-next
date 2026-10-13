@@ -26,7 +26,8 @@ email, non-example IPv4/IPv6 addresses, private host suffixes, personal absolute
 paths, runtime env files/private artefacts, AI co-authors, session links, invalid
 UTF-8, U+FFFD, unexpected control characters and double-encoded UTF-8. Zero-width
 and bidi controls U+200B-200F, U+202A-202E, U+2060-2069 and U+FEFF are rejected
-in content, filenames and Git messages. Tests construct these characters from
+along with U+00AD, U+034F, U+061C, U+115F/1160, U+180E, U+2028/2029,
+U+3164 and U+FFA0 in content, filenames and Git messages. Tests construct these characters from
 escaped literals or code points; no raw control-character exception is configured.
 Loopback
 addresses may be used only for synthetic local test listeners. RFC 5737 and
@@ -36,13 +37,21 @@ Reserved example-domain emails are allowed in content, never as commit identitie
 No address exception permits an AI identity or AI co-author.
 
 Secret assignment names are case insensitive and match any occurrence of secret,
-password, passwd, token, api_key, apikey or private_key, including prefixes,
+password, passwd, passphrase, pwd, credentials, token, api_key, apikey,
+access_key, accessKey or private_key, including prefixes,
 suffixes, client_secret and hyphen-separated API/private-key forms. Assignments
 using equals or colon, JSON/YAML keys and double-dash flags with equals or a
-space-separated value are checked, with or without quotes. Every nonempty literal
+space-separated value are checked, with or without quotes. Indented YAML values
+and block scalars are checked too. Source files (including Go and TypeScript)
+check quoted and template literals while allowing identifiers, declarations, calls,
+member access, type annotations and comparisons. Bare env/YAML/flag values remain
+checked; unquoted boolean/null configuration values are not credential strings.
+This is lexical context recognition, not a language parser; semantic review remains
+necessary, particularly for constructed strings and ambiguous prose. Every nonempty literal
 value is rejected, including short values. The exact placeholder forms are empty,
 changeme, example, test-only (case insensitive), all-asterisk masks, angle-bracket
-placeholders, environment substitutions of the form ${VAR}, and GitHub expression
+placeholders, environment substitutions of the form ${VAR} or ${VAR:-default} (also shell +, ? and =
+operators with a colon), and GitHub expression
 substitutions. Arbitrary repeated letters and ordinary words are not placeholders.
 
 Wildcard listeners 0.0.0.0 and [::] are allowed, as are documented example and
@@ -53,12 +62,15 @@ spelling is exempt from hostname detection but still rejected as a runtime file.
 Only the exact lowercase .env.example template filename is allowed; runtime env
 recognition is otherwise case insensitive. AI names retain human-name handling;
 known assistant, agent and model qualifiers and GitHub Copilot remain prohibited.
+Windsurf, Aider, Amazon Q Developer, Junie and bracketed bot qualifiers are
+recognized, along with provider domains codeium.com, windsurf.com and aider.chat.
 
 Scanners consume complete tokens or lines without overlapping retries. Assignment
 values are consumed once, IPv6 validation uses bounded candidates, and trailer
 parsing splits delimiters directly. Adversarial tests scan at least 1 MB per
 family with a two-second bound and a subprocess timeout. This is a regression
-budget, not a throughput promise for every machine or arbitrary denylist size.
+budget pinned by mutation tests; each CI job has a 15-minute timeout. This is
+not a throughput promise for every machine or arbitrary denylist size.
 
 Synthetic matches in the guard tests have exact path/category/value exceptions
 in scripts/publication-fixtures.mjs. These exceptions apply only to those source

@@ -177,7 +177,7 @@ test("baseline exemptions require configured adoption and a valid header", (t) =
   const policy = readJSON(root, "scripts/provenance.json");
   policy.files.push(path);
   writeJSON(root, "scripts/provenance.json", policy);
-  ok(check(root, "size"));
+  fails(check(root, "size"), "size-baseline-provenance");
   stage(root, path, "line\n".repeat(1200));
   fails(check(root, "size"), "size-baseline-provenance");
 });

@@ -7,6 +7,8 @@ for (const file of ["checks", "pr-text", "review-status"]) {
   const original = readFileSync(new URL(`../.github/workflows/${file}.yml`, import.meta.url), "utf8");
   test(`workflow contract ${file} accepts the tracked workflow`, () => assertWorkflow(file, original));
   const mutations = [
+    ["timeout removed", (text) => text.replace("    timeout-minutes: 15\n", "")],
+    ["timeout raised", (text) => text.replace("timeout-minutes: 15", "timeout-minutes: 150")],
     ["job key", (text) => text.replace(/^  (?:checks|pr-text|review):$/m, "  renamed:")],
     ["job name", (text) => text.replace(/^    name: .+$/m, "    name: renamed")],
     ["contents write", (text) => text.replace("contents: read", "contents: write")],

@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import { readFileSync, existsSync } from "node:fs";
 import { resolve } from "node:path";
-import { files, json, git, main, run, finish } from "./repository.mjs";
+import { files, git, main, run, finish } from "./repository.mjs";
 
 export const sha256 = (content) => createHash("sha256").update(content).digest("hex");
 export const lineCount = (content) => {
@@ -60,8 +60,13 @@ function headerRecord(file) {
     )
   );
 }
-export function sizeProblems(list, policy, previous = { adopted: {} }, previousCounts = {}, provenance = {}) {
+export function sizeProblems(
+  list, policy, previous = { adopted: {} }, previousCounts = {}, provenance = {}, origins = new Map(),
+) {
   const found = [];
+  const currentCeilings = new Map(Object.entries(policy?.adopted ?? {}));
+  const oldCeilings = new Map(Object.entries(previous?.adopted ?? {}));
+  const counts = new Map(Object.entries(previousCounts));
   if (!policy || !policy.adopted || !Array.isArray(policy.generated)) throw new Error("size-policy");
   const byPath = new Map(list.map((file) => [file.path, file]));
   const generated = new Set();
@@ -75,27 +80,27 @@ export function sizeProblems(list, policy, previous = { adopted: {} }, previousC
   for (const [path, ceiling] of Object.entries(policy.adopted)) {
     if (!relative(path) || !Number.isInteger(ceiling) || ceiling <= 0) throw new Error("size-policy");
     const file = byPath.get(path);
-    const covered =
-      provenance.files?.includes(path) || provenance.prefixes?.some((prefix) => path.startsWith(prefix));
+    const covered = provenance.adoptedPrefixes?.some((prefix) => path.startsWith(prefix));
+    const origin = origins.get(path) ?? path;
     if (!covered || !validProvenance(headerRecord(file)))
       found.push({ path, category: "size-baseline-provenance" });
     // First adoption admits only a new file with an exact ceiling, never an existing own file.
     if (
       previous &&
-      previous.adopted?.[path] === undefined &&
-      (Object.hasOwn(previousCounts, path) || !file || ceiling !== lineCount(file.content))
+      !oldCeilings.has(origin) &&
+      (counts.has(origin) || !file || ceiling !== lineCount(file.content))
     )
       found.push({ path, category: "size-baseline-new-entry" });
-    if (previous?.adopted?.[path] !== undefined && ceiling > previous.adopted[path])
+    if (oldCeilings.has(origin) && ceiling > oldCeilings.get(origin))
       found.push({ path, category: "size-baseline-growth" });
     if (!file) found.push({ path, category: "stale-size-baseline" });
   }
   for (const file of list) {
     if (generated.has(file.path) || file.content.includes(0)) continue;
-    const ceiling =
-      policy.adopted[file.path] === undefined
-        ? 1000
-        : Math.min(policy.adopted[file.path], previousCounts[file.path] ?? Infinity);
+    const origin = origins.get(file.path) ?? file.path;
+    const ceiling = currentCeilings.has(file.path)
+      ? Math.min(currentCeilings.get(file.path), counts.get(origin) ?? Infinity, oldCeilings.get(origin) ?? Infinity)
+      : 1000;
     if (lineCount(file.content) > ceiling) found.push({ path: file.path, category: "file-size" });
   }
   return found;
@@ -104,16 +109,17 @@ export function provenanceProblems(list, policy) {
   if (!Array.isArray(policy.prefixes) || !Array.isArray(policy.files) || !policy.sidecars)
     throw new Error("provenance-policy");
   const findings = [];
+  const sidecars = new Map(Object.entries(policy.sidecars));
   for (const path of [...policy.files, ...Object.keys(policy.sidecars)]) {
     if (!relative(path)) throw new Error("provenance-path");
     if (!list.some((f) => f.path === path)) findings.push({ path, category: "stale-provenance" });
   }
   for (const file of list) {
     const required = policy.files.includes(file.path) || policy.prefixes.some((p) => file.path.startsWith(p));
-    if (!required && !policy.sidecars[file.path]) continue;
-    const record = policy.sidecars[file.path] ?? headerRecord(file);
+    if (!required && !sidecars.has(file.path)) continue;
+    const record = sidecars.get(file.path) ?? headerRecord(file);
     if (!validProvenance(record)) findings.push({ path: file.path, category: "provenance-header" });
-    if (policy.sidecars[file.path] && record.sha256 !== sha256(file.content))
+    if (sidecars.has(file.path) && record.sha256 !== sha256(file.content))
       findings.push({ path: file.path, category: "provenance-hash" });
   }
   return findings;
@@ -172,8 +178,10 @@ export function licenseProblems(list, policy, root) {
   }
   return found;
 }
-export function inspectStructure(root, { only, base } = {}) {
-  const list = files(root);
+export function inspectStructure(root, { only, base, staged = false } = {}) {
+  const list = files(root, { staged });
+  const byPath = new Map(list.map((file) => [file.path, file]));
+  const policy = (path) => JSON.parse(byPath.get(path).content.toString("utf8"));
   if (!base) {
     const heads = git(["rev-list", "--all", "--max-count=1"], root).trim();
     if (heads) base = git(["rev-parse", "HEAD"], root).trim();
@@ -181,7 +189,20 @@ export function inspectStructure(root, { only, base } = {}) {
   const previous = base
     ? JSON.parse(git(["show", `${base}:scripts/size-baseline.json`], root))
     : { adopted: {} };
-  const previousCounts = {};
+  const previousCounts = Object.create(null);
+  const origins = new Map();
+  if (base) {
+    // Copy detection includes unchanged sources; NUL fields preserve arbitrary path names.
+    const changes = git([
+      "diff", ...(staged ? ["--cached"] : []), "--name-status", "-z",
+      "--find-renames", "--find-copies", "--find-copies-harder", "-l0", base, "--",
+    ], root).split("\0");
+    for (let i = 0; i < changes.length && changes[i];) {
+      const status = changes[i++];
+      const from = changes[i++];
+      if (/^[RC]/.test(status)) origins.set(changes[i++], from);
+    }
+  }
   if (base)
     for (const file of files(root, { revision: base })) {
       previousCounts[file.path] = lineCount(file.content);
@@ -190,14 +211,15 @@ export function inspectStructure(root, { only, base } = {}) {
     size: () =>
       sizeProblems(
         list,
-        json(resolve(root, "scripts/size-baseline.json")),
+        policy("scripts/size-baseline.json"),
         previous,
         previousCounts,
-        json(resolve(root, "scripts/provenance.json")),
+        policy("scripts/provenance.json"),
+        origins,
       ),
-    provenance: () => provenanceProblems(list, json(resolve(root, "scripts/provenance.json"))),
-    assets: () => assetProblems(list, json(resolve(root, "scripts/assets.json"))),
-    license: () => licenseProblems(list, json(resolve(root, "scripts/license-policy.json")), root),
+    provenance: () => provenanceProblems(list, policy("scripts/provenance.json")),
+    assets: () => assetProblems(list, policy("scripts/assets.json")),
+    license: () => licenseProblems(list, policy("scripts/license-policy.json"), root),
   };
   if (only && !checks[only]) throw new Error("unknown-check");
   return (only ? [checks[only]] : Object.values(checks)).flatMap((check) => check());
@@ -207,5 +229,5 @@ if (main(import.meta.url))
     const args = process.argv.slice(2);
     const only = args.includes("--only") ? args[args.indexOf("--only") + 1] : undefined;
     const base = args.includes("--base") ? args[args.indexOf("--base") + 1] : process.env.CHECK_BASE_SHA;
-    finish(inspectStructure(process.cwd(), { only, base: base || undefined }));
+    finish(inspectStructure(process.cwd(), { only, base: base || undefined, staged: args.includes("--staged") }));
   });

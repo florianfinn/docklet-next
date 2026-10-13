@@ -8,6 +8,7 @@ const PERMISSIONS = {
 };
 export function assertWorkflow(file, text) {
   const job = JOBS[file];
+  assert.match(text, /^    timeout-minutes: 15$/m);
   assert.match(text, new RegExp(`^  ${job}:$`, "m"));
   assert.match(text, new RegExp(`^    name: ${job}$`, "m"));
   const permissions = text.match(/^permissions:\n((?:  [^\n]*\n)+)/m)?.[1];
