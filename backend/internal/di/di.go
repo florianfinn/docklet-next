@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; functional cut: removed upstream analytics heartbeat and APNS mobile push.
+// Deviations: Local module namespace; functional cut: removed upstream analytics heartbeat and APNS mobile push; functional cut: removed template catalogue.
 
 // Package di owns the backend's dependency-injection graph.
 package di
@@ -44,7 +44,6 @@ import (
 	"github.com/florianfinn/docklet-next/backend/internal/settings"
 	"github.com/florianfinn/docklet-next/backend/internal/swarm"
 	"github.com/florianfinn/docklet-next/backend/internal/system"
-	"github.com/florianfinn/docklet-next/backend/internal/template"
 	"github.com/florianfinn/docklet-next/backend/internal/updater"
 	"github.com/florianfinn/docklet-next/backend/internal/upload"
 	"github.com/florianfinn/docklet-next/backend/internal/user"
@@ -95,7 +94,6 @@ var ServiceOptions = fx.Options(
 		network.NewNetworkService,
 		port.NewPortService,
 		swarm.NewSwarmService,
-		template.NewTemplateService,
 		oidc.NewOidcService,
 		system.NewSystemService,
 		diagnostics.NewDiagnosticsService,
@@ -133,7 +131,6 @@ var ServiceOptions = fx.Options(
 		event.New,
 		role.New,
 		apikey.New,
-		template.New,
 		gitrepo.New,
 		job.New,
 		environment.New,

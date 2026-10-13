@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace
+// Deviations: Local module namespace; functional cut: removed template catalogue.
 
 // Package cli provides the root command and entry point for the Arcane CLI.
 //
@@ -76,7 +76,6 @@ import (
 	"github.com/florianfinn/docklet-next/cli/pkg/selfupdate"
 	"github.com/florianfinn/docklet-next/cli/pkg/settings"
 	"github.com/florianfinn/docklet-next/cli/pkg/system"
-	"github.com/florianfinn/docklet-next/cli/pkg/templates"
 	"github.com/florianfinn/docklet-next/cli/pkg/updater"
 	"github.com/florianfinn/docklet-next/cli/pkg/variables"
 	"github.com/florianfinn/docklet-next/cli/pkg/version"
@@ -278,7 +277,6 @@ func init() {
 	rootCmd.AddCommand(environments.EnvironmentsCmd)
 	rootCmd.AddCommand(registries.RegistriesCmd)
 	rootCmd.AddCommand(repos.ReposCmd)
-	rootCmd.AddCommand(templates.TemplatesCmd)
 	rootCmd.AddCommand(settings.SettingsCmd)
 	rootCmd.AddCommand(jobs.JobsCmd)
 	rootCmd.AddCommand(system.SystemCmd)

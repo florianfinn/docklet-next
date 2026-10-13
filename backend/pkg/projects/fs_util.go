@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace
+// Deviations: Local module namespace; functional cut: removed template catalogue.
 
 package projects
 
@@ -151,19 +151,6 @@ func HasComposeRootKeysInFile(path string) (bool, error) {
 	_, hasServices := composeData["services"]
 	_, hasInclude := composeData["include"]
 	return hasServices || hasInclude, nil
-}
-
-func GetTemplatesDirectory(ctx context.Context, templatesDir string) (string, error) {
-	resolved := ResolveConfiguredContainerDirectory(templatesDir, "/app/data/templates")
-	// os.* rather than acfs: this creates the confinement root itself, which
-	// has to exist before acfs can open it.
-	if _, err := os.Stat(resolved); os.IsNotExist(err) {
-		if mkdirAllErr := os.MkdirAll(resolved, utils.DirPerm); mkdirAllErr != nil {
-			return "", mkdirAllErr
-		}
-		slog.InfoContext(ctx, "Created templates directory", "path", resolved)
-	}
-	return resolved, nil
 }
 
 func projectScanSkipDirectorySetInternal(skipDirectories string) map[string]bool {

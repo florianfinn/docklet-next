@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Functional cut: removed upstream analytics heartbeat.
+// Deviations: Functional cut: removed upstream analytics heartbeat; functional cut: removed template catalogue.
 
 package scheduler
 
@@ -30,9 +30,8 @@ func TestFilesystemWatcherJob_ProjectWatcherOptions_UsesConfiguredMaxDepth(t *te
 func TestFilesystemWatcherJob_ConcurrentProjectRestartsAreSerializedInternal(t *testing.T) {
 	_, settingsService, _ := setupSchedulerStateServicesInternal(t)
 	require.NoError(t, settingsService.SetStringSetting(t.Context(), "projectsDirectory", t.TempDir()))
-	require.NoError(t, settingsService.SetStringSetting(t.Context(), "templatesDirectory", t.TempDir()))
 
-	job, err := NewFilesystemWatcherJob(t.Context(), nil, nil, settingsService, 2)
+	job, err := NewFilesystemWatcherJob(t.Context(), nil, settingsService, 2)
 	require.NoError(t, err)
 
 	restartErrors := make(chan error, 2)

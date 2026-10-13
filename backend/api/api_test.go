@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace
+// Deviations: Local module namespace; functional cut: removed template catalogue.
 
 package api
 
@@ -281,39 +281,6 @@ func TestSetupAPIForSpec_PublicRoutesOverrideSecurity(t *testing.T) {
 
 			require.Empty(t, operation.Security,
 				"expected operation %s %s to be public, got security %v", testCase.method, testCase.path, operation.Security)
-		})
-	}
-}
-
-func TestSetupAPIForSpec_TemplateReadRoutesProtected(t *testing.T) {
-	api := SetupAPIForSpec()
-
-	expectedSecurity := []map[string][]string{
-		{"BearerAuth": {}},
-		{"ApiKeyAuth": {}},
-	}
-
-	testCases := []struct {
-		path string
-	}{
-		{path: "/templates"},
-		{path: "/templates/all"},
-		{path: "/templates/{id}"},
-		{path: "/templates/{id}/content"},
-	}
-
-	for _, testCase := range testCases {
-		t.Run(testCase.path, func(t *testing.T) {
-			pathItem := api.OpenAPI().Paths[testCase.path]
-
-			require.False(t, pathItem == nil || pathItem.Get == nil,
-				"expected GET %s to be registered", testCase.path)
-
-			require.Nil(t, pathItem.Get.Security,
-				"expected GET %s to inherit API security, got explicit security %v", testCase.path, pathItem.Get.Security)
-
-			require.True(t, reflect.DeepEqual(api.OpenAPI().Security, expectedSecurity),
-				"expected API security %v, got %v", expectedSecurity, api.OpenAPI().Security)
 		})
 	}
 }

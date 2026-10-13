@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; functional cut: removed APNS mobile push.
+// Deviations: Local module namespace; functional cut: removed APNS mobile push; functional cut: removed template catalogue.
 
 package api
 
@@ -55,7 +55,6 @@ import (
 	"github.com/florianfinn/docklet-next/backend/internal/settings"
 	"github.com/florianfinn/docklet-next/backend/internal/swarm"
 	"github.com/florianfinn/docklet-next/backend/internal/system"
-	"github.com/florianfinn/docklet-next/backend/internal/template"
 	"github.com/florianfinn/docklet-next/backend/internal/updater"
 	"github.com/florianfinn/docklet-next/backend/internal/upload"
 	"github.com/florianfinn/docklet-next/backend/internal/user"
@@ -266,7 +265,6 @@ type HandlerDeps struct {
 	Passkey           *passkey.PasskeyService
 	Oidc              *oidc.OidcService
 	Docker            *docker.DockerClientService
-	Template          *template.Module
 	ContainerRegistry *registry.Module
 	System            *system.Module
 	Diagnostics       *diagnostics.DiagnosticsService
@@ -421,7 +419,6 @@ func registerHandlersInternal(api huma.API, deps HandlerDeps, handlerAppCtx hand
 	oidc.RegisterOidc(api, deps.Auth.Service(), deps.Passkey, deps.Oidc, deps.Role.Service(), deps.User.Service(), cfg)
 	deps.Environment.RegisterRoutes(api, handlerAppCtx)
 	deps.ContainerRegistry.RegisterRoutes(api)
-	deps.Template.RegisterRoutes(api)
 	deps.Variable.RegisterRoutes(api, cfg)
 	deps.Image.RegisterRoutes(api, handlerAppCtx)
 	deps.Upload.RegisterRoutes(api)

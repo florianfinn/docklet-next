@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace
+// Deviations: Local module namespace; functional cut: removed template catalogue.
 
 package settings
 
@@ -660,7 +660,7 @@ func TestSettingsServiceActorSerializesConcurrentUpdatesInternal(t *testing.T) {
 	}()
 	go func() {
 		<-start
-		_, updateErr := svc.UpdateSettings(ctx, settings.Update{TemplatesDirectory: new("/data/templates-b")})
+		_, updateErr := svc.UpdateSettings(ctx, settings.Update{FollowProjectSymlinks: new("true")})
 		results <- updateErr
 	}()
 	close(start)
@@ -669,7 +669,7 @@ func TestSettingsServiceActorSerializesConcurrentUpdatesInternal(t *testing.T) {
 	require.NoError(t, <-results)
 	current := svc.GetSettingsConfig()
 	require.Equal(t, "/data/projects-a", current.ProjectsDirectory.Value)
-	require.Equal(t, "/data/templates-b", current.TemplatesDirectory.Value)
+	require.Equal(t, "true", current.FollowProjectSymlinks.Value)
 }
 
 func TestSettingsServiceActorPublishesSnapshotBeforeAsynchronousNotificationInternal(t *testing.T) {

@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace
+// Deviations: Local module namespace; functional cut: removed template catalogue.
 
 package di
 
@@ -41,7 +41,6 @@ import (
 	s3domain "github.com/florianfinn/docklet-next/backend/internal/s3"
 	"github.com/florianfinn/docklet-next/backend/internal/settings"
 	"github.com/florianfinn/docklet-next/backend/internal/system"
-	"github.com/florianfinn/docklet-next/backend/internal/template"
 	"github.com/florianfinn/docklet-next/backend/internal/updater"
 	"github.com/florianfinn/docklet-next/backend/internal/user"
 	"github.com/florianfinn/docklet-next/backend/internal/version"
@@ -365,14 +364,13 @@ func provideFilesystemWatcherJobInternal(
 	ctx context.Context,
 	lc fx.Lifecycle,
 	localProject *project.ProjectService,
-	localTemplate *template.TemplateService,
 	localSettings *settings.SettingsService,
 	cfg *config.Config,
 ) (
 	*scheduler.FilesystemWatcherJob,
 	error,
 ) {
-	job, err := scheduler.NewFilesystemWatcherJob(ctx, localProject, localTemplate, localSettings, cfg.ProjectScanMaxDepth)
+	job, err := scheduler.NewFilesystemWatcherJob(ctx, localProject, localSettings, cfg.ProjectScanMaxDepth)
 	if err != nil {
 		return nil, err
 	}

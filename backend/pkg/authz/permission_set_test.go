@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: None
+// Deviations: Functional cut: removed template catalogue.
 
 package authz
 
@@ -258,12 +258,6 @@ func TestVariablePermissionsAreSeparateGlobalGrantsWithBuiltInAccess(t *testing.
 		}
 	}
 
-	templatesOnly := NewPermissionSet()
-	templatesOnly.AddGlobal(PermTemplatesRead, PermTemplatesCreate, PermTemplatesUpdate, PermTemplatesDelete)
-	for _, permission := range variablePermissions {
-		require.False(t, templatesOnly.Allows(permission, ""),
-			"template grants must not satisfy %q", permission)
-	}
 }
 
 func TestSystemBackupPermissionsAreAdminOnlyGlobalGrants(t *testing.T) {

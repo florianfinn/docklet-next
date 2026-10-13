@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: None
+// Deviations: Functional cut: removed template catalogue.
 
 package authz
 
@@ -77,13 +77,6 @@ var permissionCatalog = []PermissionCatalogResource{
 		{"test", PermRegistriesTest, "Test", ""},
 		{"browse", PermRegistriesBrowse, "Browse", "Browse repositories and tags stored in the registry (the pages also require Read)"},
 		{"delete-tags", PermRegistriesDeleteTags, "Delete tags", "Delete image manifests from the registry"},
-	}},
-	{"templates", "Templates", PermissionScopeGlobal, []PermissionCatalogAction{
-		{"list", PermTemplatesList, "List", ""},
-		{"read", PermTemplatesRead, "Read", ""},
-		{"create", PermTemplatesCreate, "Create", ""},
-		{"update", PermTemplatesUpdate, "Update", ""},
-		{"delete", PermTemplatesDelete, "Delete", ""},
 	}},
 	{"variables", "Variables", PermissionScopeGlobal, []PermissionCatalogAction{
 		{"read", PermVariablesRead, "Read", ""},

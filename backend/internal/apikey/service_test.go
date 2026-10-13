@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace
+// Deviations: Local module namespace; functional cut: removed template catalogue.
 
 package apikey
 
@@ -900,7 +900,7 @@ func TestBackfillApiKeyPermissionsRepairsExistingBootstrapKey(t *testing.T) {
 	require.NoError(t, db.WithContext(ctx).Create(&scopedKey).Error)
 	require.NoError(t, db.WithContext(ctx).Create(&role.ApiKeyPermission{
 		ApiKeyID:   scopedKey.ID,
-		Permission: authz.PermTemplatesRead,
+		Permission: authz.PermRegistriesRead,
 	}).Error)
 
 	require.NoError(t, service.BackfillApiKeyPermissions(ctx))
@@ -918,7 +918,7 @@ func TestBackfillApiKeyPermissionsRepairsExistingBootstrapKey(t *testing.T) {
 	var scopedPerms []role.ApiKeyPermission
 	require.NoError(t, db.WithContext(ctx).Where("api_key_id = ?", scopedKey.ID).Find(&scopedPerms).Error)
 	require.Len(t, scopedPerms, 1)
-	require.Equal(t, authz.PermTemplatesRead, scopedPerms[0].Permission)
+	require.Equal(t, authz.PermRegistriesRead, scopedPerms[0].Permission)
 }
 
 func TestBackfillPermsForKeyDeduplicatesGlobalAndEnvironmentPermissions(t *testing.T) {

@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: None
+// Deviations: Functional cut: removed template catalogue.
 
 package types
 
@@ -35,7 +35,6 @@ var KnownPaginatedResources = []string{
 	"projects",
 	"environments",
 	"registries",
-	"templates",
 	"repos",
 	"gitops-syncs",
 	"users",
@@ -66,8 +65,6 @@ func NormalizePaginatedResource(resource string) string {
 		return "environments"
 	case "registry", "registries":
 		return "registries"
-	case "template":
-		return "templates"
 	case "repo", "repos", "gitrepository", "gitrepositories", "gitrepo", "gitrepos":
 		return "repos"
 	case "gitops", "gitop", "gitopssync", "gitopssyncs":

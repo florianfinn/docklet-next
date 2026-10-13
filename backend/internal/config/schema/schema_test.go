@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; functional cut: removed upstream analytics heartbeat and APNS mobile push.
+// Deviations: Local module namespace; functional cut: removed upstream analytics heartbeat and APNS mobile push; functional cut: removed template catalogue.
 
 package schema
 
@@ -263,7 +263,6 @@ var expectedEnvConfigVars = []string{
 	"PROJECT_WORKSPACE_MAX_ENTRIES",
 	"PROJECT_WORKSPACE_MAX_FILE_SIZE_MB",
 	"PUID",
-	"TEMPLATES_DIRECTORY",
 	"TLS_CERT_FILE",
 	"TLS_ENABLED",
 	"TLS_KEY_FILE",
@@ -365,7 +364,6 @@ var expectedSettingOverrideKeys = []string{
 	"scheduledPruneEnabled",
 	"scheduledPruneInterval",
 	"swarmStackSourcesDirectory",
-	"templatesDirectory",
 	"toolsImageRegistry",
 	"trivyConcurrentScanContainers",
 	"trivyConfig",

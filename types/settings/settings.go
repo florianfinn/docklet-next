@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Functional cut: removed APNS mobile push.
+// Deviations: Functional cut: removed APNS mobile push; functional cut: removed template catalogue.
 
 package settings
 
@@ -42,12 +42,6 @@ type Update struct {
 	//
 	// Required: false
 	ProjectsDirectory *string `json:"projectsDirectory,omitzero"`
-
-	// TemplatesDirectory is the directory path where local compose template folders are discovered.
-	// Must be an absolute path.
-	//
-	// Required: false
-	TemplatesDirectory *string `json:"templatesDirectory,omitzero"`
 
 	// FollowProjectSymlinks controls whether symlinked child directories in the projects directory are discovered as projects.
 	//

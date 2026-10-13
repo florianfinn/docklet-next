@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; functional cut: removed upstream analytics heartbeat and APNS mobile push.
+// Deviations: Local module namespace; functional cut: removed upstream analytics heartbeat and APNS mobile push; functional cut: removed template catalogue.
 
 package bootstrap
 
@@ -460,14 +460,6 @@ func setupSettingsSubscriptionsInternal(params settingsSubscriptionsParams) erro
 		if params.FilesystemWatcher != nil {
 			if err := params.FilesystemWatcher.RestartProjectsWatcher(params.LifecycleCtx); err != nil {
 				slog.WarnContext(params.LifecycleCtx, "Failed to restart projects filesystem watcher", "error", err)
-			}
-		}
-	})
-
-	subscribe([]string{"templatesDirectory"}, func(_ []libarcane.SettingUpdate) {
-		if params.FilesystemWatcher != nil {
-			if err := params.FilesystemWatcher.RestartTemplatesWatcher(params.LifecycleCtx); err != nil {
-				slog.WarnContext(params.LifecycleCtx, "Failed to restart templates filesystem watcher", "error", err)
 			}
 		}
 	})

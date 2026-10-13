@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace
+// Deviations: Local module namespace; functional cut: removed template catalogue.
 
 package role_test
 
@@ -143,7 +143,7 @@ func TestEnsureBuiltInRolesMigratesVariablePermissionsWithoutBackfillingCustomGr
 	ctx := t.Context()
 	userSvc, roleSvc := setupUserAndRoleServices(t)
 
-	customRole, err := roleSvc.CreateRole(ctx, "Template Reader", nil, []string{authz.PermTemplatesRead})
+	customRole, err := roleSvc.CreateRole(ctx, "Registry Reader", nil, []string{authz.PermRegistriesRead})
 	require.NoError(t, err)
 	owner := createTestUser(t, userSvc, "variable-migration-owner", "variable-migration-owner")
 	scopedKey := testApiKeyRow{
@@ -156,7 +156,7 @@ func TestEnsureBuiltInRolesMigratesVariablePermissionsWithoutBackfillingCustomGr
 	require.NoError(t, userSvc.WithContext(ctx).Create(&scopedKey).Error)
 	require.NoError(t, userSvc.WithContext(ctx).Create(&role.ApiKeyPermission{
 		ApiKeyID:   scopedKey.ID,
-		Permission: authz.PermTemplatesRead,
+		Permission: authz.PermRegistriesRead,
 	}).Error)
 
 	oldEditorPermissions := slices.DeleteFunc(authz.BuiltInEditorPermissions(), func(permission string) bool {
@@ -204,12 +204,12 @@ func TestEnsureBuiltInRolesMigratesVariablePermissionsWithoutBackfillingCustomGr
 
 	preservedCustomRole, err := roleSvc.GetRole(ctx, customRole.ID)
 	require.NoError(t, err)
-	require.Equal(t, []string{authz.PermTemplatesRead}, []string(preservedCustomRole.Permissions))
+	require.Equal(t, []string{authz.PermRegistriesRead}, []string(preservedCustomRole.Permissions))
 
 	var keyPermissions []role.ApiKeyPermission
 	require.NoError(t, userSvc.WithContext(ctx).Where("api_key_id = ?", scopedKey.ID).Find(&keyPermissions).Error)
 	require.Len(t, keyPermissions, 1)
-	require.Equal(t, authz.PermTemplatesRead, keyPermissions[0].Permission)
+	require.Equal(t, authz.PermRegistriesRead, keyPermissions[0].Permission)
 }
 
 func TestSetUserAssignmentsRejectsUnknownRole(t *testing.T) {

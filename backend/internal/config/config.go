@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; functional cut: removed upstream analytics heartbeat and APNS mobile push and Svelte-specific metadata or asset paths.
+// Deviations: Local module namespace; functional cut: removed upstream analytics heartbeat and APNS mobile push and Svelte-specific metadata or asset paths; functional cut: removed template catalogue.
 
 package config
 
@@ -75,7 +75,6 @@ type Config struct {
 	DockerHost                    string `env:"DOCKER_HOST" default:"unix:///var/run/docker.sock"`
 	DockerConfig                  string `env:"DOCKER_CONFIG" default:""`
 	ProjectsDirectory             string `env:"PROJECTS_DIRECTORY" default:"/app/data/projects"`
-	TemplatesDirectory            string `env:"TEMPLATES_DIRECTORY" default:"/app/data/templates"`
 	ProjectScanMaxDepth           int    `env:"PROJECT_SCAN_MAX_DEPTH" default:"3"`
 	ProjectWorkspaceMaxDepth      int    `env:"PROJECT_WORKSPACE_MAX_DEPTH" default:"20"`
 	ProjectWorkspaceMaxEntries    int    `env:"PROJECT_WORKSPACE_MAX_ENTRIES" default:"2000"`

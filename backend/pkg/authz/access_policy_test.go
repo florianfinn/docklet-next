@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; omit two tests and their helpers requiring the unimported frontend source tree; functional cut: removed Svelte-specific metadata or asset paths.
+// Deviations: Local module namespace; omit two tests and their helpers requiring the unimported frontend source tree; functional cut: removed Svelte-specific metadata or asset paths; functional cut: removed template catalogue.
 
 package authz_test
 
@@ -38,17 +38,11 @@ func TestAccessSurfaceRegistryDefinesSettingsCustomizeAndLandingSemantics(t *tes
 	require.Equal(t, authz.AccessScopeModeGlobalOnly, notifications.ScopeMode)
 	require.ElementsMatch(t, []string{authz.PermNotificationsManage}, notifications.Permissions)
 
-	templates := requireAccessSurfaceInternal(t, "customize.category.templates")
-	require.Equal(t, authz.AccessSurfaceKindCustomizeCategory, templates.Kind)
-	require.Equal(t, authz.AccessScopeModeGlobalOnly, templates.ScopeMode)
-	require.ElementsMatch(t, []string{authz.PermCustomizeManage, authz.PermTemplatesList, authz.PermTemplatesRead}, templates.Permissions)
-
 	variables := requireAccessSurfaceInternal(t, "customize.category.variables")
 	require.Equal(t, authz.AccessSurfaceKindCustomizeCategory, variables.Kind)
 	require.Equal(t, authz.AccessScopeModeGlobalOnly, variables.ScopeMode)
 	require.Equal(t, authz.AccessMatchModeAnyOf, variables.MatchMode)
 	require.ElementsMatch(t, []string{authz.PermVariablesRead}, variables.Permissions)
-	require.NotContains(t, variables.Permissions, authz.PermTemplatesRead)
 
 	activities := requireAccessSurfaceInternal(t, "route.activities")
 	require.Equal(t, authz.AccessSurfaceKindRoute, activities.Kind)
@@ -111,10 +105,6 @@ func TestCanAccessSurfaceEvaluatesScopeModesAndLandingChildren(t *testing.T) {
 	variablePS.AddGlobal(authz.PermVariablesRead)
 	require.True(t, authz.CanAccessSurface(variablePS, "customize.category.variables", "env-a"))
 	require.True(t, authz.CanAccessSurface(variablePS, "landing.customize", "env-a"))
-	templatePS := authz.NewPermissionSet()
-	templatePS.AddGlobal(authz.PermTemplatesRead)
-	require.False(t, authz.CanAccessSurface(templatePS, "customize.category.variables", "env-a"))
-
 	activitiesPS := authz.NewPermissionSet()
 	activitiesPS.AddEnv("env-a", authz.PermActivitiesRead)
 	require.True(t, authz.CanAccessSurface(activitiesPS, "route.activities", "env-b"))

@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: None
+// Deviations: Functional cut: removed template catalogue.
 
 // Package authz defines the permission taxonomy and authorization primitives
 // used across Arcane handlers. Permissions are strings of the form
@@ -70,12 +70,6 @@ const (
 	PermRegistriesTest       = "registries:test"
 	PermRegistriesBrowse     = "registries:browse"
 	PermRegistriesDeleteTags = "registries:delete-tags"
-
-	PermTemplatesList   = "templates:list"
-	PermTemplatesRead   = "templates:read"
-	PermTemplatesCreate = "templates:create"
-	PermTemplatesUpdate = "templates:update"
-	PermTemplatesDelete = "templates:delete"
 
 	PermVariablesRead   = "variables:read"
 	PermVariablesCreate = "variables:create"
@@ -331,7 +325,6 @@ func BuiltInEditorPermissions() []string {
 		PermSettingsRead,
 		PermEnvironmentsList, PermEnvironmentsRead, PermEnvironmentsSync,
 		PermRegistriesList, PermRegistriesRead, PermRegistriesBrowse,
-		PermTemplatesList, PermTemplatesRead, PermTemplatesCreate, PermTemplatesUpdate, PermTemplatesDelete,
 		PermVariablesRead, PermVariablesCreate, PermVariablesUpdate, PermVariablesDelete, PermVariablesSync,
 		PermGitReposList, PermGitReposRead,
 		// Editor can run volume backups, so it needs to pick a destination.
@@ -376,7 +369,6 @@ func BuiltInDeployerPermissions() []string {
 	return []string{
 		PermEnvironmentsList, PermEnvironmentsRead,
 		PermRegistriesList, PermRegistriesRead,
-		PermTemplatesList, PermTemplatesRead,
 		PermVariablesRead,
 		PermEventsRead,
 		PermContainersList,
@@ -415,7 +407,6 @@ func BuiltInViewerPermissions() []string {
 		PermSettingsRead,
 		PermEnvironmentsList, PermEnvironmentsRead,
 		PermRegistriesList, PermRegistriesRead,
-		PermTemplatesList, PermTemplatesRead,
 		PermVariablesRead,
 		PermGitReposList, PermGitReposRead,
 		PermS3DestinationsList, PermS3DestinationsRead,

@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: None
+// Deviations: Functional cut: removed template catalogue.
 
 // Package types provides the Arcane API endpoint path builders and CLI
 // configuration types.
@@ -483,20 +483,6 @@ func EventsEnvironment(envID string) string {
 	return pathf("/api/events/environment/%s", envID)
 }
 func EventsStats() string { return "/api/events/stats" }
-
-// Template endpoints
-
-func Templates() string           { return "/api/templates" }
-func Template(id string) string   { return pathf("/api/templates/%s", id) }
-func TemplatesAll() string        { return "/api/templates/all" }
-func TemplatesDefault() string    { return "/api/templates/default" }
-func TemplatesRegistries() string { return "/api/templates/registries" }
-func TemplateRegistry(id string) string {
-	return pathf("/api/templates/registries/%s", id)
-}
-func TemplateContent(id string) string  { return pathf("/api/templates/%s/content", id) }
-func TemplateDownload(id string) string { return pathf("/api/templates/%s/download", id) }
-func TemplateFetch() string             { return "/api/templates/fetch" }
 
 // Variable endpoints
 

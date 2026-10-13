@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; functional cut: removed APNS mobile push.
+// Deviations: Local module namespace; functional cut: removed APNS mobile push; functional cut: removed template catalogue.
 
 package settings
 
@@ -204,7 +204,6 @@ func (s *SettingsService) getDefaultSettings() *Settings {
 func DefaultSettingsConfig() *Settings {
 	return &Settings{
 		ProjectsDirectory:                     SettingVariable{Value: "/app/data/projects"},
-		TemplatesDirectory:                    SettingVariable{Value: "/app/data/templates"},
 		FollowProjectSymlinks:                 SettingVariable{Value: "false"},
 		SwarmStackSourcesDirectory:            SettingVariable{Value: "/app/data/swarm/sources"},
 		DiskUsagePath:                         SettingVariable{Value: "/app/data/projects"},

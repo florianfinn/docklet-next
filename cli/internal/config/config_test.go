@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace
+// Deviations: Local module namespace; functional cut: removed template catalogue.
 
 package config
 
@@ -361,7 +361,7 @@ func TestInitDefaultFileCreatesTemplate(t *testing.T) {
 		require.Contains(t, text, key,
 			"expected generated config to contain %q:\n%s", key, text)
 	}
-	for _, resource := range []string{"containers", "images", "volumes", "networks", "projects", "environments", "registries", "templates", "users", "events", "apikeys"} {
+	for _, resource := range []string{"containers", "images", "volumes", "networks", "projects", "environments", "registries", "users", "events", "apikeys"} {
 		require.Contains(t, text, resource+":",
 			"expected generated config to contain resource key %q:\n%s", resource, text)
 	}
@@ -374,7 +374,7 @@ func TestInitDefaultFileCreatesTemplate(t *testing.T) {
 	require.Equal(t, defaultPaginationInitLimit, cfg.Pagination.Default.Limit,
 		"Pagination.Default.Limit=%d, want %d", cfg.Pagination.Default.Limit, defaultPaginationInitLimit)
 
-	for _, resource := range []string{"containers", "images", "volumes", "networks", "projects", "environments", "registries", "templates", "users", "events", "apikeys"} {
+	for _, resource := range []string{"containers", "images", "volumes", "networks", "projects", "environments", "registries", "users", "events", "apikeys"} {
 		{
 			got := cfg.LimitFor(resource)
 			require.Equal(t, defaultPaginationInitLimit, got,

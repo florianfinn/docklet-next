@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: None
+// Deviations: Functional cut: removed template catalogue.
 
 package authz
 
@@ -41,7 +41,6 @@ type AccessSurface struct {
 
 var accessSurfacesInternal = []AccessSurface{
 	landingSurfaceInternal("landing.customize", "/customize", "Customize", []string{
-		"customize.category.templates",
 		"customize.category.registries",
 		"customize.category.variables",
 		"customize.category.git-repositories",
@@ -98,29 +97,6 @@ var accessSurfacesInternal = []AccessSurface{
 	routeSurfaceInternal("route.events", "/events", "Events", AccessScopeModeGlobalOnly, []string{PermEventsRead}, 110),
 	routeSurfaceInternal("route.activities", "", "Activities", AccessScopeModeAnyEffectiveScope, []string{PermActivitiesRead}, 0),
 	allOfRouteSurfaceInternal("route.oidc-role-mappings", "", "OIDC Role Mappings", AllPermissions()),
-	routeSurfaceInternal("route.customize.templates.create",
-		"/customize/templates/create",
-		"Create template",
-		AccessScopeModeGlobalOnly,
-		[]string{
-			PermCustomizeManage,
-			PermTemplatesList,
-			PermTemplatesRead,
-		},
-		0),
-
-	routeSurfaceInternal("route.customize.templates.default",
-		"/customize/templates/default",
-		"Default template",
-		AccessScopeModeGlobalOnly,
-		[]string{
-			PermCustomizeManage,
-			PermTemplatesList,
-			PermTemplatesRead,
-		},
-		0),
-
-	routeSurfaceInternal("route.customize.templates.detail", "/customize/templates/{id}", "Template", AccessScopeModeGlobalOnly, []string{PermCustomizeManage, PermTemplatesList, PermTemplatesRead}, 0),
 	allOfRouteSurfaceInternal("route.customize.registries.browse", "/customize/registries/{id}", "Registry browser", []string{PermRegistriesRead, PermRegistriesBrowse}),
 
 	settingsCategorySurfaceInternal("activity", "/settings/activity", "Activity", AccessScopeModeGlobalOnly, []string{PermSettingsRead}),
@@ -139,7 +115,6 @@ var accessSurfacesInternal = []AccessSurface{
 	settingsCategorySurfaceInternal("webhooks", "/settings/webhooks", "Webhooks", AccessScopeModeSelectedEnvPlusGlobal, []string{PermWebhooksList}),
 	settingsCategorySurfaceInternal("diagnostics", "/settings/diagnostics", "Diagnostics", AccessScopeModeGlobalOnly, []string{PermDiagnosticsRead}),
 
-	customizeCategorySurfaceInternal("templates", "/customize/templates", "Templates", []string{PermCustomizeManage, PermTemplatesList, PermTemplatesRead}),
 	customizeCategorySurfaceInternal("registries", "/customize/registries", "Container Registries", []string{PermCustomizeManage, PermRegistriesList, PermRegistriesRead}),
 	customizeCategorySurfaceInternal("variables", "/customize/variables", "Variables", []string{PermVariablesRead}),
 	customizeCategorySurfaceInternal("git-repositories", "/customize/git-repositories", "Git Repositories", []string{PermCustomizeManage, PermGitReposList, PermGitReposRead}),
