@@ -23,7 +23,7 @@
     "backend/internal/project/service_test.go": 7330,
     "backend/internal/registry/service.go": 1722,
     "backend/internal/registry/service_test.go": 1601,
-    "backend/internal/role/service.go": 811,
+    "backend/internal/role/service.go": 810,
     "backend/internal/settings/service.go": 1261,
     "backend/internal/settings/service_test.go": 1204,
     "backend/internal/system/children/backup/service.go": 866,
