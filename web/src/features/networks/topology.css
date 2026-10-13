@@ -1,0 +1,54 @@
+/* React Flow themed with Docklet tokens (Arcane network-diagram look). */
+.topology {
+  --xy-background-color: transparent;
+  --xy-edge-label-background-color: var(--popover);
+  --xy-edge-label-color: var(--foreground);
+  --xy-controls-button-background-color: var(--popover);
+  --xy-controls-button-background-color-hover: var(--muted);
+  --xy-controls-button-color: var(--foreground);
+  --xy-controls-button-border-color: var(--border);
+  --xy-minimap-background-color: color-mix(in oklch, var(--card) 85%, transparent);
+  --xy-minimap-mask-background-color: color-mix(in oklch, var(--background) 60%, transparent);
+  --xy-node-boxshadow-selected: none;
+  --xy-selection-background-color: color-mix(in oklch, var(--primary) 12%, transparent);
+  --xy-selection-border: 1px dashed var(--primary);
+}
+
+.topology .react-flow__node {
+  border-radius: 14px;
+}
+
+.topology .react-flow__node:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 3px;
+}
+
+.topology .react-flow__node-lane {
+  pointer-events: none;
+}
+
+.topology .react-flow__edge-textbg {
+  fill: var(--popover);
+}
+
+.topology .react-flow__edge-text {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  fill: var(--foreground);
+}
+
+.topology .react-flow__controls {
+  border-radius: 12px;
+  overflow: hidden;
+  box-shadow: 0 10px 24px -14px var(--shadow-color);
+}
+
+.topology .react-flow__minimap {
+  border-radius: 12px;
+  border: 1px solid var(--border);
+}
+
+.topology .react-flow__attribution {
+  background: transparent;
+  color: var(--muted-foreground);
+}

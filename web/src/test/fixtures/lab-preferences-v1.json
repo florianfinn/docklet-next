@@ -1,0 +1,209 @@
+{
+  "docklet-react-opus.design-lab": {
+    "v": 1,
+    "data": {
+      "tokens": {
+        "theme": "light",
+        "palette": {
+          "primary": "#123456",
+          "secondary": "#abcdef",
+          "surface": "#222222"
+        },
+        "semantic": 1.12,
+        "glow": 1,
+        "motion": "calm",
+        "speed": 1.3,
+        "ignoreReducedMotion": false,
+        "density": "compact",
+        "radius": 0.8,
+        "fontScale": 1
+      },
+      "active": "A",
+      "slotA": {
+        "theme": "dark",
+        "palette": {
+          "primary": "#9333ea",
+          "secondary": "#00ffcc",
+          "surface": "#13111c"
+        },
+        "semantic": 1.12,
+        "glow": 1,
+        "motion": "playful",
+        "speed": 1,
+        "ignoreReducedMotion": false,
+        "density": "compact",
+        "radius": 0.8,
+        "fontScale": 1
+      }
+    }
+  },
+  "docklet-react-opus.preferences": {
+    "v": 1,
+    "data": {
+      "hostSelection": [
+        "example-host"
+      ],
+      "stacksMode": "advanced",
+      "containersMode": "advanced",
+      "stacksLayout": "hosts",
+      "containersLayout": "hosts",
+      "volumesLayout": "table",
+      "imagesLayout": "table",
+      "workspaceAside": "details",
+      "sidebarHostsOpen": true
+    }
+  },
+  "docklet-react-opus.ui-style": {
+    "v": 1,
+    "data": {
+      "toggleStyle": "minimal",
+      "metricDisplay": "bars",
+      "hostFilterStyle": "menu",
+      "pointerGlow": true,
+      "pointerGlowIntensity": 0.6,
+      "toastScale": 1.6,
+      "toastDesign": "bar",
+      "actionDialogDesign": "focus",
+      "actionPresentationOverride": "hub",
+      "runMotion": "sweep"
+    }
+  },
+  "docklet-react-opus.visual-style": {
+    "v": 1,
+    "data": {
+      "logoVariant": "dropcap",
+      "logoMotion": "relay",
+      "logoEntrance": true,
+      "glowInside": 50,
+      "glowOutside": 4,
+      "glowSize": 128,
+      "glowLine": 2,
+      "dotWave": false,
+      "dotWaveStrength": 0.9,
+      "dotWavePeriod": 32,
+      "dotDepth": 0.6,
+      "sidebarWidth": 19.5
+    }
+  },
+  "docklet-react-opus.help": {
+    "v": 1,
+    "data": {
+      "mode": "compact"
+    }
+  },
+  "docklet-react-opus.hidden": {
+    "v": 1,
+    "data": {
+      "stacks": [
+        "example-stack"
+      ],
+      "containers": [
+        "example-container"
+      ]
+    }
+  },
+  "docklet-react-opus.dashboard": {
+    "v": 1,
+    "data": {
+      "order": [
+        "attention",
+        "updates",
+        "load",
+        "security",
+        "capacity",
+        "events",
+        "timeline",
+        "overseerr",
+        "plex",
+        "schedule",
+        "minecraft",
+        "apps"
+      ],
+      "hidden": [
+        "attention"
+      ],
+      "services": {
+        "plex": {
+          "address": "",
+          "status": "unconfigured",
+          "simulateError": false
+        },
+        "minecraft": {
+          "address": "",
+          "status": "unconfigured",
+          "simulateError": false
+        },
+        "overseerr": {
+          "address": "",
+          "status": "unconfigured",
+          "simulateError": false
+        }
+      },
+      "sizes": {
+        "attention": {
+          "w": 1,
+          "h": 6
+        },
+        "updates": {
+          "w": 1,
+          "h": 6
+        },
+        "timeline": {
+          "w": 2,
+          "h": 4
+        },
+        "security": {
+          "w": 2,
+          "h": 3
+        },
+        "load": {
+          "w": 2,
+          "h": 3
+        },
+        "apps": {
+          "w": 2,
+          "h": 3
+        },
+        "overseerr": {
+          "w": 1,
+          "h": 6
+        },
+        "events": {
+          "w": 1,
+          "h": 6
+        },
+        "schedule": {
+          "w": 1,
+          "h": 6
+        },
+        "plex": {
+          "w": 1,
+          "h": 6
+        }
+      }
+    }
+  },
+  "docklet-react-opus.fleet-view": {
+    "v": 1,
+    "data": {
+      "mode": "joint",
+      "ringSize": 320,
+      "placement": "right",
+      "fan": true,
+      "hostOrder": [
+        "example-host"
+      ],
+      "hostArea": {
+        "w": 5,
+        "h": 2
+      }
+    }
+  },
+  "docklet-react-opus.design-favorite": {
+    "v": 1,
+    "data": {
+      "code": "DOCKLET-DESIGN-1:eyJzY2hlbWEiOiJkb2NrbGV0LWRlc2lnbiIsInNlY3Rpb25zIjp7InRva2VucyI6eyJ0aGVtZSI6ImxpZ2h0IiwicGFsZXR0ZSI6eyJwcmltYXJ5IjoiIzEyMzQ1NiIsInNlY29uZGFyeSI6IiNhYmNkZWYiLCJzdXJmYWNlIjoiIzIyMjIyMiJ9LCJzZW1hbnRpYyI6MS4xMiwiZ2xvdyI6MSwibW90aW9uIjoiY2FsbSIsInNwZWVkIjoxLjMsImRlbnNpdHkiOiJjb21wYWN0IiwicmFkaXVzIjowLjgsImZvbnRTY2FsZSI6MX0sInVpU3R5bGUiOnsidG9nZ2xlU3R5bGUiOiJtaW5pbWFsIiwibWV0cmljRGlzcGxheSI6ImJhcnMiLCJob3N0RmlsdGVyU3R5bGUiOiJtZW51IiwicG9pbnRlckdsb3ciOnRydWUsInBvaW50ZXJHbG93SW50ZW5zaXR5IjowLjYsInRvYXN0U2NhbGUiOjEuNiwidG9hc3REZXNpZ24iOiJiYXIiLCJhY3Rpb25EaWFsb2dEZXNpZ24iOiJmb2N1cyIsImFjdGlvblByZXNlbnRhdGlvbk92ZXJyaWRlIjoiaHViIiwicnVuTW90aW9uIjoic3dlZXAifSwidmlzdWFsIjp7ImxvZ29WYXJpYW50IjoiZHJvcGNhcCIsImxvZ29Nb3Rpb24iOiJyZWxheSIsImxvZ29FbnRyYW5jZSI6dHJ1ZSwiZ2xvd0luc2lkZSI6NTAsImdsb3dPdXRzaWRlIjo0LCJnbG93U2l6ZSI6MTI4LCJnbG93TGluZSI6MiwiZG90V2F2ZSI6ZmFsc2UsImRvdFdhdmVTdHJlbmd0aCI6MC45LCJkb3RXYXZlUGVyaW9kIjozMiwiZG90RGVwdGgiOjAuNiwic2lkZWJhcldpZHRoIjoxOS41fSwiZGFzaGJvYXJkIjp7Im9yZGVyIjpbImF0dGVudGlvbiIsInVwZGF0ZXMiLCJsb2FkIiwic2VjdXJpdHkiLCJjYXBhY2l0eSIsImV2ZW50cyIsInRpbWVsaW5lIiwib3ZlcnNlZXJyIiwicGxleCIsInNjaGVkdWxlIiwibWluZWNyYWZ0IiwiYXBwcyJdLCJoaWRkZW4iOlsiYXR0ZW50aW9uIl0sInNpemVzIjp7ImF0dGVudGlvbiI6eyJ3IjoxLCJoIjo2fSwidXBkYXRlcyI6eyJ3IjoxLCJoIjo2fSwidGltZWxpbmUiOnsidyI6MiwiaCI6NH0sInNlY3VyaXR5Ijp7InciOjIsImgiOjN9LCJsb2FkIjp7InciOjIsImgiOjN9LCJhcHBzIjp7InciOjIsImgiOjN9LCJvdmVyc2VlcnIiOnsidyI6MSwiaCI6Nn0sImV2ZW50cyI6eyJ3IjoxLCJoIjo2fSwic2NoZWR1bGUiOnsidyI6MSwiaCI6Nn0sInBsZXgiOnsidyI6MSwiaCI6Nn19fSwiZmxlZXQiOnsibW9kZSI6ImpvaW50IiwicmluZ1NpemUiOjMyMCwicGxhY2VtZW50IjoicmlnaHQiLCJmYW4iOnRydWUsImhvc3RBcmVhIjp7InciOjUsImgiOjJ9fSwib3ZlcnZpZXciOnsic3RhY2tzTW9kZSI6ImFkdmFuY2VkIiwiY29udGFpbmVyc01vZGUiOiJhZHZhbmNlZCIsInN0YWNrc0xheW91dCI6Imhvc3RzIiwiY29udGFpbmVyc0xheW91dCI6Imhvc3RzIiwidm9sdW1lc0xheW91dCI6InRhYmxlIiwiaW1hZ2VzTGF5b3V0IjoidGFibGUiLCJ3b3Jrc3BhY2VBc2lkZSI6ImRldGFpbHMifSwiaGVscCI6eyJtb2RlIjoiY29tcGFjdCJ9fX0",
+      "savedAt": "2026-10-12T12:00:00.000Z"
+    }
+  }
+}

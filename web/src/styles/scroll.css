@@ -1,0 +1,125 @@
+/*
+ * No classic scrollbars. Native bars are hidden everywhere; wheel, touch,
+ * keyboard (focusable scroll regions, Page Up/Down, Space) and CodeMirror's
+ * own scrolling are unchanged. Where a region really overflows, a soft edge
+ * fade shows that there is more in that direction: scroll-driven animations
+ * move the fade with the scroll position, and a region that does not
+ * overflow has an inactive scroll timeline, so it shows no fade at all.
+ * Browsers without scroll timelines get the same fade from scroll-cue.ts.
+ * Popup and dialog surfaces and anything closing keep their own animation:
+ * replacing an exit animation would keep a closing portal on screen.
+ */
+* {
+  scrollbar-width: none;
+}
+*::-webkit-scrollbar {
+  display: none;
+  width: 0;
+  height: 0;
+}
+
+@property --cue-start {
+  syntax: "<length>";
+  inherits: false;
+  initial-value: 0px;
+}
+@property --cue-end {
+  syntax: "<length>";
+  inherits: false;
+  initial-value: 0px;
+}
+
+@keyframes scroll-cue {
+  0% {
+    --cue-start: 0px;
+    --cue-end: 1.5rem;
+  }
+  6% {
+    --cue-start: 1.5rem;
+  }
+  94% {
+    --cue-end: 1.5rem;
+  }
+  100% {
+    --cue-start: 1.5rem;
+    --cue-end: 0px;
+  }
+}
+
+@keyframes page-cue {
+  0%,
+  94% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+  }
+}
+
+@supports (animation-timeline: scroll()) {
+  /* Vertical regions: lists, logs, raw output, scrolling dialog bodies, the editor. Surfaces keep their shadow. */
+  :is(.overflow-y-auto, .overflow-auto, .cm-scroller, [data-scroll-cue="y"]):not([data-scroll-cue="off"], [data-slot$="-content"], [role="dialog"], [role="alertdialog"], [role="menu"], [role="listbox"], [data-state="closed"]) {
+    mask-image: linear-gradient(to bottom, transparent, #000 var(--cue-start), #000 calc(100% - var(--cue-end)), transparent);
+    animation: scroll-cue linear both;
+    animation-timeline: scroll(self block);
+  }
+  /* Horizontal regions: wide tables, chip rows. */
+  :is(.overflow-x-auto, [data-scroll-cue="x"]):not([data-scroll-cue="off"], [data-slot$="-content"], [role="dialog"], [role="alertdialog"], [role="menu"], [role="listbox"], [data-state="closed"]) {
+    mask-image: linear-gradient(to right, transparent, #000 var(--cue-start), #000 calc(100% - var(--cue-end)), transparent);
+    animation: scroll-cue linear both;
+    animation-timeline: scroll(self inline);
+  }
+  /* Scroll timelines need an automatic duration; motion "off" shortens every other animation. */
+  [data-motion] :is(.overflow-y-auto, .overflow-auto, .overflow-x-auto, .cm-scroller, [data-scroll-cue]):not([data-scroll-cue="off"], [data-slot$="-content"], [role="dialog"], [role="alertdialog"], [role="menu"], [role="listbox"], [data-state="closed"]) {
+    animation-duration: auto !important;
+    animation-iteration-count: 1 !important;
+  }
+
+  /* A mask would hide an outer focus ring; focused scroll regions draw it inside. */
+  :is(.overflow-y-auto, .overflow-auto, .overflow-x-auto, [data-scroll-cue]):focus-visible {
+    outline: 2px solid var(--ring);
+    outline-offset: -2px;
+  }
+
+  /* The page itself: a fade above the bottom edge while more page follows below. */
+  body::after {
+    content: "";
+    position: fixed;
+    inset-inline: 0;
+    bottom: 0;
+    z-index: 30;
+    height: 2.5rem;
+    pointer-events: none;
+    background: linear-gradient(to top, color-mix(in oklch, var(--background) 92%, transparent), transparent);
+    opacity: 0;
+    animation: page-cue linear both;
+    animation-timeline: scroll(root block);
+  }
+}
+
+/* Fallback without scroll timelines: shared/lib/scroll-cue.ts marks overflowing regions and the page. */
+:root[data-scroll-cue-js] [data-cue="y"] {
+  mask-image: linear-gradient(to bottom, transparent, #000 var(--cue-start), #000 calc(100% - var(--cue-end)), transparent);
+}
+:root[data-scroll-cue-js] [data-cue="x"] {
+  mask-image: linear-gradient(to right, transparent, #000 var(--cue-start), #000 calc(100% - var(--cue-end)), transparent);
+}
+:root[data-scroll-cue-js] [data-cue]:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: -2px;
+}
+:root[data-scroll-cue-js] body::after {
+  content: "";
+  position: fixed;
+  inset-inline: 0;
+  bottom: 0;
+  z-index: 30;
+  height: 2.5rem;
+  pointer-events: none;
+  background: linear-gradient(to top, color-mix(in oklch, var(--background) 92%, transparent), transparent);
+  opacity: 0;
+  transition: opacity 150ms;
+}
+:root[data-scroll-cue-js][data-page-cue] body::after {
+  opacity: 1;
+}

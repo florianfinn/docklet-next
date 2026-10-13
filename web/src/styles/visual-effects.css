@@ -1,0 +1,50 @@
+/*
+ * Visual effects tuned in the design lab (shared/preferences/visual-style-store.ts
+ * writes the variables to <html>). Imported after motion.css, so these rules
+ * refine the pointer glow defined there.
+ */
+
+/* Edge light: spot diameter and lit line width. */
+[data-slot="pointer-glow"] > [data-part="ring"] {
+  padding: var(--glow-line, 1.5px);
+  background: radial-gradient(var(--glow-size, 56px) circle at var(--gx) var(--gy), var(--glow-color), transparent 70%);
+}
+
+/*
+ * Dotted backgrounds (dashboard summary, setup, login, lab preview; not the
+ * topology graph). The moving 3D point surface is a canvas (shared/visual/
+ * DotField.tsx); this static pseudo-element is its fallback without canvas
+ * support and before the canvas is ready: grey dots on an 18 px lattice with
+ * a fixed primary/secondary tint, nothing animated.
+ */
+.dot-grid:not(.topology) {
+  position: relative;
+  isolation: isolate;
+  /* The pseudo-element below replaces the static dots from globals.css. */
+  background-image: none;
+}
+
+.dot-grid:not(.topology)::before {
+  --tint: var(--dot-wave-strength, 0.55);
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  border-radius: inherit;
+  background-color: color-mix(in oklch, var(--muted-foreground) 22%, transparent);
+  background-image:
+    radial-gradient(42% 60% at 22% 35%, color-mix(in oklch, var(--primary) calc(var(--tint) * 85%), transparent), transparent 70%),
+    radial-gradient(38% 55% at 72% 62%, color-mix(in oklch, var(--highlight) calc(var(--tint) * 85%), transparent), transparent 70%);
+  mask-image: radial-gradient(circle at 9px 9px, #000 1px, transparent 1.35px);
+  mask-size: 18px 18px;
+}
+
+[data-dot-wave="off"] .dot-grid:not(.topology)::before {
+  background-image: none;
+}
+
+/* The canvas draws the points itself once it runs. */
+.dot-grid:has(> [data-slot="dot-field"][data-ready])::before {
+  display: none;
+}
