@@ -17,6 +17,7 @@ import {
   rawCommit,
   writeJSON,
   ROOT,
+  stubModuleChecks,
 } from "./helpers.mjs";
 
 test("commit-msg rejects invalid subjects and accepts Conventional Commits including revert", (t) => {
@@ -89,20 +90,22 @@ test("history rejects private author, private committer, AI identity and bad com
 });
 test("pre-push checks the supplied outgoing head and runs the full clean chain", (t) => {
   const root = scratch(t);
+  const env = stubModuleChecks(root);
   const base = rawCommit(root);
   stage(root, "sample.txt", FIXTURES["private-hostname"][0]);
   const bad = rawCommit(root);
   git(root, "reset", "--hard", base);
   const input = (sha) => `refs/heads/main ${sha} refs/heads/main ${"0".repeat(40)}\n`;
-  fails(invoke(root, "sh", [".githooks/pre-push"], { input: input(bad) }), "private-hostname");
-  ok(invoke(root, "sh", [".githooks/pre-push"], { input: input(base) }));
+  fails(invoke(root, "sh", [".githooks/pre-push"], { env, input: input(bad) }), "private-hostname");
+  ok(invoke(root, "sh", [".githooks/pre-push"], { env, input: input(base) }));
 });
 test("pre-push propagates lint and test failures", (t) => {
   const root = scratch(t);
+  const env = stubModuleChecks(root);
   stage(root, "broken.mjs", "export const = ;\n");
   let head = rawCommit(root);
   const input = (sha) => `refs/heads/main ${sha} refs/heads/main ${"0".repeat(40)}\n`;
-  fails(invoke(root, "sh", [".githooks/pre-push"], { input: input(head) }), "check-error");
+  fails(invoke(root, "sh", [".githooks/pre-push"], { env, input: input(head) }), "check-error");
   stage(root, "broken.mjs", "export const value = 1;\n");
   stage(
     root,
@@ -110,20 +113,21 @@ test("pre-push propagates lint and test failures", (t) => {
     'import test from "node:test"; test("synthetic failure", () => { throw new Error("fixture"); });\n',
   );
   head = rawCommit(root);
-  fails(invoke(root, "sh", [".githooks/pre-push"], { input: input(head) }), "check-error");
+  fails(invoke(root, "sh", [".githooks/pre-push"], { env, input: input(head) }), "check-error");
   stage(root, "tests/smoke.test.mjs", 'import test from "node:test"; test("synthetic success", () => {});\n');
   head = rawCommit(root);
-  ok(invoke(root, "sh", [".githooks/pre-push"], { input: input(head) }));
+  ok(invoke(root, "sh", [".githooks/pre-push"], { env, input: input(head) }));
 });
 test("text-only push still rejects altered licence text", (t) => {
   const root = scratch(t);
+  const env = stubModuleChecks(root);
   const base = rawCommit(root);
   git(root, "update-ref", "refs/remotes/origin/main", base);
   stage(root, "LICENSES/BSD-3-Clause-Arcane.txt", "changed\n");
   const head = rawCommit(root);
   const input = `refs/heads/main ${head} refs/heads/main ${base}\n`;
   assert.equal(prePushScope(input, root), "text");
-  fails(invoke(root, "sh", [".githooks/pre-push"], { input }), "licence-integrity");
+  fails(invoke(root, "sh", [".githooks/pre-push"], { env, input }), "licence-integrity");
 });
 test("scope is conservative for executable trees, renames and missing refs", (t) => {
   const root = scratch(t);
