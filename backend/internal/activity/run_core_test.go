@@ -178,10 +178,9 @@ func TestRunGateAdvisoryLockBlocksAnotherService(t *testing.T) {
 	}
 }
 
-func TestGatedRunHeartbeatSurvivesThreeMinuteSweep(t *testing.T) {
+func TestGatedRunSurvivesThreeMinuteUngatedSweep(t *testing.T) {
 	db := setupActivityServiceTestDBInternal(t)
 	owner := NewActivityService(db, nil)
-	owner.gateHeartbeatInterval = 10 * time.Millisecond
 	sweeper := NewActivityService(db, nil)
 	request := GateRequest{Operation: "deploy", Scope: "stack:example", Type: activity.TypeProjectDeploy}
 	started, err := owner.StartGatedActivity(t.Context(), request)
@@ -189,14 +188,7 @@ func TestGatedRunHeartbeatSurvivesThreeMinuteSweep(t *testing.T) {
 	require.True(t, owner.isTrackedInternal(started.Run.ID))
 	old := time.Now().Add(-3 * time.Minute)
 	require.NoError(t, db.Model(&Activity{}).Where("id = ?", started.Run.ID).
-		Updates(map[string]any{"started_at": old, "gate_lease_at": old}).Error)
-	require.Eventually(t, func() bool {
-		var refreshed Activity
-		if err := db.First(&refreshed, "id = ?", started.Run.ID).Error; err != nil {
-			return false
-		}
-		return refreshed.GateLeaseAt != nil && refreshed.GateLeaseAt.After(old)
-	}, time.Second, 10*time.Millisecond)
+		Update("started_at", old).Error)
 	swept, err := sweeper.FailAbandonedActivities(t.Context())
 	require.NoError(t, err)
 	require.Zero(t, swept)
@@ -262,6 +254,8 @@ func TestEveryTerminalPathSetsMatchingMessageCode(t *testing.T) {
 			run, err := s.StartActivity(t.Context(), StartActivityRequest{Type: activity.TypeProjectDeploy})
 			require.NoError(t, err)
 			_, err = s.CancelActivity(t.Context(), "0", run.ID, "operator")
+			require.NoError(t, err)
+			_, err = s.CompleteActivity(t.Context(), run.ID, activity.StatusSuccess, "done", nil)
 			require.NoError(t, err)
 			return run.ID
 		}},

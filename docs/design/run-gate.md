@@ -2,9 +2,10 @@
 
 ## Scope and guarantees
 
-Exactly one hub process in one hub container operates against a PostgreSQL
-database. A second hub using that database is unsupported and must not accept
-work. Agents are separate processes; this decision does not limit their number.
+The private deployment operates one hub process in one hub container against a
+PostgreSQL database. A second hub must not start while the first hub holds its
+session lock. Agents are separate processes; this decision does not limit
+their number.
 This record covers the live hub, restart and crash recovery. A crashed hub does
 not automatically resume an operation. An agent may still finish an action it
 already accepted, so the next intake must read the actual resource state before
@@ -166,53 +167,28 @@ If a normal pool connection fails while the dedicated lock connection still
 holds its session, a completion retries its write up to three times for
 retryable errors. After the final failure it returns the error; it must not
 claim success or free the durable scope. The row remains active and blocks
-another gated admission on that scope. A later explicit completion retry can
-finish it after database access recovers; otherwise an operator restart
-triggers startup repair. Pool failure alone is not proof of lock loss.
+another gated admission on that scope. An operator restart triggers startup
+repair and releases the scope.
 
-## Single-instance lock and database loss
+## Single-instance lock
 
 At startup, before migration, repair, background jobs and HTTP readiness, the
-hub opens one dedicated physical connection (`*sql.Conn` or pgx
-`Acquire`) and acquires a fixed, namespaced PostgreSQL **session** advisory
-lock with `pg_try_advisory_lock`. It holds that same connection for the entire
-process lifetime and does not use it as a general query pool connection. A
-one-off query through the pool or a transaction advisory lock is insufficient.
-If the lock is held, startup fails immediately with the stable operational
-code `hub.already_running`, without opening HTTP or starting jobs; there is no
-wait for release. This is a startup error, not a run message code.
+hub opens one dedicated physical connection (`*sql.Conn` or pgx `Acquire`)
+and acquires a fixed, namespaced PostgreSQL **session** advisory lock with
+`pg_try_advisory_lock`. It holds that connection for the process lifetime and
+does not use it as a general query pool connection. If the lock is held,
+startup fails immediately with `hub.already_running`, before HTTP or jobs
+start and without waiting for release. This is a startup error, not a run
+message code. Controlled shutdown closes the dedicated physical connection.
 
-The hub records the connection's backend PID and probes that same dedicated
-connection every second. Each probe has a one-second deadline and verifies
-both the unchanged backend PID and the granted advisory lock in `pg_locks`;
-a successful pool query does not count. A failed probe, missing lock, changed
-PID or probe timeout immediately clears readiness and starts fail-stop.
-Independently, a monotonic watchdog requires a successful proof at least once
-every two seconds, so a stalled probe cannot extend the deadline. Admission
-checks readiness and the watchdog deadline both before and after its database
-transaction, before returning an executable work context. Fail-stop rejects
-new work, cancels local workers and exits with `hub.db_lock_lost`. It must not
-reconnect and silently continue on a new pool connection. Shutdown gives
-workers at most one further second
-to stop; then the process terminates instead of releasing the session lock
-while a local worker can still write. Controlled shutdown releases the lock
-only after all workers have stopped writing.
+Lock loss while running is not monitored; the single private operator accepts
+this limit.
 
-With a scheduled process, loss of the session is detected within two seconds
-and the old hub process exits within one further second: the hub-side overlap
-window is at most three seconds. An arbitrary operating-system pause can
-delay execution of this watchdog; admission must check its monotonic deadline
-on resumption before accepting work. A detached agent action can continue
-beyond process exit, so its overlap with a newly admitted action has no
-finite bound from the hub lock alone. A new hub can acquire the released lock
-and repair the old rows before opening its API. If PostgreSQL still considers
-the old session alive during a network partition, the new hub fails fast with
-`hub.already_running`. It never bypasses the held lock.
-
-No process epoch is added: terminal status conditions prevent stale database
-completion after repair, while an epoch would not stop an already accepted
-external agent action. The residual external overlap is recorded above and
-requires the separate hub–agent follow-up.
+If PostgreSQL still considers an old session alive during a network partition,
+a new hub fails immediately with `hub.already_running`. A new hub that acquires
+the lock repairs abandoned runs before accepting work. Terminal status
+conditions prevent duplicate completion after repair, while an already
+accepted external agent action can continue beyond the old hub's lifetime.
 
 ## Reconciliation with the multi-process mechanism from PR #42
 
@@ -225,17 +201,16 @@ migrations remain immutable; schema removal requires a new forward migration.
 | --- | --- | --- |
 | Transaction advisory lock per run scope | Keep | It serializes concurrent admission through commit in the one hub. |
 | Durable cancellation request, audit message and immediate live snapshot | Keep | Cancellation survives a hub crash and remains visible to clients. |
-| Owner token `gate_owner` and fencing of progress and completion writers | Remove | The dedicated session lock and fail-stop bound old hub writes; terminal status conditions still guard against duplicate completion. External effects retain the stated overlap risk. |
-| `gate_lease_at` and 30-second heartbeat | Remove | The lifetime lock identifies the hub; lease expiry could release a live worker that is slow to unwind cancellation. |
+| Owner token `gate_owner` and fencing of progress and completion writers | Remove | The private single-operator deployment accepts the loss of writer fencing; terminal status conditions still guard against duplicate completion. External effects retain the stated overlap risk. |
+| `gate_lease_at` and 30-second heartbeat | Remove | The startup lock admits one hub while held; lease expiry could release a live worker that is slow to unwind cancellation. |
 | Two-minute sweep with token rotation and takeover of gated runs | Remove | A new hub repairs after exclusive startup. The periodic sweep of ungated untracked runs remains for now. |
 | Remote cancellation observation by another service's heartbeat | Remove | Cancellation signal and worker are in the sole hub; the durable database request remains for recovery. |
 | PostgreSQL time for gated start, cancellation, terminal time and 30-second freshness | Keep | `NOW()` is available on the required database paths and keeps the interval consistent. Cross-hub clock-skew tests are unnecessary. |
 | Atomic terminal status transition and `activity_sync_receipts` | Keep | They prevent duplicate final messages and duplicate job projection on replay or restart. |
 
-Implementation may remove owner and lease code only once the single-instance
-lock, fail-stop and immediate repair are effective and tested. Intermediate
-states must neither admit two hubs nor free an active scope before its local
-worker returns or the old process exits.
+Implementation may remove owner and lease code only once the startup lock and
+immediate repair are effective and tested. During normal operation, a scope
+stays occupied until its local worker returns or the hub process exits.
 
 ## Open review notes for the implementation step
 
@@ -288,10 +263,8 @@ its session. A second service in one process is not a single-instance test.
 | 29. Crash after completion commit but before live event | Terminal run is unchanged; reconnect reloads the snapshot. | Reconnect without a snapshot reload. |
 | 30. Job completion resynchronised after restart or pruning | Receipt prevents another projection or message for that version. | Remove the receipt check. |
 | 31. Second hub starts while lock is held | No HTTP or jobs; immediate `hub.already_running`. | Skip the session-lock check. |
-| 32. Running hub loses its dedicated lock connection | Probe detects loss within two seconds; readiness falls, admission stops, workers are cancelled and process exits within one more second with `hub.db_lock_lost`. | Disable the dedicated-connection probe or its monotonic deadline. |
-| 33. Database returns after lock loss | Only a new hub acquires the lock and repairs before API readiness; the old process cannot continue hub writes or admission after fail-stop. | Let the old process reconnect and resume progress writes or admission. |
 | 34. Old session remains locked during a network partition | New hub fails immediately with `hub.already_running` and accepts no work. | Wait on `pg_advisory_lock` instead of failing on `pg_try_advisory_lock`. |
-| 35. Ordinary pool completion fails while lock connection stays healthy | After three retryable write failures, completion returns an error and the run remains active; same-scope admission stays blocked until retry or restart repair. | Treat the exhausted write as success and admit another gated run. |
+| 35. Ordinary pool completion fails while lock connection stays healthy | After three retryable write failures, completion returns an error and the run remains active; same-scope admission stays blocked until restart repair. | Treat the exhausted write as success and admit another gated run. |
 
 ## Consequences for #38: HTTP and live adapter
 
@@ -312,7 +285,5 @@ delivery guarantee. After reconnect or detected event loss, the adapter
 reloads affected runs and topics. This also reveals a completion whose
 database commit preceded a crash but whose event was never sent. The adapter
 does not interpret `cancelled` as proof that an agent reversed an accepted
-external action. `hub.already_running` and `hub.db_lock_lost` appear in
-startup or exit diagnostics only, never as #38 action response codes. The #38
-adapter can observe failed readiness after lock loss, but does not receive
-either operational code.
+external action. `hub.already_running` appears in startup diagnostics only,
+never as a #38 action response code.

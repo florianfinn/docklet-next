@@ -73,7 +73,13 @@ func Bootstrap(ctx context.Context) error {
 	appCtx, cancelApp := context.WithCancel(ctx)
 	appCtx = utils.WithAppLifecycleContext(appCtx)
 
-	db, err := initializeDBAndMigrateInternal(appCtx, cfg)
+	var db *database.DB
+	var err error
+	if cfg.AgentMode {
+		db, err = initializeDBAndMigrateInternal(appCtx, cfg)
+	} else {
+		db, err = database.InitializeHub(appCtx, cfg.DatabaseURL, database.MigrationOptions{})
+	}
 	if err != nil {
 		cancelApp()
 		return fmt.Errorf("failed to initialize database: %w", err)

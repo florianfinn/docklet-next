@@ -1,5 +1,5 @@
 // Source: api/openapi.json
-// Revision: 92bc4a534c2cf9696d64d8320c7393d4fc9447b4783869d14531071cab48db00
+// Revision: a94edf80491ca3e6393bd5972362e7e520ce82d95b152b8e12d755149dadd121
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
 // Deviations: Generated TypeScript declarations from the local Huma export.
@@ -4231,6 +4231,8 @@ export interface components {
         ActivityActivity: {
             affectedServices?: string[] | null;
             batchId?: string;
+            /** Format: date-time */
+            cancelRequestedAt?: string;
             /** Format: date-time */
             createdAt: string;
             /** Format: int64 */
