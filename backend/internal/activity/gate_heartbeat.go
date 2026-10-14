@@ -8,22 +8,31 @@ package activity
 
 import (
 	"context"
+	"errors"
 	"log/slog"
 	"time"
 
 	activitytypes "github.com/florianfinn/docklet-next/types/activity"
+	"gorm.io/gorm"
 )
 
 const gateHeartbeatInterval = 30 * time.Second
 
-func (s *ActivityService) heartbeatGatedActivityInternal(ctx context.Context, id string) error {
-	return s.db.WithContext(ctx).Model(&Activity{}).
-		Where("id = ? AND status IN ?", id, []activitytypes.Status{activitytypes.StatusQueued, activitytypes.StatusRunning}).
-		Update("updated_at", time.Now().UTC()).Error
+func (s *ActivityService) heartbeatGatedActivityInternal(ctx context.Context, id, owner string) error {
+	result := s.db.WithContext(ctx).Model(&Activity{}).
+		Where("id = ? AND gate_owner = ? AND status IN ?", id, owner, []activitytypes.Status{activitytypes.StatusQueued, activitytypes.StatusRunning}).
+		Update("updated_at", gorm.Expr("NOW()"))
+	if result.Error != nil {
+		return result.Error
+	}
+	if result.RowsAffected == 0 {
+		return ErrLeaseLost
+	}
+	return nil
 }
 
-func (s *ActivityService) startGateHeartbeatInternal(id string) {
-	ctx, cancel := context.WithCancel(context.Background()) //nolint:forbidigo // Liveness outlives the starting request.
+func (s *ActivityService) startGateHeartbeatInternal(workCtx context.Context, id, owner string) {
+	ctx, cancel := context.WithCancel(workCtx)
 	s.gateHeartbeatMu.Lock()
 	if s.gateHeartbeats == nil {
 		s.gateHeartbeats = make(map[string]context.CancelFunc)
@@ -31,14 +40,26 @@ func (s *ActivityService) startGateHeartbeatInternal(id string) {
 	s.gateHeartbeats[id] = cancel
 	s.gateHeartbeatMu.Unlock()
 	go func() {
-		ticker := time.NewTicker(gateHeartbeatInterval)
-		defer ticker.Stop()
+		ticks := s.gateHeartbeatTicks
+		if ticks == nil {
+			interval := s.gateHeartbeatInterval
+			if interval <= 0 {
+				interval = gateHeartbeatInterval
+			}
+			ticker := time.NewTicker(interval)
+			defer ticker.Stop()
+			ticks = ticker.C
+		}
 		for {
 			select {
 			case <-ctx.Done():
 				return
-			case <-ticker.C:
-				if err := s.heartbeatGatedActivityInternal(ctx, id); err != nil && ctx.Err() == nil {
+			case <-ticks:
+				if err := s.heartbeatGatedActivityInternal(ctx, id, owner); err != nil && ctx.Err() == nil {
+					if errors.Is(err, ErrLeaseLost) {
+						s.cancelTrackedInternal(id, ErrLeaseLost)
+						return
+					}
 					slog.WarnContext(ctx, "failed to refresh gated activity heartbeat", "activityId", id, "error", err)
 				}
 			}
@@ -54,4 +75,11 @@ func (s *ActivityService) stopGateHeartbeatInternal(id string) {
 	if cancel != nil {
 		cancel()
 	}
+}
+
+func (s *ActivityService) hasGateHeartbeatInternal(id string) bool {
+	s.gateHeartbeatMu.Lock()
+	defer s.gateHeartbeatMu.Unlock()
+	_, ok := s.gateHeartbeats[id]
+	return ok
 }

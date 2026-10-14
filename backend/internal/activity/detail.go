@@ -14,6 +14,8 @@ import (
 	"github.com/florianfinn/docklet-next/types/activity"
 )
 
+const maxStepTransitions = 256
+
 func (s *ActivityService) GetActivityDetail(ctx context.Context, environmentID, activityID string, limit int) (*activity.Detail, error) {
 	if err := s.checkInitInternal(); err != nil {
 		return nil, err
@@ -43,11 +45,17 @@ func (s *ActivityService) GetActivityDetail(ctx context.Context, environmentID, 
 		outMessages = append(outMessages, activityMessageToDTOInternal(&v))
 	}
 	var stepMessages []ActivityMessage
-	if err := s.db.WithContext(ctx).Model(&ActivityMessage{}).
-		Select("id, step, code, created_at").Where("activity_id = ? AND step <> ''", activityID).
-		Order("created_at ASC, id ASC").Find(&stepMessages).Error; err != nil {
+	if err := s.db.WithContext(ctx).Raw(`
+		SELECT id, step, code, created_at FROM (
+			SELECT id, step, code, created_at,
+				LAG(step) OVER (ORDER BY created_at, id) AS previous_step
+			FROM activity_messages WHERE activity_id = ? AND step <> ''
+		) AS transitions
+		WHERE previous_step IS DISTINCT FROM step
+		ORDER BY created_at DESC, id DESC LIMIT ?`, activityID, maxStepTransitions).Scan(&stepMessages).Error; err != nil {
 		return nil, fmt.Errorf("failed to load activity steps: %w", err)
 	}
+	slices.Reverse(stepMessages)
 
 	return &activity.Detail{
 		Activity:  activityToDTOInternal(&model),

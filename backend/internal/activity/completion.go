@@ -15,6 +15,7 @@ import (
 	"strings"
 	"time"
 
+	activitylib "github.com/florianfinn/docklet-next/backend/pkg/libarcane/activity"
 	"github.com/florianfinn/docklet-next/backend/pkg/utils/dbutil"
 	"github.com/florianfinn/docklet-next/types/activity"
 	"gorm.io/gorm"
@@ -40,14 +41,22 @@ func (
 	if status != activity.StatusSuccess && status != activity.StatusFailed && status != activity.StatusCancelled {
 		status = activity.StatusSuccess
 	}
-
 	activityID = strings.TrimSpace(activityID)
 	if activityID == "" {
 		return nil, errors.New("activity id is required")
 	}
-	defer s.releaseCancelInternal(activityID)
-	defer s.releaseSlotInternal(activityID)
-	defer s.stopGateHeartbeatInternal(activityID)
+	owner, _ := ctx.Value(gateOwnerContextKey{}).(string)
+	if owner != "" || !s.hasGateHeartbeatInternal(activityID) {
+		defer s.releaseCancelInternal(activityID)
+		defer s.releaseSlotInternal(activityID)
+		defer s.stopGateHeartbeatInternal(activityID)
+	}
+	if errors.Is(context.Cause(ctx), ErrLeaseLost) {
+		return nil, ErrLeaseLost
+	}
+	if errors.Is(context.Cause(ctx), activitylib.ErrCanceled) {
+		status = activity.StatusCancelled
+	}
 
 	// Detach from cancellation so the terminal write always lands — completion is
 	// often triggered precisely because the work context was cancelled.
@@ -67,14 +76,30 @@ func (
 			if err := tx.First(&model, "id = ?", activityID).Error; err != nil {
 				return fmt.Errorf("failed to load activity: %w", err)
 			}
+			if model.GateOwner != "" && model.GateOwner != owner {
+				return ErrLeaseLost
+			}
 
 			updates := completeActivityUpdatesInternal(model.StartedAt, status, finalMessage, errMessage, finalStep, now)
 			code := string(activityCodeInternal(status))
-			result := tx.Model(&Activity{}).Where("id = ? AND status IN ?", activityID, []activity.Status{activity.StatusQueued, activity.StatusRunning}).Updates(updates)
+			query := tx.Model(&Activity{}).Where("id = ? AND status IN ?", activityID, []activity.Status{activity.StatusQueued, activity.StatusRunning})
+			if model.GateOwner != "" {
+				query = query.Where("gate_owner = ?", owner)
+			}
+			result := query.Updates(updates)
 			if result.Error != nil {
 				return fmt.Errorf("failed to complete activity: %w", result.Error)
 			}
 			completed = result.RowsAffected > 0
+			if !completed && model.GateOwner != "" {
+				var current Activity
+				if err := tx.First(&current, "id = ?", activityID).Error; err != nil {
+					return err
+				}
+				if current.GateOwner != owner {
+					return ErrLeaseLost
+				}
+			}
 			if completed && strings.TrimSpace(finalMessage) != "" {
 				level := activity.MessageLevelSuccess
 				switch status {

@@ -7,6 +7,7 @@
 package runs
 
 import (
+	"context"
 	"fmt"
 	"slices"
 	"testing"
@@ -15,6 +16,36 @@ import (
 	st "github.com/florianfinn/docklet-next/types/scheduler"
 	"github.com/stretchr/testify/require"
 )
+
+type receiptPruningObserverInternal struct {
+	activityObserverFakeInternal
+	retained []string
+}
+
+func (o *receiptPruningObserverInternal) PruneRunActivityReceipts(_ context.Context, retained []string) error {
+	o.retained = append([]string(nil), retained...)
+	return nil
+}
+
+func TestCoordinatorPruneWiresRetainedActivityReceipts(t *testing.T) {
+	q := newResolutionQueueInternal(t)
+	observer := &receiptPruningObserverInternal{}
+	initial, err := q.Submit(t.Context(), st.Request{JobID: "cleanup", Trigger: "scheduled"})
+	require.NoError(t, err)
+	old := time.Now().Add(-time.Hour)
+	require.NoError(t, q.mutateInternal(t.Context(), initial.EnvironmentID, initial.JobID, func(record *st.QueueRecord) error {
+		record.Runs = []st.Run{{ID: "retired", Status: st.Succeeded, Trigger: "scheduled", UpdatedAt: old}}
+		for i := range 100 {
+			record.Runs = append(record.Runs, st.Run{ID: fmt.Sprintf("kept-%03d", i), Status: st.Succeeded, Trigger: "scheduled", UpdatedAt: old.Add(time.Duration(i+1) * time.Minute)})
+		}
+		return nil
+	}))
+	q.SetObserver(observer)
+	require.NoError(t, q.pruneInternal(t.Context()))
+	require.Len(t, observer.retained, 100)
+	require.NotContains(t, observer.retained, "retired")
+	require.Contains(t, observer.retained, "kept-099")
+}
 
 func TestPendingCompletionSurvivesPruningUntilAcknowledged(t *testing.T) {
 	now := time.Now().UTC()

@@ -16,6 +16,7 @@ import (
 
 	"github.com/florianfinn/docklet-next/backend/internal/database"
 	activitytypes "github.com/florianfinn/docklet-next/types/activity"
+	"github.com/google/uuid"
 	"gorm.io/gorm"
 )
 
@@ -36,6 +37,8 @@ type GateRequest struct {
 type GateAnswer struct {
 	Run  activitytypes.Activity `json:"run"`
 	Code string                 `json:"code"`
+	// WorkContext belongs only to run.started and carries its fenced owner.
+	WorkContext context.Context `json:"-"`
 }
 
 type GateConflict struct {
@@ -49,7 +52,11 @@ func (e *GateConflict) Error() string { return e.Code }
 // Only run.started owns execution; its heartbeat lets every process distinguish
 // live gated work from a process that stopped before completion.
 func (s *ActivityService) StartGatedActivity(ctx context.Context, request GateRequest) (GateAnswer, error) {
-	return s.startGatedActivityAtInternal(ctx, request, time.Now().UTC())
+	now := time.Now
+	if s.clock != nil {
+		now = s.clock
+	}
+	return s.startGatedActivityAtInternal(ctx, request, now().UTC())
 }
 
 func (s *ActivityService) startGatedActivityAtInternal(ctx context.Context, request GateRequest, now time.Time) (GateAnswer, error) {
@@ -108,6 +115,7 @@ func (s *ActivityService) startGatedActivityAtInternal(ctx context.Context, requ
 			AffectedServices: servicesJSONInternal(request.AffectedServices),
 			GateKey:          request.Operation,
 			GateScope:        request.Scope,
+			GateOwner:        uuid.NewString(),
 			StartedAt:        now,
 			CreatedAt:        now,
 			Metadata:         database.JSON{},
@@ -115,16 +123,25 @@ func (s *ActivityService) startGatedActivityAtInternal(ctx context.Context, requ
 		if err := tx.Create(&model).Error; err != nil {
 			return fmt.Errorf("create gated activity: %w", err)
 		}
+		if err := tx.Model(&Activity{}).Where("id = ?", model.ID).Updates(map[string]any{
+			"started_at": gorm.Expr("NOW()"), "created_at": gorm.Expr("NOW()"), "updated_at": gorm.Expr("NOW()"),
+		}).Error; err != nil {
+			return fmt.Errorf("set gated activity database time: %w", err)
+		}
+		if err := tx.First(&model, "id = ?", model.ID).Error; err != nil {
+			return fmt.Errorf("load gated activity database time: %w", err)
+		}
 		return nil
 	})
 	if err != nil {
 		return GateAnswer{}, err
 	}
 	dto := activityToDTOInternal(&model)
+	var workCtx context.Context
 	if code == string(activitytypes.CodeRunStarted) {
-		s.Track(ctx, model.ID)
-		s.startGateHeartbeatInternal(model.ID)
+		workCtx = s.Track(context.WithValue(context.WithoutCancel(ctx), gateOwnerContextKey{}, model.GateOwner), model.ID)
+		s.startGateHeartbeatInternal(workCtx, model.ID, model.GateOwner)
 		s.publishActivityInternal(dto)
 	}
-	return GateAnswer{Run: dto, Code: code}, nil
+	return GateAnswer{Run: dto, Code: code, WorkContext: workCtx}, nil
 }

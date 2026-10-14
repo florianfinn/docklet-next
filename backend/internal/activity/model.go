@@ -39,6 +39,7 @@ type Activity struct {
 	AffectedServices     database.JSON   `json:"affectedServices,omitempty" gorm:"column:affected_services;type:text"`
 	GateKey              string          `json:"-" gorm:"column:gate_key;index"`
 	GateScope            string          `json:"-" gorm:"column:gate_scope;index"`
+	GateOwner            string          `json:"-" gorm:"column:gate_owner"`
 }
 
 func (Activity) TableName() string {

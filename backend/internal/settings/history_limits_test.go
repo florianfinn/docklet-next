@@ -45,3 +45,21 @@ func TestHistoryLimitsValidateAllWritePaths(t *testing.T) {
 		})
 	}
 }
+
+func TestHistoryLimitEnvironmentOverridesFailAtInitialization(t *testing.T) {
+	db := setupSettingsTestDB(t)
+	svc, err := newSettingsServiceForTestInternal(t, t.Context(), db)
+	require.NoError(t, err)
+	for _, tc := range []struct{ key, env, invalid string }{
+		{"eventHistoryMaxEntries", "EVENT_HISTORY_MAX_ENTRIES", "49"},
+		{"activityHistoryMaxEntries", "ACTIVITY_HISTORY_MAX_ENTRIES", "1001"},
+	} {
+		t.Run(tc.key, func(t *testing.T) {
+			t.Setenv(tc.env, tc.invalid)
+			_, err := svc.loadDatabaseConfigFromEnv(t.Context(), db)
+			require.ErrorIs(t, err, common.ErrValidation)
+			err = svc.upsertEnvSetting(t.Context(), db.DB, tc.key, tc.invalid)
+			require.ErrorIs(t, err, common.ErrValidation)
+		})
+	}
+}

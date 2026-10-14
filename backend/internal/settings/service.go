@@ -364,12 +364,16 @@ func (s *SettingsService) loadDatabaseConfigFromEnv(ctx context.Context, db *dat
 
 		// debug: log each env name checked and whether a value exists
 		if val, ok, _ := utils.LookupEnvOrFile(envVarName); ok {
+			val = kit.TrimQuotes(val)
+			if err := validateSettingValueInternal(key, val); err != nil {
+				return nil, fmt.Errorf("invalid environment setting %s: %w", key, err)
+			}
 			mask := "<empty>"
 			if val != "" {
 				mask = fmt.Sprintf("%d chars", len(val))
 			}
 			slog.DebugContext(ctx, "loadDatabaseConfigFromEnv: env override found", "key", key, "env", envVarName, "valueMasked", mask)
-			rv.Field(i).FieldByName("Value").SetString(kit.TrimQuotes(val))
+			rv.Field(i).FieldByName("Value").SetString(val)
 			continue
 		}
 		if val, ok := settingsMap[key]; ok {
@@ -841,31 +845,6 @@ func (s *SettingsService) shouldProcessField(key, attrs string, isEnvOnlyMode bo
 
 	// If not in env-only mode, only persist if it's explicitly marked as envOverride
 	return isEnvOnlyMode || strings.Contains(attrs, "envOverride")
-}
-
-func (s *SettingsService) upsertEnvSetting(ctx context.Context, tx *gorm.DB, key, envVal string) error {
-	var existing SettingVariable
-	err := tx.Where("key = ?", key).First(&existing).Error
-
-	switch {
-	case errors.Is(err, gorm.ErrRecordNotFound):
-		newVar := SettingVariable{Key: key, Value: envVal}
-		if createEnvSettingErr := tx.Create(&newVar).Error; createEnvSettingErr != nil {
-			return fmt.Errorf("persist env setting %s: %w", key, createEnvSettingErr)
-		}
-		slog.DebugContext(ctx, "Created setting from environment", "key", key)
-	case err != nil:
-		return fmt.Errorf("check setting %s: %w", key, err)
-	default:
-		if existing.Value != envVal {
-			if updateEnvSettingErr := tx.Model(&existing).Update("value", envVal).Error; updateEnvSettingErr != nil {
-				return fmt.Errorf("update env setting %s: %w", key, updateEnvSettingErr)
-			}
-			slog.DebugContext(ctx, "Updated setting from environment", "key", key)
-		}
-	}
-
-	return nil
 }
 
 func (s *SettingsService) ListSettings(visibility SettingVisibility) []SettingVariable {

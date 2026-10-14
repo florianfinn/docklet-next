@@ -71,7 +71,7 @@ func TestRunGateJoinConflictAndFreshnessBoundary(t *testing.T) {
 	require.True(t, errors.As(err, &busy))
 	require.Equal(t, "run.busy", busy.Code)
 	require.Equal(t, started.Run.ID, busy.RunID)
-	completed, err := svc.CompleteActivity(ctx, started.Run.ID, activity.StatusSuccess, "checked", nil)
+	completed, err := svc.CompleteActivity(started.WorkContext, started.Run.ID, activity.StatusSuccess, "checked", nil)
 	require.NoError(t, err)
 	fresh, err := svc.startGatedActivityAtInternal(ctx, request, completed.EndedAt.Add(CheckFreshness-time.Nanosecond))
 	require.NoError(t, err)
@@ -83,12 +83,63 @@ func TestRunGateJoinConflictAndFreshnessBoundary(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, "run.started", rechecked.Code)
 	require.NotEqual(t, started.Run.ID, rechecked.Run.ID)
-	recheckedCompletion, err := svc.CompleteActivity(ctx, rechecked.Run.ID, activity.StatusSuccess, "checked again", nil)
+	recheckedCompletion, err := svc.CompleteActivity(rechecked.WorkContext, rechecked.Run.ID, activity.StatusSuccess, "checked again", nil)
 	require.NoError(t, err)
 	atBoundary, err := svc.startGatedActivityAtInternal(ctx, request, recheckedCompletion.EndedAt.Add(CheckFreshness))
 	require.NoError(t, err)
 	require.Equal(t, "run.started", atBoundary.Code)
 	require.NotEqual(t, started.Run.ID, atBoundary.Run.ID)
+}
+
+func TestActivityWritesRejectUnknownMessageCodes(t *testing.T) {
+	db := setupActivityServiceTestDBInternal(t)
+	svc := NewActivityService(db, nil)
+	_, err := svc.StartActivity(t.Context(), StartActivityRequest{Type: activity.TypeProjectDeploy, MessageCode: "unlisted.code"})
+	require.Error(t, err)
+	run, err := svc.StartActivity(t.Context(), StartActivityRequest{Type: activity.TypeProjectDeploy})
+	require.NoError(t, err)
+	invalid := "unlisted.code"
+	_, err = svc.UpdateActivity(t.Context(), run.ID, UpdateActivityRequest{MessageCode: &invalid})
+	require.Error(t, err)
+	_, err = svc.AppendMessages(t.Context(), run.ID, []AppendActivityMessageRequest{{Message: "valid"}, {Message: "invalid", Code: invalid}})
+	require.Error(t, err)
+	var count int64
+	require.NoError(t, db.Model(&ActivityMessage{}).Where("activity_id = ?", run.ID).Count(&count).Error)
+	require.Zero(t, count)
+}
+
+func TestQueuedToRunningSetsRunningCode(t *testing.T) {
+	db := setupActivityServiceTestDBInternal(t)
+	svc := NewActivityService(db, nil)
+	run, err := svc.StartActivity(t.Context(), StartActivityRequest{Type: activity.TypeProjectDeploy, Queue: true, DeferSlot: true})
+	require.NoError(t, err)
+	require.Equal(t, string(activity.CodeActivityQueued), run.MessageCode)
+	require.NoError(t, svc.AwaitActivitySlot(t.Context(), run.ID, "0"))
+	var running Activity
+	require.NoError(t, db.First(&running, "id = ?", run.ID).Error)
+	require.Equal(t, activity.StatusRunning, running.Status)
+	require.Equal(t, string(activity.CodeActivityRunning), running.MessageCode)
+	_, err = svc.CompleteActivity(t.Context(), run.ID, activity.StatusSuccess, "done", nil)
+	require.NoError(t, err)
+}
+
+func TestRunDetailBoundsDistinctStepTransitions(t *testing.T) {
+	db := setupActivityServiceTestDBInternal(t)
+	svc := NewActivityService(db, nil)
+	run, err := svc.StartActivity(t.Context(), StartActivityRequest{Type: activity.TypeProjectDeploy})
+	require.NoError(t, err)
+	messages := make([]AppendActivityMessageRequest, 0, 600)
+	for i := range 300 {
+		step := fmt.Sprintf("step-%03d", i)
+		messages = append(messages, AppendActivityMessageRequest{Message: "begin", Step: step}, AppendActivityMessageRequest{Message: "progress", Step: step})
+	}
+	_, err = svc.AppendMessages(t.Context(), run.ID, messages)
+	require.NoError(t, err)
+	detail, err := svc.GetActivityDetail(t.Context(), "0", run.ID, 10)
+	require.NoError(t, err)
+	require.Len(t, detail.StepTrace, maxStepTransitions)
+	require.Equal(t, "step-044", detail.StepTrace[0].Name)
+	require.Equal(t, "step-299", detail.StepTrace[len(detail.StepTrace)-1].Name)
 }
 
 func TestRunGateAdvisoryLockBlocksAnotherService(t *testing.T) {
@@ -118,7 +169,7 @@ func TestRunGateAdvisoryLockBlocksAnotherService(t *testing.T) {
 	select {
 	case got := <-result:
 		require.NoError(t, got.err)
-		_, err := svc.CompleteActivity(t.Context(), got.answer.Run.ID, activity.StatusSuccess, "done", nil)
+		_, err := svc.CompleteActivity(got.answer.WorkContext, got.answer.Run.ID, activity.StatusSuccess, "done", nil)
 		require.NoError(t, err)
 	case <-time.After(5 * time.Second):
 		t.Fatal("start remained blocked after advisory lock released")
@@ -128,6 +179,7 @@ func TestRunGateAdvisoryLockBlocksAnotherService(t *testing.T) {
 func TestGatedRunHeartbeatSurvivesThreeMinuteSweep(t *testing.T) {
 	db := setupActivityServiceTestDBInternal(t)
 	owner := NewActivityService(db, nil)
+	owner.gateHeartbeatInterval = 10 * time.Millisecond
 	sweeper := NewActivityService(db, nil)
 	request := GateRequest{Operation: "deploy", Scope: "stack:example", Type: activity.TypeProjectDeploy}
 	started, err := owner.StartGatedActivity(t.Context(), request)
@@ -136,7 +188,13 @@ func TestGatedRunHeartbeatSurvivesThreeMinuteSweep(t *testing.T) {
 	old := time.Now().Add(-3 * time.Minute)
 	require.NoError(t, db.Model(&Activity{}).Where("id = ?", started.Run.ID).
 		Updates(map[string]any{"started_at": old, "updated_at": old}).Error)
-	require.NoError(t, owner.heartbeatGatedActivityInternal(t.Context(), started.Run.ID))
+	require.Eventually(t, func() bool {
+		var refreshed Activity
+		if err := db.First(&refreshed, "id = ?", started.Run.ID).Error; err != nil {
+			return false
+		}
+		return refreshed.UpdatedAt.After(old)
+	}, time.Second, 10*time.Millisecond)
 	swept, err := sweeper.FailAbandonedActivities(t.Context())
 	require.NoError(t, err)
 	require.Zero(t, swept)
@@ -146,7 +204,7 @@ func TestGatedRunHeartbeatSurvivesThreeMinuteSweep(t *testing.T) {
 	var busy *GateConflict
 	require.ErrorAs(t, err, &busy)
 	require.Equal(t, "run.busy", busy.Code)
-	finished, err := owner.CompleteActivity(t.Context(), started.Run.ID, activity.StatusSuccess, "finished", nil)
+	finished, err := owner.CompleteActivity(started.WorkContext, started.Run.ID, activity.StatusSuccess, "finished", nil)
 	require.NoError(t, err)
 	require.Equal(t, activity.StatusSuccess, finished.Status)
 }
@@ -256,7 +314,7 @@ func TestEveryTerminalPathSetsMatchingMessageCode(t *testing.T) {
 		require.NoError(t, err)
 		require.Equal(t, activity.StatusRunning, answer.Run.Status)
 		require.Equal(t, "run.started", answer.Run.MessageCode)
-		_, err = svc.CompleteActivity(t.Context(), answer.Run.ID, activity.StatusSuccess, "done", nil)
+		_, err = svc.CompleteActivity(answer.WorkContext, answer.Run.ID, activity.StatusSuccess, "done", nil)
 		require.NoError(t, err)
 	})
 }
