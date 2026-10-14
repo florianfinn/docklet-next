@@ -10,6 +10,7 @@ package activity
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
@@ -45,7 +46,7 @@ func TestRunGate_ProcessFixture(t *testing.T) {
 	orm, err := gorm.Open(postgres.New(postgres.Config{Conn: pool}), &gorm.Config{})
 	require.NoError(t, err)
 	db := &database.DB{DB: orm}
-	require.NoError(t, db.AcquireHubLock(t.Context()))
+	matrixAcquireHubLock(t, db)
 	svc := NewActivityService(db, nil)
 	if mode == "job_complete" {
 		id := uuid.NewString()
@@ -111,9 +112,25 @@ func matrixPreviousHub(t *testing.T, db *database.DB, mode string) string {
 
 func matrixNewHub(t *testing.T, db *database.DB) *ActivityService {
 	t.Helper()
-	require.NoError(t, db.AcquireHubLock(t.Context()))
+	matrixAcquireHubLock(t, db)
 	t.Cleanup(func() { require.NoError(t, db.HubLock().Stop()) })
 	return NewActivityService(db, nil)
+}
+
+func matrixAcquireHubLock(t *testing.T, db *database.DB) {
+	t.Helper()
+	deadline := time.Now().Add(5 * time.Second)
+	for {
+		err := db.AcquireHubLock(t.Context())
+		if err == nil {
+			return
+		}
+		if !errors.Is(err, database.ErrHubAlreadyRunning) || time.Now().After(deadline) {
+			require.NoError(t, err)
+		}
+		// A crashed process can exit before PostgreSQL releases its session lock.
+		time.Sleep(10 * time.Millisecond)
+	}
 }
 
 func TestRunGate_Case25_CrashWhileRunning(t *testing.T) {
