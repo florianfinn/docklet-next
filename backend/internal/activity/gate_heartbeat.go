@@ -12,21 +12,22 @@ import (
 	"log/slog"
 	"time"
 
-	activitytypes "github.com/florianfinn/docklet-next/types/activity"
-	"gorm.io/gorm"
+	activitylib "github.com/florianfinn/docklet-next/backend/pkg/libarcane/activity"
 )
 
 const gateHeartbeatInterval = 30 * time.Second
 
 func (s *ActivityService) heartbeatGatedActivityInternal(ctx context.Context, id, owner string) error {
-	result := s.db.WithContext(ctx).Model(&Activity{}).
-		Where("id = ? AND gate_owner = ? AND status IN ?", id, owner, []activitytypes.Status{activitytypes.StatusQueued, activitytypes.StatusRunning}).
-		Update("updated_at", gorm.Expr("NOW()"))
-	if result.Error != nil {
-		return result.Error
+	var result struct{ CancelRequestedAt *time.Time }
+	write := s.db.WithContext(ctx).Raw("UPDATE activities SET gate_lease_at = NOW() WHERE id = ? AND gate_owner = ? AND status IN ('queued', 'running') RETURNING cancel_requested_at", id, owner).Scan(&result)
+	if write.Error != nil {
+		return write.Error
 	}
-	if result.RowsAffected == 0 {
+	if write.RowsAffected == 0 {
 		return ErrLeaseLost
+	}
+	if result.CancelRequestedAt != nil {
+		s.cancelTrackedInternal(id, activitylib.ErrCanceled)
 	}
 	return nil
 }

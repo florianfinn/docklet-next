@@ -19,8 +19,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/google/uuid"
-
 	"github.com/florianfinn/docklet-next/types/activity"
 	"github.com/florianfinn/docklet-next/types/scheduler"
 	"github.com/florianfinn/docklet-next/types/user"
@@ -43,7 +41,6 @@ const (
 	defaultActivityRetentionDays = 30
 	defaultActivityHistoryLimit  = 1000
 	defaultActivityMessages      = 500
-	staleImageUpdateCheckAge     = 6 * time.Hour
 	// abandonedActivityGrace is how old an untracked queued/running activity
 	// must be before the periodic sweep fails it. It covers the window between
 	// StartActivity's row creation and the worker's Track call.
@@ -509,7 +506,7 @@ func (s *ActivityService) UpdateActivity(ctx context.Context, activityID string,
 	}
 
 	updates := map[string]any{
-		"updated_at": time.Now(),
+		"updated_at": gorm.Expr("NOW()"),
 	}
 	if req.Status != "" {
 		updates["status"] = req.Status
@@ -557,6 +554,9 @@ func (s *ActivityService) UpdateActivity(ctx context.Context, activityID string,
 	if err := s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		owner, _ := ctx.Value(gateOwnerContextKey{}).(string)
 		query := tx.Model(&Activity{}).Where("id = ? AND status NOT IN ?", activityID, terminalActivityStatusesInternal())
+		if isTerminalActivityStatusInternal(req.Status) {
+			query = query.Where("COALESCE(gate_scope, '') = ''")
+		}
 		if owner != "" {
 			query = query.Where("gate_owner = ?", owner)
 		} else {
@@ -611,7 +611,7 @@ func (s *ActivityService) AppendMessages(ctx context.Context, activityID string,
 		}
 	}
 
-	messages, updates := buildAppendBatchInternal(activityID, reqs)
+	messages, updates := buildAppendBatchInternal(activityID, reqs, s.nowInternal())
 	if len(messages) == 0 {
 		return nil, nil
 	}
@@ -642,8 +642,7 @@ func (s *ActivityService) AppendMessages(ctx context.Context, activityID string,
 // buildAppendBatchInternal turns the request batch into insertable message rows
 // plus the coalesced Activity column updates (latest message/progress/step from
 // the last request carrying each).
-func buildAppendBatchInternal(activityID string, reqs []AppendActivityMessageRequest) ([]*ActivityMessage, map[string]any) {
-	now := time.Now()
+func buildAppendBatchInternal(activityID string, reqs []AppendActivityMessageRequest, now time.Time) ([]*ActivityMessage, map[string]any) {
 	messages := make([]*ActivityMessage, 0, len(reqs))
 	latestMessage := ""
 	latestCode := ""
@@ -689,7 +688,7 @@ func buildAppendBatchInternal(activityID string, reqs []AppendActivityMessageReq
 	updates := map[string]any{
 		"latest_message": latestMessage,
 		"message_code":   latestCode,
-		"updated_at":     now,
+		"updated_at":     gorm.Expr("NOW()"),
 	}
 	if latestProgress != nil {
 		updates["progress"] = *clampProgressPtrInternal(latestProgress)
@@ -720,6 +719,15 @@ func (s *ActivityService) appendBatchWithRetryInternal(ctx context.Context, acti
 			owner, _ := ctx.Value(gateOwnerContextKey{}).(string)
 			if current.GateOwner != owner {
 				return ErrLeaseLost
+			}
+			if current.GateScope != "" {
+				var databaseNow time.Time
+				if err := tx.Raw("SELECT NOW()").Scan(&databaseNow).Error; err != nil {
+					return err
+				}
+				for i := range messages {
+					messages[i].CreatedAt = databaseNow.Add(time.Duration(i) * time.Microsecond)
+				}
 			}
 
 			query := tx.Model(&Activity{}).Where("id = ? AND status NOT IN ?", activityID, terminalActivityStatusesInternal())
@@ -755,145 +763,6 @@ func (s *ActivityService) appendBatchWithRetryInternal(ctx context.Context, acti
 	return nil, writeErr
 }
 
-// FailStaleImageUpdateChecks marks image update checks that were left running
-// across a prior process lifetime as failed. It intentionally scopes cleanup to
-// old image-update-check activities so startup repair cannot affect other work.
-func (s *ActivityService) FailStaleImageUpdateChecks(ctx context.Context) (int64, error) {
-	if s == nil || s.db == nil {
-		return 0, nil
-	}
-
-	cutoff := time.Now().Add(-staleImageUpdateCheckAge)
-	var staleChecks []Activity
-	if err := s.db.WithContext(ctx).
-		Where("type = ? AND status = ? AND started_at < ?", activity.TypeImageUpdateCheck, activity.StatusRunning, cutoff).
-		Find(&staleChecks).Error; err != nil {
-		return 0, fmt.Errorf("find stale image update checks: %w", err)
-	}
-
-	const message = "Image update check failed because it was stale after Arcane restarted"
-	errMessage := message
-	var failed int64
-	var failErrs []error
-	for i := range staleChecks {
-		if _, err := s.CompleteActivity(ctx, staleChecks[i].ID, activity.StatusFailed, message, &errMessage, "Image update check failed"); err != nil {
-			failErrs = append(failErrs, fmt.Errorf("fail stale image update check %s: %w", staleChecks[i].ID, err))
-			continue
-		}
-		failed++
-	}
-
-	return failed, errors.Join(failErrs...)
-}
-
-// isTrackedInternal reports whether activityID has a live work registration in
-// this process (i.e. a worker goroutine called Track and has not completed yet).
-func (s *ActivityService) isTrackedInternal(activityID string) bool {
-	s.runningMu.Lock()
-	defer s.runningMu.Unlock()
-	_, ok := s.running[activityID]
-	return ok
-}
-
-// FailAbandonedActivities fails untracked local work and gated work whose
-// database heartbeat expired. The guarded terminal update fences a gated
-// owner before another operation can enter the same scope.
-func (s *ActivityService) FailAbandonedActivities(ctx context.Context) (int64, error) {
-	if s == nil || s.db == nil {
-		return 0, nil
-	}
-
-	activeStatuses := []activity.Status{activity.StatusQueued, activity.StatusRunning}
-	var candidates []Activity
-	if err := s.db.WithContext(ctx).
-		Where("status IN ? AND started_at < NOW() - INTERVAL '2 minutes' AND (COALESCE(gate_scope, '') = '' OR updated_at < NOW() - INTERVAL '2 minutes')", activeStatuses).
-		Where("type <> ?", activity.TypeJobRun).
-		Find(&candidates).Error; err != nil {
-		return 0, fmt.Errorf("find abandoned activities: %w", err)
-	}
-
-	const message = "Activity was marked failed because its worker is no longer running"
-	errMessage := message
-	var swept int64
-	var sweepErrs []error
-	for i := range candidates {
-		activityID := candidates[i].ID
-		if candidates[i].GateScope == "" && s.isTrackedInternal(activityID) {
-			continue
-		}
-
-		now := time.Now()
-		var finalized Activity
-		lostRace := false
-		if err := s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
-			updates := completeActivityUpdatesInternal(candidates[i].StartedAt, activity.StatusFailed, message, &errMessage, nil, now)
-			if candidates[i].GateOwner != "" {
-				updates["gate_owner"] = uuid.NewString()
-			}
-			result := tx.Model(&Activity{}).
-				Where("id = ? AND status IN ? AND COALESCE(gate_owner, '') = ? AND (COALESCE(gate_scope, '') = '' OR updated_at < NOW() - INTERVAL '2 minutes')", activityID, activeStatuses, candidates[i].GateOwner).
-				Updates(updates)
-			if result.Error != nil {
-				return fmt.Errorf("fail abandoned activity: %w", result.Error)
-			}
-			if result.RowsAffected == 0 {
-				lostRace = true
-				return nil
-			}
-			if err := tx.First(&finalized, "id = ?", activityID).Error; err != nil {
-				return fmt.Errorf("load failed abandoned activity: %w", err)
-			}
-			return nil
-		}); err != nil {
-			sweepErrs = append(sweepErrs, fmt.Errorf("sweep activity %s: %w", activityID, err))
-			continue
-		}
-		if lostRace {
-			continue
-		}
-
-		s.releaseSlotInternal(activityID)
-		s.releaseCancelInternal(activityID)
-		s.stopGateHeartbeatInternal(activityID)
-		s.publishTerminalSnapshotInternal(ctx, &finalized)
-		swept++
-	}
-
-	return swept, errors.Join(sweepErrs...)
-}
-
-// ResolveOrphanedQueuedActivities fails any activity still queued at startup.
-// Queued state is owned by a live goroutine blocked on AwaitActivitySlot, so a
-// queued row after a restart can never start running.
-func (s *ActivityService) ResolveOrphanedQueuedActivities(ctx context.Context, protectedIDs ...string) (int64, error) {
-	if s == nil || s.db == nil {
-		return 0, nil
-	}
-
-	var queued []Activity
-	if err := s.db.WithContext(ctx).
-		Where("status = ?", activity.StatusQueued).
-		Where("type <> ?", activity.TypeJobRun).
-		Where("id NOT IN ?", append(protectedIDs, "")).
-		Find(&queued).Error; err != nil {
-		return 0, fmt.Errorf("find orphaned queued activities: %w", err)
-	}
-
-	const message = "Queued activity was interrupted by an Arcane restart"
-	errMessage := message
-	var failed int64
-	var failErrs []error
-	for i := range queued {
-		if _, err := s.CompleteActivity(ctx, queued[i].ID, activity.StatusFailed, message, &errMessage); err != nil {
-			failErrs = append(failErrs, fmt.Errorf("fail orphaned queued activity %s: %w", queued[i].ID, err))
-			continue
-		}
-		failed++
-	}
-
-	return failed, errors.Join(failErrs...)
-}
-
 // PatchActivityMetadata merges patch into the activity's existing metadata,
 // unlike UpdateActivity which replaces the metadata wholesale.
 func (s *ActivityService) PatchActivityMetadata(ctx context.Context, activityID string, patch database.JSON) error {
@@ -918,51 +787,23 @@ func (s *ActivityService) PatchActivityMetadata(ctx context.Context, activityID 
 			merged = database.JSON{}
 		}
 		maps.Copy(merged, patch)
-		if err := tx.Model(&Activity{}).Where("id = ?", activityID).
-			Updates(map[string]any{"metadata": merged, "updated_at": time.Now()}).Error; err != nil {
-			return fmt.Errorf("failed to patch activity metadata: %w", err)
+		query := tx.Model(&Activity{}).Where("id = ?", activityID)
+		if record.GateScope != "" {
+			owner, _ := ctx.Value(gateOwnerContextKey{}).(string)
+			if owner == "" || owner != record.GateOwner {
+				return ErrLeaseLost
+			}
+			query = query.Where("gate_owner = ? AND status IN ?", owner, []activity.Status{activity.StatusQueued, activity.StatusRunning})
+		}
+		result := query.Updates(map[string]any{"metadata": merged, "updated_at": gorm.Expr("NOW()")})
+		if result.Error != nil {
+			return fmt.Errorf("failed to patch activity metadata: %w", result.Error)
+		}
+		if result.RowsAffected == 0 {
+			return ErrLeaseLost
 		}
 		return nil
 	})
-}
-
-// ResolveStaleAutoUpdateActivities finalizes auto-update activities left
-// running by a prior process lifetime. A run whose metadata marks a triggered
-// self-update completed by restarting Arcane, so it is recorded as success;
-// anything else still running at startup was interrupted and is failed.
-func (s *ActivityService) ResolveStaleAutoUpdateActivities(ctx context.Context, protectedIDs ...string) (int64, error) {
-	if s == nil || s.db == nil {
-		return 0, nil
-	}
-
-	var stale []Activity
-	if err := s.db.WithContext(ctx).
-		Where("type = ? AND status = ?", activity.TypeAutoUpdate, activity.StatusRunning).
-		Where("id NOT IN ?", append(protectedIDs, "")).
-		Find(&stale).Error; err != nil {
-		return 0, fmt.Errorf("find stale auto-update activities: %w", err)
-	}
-
-	var resolved int64
-	var resolveErrs []error
-	for i := range stale {
-		status := activity.StatusFailed
-		message := "Auto-update interrupted by Arcane restart"
-		var errMessage *string
-		if selfUpdate, _ := stale[i].Metadata["selfUpdateTriggered"].(bool); selfUpdate {
-			status = activity.StatusSuccess
-			message = "Auto-update completed — Arcane restarted with the updated image"
-		} else {
-			errMessage = new(message)
-		}
-		if _, err := s.CompleteActivity(ctx, stale[i].ID, status, message, errMessage); err != nil {
-			resolveErrs = append(resolveErrs, fmt.Errorf("resolve stale auto-update activity %s: %w", stale[i].ID, err))
-			continue
-		}
-		resolved++
-	}
-
-	return resolved, errors.Join(resolveErrs...)
 }
 
 func (s *ActivityService) ListActivitiesPaginated(ctx context.Context, environmentID string, params pagination.QueryParams) ([]activity.Activity, pagination.Response, error) {
@@ -1397,6 +1238,9 @@ func (s *ActivityService) SyncJobRun(ctx context.Context, run scheduler.Run, nam
 		}
 		if existing.Type != activity.TypeJobRun {
 			return errors.New("job activity identity belongs to another operation")
+		}
+		if existing.GateScope != "" {
+			return ErrLeaseLost
 		}
 		if stamp, ok := existing.Metadata["runUpdatedAt"].(string); ok {
 			previous, parseErr := time.Parse(time.RFC3339Nano, stamp)

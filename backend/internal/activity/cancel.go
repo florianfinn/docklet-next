@@ -17,15 +17,13 @@ import (
 
 	"github.com/florianfinn/docklet-next/backend/pkg/utils"
 	"github.com/florianfinn/docklet-next/types/activity"
-	"github.com/google/uuid"
 	"gorm.io/gorm"
 )
 
 // CancelActivity requests cancellation of a running or queued activity. When the
-// activity's work is running in this process it interrupts it (the work finalizes
-// its own terminal status); otherwise it marks the activity cancelled directly,
-// but only if it is still active. Returns ErrActivityNotCancelable if the activity
-// has already reached a terminal state, or gorm.ErrRecordNotFound if it is unknown.
+// gated work records a durable request and its owner finalizes after stopping.
+// Ungated local work finalizes itself; untracked ungated work is finalized here.
+// Terminal or unknown activities return ErrActivityNotCancelable or record not found.
 func (s *ActivityService) CancelActivity(ctx context.Context, environmentID, activityID, requestedBy string) (*activity.Activity, error) {
 	if err := s.checkInitInternal(); err != nil {
 		return nil, err
@@ -51,10 +49,23 @@ func (s *ActivityService) CancelActivity(ctx context.Context, environmentID, act
 	}
 
 	requestedBy = cmp.Or(strings.TrimSpace(requestedBy), "a user")
-	writeCtx := utils.ActivityRuntimeContext(ctx, nil)
-	if model.GateOwner != "" {
-		writeCtx = context.WithValue(writeCtx, gateOwnerContextKey{}, model.GateOwner)
+	if model.GateScope != "" {
+		result := s.db.WithContext(ctx).Model(&Activity{}).
+			Where("id = ? AND environment_id = ? AND gate_owner = ? AND status IN ?", activityID, environmentID, model.GateOwner, []activity.Status{activity.StatusQueued, activity.StatusRunning}).
+			Update("cancel_requested_at", gorm.Expr("COALESCE(cancel_requested_at, NOW())"))
+		if result.Error != nil {
+			return nil, fmt.Errorf("request gated activity cancellation: %w", result.Error)
+		}
+		if result.RowsAffected == 0 {
+			return nil, ErrActivityNotCancelable
+		}
+		s.RequestCancel(activityID)
+		if err := s.db.WithContext(ctx).First(&model, "id = ?", activityID).Error; err != nil {
+			return nil, err
+		}
+		return new(activityToDTOInternal(&model)), nil
 	}
+	writeCtx := utils.ActivityRuntimeContext(ctx, nil)
 	if _, err := s.AppendMessage(writeCtx, activityID, AppendActivityMessageRequest{
 		Level:   activity.MessageLevelWarning,
 		Message: "Cancellation requested by " + requestedBy,
@@ -62,7 +73,7 @@ func (s *ActivityService) CancelActivity(ctx context.Context, environmentID, act
 		slog.DebugContext(ctx, "failed to append cancellation message", "activityId", activityID, "error", err)
 	}
 
-	if s.RequestCancel(activityID) && model.GateOwner == "" {
+	if s.RequestCancel(activityID) {
 		// The running work observes the cancelled context and writes its own
 		// terminal status, which reaches clients via the activity stream. Return
 		// the pre-cancel snapshot rather than reloading here: the worker has not
@@ -70,8 +81,7 @@ func (s *ActivityService) CancelActivity(ctx context.Context, environmentID, act
 		return new(activityToDTOInternal(&model)), nil
 	}
 
-	// Gated work is fenced immediately after cancellation. Ungated work with no
-	// local runner is also finalized here.
+	// Ungated work without a local runner is finalized here.
 	now := time.Now()
 	var finalized Activity
 	if err := s.db.WithContext(writeCtx).Transaction(func(tx *gorm.DB) error {
@@ -79,9 +89,6 @@ func (s *ActivityService) CancelActivity(ctx context.Context, environmentID, act
 			return err
 		}
 		updates := completeActivityUpdatesInternal(finalized.StartedAt, activity.StatusCancelled, cancelledMessageInternal, nil, nil, now)
-		if finalized.GateOwner != "" {
-			updates["gate_owner"] = uuid.NewString()
-		}
 		result := tx.Model(&Activity{}).
 			Where("id = ? AND status IN ? AND COALESCE(gate_owner, '') = ?", activityID, []activity.Status{activity.StatusQueued, activity.StatusRunning}, finalized.GateOwner).
 			Updates(updates)

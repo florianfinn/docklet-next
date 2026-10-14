@@ -52,14 +52,10 @@ func (e *GateConflict) Error() string { return e.Code }
 // Only run.started owns execution; its heartbeat lets every process distinguish
 // live gated work from a process that stopped before completion.
 func (s *ActivityService) StartGatedActivity(ctx context.Context, request GateRequest) (GateAnswer, error) {
-	now := time.Now
-	if s.clock != nil {
-		now = s.clock
-	}
-	return s.startGatedActivityAtInternal(ctx, request, now().UTC())
+	return s.startGatedActivityAtInternal(ctx, request)
 }
 
-func (s *ActivityService) startGatedActivityAtInternal(ctx context.Context, request GateRequest, now time.Time) (GateAnswer, error) {
+func (s *ActivityService) startGatedActivityAtInternal(ctx context.Context, request GateRequest) (GateAnswer, error) {
 	if err := s.checkInitInternal(); err != nil {
 		return GateAnswer{}, err
 	}
@@ -95,7 +91,7 @@ func (s *ActivityService) startGatedActivityAtInternal(ctx context.Context, requ
 		}
 		if request.Check && !request.Recheck {
 			var fresh Activity
-			err = tx.Where("environment_id = ? AND gate_scope = ? AND gate_key = ? AND status = ? AND ended_at > ?", request.EnvironmentID, request.Scope, request.Operation, activitytypes.StatusSuccess, now.Add(-CheckFreshness)).Order("ended_at DESC, id DESC").First(&fresh).Error
+			err = tx.Where("environment_id = ? AND gate_scope = ? AND gate_key = ? AND status = ? AND ended_at > NOW() - (? * INTERVAL '1 second')", request.EnvironmentID, request.Scope, request.Operation, activitytypes.StatusSuccess, int(CheckFreshness/time.Second)).Order("ended_at DESC, id DESC").First(&fresh).Error
 			if err == nil {
 				model = fresh
 				code = string(activitytypes.CodeRunFresh)
@@ -116,15 +112,14 @@ func (s *ActivityService) startGatedActivityAtInternal(ctx context.Context, requ
 			GateKey:          request.Operation,
 			GateScope:        request.Scope,
 			GateOwner:        uuid.NewString(),
-			StartedAt:        now,
-			CreatedAt:        now,
+			StartedAt:        s.nowInternal(),
 			Metadata:         database.JSON{},
 		}
 		if err := tx.Create(&model).Error; err != nil {
 			return fmt.Errorf("create gated activity: %w", err)
 		}
 		if err := tx.Model(&Activity{}).Where("id = ?", model.ID).Updates(map[string]any{
-			"started_at": gorm.Expr("NOW()"), "created_at": gorm.Expr("NOW()"), "updated_at": gorm.Expr("NOW()"),
+			"started_at": gorm.Expr("NOW()"), "created_at": gorm.Expr("NOW()"), "updated_at": gorm.Expr("NOW()"), "gate_lease_at": gorm.Expr("NOW()"),
 		}).Error; err != nil {
 			return fmt.Errorf("set gated activity database time: %w", err)
 		}

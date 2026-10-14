@@ -62,7 +62,7 @@ func (
 	// often triggered precisely because the work context was cancelled.
 	ctx = context.WithoutCancel(ctx)
 
-	now := time.Now()
+	now := s.nowInternal()
 	var model Activity
 	var final *ActivityMessage
 	completed := false
@@ -79,8 +79,23 @@ func (
 			if model.GateOwner != "" && model.GateOwner != owner {
 				return ErrLeaseLost
 			}
+			if model.GateScope != "" {
+				if err := tx.Raw("SELECT NOW()").Scan(&now).Error; err != nil {
+					return err
+				}
+			}
+			if model.GateScope != "" && model.CancelRequestedAt != nil {
+				status = activity.StatusCancelled
+				finalMessage = cancelledMessageInternal
+				errMessage = nil
+			}
 
 			updates := completeActivityUpdatesInternal(model.StartedAt, status, finalMessage, errMessage, finalStep, now)
+			if model.GateScope != "" {
+				updates["ended_at"] = gorm.Expr("NOW()")
+				updates["updated_at"] = gorm.Expr("NOW()")
+				updates["duration_ms"] = gorm.Expr("GREATEST(0, EXTRACT(EPOCH FROM (NOW() - started_at)) * 1000)::bigint")
+			}
 			code := string(activityCodeInternal(status))
 			query := tx.Model(&Activity{}).Where("id = ? AND status IN ?", activityID, []activity.Status{activity.StatusQueued, activity.StatusRunning})
 			if model.GateOwner != "" {

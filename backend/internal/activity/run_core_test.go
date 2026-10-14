@@ -20,6 +20,7 @@ import (
 	"github.com/florianfinn/docklet-next/types/activity"
 	"github.com/florianfinn/docklet-next/types/scheduler"
 	"github.com/stretchr/testify/require"
+	"gorm.io/gorm"
 )
 
 func TestCompletionEffectOnceAfterRetention(t *testing.T) {
@@ -71,21 +72,22 @@ func TestRunGateJoinConflictAndFreshnessBoundary(t *testing.T) {
 	require.True(t, errors.As(err, &busy))
 	require.Equal(t, "run.busy", busy.Code)
 	require.Equal(t, started.Run.ID, busy.RunID)
-	completed, err := svc.CompleteActivity(started.WorkContext, started.Run.ID, activity.StatusSuccess, "checked", nil)
+	_, err = svc.CompleteActivity(started.WorkContext, started.Run.ID, activity.StatusSuccess, "checked", nil)
 	require.NoError(t, err)
-	fresh, err := svc.startGatedActivityAtInternal(ctx, request, completed.EndedAt.Add(CheckFreshness-time.Nanosecond))
+	fresh, err := svc.StartGatedActivity(ctx, request)
 	require.NoError(t, err)
 	require.Equal(t, "run.fresh", fresh.Code)
 	require.Equal(t, started.Run.ID, fresh.Run.ID)
 	recheck := request
 	recheck.Recheck = true
-	rechecked, err := svc.startGatedActivityAtInternal(ctx, recheck, completed.EndedAt.Add(CheckFreshness-time.Nanosecond))
+	rechecked, err := svc.StartGatedActivity(ctx, recheck)
 	require.NoError(t, err)
 	require.Equal(t, "run.started", rechecked.Code)
 	require.NotEqual(t, started.Run.ID, rechecked.Run.ID)
-	recheckedCompletion, err := svc.CompleteActivity(rechecked.WorkContext, rechecked.Run.ID, activity.StatusSuccess, "checked again", nil)
+	_, err = svc.CompleteActivity(rechecked.WorkContext, rechecked.Run.ID, activity.StatusSuccess, "checked again", nil)
 	require.NoError(t, err)
-	atBoundary, err := svc.startGatedActivityAtInternal(ctx, request, recheckedCompletion.EndedAt.Add(CheckFreshness))
+	require.NoError(t, db.Model(&Activity{}).Where("id IN ?", []string{started.Run.ID, rechecked.Run.ID}).Update("ended_at", gorm.Expr("NOW() - INTERVAL '30 seconds'")).Error)
+	atBoundary, err := svc.StartGatedActivity(ctx, request)
 	require.NoError(t, err)
 	require.Equal(t, "run.started", atBoundary.Code)
 	require.NotEqual(t, started.Run.ID, atBoundary.Run.ID)
@@ -187,13 +189,13 @@ func TestGatedRunHeartbeatSurvivesThreeMinuteSweep(t *testing.T) {
 	require.True(t, owner.isTrackedInternal(started.Run.ID))
 	old := time.Now().Add(-3 * time.Minute)
 	require.NoError(t, db.Model(&Activity{}).Where("id = ?", started.Run.ID).
-		Updates(map[string]any{"started_at": old, "updated_at": old}).Error)
+		Updates(map[string]any{"started_at": old, "gate_lease_at": old}).Error)
 	require.Eventually(t, func() bool {
 		var refreshed Activity
 		if err := db.First(&refreshed, "id = ?", started.Run.ID).Error; err != nil {
 			return false
 		}
-		return refreshed.UpdatedAt.After(old)
+		return refreshed.GateLeaseAt != nil && refreshed.GateLeaseAt.After(old)
 	}, time.Second, 10*time.Millisecond)
 	swept, err := sweeper.FailAbandonedActivities(t.Context())
 	require.NoError(t, err)

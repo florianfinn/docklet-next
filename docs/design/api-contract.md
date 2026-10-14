@@ -74,16 +74,6 @@ resolves each mapping when its endpoint and UI slice are implemented.
 callers creating events must send a listed code. A run status transition uses
 `activity.<status>`; admission results use `run.*`. The catalogue is:
 
-Run detail returns the most recent 256 distinct step transitions. Repeated
-messages within one step do not consume this limit. A closed step before the
-last step is reported as `success` when the next step starts, even if that step
-logged warning or error messages; the last step inherits the run's terminal
-status. Clients should use message levels for per-step warnings and errors.
-
-History limits from environment variables use the same numeric ranges as API
-setting writes. An invalid override fails settings initialization before cleanup
-jobs start; operators must correct it and restart the process.
-
 | Family | Codes |
 | --- | --- |
 | `run` | `run.started`, `run.joined`, `run.fresh`, `run.busy` |
@@ -100,3 +90,26 @@ jobs start; operators must correct it and restart the process.
 | `environment` | `environment.create`, `environment.connect`, `environment.disconnect`, `environment.update`, `environment.delete`, `environment.api_key.regenerated`, `environment.mtls.ca_generated`, `environment.mtls.cert_issued`, `environment.mtls.enroll`, `environment.mtls.download` |
 | `webhook` | `webhook.create`, `webhook.update`, `webhook.delete`, `webhook.trigger` |
 | `notification` | `notification.send` |
+
+## Gated run leases
+
+A gated run remains `queued` or `running` for admission until its owner writes a
+terminal state. A fresh owner token fences progress and completion writes. Gate
+start and heartbeat set `gate_lease_at` with PostgreSQL `NOW()`; progress updates
+cannot extend or shorten this lease. Cancellation sets `cancel_requested_at` as a
+durable request and signals the local worker. The owner's heartbeat observes a
+remote request; after the worker returns, completion records `cancelled` even if
+the worker reports success. Cancellation alone does not release the gate. When
+the owner is gone, only the sweep may rotate the token and fail the run, after
+the lease expires. Terminal `ended_at` and the 30-second `run.fresh` comparison
+also use database time.
+
+Run detail returns the most recent 256 distinct step transitions. Repeated
+messages within one step do not consume this limit. A closed step before the
+last step is reported as `success` when the next step starts, even if that step
+logged warning or error messages; the last step inherits the run's terminal
+status. Clients should use message levels for per-step warnings and errors.
+
+History limits from environment variables use the same numeric ranges as API
+setting writes. An invalid override fails settings initialization before cleanup
+jobs start; operators must correct it and restart the process.
