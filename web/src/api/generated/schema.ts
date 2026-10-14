@@ -1,6 +1,6 @@
 // Source: api/openapi.json
 // Revision: 6b1ff2ea22762a46ae188234f0b048559560c5eeba6ca4690119d9c40a012710
-// Retrieved: 2026-10-14
+// Retrieved: 2026-10-13
 // License: BSD-3-Clause
 // Deviations: Generated TypeScript declarations from the local Huma export.
 /**
