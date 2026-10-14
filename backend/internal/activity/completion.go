@@ -48,10 +48,15 @@ func (
 	}
 	defer s.releaseCancelInternal(activityID)
 	defer s.releaseSlotInternal(activityID)
-	if errors.Is(context.Cause(ctx), activitylib.ErrCanceled) {
+	s.runningMu.Lock()
+	defer s.runningMu.Unlock()
+	if s.cancelling[activityID] || errors.Is(context.Cause(ctx), activitylib.ErrCanceled) {
 		status = activity.StatusCancelled
+		finalMessage = cancelledMessageInternal
+		errMessage = nil
 	}
 
+	workCtx := ctx
 	// Completion remains bounded when the worker returns on cancellation.
 	var cancel context.CancelFunc
 	ctx, cancel = context.WithTimeout(context.WithoutCancel(ctx), ownerWriteTimeout)
@@ -79,11 +84,9 @@ func (
 					return err
 				}
 			}
-			if model.CancelRequestedAt != nil {
+			if s.cancelling[activityID] || errors.Is(context.Cause(workCtx), activitylib.ErrCanceled) {
 				status = activity.StatusCancelled
-				if repair, _ := ctx.Value(startupRepairContextKey{}).(bool); !repair {
-					finalMessage = cancelledMessageInternal
-				}
+				finalMessage = cancelledMessageInternal
 				errMessage = nil
 			}
 

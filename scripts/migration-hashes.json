@@ -3,6 +3,6 @@
   "002_run_traces.sql": "0f5b2c64b41be772a14b1231434d67ea21f28df3eca6ff2b952a2bbdb378d48b",
   "003_sync_receipt_lifecycle.sql": "671bcfc6ac6486430b793bf3d6c178a0c1c6f1fb18cc5b7eff61e1bb5180a578",
   "004_gate_owner.sql": "f3c8fdb6a543a7af2b70a8bea81354d9251e1214fe50a1bbe1f9081a64f08709",
-  "005_gate_lease.sql": "61c4116c28a808fe45a4577a366835e8d842e67428302c3b213aa3cb733d9f89",
+  "005_gate_lease.sql": "0b87f164f12c09429c591f28619a6f57ead7c7d8f0c37cfb7aaff677189dadd9",
   "006_single_hub_gate.sql": "6ea7d824df42c5cb4f686c846368009fe2792148ef3d4d5d1f477701a04d2830"
 }

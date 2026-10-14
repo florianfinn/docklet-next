@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; functional cut: removed APNS mobile push; functional cut: removed template catalogue; functional cut: removed GitOps and saved Git repositories; functional cut: removed Swarm; functional cut: removed standalone build workshop; functional cut: removed OIDC and passkeys. Count-based history defaults.
+// Deviations: Local module namespace; functional cut: removed APNS mobile push, template catalogue, GitOps, Swarm, standalone build workshop, OIDC and passkeys.
 
 package settings
 
@@ -213,10 +213,8 @@ func DefaultSettingsConfig() *Settings {
 		ImageEventWatcherEnabled:              SettingVariable{Value: "false"},
 		DockerClientRefreshInterval:           SettingVariable{Value: "0 */5 * * * *"},
 		EventCleanupInterval:                  SettingVariable{Value: "0 0 */6 * * *"},
-		EventHistoryMaxEntries:                SettingVariable{Value: "500"},
 		ExpiredSessionsCleanupInterval:        SettingVariable{Value: "0 0 0 * * *"},
 		UpgradeLogRetentionDays:               SettingVariable{Value: "3"},
-		ActivityHistoryMaxEntries:             SettingVariable{Value: "100"},
 		MaxConcurrentActivities:               SettingVariable{Value: "5"},
 		AutoInjectEnv:                         SettingVariable{Value: "false"},
 		DefaultDeployPullPolicy:               SettingVariable{Value: "missing"},
@@ -365,9 +363,6 @@ func (s *SettingsService) loadDatabaseConfigFromEnv(ctx context.Context, db *dat
 		// debug: log each env name checked and whether a value exists
 		if val, ok, _ := utils.LookupEnvOrFile(envVarName); ok {
 			val = kit.TrimQuotes(val)
-			if err := validateSettingValueInternal(key, val); err != nil {
-				return nil, fmt.Errorf("invalid environment setting %s: %w", key, err)
-			}
 			mask := "<empty>"
 			if val != "" {
 				mask = fmt.Sprintf("%d chars", len(val))

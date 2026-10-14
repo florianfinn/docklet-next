@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; bounded history-setting validation.
+// Deviations: Local module namespace; write validation for upgrade retention and features.
 
 package settings
 
@@ -16,16 +16,6 @@ import (
 )
 
 func validateSettingValueInternal(key, value string) error {
-	limits := map[string][2]int{
-		"eventHistoryMaxEntries":    {50, 5000},
-		"activityHistoryMaxEntries": {10, 1000},
-	}
-	if bounds, ok := limits[key]; ok && value != "" {
-		count, err := strconv.Atoi(value)
-		if err != nil || count < bounds[0] || count > bounds[1] {
-			return common.Classify(common.ErrValidation, fmt.Errorf("%s must be a whole number between %d and %d", key, bounds[0], bounds[1]))
-		}
-	}
 	if key == "upgradeLogRetentionDays" && value != "" {
 		days, err := strconv.Atoi(value)
 		if err != nil || days < 0 || days > 3650 {

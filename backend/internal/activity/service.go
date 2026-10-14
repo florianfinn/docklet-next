@@ -52,9 +52,8 @@ func gatedWriterAllowedInternal(ctx context.Context, model *Activity) bool {
 }
 
 const (
-	defaultActivityRetentionDays = 30
-	defaultActivityHistoryLimit  = 1000
-	defaultActivityMessages      = 500
+	defaultActivityHistoryLimit = 100
+	defaultActivityMessages     = 500
 	// abandonedActivityGrace is how old an untracked queued/running activity
 	// must be before the periodic sweep fails it. It covers the window between
 	// StartActivity's row creation and the worker's Track call.
@@ -96,7 +95,9 @@ type ActivityService struct {
 	// are added by Track and removed when the activity is completed.
 	runningMu sync.Mutex
 	running   map[string]context.CancelCauseFunc
-	clock     func() time.Time
+	// cancelling holds the local gate conflict until completion returns.
+	cancelling map[string]bool
+	clock      func() time.Time
 
 	// limiter bounds concurrent queue-opted activities per environment.
 	// slotReleases maps an activity ID to the release func of the slot it
@@ -277,6 +278,7 @@ func (s *ActivityService) Track(ctx context.Context, activityID string) context.
 		existing(nil)
 	}
 	s.running[activityID] = cancel
+	delete(s.cancelling, activityID)
 	s.runningMu.Unlock()
 	return workCtx
 }
@@ -296,6 +298,12 @@ func (s *ActivityService) cancelTrackedInternal(activityID string, cause error) 
 
 	s.runningMu.Lock()
 	cancel, ok := s.running[activityID]
+	if ok {
+		if s.cancelling == nil {
+			s.cancelling = make(map[string]bool)
+		}
+		s.cancelling[activityID] = true
+	}
 	s.runningMu.Unlock()
 	if !ok {
 		return false
@@ -317,6 +325,7 @@ func (s *ActivityService) releaseCancelInternal(activityID string) {
 	cancel, ok := s.running[activityID]
 	if ok {
 		delete(s.running, activityID)
+		delete(s.cancelling, activityID)
 	}
 	s.runningMu.Unlock()
 	if ok {
@@ -429,6 +438,7 @@ func (s *ActivityService) StartTrackedActivity(ctx context.Context, req StartAct
 		s.running = map[string]context.CancelCauseFunc{}
 	}
 	s.running[started.ID] = cancel
+	delete(s.cancelling, started.ID)
 	return started, workCtx, nil
 }
 
@@ -475,15 +485,6 @@ func (s *ActivityService) AwaitActivitySlot(ctx context.Context, activityID, env
 	_, held := s.slotReleases[activityID]
 	s.slotMu.Unlock()
 	if held {
-		writeCtx, cancel := ownerWriteContextInternal(ctx)
-		defer cancel()
-		var row Activity
-		if err := s.db.WithContext(writeCtx).Select("cancel_requested_at").First(&row, "id = ?", activityID).Error; err != nil {
-			return err
-		}
-		if row.CancelRequestedAt != nil {
-			return activitylib.ErrCanceled
-		}
 		if err := ctx.Err(); err != nil {
 			return context.Cause(ctx)
 		}
@@ -593,13 +594,6 @@ func (s *ActivityService) UpdateActivity(ctx context.Context, activityID string,
 		}
 		if !gatedWriterAllowedInternal(ctx, &current) {
 			return ErrRunNotOwned
-		}
-		if current.CancelRequestedAt != nil {
-			if req.Status == activity.StatusRunning {
-				return activitylib.ErrCanceled
-			}
-			delete(updates, "message_code")
-			delete(updates, "latest_message")
 		}
 		query := tx.Model(&Activity{}).Where("id = ? AND status NOT IN ?", activityID, terminalActivityStatusesInternal())
 		result := query.Updates(updates)
@@ -765,10 +759,6 @@ func (s *ActivityService) appendBatchWithRetryInternal(ctx context.Context, acti
 				for i := range messages {
 					messages[i].CreatedAt = databaseNow.Add(time.Duration(i) * time.Microsecond)
 				}
-			}
-			if current.CancelRequestedAt != nil {
-				delete(updates, "latest_message")
-				delete(updates, "message_code")
 			}
 
 			query := tx.Model(&Activity{}).Where("id = ? AND status NOT IN ?", activityID, terminalActivityStatusesInternal())

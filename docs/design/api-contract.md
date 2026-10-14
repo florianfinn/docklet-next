@@ -77,7 +77,7 @@ callers creating events must send a listed code. A run status transition uses
 | Family | Codes |
 | --- | --- |
 | `run` | `run.started`, `run.joined`, `run.fresh`, `run.busy`, `run.cancelling` |
-| `activity` | `activity.queued`, `activity.running`, `activity.success`, `activity.failed`, `activity.cancelled`, `activity.cancel_requested`, `activity.message` |
+| `activity` | `activity.queued`, `activity.running`, `activity.success`, `activity.failed`, `activity.cancelled`, `activity.message` |
 | `deploy` | `deploy.pull` |
 | `job` | `job.queued`, `job.waiting`, `job.running`, `job.retrying`, `job.succeeded`, `job.partial`, `job.skipped`, `job.failed`, `job.needs_attention`, `job.canceled` |
 | `container` | `container.die`, `container.oom`, `container.rename`, `container.unhealthy`, `container.start`, `container.stop`, `container.restart`, `container.delete`, `container.create`, `container.scan`, `container.update`, `container.deploy`, `container.kill`, `container.pause`, `container.unpause`, `container.error` |
@@ -95,8 +95,7 @@ callers creating events must send a listed code. A run status transition uses
 
 The agreed single-hub model, including admission, cancellation, restart
 recovery, operational error codes and adapter contract consequences, is in the
-[run-gate record](run-gate.md). Removing the existing lease mechanism is part
-of the later implementation step.
+[run-gate record](run-gate.md).
 
 Run detail returns the most recent 256 distinct step transitions. Repeated
 messages within one step do not consume this limit. A closed step before the
@@ -104,6 +103,7 @@ last step is reported as `success` when the next step starts, even if that step
 logged warning or error messages; the last step inherits the run's terminal
 status. Clients should use message levels for per-step warnings and errors.
 
-History limits from environment variables use the same numeric ranges as API
-setting writes. An invalid override fails settings initialization before cleanup
-jobs start; operators must correct it and restart the process.
+Event history is capped at 500 entries. Completed activity history is capped
+at 100 entries per environment. Environment overrides follow Arcane settings
+initialization and do not fail startup on invalid values. Cancellation is a
+local worker signal; the activity DTO has no cancellation-request timestamp.

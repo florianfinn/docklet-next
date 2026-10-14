@@ -98,15 +98,11 @@ type Update struct {
 	// Required: false
 	UpgradeLogRetentionDays *string `json:"upgradeLogRetentionDays,omitzero"`
 
-	// EventHistoryMaxEntries is the maximum number of events to retain.
 	//
 	// Required: false
-	EventHistoryMaxEntries *string `json:"eventHistoryMaxEntries,omitzero"`
 
-	// ActivityHistoryMaxEntries is the maximum completed Activity Center entries to retain across all environments.
 	//
 	// Required: false
-	ActivityHistoryMaxEntries *string `json:"activityHistoryMaxEntries,omitzero"`
 
 	// MaxConcurrentActivities is the maximum long-running activities per environment before new ones queue (0 = unlimited).
 	//

@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-14
 // License: BSD-3-Clause
-// Deviations: Local module namespace; environment values share write validation.
+// Deviations: Local module namespace; environment values follow Arcane initialization.
 
 package settings
 
@@ -16,9 +16,6 @@ import (
 )
 
 func (s *SettingsService) upsertEnvSetting(ctx context.Context, tx *gorm.DB, key, envVal string) error {
-	if err := validateSettingValueInternal(key, envVal); err != nil {
-		return fmt.Errorf("invalid environment setting %s: %w", key, err)
-	}
 	var existing SettingVariable
 	err := tx.Where("key = ?", key).First(&existing).Error
 

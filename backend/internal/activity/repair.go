@@ -93,11 +93,6 @@ func (s *ActivityService) repairMatchingInternal(ctx context.Context, kind activ
 				failure = nil
 			}
 		}
-		if row.CancelRequestedAt != nil {
-			result = activity.StatusCancelled
-			message = "Activity cancellation interrupted by hub restart"
-			failure = nil
-		}
 		repairCtx := context.WithValue(ctx, startupRepairContextKey{}, true)
 		finished, err := s.CompleteActivity(repairCtx, row.ID, result, message, failure)
 		if err != nil {

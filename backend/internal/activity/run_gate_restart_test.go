@@ -63,7 +63,7 @@ func TestRunGate_ProcessFixture(t *testing.T) {
 	}
 	started, err := svc.StartGatedActivity(t.Context(), matrixGateRequest())
 	require.NoError(t, err)
-	if mode == "gated_cancelling" {
+	if mode == "gated_cancelled_in_memory" {
 		_, err = svc.CancelActivity(t.Context(), "0", started.Run.ID, "operator")
 		require.NoError(t, err)
 	}
@@ -145,20 +145,19 @@ func TestRunGate_Case26_CrashWhileQueued(t *testing.T) {
 	require.NotNil(t, row.EndedAt)
 }
 
-func TestRunGate_Case27_CrashDuringCancellation(t *testing.T) {
+func TestRunGate_Case27_CrashDuringInMemoryCancellation(t *testing.T) {
 	db := setupActivityServiceTestDBInternal(t)
-	id := matrixPreviousHub(t, db, "gated_cancelling")
+	id := matrixPreviousHub(t, db, "gated_cancelled_in_memory")
 	svc := matrixNewHub(t, db)
 	count, err := svc.RepairStartup(t.Context())
 	require.NoError(t, err)
 	require.EqualValues(t, 1, count)
 	row := matrixRow(t, db.DB, id)
-	require.Equal(t, activity.StatusCancelled, row.Status)
-	require.Equal(t, string(activity.CodeActivityCancelled), row.MessageCode)
-	require.Contains(t, row.LatestMessage, "cancellation interrupted")
-	require.Nil(t, row.Error)
-	require.Len(t, matrixMessages(t, db.DB, id, string(activity.CodeActivityCancelRequested)), 1)
-	require.Len(t, matrixMessages(t, db.DB, id, string(activity.CodeActivityCancelled)), 1)
+	require.Equal(t, activity.StatusFailed, row.Status)
+	require.Equal(t, string(activity.CodeActivityFailed), row.MessageCode)
+	require.NotNil(t, row.Error)
+	require.Empty(t, matrixMessages(t, db.DB, id, "activity.cancel_requested"))
+	require.Len(t, matrixMessages(t, db.DB, id, string(activity.CodeActivityFailed)), 1)
 }
 
 func TestRunGate_Case28_CrashBeforeCompletionCommit(t *testing.T) {
@@ -207,8 +206,11 @@ func TestRunGate_Case30_JobReceiptSurvivesRestartAndPruning(t *testing.T) {
 	stamp, err := time.Parse(time.RFC3339Nano, row.Metadata["runUpdatedAt"].(string))
 	require.NoError(t, err)
 	run := scheduler.Run{ID: row.Metadata["runId"].(string), ActivityID: id, JobID: "example-job", EnvironmentID: "0", Status: scheduler.Succeeded, CreatedAt: row.StartedAt, UpdatedAt: stamp}
+	// A coordinator snapshot taken before this sync omits the run ID.
 	require.NoError(t, svc.SyncJobRun(t.Context(), run, "Example job"))
-	require.Len(t, matrixMessages(t, db.DB, id, "job.succeeded"), 1)
+	deleted, err := svc.PruneSyncReceipts(t.Context(), nil)
+	require.NoError(t, err)
+	require.Zero(t, deleted)
 	require.NoError(t, db.Delete(&Activity{}, "id = ?", id).Error)
 	require.NoError(t, svc.SyncJobRun(t.Context(), run, "Example job"))
 	var count int64

@@ -81,3 +81,14 @@ func TestPrunedManualRunKeepsIdempotencyReceipt(t *testing.T) {
 	require.False(t, pruneRunsInternal(&record, now))
 	require.Equal(t, old.ID, record.Receipts[old.ID].ID)
 }
+
+func TestJobRunsPruneAfterSevenDaysWithinCount(t *testing.T) {
+	now := time.Now().UTC()
+	record := st.QueueRecord{Runs: []st.Run{
+		{ID: "expired", Status: st.Succeeded, UpdatedAt: now.Add(-8 * 24 * time.Hour)},
+		{ID: "recent", Status: st.Succeeded, UpdatedAt: now.Add(-time.Hour)},
+	}}
+	require.True(t, pruneRunsInternal(&record, now))
+	require.Equal(t, []string{"recent"}, []string{record.Runs[0].ID})
+	require.False(t, pruneRunsInternal(&record, now))
+}

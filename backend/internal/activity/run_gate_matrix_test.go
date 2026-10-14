@@ -115,7 +115,7 @@ func TestRunGate_Case06_CancellingOperationConflicts(t *testing.T) {
 	require.Equal(t, first.Run.ID, conflict.RunID)
 }
 
-func TestRunGate_Case07_QueuedCancellationDurable(t *testing.T) {
+func TestRunGate_Case07_QueuedCancellationInMemory(t *testing.T) {
 	db := setupActivityServiceTestDBInternal(t)
 	svc := NewActivityService(db, nil)
 	run, work, err := svc.StartTrackedActivity(t.Context(), StartActivityRequest{Type: activity.TypeProjectDeploy, Queue: true, DeferSlot: true})
@@ -123,9 +123,9 @@ func TestRunGate_Case07_QueuedCancellationDurable(t *testing.T) {
 	requested, err := svc.CancelActivity(t.Context(), "0", run.ID, "operator")
 	require.NoError(t, err)
 	require.Equal(t, activity.StatusQueued, requested.Status)
-	require.NotNil(t, requested.CancelRequestedAt)
+	require.ErrorIs(t, context.Cause(work), activitylib.ErrCanceled)
 	require.Error(t, work.Err())
-	require.Len(t, matrixMessages(t, db.DB, run.ID, string(activity.CodeActivityCancelRequested)), 1)
+	require.Empty(t, matrixMessages(t, db.DB, run.ID, "activity.cancel_requested"))
 }
 
 func TestRunGate_Case08_QueuedCancelStopsSlotStart(t *testing.T) {
@@ -136,7 +136,7 @@ func TestRunGate_Case08_QueuedCancelStopsSlotStart(t *testing.T) {
 	_, err = svc.CancelActivity(t.Context(), "0", run.ID, "operator")
 	require.NoError(t, err)
 	require.Error(t, work.Err())
-	require.ErrorIs(t, svc.AwaitActivitySlot(t.Context(), run.ID, "0"), activitylib.ErrCanceled)
+	require.ErrorIs(t, svc.AwaitActivitySlot(work, run.ID, "0"), activitylib.ErrCanceled)
 	finished, err := svc.CompleteActivity(work, run.ID, activity.StatusSuccess, "late", nil)
 	require.NoError(t, err)
 	require.Equal(t, activity.StatusCancelled, finished.Status)
@@ -147,25 +147,13 @@ func TestRunGate_Case09_GatedCancellationKeepsScope(t *testing.T) {
 	db := setupActivityServiceTestDBInternal(t)
 	svc := NewActivityService(db, nil)
 	started := matrixGate(t, svc)
-	events, _, unsubscribe := svc.Subscribe("0")
-	defer unsubscribe()
 	requested, err := svc.CancelActivity(t.Context(), "0", started.Run.ID, "operator")
 	require.NoError(t, err)
 	require.Equal(t, activity.StatusRunning, requested.Status)
-	require.NotNil(t, requested.CancelRequestedAt)
-	require.Equal(t, string(activity.CodeActivityCancelRequested), requested.MessageCode)
+	require.ErrorIs(t, context.Cause(started.WorkContext), activitylib.ErrCanceled)
+	require.Equal(t, string(activity.CodeRunStarted), requested.MessageCode)
 	require.Error(t, started.WorkContext.Err())
-	require.Len(t, matrixMessages(t, db.DB, started.Run.ID, string(activity.CodeActivityCancelRequested)), 1)
-	seen := false
-	for range 2 {
-		select {
-		case event := <-events:
-			seen = seen || event.Activity != nil && event.Activity.CancelRequestedAt != nil
-		case <-time.After(time.Second):
-			t.Fatal("missing cancellation snapshot")
-		}
-	}
-	require.True(t, seen)
+	require.Empty(t, matrixMessages(t, db.DB, started.Run.ID, "activity.cancel_requested"))
 	request := matrixGateRequest()
 	request.Operation = "remove"
 	_, err = svc.StartGatedActivity(t.Context(), request)
@@ -182,9 +170,10 @@ func TestRunGate_Case10_RepeatedCancellationIdempotent(t *testing.T) {
 	require.NoError(t, err)
 	second, err := svc.CancelActivity(t.Context(), "0", started.Run.ID, "operator")
 	require.NoError(t, err)
-	require.Equal(t, first.CancelRequestedAt, second.CancelRequestedAt)
+	require.Equal(t, first.Status, second.Status)
 	require.Equal(t, activity.StatusRunning, second.Status)
-	require.Len(t, matrixMessages(t, db.DB, started.Run.ID, string(activity.CodeActivityCancelRequested)), 1)
+	require.Equal(t, activity.StatusRunning, matrixRow(t, db.DB, started.Run.ID).Status)
+	require.Empty(t, matrixMessages(t, db.DB, started.Run.ID, "activity.cancel_requested"))
 }
 
 func TestRunGate_Case11_ProgressUpdatesSnapshotAndHistory(t *testing.T) {
@@ -214,9 +203,9 @@ func TestRunGate_Case12_ProgressAfterCancelPreservesSnapshot(t *testing.T) {
 	_, err = svc.UpdateActivity(started.WorkContext, started.Run.ID, UpdateActivityRequest{LatestMessage: new("later progress"), MessageCode: &code})
 	require.NoError(t, err)
 	current := matrixRow(t, db.DB, started.Run.ID)
-	require.Equal(t, string(activity.CodeActivityCancelRequested), current.MessageCode)
-	require.Equal(t, "Cancellation requested by operator", current.LatestMessage)
-	require.NotNil(t, current.CancelRequestedAt)
+	require.Equal(t, code, current.MessageCode)
+	require.Equal(t, "later progress", current.LatestMessage)
+	require.ErrorIs(t, context.Cause(started.WorkContext), activitylib.ErrCanceled)
 	require.Equal(t, 70, *current.Progress)
 	require.Len(t, matrixMessages(t, db.DB, started.Run.ID, code), 1)
 }

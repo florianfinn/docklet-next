@@ -248,7 +248,6 @@ var expectedEnvConfigVars = []string{
 }
 
 var expectedSettingOverrideKeys = []string{
-	"activityHistoryMaxEntries",
 	"authLocalEnabled",
 	"authPasswordPolicy",
 	"authSessionTimeout",
@@ -278,7 +277,6 @@ var expectedSettingOverrideKeys = []string{
 	"enableGravatar",
 	"environmentHealthInterval",
 	"eventCleanupInterval",
-	"eventHistoryMaxEntries",
 	"experimentalFeaturesEnabled",
 	"expiredSessionsCleanupInterval",
 	"featureVulnerabilityManagementEnabled",

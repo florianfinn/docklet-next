@@ -233,7 +233,6 @@ func activityToDTOInternal(model *Activity) activity.Activity {
 		Step:                model.Step,
 		LatestMessage:       model.LatestMessage,
 		MessageCode:         model.MessageCode,
-		CancelRequestedAt:   copyPtrInternal(model.CancelRequestedAt),
 		AffectedServices:    servicesFromJSONInternal(model.AffectedServices),
 		StartedBy:           activityStartedByDTOInternal(model),
 		StartedAt:           model.StartedAt,
@@ -319,6 +318,7 @@ func findActivityIDsBeyondHistoryLimitInternal(tx *gorm.DB, maxEntries int) ([]s
 		FROM (
 			SELECT id,
 				ROW_NUMBER() OVER (
+					PARTITION BY environment_id
 					ORDER BY COALESCE(ended_at, updated_at, created_at) DESC, started_at DESC
 				) AS activity_rank
 			FROM activities

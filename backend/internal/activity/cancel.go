@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-14
 // License: BSD-3-Clause
-// Deviations: Local module namespace; durable cancellation request and local signal.
+// Deviations: Local module namespace; in-memory cancellation holds the gate until completion.
 
 package activity
 
@@ -10,19 +10,14 @@ import (
 	"cmp"
 	"context"
 	"errors"
-	"fmt"
 	"strings"
-	"time"
 
 	activitylib "github.com/florianfinn/docklet-next/backend/pkg/libarcane/activity"
 	"github.com/florianfinn/docklet-next/types/activity"
-	"gorm.io/gorm"
-	"gorm.io/gorm/clause"
 )
 
-// CancelActivity records the first request and signals the local worker.
-// The worker or startup repair writes the terminal state.
-func (s *ActivityService) CancelActivity(ctx context.Context, environmentID, activityID, requestedBy string) (*activity.Activity, error) {
+// CancelActivity signals local work; untracked active work completes directly.
+func (s *ActivityService) CancelActivity(ctx context.Context, environmentID, activityID, _ string) (*activity.Activity, error) {
 	if err := s.checkInitInternal(); err != nil {
 		return nil, err
 	}
@@ -31,54 +26,28 @@ func (s *ActivityService) CancelActivity(ctx context.Context, environmentID, act
 		return nil, errors.New("activity id is required")
 	}
 	environmentID = cmp.Or(strings.TrimSpace(environmentID), "0")
-	requestedBy = cmp.Or(strings.TrimSpace(requestedBy), "a user")
-
-	lock := s.publishLockInternal(activityID)
-	lock.Lock()
-	defer lock.Unlock()
 	s.runningMu.Lock()
-	defer s.runningMu.Unlock()
-
 	var model Activity
-	var audit *ActivityMessage
-	err := s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
-		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).Where("id = ? AND environment_id = ?", activityID, environmentID).First(&model).Error; err != nil {
-			return err
-		}
-		if model.Type == activity.TypeJobRun || isTerminalActivityStatusInternal(model.Status) {
-			return ErrActivityNotCancelable
-		}
-		if model.CancelRequestedAt != nil {
-			return nil
-		}
-		message := "Cancellation requested by " + requestedBy
-		if err := tx.Model(&Activity{}).Where("id = ? AND status IN ? AND cancel_requested_at IS NULL", activityID, []activity.Status{activity.StatusQueued, activity.StatusRunning}).Updates(map[string]any{
-			"cancel_requested_at": gorm.Expr("NOW()"),
-			"latest_message":      message,
-			"message_code":        activity.CodeActivityCancelRequested,
-			"updated_at":          gorm.Expr("NOW()"),
-		}).Error; err != nil {
-			return fmt.Errorf("request activity cancellation: %w", err)
-		}
-		var databaseNow time.Time
-		if err := tx.Raw("SELECT NOW()").Scan(&databaseNow).Error; err != nil {
-			return err
-		}
-		audit = &ActivityMessage{ActivityID: activityID, Level: activity.MessageLevelWarning, Message: message, Code: string(activity.CodeActivityCancelRequested), CreatedAt: databaseNow}
-		if err := tx.Create(audit).Error; err != nil {
-			return err
-		}
-		return tx.First(&model, "id = ?", activityID).Error
-	})
+	err := s.db.WithContext(ctx).Where("id = ? AND environment_id = ?", activityID, environmentID).First(&model).Error
 	if err != nil {
+		s.runningMu.Unlock()
 		return nil, err
 	}
-	if audit != nil {
-		s.publishMessageInternal(model.EnvironmentID, model.Type, activityMessageToDTOInternal(audit))
-		s.publishActivityInternal(activityToDTOInternal(&model))
+	if model.Type == activity.TypeJobRun || isTerminalActivityStatusInternal(model.Status) {
+		s.runningMu.Unlock()
+		return nil, ErrActivityNotCancelable
 	}
-	if cancel := s.running[activityID]; cancel != nil {
+	if cancel, tracked := s.running[activityID]; tracked {
+		if s.cancelling == nil {
+			s.cancelling = make(map[string]bool)
+		}
+		s.cancelling[activityID] = true
 		cancel(activitylib.ErrCanceled)
+		s.runningMu.Unlock()
+		return new(activityToDTOInternal(&model)), nil
 	}
-	return new(activityToDTOInternal(&model)), nil
+	s.runningMu.Unlock()
+
+	// No local worker can finish this row; the terminal status guard handles a race.
+	return s.CompleteActivity(context.WithValue(ctx, startupRepairContextKey{}, true), activityID, activity.StatusCancelled, cancelledMessageInternal, nil)
 }

@@ -147,66 +147,6 @@ func TestActivityServiceStreamFanoutInternal(t *testing.T) {
 	require.Equal(t, messageEvent, receiveActivityEventInternal(t, otherEvents))
 }
 
-func TestActivityServiceRetentionCleanupInternal(t *testing.T) {
-	ctx := t.Context()
-	db := setupActivityServiceTestDBInternal(t)
-	service := NewActivityService(db, nil)
-
-	created, err := service.StartActivity(ctx, StartActivityRequest{
-		EnvironmentID: "0",
-		Type:          activity.TypeSystemPrune,
-		LatestMessage: "Prune started",
-	})
-	require.NoError(t, err)
-	_, err = service.AppendMessage(ctx, created.ID, AppendActivityMessageRequest{
-		Message: "Removing unused resources",
-	})
-	require.NoError(t, err)
-	_, err = service.CompleteActivity(ctx, created.ID, activity.StatusSuccess, "Prune complete", nil)
-	require.NoError(t, err)
-
-	oldEndedAt := time.Now().Add(-((time.Duration(defaultActivityRetentionDays) * 24 * time.Hour) + time.Hour))
-	require.NoError(t, db.Model(&Activity{}).Where("id = ?", created.ID).Update("ended_at", oldEndedAt).Error)
-
-	deleted, err := service.PruneHistory(ctx, defaultActivityRetentionDays, 0)
-	require.NoError(t, err)
-	require.EqualValues(t, 1, deleted)
-
-	var activityCount int64
-	require.NoError(t, db.Model(&Activity{}).Count(&activityCount).Error)
-	require.Zero(t, activityCount)
-
-	var messageCount int64
-	require.NoError(t, db.Model(&ActivityMessage{}).Count(&messageCount).Error)
-	require.Zero(t, messageCount)
-}
-
-func TestActivityServicePruneHistoryZeroRetentionDisablesAgeCleanupInternal(t *testing.T) {
-	ctx := t.Context()
-	db := setupActivityServiceTestDBInternal(t)
-	service := NewActivityService(db, nil)
-
-	created, err := service.StartActivity(ctx, StartActivityRequest{
-		EnvironmentID: "0",
-		Type:          activity.TypeSystemPrune,
-		LatestMessage: "Prune started",
-	})
-	require.NoError(t, err)
-	_, err = service.CompleteActivity(ctx, created.ID, activity.StatusSuccess, "Prune complete", nil)
-	require.NoError(t, err)
-
-	oldEndedAt := time.Now().Add(-((time.Duration(defaultActivityRetentionDays) * 24 * time.Hour) + time.Hour))
-	require.NoError(t, db.Model(&Activity{}).Where("id = ?", created.ID).Update("ended_at", oldEndedAt).Error)
-
-	deleted, err := service.PruneHistory(ctx, 0, 0)
-	require.NoError(t, err)
-	require.Zero(t, deleted)
-
-	var activityCount int64
-	require.NoError(t, db.Model(&Activity{}).Where("id = ?", created.ID).Count(&activityCount).Error)
-	require.EqualValues(t, 1, activityCount)
-}
-
 func TestActivityServiceSubscribeMarksMissedEventsWhenBufferFullInternal(t *testing.T) {
 	service := NewActivityService(nil, nil)
 
@@ -254,7 +194,7 @@ func TestActivityServiceDeleteHistoryPreservesActiveActivitiesInternal(t *testin
 	require.ElementsMatch(t, []string{running.ID, remoteCompleted.ID}, []string{remaining[0].ID, remaining[1].ID})
 }
 
-func TestActivityServicePruneHistoryByAgeAndCountInternal(t *testing.T) {
+func TestActivityServicePruneHistoryByEnvironmentInternal(t *testing.T) {
 	ctx := t.Context()
 	db := setupActivityServiceTestDBInternal(t)
 	service := NewActivityService(db, nil)
@@ -284,9 +224,9 @@ func TestActivityServicePruneHistoryByAgeAndCountInternal(t *testing.T) {
 	running, err := service.StartActivity(ctx, StartActivityRequest{EnvironmentID: "remote-1", Type: activity.TypeResourceAction})
 	require.NoError(t, err)
 
-	deleted, err := service.PruneHistory(ctx, 1, 2)
+	deleted, err := service.PruneHistory(ctx, 2)
 	require.NoError(t, err)
-	require.EqualValues(t, 2, deleted)
+	require.EqualValues(t, 1, deleted)
 
 	var terminalRemoteCount int64
 	require.NoError(t, db.Model(&Activity{}).
@@ -300,7 +240,7 @@ func TestActivityServicePruneHistoryByAgeAndCountInternal(t *testing.T) {
 
 	var oldCount int64
 	require.NoError(t, db.Model(&Activity{}).Where("id = ?", oldActivity.ID).Count(&oldCount).Error)
-	require.Zero(t, oldCount)
+	require.EqualValues(t, 1, oldCount)
 }
 
 func TestActivitySubscriberCoalescesProgressEventsInternal(t *testing.T) {
@@ -548,31 +488,13 @@ func TestActivityServiceCancelActivityInternal(t *testing.T) {
 	ctx := t.Context()
 	db := setupActivityServiceTestDBInternal(t)
 	service := NewActivityService(db, nil)
-
-	// An untracked activity keeps its durable request until repair.
-	created, err := service.StartActivity(ctx, StartActivityRequest{
-		EnvironmentID: "0",
-		Type:          activity.TypeSystemPrune,
-		LatestMessage: "running",
-	})
+	created, err := service.StartActivity(ctx, StartActivityRequest{EnvironmentID: "0", Type: activity.TypeSystemPrune})
 	require.NoError(t, err)
-
 	cancelled, err := service.CancelActivity(ctx, "0", created.ID, "Tester")
 	require.NoError(t, err)
-	require.Equal(t, activity.StatusRunning, cancelled.Status)
-	require.NotNil(t, cancelled.CancelRequestedAt)
-
-	// Repeated cancellation is idempotent; completion closes the row.
-	repeated, err := service.CancelActivity(ctx, "0", created.ID, "Tester")
-	require.NoError(t, err)
-	require.Equal(t, cancelled.CancelRequestedAt, repeated.CancelRequestedAt)
-	finished, err := service.CompleteActivity(ctx, created.ID, activity.StatusSuccess, "done", nil)
-	require.NoError(t, err)
-	require.Equal(t, activity.StatusCancelled, finished.Status)
+	require.Equal(t, activity.StatusCancelled, cancelled.Status)
 	_, err = service.CancelActivity(ctx, "0", created.ID, "Tester")
 	require.ErrorIs(t, err, ErrActivityNotCancelable)
-
-	// Unknown activity reports not found.
 	_, err = service.CancelActivity(ctx, "0", "missing", "Tester")
 	require.ErrorIs(t, err, gorm.ErrRecordNotFound)
 }

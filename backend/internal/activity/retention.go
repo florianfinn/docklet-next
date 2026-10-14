@@ -17,12 +17,9 @@ import (
 	"gorm.io/gorm"
 )
 
-func (s *ActivityService) PruneHistory(ctx context.Context, retentionDays, maxEntries int) (int64, error) {
+func (s *ActivityService) PruneHistory(ctx context.Context, maxEntries int) (int64, error) {
 	if s == nil || s.db == nil {
 		return 0, nil
-	}
-	if retentionDays < 0 {
-		retentionDays = defaultActivityRetentionDays
 	}
 	if maxEntries < 0 {
 		maxEntries = defaultActivityHistoryLimit
@@ -30,19 +27,6 @@ func (s *ActivityService) PruneHistory(ctx context.Context, retentionDays, maxEn
 
 	var deleted int64
 	if err := s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
-		if retentionDays > 0 {
-			cutoff := time.Now().Add(-time.Duration(retentionDays) * 24 * time.Hour)
-			ids, err := findTerminalActivityIDsInternal(tx.Where("COALESCE(ended_at, updated_at, created_at) < ?", cutoff))
-			if err != nil {
-				return fmt.Errorf("failed to find activities older than retention window: %w", err)
-			}
-			count, err := deleteActivitiesByIDInternal(tx, ids)
-			if err != nil {
-				return err
-			}
-			deleted += count
-		}
-
 		if maxEntries > 0 {
 			ids, err := findActivityIDsBeyondHistoryLimitInternal(tx, maxEntries)
 			if err != nil {
