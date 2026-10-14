@@ -91,12 +91,12 @@ callers creating events must send a listed code. A run status transition uses
 | `webhook` | `webhook.create`, `webhook.update`, `webhook.delete`, `webhook.trigger` |
 | `notification` | `notification.send` |
 
-## Run-Gate
+## Run gate
 
-Das beschlossene Einzelinstanzmodell mit Aufnahme, Abbruch, Wiederanlauf,
-Fehlercodes und Vertragsfolgen für den Adapter steht im
-[Run-Gate-Record](run-gate.md). Die dort beschriebene Entfernung der bisherigen
-Lease-Mechanik ist Aufgabe des Implementierungsschritts.
+The agreed single-hub model, including admission, cancellation, restart
+recovery, operational error codes and adapter contract consequences, is in the
+[run-gate record](run-gate.md). Removing the existing lease mechanism is part
+of the later implementation step.
 
 Run detail returns the most recent 256 distinct step transitions. Repeated
 messages within one step do not consume this limit. A closed step before the

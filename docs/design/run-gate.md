@@ -1,256 +1,318 @@
-# Run-Gate und Einzelinstanzbetrieb
+# Run gate and single-hub operation
 
-## Geltung und Garantien
+## Scope and guarantees
 
-Pro PostgreSQL-Datenbank läuft genau ein Hub-Prozess in einem Hub-Container. Ein
-zweiter Hub mit derselben Datenbank ist nicht unterstützt und darf keine Arbeit
-annehmen. Agents sind getrennte Prozesse; diese Entscheidung begrenzt ihre Zahl
-nicht. Der Record beschreibt den lebenden Hub sowie dessen Neustart und Absturz.
-Ein abgestürzter Hub nimmt begonnene Operationen nicht automatisch wieder auf:
-Ein Agent kann eine bereits angenommene Aktion trotzdem zu Ende führen. Darum
-muss die tatsächliche Ressourcenlage vor einem erneuten Eingriff gelesen werden.
+Exactly one hub process in one hub container operates against a PostgreSQL
+database. A second hub using that database is unsupported and must not accept
+work. Agents are separate processes; this decision does not limit their number.
+This record covers the live hub, restart and crash recovery. A crashed hub does
+not automatically resume an operation. An agent may still finish an action it
+already accepted, so the next intake must read the actual resource state before
+another intervention.
 
-Ein Run hat genau einen aktiven Datensatz je `(environment_id, gate_scope)`.
-`gate_key` bezeichnet die Operation. `queued` und `running` belegen den Scope;
-`success`, `failed` und `cancelled` geben ihn frei. Ein gesetztes
-`cancel_requested_at` ist ein dauerhafter Abbruchwunsch und **kein** zusätzlicher
-Wert der Spalte `status`. Es gibt weder automatisches Replay einer Operation
-noch eine Zusage über die atomare Ausführung externer Effekte. Die Garantie
-betrifft die eindeutige Aufnahme und den einmaligen dauerhaften Abschluss des
-Run-Datensatzes.
+A gated run has at most one active row per `(environment_id, gate_scope)`.
+`gate_key` identifies the operation. Gated runs start as `running`, never
+`queued`. An ungated, queue-opted activity can instead start as `queued` while
+waiting for a local concurrency slot; it has no gate scope or gate admission
+result. A gated `running` row occupies its scope; an ungated `queued` row
+waits without holding a slot, and an ungated `running` row holds one.
+`success`, `failed` and `cancelled` are terminal. A set
+`cancel_requested_at` is a durable cancellation request, **not** another value
+of `status`. There is no automatic operation replay or atomicity guarantee
+for external effects. The guarantees cover unique gated admission and one
+durable terminal transition per activity row.
 
-## Zustände und Übergänge
+## States and transitions
 
-Die Tabelle ist der Vertrag für Gate-Runs. `message_code` bezeichnet den Code im
-Run-Snapshot; ein zusätzlich erwähnter `activity_messages.code` gehört zum
-dauerhaften Verlauf. Jeder terminale Schreibvorgang setzt `ended_at`,
-`duration_ms` und `updated_at` in derselben Transaktion wie `status` und
-`message_code`. Wiederholte oder verspätete Abschlüsse verändern einen
-terminalen Run nicht und erzeugen keine zweite Abschlussnachricht.
+`message_code` is the code in the activity snapshot. When mentioned,
+`activity_messages.code` is the code in durable history. Every terminal write
+sets `ended_at`, `duration_ms` and `updated_at` in the same transaction as
+`status` and `message_code`. A repeated or late completion leaves a terminal
+row unchanged and writes no second final message.
 
-| Von → nach | Auslöser und Bedingung | Geschriebene Spalten | Code |
+### Gated runs
+
+`StartGatedActivity` creates `running` with `run.started` and returns the only
+executable work context. Gated runs do not wait for an activity slot.
+
+| From → to | Trigger and condition | Written fields | Code |
 | --- | --- | --- | --- |
-| Kein Run → `queued` | Hub nimmt eine Operation mit Warteschlange auf. | `status`, `gate_scope`, `gate_key`, `started_at`, `message_code` | `activity.queued` |
-| Kein Run → `running` | Hub nimmt eine sofort ausführbare Operation auf. | Wie oben, dazu `status=running` | `run.started` bei Gate-Aufnahme; sonst `activity.running` |
-| `queued` → `running` | Der lokale Worker erhält seinen Ausführungsslot. | `status`, `updated_at`, `message_code` | `activity.running` |
-| `queued`/`running` → Abbruch angefordert | Der Hub nimmt einen erstmaligen Abbruchwunsch an und signalisiert den lokalen Worker. `status` bleibt erhalten. | `cancel_requested_at`, `latest_message`, `message_code`, `updated_at`; zusätzlich eine Audit-Nachricht | `activity.cancel_requested` im Snapshot und in `activity_messages.code` |
-| `queued`/`running` → gleicher aktiver Zustand | Der Worker meldet Fortschritt. | `progress`, `step`, `updated_at` und gegebenenfalls Nachrichten; ohne Abbruchwunsch auch `latest_message`, `message_code` | Ohne Abbruchwunsch der validierte Fortschrittscode, standardmäßig `activity.message`; bei Abbruchwunsch bleibt im Snapshot `activity.cancel_requested` stehen. |
-| `queued`/`running` → `success` | Der Worker meldet Erfolg; kein Abbruchwunsch liegt vor. | Terminale Spalten, `progress=100`, gegebenenfalls Abschlussnachricht | `activity.success` |
-| `queued`/`running` → `failed` | Der Worker meldet einen Fehler; kein Abbruchwunsch liegt vor. | Terminale Spalten, `error`, gegebenenfalls Abschlussnachricht | `activity.failed` |
-| `queued`/`running` mit Abbruchwunsch → `cancelled` | Der Worker kehrt zurück, auch wenn er Erfolg oder Fehler meldet. | Terminale Spalten, Abschlussnachricht; kein Fehlertext aus dem überstimmten Ergebnis | `activity.cancelled` |
-| `queued`/`running` → `failed` | Neustart-Reparatur erkennt einen Run des vorigen Hub-Prozesses ohne Abbruchwunsch. | Terminale Spalten, Unterbrechungsgrund und Abschlussnachricht | `activity.failed` |
-| `queued`/`running` mit Abbruchwunsch → `cancelled` | Neustart-Reparatur erkennt einen Run des vorigen Hub-Prozesses mit dauerhaftem Abbruchwunsch. | Terminale Spalten und Abschlussnachricht | `activity.cancelled` |
-| Terminal → derselbe Terminalzustand | Abschluss wird wiederholt, ein verspäteter Worker schreibt oder eine Reparatur wird erneut ausgeführt. | Keine | Vorhandener Code bleibt bestehen. |
+| No run → `running` | Gate admits an operation. | `status`, `gate_scope`, `gate_key`, `started_at`, `message_code` | `run.started` |
+| `running` → cancellation requested | Hub accepts the first request and signals its local worker; status stays `running`. | `cancel_requested_at`, `latest_message`, `message_code`, `updated_at`; one audit message | `activity.cancel_requested` in snapshot and history |
+| `running` → `running` | Worker reports progress. | `progress`, `step`, `updated_at` and optional messages; without cancellation, also `latest_message` and `message_code` | Validated progress code, default `activity.message`; after cancellation the snapshot keeps `activity.cancel_requested`. |
+| `running` → `success` | Worker reports success without a cancellation request. | Terminal fields, `progress=100`, optional final message | `activity.success` |
+| `running` → `failed` | Worker reports failure without a cancellation request. | Terminal fields, `error`, optional final message | `activity.failed` |
+| `running` with cancellation request → `cancelled` | Worker returns, whether it reports success or failure. | Terminal fields and final message; no error from the overridden result | `activity.cancelled` |
+| `running` → `failed` | Startup repair finds an abandoned run without a cancellation request. | Terminal fields, interruption reason and final message | `activity.failed` |
+| `running` with cancellation request → `cancelled` | Startup repair finds an abandoned run with a durable cancellation request. | Terminal fields and final message | `activity.cancelled` |
+| Terminal → same terminal state | Completion, late worker write or repair repeats. | None | Existing code remains. |
 
-Der Job-Run-Snapshot ist eine Projektion des dauerhaften Job-Koordinators. Ein
-ausdrücklicher Retry darf ihn nach einem Terminalzustand wieder öffnen; das ist
-ein neuer Koordinatorzustand und keine Wiederöffnung eines Gate-Runs. Seine
-`job.*`-Codes und `activity_sync_receipts` folgen dem Koordinator und bleiben
-von den oben genannten Gate-Übergängen getrennt.
-Ein `queued`-Run mit gesetztem Abbruchwunsch darf keinen Slot mehr übernehmen;
-sein Wartender geht direkt in den terminalen Abbruch. Ein gleichzeitiger
-Slot-Erhalt und Abbruch wird anhand der dauerhaft gespeicherten Reihenfolge
-entschieden, ohne den Abbruchwunsch zu verlieren.
+### Ungated activities and job runs
 
-## Aufnahme und Gate
+`StartActivity` can create a queue-opted ungated activity as `queued` when its
+concurrency slot is unavailable or deferred. With a free slot, it starts as
+`running`. `AwaitActivitySlot` changes a waiting row to `running` when the local
+worker obtains a slot. The ordinary activity path defaults to
+`activity.queued` and `activity.running` when the caller supplies no code;
+`run.started` belongs to gated admission. An ungated row has no gate-scope
+exclusion.
 
-Die Aufnahme sperrt den Scope innerhalb einer PostgreSQL-Transaktion, liest
-aktive Runs und legt höchstens einen neuen Run an. Die bestehende
-transaktionsgebundene Advisory-Sperre pro `(environment_id, gate_scope)` bleibt
-für gleichzeitig eintreffende Anfragen im einen Hub erhalten. Der
-Einzelinstanz-Schutz weiter unten hat eine andere Aufgabe und ersetzt die
-atomare Scope-Aufnahme nicht.
+| From → to | Trigger and condition | Written fields | Code |
+| --- | --- | --- | --- |
+| No activity → `queued` | Queue-opted work has no slot or defers it. | `status`, `started_at`, `message_code`; no gate scope | `activity.queued` |
+| No activity → `running` | Ungated work starts with a slot or needs no queue. | `status`, `started_at`, `message_code`; no gate scope | `activity.running` |
+| `queued` → `running` | Local worker acquires a slot without a recorded cancellation. | `status`, `updated_at`, `message_code` | `activity.running` |
+| `queued`/`running` → cancellation requested | Hub records the first request and signals the local worker; status stays active. | `cancel_requested_at`, `latest_message`, `message_code`, `updated_at`; one audit message | `activity.cancel_requested` |
+| `queued` with cancellation request → `cancelled` | Waiting worker stops without beginning the operation. | Terminal fields and final message | `activity.cancelled` |
+| `queued`/`running` → `success`/`failed`/`cancelled` | Worker returns, or startup repair closes abandoned work. | Terminal fields and at most one final message | Matching `activity.<status>` |
 
-| Befund bei der Aufnahme | Ergebnis | Datenbankänderung |
+A queued worker whose cancellation was recorded must not begin the operation;
+its caller completes the row as `cancelled`. If slot acquisition races with
+cancellation, the local worker checks the durable request before doing work
+and completes the cancelled activity. Ungated rows use the same terminal
+status condition and one-final-message rule as gated rows. Startup repair
+also closes abandoned ungated queued and running work before accepting new
+work. The existing two-minute sweep for ungated untracked work remains for
+now; startup repair could replace it in a separate follow-up.
+
+A job-run snapshot is a projection of its durable coordinator. An explicit
+retry may reopen it after a terminal state; that is a new coordinator state,
+not a reopened gated run. Its `job.*` codes and
+`activity_sync_receipts` follow the coordinator rather than the gated
+transition table.
+
+## Admission and gate
+
+Admission locks the scope in a PostgreSQL transaction, reads active gated runs
+and creates at most one new run. The existing transaction-scoped advisory lock
+per `(environment_id, gate_scope)` serializes concurrent requests within the
+single hub. The process-wide lock below serves a different purpose and does
+not replace atomic scope admission.
+
+| Finding at admission | Result | Database change |
 | --- | --- | --- |
-| Aktiver Run mit demselben `gate_key`, ohne Abbruchwunsch | `run.joined` mit dessen ID; nur der ursprüngliche Aufruf besitzt einen Worker. | Keine |
-| Aktiver Run mit anderem `gate_key` | Konflikt `run.busy` mit der aktiven Run-ID. | Keine |
-| Aktiver Run mit demselben `gate_key` und Abbruchwunsch | Konflikt `run.cancelling` mit der aktiven Run-ID, auch bei `Check`. | Keine |
-| Kein aktiver Run; `Check=true`, `Recheck=false`; letzter erfolgreicher Run derselben Operation und desselben Scopes endete vor weniger als 30 Sekunden | `run.fresh` mit dessen ID. | Keine |
-| Sonst | `run.started` und eine neue Run-ID; genau dieser Aufruf beginnt die Arbeit. | Neuer aktiver Run |
+| Active run with the same `gate_key` and no cancellation request | `run.joined` with its ID; only the original caller owns a worker. | None |
+| Active run with a different `gate_key` | `run.busy` conflict with the active run ID. | None |
+| Active run with the same `gate_key` and cancellation requested | `run.cancelling` conflict with the active run ID, even for `Check`. | None |
+| No active run; `Check=true` and `Recheck=false`; last successful run for this operation and scope ended less than 30 seconds ago | `run.fresh` with that ID. | None |
+| Otherwise | `run.started` and a new run ID; only this caller starts work. | New `running` run |
 
-Die Aktivprüfung kommt immer vor der Frischeprüfung. `Recheck=true` umgeht nur
-das 30-Sekunden-Ergebnis, niemals einen aktiven Run. Nur ein erfolgreicher
-Abschluss zählt als frisch; die Frist vergleicht `ended_at` mit PostgreSQL-Zeit.
-Nach Fristablauf oder `Recheck` wird die Ressourcenlage vor der Ausführung neu
-gelesen. Ein Join, eine Ablehnung und ein Frischetreffer starten keinen Worker
-und schreiben keinen neuen Run-Code in den bestehenden Datensatz.
+The active-run check always precedes freshness. `Recheck=true` bypasses only
+the 30-second freshness result, never an active run. Only success is fresh;
+the interval compares `ended_at` against PostgreSQL time. At exactly 30
+seconds the previous run is no longer fresh. After expiry or `Recheck`, the
+worker reads resource state again before acting. Joining, rejecting and
+returning a fresh result start no worker and do not change the existing row's
+message code.
 
-## Abbruch
+## Cancellation
 
-Der erste Abbruchwunsch schreibt `cancel_requested_at` mit PostgreSQL-Zeit,
-`activity.cancel_requested` und die anfordernde Person als Audit-Nachricht in
-einer Transaktion. Danach veröffentlicht der Hub Nachricht und Snapshot und
-signalisiert den lokal registrierten Worker. Ein erneuter Wunsch ist idempotent:
-kein zweiter Audit-Eintrag, kein neuer Zeitpunkt. Das Signal allein ist nicht
-dauerhaft; die Spalte ist es. Die lokale Worker-Registrierung muss bei der
-Aufnahme vorhanden sein, bevor ein Abbruch angenommen werden kann.
+The first cancellation request writes `cancel_requested_at` using PostgreSQL
+time, `activity.cancel_requested` and an audit message naming the requester in
+one transaction. The hub then publishes the message and snapshot and signals
+its locally registered worker. A repeated request is idempotent: no second
+audit entry and no new timestamp. The local signal is transient; the column
+is durable. Local worker registration must exist before cancellation can be
+accepted for a newly admitted run.
 
-Während des Abwickelns bleiben `status` und Scope aktiv. Fortschritts- und
-Metadaten-Schreibwege dürfen weiterhin arbeiten; sie erhalten aber
-`cancel_requested_at`, `message_code=activity.cancel_requested` und die
-Abbruchmeldung in `latest_message` bis zum terminalen Abschluss. Spätere
-Fortschrittsnachrichten behalten ihren eigenen Code im Nachrichtenverlauf.
-Diese Regel macht den Abbruch im Snapshot sichtbar, auch wenn der Worker noch
-meldet. Service-Schreibwege für den besitzenden Worker lösen ihre Datenbankarbeit
-selbst mit einer neuen begrenzten Schreibfrist vom abgebrochenen Arbeitskontext;
-einzelne Aufrufer müssen das nicht nachholen.
+While cancellation is unwinding, status and scope remain active. Progress and
+metadata writes may continue, but preserve `cancel_requested_at`,
+`message_code=activity.cancel_requested` and the cancellation text in
+`latest_message` until terminal completion. Later progress messages retain
+their own codes in history. The snapshot therefore shows cancellation even
+while the worker still reports progress. Service write paths for the owning
+worker detach their database work from the cancelled work context with a new,
+bounded write deadline; callers need not do so individually.
 
-Erst die Rückkehr des Workers und sein terminaler Schreibvorgang geben den Scope
-frei. Ein Worker, der nie zurückkehrt, hält ihn bis zum Ende des Hub-Prozesses.
-Die Reparatur des nächsten Hub-Prozesses schließt den Run danach ab. Ein
-abgebrochener Agent-Aufruf kann außerhalb des Hubs bereits Wirkung gezeigt
-haben; `cancelled` ist keine Rollback-Zusage.
+Only the worker's return and terminal write release the scope. A worker that
+never returns holds it until the hub process ends; the next hub repairs the
+row. A cancelled agent call may already have caused an external effect.
+`cancelled` does not promise a rollback.
 
-## Neustart, Absturz und einmaliger Abschluss
+## Restart, crash and one-time completion
 
-Nach Erwerb der Einzelinstanz-Sperre und vor der Aufnahme neuer Arbeit repariert
-der Hub alle vom vorigen Prozess verbliebenen Gate-Runs in `queued` oder
-`running` sofort. Er wartet nicht auf ein Lease-Alter: Im neuen Prozess gibt es
-keinen alten lokalen Worker. Mit `cancel_requested_at` werden sie `cancelled`,
-sonst `failed`; beide Fälle erhalten einen verständlichen Unterbrechungstext,
-einen passenden `activity.<status>`-Code und einen terminalen Zeitpunkt. Die
-Reparatur ist wiederholbar und erfasst auch Runs, die zwischen Erzeugung und
-Worker-Start oder während eines Abbruchs liegen geblieben sind. Ungated
-verwaiste Queue- und Laufzustände werden ebenfalls repariert; spezielle
-Koordinatoren, etwa Job-Runs oder ein belegter Self-Update-Abschluss, werden
-über ihren eigenen dauerhaften Zustand abgeglichen.
+After acquiring the single-instance lock and before accepting work, a new hub
+immediately repairs all gated `running` runs left by the prior process. It
+does not wait for lease age because no old local worker exists in the new
+process. A durable `cancel_requested_at` makes the result `cancelled`;
+otherwise it is `failed`. Both receive an interruption message, matching
+`activity.<status>` code and terminal timestamp. Repair is idempotent and
+also covers a crash between row creation and worker start or during
+cancellation. Abandoned ungated queued and running work is repaired too;
+special coordinators, including job runs and an occupied self-update
+completion, reconcile their own durable state.
 
-Der terminale Schreibvorgang prüft atomar `status IN ('queued', 'running')` und
-schreibt Status, Code und letzte Nachricht in einer Transaktion. Ein zweiter
-Abschluss trifft keine aktive Zeile und erzeugt keine weitere Abschlussnachricht.
-Stürzt der Hub nach Commit, aber vor dem Live-Event ab, liest der neue Hub den
-terminalen Snapshot; Clients laden ihn nach Reconnect neu. Stürzt er vor dem
-Commit ab, repariert der neue Hub den noch aktiven Run. Der Abschluss-Effekt
-des Job-Koordinators nutzt zusätzlich `activity_sync_receipts`: Run-ID und
-zuletzt angewandte Koordinatorversion werden zusammen mit Projektion und
-Nachricht transaktional geschrieben. Replay derselben Version erzeugt keinen
-zweiten Effekt, auch nach Pruning der Activity-Historie. Der Receipt bleibt bis
-zum belegten Ausscheiden des Koordinator-Runs erhalten. Diese Regeln garantieren
-keine genau einmalige externe Agent-Aktion; nach einem Absturz ist deren
-tatsächlicher Ausgang zu prüfen.
+The repair frees the gated scope. The next intake reads the resource state
+before acting, following the current Arcane behaviour. An agent may still
+finish an action accepted before the crash, so the next action can overlap
+that external action. Blocking a scope until the agent confirms the outcome,
+with a query by run ID, timeout and manual release, is a separate follow-up
+requiring a hub–agent contract change.
 
-## Einzelinstanz-Schutz und Datenbankverlust
+A terminal write atomically checks `status IN ('queued', 'running')` and
+writes status, code and latest message in one transaction. A second
+completion finds no active row and adds no final message. If the hub crashes
+after commit but before the live event, the new hub reads the terminal
+snapshot and clients reload it after reconnect. If it crashes before commit,
+the new hub repairs the still-active row. A job coordinator's completion also
+uses `activity_sync_receipts`: the run ID and last applied coordinator
+version are written transactionally with the projection and message.
+Replaying the same version adds no second effect, even after pruning activity
+history. Keep the receipt until the coordinator run has demonstrably left.
+These rules do not guarantee exactly one external agent action; its actual
+outcome must be checked after a crash.
 
-Der Hub erwirbt beim Start vor Migration, Reparatur, Hintergrundjobs und
-HTTP-Bereitschaft mit `pg_try_advisory_lock` eine feste, namensraumgebundene
-PostgreSQL-**Session**-Sperre auf einer eigens reservierten physischen
-Verbindung. Die Verbindung bleibt bis nach dem Stoppen aller Worker offen;
-eine Transaktionssperre oder eine gewöhnliche Pool-Verbindung reicht dafür
-nicht. Ist die Sperre belegt, endet der Start mit dem stabilen operativen
-Fehlercode `hub.already_running`, ohne Jobs oder HTTP zu starten. Der Code ist
-ein Startfehler und gehört nicht zum Run-Nachrichtenkatalog.
+If a normal pool connection fails while the dedicated lock connection still
+holds its session, a completion retries its write up to three times for
+retryable errors. After the final failure it returns the error; it must not
+claim success or free the durable scope. The row remains active and blocks
+another gated admission on that scope. A later explicit completion retry can
+finish it after database access recovers; otherwise an operator restart
+triggers startup repair. Pool failure alone is not proof of lock loss.
 
-Verliert der Hub die Sperrverbindung oder kann er ihren Besitz nicht mehr
-prüfen, setzt er seine Bereitschaft bei Erkennung auf falsch, nimmt keine neue Arbeit
-an, signalisiert laufenden Workern das Ende und beendet den Prozess. Er darf
-auf einer automatisch neu verbundenen Pool-Verbindung nicht weitermachen:
-Andernfalls könnte ein zweiter Hub die freigewordene Sperre bereits halten.
-Ein neuer Prozess erwirbt die Session-Sperre erneut und repariert die
-verbliebenen Runs vor dem Öffnen der API. Bei einer Netztrennung, in der
-PostgreSQL die alte Session noch für lebendig hält, wartet der Start auf deren
-Freigabe beziehungsweise scheitert sichtbar mit `hub.already_running`; er
-umgeht die Sperre nicht. Der Verlust im laufenden Prozess wird als
-`hub.db_lock_lost` gemeldet. Kontrolliertes Herunterfahren gibt die Sperre erst
-frei, wenn keine Worker mehr schreiben können; bei einem nicht endenden Worker
-endet der Prozess statt die Sperre vorzeitig freizugeben.
+## Single-instance lock and database loss
 
-## Abgleich mit der Mehrprozess-Mechanik aus PR #42
+At startup, before migration, repair, background jobs and HTTP readiness, the
+hub opens one dedicated physical connection (`*sql.Conn` or pgx
+`Acquire`) and acquires a fixed, namespaced PostgreSQL **session** advisory
+lock with `pg_try_advisory_lock`. It holds that same connection for the entire
+process lifetime and does not use it as a general query pool connection. A
+one-off query through the pool or a transaction advisory lock is insufficient.
+If the lock is held, startup fails immediately with the stable operational
+code `hub.already_running`, without opening HTTP or starting jobs; there is no
+wait for release. This is a startup error, not a run message code.
 
-Die Entscheidung in [#43](https://github.com/florianfinn/docklet-next/issues/43)
-ändert die Betriebsannahme von [PR #42](https://github.com/florianfinn/docklet-next/pull/42).
-Bereits ausgelieferte Migrationen bleiben unverändert; ein Schemaabbau erfolgt
-gegebenenfalls nur durch eine neue Vorwärtsmigration.
+The hub records the connection's backend PID and probes that same dedicated
+connection every second. Each probe has a one-second deadline and verifies
+both the unchanged backend PID and the granted advisory lock in `pg_locks`;
+a successful pool query does not count. A failed probe, missing lock, changed
+PID or probe timeout immediately clears readiness and starts fail-stop.
+Independently, a monotonic watchdog requires a successful proof at least once
+every two seconds, so a stalled probe cannot extend the deadline. Admission
+checks readiness and the watchdog deadline both before and after its database
+transaction, before returning an executable work context. Fail-stop rejects
+new work, cancels local workers and exits with `hub.db_lock_lost`. It must not
+reconnect and silently continue on a new pool connection. Shutdown gives
+workers at most one further second
+to stop; then the process terminates instead of releasing the session lock
+while a local worker can still write. Controlled shutdown releases the lock
+only after all workers have stopped writing.
 
-| Baustein | Entscheidung | Grund und Zielzustand |
+With a scheduled process, loss of the session is detected within two seconds
+and the old hub process exits within one further second: the hub-side overlap
+window is at most three seconds. An arbitrary operating-system pause can
+delay execution of this watchdog; admission must check its monotonic deadline
+on resumption before accepting work. A detached agent action can continue
+beyond process exit, so its overlap with a newly admitted action has no
+finite bound from the hub lock alone. A new hub can acquire the released lock
+and repair the old rows before opening its API. If PostgreSQL still considers
+the old session alive during a network partition, the new hub fails fast with
+`hub.already_running`. It never bypasses the held lock.
+
+No process epoch is added: terminal status conditions prevent stale database
+completion after repair, while an epoch would not stop an already accepted
+external agent action. The residual external overlap is recorded above and
+requires the separate hub–agent follow-up.
+
+## Reconciliation with the multi-process mechanism from PR #42
+
+The decision in [#43](https://github.com/florianfinn/docklet-next/issues/43)
+changes the operating assumption of
+[PR #42](https://github.com/florianfinn/docklet-next/pull/42). Shipped
+migrations remain immutable; schema removal requires a new forward migration.
+
+| Component | Decision | Reason and target state |
 | --- | --- | --- |
-| Transaktionsgebundene Advisory-Sperre je Run-Scope | Behalten | Sie serialisiert gleichzeitig eintreffende Anfragen im einen Hub bis zum Commit. |
-| Dauerhafter Abbruchwunsch, Audit-Nachricht und sofortiges Live-Snapshot | Behalten | Ein Abbruch übersteht den Hub-Absturz und bleibt für Clients sichtbar. |
-| Owner-Token `gate_owner` und Fencing jedes Fortschritts- und Abschluss-Schreibers | Entfernen | Es gibt keinen zweiten lebenden Hub-Owner. Nach Verlust der Session-Sperre beendet sich der alte Prozess; der neue repariert erst nach Erwerb der Sperre. Terminale Statusbedingungen bleiben als Schutz gegen doppelte Abschlüsse. |
-| `gate_lease_at` und 30-Sekunden-Heartbeat | Entfernen | Der Lebenszeit-Lock entscheidet über den Hub; ein Lease würde einen lebenden, aber lange abbrechenden Worker fälschlich freigeben können. |
-| Zweiminütiger Sweep mit Token-Rotation und Übernahme gegateter Runs | Entfernen | Der neue Hub repariert nach exklusivem Start sofort. Der periodische Sweep für ungated verwaiste Runs bleibt unabhängig davon erhalten. |
-| Remote-Cancel-Beobachtung durch den Heartbeat eines zweiten Service | Entfernen | Abbruchsignal und Worker liegen im einzigen Hub. Der dauerhafte Datenbankeintrag bleibt für Crash-Recovery. |
-| PostgreSQL-Zeit für Gate-Start, Abbruch, Terminalzeit und 30-Sekunden-Frische | Behalten | `NOW()` ist an den ohnehin nötigen Schreib- und Lesewegen verfügbar und hält die Frist konsistent. Hub-übergreifende Clock-Skew-Tests entfallen. |
-| Atomarer terminaler Statuswechsel und `activity_sync_receipts` | Behalten | Sie verhindern doppelte Abschlussnachrichten und doppelte Job-Projektion bei Replay oder Neustart. |
+| Transaction advisory lock per run scope | Keep | It serializes concurrent admission through commit in the one hub. |
+| Durable cancellation request, audit message and immediate live snapshot | Keep | Cancellation survives a hub crash and remains visible to clients. |
+| Owner token `gate_owner` and fencing of progress and completion writers | Remove | The dedicated session lock and fail-stop bound old hub writes; terminal status conditions still guard against duplicate completion. External effects retain the stated overlap risk. |
+| `gate_lease_at` and 30-second heartbeat | Remove | The lifetime lock identifies the hub; lease expiry could release a live worker that is slow to unwind cancellation. |
+| Two-minute sweep with token rotation and takeover of gated runs | Remove | A new hub repairs after exclusive startup. The periodic sweep of ungated untracked runs remains for now. |
+| Remote cancellation observation by another service's heartbeat | Remove | Cancellation signal and worker are in the sole hub; the durable database request remains for recovery. |
+| PostgreSQL time for gated start, cancellation, terminal time and 30-second freshness | Keep | `NOW()` is available on the required database paths and keeps the interval consistent. Cross-hub clock-skew tests are unnecessary. |
+| Atomic terminal status transition and `activity_sync_receipts` | Keep | They prevent duplicate final messages and duplicate job projection on replay or restart. |
 
-Die Implementierung darf den Owner-/Lease-Code erst entfernen, wenn die
-Einzelinstanz-Sperre samt Fail-Stop und die sofortige Reparatur wirksam und
-getestet sind. Zwischenzustände dürfen weder zwei Hubs zulassen noch einen
-aktiven Scope vor Rückkehr seines Workers freigeben.
+Implementation may remove owner and lease code only once the single-instance
+lock, fail-stop and immediate repair are effective and tested. Intermediate
+states must neither admit two hubs nor free an active scope before its local
+worker returns or the old process exits.
 
-## Offene Review-Hinweise für den Implementierungsschritt
+## Open review notes for the implementation step
 
-Die folgenden Punkte stammen aus [Review-Runde 5 zu PR #42](https://github.com/florianfinn/docklet-next/pull/42#issuecomment-6175086772)
-und sind hier fachlich entschieden, aber noch nicht umgesetzt:
+The following points come from [review round 5 on PR #42](https://github.com/florianfinn/docklet-next/pull/42#issuecomment-6175086772)
+and are decided here but not yet implemented:
 
-| Hinweis | Umsetzung und Abnahme |
+| Note | Implementation and acceptance |
 | --- | --- |
-| N13 | `cancelRequestedAt` in den Run-Snapshot und das generierte DTO aufnehmen. Nach dem Abbruch darf ein Fortschritts- oder Metadaten-Update `messageCode=activity.cancel_requested` und `latestMessage` nicht überschreiben; die einzelnen Fortschrittsnachrichten bleiben im Verlauf. |
-| N14 | Owner-Schreibwege `UpdateActivity`, `AppendMessages` und `PatchActivityMetadata` lösen den Datenbankkontext innerhalb des Service vom abgebrochenen Arbeitskontext, ohne die Owner-Identität beziehungsweise den lokalen Run-Bezug zu verlieren. So kann der Worker beim Abwickeln weiter protokollieren; der Caller braucht kein eigenes `context.WithoutCancel`. |
-| N15 | Den Kommentar zu `CancelActivity` auf den gültigen aktuellen Vertrag verkürzen und grammatisch korrigieren. |
+| N13 | Add `cancelRequestedAt` to the run snapshot and generated DTO. Progress and metadata updates after cancellation must preserve `messageCode=activity.cancel_requested` and `latestMessage`; individual progress messages remain in history. |
+| N14 | Owner write paths `UpdateActivity`, `AppendMessages` and `PatchActivityMetadata` detach the database context inside the service from the cancelled work context while retaining owner identity or the local run reference. The worker can keep logging during unwinding; callers need no `context.WithoutCancel`. |
+| N15 | Shorten and correct the `CancelActivity` comment to its current contract. |
 
-## Testmatrix für den Implementierungsschritt
+## Test matrix for the implementation step
 
-Jede Zeile braucht einen automatisierten Test und einen gezielten Gegenversuch:
-Die genannte Mutation muss den Test rot machen. Für Neustarttests werden zwei
-aufeinanderfolgende Hub-Lebenszeiten gegen dieselbe Testdatenbank verwendet;
-der erste Prozess beziehungsweise seine Session wird tatsächlich beendet. Ein
-zweiter Service im selben Prozess ersetzt den Einzelinstanztest nicht.
+Each row needs an automated test and a targeted counterexample: the named
+mutation must make that test fail. Restart tests use two consecutive hub
+lifetimes against the same test database, actually ending the first process or
+its session. A second service in one process is not a single-instance test.
 
-| Fall | Erwartung | Mutation, die den Test rot machen muss |
+| Case | Expected result | Mutation that must turn the test red |
 | --- | --- | --- |
-| 1. Neue wartende Operation | `queued`, Scope belegt, `activity.queued`. | Start direkt als `running` speichern. |
-| 2. Neue sofortige Gate-Operation | `running`, `run.started`, genau ein Worker. | Worker zweimal starten. |
-| 3. Slot wird frei | `queued` → `running`, `activity.running`. | Status- oder Code-Update weglassen. |
-| 4. Gleiche Operation trifft aktiven Run | `run.joined`, gleiche ID, kein weiterer Worker. | Zweiten Run anlegen. |
-| 5. Andere Operation trifft aktiven Run | `run.busy`, aktive ID, keine Änderung. | Konflikt zulassen. |
-| 6. Gleiche Operation trifft abbrechenden Run | `run.cancelling`, auch mit `Check`, keine Arbeit. | Wieder `run.joined` liefern. |
-| 7. Erster Abbruch bei `queued` | Wunsch und Audit-Nachricht dauerhaft, lokaler Wartender signalisiert, Status bleibt `queued`. | `cancel_requested_at` nicht schreiben. |
-| 8. Abbruch und Slot-Zuteilung konkurrieren | Ein abbrechender Wartender beginnt keine neue Arbeit und schließt als `cancelled`. | Wartenden trotz `cancel_requested_at` starten. |
-| 9. Erster Abbruch bei `running` | Wunsch, Audit-Nachricht, Snapshot und lokales Signal; Scope bleibt belegt. | Nur Kontext abbrechen, ohne dauerhaften Wunsch. |
-| 10. Wiederholter Abbruch | Zeitpunkt, Audit-Anzahl und Status bleiben gleich. | Zweite Audit-Nachricht schreiben. |
-| 11. Fortschritt ohne Abbruch | Schritt, Fortschritt und validierter Code im Snapshot und Verlauf. | Fortschrittscode nicht aktualisieren. |
-| 12. Fortschritt nach Abbruch | Nachricht wird gespeichert; `cancelRequestedAt`, Snapshot-Code und Abbruchtext bleiben sichtbar. | `latestMessage` durch Fortschritt ersetzen. |
-| 13. Abgebrochener Worker schreibt weiter | Service-Methoden akzeptieren seinen abgebrochenen Arbeitskontext. | Datenbankzugriff wieder an `ctx.Done()` koppeln. |
-| 14. Worker meldet Erfolg | Ein `success`-Abschluss, `activity.success`, `progress=100`, eine Abschlussnachricht. | Terminal-Code weglassen. |
-| 15. Worker meldet Fehler | Ein `failed`-Abschluss mit Fehlertext und `activity.failed`. | Status als `success` speichern. |
-| 16. Worker meldet nach Abbruch Erfolg oder Fehler | Ein `cancelled`-Abschluss mit `activity.cancelled`, ohne überstimmten Fehlertext. | Abbruchwunsch bei Completion ignorieren. |
-| 17. Worker kehrt nach Abbruch lange nicht zurück | Scope bleibt bis Rückkehr oder Prozessende belegt, auch nach mehr als zwei Minuten. | Gegateten Run nach Alter sweepen. |
-| 18. Doppelter oder verspäteter Abschluss | Genau ein terminaler Zustand und eine Abschlussnachricht. | Statusbedingung aus dem `UPDATE` entfernen. |
-| 19. `Check` innerhalb von 30 Sekunden nach Erfolg | `run.fresh`, gleiche ID, kein Worker. | Vergleich der Frist entfernen. |
-| 20. `Check` bei genau 30 Sekunden | Neuer Run an der exklusiven Fristgrenze. | `>=` statt `>` an der Frist verwenden. |
-| 21. `Check` nach Fehler | Neuer Run; nur Erfolg zählt als frisch. | Fehler als frisch zählen. |
-| 22. `Recheck` innerhalb der Frist | Neuer Run, sofern kein Run aktiv ist. | `Recheck` ignorieren. |
-| 23. `Recheck` bei aktivem Run | Join, `run.busy` oder `run.cancelling` hat Vorrang. | Frische-/Recheck-Zweig vor Aktivprüfung ziehen. |
-| 24. Gleichzeitige Aufnahme desselben Scopes | Eine Run-ID und höchstens ein Worker über konkurrierende Anfragen. | Scope-Transaktionssperre entfernen. |
-| 25. Absturz während `running` | Neuer Hub markiert Run vor API-Freigabe `failed`; Scope ist danach frei. | Reparatur um zwei Minuten verzögern. |
-| 26. Absturz während `queued` | Neuer Hub markiert den verwaisten Run `failed`, ohne ihn auszuführen. | Wartenden Run beim Start erneut ausführen. |
-| 27. Absturz während des Abbruchs | Neuer Hub markiert Run `cancelled`, mit passendem Code; keine doppelte Audit-Nachricht. | `cancel_requested_at` bei Reparatur ignorieren. |
-| 28. Absturz vor dem Completion-Commit | Neuer Hub schreibt genau einen Reparaturabschluss mit einer Nachricht. | Reparatur aus dem Startpfad entfernen. |
-| 29. Absturz nach Completion-Commit vor Live-Event | Terminaler Run bleibt unverändert; Reconnect lädt den Snapshot. | Reconnect ohne Snapshot-Neuladung behandeln. |
-| 30. Job-Completion nach Neustart oder Pruning erneut synchronisiert | Receipt verhindert zweite Projektion/Nachricht für dieselbe Version. | Receipt-Prüfung entfernen. |
-| 31. Zweiter Hub startet bei gehaltener Sperre | Kein HTTP, keine Jobs, Fehler `hub.already_running`. | Session-Sperrenprüfung überspringen. |
-| 32. Sperrverbindung des laufenden Hubs fällt aus | Bereitschaft fällt, neue Arbeit stoppt, Prozess endet mit `hub.db_lock_lost`. | Pool-Reconnect ohne Fail-Stop erlauben. |
-| 33. Datenbankverbindung kehrt zurück | Nur ein neuer Hub erwirbt die Sperre und repariert vor API-Freigabe; alter Prozess arbeitet nicht weiter. | Reparatur erst nach Öffnen der API starten. |
-| 34. Alte Session bleibt während Netztrennung gesperrt | Neustart meldet `hub.already_running` und nimmt keine Arbeit an. | Lock-Fehler als Warnung behandeln. |
+| 1. New ungated queue-opted activity without a free slot | `queued` and `activity.queued`; no gate scope is occupied. | Save it directly as `running`. |
+| 2. New gated operation | `running`, `run.started`, exactly one worker. | Start the worker twice. |
+| 3. Ungated slot becomes free | Its `queued` row becomes `running` with `activity.running`. | Omit the status or code update. |
+| 4. Same operation meets an active gated run | `run.joined`, same ID, no second worker. | Create a second run. |
+| 5. Different operation meets an active gated run | `run.busy`, active ID, no change. | Admit the conflict. |
+| 6. Same operation meets a cancelling gated run | `run.cancelling`, including with `Check`, no work. | Return `run.joined`. |
+| 7. First cancellation of an ungated `queued` activity | Durable request and one audit message; local waiter is signalled, status remains `queued` until completion. | Omit `cancel_requested_at`. |
+| 8. Ungated cancellation races with slot acquisition | The waiting worker starts no operation after cancellation and completes as `cancelled`. | Let it start work despite `cancel_requested_at`. |
+| 9. First cancellation of a gated `running` run | Request, audit message, snapshot and local signal; scope stays occupied. | Cancel only the context without a durable request. |
+| 10. Repeated cancellation | Timestamp, audit count and status remain unchanged. | Write a second audit message. |
+| 11. Progress without cancellation | Step, progress and validated code appear in snapshot and history. | Omit progress code update. |
+| 12. Progress after cancellation | Message is stored; `cancelRequestedAt`, snapshot code and cancellation text remain visible. | Replace `latestMessage` with progress. |
+| 13. Cancelled worker keeps writing | Service methods accept its cancelled work context. | Tie database access back to `ctx.Done()`. |
+| 14. Worker reports success | One `success` completion, `activity.success`, `progress=100` and one final message. | Omit the terminal code. |
+| 15. Worker reports failure | One `failed` completion with error text and `activity.failed`. | Store `success` instead. |
+| 16. Worker reports success or failure after cancellation | One `cancelled` completion with `activity.cancelled` and no overridden error text. | Ignore cancellation in completion. |
+| 17. Gated worker does not return promptly after cancellation | Scope stays occupied until return or process end, even after two minutes. | Sweep a gated run by age. |
+| 18. Duplicate or late completion | Exactly one terminal state and final message. | Remove the status condition from `UPDATE`. |
+| 19. `Check` within 30 seconds after success | `run.fresh`, same ID, no worker. | Remove the freshness comparison. |
+| 20. `Check` at exactly 30 seconds | New run at the exclusive interval boundary. | Use `>=` instead of `>` in the interval predicate. |
+| 21. `Check` after failure | New run; only success is fresh. | Count failure as fresh. |
+| 22. `Recheck` within the interval | New run if none is active. | Ignore `Recheck`. |
+| 23. `Recheck` with an active run | Join, `run.busy` or `run.cancelling` takes precedence. | Check freshness or recheck before active runs. |
+| 24. Concurrent admission on one scope | One run ID and at most one worker across competing requests. | Remove the scope transaction lock. |
+| 25. Crash during gated `running` | New hub marks run `failed` before API readiness; scope is free afterwards. | Delay repair by two minutes. |
+| 26. Crash during ungated `queued` | New hub marks the orphaned row `failed` without executing it. | Restart the waiting operation on startup. |
+| 27. Crash during cancellation | New hub marks run `cancelled` with matching code and no duplicate audit message. | Ignore `cancel_requested_at` during repair. |
+| 28. Crash before completion commit | New hub writes exactly one repaired completion and final message. | Remove repair from startup. |
+| 29. Crash after completion commit but before live event | Terminal run is unchanged; reconnect reloads the snapshot. | Reconnect without a snapshot reload. |
+| 30. Job completion resynchronised after restart or pruning | Receipt prevents another projection or message for that version. | Remove the receipt check. |
+| 31. Second hub starts while lock is held | No HTTP or jobs; immediate `hub.already_running`. | Skip the session-lock check. |
+| 32. Running hub loses its dedicated lock connection | Probe detects loss within two seconds; readiness falls, admission stops, workers are cancelled and process exits within one more second with `hub.db_lock_lost`. | Disable the dedicated-connection probe or its monotonic deadline. |
+| 33. Database returns after lock loss | Only a new hub acquires the lock and repairs before API readiness; the old process cannot continue hub writes or admission after fail-stop. | Let the old process reconnect and resume progress writes or admission. |
+| 34. Old session remains locked during a network partition | New hub fails immediately with `hub.already_running` and accepts no work. | Wait on `pg_advisory_lock` instead of failing on `pg_try_advisory_lock`. |
+| 35. Ordinary pool completion fails while lock connection stays healthy | After three retryable write failures, completion returns an error and the run remains active; same-scope admission stays blocked until retry or restart repair. | Treat the exhausted write as success and admit another gated run. |
 
-## Folgen für #38: HTTP- und Live-Adapter
+## Consequences for #38: HTTP and live adapter
 
-Der Adapter darf sich auf `id`, `status`, `messageCode`, `latestMessage`,
-`startedAt`, `endedAt`, `affectedServices` und das neu auszugebende
-`cancelRequestedAt` im Snapshot stützen. Ein aktiver Run mit
-`cancelRequestedAt` bleibt `queued` oder `running`; der Zeitstempel ist die
-maßgebliche Abbruchanzeige. `run.started`, `run.joined` und `run.fresh` sind
-Aufnahmeergebnisse. `run.busy` und `run.cancelling` sind codierte Konflikte mit
-der aktiven Run-ID. Nur `run.started` enthält einen ausführbaren Arbeitskontext;
-der HTTP-Adapter gibt diesen niemals an den Client weiter.
+The adapter can use `id`, `status`, `messageCode`, `latestMessage`,
+`startedAt`, `endedAt`, `affectedServices` and the new
+`cancelRequestedAt` in the snapshot. A gated active run with
+`cancelRequestedAt` remains `running`; an ungated queued activity can remain
+`queued`. The timestamp is the authoritative cancellation indicator.
+`run.started`, `run.joined` and `run.fresh` are admission results.
+`run.busy` and `run.cancelling` are coded conflicts with the active run ID.
+Only `run.started` contains an executable work context; the HTTP adapter
+never exposes it to the client.
 
-Der Live-Kanal veröffentlicht bei Start, Fortschritt, Abbruchwunsch und
-terminalem Abschluss Activity-Snapshots; beim Abbruch und beim Abschluss
-zusätzlich die jeweiligen Nachrichten. Ein Live-Event ist ein Hinweis auf
-einen geänderten Snapshot, keine dauerhafte Zustellgarantie. Nach Reconnect
-oder einem erkannten Event-Verlust lädt der Adapter betroffene Runs und Themen
-neu. So erscheint auch ein Abschluss, dessen Datenbank-Commit vor dem Absturz
-lag, dessen Event aber nicht mehr gesendet wurde. Der Adapter interpretiert
-`cancelled` nicht als Beweis, dass ein Agent eine bereits angenommene externe
-Aktion rückgängig gemacht hat.
+The live channel publishes activity snapshots at start, progress,
+cancellation request and terminal completion, plus messages for cancellation
+and completion. A live event announces a changed snapshot; it is not a
+delivery guarantee. After reconnect or detected event loss, the adapter
+reloads affected runs and topics. This also reveals a completion whose
+database commit preceded a crash but whose event was never sent. The adapter
+does not interpret `cancelled` as proof that an agent reversed an accepted
+external action. `hub.already_running` and `hub.db_lock_lost` appear in
+startup or exit diagnostics only, never as #38 action response codes. The #38
+adapter can observe failed readiness after lock loss, but does not receive
+either operational code.
