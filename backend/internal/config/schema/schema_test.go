@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; functional cut: removed upstream analytics heartbeat and APNS mobile push; functional cut: removed template catalogue; functional cut: removed GitOps and saved Git repositories; functional cut: removed Swarm; functional cut: removed standalone build workshop; functional cut: removed OIDC and passkeys.; Removed downgrade setting from the configuration contract.
+// Deviations: Local module namespace; functional cut: removed upstream analytics heartbeat and APNS mobile push; functional cut: removed template catalogue; functional cut: removed GitOps and saved Git repositories; functional cut: removed Swarm; functional cut: removed standalone build workshop; functional cut: removed OIDC and passkeys.; Removed downgrade setting from the configuration contract. Count-based history settings contract.
 
 package schema
 
@@ -249,7 +249,6 @@ var expectedEnvConfigVars = []string{
 
 var expectedSettingOverrideKeys = []string{
 	"activityHistoryMaxEntries",
-	"activityHistoryRetentionDays",
 	"authLocalEnabled",
 	"authPasswordPolicy",
 	"authSessionTimeout",
@@ -279,6 +278,7 @@ var expectedSettingOverrideKeys = []string{
 	"enableGravatar",
 	"environmentHealthInterval",
 	"eventCleanupInterval",
+	"eventHistoryMaxEntries",
 	"experimentalFeaturesEnabled",
 	"expiredSessionsCleanupInterval",
 	"featureVulnerabilityManagementEnabled",

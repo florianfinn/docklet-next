@@ -2,7 +2,7 @@
 // Revision: be847e36ab81fdf0cd6a7dad333046ddea990e71
 // Retrieved: 2026-10-13
 // License: Apache-2.0
-// Deviations: Original issue #8 persistent-model registry.
+// Deviations: Original issue #8 persistent-model registry. Durable run projection receipt model.
 
 package schema
 
@@ -35,7 +35,7 @@ import (
 // Models is the persistent schema owned by the retained core modules.
 func Models() []any {
 	return []any{
-		&activity.Activity{}, &activity.ActivityMessage{},
+		&activity.Activity{}, &activity.ActivityMessage{}, &activity.ActivitySyncReceipt{},
 		&apikey.ApiKey{}, &backup.SystemBackupRecoveryConfig{},
 		&environment.Environment{}, &event.Event{},
 		&patch.ImagePatchRecord{}, &imageupdate.ImageUpdateRecord{},

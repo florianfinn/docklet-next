@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: None
+// Deviations: Stable event message code.
 
 package event
 
@@ -18,7 +18,8 @@ type Event struct {
 	// Type of the event.
 	//
 	// Required: true
-	Type string `json:"type"`
+	Type        string `json:"type"`
+	MessageCode string `json:"messageCode"`
 
 	// Severity level of the event.
 	//

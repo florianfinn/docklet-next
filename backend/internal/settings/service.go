@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; functional cut: removed APNS mobile push; functional cut: removed template catalogue; functional cut: removed GitOps and saved Git repositories; functional cut: removed Swarm; functional cut: removed standalone build workshop; functional cut: removed OIDC and passkeys.
+// Deviations: Local module namespace; functional cut: removed APNS mobile push; functional cut: removed template catalogue; functional cut: removed GitOps and saved Git repositories; functional cut: removed Swarm; functional cut: removed standalone build workshop; functional cut: removed OIDC and passkeys. Count-based history defaults.
 
 package settings
 
@@ -213,10 +213,10 @@ func DefaultSettingsConfig() *Settings {
 		ImageEventWatcherEnabled:              SettingVariable{Value: "false"},
 		DockerClientRefreshInterval:           SettingVariable{Value: "0 */5 * * * *"},
 		EventCleanupInterval:                  SettingVariable{Value: "0 0 */6 * * *"},
+		EventHistoryMaxEntries:                SettingVariable{Value: "500"},
 		ExpiredSessionsCleanupInterval:        SettingVariable{Value: "0 0 0 * * *"},
-		ActivityHistoryRetentionDays:          SettingVariable{Value: "30"},
 		UpgradeLogRetentionDays:               SettingVariable{Value: "3"},
-		ActivityHistoryMaxEntries:             SettingVariable{Value: "1000"},
+		ActivityHistoryMaxEntries:             SettingVariable{Value: "100"},
 		MaxConcurrentActivities:               SettingVariable{Value: "5"},
 		AutoInjectEnv:                         SettingVariable{Value: "false"},
 		DefaultDeployPullPolicy:               SettingVariable{Value: "missing"},

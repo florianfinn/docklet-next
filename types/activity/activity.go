@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: functional cut: removed standalone build workshop.
+// Deviations: Functional cut: removed standalone build workshop; coded run trace and service effects.
 
 package activity
 
@@ -66,6 +66,8 @@ type Activity struct {
 	Progress              *int           `json:"progress,omitempty"`
 	Step                  string         `json:"step,omitempty"`
 	LatestMessage         string         `json:"latestMessage,omitempty"`
+	MessageCode           string         `json:"messageCode,omitempty"`
+	AffectedServices      []string       `json:"affectedServices,omitempty"`
 	StartedBy             *StartedBy     `json:"startedBy,omitempty"`
 	StartedAt             time.Time      `json:"startedAt"`
 	EndedAt               *time.Time     `json:"endedAt,omitempty"`
@@ -87,13 +89,22 @@ type Message struct {
 	ActivityID string         `json:"activityId"`
 	Level      MessageLevel   `json:"level"`
 	Message    string         `json:"message"`
+	Code       string         `json:"code,omitempty"`
+	Step       string         `json:"step,omitempty"`
 	Payload    map[string]any `json:"payload,omitempty"`
 	CreatedAt  time.Time      `json:"createdAt"`
 }
 
 type Detail struct {
-	Activity Activity  `json:"activity"`
-	Messages []Message `json:"messages"`
+	Activity  Activity         `json:"activity"`
+	Messages  []Message        `json:"messages"`
+	StepTrace []StepTraceEntry `json:"stepTrace"`
+}
+
+type StepTraceEntry struct {
+	Step string    `json:"step"`
+	Code string    `json:"code,omitempty"`
+	At   time.Time `json:"at"`
 }
 
 type StreamEvent struct {

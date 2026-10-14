@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; functional cut: removed federated credentials; functional cut: removed GitOps and saved Git repositories.
+// Deviations: Local module namespace; functional cut: removed federated credentials; functional cut: removed GitOps and saved Git repositories; coded event persistence.
 
 package event
 
@@ -134,6 +134,7 @@ type Event struct {
 	EnvironmentID    *string       `json:"environmentId,omitempty"`
 	Metadata         database.JSON `json:"metadata,omitempty" gorm:"type:text"`
 	Timestamp        time.Time     `json:"timestamp" sortable:"true"`
+	MessageCode      string        `json:"messageCode" gorm:"column:message_code"`
 }
 
 func (Event) TableName() string {

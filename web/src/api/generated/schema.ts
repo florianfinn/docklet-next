@@ -1,5 +1,5 @@
 // Source: api/openapi.json
-// Revision: fa3d5478b428e37f62cad830ec040176817ba04c641253cf78ee26e1c6b0a6a1
+// Revision: 6b1ff2ea22762a46ae188234f0b048559560c5eeba6ca4690119d9c40a012710
 // Retrieved: 2026-10-14
 // License: BSD-3-Clause
 // Deviations: Generated TypeScript declarations from the local Huma export.
@@ -4229,6 +4229,7 @@ export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
         ActivityActivity: {
+            affectedServices?: string[] | null;
             batchId?: string;
             /** Format: date-time */
             createdAt: string;
@@ -4240,6 +4241,7 @@ export interface components {
             error?: string;
             id: string;
             latestMessage?: string;
+            messageCode?: string;
             metadata?: {
                 [key: string]: unknown;
             };
@@ -4266,9 +4268,11 @@ export interface components {
         ActivityDetail: {
             activity: components["schemas"]["ActivityActivity"];
             messages: components["schemas"]["ActivityMessage"][] | null;
+            stepTrace: components["schemas"]["ActivityStepTraceEntry"][] | null;
         };
         ActivityMessage: {
             activityId: string;
+            code?: string;
             /** Format: date-time */
             createdAt: string;
             id: string;
@@ -4277,11 +4281,18 @@ export interface components {
             payload?: {
                 [key: string]: unknown;
             };
+            step?: string;
         };
         ActivityStartedBy: {
             displayName?: string;
             userId?: string;
             username: string;
+        };
+        ActivityStepTraceEntry: {
+            /** Format: date-time */
+            at: string;
+            code?: string;
+            step: string;
         };
         ActivityStreamEvent: {
             activities?: components["schemas"]["ActivityActivity"][] | null;
@@ -7873,6 +7884,7 @@ export interface components {
             description?: string;
             environmentId?: string;
             id: string;
+            messageCode: string;
             metadata?: {
                 [key: string]: unknown;
             };

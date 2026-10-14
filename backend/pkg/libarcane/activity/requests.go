@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace
+// Deviations: Local module namespace; coded step and service-effect requests.
 
 package activity
 
@@ -58,31 +58,36 @@ type StartRequest struct {
 	// DeferSlot persists a queued activity without reserving a slot until its
 	// serialized worker starts. It is used by actor-owned work submitted after
 	// activity creation so queued tasks cannot hold slots ahead of the actor.
-	DeferSlot     bool
-	Type          activitytypes.Type
-	ResourceType  *string
-	ResourceID    *string
-	ResourceName  *string
-	StartedBy     *user.Actor
-	Step          string
-	LatestMessage string
-	Progress      *int
-	Metadata      database.JSON
+	DeferSlot        bool
+	Type             activitytypes.Type
+	ResourceType     *string
+	ResourceID       *string
+	ResourceName     *string
+	StartedBy        *user.Actor
+	Step             string
+	LatestMessage    string
+	MessageCode      string
+	AffectedServices []string
+	Progress         *int
+	Metadata         database.JSON
 }
 
 type UpdateRequest struct {
-	Status        activitytypes.Status
-	ResourceName  *string
-	Progress      *int
-	Step          *string
-	LatestMessage *string
-	Error         *string
-	Metadata      database.JSON
+	Status           activitytypes.Status
+	ResourceName     *string
+	Progress         *int
+	Step             *string
+	LatestMessage    *string
+	MessageCode      *string
+	AffectedServices []string
+	Error            *string
+	Metadata         database.JSON
 }
 
 type AppendMessageRequest struct {
 	Level    activitytypes.MessageLevel
 	Message  string
+	Code     string
 	Payload  database.JSON
 	Progress *int
 	Step     string

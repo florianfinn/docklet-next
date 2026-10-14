@@ -40,7 +40,7 @@ func setupActivityServiceTestDBInternal(t *testing.T) *database.DB {
 
 	db, err := gorm.Open(testpg.Dialector(t, ":memory:"), &gorm.Config{})
 	require.NoError(t, err)
-	require.NoError(t, db.AutoMigrate(&Activity{}, &ActivityMessage{}))
+	require.NoError(t, db.AutoMigrate(&Activity{}, &ActivityMessage{}, &ActivitySyncReceipt{}))
 	return &database.DB{DB: db}
 }
 
