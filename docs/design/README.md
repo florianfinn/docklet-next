@@ -9,6 +9,7 @@ GitHub issues and milestones hold implementation and acceptance evidence.
 | [SQLite removal map](arcane-sqlite-removal.md) | Exact source, test, migration and build paths for the PostgreSQL-only cut |
 | [Core adoption](core-adoption.md) | One-time Go adoption, scope boundaries and evaluation gates |
 | [API contract and UI mapping](api-contract.md) | Reproducible OpenAPI export, generated types and owned DTO/UI gaps |
+| [Run-Gate und Einzelinstanzbetrieb](run-gate.md) | Zustände, Aufnahme, Abbruch, Wiederanlauf und Startschutz für einen Hub pro Datenbank |
 | [Database baseline](database-baseline.md) | PostgreSQL baseline generation, forward-only migration policy and schema proof |
 | [Agent surface](agent-surface.md) | Agent and Edge agent module allowlist and host exposure |
 | [Functional cut](functional-cut.md) | M1 module decisions and the R5 evaluation |
