@@ -15,7 +15,11 @@ function command(program, args) {
     encoding: "utf8",
     maxBuffer: 8 * 1024 * 1024,
   });
-  if (result.status !== 0) throw new Error(`${program} failed while generating the API contract`);
+  if (result.status !== 0) {
+    const detail = [result.stderr?.trim(), result.stdout?.trim(), result.error?.message]
+      .filter(Boolean).join("\n") || `exit status ${result.status}`;
+    throw new Error(`${program} failed while generating the API contract: ${detail}`);
+  }
 }
 
 export function differences(committedSpec, committedTypes, exportedSpec, exportedTypes) {
@@ -36,10 +40,14 @@ function generatedTypes(spec, workdir) {
   writeFileSync(input, spec);
   command("pnpm", ["--dir", "web", "exec", "openapi-typescript", input, "--output", output]);
   const revision = createHash("sha256").update(spec).digest("hex");
+  const specProvenance = JSON.parse(readFileSync(resolve(root, "scripts/provenance.json"), "utf8"))
+    .sidecars["api/openapi.json"];
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(specProvenance?.retrieved ?? ""))
+    throw new Error("missing api/openapi.json retrieval date");
   const provenance = [
     "// Source: api/openapi.json",
     `// Revision: ${revision}`,
-    "// Retrieved: 2026-10-14",
+    `// Retrieved: ${specProvenance.retrieved}`,
     "// License: BSD-3-Clause",
     "// Deviations: Generated TypeScript declarations from the local Huma export.",
     "",

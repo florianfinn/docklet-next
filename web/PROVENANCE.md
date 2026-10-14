@@ -272,6 +272,16 @@ added. Its installed `LICENSE.md` carries the MIT notice. This avoids maintainin
 a partial ICU parser. A full distribution dependency inventory remains a separate
 M2/release duty as described above.
 
+`openapi-typescript` **7.13.0 (MIT)** is an exact development dependency used only
+to generate TypeScript declarations from the local OpenAPI export. It adds no
+runtime client. Of its 25 added transitive packages, the non-MIT licences are
+ISC (`minimatch`, `yargs-parser`), Apache-2.0 (`yaml-ast-parser`), Python-2.0
+(`argparse`) and MIT OR CC0-1.0 (`type-fest`); the other 20 are MIT. Its declared
+TypeScript peer range is `^5.x`, while this workspace pins TypeScript 6.0.3.
+Generation and typechecking pass with that peer mismatch, which needs checking
+again before upgrading either tool. The generated declarations have an exact
+ESLint exclusion and remain included in the TypeScript project.
+
 There are **22 existing English messages with undoubled apostrophes** in the
 snapshot. The no-text-rewrite boundary preserves them with exact file/key/value
 SHA-256 exceptions in `apostrophe-exceptions.test-support.ts`. Any new or modified
