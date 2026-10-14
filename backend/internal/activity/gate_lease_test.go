@@ -34,6 +34,11 @@ func TestGatedCancelHandlerKeepsScopeUntilOwnerCompletes(t *testing.T) {
 	var requested Activity
 	require.NoError(t, db.First(&requested, "id = ?", started.Run.ID).Error)
 	require.NotNil(t, requested.CancelRequestedAt)
+	_, err = owner.StartGatedActivity(t.Context(), GateRequest{Operation: "deploy", Scope: "stack:example", Type: activitytypes.TypeProjectDeploy})
+	var cancelling *GateConflict
+	require.ErrorAs(t, err, &cancelling)
+	require.Equal(t, started.Run.ID, cancelling.RunID)
+	require.Equal(t, string(activitytypes.CodeRunCancelling), cancelling.Code)
 	conflict := GateRequest{Operation: "remove", Scope: "stack:example", Type: activitytypes.TypeProjectDeploy}
 	_, err = owner.StartGatedActivity(t.Context(), conflict)
 	var busy *GateConflict
@@ -69,6 +74,10 @@ func TestGatedRemoteCancelKeepsScopeUntilOwnerCompletes(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, activitytypes.StatusRunning, response.Status)
 	require.NoError(t, started.WorkContext.Err())
+	_, err = other.StartGatedActivity(t.Context(), GateRequest{Operation: "deploy", Scope: "stack:example", Type: activitytypes.TypeProjectDeploy})
+	var cancelling *GateConflict
+	require.ErrorAs(t, err, &cancelling)
+	require.Equal(t, string(activitytypes.CodeRunCancelling), cancelling.Code)
 	conflict := GateRequest{Operation: "remove", Scope: "stack:example", Type: activitytypes.TypeProjectDeploy}
 	_, err = other.StartGatedActivity(t.Context(), conflict)
 	var busy *GateConflict
@@ -77,6 +86,120 @@ func TestGatedRemoteCancelKeepsScopeUntilOwnerCompletes(t *testing.T) {
 	require.Eventually(t, func() bool { return started.WorkContext.Err() != nil }, time.Second, 10*time.Millisecond)
 	_, err = other.StartGatedActivity(t.Context(), conflict)
 	require.ErrorAs(t, err, &busy)
+	finished, err := owner.CompleteActivity(started.WorkContext, started.Run.ID, activitytypes.StatusSuccess, "late success", nil)
+	require.NoError(t, err)
+	require.Equal(t, activitytypes.StatusCancelled, finished.Status)
+}
+
+func TestGatedCancelPublishesRequesterImmediately(t *testing.T) {
+	db := setupActivityServiceTestDBInternal(t)
+	owner := NewActivityService(db, nil)
+	owner.gateHeartbeatTicks = make(chan time.Time)
+	other := NewActivityService(db, nil)
+	started, err := owner.StartGatedActivity(t.Context(), GateRequest{Operation: "deploy", Scope: "stack:example", Type: activitytypes.TypeProjectDeploy})
+	require.NoError(t, err)
+	events, _, unsubscribe := other.Subscribe("0")
+	defer unsubscribe()
+	result, err := other.CancelActivity(t.Context(), "0", started.Run.ID, "operator")
+	require.NoError(t, err)
+	require.Equal(t, activitytypes.StatusRunning, result.Status)
+	require.Equal(t, string(activitytypes.CodeActivityCancelRequested), result.MessageCode)
+	require.Equal(t, "Cancellation requested by operator", result.LatestMessage)
+	require.NoError(t, started.WorkContext.Err())
+	var audit []ActivityMessage
+	require.NoError(t, db.Where("activity_id = ? AND code = ?", started.Run.ID, activitytypes.CodeActivityCancelRequested).Find(&audit).Error)
+	require.Len(t, audit, 1)
+	require.Equal(t, "Cancellation requested by operator", audit[0].Message)
+	seenMessage, seenSnapshot := false, false
+	require.Eventually(t, func() bool {
+		select {
+		case event := <-events:
+			if event.Message != nil && event.Message.Code == string(activitytypes.CodeActivityCancelRequested) {
+				seenMessage = true
+			}
+			if event.Activity != nil && event.Activity.MessageCode == string(activitytypes.CodeActivityCancelRequested) {
+				seenSnapshot = true
+			}
+		default:
+		}
+		return seenMessage && seenSnapshot
+	}, time.Second, 10*time.Millisecond)
+	_, err = other.CancelActivity(t.Context(), "0", started.Run.ID, "operator")
+	require.NoError(t, err)
+	require.NoError(t, db.Where("activity_id = ? AND code = ?", started.Run.ID, activitytypes.CodeActivityCancelRequested).Find(&audit).Error)
+	require.Len(t, audit, 1)
+	_, err = owner.CompleteActivity(started.WorkContext, started.Run.ID, activitytypes.StatusSuccess, "done", nil)
+	require.NoError(t, err)
+}
+
+func TestGatedHeartbeatContinuesAfterCancellation(t *testing.T) {
+	for _, remote := range []bool{false, true} {
+		name := "local"
+		if remote {
+			name = "remote"
+		}
+		t.Run(name, func(t *testing.T) {
+			db := setupActivityServiceTestDBInternal(t)
+			owner := NewActivityService(db, nil)
+			ticks := make(chan time.Time, 4)
+			owner.gateHeartbeatTicks = ticks
+			other := NewActivityService(db, nil)
+			request := GateRequest{Operation: "deploy", Scope: "stack:example", Type: activitytypes.TypeProjectDeploy}
+			started, err := owner.StartGatedActivity(t.Context(), request)
+			require.NoError(t, err)
+			canceller := owner
+			if remote {
+				canceller = other
+			}
+			_, err = canceller.CancelActivity(t.Context(), "0", started.Run.ID, "operator")
+			require.NoError(t, err)
+			if remote {
+				ticks <- time.Now()
+				require.Eventually(t, func() bool { return started.WorkContext.Err() != nil }, time.Second, 10*time.Millisecond)
+			} else {
+				require.Error(t, started.WorkContext.Err())
+			}
+			require.True(t, owner.isTrackedInternal(started.Run.ID))
+			old := time.Now().Add(-3 * time.Minute)
+			require.NoError(t, db.Model(&Activity{}).Where("id = ?", started.Run.ID).
+				Updates(map[string]any{"started_at": old, "gate_lease_at": old}).Error)
+			ticks <- time.Now()
+			require.Eventually(t, func() bool {
+				var row Activity
+				return db.First(&row, "id = ?", started.Run.ID).Error == nil && row.GateLeaseAt != nil && row.GateLeaseAt.After(old)
+			}, time.Second, 10*time.Millisecond)
+			var refreshed Activity
+			require.NoError(t, db.First(&refreshed, "id = ?", started.Run.ID).Error)
+			time.Sleep(20 * time.Millisecond)
+			ticks <- time.Now()
+			require.Eventually(t, func() bool {
+				var row Activity
+				return db.First(&row, "id = ?", started.Run.ID).Error == nil && row.GateLeaseAt != nil && row.GateLeaseAt.After(*refreshed.GateLeaseAt)
+			}, time.Second, 10*time.Millisecond)
+			swept, err := other.FailAbandonedActivities(t.Context())
+			require.NoError(t, err)
+			require.Zero(t, swept)
+			request.Operation = "remove"
+			_, err = other.StartGatedActivity(t.Context(), request)
+			var busy *GateConflict
+			require.ErrorAs(t, err, &busy)
+			require.Equal(t, string(activitytypes.CodeRunBusy), busy.Code)
+			_, err = owner.CompleteActivity(started.WorkContext, started.Run.ID, activitytypes.StatusSuccess, "done", nil)
+			require.NoError(t, err)
+		})
+	}
+}
+
+func TestGatedRemoteCancelBeforeHeartbeatForcesCancelled(t *testing.T) {
+	db := setupActivityServiceTestDBInternal(t)
+	owner := NewActivityService(db, nil)
+	owner.gateHeartbeatTicks = make(chan time.Time)
+	other := NewActivityService(db, nil)
+	started, err := owner.StartGatedActivity(t.Context(), GateRequest{Operation: "deploy", Scope: "stack:example", Type: activitytypes.TypeProjectDeploy})
+	require.NoError(t, err)
+	_, err = other.CancelActivity(t.Context(), "0", started.Run.ID, "operator")
+	require.NoError(t, err)
+	require.NoError(t, started.WorkContext.Err())
 	finished, err := owner.CompleteActivity(started.WorkContext, started.Run.ID, activitytypes.StatusSuccess, "late success", nil)
 	require.NoError(t, err)
 	require.Equal(t, activitytypes.StatusCancelled, finished.Status)
@@ -144,8 +267,8 @@ func TestGatedLeaseTakeoverFencesOldOwner(t *testing.T) {
 	require.ErrorIs(t, err, ErrLeaseLost)
 	_, err = owner.UpdateActivity(context.WithoutCancel(started.WorkContext), started.Run.ID, UpdateActivityRequest{LatestMessage: new("late")})
 	require.ErrorIs(t, err, ErrLeaseLost)
-	_, err = owner.AppendMessage(context.WithoutCancel(started.WorkContext), started.Run.ID, AppendActivityMessageRequest{Message: "late"})
-	require.ErrorIs(t, err, ErrActivityNotCancelable)
+	_, err = owner.AppendMessages(context.WithoutCancel(started.WorkContext), started.Run.ID, []AppendActivityMessageRequest{{Message: "late"}})
+	require.ErrorIs(t, err, ErrLeaseLost)
 	_, err = other.CompleteActivity(takeover.WorkContext, takeover.Run.ID, activitytypes.StatusSuccess, "done", nil)
 	require.NoError(t, err)
 }

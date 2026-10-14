@@ -33,7 +33,7 @@ func (s *ActivityService) heartbeatGatedActivityInternal(ctx context.Context, id
 }
 
 func (s *ActivityService) startGateHeartbeatInternal(workCtx context.Context, id, owner string) {
-	ctx, cancel := context.WithCancel(workCtx)
+	ctx, cancel := context.WithCancel(context.WithoutCancel(workCtx))
 	s.gateHeartbeatMu.Lock()
 	if s.gateHeartbeats == nil {
 		s.gateHeartbeats = make(map[string]context.CancelFunc)

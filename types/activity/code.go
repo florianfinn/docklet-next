@@ -14,11 +14,13 @@ const (
 	CodeRunJoined                         Code = "run.joined"
 	CodeRunFresh                          Code = "run.fresh"
 	CodeRunBusy                           Code = "run.busy"
+	CodeRunCancelling                     Code = "run.cancelling"
 	CodeActivityQueued                    Code = "activity.queued"
 	CodeActivityRunning                   Code = "activity.running"
 	CodeActivitySuccess                   Code = "activity.success"
 	CodeActivityFailed                    Code = "activity.failed"
 	CodeActivityCancelled                 Code = "activity.cancelled"
+	CodeActivityCancelRequested           Code = "activity.cancel_requested"
 	CodeActivityMessage                   Code = "activity.message"
 	CodeDeployPull                        Code = "deploy.pull"
 	CodeJobQueued                         Code = "job.queued"
@@ -115,11 +117,13 @@ func Values() []Code {
 		CodeRunJoined,
 		CodeRunFresh,
 		CodeRunBusy,
+		CodeRunCancelling,
 		CodeActivityQueued,
 		CodeActivityRunning,
 		CodeActivitySuccess,
 		CodeActivityFailed,
 		CodeActivityCancelled,
+		CodeActivityCancelRequested,
 		CodeActivityMessage,
 		CodeDeployPull,
 		CodeJobQueued,

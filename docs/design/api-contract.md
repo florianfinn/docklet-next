@@ -76,8 +76,8 @@ callers creating events must send a listed code. A run status transition uses
 
 | Family | Codes |
 | --- | --- |
-| `run` | `run.started`, `run.joined`, `run.fresh`, `run.busy` |
-| `activity` | `activity.queued`, `activity.running`, `activity.success`, `activity.failed`, `activity.cancelled`, `activity.message` |
+| `run` | `run.started`, `run.joined`, `run.fresh`, `run.busy`, `run.cancelling` |
+| `activity` | `activity.queued`, `activity.running`, `activity.success`, `activity.failed`, `activity.cancelled`, `activity.cancel_requested`, `activity.message` |
 | `deploy` | `deploy.pull` |
 | `job` | `job.queued`, `job.waiting`, `job.running`, `job.retrying`, `job.succeeded`, `job.partial`, `job.skipped`, `job.failed`, `job.needs_attention`, `job.canceled` |
 | `container` | `container.die`, `container.oom`, `container.rename`, `container.unhealthy`, `container.start`, `container.stop`, `container.restart`, `container.delete`, `container.create`, `container.scan`, `container.update`, `container.deploy`, `container.kill`, `container.pause`, `container.unpause`, `container.error` |
@@ -99,9 +99,14 @@ start and heartbeat set `gate_lease_at` with PostgreSQL `NOW()`; progress update
 cannot extend or shorten this lease. Cancellation sets `cancel_requested_at` as a
 durable request and signals the local worker. The owner's heartbeat observes a
 remote request; after the worker returns, completion records `cancelled` even if
-the worker reports success. Cancellation alone does not release the gate. When
-the owner is gone, only the sweep may rotate the token and fail the run, after
-the lease expires. Terminal `ended_at` and the 30-second `run.fresh` comparison
+the worker reports success. A second request for the same operation receives
+`run.cancelling` while cancellation is pending; a different operation receives
+`run.busy`. The cancellation request writes an `activity.cancel_requested`
+message with the requester and publishes the current snapshot immediately.
+Cancellation alone does not release the gate: the owner keeps its heartbeat
+until the worker returns. A worker that never returns holds the scope until its
+process exits; after the lease expires, the sweep may rotate the token and fail
+the run. Terminal `ended_at` and the 30-second `run.fresh` comparison
 also use database time.
 
 Run detail returns the most recent 256 distinct step transitions. Repeated

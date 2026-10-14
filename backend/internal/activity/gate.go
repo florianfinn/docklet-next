@@ -79,6 +79,9 @@ func (s *ActivityService) startGatedActivityAtInternal(ctx context.Context, requ
 		var active Activity
 		err := tx.Where("environment_id = ? AND gate_scope = ? AND status IN ?", request.EnvironmentID, request.Scope, []activitytypes.Status{activitytypes.StatusQueued, activitytypes.StatusRunning}).Order("started_at DESC, id DESC").First(&active).Error
 		if err == nil {
+			if active.CancelRequestedAt != nil && active.GateKey == request.Operation {
+				return &GateConflict{RunID: active.ID, Code: string(activitytypes.CodeRunCancelling)}
+			}
 			if active.GateKey != request.Operation {
 				return &GateConflict{RunID: active.ID, Code: string(activitytypes.CodeRunBusy)}
 			}

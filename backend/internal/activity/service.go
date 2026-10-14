@@ -713,12 +713,12 @@ func (s *ActivityService) appendBatchWithRetryInternal(ctx context.Context, acti
 				}
 				return fmt.Errorf("failed to load activity: %w", err)
 			}
-			if isTerminalActivityStatusInternal(current.Status) {
-				return ErrActivityNotCancelable
-			}
 			owner, _ := ctx.Value(gateOwnerContextKey{}).(string)
 			if current.GateOwner != owner {
 				return ErrLeaseLost
+			}
+			if isTerminalActivityStatusInternal(current.Status) {
+				return ErrActivityNotCancelable
 			}
 			if current.GateScope != "" {
 				var databaseNow time.Time

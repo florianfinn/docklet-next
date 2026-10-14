@@ -18,6 +18,7 @@ import (
 	"github.com/florianfinn/docklet-next/backend/pkg/utils"
 	"github.com/florianfinn/docklet-next/types/activity"
 	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 )
 
 // CancelActivity requests cancellation of a running or queued activity. When the
@@ -50,19 +51,53 @@ func (s *ActivityService) CancelActivity(ctx context.Context, environmentID, act
 
 	requestedBy = cmp.Or(strings.TrimSpace(requestedBy), "a user")
 	if model.GateScope != "" {
-		result := s.db.WithContext(ctx).Model(&Activity{}).
-			Where("id = ? AND environment_id = ? AND gate_owner = ? AND status IN ?", activityID, environmentID, model.GateOwner, []activity.Status{activity.StatusQueued, activity.StatusRunning}).
-			Update("cancel_requested_at", gorm.Expr("COALESCE(cancel_requested_at, NOW())"))
-		if result.Error != nil {
-			return nil, fmt.Errorf("request gated activity cancellation: %w", result.Error)
-		}
-		if result.RowsAffected == 0 {
-			return nil, ErrActivityNotCancelable
-		}
-		s.RequestCancel(activityID)
-		if err := s.db.WithContext(ctx).First(&model, "id = ?", activityID).Error; err != nil {
+		lock := s.publishLockInternal(activityID)
+		lock.Lock()
+		defer lock.Unlock()
+		var audit *ActivityMessage
+		err := s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+			if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).Where("id = ? AND environment_id = ?", activityID, environmentID).First(&model).Error; err != nil {
+				return err
+			}
+			if isTerminalActivityStatusInternal(model.Status) {
+				return ErrActivityNotCancelable
+			}
+			if model.CancelRequestedAt != nil {
+				return nil
+			}
+			message := "Cancellation requested by " + requestedBy
+			result := tx.Model(&Activity{}).
+				Where("id = ? AND gate_owner = ? AND status IN ?", activityID, model.GateOwner, []activity.Status{activity.StatusQueued, activity.StatusRunning}).
+				Updates(map[string]any{
+					"cancel_requested_at": gorm.Expr("NOW()"),
+					"latest_message":      message,
+					"message_code":        activity.CodeActivityCancelRequested,
+					"updated_at":          gorm.Expr("NOW()"),
+				})
+			if result.Error != nil {
+				return fmt.Errorf("request gated activity cancellation: %w", result.Error)
+			}
+			if result.RowsAffected == 0 {
+				return ErrLeaseLost
+			}
+			var databaseNow time.Time
+			if err := tx.Raw("SELECT NOW()").Scan(&databaseNow).Error; err != nil {
+				return err
+			}
+			audit = &ActivityMessage{ActivityID: activityID, Level: activity.MessageLevelWarning, Message: message, Code: string(activity.CodeActivityCancelRequested), CreatedAt: databaseNow}
+			if err := tx.Create(audit).Error; err != nil {
+				return err
+			}
+			return tx.First(&model, "id = ?", activityID).Error
+		})
+		if err != nil {
 			return nil, err
 		}
+		if audit != nil {
+			s.publishMessageInternal(model.EnvironmentID, model.Type, activityMessageToDTOInternal(audit))
+			s.publishActivityInternal(activityToDTOInternal(&model))
+		}
+		s.RequestCancel(activityID)
 		return new(activityToDTOInternal(&model)), nil
 	}
 	writeCtx := utils.ActivityRuntimeContext(ctx, nil)
