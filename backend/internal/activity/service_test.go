@@ -40,7 +40,7 @@ func setupActivityServiceTestDBInternal(t *testing.T) *database.DB {
 
 	db, err := gorm.Open(testpg.Dialector(t, ":memory:"), &gorm.Config{})
 	require.NoError(t, err)
-	require.NoError(t, db.AutoMigrate(&Activity{}, &ActivityMessage{}))
+	require.NoError(t, db.AutoMigrate(Models()...))
 	return &database.DB{DB: db}
 }
 
@@ -391,7 +391,7 @@ func setupQueuedActivityServiceInternal(t *testing.T) (*ActivityService, context
 
 	db, err := gorm.Open(testpg.Dialector(t, ":memory:"), &gorm.Config{})
 	require.NoError(t, err)
-	require.NoError(t, db.AutoMigrate(&Activity{}, &ActivityMessage{}, &settings.SettingVariable{}))
+	require.NoError(t, db.AutoMigrate(append(Models(), &settings.SettingVariable{})...))
 	wrapped := &database.DB{DB: db}
 
 	localSettings, err := newSettingsServiceForTestInternal(t, ctx, wrapped)

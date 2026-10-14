@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; functional cut: removed SQLite runtime and migrations.
+// Deviations: Local module namespace; functional cut: removed SQLite runtime and migrations; coded run projection and guarded updates.
 
 package activity
 
@@ -41,7 +41,6 @@ const (
 	defaultActivityRetentionDays = 30
 	defaultActivityHistoryLimit  = 1000
 	defaultActivityMessages      = 500
-	staleImageUpdateCheckAge     = 6 * time.Hour
 	// abandonedActivityGrace is how old an untracked queued/running activity
 	// must be before the periodic sweep fails it. It covers the window between
 	// StartActivity's row creation and the worker's Track call.
@@ -66,6 +65,9 @@ const (
 )
 
 var ErrActivityNotCancelable = errors.New("activity is not cancelable")
+var ErrLeaseLost = errors.New("gated activity lease lost")
+
+type gateOwnerContextKey struct{}
 
 type ActivityService struct {
 	db *database.DB
@@ -77,8 +79,13 @@ type ActivityService struct {
 	// running maps an active activity ID to the cancel function of its work
 	// context, so cancellation requests can interrupt in-flight work. Entries
 	// are added by Track and removed when the activity is completed.
-	runningMu sync.Mutex
-	running   map[string]context.CancelCauseFunc
+	runningMu             sync.Mutex
+	running               map[string]context.CancelCauseFunc
+	gateHeartbeatMu       sync.Mutex
+	gateHeartbeats        map[string]context.CancelFunc
+	gateHeartbeatInterval time.Duration
+	gateHeartbeatTicks    <-chan time.Time
+	clock                 func() time.Time
 
 	// limiter bounds concurrent queue-opted activities per environment.
 	// slotReleases maps an activity ID to the release func of the slot it
@@ -268,6 +275,10 @@ func (s *ActivityService) Track(ctx context.Context, activityID string) context.
 // activitylib.ErrCanceled as the cause. It returns whether a running activity
 // was found in this process.
 func (s *ActivityService) RequestCancel(activityID string) bool {
+	return s.cancelTrackedInternal(activityID, activitylib.ErrCanceled)
+}
+
+func (s *ActivityService) cancelTrackedInternal(activityID string, cause error) bool {
 	activityID = strings.TrimSpace(activityID)
 	if s == nil || activityID == "" {
 		return false
@@ -279,7 +290,7 @@ func (s *ActivityService) RequestCancel(activityID string) bool {
 	if !ok {
 		return false
 	}
-	cancel(activitylib.ErrCanceled)
+	cancel(cause)
 	return true
 }
 
@@ -313,6 +324,9 @@ func (s *ActivityService) checkInitInternal() error {
 func (s *ActivityService) StartActivity(ctx context.Context, req StartActivityRequest) (*activity.Activity, error) {
 	if err := s.checkInitInternal(); err != nil {
 		return nil, err
+	}
+	if code := strings.TrimSpace(req.MessageCode); code != "" && !activity.Valid(code) {
+		return nil, fmt.Errorf("unknown activity message code: %s", code)
 	}
 
 	now := time.Now()
@@ -363,6 +377,8 @@ func (s *ActivityService) StartActivity(ctx context.Context, req StartActivityRe
 		Progress:             clampProgressPtrInternal(req.Progress),
 		Step:                 strings.TrimSpace(req.Step),
 		LatestMessage:        strings.TrimSpace(req.LatestMessage),
+		MessageCode:          cmp.Or(strings.TrimSpace(req.MessageCode), "activity."+string(status)),
+		AffectedServices:     servicesJSONInternal(req.AffectedServices),
 		StartedAt:            now,
 		Metadata:             cloneJSONInternal(req.Metadata),
 		CreatedAt:            now,
@@ -490,10 +506,13 @@ func (s *ActivityService) UpdateActivity(ctx context.Context, activityID string,
 	}
 
 	updates := map[string]any{
-		"updated_at": time.Now(),
+		"updated_at": gorm.Expr("NOW()"),
 	}
 	if req.Status != "" {
 		updates["status"] = req.Status
+		if req.MessageCode == nil {
+			updates["message_code"] = activityCodeInternal(req.Status)
+		}
 	}
 	if req.ResourceName != nil {
 		updates["resource_name"] = strings.TrimSpace(*req.ResourceName)
@@ -506,6 +525,16 @@ func (s *ActivityService) UpdateActivity(ctx context.Context, activityID string,
 	}
 	if req.LatestMessage != nil {
 		updates["latest_message"] = strings.TrimSpace(*req.LatestMessage)
+	}
+	if req.MessageCode != nil {
+		code := strings.TrimSpace(*req.MessageCode)
+		if !activity.Valid(code) {
+			return nil, fmt.Errorf("unknown activity message code: %s", code)
+		}
+		updates["message_code"] = code
+	}
+	if req.AffectedServices != nil {
+		updates["affected_services"] = servicesJSONInternal(req.AffectedServices)
 	}
 	if req.Error != nil {
 		updates["error"] = strings.TrimSpace(*req.Error)
@@ -523,12 +552,26 @@ func (s *ActivityService) UpdateActivity(ctx context.Context, activityID string,
 
 	var model Activity
 	if err := s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
-		result := tx.Model(&Activity{}).Where("id = ?", activityID).Updates(updates)
+		owner, _ := ctx.Value(gateOwnerContextKey{}).(string)
+		query := tx.Model(&Activity{}).Where("id = ? AND status NOT IN ?", activityID, terminalActivityStatusesInternal())
+		if isTerminalActivityStatusInternal(req.Status) {
+			query = query.Where("COALESCE(gate_scope, '') = ''")
+		}
+		if owner != "" {
+			query = query.Where("gate_owner = ?", owner)
+		} else {
+			query = query.Where("COALESCE(gate_owner, '') = ''")
+		}
+		result := query.Updates(updates)
 		if result.Error != nil {
 			return fmt.Errorf("failed to update activity: %w", result.Error)
 		}
 		if result.RowsAffected == 0 {
-			return errors.New("activity not found")
+			var current Activity
+			if err := tx.First(&current, "id = ?", activityID).Error; err == nil && current.GateOwner != "" {
+				return ErrLeaseLost
+			}
+			return errors.New("activity not found or completed")
 		}
 		if err := tx.First(&model, "id = ?", activityID).Error; err != nil {
 			return fmt.Errorf("failed to load updated activity: %w", err)
@@ -562,8 +605,13 @@ func (s *ActivityService) AppendMessages(ctx context.Context, activityID string,
 	if activityID == "" {
 		return nil, errors.New("activity id is required")
 	}
+	for _, req := range reqs {
+		if code := strings.TrimSpace(req.Code); code != "" && !activity.Valid(code) {
+			return nil, fmt.Errorf("unknown activity message code: %s", code)
+		}
+	}
 
-	messages, updates := buildAppendBatchInternal(activityID, reqs)
+	messages, updates := buildAppendBatchInternal(activityID, reqs, s.nowInternal())
 	if len(messages) == 0 {
 		return nil, nil
 	}
@@ -594,10 +642,10 @@ func (s *ActivityService) AppendMessages(ctx context.Context, activityID string,
 // buildAppendBatchInternal turns the request batch into insertable message rows
 // plus the coalesced Activity column updates (latest message/progress/step from
 // the last request carrying each).
-func buildAppendBatchInternal(activityID string, reqs []AppendActivityMessageRequest) ([]*ActivityMessage, map[string]any) {
-	now := time.Now()
+func buildAppendBatchInternal(activityID string, reqs []AppendActivityMessageRequest, now time.Time) ([]*ActivityMessage, map[string]any) {
 	messages := make([]*ActivityMessage, 0, len(reqs))
 	latestMessage := ""
+	latestCode := ""
 	var latestProgress *int
 	latestStep := ""
 	for _, req := range reqs {
@@ -610,11 +658,14 @@ func buildAppendBatchInternal(activityID string, reqs []AppendActivityMessageReq
 		}
 
 		level := cmp.Or(req.Level, activity.MessageLevelInfo)
+		code := cmp.Or(strings.TrimSpace(req.Code), "activity.message")
 
 		messages = append(messages, &ActivityMessage{
 			ActivityID: activityID,
 			Level:      level,
 			Message:    messageText,
+			Code:       code,
+			Step:       strings.TrimSpace(req.Step),
 			Payload:    cloneJSONInternal(req.Payload),
 			// Spread inside the shared timestamp so the created_at sort
 			// used for retrieval keeps the original line order.
@@ -622,6 +673,7 @@ func buildAppendBatchInternal(activityID string, reqs []AppendActivityMessageReq
 		})
 
 		latestMessage = messageText
+		latestCode = code
 		if req.Progress != nil {
 			latestProgress = req.Progress
 		}
@@ -635,7 +687,8 @@ func buildAppendBatchInternal(activityID string, reqs []AppendActivityMessageReq
 
 	updates := map[string]any{
 		"latest_message": latestMessage,
-		"updated_at":     now,
+		"message_code":   latestCode,
+		"updated_at":     gorm.Expr("NOW()"),
 	}
 	if latestProgress != nil {
 		updates["progress"] = *clampProgressPtrInternal(latestProgress)
@@ -660,17 +713,38 @@ func (s *ActivityService) appendBatchWithRetryInternal(ctx context.Context, acti
 				}
 				return fmt.Errorf("failed to load activity: %w", err)
 			}
-
-			if err := tx.Create(&messages).Error; err != nil {
-				return fmt.Errorf("failed to append activity message: %w", err)
+			owner, _ := ctx.Value(gateOwnerContextKey{}).(string)
+			if current.GateOwner != owner {
+				return ErrLeaseLost
+			}
+			if isTerminalActivityStatusInternal(current.Status) {
+				return ErrActivityNotCancelable
+			}
+			if current.GateScope != "" {
+				var databaseNow time.Time
+				if err := tx.Raw("SELECT NOW()").Scan(&databaseNow).Error; err != nil {
+					return err
+				}
+				for i := range messages {
+					messages[i].CreatedAt = databaseNow.Add(time.Duration(i) * time.Microsecond)
+				}
 			}
 
-			result := tx.Model(&Activity{}).Where("id = ?", activityID).Updates(updates)
+			query := tx.Model(&Activity{}).Where("id = ? AND status NOT IN ?", activityID, terminalActivityStatusesInternal())
+			if owner != "" {
+				query = query.Where("gate_owner = ?", owner)
+			} else {
+				query = query.Where("COALESCE(gate_owner, '') = ''")
+			}
+			result := query.Updates(updates)
 			if result.Error != nil {
 				return fmt.Errorf("failed to update activity latest message: %w", result.Error)
 			}
 			if result.RowsAffected == 0 {
-				return errors.New("activity not found")
+				return ErrLeaseLost
+			}
+			if err := tx.Create(&messages).Error; err != nil {
+				return fmt.Errorf("failed to append activity message: %w", err)
 			}
 			if err := tx.First(&current, "id = ?", activityID).Error; err != nil {
 				return fmt.Errorf("failed to load updated activity: %w", err)
@@ -687,342 +761,6 @@ func (s *ActivityService) appendBatchWithRetryInternal(ctx context.Context, acti
 		time.Sleep(250 * time.Millisecond * time.Duration(attempt))
 	}
 	return nil, writeErr
-}
-
-func (
-	s *ActivityService,
-) CompleteActivity(
-	ctx context.Context,
-	activityID string,
-	status activity.Status,
-	finalMessage string,
-	errMessage *string,
-	finalStep ...string,
-) (
-	*activity.Activity,
-	error,
-) {
-	if err := s.checkInitInternal(); err != nil {
-		return nil, err
-	}
-	status = cmp.Or(status, activity.StatusSuccess)
-	if status != activity.StatusSuccess && status != activity.StatusFailed && status != activity.StatusCancelled {
-		status = activity.StatusSuccess
-	}
-
-	activityID = strings.TrimSpace(activityID)
-	if activityID == "" {
-		return nil, errors.New("activity id is required")
-	}
-
-	// The activity is reaching a terminal state; release any cancel
-	// registration and free its concurrency slot.
-	s.releaseCancelInternal(activityID)
-	s.releaseSlotInternal(activityID)
-
-	// Detach from cancellation so the terminal write always lands — completion is
-	// often triggered precisely because the work context was cancelled.
-	ctx = context.WithoutCancel(ctx)
-
-	now := time.Now()
-	var model Activity
-	// Retry transient write contention so completion is persisted.
-	const completeWriteAttempts = 3
-	var writeErr error
-	for attempt := 1; attempt <= completeWriteAttempts; attempt++ {
-		writeErr = s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
-			if err := tx.First(&model, "id = ?", activityID).Error; err != nil {
-				return fmt.Errorf("failed to load activity: %w", err)
-			}
-
-			updates := completeActivityUpdatesInternal(model.StartedAt, status, finalMessage, errMessage, finalStep, now)
-			if err := tx.Model(&Activity{}).Where("id = ?", activityID).Updates(updates).Error; err != nil {
-				return fmt.Errorf("failed to complete activity: %w", err)
-			}
-			if err := tx.First(&model, "id = ?", activityID).Error; err != nil {
-				return fmt.Errorf("failed to load completed activity: %w", err)
-			}
-			return nil
-		})
-		if writeErr == nil {
-			break
-		}
-		if attempt == completeWriteAttempts || !dbutil.IsRetryableWriteError(writeErr) {
-			return nil, writeErr
-		}
-		slog.WarnContext(ctx, "retrying activity terminal status write", "activityId", activityID, "attempt", attempt, "error", writeErr)
-		time.Sleep(250 * time.Millisecond * time.Duration(attempt))
-	}
-	if writeErr != nil {
-		return nil, writeErr
-	}
-
-	if strings.TrimSpace(finalMessage) != "" {
-		level := activity.MessageLevelSuccess
-		switch status {
-		case activity.StatusFailed:
-			level = activity.MessageLevelError
-		case activity.StatusCancelled:
-			level = activity.MessageLevelWarning
-		case activity.StatusQueued, activity.StatusRunning, activity.StatusSuccess:
-		}
-		activityCtx := utils.ActivityRuntimeContext(ctx, nil)
-		if _, err := s.AppendMessage(activityCtx, activityID, AppendActivityMessageRequest{
-			Level:   level,
-			Message: finalMessage,
-		}); err != nil {
-			slog.DebugContext(ctx, "failed to append final activity message", "activityId", activityID, "error", err)
-		}
-	}
-
-	dto := s.publishTerminalSnapshotInternal(ctx, &model)
-	return &dto, nil
-}
-
-// publishTerminalSnapshotInternal publishes an activity's terminal event from
-// a snapshot re-read under the per-activity publish lock. Terminal writers
-// cannot hold that lock across their own transactions (CompleteActivity
-// appends its final message through the locked AppendMessages path), so a
-// snapshot captured in-transaction can be overtaken by an append or update
-// that commits later but publishes first; re-reading under the lock
-// guarantees the terminal event carries every field already streamed. The
-// passed model is published as-is if the re-read fails, and is updated in
-// place otherwise so callers return the published state.
-func (s *ActivityService) publishTerminalSnapshotInternal(ctx context.Context, model *Activity) activity.Activity {
-	lock := s.publishLockInternal(model.ID)
-	lock.Lock()
-	defer lock.Unlock()
-
-	var fresh Activity
-	if err := s.db.WithContext(ctx).First(&fresh, "id = ?", model.ID).Error; err != nil {
-		slog.DebugContext(ctx, "failed to reload activity for terminal publish", "activityId", model.ID, "error", err)
-	} else {
-		*model = fresh
-	}
-	dto := activityToDTOInternal(model)
-	s.publishActivityInternal(dto)
-	return dto
-}
-
-// CancelActivity requests cancellation of a running or queued activity. When the
-// activity's work is running in this process it interrupts it (the work finalizes
-// its own terminal status); otherwise it marks the activity cancelled directly,
-// but only if it is still active. Returns ErrActivityNotCancelable if the activity
-// has already reached a terminal state, or gorm.ErrRecordNotFound if it is unknown.
-func (s *ActivityService) CancelActivity(ctx context.Context, environmentID, activityID, requestedBy string) (*activity.Activity, error) {
-	if err := s.checkInitInternal(); err != nil {
-		return nil, err
-	}
-	activityID = strings.TrimSpace(activityID)
-	if activityID == "" {
-		return nil, errors.New("activity id is required")
-	}
-	environmentID = cmp.Or(strings.TrimSpace(environmentID), "0")
-
-	var model Activity
-	if err := s.db.WithContext(ctx).Where("id = ? AND environment_id = ?", activityID, environmentID).First(&model).Error; err != nil {
-		return nil, err
-	}
-	if model.Type == activity.TypeJobRun {
-		return nil, ErrActivityNotCancelable
-	}
-	switch model.Status {
-	case activity.StatusSuccess, activity.StatusFailed, activity.StatusCancelled:
-		return nil, ErrActivityNotCancelable
-	case activity.StatusQueued, activity.StatusRunning:
-		// Active states — cancellation can proceed.
-	}
-
-	requestedBy = cmp.Or(strings.TrimSpace(requestedBy), "a user")
-	writeCtx := utils.ActivityRuntimeContext(ctx, nil)
-	if _, err := s.AppendMessage(writeCtx, activityID, AppendActivityMessageRequest{
-		Level:   activity.MessageLevelWarning,
-		Message: "Cancellation requested by " + requestedBy,
-	}); err != nil {
-		slog.DebugContext(ctx, "failed to append cancellation message", "activityId", activityID, "error", err)
-	}
-
-	if s.RequestCancel(activityID) {
-		// The running work observes the cancelled context and writes its own
-		// terminal status, which reaches clients via the activity stream. Return
-		// the pre-cancel snapshot rather than reloading here: the worker has not
-		// finished unwinding yet, so a reload would still report "running".
-		return new(activityToDTOInternal(&model)), nil
-	}
-
-	// Untracked work (e.g. after a process restart, or a queued activity with no
-	// runner): finalize directly, but only if it is still active to avoid
-	// clobbering a concurrently-completing activity.
-	now := time.Now()
-	var finalized Activity
-	if err := s.db.WithContext(writeCtx).Transaction(func(tx *gorm.DB) error {
-		if err := tx.First(&finalized, "id = ? AND environment_id = ?", activityID, environmentID).Error; err != nil {
-			return err
-		}
-		updates := completeActivityUpdatesInternal(finalized.StartedAt, activity.StatusCancelled, cancelledMessageInternal, nil, nil, now)
-		result := tx.Model(&Activity{}).
-			Where("id = ? AND status IN ?", activityID, []activity.Status{activity.StatusQueued, activity.StatusRunning}).
-			Updates(updates)
-		if result.Error != nil {
-			return fmt.Errorf("failed to cancel activity: %w", result.Error)
-		}
-		if result.RowsAffected == 0 {
-			return ErrActivityNotCancelable
-		}
-		if err := tx.First(&finalized, "id = ? AND environment_id = ?", activityID, environmentID).Error; err != nil {
-			return fmt.Errorf("failed to load cancelled activity: %w", err)
-		}
-		return nil
-	}); err != nil {
-		return nil, err
-	}
-
-	dto := s.publishTerminalSnapshotInternal(writeCtx, &finalized)
-	return &dto, nil
-}
-
-// FailStaleImageUpdateChecks marks image update checks that were left running
-// across a prior process lifetime as failed. It intentionally scopes cleanup to
-// old image-update-check activities so startup repair cannot affect other work.
-func (s *ActivityService) FailStaleImageUpdateChecks(ctx context.Context) (int64, error) {
-	if s == nil || s.db == nil {
-		return 0, nil
-	}
-
-	cutoff := time.Now().Add(-staleImageUpdateCheckAge)
-	var staleChecks []Activity
-	if err := s.db.WithContext(ctx).
-		Where("type = ? AND status = ? AND started_at < ?", activity.TypeImageUpdateCheck, activity.StatusRunning, cutoff).
-		Find(&staleChecks).Error; err != nil {
-		return 0, fmt.Errorf("find stale image update checks: %w", err)
-	}
-
-	const message = "Image update check failed because it was stale after Arcane restarted"
-	errMessage := message
-	var failed int64
-	var failErrs []error
-	for i := range staleChecks {
-		if _, err := s.CompleteActivity(ctx, staleChecks[i].ID, activity.StatusFailed, message, &errMessage, "Image update check failed"); err != nil {
-			failErrs = append(failErrs, fmt.Errorf("fail stale image update check %s: %w", staleChecks[i].ID, err))
-			continue
-		}
-		failed++
-	}
-
-	return failed, errors.Join(failErrs...)
-}
-
-// isTrackedInternal reports whether activityID has a live work registration in
-// this process (i.e. a worker goroutine called Track and has not completed yet).
-func (s *ActivityService) isTrackedInternal(activityID string) bool {
-	s.runningMu.Lock()
-	defer s.runningMu.Unlock()
-	_, ok := s.running[activityID]
-	return ok
-}
-
-// FailAbandonedActivities marks queued/running activities whose worker is no
-// longer alive in this process as failed, releasing any concurrency slot they
-// still hold. Liveness comes from the running map, not age: every creation
-// path Tracks its activity right after StartActivity, and the short grace
-// period covers that create→Track window. This assumes exactly one Arcane
-// process owns the database (managers and agents each own theirs); running
-// multiple replicas against one database would make each replica sweep the
-// other's live work.
-//
-// The terminal write is status-guarded like CancelActivity's untracked
-// fallback: a worker completing concurrently wins the race and the row is
-// skipped here.
-func (s *ActivityService) FailAbandonedActivities(ctx context.Context) (int64, error) {
-	if s == nil || s.db == nil {
-		return 0, nil
-	}
-
-	cutoff := time.Now().Add(-abandonedActivityGrace)
-	activeStatuses := []activity.Status{activity.StatusQueued, activity.StatusRunning}
-	var candidates []Activity
-	if err := s.db.WithContext(ctx).
-		Where("status IN ? AND started_at < ?", activeStatuses, cutoff).
-		Where("type <> ?", activity.TypeJobRun).
-		Find(&candidates).Error; err != nil {
-		return 0, fmt.Errorf("find abandoned activities: %w", err)
-	}
-
-	const message = "Activity was marked failed because its worker is no longer running"
-	errMessage := message
-	var swept int64
-	var sweepErrs []error
-	for i := range candidates {
-		activityID := candidates[i].ID
-		if s.isTrackedInternal(activityID) {
-			continue
-		}
-
-		now := time.Now()
-		var finalized Activity
-		lostRace := false
-		if err := s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
-			updates := completeActivityUpdatesInternal(candidates[i].StartedAt, activity.StatusFailed, message, &errMessage, nil, now)
-			result := tx.Model(&Activity{}).
-				Where("id = ? AND status IN ?", activityID, activeStatuses).
-				Updates(updates)
-			if result.Error != nil {
-				return fmt.Errorf("fail abandoned activity: %w", result.Error)
-			}
-			if result.RowsAffected == 0 {
-				lostRace = true
-				return nil
-			}
-			if err := tx.First(&finalized, "id = ?", activityID).Error; err != nil {
-				return fmt.Errorf("load failed abandoned activity: %w", err)
-			}
-			return nil
-		}); err != nil {
-			sweepErrs = append(sweepErrs, fmt.Errorf("sweep activity %s: %w", activityID, err))
-			continue
-		}
-		if lostRace {
-			continue
-		}
-
-		s.releaseSlotInternal(activityID)
-		s.publishTerminalSnapshotInternal(ctx, &finalized)
-		swept++
-	}
-
-	return swept, errors.Join(sweepErrs...)
-}
-
-// ResolveOrphanedQueuedActivities fails any activity still queued at startup.
-// Queued state is owned by a live goroutine blocked on AwaitActivitySlot, so a
-// queued row after a restart can never start running.
-func (s *ActivityService) ResolveOrphanedQueuedActivities(ctx context.Context, protectedIDs ...string) (int64, error) {
-	if s == nil || s.db == nil {
-		return 0, nil
-	}
-
-	var queued []Activity
-	if err := s.db.WithContext(ctx).
-		Where("status = ?", activity.StatusQueued).
-		Where("type <> ?", activity.TypeJobRun).
-		Where("id NOT IN ?", append(protectedIDs, "")).
-		Find(&queued).Error; err != nil {
-		return 0, fmt.Errorf("find orphaned queued activities: %w", err)
-	}
-
-	const message = "Queued activity was interrupted by an Arcane restart"
-	errMessage := message
-	var failed int64
-	var failErrs []error
-	for i := range queued {
-		if _, err := s.CompleteActivity(ctx, queued[i].ID, activity.StatusFailed, message, &errMessage); err != nil {
-			failErrs = append(failErrs, fmt.Errorf("fail orphaned queued activity %s: %w", queued[i].ID, err))
-			continue
-		}
-		failed++
-	}
-
-	return failed, errors.Join(failErrs...)
 }
 
 // PatchActivityMetadata merges patch into the activity's existing metadata,
@@ -1049,75 +787,23 @@ func (s *ActivityService) PatchActivityMetadata(ctx context.Context, activityID 
 			merged = database.JSON{}
 		}
 		maps.Copy(merged, patch)
-		if err := tx.Model(&Activity{}).Where("id = ?", activityID).
-			Updates(map[string]any{"metadata": merged, "updated_at": time.Now()}).Error; err != nil {
-			return fmt.Errorf("failed to patch activity metadata: %w", err)
+		query := tx.Model(&Activity{}).Where("id = ?", activityID)
+		if record.GateScope != "" {
+			owner, _ := ctx.Value(gateOwnerContextKey{}).(string)
+			if owner == "" || owner != record.GateOwner {
+				return ErrLeaseLost
+			}
+			query = query.Where("gate_owner = ? AND status IN ?", owner, []activity.Status{activity.StatusQueued, activity.StatusRunning})
+		}
+		result := query.Updates(map[string]any{"metadata": merged, "updated_at": gorm.Expr("NOW()")})
+		if result.Error != nil {
+			return fmt.Errorf("failed to patch activity metadata: %w", result.Error)
+		}
+		if result.RowsAffected == 0 {
+			return ErrLeaseLost
 		}
 		return nil
 	})
-}
-
-// ResolveStaleAutoUpdateActivities finalizes auto-update activities left
-// running by a prior process lifetime. A run whose metadata marks a triggered
-// self-update completed by restarting Arcane, so it is recorded as success;
-// anything else still running at startup was interrupted and is failed.
-func (s *ActivityService) ResolveStaleAutoUpdateActivities(ctx context.Context, protectedIDs ...string) (int64, error) {
-	if s == nil || s.db == nil {
-		return 0, nil
-	}
-
-	var stale []Activity
-	if err := s.db.WithContext(ctx).
-		Where("type = ? AND status = ?", activity.TypeAutoUpdate, activity.StatusRunning).
-		Where("id NOT IN ?", append(protectedIDs, "")).
-		Find(&stale).Error; err != nil {
-		return 0, fmt.Errorf("find stale auto-update activities: %w", err)
-	}
-
-	var resolved int64
-	var resolveErrs []error
-	for i := range stale {
-		status := activity.StatusFailed
-		message := "Auto-update interrupted by Arcane restart"
-		var errMessage *string
-		if selfUpdate, _ := stale[i].Metadata["selfUpdateTriggered"].(bool); selfUpdate {
-			status = activity.StatusSuccess
-			message = "Auto-update completed — Arcane restarted with the updated image"
-		} else {
-			errMessage = new(message)
-		}
-		if _, err := s.CompleteActivity(ctx, stale[i].ID, status, message, errMessage); err != nil {
-			resolveErrs = append(resolveErrs, fmt.Errorf("resolve stale auto-update activity %s: %w", stale[i].ID, err))
-			continue
-		}
-		resolved++
-	}
-
-	return resolved, errors.Join(resolveErrs...)
-}
-
-func completeActivityUpdatesInternal(startedAt time.Time, status activity.Status, finalMessage string, errMessage *string, finalStep []string, now time.Time) map[string]any {
-	updates := map[string]any{
-		"status":      status,
-		"ended_at":    now,
-		"duration_ms": now.Sub(startedAt).Milliseconds(),
-		"updated_at":  now,
-	}
-	if trimmed := strings.TrimSpace(finalMessage); trimmed != "" {
-		updates["latest_message"] = trimmed
-	}
-	if len(finalStep) > 0 {
-		if step := strings.TrimSpace(finalStep[0]); step != "" {
-			updates["step"] = step
-		}
-	}
-	if errMessage != nil && strings.TrimSpace(*errMessage) != "" {
-		updates["error"] = strings.TrimSpace(*errMessage)
-	}
-	if status == activity.StatusSuccess {
-		updates["progress"] = 100
-	}
-	return updates
 }
 
 func (s *ActivityService) ListActivitiesPaginated(ctx context.Context, environmentID string, params pagination.QueryParams) ([]activity.Activity, pagination.Response, error) {
@@ -1165,113 +851,6 @@ func (s *ActivityService) ListActivitiesPaginated(ctx context.Context, environme
 		out = append(out, activityToDTOInternal(&activities[i]))
 	}
 	return out, paginationResp, nil
-}
-
-func (s *ActivityService) GetActivityDetail(ctx context.Context, environmentID, activityID string, limit int) (*activity.Detail, error) {
-	if err := s.checkInitInternal(); err != nil {
-		return nil, err
-	}
-	if limit <= 0 || limit > defaultActivityMessages {
-		limit = defaultActivityMessages
-	}
-
-	var model Activity
-	if err := s.db.WithContext(ctx).
-		Where("id = ? AND environment_id = ?", activityID, environmentID).
-		First(&model).Error; err != nil {
-		return nil, fmt.Errorf("failed to load activity: %w", err)
-	}
-
-	var messages []ActivityMessage
-	if err := s.db.WithContext(ctx).
-		Where("activity_id = ?", activityID).
-		Order("created_at DESC").
-		Limit(limit).
-		Find(&messages).Error; err != nil {
-		return nil, fmt.Errorf("failed to load activity messages: %w", err)
-	}
-
-	outMessages := make([]activity.Message, 0, len(messages))
-	for _, v := range slices.Backward(messages) {
-		outMessages = append(outMessages, activityMessageToDTOInternal(&v))
-	}
-
-	return &activity.Detail{
-		Activity: activityToDTOInternal(&model),
-		Messages: outMessages,
-	}, nil
-}
-
-func (s *ActivityService) PruneHistory(ctx context.Context, retentionDays, maxEntries int) (int64, error) {
-	if s == nil || s.db == nil {
-		return 0, nil
-	}
-	if retentionDays < 0 {
-		retentionDays = defaultActivityRetentionDays
-	}
-	if maxEntries < 0 {
-		maxEntries = defaultActivityHistoryLimit
-	}
-
-	var deleted int64
-	if err := s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
-		if retentionDays > 0 {
-			cutoff := time.Now().Add(-time.Duration(retentionDays) * 24 * time.Hour)
-			ids, err := findTerminalActivityIDsInternal(tx.Where("COALESCE(ended_at, updated_at, created_at) < ?", cutoff))
-			if err != nil {
-				return fmt.Errorf("failed to find activities older than retention window: %w", err)
-			}
-			count, err := deleteActivitiesByIDInternal(tx, ids)
-			if err != nil {
-				return err
-			}
-			deleted += count
-		}
-
-		if maxEntries > 0 {
-			ids, err := findActivityIDsBeyondHistoryLimitInternal(tx, maxEntries)
-			if err != nil {
-				return err
-			}
-			count, err := deleteActivitiesByIDInternal(tx, ids)
-			if err != nil {
-				return err
-			}
-			deleted += count
-		}
-
-		return nil
-	}); err != nil {
-		return 0, err
-	}
-
-	return deleted, nil
-}
-
-func (s *ActivityService) DeleteHistory(ctx context.Context, environmentID string) (int64, error) {
-	if s == nil || s.db == nil {
-		return 0, nil
-	}
-
-	environmentID = cmp.Or(strings.TrimSpace(environmentID), "0")
-
-	var deleted int64
-	if err := s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
-		ids, err := findTerminalActivityIDsInternal(scopeJobActivityVisibilityInternal(ctx, tx.Where("environment_id = ?", environmentID), environmentID, authz.PermActivitiesDelete))
-		if err != nil {
-			return fmt.Errorf("failed to find activity history: %w", err)
-		}
-		count, err := deleteActivitiesByIDInternal(tx, ids)
-		if err != nil {
-			return err
-		}
-		deleted = count
-		return nil
-	}); err != nil {
-		return 0, err
-	}
-
-	return deleted, nil
 }
 
 func (s *ActivityService) Subscribe(environmentID string) (<-chan activity.StreamEvent, func() bool, func()) {
@@ -1431,6 +1010,8 @@ func activityToDTOInternal(model *Activity) activity.Activity {
 		Progress:            clampProgressPtrInternal(model.Progress),
 		Step:                model.Step,
 		LatestMessage:       model.LatestMessage,
+		MessageCode:         model.MessageCode,
+		AffectedServices:    servicesFromJSONInternal(model.AffectedServices),
 		StartedBy:           activityStartedByDTOInternal(model),
 		StartedAt:           model.StartedAt,
 		EndedAt:             copyPtrInternal(model.EndedAt),
@@ -1451,6 +1032,8 @@ func activityMessageToDTOInternal(model *ActivityMessage) activity.Message {
 		ActivityID: model.ActivityID,
 		Level:      model.Level,
 		Message:    model.Message,
+		Code:       model.Code,
+		Step:       model.Step,
 		Payload:    jsonToMapInternal(model.Payload),
 		CreatedAt:  model.CreatedAt,
 	}
@@ -1513,7 +1096,6 @@ func findActivityIDsBeyondHistoryLimitInternal(tx *gorm.DB, maxEntries int) ([]s
 		FROM (
 			SELECT id,
 				ROW_NUMBER() OVER (
-					PARTITION BY environment_id
 					ORDER BY COALESCE(ended_at, updated_at, created_at) DESC, started_at DESC
 				) AS activity_rank
 			FROM activities
@@ -1613,23 +1195,52 @@ func (s *ActivityService) SyncJobRun(ctx context.Context, run scheduler.Run, nam
 	if run.ActivityID == "" {
 		return errors.New("job activity ID is required")
 	}
+	if run.ID == "" {
+		return errors.New("job run ID is required")
+	}
 	lock := s.publishLockInternal(run.ActivityID)
 	lock.Lock()
 	defer lock.Unlock()
 	model := jobActivityInternal(run, name)
+	if !activity.Valid(model.MessageCode) {
+		return fmt.Errorf("unknown job activity message code: %s", model.MessageCode)
+	}
 	changed := false
 	if err := s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		var receipt ActivitySyncReceipt
+		receiptErr := tx.First(&receipt, "run_id = ?", run.ID).Error
+		if receiptErr != nil && !errors.Is(receiptErr, gorm.ErrRecordNotFound) {
+			return receiptErr
+		}
+		if receiptErr == nil && !receipt.UpdatedAt.Before(run.UpdatedAt) {
+			var retained Activity
+			if err := tx.First(&retained, "id = ?", run.ActivityID).Error; errors.Is(err, gorm.ErrRecordNotFound) {
+				return nil
+			} else if err != nil {
+				return err
+			}
+		}
 		var existing Activity
 		err := tx.First(&existing, "id = ?", run.ActivityID).Error
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			changed = true
-			return tx.Create(&model).Error
+			if err := tx.Create(&model).Error; err != nil {
+				return err
+			}
+			if err := tx.Create(&ActivityMessage{ActivityID: model.ID, Level: activity.MessageLevelInfo, Message: model.LatestMessage, Code: model.MessageCode, Step: model.Step, CreatedAt: run.UpdatedAt}).Error; err != nil {
+				return err
+			}
+			syncedAt := time.Now().UTC()
+			return tx.Save(&ActivitySyncReceipt{RunID: run.ID, UpdatedAt: run.UpdatedAt, SyncedAt: &syncedAt}).Error
 		}
 		if err != nil {
 			return err
 		}
 		if existing.Type != activity.TypeJobRun {
 			return errors.New("job activity identity belongs to another operation")
+		}
+		if existing.GateScope != "" {
+			return ErrLeaseLost
 		}
 		if stamp, ok := existing.Metadata["runUpdatedAt"].(string); ok {
 			previous, parseErr := time.Parse(time.RFC3339Nano, stamp)
@@ -1642,12 +1253,20 @@ func (s *ActivityService) SyncJobRun(ctx context.Context, run scheduler.Run, nam
 			}
 		}
 		changed = true
-		return tx.Table("activities").Where("id = ?", run.ActivityID).Updates(map[string]any{
+		if err := tx.Table("activities").Where("id = ?", run.ActivityID).Updates(map[string]any{
 			"environment_id": model.EnvironmentID,
 			"status":         model.Status, "step": model.Step, "latest_message": model.LatestMessage,
+			"message_code": model.MessageCode, "affected_services": model.AffectedServices,
 			"ended_at": model.EndedAt, "duration_ms": model.DurationMs, "error": model.Error,
 			"metadata": model.Metadata, "updated_at": model.UpdatedAt,
-		}).Error
+		}).Error; err != nil {
+			return err
+		}
+		if err := tx.Create(&ActivityMessage{ActivityID: model.ID, Level: activity.MessageLevelInfo, Message: model.LatestMessage, Code: model.MessageCode, Step: model.Step, CreatedAt: run.UpdatedAt}).Error; err != nil {
+			return err
+		}
+		syncedAt := time.Now().UTC()
+		return tx.Save(&ActivitySyncReceipt{RunID: run.ID, UpdatedAt: run.UpdatedAt, SyncedAt: &syncedAt}).Error
 	}); err != nil {
 		return fmt.Errorf("synchronize job activity: %w", err)
 	}
@@ -1680,13 +1299,20 @@ func jobActivityInternal(run scheduler.Run, name string) Activity {
 		ID: run.ActivityID, CreatedAt: run.CreatedAt, UpdatedAt: new(run.UpdatedAt),
 		EnvironmentID: run.EnvironmentID, BatchID: new(run.ID), Type: activity.TypeJobRun, Status: status,
 		ResourceType: new("job"), ResourceID: new(run.JobID), ResourceName: new(name),
-		StartedAt: run.CreatedAt, Step: string(run.Status), LatestMessage: message,
+		StartedAt: run.CreatedAt, Step: string(run.Status), LatestMessage: message, MessageCode: "job." + string(run.Status),
 		Metadata: database.JSON{
 			"jobId": run.JobID, "runId": run.ID, "environmentId": run.EnvironmentID,
 			"jobStatus": string(run.Status), "trigger": run.Trigger, "attemptCount": run.AttemptCount,
 			"runUpdatedAt": run.UpdatedAt.Format(time.RFC3339Nano), "domainActivityId": run.Outcome.ActivityID,
 		},
 	}
+	services := make([]string, 0, len(run.Outcome.Targets))
+	for _, target := range run.Outcome.Targets {
+		if target.ResourceType == "service" {
+			services = append(services, target.ID)
+		}
+	}
+	model.AffectedServices = servicesJSONInternal(services)
 	if run.RequestedBy != "" {
 		model.StartedByUserID = new(run.RequestedBy)
 		model.StartedByUsername = new(run.RequestedBy)

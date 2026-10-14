@@ -44,6 +44,17 @@ func setupEventServiceTestDB(t *testing.T) *database.DB {
 	return &database.DB{DB: db}
 }
 
+func TestCreateEventRejectsUnknownMessageCode(t *testing.T) {
+	svc := NewEventService(setupEventServiceTestDB(t), nil, nil)
+	_, err := svc.CreateEvent(t.Context(), CreateEventRequest{Type: EventTypeContainerStart, MessageCode: "unlisted.code", Title: "Started"})
+	require.ErrorContains(t, err, "unknown event message code")
+	var count int64
+	require.NoError(t, svc.db.Model(&Event{}).Count(&count).Error)
+	require.Zero(t, count)
+	_, err = svc.CreateEvent(t.Context(), CreateEventRequest{Type: EventTypeContainerStart, Title: "Started"})
+	require.NoError(t, err)
+}
+
 func TestCreateEventRequestJSONOmitempty(t *testing.T) {
 	t.Run("includes optional fields when set", func(t *testing.T) {
 		payload, err := json.Marshal(CreateEventRequest{

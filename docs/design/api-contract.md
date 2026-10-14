@@ -33,7 +33,7 @@ the mapping and its contract tests before that feature claims live data.
 | `ProjectDetails`, `ProjectRuntimeService`, `ProjectTag` | `Stack`, `StackDetail`, `Service` | Compose project records need host IDs, service status, labels and UI display fields. | Planned M5 Hosts, transport and read inventory |
 | `ContainerDetails`, `ContainerSummary`, `ContainerComposeInfo` | `ContainerInfo`, `DockletAdapter` | Docker container records need origin classification, restrictions and display status. | Planned M5 Hosts, transport and read inventory |
 | `DashboardSnapshot`, `DashboardSnapshotContainers`, `DashboardSnapshotImages` | `HostMetrics`, `ContainerMetrics`, `MetricsSnapshot` | Aggregate dashboard payloads do not directly provide the per-host view and metric units. | Planned M5 Hosts, transport and read inventory |
-| `ActivityActivity`, `ActivityMessage`, `EventEvent` | `ActionRun`, `OpsEvent`, `CodedActionRun`, `CodedEvent` | Persisted phases, service effects and message codes must replace presentation text. | #37 |
+| `ActivityActivity`, `ActivityMessage`, `EventEvent` | `ActionRun`, `OpsEvent`, `CodedActionRun`, `CodedEvent` | Map persisted step traces, affected services and message codes into the HTTP adapter view models. | #38 |
 | `JobscheduleConfig`, `JobscheduleJobStatus`, `JobscheduleJobRunResponse` | `ScheduledJob`, `DockletAdapter` | Job state and next-run time need a common schedule projection using the M4 hub time zone. | Planned M10 Images and updates |
 | `StreamEvent`, `ActivityStreamEvent`, `EventStreamEvent` | `subscribeActions`, `subscribeChanges` | SSE channel envelopes need parsing, reconnect and query invalidation. | #38 |
 | `ProjectDeployOptions`, `ProjectCreateReponse`, `SystemConvertDockerRunResponse` | `DeployInput`, `ImportResult` | UI drafts and imports need lossless Compose fields and action identity. | Planned M7 Stack authoring and deployment |
@@ -66,3 +66,55 @@ The table records existing mismatches, not a promise that every listed API
 operation is ready for production use. Some schema types are nested Docker
 structures rather than separately callable operations. The owning milestone
 resolves each mapping when its endpoint and UI slice are implemented.
+
+## Stable message codes
+
+`types/activity/code.go` owns the code catalogue. OpenAPI exposes these values as
+`messageCode` enums for activity and event responses. Display text is separate;
+callers creating events must send a listed code. A run status transition uses
+`activity.<status>`; admission results use `run.*`. The catalogue is:
+
+| Family | Codes |
+| --- | --- |
+| `run` | `run.started`, `run.joined`, `run.fresh`, `run.busy`, `run.cancelling` |
+| `activity` | `activity.queued`, `activity.running`, `activity.success`, `activity.failed`, `activity.cancelled`, `activity.cancel_requested`, `activity.message` |
+| `deploy` | `deploy.pull` |
+| `job` | `job.queued`, `job.waiting`, `job.running`, `job.retrying`, `job.succeeded`, `job.partial`, `job.skipped`, `job.failed`, `job.needs_attention`, `job.canceled` |
+| `container` | `container.die`, `container.oom`, `container.rename`, `container.unhealthy`, `container.start`, `container.stop`, `container.restart`, `container.delete`, `container.create`, `container.scan`, `container.update`, `container.deploy`, `container.kill`, `container.pause`, `container.unpause`, `container.error` |
+| `image` | `image.untag`, `image.import`, `image.prune`, `image.pull`, `image.load`, `image.tag`, `image.commit`, `image.delete`, `image.scan`, `image.error`, `image.vulnerability_scan` |
+| `volume` | `volume.prune`, `volume.create`, `volume.rename`, `volume.delete`, `volume.error`, `volume.file.create`, `volume.file.delete`, `volume.file.upload`, `volume.file.update`, `volume.workspace.update`, `volume.backup.create`, `volume.backup.delete`, `volume.backup.restore`, `volume.backup.restore_files`, `volume.backup.download` |
+| `network` | `network.prune`, `network.create`, `network.delete`, `network.connect`, `network.disconnect`, `network.error` |
+| `project` | `project.deploy`, `project.delete`, `project.start`, `project.stop`, `project.create`, `project.update`, `project.error` |
+| `system` | `system.prune`, `system.auto_update`, `system.upgrade` |
+| `user` | `user.login`, `user.logout` |
+| `environment` | `environment.create`, `environment.connect`, `environment.disconnect`, `environment.update`, `environment.delete`, `environment.api_key.regenerated`, `environment.mtls.ca_generated`, `environment.mtls.cert_issued`, `environment.mtls.enroll`, `environment.mtls.download` |
+| `webhook` | `webhook.create`, `webhook.update`, `webhook.delete`, `webhook.trigger` |
+| `notification` | `notification.send` |
+
+## Gated run leases
+
+A gated run remains `queued` or `running` for admission until its owner writes a
+terminal state. A fresh owner token fences progress and completion writes. Gate
+start and heartbeat set `gate_lease_at` with PostgreSQL `NOW()`; progress updates
+cannot extend or shorten this lease. Cancellation sets `cancel_requested_at` as a
+durable request and signals the local worker. The owner's heartbeat observes a
+remote request; after the worker returns, completion records `cancelled` even if
+the worker reports success. A second request for the same operation receives
+`run.cancelling` while cancellation is pending; a different operation receives
+`run.busy`. The cancellation request writes an `activity.cancel_requested`
+message with the requester and publishes the current snapshot immediately.
+Cancellation alone does not release the gate: the owner keeps its heartbeat
+until the worker returns. A worker that never returns holds the scope until its
+process exits; after the lease expires, the sweep may rotate the token and fail
+the run. Terminal `ended_at` and the 30-second `run.fresh` comparison
+also use database time.
+
+Run detail returns the most recent 256 distinct step transitions. Repeated
+messages within one step do not consume this limit. A closed step before the
+last step is reported as `success` when the next step starts, even if that step
+logged warning or error messages; the last step inherits the run's terminal
+status. Clients should use message levels for per-step warnings and errors.
+
+History limits from environment variables use the same numeric ranges as API
+setting writes. An invalid override fails settings initialization before cleanup
+jobs start; operators must correct it and restart the process.

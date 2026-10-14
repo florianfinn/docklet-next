@@ -105,6 +105,14 @@ func NewJobService(
 	return service
 }
 
+func (s *JobService) PruneRunActivityReceipts(ctx context.Context, retainedRunIDs []string) error {
+	if s.activity == nil {
+		return nil
+	}
+	_, err := s.activity.PruneSyncReceipts(ctx, retainedRunIDs)
+	return err
+}
+
 func (s *JobService) SetScheduler(ctx context.Context, controller scheduler.JobController) { //nolint:contextcheck // scheduler jobs must capture the app lifecycle context, not request contexts
 	if ctx == nil {
 		ctx = context.Background() //nolint:forbidigo // A nil scheduler context uses an independent lifecycle root.

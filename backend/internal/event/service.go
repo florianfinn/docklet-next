@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; functional cut: removed federated credentials.
+// Deviations: Local module namespace; functional cut: removed federated credentials; stable event codes; extracted retention and actor normalization.
 
 package event
 
@@ -22,6 +22,7 @@ import (
 	"sync"
 	"time"
 
+	activitytypes "github.com/florianfinn/docklet-next/types/activity"
 	"github.com/florianfinn/docklet-next/types/event"
 	"github.com/moby/moby/api/types/events"
 	"github.com/samber/mo"
@@ -68,29 +69,18 @@ func NewEventService(db *database.DB, cfg *config.Config, httpClient *http.Clien
 	}
 }
 
-type CreateEventRequest struct {
-	// Internal identity for replay-safe daemon delivery; never accepted from API payloads.
-	deduplicationKey string
-	Type             EventType     `json:"type"`
-	Severity         EventSeverity `json:"severity,omitempty"`
-	Title            string        `json:"title"`
-	Description      string        `json:"description,omitempty"`
-	ResourceType     *string       `json:"resourceType,omitempty"`
-	ResourceID       *string       `json:"resourceId,omitempty"`
-	ResourceName     *string       `json:"resourceName,omitempty"`
-	UserID           *string       `json:"userId,omitempty"`
-	Username         *string       `json:"username,omitempty"`
-	EnvironmentID    *string       `json:"environmentId,omitempty"`
-	Metadata         database.JSON `json:"metadata,omitempty"`
-}
-
 func (s *EventService) CreateEvent(ctx context.Context, req CreateEventRequest) (*Event, error) {
+	code := cmp.Or(strings.TrimSpace(req.MessageCode), string(req.Type))
+	if !activitytypes.Valid(code) {
+		return nil, fmt.Errorf("unknown event message code: %s", code)
+	}
 	severity := cmp.Or(req.Severity, EventSeverityInfo)
 	userID, username := normalizeEventActor(req.UserID, req.Username)
 
 	eventRecord := &Event{
 		CreatedAt:     time.Now(),
 		Type:          req.Type,
+		MessageCode:   code,
 		Severity:      severity,
 		Title:         req.Title,
 		Description:   req.Description,
@@ -291,35 +281,6 @@ func managerEventEndpointURL(rawBaseURL string) (string, error) {
 	return baseURL.String(), nil
 }
 
-func normalizeEventActor(userID, username *string) (*string, *string) {
-	normalizedUserID := normalizeOptionalStringPtr(userID)
-	normalizedUsername := normalizeOptionalStringPtr(username)
-
-	if normalizedUsername == nil && normalizedUserID != nil {
-		normalizedUsername = new(*normalizedUserID)
-	}
-	if normalizedUserID == nil && normalizedUsername != nil {
-		normalizedUserID = new(*normalizedUsername)
-	}
-	if normalizedUserID == nil && normalizedUsername == nil {
-		normalizedUserID = new("system")
-		normalizedUsername = new("System")
-	}
-
-	return normalizedUserID, normalizedUsername
-}
-
-func normalizeOptionalStringPtr(value *string) *string {
-	if value == nil {
-		return nil
-	}
-	trimmed := strings.TrimSpace(*value)
-	if trimmed == "" {
-		return nil
-	}
-	return &trimmed
-}
-
 func (s *EventService) ListEventsPaginated(ctx context.Context, params pagination.QueryParams) ([]event.Event, pagination.Response, error) {
 	var eventRecords []Event
 	q := s.db.WithContext(ctx).Model(&Event{})
@@ -469,23 +430,6 @@ func (s *EventService) DeleteEvent(ctx context.Context, eventID string) error {
 		return nil
 	})
 	if err == nil {
-		s.changes.Publish(struct{}{})
-	}
-	return err
-}
-
-func (s *EventService) DeleteOldEvents(ctx context.Context, olderThan time.Duration) error {
-	cutoff := time.Now().Add(-olderThan)
-	var deleted int64
-	err := s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
-		result := tx.Where("timestamp < ?", cutoff).Delete(&Event{})
-		if result.Error != nil {
-			return fmt.Errorf("failed to delete old events: %w", result.Error)
-		}
-		deleted = result.RowsAffected
-		return nil
-	})
-	if err == nil && deleted > 0 {
 		s.changes.Publish(struct{}{})
 	}
 	return err

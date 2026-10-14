@@ -2,14 +2,14 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace
+// Deviations: Local module namespace; count-based event and finished-run retention.
 
 package scheduler
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
-	"time"
 
 	schedulertypes "github.com/florianfinn/docklet-next/types/scheduler"
 	kit "go.getarcane.app/kit/pkg"
@@ -47,21 +47,27 @@ func (j *EventCleanupJob) Schedule(ctx context.Context) string {
 func (j *EventCleanupJob) Run(ctx context.Context) (schedulertypes.Outcome, error) {
 	slog.InfoContext(ctx, "Running event cleanup job", "jobName", EventCleanupJobName)
 
-	// Delete events older than 36 hours
-	olderThan := 36 * time.Hour
-	if err := j.eventService.DeleteOldEvents(ctx, olderThan); err != nil {
-		slog.ErrorContext(ctx, "Failed to delete old events", "jobName", EventCleanupJobName, "olderThan", olderThan.String(), "error", err)
+	eventLimit := j.settingsService.GetIntSetting(ctx, "eventHistoryMaxEntries", 500)
+	if eventLimit < 50 || eventLimit > 5000 {
+		return schedulertypes.Outcome{}, fmt.Errorf("eventHistoryMaxEntries out of range: %d", eventLimit)
+	}
+	deletedEvents, err := j.eventService.PruneEvents(ctx, eventLimit)
+	if err != nil {
+		slog.ErrorContext(ctx, "Failed to prune events", "jobName", EventCleanupJobName, "error", err)
 		return schedulertypes.Outcome{}, err
 	}
 
 	slog.InfoContext(ctx, "Event cleanup job completed successfully",
 		"jobName", EventCleanupJobName,
-		"olderThan", olderThan.String())
+		"maxEntries", eventLimit,
+		"deleted", deletedEvents)
 
 	if j.activityService != nil {
-		retentionDays := j.settingsService.GetIntSetting(ctx, "activityHistoryRetentionDays", 30)
-		maxEntries := j.settingsService.GetIntSetting(ctx, "activityHistoryMaxEntries", 1000)
-		deleted, err := j.activityService.PruneHistory(ctx, retentionDays, maxEntries)
+		maxEntries := j.settingsService.GetIntSetting(ctx, "activityHistoryMaxEntries", 100)
+		if maxEntries < 10 || maxEntries > 1000 {
+			return schedulertypes.Outcome{}, fmt.Errorf("activityHistoryMaxEntries out of range: %d", maxEntries)
+		}
+		deleted, err := j.activityService.PruneHistory(ctx, 0, maxEntries)
 		if err != nil {
 			slog.ErrorContext(ctx, "Failed to prune activity history", "jobName", EventCleanupJobName, "error", err)
 			return schedulertypes.Outcome{}, err
@@ -69,7 +75,6 @@ func (j *EventCleanupJob) Run(ctx context.Context) (schedulertypes.Outcome, erro
 
 		slog.InfoContext(ctx, "Activity history cleanup completed successfully",
 			"jobName", EventCleanupJobName,
-			"retentionDays", retentionDays,
 			"maxEntries", maxEntries,
 			"deleted", deleted)
 	}

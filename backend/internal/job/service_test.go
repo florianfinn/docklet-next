@@ -534,7 +534,7 @@ func newJobActivityTestServiceInternal(t *testing.T) (*JobService, *activity.Act
 	sqlDB, err := db.DB.DB()
 	require.NoError(t, err)
 	sqlDB.SetMaxOpenConns(1)
-	require.NoError(t, db.AutoMigrate(&activity.Activity{}, &activity.ActivityMessage{}))
+	require.NoError(t, db.AutoMigrate(activity.Models()...))
 	activities := activity.NewActivityService(db, nil)
 	svc := NewJobService(db, nil, &config.Config{}, newJobCoordinatorForTestInternal(t, db), nil, nil, activities)
 	return svc, activities, db
@@ -651,7 +651,7 @@ func TestJobActivityRestartRepairsFailedProjection(t *testing.T) {
 		current.UpdatedAt = time.Now().UTC()
 		return nil
 	}))
-	require.NoError(t, db.AutoMigrate(&activity.Activity{}, &activity.ActivityMessage{}))
+	require.NoError(t, db.AutoMigrate(activity.Models()...))
 	restarted := NewJobService(db, nil, &config.Config{}, svc.runs, nil, nil, activities)
 	require.NoError(t, restarted.runs.Start(ctx, ctx))
 	t.Cleanup(func() {

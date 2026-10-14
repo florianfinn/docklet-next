@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; functional cut: removed APNS mobile push; functional cut: removed template catalogue; functional cut: removed GitOps and saved Git repositories; functional cut: removed Swarm; functional cut: removed standalone build workshop; functional cut: removed OIDC and passkeys.
+// Deviations: Local module namespace; functional cut: removed APNS mobile push; functional cut: removed template catalogue; functional cut: removed GitOps and saved Git repositories; functional cut: removed Swarm; functional cut: removed standalone build workshop; functional cut: removed OIDC and passkeys. Count-based history defaults.
 
 package settings
 
@@ -213,10 +213,10 @@ func DefaultSettingsConfig() *Settings {
 		ImageEventWatcherEnabled:              SettingVariable{Value: "false"},
 		DockerClientRefreshInterval:           SettingVariable{Value: "0 */5 * * * *"},
 		EventCleanupInterval:                  SettingVariable{Value: "0 0 */6 * * *"},
+		EventHistoryMaxEntries:                SettingVariable{Value: "500"},
 		ExpiredSessionsCleanupInterval:        SettingVariable{Value: "0 0 0 * * *"},
-		ActivityHistoryRetentionDays:          SettingVariable{Value: "30"},
 		UpgradeLogRetentionDays:               SettingVariable{Value: "3"},
-		ActivityHistoryMaxEntries:             SettingVariable{Value: "1000"},
+		ActivityHistoryMaxEntries:             SettingVariable{Value: "100"},
 		MaxConcurrentActivities:               SettingVariable{Value: "5"},
 		AutoInjectEnv:                         SettingVariable{Value: "false"},
 		DefaultDeployPullPolicy:               SettingVariable{Value: "missing"},
@@ -364,12 +364,16 @@ func (s *SettingsService) loadDatabaseConfigFromEnv(ctx context.Context, db *dat
 
 		// debug: log each env name checked and whether a value exists
 		if val, ok, _ := utils.LookupEnvOrFile(envVarName); ok {
+			val = kit.TrimQuotes(val)
+			if err := validateSettingValueInternal(key, val); err != nil {
+				return nil, fmt.Errorf("invalid environment setting %s: %w", key, err)
+			}
 			mask := "<empty>"
 			if val != "" {
 				mask = fmt.Sprintf("%d chars", len(val))
 			}
 			slog.DebugContext(ctx, "loadDatabaseConfigFromEnv: env override found", "key", key, "env", envVarName, "valueMasked", mask)
-			rv.Field(i).FieldByName("Value").SetString(kit.TrimQuotes(val))
+			rv.Field(i).FieldByName("Value").SetString(val)
 			continue
 		}
 		if val, ok := settingsMap[key]; ok {
@@ -479,21 +483,6 @@ func (s *SettingsService) getEffectiveSettingsConfigInternal(ctx context.Context
 	settingsCfg := s.GetSettingsConfig().Clone()
 	s.applyEnvOverrides(ctx, settingsCfg)
 	return settingsCfg
-}
-
-func validateSettingValueInternal(key, value string) error {
-	if key == "upgradeLogRetentionDays" && value != "" {
-		days, err := strconv.Atoi(value)
-		if err != nil || days < 0 || days > 3650 {
-			return common.Classify(common.ErrValidation, errors.New("upgradeLogRetentionDays must be a whole number between 0 and 3650"))
-		}
-	}
-	for _, definition := range features.All() {
-		if definition.SettingKey == key && value != "true" && value != "false" {
-			return common.Classify(common.ErrValidation, fmt.Errorf("%s must be true or false", key))
-		}
-	}
-	return nil
 }
 
 func (s *SettingsService) UpdateSetting(ctx context.Context, key, value string) error {
@@ -856,31 +845,6 @@ func (s *SettingsService) shouldProcessField(key, attrs string, isEnvOnlyMode bo
 
 	// If not in env-only mode, only persist if it's explicitly marked as envOverride
 	return isEnvOnlyMode || strings.Contains(attrs, "envOverride")
-}
-
-func (s *SettingsService) upsertEnvSetting(ctx context.Context, tx *gorm.DB, key, envVal string) error {
-	var existing SettingVariable
-	err := tx.Where("key = ?", key).First(&existing).Error
-
-	switch {
-	case errors.Is(err, gorm.ErrRecordNotFound):
-		newVar := SettingVariable{Key: key, Value: envVal}
-		if createEnvSettingErr := tx.Create(&newVar).Error; createEnvSettingErr != nil {
-			return fmt.Errorf("persist env setting %s: %w", key, createEnvSettingErr)
-		}
-		slog.DebugContext(ctx, "Created setting from environment", "key", key)
-	case err != nil:
-		return fmt.Errorf("check setting %s: %w", key, err)
-	default:
-		if existing.Value != envVal {
-			if updateEnvSettingErr := tx.Model(&existing).Update("value", envVal).Error; updateEnvSettingErr != nil {
-				return fmt.Errorf("update env setting %s: %w", key, updateEnvSettingErr)
-			}
-			slog.DebugContext(ctx, "Updated setting from environment", "key", key)
-		}
-	}
-
-	return nil
 }
 
 func (s *SettingsService) ListSettings(visibility SettingVisibility) []SettingVariable {
