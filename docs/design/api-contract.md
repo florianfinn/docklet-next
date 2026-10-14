@@ -91,23 +91,12 @@ callers creating events must send a listed code. A run status transition uses
 | `webhook` | `webhook.create`, `webhook.update`, `webhook.delete`, `webhook.trigger` |
 | `notification` | `notification.send` |
 
-## Gated run leases
+## Run gate
 
-A gated run remains `queued` or `running` for admission until its owner writes a
-terminal state. A fresh owner token fences progress and completion writes. Gate
-start and heartbeat set `gate_lease_at` with PostgreSQL `NOW()`; progress updates
-cannot extend or shorten this lease. Cancellation sets `cancel_requested_at` as a
-durable request and signals the local worker. The owner's heartbeat observes a
-remote request; after the worker returns, completion records `cancelled` even if
-the worker reports success. A second request for the same operation receives
-`run.cancelling` while cancellation is pending; a different operation receives
-`run.busy`. The cancellation request writes an `activity.cancel_requested`
-message with the requester and publishes the current snapshot immediately.
-Cancellation alone does not release the gate: the owner keeps its heartbeat
-until the worker returns. A worker that never returns holds the scope until its
-process exits; after the lease expires, the sweep may rotate the token and fail
-the run. Terminal `ended_at` and the 30-second `run.fresh` comparison
-also use database time.
+The agreed single-hub model, including admission, cancellation, restart
+recovery, operational error codes and adapter contract consequences, is in the
+[run-gate record](run-gate.md). Removing the existing lease mechanism is part
+of the later implementation step.
 
 Run detail returns the most recent 256 distinct step transitions. Repeated
 messages within one step do not consume this limit. A closed step before the
