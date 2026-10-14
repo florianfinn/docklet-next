@@ -25,6 +25,8 @@ export function check(mode) {
       command(process.execPath, ["scripts/inventory-core.mjs", "--check"]);
     if (mode === "lint" && paths.some((path) => path.endsWith(".go"))) checkGoFormatting();
   }
+  if (["lint", "test"].includes(mode) && tracked().includes("api/openapi.json"))
+    command(process.execPath, ["scripts/openapi-contract.mjs", "check"]);
   if (mode === "test" || mode === "text") {
     const tests = tracked().filter((p) => /^tests\/.*\.test\.mjs$/.test(p));
     if (!tests.length) throw new Error("missing-tests");

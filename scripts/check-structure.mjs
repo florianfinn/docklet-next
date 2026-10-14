@@ -40,7 +40,7 @@ export function validProvenance(record) {
 }
 // Exemptions are constrained in code; editing the baseline cannot admit arbitrary files.
 const LOCKFILES = new Set(["pnpm-lock.yaml", "package-lock.json", "go.sum", "yarn.lock"]);
-const GENERATED_DIRECTORIES = ["api/generated/", "web/src/generated/"];
+const GENERATED_DIRECTORIES = ["api/generated/", "web/src/generated/", "web/src/api/generated/"];
 function generatedFile(file) {
   if (LOCKFILES.has(file.path.split("/").at(-1))) return true;
   return (

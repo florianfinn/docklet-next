@@ -13,6 +13,8 @@
     "lint": "node scripts/run-checks.mjs lint",
     "test": "node scripts/run-checks.mjs test",
     "build": "node scripts/run-checks.mjs build",
+    "contract:generate": "node scripts/openapi-contract.mjs generate",
+    "contract:check": "node scripts/openapi-contract.mjs check",
     "check:publication": "node scripts/check-publication.mjs --worktree --history",
     "check:structure": "node scripts/check-structure.mjs",
     "check:pr": "node scripts/check-pr-publication.mjs",
