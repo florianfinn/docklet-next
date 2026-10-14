@@ -45,8 +45,9 @@ type GateConflict struct {
 
 func (e *GateConflict) Error() string { return e.Code }
 
-// StartGatedActivity serializes starts for one resource across hub processes.
-// The caller owns execution only when Code is run.started.
+// StartGatedActivity serializes starts for one resource in PostgreSQL.
+// Only run.started owns execution; its heartbeat lets every process distinguish
+// live gated work from a process that stopped before completion.
 func (s *ActivityService) StartGatedActivity(ctx context.Context, request GateRequest) (GateAnswer, error) {
 	return s.startGatedActivityAtInternal(ctx, request, time.Now().UTC())
 }
@@ -66,7 +67,7 @@ func (s *ActivityService) startGatedActivityAtInternal(ctx context.Context, requ
 	}
 
 	var model Activity
-	code := "run.started"
+	code := string(activitytypes.CodeRunStarted)
 	err := s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		lockKey := strconv.Itoa(len(request.EnvironmentID)) + ":" + request.EnvironmentID + request.Scope
 		if err := tx.Exec("SELECT pg_advisory_xact_lock(hashtextextended(?, 0))", lockKey).Error; err != nil {
@@ -76,10 +77,10 @@ func (s *ActivityService) startGatedActivityAtInternal(ctx context.Context, requ
 		err := tx.Where("environment_id = ? AND gate_scope = ? AND status IN ?", request.EnvironmentID, request.Scope, []activitytypes.Status{activitytypes.StatusQueued, activitytypes.StatusRunning}).Order("started_at DESC, id DESC").First(&active).Error
 		if err == nil {
 			if active.GateKey != request.Operation {
-				return &GateConflict{RunID: active.ID, Code: "run.busy"}
+				return &GateConflict{RunID: active.ID, Code: string(activitytypes.CodeRunBusy)}
 			}
 			model = active
-			code = "run.joined"
+			code = string(activitytypes.CodeRunJoined)
 			return nil
 		}
 		if !errors.Is(err, gorm.ErrRecordNotFound) {
@@ -90,7 +91,7 @@ func (s *ActivityService) startGatedActivityAtInternal(ctx context.Context, requ
 			err = tx.Where("environment_id = ? AND gate_scope = ? AND gate_key = ? AND status = ? AND ended_at > ?", request.EnvironmentID, request.Scope, request.Operation, activitytypes.StatusSuccess, now.Add(-CheckFreshness)).Order("ended_at DESC, id DESC").First(&fresh).Error
 			if err == nil {
 				model = fresh
-				code = "run.fresh"
+				code = string(activitytypes.CodeRunFresh)
 				return nil
 			}
 			if !errors.Is(err, gorm.ErrRecordNotFound) {
@@ -101,6 +102,7 @@ func (s *ActivityService) startGatedActivityAtInternal(ctx context.Context, requ
 			EnvironmentID:    request.EnvironmentID,
 			Type:             request.Type,
 			Status:           activitytypes.StatusRunning,
+			MessageCode:      string(activitytypes.CodeRunStarted),
 			ResourceType:     new(request.ResourceType),
 			ResourceID:       new(request.ResourceID),
 			AffectedServices: servicesJSONInternal(request.AffectedServices),
@@ -119,7 +121,9 @@ func (s *ActivityService) startGatedActivityAtInternal(ctx context.Context, requ
 		return GateAnswer{}, err
 	}
 	dto := activityToDTOInternal(&model)
-	if code == "run.started" {
+	if code == string(activitytypes.CodeRunStarted) {
+		s.Track(ctx, model.ID)
+		s.startGateHeartbeatInternal(model.ID)
 		s.publishActivityInternal(dto)
 	}
 	return GateAnswer{Run: dto, Code: code}, nil

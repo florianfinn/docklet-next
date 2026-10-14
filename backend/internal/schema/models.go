@@ -34,8 +34,7 @@ import (
 
 // Models is the persistent schema owned by the retained core modules.
 func Models() []any {
-	return []any{
-		&activity.Activity{}, &activity.ActivityMessage{}, &activity.ActivitySyncReceipt{},
+	return append(activity.Models(),
 		&apikey.ApiKey{}, &backup.SystemBackupRecoveryConfig{},
 		&environment.Environment{}, &event.Event{},
 		&patch.ImagePatchRecord{}, &imageupdate.ImageUpdateRecord{},
@@ -52,5 +51,5 @@ func Models() []any {
 		&vulnerability.VulnerabilityScanItem{}, &vulnerability.VulnerabilityThreatIntel{},
 		&vulnerability.VulnerabilityIgnore{}, &query.VulnerabilityRiskSnapshot{},
 		&webhook.Webhook{},
-	}
+	)
 }

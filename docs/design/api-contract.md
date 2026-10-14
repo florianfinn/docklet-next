@@ -66,3 +66,14 @@ The table records existing mismatches, not a promise that every listed API
 operation is ready for production use. Some schema types are nested Docker
 structures rather than separately callable operations. The owning milestone
 resolves each mapping when its endpoint and UI slice are implemented.
+
+## Stable message codes
+
+`types/activity/code.go` owns the code catalogue. OpenAPI exposes these values as
+`messageCode` enums for activity and event responses. Display text is separate;
+callers creating events must send a listed code. A run status transition uses
+`activity.<status>`; admission results use `run.*`. The catalogue is:
+
+| Family | Codes |
+| --- | --- |
+| `environment` | `environment.api_key.regenerated` |

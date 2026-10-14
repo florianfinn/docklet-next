@@ -9,12 +9,14 @@
 package activity
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"sync"
 	"testing"
 	"time"
 
+	"github.com/florianfinn/docklet-next/backend/internal/database"
 	"github.com/florianfinn/docklet-next/types/activity"
 	"github.com/florianfinn/docklet-next/types/scheduler"
 	"github.com/stretchr/testify/require"
@@ -75,10 +77,188 @@ func TestRunGateJoinConflictAndFreshnessBoundary(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, "run.fresh", fresh.Code)
 	require.Equal(t, started.Run.ID, fresh.Run.ID)
-	atBoundary, err := svc.startGatedActivityAtInternal(ctx, request, completed.EndedAt.Add(CheckFreshness))
+	recheck := request
+	recheck.Recheck = true
+	rechecked, err := svc.startGatedActivityAtInternal(ctx, recheck, completed.EndedAt.Add(CheckFreshness-time.Nanosecond))
+	require.NoError(t, err)
+	require.Equal(t, "run.started", rechecked.Code)
+	require.NotEqual(t, started.Run.ID, rechecked.Run.ID)
+	recheckedCompletion, err := svc.CompleteActivity(ctx, rechecked.Run.ID, activity.StatusSuccess, "checked again", nil)
+	require.NoError(t, err)
+	atBoundary, err := svc.startGatedActivityAtInternal(ctx, request, recheckedCompletion.EndedAt.Add(CheckFreshness))
 	require.NoError(t, err)
 	require.Equal(t, "run.started", atBoundary.Code)
 	require.NotEqual(t, started.Run.ID, atBoundary.Run.ID)
+}
+
+func TestRunGateAdvisoryLockBlocksAnotherService(t *testing.T) {
+	db := setupActivityServiceTestDBInternal(t)
+	lockKey := "1:0stack:example"
+	tx := db.Begin()
+	require.NoError(t, tx.Exec("SELECT pg_advisory_xact_lock(hashtextextended(?, 0))", lockKey).Error)
+	defer tx.Rollback()
+	svc := NewActivityService(db, nil)
+	type outcome struct {
+		answer GateAnswer
+		err    error
+	}
+	result := make(chan outcome, 1)
+	go func() {
+		answer, err := svc.StartGatedActivity(context.Background(), GateRequest{
+			Operation: "deploy", Scope: "stack:example", Type: activity.TypeProjectDeploy,
+		})
+		result <- outcome{answer, err}
+	}()
+	select {
+	case got := <-result:
+		require.Failf(t, "advisory lock did not block", "start returned: %v", got.err)
+	case <-time.After(100 * time.Millisecond):
+	}
+	require.NoError(t, tx.Commit().Error)
+	select {
+	case got := <-result:
+		require.NoError(t, got.err)
+		_, err := svc.CompleteActivity(t.Context(), got.answer.Run.ID, activity.StatusSuccess, "done", nil)
+		require.NoError(t, err)
+	case <-time.After(5 * time.Second):
+		t.Fatal("start remained blocked after advisory lock released")
+	}
+}
+
+func TestGatedRunHeartbeatSurvivesThreeMinuteSweep(t *testing.T) {
+	db := setupActivityServiceTestDBInternal(t)
+	owner := NewActivityService(db, nil)
+	sweeper := NewActivityService(db, nil)
+	request := GateRequest{Operation: "deploy", Scope: "stack:example", Type: activity.TypeProjectDeploy}
+	started, err := owner.StartGatedActivity(t.Context(), request)
+	require.NoError(t, err)
+	require.True(t, owner.isTrackedInternal(started.Run.ID))
+	old := time.Now().Add(-3 * time.Minute)
+	require.NoError(t, db.Model(&Activity{}).Where("id = ?", started.Run.ID).
+		Updates(map[string]any{"started_at": old, "updated_at": old}).Error)
+	require.NoError(t, owner.heartbeatGatedActivityInternal(t.Context(), started.Run.ID))
+	swept, err := sweeper.FailAbandonedActivities(t.Context())
+	require.NoError(t, err)
+	require.Zero(t, swept)
+	conflict := request
+	conflict.Operation = "remove"
+	_, err = sweeper.StartGatedActivity(t.Context(), conflict)
+	var busy *GateConflict
+	require.ErrorAs(t, err, &busy)
+	require.Equal(t, "run.busy", busy.Code)
+	finished, err := owner.CompleteActivity(t.Context(), started.Run.ID, activity.StatusSuccess, "finished", nil)
+	require.NoError(t, err)
+	require.Equal(t, activity.StatusSuccess, finished.Status)
+}
+
+func TestFailedCompletionWriteReleasesRegistrationAndSlot(t *testing.T) {
+	db := setupActivityServiceTestDBInternal(t)
+	svc := NewActivityService(db, nil)
+	run, err := svc.StartActivity(t.Context(), StartActivityRequest{Type: activity.TypeProjectDeploy, Queue: true})
+	require.NoError(t, err)
+	_ = svc.Track(t.Context(), run.ID)
+	svc.slotMu.Lock()
+	_, held := svc.slotReleases[run.ID]
+	svc.slotMu.Unlock()
+	require.True(t, held)
+	require.NoError(t, db.Migrator().DropTable(&ActivityMessage{}))
+	_, err = svc.CompleteActivity(t.Context(), run.ID, activity.StatusSuccess, "final", nil)
+	require.Error(t, err)
+	require.False(t, svc.isTrackedInternal(run.ID))
+	svc.slotMu.Lock()
+	_, held = svc.slotReleases[run.ID]
+	svc.slotMu.Unlock()
+	require.False(t, held)
+}
+
+func TestEveryTerminalPathSetsMatchingMessageCode(t *testing.T) {
+	cases := []struct {
+		name string
+		want activity.Status
+		run  func(*testing.T, *ActivityService, *database.DB) string
+	}{
+		{"complete success", activity.StatusSuccess, func(t *testing.T, s *ActivityService, _ *database.DB) string {
+			run, err := s.StartActivity(t.Context(), StartActivityRequest{Type: activity.TypeProjectDeploy})
+			require.NoError(t, err)
+			_, err = s.CompleteActivity(t.Context(), run.ID, activity.StatusSuccess, "done", nil)
+			require.NoError(t, err)
+			return run.ID
+		}},
+		{"complete failed", activity.StatusFailed, func(t *testing.T, s *ActivityService, _ *database.DB) string {
+			run, err := s.StartActivity(t.Context(), StartActivityRequest{Type: activity.TypeProjectDeploy})
+			require.NoError(t, err)
+			_, err = s.CompleteActivity(t.Context(), run.ID, activity.StatusFailed, "failed", nil)
+			require.NoError(t, err)
+			return run.ID
+		}},
+		{"complete cancelled", activity.StatusCancelled, func(t *testing.T, s *ActivityService, _ *database.DB) string {
+			run, err := s.StartActivity(t.Context(), StartActivityRequest{Type: activity.TypeProjectDeploy})
+			require.NoError(t, err)
+			_, err = s.CompleteActivity(t.Context(), run.ID, activity.StatusCancelled, "cancelled", nil)
+			require.NoError(t, err)
+			return run.ID
+		}},
+		{"cancel fallback", activity.StatusCancelled, func(t *testing.T, s *ActivityService, _ *database.DB) string {
+			run, err := s.StartActivity(t.Context(), StartActivityRequest{Type: activity.TypeProjectDeploy})
+			require.NoError(t, err)
+			_, err = s.CancelActivity(t.Context(), "0", run.ID, "operator")
+			require.NoError(t, err)
+			return run.ID
+		}},
+		{"abandoned sweep", activity.StatusFailed, func(t *testing.T, s *ActivityService, db *database.DB) string {
+			run, err := s.StartActivity(t.Context(), StartActivityRequest{Type: activity.TypeProjectDeploy})
+			require.NoError(t, err)
+			require.NoError(t, db.Model(&Activity{}).Where("id = ?", run.ID).Update("started_at", time.Now().Add(-3*time.Minute)).Error)
+			count, err := s.FailAbandonedActivities(t.Context())
+			require.NoError(t, err)
+			require.EqualValues(t, 1, count)
+			return run.ID
+		}},
+		{"orphaned queued", activity.StatusFailed, func(t *testing.T, s *ActivityService, _ *database.DB) string {
+			run, err := s.StartActivity(t.Context(), StartActivityRequest{Type: activity.TypeProjectDeploy, Queue: true, DeferSlot: true})
+			require.NoError(t, err)
+			count, err := s.ResolveOrphanedQueuedActivities(t.Context())
+			require.NoError(t, err)
+			require.EqualValues(t, 1, count)
+			return run.ID
+		}},
+		{"stale auto update failed", activity.StatusFailed, func(t *testing.T, s *ActivityService, _ *database.DB) string {
+			run, err := s.StartActivity(t.Context(), StartActivityRequest{Type: activity.TypeAutoUpdate})
+			require.NoError(t, err)
+			count, err := s.ResolveStaleAutoUpdateActivities(t.Context())
+			require.NoError(t, err)
+			require.EqualValues(t, 1, count)
+			return run.ID
+		}},
+		{"stale auto update success", activity.StatusSuccess, func(t *testing.T, s *ActivityService, _ *database.DB) string {
+			run, err := s.StartActivity(t.Context(), StartActivityRequest{Type: activity.TypeAutoUpdate})
+			require.NoError(t, err)
+			require.NoError(t, s.PatchActivityMetadata(t.Context(), run.ID, database.JSON{"selfUpdateTriggered": true}))
+			count, err := s.ResolveStaleAutoUpdateActivities(t.Context())
+			require.NoError(t, err)
+			require.EqualValues(t, 1, count)
+			return run.ID
+		}},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			db := setupActivityServiceTestDBInternal(t)
+			id := tc.run(t, NewActivityService(db, nil), db)
+			var row Activity
+			require.NoError(t, db.First(&row, "id = ?", id).Error)
+			require.Equal(t, tc.want, row.Status)
+			require.Equal(t, string(activityCodeInternal(tc.want)), row.MessageCode)
+		})
+	}
+	t.Run("gate start", func(t *testing.T) {
+		svc := NewActivityService(setupActivityServiceTestDBInternal(t), nil)
+		answer, err := svc.StartGatedActivity(t.Context(), GateRequest{Operation: "deploy", Scope: "stack:example", Type: activity.TypeProjectDeploy})
+		require.NoError(t, err)
+		require.Equal(t, activity.StatusRunning, answer.Run.Status)
+		require.Equal(t, "run.started", answer.Run.MessageCode)
+		_, err = svc.CompleteActivity(t.Context(), answer.Run.ID, activity.StatusSuccess, "done", nil)
+		require.NoError(t, err)
+	})
 }
 
 func TestRunGateConcurrentStartsAcrossServices(t *testing.T) {
@@ -188,6 +368,27 @@ func TestFinishedRetentionLimitAcrossEnvironments(t *testing.T) {
 	require.EqualValues(t, 1, running)
 }
 
+func TestActivityRetentionKeepsNewestFinishedRunByEndTime(t *testing.T) {
+	db := setupActivityServiceTestDBInternal(t)
+	svc := NewActivityService(db, nil)
+	ids := make([]string, 0, 3)
+	for i := range 3 {
+		run, err := svc.StartActivity(t.Context(), StartActivityRequest{Type: activity.TypeProjectDeploy})
+		require.NoError(t, err)
+		_, err = svc.CompleteActivity(t.Context(), run.ID, activity.StatusSuccess, "done", nil)
+		require.NoError(t, err)
+		ended := time.Now().Add(time.Duration(i-3) * time.Hour)
+		require.NoError(t, db.Model(&Activity{}).Where("id = ?", run.ID).Update("ended_at", ended).Error)
+		ids = append(ids, run.ID)
+	}
+	deleted, err := svc.PruneHistory(t.Context(), 0, 1)
+	require.NoError(t, err)
+	require.EqualValues(t, 2, deleted)
+	var kept []string
+	require.NoError(t, db.Model(&Activity{}).Pluck("id", &kept).Error)
+	require.Equal(t, []string{ids[2]}, kept)
+}
+
 func TestRunTraceCodesAndAffectedServices(t *testing.T) {
 	svc := NewActivityService(setupActivityServiceTestDBInternal(t), nil)
 	run, err := svc.StartActivity(t.Context(), StartActivityRequest{Type: activity.TypeProjectDeploy, AffectedServices: []string{"web", "api", "web"}})
@@ -199,8 +400,32 @@ func TestRunTraceCodesAndAffectedServices(t *testing.T) {
 	require.Equal(t, []string{"web", "api"}, detail.Activity.AffectedServices)
 	require.Equal(t, "deploy.pull", detail.Activity.MessageCode)
 	require.Len(t, detail.StepTrace, 1)
-	require.Equal(t, "pull", detail.StepTrace[0].Step)
+	require.Equal(t, "pull", detail.StepTrace[0].Name)
 	require.Equal(t, "deploy.pull", detail.StepTrace[0].Code)
+}
+
+func TestStepTraceKeepsEarlyStepsAndDeduplicatesProgress(t *testing.T) {
+	svc := NewActivityService(setupActivityServiceTestDBInternal(t), nil)
+	run, err := svc.StartActivity(t.Context(), StartActivityRequest{Type: activity.TypeProjectDeploy})
+	require.NoError(t, err)
+	_, err = svc.AppendMessage(t.Context(), run.ID, AppendActivityMessageRequest{Message: "prepare", Step: "Prepare"})
+	require.NoError(t, err)
+	for i := range 510 {
+		_, err = svc.AppendMessage(t.Context(), run.ID, AppendActivityMessageRequest{Message: fmt.Sprintf("line %d", i), Step: "Apply"})
+		require.NoError(t, err)
+	}
+	_, err = svc.CompleteActivity(t.Context(), run.ID, activity.StatusSuccess, "done", nil, "Verify")
+	require.NoError(t, err)
+	detail, err := svc.GetActivityDetail(t.Context(), "0", run.ID, 10)
+	require.NoError(t, err)
+	require.Len(t, detail.Messages, 10)
+	require.Len(t, detail.StepTrace, 3)
+	require.Equal(t, []string{"Prepare", "Apply", "Verify"}, []string{detail.StepTrace[0].Name, detail.StepTrace[1].Name, detail.StepTrace[2].Name})
+	for _, step := range detail.StepTrace {
+		require.NotEmpty(t, step.ID)
+		require.NotNil(t, step.EndedAt)
+		require.Equal(t, activity.StatusSuccess, step.Status)
+	}
 }
 
 func TestJobCompletionReplayAfterPruningKeepsOneEffect(t *testing.T) {
@@ -223,4 +448,24 @@ func TestJobCompletionReplayAfterPruningKeepsOneEffect(t *testing.T) {
 	var receipts int64
 	require.NoError(t, db.Model(&ActivitySyncReceipt{}).Where("run_id = ?", run.ID).Count(&receipts).Error)
 	require.EqualValues(t, 1, receipts)
+}
+
+func TestPruneSyncReceiptsKeepsCoordinatorRunsAndRecentSyncs(t *testing.T) {
+	db := setupActivityServiceTestDBInternal(t)
+	svc := NewActivityService(db, nil)
+	old := time.Now().UTC().Add(-time.Hour)
+	recent := time.Now().UTC()
+	for _, row := range []ActivitySyncReceipt{
+		{RunID: "retained", UpdatedAt: old, SyncedAt: &old},
+		{RunID: "retired", UpdatedAt: old, SyncedAt: &old},
+		{RunID: "concurrent", UpdatedAt: old, SyncedAt: &recent},
+	} {
+		require.NoError(t, db.Create(&row).Error)
+	}
+	deleted, err := svc.PruneSyncReceipts(t.Context(), []string{"retained"})
+	require.NoError(t, err)
+	require.EqualValues(t, 1, deleted)
+	var kept []string
+	require.NoError(t, db.Model(&ActivitySyncReceipt{}).Order("run_id").Pluck("run_id", &kept).Error)
+	require.Equal(t, []string{"concurrent", "retained"}, kept)
 }

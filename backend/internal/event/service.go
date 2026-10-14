@@ -22,6 +22,7 @@ import (
 	"sync"
 	"time"
 
+	activitytypes "github.com/florianfinn/docklet-next/types/activity"
 	"github.com/florianfinn/docklet-next/types/event"
 	"github.com/moby/moby/api/types/events"
 	"github.com/samber/mo"
@@ -68,31 +69,18 @@ func NewEventService(db *database.DB, cfg *config.Config, httpClient *http.Clien
 	}
 }
 
-type CreateEventRequest struct {
-	// Internal identity for replay-safe daemon delivery; never accepted from API payloads.
-	deduplicationKey string
-	Type             EventType     `json:"type"`
-	MessageCode      string        `json:"messageCode,omitempty"`
-	Severity         EventSeverity `json:"severity,omitempty"`
-	Title            string        `json:"title"`
-	Description      string        `json:"description,omitempty"`
-	ResourceType     *string       `json:"resourceType,omitempty"`
-	ResourceID       *string       `json:"resourceId,omitempty"`
-	ResourceName     *string       `json:"resourceName,omitempty"`
-	UserID           *string       `json:"userId,omitempty"`
-	Username         *string       `json:"username,omitempty"`
-	EnvironmentID    *string       `json:"environmentId,omitempty"`
-	Metadata         database.JSON `json:"metadata,omitempty"`
-}
-
 func (s *EventService) CreateEvent(ctx context.Context, req CreateEventRequest) (*Event, error) {
+	code := cmp.Or(strings.TrimSpace(req.MessageCode), string(req.Type))
+	if !activitytypes.Valid(code) {
+		return nil, fmt.Errorf("unknown event message code: %s", code)
+	}
 	severity := cmp.Or(req.Severity, EventSeverityInfo)
 	userID, username := normalizeEventActor(req.UserID, req.Username)
 
 	eventRecord := &Event{
 		CreatedAt:     time.Now(),
 		Type:          req.Type,
-		MessageCode:   cmp.Or(strings.TrimSpace(req.MessageCode), string(req.Type)),
+		MessageCode:   code,
 		Severity:      severity,
 		Title:         req.Title,
 		Description:   req.Description,

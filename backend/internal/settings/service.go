@@ -481,21 +481,6 @@ func (s *SettingsService) getEffectiveSettingsConfigInternal(ctx context.Context
 	return settingsCfg
 }
 
-func validateSettingValueInternal(key, value string) error {
-	if key == "upgradeLogRetentionDays" && value != "" {
-		days, err := strconv.Atoi(value)
-		if err != nil || days < 0 || days > 3650 {
-			return common.Classify(common.ErrValidation, errors.New("upgradeLogRetentionDays must be a whole number between 0 and 3650"))
-		}
-	}
-	for _, definition := range features.All() {
-		if definition.SettingKey == key && value != "true" && value != "false" {
-			return common.Classify(common.ErrValidation, fmt.Errorf("%s must be true or false", key))
-		}
-	}
-	return nil
-}
-
 func (s *SettingsService) UpdateSetting(ctx context.Context, key, value string) error {
 	if err := validateSettingValueInternal(key, value); err != nil {
 		return err

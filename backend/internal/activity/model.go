@@ -63,8 +63,12 @@ func (ActivityMessage) TableName() string {
 
 // ActivitySyncReceipt persists applied run versions independently of history pruning.
 type ActivitySyncReceipt struct {
-	RunID     string    `gorm:"column:run_id;primaryKey"`
-	UpdatedAt time.Time `gorm:"column:updated_at;not null"`
+	RunID     string     `gorm:"column:run_id;primaryKey"`
+	UpdatedAt time.Time  `gorm:"column:updated_at;not null"`
+	SyncedAt  *time.Time `gorm:"column:synced_at"`
 }
 
 func (ActivitySyncReceipt) TableName() string { return "activity_sync_receipts" }
+
+// Models returns the persistent activity schema for integration fixtures and the core registry.
+func Models() []any { return []any{&Activity{}, &ActivityMessage{}, &ActivitySyncReceipt{}} }

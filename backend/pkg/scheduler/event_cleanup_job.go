@@ -8,6 +8,7 @@ package scheduler
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
 
 	schedulertypes "github.com/florianfinn/docklet-next/types/scheduler"
@@ -48,7 +49,7 @@ func (j *EventCleanupJob) Run(ctx context.Context) (schedulertypes.Outcome, erro
 
 	eventLimit := j.settingsService.GetIntSetting(ctx, "eventHistoryMaxEntries", 500)
 	if eventLimit < 50 || eventLimit > 5000 {
-		eventLimit = 500
+		return schedulertypes.Outcome{}, fmt.Errorf("eventHistoryMaxEntries out of range: %d", eventLimit)
 	}
 	deletedEvents, err := j.eventService.PruneEvents(ctx, eventLimit)
 	if err != nil {
@@ -64,7 +65,7 @@ func (j *EventCleanupJob) Run(ctx context.Context) (schedulertypes.Outcome, erro
 	if j.activityService != nil {
 		maxEntries := j.settingsService.GetIntSetting(ctx, "activityHistoryMaxEntries", 100)
 		if maxEntries < 10 || maxEntries > 1000 {
-			maxEntries = 100
+			return schedulertypes.Outcome{}, fmt.Errorf("activityHistoryMaxEntries out of range: %d", maxEntries)
 		}
 		deleted, err := j.activityService.PruneHistory(ctx, 0, maxEntries)
 		if err != nil {

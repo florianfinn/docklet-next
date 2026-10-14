@@ -1,5 +1,5 @@
 // Source: api/openapi.json
-// Revision: 6b1ff2ea22762a46ae188234f0b048559560c5eeba6ca4690119d9c40a012710
+// Revision: 354148d38fad61f4fdd2c3566de384458d09df46a65a431ca70c28ba55806278
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
 // Deviations: Generated TypeScript declarations from the local Huma export.
@@ -4241,7 +4241,8 @@ export interface components {
             error?: string;
             id: string;
             latestMessage?: string;
-            messageCode?: string;
+            /** @enum {string} */
+            messageCode?: "run.started" | "run.joined" | "run.fresh" | "run.busy" | "activity.queued" | "activity.running" | "activity.success" | "activity.failed" | "activity.cancelled" | "activity.message" | "deploy.pull" | "job.queued" | "job.waiting" | "job.running" | "job.retrying" | "job.succeeded" | "job.partial" | "job.skipped" | "job.failed" | "job.needs_attention" | "job.canceled" | "container.die" | "container.oom" | "container.rename" | "container.unhealthy" | "image.untag" | "image.import" | "image.prune" | "volume.prune" | "network.prune" | "container.start" | "container.stop" | "container.restart" | "container.delete" | "container.create" | "container.scan" | "container.update" | "container.deploy" | "container.kill" | "container.pause" | "container.unpause" | "container.error" | "image.pull" | "image.load" | "image.tag" | "image.commit" | "image.delete" | "image.scan" | "image.error" | "image.vulnerability_scan" | "project.deploy" | "project.delete" | "project.start" | "project.stop" | "project.create" | "project.update" | "project.error" | "volume.create" | "volume.rename" | "volume.delete" | "volume.error" | "volume.file.create" | "volume.file.delete" | "volume.file.upload" | "volume.file.update" | "volume.workspace.update" | "volume.backup.create" | "volume.backup.delete" | "volume.backup.restore" | "volume.backup.restore_files" | "volume.backup.download" | "network.create" | "network.delete" | "network.connect" | "network.disconnect" | "network.error" | "system.prune" | "user.login" | "user.logout" | "system.auto_update" | "system.upgrade" | "environment.create" | "environment.connect" | "environment.disconnect" | "environment.update" | "environment.delete" | "environment.api_key.regenerated" | "environment.mtls.ca_generated" | "environment.mtls.cert_issued" | "environment.mtls.enroll" | "environment.mtls.download" | "webhook.create" | "webhook.update" | "webhook.delete" | "webhook.trigger" | "notification.send";
             metadata?: {
                 [key: string]: unknown;
             };
@@ -4289,10 +4290,14 @@ export interface components {
             username: string;
         };
         ActivityStepTraceEntry: {
-            /** Format: date-time */
-            at: string;
             code?: string;
-            step: string;
+            /** Format: date-time */
+            endedAt?: string;
+            id: string;
+            name: string;
+            /** Format: date-time */
+            startedAt: string;
+            status: string;
         };
         ActivityStreamEvent: {
             activities?: components["schemas"]["ActivityActivity"][] | null;
@@ -7884,7 +7889,8 @@ export interface components {
             description?: string;
             environmentId?: string;
             id: string;
-            messageCode: string;
+            /** @enum {string} */
+            messageCode: "run.started" | "run.joined" | "run.fresh" | "run.busy" | "activity.queued" | "activity.running" | "activity.success" | "activity.failed" | "activity.cancelled" | "activity.message" | "deploy.pull" | "job.queued" | "job.waiting" | "job.running" | "job.retrying" | "job.succeeded" | "job.partial" | "job.skipped" | "job.failed" | "job.needs_attention" | "job.canceled" | "container.die" | "container.oom" | "container.rename" | "container.unhealthy" | "image.untag" | "image.import" | "image.prune" | "volume.prune" | "network.prune" | "container.start" | "container.stop" | "container.restart" | "container.delete" | "container.create" | "container.scan" | "container.update" | "container.deploy" | "container.kill" | "container.pause" | "container.unpause" | "container.error" | "image.pull" | "image.load" | "image.tag" | "image.commit" | "image.delete" | "image.scan" | "image.error" | "image.vulnerability_scan" | "project.deploy" | "project.delete" | "project.start" | "project.stop" | "project.create" | "project.update" | "project.error" | "volume.create" | "volume.rename" | "volume.delete" | "volume.error" | "volume.file.create" | "volume.file.delete" | "volume.file.upload" | "volume.file.update" | "volume.workspace.update" | "volume.backup.create" | "volume.backup.delete" | "volume.backup.restore" | "volume.backup.restore_files" | "volume.backup.download" | "network.create" | "network.delete" | "network.connect" | "network.disconnect" | "network.error" | "system.prune" | "user.login" | "user.logout" | "system.auto_update" | "system.upgrade" | "environment.create" | "environment.connect" | "environment.disconnect" | "environment.update" | "environment.delete" | "environment.api_key.regenerated" | "environment.mtls.ca_generated" | "environment.mtls.cert_issued" | "environment.mtls.enroll" | "environment.mtls.download" | "webhook.create" | "webhook.update" | "webhook.delete" | "webhook.trigger" | "notification.send";
             metadata?: {
                 [key: string]: unknown;
             };
@@ -9379,7 +9385,6 @@ export interface components {
              */
             readonly $schema?: string;
             activityHistoryMaxEntries?: string | null;
-            activityHistoryRetentionDays?: string | null;
             authLocalEnabled?: string | null;
             authPasswordPolicy?: string | null;
             authSessionTimeout?: string | null;
@@ -9408,6 +9413,7 @@ export interface components {
             dockerImagePullTimeout?: string | null;
             enableGravatar?: string | null;
             environmentHealthInterval?: string | null;
+            eventHistoryMaxEntries?: string | null;
             experimentalFeaturesEnabled?: string | null;
             /** @enum {string|null} */
             featureVulnerabilityManagementEnabled?: "true" | "false" | null;

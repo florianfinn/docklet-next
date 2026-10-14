@@ -270,6 +270,27 @@ func (q *Coordinator) pruneInternal(ctx context.Context) error {
 			return fmt.Errorf("prune job %q in environment %q: %w", record.JobID, record.EnvironmentID, mutateErr)
 		}
 	}
+	pruner, ok := q.observer.(interface {
+		PruneRunActivityReceipts(context.Context, []string) error
+	})
+	if ok {
+		current, err := q.Records(ctx)
+		if err != nil {
+			return err
+		}
+		retained := make([]string, 0)
+		for _, record := range current {
+			for _, run := range record.Runs {
+				retained = append(retained, run.ID)
+			}
+			for id := range record.Receipts {
+				retained = append(retained, id)
+			}
+		}
+		if err := pruner.PruneRunActivityReceipts(ctx, retained); err != nil {
+			return fmt.Errorf("prune retired activity receipts: %w", err)
+		}
+	}
 	return nil
 }
 

@@ -45,6 +45,9 @@ func (
 	if activityID == "" {
 		return nil, errors.New("activity id is required")
 	}
+	defer s.releaseCancelInternal(activityID)
+	defer s.releaseSlotInternal(activityID)
+	defer s.stopGateHeartbeatInternal(activityID)
 
 	// Detach from cancellation so the terminal write always lands — completion is
 	// often triggered precisely because the work context was cancelled.
@@ -66,8 +69,7 @@ func (
 			}
 
 			updates := completeActivityUpdatesInternal(model.StartedAt, status, finalMessage, errMessage, finalStep, now)
-			code := "activity." + string(status)
-			updates["message_code"] = code
+			code := string(activityCodeInternal(status))
 			result := tx.Model(&Activity{}).Where("id = ? AND status IN ?", activityID, []activity.Status{activity.StatusQueued, activity.StatusRunning}).Updates(updates)
 			if result.Error != nil {
 				return fmt.Errorf("failed to complete activity: %w", result.Error)
@@ -109,8 +111,6 @@ func (
 		return nil, writeErr
 	}
 
-	s.releaseCancelInternal(activityID)
-	s.releaseSlotInternal(activityID)
 	if !completed {
 		return new(activityToDTOInternal(&model)), nil
 	}
@@ -142,10 +142,11 @@ func (s *ActivityService) publishTerminalSnapshotInternal(ctx context.Context, m
 
 func completeActivityUpdatesInternal(startedAt time.Time, status activity.Status, finalMessage string, errMessage *string, finalStep []string, now time.Time) map[string]any {
 	updates := map[string]any{
-		"status":      status,
-		"ended_at":    now,
-		"duration_ms": now.Sub(startedAt).Milliseconds(),
-		"updated_at":  now,
+		"status":       status,
+		"message_code": activityCodeInternal(status),
+		"ended_at":     now,
+		"duration_ms":  now.Sub(startedAt).Milliseconds(),
+		"updated_at":   now,
 	}
 	if trimmed := strings.TrimSpace(finalMessage); trimmed != "" {
 		updates["latest_message"] = trimmed
@@ -162,4 +163,21 @@ func completeActivityUpdatesInternal(startedAt time.Time, status activity.Status
 		updates["progress"] = 100
 	}
 	return updates
+}
+
+func activityCodeInternal(status activity.Status) activity.Code {
+	switch status {
+	case activity.StatusQueued:
+		return activity.CodeActivityQueued
+	case activity.StatusRunning:
+		return activity.CodeActivityRunning
+	case activity.StatusSuccess:
+		return activity.CodeActivitySuccess
+	case activity.StatusFailed:
+		return activity.CodeActivityFailed
+	case activity.StatusCancelled:
+		return activity.CodeActivityCancelled
+	default:
+		return activity.CodeActivityFailed
+	}
 }

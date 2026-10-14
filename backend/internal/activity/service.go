@@ -77,8 +77,10 @@ type ActivityService struct {
 	// running maps an active activity ID to the cancel function of its work
 	// context, so cancellation requests can interrupt in-flight work. Entries
 	// are added by Track and removed when the activity is completed.
-	runningMu sync.Mutex
-	running   map[string]context.CancelCauseFunc
+	runningMu       sync.Mutex
+	running         map[string]context.CancelCauseFunc
+	gateHeartbeatMu sync.Mutex
+	gateHeartbeats  map[string]context.CancelFunc
 
 	// limiter bounds concurrent queue-opted activities per environment.
 	// slotReleases maps an activity ID to the release func of the slot it
@@ -831,10 +833,9 @@ func (s *ActivityService) isTrackedInternal(activityID string) bool {
 // longer alive in this process as failed, releasing any concurrency slot they
 // still hold. Liveness comes from the running map, not age: every creation
 // path Tracks its activity right after StartActivity, and the short grace
-// period covers that create→Track window. This assumes exactly one Arcane
-// process owns the database (managers and agents each own theirs); running
-// multiple replicas against one database would make each replica sweep the
-// other's live work.
+// period covers that create→Track window. Gated runs refresh updated_at;
+// every process respects that durable heartbeat when sweeping another owner.
+// Ungated activities still require a single process owner.
 //
 // The terminal write is status-guarded like CancelActivity's untracked
 // fallback: a worker completing concurrently wins the race and the row is
@@ -848,7 +849,7 @@ func (s *ActivityService) FailAbandonedActivities(ctx context.Context) (int64, e
 	activeStatuses := []activity.Status{activity.StatusQueued, activity.StatusRunning}
 	var candidates []Activity
 	if err := s.db.WithContext(ctx).
-		Where("status IN ? AND started_at < ?", activeStatuses, cutoff).
+		Where("status IN ? AND started_at < ? AND (COALESCE(gate_scope, '') = '' OR updated_at < ?)", activeStatuses, cutoff, cutoff).
 		Where("type <> ?", activity.TypeJobRun).
 		Find(&candidates).Error; err != nil {
 		return 0, fmt.Errorf("find abandoned activities: %w", err)
@@ -870,7 +871,7 @@ func (s *ActivityService) FailAbandonedActivities(ctx context.Context) (int64, e
 		if err := s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 			updates := completeActivityUpdatesInternal(candidates[i].StartedAt, activity.StatusFailed, message, &errMessage, nil, now)
 			result := tx.Model(&Activity{}).
-				Where("id = ? AND status IN ?", activityID, activeStatuses).
+				Where("id = ? AND status IN ? AND (COALESCE(gate_scope, '') = '' OR updated_at < ?)", activityID, activeStatuses, cutoff).
 				Updates(updates)
 			if result.Error != nil {
 				return fmt.Errorf("fail abandoned activity: %w", result.Error)
@@ -892,6 +893,8 @@ func (s *ActivityService) FailAbandonedActivities(ctx context.Context) (int64, e
 		}
 
 		s.releaseSlotInternal(activityID)
+		s.releaseCancelInternal(activityID)
+		s.stopGateHeartbeatInternal(activityID)
 		s.publishTerminalSnapshotInternal(ctx, &finalized)
 		swept++
 	}
@@ -1047,42 +1050,6 @@ func (s *ActivityService) ListActivitiesPaginated(ctx context.Context, environme
 		out = append(out, activityToDTOInternal(&activities[i]))
 	}
 	return out, paginationResp, nil
-}
-
-func (s *ActivityService) GetActivityDetail(ctx context.Context, environmentID, activityID string, limit int) (*activity.Detail, error) {
-	if err := s.checkInitInternal(); err != nil {
-		return nil, err
-	}
-	if limit <= 0 || limit > defaultActivityMessages {
-		limit = defaultActivityMessages
-	}
-
-	var model Activity
-	if err := s.db.WithContext(ctx).
-		Where("id = ? AND environment_id = ?", activityID, environmentID).
-		First(&model).Error; err != nil {
-		return nil, fmt.Errorf("failed to load activity: %w", err)
-	}
-
-	var messages []ActivityMessage
-	if err := s.db.WithContext(ctx).
-		Where("activity_id = ?", activityID).
-		Order("created_at DESC").
-		Limit(limit).
-		Find(&messages).Error; err != nil {
-		return nil, fmt.Errorf("failed to load activity messages: %w", err)
-	}
-
-	outMessages := make([]activity.Message, 0, len(messages))
-	for _, v := range slices.Backward(messages) {
-		outMessages = append(outMessages, activityMessageToDTOInternal(&v))
-	}
-
-	return &activity.Detail{
-		Activity:  activityToDTOInternal(&model),
-		Messages:  outMessages,
-		StepTrace: stepTraceInternal(outMessages),
-	}, nil
 }
 
 func (s *ActivityService) Subscribe(environmentID string) (<-chan activity.StreamEvent, func() bool, func()) {
@@ -1459,7 +1426,8 @@ func (s *ActivityService) SyncJobRun(ctx context.Context, run scheduler.Run, nam
 			if err := tx.Create(&ActivityMessage{ActivityID: model.ID, Level: activity.MessageLevelInfo, Message: model.LatestMessage, Code: model.MessageCode, Step: model.Step, CreatedAt: run.UpdatedAt}).Error; err != nil {
 				return err
 			}
-			return tx.Save(&ActivitySyncReceipt{RunID: run.ID, UpdatedAt: run.UpdatedAt}).Error
+			syncedAt := time.Now().UTC()
+			return tx.Save(&ActivitySyncReceipt{RunID: run.ID, UpdatedAt: run.UpdatedAt, SyncedAt: &syncedAt}).Error
 		}
 		if err != nil {
 			return err
@@ -1490,7 +1458,8 @@ func (s *ActivityService) SyncJobRun(ctx context.Context, run scheduler.Run, nam
 		if err := tx.Create(&ActivityMessage{ActivityID: model.ID, Level: activity.MessageLevelInfo, Message: model.LatestMessage, Code: model.MessageCode, Step: model.Step, CreatedAt: run.UpdatedAt}).Error; err != nil {
 			return err
 		}
-		return tx.Save(&ActivitySyncReceipt{RunID: run.ID, UpdatedAt: run.UpdatedAt}).Error
+		syncedAt := time.Now().UTC()
+		return tx.Save(&ActivitySyncReceipt{RunID: run.ID, UpdatedAt: run.UpdatedAt, SyncedAt: &syncedAt}).Error
 	}); err != nil {
 		return fmt.Errorf("synchronize job activity: %w", err)
 	}

@@ -47,16 +47,30 @@ func servicesFromJSONInternal(value database.JSON) []string {
 	return result
 }
 
-func stepTraceInternal(messages []activitytypes.Message) []activitytypes.StepTraceEntry {
+func stepTraceInternal(messages []ActivityMessage, run *Activity) []activitytypes.StepTraceEntry {
 	trace := make([]activitytypes.StepTraceEntry, 0)
 	for _, message := range messages {
-		if message.Step != "" {
-			trace = append(trace, activitytypes.StepTraceEntry{
-				Step: message.Step,
-				Code: message.Code,
-				At:   message.CreatedAt,
-			})
+		name := strings.TrimSpace(message.Step)
+		if name == "" {
+			continue
 		}
+		if len(trace) > 0 {
+			previous := &trace[len(trace)-1]
+			if previous.Name == name {
+				continue
+			}
+			previous.Status = activitytypes.StatusSuccess
+			previous.EndedAt = new(message.CreatedAt)
+		}
+		trace = append(trace, activitytypes.StepTraceEntry{
+			ID: message.ID, Name: name, Status: activitytypes.StatusRunning,
+			Code: message.Code, StartedAt: message.CreatedAt,
+		})
+	}
+	if len(trace) > 0 && run.EndedAt != nil {
+		last := &trace[len(trace)-1]
+		last.Status = run.Status
+		last.EndedAt = run.EndedAt
 	}
 	return trace
 }

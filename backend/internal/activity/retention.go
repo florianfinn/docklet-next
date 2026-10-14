@@ -88,3 +88,18 @@ func (s *ActivityService) DeleteHistory(ctx context.Context, environmentID strin
 
 	return deleted, nil
 }
+
+// PruneSyncReceipts removes only runs retired from the durable coordinator.
+// The grace protects a receipt synchronized after the coordinator snapshot.
+func (s *ActivityService) PruneSyncReceipts(ctx context.Context, retainedRunIDs []string) (int64, error) {
+	cutoff := time.Now().UTC().Add(-abandonedActivityGrace)
+	query := s.db.WithContext(ctx).Where("synced_at < ?", cutoff)
+	if len(retainedRunIDs) > 0 {
+		query = query.Where("run_id NOT IN ?", retainedRunIDs)
+	}
+	result := query.Delete(&ActivitySyncReceipt{})
+	if result.Error != nil {
+		return 0, fmt.Errorf("prune retired activity receipts: %w", result.Error)
+	}
+	return result.RowsAffected, nil
+}
