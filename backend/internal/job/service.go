@@ -517,13 +517,10 @@ func (s *JobService) ReconcileStartupActivities(ctx context.Context, extraProtec
 	if failInterruptedBackupsErr := s.activity.FailInterruptedBackups(ctx, protected...); failInterruptedBackupsErr != nil {
 		return failInterruptedBackupsErr
 	}
-	if _, failStaleImageUpdateChecksErr := s.activity.FailStaleImageUpdateChecks(ctx); failStaleImageUpdateChecksErr != nil {
-		return failStaleImageUpdateChecksErr
-	}
 	if _, resolveStaleAutoUpdateActivitiesErr := s.activity.ResolveStaleAutoUpdateActivities(ctx, protected...); resolveStaleAutoUpdateActivitiesErr != nil {
 		return resolveStaleAutoUpdateActivitiesErr
 	}
-	_, err = s.activity.ResolveOrphanedQueuedActivities(ctx, protected...)
+	_, err = s.activity.RepairStartup(ctx, protected...)
 	return err
 }
 

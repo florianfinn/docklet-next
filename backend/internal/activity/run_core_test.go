@@ -36,7 +36,7 @@ func TestCompletionEffectOnceAfterRetention(t *testing.T) {
 		_, finishErr := svc.CompleteActivity(ctx, finished.ID, activity.StatusSuccess, "done", nil)
 		require.NoError(t, finishErr)
 	}
-	deleted, err := svc.PruneHistory(ctx, 0, 10)
+	deleted, err := svc.PruneHistory(ctx, 10)
 	require.NoError(t, err)
 	require.Zero(t, deleted)
 	first, err := svc.CompleteActivity(ctx, old.ID, activity.StatusSuccess, "completed once", nil, "deploy")
@@ -48,7 +48,7 @@ func TestCompletionEffectOnceAfterRetention(t *testing.T) {
 	var effects int64
 	require.NoError(t, db.Model(&ActivityMessage{}).Where("activity_id = ? AND code = ?", old.ID, "activity.success").Count(&effects).Error)
 	require.EqualValues(t, 1, effects)
-	deleted, err = svc.PruneHistory(ctx, 0, 10)
+	deleted, err = svc.PruneHistory(ctx, 10)
 	require.NoError(t, err)
 	require.EqualValues(t, 1, deleted)
 }
@@ -178,10 +178,9 @@ func TestRunGateAdvisoryLockBlocksAnotherService(t *testing.T) {
 	}
 }
 
-func TestGatedRunHeartbeatSurvivesThreeMinuteSweep(t *testing.T) {
+func TestGatedRunSurvivesThreeMinuteUngatedSweep(t *testing.T) {
 	db := setupActivityServiceTestDBInternal(t)
 	owner := NewActivityService(db, nil)
-	owner.gateHeartbeatInterval = 10 * time.Millisecond
 	sweeper := NewActivityService(db, nil)
 	request := GateRequest{Operation: "deploy", Scope: "stack:example", Type: activity.TypeProjectDeploy}
 	started, err := owner.StartGatedActivity(t.Context(), request)
@@ -189,14 +188,7 @@ func TestGatedRunHeartbeatSurvivesThreeMinuteSweep(t *testing.T) {
 	require.True(t, owner.isTrackedInternal(started.Run.ID))
 	old := time.Now().Add(-3 * time.Minute)
 	require.NoError(t, db.Model(&Activity{}).Where("id = ?", started.Run.ID).
-		Updates(map[string]any{"started_at": old, "gate_lease_at": old}).Error)
-	require.Eventually(t, func() bool {
-		var refreshed Activity
-		if err := db.First(&refreshed, "id = ?", started.Run.ID).Error; err != nil {
-			return false
-		}
-		return refreshed.GateLeaseAt != nil && refreshed.GateLeaseAt.After(old)
-	}, time.Second, 10*time.Millisecond)
+		Update("started_at", old).Error)
 	swept, err := sweeper.FailAbandonedActivities(t.Context())
 	require.NoError(t, err)
 	require.Zero(t, swept)
@@ -262,6 +254,8 @@ func TestEveryTerminalPathSetsMatchingMessageCode(t *testing.T) {
 			run, err := s.StartActivity(t.Context(), StartActivityRequest{Type: activity.TypeProjectDeploy})
 			require.NoError(t, err)
 			_, err = s.CancelActivity(t.Context(), "0", run.ID, "operator")
+			require.NoError(t, err)
+			_, err = s.CompleteActivity(t.Context(), run.ID, activity.StatusSuccess, "done", nil)
 			require.NoError(t, err)
 			return run.ID
 		}},
@@ -388,7 +382,7 @@ func TestRunningRunsSurviveCountRetentionAndReloadDoesNotRepeatCompletion(t *tes
 		require.NoError(t, err)
 		_ = i
 	}
-	deleted, err := svc.PruneHistory(ctx, 0, 100)
+	deleted, err := svc.PruneHistory(ctx, 100)
 	require.NoError(t, err)
 	require.EqualValues(t, 1, deleted)
 	var count int64
@@ -406,7 +400,7 @@ func TestRunningRunsSurviveCountRetentionAndReloadDoesNotRepeatCompletion(t *tes
 	}
 }
 
-func TestFinishedRetentionLimitAcrossEnvironments(t *testing.T) {
+func TestFinishedRetentionLimitPerEnvironment(t *testing.T) {
 	db := setupActivityServiceTestDBInternal(t)
 	svc := NewActivityService(db, nil)
 	for _, environment := range []string{"0", "remote-example"} {
@@ -417,12 +411,12 @@ func TestFinishedRetentionLimitAcrossEnvironments(t *testing.T) {
 	}
 	active, err := svc.StartActivity(t.Context(), StartActivityRequest{EnvironmentID: "remote-example", Type: activity.TypeProjectDeploy})
 	require.NoError(t, err)
-	deleted, err := svc.PruneHistory(t.Context(), 0, 1)
+	deleted, err := svc.PruneHistory(t.Context(), 1)
 	require.NoError(t, err)
-	require.EqualValues(t, 1, deleted)
+	require.Zero(t, deleted)
 	var finished int64
 	require.NoError(t, db.Model(&Activity{}).Where("status IN ?", terminalActivityStatusesInternal()).Count(&finished).Error)
-	require.EqualValues(t, 1, finished)
+	require.EqualValues(t, 2, finished)
 	var running int64
 	require.NoError(t, db.Model(&Activity{}).Where("id = ?", active.ID).Count(&running).Error)
 	require.EqualValues(t, 1, running)
@@ -441,7 +435,7 @@ func TestActivityRetentionKeepsNewestFinishedRunByEndTime(t *testing.T) {
 		require.NoError(t, db.Model(&Activity{}).Where("id = ?", run.ID).Update("ended_at", ended).Error)
 		ids = append(ids, run.ID)
 	}
-	deleted, err := svc.PruneHistory(t.Context(), 0, 1)
+	deleted, err := svc.PruneHistory(t.Context(), 1)
 	require.NoError(t, err)
 	require.EqualValues(t, 2, deleted)
 	var kept []string
@@ -498,7 +492,7 @@ func TestJobCompletionReplayAfterPruningKeepsOneEffect(t *testing.T) {
 	require.NoError(t, err)
 	_, err = svc.CompleteActivity(t.Context(), newer.ID, activity.StatusSuccess, "newer", nil)
 	require.NoError(t, err)
-	deleted, err := svc.PruneHistory(t.Context(), 0, 1)
+	deleted, err := svc.PruneHistory(t.Context(), 1)
 	require.NoError(t, err)
 	require.EqualValues(t, 1, deleted)
 	require.NoError(t, NewActivityService(db, nil).SyncJobRun(t.Context(), run, "Check"))

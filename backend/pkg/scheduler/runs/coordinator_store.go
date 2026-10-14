@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; functional cut: removed SQLite runtime and migrations; count retention preserves pending sync and idempotency receipts.
+// Deviations: Local module namespace; removed SQLite runtime; pending sync and idempotency receipts survive retention.
 
 package runs
 
@@ -294,51 +294,28 @@ func (q *Coordinator) pruneInternal(ctx context.Context) error {
 	return nil
 }
 
-func pruneRunsInternal(record *st.QueueRecord, _ time.Time) bool {
+func pruneRunsInternal(record *st.QueueRecord, now time.Time) bool {
 	changed := false
-	finished := make([]st.Run, 0, len(record.Runs))
-	for _, run := range record.Runs {
-		if run.Status.Terminal() && (!(run.RemoteDeliveryAttempted || run.RemoteAccepted) || run.RemoteSettled) {
-			finished = append(finished, run)
+	terminal := 0
+	for index, run := range slices.Backward(record.Runs) {
+		if !run.Status.Terminal() || ((run.RemoteDeliveryAttempted || run.RemoteAccepted) && !run.RemoteSettled) {
+			continue
 		}
-	}
-	if len(finished) <= 100 {
-		return false
-	}
-	sort.Slice(finished, func(i, j int) bool {
-		a, b := finished[i].UpdatedAt, finished[j].UpdatedAt
-		if finished[i].FinishedAt != nil {
-			a = *finished[i].FinishedAt
+		terminal++
+		if terminal <= 100 && now.Sub(run.UpdatedAt) < 7*24*time.Hour {
+			continue
 		}
-		if finished[j].FinishedAt != nil {
-			b = *finished[j].FinishedAt
-		}
-		if a.Equal(b) {
-			return finished[i].ID > finished[j].ID
-		}
-		return a.After(b)
-	})
-	keep := make(map[string]bool, min(100, len(finished)))
-	for _, run := range finished[:min(100, len(finished))] {
-		keep[run.ID] = true
-	}
-	retained := record.Runs[:0]
-	for _, run := range record.Runs {
-		if !run.Status.Terminal() || ((run.RemoteDeliveryAttempted || run.RemoteAccepted) && !run.RemoteSettled) || keep[run.ID] {
-			retained = append(retained, run)
-		} else {
-			if separateTriggerInternal(run.Trigger) {
-				if record.Receipts == nil {
-					record.Receipts = make(map[string]st.Run)
-				}
-				run.Attempts = nil
-				run.Outcome.Targets = nil
-				record.Receipts[run.ID] = run
+		if separateTriggerInternal(run.Trigger) {
+			if record.Receipts == nil {
+				record.Receipts = make(map[string]st.Run)
 			}
-			changed = true
+			run.Attempts = nil
+			run.Outcome.Targets = nil
+			record.Receipts[run.ID] = run
 		}
+		record.Runs = append(record.Runs[:index], record.Runs[index+1:]...)
+		changed = true
 	}
-	record.Runs = retained
 	return changed
 }
 

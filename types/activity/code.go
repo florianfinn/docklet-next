@@ -20,7 +20,6 @@ const (
 	CodeActivitySuccess                   Code = "activity.success"
 	CodeActivityFailed                    Code = "activity.failed"
 	CodeActivityCancelled                 Code = "activity.cancelled"
-	CodeActivityCancelRequested           Code = "activity.cancel_requested"
 	CodeActivityMessage                   Code = "activity.message"
 	CodeDeployPull                        Code = "deploy.pull"
 	CodeJobQueued                         Code = "job.queued"
@@ -123,7 +122,6 @@ func Values() []Code {
 		CodeActivitySuccess,
 		CodeActivityFailed,
 		CodeActivityCancelled,
-		CodeActivityCancelRequested,
 		CodeActivityMessage,
 		CodeDeployPull,
 		CodeJobQueued,

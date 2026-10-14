@@ -19,6 +19,7 @@ import (
 	"github.com/florianfinn/docklet-next/backend/pkg/utils/dbutil"
 	"github.com/florianfinn/docklet-next/types/activity"
 	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 )
 
 func (
@@ -45,22 +46,21 @@ func (
 	if activityID == "" {
 		return nil, errors.New("activity id is required")
 	}
-	owner, _ := ctx.Value(gateOwnerContextKey{}).(string)
-	if owner != "" || !s.hasGateHeartbeatInternal(activityID) {
-		defer s.releaseCancelInternal(activityID)
-		defer s.releaseSlotInternal(activityID)
-		defer s.stopGateHeartbeatInternal(activityID)
-	}
-	if errors.Is(context.Cause(ctx), ErrLeaseLost) {
-		return nil, ErrLeaseLost
-	}
-	if errors.Is(context.Cause(ctx), activitylib.ErrCanceled) {
+	defer s.releaseCancelInternal(activityID)
+	defer s.releaseSlotInternal(activityID)
+	s.runningMu.Lock()
+	defer s.runningMu.Unlock()
+	if s.cancelling[activityID] || errors.Is(context.Cause(ctx), activitylib.ErrCanceled) {
 		status = activity.StatusCancelled
+		finalMessage = cancelledMessageInternal
+		errMessage = nil
 	}
 
-	// Detach from cancellation so the terminal write always lands — completion is
-	// often triggered precisely because the work context was cancelled.
-	ctx = context.WithoutCancel(ctx)
+	workCtx := ctx
+	// Completion remains bounded when the worker returns on cancellation.
+	var cancel context.CancelFunc
+	ctx, cancel = context.WithTimeout(context.WithoutCancel(ctx), ownerWriteTimeout)
+	defer cancel()
 
 	now := s.nowInternal()
 	var model Activity
@@ -73,18 +73,18 @@ func (
 		writeErr = s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 			completed = false
 			final = nil
-			if err := tx.First(&model, "id = ?", activityID).Error; err != nil {
+			if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).First(&model, "id = ?", activityID).Error; err != nil {
 				return fmt.Errorf("failed to load activity: %w", err)
 			}
-			if model.GateOwner != "" && model.GateOwner != owner {
-				return ErrLeaseLost
+			if !isTerminalActivityStatusInternal(model.Status) && !gatedWriterAllowedInternal(ctx, &model) {
+				return ErrRunNotOwned
 			}
 			if model.GateScope != "" {
 				if err := tx.Raw("SELECT NOW()").Scan(&now).Error; err != nil {
 					return err
 				}
 			}
-			if model.GateScope != "" && model.CancelRequestedAt != nil {
+			if s.cancelling[activityID] || errors.Is(context.Cause(workCtx), activitylib.ErrCanceled) {
 				status = activity.StatusCancelled
 				finalMessage = cancelledMessageInternal
 				errMessage = nil
@@ -98,23 +98,11 @@ func (
 			}
 			code := string(activityCodeInternal(status))
 			query := tx.Model(&Activity{}).Where("id = ? AND status IN ?", activityID, []activity.Status{activity.StatusQueued, activity.StatusRunning})
-			if model.GateOwner != "" {
-				query = query.Where("gate_owner = ?", owner)
-			}
 			result := query.Updates(updates)
 			if result.Error != nil {
 				return fmt.Errorf("failed to complete activity: %w", result.Error)
 			}
 			completed = result.RowsAffected > 0
-			if !completed && model.GateOwner != "" {
-				var current Activity
-				if err := tx.First(&current, "id = ?", activityID).Error; err != nil {
-					return err
-				}
-				if current.GateOwner != owner {
-					return ErrLeaseLost
-				}
-			}
 			if completed && strings.TrimSpace(finalMessage) != "" {
 				level := activity.MessageLevelSuccess
 				switch status {

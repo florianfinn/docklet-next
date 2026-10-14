@@ -10,9 +10,6 @@ package activity
 
 import (
 	"context"
-	"net/http"
-	"net/http/httptest"
-	"sync"
 	"testing"
 	"time"
 
@@ -21,13 +18,10 @@ import (
 	"github.com/florianfinn/docklet-next/types/scheduler"
 	"github.com/florianfinn/docklet-next/types/user"
 	"github.com/stretchr/testify/require"
-	"go.getarcane.app/sys/crypto"
 	"gorm.io/gorm"
 
 	"github.com/florianfinn/docklet-next/backend/internal/database"
-	"github.com/florianfinn/docklet-next/backend/internal/environment"
 	"github.com/florianfinn/docklet-next/backend/internal/middleware"
-	"github.com/florianfinn/docklet-next/backend/internal/registry"
 	"github.com/florianfinn/docklet-next/backend/internal/settings"
 	"github.com/florianfinn/docklet-next/backend/pkg/authz"
 	activitylib "github.com/florianfinn/docklet-next/backend/pkg/libarcane/activity"
@@ -153,66 +147,6 @@ func TestActivityServiceStreamFanoutInternal(t *testing.T) {
 	require.Equal(t, messageEvent, receiveActivityEventInternal(t, otherEvents))
 }
 
-func TestActivityServiceRetentionCleanupInternal(t *testing.T) {
-	ctx := t.Context()
-	db := setupActivityServiceTestDBInternal(t)
-	service := NewActivityService(db, nil)
-
-	created, err := service.StartActivity(ctx, StartActivityRequest{
-		EnvironmentID: "0",
-		Type:          activity.TypeSystemPrune,
-		LatestMessage: "Prune started",
-	})
-	require.NoError(t, err)
-	_, err = service.AppendMessage(ctx, created.ID, AppendActivityMessageRequest{
-		Message: "Removing unused resources",
-	})
-	require.NoError(t, err)
-	_, err = service.CompleteActivity(ctx, created.ID, activity.StatusSuccess, "Prune complete", nil)
-	require.NoError(t, err)
-
-	oldEndedAt := time.Now().Add(-((time.Duration(defaultActivityRetentionDays) * 24 * time.Hour) + time.Hour))
-	require.NoError(t, db.Model(&Activity{}).Where("id = ?", created.ID).Update("ended_at", oldEndedAt).Error)
-
-	deleted, err := service.PruneHistory(ctx, defaultActivityRetentionDays, 0)
-	require.NoError(t, err)
-	require.EqualValues(t, 1, deleted)
-
-	var activityCount int64
-	require.NoError(t, db.Model(&Activity{}).Count(&activityCount).Error)
-	require.Zero(t, activityCount)
-
-	var messageCount int64
-	require.NoError(t, db.Model(&ActivityMessage{}).Count(&messageCount).Error)
-	require.Zero(t, messageCount)
-}
-
-func TestActivityServicePruneHistoryZeroRetentionDisablesAgeCleanupInternal(t *testing.T) {
-	ctx := t.Context()
-	db := setupActivityServiceTestDBInternal(t)
-	service := NewActivityService(db, nil)
-
-	created, err := service.StartActivity(ctx, StartActivityRequest{
-		EnvironmentID: "0",
-		Type:          activity.TypeSystemPrune,
-		LatestMessage: "Prune started",
-	})
-	require.NoError(t, err)
-	_, err = service.CompleteActivity(ctx, created.ID, activity.StatusSuccess, "Prune complete", nil)
-	require.NoError(t, err)
-
-	oldEndedAt := time.Now().Add(-((time.Duration(defaultActivityRetentionDays) * 24 * time.Hour) + time.Hour))
-	require.NoError(t, db.Model(&Activity{}).Where("id = ?", created.ID).Update("ended_at", oldEndedAt).Error)
-
-	deleted, err := service.PruneHistory(ctx, 0, 0)
-	require.NoError(t, err)
-	require.Zero(t, deleted)
-
-	var activityCount int64
-	require.NoError(t, db.Model(&Activity{}).Where("id = ?", created.ID).Count(&activityCount).Error)
-	require.EqualValues(t, 1, activityCount)
-}
-
 func TestActivityServiceSubscribeMarksMissedEventsWhenBufferFullInternal(t *testing.T) {
 	service := NewActivityService(nil, nil)
 
@@ -260,7 +194,7 @@ func TestActivityServiceDeleteHistoryPreservesActiveActivitiesInternal(t *testin
 	require.ElementsMatch(t, []string{running.ID, remoteCompleted.ID}, []string{remaining[0].ID, remaining[1].ID})
 }
 
-func TestActivityServicePruneHistoryByAgeAndCountInternal(t *testing.T) {
+func TestActivityServicePruneHistoryByEnvironmentInternal(t *testing.T) {
 	ctx := t.Context()
 	db := setupActivityServiceTestDBInternal(t)
 	service := NewActivityService(db, nil)
@@ -290,9 +224,9 @@ func TestActivityServicePruneHistoryByAgeAndCountInternal(t *testing.T) {
 	running, err := service.StartActivity(ctx, StartActivityRequest{EnvironmentID: "remote-1", Type: activity.TypeResourceAction})
 	require.NoError(t, err)
 
-	deleted, err := service.PruneHistory(ctx, 1, 2)
+	deleted, err := service.PruneHistory(ctx, 2)
 	require.NoError(t, err)
-	require.EqualValues(t, 2, deleted)
+	require.EqualValues(t, 1, deleted)
 
 	var terminalRemoteCount int64
 	require.NoError(t, db.Model(&Activity{}).
@@ -306,7 +240,7 @@ func TestActivityServicePruneHistoryByAgeAndCountInternal(t *testing.T) {
 
 	var oldCount int64
 	require.NoError(t, db.Model(&Activity{}).Where("id = ?", oldActivity.ID).Count(&oldCount).Error)
-	require.Zero(t, oldCount)
+	require.EqualValues(t, 1, oldCount)
 }
 
 func TestActivitySubscriberCoalescesProgressEventsInternal(t *testing.T) {
@@ -554,25 +488,13 @@ func TestActivityServiceCancelActivityInternal(t *testing.T) {
 	ctx := t.Context()
 	db := setupActivityServiceTestDBInternal(t)
 	service := NewActivityService(db, nil)
-
-	// An untracked running activity (e.g. after a restart) is finalized directly.
-	created, err := service.StartActivity(ctx, StartActivityRequest{
-		EnvironmentID: "0",
-		Type:          activity.TypeSystemPrune,
-		LatestMessage: "running",
-	})
+	created, err := service.StartActivity(ctx, StartActivityRequest{EnvironmentID: "0", Type: activity.TypeSystemPrune})
 	require.NoError(t, err)
-
 	cancelled, err := service.CancelActivity(ctx, "0", created.ID, "Tester")
 	require.NoError(t, err)
-	require.Equal(t, "cancelled", string(cancelled.Status))
-	require.NotNil(t, cancelled.EndedAt)
-
-	// Cancelling an already-terminal activity is rejected.
+	require.Equal(t, activity.StatusCancelled, cancelled.Status)
 	_, err = service.CancelActivity(ctx, "0", created.ID, "Tester")
 	require.ErrorIs(t, err, ErrActivityNotCancelable)
-
-	// Unknown activity reports not found.
 	_, err = service.CancelActivity(ctx, "0", "missing", "Tester")
 	require.ErrorIs(t, err, gorm.ErrRecordNotFound)
 }
@@ -985,74 +907,4 @@ func TestJobActivityVisibilityFiltersBeforePagination(t *testing.T) {
 	deleted, err = service.DeleteHistory(ctx, "0")
 	require.NoError(t, err)
 	require.EqualValues(t, 2, deleted)
-}
-
-func TestSyncResourcesToEnvironmentOutcomes(t *testing.T) {
-	paths := []string{"/api/container-registries/sync"}
-	cases := []struct {
-		name     string
-		failures map[string]string
-		groups   string
-	}{
-		{name: "success"},
-		{name: "registry failure", failures: map[string]string{paths[0]: "status"}, groups: "container registries"},
-		{name: "malformed response", failures: map[string]string{paths[0]: "malformed"}, groups: "container registries"},
-		{name: "agent reports failure", failures: map[string]string{paths[0]: "false"}, groups: "container registries"},
-	}
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
-			db := setupActivityServiceTestDBInternal(t)
-			require.NoError(t, db.AutoMigrate(&environment.Environment{}, &registry.ContainerRegistry{}))
-			sqlDB, err := db.DB.DB()
-			require.NoError(t, err)
-			sqlDB.SetMaxOpenConns(1)
-			t.Cleanup(func() { require.NoError(t, sqlDB.Close()) })
-			crypto.InitEncryption(&crypto.Config{EncryptionKey: "test-encryption-key-for-testing-32bytes-min", Environment: "test"})
-			var mu sync.Mutex
-			var calls []string
-			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-				mu.Lock()
-				calls = append(calls, r.URL.Path)
-				mu.Unlock()
-				switch tc.failures[r.URL.Path] {
-				case "status":
-					http.Error(w, "private-agent-response", http.StatusUnauthorized)
-				case "malformed":
-					_, _ = w.Write([]byte("private-agent-response"))
-				case "false":
-					_, _ = w.Write([]byte(`{"success":false,"data":{"message":"private-agent-response"}}`))
-				default:
-					_, _ = w.Write([]byte(`{"success":true}`))
-				}
-			}))
-			defer server.Close()
-			require.NoError(t, db.Create(&environment.Environment{ID: "remote", Name: "Remote", ApiUrl: server.URL, AccessToken: new("agent-token"), Enabled: true}).Error)
-			service := environment.NewEnvironmentService(db, server.Client(), nil, nil, nil, nil)
-			activityService := NewActivityService(db, nil)
-			id, err := service.SyncResourcesToEnvironment(t.Context(), "remote", &user.Actor{ID: "operator", Username: "operator"}, activityService)
-			require.NotEmpty(t, id)
-			var recorded Activity
-			require.NoError(t, db.First(&recorded, "id = ?", id).Error)
-			require.NotNil(t, recorded.EndedAt)
-			require.NotNil(t, recorded.DurationMs)
-			require.Equal(t, "remote", recorded.EnvironmentID)
-			if tc.groups == "" {
-				require.NoError(t, err)
-				require.Equal(t, activity.StatusSuccess, recorded.Status)
-				require.Equal(t, "Environment synced successfully", recorded.LatestMessage)
-				require.Nil(t, recorded.Error)
-			} else {
-				require.EqualError(t, err, "Failed to sync "+tc.groups+". Other resource groups may have synced successfully. Check the manager logs, correct the failed sync, and retry.")
-				require.Equal(t, activity.StatusFailed, recorded.Status)
-				require.NotNil(t, recorded.Error)
-				require.Equal(t, err.Error(), *recorded.Error)
-				require.Equal(t, err.Error(), recorded.LatestMessage)
-				require.NotContains(t, err.Error(), "private-agent-response")
-				require.NotContains(t, err.Error(), "agent-token")
-			}
-			mu.Lock()
-			defer mu.Unlock()
-			require.Equal(t, paths, calls)
-		})
-	}
 }

@@ -29,6 +29,7 @@ import (
 
 type DB struct {
 	*gorm.DB
+	hubLock *HubLock
 }
 
 type MigrationOptions struct{}
@@ -55,6 +56,14 @@ func SetGormLogger(l logger.Interface) {
 }
 
 func Initialize(ctx context.Context, databaseURL string, options MigrationOptions) (database *DB, err error) {
+	return initializeInternal(ctx, databaseURL, options, false)
+}
+
+func InitializeHub(ctx context.Context, databaseURL string, options MigrationOptions) (database *DB, err error) {
+	return initializeInternal(ctx, databaseURL, options, true)
+}
+
+func initializeInternal(ctx context.Context, databaseURL string, options MigrationOptions, hub bool) (database *DB, err error) {
 	db, err := connectDatabaseInternal(ctx, databaseURL)
 	if err != nil {
 		return nil, fmt.Errorf("failed to connect to database: %w", err)
@@ -78,6 +87,12 @@ func Initialize(ctx context.Context, databaseURL string, options MigrationOption
 	sqlDB, err := db.DB.DB()
 	if err != nil {
 		return nil, fmt.Errorf("failed to get sql.DB: %w", err)
+	}
+	if hub {
+		db.hubLock, err = acquireHubLock(ctx, sqlDB)
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	if migrateDatabaseErr := migrateDatabaseInternal(ctx, sqlDB, dbProviderPostgres, options); migrateDatabaseErr != nil {
@@ -118,7 +133,7 @@ func connectDatabaseInternal(ctx context.Context, databaseURL string) (*DB, erro
 			IgnoreRelationshipsWhenMigrating: true,
 		})
 		if err == nil {
-			return &DB{db}, nil
+			return &DB{DB: db}, nil
 		}
 
 		slog.InfoContext(ctx, "Failed to initialize database", "attempt", i)
@@ -288,11 +303,15 @@ func (db *DB) FindEnvironmentIDByApiKey(ctx context.Context, apiKey string) (str
 }
 
 func (db *DB) Close() error {
+	var lockErr error
+	if db.hubLock != nil {
+		lockErr = db.hubLock.Stop()
+	}
 	sqlDB, err := db.SQLDB()
 	if err != nil {
-		return err
+		return errors.Join(lockErr, err)
 	}
-	return sqlDB.Close()
+	return errors.Join(lockErr, sqlDB.Close())
 }
 
 func (db *DB) SQLDB() (*sql.DB, error) {
