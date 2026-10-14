@@ -46,6 +46,7 @@
   },
   "generated": [
     "backend/go.sum",
-    "web/pnpm-lock.yaml"
+    "web/pnpm-lock.yaml",
+    "web/src/api/generated/schema.ts"
   ]
 }
