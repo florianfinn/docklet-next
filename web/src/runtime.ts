@@ -2,7 +2,7 @@ import type { AppLocale } from "@/domain/locale";
 import type { ContainerInfo, ScheduledJob, SecurityOverview } from "@/domain/model";
 import type { DockletAdapter } from "@/data/adapter";
 
-export { createDisconnectedAdapter as createAdapter } from "@/data/disconnected-adapter";
+export { createHttpAdapter as createAdapter } from "@/data/http/http-adapter";
 export interface DemoFailure {
   operation: "runStackCommand" | "installStackUpdates" | "deployStack" | "recreateContainer" | "connectHost" | "pullImage";
   at?: "none" | "pull" | "start" | "health";

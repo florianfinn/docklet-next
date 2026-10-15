@@ -117,7 +117,7 @@ interface Entry {
 const LOST_RUN_MS = 10_000;
 
 type Status = ActionRun["status"] | "pending";
-const active = (s: Status) => s === "pending" || s === "running";
+const active = (s: Status) => s === "pending" || s === "queued" || s === "running";
 
 /** Target scopes of a run, also for runs started outside the gate (schedules, other tabs). */
 function scopesOf(run: CodedActionRun): string[] {
@@ -226,7 +226,7 @@ export class RunGate {
     }
     const ownRuns = new Set([...this.entries.values()].filter((e) => e.rule.key === rule.key).map((e) => e.runId));
     for (const r of this.runs.values()) {
-      if (r.status !== "running" || ownRuns.has(r.id)) continue;
+      if (!active(r.status) || ownRuns.has(r.id)) continue;
       if (scopesOf(r).some((scope) => this.conflicts(me, { scope, parent: this.parentOf(scope) }))) return r.id;
     }
     return false;
@@ -236,6 +236,7 @@ export class RunGate {
   run(method: keyof DockletAdapter, args: Args, options: { fresh?: boolean } = {}): Promise<unknown> {
     const ruleOf = GATE_RULES[method];
     const start = () => (this.inner[method] as (...a: Args) => Promise<unknown>).apply(this.inner, args as unknown[]);
+    if (this.inner.kind === "http" && !this.inner.mappedOperations?.has(method)) return start();
     if (!ruleOf) return start();
     this.prune();
     this.watch();

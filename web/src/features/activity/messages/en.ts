@@ -2,19 +2,20 @@
 
 export const enActivity = {
   open: "Activity",
-  openWithCount: "Activity, {count, plural, one {# running} other {# running}}",
+  openWithCount: "Activity, {count, plural, one {# active} other {# active}}",
   running: "{count} running",
   title: "Action center",
   description: (import.meta.env.DEV ? "Runs with steps, output and errors, plus the event history. All actions are simulated." : "Runs with steps, output and errors, plus the event history."),
   tabs: { actions: "Actions", events: "Events" },
   tabsLabel: "Action center sections",
-  historyLimit: "Keeps at most {count} completed actions; running ones always stay.",
+  historyLimit: "Keeps at most {count} completed actions; queued and running ones always stay.",
   historyLimitEvents: "Keeps at most {count} events.",
   historySettings: "Change limits",
   emptyActions: "No actions in this session yet.",
   emptyEvents: "No events for this filter.",
   clearFinished: "Hide completed",
-  status: { running: "Running", succeeded: "Succeeded", failed: "Failed" },
+  status: { queued: "Queued", running: "Running", succeeded: "Succeeded", failed: "Failed", cancelled: "Cancelled" },
+  capability: { unavailable: "This action is unavailable because its capability could not be read.", mappingUnavailable: "This action is not available in the current hub version." },
   step: { pending: "Pending", running: "Running", done: "Done", error: "Error", skipped: "Skipped" },
   phase: "Step {current} of {total}: {label}",
   done: "Completed after {seconds} s",
@@ -27,6 +28,7 @@ export const enActivity = {
   openStack: "Open stack",
   filter: { label: "Filter events", all: "All", error: "Errors", warn: "Warnings", ok: "Success", info: "Info" },
   kind: {
+    activity: "Activity",
     deploy: "Deploy",
     update: "Update",
     restart: "Restart",
@@ -37,6 +39,7 @@ export const enActivity = {
     config: "Configuration",
   },
   runKind: {
+    activity: "Activity",
     deploy: "Deploy",
     redeploy: "Redeploy",
     update: "Update",
@@ -93,7 +96,7 @@ export const enActivity = {
     target: "Target",
     services: "Affected",
     none: "–",
-    result: { running: "Running", succeeded: "Completed successfully", failed: "Failed" },
+    result: { queued: "Queued", running: "Running", succeeded: "Completed successfully", failed: "Failed", cancelled: "Cancelled" },
   },
   history: {
     current: "Current run",
@@ -118,7 +121,8 @@ export const enActivity = {
   },
   output: {
     title: "Raw output",
-    simulated: (import.meta.env.DEV ? "Simulated" : ""),
+    simulated: "Simulated",
+    truncated: "Earlier output was removed because this run reached the storage limit.",
     hint: (import.meta.env.DEV ? "Docker and Compose output of this run – separate from the services’ runtime logs. Generated in this demo, not a real Docker call." : "Docker and Compose output of this run, separate from service runtime logs."),
     stderrNote: "Docker Compose writes progress to stderr; only error lines are marked red.",
     lines: "{count, plural, one {# line} other {# lines}}",

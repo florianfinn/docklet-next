@@ -232,7 +232,7 @@ export const deDashboard: typeof enDashboard = {
   timeline: {
     now: "jetzt",
     hoursAgo: "−{h} h",
-    legend: { deploy: "Deploy", update: "Update", restart: "Neustart", health: "Fehler", backup: "Backup", scan: "Scan", host: "Host", config: "Konfiguration" },
+    legend: { activity: "Aktivität", deploy: "Deploy", update: "Update", restart: "Neustart", health: "Fehler", backup: "Backup", scan: "Scan", host: "Host", config: "Konfiguration" },
     empty: "Keine Ereignisse in den letzten 24 Stunden.",
   },
   load: { cpu: "CPU", mem: "RAM", toggle: "Kennzahl", axis: "{value} %" },

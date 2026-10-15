@@ -22,6 +22,7 @@ import { encodeDemoEvent, encodeDemoRuns, encodeDemoStackDetail } from "./encode
 import type { CodedStackDetail } from "../message-code";
 import { registerDemoOptions, takeDemoFailure, type DemoAdapterOptions, type FailAt } from "./options";
 import { simulateRead, simulateWrite, simulationStore, takeForcedFailure } from "./simulation";
+import { GENERIC_REASON, HUB_REF } from "../capability";
 
 export class DemoCommandError extends Error {
   readonly code: "not-found" | "recreate-not-allowed" | "managed-by-unraid";
@@ -118,6 +119,14 @@ export function createDemoAdapter(options: DemoAdapterOptions = {}): DockletAdap
 
   const adapter: DockletAdapter = {
     kind: "demo",
+    getCapability: async (operationId, resourceRef = HUB_REF) => {
+      const knownResource = resourceRef.kind === "hub" ||
+        (resourceRef.kind === "host" && !!db.host(resourceRef.id)) ||
+        (resourceRef.kind === "stack" && !!db.stack(resourceRef.id)) ||
+        (resourceRef.kind === "container" && db.containers().some((item) => item.id === resourceRef.id));
+      const available = knownResource && typeof adapter[operationId as keyof DockletAdapter] === "function" && operationId !== "getCapability";
+      return { operationId, resourceRef, available, ...(available ? {} : { disabledReasonCode: GENERIC_REASON }) };
+    },
     ...createHostsApi(ctx),
     ...createImagesApi(ctx),
     ...createVolumesApi(ctx),

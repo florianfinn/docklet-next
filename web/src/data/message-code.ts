@@ -7,6 +7,7 @@ import type { ActionRun, ActionStep, OpsEvent, RunOutputLine, StackDetail } from
 export interface MessageCode {
   code: string;
   params: Record<string, string | number | MessageCode>;
+  sourceText?: string;
 }
 
 export type CodedStep = Omit<ActionStep, "label" | "detail"> & { label: MessageCode; detail?: MessageCode };
@@ -29,12 +30,22 @@ const translators = {
 
 /** The adapter sends codes; display text is resolved at the UI boundary. */
 export function renderMessage(message: MessageCode, locale: AppLocale): string {
+  const wireStatus: Record<string, string> = { "activity.queued": "queued", "activity.running": "running", "activity.success": "succeeded", "activity.failed": "failed", "activity.cancelled": "cancelled" };
+  if (wireStatus[message.code]) {
+    const translateStatus = translators[locale] as unknown as (key: string) => string;
+    return translateStatus(`activity.status.${wireStatus[message.code]}`);
+  }
   const values: Record<string, string | number> = {};
   for (const [key, value] of Object.entries(message.params)) {
     values[key] = typeof value === "object" ? renderMessage(value, locale) : value;
   }
   const translate = translators[locale] as unknown as (key: string, values: Record<string, string | number>) => string;
-  return translate(message.code, values);
+  try {
+    return translate(message.code, values);
+  } catch (error) {
+    if (message.sourceText !== undefined) return message.sourceText;
+    throw error;
+  }
 }
 
 const runCache: Partial<Record<AppLocale, WeakMap<CodedActionRun, ActionRun>>> = {};

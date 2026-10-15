@@ -3,19 +3,20 @@ import type { enActivity } from "./en";
 
 export const deActivity: typeof enActivity = {
   open: "Aktivitäten",
-  openWithCount: "Aktivitäten, {count, plural, one {# läuft} other {# laufen}}",
+  openWithCount: "Aktivitäten, {count, plural, one {# aktiv} other {# aktiv}}",
   running: "{count} laufend",
   title: "Aktionszentrum",
   description: (import.meta.env.DEV ? "Abläufe mit Schritten, Ausgaben und Fehlern sowie der Ereignisverlauf. Alle Aktionen sind simuliert." : "Abläufe mit Schritten, Ausgaben und Fehlern sowie der Ereignisverlauf."),
   tabs: { actions: "Aktionen", events: "Ereignisse" },
   tabsLabel: "Bereiche des Aktionszentrums",
-  historyLimit: "Behält höchstens {count} abgeschlossene Aktionen; laufende bleiben immer.",
+  historyLimit: "Behält höchstens {count} abgeschlossene Aktionen; wartende und laufende bleiben immer.",
   historyLimitEvents: "Behält höchstens {count} Ereignisse.",
   historySettings: "Grenzen ändern",
   emptyActions: "Noch keine Aktionen in dieser Sitzung.",
   emptyEvents: "Keine Ereignisse für diesen Filter.",
   clearFinished: "Abgeschlossene ausblenden",
-  status: { running: "Läuft", succeeded: "Erfolgreich", failed: "Fehlgeschlagen" },
+  status: { queued: "Wartet", running: "Läuft", succeeded: "Erfolgreich", failed: "Fehlgeschlagen", cancelled: "Abgebrochen" },
+  capability: { unavailable: "Diese Aktion ist nicht verfügbar, weil ihre Fähigkeit nicht gelesen werden konnte.", mappingUnavailable: "Diese Aktion ist in der aktuellen Hub-Version nicht verfügbar." },
   step: { pending: "Ausstehend", running: "Läuft", done: "Erledigt", error: "Fehler", skipped: "Übersprungen" },
   phase: "Schritt {current} von {total}: {label}",
   done: "Abgeschlossen nach {seconds} s",
@@ -28,6 +29,7 @@ export const deActivity: typeof enActivity = {
   openStack: "Stack öffnen",
   filter: { label: "Ereignisse filtern", all: "Alle", error: "Fehler", warn: "Warnungen", ok: "Erfolg", info: "Info" },
   kind: {
+    activity: "Aktivität",
     deploy: "Deploy",
     update: "Update",
     restart: "Neustart",
@@ -38,6 +40,7 @@ export const deActivity: typeof enActivity = {
     config: "Konfiguration",
   },
   runKind: {
+    activity: "Aktivität",
     deploy: "Deploy",
     redeploy: "Redeploy",
     update: "Update",
@@ -94,7 +97,7 @@ export const deActivity: typeof enActivity = {
     target: "Ziel",
     services: "Betroffen",
     none: "–",
-    result: { running: "Läuft", succeeded: "Erfolgreich abgeschlossen", failed: "Fehlgeschlagen" },
+    result: { queued: "Wartet", running: "Läuft", succeeded: "Erfolgreich abgeschlossen", failed: "Fehlgeschlagen", cancelled: "Abgebrochen" },
   },
   history: {
     current: "Aktueller Ablauf",
@@ -119,7 +122,8 @@ export const deActivity: typeof enActivity = {
   },
   output: {
     title: "Rohausgabe",
-    simulated: (import.meta.env.DEV ? "Simuliert" : ""),
+    simulated: "Simuliert",
+    truncated: "Ältere Ausgaben wurden entfernt, weil dieser Ablauf die Speichergrenze erreicht hat.",
     hint: (import.meta.env.DEV ? "Docker- und Compose-Ausgabe dieses Ablaufs – getrennt von den Laufzeit-Logs der Services. In dieser Demo erzeugt, kein echter Docker-Aufruf." : "Docker- und Compose-Ausgabe dieses Ablaufs, getrennt von den Laufzeit-Logs der Services."),
     stderrNote: "Docker Compose schreibt Fortschritt auf stderr; rot markiert sind nur Fehlerzeilen.",
     lines: "{count, plural, one {# Zeile} other {# Zeilen}}",

@@ -59,6 +59,11 @@ export function useEvents() {
   return useQuery({ queryKey: queryKeys.events, queryFn: () => adapter.listEvents(), select });
 }
 
+export function useActionsQuery() {
+  const adapter = useAdapter();
+  return useQuery({ queryKey: queryKeys.actions, queryFn: () => adapter.listActions() });
+}
+
 export function useSchedule() {
   const adapter = useAdapter();
   return useQuery({ queryKey: queryKeys.schedule, queryFn: () => adapter.listSchedule(), select: useLocalized(localizeSchedule) });

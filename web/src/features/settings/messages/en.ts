@@ -296,7 +296,7 @@ export const enSettings = {
     actions: "Maximum completed actions",
     eventsHint: "{min}–{max} entries, default {fallback}. Beyond that, the oldest events are dropped.",
     actionsHint: "{min}–{max} entries, default {fallback}. Running actions do not count and always stay.",
-    historyNote: "The limit is by count, not by age. A smaller value removes the oldest entries immediately on save. In this preview the history lives only in the browser's memory.",
+    historyNote: "History keeps 500 events and 100 finished runs per environment. Active runs remain available.",
     errors: { range: "Please enter a number from {min} to {max}.", integer: "Please enter a whole number." },
     output: "Save action output",
     outputHint: "Step logs in the action center. Without saving, only the result and errors remain.",
