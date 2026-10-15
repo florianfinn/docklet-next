@@ -87,6 +87,23 @@ func TestWriterRecordsLogAndErrorFramesVerbatimInternal(t *testing.T) {
 	require.Equal(t, activitytypes.MessageLevelInfo, messages[0].Level)
 	require.Equal(t, "Error response from daemon: conflict", messages[1].Message)
 	require.Equal(t, activitytypes.MessageLevelError, messages[1].Level)
+	require.Equal(t, "{\"log\":\"Container web-1  Created\"}", messages[0].Output.Text)
+	require.Equal(t, "stdout", messages[0].Output.Stream)
+	require.Equal(t, "{\"error\":\"Error response from daemon: conflict\"}", messages[1].Output.Text)
+	require.Equal(t, "stderr", messages[1].Output.Stream)
+	require.False(t, messages[0].Output.Timestamp.IsZero())
+}
+
+func TestWriterFlushesUnterminatedRawLineInternal(t *testing.T) {
+	appender := &recordingAppender{}
+	writer := NewWriter(t.Context(), appender, "activity-1", io.Discard, "pull")
+	_, err := writer.Write([]byte("  final line  "))
+	require.NoError(t, err)
+	FlushWriter(writer)
+	messages, _ := appender.recorded()
+	require.Len(t, messages, 1)
+	require.Equal(t, "final line", messages[0].Message)
+	require.Equal(t, "  final line  ", messages[0].Output.Text)
 }
 
 // gatedAppender blocks its first AppendMessages call until release is

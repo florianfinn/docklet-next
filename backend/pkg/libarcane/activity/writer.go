@@ -15,6 +15,7 @@ import (
 	"net/http"
 	"strings"
 	"sync"
+	"time"
 
 	activitytypes "github.com/florianfinn/docklet-next/types/activity"
 	"github.com/samber/mo"
@@ -53,6 +54,7 @@ type writerAppendMessage struct {
 	message string
 	payload database.JSON
 	step    string
+	output  *activitytypes.OutputLine
 }
 
 type writerQueueItem struct {
@@ -98,11 +100,9 @@ func (w *Writer) Write(p []byte) (int, error) {
 		if idx < 0 {
 			break
 		}
-		line := strings.TrimSpace(string(w.buffer[:idx]))
+		line := string(w.buffer[:idx])
 		w.buffer = w.buffer[idx+1:]
-		if message, ok := w.processLineInternal(line).Get(); ok {
-			messages = append(messages, message)
-		}
+		messages = append(messages, w.captureLineInternal(line))
 	}
 	w.mu.Unlock()
 
@@ -117,12 +117,21 @@ func (w *Writer) Flush() {
 	if flusher, ok := w.writer.(http.Flusher); ok {
 		flusher.Flush()
 	}
+	w.mu.Lock()
+	var tail *writerAppendMessage
+	if len(w.buffer) > 0 {
+		item := w.captureLineInternal(string(w.buffer))
+		tail = &item
+		w.buffer = nil
+	}
+	w.mu.Unlock()
+	if tail != nil {
+		w.enqueueMessageInternal(*tail)
+	}
 	flushDone := make(chan struct{})
 	select {
 	case w.queueCh <- writerQueueItem{flush: flushDone}:
 	case <-doneInternal(w.ctx):
-		return
-	default:
 		return
 	}
 	select {
@@ -132,9 +141,26 @@ func (w *Writer) Flush() {
 	}
 }
 
-// processLineInternal records stream lines as activity messages verbatim.
-// Docker operation output arrives as {"log":"<raw CLI line>"} frames; terminal
-// failures as {"error":"..."} frames. Anything else passes through untouched.
+func (w *Writer) captureLineInternal(line string) writerAppendMessage {
+	message, ok := w.processLineInternal(strings.TrimSpace(line)).Get()
+	output := &activitytypes.OutputLine{
+		Timestamp: time.Now().UTC(),
+		Stream:    "stdout",
+		Text:      line,
+		Step:      w.defaultStep,
+	}
+	if ok {
+		output.Level = message.level
+		if message.level == activitytypes.MessageLevelError {
+			output.Stream = "stderr"
+		}
+	}
+	message.output = output
+	return message
+}
+
+// processLineInternal normalizes stream lines into coded activity messages.
+// Raw lines are captured separately before this conversion.
 func (w *Writer) processLineInternal(line string) mo.Option[writerAppendMessage] {
 	if line == "" || w.activityService == nil || w.activityID == "" {
 		return mo.None[writerAppendMessage]()
@@ -183,8 +209,6 @@ func (w *Writer) enqueueMessageInternal(message writerAppendMessage) {
 	case w.queueCh <- writerQueueItem{message: &message}:
 	case <-doneInternal(w.ctx):
 		return
-	default:
-		return
 	}
 }
 
@@ -214,9 +238,7 @@ func (w *Writer) drainRemainingInternal() {
 	}
 }
 
-// drainQueueBatchInternal drains whatever is already queued behind item (up
-// to writerAppendBatchSize lines) into a single AppendMessages call, so bulk
-// docker output costs one transaction per batch instead of one per line.
+// drainQueueBatchInternal writes queued raw lines and messages in one batch.
 // Flush signals encountered while draining close only after the write, since
 // the messages queued before them are only then persisted.
 func (w *Writer) drainQueueBatchInternal(item writerQueueItem) {
@@ -236,6 +258,7 @@ func (w *Writer) drainQueueBatchInternal(item writerQueueItem) {
 			Message: queued.message.message,
 			Payload: queued.message.payload,
 			Step:    queued.message.step,
+			Output:  queued.message.output,
 		})
 	}
 

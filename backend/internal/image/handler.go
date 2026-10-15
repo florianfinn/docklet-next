@@ -337,12 +337,9 @@ func (h *ImageHandler) PullImage(ctx context.Context, input *PullImageInput) (*h
 
 			writer := activitylib.NewWriter(runtimeCtx, h.activityService, activityID, rawWriter, "Pulling image")
 			if pullImageErr := h.imageService.PullImage(runtimeCtx, fullImageName, writer, *user, credentials); pullImageErr != nil {
+				_, _ = fmt.Fprintf(writer, "{\"error\":%q}\n", pullImageErr.Error())
 				activitylib.FlushWriter(writer)
 				activitylib.CompleteHandlerActivity(runtimeCtx, h.activityService, activityID, "Image pull failed", pullImageErr)
-				_, _ = fmt.Fprintf(writer, "{\"error\":%q}\n", pullImageErr.Error())
-				if f, ok := writer.(http.Flusher); ok {
-					f.Flush()
-				}
 				return
 			}
 			activitylib.FlushWriter(writer)

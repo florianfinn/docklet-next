@@ -1,5 +1,5 @@
 // Source: api/openapi.json
-// Revision: 8e5b99bfd4a1cb42cc19b4c9891c771942d1a733112487153f59ee84967010f0
+// Revision: d9161c97c42879e6c9f5aa029ec7bfdc0431f41775e6bf79145257a9e9de6349
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
 // Deviations: Generated TypeScript declarations from the local Huma export.
@@ -590,6 +590,23 @@ export interface paths {
         put?: never;
         /** Restore project files from an Arcane system backup */
         post: operations["restore-system-backup-files"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/capabilities": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get adapter capability descriptors */
+        get: operations["get-capabilities"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -4269,6 +4286,8 @@ export interface components {
         ActivityDetail: {
             activity: components["schemas"]["ActivityActivity"];
             messages: components["schemas"]["ActivityMessage"][] | null;
+            output: components["schemas"]["ActivityOutputLine"][] | null;
+            outputTruncated: boolean;
             stepTrace: components["schemas"]["ActivityStepTraceEntry"][] | null;
         };
         ActivityMessage: {
@@ -4284,6 +4303,14 @@ export interface components {
                 [key: string]: unknown;
             };
             step?: string;
+        };
+        ActivityOutputLine: {
+            level?: string;
+            step?: string;
+            stream: string;
+            text: string;
+            /** Format: date-time */
+            timestamp: string;
         };
         ActivityStartedBy: {
             displayName?: string;
@@ -5264,6 +5291,18 @@ export interface components {
             readonly $schema?: string;
             /** @description Response data */
             data: components["schemas"]["AutoUpdateRecord"][] | null;
+            /** @description Whether the request was successful */
+            success: boolean;
+        };
+        BaseApiResponseListCapabilityDescriptor: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example /api/schemas/BaseApiResponseListCapabilityDescriptor.json
+             */
+            readonly $schema?: string;
+            /** @description Response data */
+            data: components["schemas"]["CapabilityDescriptor"][] | null;
             /** @description Whether the request was successful */
             success: boolean;
         };
@@ -6262,6 +6301,16 @@ export interface components {
             push?: boolean;
             /** @description Service names to build */
             services?: string[] | null;
+        };
+        CapabilityDescriptor: {
+            available: boolean;
+            disabledReasonCode?: string;
+            operationId: string;
+            resourceRef: components["schemas"]["CapabilityResourceRef"];
+        };
+        CapabilityResourceRef: {
+            id: string;
+            kind: string;
         };
         CategoryCategory: {
             description: string;
@@ -9995,6 +10044,9 @@ export interface components {
              * @example /api/schemas/VersionInfo.json
              */
             readonly $schema?: string;
+            agentContractFingerprint: string;
+            /** Format: int64 */
+            agentContractVersion: number;
             buildTime?: string;
             currentDigest?: string;
             currentTag?: string;
@@ -10003,6 +10055,8 @@ export interface components {
             enabledFeatures?: string[] | null;
             goVersion: string;
             isSemverVersion: boolean;
+            /** Format: int64 */
+            minimumAgentContractVersion: number;
             newestDigest?: string;
             newestVersion?: string;
             nodeVersion: string;
@@ -11831,6 +11885,40 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["BaseApiResponseMessageResponse"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "get-capabilities": {
+        parameters: {
+            query?: {
+                /** @description Resource kind */
+                kind?: string;
+                /** @description Resource ID */
+                id?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BaseApiResponseListCapabilityDescriptor"];
                 };
             };
             /** @description Error */

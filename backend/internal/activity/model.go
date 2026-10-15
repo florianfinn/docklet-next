@@ -7,6 +7,7 @@
 package activity
 
 import (
+	"database/sql/driver"
 	"time"
 
 	"github.com/florianfinn/docklet-next/types/activity"
@@ -37,8 +38,23 @@ type Activity struct {
 	Metadata             database.JSON   `json:"metadata,omitempty" gorm:"type:text"`
 	MessageCode          string          `json:"messageCode,omitempty" gorm:"column:message_code"`
 	AffectedServices     database.JSON   `json:"affectedServices,omitempty" gorm:"column:affected_services;type:text"`
+	Output               OutputLines     `json:"-" gorm:"column:output;type:jsonb;not null;default:'[]'"`
+	OutputTruncated      bool            `json:"-" gorm:"column:output_truncated;not null;default:false"`
 	GateKey              string          `json:"-" gorm:"column:gate_key;index"`
 	GateScope            string          `json:"-" gorm:"column:gate_scope;index"`
+}
+
+type OutputLines []activity.OutputLine
+
+func (lines OutputLines) Value() (driver.Value, error) {
+	if lines == nil {
+		lines = OutputLines{}
+	}
+	return database.JSONValue(false, []activity.OutputLine(lines))
+}
+
+func (lines *OutputLines) Scan(value any) error {
+	return database.JSONScan(lines, value)
 }
 
 func (Activity) TableName() string {

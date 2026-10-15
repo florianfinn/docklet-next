@@ -58,8 +58,10 @@ func (s *ActivityService) GetActivityDetail(ctx context.Context, environmentID, 
 	slices.Reverse(stepMessages)
 
 	return &activity.Detail{
-		Activity:  activityToDTOInternal(&model),
-		Messages:  outMessages,
-		StepTrace: stepTraceInternal(stepMessages, &model),
+		Activity:        activityToDTOInternal(&model),
+		Messages:        outMessages,
+		StepTrace:       stepTraceInternal(stepMessages, &model),
+		Output:          append([]activity.OutputLine{}, model.Output...),
+		OutputTruncated: model.OutputTruncated,
 	}, nil
 }

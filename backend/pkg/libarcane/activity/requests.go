@@ -91,4 +91,5 @@ type AppendMessageRequest struct {
 	Payload  database.JSON
 	Progress *int
 	Step     string
+	Output   *activitytypes.OutputLine
 }

@@ -348,12 +348,9 @@ func (h *ProjectHandler) streamProjectOperationInternal(environmentID, projectID
 
 			opCtx := context.WithValue(runtimeCtx, types.ProgressWriterKey{}, writer)
 			if err := cfg.Action(opCtx, writer); err != nil {
+				_, _ = fmt.Fprintf(writer, "{\"error\":%q}\n", err.Error())
 				activitylib.FlushWriter(writer)
 				activitylib.CompleteHandlerActivity(runtimeCtx, h.activityService, activityID, cfg.FailureMessage, err)
-				_, _ = fmt.Fprintf(writer, "{\"error\":%q}\n", err.Error())
-				if f, ok := writer.(http.Flusher); ok {
-					f.Flush()
-				}
 				return
 			}
 

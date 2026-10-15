@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; functional cut: removed APNS mobile push and Svelte-specific metadata or asset paths.
+// Deviations: Local module namespace; removed APNS and Svelte-only metadata; added agent/hub contract metadata.
 
 package version
 
@@ -17,6 +17,7 @@ import (
 	"time"
 
 	"github.com/distribution/reference"
+	"github.com/florianfinn/docklet-next/types/contract"
 	"github.com/florianfinn/docklet-next/types/version"
 	containertypes "github.com/moby/moby/api/types/container"
 	"github.com/moby/moby/client"
@@ -325,18 +326,21 @@ func (s *VersionService) GetAppVersionInfo(ctx context.Context) *version.Info {
 
 	// Build base info struct (always populated)
 	info := &version.Info{
-		CurrentVersion:  ver,
-		CurrentTag:      currentTag,
-		CurrentDigest:   currentDigest,
-		DisplayVersion:  s.getDisplayVersion(),
-		Revision:        s.revision,
-		ShortRevision:   config.ShortRevision(),
-		GoVersion:       config.GoVersion(),
-		NodeVersion:     config.NodeVersion,
-		EnabledFeatures: kit.Unique(kit.TrimNonEmpty(strings.Split(strings.ToLower(buildables.EnabledFeatures), ","))),
-		BuildTime:       config.BuildTime,
-		IsSemverVersion: isSemver,
-		UpdateAvailable: false,
+		AgentContractVersion:        contract.AgentHubVersion,
+		AgentContractFingerprint:    contract.AgentHubFingerprint,
+		MinimumAgentContractVersion: contract.MinimumAgentVersion,
+		CurrentVersion:              ver,
+		CurrentTag:                  currentTag,
+		CurrentDigest:               currentDigest,
+		DisplayVersion:              s.getDisplayVersion(),
+		Revision:                    s.revision,
+		ShortRevision:               config.ShortRevision(),
+		GoVersion:                   config.GoVersion(),
+		NodeVersion:                 config.NodeVersion,
+		EnabledFeatures:             kit.Unique(kit.TrimNonEmpty(strings.Split(strings.ToLower(buildables.EnabledFeatures), ","))),
+		BuildTime:                   config.BuildTime,
+		IsSemverVersion:             isSemver,
+		UpdateAvailable:             false,
 	}
 
 	// If update checks disabled, return base info
