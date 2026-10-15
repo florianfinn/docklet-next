@@ -63,6 +63,21 @@ func TestHubBackupFailureWritesAfterArchiveMigration(t *testing.T) {
 	}
 }
 
+func TestHubBackupStartupSurvivesUnavailableStorage(t *testing.T) {
+	db := newMigratedHubBackupDB(t)
+	path := filepath.Join(t.TempDir(), "file")
+	require.NoError(t, os.WriteFile(path, []byte("x"), 0600))
+	system := &SystemService{db: db}
+	system.backup = backupservice.NewService(backupservice.Dependencies{
+		Store:  system.backupStoreInternal(),
+		Config: &config.Config{BackupDir: filepath.Join(path, "backups")},
+	})
+	require.NoError(t, system.ReconcileInterruptedBackups(t.Context()))
+	storage := system.backup.Storage()
+	require.False(t, storage.Available)
+	require.Equal(t, backuptypes.SystemBackupStorageMissing, storage.ReasonCode)
+}
+
 func TestHubBackupRetentionAfterArchiveMigration(t *testing.T) {
 	db := newMigratedHubBackupDB(t)
 	store := (&SystemService{db: db}).backupStoreInternal()
@@ -182,7 +197,7 @@ func TestHubArchiveCreateListDownloadAndGate(t *testing.T) {
 	require.ErrorIs(t, err, backupservice.ErrSystemBackupAlreadyRunning)
 	_, err = activities.CompleteActivity(gate.WorkContext, gate.Run.ID, activitytypes.StatusSuccess, "activity.success", nil)
 	require.NoError(t, err)
-	run, err := service.StartBackup(t.Context(), usertypes.SystemUser, backuptypes.CreateSystemBackupRequest{})
+	run, err := service.StartBackup(t.Context(), usertypes.Actor{ID: "operator-1", Username: "operator"}, backuptypes.CreateSystemBackupRequest{})
 	require.NoError(t, err)
 	require.NotEmpty(t, run.ActivityID)
 	require.Eventually(t, func() bool {
@@ -212,6 +227,7 @@ func TestHubArchiveCreateListDownloadAndGate(t *testing.T) {
 	detail, err := activities.GetActivityDetail(t.Context(), "0", run.ActivityID, 20)
 	require.NoError(t, err)
 	require.Equal(t, activitytypes.StatusSuccess, detail.Activity.Status)
+	require.Equal(t, "operator-1", detail.Activity.StartedBy.UserID)
 	require.Empty(t, detail.Output)
 
 	policy := SystemBackupPolicy{BaseModel: database.BaseModel{ID: "daily"}, Schedule: "0 0 3 * * *", RetentionCount: 1}

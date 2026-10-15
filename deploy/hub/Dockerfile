@@ -14,8 +14,12 @@ COPY third_party/ third_party/
 RUN cd backend && CGO_ENABLED=0 go build -o /out/docklet-hub ./cmd
 FROM ${RUNTIME_IMAGE}
 COPY --from=build /out/docklet-hub /usr/local/bin/docklet-hub
-RUN mkdir -p /var/lib/docklet/backups && chmod 0700 /var/lib/docklet/backups
+LABEL org.opencontainers.image.title="Docklet Next Hub" \
+      org.opencontainers.image.description="Docklet Next Hub with PostgreSQL 18 backup tools" \
+      org.opencontainers.image.licenses="Apache-2.0"
+RUN mkdir -p /var/lib/docklet/backups && chown postgres:postgres /var/lib/docklet/backups && chmod 0700 /var/lib/docklet/backups
 ENV DOCKLET_BACKUP_DIR=/var/lib/docklet/backups
 VOLUME ["/var/lib/docklet/backups"]
 EXPOSE 3552
+USER postgres
 ENTRYPOINT ["/usr/local/bin/docklet-hub"]

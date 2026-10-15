@@ -13,7 +13,6 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
-	"strings"
 	"time"
 	"uuid"
 
@@ -40,10 +39,11 @@ const defaultSystemBackupSchedule = "0 0 3 * * *"
 const systemAdmissionID = "system"
 
 var (
-	ErrSystemBackupAlreadyRunning = errors.New("run.busy")
-	ErrSystemBackupUnavailable    = errors.New("backup.storage_unavailable")
-	ErrSystemBackupNotFound       = errors.New("backup.not_found")
-	ErrSystemBackupRetention      = errors.New("backup.retention_failed")
+	ErrSystemBackupAlreadyRunning    = errors.New("run.busy")
+	ErrSystemBackupUnavailable       = errors.New("backup.storage_unavailable")
+	ErrSystemBackupNotFound          = errors.New("backup.not_found")
+	ErrSystemBackupRetention         = errors.New("backup.retention_failed")
+	ErrSystemBackupTargetUnavailable = errors.New("backup.target_unavailable")
 )
 
 // Store is owned by the system domain, which maps rows to the archive contract.
@@ -152,7 +152,7 @@ func (s *Service) ListBackupHistory(ctx context.Context, params pagination.Query
 
 func (s *Service) validateRequest(ctx context.Context, request backuptypes.CreateSystemBackupRequest) error {
 	if request.TargetID != "" {
-		return errors.New("backup.target_unavailable")
+		return ErrSystemBackupTargetUnavailable
 	}
 	if request.PolicyID != "" {
 		policy, err := s.store.Policy(ctx, request.PolicyID)
@@ -163,7 +163,7 @@ func (s *Service) validateRequest(ctx context.Context, request backuptypes.Creat
 			return ErrSystemBackupNotFound
 		}
 		if policy.TargetID != "" {
-			return errors.New("backup.target_unavailable")
+			return ErrSystemBackupTargetUnavailable
 		}
 	}
 	if !s.SupportedDatabaseProvider() {
@@ -172,7 +172,7 @@ func (s *Service) validateRequest(ctx context.Context, request backuptypes.Creat
 	return nil
 }
 
-func (s *Service) startRun(ctx context.Context, trigger string, request backuptypes.CreateSystemBackupRequest) (*backuptypes.SystemBackupRun, context.Context, error) {
+func (s *Service) startRun(ctx context.Context, actor usertypes.Actor, trigger string, request backuptypes.CreateSystemBackupRequest) (*backuptypes.SystemBackupRun, context.Context, error) {
 	if err := s.validateRequest(ctx, request); err != nil {
 		return nil, nil, err
 	}
@@ -180,6 +180,7 @@ func (s *Service) startRun(ctx context.Context, trigger string, request backupty
 	answer, err := s.activityService.StartGatedActivity(ctx, activity.GateRequest{
 		EnvironmentID: "0", Operation: "create:" + id, Scope: sharedbackup.SystemAdmissionScope,
 		Type: activitytypes.TypeResourceAction, ResourceType: "system_backup", ResourceID: id,
+		StartedBy: &actor,
 	})
 	if err != nil {
 		var conflict *activity.GateConflict
@@ -276,8 +277,8 @@ func (s *Service) finishRun(workCtx context.Context, run *backuptypes.SystemBack
 	return activityErr
 }
 
-func (s *Service) StartBackup(ctx context.Context, _ usertypes.Actor, request backuptypes.CreateSystemBackupRequest) (*backuptypes.SystemBackupRun, error) {
-	run, workCtx, err := s.startRun(ctx, backuptypes.SystemBackupTriggerManual, request)
+func (s *Service) StartBackup(ctx context.Context, actor usertypes.Actor, request backuptypes.CreateSystemBackupRequest) (*backuptypes.SystemBackupRun, error) {
+	run, workCtx, err := s.startRun(ctx, actor, backuptypes.SystemBackupTriggerManual, request)
 	if err != nil {
 		return nil, err
 	}
@@ -290,8 +291,8 @@ func (s *Service) StartBackup(ctx context.Context, _ usertypes.Actor, request ba
 }
 
 // CreateBackup executes a scheduled archive before the job reports its outcome.
-func (s *Service) CreateBackup(ctx context.Context, _ usertypes.Actor, trigger string, request backuptypes.CreateSystemBackupRequest) (*backuptypes.SystemBackupRun, error) {
-	run, workCtx, err := s.startRun(ctx, trigger, request)
+func (s *Service) CreateBackup(ctx context.Context, actor usertypes.Actor, trigger string, request backuptypes.CreateSystemBackupRequest) (*backuptypes.SystemBackupRun, error) {
+	run, workCtx, err := s.startRun(ctx, actor, trigger, request)
 	if err != nil {
 		return nil, err
 	}
@@ -387,7 +388,7 @@ func (s *Service) GetPolicies(ctx context.Context) (*backuptypes.SystemBackupPol
 func (s *Service) UpdatePolicies(ctx context.Context, updates []backuptypes.UpdateSystemBackupPolicy) (*backuptypes.SystemBackupPolicyCollection, error) {
 	build := func(ctx context.Context, policy *backuptypes.SystemBackupPolicy, update backuptypes.UpdateSystemBackupPolicy) error {
 		if update.TargetID != "" {
-			return errors.New("backup.target_unavailable")
+			return ErrSystemBackupTargetUnavailable
 		}
 		normalized, err := sharedbackup.ValidatePolicyUpdate(ctx, "system", backuptypes.UpdateBackupPolicy{
 			ID: update.ID, Enabled: update.Enabled, Schedule: update.Schedule,
@@ -494,78 +495,6 @@ func (s *Service) applyRetention(ctx context.Context, policyID string, keep int)
 	return nil
 }
 
-// ReconcileStorage removes incomplete files and records left by a crashed process.
-func (s *Service) ReconcileStorage(ctx context.Context) error {
-	dir := s.backupDir()
-	if err := ensureArchiveDir(dir); err != nil {
-		return errors.New("backup.storage_unavailable")
-	}
-	entries, err := os.ReadDir(dir)
-	if err != nil {
-		return errors.New("backup.storage_unavailable")
-	}
-	for _, entry := range entries {
-		if !entry.Type().IsRegular() {
-			continue
-		}
-		name := entry.Name()
-		if strings.HasPrefix(name, ".partial-") {
-			_ = os.Remove(filepath.Join(dir, name))
-			continue
-		}
-		if !strings.HasSuffix(name, ".dump") {
-			continue
-		}
-		id := strings.TrimSuffix(name, ".dump")
-		expected, err := backuptypes.ArchiveNameForID(id)
-		if err != nil || expected != name {
-			continue
-		}
-		run, err := s.store.Run(ctx, id)
-		if err != nil || run == nil || run.Status != backuptypes.SystemBackupStatusSucceeded || run.ArchiveName != name {
-			if removeErr := os.Remove(filepath.Join(dir, name)); removeErr != nil {
-				return errors.New("backup.storage_unavailable")
-			}
-		}
-	}
-	// A deletion interrupted after unlink leaves a metadata row without a file.
-	if s.store.ListRuns != nil {
-		var completed []backuptypes.SystemBackupRun
-		for start := 0; ; start += 100 {
-			rows, _, err := s.store.ListRuns(ctx, pagination.QueryParams{
-				SortParams: pagination.SortParams{Sort: "createdAt", Order: pagination.SortDesc},
-				Params:     pagination.Params{Start: start, Limit: 100},
-			})
-			if err != nil {
-				return errors.New("backup.storage_unavailable")
-			}
-			completed = append(completed, rows...)
-			if len(rows) < 100 {
-				break
-			}
-		}
-		for _, run := range completed {
-			if run.Status != backuptypes.SystemBackupStatusSucceeded || run.ArchiveName == "" {
-				continue
-			}
-			name, err := backuptypes.ArchiveNameForID(run.ID)
-			if err != nil || name != run.ArchiveName {
-				return errors.New("backup.storage_unavailable")
-			}
-			info, err := os.Lstat(filepath.Join(dir, name))
-			if errors.Is(err, os.ErrNotExist) {
-				if err := s.store.DeleteRun(ctx, run.ID); err != nil {
-					return errors.New("backup.storage_unavailable")
-				}
-				continue
-			}
-			if err != nil || !info.Mode().IsRegular() || info.Size() != run.Size {
-				return errors.New("backup.storage_unavailable")
-			}
-		}
-	}
-	return nil
-}
 func (s *Service) Storage() backuptypes.SystemBackupStorage {
 	return storageStatus(s.backupDir())
 }

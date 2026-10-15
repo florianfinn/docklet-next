@@ -23,8 +23,6 @@ services:
       - "127.0.0.1:${DOCKLET_HUB_PORT:-3552}:3552"
     volumes:
       - hub-backups:/var/lib/docklet/backups
-    tmpfs:
-      - /var/lib/postgresql:size=1m
 volumes:
   hub-backups:
     labels:

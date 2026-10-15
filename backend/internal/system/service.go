@@ -126,7 +126,13 @@ func (s *SystemService) ReconcileInterruptedBackups(ctx context.Context, _ ...st
 		return err
 	}
 	if s.backup != nil {
-		return s.backup.ReconcileStorage(ctx)
+		if err := s.backup.ReconcileStorage(ctx); err != nil {
+			if errors.Is(err, systembackup.ErrSystemBackupUnavailable) {
+				slog.WarnContext(ctx, "Hub backup storage is unavailable", "code", "backup.storage_unavailable")
+				return nil
+			}
+			return err
+		}
 	}
 	return nil
 }

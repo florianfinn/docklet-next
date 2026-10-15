@@ -93,12 +93,12 @@ func storageAvailable(dir string) error {
 
 func storageStatus(dir string) backuptypes.SystemBackupStorage {
 	status := backuptypes.SystemBackupStorage{MaxArchiveBytes: backuptypes.MaxSystemArchiveBytes}
-	if !archiveToolsAvailable() {
-		status.ReasonCode = backuptypes.SystemBackupToolsUnavailable
-		return status
-	}
 	if err := storageAvailable(dir); err != nil {
 		status.ReasonCode = backuptypes.SystemBackupStorageMissing
+		return status
+	}
+	if !archiveToolsAvailable() {
+		status.ReasonCode = backuptypes.SystemBackupToolsUnavailable
 		return status
 	}
 	var stat syscall.Statfs_t
@@ -163,6 +163,10 @@ func postgresEnv(dsn string) ([]string, error) {
 }
 
 func createArchive(ctx context.Context, dir, dsn, id string) (string, int64, error) {
+	return createArchiveWithLimits(ctx, dir, dsn, id, backuptypes.MaxSystemArchiveBytes, archiveDeadline)
+}
+
+func createArchiveWithLimits(ctx context.Context, dir, dsn, id string, maxBytes int64, timeout time.Duration) (string, int64, error) {
 	if err := archiveContextError(ctx); err != nil {
 		return "", 0, err
 	}
@@ -177,7 +181,7 @@ func createArchive(ctx context.Context, dir, dsn, id string) (string, int64, err
 	if err != nil {
 		return "", 0, err
 	}
-	deadlineCtx, cancel := context.WithTimeout(ctx, archiveDeadline)
+	deadlineCtx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 	file, err := os.CreateTemp(dir, ".partial-")
 	if err != nil {
@@ -201,7 +205,7 @@ func createArchive(ctx context.Context, dir, dsn, id string) (string, int64, err
 		}
 		return "", 0, ErrSystemBackupUnavailable
 	}
-	writer := &limitedArchiveWriter{file: file, limit: backuptypes.MaxSystemArchiveBytes}
+	writer := &limitedArchiveWriter{file: file, limit: maxBytes}
 	_, copyErr := io.Copy(writer, stdout)
 	if copyErr != nil {
 		_ = cmd.Process.Kill()

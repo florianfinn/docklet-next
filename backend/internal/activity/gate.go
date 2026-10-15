@@ -16,6 +16,7 @@ import (
 
 	"github.com/florianfinn/docklet-next/backend/internal/database"
 	activitytypes "github.com/florianfinn/docklet-next/types/activity"
+	usertypes "github.com/florianfinn/docklet-next/types/user"
 	"gorm.io/gorm"
 )
 
@@ -29,6 +30,7 @@ type GateRequest struct {
 	Type             activitytypes.Type
 	ResourceType     string
 	ResourceID       string
+	StartedBy        *usertypes.Actor
 	AffectedServices []string
 	Check            bool
 	Recheck          bool
@@ -117,6 +119,19 @@ func (s *ActivityService) startGatedActivityAtInternal(ctx context.Context, requ
 			GateScope:        request.Scope,
 			StartedAt:        s.nowInternal(),
 			Metadata:         database.JSON{},
+		}
+		if request.StartedBy != nil {
+			if id := strings.TrimSpace(request.StartedBy.ID); id != "" {
+				model.StartedByUserID = &id
+			}
+			if username := strings.TrimSpace(request.StartedBy.Username); username != "" {
+				model.StartedByUsername = &username
+			}
+			if request.StartedBy.DisplayName != nil {
+				if name := strings.TrimSpace(*request.StartedBy.DisplayName); name != "" {
+					model.StartedByDisplayName = &name
+				}
+			}
 		}
 		if err := tx.Create(&model).Error; err != nil {
 			return fmt.Errorf("create gated activity: %w", err)

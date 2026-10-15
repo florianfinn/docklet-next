@@ -17,6 +17,8 @@ import (
 	"github.com/florianfinn/docklet-next/types/base"
 
 	"github.com/florianfinn/docklet-next/backend/internal/activity"
+	sharedbackup "github.com/florianfinn/docklet-next/backend/internal/backup"
+	userdomain "github.com/florianfinn/docklet-next/backend/internal/user"
 	"github.com/florianfinn/docklet-next/backend/pkg/utils/handlerutil"
 	usertypes "github.com/florianfinn/docklet-next/types/user"
 )
@@ -107,8 +109,17 @@ func (h *Handler) UpdatePolicies(ctx context.Context, input *UpdateSystemBackupP
 		return nil, huma.Error501NotImplemented("backup.not_implemented")
 	}
 	policies, err := h.service.UpdatePolicies(ctx, input.Body.Policies)
-	if err != nil {
+	if errors.Is(err, ErrSystemBackupTargetUnavailable) {
+		return nil, huma.Error422UnprocessableEntity("backup.target_unavailable")
+	}
+	if errors.Is(err, ErrSystemBackupUnavailable) {
+		return nil, huma.Error503ServiceUnavailable("backup.storage_unavailable")
+	}
+	if errors.Is(err, sharedbackup.ErrPolicyValidation) {
 		return nil, huma.Error400BadRequest("backup.invalid_policy")
+	}
+	if err != nil {
+		return nil, huma.Error500InternalServerError("backup.failed")
 	}
 	return &SystemBackupPoliciesOutput{Body: *policies}, nil
 }
@@ -116,15 +127,25 @@ func (h *Handler) Create(ctx context.Context, input *CreateSystemBackupInput) (*
 	if h.service == nil {
 		return nil, huma.Error501NotImplemented("backup.not_implemented")
 	}
-	run, err := h.service.StartBackup(ctx, usertypes.Actor{}, input.Body)
+	actor := usertypes.Actor{}
+	if currentUser, exists := userdomain.CurrentUserFromContext(ctx); exists && currentUser != nil {
+		actor = *currentUser.Actor()
+	}
+	run, err := h.service.StartBackup(ctx, actor, input.Body)
 	if errors.Is(err, ErrSystemBackupAlreadyRunning) {
 		return nil, huma.Error409Conflict("run.busy")
 	}
 	if errors.Is(err, ErrSystemBackupNotFound) {
 		return nil, huma.Error404NotFound("backup.not_found")
 	}
+	if errors.Is(err, ErrSystemBackupTargetUnavailable) {
+		return nil, huma.Error422UnprocessableEntity("backup.target_unavailable")
+	}
+	if errors.Is(err, ErrSystemBackupUnavailable) {
+		return nil, huma.Error503ServiceUnavailable("backup.storage_unavailable")
+	}
 	if err != nil {
-		return nil, huma.Error503ServiceUnavailable("backup.unavailable")
+		return nil, huma.Error500InternalServerError("backup.failed")
 	}
 	return &SystemBackupOutput{Body: *run}, nil
 }
