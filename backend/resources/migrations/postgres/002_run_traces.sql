@@ -2,7 +2,7 @@
 -- Revision: 1d6b25c3162636f018e0a6491e7f5428110874e3
 -- Retrieved: 2026-10-14
 -- License: Apache-2.0
--- Deviations: Original forward migration for issue #37; adds coded run traces and gate lookups.
+-- Deviations: Original forward migration for issue #37; adds coded run traces. Gate lookup columns and indexes are absent from the cited api-contract.md design record.
 -- +goose Up
 ALTER TABLE activities ADD COLUMN message_code text;
 ALTER TABLE activities ADD COLUMN affected_services text;
