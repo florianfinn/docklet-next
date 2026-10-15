@@ -75,7 +75,7 @@ export function AppShell({ navigation = NAV }: { navigation?: NavGroup[] }) {
   const ta = useTranslations("activity");
   const crumbs = useCrumbs();
   const location = useLocation();
-  const running = useActionRuns().filter((r) => r.status === "running").length;
+  const running = useActionRuns().filter((r) => r.status === "queued" || r.status === "running").length;
   const width = pageWidth(location.pathname);
   const sidebarWidth = sidebarWidthCss(useSidebarWidth());
 

@@ -436,6 +436,9 @@ var routeModules = []routeModule{
 	{"event", false, func(api huma.API, d HandlerDeps, _ handlerutil.ActivityAppContext, _ *config.Config) {
 		d.Event.RegisterRoutes(api)
 	}},
+	{"capabilities", false, func(api huma.API, _ HandlerDeps, _ handlerutil.ActivityAppContext, _ *config.Config) {
+		activity.RegisterCapabilities(api)
+	}},
 	{"activity", true, func(api huma.API, d HandlerDeps, _ handlerutil.ActivityAppContext, _ *config.Config) {
 		d.Activity.RegisterRoutes(api)
 	}},

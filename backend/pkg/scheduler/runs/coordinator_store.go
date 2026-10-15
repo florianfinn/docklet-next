@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; functional cut: removed SQLite runtime and migrations.
+// Deviations: Local module namespace; removed SQLite runtime; pending sync and idempotency receipts survive retention.
 
 package runs
 
@@ -104,13 +104,8 @@ func preserveUnsyncedRunsInternal(state *st.CoordinatorState, previous []st.Run)
 	for _, run := range previous {
 		_, exists := retained[run.ID]
 		if _, pending := state.PendingActivitySync[run.ID]; pending && !exists {
-			// Activity projection must not extend completed run retention.
-			if run.Status.Terminal() {
-				if _, archived := state.Record.Receipts[run.ID]; !archived {
-					delete(state.PendingActivitySync, run.ID)
-				}
-				continue
-			}
+			// The completion projection is a durable effect. Retain its source
+			// until the observer acknowledges the exact run version.
 			retained[run.ID] = run
 			delete(state.Record.Receipts, run.ID)
 			restore = true
@@ -273,6 +268,27 @@ func (q *Coordinator) pruneInternal(ctx context.Context) error {
 			return nil
 		}); mutateErr != nil {
 			return fmt.Errorf("prune job %q in environment %q: %w", record.JobID, record.EnvironmentID, mutateErr)
+		}
+	}
+	pruner, ok := q.observer.(interface {
+		PruneRunActivityReceipts(context.Context, []string) error
+	})
+	if ok {
+		current, err := q.Records(ctx)
+		if err != nil {
+			return err
+		}
+		retained := make([]string, 0)
+		for _, record := range current {
+			for _, run := range record.Runs {
+				retained = append(retained, run.ID)
+			}
+			for id := range record.Receipts {
+				retained = append(retained, id)
+			}
+		}
+		if err := pruner.PruneRunActivityReceipts(ctx, retained); err != nil {
+			return fmt.Errorf("prune retired activity receipts: %w", err)
 		}
 	}
 	return nil

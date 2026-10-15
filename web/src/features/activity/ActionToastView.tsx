@@ -36,7 +36,7 @@ function useToastFacts(run: ActionRun, now: number) {
       ? t("phase", { current: index + 1, total: run.steps.length, label: step.label })
       : run.status === "failed"
         ? t("failedAt", { label: step?.label ?? "" })
-        : t("done", { seconds });
+        : run.status === "succeeded" ? t("done", { seconds }) : t(`status.${run.status}`);
   const line = run.status === "failed" ? (run.error ?? t("toast.unknownError")) : run.status === "running" ? (step?.detail ?? run.target) : run.target;
   return { status, line, seconds, done, total: run.steps.length };
 }
@@ -105,7 +105,7 @@ function RestoreLink({ run, onClose }: { run: ActionRun; onClose: () => void }) 
 
 /** Countdown of a settled toast; the toast closes when the animation ends (paused on hover and focus by CSS). */
 function LifeBar({ run, onEnd }: { run: ActionRun; onEnd: () => void }) {
-  if (run.status === "running") return null;
+  if (run.status === "running" || run.status === "queued") return null;
   const life = TOAST_LIFETIME[run.status];
   return (
     <span aria-hidden className="absolute inset-x-0 bottom-0 h-1 bg-(--tone)/12" data-slot="toast-life-track">

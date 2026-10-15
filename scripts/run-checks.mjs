@@ -10,6 +10,8 @@ function command(program, args, cwd = process.cwd()) {
 export function check(mode) {
   if (!["lint", "test", "text", "build"].includes(mode)) throw new Error("unknown-check");
   if (git(["config", "--get", "core.hooksPath"]).trim() !== ".githooks") throw new Error("hooks-not-active");
+  if (["lint", "test"].includes(mode) && tracked().includes("web/src/api/generated/schema.ts") &&
+      !tracked().includes("api/openapi.json")) throw new Error("missing-tracked-openapi-contract");
   if (mode === "lint") {
     for (const path of tracked().filter((p) => p.endsWith(".mjs")))
       command(process.execPath, ["--check", path]);
@@ -25,6 +27,8 @@ export function check(mode) {
       command(process.execPath, ["scripts/inventory-core.mjs", "--check"]);
     if (mode === "lint" && paths.some((path) => path.endsWith(".go"))) checkGoFormatting();
   }
+  if (["lint", "test"].includes(mode) && tracked().includes("web/src/api/generated/schema.ts"))
+    command(process.execPath, ["scripts/openapi-contract.mjs", "check"]);
   if (mode === "test" || mode === "text") {
     const tests = tracked().filter((p) => /^tests\/.*\.test\.mjs$/.test(p));
     if (!tests.length) throw new Error("missing-tests");

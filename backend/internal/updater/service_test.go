@@ -764,7 +764,7 @@ func TestUpdaterService_RecordUpdateRunAdapterInternal(t *testing.T) {
 func TestUpdaterService_RecordUpdateRunAppendsActivityMessageInternal(t *testing.T) {
 	ctx := t.Context()
 	db := setupProjectTestDBInternal(t)
-	require.NoError(t, db.AutoMigrate(&AutoUpdateRecord{}, &activity.Activity{}, &activity.ActivityMessage{}))
+	require.NoError(t, db.AutoMigrate(append(activity.Models(), &AutoUpdateRecord{})...))
 	activityService := activity.NewActivityService(db, nil)
 	svc, svcErr := NewUpdaterService(db, nil, nil, nil, nil, nil, nil, nil, nil, nil, activityService, nil, nil, nil, nil)
 	require.NoError(t, svcErr)
@@ -838,7 +838,7 @@ func TestUpdaterService_AcceptSingleContainerUpdateUsesQueuedActivityInternal(t 
 		name := kit.Ternary(cancelActivity, "activity cancellation while queued", "request disconnect")
 		t.Run(name, func(t *testing.T) {
 			db := setupProjectTestDBInternal(t)
-			require.NoError(t, db.AutoMigrate(&activity.Activity{}, &activity.ActivityMessage{}))
+			require.NoError(t, db.AutoMigrate(activity.Models()...))
 			sqlDB, err := db.DB.DB()
 			require.NoError(t, err)
 			sqlDB.SetMaxOpenConns(1)
@@ -898,7 +898,7 @@ func TestUpdaterService_AcceptSingleContainerUpdateUsesQueuedActivityInternal(t 
 
 func TestUpdaterService_AcceptSingleContainerUpdateFailureFinalizesInternal(t *testing.T) {
 	db := setupProjectTestDBInternal(t)
-	require.NoError(t, db.AutoMigrate(&activity.Activity{}, &activity.ActivityMessage{}))
+	require.NoError(t, db.AutoMigrate(activity.Models()...))
 	activityService := activity.NewActivityService(db, nil)
 	svc, err := NewUpdaterService(db, nil, nil, nil, nil, nil, nil, nil, nil, nil, activityService, nil, nil, nil, nil)
 	require.NoError(t, err)
@@ -987,7 +987,7 @@ func TestUpdaterService_SingleContainerActivityResultMessagesInternal(t *testing
 	} {
 		t.Run(tt.name, func(t *testing.T) {
 			db := setupProjectTestDBInternal(t)
-			require.NoError(t, db.AutoMigrate(&activity.Activity{}, &activity.ActivityMessage{}))
+			require.NoError(t, db.AutoMigrate(activity.Models()...))
 			activityService := activity.NewActivityService(db, nil)
 			svc, err := NewUpdaterService(db, nil, nil, nil, nil, nil, nil, nil, nil, nil, activityService, nil, nil, nil, nil)
 			require.NoError(t, err)
@@ -1630,7 +1630,7 @@ func TestUpdaterProjectChecksWithoutContainersInternal(t *testing.T) {
 
 func TestSingleUpdatePersistsSuccessfulActivity(t *testing.T) {
 	db := setupProjectTestDBInternal(t)
-	require.NoError(t, db.AutoMigrate(&activity.Activity{}, &activity.ActivityMessage{}, &AutoUpdateRecord{}))
+	require.NoError(t, db.AutoMigrate(append(activity.Models(), &AutoUpdateRecord{})...))
 	pool, err := db.DB.DB()
 	require.NoError(t, err)
 	pool.SetMaxOpenConns(1)

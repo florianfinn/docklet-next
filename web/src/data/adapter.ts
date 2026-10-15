@@ -13,6 +13,7 @@ import type {
 
 import type { HostsApi, HubApi, ImagesApi, NetworksApi, SettingsApi, VolumesApi } from "./api";
 import type { CodedActionRun, CodedEvent, CodedStackDetail } from "./message-code";
+import type { CapabilityDescriptor, ResourceRef } from "./capability";
 
 export type StackCommand = "start" | "stop" | "restart" | "redeploy";
 export type ContainerCommand = "start" | "stop" | "restart";
@@ -56,6 +57,9 @@ export type Unsubscribe = () => void;
  */
 export interface DockletAdapter extends HostsApi, VolumesApi, SettingsApi, ImagesApi, NetworksApi, HubApi {
   readonly kind: "demo" | "http" | "disconnected";
+  readonly mappedOperations?: ReadonlySet<string>;
+
+  getCapability(operationId: string, resourceRef?: ResourceRef): Promise<CapabilityDescriptor>;
 
   listHosts(): Promise<Host[]>;
   listStacks(): Promise<Stack[]>;

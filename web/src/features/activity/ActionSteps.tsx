@@ -11,7 +11,7 @@ import { stepTone } from "./run-phase";
 
 /** Shared tone components know only semantic tones; a running run takes the brand primary. */
 const RUNNING_STYLE = { "--tone": "var(--primary-text)" } as CSSProperties;
-const SEMANTIC = { running: "accent", succeeded: "ok", failed: "err" } as const;
+const SEMANTIC = { queued: "gray", running: "accent", succeeded: "ok", failed: "err", cancelled: "gray" } as const;
 
 export function RunIconTile({ status, size, className, children }: { status: ActionStatus; size?: "sm" | "md" | "lg"; className?: string; children: ReactNode }) {
   return (

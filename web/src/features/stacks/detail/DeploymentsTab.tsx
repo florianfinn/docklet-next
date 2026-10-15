@@ -1,4 +1,4 @@
-import { CheckCircle2, ChevronRight, History, Loader2, RotateCcw, XCircle } from "lucide-react";
+import { ChevronRight, History, RotateCcw } from "lucide-react";
 import { useRef, useState } from "react";
 import { useTranslations } from "use-intl";
 
@@ -8,7 +8,7 @@ import type { ActionRun, RestorePoint, StackDetail } from "@/domain/model";
 import { versionLabel } from "@/domain/updates";
 import { StepList } from "@/features/activity/ActionSteps";
 import { deployRuns, shownRun, type HistoryPick } from "@/features/activity/deploy-history";
-import { RUN_TONE, useNow } from "@/features/activity/run-phase";
+import { RUN_ICON, RUN_TONE, useNow } from "@/features/activity/run-phase";
 import { startPresented, useInlineRunSurface } from "@/features/activity/run-presentation";
 import { RunFocusView } from "@/features/activity/RunFocus";
 import { EmptyState } from "@/shared/components/page";
@@ -23,7 +23,7 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/shared/ui
 import { useStackCommands } from "@/shared/hooks/use-stack-commands";
 
 const TONE = RUN_TONE;
-const ICON = { running: Loader2, succeeded: CheckCircle2, failed: XCircle } as const;
+const ICON = RUN_ICON;
 
 const durationOf = (run: ActionRun) => (run.finishedAt ? Math.round((new Date(run.finishedAt).getTime() - new Date(run.startedAt).getTime()) / 1000) : 0);
 

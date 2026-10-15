@@ -2,14 +2,13 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace
+// Deviations: Local module namespace; fixed event and finished-activity limits.
 
 package scheduler
 
 import (
 	"context"
 	"log/slog"
-	"time"
 
 	schedulertypes "github.com/florianfinn/docklet-next/types/scheduler"
 	kit "go.getarcane.app/kit/pkg"
@@ -47,21 +46,19 @@ func (j *EventCleanupJob) Schedule(ctx context.Context) string {
 func (j *EventCleanupJob) Run(ctx context.Context) (schedulertypes.Outcome, error) {
 	slog.InfoContext(ctx, "Running event cleanup job", "jobName", EventCleanupJobName)
 
-	// Delete events older than 36 hours
-	olderThan := 36 * time.Hour
-	if err := j.eventService.DeleteOldEvents(ctx, olderThan); err != nil {
-		slog.ErrorContext(ctx, "Failed to delete old events", "jobName", EventCleanupJobName, "olderThan", olderThan.String(), "error", err)
+	deletedEvents, err := j.eventService.PruneEvents(ctx, 500)
+	if err != nil {
+		slog.ErrorContext(ctx, "Failed to prune events", "jobName", EventCleanupJobName, "error", err)
 		return schedulertypes.Outcome{}, err
 	}
 
 	slog.InfoContext(ctx, "Event cleanup job completed successfully",
 		"jobName", EventCleanupJobName,
-		"olderThan", olderThan.String())
+		"maxEntries", 500,
+		"deleted", deletedEvents)
 
 	if j.activityService != nil {
-		retentionDays := j.settingsService.GetIntSetting(ctx, "activityHistoryRetentionDays", 30)
-		maxEntries := j.settingsService.GetIntSetting(ctx, "activityHistoryMaxEntries", 1000)
-		deleted, err := j.activityService.PruneHistory(ctx, retentionDays, maxEntries)
+		deleted, err := j.activityService.PruneHistory(ctx, 100)
 		if err != nil {
 			slog.ErrorContext(ctx, "Failed to prune activity history", "jobName", EventCleanupJobName, "error", err)
 			return schedulertypes.Outcome{}, err
@@ -69,8 +66,7 @@ func (j *EventCleanupJob) Run(ctx context.Context) (schedulertypes.Outcome, erro
 
 		slog.InfoContext(ctx, "Activity history cleanup completed successfully",
 			"jobName", EventCleanupJobName,
-			"retentionDays", retentionDays,
-			"maxEntries", maxEntries,
+			"maxEntries", 100,
 			"deleted", deleted)
 	}
 	return schedulertypes.Outcome{Status: schedulertypes.Succeeded}, nil

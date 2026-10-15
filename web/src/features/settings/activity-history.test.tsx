@@ -1,5 +1,4 @@
 import { screen, waitFor } from "@testing-library/react";
-import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { ActionRunner } from "@/data/demo/action-runner";
@@ -93,26 +92,12 @@ describe("activity history limits", () => {
     expect((await adapter.listActions()).filter((r) => r.status !== "running" && r.stackId === target.id).length).toBe(1);
   });
 
-  it("validate the range in the section, block saving and apply a smaller limit to the stored history at once", async () => {
+  it("shows fixed history limits without editable controls", async () => {
     const adapter = createDemoAdapter();
     renderRoutes([{ path: "/settings/:section", element: <SettingsPage /> }], ["/settings/activity"], adapter);
-    const events = (await screen.findByLabelText("Höchstens Ereignisse")) as HTMLInputElement;
-    expect([events.value, (screen.getByLabelText("Höchstens abgeschlossene Aktionen") as HTMLInputElement).value]).toEqual(["500", "100"]);
-
-    await userEvent.clear(events);
-    await userEvent.type(events, "20");
-    expect(screen.getByText("Bitte eine Zahl von 50 bis 5000 eingeben.") !== null).toBe(true);
-    await userEvent.click(screen.getByRole("button", { name: "Speichern" }));
-    expect(screen.getByRole("status").textContent).toBe("Bitte markierte Felder prüfen");
-    expect((await adapter.getSettings()).activity.maxEvents).toBe(500);
-
-    await userEvent.clear(events);
-    await userEvent.type(events, "50");
-    await userEvent.click(screen.getByRole("button", { name: "Speichern" }));
-    await waitFor(() => expect(screen.getByRole("status").textContent).toBe("Alles gespeichert"));
-    expect((await adapter.getSettings()).activity.maxEvents).toBe(50);
-    expect((await adapter.listEvents()).length <= 50).toBe(true);
-    // The adapter repeats the rule for other clients.
+    await screen.findByText("Der Verlauf behält 500 Ereignisse und 100 abgeschlossene Abläufe je Umgebung. Aktive Abläufe bleiben erhalten.");
+    expect(screen.queryByLabelText("Höchstens Ereignisse") === null).toBe(true);
+    expect(screen.queryByLabelText("Höchstens abgeschlossene Aktionen") === null).toBe(true);
     await expect(adapter.saveSettings("activity", { ...(await adapter.getSettings()).activity, maxFinishedActions: 5 })).rejects.toThrow("invalid-history");
   });
 });

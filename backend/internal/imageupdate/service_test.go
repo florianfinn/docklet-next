@@ -977,7 +977,7 @@ func TestImageUpdateService_CheckMultipleImages_UsesRegistryFallback(t *testing.
 
 func TestImageUpdateService_CheckMultipleImagesCompletesActivityWhenRequestContextCanceledInternal(t *testing.T) {
 	db := setupImageUpdateTestDB(t)
-	require.NoError(t, db.AutoMigrate(&activity.Activity{}, &activity.ActivityMessage{}))
+	require.NoError(t, db.AutoMigrate(activity.Models()...))
 
 	activityService := activity.NewActivityService(db, nil)
 	svc := NewImageUpdateService(db, nil, nil, nil, nil, nil, activityService)
@@ -1024,7 +1024,7 @@ func TestImageUpdateService_CheckMultipleImagesCompletesActivityWhenRequestConte
 
 func TestImageUpdateService_CheckMultipleImagesTimesOutStalledRegistryCheckInternal(t *testing.T) {
 	db := setupImageUpdateTestDB(t)
-	require.NoError(t, db.AutoMigrate(&activity.Activity{}, &activity.ActivityMessage{}))
+	require.NoError(t, db.AutoMigrate(activity.Models()...))
 
 	settingsService := newImageUpdateTestSettingsServiceInternal(t, "1", "30")
 	activityService := activity.NewActivityService(db, nil)
@@ -1076,7 +1076,7 @@ func TestImageUpdateService_CheckMultipleImagesTimesOutStalledRegistryCheckInter
 
 func TestImageUpdateService_CheckMultipleImagesPanicMarksActivityFailedInternal(t *testing.T) {
 	db := setupImageUpdateTestDB(t)
-	require.NoError(t, db.AutoMigrate(&activity.Activity{}, &activity.ActivityMessage{}))
+	require.NoError(t, db.AutoMigrate(activity.Models()...))
 
 	settingsService := newImageUpdateTestSettingsServiceInternal(t, "30", "30")
 	activityService := activity.NewActivityService(db, nil)

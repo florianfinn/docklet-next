@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: ; functional cut: removed Svelte-specific metadata or asset paths.
+// Deviations: Removed Svelte-only metadata and added agent/hub contract metadata.
 
 package version
 
@@ -14,6 +14,9 @@ import (
 
 // Info contains detailed version information about the application.
 type Info struct {
+	AgentContractVersion        int    `json:"agentContractVersion"`
+	AgentContractFingerprint    string `json:"agentContractFingerprint"`
+	MinimumAgentContractVersion int    `json:"minimumAgentContractVersion"`
 	// CurrentVersion is the current version string.
 	//
 	// Required: true

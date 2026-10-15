@@ -105,6 +105,14 @@ func NewJobService(
 	return service
 }
 
+func (s *JobService) PruneRunActivityReceipts(ctx context.Context, retainedRunIDs []string) error {
+	if s.activity == nil {
+		return nil
+	}
+	_, err := s.activity.PruneSyncReceipts(ctx, retainedRunIDs)
+	return err
+}
+
 func (s *JobService) SetScheduler(ctx context.Context, controller scheduler.JobController) { //nolint:contextcheck // scheduler jobs must capture the app lifecycle context, not request contexts
 	if ctx == nil {
 		ctx = context.Background() //nolint:forbidigo // A nil scheduler context uses an independent lifecycle root.
@@ -509,13 +517,10 @@ func (s *JobService) ReconcileStartupActivities(ctx context.Context, extraProtec
 	if failInterruptedBackupsErr := s.activity.FailInterruptedBackups(ctx, protected...); failInterruptedBackupsErr != nil {
 		return failInterruptedBackupsErr
 	}
-	if _, failStaleImageUpdateChecksErr := s.activity.FailStaleImageUpdateChecks(ctx); failStaleImageUpdateChecksErr != nil {
-		return failStaleImageUpdateChecksErr
-	}
 	if _, resolveStaleAutoUpdateActivitiesErr := s.activity.ResolveStaleAutoUpdateActivities(ctx, protected...); resolveStaleAutoUpdateActivitiesErr != nil {
 		return resolveStaleAutoUpdateActivitiesErr
 	}
-	_, err = s.activity.ResolveOrphanedQueuedActivities(ctx, protected...)
+	_, err = s.activity.RepairStartup(ctx, protected...)
 	return err
 }
 

@@ -22,6 +22,7 @@ import { encodeDemoEvent, encodeDemoRuns, encodeDemoStackDetail } from "./encode
 import type { CodedStackDetail } from "../message-code";
 import { registerDemoOptions, takeDemoFailure, type DemoAdapterOptions, type FailAt } from "./options";
 import { simulateRead, simulateWrite, simulationStore, takeForcedFailure } from "./simulation";
+import { GENERIC_REASON, HUB_REF, unavailable } from "../capability";
 
 export class DemoCommandError extends Error {
   readonly code: "not-found" | "recreate-not-allowed" | "managed-by-unraid";
@@ -38,7 +39,7 @@ const clone = <T>(v: T): T => structuredClone(v);
 export function createDemoAdapter(options: DemoAdapterOptions = {}): DockletAdapter {
   const db = new DemoDb();
   const composeTarget = (stack: Stack): ComposeTarget => ({ project: stack.id, services: stack.services.map((s) => ({ name: s.name, image: imageRef(s.image) })), hostName: db.host(stack.hostId)?.name ?? stack.hostId });
-  const runner = new ActionRunner(SEED_RUNS, (run) => {
+  const runner = new ActionRunner(options.seedRuns ?? SEED_RUNS, (run) => {
     const stack = run.stackId ? db.stack(run.stackId) : undefined;
     return stack ? composeScript(composeTarget(stack), run.services) : genericScript;
   }, () => db.settings.activity.maxFinishedActions);
@@ -50,6 +51,7 @@ export function createDemoAdapter(options: DemoAdapterOptions = {}): DockletAdap
   const logs = new LogSimulator(() => [...db.stacks, ...db.containers().filter((c) => !c.stackId).map((c) => ({ id: `container:${c.id}`, services: [{ name: c.name, state: c.state }] }))]);
   const empty = () => simulationStore.get().empty;
   const ctx: DemoContext = { db, runner, forcedFailure: () => takeForcedFailure() !== "none", demoFailure: (operation) => takeDemoFailure(adapter, operation) };
+  const supportedOperations = new Set<string>();
 
   function failStep(requested: FailAt | undefined): DeployStepKey | undefined {
     const forced = takeForcedFailure();
@@ -118,6 +120,14 @@ export function createDemoAdapter(options: DemoAdapterOptions = {}): DockletAdap
 
   const adapter: DockletAdapter = {
     kind: "demo",
+    getCapability: async (operationId, resourceRef = HUB_REF) => {
+      const knownResource = resourceRef.kind === "hub" ||
+        (resourceRef.kind === "host" && !!db.host(resourceRef.id)) ||
+        (resourceRef.kind === "stack" && !!db.stack(resourceRef.id)) ||
+        (resourceRef.kind === "container" && db.containers().some((item) => item.id === resourceRef.id));
+      const available = knownResource && supportedOperations.has(operationId);
+      return { operationId, resourceRef, available, ...(available ? {} : { disabledReasonCode: GENERIC_REASON }) };
+    },
     ...createHostsApi(ctx),
     ...createImagesApi(ctx),
     ...createVolumesApi(ctx),
@@ -150,6 +160,9 @@ export function createDemoAdapter(options: DemoAdapterOptions = {}): DockletAdap
     listActions: async () => clone(encodeDemoRuns(runner.list())),
 
     async runStackCommand(stackId, command: StackCommand) {
+      if (!(await adapter.getCapability("runStackCommand", { kind: "stack", id: stackId })).available) {
+        throw unavailable("runStackCommand", { kind: "stack", id: stackId });
+      }
       const stack = requireStack(stackId);
       const names = stack.services.map((s) => s.name).join(", ");
       const fail = failStep(takeDemoFailure(adapter, "runStackCommand")?.at);
@@ -549,6 +562,10 @@ export function createDemoAdapter(options: DemoAdapterOptions = {}): DockletAdap
     return c;
   }
 
+  for (const [operationId, value] of Object.entries(adapter)) {
+    if (operationId !== "getCapability" && typeof value === "function") supportedOperations.add(operationId);
+  }
+  for (const operationId of options.missingCapabilities ?? []) supportedOperations.delete(operationId);
   registerDemoOptions(adapter, options);
   return adapter;
 }

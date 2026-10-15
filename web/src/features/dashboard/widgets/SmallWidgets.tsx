@@ -5,6 +5,7 @@ import { toast } from "sonner";
 import { useTranslations } from "use-intl";
 
 import { useAdapter } from "@/data/use-adapter";
+import { useCapability } from "@/data/use-capability";
 import { useMetrics } from "@/data/live";
 import { formatCountdown, formatGb, formatRelative } from "@/domain/format";
 import { jobHref } from "@/domain/job-links";
@@ -105,11 +106,12 @@ export function SecurityWidget({ security, visibleHostIds }: { security: Securit
   const t = useTranslations("dashboard.security");
   const navigate = useNavigate();
   const adapter = useAdapter();
+  const scanCapability = useCapability("runScan");
   if (!security.enabled) {
     return (
       <div className="flex h-full flex-col items-start justify-center gap-3">
         <p className="text-sm text-muted-foreground">{t("disabled")}</p>
-        <Button size="sm" variant="outline" onClick={() => void adapter.runScan()}>
+        <Button size="sm" variant="outline" disabled={!scanCapability.available} title={scanCapability.reason} onClick={() => void adapter.runScan()}>
           <ShieldCheck data-icon="inline-start" /> {t("enable")}
         </Button>
       </div>

@@ -156,7 +156,7 @@ export interface Stack {
   dockerLabels?: Record<string, string>;
 }
 
-export type DeployStepKey = "validate" | "pull" | "build" | "create" | "stop" | "start" | "health" | "scan" | "collect" | "save" | "wait" | "connect";
+export type DeployStepKey = "validate" | "pull" | "build" | "create" | "stop" | "start" | "health" | "scan" | "collect" | "save" | "wait" | "connect" | "other";
 export type StepState = "pending" | "running" | "done" | "error" | "skipped";
 
 export interface ActionStep {
@@ -169,6 +169,7 @@ export interface ActionStep {
 }
 
 export type ActionKind =
+  | "activity"
   | "deploy"
   | "redeploy"
   | "update"
@@ -187,7 +188,7 @@ export type ActionKind =
   | "prune"
   | "agent-restart";
 
-export type ActionStatus = "running" | "succeeded" | "failed";
+export type ActionStatus = "queued" | "running" | "succeeded" | "failed" | "cancelled";
 
 /** "cmd" echoes the command, "note" marks the output as simulated; Docker writes progress to stderr. */
 export type OutputStream = "cmd" | "stdout" | "stderr" | "note";
@@ -218,8 +219,9 @@ export interface ActionRun {
   finishedAt?: string;
   error?: string;
   log: string[];
-  /** Raw, chronological operation output; simulated in the demo. */
+  /** Raw, chronological operation output. */
   output: RunOutputLine[];
+  outputTruncated?: boolean;
   /** Restore point created before this run; offered manually after failures. */
   restorePointId?: string;
 }
@@ -278,7 +280,7 @@ export interface LogLine {
   message: string;
 }
 
-export type EventKind = "deploy" | "update" | "restart" | "health" | "host" | "backup" | "scan" | "config";
+export type EventKind = "activity" | "deploy" | "update" | "restart" | "health" | "host" | "backup" | "scan" | "config";
 export type EventLevel = "info" | "ok" | "warn" | "error";
 
 export interface OpsEvent {

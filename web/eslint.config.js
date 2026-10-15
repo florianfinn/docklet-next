@@ -6,7 +6,7 @@ import tseslint from "typescript-eslint";
 
 export default tseslint.config(
   { linterOptions: { reportUnusedDisableDirectives: "error" } },
-  { ignores: ["dist", "node_modules"] },
+  { ignores: ["dist", "node_modules", "src/api/generated/schema.ts"] },
   js.configs.recommended,
   ...tseslint.configs.recommended,
   {

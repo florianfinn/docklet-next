@@ -2,11 +2,12 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace
+// Deviations: Local module namespace; run gate, service effects, coded steps and output columns.
 
 package activity
 
 import (
+	"database/sql/driver"
 	"time"
 
 	"github.com/florianfinn/docklet-next/types/activity"
@@ -35,6 +36,25 @@ type Activity struct {
 	DurationMs           *int64          `json:"durationMs,omitempty" gorm:"column:duration_ms" sortable:"true"`
 	Error                *string         `json:"error,omitempty" gorm:"column:error"`
 	Metadata             database.JSON   `json:"metadata,omitempty" gorm:"type:text"`
+	MessageCode          string          `json:"messageCode,omitempty" gorm:"column:message_code"`
+	AffectedServices     database.JSON   `json:"affectedServices,omitempty" gorm:"column:affected_services;type:text"`
+	GateKey              string          `json:"-" gorm:"column:gate_key;index"`
+	GateScope            string          `json:"-" gorm:"column:gate_scope;index"`
+	Output               OutputLines     `json:"-" gorm:"column:output;type:jsonb;not null;default:'[]'"`
+	OutputTruncated      bool            `json:"-" gorm:"column:output_truncated;not null;default:false"`
+}
+
+type OutputLines []activity.OutputLine
+
+func (lines OutputLines) Value() (driver.Value, error) {
+	if lines == nil {
+		lines = OutputLines{}
+	}
+	return database.JSONValue(false, []activity.OutputLine(lines))
+}
+
+func (lines *OutputLines) Scan(value any) error {
+	return database.JSONScan(lines, value)
 }
 
 func (Activity) TableName() string {
@@ -48,9 +68,23 @@ type ActivityMessage struct {
 	Level      activity.MessageLevel `json:"level" gorm:"column:level;not null"`
 	Message    string                `json:"message" gorm:"column:message;not null"`
 	Payload    database.JSON         `json:"payload,omitempty" gorm:"type:text"`
+	Code       string                `json:"code,omitempty" gorm:"column:code"`
+	Step       string                `json:"step,omitempty" gorm:"column:step"`
 	Activity   *Activity             `json:"-" gorm:"foreignKey:ActivityID;constraint:OnDelete:CASCADE"`
 }
 
 func (ActivityMessage) TableName() string {
 	return "activity_messages"
 }
+
+// ActivitySyncReceipt persists applied run versions independently of history pruning.
+type ActivitySyncReceipt struct {
+	RunID     string     `gorm:"column:run_id;primaryKey"`
+	UpdatedAt time.Time  `gorm:"column:updated_at;not null"`
+	SyncedAt  *time.Time `gorm:"column:synced_at"`
+}
+
+func (ActivitySyncReceipt) TableName() string { return "activity_sync_receipts" }
+
+// Models returns the persistent activity schema for integration fixtures and the core registry.
+func Models() []any { return []any{&Activity{}, &ActivityMessage{}, &ActivitySyncReceipt{}} }

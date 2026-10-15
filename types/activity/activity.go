@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: functional cut: removed standalone build workshop.
+// Deviations: Functional cut: removed standalone build workshop; coded run trace and service effects.
 
 package activity
 
@@ -66,6 +66,8 @@ type Activity struct {
 	Progress              *int           `json:"progress,omitempty"`
 	Step                  string         `json:"step,omitempty"`
 	LatestMessage         string         `json:"latestMessage,omitempty"`
+	MessageCode           string         `json:"messageCode,omitempty" enum:"run.started,run.joined,run.fresh,run.busy,run.cancelling,activity.queued,activity.running,activity.success,activity.failed,activity.cancelled,activity.message,deploy.pull,job.queued,job.waiting,job.running,job.retrying,job.succeeded,job.partial,job.skipped,job.failed,job.needs_attention,job.canceled,container.die,container.oom,container.rename,container.unhealthy,image.untag,image.import,image.prune,volume.prune,network.prune,container.start,container.stop,container.restart,container.delete,container.create,container.scan,container.update,container.deploy,container.kill,container.pause,container.unpause,container.error,image.pull,image.load,image.tag,image.commit,image.delete,image.scan,image.error,image.vulnerability_scan,project.deploy,project.delete,project.start,project.stop,project.create,project.update,project.error,volume.create,volume.rename,volume.delete,volume.error,volume.file.create,volume.file.delete,volume.file.upload,volume.file.update,volume.workspace.update,volume.backup.create,volume.backup.delete,volume.backup.restore,volume.backup.restore_files,volume.backup.download,network.create,network.delete,network.connect,network.disconnect,network.error,system.prune,user.login,user.logout,system.auto_update,system.upgrade,environment.create,environment.connect,environment.disconnect,environment.update,environment.delete,environment.api_key.regenerated,environment.mtls.ca_generated,environment.mtls.cert_issued,environment.mtls.enroll,environment.mtls.download,webhook.create,webhook.update,webhook.delete,webhook.trigger,notification.send"`
+	AffectedServices      []string       `json:"affectedServices,omitempty"`
 	StartedBy             *StartedBy     `json:"startedBy,omitempty"`
 	StartedAt             time.Time      `json:"startedAt"`
 	EndedAt               *time.Time     `json:"endedAt,omitempty"`
@@ -87,13 +89,35 @@ type Message struct {
 	ActivityID string         `json:"activityId"`
 	Level      MessageLevel   `json:"level"`
 	Message    string         `json:"message"`
+	Code       string         `json:"code,omitempty" enum:"run.started,run.joined,run.fresh,run.busy,run.cancelling,activity.queued,activity.running,activity.success,activity.failed,activity.cancelled,activity.message,deploy.pull,job.queued,job.waiting,job.running,job.retrying,job.succeeded,job.partial,job.skipped,job.failed,job.needs_attention,job.canceled,container.die,container.oom,container.rename,container.unhealthy,image.untag,image.import,image.prune,volume.prune,network.prune,container.start,container.stop,container.restart,container.delete,container.create,container.scan,container.update,container.deploy,container.kill,container.pause,container.unpause,container.error,image.pull,image.load,image.tag,image.commit,image.delete,image.scan,image.error,image.vulnerability_scan,project.deploy,project.delete,project.start,project.stop,project.create,project.update,project.error,volume.create,volume.rename,volume.delete,volume.error,volume.file.create,volume.file.delete,volume.file.upload,volume.file.update,volume.workspace.update,volume.backup.create,volume.backup.delete,volume.backup.restore,volume.backup.restore_files,volume.backup.download,network.create,network.delete,network.connect,network.disconnect,network.error,system.prune,user.login,user.logout,system.auto_update,system.upgrade,environment.create,environment.connect,environment.disconnect,environment.update,environment.delete,environment.api_key.regenerated,environment.mtls.ca_generated,environment.mtls.cert_issued,environment.mtls.enroll,environment.mtls.download,webhook.create,webhook.update,webhook.delete,webhook.trigger,notification.send"`
+	Step       string         `json:"step,omitempty"`
 	Payload    map[string]any `json:"payload,omitempty"`
 	CreatedAt  time.Time      `json:"createdAt"`
 }
 
 type Detail struct {
-	Activity Activity  `json:"activity"`
-	Messages []Message `json:"messages"`
+	Activity        Activity         `json:"activity"`
+	Messages        []Message        `json:"messages"`
+	StepTrace       []StepTraceEntry `json:"stepTrace"`
+	Output          []OutputLine     `json:"output"`
+	OutputTruncated bool             `json:"outputTruncated"`
+}
+
+type OutputLine struct {
+	Timestamp time.Time    `json:"timestamp"`
+	Stream    string       `json:"stream"`
+	Text      string       `json:"text"`
+	Step      string       `json:"step,omitempty"`
+	Level     MessageLevel `json:"level,omitempty"`
+}
+
+type StepTraceEntry struct {
+	ID        string     `json:"id"`
+	Name      string     `json:"name"`
+	Status    Status     `json:"status" enum:"queued,running,success,failed,cancelled"`
+	Code      string     `json:"code,omitempty" enum:"run.started,run.joined,run.fresh,run.busy,run.cancelling,activity.queued,activity.running,activity.success,activity.failed,activity.cancelled,activity.message,deploy.pull,job.queued,job.waiting,job.running,job.retrying,job.succeeded,job.partial,job.skipped,job.failed,job.needs_attention,job.canceled,container.die,container.oom,container.rename,container.unhealthy,image.untag,image.import,image.prune,volume.prune,network.prune,container.start,container.stop,container.restart,container.delete,container.create,container.scan,container.update,container.deploy,container.kill,container.pause,container.unpause,container.error,image.pull,image.load,image.tag,image.commit,image.delete,image.scan,image.error,image.vulnerability_scan,project.deploy,project.delete,project.start,project.stop,project.create,project.update,project.error,volume.create,volume.rename,volume.delete,volume.error,volume.file.create,volume.file.delete,volume.file.upload,volume.file.update,volume.workspace.update,volume.backup.create,volume.backup.delete,volume.backup.restore,volume.backup.restore_files,volume.backup.download,network.create,network.delete,network.connect,network.disconnect,network.error,system.prune,user.login,user.logout,system.auto_update,system.upgrade,environment.create,environment.connect,environment.disconnect,environment.update,environment.delete,environment.api_key.regenerated,environment.mtls.ca_generated,environment.mtls.cert_issued,environment.mtls.enroll,environment.mtls.download,webhook.create,webhook.update,webhook.delete,webhook.trigger,notification.send"`
+	StartedAt time.Time  `json:"startedAt"`
+	EndedAt   *time.Time `json:"endedAt,omitempty"`
 }
 
 type StreamEvent struct {

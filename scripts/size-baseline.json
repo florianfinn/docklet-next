@@ -24,7 +24,6 @@
     "backend/internal/registry/service.go": 1722,
     "backend/internal/registry/service_test.go": 1601,
     "backend/internal/role/service.go": 741,
-    "backend/internal/settings/service.go": 1260,
     "backend/internal/settings/service_test.go": 1204,
     "backend/internal/system/children/backup/service.go": 866,
     "backend/internal/system/children/prune/service.go": 1042,
@@ -46,6 +45,7 @@
   },
   "generated": [
     "backend/go.sum",
-    "web/pnpm-lock.yaml"
+    "web/pnpm-lock.yaml",
+    "web/src/api/generated/schema.ts"
   ]
 }

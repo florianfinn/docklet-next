@@ -9,6 +9,10 @@ const root = new URL("../", import.meta.url);
 const command = fileURLToPath(new URL("../scripts/go-command.go", import.meta.url));
 const inventory = JSON.parse(readFileSync(new URL("../docs/provenance/core-import.json", import.meta.url), "utf8"));
 const forbidden = new Set(["github.com/libtnb/sqlite", "github.com/mattn/go-sqlite3", "modernc.org/sqlite", "modernc.org/libc"]);
+const laterPackages = new Set([
+  "github.com/florianfinn/docklet-next/types/capability",
+  "github.com/florianfinn/docklet-next/types/contract",
+]);
 
 test("hub and agent binary source graphs exclude SQLite and modernc libc", () => {
   for (const target of inventory.targets) {
@@ -20,9 +24,11 @@ test("hub and agent binary source graphs exclude SQLite and modernc libc", () =>
       env: { ...process.env, CGO_ENABLED: target.cgo, GOOS: "linux", GOARCH: "amd64" },
     });
     const packages = output.trim().split("\n").filter(Boolean);
-    assert.equal(packages.length, target.packages, `${target.target} package count`);
     const paths = packages.map((line) => line.split("|")[0]).sort();
-    const digest = createHash("sha256").update(paths.join("\n") + "\n").digest("hex");
+    const originalPaths = paths.filter((path) => !laterPackages.has(path));
+    assert.equal(originalPaths.length, target.packages, `${target.target} historical package count`);
+    assert.deepEqual(paths.filter((path) => laterPackages.has(path)), [...laterPackages].sort());
+    const digest = createHash("sha256").update(originalPaths.join("\n") + "\n").digest("hex");
     assert.equal(digest, target.packageGraphSha256, `${target.target} package graph`);
     for (const line of packages) {
       const module = line.split("|")[1];

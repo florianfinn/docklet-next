@@ -109,7 +109,8 @@ func TestVolumeBackupPolicy_RetentionIgnoresFailedRuns(t *testing.T) {
 func TestVolumeBackupPolicy_ScheduledRunCreatesActivity(t *testing.T) {
 	gormDB, err := gorm.Open(testpg.Dialector(t, "file:volume-backup-scheduled-activity?mode=memory&cache=shared"), &gorm.Config{})
 	require.NoError(t, err)
-	require.NoError(t, gormDB.AutoMigrate(&policies.VolumeBackupPolicy{}, &activity.Activity{}))
+	require.NoError(t, gormDB.AutoMigrate(&policies.VolumeBackupPolicy{}))
+	require.NoError(t, gormDB.AutoMigrate(activity.Models()...))
 	db := &database.DB{DB: gormDB}
 	policy := &policies.VolumeBackupPolicy{
 		VolumeName:     "app-data",

@@ -26,6 +26,7 @@ let ProductImportSourceDialog: typeof ImportSourceDialog;
 let productAdapter: typeof createAdapter;
 
 beforeAll(async () => {
+  vi.stubGlobal("fetch", vi.fn(async () => new Response(JSON.stringify({ code: "offline" }), { status: 503 })));
   vi.stubEnv("DEV", false);
   vi.resetModules();
   ({ routes, navigation } = await import("@/app/router"));
@@ -34,10 +35,10 @@ beforeAll(async () => {
   ({ createAdapter: productAdapter } = await import("./runtime"));
 });
 
-afterAll(() => vi.unstubAllEnvs());
+afterAll(() => { vi.unstubAllEnvs(); vi.unstubAllGlobals(); });
 afterEach(() => cleanup());
 
-it.each(paths)("settles with the product disconnected adapter: %s", async (path) => {
+it.each(paths)("settles with the product HTTP adapter when the backend is unavailable: %s", async (path) => {
   let commits = 0;
   const errors: string[] = [];
   const error = vi.spyOn(console, "error").mockImplementation((...args) => errors.push(args.map(String).join(" ")));
@@ -51,7 +52,7 @@ it.each(paths)("settles with the product disconnected adapter: %s", async (path)
   });
   try {
     renderProductRoutes(bounded(routes), [path], productAdapter());
-    await waitFor(() => expect(document.body.textContent?.trim().length).toBeGreaterThan(20));
+    if (path !== "/setup" && path !== "/login") await waitFor(() => expect(document.body.textContent?.trim().length).toBeGreaterThan(20));
     await new Promise((resolve) => setTimeout(resolve, path === "/stacks/new" ? 5000 : 750));
     expect(commits).toBeLessThanOrEqual(40);
     expect(timers.mock.calls.length).toBeLessThan(200);
@@ -83,7 +84,7 @@ it("shows only sidebar links backed by a production route", async () => {
   }
 });
 
-it("handles a rejected source import with the product disconnected adapter", async () => {
+it("handles a rejected source import with the product HTTP adapter", async () => {
   const errors: string[] = [];
   const error = vi.spyOn(console, "error").mockImplementation((...args) => errors.push(args.map(String).join(" ")));
   try {

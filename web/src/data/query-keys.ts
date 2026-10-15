@@ -8,6 +8,7 @@ export const queryKeys = {
   security: ["security"],
   topology: ["topology"],
   events: ["events"],
+  actions: ["actions"],
   schedule: ["schedule"],
   volumes: ["volumes"],
   volumeRoot: ["volume"],

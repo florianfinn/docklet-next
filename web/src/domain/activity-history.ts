@@ -31,10 +31,10 @@ export function pruneEvents(events: readonly OpsEvent[], max: number): OpsEvent[
  * time stay (start time for runs without one). The order of the list is kept.
  */
 export function pruneRuns(runs: readonly ActionRun[], maxFinished: number): ActionRun[] {
-  const finished = runs.filter((r) => r.status !== "running");
+  const finished = runs.filter((r) => r.status !== "running" && r.status !== "queued");
   if (finished.length <= maxFinished) return [...runs];
   const stamp = (r: ActionRun) => Date.parse(r.finishedAt ?? r.startedAt);
   // Stable sort: equal stamps keep list order, so the earlier (newer-started) entry wins.
   const keep = new Set(finished.map((r, i) => ({ r, i })).sort((a, b) => stamp(b.r) - stamp(a.r) || a.i - b.i).slice(0, Math.max(0, maxFinished)).map((e) => e.r));
-  return runs.filter((r) => r.status === "running" || keep.has(r));
+  return runs.filter((r) => r.status === "running" || r.status === "queued" || keep.has(r));
 }
