@@ -105,7 +105,7 @@ func (SystemBackupPolicy) TableName() string { return "system_backup_policies" }
 func (p SystemBackupPolicy) ToDTO() backup.SystemBackupPolicy {
 	return backup.SystemBackupPolicy{
 		ID: p.ID, Enabled: p.Enabled, Schedule: p.Schedule, RetentionCount: p.RetentionCount,
-		TargetID: p.TargetID, LocalEnabled: true,
+		TargetID: p.TargetID,
 	}
 }
 

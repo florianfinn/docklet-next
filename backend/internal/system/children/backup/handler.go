@@ -8,6 +8,9 @@ package backup
 
 import (
 	"context"
+	"errors"
+	"io"
+	"strconv"
 
 	"github.com/danielgtaylor/huma/v2"
 	"github.com/florianfinn/docklet-next/types/backup"
@@ -15,6 +18,7 @@ import (
 
 	"github.com/florianfinn/docklet-next/backend/internal/activity"
 	"github.com/florianfinn/docklet-next/backend/pkg/utils/handlerutil"
+	usertypes "github.com/florianfinn/docklet-next/types/user"
 )
 
 type Handler struct {
@@ -98,27 +102,76 @@ func (h *Handler) GetPolicies(ctx context.Context, _ *struct{}) (*SystemBackupPo
 	return &SystemBackupPoliciesOutput{Body: *policies}, nil
 }
 
-// Mutation and file routes remain unavailable until the archive engine lands.
-func (h *Handler) UpdatePolicies(context.Context, *UpdateSystemBackupPoliciesInput) (*SystemBackupPoliciesOutput, error) {
-	return nil, huma.Error501NotImplemented("backup.not_implemented")
+func (h *Handler) UpdatePolicies(ctx context.Context, input *UpdateSystemBackupPoliciesInput) (*SystemBackupPoliciesOutput, error) {
+	if h.service == nil {
+		return nil, huma.Error501NotImplemented("backup.not_implemented")
+	}
+	policies, err := h.service.UpdatePolicies(ctx, input.Body.Policies)
+	if err != nil {
+		return nil, huma.Error400BadRequest("backup.invalid_policy")
+	}
+	return &SystemBackupPoliciesOutput{Body: *policies}, nil
 }
-func (h *Handler) Create(context.Context, *CreateSystemBackupInput) (*SystemBackupOutput, error) {
-	return nil, huma.Error501NotImplemented("backup.not_implemented")
+func (h *Handler) Create(ctx context.Context, input *CreateSystemBackupInput) (*SystemBackupOutput, error) {
+	if h.service == nil {
+		return nil, huma.Error501NotImplemented("backup.not_implemented")
+	}
+	run, err := h.service.StartBackup(ctx, usertypes.Actor{}, input.Body)
+	if errors.Is(err, ErrSystemBackupAlreadyRunning) {
+		return nil, huma.Error409Conflict("run.busy")
+	}
+	if errors.Is(err, ErrSystemBackupNotFound) {
+		return nil, huma.Error404NotFound("backup.not_found")
+	}
+	if err != nil {
+		return nil, huma.Error503ServiceUnavailable("backup.unavailable")
+	}
+	return &SystemBackupOutput{Body: *run}, nil
 }
 func (h *Handler) Upload(context.Context, *UploadSystemBackupInput) (*SystemBackupOperationOutput, error) {
 	return nil, huma.Error501NotImplemented("backup.not_implemented")
 }
-func (h *Handler) Download(context.Context, *BackupIDInput) (*huma.StreamResponse, error) {
-	return nil, huma.Error501NotImplemented("backup.not_implemented")
+func (h *Handler) Download(ctx context.Context, input *BackupIDInput) (*huma.StreamResponse, error) {
+	if h.service == nil {
+		return nil, huma.Error501NotImplemented("backup.not_implemented")
+	}
+	reader, size, name, err := h.service.OpenArchive(ctx, input.ID)
+	if err != nil {
+		return nil, huma.Error404NotFound("backup.not_found")
+	}
+	return &huma.StreamResponse{Body: func(out huma.Context) {
+		defer reader.Close()
+		out.SetHeader("Content-Type", "application/octet-stream")
+		out.SetHeader("Content-Disposition", "attachment; filename=\""+name+"\"")
+		out.SetHeader("Cache-Control", "no-store")
+		out.SetHeader("Content-Length", strconv.FormatInt(size, 10))
+		_, _ = io.Copy(out.BodyWriter(), reader)
+	}}, nil
 }
 func (h *Handler) Restore(context.Context, *RestoreSystemBackupInput) (*SystemBackupOperationOutput, error) {
 	return nil, huma.Error501NotImplemented("backup.not_implemented")
 }
-func (h *Handler) Delete(context.Context, *BackupIDInput) (*SystemBackupOperationOutput, error) {
-	return nil, huma.Error501NotImplemented("backup.not_implemented")
+func (h *Handler) Delete(ctx context.Context, input *BackupIDInput) (*SystemBackupOperationOutput, error) {
+	if h.service == nil {
+		return nil, huma.Error501NotImplemented("backup.not_implemented")
+	}
+	operation, err := h.service.DeleteBackup(ctx, input.ID)
+	if errors.Is(err, ErrSystemBackupAlreadyRunning) {
+		return nil, huma.Error409Conflict("run.busy")
+	}
+	if errors.Is(err, ErrSystemBackupNotFound) {
+		return nil, huma.Error404NotFound("backup.not_found")
+	}
+	if err != nil {
+		return nil, huma.Error500InternalServerError("backup.failed")
+	}
+	return &SystemBackupOperationOutput{Body: *operation}, nil
 }
 func (h *Handler) Storage(context.Context, *struct{}) (*SystemBackupStorageOutput, error) {
-	return nil, huma.Error501NotImplemented("backup.not_implemented")
+	if h.service == nil {
+		return nil, huma.Error501NotImplemented("backup.not_implemented")
+	}
+	return &SystemBackupStorageOutput{Body: h.service.Storage()}, nil
 }
 func (h *Handler) Maintenance(context.Context, *struct{}) (*SystemBackupMaintenanceOutput, error) {
 	return nil, huma.Error501NotImplemented("backup.not_implemented")

@@ -12,8 +12,11 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/hex"
+	"io"
 	"net/url"
 	"os"
+	"os/exec"
+	"path/filepath"
 	"reflect"
 	"testing"
 	"time"
@@ -22,10 +25,15 @@ import (
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
 
+	"github.com/florianfinn/docklet-next/backend/internal/activity"
 	backupstore "github.com/florianfinn/docklet-next/backend/internal/backup"
+	"github.com/florianfinn/docklet-next/backend/internal/config"
 	"github.com/florianfinn/docklet-next/backend/internal/database"
+	backupservice "github.com/florianfinn/docklet-next/backend/internal/system/children/backup"
 	"github.com/florianfinn/docklet-next/backend/pkg/pagination"
+	activitytypes "github.com/florianfinn/docklet-next/types/activity"
 	backuptypes "github.com/florianfinn/docklet-next/types/backup"
+	usertypes "github.com/florianfinn/docklet-next/types/user"
 )
 
 func TestHubBackupFailureWritesAfterArchiveMigration(t *testing.T) {
@@ -60,18 +68,19 @@ func TestHubBackupRetentionAfterArchiveMigration(t *testing.T) {
 	store := (&SystemService{db: db}).backupStoreInternal()
 	base := time.Now().UTC().Add(-time.Hour)
 	for i, row := range []struct {
-		id, policyID, status string
-		archiveName          *string
+		id, policyID, status, trigger string
+		archiveName                   *string
 	}{
-		{"old", "daily", backuptypes.SystemBackupStatusSucceeded, new("old.dump")},
-		{"without-archive", "daily", backuptypes.SystemBackupStatusSucceeded, nil},
-		{"new", "daily", backuptypes.SystemBackupStatusSucceeded, new("new.dump")},
-		{"failed", "daily", backuptypes.SystemBackupStatusFailed, new("failed.dump")},
-		{"other-policy", "other", backuptypes.SystemBackupStatusSucceeded, new("other.dump")},
+		{"old", "daily", backuptypes.SystemBackupStatusSucceeded, backuptypes.SystemBackupTriggerScheduled, new("old.dump")},
+		{"without-archive", "daily", backuptypes.SystemBackupStatusSucceeded, backuptypes.SystemBackupTriggerScheduled, nil},
+		{"new", "daily", backuptypes.SystemBackupStatusSucceeded, backuptypes.SystemBackupTriggerScheduled, new("new.dump")},
+		{"manual", "daily", backuptypes.SystemBackupStatusSucceeded, backuptypes.SystemBackupTriggerManual, new("manual.dump")},
+		{"failed", "daily", backuptypes.SystemBackupStatusFailed, backuptypes.SystemBackupTriggerScheduled, new("failed.dump")},
+		{"other-policy", "other", backuptypes.SystemBackupStatusSucceeded, backuptypes.SystemBackupTriggerScheduled, new("other.dump")},
 	} {
 		require.NoError(t, db.Create(&SystemBackupRun{
 			BaseModel: database.BaseModel{ID: row.id}, CreatedAt: base.Add(time.Duration(i) * time.Minute),
-			Status: SystemBackupStatus(row.status), Trigger: SystemBackupTriggerManual,
+			Status: SystemBackupStatus(row.status), Trigger: SystemBackupTrigger(row.trigger),
 			PolicyID: row.policyID, ArchiveName: row.archiveName, CopyState: backuptypes.SystemBackupCopyNone,
 		}).Error)
 	}
@@ -147,6 +156,118 @@ func TestHubBackupStoreQueriesAfterArchiveMigration(t *testing.T) {
 }
 
 func newMigratedHubBackupDB(t *testing.T) *database.DB {
+	db, _ := newMigratedHubBackupDBWithURL(t)
+	return db
+}
+
+func TestHubArchiveCreateListDownloadAndGate(t *testing.T) {
+	if os.Getenv("DOCKLET_BACKUP_INTEGRATION") != "1" {
+		t.Skip("archive integration runs in the PostgreSQL 18 client image")
+	}
+	db, dsn := newMigratedHubBackupDBWithURL(t)
+	require.NoError(t, db.Exec("CREATE TABLE backup_seed (value text NOT NULL)").Error)
+	require.NoError(t, db.Exec("INSERT INTO backup_seed (value) VALUES ('example')").Error)
+	system := &SystemService{db: db}
+	dir := t.TempDir()
+	activities := activity.NewActivityService(db, nil)
+	service := backupservice.NewService(backupservice.Dependencies{
+		Store: system.backupStoreInternal(), DB: db, Activity: activities,
+		Config: &config.Config{DatabaseURL: dsn, BackupDir: dir},
+	})
+	gate, err := activities.StartGatedActivity(t.Context(), activity.GateRequest{
+		EnvironmentID: "0", Operation: "existing:example", Scope: "system-backup", Type: activitytypes.TypeResourceAction,
+	})
+	require.NoError(t, err)
+	_, err = service.StartBackup(t.Context(), usertypes.SystemUser, backuptypes.CreateSystemBackupRequest{})
+	require.ErrorIs(t, err, backupservice.ErrSystemBackupAlreadyRunning)
+	_, err = activities.CompleteActivity(gate.WorkContext, gate.Run.ID, activitytypes.StatusSuccess, "activity.success", nil)
+	require.NoError(t, err)
+	run, err := service.StartBackup(t.Context(), usertypes.SystemUser, backuptypes.CreateSystemBackupRequest{})
+	require.NoError(t, err)
+	require.NotEmpty(t, run.ActivityID)
+	require.Eventually(t, func() bool {
+		latest, err := system.backupStoreInternal().Run(t.Context(), run.ID)
+		return err == nil && latest.Status == backuptypes.SystemBackupStatusSucceeded
+	}, 30*time.Second, 100*time.Millisecond)
+	latest, err := system.backupStoreInternal().Run(t.Context(), run.ID)
+	require.NoError(t, err)
+	require.Equal(t, 18, latest.SourceServerMajor)
+	require.GreaterOrEqual(t, latest.MigrationVersion, int64(8))
+	params := pagination.QueryParams{SortParams: pagination.SortParams{Sort: "createdAt", Order: pagination.SortDesc}, Params: pagination.Params{Limit: 10}}
+	listed, _, err := service.ListBackups(t.Context(), params)
+	require.NoError(t, err)
+	require.Len(t, listed, 1)
+	reader, size, name, err := service.OpenArchive(t.Context(), run.ID)
+	require.NoError(t, err)
+	require.Equal(t, latest.Size, size)
+	require.Equal(t, latest.ArchiveName, name)
+	var signature [5]byte
+	_, err = reader.Read(signature[:])
+	require.NoError(t, err)
+	require.Equal(t, "PGDMP", string(signature[:]))
+	require.NoError(t, reader.Close())
+	command := exec.Command("pg_restore", "--list", filepath.Join(dir, name))
+	command.Stdout, command.Stderr = io.Discard, io.Discard
+	require.NoError(t, command.Run())
+	detail, err := activities.GetActivityDetail(t.Context(), "0", run.ActivityID, 20)
+	require.NoError(t, err)
+	require.Equal(t, activitytypes.StatusSuccess, detail.Activity.Status)
+	require.Empty(t, detail.Output)
+
+	policy := SystemBackupPolicy{BaseModel: database.BaseModel{ID: "daily"}, Schedule: "0 0 3 * * *", RetentionCount: 1}
+	require.NoError(t, db.Create(&policy).Error)
+	_, err = service.UpdatePolicies(t.Context(), []backuptypes.UpdateSystemBackupPolicy{{
+		ID: policy.ID, Enabled: true, Schedule: policy.Schedule, RetentionCount: policy.RetentionCount,
+	}})
+	require.NoError(t, err)
+	manual, err := service.StartBackup(t.Context(), usertypes.SystemUser, backuptypes.CreateSystemBackupRequest{PolicyID: "daily"})
+	require.NoError(t, err)
+	require.Eventually(t, func() bool {
+		stored, loadErr := system.backupStoreInternal().Run(t.Context(), manual.ID)
+		return loadErr == nil && stored.Status == backuptypes.SystemBackupStatusSucceeded
+	}, 30*time.Second, 100*time.Millisecond)
+	first, err := service.CreateBackup(t.Context(), usertypes.SystemUser, backuptypes.SystemBackupTriggerScheduled,
+		backuptypes.CreateSystemBackupRequest{PolicyID: "daily"})
+	require.NoError(t, err)
+	second, err := service.CreateBackup(t.Context(), usertypes.SystemUser, backuptypes.SystemBackupTriggerScheduled,
+		backuptypes.CreateSystemBackupRequest{PolicyID: "daily"})
+	require.NoError(t, err)
+	_, err = system.backupStoreInternal().Run(t.Context(), first.ID)
+	require.Error(t, err)
+	_, err = system.backupStoreInternal().Run(t.Context(), manual.ID)
+	require.NoError(t, err)
+	secondFile, _, _, err := service.OpenArchive(t.Context(), second.ID)
+	require.NoError(t, err)
+	require.NoError(t, secondFile.Close())
+
+	wrong, err := url.Parse(dsn)
+	require.NoError(t, err)
+	wrong.User = url.UserPassword("docklet", "wrong")
+	failedService := backupservice.NewService(backupservice.Dependencies{
+		Store: system.backupStoreInternal(), DB: db, Activity: activities,
+		Config: &config.Config{DatabaseURL: wrong.String(), BackupDir: dir},
+	})
+	failed, err := failedService.StartBackup(t.Context(), usertypes.SystemUser, backuptypes.CreateSystemBackupRequest{})
+	require.NoError(t, err)
+	require.Eventually(t, func() bool {
+		stored, loadErr := system.backupStoreInternal().Run(t.Context(), failed.ID)
+		return loadErr == nil && stored.Status == backuptypes.SystemBackupStatusFailed
+	}, 30*time.Second, 100*time.Millisecond)
+	failedDetail, err := activities.GetActivityDetail(t.Context(), "0", failed.ActivityID, 20)
+	require.NoError(t, err)
+	require.Equal(t, activitytypes.StatusFailed, failedDetail.Activity.Status)
+	require.NotContains(t, failedDetail.Activity.LatestMessage, "wrong")
+	require.Empty(t, failedDetail.Output)
+	deleted, err := service.DeleteBackup(t.Context(), second.ID)
+	require.NoError(t, err)
+	require.Equal(t, string(activitytypes.StatusSuccess), deleted.Status)
+	_, err = system.backupStoreInternal().Run(t.Context(), second.ID)
+	require.Error(t, err)
+	_, err = os.Stat(filepath.Join(dir, second.ArchiveName))
+	require.ErrorIs(t, err, os.ErrNotExist)
+}
+
+func newMigratedHubBackupDBWithURL(t *testing.T) (*database.DB, string) {
 	t.Helper()
 	dsn := os.Getenv("DATABASE_URL")
 	require.NotEmpty(t, dsn, "DATABASE_URL must point to the test PostgreSQL service")
@@ -167,5 +288,5 @@ func newMigratedHubBackupDB(t *testing.T) *database.DB {
 	db, err := database.Initialize(t.Context(), parsed.String(), database.MigrationOptions{})
 	require.NoError(t, err)
 	t.Cleanup(func() { require.NoError(t, db.Close()) })
-	return db
+	return db, parsed.String()
 }

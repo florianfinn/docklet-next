@@ -1,0 +1,7 @@
+# The Hub image consumes only Go source and the checked-in frontend placeholder.
+.git
+**/node_modules
+**/.env
+**/.env.*
+**/*.test
+**/.cache

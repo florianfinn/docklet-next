@@ -64,6 +64,19 @@ jobs:
             types/go.sum
             third_party/arcane/**/go.sum
             third_party/francis/go.sum
+      - name: Compile archive integration for PostgreSQL 18 client image
+        working-directory: backend
+        run: CGO_ENABLED=0 go test -c -tags=postgres_integration -o hub-backup.test ./internal/system
+      - name: Run archive integration with PostgreSQL 18 client tools
+        env:
+          DOCKER_HOST: unix:///var/run/docker.sock
+        run: |
+          docker run --rm --network host --label t3.project=docklet-next \
+            -e DATABASE_URL -e DOCKLET_BACKUP_INTEGRATION=1 -e DOCKER_HOST=unix:///nonexistent.sock \
+            -v "$GITHUB_WORKSPACE/backend:/work:ro" -w /work \
+            --entrypoint /work/hub-backup.test \
+            postgres:18.6-alpine@sha256:77f585114c32fbca283dc835b0596f4e52b51b4c6662d7810b2f4084f60a1873 \
+            -test.run '^TestHubArchiveCreateListDownloadAndGate$' -test.v
       - name: Isolate PostgreSQL tests from Docker daemons
         run: |
           declare -A seen=()
@@ -90,9 +103,22 @@ jobs:
               if test -S "$socket"; then sudo chmod "$mode" "$socket"; fi
             done < "$RUNNER_TEMP/postgres-docker-socket-modes"
           fi
+  hub-image:
+    needs: scope
+    if: needs.scope.outputs.value != 'text'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Build Hub image
+        run: docker build --label t3.project=docklet-next -f deploy/hub/Dockerfile -t docklet-next-hub:check .
+      - name: Check PostgreSQL client major
+        run: docker run --rm --label t3.project=docklet-next --entrypoint pg_dump docklet-next-hub:check --version | grep -E 'PostgreSQL\) 18\.'
   checks:
     name: checks
-    needs: [scope, postgres-integration]
+    needs: [scope, postgres-integration, hub-image]
     if: always()
     timeout-minutes: 15
     runs-on: ubuntu-24.04
@@ -104,6 +130,9 @@ jobs:
       - name: Require successful PostgreSQL integration
         if: needs.scope.outputs.value != 'text'
         run: test '${{ needs.postgres-integration.result }}' = success
+      - name: Require successful Hub image
+        if: needs.scope.outputs.value != 'text'
+        run: test '${{ needs.hub-image.result }}' = success
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
