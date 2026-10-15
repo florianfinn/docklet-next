@@ -55,10 +55,12 @@ export function createHttpAdapter(options: HttpAdapterOptions = {}): DockletAdap
   let source: Source | undefined;
   let currentRuns: CodedActionRun[] | undefined;
   let lastEventId: number | undefined;
-  let refreshVersion = 0;
   let subscriptionVersion = 0;
-  let fullRead: Promise<void> | undefined;
-  const runVersions = new Map<string, number>();
+  let readSequence = 0;
+  let lastFullSequence = 0;
+  // Reads apply per run only when they started after its last applied read.
+  // Full reads record removals, so older results cannot restore absent runs.
+  const appliedRunSequences = new Map<string, number>();
   let sourceOpen = false;
   let reconnectTimer: ReturnType<typeof setTimeout> | undefined;
 
@@ -134,29 +136,39 @@ export function createHttpAdapter(options: HttpAdapterOptions = {}): DockletAdap
 
   function refreshRuns(): void {
     if (actionListeners.size === 0) return;
-    const version = ++refreshVersion;
-    const pending = loadActions().then((runs) => {
-      if (version === refreshVersion && actionListeners.size) {
-        currentRuns = runs;
-        actionListeners.forEach((listener) => listener(runs));
+    const sequence = ++readSequence;
+    const generation = subscriptionVersion;
+    void loadActions().then((runs) => {
+      if (generation !== subscriptionVersion || !actionListeners.size) return;
+      const merged = new Map(currentRuns?.map((run) => [run.id, run]));
+      const incoming = new Set(runs.map((run) => run.id));
+      const canApply = (id: string) => sequence > Math.max(appliedRunSequences.get(id) ?? 0, lastFullSequence);
+      for (const run of runs) {
+        if (!canApply(run.id)) continue;
+        merged.set(run.id, run);
+        appliedRunSequences.set(run.id, sequence);
       }
+      for (const id of merged.keys()) {
+        if (incoming.has(id) || !canApply(id)) continue;
+        merged.delete(id);
+        appliedRunSequences.set(id, sequence);
+      }
+      lastFullSequence = Math.max(lastFullSequence, sequence);
+      currentRuns = [...merged.values()].sort((a, b) => Date.parse(b.startedAt) - Date.parse(a.startedAt));
+      actionListeners.forEach((listener) => listener(currentRuns!));
     }).catch((error) => { window.dispatchEvent(new CustomEvent("docklet:adapter-error", { detail: error })); });
-    fullRead = pending;
-    void pending.then(() => { if (fullRead === pending) fullRead = undefined; });
   }
 
   function refreshRun(activityId: string, environmentId?: string): void {
     const previous = currentRuns?.find((run) => run.id === activityId);
     if (!previous || !environmentId || previous.hostId !== environmentId) { refreshRuns(); return; }
     const generation = subscriptionVersion;
-    const version = (runVersions.get(activityId) ?? 0) + 1;
-    runVersions.set(activityId, version);
-    void read("get-activity", `/environments/${encodeURIComponent(environmentId)}/activities/${encodeURIComponent(activityId)}`, { limit: 500 }).then(async (body) => {
+    const sequence = ++readSequence;
+    void read("get-activity", `/environments/${encodeURIComponent(environmentId)}/activities/${encodeURIComponent(activityId)}`, { limit: 500 }).then((body) => {
       if (!body.data || body.data.activity?.id !== activityId) throw classifiedError({ code: "get-activity.invalid-detail" });
       const updated = mapActivityDetail(body.data);
-      // A full snapshot must publish before a concurrent detail refresh changes one run.
-      while (fullRead) await fullRead;
-      if (generation !== subscriptionVersion || version !== runVersions.get(activityId) || !currentRuns?.some((run) => run.id === activityId)) return;
+      if (generation !== subscriptionVersion || sequence <= Math.max(appliedRunSequences.get(activityId) ?? 0, lastFullSequence) || !currentRuns?.some((run) => run.id === activityId)) return;
+      appliedRunSequences.set(activityId, sequence);
       currentRuns = currentRuns.map((run) => run.id === activityId ? updated : run);
       actionListeners.forEach((listener) => listener(currentRuns!));
       if (updated.status !== "queued" && updated.status !== "running") refreshRuns();
@@ -237,9 +249,9 @@ export function createHttpAdapter(options: HttpAdapterOptions = {}): DockletAdap
     source?.close();
     source = undefined;
     sourceOpen = false;
-    ++refreshVersion;
     ++subscriptionVersion;
-    runVersions.clear();
+    lastFullSequence = 0;
+    appliedRunSequences.clear();
   }
 
   const unsupported = createDisconnectedAdapter();

@@ -91,6 +91,36 @@ class FakeSource {
   send(value: unknown, id = "") { this.onmessage?.({ data: JSON.stringify(value), lastEventId: id } as MessageEvent); }
 }
 
+function heldRunBackend() {
+  const b = backend();
+  const held: Array<() => void> = [];
+  let hold = false;
+  const fetcher = vi.fn(async (input: string | URL | Request) => {
+    if (hold && new URL(String(input), "https://example.test").pathname.endsWith(`/activities/${activity.id}`)) {
+      const response = ok(structuredClone(b.state.detail));
+      await new Promise<void>((resolve) => { held.push(resolve); });
+      return response;
+    }
+    return b.fetcher(input);
+  });
+  const source = new FakeSource();
+  const http = createHttpAdapter({ fetch: fetcher as typeof fetch, eventSource: () => source as unknown as EventSource });
+  const runs = vi.fn<(runs: CodedActionRun[]) => void>();
+  const stop = http.subscribeActions(runs);
+  const start = async () => {
+    source.open();
+    await waitFor(() => expect(runs.mock.lastCall?.[0][0]?.status).toBe("succeeded"));
+    hold = true;
+  };
+  const read = async (kind: "S" | "F", status: "queued" | "running", count: number) => {
+    b.state.detail.activity.status = status;
+    if (kind === "S") source.send({ channel: "activities", activity: { type: "updated", activityId: activity.id, environmentId: "0" }, timestamp: later });
+    else source.open();
+    await waitFor(() => expect(held).toHaveLength(count));
+  };
+  return { state: b.state, source, held, runs, stop, start, read };
+}
+
 afterEach(() => { vi.restoreAllMocks(); simulationStore.reset(); localStorage.clear(); });
 
 function RecordedOutputList({ initial, onChange }: { initial: CodedActionRun[]; onChange: (update: (runs: CodedActionRun[]) => void) => void }) {
@@ -271,6 +301,43 @@ describe("#38 adapter contract matrix", () => {
     stop();
   });
 
+  it.each([
+    ["S completes before F starts", ["S", "F"], ["S", "F"]],
+    ["F completes before S starts", ["F", "S"], ["F", "S"]],
+    ["S starts before F and completes after F", ["S", "F"], ["F", "S"]],
+    ["F starts before S and completes after S", ["F", "S"], ["S", "F"]],
+  ] as const)("7 applies the last-started read when %s", async (_, starts, finishes) => {
+    const b = heldRunBackend();
+    await b.start();
+    const status = (kind: "S" | "F") => kind === "S" ? "running" as const : "queued" as const;
+    const startRead = (kind: "S" | "F", count: number) => b.read(kind, status(kind), count);
+    const release = async (kind: "S" | "F", expected: "S" | "F") => {
+      b.held[starts.indexOf(kind)]!();
+      await waitFor(() => expect(b.runs.mock.lastCall?.[0][0]?.status).toBe(status(expected)));
+    };
+    await startRead(starts[0], 1);
+    if (starts[0] === finishes[0]) await release(finishes[0], finishes[0]);
+    await startRead(starts[1], 2);
+    if (starts[0] !== finishes[0]) await release(finishes[0], finishes[0]);
+    await release(finishes[1], starts[1]);
+    await new Promise<void>((resolve) => setTimeout(resolve, 0));
+    expect(b.runs.mock.lastCall?.[0][0]?.status).toBe(status(starts[1]));
+    b.stop();
+  });
+
+  it("7 does not resurrect a run removed by a newer full read", async () => {
+    const b = heldRunBackend();
+    await b.start();
+    await b.read("S", "running", 1);
+    b.state.list = [];
+    b.source.open();
+    await waitFor(() => expect(b.runs.mock.lastCall?.[0]).toEqual([]));
+    b.held[0]!();
+    await new Promise<void>((resolve) => setTimeout(resolve, 0));
+    expect(b.runs.mock.lastCall?.[0]).toEqual([]);
+    b.stop();
+  });
+
   it("7 reconnects a CLOSED source, re-reads once, and stops retries after unsubscribe", async () => {
     const b = backend();
     const sources: FakeSource[] = [];
@@ -291,10 +358,17 @@ describe("#38 adapter contract matrix", () => {
     sources[1]!.open();
     await waitFor(() => expect(runs.mock.lastCall?.[0][0].status).toBe("running"));
     expect(b.requests.filter((path) => path.endsWith("/run-dns-1"))).toHaveLength(2);
-    sources[1]!.failClosed();
-    stop();
-    await new Promise((resolve) => setTimeout(resolve, 350));
-    expect(sources).toHaveLength(2);
+    vi.useFakeTimers();
+    try {
+      sources[1]!.failClosed();
+      expect(vi.getTimerCount()).toBe(1);
+      stop();
+      expect(vi.getTimerCount()).toBe(0);
+      await vi.advanceTimersByTimeAsync(350);
+      expect(sources).toHaveLength(2);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("8 selects HTTP for production and has no simulated output marker", async () => {
