@@ -27,6 +27,10 @@ func (s *ActivityService) CancelActivity(ctx context.Context, environmentID, act
 	}
 	environmentID = cmp.Or(strings.TrimSpace(environmentID), "0")
 	s.runningMu.Lock()
+	if s.sealed[activityID] {
+		s.runningMu.Unlock()
+		return nil, ErrActivityNotCancelable
+	}
 	var model Activity
 	err := s.db.WithContext(ctx).Where("id = ? AND environment_id = ?", activityID, environmentID).First(&model).Error
 	if err != nil {

@@ -43,7 +43,10 @@ func RegisterRoutes(api huma.API, h *Handler) {
 			Type: "string", Format: "binary", MaxLength: &maxArchiveBytes,
 		}},
 	}}
-	middleware.RegisterWithPermission(api, upload, authz.PermSystemBackupsRestore, h.Upload)
+	upload.Metadata = map[string]any{authz.MetaRequiredPermission: authz.PermSystemBackupsRestore}
+	upload.Middlewares = append(upload.Middlewares, middleware.RequirePermission(api, authz.PermSystemBackupsRestore)...)
+	upload.Middlewares = append(upload.Middlewares, h.streamUploadMiddleware(api)...)
+	huma.Register(api, upload, h.Upload)
 	download := op("download-system-backup", http.MethodGet, "/backups/{id}/download", "Download a Hub database archive")
 	download.Responses = map[string]*huma.Response{"200": {
 		Description: "PostgreSQL custom-format archive",

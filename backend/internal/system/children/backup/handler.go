@@ -18,6 +18,7 @@ import (
 
 	"github.com/florianfinn/docklet-next/backend/internal/activity"
 	sharedbackup "github.com/florianfinn/docklet-next/backend/internal/backup"
+	"github.com/florianfinn/docklet-next/backend/internal/middleware"
 	userdomain "github.com/florianfinn/docklet-next/backend/internal/user"
 	"github.com/florianfinn/docklet-next/backend/pkg/utils/handlerutil"
 	usertypes "github.com/florianfinn/docklet-next/types/user"
@@ -149,8 +150,12 @@ func (h *Handler) Create(ctx context.Context, input *CreateSystemBackupInput) (*
 	}
 	return &SystemBackupOutput{Body: *run}, nil
 }
-func (h *Handler) Upload(context.Context, *UploadSystemBackupInput) (*SystemBackupOperationOutput, error) {
-	return nil, huma.Error501NotImplemented("backup.not_implemented")
+func (h *Handler) Upload(ctx context.Context, _ *UploadSystemBackupInput) (*SystemBackupOperationOutput, error) {
+	operation, ok := ctx.Value(uploadResultKey{}).(*backup.SystemBackupOperation)
+	if !ok || operation == nil {
+		return nil, huma.Error501NotImplemented("backup.not_implemented")
+	}
+	return &SystemBackupOperationOutput{Body: *operation}, nil
 }
 func (h *Handler) Download(ctx context.Context, input *BackupIDInput) (*huma.StreamResponse, error) {
 	if h.service == nil {
@@ -169,8 +174,29 @@ func (h *Handler) Download(ctx context.Context, input *BackupIDInput) (*huma.Str
 		_, _ = io.Copy(out.BodyWriter(), reader)
 	}}, nil
 }
-func (h *Handler) Restore(context.Context, *RestoreSystemBackupInput) (*SystemBackupOperationOutput, error) {
-	return nil, huma.Error501NotImplemented("backup.not_implemented")
+func (h *Handler) Restore(ctx context.Context, input *RestoreSystemBackupInput) (*SystemBackupOperationOutput, error) {
+	if h.service == nil {
+		return nil, huma.Error501NotImplemented("backup.not_implemented")
+	}
+	actor := usertypes.Actor{}
+	if current, ok := userdomain.CurrentUserFromContext(ctx); ok && current != nil {
+		actor = *current.Actor()
+	}
+	keyID, _ := ctx.Value(middleware.ContextKeyApiKeyID).(string)
+	operation, err := h.service.StartRestore(ctx, actor, keyID, input.ID, input.Body.ConfirmBackupID)
+	switch {
+	case errors.Is(err, ErrSystemBackupNotFound):
+		return nil, huma.Error404NotFound("backup.not_found")
+	case errors.Is(err, ErrSystemBackupAlreadyRunning):
+		return nil, huma.Error409Conflict("run.busy")
+	case errors.Is(err, errInvalidArchive), errors.Is(err, errArchiveMajor), errors.Is(err, errMigration):
+		return nil, huma.Error422UnprocessableEntity(uploadErrorCode(err))
+	case errors.Is(err, ErrSystemBackupUnavailable):
+		return nil, huma.Error503ServiceUnavailable("backup.storage_unavailable")
+	case err != nil:
+		return nil, huma.Error500InternalServerError("backup.restore_failed")
+	}
+	return &SystemBackupOperationOutput{Body: *operation}, nil
 }
 func (h *Handler) Delete(ctx context.Context, input *BackupIDInput) (*SystemBackupOperationOutput, error) {
 	if h.service == nil {
@@ -195,5 +221,8 @@ func (h *Handler) Storage(context.Context, *struct{}) (*SystemBackupStorageOutpu
 	return &SystemBackupStorageOutput{Body: h.service.Storage()}, nil
 }
 func (h *Handler) Maintenance(context.Context, *struct{}) (*SystemBackupMaintenanceOutput, error) {
-	return nil, huma.Error501NotImplemented("backup.not_implemented")
+	if h.service == nil {
+		return nil, huma.Error501NotImplemented("backup.not_implemented")
+	}
+	return &SystemBackupMaintenanceOutput{Body: h.service.MaintenanceGate().Status()}, nil
 }

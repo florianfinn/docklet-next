@@ -292,7 +292,7 @@ func registerJobs(params registerJobsParams) error {
 	// absent from job_metadata so it stays out of the Jobs UI.
 
 	// Environment health registers one dynamic job for each environment.
-	if err := registerDynamicJobs(dynamicJobsParams{
+	dynamic := dynamicJobsParams{
 		AppCtx:      params.AppCtx,
 		Config:      params.Config,
 		Scheduler:   params.Scheduler,
@@ -301,8 +301,14 @@ func registerJobs(params registerJobsParams) error {
 		Volume:      params.Volume,
 		System:      params.System,
 		Admission:   params.Admission,
-	}); err != nil {
+	}
+	if err := registerDynamicJobs(dynamic); err != nil {
 		return err
+	}
+	if !params.Config.AgentMode && params.System != nil {
+		params.System.SetRestoreSchedulerRefresh(func(ctx context.Context) error {
+			return refreshDynamicJobsAfterRestore(ctx, dynamic)
+		})
 	}
 
 	if err := setupSettingsSubscriptionsInternal(settingsSubscriptionsParams{

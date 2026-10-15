@@ -47,6 +47,10 @@ type Coordinator struct {
 	observer     st.RunObserver
 	observerMu   sync.Mutex
 	location     *time.Location
+	paused       bool
+	work         map[uint64]context.CancelFunc
+	workNext     uint64
+	workers      sync.WaitGroup
 }
 
 // Submit persists acceptance before waking the dispatcher. Run IDs deduplicate
@@ -58,6 +62,9 @@ func (q *Coordinator) Submit(ctx context.Context, request st.Request) (st.Run, e
 	defer q.mu.Unlock()
 	if q.stopping {
 		return st.Run{}, errors.New("job queue is stopping")
+	}
+	if q.paused {
+		return st.Run{}, errors.New("job queue is paused")
 	}
 	request.EnvironmentID = cmp.Or(request.EnvironmentID, "0")
 	if request.JobID == "" {
@@ -281,6 +288,59 @@ func (q *Coordinator) Stop(ctx context.Context) error {
 		return nil
 	case <-ctx.Done():
 		return ctx.Err()
+	}
+}
+
+// PauseAndDrain stops admission and dispatch, cancels local executions, and
+// waits until their database writes have finished before restore begins.
+func (q *Coordinator) PauseAndDrain(ctx context.Context) error {
+	q.mu.Lock()
+	q.paused = true
+	q.enabled.Store(false)
+	for _, cancel := range q.work {
+		cancel()
+	}
+	q.mu.Unlock()
+	done := make(chan struct{})
+	go func() { q.workers.Wait(); close(done) }()
+	select {
+	case <-done:
+		return nil
+	case <-ctx.Done():
+		return ctx.Err()
+	}
+}
+
+func (q *Coordinator) Resume() {
+	q.mu.Lock()
+	if !q.stopping {
+		q.paused = false
+		q.enabled.Store(true)
+	}
+	q.mu.Unlock()
+	q.signalInternal()
+}
+
+func (q *Coordinator) trackRestoreWorkerInternal(ctx context.Context) (context.Context, bool, func()) {
+	q.mu.Lock()
+	defer q.mu.Unlock()
+	if q.paused || !q.enabled.Load() {
+		return nil, false, nil
+	}
+	workCtx, cancel := context.WithCancel(ctx)
+	q.workNext++
+	id := q.workNext
+	if q.work == nil {
+		q.work = make(map[uint64]context.CancelFunc)
+	}
+	q.work[id] = cancel
+	q.workers.Add(1)
+	return workCtx, true, func() {
+		cancel()
+		q.mu.Lock()
+		delete(q.work, id)
+		q.mu.Unlock()
+		q.workers.Done()
 	}
 }
 

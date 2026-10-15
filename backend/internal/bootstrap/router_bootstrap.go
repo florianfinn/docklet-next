@@ -211,6 +211,21 @@ func newRouter(p RouterParams) (*echo.Echo, *edge.TunnelServer) {
 	e.Use(echomiddleware.RequestID())
 	e.Use(requestLoggerMiddlewareInternal())
 	e.Use(secureCookieContextMiddlewareInternal(trustedProxyNets))
+	if hubMode && deps.System != nil {
+		if gate := deps.System.Service().BackupMaintenanceGate(); gate != nil {
+			e.Use(func(next echo.HandlerFunc) echo.HandlerFunc {
+				return func(c *echo.Context) error {
+					// The restore request has completed before its worker enters maintenance.
+					release, err := gate.Admit()
+					if err != nil {
+						return c.JSON(http.StatusServiceUnavailable, map[string]string{"code": "backup.maintenance"})
+					}
+					defer release()
+					return next(c)
+				}
+			})
+		}
+	}
 
 	authMiddleware := p.AuthMiddleware
 	e.Use(middleware.NewCORSMiddleware(cfg).Add())

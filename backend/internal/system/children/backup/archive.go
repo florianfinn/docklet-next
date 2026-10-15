@@ -269,3 +269,16 @@ func archiveContextError(ctx context.Context) error {
 	}
 	return nil
 }
+
+func (s *Service) backupDir() string {
+	if s.config != nil && s.config.BackupDir != "" {
+		return s.config.BackupDir
+	}
+	return "/var/lib/docklet/backups"
+}
+func (s *Service) SupportedDatabaseProvider() bool {
+	if s.config == nil || s.config.DatabaseURL == "" {
+		return false
+	}
+	return archiveToolsAvailable() && storageAvailable(s.backupDir()) == nil
+}

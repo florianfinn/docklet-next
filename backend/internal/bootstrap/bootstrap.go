@@ -37,6 +37,7 @@ import (
 	"github.com/florianfinn/docklet-next/backend/internal/project"
 	"github.com/florianfinn/docklet-next/backend/internal/role"
 	"github.com/florianfinn/docklet-next/backend/internal/settings"
+	hubbackup "github.com/florianfinn/docklet-next/backend/internal/system/children/backup"
 	"github.com/florianfinn/docklet-next/backend/internal/user"
 	"github.com/florianfinn/docklet-next/backend/internal/volume"
 	"github.com/florianfinn/docklet-next/backend/internal/vulnerability"
@@ -78,6 +79,10 @@ func Bootstrap(ctx context.Context) error {
 	if cfg.AgentMode {
 		db, err = initializeDBAndMigrateInternal(appCtx, cfg)
 	} else {
+		if markerErr := hubbackup.CheckRestoreMarker(cfg.BackupDir); markerErr != nil {
+			cancelApp()
+			return markerErr
+		}
 		db, err = database.InitializeHub(appCtx, cfg.DatabaseURL, database.MigrationOptions{})
 	}
 	if err != nil {

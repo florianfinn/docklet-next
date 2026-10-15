@@ -63,6 +63,24 @@ func InitializeHub(ctx context.Context, databaseURL string, options MigrationOpt
 	return initializeInternal(ctx, databaseURL, options, true)
 }
 
+// OpenHubForRestore takes the single-hub lock without creating schema objects.
+// The offline command uses this against an empty replacement database.
+func OpenHubForRestore(ctx context.Context, databaseURL string) (*DB, error) {
+	db, err := connectDatabaseInternal(ctx, databaseURL)
+	if err != nil {
+		return nil, err
+	}
+	pool, err := db.SQLDB()
+	if err == nil {
+		db.hubLock, err = acquireHubLock(ctx, pool)
+	}
+	if err != nil {
+		_ = db.Close()
+		return nil, err
+	}
+	return db, nil
+}
+
 func initializeInternal(ctx context.Context, databaseURL string, options MigrationOptions, hub bool) (database *DB, err error) {
 	db, err := connectDatabaseInternal(ctx, databaseURL)
 	if err != nil {
@@ -156,6 +174,20 @@ func migrateDatabaseInternal(ctx context.Context, db *sql.DB, dbProvider string,
 	}
 
 	return migrateDatabaseToVersionInternal(ctx, db, dbProvider, options, requiredVersion)
+}
+
+// LatestMigrationVersion is the upper bound accepted from a Hub archive.
+func LatestMigrationVersion() (int64, error) {
+	return getHighestEmbeddedMigrationVersionInternal(dbProviderPostgres)
+}
+
+// Migrate applies only forward migrations to an already opened Hub database.
+func (db *DB) Migrate(ctx context.Context) error {
+	pool, err := db.SQLDB()
+	if err != nil {
+		return err
+	}
+	return migrateDatabaseInternal(ctx, pool, dbProviderPostgres, MigrationOptions{})
 }
 
 func migrateDatabaseToVersionInternal(ctx context.Context, db *sql.DB, dbProvider string, _ MigrationOptions, requiredVersion int64) error {
@@ -316,4 +348,26 @@ func (db *DB) Close() error {
 
 func (db *DB) SQLDB() (*sql.DB, error) {
 	return db.DB.DB()
+}
+
+// SuspendOrdinaryConnections closes idle pool sessions and leaves only the
+// pinned hub-lock session while pg_restore owns database replacement.
+func (db *DB) SuspendOrdinaryConnections() error {
+	pool, err := db.SQLDB()
+	if err != nil {
+		return err
+	}
+	pool.SetMaxIdleConns(0)
+	pool.SetMaxOpenConns(1)
+	return nil
+}
+
+func (db *DB) ResumeOrdinaryConnections() error {
+	pool, err := db.SQLDB()
+	if err != nil {
+		return err
+	}
+	pool.SetMaxOpenConns(50)
+	pool.SetMaxIdleConns(15)
+	return nil
 }

@@ -178,6 +178,10 @@ func (s *SettingsService) refreshSettingsCacheInternal(ctx context.Context) erro
 	return nil
 }
 
+func (s *SettingsService) RefreshAfterRestore(ctx context.Context) error {
+	return s.refreshSettingsCacheInternal(ctx)
+}
+
 func (s *SettingsService) getDefaultSettings() *Settings {
 	return DefaultSettingsConfig()
 }

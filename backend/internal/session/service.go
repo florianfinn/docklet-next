@@ -142,6 +142,15 @@ func (s *SessionService) RevokeSession(ctx context.Context, sessionID string) er
 	return nil
 }
 
+// RevokeAllSessions invalidates every session in a restored database before
+// HTTP admission resumes, including the session that requested restore.
+func (s *SessionService) RevokeAllSessions(ctx context.Context) error {
+	now := time.Now().UTC()
+	return s.db.WithContext(ctx).Model(&UserSession{}).
+		Where("revoked_at IS NULL").
+		Updates(map[string]any{"revoked_at": now, "updated_at": now}).Error
+}
+
 func (s *SessionService) DeleteExpiredSessions(ctx context.Context, revokedRetention time.Duration) (int64, error) {
 	now := time.Now()
 	revokedCutoff := now.Add(-revokedRetention)

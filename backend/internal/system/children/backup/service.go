@@ -22,10 +22,12 @@ import (
 	usertypes "github.com/florianfinn/docklet-next/types/user"
 
 	"github.com/florianfinn/docklet-next/backend/internal/activity"
+	"github.com/florianfinn/docklet-next/backend/internal/auth"
 	sharedbackup "github.com/florianfinn/docklet-next/backend/internal/backup"
 	"github.com/florianfinn/docklet-next/backend/internal/config"
 	"github.com/florianfinn/docklet-next/backend/internal/database"
 	dockerInternal "github.com/florianfinn/docklet-next/backend/internal/docker"
+	"github.com/florianfinn/docklet-next/backend/internal/role"
 	"github.com/florianfinn/docklet-next/backend/internal/settings"
 	"github.com/florianfinn/docklet-next/backend/internal/system/children/backup/children/volumes"
 	"github.com/florianfinn/docklet-next/backend/internal/volume"
@@ -77,6 +79,9 @@ type Dependencies struct {
 	Settings     *settings.SettingsService
 	Config       *config.Config
 	RecoveryKeys *sharedbackup.RecoveryKeyStore
+	Auth         *auth.AuthService
+	Roles        *role.RoleService
+	Coordinator  *runs.Coordinator
 }
 
 type Service struct {
@@ -89,12 +94,20 @@ type Service struct {
 	volumeService   *volume.VolumeService
 	jobs            *entityjobs.Registry
 	volumes         *volumes.Service
+	maintenance     *MaintenanceGate
+	auth            *auth.AuthService
+	roles           *role.RoleService
+	coordinator     *runs.Coordinator
+	settings        *settings.SettingsService
+	exitUnready     context.CancelFunc
+	refreshJobs     func(context.Context) error
 }
 
 func NewService(deps Dependencies) *Service {
 	s := &Service{store: deps.Store, db: deps.DB, engine: deps.Engine, activityService: deps.Activity,
 		config: deps.Config, recoveryKeys: deps.RecoveryKeys, volumeService: deps.Volumes,
-		jobs: entityjobs.New("system-backup:", sharedbackup.SystemAdmissionScope)}
+		jobs: entityjobs.New("system-backup:", sharedbackup.SystemAdmissionScope), maintenance: NewMaintenanceGate(),
+		auth: deps.Auth, roles: deps.Roles, coordinator: deps.Coordinator, settings: deps.Settings}
 	s.volumes = volumes.NewService(volumes.Dependencies{
 		DB: deps.DB, Engine: deps.Engine, Volumes: deps.Volumes, Activity: deps.Activity,
 		Settings: deps.Settings, Jobs: s.jobs, AcquireRun: s.acquireRunInternal,
@@ -126,19 +139,6 @@ func (s *Service) acquireDurableRunInternal(ctx context.Context, runID string) (
 		return nil, ErrSystemBackupAlreadyRunning
 	}
 	return lease, nil
-}
-
-func (s *Service) backupDir() string {
-	if s.config != nil && s.config.BackupDir != "" {
-		return s.config.BackupDir
-	}
-	return "/var/lib/docklet/backups"
-}
-func (s *Service) SupportedDatabaseProvider() bool {
-	if s.config == nil || s.config.DatabaseURL == "" {
-		return false
-	}
-	return archiveToolsAvailable() && storageAvailable(s.backupDir()) == nil
 }
 
 func (s *Service) ListBackups(ctx context.Context, params pagination.QueryParams) ([]backuptypes.SystemBackupRun, pagination.Response, error) {

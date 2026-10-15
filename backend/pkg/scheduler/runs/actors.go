@@ -362,6 +362,12 @@ func (a *executorActorInternal) Job(ctx context.Context, _ string, data actor.En
 	if !q.enabled.Load() {
 		return actor.ErrJobRejected
 	}
+	workCtx, admitted, release := q.trackRestoreWorkerInternal(ctx)
+	if !admitted {
+		return actor.ErrJobRejected
+	}
+	defer release()
+	ctx = workCtx
 	var command st.ExecutionCommand
 	if err := data.Decode(&command); err != nil {
 		return errors.Join(err, actor.ErrJobPermanentFailure)
