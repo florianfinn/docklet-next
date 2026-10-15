@@ -1,5 +1,5 @@
 // Source: api/openapi.json
-// Revision: 3dc474068496a9497d1c20606dbc8e381daf95156aa359fe2e75cd7afc5b342b
+// Revision: 7a4b182576a70707668b3aca1195802901555a65b5f052f4d6a05370799eff3c
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
 // Deviations: Generated TypeScript declarations from the local Huma export.
@@ -485,7 +485,10 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Import a completed archive upload */
+        /**
+         * Upload and import a Hub database archive
+         * @description Stream one PostgreSQL custom-format archive as application/octet-stream, up to 2 GiB.
+         */
         post: operations["import-system-backup-upload"];
         delete?: never;
         options?: never;
@@ -4742,8 +4745,13 @@ export interface components {
              * @example /api/schemas/BackupSystemBackupStorage.json
              */
             readonly $schema?: string;
+            available: boolean;
             /** Format: int64 */
             freeBytes: number;
+            /** Format: int64 */
+            maxArchiveBytes: number;
+            /** @enum {string} */
+            reasonCode?: "backup.tools_unavailable" | "backup.storage_unavailable";
             /** Format: int64 */
             usedBytes: number;
         };
@@ -4827,15 +4835,6 @@ export interface components {
             selectionMode: string;
             stopContainers?: boolean;
             volumeNames: string[] | null;
-        };
-        BackupUploadSystemBackupRequest: {
-            /**
-             * Format: uri
-             * @description A URL to the JSON Schema for this object.
-             * @example /api/schemas/BackupUploadSystemBackupRequest.json
-             */
-            readonly $schema?: string;
-            uploadId: string;
         };
         BaseApiResponseActivityActivity: {
             /**
@@ -11655,7 +11654,7 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["BackupUploadSystemBackupRequest"];
+                "application/octet-stream": string;
             };
         };
         responses: {

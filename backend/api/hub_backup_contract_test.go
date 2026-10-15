@@ -45,6 +45,12 @@ func TestHubBackupArchiveContract(t *testing.T) {
 	require.NotNil(t, spec.Paths["/backups/volumes/run"])
 	download := spec.Paths["/backups/{id}/download"].Get.Responses["200"]
 	require.NotNil(t, download.Content["application/octet-stream"])
+	upload := spec.Paths["/backups/upload"].Post.RequestBody
+	require.NotNil(t, upload)
+	require.NotNil(t, upload.Content["application/octet-stream"])
+	require.Nil(t, upload.Content["application/json"])
+	require.Equal(t, "binary", upload.Content["application/octet-stream"].Schema.Format)
+	require.Equal(t, 2147483648, *upload.Content["application/octet-stream"].Schema.MaxLength)
 
 	run := spec.Components.Schemas.Map()["BackupSystemBackupRun"]
 	require.NotNil(t, run)
@@ -55,4 +61,10 @@ func TestHubBackupArchiveContract(t *testing.T) {
 		require.NotContains(t, run.Properties, field)
 	}
 	require.Equal(t, float64(2147483648), *run.Properties["size"].Maximum)
+	storage := spec.Components.Schemas.Map()["BackupSystemBackupStorage"]
+	require.NotNil(t, storage)
+	for _, field := range []string{"available", "reasonCode", "usedBytes", "freeBytes", "maxArchiveBytes"} {
+		require.Contains(t, storage.Properties, field)
+	}
+	require.Equal(t, float64(2147483648), *storage.Properties["maxArchiveBytes"].Maximum)
 }

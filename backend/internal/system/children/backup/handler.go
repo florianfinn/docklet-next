@@ -49,9 +49,7 @@ type CreateSystemBackupInput struct {
 	Body backup.CreateSystemBackupRequest
 }
 type SystemBackupOutput struct{ Body backup.SystemBackupRun }
-type UploadSystemBackupInput struct {
-	Body backup.UploadSystemBackupRequest
-}
+type UploadSystemBackupInput struct{}
 type SystemBackupOperationOutput struct{ Body backup.SystemBackupOperation }
 type SystemBackupStorageOutput struct{ Body backup.SystemBackupStorage }
 type SystemBackupMaintenanceOutput struct {

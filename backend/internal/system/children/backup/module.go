@@ -13,6 +13,7 @@ import (
 	"github.com/florianfinn/docklet-next/backend/internal/middleware"
 	"github.com/florianfinn/docklet-next/backend/internal/system/children/backup/children/volumes"
 	"github.com/florianfinn/docklet-next/backend/pkg/authz"
+	backuptypes "github.com/florianfinn/docklet-next/types/backup"
 )
 
 func RegisterRoutes(api huma.API, h *Handler) {
@@ -30,8 +31,17 @@ func RegisterRoutes(api huma.API, h *Handler) {
 	create := op("create-system-backup", http.MethodPost, "/backups", "Create a Hub database archive")
 	create.DefaultStatus = http.StatusAccepted
 	middleware.RegisterWithPermission(api, create, authz.PermSystemBackupsManage, h.Create)
-	upload := op("import-system-backup-upload", http.MethodPost, "/backups/upload", "Import a completed archive upload")
+	upload := op("import-system-backup-upload", http.MethodPost, "/backups/upload", "Upload and import a Hub database archive")
 	upload.DefaultStatus = http.StatusAccepted
+	upload.Description = "Stream one PostgreSQL custom-format archive as application/octet-stream, up to 2 GiB."
+	upload.MaxBodyBytes = backuptypes.MaxSystemArchiveBytes + 1
+	maxArchiveBytes := int(backuptypes.MaxSystemArchiveBytes)
+	// RawBody would buffer the entire archive before the handler can stream it.
+	upload.RequestBody = &huma.RequestBody{Required: true, Content: map[string]*huma.MediaType{
+		"application/octet-stream": {Schema: &huma.Schema{
+			Type: "string", Format: "binary", MaxLength: &maxArchiveBytes,
+		}},
+	}}
 	middleware.RegisterWithPermission(api, upload, authz.PermSystemBackupsRestore, h.Upload)
 	download := op("download-system-backup", http.MethodGet, "/backups/{id}/download", "Download a Hub database archive")
 	download.Responses = map[string]*huma.Response{"200": {

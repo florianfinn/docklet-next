@@ -125,7 +125,7 @@ func (s *SystemService) ReconcileInterruptedBackups(ctx context.Context, protect
 	if len(protectedIDs) > 0 {
 		query = query.Where("id NOT IN ?", protectedIDs)
 	}
-	return query.Updates(map[string]any{"status": SystemBackupStatusFailed, "error": "Backup interrupted by application restart"}).Error
+	return query.Updates(map[string]any{"status": SystemBackupStatusFailed, "error_code": backuptypes.SystemBackupErrorInterrupted}).Error
 }
 
 // SetBackupScheduler injects the dynamic scheduler and admission gate for
@@ -480,8 +480,8 @@ func (s *SystemService) backupStoreInternal() systembackup.Store {
 			run := systemBackupRunFromDTOInternal(*dto)
 			return s.db.WithContext(ctx).Save(&run).Error
 		},
-		FailRun: func(ctx context.Context, id, message string) error {
-			return s.db.WithContext(ctx).Model(&SystemBackupRun{}).Where("id = ?", id).Updates(map[string]any{"status": SystemBackupStatusFailed, "error": message}).Error
+		FailRun: func(ctx context.Context, id, _ string) error {
+			return s.db.WithContext(ctx).Model(&SystemBackupRun{}).Where("id = ?", id).Updates(map[string]any{"status": SystemBackupStatusFailed, "error_code": backuptypes.SystemBackupErrorFailed}).Error
 		},
 		DeleteRun: func(ctx context.Context, id string) error {
 			return s.db.WithContext(ctx).Where("id = ?", id).Delete(&SystemBackupRun{}).Error

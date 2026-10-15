@@ -18,6 +18,13 @@ const SystemBackupDestinationLocal SystemBackupDestination = "local"
 
 const MaxSystemArchiveBytes int64 = 2 << 30
 
+const (
+	SystemBackupErrorInterrupted = "backup.interrupted"
+	SystemBackupErrorFailed      = "backup.failed"
+	SystemBackupToolsUnavailable = "backup.tools_unavailable"
+	SystemBackupStorageMissing   = "backup.storage_unavailable"
+)
+
 // ArchiveNameForID derives a server-owned filename from an opaque backup ID.
 func ArchiveNameForID(id string) (string, error) {
 	if len(id) < 1 || len(id) > 128 {
@@ -70,7 +77,7 @@ type SystemBackupRun struct {
 	CopyErrorCode     string                `json:"copyErrorCode,omitempty"`
 	ErrorCode         string                `json:"errorCode,omitempty"`
 
-	// Legacy fields remain only for the inactive Arcane engine until its replacement.
+	// Legacy fields remain for the inactive Arcane engine and volume policy mapping.
 	Destination     SystemBackupDestination `json:"-"`
 	LocalSnapshotID string                  `json:"-"`
 	Error           string                  `json:"-"`
@@ -115,8 +122,11 @@ type UpdateSystemBackupPolicies struct {
 }
 
 type SystemBackupStorage struct {
-	UsedBytes int64 `json:"usedBytes" minimum:"0"`
-	FreeBytes int64 `json:"freeBytes" minimum:"0"`
+	Available       bool   `json:"available"`
+	ReasonCode      string `json:"reasonCode,omitempty" enum:"backup.tools_unavailable,backup.storage_unavailable"`
+	UsedBytes       int64  `json:"usedBytes" minimum:"0"`
+	FreeBytes       int64  `json:"freeBytes" minimum:"0"`
+	MaxArchiveBytes int64  `json:"maxArchiveBytes" minimum:"2147483648" maximum:"2147483648"`
 }
 
 type SystemBackupMaintenance struct {
@@ -137,11 +147,6 @@ type CreateSystemBackupRequest struct {
 	// Legacy engine inputs are deliberately absent from JSON.
 	Destination SystemBackupDestination `json:"-"`
 	RecoveryKey string                  `json:"-"`
-}
-
-// UploadSystemBackupRequest consumes a completed bounded upload session.
-type UploadSystemBackupRequest struct {
-	UploadID string `json:"uploadId" pattern:"^[A-Za-z0-9_-]{1,128}$"`
 }
 
 type RestoreSystemBackupRequest struct {
