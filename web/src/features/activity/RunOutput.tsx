@@ -3,6 +3,7 @@ import { useEffect, useMemo, useRef } from "react";
 import { useTranslations } from "use-intl";
 
 import type { ActionRun } from "@/domain/model";
+import { useAdapter } from "@/data/use-adapter";
 import { CopyButton } from "@/shared/components/code-block";
 import { ToneBadge } from "@/shared/components/tone";
 import { downloadBlob } from "@/shared/lib/tar";
@@ -49,6 +50,7 @@ function LineView({ row }: { row: OutputRow }) {
  */
 export function RunOutput({ run, defaultOpen = false, fill = false, className }: { run: ActionRun; defaultOpen?: boolean; fill?: boolean; className?: string }) {
   const t = useTranslations("activity.output");
+  const adapter = useAdapter();
   const [view, setView] = useOutputView(run.id, outputFallback(run, defaultOpen));
   const listRef = useRef<HTMLOListElement>(null);
   const stick = useRef(true);
@@ -78,7 +80,7 @@ export function RunOutput({ run, defaultOpen = false, fill = false, className }:
           <Terminal className="size-3.5 text-muted-foreground" aria-hidden />
           {t("title")}
         </CollapsibleTrigger>
-        {import.meta.env.DEV && (
+        {adapter.kind === "demo" && (
           <ToneBadge tone="violet" className="h-5 px-1.5 text-[10.5px]" title={`${t("hint")} ${t("stderrNote")} ${t("foldNote")}`}>
             {t("simulated")}
           </ToneBadge>
@@ -104,6 +106,7 @@ export function RunOutput({ run, defaultOpen = false, fill = false, className }:
         )}
       </div>
       <CollapsibleContent className={cn(fill && "flex min-h-0 flex-1 flex-col")}>
+        {run.outputTruncated && <p role="note" className="px-3 pb-1.5 text-xs text-warning">{t("truncated")}</p>}
         {/* Filling a phone dialog, the hint stays on the badge's tooltip so the lines get the height. */}
         <p className={cn("px-3 pb-1.5 text-[11px] text-muted-foreground", fill && "max-sm:hidden")}>
           {t("hint")} {t("stderrNote")} {t("foldNote")}

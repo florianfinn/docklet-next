@@ -200,19 +200,19 @@ export class RunToastCoordinator {
     for (const run of [...this.runs].reverse()) {
       const prev = this.seen.get(run.id);
       if (!prev) {
-        if (run.status === "running") {
+        if (run.status === "running" || run.status === "queued") {
           const { presentation, claim } = initialPresentation(run, this.ctx.state(), this.ctx.autoDialog());
           if (claim) bindPresentation(run.id, presentation, claim);
           if (presentation === "dialog") this.port.offerDialog(run.id);
         }
         const covered = this.covered(run);
         this.seen.set(run.id, { status: run.status, covered });
-        if (!covered && (run.status === "running" || run.status === "failed")) this.port.show(run.id);
+        if (!covered && (run.status === "running" || run.status === "queued" || run.status === "failed")) this.port.show(run.id);
         continue;
       }
       const covered = this.covered(run);
       if (covered && !prev.covered) this.port.hide(run.id);
-      else if (!covered && prev.covered && run.status === "running") this.port.show(run.id);
+      else if (!covered && prev.covered && (run.status === "running" || run.status === "queued")) this.port.show(run.id);
       else if (!covered && !prev.covered && run.status === "failed" && prev.status !== "failed") this.port.show(run.id);
       this.seen.set(run.id, { status: run.status, covered });
     }

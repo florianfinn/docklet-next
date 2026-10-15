@@ -30,7 +30,7 @@ export function useNavCounts(): NavCounts {
 }
 
 export function useRunningActionCount(): number {
-  return useActionRuns().filter((r) => r.status === "running").length;
+  return useActionRuns().filter((r) => r.status === "queued" || r.status === "running").length;
 }
 
 export function isNavActive(pathname: string, to: string): boolean {

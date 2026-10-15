@@ -6,6 +6,7 @@ import { ToneDot } from "@/shared/components/tone";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/shared/ui/tooltip";
 
 const KIND_TONE: Record<EventKind, Tone> = {
+  activity: "gray",
   deploy: "accent",
   update: "warn",
   restart: "info",

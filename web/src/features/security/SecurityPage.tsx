@@ -4,6 +4,7 @@ import { useSearchParams } from "react-router";
 import { useTranslations } from "use-intl";
 
 import { useAdapter } from "@/data/use-adapter";
+import { useCapability } from "@/data/use-capability";
 import { useActionRuns } from "@/data/live";
 import { useSecurity, useStacks } from "@/data/queries";
 import { isHostVisible } from "@/domain/hosts";
@@ -54,6 +55,7 @@ function SecuritySkeleton() {
 export default function SecurityPage() {
   const t = useTranslations("security");
   const adapter = useAdapter();
+  const scanCapability = useCapability("runScan");
   const security = useSecurity();
   const stacks = useStacks();
   const hosts = useHostScope();
@@ -86,7 +88,7 @@ export default function SecurityPage() {
             {security.data && <ScanToggle enabled={security.data.enabled} />}
             {security.data?.enabled && <ScanScheduleLink schedule={security.data.schedule} enabled />}
             <HelpTarget topic="action.scan" side="bottom">
-              <Button disabled={!!scan} onClick={() => void adapter.runScan()} className="group">
+              <Button disabled={!!scan || !scanCapability.available} title={scanCapability.reason} onClick={() => void adapter.runScan()} className="group">
                 {scan ? <Spinner data-icon="inline-start" /> : <ScanSearch data-icon="inline-start" className="tilt" />}
                 {scan ? t("scanning") : t("scan")}
               </Button>
@@ -115,7 +117,7 @@ export default function SecurityPage() {
           <Shield className="size-9 text-muted-foreground" />
           <h2 className="text-lg font-semibold">{t("off.title")}</h2>
           <p className="max-w-md text-sm text-muted-foreground">{t("off.body")}</p>
-          <Button onClick={() => void adapter.runScan()}>{t("off.enable")}</Button>
+          <Button disabled={!scanCapability.available} title={scanCapability.reason} onClick={() => void adapter.runScan()}>{t("off.enable")}</Button>
         </Card>
       ) : !data?.images.length ? (
         <EmptyState icon={<Shield />} title={t("empty.title")} description={t("empty.body")} />

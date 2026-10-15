@@ -8,6 +8,7 @@ import { useTranslations } from "use-intl";
 import { queryKeys } from "@/data/query-keys";
 import { useSettings } from "@/data/queries";
 import { useAdapter } from "@/data/use-adapter";
+import { useCapability } from "@/data/use-capability";
 import type { SecurityOverview } from "@/domain/model";
 import { nextScan, SCAN_SCHEDULE_ANCHOR, type ScanSchedule } from "@/domain/scan-schedule";
 import { DEFAULT_TIME_ZONE } from "@/domain/schedule";
@@ -28,6 +29,7 @@ export function ScanToggle({ enabled }: { enabled: boolean }) {
   const t = useTranslations("security");
   const dt = useAdapterText();
   const adapter = useAdapter();
+  const capability = useCapability("setScanEnabled");
   const client = useQueryClient();
   const [pending, setPending] = useState(false);
 
@@ -52,7 +54,7 @@ export function ScanToggle({ enabled }: { enabled: boolean }) {
   return (
     <HelpTarget topic="settingsScans.enabled" side="bottom">
       <div data-slot="scan-toggle" aria-busy={pending} className="flex h-9 items-center gap-2 rounded-md border bg-background px-3 shadow-xs dark:border-input dark:bg-input/30">
-        <Switch id="scan-on" checked={enabled} disabled={pending} onCheckedChange={(v) => void change(v)} />
+        <Switch id="scan-on" checked={enabled} disabled={pending || !capability.available} title={capability.reason} onCheckedChange={(v) => void change(v)} />
         <Label htmlFor="scan-on" className="text-sm whitespace-nowrap">
           {t("enabled")}
         </Label>

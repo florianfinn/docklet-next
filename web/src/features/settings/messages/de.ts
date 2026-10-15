@@ -297,7 +297,7 @@ export const deSettings: typeof enSettings = {
     actions: "Höchstens abgeschlossene Aktionen",
     eventsHint: "{min}–{max} Einträge, Standard {fallback}. Darüber fallen die ältesten Ereignisse weg.",
     actionsHint: "{min}–{max} Einträge, Standard {fallback}. Laufende Aktionen zählen nicht und bleiben immer.",
-    historyNote: "Begrenzt wird nach Anzahl, nicht nach Alter. Ein kleinerer Wert entfernt beim Speichern sofort die ältesten Einträge. In dieser Vorschau liegt der Verlauf nur im Speicher des Browsers.",
+    historyNote: "Der Verlauf behält 500 Ereignisse und 100 abgeschlossene Abläufe je Umgebung. Aktive Abläufe bleiben erhalten.",
     errors: { range: "Bitte eine Zahl von {min} bis {max} eingeben.", integer: "Bitte eine ganze Zahl eingeben." },
     output: "Ausgaben von Aktionen speichern",
     outputHint: "Schrittprotokolle im Aktionszentrum. Ohne Speicherung bleiben nur Ergebnis und Fehler.",

@@ -354,3 +354,12 @@ imported into a production build. Route tests load the production branches and
 check visible navigation against that same tree. The production host list hides
 its unavailable onboarding action, and run output omits the development-only
 simulation badge.
+
+## HTTP activity and event integration (#38)
+
+The historical 592-file snapshot remains the import proof. Current sidecar
+hashes identify the changed React and data files. New HTTP adapter, capability,
+DTO mapping and matrix-test files carry their own provenance headers. The
+adapter reads the checked-in generated OpenAPI types, retrieves run details and
+events, and uses the approved SSE channel to refresh snapshots. Its only new
+transport is browser HTTP and EventSource; no runtime package was added.

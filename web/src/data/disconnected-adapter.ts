@@ -1,4 +1,5 @@
 import type { DockletAdapter } from "./adapter";
+import { GENERIC_REASON, HUB_REF } from "./capability";
 
 export const BACKEND_DISCONNECTED = "backend-not-connected";
 
@@ -8,6 +9,7 @@ export function createDisconnectedAdapter(): DockletAdapter {
   const subscribe = () => () => {};
   return {
     kind: "disconnected",
+    getCapability: async (operationId, resourceRef = HUB_REF) => ({ operationId, resourceRef, available: false, disabledReasonCode: GENERIC_REASON }),
     listHosts: unavailable,
     listStacks: unavailable,
     getStack: unavailable,

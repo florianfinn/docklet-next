@@ -8,6 +8,7 @@ import { summarizeUpdates } from "@/domain/updates";
 import { BulkActionBar } from "@/shared/component-set/bulk-action-bar";
 import { StatStrip } from "@/shared/component-set/stat-strip";
 import { useMetrics } from "@/data/live";
+import { useCapability } from "@/data/use-capability";
 import { HostBlocks } from "@/shared/components/host-blocks";
 import { LoadMetricToggle, LoadSortHead } from "@/shared/components/overview/load-sort";
 import { OverviewTable, type OverviewColumn, type TableView } from "@/shared/components/overview/overview-table";
@@ -44,6 +45,8 @@ export default function StacksPage() {
   const mode = usePreference("stacksMode");
   const layout = usePreference("stacksLayout");
   const cmd = useStackCommands();
+  const deployCapability = useCapability("deployStack");
+  const commandCapability = useCapability("runStackCommand");
   const [query, setQuery] = useState("");
   const [status, setStatus] = useState<StatusFilter>("all");
   const [sort, setSort] = useState<StackSort>(DEFAULT_STACK_SORT);
@@ -144,12 +147,12 @@ export default function StacksPage() {
         title={t("title")}
         description={t("description", { scope })}
         actions={
-          <Button asChild className="group">
+          deployCapability.available ? <Button asChild className="group">
             <Link to="/stacks/new">
               <Plus data-icon="inline-start" className="transition-transform duration-(--dur) group-hover:rotate-90" />
               {t("newStack")}
             </Link>
-          </Button>
+          </Button> : <Button disabled title={deployCapability.reason}><Plus data-icon="inline-start" />{t("newStack")}</Button>
         }
       />
       <StatStrip
@@ -185,9 +188,9 @@ export default function StacksPage() {
             title={t("emptyAll.title")}
             description={t("emptyAll.description")}
             action={
-              <Button asChild>
+              deployCapability.available ? <Button asChild>
                 <Link to="/stacks/new">{t("newStack")}</Link>
-              </Button>
+              </Button> : <Button disabled title={deployCapability.reason}>{t("newStack")}</Button>
             }
           />
         ) : rows.length === 0 && hidden.length > 0 && layout !== "hosts" ? (
@@ -255,19 +258,19 @@ export default function StacksPage() {
         )}
       </Card>
       <BulkActionBar count={visibleSelected.length} selectedLabel={t("select.selected", { count: visibleSelected.length })} clearLabel={t("select.clear")} onClear={clearSelection}>
-        <Button size="sm" variant="secondary" className="h-8" onClick={() => bulk((id) => cmd.run(id, "start"))}>
+        <Button size="sm" variant="secondary" className="h-8" disabled={!commandCapability.available} title={commandCapability.reason} onClick={() => bulk((id) => cmd.run(id, "start"))}>
           <Play data-icon="inline-start" />
           {t("bulk.start")}
         </Button>
-        <Button size="sm" variant="secondary" className="h-8" onClick={() => bulk((id) => cmd.run(id, "stop"))}>
+        <Button size="sm" variant="secondary" className="h-8" disabled={!commandCapability.available} title={commandCapability.reason} onClick={() => bulk((id) => cmd.run(id, "stop"))}>
           <Square data-icon="inline-start" />
           {t("bulk.stop")}
         </Button>
-        <Button size="sm" variant="secondary" className="h-8" onClick={() => bulk((id) => cmd.run(id, "restart"))}>
+        <Button size="sm" variant="secondary" className="h-8" disabled={!commandCapability.available} title={commandCapability.reason} onClick={() => bulk((id) => cmd.run(id, "restart"))}>
           <RotateCw data-icon="inline-start" />
           {t("bulk.restart")}
         </Button>
-        <Button size="sm" variant="secondary" className="h-8" onClick={() => bulk((id) => cmd.run(id, "redeploy"))}>
+        <Button size="sm" variant="secondary" className="h-8" disabled={!commandCapability.available} title={commandCapability.reason} onClick={() => bulk((id) => cmd.run(id, "redeploy"))}>
           <RefreshCw data-icon="inline-start" />
           {t("bulk.redeploy")}
         </Button>

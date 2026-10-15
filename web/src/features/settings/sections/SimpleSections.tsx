@@ -1,10 +1,9 @@
 import { useTranslations } from "use-intl";
 
 import { ActionPresentationField } from "@/features/activity/ActionPresentationSetting";
-import { HISTORY_LIMITS, validateHistoryLimit } from "@/domain/activity-history";
 import type { HostDefaults, HubSettings } from "@/domain/settings";
 import { ChoiceCards, TextField } from "@/shared/components/form-field";
-import { HelpLabel, HelpLegend, type HelpKey } from "@/shared/help/help-tooltip";
+import { HelpLabel, HelpLegend } from "@/shared/help/help-tooltip";
 import { Field, FieldContent, FieldDescription, FieldGroup, FieldSet } from "@/shared/ui/field";
 import { Switch } from "@/shared/ui/switch";
 
@@ -81,38 +80,17 @@ export function HostDefaultsSection({ settings }: { settings: HubSettings }) {
   );
 }
 
-/** Count field of the activity history; the draft keeps NaN for an empty field so validation can name it. */
-function HistoryLimitField({ id, kind, label, help, value, onChange }: { id: string; kind: keyof typeof HISTORY_LIMITS; label: string; help: HelpKey; value: number; onChange: (n: number) => void }) {
-  const ta = useTranslations("settings.activity");
-  const { min, max, default: fallback } = HISTORY_LIMITS[kind];
-  const error = validateHistoryLimit(kind, value);
-  return (
-    <TextField
-      id={id}
-      type="number"
-      label={label}
-      help={help}
-      value={Number.isFinite(value) ? String(value) : ""}
-      onChange={(v) => onChange(v.trim() === "" ? Number.NaN : Number(v))}
-      description={ta(kind === "events" ? "eventsHint" : "actionsHint", { min, max, fallback })}
-      error={error ? ta(`errors.${error}`, { min, max }) : undefined}
-      inputClassName="w-full sm:w-40 tabular-nums"
-    />
-  );
-}
-
 export function ActivitySection({ settings }: { settings: HubSettings }) {
   const t = useTranslations("settings");
   const ta = useTranslations("settings.activity");
   const save = useSaveSettings();
   const { draft, patch, dirty, reset, commit } = useSectionDraft(settings.activity);
   if (!draft) return null;
-  const valid = !validateHistoryLimit("events", draft.maxEvents) && !validateHistoryLimit("actions", draft.maxFinishedActions);
   return (
     <SettingsForm
       title={t("sections.activity")}
       dirty={dirty}
-      valid={valid}
+      valid
       onDiscard={reset}
       onSave={async () => {
         await save("activity", draft);
@@ -120,10 +98,6 @@ export function ActivitySection({ settings }: { settings: HubSettings }) {
       }}
     >
       <FieldGroup>
-        <div className="grid gap-4 sm:grid-cols-2">
-          <HistoryLimitField id="act-events" kind="events" label={ta("events")} help="settingsActivity.events" value={draft.maxEvents} onChange={(maxEvents) => patch({ maxEvents })} />
-          <HistoryLimitField id="act-actions" kind="actions" label={ta("actions")} help="settingsActivity.actions" value={draft.maxFinishedActions} onChange={(maxFinishedActions) => patch({ maxFinishedActions })} />
-        </div>
         <p className="text-xs text-muted-foreground">{ta("historyNote")}</p>
         <Field orientation="horizontal">
           <Switch id="act-output" checked={draft.keepActionOutput} onCheckedChange={(keepActionOutput) => patch({ keepActionOutput })} />

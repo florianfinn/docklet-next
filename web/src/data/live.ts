@@ -6,6 +6,7 @@ import type { ActionRun, LogLine, MetricsSnapshot } from "@/domain/model";
 import type { DockletAdapter } from "./adapter";
 import { renderRun, type CodedActionRun } from "./message-code";
 import { useAdapter } from "./use-adapter";
+import { useActionsQuery } from "./queries";
 
 interface Channel<T> {
   value: T | undefined;
@@ -64,15 +65,16 @@ const EMPTY_RUNS: CodedActionRun[] = [];
 
 /** Run codes rendered in the interface language. */
 export function useActionRuns(): ActionRun[] {
-  const runs = useActionsChannel((r) => r ?? EMPTY_RUNS);
+  const runs = useActionsChannel((r) => r);
+  const query = useActionsQuery();
   const locale = useLocale();
-  return useMemo(() => runs.map((r) => renderRun(r, locale)), [runs, locale]);
+  const chosen = runs ?? query.data ?? EMPTY_RUNS;
+  return useMemo(() => chosen.map((r) => renderRun(r, locale)), [chosen, locale]);
 }
 
 export function useActionRun(id: string | undefined): ActionRun | undefined {
-  const run = useActionsChannel((runs) => (id ? runs?.find((r) => r.id === id) : undefined));
-  const locale = useLocale();
-  return run && renderRun(run, locale);
+  const runs = useActionRuns();
+  return id ? runs.find((run) => run.id === id) : undefined;
 }
 
 export function useContainerLogs(containerId: string, paused: boolean): LogLine[] {

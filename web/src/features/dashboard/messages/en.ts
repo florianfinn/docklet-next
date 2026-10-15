@@ -231,7 +231,7 @@ export const enDashboard = {
   timeline: {
     now: "now",
     hoursAgo: "−{h} h",
-    legend: { deploy: "Deploy", update: "Update", restart: "Restart", health: "Error", backup: "Backup", scan: "Scan", host: "Host", config: "Configuration" },
+    legend: { activity: "Activity", deploy: "Deploy", update: "Update", restart: "Restart", health: "Error", backup: "Backup", scan: "Scan", host: "Host", config: "Configuration" },
     empty: "No events in the last 24 hours.",
   },
   load: { cpu: "CPU", mem: "RAM", toggle: "Metric", axis: "{value}%" },

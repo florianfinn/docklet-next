@@ -5,7 +5,8 @@ import { Link } from "react-router";
 import { useTranslations } from "use-intl";
 
 import { useActionRuns } from "@/data/live";
-import { useEvents, useSettings } from "@/data/queries";
+import { useActionsQuery, useEvents } from "@/data/queries";
+import { HISTORY_LIMITS } from "@/domain/activity-history";
 import { formatRelative, formatTime } from "@/domain/format";
 import type { ActionRun, EventLevel } from "@/domain/model";
 import { ProgressList } from "@/shared/component-set/progress-list";
@@ -30,7 +31,7 @@ import { keepOpenForCoordinatedLayers } from "./layer-coordination";
 import { RunOutput } from "./RunOutput";
 
 /** Shared list tones; notifications.css turns the running "accent" into the brand run tone inside the action centre. */
-const TONE = { running: "accent", succeeded: "ok", failed: "err" } as const;
+const TONE = { queued: "gray", running: "accent", succeeded: "ok", failed: "err", cancelled: "gray" } as const;
 const LEVEL_TONE: Record<EventLevel, "err" | "warn" | "ok" | "info"> = { error: "err", warn: "warn", ok: "ok", info: "info" };
 
 function RunBody({ run, defaultOpen }: { run: ActionRun; defaultOpen: boolean }) {
@@ -79,13 +80,16 @@ function RunBody({ run, defaultOpen }: { run: ActionRun; defaultOpen: boolean })
 function ActionsTab({ focusRunId }: { focusRunId?: string }) {
   const t = useTranslations("activity");
   const runs = useActionRuns();
+  const query = useActionsQuery();
   const [hideFinished, setHideFinished] = useState(false);
-  const shown = hideFinished ? runs.filter((r) => r.status === "running") : runs;
+  const shown = hideFinished ? runs.filter((r) => r.status === "running" || r.status === "queued") : runs;
 
   useEffect(() => {
     if (focusRunId) requestAnimationFrame(() => document.getElementById(`run-${focusRunId}`)?.scrollIntoView({ block: "nearest" }));
   }, [focusRunId]);
 
+  if (query.isError && !runs.length) return <QueryError onRetry={() => void query.refetch()} compact />;
+  if (query.isPending && !runs.length) return <Skeleton className="h-24 rounded-xl" />;
   if (!runs.length) return <EmptyState icon={<History />} title={t("emptyActions")} />;
   return (
     <div className="flex flex-col gap-3">
@@ -103,7 +107,7 @@ function ActionsTab({ focusRunId }: { focusRunId?: string }) {
       </div>
       <ProgressList
         items={shown.map((run) => {
-          const Icon = run.status === "running" ? Loader2 : run.status === "succeeded" ? CheckCircle2 : XCircle;
+          const Icon = run.status === "queued" ? History : run.status === "running" ? Loader2 : run.status === "succeeded" ? CheckCircle2 : run.status === "cancelled" ? History : XCircle;
           return {
             id: run.id,
             tone: TONE[run.status],
@@ -183,17 +187,12 @@ function EventsTab() {
   );
 }
 
-/** The hub's history limit with a link to change it; the action centre closes on the way. */
+/** Fixed hub history limits. */
 function HistoryLimit({ kind }: { kind: "actions" | "events" }) {
   const t = useTranslations("activity");
-  const activity = useSettings().data?.activity;
-  if (!activity) return null;
   return (
     <p className="flex flex-wrap items-center gap-x-1.5 text-xs text-muted-foreground" data-slot="history-limit">
-      {kind === "actions" ? t("historyLimit", { count: activity.maxFinishedActions }) : t("historyLimitEvents", { count: activity.maxEvents })}
-      <Link to="/settings/activity" className="text-primary-text underline-offset-4 hover:underline" onClick={() => activityStore.set((s) => ({ ...s, open: false }))}>
-        {t("historySettings")}
-      </Link>
+      {kind === "actions" ? t("historyLimit", { count: HISTORY_LIMITS.actions.default }) : t("historyLimitEvents", { count: HISTORY_LIMITS.events.default })}
     </p>
   );
 }
