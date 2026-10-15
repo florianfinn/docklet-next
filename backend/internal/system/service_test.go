@@ -128,7 +128,6 @@ func TestListBackupHistoryClassifiesAndFiltersOrigins(t *testing.T) {
 	now := time.Now().UTC()
 	require.NoError(t, gormDB.Create(&SystemBackupRun{
 		CreatedAt: now.Add(-2 * time.Minute), Status: SystemBackupStatusSucceeded, Trigger: SystemBackupTriggerManual,
-		Destination: backuptypes.SystemBackupDestinationLocal,
 	}).Error)
 	require.NoError(t, gormDB.Create(&volume.VolumeBackup{
 		VolumeName: "app-data", CreatedAt: now.Add(-time.Minute), Status: volume.VolumeBackupStatusSucceeded,

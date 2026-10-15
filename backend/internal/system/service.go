@@ -125,7 +125,7 @@ func (s *SystemService) ReconcileInterruptedBackups(ctx context.Context, protect
 	if len(protectedIDs) > 0 {
 		query = query.Where("id NOT IN ?", protectedIDs)
 	}
-	return query.Updates(map[string]any{"status": SystemBackupStatusFailed, "error": "Backup interrupted by application restart"}).Error
+	return query.Updates(map[string]any{"status": SystemBackupStatusFailed, "error_code": backuptypes.SystemBackupErrorInterrupted}).Error
 }
 
 // SetBackupScheduler injects the dynamic scheduler and admission gate for
@@ -459,8 +459,8 @@ func resolveUpgraderRuntimeOptionsInternal(
 	return containerEnv, mounts, "", nil
 }
 
-const systemBackupHistoryUnion = "SELECT id, size, created_at, status, trigger, destination, '' AS format, local_snapshot_id, " +
-	"policy_id, error, 'system' AS type, 'system' AS resource_type, 'Arcane' AS resource_name " +
+const systemBackupHistoryUnion = "SELECT id, size, created_at, status, trigger, 'local' AS destination, 'pg_custom' AS format, '' AS local_snapshot_id, " +
+	"policy_id, error_code AS error, 'system' AS type, 'system' AS resource_type, 'Hub database' AS resource_name " +
 	"FROM system_backup_runs UNION ALL SELECT id, size, created_at, status, trigger, destination, format, " +
 	"local_snapshot_id, policy_id, error, CASE WHEN policy_id LIKE 'system-volume:%' THEN 'system' ELSE " +
 	"'volume' END AS type, 'volume' AS resource_type, volume_name AS resource_name FROM volume_backups"
@@ -480,8 +480,8 @@ func (s *SystemService) backupStoreInternal() systembackup.Store {
 			run := systemBackupRunFromDTOInternal(*dto)
 			return s.db.WithContext(ctx).Save(&run).Error
 		},
-		FailRun: func(ctx context.Context, id, message string) error {
-			return s.db.WithContext(ctx).Model(&SystemBackupRun{}).Where("id = ?", id).Updates(map[string]any{"status": SystemBackupStatusFailed, "error": message}).Error
+		FailRun: func(ctx context.Context, id, _ string) error {
+			return s.db.WithContext(ctx).Model(&SystemBackupRun{}).Where("id = ?", id).Updates(map[string]any{"status": SystemBackupStatusFailed, "error_code": backuptypes.SystemBackupErrorFailed}).Error
 		},
 		DeleteRun: func(ctx context.Context, id string) error {
 			return s.db.WithContext(ctx).Where("id = ?", id).Delete(&SystemBackupRun{}).Error
@@ -498,7 +498,7 @@ func (s *SystemService) backupStoreInternal() systembackup.Store {
 			query := s.db.WithContext(ctx).Model(&SystemBackupRun{})
 			if term := strings.TrimSpace(params.Search); term != "" {
 				pattern := "%" + term + "%"
-				query = query.Where("status LIKE ? OR trigger LIKE ? OR destination LIKE ? OR error LIKE ?", pattern, pattern, pattern, pattern)
+				query = query.Where("status LIKE ? OR trigger LIKE ? OR archive_name LIKE ? OR error_code LIKE ?", pattern, pattern, pattern, pattern)
 			}
 			response, err := pagination.PaginateAndSortDB(params, query, &records)
 			if err != nil {
@@ -511,7 +511,11 @@ func (s *SystemService) backupStoreInternal() systembackup.Store {
 			return result, response, nil
 		},
 		ExpiredRunIDs: func(ctx context.Context, policyID string, keep int) ([]string, error) {
-			return backup.ExpiredRunIDs(ctx, s.db, "system_backup_runs", policyID, keep)
+			var ids []string
+			err := s.db.WithContext(ctx).Model(&SystemBackupRun{}).
+				Where("policy_id = ? AND status = ? AND archive_name IS NOT NULL", policyID, SystemBackupStatusSucceeded).
+				Order("created_at DESC").Offset(keep).Pluck("id", &ids).Error
+			return ids, err
 		},
 		RunsByID: func(ctx context.Context, ids []string) ([]*backuptypes.SystemBackupRun, error) {
 			var records []SystemBackupRun

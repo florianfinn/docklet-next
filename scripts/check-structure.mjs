@@ -16,7 +16,7 @@ const relative = (path) =>
   !path.split("/").some((p) => p === ".." || p === "." || !p);
 const digest = (value) => typeof value === "string" && /^[a-f0-9]{64}$/.test(value);
 export function provenanceFields(text) {
-  const field = (name) => text.match(new RegExp("^(?://|#|\\*)? ?" + name + ": (.+)$", "m"))?.[1]?.trim();
+  const field = (name) => text.match(new RegExp("^(?://|--|#|\\*)? ?" + name + ": (.+)$", "m"))?.[1]?.trim();
   return {
     source: field("Source"),
     revision: field("Revision"),
@@ -25,6 +25,13 @@ export function provenanceFields(text) {
     deviations: field("Deviations"),
   };
 }
+const MIGRATION_PREFIX = "backend/resources/migrations/postgres/";
+const PROVENANCE_FIELDS = ["source", "revision", "retrieved", "license", "deviations"];
+const SHIPPED_MIGRATION_OVERRIDES = new Set([
+  "001_baseline.sql", "002_run_traces.sql", "003_sync_receipt_lifecycle.sql",
+  "004_gate_owner.sql", "005_gate_lease.sql", "006_single_hub_gate.sql",
+  "007_activity_raw_output.sql",
+].map((name) => MIGRATION_PREFIX + name));
 export function validProvenance(record) {
   return (
     record &&
@@ -110,17 +117,40 @@ export function provenanceProblems(list, policy) {
     throw new Error("provenance-policy");
   const findings = [];
   const sidecars = new Map(Object.entries(policy.sidecars));
+  const overrides = policy.migrationHeaderOverrides ?? {};
+  if (!overrides || Array.isArray(overrides) || typeof overrides !== "object") throw new Error("provenance-policy");
+  for (const [path, fields] of Object.entries(overrides)) {
+    if (!SHIPPED_MIGRATION_OVERRIDES.has(path) || !sidecars.has(path) ||
+        !fields || Array.isArray(fields) || typeof fields !== "object" ||
+        !Object.keys(fields).length || Object.entries(fields).some(([field, value]) =>
+          !PROVENANCE_FIELDS.includes(field) || typeof value !== "string" ||
+          !value.length || value !== sidecars.get(path)[field])) throw new Error("provenance-policy");
+  }
   for (const path of [...policy.files, ...Object.keys(policy.sidecars)]) {
     if (!relative(path)) throw new Error("provenance-path");
     if (!list.some((f) => f.path === path)) findings.push({ path, category: "stale-provenance" });
   }
   for (const file of list) {
     const required = policy.files.includes(file.path) || policy.prefixes.some((p) => file.path.startsWith(p));
-    if (!required && !sidecars.has(file.path)) continue;
+    if (!required && !sidecars.has(file.path) && !file.path.startsWith(MIGRATION_PREFIX)) continue;
+    if (file.path.startsWith(MIGRATION_PREFIX) && !sidecars.has(file.path))
+      findings.push({ path: file.path, category: "migration-provenance-sidecar" });
     const record = sidecars.get(file.path) ?? headerRecord(file);
     if (!validProvenance(record)) findings.push({ path: file.path, category: "provenance-header" });
     if (sidecars.has(file.path) && record.sha256 !== sha256(file.content))
       findings.push({ path: file.path, category: "provenance-hash" });
+    if (file.path.startsWith(MIGRATION_PREFIX) && sidecars.has(file.path)) {
+      const header = headerRecord(file);
+      const exempt = overrides[file.path] ?? {};
+      for (const field of PROVENANCE_FIELDS) {
+        if (Object.hasOwn(exempt, field)) {
+          if (header[field] === record[field])
+            findings.push({ path: file.path, category: "stale-migration-header-override" });
+        } else if (header[field] !== record[field]) {
+          findings.push({ path: file.path, category: "migration-provenance-mismatch" });
+        }
+      }
+    }
   }
   return findings;
 }

@@ -272,9 +272,9 @@ func (s *Service) completeBackupInternal(ctx context.Context, run *backuptypes.S
 		err = ctx.Err()
 	}
 	if err != nil {
-		run.Status, run.Error = backuptypes.SystemBackupStatusFailed, err.Error()
+		run.Status, run.ErrorCode = backuptypes.SystemBackupStatusFailed, backuptypes.SystemBackupErrorFailed
 	} else {
-		run.Status, run.Error = backuptypes.SystemBackupStatusSucceeded, ""
+		run.Status, run.ErrorCode = backuptypes.SystemBackupStatusSucceeded, ""
 	}
 	if saveErr := s.store.SaveRun(context.WithoutCancel(ctx), run); saveErr != nil {
 		err = errors.Join(err, fmt.Errorf("failed to save system backup result: %w", saveErr))
@@ -456,11 +456,11 @@ func (s *Service) UpdatePolicies(ctx context.Context, updates []backuptypes.Upda
 		return nil, err
 	}
 	build := func(ctx context.Context, policy *backuptypes.SystemBackupPolicy, update backuptypes.UpdateSystemBackupPolicy) error {
-		normalized, normalizeErr := backup.ValidatePolicyUpdate(ctx, "system", update)
+		normalized, normalizeErr := backup.ValidatePolicyUpdate(ctx, "system", backuptypes.UpdateBackupPolicy{ID: update.ID, Enabled: update.Enabled, Schedule: update.Schedule, RetentionCount: update.RetentionCount, LocalEnabled: true})
 		if normalizeErr != nil {
 			return normalizeErr
 		}
-		update = normalized
+		update.Schedule, update.RetentionCount = normalized.Schedule, normalized.RetentionCount
 		if update.Enabled && !configured {
 			return errors.New("configure a recovery key before enabling scheduled system backups")
 		}
@@ -773,7 +773,7 @@ func (s *Service) resumeBackupInternal(ctx context.Context, previous scheduler.R
 		return err
 	}
 	run.LocalSnapshotID, run.Size = staged.ID, staged.Size
-	run.Status, run.Error = backuptypes.SystemBackupStatusSucceeded, ""
+	run.Status, run.ErrorCode = backuptypes.SystemBackupStatusSucceeded, ""
 	return s.store.SaveRun(ctx, run)
 }
 

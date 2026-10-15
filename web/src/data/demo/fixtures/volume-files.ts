@@ -50,7 +50,7 @@ const BY_KEY: Record<string, FileSeed[]> = {
   ha_config: [
     t("/configuration.yaml", "# Synthetic Home Assistant configuration\ndefault_config:\n\nhomeassistant:\n  name: Beispielhaus\n  time_zone: Europe/Berlin\n\nautomation: !include automations.yaml\n", 3),
     t("/automations.yaml", "- id: '1700000000000'\n  alias: Flurlicht abends\n  trigger:\n    - platform: sun\n      event: sunset\n  action:\n    - service: light.turn_on\n      target:\n        entity_id: light.flur\n", 4),
-    t("/secrets.yaml", "# Platzhalter – keine echten Geheimnisse im Demo\nexample_api_key: demo-placeholder\n", 20),
+    t("/secrets.yaml", "token: test-only\n", 20),
     b("/home-assistant_v2.db", 220 * MB, 0.02),
     t("/.storage/core.config_entries", '{\n  "version": 1,\n  "data": { "entries": [] }\n}\n', 6),
     t("/home-assistant.log", "2026-10-10 08:00:01 INFO (MainThread) [homeassistant.core] Starting (synthetic)\n", 0.3),

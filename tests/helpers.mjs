@@ -56,6 +56,7 @@ function scopePolicies(root, paths) {
   const provenance = readJSON(root, "scripts/provenance.json");
   provenance.files = provenance.files.filter(has);
   provenance.sidecars = entries(provenance.sidecars);
+  provenance.migrationHeaderOverrides = entries(provenance.migrationHeaderOverrides ?? {});
   if (provenance.snapshots) provenance.snapshots = Object.fromEntries(
     Object.entries(provenance.snapshots).filter(([prefix]) => paths.some((path) => path.startsWith(prefix))),
   );
