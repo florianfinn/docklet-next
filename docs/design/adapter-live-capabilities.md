@@ -30,7 +30,7 @@ adapter operation available: its mapping and server capability must both exist.
 
 | Adapter call or family | Current OpenAPI operation | M3 handling |
 | --- | --- | --- |
-| `listActions`, run refresh | `list-activities`, `get-activity` per environment | Map recorded activity, message and step DTOs; enable the full `CodedActionRun` projection only where required fields have wire sources. |
+| `listActions`, run refresh | `list-activities`, `get-activity` per environment | Map recorded activity, message, step and output DTOs; enable the full `CodedActionRun` projection only where required fields have wire sources. |
 | `listEvents` | `listEvents` or `getEventsByEnvironment` for the selected scope | Map `EventEvent` to `CodedEvent`; use recorded DTOs. |
 | `subscribeActions`, `subscribeChanges` | `streamClient` (`activities`, `events`) | Parse envelopes and re-read changed snapshots/queries. |
 | `listHosts`, `listStacks`, `getStack`, `listContainers` | `listEnvironments`, `list-projects`, `get-project`, `list-containers` | Expose unavailable until M5 owns the view-model mappings. |
@@ -54,10 +54,43 @@ run remains `running` until completion. The HTTP adapter never exposes the
 server's executable work context. The client-side `run-gate.ts` remains a UI
 deduplication aid; server admission decides cross-tab conflicts and freshness.
 
+Raw run output is a retained debugging feature. The hub persists it per run in
+`activities`, separate from coded messages: `backend/pkg/libarcane/activity/writer.go`
+captures execution output before its message normalization, and
+`backend/internal/activity/service.go` writes the original lines in batches with
+their timestamp, stream, text and optional step/level. The stored output is
+capped at **256 KiB of UTF-8 serialized lines per run**; on overflow, discard
+the oldest complete lines (or the oldest UTF-8 characters of a single oversized
+line) and set `outputTruncated`. The activity detail returned by `get-activity`
+gains `output` (an array of these lines) and `outputTruncated` DTO fields.
+The adapter maps the lines into web `ActionRun.output`; `RunOutput` shows a
+localized truncation marker when `outputTruncated` is true. This requires a
+new forward PostgreSQL migration for the activity row, matching Go and
+generated OpenAPI/TypeScript DTO changes, and an `ActionRun` truncation flag.
+Output disappears with its run under the fixed 100-finished-runs-per-environment
+retention; active runs remain. The detail response is also proxied from agents,
+so these additive fields change the agent/hub contract and require a contract
+version and minimum-agent-version review before release.
+
+The web run states map directly from the wire, except `success`:
+
+| Wire status | `ActionRun.status` | German label | English label |
+| --- | --- | --- | --- |
+| `queued` | `queued` | Wartet | Queued |
+| `running` | `running` | Läuft | Running |
+| `success` | `succeeded` | Erfolgreich | Succeeded |
+| `failed` | `failed` | Fehlgeschlagen | Failed |
+| `cancelled` | `cancelled` | Abgebrochen | Cancelled |
+
+The activity feature catalogues supply these labels; queued and cancelled
+render as distinct states throughout run surfaces, including the result view.
+
 ## Capability descriptor
 
 The server is the source of truth for each operation's descriptor:
 `{ operationId, available, disabledReasonCode?, resourceRef: { kind, id } }`.
+The demo adapter synthesizes the same descriptor from its in-memory supported
+operations and `DemoDb` fixture resources in `web/src/data/demo/demo-adapter.ts`.
 `operationId` names the adapter operation, and `resourceRef` identifies its hub
 or target resource without defining rights. An unavailable descriptor requires
 a reason code; an available one has no disabled reason. The current OpenAPI has no descriptor operation,
@@ -109,11 +142,16 @@ make the case fail.
 | # | Required observation | Red mutation |
 | --- | --- | --- |
 | 1 | Recorded activity and event DTOs produce the same coded run/event fields in both adapters, including steps, affected services and message codes. | Drop `affectedServices` or a message code in the HTTP mapper. |
-| 2 | An unsupported operation is disabled with the server reason and direct invocation returns `not-available` without a request or run. | Return a synthetic action ID or omit the disabled reason. |
-| 3 | A descriptor missing an entry or failing to load leaves that operation unavailable. | Treat missing capability as available. |
+| 2 | An unsupported operation is disabled with the server reason and direct invocation returns `not-available` without a request or run; the demo descriptor comes from its in-memory supported operations and `DemoDb` fixtures. | Return a synthetic action ID or omit the disabled reason. |
+| 3 | A descriptor missing an entry or failing to load leaves that operation unavailable; the demo adapter uses its in-memory descriptor with an entry removed or a forced load failure. | Treat missing capability as available. |
 | 4 | `run.busy` and `run.cancelling` preserve their code and active run ID; neither starts another action. | Convert a conflict into `ok` or erase `activeRunId`. |
 | 5 | A transport or DTO mapping error renders as error, with no empty or successful fallback. | Catch the error and return `[]` or a fake ID. |
-| 6 | Start, progress, terminal and completion-message notifications re-read the affected run; event invalidation refreshes the event query. | Trust the stream payload as final state or drop the `events` invalidation. |
+| 6 | Start, progress, terminal and completion-message notifications re-read the affected run; event invalidation refreshes the event query. The fixture commits a newer run detail than the stream envelope carries, so content is stale at notification time. | Trust the stale stream payload as final state or drop the `events` invalidation. |
 | 7 | Reconnect and detected event loss re-read subscribed runs and events, revealing a committed completion that had no delivered event. | Remove reconnect refresh or omit active run detail. |
 | 8 | The production route uses the HTTP adapter for M3 data and offers no simulated success or empty simulation label. | Select the demo adapter or restore the empty `activity.output.simulated` value. |
-| 9 | Settings expose no editable history limit; the displayed retention is 500 events and 100 finished runs, preserving active runs. | Restore the numeric fields or prune a running run. |
+| 9 | Settings expose no editable history-limit fields. | Restore a numeric history-limit control. |
+| 10 | Recorded raw execution lines survive a detail re-read and appear in `ActionRun.output` with their timestamp, stream and text. | Drop output from `get-activity` or map it to an empty array. |
+| 11 | A run exceeding 256 KiB retains the newest output within the cap and displays a truncation marker. | Keep the oldest lines, exceed the cap or omit `outputTruncated`. |
+| 12 | Pruning a finished run removes its output while a retained active run keeps its output. | Store output without activity-row ownership or delete active output. |
+| 13 | Wire `queued` renders the distinct Wartet/Queued label and stays nonterminal. | Map `queued` to `running` or reuse its label. |
+| 14 | Wire `cancelled` renders the distinct Abgebrochen/Cancelled label and is terminal. | Map `cancelled` to `failed` or reuse its label. |
