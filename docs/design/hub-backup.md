@@ -73,8 +73,10 @@ names the archive, creation time and data replacement. The server rechecks
 permission and archive ownership at execution. Both a listed archive and an
 uploaded archive use the same validation: custom-format signature, readable
 `pg_restore --list`, PostgreSQL source server major version 18, current target
-server major version 18, archive size, and a digest computed while storing it.
-The archive must have a migration version supported by this hub build. A
+server major version 18 and archive size. Uploads have no trusted checksum
+reference; format and version checks do not claim to detect every alteration.
+The archive migration version must be from this product's PostgreSQL baseline
+(migration 001) through the newest migration embedded in the running hub. A
 nonempty target must have the same migration version; an empty target is
 allowed for the documented full restore. A newer or older nonempty schema is
 rejected before maintenance mode. The hub does not
@@ -93,8 +95,10 @@ outside logged arguments. No `--create` or database drop is used, so the
 single-hub lock survives. Restore never targets a database with another hub.
 The hub then reopens its pool, verifies migrations and health, invalidates
 in-memory auth/session caches, and restarts the scheduler before leaving
-maintenance mode. Restored session rows must be revoked before new login;
-tokens issued before restore must not authenticate against restored rows.
+maintenance mode. After restoring an older supported archive into an empty
+target, normal forward migrations run before health verification and readiness;
+the hub never downgrades a schema. Restored session rows must be revoked before
+new login; tokens issued before restore must not authenticate against restored rows.
 This includes the session that requested restore. The UI reports completion
 only after the hub is ready and requires reauthentication.
 
@@ -104,9 +108,12 @@ session revocation or health verification cannot be established, maintenance
 mode persists and the process exits unready rather than serving uncertain data.
 The operator must recover from an external copy or a known good archive. A hub
 crash during restore cannot claim success: startup checks a durable restore
-marker and database health before allowing traffic, and either establishes a
-completed restore or stays unready for operator recovery. The marker must live
-outside the database being restored. Cancellation is accepted before the
+marker at `${DOCKLET_BACKUP_DIR}/restore-state.json`, outside the database being
+restored. The hub writes it atomically before starting `pg_restore` and removes
+it only after migrations, health and session revocation succeed. If it remains
+at startup, the hub keeps HTTP unready and the scheduler stopped; an operator
+uses the offline recovery command to verify or repeat the restore and clear the
+marker only after those checks pass. Cancellation is accepted before the
 `pg_restore` transaction begins; once replacement starts, the UI cannot claim
 that cancellation reversed it. A restore failure remains visible as a coded,
 sanitized outcome after recovery.
@@ -132,8 +139,8 @@ permissions retain their read, create/delete/policy and restore distinctions;
 the restore permission also guards upload. Capability descriptors disable
 actions during maintenance or when client tools/storage are unavailable.
 Upload uses a bounded stream to a non-executable private file; it rejects
-oversize, malformed, wrong-major and digest-mismatched archives. Responses and
-logs contain IDs and stable reason codes, not archive SQL, passwords, keys,
+oversize, malformed and wrong-major archives. Responses and logs contain IDs
+and stable reason codes, not archive SQL, passwords, keys,
 connection URLs, dump stderr or uploaded filenames. Downloads set attachment
 headers and no-store caching and stream from a server-selected ID.
 
@@ -145,7 +152,7 @@ headers and no-store caching and stream from a server-selected ID.
 | Recovery-key generate/set, `recoveryKey` request fields, Rustic snapshot IDs, file browse and restore-files routes | Remove from the hub database-backup contract and UI; they represent the old encrypted repository and project-file model. Do not remove volume-backup encryption or its recovery-key dependency without a separate volume-backup decision. |
 | `system_backup_runs`, `system_backup_policies`, `system-backup:` scheduled job | Reuse the records and job identity where safe; migrate archive metadata and prune obsolete system-only fields with a forward migration. The scheduler retains skipped/partial outcomes. |
 | `systemBackupsCategory` placeholder in backend settings | Replace Arcane recovery wording with a Hub database-backup entry; keep the policy under the backup endpoints, not a duplicate generic setting. |
-| `web/src/features/volumes/BackupsPage.tsx` and `BackupTargetsSection.tsx` | Keep their volume-backup role. Add a separate Hub database-backup page with list, download, upload, restore, schedule and localized English/German text. |
+| `web/src/features/volumes/BackupsPage.tsx` and `web/src/features/settings/sections/BackupTargetsSection.tsx` | Keep their volume-backup role. Add a separate Hub database-backup page with list, download, upload, restore, schedule and localized English/German text. |
 
 The current `SupportedDatabaseProvider() == false` and PostgreSQL
 `ErrSystemBackupUnavailable` paths are replaced only when their operation is
@@ -177,9 +184,14 @@ tests alone do not close the milestone.
    `feature/hub-backup` before dependent work.
 2. **Backup engine and schedule.** Implement bounded `pg_dump` and storage in
    `backend/internal/system/children/backup/`, policy retention and job
-   reconciliation, `backend/internal/config/`, hub image/build files and
-   `.env.example`; add unit tests and the backup half of the PostgreSQL
-   integration test. Acceptance: manual and scheduled archives are listable and
+   reconciliation and `backend/internal/config/`. No Hub Dockerfile or deployment
+   Compose file exists yet: create `deploy/hub/Dockerfile` with PostgreSQL 18
+   client tools and `deploy/hub/compose.yaml` with the persistent backup mount;
+   update `.github/workflows/checks.yml` to build and check the Hub image, and
+   add the storage variable to `.env.example`. The existing PostgreSQL service
+   image in that workflow is only the integration-test database. Add unit tests
+   and the backup half of the PostgreSQL integration test. Acceptance: manual
+   and scheduled archives are listable and
    downloadable, retention and crash cleanup work, PG 18 tools are in the image.
 3. **Restore and maintenance.** Add upload validation, `pg_restore`, durable
    restore marker, maintenance admission, session revocation, offline recovery
