@@ -456,11 +456,11 @@ func (s *Service) UpdatePolicies(ctx context.Context, updates []backuptypes.Upda
 		return nil, err
 	}
 	build := func(ctx context.Context, policy *backuptypes.SystemBackupPolicy, update backuptypes.UpdateSystemBackupPolicy) error {
-		normalized, normalizeErr := backup.ValidatePolicyUpdate(ctx, "system", update)
+		normalized, normalizeErr := backup.ValidatePolicyUpdate(ctx, "system", backuptypes.UpdateBackupPolicy{ID: update.ID, Enabled: update.Enabled, Schedule: update.Schedule, RetentionCount: update.RetentionCount, LocalEnabled: true})
 		if normalizeErr != nil {
 			return normalizeErr
 		}
-		update = normalized
+		update.Schedule, update.RetentionCount = normalized.Schedule, normalized.RetentionCount
 		if update.Enabled && !configured {
 			return errors.New("configure a recovery key before enabling scheduled system backups")
 		}

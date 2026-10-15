@@ -459,8 +459,8 @@ func resolveUpgraderRuntimeOptionsInternal(
 	return containerEnv, mounts, "", nil
 }
 
-const systemBackupHistoryUnion = "SELECT id, size, created_at, status, trigger, destination, '' AS format, local_snapshot_id, " +
-	"policy_id, error, 'system' AS type, 'system' AS resource_type, 'Arcane' AS resource_name " +
+const systemBackupHistoryUnion = "SELECT id, size, created_at, status, trigger, 'local' AS destination, 'pg_custom' AS format, '' AS local_snapshot_id, " +
+	"policy_id, error_code AS error, 'system' AS type, 'system' AS resource_type, 'Hub database' AS resource_name " +
 	"FROM system_backup_runs UNION ALL SELECT id, size, created_at, status, trigger, destination, format, " +
 	"local_snapshot_id, policy_id, error, CASE WHEN policy_id LIKE 'system-volume:%' THEN 'system' ELSE " +
 	"'volume' END AS type, 'volume' AS resource_type, volume_name AS resource_name FROM volume_backups"
@@ -498,7 +498,7 @@ func (s *SystemService) backupStoreInternal() systembackup.Store {
 			query := s.db.WithContext(ctx).Model(&SystemBackupRun{})
 			if term := strings.TrimSpace(params.Search); term != "" {
 				pattern := "%" + term + "%"
-				query = query.Where("status LIKE ? OR trigger LIKE ? OR destination LIKE ? OR error LIKE ?", pattern, pattern, pattern, pattern)
+				query = query.Where("status LIKE ? OR trigger LIKE ? OR archive_name LIKE ? OR error_code LIKE ?", pattern, pattern, pattern, pattern)
 			}
 			response, err := pagination.PaginateAndSortDB(params, query, &records)
 			if err != nil {
