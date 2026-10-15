@@ -27,6 +27,11 @@ export function provenanceFields(text) {
 }
 const MIGRATION_PREFIX = "backend/resources/migrations/postgres/";
 const PROVENANCE_FIELDS = ["source", "revision", "retrieved", "license", "deviations"];
+const SHIPPED_MIGRATION_OVERRIDES = new Set([
+  "001_baseline.sql", "002_run_traces.sql", "003_sync_receipt_lifecycle.sql",
+  "004_gate_owner.sql", "005_gate_lease.sql", "006_single_hub_gate.sql",
+  "007_activity_raw_output.sql",
+].map((name) => MIGRATION_PREFIX + name));
 export function validProvenance(record) {
   return (
     record &&
@@ -115,9 +120,11 @@ export function provenanceProblems(list, policy) {
   const overrides = policy.migrationHeaderOverrides ?? {};
   if (!overrides || Array.isArray(overrides) || typeof overrides !== "object") throw new Error("provenance-policy");
   for (const [path, fields] of Object.entries(overrides)) {
-    if (!path.startsWith(MIGRATION_PREFIX) || !sidecars.has(path) || !Array.isArray(fields) ||
-        !fields.length || new Set(fields).size !== fields.length ||
-        fields.some((field) => !PROVENANCE_FIELDS.includes(field))) throw new Error("provenance-policy");
+    if (!SHIPPED_MIGRATION_OVERRIDES.has(path) || !sidecars.has(path) ||
+        !fields || Array.isArray(fields) || typeof fields !== "object" ||
+        !Object.keys(fields).length || Object.entries(fields).some(([field, value]) =>
+          !PROVENANCE_FIELDS.includes(field) || typeof value !== "string" ||
+          !value.length || value !== sidecars.get(path)[field])) throw new Error("provenance-policy");
   }
   for (const path of [...policy.files, ...Object.keys(policy.sidecars)]) {
     if (!relative(path)) throw new Error("provenance-path");
@@ -134,9 +141,9 @@ export function provenanceProblems(list, policy) {
       findings.push({ path: file.path, category: "provenance-hash" });
     if (file.path.startsWith(MIGRATION_PREFIX) && sidecars.has(file.path)) {
       const header = headerRecord(file);
-      const exempt = overrides[file.path] ?? [];
+      const exempt = overrides[file.path] ?? {};
       for (const field of PROVENANCE_FIELDS) {
-        if (exempt.includes(field)) {
+        if (Object.hasOwn(exempt, field)) {
           if (header[field] === record[field])
             findings.push({ path: file.path, category: "stale-migration-header-override" });
         } else if (header[field] !== record[field]) {

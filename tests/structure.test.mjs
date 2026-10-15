@@ -99,6 +99,42 @@ test("migration headers agree with sidecars for every authoritative field", () =
     assert.ok(check(content(), changed).some((finding) => finding.category === "migration-provenance-mismatch"), key);
   }
 });
+test("shipped migration overrides require a mismatch and the expected sidecar value", () => {
+  const path = "backend/resources/migrations/postgres/001_baseline.sql";
+  const record = {
+    source: "example/migration.sql", revision: "a".repeat(40), retrieved: "2026-10-15",
+    license: "Apache-2.0", deviations: "Synthetic migration.",
+  };
+  const content = (source) => Buffer.from(
+    `-- Source: ${source}\n-- Revision: ${record.revision}\n` +
+    `-- Retrieved: ${record.retrieved}\n-- License: ${record.license}\n` +
+    `-- Deviations: ${record.deviations}\n-- +goose Up\n`,
+  );
+  const check = (bytes, override, sidecar = record) => provenanceProblems([{ path, content: bytes }], {
+    prefixes: [], files: [], sidecars: { [path]: { ...sidecar, sha256: sha256(bytes) } },
+    migrationHeaderOverrides: { [path]: override },
+  });
+  const override = { source: record.source };
+  assert.deepEqual(check(content("example/shipped.sql"), override), []);
+  assert.ok(check(content(record.source), override)
+    .some((finding) => finding.category === "stale-migration-header-override"));
+  assert.throws(() => check(content("example/shipped.sql"), { source: 42 }), /provenance-policy/);
+  assert.throws(() => check(content("example/shipped.sql"), { source: "example/other.sql" }), /provenance-policy/);
+});
+test("new migrations cannot declare header overrides", () => {
+  const path = "backend/resources/migrations/postgres/008_example.sql";
+  const bytes = Buffer.from("-- Source: example/migration.sql\n-- +goose Up\n");
+  const record = {
+    source: "example/migration.sql", revision: "a".repeat(40), retrieved: "2026-10-15",
+    license: "Apache-2.0", deviations: "Synthetic migration.", sha256: sha256(bytes),
+  };
+  for (const override of [["revision"], { revision: record.revision }]) {
+    assert.throws(() => provenanceProblems([{ path, content: bytes }], {
+      prefixes: [], files: [], sidecars: { [path]: record },
+      migrationHeaderOverrides: { [path]: override },
+    }), /provenance-policy/);
+  }
+});
 test("unlisted binary and changed asset hash fail", (t) => {
   const root = scratch(t);
   const data = Buffer.from([0, 1, 2, 3]);
