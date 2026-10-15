@@ -14,11 +14,13 @@ remains a separate feature and is not included in a database archive.
 The database archive includes the hub's persisted users, settings, sessions,
 job definitions, activity history and migration state. It does not include
 environment files, signing secrets stored outside the database, Docker volumes,
-project files on disk or agent state. The UI explains this scope and the need to
-copy downloaded archives to independent storage. A local backup on the hub's
-volume alone does not protect against loss of that host or volume. The custom
-archive is not encrypted by the hub and may contain credentials; the operator
-must protect exported copies.
+project files on disk or agent state. The UI explains this scope. Local archives
+on the hub backup volume and UI download are the primary recovery path. The
+operator may also select an existing volume-backup target for an off-host copy.
+A local backup alone does not protect against loss of the hub host or volume.
+The custom archive is not encrypted by the hub and may contain credentials; the
+operator must protect downloaded and target copies. Selecting a target does not
+change the local backup requirement.
 
 ## Storage, limits and retention
 
@@ -43,6 +45,27 @@ downloadable file. A retention failure leaves the new backup intact and marks
 the job partial; the next run retries pruning. Deleting a backup removes both
 its file and metadata with idempotent reconciliation after a crash. The UI
 shows local disk usage and the configured retention count.
+
+An optional target copy uses the same target ID and configuration shown for
+volume backups in `BackupTargetsSection`, including existing host mounts and
+SMB shares; no database-backup destination type or credential store is added.
+After the local dump succeeds, the same run streams the finished archive to
+the selected target through the volume-backup target transfer interface. It
+writes to a private temporary name and publishes the copy only after the full
+write succeeds. The source backup ID, target ID and copy state are recorded.
+A failed or interrupted copy leaves the local archive available, reports a
+failed activity and a partial scheduled-job outcome with a failed copy step,
+and can be retried in a follow-up run under the same `system-backup` gate
+scope without repeating `pg_dump`. The backup record distinguishes local
+completion from copy failure.
+No incomplete target file appears as a completed copy.
+
+The schedule's retention count also caps completed copies for that policy on
+the selected target, independently of local pruning. Manual backups and their
+copies are excluded. Target pruning runs after a successful copy; a target
+retention failure keeps both the new local archive and target copy and reports
+a partial outcome for later retry. Changing a policy's target does not delete
+copies on the old target; the UI warns that the operator must clean them up.
 
 One archive or upload is limited to 2 GiB. Backup, upload and restore each have
 a 60-minute deadline; exceeding either limit fails the run, closes the stream
@@ -123,6 +146,12 @@ requires an existing independently downloaded archive or explicit acceptance
 that current data can be replaced. This avoids claiming protection that a
 same-volume pre-restore archive cannot provide.
 
+In the first release, restore accepts a local archive or an upload only. An
+operator retrieves a target copy outside the Hub UI and uploads it, or places
+it in the mounted backup directory for offline recovery. This keeps validation
+and the maintenance transaction on one local input path; direct browsing of remote
+targets would add another failure path during recovery.
+
 An empty replacement database has no admin session with which to use the UI.
 For disaster recovery, an offline hub-image restore command accepts an archive
 from the mounted backup directory, uses the same validation and transactional
@@ -152,7 +181,8 @@ headers and no-store caching and stream from a server-selected ID.
 | Recovery-key generate/set, `recoveryKey` request fields, Rustic snapshot IDs, file browse and restore-files routes | Remove from the hub database-backup contract and UI; they represent the old encrypted repository and project-file model. Do not remove volume-backup encryption or its recovery-key dependency without a separate volume-backup decision. |
 | `system_backup_runs`, `system_backup_policies`, `system-backup:` scheduled job | Reuse the records and job identity where safe; migrate archive metadata and prune obsolete system-only fields with a forward migration. The scheduler retains skipped/partial outcomes. |
 | `systemBackupsCategory` placeholder in backend settings | Replace Arcane recovery wording with a Hub database-backup entry; keep the policy under the backup endpoints, not a duplicate generic setting. |
-| `web/src/features/volumes/BackupsPage.tsx` and `web/src/features/settings/sections/BackupTargetsSection.tsx` | Keep their volume-backup role. Add a separate Hub database-backup page with list, download, upload, restore, schedule and localized English/German text. |
+| `web/src/domain/settings.ts`, `web/src/features/settings/sections/BackupTargetsSection.tsx` and `web/src/features/volumes/backups/BackupPolicyCard.tsx` | Reuse the backup-target view model, settings editor and target selector pattern. Add a separate Hub database-backup page with list, download, upload, restore, schedule, optional target selection and localized English/German text. |
+| Volume-backup target transfer | Reuse the target resolver and archive-transfer interface once delivered for volume backups; send a completed `pg_dump` archive as an opaque file. Rustic snapshot replication is not a PostgreSQL archive copy. |
 
 The current `SupportedDatabaseProvider() == false` and PostgreSQL
 `ErrSystemBackupUnavailable` paths are replaced only when their operation is
@@ -160,12 +190,30 @@ implemented. No route should advertise a working backup while it still returns
 the stub. The existing system-managed volume-backup routes and UI remain
 separate; shared code removed from the system surface must preserve them.
 
+Code check at this design revision: the target UI already models `local`,
+`mount`, `smb` and `nfs` in `web/src/domain/settings.ts` and
+`BackupTargetsSection.tsx`; `BackupPolicyCard.tsx` selects their IDs. These are
+prototype contracts. `web/src/data/demo/demo-settings.ts` simulates target
+tests, while `web/src/data/disconnected-adapter.ts` leaves the production port
+unavailable. The Go volume-backup contract in `types/volume/backup.go` permits
+only `local`, and `backend/internal/volume/children/backup/service.go` rejects
+other destinations. `backend/internal/volume/children/backup/helpers.go` can
+mirror an existing `/backups` bind mount, but does not resolve configured SMB
+targets. `backend/internal/backup/service.go` has Rustic repository replication,
+not a file transfer suitable for a `pg_dump` archive. Thus configured external
+mounts and SMB work in the prototype UI, not yet in live volume backups. The
+volume-backup owner must deliver and verify the server-side target model,
+credential handling and transfer interface before database target copying can
+use it. This prerequisite belongs to the planned Backups and restore milestone,
+not a second target-storage implementation inside the hub-backup feature.
+
 ## Verification and delivery steps
 
 Unit tests run without PostgreSQL, Docker or a running agent. They cover policy
 retention and manual/archive exclusions, stream size and timeout enforcement,
 filename/ID isolation, archive-major and migration rejection, gate conflicts,
-restart reconciliation, sanitized errors, maintenance admission and session
+restart reconciliation, target copy failure/retry and independent retention,
+sanitized errors, maintenance admission and session
 revocation. A PostgreSQL 18 integration test in CI uses a throwaway database
 container: seed representative users, settings, jobs and activity, create an
 archive, empty the database, restore the archive, restart hub wiring, and compare
@@ -178,9 +226,9 @@ tests alone do not close the milestone.
    `backend/internal/system/{model.go,children/backup/{module.go,handler.go}}`,
    the next PostgreSQL migration, `api/openapi.json`, generated
    `web/src/api/generated/schema.ts` and contract tests. Define archive,
-   upload/download, activity and maintenance DTOs, remove system-only recovery
-   fields/routes, and retain volume contracts. Acceptance: generated contract
-   matches routes and migration tests pass. Merge this step into
+   upload/download, target ID, copy state, activity and maintenance DTOs,
+   remove system-only recovery fields/routes, and retain volume contracts.
+   Acceptance: generated contract matches routes and migration tests pass. Merge this step into
    `feature/hub-backup` before dependent work.
 2. **Backup engine and schedule.** Implement bounded `pg_dump` and storage in
    `backend/internal/system/children/backup/`, policy retention and job
@@ -199,15 +247,27 @@ tests alone do not close the milestone.
    and relevant tests. Acceptance: the CI round-trip restores the same data;
    incompatible uploads and failures leave the hub safe. This is a risk step
    requiring an independent interim review under `review-workflow.md`.
-4. **Hub UI and acceptance.** Add the Hub backup page, adapter mapping and
+4. **Target copy integration.** After the volume-backup owner has merged the
+   live target model, credential handling and archive-transfer interface, wire
+   optional target IDs to the Hub backup policy and copy runs. Reuse
+   `web/src/domain/settings.ts`, `BackupTargetsSection.tsx`, the delivered
+   target service and transfer code; add copy status, retry and independent
+   retention tests. Acceptance: an external mount and an SMB target each
+   receive a complete archive; a failed transfer leaves the local archive
+   downloadable and the job partial. Until that prerequisite lands, ship local
+   backup and download without advertising target delivery.
+5. **Hub UI and acceptance.** Add the Hub backup page, adapter mapping and
    `web/src/features/*/messages/{en,de}.ts` catalogues; update deployment
    documentation and UI/adapter tests. Acceptance: an admin can create, list,
    download, upload and restore through the UI, configure the schedule, see
-   actionable states, and complete the documented practical round-trip.
+   actionable local and target-copy states, and complete the documented
+   practical round-trip.
 
-## Maintainer choice
+## Off-host delivery decision
 
-Should the first release keep backups only on the hub's local volume, with an
-operator downloading copies elsewhere, or must it also send copies directly to
-separate storage? This plan uses local storage and download. Direct remote
-delivery would require its own destination and credential design.
+The first release prioritizes a recoverable local archive and UI download.
+Optional off-host delivery selects a volume-backup target managed in hub
+settings. This gives the operator an independent copy without a parallel
+destination model or credential store. Target delivery follows the live
+volume-backup target implementation identified above; the UI prototype alone
+is not evidence that external mounts or SMB work in production.
