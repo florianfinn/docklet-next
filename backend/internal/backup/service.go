@@ -629,7 +629,7 @@ func (e *Engine) runContainerInternal(ctx context.Context, dockerClient *client.
 
 var (
 	ErrRecoveryKeyNotConfigured = errors.New("recovery key is not configured")
-
+	ErrPolicyValidation         = errors.New("backup.invalid_policy")
 	// RecoveryKeyFormat is 8 hyphenated groups of 6 base32 characters, used verbatim as the Rustic password.
 	RecoveryKeyFormat = regexp.MustCompile(`^[A-Z2-7]{6}(-[A-Z2-7]{6}){7}$`)
 )
@@ -813,14 +813,14 @@ func (r PolicyReconciliation[P, U]) buildInternal(ctx context.Context, updates [
 			var ok bool
 			policy, ok = byID[updateID]
 			if !ok {
-				return nil, nil, fmt.Errorf("%s backup policy not found", r.Domain)
+				return nil, nil, fmt.Errorf("%w: %s backup policy not found", ErrPolicyValidation, r.Domain)
 			}
 			if _, duplicate := kept[updateID]; duplicate {
-				return nil, nil, fmt.Errorf("duplicate %s backup policy", r.Domain)
+				return nil, nil, fmt.Errorf("%w: duplicate %s backup policy", ErrPolicyValidation, r.Domain)
 			}
 		}
 		if err := r.Build(ctx, &policy, update); err != nil {
-			return nil, nil, err
+			return nil, nil, fmt.Errorf("%w: %w", ErrPolicyValidation, err)
 		}
 		if policyID := r.ID(&policy); policyID != "" {
 			kept[policyID] = struct{}{}

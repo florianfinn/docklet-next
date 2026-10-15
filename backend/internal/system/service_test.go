@@ -197,7 +197,7 @@ func (s *systemBackupPolicySchedulerInternal) Submit(_ context.Context, request 
 	return scheduler.Run{ID: request.RunID, JobID: request.JobID, EnvironmentID: request.EnvironmentID, Status: scheduler.Queued}, nil
 }
 
-func TestSystemBackupPoliciesRejectEnableUntilPostgresRecoveryExists(t *testing.T) {
+func TestSystemBackupPoliciesRejectEnableWithoutStorageEvenWithVolumeKey(t *testing.T) {
 	gormDB, err := gorm.Open(testpg.Dialector(t, "file:system-backup-schedules?mode=memory&cache=shared"), &gorm.Config{})
 	require.NoError(t, err)
 	require.NoError(t, gormDB.AutoMigrate(&SystemBackupPolicy{}, &backup.SystemBackupRecoveryConfig{}))
@@ -206,16 +206,16 @@ func TestSystemBackupPoliciesRejectEnableUntilPostgresRecoveryExists(t *testing.
 	service := &SystemService{db: db}
 	service.backup = systembackup.NewService(systembackup.Dependencies{
 		Store: service.backupStoreInternal(), DB: db,
-		Config:       &config.Config{DatabaseURL: "postgres://test.invalid/docklet"},
+		Config:       &config.Config{DatabaseURL: "postgres://test.invalid/docklet", BackupDir: "relative"},
 		RecoveryKeys: backup.NewRecoveryKeyStore(db),
 	})
 	_, err = service.backup.SetRecoveryKey(t.Context(), "QWERTY-ABCDEF-234567-GHIJKL-MNOPQR-STUVWX-YZ2345-ZXCVBN")
 	require.NoError(t, err)
-	_, err = service.backup.UpdatePolicies(t.Context(), []backuptypes.UpdateSystemBackupPolicy{{Enabled: true, Schedule: "0 0 2 * * *", RetentionCount: 5, LocalEnabled: true}})
+	_, err = service.backup.UpdatePolicies(t.Context(), []backuptypes.UpdateSystemBackupPolicy{{Enabled: true, Schedule: "0 0 2 * * *", RetentionCount: 5}})
 	require.ErrorIs(t, err, systembackup.ErrSystemBackupUnavailable)
 }
 
-func TestSystemBackupPolicyRequiresConfiguredRecoveryKeyWhenEnabled(t *testing.T) {
+func TestSystemBackupPolicyRejectsRelativeArchiveStorage(t *testing.T) {
 	gormDB, err := gorm.Open(testpg.Dialector(t, "file:system-backup-key-required?mode=memory&cache=shared"), &gorm.Config{})
 	require.NoError(t, err)
 	require.NoError(t, gormDB.AutoMigrate(&SystemBackupPolicy{}, &backup.SystemBackupRecoveryConfig{}))
@@ -224,12 +224,12 @@ func TestSystemBackupPolicyRequiresConfiguredRecoveryKeyWhenEnabled(t *testing.T
 	service.backup = systembackup.NewService(systembackup.Dependencies{
 		Store:        service.backupStoreInternal(),
 		DB:           db,
-		Config:       &config.Config{DatabaseURL: "file:system-backup-key-required-test.db"},
+		Config:       &config.Config{DatabaseURL: "file:system-backup-key-required-test.db", BackupDir: "relative"},
 		RecoveryKeys: backup.NewRecoveryKeyStore(db),
 	})
 
 	_, err = service.backup.UpdatePolicies(t.Context(), []backuptypes.UpdateSystemBackupPolicy{{
-		Enabled: true, Schedule: "0 0 2 * * *", RetentionCount: 7, LocalEnabled: true,
+		Enabled: true, Schedule: "0 0 2 * * *", RetentionCount: 7,
 	}})
-	require.ErrorContains(t, err, "configure a recovery key")
+	require.ErrorIs(t, err, systembackup.ErrSystemBackupUnavailable)
 }

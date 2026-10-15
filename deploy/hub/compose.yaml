@@ -1,0 +1,33 @@
+# Source: docklet-next/docs/design/hub-backup.md
+# Revision: 8f8c8f89bc6ebb7261862d0c35a6ddbc1513e9fa
+# Retrieved: 2026-10-15
+# License: Apache-2.0
+# Deviations: Original local Hub deployment example for issue #32.
+name: docklet-next-hub
+services:
+  hub:
+    build:
+      context: ../..
+      dockerfile: deploy/hub/Dockerfile
+      args:
+        GO_IMAGE: ${DOCKLET_GO_IMAGE:-golang:1.27.2-bookworm@sha256:5cf287a799e6b94384bad13d16b14904c531f51ba65792237e122ce42b392f61}
+        RUNTIME_IMAGE: ${DOCKLET_HUB_RUNTIME_IMAGE:-postgres:18.6-alpine@sha256:77f585114c32fbca283dc835b0596f4e52b51b4c6662d7810b2f4084f60a1873}
+    image: ${DOCKLET_HUB_IMAGE:-docklet-next-hub:0.0.0}
+    labels:
+      t3.project: docklet-next
+    env_file:
+      - ../../.env
+    environment:
+      DOCKLET_BACKUP_DIR: /var/lib/docklet/backups
+    ports:
+      - "127.0.0.1:${DOCKLET_HUB_PORT:-3552}:3552"
+    volumes:
+      - hub-backups:/var/lib/docklet/backups
+volumes:
+  hub-backups:
+    labels:
+      t3.project: docklet-next
+networks:
+  default:
+    labels:
+      t3.project: docklet-next

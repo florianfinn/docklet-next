@@ -14,7 +14,7 @@ import (
 
 func TestSystemArchiveWireExcludesRecoveryInputs(t *testing.T) {
 	for _, value := range []any{
-		CreateSystemBackupRequest{PolicyID: "policy-1", TargetID: "target-1", RecoveryKey: "secret", Destination: SystemBackupDestinationLocal},
+		CreateSystemBackupRequest{PolicyID: "policy-1", TargetID: "target-1"},
 		RestoreSystemBackupRequest{ConfirmBackupID: "archive-1", RecoveryKey: "secret"},
 		SystemBackupRun{ID: "archive-1", Size: 2147483648, Destination: SystemBackupDestinationLocal, LocalSnapshotID: "snapshot-1", Error: "secret"},
 	} {

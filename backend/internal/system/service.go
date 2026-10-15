@@ -120,12 +120,21 @@ func NewSystemService(
 }
 
 // ReconcileInterruptedBackups fails system backup runs left running by the previous process.
-func (s *SystemService) ReconcileInterruptedBackups(ctx context.Context, protectedIDs ...string) error {
+func (s *SystemService) ReconcileInterruptedBackups(ctx context.Context, _ ...string) error {
 	query := s.db.WithContext(ctx).Model(&SystemBackupRun{}).Where("status = ?", SystemBackupStatusRunning)
-	if len(protectedIDs) > 0 {
-		query = query.Where("id NOT IN ?", protectedIDs)
+	if err := query.Updates(map[string]any{"status": SystemBackupStatusFailed, "error_code": backuptypes.SystemBackupErrorInterrupted}).Error; err != nil {
+		return err
 	}
-	return query.Updates(map[string]any{"status": SystemBackupStatusFailed, "error_code": backuptypes.SystemBackupErrorInterrupted}).Error
+	if s.backup != nil {
+		if err := s.backup.ReconcileStorage(ctx); err != nil {
+			if errors.Is(err, systembackup.ErrSystemBackupUnavailable) {
+				slog.WarnContext(ctx, "Hub backup storage is unavailable", "code", "backup.storage_unavailable")
+				return nil
+			}
+			return err
+		}
+	}
+	return nil
 }
 
 // SetBackupScheduler injects the dynamic scheduler and admission gate for
@@ -513,7 +522,7 @@ func (s *SystemService) backupStoreInternal() systembackup.Store {
 		ExpiredRunIDs: func(ctx context.Context, policyID string, keep int) ([]string, error) {
 			var ids []string
 			err := s.db.WithContext(ctx).Model(&SystemBackupRun{}).
-				Where("policy_id = ? AND status = ? AND archive_name IS NOT NULL", policyID, SystemBackupStatusSucceeded).
+				Where("policy_id = ? AND trigger = ? AND status = ? AND archive_name IS NOT NULL", policyID, SystemBackupTriggerScheduled, SystemBackupStatusSucceeded).
 				Order("created_at DESC").Offset(keep).Pluck("id", &ids).Error
 			return ids, err
 		},

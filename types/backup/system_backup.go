@@ -77,7 +77,7 @@ type SystemBackupRun struct {
 	CopyErrorCode     string                `json:"copyErrorCode,omitempty"`
 	ErrorCode         string                `json:"errorCode,omitempty"`
 
-	// Legacy fields remain for the inactive Arcane engine and volume policy mapping.
+	// System-managed volume policies still map their snapshot records through these Go-only fields.
 	Destination     SystemBackupDestination `json:"-"`
 	LocalSnapshotID string                  `json:"-"`
 	Error           string                  `json:"-"`
@@ -90,7 +90,6 @@ type SystemBackupPolicy struct {
 	RetentionCount int              `json:"retentionCount" minimum:"1"`
 	TargetID       string           `json:"targetId,omitempty"`
 	LastRun        *SystemBackupRun `json:"lastRun,omitempty"`
-	LocalEnabled   bool             `json:"-"`
 }
 
 // UpdateBackupPolicy is shared with system-managed volume backup policies.
@@ -109,12 +108,10 @@ type UpdateSystemBackupPolicy struct {
 	Schedule       string `json:"schedule"`
 	RetentionCount int    `json:"retentionCount" minimum:"1"`
 	TargetID       string `json:"targetId,omitempty" pattern:"^[A-Za-z0-9_-]{1,128}$"`
-	LocalEnabled   bool   `json:"-"`
 }
 
 type SystemBackupPolicyCollection struct {
-	Policies          []SystemBackupPolicy `json:"policies"`
-	RecoveryKeyStored bool                 `json:"-"`
+	Policies []SystemBackupPolicy `json:"policies"`
 }
 
 type UpdateSystemBackupPolicies struct {
@@ -144,9 +141,6 @@ type SystemBackupOperation struct {
 type CreateSystemBackupRequest struct {
 	PolicyID string `json:"policyId,omitempty" pattern:"^[A-Za-z0-9_-]{1,128}$"`
 	TargetID string `json:"targetId,omitempty" pattern:"^[A-Za-z0-9_-]{1,128}$"`
-	// Legacy engine inputs are deliberately absent from JSON.
-	Destination SystemBackupDestination `json:"-"`
-	RecoveryKey string                  `json:"-"`
 }
 
 type RestoreSystemBackupRequest struct {
@@ -154,11 +148,7 @@ type RestoreSystemBackupRequest struct {
 	RecoveryKey     string `json:"-"`
 }
 
-type DeleteSystemBackupRequest struct {
-	RecoveryKey string `json:"-"`
-}
-
-// These Go-only values keep the volume recovery-key CLI compiling during the cutover.
+// Volume recovery-key operations use these Go-only values.
 type SystemBackupRecoveryKeyStatus struct {
 	Configured bool `json:"-"`
 }
