@@ -3,7 +3,7 @@ import type { enActivity } from "./en";
 
 export const deActivity: typeof enActivity = {
   open: "Aktivitäten",
-  openWithCount: "Aktivitäten, {count, plural, one {# aktiv} other {# aktiv}}",
+  openWithCount: "Aktivitäten, {count} aktiv",
   running: "{count} laufend",
   title: "Aktionszentrum",
   description: (import.meta.env.DEV ? "Abläufe mit Schritten, Ausgaben und Fehlern sowie der Ereignisverlauf. Alle Aktionen sind simuliert." : "Abläufe mit Schritten, Ausgaben und Fehlern sowie der Ereignisverlauf."),

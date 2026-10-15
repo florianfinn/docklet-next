@@ -2,7 +2,7 @@
 
 export const enActivity = {
   open: "Activity",
-  openWithCount: "Activity, {count, plural, one {# active} other {# active}}",
+  openWithCount: "Activity, {count} active",
   running: "{count} running",
   title: "Action center",
   description: (import.meta.env.DEV ? "Runs with steps, output and errors, plus the event history. All actions are simulated." : "Runs with steps, output and errors, plus the event history."),

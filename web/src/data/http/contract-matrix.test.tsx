@@ -3,12 +3,17 @@
 // Retrieved: 2026-10-15
 // License: Apache-2.0
 // Deviations: Original web contract matrix for issue 38.
+// Cases 5–7 and 10–12 exercise HTTP transport, SSE, and recorded DTOs only.
 
-import { screen, waitFor } from "@testing-library/react";
+import { act, screen, waitFor } from "@testing-library/react";
+import { useState } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import type { components } from "@/api/generated/schema";
 import { createDemoAdapter } from "@/data/demo/demo-adapter";
+import { SEED_RUNS } from "@/data/demo/fixtures/events";
+import { simulationStore } from "@/data/demo/simulation";
+import { isRunBusy, withRunGate } from "@/data/run-gate";
 import { pruneRuns } from "@/domain/activity-history";
 import { renderWithApp } from "@/test/render";
 import { RunFocusView } from "@/features/activity/RunFocus";
@@ -18,7 +23,7 @@ import { enActivity } from "@/features/activity/messages/en";
 import { TOAST_LIFETIME } from "@/features/activity/run-phase";
 import { ActivitySection } from "@/features/settings/sections/SimpleSections";
 
-import { renderRun } from "../message-code";
+import { renderRun, type CodedActionRun } from "../message-code";
 import type { CapabilityDescriptor } from "../capability";
 import { createHttpAdapter } from "./http-adapter";
 import { mapActivityDetail, mapEvent } from "./map-dto";
@@ -53,7 +58,7 @@ const ok = (data: unknown) => json({ success: true, data });
 const page = (data: unknown[]) => json({ success: true, data, pagination: pagination(data.length) });
 
 function backend() {
-  const state = { detail: structuredClone(detail), events: [event], list: [activity], descriptors: [
+  const state = { detail: structuredClone(detail), extraDetails: {} as Record<string, Detail>, events: [event], list: [activity], descriptors: [
     ...["listActions", "listEvents", "subscribeActions", "subscribeChanges"].map((operationId) => ({ operationId, available: true, resourceRef: { kind: "hub", id: "0" } })),
   ] as CapabilityDescriptor[] };
   const requests: string[] = [];
@@ -64,6 +69,10 @@ function backend() {
     if (url.pathname === "/api/environments") return page([{ id: "0" }]);
     if (url.pathname === "/api/environments/0/activities") return page(state.list);
     if (url.pathname === "/api/environments/0/activities/run-dns-1") return ok(state.detail);
+    if (url.pathname.startsWith("/api/environments/0/activities/")) {
+      const found = state.extraDetails[url.pathname.split("/").at(-1)!];
+      if (found) return ok(found);
+    }
     if (url.pathname === "/api/events") return page(state.events);
     return json({ code: "not-found" }, 404);
   });
@@ -72,15 +81,94 @@ function backend() {
 }
 
 class FakeSource {
+  readyState = 0;
   onopen: ((event: Event) => void) | null = null;
   onmessage: ((event: MessageEvent) => void) | null = null;
   onerror: ((event: Event) => void) | null = null;
   close = vi.fn();
-  open() { this.onopen?.({} as Event); }
+  open() { this.readyState = 1; this.onopen?.({} as Event); }
+  failClosed() { this.readyState = 2; this.onerror?.({} as Event); }
   send(value: unknown, id = "") { this.onmessage?.({ data: JSON.stringify(value), lastEventId: id } as MessageEvent); }
 }
 
-afterEach(() => { vi.restoreAllMocks(); localStorage.clear(); });
+afterEach(() => { vi.restoreAllMocks(); simulationStore.reset(); localStorage.clear(); });
+
+function RecordedOutputList({ initial, onChange }: { initial: CodedActionRun[]; onChange: (update: (runs: CodedActionRun[]) => void) => void }) {
+  const [runs, setRuns] = useState(initial);
+  onChange(setRuns);
+  return <>{runs.map((run) => <RunOutput key={run.id} run={renderRun(run, "de")} defaultOpen />)}</>;
+}
+
+describe.each(["demo", "http"] as const)("%s shared adapter cases", (kind) => {
+  it("2 disables an unsupported action and refuses a direct call without starting a run", async () => {
+    const b = backend();
+    const adapter = kind === "demo" ? createDemoAdapter() : b.http;
+    const id = kind === "demo" ? "missing" : "dns";
+    const ref = { kind: "stack" as const, id };
+    if (kind === "http") b.state.descriptors.push({ operationId: "runStackCommand", resourceRef: ref, available: false, disabledReasonCode: "capability.mapping-unavailable" });
+    const descriptor = await adapter.getCapability("runStackCommand", ref);
+    expect(descriptor.available).toBe(false);
+    expect(descriptor.disabledReasonCode).toBe(kind === "http" ? "capability.mapping-unavailable" : "capability.unavailable");
+    const beforeRequests = b.fetcher.mock.calls.length;
+    const beforeRuns = kind === "demo" ? (await adapter.listActions()).length : 0;
+    await expect(adapter.runStackCommand(id, "start")).rejects.toMatchObject({ outcome: { kind: "not-available", operationId: "runStackCommand" } });
+    expect(b.fetcher.mock.calls.length).toBe(beforeRequests);
+    if (kind === "demo") expect((await adapter.listActions()).length).toBe(beforeRuns);
+  });
+
+  it("3 keeps a missing descriptor unavailable through the real adapter lookup", async () => {
+    const b = backend();
+    b.state.descriptors = [];
+    const adapter = kind === "demo" ? createDemoAdapter({ missingCapabilities: ["runStackCommand"] }) : b.http;
+    const ref = { kind: "stack" as const, id: "dns" };
+    const descriptor = await adapter.getCapability("runStackCommand", ref);
+    expect([descriptor.available, descriptor.disabledReasonCode]).toEqual([false, "capability.unavailable"]);
+    await expect(adapter.runStackCommand("dns", "start")).rejects.toMatchObject({ outcome: { kind: "not-available" } });
+    if (kind === "http") {
+      expect(b.fetcher.mock.calls.every((call) => String(call[0]).includes("capabilities"))).toBe(true);
+      b.fetcher.mockRejectedValueOnce(new Error("offline"));
+      expect((await adapter.getCapability("listEvents")).available).toBe(false);
+    }
+  });
+
+  it("4 preserves a busy run ID and refuses another start", async () => {
+    if (kind === "demo") {
+      simulationStore.set((state) => ({ ...state, latency: "instant", actionSpeed: 20 }));
+      const adapter = withRunGate(createDemoAdapter());
+      const activeRunId = await adapter.runStackCommand("media", "redeploy");
+      const before = (await adapter.listActions()).length;
+      const error = await adapter.runStackCommand("media", "stop").catch((value: unknown) => value);
+      expect(isRunBusy(error)).toBe(true);
+      if (isRunBusy(error)) expect(error.runId).toBe(activeRunId);
+      expect((await adapter.listActions()).length).toBe(before);
+      return;
+    }
+    for (const code of ["run.busy", "run.cancelling"] as const) {
+      const b = backend();
+      b.fetcher.mockImplementation(async (input) => String(input).includes("/events") ? json({ code, activeRunId: "active-1" }, 409) : backendResponse(String(input)));
+      await expect(b.http.listEvents()).rejects.toMatchObject({ outcome: { kind: "conflict", code, activeRunId: "active-1" } });
+      expect(b.fetcher.mock.calls.some((call) => String(call[0]).includes("/activities"))).toBe(false);
+    }
+  });
+
+  it.each([["queued", "Wartet", "Queued"], ["cancelled", "Abgebrochen", "Cancelled"]] as const)("%s has distinct labels and terminal behavior (cases 13/14)", (status, de, en) => {
+    const b = backend();
+    b.state.detail.activity.status = status;
+    const seed = { ...structuredClone(SEED_RUNS[1]!), status, finishedAt: status === "queued" ? undefined : later };
+    const adapter = kind === "demo" ? createDemoAdapter({ seedRuns: [seed] }) : b.http;
+    return adapter.listActions().then((runs) => {
+      const coded = runs[0]!;
+      expect(coded.status).toBe(status);
+      const rendered = renderRun(coded, "de");
+      expect(rendered.status).toBe(status);
+      expect([deActivity.status[status], enActivity.status[status]]).toEqual([de, en]);
+      if (status === "queued") expect(pruneRuns([rendered], 0)).toHaveLength(1);
+      else expect([TOAST_LIFETIME.cancelled, pruneRuns([rendered], 0).length]).toEqual([8000, 0]);
+      renderWithApp(<RunFocusView run={rendered} now={Date.parse(later)} />, adapter);
+      expect(screen.getAllByText(de).length).toBeGreaterThan(0);
+    });
+  });
+});
 
 describe("#38 adapter contract matrix", () => {
   it("1 maps recorded run and event fields alongside coded demo data", async () => {
@@ -96,39 +184,6 @@ describe("#38 adapter contract matrix", () => {
     const wireEvent = (await http.listEvents())[0]!;
     expect([wireEvent.id, wireEvent.kind, wireEvent.level, wireEvent.stackId]).toEqual([demoEvent.id, demoEvent.kind, demoEvent.level, demoEvent.stackId]);
     expect(wireEvent.title.code).toBe("project.deploy");
-  });
-
-  it("2 keeps an unsupported operation disabled and refuses direct calls without a request", async () => {
-    const { http, fetcher, state } = backend();
-    state.descriptors.push({ operationId: "runStackCommand", resourceRef: { kind: "stack", id: "dns" }, available: false, disabledReasonCode: "capability.mapping-unavailable" });
-    const descriptor = await http.getCapability("runStackCommand", { kind: "stack", id: "dns" });
-    expect([descriptor.available, descriptor.disabledReasonCode]).toEqual([false, "capability.mapping-unavailable"]);
-    const before = fetcher.mock.calls.length;
-    await expect(http.runStackCommand("dns", "start")).rejects.toMatchObject({ outcome: { kind: "not-available", operationId: "runStackCommand", reasonCode: "capability.mapping-unavailable" } });
-    expect(fetcher.mock.calls.length).toBe(before);
-    expect((await createDemoAdapter().getCapability("runStackCommand", { kind: "stack", id: "cloud" })).available).toBe(true);
-    expect((await createDemoAdapter().getCapability("runStackCommand", { kind: "stack", id: "missing" })).available).toBe(false);
-  });
-
-  it("3 treats missing and unreadable descriptors as unavailable", async () => {
-    const { http, state, fetcher } = backend();
-    state.descriptors = [];
-    expect((await http.getCapability("listActions")).available).toBe(false);
-    await expect(http.listActions()).rejects.toMatchObject({ outcome: { kind: "not-available" } });
-    expect(fetcher.mock.calls.every((call) => String(call[0]).includes("capabilities"))).toBe(true);
-    fetcher.mockRejectedValueOnce(new Error("offline"));
-    expect((await http.getCapability("listEvents")).available).toBe(false);
-    const demo = createDemoAdapter();
-    vi.spyOn(demo, "getCapability").mockResolvedValueOnce({ operationId: "listActions", resourceRef: { kind: "hub", id: "0" }, available: false, disabledReasonCode: "capability.unavailable" }).mockRejectedValueOnce(new Error("offline"));
-    expect((await demo.getCapability("listActions")).available).toBe(false);
-    await expect(demo.getCapability("listActions")).rejects.toThrow("offline");
-  });
-
-  it.each(["run.busy", "run.cancelling"] as const)("4 preserves %s with its active run", async (code) => {
-    const { http, fetcher } = backend();
-    fetcher.mockImplementation(async (input) => String(input).includes("/events") ? json({ code, activeRunId: "active-1" }, 409) : backendResponse(String(input)));
-    await expect(http.listEvents()).rejects.toMatchObject({ outcome: { kind: "conflict", code, activeRunId: "active-1" } });
-    expect(fetcher.mock.calls.some((call) => String(call[0]).includes("/activities"))).toBe(false);
   });
 
   it("5 rejects transport and DTO mapping errors without an empty fallback", async () => {
@@ -155,8 +210,9 @@ describe("#38 adapter contract matrix", () => {
     }
     source.send({ channel: "activities", activity: { type: "message", activityId: activity.id, message: detail.messages?.[0] }, timestamp: later });
     await waitFor(() => expect(b.requests.filter((path) => path.endsWith("/run-dns-1")).length).toBeGreaterThan(3));
+    changes.mockClear();
     source.send({ channel: "events", eventLog: { type: "changed", timestamp: later }, timestamp: later });
-    expect(changes).toHaveBeenCalledWith(["events"]);
+    expect(changes.mock.calls).toEqual([[ ["events"] ]]);
     stopRuns(); stopChanges();
   });
 
@@ -177,6 +233,68 @@ describe("#38 adapter contract matrix", () => {
     await waitFor(() => expect(b.requests.filter((path) => path.endsWith("/run-dns-1")).length).toBeGreaterThan(reads));
     expect(changes).toHaveBeenCalledWith(["events"]);
     stopRuns(); stopChanges();
+  });
+
+  it("7 keeps a reconnect full read when another run receives an activity event", async () => {
+    const b = backend();
+    b.state.detail.activity.status = "running";
+    b.state.list[0] = { ...activity, status: "running" };
+    const second: Activity = { ...activity, id: "run-other-2", status: "running", resourceName: "Other" };
+    const secondDetail: Detail = { ...structuredClone(detail), activity: second };
+    b.state.list.push(second);
+    let releaseSecond: (() => void) | undefined;
+    let holdSecond = false;
+    const fetcher = vi.fn(async (input: string | URL | Request) => {
+      if (String(input).includes("/activities/run-other-2")) {
+        if (holdSecond) {
+          holdSecond = false;
+          await new Promise<void>((resolve) => { releaseSecond = resolve; });
+        }
+        return ok(secondDetail);
+      }
+      return b.fetcher(input);
+    });
+    const source = new FakeSource();
+    const http = createHttpAdapter({ fetch: fetcher as typeof fetch, eventSource: () => source as unknown as EventSource });
+    const runs = vi.fn();
+    const stop = http.subscribeActions(runs);
+    source.open();
+    await waitFor(() => expect(runs.mock.lastCall?.[0].find((run: { id: string }) => run.id === second.id)?.status).toBe("running"));
+    secondDetail.activity = { ...second, status: "success" };
+    holdSecond = true;
+    source.open();
+    await waitFor(() => expect(releaseSecond).toBeTypeOf("function"));
+    source.send({ channel: "activities", activity: { type: "updated", activityId: activity.id, environmentId: "0" }, timestamp: later });
+    await waitFor(() => expect(fetcher.mock.calls.filter((call) => String(call[0]).includes("/activities/run-dns-1")).length).toBeGreaterThan(1));
+    releaseSecond!();
+    await waitFor(() => expect(runs.mock.lastCall?.[0].find((run: { id: string }) => run.id === second.id)?.status).toBe("succeeded"));
+    stop();
+  });
+
+  it("7 reconnects a CLOSED source, re-reads once, and stops retries after unsubscribe", async () => {
+    const b = backend();
+    const sources: FakeSource[] = [];
+    const http = createHttpAdapter({ fetch: b.fetcher as typeof fetch, eventSource: () => {
+      const source = new FakeSource();
+      sources.push(source);
+      return source as unknown as EventSource;
+    } });
+    const runs = vi.fn();
+    const stop = http.subscribeActions(runs);
+    sources[0]!.open();
+    await waitFor(() => expect(runs).toHaveBeenCalledTimes(1));
+    expect(b.requests.filter((path) => path.endsWith("/run-dns-1"))).toHaveLength(1);
+    b.state.detail.activity.status = "running";
+    sources[0]!.failClosed();
+    await waitFor(() => expect(sources).toHaveLength(2));
+    expect(sources[0]!.close).toHaveBeenCalledTimes(1);
+    sources[1]!.open();
+    await waitFor(() => expect(runs.mock.lastCall?.[0][0].status).toBe("running"));
+    expect(b.requests.filter((path) => path.endsWith("/run-dns-1"))).toHaveLength(2);
+    sources[1]!.failClosed();
+    stop();
+    await new Promise((resolve) => setTimeout(resolve, 350));
+    expect(sources).toHaveLength(2);
   });
 
   it("8 selects HTTP for production and has no simulated output marker", async () => {
@@ -214,24 +332,21 @@ describe("#38 adapter contract matrix", () => {
 
   it("12 drops pruned finished DTOs while retaining active output", async () => {
     const b = backend();
-    b.state.detail.activity.status = "running";
-    const active = (await b.http.listActions())[0]!;
-    b.state.list = [];
-    expect(await b.http.listActions()).toEqual([]);
-    expect(active.output[0]?.text).toBe("ready");
+    b.state.detail.output = [{ timestamp: at, stream: "stdout", text: "finished-only" }];
+    const activeActivity: Activity = { ...activity, id: "run-active-2", status: "running" };
+    b.state.list.push(activeActivity);
+    b.state.extraDetails[activeActivity.id] = { ...structuredClone(detail), activity: activeActivity, output: [{ timestamp: at, stream: "stdout", text: "active-only" }] };
+    const initial = await b.http.listActions();
+    let update!: (runs: CodedActionRun[]) => void;
+    renderWithApp(<RecordedOutputList initial={initial} onChange={(setter) => { update = setter; }} />, b.http);
+    await waitFor(() => expect([screen.queryByText("finished-only") !== null, screen.queryByText("active-only") !== null]).toEqual([true, true]));
+    b.state.list = [activeActivity];
+    const refreshed = await b.http.listActions();
+    act(() => update(refreshed));
+    await waitFor(() => expect(screen.queryByText("finished-only")).toBeNull());
+    expect(screen.queryByText("active-only") !== null).toBe(true);
   });
 
-  it.each([["queued", "Wartet", "Queued"], ["cancelled", "Abgebrochen", "Cancelled"]] as const)("13/14 renders %s distinctly", (status, de, en) => {
-    const b = backend(); b.state.detail.activity.status = status;
-    const coded = mapActivityDetail(b.state.detail);
-    expect(coded.status).toBe(status);
-    expect(renderRun(coded, "de").status).toBe(status);
-    expect([deActivity.status[status], enActivity.status[status]]).toEqual([de, en]);
-    if (status === "queued") expect(pruneRuns([renderRun(coded, "de")], 0)).toHaveLength(1);
-    else expect([TOAST_LIFETIME.cancelled, pruneRuns([renderRun(coded, "de")], 0).length]).toEqual([8000, 0]);
-    renderWithApp(<RunFocusView run={renderRun(coded, "de")} now={Date.parse(later)} />, b.http);
-    expect(screen.getAllByText(de).length).toBeGreaterThan(0);
-  });
 });
 
 function backendResponse(input: string): Response {

@@ -15,9 +15,10 @@ import { mapActivityDetail, mapEvent } from "./map-dto";
 type ReadOperation = "get-capabilities" | "listEnvironments" | "list-activities" | "get-activity" | "listEvents";
 type Body<I extends ReadOperation> = operations[I]["responses"][200]["content"]["application/json"];
 type StreamPayload = operations["streamClient"]["responses"][200]["content"]["text/event-stream"][number]["data"];
-type Source = Pick<EventSource, "close" | "onopen" | "onmessage" | "onerror">;
+type Source = Pick<EventSource, "close" | "onopen" | "onmessage" | "onerror"> & Partial<Pick<EventSource, "readyState">>;
 
 const IMPLEMENTED = new Set(["listActions", "listEvents", "subscribeActions", "subscribeChanges"]);
+const RECONNECT_MS = 250;
 
 export interface HttpAdapterOptions {
   baseUrl?: string;
@@ -55,6 +56,11 @@ export function createHttpAdapter(options: HttpAdapterOptions = {}): DockletAdap
   let currentRuns: CodedActionRun[] | undefined;
   let lastEventId: number | undefined;
   let refreshVersion = 0;
+  let subscriptionVersion = 0;
+  let fullRead: Promise<void> | undefined;
+  const runVersions = new Map<string, number>();
+  let sourceOpen = false;
+  let reconnectTimer: ReturnType<typeof setTimeout> | undefined;
 
   async function read<I extends ReadOperation>(operationId: I, route: keyof paths | string, query?: Record<string, string | number>): Promise<Body<I>> {
     const params = new URLSearchParams();
@@ -129,22 +135,28 @@ export function createHttpAdapter(options: HttpAdapterOptions = {}): DockletAdap
   function refreshRuns(): void {
     if (actionListeners.size === 0) return;
     const version = ++refreshVersion;
-    void loadActions().then((runs) => {
-      if (version === refreshVersion) {
+    const pending = loadActions().then((runs) => {
+      if (version === refreshVersion && actionListeners.size) {
         currentRuns = runs;
         actionListeners.forEach((listener) => listener(runs));
       }
     }).catch((error) => { window.dispatchEvent(new CustomEvent("docklet:adapter-error", { detail: error })); });
+    fullRead = pending;
+    void pending.then(() => { if (fullRead === pending) fullRead = undefined; });
   }
 
   function refreshRun(activityId: string, environmentId?: string): void {
     const previous = currentRuns?.find((run) => run.id === activityId);
     if (!previous || !environmentId || previous.hostId !== environmentId) { refreshRuns(); return; }
-    const version = ++refreshVersion;
-    void read("get-activity", `/environments/${encodeURIComponent(environmentId)}/activities/${encodeURIComponent(activityId)}`, { limit: 500 }).then((body) => {
+    const generation = subscriptionVersion;
+    const version = (runVersions.get(activityId) ?? 0) + 1;
+    runVersions.set(activityId, version);
+    void read("get-activity", `/environments/${encodeURIComponent(environmentId)}/activities/${encodeURIComponent(activityId)}`, { limit: 500 }).then(async (body) => {
       if (!body.data || body.data.activity?.id !== activityId) throw classifiedError({ code: "get-activity.invalid-detail" });
       const updated = mapActivityDetail(body.data);
-      if (version !== refreshVersion || !currentRuns) return;
+      // A full snapshot must publish before a concurrent detail refresh changes one run.
+      while (fullRead) await fullRead;
+      if (generation !== subscriptionVersion || version !== runVersions.get(activityId) || !currentRuns?.some((run) => run.id === activityId)) return;
       currentRuns = currentRuns.map((run) => run.id === activityId ? updated : run);
       actionListeners.forEach((listener) => listener(currentRuns!));
       if (updated.status !== "queued" && updated.status !== "running") refreshRuns();
@@ -181,19 +193,53 @@ export function createHttpAdapter(options: HttpAdapterOptions = {}): DockletAdap
 
   function connect(): void {
     if (source || (!actionListeners.size && !changeListeners.size)) return;
+    sourceOpen = false;
+    let opened: Source;
     try {
-      source = sourceFactory(`${baseUrl}/stream?channels=activities%2Cevents`);
-    } catch (error) { window.dispatchEvent(new CustomEvent("docklet:adapter-error", { detail: classifiedError(error) })); return; }
-    source.onopen = () => { lastEventId = undefined; refreshSubscribed(); };
-    source.onmessage = (event: MessageEvent) => handleStream(event.data, event.lastEventId);
-    source.onerror = () => { lastEventId = undefined; };
+      opened = sourceFactory(`${baseUrl}/stream?channels=activities%2Cevents`);
+    } catch (error) {
+      window.dispatchEvent(new CustomEvent("docklet:adapter-error", { detail: classifiedError(error) }));
+      scheduleReconnect();
+      return;
+    }
+    source = opened;
+    opened.onopen = () => {
+      if (source !== opened) return;
+      sourceOpen = true;
+      lastEventId = undefined;
+      refreshSubscribed();
+    };
+    opened.onmessage = (event: MessageEvent) => { if (source === opened) handleStream(event.data, event.lastEventId); };
+    opened.onerror = () => {
+      if (source !== opened) return;
+      lastEventId = undefined;
+      if (opened.readyState === 2) {
+        opened.close();
+        source = undefined;
+        sourceOpen = false;
+        scheduleReconnect();
+      }
+    };
+  }
+
+  function scheduleReconnect(): void {
+    if (reconnectTimer || (!actionListeners.size && !changeListeners.size)) return;
+    reconnectTimer = setTimeout(() => {
+      reconnectTimer = undefined;
+      connect();
+    }, RECONNECT_MS);
   }
 
   function disconnectIfUnused(): void {
     if (actionListeners.size || changeListeners.size) return;
+    if (reconnectTimer) clearTimeout(reconnectTimer);
+    reconnectTimer = undefined;
     source?.close();
     source = undefined;
+    sourceOpen = false;
     ++refreshVersion;
+    ++subscriptionVersion;
+    runVersions.clear();
   }
 
   const unsupported = createDisconnectedAdapter();
@@ -208,7 +254,8 @@ export function createHttpAdapter(options: HttpAdapterOptions = {}): DockletAdap
     subscribeActions(listener) {
       actionListeners.add(listener);
       connect();
-      refreshRuns();
+      if (actionListeners.size === 1 && sourceOpen) refreshRuns();
+      else if (currentRuns) listener(currentRuns);
       return () => { actionListeners.delete(listener); disconnectIfUnused(); };
     },
     subscribeChanges(listener) {
