@@ -12,6 +12,7 @@ GitHub issues and milestones hold implementation and acceptance evidence.
 | [HTTP adapter, live channel and capabilities](adapter-live-capabilities.md) | M3 adapter outcomes, server capabilities, run/event refresh and contract matrix |
 | [Run gate and single-hub operation](run-gate.md) | Activity states, gated admission, cancellation, restart recovery and one hub per database |
 | [Database baseline](database-baseline.md) | PostgreSQL baseline generation, forward-only migration policy and schema proof |
+| [Hub database backup](hub-backup.md) | PostgreSQL archive, restore safety, retention and delivery steps |
 | [Agent surface](agent-surface.md) | Agent and Edge agent module allowlist and host exposure |
 | [Functional cut](functional-cut.md) | M1 module decisions and the R5 evaluation |
 | [Frontend consolidation](frontend-consolidation.md) | Frozen React reference and product/demo boundary |
