@@ -32,7 +32,12 @@ func appendOutputLinesInternal(existing OutputLines, incoming []activitytypes.Ou
 		lineSize := serializedOutputLineSizeInternal(line)
 		if lineSize+2 > maxSerializedOutputBytes {
 			truncated = true
-			line.Step = ""
+			originalText := line.Text
+			line.Text = ""
+			if serializedOutputLineSizeInternal(line)+2 > maxSerializedOutputBytes {
+				line.Step = ""
+			}
+			line.Text = originalText
 			runes := []rune(line.Text)
 			low, high := 0, len(runes)
 			for low < high {

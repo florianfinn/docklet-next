@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace
+// Deviations: Local module namespace; raw line capture, bounded blocking queue and trailing line flush.
 
 package activity
 
@@ -205,6 +205,7 @@ func (w *Writer) processLineInternal(line string) mo.Option[writerAppendMessage]
 }
 
 func (w *Writer) enqueueMessageInternal(message writerAppendMessage) {
+	// Queue backpressure preserves accepted output; cancellation ends a blocked write.
 	select {
 	case w.queueCh <- writerQueueItem{message: &message}:
 	case <-doneInternal(w.ctx):

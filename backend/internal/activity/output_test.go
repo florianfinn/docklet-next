@@ -44,3 +44,30 @@ func TestOutputLimitKeepsUTF8TailOfOversizedLineInternal(t *testing.T) {
 	require.NoError(t, err)
 	require.LessOrEqual(t, len(encoded), maxSerializedOutputBytes)
 }
+
+func TestOutputLimitKeepsFittingStepOfOversizedLineInternal(t *testing.T) {
+	output, truncated := appendOutputLinesInternal(nil, []activitytypes.OutputLine{{
+		Timestamp: time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC),
+		Stream:    "stdout", Step: "pull", Text: strings.Repeat("x", maxSerializedOutputBytes),
+	}})
+	require.True(t, truncated)
+	require.Len(t, output, 1)
+	require.Equal(t, "pull", output[0].Step)
+	encoded, err := json.Marshal(output)
+	require.NoError(t, err)
+	require.LessOrEqual(t, len(encoded), maxSerializedOutputBytes)
+}
+
+func TestOutputLimitDropsStepThatExceedsCapInternal(t *testing.T) {
+	output, truncated := appendOutputLinesInternal(nil, []activitytypes.OutputLine{{
+		Timestamp: time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC),
+		Stream:    "stdout", Step: strings.Repeat("s", maxSerializedOutputBytes), Text: "tail",
+	}})
+	require.True(t, truncated)
+	require.Len(t, output, 1)
+	require.Empty(t, output[0].Step)
+	require.Equal(t, "tail", output[0].Text)
+	encoded, err := json.Marshal(output)
+	require.NoError(t, err)
+	require.LessOrEqual(t, len(encoded), maxSerializedOutputBytes)
+}

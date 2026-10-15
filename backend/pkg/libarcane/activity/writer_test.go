@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace
+// Deviations: Local module namespace; raw output, batch and queue backpressure tests.
 
 package activity
 
@@ -154,6 +154,84 @@ func TestWriterBatchesQueuedLinesIntoOneAppendInternal(t *testing.T) {
 		require.Equal(t, fmt.Sprintf("layer %d", i), message.Message)
 	}
 	require.Equal(t, []int{1, 9}, batchSizes)
+}
+
+func TestWriterFullQueueBlocksUntilDrainedInternal(t *testing.T) {
+	appender := &gatedAppender{started: make(chan struct{}), release: make(chan struct{})}
+	var releaseOnce sync.Once
+	release := func() { releaseOnce.Do(func() { close(appender.release) }) }
+	defer release()
+	writer := NewWriter(t.Context(), appender, "activity-1", io.Discard, "pull")
+	_, err := writer.Write([]byte("first\n"))
+	require.NoError(t, err)
+	select {
+	case <-appender.started:
+	case <-time.After(time.Second):
+		t.Fatal("first append never started")
+	}
+	for i := range writerAppendQueueSize {
+		_, err := writer.Write(fmt.Appendf(nil, "queued %d\n", i))
+		require.NoError(t, err)
+	}
+	require.Len(t, writer.(*Writer).queueCh, writerAppendQueueSize)
+	writeDone := make(chan error, 1)
+	go func() {
+		_, err := writer.Write([]byte("after queue\n"))
+		writeDone <- err
+	}()
+	select {
+	case <-writeDone:
+		t.Fatal("write returned while queue was full")
+	case <-time.After(30 * time.Millisecond):
+	}
+	release()
+	select {
+	case err := <-writeDone:
+		require.NoError(t, err)
+	case <-time.After(time.Second):
+		t.Fatal("write did not resume after queue drained")
+	}
+	FlushWriter(writer)
+	messages, _ := appender.recorded()
+	require.Len(t, messages, writerAppendQueueSize+2)
+	require.Equal(t, "after queue", messages[len(messages)-1].Message)
+}
+
+func TestWriterFullQueueReturnsOnCancelInternal(t *testing.T) {
+	ctx, cancel := context.WithCancel(t.Context())
+	defer cancel()
+	appender := &gatedAppender{started: make(chan struct{}), release: make(chan struct{})}
+	defer close(appender.release)
+	writer := NewWriter(ctx, appender, "activity-1", io.Discard, "pull")
+	_, err := writer.Write([]byte("first\n"))
+	require.NoError(t, err)
+	select {
+	case <-appender.started:
+	case <-time.After(time.Second):
+		t.Fatal("first append never started")
+	}
+	for i := range writerAppendQueueSize {
+		_, err := writer.Write(fmt.Appendf(nil, "queued %d\n", i))
+		require.NoError(t, err)
+	}
+	require.Len(t, writer.(*Writer).queueCh, writerAppendQueueSize)
+	writeDone := make(chan error, 1)
+	go func() {
+		_, err := writer.Write([]byte("after queue\n"))
+		writeDone <- err
+	}()
+	select {
+	case <-writeDone:
+		t.Fatal("write returned while queue was full")
+	case <-time.After(30 * time.Millisecond):
+	}
+	cancel()
+	select {
+	case err := <-writeDone:
+		require.NoError(t, err)
+	case <-time.After(time.Second):
+		t.Fatal("write did not return after cancellation")
+	}
 }
 
 func TestWriterReturnsWrappedWriteErrorWithoutActivityInternal(t *testing.T) {
