@@ -35,6 +35,7 @@ func RegisterRoutes(api huma.API, h *Handler) {
 	upload.DefaultStatus = http.StatusAccepted
 	upload.Description = "Stream one PostgreSQL custom-format archive as application/octet-stream, up to 2 GiB."
 	upload.MaxBodyBytes = backuptypes.MaxSystemArchiveBytes + 1
+	upload.Errors = []int{http.StatusRequestEntityTooLarge, http.StatusUnsupportedMediaType}
 	maxArchiveBytes := int(backuptypes.MaxSystemArchiveBytes)
 	// RawBody would buffer the entire archive before the handler can stream it.
 	upload.RequestBody = &huma.RequestBody{Required: true, Content: map[string]*huma.MediaType{
@@ -46,7 +47,12 @@ func RegisterRoutes(api huma.API, h *Handler) {
 	download := op("download-system-backup", http.MethodGet, "/backups/{id}/download", "Download a Hub database archive")
 	download.Responses = map[string]*huma.Response{"200": {
 		Description: "PostgreSQL custom-format archive",
-		Content:     map[string]*huma.MediaType{"application/octet-stream": {Schema: &huma.Schema{Type: "string", Format: "binary"}}},
+		Headers: map[string]*huma.Param{"Content-Disposition": {
+			Description: "attachment with a server-selected archive filename",
+			Required:    true,
+			Schema:      &huma.Schema{Type: "string", Pattern: "^attachment(?:;|$)"},
+		}},
+		Content: map[string]*huma.MediaType{"application/octet-stream": {Schema: &huma.Schema{Type: "string", Format: "binary"}}},
 	}}
 	middleware.RegisterWithPermission(api, download, authz.PermSystemBackupsRead, h.Download)
 	restore := op("restore-system-backup", http.MethodPost, "/backups/{id}/restore", "Restore a Hub database archive")

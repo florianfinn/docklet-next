@@ -45,12 +45,18 @@ func TestHubBackupArchiveContract(t *testing.T) {
 	require.NotNil(t, spec.Paths["/backups/volumes/run"])
 	download := spec.Paths["/backups/{id}/download"].Get.Responses["200"]
 	require.NotNil(t, download.Content["application/octet-stream"])
+	require.NotNil(t, download.Headers["Content-Disposition"])
+	require.True(t, download.Headers["Content-Disposition"].Required)
+	require.Equal(t, "^attachment(?:;|$)", download.Headers["Content-Disposition"].Schema.Pattern)
 	upload := spec.Paths["/backups/upload"].Post.RequestBody
 	require.NotNil(t, upload)
 	require.NotNil(t, upload.Content["application/octet-stream"])
 	require.Nil(t, upload.Content["application/json"])
 	require.Equal(t, "binary", upload.Content["application/octet-stream"].Schema.Format)
 	require.Equal(t, 2147483648, *upload.Content["application/octet-stream"].Schema.MaxLength)
+	for _, status := range []string{"413", "415"} {
+		require.NotNil(t, spec.Paths["/backups/upload"].Post.Responses[status], status)
+	}
 
 	run := spec.Components.Schemas.Map()["BackupSystemBackupRun"]
 	require.NotNil(t, run)

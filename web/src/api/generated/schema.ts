@@ -1,5 +1,5 @@
 // Source: api/openapi.json
-// Revision: 7a4b182576a70707668b3aca1195802901555a65b5f052f4d6a05370799eff3c
+// Revision: 9a9c0660a4ddf62accc3036ba995d8def71002aad033d0b5649e750db111fa2f
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
 // Deviations: Generated TypeScript declarations from the local Huma export.
@@ -11667,8 +11667,26 @@ export interface operations {
                     "application/json": components["schemas"]["BackupSystemBackupOperation"];
                 };
             };
-            /** @description Error */
-            default: {
+            /** @description Request Entity Too Large */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Unsupported Media Type */
+            415: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -11847,6 +11865,8 @@ export interface operations {
             /** @description PostgreSQL custom-format archive */
             200: {
                 headers: {
+                    /** @description attachment with a server-selected archive filename */
+                    "Content-Disposition": string;
                     [name: string]: unknown;
                 };
                 content: {

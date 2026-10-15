@@ -511,7 +511,11 @@ func (s *SystemService) backupStoreInternal() systembackup.Store {
 			return result, response, nil
 		},
 		ExpiredRunIDs: func(ctx context.Context, policyID string, keep int) ([]string, error) {
-			return backup.ExpiredRunIDs(ctx, s.db, "system_backup_runs", policyID, keep)
+			var ids []string
+			err := s.db.WithContext(ctx).Model(&SystemBackupRun{}).
+				Where("policy_id = ? AND status = ? AND archive_name IS NOT NULL", policyID, SystemBackupStatusSucceeded).
+				Order("created_at DESC").Offset(keep).Pluck("id", &ids).Error
+			return ids, err
 		},
 		RunsByID: func(ctx context.Context, ids []string) ([]*backuptypes.SystemBackupRun, error) {
 			var records []SystemBackupRun

@@ -60,11 +60,15 @@ func (b SystemBackupRun) ToDTO() backup.SystemBackupRun {
 }
 
 func systemBackupRunFromDTOInternal(dto backup.SystemBackupRun) SystemBackupRun {
+	copyState := dto.CopyState
+	if copyState == "" {
+		copyState = backup.SystemBackupCopyNone
+	}
 	run := SystemBackupRun{
 		Size: dto.Size, CreatedAt: dto.CreatedAt, Status: SystemBackupStatus(dto.Status), Trigger: SystemBackupTrigger(dto.Trigger),
 		ArchiveName: backupOptionalValueInternal(dto.ArchiveName), ActivityID: dto.ActivityID, CompletedAt: dto.CompletedAt,
 		SourceServerMajor: backupOptionalValueInternal(dto.SourceServerMajor), MigrationVersion: backupOptionalValueInternal(dto.MigrationVersion),
-		CopyTargetID: dto.CopyTargetID, CopyState: dto.CopyState, CopyErrorCode: dto.CopyErrorCode,
+		CopyTargetID: dto.CopyTargetID, CopyState: copyState, CopyErrorCode: dto.CopyErrorCode,
 		PolicyID: dto.PolicyID, ErrorCode: dto.ErrorCode,
 	}
 	run.ID = dto.ID
