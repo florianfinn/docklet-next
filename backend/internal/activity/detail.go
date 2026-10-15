@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; run detail and complete step trace.
+// Deviations: Local module namespace; run detail, step trace and output projection.
 
 package activity
 
@@ -58,8 +58,10 @@ func (s *ActivityService) GetActivityDetail(ctx context.Context, environmentID, 
 	slices.Reverse(stepMessages)
 
 	return &activity.Detail{
-		Activity:  activityToDTOInternal(&model),
-		Messages:  outMessages,
-		StepTrace: stepTraceInternal(stepMessages, &model),
+		Activity:        activityToDTOInternal(&model),
+		Messages:        outMessages,
+		StepTrace:       stepTraceInternal(stepMessages, &model),
+		Output:          append([]activity.OutputLine{}, model.Output...),
+		OutputTruncated: model.OutputTruncated,
 	}, nil
 }

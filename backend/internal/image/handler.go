@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; functional cut: removed standalone build workshop.
+// Deviations: Local module namespace; removed build workshop; flush error output before run completion.
 
 package image
 
@@ -337,12 +337,9 @@ func (h *ImageHandler) PullImage(ctx context.Context, input *PullImageInput) (*h
 
 			writer := activitylib.NewWriter(runtimeCtx, h.activityService, activityID, rawWriter, "Pulling image")
 			if pullImageErr := h.imageService.PullImage(runtimeCtx, fullImageName, writer, *user, credentials); pullImageErr != nil {
+				_, _ = fmt.Fprintf(writer, "{\"error\":%q}\n", pullImageErr.Error())
 				activitylib.FlushWriter(writer)
 				activitylib.CompleteHandlerActivity(runtimeCtx, h.activityService, activityID, "Image pull failed", pullImageErr)
-				_, _ = fmt.Fprintf(writer, "{\"error\":%q}\n", pullImageErr.Error())
-				if f, ok := writer.(http.Flusher); ok {
-					f.Flush()
-				}
 				return
 			}
 			activitylib.FlushWriter(writer)

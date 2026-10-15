@@ -96,9 +96,19 @@ type Message struct {
 }
 
 type Detail struct {
-	Activity  Activity         `json:"activity"`
-	Messages  []Message        `json:"messages"`
-	StepTrace []StepTraceEntry `json:"stepTrace"`
+	Activity        Activity         `json:"activity"`
+	Messages        []Message        `json:"messages"`
+	StepTrace       []StepTraceEntry `json:"stepTrace"`
+	Output          []OutputLine     `json:"output"`
+	OutputTruncated bool             `json:"outputTruncated"`
+}
+
+type OutputLine struct {
+	Timestamp time.Time    `json:"timestamp"`
+	Stream    string       `json:"stream"`
+	Text      string       `json:"text"`
+	Step      string       `json:"step,omitempty"`
+	Level     MessageLevel `json:"level,omitempty"`
 }
 
 type StepTraceEntry struct {

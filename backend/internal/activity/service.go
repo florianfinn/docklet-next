@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; functional cut: removed SQLite runtime and migrations; coded run projection and guarded updates.
+// Deviations: Local module namespace; removed SQLite; coded run projection, guarded updates and bounded output persistence.
 
 package activity
 
@@ -624,53 +624,6 @@ func (s *ActivityService) AppendMessage(ctx context.Context, activityID string, 
 	return &messages[0], nil
 }
 
-// AppendMessages persists a batch in one transaction. Re-read the activity
-// after the update so its published state includes earlier concurrent writes;
-// stale later publications are dropped by admitActivityPublishInternal.
-func (s *ActivityService) AppendMessages(ctx context.Context, activityID string, reqs []AppendActivityMessageRequest) ([]activity.Message, error) {
-	if err := s.checkInitInternal(); err != nil {
-		return nil, err
-	}
-	activityID = strings.TrimSpace(activityID)
-	if activityID == "" {
-		return nil, errors.New("activity id is required")
-	}
-	ctx, cancel := ownerWriteContextInternal(ctx)
-	defer cancel()
-	for _, req := range reqs {
-		if code := strings.TrimSpace(req.Code); code != "" && !activity.Valid(code) {
-			return nil, fmt.Errorf("unknown activity message code: %s", code)
-		}
-	}
-
-	messages, updates := buildAppendBatchInternal(activityID, reqs, s.nowInternal())
-	if len(messages) == 0 {
-		return nil, nil
-	}
-
-	// Hold the per-activity publish lock across commit and publish so this
-	// batch's snapshot cannot be overtaken on the stream by a concurrent
-	// UpdateActivity that committed later — subscribers must see the two
-	// snapshots in commit order.
-	lock := s.publishLockInternal(activityID)
-	lock.Lock()
-	defer lock.Unlock()
-
-	current, err := s.appendBatchWithRetryInternal(ctx, activityID, messages, updates)
-	if err != nil {
-		return nil, err
-	}
-
-	out := make([]activity.Message, 0, len(messages))
-	for _, message := range messages {
-		dto := activityMessageToDTOInternal(message)
-		s.publishMessageInternal(current.EnvironmentID, current.Type, dto)
-		out = append(out, dto)
-	}
-	s.publishActivityInternal(activityToDTOInternal(current))
-	return out, nil
-}
-
 // buildAppendBatchInternal turns the request batch into insertable message rows
 // plus the coalesced Activity column updates (latest message/progress/step from
 // the last request carrying each).
@@ -732,8 +685,8 @@ func buildAppendBatchInternal(activityID string, reqs []AppendActivityMessageReq
 }
 
 // appendBatchWithRetryInternal retries transient write contention because the
-// Writer drain cannot replay a failed batch.
-func (s *ActivityService) appendBatchWithRetryInternal(ctx context.Context, activityID string, messages []*ActivityMessage, updates map[string]any) (*Activity, error) {
+// Writer drain cannot replay a failed message and output batch.
+func (s *ActivityService) appendBatchWithRetryInternal(ctx context.Context, activityID string, messages []*ActivityMessage, updates map[string]any, output []activity.OutputLine) (*Activity, error) {
 	var current Activity
 	const appendWriteAttempts = 3
 	var writeErr error
@@ -760,6 +713,11 @@ func (s *ActivityService) appendBatchWithRetryInternal(ctx context.Context, acti
 					messages[i].CreatedAt = databaseNow.Add(time.Duration(i) * time.Microsecond)
 				}
 			}
+			if len(output) > 0 {
+				lines, truncated := appendOutputLinesInternal(current.Output, output)
+				updates["output"] = lines
+				updates["output_truncated"] = current.OutputTruncated || truncated
+			}
 
 			query := tx.Model(&Activity{}).Where("id = ? AND status NOT IN ?", activityID, terminalActivityStatusesInternal())
 			result := query.Updates(updates)
@@ -769,8 +727,10 @@ func (s *ActivityService) appendBatchWithRetryInternal(ctx context.Context, acti
 			if result.RowsAffected == 0 {
 				return ErrActivityNotCancelable
 			}
-			if err := tx.Create(&messages).Error; err != nil {
-				return fmt.Errorf("failed to append activity message: %w", err)
+			if len(messages) > 0 {
+				if err := tx.Create(&messages).Error; err != nil {
+					return fmt.Errorf("failed to append activity message: %w", err)
+				}
 			}
 			if err := tx.First(&current, "id = ?", activityID).Error; err != nil {
 				return fmt.Errorf("failed to load updated activity: %w", err)

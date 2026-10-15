@@ -2,11 +2,12 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; run gate, service effects and coded step persistence.
+// Deviations: Local module namespace; run gate, service effects, coded steps and output columns.
 
 package activity
 
 import (
+	"database/sql/driver"
 	"time"
 
 	"github.com/florianfinn/docklet-next/types/activity"
@@ -39,6 +40,21 @@ type Activity struct {
 	AffectedServices     database.JSON   `json:"affectedServices,omitempty" gorm:"column:affected_services;type:text"`
 	GateKey              string          `json:"-" gorm:"column:gate_key;index"`
 	GateScope            string          `json:"-" gorm:"column:gate_scope;index"`
+	Output               OutputLines     `json:"-" gorm:"column:output;type:jsonb;not null;default:'[]'"`
+	OutputTruncated      bool            `json:"-" gorm:"column:output_truncated;not null;default:false"`
+}
+
+type OutputLines []activity.OutputLine
+
+func (lines OutputLines) Value() (driver.Value, error) {
+	if lines == nil {
+		lines = OutputLines{}
+	}
+	return database.JSONValue(false, []activity.OutputLine(lines))
+}
+
+func (lines *OutputLines) Scan(value any) error {
+	return database.JSONScan(lines, value)
 }
 
 func (Activity) TableName() string {

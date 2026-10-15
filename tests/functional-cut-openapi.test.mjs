@@ -4,6 +4,7 @@ import { readFileSync } from "node:fs";
 
 const read = (name) => JSON.parse(readFileSync(new URL(`../api/${name}`, import.meta.url), "utf8"));
 const methods = new Set(["get", "post", "put", "patch", "delete", "head", "options", "trace"]);
+const laterOperations = new Map([["GET /capabilities", "get-capabilities"]]);
 const operations = (document) => new Map(
   Object.entries(document.paths).flatMap(([path, entries]) =>
     Object.entries(entries)
@@ -21,7 +22,7 @@ test("the functional cut removes only the reviewed OpenAPI operations", () => {
   ));
 
   assert.equal(baseline.size, manifest.baselineOperations);
-  assert.equal(current.size, manifest.remainingOperations);
+  assert.equal(current.size, manifest.remainingOperations + laterOperations.size);
   assert.equal(removed.size, manifest.removedOperations.length);
   assert.equal(removed.size, 159);
   for (const [key, id] of removed) {
@@ -33,7 +34,11 @@ test("the functional cut removes only the reviewed OpenAPI operations", () => {
     if (removed.has(key)) continue;
     assert.equal(current.get(key), id, `retained operation changed: ${key}`);
   }
-  for (const key of current.keys()) {
+  for (const [key, id] of current) {
+    if (laterOperations.has(key)) {
+      assert.equal(id, laterOperations.get(key));
+      continue;
+    }
     assert.ok(baseline.has(key), `unexpected operation added during the cut: ${key}`);
   }
 });

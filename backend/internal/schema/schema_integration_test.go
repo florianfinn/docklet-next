@@ -24,6 +24,7 @@ import (
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
 
+	"github.com/florianfinn/docklet-next/backend/internal/activity"
 	"github.com/florianfinn/docklet-next/backend/internal/database"
 )
 
@@ -122,6 +123,13 @@ func TestFreshMigrationMatchesRetainedModels(t *testing.T) {
 	require.NoError(t, err)
 	t.Cleanup(func() { require.NoError(t, modelSQL.Close()) })
 	require.NoError(t, modelDB.AutoMigrate(Models()...))
+	// Migration 006 leaves three dropped attribute slots before the new output
+	// columns. Recreate that physical layout before comparing exact ordinals.
+	require.NoError(t, modelDB.Exec(`ALTER TABLE activities DROP COLUMN output, DROP COLUMN output_truncated`).Error)
+	require.NoError(t, modelDB.Exec(`ALTER TABLE activities ADD COLUMN ordinal_gap text`).Error)
+	require.NoError(t, modelDB.Exec(`ALTER TABLE activities DROP COLUMN ordinal_gap`).Error)
+	require.NoError(t, modelDB.Migrator().AddColumn(&activity.Activity{}, "Output"))
+	require.NoError(t, modelDB.Migrator().AddColumn(&activity.Activity{}, "OutputTruncated"))
 	for _, statement := range strings.Split(retainedIntegritySQL, ";") {
 		if strings.TrimSpace(statement) != "" {
 			require.NoError(t, modelDB.Exec(statement).Error)
