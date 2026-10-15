@@ -17,6 +17,7 @@ export function check(mode) {
       command(process.execPath, ["--check", path]);
   }
   if (["lint", "test", "build"].includes(mode)) command(process.execPath, ["scripts/check-migrations.mjs"]);
+  if (mode === "test") command(process.execPath, ["scripts/check-structure.mjs"]);
   if (["lint", "text", "build"].includes(mode)) {
     command(process.execPath, ["scripts/check-publication.mjs", "--worktree"]);
     command(process.execPath, ["scripts/check-structure.mjs"]);

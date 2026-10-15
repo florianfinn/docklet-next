@@ -2,6 +2,15 @@
   "prefixes": ["backend/", "cli/", "deploy/", "api/", "types/", "third_party/arcane/", "third_party/francis/", "web/"],
   "files": ["AGENTS.md", "docs/design/review-workflow.md", "docs/design/publication-policy.md", "scripts/publication-patterns.mjs", "scripts/check-publication.mjs", "scripts/commit-subject.mjs", "scripts/check-pr-publication.mjs", "scripts/change-scope.mjs", "scripts/review-status.mjs", "scripts/setup-git-hooks.mjs", "scripts/pre-push.mjs", ".githooks/pre-commit", ".githooks/commit-msg", ".githooks/pre-push", ".github/workflows/checks.yml", ".github/workflows/pr-text.yml", ".github/workflows/review-status.yml", "scripts/publication-assignments.mjs"],
   "adoptedPrefixes": ["backend/", "types/", "third_party/arcane/", "third_party/francis/"],
+  "migrationHeaderOverrides": {
+    "backend/resources/migrations/postgres/001_baseline.sql": ["source", "revision", "license", "deviations"],
+    "backend/resources/migrations/postgres/002_run_traces.sql": ["source", "revision", "deviations"],
+    "backend/resources/migrations/postgres/003_sync_receipt_lifecycle.sql": ["source", "revision", "retrieved", "deviations"],
+    "backend/resources/migrations/postgres/004_gate_owner.sql": ["source", "revision", "deviations"],
+    "backend/resources/migrations/postgres/005_gate_lease.sql": ["source", "revision", "deviations"],
+    "backend/resources/migrations/postgres/006_single_hub_gate.sql": ["source", "revision", "retrieved", "license", "deviations"],
+    "backend/resources/migrations/postgres/007_activity_raw_output.sql": ["deviations"]
+  },
   "snapshots": {
     "web/src/": {"source": "approved Docklet design prototype (maintainer's own work)/react-opus/src/", "revision": "d75474089b87ab9f77c606cc7aa696d05157d8e9cd902f1ed5a0f2b904722a39", "retrieved": "2026-10-13", "license": "Apache-2.0 AND MIT AND BSD-3-Clause", "deviations": "Historical initial import: 592 byte-identical L4 files. Subsequent product-boundary, catalogue-base and validation changes are recorded by per-file sidecars and web/PROVENANCE.md.", "files": 592, "method": "SHA-256 over byte-sorted <sha256>  <path> lines, LF terminated, with paths relative to web/ and prefixed src/"}
   },

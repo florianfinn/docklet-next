@@ -29,6 +29,13 @@ content changes require updating the entry and deviations. Byte-identical legal
 texts are instead protected by the licence hash manifest. Source licences remain
 intact.
 
+PostgreSQL migrations require a sidecar entry. The guard compares all five SQL
+header fields with that entry. `migrationHeaderOverrides` lists only fields that
+already differ in shipped migrations; the sidecar is authoritative for those
+fields. The file SHA-256 still protects every shipped header byte, and an override
+fails once the field agrees with the sidecar. New migrations require matching
+headers and sidecars without overrides.
+
 scripts/size-baseline.json maps adopted oversized files to reviewed line
 ceilings. Own files have a hard 1,000-line limit without exemptions. A first
 adoption may add an oversized file and its ceiling together only if the path is

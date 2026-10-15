@@ -1,6 +1,7 @@
 import test from "node:test";
+import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { sha256 } from "../scripts/check-structure.mjs";
+import { provenanceProblems, sha256 } from "../scripts/check-structure.mjs";
 import { scratch, stage, write, git, node, ok, fails, readJSON, writeJSON, rawCommit } from "./helpers.mjs";
 
 const header =
@@ -73,6 +74,30 @@ test("JSON provenance sidecars bind exact file bytes", (t) => {
   fails(check(root, "provenance"), "provenance-hash");
   write(root, ".claude/settings.json", content);
   ok(check(root, "provenance"));
+});
+test("migration headers agree with sidecars for every authoritative field", () => {
+  const path = "backend/resources/migrations/postgres/008_example.sql";
+  const record = {
+    source: "example/migration.sql", revision: "a".repeat(40), retrieved: "2026-10-15",
+    license: "Apache-2.0", deviations: "Synthetic forward migration.",
+  };
+  const content = () => Buffer.from(Object.entries(record)
+    .map(([key, value]) => `-- ${key[0].toUpperCase()}${key.slice(1)}: ${value}\n`).join("") + "-- +goose Up\n");
+  const policy = (bytes, sidecar = record) => ({
+    prefixes: [], files: [], sidecars: { [path]: { ...sidecar, sha256: sha256(bytes) } },
+    migrationHeaderOverrides: {},
+  });
+  const check = (bytes, sidecar = record) => provenanceProblems([{ path, content: bytes }], policy(bytes, sidecar));
+  assert.deepEqual(check(content()), []);
+  assert.ok(provenanceProblems([{ path, content: content() }],
+    { prefixes: [], files: [], sidecars: {}, migrationHeaderOverrides: {} })
+    .some((finding) => finding.category === "migration-provenance-sidecar"));
+  for (const key of Object.keys(record)) {
+    const changed = { ...record, [key]: key === "revision" ? "b".repeat(40) : `${record[key]} changed` };
+    const header = content().toString().replace(record[key], changed[key]);
+    assert.ok(check(Buffer.from(header)).some((finding) => finding.category === "migration-provenance-mismatch"), key);
+    assert.ok(check(content(), changed).some((finding) => finding.category === "migration-provenance-mismatch"), key);
+  }
 });
 test("unlisted binary and changed asset hash fail", (t) => {
   const root = scratch(t);
