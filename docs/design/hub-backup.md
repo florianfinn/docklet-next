@@ -55,17 +55,15 @@ writes to a private temporary name and publishes the copy only after the full
 write succeeds. The source backup ID, target ID and copy state are recorded.
 A failed or interrupted copy leaves the local archive available, reports a
 failed activity and a partial scheduled-job outcome with a failed copy step,
-and can be retried in a follow-up run under the same `system-backup` gate
-scope without repeating `pg_dump`. The backup record distinguishes local
-completion from copy failure.
+and leaves the backup record showing local completion and copy failure. The
+next scheduled backup creates a new local archive and attempts its target copy;
+there is no separate copy retry queue or copy-only run.
 No incomplete target file appears as a completed copy.
 
-The schedule's retention count also caps completed copies for that policy on
-the selected target, independently of local pruning. Manual backups and their
-copies are excluded. Target pruning runs after a successful copy; a target
-retention failure keeps both the new local archive and target copy and reports
-a partial outcome for later retry. Changing a policy's target does not delete
-copies on the old target; the UI warns that the operator must clean them up.
+The hub does not prune target copies. This keeps target
+delivery independent of local retention and avoids a second pruning state
+machine across external storage. The operator manages target copy lifetime;
+the UI warns that local pruning and target changes do not remove old copies.
 
 One archive or upload is limited to 2 GiB. Backup, upload and restore each have
 a 60-minute deadline; exceeding either limit fails the run, closes the stream
@@ -169,8 +167,10 @@ the restore permission also guards upload. Capability descriptors disable
 actions during maintenance or when client tools/storage are unavailable.
 Upload uses a bounded stream to a non-executable private file; it rejects
 oversize, malformed and wrong-major archives. Responses and logs contain IDs
-and stable reason codes, not archive SQL, passwords, keys,
-connection URLs, dump stderr or uploaded filenames. Downloads set attachment
+and stable reason codes, not archive SQL, passwords, keys, target credentials,
+SMB share or host paths, mount paths, connection URLs, dump stderr or uploaded
+filenames. Run output and activity steps follow the same redaction rule; a
+target ID and coded copy step suffice. Downloads set attachment
 headers and no-store caching and stream from a server-selected ID.
 
 | Adopted surface | Decision |
@@ -212,8 +212,7 @@ not a second target-storage implementation inside the hub-backup feature.
 Unit tests run without PostgreSQL, Docker or a running agent. They cover policy
 retention and manual/archive exclusions, stream size and timeout enforcement,
 filename/ID isolation, archive-major and migration rejection, gate conflicts,
-restart reconciliation, target copy failure/retry and independent retention,
-sanitized errors, maintenance admission and session
+restart reconciliation, sanitized errors, maintenance admission and session
 revocation. A PostgreSQL 18 integration test in CI uses a throwaway database
 container: seed representative users, settings, jobs and activity, create an
 archive, empty the database, restore the archive, restart hub wiring, and compare
@@ -221,6 +220,7 @@ the same data and migration state. It also injects a restore error and verifies
 transaction rollback and readiness handling. Practical acceptance repeats a
 UI-created backup to empty database to restored hub with the same data; local
 tests alone do not close the milestone.
+Target integration adds copy-failure and redaction tests when step 4 lands.
 
 1. **Shared contract owner.** Update `types/backup/`,
    `backend/internal/system/{model.go,children/backup/{module.go,handler.go}}`,
@@ -251,17 +251,23 @@ tests alone do not close the milestone.
    live target model, credential handling and archive-transfer interface, wire
    optional target IDs to the Hub backup policy and copy runs. Reuse
    `web/src/domain/settings.ts`, `BackupTargetsSection.tsx`, the delivered
-   target service and transfer code; add copy status, retry and independent
-   retention tests. Acceptance: an external mount and an SMB target each
+   target service and transfer code; add copy status, failure and redaction
+   tests. Acceptance: an external mount and an SMB target each
    receive a complete archive; a failed transfer leaves the local archive
-   downloadable and the job partial. Until that prerequisite lands, ship local
-   backup and download without advertising target delivery.
+   downloadable and the job partial. This optional step may land after step 5
+   and feature acceptance, once the M12 target prerequisite exists. Until then,
+   hide target selection and ship local backup and download without advertising
+   target delivery.
 5. **Hub UI and acceptance.** Add the Hub backup page, adapter mapping and
    `web/src/features/*/messages/{en,de}.ts` catalogues; update deployment
    documentation and UI/adapter tests. Acceptance: an admin can create, list,
    download, upload and restore through the UI, configure the schedule, see
-   actionable local and target-copy states, and complete the documented
-   practical round-trip.
+   actionable local states, and complete the documented practical round-trip.
+   The UI shows target-copy states and selection only after step 4 lands.
+
+Step 5 and feature acceptance require the local backup and restore path from
+steps 1–3, not step 4. Target delivery receives its own acceptance when the M12
+target service is available; it does not delay acceptance of the local path.
 
 ## Off-host delivery decision
 
