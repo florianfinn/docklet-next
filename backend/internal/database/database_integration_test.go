@@ -84,7 +84,7 @@ func TestRawOutputMigrationUpgradesExistingActivityRows(t *testing.T) {
 	require.NoError(t, err)
 	t.Cleanup(func() { require.NoError(t, sqlDB.Close()) })
 	require.NoError(t, migrateDatabaseToVersionInternal(t.Context(), sqlDB, dbProviderPostgres, MigrationOptions{}, 6))
-	require.NoError(t, conn.Exec(`INSERT INTO activities (id, environment_id, type, status, started_at) VALUES ('existing', '0', 'image_pull', 'success', NOW())`).Error)
+	require.NoError(t, conn.Exec(`INSERT INTO activities (id, created_at, environment_id, type, status, started_at) VALUES ('existing', NOW(), '0', 'image_pull', 'success', NOW())`).Error)
 	require.NoError(t, migrateDatabaseToVersionInternal(t.Context(), sqlDB, dbProviderPostgres, MigrationOptions{}, 7))
 	var output string
 	var truncated bool

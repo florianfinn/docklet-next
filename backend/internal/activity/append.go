@@ -43,6 +43,9 @@ func (s *ActivityService) AppendMessages(ctx context.Context, activityID string,
 	if len(messages) == 0 && len(output) == 0 {
 		return nil, nil
 	}
+	if updates == nil {
+		updates = make(map[string]any, 2)
+	}
 
 	// Hold the per-activity publish lock across commit and publish so this
 	// batch's snapshot cannot be overtaken on the stream by a concurrent

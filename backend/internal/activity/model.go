@@ -38,10 +38,10 @@ type Activity struct {
 	Metadata             database.JSON   `json:"metadata,omitempty" gorm:"type:text"`
 	MessageCode          string          `json:"messageCode,omitempty" gorm:"column:message_code"`
 	AffectedServices     database.JSON   `json:"affectedServices,omitempty" gorm:"column:affected_services;type:text"`
-	Output               OutputLines     `json:"-" gorm:"column:output;type:jsonb;not null;default:'[]'"`
-	OutputTruncated      bool            `json:"-" gorm:"column:output_truncated;not null;default:false"`
 	GateKey              string          `json:"-" gorm:"column:gate_key;index"`
 	GateScope            string          `json:"-" gorm:"column:gate_scope;index"`
+	Output               OutputLines     `json:"-" gorm:"column:output;type:jsonb;not null;default:'[]'"`
+	OutputTruncated      bool            `json:"-" gorm:"column:output_truncated;not null;default:false"`
 }
 
 type OutputLines []activity.OutputLine
