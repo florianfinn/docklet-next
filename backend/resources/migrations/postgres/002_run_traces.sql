@@ -1,8 +1,8 @@
--- Source: florianfinn/docklet-next/backend/resources/migrations/postgres/001_baseline.sql
--- Revision: 65c9e0dceb6f994ac884904e2a6b7348f75580fa
+-- Source: docklet-next/docs/design/api-contract.md
+-- Revision: 1d6b25c3162636f018e0a6491e7f5428110874e3
 -- Retrieved: 2026-10-14
 -- License: Apache-2.0
--- Deviations: New forward migration for coded run traces and gate lookups.
+-- Deviations: Original forward migration for issue #37; adds coded run traces and gate lookups.
 -- +goose Up
 ALTER TABLE activities ADD COLUMN message_code text;
 ALTER TABLE activities ADD COLUMN affected_services text;
