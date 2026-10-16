@@ -109,3 +109,63 @@ func TestSignInIgnoresMutableLocalEnabledSetting(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, "local", current.AuthLastMode.Value)
 }
+
+func TestSignInProxyHeaderConfiguration(t *testing.T) {
+	svc, _ := modeTestService(t)
+	svc.config.AuthMode = "proxy"
+	svc.config.AuthProxyHeader = "X-Identity"
+	for _, tc := range []struct {
+		name, header string
+		values       []string
+		status       int
+	}{
+		{"configured header", "X-Identity", []string{"operator"}, 200},
+		{"default header ignored", "Remote-User", []string{"operator"}, 401},
+		{"duplicate identities", "X-Identity", []string{"operator", "other"}, 401},
+		{"blank identity", "X-Identity", []string{" "}, 401},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			req := httptest.NewRequest(http.MethodGet, "/api/secure", http.NoBody)
+			req.RemoteAddr = "192.0.2.10:5000"
+			for _, value := range tc.values {
+				req.Header.Add(tc.header, value)
+			}
+			for _, surface := range []string{"huma", "echo"} {
+				router := modeTestRouter(t, svc, surface, false)
+				rec := httptest.NewRecorder()
+				router.ServeHTTP(rec, req)
+				require.Equal(t, tc.status, rec.Code, rec.Body.String())
+			}
+		})
+	}
+}
+
+func TestSignInAgentTransportUnaffected(t *testing.T) {
+	svc, _ := modeTestService(t)
+	for _, edgeMode := range []bool{false, true} {
+		for _, mode := range []string{"none", "local", "proxy"} {
+			cfg := *svc.config
+			cfg.AgentMode = true
+			cfg.EdgeAgent = edgeMode
+			cfg.AuthMode = mode
+			cfg.AgentToken = "example"
+			svc.config = &cfg
+			router := echo.New()
+			router.Use(NewAuthMiddleware(svc, &cfg).Add())
+			router.POST("/api/agent", func(c *echo.Context) error { return c.NoContent(200) })
+			for _, token := range []string{"", "wrong", "example"} {
+				req := httptest.NewRequest(http.MethodPost, "/api/agent", http.NoBody)
+				req.Header.Set("X-Arcane-Agent-Token", token)
+				req.Header.Set("Remote-User", "operator")
+				rec := httptest.NewRecorder()
+				router.ServeHTTP(rec, req)
+				expected := 403
+				if token == "example" {
+					expected = 200
+				}
+				require.Equal(t, expected, rec.Code)
+			}
+			require.Equal(t, authtypes.SignInModeLocal, svc.SignInMode())
+		}
+	}
+}

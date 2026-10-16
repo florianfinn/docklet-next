@@ -16,19 +16,28 @@ import (
 
 	"github.com/danielgtaylor/huma/v2"
 	"github.com/danielgtaylor/huma/v2/adapters/humaecho"
+	"github.com/florianfinn/docklet-next/backend/internal/apikey"
 	"github.com/florianfinn/docklet-next/backend/internal/config"
+	"github.com/florianfinn/docklet-next/backend/internal/database"
 	"github.com/florianfinn/docklet-next/backend/internal/middleware"
 	"github.com/florianfinn/docklet-next/backend/internal/role"
 	"github.com/florianfinn/docklet-next/backend/internal/session"
 	"github.com/florianfinn/docklet-next/backend/internal/user"
 	"github.com/florianfinn/docklet-next/backend/pkg/authz"
 	"github.com/florianfinn/docklet-next/backend/pkg/utils/cookie"
+	apikeytypes "github.com/florianfinn/docklet-next/types/apikey"
 	authtypes "github.com/florianfinn/docklet-next/types/auth"
 	"github.com/labstack/echo/v5"
 	"github.com/stretchr/testify/require"
 )
 
 func modeTestService(t *testing.T) (*AuthService, *TokenPair) {
+	t.Helper()
+	service, tokens, _ := modeTestFixture(t)
+	return service, tokens
+}
+
+func modeTestFixture(t *testing.T) (*AuthService, *TokenPair, *database.DB) {
 	t.Helper()
 	db := setupAuthServiceTestDB(t)
 	roles := role.NewRoleService(db)
@@ -51,11 +60,15 @@ func modeTestService(t *testing.T) (*AuthService, *TokenPair) {
 	svc.browserSigningKey = bytes.Repeat([]byte{0x42}, browserSessionSigningKeySize)
 	tokens, err := svc.CompleteLogin(t.Context(), admin, authtypes.SessionMeta{}, session.UserSessionSourceLocal)
 	require.NoError(t, err)
-	return svc, tokens
+	return svc, tokens, db
 }
 
-func modeTestRouter(t *testing.T, svc *AuthService, surface string, csrf bool) *echo.Echo {
+func modeTestRouter(t *testing.T, svc *AuthService, surface string, csrf bool, keys ...*apikey.ApiKeyService) *echo.Echo {
 	t.Helper()
+	var keyService *apikey.ApiKeyService
+	if len(keys) > 0 {
+		keyService = keys[0]
+	}
 	router := echo.New()
 	// Ensure authentication uses the direct socket even when the framework trusts XFF.
 	router.IPExtractor = func(r *http.Request) string { return r.Header.Get("X-Forwarded-For") }
@@ -63,7 +76,11 @@ func modeTestRouter(t *testing.T, svc *AuthService, surface string, csrf bool) *
 		router.Use(middleware.NewCSRFMiddleware(svc.config).Add())
 	}
 	if surface == "echo" {
-		router.Use(NewAuthMiddleware(svc, svc.config).WithPermissionResolver(svc.userServiceRoleResolver()).Add())
+		authMiddleware := NewAuthMiddleware(svc, svc.config).WithPermissionResolver(svc.userServiceRoleResolver())
+		if keyService != nil {
+			authMiddleware = authMiddleware.WithApiKeyValidator(keyService)
+		}
+		router.Use(authMiddleware.Add())
 		handler := func(c *echo.Context) error {
 			actor, ok := c.Get(string(middleware.ContextKeyCurrentUser)).(*user.User)
 			require.True(t, ok)
@@ -73,9 +90,9 @@ func modeTestRouter(t *testing.T, svc *AuthService, surface string, csrf bool) *
 		router.POST("/api/secure", handler)
 	} else {
 		api := humaecho.New(router, huma.DefaultConfig("test", "1.0.0"))
-		api.UseMiddleware(NewHumaMiddleware(api, svc, nil, svc.userServiceRoleResolver(), nil, svc.config))
+		api.UseMiddleware(NewHumaMiddleware(api, svc, keyService, svc.userServiceRoleResolver(), nil, svc.config))
 		for _, method := range []string{http.MethodGet, http.MethodPost} {
-			huma.Register(api, huma.Operation{OperationID: method + "-secure", Method: method, Path: "/api/secure", Security: []map[string][]string{{"BearerAuth": {}}}}, func(ctx context.Context, _ *struct{}) (*secureOutput, error) {
+			huma.Register(api, huma.Operation{OperationID: method + "-secure", Method: method, Path: "/api/secure", Security: []map[string][]string{{"BearerAuth": {}}, {"ApiKeyAuth": {}}}}, func(ctx context.Context, _ *struct{}) (*secureOutput, error) {
 				actor, ok := user.CurrentUserFromContext(ctx)
 				require.True(t, ok)
 				out := &secureOutput{}
@@ -93,7 +110,17 @@ func (s *AuthService) userServiceRoleResolver() PermissionResolver {
 }
 
 func TestSignInRequestMatrix(t *testing.T) {
-	svc, tokens := modeTestService(t)
+	svc, tokens, db := modeTestFixture(t)
+	admin, err := svc.userService.GlobalAdministrator(t.Context())
+	require.NoError(t, err)
+	stale, err := svc.CompleteLogin(t.Context(), admin, authtypes.SessionMeta{}, session.UserSessionSourceLocal)
+	require.NoError(t, err)
+	_, staleSession, err := svc.VerifyToken(t.Context(), stale.AccessToken)
+	require.NoError(t, err)
+	require.NoError(t, svc.RevokeSession(t.Context(), staleSession))
+	keyService := apikey.NewApiKeyService(db, svc.userService, role.NewRoleService(db))
+	key, err := keyService.CreatePersonalApiKey(t.Context(), admin.ID, apikeytypes.CreateUserApiKey{Name: "example"})
+	require.NoError(t, err)
 	cases := []struct {
 		name, peer, identity, xff, credential string
 		localStatus, proxyStatus              int
@@ -106,18 +133,32 @@ func TestSignInRequestMatrix(t *testing.T) {
 		{name: "trusted proxy", peer: "192.0.2.10:5000", identity: "operator", xff: "198.51.100.5", localStatus: 401, proxyStatus: 200},
 		{name: "trusted IPv6", peer: "[2001:db8::10]:5000", identity: "operator", localStatus: 401, proxyStatus: 200},
 		{name: "trusted missing identity", peer: "192.0.2.10:5000", localStatus: 401, proxyStatus: 401},
+		{name: "stale bearer from prior mode", peer: "198.51.100.5:5000", credential: "stale bearer", localStatus: 401, proxyStatus: 401},
+		{name: "stale cookie from prior mode", peer: "198.51.100.5:5000", credential: "stale cookie", localStatus: 401, proxyStatus: 401},
+		{name: "personal API key", peer: "198.51.100.5:5000", credential: "api key", localStatus: 200, proxyStatus: 401},
+		{name: "proxy with local bearer", peer: "192.0.2.10:5000", identity: "operator", credential: "bearer", localStatus: 200, proxyStatus: 200},
+		{name: "proxy with stale cookie", peer: "192.0.2.10:5000", identity: "operator", credential: "stale cookie", localStatus: 401, proxyStatus: 200},
 		{name: "unparseable peer", peer: "invalid", identity: "operator", localStatus: 401, proxyStatus: 401},
 	}
 	for _, mode := range []string{"none", "local", "proxy"} {
 		svc.config.AuthMode = mode
 		for _, surface := range []string{"huma", "echo"} {
-			router := modeTestRouter(t, svc, surface, false)
+			router := modeTestRouter(t, svc, surface, false, keyService)
 			for _, tc := range cases {
 				t.Run(mode+"/"+surface+"/"+tc.name, func(t *testing.T) {
 					req := httptest.NewRequest(http.MethodGet, "/api/secure", http.NoBody)
 					req.RemoteAddr = tc.peer
 					req.Header.Set("Remote-User", tc.identity)
 					req.Header.Set("X-Forwarded-For", tc.xff)
+					if tc.credential == "stale bearer" {
+						req.Header.Set("Authorization", "Bearer "+stale.AccessToken)
+					}
+					if tc.credential == "stale cookie" {
+						req.AddCookie(&http.Cookie{Name: cookie.InsecureTokenCookieName, Value: stale.BrowserToken})
+					}
+					if tc.credential == "api key" {
+						req.Header.Set(middleware.HeaderApiKey, key.Key)
+					}
 					if tc.credential == "bearer" {
 						req.Header.Set("Authorization", "Bearer "+tokens.AccessToken)
 					}

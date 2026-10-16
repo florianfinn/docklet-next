@@ -25,7 +25,7 @@ import (
 )
 
 func (s *AuthService) SignInMode() authtypes.SignInMode {
-	if s == nil {
+	if s == nil || (s.config != nil && (s.config.AgentMode || s.config.EdgeAgent)) {
 		return authtypes.SignInModeLocal
 	}
 	return s.config.SignInMode()
