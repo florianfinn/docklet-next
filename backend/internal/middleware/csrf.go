@@ -7,6 +7,7 @@
 package middleware
 
 import (
+	"context"
 	"crypto/rand"
 	"crypto/subtle"
 	"encoding/base64"
@@ -21,6 +22,13 @@ import (
 )
 
 const CSRFHeader = "X-CSRF-Token"
+
+type csrfTokenContextKey struct{}
+
+func CSRFTokenFromContext(ctx context.Context) string {
+	value, _ := ctx.Value(csrfTokenContextKey{}).(string)
+	return value
+}
 
 // CSRFMiddleware requires an allowed Origin and a cookie/header token pair on hub writes.
 // Transport bypasses validate environment credentials rather than trusting header presence.
@@ -61,6 +69,8 @@ func (m *CSRFMiddleware) Add() echo.MiddlewareFunc {
 					http.SetCookie(c.Response(), &http.Cookie{Name: csrfCookieName(req), Value: token, Path: "/", Secure: cookie.SecureCookieFromContext(req.Context()), HttpOnly: true, SameSite: http.SameSiteStrictMode})
 				}
 				c.Response().Header().Set(CSRFHeader, token)
+				c.Response().Header().Set("Cache-Control", "no-store")
+				c.SetRequest(req.WithContext(context.WithValue(req.Context(), csrfTokenContextKey{}, token)))
 				return next(c)
 			case http.MethodOptions:
 				return next(c)

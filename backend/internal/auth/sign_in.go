@@ -88,6 +88,9 @@ func handleModeAuthInternal(api huma.API, ctx huma.Context, service *AuthService
 	if service.SignInMode() == authtypes.SignInModeLocal {
 		return false
 	}
+	if ctx.Method() == http.MethodGet && strings.HasSuffix(ctx.URL().Path, "/auth/mode") {
+		return false
+	}
 	if strings.HasSuffix(ctx.URL().Path, "/auth/login") || strings.HasSuffix(ctx.URL().Path, "/auth/refresh") || strings.HasSuffix(ctx.URL().Path, "/auth/password") {
 		_ = huma.WriteErr(api, ctx, http.StatusUnauthorized, "Local authentication is disabled")
 		return true

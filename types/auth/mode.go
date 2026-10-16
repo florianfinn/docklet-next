@@ -13,3 +13,7 @@ const (
 	SignInModeLocal SignInMode = "local"
 	SignInModeProxy SignInMode = "proxy"
 )
+
+type SignInConfiguration struct {
+	Mode SignInMode `json:"mode" enum:"none,local,proxy" readOnly:"true" doc:"Active startup sign-in mode; changes require operator configuration and restart"`
+}

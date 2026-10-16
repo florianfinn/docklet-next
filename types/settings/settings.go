@@ -240,7 +240,7 @@ type Update struct {
 	// AuthLocalEnabled indicates if local authentication is enabled.
 	//
 	// Required: false
-	AuthLocalEnabled *string `json:"authLocalEnabled,omitzero"`
+	AuthLocalEnabled *string `json:"authLocalEnabled,omitzero" deprecated:"true" doc:"Read-only startup policy; updates are rejected. Use GET /auth/mode."`
 
 	//
 	// Required: false

@@ -18,6 +18,7 @@ import (
 	"go.getarcane.app/kit/normalization"
 	"gorm.io/gorm"
 
+	"github.com/florianfinn/docklet-next/backend/internal/common"
 	"github.com/florianfinn/docklet-next/backend/pkg/libarcane"
 	"github.com/florianfinn/docklet-next/backend/pkg/utils/httpx"
 	"github.com/florianfinn/docklet-next/backend/pkg/utils/validation"
@@ -77,6 +78,9 @@ func (s *SettingsService) updateSettingValueNoRefreshInternal(ctx context.Contex
 // UpdateSettings publishes the refreshed snapshot before returning. Each
 // subscriber's effects remain ordered and may finish after this method returns.
 func (s *SettingsService) UpdateSettings(ctx context.Context, updates settings.Update) ([]SettingVariable, error) {
+	if updates.AuthLocalEnabled != nil {
+		return nil, common.Classify(common.ErrValidation, errors.New("sign-in mode is read-only; configure AUTH_MODE and restart"))
+	}
 	if err := normalization.Normalize(&updates); err != nil {
 		return nil, err
 	}

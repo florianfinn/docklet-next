@@ -59,6 +59,15 @@ func RegisterAuth(
 		authService:     authService,
 		settingsService: settingsService,
 	}
+	huma.Register(api, huma.Operation{
+		OperationID: "get-sign-in-mode",
+		Method:      http.MethodGet,
+		Path:        "/auth/mode",
+		Summary:     "Get active sign-in mode",
+		Description: "Read the startup-selected mode. Save the X-CSRF-Token response header and cookie, then supply that header and the hub Origin on state-changing requests in every mode. Local sessions and personal API keys apply only in local mode; proxy mode requires the configured identity header from a trusted direct peer.",
+		Tags:        []string{"Auth"},
+		Security:    []map[string][]string{},
+	}, h.GetSignInMode)
 
 	huma.Register(api, huma.Operation{
 		OperationID: "login",
