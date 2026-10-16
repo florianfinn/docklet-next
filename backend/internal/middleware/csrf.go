@@ -31,10 +31,11 @@ func CSRFTokenFromContext(ctx context.Context) string {
 }
 
 // CSRFMiddleware requires an allowed Origin and a cookie/header token pair on hub writes.
-// Transport bypasses validate environment credentials rather than trusting header presence.
+// Credential exceptions require validation rather than header presence.
 type CSRFMiddleware struct {
 	cfg                    *config.Config
 	transportAuthenticated func(*http.Request) bool
+	localCredential        func(*http.Request) (bool, error)
 }
 
 func NewCSRFMiddleware(cfg *config.Config) *CSRFMiddleware {
@@ -43,6 +44,11 @@ func NewCSRFMiddleware(cfg *config.Config) *CSRFMiddleware {
 
 func (m *CSRFMiddleware) WithTransportValidator(validate func(*http.Request) bool) *CSRFMiddleware {
 	m.transportAuthenticated = validate
+	return m
+}
+
+func (m *CSRFMiddleware) WithLocalCredentialValidator(validate func(*http.Request) (bool, error)) *CSRFMiddleware {
+	m.localCredential = validate
 	return m
 }
 
@@ -78,6 +84,22 @@ func (m *CSRFMiddleware) Add() echo.MiddlewareFunc {
 			// These routes authenticate only their own transport/path tokens downstream.
 			if strings.HasPrefix(req.URL.Path, "/api/webhooks/trigger/") || (m.transportAuthenticated != nil && m.transportAuthenticated(req)) {
 				return next(c)
+			}
+			if m.cfg.SignInMode() == "local" {
+				if m.localCredential != nil {
+					valid, err := m.localCredential(req)
+					if err != nil {
+						return c.JSON(http.StatusUnauthorized, common.APIError{Code: common.APIErrorCodeUnauthorized, Message: "Invalid or expired credential"})
+					}
+					if valid {
+						return next(c)
+					}
+				}
+				// These POSTs authenticate explicit body credentials and carry no ambient authority.
+				if req.Method == http.MethodPost && req.Header.Get("Origin") == "" && len(req.Header.Values("Cookie")) == 0 &&
+					(req.URL.Path == "/api/auth/login" || req.URL.Path == "/api/auth/refresh") {
+					return next(c)
+				}
 			}
 			originOK := false
 			for _, allowed := range origins {

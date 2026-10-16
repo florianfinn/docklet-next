@@ -66,7 +66,8 @@ func TestSignInForwardingAndStreamMatrix(t *testing.T) {
 	for _, mode := range []string{"none", "local", "proxy"} {
 		cfg.AuthMode = mode
 		transportRouter := echo.New()
-		transportRouter.Use(middleware.NewCSRFMiddleware(cfg).WithTransportValidator(transportValidator).Add())
+		transportRouter.Use(middleware.NewCSRFMiddleware(cfg).WithTransportValidator(transportValidator).
+			WithLocalCredentialValidator(auth.NewAuthMiddleware(svc, cfg).WithApiKeyValidator(keys).ValidateLocalHeaderCredential).Add())
 		transportRouter.POST("/api/transport", func(c *echo.Context) error { return c.NoContent(200) })
 		for _, tc := range []struct {
 			value  string
@@ -76,7 +77,14 @@ func TestSignInForwardingAndStreamMatrix(t *testing.T) {
 			req.Header.Set(middleware.HeaderApiKey, tc.value)
 			rec := httptest.NewRecorder()
 			transportRouter.ServeHTTP(rec, req)
-			require.Equal(t, tc.status, rec.Code)
+			want := tc.status
+			if mode == "local" && tc.value != bootstrapKey.Key {
+				want = 401
+				if tc.value == personalKey.Key {
+					want = 200
+				}
+			}
+			require.Equal(t, want, rec.Code)
 		}
 		router := echo.New()
 		router.IPExtractor = func(req *http.Request) string { return req.Header.Get("X-Forwarded-For") }

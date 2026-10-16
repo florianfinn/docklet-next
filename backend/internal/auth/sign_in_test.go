@@ -73,7 +73,8 @@ func modeTestRouter(t *testing.T, svc *AuthService, surface string, csrf bool, k
 	// Ensure authentication uses the direct socket even when the framework trusts XFF.
 	router.IPExtractor = func(r *http.Request) string { return r.Header.Get("X-Forwarded-For") }
 	if csrf {
-		router.Use(middleware.NewCSRFMiddleware(svc.config).Add())
+		router.Use(middleware.NewCSRFMiddleware(svc.config).WithLocalCredentialValidator(
+			NewAuthMiddleware(svc, svc.config).WithApiKeyValidator(keyService).ValidateLocalHeaderCredential).Add())
 	}
 	if surface == "echo" {
 		authMiddleware := NewAuthMiddleware(svc, svc.config).WithPermissionResolver(svc.userServiceRoleResolver())
@@ -196,7 +197,7 @@ func TestSignInStateChangeMatrix(t *testing.T) {
 			authenticate := func(req *http.Request) {
 				req.RemoteAddr = "192.0.2.10:5000"
 				if mode == "local" {
-					req.Header.Set("Authorization", "Bearer "+tokens.AccessToken)
+					req.AddCookie(&http.Cookie{Name: cookie.InsecureTokenCookieName, Value: tokens.BrowserToken})
 				}
 				if mode == "proxy" {
 					req.Header.Set("Remote-User", "operator")
@@ -219,6 +220,7 @@ func TestSignInStateChangeMatrix(t *testing.T) {
 				{"without CSRF token", "https://hub.example.com", "", true, 403},
 				{"wrong CSRF token", "https://hub.example.com", "invalid", true, 403},
 				{"without CSRF cookie", "https://hub.example.com", csrfToken, false, 403},
+				{"without CSRF cookie and token", "https://hub.example.com", "", false, 403},
 				{"valid state change", "https://hub.example.com", csrfToken, true, 200},
 			} {
 				t.Run(mode+"/"+surface+"/"+tc.name, func(t *testing.T) {

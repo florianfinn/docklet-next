@@ -41,6 +41,7 @@ func TestCSRFModeMatrix(t *testing.T) {
 			{"missing token", "https://hub.example.com", "", true, 403},
 			{"wrong token", "https://hub.example.com", "invalid", true, 403},
 			{"missing cookie", "https://hub.example.com", token, false, 403},
+			{"missing cookie and token", "https://hub.example.com", "", false, 403},
 			{"valid", "https://hub.example.com", token, true, 200},
 		} {
 			for _, credential := range []string{"", "Authorization", "X-API-Key", "Remote-User", "X-Arcane-Agent-Token"} {

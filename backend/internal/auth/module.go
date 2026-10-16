@@ -64,7 +64,7 @@ func RegisterAuth(
 		Method:      http.MethodGet,
 		Path:        "/auth/mode",
 		Summary:     "Get active sign-in mode",
-		Description: "Read the startup-selected mode. Save the X-CSRF-Token response header and cookie, then supply that header and the hub Origin on state-changing requests in every mode. Local sessions and personal API keys apply only in local mode; proxy mode requires the configured identity header from a trusted direct peer.",
+		Description: "Read the startup-selected mode. Browser writes in every mode require the X-CSRF-Token response header, cookie and hub Origin. In local mode validated Bearer/API-key requests, and cookie-less login/refresh POSTs without Origin, use explicit credentials instead. Proxy mode requires the configured identity header from a trusted direct peer.",
 		Tags:        []string{"Auth"},
 		Security:    []map[string][]string{},
 	}, h.GetSignInMode)

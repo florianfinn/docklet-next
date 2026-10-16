@@ -65,8 +65,17 @@ Restored database sessions are independently revoked by the backup subsystem.
 Every ordinary state-changing hub request in every mode requires an exact allowed
 Origin and a double-submit CSRF token. Allowed origins follow `APP_URL` and the
 existing development-origin policy. Header presence alone never bypasses either
-check; cookie-less proxy identity receives the same protection. Non-browser hub
-API clients must supply these values too.
+check; cookie-less proxy identity receives the same protection. In local mode,
+validated Bearer tokens and personal/scoped API keys authenticate explicit
+non-browser requests without Origin or CSRF tokens. Invalid or expired explicit
+credentials return 401, allowing the CLI to refresh and retry. Cookie-only
+authentication stays strict. Proxy and none modes never grant this local exception.
+
+Local `POST /api/auth/login` and `POST /api/auth/refresh` also allow a missing
+Origin only when no Cookie header is present. These endpoints authenticate the
+explicit password/refresh token in the body and carry no ambient authority. A
+browser Origin or any cookie requires the ordinary Origin and CSRF pair. The
+shipped CLI uses these cookie-less flows; credentials still validate downstream.
 
 A safe API GET/HEAD issues a random 32-byte token through `X-CSRF-Token` and a
 host-only, HttpOnly, SameSite=Strict cookie. Trusted HTTPS context uses a Secure
@@ -78,7 +87,7 @@ and constrained to the three protocol values in OpenAPI and generated types.
 
 Only independently authenticated machine ingress keeps its separate contract:
 agent-only listeners, validated environment-token requests, Edge tunnel tokens
-and webhook path-token routes. Arbitrary user Bearer/API-key or proxy headers do
+and webhook path-token routes. Unvalidated Bearer/API-key or proxy headers do
 not qualify. WebSocket handshakes retain their existing Origin checks before
 upgrade. This policy does not protect against same-origin script compromise or a
 compromised authenticated proxy. It does not add per-user isolation.

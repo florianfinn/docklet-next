@@ -237,7 +237,9 @@ func newRouter(p RouterParams) (*echo.Echo, *edge.TunnelServer) {
 
 	authMiddleware := p.AuthMiddleware
 	e.Use(middleware.NewCORSMiddleware(cfg).Add())
-	e.Use(middleware.NewCSRFMiddleware(cfg).WithTransportValidator(csrfTransportValidatorInternal(deps)).Add())
+	e.Use(middleware.NewCSRFMiddleware(cfg).
+		WithTransportValidator(csrfTransportValidatorInternal(deps)).
+		WithLocalCredentialValidator(authMiddleware.ValidateLocalHeaderCredential).Add())
 
 	apiGroup := e.Group("/api")
 

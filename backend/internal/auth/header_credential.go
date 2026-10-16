@@ -1,0 +1,40 @@
+// Source: docklet-next/issues/68
+// Revision: af5fa9df01e730f7691d650985abd33d74f51ae5
+// Retrieved: 2026-10-16
+// License: Apache-2.0
+// Deviations: Original validation of explicit local credentials for browser-protection exceptions.
+
+package auth
+
+import (
+	"net/http"
+	"strings"
+
+	"github.com/florianfinn/docklet-next/backend/internal/common"
+	"github.com/florianfinn/docklet-next/backend/internal/middleware"
+)
+
+// ValidateLocalHeaderCredential never falls back to browser cookies or proxy identity.
+// An invalid explicit credential returns an error so CLI clients can refresh after 401.
+func (m *AuthMiddleware) ValidateLocalHeaderCredential(req *http.Request) (bool, error) {
+	if m.authService == nil || m.authService.SignInMode() != "local" {
+		return false, nil
+	}
+	if key := req.Header.Get(middleware.HeaderApiKey); key != "" {
+		if m.apiKeyValidator != nil {
+			actor, _, err := m.apiKeyValidator.ValidateApiKeyWithID(req.Context(), key)
+			if err == nil && actor != nil {
+				return true, nil
+			}
+		}
+		return false, common.ErrInvalidToken
+	}
+	if scheme, token, ok := strings.Cut(req.Header.Get("Authorization"), " "); ok && strings.EqualFold(scheme, "Bearer") {
+		actor, _, err := m.authService.VerifyToken(req.Context(), token)
+		if err != nil || actor == nil {
+			return false, common.ErrInvalidToken
+		}
+		return true, nil
+	}
+	return false, nil
+}
