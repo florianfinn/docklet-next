@@ -13,6 +13,7 @@ import (
 	"net/http"
 	"net/netip"
 	"strings"
+	"time"
 
 	"github.com/danielgtaylor/huma/v2"
 	"github.com/danielgtaylor/huma/v2/adapters/humaecho"
@@ -87,6 +88,10 @@ func handleModeAuthInternal(api huma.API, ctx huma.Context, service *AuthService
 	if service.SignInMode() == authtypes.SignInModeLocal {
 		return false
 	}
+	if strings.HasSuffix(ctx.URL().Path, "/auth/login") || strings.HasSuffix(ctx.URL().Path, "/auth/refresh") || strings.HasSuffix(ctx.URL().Path, "/auth/password") {
+		_ = huma.WriteErr(api, ctx, http.StatusUnauthorized, "Local authentication is disabled")
+		return true
+	}
 	for _, header := range []string{middleware.HeaderAgentToken, middleware.HeaderApiKey} {
 		if transportUser, env, ok := tryEnvironmentAccessTokenAuthInternal(ctx, resolver, ctx.Header(header)); ok {
 			applyProxiedIconCatalogInternal(ctx, transportUser)
@@ -108,4 +113,28 @@ func (s *AuthService) IsLocalAuthEnabled(_ context.Context) (bool, error) {
 		return false, errors.New("authentication service unavailable")
 	}
 	return s.SignInMode() == authtypes.SignInModeLocal, nil
+}
+
+func (s *AuthService) InitializeSignIn(ctx context.Context) error {
+	if err := s.config.ValidateSignIn(); err != nil {
+		return err
+	}
+	if err := s.sessionService.ActivateSignInMode(ctx, s.SignInMode()); err != nil {
+		return err
+	}
+	s.InvalidateAllTokenCache()
+	return nil
+}
+
+func (s *AuthService) cachedVerificationInternal(tokenHash string) (*user.User, string, bool) {
+	cached, ok, _ := s.tokenCache.Get(tokenHash)
+	if !ok {
+		return nil, "", false
+	}
+	now := time.Now()
+	if now.After(cached.TokenExpiresAt) || now.After(cached.SessionExpiresAt) {
+		s.tokenCache.Delete(tokenHash)
+		return nil, "", false
+	}
+	return new(cached.User), cached.SessionID, true
 }

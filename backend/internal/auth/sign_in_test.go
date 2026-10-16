@@ -47,6 +47,7 @@ func modeTestService(t *testing.T) (*AuthService, *TokenPair) {
 		AuthMode: "local", AuthTrustedProxies: "192.0.2.10,2001:db8::/32", JWTRefreshExpiry: time.Hour,
 		AppUrl: "https://hub.example.com", Environment: "production",
 	}).WithSigningKey(newTestSigningKeyInternal())
+	require.NoError(t, svc.InitializeSignIn(t.Context()))
 	svc.browserSigningKey = bytes.Repeat([]byte{0x42}, browserSessionSigningKeySize)
 	tokens, err := svc.CompleteLogin(t.Context(), admin, authtypes.SessionMeta{}, session.UserSessionSourceLocal)
 	require.NoError(t, err)

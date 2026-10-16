@@ -29,6 +29,7 @@ import (
 
 	"github.com/florianfinn/docklet-next/backend/api/ws"
 	"github.com/florianfinn/docklet-next/backend/internal/apikey"
+	"github.com/florianfinn/docklet-next/backend/internal/auth"
 	"github.com/florianfinn/docklet-next/backend/internal/config"
 	"github.com/florianfinn/docklet-next/backend/internal/database"
 	"github.com/florianfinn/docklet-next/backend/internal/di"
@@ -209,10 +210,11 @@ type initializeStartupStateParams struct {
 	Role          *role.RoleService
 	User          *user.UserService
 	ApiKey        *apikey.ApiKeyService
+	Auth          *auth.AuthService
 	Vulnerability *vulnerability.VulnerabilityService
 }
 
-func initializeStartupState(p initializeStartupStateParams) {
+func initializeStartupState(p initializeStartupStateParams) error {
 	appCtx := p.AppCtx
 	cfg := p.Config
 	httpClient := p.HTTPClient
@@ -300,6 +302,11 @@ func initializeStartupState(p initializeStartupStateParams) {
 		},
 	)
 	startup.CleanupUnknownSettings(appCtx, p.Settings)
+	if !cfg.AgentMode {
+		if err := p.Auth.InitializeSignIn(appCtx); err != nil {
+			return fmt.Errorf("initialize sign-in: %w", err)
+		}
+	}
 
 	runRoleStartupTasks(appCtx, p.Role, p.ApiKey, cfg, cfg.AgentMode)
 
@@ -314,6 +321,7 @@ func initializeStartupState(p initializeStartupStateParams) {
 	} else if cfg.AgentMode && !cfg.EdgeAgent {
 		slog.InfoContext(appCtx, "Direct mode active: agent operates as a passive HTTP server; no outbound connection to manager required")
 	}
+	return nil
 }
 
 func runRoleStartupTasks(ctx context.Context, roleService *role.RoleService, apiKeyService *apikey.ApiKeyService, cfg *config.Config, agentMode bool) {
