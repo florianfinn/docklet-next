@@ -23,11 +23,12 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Input } from "@/shared/ui/input";
 import { Label } from "@/shared/ui/label";
 import { Progress } from "@/shared/ui/progress";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/shared/ui/select";
 import { Skeleton } from "@/shared/ui/skeleton";
-import { Switch } from "@/shared/ui/switch";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/shared/ui/table";
 
 import { useHubBackupAccess } from "./use-backup-access";
+import { formatSimpleBackupSchedule, parseSimpleBackupSchedule, validBackupTime, type BackupFrequency, type BackupWeekday } from "./simple-schedule";
 
 const keys = { runs: ["hub-backup-runs"], policy: ["hub-backup-policy"], storage: ["hub-backup-storage"], maintenance: ["hub-backup-maintenance"] } as const;
 
@@ -59,24 +60,47 @@ function useBackupErrorText() {
 
 function PolicyEditor({ policy, disabled, onSave }: { policy: HubBackupPolicy; disabled: boolean; onSave: (policy: HubBackupPolicy) => Promise<void> }) {
   const t = useTranslations("hubBackups");
-  const [enabled, setEnabled] = useState(policy.enabled);
-  const [schedule, setSchedule] = useState(policy.schedule);
+  const initial = parseSimpleBackupSchedule(policy.schedule);
+  const [frequency, setFrequency] = useState<BackupFrequency | "custom">(initial ? policy.enabled ? initial.frequency : "off" : "custom");
+  const [time, setTime] = useState(initial?.time ?? "03:00");
+  const [weekday, setWeekday] = useState<BackupWeekday>(initial?.frequency === "weekly" ? initial.weekday : "1");
   const [retentionCount, setRetentionCount] = useState(String(policy.retentionCount));
   const [busy, setBusy] = useState(false);
   const [invalid, setInvalid] = useState(false);
   async function save() {
     const count = Number(retentionCount);
-    if (!Number.isSafeInteger(count) || count < 1 || !schedule.trim()) { setInvalid(true); return; }
+    if (!Number.isSafeInteger(count) || count < 1 || (frequency !== "off" && frequency !== "custom" && !validBackupTime(time))) { setInvalid(true); return; }
+    const schedule = frequency === "off" || frequency === "custom" ? policy.schedule : formatSimpleBackupSchedule(frequency === "weekly" ? { frequency, time, weekday } : { frequency, time });
     setInvalid(false); setBusy(true);
-    try { await onSave({ ...policy, enabled, schedule: schedule.trim(), retentionCount: count }); }
+    try { await onSave({ ...policy, enabled: frequency === "custom" ? policy.enabled : frequency !== "off", schedule, retentionCount: count }); }
     finally { setBusy(false); }
   }
   return (
     <Card>
       <CardHeader><CardTitle>{t("policy")}</CardTitle><CardDescription>{t("policyHint")}</CardDescription></CardHeader>
       <CardContent className="grid gap-4 sm:grid-cols-2">
-        <div className="flex items-center gap-3 sm:col-span-2"><Switch id={`policy-${policy.id}`} checked={enabled} disabled={disabled || busy} onCheckedChange={setEnabled} /><Label htmlFor={`policy-${policy.id}`}>{t("enabled")}</Label></div>
-        <div className="grid gap-1.5"><Label htmlFor={`schedule-${policy.id}`}>{t("schedule")}</Label><Input id={`schedule-${policy.id}`} value={schedule} onChange={(event) => setSchedule(event.target.value)} disabled={disabled || busy} /><p className="text-xs text-muted-foreground">{t("scheduleHint")}</p></div>
+        {frequency === "custom" ? <div className="grid gap-2 sm:col-span-2">
+          <p className="text-sm font-medium">{t("customSchedule")}</p>
+          <code className="rounded-md border bg-muted px-3 py-2 text-sm">{policy.schedule}</code>
+          <p className="text-xs text-muted-foreground">{t("customScheduleHint")}</p>
+          <Button type="button" variant="outline" className="w-fit" disabled={disabled || busy} onClick={() => setFrequency("daily")}>{t("replaceSchedule")}</Button>
+        </div> : <>
+          <div className="grid gap-1.5"><Label htmlFor={`frequency-${policy.id}`}>{t("frequency")}</Label>
+            <Select value={frequency} onValueChange={(value) => setFrequency(value as BackupFrequency)} disabled={disabled || busy}>
+              <SelectTrigger id={`frequency-${policy.id}`} className="w-full"><SelectValue /></SelectTrigger>
+              <SelectContent><SelectItem value="off">{t("frequencyValues.off")}</SelectItem><SelectItem value="daily">{t("frequencyValues.daily")}</SelectItem><SelectItem value="weekly">{t("frequencyValues.weekly")}</SelectItem></SelectContent>
+            </Select>
+          </div>
+          {frequency !== "off" && <>
+            {frequency === "weekly" && <div className="grid gap-1.5"><Label htmlFor={`weekday-${policy.id}`}>{t("weekday")}</Label>
+              <Select value={weekday} onValueChange={(value) => setWeekday(value as BackupWeekday)} disabled={disabled || busy}>
+                <SelectTrigger id={`weekday-${policy.id}`} className="w-full"><SelectValue /></SelectTrigger>
+                <SelectContent>{(["0", "1", "2", "3", "4", "5", "6"] as const).map((day) => <SelectItem key={day} value={day}>{t(`weekdays.${day}`)}</SelectItem>)}</SelectContent>
+              </Select>
+            </div>}
+            <div className="grid gap-1.5"><Label htmlFor={`time-${policy.id}`}>{t("time")}</Label><Input id={`time-${policy.id}`} type="time" step={60} value={time} onChange={(event) => setTime(event.target.value)} disabled={disabled || busy} /><p className="text-xs text-muted-foreground">{t("timeHint")}</p></div>
+          </>}
+        </>}
         <div className="grid gap-1.5"><Label htmlFor={`keep-${policy.id}`}>{t("keepCount")}</Label><Input id={`keep-${policy.id}`} type="number" min={1} step={1} value={retentionCount} onChange={(event) => setRetentionCount(event.target.value)} disabled={disabled || busy} /></div>
         {invalid && <p role="alert" className="text-sm text-destructive sm:col-span-2">{t("invalidPolicy")}</p>}
         <div className="sm:col-span-2"><Button onClick={() => void save()} disabled={disabled || busy}>{t("save")}</Button></div>

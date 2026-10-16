@@ -9,6 +9,7 @@ import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { NAV, visibleNavItems } from "@/app/shell/nav-items";
+import { setAppLocale } from "@/app/i18n/locale-store";
 import { FreeSidebar } from "@/app/shell/free/FreeSidebar";
 import { createDemoAdapter } from "@/data/demo/demo-adapter";
 import { AdapterOutcomeError } from "@/data/capability";
@@ -30,7 +31,13 @@ function page(scenario: DemoAdapterOptions["hubBackupScenario"] = "list") {
   return { adapter, ...result };
 }
 
-afterEach(() => vi.restoreAllMocks());
+afterEach(() => { vi.restoreAllMocks(); setAppLocale("de"); });
+
+async function choose(combobox: HTMLElement, option: string) {
+  combobox.focus();
+  await userEvent.keyboard("{Enter}");
+  await userEvent.click(await screen.findByRole("option", { name: option }));
+}
 
 describe("Hub database backup page", () => {
   it("shows the empty state and creates a manual archive", async () => {
@@ -152,6 +159,55 @@ describe("Hub database backup page", () => {
     expect(await screen.findByText(deHubBackups.uploadProgress.replace("{percent}", "45"))).toBeTruthy();
     expect(screen.getByRole("progressbar", { name: deHubBackups.uploadProgress.replace("{percent}", "45") }).getAttribute("aria-valuenow")).toBe("45");
     await waitFor(async () => expect((await adapter.listHubBackups()).some((run) => run.trigger === "uploaded")).toBe(true));
+  });
+
+  it("saves weekly, daily and off through the existing policy payload", async () => {
+    const { adapter } = page();
+    const save = vi.spyOn(adapter, "saveHubBackupPolicies");
+    const frequency = await screen.findByRole("combobox", { name: deHubBackups.frequency });
+    await choose(frequency, deHubBackups.frequencyValues.weekly);
+    await choose(screen.getByRole("combobox", { name: deHubBackups.weekday }), deHubBackups.weekdays["3"]);
+    fireEvent.change(screen.getByLabelText(deHubBackups.time), { target: { value: "16:25" } });
+    await userEvent.click(screen.getByRole("button", { name: deHubBackups.save }));
+    await waitFor(() => expect(save).toHaveBeenLastCalledWith([{ id: "hub-daily", enabled: true, schedule: "0 25 16 * * 3", retentionCount: 7 }]));
+
+    await choose(await screen.findByRole("combobox", { name: deHubBackups.frequency }), deHubBackups.frequencyValues.daily);
+    await userEvent.click(screen.getByRole("button", { name: deHubBackups.save }));
+    await waitFor(() => expect(save).toHaveBeenLastCalledWith([{ id: "hub-daily", enabled: true, schedule: "0 25 16 * * *", retentionCount: 7 }]));
+
+    await choose(await screen.findByRole("combobox", { name: deHubBackups.frequency }), deHubBackups.frequencyValues.off);
+    await userEvent.click(screen.getByRole("button", { name: deHubBackups.save }));
+    await waitFor(() => expect(save).toHaveBeenLastCalledWith([{ id: "hub-daily", enabled: false, schedule: "0 25 16 * * *", retentionCount: 7 }]));
+    expect(screen.queryByLabelText(deHubBackups.time)).toBeNull();
+  });
+
+  it("preserves an unrepresentable cron until replacement is chosen", async () => {
+    const adapter = createDemoAdapter();
+    const original = { id: "hub-daily", enabled: true, schedule: "*/5 * * * * *", retentionCount: 7 };
+    vi.spyOn(adapter, "getHubBackupPolicies").mockResolvedValue([original]);
+    const save = vi.spyOn(adapter, "saveHubBackupPolicies").mockResolvedValue([original]);
+    renderRoutes([{ path: "/hub-backups", element: <HubBackupsPage /> }], ["/hub-backups"], adapter);
+    expect(await screen.findByText(original.schedule)).toBeTruthy();
+    expect(screen.getByText(deHubBackups.customScheduleHint)).toBeTruthy();
+    expect(screen.queryByRole("combobox", { name: deHubBackups.frequency })).toBeNull();
+    const count = screen.getByLabelText(deHubBackups.keepCount);
+    await userEvent.clear(count);
+    await userEvent.type(count, "9");
+    await userEvent.click(screen.getByRole("button", { name: deHubBackups.save }));
+    await waitFor(() => expect(save).toHaveBeenCalledWith([{ ...original, retentionCount: 9 }]));
+    await userEvent.click(screen.getByRole("button", { name: deHubBackups.replaceSchedule }));
+    expect(screen.getByRole("combobox", { name: deHubBackups.frequency })).toBeTruthy();
+    await userEvent.click(screen.getByRole("button", { name: deHubBackups.save }));
+    await waitFor(() => expect(save).toHaveBeenLastCalledWith([{ ...original, schedule: "0 0 3 * * *", retentionCount: 9 }]));
+  });
+
+  it("renders the picker text in German and English", async () => {
+    page();
+    expect(await screen.findByRole("combobox", { name: deHubBackups.frequency })).toBeTruthy();
+    expect(screen.getByText(deHubBackups.timeHint)).toBeTruthy();
+    setAppLocale("en-US");
+    expect(await screen.findByRole("combobox", { name: enHubBackups.frequency })).toBeTruthy();
+    expect(screen.getByText("24-hour time in the Hub's local time zone.")).toBeTruthy();
   });
 
   it("shows maintenance progress and redirects after sessions are revoked", async () => {

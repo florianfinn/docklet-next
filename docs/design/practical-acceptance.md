@@ -41,41 +41,35 @@ Record the accepted root SHA and verify that obsolete local roots are unreachabl
 and pruned before first publication. Rewriting the private root needs renewed
 review of the resulting SHA; earlier review does not attest to changed content.
 
-## Praktische Abnahme: Backup der Hub-Datenbank
+## Practical acceptance: Hub database backup
 
-Diese Schritte führt der Maintainer in einer ausdrücklich freigegebenen, isolierten
-Testumgebung mit erfundenen Daten aus. Der Betreiber bereitet die Umgebung vor;
-dieses Dokument erteilt keine Freigabe für ein Deployment. Notiere die geprüfte
-Produktversion, das Paket und die Bild-Digests im Abnahme-Issue.
+The maintainer performs these steps with synthetic data in an explicitly approved,
+isolated sandbox. The operator prepares the sandbox; this document does not approve
+a deployment. Record the tested product version, package and image digests in the
+acceptance issue.
 
-Voraussetzung für diesen Ablauf ist eine funktionsfähige Anmeldung im
-Produktions-Web-Bundle für den lokalen globalen Administrator. Sie fehlt derzeit:
-`/login` zeigt nur einen Backend-Hinweis. Deshalb ist der beschriebene
-Backup-Roundtrip heute nicht praktisch abnehmbar. Der Maintainer muss entscheiden,
-ob eine Produktions-Anmeldung vorher bereitgestellt oder die Abnahme bis zur
-Identitätsintegration zurückgestellt wird, und die Abhängigkeit im Meilenstein
-festhalten. Beginne die Abnahme erst mit funktionsfähiger Produktions-Anmeldung;
-insbesondere die Schritte 2 und 5 benötigen sie.
+The browser steps require a working production-bundle login for a local global
+administrator. M4 owns that login; `/login` currently shows only a backend notice.
+The maintainer has deferred practical acceptance until the M4 login is available.
+In particular, steps 2 and 5 cannot be performed before then.
 
-1. Lege im Test-Hub gut wiedererkennbare Beispieldaten an: einen zusätzlichen
-   Benutzer, eine Einstellung und einen geplanten Auftrag. Notiere die Werte,
-   ohne Zugangsdaten oder andere Geheimnisse in öffentliche Nachweise zu kopieren.
-2. Öffne als globaler Administrator **Hub-Datenbank**. Prüfe, dass genügend freier
-   Platz angezeigt wird. Klicke **Backup erstellen** und warte, bis das Archiv
-   **Abgeschlossen** zeigt. Notiere Archiv-ID, Erstellungszeit und Größe.
-3. Lade dieses Archiv über **Herunterladen** auf einen geschützten Speicherort
-   außerhalb des Hub-Hosts. Prüfe, dass die Datei vorhanden und nicht leer ist.
-4. Lass den Betreiber den Hub stoppen und eine neue, leere PostgreSQL-18-Datenbank
-   in der freigegebenen Testumgebung bereitstellen. Der Hub darf diese leere
-   Datenbank vor der Wiederherstellung nicht starten. Der Betreiber legt die
-   heruntergeladene Datei als `<Archiv-ID>.dump` in das Backup-Volume und führt
-   den in `deploy/hub/README.md` beschriebenen Befehl
-   `restore-hub --backup-id <Archiv-ID>` aus.
-5. Starte den Hub. Prüfe, dass der Health-Endpunkt bereit ist und eine neue
-   Anmeldung nötig ist. Melde dich an und vergleiche Benutzer, Einstellung,
-   Auftrag, Aktivitätsverlauf und Migrationsstand mit den vor Schritt 2
-   notierten Werten. Die Daten müssen übereinstimmen. Prüfe außerdem, dass
-   frühere Sitzungen keinen Zugriff mehr haben.
-6. Halte Ergebnis, Archivgröße, Zeitpunkt, Paketversion, etwaige Abweichungen
-   und Aufräumen im Abnahme-Issue fest. Bei einem Unterschied gilt die Abnahme
-   als fehlgeschlagen; bewahre Archiv und private Fehlerbelege für die Diagnose.
+1. Create recognizable synthetic data in the test Hub: an additional user, a
+   setting and a scheduled job. Record their values without copying credentials
+   or other secrets into public evidence.
+2. Sign in as a global administrator and open **Hub database**. Check that enough
+   free space is shown. Select **Create backup** and wait for the archive to show
+   **Complete**. Record the archive ID, creation time and size.
+3. Download the archive to protected storage outside the Hub host. Verify that
+   the file exists and is not empty.
+4. Have the operator stop the Hub and prepare a new, empty PostgreSQL 18 database
+   in the approved sandbox. The Hub must not start against that empty database
+   before restore. The operator places the downloaded file as `<archive-id>.dump`
+   in the backup volume and runs `restore-hub --backup-id <archive-id>` as
+   described in `deploy/hub/README.md`.
+5. Start the Hub. Check that its health endpoint is ready and a fresh login is
+   required. Sign in and compare the user, setting, job, activity history and
+   migration state with the values recorded before step 2. They must match.
+   Confirm that earlier sessions no longer have access.
+6. Record the result, archive size, time, package version, deviations and cleanup
+   in the acceptance issue. A mismatch fails acceptance; retain the archive and
+   private failure evidence for diagnosis.
