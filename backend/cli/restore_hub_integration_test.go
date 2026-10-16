@@ -29,8 +29,14 @@ import (
 )
 
 func TestRestoreHubCommandIntoEmptyDatabase(t *testing.T) {
-	if _, err := exec.LookPath("pg_dump"); err != nil {
-		t.Skip("PostgreSQL 18 client image required")
+	for _, tool := range []string{"pg_dump", "pg_restore"} {
+		path, err := exec.LookPath(tool)
+		if err != nil {
+			t.Skipf("PostgreSQL 18 client tool %s is unavailable", tool)
+		}
+		version, err := exec.Command(path, "--version").Output()
+		require.NoError(t, err, "%s version probe failed", tool)
+		require.Contains(t, string(version), "(PostgreSQL) 18.", "%s must be PostgreSQL 18", tool)
 	}
 	adminURL := os.Getenv("DATABASE_URL")
 	require.NotEmpty(t, adminURL)
@@ -75,14 +81,14 @@ func TestRestoreHubCommandIntoEmptyDatabase(t *testing.T) {
 		"PGUSER="+parsed.User.Username(), "PGPASSWORD="+password,
 		"PGDATABASE="+strings.TrimPrefix(parsed.Path, "/"), "PGSSLMODE=disable")
 	command.Stdout, command.Stderr = archive, io.Discard
-	require.NoError(t, command.Run())
+	require.NoError(t, command.Run(), "pg_dump could not create the archive; check the PostgreSQL 18 client and test server")
 	require.NoError(t, archive.Close())
 	t.Setenv("DATABASE_URL", targetURL)
 	t.Setenv("DOCKLET_BACKUP_DIR", dir)
 	rootCmd.SetArgs([]string{"restore-hub", "--backup-id", id})
 	var output bytes.Buffer
 	rootCmd.SetOut(&output)
-	require.NoError(t, rootCmd.ExecuteContext(t.Context()))
+	require.NoError(t, rootCmd.ExecuteContext(t.Context()), "restore-hub failed; check the PostgreSQL 18 client, archive and test server")
 	require.Contains(t, output.String(), "Hub archive restored")
 	restarted, err := database.InitializeHub(t.Context(), targetURL, database.MigrationOptions{})
 	require.NoError(t, err)
