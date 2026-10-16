@@ -11,6 +11,8 @@ sessions, access tokens and browser cookies. The proxy identity header has no
 meaning in this mode. The mutable legacy `authLocalEnabled` setting cannot select
 another mode; API updates to it are rejected. Additional user identities and their
 resource rights are outside this decision and belong to M15.
+Clients read the active policy from `GET /api/auth/mode`, not the legacy
+`authLocalEnabled` setting, whose stored value does not describe none/proxy mode.
 
 `none` maps every ordinary hub request to the global administrator. `proxy` maps
 each accepted proxy identity to that same persisted administrator ID. Proxy names
@@ -63,6 +65,10 @@ and prevents readiness. Access/browser verification checks the mode before any
 cache hit. Startup clears the verification cache; returning to local mode cannot
 resurrect an older session. A same-mode restart preserves valid local sessions.
 Restored database sessions are independently revoked by the backup subsystem.
+Mode changes revoke sessions only. Users, personal/scoped API keys, environment
+bootstrap/access tokens and webhook tokens created or retained during none/proxy
+mode persist when local mode resumes. Operators must review users and credentials
+and revoke or rotate unwanted access; switching modes does not remove it.
 
 ## Browser request protection
 

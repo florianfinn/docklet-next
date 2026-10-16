@@ -50,10 +50,18 @@ with an empty volume; unsupported or newer schemas are refused.
 
 `AUTH_MODE=local` is the default and uses the local administrator password and
 sessions. `AUTH_MODE=none` grants full administrator access to anyone who can reach
-the hub; the operator deliberately accepts that access. `AUTH_MODE=proxy` accepts
+the hub; the operator deliberately accepts that access. Switching away from none
+revokes sessions but preserves users, API keys, environment tokens and webhook
+tokens created meanwhile. Review users and revoke or rotate unwanted credentials.
+The hub does not allowlist the request Host header; none-mode reads remain
+unauthenticated, including requests using another Host. Browser write and WebSocket
+Origin checks do not add Host validation for reads.
+
+`AUTH_MODE=proxy` accepts
 the identity in `AUTH_PROXY_HEADER` (default `Remote-User`) only from the direct TCP
 peer addresses or CIDRs in `AUTH_TRUSTED_PROXIES`. The list is comma-separated and
-has no default; missing or malformed proxy configuration prevents startup.
+has no default; missing/malformed configuration and all-address `/0` networks
+prevent startup. Identity values must contain printable UTF-8 characters only.
 
 Every accepted proxy name maps to the same administrator; it is used only for
 activity attribution. Configure the proxy to authenticate every request and strip
