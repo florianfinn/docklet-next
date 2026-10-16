@@ -14,7 +14,6 @@ import (
 	"github.com/spf13/cobra"
 	"go.getarcane.app/kit/pkg/signals"
 
-	"github.com/florianfinn/docklet-next/backend/cli/admin"
 	"github.com/florianfinn/docklet-next/backend/cli/generate"
 	"github.com/florianfinn/docklet-next/backend/cli/upgrade"
 	"github.com/florianfinn/docklet-next/backend/internal/bootstrap"
@@ -45,7 +44,6 @@ func Execute() {
 }
 
 func init() {
-	rootCmd.AddCommand(admin.AdminCmd)
 	rootCmd.AddCommand(upgrade.UpgradeCmd)
 	rootCmd.AddCommand(generate.GenerateCmd)
 }

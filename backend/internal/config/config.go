@@ -42,7 +42,6 @@ type Config struct {
 
 	AppUrl                 string         `env:"APP_URL" default:"http://localhost:3552"`
 	DatabaseURL            string         `env:"DATABASE_URL" default:"file:data/docklet.db"`
-	AllowCLIPasswordReset  bool           `env:"ALLOW_CLI_PASSWORD_RESET" default:"false"`
 	ActorPort              string         `env:"ACTOR_PORT" default:"3551"`
 	Port                   string         `env:"PORT" default:"3552"`
 	Listen                 string         `env:"LISTEN" default:""`
