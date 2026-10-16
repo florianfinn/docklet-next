@@ -38,11 +38,14 @@ Consequently, deleting a `FOR UPDATE` clause alone gives no replacement guarante
 
 Arcane reference sources are v2.15.1 at
 `095cb778daba1034e2a39961199e712a75d4ba29`:
-`backend/internal/database/database.go`, `backend/pkg/utils/sqlite/sqlite.go`,
-`backend/pkg/utils/dbutil/dbutil.go`, `backend/pkg/utils/francis/provider.go`,
+`backend/internal/database/database.go`, `backend/pkg/utils/dbutil/dbutil.go`,
+`backend/pkg/utils/francis/provider.go`,
 `runtime.go` and `backend/pkg/libarcane/startup/runtime_identity.go`.
-Recover only the required file handling, scalar registration and wiring. Do not
-restore dual-dialect branches, old data import or the 90 Arcane SQLite migrations.
+Recover only the required file handling and wiring. No retained SQL calls the
+`normalize` scalar; leave `backend/pkg/utils/sqlite/sqlite.go` out unless a caller
+appears. The [M1 removal inventory](../history/m1-sqlite-removal.md) records all
+90 upstream SQLite migration paths; do not restore those migrations, dual-dialect
+branches or old data import.
 
 The wrapper is MIT; the modernc driver has BSD-3-Clause source and bundles other
 notices, including SQLite's public-domain dedication. The full selected graph,
@@ -69,7 +72,8 @@ its name from a manifest is insufficient.
 Keep `DATABASE_URL` as the only database location setting. The native default is
 `file:data/docklet.db`, relative to the process working directory. The Docker
 template explicitly sets `DATABASE_URL=file:/app/data/docklet.db` and mounts the
-local named volume `hub-data` at `/app/data`. A local bind mount is also supported.
+local named volume `hub-data` at `/app/data`. Bind mounts are supported on Linux
+hosts only; use the named volume on Docker Desktop and other hosts.
 Use the standard `file:` URI escaping for spaces and special characters.
 
 | File for the Docker default | Purpose |
@@ -88,9 +92,9 @@ symlink/hard-link database aliases that could acquire a different lock for the
 same database. Do not rename or replace database files while the hub is running.
 
 Accept file-backed, writable local databases only. Reject remote URI authorities,
-memory databases, shared-cache memory modes, read-only/immutable modes and
-PostgreSQL schemes. Parse query options explicitly; reject options that override
-the required connection policy. The application supplies pragmas and transaction
+memory databases, shared-cache memory modes, read-only/immutable modes,
+PostgreSQL schemes and the `vfs` option. Parse query options explicitly; reject
+options that override the required connection policy. The application supplies pragmas and transaction
 mode internally, so the normal operator URL needs no query string. Do not add
 `DATABASE_TYPE`, `DB_DRIVER`, a separate Francis URL or pool/pragmas env settings.
 Existing `_FILE` secret conventions and `PUID`/`PGID` identity handling remain.
@@ -100,8 +104,11 @@ Both databases, their WAL/SHM files and the lock must reside on local persistent
 storage available to the same host. SMB/NFS and other network shares are
 unsupported for database files, including a named volume backed by such a share.
 This follows the [WAL same-host requirement](https://www.sqlite.org/wal.html).
-An operator must choose a local volume; path syntax alone cannot prove its
-underlying filesystem. Backup archives may be copied to network targets later.
+On Linux, check the resolved database directory before opening either file with
+`go-sql-utils/sqlite.IsNetworkedFileSystem` v0.3.9, already a Francis dependency.
+Fail startup on detection errors or a positive result (NFS, SMB/CIFS or FUSE),
+with guidance to use local persistent storage. This catches common mistakes;
+it cannot certify every storage backend. Backup archives may use network targets.
 Keep directory access private to the runtime identity; create database/lock files
 with mode `0600` and their directory with `0700`, subject to a stricter umask.
 The runtime UID needs creation and rename rights for SQLite's companion files.
@@ -113,8 +120,19 @@ connection expiry. Use the same limits for the Francis writer pool. Francis
 diagnostics may use one separately owned read-only connection to its sidecar;
 it must never become a second writer. There is no extra main read pool initially.
 WAL preserves the option of bounded readers later, but measurements must justify
-that change. Close result sets promptly and never call the parent pool from an
-open transaction: with one connection that would deadlock waiting for itself.
+that change. Never call the parent pool from an open transaction: with one
+connection that would deadlock waiting for itself. No checked-out connection,
+cursor or transaction may span network I/O, an external callback or an iterator
+handed to another layer.
+
+Change `ExportVulnerabilities` (`vulnerability/children/query/service.go:536`):
+its `Rows()` cursor currently survives into the CSV `StreamResponse`
+(`handler.go:286-298`). Fetch bounded keyset pages with short reads, materialise
+and close each page before yielding or writing, and retain the requested sort
+with a unique tie-breaker. Do not keep a transaction across pages. With
+`MaxOpenConns=1`, a blocked CSV writer must leave the connection available for a
+concurrent activity completion within its existing 10-second deadline. Audit
+held cursors and deeper helper calls as well as direct transaction closures.
 
 | Setting | Required value and application |
 | --- | --- |
@@ -124,6 +142,7 @@ open transaction: with one connection that would deadlock waiting for itself.
 | `synchronous` | `FULL` on every write connection; durable commits take priority over unmeasured throughput |
 | `wal_autocheckpoint` | `1000` pages on each writer; retain SQLite's ordinary checkpoint mechanism |
 | Transaction start | `_txlock=immediate` for write pools so GORM/SQL transactions begin with `BEGIN IMMEDIATE` |
+| Hub time binding/scanning | `_time_integer_format=unix_micro` and `_inttotime=1` on every hub/migration connection; declared `DATETIME`/`TIMESTAMP` columns store integer microseconds and scan as UTC `time.Time`. Francis retains its separate millisecond contract. |
 
 Use a shared connection factory/modernc DSN setup for hub, migrations, Francis
 and diagnostic access. A single `Exec(PRAGMA foreign_keys=ON)` on a pool is
@@ -140,20 +159,17 @@ publication outside them. Publish events and invalidate caches only after commit
 The [transaction rules](https://www.sqlite.org/lang_transaction.html) explain
 why `BEGIN IMMEDIATE` can fail busy before any read-modify-write decision.
 
-Recognise modernc error codes, including extended `SQLITE_BUSY` variants, using
-their primary result code. For retry-safe database-only transactions, roll back
-and retry the whole transaction at most three times, with context-aware 50 ms
-then 100 ms delays inside the original operation deadline. Each attempt rereads
-state and resets callback output. Retain the existing 10-second detached deadline
-for activity owner writes; a retry does not extend it. Do not stack multiple
-retry loops. `SQLITE_LOCKED` indicates a connection/cursor misuse to fix, rather
-than an unrestricted retry reason. Constraint, disk-full, I/O and corrupt-file
-errors are not busy errors. Never replay an external action or an uncertain
-commit; return a failure when the durable result cannot be established.
+Keep `busy_timeout`; classify an exhausted modernc `SQLITE_BUSY`, including
+extended variants by primary code, in the existing `IsRetryableWriteError`.
+Retain the activity completion/append retry loops and their original 10-second
+owner-write deadline; add no generic retry layer or separate backoff policy.
+The sole connection and lifetime lock serialize cooperating writers.
+`SQLITE_LOCKED` indicates cursor/connection misuse to fix. Constraint, disk-full,
+I/O and corrupt-file errors are not busy errors. Never replay an external action
+or an uncertain commit.
 
-Record busy attempts and exhausted operations separately. Ordinary writes queue
-in the bounded pool; queue time belongs in latency measurements. Long readers
-can prevent WAL reclamation. Sample WAL bytes and passive checkpoint results;
+Ordinary writes queue in the pool; queue time belongs in latency measurements.
+Long readers can prevent WAL reclamation. Sample WAL bytes and passive checkpoint results;
 close leaked readers rather than truncating a live WAL file. A clean shutdown
 may checkpoint after readers and writers stop. An uncheckpointed WAL after a
 crash is recovered by SQLite on next open, never manually deleted.
@@ -161,7 +177,8 @@ crash is recovered by SQLite on next open, never manually deleted.
 ## Single hub and run admission
 
 Replace `backend/internal/database/hub_lock.go`'s PostgreSQL session with a
-nonblocking OS exclusive file lock on the stable `.lock` file. The lock is
+nonblocking `flock(LOCK_EX | LOCK_NB)` on the stable `.lock` file on Linux,
+with equivalent descriptor-owned locks on other supported targets. The lock is
 acquired before opening/migrating either database, startup repair, Francis,
 jobs or HTTP readiness. Keep its descriptor open for the whole hub lifetime.
 A second process fails immediately with `hub.already_running`, starts no HTTP
@@ -171,10 +188,21 @@ two holders. On shutdown, stop work and close every database handle before
 unlocking. Failed startup closes all resources and releases the lock.
 
 Implement the lock for supported native build targets, failing closed where
-unsupported; production Docker is Linux. Administrative commands that write or
-migrate the hub files must acquire the same lock. Read-only inspection must not
-migrate. Goose uses the SQLite dialect under this lock; remove its PostgreSQL
-session locker. The lock is cooperative on a local filesystem, not a defence
+unsupported; production Docker is Linux. Do not use classic process-owned POSIX
+record locks: closing another descriptor can release them. The hub must never
+open live database, WAL or SHM files through ordinary file descriptors; use
+`Lstat`/`Stat` for alias/ownership checks and SQLite APIs for contents. Follow
+[SQLite's descriptor guidance](https://www.sqlite.org/howtocorrupt.html#posix_advisory_locks_canceled_by_a_separate_thread_doing_close_).
+Rejecting `vfs` also prevents a collision with the unix-dotfile VFS's `.lock` name.
+
+Administrative writers acquire the same lifetime lock. In particular,
+`backend/cli/admin/reset_password.go` (line 68) currently initializes/migrates directly;
+`admin reset-password` must refuse a running hub with `hub.already_running`.
+When stopped, it acquires the lock, migrates forward, resets the password and
+revokes sessions, closes the database and releases the lock. Keep the existing
+explicit `ALLOW_CLI_PASSWORD_RESET=true` gate and terminal password prompt.
+Read-only inspection must not migrate. Goose uses the SQLite dialect under this
+lock; remove its PostgreSQL session locker. The lock is cooperative on a local filesystem, not a defence
 against an operator editing or replacing files beneath a running hub.
 
 Replace the run-scope advisory lock at `backend/internal/activity/gate.go:77`
@@ -229,25 +257,30 @@ targets against the SQLite indexes, especially `COALESCE(environment_id, '')`.
 
 ## Values, timestamps and JSON
 
-Store hub timestamps as signed 64-bit Unix microseconds in `INTEGER` columns.
-Use `t.UTC().UnixMicro()` on write and `time.UnixMicro(value).UTC()` on read;
-microseconds preserve PostgreSQL timestamp precision and the activity batch
+Declare hub timestamp columns as `DATETIME` (or `TIMESTAMP`), with numeric
+affinity and signed 64-bit Unix-microsecond storage. The hub driver's mandatory
+`_time_integer_format=unix_micro&_inttotime=1` centrally binds `time.Time` as
+integer microseconds and scans declared timestamp columns back as UTC
+`time.Time`. This covers model writes, map updates, predicates and raw SQL.
+Microseconds preserve PostgreSQL timestamp precision and the activity batch
 writer's microsecond ordering. Preserve the per-batch offsets and stable
 `created_at, id` ordering in message queries; do not truncate them to milliseconds.
 Public DTOs remain `time.Time` and RFC3339 JSON. A nullable timestamp uses SQL NULL and a nil pointer; the zero Go
 time is distinct from Unix epoch zero. Keep interval/duration counters as their
 declared units, not as timestamp values.
 
-Implement one database serializer for GORM `time.Time`/`*time.Time` fields and an
-explicit scanner/valuer for raw SQL projections. Annotate persistent fields with
-the serializer and integer type. The scanner accepts driver `int64` and NULL
-only where nullable, and rejects text and floating-point values. Unit-specific
-helpers and round-trip tests prevent mixing integer seconds, milliseconds and
-microseconds; an arbitrary integer alone cannot identify its unit.
-Model writes, hooks, map updates, raw SQL, predicates and bulk upserts must all
-use this encoding; a field serializer alone does not encode map/query arguments.
-Audit every timestamp path, including heartbeats, auth/session/key expiry,
-retention, pagination and diagnostics. Test `typeof(column) = 'integer'`.
+Keep GORM time fields and auto-time handling without a timestamp serializer or
+`type:integer` tags. Only computed projections without declared types, such as
+`MAX(created_at)`, need an explicit microsecond scanner accepting `int64` and
+NULL where nullable, converting with `time.UnixMicro(value).UTC()` and rejecting
+text/floats. Francis diagnostics use the separate millisecond scanner below.
+Verify binding/scanning after physical connection replacement, not just at open.
+Require a future-row `Where("expires_at < ?", time.Now())` to match zero rows,
+plus session/receipt retention and stale-run boundary tests. Prove `CreatedAt`
+and `UpdatedAt` auto-population on `Create`, `Save` and `Updates(map)`, nullable
+and zero-time round-trips, and `typeof(column) = 'integer'`. The retained destructive
+predicates include `session/service.go:149`, `activity/retention.go:80` and
+`activity/repair.go:63`; a write-only type assertion cannot protect these reads.
 
 Take UTC time from the single hub's injected clock after acquiring the write
 transaction. Replace `NOW()`, `INTERVAL`, `EXTRACT`, `GREATEST` and PostgreSQL
@@ -275,6 +308,19 @@ use `CHECK (value IS NULL OR json_valid(value))` with real column names and
 preserve their existing nullability/defaults. Add object/array restrictions only
 where already required by the model contract. Francis owns its JSON functions
 and matching expression indexes. Text search is not a substitute for JSON parsing.
+
+Accept SQLite's default ASCII case-insensitive `LIKE` for user-facing search,
+including `event/service.go:291` and `project/service.go:1692`; non-ASCII case
+folding is not promised. Keep text equality and ordering at SQLite's default
+`BINARY` collation, including uppercase-before-lowercase ASCII ordering. No
+locale-sensitive sorting or global `case_sensitive_like` pragma is introduced.
+These follow [SQLite's LIKE](https://www.sqlite.org/lang_expr.html#like) and
+[collation rules](https://www.sqlite.org/datatype3.html#collating_sequences).
+Exact namespaces must stay case-sensitive: change `kv/service.go:70`
+(`ListByPrefix`, used for rename journals/cleanup) to
+`substr(key, 1, length(?)) = ? COLLATE BINARY`, binding the literal prefix twice.
+Test mixed-case prefixes and retain literal `%`, `_` and backslash cases;
+also cover search case and text ordering in the default suite.
 
 ## Fresh migration baseline and schema proof
 
@@ -312,12 +358,17 @@ numeric ID allocation and empty tables behaviourally. Require
 Update `scripts/check-migrations.mjs`, `migration-hashes.json`, provenance
 sidecars/overrides and their guard tests together. Replace the old independent
 baseline pin with the reviewed SQLite SHA-256 and retain fail-closed checks for
-missing/changed/unmanifested files and duplicate versions. The comparison-base
+missing/changed/unmanifested files and duplicate versions. Key the new manifest
+by paths relative to `backend/resources/migrations/`, starting with
+`sqlite/001_baseline.sql`, instead of the current bare filenames
+(`scripts/check-migrations.mjs:13-46`). The comparison-base
 guard needs an explicit, narrowly defined one-time transition from the exact
 seven-hash PostgreSQL manifest at the inspected base to the new SQLite manifest;
 it must not skip checks merely because a directory or manifest changed. Tests
 must reject a changed old hash, unrelated deletion and altered SQLite baseline.
-After that transition, existing SQLite hashes cannot be rewritten or removed.
+Prove the transition against both the step PR's feature base and the closing
+PR's main base. After that transition, existing SQLite hashes cannot be rewritten
+or removed.
 
 Record a Docklet SQLite database identity/baseline revision in application-owned
 metadata. Under the lifetime lock, inspect `sqlite_master` before Goose creates
@@ -388,15 +439,18 @@ default with no database service, Docker socket or agent. At the inspected base,
 60 of 229 backend test files are PG-tagged and 44 import `testpg`; migrate their
 behaviour assertions rather than dropping them to reach green. Also replace the
 untagged Francis PG-conditional test. Each test owns its directory and closes
-every pool; concurrency cases use independent handles on the same temp file.
+every pool; service concurrency cases share the configured one-connection pool.
 
 Required checks include all row-lock invariants above, gate admission/freshness,
 cancelled-worker logging, concurrent completion/progress/repair and receipt
 replay. Use real child processes for double start, crash lock release and restart
-repair; two services in one process do not test the file lock. Force a competing
-writer to exercise bounded busy recovery, deadline/cancellation and exhaustion.
-Replace a pool connection to prove FK/busy/synchronous setup; test invalid FK
-writes and delete actions. Cover fresh migration, reopen, forward upgrade,
+repair; two services in one process do not test the file lock. Opening and closing
+a second lock-file descriptor in the holder must still leave a child refused
+with `hub.already_running`. Test `admin reset-password` refusing a live hub and
+succeeding under the lock after shutdown. A blocked export writer must not hold
+the pool connection or prevent concurrent completion within its deadline.
+Replace a pool connection to prove FK/busy/synchronous and hub time setup; test
+invalid FK writes and delete actions. Cover fresh migration, reopen, forward upgrade,
 newer/foreign/corrupt schema rejection, timestamp sorting/boundaries and multi-line batch order, UPSERT,
 JSON, WAL recovery/checkpoints and unwritable/full-storage errors. Give critical
 guards targeted counterexamples; the existing run-gate matrix still applies.
@@ -418,6 +472,18 @@ remove its PostgreSQL service/client-image assumptions; do not merge its backup
 engine or advertise backup as available. Keep overridable pinned image references
 and the local build fallback. Production secrets remain local.
 
+The deploy README must document offline password recovery on the same data volume,
+using the template's `hub` service and binary entrypoint:
+
+```sh
+docker compose stop hub
+docker compose run --rm -e ALLOW_CLI_PASSWORD_RESET=true hub admin reset-password --username example-admin
+docker compose up -d hub
+```
+
+Keep the password in the terminal prompt. `docker exec` against a running hub
+must fail with `hub.already_running`; never bypass the lock for recovery.
+
 Measure the final candidate on local storage. The heartbeat path changes a row
 only after 30 seconds, so four agents yield approximately `4/30 = 0.13` changed
 rows/second from that path, not a bound on total SQL calls. Francis polls every
@@ -431,7 +497,7 @@ same-scope admission bursts and verify final row/message counts.
 | Measurement | Candidate acceptance target |
 | --- | --- |
 | Write operation latency, including pool wait/retry, measured per completed service call | p95 at most 250 ms; report sample count and p99 too |
-| SQLite contention codes, counted at every failed attempt | Zero exhausted `SQLITE_BUSY` operations and zero `SQLITE_LOCKED`; report recovered busy attempts separately |
+| SQLite contention errors observed during the workload | Zero `SQLITE_BUSY` and `SQLITE_LOCKED` errors; inspect existing retry logs if any occur |
 | WAL bytes sampled every second for each file | Peak at most 64 MiB per file; after writers/readers drain, a passive checkpoint reports no blocked frames and a truncate checkpoint leaves no retained WAL frames |
 | Correctness | No missing/duplicate committed writes, final messages or workers; no negative durations; all scope/receipt constraints hold |
 
@@ -454,11 +520,11 @@ separate schema/runtime/run-gate work is delegated against an unmerged foundatio
 
 | Commit order | Owned changes and check before proceeding |
 | --- | --- |
-| 1. Driver and Francis foundation | Restore the pinned SQLite provider with provenance/licences; add the pure-Go dialector, shared connection policy, URL/path handling and lifetime lock; remove PG provider wiring. Compile hub/agent/CLI with CGO off and prove provider state survives reopen. |
-| 2. Values and fresh schema | Implement timestamp/JSON encoding; generate/review `001_baseline.sql`, identity, semantic integrity reference, provenance and narrowly scoped hash-guard transition. Prove fresh schema equivalence, FK/check/index behaviour, foreign/newer refusal and idempotent reopen. |
-| 3. Atomic service writes | Replace all 13 row locks, gate advisory lock and PG time SQL, audit all timestamp writes/predicates and preserve conditional updates/receipts. Run focused concurrent user/role/KV/tag/run tests and the run-gate counterexamples. |
-| 4. Default persistence coverage | Port all tagged/helper tests and Francis diagnostics/runtime tests to independent temp files, implement real process lock/crash tests, busy/deadline and WAL tests. Run the whole default suite without PG env or service, with Docker unavailable. |
-| 5. Packaging and CI | Supply local-volume Docker/Compose packaging, defaults, ownership and operator docs; remove PG service/tools/job; refresh actual dependency inventories and packaged notices. Verify production builds, local image startup and served UI/health. |
+| 1. Driver and Francis foundation | Restore the pinned SQLite provider with provenance/licences; add the pure-Go dialector, per-file connection policy, URL/storage validation and descriptor-owned lifetime lock; remove PG provider wiring. Compile hub/agent/CLI with CGO off and prove provider state survives reopen. |
+| 2. Values and fresh schema | Enforce hub driver-native microsecond binding/scanning with declared timestamp types and unchanged GORM time fields; implement JSON TEXT, untyped projection/Francis scanners, identity, semantic schema proof, provenance and path-qualified manifest transition. Prove predicates, GORM auto-times, schema constraints, foreign/newer refusal and reopen, including transition guards against feature and main bases. |
+| 3. Atomic service writes and cursor lifetimes | Replace all 13 row locks, gate advisory lock and PG time SQL; map busy errors into existing retries. Audit nested pool access, held cursors and timestamp paths; page `ExportVulnerabilities` before yielding; preserve exact KV prefixes and defined search/sort semantics. Run concurrent user/role/KV/tag/run tests, blocked-export completion and gate counterexamples. |
+| 4. Default persistence coverage | Port tagged/helper and Francis tests to temp files; implement process lock/crash, descriptor-close and offline-reset tests, connection replacement, deadline and WAL checks. Run the whole default suite without PG env or service, with Docker unavailable. |
+| 5. Packaging and CI | Supply Docker/Compose packaging with a local named volume, Linux-only bind mounts, ownership and offline password-reset instructions; remove PG service/tools/job; refresh actual dependency inventories and packaged notices. Verify production builds, local image startup and served UI/health. |
 | 6. Acceptance evidence and final docs | Run the representative load and approved practical empty-install/restart checks; reconcile all docs with final code and record results in #60. Re-run full lint/tests/build, publication, provenance and migration guards on the final head. |
 
 Commit groups are implementation order, not separately accepted steps. If a
@@ -474,10 +540,11 @@ green checks, review and recorded acceptance completes #60. #32 remains separate
 
 Output-heavy jobs can queue interactive writes; load latency, busy counts and
 WAL measurements expose that risk. A single connection can deadlock on nested
-pool access; every transaction must carry its own handle. Timestamp conversion
-can hide in raw SQL and map updates; storage-type and boundary tests must catch
-it. SQLite affinity and NULL uniqueness can weaken constraints unless tested
-behaviourally. Francis restoration and the actual compiled licence graph need
+pool access or a held export cursor; transactions carry their own handle and
+pages close before yielding. Hub timestamp safety depends on driver options
+surviving connection replacement and correct declared types; predicate,
+auto-time and computed-projection tests enforce it. SQLite affinity and NULL
+uniqueness can weaken constraints unless tested behaviourally. Francis restoration and the actual compiled licence graph need
 their own proof. Local-file locks do not support network volumes or multiple
 hubs; a later scale change requires another architecture decision. Future
 two-file restore can fail between swaps and therefore needs #32's marker and

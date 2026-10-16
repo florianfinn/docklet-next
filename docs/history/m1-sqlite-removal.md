@@ -1,8 +1,8 @@
 # SQLite removal map for the PostgreSQL baseline
 
 Archived on 2026-10-16 from the pre-SQLite design at
-`1ead6d2c7e17c79b46c42eb8567c3a1d70730fd5`. This records the M1 input and
-PostgreSQL implementation, not the current database decision. See the
+`1ead6d2c7e17c79b46c42eb8567c3a1d70730fd5`. This records the M1 SQLite removal
+inventory, not the current database decision. See the
 [SQLite database contract](../design/sqlite-database.md).
 
 Paths below are relative to Arcane v2.15.1 at

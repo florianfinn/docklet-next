@@ -153,7 +153,8 @@ outcome must be checked after a crash.
 
 If a normal database write encounters transient contention while the lifetime
 file lock remains held, completion retries its transaction up to three times
-within the bounded owner-write deadline, using the SQLite retry policy. After
+within the existing 10-second owner-write deadline; exhausted SQLite busy errors
+use the existing retry classifier, with no additional retry layer. After
 the final failure it returns the error; it must not
 claim success or free the durable scope. The row remains active and blocks
 another gated admission on that scope. An operator restart triggers startup
@@ -162,8 +163,9 @@ repair and releases the scope.
 ## Single-instance lock
 
 At startup, before opening/migrating either database, repair, background jobs
-and HTTP readiness, the hub acquires a nonblocking exclusive OS lock on the
-resolved main database path plus `.lock`. It holds the descriptor through the
+and HTTP readiness, the hub acquires `flock(LOCK_EX | LOCK_NB)` on Linux, or an
+equivalent descriptor-owned lock on another supported target, on the resolved
+main database path plus `.lock`. It holds the descriptor through the
 whole process lifetime. If held, startup fails immediately with
 `hub.already_running`, before HTTP or jobs and without waiting for release.
 This is a startup error, not a run message code.
@@ -171,8 +173,12 @@ This is a startup error, not a run message code.
 Controlled shutdown stops work and closes every database handle before unlocking.
 A crash releases the OS lock; a new hub recovers SQLite and repairs abandoned
 runs before accepting work. Never unlink/replace the lock inode or use network
-storage. The [SQLite contract](sqlite-database.md#single-hub-and-run-admission)
-also covers path aliases and administrative writers. Terminal status conditions
+storage. Opening and closing a second descriptor of the lock file must not
+release the held lock. Never open live database/WAL/SHM files through ordinary
+descriptors; use `Lstat`/`Stat` for path checks. The
+[SQLite contract](sqlite-database.md#single-hub-and-run-admission) also covers
+path aliases, excluded VFS options and administrative writers, including offline
+`admin reset-password`. Terminal status conditions
 prevent duplicate completion after repair, while an already accepted external
 agent action can continue beyond the old hub's lifetime.
 
