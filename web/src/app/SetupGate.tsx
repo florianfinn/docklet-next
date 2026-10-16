@@ -2,13 +2,16 @@
 // Revision: 7f4c05631ea6c769bb1cfae85c081b9b8b83df17
 // Retrieved: 2026-10-17
 // License: Apache-2.0
-// Deviations: Original first-run route gate for the connected hub.
+// Deviations: Original first-run route gate and administrator locale sync.
 
+import { useEffect } from "react";
 import { Navigate } from "react-router";
 import { useTranslations } from "use-intl";
 
+import { setAppLocale } from "@/app/i18n/locale-store";
 import { AdapterOutcomeError } from "@/data/capability";
 import { useAuthMode, useCurrentUser, useSetupStatus } from "@/data/queries";
+import { isLocale } from "@/domain/locale";
 import { Button } from "@/shared/ui/button";
 
 import SetupPage from "@/features/setup/SetupPage";
@@ -18,6 +21,8 @@ export function SetupGate() {
   const mode = useAuthMode();
   const currentUser = useCurrentUser();
   const setup = useSetupStatus(currentUser.isSuccess);
+  const savedLocale = currentUser.data?.locale;
+  useEffect(() => { if (isLocale(savedLocale)) setAppLocale(savedLocale); }, [savedLocale]);
   if (mode.isPending || currentUser.isPending) return <main aria-busy="true" className="p-6">{t("loading")}</main>;
   if (currentUser.isError) {
     const rejected = currentUser.error instanceof AdapterOutcomeError && currentUser.error.outcome.kind === "error" && currentUser.error.outcome.status === 401;

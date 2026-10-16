@@ -2,14 +2,16 @@
 // Revision: 7f4c05631ea6c769bb1cfae85c081b9b8b83df17
 // Retrieved: 2026-10-17
 // License: Apache-2.0
-// Deviations: Mode-aware route guard for authenticated hub routes.
+// Deviations: Mode-aware route guard and administrator locale sync.
 
 import { useEffect, useState } from "react";
 import { Navigate, Outlet, useLocation } from "react-router";
 import { useTranslations } from "use-intl";
 
+import { setAppLocale } from "@/app/i18n/locale-store";
 import { AdapterOutcomeError } from "@/data/capability";
 import { useAuthMode, useCurrentUser, useSetupStatus } from "@/data/queries";
+import { isLocale } from "@/domain/locale";
 import { Button } from "@/shared/ui/button";
 
 export function AuthGate() {
@@ -19,6 +21,8 @@ export function AuthGate() {
   const setup = useSetupStatus(currentUser.isSuccess);
   const location = useLocation();
   const [unauthorized, setUnauthorized] = useState(false);
+  const savedLocale = currentUser.data?.locale;
+  useEffect(() => { if (isLocale(savedLocale)) setAppLocale(savedLocale); }, [savedLocale]);
   useEffect(() => {
     const reject = () => setUnauthorized(true);
     window.addEventListener("docklet:unauthorized", reject);
