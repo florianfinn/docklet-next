@@ -59,7 +59,7 @@ func (h *Handler) streamUploadMiddleware(api huma.API) huma.Middlewares {
 				status = http.StatusRequestEntityTooLarge
 			case errors.Is(err, ErrSystemBackupAlreadyRunning):
 				status = http.StatusConflict
-			case errors.Is(err, ErrSystemBackupUnavailable):
+			case errors.Is(err, ErrSystemBackupUnavailable), errors.Is(err, ErrSystemBackupToolsUnavailable):
 				status = http.StatusServiceUnavailable
 			case errors.Is(err, errArchiveTimeout):
 				status = http.StatusRequestTimeout

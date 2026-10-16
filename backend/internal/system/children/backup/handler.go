@@ -116,6 +116,9 @@ func (h *Handler) UpdatePolicies(ctx context.Context, input *UpdateSystemBackupP
 	if errors.Is(err, ErrSystemBackupUnavailable) {
 		return nil, huma.Error503ServiceUnavailable("backup.storage_unavailable")
 	}
+	if errors.Is(err, ErrSystemBackupToolsUnavailable) {
+		return nil, huma.Error503ServiceUnavailable("backup.tools_unavailable")
+	}
 	if errors.Is(err, sharedbackup.ErrPolicyValidation) {
 		return nil, huma.Error400BadRequest("backup.invalid_policy")
 	}
@@ -144,6 +147,9 @@ func (h *Handler) Create(ctx context.Context, input *CreateSystemBackupInput) (*
 	}
 	if errors.Is(err, ErrSystemBackupUnavailable) {
 		return nil, huma.Error503ServiceUnavailable("backup.storage_unavailable")
+	}
+	if errors.Is(err, ErrSystemBackupToolsUnavailable) {
+		return nil, huma.Error503ServiceUnavailable("backup.tools_unavailable")
 	}
 	if err != nil {
 		return nil, huma.Error500InternalServerError("backup.failed")
@@ -193,6 +199,8 @@ func (h *Handler) Restore(ctx context.Context, input *RestoreSystemBackupInput) 
 		return nil, huma.Error422UnprocessableEntity(uploadErrorCode(err))
 	case errors.Is(err, ErrSystemBackupUnavailable):
 		return nil, huma.Error503ServiceUnavailable("backup.storage_unavailable")
+	case errors.Is(err, ErrSystemBackupToolsUnavailable):
+		return nil, huma.Error503ServiceUnavailable("backup.tools_unavailable")
 	case err != nil:
 		return nil, huma.Error500InternalServerError("backup.restore_failed")
 	}

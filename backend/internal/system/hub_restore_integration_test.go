@@ -96,10 +96,9 @@ func TestHubRestorePostgres18RoundTrip(t *testing.T) {
 		if restarted.Raw("SELECT status FROM activities WHERE id=?", operation.ActivityID).Scan(&status).Error != nil {
 			return false
 		}
-		return status == "success"
+		return status == "success" && backupservice.CheckRestoreMarker(dir) == nil &&
+			!targetBackups.MaintenanceGate().Status().Active
 	}, 30*time.Second, 100*time.Millisecond)
-	require.NoError(t, backupservice.CheckRestoreMarker(dir))
-	require.False(t, targetBackups.MaintenanceGate().Status().Active)
 	select {
 	case <-jobsRefreshed:
 	default:

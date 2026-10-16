@@ -24,10 +24,10 @@ import (
 )
 
 func (s *Service) UploadArchive(ctx context.Context, actor usertypes.Actor, reader io.Reader) (*backuptypes.SystemBackupOperation, error) {
-	if s == nil || s.store.CreateRun == nil || s.activityService == nil || !s.SupportedDatabaseProvider() {
+	if s == nil || s.store.CreateRun == nil || s.activityService == nil {
 		return nil, ErrSystemBackupUnavailable
 	}
-	if err := storageAvailable(s.backupDir()); err != nil {
+	if err := s.databaseProviderError(); err != nil {
 		return nil, err
 	}
 	id := "system-" + uuid.New().String()
@@ -91,6 +91,10 @@ func uploadErrorCode(err error) string {
 		return "backup.incompatible_migration"
 	case errors.Is(err, errArchiveTimeout):
 		return "backup.timeout"
+	case errors.Is(err, ErrSystemBackupToolsUnavailable):
+		return "backup.tools_unavailable"
+	case errors.Is(err, ErrSystemBackupUnavailable):
+		return "backup.storage_unavailable"
 	case errors.Is(err, errInvalidArchive):
 		return "backup.invalid_archive"
 	default:

@@ -172,6 +172,7 @@ func TestReconcileStorageMarksOnlyInconsistentArchive(t *testing.T) {
 }
 
 func TestReconcileStorageUnavailableIsReportedWithoutPath(t *testing.T) {
+	fakeClientTools(t, "18", "18")
 	dir := filepath.Join(t.TempDir(), "file")
 	require.NoError(t, os.WriteFile(dir, []byte("x"), 0600))
 	service := &Service{config: &config.Config{BackupDir: filepath.Join(dir, "backups")}}

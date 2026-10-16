@@ -71,6 +71,9 @@ func (s *Service) StartRestore(ctx context.Context, actor usertypes.Actor, keyID
 	if s == nil || s.db == nil || s.activityService == nil || s.maintenance == nil || s.config == nil {
 		return nil, ErrSystemBackupUnavailable
 	}
+	if err := s.databaseProviderError(); err != nil {
+		return nil, err
+	}
 	if _, _, _, err := s.sourceArchive(ctx, id); err != nil {
 		return nil, err
 	}
@@ -298,6 +301,9 @@ func revokeRestoredSessions(ctx context.Context, db *database.DB) error {
 func OfflineRestore(ctx context.Context, cfg *config.Config, id string) error {
 	if cfg == nil || cfg.DatabaseURL == "" || cfg.BackupDir == "" {
 		return ErrSystemBackupUnavailable
+	}
+	if !archiveToolsAvailable() {
+		return ErrSystemBackupToolsUnavailable
 	}
 	name, err := backuptypes.ArchiveNameForID(id)
 	if err != nil {

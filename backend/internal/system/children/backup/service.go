@@ -43,6 +43,7 @@ const systemAdmissionID = "system"
 var (
 	ErrSystemBackupAlreadyRunning    = errors.New("run.busy")
 	ErrSystemBackupUnavailable       = errors.New("backup.storage_unavailable")
+	ErrSystemBackupToolsUnavailable  = errors.New("backup.tools_unavailable")
 	ErrSystemBackupNotFound          = errors.New("backup.not_found")
 	ErrSystemBackupRetention         = errors.New("backup.retention_failed")
 	ErrSystemBackupTargetUnavailable = errors.New("backup.target_unavailable")
@@ -166,8 +167,8 @@ func (s *Service) validateRequest(ctx context.Context, request backuptypes.Creat
 			return ErrSystemBackupTargetUnavailable
 		}
 	}
-	if !s.SupportedDatabaseProvider() {
-		return ErrSystemBackupUnavailable
+	if err := s.databaseProviderError(); err != nil {
+		return err
 	}
 	return nil
 }
@@ -384,29 +385,6 @@ func (s *Service) GetPolicies(ctx context.Context) (*backuptypes.SystemBackupPol
 		result.Policies = append(result.Policies, policy)
 	}
 	return result, nil
-}
-func (s *Service) UpdatePolicies(ctx context.Context, updates []backuptypes.UpdateSystemBackupPolicy) (*backuptypes.SystemBackupPolicyCollection, error) {
-	build := func(ctx context.Context, policy *backuptypes.SystemBackupPolicy, update backuptypes.UpdateSystemBackupPolicy) error {
-		if update.TargetID != "" {
-			return ErrSystemBackupTargetUnavailable
-		}
-		normalized, err := sharedbackup.ValidatePolicyUpdate(ctx, "system", backuptypes.UpdateBackupPolicy{
-			ID: update.ID, Enabled: update.Enabled, Schedule: update.Schedule,
-			RetentionCount: update.RetentionCount, LocalEnabled: true})
-		if err != nil {
-			return err
-		}
-		if update.Enabled && !s.SupportedDatabaseProvider() {
-			return ErrSystemBackupUnavailable
-		}
-		policy.Enabled, policy.Schedule, policy.RetentionCount = update.Enabled, normalized.Schedule, normalized.RetentionCount
-		policy.TargetID = ""
-		return nil
-	}
-	if err := s.store.ReconcilePolicies(ctx, updates, build, s.jobs.Unregister, s.reschedulePolicy); err != nil {
-		return nil, err
-	}
-	return s.GetPolicies(ctx)
 }
 func (s *Service) SetScheduler(ctx context.Context, dynamicScheduler scheduler.DynamicScheduler, admissionGate *runs.Admission) error {
 	return s.jobs.SetScheduler(ctx, dynamicScheduler, admissionGate)
