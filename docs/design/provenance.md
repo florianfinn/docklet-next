@@ -1,9 +1,11 @@
 # Provenance and inventories
 
 The imported Arcane PostgreSQL migration history was removed before release
-and replaced by the [retained-model baseline](database-baseline.md). That
-document records the source revision, removed feature schema and generation
-method as the provenance deviation for those 90 deleted files.
+and replaced by a retained-model baseline. The
+[M1 record](../history/m1-postgresql-baseline.md) preserves the source revision,
+removed feature schema and generation method for those 90 deleted files.
+The [SQLite contract](sqlite-database.md) owns the new baseline and restored
+provider provenance; historical inventories remain dated evidence.
 
 Each adopted file retains existing legal notices and adds a short native
 comment:
@@ -29,13 +31,13 @@ content changes require updating the entry and deviations. Byte-identical legal
 texts are instead protected by the licence hash manifest. Source licences remain
 intact.
 
-PostgreSQL migrations require a sidecar entry. The guard compares all five SQL
-header fields with that entry. `migrationHeaderOverrides` records the expected
-sidecar values for fields that already differ in the seven shipped migrations;
-the sidecar is authoritative for those fields. The file SHA-256 still protects
-every shipped header byte, and an override fails if its expected sidecar value
-changes or the header field agrees with the sidecar. New migrations require
-matching headers and sidecars without overrides.
+Database migrations require a sidecar entry matching all five SQL header
+fields, plus a content SHA-256. New migrations cannot use header overrides.
+The current PostgreSQL set has seven protected pre-release files with explicit
+`migrationHeaderOverrides`; those override values and file bytes stay guarded
+until the reviewed one-time [SQLite baseline transition](sqlite-database.md#fresh-migration-baseline-and-schema-proof).
+That transition removes obsolete entries and updates path coverage and guard
+tests together. Shipped SQLite migrations cannot be rewritten or deleted.
 
 scripts/size-baseline.json maps adopted oversized files to reviewed line
 ceilings. Own files have a hard 1,000-line limit without exemptions. A first

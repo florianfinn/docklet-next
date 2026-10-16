@@ -17,7 +17,10 @@ setting. Source archives without Git may skip hook setup, but verification runs
 in a checkout. The build compiles Go commands and the web bundle. The root
 commands run Go and web checks.
 
-PostgreSQL integration tests need a dedicated PostgreSQL 18 test service. Use
+The [SQLite contract](docs/design/sqlite-database.md) replaces the database
+runtime in implementation step 2; persistence tests then use temporary local
+files in the default suite. Until that step lands, the existing PostgreSQL
+integration tests need a dedicated PostgreSQL 18 test service. Use
 its test-only connection URL as `DATABASE_URL`, `DOCKLET_TEST_POSTGRES_DSN`
 and `ARCANE_TEST_POSTGRES_DSN`; the tests create and drop
 temporary databases and may modify the configured test database. If Go runs
@@ -37,8 +40,8 @@ GOFLAGS=-p=2 \
 ```
 
 CI runs this suite in a separate required gate against a pinned PostgreSQL 18
-service. The [baseline design](docs/design/database-baseline.md) describes the
-fresh database and model comparison tests.
+service. The [historical baseline record](docs/history/m1-postgresql-baseline.md) describes
+the current PostgreSQL schema comparison; the SQLite contract specifies its replacement.
 
 Read [AGENTS.md](AGENTS.md) and [review-workflow.md](docs/design/review-workflow.md)
 before work. Follow module ownership and the ready gate. Keep changes local until

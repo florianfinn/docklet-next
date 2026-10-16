@@ -297,21 +297,20 @@ LGPL code or of adopting libc locally.
 
 The UUID file also preserves GCC's `stddef.h` notice: GPL-3.0-or-later with the
 explicit GCC Runtime Library Exception 3.1. Record that notice alongside LGPL;
-the basic C type definitions are not a linked GCC implementation. The narrow
-exception permits this pre-cut inventory, not a product release containing libc.
-Any changed file needs fresh assessment. The generator traverses both dependency
-graphs with SQLite removed as a traversal boundary and fails if libc remains
-reachable: these headers arrive **only through modernc.org/sqlite**. The #7 gate
-must prove both modules absent from both post-cut binary graphs.
+the basic C type definitions are not a linked GCC implementation. This exact-file
+assessment covers the pre-cut inventory, not a future product graph. The original
+removal check traversed both dependency graphs with SQLite excluded and required
+libc to be absent. Under the [SQLite decision](sqlite-database.md), implementation
+step 2 replaces that boundary with an assessment of the actual compiled files,
+exact hashes, selected grants and packaged notices for both binaries. Changed or
+new material needs fresh assessment before release.
 
-## PostgreSQL-only boundary
+## Database adoption boundary
 
-The [SQLite removal map](arcane-sqlite-removal.md) enumerates the source paths,
-90 migration files, tests, configuration and build surfaces for #7. Remove SQLite
-provider support, including Francis sidecar storage, rather than only the driver
-import. Preserve database-independent behaviour tests through pure logic or
-appropriate PostgreSQL-specific checks without requiring a running service in
-the default test chain. System backup/recovery is SQLite-specific upstream;
-#7 must remove that implementation and state the unavailable capability until a
-PostgreSQL implementation exists. This does not silently remove the retained
-backup feature. Existing Arcane database migration or recovery is not supported.
+The [SQLite database contract](sqlite-database.md) supersedes the original
+PostgreSQL-only choice. Recover only its named driver/file handling and the
+matching Francis SQLite component with provenance. Keep the fresh retained-model
+schema, no old-data import and default tests without real services. The
+[historical removal map](../history/m1-sqlite-removal.md) records all upstream
+paths and the original #7 verification scope. System database backup/recovery
+remains owned separately by #32.
