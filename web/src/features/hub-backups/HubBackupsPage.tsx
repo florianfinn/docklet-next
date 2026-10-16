@@ -5,7 +5,7 @@
 // Deviations: Original Hub backup page for issue #32, using free UI primitives.
 
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Archive, Download, HardDrive, RotateCw, Upload } from "lucide-react";
+import { Archive, Download, HardDrive, RotateCw, Trash2, Upload } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router";
 import { toast } from "sonner";
@@ -22,6 +22,7 @@ import { Checkbox } from "@/shared/ui/checkbox";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/shared/ui/dialog";
 import { Input } from "@/shared/ui/input";
 import { Label } from "@/shared/ui/label";
+import { Progress } from "@/shared/ui/progress";
 import { Skeleton } from "@/shared/ui/skeleton";
 import { Switch } from "@/shared/ui/switch";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/shared/ui/table";
@@ -45,6 +46,11 @@ function useBackupErrorText() {
     if (code === "backup.tools_unavailable") return t("toolsUnavailable");
     if (code === "backup.size_limit") return t("errors.size");
     if (code === "backup.unsupported_media_type") return t("errors.type");
+    if (code === "backup.maintenance") return t("errors.maintenance");
+    if (code === "backup.recovery_required") return t("errors.recoveryRequired");
+    if (code === "backup.not_found") return t("errors.notFound");
+    if (code === "backup.timeout") return t("errors.timeout");
+    if (code === "backup.invalid_policy") return t("errors.invalidPolicy");
     if (["backup.invalid_archive", "backup.incompatible_server", "backup.incompatible_migration"].includes(code)) return t("errors.invalid");
     if (code === "run.busy" || code === "run.cancelling") return t("errors.busy");
     return t("errors.generic");
@@ -104,7 +110,7 @@ function UploadDialog({ open, onOpenChange, disabled, onUploaded }: { open: bool
       <DialogContent>
         <DialogHeader><DialogTitle>{t("uploadTitle")}</DialogTitle><DialogDescription>{t("uploadHint")}</DialogDescription></DialogHeader>
         <div className="grid gap-2"><Label htmlFor="hub-backup-file">{t("chooseFile")}</Label><Input id="hub-backup-file" type="file" accept=".dump,application/octet-stream" disabled={busy} onChange={(event) => { setFile(event.target.files?.[0] ?? null); setError(""); }} /></div>
-        {progress !== null && <div role="status" className="text-sm">{t("uploadProgress", { percent: progress })}<progress className="mt-2 w-full" max={100} value={progress} /></div>}
+        {progress !== null && <div role="status" className="space-y-2 text-sm">{t("uploadProgress", { percent: progress })}<Progress value={progress} aria-label={t("uploadProgress", { percent: progress })} /></div>}
         {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
         <DialogFooter><Button variant="outline" disabled={busy} onClick={() => onOpenChange(false)}>{t("cancel")}</Button><Button disabled={disabled || !file || busy} onClick={() => void upload()}>{t("uploadAction")}</Button></DialogFooter>
       </DialogContent>
@@ -141,6 +147,31 @@ function RestoreDialog({ run, onClose, onStarted }: { run: HubBackupRun | null; 
   );
 }
 
+function DeleteDialog({ run, onClose, onDeleted }: { run: HubBackupRun | null; onClose: () => void; onDeleted: () => void }) {
+  const t = useTranslations("hubBackups");
+  const adapter = useAdapter();
+  const errorText = useBackupErrorText();
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  async function remove() {
+    if (!run) return;
+    setBusy(true); setError("");
+    try {
+      await adapter.deleteHubBackup(run.id);
+      onDeleted(); onClose();
+      toast.success(t("deleted"));
+    } catch (cause) { setError(errorText(cause)); }
+    finally { setBusy(false); }
+  }
+  return <Dialog open={!!run} onOpenChange={(open) => { if (!open && !busy) onClose(); }}>
+    <DialogContent>
+      <DialogHeader><DialogTitle>{t("deleteTitle")}</DialogTitle><DialogDescription>{run ? t("deleteConsequences", { name: run.id }) : ""}</DialogDescription></DialogHeader>
+      {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
+      <DialogFooter><Button variant="outline" disabled={busy} onClick={onClose}>{t("cancel")}</Button><Button variant="destructive" disabled={!run || busy} onClick={() => void remove()}>{t("deleteAction")}</Button></DialogFooter>
+    </DialogContent>
+  </Dialog>;
+}
+
 export default function HubBackupsPage() {
   const t = useTranslations("hubBackups");
   const locale = useLocale();
@@ -151,13 +182,19 @@ export default function HubBackupsPage() {
   const access = useHubBackupAccess();
   const [uploadOpen, setUploadOpen] = useState(false);
   const [restoreRun, setRestoreRun] = useState<HubBackupRun | null>(null);
+  const [deleteRun, setDeleteRun] = useState<HubBackupRun | null>(null);
   const [creating, setCreating] = useState(false);
   const [restoreStarted, setRestoreStarted] = useState(false);
   const [restoreActivityId, setRestoreActivityId] = useState("");
   const seenMaintenance = useRef(false);
   const [actionError, setActionError] = useState("");
-  const maintenance = useQuery({ queryKey: keys.maintenance, queryFn: () => adapter.getHubBackupMaintenance(), refetchInterval: 1000, retry: false });
   const canRead = access.data?.read === true;
+  const maintenance = useQuery({ queryKey: keys.maintenance, queryFn: () => adapter.getHubBackupMaintenance(), enabled: canRead,
+    refetchInterval: (query) => {
+      const restoreStatus = client.getQueryData<string>(["hub-restore-activity", restoreActivityId]);
+      const failed = ["failed", "cancelled", "canceled"].includes(restoreStatus ?? "");
+      return query.state.data?.active || (restoreStarted && !failed) ? 1000 : 15_000;
+    }, retry: false });
   const runs = useQuery({ queryKey: keys.runs, queryFn: () => adapter.listHubBackups(), enabled: canRead && !maintenance.data?.active, refetchInterval: 2500 });
   const policies = useQuery({ queryKey: keys.policy, queryFn: () => adapter.getHubBackupPolicies(), enabled: canRead && !maintenance.data?.active });
   const storage = useQuery({ queryKey: keys.storage, queryFn: () => adapter.getHubBackupStorage(), enabled: canRead && !maintenance.data?.active, refetchInterval: 5000 });
@@ -211,13 +248,15 @@ export default function HubBackupsPage() {
       <h1 className="text-2xl font-semibold">{t("maintenanceTitle")}</h1>
       <p className="text-sm text-muted-foreground">{t("maintenanceHint")}</p>
       <p className="font-medium">{t(`maintenancePhase.${phase}`)}</p>
-      <progress className="w-full" max={3} value={phase === "draining" ? 1 : phase === "applying" ? 2 : 3} />
+      <Progress value={phase === "draining" ? 33 : phase === "applying" ? 67 : 100} aria-label={t("maintenanceProgress")} />
       {phase === "blocked" && <p className="text-sm text-destructive">{t("maintenancePhase.blocked")}</p>}
     </section>;
   }
-  if (access.isPending || maintenance.isPending) return <Skeleton className="h-80 w-full" />;
-  if (access.isError || maintenance.isError) return <QueryError onRetry={() => { void access.refetch(); void maintenance.refetch(); }} />;
+  if (access.isPending) return <Skeleton className="h-80 w-full" />;
+  if (access.isError) return <QueryError onRetry={() => void access.refetch()} />;
   if (!canRead) return <p role="alert" className="rounded-lg border p-6">{t("accessDenied")}</p>;
+  if (maintenance.isPending) return <Skeleton className="h-80 w-full" />;
+  if (maintenance.isError) return <QueryError onRetry={() => void maintenance.refetch()} />;
   return <>
     <PageHeader title={t("title")} description={t("description")} actions={<><Button variant="outline" disabled={!canRestore} onClick={() => setUploadOpen(true)}><Upload data-icon="inline-start" />{t("upload")}</Button><Button disabled={!canManage || creating} onClick={() => void create()}><Archive data-icon="inline-start" />{creating ? t("creating") : t("create")}</Button></>} />
     <div className="mb-5 grid gap-3 rounded-lg border bg-card/50 p-4 text-sm text-muted-foreground"><p>{t("scope")}</p><p>{t("sensitive")}</p></div>
@@ -229,11 +268,12 @@ export default function HubBackupsPage() {
         <div className="overflow-x-auto"><Table><TableHeader><TableRow><TableHead>{t("name")}</TableHead><TableHead>{t("created")}</TableHead><TableHead>{t("size")}</TableHead><TableHead>{t("trigger")}</TableHead><TableHead>{t("status")}</TableHead><TableHead>{t("actions")}</TableHead></TableRow></TableHeader><TableBody>{runs.data.map((run) => {
           const state = run.activityId ? activity.data?.[run.activityId] : "";
           const status = state === "queued" ? "queued" : state === "cancelled" || state === "canceled" ? "cancelled" : run.status;
-          return <TableRow key={run.id}><TableCell className="font-mono text-xs">{run.id}</TableCell><TableCell>{new Date(run.createdAt).toLocaleString(locale)}</TableCell><TableCell>{run.size ? formatBytes(run.size, locale) : "–"}</TableCell><TableCell>{t(`triggerValues.${run.trigger}`)}</TableCell><TableCell><ToneBadge tone={status === "succeeded" ? "ok" : status === "failed" ? "err" : "gray"}>{t(`statusValues.${status}`)}</ToneBadge></TableCell><TableCell><div className="flex gap-2"><Button size="sm" variant="outline" disabled={status !== "succeeded"} onClick={() => void download(run.id)}><Download data-icon="inline-start" />{t("download")}</Button><Button size="sm" variant="outline" disabled={status !== "succeeded" || !canRestore} onClick={() => setRestoreRun(run)}>{t("restore")}</Button></div></TableCell></TableRow>;
+          return <TableRow key={run.id}><TableCell className="font-mono text-xs">{run.id}</TableCell><TableCell>{new Date(run.createdAt).toLocaleString(locale)}</TableCell><TableCell>{run.size ? formatBytes(run.size, locale) : "–"}</TableCell><TableCell>{t(`triggerValues.${run.trigger}`)}</TableCell><TableCell><ToneBadge tone={status === "succeeded" ? "ok" : status === "failed" ? "err" : "gray"}>{t(`statusValues.${status}`)}</ToneBadge></TableCell><TableCell><div className="flex gap-2"><Button size="sm" variant="outline" disabled={status !== "succeeded"} onClick={() => void download(run.id)}><Download data-icon="inline-start" />{t("download")}</Button><Button size="sm" variant="outline" disabled={status !== "succeeded" || !canRestore} onClick={() => setRestoreRun(run)}>{t("restore")}</Button><Button size="sm" variant="outline" disabled={status === "running" || status === "queued" || !canManage} onClick={() => setDeleteRun(run)}><Trash2 data-icon="inline-start" />{t("delete")}</Button></div></TableCell></TableRow>;
         })}</TableBody></Table></div>}
     </CardContent></Card>
     {policies.isError ? <QueryError onRetry={() => void policies.refetch()} /> : policies.isPending ? <Skeleton className="h-52 w-full" /> : (policies.data?.length ? policies.data : [{ id: "", enabled: false, schedule: "0 0 3 * * *", retentionCount: 7 }]).map((policy) => <PolicyEditor key={`${policy.id}-${policy.schedule}-${policy.retentionCount}-${policy.enabled}`} policy={policy} disabled={!canManage} onSave={savePolicy} />)}
     <UploadDialog open={uploadOpen} onOpenChange={setUploadOpen} disabled={!canRestore} onUploaded={refresh} />
-    <RestoreDialog key={restoreRun?.id ?? "none"} run={restoreRun} onClose={() => setRestoreRun(null)} onStarted={(activityId) => { setRestoreActivityId(activityId); setRestoreStarted(true); void maintenance.refetch(); }} />
+    <RestoreDialog key={`restore-${restoreRun?.id ?? "none"}`} run={restoreRun} onClose={() => setRestoreRun(null)} onStarted={(activityId) => { setRestoreActivityId(activityId); setRestoreStarted(true); void maintenance.refetch(); }} />
+    <DeleteDialog key={`delete-${deleteRun?.id ?? "none"}`} run={deleteRun} onClose={() => setDeleteRun(null)} onDeleted={refresh} />
   </>;
 }

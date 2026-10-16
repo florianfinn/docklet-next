@@ -48,6 +48,15 @@ Testumgebung mit erfundenen Daten aus. Der Betreiber bereitet die Umgebung vor;
 dieses Dokument erteilt keine Freigabe für ein Deployment. Notiere die geprüfte
 Produktversion, das Paket und die Bild-Digests im Abnahme-Issue.
 
+Voraussetzung für diesen Ablauf ist eine funktionsfähige Anmeldung im
+Produktions-Web-Bundle für den lokalen globalen Administrator. Sie fehlt derzeit:
+`/login` zeigt nur einen Backend-Hinweis. Deshalb ist der beschriebene
+Backup-Roundtrip heute nicht praktisch abnehmbar. Der Maintainer muss entscheiden,
+ob eine Produktions-Anmeldung vorher bereitgestellt oder die Abnahme bis zur
+Identitätsintegration zurückgestellt wird, und die Abhängigkeit im Meilenstein
+festhalten. Beginne die Abnahme erst mit funktionsfähiger Produktions-Anmeldung;
+insbesondere die Schritte 2 und 5 benötigen sie.
+
 1. Lege im Test-Hub gut wiedererkennbare Beispieldaten an: einen zusätzlichen
    Benutzer, eine Einstellung und einen geplanten Auftrag. Notiere die Werte,
    ohne Zugangsdaten oder andere Geheimnisse in öffentliche Nachweise zu kopieren.

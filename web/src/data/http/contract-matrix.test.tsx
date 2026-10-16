@@ -460,6 +460,11 @@ function backupBackend(scenario: BackupScenario) {
     if (url.pathname === "/api/backups/maintenance") return json({ active: scenario === "maintenance", ...(scenario === "maintenance" ? { phase: "draining", activityId: "activity-restore-1" } : {}) });
     if (url.pathname.startsWith("/api/environments/0/activities/")) return ok({ activity: { id: "activity-demo-1", status: scenario === "creating" ? "running" : "success" } });
     if (url.pathname === "/api/backups/system-demo-1/restore") return json({ backupId: run.id, activityId: "activity-restore-1", status: "running" }, 202);
+    if (url.pathname.startsWith("/api/backups/") && method === "DELETE") {
+      const id = decodeURIComponent(url.pathname.slice("/api/backups/".length));
+      state.runs = state.runs.filter((entry) => entry.id !== id);
+      return json({ backupId: id, activityId: "activity-delete-1", status: "success" });
+    }
     return json({ detail: "not-found" }, 404);
   });
   return { adapter: createHttpAdapter({ fetch: fetcher as typeof fetch }), state };
@@ -472,7 +477,11 @@ describe.each(["demo", "http"] as const)("%s Hub backup contract", (kind) => {
     expect(access.read).toBe(scenario !== "no-access");
     const maintenance = await adapter.getHubBackupMaintenance();
     expect(maintenance.active).toBe(scenario === "maintenance");
-    if (!access.read) { await expect(adapter.listHubBackups()).rejects.toBeTruthy(); return; }
+    if (!access.read) {
+      await expect(adapter.listHubBackups()).rejects.toBeTruthy();
+      await expect(adapter.deleteHubBackup("system-demo-1")).rejects.toBeTruthy();
+      return;
+    }
     const runs = await adapter.listHubBackups();
     expect(runs.map((run) => [run.id, run.trigger, run.status, run.size])).toEqual(scenario === "empty" ? [] : [["system-demo-1", "manual", scenario === "creating" ? "running" : "succeeded", 33_554_432]]);
     const storage = await adapter.getHubBackupStorage();
@@ -496,6 +505,15 @@ describe.each(["demo", "http"] as const)("%s Hub backup contract", (kind) => {
       expect(setup.state.requests.some((item) => item.path.endsWith("/restore") && item.body?.includes('"confirmBackupId":"system-demo-1"'))).toBe(true);
       expect(setup.state.requests.some((item) => item.path === "/api/backups/policies" && item.method === "PUT")).toBe(true);
     }
+  });
+
+  it("deletes an archive through the manage operation", async () => {
+    const setup = backupBackend("list");
+    const adapter = kind === "demo" ? createDemoAdapter() : setup.adapter;
+    const operation = await adapter.deleteHubBackup("system-demo-1");
+    expect([operation.backupId, operation.status]).toEqual(["system-demo-1", "success"]);
+    expect((await adapter.listHubBackups()).some((run) => run.id === "system-demo-1")).toBe(false);
+    if (kind === "http") expect(setup.state.requests.some((item) => item.path === "/api/backups/system-demo-1" && item.method === "DELETE")).toBe(true);
   });
 });
 
@@ -521,6 +539,21 @@ it("uses an octet-stream upload with progress and an ID-based download", async (
   await adapter.downloadHubBackup("system-demo-1");
   expect(clicked).toHaveBeenCalledOnce();
   expect(new URL((clicked.mock.instances[0] as HTMLAnchorElement).href).pathname).toBe("/api/backups/system-demo-1/download");
+});
+
+it.each([[413, "backup.size_limit", "<html>Request rejected</html>"], [415, "backup.unsupported_media_type", ""]] as const)("maps upload HTTP %i without a JSON error body", async (status, code, payload) => {
+  class FailedUpload {
+    upload = { onprogress: null };
+    status = status;
+    responseText = payload;
+    onerror: (() => void) | null = null;
+    onload: (() => void) | null = null;
+    open() {}
+    setRequestHeader() {}
+    send() { this.onload?.(); }
+  }
+  const adapter = createHttpAdapter({ uploadFactory: () => new FailedUpload() as unknown as XMLHttpRequest });
+  await expect(adapter.uploadHubBackup(new File(["PGDMP"], "archive.dump"), () => undefined)).rejects.toMatchObject({ outcome: { kind: "error", code, status } });
 });
 
 it("recognizes a global administrator wildcard permission", async () => {

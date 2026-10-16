@@ -22,7 +22,9 @@ function responseCode(body: unknown): string {
 }
 
 function error(body: unknown, status: number): AdapterOutcomeError {
-  return new AdapterOutcomeError({ kind: "error", code: responseCode(body), status });
+  const bodyCode = responseCode(body);
+  const code = bodyCode !== "http.error" ? bodyCode : status === 413 ? "backup.size_limit" : status === 415 ? "backup.unsupported_media_type" : bodyCode;
+  return new AdapterOutcomeError({ kind: "error", code, status });
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -137,6 +139,11 @@ export function createHttpHubBackups(baseUrl: string, fetcher: typeof fetch, upl
     },
     async restoreHubBackup(id) {
       const body = await request(`/backups/${encodeURIComponent(id)}/restore`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ confirmBackupId: id }) });
+      if (!isRecord(body) || typeof body.activityId !== "string") throw error({ code: "backup.invalid_response" }, 200);
+      return body as HubBackupOperation;
+    },
+    async deleteHubBackup(id) {
+      const body = await request(`/backups/${encodeURIComponent(id)}`, { method: "DELETE" });
       if (!isRecord(body) || typeof body.activityId !== "string") throw error({ code: "backup.invalid_response" }, 200);
       return body as HubBackupOperation;
     },

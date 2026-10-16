@@ -29,6 +29,7 @@ export interface HubBackupApi {
   createHubBackup(): Promise<HubBackupRun>;
   uploadHubBackup(file: File, onProgress: (percent: number) => void): Promise<HubBackupOperation>;
   restoreHubBackup(id: string): Promise<HubBackupOperation>;
+  deleteHubBackup(id: string): Promise<HubBackupOperation>;
   downloadHubBackup(id: string): Promise<void>;
 }
 

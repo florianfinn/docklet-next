@@ -4,14 +4,17 @@
 // License: Apache-2.0
 // Deviations: Original UI state tests for issue #32.
 
-import { fireEvent, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { NAV, visibleNavItems } from "@/app/shell/nav-items";
+import { FreeSidebar } from "@/app/shell/free/FreeSidebar";
 import { createDemoAdapter } from "@/data/demo/demo-adapter";
+import { AdapterOutcomeError } from "@/data/capability";
 import type { DemoAdapterOptions } from "@/data/demo/options";
 import { MAX_HUB_BACKUP_BYTES } from "@/domain/hub-backup";
+import { SidebarProvider } from "@/shared/ui/sidebar";
 import { renderRoutes } from "@/test/render";
 
 import { deHubBackups } from "./messages/de";
@@ -105,6 +108,35 @@ describe("Hub database backup page", () => {
     expect(await screen.findByText(deHubBackups.maintenanceTitle)).toBeTruthy();
   });
 
+  it("requires confirmation before deleting an archive", async () => {
+    const { adapter } = page();
+    const remove = vi.spyOn(adapter, "deleteHubBackup");
+    await screen.findByText("system-demo-1");
+    await userEvent.click(screen.getByRole("button", { name: deHubBackups.delete }));
+    expect(screen.getByText(deHubBackups.deleteConsequences.replace("{name}", "system-demo-1"))).toBeTruthy();
+    expect(remove).not.toHaveBeenCalled();
+    await userEvent.click(screen.getByRole("button", { name: deHubBackups.cancel }));
+    expect(remove).not.toHaveBeenCalled();
+    await userEvent.click(screen.getByRole("button", { name: deHubBackups.delete }));
+    await userEvent.click(screen.getByRole("button", { name: deHubBackups.deleteAction }));
+    await waitFor(() => expect(remove).toHaveBeenCalledWith("system-demo-1"));
+    await waitFor(() => expect(screen.queryByText("system-demo-1")).toBeNull());
+  });
+
+  it.each([
+    ["backup.maintenance", "maintenance"],
+    ["backup.recovery_required", "recoveryRequired"],
+    ["backup.not_found", "notFound"],
+    ["backup.timeout", "timeout"],
+    ["backup.invalid_policy", "invalidPolicy"],
+  ] as const)("shows actionable text for %s", async (code, key) => {
+    const { adapter } = page();
+    vi.spyOn(adapter, "createHubBackup").mockRejectedValue(new AdapterOutcomeError({ kind: "error", code, status: 422 }));
+    await screen.findByText("system-demo-1");
+    await userEvent.click(screen.getByRole("button", { name: deHubBackups.create }));
+    expect(await screen.findByRole("alert")).toHaveProperty("textContent", deHubBackups.errors[key]);
+  });
+
   it("saves the schedule and keep count and uploads a supported archive with progress", async () => {
     const { adapter } = page();
     await screen.findByText("system-demo-1");
@@ -118,6 +150,7 @@ describe("Hub database backup page", () => {
     fireEvent.change(screen.getByLabelText(deHubBackups.chooseFile), { target: { files: [file] } });
     await userEvent.click(screen.getByRole("button", { name: deHubBackups.uploadAction }));
     expect(await screen.findByText(deHubBackups.uploadProgress.replace("{percent}", "45"))).toBeTruthy();
+    expect(screen.getByRole("progressbar", { name: deHubBackups.uploadProgress.replace("{percent}", "45") }).getAttribute("aria-valuenow")).toBe("45");
     await waitFor(async () => expect((await adapter.listHubBackups()).some((run) => run.trigger === "uploaded")).toBe(true));
   });
 
@@ -125,6 +158,7 @@ describe("Hub database backup page", () => {
     const { adapter, router } = page("maintenance");
     expect(await screen.findByText(deHubBackups.maintenanceTitle)).toBeTruthy();
     expect(screen.getByText(deHubBackups.maintenancePhase.draining)).toBeTruthy();
+    expect(screen.getByRole("progressbar", { name: deHubBackups.maintenanceProgress }).getAttribute("aria-valuenow")).toBe("33");
     vi.spyOn(adapter, "getHubBackupMaintenance").mockResolvedValue({ active: false });
     await waitFor(() => expect(router.state.location.pathname).toBe("/login"), { timeout: 3500 });
   });
@@ -136,6 +170,39 @@ describe("Hub database backup page", () => {
     const system = NAV.find((group) => group.key === "system")!;
     expect(visibleNavItems(system.items, false).some((item) => item.key === "hubBackups")).toBe(false);
     expect(visibleNavItems(system.items, true).some((item) => item.key === "hubBackups")).toBe(true);
+  });
+
+  it("does not query maintenance or render the sidebar link without access", async () => {
+    const adapter = createDemoAdapter({ hubBackupScenario: "no-access" });
+    const maintenance = vi.spyOn(adapter, "getHubBackupMaintenance");
+    renderRoutes([{ path: "/", element: <SidebarProvider><FreeSidebar navigation={NAV} /></SidebarProvider> }], ["/"], adapter);
+    expect(screen.queryByRole("link", { name: "Hub-Datenbank" })).toBeNull();
+    renderRoutes([{ path: "/hub-backups", element: <HubBackupsPage /> }], ["/hub-backups"], adapter);
+    expect(await screen.findByText(deHubBackups.accessDenied)).toBeTruthy();
+    expect(maintenance).not.toHaveBeenCalled();
+  });
+
+  it("polls maintenance every fifteen seconds while idle", async () => {
+    const { adapter } = page();
+    const maintenance = vi.spyOn(adapter, "getHubBackupMaintenance");
+    await screen.findByText("system-demo-1");
+    maintenance.mockClear();
+    await act(async () => { await new Promise((resolve) => setTimeout(resolve, 1100)); });
+    expect(maintenance).not.toHaveBeenCalled();
+    await waitFor(() => expect(maintenance).toHaveBeenCalledOnce(), { timeout: 15_500 });
+  });
+
+  it("polls maintenance every second during restore", async () => {
+    const { adapter } = page();
+    const maintenance = vi.spyOn(adapter, "getHubBackupMaintenance");
+    await screen.findByText("system-demo-1");
+    await userEvent.click(screen.getByRole("button", { name: deHubBackups.restore }));
+    await userEvent.type(screen.getByLabelText(deHubBackups.restoreType), "system-demo-1");
+    await userEvent.click(screen.getByRole("checkbox", { name: deHubBackups.restoreSafety }));
+    await userEvent.click(screen.getByRole("button", { name: deHubBackups.restoreAction }));
+    expect(await screen.findByText(deHubBackups.maintenanceTitle)).toBeTruthy();
+    const calls = maintenance.mock.calls.length;
+    await waitFor(() => expect(maintenance.mock.calls.length).toBeGreaterThan(calls), { timeout: 1500 });
   });
 
   it("keeps English and German catalogue keys and placeholders aligned", () => {

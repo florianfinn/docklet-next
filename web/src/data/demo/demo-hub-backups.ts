@@ -88,6 +88,15 @@ export function createDemoHubBackups(options: DemoAdapterOptions = {}): HubBacku
       setTimeout(() => { maintenance = false; signedOut = true; states.set("activity-restore-1", "success"); }, 2900);
       return { backupId: id, activityId: "activity-restore-1", status: "running" };
     },
+    async deleteHubBackup(id) {
+      requireAccess(); requireStorage();
+      const index = runs.findIndex((run) => run.id === id);
+      if (index === -1) invalid("backup.not_found");
+      runs.splice(index, 1);
+      const activityId = `activity-delete-${id}`;
+      states.set(activityId, "success");
+      return { backupId: id, activityId, status: "success" };
+    },
     async downloadHubBackup(id) {
       requireAccess();
       if (!runs.some((run) => run.id === id && run.status === "succeeded")) invalid("backup.not_found");

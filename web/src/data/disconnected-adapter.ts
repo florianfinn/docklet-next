@@ -19,6 +19,7 @@ export function createDisconnectedAdapter(): DockletAdapter {
     createHubBackup: unavailable,
     uploadHubBackup: unavailable,
     restoreHubBackup: unavailable,
+    deleteHubBackup: unavailable,
     downloadHubBackup: unavailable,
     getCapability: async (operationId, resourceRef = HUB_REF) => ({ operationId, resourceRef, available: false, disabledReasonCode: GENERIC_REASON }),
     listHosts: unavailable,
