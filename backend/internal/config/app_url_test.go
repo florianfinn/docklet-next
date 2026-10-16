@@ -20,6 +20,7 @@ func TestSignInNormalizesAppURL(t *testing.T) {
 		{"https://Hub.example.com:0443", "https://hub.example.com"},
 		{"https://Hub.example.com:8443/", "https://hub.example.com:8443/"},
 		{"https://[2001:DB8:0:0::1]:443", "https://[2001:db8::1]"},
+		{"https://[::ffff:c000:201]:443", "https://[::ffff:c000:201]"},
 		{"Hub.example.com", "https://hub.example.com"},
 	} {
 		t.Run(tc.input, func(t *testing.T) {

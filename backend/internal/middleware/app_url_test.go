@@ -21,6 +21,7 @@ func TestSignInCanonicalBrowserOrigins(t *testing.T) {
 		{"HTTPS://Hub.example.com:443", "https://hub.example.com"},
 		{"http://Hub.example.com:80", "http://hub.example.com"},
 		{"https://Hub.example.com:8443", "https://hub.example.com:8443"},
+		{"https://[::ffff:c000:201]", "https://[::ffff:c000:201]"},
 	} {
 		t.Run(tc.appURL, func(t *testing.T) {
 			cfg := &config.Config{AuthMode: "none", Environment: "production", AppUrl: tc.appURL}

@@ -7,6 +7,7 @@
 package config
 
 import (
+	"fmt"
 	"net"
 	"net/netip"
 	"net/url"
@@ -30,6 +31,11 @@ func normalizedAppURL(value string) string {
 	host := strings.ToLower(u.Hostname())
 	if address, err := netip.ParseAddr(host); err == nil {
 		host = address.String()
+		if address.Is4In6() {
+			// Browser IPv6 hosts keep hexadecimal words for mapped addresses.
+			mapped := address.As4()
+			host = fmt.Sprintf("::ffff:%x:%x", uint16(mapped[0])<<8|uint16(mapped[1]), uint16(mapped[2])<<8|uint16(mapped[3]))
+		}
 	}
 	port := u.Port()
 	if port != "" {
