@@ -9,8 +9,10 @@ export const deSetup: typeof enSetup = {
   newPassword: "Neues Administratorpasswort",
   confirmPassword: "Neues Passwort bestätigen",
   badge: "Ersteinrichtung · Vorschau",
+  badgeConnected: "Ersteinrichtung",
   title: "Docklet einrichten",
   lead: (import.meta.env.DEV ? "Ein neuer Hub fragt diese Angaben einmal ab. Im Prototyp startest du den Ablauf über das Design-Labor; das Dashboard bleibt unverändert erreichbar." : "Ein neuer Hub fragt diese Angaben einmal ab."),
+  leadConnected: "Richte den Hub ein, bevor du ihn verwendest. Die Angaben werden beim Abschluss gespeichert.",
   exit: "Vorschau verlassen",
   railLabel: "Schritte der Ersteinrichtung",
   steps: {
@@ -34,7 +36,7 @@ export const deSetup: typeof enSetup = {
   discovery: {
     title: "Interne Adresse aus der Hub-Erkennung",
     lead: "Der Hub prüft auf dem Server seinen Container und seine Docker-Netzwerke. Der Browser selbst kann Docker-Adressen nicht sehen.",
-    simulated: (import.meta.env.DEV ? "Simuliert" : ""),
+    simulated: "Simuliert",
     loading: "Hub erkennt seine Netzwerke …",
     failed: "Erkennung nicht möglich – Adresse bitte selbst eintragen.",
     retry: "Erneut erkennen",
@@ -84,6 +86,8 @@ export const deSetup: typeof enSetup = {
     user: "Admin",
     password: "Passwort",
     passwordSet: "gesetzt (wird nicht gespeichert)",
+    passwordWillChange: "Wird vor Abschluss der Einrichtung geändert",
+    passwordAlreadySet: "Bereits gesetzt",
     header: "Benutzer-Header",
     hosts: "Hosts",
     hostsNone: "Noch keiner – nach dem Abschluss bietet Docklet das Host-Onboarding an.",
@@ -93,6 +97,7 @@ export const deSetup: typeof enSetup = {
   done: {
     title: "{name} ist eingerichtet",
     body: (import.meta.env.DEV ? "Die Angaben stehen jetzt in den Hub-Einstellungen dieses Demo-Tabs. Passwörter wurden verworfen, nicht gespeichert." : "Die Angaben stehen in den Hub-Einstellungen. Passwörter wurden verworfen."),
+    bodyConnected: "Die Hub-Einstellungen wurden gespeichert. Weiter geht es zum Dashboard.",
     host: "Ersten Host verbinden",
     dashboard: "Zum Dashboard",
     settings: "Hub-Einstellungen ansehen",

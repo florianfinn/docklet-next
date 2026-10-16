@@ -1,4 +1,4 @@
-// German texts of the login demo (full-screen route, started from the design lab).
+// German texts for connected sign-in and its demo preview.
 import type { enLogin } from "./en";
 
 export const deLogin: typeof enLogin = {
@@ -6,7 +6,7 @@ export const deLogin: typeof enLogin = {
   title: "Bei {hub} anmelden",
   exit: "Demo verlassen",
   loading: "Lade Anmeldeart …",
-  settingsError: "Die Anmeldeart konnte nicht geladen werden. Du kannst sie unten in der Demo-Steuerung wählen.",
+  settingsError: "Die Anmeldeart konnte nicht geladen werden. Bitte erneut versuchen.",
   retry: "Erneut laden",
   proxyRejected: "Melde dich über deinen Proxy an und lade diese Seite neu. Der Hub hat die Proxy-Identität abgelehnt.",
   sessionError: "Die Sitzung konnte nicht geprüft werden.",

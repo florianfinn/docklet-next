@@ -5,7 +5,7 @@ import { useTranslations } from "use-intl";
 
 import { LOCALES, setAppLocale, useAppLocale } from "@/app/i18n/locale-store";
 import { useAdapter } from "@/data/use-adapter";
-import { useAuthMode } from "@/data/queries";
+import { useAuthMode, useCurrentUser } from "@/data/queries";
 import { setTokens } from "@/shared/theme/design-tokens";
 import { useTokens } from "@/shared/theme/use-design-tokens";
 import { LabMenuItem } from "@/runtime";
@@ -24,11 +24,7 @@ import { SidebarMenu, SidebarMenuButton, SidebarMenuItem, useSidebar } from "@/s
 
 import { LogoutDialog } from "../LogoutDialog";
 
-/**
- * Free profile menu at the bottom of the sidebar: initials tile, name and
- * e-mail; the menu opens beside the sidebar on desktop and offers the colour
- * scheme and the interface language as radio choices.
- */
+/** Sidebar account menu for the connected user or the demo administrator. */
 export function FreeUserMenu({ onNavigate }: { onNavigate: () => void }) {
   const t = useTranslations("shell.user");
   const tl = useTranslations("locale.switcher");
@@ -40,7 +36,10 @@ export function FreeUserMenu({ onNavigate }: { onNavigate: () => void }) {
   const disconnected = useAdapter().kind === "disconnected";
   const adapter = useAdapter();
   const mode = useAuthMode();
-  const name = t(disconnected ? "unknownName" : "name");
+  const currentUser = useCurrentUser(adapter.kind === "http");
+  const connected = adapter.kind === "http";
+  const name = connected ? currentUser.data?.username ?? t("unknownName") : t(disconnected ? "unknownName" : "name");
+  const detail = connected ? t("role") : t(disconnected ? "unknownStatus" : "email");
   const initials = name
     .split(" ")
     .map((part) => part[0])
@@ -61,7 +60,7 @@ export function FreeUserMenu({ onNavigate }: { onNavigate: () => void }) {
               </Avatar>
               <span className="grid flex-1 text-left leading-tight">
                 <span className="truncate text-sm font-medium">{name}</span>
-                <span className="truncate text-xs text-muted-foreground">{t(disconnected ? "unknownStatus" : "email")}</span>
+                <span className="truncate text-xs text-muted-foreground">{detail}</span>
               </span>
               <ChevronsUpDown className="ml-auto size-4 text-muted-foreground" />
             </SidebarMenuButton>
@@ -69,7 +68,7 @@ export function FreeUserMenu({ onNavigate }: { onNavigate: () => void }) {
           <DropdownMenuContent side={isMobile ? "top" : "right"} align="end" sideOffset={10} className="w-64">
             {!disconnected && <DropdownMenuLabel className="font-normal">
               <span className="block text-xs text-muted-foreground">{t("signedInAs")}</span>
-              <span className="block truncate text-sm font-medium">{t("email")}</span>
+              <span className="block truncate text-sm font-medium">{connected ? name : t("email")}</span>
               <span className="block truncate text-xs text-muted-foreground">{t("role")}</span>
             </DropdownMenuLabel>}
             {!disconnected && <DropdownMenuSeparator />}
@@ -94,14 +93,14 @@ export function FreeUserMenu({ onNavigate }: { onNavigate: () => void }) {
               </DropdownMenuRadioItem>
             </DropdownMenuRadioGroup>
             <DropdownMenuLabel className="py-1 text-xs font-normal text-muted-foreground">{tl("label")}</DropdownMenuLabel>
-            <DropdownMenuRadioGroup value={locale} onValueChange={(v) => setAppLocale(v === "en-US" ? "en-US" : "de")}>
+            {connected ? <DropdownMenuItem onSelect={() => go("/profile")}><Languages />{tl("label")}</DropdownMenuItem> : <DropdownMenuRadioGroup value={locale} onValueChange={(v) => setAppLocale(v === "en-US" ? "en-US" : "de")}>
               {LOCALES.map((l) => (
                 <DropdownMenuRadioItem key={l} value={l} lang={l}>
                   <Languages />
                   {tl(`names.${l === "de" ? "de" : "enUS"}`)}
                 </DropdownMenuRadioItem>
               ))}
-            </DropdownMenuRadioGroup>
+            </DropdownMenuRadioGroup>}
             {!disconnected && <DropdownMenuSeparator />}
             <LabMenuItem />
             {!disconnected && (adapter.kind === "demo" || mode.data === "local") && <DropdownMenuItem variant="destructive" onSelect={() => setLogout(true)}>

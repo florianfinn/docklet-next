@@ -1,11 +1,11 @@
-// American English texts of the login demo (full-screen route, started from the design lab).
+// American English texts for connected sign-in and its demo preview.
 
 export const enLogin = {
   badge: "Demo · not a real sign-in",
   title: "Sign in to {hub}",
   exit: "Leave demo",
   loading: "Loading sign-in method …",
-  settingsError: "The sign-in method could not be loaded. You can choose it below in the demo controls.",
+  settingsError: "The sign-in method could not be loaded. Try again.",
   retry: "Reload",
   proxyRejected: "Sign in through your proxy, then reload this page. The hub rejected the proxy identity.",
   sessionError: "The session could not be checked.",

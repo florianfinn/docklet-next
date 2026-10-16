@@ -46,7 +46,7 @@ func TestSetupSettingsPersistAcrossServiceRestart(t *testing.T) {
 	require.NoError(t, err)
 	_, err = first.UpdateSettings(t.Context(), settingstypes.Update{
 		SetupCompleted: new("true"), HubName: new("Example Hub"), TimeZone: new("UTC"),
-		MaxEvents: new("200"), MaxFinishedActions: new("30"), KeepActionOutput: new("false"), ActionPresentation: new("toast"),
+		KeepActionOutput: new("false"), ActionPresentation: new("toast"),
 	})
 	require.NoError(t, err)
 	require.NoError(t, first.Stop(context.Background()))
@@ -58,8 +58,6 @@ func TestSetupSettingsPersistAcrossServiceRestart(t *testing.T) {
 	require.Equal(t, "true", stored.SetupCompleted.Value)
 	require.Equal(t, "Example Hub", stored.HubName.Value)
 	require.Equal(t, "UTC", stored.TimeZone.Value)
-	require.Equal(t, "200", stored.MaxEvents.Value)
-	require.Equal(t, "30", stored.MaxFinishedActions.Value)
 	require.Equal(t, "false", stored.KeepActionOutput.Value)
 	require.Equal(t, "toast", stored.ActionPresentation.Value)
 }

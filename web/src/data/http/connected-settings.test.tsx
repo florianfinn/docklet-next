@@ -19,7 +19,7 @@ import { createHttpAdapter } from "./http-adapter";
 
 const initial = {
   setupCompleted: "true", hubName: "Docklet", hubAddress: "192.0.2.10:8080", domainUrl: "", linkBase: "auto", timeZone: "Europe/Berlin",
-  maxEvents: "500", maxFinishedActions: "100", keepActionOutput: "true", actionPresentation: "dialog",
+  keepActionOutput: "true", actionPresentation: "dialog",
 };
 
 function connectedServer() {

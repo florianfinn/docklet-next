@@ -40,8 +40,6 @@ func DefaultSettingsConfig() *Settings {
 		ExpiredSessionsCleanupInterval:        SettingVariable{Value: "0 0 0 * * *"},
 		UpgradeLogRetentionDays:               SettingVariable{Value: "3"},
 		MaxConcurrentActivities:               SettingVariable{Value: "5"},
-		MaxEvents:                             SettingVariable{Value: "500"},
-		MaxFinishedActions:                    SettingVariable{Value: "100"},
 		KeepActionOutput:                      SettingVariable{Value: "true"},
 		ActionPresentation:                    SettingVariable{Value: "dialog"},
 		AutoInjectEnv:                         SettingVariable{Value: "false"},

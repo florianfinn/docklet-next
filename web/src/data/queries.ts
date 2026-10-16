@@ -99,9 +99,9 @@ export function useAuthMode() {
   return useQuery({ queryKey: queryKeys.authMode, queryFn: () => adapter.getAuthMode(), staleTime: 0 });
 }
 
-export function useCurrentUser() {
+export function useCurrentUser(enabled = true) {
   const adapter = useAdapter();
-  return useQuery({ queryKey: queryKeys.currentUser, queryFn: () => adapter.getCurrentUser(), staleTime: 0 });
+  return useQuery({ queryKey: queryKeys.currentUser, queryFn: () => adapter.getCurrentUser(), enabled, staleTime: 0 });
 }
 
 export function useSetupStatus(enabled = true) {

@@ -57,7 +57,7 @@ export const messages: typeof enMessages = {
   images: deImages,
   volumes: deVolumes,
   settings: deSettings,
-  setup: import.meta.env.DEV ? deSetup : ({} as typeof deSetup),
-  login: import.meta.env.DEV ? deLogin : ({} as typeof deLogin),
+  setup: deSetup,
+  login: deLogin,
   locale: deLocale,
 };

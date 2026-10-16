@@ -56,10 +56,7 @@ function ReviewBlock({ title, onEdit, rows }: { title: string; onEdit: () => voi
   );
 }
 
-/**
- * First-run setup as a full-screen preview route. The draft lives in memory,
- * so back navigation (button, rail or browser) keeps every entered value.
- */
+/** First-run draft stays in memory while the operator moves between steps. */
 export default function SetupPage() {
   const t = useTranslations("setup");
   const tr = useTranslations("setup.review");
@@ -136,19 +133,19 @@ export default function SetupPage() {
           <BrandLogo size={44} entranceSlot="setup" motion={motion} className="shrink-0" />
           <div className="mr-auto">
             <ToneBadge tone="violet" className="mb-1">
-              {t("badge")}
+              {t(connected ? "badgeConnected" : "badge")}
             </ToneBadge>
             <h1 className="text-2xl font-semibold tracking-tight">{t("title")}</h1>
           </div>
           <LanguageSwitch size="xs" />
-          <Button asChild variant="outline" size="sm">
+          {!connected && <Button asChild variant="outline" size="sm">
             <Link to="/dashboard">
               <ArrowLeft data-icon="inline-start" />
               {t("exit")}
             </Link>
-          </Button>
+          </Button>}
         </header>
-        <p className={cn(READABLE_PLATE, "max-w-3xl self-start px-4 py-2.5 text-sm text-muted-foreground")}>{t("lead")}</p>
+        <p className={cn(READABLE_PLATE, "max-w-3xl self-start px-4 py-2.5 text-sm text-muted-foreground")}>{t(connected ? "leadConnected" : "lead")}</p>
         <div className="grid grid-cols-[minmax(0,1fr)] items-start gap-5 lg:grid-cols-[15rem_minmax(0,1fr)]">
           <div className={cn(READABLE_PLATE, "p-1.5")} data-slot="setup-rail">
             <StepRail steps={steps} current={step} reachable={step === "done" ? -1 : draft.reached} onSelect={(id) => go(id as SetupStep)} label={t("railLabel")} />
@@ -219,7 +216,7 @@ export default function SetupPage() {
                     onEdit={() => go("auth")}
                     rows={[
                       [tr("mode"), tr(`modes.${draft.auth.mode}`)],
-                      ...(draft.auth.mode === "local" ? ([[tr("user"), draft.auth.local.username], [tr("password"), tr("passwordSet")]] as [string, string][]) : []),
+                      ...(draft.auth.mode === "local" ? ([[tr("user"), draft.auth.local.username], [tr("password"), tr(connected ? draft.auth.local.passwordSet ? "passwordAlreadySet" : "passwordWillChange" : "passwordSet")]] as [string, string][]) : []),
                       ...(draft.auth.mode === "proxy" ? ([[tr("header"), draft.auth.proxy.userHeader]] as [string, string][]) : []),
                     ]}
                   />
@@ -245,28 +242,28 @@ export default function SetupPage() {
                   </span>
                   <div>
                     <h3 className="text-xl font-semibold tracking-tight">{t("done.title", { name: draft.general.hubName })}</h3>
-                    <p className="mt-1 max-w-xl text-sm text-muted-foreground">{t("done.body")}</p>
+                    <p className="mt-1 max-w-xl text-sm text-muted-foreground">{t(connected ? "done.bodyConnected" : "done.body")}</p>
                   </div>
                   <div className="flex flex-wrap gap-2">
-                    <Button asChild>
+                    {!connected && <Button asChild>
                       <Link to="/hosts/new" onClick={() => onboardingStore.set(null)}>
                         <Server data-icon="inline-start" />
                         {t("done.host")}
                       </Link>
-                    </Button>
+                    </Button>}
                     <Button asChild variant="outline">
-                      <Link to="/dashboard">
+                      <Link to="/dashboard" onClick={() => { if (connected) queryClient.setQueryData(queryKeys.setupStatus, true); }}>
                         <LayoutDashboard data-icon="inline-start" />
                         {t("done.dashboard")}
                       </Link>
                     </Button>
                     <Button asChild variant="ghost">
-                      <Link to="/settings/general">
+                      <Link to="/settings/general" onClick={() => { if (connected) queryClient.setQueryData(queryKeys.setupStatus, true); }}>
                         <Settings2 data-icon="inline-start" />
                         {t("done.settings")}
                       </Link>
                     </Button>
-                    {import.meta.env.DEV && (
+                    {!connected && (
                       <Button
                         variant="ghost"
                         onClick={() => {

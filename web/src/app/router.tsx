@@ -1,8 +1,10 @@
 import { lazy, Suspense } from "react";
-import { createBrowserRouter, Navigate, type RouteObject } from "react-router";
+import { createBrowserRouter, Navigate, Outlet, type RouteObject } from "react-router";
 import { QueryError } from "@/shared/components/page";
+import { useAdapter } from "@/data/use-adapter";
 import { AuthGate } from "./AuthGate";
 import { SetupGate } from "./SetupGate";
+import ProductLoginPage from "@/features/auth/login/ProductLoginPage";
 
 import { NotFound } from "./shell/NotFound";
 import { RouteError } from "./shell/RouteError";
@@ -25,9 +27,21 @@ const BackupsPage = lazy(() => import("@/features/volumes/BackupsPage"));
 const HubBackupsPage = lazy(() => import("@/features/hub-backups/HubBackupsPage"));
 const SettingsPage = lazy(() => import("@/features/settings/SettingsPage"));
 const ProfilePage = lazy(() => import("@/features/settings/ProfilePage"));
-const SetupPage = import.meta.env.DEV ? lazy(() => import("@/features/setup/SetupPage")) : null;
-const LoginPage = lazy(() => import("@/features/auth/login/LoginPage"));
+const SetupPage = lazy(() => import("@/features/setup/SetupPage"));
+const DemoLoginPage = lazy(() => import("@/features/auth/login/LoginPage"));
 const PreviewPage = import.meta.env.DEV ? lazy(() => import("./preview/PreviewPage")) : null;
+
+function HubRouteGate() {
+  return useAdapter().kind === "http" ? <AuthGate /> : <Outlet />;
+}
+
+function SetupRoute() {
+  return useAdapter().kind === "http" ? <SetupGate /> : <SetupPage />;
+}
+
+function LoginRoute() {
+  return useAdapter().kind === "http" ? <ProductLoginPage /> : <DemoLoginPage />;
+}
 
 const shellRoutes: RouteObject[] = [
   {
@@ -62,28 +76,26 @@ export const navigation = navigationForRoutes(shellRoutes);
 
 export const routes: RouteObject[] = [
   {
-    // First-run setup is a full-screen preview outside the shell.
+    // Setup remains outside the shell in both connected and demo routes.
     path: "setup",
     errorElement: <RouteError />,
     element: (
       <Suspense fallback={null}>
-        {SetupPage ? <SetupPage /> : <SetupGate />}
+        <SetupRoute />
       </Suspense>
     ),
   },
   {
-    // The build selects the login entry; authentication arrives with the backend.
+    // The adapter selects the connected or demo sign-in flow.
     path: "login",
     errorElement: <RouteError />,
     element: (
       <Suspense fallback={null}>
-        <LoginPage />
+        <LoginRoute />
       </Suspense>
     ),
   },
-  import.meta.env.DEV
-    ? { element: <AppShell navigation={navigation} />, children: shellRoutes }
-    : { element: <AuthGate />, children: [{ element: <AppShell navigation={navigation} />, children: shellRoutes }] },
+  { element: <HubRouteGate />, children: [{ element: <AppShell navigation={navigation} />, children: shellRoutes }] },
 ];
 
 export const router = createBrowserRouter(routes);

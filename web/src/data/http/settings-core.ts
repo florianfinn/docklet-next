@@ -5,6 +5,7 @@
 // Deviations: Original core settings mapping for setup and connected hub sections.
 
 import type { SettingsApi } from "@/data/api";
+import { HISTORY_LIMITS } from "@/domain/activity-history";
 import type { HubSettings, SettingsSection } from "@/domain/settings";
 import { unavailable } from "../capability";
 import type { CsrfClient } from "./csrf-client";
@@ -14,12 +15,6 @@ export type CoreSettings = Record<string, string>;
 function field(values: CoreSettings, key: string): string {
   const value = values[key];
   if (value === undefined) throw new Error(`settings.missing.${key}`);
-  return value;
-}
-
-function integer(values: CoreSettings, key: string): number {
-  const value = Number(field(values, key));
-  if (!Number.isSafeInteger(value) || value < 1) throw new Error(`settings.invalid.${key}`);
   return value;
 }
 
@@ -77,7 +72,7 @@ export function createSettingsCore(baseUrl: string, client: CsrfClient): Pick<Se
       try { new Intl.DateTimeFormat("en", { timeZone }); } catch { throw new Error("settings.invalid.timeZone"); }
       return {
         general: { hubName: field(values, "hubName"), hubAddress: field(values, "hubAddress"), domainUrl: field(values, "domainUrl"), linkBase, timeZone },
-        activity: { maxEvents: integer(values, "maxEvents"), maxFinishedActions: integer(values, "maxFinishedActions"), keepActionOutput: boolean(values, "keepActionOutput"), actionPresentation },
+        activity: { maxEvents: HISTORY_LIMITS.events.default, maxFinishedActions: HISTORY_LIMITS.actions.default, keepActionOutput: boolean(values, "keepActionOutput"), actionPresentation },
       };
     },
     async saveSettings<K extends SettingsSection>(section: K, value: HubSettings[K]) {
@@ -88,7 +83,7 @@ export function createSettingsCore(baseUrl: string, client: CsrfClient): Pick<Se
       }
       if (section === "activity") {
         const activity = value as HubSettings["activity"];
-        await write({ maxEvents: String(activity.maxEvents), maxFinishedActions: String(activity.maxFinishedActions), keepActionOutput: String(activity.keepActionOutput), actionPresentation: activity.actionPresentation });
+        await write({ keepActionOutput: String(activity.keepActionOutput), actionPresentation: activity.actionPresentation });
         return;
       }
       throw unavailable("saveSettings", undefined, "capability.mapping-unavailable");

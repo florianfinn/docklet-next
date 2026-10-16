@@ -4,7 +4,7 @@
 // License: Apache-2.0
 // Deviations: Original first-run route gate and administrator locale sync.
 
-import { useEffect } from "react";
+import { lazy, Suspense, useEffect } from "react";
 import { Navigate } from "react-router";
 import { useTranslations } from "use-intl";
 
@@ -14,7 +14,7 @@ import { useAuthMode, useCurrentUser, useSetupStatus } from "@/data/queries";
 import { isLocale } from "@/domain/locale";
 import { Button } from "@/shared/ui/button";
 
-import SetupPage from "@/features/setup/SetupPage";
+const SetupPage = lazy(() => import("@/features/setup/SetupPage"));
 
 export function SetupGate() {
   const t = useTranslations("login");
@@ -32,5 +32,5 @@ export function SetupGate() {
   if (mode.isError || currentUser.isError || setup.isError) return <main className="p-6"><p>{t("setupStatusError")}</p><Button onClick={() => { void mode.refetch(); void currentUser.refetch(); void setup.refetch(); }}>{t("retry")}</Button></main>;
   if (setup.isPending) return <main aria-busy="true" className="p-6">{t("loading")}</main>;
   if (setup.data) return <Navigate to="/dashboard" replace />;
-  return <SetupPage />;
+  return <Suspense fallback={<main aria-busy="true" className="p-6">{t("loading")}</main>}><SetupPage /></Suspense>;
 }

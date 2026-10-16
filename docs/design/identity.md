@@ -14,6 +14,14 @@ resource rights are outside this decision and belong to M15.
 Clients read the active policy from `GET /api/auth/mode`, not the legacy
 `authLocalEnabled` setting, whose stored value does not describe none/proxy mode.
 
+Die Weboberfläche zeigt diese Startkonfiguration im Anmeldeabschnitt nur
+lesbar. Bei `local` führt `/login` durch die echte Cookie-Sitzung und den
+vorhandenen CSRF-Vertrag; bei `proxy` erklärt ein abgewiesener Aufruf die
+Anmeldung über den Proxy; bei `none` entfällt die Anmeldeseite. Ein lokaler
+Erststart verlangt den Wechsel des markierten Administratorpassworts vor dem
+Abschluss der Einrichtung. Die Profilsprache liegt beim Administrator im
+Core und wird nach dem Laden auf die Oberfläche angewendet.
+
 `none` maps every ordinary hub request to the global administrator. `proxy` maps
 each accepted proxy identity to that same persisted administrator ID. Proxy names
 are request-scoped activity attribution, not local accounts, role assignments or

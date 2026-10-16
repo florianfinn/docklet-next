@@ -36,12 +36,6 @@ func validateSettingValueInternal(key, value string) error {
 	if key == "actionPresentation" && value != "dialog" && value != "toast" {
 		return common.Classify(common.ErrValidation, errors.New("actionPresentation must be dialog or toast"))
 	}
-	if (key == "maxEvents" || key == "maxFinishedActions") && value != "" {
-		limit, err := strconv.Atoi(value)
-		if err != nil || limit < 1 || limit > 100000 {
-			return common.Classify(common.ErrValidation, fmt.Errorf("%s must be between 1 and 100000", key))
-		}
-	}
 	if key == "upgradeLogRetentionDays" && value != "" {
 		days, err := strconv.Atoi(value)
 		if err != nil || days < 0 || days > 3650 {

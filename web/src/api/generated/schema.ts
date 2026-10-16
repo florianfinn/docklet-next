@@ -1,5 +1,5 @@
 // Source: api/openapi.json
-// Revision: 8edeed5bb6b535a790e3e8a1186db04334370830f2ff46be66b84579c806226d
+// Revision: 2a8c9b6bf74be62d51e728c6550abe16dc79381e7ca821642b37eaffc49cb24b
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
 // Deviations: Generated TypeScript declarations from the local Huma export.
@@ -9562,8 +9562,6 @@ export interface components {
             lifecycleMaxTimeoutSec?: string | null;
             linkBase?: string | null;
             maxConcurrentActivities?: string | null;
-            maxEvents?: string | null;
-            maxFinishedActions?: string | null;
             maxImageUploadSize?: string | null;
             pollingEnabled?: string | null;
             pollingInterval?: string | null;

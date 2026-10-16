@@ -2,7 +2,7 @@ import { useTranslations } from "use-intl";
 import { useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "react-router";
 
-import { useAuthMode, useSettings } from "@/data/queries";
+import { useAuthMode, useCurrentUser, useSettings } from "@/data/queries";
 import { queryKeys } from "@/data/query-keys";
 import { useAdapter } from "@/data/use-adapter";
 import { AlertDialog, AlertDialogAction, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/shared/ui/alert-dialog";
@@ -13,6 +13,7 @@ export function LogoutDialog({ open, onOpenChange }: { open: boolean; onOpenChan
   const adapter = useAdapter();
   const settings = useSettings(adapter.kind === "demo");
   const mode = useAuthMode();
+  const currentUser = useCurrentUser(adapter.kind === "http");
   const client = useQueryClient();
   const navigate = useNavigate();
   const auth = settings.data?.auth;
@@ -23,7 +24,7 @@ export function LogoutDialog({ open, onOpenChange }: { open: boolean; onOpenChan
       : activeMode === "proxy"
         ? t("logoutProxy", { url: auth?.proxy.logoutUrl || t("logoutProxyDefault") })
         : activeMode === "local"
-          ? t("logoutLocal", { user: auth?.local.username ?? "admin" })
+          ? t("logoutLocal", { user: auth?.local.username ?? currentUser.data?.username ?? t("unknownName") })
           : t("logoutBody");
   return (
     <AlertDialog open={open} onOpenChange={onOpenChange}>
