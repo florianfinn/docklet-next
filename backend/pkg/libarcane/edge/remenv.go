@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace
+// Deviations: Local module namespace; retain browser cookies at the hub boundary.
 
 package edge
 
@@ -74,13 +74,6 @@ func BuildWebSocketHeaders(c *echo.Context, accessToken *string) http.Header {
 		headers.Set(HeaderAuthorization, auth)
 	} else if token, err := cookie.GetTokenCookie(req); err == nil && token != "" {
 		headers.Set(HeaderAuthorization, "Bearer "+token)
-	}
-
-	// Forward cookies if no other auth is present
-	if headers.Get(HeaderAuthorization) == "" && headers.Get(HeaderAPIKey) == "" {
-		if cookies := req.Header.Get(HeaderCookie); cookies != "" {
-			headers.Set(HeaderCookie, cookies)
-		}
 	}
 
 	// Set agent token for remote environment authentication

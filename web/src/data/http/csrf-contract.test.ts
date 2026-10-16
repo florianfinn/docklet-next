@@ -6,21 +6,41 @@
 // Deviations: Original adapter integration test against the real Go CSRF middleware.
 
 import { execFile } from "node:child_process";
+import { mkdir, mkdtemp, rm } from "node:fs/promises";
+import { join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
-import { expect, it } from "vitest";
+import { afterAll, beforeAll, expect, it } from "vitest";
 
 import { createHttpAdapter } from "./http-adapter";
 import { createCsrfClient } from "./csrf-client";
 
 const baseUrl = "https://hub.example.com/api";
 const run = promisify(execFile);
+let bridgeDirectory: string | undefined;
+let bridgeBinary: string;
+
+beforeAll(async () => {
+  // Share the binary with Go toolchains that run in a workspace-mounted container.
+  const scratchDirectory = fileURLToPath(new URL("../../../../.scratch/", import.meta.url));
+  await mkdir(scratchDirectory, { recursive: true });
+  bridgeDirectory = await mkdtemp(join(scratchDirectory, "csrf-bridge-"));
+  bridgeBinary = join(bridgeDirectory, process.platform === "win32" ? "csrf-bridge.exe" : "csrf-bridge");
+  await run("go", ["build", "-o", bridgeBinary, "../backend/internal/middleware/testdata/csrf-bridge.go"], {
+    env: { ...process.env, GOFLAGS: "-p=4" }, timeout: 180_000,
+  });
+}, 180_000);
+
+afterAll(async () => {
+  if (bridgeDirectory) await rm(bridgeDirectory, { recursive: true, force: true });
+});
 
 async function middlewareFetch(input: string | URL | Request, init?: RequestInit): Promise<Response> {
   const headers: Record<string, string[]> = {};
   new Headers(init?.headers).forEach((value, name) => { headers[name] = [value]; });
   const body = init?.body instanceof Blob ? await init.body.text() : String(init?.body ?? "");
   const request = { method: init?.method ?? "GET", path: new URL(String(input)).pathname, headers, body };
-  const { stdout } = await run("go", ["run", "../backend/internal/middleware/testdata/csrf-bridge.go", JSON.stringify(request)], { env: { ...process.env, GOFLAGS: "-p=4" }, timeout: 20_000 });
+  const { stdout } = await run(bridgeBinary, [JSON.stringify(request)], { timeout: 20_000 });
   const response = JSON.parse(stdout) as { status: number; headers: Record<string, string[]>; body: string };
   const responseHeaders = new Headers();
   for (const [name, values] of Object.entries(response.headers)) for (const value of values) responseHeaders.append(name, value);

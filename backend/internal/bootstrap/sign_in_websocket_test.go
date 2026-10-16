@@ -155,17 +155,22 @@ func TestSignInAgentWebSocketOrigin(t *testing.T) {
 	ws.NewWebSocketHandler(router.Group("/api"), nil, nil, nil, nil, auth.NewAuthMiddleware(nil, cfg), cfg)
 	for _, tc := range []struct {
 		name, token, origin string
+		cookie              bool
 		status              int
 	}{
-		{"valid transport", "example", "", 101},
-		{"invalid transport", "invalid", "", 403},
-		{"wrong origin", "example", "https://other.example.com", 403},
-		{"allowed origin", "example", "https://hub.example.com", 101},
+		{"valid transport", "example", "", false, 101},
+		{"invalid transport", "invalid", "", false, 403},
+		{"cookie without origin", "example", "", true, 403},
+		{"wrong origin", "example", "https://other.example.com", false, 403},
+		{"allowed origin", "example", "https://hub.example.com", false, 101},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			req := httptest.NewRequest(http.MethodGet, "/api/environments/0/ws/containers/example/terminal", http.NoBody)
 			req.Header.Set(middleware.HeaderAgentToken, tc.token)
 			req.Header.Set("Origin", tc.origin)
+			if tc.cookie {
+				req.AddCookie(&http.Cookie{Name: "docklet_csrf", Value: "example"})
+			}
 			webSocketHandshake(req)
 			rec := httptest.NewRecorder()
 			router.ServeHTTP(rec, req)
