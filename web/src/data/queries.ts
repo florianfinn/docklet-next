@@ -89,6 +89,16 @@ export function useSettings() {
   return useQuery({ queryKey: queryKeys.settings, queryFn: () => adapter.getSettings() });
 }
 
+export function useAuthMode() {
+  const adapter = useAdapter();
+  return useQuery({ queryKey: queryKeys.authMode, queryFn: () => adapter.getAuthMode(), staleTime: 0 });
+}
+
+export function useCurrentUser() {
+  const adapter = useAdapter();
+  return useQuery({ queryKey: queryKeys.currentUser, queryFn: () => adapter.getCurrentUser(), staleTime: 0 });
+}
+
 export function useImages() {
   const adapter = useAdapter();
   return useQuery({ queryKey: queryKeys.images, queryFn: () => adapter.listImages() });

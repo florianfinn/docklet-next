@@ -8,6 +8,8 @@ export const deLogin: typeof enLogin = {
   loading: "Lade Anmeldeart …",
   settingsError: "Die Anmeldeart konnte nicht geladen werden. Du kannst sie unten in der Demo-Steuerung wählen.",
   retry: "Erneut laden",
+  proxyRejected: "Melde dich über deinen Proxy an und lade diese Seite neu. Der Hub hat die Proxy-Identität abgelehnt.",
+  sessionError: "Die Sitzung konnte nicht geprüft werden.",
   username: "Benutzername",
   password: "Passwort",
   required: "Pflichtfeld",

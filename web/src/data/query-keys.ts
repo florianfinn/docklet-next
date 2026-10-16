@@ -1,4 +1,6 @@
 export const queryKeys = {
+  authMode: ["auth-mode"],
+  currentUser: ["current-user"],
   hosts: ["hosts"],
   systemComponents: ["system-components"],
   stacks: ["stacks"],

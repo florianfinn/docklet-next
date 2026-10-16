@@ -5,6 +5,7 @@ import { useTranslations } from "use-intl";
 
 import { LOCALES, setAppLocale, useAppLocale } from "@/app/i18n/locale-store";
 import { useAdapter } from "@/data/use-adapter";
+import { useAuthMode } from "@/data/queries";
 import { setTokens } from "@/shared/theme/design-tokens";
 import { useTokens } from "@/shared/theme/use-design-tokens";
 import { LabMenuItem } from "@/runtime";
@@ -37,6 +38,8 @@ export function FreeUserMenu({ onNavigate }: { onNavigate: () => void }) {
   const { isMobile } = useSidebar();
   const [logout, setLogout] = useState(false);
   const disconnected = useAdapter().kind === "disconnected";
+  const adapter = useAdapter();
+  const mode = useAuthMode();
   const name = t(disconnected ? "unknownName" : "name");
   const initials = name
     .split(" ")
@@ -101,7 +104,7 @@ export function FreeUserMenu({ onNavigate }: { onNavigate: () => void }) {
             </DropdownMenuRadioGroup>
             {!disconnected && <DropdownMenuSeparator />}
             <LabMenuItem />
-            {!disconnected && <DropdownMenuItem variant="destructive" onSelect={() => setLogout(true)}>
+            {!disconnected && (adapter.kind === "demo" || mode.data === "local") && <DropdownMenuItem variant="destructive" onSelect={() => setLogout(true)}>
               <LogOut />
               {t("logout")}
             </DropdownMenuItem>}

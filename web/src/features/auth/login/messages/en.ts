@@ -7,6 +7,8 @@ export const enLogin = {
   loading: "Loading sign-in method …",
   settingsError: "The sign-in method could not be loaded. You can choose it below in the demo controls.",
   retry: "Reload",
+  proxyRejected: "Sign in through your proxy, then reload this page. The hub rejected the proxy identity.",
+  sessionError: "The session could not be checked.",
   username: "Username",
   password: "Password",
   required: "Required",

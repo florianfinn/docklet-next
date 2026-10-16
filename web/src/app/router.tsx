@@ -2,6 +2,7 @@ import { lazy, Suspense } from "react";
 import { createBrowserRouter, Navigate, type RouteObject } from "react-router";
 import { QueryError } from "@/shared/components/page";
 import { BackendNotice } from "@/data/BackendNotice";
+import { AuthGate } from "./AuthGate";
 
 import { NotFound } from "./shell/NotFound";
 import { RouteError } from "./shell/RouteError";
@@ -80,10 +81,9 @@ export const routes: RouteObject[] = [
       </Suspense>
     ),
   },
-  {
-    element: <AppShell navigation={navigation} />,
-    children: shellRoutes,
-  },
+  import.meta.env.DEV
+    ? { element: <AppShell navigation={navigation} />, children: shellRoutes }
+    : { element: <AuthGate />, children: [{ element: <AppShell navigation={navigation} />, children: shellRoutes }] },
 ];
 
 export const router = createBrowserRouter(routes);

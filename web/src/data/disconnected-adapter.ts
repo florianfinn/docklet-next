@@ -9,6 +9,12 @@ export function createDisconnectedAdapter(): DockletAdapter {
   const subscribe = () => () => {};
   return {
     kind: "disconnected",
+    getAuthMode: unavailable,
+    getCurrentUser: unavailable,
+    login: unavailable,
+    logout: unavailable,
+    changePassword: unavailable,
+    updateMyLocale: unavailable,
     getHubBackupAccess: unavailable,
     listHubBackups: unavailable,
     getHubBackupPolicies: unavailable,
