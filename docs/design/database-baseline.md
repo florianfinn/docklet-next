@@ -23,9 +23,9 @@ Generate the development schema only in a new local temporary file:
 DATABASE_URL=file:baseline.db go run ./backend/cmd/schema-baseline > baseline.sql
 ```
 
-Der Befehl übernimmt die Hub-Lebenszeitsperre, lehnt vorhandene Zieldateien ab
-und erzeugt deterministisches SQL aus den beibehaltenen Modellen und den
-geprüften SQLite-Integritätsregeln. Its output must
+The command takes the hub lifetime lock, rejects existing target files and
+generates deterministic SQL from the retained models and the reviewed SQLite
+integrity rules. Its output must
 match `backend/resources/migrations/sqlite/001_baseline.sql` byte for byte. This
 is a development verification command, not an operator migration or import tool.
 The independent retained-integrity fixture and behavioural constraint tests
