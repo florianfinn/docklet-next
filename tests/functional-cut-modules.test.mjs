@@ -1,6 +1,10 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
+import { execFileSync } from "node:child_process";
+
+// The functional-cut evidence predates the separately approved SQLite restoration.
+const cutRevision = "b3607be5144101152c8eb7738d389e8c73986fba";
 
 const manifest = JSON.parse(readFileSync(new URL("../docs/provenance/removed-modules.json", import.meta.url), "utf8"));
 const baseline = JSON.parse(readFileSync(new URL("./fixtures/pre-cut-go-requirements.json", import.meta.url), "utf8"));
@@ -20,7 +24,7 @@ function requirements(body) {
   return result;
 }
 
-test("removed Go requirements match the baseline and tidied manifests", () => {
+test("historical removed Go requirements match the functional-cut manifests", () => {
   assert.equal(baseline.sourceRevision, manifest.baselineRevision);
   assert.deepEqual(Object.keys(baseline.requirements).sort(), [...manifest.comparedManifests].sort());
   const removed = [];
@@ -30,7 +34,7 @@ test("removed Go requirements match the baseline and tidied manifests", () => {
   for (const path of manifest.comparedManifests) {
     const previous = new Map(baseline.requirements[path].map(([name, version, direct]) => [name, { version, direct }]));
     assert.equal(previous.size, baseline.requirements[path].length, `duplicate baseline requirement: ${path}`);
-    const current = requirements(readFileSync(new URL(`../${path}`, import.meta.url), "utf8"));
+    const current = requirements(execFileSync("git", ["show", `${cutRevision}:${path}`], { encoding: "utf8" }));
     for (const name of previous.keys()) before.add(name);
     for (const name of current.keys()) after.add(name);
     for (const [name, value] of [...previous].sort(([a], [b]) => a < b ? -1 : a > b ? 1 : 0)) {

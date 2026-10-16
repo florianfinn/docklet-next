@@ -2,7 +2,7 @@
 // Revision: 23cd46831a543a73eec05ad034afd46245225876
 // Retrieved: 2026-10-16
 // License: MIT
-// Deviations: None; pinned SQLite provider restored.
+// Deviations: Pinned provider restored; temporary storage is configured before transactions by the connection factory.
 
 package sqlite
 
@@ -637,8 +637,6 @@ func (s *SQLiteProvider) lookupActorInTransaction(ctx context.Context, tx *sql.T
 	//    Note the "lookup_result" temporary table is connection-local and thus not prefixed
 	// #nosec G202 -- the only concatenated values are the static table prefix and an internally-built host clause, not user input
 	q := `
-	PRAGMA temp_store = MEMORY;
-
 	CREATE TEMPORARY TABLE IF NOT EXISTS lookup_result (
 		host_id text NOT NULL,
 		host_address text NOT NULL,

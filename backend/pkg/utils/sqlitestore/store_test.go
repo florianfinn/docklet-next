@@ -89,3 +89,19 @@ func TestWALCheckpointReadOnlyAndStorageErrors(t *testing.T) {
 	_, err = Open(t.Context(), filepath.Join(dir, "unwritable.db"), true, false)
 	require.Error(t, err)
 }
+
+func TestFrancisTemporaryStorageSurvivesConnectionReplacement(t *testing.T) {
+	pool, err := Open(t.Context(), filepath.Join(t.TempDir(), "francis.db"), false, false)
+	require.NoError(t, err)
+	defer pool.Close()
+	for range 2 {
+		var mode int
+		require.NoError(t, pool.QueryRow("PRAGMA temp_store").Scan(&mode))
+		require.Equal(t, 2, mode)
+		_, err = pool.Exec("CREATE TEMP TABLE IF NOT EXISTS scratch(id INTEGER)")
+		require.NoError(t, err)
+		pool.SetMaxIdleConns(0)
+		require.NoError(t, pool.Ping())
+		pool.SetMaxIdleConns(1)
+	}
+}

@@ -8,7 +8,7 @@ const root = join(dirname(fileURLToPath(import.meta.url)), "..");
 const migrationDir = "backend/resources/migrations";
 const baseline = "sqlite/001_baseline.sql";
 // Independent of the manifest so rehashing a shipped baseline cannot certify it.
-const baselineHash = "38474d07ced65e45099f36d846a4b5f5378dcb09f74c68a166cefd7abc3cc603";
+const baselineHash = "bdd3f75d6f7e48bf9749e41f1dd6bd7c81d8142f832c43894052887ebe91ddb2";
 
 export function migrationProblems(files, manifest, pinnedBaselineHash = baselineHash) {
   const problems = [];

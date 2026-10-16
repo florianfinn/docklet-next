@@ -44,7 +44,7 @@ func BenchmarkSQLiteConcurrentLoad(b *testing.B) {
 	envs := environment.NewEnvironmentService(db, nil, nil, nil, nil, nil)
 	values := kv.NewKVService(db)
 	actors := francistesting.New(b, url)
-	if err = actors.RegisterActor("load", func(string, *actor.Service) actor.Actor { return struct{}{} }); err != nil {
+	if err = actors.RegisterActor("load", func(string, *actor.Service) actor.Actor { return &sqliteLoadActor{service: actors.Service()} }); err != nil {
 		b.Fatal(err)
 	}
 	francistesting.Start(b, actors)
@@ -125,40 +125,66 @@ func BenchmarkSQLiteConcurrentLoad(b *testing.B) {
 	}
 	var outputs [4]atomic.Int64
 	var interactive [3]atomic.Int64
-	var heartbeats atomic.Int64
+	var heartbeats [4]atomic.Int64
 	var receipts atomic.Int64
 	var reads atomic.Int64
 	var peaks [2]atomic.Int64
 	started := time.Now()
 	timer := time.AfterFunc(duration, stopAll)
 	defer timer.Stop()
+	emit := func(i int, target int64) error {
+		current := outputs[i].Load()
+		count := target - current
+		if count > 32 {
+			return fmt.Errorf("output backlog exceeded one bounded batch")
+		}
+		if count <= 0 {
+			return nil
+		}
+		batch := make([]activity.AppendActivityMessageRequest, 0, count)
+		for offset := range count {
+			line := fmt.Sprintf("line-%d-%d", i, current+offset)
+			batch = append(batch, activity.AppendActivityMessageRequest{Message: line, Output: &activitytypes.OutputLine{Timestamp: time.Now().UTC(), Stream: "stdout", Text: line}})
+		}
+		callStart := time.Now()
+		_, err := svc.AppendMessages(runs[i].WorkContext, runs[i].Run.ID, batch)
+		record(callStart, err)
+		if err == nil {
+			outputs[i].Add(count)
+		}
+		return err
+	}
+	interact := func(i int, target int64) error {
+		for interactive[i].Load() < target {
+			callStart := time.Now()
+			_, err := values.IncrementInt64(ctx, fmt.Sprintf("user-%d", i), 1)
+			record(callStart, err)
+			if err != nil {
+				return err
+			}
+			interactive[i].Add(1)
+		}
+		return nil
+	}
+	heartbeat := func(i int) error {
+		err := envs.UpdateEnvironmentHeartbeat(ctx, fmt.Sprintf("env-%d", i))
+		if err == nil {
+			heartbeats[i].Add(1)
+		}
+		return err
+	}
 	for i := range 4 {
 		repeat(100*time.Millisecond, func() error {
-			index := outputs[i].Load()
-			line := fmt.Sprintf("line-%d-%d", i, index)
-			_, err := svc.AppendMessages(runs[i].WorkContext, runs[i].Run.ID, []activity.AppendActivityMessageRequest{{Message: line, Output: &activitytypes.OutputLine{Text: line}}})
-			if err == nil {
-				outputs[i].Add(1)
-			}
-			return err
-		}, true)
-		repeat(5*time.Second, func() error {
-			err := envs.UpdateEnvironmentHeartbeat(ctx, fmt.Sprintf("env-%d", i))
-			if err == nil {
-				heartbeats.Add(1)
-			}
-			return err
-		}, true)
+			return emit(i, min(int64(duration/(100*time.Millisecond)), int64(time.Since(started)/(100*time.Millisecond))))
+		}, false)
+		repeat(5*time.Second, func() error { return heartbeat(i) }, true)
 	}
 	for i := range 3 {
 		repeat(time.Second, func() error {
-			_, err := values.IncrementInt64(ctx, fmt.Sprintf("user-%d", i), 1)
-			if err == nil {
-				interactive[i].Add(1)
-			}
-			return err
-		}, true)
+			return interact(i, min(int64(duration/time.Second), int64(time.Since(started)/time.Second)))
+		}, false)
 	}
+
 	repeat(time.Second, func() error {
 		for i := range 4 {
 			answer, err := svc.StartGatedActivity(ctx, activity.GateRequest{EnvironmentID: fmt.Sprintf("env-%d", i), Operation: "load", Scope: "output", Type: activitytypes.TypeProjectDeploy})
@@ -180,7 +206,8 @@ func BenchmarkSQLiteConcurrentLoad(b *testing.B) {
 		return err
 	}, true)
 	repeat(time.Second, func() error {
-		return actors.Service().SetState(ctx, "load", "load", map[string]int64{"tick": time.Now().UnixMilli()}, nil)
+		_, err := actors.Service().Invoke(ctx, "load", "load", "tick", nil)
+		return err
 	}, true)
 	repeat(200*time.Millisecond, func() error {
 		_, err := svc.GetActivityDetail(ctx, "env-0", runs[0].Run.ID, 20)
@@ -204,10 +231,25 @@ func BenchmarkSQLiteConcurrentLoad(b *testing.B) {
 	}, false)
 	<-stop
 	wg.Wait()
-	elapsed := time.Since(started)
 	if len(failures) > 0 {
-		b.Fatalf("workload error after %s: %v", elapsed, failures)
+		b.Fatalf("workload error after %s: %v", time.Since(started), failures)
 	}
+	for i := range 4 {
+		if err = emit(i, int64(duration/(100*time.Millisecond))); err != nil {
+			b.Fatal(err)
+		}
+		for heartbeats[i].Load() < int64(duration/(5*time.Second)) {
+			if err = heartbeat(i); err != nil {
+				b.Fatal(err)
+			}
+		}
+	}
+	for i := range 3 {
+		if err = interact(i, int64(duration/time.Second)); err != nil {
+			b.Fatal(err)
+		}
+	}
+	elapsed := time.Since(started)
 	for i := range 4 {
 		if _, err = svc.CompleteActivity(runs[i].WorkContext, runs[i].Run.ID, activitytypes.StatusSuccess, "finished", nil); err != nil {
 			b.Fatal(err)
@@ -233,13 +275,20 @@ func BenchmarkSQLiteConcurrentLoad(b *testing.B) {
 	if active != 0 || negative != 0 || receiptRows != 1 {
 		b.Fatalf("run constraints: active=%d negative=%d receipts=%d", active, negative, receiptRows)
 	}
+	var jobMessages int64
+	if err = db.Model(&activity.ActivityMessage{}).Where("activity_id=?", "load-job-activity").Count(&jobMessages).Error; err != nil {
+		b.Fatal(err)
+	}
+	if jobMessages != receipts.Load() {
+		b.Fatalf("coordinator message count: %d != %d", jobMessages, receipts.Load())
+	}
 	if err = actors.Stop(ctx); err != nil {
 		b.Fatal(err)
 	}
 	sort.Slice(latencies, func(i, j int) bool { return latencies[i] < latencies[j] })
 	p95 := latencies[(len(latencies)-1)*95/100]
 	p99 := latencies[(len(latencies)-1)*99/100]
-	b.Logf("duration=%s platform=%s/%s CPUs=%d SQLite=%s driver=modernc-v1.60.1 page_size=%d samples=%d p95=%s p99=%s busy=%d locked=%d WAL_main_peak=%d WAL_francis_peak=%d main_initial=%d main_final=%d francis_initial=%d francis_final=%d heartbeats=%d reads=%d job_syncs=%d outputs=[%d,%d,%d,%d] interactive=[%d,%d,%d]", elapsed, runtime.GOOS, runtime.GOARCH, runtime.NumCPU(), sqliteVersion, pageSize, len(latencies), p95, p99, busy.Load(), locked.Load(), peaks[0].Load(), peaks[1].Load(), initial, fileSize(path), initialSidecar, fileSize(sidecar), heartbeats.Load(), reads.Load(), receipts.Load(), outputs[0].Load(), outputs[1].Load(), outputs[2].Load(), outputs[3].Load(), interactive[0].Load(), interactive[1].Load(), interactive[2].Load())
+
 	for _, p := range []string{path, sidecar} {
 		check, err := sqlitestore.Open(ctx, p, p == path, false)
 		if err != nil {
@@ -254,7 +303,15 @@ func BenchmarkSQLiteConcurrentLoad(b *testing.B) {
 		}
 		_ = check.Close()
 	}
+	b.Logf("duration=%s platform=%s/%s CPUs=%d SQLite=%s driver=modernc-v1.60.1 page_size=%d samples=%d p95=%s p99=%s busy=%d locked=%d WAL_main_peak=%d WAL_francis_peak=%d main_initial=%d main_final=%d francis_initial=%d francis_final=%d heartbeats=%d reads=%d job_syncs=%d outputs=[%d,%d,%d,%d] interactive=[%d,%d,%d]", elapsed, runtime.GOOS, runtime.GOARCH, runtime.NumCPU(), sqliteVersion, pageSize, len(latencies), p95, p99, busy.Load(), locked.Load(), peaks[0].Load(), peaks[1].Load(), initial, fileSize(path), initialSidecar, fileSize(sidecar), heartbeats[0].Load()+heartbeats[1].Load()+heartbeats[2].Load()+heartbeats[3].Load(), reads.Load(), receipts.Load(), outputs[0].Load(), outputs[1].Load(), outputs[2].Load(), outputs[3].Load(), interactive[0].Load(), interactive[1].Load(), interactive[2].Load())
 	if p95 > 250*time.Millisecond || busy.Load() != 0 || locked.Load() != 0 || peaks[0].Load() > 64<<20 || peaks[1].Load() > 64<<20 {
 		b.Fatal("candidate exceeds SQLite acceptance thresholds")
 	}
+}
+
+// sqliteLoadActor exercises actor lookup, activation and durable state on the writer.
+type sqliteLoadActor struct{ service *actor.Service }
+
+func (a *sqliteLoadActor) Invoke(ctx context.Context, _ string, _ actor.Envelope) (any, error) {
+	return nil, a.service.SetState(ctx, "load", "load", map[string]int64{"tick": time.Now().UnixMilli()}, nil)
 }

@@ -8,7 +8,8 @@ package backup
 
 import (
 	"context"
-	"os"
+	"github.com/florianfinn/docklet-next/backend/pkg/utils/sqlitestore"
+	"path/filepath"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -157,11 +158,8 @@ func TestSnapshotCommandInternal(t *testing.T) {
 	require.ErrorContains(t, err, "at least one snapshot source")
 }
 
-func TestPostgresDurableBackupRestartKeepsCompletionInternal(t *testing.T) {
-	url := os.Getenv("ARCANE_TEST_POSTGRES_DSN")
-	if url == "" {
-		t.Skip("PostgreSQL integration requires ARCANE_TEST_POSTGRES_DSN")
-	}
+func TestSQLiteDurableBackupRestartKeepsCompletionInternal(t *testing.T) {
+	url := sqlitestore.URL(filepath.Join(t.TempDir(), "hub.db"))
 	var calls atomic.Int32
 	runtime := francistest.New(t, url)
 	engine := NewEngine(t.Context(), nil, nil)
@@ -191,11 +189,8 @@ func TestPostgresDurableBackupRestartKeepsCompletionInternal(t *testing.T) {
 	require.EqualValues(t, 1, calls.Load())
 }
 
-func TestPostgresDurableBackupShutdownKeepsInterruptedEvidenceInternal(t *testing.T) {
-	url := os.Getenv("ARCANE_TEST_POSTGRES_DSN")
-	if url == "" {
-		t.Skip("PostgreSQL integration requires ARCANE_TEST_POSTGRES_DSN")
-	}
+func TestSQLiteDurableBackupShutdownKeepsInterruptedEvidenceInternal(t *testing.T) {
+	url := sqlitestore.URL(filepath.Join(t.TempDir(), "hub.db"))
 	runtime := francistest.New(t, url)
 	admission := runs.NewAdmission(runtime.Service(), t.Name())
 	require.NoError(t, admission.Register(runtime))

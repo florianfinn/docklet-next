@@ -26,6 +26,16 @@ function search(pattern, paths, globs = []) {
 
 test("removed feature identifiers have expected-empty source and configuration searches", () => {
   for (const query of manifest.queries) {
+    // Decision #60 restores SQLite; its positive graph contract is tested separately.
+    if (query.feature === "SQLite runtime") {
+      const result = spawnSync("git", ["grep", "-niE", query.pattern,
+        "b3607be5144101152c8eb7738d389e8c73986fba", "--", ":(glob)backend/**/*.go",
+        ":(exclude,glob)**/*_test.go"], { cwd: root, encoding: "utf8" });
+      assert.ok(result.status === 0 || result.status === 1, result.stderr);
+      assert.deepEqual(result.stdout.trim().split("\n").filter(Boolean)
+        .filter((line) => !provenance.test(line)), query.expectedMatches);
+      continue;
+    }
     assert.deepEqual(search(query.pattern, manifest.scope, manifest.globs), query.expectedMatches, query.feature);
   }
   for (const query of manifest.environment.queries) {

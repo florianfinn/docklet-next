@@ -8,9 +8,12 @@ package database
 
 import (
 	"github.com/florianfinn/docklet-next/backend/pkg/utils/sqlitestore"
+	"github.com/florianfinn/docklet-next/backend/resources"
+	"github.com/pressly/goose/v3"
 	"github.com/stretchr/testify/require"
 	"path/filepath"
 	"testing"
+	"testing/fstest"
 )
 
 func TestDatabaseIdentityAndReopen(t *testing.T) {
@@ -71,4 +74,27 @@ func TestRejectsForeignAndInconsistentSQLite(t *testing.T) {
 			require.NoError(t, lock.Stop())
 		})
 	}
+}
+
+func TestGooseAppliesForwardUpgradeWithoutRewritingBaseline(t *testing.T) {
+	url := sqlitestore.URL(filepath.Join(t.TempDir(), "hub.db"))
+	db, err := Initialize(t.Context(), url, MigrationOptions{})
+	require.NoError(t, err)
+	require.NoError(t, db.Exec("INSERT INTO kv(key,value) VALUES('retained','value')").Error)
+	baseline, err := resources.FS.ReadFile("migrations/sqlite/001_baseline.sql")
+	require.NoError(t, err)
+	migrations := fstest.MapFS{"001_baseline.sql": &fstest.MapFile{Data: baseline}, "002_fixture.sql": &fstest.MapFile{Data: []byte("-- +goose Up\nALTER TABLE kv ADD COLUMN forward_value TEXT;\n")}}
+	pool, err := db.SQLDB()
+	require.NoError(t, err)
+	provider, err := goose.NewProvider(goose.DialectSQLite3, pool, migrations)
+	require.NoError(t, err)
+	_, err = provider.Up(t.Context())
+	require.NoError(t, err)
+	var value string
+	require.NoError(t, db.Raw("SELECT value FROM kv WHERE key='retained'").Scan(&value).Error)
+	require.Equal(t, "value", value)
+	require.NoError(t, db.Exec("UPDATE kv SET forward_value='new' WHERE key='retained'").Error)
+	require.NoError(t, db.Close())
+	_, err = Initialize(t.Context(), url, MigrationOptions{})
+	require.ErrorContains(t, err, "newer")
 }

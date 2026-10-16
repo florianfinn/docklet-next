@@ -8,6 +8,7 @@ package schema
 
 import (
 	"bytes"
+	"cmp"
 	"context"
 	"encoding/csv"
 	"fmt"
@@ -17,6 +18,9 @@ import (
 	activitytypes "github.com/florianfinn/docklet-next/types/activity"
 	"github.com/stretchr/testify/require"
 	"gorm.io/gorm"
+	"sort"
+	"strconv"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -45,19 +49,48 @@ func TestBlockedCSVLeavesPoolAvailableForCompletion(t *testing.T) {
 		return nil
 	}))
 	svc := query.NewService(db, nil, nil, nil, nil, nil, nil, nil)
-	for _, sort := range []string{"severity", "pkgName", "vulnerabilityId", "installedVersion", "fixedVersion", "imageName", ""} {
+	for _, sorting := range []string{"severity", "pkgName", "vulnerabilityId", "installedVersion", "fixedVersion", "imageName", ""} {
 		for _, order := range []pagination.SortOrder{"asc", "desc"} {
-			seq, err := svc.ExportVulnerabilities(t.Context(), "0", pagination.QueryParams{Sort: sort, Order: order, Filters: map[string]string{}})
+			seq, err := svc.ExportVulnerabilities(t.Context(), "0", pagination.QueryParams{Sort: sorting, Order: order, Filters: map[string]string{}})
 			require.NoError(t, err)
+			var ordered []int
 			ids := map[string]bool{}
 			count := 0
 			for row, err := range seq {
 				require.NoError(t, err)
-				require.False(t, ids[row.VulnerabilityID], "sort=%s order=%s duplicate=%s", sort, order, row.VulnerabilityID)
+				require.False(t, ids[row.VulnerabilityID], "sort=%s order=%s duplicate=%s", sorting, order, row.VulnerabilityID)
 				ids[row.VulnerabilityID] = true
+				index, err := strconv.Atoi(strings.TrimPrefix(row.VulnerabilityID, "CVE-2026-"))
+				require.NoError(t, err)
+				ordered = append(ordered, index)
 				count++
 			}
-			require.Equal(t, 300, count, sort)
+			require.Equal(t, 300, count, sorting)
+			expected := make([]int, 300)
+			for i := range expected {
+				expected[i] = i
+			}
+			sort.Slice(expected, func(a, b int) bool {
+				i, j := expected[a], expected[b]
+				comparison := 0
+				switch sorting {
+				case "severity":
+					comparison = cmp.Compare(i%5, j%5)
+				case "pkgName":
+					comparison = cmp.Compare(i%10, j%10)
+				case "vulnerabilityId":
+					comparison = cmp.Compare(i, j)
+				}
+				if comparison == 0 {
+					comparison = cmp.Compare(i, j)
+				}
+				if order == pagination.SortDesc {
+					return comparison > 0
+				}
+				return comparison < 0
+			})
+			require.Equal(t, expected, ordered, "sort=%s order=%s", sorting, order)
+
 		}
 	}
 	runSvc := activity.NewActivityService(db, nil)

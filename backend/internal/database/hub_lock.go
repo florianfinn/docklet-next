@@ -9,8 +9,8 @@ package database
 import (
 	"context"
 	"errors"
-	"github.com/gofrs/flock"
 	"github.com/florianfinn/docklet-next/backend/pkg/utils/sqlitestore"
+	"github.com/gofrs/flock"
 )
 
 var ErrHubAlreadyRunning = errors.New("hub.already_running")
@@ -22,7 +22,9 @@ func acquireHubLock(ctx context.Context, path string) (*HubLock, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
- if err:=sqlitestore.ValidateFile(path+".lock");err!=nil{return nil,err}
+	if err := sqlitestore.ValidateFile(path + ".lock"); err != nil {
+		return nil, err
+	}
 	lock := flock.New(path+".lock", flock.SetPermissions(0600))
 	ok, err := lock.TryLock()
 	if err != nil {

@@ -221,3 +221,19 @@ func TestSQLiteConstraintBoundaries(t *testing.T) {
 	require.NoError(t, db.Exec("UPDATE users SET preferences='{}' WHERE id=?", actor.ID).Error)
 	require.Error(t, db.Exec("UPDATE users SET preferences='invalid' WHERE id=?", actor.ID).Error)
 }
+
+func TestSQLiteNumericAllocationAndTimeDefaults(t *testing.T) {
+	db := cascadeDatabase(t)
+	require.NoError(t, db.Exec("INSERT INTO notification_settings(provider,config) VALUES('example','{}')").Error)
+	var first int64
+	require.NoError(t, db.Raw("SELECT id FROM notification_settings").Scan(&first).Error)
+	require.Positive(t, first)
+	var kind string
+	require.NoError(t, db.Raw("SELECT typeof(created_at) FROM notification_settings").Scan(&kind).Error)
+	require.Equal(t, "integer", kind)
+	require.NoError(t, db.Exec("DELETE FROM notification_settings").Error)
+	require.NoError(t, db.Exec("INSERT INTO notification_settings(provider,config) VALUES('example','{}')").Error)
+	var next int64
+	require.NoError(t, db.Raw("SELECT id FROM notification_settings").Scan(&next).Error)
+	require.Greater(t, next, first)
+}

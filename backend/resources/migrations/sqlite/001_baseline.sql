@@ -1,4 +1,4 @@
--- Source: docklet-next/backend/internal/schema/models.go and retained_integrity.json
+-- Source: docklet-next/docs/design/sqlite-database.md
 -- Revision: b3607be5144101152c8eb7738d389e8c73986fba
 -- Retrieved: 2026-10-16
 -- License: Apache-2.0 AND BSD-3-Clause

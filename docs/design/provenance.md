@@ -33,11 +33,11 @@ intact.
 
 Database migrations require a sidecar entry matching all five SQL header
 fields, plus a content SHA-256. New migrations cannot use header overrides.
-The current PostgreSQL set has seven protected pre-release files with explicit
-`migrationHeaderOverrides`; those override values and file bytes stay guarded
-until the reviewed one-time [SQLite baseline transition](sqlite-database.md#fresh-migration-baseline-and-schema-proof).
-That transition removes obsolete entries and updates path coverage and guard
-tests together. Shipped SQLite migrations cannot be rewritten or deleted.
+SQLite migration paths are relative to `backend/resources/migrations/`, beginning
+with `sqlite/001_baseline.sql`. No header overrides are permitted. The exact
+seven-hash pre-release PostgreSQL manifest is accepted only for the one-time
+baseline transition defined by the SQLite contract. Shipped SQLite hashes cannot
+be changed or removed.
 
 scripts/size-baseline.json maps adopted oversized files to reviewed line
 ceilings. Own files have a hard 1,000-line limit without exemptions. A first

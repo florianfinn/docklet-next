@@ -10,15 +10,15 @@ No endorsement or partnership is implied.
 Governance tooling adapted from florianfinn/docklet-hub under Apache-2.0.
 Source revision: a4484c910bb5d6a8f8df97b4f23f4ee5e6359081.
 
-Third-party Go notices — functional-cut source graph, 2026-10-13
+Third-party Go notices — SQLite source graph, 2026-10-16
 
 The source import derives from Arcane v2.15.1 at
 095cb778daba1034e2a39961199e712a75d4ba29. The backend, CLI, wire types
 and eleven helper modules carry local module wiring and per-file provenance.
-The PostgreSQL-only Francis subset is adopted locally from revision
-23cd46831a543a73eec05ad034afd46245225876. No binary is distributed.
-The current linux/amd64 hub and agent command source graphs each contain 272
-modules and 1,491 non-standard-library packages. The current module inventory,
+The SQLite and memory-provider Francis subset is adopted locally from revision
+23cd46831a543a73eec05ad034afd46245225876. Candidate packages retain these notices; no product release is published.
+The current linux/amd64 hub and agent command source graphs each contain 273
+modules and 1,489 non-standard-library packages. The current module inventory,
 local lockfile hashes and licence mapping are in docs/provenance/core-import.json.
 The archived pre-cut evidence remains in docs/provenance/arcane-binary.json,
 arcane-license-packages.json and arcane-modules.json.
@@ -76,7 +76,7 @@ Retain their original notices, including:
 Sibling backend, CLI and types use the Arcane root BSD notice above.
 
 Francis actor-runtime notices
-The locally adopted PostgreSQL-only Francis subset retains its MIT licence in
+The locally adopted SQLite and memory-provider Francis subset retains its MIT licence in
 third_party/francis/LICENSE.md: Copyright (c) 2025-2026, Alessandro Segala &
 contributors. Its host, actor core and time helpers preserve embedded Apache-2.0
 notices from The Dapr Authors, dated 2023 or 2024 in their source headers.
@@ -91,14 +91,25 @@ excerpts are not a substitute for original legal notices in a release bundle.
 
 docs/provenance/core-import.json records the current hub/agent source graphs and
 all local Go manifest/checksum hashes. Root checks reject lockfile inventory
-drift. The source graphs exclude modernc.org/sqlite, modernc.org/libc,
-github.com/libtnb/sqlite and github.com/mattn/go-sqlite3. Indirect module
-requirements retained for upstream dependency tests are not part of either
-command graph.
+drift. The source graphs include libtnb/sqlite v1.2.2 (MIT), modernc.org/sqlite v1.60.1
+(BSD-3-Clause, SQLite public domain and retained third-party grants) and
+modernc.org/libc v1.77.1 (BSD-3-Clause and MIT). They exclude PostgreSQL drivers
+and providers. docs/provenance/core-compiled-notices.json records the exact two
+compiled glibc/GCC header files and their narrowly assessed declarations. Preserve
+their LGPL-2.1-or-later and GCC Runtime Library Exception notices verbatim in the
+bundle; this is not approval of arbitrary copyleft implementations.
 
-Product packaging must include verbatim licence texts, corresponding-source
-references and tested extracted-artefact copies before any release. Web
-dependencies and container contents require their own inventories. No release
-licence bundle is claimed by this source assessment. Unknown/incompatible
+The package contains Go and web dependency licence texts and source references
+under /usr/share/licenses/docklet-next. The web dependency bundle conservatively
+includes all declared runtime dependencies and their transitive dependencies.
+Three npm tarballs omit root licence texts: @schummar/icu-type-parser,
+victory-vendor and react-remove-scroll-bar. Hash-bound upstream project texts
+are retained in LICENSES and included with their source revisions. The last
+package's npm gitHead is unavailable publicly; its MIT declaration is paired
+with the upstream project's pinned licence text. Vendor D3 notices remain intact.
+
+Candidate packaging includes verbatim licence texts, corresponding-source
+references and hash-checked extracted copies. Container base-image packages and
+platforms beyond Linux/amd64 still require their release assessments. Unknown/incompatible
 shipped licences block release. All identified legal evidence has a
 classification or an explicit hash-bound review.

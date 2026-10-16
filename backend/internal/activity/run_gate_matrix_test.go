@@ -2,7 +2,7 @@
 // Revision: ab701984e86075694baabdc5efe14bed287768fc
 // Retrieved: 2026-10-14
 // License: Apache-2.0
-// Deviations: PostgreSQL cases for the run-gate transition matrix.
+// Deviations: SQLite cases for the run-gate transition matrix.
 
 package activity
 

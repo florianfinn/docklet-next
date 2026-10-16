@@ -2,7 +2,7 @@
 // Revision: 23cd46831a543a73eec05ad034afd46245225876
 // Retrieved: 2026-10-16
 // License: MIT
-// Deviations: Pinned provider restored; whitespace normalized and reserved example host addresses.
+// Deviations: Pinned provider restored; whitespace normalized, reserved example hosts and injected production connection policy.
 
 package sqlite
 
@@ -105,7 +105,7 @@ func initTestProviderWithPrefix(t *testing.T, connString string, tablePrefix str
 	}), clock)
 	log := slog.New(h)
 
-	pool, err := sql.Open("sqlite", strings.Split(connString, "?")[0]+"?_pragma=foreign_keys(1)&_pragma=busy_timeout(2500)&_pragma=journal_mode(WAL)&_pragma=synchronous(FULL)&_pragma=wal_autocheckpoint(1000)&_txlock=immediate")
+	pool, err := sql.Open("sqlite", strings.Split(connString, "?")[0]+"?_pragma=temp_store(MEMORY)&_pragma=foreign_keys(1)&_pragma=busy_timeout(2500)&_pragma=journal_mode(WAL)&_pragma=synchronous(FULL)&_pragma=wal_autocheckpoint(1000)&_txlock=immediate")
 	require.NoError(t, err)
 	pool.SetMaxOpenConns(1)
 	pool.SetMaxIdleConns(1)
@@ -435,7 +435,7 @@ func (s *SQLiteProvider) GetAllHosts(ctx context.Context) (comptesting.Spec, err
 
 func TestHostGarbageCollection(t *testing.T) {
 	// Use the production one-connection writer policy., but note it has a different name form the previous
-	s := initTestProvider(t, "file:gctest?mode=memory")
+	s := initTestProvider(t, testutil.SQLiteConnString(t))
 
 	t.Run("garbage collector removes expired hosts", func(t *testing.T) {
 		// Register multiple hosts at different times

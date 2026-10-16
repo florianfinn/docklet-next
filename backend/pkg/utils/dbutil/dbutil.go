@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: functional cut: removed SQLite runtime and migrations.
+// Deviations: SQLite busy classification for the existing bounded owner-write retries.
 
 // Package dbutil provides small generic helpers around GORM that consolidate
 // repetitive single-row lookup and transaction boilerplate found across services.

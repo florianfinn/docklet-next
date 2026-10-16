@@ -40,13 +40,13 @@ func TestRunGate_ProcessFixture(t *testing.T) {
 		run := scheduler.Run{ID: "job-" + id, ActivityID: "activity-" + id, JobID: "example-job", EnvironmentID: "0", Status: scheduler.Succeeded, CreatedAt: stamp.Add(-time.Minute), UpdatedAt: stamp}
 		require.NoError(t, svc.SyncJobRun(t.Context(), run, "Example job"))
 		fmt.Printf("RUN_ID:%s\n", run.ActivityID)
- os.Exit(0)
+		os.Exit(0)
 	}
 	if mode == "ungated_queued" {
 		run, err := svc.StartActivity(t.Context(), StartActivityRequest{Type: activity.TypeProjectDeploy, Queue: true, DeferSlot: true})
 		require.NoError(t, err)
 		fmt.Printf("RUN_ID:%s\n", run.ID)
- os.Exit(0)
+		os.Exit(0)
 	}
 	started, err := svc.StartGatedActivity(t.Context(), matrixGateRequest())
 	require.NoError(t, err)
@@ -75,7 +75,7 @@ func TestRunGate_ProcessFixture(t *testing.T) {
 		require.NoError(t, err)
 	}
 	fmt.Printf("RUN_ID:%s\n", started.Run.ID)
- os.Exit(0)
+	os.Exit(0)
 }
 
 func matrixPreviousHub(t *testing.T, db *database.DB, mode string) string {

@@ -1,0 +1,12 @@
+.git
+.scratch
+**/node_modules
+**/dist
+**/.env
+**/.env.*
+!**/.env.example
+**/*.db
+**/*.db-*
+**/*.db.lock
+**/*.francis.db*
+.publication-denylist.local.json

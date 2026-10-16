@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; removed SQLite; coded run projection, guarded updates and bounded output persistence.
+// Deviations: Local module namespace; SQLite persistence; coded run projection, guarded updates and bounded output persistence.
 
 package activity
 

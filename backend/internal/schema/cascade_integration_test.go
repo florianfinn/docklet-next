@@ -2,7 +2,7 @@
 // Revision: be847e36ab81fdf0cd6a7dad333046ddea990e71
 // Retrieved: 2026-10-13
 // License: Apache-2.0
-// Deviations: Verifies service deletes against the retained PostgreSQL baseline.
+// Deviations: Verifies service deletes against the retained SQLite baseline.
 
 package schema
 

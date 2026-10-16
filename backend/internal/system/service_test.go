@@ -196,7 +196,7 @@ func (s *systemBackupPolicySchedulerInternal) Submit(_ context.Context, request 
 	return scheduler.Run{ID: request.RunID, JobID: request.JobID, EnvironmentID: request.EnvironmentID, Status: scheduler.Queued}, nil
 }
 
-func TestSystemBackupPoliciesRejectEnableUntilPostgresRecoveryExists(t *testing.T) {
+func TestSystemBackupPoliciesRejectEnableUntilDatabaseRecoveryExists(t *testing.T) {
 	gormDB, err := gorm.Open(testsqlite.Dialector(t, "file:system-backup-schedules?mode=memory&cache=shared"), &gorm.Config{})
 	require.NoError(t, err)
 	require.NoError(t, gormDB.AutoMigrate(&SystemBackupPolicy{}, &backup.SystemBackupRecoveryConfig{}))
@@ -205,7 +205,7 @@ func TestSystemBackupPoliciesRejectEnableUntilPostgresRecoveryExists(t *testing.
 	service := &SystemService{db: db}
 	service.backup = systembackup.NewService(systembackup.Dependencies{
 		Store: service.backupStoreInternal(), DB: db,
-		Config:       &config.Config{DatabaseURL: "postgres://test.invalid/docklet"},
+		Config:       &config.Config{DatabaseURL: "file:data/docklet.db"},
 		RecoveryKeys: backup.NewRecoveryKeyStore(db),
 	})
 	_, err = service.backup.SetRecoveryKey(t.Context(), "QWERTY-ABCDEF-234567-GHIJKL-MNOPQR-STUVWX-YZ2345-ZXCVBN")

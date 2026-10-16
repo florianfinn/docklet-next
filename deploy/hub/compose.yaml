@@ -1,0 +1,37 @@
+# Source: docklet-next/docs/design/sqlite-database.md
+# Revision: b3607be5144101152c8eb7738d389e8c73986fba
+# Retrieved: 2026-10-16
+# License: Apache-2.0
+# Deviations: Original single-hub template with local persistent SQLite storage.
+name: docklet-next
+services:
+  hub:
+    image: ${HUB_IMAGE:-docklet-next-hub:0.0.0}
+    build:
+      context: ../..
+      dockerfile: deploy/hub/Dockerfile
+    labels:
+      t3.project: docklet-next
+    restart: unless-stopped
+    stop_grace_period: 30s
+    ports:
+      - "127.0.0.1:${HUB_PORT:-3552}:3552"
+    environment:
+      APP_URL: ${APP_URL:-http://localhost:3552}
+      DATABASE_URL: file:/app/data/docklet.db
+      ENCRYPTION_KEY: ${ENCRYPTION_KEY:?Set ENCRYPTION_KEY in your private environment file}
+      PUID: ${PUID:-65532}
+      PGID: ${PGID:-65532}
+      PROJECTS_DIRECTORY: /app/data/projects
+      DOCKER_CONFIG: /app/data/.docker
+    volumes:
+      - hub-data:/app/data
+      - /var/run/docker.sock:/var/run/docker.sock
+volumes:
+  hub-data:
+    labels:
+      t3.project: docklet-next
+networks:
+  default:
+    labels:
+      t3.project: docklet-next

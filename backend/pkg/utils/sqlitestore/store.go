@@ -142,6 +142,9 @@ func Open(ctx context.Context, path string, hub, readOnly bool) (*sql.DB, error)
 	if !readOnly {
 		q.Add("_pragma", "journal_mode(WAL)")
 		q.Set("_txlock", "immediate")
+		if !hub {
+			q.Add("_pragma", "temp_store(MEMORY)")
+		}
 	}
 	if hub {
 		q.Set("_time_integer_format", "unix_micro")

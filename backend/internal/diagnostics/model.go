@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; functional cut: removed SQLite runtime and migrations.
+// Deviations: Local module namespace; SQLite-only local persistence.
 
 package diagnostics
 
@@ -59,7 +59,7 @@ type terminalJobModel struct {
 
 func (terminalJobModel) TableName() string { return francis.TablePrefix + "_terminal_jobs" }
 
-// actorTimeInternal scans PostgreSQL timestamps stored by Francis.
+// actorTimeInternal scans Francis integer Unix-millisecond timestamps.
 type actorTimeInternal time.Time
 
 func (t *actorTimeInternal) Scan(value any) error {

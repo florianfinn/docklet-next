@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; functional cut: removed SQLite runtime and migrations.
+// Deviations: Local module namespace; Temporary SQLite files for durable tests; optional memory provider for pure tests.
 
 // Package testing starts isolated Francis hosts for owning-logic tests.
 package testing

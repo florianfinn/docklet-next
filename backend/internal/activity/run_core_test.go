@@ -2,7 +2,7 @@
 // Revision: 65c9e0dceb6f994ac884904e2a6b7348f75580fa
 // Retrieved: 2026-10-14
 // License: Apache-2.0
-// Deviations: New PostgreSQL run-core regression matrix.
+// Deviations: SQLite run-core regression matrix.
 
 package activity
 
