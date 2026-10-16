@@ -396,21 +396,19 @@ func (s *UserService) CreateDefaultAdmin(ctx context.Context) error {
 		}
 	}
 
-	// Step 1: ensure the default admin user row exists. If the users table is
-	// empty we create it; otherwise (zero global admins — a broken/ancient
-	// upgrade) we find the existing `arcane` user to recover, if any.
+	hashedPassword, err := s.HashPassword("arcane-admin")
+	if err != nil {
+		return fmt.Errorf("failed to hash default admin password: %w", err)
+	}
+
 	var adminUserID string
-	err := dbutil.WithTx(ctx, s.db.DB, func(tx *gorm.DB) error {
+	err = dbutil.WithTx(ctx, s.db.DB, func(tx *gorm.DB) error {
 		var count int64
 		if err := tx.Model(&User{}).Count(&count).Error; err != nil {
 			return fmt.Errorf("failed to count users: %w", err)
 		}
 
 		if count == 0 {
-			hashedPassword, err := s.HashPassword("arcane-admin")
-			if err != nil {
-				return fmt.Errorf("failed to hash default admin password: %w", err)
-			}
 			email := "admin@localhost"
 			displayName := "Arcane Admin"
 			userModel := &User{
@@ -456,9 +454,8 @@ func (s *UserService) CreateDefaultAdmin(ctx context.Context) error {
 }
 
 // grantDefaultAdminRoleInternal grants the global Admin role to the bootstrap
-// user. Reached only on fresh bootstrap or zero-admin recovery.
-// SetUserAssignments replaces manual-source rows, so carry forward only the
-// them as manual and pin them forever.
+// user on fresh bootstrap or zero-admin recovery. Preserve manual assignments;
+// other sources remain managed by their own assignment writers.
 func (s *UserService) grantDefaultAdminRoleInternal(ctx context.Context, adminUserID string) error {
 	assignments, err := s.roleService.ListUserAssignments(ctx, adminUserID)
 	if err != nil {
@@ -491,25 +488,22 @@ func (s *UserService) grantDefaultAdminRoleInternal(ctx context.Context, adminUs
 // be present in ctx. Pass nil for internal service-to-service calls. A
 // non-admin caller may not delete a global admin target.
 func (s *UserService) DeleteUser(ctx context.Context, id string, actorPerms *authz.PermissionSet) error {
-	// Last-admin guard: if this user's effective permissions make them the only
-	// global admin, refuse the delete. Checked outside the transaction because
-	// role.RoleService uses its own session and the guard spans rows.
-	if s.roleService != nil {
-		ps, err := s.roleService.ResolvePermissions(ctx, id)
-		if err != nil {
-			return err
-		}
-		if ps != nil && ps.IsGlobalAdmin() {
-			remaining, countGlobalAdminsExcludingUserErr := s.roleService.CountGlobalAdminsExcludingUser(ctx, id)
-			if countGlobalAdminsExcludingUserErr != nil {
-				return countGlobalAdminsExcludingUserErr
-			}
-			if remaining == 0 {
-				return ErrCannotRemoveLastAdmin
-			}
-		}
-	}
 	return dbutil.WithTx(ctx, s.db.DB, func(tx *gorm.DB) error {
+		if s.roleService != nil {
+			ps, err := s.roleService.ResolveUserPermissionsInDB(ctx, tx, id)
+			if err != nil {
+				return err
+			}
+			if ps != nil && ps.IsGlobalAdmin() {
+				remaining, err := s.roleService.CountGlobalAdminsExcludingUserInDB(ctx, tx, id)
+				if err != nil {
+					return err
+				}
+				if remaining == 0 {
+					return ErrCannotRemoveLastAdmin
+				}
+			}
+		}
 		if err := s.checkTargetPrivilegeInternal(ctx, tx, actorPerms, id); err != nil {
 			return err
 		}

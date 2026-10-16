@@ -9,7 +9,8 @@ if(!Number.isInteger(hostPort)||hostPort<0||hostPort>65535)throw new Error("inva
 if (!image) throw new Error("expected candidate image");
 const suffix = randomBytes(6).toString("hex"), volume = `docklet-sqlite-smoke-${suffix}`;
 const encryption = randomBytes(32).toString("hex");
-const common = ["--label", "t3.project=docklet-next", "-v", `${volume}:/app/data`, "-e", `ENCRYPTION_KEY=${encryption}`, "-e", "APP_URL=http://localhost:3552"];
+const labels = process.env.SMOKE_DOCKER_LABEL ? ["--label", process.env.SMOKE_DOCKER_LABEL] : [];
+const common = [...labels, "-v", `${volume}:/app/data`, "-e", `ENCRYPTION_KEY=${encryption}`, "-e", "APP_URL=http://localhost:3552"];
 function docker(args, required = true) {
   const result = spawnSync("docker", args, { encoding: "utf8", maxBuffer: 4 * 1024 * 1024 });
   if (required && result.status !== 0) throw new Error("candidate image operation failed");
@@ -18,7 +19,7 @@ function docker(args, required = true) {
 const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
 let id;
 try {
-  docker(["volume", "create", "--label", "t3.project=docklet-next", volume]);
+  docker(["volume", "create", ...labels, volume]);
   id = docker(["run", "-d", ...common, "-p", `127.0.0.1:${hostPort||""}:3552`, image]).stdout.trim();
   const port = docker(["port", id, "3552/tcp"]).stdout.trim();
   if (!/^127\.0\.0\.1:\d+$/.test(port)) throw new Error("candidate port must bind loopback");

@@ -11,6 +11,7 @@ import (
 	"errors"
 	"github.com/florianfinn/docklet-next/backend/pkg/utils/sqlitestore"
 	"github.com/gofrs/flock"
+	"sync"
 )
 
 var ErrHubAlreadyRunning = errors.New("hub.already_running")
@@ -61,4 +62,26 @@ func (db *DB) AcquireHubLock(ctx context.Context) error {
 	}
 	db.hubLock = lock
 	return nil
+}
+
+// Keep descriptors reachable so file finalizers cannot release a failed shutdown's lock.
+var retainedHubLocks struct {
+	sync.Mutex
+	locks []*HubLock
+}
+
+// CloseRetainingHubLock closes the main pool but keeps the lifetime lock until
+// process exit when other application database handles may still be open.
+func (db *DB) CloseRetainingHubLock() error {
+	if db.hubLock != nil {
+		retainedHubLocks.Lock()
+		retainedHubLocks.locks = append(retainedHubLocks.locks, db.hubLock)
+		retainedHubLocks.Unlock()
+		db.hubLock = nil
+	}
+	pool, err := db.SQLDB()
+	if err != nil {
+		return err
+	}
+	return pool.Close()
 }

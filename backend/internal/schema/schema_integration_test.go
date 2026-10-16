@@ -138,7 +138,7 @@ func TestFreshMigrationMatchesRetainedModels(t *testing.T) {
 		case "notnull":
 			c := columns[row[1]+"."+row[2]]
 			require.NotEmpty(t, c, row)
-			require.True(t, c[3] == "1" || c[5] != "0", fmt.Sprint(row))
+			require.True(t, c[3] == "1" || (c[5] != "0" && strings.EqualFold(c[2], "integer")), fmt.Sprint(row))
 		case "default":
 			if row[3] == "INTEGER PRIMARY KEY AUTOINCREMENT" {
 				require.Contains(t, tableSQL[row[1]], canonical(row[3]))

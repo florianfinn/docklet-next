@@ -16,6 +16,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -24,6 +25,18 @@ import (
 func TestRunGate_HubLockProcessFixture(t *testing.T) {
 	path := os.Getenv("RUN_GATE_LOCK_PATH")
 	if path == "" {
+		return
+	}
+	if os.Getenv("RUN_GATE_CLOSE_RETAIN_LOCK") == "1" {
+		db, err := InitializeHub(t.Context(), sqlitestore.URL(path), MigrationOptions{})
+		require.NoError(t, err)
+		pool, err := db.SQLDB()
+		require.NoError(t, err)
+		require.NoError(t, db.CloseRetainingHubLock())
+		require.Error(t, pool.Ping())
+		runtime.GC()
+		fmt.Println("READY")
+		_, _ = bufio.NewReader(os.Stdin).ReadString('\n')
 		return
 	}
 	lock, err := acquireHubLock(t.Context(), path)
@@ -47,14 +60,14 @@ type matrixLockProcess struct {
 	stderr bytes.Buffer
 }
 
-func matrixStartLockProcess(t *testing.T, path string) *matrixLockProcess {
+func matrixStartLockProcess(t *testing.T, path string, extraEnv ...string) *matrixLockProcess {
 	t.Helper()
 	exe, err := os.Executable()
 	require.NoError(t, err)
 	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
 	p := &matrixLockProcess{cancel: cancel}
 	p.cmd = exec.CommandContext(ctx, exe, "-test.run=^TestRunGate_HubLockProcessFixture$")
-	p.cmd.Env = append(os.Environ(), "RUN_GATE_LOCK_PATH="+path)
+	p.cmd.Env = append(append(os.Environ(), "RUN_GATE_LOCK_PATH="+path), extraEnv...)
 	stdout, err := p.cmd.StdoutPipe()
 	require.NoError(t, err)
 	stdin, err := p.cmd.StdinPipe()
@@ -116,4 +129,17 @@ func TestHubLockDescriptorClosePreservesChildRefusal(t *testing.T) {
 	output, err := cmd.CombinedOutput()
 	require.Error(t, err)
 	require.Contains(t, string(output), "hub.already_running")
+}
+
+func TestFailedShutdownRetainsLockUntilProcessExit(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "hub.db")
+	p := matrixStartLockProcess(t, path, "RUN_GATE_CLOSE_RETAIN_LOCK=1")
+	_, err := InitializeHub(t.Context(), sqlitestore.URL(path), MigrationOptions{})
+	require.ErrorIs(t, err, ErrHubAlreadyRunning)
+	_, err = p.stdin.Write([]byte("stop\n"))
+	require.NoError(t, err)
+	require.NoError(t, p.cmd.Wait(), p.stderr.String())
+	db, err := InitializeHub(t.Context(), sqlitestore.URL(path), MigrationOptions{})
+	require.NoError(t, err)
+	require.NoError(t, db.Close())
 }

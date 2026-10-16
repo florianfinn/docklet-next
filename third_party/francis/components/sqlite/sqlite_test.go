@@ -434,7 +434,7 @@ func (s *SQLiteProvider) GetAllHosts(ctx context.Context) (comptesting.Spec, err
 }
 
 func TestHostGarbageCollection(t *testing.T) {
-	// Use the production one-connection writer policy., but note it has a different name form the previous
+	// Use the production one-connection writer policy.
 	s := initTestProvider(t, testutil.SQLiteConnString(t))
 
 	t.Run("garbage collector removes expired hosts", func(t *testing.T) {

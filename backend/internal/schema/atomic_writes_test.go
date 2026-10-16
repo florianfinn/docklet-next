@@ -197,6 +197,7 @@ func TestConcurrentPasswordChangesRevokeSessionsAtomically(t *testing.T) {
 
 func TestSQLiteConstraintBoundaries(t *testing.T) {
 	db := cascadeDatabase(t)
+	require.ErrorContains(t, db.Exec("INSERT INTO activity_sync_receipts(run_id,updated_at) VALUES(NULL,1)").Error, "NOT NULL constraint failed: activity_sync_receipts.run_id")
 	require.NoError(t, db.Exec("INSERT INTO activities(id,created_at,environment_id,type,status,started_at,gate_scope,gate_key) VALUES('queued',1,'0','project_deploy','queued',1,'scope','op')").Error)
 	require.Error(t, db.Exec("INSERT INTO activities(id,created_at,environment_id,type,status,started_at,gate_scope,gate_key) VALUES('contender',1,'0','project_deploy','running',1,'scope','op')").Error)
 	require.Error(t, db.Exec("UPDATE activities SET metadata='invalid' WHERE id='queued'").Error)

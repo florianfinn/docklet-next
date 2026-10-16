@@ -84,9 +84,14 @@ func Bootstrap(ctx context.Context) error {
 		cancelApp()
 		return fmt.Errorf("failed to initialize database: %w", err)
 	}
+	releaseHubLock := true
 	defer func() {
 		cancelApp()
-		if closeErr := db.Close(); closeErr != nil {
+		closeDatabase := db.CloseRetainingHubLock
+		if releaseHubLock {
+			closeDatabase = db.Close
+		}
+		if closeErr := closeDatabase(); closeErr != nil {
 			slog.ErrorContext(ctx, "Error closing database", "error", closeErr)
 		}
 	}()
@@ -109,6 +114,7 @@ func Bootstrap(ctx context.Context) error {
 	stopCtx, cancelStop := context.WithTimeout(context.WithoutCancel(ctx), 30*time.Second)
 	defer cancelStop()
 	if stopErr := app.Stop(stopCtx); stopErr != nil {
+		releaseHubLock = false
 		return fmt.Errorf("stop application: %w", stopErr)
 	}
 

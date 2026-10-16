@@ -79,7 +79,7 @@ func (ActivityMessage) TableName() string {
 
 // ActivitySyncReceipt persists applied run versions independently of history pruning.
 type ActivitySyncReceipt struct {
-	RunID     string     `gorm:"column:run_id;primaryKey"`
+	RunID     string     `gorm:"column:run_id;primaryKey;not null"`
 	UpdatedAt time.Time  `gorm:"column:updated_at;not null"`
 	SyncedAt  *time.Time `gorm:"column:synced_at"`
 }

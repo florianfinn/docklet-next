@@ -2,7 +2,7 @@
 -- Revision: 23cd46831a543a73eec05ad034afd46245225876
 -- Retrieved: 2026-10-16
 -- License: MIT
--- Deviations: None; pinned SQLite provider restored.
+-- Deviations: Pinned SQLite provider restored; trailing whitespace normalized.
 
 -- Fetches the upcoming alarms with constraints on capacity
 

@@ -141,7 +141,7 @@ func TestRunDetailBoundsDistinctStepTransitions(t *testing.T) {
 	require.Equal(t, "step-299", detail.StepTrace[len(detail.StepTrace)-1].Name)
 }
 
-func TestRunGateImmediateTransactionBlocksAnotherService(t *testing.T) {
+func TestRunGateSingleConnectionPoolBlocksAnotherService(t *testing.T) {
 	db := setupActivityServiceTestDBInternal(t)
 	tx := db.Begin()
 	require.NoError(t, tx.Error)
@@ -160,7 +160,7 @@ func TestRunGateImmediateTransactionBlocksAnotherService(t *testing.T) {
 	}()
 	select {
 	case got := <-result:
-		require.Failf(t, "immediate transaction did not block", "start returned: %v", got.err)
+		require.Failf(t, "occupied connection pool did not block", "start returned: %v", got.err)
 	case <-time.After(100 * time.Millisecond):
 	}
 	require.NoError(t, tx.Commit().Error)
@@ -170,7 +170,7 @@ func TestRunGateImmediateTransactionBlocksAnotherService(t *testing.T) {
 		_, err := svc.CompleteActivity(got.answer.WorkContext, got.answer.Run.ID, activity.StatusSuccess, "done", nil)
 		require.NoError(t, err)
 	case <-time.After(5 * time.Second):
-		t.Fatal("start remained blocked after immediate transaction released")
+		t.Fatal("start remained blocked after pool connection released")
 	}
 }
 

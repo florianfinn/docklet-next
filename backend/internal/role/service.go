@@ -92,7 +92,7 @@ func (s *RoleService) EnsureBuiltInRoles(ctx context.Context) error {
 // non-service users resolve to global administrator permissions. Called at boot
 // after role reconciliation; also called from inside mutation paths.
 func (s *RoleService) AssertGlobalAdminExists(ctx context.Context) error {
-	count, err := s.countEffectiveGlobalAdminsInternal(ctx, s.db.WithContext(ctx), "")
+	count, err := s.CountGlobalAdminsExcludingUserInDB(ctx, s.db.WithContext(ctx), "")
 	if err != nil {
 		return err
 	}
@@ -353,7 +353,7 @@ func (s *RoleService) replaceUserAssignmentsForSourceInternal(ctx context.Contex
 				return fmt.Errorf("failed to insert %s assignments: %w", source, err)
 			}
 		}
-		count, err := s.countEffectiveGlobalAdminsInternal(ctx, tx, "")
+		count, err := s.CountGlobalAdminsExcludingUserInDB(ctx, tx, "")
 		if err != nil {
 			return err
 		}
@@ -426,15 +426,15 @@ func validateAssignmentsExistInternal(tx *gorm.DB, desired []UserRoleAssignment)
 }
 
 func (s *RoleService) CountGlobalAdminsExcludingUser(ctx context.Context, excludedUserID string) (int, error) {
-	return s.countEffectiveGlobalAdminsInternal(ctx, s.db.WithContext(ctx), excludedUserID)
+	return s.CountGlobalAdminsExcludingUserInDB(ctx, s.db.WithContext(ctx), excludedUserID)
 }
 
-func (s *RoleService) countEffectiveGlobalAdminsInternal(ctx context.Context, tx *gorm.DB, excludedUserID string) (int, error) {
+// CountGlobalAdminsExcludingUserInDB counts effective admins on the supplied transaction.
+func (s *RoleService) CountGlobalAdminsExcludingUserInDB(ctx context.Context, tx *gorm.DB, excludedUserID string) (int, error) {
 	type globalPermissionRow struct {
 		UserID      string `gorm:"column:user_id"`
 		Permissions string `gorm:"column:permissions"`
 	}
-
 	var rows []globalPermissionRow
 	query := tx.WithContext(ctx).
 		Table("users AS u").

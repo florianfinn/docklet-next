@@ -18,7 +18,7 @@ and eleven helper modules carry local module wiring and per-file provenance.
 The SQLite and memory-provider Francis subset is adopted locally from revision
 23cd46831a543a73eec05ad034afd46245225876. Candidate packages retain these notices; no product release is published.
 The current linux/amd64 hub and agent command source graphs each contain 273
-modules and 1,489 non-standard-library packages. The current module inventory,
+modules and 1,487 non-standard-library packages. The current module inventory,
 local lockfile hashes and licence mapping are in docs/provenance/core-import.json.
 The archived pre-cut evidence remains in docs/provenance/arcane-binary.json,
 arcane-license-packages.json and arcane-modules.json.

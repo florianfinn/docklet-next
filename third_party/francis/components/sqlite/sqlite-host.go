@@ -2,7 +2,7 @@
 // Revision: 23cd46831a543a73eec05ad034afd46245225876
 // Retrieved: 2026-10-16
 // License: MIT
-// Deviations: Pinned provider restored; temporary storage is configured before transactions by the connection factory.
+// Deviations: Pinned provider restored; temporary storage is configured before transactions by the connection factory; trailing whitespace normalized.
 
 package sqlite
 

@@ -11,6 +11,8 @@ import (
 	"fmt"
 	"os"
 
+	"github.com/gofrs/flock"
+
 	"context"
 	"github.com/florianfinn/docklet-next/backend/internal/schema"
 	"github.com/florianfinn/docklet-next/backend/pkg/utils/sqlitestore"
@@ -31,6 +33,25 @@ func generate() error {
 	}
 	path, err := sqlitestore.Path(dsn)
 	if err != nil {
+		return err
+	}
+	if err := sqlitestore.ValidateFile(path + ".lock"); err != nil {
+		return err
+	}
+	lock := flock.New(path+".lock", flock.SetPermissions(0600))
+	defer lock.Close()
+	locked, err := lock.TryLock()
+	if err != nil {
+		return err
+	}
+	if !locked {
+		return errors.New("hub.already_running")
+	}
+	file, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0600)
+	if err != nil {
+		return fmt.Errorf("baseline generation requires a new database file: %w", err)
+	}
+	if err := file.Close(); err != nil {
 		return err
 	}
 	pool, err := sqlitestore.Open(context.Background(), path, true, false)
