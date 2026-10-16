@@ -162,8 +162,8 @@ func verifyRouterRequestUserInternal(ctx context.Context, authService *auth.Auth
 		requestUser, err := authService.ModeRequestUser(ctx, req)
 		return requestUser.Actor(), err == nil && requestUser != nil
 	}
-	if authHeader := req.Header.Get("Authorization"); strings.HasPrefix(authHeader, "Bearer ") {
-		user, _, err := authService.VerifyToken(ctx, strings.TrimPrefix(authHeader, "Bearer "))
+	if token, ok := auth.BearerToken(req.Header.Get("Authorization")); ok {
+		user, _, err := authService.VerifyToken(ctx, token)
 		return user.Actor(), err == nil && user != nil
 	}
 

@@ -77,9 +77,11 @@ Origin and a double-submit CSRF token. Allowed origins follow `APP_URL` and the
 existing development-origin policy. Header presence alone never bypasses either
 check; cookie-less proxy identity receives the same protection. In local mode,
 validated Bearer tokens and personal/scoped API keys authenticate explicit
-non-browser requests without Origin or CSRF tokens. Invalid or expired explicit
-credentials return 401, allowing the CLI to refresh and retry. Cookie-only
-authentication stays strict. Proxy and none modes never grant this local exception.
+cookie-less non-browser requests without Origin or CSRF tokens. Invalid or expired explicit
+credentials return 401, allowing the CLI to refresh and retry. Requests with
+cookies stay strict even when they carry header credentials. An operation can
+ignore a header and authenticate the cookie instead. Proxy and none modes never
+grant this local exception.
 Startup normalizes the APP_URL scheme and host to lowercase and removes default
 HTTP/HTTPS ports; nondefault ports remain part of the exact origin.
 
@@ -105,7 +107,8 @@ and webhook path-token routes. Unvalidated Bearer/API-key or proxy headers do
 not qualify. Local, direct environment and Edge-proxied WebSockets require the
 same exact allowed Origin, including terminal upgrades. Request Host and other
 localhost ports never expand that list. An absent Origin requires a validated
-non-cookie credential; none/proxy browser streams cannot use an absent Origin.
+explicit credential and no Cookie header; none/proxy browser streams cannot use
+an absent Origin.
 Environment forwarding checks original client authority before injecting agent
 tokens. This policy does not protect against same-origin script compromise or a
 compromised authenticated proxy. It does not add per-user isolation.

@@ -1,5 +1,5 @@
 // Source: api/openapi.json
-// Revision: def2a0b14715d0d06a6924fa1bfa35f255aa598b1f95655f10f0579ac5ace521
+// Revision: 9097252d8ec7a1500977f3146519c7c5a8c454963e5dc664b079c3dc0b7a97f0
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
 // Deviations: Generated TypeScript declarations from the local Huma export.
@@ -338,7 +338,7 @@ export interface paths {
         };
         /**
          * Get active sign-in mode
-         * @description Read the startup-selected mode. Browser writes in every mode require the X-CSRF-Token response header, cookie and hub Origin. In local mode validated Bearer/API-key requests, and cookie-less login/refresh POSTs without Origin, use explicit credentials instead. Proxy mode requires the configured identity header from a trusted direct peer.
+         * @description Read the startup-selected mode. Requests with cookies in every mode require the X-CSRF-Token response header and hub Origin for writes. In local mode cookie-less validated Bearer/API-key requests, and cookie-less login/refresh POSTs without Origin, use explicit credentials instead. Proxy mode requires the configured identity header from a trusted direct peer.
          */
         get: operations["get-sign-in-mode"];
         put?: never;

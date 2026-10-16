@@ -82,11 +82,13 @@ func (m *CSRFMiddleware) Add() echo.MiddlewareFunc {
 				return next(c)
 			}
 			// These routes authenticate only their own transport/path tokens downstream.
-			if strings.HasPrefix(req.URL.Path, "/api/webhooks/trigger/") || (m.transportAuthenticated != nil && m.transportAuthenticated(req)) {
+			cookieLess := len(req.Header.Values("Cookie")) == 0
+			if strings.HasPrefix(req.URL.Path, "/api/webhooks/trigger/") || (cookieLess && m.transportAuthenticated != nil && m.transportAuthenticated(req)) {
 				return next(c)
 			}
 			if m.cfg.SignInMode() == "local" {
-				if m.localCredential != nil {
+				// An operation may ignore a header credential and authenticate its cookie instead.
+				if cookieLess && m.localCredential != nil {
 					valid, err := m.localCredential(req)
 					if err != nil {
 						return c.JSON(http.StatusUnauthorized, common.APIError{Code: common.APIErrorCodeUnauthorized, Message: "Invalid or expired credential"})

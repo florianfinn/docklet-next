@@ -69,6 +69,10 @@ func TestValidateWebSocketOrigin(t *testing.T) {
 			req.Header.Set("Origin", tc.origin)
 			check := ValidateWebSocketOrigin([]string{"https://hub.example.com"}, func(*http.Request) bool { return tc.authenticated })
 			assert.Equal(t, tc.want, check(req))
+			if tc.origin == "" {
+				req.AddCookie(&http.Cookie{Name: "example", Value: "example"})
+				assert.False(t, check(req))
+			}
 			req.Header.Add("Origin", "https://hub.example.com")
 			assert.False(t, check(req))
 		})

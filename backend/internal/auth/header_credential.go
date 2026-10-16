@@ -29,7 +29,7 @@ func (m *AuthMiddleware) ValidateLocalHeaderCredential(req *http.Request) (bool,
 		}
 		return false, common.ErrInvalidToken
 	}
-	if scheme, token, ok := strings.Cut(req.Header.Get("Authorization"), " "); ok && strings.EqualFold(scheme, "Bearer") {
+	if token, ok := BearerToken(req.Header.Get("Authorization")); ok {
 		actor, _, err := m.authService.VerifyToken(req.Context(), token)
 		if err != nil || actor == nil {
 			return false, common.ErrInvalidToken
@@ -37,6 +37,12 @@ func (m *AuthMiddleware) ValidateLocalHeaderCredential(req *http.Request) (bool,
 		return true, nil
 	}
 	return false, nil
+}
+
+// BearerToken keeps credential selection identical before and after origin checks.
+func BearerToken(header string) (string, bool) {
+	scheme, token, ok := strings.Cut(header, " ")
+	return token, ok && strings.EqualFold(scheme, "Bearer")
 }
 
 // ValidateNonCookieCredential also preserves authenticated agent stream transports.

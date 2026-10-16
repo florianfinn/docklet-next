@@ -91,3 +91,18 @@ func TestCSRFTransportBoundary(t *testing.T) {
 		}
 	}
 }
+
+func TestCSRFCookieRequestsIgnoreCredentialExceptions(t *testing.T) {
+	for _, mode := range []string{"none", "local", "proxy"} {
+		router := echo.New()
+		router.Use(NewCSRFMiddleware(&config.Config{AuthMode: mode}).
+			WithTransportValidator(func(*http.Request) bool { return true }).
+			WithLocalCredentialValidator(func(*http.Request) (bool, error) { return true, nil }).Add())
+		router.POST("/api/test", func(c *echo.Context) error { return c.NoContent(200) })
+		req := httptest.NewRequest(http.MethodPost, "/api/test", http.NoBody)
+		req.AddCookie(&http.Cookie{Name: "example", Value: "example"})
+		rec := httptest.NewRecorder()
+		router.ServeHTTP(rec, req)
+		require.Equal(t, 403, rec.Code)
+	}
+}

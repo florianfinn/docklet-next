@@ -45,7 +45,7 @@ func ValidateWebSocketOrigin(allowedOrigins []string, credentialAuthenticated fu
 		}
 		origin := r.Header.Get("Origin")
 		if origin == "" {
-			return credentialAuthenticated != nil && credentialAuthenticated(r)
+			return len(r.Header.Values("Cookie")) == 0 && credentialAuthenticated != nil && credentialAuthenticated(r)
 		}
 		for _, allowed := range allowedOrigins {
 			if origin == allowed {

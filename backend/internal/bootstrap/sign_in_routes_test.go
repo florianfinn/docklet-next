@@ -43,6 +43,7 @@ type signInRoutingFixture struct {
 	tokens                    *auth.TokenPair
 	bootstrapKey, personalKey string
 	adminID                   string
+	users                     *user.UserService
 }
 
 func newSignInRoutingFixture(t *testing.T) signInRoutingFixture {
@@ -72,7 +73,7 @@ func newSignInRoutingFixture(t *testing.T) signInRoutingFixture {
 	require.NoError(t, err)
 	personalKey, err := keys.CreatePersonalApiKey(t.Context(), admin.ID, apikeytypes.CreateUserApiKey{Name: "example"})
 	require.NoError(t, err)
-	return signInRoutingFixture{cfg, svc, roles, keys, tokens, bootstrapKey.Key, personalKey.Key, admin.ID}
+	return signInRoutingFixture{cfg, svc, roles, keys, tokens, bootstrapKey.Key, personalKey.Key, admin.ID, users}
 }
 
 func TestSignInForwardingAndStreamMatrix(t *testing.T) {

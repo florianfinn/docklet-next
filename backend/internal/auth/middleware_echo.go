@@ -345,7 +345,7 @@ func environmentScopedInternal(c *echo.Context, env *environment.Environment) *a
 func extractBearerOrCookieTokenInternal(c *echo.Context) (string, bool) {
 	req := c.Request()
 	authHeader := req.Header.Get("Authorization")
-	if after, ok := strings.CutPrefix(authHeader, "Bearer "); ok {
+	if after, ok := BearerToken(authHeader); ok {
 		return after, false
 	}
 	if tok, err := cookie.GetTokenCookie(req); err == nil && tok != "" {

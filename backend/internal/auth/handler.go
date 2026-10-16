@@ -917,8 +917,8 @@ func resolveApiKeyPermissionsInternal(ctx context.Context, permResolver Permissi
 func extractBearerTokenInternal(ctx huma.Context) (string, bool) {
 	// Try Authorization header first
 	authHeader := ctx.Header("Authorization")
-	if len(authHeader) > 7 && strings.ToLower(authHeader[:7]) == "bearer " {
-		return authHeader[7:], false
+	if token, ok := BearerToken(authHeader); ok {
+		return token, false
 	}
 
 	// Try cookie as fallback

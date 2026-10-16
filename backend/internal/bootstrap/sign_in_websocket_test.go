@@ -19,8 +19,11 @@ import (
 	"github.com/florianfinn/docklet-next/backend/internal/config"
 	"github.com/florianfinn/docklet-next/backend/internal/middleware"
 	"github.com/florianfinn/docklet-next/backend/internal/role"
+	"github.com/florianfinn/docklet-next/backend/internal/session"
+	"github.com/florianfinn/docklet-next/backend/internal/user"
 	"github.com/florianfinn/docklet-next/backend/pkg/libarcane/edge"
 	"github.com/florianfinn/docklet-next/backend/pkg/utils/cookie"
+	authtypes "github.com/florianfinn/docklet-next/types/auth"
 	"github.com/labstack/echo/v5"
 	"github.com/stretchr/testify/require"
 )
@@ -100,21 +103,24 @@ func TestSignInWebSocketEmptyOriginCredentials(t *testing.T) {
 		authMiddleware := auth.NewAuthMiddleware(f.svc, f.cfg).WithApiKeyValidator(f.keys).WithPermissionResolver(f.roles)
 		router := echo.New()
 		ws.NewWebSocketHandler(router.Group("/api"), nil, nil, nil, nil, authMiddleware, f.cfg)
-		for _, credential := range []string{"bearer", "key", "invalid bearer", "invalid key", "cookie", "proxy"} {
+		for _, credential := range []string{"bearer", "key", "invalid bearer", "invalid key", "cookie", "proxy", "bearer with cookie", "key with cookie"} {
 			t.Run(mode+"/"+credential, func(t *testing.T) {
 				req := httptest.NewRequest(http.MethodGet, "/api/environments/0/ws/containers/example/terminal", http.NoBody)
 				req.RemoteAddr = "192.0.2.10:5000"
 				req.Header.Set("Remote-User", "operator")
 				switch credential {
-				case "bearer":
+				case "bearer", "bearer with cookie":
 					req.Header.Set("Authorization", "Bearer "+f.tokens.AccessToken)
-				case "key":
+				case "key", "key with cookie":
 					req.Header.Set(middleware.HeaderApiKey, f.personalKey)
 				case "invalid bearer":
 					req.Header.Set("Authorization", "Bearer example")
 				case "invalid key":
 					req.Header.Set(middleware.HeaderApiKey, "example")
 				case "cookie":
+					req.AddCookie(&http.Cookie{Name: cookie.InsecureTokenCookieName, Value: f.tokens.BrowserToken})
+				}
+				if credential == "bearer with cookie" || credential == "key with cookie" {
 					req.AddCookie(&http.Cookie{Name: cookie.InsecureTokenCookieName, Value: f.tokens.BrowserToken})
 				}
 				webSocketHandshake(req)
@@ -126,7 +132,7 @@ func TestSignInWebSocketEmptyOriginCredentials(t *testing.T) {
 					if credential == "bearer" || credential == "key" {
 						want = 101
 					}
-					if credential == "cookie" {
+					if credential == "cookie" || credential == "bearer with cookie" || credential == "key with cookie" {
 						want = 403
 					}
 				}
@@ -172,3 +178,29 @@ type originTestTunnelConnection struct{ edge.TunnelConnection }
 
 // The recorder cannot hijack, so upgrades stop before any tunnel I/O.
 func (*originTestTunnelConnection) IsClosed() bool { return false }
+
+func TestSignInWebSocketHeaderIdentity(t *testing.T) {
+	f := newSignInRoutingFixture(t)
+	member, err := f.users.CreateUser(t.Context(), &user.User{Username: "operator"})
+	require.NoError(t, err)
+	require.NoError(t, f.roles.SetUserAssignments(t.Context(), member.ID, nil))
+	tokens, err := f.svc.CompleteLogin(t.Context(), member, authtypes.SessionMeta{}, session.UserSessionSourceLocal)
+	require.NoError(t, err)
+	router := echo.New()
+	ws.NewWebSocketHandler(router.Group("/api"), nil, nil, nil, nil, auth.NewAuthMiddleware(f.svc, f.cfg).WithPermissionResolver(f.roles), f.cfg)
+	for _, scheme := range []string{"Bearer", "bearer", "bEaReR"} {
+		t.Run(scheme, func(t *testing.T) {
+			req := httptest.NewRequest(http.MethodGet, "/api/environments/0/ws/containers/example/terminal", http.NoBody)
+			req.Header.Set("Authorization", scheme+" "+tokens.AccessToken)
+			req.Header.Set("Origin", "https://hub.example.com")
+			req.AddCookie(&http.Cookie{Name: cookie.InsecureTokenCookieName, Value: f.tokens.BrowserToken})
+			actor, ok := verifyRouterRequestUserInternal(t.Context(), f.svc, req)
+			require.True(t, ok)
+			require.Equal(t, member.ID, actor.ID)
+			webSocketHandshake(req)
+			rec := httptest.NewRecorder()
+			router.ServeHTTP(rec, req)
+			require.Equal(t, 403, rec.Code, rec.Body.String())
+		})
+	}
+}
