@@ -2,13 +2,14 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; functional cut: removed federated credentials.
+// Deviations: Explicit Origin and double-submit CSRF checks for every hub sign-in mode; independently authenticated transports retain their ingress.
 
 package middleware
 
 import (
-	"context"
-	"log/slog"
+	"crypto/rand"
+	"crypto/subtle"
+	"encoding/base64"
 	"net/http"
 	"strings"
 
@@ -16,83 +17,97 @@ import (
 
 	"github.com/florianfinn/docklet-next/backend/internal/common"
 	"github.com/florianfinn/docklet-next/backend/internal/config"
+	"github.com/florianfinn/docklet-next/backend/pkg/utils/cookie"
 )
 
-// publicCrossOriginBypassPaths are endpoints intentionally reachable cross-origin
-// by non-browser callers that authenticate with their OWN token carried in the
-// path or request body (not the session cookie). Cross-origin protection must not
-// block them, since a legitimate external caller (CI, webhook source) may attach
-// an Origin header. Patterns use net/http ServeMux syntax, matched against URL path.
-var publicCrossOriginBypassPaths = []string{
-	"/api/webhooks/trigger/{token}",
-}
+const CSRFHeader = "X-CSRF-Token"
 
-// CSRFMiddleware rejects cross-origin state-changing requests to the cookie-backed
-// API. It complements the SameSite=Lax session cookie with server-side origin
-// verification (Sec-Fetch-Site, with an Origin/Host fallback) via the standard
-// library's net/http.CrossOriginProtection.
-//
-// Header-credentialed requests (Bearer / X-API-Key / agent token) are not CSRF-able
-// — a browser cannot attach those headers to a forged cross-origin request — so they
-// are left untouched, as are non-browser clients that send no Origin header.
+// CSRFMiddleware requires an allowed Origin and a cookie/header token pair on hub writes.
+// Transport bypasses validate environment credentials rather than trusting header presence.
 type CSRFMiddleware struct {
-	cfg *config.Config
+	cfg                    *config.Config
+	transportAuthenticated func(*http.Request) bool
 }
 
 func NewCSRFMiddleware(cfg *config.Config) *CSRFMiddleware {
 	return &CSRFMiddleware{cfg: cfg}
 }
 
+func (m *CSRFMiddleware) WithTransportValidator(validate func(*http.Request) bool) *CSRFMiddleware {
+	m.transportAuthenticated = validate
+	return m
+}
+
 func (m *CSRFMiddleware) Add() echo.MiddlewareFunc {
-	// Edge Agent mode: skip. The agent only receives server-to-server requests
-	// through the edge tunnel from the manager — never from browsers. Mirrors CORSMiddleware.
-	if m.cfg != nil && m.cfg.EdgeAgent {
-		return func(next echo.HandlerFunc) echo.HandlerFunc {
-			return func(c *echo.Context) error { return next(c) }
-		}
-	}
-
-	cop := http.NewCrossOriginProtection()
-	for _, origin := range deriveAllowedOriginsInternal(m.cfg, nil) {
-		// AddTrustedOrigin expects scheme://host[:port]; deriveAllowedOriginsInternal
-		// already produces that form (shared with CORS). Skip anything malformed.
-		if err := cop.AddTrustedOrigin(origin); err != nil {
-			slog.WarnContext(context.Background(), "CSRF: ignoring invalid trusted origin", //nolint:forbidigo // Middleware configuration is derived at startup without a request context.
-				"origin", origin, "error", err)
-		}
-	}
-	for _, pattern := range publicCrossOriginBypassPaths {
-		cop.AddInsecureBypassPattern(pattern)
-	}
-
+	origins := deriveAllowedOriginsInternal(m.cfg, nil)
 	return func(next echo.HandlerFunc) echo.HandlerFunc {
 		return func(c *echo.Context) error {
 			req := c.Request()
-			if hasHeaderCredentialInternal(req) {
+			if m.cfg != nil && (m.cfg.AgentMode || m.cfg.EdgeAgent) {
 				return next(c)
 			}
-			if err := cop.Check(req); err != nil {
-				slog.WarnContext(req.Context(), "CSRF: cross-origin request blocked",
-					"path", req.URL.Path,
-					"method", req.Method,
-					"origin", req.Header.Get("Origin"),
-					"secFetchSite", req.Header.Get("Sec-Fetch-Site"),
-				)
-				return c.JSON(http.StatusForbidden, common.APIError{
-					Code:    common.APIErrorCodeForbidden,
-					Message: "Cross-origin request blocked",
-				})
+			if !strings.HasPrefix(req.URL.Path, "/api/") {
+				return next(c)
+			}
+			switch req.Method {
+			case http.MethodGet, http.MethodHead:
+				token := requestCSRFToken(req)
+				if token == "" {
+					random := make([]byte, 32)
+					if _, err := rand.Read(random); err != nil {
+						return err
+					}
+					token = base64.RawURLEncoding.EncodeToString(random)
+					http.SetCookie(c.Response(), &http.Cookie{Name: csrfCookieName(req), Value: token, Path: "/", Secure: cookie.SecureCookieFromContext(req.Context()), HttpOnly: true, SameSite: http.SameSiteStrictMode})
+				}
+				c.Response().Header().Set(CSRFHeader, token)
+				return next(c)
+			case http.MethodOptions:
+				return next(c)
+			}
+			// These routes authenticate only their own transport/path tokens downstream.
+			if strings.HasPrefix(req.URL.Path, "/api/webhooks/trigger/") || (m.transportAuthenticated != nil && m.transportAuthenticated(req)) {
+				return next(c)
+			}
+			originOK := false
+			for _, allowed := range origins {
+				if req.Header.Get("Origin") == allowed {
+					originOK = true
+					break
+				}
+			}
+			if !originOK {
+				return csrfForbidden(c, "Origin is required and must match the hub")
+			}
+			expected := requestCSRFToken(req)
+			provided := req.Header.Get(CSRFHeader)
+			if expected == "" || subtle.ConstantTimeCompare([]byte(expected), []byte(provided)) != 1 {
+				return csrfForbidden(c, "A valid CSRF token is required")
 			}
 			return next(c)
 		}
 	}
 }
 
-// hasHeaderCredentialInternal reports whether the request carries a credential in a
-// header that a browser cannot forge on a cross-origin request, meaning it is not
-// susceptible to CSRF and should bypass the cross-origin check.
-func hasHeaderCredentialInternal(req *http.Request) bool {
-	return strings.HasPrefix(req.Header.Get("Authorization"), "Bearer ") ||
-		req.Header.Get(HeaderApiKey) != "" ||
-		req.Header.Get(HeaderAgentToken) != ""
+func csrfCookieName(req *http.Request) string {
+	if cookie.SecureCookieFromContext(req.Context()) {
+		return "__Host-docklet_csrf"
+	}
+	return "docklet_csrf"
+}
+
+func requestCSRFToken(req *http.Request) string {
+	value, err := req.Cookie(csrfCookieName(req))
+	if err != nil || len(value.Value) != 43 {
+		return ""
+	}
+	decoded, err := base64.RawURLEncoding.DecodeString(value.Value)
+	if err != nil || len(decoded) != 32 {
+		return ""
+	}
+	return value.Value
+}
+
+func csrfForbidden(c *echo.Context, message string) error {
+	return c.JSON(http.StatusForbidden, common.APIError{Code: common.APIErrorCodeForbidden, Message: message})
 }

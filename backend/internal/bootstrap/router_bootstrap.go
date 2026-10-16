@@ -237,7 +237,25 @@ func newRouter(p RouterParams) (*echo.Echo, *edge.TunnelServer) {
 
 	authMiddleware := p.AuthMiddleware
 	e.Use(middleware.NewCORSMiddleware(cfg).Add())
-	e.Use(middleware.NewCSRFMiddleware(cfg).Add())
+	e.Use(middleware.NewCSRFMiddleware(cfg).WithTransportValidator(func(req *http.Request) bool {
+		if deps.Environment == nil {
+			return false
+		}
+		for _, header := range []string{middleware.HeaderAgentToken, middleware.HeaderApiKey} {
+			if token := req.Header.Get(header); token != "" {
+				if env, err := deps.Environment.Service().ResolveEnvironmentByAccessToken(req.Context(), token); err == nil && env != nil {
+					return true
+				}
+			}
+		}
+		if strings.HasPrefix(req.URL.Path, "/api/tunnel/") {
+			if token, ok := strings.CutPrefix(req.Header.Get("Authorization"), "Bearer "); ok {
+				envID, err := deps.Environment.Service().ResolveEdgeEnvironmentByToken(req.Context(), token)
+				return err == nil && envID != ""
+			}
+		}
+		return false
+	}).Add())
 
 	apiGroup := e.Group("/api")
 

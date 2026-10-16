@@ -69,13 +69,13 @@ func modeTestRouter(t *testing.T, svc *AuthService, surface string, csrf bool) *
 			require.True(t, ok)
 			return c.String(http.StatusOK, actor.ID+":"+actor.Username)
 		}
-		router.GET("/secure", handler)
-		router.POST("/secure", handler)
+		router.GET("/api/secure", handler)
+		router.POST("/api/secure", handler)
 	} else {
 		api := humaecho.New(router, huma.DefaultConfig("test", "1.0.0"))
 		api.UseMiddleware(NewHumaMiddleware(api, svc, nil, svc.userServiceRoleResolver(), nil, svc.config))
 		for _, method := range []string{http.MethodGet, http.MethodPost} {
-			huma.Register(api, huma.Operation{OperationID: method + "-secure", Method: method, Path: "/secure", Security: []map[string][]string{{"BearerAuth": {}}}}, func(ctx context.Context, _ *struct{}) (*secureOutput, error) {
+			huma.Register(api, huma.Operation{OperationID: method + "-secure", Method: method, Path: "/api/secure", Security: []map[string][]string{{"BearerAuth": {}}}}, func(ctx context.Context, _ *struct{}) (*secureOutput, error) {
 				actor, ok := user.CurrentUserFromContext(ctx)
 				require.True(t, ok)
 				out := &secureOutput{}
@@ -114,7 +114,7 @@ func TestSignInRequestMatrix(t *testing.T) {
 			router := modeTestRouter(t, svc, surface, false)
 			for _, tc := range cases {
 				t.Run(mode+"/"+surface+"/"+tc.name, func(t *testing.T) {
-					req := httptest.NewRequest(http.MethodGet, "/secure", http.NoBody)
+					req := httptest.NewRequest(http.MethodGet, "/api/secure", http.NoBody)
 					req.RemoteAddr = tc.peer
 					req.Header.Set("Remote-User", tc.identity)
 					req.Header.Set("X-Forwarded-For", tc.xff)
@@ -144,4 +144,55 @@ func TestSignInRequestMatrix(t *testing.T) {
 	stored, err := svc.userService.GlobalAdministrator(t.Context())
 	require.NoError(t, err)
 	require.Equal(t, "admin", stored.Username)
+}
+
+func TestSignInStateChangeMatrix(t *testing.T) {
+	svc, tokens := modeTestService(t)
+	for _, mode := range []string{"none", "local", "proxy"} {
+		svc.config.AuthMode = mode
+		for _, surface := range []string{"huma", "echo"} {
+			router := modeTestRouter(t, svc, surface, true)
+			authenticate := func(req *http.Request) {
+				req.RemoteAddr = "192.0.2.10:5000"
+				if mode == "local" {
+					req.Header.Set("Authorization", "Bearer "+tokens.AccessToken)
+				}
+				if mode == "proxy" {
+					req.Header.Set("Remote-User", "operator")
+				}
+			}
+			get := httptest.NewRequest(http.MethodGet, "/api/secure", http.NoBody)
+			authenticate(get)
+			preflight := httptest.NewRecorder()
+			router.ServeHTTP(preflight, get)
+			require.Equal(t, 200, preflight.Code)
+			csrfToken := preflight.Header().Get(middleware.CSRFHeader)
+			csrfCookie := preflight.Result().Cookies()[0]
+			for _, tc := range []struct {
+				name, origin, token string
+				cookie              bool
+				status              int
+			}{
+				{"without Origin", "", csrfToken, true, 403},
+				{"wrong Origin", "https://other.example.com", csrfToken, true, 403},
+				{"without CSRF token", "https://hub.example.com", "", true, 403},
+				{"wrong CSRF token", "https://hub.example.com", "invalid", true, 403},
+				{"without CSRF cookie", "https://hub.example.com", csrfToken, false, 403},
+				{"valid state change", "https://hub.example.com", csrfToken, true, 200},
+			} {
+				t.Run(mode+"/"+surface+"/"+tc.name, func(t *testing.T) {
+					req := httptest.NewRequest(http.MethodPost, "/api/secure", http.NoBody)
+					authenticate(req)
+					req.Header.Set("Origin", tc.origin)
+					req.Header.Set(middleware.CSRFHeader, tc.token)
+					if tc.cookie {
+						req.AddCookie(csrfCookie)
+					}
+					rec := httptest.NewRecorder()
+					router.ServeHTTP(rec, req)
+					require.Equal(t, tc.status, rec.Code, rec.Body.String())
+				})
+			}
+		}
+	}
 }
