@@ -2,14 +2,34 @@
 // Revision: 7f4c05631ea6c769bb1cfae85c081b9b8b83df17
 // Retrieved: 2026-10-17
 // License: Apache-2.0
-// Deviations: Original core settings mapping for first-run setup.
+// Deviations: Original core settings mapping for setup and connected hub sections.
 
-import type { HubSettings } from "@/domain/settings";
+import type { SettingsApi } from "@/data/api";
+import type { HubSettings, SettingsSection } from "@/domain/settings";
+import { unavailable } from "../capability";
 import type { CsrfClient } from "./csrf-client";
 
 export type CoreSettings = Record<string, string>;
 
-export function createSettingsCore(baseUrl: string, client: CsrfClient) {
+function field(values: CoreSettings, key: string): string {
+  const value = values[key];
+  if (value === undefined) throw new Error(`settings.missing.${key}`);
+  return value;
+}
+
+function integer(values: CoreSettings, key: string): number {
+  const value = Number(field(values, key));
+  if (!Number.isSafeInteger(value) || value < 1) throw new Error(`settings.invalid.${key}`);
+  return value;
+}
+
+function boolean(values: CoreSettings, key: string): boolean {
+  const value = field(values, key);
+  if (value !== "true" && value !== "false") throw new Error(`settings.invalid.${key}`);
+  return value === "true";
+}
+
+export function createSettingsCore(baseUrl: string, client: CsrfClient): Pick<SettingsApi, "getSetupStatus" | "completeSetup" | "getConnectedSettings" | "saveSettings"> {
   async function read(): Promise<CoreSettings> {
     const response = await client.fetch(`${baseUrl}/environments/0/settings`, { credentials: "same-origin", headers: { Accept: "application/json" } });
     if (!response.ok) throw new Error(`settings.read.${response.status}`);
@@ -26,8 +46,6 @@ export function createSettingsCore(baseUrl: string, client: CsrfClient) {
   }
 
   return {
-    read,
-    write,
     async getSetupStatus() {
       const settings = await read();
       if (settings.setupCompleted !== "true" && settings.setupCompleted !== "false") throw new Error("settings.setup-status-missing");
@@ -48,6 +66,32 @@ export function createSettingsCore(baseUrl: string, client: CsrfClient) {
         detectSocketGroup: String(input.hostDefaults.detectSocketGroup),
         setupCompleted: "true",
       });
+    },
+    async getConnectedSettings() {
+      const values = await read();
+      const linkBase = field(values, "linkBase");
+      const actionPresentation = field(values, "actionPresentation");
+      if (linkBase !== "auto" && linkBase !== "internal" && linkBase !== "domain") throw new Error("settings.invalid.linkBase");
+      if (actionPresentation !== "dialog" && actionPresentation !== "toast") throw new Error("settings.invalid.actionPresentation");
+      const timeZone = field(values, "timeZone");
+      try { new Intl.DateTimeFormat("en", { timeZone }); } catch { throw new Error("settings.invalid.timeZone"); }
+      return {
+        general: { hubName: field(values, "hubName"), hubAddress: field(values, "hubAddress"), domainUrl: field(values, "domainUrl"), linkBase, timeZone },
+        activity: { maxEvents: integer(values, "maxEvents"), maxFinishedActions: integer(values, "maxFinishedActions"), keepActionOutput: boolean(values, "keepActionOutput"), actionPresentation },
+      };
+    },
+    async saveSettings<K extends SettingsSection>(section: K, value: HubSettings[K]) {
+      if (section === "general") {
+        const general = value as HubSettings["general"];
+        await write({ hubName: general.hubName, hubAddress: general.hubAddress, domainUrl: general.domainUrl, linkBase: general.linkBase, timeZone: general.timeZone });
+        return;
+      }
+      if (section === "activity") {
+        const activity = value as HubSettings["activity"];
+        await write({ maxEvents: String(activity.maxEvents), maxFinishedActions: String(activity.maxFinishedActions), keepActionOutput: String(activity.keepActionOutput), actionPresentation: activity.actionPresentation });
+        return;
+      }
+      throw unavailable("saveSettings", undefined, "capability.mapping-unavailable");
     },
   };
 }

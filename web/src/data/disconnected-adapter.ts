@@ -93,6 +93,7 @@ export function createDisconnectedAdapter(): DockletAdapter {
     pruneImages: unavailable,
     getSettings: unavailable,
     getSetupStatus: unavailable,
+    getConnectedSettings: unavailable,
     saveSettings: unavailable,
     completeSetup: unavailable,
     testBackupTarget: unavailable,

@@ -7,12 +7,12 @@ import { queryKeys } from "@/data/query-keys";
 import { useAdapter } from "@/data/use-adapter";
 import { AlertDialog, AlertDialogAction, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/shared/ui/alert-dialog";
 
-/** Simulated logout explanation that follows the hub's login mode; the prototype has no session. */
+/** Sign-out confirmation for the active startup sign-in mode. */
 export function LogoutDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (open: boolean) => void }) {
   const t = useTranslations("shell.user");
-  const settings = useSettings();
-  const mode = useAuthMode();
   const adapter = useAdapter();
+  const settings = useSettings(adapter.kind === "demo");
+  const mode = useAuthMode();
   const client = useQueryClient();
   const navigate = useNavigate();
   const auth = settings.data?.auth;

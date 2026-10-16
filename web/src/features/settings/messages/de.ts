@@ -70,6 +70,9 @@ export const deSettings: typeof enSettings = {
     labHint: (import.meta.env.DEV ? "Das Design-Labor (nur Prototyp) bearbeitet dieselbe Palette sofort und ohne Speichern; eine Änderung dort ersetzt das entsprechende Feld dieses Entwurfs." : "Änderungen an der Palette gelten nach dem Speichern."),
   },
   auth: {
+    startupModeInfo: "Der Betreiber legt die Anmeldeart beim Start mit AUTH_MODE fest. Für Proxy-Anmeldung sind außerdem AUTH_PROXY_HEADER und AUTH_TRUSTED_PROXIES nötig. Änderungen erfordern einen Neustart.",
+    retryMode: "Anmeldeart neu laden",
+    loadingMode: "Lade Anmeldeart …",
     mode: "Anmeldemodus",
     none: "Kein Login",
     noneDesc: "Jeder mit Zugriff auf die Hub-Adresse hat Vollzugriff. Nur in vertrauenswürdigen Netzen.",

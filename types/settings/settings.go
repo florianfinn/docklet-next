@@ -48,6 +48,10 @@ type Update struct {
 	DefaultPUID           *string `json:"defaultPuid,omitzero"`
 	DefaultPGID           *string `json:"defaultPgid,omitzero"`
 	DetectSocketGroup     *string `json:"detectSocketGroup,omitzero"`
+	MaxEvents             *string `json:"maxEvents,omitzero"`
+	MaxFinishedActions    *string `json:"maxFinishedActions,omitzero"`
+	KeepActionOutput      *string `json:"keepActionOutput,omitzero"`
+	ActionPresentation    *string `json:"actionPresentation,omitzero"`
 	// ProjectsDirectory is the directory path where projects are stored.
 	// Must be an absolute path.
 	//

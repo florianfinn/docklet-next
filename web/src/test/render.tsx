@@ -9,18 +9,19 @@ import { AdapterProvider } from "@/data/AdapterProvider";
 import type { DockletAdapter } from "@/data/adapter";
 import { createDemoAdapter } from "@/data/demo/demo-adapter";
 import { TooltipProvider } from "@/shared/ui/tooltip";
+import { useHubTimeZone } from "@/shared/hooks/use-hub-time-zone";
 
 /** Renders a memory router with the app providers. */
 export function renderRoutes(routes: RouteObject[], initialEntries: string[] = ["/"], adapter: DockletAdapter = createDemoAdapter()) {
   const router = createMemoryRouter(routes, { initialEntries });
   const utils = render(
-    <LocaleIntl>
-      <AdapterProvider adapter={adapter}>
+    <AdapterProvider adapter={adapter}>
+      <LocaleIntl>
         <TooltipProvider>
           <RouterProvider router={router} />
         </TooltipProvider>
-      </AdapterProvider>
-    </LocaleIntl>,
+      </LocaleIntl>
+    </AdapterProvider>,
   );
   return { ...utils, router };
 }
@@ -28,8 +29,9 @@ export function renderRoutes(routes: RouteObject[], initialEntries: string[] = [
 /** Follows the locale store like App, so tests can switch the language live. */
 function LocaleIntl({ children }: { children: ReactNode }) {
   const locale = useAppLocale();
+  const timeZone = useHubTimeZone();
   return (
-    <IntlProvider locale={locale} messages={catalogs[locale]} timeZone="Europe/Berlin">
+    <IntlProvider locale={locale} messages={catalogs[locale]} timeZone={timeZone}>
       {children}
     </IntlProvider>
   );

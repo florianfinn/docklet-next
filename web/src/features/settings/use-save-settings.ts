@@ -12,7 +12,7 @@ export function useSaveSettings() {
   return useCallback(
     async <K extends SettingsSection>(section: K, value: HubSettings[K]) => {
       await adapter.saveSettings(section, value);
-      await client.invalidateQueries({ queryKey: queryKeys.settings });
+      await Promise.all([client.invalidateQueries({ queryKey: queryKeys.settings }), client.invalidateQueries({ queryKey: queryKeys.connectedSettings })]);
     },
     [adapter, client],
   );

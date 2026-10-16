@@ -17,7 +17,7 @@ import (
 )
 
 func validateSettingValueInternal(key, value string) error {
-	if key == "setupCompleted" || key == "detectSocketGroup" {
+	if key == "setupCompleted" || key == "detectSocketGroup" || key == "keepActionOutput" {
 		if value != "true" && value != "false" {
 			return common.Classify(common.ErrValidation, fmt.Errorf("%s must be true or false", key))
 		}
@@ -31,6 +31,15 @@ func validateSettingValueInternal(key, value string) error {
 	if key == "timeZone" && value != "" {
 		if _, err := time.LoadLocation(value); err != nil {
 			return common.Classify(common.ErrValidation, errors.New("timeZone must be an IANA time zone"))
+		}
+	}
+	if key == "actionPresentation" && value != "dialog" && value != "toast" {
+		return common.Classify(common.ErrValidation, errors.New("actionPresentation must be dialog or toast"))
+	}
+	if (key == "maxEvents" || key == "maxFinishedActions") && value != "" {
+		limit, err := strconv.Atoi(value)
+		if err != nil || limit < 1 || limit > 100000 {
+			return common.Classify(common.ErrValidation, fmt.Errorf("%s must be between 1 and 100000", key))
 		}
 	}
 	if key == "upgradeLogRetentionDays" && value != "" {

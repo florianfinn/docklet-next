@@ -2,12 +2,14 @@ import { Archive, BellRing, HardDrive, History, Info, KeyRound, Palette, Refresh
 import { NavLink, Navigate, useParams } from "react-router";
 import { useTranslations } from "use-intl";
 
-import { useSettings } from "@/data/queries";
+import { useConnectedSettings, useSettings } from "@/data/queries";
+import { useAdapter } from "@/data/use-adapter";
 import { PageHeader, QueryError } from "@/shared/components/page";
 import { FavoritesSection } from "@/shared/preferences/FavoritesSection";
 import { Skeleton } from "@/shared/ui/skeleton";
 
 import { AuthSection } from "./sections/AuthSection";
+import { ConnectedAuthSection } from "./sections/ConnectedAuthSection";
 import { BackupTargetsSection } from "./sections/BackupTargetsSection";
 import { GeneralSection } from "./sections/GeneralSection";
 import { HelpSection } from "./sections/HelpSection";
@@ -30,10 +32,14 @@ const IDS = GROUPS.flatMap((g) => g.items.map((i) => i.id)) as SectionId[];
 export default function SettingsPage() {
   const { section } = useParams();
   const t = useTranslations("settings");
-  const settings = useSettings();
-  if (!section || !IDS.includes(section as SectionId)) return <Navigate to="/settings/general" replace />;
-  const id = section as SectionId;
+  const adapter = useAdapter();
+  const validSection = !!section && IDS.includes(section as SectionId);
+  const id = validSection ? section as SectionId : "general";
+  const connected = adapter.kind === "http" && (id === "general" || id === "auth" || id === "activity");
+  const settings = useSettings(!connected && id !== "appearance" && id !== "help");
+  const hub = useConnectedSettings(connected && id !== "auth");
   const s = settings.data;
+  if (!validSection) return <Navigate to="/settings/general" replace />;
 
   return (
     <>
@@ -70,6 +76,10 @@ export default function SettingsPage() {
             </div>
           ) : id === "help" ? (
             <HelpSection />
+          ) : connected ? (
+            id === "auth" ? <ConnectedAuthSection /> : hub.isError ? <QueryError onRetry={() => void hub.refetch()} /> : !hub.data ? (
+              <div className="flex flex-col gap-3" aria-busy="true"><Skeleton className="h-16 rounded-2xl" /><Skeleton className="h-80 rounded-2xl" /></div>
+            ) : id === "general" ? <GeneralSection settings={hub.data} /> : <ActivitySection settings={hub.data} />
           ) : settings.isError ? (
             <QueryError onRetry={() => void settings.refetch()} />
           ) : !s ? (

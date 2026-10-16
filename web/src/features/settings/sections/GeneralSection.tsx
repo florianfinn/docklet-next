@@ -14,10 +14,7 @@ import { SettingsForm } from "../SettingsForm";
 import { useSaveSettings } from "../use-save-settings";
 import { useSectionDraft } from "../use-section-draft";
 
-/**
- * Hub name, the internal address agents reach the hub at, an optional domain
- * and time zone; shared by settings and first-run setup.
- */
+/** Hub address, link policy, and time zone shared by settings and first-run setup. */
 export function GeneralFields({ value, onChange, showErrors, idPrefix = "gen" }: { value: GeneralSettings; onChange: (p: Partial<GeneralSettings>) => void; showErrors: boolean; idPrefix?: string }) {
   const t = useTranslations("settings.general");
   const tl = useTranslations("locale.switcher");
@@ -94,7 +91,7 @@ export function GeneralFields({ value, onChange, showErrors, idPrefix = "gen" }:
   );
 }
 
-export function GeneralSection({ settings }: { settings: HubSettings }) {
+export function GeneralSection({ settings }: { settings: Pick<HubSettings, "general"> }) {
   const t = useTranslations("settings");
   const save = useSaveSettings();
   const { draft, patch, dirty, reset, commit } = useSectionDraft(settings.general);

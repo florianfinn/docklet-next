@@ -84,9 +84,14 @@ export function useFiles(volumeId: string, path: string, enabled = true) {
   return useQuery({ queryKey: queryKeys.files(volumeId, path), queryFn: () => adapter.listFiles(volumeId, path), enabled, placeholderData: (prev, prevQuery) => (prevQuery?.queryKey[1] === volumeId ? prev : undefined) });
 }
 
-export function useSettings() {
+export function useSettings(enabled = true) {
   const adapter = useAdapter();
-  return useQuery({ queryKey: queryKeys.settings, queryFn: () => adapter.getSettings() });
+  return useQuery({ queryKey: queryKeys.settings, queryFn: () => adapter.getSettings(), enabled });
+}
+
+export function useConnectedSettings(enabled = true) {
+  const adapter = useAdapter();
+  return useQuery({ queryKey: queryKeys.connectedSettings, queryFn: () => adapter.getConnectedSettings(), enabled });
 }
 
 export function useAuthMode() {

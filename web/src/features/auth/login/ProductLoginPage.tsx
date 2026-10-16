@@ -43,6 +43,7 @@ export default function ProductLoginPage() {
         setPassword("");
         client.setQueryData(queryKeys.currentUser, user);
         await client.invalidateQueries({ queryKey: queryKeys.currentUser });
+        await client.invalidateQueries({ queryKey: queryKeys.connectedSettings });
         void navigate("/dashboard", { replace: true });
       }).catch((cause: unknown) => {
         const invalid = cause instanceof AdapterOutcomeError && cause.outcome.kind === "error" && cause.outcome.status === 401;

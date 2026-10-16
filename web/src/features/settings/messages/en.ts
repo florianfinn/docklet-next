@@ -69,6 +69,9 @@ export const enSettings = {
     labHint: (import.meta.env.DEV ? "The design lab (prototype only) edits the same palette immediately and without saving; a change there replaces the corresponding field of this draft." : "Palette changes take effect after saving."),
   },
   auth: {
+    startupModeInfo: "The operator selects the sign-in mode with AUTH_MODE at startup. Proxy identity also requires AUTH_PROXY_HEADER and AUTH_TRUSTED_PROXIES. Changes require a restart.",
+    retryMode: "Reload sign-in mode",
+    loadingMode: "Loading sign-in mode …",
     mode: "Sign-in mode",
     none: "No login",
     noneDesc: "Anyone who can reach the hub address has full access. Trusted networks only.",

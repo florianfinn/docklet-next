@@ -2,6 +2,7 @@ export const queryKeys = {
   authMode: ["auth-mode"],
   currentUser: ["current-user"],
   setupStatus: ["setup-status"],
+  connectedSettings: ["connected-settings"],
   hosts: ["hosts"],
   systemComponents: ["system-components"],
   stacks: ["stacks"],
