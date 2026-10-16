@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: None
+// Deviations: Log only sorted forwarded header names.
 
 package ws
 
@@ -12,6 +12,7 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
+	"sort"
 	"time"
 
 	"github.com/coder/websocket"
@@ -37,7 +38,12 @@ func ProxyHTTP(w http.ResponseWriter, r *http.Request, remoteWS string, header h
 	// This is a pure bridge; frame-size policing is the remote endpoint's job.
 	clientConn.SetReadLimit(-1)
 
-	slog.DebugContext(r.Context(), "attempting websocket dial", "remoteWs", remoteWS, "headers", header)
+	headerNames := make([]string, 0, len(header))
+	for name := range header {
+		headerNames = append(headerNames, name)
+	}
+	sort.Strings(headerNames)
+	slog.DebugContext(r.Context(), "attempting websocket dial", "remoteWs", remoteWS, "headerNames", headerNames)
 	dialCtx, dialCancel := context.WithTimeout(r.Context(), 45*time.Second)
 	remoteConn, resp, err := websocket.Dial(dialCtx, remoteWS, &websocket.DialOptions{
 		HTTPHeader: header,

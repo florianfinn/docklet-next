@@ -2,12 +2,14 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: None
+// Deviations: Test forwarded header logging without values.
 
 package ws
 
 import (
+	"bytes"
 	"context"
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -189,6 +191,11 @@ func TestProxyHTTP_BinaryMessages(t *testing.T) {
 }
 
 func TestProxyHTTP_HeadersForwarded(t *testing.T) {
+	var logs bytes.Buffer
+	previousLogger := slog.Default()
+	slog.SetDefault(slog.New(slog.NewJSONHandler(&logs, &slog.HandlerOptions{Level: slog.LevelDebug})))
+	t.Cleanup(func() { slog.SetDefault(previousLogger) })
+
 	headersCh := make(chan http.Header, 1)
 	remoteServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		headersCh <- r.Header.Clone()
@@ -203,12 +210,15 @@ func TestProxyHTTP_HeadersForwarded(t *testing.T) {
 	remoteWS := "ws" + strings.TrimPrefix(remoteServer.URL, "http")
 
 	customHeaders := http.Header{
-		"X-Custom-Header": {"test-value"},
-		"Authorization":   {"Bearer token123"},
+		"X-Custom-Header": {"example-custom-value"},
+		"Authorization":   {"Bearer " + "example-secret-token"},
+		"X-API-Key":       {"example-agent-token"},
 	}
 
+	proxyDone := make(chan struct{}, 1)
 	proxyServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		_ = ProxyHTTP(w, r, remoteWS, customHeaders, allowAnyOriginForTest)
+		proxyDone <- struct{}{}
 	}))
 	defer proxyServer.Close()
 
@@ -221,9 +231,21 @@ func TestProxyHTTP_HeadersForwarded(t *testing.T) {
 
 	select {
 	case receivedHeaders := <-headersCh:
-		assert.Equal(t, "test-value", receivedHeaders.Get("X-Custom-Header"))
-		assert.Equal(t, "Bearer token123", receivedHeaders.Get("Authorization"))
+		assert.Equal(t, "example-custom-value", receivedHeaders.Get("X-Custom-Header"))
+		assert.Equal(t, "Bearer "+"example-secret-token", receivedHeaders.Get("Authorization"))
+		assert.Equal(t, "example-agent-token", receivedHeaders.Get("X-API-Key"))
 	case <-time.After(2 * time.Second):
 		require.FailNow(t, "timed out waiting for headers")
 	}
+
+	select {
+	case <-proxyDone:
+	case <-time.After(2 * time.Second):
+		require.FailNow(t, "timed out waiting for proxy completion")
+	}
+	logOutput := logs.String()
+	assert.Contains(t, logOutput, `"headerNames":["Authorization","X-API-Key","X-Custom-Header"]`)
+	assert.NotContains(t, logOutput, "example-secret-token")
+	assert.NotContains(t, logOutput, "example-agent-token")
+	assert.NotContains(t, logOutput, "example-custom-value")
 }
