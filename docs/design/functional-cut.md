@@ -60,28 +60,26 @@ paths.
 
 ## Database ownership
 
-The [fresh PostgreSQL baseline](database-baseline.md) replaces the imported
-Arcane migration chain. Issue #8 generated it from retained models and schema
-integrity properties; it omits Swarm, GitOps, Git repositories, templates,
-central variables, S3 destinations, build workshop records, OIDC, passkeys,
-federated credentials, APNS and SQLite artefacts. No earlier Arcane database
-is imported.
+The [fresh SQLite baseline](database-baseline.md) replaces the PostgreSQL
+baseline under [decision #60](sqlite-database.md). It retains the same functional
+cut: no Swarm, GitOps, Git repositories, templates, central variables, S3
+destinations, build workshop records, OIDC, passkeys, federated credentials or
+APNS. SQLite infrastructure returns; old Arcane and Docklet data is not imported.
+The [M1 baseline record](../history/m1-postgresql-baseline.md) preserves the
+retained-integrity derivation for equivalent SQLite schema checks.
 
 ## Francis storage
 
-Francis v0.1.0 links its SQLite provider into both binaries through the
-`host/local` import. Docklet Next therefore keeps the required Francis packages
-under `third_party/francis/` with the same module identity at revision
-`23cd46831a543a73eec05ad034afd46245225876`. The local subset has
-PostgreSQL and in-memory providers; SQLite providers and migrations are removed.
-`scripts/provenance.json` records each file's source and deviation. The MIT
-licence and the Apache-2.0 notices for adopted Dapr code remain intact.
+Restore Francis's SQLite component from revision
+`23cd46831a543a73eec05ad034afd46245225876` under `third_party/francis/`, with
+its module identity, MIT licence and adopted Dapr Apache-2.0 notices intact.
+The [SQLite contract](sqlite-database.md#francis-provider) owns provider wiring,
+sidecar files, provenance, tests and removal of PostgreSQL components.
 
-The default test suite needs no database service. PostgreSQL persistence tests
-use an explicitly configured integration environment. PostgreSQL system backup
-creation, listing, recovery and scheduled policy runs currently return
-unavailable; [issue #32](https://github.com/florianfinn/docklet-next/issues/32)
-owns the decision to implement or remove this surface. Local volume backups remain available.
+Default persistence tests move to temporary SQLite files without a database
+service. System database backup/recovery remains unavailable until
+[issue #32](https://github.com/florianfinn/docklet-next/issues/32) resumes on
+SQLite after this milestone merges to main. Local volume backups remain available.
 
 The Docker info response embeds the Docker SDK's `system.Info`, including its
 Swarm status and nested OpenAPI schemas. This is daemon information passed

@@ -1,9 +1,14 @@
 # SQLite removal map for the PostgreSQL baseline
 
+Archived on 2026-10-16 from the pre-SQLite design at
+`1ead6d2c7e17c79b46c42eb8567c3a1d70730fd5`. This records the M1 SQLite removal
+inventory, not the current database decision. See the
+[SQLite database contract](../design/sqlite-database.md).
+
 Paths below are relative to Arcane v2.15.1 at
 `095cb778daba1034e2a39961199e712a75d4ba29`, inspected on 2026-10-13.
 This is the removal input to #7, not a claim that the code was changed here.
-The [adoption decision](arcane-adoption.md) owns the selected revision.
+The [adoption decision](../design/arcane-adoption.md) owns the selected revision.
 
 ## Runtime and migration paths
 

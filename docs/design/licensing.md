@@ -39,9 +39,11 @@ pathrs-lite tree is excluded. Select BSD-3-Clause (Eclipse Distribution License
 say so in NOTICE. All applicable copyright/licence texts travel in the bundle.
 The refreshed [adoption inventory](arcane-adoption.md) records 1,587 imported
 packages, mixed and nested grants, resolved scanner gaps, and exact-file libc
-header exceptions that #7 must remove with SQLite before release. Both
-assessments exclude the web runtime and image contents; M2 and release acceptance
-cover them.
+header exceptions assessed for the pre-cut inventory. The
+[SQLite driver decision](sqlite-database.md#driver-provenance-and-licences) requires
+a fresh compiled-graph and notice assessment before distribution; the former
+removal gate does not approve restored dependencies. Both assessments exclude
+the web runtime and image contents; M2 and release acceptance cover them.
 
 M0 copies the Arcane licence byte-for-byte and checks its recorded SHA-256. It
 contains no Arcane product code, executable product or completed dependency

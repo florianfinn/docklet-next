@@ -3,7 +3,7 @@ Source: docklet-hub/AGENTS.md
 Revision: a4484c910bb5d6a8f8df97b4f23f4ee5e6359081
 Retrieved: 2026-10-13
 License: Apache-2.0
-Deviations: English rewrite; milestone review cut, Go/React boundaries, free components and M0 guards.
+Deviations: English rewrite; milestone review cut, Go/React boundaries, free components, M0 guards and SQLite local-storage policy.
 -->
 
 # AGENTS.md
@@ -122,9 +122,11 @@ in GitHub issues and milestones; rationale belongs in docs/design/ and its index
   belongs in types/ and checked-in OpenAPI; generate TypeScript DTOs from it.
 - Hub, agent, API and UI share a version. Minimum agent and Edge protocol versions
   are explicit release boundaries. Announce protocol breaks and new required values.
-- PostgreSQL is the only database. Do not import earlier docklet-hub or Arcane
-  databases or registrations. Establish a baseline before the first release;
-  shipped migrations are immutable and run forward at startup.
+- SQLite is the only hub database. Keep database files on local persistent
+  storage; network shares are unsupported for them. Do not import earlier
+  docklet-hub or Arcane databases or registrations, or development PostgreSQL
+  data. Establish a fresh baseline before the first release; shipped migrations
+  are immutable and run forward at startup.
 - Run only at the root of a dedicated domain or subdomain; sub-path hosting is
   unsupported. This applies to assets, routing, API, WebSockets, auth and links.
 - Pin images to SemVer and digest where available; never latest in install templates.
