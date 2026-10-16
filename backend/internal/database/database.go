@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; PostgreSQL-only forward migrations, without legacy adoption or downgrades.
+// Deviations: Local module namespace; SQLite-only connection policy and forward migrations under a lifetime file lock.
 
 package database
 
@@ -18,9 +18,9 @@ import (
 	"strings"
 	"time"
 
+	"github.com/florianfinn/docklet-next/backend/pkg/utils/sqlitestore"
 	"github.com/pressly/goose/v3"
-	"github.com/pressly/goose/v3/lock"
-	"gorm.io/driver/postgres"
+
 	"gorm.io/gorm"
 	"gorm.io/gorm/logger"
 
@@ -30,12 +30,13 @@ import (
 type DB struct {
 	*gorm.DB
 	hubLock *HubLock
+	path    string
 }
 
 type MigrationOptions struct{}
 
 const (
-	dbProviderPostgres = "postgres"
+	dbProviderSQLite   = "sqlite"
 	legacyVersionTable = "schema_migrations"
 
 	// Prepared-statement cache bounds. GORM's PrepareStmt cache is a global LRU keyed
@@ -63,11 +64,23 @@ func InitializeHub(ctx context.Context, databaseURL string, options MigrationOpt
 	return initializeInternal(ctx, databaseURL, options, true)
 }
 
-func initializeInternal(ctx context.Context, databaseURL string, options MigrationOptions, hub bool) (database *DB, err error) {
+func initializeInternal(ctx context.Context, databaseURL string, options MigrationOptions, _ bool) (database *DB, err error) {
+	path, err := sqlitestore.Path(databaseURL)
+	if err != nil {
+		return nil, err
+	}
+	lifetimeLock, err := acquireHubLock(ctx, path)
+	if err != nil {
+		return nil, err
+	}
 	db, err := connectDatabaseInternal(ctx, databaseURL)
 	if err != nil {
-		return nil, fmt.Errorf("failed to connect to database: %w", err)
+		_ = lifetimeLock.Stop()
+		return nil, err
 	}
+	db.path = path
+	db.hubLock = lifetimeLock
+
 	// Initialization opens a connection pool before it can fail on migrations or
 	// provider detection; release it rather than leaking it into a failed startup.
 	defer func() {
@@ -88,65 +101,34 @@ func initializeInternal(ctx context.Context, databaseURL string, options Migrati
 	if err != nil {
 		return nil, fmt.Errorf("failed to get sql.DB: %w", err)
 	}
-	if hub {
-		db.hubLock, err = acquireHubLock(ctx, sqlDB)
-		if err != nil {
-			return nil, err
-		}
-	}
 
-	if migrateDatabaseErr := migrateDatabaseInternal(ctx, sqlDB, dbProviderPostgres, options); migrateDatabaseErr != nil {
+	if migrateDatabaseErr := migrateDatabaseInternal(ctx, sqlDB, dbProviderSQLite, options); migrateDatabaseErr != nil {
 		slog.ErrorContext(ctx, "Failed to run migrations", "error", migrateDatabaseErr)
 		return nil, fmt.Errorf("failed to run migrations: %w", migrateDatabaseErr)
 	}
-
-	// Set connection pool settings
-	sqlDB.SetMaxIdleConns(15)
-	sqlDB.SetMaxOpenConns(50)
-	sqlDB.SetConnMaxLifetime(5 * time.Minute)
-	sqlDB.SetConnMaxIdleTime(3 * time.Minute)
 
 	return db, nil
 }
 
 func connectDatabaseInternal(ctx context.Context, databaseURL string) (*DB, error) {
-	if !strings.HasPrefix(databaseURL, "postgres://") && !strings.HasPrefix(databaseURL, "postgresql://") {
-		return nil, errors.New("DATABASE_URL must be a PostgreSQL URL")
+	path, err := sqlitestore.Path(databaseURL)
+	if err != nil {
+		return nil, err
 	}
-	dialector := postgres.Open(databaseURL)
-
-	// Retry connection up to 3 times
-	var db *gorm.DB
-	var err error
-	for i := 1; i <= 3; i++ {
-		if retryCancellationErr := ctx.Err(); retryCancellationErr != nil {
-			return nil, retryCancellationErr
-		}
-		db, err = gorm.Open(dialector, &gorm.Config{
-			Logger: customGormLogger,
-			NowFunc: func() time.Time {
-				return time.Now().UTC()
-			},
-			PrepareStmt:                      true,
-			PrepareStmtMaxSize:               preparedStmtMaxSize,
-			PrepareStmtTTL:                   preparedStmtTTL,
-			IgnoreRelationshipsWhenMigrating: true,
-		})
-		if err == nil {
-			return &DB{DB: db}, nil
-		}
-
-		slog.InfoContext(ctx, "Failed to initialize database", "attempt", i)
-		if i < 3 {
-			select {
-			case <-time.After(3 * time.Second):
-			case <-ctx.Done():
-				return nil, ctx.Err()
-			}
-		}
+	pool, err := sqlitestore.Open(ctx, path, true, false)
+	if err != nil {
+		return nil, err
 	}
-
-	return nil, err
+	db, err := gorm.Open(sqlitestore.Dialector(pool), &gorm.Config{
+		Logger: customGormLogger, NowFunc: func() time.Time { return time.Now().UTC() },
+		PrepareStmt: true, PrepareStmtMaxSize: preparedStmtMaxSize, PrepareStmtTTL: preparedStmtTTL,
+		IgnoreRelationshipsWhenMigrating: true,
+	})
+	if err != nil {
+		_ = pool.Close()
+		return nil, err
+	}
+	return &DB{DB: db, path: path}, nil
 }
 
 func migrateDatabaseInternal(ctx context.Context, db *sql.DB, dbProvider string, options MigrationOptions) error {
@@ -206,19 +188,7 @@ func newGooseProviderInternal(db *sql.DB, dbProvider string) (*goose.Provider, e
 		return nil, err
 	}
 
-	// Two Arcane processes pointed at the same Postgres (a rolling deploy, or a
-	// replica set) would otherwise run migrations concurrently and race on the
-	// same DDL. A session-level advisory lock serializes them.
-	var options []goose.ProviderOption
-	if dialect == goose.DialectPostgres {
-		sessionLocker, newPostgresSessionLockerErr := lock.NewPostgresSessionLocker()
-		if newPostgresSessionLockerErr != nil {
-			return nil, fmt.Errorf("failed to create Postgres migration session locker: %w", newPostgresSessionLockerErr)
-		}
-		options = append(options, goose.WithSessionLocker(sessionLocker))
-	}
-
-	return goose.NewProvider(dialect, db, migrationsFS, options...)
+	return goose.NewProvider(dialect, db, migrationsFS)
 }
 
 func embeddedMigrationFSInternal(dbProvider string) (fs.FS, error) {
@@ -232,8 +202,8 @@ func embeddedMigrationFSInternal(dbProvider string) (fs.FS, error) {
 
 func gooseDialectInternal(dbProvider string) (goose.Dialect, error) {
 	switch dbProvider {
-	case dbProviderPostgres:
-		return goose.DialectPostgres, nil
+	case dbProviderSQLite:
+		return goose.DialectSQLite3, nil
 	default:
 		return "", fmt.Errorf("unsupported database provider: %s", dbProvider)
 	}
@@ -303,15 +273,11 @@ func (db *DB) FindEnvironmentIDByApiKey(ctx context.Context, apiKey string) (str
 }
 
 func (db *DB) Close() error {
-	var lockErr error
-	if db.hubLock != nil {
-		lockErr = db.hubLock.Stop()
-	}
-	sqlDB, err := db.SQLDB()
+	pool, err := db.SQLDB()
 	if err != nil {
-		return errors.Join(lockErr, err)
+		return errors.Join(err, db.hubLock.Stop())
 	}
-	return errors.Join(lockErr, sqlDB.Close())
+	return errors.Join(pool.Close(), db.hubLock.Stop())
 }
 
 func (db *DB) SQLDB() (*sql.DB, error) {

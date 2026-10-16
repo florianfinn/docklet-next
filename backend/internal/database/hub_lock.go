@@ -1,66 +1,52 @@
-// Source: florianfinn/docklet-next/backend/internal/database/database.go
-// Revision: ab701984e86075694baabdc5efe14bed287768fc
-// Retrieved: 2026-10-14
+// Source: docklet-next/docs/design/sqlite-database.md
+// Revision: b3607be5144101152c8eb7738d389e8c73986fba
+// Retrieved: 2026-10-16
 // License: Apache-2.0
-// Deviations: New dedicated PostgreSQL session lock for single-hub startup.
+// Deviations: Descriptor-owned single-hub lock on a stable local inode.
 
 package database
 
 import (
 	"context"
-	"database/sql"
-	"database/sql/driver"
 	"errors"
-	"fmt"
-)
-
-const (
-	hubLockNamespace = 0x444f434b
-	hubLockID        = 0x48554231
+	"github.com/gofrs/flock"
+	"os"
 )
 
 var ErrHubAlreadyRunning = errors.New("hub.already_running")
 
-// HubLock owns a physical PostgreSQL connection for one hub lifetime.
-type HubLock struct{ conn *sql.Conn }
+// HubLock holds flock (LockFileEx on Windows) until all database handles close.
+type HubLock struct{ lock *flock.Flock }
 
-func acquireHubLock(ctx context.Context, pool *sql.DB) (*HubLock, error) {
-	conn, err := pool.Conn(ctx)
+func acquireHubLock(ctx context.Context, path string) (*HubLock, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	info, err := os.Lstat(path + ".lock")
+	if err == nil && !info.Mode().IsRegular() {
+		return nil, errors.New("hub lock must be a regular file")
+	}
+	if err != nil && !errors.Is(err, os.ErrNotExist) {
+		return nil, err
+	}
+	lock := flock.New(path+".lock", flock.SetPermissions(0600))
+	ok, err := lock.TryLock()
 	if err != nil {
-		return nil, fmt.Errorf("acquire hub lock connection: %w", err)
+		_ = lock.Close()
+		return nil, err
 	}
-	var granted bool
-	if err := conn.QueryRowContext(ctx, "SELECT pg_try_advisory_lock($1, $2)", hubLockNamespace, hubLockID).Scan(&granted); err != nil {
-		_ = discardHubLockConn(conn)
-		return nil, fmt.Errorf("acquire hub session lock: %w", err)
-	}
-	if !granted {
-		_ = conn.Close()
+	if !ok {
+		_ = lock.Close()
 		return nil, ErrHubAlreadyRunning
 	}
-	return &HubLock{conn: conn}, nil
+	return &HubLock{lock: lock}, nil
 }
-
-func discardHubLockConn(conn *sql.Conn) error {
-	// Discard the physical session so its advisory lock cannot enter the pool.
-	err := conn.Raw(func(any) error { return driver.ErrBadConn })
-	if errors.Is(err, driver.ErrBadConn) {
-		err = nil
-	}
-	closeErr := conn.Close()
-	if errors.Is(closeErr, sql.ErrConnDone) {
-		closeErr = nil
-	}
-	return errors.Join(err, closeErr)
-}
-
 func (l *HubLock) Stop() error {
 	if l == nil {
 		return nil
 	}
-	return discardHubLockConn(l.conn)
+	return l.lock.Close()
 }
-
 func (db *DB) HubLock() *HubLock {
 	if db == nil {
 		return nil
@@ -68,16 +54,12 @@ func (db *DB) HubLock() *HubLock {
 	return db.hubLock
 }
 
-// AcquireHubLock attaches the lifetime lock to an existing migrated database.
+// AcquireHubLock is only for test fixtures already opened by the owner.
 func (db *DB) AcquireHubLock(ctx context.Context) error {
-	if db == nil || db.hubLock != nil {
-		return errors.New("hub lock already attached or database unavailable")
+	if db == nil || db.hubLock != nil || db.path == "" {
+		return errors.New("hub lock already attached or database path unavailable")
 	}
-	pool, err := db.SQLDB()
-	if err != nil {
-		return err
-	}
-	lock, err := acquireHubLock(ctx, pool)
+	lock, err := acquireHubLock(ctx, db.path)
 	if err != nil {
 		return err
 	}

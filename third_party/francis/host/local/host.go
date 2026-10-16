@@ -24,7 +24,7 @@ import (
 
 	"github.com/italypaleale/francis/actor"
 	"github.com/italypaleale/francis/components"
-	"github.com/italypaleale/francis/components/postgres"
+	"github.com/italypaleale/francis/components/sqlite"
 	"github.com/italypaleale/francis/components/standalone"
 	"github.com/italypaleale/francis/internal/actorcore"
 	"github.com/italypaleale/francis/internal/ca"
@@ -54,14 +54,11 @@ const (
 )
 
 type (
-	// PostgresProviderOptions re-exports provider options
-	PostgresProviderOptions = postgres.PostgresProviderOptions
+	// SQLiteProviderOptions re-exports provider options
+	SQLiteProviderOptions = sqlite.SQLiteProviderOptions
 
 	// StandaloneMemoryProviderOptions re-exports provider options
 	StandaloneMemoryProviderOptions = standalone.StandaloneMemoryOptions
-
-	// StandalonePostgresProviderOptions re-exports provider options
-	StandalonePostgresProviderOptions = standalone.StandalonePostgresOptions
 )
 
 // Host is an actor host.

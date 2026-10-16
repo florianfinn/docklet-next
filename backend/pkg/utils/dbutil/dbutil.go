@@ -12,10 +12,10 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"strings"
 
-	"github.com/jackc/pgx/v5/pgconn"
 	"gorm.io/gorm"
+	"modernc.org/sqlite"
+	sqlitecode "modernc.org/sqlite/lib"
 )
 
 // IsRetryableWriteError reports whether a database write failed because the
@@ -25,16 +25,8 @@ func IsRetryableWriteError(err error) bool {
 		return false
 	}
 
-	var pgError *pgconn.PgError
-	if errors.As(err, &pgError) {
-		switch pgError.Code {
-		case "40001", "40P01", "55P03":
-			return true
-		}
-	}
-
-	errMsg := strings.ToLower(strings.TrimSpace(err.Error()))
-	return strings.Contains(errMsg, "timeout")
+	var sqliteError *sqlite.Error
+	return errors.As(err, &sqliteError) && sqliteError.Code()&0xff == sqlitecode.SQLITE_BUSY
 }
 
 // FirstWhere fetches a single row of T matching the provided WHERE clause.

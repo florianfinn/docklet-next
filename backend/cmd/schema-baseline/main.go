@@ -11,8 +11,9 @@ import (
 	"fmt"
 	"os"
 
+	"context"
 	"github.com/florianfinn/docklet-next/backend/internal/schema"
-	"gorm.io/driver/postgres"
+	"github.com/florianfinn/docklet-next/backend/pkg/utils/sqlitestore"
 	"gorm.io/gorm"
 )
 
@@ -28,12 +29,21 @@ func generate() error {
 	if dsn == "" {
 		return errors.New("DATABASE_URL is required")
 	}
-	db, err := gorm.Open(postgres.Open(dsn), &gorm.Config{IgnoreRelationshipsWhenMigrating: true})
+	path, err := sqlitestore.Path(dsn)
+	if err != nil {
+		return err
+	}
+	pool, err := sqlitestore.Open(context.Background(), path, true, false)
+	if err != nil {
+		return err
+	}
+	defer pool.Close()
+	db, err := gorm.Open(sqlitestore.Dialector(pool), &gorm.Config{IgnoreRelationshipsWhenMigrating: true})
 	if err != nil {
 		return err
 	}
 	var tables int
-	if err := db.Raw("SELECT count(*) FROM pg_tables WHERE schemaname = 'public'").Scan(&tables).Error; err != nil {
+	if err := db.Raw("SELECT count(*) FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'").Scan(&tables).Error; err != nil {
 		return err
 	}
 	if tables != 0 {

@@ -7,19 +7,20 @@
 package francis
 
 import (
+	"github.com/florianfinn/docklet-next/backend/pkg/utils/sqlitestore"
+	"path/filepath"
 	"testing"
 
 	"github.com/stretchr/testify/require"
 )
 
-func TestStoreURLRequiresPostgres(t *testing.T) {
-	for _, input := range []string{"postgres://docklet@example.invalid/docklet", "postgresql://docklet@example.invalid/docklet"} {
-		actual, err := StoreURL(input)
-		require.NoError(t, err)
-		require.Equal(t, input, actual)
-	}
-	for _, input := range []string{"file:legacy.db", "mysql://localhost/test", ""} {
+func TestStoreURL(t *testing.T) {
+	for _, input := range []string{"postgres://example.invalid/db", "file::memory:", "file:x.db?vfs=unix-dotfile", ""} {
 		_, err := StoreURL(input)
 		require.Error(t, err)
 	}
+	path := filepath.Join(t.TempDir(), "hub.db")
+	actual, err := StoreURL(sqlitestore.URL(path))
+	require.NoError(t, err)
+	require.Equal(t, sqlitestore.URL(filepath.Join(filepath.Dir(path), "hub.francis.db")), actual)
 }

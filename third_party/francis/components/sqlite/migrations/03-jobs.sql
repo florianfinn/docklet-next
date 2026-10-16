@@ -1,3 +1,9 @@
+-- Source: italypaleale/francis/components/sqlite/migrations/03-jobs.sql
+-- Revision: 23cd46831a543a73eec05ad034afd46245225876
+-- Retrieved: 2026-10-16
+-- License: MIT
+-- Deviations: None; pinned SQLite provider restored.
+
 -- Add the job discriminator and job-specific columns to the alarms table
 -- Jobs ride on the existing alarm engine and are stored as alarm rows with alarm_kind = 'job'
 ALTER TABLE %salarms ADD COLUMN alarm_kind text NOT NULL DEFAULT 'alarm';
@@ -7,8 +13,8 @@ ALTER TABLE %salarms ADD COLUMN alarm_cron text;
 -- Holds jobs that exhausted their retries or failed permanently
 -- A dead job preserves the original alarm_id as its job_id so it can be looked up and replayed
 CREATE TABLE %sdead_jobs (
-    -- Job ID, equal to the original alarm_id
-    job_id uuid PRIMARY KEY NOT NULL,
+    -- Job ID, equal to the original alarm_id (as UUID)
+    job_id text PRIMARY KEY NOT NULL,
     -- Actor type
     actor_type text NOT NULL,
     -- Actor ID
@@ -16,21 +22,19 @@ CREATE TABLE %sdead_jobs (
     -- Job handler method
     job_method text NOT NULL,
     -- Opaque job input data
-    job_data bytea,
+    job_data blob,
     -- Number of attempts made before dead-lettering
     attempts integer NOT NULL,
     -- Last error recorded for the job
     last_error text,
-    -- Time the job was dead-lettered
-    -- Stored as UTC
-    failed_at timestamp NOT NULL,
-    -- Original due time of the failed occurrence
-    -- Stored as UTC
-    original_due timestamp NOT NULL,
+    -- Time the job was dead-lettered, as a unix timestamp in milliseconds
+    failed_at integer NOT NULL,
+    -- Original due time of the failed occurrence, as a unix timestamp in milliseconds
+    original_due integer NOT NULL,
     -- Repetition interval of the original job, if any
     job_interval text,
     -- Cron schedule of the original job, if any
     job_cron text
-);
+) WITHOUT ROWID, STRICT;
 
-CREATE INDEX %pdead_jobs_actor_idx ON %sdead_jobs (actor_type, actor_id);
+CREATE INDEX %sdead_jobs_actor_idx ON %sdead_jobs (actor_type, actor_id);

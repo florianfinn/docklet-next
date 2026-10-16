@@ -36,7 +36,7 @@ require (
 	github.com/gofrs/flock v0.13.1
 	github.com/google/go-containerregistry v0.22.1
 	github.com/italypaleale/francis v0.1.0
-	github.com/jackc/pgx/v5 v5.11.0
+	github.com/libtnb/sqlite v1.2.2
 	github.com/klauspost/compress v1.20.1
 	github.com/labstack/echo/v5 v5.4.0
 	github.com/lestrrat-go/jwx/v4 v4.5.0
@@ -82,7 +82,6 @@ require (
 	golang.org/x/time v0.16.0
 	google.golang.org/grpc v1.84.0
 	google.golang.org/protobuf v1.36.12
-	gorm.io/driver/postgres v1.6.3
 	gorm.io/gorm v1.31.2
 )
 
