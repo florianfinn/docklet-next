@@ -1,195 +1,177 @@
-//go:build postgres_integration
-
-// Source: docklet-next/docs/design/core-adoption.md
-// Revision: be847e36ab81fdf0cd6a7dad333046ddea990e71
-// Retrieved: 2026-10-13
+// Source: docklet-next/docs/design/sqlite-database.md
+// Revision: b3607be5144101152c8eb7738d389e8c73986fba
+// Retrieved: 2026-10-16
 // License: Apache-2.0
-// Deviations: Original issue #8 fresh database and bidirectional model schema proof.
+// Deviations: Bidirectional SQLite schema proof and independent retained-integrity assertions.
 
 package schema
 
 import (
-	"crypto/rand"
+	"database/sql"
 	_ "embed"
-	"encoding/hex"
 	"encoding/json"
 	"fmt"
-	"net/url"
-	"os"
-	"regexp"
-	"slices"
+	"github.com/florianfinn/docklet-next/backend/internal/database"
+	"github.com/florianfinn/docklet-next/backend/pkg/utils/sqlitestore"
+	"github.com/stretchr/testify/require"
+	"gorm.io/gorm"
+	"path/filepath"
+	"sort"
 	"strings"
 	"testing"
-
-	"github.com/stretchr/testify/require"
-	"gorm.io/driver/postgres"
-	"gorm.io/gorm"
-
-	"github.com/florianfinn/docklet-next/backend/internal/activity"
-	"github.com/florianfinn/docklet-next/backend/internal/database"
 )
-
-//go:embed retained_integrity.sql
-var retainedIntegritySQL string
 
 //go:embed testdata/retained-integrity.json
 var retainedIntegrityReference []byte
 
-func freshDatabase(t *testing.T, admin *gorm.DB, source *url.URL) string {
+func freshDatabase(t *testing.T) string {
 	t.Helper()
-	var random [8]byte
-	_, err := rand.Read(random[:])
+	return sqlitestore.URL(filepath.Join(t.TempDir(), "hub.db"))
+}
+func canonical(s string) string {
+	return strings.ToLower(strings.Join(strings.Fields(strings.NewReplacer(`"`, "", "`", "", "(", " ", ")", " ", ",", " ").Replace(s)), " "))
+}
+func sqlRows(t *testing.T, db *sql.DB, query string, args ...any) [][]string {
+	t.Helper()
+	rows, err := db.QueryContext(t.Context(), query, args...)
 	require.NoError(t, err)
-	name := "docklet_schema_" + hex.EncodeToString(random[:])
-	require.NoError(t, admin.Exec("CREATE DATABASE "+name).Error)
-	t.Cleanup(func() { require.NoError(t, admin.Exec("DROP DATABASE "+name+" WITH (FORCE)").Error) })
-	copyURL := *source
-	copyURL.Path = "/" + name
-	return copyURL.String()
-}
-
-func catalog(t *testing.T, db *gorm.DB) []string {
-	t.Helper()
-	const query = `
-SELECT object FROM (
- SELECT 'table:' || c.relname AS object FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace
- WHERE n.nspname='public' AND c.relkind='r' AND c.relname<>'goose_db_version'
- UNION ALL
- SELECT 'column:' || c.relname || '.' || a.attname || ':' || a.attnum || ':' || format_type(a.atttypid,a.atttypmod) || ':' || a.attnotnull || ':' || coalesce(pg_get_expr(d.adbin,d.adrelid),'')
- FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace JOIN pg_attribute a ON a.attrelid=c.oid
- LEFT JOIN pg_attrdef d ON d.adrelid=c.oid AND d.adnum=a.attnum
- WHERE n.nspname='public' AND c.relkind='r' AND c.relname<>'goose_db_version' AND a.attnum>0 AND NOT a.attisdropped
- UNION ALL
- SELECT 'index:' || pg_get_indexdef(i.indexrelid) FROM pg_index i JOIN pg_class c ON c.oid=i.indrelid JOIN pg_namespace n ON n.oid=c.relnamespace
- WHERE n.nspname='public' AND c.relname<>'goose_db_version'
- UNION ALL
- SELECT 'constraint:' || c.relname || ':' || x.conname || ':' || pg_get_constraintdef(x.oid)
- FROM pg_constraint x JOIN pg_class c ON c.oid=x.conrelid JOIN pg_namespace n ON n.oid=c.relnamespace
- WHERE n.nspname='public' AND c.relname<>'goose_db_version'
- UNION ALL
- SELECT 'sequence:' || c.relname FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace WHERE n.nspname='public' AND c.relkind='S' AND c.relname<>'goose_db_version_id_seq'
- UNION ALL
- SELECT 'enum:' || t.typname || ':' || e.enumlabel FROM pg_type t JOIN pg_namespace n ON n.oid=t.typnamespace JOIN pg_enum e ON e.enumtypid=t.oid WHERE n.nspname='public'
-) objects ORDER BY object`
-	var rows []string
-	require.NoError(t, db.Raw(query).Scan(&rows).Error)
-	return rows
-}
-
-var backupColumnOrdinal = regexp.MustCompile(`^(column:system_backup_(?:runs|policies)\.[^:]+:)[0-9]+:`)
-
-func comparableCatalog(entries []string) []string {
-	result := make([]string, 0, len(entries))
-	for _, entry := range entries {
-		if (strings.HasPrefix(entry, "constraint:system_backup_runs:") ||
-			strings.HasPrefix(entry, "constraint:system_backup_policies:") ||
-			strings.HasPrefix(entry, "index:")) &&
-			(strings.Contains(entry, "system_backup_runs") || strings.Contains(entry, "system_backup_policies")) {
-			continue
+	defer rows.Close()
+	names, err := rows.Columns()
+	require.NoError(t, err)
+	var result [][]string
+	for rows.Next() {
+		values := make([]sql.NullString, len(names))
+		targets := make([]any, len(names))
+		for i := range values {
+			targets[i] = &values[i]
 		}
-		result = append(result, backupColumnOrdinal.ReplaceAllString(entry, "${1}0:"))
+		require.NoError(t, rows.Scan(targets...))
+		row := make([]string, len(names))
+		for i, v := range values {
+			if v.Valid {
+				row[i] = v.String
+			} else {
+				row[i] = "<NULL>"
+			}
+		}
+		result = append(result, row)
 	}
-	slices.Sort(result)
+	require.NoError(t, rows.Err())
 	return result
 }
-
-func integrityCatalog(t *testing.T, db *gorm.DB) []string {
+func catalog(t *testing.T, db *sql.DB) []string {
 	t.Helper()
-	const query = `
-SELECT object FROM (
- SELECT 'notnull:' || c.relname || '.' || a.attname AS object
- FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace JOIN pg_attribute a ON a.attrelid=c.oid
- WHERE n.nspname='public' AND c.relkind='r' AND a.attnum>0 AND NOT a.attisdropped AND a.attnotnull
- UNION ALL
- SELECT 'default:' || c.relname || '.' || a.attname || ':' || pg_get_expr(d.adbin,d.adrelid)
- FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace JOIN pg_attribute a ON a.attrelid=c.oid
- JOIN pg_attrdef d ON d.adrelid=c.oid AND d.adnum=a.attnum
- WHERE n.nspname='public' AND c.relkind='r' AND c.relname<>'goose_db_version'
- UNION ALL
- SELECT 'constraint:' || c.relname || ':' || pg_get_constraintdef(x.oid)
- FROM pg_constraint x JOIN pg_class c ON c.oid=x.conrelid JOIN pg_namespace n ON n.oid=c.relnamespace
- WHERE n.nspname='public' AND c.relname<>'goose_db_version' AND x.contype<>'n'
- UNION ALL
- SELECT 'index:' || c.relname || ':' || substr(pg_get_indexdef(i.indexrelid), strpos(pg_get_indexdef(i.indexrelid),' ON public.'))
- FROM pg_index i JOIN pg_class c ON c.oid=i.indrelid JOIN pg_namespace n ON n.oid=c.relnamespace
- WHERE n.nspname='public' AND c.relname<>'goose_db_version'
-) objects ORDER BY object`
-	var rows []string
-	require.NoError(t, db.Raw(query).Scan(&rows).Error)
-	return rows
-}
-
-func TestFreshMigrationMatchesRetainedModels(t *testing.T) {
-	dsn := os.Getenv("DATABASE_URL")
-	require.NotEmpty(t, dsn, "DATABASE_URL must point to the test PostgreSQL service")
-	u, err := url.Parse(dsn)
-	require.NoError(t, err)
-	require.True(t, strings.HasPrefix(u.Scheme, "postgres"))
-	admin, err := gorm.Open(postgres.Open(dsn), &gorm.Config{})
-	require.NoError(t, err)
-	adminSQL, err := admin.DB()
-	require.NoError(t, err)
-	t.Cleanup(func() { _ = adminSQL.Close() })
-	migratedURL := freshDatabase(t, admin, u)
-	modelURL := freshDatabase(t, admin, u)
-	migrated, err := database.Initialize(t.Context(), migratedURL, database.MigrationOptions{})
-	require.NoError(t, err)
-	t.Cleanup(func() { require.NoError(t, migrated.Close()) })
-	modelDB, err := gorm.Open(postgres.Open(modelURL), &gorm.Config{IgnoreRelationshipsWhenMigrating: true})
-	require.NoError(t, err)
-	modelSQL, err := modelDB.DB()
-	require.NoError(t, err)
-	t.Cleanup(func() { require.NoError(t, modelSQL.Close()) })
-	require.NoError(t, modelDB.AutoMigrate(Models()...))
-	// Migration 006 leaves three dropped attribute slots before the new output
-	// columns. Recreate that physical layout before comparing exact ordinals.
-	require.NoError(t, modelDB.Exec(`ALTER TABLE activities DROP COLUMN output, DROP COLUMN output_truncated`).Error)
-	require.NoError(t, modelDB.Exec(`ALTER TABLE activities ADD COLUMN ordinal_gap text`).Error)
-	require.NoError(t, modelDB.Exec(`ALTER TABLE activities DROP COLUMN ordinal_gap`).Error)
-	require.NoError(t, modelDB.Migrator().AddColumn(&activity.Activity{}, "Output"))
-	require.NoError(t, modelDB.Migrator().AddColumn(&activity.Activity{}, "OutputTruncated"))
-	for _, statement := range strings.Split(retainedIntegritySQL, ";") {
-		if strings.TrimSpace(statement) != "" {
-			require.NoError(t, modelDB.Exec(statement).Error)
-		}
-	}
-	// Forward migrations leave dropped physical column slots; compare the live
-	// backup columns by name and type while preserving exact checks elsewhere.
-	require.Equal(t, comparableCatalog(catalog(t, modelDB)), comparableCatalog(catalog(t, migrated.DB)))
-	var expected [][]string
-	require.NoError(t, json.Unmarshal(retainedIntegrityReference, &expected))
-	actual := integrityCatalog(t, migrated.DB)
-	var missing []string
-	for _, parts := range expected {
-		if (parts[0] == "default" && len(parts) > 2 && parts[1] == "system_backup_policies" && parts[2] == "local_enabled") ||
-			(parts[0] == "notnull" && len(parts) > 2 && ((parts[1] == "system_backup_policies" && parts[2] == "local_enabled") ||
-				(parts[1] == "system_backup_runs" && parts[2] == "destination"))) {
+	objects := sqlRows(t, db, "SELECT type,name,tbl_name,sql FROM sqlite_master WHERE name NOT LIKE 'sqlite_%' AND name <> 'goose_db_version' AND tbl_name <> 'goose_db_version' ORDER BY type,name")
+	var result []string
+	for _, o := range objects {
+		result = append(result, strings.Join(o, ":"))
+		if o[0] != "table" {
 			continue
 		}
-		var entry string
-		switch parts[0] {
-		case "notnull":
-			require.Len(t, parts, 3)
-			entry = "notnull:" + parts[1] + "." + parts[2]
-		case "default":
-			require.Len(t, parts, 4)
-			entry = "default:" + parts[1] + "." + parts[2] + ":" + parts[3]
-		default:
-			require.Len(t, parts, 3)
-			entry = parts[0] + ":" + parts[1] + ":" + parts[2]
-		}
-		if !slices.Contains(actual, entry) {
-			missing = append(missing, entry)
+		for _, pragma := range []string{"table_info", "foreign_key_list", "index_list"} {
+			for _, row := range sqlRows(t, db, "PRAGMA "+pragma+"("+quote(o[1])+")") {
+				// index_list sequence is creation order, not a schema property.
+				if pragma == "index_list" {
+					row[0] = ""
+					for _, x := range sqlRows(t, db, "PRAGMA index_xinfo("+quote(row[1])+")") {
+						result = append(result, "index_xinfo:"+row[1]+":"+strings.Join(x, ":"))
+					}
+				}
+				result = append(result, pragma+":"+o[1]+":"+strings.Join(row, ":"))
+			}
 		}
 	}
-	require.Empty(t, missing, "baseline must retain the independent old-chain integrity reference")
-
-	var tableNames []string
-	require.NoError(t, migrated.Raw("SELECT tablename FROM pg_tables WHERE schemaname='public' AND tablename<>'goose_db_version' ORDER BY tablename").Scan(&tableNames).Error)
-	require.Len(t, tableNames, len(Models()))
-	for _, name := range tableNames {
-		var count int64
-		require.NoError(t, migrated.Raw(fmt.Sprintf("SELECT count(*) FROM public.%q", name)).Scan(&count).Error)
-		require.Zero(t, count, "baseline must contain no seed rows in %s", name)
+	sort.Strings(result)
+	return result
+}
+func TestFreshMigrationMatchesRetainedModels(t *testing.T) {
+	migrated, err := database.Initialize(t.Context(), freshDatabase(t), database.MigrationOptions{})
+	require.NoError(t, err)
+	t.Cleanup(func() { require.NoError(t, migrated.Close()) })
+	modelPath, err := sqlitestore.Path(freshDatabase(t))
+	require.NoError(t, err)
+	pool, err := sqlitestore.Open(t.Context(), modelPath, true, false)
+	require.NoError(t, err)
+	t.Cleanup(func() { require.NoError(t, pool.Close()) })
+	model, err := gorm.Open(sqlitestore.Dialector(pool), &gorm.Config{IgnoreRelationshipsWhenMigrating: true})
+	require.NoError(t, err)
+	require.NoError(t, model.AutoMigrate(Models()...))
+	require.NoError(t, ApplyIntegrity(model))
+	require.NoError(t, model.Exec("CREATE TABLE docklet_database_metadata (identity TEXT PRIMARY KEY NOT NULL CHECK (identity = 'docklet-next:sqlite:1'))").Error)
+	actual, err := migrated.SQLDB()
+	require.NoError(t, err)
+	require.Equal(t, catalog(t, pool), catalog(t, actual))
+	require.Empty(t, sqlRows(t, actual, "PRAGMA foreign_key_check"))
+	require.Equal(t, [][]string{{"ok"}}, sqlRows(t, actual, "PRAGMA integrity_check"))
+	var expected [][]string
+	require.NoError(t, json.Unmarshal(retainedIntegrityReference, &expected))
+	tableSQL := map[string]string{}
+	columns := map[string][]string{}
+	var allIndexes []string
+	for _, row := range sqlRows(t, actual, "SELECT name,sql FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' AND name <> 'goose_db_version'") {
+		tableSQL[row[0]] = canonical(row[1])
+		for _, c := range sqlRows(t, actual, "PRAGMA table_info("+quote(row[0])+")") {
+			columns[row[0]+"."+c[1]] = c
+		}
+	}
+	for _, row := range sqlRows(t, actual, "SELECT sql FROM sqlite_master WHERE type='index' AND sql IS NOT NULL") {
+		allIndexes = append(allIndexes, canonical(row[0]))
+	}
+	for table := range tableSQL {
+		for _, idx := range sqlRows(t, actual, "PRAGMA index_list("+quote(table)+")") {
+			var names []string
+			for _, c := range sqlRows(t, actual, "PRAGMA index_xinfo("+quote(idx[1])+")") {
+				if c[5] == "1" {
+					names = append(names, c[2])
+				}
+			}
+			allIndexes = append(allIndexes, canonical("ON "+table+" ("+strings.Join(names, ",")+")"))
+		}
+		for _, c := range sqlRows(t, actual, "PRAGMA table_info("+quote(table)+")") {
+			if c[5] != "0" && strings.EqualFold(c[2], "integer") {
+				allIndexes = append(allIndexes, canonical("ON "+table+" ("+c[1]+")"))
+			}
+		}
+	}
+	for _, row := range expected {
+		switch row[0] {
+		case "notnull":
+			c := columns[row[1]+"."+row[2]]
+			require.NotEmpty(t, c, row)
+			require.True(t, c[3] == "1" || (c[5] != "0" && strings.EqualFold(c[2], "integer")), fmt.Sprint(row))
+		case "default":
+			if row[3] == "INTEGER PRIMARY KEY AUTOINCREMENT" {
+				require.Contains(t, tableSQL[row[1]], canonical(row[3]))
+				continue
+			}
+			c := columns[row[1]+"."+row[2]]
+			require.NotEmpty(t, c, row)
+			require.Equal(t, canonical(row[3]), canonical(c[4]), fmt.Sprint(row))
+		case "constraint":
+			if strings.HasPrefix(row[2], "PRIMARY KEY (") {
+				names := strings.Fields(strings.TrimPrefix(canonical(row[2]), "primary key "))
+				actualPK := []string{}
+				for _, c := range sqlRows(t, actual, "PRAGMA table_info("+quote(row[1])+")") {
+					if c[5] != "0" {
+						actualPK = append(actualPK, c[1])
+					}
+				}
+				require.Equal(t, names, actualPK, fmt.Sprint(row))
+			} else {
+				require.Contains(t, tableSQL[row[1]], canonical(row[2]), fmt.Sprint(row))
+			}
+		case "index":
+			found := false
+			for _, index := range allIndexes {
+				found = found || strings.Contains(index, canonical(row[2]))
+			}
+			require.True(t, found, fmt.Sprint(row))
+		}
+	}
+	for table := range tableSQL {
+		if table == "docklet_database_metadata" {
+			continue
+		}
+		require.Equal(t, [][]string{{"0"}}, sqlRows(t, actual, "SELECT count(*) FROM "+quote(table)))
 	}
 }

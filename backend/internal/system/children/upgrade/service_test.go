@@ -1,10 +1,8 @@
-//go:build postgres_integration
-
 // Source: getarcaneapp/arcane/backend/internal/system/children/upgrade/service_test.go
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; functional cut: removed GitOps and saved Git repositories; functional cut: PostgreSQL integration test fixture.
+// Deviations: Local module namespace; functional cut: removed GitOps and saved Git repositories; SQLite temp-file persistence fixture.
 
 package upgrade
 
@@ -18,7 +16,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/florianfinn/docklet-next/backend/internal/testpg"
+	"github.com/florianfinn/docklet-next/backend/internal/testsqlite"
 	versiontypes "github.com/florianfinn/docklet-next/types/version"
 	"github.com/moby/moby/api/types/container"
 	"github.com/stretchr/testify/require"
@@ -326,7 +324,7 @@ func TestResolveSelfUpgradeTargetImageInternal(t *testing.T) {
 	}
 	for _, tt := range composeTests {
 		t.Run(tt.name, func(t *testing.T) {
-			gormDB, err := gorm.Open(testpg.Dialector(t, "file:"+t.Name()+"?mode=memory&cache=shared"), &gorm.Config{})
+			gormDB, err := gorm.Open(testsqlite.Dialector(t, "file:"+t.Name()+"?mode=memory&cache=shared"), &gorm.Config{})
 			require.NoError(t, err)
 			db := &database.DB{DB: gormDB}
 			require.NoError(t, db.AutoMigrate(&project.Project{}, &settings.SettingVariable{}))
@@ -492,7 +490,7 @@ func TestUpsertPendingResult(t *testing.T) {
 
 func TestUpdateAllFailedJobMarksUpdatingResultsFailed(t *testing.T) {
 	ctx := t.Context()
-	gormDB, err := gorm.Open(testpg.Dialector(t, "file:"+t.Name()+"?mode=memory&cache=shared"), &gorm.Config{})
+	gormDB, err := gorm.Open(testsqlite.Dialector(t, "file:"+t.Name()+"?mode=memory&cache=shared"), &gorm.Config{})
 	require.NoError(t, err)
 
 	db := &database.DB{DB: gormDB}
@@ -541,7 +539,7 @@ func TestUpdateAllFailedJobMarksUpdatingResultsFailed(t *testing.T) {
 // place, because no next boot is coming to do it.
 func TestUpdateAllFinalizesUpToDateManagerWithoutRestart(t *testing.T) {
 	ctx := t.Context()
-	gormDB, err := gorm.Open(testpg.Dialector(t, "file:"+t.Name()+"?mode=memory&cache=shared"), &gorm.Config{})
+	gormDB, err := gorm.Open(testsqlite.Dialector(t, "file:"+t.Name()+"?mode=memory&cache=shared"), &gorm.Config{})
 	require.NoError(t, err)
 
 	db := &database.DB{DB: gormDB}
@@ -587,7 +585,7 @@ func TestUpdateAllFinalizesUpToDateManagerWithoutRestart(t *testing.T) {
 // progress; re-entering the current stage must not restart its clock.
 func TestUpdateAllStageChangesPersist(t *testing.T) {
 	ctx := t.Context()
-	gormDB, err := gorm.Open(testpg.Dialector(t, "file:"+t.Name()+"?mode=memory&cache=shared"), &gorm.Config{})
+	gormDB, err := gorm.Open(testsqlite.Dialector(t, "file:"+t.Name()+"?mode=memory&cache=shared"), &gorm.Config{})
 	require.NoError(t, err)
 
 	db := &database.DB{DB: gormDB}
@@ -685,7 +683,7 @@ func TestAgentAlreadyOnTarget(t *testing.T) {
 // and complete the job, NOT re-run the agents phase.
 func TestResumeUpdateAllFinalizesManagerWithoutRerunningAgents(t *testing.T) {
 	ctx := t.Context()
-	gormDB, err := gorm.Open(testpg.Dialector(t, "file:"+t.Name()+"?mode=memory&cache=shared"), &gorm.Config{})
+	gormDB, err := gorm.Open(testsqlite.Dialector(t, "file:"+t.Name()+"?mode=memory&cache=shared"), &gorm.Config{})
 	require.NoError(t, err)
 
 	db := &database.DB{DB: gormDB}

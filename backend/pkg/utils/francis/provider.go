@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: functional cut: removed SQLite actor storage; functional cut: removed SQLite runtime and migrations.
+// Deviations: SQLite sidecar with caller-owned single-connection persistence.
 
 package francis
 
@@ -10,38 +10,51 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/florianfinn/docklet-next/backend/pkg/utils/sqlitestore"
 	"log/slog"
-	"strings"
 	"time"
 
+	"database/sql"
 	"github.com/italypaleale/francis/components"
-	"github.com/italypaleale/francis/components/postgres"
-	"github.com/italypaleale/francis/host/local"
+	"github.com/italypaleale/francis/components/sqlite"
 )
 
 func StoreURL(databaseURL string) (string, error) {
-	if !strings.HasPrefix(databaseURL, "postgres://") && !strings.HasPrefix(databaseURL, "postgresql://") {
-		return "", errors.New("actor storage requires a PostgreSQL URL")
+	path, err := sqlitestore.Path(databaseURL)
+	if err != nil {
+		return "", err
 	}
-	return databaseURL, nil
+	return sqlitestore.URL(sqlitestore.FrancisPath(path)), nil
 }
 
-func providerOption(storeURL string) local.HostOption {
-	return local.WithPostgresProvider(postgres.PostgresProviderOptions{ConnectionString: storeURL, TablePrefix: TablePrefix})
+type ownedProvider struct {
+	components.ActorProvider
+	pool *sql.DB
 }
+
+func (p *ownedProvider) Close() error { return errors.Join(p.ActorProvider.Close(), p.pool.Close()) }
 
 func openProvider(ctx context.Context, storeURL string) (components.ActorProvider, error) {
 	cfg := components.NewProviderConfig()
 	cfg.HostHealthCheckDeadline = 90 * time.Second
 	cfg.MaxHosts = 1
-	provider, err := postgres.NewPostgresProvider(slog.Default(), postgres.PostgresProviderOptions{ConnectionString: storeURL, TablePrefix: TablePrefix}, cfg)
+	path, err := sqlitestore.Path(storeURL)
 	if err != nil {
 		return nil, err
 	}
-	if err = provider.Init(ctx); err != nil {
-		return nil, errors.Join(fmt.Errorf("initialize actor provider: %w", err), provider.Close())
+	pool, err := sqlitestore.Open(ctx, path, false, false)
+	if err != nil {
+		return nil, err
 	}
-	return provider, nil
+	provider, err := sqlite.NewSQLiteProvider(slog.Default(), sqlite.SQLiteProviderOptions{DB: pool, TablePrefix: TablePrefix}, cfg)
+	if err != nil {
+		_ = pool.Close()
+		return nil, err
+	}
+	if err = provider.Init(ctx); err != nil {
+		return nil, errors.Join(fmt.Errorf("initialize actor provider: %w", err), provider.Close(), pool.Close())
+	}
+	return &ownedProvider{ActorProvider: provider, pool: pool}, nil
 }
 
 // ClearRestoredHosts removes copied live host ownership from an offline restored database.

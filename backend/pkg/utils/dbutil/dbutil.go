@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: functional cut: removed SQLite runtime and migrations.
+// Deviations: SQLite busy classification for the existing bounded owner-write retries.
 
 // Package dbutil provides small generic helpers around GORM that consolidate
 // repetitive single-row lookup and transaction boilerplate found across services.
@@ -12,10 +12,10 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"strings"
 
-	"github.com/jackc/pgx/v5/pgconn"
 	"gorm.io/gorm"
+	"modernc.org/sqlite"
+	sqlitecode "modernc.org/sqlite/lib"
 )
 
 // IsRetryableWriteError reports whether a database write failed because the
@@ -25,16 +25,8 @@ func IsRetryableWriteError(err error) bool {
 		return false
 	}
 
-	var pgError *pgconn.PgError
-	if errors.As(err, &pgError) {
-		switch pgError.Code {
-		case "40001", "40P01", "55P03":
-			return true
-		}
-	}
-
-	errMsg := strings.ToLower(strings.TrimSpace(err.Error()))
-	return strings.Contains(errMsg, "timeout")
+	var sqliteError *sqlite.Error
+	return errors.As(err, &sqliteError) && isBusyCode(sqliteError.Code())
 }
 
 // FirstWhere fetches a single row of T matching the provided WHERE clause.
@@ -59,4 +51,12 @@ func FirstWhere[T any](ctx context.Context, db *gorm.DB, notFound error, where s
 // db.WithContext(ctx).Transaction(fn) but tightens the surface area at call sites.
 func WithTx(ctx context.Context, db *gorm.DB, fn func(tx *gorm.DB) error) error {
 	return db.WithContext(ctx).Transaction(fn)
+}
+
+func isBusyCode(code int) bool { return code&0xff == sqlitecode.SQLITE_BUSY }
+
+// IsUniqueConstraint classifies primary-key and unique-index failures only.
+func IsUniqueConstraint(err error) bool {
+	var sqliteError *sqlite.Error
+	return errors.As(err, &sqliteError) && (sqliteError.Code() == sqlitecode.SQLITE_CONSTRAINT_UNIQUE || sqliteError.Code() == sqlitecode.SQLITE_CONSTRAINT_PRIMARYKEY)
 }

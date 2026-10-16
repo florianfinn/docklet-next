@@ -1,10 +1,8 @@
-//go:build postgres_integration
-
 // Source: getarcaneapp/arcane/backend/cli/admin/reset_password_test.go
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; functional cut: PostgreSQL integration test fixture.
+// Deviations: Local module namespace; SQLite temp-file persistence fixture.
 
 package admin
 
@@ -12,7 +10,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/florianfinn/docklet-next/backend/internal/testpg"
+	"github.com/florianfinn/docklet-next/backend/internal/testsqlite"
 	"github.com/florianfinn/docklet-next/types/auth"
 	"github.com/stretchr/testify/require"
 	"gorm.io/gorm"
@@ -28,7 +26,7 @@ import (
 func newResetPasswordTestDBInternal(t *testing.T) *database.DB {
 	t.Helper()
 
-	gormDB, err := gorm.Open(testpg.Dialector(t, ":memory:"), &gorm.Config{})
+	gormDB, err := gorm.Open(testsqlite.Dialector(t, ":memory:"), &gorm.Config{})
 	require.NoError(t, err)
 	require.NoError(t, gormDB.AutoMigrate(
 		&user.User{},
@@ -99,19 +97,7 @@ func TestResetPasswordInternalRollsBackWhenSessionRevocationFails(t *testing.T) 
 	sessionService := session.NewSessionService(db)
 	localSession, _, err := sessionService.CreateSession(ctx, adminUser.ID, time.Now().Add(time.Hour), auth.SessionMeta{})
 	require.NoError(t, err)
-	require.NoError(t, db.Exec(`
-		CREATE FUNCTION fail_user_session_revocation() RETURNS trigger AS $$
-		BEGIN
-			RAISE EXCEPTION 'forced session revocation failure';
-		END;
-		$$ LANGUAGE plpgsql;
-	`).Error)
-	require.NoError(t, db.Exec(`
-		CREATE TRIGGER fail_user_session_revocation
-		BEFORE UPDATE OF revoked_at ON user_sessions
-		FOR EACH ROW WHEN (NEW.revoked_at IS NOT NULL)
-		EXECUTE FUNCTION fail_user_session_revocation();
-	`).Error)
+	require.NoError(t, db.Exec(`CREATE TRIGGER fail_user_session_revocation BEFORE UPDATE OF revoked_at ON user_sessions FOR EACH ROW WHEN NEW.revoked_at IS NOT NULL BEGIN SELECT RAISE(ABORT,'forced session revocation failure'); END;`).Error)
 
 	err = resetPasswordInternal(ctx, db, adminUser.Username, "new-password", validation.PasswordPolicyBasic)
 	require.Error(t, err)

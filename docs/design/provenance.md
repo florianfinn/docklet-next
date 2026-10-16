@@ -1,9 +1,11 @@
 # Provenance and inventories
 
 The imported Arcane PostgreSQL migration history was removed before release
-and replaced by the [retained-model baseline](database-baseline.md). That
-document records the source revision, removed feature schema and generation
-method as the provenance deviation for those 90 deleted files.
+and replaced by a retained-model baseline. The
+[M1 record](../history/m1-postgresql-baseline.md) preserves the source revision,
+removed feature schema and generation method for those 90 deleted files.
+The [SQLite contract](sqlite-database.md) owns the new baseline and restored
+provider provenance; historical inventories remain dated evidence.
 
 Each adopted file retains existing legal notices and adds a short native
 comment:
@@ -29,13 +31,13 @@ content changes require updating the entry and deviations. Byte-identical legal
 texts are instead protected by the licence hash manifest. Source licences remain
 intact.
 
-PostgreSQL migrations require a sidecar entry. The guard compares all five SQL
-header fields with that entry. `migrationHeaderOverrides` records the expected
-sidecar values for fields that already differ in the seven shipped migrations;
-the sidecar is authoritative for those fields. The file SHA-256 still protects
-every shipped header byte, and an override fails if its expected sidecar value
-changes or the header field agrees with the sidecar. New migrations require
-matching headers and sidecars without overrides.
+Database migrations require a sidecar entry matching all five SQL header
+fields, plus a content SHA-256. New migrations cannot use header overrides.
+SQLite migration paths are relative to `backend/resources/migrations/`, beginning
+with `sqlite/001_baseline.sql`. No header overrides are permitted. The exact
+seven-hash pre-release PostgreSQL manifest is accepted only for the one-time
+baseline transition defined by the SQLite contract. Shipped SQLite hashes cannot
+be changed or removed.
 
 scripts/size-baseline.json maps adopted oversized files to reviewed line
 ceilings. Own files have a hard 1,000-line limit without exemptions. A first
@@ -121,10 +123,13 @@ no assets.
 
 ## Distribution hook points
 
-scripts/license-policy.json records the immutable Arcane BSD text hash. M1/M2
-must add exact extracted build-artefact paths to artifactCopies and run the
-licence check against each staging tree before packaging. A configured copy must
-exist and match; no copies are configured while there are no artefacts.
+scripts/license-policy.json records the immutable Arcane BSD text hash. Static
+artifact copies use exact `artifactCopies` paths; the candidate image instead
+assembles dynamic Go/web bundles from the current dependency inventories.
+`smoke-hub-image.mjs` extracts them and checks every recorded dependency hash
+and the immutable Arcane BSD text in the package. A nonempty file alone does
+not establish the required notice.
+
 Binaries/images/installers must ship the same notice under an appropriate
 licences directory. The UI must expose third-party licence text. Release checks
 inspect extracted artefacts, not only a source Dockerfile or an in-app link.

@@ -1,7 +1,12 @@
-# The Hub image consumes only Go source and the checked-in frontend placeholder.
 .git
+.scratch
 **/node_modules
+**/dist
 **/.env
 **/.env.*
-**/*.test
-**/.cache
+!**/.env.example
+**/*.db
+**/*.db-*
+**/*.db.lock
+**/*.francis.db*
+.publication-denylist.local.json

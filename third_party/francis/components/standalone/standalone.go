@@ -1,4 +1,4 @@
-// Package standalone provides in-memory and PostgreSQL-backed actor storage.
+// Package standalone provides in-memory actor storage.
 package standalone
 
 import (

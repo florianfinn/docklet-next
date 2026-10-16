@@ -1,10 +1,8 @@
-//go:build postgres_integration
-
 // Source: getarcaneapp/arcane/backend/internal/webhook/service_test.go
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; functional cut: removed GitOps and saved Git repositories; functional cut: PostgreSQL integration test fixture.
+// Deviations: Local module namespace; functional cut: removed GitOps and saved Git repositories; SQLite temp-file persistence fixture.
 
 package webhook
 
@@ -20,7 +18,7 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/florianfinn/docklet-next/backend/internal/testpg"
+	"github.com/florianfinn/docklet-next/backend/internal/testsqlite"
 	"github.com/florianfinn/docklet-next/types"
 	"github.com/florianfinn/docklet-next/types/user"
 	"github.com/labstack/echo/v5"
@@ -40,7 +38,7 @@ func setupWebhookServiceTestDB(t *testing.T) *database.DB {
 	initWebhookTokenCryptoForTests()
 
 	dsn := fmt.Sprintf("file:%s?mode=memory&cache=shared", strings.NewReplacer("/", "_", " ", "_").Replace(t.Name()))
-	db, err := gorm.Open(testpg.Dialector(t, dsn), &gorm.Config{})
+	db, err := gorm.Open(testsqlite.Dialector(t, dsn), &gorm.Config{})
 	require.NoError(t, err)
 	require.NoError(t, db.AutoMigrate(&Webhook{}))
 

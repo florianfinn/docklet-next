@@ -2,8 +2,10 @@
 
 Docker and Compose management with a Go hub and agent core and a React interface.
 
-**Status: early development, not usable yet.** This repository currently contains
-its governance and verification foundation; no runnable product is included.
+**Status: early development; no product release.** The Go hub and agent core and
+React interface build locally. The hub uses SQLite on local persistent storage;
+no database service or old-data import is supported. See the
+[hub candidate package](deploy/hub/README.md) for storage, restart and recovery.
 
 Based on Arcane. The core is intended for one-time adoption followed by independent
 maintenance. Own code is licensed under [Apache-2.0](LICENSE); Arcane-derived parts

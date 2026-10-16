@@ -9,7 +9,7 @@ import (
 
 	"github.com/italypaleale/francis/components"
 	"github.com/italypaleale/francis/components/instrument"
-	"github.com/italypaleale/francis/components/postgres"
+	"github.com/italypaleale/francis/components/sqlite"
 	"github.com/italypaleale/francis/components/standalone"
 )
 
@@ -18,29 +18,23 @@ func New(logger *slog.Logger, opts components.ProviderOptions, cfg components.Pr
 	var operationLog components.OperationLogConfig
 
 	switch x := opts.(type) {
-	case postgres.PostgresProviderOptions:
-		p, err = postgres.NewPostgresProvider(logger, x, cfg)
+	case sqlite.SQLiteProviderOptions:
+		p, err = sqlite.NewSQLiteProvider(logger, x, cfg)
 		operationLog = x.OperationLog
 		if err != nil {
-			return nil, fmt.Errorf("failed to create Postgres provider: %w", err)
+			return nil, fmt.Errorf("failed to create SQLite provider: %w", err)
 		}
-	case *postgres.PostgresProviderOptions:
-		p, err = postgres.NewPostgresProvider(logger, *x, cfg)
+	case *sqlite.SQLiteProviderOptions:
+		p, err = sqlite.NewSQLiteProvider(logger, *x, cfg)
 		operationLog = x.OperationLog
 		if err != nil {
-			return nil, fmt.Errorf("failed to create Postgres provider: %w", err)
+			return nil, fmt.Errorf("failed to create SQLite provider: %w", err)
 		}
 	case standalone.StandaloneMemoryOptions:
 		p, err = standalone.NewStandaloneMemory(logger, x, cfg)
 		operationLog = x.OperationLog
 		if err != nil {
 			return nil, fmt.Errorf("failed to create standalone memory provider: %w", err)
-		}
-	case standalone.StandalonePostgresOptions:
-		p, err = standalone.NewStandalonePostgresBacked(logger, x, cfg)
-		operationLog = x.OperationLog
-		if err != nil {
-			return nil, fmt.Errorf("failed to create standalone Postgres provider: %w", err)
 		}
 	case nil:
 		return nil, errors.New("option ProviderOptions is required")

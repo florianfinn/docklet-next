@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; functional cut: removed upstream analytics heartbeat, APNS, Svelte assets, templates, OIDC, passkeys, SQLite and GitOps work directory; removed downgrade setting for forward-only migrations.
+// Deviations: Local module namespace; functional cut: removed upstream analytics heartbeat, APNS, Svelte assets, templates, OIDC, passkeys and GitOps work directory; removed downgrade setting for forward-only migrations.
 
 package config
 
@@ -41,7 +41,7 @@ type Config struct {
 	BuildablesConfig
 
 	AppUrl                string         `env:"APP_URL" default:"http://localhost:3552"`
-	DatabaseURL           string         `env:"DATABASE_URL" default:"postgres://docklet:docklet@localhost:5432/docklet"`
+	DatabaseURL           string         `env:"DATABASE_URL" default:"file:data/docklet.db"`
 	AllowCLIPasswordReset bool           `env:"ALLOW_CLI_PASSWORD_RESET" default:"false"`
 	ActorPort             string         `env:"ACTOR_PORT" default:"3551"`
 	Port                  string         `env:"PORT" default:"3552"`

@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; removed SQLite; coded run projection, guarded updates and bounded output persistence.
+// Deviations: Local module namespace; SQLite persistence; coded run projection, guarded updates and bounded output persistence.
 
 package activity
 
@@ -20,7 +20,6 @@ import (
 	"github.com/florianfinn/docklet-next/types/activity"
 	"github.com/samber/mo"
 	"gorm.io/gorm"
-	"gorm.io/gorm/clause"
 
 	"github.com/florianfinn/docklet-next/backend/internal/common"
 	"github.com/florianfinn/docklet-next/backend/internal/database"
@@ -489,9 +488,7 @@ func (s *ActivityService) UpdateActivity(ctx context.Context, activityID string,
 	ctx, cancel := ownerWriteContextInternal(ctx)
 	defer cancel()
 
-	updates := map[string]any{
-		"updated_at": gorm.Expr("NOW()"),
-	}
+	updates := map[string]any{}
 	if req.Status != "" {
 		updates["status"] = req.Status
 		if req.MessageCode == nil {
@@ -536,8 +533,9 @@ func (s *ActivityService) UpdateActivity(ctx context.Context, activityID string,
 
 	var model Activity
 	if err := s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		updates["updated_at"] = s.nowInternal()
 		var current Activity
-		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).First(&current, "id = ?", activityID).Error; err != nil {
+		if err := tx.First(&current, "id = ?", activityID).Error; err != nil {
 			return err
 		}
 		if isTerminalActivityStatusInternal(current.Status) {
@@ -546,7 +544,7 @@ func (s *ActivityService) UpdateActivity(ctx context.Context, activityID string,
 		if !gatedWriterAllowedInternal(ctx, &current) {
 			return ErrRunNotOwned
 		}
-		query := tx.Model(&Activity{}).Where("id = ? AND status NOT IN ?", activityID, terminalActivityStatusesInternal())
+		query := tx.Model(&Activity{}).Where("id = ? AND status IN ?", activityID, []activity.Status{activity.StatusQueued, activity.StatusRunning})
 		result := query.Updates(updates)
 		if result.Error != nil {
 			return fmt.Errorf("failed to update activity: %w", result.Error)
@@ -624,7 +622,7 @@ func buildAppendBatchInternal(activityID string, reqs []AppendActivityMessageReq
 	updates := map[string]any{
 		"latest_message": latestMessage,
 		"message_code":   latestCode,
-		"updated_at":     gorm.Expr("NOW()"),
+		"updated_at":     now,
 	}
 	if latestProgress != nil {
 		updates["progress"] = *clampProgressPtrInternal(latestProgress)
@@ -643,7 +641,7 @@ func (s *ActivityService) appendBatchWithRetryInternal(ctx context.Context, acti
 	var writeErr error
 	for attempt := 1; attempt <= appendWriteAttempts; attempt++ {
 		writeErr = s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
-			if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).First(&current, "id = ?", activityID).Error; err != nil {
+			if err := tx.First(&current, "id = ?", activityID).Error; err != nil {
 				if errors.Is(err, gorm.ErrRecordNotFound) {
 					return errors.New("activity not found")
 				}
@@ -655,14 +653,10 @@ func (s *ActivityService) appendBatchWithRetryInternal(ctx context.Context, acti
 			if isTerminalActivityStatusInternal(current.Status) {
 				return ErrActivityNotCancelable
 			}
-			if current.GateScope != "" {
-				var databaseNow time.Time
-				if err := tx.Raw("SELECT NOW()").Scan(&databaseNow).Error; err != nil {
-					return err
-				}
-				for i := range messages {
-					messages[i].CreatedAt = databaseNow.Add(time.Duration(i) * time.Microsecond)
-				}
+			now := s.nowInternal().UTC().Truncate(time.Microsecond)
+			updates["updated_at"] = now
+			for i := range messages {
+				messages[i].CreatedAt = now.Add(time.Duration(i) * time.Microsecond)
 			}
 			if len(output) > 0 {
 				lines, truncated := appendOutputLinesInternal(current.Output, output)
@@ -670,7 +664,7 @@ func (s *ActivityService) appendBatchWithRetryInternal(ctx context.Context, acti
 				updates["output_truncated"] = current.OutputTruncated || truncated
 			}
 
-			query := tx.Model(&Activity{}).Where("id = ? AND status NOT IN ?", activityID, terminalActivityStatusesInternal())
+			query := tx.Model(&Activity{}).Where("id = ? AND status IN ?", activityID, []activity.Status{activity.StatusQueued, activity.StatusRunning})
 			result := query.Updates(updates)
 			if result.Error != nil {
 				return fmt.Errorf("failed to update activity latest message: %w", result.Error)
@@ -718,7 +712,7 @@ func (s *ActivityService) PatchActivityMetadata(ctx context.Context, activityID 
 
 	return s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		var record Activity
-		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).First(&record, "id = ?", activityID).Error; err != nil {
+		if err := tx.First(&record, "id = ?", activityID).Error; err != nil {
 			return fmt.Errorf("failed to load activity: %w", err)
 		}
 		if !gatedWriterAllowedInternal(ctx, &record) {
@@ -733,7 +727,7 @@ func (s *ActivityService) PatchActivityMetadata(ctx context.Context, activityID 
 		}
 		maps.Copy(merged, patch)
 		query := tx.Model(&Activity{}).Where("id = ? AND status IN ?", activityID, []activity.Status{activity.StatusQueued, activity.StatusRunning})
-		result := query.Updates(map[string]any{"metadata": merged, "updated_at": gorm.Expr("NOW()")})
+		result := query.Updates(map[string]any{"metadata": merged, "updated_at": s.nowInternal()})
 		if result.Error != nil {
 			return fmt.Errorf("failed to patch activity metadata: %w", result.Error)
 		}

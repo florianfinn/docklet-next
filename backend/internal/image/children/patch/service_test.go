@@ -1,10 +1,8 @@
-//go:build postgres_integration
-
 // Source: getarcaneapp/arcane/backend/internal/image/children/patch/service_test.go
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; functional cut: PostgreSQL integration test fixture.
+// Deviations: Local module namespace; SQLite temp-file persistence fixture.
 
 package patch
 
@@ -17,7 +15,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/florianfinn/docklet-next/backend/internal/testpg"
+	"github.com/florianfinn/docklet-next/backend/internal/testsqlite"
 	"github.com/florianfinn/docklet-next/types/features"
 	"github.com/florianfinn/docklet-next/types/imagepatch"
 	"github.com/florianfinn/docklet-next/types/user"
@@ -76,7 +74,7 @@ func TestResolvePatchedRef(t *testing.T) {
 func TestListPatchTargets_ExcludesUntaggedImages(t *testing.T) {
 	ctx := t.Context()
 	dsn := fmt.Sprintf("file:image-patch-test-%d?mode=memory&cache=shared", time.Now().UnixNano())
-	gdb, err := gorm.Open(testpg.Dialector(t, dsn), &gorm.Config{})
+	gdb, err := gorm.Open(testsqlite.Dialector(t, dsn), &gorm.Config{})
 	require.NoError(t, err)
 	require.NoError(t, gdb.AutoMigrate(&vulnerability.VulnerabilityScanRecord{}, &vulnerability.VulnerabilityReportRecord{}, &ImagePatchRecord{}))
 	db := &database.DB{DB: gdb}
@@ -105,7 +103,7 @@ func TestListPatchTargets_ExcludesUntaggedImages(t *testing.T) {
 
 func patchFeatureSettingsInternal(t *testing.T) (*settings.SettingsService, *database.DB) {
 	t.Helper()
-	gdb, err := gorm.Open(testpg.Dialector(t, ":memory:"), &gorm.Config{})
+	gdb, err := gorm.Open(testsqlite.Dialector(t, ":memory:"), &gorm.Config{})
 	require.NoError(t, err)
 	require.NoError(t, gdb.AutoMigrate(&settings.SettingVariable{}, &vulnerability.VulnerabilityScanRecord{}, &vulnerability.VulnerabilityReportRecord{}, &ImagePatchRecord{}))
 	db := &database.DB{DB: gdb}

@@ -6,7 +6,6 @@ import { join } from "node:path";
 const root = new URL("../", import.meta.url);
 const excludedFiles = new Map([
   ["backend/internal/config/buildables_config.go", ["AUTO_LOGIN_USERNAME", "AUTO_LOGIN_PASSWORD", "AUTO_LOGIN_PASSWORD_FILE", "AUTO_LOGIN_PASSWORD__FILE"]],
-  ["backend/internal/testpg/testpg.go", ["DOCKLET_TEST_POSTGRES_DSN"]],
 ]);
 const commentedConfigOverrides = new Set(["DOCKER_HOST", "PROJECTS_DIRECTORY", "HTTP_CLIENT_TIMEOUT"]);
 
