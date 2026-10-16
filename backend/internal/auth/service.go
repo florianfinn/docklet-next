@@ -114,14 +114,6 @@ func (s *AuthService) GetSessionTimeout(ctx context.Context) (int, error) {
 	return minutes, nil
 }
 
-func (s *AuthService) IsLocalAuthEnabled(ctx context.Context) (bool, error) {
-	localSettings, err := s.settingsService.GetSettings(ctx)
-	if err != nil {
-		return true, err
-	}
-	return localSettings.AuthLocalEnabled.IsTrue(), nil
-}
-
 // AuthenticateLocalPrimary validates the local primary factor without
 // creating a session.
 func (s *AuthService) AuthenticateLocalPrimary(ctx context.Context, username, password string) (*user.User, error) {

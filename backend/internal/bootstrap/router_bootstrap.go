@@ -123,6 +123,15 @@ func createAuthValidatorInternal(deps api.HandlerDeps) middleware.AuthValidator 
 	}
 	return func(ctx context.Context, c *echo.Context) (*authz.PermissionSet, *usertypes.Actor, bool) {
 		req := c.Request()
+		if deps.Auth.Service().SignInMode() != "local" {
+			if apiKey := req.Header.Get(middleware.HeaderApiKey); apiKey != "" {
+				if envID, err := deps.ApiKey.Service().GetEnvironmentByApiKey(ctx, apiKey); err == nil && envID != nil {
+					return authz.EnvironmentPermissionSet(*envID), nil, true
+				}
+			}
+			actor, ok := verifyRouterRequestUserInternal(ctx, deps.Auth.Service(), req)
+			return authz.SudoPermissionSet(), actor, ok
+		}
 		// Check for API key authentication
 		if apiKey := req.Header.Get(middleware.HeaderApiKey); apiKey != "" {
 			// User-owned API key: personal keys inherit the owner's role
@@ -150,6 +159,10 @@ func createAuthValidatorInternal(deps api.HandlerDeps) middleware.AuthValidator 
 }
 
 func verifyRouterRequestUserInternal(ctx context.Context, authService *auth.AuthService, req *http.Request) (*usertypes.Actor, bool) {
+	if authService.SignInMode() != "local" {
+		requestUser, err := authService.ModeRequestUser(ctx, req)
+		return requestUser.Actor(), err == nil && requestUser != nil
+	}
 	if authHeader := req.Header.Get("Authorization"); strings.HasPrefix(authHeader, "Bearer ") {
 		user, _, err := authService.VerifyToken(ctx, strings.TrimPrefix(authHeader, "Bearer "))
 		return user.Actor(), err == nil && user != nil
