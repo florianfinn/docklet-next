@@ -88,8 +88,12 @@ and constrained to the three protocol values in OpenAPI and generated types.
 Only independently authenticated machine ingress keeps its separate contract:
 agent-only listeners, validated environment-token requests, Edge tunnel tokens
 and webhook path-token routes. Unvalidated Bearer/API-key or proxy headers do
-not qualify. WebSocket handshakes retain their existing Origin checks before
-upgrade. This policy does not protect against same-origin script compromise or a
+not qualify. Local, direct environment and Edge-proxied WebSockets require the
+same exact allowed Origin, including terminal upgrades. Request Host and other
+localhost ports never expand that list. An absent Origin requires a validated
+non-cookie credential; none/proxy browser streams cannot use an absent Origin.
+Environment forwarding checks original client authority before injecting agent
+tokens. This policy does not protect against same-origin script compromise or a
 compromised authenticated proxy. It does not add per-user isolation.
 
 ## Operator recovery

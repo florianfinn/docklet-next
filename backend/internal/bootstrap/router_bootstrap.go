@@ -35,7 +35,6 @@ import (
 	"github.com/florianfinn/docklet-next/backend/pkg/libarcane/edge"
 	"github.com/florianfinn/docklet-next/backend/pkg/utils/cookie"
 	"github.com/florianfinn/docklet-next/backend/pkg/utils/handlerutil"
-	"github.com/florianfinn/docklet-next/backend/pkg/utils/httpx"
 )
 
 var (
@@ -293,7 +292,9 @@ func newRouter(p RouterParams) (*echo.Echo, *edge.TunnelServer) {
 		createAuthValidatorInternal(deps),
 		permissionMatcher,
 		p.TunnelRegistry,
-		httpx.ValidateWebSocketOrigin(cfg.GetAppURL()),
+		middleware.WebSocketOriginValidator(cfg, func(req *http.Request) bool {
+			return authMiddleware.ValidateNonCookieCredential(req) || csrfTransportValidatorInternal(deps)(req)
+		}),
 	)
 	apiGroup.Use(envProxyMiddleware)
 

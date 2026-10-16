@@ -38,3 +38,18 @@ func (m *AuthMiddleware) ValidateLocalHeaderCredential(req *http.Request) (bool,
 	}
 	return false, nil
 }
+
+// ValidateNonCookieCredential also preserves authenticated agent stream transports.
+func (m *AuthMiddleware) ValidateNonCookieCredential(req *http.Request) bool {
+	if m.cfg != nil && (m.cfg.AgentMode || m.cfg.EdgeAgent) {
+		return AgentTokenMatches(req.Header.Get(middleware.HeaderAgentToken), m.cfg.AgentToken) ||
+			AgentTokenMatches(req.Header.Get(middleware.HeaderApiKey), m.cfg.AgentToken)
+	}
+	for _, header := range []string{middleware.HeaderAgentToken, middleware.HeaderApiKey} {
+		if _, ok := m.resolveEnvironmentAccessToken(req.Context(), req.Header.Get(header)).Get(); ok {
+			return true
+		}
+	}
+	valid, _ := m.ValidateLocalHeaderCredential(req)
+	return valid
+}

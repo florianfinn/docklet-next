@@ -35,7 +35,18 @@ import (
 	"go.getarcane.app/sys/crypto"
 )
 
-func TestSignInForwardingAndStreamMatrix(t *testing.T) {
+type signInRoutingFixture struct {
+	cfg                       *config.Config
+	svc                       *auth.AuthService
+	roles                     *role.RoleService
+	keys                      *apikey.ApiKeyService
+	tokens                    *auth.TokenPair
+	bootstrapKey, personalKey string
+	adminID                   string
+}
+
+func newSignInRoutingFixture(t *testing.T) signInRoutingFixture {
+	t.Helper()
 	cfg := &config.Config{AuthMode: "local", AuthTrustedProxies: "192.0.2.10", AppUrl: "https://hub.example.com", Environment: "production", JWTRefreshExpiry: time.Hour, DatabaseURL: sqlitestore.URL(filepath.Join(t.TempDir(), "hub.db"))}
 	db, err := initializeDBAndMigrateInternal(t.Context(), cfg)
 	require.NoError(t, err)
@@ -61,8 +72,14 @@ func TestSignInForwardingAndStreamMatrix(t *testing.T) {
 	require.NoError(t, err)
 	personalKey, err := keys.CreatePersonalApiKey(t.Context(), admin.ID, apikeytypes.CreateUserApiKey{Name: "example"})
 	require.NoError(t, err)
+	return signInRoutingFixture{cfg, svc, roles, keys, tokens, bootstrapKey.Key, personalKey.Key, admin.ID}
+}
+
+func TestSignInForwardingAndStreamMatrix(t *testing.T) {
+	fixture := newSignInRoutingFixture(t)
+	cfg, svc, roles, keys, tokens := fixture.cfg, fixture.svc, fixture.roles, fixture.keys, fixture.tokens
 	transportValidator := csrfTransportValidatorInternal(api.HandlerDeps{ApiKey: apikey.New(keys)})
-	validator := createAuthValidatorInternal(api.HandlerDeps{Auth: auth.New(svc, users, settingsSvc), ApiKey: apikey.New(keys), Role: role.New(roles)})
+	validator := createAuthValidatorInternal(api.HandlerDeps{Auth: auth.New(svc, nil, nil), ApiKey: apikey.New(keys), Role: role.New(roles)})
 	for _, mode := range []string{"none", "local", "proxy"} {
 		cfg.AuthMode = mode
 		transportRouter := echo.New()
@@ -72,15 +89,15 @@ func TestSignInForwardingAndStreamMatrix(t *testing.T) {
 		for _, tc := range []struct {
 			value  string
 			status int
-		}{{bootstrapKey.Key, 200}, {personalKey.Key, 403}, {"invalid", 403}} {
+		}{{fixture.bootstrapKey, 200}, {fixture.personalKey, 403}, {"invalid", 403}} {
 			req := httptest.NewRequest(http.MethodPost, "/api/transport", http.NoBody)
 			req.Header.Set(middleware.HeaderApiKey, tc.value)
 			rec := httptest.NewRecorder()
 			transportRouter.ServeHTTP(rec, req)
 			want := tc.status
-			if mode == "local" && tc.value != bootstrapKey.Key {
+			if mode == "local" && tc.value != fixture.bootstrapKey {
 				want = 401
-				if tc.value == personalKey.Key {
+				if tc.value == fixture.personalKey {
 					want = 200
 				}
 			}
@@ -126,7 +143,7 @@ func TestSignInForwardingAndStreamMatrix(t *testing.T) {
 				require.Equal(t, want == 200, ok)
 				if ok {
 					require.True(t, ps.IsGlobalAdmin())
-					require.Equal(t, admin.ID, actor.ID)
+					require.Equal(t, fixture.adminID, actor.ID)
 				}
 				for _, path := range []string{"/api/diagnostics/stream", "/api/environments/0/ws/system/stats"} {
 					req := request(path)
