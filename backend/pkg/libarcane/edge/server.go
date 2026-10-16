@@ -386,6 +386,10 @@ func tokenFromHeadersWithSourceInternal(req *http.Request) (string, string) {
 }
 
 func (s *TunnelServer) manageConnectedTunnel(ctx, callbackCtx context.Context, tunnel *AgentTunnel) {
+	if ctx.Err() != nil {
+		_ = tunnel.closeForMaintenance()
+		return
+	}
 	accepted, drainPrevious, rejectReason, err := s.registry.RegisterSession(callbackCtx, tunnel, TunnelStaleTimeout)
 	if err != nil {
 		slog.ErrorContext(ctx, "Failed to register edge agent session",
@@ -409,6 +413,11 @@ func (s *TunnelServer) manageConnectedTunnel(ctx, callbackCtx context.Context, t
 			Error:         rejectReason,
 		})
 		_ = tunnel.CloseWithReason(rejectReason)
+		return
+	}
+	if ctx.Err() != nil {
+		_ = tunnel.closeForMaintenance()
+		_, _ = s.registry.UnregisterCurrent(callbackCtx, tunnel.EnvironmentID, tunnel)
 		return
 	}
 

@@ -16,6 +16,7 @@ import (
 	"strings"
 
 	"github.com/florianfinn/docklet-next/types"
+	backuptypes "github.com/florianfinn/docklet-next/types/backup"
 	usertypes "github.com/florianfinn/docklet-next/types/user"
 	"github.com/labstack/echo/v5"
 	echomiddleware "github.com/labstack/echo/v5/middleware"
@@ -29,6 +30,7 @@ import (
 	"github.com/florianfinn/docklet-next/backend/internal/auth"
 	"github.com/florianfinn/docklet-next/backend/internal/config"
 	"github.com/florianfinn/docklet-next/backend/internal/middleware"
+	hubbackup "github.com/florianfinn/docklet-next/backend/internal/system/children/backup"
 	"github.com/florianfinn/docklet-next/backend/pkg/authz"
 	"github.com/florianfinn/docklet-next/backend/pkg/libarcane/edge"
 	"github.com/florianfinn/docklet-next/backend/pkg/utils/cookie"
@@ -211,6 +213,14 @@ func newRouter(p RouterParams) (*echo.Echo, *edge.TunnelServer) {
 	e.Use(echomiddleware.RequestID())
 	e.Use(requestLoggerMiddlewareInternal())
 	e.Use(secureCookieContextMiddlewareInternal(trustedProxyNets))
+	if hubMode && deps.System != nil {
+		if gate := deps.System.Service().BackupMaintenanceGate(); gate != nil {
+			e.Use(maintenanceMiddlewareInternal(gate))
+			if p.TunnelRegistry != nil {
+				gate.OnBegin(p.TunnelRegistry.CloseActiveForMaintenance)
+			}
+		}
+	}
 
 	authMiddleware := p.AuthMiddleware
 	e.Use(middleware.NewCORSMiddleware(cfg).Add())
@@ -324,6 +334,61 @@ func newRouter(p RouterParams) (*echo.Echo, *edge.TunnelServer) {
 	}
 
 	return e, tunnelServer
+}
+
+func maintenanceMiddlewareInternal(gate *hubbackup.MaintenanceGate) echo.MiddlewareFunc {
+	return func(next echo.HandlerFunc) echo.HandlerFunc {
+		return func(c *echo.Context) error {
+			req := c.Request()
+			status := gate.Status()
+			if status.Active {
+				return maintenanceReadOrErrorInternal(c, status)
+			}
+			// Keep the accepted restore response alive until its worker can drain it.
+			if req.Method == http.MethodPost && strings.HasPrefix(req.URL.Path, "/api/backups/") && strings.HasSuffix(req.URL.Path, "/restore") {
+				release, err := gate.Admit()
+				if err != nil {
+					return maintenanceReadOrErrorInternal(c, gate.Status())
+				}
+				defer release()
+				return next(c)
+			}
+			ctx, cancel := context.WithCancel(req.Context())
+			release, err := gate.AdmitCancel(cancel)
+			if err != nil {
+				cancel()
+				return maintenanceReadOrErrorInternal(c, gate.Status())
+			}
+			defer release()
+			defer cancel()
+			c.SetRequest(req.WithContext(ctx))
+			return next(c)
+		}
+	}
+}
+
+func maintenanceReadOrErrorInternal(c *echo.Context, status backuptypes.SystemBackupMaintenance) error {
+	req := c.Request()
+	if req.Method == http.MethodGet && req.URL.Path == "/api/backups/maintenance" {
+		c.Response().Header().Set("Cache-Control", "no-store")
+		return c.JSON(http.StatusOK, status)
+	}
+	if req.URL.Path == "/api/health" && (req.Method == http.MethodGet || req.Method == http.MethodHead) {
+		c.Response().Header().Set("Cache-Control", "no-store")
+		if req.Method == http.MethodHead {
+			return c.NoContent(http.StatusServiceUnavailable)
+		}
+		return c.JSON(http.StatusServiceUnavailable, map[string]string{"status": "DOWN"})
+	}
+	c.Response().Header().Set("Content-Type", "application/problem+json")
+	return c.JSON(http.StatusServiceUnavailable, maintenanceProblemInternal())
+}
+
+func maintenanceProblemInternal() map[string]any {
+	return map[string]any{
+		"title": "Service Unavailable", "status": http.StatusServiceUnavailable,
+		"detail": "backup.maintenance",
+	}
 }
 
 // parseTrustedProxyCIDRsInternal parses TRUSTED_PROXIES into a list of

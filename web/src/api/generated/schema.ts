@@ -1,5 +1,5 @@
 // Source: api/openapi.json
-// Revision: 9a9c0660a4ddf62accc3036ba995d8def71002aad033d0b5649e750db111fa2f
+// Revision: bc1d8e80eb9968b37f2aa0fafca9011a4fb0b086a36e706cf0dc90304e9822c0
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
 // Deviations: Generated TypeScript declarations from the local Huma export.
@@ -431,7 +431,10 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Get Hub restore maintenance status */
+        /**
+         * Get Hub restore maintenance status
+         * @description During restore maintenance, the router serves the active phase and activity ID without database access or authentication. Normal reads require system-backups:read.
+         */
         get: operations["get-system-backup-maintenance"];
         put?: never;
         post?: never;
@@ -4672,6 +4675,8 @@ export interface components {
             readonly $schema?: string;
             active: boolean;
             activityId?: string;
+            /** @enum {string} */
+            phase?: "draining" | "applying" | "verifying" | "blocked";
             reasonCode?: string;
         };
         BackupSystemBackupOperation: {

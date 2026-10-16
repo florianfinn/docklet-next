@@ -29,7 +29,9 @@ import (
 
 type DB struct {
 	*gorm.DB
-	hubLock *HubLock
+	hubLock     *HubLock
+	poolMaxOpen int
+	poolMaxIdle int
 }
 
 type MigrationOptions struct{}
@@ -61,6 +63,24 @@ func Initialize(ctx context.Context, databaseURL string, options MigrationOption
 
 func InitializeHub(ctx context.Context, databaseURL string, options MigrationOptions) (database *DB, err error) {
 	return initializeInternal(ctx, databaseURL, options, true)
+}
+
+// OpenHubForRestore takes the single-hub lock without creating schema objects.
+// The offline command uses this against an empty replacement database.
+func OpenHubForRestore(ctx context.Context, databaseURL string) (*DB, error) {
+	db, err := connectDatabaseInternal(ctx, databaseURL)
+	if err != nil {
+		return nil, err
+	}
+	pool, err := db.SQLDB()
+	if err == nil {
+		db.hubLock, err = acquireHubLock(ctx, pool)
+	}
+	if err != nil {
+		_ = db.Close()
+		return nil, err
+	}
+	return db, nil
 }
 
 func initializeInternal(ctx context.Context, databaseURL string, options MigrationOptions, hub bool) (database *DB, err error) {
@@ -103,6 +123,7 @@ func initializeInternal(ctx context.Context, databaseURL string, options Migrati
 	// Set connection pool settings
 	sqlDB.SetMaxIdleConns(15)
 	sqlDB.SetMaxOpenConns(50)
+	db.poolMaxOpen, db.poolMaxIdle = 50, 15
 	sqlDB.SetConnMaxLifetime(5 * time.Minute)
 	sqlDB.SetConnMaxIdleTime(3 * time.Minute)
 
@@ -156,6 +177,20 @@ func migrateDatabaseInternal(ctx context.Context, db *sql.DB, dbProvider string,
 	}
 
 	return migrateDatabaseToVersionInternal(ctx, db, dbProvider, options, requiredVersion)
+}
+
+// LatestMigrationVersion is the upper bound accepted from a Hub archive.
+func LatestMigrationVersion() (int64, error) {
+	return getHighestEmbeddedMigrationVersionInternal(dbProviderPostgres)
+}
+
+// Migrate applies only forward migrations to an already opened Hub database.
+func (db *DB) Migrate(ctx context.Context) error {
+	pool, err := db.SQLDB()
+	if err != nil {
+		return err
+	}
+	return migrateDatabaseInternal(ctx, pool, dbProviderPostgres, MigrationOptions{})
 }
 
 func migrateDatabaseToVersionInternal(ctx context.Context, db *sql.DB, dbProvider string, _ MigrationOptions, requiredVersion int64) error {
@@ -316,4 +351,26 @@ func (db *DB) Close() error {
 
 func (db *DB) SQLDB() (*sql.DB, error) {
 	return db.DB.DB()
+}
+
+// Suspension is soft: in-use sessions can hold the one ordinary pool slot.
+// The restore deadline bounds a waiter; the pinned hub-lock session is separate.
+func (db *DB) SuspendOrdinaryConnections() error {
+	pool, err := db.SQLDB()
+	if err != nil {
+		return err
+	}
+	pool.SetMaxIdleConns(0)
+	pool.SetMaxOpenConns(1)
+	return nil
+}
+
+func (db *DB) ResumeOrdinaryConnections() error {
+	pool, err := db.SQLDB()
+	if err != nil {
+		return err
+	}
+	pool.SetMaxOpenConns(db.poolMaxOpen)
+	pool.SetMaxIdleConns(db.poolMaxIdle)
+	return nil
 }

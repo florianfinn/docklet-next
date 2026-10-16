@@ -37,6 +37,7 @@ import (
 	"gorm.io/gorm"
 
 	"github.com/florianfinn/docklet-next/backend/internal/activity"
+	"github.com/florianfinn/docklet-next/backend/internal/auth"
 	"github.com/florianfinn/docklet-next/backend/internal/backup"
 	"github.com/florianfinn/docklet-next/backend/internal/config"
 	"github.com/florianfinn/docklet-next/backend/internal/container"
@@ -46,6 +47,7 @@ import (
 	"github.com/florianfinn/docklet-next/backend/internal/imageupdate"
 	"github.com/florianfinn/docklet-next/backend/internal/network"
 	"github.com/florianfinn/docklet-next/backend/internal/project"
+	"github.com/florianfinn/docklet-next/backend/internal/role"
 	"github.com/florianfinn/docklet-next/backend/internal/settings"
 	systembackup "github.com/florianfinn/docklet-next/backend/internal/system/children/backup"
 	"github.com/florianfinn/docklet-next/backend/internal/system/children/prune"
@@ -73,6 +75,19 @@ type SystemService struct {
 	backup  *systembackup.Service
 }
 
+func (s *SystemService) BackupMaintenanceGate() *systembackup.MaintenanceGate {
+	if s == nil || s.backup == nil {
+		return nil
+	}
+	return s.backup.MaintenanceGate()
+}
+
+func (s *SystemService) SetRestoreSchedulerRefresh(refresh func(context.Context) error) {
+	if s != nil && s.backup != nil {
+		s.backup.SetRestoreSchedulerRefresh(refresh)
+	}
+}
+
 func NewSystemService(
 	db *database.DB,
 	dockerService *dockerInternal.DockerClientService,
@@ -88,6 +103,10 @@ func NewSystemService(
 	backupEngine *backup.Engine,
 	recoveryKeys *backup.RecoveryKeyStore,
 	cfg *config.Config,
+	authService *auth.AuthService,
+	roles *role.RoleService,
+	coordinator *runs.Coordinator,
+	exitUnready context.CancelFunc,
 ) *SystemService {
 	location := time.UTC
 	if cfg != nil {
@@ -115,7 +134,11 @@ func NewSystemService(
 		Settings:     settingsService,
 		Config:       cfg,
 		RecoveryKeys: recoveryKeys,
+		Auth:         authService,
+		Roles:        roles,
+		Coordinator:  coordinator,
 	})
+	s.backup.SetExitUnready(exitUnready)
 	return s
 }
 

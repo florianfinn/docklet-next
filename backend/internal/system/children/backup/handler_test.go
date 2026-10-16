@@ -35,6 +35,7 @@ func TestUpdatePoliciesDistinguishesValidationFromInternalFailures(t *testing.T)
 		{name: "target", err: ErrSystemBackupTargetUnavailable, want: http.StatusUnprocessableEntity},
 		{name: "policy", err: sharedbackup.ErrPolicyValidation, want: http.StatusBadRequest},
 		{name: "storage", err: ErrSystemBackupUnavailable, want: http.StatusServiceUnavailable},
+		{name: "tools", err: ErrSystemBackupToolsUnavailable, want: http.StatusServiceUnavailable},
 		{name: "database", err: errors.New("database unavailable"), want: http.StatusInternalServerError},
 	} {
 		t.Run(tc.name, func(t *testing.T) {

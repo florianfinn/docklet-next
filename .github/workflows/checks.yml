@@ -64,6 +64,24 @@ jobs:
             types/go.sum
             third_party/arcane/**/go.sum
             third_party/francis/go.sum
+      - name: Install PostgreSQL 18 client tools for archive and restore tests
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ca-certificates curl
+          sudo install -d -m 0755 /usr/share/postgresql-common/pgdg
+          sudo curl -fsSLo /usr/share/postgresql-common/pgdg/apt.postgresql.org.asc \
+            https://www.postgresql.org/media/keys/ACCC4CF8.asc
+          echo 'deb [signed-by=/usr/share/postgresql-common/pgdg/apt.postgresql.org.asc] https://apt.postgresql.org/pub/repos/apt/ noble-pgdg main' \
+            | sudo tee /etc/apt/sources.list.d/pgdg.list >/dev/null
+          sudo apt-get update
+          sudo apt-get install -y postgresql-client-18
+          echo /usr/lib/postgresql/18/bin >> "$GITHUB_PATH"
+      - name: Verify PostgreSQL archive test prerequisites
+        run: |
+          pg_dump --version | grep -E 'PostgreSQL\) 18\.'
+          pg_restore --version | grep -E 'PostgreSQL\) 18\.'
+          test -w "${TMPDIR:-/tmp}"
+          df -B1 "${TMPDIR:-/tmp}"
       - name: Compile archive integration for PostgreSQL 18 client image
         working-directory: backend
         run: CGO_ENABLED=0 go test -c -tags=postgres_integration -o hub-backup.test ./internal/system

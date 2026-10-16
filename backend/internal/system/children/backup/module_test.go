@@ -105,3 +105,30 @@ func TestHubBackupRegisteredPermissionsAndStubs(t *testing.T) {
 		})
 	}
 }
+
+func TestUploadRejectsUnauthorizedTypeAndDeclaredOversize(t *testing.T) {
+	router := echo.New()
+	api := humaecho.NewWithGroup(router, router.Group("/api"), huma.DefaultConfig("test", "1.0.0"))
+	api.UseMiddleware(func(ctx huma.Context, next func(huma.Context)) {
+		permissions := authz.NewPermissionSet()
+		if ctx.Header("X-Test-Admin") == "true" {
+			permissions = authz.SudoPermissionSet()
+		}
+		next(huma.WithContext(ctx, context.WithValue(ctx.Context(), middleware.ContextKeyUserPermissions, permissions)))
+	})
+	RegisterRoutes(api, NewHandler(&Service{}, nil, t.Context()))
+	request := func(admin bool, contentType string, length int64) int {
+		req := httptest.NewRequest(http.MethodPost, "/api/backups/upload", bytes.NewBufferString("PGDMP"))
+		req.Header.Set("Content-Type", contentType)
+		req.ContentLength = length
+		if admin {
+			req.Header.Set("X-Test-Admin", "true")
+		}
+		rec := httptest.NewRecorder()
+		router.ServeHTTP(rec, req)
+		return rec.Code
+	}
+	require.Equal(t, http.StatusForbidden, request(false, "application/octet-stream", 5))
+	require.Equal(t, http.StatusUnsupportedMediaType, request(true, "application/json", 5))
+	require.Equal(t, http.StatusRequestEntityTooLarge, request(true, "application/octet-stream", backuptypes.MaxSystemArchiveBytes+1))
+}

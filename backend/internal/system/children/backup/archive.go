@@ -93,12 +93,12 @@ func storageAvailable(dir string) error {
 
 func storageStatus(dir string) backuptypes.SystemBackupStorage {
 	status := backuptypes.SystemBackupStorage{MaxArchiveBytes: backuptypes.MaxSystemArchiveBytes}
-	if err := storageAvailable(dir); err != nil {
-		status.ReasonCode = backuptypes.SystemBackupStorageMissing
-		return status
-	}
 	if !archiveToolsAvailable() {
 		status.ReasonCode = backuptypes.SystemBackupToolsUnavailable
+		return status
+	}
+	if err := storageAvailable(dir); err != nil {
+		status.ReasonCode = backuptypes.SystemBackupStorageMissing
 		return status
 	}
 	var stat syscall.Statfs_t
@@ -268,4 +268,24 @@ func archiveContextError(ctx context.Context) error {
 		return errors.New("backup.interrupted")
 	}
 	return nil
+}
+
+func (s *Service) backupDir() string {
+	if s.config != nil && s.config.BackupDir != "" {
+		return s.config.BackupDir
+	}
+	return "/var/lib/docklet/backups"
+}
+func (s *Service) SupportedDatabaseProvider() bool {
+	return s.databaseProviderError() == nil
+}
+
+func (s *Service) databaseProviderError() error {
+	if !archiveToolsAvailable() {
+		return ErrSystemBackupToolsUnavailable
+	}
+	if s == nil || s.config == nil || s.config.DatabaseURL == "" {
+		return ErrSystemBackupUnavailable
+	}
+	return storageAvailable(s.backupDir())
 }

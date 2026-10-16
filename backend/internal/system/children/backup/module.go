@@ -27,7 +27,9 @@ func RegisterRoutes(api huma.API, h *Handler) {
 	middleware.RegisterWithPermission(api, op("get-system-backup-policies", http.MethodGet, "/backups/policies", "Get Hub database backup policies"), authz.PermSystemBackupsRead, h.GetPolicies)
 	middleware.RegisterWithPermission(api, op("update-system-backup-policies", http.MethodPut, "/backups/policies", "Update Hub database backup policies"), authz.PermSystemBackupsManage, h.UpdatePolicies)
 	middleware.RegisterWithPermission(api, op("get-system-backup-storage", http.MethodGet, "/backups/storage", "Get local archive storage usage"), authz.PermSystemBackupsRead, h.Storage)
-	middleware.RegisterWithPermission(api, op("get-system-backup-maintenance", http.MethodGet, "/backups/maintenance", "Get Hub restore maintenance status"), authz.PermSystemBackupsRead, h.Maintenance)
+	maintenance := op("get-system-backup-maintenance", http.MethodGet, "/backups/maintenance", "Get Hub restore maintenance status")
+	maintenance.Description = "During restore maintenance, the router serves the active phase and activity ID without database access or authentication. Normal reads require system-backups:read."
+	middleware.RegisterWithPermission(api, maintenance, authz.PermSystemBackupsRead, h.Maintenance)
 	create := op("create-system-backup", http.MethodPost, "/backups", "Create a Hub database archive")
 	create.DefaultStatus = http.StatusAccepted
 	middleware.RegisterWithPermission(api, create, authz.PermSystemBackupsManage, h.Create)
@@ -43,7 +45,10 @@ func RegisterRoutes(api huma.API, h *Handler) {
 			Type: "string", Format: "binary", MaxLength: &maxArchiveBytes,
 		}},
 	}}
-	middleware.RegisterWithPermission(api, upload, authz.PermSystemBackupsRestore, h.Upload)
+	upload.Metadata = map[string]any{authz.MetaRequiredPermission: authz.PermSystemBackupsRestore}
+	upload.Middlewares = append(upload.Middlewares, middleware.RequirePermission(api, authz.PermSystemBackupsRestore)...)
+	upload.Middlewares = append(upload.Middlewares, h.streamUploadMiddleware(api)...)
+	huma.Register(api, upload, h.Upload)
 	download := op("download-system-backup", http.MethodGet, "/backups/{id}/download", "Download a Hub database archive")
 	download.Responses = map[string]*huma.Response{"200": {
 		Description: "PostgreSQL custom-format archive",

@@ -111,6 +111,30 @@ func matrixLockPool(t *testing.T, dsn string) *sql.DB {
 	return pool
 }
 
+func TestRestorePoolResumesConfiguredLimits(t *testing.T) {
+	db, err := InitializeHub(t.Context(), matrixLockDatabase(t), MigrationOptions{})
+	require.NoError(t, err)
+	t.Cleanup(func() { require.NoError(t, db.Close()) })
+	pool, err := db.SQLDB()
+	require.NoError(t, err)
+	db.poolMaxOpen, db.poolMaxIdle = 7, 3
+	pool.SetMaxOpenConns(7)
+	pool.SetMaxIdleConns(3)
+	require.NoError(t, db.SuspendOrdinaryConnections())
+	require.Equal(t, 1, pool.Stats().MaxOpenConnections)
+	require.NoError(t, db.ResumeOrdinaryConnections())
+	require.Equal(t, 7, pool.Stats().MaxOpenConnections)
+	connections := make([]*sql.Conn, 4)
+	for i := range connections {
+		connections[i], err = pool.Conn(t.Context())
+		require.NoError(t, err)
+	}
+	for _, connection := range connections {
+		require.NoError(t, connection.Close())
+	}
+	require.Equal(t, 3, pool.Stats().Idle)
+}
+
 func TestRunGate_Case31_SecondHubFailsFast(t *testing.T) {
 	dsn := matrixLockDatabase(t)
 	p := matrixStartLockProcess(t, dsn)

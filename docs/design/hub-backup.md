@@ -106,8 +106,13 @@ cannot prove that SQL inside a custom archive is benign; only an operator who
 trusts the archive source may restore it.
 
 After validation, the hub enters maintenance mode: it stops scheduler intake,
-rejects new mutating requests and logins, cancels and drains local work, and
-closes ordinary database connections. The dedicated single-hub lock connection
+rejects new database-backed requests and logins with a coded Huma 503 response,
+closes live browser streams and edge tunnels, cancels and drains local work, and
+closes ordinary database connections. Edge agents reconnect after maintenance.
+`GET /api/backups/maintenance` exposes only the active phase and activity ID
+without database access during maintenance, even after session revocation.
+`GET` and `HEAD /api/health` remain database-free and report 503 while the hub
+is unready. The dedicated single-hub lock connection
 remains open. Active browser and API sessions are interrupted; the UI asks for
 a fresh login after completion. Restore runs `pg_restore --clean --if-exists
 --no-owner --no-acl --single-transaction --exit-on-error` against the existing
@@ -132,7 +137,8 @@ crash during restore cannot claim success: startup checks a durable restore
 marker at `${DOCKLET_BACKUP_DIR}/restore-state.json`, outside the database being
 restored. The hub writes it atomically before starting `pg_restore` and removes
 it only after migrations, health and session revocation succeed. If it remains
-at startup, the hub keeps HTTP unready and the scheduler stopped; an operator
+at startup, the hub logs recovery guidance and exits before HTTP, migrations or
+scheduler startup; an operator
 uses the offline recovery command to verify or repeat the restore and clear the
 marker only after those checks pass. Cancellation is accepted before the
 `pg_restore` transaction begins; once replacement starts, the UI cannot claim
@@ -157,10 +163,15 @@ restore path, and runs before HTTP and scheduler startup. It does not require
 the source hub's metadata rows. The UI path serves an already initialized hub;
 the offline path is how practical acceptance restores into a truly empty
 database. Both paths revoke restored sessions before the hub becomes ready.
+With a valid existing marker, offline recovery also accepts a nonempty target
+at a supported intermediate migration version left by an interrupted forward
+migration. Without a marker, the nonempty target must match the archive version.
 
 ## Security and adopted surface
 
-All hub-backup endpoints require a global admin. Existing
+Hub-backup operations require a global admin. The database-free maintenance
+status is readable during maintenance without authentication and contains no
+secret state. Existing
 `system-backups:read`, `system-backups:manage` and `system-backups:restore`
 permissions retain their read, create/delete/policy and restore distinctions;
 the restore permission also guards upload. Capability descriptors disable
