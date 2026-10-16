@@ -21,9 +21,14 @@ let id;
 try {
   docker(["volume", "create", ...labels, volume]);
   id = docker(["run", "-d", ...common, "-p", `127.0.0.1:${hostPort||""}:3552`, image]).stdout.trim();
-  const port = docker(["port", id, "3552/tcp"]).stdout.trim();
-  if (!/^127\.0\.0\.1:\d+$/.test(port)) throw new Error("candidate port must bind loopback");
-  const base = `http://${port}`;
+  // An ephemeral host port is reassigned on restart, so resolve it again after each start.
+  let base;
+  function resolveBase() {
+    const port = docker(["port", id, "3552/tcp"]).stdout.trim();
+    if (!/^127\.0\.0\.1:\d+$/.test(port)) throw new Error("candidate port must bind loopback");
+    base = `http://${port}`;
+  }
+  resolveBase();
   async function ready() {
     for (let attempt = 0; attempt < 120; attempt++) {
       try { if ((await fetch(`${base}/api/health`, { signal: AbortSignal.timeout(1000) })).ok) return; } catch { /* Startup may still be running. */ }
@@ -37,7 +42,7 @@ try {
   if (!asset || !(await fetch(base + asset[1])).ok) throw new Error("production web bundle was not served");
   const second = docker(["run", "--rm", ...common, "--network", "none", image], false);
   if (second.status === 0 || !`${second.stdout}${second.stderr}`.includes("hub.already_running")) throw new Error("second hub was not refused");
-  docker(["restart", id]); await ready();
+  docker(["restart", id]); resolveBase(); await ready();
   const target = resolve(".scratch", `image-smoke-${suffix}`); mkdirSync(target, { recursive: true });
   docker(["cp", `${id}:/usr/share/licenses/docklet-next/.`, target]);
   for (const path of ["LICENSE", "NOTICE", "LICENSES/BSD-3-Clause-Arcane.txt", "go/github.com/libtnb/sqlite/LICENSE", "go/modernc.org/sqlite/LICENSE", "go/github.com/italypaleale/francis/LICENSE.md", "web/index.json"])
