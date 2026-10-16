@@ -2,18 +2,16 @@
 // Revision: 8f8c8f89bc6ebb7261862d0c35a6ddbc1513e9fa
 // Retrieved: 2026-10-15
 // License: Apache-2.0
-// Deviations: Original transactional Hub restore and offline recovery for issue #32.
+// Deviations: Original paired SQLite Hub restore and offline recovery for issue #32.
 
 package backup
 
 import (
 	"context"
 	"errors"
-	"io"
+	"github.com/florianfinn/docklet-next/backend/pkg/utils/sqlitestore"
 	"log/slog"
-	"net/url"
 	"os"
-	"os/exec"
 	"path/filepath"
 
 	activitytypes "github.com/florianfinn/docklet-next/types/activity"
@@ -26,6 +24,8 @@ import (
 	"github.com/florianfinn/docklet-next/backend/internal/database"
 	"github.com/florianfinn/docklet-next/backend/internal/session"
 	"github.com/florianfinn/docklet-next/backend/pkg/authz"
+	"github.com/florianfinn/docklet-next/backend/pkg/utils/francis"
+	"time"
 )
 
 func (s *Service) SetExitUnready(cancel context.CancelFunc) { s.exitUnready = cancel }
@@ -52,14 +52,8 @@ func (s *Service) sourceArchive(ctx context.Context, id string) (*backuptypes.Sy
 	if err != nil {
 		return nil, "", archiveInfo{}, err
 	}
-	if run.Size != info.size || run.SourceServerMajor != 18 || run.MigrationVersion != info.migration {
+	if run.Size != info.size || run.ArchiveVersion != archiveVersion || run.MigrationVersion != info.migration {
 		return nil, "", archiveInfo{}, errInvalidArchive
-	}
-	if err := validateTargetServer(ctx, s.db); err != nil {
-		return nil, "", archiveInfo{}, err
-	}
-	if err := validateTargetVersion(ctx, s.db, info.migration, newest, false); err != nil {
-		return nil, "", archiveInfo{}, err
 	}
 	return run, path, info, nil
 }
@@ -109,7 +103,7 @@ func (s *Service) executeRestore(workCtx context.Context, actor usertypes.Actor,
 			return
 		}
 	}
-	run, path, info, err := s.sourceArchive(ctx, id)
+	run, _, info, err := s.sourceArchive(ctx, id)
 	if err != nil {
 		fail("backup.invalid_archive", activitytypes.StatusFailed)
 		return
@@ -118,7 +112,6 @@ func (s *Service) executeRestore(workCtx context.Context, actor usertypes.Actor,
 		fail("backup.maintenance", activitytypes.StatusFailed)
 		return
 	}
-	markerWritten := false
 	blocked := func() {
 		s.maintenance.SetPhase("blocked")
 		slog.Error("Hub restore requires offline recovery", "backupId", id, "code", "backup.recovery_required")
@@ -147,56 +140,63 @@ func (s *Service) executeRestore(workCtx context.Context, actor usertypes.Actor,
 		blocked()
 		return
 	}
-	if err := s.db.SuspendOrdinaryConnections(); err != nil {
-		blocked()
-		return
-	}
 	if workCtx.Err() != nil || s.activityService.SealCancellation(started.ID) != nil {
-		_ = s.db.ResumeOrdinaryConnections()
 		resume()
 		fail("backup.interrupted", activitytypes.StatusCancelled)
 		return
 	}
-	if err := CheckRestoreMarker(s.backupDir()); err != nil {
+	if err := CheckRestoreMarker(restoreStateDir(s.db.Path())); err != nil {
 		blocked()
 		return
 	}
-	if err := writeRestoreMarker(s.backupDir(), restoreMarker{BackupID: id, ActivityID: started.ID, Phase: "applying"}); err != nil {
+	if s.runtime != nil {
+		if err := s.runtime.Stop(ctx); err != nil {
+			blocked()
+			return
+		}
+	}
+	if err := s.db.SuspendOrdinaryConnections(); err != nil {
 		blocked()
 		return
 	}
-	markerWritten = true
+	marker, err := preparePair(ctx, s.config, s.db.Path(), id, started.ID)
+	if err != nil {
+		blocked()
+		return
+	}
 	s.maintenance.SetPhase("applying")
-	commandErr := runPGRestore(ctx, s.config.DatabaseURL, path)
-	if err := s.db.ResumeOrdinaryConnections(); err != nil {
+	if err = installPair(ctx, restoreStateDir(s.db.Path()), marker); err != nil {
+		blocked()
+		return
+	}
+	if err = s.db.ResumeOrdinaryConnections(); err != nil {
 		blocked()
 		return
 	}
 	s.maintenance.SetPhase("verifying")
-	if err := writeRestoreMarker(s.backupDir(), restoreMarker{BackupID: id, ActivityID: started.ID, Phase: "verifying"}); err != nil {
+	if err = finalizeRestoredDatabase(ctx, s.db, s.config); err != nil {
 		blocked()
 		return
 	}
-	if commandErr == nil {
-		if err := verifyRestoredDatabase(ctx, s.db); err != nil {
-			blocked()
-			return
-		}
-		if err := s.store.SaveRun(ctx, restoreArchiveRecord(run, info, started.ID)); err != nil {
-			blocked()
-			return
-		}
-		if err := s.activityService.RestoreGatedActivity(ctx, started, id); err != nil {
-			blocked()
-			return
-		}
-	} else if err := verifyRollback(ctx, s.db, info.migration); err != nil {
+	if err = s.store.SaveRun(ctx, restoreArchiveRecord(run, info, started.ID)); err != nil {
 		blocked()
 		return
 	}
-	if err := revokeRestoredSessions(ctx, s.db); err != nil {
+	if err = s.activityService.RestoreGatedActivity(ctx, started, id); err != nil {
 		blocked()
 		return
+	}
+	if s.coordinator != nil {
+		s.coordinator.ResetAfterRestore()
+	}
+	if s.runtime != nil {
+		if err = s.runtime.Restart(ctx); err != nil {
+			blocked()
+			return
+		}
+	}
+	if s.apiKeys != nil {
+		s.apiKeys.InvalidateAfterRestore()
 	}
 	if s.auth != nil {
 		s.auth.InvalidateAllTokenCache()
@@ -210,25 +210,19 @@ func (s *Service) executeRestore(workCtx context.Context, actor usertypes.Actor,
 			return
 		}
 	}
-	if commandErr == nil && s.refreshJobs != nil {
+	if s.refreshJobs != nil {
 		if err := s.refreshJobs(ctx); err != nil {
 			blocked()
 			return
 		}
 	}
-	status, code := activitytypes.StatusSuccess, "backup.restored"
-	if commandErr != nil {
-		status, code = activitytypes.StatusFailed, "backup.restore_failed"
-	}
-	if _, err := s.activityService.CompleteActivity(workCtx, started.ID, status, code, nil); err != nil {
+	if _, err = s.activityService.CompleteActivity(workCtx, started.ID, activitytypes.StatusSuccess, "backup.restored", nil); err != nil {
 		blocked()
 		return
 	}
-	if markerWritten {
-		if err := clearRestoreMarker(s.backupDir()); err != nil {
-			blocked()
-			return
-		}
+	if err = clearRestoreMarker(restoreStateDir(s.db.Path())); err != nil {
+		blocked()
+		return
 	}
 	resume()
 }
@@ -237,138 +231,129 @@ func restoreArchiveRecord(run *backuptypes.SystemBackupRun, info archiveInfo, ac
 	copy := *run
 	copy.ActivityID = activityID
 	copy.Status = backuptypes.SystemBackupStatusSucceeded
-	copy.Size, copy.MigrationVersion, copy.SourceServerMajor = info.size, info.migration, 18
+	copy.Size, copy.MigrationVersion, copy.ArchiveVersion = info.size, info.migration, archiveVersion
 	return &copy
 }
 
-func runPGRestore(ctx context.Context, dsn, path string) error {
-	env, err := postgresEnv(dsn)
-	if err != nil {
-		return errors.New("backup.restore_failed")
+func finalizeRestoredDatabase(ctx context.Context, db *database.DB, cfg *config.Config) error {
+	if err := db.WithContext(ctx).Exec("DROP TABLE IF EXISTS docklet_backup_image").Error; err != nil {
+		return ErrRestoreRecoveryRequired
 	}
-	parsed, err := url.Parse(dsn)
-	if err != nil || parsed.Path == "" {
-		return errors.New("backup.restore_failed")
-	}
-	command := exec.CommandContext(ctx, "pg_restore", "--clean", "--if-exists", "--no-owner", "--no-acl", "--single-transaction", "--exit-on-error", "--dbname", parsed.Path[1:], path)
-	command.Env, command.Stdout, command.Stderr = env, io.Discard, io.Discard
-	if err := command.Run(); err != nil {
-		return errors.New("backup.restore_failed")
-	}
-	return nil
-}
-
-func validateTargetServer(ctx context.Context, db *database.DB) error {
-	var version int
-	if db == nil || db.WithContext(ctx).Raw("SELECT current_setting('server_version_num')::int").Scan(&version).Error != nil || version < 180000 || version >= 190000 {
-		return errArchiveMajor
-	}
-	return nil
-}
-
-func verifyRestoredDatabase(ctx context.Context, db *database.DB) error {
 	if err := db.Migrate(ctx); err != nil {
 		return ErrRestoreRecoveryRequired
 	}
-	newest, err := newestMigration()
+	if err := francis.ClearRestoredOwnership(ctx, cfg.DatabaseURL); err != nil {
+		return ErrRestoreRecoveryRequired
+	}
+	if err := activity.NewActivityService(db, nil).FailInterruptedAfterRestore(ctx); err != nil {
+		return ErrRestoreRecoveryRequired
+	}
+	if err := revokeRestoredSessions(ctx, db); err != nil {
+		return ErrRestoreRecoveryRequired
+	}
+	pool, err := db.SQLDB()
 	if err != nil {
 		return ErrRestoreRecoveryRequired
 	}
-	return verifyRollback(ctx, db, newest)
-}
-
-func verifyRollback(ctx context.Context, db *database.DB, expectedVersion int64) error {
-	if err := validateTargetServer(ctx, db); err != nil {
-		return ErrRestoreRecoveryRequired
-	}
-	var version int64
-	if err := db.WithContext(ctx).Raw("SELECT COALESCE(MAX(version_id), 0) FROM goose_db_version WHERE is_applied = true").Scan(&version).Error; err != nil || version != expectedVersion {
-		return ErrRestoreRecoveryRequired
-	}
-	var healthy int
-	if err := db.WithContext(ctx).Raw("SELECT 1").Scan(&healthy).Error; err != nil || healthy != 1 {
+	if err = checkImage(ctx, pool); err != nil {
 		return ErrRestoreRecoveryRequired
 	}
 	return nil
 }
-
 func revokeRestoredSessions(ctx context.Context, db *database.DB) error {
 	return session.NewSessionService(db).RevokeAllSessions(ctx)
 }
 
-// OfflineRestore runs before HTTP and scheduler startup and needs no source
-// metadata or admin session in the replacement database.
+// OfflineRestore needs no source metadata or session in an empty replacement hub.
 func OfflineRestore(ctx context.Context, cfg *config.Config, id string) error {
 	if cfg == nil || cfg.DatabaseURL == "" || cfg.BackupDir == "" {
 		return ErrSystemBackupUnavailable
 	}
-	if !archiveToolsAvailable() {
-		return ErrSystemBackupToolsUnavailable
-	}
-	name, err := backuptypes.ArchiveNameForID(id)
-	if err != nil {
+	if _, err := backuptypes.ArchiveNameForID(id); err != nil {
 		return errInvalidArchive
 	}
-	db, err := database.OpenHubForRestore(ctx, cfg.DatabaseURL)
-	if err != nil {
-		return ErrRestoreRecoveryRequired
+	if CheckPendingRestore(cfg) != nil {
+		return RecoverPendingRestore(ctx, cfg)
 	}
-	defer db.Close()
-	newest, err := newestMigration()
-	if err != nil {
-		return ErrRestoreRecoveryRequired
-	}
-	path := filepath.Join(cfg.BackupDir, name)
-	recovery := false
-	if _, statErr := os.Lstat(markerPath(cfg.BackupDir)); statErr == nil {
-		if _, markerErr := readRestoreMarker(cfg.BackupDir); markerErr != nil {
-			return markerErr
-		}
-		recovery = true
-	} else if !errors.Is(statErr, os.ErrNotExist) {
-		return ErrRestoreRecoveryRequired
-	}
-	if err := validateTargetServer(ctx, db); err != nil {
-		return err
-	}
-	info, err := validateArchive(ctx, path, newest)
-	if err != nil {
-		return err
-	}
-	if err := validateTargetVersion(ctx, db, info.migration, newest, recovery); err != nil {
-		return err
-	}
-	if err := writeRestoreMarker(cfg.BackupDir, restoreMarker{BackupID: id, Phase: "applying"}); err != nil {
-		return err
-	}
-	deadline, cancel := context.WithTimeout(ctx, archiveDeadline)
+	ctx, cancel := context.WithTimeout(ctx, archiveDeadline)
 	defer cancel()
-	if err := runPGRestore(deadline, cfg.DatabaseURL, path); err != nil {
+	lock, path, err := database.AcquireRestoreLock(ctx, cfg.DatabaseURL)
+	if err != nil {
+		return restoreLockError(err)
+	}
+	defer lock.Stop()
+	if err = checkpointStoppedPair(ctx, path); err != nil {
 		return err
 	}
-	if err := writeRestoreMarker(cfg.BackupDir, restoreMarker{BackupID: id, Phase: "verifying"}); err != nil {
+	// The target is stopped. Validate any existing Hub identity/version before replacing it.
+	if _, err := os.Stat(path); err == nil {
+		pool, err := openImage(path)
+		if err != nil {
+			return errMigration
+		}
+		var count int
+		err = pool.QueryRowContext(ctx, "SELECT count(*) FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'").Scan(&count)
+		if err == nil && count > 0 {
+			err = database.ValidateSnapshot(ctx, pool, mustNewestMigration())
+		}
+		_ = pool.Close()
+		if err != nil {
+			return errMigration
+		}
+	}
+	marker, err := preparePair(ctx, cfg, path, id, "")
+	if err != nil {
 		return err
 	}
-	if err := verifyRestoredDatabase(deadline, db); err != nil {
+	if err = installPair(ctx, restoreStateDir(path), marker); err != nil {
 		return err
 	}
-	if err := activity.NewActivityService(db, nil).FailInterruptedAfterRestore(deadline); err != nil {
+	db, err := database.OpenLockedForRestore(ctx, path, lock)
+	if err != nil {
 		return ErrRestoreRecoveryRequired
 	}
-	if err := revokeRestoredSessions(deadline, db); err != nil {
-		return ErrRestoreRecoveryRequired
-	}
-	if err := db.WithContext(deadline).Exec(`INSERT INTO system_backup_runs
-        (id, created_at, updated_at, status, trigger, size, archive_name, completed_at,
-         source_server_major, migration_version, copy_state, activity_id)
-        VALUES (?, NOW(), NOW(), 'succeeded', 'uploaded', ?, ?, NOW(), 18, ?, 'none', '')
-        ON CONFLICT (id) DO UPDATE SET status='succeeded', size=EXCLUDED.size,
-        archive_name=EXCLUDED.archive_name, completed_at=NOW(), source_server_major=18,
-        migration_version=EXCLUDED.migration_version, copy_state='none'`, id, info.size, name, info.migration).Error; err != nil {
-		return ErrRestoreRecoveryRequired
-	}
-	if err := clearRestoreMarker(cfg.BackupDir); err != nil {
+	defer db.SuspendOrdinaryConnections()
+	if err = finalizeRestoredDatabase(ctx, db, cfg); err != nil {
 		return err
+	}
+	if err = recordRecoveredArchive(ctx, db, marker); err != nil {
+		return err
+	}
+	return clearRestoreMarker(restoreStateDir(path))
+}
+func recordRecoveredArchive(ctx context.Context, db *database.DB, marker restoreMarker) error {
+	name, _ := backuptypes.ArchiveNameForID(marker.BackupID)
+	now := time.Now().UTC()
+	if err := db.WithContext(ctx).Exec(`INSERT INTO system_backup_runs
+  (id,created_at,updated_at,status,trigger,size,archive_name,completed_at,archive_version,migration_version,copy_state,activity_id)
+  VALUES (?,?,?,'succeeded','uploaded',?,?,?,?,?,'none','')
+  ON CONFLICT(id) DO UPDATE SET status='succeeded',size=excluded.size,archive_name=excluded.archive_name,
+  completed_at=excluded.completed_at,archive_version=excluded.archive_version,migration_version=excluded.migration_version,copy_state='none'`,
+		marker.BackupID, now, now, marker.ArchiveSize, name, now, archiveVersion, marker.MigrationVersion).Error; err != nil {
+		return ErrRestoreRecoveryRequired
+	}
+	return nil
+}
+
+// Recover committed WAL before inspecting or copying a stopped target. A marker
+// uses immutable staged images instead and must not open an interrupted pair.
+func checkpointStoppedPair(ctx context.Context, path string) error {
+	for i, file := range []string{path, sqlitestore.FrancisPath(path)} {
+		if _, err := os.Lstat(file); errors.Is(err, os.ErrNotExist) {
+			continue
+		} else if err != nil {
+			return ErrRestoreRecoveryRequired
+		}
+		pool, err := sqlitestore.Open(ctx, file, i == 0, false)
+		if err != nil {
+			return ErrRestoreRecoveryRequired
+		}
+		var busy, log, done int
+		err = pool.QueryRowContext(ctx, "PRAGMA wal_checkpoint(TRUNCATE)").Scan(&busy, &log, &done)
+		closeErr := pool.Close()
+		if err != nil || closeErr != nil || busy != 0 {
+			return ErrRestoreRecoveryRequired
+		}
 	}
 	return nil
 }

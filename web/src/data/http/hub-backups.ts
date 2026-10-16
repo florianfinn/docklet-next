@@ -87,7 +87,7 @@ export function createHttpHubBackups(baseUrl: string, fetcher: typeof fetch, upl
       return body.policies as HubBackupPolicy[];
     },
     async saveHubBackupPolicies(policies) {
-      const body = await request("/backups/policies", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ policies: policies.map(({ id, enabled, retentionCount, schedule }) => ({ id, enabled, retentionCount, schedule })) }) });
+      const body = await request("/backups/policies", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ policies: policies.map(({ id, enabled, retentionCount, schedule }) => ({ ...(id ? { id } : {}), enabled, retentionCount, schedule })) }) });
       if (!isRecord(body) || !Array.isArray(body.policies)) throw error({ code: "backup.invalid_response" }, 200);
       return body.policies as HubBackupPolicy[];
     },

@@ -48,12 +48,13 @@ func (s *ActivityService) FailInterruptedAfterRestore(ctx context.Context) error
 }
 
 func failInterruptedForRestoreInternal(tx *gorm.DB) error {
+	now := time.Now().UTC()
 	return tx.Model(&Activity{}).
 		Where("status IN ?", []activitytypes.Status{activitytypes.StatusRunning, activitytypes.StatusQueued}).
 		Updates(map[string]any{
 			"status": activitytypes.StatusFailed, "message_code": "activity.failed",
-			"error": "backup.interrupted", "ended_at": gorm.Expr("NOW()"),
-			"duration_ms": gorm.Expr("GREATEST(0, EXTRACT(EPOCH FROM (NOW() - started_at)) * 1000)::bigint"),
-			"updated_at":  gorm.Expr("NOW()"),
+			"error": "backup.interrupted", "ended_at": now,
+			"duration_ms": gorm.Expr("max(0,(? - started_at)/1000)", now.UnixMicro()),
+			"updated_at":  now,
 		}).Error
 }

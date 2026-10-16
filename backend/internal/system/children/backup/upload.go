@@ -63,7 +63,7 @@ func (s *Service) UploadArchive(ctx context.Context, actor usertypes.Actor, read
 		status, code = activitytypes.StatusFailed, run.ErrorCode
 	} else {
 		run.Status = backuptypes.SystemBackupStatusSucceeded
-		run.ArchiveName, run.Size, run.SourceServerMajor, run.MigrationVersion = name, info.size, 18, info.migration
+		run.ArchiveName, run.Size, run.ArchiveVersion, run.MigrationVersion = name, info.size, archiveVersion, info.migration
 	}
 	if saveErr := s.store.SaveRun(context.WithoutCancel(workCtx), run); saveErr != nil {
 		if name != "" {
@@ -122,7 +122,7 @@ func (s *Service) receiveArchiveWithLimit(ctx context.Context, id string, reader
 		return "", info, ErrSystemBackupUnavailable
 	}
 	writer := &limitedArchiveWriter{file: file, limit: limit}
-	_, err = io.Copy(writer, reader)
+	_, err = io.Copy(writer, &contextReader{ctx: ctx, reader: reader})
 	if err != nil {
 		if ctx.Err() != nil {
 			return "", info, archiveContextError(ctx)

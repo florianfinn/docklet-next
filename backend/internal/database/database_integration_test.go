@@ -48,7 +48,7 @@ func TestRejectsForeignAndInconsistentSQLite(t *testing.T) {
 		{"missing_version", "DELETE FROM goose_db_version WHERE version_id=1", true, "inconsistent"},
 		{"duplicate", "INSERT INTO goose_db_version(version_id,is_applied) VALUES(1,1)", true, "inconsistent"},
 		{"downgraded", "UPDATE goose_db_version SET is_applied=0 WHERE version_id=1", true, "inconsistent"},
-		{"newer", "INSERT INTO goose_db_version(version_id,is_applied) VALUES(2,1)", true, "newer"},
+		{"newer", "INSERT INTO goose_db_version(version_id,is_applied) VALUES(999,1)", true, "newer"},
 		{"wrong_identity", "PRAGMA ignore_check_constraints=ON; UPDATE docklet_database_metadata SET identity='other'; PRAGMA ignore_check_constraints=OFF", true, "foreign"},
 		{"missing_identity", "DROP TABLE docklet_database_metadata", true, "foreign"},
 	} {
@@ -83,7 +83,9 @@ func TestGooseAppliesForwardUpgradeWithoutRewritingBaseline(t *testing.T) {
 	require.NoError(t, db.Exec("INSERT INTO kv(key,value) VALUES('retained','value')").Error)
 	baseline, err := resources.FS.ReadFile("migrations/sqlite/001_baseline.sql")
 	require.NoError(t, err)
-	migrations := fstest.MapFS{"001_baseline.sql": &fstest.MapFile{Data: baseline}, "002_fixture.sql": &fstest.MapFile{Data: []byte("-- +goose Up\nALTER TABLE kv ADD COLUMN forward_value TEXT;\n")}}
+	forward, err := resources.FS.ReadFile("migrations/sqlite/002_hub_backup_archive.sql")
+	require.NoError(t, err)
+	migrations := fstest.MapFS{"002_hub_backup_archive.sql": &fstest.MapFile{Data: forward}, "001_baseline.sql": &fstest.MapFile{Data: baseline}, "003_fixture.sql": &fstest.MapFile{Data: []byte("-- +goose Up\nALTER TABLE kv ADD COLUMN forward_value TEXT;\n")}}
 	pool, err := db.SQLDB()
 	require.NoError(t, err)
 	provider, err := goose.NewProvider(goose.DialectSQLite3, pool, migrations)

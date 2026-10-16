@@ -120,7 +120,7 @@ function UploadDialog({ open, onOpenChange, disabled, onUploaded }: { open: bool
   async function upload() {
     if (!file) return;
     if (file.size > MAX_HUB_BACKUP_BYTES) { setError(t("errors.size")); return; }
-    if (file.type && file.type !== "application/octet-stream") { setError(t("errors.type")); return; }
+    if (file.type && !["application/octet-stream", "application/x-tar"].includes(file.type)) { setError(t("errors.type")); return; }
     setError(""); setProgress(0); setBusy(true);
     try {
       await adapter.uploadHubBackup(file, setProgress);
@@ -133,7 +133,7 @@ function UploadDialog({ open, onOpenChange, disabled, onUploaded }: { open: bool
     <Dialog open={open} onOpenChange={(next) => { if (!busy) onOpenChange(next); }}>
       <DialogContent>
         <DialogHeader><DialogTitle>{t("uploadTitle")}</DialogTitle><DialogDescription>{t("uploadHint")}</DialogDescription></DialogHeader>
-        <div className="grid gap-2"><Label htmlFor="hub-backup-file">{t("chooseFile")}</Label><Input id="hub-backup-file" type="file" accept=".dump,application/octet-stream" disabled={busy} onChange={(event) => { setFile(event.target.files?.[0] ?? null); setError(""); }} /></div>
+        <div className="grid gap-2"><Label htmlFor="hub-backup-file">{t("chooseFile")}</Label><Input id="hub-backup-file" type="file" accept=".tar,application/octet-stream,application/x-tar" disabled={busy} onChange={(event) => { setFile(event.target.files?.[0] ?? null); setError(""); }} /></div>
         {progress !== null && <div role="status" className="space-y-2 text-sm">{t("uploadProgress", { percent: progress })}<Progress value={progress} aria-label={t("uploadProgress", { percent: progress })} /></div>}
         {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
         <DialogFooter><Button variant="outline" disabled={busy} onClick={() => onOpenChange(false)}>{t("cancel")}</Button><Button disabled={disabled || !file || busy} onClick={() => void upload()}>{t("uploadAction")}</Button></DialogFooter>
@@ -233,7 +233,7 @@ export default function HubBackupsPage() {
   const restoreFailed = ["failed", "cancelled", "canceled"].includes(restoreActivity.data ?? "");
 
   useEffect(() => {
-    if (maintenance.data?.active) seenMaintenance.current = true;
+    if (maintenance.data?.active && maintenance.data.operation !== "backup") seenMaintenance.current = true;
     else if (seenMaintenance.current && maintenance.data) navigate("/login", { replace: true });
   }, [maintenance.data, navigate]);
   useEffect(() => {
@@ -269,9 +269,9 @@ export default function HubBackupsPage() {
   if (maintenance.data?.active || (restoreStarted && !restoreFailed)) {
     const phase = maintenance.data?.phase ?? "draining";
     return <section role="status" className="mx-auto max-w-2xl space-y-4 rounded-xl border bg-card p-6">
-      <h1 className="text-2xl font-semibold">{t("maintenanceTitle")}</h1>
-      <p className="text-sm text-muted-foreground">{t("maintenanceHint")}</p>
-      <p className="font-medium">{t(`maintenancePhase.${phase}`)}</p>
+      <h1 className="text-2xl font-semibold">{t(maintenance.data?.operation === "backup" ? "snapshotTitle" : "maintenanceTitle")}</h1>
+      <p className="text-sm text-muted-foreground">{t(maintenance.data?.operation === "backup" ? "snapshotHint" : "maintenanceHint")}</p>
+      <p className="font-medium">{maintenance.data?.operation === "backup" ? t("snapshotProgress") : t(`maintenancePhase.${phase}`)}</p>
       <Progress value={phase === "draining" ? 33 : phase === "applying" ? 67 : 100} aria-label={t("maintenanceProgress")} />
       {phase === "blocked" && <p className="text-sm text-destructive">{t("maintenancePhase.blocked")}</p>}
     </section>;

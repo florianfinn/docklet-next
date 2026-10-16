@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Replaced Rustic recovery routes with PostgreSQL archive routes.
+// Deviations: Replaced Rustic recovery routes with SQLite archive routes.
 
 package backup
 
@@ -35,7 +35,7 @@ func RegisterRoutes(api huma.API, h *Handler) {
 	middleware.RegisterWithPermission(api, create, authz.PermSystemBackupsManage, h.Create)
 	upload := op("import-system-backup-upload", http.MethodPost, "/backups/upload", "Upload and import a Hub database archive")
 	upload.DefaultStatus = http.StatusAccepted
-	upload.Description = "Stream one PostgreSQL custom-format archive as application/octet-stream, up to 2 GiB."
+	upload.Description = "Stream one versioned two-file Docklet SQLite tar archive as application/octet-stream, up to 2 GiB."
 	upload.MaxBodyBytes = backuptypes.MaxSystemArchiveBytes + 1
 	upload.Errors = []int{http.StatusRequestEntityTooLarge, http.StatusUnsupportedMediaType}
 	maxArchiveBytes := int(backuptypes.MaxSystemArchiveBytes)
@@ -51,7 +51,7 @@ func RegisterRoutes(api huma.API, h *Handler) {
 	huma.Register(api, upload, h.Upload)
 	download := op("download-system-backup", http.MethodGet, "/backups/{id}/download", "Download a Hub database archive")
 	download.Responses = map[string]*huma.Response{"200": {
-		Description: "PostgreSQL custom-format archive",
+		Description: "versioned two-file Docklet SQLite tar archive",
 		Headers: map[string]*huma.Param{"Content-Disposition": {
 			Description: "attachment with a server-selected archive filename",
 			Required:    true,

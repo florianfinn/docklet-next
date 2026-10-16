@@ -7,6 +7,7 @@
 package bootstrap
 
 import (
+	"github.com/florianfinn/docklet-next/backend/pkg/utils/sqlitestore"
 	"os"
 	"path/filepath"
 	"testing"
@@ -18,11 +19,13 @@ import (
 
 func TestBootstrapRefusesRestoreMarkerBeforeDatabaseMigration(t *testing.T) {
 	dir := t.TempDir()
-	require.NoError(t, os.WriteFile(filepath.Join(dir, "restore-state.json"), []byte("marker"), 0600))
+	stateDir := filepath.Join(dir, "hub.db.restore")
+	require.NoError(t, os.Mkdir(stateDir, 0700))
+	require.NoError(t, os.WriteFile(filepath.Join(stateDir, "restore-state.json"), []byte("marker"), 0600))
 	t.Setenv("DOCKLET_BACKUP_DIR", dir)
 	t.Setenv("DOCKER_CONFIG", filepath.Join(dir, "docker-config"))
 	t.Setenv("PROJECTS_DIRECTORY", filepath.Join(dir, "projects"))
-	t.Setenv("DATABASE_URL", "postgres://localhost:1/ignored")
+	t.Setenv("DATABASE_URL", sqlitestore.URL(filepath.Join(dir, "hub.db")))
 	err := Bootstrap(t.Context())
 	require.ErrorIs(t, err, hubbackup.ErrRestoreRecoveryRequired)
 }

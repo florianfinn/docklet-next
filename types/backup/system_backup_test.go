@@ -42,10 +42,10 @@ func TestSystemArchiveSizeIsAnIntegerByteCount(t *testing.T) {
 
 func TestArchiveNameForIDIsIsolatedFromPaths(t *testing.T) {
 	name, err := ArchiveNameForID("backup_01-ABC")
-	if err != nil || name != "backup_01-ABC.dump" {
+	if err != nil || name != "backup_01-ABC.tar" {
 		t.Fatalf("safe backup ID did not map to a fixed archive name: %q, %v", name, err)
 	}
-	for _, id := range []string{"", "../archive", "folder/archive", "folder\\archive", ".hidden", "a.dump", strings.Repeat("a", 129)} {
+	for _, id := range []string{"", "../archive", "folder/archive", "folder\\archive", ".hidden", "a.tar", strings.Repeat("a", 129)} {
 		if _, err := ArchiveNameForID(id); err == nil {
 			t.Fatalf("unsafe backup ID accepted: %q", id)
 		}

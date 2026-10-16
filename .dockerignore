@@ -10,3 +10,6 @@
 **/*.db.lock
 **/*.francis.db*
 .publication-denylist.local.json
+
+**/*.restore
+**/*.restore-*

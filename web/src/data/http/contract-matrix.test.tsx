@@ -507,6 +507,14 @@ describe.each(["demo", "http"] as const)("%s Hub backup contract", (kind) => {
     }
   });
 
+  it("omits an unassigned policy ID on first save", async () => {
+    if (kind !== "http") return;
+    const setup = backupBackend("list");
+    await setup.adapter.saveHubBackupPolicies([{ id: "", enabled: true, schedule: "0 20 4 * * 1", retentionCount: 7 }]);
+    const request = setup.state.requests.find((entry) => entry.path === "/api/backups/policies" && entry.method === "PUT");
+    expect(JSON.parse(request!.body!).policies[0]).toEqual({ enabled: true, schedule: "0 20 4 * * 1", retentionCount: 7 });
+  });
+
   it("deletes an archive through the manage operation", async () => {
     const setup = backupBackend("list");
     const adapter = kind === "demo" ? createDemoAdapter() : setup.adapter;
@@ -532,7 +540,7 @@ it("uses an octet-stream upload with progress and an ID-based download", async (
   }
   const adapter = createHttpAdapter({ fetch: backupBackend("list").adapter.getHubBackupAccess as unknown as typeof fetch, uploadFactory: () => new FakeUpload() as unknown as XMLHttpRequest });
   const progress: number[] = [];
-  const file = new File(["PGDMP"], "archive.dump", { type: "application/octet-stream" });
+  const file = new File(["PGDMP"], "archive.tar", { type: "application/octet-stream" });
   const result = await adapter.uploadHubBackup(file, (value) => progress.push(value));
   expect([result.backupId, request.url, request.headers["Content-Type"], request.body === file, progress]).toEqual(["system-upload-1", "/api/backups/upload", "application/octet-stream", true, [50, 100]]);
   const clicked = vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(() => undefined);
@@ -553,7 +561,7 @@ it.each([[413, "backup.size_limit", "<html>Request rejected</html>"], [415, "bac
     send() { this.onload?.(); }
   }
   const adapter = createHttpAdapter({ uploadFactory: () => new FailedUpload() as unknown as XMLHttpRequest });
-  await expect(adapter.uploadHubBackup(new File(["PGDMP"], "archive.dump"), () => undefined)).rejects.toMatchObject({ outcome: { kind: "error", code, status } });
+  await expect(adapter.uploadHubBackup(new File(["PGDMP"], "archive.tar"), () => undefined)).rejects.toMatchObject({ outcome: { kind: "error", code, status } });
 });
 
 it("recognizes a global administrator wildcard permission", async () => {

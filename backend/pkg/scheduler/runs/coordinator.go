@@ -48,6 +48,7 @@ type Coordinator struct {
 	observerMu   sync.Mutex
 	location     *time.Location
 	paused       bool
+	background   sync.Mutex
 	work         map[uint64]context.CancelFunc
 	workNext     uint64
 	workers      sync.WaitGroup
@@ -293,21 +294,38 @@ func (q *Coordinator) Stop(ctx context.Context) error {
 
 // PauseAndDrain stops admission and dispatch, cancels local executions, and
 // waits until their database writes have finished before restore begins.
+type maintenanceWorkerKey struct{}
+
 func (q *Coordinator) PauseAndDrain(ctx context.Context) error {
+	except, _ := ctx.Value(maintenanceWorkerKey{}).(uint64)
 	q.mu.Lock()
 	q.paused = true
 	q.enabled.Store(false)
-	for _, cancel := range q.work {
-		cancel()
+	for id, cancel := range q.work {
+		if id != except {
+			cancel()
+		}
 	}
 	q.mu.Unlock()
-	done := make(chan struct{})
-	go func() { q.workers.Wait(); close(done) }()
-	select {
-	case <-done:
-		return nil
-	case <-ctx.Done():
-		return ctx.Err()
+	q.background.Lock()
+	q.background.Unlock()
+	ticker := time.NewTicker(10 * time.Millisecond)
+	defer ticker.Stop()
+	for {
+		q.mu.Lock()
+		remaining := len(q.work)
+		if _, ok := q.work[except]; ok {
+			remaining--
+		}
+		q.mu.Unlock()
+		if remaining == 0 {
+			return nil
+		}
+		select {
+		case <-ticker.C:
+		case <-ctx.Done():
+			return ctx.Err()
+		}
 	}
 }
 
@@ -335,7 +353,7 @@ func (q *Coordinator) trackRestoreWorkerInternal(ctx context.Context) (context.C
 	}
 	q.work[id] = cancel
 	q.workers.Add(1)
-	return workCtx, true, func() {
+	return context.WithValue(workCtx, maintenanceWorkerKey{}, id), true, func() {
 		cancel()
 		q.mu.Lock()
 		delete(q.work, id)
@@ -352,6 +370,20 @@ func (q *Coordinator) dispatchInternal(ctx context.Context) {
 	fullRepair := true
 	nextRetention := time.Now()
 	for ctx.Err() == nil {
+		q.background.Lock()
+		q.mu.Lock()
+		paused := q.paused
+		q.mu.Unlock()
+		if paused {
+			q.background.Unlock()
+			select {
+			case <-ctx.Done():
+				return
+			case <-q.wake:
+			case <-time.After(100 * time.Millisecond):
+			}
+			continue
+		}
 		q.retryActivitySyncInternal(ctx)
 		if initialRetention || !time.Now().Before(nextRetention) {
 			if err := q.pruneInternal(ctx); err != nil {
@@ -382,6 +414,7 @@ func (q *Coordinator) dispatchInternal(ctx context.Context) {
 				nextWake = activityRetry
 			}
 		}
+		q.background.Unlock()
 		timer := time.NewTimer(max(time.Until(nextWake), 0))
 		select {
 		case <-ctx.Done():
@@ -606,4 +639,13 @@ func (q *Coordinator) Resolve(ctx context.Context, environmentID, jobID, runID, 
 		q.signalInternal()
 	}
 	return run, err
+}
+
+// ResetAfterRestore prevents copied claims from being mistaken for this host's
+// current workers when a running process restores its own earlier archive.
+func (q *Coordinator) ResetAfterRestore() {
+	q.mu.Lock()
+	defer q.mu.Unlock()
+	q.owner = uuid.New().String()
+	q.checkpointed = make(map[string]bool)
 }

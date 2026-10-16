@@ -20,6 +20,7 @@ type MaintenanceGate struct {
 	mu         sync.Mutex
 	phase      string
 	activityID string
+	operation  string
 	active     int
 	drained    chan struct{}
 	cancellers map[uint64]func()
@@ -80,13 +81,17 @@ func (g *MaintenanceGate) OnBegin(closeConnections func()) {
 	g.mu.Unlock()
 }
 
-func (g *MaintenanceGate) Begin(activityID string) error {
+func (g *MaintenanceGate) Begin(activityID string, operations ...string) error {
 	g.mu.Lock()
 	if g.phase != "" {
 		g.mu.Unlock()
 		return ErrMaintenanceActive
 	}
 	g.phase, g.activityID = "draining", activityID
+	g.operation = "restore"
+	if len(operations) > 0 {
+		g.operation = operations[0]
+	}
 	if g.active > 0 {
 		g.drained = make(chan struct{})
 	}
@@ -138,7 +143,7 @@ func (g *MaintenanceGate) Status() backuptypes.SystemBackupMaintenance {
 	if g.phase == "" {
 		return backuptypes.SystemBackupMaintenance{}
 	}
-	return backuptypes.SystemBackupMaintenance{Active: true, Phase: g.phase, ReasonCode: "backup.maintenance", ActivityID: g.activityID}
+	return backuptypes.SystemBackupMaintenance{Active: true, Operation: g.operation, Phase: g.phase, ReasonCode: "backup.maintenance", ActivityID: g.activityID}
 }
 
 func (s *Service) MaintenanceGate() *MaintenanceGate {

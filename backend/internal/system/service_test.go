@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; functional cut: removed S3 backup destinations; SQLite temp-file persistence fixture.
+// Deviations: Local module namespace; SQLite history, scheduling and separate volume recovery-key checks.
 
 package system
 
@@ -126,7 +126,6 @@ func TestListBackupHistoryClassifiesAndFiltersOrigins(t *testing.T) {
 	now := time.Now().UTC()
 	require.NoError(t, gormDB.Create(&SystemBackupRun{
 		CreatedAt: now.Add(-2 * time.Minute), Status: SystemBackupStatusSucceeded, Trigger: SystemBackupTriggerManual,
-		Destination: backuptypes.SystemBackupDestinationLocal,
 	}).Error)
 	require.NoError(t, gormDB.Create(&volume.VolumeBackup{
 		VolumeName: "app-data", CreatedAt: now.Add(-time.Minute), Status: volume.VolumeBackupStatusSucceeded,
@@ -196,7 +195,7 @@ func (s *systemBackupPolicySchedulerInternal) Submit(_ context.Context, request 
 	return scheduler.Run{ID: request.RunID, JobID: request.JobID, EnvironmentID: request.EnvironmentID, Status: scheduler.Queued}, nil
 }
 
-func TestSystemBackupPoliciesRejectEnableUntilDatabaseRecoveryExists(t *testing.T) {
+func TestSystemBackupPoliciesRejectEnableWithoutStorageEvenWithVolumeKey(t *testing.T) {
 	gormDB, err := gorm.Open(testsqlite.Dialector(t, "file:system-backup-schedules?mode=memory&cache=shared"), &gorm.Config{})
 	require.NoError(t, err)
 	require.NoError(t, gormDB.AutoMigrate(&SystemBackupPolicy{}, &backup.SystemBackupRecoveryConfig{}))
@@ -205,16 +204,16 @@ func TestSystemBackupPoliciesRejectEnableUntilDatabaseRecoveryExists(t *testing.
 	service := &SystemService{db: db}
 	service.backup = systembackup.NewService(systembackup.Dependencies{
 		Store: service.backupStoreInternal(), DB: db,
-		Config:       &config.Config{DatabaseURL: "file:data/docklet.db"},
+		Config:       &config.Config{DatabaseURL: "file:example.db", BackupDir: "relative"},
 		RecoveryKeys: backup.NewRecoveryKeyStore(db),
 	})
 	_, err = service.backup.SetRecoveryKey(t.Context(), "QWERTY-ABCDEF-234567-GHIJKL-MNOPQR-STUVWX-YZ2345-ZXCVBN")
 	require.NoError(t, err)
-	_, err = service.backup.UpdatePolicies(t.Context(), []backuptypes.UpdateSystemBackupPolicy{{Enabled: true, Schedule: "0 0 2 * * *", RetentionCount: 5, LocalEnabled: true}})
+	_, err = service.backup.UpdatePolicies(t.Context(), []backuptypes.UpdateSystemBackupPolicy{{Enabled: true, Schedule: "0 0 2 * * *", RetentionCount: 5}})
 	require.ErrorIs(t, err, systembackup.ErrSystemBackupUnavailable)
 }
 
-func TestSystemBackupPolicyRequiresConfiguredRecoveryKeyWhenEnabled(t *testing.T) {
+func TestSystemBackupPolicyRejectsRelativeArchiveStorage(t *testing.T) {
 	gormDB, err := gorm.Open(testsqlite.Dialector(t, "file:system-backup-key-required?mode=memory&cache=shared"), &gorm.Config{})
 	require.NoError(t, err)
 	require.NoError(t, gormDB.AutoMigrate(&SystemBackupPolicy{}, &backup.SystemBackupRecoveryConfig{}))
@@ -223,12 +222,12 @@ func TestSystemBackupPolicyRequiresConfiguredRecoveryKeyWhenEnabled(t *testing.T
 	service.backup = systembackup.NewService(systembackup.Dependencies{
 		Store:        service.backupStoreInternal(),
 		DB:           db,
-		Config:       &config.Config{DatabaseURL: "file:system-backup-key-required-test.db"},
+		Config:       &config.Config{DatabaseURL: "file:system-backup-key-required-test.db", BackupDir: "relative"},
 		RecoveryKeys: backup.NewRecoveryKeyStore(db),
 	})
 
 	_, err = service.backup.UpdatePolicies(t.Context(), []backuptypes.UpdateSystemBackupPolicy{{
-		Enabled: true, Schedule: "0 0 2 * * *", RetentionCount: 7, LocalEnabled: true,
+		Enabled: true, Schedule: "0 0 2 * * *", RetentionCount: 7,
 	}})
-	require.ErrorContains(t, err, "configure a recovery key")
+	require.ErrorIs(t, err, systembackup.ErrSystemBackupUnavailable)
 }

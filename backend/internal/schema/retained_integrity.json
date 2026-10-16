@@ -45,7 +45,6 @@
     {"table": "roles", "column": "permissions", "default": "'[]'", "notNull": true},
     {"table": "system_backup_policies", "column": "created_at", "default": "(CAST((julianday('now') - 2440587.5) * 86400000000 AS INTEGER))", "notNull": true},
     {"table": "system_backup_policies", "column": "enabled", "default": "false", "notNull": true},
-    {"table": "system_backup_policies", "column": "local_enabled", "default": "true", "notNull": true},
     {"table": "system_backup_policies", "column": "retention_count", "default": "7", "notNull": true},
     {"table": "system_backup_recovery_config", "column": "created_at", "default": "(CAST((julianday('now') - 2440587.5) * 86400000000 AS INTEGER))", "notNull": true},
     {"table": "system_backup_runs", "column": "created_at", "default": "(CAST((julianday('now') - 2440587.5) * 86400000000 AS INTEGER))", "notNull": true},
@@ -178,7 +177,6 @@
     {"table": "system_backup_policies", "column": "schedule", "notNull": true},
     {"table": "system_backup_recovery_config", "column": "encrypted_recovery_key", "notNull": true},
     {"table": "system_backup_recovery_config", "column": "id", "notNull": true},
-    {"table": "system_backup_runs", "column": "destination", "notNull": true},
     {"table": "system_backup_runs", "column": "id", "notNull": true},
     {"table": "system_backup_runs", "column": "status", "notNull": true},
     {"table": "system_backup_runs", "column": "trigger", "notNull": true},
@@ -230,114 +228,78 @@
     {"table": "webhooks", "column": "token_prefix", "notNull": true}
   ],
   "constraints": {
-  "activity_messages": [
-    "FOREIGN KEY (activity_id) REFERENCES activities(id) ON DELETE CASCADE"
-  ],
-  "api_key_permissions": [
-    "FOREIGN KEY (api_key_id) REFERENCES api_keys(id) ON DELETE CASCADE",
-    "FOREIGN KEY (environment_id) REFERENCES environments(id) ON DELETE CASCADE"
-  ],
-  "api_keys": [
-    "FOREIGN KEY (environment_id) REFERENCES environments(id) ON DELETE CASCADE",
-    "FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE"
-  ],
-  "environments": [
-    "FOREIGN KEY (api_key_id) REFERENCES api_keys(id) ON DELETE SET NULL"
-  ],
-  "project_tags": [
-    "CHECK ((color IN ('gray', 'purple', 'blue', 'green', 'yellow', 'orange', 'red', 'pink')))",
-    "CHECK ((source IN ('ui', 'compose')))",
-    "FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE"
-  ],
-  "projects": [
-    "UNIQUE (dir_name)"
-  ],
-  "roles": [
-    "UNIQUE (name)"
-  ],
-  "user_avatars": [
-    "FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE"
-  ],
-  "user_role_assignments": [
-    "FOREIGN KEY (environment_id) REFERENCES environments(id) ON DELETE CASCADE",
-    "FOREIGN KEY (role_id) REFERENCES roles(id) ON DELETE CASCADE",
-    "FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE"
-  ],
-  "user_sessions": [
-    "FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE",
-    "UNIQUE (refresh_token_hash)"
-  ],
-  "users": [
-    "CHECK ((time_format IN ('auto', '12h', '24h')))",
-    "UNIQUE (username)"
-  ],
-  "vulnerability_scan_items": [
-    "FOREIGN KEY (image_id) REFERENCES vulnerability_scans(id) ON DELETE CASCADE",
-    "CHECK (details IS NULL OR json_valid(details))"
-  ],
-  "webhooks": [
-    "UNIQUE (token_hash)"
-  ],
-  "activities": [
-    "CHECK (status IN ('queued','running','success','failed','cancelled'))",
-    "CHECK ((COALESCE(gate_scope, '') = '') = (COALESCE(gate_key, '') = ''))"
-  ],
-  "vulnerability_reports": [
-    "CHECK (data IS NULL OR json_valid(data))"
-  ]
-},
+    "activity_messages": ["FOREIGN KEY (activity_id) REFERENCES activities(id) ON DELETE CASCADE"],
+    "api_key_permissions": ["FOREIGN KEY (api_key_id) REFERENCES api_keys(id) ON DELETE CASCADE", "FOREIGN KEY (environment_id) REFERENCES environments(id) ON DELETE CASCADE"],
+    "api_keys": ["FOREIGN KEY (environment_id) REFERENCES environments(id) ON DELETE CASCADE", "FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE"],
+    "environments": ["FOREIGN KEY (api_key_id) REFERENCES api_keys(id) ON DELETE SET NULL"],
+    "project_tags": ["CHECK ((color IN ('gray', 'purple', 'blue', 'green', 'yellow', 'orange', 'red', 'pink')))", "CHECK ((source IN ('ui', 'compose')))", "FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE"],
+    "projects": ["UNIQUE (dir_name)"],
+    "roles": ["UNIQUE (name)"],
+    "user_avatars": ["FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE"],
+    "user_role_assignments": ["FOREIGN KEY (environment_id) REFERENCES environments(id) ON DELETE CASCADE", "FOREIGN KEY (role_id) REFERENCES roles(id) ON DELETE CASCADE", "FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE"],
+    "user_sessions": ["FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE", "UNIQUE (refresh_token_hash)"],
+    "users": ["CHECK ((time_format IN ('auto', '12h', '24h')))", "UNIQUE (username)"],
+    "vulnerability_scan_items": ["FOREIGN KEY (image_id) REFERENCES vulnerability_scans(id) ON DELETE CASCADE", "CHECK (details IS NULL OR json_valid(details))"],
+    "webhooks": ["UNIQUE (token_hash)"],
+    "activities": ["CHECK (status IN ('queued','running','success','failed','cancelled'))", "CHECK ((COALESCE(gate_scope, '') = '') = (COALESCE(gate_key, '') = ''))"],
+    "vulnerability_reports": ["CHECK (data IS NULL OR json_valid(data))"],
+    "system_backup_runs": ["CHECK (size BETWEEN 0 AND 2147483648)", "CHECK (archive_name IS NULL OR (length(archive_name) BETWEEN 5 AND 132 AND archive_name NOT GLOB '*[^A-Za-z0-9_.-]*' AND substr(archive_name,-4) = '.tar'))", "CHECK (archive_version IS NULL OR archive_version = 1)", "CHECK (migration_version IS NULL OR migration_version >= 1)", "CHECK (copy_state IN ('none','pending','succeeded','failed'))"],
+    "system_backup_policies": ["CHECK (retention_count >= 1)"]
+  },
   "indexes": [
-  "CREATE INDEX idx_activities_environment_batch ON activities (environment_id, batch_id);",
-  "CREATE INDEX idx_activities_environment_started ON activities (environment_id, started_at);",
-  "CREATE INDEX idx_activities_environment_status_updated ON activities (environment_id, status, updated_at);",
-  "CREATE INDEX idx_activities_resource ON activities (resource_type, resource_id);",
-  "CREATE INDEX idx_activity_messages_activity_created ON activity_messages (activity_id, created_at);",
-  "CREATE UNIQUE INDEX idx_akp_uniq ON api_key_permissions (api_key_id, permission, COALESCE(environment_id, ''));",
-  "CREATE INDEX idx_api_keys_expires_at_not_null ON api_keys (expires_at) WHERE (expires_at IS NOT NULL);",
-  "CREATE INDEX idx_api_keys_key_hash ON api_keys (key_hash);",
-  "CREATE INDEX idx_api_keys_key_prefix ON api_keys (key_prefix);",
-  "CREATE INDEX idx_api_keys_user_managed_by_created_at ON api_keys (user_id, managed_by, created_at, id);",
-  "CREATE INDEX idx_auto_update_resource_id ON auto_update_records (resource_id);",
-  "CREATE INDEX idx_auto_update_start_time ON auto_update_records (start_time);",
-  "CREATE INDEX idx_container_registries_enabled ON container_registries (enabled);",
-  "CREATE INDEX idx_environment_update_jobs_status ON environment_update_jobs (status);",
-  "CREATE INDEX idx_environments_access_token_not_null ON environments (access_token) WHERE (access_token IS NOT NULL);",
-  "CREATE INDEX idx_environments_api_url ON environments (api_url);",
-  "CREATE INDEX idx_environments_enabled ON environments (enabled);",
-  "CREATE INDEX idx_environments_enabled_true ON environments (id, name) WHERE (enabled = true);",
-  "CREATE INDEX idx_environments_last_seen ON environments (last_seen);",
-  "CREATE INDEX idx_environments_name ON environments (name);",
-  "CREATE INDEX idx_environments_status ON environments (status);",
-  "CREATE INDEX idx_events_environment_timestamp ON events (environment_id, \"timestamp\");",
-  "CREATE INDEX idx_events_resource_id ON events (resource_id);",
-  "CREATE INDEX idx_events_resource_type ON events (resource_type);",
-  "CREATE INDEX idx_events_severity ON events (severity);",
-  "CREATE INDEX idx_events_timestamp ON events (\"timestamp\");",
-  "CREATE INDEX idx_events_type ON events (type);",
-  "CREATE INDEX idx_events_user_id ON events (user_id);",
-  "CREATE INDEX idx_image_patches_created_at ON image_patches (created_at);",
-  "CREATE INDEX idx_image_updates_check_time ON image_updates (check_time);",
-  "CREATE INDEX idx_image_updates_has_update ON image_updates (has_update);",
-  "CREATE INDEX idx_image_updates_has_update_notification ON image_updates (has_update, notification_sent);",
-  "CREATE INDEX idx_image_updates_notification_sent ON image_updates (notification_sent);",
-  "CREATE INDEX idx_image_updates_repository_tag ON image_updates (repository, tag);",
-  "CREATE INDEX idx_notification_settings_enabled ON notification_settings (enabled);",
-  "CREATE INDEX idx_project_tags_name ON project_tags (name);",
-  "CREATE INDEX idx_projects_dir_name_not_null ON projects (dir_name) WHERE (dir_name IS NOT NULL);",
-  "CREATE INDEX idx_projects_status ON projects (status);",
-  "CREATE UNIQUE INDEX idx_ura_uniq ON user_role_assignments (user_id, role_id, COALESCE(environment_id, ''));",
-  "CREATE INDEX idx_users_email ON users (email);",
-  "CREATE INDEX idx_users_username ON users (username);",
-  "CREATE INDEX idx_volume_backups_volume_name_created_at ON volume_backups (volume_name, created_at);",
-  "CREATE INDEX idx_vulnerability_ignores_composite ON vulnerability_ignores (environment_id, image_id, vulnerability_id, pkg_name, installed_version);",
-  "CREATE INDEX idx_vulnerability_ignores_env_created_at ON vulnerability_ignores (environment_id, created_at);",
-  "CREATE INDEX idx_vulnerability_ignores_env_vulnerability_id ON vulnerability_ignores (environment_id, vulnerability_id);",
-  "CREATE INDEX idx_vulnerability_scan_items_severity_rank_id ON vulnerability_scan_items (severity_rank, id);",
-  "CREATE INDEX idx_vulnerability_scans_scan_time ON vulnerability_scans (scan_time);",
-  "CREATE INDEX idx_vulnerability_scans_status_total_count ON vulnerability_scans (status, total_count);",
-  "CREATE INDEX idx_vulnerability_threat_intel_known_exploited ON vulnerability_threat_intel (known_exploited);",
-  "CREATE INDEX idx_webhooks_environment_id ON webhooks (environment_id);",
-  "CREATE INDEX idx_webhooks_token_prefix ON webhooks (token_prefix);",
-  "CREATE UNIQUE INDEX idx_activities_active_scope ON activities(environment_id,gate_scope) WHERE gate_scope <> '' AND status IN ('queued','running');"
-]
+    "CREATE INDEX idx_activities_environment_batch ON activities (environment_id, batch_id);",
+    "CREATE INDEX idx_activities_environment_started ON activities (environment_id, started_at);",
+    "CREATE INDEX idx_activities_environment_status_updated ON activities (environment_id, status, updated_at);",
+    "CREATE INDEX idx_activities_resource ON activities (resource_type, resource_id);",
+    "CREATE INDEX idx_activity_messages_activity_created ON activity_messages (activity_id, created_at);",
+    "CREATE UNIQUE INDEX idx_akp_uniq ON api_key_permissions (api_key_id, permission, COALESCE(environment_id, ''));",
+    "CREATE INDEX idx_api_keys_expires_at_not_null ON api_keys (expires_at) WHERE (expires_at IS NOT NULL);",
+    "CREATE INDEX idx_api_keys_key_hash ON api_keys (key_hash);",
+    "CREATE INDEX idx_api_keys_key_prefix ON api_keys (key_prefix);",
+    "CREATE INDEX idx_api_keys_user_managed_by_created_at ON api_keys (user_id, managed_by, created_at, id);",
+    "CREATE INDEX idx_auto_update_resource_id ON auto_update_records (resource_id);",
+    "CREATE INDEX idx_auto_update_start_time ON auto_update_records (start_time);",
+    "CREATE INDEX idx_container_registries_enabled ON container_registries (enabled);",
+    "CREATE INDEX idx_environment_update_jobs_status ON environment_update_jobs (status);",
+    "CREATE INDEX idx_environments_access_token_not_null ON environments (access_token) WHERE (access_token IS NOT NULL);",
+    "CREATE INDEX idx_environments_api_url ON environments (api_url);",
+    "CREATE INDEX idx_environments_enabled ON environments (enabled);",
+    "CREATE INDEX idx_environments_enabled_true ON environments (id, name) WHERE (enabled = true);",
+    "CREATE INDEX idx_environments_last_seen ON environments (last_seen);",
+    "CREATE INDEX idx_environments_name ON environments (name);",
+    "CREATE INDEX idx_environments_status ON environments (status);",
+    "CREATE INDEX idx_events_environment_timestamp ON events (environment_id, \"timestamp\");",
+    "CREATE INDEX idx_events_resource_id ON events (resource_id);",
+    "CREATE INDEX idx_events_resource_type ON events (resource_type);",
+    "CREATE INDEX idx_events_severity ON events (severity);",
+    "CREATE INDEX idx_events_timestamp ON events (\"timestamp\");",
+    "CREATE INDEX idx_events_type ON events (type);",
+    "CREATE INDEX idx_events_user_id ON events (user_id);",
+    "CREATE INDEX idx_image_patches_created_at ON image_patches (created_at);",
+    "CREATE INDEX idx_image_updates_check_time ON image_updates (check_time);",
+    "CREATE INDEX idx_image_updates_has_update ON image_updates (has_update);",
+    "CREATE INDEX idx_image_updates_has_update_notification ON image_updates (has_update, notification_sent);",
+    "CREATE INDEX idx_image_updates_notification_sent ON image_updates (notification_sent);",
+    "CREATE INDEX idx_image_updates_repository_tag ON image_updates (repository, tag);",
+    "CREATE INDEX idx_notification_settings_enabled ON notification_settings (enabled);",
+    "CREATE INDEX idx_project_tags_name ON project_tags (name);",
+    "CREATE INDEX idx_projects_dir_name_not_null ON projects (dir_name) WHERE (dir_name IS NOT NULL);",
+    "CREATE INDEX idx_projects_status ON projects (status);",
+    "CREATE UNIQUE INDEX idx_ura_uniq ON user_role_assignments (user_id, role_id, COALESCE(environment_id, ''));",
+    "CREATE INDEX idx_users_email ON users (email);",
+    "CREATE INDEX idx_users_username ON users (username);",
+    "CREATE INDEX idx_volume_backups_volume_name_created_at ON volume_backups (volume_name, created_at);",
+    "CREATE INDEX idx_vulnerability_ignores_composite ON vulnerability_ignores (environment_id, image_id, vulnerability_id, pkg_name, installed_version);",
+    "CREATE INDEX idx_vulnerability_ignores_env_created_at ON vulnerability_ignores (environment_id, created_at);",
+    "CREATE INDEX idx_vulnerability_ignores_env_vulnerability_id ON vulnerability_ignores (environment_id, vulnerability_id);",
+    "CREATE INDEX idx_vulnerability_scan_items_severity_rank_id ON vulnerability_scan_items (severity_rank, id);",
+    "CREATE INDEX idx_vulnerability_scans_scan_time ON vulnerability_scans (scan_time);",
+    "CREATE INDEX idx_vulnerability_scans_status_total_count ON vulnerability_scans (status, total_count);",
+    "CREATE INDEX idx_vulnerability_threat_intel_known_exploited ON vulnerability_threat_intel (known_exploited);",
+    "CREATE INDEX idx_webhooks_environment_id ON webhooks (environment_id);",
+    "CREATE INDEX idx_webhooks_token_prefix ON webhooks (token_prefix);",
+    "CREATE UNIQUE INDEX idx_activities_active_scope ON activities(environment_id,gate_scope) WHERE gate_scope <> '' AND status IN ('queued','running');",
+    "CREATE UNIQUE INDEX idx_system_backup_runs_archive_name ON system_backup_runs (archive_name) WHERE archive_name IS NOT NULL;",
+    "CREATE INDEX idx_system_backup_runs_activity_id ON system_backup_runs (activity_id) WHERE activity_id IS NOT NULL;"
+  ]
 }

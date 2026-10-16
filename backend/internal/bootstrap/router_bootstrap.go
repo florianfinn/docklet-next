@@ -344,8 +344,8 @@ func maintenanceMiddlewareInternal(gate *hubbackup.MaintenanceGate) echo.Middlew
 			if status.Active {
 				return maintenanceReadOrErrorInternal(c, status)
 			}
-			// Keep the accepted restore response alive until its worker can drain it.
-			if req.Method == http.MethodPost && strings.HasPrefix(req.URL.Path, "/api/backups/") && strings.HasSuffix(req.URL.Path, "/restore") {
+			// Keep accepted snapshot/restore responses alive until their workers drain them.
+			if req.Method == http.MethodPost && (req.URL.Path == "/api/backups" || (strings.HasPrefix(req.URL.Path, "/api/backups/") && strings.HasSuffix(req.URL.Path, "/restore"))) {
 				release, err := gate.Admit()
 				if err != nil {
 					return maintenanceReadOrErrorInternal(c, gate.Status())

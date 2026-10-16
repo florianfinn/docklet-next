@@ -116,19 +116,21 @@ func TestMaintenanceRouterAdmissionAndDatabaseFreeReads(t *testing.T) {
 	require.Equal(t, "applying", body["phase"])
 }
 
-func TestRestoreAdmissionResponseSurvivesBeginningMaintenance(t *testing.T) {
-	gate := hubbackup.NewMaintenanceGate()
-	router := newEchoInternal()
-	router.Use(maintenanceMiddlewareInternal(gate))
-	router.POST("/api/backups/:id/restore", func(c *echo.Context) error {
-		if err := gate.Begin("activity-1"); err != nil {
-			return err
-		}
-		require.NoError(t, c.Request().Context().Err())
-		return c.NoContent(http.StatusAccepted)
-	})
-	rec := httptest.NewRecorder()
-	router.ServeHTTP(rec, httptest.NewRequest(http.MethodPost, "/api/backups/example/restore", http.NoBody))
-	require.Equal(t, http.StatusAccepted, rec.Code)
-	require.NoError(t, gate.Wait(t.Context()))
+func TestBackupAdmissionResponseSurvivesBeginningMaintenance(t *testing.T) {
+	for _, path := range []string{"/api/backups", "/api/backups/example/restore"} {
+		t.Run(path, func(t *testing.T) {
+			gate := hubbackup.NewMaintenanceGate()
+			router := newEchoInternal()
+			router.Use(maintenanceMiddlewareInternal(gate))
+			router.POST(path, func(c *echo.Context) error {
+				require.NoError(t, gate.Begin("activity-1"))
+				require.NoError(t, c.Request().Context().Err())
+				return c.NoContent(http.StatusAccepted)
+			})
+			rec := httptest.NewRecorder()
+			router.ServeHTTP(rec, httptest.NewRequest(http.MethodPost, path, http.NoBody))
+			require.Equal(t, http.StatusAccepted, rec.Code)
+			require.NoError(t, gate.Wait(t.Context()))
+		})
+	}
 }

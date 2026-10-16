@@ -59,6 +59,9 @@ func Bootstrap(ctx context.Context) error {
 		DockerConfig:      cfg.DockerConfig,
 		ProjectsDirectory: cfg.ProjectsDirectory,
 	}
+	if !cfg.AgentMode {
+		runtimeIdentityCfg.BackupDirectory = cfg.BackupDir
+	}
 	if err := startup.ApplyRequestedRuntimeIdentity(ctx, runtimeIdentityCfg); err != nil {
 		return fmt.Errorf("apply runtime identity: %w", err)
 	}
@@ -79,7 +82,7 @@ func Bootstrap(ctx context.Context) error {
 	if cfg.AgentMode {
 		db, err = initializeDBAndMigrateInternal(appCtx, cfg)
 	} else {
-		if markerErr := hubbackup.CheckRestoreMarker(cfg.BackupDir); markerErr != nil {
+		if markerErr := hubbackup.RecoverPendingRestore(appCtx, cfg); markerErr != nil {
 			slog.ErrorContext(appCtx, "Hub restore recovery required; run the offline restore command before restarting the hub", "code", "backup.recovery_required")
 			cancelApp()
 			return markerErr

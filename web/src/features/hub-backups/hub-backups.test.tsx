@@ -86,7 +86,7 @@ describe("Hub database backup page", () => {
     await screen.findByText("system-demo-1");
     await userEvent.click(screen.getByRole("button", { name: deHubBackups.upload }));
     const input = screen.getByLabelText(deHubBackups.chooseFile);
-    const large = new File(["x"], "large.dump", { type: "application/octet-stream" });
+    const large = new File(["x"], "large.tar", { type: "application/octet-stream" });
     Object.defineProperty(large, "size", { value: MAX_HUB_BACKUP_BYTES + 1 });
     fireEvent.change(input, { target: { files: [large] } });
     await userEvent.click(screen.getByRole("button", { name: deHubBackups.uploadAction }));
@@ -153,7 +153,7 @@ describe("Hub database backup page", () => {
     await userEvent.click(screen.getByRole("button", { name: deHubBackups.save }));
     await waitFor(async () => expect((await adapter.getHubBackupPolicies())[0]?.retentionCount).toBe(3));
     await userEvent.click(screen.getByRole("button", { name: deHubBackups.upload }));
-    const file = new File(["PGDMP"], "trusted.dump", { type: "application/octet-stream" });
+    const file = new File(["PGDMP"], "trusted.tar", { type: "application/octet-stream" });
     fireEvent.change(screen.getByLabelText(deHubBackups.chooseFile), { target: { files: [file] } });
     await userEvent.click(screen.getByRole("button", { name: deHubBackups.uploadAction }));
     expect(await screen.findByText(deHubBackups.uploadProgress.replace("{percent}", "45"))).toBeTruthy();
@@ -217,6 +217,16 @@ describe("Hub database backup page", () => {
     expect(screen.getByRole("progressbar", { name: deHubBackups.maintenanceProgress }).getAttribute("aria-valuenow")).toBe("33");
     vi.spyOn(adapter, "getHubBackupMaintenance").mockResolvedValue({ active: false });
     await waitFor(() => expect(router.state.location.pathname).toBe("/login"), { timeout: 3500 });
+  });
+
+  it("returns to the page after a snapshot without signing out", async () => {
+    const adapter = createDemoAdapter();
+    vi.spyOn(adapter, "getHubBackupMaintenance").mockResolvedValue({ active: true, operation: "backup", phase: "applying" });
+    const router = renderRoutes([{ path: "/hub-backups", element: <HubBackupsPage /> }, { path: "/login", element: <p>Login</p> }], ["/hub-backups"], adapter);
+    expect(await screen.findByText(deHubBackups.snapshotTitle)).toBeTruthy();
+    vi.spyOn(adapter, "getHubBackupMaintenance").mockResolvedValue({ active: false });
+    expect(await screen.findByText("system-demo-1", {}, { timeout: 3500 })).toBeTruthy();
+    expect(router.router.state.location.pathname).toBe("/hub-backups");
   });
 
   it("hides the page and navigation from a non-admin", async () => {

@@ -61,9 +61,9 @@ In particular, steps 2 and 5 cannot be performed before then.
    **Complete**. Record the archive ID, creation time and size.
 3. Download the archive to protected storage outside the Hub host. Verify that
    the file exists and is not empty.
-4. Have the operator stop the Hub and prepare a new, empty PostgreSQL 18 database
+4. Have the operator stop the Hub and prepare a new, empty local SQLite data volume
    in the approved sandbox. The Hub must not start against that empty database
-   before restore. The operator places the downloaded file as `<archive-id>.dump`
+   before restore. The operator places the downloaded file as `<archive-id>.tar`
    in the backup volume and runs `restore-hub --backup-id <archive-id>` as
    described in `deploy/hub/README.md`.
 5. Start the Hub. Check that its health endpoint is ready and a fresh login is

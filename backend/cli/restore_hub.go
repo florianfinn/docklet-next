@@ -12,6 +12,7 @@ import (
 
 	"github.com/florianfinn/docklet-next/backend/internal/config"
 	hubbackup "github.com/florianfinn/docklet-next/backend/internal/system/children/backup"
+	"github.com/florianfinn/docklet-next/backend/pkg/libarcane/startup"
 	"github.com/spf13/cobra"
 )
 
@@ -25,7 +26,12 @@ var restoreHubCmd = &cobra.Command{
 		if restoreHubBackupID == "" {
 			return errors.New("backup ID is required")
 		}
-		if err := hubbackup.OfflineRestore(cmd.Context(), config.Load(), restoreHubBackupID); err != nil {
+		cfg := config.Load()
+		identity := &startup.RuntimeIdentityConfig{PUID: cfg.PUID, PGID: cfg.PGID, DockerHost: cfg.DockerHost, DockerConfig: cfg.DockerConfig, ProjectsDirectory: cfg.ProjectsDirectory, BackupDirectory: cfg.BackupDir}
+		if err := startup.ApplyRequestedRuntimeIdentity(cmd.Context(), identity); err != nil {
+			return err
+		}
+		if err := hubbackup.OfflineRestore(cmd.Context(), cfg, restoreHubBackupID); err != nil {
 			return fmt.Errorf("offline Hub restore: %w", err)
 		}
 		_, err := fmt.Fprintln(cmd.OutOrStdout(), "Hub archive restored; start the Hub and sign in again")

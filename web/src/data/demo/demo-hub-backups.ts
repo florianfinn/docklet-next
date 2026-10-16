@@ -12,7 +12,7 @@ import type { DemoAdapterOptions } from "./options";
 
 const CREATED = "2026-10-14T09:30:00Z";
 const sample: HubBackupRun = {
-  id: "system-demo-1", activityId: "activity-demo-1", archiveName: "system-demo-1.dump",
+  id: "system-demo-1", activityId: "activity-demo-1", archiveName: "system-demo-1.tar",
   createdAt: CREATED, completedAt: CREATED, size: 33_554_432, status: "succeeded",
   trigger: "manual", copyState: "none",
 };
@@ -55,7 +55,7 @@ export function createDemoHubBackups(options: DemoAdapterOptions = {}): HubBacku
       const reasonCode = scenario === "storage-unavailable" ? "backup.storage_unavailable" : scenario === "tools-unavailable" ? "backup.tools_unavailable" : undefined;
       return { available: !reasonCode, freeBytes: reasonCode ? 0 : 9_663_676_416, usedBytes: runs.filter((run) => run.status === "succeeded").reduce((sum, run) => sum + run.size, 0), maxArchiveBytes: MAX_HUB_BACKUP_BYTES, ...(reasonCode ? { reasonCode } : {}) };
     },
-    async getHubBackupMaintenance() { return { active: maintenance, ...(maintenance ? { phase, activityId: "activity-restore-1" } : {}) }; },
+    async getHubBackupMaintenance() { return { active: maintenance, ...(maintenance ? { operation: "restore" as const, phase, activityId: "activity-restore-1" } : {}) }; },
     async getHubBackupActivityStatus(id) { requireAccess(); return states.get(id) ?? "failed"; },
     async createHubBackup() {
       requireAccess(); requireStorage();
@@ -69,7 +69,7 @@ export function createDemoHubBackups(options: DemoAdapterOptions = {}): HubBacku
     async uploadHubBackup(file, onProgress): Promise<HubBackupOperation> {
       requireAccess(); requireStorage();
       if (file.size > MAX_HUB_BACKUP_BYTES) invalid("backup.size_limit");
-      if (file.type && file.type !== "application/octet-stream") invalid("backup.unsupported_media_type");
+      if (file.type && !["application/octet-stream", "application/x-tar"].includes(file.type)) invalid("backup.unsupported_media_type");
       onProgress(45);
       await new Promise((resolve) => setTimeout(resolve, 350));
       const id = `system-upload-${runs.length + 1}`;
@@ -100,10 +100,10 @@ export function createDemoHubBackups(options: DemoAdapterOptions = {}): HubBacku
     async downloadHubBackup(id) {
       requireAccess();
       if (!runs.some((run) => run.id === id && run.status === "succeeded")) invalid("backup.not_found");
-      const blob = new Blob(["PGDMPdemo"], { type: "application/octet-stream" });
+      const blob = new Blob(["demo SQLite archive placeholder"], { type: "application/octet-stream" });
       const url = URL.createObjectURL(blob);
       const link = document.createElement("a");
-      link.href = url; link.download = `${id}.dump`; document.body.append(link); link.click(); link.remove();
+      link.href = url; link.download = `${id}.tar`; document.body.append(link); link.click(); link.remove();
       setTimeout(() => URL.revokeObjectURL(url), 0);
     },
   };

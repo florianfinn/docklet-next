@@ -1,5 +1,3 @@
-//go:build postgres_integration
-
 // Source: docklet-next/docs/design/hub-backup.md
 // Revision: 8f8c8f89bc6ebb7261862d0c35a6ddbc1513e9fa
 // Retrieved: 2026-10-15
@@ -10,20 +8,16 @@ package system
 
 import (
 	"context"
-	"crypto/rand"
-	"encoding/hex"
 	"io"
-	"net/url"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"reflect"
 	"testing"
 	"time"
 
+	"github.com/florianfinn/docklet-next/backend/pkg/utils/francis"
+	"github.com/florianfinn/docklet-next/backend/pkg/utils/sqlitestore"
 	"github.com/stretchr/testify/require"
-	"gorm.io/driver/postgres"
-	"gorm.io/gorm"
 
 	"github.com/florianfinn/docklet-next/backend/internal/activity"
 	backupstore "github.com/florianfinn/docklet-next/backend/internal/backup"
@@ -86,12 +80,12 @@ func TestHubBackupRetentionAfterArchiveMigration(t *testing.T) {
 		id, policyID, status, trigger string
 		archiveName                   *string
 	}{
-		{"old", "daily", backuptypes.SystemBackupStatusSucceeded, backuptypes.SystemBackupTriggerScheduled, new("old.dump")},
+		{"old", "daily", backuptypes.SystemBackupStatusSucceeded, backuptypes.SystemBackupTriggerScheduled, new("old.tar")},
 		{"without-archive", "daily", backuptypes.SystemBackupStatusSucceeded, backuptypes.SystemBackupTriggerScheduled, nil},
-		{"new", "daily", backuptypes.SystemBackupStatusSucceeded, backuptypes.SystemBackupTriggerScheduled, new("new.dump")},
-		{"manual", "daily", backuptypes.SystemBackupStatusSucceeded, backuptypes.SystemBackupTriggerManual, new("manual.dump")},
-		{"failed", "daily", backuptypes.SystemBackupStatusFailed, backuptypes.SystemBackupTriggerScheduled, new("failed.dump")},
-		{"other-policy", "other", backuptypes.SystemBackupStatusSucceeded, backuptypes.SystemBackupTriggerScheduled, new("other.dump")},
+		{"new", "daily", backuptypes.SystemBackupStatusSucceeded, backuptypes.SystemBackupTriggerScheduled, new("new.tar")},
+		{"manual", "daily", backuptypes.SystemBackupStatusSucceeded, backuptypes.SystemBackupTriggerManual, new("manual.tar")},
+		{"failed", "daily", backuptypes.SystemBackupStatusFailed, backuptypes.SystemBackupTriggerScheduled, new("failed.tar")},
+		{"other-policy", "other", backuptypes.SystemBackupStatusSucceeded, backuptypes.SystemBackupTriggerScheduled, new("other.tar")},
 	} {
 		require.NoError(t, db.Create(&SystemBackupRun{
 			BaseModel: database.BaseModel{ID: row.id}, CreatedAt: base.Add(time.Duration(i) * time.Minute),
@@ -105,7 +99,7 @@ func TestHubBackupRetentionAfterArchiveMigration(t *testing.T) {
 }
 
 // Exercise the system backup store after all migrations so its SQL and mapped
-// columns are checked by PostgreSQL against the installed schema.
+// columns are checked by SQLite against the installed schema.
 func TestHubBackupStoreQueriesAfterArchiveMigration(t *testing.T) {
 	db := newMigratedHubBackupDB(t)
 	store := (&SystemService{db: db}).backupStoreInternal()
@@ -118,7 +112,7 @@ func TestHubBackupStoreQueriesAfterArchiveMigration(t *testing.T) {
 	}
 	require.NoError(t, store.CreateRun(ctx, run))
 	run.Status = backuptypes.SystemBackupStatusSucceeded
-	run.ArchiveName = "archive.dump"
+	run.ArchiveName = "archive.tar"
 	require.NoError(t, store.SaveRun(ctx, run))
 	_, err := store.Run(ctx, run.ID)
 	require.NoError(t, err)
@@ -176,9 +170,6 @@ func newMigratedHubBackupDB(t *testing.T) *database.DB {
 }
 
 func TestHubArchiveCreateListDownloadAndGate(t *testing.T) {
-	if os.Getenv("DOCKLET_BACKUP_INTEGRATION") != "1" {
-		t.Skip("archive integration runs in the PostgreSQL 18 client image")
-	}
 	db, dsn := newMigratedHubBackupDBWithURL(t)
 	require.NoError(t, db.Exec("CREATE TABLE backup_seed (value text NOT NULL)").Error)
 	require.NoError(t, db.Exec("INSERT INTO backup_seed (value) VALUES ('example')").Error)
@@ -206,8 +197,8 @@ func TestHubArchiveCreateListDownloadAndGate(t *testing.T) {
 	}, 30*time.Second, 100*time.Millisecond)
 	latest, err := system.backupStoreInternal().Run(t.Context(), run.ID)
 	require.NoError(t, err)
-	require.Equal(t, 18, latest.SourceServerMajor)
-	require.GreaterOrEqual(t, latest.MigrationVersion, int64(8))
+	require.Equal(t, 1, latest.ArchiveVersion)
+	require.GreaterOrEqual(t, latest.MigrationVersion, int64(2))
 	params := pagination.QueryParams{SortParams: pagination.SortParams{Sort: "createdAt", Order: pagination.SortDesc}, Params: pagination.Params{Limit: 10}}
 	listed, _, err := service.ListBackups(t.Context(), params)
 	require.NoError(t, err)
@@ -216,14 +207,10 @@ func TestHubArchiveCreateListDownloadAndGate(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, latest.Size, size)
 	require.Equal(t, latest.ArchiveName, name)
-	var signature [5]byte
-	_, err = reader.Read(signature[:])
+	data, err := io.ReadAll(reader)
 	require.NoError(t, err)
-	require.Equal(t, "PGDMP", string(signature[:]))
+	require.Greater(t, len(data), 1024)
 	require.NoError(t, reader.Close())
-	command := exec.Command("pg_restore", "--list", filepath.Join(dir, name))
-	command.Stdout, command.Stderr = io.Discard, io.Discard
-	require.NoError(t, command.Run())
 	detail, err := activities.GetActivityDetail(t.Context(), "0", run.ActivityID, 20)
 	require.NoError(t, err)
 	require.Equal(t, activitytypes.StatusSuccess, detail.Activity.Status)
@@ -256,24 +243,6 @@ func TestHubArchiveCreateListDownloadAndGate(t *testing.T) {
 	require.NoError(t, err)
 	require.NoError(t, secondFile.Close())
 
-	wrong, err := url.Parse(dsn)
-	require.NoError(t, err)
-	wrong.User = url.UserPassword("docklet", "wrong")
-	failedService := backupservice.NewService(backupservice.Dependencies{
-		Store: system.backupStoreInternal(), DB: db, Activity: activities,
-		Config: &config.Config{DatabaseURL: wrong.String(), BackupDir: dir},
-	})
-	failed, err := failedService.StartBackup(t.Context(), usertypes.SystemUser, backuptypes.CreateSystemBackupRequest{})
-	require.NoError(t, err)
-	require.Eventually(t, func() bool {
-		stored, loadErr := system.backupStoreInternal().Run(t.Context(), failed.ID)
-		return loadErr == nil && stored.Status == backuptypes.SystemBackupStatusFailed
-	}, 30*time.Second, 100*time.Millisecond)
-	failedDetail, err := activities.GetActivityDetail(t.Context(), "0", failed.ActivityID, 20)
-	require.NoError(t, err)
-	require.Equal(t, activitytypes.StatusFailed, failedDetail.Activity.Status)
-	require.NotContains(t, failedDetail.Activity.LatestMessage, "wrong")
-	require.Empty(t, failedDetail.Output)
 	deleted, err := service.DeleteBackup(t.Context(), second.ID)
 	require.NoError(t, err)
 	require.Equal(t, string(activitytypes.StatusSuccess), deleted.Status)
@@ -285,24 +254,10 @@ func TestHubArchiveCreateListDownloadAndGate(t *testing.T) {
 
 func newMigratedHubBackupDBWithURL(t *testing.T) (*database.DB, string) {
 	t.Helper()
-	dsn := os.Getenv("DATABASE_URL")
-	require.NotEmpty(t, dsn, "DATABASE_URL must point to the test PostgreSQL service")
-	admin, err := gorm.Open(postgres.Open(dsn), &gorm.Config{})
-	require.NoError(t, err)
-	adminSQL, err := admin.DB()
-	require.NoError(t, err)
-	t.Cleanup(func() { require.NoError(t, adminSQL.Close()) })
-	var suffix [8]byte
-	_, err = rand.Read(suffix[:])
-	require.NoError(t, err)
-	name := "docklet_backup_store_" + hex.EncodeToString(suffix[:])
-	require.NoError(t, admin.Exec("CREATE DATABASE "+name).Error)
-	t.Cleanup(func() { require.NoError(t, admin.Exec("DROP DATABASE "+name+" WITH (FORCE)").Error) })
-	parsed, err := url.Parse(dsn)
-	require.NoError(t, err)
-	parsed.Path = "/" + name
-	db, err := database.Initialize(t.Context(), parsed.String(), database.MigrationOptions{})
+	dsn := sqlitestore.URL(filepath.Join(t.TempDir(), "hub.db"))
+	db, err := database.InitializeHub(t.Context(), dsn, database.MigrationOptions{})
 	require.NoError(t, err)
 	t.Cleanup(func() { require.NoError(t, db.Close()) })
-	return db, parsed.String()
+	require.NoError(t, francis.InitializeStore(t.Context(), dsn))
+	return db, dsn
 }
