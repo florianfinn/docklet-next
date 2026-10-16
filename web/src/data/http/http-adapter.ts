@@ -12,6 +12,7 @@ import { createDisconnectedAdapter } from "../disconnected-adapter";
 import type { CodedActionRun } from "../message-code";
 import { mapActivityDetail, mapEvent } from "./map-dto";
 import { createHttpHubBackups } from "./hub-backups";
+import { createCsrfClient } from "./csrf-client";
 
 type ReadOperation = "get-capabilities" | "listEnvironments" | "list-activities" | "get-activity" | "listEvents";
 type Body<I extends ReadOperation> = operations[I]["responses"][200]["content"]["application/json"];
@@ -50,7 +51,8 @@ function classifiedError(error: unknown, status?: number): AdapterOutcomeError {
 /** A small typed caller; response shape is checked before a DTO reaches the mapper. */
 export function createHttpAdapter(options: HttpAdapterOptions = {}): DockletAdapter {
   const baseUrl = (options.baseUrl ?? "/api").replace(/\/$/, "");
-  const fetcher = options.fetch ?? globalThis.fetch;
+  const client = createCsrfClient(baseUrl, options.fetch ?? globalThis.fetch);
+  const fetcher = client.fetch;
   const sourceFactory = options.eventSource ?? ((url: string) => new EventSource(url, { withCredentials: true }));
   const changeListeners = new Set<(topics: Topic[]) => void>();
   const actionListeners = new Set<(runs: CodedActionRun[]) => void>();
@@ -260,7 +262,7 @@ export function createHttpAdapter(options: HttpAdapterOptions = {}): DockletAdap
   const methods = Object.fromEntries(Object.keys(unsupported).filter((key) => key !== "kind").map((operationId) => [operationId, (...args: unknown[]) => Promise.reject(unavailable(operationId, refFor(operationId, args), "capability.mapping-unavailable"))])) as unknown as DockletAdapter;
   return {
     ...methods,
-    ...createHttpHubBackups(baseUrl, fetcher, options.uploadFactory),
+    ...createHttpHubBackups(baseUrl, client, options.uploadFactory),
     kind: "http",
     mappedOperations: IMPLEMENTED,
     getCapability,

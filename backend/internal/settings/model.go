@@ -156,6 +156,7 @@ type Settings struct {
 	BrowserSessionSigningKey SettingVariable `key:"browserSessionSigningKey,internal,sensitive"`
 	JwtSigningKeySeed        SettingVariable `key:"jwtSigningKeySeed,internal,sensitive"`
 	InstanceID               SettingVariable `key:"instanceId,internal"`
+	AuthLastMode             SettingVariable `key:"authLastMode,internal"`
 
 	// Users category (admin management page - no actual settings)
 	UsersCategoryPlaceholder SettingVariable `key:"usersCategory,internal" meta:"label=Users;type=internal;keywords=users,accounts,management,admin,access,permissions,roles;category=users;description=Manage user accounts and permissions" catmeta:"id=users;title=Users;icon=user;url=/settings/users;description=Manage user accounts and access control"`

@@ -64,6 +64,8 @@ type AuthService struct {
 	browserSigningKey []byte
 	refreshExpiry     time.Duration
 	config            *config.Config
+	recoveryOnce      sync.Once
+	recoveryErr       error
 	// tokenCache is a per-process in-memory cache for verified tokens. A hit
 	// skips signature verification and the user/session lookups; revocation in
 	// this process purges entries, revocation by another process is visible
@@ -112,14 +114,6 @@ func (s *AuthService) GetSessionTimeout(ctx context.Context) (int, error) {
 	}
 
 	return minutes, nil
-}
-
-func (s *AuthService) IsLocalAuthEnabled(ctx context.Context) (bool, error) {
-	localSettings, err := s.settingsService.GetSettings(ctx)
-	if err != nil {
-		return true, err
-	}
-	return localSettings.AuthLocalEnabled.IsTrue(), nil
 }
 
 // AuthenticateLocalPrimary validates the local primary factor without
@@ -177,6 +171,9 @@ func (s *AuthService) AuthenticateLocalPrimary(ctx context.Context, username, pa
 
 // CompleteLogin creates a session after local credentials are verified.
 func (s *AuthService) CompleteLogin(ctx context.Context, localUser *user.User, meta auth.SessionMeta, source string) (*TokenPair, error) {
+	if s.SignInMode() != auth.SignInModeLocal {
+		return nil, ErrLocalAuthDisabled
+	}
 	if localUser == nil {
 		return nil, common.ErrUserNotFound
 	}
@@ -272,6 +269,9 @@ func (s *AuthService) browserSigningKeyInternal(ctx context.Context) ([]byte, er
 }
 
 func (s *AuthService) RefreshToken(ctx context.Context, refreshToken string, meta auth.SessionMeta) (*TokenPair, error) {
+	if s.SignInMode() != auth.SignInModeLocal {
+		return nil, common.ErrInvalidToken
+	}
 	signingKey, err := s.signingKeyInternal(ctx)
 	if err != nil {
 		return nil, err
@@ -314,6 +314,9 @@ func (s *AuthService) RefreshToken(ctx context.Context, refreshToken string, met
 }
 
 func (s *AuthService) VerifyToken(ctx context.Context, accessToken string) (*user.User, string, error) {
+	if s.SignInMode() != auth.SignInModeLocal {
+		return nil, "", common.ErrInvalidToken
+	}
 	tokenHash := kit.SHA256Hex(accessToken)
 	if localUser, sessionID, ok := s.cachedVerificationInternal(tokenHash); ok {
 		return localUser, sessionID, nil
@@ -330,6 +333,9 @@ func (s *AuthService) VerifyToken(ctx context.Context, accessToken string) (*use
 }
 
 func (s *AuthService) VerifyBrowserToken(ctx context.Context, browserToken string) (*user.User, string, error) {
+	if s.SignInMode() != auth.SignInModeLocal {
+		return nil, "", common.ErrInvalidToken
+	}
 	tokenHash := "browser:" + kit.SHA256Hex(browserToken)
 	if localUser, sessionID, ok := s.cachedVerificationInternal(tokenHash); ok {
 		return localUser, sessionID, nil
@@ -354,19 +360,6 @@ func (s *AuthService) VerifyBrowserToken(ctx context.Context, browserToken strin
 	default:
 		return nil, "", common.ErrInvalidToken
 	}
-}
-
-func (s *AuthService) cachedVerificationInternal(tokenHash string) (*user.User, string, bool) {
-	cached, ok, _ := s.tokenCache.Get(tokenHash)
-	if !ok {
-		return nil, "", false
-	}
-	now := time.Now()
-	if now.After(cached.TokenExpiresAt) || now.After(cached.SessionExpiresAt) {
-		s.tokenCache.Delete(tokenHash)
-		return nil, "", false
-	}
-	return new(cached.User), cached.SessionID, true
 }
 
 func (s *AuthService) verifyTokenClaimsInternal(ctx context.Context, tokenHash string, claims *accessTokenClaims) (*user.User, string, error) {
@@ -434,13 +427,6 @@ func (s *AuthService) ChangePassword(ctx context.Context, userID, currentPasswor
 	// The current session's cached user still carries the old password flags.
 	s.InvalidateUserTokenCache(userID)
 	return nil
-}
-
-func (s *AuthService) passwordPolicyInternal(ctx context.Context) string {
-	if s.settingsService == nil {
-		return validation.PasswordPolicyStrong
-	}
-	return s.settingsService.GetStringSetting(ctx, "authPasswordPolicy", validation.PasswordPolicyStrong)
 }
 
 // InvalidateUserTokenCache purges all cached token verifications for a user.

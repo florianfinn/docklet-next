@@ -64,6 +64,7 @@ func TestGetAutoLoginConfig_DisabledWhenLocalAuthDisabled(t *testing.T) {
 
 	s := newTestAuthService()
 	s.config = &config.Config{
+		AuthMode: "none",
 		BuildablesConfig: config.BuildablesConfig{
 			AutoLoginUsername: "autologinuser",
 			AutoLoginPassword: "autologinpass",

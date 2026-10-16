@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; functional cut: removed upstream analytics heartbeat, APNS, Svelte assets, templates, OIDC, passkeys and GitOps work directory; removed downgrade setting for forward-only migrations.
+// Deviations: Local module namespace; removed upstream analytics, APNS, Svelte assets, templates, OIDC/passkeys, GitOps directory and downgrade setting; normalize APP_URL for browser origins.
 
 package config
 
@@ -40,20 +40,23 @@ const (
 type Config struct {
 	BuildablesConfig
 
-	AppUrl                string         `env:"APP_URL" default:"http://localhost:3552"`
-	DatabaseURL           string         `env:"DATABASE_URL" default:"file:data/docklet.db"`
-	AllowCLIPasswordReset bool           `env:"ALLOW_CLI_PASSWORD_RESET" default:"false"`
-	ActorPort             string         `env:"ACTOR_PORT" default:"3551"`
-	Port                  string         `env:"PORT" default:"3552"`
-	Listen                string         `env:"LISTEN" default:""`
-	TLSEnabled            bool           `env:"TLS_ENABLED" default:"false"`
-	TLSCertFile           string         `env:"TLS_CERT_FILE" default:""`
-	TLSKeyFile            string         `env:"TLS_KEY_FILE" default:""`
-	Environment           AppEnvironment `env:"ENVIRONMENT" default:"production"`
-	JWTSecret             string         `env:"JWT_SECRET" options:"file,deprecated"`
-	JWTRefreshExpiry      time.Duration  `env:"JWT_REFRESH_EXPIRY" default:"168h"`
-	EncryptionKey         string         `env:"ENCRYPTION_KEY" default:"arcane-dev-key-32-characters!!!" options:"file"`
-	AdminStaticAPIKey     string         `env:"ADMIN_STATIC_API_KEY" default:"" options:"file"`
+	AppUrl                 string         `env:"APP_URL" default:"http://localhost:3552"`
+	DatabaseURL            string         `env:"DATABASE_URL" default:"file:data/docklet.db"`
+	ActorPort              string         `env:"ACTOR_PORT" default:"3551"`
+	Port                   string         `env:"PORT" default:"3552"`
+	Listen                 string         `env:"LISTEN" default:""`
+	TLSEnabled             bool           `env:"TLS_ENABLED" default:"false"`
+	TLSCertFile            string         `env:"TLS_CERT_FILE" default:""`
+	TLSKeyFile             string         `env:"TLS_KEY_FILE" default:""`
+	Environment            AppEnvironment `env:"ENVIRONMENT" default:"production"`
+	JWTSecret              string         `env:"JWT_SECRET" options:"file,deprecated"`
+	JWTRefreshExpiry       time.Duration  `env:"JWT_REFRESH_EXPIRY" default:"168h"`
+	EncryptionKey          string         `env:"ENCRYPTION_KEY" default:"arcane-dev-key-32-characters!!!" options:"file"`
+	AdminStaticAPIKey      string         `env:"ADMIN_STATIC_API_KEY" default:"" options:"file"`
+	AuthMode               string         `env:"AUTH_MODE" default:"local" options:"file"`
+	AuthProxyHeader        string         `env:"AUTH_PROXY_HEADER" default:"Remote-User" options:"file"`
+	AuthTrustedProxies     string         `env:"AUTH_TRUSTED_PROXIES" default:"" options:"file"`
+	AuthResetAdminPassword string         `env:"AUTH_RESET_ADMIN_PASSWORD" default:"" options:"file"`
 
 	PUID                          string `env:"PUID" default:""`
 	PGID                          string `env:"PGID" default:""`
@@ -413,17 +416,17 @@ func (c *Config) GetLocation() *time.Location {
 func (c *Config) GetAppURL() string {
 	// If APP_URL is explicitly set to something other than the default, use it
 	if os.Getenv("APP_URL") != "" {
-		return c.AppUrl
+		return normalizedAppURL(c.AppUrl)
 	}
 
 	// If in agent mode and we have a manager URL, use the manager URL
 	if c.AgentMode {
 		if managerBase := httpx.ManagerBaseURL(c.ManagerApiUrl); managerBase != "" {
-			return managerBase
+			return normalizedAppURL(managerBase)
 		}
 	}
 
-	return c.AppUrl
+	return normalizedAppURL(c.AppUrl)
 }
 
 // MaskSensitive returns a copy of the config with sensitive fields masked.

@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; functional cut: removed GitOps and saved Git repositories; functional cut: removed Swarm.
+// Deviations: Local module namespace; functional cut: removed GitOps, saved Git repositories and Swarm; validate original WebSocket client origin before forwarding credentials.
 
 package middleware
 
@@ -83,10 +83,7 @@ type EnvironmentMiddleware struct {
 	httpClient    *http.Client
 	registry      *edge.TunnelRegistry
 	matcher       *authz.PermissionMatcher
-	// checkOrigin is the same Origin validator the local WebSocket endpoints
-	// use. Proxied upgrades previously accepted any Origin, so a cross-origin
-	// page could ride the caller's session cookie into a remote environment's
-	// terminal or log stream.
+	// checkOrigin shares the local WebSocket origin and credential policy.
 	checkOrigin func(*http.Request) bool
 }
 
@@ -145,6 +142,10 @@ func (m *EnvironmentMiddleware) Handle(c *echo.Context, next echo.HandlerFunc) e
 			})
 		}
 		perms, user = ps, u
+	}
+	// Check client authority before Edge forwarding injects server-side agent tokens.
+	if httpx.IsWebSocketUpgradeRequest(c.Request()) && (m.checkOrigin == nil || !m.checkOrigin(c.Request())) {
+		return echo.NewHTTPError(http.StatusForbidden, "websocket origin not allowed")
 	}
 
 	m.setIconCatalogHeaderInternal(c, user)

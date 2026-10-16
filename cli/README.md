@@ -29,6 +29,11 @@ Set the hub URL:
 
 ### Authenticate (choose one)
 
+Both options require the hub's `local` sign-in mode. The CLI supplies explicit
+credentials without browser cookies, Origin or CSRF headers. Local login and
+refresh accept cookie-less requests; authenticated writes validate the Bearer
+token or API key. Proxy mode requires authentication through the configured proxy.
+
 #### Option A: Local account
 
 - `cli auth login --username <name>` (prompts for the password)

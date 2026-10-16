@@ -177,8 +177,8 @@ storage. Opening and closing a second descriptor of the lock file must not
 release the held lock. Never open live database/WAL/SHM files through ordinary
 descriptors; use `Lstat`/`Stat` for path checks. The
 [SQLite contract](sqlite-database.md#single-hub-and-run-admission) also covers
-path aliases, excluded VFS options and administrative writers, including offline
-`admin reset-password`. Terminal status conditions
+path aliases, excluded VFS options and startup administrator recovery through
+[identity configuration](identity.md). Terminal status conditions
 prevent duplicate completion after repair, while an already accepted external
 agent action can continue beyond the old hub's lifetime.
 

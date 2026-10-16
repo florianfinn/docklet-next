@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace
+// Deviations: Local module namespace; assert browser cookies never reach remote agents.
 
 package edge
 
@@ -234,17 +234,18 @@ func TestBuildWebSocketHeaders_UsesCookieTokenAsBearer(t *testing.T) {
 
 	headers := BuildWebSocketHeaders(c, nil)
 	require.Equal(t, "Bearer cookie-token", headers.Get(HeaderAuthorization))
+	require.NotContains(t, headers, HeaderCookie)
 }
 
-func TestBuildWebSocketHeaders_ForwardsCookieHeaderWhenNoAuthPresent(t *testing.T) {
+func TestBuildWebSocketHeaders_DropsBrowserCookiesWhenNoAuthPresent(t *testing.T) {
 	e := echo.New()
 	w := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodGet, "http://example.com", http.NoBody)
-	req.Header.Set(HeaderCookie, "session=abc")
+	req.Header.Set(HeaderCookie, "docklet_csrf=example; proxy_session=example")
 	c := e.NewContext(req, w)
 
 	headers := BuildWebSocketHeaders(c, nil)
-	require.Equal(t, "session=abc", headers.Get(HeaderCookie))
+	require.NotContains(t, headers, HeaderCookie)
 }
 
 func TestHTTPToWebSocketURL(t *testing.T) {

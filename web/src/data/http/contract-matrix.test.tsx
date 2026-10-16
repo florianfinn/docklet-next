@@ -443,6 +443,7 @@ function backupBackend(scenario: BackupScenario) {
     const url = new URL(String(input), "https://example.test");
     const method = init?.method ?? "GET";
     state.requests.push({ path: url.pathname, method, body: init?.body as string | undefined });
+    if (url.pathname === "/api/auth/mode") return new Response(JSON.stringify({ mode: "none" }), { headers: { "X-CSRF-Token": "example".padEnd(43, "x") } });
     if (url.pathname === "/api/auth/me") return ok({ isGlobalAdmin: scenario !== "no-access", permissionsByEnv: { global: ["system-backups:read", "system-backups:manage", "system-backups:restore"] } });
     if (scenario === "no-access") return json({ detail: "permission.denied" }, 403);
     if (url.pathname === "/api/backups" && method === "GET") return page(state.runs);
@@ -467,7 +468,7 @@ function backupBackend(scenario: BackupScenario) {
     }
     return json({ detail: "not-found" }, 404);
   });
-  return { adapter: createHttpAdapter({ fetch: fetcher as typeof fetch }), state };
+  return { adapter: createHttpAdapter({ fetch: fetcher as typeof fetch }), state, fetcher };
 }
 
 describe.each(["demo", "http"] as const)("%s Hub backup contract", (kind) => {
@@ -538,11 +539,12 @@ it("uses an octet-stream upload with progress and an ID-based download", async (
     setRequestHeader(key: string, value: string) { request.headers[key] = value; }
     send(body: File) { request.body = body; this.upload.onprogress?.({ lengthComputable: true, loaded: 5, total: 10 } as ProgressEvent); this.onload?.(); }
   }
-  const adapter = createHttpAdapter({ fetch: backupBackend("list").adapter.getHubBackupAccess as unknown as typeof fetch, uploadFactory: () => new FakeUpload() as unknown as XMLHttpRequest });
+  const adapter = createHttpAdapter({ fetch: backupBackend("list").fetcher as typeof fetch, uploadFactory: () => new FakeUpload() as unknown as XMLHttpRequest });
   const progress: number[] = [];
   const file = new File(["PGDMP"], "archive.tar", { type: "application/octet-stream" });
   const result = await adapter.uploadHubBackup(file, (value) => progress.push(value));
   expect([result.backupId, request.url, request.headers["Content-Type"], request.body === file, progress]).toEqual(["system-upload-1", "/api/backups/upload", "application/octet-stream", true, [50, 100]]);
+  expect(request.headers["X-CSRF-Token"]).toBe("example".padEnd(43, "x"));
   const clicked = vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(() => undefined);
   await adapter.downloadHubBackup("system-demo-1");
   expect(clicked).toHaveBeenCalledOnce();
@@ -560,7 +562,7 @@ it.each([[413, "backup.size_limit", "<html>Request rejected</html>"], [415, "bac
     setRequestHeader() {}
     send() { this.onload?.(); }
   }
-  const adapter = createHttpAdapter({ uploadFactory: () => new FailedUpload() as unknown as XMLHttpRequest });
+  const adapter = createHttpAdapter({ fetch: backupBackend("list").fetcher as typeof fetch, uploadFactory: () => new FailedUpload() as unknown as XMLHttpRequest });
   await expect(adapter.uploadHubBackup(new File(["PGDMP"], "archive.tar"), () => undefined)).rejects.toMatchObject({ outcome: { kind: "error", code, status } });
 });
 

@@ -196,12 +196,10 @@ open live database, WAL or SHM files through ordinary file descriptors; use
 Rejecting `vfs` also prevents a collision with the unix-dotfile VFS's `.lock` name.
 
 Administrative writers apply the same runtime identity before resolving paths or
-creating files and acquire the same lifetime lock. In particular,
-`backend/cli/admin/reset_password.go` (line 68) currently initializes/migrates directly;
-`admin reset-password` must refuse a running hub with `hub.already_running`.
-When stopped, it acquires the lock, migrates forward, resets the password and
-revokes sessions, closes the database and releases the lock. Keep the existing
-explicit `ALLOW_CLI_PASSWORD_RESET=true` gate and terminal password prompt.
+creating files and acquire the same lifetime lock. Administrator recovery follows
+[identity](identity.md): startup environment configuration replaces the inherited
+password-reset CLI. The hub takes the lock before startup recovery changes users
+or sessions.
 Read-only inspection must not migrate. Goose uses the SQLite dialect under this
 lock; remove its PostgreSQL session locker. The lock is cooperative on a local filesystem, not a defence
 against an operator editing or replacing files beneath a running hub.
@@ -452,8 +450,7 @@ cancelled-worker logging, concurrent completion/progress/repair and receipt
 replay. Use real child processes for double start, crash lock release and restart
 repair; two services in one process do not test the file lock. Opening and closing
 a second lock-file descriptor in the holder must still leave a child refused
-with `hub.already_running`. Test `admin reset-password` refusing a live hub and
-succeeding under the lock after shutdown. A blocked export writer must not hold
+with `hub.already_running`. Test startup password recovery under the same lifetime lock. A blocked export writer must not hold
 the pool connection or prevent concurrent completion within its deadline.
 Replace a pool connection to prove FK/busy/synchronous and hub time setup; test
 invalid FK writes and delete actions. Cover fresh migration, reopen, forward upgrade,
@@ -478,17 +475,10 @@ remove its PostgreSQL service/client-image assumptions; do not merge its backup
 engine or advertise backup as available. Keep overridable pinned image references
 and the local build fallback. Production secrets remain local.
 
-The deploy README must document offline password recovery on the same data volume,
-using the template's `hub` service and binary entrypoint:
-
-```sh
-docker compose stop hub
-docker compose run --rm -e ALLOW_CLI_PASSWORD_RESET=true hub admin reset-password --username example-admin
-docker compose up -d hub
-```
-
-Keep the password in the terminal prompt. `docker exec` against a running hub
-must fail with `hub.already_running`; never bypass the lock for recovery.
+The deploy README documents password recovery through startup environment
+configuration and container recreation on the same local data volume, following
+[identity](identity.md). Recovery runs after lock acquisition; never bypass the
+lock or edit database files beneath a running hub.
 
 Measure the final candidate on local storage. The heartbeat path changes a row
 only after 30 seconds, so four agents yield approximately `4/30 = 0.13` changed

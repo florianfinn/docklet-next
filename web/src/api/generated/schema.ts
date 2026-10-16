@@ -1,5 +1,5 @@
 // Source: api/openapi.json
-// Revision: d563077f15c4561a4a803b81c91331cb1cf7bf938720118b1837a958f799ecdb
+// Revision: 9097252d8ec7a1500977f3146519c7c5a8c454963e5dc664b079c3dc0b7a97f0
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
 // Deviations: Generated TypeScript declarations from the local Huma export.
@@ -322,6 +322,26 @@ export interface paths {
          * @description Update the current user's display name and email.
          */
         put: operations["update-my-profile"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/auth/mode": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get active sign-in mode
+         * @description Read the startup-selected mode. Requests with cookies in every mode require the X-CSRF-Token response header and hub Origin for writes. In local mode cookie-less validated Bearer/API-key requests, and cookie-less login/refresh POSTs without Origin, use explicit credentials instead. Proxy mode requires the configured identity header from a trusted direct peer.
+         */
+        get: operations["get-sign-in-mode"];
+        put?: never;
         post?: never;
         delete?: never;
         options?: never;
@@ -4553,6 +4573,13 @@ export interface components {
             /** @description Refresh token used to obtain a new access token */
             refreshToken: string;
         };
+        AuthSignInConfiguration: {
+            /**
+             * @description Active startup sign-in mode; changes require operator configuration and restart
+             * @enum {string}
+             */
+            readonly mode: "none" | "local" | "proxy";
+        };
         AuthTokenRefreshResponse: {
             /**
              * Format: date-time
@@ -4912,6 +4939,18 @@ export interface components {
             readonly $schema?: string;
             /** @description Response data */
             data: components["schemas"]["AuthAuthenticationResponse"];
+            /** @description Whether the request was successful */
+            success: boolean;
+        };
+        BaseApiResponseAuthSignInConfiguration: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example /api/schemas/BaseApiResponseAuthSignInConfiguration.json
+             */
+            readonly $schema?: string;
+            /** @description Response data */
+            data: components["schemas"]["AuthSignInConfiguration"];
             /** @description Whether the request was successful */
             success: boolean;
         };
@@ -9467,6 +9506,10 @@ export interface components {
              * @example /api/schemas/SettingsUpdate.json
              */
             readonly $schema?: string;
+            /**
+             * @deprecated
+             * @description Read-only startup policy; updates are rejected. Use GET /auth/mode.
+             */
             authLocalEnabled?: string | null;
             authPasswordPolicy?: string | null;
             authSessionTimeout?: string | null;
@@ -11317,6 +11360,36 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["BaseApiResponseUserUser"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "get-sign-in-mode": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    "X-CSRF-Token"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BaseApiResponseAuthSignInConfiguration"];
                 };
             };
             /** @description Error */

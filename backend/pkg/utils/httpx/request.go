@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace
+// Deviations: Local module namespace; exact configured WebSocket origins with validated non-cookie exceptions.
 
 package httpx
 
@@ -36,37 +36,23 @@ func SetStreamHeaders(headers HeaderSetter) {
 	headers.SetHeader("X-Accel-Buffering", "no")
 }
 
-// ValidateWebSocketOrigin validates the Origin header for WebSocket connections
-// to prevent CSRF attacks. It checks:
-// 1. Same-origin requests (Origin matches Host)
-// 2. Allowed origins from appURL
-// 3. Handles empty Origin headers (some clients don't send it)
-func ValidateWebSocketOrigin(appURL string) func(r *http.Request) bool {
+// ValidateWebSocketOrigin uses the same exact origin list as HTTP browser protection.
+// Missing Origin requires an independently validated non-cookie credential.
+func ValidateWebSocketOrigin(allowedOrigins []string, credentialAuthenticated func(*http.Request) bool) func(r *http.Request) bool {
 	return func(r *http.Request) bool {
+		if len(r.Header.Values("Origin")) > 1 {
+			return false
+		}
 		origin := r.Header.Get("Origin")
-
 		if origin == "" {
-			return true
+			return len(r.Header.Values("Cookie")) == 0 && credentialAuthenticated != nil && credentialAuthenticated(r)
 		}
-
-		originURL, err := url.Parse(origin)
-		if err != nil {
-			return false
+		for _, allowed := range allowedOrigins {
+			if origin == allowed {
+				return true
+			}
 		}
-
-		if originURL.Host == r.Host {
-			return true
-		}
-
-		appURLParsed, err := url.Parse(appURL)
-		if err != nil {
-			return false
-		}
-		if originURL.Host == appURLParsed.Host {
-			return true
-		}
-
-		return isLocalhost(originURL.Host) && isLocalhost(r.Host)
+		return false
 	}
 }
 
@@ -85,19 +71,6 @@ func IsWebSocketUpgradeRequest(r *http.Request) bool {
 	default:
 		return true
 	}
-}
-
-func isLocalhost(host string) bool {
-	hostOnly := host
-	if before, _, found := strings.CutLast(host, ":"); found {
-		hostOnly = before
-	}
-
-	return hostOnly == "localhost" ||
-		hostOnly == "127.0.0.1" ||
-		hostOnly == "::1" ||
-		strings.HasPrefix(hostOnly, "127.") ||
-		hostOnly == "[::1]"
 }
 
 // GetIntQueryParam reads and parses an integer query parameter from the request URL.
