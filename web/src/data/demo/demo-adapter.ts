@@ -23,6 +23,7 @@ import type { CodedStackDetail } from "../message-code";
 import { registerDemoOptions, takeDemoFailure, type DemoAdapterOptions, type FailAt } from "./options";
 import { simulateRead, simulateWrite, simulationStore, takeForcedFailure } from "./simulation";
 import { GENERIC_REASON, HUB_REF, unavailable } from "../capability";
+import { createDemoHubBackups } from "./demo-hub-backups";
 
 export class DemoCommandError extends Error {
   readonly code: "not-found" | "recreate-not-allowed" | "managed-by-unraid";
@@ -120,6 +121,7 @@ export function createDemoAdapter(options: DemoAdapterOptions = {}): DockletAdap
 
   const adapter: DockletAdapter = {
     kind: "demo",
+    ...createDemoHubBackups(options),
     getCapability: async (operationId, resourceRef = HUB_REF) => {
       const knownResource = resourceRef.kind === "hub" ||
         (resourceRef.kind === "host" && !!db.host(resourceRef.id)) ||

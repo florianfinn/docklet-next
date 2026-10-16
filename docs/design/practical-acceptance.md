@@ -40,3 +40,36 @@ including guard code, tests, policies, licences, hooks and design documents.
 Record the accepted root SHA and verify that obsolete local roots are unreachable
 and pruned before first publication. Rewriting the private root needs renewed
 review of the resulting SHA; earlier review does not attest to changed content.
+
+## Practical acceptance: Hub database backup
+
+The maintainer performs these steps with synthetic data in an explicitly approved,
+isolated sandbox. The operator prepares the sandbox; this document does not approve
+a deployment. Record the tested product version, package and image digests in the
+acceptance issue.
+
+The browser steps require a working production-bundle login for a local global
+administrator. M4 owns that login; `/login` currently shows only a backend notice.
+The maintainer has deferred practical acceptance until the M4 login is available.
+In particular, steps 2 and 5 cannot be performed before then.
+
+1. Create recognizable synthetic data in the test Hub: an additional user, a
+   setting and a scheduled job. Record their values without copying credentials
+   or other secrets into public evidence.
+2. Sign in as a global administrator and open **Hub database**. Check that enough
+   free space is shown. Select **Create backup** and wait for the archive to show
+   **Complete**. Record the archive ID, creation time and size.
+3. Download the archive to protected storage outside the Hub host. Verify that
+   the file exists and is not empty.
+4. Have the operator stop the Hub and prepare a new, empty PostgreSQL 18 database
+   in the approved sandbox. The Hub must not start against that empty database
+   before restore. The operator places the downloaded file as `<archive-id>.dump`
+   in the backup volume and runs `restore-hub --backup-id <archive-id>` as
+   described in `deploy/hub/README.md`.
+5. Start the Hub. Check that its health endpoint is ready and a fresh login is
+   required. Sign in and compare the user, setting, job, activity history and
+   migration state with the values recorded before step 2. They must match.
+   Confirm that earlier sessions no longer have access.
+6. Record the result, archive size, time, package version, deviations and cleanup
+   in the acceptance issue. A mismatch fails acceptance; retain the archive and
+   private failure evidence for diagnosis.

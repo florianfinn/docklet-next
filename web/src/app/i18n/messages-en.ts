@@ -5,6 +5,7 @@ import { enContainers } from "@/features/containers/messages/en";
 import { enDashboard } from "@/features/dashboard/messages/en";
 import { enRunMessages } from "@/data/messages/run-en";
 import { enHosts } from "@/features/hosts/messages/en";
+import { enHubBackups } from "@/features/hub-backups/messages/en";
 import { enImages } from "@/features/images/messages/en";
 import { enSettings } from "@/features/settings/messages/en";
 import { enSetup } from "@/features/setup/messages/en";
@@ -50,6 +51,7 @@ export const enMessages = {
     },
   },
   hosts: enHosts,
+  hubBackups: enHubBackups,
   images: enImages,
   volumes: enVolumes,
   settings: enSettings,
