@@ -47,7 +47,10 @@ refresh, local Bearer tokens, browser sessions or personal API keys as a second
 sign-in path. In none mode local login/refresh/password endpoints are also
 unavailable. Environment bootstrap keys, agent access tokens, Edge tunnel
 credentials and webhook path tokens retain their existing machine contracts.
-They do not become proxy user identities.
+They do not become proxy user identities. Public API operations retain their
+existing contracts, including health probes and the pairing handler that validates
+its own environment bootstrap key; mode selection does not add a user sign-in
+requirement to those operations.
 
 Before serving requests, startup compares its mode with internal `authLastMode`.
 A different or unrecorded mode atomically revokes existing sessions and records

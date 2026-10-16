@@ -40,6 +40,11 @@ func (s *AuthService) recoverAdministrator(ctx context.Context) error {
 	return s.recoveryErr
 }
 
+// Source: getarcaneapp/arcane/backend/internal/auth/service.go
+// Revision: 095cb778daba1034e2a39961199e712a75d4ba29
+// Retrieved: 2026-10-13
+// License: BSD-3-Clause
+// Deviations: Relocated without behavioural changes.
 func (s *AuthService) passwordPolicyInternal(ctx context.Context) string {
 	if s.settingsService == nil {
 		return validation.PasswordPolicyStrong

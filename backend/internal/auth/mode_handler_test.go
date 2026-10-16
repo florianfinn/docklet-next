@@ -7,12 +7,14 @@
 package auth
 
 import (
+	"context"
 	"net/http"
 	"net/http/httptest"
 	"testing"
 
 	"github.com/danielgtaylor/huma/v2"
 	"github.com/danielgtaylor/huma/v2/adapters/humaecho"
+	"github.com/florianfinn/docklet-next/backend/internal/health"
 	"github.com/florianfinn/docklet-next/backend/internal/middleware"
 	"github.com/labstack/echo/v5"
 	"github.com/stretchr/testify/require"
@@ -28,6 +30,12 @@ func TestSignInModeReadOnlyAPI(t *testing.T) {
 			api := humaecho.NewWithGroup(router, router.Group("/api"), huma.DefaultConfig("test", "1.0.0"))
 			api.UseMiddleware(NewHumaMiddleware(api, svc, nil, nil, nil, svc.config))
 			RegisterAuth(api, svc.userService, svc, svc.settingsService)
+			health.RegisterRoutes(api)
+			huma.Register(api, huma.Operation{OperationID: "test-pairing", Method: http.MethodPost, Path: "/environments/pair", Security: []map[string][]string{}}, func(_ context.Context, input *struct {
+				Key string `header:"X-API-Key"`
+			}) (*struct{ Body string }, error) { if input.Key != "example" {
+				return nil, huma.Error401Unauthorized("Invalid machine key")
+			}; return &struct{ Body string }{Body: "paired"}, nil })
 			req := httptest.NewRequest(http.MethodGet, "/api/auth/mode", http.NoBody)
 			req.RemoteAddr = "198.51.100.5:5000"
 			rec := httptest.NewRecorder()
@@ -42,6 +50,25 @@ func TestSignInModeReadOnlyAPI(t *testing.T) {
 			require.Nil(t, operation.Put)
 			require.Nil(t, operation.Post)
 			require.Contains(t, operation.Get.Responses["200"].Headers, middleware.CSRFHeader)
+			for _, method := range []string{http.MethodGet, http.MethodHead} {
+				result := httptest.NewRecorder()
+				router.ServeHTTP(result, httptest.NewRequest(method, "/api/health", http.NoBody))
+				require.Equal(t, 200, result.Code)
+			}
+			for _, key := range []string{"invalid", "example"} {
+				pair := httptest.NewRequest(http.MethodPost, "/api/environments/pair", http.NoBody)
+				pair.Header.Set("X-API-Key", key)
+				pair.Header.Set("Origin", svc.config.AppUrl)
+				pair.Header.Set(middleware.CSRFHeader, rec.Header().Get(middleware.CSRFHeader))
+				pair.AddCookie(rec.Result().Cookies()[0])
+				result := httptest.NewRecorder()
+				router.ServeHTTP(result, pair)
+				expected := 401
+				if key == "example" {
+					expected = 200
+				}
+				require.Equal(t, expected, result.Code, result.Body.String())
+			}
 		})
 	}
 }

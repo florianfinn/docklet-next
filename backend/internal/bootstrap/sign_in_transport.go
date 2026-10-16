@@ -7,10 +7,11 @@
 package bootstrap
 
 import (
-	"github.com/florianfinn/docklet-next/backend/api"
-	"github.com/florianfinn/docklet-next/backend/internal/middleware"
 	"net/http"
 	"strings"
+
+	"github.com/florianfinn/docklet-next/backend/api"
+	"github.com/florianfinn/docklet-next/backend/internal/middleware"
 )
 
 func csrfTransportValidatorInternal(deps api.HandlerDeps) func(*http.Request) bool {

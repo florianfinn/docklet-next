@@ -88,12 +88,12 @@ func handleModeAuthInternal(api huma.API, ctx huma.Context, service *AuthService
 	if service.SignInMode() == authtypes.SignInModeLocal {
 		return false
 	}
-	if ctx.Method() == http.MethodGet && strings.HasSuffix(ctx.URL().Path, "/auth/mode") {
-		return false
-	}
 	if strings.HasSuffix(ctx.URL().Path, "/auth/login") || strings.HasSuffix(ctx.URL().Path, "/auth/refresh") || strings.HasSuffix(ctx.URL().Path, "/auth/password") {
 		_ = huma.WriteErr(api, ctx, http.StatusUnauthorized, "Local authentication is disabled")
 		return true
+	}
+	if !parseSecurityRequirementsInternal(api, ctx).isRequired {
+		return false
 	}
 	for _, header := range []string{middleware.HeaderAgentToken, middleware.HeaderApiKey} {
 		if transportUser, env, ok := tryEnvironmentAccessTokenAuthInternal(ctx, resolver, ctx.Header(header)); ok {
@@ -129,6 +129,11 @@ func (s *AuthService) InitializeSignIn(ctx context.Context) error {
 	return s.recoverAdministrator(ctx)
 }
 
+// Source: getarcaneapp/arcane/backend/internal/auth/service.go
+// Revision: 095cb778daba1034e2a39961199e712a75d4ba29
+// Retrieved: 2026-10-13
+// License: BSD-3-Clause
+// Deviations: Relocated without behavioural changes.
 func (s *AuthService) cachedVerificationInternal(tokenHash string) (*user.User, string, bool) {
 	cached, ok, _ := s.tokenCache.Get(tokenHash)
 	if !ok {
