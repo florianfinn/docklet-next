@@ -17,6 +17,7 @@ export const enShell = {
     volumes: "Volumes",
     hosts: "Hosts",
     backups: "Backups",
+    hubBackups: "Hub database",
     notifications: "Notifications",
     proxy: "Proxy",
     games: "Games",

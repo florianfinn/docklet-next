@@ -1,5 +1,5 @@
 // Source: api/openapi.json
-// Revision: bc1d8e80eb9968b37f2aa0fafca9011a4fb0b086a36e706cf0dc90304e9822c0
+// Revision: d563077f15c4561a4a803b81c91331cb1cf7bf938720118b1837a958f799ecdb
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
 // Deviations: Generated TypeScript declarations from the local Huma export.
@@ -490,7 +490,7 @@ export interface paths {
         put?: never;
         /**
          * Upload and import a Hub database archive
-         * @description Stream one PostgreSQL custom-format archive as application/octet-stream, up to 2 GiB.
+         * @description Stream one versioned two-file Docklet SQLite tar archive as application/octet-stream, up to 2 GiB.
          */
         post: operations["import-system-backup-upload"];
         delete?: never;
@@ -4676,6 +4676,8 @@ export interface components {
             active: boolean;
             activityId?: string;
             /** @enum {string} */
+            operation?: "backup" | "restore";
+            /** @enum {string} */
             phase?: "draining" | "applying" | "verifying" | "blocked";
             reasonCode?: string;
         };
@@ -4718,6 +4720,8 @@ export interface components {
             readonly $schema?: string;
             activityId?: string;
             archiveName?: string;
+            /** Format: int64 */
+            archiveVersion?: number;
             /** Format: date-time */
             completedAt?: string;
             copyErrorCode?: string;
@@ -4736,8 +4740,6 @@ export interface components {
              * @description Archive size in bytes
              */
             size: number;
-            /** Format: int64 */
-            sourceServerMajor?: number;
             /** @enum {string} */
             status: "running" | "succeeded" | "failed";
             /** @enum {string} */
@@ -11867,7 +11869,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description PostgreSQL custom-format archive */
+            /** @description versioned two-file Docklet SQLite tar archive */
             200: {
                 headers: {
                     /** @description attachment with a server-selected archive filename */

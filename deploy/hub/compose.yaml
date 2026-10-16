@@ -1,38 +1,32 @@
-# Source: docklet-next/docs/design/hub-backup.md
-# Revision: 8f8c8f89bc6ebb7261862d0c35a6ddbc1513e9fa
-# Retrieved: 2026-10-15
+# Source: docklet-next/docs/design/sqlite-database.md
+# Revision: b3607be5144101152c8eb7738d389e8c73986fba
+# Retrieved: 2026-10-16
 # License: Apache-2.0
-# Deviations: Original local Hub deployment example for issue #32.
-name: docklet-next-hub
+# Deviations: Original single-hub template with local persistent SQLite storage.
+name: docklet-next
 services:
   hub:
+    image: ${HUB_IMAGE:-docklet-next-hub:0.0.0}
     build:
       context: ../..
       dockerfile: deploy/hub/Dockerfile
-      args:
-        GO_IMAGE: ${DOCKLET_GO_IMAGE:-golang:1.27.2-bookworm@sha256:5cf287a799e6b94384bad13d16b14904c531f51ba65792237e122ce42b392f61}
-        RUNTIME_IMAGE: ${DOCKLET_HUB_RUNTIME_IMAGE:-postgres:18.6-alpine@sha256:77f585114c32fbca283dc835b0596f4e52b51b4c6662d7810b2f4084f60a1873}
-        IMAGE_VERSION: ${DOCKLET_HUB_VERSION:-0.0.0}
-        IMAGE_SOURCE: ${DOCKLET_HUB_SOURCE:-https://github.com/florianfinn/docklet-next}
-        IMAGE_REVISION: ${DOCKLET_HUB_REVISION:-unknown}
-    image: ${DOCKLET_HUB_IMAGE:-docklet-next-hub:0.0.0}
-    labels:
-      t3.project: docklet-next
-    env_file:
-      - ../../.env
-    environment:
-      DOCKLET_BACKUP_DIR: /var/lib/docklet/backups
+    restart: unless-stopped
+    stop_grace_period: 30s
     ports:
-      - "127.0.0.1:${DOCKLET_HUB_PORT:-3552}:3552"
+      - "127.0.0.1:${HUB_PORT:-3552}:3552"
+    environment:
+      APP_URL: ${APP_URL:-http://localhost:3552}
+      DOCKLET_BACKUP_DIR: /var/lib/docklet/backups
+      DATABASE_URL: file:/app/data/docklet.db
+      ENCRYPTION_KEY: ${ENCRYPTION_KEY:?Set ENCRYPTION_KEY in your private environment file}
+      PUID: ${PUID:-65532}
+      PGID: ${PGID:-65532}
+      PROJECTS_DIRECTORY: /app/data/projects
+      DOCKER_CONFIG: /app/data/.docker
     volumes:
+      - hub-data:/app/data
       - hub-backups:/var/lib/docklet/backups
-    tmpfs:
-      - /var/lib/postgresql:mode=0700
+      - /var/run/docker.sock:/var/run/docker.sock
 volumes:
-  hub-backups:
-    labels:
-      t3.project: docklet-next
-networks:
-  default:
-    labels:
-      t3.project: docklet-next
+  hub-data: {}
+  hub-backups: {}

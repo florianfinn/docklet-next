@@ -17,7 +17,7 @@ type NotificationSettings struct {
 	ID        uint                               `json:"id" gorm:"primaryKey"`
 	Provider  notifications.NotificationProvider `json:"provider" gorm:"not null;index;type:varchar(50)"`
 	Enabled   bool                               `json:"enabled" gorm:"default:false"`
-	Config    database.JSON                      `json:"config" gorm:"type:jsonb"`
+	Config    database.JSON                      `json:"config" gorm:"type:text"`
 	CreatedAt time.Time                          `json:"createdAt"`
 	UpdatedAt time.Time                          `json:"updatedAt"`
 }

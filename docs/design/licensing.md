@@ -29,7 +29,7 @@ The required six duties are:
    drift against actual lockfiles and extracted artefact copies. Independent review
    verifies licences and free-component origins before public release.
 
-The examined Go binary graph used go list -deps for backend/cmd and go-licenses
+The historical pre-cut Go binary graph used go list -deps for backend/cmd and go-licenses
 v2.0.1: 297 modules, with 535 reported licence groups (not individual imported
 packages). Five reported MPL-2.0 groups require file-level assessment:
 filepath-securejoin, errwrap, go-cleanhttp, go-multierror and go-version. Only
@@ -39,10 +39,15 @@ pathrs-lite tree is excluded. Select BSD-3-Clause (Eclipse Distribution License
 say so in NOTICE. All applicable copyright/licence texts travel in the bundle.
 The refreshed [adoption inventory](arcane-adoption.md) records 1,587 imported
 packages, mixed and nested grants, resolved scanner gaps, and exact-file libc
-header exceptions that #7 must remove with SQLite before release. Both
-assessments exclude the web runtime and image contents; M2 and release acceptance
-cover them.
+header exceptions assessed for the pre-cut inventory. The
+[SQLite driver decision](sqlite-database.md#driver-provenance-and-licences) requires
+a fresh compiled-graph and notice assessment before distribution; the former
+removal gate does not approve restored dependencies. The historical assessments exclude the web runtime and image contents. The
+[current SQLite assessment](sqlite-license-assessment.md) records the selected
+Linux/amd64 compiled Go graph and complete Go/web notice bundles; image OS
+packages and other targets remain release-assessment boundaries.
 
-M0 copies the Arcane licence byte-for-byte and checks its recorded SHA-256. It
-contains no Arcane product code, executable product or completed dependency
-inventory. The explicit future checks are specified in [provenance](provenance.md).
+M0 established the immutable Arcane licence copy before product-code adoption.
+The current [inventory](../provenance/core-import.md) and
+[extracted package checks](provenance.md#distribution-hook-points) extend that
+foundation; they do not authorise a product release without practical acceptance.

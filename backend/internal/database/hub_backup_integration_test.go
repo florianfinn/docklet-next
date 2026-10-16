@@ -1,109 +1,63 @@
-//go:build postgres_integration
-
 // Source: docklet-next/docs/design/hub-backup.md
 // Revision: 8f8c8f89bc6ebb7261862d0c35a6ddbc1513e9fa
-// Retrieved: 2026-10-15
+// Retrieved: 2026-10-16
 // License: Apache-2.0
-// Deviations: Original fresh and forward migration tests for issue #32.
+// Deviations: Original coordinated SQLite backup and paired recovery for issue #32.
 
 package database
 
 import (
-	"crypto/rand"
-	"database/sql"
-	"encoding/hex"
-	"net/url"
-	"os"
-	"testing"
-
+	"github.com/florianfinn/docklet-next/backend/pkg/utils/sqlitestore"
 	"github.com/stretchr/testify/require"
-	"gorm.io/driver/postgres"
-	"gorm.io/gorm"
+	"path/filepath"
+	"testing"
 )
 
 func TestHubBackupArchiveMigration(t *testing.T) {
-	dsn := os.Getenv("DATABASE_URL")
-	require.NotEmpty(t, dsn)
-	source, err := url.Parse(dsn)
-	require.NoError(t, err)
-	admin, err := gorm.Open(postgres.Open(dsn), &gorm.Config{})
-	require.NoError(t, err)
-	adminSQL, err := admin.DB()
-	require.NoError(t, err)
-	t.Cleanup(func() { require.NoError(t, adminSQL.Close()) })
-
-	for _, startVersion := range []int64{0, 7} {
-		name := "fresh"
-		if startVersion == 7 {
-			name = "forward"
-		}
-		t.Run(name, func(t *testing.T) {
-			var random [8]byte
-			_, err := rand.Read(random[:])
+	for _, start := range []int64{0, 1} {
+		t.Run(string(rune('0'+start)), func(t *testing.T) {
+			url := sqlitestore.URL(filepath.Join(t.TempDir(), "hub.db"))
+			db, err := OpenHubForRestore(t.Context(), url)
 			require.NoError(t, err)
-			dbName := "docklet_backup_" + hex.EncodeToString(random[:])
-			require.NoError(t, admin.Exec("CREATE DATABASE "+dbName).Error)
-			t.Cleanup(func() { require.NoError(t, admin.Exec("DROP DATABASE "+dbName+" WITH (FORCE)").Error) })
-			local := *source
-			local.Path = "/" + dbName
-			conn, err := gorm.Open(postgres.Open(local.String()), &gorm.Config{})
+			defer db.Close()
+			pool, err := db.SQLDB()
 			require.NoError(t, err)
-			sqlDB, err := conn.DB()
-			require.NoError(t, err)
-			t.Cleanup(func() { require.NoError(t, sqlDB.Close()) })
-			if startVersion == 7 {
-				require.NoError(t, migrateDatabaseToVersionInternal(t.Context(), sqlDB, dbProviderPostgres, MigrationOptions{}, 7))
-				require.NoError(t, conn.Exec(`INSERT INTO system_backup_runs (id,created_at,status,trigger,destination,size) VALUES ('legacy',NOW(),'succeeded','manual','local',10)`).Error)
-				require.NoError(t, conn.Exec(`INSERT INTO system_backup_policies (id,created_at,schedule,retention_count,enabled) VALUES ('policy',NOW(),'0 0 3 * * *',7,true)`).Error)
+			if start == 1 {
+				require.NoError(t, migrateDatabaseToVersionInternal(t.Context(), pool, dbProviderSQLite, MigrationOptions{}, 1))
+				require.NoError(t, db.Exec("INSERT INTO system_backup_runs(id,status,trigger,destination) VALUES('legacy','succeeded','manual','local')").Error)
+				require.NoError(t, db.Exec("INSERT INTO system_backup_policies(id,schedule,retention_count,enabled) VALUES('policy','0 0 3 * * *',7,true)").Error)
 			}
-			require.NoError(t, migrateDatabaseToVersionInternal(t.Context(), sqlDB, dbProviderPostgres, MigrationOptions{}, 8))
-			require.NoError(t, migrateDatabaseToVersionInternal(t.Context(), sqlDB, dbProviderPostgres, MigrationOptions{}, 8))
-			assertHubArchiveSchema(t, sqlDB)
-			_, err = sqlDB.ExecContext(t.Context(), `INSERT INTO system_backup_runs (id,created_at,status,trigger,size,copy_state) VALUES ('oversize',NOW(),'succeeded','manual',2147483649,'none')`)
-			require.Error(t, err)
-			_, err = sqlDB.ExecContext(t.Context(), `INSERT INTO system_backup_runs (id,created_at,status,trigger,size,copy_state,archive_name) VALUES ('bad-name',NOW(),'succeeded','manual',1,'none','../unsafe.dump')`)
-			require.Error(t, err)
-			_, err = sqlDB.ExecContext(t.Context(), `INSERT INTO system_backup_runs (id,created_at,status,trigger,size,copy_state) VALUES ('bad-state',NOW(),'succeeded','manual',1,'unknown')`)
-			require.Error(t, err)
-			if startVersion == 7 {
-				var count int
-				require.NoError(t, conn.Raw("SELECT COUNT(*) FROM system_backup_runs WHERE id='legacy'").Scan(&count).Error)
+			require.NoError(t, db.Migrate(t.Context()))
+			require.NoError(t, db.Migrate(t.Context()))
+			for _, column := range []string{"archive_name", "activity_id", "completed_at", "archive_version", "migration_version", "copy_target_id", "copy_state", "copy_error_code", "error_code"} {
+				require.True(t, db.Migrator().HasColumn("system_backup_runs", column), column)
+			}
+			for _, column := range []string{"destination", "local_snapshot_id", "error"} {
+				require.False(t, db.Migrator().HasColumn("system_backup_runs", column), column)
+			}
+			require.True(t, db.Migrator().HasTable("system_backup_recovery_config"))
+			require.True(t, db.Migrator().HasColumn("system_backup_policies", "target_id"))
+			require.False(t, db.Migrator().HasColumn("system_backup_policies", "local_enabled"))
+			for _, statement := range []string{
+				"INSERT INTO system_backup_runs(id,status,trigger,size,copy_state) VALUES('oversize','succeeded','manual',2147483649,'none')",
+				"INSERT INTO system_backup_runs(id,status,trigger,size,copy_state,archive_name) VALUES('bad-name','succeeded','manual',1,'none','../unsafe.tar')",
+				"INSERT INTO system_backup_runs(id,status,trigger,size,copy_state) VALUES('bad-state','succeeded','manual',1,'unknown')",
+				"INSERT INTO system_backup_runs(id,status,trigger,size,copy_state,archive_version) VALUES('bad-version','succeeded','manual',1,'none',2)",
+			} {
+				require.Error(t, db.Exec(statement).Error)
+			}
+			if start == 1 {
+				var count int64
+				require.NoError(t, db.Table("system_backup_runs").Count(&count).Error)
 				require.Zero(t, count)
 				var enabled bool
-				require.NoError(t, conn.Raw("SELECT enabled FROM system_backup_policies WHERE id='policy'").Scan(&enabled).Error)
+				require.NoError(t, db.Raw("SELECT enabled FROM system_backup_policies WHERE id='policy'").Scan(&enabled).Error)
 				require.False(t, enabled)
 			}
+			rows, err := pool.QueryContext(t.Context(), "PRAGMA foreign_key_check")
+			require.NoError(t, err)
+			require.False(t, rows.Next())
+			require.NoError(t, rows.Close())
 		})
-	}
-}
-
-func assertHubArchiveSchema(t *testing.T, db *sql.DB) {
-	t.Helper()
-	for _, column := range []string{"archive_name", "activity_id", "completed_at", "source_server_major", "migration_version", "copy_target_id", "copy_state", "copy_error_code", "error_code"} {
-		var exists bool
-		require.NoError(t, db.QueryRowContext(t.Context(), `SELECT EXISTS(SELECT 1 FROM information_schema.columns WHERE table_name='system_backup_runs' AND column_name=$1)`, column).Scan(&exists))
-		require.True(t, exists, column)
-	}
-	for _, column := range []string{"destination", "local_snapshot_id", "error"} {
-		var exists bool
-		require.NoError(t, db.QueryRowContext(t.Context(), `SELECT EXISTS(SELECT 1 FROM information_schema.columns WHERE table_name='system_backup_runs' AND column_name=$1)`, column).Scan(&exists))
-		require.False(t, exists, column)
-	}
-	var targetID, localEnabled bool
-	require.NoError(t, db.QueryRowContext(t.Context(), `SELECT EXISTS(SELECT 1 FROM information_schema.columns WHERE table_name='system_backup_policies' AND column_name='target_id'), EXISTS(SELECT 1 FROM information_schema.columns WHERE table_name='system_backup_policies' AND column_name='local_enabled')`).Scan(&targetID, &localEnabled))
-	require.True(t, targetID)
-	require.False(t, localEnabled)
-	var recoveryTable bool
-	require.NoError(t, db.QueryRowContext(t.Context(), `SELECT to_regclass('system_backup_recovery_config') IS NOT NULL`).Scan(&recoveryTable))
-	require.True(t, recoveryTable)
-	for _, name := range []string{"idx_system_backup_runs_archive_name", "idx_system_backup_runs_activity_id"} {
-		var exists bool
-		require.NoError(t, db.QueryRowContext(t.Context(), `SELECT EXISTS(SELECT 1 FROM pg_indexes WHERE tablename='system_backup_runs' AND indexname=$1)`, name).Scan(&exists))
-		require.True(t, exists, name)
-	}
-	for _, name := range []string{"system_backup_runs_size_limit", "system_backup_runs_archive_name", "system_backup_runs_server_major", "system_backup_runs_migration_version", "system_backup_runs_copy_state", "system_backup_policies_retention_count"} {
-		var exists bool
-		require.NoError(t, db.QueryRowContext(t.Context(), `SELECT EXISTS(SELECT 1 FROM pg_constraint WHERE conname=$1)`, name).Scan(&exists))
-		require.True(t, exists, name)
 	}
 }

@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Replaced Rustic system recovery with bounded PostgreSQL archives; retained the separate volume-backup coordinator.
+// Deviations: Replaced Rustic system recovery with coordinated SQLite archives; retained the separate volume-backup coordinator.
 
 package backup
 
@@ -22,6 +22,7 @@ import (
 	usertypes "github.com/florianfinn/docklet-next/types/user"
 
 	"github.com/florianfinn/docklet-next/backend/internal/activity"
+	"github.com/florianfinn/docklet-next/backend/internal/apikey"
 	"github.com/florianfinn/docklet-next/backend/internal/auth"
 	sharedbackup "github.com/florianfinn/docklet-next/backend/internal/backup"
 	"github.com/florianfinn/docklet-next/backend/internal/config"
@@ -35,6 +36,7 @@ import (
 	"github.com/florianfinn/docklet-next/backend/pkg/scheduler/entityjobs"
 	"github.com/florianfinn/docklet-next/backend/pkg/scheduler/jobcontext"
 	"github.com/florianfinn/docklet-next/backend/pkg/scheduler/runs"
+	"github.com/florianfinn/docklet-next/backend/pkg/utils/francis"
 )
 
 const defaultSystemBackupSchedule = "0 0 3 * * *"
@@ -71,6 +73,7 @@ type Store struct {
 }
 
 type Dependencies struct {
+	APIKeys      *apikey.ApiKeyService
 	Store        Store
 	DB           *database.DB
 	Docker       *dockerInternal.DockerClientService
@@ -83,9 +86,11 @@ type Dependencies struct {
 	Auth         *auth.AuthService
 	Roles        *role.RoleService
 	Coordinator  *runs.Coordinator
+	Runtime      *francis.Runtime
 }
 
 type Service struct {
+	apiKeys         *apikey.ApiKeyService
 	store           Store
 	db              *database.DB
 	engine          *sharedbackup.Engine
@@ -102,13 +107,14 @@ type Service struct {
 	settings        *settings.SettingsService
 	exitUnready     context.CancelFunc
 	refreshJobs     func(context.Context) error
+	runtime         *francis.Runtime
 }
 
 func NewService(deps Dependencies) *Service {
-	s := &Service{store: deps.Store, db: deps.DB, engine: deps.Engine, activityService: deps.Activity,
+	s := &Service{apiKeys: deps.APIKeys, store: deps.Store, db: deps.DB, engine: deps.Engine, activityService: deps.Activity,
 		config: deps.Config, recoveryKeys: deps.RecoveryKeys, volumeService: deps.Volumes,
 		jobs: entityjobs.New("system-backup:", sharedbackup.SystemAdmissionScope), maintenance: NewMaintenanceGate(),
-		auth: deps.Auth, roles: deps.Roles, coordinator: deps.Coordinator, settings: deps.Settings}
+		auth: deps.Auth, roles: deps.Roles, coordinator: deps.Coordinator, settings: deps.Settings, runtime: deps.Runtime}
 	s.volumes = volumes.NewService(volumes.Dependencies{
 		DB: deps.DB, Engine: deps.Engine, Volumes: deps.Volumes, Activity: deps.Activity,
 		Settings: deps.Settings, Jobs: s.jobs, AcquireRun: s.acquireRunInternal,
@@ -202,27 +208,11 @@ func (s *Service) startRun(ctx context.Context, actor usertypes.Actor, trigger s
 }
 
 func (s *Service) finishRun(workCtx context.Context, run *backuptypes.SystemBackupRun) error {
+	archive, size, err := s.snapshotArchive(workCtx, run.ActivityID, run.ID)
 	var migration int64
-	var err error
-	if s.db == nil {
-		err = ErrSystemBackupUnavailable
-	} else {
-		var serverVersion int
-		err = s.db.WithContext(workCtx).Raw("SELECT current_setting('server_version_num')::int").Scan(&serverVersion).Error
-		if serverVersion < 180000 || serverVersion >= 190000 {
-			err = ErrSystemBackupUnavailable
-		}
-	}
 	if err == nil {
-		err = s.db.WithContext(workCtx).Raw("SELECT COALESCE(MAX(version_id), 0) FROM goose_db_version WHERE is_applied = true").Scan(&migration).Error
-		if migration < 1 {
-			err = ErrSystemBackupUnavailable
-		}
-	}
-	var archive string
-	var size int64
-	if err == nil {
-		archive, size, err = createArchive(workCtx, s.backupDir(), s.config.DatabaseURL, run.ID)
+		info, validateErr := validateArchive(workCtx, filepath.Join(s.backupDir(), archive), mustNewestMigration())
+		err, migration = validateErr, info.migration
 	}
 	now := time.Now().UTC()
 	run.CompletedAt = &now
@@ -240,7 +230,7 @@ func (s *Service) finishRun(workCtx context.Context, run *backuptypes.SystemBack
 		detail = &code
 	} else {
 		run.Status = backuptypes.SystemBackupStatusSucceeded
-		run.ArchiveName, run.Size, run.MigrationVersion, run.SourceServerMajor = archive, size, migration, 18
+		run.ArchiveName, run.Size, run.MigrationVersion, run.ArchiveVersion = archive, size, migration, archiveVersion
 	}
 	saveErr := s.store.SaveRun(context.WithoutCancel(workCtx), run)
 	if saveErr != nil {
@@ -471,10 +461,6 @@ func (s *Service) applyRetention(ctx context.Context, policyID string, keep int)
 		}
 	}
 	return nil
-}
-
-func (s *Service) Storage() backuptypes.SystemBackupStorage {
-	return storageStatus(s.backupDir())
 }
 
 // Recovery keys remain available to the separate volume backup policy.

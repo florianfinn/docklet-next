@@ -35,14 +35,19 @@ const FOUNDATION_FILES = new Set([
   ".env.example", ".claude/settings.json", "docs/design/publication-policy.md",
   "docs/design/review-workflow.md", "tests/helpers.mjs", "tests/workflow-contracts.mjs",
 ]);
+const PRODUCT_NOTICES = new Set([
+  "LICENSES/MIT-icu-type-parser.txt", "LICENSES/MIT-react-remove-scroll-bar.txt",
+  "LICENSES/MIT-victory-vendor.txt",
+]);
 function foundationPath(path) {
+  if (PRODUCT_NOTICES.has(path)) return false;
   return FOUNDATION_FILES.has(path) ||
     ["scripts/", ".githooks/", ".github/", "LICENSES/"].some((prefix) => path.startsWith(prefix));
 }
 function scopePolicies(root, paths) {
   const retained = new Set(paths);
   const has = (path) => retained.has(path);
-  if (!has("backend/resources/migrations/postgres/001_baseline.sql")) {
+  if (!has("backend/resources/migrations/sqlite/001_baseline.sql")) {
     rmSync(resolve(root, "scripts/migration-hashes.json"), { force: true });
     rmSync(resolve(root, "backend/resources/migrations"), { recursive: true, force: true });
   }

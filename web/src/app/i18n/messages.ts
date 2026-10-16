@@ -5,6 +5,7 @@ import { deContainers } from "@/features/containers/messages/de";
 import { deDashboard } from "@/features/dashboard/messages/de";
 import { deRunMessages } from "@/data/messages/run-de";
 import { deHosts } from "@/features/hosts/messages/de";
+import { deHubBackups } from "@/features/hub-backups/messages/de";
 import { deImages } from "@/features/images/messages/de";
 import { deSettings } from "@/features/settings/messages/de";
 import { deSetup } from "@/features/setup/messages/de";
@@ -52,6 +53,7 @@ export const messages: typeof enMessages = {
     },
   },
   hosts: deHosts,
+  hubBackups: deHubBackups,
   images: deImages,
   volumes: deVolumes,
   settings: deSettings,

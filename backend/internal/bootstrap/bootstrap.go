@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; functional cut: removed central variables and .env.global; functional cut: removed GitOps and saved Git repositories; functional cut: removed Swarm; functional cut: removed standalone build workshop; functional cut: removed OIDC and passkeys; functional cut: removed SQLite runtime and migrations.; Uses forward-only database initialization.
+// Deviations: Local module namespace; functional cut: removed central variables and .env.global; functional cut: removed GitOps and saved Git repositories; functional cut: removed Swarm; functional cut: removed standalone build workshop; functional cut: removed OIDC and passkeys; SQLite-only local persistence.; Uses forward-only database initialization.
 
 package bootstrap
 
@@ -59,6 +59,9 @@ func Bootstrap(ctx context.Context) error {
 		DockerConfig:      cfg.DockerConfig,
 		ProjectsDirectory: cfg.ProjectsDirectory,
 	}
+	if !cfg.AgentMode {
+		runtimeIdentityCfg.BackupDirectory = cfg.BackupDir
+	}
 	if err := startup.ApplyRequestedRuntimeIdentity(ctx, runtimeIdentityCfg); err != nil {
 		return fmt.Errorf("apply runtime identity: %w", err)
 	}
@@ -79,7 +82,7 @@ func Bootstrap(ctx context.Context) error {
 	if cfg.AgentMode {
 		db, err = initializeDBAndMigrateInternal(appCtx, cfg)
 	} else {
-		if markerErr := hubbackup.CheckRestoreMarker(cfg.BackupDir); markerErr != nil {
+		if markerErr := hubbackup.RecoverPendingRestore(appCtx, cfg); markerErr != nil {
 			slog.ErrorContext(appCtx, "Hub restore recovery required; run the offline restore command before restarting the hub", "code", "backup.recovery_required")
 			cancelApp()
 			return markerErr
@@ -90,9 +93,14 @@ func Bootstrap(ctx context.Context) error {
 		cancelApp()
 		return fmt.Errorf("failed to initialize database: %w", err)
 	}
+	releaseHubLock := true
 	defer func() {
 		cancelApp()
-		if closeErr := db.Close(); closeErr != nil {
+		closeDatabase := db.CloseRetainingHubLock
+		if releaseHubLock {
+			closeDatabase = db.Close
+		}
+		if closeErr := closeDatabase(); closeErr != nil {
 			slog.ErrorContext(ctx, "Error closing database", "error", closeErr)
 		}
 	}()
@@ -115,6 +123,7 @@ func Bootstrap(ctx context.Context) error {
 	stopCtx, cancelStop := context.WithTimeout(context.WithoutCancel(ctx), 30*time.Second)
 	defer cancelStop()
 	if stopErr := app.Stop(stopCtx); stopErr != nil {
+		releaseHubLock = false
 		return fmt.Errorf("stop application: %w", stopErr)
 	}
 

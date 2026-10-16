@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; functional cut: removed standalone build workshop; functional cut: removed SQLite runtime and migrations.
+// Deviations: Local module namespace; functional cut: removed standalone build workshop; SQLite-only local persistence.
 
 package startup
 
@@ -50,6 +50,7 @@ type RuntimeIdentityConfig struct {
 	DockerHost        string
 	DockerConfig      string
 	ProjectsDirectory string
+	BackupDirectory   string
 }
 
 // ApplyRequestedRuntimeIdentity switches the current process to the configured
@@ -114,6 +115,11 @@ func ApplyRequestedRuntimeIdentity(ctx context.Context, cfg *RuntimeIdentityConf
 			runtimeUID, runtimeGID, mountpoints, projectsDir, defaultDataDirectory,
 		); prepareWritablePathsWithRootsErr != nil {
 			return prepareWritablePathsWithRootsErr
+		}
+		if cfg.BackupDirectory != "" {
+			if err := prepareBackupDirectoryInternal(runtimeUID, runtimeGID, mountpoints, cfg.BackupDirectory); err != nil {
+				slog.WarnContext(ctx, "Backup storage ownership is unavailable", "code", "backup.storage_unavailable")
+			}
 		}
 	}
 
@@ -293,7 +299,7 @@ func dockerSocketPathInternal(raw string) mo.Option[string] {
 }
 
 func prepareWritablePathsWithRootsInternal(uid, gid int, mountpoints map[string]struct{}, projectsDir, dataDirectory string) error {
-	if err := os.MkdirAll(dataDirectory, utils.DirPerm); err != nil {
+	if err := os.MkdirAll(dataDirectory, 0700); err != nil {
 		return fmt.Errorf("create data directory: %w", err)
 	}
 
@@ -301,6 +307,9 @@ func prepareWritablePathsWithRootsInternal(uid, gid int, mountpoints map[string]
 		return fmt.Errorf("chown data directory: %w", err)
 	}
 
+	if err := os.Chmod(dataDirectory, 0700); err != nil {
+		return fmt.Errorf("protect data directory: %w", err)
+	}
 	entries, err := os.ReadDir(dataDirectory)
 	if err != nil {
 		return fmt.Errorf("read data directory: %w", err)
@@ -393,4 +402,21 @@ func unescapeMountInfoPathInternal(path string) string {
 		`\134`, `\`,
 	)
 	return replacer.Replace(path)
+}
+
+func prepareBackupDirectoryInternal(uid, gid int, mountpoints map[string]struct{}, path string) error {
+	if !filepath.IsAbs(path) {
+		return fmt.Errorf("backup directory must be absolute")
+	}
+	if err := os.MkdirAll(path, 0700); err != nil {
+		return fmt.Errorf("backup directory unavailable")
+	}
+	info, err := os.Lstat(path)
+	if err != nil || !info.IsDir() || info.Mode()&os.ModeSymlink != 0 {
+		return fmt.Errorf("backup directory must be a real directory")
+	}
+	if err := prepareWritablePathsWithRootsInternal(uid, gid, mountpoints, "", path); err != nil {
+		return fmt.Errorf("backup directory ownership unavailable")
+	}
+	return nil
 }

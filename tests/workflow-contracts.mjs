@@ -8,6 +8,11 @@ const PERMISSIONS = {
 };
 export function assertWorkflow(file, text) {
   const job = JOBS[file];
+  if (file === "checks") {
+    assert.match(text, /^  verify:\n    name: verify$/m);
+    assert.match(text, /needs: \[scope, verify, package-image\]/);
+    assert.match(text, /test "\$IMAGE_RESULT" = success/);
+  }
   assert.match(text, /^    timeout-minutes: 15$/m);
   assert.match(text, new RegExp(`^  ${job}:$`, "m"));
   assert.match(text, new RegExp(`^    name: ${job}$`, "m"));
@@ -15,11 +20,11 @@ export function assertWorkflow(file, text) {
   assert.equal(permissions, PERMISSIONS[file]);
   assert.equal(/^ +permissions:/m.test(text), false);
   const actions = [...text.matchAll(/^\s+- uses: ([^\s]+)/gm)];
-  assert.equal(actions.length, file === "checks" ? 7 : 2);
+  assert.equal(actions.length, file === "checks" ? 6 : 2);
   for (const match of actions) assert.match(match[1], /@[a-f0-9]{40}$/);
   assert.equal(/actions\/cache\b/.test(text), false);
   assert.equal(text.includes("secrets."), false);
-  assert.equal((text.match(/persist-credentials: false/g) ?? []).length, file === "checks" ? 4 : 1);
+  assert.equal((text.match(/persist-credentials: false/g) ?? []).length, file === "checks" ? 3 : 1);
   assert.match(text, /branches: \[main\]/);
   // Expressions in run blocks must not interpolate attacker-controlled event text.
   const runBlocks = [...text.matchAll(/^\s*(?:- )?run:([^\n]*(?:\n {10,}[^\n]*)*)/gm)];
@@ -42,10 +47,8 @@ export function assertWorkflow(file, text) {
     assert.equal(text.includes("write"), false);
   }
   if (file === "checks") {
-    assert.match(text, /^  hub-image:$/m);
-    assert.match(text, /docker build --label t3\.project=docklet-next -f deploy\/hub\/Dockerfile/);
-    assert.match(text, /--entrypoint pg_dump docklet-next-hub:check --version/);
-    assert.match(text, /DOCKLET_BACKUP_INTEGRATION=1/);
-    assert.match(text, /needs: \[scope, postgres-integration, hub-image\]/);
+    assert.match(text, /^  package-image:$/m);
+    assert.match(text, /scripts\/smoke-hub-image.mjs/);
+    assert.equal(text.includes("postgres-integration"), false);
   }
 }

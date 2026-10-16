@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Replaced the system recovery wire contract with local PostgreSQL archives.
+// Deviations: Replaced the system recovery wire contract with coordinated SQLite archives.
 
 package backup
 
@@ -36,7 +36,7 @@ func ArchiveNameForID(id string) (string, error) {
 			return "", errors.New("invalid backup ID")
 		}
 	}
-	return id + ".dump", nil
+	return id + ".tar", nil
 }
 
 const (
@@ -59,23 +59,23 @@ const (
 	SystemBackupCopyFailed    SystemBackupCopyState = "failed"
 )
 
-// SystemBackupRun describes one local PostgreSQL custom-format archive.
+// SystemBackupRun describes one versioned two-file SQLite archive.
 type SystemBackupRun struct {
-	ID                string                `json:"id"`
-	ActivityID        string                `json:"activityId,omitempty"`
-	ArchiveName       string                `json:"archiveName,omitempty"`
-	Size              int64                 `json:"size" minimum:"0" maximum:"2147483648" doc:"Archive size in bytes"`
-	CreatedAt         time.Time             `json:"createdAt"`
-	CompletedAt       *time.Time            `json:"completedAt,omitempty"`
-	Status            string                `json:"status" enum:"running,succeeded,failed"`
-	Trigger           string                `json:"trigger" enum:"manual,scheduled,uploaded"`
-	PolicyID          string                `json:"policyId,omitempty"`
-	SourceServerMajor int                   `json:"sourceServerMajor,omitempty" minimum:"0"`
-	MigrationVersion  int64                 `json:"migrationVersion,omitempty" minimum:"0"`
-	CopyTargetID      string                `json:"copyTargetId,omitempty"`
-	CopyState         SystemBackupCopyState `json:"copyState" enum:"none,pending,succeeded,failed"`
-	CopyErrorCode     string                `json:"copyErrorCode,omitempty"`
-	ErrorCode         string                `json:"errorCode,omitempty"`
+	ID               string                `json:"id"`
+	ActivityID       string                `json:"activityId,omitempty"`
+	ArchiveName      string                `json:"archiveName,omitempty"`
+	Size             int64                 `json:"size" minimum:"0" maximum:"2147483648" doc:"Archive size in bytes"`
+	CreatedAt        time.Time             `json:"createdAt"`
+	CompletedAt      *time.Time            `json:"completedAt,omitempty"`
+	Status           string                `json:"status" enum:"running,succeeded,failed"`
+	Trigger          string                `json:"trigger" enum:"manual,scheduled,uploaded"`
+	PolicyID         string                `json:"policyId,omitempty"`
+	ArchiveVersion   int                   `json:"archiveVersion,omitempty" minimum:"0"`
+	MigrationVersion int64                 `json:"migrationVersion,omitempty" minimum:"0"`
+	CopyTargetID     string                `json:"copyTargetId,omitempty"`
+	CopyState        SystemBackupCopyState `json:"copyState" enum:"none,pending,succeeded,failed"`
+	CopyErrorCode    string                `json:"copyErrorCode,omitempty"`
+	ErrorCode        string                `json:"errorCode,omitempty"`
 
 	// System-managed volume policies still map their snapshot records through these Go-only fields.
 	Destination     SystemBackupDestination `json:"-"`
@@ -127,6 +127,7 @@ type SystemBackupStorage struct {
 }
 
 type SystemBackupMaintenance struct {
+	Operation  string `json:"operation,omitempty" enum:"backup,restore"`
 	Active     bool   `json:"active"`
 	Phase      string `json:"phase,omitempty" enum:"draining,applying,verifying,blocked"`
 	ReasonCode string `json:"reasonCode,omitempty"`

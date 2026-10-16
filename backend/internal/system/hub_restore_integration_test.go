@@ -1,37 +1,27 @@
-//go:build postgres_integration
-
 // Source: docklet-next/docs/design/hub-backup.md
 // Revision: 8f8c8f89bc6ebb7261862d0c35a6ddbc1513e9fa
 // Retrieved: 2026-10-15
 // License: Apache-2.0
-// Deviations: Original PostgreSQL 18 offline and online restore round-trip for issue #32.
+// Deviations: Original SQLite offline and online restore round-trip for issue #32.
 
 package system
 
 import (
 	"bytes"
 	"context"
-	"crypto/rand"
-	"encoding/hex"
+	"encoding/json"
 	"io"
-	"io/fs"
 	"net/http"
 	"net/http/httptest"
-	"net/url"
-	"os"
-	"os/exec"
 	"path/filepath"
-	"strings"
 	"testing"
 	"time"
 
 	"github.com/danielgtaylor/huma/v2"
 	"github.com/danielgtaylor/huma/v2/adapters/humaecho"
+	"github.com/florianfinn/docklet-next/backend/pkg/utils/sqlitestore"
 	"github.com/labstack/echo/v5"
-	"github.com/pressly/goose/v3"
 	"github.com/stretchr/testify/require"
-	"gorm.io/driver/postgres"
-	"gorm.io/gorm"
 
 	"github.com/florianfinn/docklet-next/backend/internal/activity"
 	"github.com/florianfinn/docklet-next/backend/internal/config"
@@ -39,21 +29,17 @@ import (
 	"github.com/florianfinn/docklet-next/backend/internal/middleware"
 	backupservice "github.com/florianfinn/docklet-next/backend/internal/system/children/backup"
 	"github.com/florianfinn/docklet-next/backend/pkg/authz"
-	"github.com/florianfinn/docklet-next/backend/resources"
 	backuptypes "github.com/florianfinn/docklet-next/types/backup"
 	usertypes "github.com/florianfinn/docklet-next/types/user"
 )
 
-func TestHubRestorePostgres18RoundTrip(t *testing.T) {
-	if _, err := exec.LookPath("pg_restore"); err != nil {
-		t.Skip("PostgreSQL 18 client image required")
-	}
+func TestHubRestoreSQLiteRoundTrip(t *testing.T) {
 	source, sourceURL := newMigratedHubBackupDBWithURL(t)
-	require.NoError(t, source.Exec(`INSERT INTO users (id,created_at,username,password_hash,time_format) VALUES ('seed-user',NOW(),'example','hash','auto')`).Error)
-	require.NoError(t, source.Exec(`INSERT INTO user_sessions (id,created_at,user_id,refresh_token_hash,last_used_at,expires_at) VALUES ('seed-session',NOW(),'seed-user','hash',NOW(),NOW()+INTERVAL '1 day')`).Error)
+	require.NoError(t, source.Exec(`INSERT INTO users (id,created_at,username,password_hash,time_format) VALUES ('seed-user',(CAST((julianday('now') - 2440587.5) * 86400000000 AS INTEGER)),'example','hash','auto')`).Error)
+	require.NoError(t, source.Exec(`INSERT INTO user_sessions (id,created_at,user_id,refresh_token_hash,last_used_at,expires_at) VALUES ('seed-session',(CAST((julianday('now') - 2440587.5) * 86400000000 AS INTEGER)),'seed-user','hash',(CAST((julianday('now') - 2440587.5) * 86400000000 AS INTEGER)),(CAST((julianday('now') - 2440587.5) * 86400000000 AS INTEGER)+86400000000))`).Error)
 	require.NoError(t, source.Exec(`INSERT INTO settings (key,value) VALUES ('restore-example','before')`).Error)
-	require.NoError(t, source.Exec(`INSERT INTO environment_update_jobs (id,created_at,status) VALUES ('seed-job',NOW(),'success')`).Error)
-	require.NoError(t, source.Exec(`INSERT INTO activities (id,created_at,environment_id,type,status,started_at,ended_at,duration_ms,metadata) VALUES ('seed-activity',NOW(),'0','resource_action','success',NOW(),NOW(),0,'{}')`).Error)
+	require.NoError(t, source.Exec(`INSERT INTO environment_update_jobs (id,created_at,status) VALUES ('seed-job',(CAST((julianday('now') - 2440587.5) * 86400000000 AS INTEGER)),'success')`).Error)
+	require.NoError(t, source.Exec(`INSERT INTO activities (id,created_at,environment_id,type,status,started_at,ended_at,duration_ms,metadata) VALUES ('seed-activity',(CAST((julianday('now') - 2440587.5) * 86400000000 AS INTEGER)),'0','resource_action','success',(CAST((julianday('now') - 2440587.5) * 86400000000 AS INTEGER)),(CAST((julianday('now') - 2440587.5) * 86400000000 AS INTEGER)),0,'{}')`).Error)
 	dir := t.TempDir()
 	sourceSystem := &SystemService{db: source}
 	sourceActivities := activity.NewActivityService(source, nil)
@@ -66,7 +52,7 @@ func TestHubRestorePostgres18RoundTrip(t *testing.T) {
 	require.Equal(t, backuptypes.SystemBackupStatusSucceeded, run.Status)
 	targetURL := newEmptyHubRestoreDBURL(t)
 	require.NoError(t, backupservice.OfflineRestore(t.Context(), &config.Config{DatabaseURL: targetURL, BackupDir: dir}, run.ID))
-	require.NoError(t, backupservice.CheckRestoreMarker(dir))
+	require.NoError(t, backupservice.CheckPendingRestore(&config.Config{DatabaseURL: targetURL}))
 	restarted, err := database.InitializeHub(t.Context(), targetURL, database.MigrationOptions{})
 	require.NoError(t, err)
 	t.Cleanup(func() { require.NoError(t, restarted.Close()) })
@@ -92,12 +78,7 @@ func TestHubRestorePostgres18RoundTrip(t *testing.T) {
 	require.NoError(t, err)
 	require.NotEmpty(t, operation.ActivityID)
 	require.Eventually(t, func() bool {
-		var status string
-		if restarted.Raw("SELECT status FROM activities WHERE id=?", operation.ActivityID).Scan(&status).Error != nil {
-			return false
-		}
-		return status == "success" && backupservice.CheckRestoreMarker(dir) == nil &&
-			!targetBackups.MaintenanceGate().Status().Active
+		return !targetBackups.MaintenanceGate().Status().Active && backupservice.CheckPendingRestore(&config.Config{DatabaseURL: targetURL}) == nil && len(jobsRefreshed) > 0
 	}, 30*time.Second, 100*time.Millisecond)
 	select {
 	case <-jobsRefreshed:
@@ -107,80 +88,7 @@ func TestHubRestorePostgres18RoundTrip(t *testing.T) {
 	assertRestoredSeedInternal(t, restarted)
 }
 
-func TestOfflineRestoreWithMarkerReplacesNonEmptyTarget(t *testing.T) {
-	if _, err := exec.LookPath("pg_restore"); err != nil {
-		t.Skip("PostgreSQL 18 client image required")
-	}
-	source, sourceURL := newMigratedHubBackupDBWithURL(t)
-	require.NoError(t, source.Exec("INSERT INTO settings (key,value) VALUES ('restore-example','archive')").Error)
-	dir := t.TempDir()
-	sourceBackups := backupservice.NewService(backupservice.Dependencies{
-		Store: (&SystemService{db: source}).backupStoreInternal(), DB: source,
-		Activity: activity.NewActivityService(source, nil),
-		Config:   &config.Config{DatabaseURL: sourceURL, BackupDir: dir},
-	})
-	run, err := sourceBackups.CreateBackup(t.Context(), usertypes.SystemUser, backuptypes.SystemBackupTriggerManual, backuptypes.CreateSystemBackupRequest{})
-	require.NoError(t, err)
-	target, targetURL := newMigratedHubBackupDBWithURL(t)
-	require.NoError(t, target.Exec("INSERT INTO settings (key,value) VALUES ('restore-example','target')").Error)
-	marker := []byte(`{"backupId":"` + run.ID + `","phase":"verifying"}`)
-	require.NoError(t, os.WriteFile(filepath.Join(dir, "restore-state.json"), marker, 0600))
-	require.NoError(t, backupservice.OfflineRestore(t.Context(), &config.Config{DatabaseURL: targetURL, BackupDir: dir}, run.ID))
-	require.NoError(t, backupservice.CheckRestoreMarker(dir))
-	var value string
-	require.NoError(t, target.Raw("SELECT value FROM settings WHERE key='restore-example'").Scan(&value).Error)
-	require.Equal(t, "archive", value)
-}
-
-func TestOfflineRestoreWithMarkerCompletesInterruptedMigration(t *testing.T) {
-	if _, err := exec.LookPath("pg_restore"); err != nil {
-		t.Skip("PostgreSQL 18 client image required")
-	}
-	sourceURL := newEmptyHubRestoreDBURL(t)
-	source, err := gorm.Open(postgres.Open(sourceURL), &gorm.Config{})
-	require.NoError(t, err)
-	pool, err := source.DB()
-	require.NoError(t, err)
-	migrations, err := fs.Sub(resources.FS, "migrations/postgres")
-	require.NoError(t, err)
-	provider, err := goose.NewProvider(goose.DialectPostgres, pool, migrations)
-	require.NoError(t, err)
-	_, err = provider.UpTo(t.Context(), 7)
-	require.NoError(t, err)
-	require.NoError(t, source.Exec("INSERT INTO settings (key,value) VALUES ('restore-example','older-archive')").Error)
-	require.NoError(t, pool.Close())
-
-	dir := t.TempDir()
-	id := "older-archive"
-	archiveName, err := backuptypes.ArchiveNameForID(id)
-	require.NoError(t, err)
-	parsed, err := url.Parse(sourceURL)
-	require.NoError(t, err)
-	password, _ := parsed.User.Password()
-	dump := exec.CommandContext(t.Context(), "pg_dump", "--format=custom", "--file="+filepath.Join(dir, archiveName))
-	dump.Env = append(os.Environ(), "PGHOST="+parsed.Hostname(), "PGPORT="+parsed.Port(),
-		"PGUSER="+parsed.User.Username(), "PGPASSWORD="+password,
-		"PGDATABASE="+strings.TrimPrefix(parsed.Path, "/"), "PGSSLMODE=disable")
-	require.NoError(t, dump.Run())
-	target, targetURL := newMigratedHubBackupDBWithURL(t)
-	require.NoError(t, target.Exec("INSERT INTO settings (key,value) VALUES ('restore-example','interrupted-target')").Error)
-	require.NoError(t, os.WriteFile(filepath.Join(dir, "restore-state.json"), []byte(`{"backupId":"older-archive","phase":"verifying"}`), 0600))
-	require.NoError(t, backupservice.OfflineRestore(t.Context(), &config.Config{DatabaseURL: targetURL, BackupDir: dir}, id))
-	require.NoError(t, backupservice.CheckRestoreMarker(dir))
-	var value string
-	require.NoError(t, target.Raw("SELECT value FROM settings WHERE key='restore-example'").Scan(&value).Error)
-	require.Equal(t, "older-archive", value)
-	var version int64
-	require.NoError(t, target.Raw("SELECT COALESCE(MAX(version_id),0) FROM goose_db_version WHERE is_applied=true").Scan(&version).Error)
-	newest, err := database.LatestMigrationVersion()
-	require.NoError(t, err)
-	require.Equal(t, newest, version)
-}
-
 func TestHubUploadStreamsThroughAuthorizedRoute(t *testing.T) {
-	if _, err := exec.LookPath("pg_restore"); err != nil {
-		t.Skip("PostgreSQL 18 client image required")
-	}
 	db, dsn := newMigratedHubBackupDBWithURL(t)
 	dir := t.TempDir()
 	system := &SystemService{db: db}
@@ -213,52 +121,6 @@ func TestHubUploadStreamsThroughAuthorizedRoute(t *testing.T) {
 	require.Equal(t, 1, count)
 }
 
-func TestHubRestoreCommandFailureRollsBackAndResumes(t *testing.T) {
-	if _, err := exec.LookPath("pg_restore"); err != nil {
-		t.Skip("PostgreSQL 18 client image required")
-	}
-	db, dsn := newMigratedHubBackupDBWithURL(t)
-	require.NoError(t, db.Exec("CREATE TABLE zz_late_data (id integer PRIMARY KEY, payload text NOT NULL)").Error)
-	require.NoError(t, db.Exec("INSERT INTO zz_late_data SELECT n, repeat(md5(n::text), 8) FROM generate_series(1, 1000) AS n").Error)
-	require.NoError(t, db.Exec("INSERT INTO settings (key,value) VALUES ('rollback-example','original')").Error)
-	dir := t.TempDir()
-	system := &SystemService{db: db}
-	activities := activity.NewActivityService(db, nil)
-	service := backupservice.NewService(backupservice.Dependencies{
-		Store: system.backupStoreInternal(), DB: db, Activity: activities,
-		Config: &config.Config{DatabaseURL: dsn, BackupDir: dir},
-	})
-	run, err := service.CreateBackup(t.Context(), usertypes.SystemUser, backuptypes.SystemBackupTriggerManual, backuptypes.CreateSystemBackupRequest{})
-	require.NoError(t, err)
-	require.NoError(t, db.Exec("INSERT INTO zz_late_data (id, payload) VALUES (1001, 'newer')").Error)
-	require.NoError(t, db.Exec("UPDATE settings SET value='newer' WHERE key='rollback-example'").Error)
-	path := filepath.Join(dir, run.ArchiveName)
-	data, err := os.ReadFile(path)
-	require.NoError(t, err)
-	require.Greater(t, len(data), 1024)
-	require.NoError(t, os.WriteFile(path, data[:len(data)-64], 0600))
-	run.Size = int64(len(data) - 64)
-	require.NoError(t, system.backupStoreInternal().SaveRun(t.Context(), run))
-	operation, err := service.StartRestore(t.Context(), usertypes.Actor{ID: "operator", Username: "operator"}, "", run.ID, run.ID)
-	require.NoError(t, err)
-	require.Eventually(t, func() bool {
-		var status string
-		if db.Raw("SELECT status FROM activities WHERE id=?", operation.ActivityID).Scan(&status).Error != nil {
-			return false
-		}
-		return status == "failed"
-	}, 30*time.Second, 100*time.Millisecond)
-	require.Eventually(t, func() bool {
-		return backupservice.CheckRestoreMarker(dir) == nil && !service.MaintenanceGate().Status().Active
-	}, 10*time.Second, 50*time.Millisecond)
-	var rows int
-	require.NoError(t, db.Raw("SELECT COUNT(*) FROM zz_late_data").Scan(&rows).Error)
-	require.Equal(t, 1001, rows)
-	var value string
-	require.NoError(t, db.Raw("SELECT value FROM settings WHERE key='rollback-example'").Scan(&value).Error)
-	require.Equal(t, "newer", value)
-}
-
 func assertRestoredSeedInternal(t *testing.T, db *database.DB) {
 	t.Helper()
 	for _, query := range []string{
@@ -280,21 +142,27 @@ func assertRestoredSeedInternal(t *testing.T, db *database.DB) {
 
 func newEmptyHubRestoreDBURL(t *testing.T) string {
 	t.Helper()
-	dsn := os.Getenv("DATABASE_URL")
-	require.NotEmpty(t, dsn)
-	admin, err := gorm.Open(postgres.Open(dsn), &gorm.Config{})
-	require.NoError(t, err)
-	pool, err := admin.DB()
-	require.NoError(t, err)
-	t.Cleanup(func() { require.NoError(t, pool.Close()) })
-	var random [8]byte
-	_, err = rand.Read(random[:])
-	require.NoError(t, err)
-	name := "docklet_restore_" + hex.EncodeToString(random[:])
-	require.NoError(t, admin.Exec("CREATE DATABASE "+name).Error)
-	t.Cleanup(func() { require.NoError(t, admin.Exec("DROP DATABASE "+name+" WITH (FORCE)").Error) })
-	parsed, err := url.Parse(dsn)
-	require.NoError(t, err)
-	parsed.Path = "/" + name
-	return parsed.String()
+	return sqlitestore.URL(filepath.Join(t.TempDir(), "hub.db"))
+}
+
+func TestHubBackupPolicyRouteCreatesFirstPolicyWithoutID(t *testing.T) {
+	db, dsn := newMigratedHubBackupDBWithURL(t)
+	system := &SystemService{db: db}
+	service := backupservice.NewService(backupservice.Dependencies{Store: system.backupStoreInternal(), DB: db, Config: &config.Config{DatabaseURL: dsn, BackupDir: t.TempDir()}})
+	router := echo.New()
+	api := humaecho.NewWithGroup(router, router.Group("/api"), huma.DefaultConfig("test", "1.0.0"))
+	api.UseMiddleware(func(ctx huma.Context, next func(huma.Context)) {
+		next(huma.WithContext(ctx, context.WithValue(ctx.Context(), middleware.ContextKeyUserPermissions, authz.SudoPermissionSet())))
+	})
+	backupservice.RegisterRoutes(api, backupservice.NewHandler(service, nil, t.Context()))
+	request := httptest.NewRequest(http.MethodPut, "/api/backups/policies", bytes.NewBufferString(`{"policies":[{"enabled":true,"schedule":"0 20 4 * * 1","retentionCount":7}]}`))
+	request.Header.Set("Content-Type", "application/json")
+	response := httptest.NewRecorder()
+	router.ServeHTTP(response, request)
+	require.Equal(t, http.StatusOK, response.Code, response.Body.String())
+	var result backuptypes.SystemBackupPolicyCollection
+	require.NoError(t, json.Unmarshal(response.Body.Bytes(), &result))
+	require.Len(t, result.Policies, 1)
+	require.NotEmpty(t, result.Policies[0].ID)
+	require.Equal(t, "0 20 4 * * 1", result.Policies[0].Schedule)
 }

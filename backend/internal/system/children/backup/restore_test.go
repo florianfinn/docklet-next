@@ -11,7 +11,6 @@ import (
 	"context"
 	"os"
 	"path/filepath"
-	"strings"
 	"testing"
 	"time"
 
@@ -23,7 +22,7 @@ func TestRestoreMarkerCrashPoints(t *testing.T) {
 	dir := t.TempDir()
 	require.NoError(t, CheckRestoreMarker(dir))
 	for _, phase := range []string{"applying", "verifying"} {
-		require.NoError(t, writeRestoreMarker(dir, restoreMarker{BackupID: "backup-1", ActivityID: "activity-1", Phase: phase}))
+		require.NoError(t, writeRestoreMarker(dir, restoreMarker{ArchiveSize: 2048, MigrationVersion: 1, Version: 1, RestoreID: "restore-1", DatabasePath: filepath.Join(dir, "hub.db"), Images: []imageManifest{{Name: hubImageName, Size: 512, SHA256: string(bytes.Repeat([]byte("a"), 64))}, {Name: francisImageName, Size: 512, SHA256: string(bytes.Repeat([]byte("b"), 64))}}, BackupID: "backup-1", ActivityID: "activity-1", Phase: phase}))
 		require.ErrorIs(t, CheckRestoreMarker(dir), ErrRestoreRecoveryRequired)
 		marker, err := readRestoreMarker(dir)
 		require.NoError(t, err)
@@ -63,7 +62,7 @@ func TestMaintenanceBlocksAdmissionAndDrains(t *testing.T) {
 func TestUploadLimitAndInvalidArchiveRemoveStaging(t *testing.T) {
 	dir := t.TempDir()
 	service := &Service{config: &config.Config{BackupDir: dir}}
-	_, _, err := service.receiveArchiveWithLimit(t.Context(), "backup-1", bytes.NewBufferString("PGDMP-overflow"), 5)
+	_, _, err := service.receiveArchiveWithLimit(t.Context(), "backup-1", bytes.NewBufferString("archive-overflow"), 5)
 	require.ErrorIs(t, err, errArchiveLimit)
 	entries, err := os.ReadDir(dir)
 	require.NoError(t, err)
@@ -73,41 +72,4 @@ func TestUploadLimitAndInvalidArchiveRemoveStaging(t *testing.T) {
 	entries, err = os.ReadDir(dir)
 	require.NoError(t, err)
 	require.Empty(t, entries)
-}
-
-func TestArchiveValidationRejectsMajorAndMigration(t *testing.T) {
-	fake := t.TempDir()
-	script := `#!/bin/sh
-case "$1" in
-  --list) printf ';     Dumped from database version: %s\n' "$FAKE_MAJOR" ;;
-  --data-only) printf 'COPY public.goose_db_version (id, version_id, is_applied, tstamp) FROM stdin;\n1\t%s\tt\t2026-01-01\n\\.\n' "$FAKE_MIGRATION" ;;
-esac
-`
-	require.NoError(t, os.WriteFile(filepath.Join(fake, "pg_restore"), []byte(script), 0700))
-	t.Setenv("PATH", fake+string(os.PathListSeparator)+os.Getenv("PATH"))
-	archive := filepath.Join(t.TempDir(), "backup.dump")
-	require.NoError(t, os.WriteFile(archive, []byte("PGDMPsynthetic"), 0600))
-	t.Setenv("FAKE_MAJOR", "17.5")
-	t.Setenv("FAKE_MIGRATION", "8")
-	_, err := validateArchive(t.Context(), archive, 8)
-	require.ErrorIs(t, err, errArchiveMajor)
-	t.Setenv("FAKE_MAJOR", "18.6")
-	t.Setenv("FAKE_MIGRATION", "9")
-	_, err = validateArchive(t.Context(), archive, 8)
-	require.ErrorIs(t, err, errMigration)
-	t.Setenv("FAKE_MIGRATION", "8")
-	info, err := validateArchive(t.Context(), archive, 8)
-	require.NoError(t, err)
-	require.Equal(t, int64(8), info.migration)
-}
-
-func TestRestoreCommandErrorIsSanitized(t *testing.T) {
-	fake := t.TempDir()
-	require.NoError(t, os.WriteFile(filepath.Join(fake, "pg_restore"), []byte("#!/bin/sh\necho 'private-password-example' >&2\nexit 1\n"), 0700))
-	t.Setenv("PATH", fake+string(os.PathListSeparator)+os.Getenv("PATH"))
-	err := runPGRestore(t.Context(), "postgres://example:test-only@db.example.com/example", "/not-a-real-file")
-	require.Error(t, err)
-	require.EqualError(t, err, "backup.restore_failed")
-	require.False(t, strings.Contains(err.Error(), "test-only"))
-	require.False(t, strings.Contains(err.Error(), "private-password-example"))
 }

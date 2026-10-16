@@ -1,10 +1,8 @@
-//go:build postgres_integration
-
 // Source: getarcaneapp/arcane/backend/internal/volume/children/backup/children/policies/service_test.go
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; functional cut: removed S3 backup destinations; functional cut: PostgreSQL integration test fixture.
+// Deviations: Local module namespace; functional cut: removed S3 backup destinations; SQLite temp-file persistence fixture.
 
 package policies
 
@@ -12,7 +10,7 @@ import (
 	"context"
 	"testing"
 
-	"github.com/florianfinn/docklet-next/backend/internal/testpg"
+	"github.com/florianfinn/docklet-next/backend/internal/testsqlite"
 	"github.com/florianfinn/docklet-next/types/backup"
 	"github.com/florianfinn/docklet-next/types/scheduler"
 	"github.com/florianfinn/docklet-next/types/volume"
@@ -57,7 +55,7 @@ func (s *volumeBackupPolicySchedulerInternal) HasJob(name string) bool {
 }
 
 func TestVolumeBackupPolicy_UpdateRegistersIndependentJobsAndSettings(t *testing.T) {
-	gormDB, err := gorm.Open(testpg.Dialector(t, "file:volume-backup-schedule?mode=memory&cache=shared"), &gorm.Config{})
+	gormDB, err := gorm.Open(testsqlite.Dialector(t, "file:volume-backup-schedule?mode=memory&cache=shared"), &gorm.Config{})
 	require.NoError(t, err)
 	require.NoError(t, gormDB.AutoMigrate(&VolumeBackupPolicy{}))
 	db := &database.DB{DB: gormDB}
@@ -89,7 +87,7 @@ func TestVolumeBackupPolicy_UpdateRegistersIndependentJobsAndSettings(t *testing
 }
 
 func TestVolumeBackupPolicy_GetReturnsLastRunForEachPolicy(t *testing.T) {
-	gormDB, err := gorm.Open(testpg.Dialector(t, "file:volume-backup-last-runs?mode=memory&cache=shared"), &gorm.Config{})
+	gormDB, err := gorm.Open(testsqlite.Dialector(t, "file:volume-backup-last-runs?mode=memory&cache=shared"), &gorm.Config{})
 	require.NoError(t, err)
 	require.NoError(t, gormDB.AutoMigrate(&VolumeBackupPolicy{}))
 	first := &VolumeBackupPolicy{VolumeName: "app-data", Schedule: "0 0 2 * * *", LocalEnabled: true}

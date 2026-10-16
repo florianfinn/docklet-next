@@ -10,11 +10,11 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"strconv"
 	"strings"
 	"time"
 
 	"github.com/florianfinn/docklet-next/backend/internal/database"
+	"github.com/florianfinn/docklet-next/backend/pkg/utils/dbutil"
 	activitytypes "github.com/florianfinn/docklet-next/types/activity"
 	usertypes "github.com/florianfinn/docklet-next/types/user"
 	"gorm.io/gorm"
@@ -50,7 +50,7 @@ type GateConflict struct {
 
 func (e *GateConflict) Error() string { return e.Code }
 
-// StartGatedActivity serializes starts for one resource in PostgreSQL.
+// StartGatedActivity serializes starts for one resource in one immediate transaction.
 // Only run.started owns execution.
 func (s *ActivityService) StartGatedActivity(ctx context.Context, request GateRequest) (GateAnswer, error) {
 	return s.startGatedActivityAtInternal(ctx, request)
@@ -74,11 +74,8 @@ func (s *ActivityService) startGatedActivityAtInternal(ctx context.Context, requ
 	code := string(activitytypes.CodeRunStarted)
 	s.runningMu.Lock()
 	defer s.runningMu.Unlock()
-	err := s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
-		lockKey := strconv.Itoa(len(request.EnvironmentID)) + ":" + request.EnvironmentID + request.Scope
-		if err := tx.Exec("SELECT pg_advisory_xact_lock(hashtextextended(?, 0))", lockKey).Error; err != nil {
-			return fmt.Errorf("lock run scope: %w", err)
-		}
+	admit := func(tx *gorm.DB) error {
+		now := s.nowInternal().UTC().Truncate(time.Microsecond)
 		var active Activity
 		err := tx.Where("environment_id = ? AND gate_scope = ? AND status IN ?", request.EnvironmentID, request.Scope, []activitytypes.Status{activitytypes.StatusQueued, activitytypes.StatusRunning}).Order("started_at DESC, id DESC").First(&active).Error
 		if err == nil {
@@ -97,7 +94,7 @@ func (s *ActivityService) startGatedActivityAtInternal(ctx context.Context, requ
 		}
 		if request.Check && !request.Recheck {
 			var fresh Activity
-			err = tx.Where("environment_id = ? AND gate_scope = ? AND gate_key = ? AND status = ? AND ended_at "+checkFreshnessOperator+" NOW() - (? * INTERVAL '1 second')", request.EnvironmentID, request.Scope, request.Operation, activitytypes.StatusSuccess, int(CheckFreshness/time.Second)).Order("ended_at DESC, id DESC").First(&fresh).Error
+			err = tx.Where("environment_id = ? AND gate_scope = ? AND gate_key = ? AND status = ? AND ended_at "+checkFreshnessOperator+" ?", request.EnvironmentID, request.Scope, request.Operation, activitytypes.StatusSuccess, now.Add(-CheckFreshness)).Order("ended_at DESC, id DESC").First(&fresh).Error
 			if err == nil {
 				model = fresh
 				code = string(activitytypes.CodeRunFresh)
@@ -117,7 +114,8 @@ func (s *ActivityService) startGatedActivityAtInternal(ctx context.Context, requ
 			AffectedServices: servicesJSONInternal(request.AffectedServices),
 			GateKey:          request.Operation,
 			GateScope:        request.Scope,
-			StartedAt:        s.nowInternal(),
+			StartedAt:        now,
+			BaseModel:        database.BaseModel{CreatedAt: now, UpdatedAt: new(now)},
 			Metadata:         database.JSON{},
 		}
 		if request.StartedBy != nil {
@@ -136,16 +134,16 @@ func (s *ActivityService) startGatedActivityAtInternal(ctx context.Context, requ
 		if err := tx.Create(&model).Error; err != nil {
 			return fmt.Errorf("create gated activity: %w", err)
 		}
-		if err := tx.Model(&Activity{}).Where("id = ?", model.ID).Updates(map[string]any{
-			"started_at": gorm.Expr("NOW()"), "created_at": gorm.Expr("NOW()"), "updated_at": gorm.Expr("NOW()"),
-		}).Error; err != nil {
-			return fmt.Errorf("set gated activity database time: %w", err)
-		}
-		if err := tx.First(&model, "id = ?", model.ID).Error; err != nil {
-			return fmt.Errorf("load gated activity database time: %w", err)
-		}
+
 		return nil
-	})
+	}
+	var err error
+	for attempt := 0; attempt < 2; attempt++ {
+		err = s.db.WithContext(ctx).Transaction(admit)
+		if err == nil || !dbutil.IsUniqueConstraint(err) {
+			break
+		}
+	}
 	if err != nil {
 		return GateAnswer{}, err
 	}

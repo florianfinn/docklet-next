@@ -84,7 +84,7 @@ func (s *ActivityService) cancelTrackedInternal(activityID string, cause error) 
 }
 
 // SealCancellation marks the point after which cancelling a restore cannot
-// imply that its PostgreSQL transaction was reversed.
+// imply that its file replacement was reversed.
 func (s *ActivityService) SealCancellation(activityID string) error {
 	s.runningMu.Lock()
 	defer s.runningMu.Unlock()

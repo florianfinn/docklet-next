@@ -17,28 +17,23 @@ setting. Source archives without Git may skip hook setup, but verification runs
 in a checkout. The build compiles Go commands and the web bundle. The root
 commands run Go and web checks.
 
-PostgreSQL integration tests need a dedicated PostgreSQL 18 test service. Use
-its test-only connection URL as `DATABASE_URL`, `DOCKLET_TEST_POSTGRES_DSN`
-and `ARCANE_TEST_POSTGRES_DSN`; the tests create and drop
-temporary databases and may modify the configured test database. If Go runs
-inside a toolchain container, forward `DATABASE_URL` into that container.
-Use a fresh configured test database for each full tagged run because durable
-actor tests persist state there.
-Run the tagged suite serially relative to other test suites and cap Go package
-parallelism on constrained machines:
+Persistence tests use isolated temporary SQLite files with the production
+one-connection policy. Run them in the default suite without a database service,
+Docker socket, PostgreSQL environment variables or integration tags. The Francis
+provider suite also runs by default. Root checks keep Docker unavailable inside
+test processes; the separate image-smoke CI job uses Docker only for packaging.
+
+For the 15-minute service-layer acceptance workload:
 
 ```sh
-cd backend
-GOFLAGS=-p=2 \
-  DATABASE_URL='postgres://docklet:test-only@127.0.0.1:5432/docklet?sslmode=disable' \
-  DOCKLET_TEST_POSTGRES_DSN='postgres://docklet:test-only@127.0.0.1:5432/docklet?sslmode=disable' \
-  ARCANE_TEST_POSTGRES_DSN='postgres://docklet:test-only@127.0.0.1:5432/docklet?sslmode=disable' \
-  go test -tags=postgres_integration ./...
+CGO_ENABLED=0 GOFLAGS=-p=4 go -C backend test ./internal/schema \
+  -run '^$' -bench '^BenchmarkSQLiteConcurrentLoad$' -benchtime=1x -timeout=20m
 ```
 
-CI runs this suite in a separate required gate against a pinned PostgreSQL 18
-service. The [baseline design](docs/design/database-baseline.md) describes the
-fresh database and model comparison tests.
+The benchmark reports service-call p95/p99 latency, contention, WAL peaks and exact
+committed row/message counts. See the [SQLite contract](docs/design/sqlite-database.md)
+and [candidate packaging](deploy/hub/README.md). `pnpm run build` compiles hub,
+agent, CLI and web; the Docker build embeds the production web output into the hub.
 
 Read [AGENTS.md](AGENTS.md) and [review-workflow.md](docs/design/review-workflow.md)
 before work. Follow module ownership and the ready gate. Keep changes local until

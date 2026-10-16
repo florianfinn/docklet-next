@@ -1,5 +1,3 @@
-//go:build postgres_integration
-
 // Source: docklet-next/docs/design/core-adoption.md
 // Revision: be847e36ab81fdf0cd6a7dad333046ddea990e71
 // Retrieved: 2026-10-13
@@ -10,40 +8,21 @@ package bootstrap
 
 import (
 	"context"
-	"crypto/rand"
-	"encoding/hex"
+
+	"github.com/florianfinn/docklet-next/backend/pkg/utils/sqlitestore"
 	"net/http"
-	"net/url"
-	"os"
+	"path/filepath"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/require"
 	"go.uber.org/fx"
-	"gorm.io/driver/postgres"
-	"gorm.io/gorm"
 
 	"github.com/florianfinn/docklet-next/backend/internal/config"
 )
 
-func TestHubStartsAgainstEmptyPostgres(t *testing.T) {
-	dsn := os.Getenv("DATABASE_URL")
-	require.NotEmpty(t, dsn)
-	admin, err := gorm.Open(postgres.Open(dsn), &gorm.Config{})
-	require.NoError(t, err)
-	adminSQL, err := admin.DB()
-	require.NoError(t, err)
-	t.Cleanup(func() { _ = adminSQL.Close() })
-	var random [8]byte
-	_, err = rand.Read(random[:])
-	require.NoError(t, err)
-	name := "docklet_hub_" + hex.EncodeToString(random[:])
-	require.NoError(t, admin.Exec("CREATE DATABASE "+name).Error)
-	t.Cleanup(func() { require.NoError(t, admin.Exec("DROP DATABASE "+name+" WITH (FORCE)").Error) })
-	u, err := url.Parse(dsn)
-	require.NoError(t, err)
-	u.Path = "/" + name
-	freshURL := u.String()
+func TestHubStartsAgainstEmptySQLite(t *testing.T) {
+	freshURL := sqlitestore.URL(filepath.Join(t.TempDir(), "hub.db"))
 	cfg := &config.Config{
 		DatabaseURL:       freshURL,
 		Environment:       config.AppEnvironmentTest,

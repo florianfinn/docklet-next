@@ -1,10 +1,8 @@
-//go:build postgres_integration
-
 // Source: florianfinn/docklet-next/backend/internal/activity
 // Revision: 65c9e0dceb6f994ac884904e2a6b7348f75580fa
 // Retrieved: 2026-10-14
 // License: Apache-2.0
-// Deviations: New PostgreSQL run-core regression matrix.
+// Deviations: SQLite run-core regression matrix.
 
 package activity
 
@@ -20,7 +18,6 @@ import (
 	"github.com/florianfinn/docklet-next/types/activity"
 	"github.com/florianfinn/docklet-next/types/scheduler"
 	"github.com/stretchr/testify/require"
-	"gorm.io/gorm"
 )
 
 func TestCompletionEffectOnceAfterRetention(t *testing.T) {
@@ -86,7 +83,7 @@ func TestRunGateJoinConflictAndFreshnessBoundary(t *testing.T) {
 	require.NotEqual(t, started.Run.ID, rechecked.Run.ID)
 	_, err = svc.CompleteActivity(rechecked.WorkContext, rechecked.Run.ID, activity.StatusSuccess, "checked again", nil)
 	require.NoError(t, err)
-	require.NoError(t, db.Model(&Activity{}).Where("id IN ?", []string{started.Run.ID, rechecked.Run.ID}).Update("ended_at", gorm.Expr("NOW() - INTERVAL '30 seconds'")).Error)
+	require.NoError(t, db.Model(&Activity{}).Where("id IN ?", []string{started.Run.ID, rechecked.Run.ID}).Update("ended_at", time.Now().UTC().Add(-30*time.Second)).Error)
 	atBoundary, err := svc.StartGatedActivity(ctx, request)
 	require.NoError(t, err)
 	require.Equal(t, "run.started", atBoundary.Code)
@@ -144,11 +141,10 @@ func TestRunDetailBoundsDistinctStepTransitions(t *testing.T) {
 	require.Equal(t, "step-299", detail.StepTrace[len(detail.StepTrace)-1].Name)
 }
 
-func TestRunGateAdvisoryLockBlocksAnotherService(t *testing.T) {
+func TestRunGateSingleConnectionPoolBlocksAnotherService(t *testing.T) {
 	db := setupActivityServiceTestDBInternal(t)
-	lockKey := "1:0stack:example"
 	tx := db.Begin()
-	require.NoError(t, tx.Exec("SELECT pg_advisory_xact_lock(hashtextextended(?, 0))", lockKey).Error)
+	require.NoError(t, tx.Error)
 	defer tx.Rollback()
 	svc := NewActivityService(db, nil)
 	type outcome struct {
@@ -164,7 +160,7 @@ func TestRunGateAdvisoryLockBlocksAnotherService(t *testing.T) {
 	}()
 	select {
 	case got := <-result:
-		require.Failf(t, "advisory lock did not block", "start returned: %v", got.err)
+		require.Failf(t, "occupied connection pool did not block", "start returned: %v", got.err)
 	case <-time.After(100 * time.Millisecond):
 	}
 	require.NoError(t, tx.Commit().Error)
@@ -174,7 +170,7 @@ func TestRunGateAdvisoryLockBlocksAnotherService(t *testing.T) {
 		_, err := svc.CompleteActivity(got.answer.WorkContext, got.answer.Run.ID, activity.StatusSuccess, "done", nil)
 		require.NoError(t, err)
 	case <-time.After(5 * time.Second):
-		t.Fatal("start remained blocked after advisory lock released")
+		t.Fatal("start remained blocked after pool connection released")
 	}
 }
 

@@ -26,6 +26,7 @@ import (
 	"github.com/florianfinn/docklet-next/backend/internal/session"
 	"github.com/florianfinn/docklet-next/backend/internal/settings"
 	"github.com/florianfinn/docklet-next/backend/internal/user"
+	"github.com/florianfinn/docklet-next/backend/pkg/libarcane/startup"
 	"github.com/florianfinn/docklet-next/backend/pkg/utils/validation"
 )
 
@@ -60,6 +61,11 @@ func runResetPasswordCommandInternal(cmd *cobra.Command, _ []string) error {
 		return err
 	}
 
+	if err := startup.ApplyRequestedRuntimeIdentity(cmd.Context(), &startup.RuntimeIdentityConfig{
+		PUID: cfg.PUID, PGID: cfg.PGID, DockerHost: cfg.DockerHost, DockerConfig: cfg.DockerConfig, ProjectsDirectory: cfg.ProjectsDirectory,
+	}); err != nil {
+		return err
+	}
 	username := strings.TrimSpace(resetPasswordUsername)
 	if username == "" {
 		return errors.New("username cannot be empty")

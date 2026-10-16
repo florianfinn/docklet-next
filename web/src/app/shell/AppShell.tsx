@@ -41,13 +41,13 @@ function useCrumbs(): Crumb[] {
   const stacks = useStacks();
   const containers = useContainers();
   const volume = useVolume(first === "volumes" && second ? second : undefined);
-  const known = ["dashboard", "stacks", "containers", "security", "networks", "images", "hosts", "volumes", "backups", "settings", "profile"] as const;
+  const known = ["dashboard", "stacks", "containers", "security", "networks", "images", "hosts", "volumes", "backups", "hub-backups", "settings", "profile"] as const;
   if (import.meta.env.DEV && first === "preview" && second && Object.hasOwn(PREVIEW_ICONS, second)) {
     const key = second as Parameters<typeof t>[0];
     return [{ label: t(key) }];
   }
   if (!first || !known.includes(first as (typeof known)[number])) return [];
-  const root: Crumb = { label: t(first as (typeof known)[number]), to: `/${first}` };
+  const root: Crumb = { label: first === "hub-backups" ? t("hubBackups") : t(first as Exclude<(typeof known)[number], "hub-backups">), to: `/${first}` };
   if (!second) return [{ label: root.label }];
   if (first === "stacks") {
     const name = second === "new" ? tl("newStack") : (stacks.data?.find((s) => s.id === second)?.name ?? second);

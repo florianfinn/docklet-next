@@ -18,6 +18,7 @@ export const deShell: typeof enShell = {
     volumes: "Volumes",
     hosts: "Hosts",
     backups: "Backups",
+    hubBackups: "Hub-Datenbank",
     notifications: "Benachrichtigungen",
     proxy: "Proxy",
     games: "Games",

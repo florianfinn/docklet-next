@@ -21,6 +21,7 @@ const VolumesPage = lazy(() => import("@/features/volumes/VolumesPage"));
 const ImagesPage = lazy(() => import("@/features/images/ImagesPage"));
 const VolumePage = lazy(() => import("@/features/volumes/VolumePage"));
 const BackupsPage = lazy(() => import("@/features/volumes/BackupsPage"));
+const HubBackupsPage = lazy(() => import("@/features/hub-backups/HubBackupsPage"));
 const SettingsPage = lazy(() => import("@/features/settings/SettingsPage"));
 const ProfilePage = lazy(() => import("@/features/settings/ProfilePage"));
 const SetupPage = import.meta.env.DEV ? lazy(() => import("@/features/setup/SetupPage")) : null;
@@ -46,6 +47,7 @@ const shellRoutes: RouteObject[] = [
       { path: "images", element: <ImagesPage /> },
       { path: "volumes/:volumeId", element: <VolumePage /> },
       { path: "backups", element: <BackupsPage /> },
+      { path: "hub-backups", element: <HubBackupsPage /> },
       { path: "settings", element: <Navigate to="/settings/general" replace /> },
       { path: "settings/:section", element: <SettingsPage /> },
       { path: "profile", element: <ProfilePage /> },

@@ -22,7 +22,7 @@ import (
 // ReconcileStorage removes incomplete files and records left by a crashed process.
 func (s *Service) ReconcileStorage(ctx context.Context) error {
 	dir := s.backupDir()
-	if err := ensureArchiveDir(dir); err != nil {
+	if err := s.archiveDirectoryError(); err != nil {
 		return ErrSystemBackupUnavailable
 	}
 	entries, err := os.ReadDir(dir)
@@ -30,20 +30,26 @@ func (s *Service) ReconcileStorage(ctx context.Context) error {
 		return ErrSystemBackupUnavailable
 	}
 	for _, entry := range entries {
+		if entry.IsDir() && (strings.HasPrefix(entry.Name(), ".snapshot-") || strings.HasPrefix(entry.Name(), ".validate-")) {
+			if err := os.RemoveAll(filepath.Join(dir, entry.Name())); err != nil {
+				return ErrSystemBackupUnavailable
+			}
+			continue
+		}
 		if !entry.Type().IsRegular() {
 			continue
 		}
 		name := entry.Name()
-		if strings.HasPrefix(name, ".partial-") {
+		if strings.HasPrefix(name, ".partial-") || strings.HasPrefix(name, ".restore-state-") {
 			if err := os.Remove(filepath.Join(dir, name)); err != nil {
 				return ErrSystemBackupUnavailable
 			}
 			continue
 		}
-		if !strings.HasSuffix(name, ".dump") {
+		if !strings.HasSuffix(name, ".tar") {
 			continue
 		}
-		id := strings.TrimSuffix(name, ".dump")
+		id := strings.TrimSuffix(name, ".tar")
 		expected, err := backuptypes.ArchiveNameForID(id)
 		if err != nil || expected != name {
 			continue

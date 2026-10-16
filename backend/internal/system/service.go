@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; functional cut: removed S3 backup destinations; functional cut: removed SQLite runtime and migrations.
+// Deviations: Local module namespace; functional cut: removed S3 backup destinations; SQLite-only local persistence.
 
 package system
 
@@ -37,6 +37,7 @@ import (
 	"gorm.io/gorm"
 
 	"github.com/florianfinn/docklet-next/backend/internal/activity"
+	"github.com/florianfinn/docklet-next/backend/internal/apikey"
 	"github.com/florianfinn/docklet-next/backend/internal/auth"
 	"github.com/florianfinn/docklet-next/backend/internal/backup"
 	"github.com/florianfinn/docklet-next/backend/internal/config"
@@ -58,6 +59,7 @@ import (
 	"github.com/florianfinn/docklet-next/backend/pkg/pagination"
 	"github.com/florianfinn/docklet-next/backend/pkg/scheduler/runs"
 	"github.com/florianfinn/docklet-next/backend/pkg/utils"
+	"github.com/florianfinn/docklet-next/backend/pkg/utils/francis"
 )
 
 // SystemService owns Docker system-wide operations and coordinates the prune
@@ -107,6 +109,8 @@ func NewSystemService(
 	roles *role.RoleService,
 	coordinator *runs.Coordinator,
 	exitUnready context.CancelFunc,
+	actorRuntime *francis.Runtime,
+	apiKeys *apikey.ApiKeyService,
 ) *SystemService {
 	location := time.UTC
 	if cfg != nil {
@@ -137,6 +141,8 @@ func NewSystemService(
 		Auth:         authService,
 		Roles:        roles,
 		Coordinator:  coordinator,
+		Runtime:      actorRuntime,
+		APIKeys:      apiKeys,
 	})
 	s.backup.SetExitUnready(exitUnready)
 	return s
@@ -491,7 +497,7 @@ func resolveUpgraderRuntimeOptionsInternal(
 	return containerEnv, mounts, "", nil
 }
 
-const systemBackupHistoryUnion = "SELECT id, size, created_at, status, trigger, 'local' AS destination, 'pg_custom' AS format, '' AS local_snapshot_id, " +
+const systemBackupHistoryUnion = "SELECT id, size, created_at, status, trigger, 'local' AS destination, 'sqlite_pair_v1' AS format, '' AS local_snapshot_id, " +
 	"policy_id, error_code AS error, 'system' AS type, 'system' AS resource_type, 'Hub database' AS resource_name " +
 	"FROM system_backup_runs UNION ALL SELECT id, size, created_at, status, trigger, destination, format, " +
 	"local_snapshot_id, policy_id, error, CASE WHEN policy_id LIKE 'system-volume:%' THEN 'system' ELSE " +

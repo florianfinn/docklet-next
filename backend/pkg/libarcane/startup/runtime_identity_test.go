@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: functional cut: removed standalone build workshop; functional cut: removed SQLite runtime and migrations.
+// Deviations: functional cut: removed standalone build workshop; SQLite-only local persistence.
 
 package startup
 
@@ -451,4 +451,13 @@ func TestPrepareWritablePathsInternalChownsTopLevelProjectsShallowly(t *testing.
 	require.True(t, visited[filepath.Clean(databaseDir)], "non-protected data child must be chowned")
 	require.False(t, visited[filepath.Clean(demoDir)], "subdir inside projects dir must NOT be chowned")
 	require.False(t, visited[filepath.Clean(keepFile)], "file inside projects dir must NOT be chowned")
+}
+
+func TestBackupDirectoryPreparationRejectsAliases(t *testing.T) {
+	dir := t.TempDir()
+	require.NoError(t, prepareBackupDirectoryInternal(os.Getuid(), os.Getgid(), map[string]struct{}{}, filepath.Join(dir, "backups")))
+	require.Error(t, prepareBackupDirectoryInternal(os.Getuid(), os.Getgid(), nil, "relative"))
+	target := filepath.Join(dir, "alias")
+	require.NoError(t, os.Symlink(filepath.Join(dir, "backups"), target))
+	require.Error(t, prepareBackupDirectoryInternal(os.Getuid(), os.Getgid(), nil, target))
 }
