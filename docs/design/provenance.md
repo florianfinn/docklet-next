@@ -123,10 +123,13 @@ no assets.
 
 ## Distribution hook points
 
-scripts/license-policy.json records the immutable Arcane BSD text hash. M1/M2
-must add exact extracted build-artefact paths to artifactCopies and run the
-licence check against each staging tree before packaging. A configured copy must
-exist and match; no copies are configured while there are no artefacts.
+scripts/license-policy.json records the immutable Arcane BSD text hash. Static
+artifact copies use exact `artifactCopies` paths; the candidate image instead
+assembles dynamic Go/web bundles from the current dependency inventories.
+`smoke-hub-image.mjs` extracts them and checks every recorded dependency hash
+and the immutable Arcane BSD text in the package. A nonempty file alone does
+not establish the required notice.
+
 Binaries/images/installers must ship the same notice under an appropriate
 licences directory. The UI must expose third-party licence text. Release checks
 inspect extracted artefacts, not only a source Dockerfile or an in-app link.

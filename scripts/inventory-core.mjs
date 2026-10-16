@@ -25,12 +25,12 @@ if (check) {
   const targets = [];
   for (const [target, cgo, flags] of [["hub", "0", []], ["agent", "0", ["-tags=exclude_frontend"]]]) {
     const format = '{{if .Module}}{{.ImportPath}}|{{.Module.Path}}|{{.Module.Version}}{{with .Module.Replace}}|{{.Path}}|{{.Version}}{{end}}{{end}}';
-    const result = execFileSync("go", ["run", resolve("scripts/go-command.go"), "--", "list", "-deps", ...flags, "-f", format, "./backend/cmd/..."], {
+    const result = execFileSync("go", ["run", resolve("scripts/go-command.go"), "--", "list", "-deps", ...flags, "-f", format, "./backend/cmd"], {
       encoding: "utf8", maxBuffer: 32 * 1024 * 1024,
       env: { ...process.env, CGO_ENABLED: cgo, GOOS: "linux", GOARCH: "amd64" },
     });
     const packages = result.trim().split("\n").filter(Boolean);
-    targets.push({ target, cgo, tags: flags, packages: packages.length, packageGraphSha256: hash(packages.map((line) => line.split("|")[0]).sort().join("\n") + "\n") });
+    targets.push({ target, entrypoint: "./backend/cmd", cgo, tags: flags, packages: packages.length, packageGraphSha256: hash(packages.map((line) => line.split("|")[0]).sort().join("\n") + "\n") });
     for (const line of packages) {
       const [, name, declared, replacement, version] = line.split("|");
       const upstream = namespace(name);

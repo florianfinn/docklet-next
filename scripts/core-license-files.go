@@ -66,7 +66,7 @@ func work() error {
 		return fmt.Errorf("expected inspect or bundle")
 	}
 	if os.Args[1] == "inspect" {
-		args := []string{"list", "-deps", "-json=Dir,GoFiles,CgoFiles,CFiles,HFiles,SFiles,Module,Error,DepsErrors", "./backend/cmd/..."}
+		args := []string{"list", "-deps", "-json=Dir,GoFiles,CgoFiles,CFiles,HFiles,SFiles,Module,Error,DepsErrors", "./backend/cmd"}
 		if len(os.Args) > 2 {
 			args = append(args[:2], append([]string{"-tags=" + os.Args[2]}, args[2:]...)...)
 		}

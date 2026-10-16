@@ -127,6 +127,7 @@ func BenchmarkSQLiteConcurrentLoad(b *testing.B) {
 	var interactive [3]atomic.Int64
 	var heartbeats [4]atomic.Int64
 	var receipts atomic.Int64
+	var actorCalls atomic.Int64
 	var reads atomic.Int64
 	var peaks [2]atomic.Int64
 	started := time.Now()
@@ -207,6 +208,9 @@ func BenchmarkSQLiteConcurrentLoad(b *testing.B) {
 	}, true)
 	repeat(time.Second, func() error {
 		_, err := actors.Service().Invoke(ctx, "load", "load", "tick", nil)
+		if err == nil {
+			actorCalls.Add(1)
+		}
 		return err
 	}, true)
 	repeat(200*time.Millisecond, func() error {
@@ -258,6 +262,13 @@ func BenchmarkSQLiteConcurrentLoad(b *testing.B) {
 		if err = db.Model(&activity.ActivityMessage{}).Where("activity_id=?", runs[i].Run.ID).Count(&count).Error; err != nil {
 			b.Fatal(err)
 		}
+		var distinct int64
+		if err = db.Model(&activity.ActivityMessage{}).Where("activity_id=?", runs[i].Run.ID).Distinct("message").Count(&distinct).Error; err != nil {
+			b.Fatal(err)
+		}
+		if distinct != count {
+			b.Fatalf("duplicate output payloads: %d distinct of %d", distinct, count)
+		}
 		if count != outputs[i].Load()+1 {
 			b.Fatalf("missing/duplicate messages: %d != %d", count, outputs[i].Load()+1)
 		}
@@ -269,9 +280,15 @@ func BenchmarkSQLiteConcurrentLoad(b *testing.B) {
 		}
 	}
 	var active, negative, receiptRows int64
-	db.Model(&activity.Activity{}).Where("status IN ?", []string{"running", "queued"}).Count(&active)
-	db.Model(&activity.Activity{}).Where("duration_ms < 0").Count(&negative)
-	db.Model(&activity.ActivitySyncReceipt{}).Count(&receiptRows)
+	if err = db.Model(&activity.Activity{}).Where("status IN ?", []string{"running", "queued"}).Count(&active).Error; err != nil {
+		b.Fatal(err)
+	}
+	if err = db.Model(&activity.Activity{}).Where("duration_ms < 0").Count(&negative).Error; err != nil {
+		b.Fatal(err)
+	}
+	if err = db.Model(&activity.ActivitySyncReceipt{}).Count(&receiptRows).Error; err != nil {
+		b.Fatal(err)
+	}
 	if active != 0 || negative != 0 || receiptRows != 1 {
 		b.Fatalf("run constraints: active=%d negative=%d receipts=%d", active, negative, receiptRows)
 	}
@@ -281,6 +298,10 @@ func BenchmarkSQLiteConcurrentLoad(b *testing.B) {
 	}
 	if jobMessages != receipts.Load() {
 		b.Fatalf("coordinator message count: %d != %d", jobMessages, receipts.Load())
+	}
+	var actorState map[string]int64
+	if err = actors.Service().GetState(ctx, "load", "load", &actorState); err != nil || actorState["tick"] < started.UnixMilli() || actorCalls.Load() == 0 {
+		b.Fatalf("actor state was not persisted: %v %v", actorState, err)
 	}
 	if err = actors.Stop(ctx); err != nil {
 		b.Fatal(err)
@@ -303,7 +324,7 @@ func BenchmarkSQLiteConcurrentLoad(b *testing.B) {
 		}
 		_ = check.Close()
 	}
-	b.Logf("duration=%s platform=%s/%s CPUs=%d SQLite=%s driver=modernc-v1.60.1 page_size=%d samples=%d p95=%s p99=%s busy=%d locked=%d WAL_main_peak=%d WAL_francis_peak=%d main_initial=%d main_final=%d francis_initial=%d francis_final=%d heartbeats=%d reads=%d job_syncs=%d outputs=[%d,%d,%d,%d] interactive=[%d,%d,%d]", elapsed, runtime.GOOS, runtime.GOARCH, runtime.NumCPU(), sqliteVersion, pageSize, len(latencies), p95, p99, busy.Load(), locked.Load(), peaks[0].Load(), peaks[1].Load(), initial, fileSize(path), initialSidecar, fileSize(sidecar), heartbeats[0].Load()+heartbeats[1].Load()+heartbeats[2].Load()+heartbeats[3].Load(), reads.Load(), receipts.Load(), outputs[0].Load(), outputs[1].Load(), outputs[2].Load(), outputs[3].Load(), interactive[0].Load(), interactive[1].Load(), interactive[2].Load())
+	b.Logf("duration=%s platform=%s/%s CPUs=%d SQLite=%s driver=modernc-v1.60.1 page_size=%d samples=%d p95=%s p99=%s busy=%d locked=%d WAL_main_peak=%d WAL_francis_peak=%d main_initial=%d main_final=%d francis_initial=%d francis_final=%d heartbeats=%d reads=%d job_syncs=%d actor_calls=%d outputs=[%d,%d,%d,%d] interactive=[%d,%d,%d]", elapsed, runtime.GOOS, runtime.GOARCH, runtime.NumCPU(), sqliteVersion, pageSize, len(latencies), p95, p99, busy.Load(), locked.Load(), peaks[0].Load(), peaks[1].Load(), initial, fileSize(path), initialSidecar, fileSize(sidecar), heartbeats[0].Load()+heartbeats[1].Load()+heartbeats[2].Load()+heartbeats[3].Load(), reads.Load(), receipts.Load(), actorCalls.Load(), outputs[0].Load(), outputs[1].Load(), outputs[2].Load(), outputs[3].Load(), interactive[0].Load(), interactive[1].Load(), interactive[2].Load())
 	if p95 > 250*time.Millisecond || busy.Load() != 0 || locked.Load() != 0 || peaks[0].Load() > 64<<20 || peaks[1].Load() > 64<<20 {
 		b.Fatal("candidate exceeds SQLite acceptance thresholds")
 	}

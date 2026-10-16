@@ -165,8 +165,9 @@ assessment and packaged notices.
 
 ## SQLite source selection, 2026-10-16
 
-The CGO-free Linux/amd64 hub and agent graphs each contain 273 modules and 1,489
-non-standard-library packages. The current generated inventory records complete
+The CGO-free Linux/amd64 hub and agent graphs each contain 273 modules and 1,487
+non-standard-library packages. The graph is rooted at the shipped `./backend/cmd` entrypoint; the development
+schema generator is excluded. The current generated inventory records complete
 graph hashes, module versions, local lockfile hashes, legal file hashes and
 corresponding-source links. PostgreSQL providers and drivers are absent. The
 [compiled notice assessment](../design/sqlite-license-assessment.md) covers the

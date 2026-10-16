@@ -13,7 +13,7 @@ const forbidden = new Set(["github.com/jackc/pgx/v5", "github.com/jackc/pgerrcod
 test("hub and agent graphs use pure-Go SQLite and exclude PostgreSQL", () => {
   for (const target of inventory.targets) {
     const output = execFileSync("go", ["run", command, "--", "list", "-deps", ...target.tags,
-      "-f", "{{if .Module}}{{.ImportPath}}|{{.Module.Path}}{{end}}", "./backend/cmd/..."], {
+      "-f", "{{if .Module}}{{.ImportPath}}|{{.Module.Path}}{{end}}", "./backend/cmd"], {
       cwd: root,
       encoding: "utf8",
       maxBuffer: 32 * 1024 * 1024,
@@ -22,6 +22,8 @@ test("hub and agent graphs use pure-Go SQLite and exclude PostgreSQL", () => {
     const packages = output.trim().split("\n").filter(Boolean);
     const paths = packages.map((line) => line.split("|")[0]).sort();
     assert.equal(target.cgo,"0");
+    assert.equal(target.entrypoint,"./backend/cmd");
+    assert.equal(paths.includes("github.com/florianfinn/docklet-next/backend/cmd/schema-baseline"),false);
     assert.equal(paths.length,target.packages);
     const digest=createHash("sha256").update(paths.join("\n")+"\n").digest("hex");
     assert.equal(digest,target.packageGraphSha256,`${target.target} package graph`);

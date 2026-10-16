@@ -49,6 +49,7 @@ const legacyManifest = {
 export function baseManifestProblems(previous, manifest) {
   const exact = (a, b) => JSON.stringify(Object.entries(a).sort()) === JSON.stringify(Object.entries(b).sort());
   if (exact(previous, legacyManifest) && exact(manifest, { [baseline]: baselineHash })) return [];
+  if (!Object.hasOwn(previous, baseline)) return ["invalid-transition-base"];
   return Object.entries(previous).filter(([name, hash]) => manifest[name] !== hash)
     .map(([name]) => `changed-shipped:${name}`);
 }
@@ -57,7 +58,7 @@ function comparisonProblems(manifest) {
  if (!base) return [];
  if (!/^[a-f0-9]{40}$/.test(base)) throw new Error("migration-integrity: invalid base revision");
  const previous = spawnSync("git", ["show", `${base}:scripts/migration-hashes.json`], {cwd: root});
- if (previous.status !== 0) return [];
+ if (previous.status !== 0) throw new Error("migration-integrity: unreadable base manifest");
  const old = JSON.parse(previous.stdout.toString("utf8"));
  const problems = baseManifestProblems(old, manifest);
  if (!problems.length && Object.hasOwn(old, "001_baseline.sql")) {

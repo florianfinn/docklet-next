@@ -42,6 +42,8 @@ try {
   for (const path of ["LICENSE", "NOTICE", "LICENSES/BSD-3-Clause-Arcane.txt", "go/github.com/libtnb/sqlite/LICENSE", "go/modernc.org/sqlite/LICENSE", "go/github.com/italypaleale/francis/LICENSE.md", "web/index.json"])
     if (!readFileSync(join(target, path)).length) throw new Error("packaged licence evidence is missing");
   const digest = path => createHash("sha256").update(readFileSync(path)).digest("hex");
+  const policy = JSON.parse(readFileSync("scripts/license-policy.json"));
+  if (digest(join(target, policy.source)) !== policy.sha256) throw new Error("extracted Arcane licence hash mismatch");
   const inventory = JSON.parse(readFileSync(join(target,"docs/provenance/core-import.json")));
   for (const module of inventory.packages) for(const file of module.legalFiles)
     if(digest(join(target,"go",module.name,file.path)) !== file.sha256) throw new Error("extracted Go licence hash mismatch");

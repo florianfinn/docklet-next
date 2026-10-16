@@ -49,3 +49,13 @@ test("historical removed Go requirements match the functional-cut manifests", ()
     assert.ok(after.has(name), `documented indirect requirement disappeared: ${name}`);
   }
 });
+
+test("current requirements retain the functional cut except the approved SQLite restoration", () => {
+  const current = new Set(manifest.comparedManifests.flatMap((path) =>
+    [...requirements(readFileSync(new URL(`../${path}`, import.meta.url), "utf8")).keys()]));
+  assert.deepEqual(manifest.removedModulePaths.filter((name) => current.has(name)), [
+    "github.com/dustin/go-humanize", "github.com/libtnb/sqlite",
+    "github.com/ncruces/go-strftime", "github.com/remyoudompheng/bigfft",
+    "modernc.org/libc", "modernc.org/mathutil", "modernc.org/memory",
+  ]);
+});
