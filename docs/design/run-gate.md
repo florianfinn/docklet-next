@@ -2,10 +2,11 @@
 
 ## Scope and guarantees
 
-The private deployment operates one hub process in one hub container against a
-PostgreSQL database. A second hub must not start while the first hub holds its
-session lock. Agents are separate processes; this decision does not limit
-their number.
+The private deployment operates one hub process in one hub container against
+SQLite on local persistent storage. A second hub must not start while the first
+holds its lifetime file lock. The [SQLite contract](sqlite-database.md) defines
+the runtime transition, file/connection policy and schema. Agents are separate
+processes; this decision does not limit their number.
 This record covers the live hub, restart and crash recovery. A crashed hub does
 not automatically resume an operation. An agent may still finish an action it
 already accepted, so the next intake must read the actual resource state before
@@ -82,11 +83,11 @@ transition table.
 
 ## Admission and gate
 
-Admission locks the scope in a PostgreSQL transaction, reads active gated runs
-and creates at most one new run. The existing transaction-scoped advisory lock
-per `(environment_id, gate_scope)` serializes concurrent requests within the
-single hub. The process-wide lock below serves a different purpose and does
-not replace atomic scope admission.
+Admission uses one short `BEGIN IMMEDIATE` transaction to read active gated
+runs and create at most one new run. A partial unique index on active
+`(environment_id, gate_scope)` pairs protects the invariant durably. The local
+running/cancelling mutex covers commit and worker registration. The lifetime
+file lock prevents a second hub; it does not replace atomic scope admission.
 
 | Finding at admission | Result | Database change |
 | --- | --- | --- |
@@ -98,9 +99,9 @@ not replace atomic scope admission.
 
 The active-run check always precedes freshness. `Recheck=true` bypasses only
 the 30-second freshness result, never an active run. Only success is fresh;
-the interval compares `ended_at` against PostgreSQL time. At exactly 30
-seconds the previous run is no longer fresh. After expiry or `Recheck`, the
-worker reads resource state again before acting. Joining, rejecting and
+the interval compares integer UTC microseconds using one bound hub clock
+sample. At exactly 30 seconds the previous run is no longer fresh. After expiry
+or `Recheck`, the worker reads resource state again before acting. Joining, rejecting and
 returning a fresh result start no worker and do not change the existing row's
 message code.
 
@@ -150,32 +151,36 @@ snapshot but before receipt pruning.
 These rules do not guarantee exactly one external agent action; its actual
 outcome must be checked after a crash.
 
-If a normal pool connection fails while the dedicated lock connection still
-holds its session, a completion retries its write up to three times for
-retryable errors. After the final failure it returns the error; it must not
+If a normal database write encounters transient contention while the lifetime
+file lock remains held, completion retries its transaction up to three times
+within the existing 10-second owner-write deadline; exhausted SQLite busy errors
+use the existing retry classifier, with no additional retry layer. After
+the final failure it returns the error; it must not
 claim success or free the durable scope. The row remains active and blocks
 another gated admission on that scope. An operator restart triggers startup
 repair and releases the scope.
 
 ## Single-instance lock
 
-At startup, before migration, repair, background jobs and HTTP readiness, the
-hub opens one dedicated physical connection (`*sql.Conn` or pgx `Acquire`)
-and acquires a fixed, namespaced PostgreSQL **session** advisory lock with
-`pg_try_advisory_lock`. It holds that connection for the process lifetime and
-does not use it as a general query pool connection. If the lock is held,
-startup fails immediately with `hub.already_running`, before HTTP or jobs
-start and without waiting for release. This is a startup error, not a run
-message code. Controlled shutdown closes the dedicated physical connection.
+At startup, before opening/migrating either database, repair, background jobs
+and HTTP readiness, the hub acquires `flock(LOCK_EX | LOCK_NB)` on Linux, or an
+equivalent descriptor-owned lock on another supported target, on the resolved
+main database path plus `.lock`. It holds the descriptor through the
+whole process lifetime. If held, startup fails immediately with
+`hub.already_running`, before HTTP or jobs and without waiting for release.
+This is a startup error, not a run message code.
 
-Lock loss while running is not monitored; the single private operator accepts
-this limit.
-
-If PostgreSQL still considers an old session alive during a network partition,
-a new hub fails immediately with `hub.already_running`. A new hub that acquires
-the lock repairs abandoned runs before accepting work. Terminal status
-conditions prevent duplicate completion after repair, while an already
-accepted external agent action can continue beyond the old hub's lifetime.
+Controlled shutdown stops work and closes every database handle before unlocking.
+A crash releases the OS lock; a new hub recovers SQLite and repairs abandoned
+runs before accepting work. Never unlink/replace the lock inode or use network
+storage. Opening and closing a second descriptor of the lock file must not
+release the held lock. Never open live database/WAL/SHM files through ordinary
+descriptors; use `Lstat`/`Stat` for path checks. The
+[SQLite contract](sqlite-database.md#single-hub-and-run-admission) also covers
+path aliases, excluded VFS options and administrative writers, including offline
+`admin reset-password`. Terminal status conditions
+prevent duplicate completion after repair, while an already accepted external
+agent action can continue beyond the old hub's lifetime.
 
 ## Reconciliation with the multi-process mechanism from PR #42
 
@@ -187,13 +192,13 @@ migrations remain immutable.
 
 | Component | Decision | Reason and target state |
 | --- | --- | --- |
-| Transaction advisory lock per run scope | Keep | It serializes concurrent admission through commit in the one hub. |
+| Atomic run-scope admission | Keep with SQLite | An immediate transaction plus active-scope uniqueness serializes admission through commit in the one hub. |
 | Durable cancellation request, audit message and immediate live snapshot | Remove | The sole hub cancels its registered local worker; restart repair fails abandoned work. |
 | Owner token `gate_owner` and fencing of progress and completion writers | Remove | The private single-operator deployment accepts the loss of writer fencing; terminal status conditions still guard against duplicate completion. External effects retain the stated overlap risk. |
 | `gate_lease_at` and 30-second heartbeat | Remove | The startup lock admits one hub while held; lease expiry could release a live worker that is slow to unwind cancellation. |
 | Two-minute sweep with token rotation and takeover of gated runs | Remove | A new hub repairs after exclusive startup. The periodic sweep of ungated untracked runs remains for now. |
 | Remote cancellation observation by another service's heartbeat | Remove | Cancellation signal and worker are in the sole hub; restart repair handles abandoned work. |
-| PostgreSQL time for gated start, terminal time and 30-second freshness | Keep | `NOW()` is available on the required database paths and keeps the interval consistent. Cross-hub clock-skew tests are unnecessary. |
+| One clock for gated start, terminal time and 30-second freshness | Keep with SQLite | Bind UTC Unix microseconds from the single hub clock; use the same sample per transaction. Cross-hub clock-skew tests are unnecessary. |
 | Atomic terminal status transition and `activity_sync_receipts` | Keep | They prevent duplicate final messages and duplicate job projection on replay or restart. |
 | Receipt `synced_at` grace | Keep | It protects a newly synced receipt from pruning against an older coordinator snapshot. |
 | Configurable event and activity count limits | Remove | Cleanup keeps 500 events and 100 finished activities per environment. |
@@ -215,8 +220,9 @@ The following points come from [review round 5 on PR #42](https://github.com/flo
 
 Each row needs an automated test and a targeted counterexample: the named
 mutation must make that test fail. Restart tests use two consecutive hub
-lifetimes against the same test database, actually ending the first process or
-its session. A second service in one process is not a single-instance test.
+lifetimes against the same temporary SQLite files, actually ending the first
+process and releasing its file descriptor. A second service in one process is
+not a single-instance test.
 
 | Case | Expected result | Mutation that must turn the test red |
 | --- | --- | --- |
@@ -243,16 +249,16 @@ its session. A second service in one process is not a single-instance test.
 | 21. `Check` after failure | New run; only success is fresh. | Count failure as fresh. |
 | 22. `Recheck` within the interval | New run if none is active. | Ignore `Recheck`. |
 | 23. `Recheck` with an active run | Join, `run.busy` or `run.cancelling` takes precedence. | Check freshness or recheck before active runs. |
-| 24. Concurrent admission on one scope | One run ID and at most one worker across competing requests. | Remove the scope transaction lock. |
+| 24. Concurrent admission on one scope | One run ID and at most one worker across competing requests. | Split active lookup/insert across transactions and remove active-scope uniqueness. |
 | 25. Crash during gated `running` | New hub marks run `failed` before API readiness; scope is free afterwards. | Delay repair by two minutes. |
 | 26. Crash during ungated `queued` | New hub marks the orphaned row `failed` without executing it. | Restart the waiting operation on startup. |
 | 27. Crash during cancellation | New hub marks abandoned run `failed` with one final message. | Mark abandoned runs `cancelled` instead. |
 | 28. Crash before completion commit | New hub writes exactly one repaired completion and final message. | Remove repair from startup. |
 | 29. Crash after completion commit but before live event | Terminal run is unchanged; reconnect reloads the snapshot. | Reconnect without a snapshot reload. |
 | 30. Job completion resynchronised after restart or pruning | A new receipt survives a stale coordinator retention snapshot; replay after activity pruning adds no projection. | Remove the `synced_at` grace or receipt check. |
-| 31. Second hub starts while lock is held | No HTTP or jobs; immediate `hub.already_running`. | Skip the session-lock check. |
-| 34. Old session remains locked during a network partition | New hub fails immediately with `hub.already_running` and accepts no work. | Wait on `pg_advisory_lock` instead of failing on `pg_try_advisory_lock`. |
-| 35. Ordinary pool completion fails while lock connection stays healthy | After three retryable write failures, completion returns an error and the run remains active; same-scope admission stays blocked until restart repair. | Treat the exhausted write as success and admit another gated run. |
+| 31. Second hub starts while lock is held | No HTTP or jobs; immediate `hub.already_running`. | Skip the file-lock check. |
+| 34. First hub crashes while holding the file lock | Its OS lock releases; a new process starts and repairs abandoned runs before readiness. | Treat a leftover lock filename as a live owner instead of acquiring the OS lock. |
+| 35. Ordinary pool completion fails while the file lock stays held | After three retryable write failures, completion returns an error and the run remains active; same-scope admission stays blocked until restart repair. | Treat the exhausted write as success and admit another gated run. |
 
 ## Consequences for #38: HTTP and live adapter
 

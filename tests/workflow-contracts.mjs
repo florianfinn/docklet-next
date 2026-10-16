@@ -8,6 +8,11 @@ const PERMISSIONS = {
 };
 export function assertWorkflow(file, text) {
   const job = JOBS[file];
+  if (file === "checks") {
+    assert.match(text, /^  verify:\n    name: verify$/m);
+    assert.match(text, /needs: \[scope, verify, package-image\]/);
+    assert.match(text, /test "\$IMAGE_RESULT" = success/);
+  }
   assert.match(text, /^    timeout-minutes: 15$/m);
   assert.match(text, new RegExp(`^  ${job}:$`, "m"));
   assert.match(text, new RegExp(`^    name: ${job}$`, "m"));

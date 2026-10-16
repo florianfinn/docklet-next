@@ -7,7 +7,7 @@ import (
 	"k8s.io/utils/clock"
 
 	"github.com/italypaleale/francis/components"
-	"github.com/italypaleale/francis/components/postgres"
+	"github.com/italypaleale/francis/components/sqlite"
 	"github.com/italypaleale/francis/components/standalone"
 )
 
@@ -42,18 +42,13 @@ func WithLogger(logger *slog.Logger) HostOption {
 	return func(o *newHostOptions) { o.Logger = logger }
 }
 
-// WithPostgresProvider sets the Postgres provider
-func WithPostgresProvider(opts postgres.PostgresProviderOptions) HostOption {
+// WithSQLiteProvider sets the SQLite provider
+func WithSQLiteProvider(opts sqlite.SQLiteProviderOptions) HostOption {
 	return func(o *newHostOptions) { o.ProviderOptions = opts }
 }
 
 // WithStandaloneMemoryProvider sets the standalone in-memory provider
 func WithStandaloneMemoryProvider(opts standalone.StandaloneMemoryOptions) HostOption {
-	return func(o *newHostOptions) { o.ProviderOptions = opts }
-}
-
-// WithStandalonePostgresProvider sets the standalone Postgres-backed provider
-func WithStandalonePostgresProvider(opts standalone.StandalonePostgresOptions) HostOption {
 	return func(o *newHostOptions) { o.ProviderOptions = opts }
 }
 

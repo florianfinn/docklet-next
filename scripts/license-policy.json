@@ -58,6 +58,18 @@
     {
       "path": "third_party/francis/LICENSE.md",
       "sha256": "43e1d69fa26fa83d6443af160f26fbd21912791324b183db334130c0a11cfffc"
+    },
+    {
+      "path": "LICENSES/MIT-icu-type-parser.txt",
+      "sha256": "872f31f366abf7225ef12fc28320977c6287ed01f6569f40070a48ac890186dd"
+    },
+    {
+      "path": "LICENSES/MIT-victory-vendor.txt",
+      "sha256": "34dee5fd5e5cc756efb5ad4d64652bce719bdf5e900ca5d7538253e737930bc4"
+    },
+    {
+      "path": "LICENSES/MIT-react-remove-scroll-bar.txt",
+      "sha256": "a79aae0c0f21990d9d963bb3c5a79cdcea9a46f8523ba55c58d7fe776b6ebc84"
     }
   ]
 }

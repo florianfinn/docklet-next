@@ -1,23 +1,26 @@
-// Source: getarcaneapp/arcane/backend/pkg/utils/dbutil/dbutil_test.go
-// Revision: 095cb778daba1034e2a39961199e712a75d4ba29
-// Retrieved: 2026-10-13
-// License: BSD-3-Clause
-// Deviations: functional cut: PostgreSQL retry test runs without database integration.
-
+// Source: docklet-next/docs/design/sqlite-database.md
+// Revision: b3607be5144101152c8eb7738d389e8c73986fba
+// Retrieved: 2026-10-16
+// License: Apache-2.0
+// Deviations: SQLite retry classification with real driver errors.
 package dbutil
 
 import (
+	"errors"
 	"fmt"
-	"testing"
-
-	"github.com/jackc/pgx/v5/pgconn"
+	"github.com/florianfinn/docklet-next/backend/internal/testsqlite"
 	"github.com/stretchr/testify/require"
+	"testing"
 )
 
-func TestIsRetryableWriteErrorUsesPostgresCodes(t *testing.T) {
-	for _, code := range []string{"40001", "40P01", "55P03"} {
-		require.True(t, IsRetryableWriteError(fmt.Errorf("write: %w", &pgconn.PgError{Code: code})))
-	}
-	require.False(t, IsRetryableWriteError(&pgconn.PgError{Code: "23505"}))
+func TestIsRetryableWriteErrorUsesSQLiteBusy(t *testing.T) {
+	require.True(t, IsRetryableWriteError(fmt.Errorf("write: %w", testsqlite.BusyError(t))))
 	require.False(t, IsRetryableWriteError(nil))
+	require.False(t, IsRetryableWriteError(errors.New("timeout")))
+	for _, code := range []int{5, 5 | 1<<8, 5 | 2<<8} {
+		require.True(t, isBusyCode(code))
+	}
+	for _, code := range []int{6, 19, 10, 13, 11} {
+		require.False(t, isBusyCode(code))
+	}
 }

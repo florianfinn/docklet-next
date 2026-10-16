@@ -2,16 +2,17 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: functional cut: removed SQLite runtime and migrations.
+// Deviations: SQLite-only local persistence.
 
 package francis
 
 import (
 	"bytes"
 	"context"
+	"github.com/florianfinn/docklet-next/backend/pkg/utils/sqlitestore"
 	"log/slog"
 	"net"
-	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -39,12 +40,8 @@ func TestActorLogHandler(t *testing.T) {
 	require.Contains(t, output.String(), "nested.actorRef=job-health-executor/image-polling@0")
 }
 
-func TestPostgresHostRestartPersistence(t *testing.T) {
-	databaseURL := os.Getenv("ARCANE_TEST_POSTGRES_DSN")
-	if databaseURL == "" {
-		t.Skip("ARCANE_TEST_POSTGRES_DSN is not set")
-	}
-	testRestartPersistenceInternal(t, databaseURL)
+func TestSQLiteHostRestartPersistence(t *testing.T) {
+	testRestartPersistenceInternal(t, sqlitestore.URL(filepath.Join(t.TempDir(), "hub.db")))
 }
 
 func testRestartPersistenceInternal(t *testing.T, databaseURL string) {

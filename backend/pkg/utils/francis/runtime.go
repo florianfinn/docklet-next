@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: functional cut: removed SQLite runtime and migrations.
+// Deviations: SQLite sidecar writer and separately owned read-only diagnostics.
 
 // Package francis owns the embedded Francis host lifecycle.
 package francis
@@ -21,10 +21,11 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/florianfinn/docklet-next/backend/pkg/utils/sqlitestore"
 	"github.com/italypaleale/francis/actor"
 	"github.com/italypaleale/francis/components"
+	"github.com/italypaleale/francis/components/sqlite"
 	"github.com/italypaleale/francis/host/local"
-	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
 	"gorm.io/gorm/logger"
 )
@@ -72,7 +73,7 @@ func New(databaseURL, encryptionKey, instanceID, port string, options ...local.H
 	runtime := &Runtime{
 		service: &actor.Service{}, ready: make(chan struct{}), done: make(chan struct{}), address: address, storeURL: storeURL,
 		options: []local.HostOption{
-			local.WithAddress(address), providerOption(storeURL),
+			local.WithAddress(address),
 			local.WithMaxHosts(1), local.WithHostHealthCheckDeadline(90 * time.Second),
 			local.WithShutdownGracePeriod(10 * time.Second), local.WithAlarmsPollInterval(time.Second),
 			local.WithAlarmsFetchAheadInterval(30 * time.Second), local.WithAlarmsLeaseDuration(180 * time.Second),
@@ -119,15 +120,19 @@ func (r *Runtime) Store() (*gorm.DB, error) {
 	if r.store != nil {
 		return r.store, nil
 	}
-	store, err := gorm.Open(postgres.Open(r.storeURL), &gorm.Config{Logger: logger.Discard})
+	path, err := sqlitestore.Path(r.storeURL)
 	if err != nil {
-		return nil, fmt.Errorf("open actor storage: %w", err)
+		return nil, err
 	}
-	sqlDB, err := store.DB()
+	pool, err := sqlitestore.Open(context.Background(), path, false, true)
 	if err != nil {
-		return nil, fmt.Errorf("open actor storage: %w", err)
+		return nil, err
 	}
-	sqlDB.SetMaxOpenConns(2)
+	store, err := gorm.Open(sqlitestore.Dialector(pool), &gorm.Config{Logger: logger.Discard})
+	if err != nil {
+		_ = pool.Close()
+		return nil, fmt.Errorf("open actor diagnostics: %w", err)
+	}
 	r.store = store
 	return store, nil
 }
@@ -229,23 +234,35 @@ func (r *Runtime) Start(ctx, appCtx context.Context, onFailure func(error)) erro
 }
 
 func (r *Runtime) runHost(ctx context.Context) (*local.Host, chan error, error) {
-	host, err := local.NewHost(r.options...)
+	path, err := sqlitestore.Path(r.storeURL)
 	if err != nil {
+		return nil, nil, err
+	}
+	pool, err := sqlitestore.Open(ctx, path, false, false)
+	if err != nil {
+		return nil, nil, err
+	}
+	options := []local.HostOption{local.WithSQLiteProvider(sqlite.SQLiteProviderOptions{DB: pool, TablePrefix: TablePrefix})}
+	options = append(options, r.options...)
+	host, err := local.NewHost(options...)
+	if err != nil {
+		_ = pool.Close()
 		return nil, nil, err
 	}
 	for _, registration := range r.registrations {
 		if registerActorErr := host.RegisterActor(registration.actorType, registration.factory, registration.options...); registerActorErr != nil {
-			// Running a canceled host closes its provider-owned connections.
+			// A cancelled host drains provider work before its caller-owned pool closes.
 			cleanupCtx, cancel := context.WithCancel(ctx)
 			cancel()
-			if cleanupErr := host.Run(cleanupCtx); cleanupErr != nil {
+			cleanupErr := errors.Join(host.Run(cleanupCtx), pool.Close())
+			if cleanupErr != nil {
 				return nil, nil, errors.Join(registerActorErr, fmt.Errorf("clean up unregistered actor host: %w", cleanupErr))
 			}
 			return nil, nil, registerActorErr
 		}
 	}
 	localErrors := make(chan error, 1)
-	go func() { localErrors <- host.Run(ctx) }()
+	go func() { localErrors <- errors.Join(host.Run(ctx), pool.Close()) }()
 	return host, localErrors, nil
 }
 

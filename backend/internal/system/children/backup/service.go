@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; functional cut: removed S3 backup destinations; functional cut: removed SQLite runtime and migrations.
+// Deviations: Local module namespace; functional cut: removed S3 backup destinations; SQLite-only local persistence.
 
 package backup
 
@@ -49,7 +49,7 @@ const (
 
 var (
 	ErrSystemBackupAlreadyRunning = errors.New("an Arcane system backup is already running")
-	ErrSystemBackupUnavailable    = errors.New("PostgreSQL system backup and recovery are not implemented")
+	ErrSystemBackupUnavailable    = errors.New("Hub database backup and recovery are not implemented")
 )
 
 // Store persists system backup runs and policies through their public DTOs;
@@ -155,7 +155,7 @@ func (s *Service) acquireDurableRunInternal(ctx context.Context, runID string) (
 	return lease, nil
 }
 
-// SupportedDatabaseProvider reports whether PostgreSQL system recovery is implemented.
+// SupportedDatabaseProvider reports whether hub database recovery is implemented.
 func (s *Service) SupportedDatabaseProvider() bool { return false }
 
 func (s *Service) localRepositoryInternal(ctx context.Context, dockerClient *client.Client, readOnly bool) (backup.Repository, error) {

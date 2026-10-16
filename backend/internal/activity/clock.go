@@ -2,7 +2,7 @@
 // Revision: 660e9e31bfeb0c724d61ee5d43aec3288c84289d
 // Retrieved: 2026-10-14
 // License: Apache-2.0
-// Deviations: Injectable process clock for gate skew regression tests.
+// Deviations: Bound process clock for gate admission and terminal decisions.
 
 package activity
 

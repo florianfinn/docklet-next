@@ -1,10 +1,8 @@
-//go:build postgres_integration
-
 // Source: getarcaneapp/arcane/backend/internal/container/service_test.go
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; functional cut: PostgreSQL integration test fixture.
+// Deviations: Local module namespace; SQLite temp-file persistence fixture.
 
 package container
 
@@ -28,7 +26,7 @@ import (
 	"time"
 
 	"github.com/containerd/errdefs"
-	"github.com/florianfinn/docklet-next/backend/internal/testpg"
+	"github.com/florianfinn/docklet-next/backend/internal/testsqlite"
 	containertypes "github.com/florianfinn/docklet-next/types/container"
 	"github.com/florianfinn/docklet-next/types/image"
 	"github.com/florianfinn/docklet-next/types/user"
@@ -406,7 +404,7 @@ func newTestDockerClientInternal(t *testing.T, server *httptest.Server) *client.
 
 func setupProjectTestDBInternal(t *testing.T) *database.DB {
 	t.Helper()
-	db, err := gorm.Open(testpg.Dialector(t, ":memory:"), &gorm.Config{})
+	db, err := gorm.Open(testsqlite.Dialector(t, ":memory:"), &gorm.Config{})
 	require.NoError(t, err)
 	require.NoError(t, db.AutoMigrate(&project.Project{}, &settings.SettingVariable{}, &imageupdate.ImageUpdateRecord{}, &event.Event{}))
 	return &database.DB{DB: db}

@@ -1,0 +1,41 @@
+{
+  "date": "2026-10-16",
+  "target": "linux/amd64",
+  "cgo": "0",
+  "files": [
+    {
+      "module": "modernc.org/libc",
+      "version": "v1.77.1",
+      "path": "sys/types/types_linux_amd64.go",
+      "sha256": "1ada8b2599b13281b8fe191cfb24c02896ec3781b95a3b5cf76e1d74424eea2e",
+      "targets": [
+        "hub",
+        "agent"
+      ],
+      "license": "LGPL-2.1-or-later",
+      "reason": "Exact generated header-derived type layouts and constants; LGPL-2.1 section 5 permits object code using these header declarations without restriction. Preserve complete source notices and corresponding source references. The UUID declarations additionally retain the explicit GCC Runtime Library Exception 3.1; no GCC implementation is linked. This assessment is restricted to the recorded version, files and hashes.",
+      "source": "https://proxy.golang.org/modernc.org/libc/@v/v1.77.1.zip",
+      "references": [
+        "https://www.gnu.org/licenses/old-licenses/lgpl-2.1.html",
+        "https://www.gnu.org/licenses/gcc-exception-3.1.html"
+      ]
+    },
+    {
+      "module": "modernc.org/libc",
+      "version": "v1.77.1",
+      "path": "uuid/uuid/uuid_linux_amd64.go",
+      "sha256": "c677ffac9af69102fabc82443b8799b4071c7ead9f02237bb2f01af7782af428",
+      "targets": [
+        "hub",
+        "agent"
+      ],
+      "license": "LGPL-2.1-or-later AND (GPL-3.0-or-later WITH GCC-exception-3.1)",
+      "reason": "Exact generated header-derived type layouts and constants; LGPL-2.1 section 5 permits object code using these header declarations without restriction. Preserve complete source notices and corresponding source references. The UUID declarations additionally retain the explicit GCC Runtime Library Exception 3.1; no GCC implementation is linked. This assessment is restricted to the recorded version, files and hashes.",
+      "source": "https://proxy.golang.org/modernc.org/libc/@v/v1.77.1.zip",
+      "references": [
+        "https://www.gnu.org/licenses/old-licenses/lgpl-2.1.html",
+        "https://www.gnu.org/licenses/gcc-exception-3.1.html"
+      ]
+    }
+  ]
+}

@@ -31,9 +31,11 @@ TypeScript types. The HTTP adapter maps DTOs to UI view models; features do not
 import generated DTOs. Host capabilities include reasons for unavailable actions;
 backend checks remain authoritative.
 
-PostgreSQL is the only database (R6). SQLite migrations, drivers and tests are
-removed in M1. New installations use a fresh baseline; neither Arcane nor former
-Docklet databases or registrations are imported. Forward migrations run at startup.
+SQLite is the only hub database under [decision #60](sqlite-database.md),
+superseding R6's PostgreSQL choice. Database files require local persistent
+storage. New installations use a fresh baseline; no Arcane, former Docklet or
+PostgreSQL development databases or registrations are imported. Forward
+migrations run at startup; shipped migrations remain immutable.
 
 The product runs at the root of its own domain or subdomain (R12). There is no
 sub-path deployment: the contract covers assets, router, API, WebSockets,

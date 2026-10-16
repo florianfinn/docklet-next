@@ -1,10 +1,8 @@
-//go:build postgres_integration
-
 // Source: getarcaneapp/arcane/backend/internal/activity/service_test.go
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; functional cut: removed GitOps and saved Git repositories; functional cut: removed S3 backup destinations; functional cut: removed SQLite runtime and migrations; functional cut: PostgreSQL integration test fixture.
+// Deviations: Local module namespace; functional cut: removed GitOps and saved Git repositories; functional cut: removed S3 backup destinations; SQLite temp-file persistence fixture.
 
 package activity
 
@@ -13,7 +11,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/florianfinn/docklet-next/backend/internal/testpg"
+	"github.com/florianfinn/docklet-next/backend/internal/testsqlite"
 	"github.com/florianfinn/docklet-next/types/activity"
 	"github.com/florianfinn/docklet-next/types/scheduler"
 	"github.com/florianfinn/docklet-next/types/user"
@@ -28,15 +26,6 @@ import (
 	"github.com/florianfinn/docklet-next/backend/pkg/pagination"
 	"github.com/florianfinn/docklet-next/backend/pkg/utils"
 )
-
-func setupActivityServiceTestDBInternal(t *testing.T) *database.DB {
-	t.Helper()
-
-	db, err := gorm.Open(testpg.Dialector(t, ":memory:"), &gorm.Config{})
-	require.NoError(t, err)
-	require.NoError(t, db.AutoMigrate(Models()...))
-	return &database.DB{DB: db}
-}
 
 func TestActivityServiceLifecycleInternal(t *testing.T) {
 	ctx := t.Context()
@@ -323,7 +312,7 @@ func setupQueuedActivityServiceInternal(t *testing.T) (*ActivityService, context
 	t.Helper()
 	ctx := t.Context()
 
-	db, err := gorm.Open(testpg.Dialector(t, ":memory:"), &gorm.Config{})
+	db, err := gorm.Open(testsqlite.Dialector(t, ":memory:"), &gorm.Config{})
 	require.NoError(t, err)
 	require.NoError(t, db.AutoMigrate(append(Models(), &settings.SettingVariable{})...))
 	wrapped := &database.DB{DB: db}

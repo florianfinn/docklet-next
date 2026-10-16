@@ -65,8 +65,10 @@ line) and set `outputTruncated`. The activity detail returned by `get-activity`
 gains `output` (an array of these lines) and `outputTruncated` DTO fields.
 The adapter maps the lines into web `ActionRun.output`; `RunOutput` shows a
 localized truncation marker when `outputTruncated` is true. This requires a
-new forward PostgreSQL migration for the activity row, matching Go and
-generated OpenAPI/TypeScript DTO changes, and an `ActionRun` truncation flag.
+schema change for the activity row, matching Go and generated OpenAPI/TypeScript
+DTO changes, and an `ActionRun` truncation flag. The
+[SQLite baseline](sqlite-database.md#fresh-migration-baseline-and-schema-proof)
+includes the retained raw-output fields.
 Output disappears with its run under the fixed 100-finished-runs-per-environment
 retention; active runs remain. The detail response is also proxied from agents,
 so these additive fields change the agent/hub contract and require a contract

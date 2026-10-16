@@ -1,10 +1,8 @@
-//go:build postgres_integration
-
 // Source: getarcaneapp/arcane/backend/internal/imageupdate/service_test.go
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; functional cut: removed APNS mobile push; functional cut: PostgreSQL integration test fixture.
+// Deviations: Local module namespace; functional cut: removed APNS mobile push; SQLite temp-file persistence fixture.
 
 package imageupdate
 
@@ -22,7 +20,7 @@ import (
 	"time"
 
 	"github.com/distribution/reference"
-	"github.com/florianfinn/docklet-next/backend/internal/testpg"
+	"github.com/florianfinn/docklet-next/backend/internal/testsqlite"
 	activitytypes "github.com/florianfinn/docklet-next/types/activity"
 	"github.com/florianfinn/docklet-next/types/containerregistry"
 	"github.com/florianfinn/docklet-next/types/imageupdate"
@@ -90,7 +88,7 @@ func newImageUpdateTestDockerClientInternal(t *testing.T, server *httptest.Serve
 
 func setupImageUpdateRegistryTestDBInternal(t *testing.T) *database.DB {
 	t.Helper()
-	db, err := gorm.Open(testpg.Dialector(t, ":memory:"), &gorm.Config{})
+	db, err := gorm.Open(testsqlite.Dialector(t, ":memory:"), &gorm.Config{})
 	require.NoError(t, err)
 	require.NoError(t, db.AutoMigrate(
 		&registry.ContainerRegistry{},
@@ -353,7 +351,7 @@ func TestImageUpdateService_DockerReferenceCompatibility(t *testing.T) {
 func setupImageUpdateTestDB(t *testing.T) *database.DB {
 	t.Helper()
 	dsn := fmt.Sprintf("file:image-update-test-%d?mode=memory&cache=shared", time.Now().UnixNano())
-	db, err := gorm.Open(testpg.Dialector(t, dsn), &gorm.Config{})
+	db, err := gorm.Open(testsqlite.Dialector(t, dsn), &gorm.Config{})
 	require.NoError(t, err)
 	require.NoError(t, db.AutoMigrate(&ImageUpdateRecord{}, &event.Event{}, &testProjectRow{}))
 	return &database.DB{DB: db}
@@ -2152,7 +2150,7 @@ func newImageUpdateTestSettingsServiceInternal(t *testing.T, registryTimeout, do
 	t.Setenv("REGISTRY_TIMEOUT", registryTimeout)
 	t.Setenv("DOCKER_API_TIMEOUT", dockerAPITimeout)
 	ctx := t.Context()
-	db, err := gorm.Open(testpg.Dialector(t, ":memory:"), &gorm.Config{})
+	db, err := gorm.Open(testsqlite.Dialector(t, ":memory:"), &gorm.Config{})
 	require.NoError(t, err)
 	require.NoError(t, db.AutoMigrate(&settings.SettingVariable{}))
 	dbWrap := &database.DB{DB: db}
