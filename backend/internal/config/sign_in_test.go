@@ -48,7 +48,7 @@ func TestSignInStartupValidation(t *testing.T) {
 func TestSignInEnvAndFileVariants(t *testing.T) {
 	for _, suffix := range []string{"", "_FILE", "__FILE"} {
 		t.Run(suffix, func(t *testing.T) {
-			for key, value := range map[string]string{"AUTH_MODE": "proxy", "AUTH_PROXY_HEADER": "X-Identity", "AUTH_TRUSTED_PROXIES": "192.0.2.10"} {
+			for key, value := range map[string]string{"AUTH_MODE": "proxy", "AUTH_PROXY_HEADER": "X-Identity", "AUTH_TRUSTED_PROXIES": "192.0.2.10", "AUTH_RESET_ADMIN_PASSWORD": "example"} {
 				t.Setenv(key, "")
 				t.Setenv(key+"_FILE", "")
 				t.Setenv(key+"__FILE", "")
@@ -65,6 +65,8 @@ func TestSignInEnvAndFileVariants(t *testing.T) {
 			require.Equal(t, auth.SignInModeProxy, cfg.SignInMode())
 			require.Equal(t, "X-Identity", cfg.ProxyIdentityHeader())
 			require.Equal(t, "192.0.2.10", cfg.AuthTrustedProxies)
+			require.Equal(t, "example", cfg.AuthResetAdminPassword)
+			require.Equal(t, "****", cfg.MaskSensitive()["AUTH_RESET_ADMIN_PASSWORD"])
 		})
 	}
 }

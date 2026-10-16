@@ -64,6 +64,8 @@ type AuthService struct {
 	browserSigningKey []byte
 	refreshExpiry     time.Duration
 	config            *config.Config
+	recoveryOnce      sync.Once
+	recoveryErr       error
 	// tokenCache is a per-process in-memory cache for verified tokens. A hit
 	// skips signature verification and the user/session lookups; revocation in
 	// this process purges entries, revocation by another process is visible
@@ -425,13 +427,6 @@ func (s *AuthService) ChangePassword(ctx context.Context, userID, currentPasswor
 	// The current session's cached user still carries the old password flags.
 	s.InvalidateUserTokenCache(userID)
 	return nil
-}
-
-func (s *AuthService) passwordPolicyInternal(ctx context.Context) string {
-	if s.settingsService == nil {
-		return validation.PasswordPolicyStrong
-	}
-	return s.settingsService.GetStringSetting(ctx, "authPasswordPolicy", validation.PasswordPolicyStrong)
 }
 
 // InvalidateUserTokenCache purges all cached token verifications for a user.

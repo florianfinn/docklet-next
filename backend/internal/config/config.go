@@ -40,23 +40,24 @@ const (
 type Config struct {
 	BuildablesConfig
 
-	AppUrl                string         `env:"APP_URL" default:"http://localhost:3552"`
-	DatabaseURL           string         `env:"DATABASE_URL" default:"file:data/docklet.db"`
-	AllowCLIPasswordReset bool           `env:"ALLOW_CLI_PASSWORD_RESET" default:"false"`
-	ActorPort             string         `env:"ACTOR_PORT" default:"3551"`
-	Port                  string         `env:"PORT" default:"3552"`
-	Listen                string         `env:"LISTEN" default:""`
-	TLSEnabled            bool           `env:"TLS_ENABLED" default:"false"`
-	TLSCertFile           string         `env:"TLS_CERT_FILE" default:""`
-	TLSKeyFile            string         `env:"TLS_KEY_FILE" default:""`
-	Environment           AppEnvironment `env:"ENVIRONMENT" default:"production"`
-	JWTSecret             string         `env:"JWT_SECRET" options:"file,deprecated"`
-	JWTRefreshExpiry      time.Duration  `env:"JWT_REFRESH_EXPIRY" default:"168h"`
-	EncryptionKey         string         `env:"ENCRYPTION_KEY" default:"arcane-dev-key-32-characters!!!" options:"file"`
-	AdminStaticAPIKey     string         `env:"ADMIN_STATIC_API_KEY" default:"" options:"file"`
-	AuthMode              string         `env:"AUTH_MODE" default:"local" options:"file"`
-	AuthProxyHeader       string         `env:"AUTH_PROXY_HEADER" default:"Remote-User" options:"file"`
-	AuthTrustedProxies    string         `env:"AUTH_TRUSTED_PROXIES" default:"" options:"file"`
+	AppUrl                 string         `env:"APP_URL" default:"http://localhost:3552"`
+	DatabaseURL            string         `env:"DATABASE_URL" default:"file:data/docklet.db"`
+	AllowCLIPasswordReset  bool           `env:"ALLOW_CLI_PASSWORD_RESET" default:"false"`
+	ActorPort              string         `env:"ACTOR_PORT" default:"3551"`
+	Port                   string         `env:"PORT" default:"3552"`
+	Listen                 string         `env:"LISTEN" default:""`
+	TLSEnabled             bool           `env:"TLS_ENABLED" default:"false"`
+	TLSCertFile            string         `env:"TLS_CERT_FILE" default:""`
+	TLSKeyFile             string         `env:"TLS_KEY_FILE" default:""`
+	Environment            AppEnvironment `env:"ENVIRONMENT" default:"production"`
+	JWTSecret              string         `env:"JWT_SECRET" options:"file,deprecated"`
+	JWTRefreshExpiry       time.Duration  `env:"JWT_REFRESH_EXPIRY" default:"168h"`
+	EncryptionKey          string         `env:"ENCRYPTION_KEY" default:"arcane-dev-key-32-characters!!!" options:"file"`
+	AdminStaticAPIKey      string         `env:"ADMIN_STATIC_API_KEY" default:"" options:"file"`
+	AuthMode               string         `env:"AUTH_MODE" default:"local" options:"file"`
+	AuthProxyHeader        string         `env:"AUTH_PROXY_HEADER" default:"Remote-User" options:"file"`
+	AuthTrustedProxies     string         `env:"AUTH_TRUSTED_PROXIES" default:"" options:"file"`
+	AuthResetAdminPassword string         `env:"AUTH_RESET_ADMIN_PASSWORD" default:"" options:"file"`
 
 	PUID                          string `env:"PUID" default:""`
 	PGID                          string `env:"PGID" default:""`

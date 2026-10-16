@@ -123,7 +123,7 @@ func (s *AuthService) InitializeSignIn(ctx context.Context) error {
 		return err
 	}
 	s.InvalidateAllTokenCache()
-	return nil
+	return s.recoverAdministrator(ctx)
 }
 
 func (s *AuthService) cachedVerificationInternal(tokenHash string) (*user.User, string, bool) {
