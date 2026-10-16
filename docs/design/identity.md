@@ -23,7 +23,8 @@ permissions, so renaming its username does not change the mapping.
 `AUTH_PROXY_HEADER` defaults to `Remote-User`. `AUTH_TRUSTED_PROXIES` is a required,
 comma-separated list of literal IPv4/IPv6 addresses or CIDRs in proxy mode. There
 is no identity-trust default, including when the listener binds to loopback.
-Invalid list members and invalid HTTP header names prevent startup.
+Invalid list members, all-address `/0` networks and invalid HTTP header names
+prevent startup.
 
 The hub parses the direct socket peer from `Request.RemoteAddr`. Framework client
 IP extraction, `Forwarded` and `X-Forwarded-For` never establish identity. A peer
@@ -70,6 +71,8 @@ validated Bearer tokens and personal/scoped API keys authenticate explicit
 non-browser requests without Origin or CSRF tokens. Invalid or expired explicit
 credentials return 401, allowing the CLI to refresh and retry. Cookie-only
 authentication stays strict. Proxy and none modes never grant this local exception.
+Startup normalizes the APP_URL scheme and host to lowercase and removes default
+HTTP/HTTPS ports; nondefault ports remain part of the exact origin.
 
 Local `POST /api/auth/login` and `POST /api/auth/refresh` also allow a missing
 Origin only when no Cookie header is present. These endpoints authenticate the

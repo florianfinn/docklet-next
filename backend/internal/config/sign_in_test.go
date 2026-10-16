@@ -33,6 +33,10 @@ func TestSignInStartupValidation(t *testing.T) {
 		{"proxy bad header", "proxy", "192.0.2.10", "Remote User", false},
 		{"proxy IPs", "proxy", "192.0.2.10,2001:db8::10", "", true},
 		{"proxy CIDRs", "proxy", "192.0.2.0/24,2001:db8::/32", "X-Identity", true},
+		{"proxy all IPv4", "proxy", "0.0.0.0/0", "", false},
+		{"proxy all IPv6", "proxy", "::/0", "", false},
+		{"proxy masked all IPv4", "proxy", "192.0.2.10/0", "", false},
+		{"proxy masked all IPv6", "proxy", "2001:db8::10/0", "", false},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			cfg := &Config{AuthMode: tc.mode, AuthTrustedProxies: tc.peers, AuthProxyHeader: tc.header}

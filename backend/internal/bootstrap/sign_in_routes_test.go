@@ -166,6 +166,8 @@ func TestSignInInvalidStartupFailsBeforeDatabase(t *testing.T) {
 		{"invalid mode", "invalid", ""},
 		{"missing proxy policy", "proxy", ""},
 		{"bad proxy policy", "proxy", "192.0.2.10,invalid"},
+		{"all IPv4 peers", "proxy", "0.0.0.0/0"},
+		{"all IPv6 peers", "proxy", "::/0"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			path := filepath.Join(t.TempDir(), "unopened.db")

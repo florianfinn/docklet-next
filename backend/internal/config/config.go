@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; functional cut: removed upstream analytics heartbeat, APNS, Svelte assets, templates, OIDC, passkeys and GitOps work directory; removed downgrade setting for forward-only migrations.
+// Deviations: Local module namespace; removed upstream analytics, APNS, Svelte assets, templates, OIDC/passkeys, GitOps directory and downgrade setting; normalize APP_URL for browser origins.
 
 package config
 
@@ -416,17 +416,17 @@ func (c *Config) GetLocation() *time.Location {
 func (c *Config) GetAppURL() string {
 	// If APP_URL is explicitly set to something other than the default, use it
 	if os.Getenv("APP_URL") != "" {
-		return c.AppUrl
+		return normalizedAppURL(c.AppUrl)
 	}
 
 	// If in agent mode and we have a manager URL, use the manager URL
 	if c.AgentMode {
 		if managerBase := httpx.ManagerBaseURL(c.ManagerApiUrl); managerBase != "" {
-			return managerBase
+			return normalizedAppURL(managerBase)
 		}
 	}
 
-	return c.AppUrl
+	return normalizedAppURL(c.AppUrl)
 }
 
 // MaskSensitive returns a copy of the config with sensitive fields masked.

@@ -29,6 +29,7 @@ func (c *Config) ProxyIdentityHeader() string {
 }
 
 func (c *Config) ValidateSignIn() error {
+	c.AppUrl = normalizedAppURL(c.AppUrl)
 	if c.AgentMode || c.EdgeAgent {
 		return nil
 	}
@@ -64,6 +65,9 @@ func (c *Config) AuthProxyNetworks() ([]netip.Prefix, error) {
 				return nil, errors.New("AUTH_TRUSTED_PROXIES must contain only IP addresses or CIDRs")
 			}
 			network = netip.PrefixFrom(addr, addr.BitLen())
+		}
+		if network.Bits() == 0 {
+			return nil, errors.New("AUTH_TRUSTED_PROXIES must not trust all addresses")
 		}
 		networks = append(networks, network.Masked())
 	}
