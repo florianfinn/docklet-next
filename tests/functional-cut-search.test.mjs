@@ -29,7 +29,7 @@ test("removed feature identifiers have expected-empty source and configuration s
     // Decision #60 restores SQLite; its positive graph contract is tested separately.
     if (query.feature === "SQLite runtime") {
       assert.deepEqual(search(query.pattern, manifest.scope, manifest.globs,
-        "b3607be5144101152c8eb7738d389e8c73986fba"), query.expectedMatches);
+        "1ead6d2c7e17c79b46c42eb8567c3a1d70730fd5"), query.expectedMatches);
       continue;
     }
     assert.deepEqual(search(query.pattern, manifest.scope, manifest.globs), query.expectedMatches, query.feature);

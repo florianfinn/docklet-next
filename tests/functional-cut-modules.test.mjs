@@ -4,7 +4,7 @@ import { readFileSync } from "node:fs";
 import { execFileSync } from "node:child_process";
 
 // The functional-cut evidence predates the separately approved SQLite restoration.
-const cutRevision = "b3607be5144101152c8eb7738d389e8c73986fba";
+const cutRevision = "1ead6d2c7e17c79b46c42eb8567c3a1d70730fd5";
 
 const manifest = JSON.parse(readFileSync(new URL("../docs/provenance/removed-modules.json", import.meta.url), "utf8"));
 const baseline = JSON.parse(readFileSync(new URL("./fixtures/pre-cut-go-requirements.json", import.meta.url), "utf8"));
