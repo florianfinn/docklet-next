@@ -128,6 +128,7 @@ type SystemBackupStorage struct {
 
 type SystemBackupMaintenance struct {
 	Active     bool   `json:"active"`
+	Phase      string `json:"phase,omitempty" enum:"draining,applying,verifying,blocked"`
 	ReasonCode string `json:"reasonCode,omitempty"`
 	ActivityID string `json:"activityId,omitempty"`
 }

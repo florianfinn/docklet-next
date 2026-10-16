@@ -29,7 +29,9 @@ import (
 
 type DB struct {
 	*gorm.DB
-	hubLock *HubLock
+	hubLock     *HubLock
+	poolMaxOpen int
+	poolMaxIdle int
 }
 
 type MigrationOptions struct{}
@@ -121,6 +123,7 @@ func initializeInternal(ctx context.Context, databaseURL string, options Migrati
 	// Set connection pool settings
 	sqlDB.SetMaxIdleConns(15)
 	sqlDB.SetMaxOpenConns(50)
+	db.poolMaxOpen, db.poolMaxIdle = 50, 15
 	sqlDB.SetConnMaxLifetime(5 * time.Minute)
 	sqlDB.SetConnMaxIdleTime(3 * time.Minute)
 
@@ -350,8 +353,8 @@ func (db *DB) SQLDB() (*sql.DB, error) {
 	return db.DB.DB()
 }
 
-// SuspendOrdinaryConnections closes idle pool sessions and leaves only the
-// pinned hub-lock session while pg_restore owns database replacement.
+// Suspension is soft: in-use sessions can hold the one ordinary pool slot.
+// The restore deadline bounds a waiter; the pinned hub-lock session is separate.
 func (db *DB) SuspendOrdinaryConnections() error {
 	pool, err := db.SQLDB()
 	if err != nil {
@@ -367,7 +370,7 @@ func (db *DB) ResumeOrdinaryConnections() error {
 	if err != nil {
 		return err
 	}
-	pool.SetMaxOpenConns(50)
-	pool.SetMaxIdleConns(15)
+	pool.SetMaxOpenConns(db.poolMaxOpen)
+	pool.SetMaxIdleConns(db.poolMaxIdle)
 	return nil
 }

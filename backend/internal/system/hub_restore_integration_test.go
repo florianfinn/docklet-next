@@ -14,18 +14,21 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"io"
+	"io/fs"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/danielgtaylor/huma/v2"
 	"github.com/danielgtaylor/huma/v2/adapters/humaecho"
 	"github.com/labstack/echo/v5"
+	"github.com/pressly/goose/v3"
 	"github.com/stretchr/testify/require"
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
@@ -36,6 +39,7 @@ import (
 	"github.com/florianfinn/docklet-next/backend/internal/middleware"
 	backupservice "github.com/florianfinn/docklet-next/backend/internal/system/children/backup"
 	"github.com/florianfinn/docklet-next/backend/pkg/authz"
+	"github.com/florianfinn/docklet-next/backend/resources"
 	backuptypes "github.com/florianfinn/docklet-next/types/backup"
 	usertypes "github.com/florianfinn/docklet-next/types/user"
 )
@@ -102,6 +106,76 @@ func TestHubRestorePostgres18RoundTrip(t *testing.T) {
 		t.Fatal("scheduler registrations were not refreshed")
 	}
 	assertRestoredSeedInternal(t, restarted)
+}
+
+func TestOfflineRestoreWithMarkerReplacesNonEmptyTarget(t *testing.T) {
+	if _, err := exec.LookPath("pg_restore"); err != nil {
+		t.Skip("PostgreSQL 18 client image required")
+	}
+	source, sourceURL := newMigratedHubBackupDBWithURL(t)
+	require.NoError(t, source.Exec("INSERT INTO settings (key,value) VALUES ('restore-example','archive')").Error)
+	dir := t.TempDir()
+	sourceBackups := backupservice.NewService(backupservice.Dependencies{
+		Store: (&SystemService{db: source}).backupStoreInternal(), DB: source,
+		Activity: activity.NewActivityService(source, nil),
+		Config:   &config.Config{DatabaseURL: sourceURL, BackupDir: dir},
+	})
+	run, err := sourceBackups.CreateBackup(t.Context(), usertypes.SystemUser, backuptypes.SystemBackupTriggerManual, backuptypes.CreateSystemBackupRequest{})
+	require.NoError(t, err)
+	target, targetURL := newMigratedHubBackupDBWithURL(t)
+	require.NoError(t, target.Exec("INSERT INTO settings (key,value) VALUES ('restore-example','target')").Error)
+	marker := []byte(`{"backupId":"` + run.ID + `","phase":"verifying"}`)
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "restore-state.json"), marker, 0600))
+	require.NoError(t, backupservice.OfflineRestore(t.Context(), &config.Config{DatabaseURL: targetURL, BackupDir: dir}, run.ID))
+	require.NoError(t, backupservice.CheckRestoreMarker(dir))
+	var value string
+	require.NoError(t, target.Raw("SELECT value FROM settings WHERE key='restore-example'").Scan(&value).Error)
+	require.Equal(t, "archive", value)
+}
+
+func TestOfflineRestoreWithMarkerCompletesInterruptedMigration(t *testing.T) {
+	if _, err := exec.LookPath("pg_restore"); err != nil {
+		t.Skip("PostgreSQL 18 client image required")
+	}
+	sourceURL := newEmptyHubRestoreDBURL(t)
+	source, err := gorm.Open(postgres.Open(sourceURL), &gorm.Config{})
+	require.NoError(t, err)
+	pool, err := source.DB()
+	require.NoError(t, err)
+	migrations, err := fs.Sub(resources.FS, "migrations/postgres")
+	require.NoError(t, err)
+	provider, err := goose.NewProvider(goose.DialectPostgres, pool, migrations)
+	require.NoError(t, err)
+	_, err = provider.UpTo(t.Context(), 7)
+	require.NoError(t, err)
+	require.NoError(t, source.Exec("INSERT INTO settings (key,value) VALUES ('restore-example','older-archive')").Error)
+	require.NoError(t, pool.Close())
+
+	dir := t.TempDir()
+	id := "older-archive"
+	archiveName, err := backuptypes.ArchiveNameForID(id)
+	require.NoError(t, err)
+	parsed, err := url.Parse(sourceURL)
+	require.NoError(t, err)
+	password, _ := parsed.User.Password()
+	dump := exec.CommandContext(t.Context(), "pg_dump", "--format=custom", "--file="+filepath.Join(dir, archiveName))
+	dump.Env = append(os.Environ(), "PGHOST="+parsed.Hostname(), "PGPORT="+parsed.Port(),
+		"PGUSER="+parsed.User.Username(), "PGPASSWORD="+password,
+		"PGDATABASE="+strings.TrimPrefix(parsed.Path, "/"), "PGSSLMODE=disable")
+	require.NoError(t, dump.Run())
+	target, targetURL := newMigratedHubBackupDBWithURL(t)
+	require.NoError(t, target.Exec("INSERT INTO settings (key,value) VALUES ('restore-example','interrupted-target')").Error)
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "restore-state.json"), []byte(`{"backupId":"older-archive","phase":"verifying"}`), 0600))
+	require.NoError(t, backupservice.OfflineRestore(t.Context(), &config.Config{DatabaseURL: targetURL, BackupDir: dir}, id))
+	require.NoError(t, backupservice.CheckRestoreMarker(dir))
+	var value string
+	require.NoError(t, target.Raw("SELECT value FROM settings WHERE key='restore-example'").Scan(&value).Error)
+	require.Equal(t, "older-archive", value)
+	var version int64
+	require.NoError(t, target.Raw("SELECT COALESCE(MAX(version_id),0) FROM goose_db_version WHERE is_applied=true").Scan(&version).Error)
+	newest, err := database.LatestMigrationVersion()
+	require.NoError(t, err)
+	require.Equal(t, newest, version)
 }
 
 func TestHubUploadStreamsThroughAuthorizedRoute(t *testing.T) {

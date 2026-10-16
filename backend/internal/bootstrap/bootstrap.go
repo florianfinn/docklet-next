@@ -80,6 +80,7 @@ func Bootstrap(ctx context.Context) error {
 		db, err = initializeDBAndMigrateInternal(appCtx, cfg)
 	} else {
 		if markerErr := hubbackup.CheckRestoreMarker(cfg.BackupDir); markerErr != nil {
+			slog.ErrorContext(appCtx, "Hub restore recovery required; run the offline restore command before restarting the hub", "code", "backup.recovery_required")
 			cancelApp()
 			return markerErr
 		}

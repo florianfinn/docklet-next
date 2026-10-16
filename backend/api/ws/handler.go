@@ -27,6 +27,7 @@ import (
 	"github.com/florianfinn/docklet-next/backend/internal/middleware"
 	"github.com/florianfinn/docklet-next/backend/internal/project"
 	"github.com/florianfinn/docklet-next/backend/internal/system"
+	hubbackup "github.com/florianfinn/docklet-next/backend/internal/system/children/backup"
 	systemlib "github.com/florianfinn/docklet-next/backend/pkg/libarcane/system"
 	wshub "github.com/florianfinn/docklet-next/backend/pkg/libarcane/ws"
 	"github.com/florianfinn/docklet-next/backend/pkg/utils/concurrency"
@@ -41,6 +42,7 @@ type WebSocketHandler struct {
 	projectService      *project.ProjectService
 	containerService    *container.ContainerService
 	systemService       *system.SystemService
+	maintenance         *hubbackup.MaintenanceGate
 	diagnosticsService  *diagnostics.DiagnosticsService
 	checkWSOrigin       func(*http.Request) bool
 	wsMetrics           *wshub.WebSocketMetrics
@@ -99,6 +101,9 @@ func NewWebSocketHandler(
 			Build(),
 		checkWSOrigin: httpx.ValidateWebSocketOrigin(cfg.GetAppURL()),
 	}
+	if systemService != nil {
+		handler.maintenance = systemService.BackupMaintenanceGate()
+	}
 	wsGroup := group.Group("/environments/:id/ws", authMiddleware.WithAdminNotRequired().Add())
 	for _, r := range handler.proxiedRoutes() {
 		wsGroup.GET(r.path, r.handler, middleware.RequireEchoPermission(r.perm))
@@ -127,8 +132,16 @@ func (h *WebSocketHandler) acceptWSInternal(c *echo.Context, kind, resourceID st
 		slog.DebugContext(c.Request().Context(), "websocket accept failed", "kind", kind, "resourceId", resourceID, "error", err)
 		return nil, nil, false
 	}
+	release := func() {}
+	if h.maintenance != nil {
+		release, err = h.maintenance.AdmitConnection(func() { _ = conn.CloseNow() })
+		if err != nil {
+			_ = conn.CloseNow()
+			return nil, nil, false
+		}
+	}
 	connID := h.wsMetrics.RegisterConnection(buildWSConnectionInfoInternal(c, kind, resourceID))
-	return conn, func() { h.wsMetrics.UnregisterConnection(connID) }, true
+	return conn, func() { h.wsMetrics.UnregisterConnection(connID); release() }, true
 }
 
 // keepWSConnAliveInternal pings the peer every period. Ping round-trips (the

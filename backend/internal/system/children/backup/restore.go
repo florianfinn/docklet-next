@@ -12,6 +12,7 @@ import (
 	"io"
 	"log/slog"
 	"net/url"
+	"os"
 	"os/exec"
 	"path/filepath"
 
@@ -57,7 +58,7 @@ func (s *Service) sourceArchive(ctx context.Context, id string) (*backuptypes.Sy
 	if err := validateTargetServer(ctx, s.db); err != nil {
 		return nil, "", archiveInfo{}, err
 	}
-	if err := validateTargetVersion(ctx, s.db, info.migration, newest); err != nil {
+	if err := validateTargetVersion(ctx, s.db, info.migration, newest, false); err != nil {
 		return nil, "", archiveInfo{}, err
 	}
 	return run, path, info, nil
@@ -312,6 +313,15 @@ func OfflineRestore(ctx context.Context, cfg *config.Config, id string) error {
 		return ErrRestoreRecoveryRequired
 	}
 	path := filepath.Join(cfg.BackupDir, name)
+	recovery := false
+	if _, statErr := os.Lstat(markerPath(cfg.BackupDir)); statErr == nil {
+		if _, markerErr := readRestoreMarker(cfg.BackupDir); markerErr != nil {
+			return markerErr
+		}
+		recovery = true
+	} else if !errors.Is(statErr, os.ErrNotExist) {
+		return ErrRestoreRecoveryRequired
+	}
 	if err := validateTargetServer(ctx, db); err != nil {
 		return err
 	}
@@ -319,7 +329,7 @@ func OfflineRestore(ctx context.Context, cfg *config.Config, id string) error {
 	if err != nil {
 		return err
 	}
-	if err := validateTargetVersion(ctx, db, info.migration, newest); err != nil {
+	if err := validateTargetVersion(ctx, db, info.migration, newest, recovery); err != nil {
 		return err
 	}
 	if err := writeRestoreMarker(cfg.BackupDir, restoreMarker{BackupID: id, Phase: "applying"}); err != nil {

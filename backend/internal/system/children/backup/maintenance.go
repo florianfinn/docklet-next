@@ -22,12 +22,29 @@ type MaintenanceGate struct {
 	activityID string
 	active     int
 	drained    chan struct{}
+	cancellers map[uint64]func()
+	nextID     uint64
+	onBegin    []func()
 }
 
 func NewMaintenanceGate() *MaintenanceGate { return &MaintenanceGate{} }
 
 // Admit holds the barrier across a request so restore can wait for prior work.
 func (g *MaintenanceGate) Admit() (func(), error) {
+	return g.admit(nil)
+}
+
+// AdmitCancel keeps an HTTP or gRPC request in the drain until its handler exits.
+func (g *MaintenanceGate) AdmitCancel(cancel func()) (func(), error) {
+	return g.admit(cancel)
+}
+
+// AdmitConnection tracks an upgraded connection after its HTTP handler exits.
+func (g *MaintenanceGate) AdmitConnection(closeConnection func()) (func(), error) {
+	return g.admit(closeConnection)
+}
+
+func (g *MaintenanceGate) admit(cancel func()) (func(), error) {
 	if g == nil {
 		return func() {}, nil
 	}
@@ -37,26 +54,50 @@ func (g *MaintenanceGate) Admit() (func(), error) {
 		return nil, ErrMaintenanceActive
 	}
 	g.active++
-	return func() {
+	g.nextID++
+	id := g.nextID
+	if cancel != nil {
+		if g.cancellers == nil {
+			g.cancellers = make(map[uint64]func())
+		}
+		g.cancellers[id] = cancel
+	}
+	return sync.OnceFunc(func() {
 		g.mu.Lock()
 		defer g.mu.Unlock()
+		delete(g.cancellers, id)
 		g.active--
 		if g.active == 0 && g.drained != nil {
 			close(g.drained)
 			g.drained = nil
 		}
-	}, nil
+	}), nil
+}
+
+func (g *MaintenanceGate) OnBegin(closeConnections func()) {
+	g.mu.Lock()
+	g.onBegin = append(g.onBegin, closeConnections)
+	g.mu.Unlock()
 }
 
 func (g *MaintenanceGate) Begin(activityID string) error {
 	g.mu.Lock()
-	defer g.mu.Unlock()
 	if g.phase != "" {
+		g.mu.Unlock()
 		return ErrMaintenanceActive
 	}
 	g.phase, g.activityID = "draining", activityID
 	if g.active > 0 {
 		g.drained = make(chan struct{})
+	}
+	cancels := make([]func(), 0, len(g.cancellers)+len(g.onBegin))
+	for _, cancel := range g.cancellers {
+		cancels = append(cancels, cancel)
+	}
+	cancels = append(cancels, g.onBegin...)
+	g.mu.Unlock()
+	for _, cancel := range cancels {
+		cancel()
 	}
 	return nil
 }
@@ -97,7 +138,7 @@ func (g *MaintenanceGate) Status() backuptypes.SystemBackupMaintenance {
 	if g.phase == "" {
 		return backuptypes.SystemBackupMaintenance{}
 	}
-	return backuptypes.SystemBackupMaintenance{Active: true, ReasonCode: "backup.maintenance", ActivityID: g.activityID}
+	return backuptypes.SystemBackupMaintenance{Active: true, Phase: g.phase, ReasonCode: "backup.maintenance", ActivityID: g.activityID}
 }
 
 func (s *Service) MaintenanceGate() *MaintenanceGate {

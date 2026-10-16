@@ -140,7 +140,7 @@ func parseGooseArchive(sql string) (int64, error) {
 	return version, nil
 }
 
-func validateTargetVersion(ctx context.Context, db *database.DB, archiveVersion, newest int64) error {
+func validateTargetVersion(ctx context.Context, db *database.DB, archiveVersion, newest int64, recovery bool) error {
 	if db == nil || archiveVersion < 1 || archiveVersion > newest {
 		return errMigration
 	}
@@ -155,7 +155,7 @@ func validateTargetVersion(ctx context.Context, db *database.DB, archiveVersion,
 	if err := db.WithContext(ctx).Raw("SELECT COALESCE(MAX(version_id), 0) FROM goose_db_version WHERE is_applied = true").Scan(&current).Error; err != nil {
 		return errMigration
 	}
-	if current != archiveVersion {
+	if current != archiveVersion && (!recovery || current < archiveVersion || current > newest) {
 		return errMigration
 	}
 	return nil

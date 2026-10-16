@@ -81,6 +81,14 @@ func (t *AgentTunnel) MetadataSnapshot() TunnelMetadataSnapshot {
 // CloseWithReason closes the tunnel connection and records the disconnect
 // reason. Pass "" when there is no reason to record.
 func (t *AgentTunnel) CloseWithReason(reason string) error {
+	return t.closeWithReason(reason, false)
+}
+
+func (t *AgentTunnel) closeForMaintenance() error {
+	return t.closeWithReason("hub maintenance", true)
+}
+
+func (t *AgentTunnel) closeWithReason(reason string, immediate bool) error {
 	if t == nil {
 		return nil
 	}
@@ -97,6 +105,12 @@ func (t *AgentTunnel) CloseWithReason(reason string) error {
 	})
 	if t.Conn == nil {
 		return nil
+	}
+	if immediate {
+		if conn, ok := t.Conn.(*TunnelConn); ok {
+			conn.closed.Store(true)
+			return conn.conn.CloseNow()
+		}
 	}
 	return t.Conn.Close()
 }
@@ -272,6 +286,18 @@ func (r *TunnelRegistry) CleanupStale(ctx context.Context, maxAge time.Duration)
 	}
 
 	return removed
+}
+
+// CloseActiveForMaintenance leaves the registry reusable when agents reconnect.
+func (r *TunnelRegistry) CloseActiveForMaintenance() {
+	if r == nil {
+		return
+	}
+	for _, tunnel := range r.tunnels.Values() {
+		if tunnel != nil {
+			_ = tunnel.closeForMaintenance()
+		}
+	}
 }
 
 // Stop drains registry mutations and closes active tunnels.
