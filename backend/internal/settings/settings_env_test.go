@@ -1,10 +1,8 @@
-//go:build postgres_integration
-
 // Source: getarcaneapp/arcane/backend/internal/settings/service_test.go
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-14
 // License: BSD-3-Clause
-// Deviations: PostgreSQL initialization regression for invalid environment values.
+// Deviations: SQLite initialization regression for invalid environment values.
 
 package settings
 

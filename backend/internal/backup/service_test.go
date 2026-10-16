@@ -1,21 +1,20 @@
-//go:build postgres_integration
-
 // Source: getarcaneapp/arcane/backend/internal/backup/service_test.go
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; functional cut: removed SQLite runtime and migrations; functional cut: PostgreSQL integration test fixture.
+// Deviations: Local module namespace; SQLite temp-file persistence fixture.
 
 package backup
 
 import (
 	"context"
-	"os"
+	"github.com/florianfinn/docklet-next/backend/pkg/utils/sqlitestore"
+	"path/filepath"
 	"sync/atomic"
 	"testing"
 	"time"
 
-	"github.com/florianfinn/docklet-next/backend/internal/testpg"
+	"github.com/florianfinn/docklet-next/backend/internal/testsqlite"
 	"github.com/florianfinn/docklet-next/types/backup"
 	"github.com/florianfinn/docklet-next/types/scheduler"
 	"github.com/moby/moby/api/types/mount"
@@ -90,7 +89,7 @@ func TestQualifySnapshotListingInternal(t *testing.T) {
 }
 
 func TestRecoveryKeyStoreRoundTrip(t *testing.T) {
-	gormDB, err := gorm.Open(testpg.Dialector(t, "file:recovery-key-store?mode=memory&cache=shared"), &gorm.Config{})
+	gormDB, err := gorm.Open(testsqlite.Dialector(t, "file:recovery-key-store?mode=memory&cache=shared"), &gorm.Config{})
 	require.NoError(t, err)
 	require.NoError(t, gormDB.AutoMigrate(&SystemBackupRecoveryConfig{}))
 	crypto.InitEncryption(&crypto.Config{EncryptionKey: "recovery-key-store-test-key-32bytes", Environment: "test"})
@@ -159,11 +158,8 @@ func TestSnapshotCommandInternal(t *testing.T) {
 	require.ErrorContains(t, err, "at least one snapshot source")
 }
 
-func TestPostgresDurableBackupRestartKeepsCompletionInternal(t *testing.T) {
-	url := os.Getenv("ARCANE_TEST_POSTGRES_DSN")
-	if url == "" {
-		t.Skip("PostgreSQL integration requires ARCANE_TEST_POSTGRES_DSN")
-	}
+func TestSQLiteDurableBackupRestartKeepsCompletionInternal(t *testing.T) {
+	url := sqlitestore.URL(filepath.Join(t.TempDir(), "hub.db"))
 	var calls atomic.Int32
 	runtime := francistest.New(t, url)
 	engine := NewEngine(t.Context(), nil, nil)
@@ -193,11 +189,8 @@ func TestPostgresDurableBackupRestartKeepsCompletionInternal(t *testing.T) {
 	require.EqualValues(t, 1, calls.Load())
 }
 
-func TestPostgresDurableBackupShutdownKeepsInterruptedEvidenceInternal(t *testing.T) {
-	url := os.Getenv("ARCANE_TEST_POSTGRES_DSN")
-	if url == "" {
-		t.Skip("PostgreSQL integration requires ARCANE_TEST_POSTGRES_DSN")
-	}
+func TestSQLiteDurableBackupShutdownKeepsInterruptedEvidenceInternal(t *testing.T) {
+	url := sqlitestore.URL(filepath.Join(t.TempDir(), "hub.db"))
 	runtime := francistest.New(t, url)
 	admission := runs.NewAdmission(runtime.Service(), t.Name())
 	require.NoError(t, admission.Register(runtime))

@@ -1,10 +1,8 @@
-//go:build postgres_integration
-
 // Source: florianfinn/docklet-next/docs/design/run-gate.md
 // Revision: ab701984e86075694baabdc5efe14bed287768fc
 // Retrieved: 2026-10-14
 // License: Apache-2.0
-// Deviations: PostgreSQL cases for the run-gate transition matrix.
+// Deviations: SQLite cases for the run-gate transition matrix.
 
 package activity
 
@@ -321,14 +319,13 @@ func TestRunGate_Case19_CheckFreshSuccess(t *testing.T) {
 
 func TestRunGate_Case20_CheckBoundaryExclusive(t *testing.T) {
 	db := setupActivityServiceTestDBInternal(t)
-	var predicateAtBoundary bool
-	require.NoError(t, db.Raw("SELECT (NOW() - INTERVAL '30 seconds') "+checkFreshnessOperator+" NOW() - INTERVAL '30 seconds'").Scan(&predicateAtBoundary).Error)
-	require.False(t, predicateAtBoundary)
 	svc := NewActivityService(db, nil)
+	now := time.Now().UTC().Truncate(time.Microsecond)
+	svc.clock = func() time.Time { return now }
 	started := matrixGate(t, svc)
 	_, err := svc.CompleteActivity(started.WorkContext, started.Run.ID, activity.StatusSuccess, "done", nil)
 	require.NoError(t, err)
-	require.NoError(t, db.Model(&Activity{}).Where("id = ?", started.Run.ID).Update("ended_at", gorm.Expr("NOW() - INTERVAL '30 seconds'")).Error)
+	require.NoError(t, db.Model(&Activity{}).Where("id = ?", started.Run.ID).Update("ended_at", now.Add(-30*time.Second)).Error)
 	request := matrixGateRequest()
 	request.Check = true
 	next, err := svc.StartGatedActivity(t.Context(), request)
@@ -388,7 +385,7 @@ func TestRunGate_Case23_ActiveBeforeRecheck(t *testing.T) {
 func TestRunGate_Case24_ConcurrentScopeAdmission(t *testing.T) {
 	db := setupActivityServiceTestDBInternal(t)
 	tx := db.Begin()
-	require.NoError(t, tx.Exec("SELECT pg_advisory_xact_lock(hashtextextended(?, 0))", "1:0stack:example").Error)
+	require.NoError(t, tx.Error)
 	defer tx.Rollback()
 	services := [2]*ActivityService{NewActivityService(db, nil), NewActivityService(db, nil)}
 	var answers [2]GateAnswer

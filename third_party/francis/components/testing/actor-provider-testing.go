@@ -1,0 +1,39 @@
+// Source: italypaleale/francis/components/testing/actor-provider-testing.go
+// Revision: 23cd46831a543a73eec05ad034afd46245225876
+// Retrieved: 2026-10-16
+// License: MIT
+// Deviations: Pinned provider test support restored for default tests; reserved example addresses; oversized suite split without behavior changes.
+
+package comptesting
+
+import (
+	"context"
+	"time"
+
+	"github.com/italypaleale/francis/components"
+)
+
+// ActorProviderTesting extends the ActorProvider interface adding test-only methods
+type ActorProviderTesting interface {
+	components.ActorProvider
+
+	// CleanupExpired performs garbage collection of expired records
+	CleanupExpired(ctx context.Context) error
+
+	// Seed seeds the data into the database
+	Seed(ctx context.Context, spec Spec) error
+
+	// Now returns the current time
+	// Providers that do not have a mocked clock should respond with time.Now()
+	Now() time.Time
+
+	// AdvanceClock advances the clock
+	// Providers that do not have a mocked clock should sleep for the given duration
+	AdvanceClock(d time.Duration) error
+
+	// GetAllActorState returns all stored actor state
+	GetAllActorState(ctx context.Context) (ActorStateSpecCollection, error)
+
+	// GetAllHosts returns all stored hosts, host actor types, active actors, and alarms
+	GetAllHosts(ctx context.Context) (Spec, error)
+}

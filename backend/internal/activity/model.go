@@ -40,7 +40,7 @@ type Activity struct {
 	AffectedServices     database.JSON   `json:"affectedServices,omitempty" gorm:"column:affected_services;type:text"`
 	GateKey              string          `json:"-" gorm:"column:gate_key;index"`
 	GateScope            string          `json:"-" gorm:"column:gate_scope;index"`
-	Output               OutputLines     `json:"-" gorm:"column:output;type:jsonb;not null;default:'[]'"`
+	Output               OutputLines     `json:"-" gorm:"column:output;type:text;not null;default:'[]'"`
 	OutputTruncated      bool            `json:"-" gorm:"column:output_truncated;not null;default:false"`
 }
 
@@ -79,7 +79,7 @@ func (ActivityMessage) TableName() string {
 
 // ActivitySyncReceipt persists applied run versions independently of history pruning.
 type ActivitySyncReceipt struct {
-	RunID     string     `gorm:"column:run_id;primaryKey"`
+	RunID     string     `gorm:"column:run_id;primaryKey;not null"`
 	UpdatedAt time.Time  `gorm:"column:updated_at;not null"`
 	SyncedAt  *time.Time `gorm:"column:synced_at"`
 }

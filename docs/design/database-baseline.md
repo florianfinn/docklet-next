@@ -12,7 +12,21 @@ reviewed integrity properties. Shipped migrations remain immutable; later
 migrations run forward at startup, with foreign/newer schema rejection and no
 downgrade. Production never uses AutoMigrate.
 
-The current PostgreSQL implementation's generation commands and retained
+The historical PostgreSQL generation commands and retained
 integrity derivation are preserved in the
 [M1 baseline record](../history/m1-postgresql-baseline.md). They are reference
 material for verifying equivalent constraints, not SQLite setup instructions.
+
+Generate the development schema only in a new local temporary file:
+
+```sh
+DATABASE_URL=file:baseline.db go run ./backend/cmd/schema-baseline > baseline.sql
+```
+
+The command takes the hub lifetime lock, rejects existing target files and
+generates deterministic SQL from the retained models and the reviewed SQLite
+integrity rules. Its output must
+match `backend/resources/migrations/sqlite/001_baseline.sql` byte for byte. This
+is a development verification command, not an operator migration or import tool.
+The independent retained-integrity fixture and behavioural constraint tests
+verify the overlay as well as the generated migration.

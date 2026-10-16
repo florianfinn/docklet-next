@@ -11,7 +11,6 @@ import (
 	"errors"
 	"fmt"
 	"strconv"
-	"strings"
 	"time"
 
 	"gorm.io/gorm"
@@ -66,8 +65,7 @@ func (s *KVService) Delete(ctx context.Context, key string) error {
 
 func (s *KVService) ListByPrefix(ctx context.Context, prefix string) ([]KVEntry, error) {
 	var entries []KVEntry
-	escapedPrefix := strings.NewReplacer(`\`, `\\`, `%`, `\%`, `_`, `\_`).Replace(prefix)
-	if err := s.db.WithContext(ctx).Where("key LIKE ? ESCAPE '\\'", escapedPrefix+"%").Find(&entries).Error; err != nil {
+	if err := s.db.WithContext(ctx).Where("substr(key,1,length(?)) = ? COLLATE BINARY", prefix, prefix).Find(&entries).Error; err != nil {
 		return nil, fmt.Errorf("failed to list kv entries with prefix %q: %w", prefix, err)
 	}
 	return entries, nil
@@ -107,7 +105,7 @@ func (s *KVService) IncrementInt64(ctx context.Context, key string, delta int64)
 	var nextValue int64
 	err := s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		var entry KVEntry
-		err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).Where("key = ?", key).First(&entry).Error
+		err := tx.Where("key = ?", key).First(&entry).Error
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			nextValue = delta
 			return tx.Create(&KVEntry{
@@ -126,7 +124,14 @@ func (s *KVService) IncrementInt64(ctx context.Context, key string, delta int64)
 
 		nextValue = currentValue + delta
 		entry.Value = strconv.FormatInt(nextValue, 10)
-		return tx.Save(&entry).Error
+		result := tx.Model(&KVEntry{}).Where("key = ?", key).Update("value", entry.Value)
+		if result.Error != nil {
+			return result.Error
+		}
+		if result.RowsAffected != 1 {
+			return gorm.ErrRecordNotFound
+		}
+		return nil
 	})
 	if err != nil {
 		return 0, fmt.Errorf("failed to increment kv entry %q: %w", key, err)

@@ -43,7 +43,8 @@ func JSONValue(isNil bool, value any) (driver.Value, error) {
 	if isNil {
 		return nil, nil
 	}
-	return json.Marshal(value)
+	data, err := json.Marshal(value)
+	return string(data), err
 }
 
 // JSONScan unmarshals a JSON TEXT column into dest, treating NULL as the zero value.

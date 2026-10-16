@@ -1,10 +1,8 @@
-//go:build postgres_integration
-
 // Source: getarcaneapp/arcane/backend/pkg/scheduler/auto_heal_job_test.go
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; functional cut: removed upstream analytics heartbeat; functional cut: PostgreSQL integration test fixture.
+// Deviations: Local module namespace; functional cut: removed upstream analytics heartbeat; SQLite temp-file persistence fixture.
 
 package scheduler
 
@@ -14,7 +12,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/florianfinn/docklet-next/backend/internal/testpg"
+	"github.com/florianfinn/docklet-next/backend/internal/testsqlite"
 	"github.com/moby/moby/api/types/container"
 	"github.com/moby/moby/client"
 	"github.com/stretchr/testify/require"
@@ -175,7 +173,7 @@ func TestAutoHeal_ResetRestartTracking(t *testing.T) {
 func TestAutoHeal_Run_UsesBoundedConcurrency(t *testing.T) {
 	ctx := t.Context()
 
-	db, err := gorm.Open(testpg.Dialector(t, ":memory:"), &gorm.Config{})
+	db, err := gorm.Open(testsqlite.Dialector(t, ":memory:"), &gorm.Config{})
 	require.NoError(t, err)
 	require.NoError(t, db.AutoMigrate(&settings.SettingVariable{}))
 

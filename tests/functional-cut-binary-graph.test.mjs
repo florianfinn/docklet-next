@@ -8,16 +8,12 @@ import { fileURLToPath } from "node:url";
 const root = new URL("../", import.meta.url);
 const command = fileURLToPath(new URL("../scripts/go-command.go", import.meta.url));
 const inventory = JSON.parse(readFileSync(new URL("../docs/provenance/core-import.json", import.meta.url), "utf8"));
-const forbidden = new Set(["github.com/libtnb/sqlite", "github.com/mattn/go-sqlite3", "modernc.org/sqlite", "modernc.org/libc"]);
-const laterPackages = new Set([
-  "github.com/florianfinn/docklet-next/types/capability",
-  "github.com/florianfinn/docklet-next/types/contract",
-]);
+const forbidden = new Set(["github.com/jackc/pgx/v5", "github.com/jackc/pgerrcode", "github.com/jackc/pgpassfile", "github.com/jackc/pgservicefile", "github.com/jackc/puddle/v2", "gorm.io/driver/postgres"]);
 
-test("hub and agent binary source graphs exclude SQLite and modernc libc", () => {
+test("hub and agent graphs use pure-Go SQLite and exclude PostgreSQL", () => {
   for (const target of inventory.targets) {
     const output = execFileSync("go", ["run", command, "--", "list", "-deps", ...target.tags,
-      "-f", "{{if .Module}}{{.ImportPath}}|{{.Module.Path}}{{end}}", "./backend/cmd/..."], {
+      "-f", "{{if .Module}}{{.ImportPath}}|{{.Module.Path}}{{end}}", "./backend/cmd"], {
       cwd: root,
       encoding: "utf8",
       maxBuffer: 32 * 1024 * 1024,
@@ -25,14 +21,20 @@ test("hub and agent binary source graphs exclude SQLite and modernc libc", () =>
     });
     const packages = output.trim().split("\n").filter(Boolean);
     const paths = packages.map((line) => line.split("|")[0]).sort();
-    const originalPaths = paths.filter((path) => !laterPackages.has(path));
-    assert.equal(originalPaths.length, target.packages, `${target.target} historical package count`);
-    assert.deepEqual(paths.filter((path) => laterPackages.has(path)), [...laterPackages].sort());
-    const digest = createHash("sha256").update(originalPaths.join("\n") + "\n").digest("hex");
-    assert.equal(digest, target.packageGraphSha256, `${target.target} package graph`);
+    assert.equal(target.cgo,"0");
+    assert.equal(target.entrypoint,"./backend/cmd");
+    assert.equal(paths.includes("github.com/florianfinn/docklet-next/backend/cmd/schema-baseline"),false);
+    assert.equal(paths.length,target.packages);
+    const digest=createHash("sha256").update(paths.join("\n")+"\n").digest("hex");
+    assert.equal(digest,target.packageGraphSha256,`${target.target} package graph`);
+    for(const module of ["github.com/libtnb/sqlite","modernc.org/sqlite","modernc.org/libc"])
+      assert.ok(packages.some(line=>line.split("|")[1]===module),module);
+    const inspected=JSON.parse(execFileSync("go",["run",command,"--","run","scripts/core-license-files.go","inspect",...target.tags.map(flag=>flag.replace("-tags=",""))],{cwd:root,encoding:"utf8",env:{...process.env,CGO_ENABLED:"0"}}));
+    const expected=JSON.parse(readFileSync(new URL("../docs/provenance/core-compiled-notices.json",import.meta.url))).files.map(({module,version,path,sha256})=>({module,version,path,sha256}));
+    assert.deepEqual(inspected,expected,`${target.target} compiled licence evidence`);
     for (const line of packages) {
       const module = line.split("|")[1];
-      assert.equal(forbidden.has(module), false, `${target.target} includes ${module}`);
+      assert.equal(forbidden.has(module) || line.includes("/components/postgres"), false, `${target.target} includes ${module}`);
     }
   }
 });

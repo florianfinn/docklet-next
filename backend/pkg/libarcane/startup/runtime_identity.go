@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; functional cut: removed standalone build workshop; functional cut: removed SQLite runtime and migrations.
+// Deviations: Local module namespace; functional cut: removed standalone build workshop; SQLite-only local persistence.
 
 package startup
 
@@ -293,7 +293,7 @@ func dockerSocketPathInternal(raw string) mo.Option[string] {
 }
 
 func prepareWritablePathsWithRootsInternal(uid, gid int, mountpoints map[string]struct{}, projectsDir, dataDirectory string) error {
-	if err := os.MkdirAll(dataDirectory, utils.DirPerm); err != nil {
+	if err := os.MkdirAll(dataDirectory, 0700); err != nil {
 		return fmt.Errorf("create data directory: %w", err)
 	}
 
@@ -301,6 +301,9 @@ func prepareWritablePathsWithRootsInternal(uid, gid int, mountpoints map[string]
 		return fmt.Errorf("chown data directory: %w", err)
 	}
 
+	if err := os.Chmod(dataDirectory, 0700); err != nil {
+		return fmt.Errorf("protect data directory: %w", err)
+	}
 	entries, err := os.ReadDir(dataDirectory)
 	if err != nil {
 		return fmt.Errorf("read data directory: %w", err)

@@ -1,10 +1,8 @@
-//go:build postgres_integration
-
 // Source: docklet-next/docs/design/adapter-live-capabilities.md
 // Revision: dfdfa084478d327818d8c57b0973d638f80861f6
 // Retrieved: 2026-10-15
 // License: Apache-2.0
-// Deviations: Original PostgreSQL retention and detail regression test.
+// Deviations: SQLite retention and detail regression test.
 
 package activity
 

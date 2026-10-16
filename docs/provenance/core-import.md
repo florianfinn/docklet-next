@@ -3,8 +3,9 @@
 The import uses Arcane v2.15.1 at
 `095cb778daba1034e2a39961199e712a75d4ba29` and the eleven independently pinned
 helper modules listed in [the adoption decision](../design/arcane-adoption.md).
-No functional cut is included. SQLite, Swarm, Git Sync and other removal targets
-remain for the subsequent cut.
+The pristine tree proofs below describe the original adoption. The current
+SQLite source selection is recorded separately in core-import.json and in the
+2026-10-16 assessment below.
 
 ## Pristine tree proof
 
@@ -158,5 +159,18 @@ is replaced by the minimal checksum file generated for the local workspace.
 All helper licence variants and the supplementary `sys/LICENSE` are recorded in
 `scripts/license-policy.json`, verified by the core inventory check and covered
 by exact provenance hashes. Release packaging must still assemble and inspect
-the complete third-party licence bundle. SQLite/libc removal and post-cut graph
-verification remain mandatory before release.
+the complete third-party licence bundle. The SQLite decision replaces the former removal boundary with exact compiled-file
+assessment and packaged notices.
+
+
+## SQLite source selection, 2026-10-16
+
+The CGO-free Linux/amd64 hub and agent graphs each contain 273 modules and 1,487
+non-standard-library packages. The graph is rooted at the shipped `./backend/cmd` entrypoint; the development
+schema generator is excluded. The current generated inventory records complete
+graph hashes, module versions, local lockfile hashes, legal file hashes and
+corresponding-source links. PostgreSQL providers and drivers are absent. The
+[compiled notice assessment](../design/sqlite-license-assessment.md) covers the
+two exact libc header files; unchanged historical Arcane inventories remain input
+evidence. Candidate packaging copies all listed Go and web legal texts and checks
+every extracted hash. This is not a product release or approval of other targets.

@@ -1,10 +1,8 @@
-//go:build postgres_integration
-
 // Source: getarcaneapp/arcane/backend/internal/build/service_test.go
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; functional cut: removed GitOps and saved Git repositories; functional cut: removed standalone build workshop; functional cut: PostgreSQL integration test fixture.
+// Deviations: Local module namespace; functional cut: removed GitOps and saved Git repositories; functional cut: removed standalone build workshop; SQLite temp-file persistence fixture.
 
 package build
 
@@ -20,7 +18,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/florianfinn/docklet-next/backend/internal/testpg"
+	"github.com/florianfinn/docklet-next/backend/internal/testsqlite"
 	usertypes "github.com/florianfinn/docklet-next/types/user"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -316,7 +314,7 @@ func (b testBuildRecorder) BuildImage(_ context.Context, req types.BuildRequest,
 }
 
 func setupBuildEventTestDB(t *testing.T) (*database.DB, error) {
-	db, err := gorm.Open(testpg.Dialector(t, ":memory:"), &gorm.Config{})
+	db, err := gorm.Open(testsqlite.Dialector(t, ":memory:"), &gorm.Config{})
 	if err != nil {
 		return nil, err
 	}

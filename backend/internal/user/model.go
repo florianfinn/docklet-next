@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; functional cut: removed OIDC, passkeys and federated accounts; PostgreSQL avatar storage.
+// Deviations: Local module namespace; functional cut: removed OIDC, passkeys and federated accounts; SQLite BLOB avatar storage.
 
 package user
 
@@ -41,7 +41,7 @@ func (User) TableName() string {
 // loading up to 2MB of binary data on every user query.
 type UserAvatar struct {
 	UserID   string `json:"userId" gorm:"column:user_id;primaryKey"`
-	Data     []byte `json:"-" gorm:"column:data;type:bytea;not null"`
+	Data     []byte `json:"-" gorm:"column:data;type:blob;not null"`
 	MimeType string `json:"mimeType" gorm:"column:mime_type;not null"`
 }
 
