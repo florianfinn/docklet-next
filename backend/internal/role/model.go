@@ -9,7 +9,7 @@ package role
 import "github.com/florianfinn/docklet-next/backend/internal/database"
 
 // Role is a named permission set. Built-in roles (Admin, Editor, Deployer,
-// Viewer) are seeded by migration 054 and cannot be edited or deleted.
+// Viewer) are seeded at bootstrap and cannot be edited or deleted.
 type Role struct {
 	database.BaseModel
 

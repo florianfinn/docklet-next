@@ -22,7 +22,7 @@ func (s *ActivityService) isTrackedInternal(activityID string) bool {
 	return ok
 }
 
-// RepairStartup closes abandoned work after the hub session lock is acquired.
+// RepairStartup closes abandoned work after the hub lifetime file lock is acquired.
 // Coordinator-owned activities are excluded until their own reconciliation ends.
 func (s *ActivityService) RepairStartup(ctx context.Context, protectedIDs ...string) (int64, error) {
 	return s.repairMatchingInternal(ctx, "", "", false, protectedIDs...)
@@ -57,10 +57,10 @@ func (s *ActivityService) repairMatchingInternal(ctx context.Context, kind activ
 		query = query.Where("status = ?", status)
 	}
 	if sweep {
-		query = query.Where("COALESCE(gate_scope, '') = '' AND started_at < NOW() - INTERVAL '2 minutes'")
+		query = query.Where("COALESCE(gate_scope, '') = '' AND started_at < ?", s.nowInternal().Add(-2*time.Minute))
 	}
 	if kind == activity.TypeImageUpdateCheck && status == activity.StatusRunning && !sweep {
-		query = query.Where("started_at < ?", time.Now().Add(-staleImageUpdateCheckAge))
+		query = query.Where("started_at < ?", s.nowInternal().Add(-staleImageUpdateCheckAge))
 	}
 	if len(protectedIDs) != 0 {
 		query = query.Where("id NOT IN ?", protectedIDs)

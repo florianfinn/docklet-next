@@ -37,7 +37,7 @@ func (s *EventService) PruneEvents(ctx context.Context, maxEntries int) (int64, 
 		return 0, errors.New("event limit must not be negative")
 	}
 	result := s.db.WithContext(ctx).Exec(`DELETE FROM events WHERE id IN (
-  SELECT id FROM events ORDER BY timestamp DESC, id DESC OFFSET ?
+  SELECT id FROM events ORDER BY timestamp DESC, id DESC LIMIT -1 OFFSET ?
  )`, maxEntries)
 	if result.Error != nil {
 		return 0, fmt.Errorf("prune events: %w", result.Error)

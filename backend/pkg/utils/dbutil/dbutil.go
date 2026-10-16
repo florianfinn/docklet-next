@@ -26,7 +26,7 @@ func IsRetryableWriteError(err error) bool {
 	}
 
 	var sqliteError *sqlite.Error
-	return errors.As(err, &sqliteError) && sqliteError.Code()&0xff == sqlitecode.SQLITE_BUSY
+	return errors.As(err, &sqliteError) && isBusyCode(sqliteError.Code())
 }
 
 // FirstWhere fetches a single row of T matching the provided WHERE clause.
@@ -51,4 +51,12 @@ func FirstWhere[T any](ctx context.Context, db *gorm.DB, notFound error, where s
 // db.WithContext(ctx).Transaction(fn) but tightens the surface area at call sites.
 func WithTx(ctx context.Context, db *gorm.DB, fn func(tx *gorm.DB) error) error {
 	return db.WithContext(ctx).Transaction(fn)
+}
+
+func isBusyCode(code int) bool { return code&0xff == sqlitecode.SQLITE_BUSY }
+
+// IsUniqueConstraint classifies primary-key and unique-index failures only.
+func IsUniqueConstraint(err error) bool {
+	var sqliteError *sqlite.Error
+	return errors.As(err, &sqliteError) && (sqliteError.Code() == sqlitecode.SQLITE_CONSTRAINT_UNIQUE || sqliteError.Code() == sqlitecode.SQLITE_CONSTRAINT_PRIMARYKEY)
 }

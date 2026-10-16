@@ -10,7 +10,7 @@ import (
 	"context"
 	"errors"
 	"github.com/gofrs/flock"
-	"os"
+	"github.com/florianfinn/docklet-next/backend/pkg/utils/sqlitestore"
 )
 
 var ErrHubAlreadyRunning = errors.New("hub.already_running")
@@ -22,13 +22,7 @@ func acquireHubLock(ctx context.Context, path string) (*HubLock, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
-	info, err := os.Lstat(path + ".lock")
-	if err == nil && !info.Mode().IsRegular() {
-		return nil, errors.New("hub lock must be a regular file")
-	}
-	if err != nil && !errors.Is(err, os.ErrNotExist) {
-		return nil, err
-	}
+ if err:=sqlitestore.ValidateFile(path+".lock");err!=nil{return nil,err}
 	lock := flock.New(path+".lock", flock.SetPermissions(0600))
 	ok, err := lock.TryLock()
 	if err != nil {

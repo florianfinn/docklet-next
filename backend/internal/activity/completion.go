@@ -19,7 +19,6 @@ import (
 	"github.com/florianfinn/docklet-next/backend/pkg/utils/dbutil"
 	"github.com/florianfinn/docklet-next/types/activity"
 	"gorm.io/gorm"
-	"gorm.io/gorm/clause"
 )
 
 func (
@@ -62,7 +61,7 @@ func (
 	ctx, cancel = context.WithTimeout(context.WithoutCancel(ctx), ownerWriteTimeout)
 	defer cancel()
 
-	now := s.nowInternal()
+	var now time.Time
 	var model Activity
 	var final *ActivityMessage
 	completed := false
@@ -73,17 +72,14 @@ func (
 		writeErr = s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 			completed = false
 			final = nil
-			if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).First(&model, "id = ?", activityID).Error; err != nil {
+			now = s.nowInternal().UTC().Truncate(time.Microsecond)
+			if err := tx.First(&model, "id = ?", activityID).Error; err != nil {
 				return fmt.Errorf("failed to load activity: %w", err)
 			}
 			if !isTerminalActivityStatusInternal(model.Status) && !gatedWriterAllowedInternal(ctx, &model) {
 				return ErrRunNotOwned
 			}
-			if model.GateScope != "" {
-				if err := tx.Raw("SELECT NOW()").Scan(&now).Error; err != nil {
-					return err
-				}
-			}
+
 			if s.cancelling[activityID] || errors.Is(context.Cause(workCtx), activitylib.ErrCanceled) {
 				status = activity.StatusCancelled
 				finalMessage = cancelledMessageInternal
@@ -91,11 +87,7 @@ func (
 			}
 
 			updates := completeActivityUpdatesInternal(model.StartedAt, status, finalMessage, errMessage, finalStep, now)
-			if model.GateScope != "" {
-				updates["ended_at"] = gorm.Expr("NOW()")
-				updates["updated_at"] = gorm.Expr("NOW()")
-				updates["duration_ms"] = gorm.Expr("GREATEST(0, EXTRACT(EPOCH FROM (NOW() - started_at)) * 1000)::bigint")
-			}
+
 			code := string(activityCodeInternal(status))
 			query := tx.Model(&Activity{}).Where("id = ? AND status IN ?", activityID, []activity.Status{activity.StatusQueued, activity.StatusRunning})
 			result := query.Updates(updates)
@@ -173,7 +165,7 @@ func completeActivityUpdatesInternal(startedAt time.Time, status activity.Status
 		"status":       status,
 		"message_code": activityCodeInternal(status),
 		"ended_at":     now,
-		"duration_ms":  now.Sub(startedAt).Milliseconds(),
+		"duration_ms":  max(int64(0), now.Sub(startedAt).Milliseconds()),
 		"updated_at":   now,
 	}
 	if trimmed := strings.TrimSpace(finalMessage); trimmed != "" {

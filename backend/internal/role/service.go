@@ -20,10 +20,8 @@ import (
 
 	roletypes "github.com/florianfinn/docklet-next/types/role"
 	"github.com/samber/hot"
-	"github.com/samber/mo"
 	"go.getarcane.app/kit/normalization"
 	"gorm.io/gorm"
-	"gorm.io/gorm/clause"
 
 	"github.com/florianfinn/docklet-next/backend/internal/common"
 	"github.com/florianfinn/docklet-next/backend/internal/database"
@@ -154,7 +152,13 @@ func (s *RoleService) CreateRole(ctx context.Context, name string, description *
 		if conflict > 0 {
 			return common.Classify(common.ErrRoleNameTaken, errors.New("Role name already in use"))
 		}
-		return tx.Create(role).Error
+		if err := tx.Create(role).Error; err != nil {
+			if dbutil.IsUniqueConstraint(err) {
+				return common.ErrRoleNameTaken
+			}
+			return err
+		}
+		return nil
 	})
 	if err != nil {
 		return nil, err
@@ -162,13 +166,9 @@ func (s *RoleService) CreateRole(ctx context.Context, name string, description *
 	return role, nil
 }
 
-// lockAssignedUserRowsInternal locks the user rows of everyone currently
-// assigned to roleID, in deterministic id order. Role-definition writes call
-// this so they serialize with user-domain mutation transactions, whose in-transaction
-// privilege checks lock the same rows: without it a role edit could change a
-// holder's effective admin status between that check and the mutation commit.
-// Returns the affected user ids for post-commit cache invalidation.
-func lockAssignedUserRowsInternal(tx *gorm.DB, roleID string) ([]string, error) {
+// assignedUserIDsInternal validates affected users inside the role transaction.
+// Their permission caches are invalidated only after commit.
+func assignedUserIDsInternal(tx *gorm.DB, roleID string) ([]string, error) {
 	var ids []string
 	if err := tx.Model(&UserRoleAssignment{}).
 		Where("role_id = ?", roleID).
@@ -179,13 +179,15 @@ func lockAssignedUserRowsInternal(tx *gorm.DB, roleID string) ([]string, error) 
 	if len(ids) == 0 {
 		return ids, nil
 	}
-	var locked []string
+	var present []string
 	if err := tx.Table("users").
-		Clauses(clause.Locking{Strength: "UPDATE"}).
 		Where("id IN ?", ids).
 		Order("id").
-		Pluck("id", &locked).Error; err != nil {
-		return nil, fmt.Errorf("failed to lock users assigned to role: %w", err)
+		Pluck("id", &present).Error; err != nil {
+		return nil, fmt.Errorf("failed to read users assigned to role: %w", err)
+	}
+	if len(present) != len(ids) {
+		return nil, common.ErrUserNotFound
 	}
 	return ids, nil
 }
@@ -202,7 +204,7 @@ func (s *RoleService) UpdateRole(ctx context.Context, id, name string, descripti
 	var affected []string
 	err := dbutil.WithTx(ctx, s.db.DB, func(tx *gorm.DB) error {
 		var existing Role
-		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).Where("id = ?", id).First(&existing).Error; err != nil {
+		if err := tx.Where("id = ?", id).First(&existing).Error; err != nil {
 			if errors.Is(err, gorm.ErrRecordNotFound) {
 				return common.Classify(common.ErrRoleNotFound, errors.New("Role not found"))
 			}
@@ -220,7 +222,7 @@ func (s *RoleService) UpdateRole(ctx context.Context, id, name string, descripti
 				return common.Classify(common.ErrRoleNameTaken, errors.New("Role name already in use"))
 			}
 		}
-		ids, err := lockAssignedUserRowsInternal(tx, id)
+		ids, err := assignedUserIDsInternal(tx, id)
 		if err != nil {
 			return err
 		}
@@ -228,8 +230,15 @@ func (s *RoleService) UpdateRole(ctx context.Context, id, name string, descripti
 		existing.Name = input.Name
 		existing.Description = input.Description
 		existing.Permissions = permissions
-		if updateRoleErr := tx.Save(&existing).Error; updateRoleErr != nil {
+		result := tx.Model(&Role{}).Where("id = ?", id).Select("*").Updates(&existing)
+		if updateRoleErr := result.Error; updateRoleErr != nil {
+			if dbutil.IsUniqueConstraint(updateRoleErr) {
+				return common.ErrRoleNameTaken
+			}
 			return fmt.Errorf("failed to update role: %w", updateRoleErr)
+		}
+		if result.RowsAffected != 1 {
+			return common.ErrRoleNotFound
 		}
 		out = existing
 		return nil
@@ -247,7 +256,7 @@ func (s *RoleService) DeleteRole(ctx context.Context, id string) error {
 	var affected []string
 	err := dbutil.WithTx(ctx, s.db.DB, func(tx *gorm.DB) error {
 		var existing Role
-		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).Where("id = ?", id).First(&existing).Error; err != nil {
+		if err := tx.Where("id = ?", id).First(&existing).Error; err != nil {
 			if errors.Is(err, gorm.ErrRecordNotFound) {
 				return common.Classify(common.ErrRoleNotFound, errors.New("Role not found"))
 			}
@@ -258,13 +267,17 @@ func (s *RoleService) DeleteRole(ctx context.Context, id string) error {
 		}
 
 		// Collect affected users before deleting the role.
-		ids, err := lockAssignedUserRowsInternal(tx, id)
+		ids, err := assignedUserIDsInternal(tx, id)
 		if err != nil {
 			return err
 		}
 		affected = ids
-		if deleteRoleErr := tx.Delete(&Role{}, "id = ?", id).Error; deleteRoleErr != nil {
+		result := tx.Delete(&Role{}, "id = ?", id)
+		if deleteRoleErr := result.Error; deleteRoleErr != nil {
 			return fmt.Errorf("failed to delete role: %w", deleteRoleErr)
+		}
+		if result.RowsAffected != 1 {
+			return common.ErrRoleNotFound
 		}
 		return nil
 	})
@@ -317,19 +330,16 @@ func (s *RoleService) replaceUserAssignmentsForSourceInternal(ctx context.Contex
 		desired[i].Source = source
 	}
 	err := dbutil.WithTx(ctx, s.db.DB, func(tx *gorm.DB) error {
-		// Lock the target's user row so assignment swaps serialize with
-		// user-domain update/delete transactions, whose in-transaction privilege
-		// checks lock the same row.
-		var locked struct{ ID string }
+		// Assignment replacement and admin validation share the immediate transaction.
+		var current struct{ ID string }
 		if err := tx.Table("users").
 			Select("id").
-			Clauses(clause.Locking{Strength: "UPDATE"}).
 			Where("id = ?", userID).
-			Take(&locked).Error; err != nil {
+			Take(&current).Error; err != nil {
 			if errors.Is(err, gorm.ErrRecordNotFound) {
 				return common.ErrUserNotFound
 			}
-			return fmt.Errorf("failed to lock user for assignment update: %w", err)
+			return fmt.Errorf("failed to read user for assignment update: %w", err)
 		}
 		if err := validateAssignmentsExistInternal(tx, desired); err != nil {
 			return err
@@ -667,75 +677,3 @@ func (s *RoleService) InvalidateApiKey(apiKeyID string) {
 }
 
 // ---------- helpers ----------
-
-func validatePermissionsInternal(perms []string) error {
-	for _, p := range perms {
-		if !authz.IsKnownPermission(p) {
-			return common.Classify(common.ErrUnknownPermission, errors.New("Unknown permission: "+
-
-				p))
-		}
-	}
-	return nil
-}
-
-// ValidatePermissionsAgainstCaller rejects any permission in `desired` that the
-// caller does not hold at global scope. Sudo callers (agent / env access
-// tokens, bootstrap paths) bypass entirely. Holding a permission only inside a
-// specific environment is intentionally insufficient: roles are reusable
-// templates that can later be assigned globally, so an env-scoped grant must
-// not let the caller mint a global-capable role.
-//
-// Unknown permission strings are rejected first with an UnknownPermissionError
-// so a caller typo-ing a permission gets a descriptive 400 instead of a
-// misleading 403 from the escalation guard below (which would always fire on
-// an unknown perm because no PermissionSet contains it). This also gives the
-// escalation loop a clean invariant: every perm reaching it is real.
-//
-// Callers should run this before persisting role permissions to defend against
-// privilege escalation if the role mutation endpoints are ever exposed beyond
-// global admins.
-func (s *RoleService) ValidatePermissionsAgainstCaller(caller *authz.PermissionSet, desired []string) error {
-	if err := validatePermissionsInternal(desired); err != nil {
-		return err
-	}
-	return validatePermissionSetAgainstCallerInternal(caller, desired, "")
-}
-
-// ValidateRoleAssignmentAgainstCaller rejects assigning a role at the requested
-// scope when the caller does not hold every permission in that role at that
-// same scope.
-func (s *RoleService) ValidateRoleAssignmentAgainstCaller(ctx context.Context, caller *authz.PermissionSet, roleID string, environmentID *string) error {
-	role, err := s.GetRole(ctx, roleID)
-	if err != nil {
-		return err
-	}
-
-	desired := []string(role.Permissions)
-	if validatePermissionsErr := validatePermissionsInternal(desired); validatePermissionsErr != nil {
-		return validatePermissionsErr
-	}
-	return validatePermissionSetAgainstCallerInternal(caller, desired, mo.PointerToOption(environmentID).OrEmpty())
-}
-
-func validatePermissionSetAgainstCallerInternal(caller *authz.PermissionSet, desired []string, environmentID string) error {
-	if caller == nil {
-		if len(desired) == 0 {
-			return nil
-		}
-		return common.Classify(common.ErrRolePermissionEscalation, errors.New("cannot grant a permission you do not hold: "+
-
-			desired[0]))
-	}
-	if caller.Sudo {
-		return nil
-	}
-	for _, p := range desired {
-		if !caller.Allows(p, environmentID) {
-			return common.Classify(common.ErrRolePermissionEscalation, errors.New("cannot grant a permission you do not hold: "+
-
-				p))
-		}
-	}
-	return nil
-}

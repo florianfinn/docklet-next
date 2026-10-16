@@ -60,7 +60,7 @@ func Path(raw string) (string, error) {
 		return "", err
 	}
 	name = filepath.Join(parent, filepath.Base(name))
-	if err = checkFile(name); err != nil {
+	if err = ValidateFile(name); err != nil {
 		return "", err
 	}
 	if err = checkLocalDirectory(parent, gosqlsqlite.IsNetworkedFileSystem); err != nil {
@@ -80,7 +80,7 @@ func checkLocalDirectory(path string, detect func(string) (bool, error)) error {
 	return nil
 }
 
-func checkFile(path string) error {
+func ValidateFile(path string) error {
 	info, err := os.Lstat(path)
 	if errors.Is(err, os.ErrNotExist) {
 		return nil
@@ -107,7 +107,7 @@ func URL(path string) string { return (&url.URL{Scheme: "file", Path: path}).Str
 // Open configures every replacement connection through the driver's DSN.
 // Francis deliberately omits hub time options: its STRICT integers are milliseconds.
 func Open(ctx context.Context, path string, hub, readOnly bool) (*sql.DB, error) {
-	if err := checkFile(path); err != nil {
+	if err := ValidateFile(path); err != nil {
 		return nil, err
 	}
 	if err := checkLocalDirectory(filepath.Dir(path), gosqlsqlite.IsNetworkedFileSystem); err != nil {

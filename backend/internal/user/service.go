@@ -23,7 +23,6 @@ import (
 	"go.getarcane.app/kit/pkg"
 	"golang.org/x/crypto/argon2"
 	"gorm.io/gorm"
-	"gorm.io/gorm/clause"
 
 	"github.com/florianfinn/docklet-next/backend/internal/common"
 	"github.com/florianfinn/docklet-next/backend/internal/database"
@@ -207,11 +206,8 @@ func (s *UserService) ResolveUserPermissions(ctx context.Context, userID string)
 // A nil actorPerms denotes a trusted internal caller (e.g. the auth service
 // acting on behalf of the account owner) and skips the privilege check.
 //
-// The target and any request-time global-admin actor are locked together before
-// permissions are resolved through tx (never the TTL cache). Role-assignment
-// writes lock the same user rows, so a concurrent promotion or demotion is
-// serialized with the mutation. The request-time actor permissions remain part
-// of the decision so revalidation can only reduce, never elevate, authority.
+// Current actor/target permissions are resolved through the immediate transaction.
+// Revalidation may reduce request-time authority, never elevate it.
 func (s *UserService) checkTargetPrivilegeInternal(ctx context.Context, tx *gorm.DB, actorPerms *authz.PermissionSet, targetID string) error {
 	revalidateActor := actorPerms != nil && !actorPerms.Sudo && actorPerms.IsGlobalAdmin() && s.roleService != nil
 	actorID := ""
@@ -227,18 +223,18 @@ func (s *UserService) checkTargetPrivilegeInternal(ctx context.Context, tx *gorm
 	if actorID != "" && actorID != targetID {
 		userIDs = append(userIDs, actorID)
 	}
-	var lockedUsers []User
-	if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).
+	var currentUsers []User
+	if err := tx.
 		Where("id IN ?", userIDs).
 		Order("id ASC").
-		Find(&lockedUsers).Error; err != nil {
-		return fmt.Errorf("failed to lock users: %w", err)
+		Find(&currentUsers).Error; err != nil {
+		return fmt.Errorf("failed to read users: %w", err)
 	}
 	targetFound := false
 	actorFound := actorID == ""
-	for i := range lockedUsers {
-		targetFound = targetFound || lockedUsers[i].ID == targetID
-		actorFound = actorFound || lockedUsers[i].ID == actorID
+	for i := range currentUsers {
+		targetFound = targetFound || currentUsers[i].ID == targetID
+		actorFound = actorFound || currentUsers[i].ID == actorID
 	}
 	if !targetFound {
 		return common.ErrUserNotFound
@@ -277,11 +273,15 @@ func (s *UserService) UpdateUser(ctx context.Context, localUser *User, actorPerm
 		if err := s.checkTargetPrivilegeInternal(ctx, tx, actorPerms, localUser.ID); err != nil {
 			return err
 		}
-		if err := tx.Save(localUser).Error; err != nil {
+		result := tx.Model(&User{}).Where("id = ?", localUser.ID).Select("*").Updates(localUser)
+		if err := result.Error; err != nil {
 			if isDuplicateKeyErrorInternal(tx, err) {
 				return ErrUsernameTaken
 			}
 			return fmt.Errorf("failed to update user: %w", err)
+		}
+		if result.RowsAffected != 1 {
+			return common.ErrUserNotFound
 		}
 		return nil
 	})
@@ -343,7 +343,7 @@ func (s *UserService) SetPasswordAndRevokeSessionsExcept(ctx context.Context, lo
 
 	var updatedUser User
 	err = dbutil.WithTx(ctx, s.db.DB, func(tx *gorm.DB) error {
-		if loadPasswordResetUserErr := tx.Clauses(clause.Locking{Strength: "UPDATE"}).
+		if loadPasswordResetUserErr := tx.
 			Where("id = ?", localUser.ID).
 			First(&updatedUser).Error; loadPasswordResetUserErr != nil {
 			if errors.Is(loadPasswordResetUserErr, gorm.ErrRecordNotFound) {
@@ -354,8 +354,15 @@ func (s *UserService) SetPasswordAndRevokeSessionsExcept(ctx context.Context, lo
 
 		updatedUser.PasswordHash = hashedPassword
 		updatedUser.RequiresPasswordChange = false
-		if updatePasswordErr := tx.Save(&updatedUser).Error; updatePasswordErr != nil {
+		result := tx.Model(&User{}).Where("id = ?", updatedUser.ID).Updates(map[string]any{"password_hash": hashedPassword, "requires_password_change": false})
+		if updatePasswordErr := result.Error; updatePasswordErr != nil {
 			return fmt.Errorf("failed to update user password: %w", updatePasswordErr)
+		}
+		if result.RowsAffected != 1 {
+			return common.ErrUserNotFound
+		}
+		if err := tx.First(&updatedUser, "id=?", updatedUser.ID).Error; err != nil {
+			return err
 		}
 		return s.revokeSessionsExcept(ctx, tx, updatedUser.ID, exceptSessionID)
 	})
