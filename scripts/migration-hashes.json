@@ -1,9 +1,3 @@
 {
-  "001_baseline.sql": "c39ff6da5f2a456e6f63261c4ec6ad13b584dc53fd5d4b501b6ca9638f573554",
-  "002_run_traces.sql": "0f5b2c64b41be772a14b1231434d67ea21f28df3eca6ff2b952a2bbdb378d48b",
-  "003_sync_receipt_lifecycle.sql": "671bcfc6ac6486430b793bf3d6c178a0c1c6f1fb18cc5b7eff61e1bb5180a578",
-  "004_gate_owner.sql": "f3c8fdb6a543a7af2b70a8bea81354d9251e1214fe50a1bbe1f9081a64f08709",
-  "005_gate_lease.sql": "61c4116c28a808fe45a4577a366835e8d842e67428302c3b213aa3cb733d9f89",
-  "006_single_hub_gate.sql": "dbf959161d6b5554d211007cb84669843b3044a63b2b073d86434b2fccb8e67a",
-  "007_activity_raw_output.sql": "51c48b1468886cb1725eadeb4f463ffc07c7f6b725466afe138728fed107efa8"
+  "sqlite/001_baseline.sql": "38474d07ced65e45099f36d846a4b5f5378dcb09f74c68a166cefd7abc3cc603"
 }

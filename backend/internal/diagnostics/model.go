@@ -64,6 +64,8 @@ type actorTimeInternal time.Time
 
 func (t *actorTimeInternal) Scan(value any) error {
 	switch v := value.(type) {
+	case int64:
+		*t = actorTimeInternal(time.UnixMilli(v).UTC())
 	case time.Time:
 		*t = actorTimeInternal(v.UTC())
 	case nil:

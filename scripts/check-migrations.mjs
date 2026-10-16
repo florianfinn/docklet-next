@@ -2,13 +2,13 @@ import { createHash } from "node:crypto";
 import { spawnSync } from "node:child_process";
 import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { fileURLToPath } from "node:url";
-import { dirname, join, relative } from "node:path";
+import { basename, dirname, join, relative } from "node:path";
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
-const migrationDir = "backend/resources/migrations/postgres";
-const baseline = "001_baseline.sql";
+const migrationDir = "backend/resources/migrations";
+const baseline = "sqlite/001_baseline.sql";
 // Independent of the manifest so rehashing a shipped baseline cannot certify it.
-const baselineHash = "c39ff6da5f2a456e6f63261c4ec6ad13b584dc53fd5d4b501b6ca9638f573554";
+const baselineHash = "38474d07ced65e45099f36d846a4b5f5378dcb09f74c68a166cefd7abc3cc603";
 
 export function migrationProblems(files, manifest, pinnedBaselineHash = baselineHash) {
   const problems = [];
@@ -25,7 +25,7 @@ export function migrationProblems(files, manifest, pinnedBaselineHash = baseline
   const versions = new Set();
   for (const name of files.keys()) {
     if (!Object.hasOwn(manifest, name)) problems.push(`unmanifested:${name}`);
-    const match = /^(\d{3})_[a-z0-9_]+\.sql$/.exec(name);
+    const match = /^(\d{3})_[a-z0-9_]+\.sql$/.exec(basename(name));
     if (!match) { problems.push(`invalid-name:${name}`); continue; }
     const version = Number(match[1]);
     if (version < 1 || (name !== baseline && version <= 1)) problems.push(`invalid-version:${name}`);
@@ -35,15 +35,43 @@ export function migrationProblems(files, manifest, pinnedBaselineHash = baseline
   return problems;
 }
 
-function baseManifestProblems(manifest) {
-  const base = process.env.CHECK_BASE_SHA;
-  if (!base) return [];
-  if (!/^[a-f0-9]{40}$/.test(base)) throw new Error("migration-integrity: invalid base revision");
-  const previous = spawnSync("git", ["show", `${base}:scripts/migration-hashes.json`], { cwd: root });
-  if (previous.status !== 0) return [];
-  return Object.entries(JSON.parse(previous.stdout.toString("utf8")))
-    .filter(([name, hash]) => manifest[name] !== hash)
+const legacyManifest = {
+  "001_baseline.sql": "c39ff6da5f2a456e6f63261c4ec6ad13b584dc53fd5d4b501b6ca9638f573554",
+  "002_run_traces.sql": "0f5b2c64b41be772a14b1231434d67ea21f28df3eca6ff2b952a2bbdb378d48b",
+  "003_sync_receipt_lifecycle.sql": "671bcfc6ac6486430b793bf3d6c178a0c1c6f1fb18cc5b7eff61e1bb5180a578",
+  "004_gate_owner.sql": "f3c8fdb6a543a7af2b70a8bea81354d9251e1214fe50a1bbe1f9081a64f08709",
+  "005_gate_lease.sql": "61c4116c28a808fe45a4577a366835e8d842e67428302c3b213aa3cb733d9f89",
+  "006_single_hub_gate.sql": "dbf959161d6b5554d211007cb84669843b3044a63b2b073d86434b2fccb8e67a",
+  "007_activity_raw_output.sql": "51c48b1468886cb1725eadeb4f463ffc07c7f6b725466afe138728fed107efa8"
+};
+
+export function baseManifestProblems(previous, manifest) {
+  const exact = (a, b) => JSON.stringify(Object.entries(a).sort()) === JSON.stringify(Object.entries(b).sort());
+  if (exact(previous, legacyManifest) && exact(manifest, { [baseline]: baselineHash })) return [];
+  return Object.entries(previous).filter(([name, hash]) => manifest[name] !== hash)
     .map(([name]) => `changed-shipped:${name}`);
+}
+function comparisonProblems(manifest) {
+ const base = process.env.CHECK_BASE_SHA;
+ if (!base) return [];
+ if (!/^[a-f0-9]{40}$/.test(base)) throw new Error("migration-integrity: invalid base revision");
+ const previous = spawnSync("git", ["show", `${base}:scripts/migration-hashes.json`], {cwd: root});
+ if (previous.status !== 0) return [];
+ const old = JSON.parse(previous.stdout.toString("utf8"));
+ const problems = baseManifestProblems(old, manifest);
+ if (!problems.length && Object.hasOwn(old, "001_baseline.sql")) {
+  for (const [name, hash] of Object.entries(legacyManifest)) {
+   const file = spawnSync("git", ["show", `${base}:${migrationDir}/postgres/${name}`], {cwd: root});
+   if (file.status !== 0 || createHash("sha256").update(file.stdout).digest("hex") !== hash)
+    problems.push(`changed-transition-source:${name}`);
+  }
+ }
+ return problems;
+}
+function migrationFiles(dir, prefix = "") {
+ return readdirSync(dir, {withFileTypes: true}).flatMap((entry) => entry.isDirectory()
+  ? migrationFiles(join(dir, entry.name), prefix + entry.name + "/")
+  : entry.name.endsWith(".sql") ? [[prefix + entry.name, readFileSync(join(dir, entry.name))]] : []);
 }
 
 export function checkMigrations() {
@@ -66,7 +94,7 @@ export function checkMigrations() {
       if (blob.status !== 0) throw new Error(`migration-integrity: unreadable staged file ${path}`);
       return [path.slice(migrationDir.length + 1), blob.stdout];
     }));
-    const problems = [...migrationProblems(files, manifest), ...baseManifestProblems(manifest)];
+    const problems = [...migrationProblems(files, manifest), ...comparisonProblems(manifest)];
     if (problems.length) throw new Error(`migration-integrity: ${problems.join(", ")}`);
     return;
   }
@@ -80,9 +108,8 @@ export function checkMigrations() {
     throw new Error("migration-integrity: deleted baseline");
   }
   const manifest = JSON.parse(readFileSync(manifestPath, "utf8"));
-  const files = new Map(readdirSync(join(root, migrationDir)).filter((name) => name.endsWith(".sql"))
-    .map((name) => [name, readFileSync(join(root, migrationDir, name))]));
-  const problems = [...migrationProblems(files, manifest), ...baseManifestProblems(manifest)];
+  const files = new Map(migrationFiles(join(root, migrationDir)));
+  const problems = [...migrationProblems(files, manifest), ...comparisonProblems(manifest)];
   if (problems.length) throw new Error(`migration-integrity: ${problems.join(", ")}`);
 }
 

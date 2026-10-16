@@ -1,5 +1,3 @@
-//go:build postgres_integration
-
 // Source: docklet-next/docs/design/core-adoption.md
 // Revision: be847e36ab81fdf0cd6a7dad333046ddea990e71
 // Retrieved: 2026-10-13
@@ -9,14 +7,10 @@
 package schema
 
 import (
-	"net/url"
-	"os"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/require"
-	"gorm.io/driver/postgres"
-	"gorm.io/gorm"
 
 	"github.com/florianfinn/docklet-next/backend/internal/apikey"
 	"github.com/florianfinn/docklet-next/backend/internal/database"
@@ -28,16 +22,7 @@ import (
 
 func cascadeDatabase(t *testing.T) *database.DB {
 	t.Helper()
-	dsn := os.Getenv("DATABASE_URL")
-	require.NotEmpty(t, dsn)
-	u, err := url.Parse(dsn)
-	require.NoError(t, err)
-	admin, err := gorm.Open(postgres.Open(dsn), &gorm.Config{})
-	require.NoError(t, err)
-	adminSQL, err := admin.DB()
-	require.NoError(t, err)
-	t.Cleanup(func() { require.NoError(t, adminSQL.Close()) })
-	migrated, err := database.Initialize(t.Context(), freshDatabase(t, admin, u), database.MigrationOptions{})
+	migrated, err := database.Initialize(t.Context(), freshDatabase(t), database.MigrationOptions{})
 	require.NoError(t, err)
 	t.Cleanup(func() { require.NoError(t, migrated.Close()) })
 	return migrated

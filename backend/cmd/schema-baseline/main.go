@@ -49,5 +49,8 @@ func generate() error {
 	if tables != 0 {
 		return errors.New("baseline generation requires an empty database")
 	}
-	return db.AutoMigrate(schema.Models()...)
+	if err := db.AutoMigrate(schema.Models()...); err != nil {
+		return err
+	}
+	return schema.ApplyIntegrity(db)
 }

@@ -38,16 +38,6 @@ type MigrationOptions struct{}
 const (
 	dbProviderSQLite   = "sqlite"
 	legacyVersionTable = "schema_migrations"
-
-	// Prepared-statement cache bounds. GORM's PrepareStmt cache is a global LRU keyed
-	// by SQL text. When PrepareStmtMaxSize/PrepareStmtTTL are left at zero, GORM falls
-	// back to math.MaxInt entries with a 24h TTL, i.e. effectively unbounded. Because
-	// this codebase emits highly variable SQL (dynamic filter/sort/pagination and
-	// GORM's IN (...) slice expansion, whose placeholder count changes the query
-	// text), the cache grows steadily under normal use. Bounding size and TTL keeps
-	// hot queries prepared while evicting the long tail.
-	preparedStmtMaxSize = 256
-	preparedStmtTTL     = 15 * time.Minute
 )
 
 var customGormLogger logger.Interface
@@ -121,7 +111,6 @@ func connectDatabaseInternal(ctx context.Context, databaseURL string) (*DB, erro
 	}
 	db, err := gorm.Open(sqlitestore.Dialector(pool), &gorm.Config{
 		Logger: customGormLogger, NowFunc: func() time.Time { return time.Now().UTC() },
-		PrepareStmt: true, PrepareStmtMaxSize: preparedStmtMaxSize, PrepareStmtTTL: preparedStmtTTL,
 		IgnoreRelationshipsWhenMigrating: true,
 	})
 	if err != nil {
@@ -141,12 +130,8 @@ func migrateDatabaseInternal(ctx context.Context, db *sql.DB, dbProvider string,
 }
 
 func migrateDatabaseToVersionInternal(ctx context.Context, db *sql.DB, dbProvider string, _ MigrationOptions, requiredVersion int64) error {
-	var legacyExists bool
-	if err := db.QueryRowContext(ctx, `SELECT to_regclass($1) IS NOT NULL`, legacyVersionTable).Scan(&legacyExists); err != nil {
-		return fmt.Errorf("check legacy migration state: %w", err)
-	}
-	if legacyExists {
-		return errors.New("legacy databases are not supported; start with an empty PostgreSQL database")
+	if err := validateIdentity(ctx, db, requiredVersion); err != nil {
+		return err
 	}
 	provider, err := newGooseProviderInternal(db, dbProvider)
 	if err != nil {
@@ -156,15 +141,7 @@ func migrateDatabaseToVersionInternal(ctx context.Context, db *sql.DB, dbProvide
 	if err != nil {
 		return fmt.Errorf("read migration version: %w", err)
 	}
-	if currentVersion > 0 {
-		var legacyRolesColumn bool
-		if err := db.QueryRowContext(ctx, `SELECT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema='public' AND table_name='users' AND column_name='roles')`).Scan(&legacyRolesColumn); err != nil {
-			return fmt.Errorf("check migration provenance: %w", err)
-		}
-		if legacyRolesColumn {
-			return errors.New("legacy databases are not supported; start with an empty PostgreSQL database")
-		}
-	}
+
 	if currentVersion > requiredVersion {
 		return fmt.Errorf("database schema version %d is newer than supported version %d", currentVersion, requiredVersion)
 	}
@@ -172,7 +149,7 @@ func migrateDatabaseToVersionInternal(ctx context.Context, db *sql.DB, dbProvide
 		return nil
 	}
 	if _, err := provider.UpTo(ctx, requiredVersion); err != nil {
-		return fmt.Errorf("apply PostgreSQL migrations: %w", err)
+		return fmt.Errorf("apply SQLite migrations: %w", err)
 	}
 	return nil
 }
