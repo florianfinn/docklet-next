@@ -125,15 +125,21 @@ func TestSignInCLIThroughRealMiddleware(t *testing.T) {
 		require.NoError(t, err, "%s", output)
 	}
 	run("auth", "login", "--username", "admin")
-	configBytes, err := os.ReadFile(configPath)
-	require.NoError(t, err)
-	lines := strings.Split(string(configBytes), "\n")
-	for i, line := range lines {
-		if strings.HasPrefix(line, "jwt_token:") {
-			lines[i] = "jwt_token: example"
+	invalidateAccess := func() {
+		t.Helper()
+		configBytes, err := os.ReadFile(configPath)
+		require.NoError(t, err)
+		lines := strings.Split(string(configBytes), "\n")
+		for i, line := range lines {
+			if strings.HasPrefix(line, "jwt_token:") {
+				lines[i] = "jwt_token: example"
+			}
 		}
+		require.NoError(t, os.WriteFile(configPath, []byte(strings.Join(lines, "\n")), 0o600))
 	}
-	require.NoError(t, os.WriteFile(configPath, []byte(strings.Join(lines, "\n")), 0o600))
+	invalidateAccess()
+	run("auth", "refresh")
+	invalidateAccess()
 	run("auth", "logout")
 	admin, err := svc.userService.GlobalAdministrator(t.Context())
 	require.NoError(t, err)
@@ -143,7 +149,7 @@ func TestSignInCLIThroughRealMiddleware(t *testing.T) {
 	run("auth", "logout")
 	mu.Lock()
 	defer mu.Unlock()
-	require.Equal(t, []string{"/api/auth/login", "/api/auth/logout", "/api/auth/refresh", "/api/auth/logout", "/api/auth/logout"}, seen)
+	require.Equal(t, []string{"/api/auth/login", "/api/auth/refresh", "/api/auth/logout", "/api/auth/refresh", "/api/auth/logout", "/api/auth/logout"}, seen)
 }
 
 func TestSignInBodyCredentialBoundary(t *testing.T) {

@@ -87,6 +87,11 @@ func (m *CSRFMiddleware) Add() echo.MiddlewareFunc {
 				return next(c)
 			}
 			if m.cfg.SignInMode() == "local" {
+				// These POSTs authenticate explicit body credentials and carry no ambient authority.
+				if req.Method == http.MethodPost && req.Header.Get("Origin") == "" && cookieLess &&
+					(req.URL.Path == "/api/auth/login" || req.URL.Path == "/api/auth/refresh") {
+					return next(c)
+				}
 				// An operation may ignore a header credential and authenticate its cookie instead.
 				if cookieLess && m.localCredential != nil {
 					valid, err := m.localCredential(req)
@@ -96,11 +101,6 @@ func (m *CSRFMiddleware) Add() echo.MiddlewareFunc {
 					if valid {
 						return next(c)
 					}
-				}
-				// These POSTs authenticate explicit body credentials and carry no ambient authority.
-				if req.Method == http.MethodPost && req.Header.Get("Origin") == "" && len(req.Header.Values("Cookie")) == 0 &&
-					(req.URL.Path == "/api/auth/login" || req.URL.Path == "/api/auth/refresh") {
-					return next(c)
 				}
 			}
 			originOK := false
