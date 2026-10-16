@@ -47,6 +47,11 @@ type Coordinator struct {
 	observer     st.RunObserver
 	observerMu   sync.Mutex
 	location     *time.Location
+	paused       bool
+	background   sync.Mutex
+	work         map[uint64]context.CancelFunc
+	workNext     uint64
+	workers      sync.WaitGroup
 }
 
 // Submit persists acceptance before waking the dispatcher. Run IDs deduplicate
@@ -58,6 +63,9 @@ func (q *Coordinator) Submit(ctx context.Context, request st.Request) (st.Run, e
 	defer q.mu.Unlock()
 	if q.stopping {
 		return st.Run{}, errors.New("job queue is stopping")
+	}
+	if q.paused {
+		return st.Run{}, errors.New("job queue is paused")
 	}
 	request.EnvironmentID = cmp.Or(request.EnvironmentID, "0")
 	if request.JobID == "" {
@@ -284,6 +292,76 @@ func (q *Coordinator) Stop(ctx context.Context) error {
 	}
 }
 
+// PauseAndDrain stops admission and dispatch, cancels local executions, and
+// waits until their database writes have finished before restore begins.
+type maintenanceWorkerKey struct{}
+
+func (q *Coordinator) PauseAndDrain(ctx context.Context) error {
+	except, _ := ctx.Value(maintenanceWorkerKey{}).(uint64)
+	q.mu.Lock()
+	q.paused = true
+	q.enabled.Store(false)
+	for id, cancel := range q.work {
+		if id != except {
+			cancel()
+		}
+	}
+	q.mu.Unlock()
+	q.background.Lock()
+	q.background.Unlock()
+	ticker := time.NewTicker(10 * time.Millisecond)
+	defer ticker.Stop()
+	for {
+		q.mu.Lock()
+		remaining := len(q.work)
+		if _, ok := q.work[except]; ok {
+			remaining--
+		}
+		q.mu.Unlock()
+		if remaining == 0 {
+			return nil
+		}
+		select {
+		case <-ticker.C:
+		case <-ctx.Done():
+			return ctx.Err()
+		}
+	}
+}
+
+func (q *Coordinator) Resume() {
+	q.mu.Lock()
+	if !q.stopping {
+		q.paused = false
+		q.enabled.Store(true)
+	}
+	q.mu.Unlock()
+	q.signalInternal()
+}
+
+func (q *Coordinator) trackRestoreWorkerInternal(ctx context.Context) (context.Context, bool, func()) {
+	q.mu.Lock()
+	defer q.mu.Unlock()
+	if q.paused || !q.enabled.Load() {
+		return nil, false, nil
+	}
+	workCtx, cancel := context.WithCancel(ctx)
+	q.workNext++
+	id := q.workNext
+	if q.work == nil {
+		q.work = make(map[uint64]context.CancelFunc)
+	}
+	q.work[id] = cancel
+	q.workers.Add(1)
+	return context.WithValue(workCtx, maintenanceWorkerKey{}, id), true, func() {
+		cancel()
+		q.mu.Lock()
+		delete(q.work, id)
+		q.mu.Unlock()
+		q.workers.Done()
+	}
+}
+
 func (q *Coordinator) dispatchInternal(ctx context.Context) {
 	defer close(q.done)
 
@@ -292,6 +370,20 @@ func (q *Coordinator) dispatchInternal(ctx context.Context) {
 	fullRepair := true
 	nextRetention := time.Now()
 	for ctx.Err() == nil {
+		q.background.Lock()
+		q.mu.Lock()
+		paused := q.paused
+		q.mu.Unlock()
+		if paused {
+			q.background.Unlock()
+			select {
+			case <-ctx.Done():
+				return
+			case <-q.wake:
+			case <-time.After(100 * time.Millisecond):
+			}
+			continue
+		}
 		q.retryActivitySyncInternal(ctx)
 		if initialRetention || !time.Now().Before(nextRetention) {
 			if err := q.pruneInternal(ctx); err != nil {
@@ -322,6 +414,7 @@ func (q *Coordinator) dispatchInternal(ctx context.Context) {
 				nextWake = activityRetry
 			}
 		}
+		q.background.Unlock()
 		timer := time.NewTimer(max(time.Until(nextWake), 0))
 		select {
 		case <-ctx.Done():
@@ -546,4 +639,13 @@ func (q *Coordinator) Resolve(ctx context.Context, environmentID, jobID, runID, 
 		q.signalInternal()
 	}
 	return run, err
+}
+
+// ResetAfterRestore prevents copied claims from being mistaken for this host's
+// current workers when a running process restores its own earlier archive.
+func (q *Coordinator) ResetAfterRestore() {
+	q.mu.Lock()
+	defer q.mu.Unlock()
+	q.owner = uuid.New().String()
+	q.checkpointed = make(map[string]bool)
 }

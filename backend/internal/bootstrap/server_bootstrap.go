@@ -9,6 +9,7 @@ package bootstrap
 import (
 	"context"
 	"crypto/tls"
+	"encoding/json"
 	"errors"
 	"log/slog"
 	"net"
@@ -22,6 +23,8 @@ import (
 	"google.golang.org/grpc"
 
 	"github.com/florianfinn/docklet-next/backend/internal/config"
+	"github.com/florianfinn/docklet-next/backend/internal/system"
+	hubbackup "github.com/florianfinn/docklet-next/backend/internal/system/children/backup"
 	"github.com/florianfinn/docklet-next/backend/pkg/libarcane/edge"
 	"github.com/florianfinn/docklet-next/backend/pkg/utils/httpx"
 	tunnelpb "github.com/florianfinn/docklet-next/backend/proto/tunnel/v1"
@@ -42,6 +45,7 @@ type HTTPServerParams struct {
 	Config       *config.Config
 	Router       *echo.Echo
 	TunnelServer *edge.TunnelServer
+	System       *system.SystemService
 	Scheduler    schedulertypes.JobScheduler
 }
 
@@ -56,7 +60,11 @@ func NewHTTPServer(lc fx.Lifecycle, p HTTPServerParams) (*http.Server, error) {
 		p.TunnelServer.SetConfig(edgeCfg)
 	}
 
-	httpHandler, grpcServer := configureTunnelServerInternal(p.AppCtx, p.Config, p.Router, p.TunnelServer, listenAddr)
+	var maintenance *hubbackup.MaintenanceGate
+	if p.System != nil {
+		maintenance = p.System.BackupMaintenanceGate()
+	}
+	httpHandler, grpcServer := configureTunnelServerInternal(p.AppCtx, p.Config, p.Router, p.TunnelServer, maintenance, listenAddr)
 	httpHandler, protocols := configureHTTPProtocolsInternal(useTLS, httpHandler)
 
 	// Request contexts deliberately do not inherit the app lifecycle marker.
@@ -152,7 +160,7 @@ func prepareServerTLSInternal(ctx context.Context, cfg *config.Config) (bool, st
 	return useTLS, tlsCertFile, tlsKeyFile, edgeCfg, nil
 }
 
-func configureTunnelServerInternal(appCtx context.Context, cfg *config.Config, router http.Handler, tunnelServer *edge.TunnelServer, listenAddr string) (http.Handler, *grpc.Server) {
+func configureTunnelServerInternal(appCtx context.Context, cfg *config.Config, router http.Handler, tunnelServer *edge.TunnelServer, gate *hubbackup.MaintenanceGate, listenAddr string) (http.Handler, *grpc.Server) {
 	httpHandler := router
 	var grpcServer *grpc.Server
 
@@ -163,7 +171,20 @@ func configureTunnelServerInternal(appCtx context.Context, cfg *config.Config, r
 
 		httpHandler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			if isTunnelGRPCRequestInternal(r) {
-				grpcReq := normalizeTunnelGRPCRequestPathInternal(r)
+				ctx, cancel := context.WithCancel(r.Context())
+				if gate != nil {
+					release, err := gate.AdmitCancel(cancel)
+					if err != nil {
+						cancel()
+						w.Header().Set("Content-Type", "application/problem+json")
+						w.WriteHeader(http.StatusServiceUnavailable)
+						_ = json.NewEncoder(w).Encode(maintenanceProblemInternal())
+						return
+					}
+					defer release()
+				}
+				defer cancel()
+				grpcReq := normalizeTunnelGRPCRequestPathInternal(r.WithContext(ctx))
 				grpcServer.ServeHTTP(w, grpcReq)
 				return
 			}

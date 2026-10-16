@@ -523,6 +523,32 @@ func TestVerifyToken_RejectsRevokedCachedSession(t *testing.T) {
 	require.ErrorIs(t, err, common.ErrSessionRevoked, "expected cached access token to be rejected after revocation, got %v", err)
 }
 
+func TestRestoreRevokesEveryCachedSession(t *testing.T) {
+	db := setupAuthServiceTestDB(t)
+	userSvc := user.NewUserService(db, nil, session.RevokeAllUserSessionsExceptInDB)
+	s := newTestAuthService()
+	s.userService = userSvc
+	s.sessionService = session.NewSessionService(db)
+	localUser := &user.User{ID: "restore-user", Username: "restore-user"}
+	_, err := userSvc.CreateUser(t.Context(), localUser)
+	require.NoError(t, err)
+	exp := time.Now().Add(5 * time.Minute)
+	first, _ := createTestSession(t, db, localUser.ID, exp)
+	second, _ := createTestSession(t, db, localUser.ID, exp)
+	tokens := make([]string, 0, 2)
+	for _, record := range []*session.UserSession{first, second} {
+		token := makeAccessToken(t, s.signingKey, "access", localUser.ID, localUser.Username, nil, "", "", exp, record.ID)
+		tokens = append(tokens, token)
+		_, _, err = s.VerifyToken(t.Context(), token)
+		require.NoError(t, err)
+	}
+	require.NoError(t, s.RevokeAllSessions(t.Context()))
+	for _, token := range tokens {
+		_, _, err = s.VerifyToken(t.Context(), token)
+		require.ErrorIs(t, err, common.ErrSessionRevoked)
+	}
+}
+
 func TestRefreshToken_RotatesJTI(t *testing.T) {
 	db := setupAuthServiceTestDB(t)
 	userSvc := user.NewUserService(db, nil, session.RevokeAllUserSessionsExceptInDB)

@@ -12,6 +12,7 @@ export interface DemoAdapterOptions {
   nextFailure?: DemoFailure;
   missingCapabilities?: readonly string[];
   seedRuns?: Omit<ActionRun, "output">[];
+  hubBackupScenario?: "list" | "empty" | "creating" | "storage-unavailable" | "tools-unavailable" | "maintenance" | "signed-out" | "queued" | "cancelled" | "no-access";
 }
 
 const demoOptions = Symbol("docklet.demo.options");

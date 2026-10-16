@@ -8,3 +8,7 @@ coverage/
 .publication-denylist.local.json
 .claude/*
 !.claude/settings.json
+
+# Private restore control files, staged images and safety copies.
+*.restore/
+*.restore-*/

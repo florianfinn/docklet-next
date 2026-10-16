@@ -46,4 +46,9 @@ export function assertWorkflow(file, text) {
     assert.equal(text.includes("pull_request_target:"), false);
     assert.equal(text.includes("write"), false);
   }
+  if (file === "checks") {
+    assert.match(text, /^  package-image:$/m);
+    assert.match(text, /scripts\/smoke-hub-image.mjs/);
+    assert.equal(text.includes("postgres-integration"), false);
+  }
 }

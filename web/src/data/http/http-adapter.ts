@@ -11,6 +11,7 @@ import { AdapterOutcomeError, GENERIC_REASON, HUB_REF, unavailable, type Capabil
 import { createDisconnectedAdapter } from "../disconnected-adapter";
 import type { CodedActionRun } from "../message-code";
 import { mapActivityDetail, mapEvent } from "./map-dto";
+import { createHttpHubBackups } from "./hub-backups";
 
 type ReadOperation = "get-capabilities" | "listEnvironments" | "list-activities" | "get-activity" | "listEvents";
 type Body<I extends ReadOperation> = operations[I]["responses"][200]["content"]["application/json"];
@@ -24,6 +25,7 @@ export interface HttpAdapterOptions {
   baseUrl?: string;
   fetch?: typeof globalThis.fetch;
   eventSource?: (url: string) => Source;
+  uploadFactory?: () => XMLHttpRequest;
 }
 
 function refFor(operationId: string, args: readonly unknown[]): ResourceRef {
@@ -258,6 +260,7 @@ export function createHttpAdapter(options: HttpAdapterOptions = {}): DockletAdap
   const methods = Object.fromEntries(Object.keys(unsupported).filter((key) => key !== "kind").map((operationId) => [operationId, (...args: unknown[]) => Promise.reject(unavailable(operationId, refFor(operationId, args), "capability.mapping-unavailable"))])) as unknown as DockletAdapter;
   return {
     ...methods,
+    ...createHttpHubBackups(baseUrl, fetcher, options.uploadFactory),
     kind: "http",
     mappedOperations: IMPLEMENTED,
     getCapability,

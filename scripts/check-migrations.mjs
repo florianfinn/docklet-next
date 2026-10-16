@@ -46,9 +46,11 @@ const legacyManifest = {
   "007_activity_raw_output.sql": "51c48b1468886cb1725eadeb4f463ffc07c7f6b725466afe138728fed107efa8"
 };
 
+const backupLegacyManifest = { ...legacyManifest, "008_hub_backup_archive.sql": "887c68b84d26386d9f9e8e119c79e4dc52ca4c99a641959b1347f2f7f99aca1e" };
+
 export function baseManifestProblems(previous, manifest) {
   const exact = (a, b) => JSON.stringify(Object.entries(a).sort()) === JSON.stringify(Object.entries(b).sort());
-  if (exact(previous, legacyManifest) && exact(manifest, { [baseline]: baselineHash })) return [];
+  if ((exact(previous, legacyManifest) || exact(previous, backupLegacyManifest)) && manifest[baseline] === baselineHash) return [];
   if (!Object.hasOwn(previous, baseline)) return ["invalid-transition-base"];
   return Object.entries(previous).filter(([name, hash]) => manifest[name] !== hash)
     .map(([name]) => `changed-shipped:${name}`);
@@ -62,7 +64,7 @@ function comparisonProblems(manifest) {
  const old = JSON.parse(previous.stdout.toString("utf8"));
  const problems = baseManifestProblems(old, manifest);
  if (!problems.length && Object.hasOwn(old, "001_baseline.sql")) {
-  for (const [name, hash] of Object.entries(legacyManifest)) {
+  for (const [name, hash] of Object.entries(old)) {
    const file = spawnSync("git", ["show", `${base}:${migrationDir}/postgres/${name}`], {cwd: root});
    if (file.status !== 0 || createHash("sha256").update(file.stdout).digest("hex") !== hash)
     problems.push(`changed-transition-source:${name}`);

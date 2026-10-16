@@ -96,6 +96,7 @@ type ActivityService struct {
 	running   map[string]context.CancelCauseFunc
 	// cancelling holds the local gate conflict until completion returns.
 	cancelling map[string]bool
+	sealed     map[string]bool
 	clock      func() time.Time
 
 	// limiter bounds concurrent queue-opted activities per environment.
@@ -280,56 +281,6 @@ func (s *ActivityService) Track(ctx context.Context, activityID string) context.
 	delete(s.cancelling, activityID)
 	s.runningMu.Unlock()
 	return workCtx
-}
-
-// RequestCancel cancels the work context registered for activityID, signalling
-// activitylib.ErrCanceled as the cause. It returns whether a running activity
-// was found in this process.
-func (s *ActivityService) RequestCancel(activityID string) bool {
-	return s.cancelTrackedInternal(activityID, activitylib.ErrCanceled)
-}
-
-func (s *ActivityService) cancelTrackedInternal(activityID string, cause error) bool {
-	activityID = strings.TrimSpace(activityID)
-	if s == nil || activityID == "" {
-		return false
-	}
-
-	s.runningMu.Lock()
-	cancel, ok := s.running[activityID]
-	if ok {
-		if s.cancelling == nil {
-			s.cancelling = make(map[string]bool)
-		}
-		s.cancelling[activityID] = true
-	}
-	s.runningMu.Unlock()
-	if !ok {
-		return false
-	}
-	cancel(cause)
-	return true
-}
-
-// releaseCancelInternal removes and cancels the registration for activityID.
-// Cancelling with a nil cause is a no-op if the context was already cancelled
-// (the first cause wins), so a prior ErrCanceled cause is preserved.
-func (s *ActivityService) releaseCancelInternal(activityID string) {
-	activityID = strings.TrimSpace(activityID)
-	if s == nil || activityID == "" {
-		return
-	}
-
-	s.runningMu.Lock()
-	cancel, ok := s.running[activityID]
-	if ok {
-		delete(s.running, activityID)
-		delete(s.cancelling, activityID)
-	}
-	s.runningMu.Unlock()
-	if ok {
-		cancel(nil)
-	}
 }
 
 func (s *ActivityService) checkInitInternal() error {

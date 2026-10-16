@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; functional cut: removed S3 backup destinations.
+// Deviations: Replaced Rustic recovery routes with SQLite archive routes.
 
 package backup
 
@@ -10,183 +10,62 @@ import (
 	"net/http"
 
 	"github.com/danielgtaylor/huma/v2"
-
 	"github.com/florianfinn/docklet-next/backend/internal/middleware"
 	"github.com/florianfinn/docklet-next/backend/internal/system/children/backup/children/volumes"
 	"github.com/florianfinn/docklet-next/backend/pkg/authz"
+	backuptypes "github.com/florianfinn/docklet-next/types/backup"
 )
 
-// RegisterRoutes registers the system backup endpoints, including the
-// system-managed volume backup endpoints.
 func RegisterRoutes(api huma.API, h *Handler) {
 	adminOnly := middleware.RequireGlobalAdmin(api)
-	middleware.RegisterWithPermission(
-		api,
-		huma.Operation{
-			OperationID: "list-system-backups",
-			Method:      http.MethodGet,
-			Path:        "/backups",
-			Summary:     "List Arcane system backups",
-			Tags: []string{
-				"System Backups",
-			},
-			Middlewares: adminOnly,
-		},
-		authz.PermSystemBackupsRead,
-		h.List,
-	)
-	middleware.RegisterWithPermission(
-		api,
-		huma.Operation{
-			OperationID: "list-backup-history",
-			Method:      http.MethodGet,
-			Path:        "/backups/history",
-			Summary:     "List unified backup history",
-			Tags: []string{
-				"System Backups",
-			},
-			Middlewares: adminOnly,
-		},
-		authz.PermSystemBackupsRead,
-		h.ListHistory,
-	)
-	middleware.RegisterWithPermission(
-		api,
-		huma.Operation{
-			OperationID: "get-system-backup-policies",
-			Method:      http.MethodGet,
-			Path:        "/backups/policies",
-			Summary:     "Get Arcane system backup policies",
-			Tags: []string{
-				"System Backups",
-			},
-			Middlewares: adminOnly,
-		},
-		authz.PermSystemBackupsRead,
-		h.GetPolicies,
-	)
-	middleware.RegisterWithPermission(
-		api,
-		huma.Operation{
-			OperationID: "update-system-backup-policies",
-			Method:      http.MethodPut,
-			Path:        "/backups/policies",
-			Summary:     "Update Arcane system backup policies",
-			Tags: []string{
-				"System Backups",
-			},
-			Middlewares: adminOnly,
-		},
-		authz.PermSystemBackupsManage,
-		h.UpdatePolicies,
-	)
-	middleware.RegisterWithPermission(
-		api,
-		huma.Operation{
-			OperationID: "generate-system-backup-recovery-key",
-			Method:      http.MethodPost,
-			Path:        "/backups/recovery-key/generate",
-			Summary:     "Generate an Arcane system backup recovery key",
-			Tags: []string{
-				"System Backups",
-			},
-			Middlewares: adminOnly,
-		},
-		authz.PermSystemBackupsRecoveryKey,
-		h.GenerateRecoveryKey,
-	)
-	middleware.RegisterWithPermission(
-		api,
-		huma.Operation{
-			OperationID: "set-system-backup-recovery-key",
-			Method:      http.MethodPut,
-			Path:        "/backups/recovery-key",
-			Summary:     "Configure Arcane system backup recovery key",
-			Tags: []string{
-				"System Backups",
-			},
-			Middlewares: adminOnly,
-		},
-		authz.PermSystemBackupsRecoveryKey,
-		h.SetRecoveryKey,
-	)
-	middleware.RegisterWithPermission(
-		api,
-		huma.Operation{
-			OperationID:   "create-system-backup",
-			DefaultStatus: http.StatusAccepted,
-			Method:        http.MethodPost,
-			Path:          "/backups",
-			Summary:       "Create Arcane system backup",
-			Tags: []string{
-				"System Backups",
-			},
-			Middlewares: adminOnly,
-		},
-		authz.PermSystemBackupsManage,
-		h.Create,
-	)
-	middleware.RegisterWithPermission(
-		api,
-		huma.Operation{
-			OperationID: "restore-system-backup",
-			Method:      http.MethodPost,
-			Path:        "/backups/{id}/restore",
-			Summary:     "Restore Arcane system backup",
-			Tags: []string{
-				"System Backups",
-			},
-			Middlewares: adminOnly,
-		},
-		authz.PermSystemBackupsRestore,
-		h.Restore,
-	)
-	middleware.RegisterWithPermission(
-		api,
-		huma.Operation{
-			OperationID: "browse-system-backup-files",
-			Method:      http.MethodPost,
-			Path:        "/backups/{id}/files/browse",
-			Summary:     "Browse project files in an Arcane system backup",
-			Tags: []string{
-				"System Backups",
-			},
-			Middlewares: adminOnly,
-		},
-		authz.PermSystemBackupsRead,
-		h.BrowseFiles,
-	)
-	middleware.RegisterWithPermission(
-		api,
-		huma.Operation{
-			OperationID: "restore-system-backup-files",
-			Method:      http.MethodPost,
-			Path:        "/backups/{id}/restore-files",
-			Summary:     "Restore project files from an Arcane system backup",
-			Tags: []string{
-				"System Backups",
-			},
-			Middlewares: adminOnly,
-		},
-		authz.PermSystemBackupsRestore,
-		h.RestoreFiles,
-	)
-	middleware.RegisterWithPermission(
-		api,
-		huma.Operation{
-			OperationID: "delete-system-backup",
-			Method:      http.MethodDelete,
-			Path:        "/backups/{id}",
-			Summary:     "Delete Arcane system backup",
-			Tags: []string{
-				"System Backups",
-			},
-			Middlewares: adminOnly,
-		},
-		authz.PermSystemBackupsManage,
-		h.Delete,
-	)
-
+	op := func(id, method, path, summary string) huma.Operation {
+		return huma.Operation{OperationID: id, Method: method, Path: path, Summary: summary,
+			Tags: []string{"Hub Backups"}, Middlewares: adminOnly}
+	}
+	middleware.RegisterWithPermission(api, op("list-system-backups", http.MethodGet, "/backups", "List Hub database archives"), authz.PermSystemBackupsRead, h.List)
+	middleware.RegisterWithPermission(api, op("list-backup-history", http.MethodGet, "/backups/history", "List backup history"), authz.PermSystemBackupsRead, h.ListHistory)
+	middleware.RegisterWithPermission(api, op("get-system-backup-policies", http.MethodGet, "/backups/policies", "Get Hub database backup policies"), authz.PermSystemBackupsRead, h.GetPolicies)
+	middleware.RegisterWithPermission(api, op("update-system-backup-policies", http.MethodPut, "/backups/policies", "Update Hub database backup policies"), authz.PermSystemBackupsManage, h.UpdatePolicies)
+	middleware.RegisterWithPermission(api, op("get-system-backup-storage", http.MethodGet, "/backups/storage", "Get local archive storage usage"), authz.PermSystemBackupsRead, h.Storage)
+	maintenance := op("get-system-backup-maintenance", http.MethodGet, "/backups/maintenance", "Get Hub restore maintenance status")
+	maintenance.Description = "During restore maintenance, the router serves the active phase and activity ID without database access or authentication. Normal reads require system-backups:read."
+	middleware.RegisterWithPermission(api, maintenance, authz.PermSystemBackupsRead, h.Maintenance)
+	create := op("create-system-backup", http.MethodPost, "/backups", "Create a Hub database archive")
+	create.DefaultStatus = http.StatusAccepted
+	middleware.RegisterWithPermission(api, create, authz.PermSystemBackupsManage, h.Create)
+	upload := op("import-system-backup-upload", http.MethodPost, "/backups/upload", "Upload and import a Hub database archive")
+	upload.DefaultStatus = http.StatusAccepted
+	upload.Description = "Stream one versioned two-file Docklet SQLite tar archive as application/octet-stream, up to 2 GiB."
+	upload.MaxBodyBytes = backuptypes.MaxSystemArchiveBytes + 1
+	upload.Errors = []int{http.StatusRequestEntityTooLarge, http.StatusUnsupportedMediaType}
+	maxArchiveBytes := int(backuptypes.MaxSystemArchiveBytes)
+	// RawBody would buffer the entire archive before the handler can stream it.
+	upload.RequestBody = &huma.RequestBody{Required: true, Content: map[string]*huma.MediaType{
+		"application/octet-stream": {Schema: &huma.Schema{
+			Type: "string", Format: "binary", MaxLength: &maxArchiveBytes,
+		}},
+	}}
+	upload.Metadata = map[string]any{authz.MetaRequiredPermission: authz.PermSystemBackupsRestore}
+	upload.Middlewares = append(upload.Middlewares, middleware.RequirePermission(api, authz.PermSystemBackupsRestore)...)
+	upload.Middlewares = append(upload.Middlewares, h.streamUploadMiddleware(api)...)
+	huma.Register(api, upload, h.Upload)
+	download := op("download-system-backup", http.MethodGet, "/backups/{id}/download", "Download a Hub database archive")
+	download.Responses = map[string]*huma.Response{"200": {
+		Description: "versioned two-file Docklet SQLite tar archive",
+		Headers: map[string]*huma.Param{"Content-Disposition": {
+			Description: "attachment with a server-selected archive filename",
+			Required:    true,
+			Schema:      &huma.Schema{Type: "string", Pattern: "^attachment(?:;|$)"},
+		}},
+		Content: map[string]*huma.MediaType{"application/octet-stream": {Schema: &huma.Schema{Type: "string", Format: "binary"}}},
+	}}
+	middleware.RegisterWithPermission(api, download, authz.PermSystemBackupsRead, h.Download)
+	restore := op("restore-system-backup", http.MethodPost, "/backups/{id}/restore", "Restore a Hub database archive")
+	restore.DefaultStatus = http.StatusAccepted
+	middleware.RegisterWithPermission(api, restore, authz.PermSystemBackupsRestore, h.Restore)
+	deleteBackup := op("delete-system-backup", http.MethodDelete, "/backups/{id}", "Delete a Hub database archive")
+	deleteBackup.DefaultStatus = http.StatusAccepted
+	middleware.RegisterWithPermission(api, deleteBackup, authz.PermSystemBackupsManage, h.Delete)
 	var volumeService *volumes.Service
 	if h.service != nil {
 		volumeService = h.service.volumes

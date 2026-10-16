@@ -48,6 +48,9 @@ type Runtime struct {
 	address       string
 	storeURL      string
 	store         *gorm.DB
+	writer        *sql.DB
+	appCtx        context.Context
+	onFailure     func(error)
 	actorNames    sync.Map
 }
 
@@ -161,6 +164,7 @@ func (r *Runtime) Start(ctx, appCtx context.Context, onFailure func(error)) erro
 		return errors.New("actor host already started")
 	}
 	r.started = true
+	r.appCtx, r.onFailure = appCtx, onFailure
 	runCtx, cancel := context.WithCancel(appCtx)
 	r.cancel = cancel
 	r.mu.Unlock()
@@ -242,6 +246,9 @@ func (r *Runtime) runHost(ctx context.Context) (*local.Host, chan error, error) 
 	if err != nil {
 		return nil, nil, err
 	}
+	r.mu.Lock()
+	r.writer = pool
+	r.mu.Unlock()
 	options := []local.HostOption{local.WithSQLiteProvider(sqlite.SQLiteProviderOptions{DB: pool, TablePrefix: TablePrefix})}
 	options = append(options, r.options...)
 	host, err := local.NewHost(options...)

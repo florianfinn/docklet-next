@@ -2,33 +2,31 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; functional cut: removed S3 backup destinations.
+// Deviations: Replaced Rustic recovery handlers with the SQLite archive contract.
 
 package backup
 
 import (
 	"context"
 	"errors"
-	"strings"
+	"io"
+	"strconv"
 
 	"github.com/danielgtaylor/huma/v2"
-	activitytypes "github.com/florianfinn/docklet-next/types/activity"
 	"github.com/florianfinn/docklet-next/types/backup"
 	"github.com/florianfinn/docklet-next/types/base"
-	"github.com/samber/mo"
 
 	"github.com/florianfinn/docklet-next/backend/internal/activity"
-	"github.com/florianfinn/docklet-next/backend/internal/common"
-	"github.com/florianfinn/docklet-next/backend/internal/database"
-	activitylib "github.com/florianfinn/docklet-next/backend/pkg/libarcane/activity"
-	"github.com/florianfinn/docklet-next/backend/pkg/utils"
+	sharedbackup "github.com/florianfinn/docklet-next/backend/internal/backup"
+	"github.com/florianfinn/docklet-next/backend/internal/middleware"
+	userdomain "github.com/florianfinn/docklet-next/backend/internal/user"
 	"github.com/florianfinn/docklet-next/backend/pkg/utils/handlerutil"
+	usertypes "github.com/florianfinn/docklet-next/types/user"
 )
 
 type Handler struct {
-	service  *Service
-	activity *activity.ActivityService
-	appCtx   context.Context
+	service *Service
+	appCtx  context.Context
 }
 
 type ListSystemBackupsInput struct {
@@ -51,58 +49,29 @@ type ListBackupHistoryInput struct {
 type SystemBackupPoliciesOutput struct {
 	Body backup.SystemBackupPolicyCollection
 }
-
 type UpdateSystemBackupPoliciesInput struct {
 	Body backup.UpdateSystemBackupPolicies
 }
-
-type SetSystemBackupRecoveryKeyInput struct {
-	Body backup.SystemBackupRecoveryKey
-}
-
-type SystemBackupRecoveryKeyOutput struct {
-	Body backup.SystemBackupRecoveryKeyStatus
-}
-
-type GenerateSystemBackupRecoveryKeyOutput struct {
-	Body backup.SystemBackupRecoveryKey
-}
-
 type CreateSystemBackupInput struct {
 	Body backup.CreateSystemBackupRequest
 }
-
-type (
-	SystemBackupOutput       struct{ Body backup.SystemBackupRun }
-	RestoreSystemBackupInput struct {
-		ID   string `path:"id"`
-		Body backup.RestoreSystemBackupRequest
-	}
-)
-
-// BrowseSystemBackupFilesInput selects one page of a system backup tree.
-type BrowseSystemBackupFilesInput struct {
-	ID     string `path:"id"`
-	Path   string `query:"path" doc:"Folder path relative to the backup root"`
-	Search string `query:"search" doc:"Case-insensitive full-path search"`
-	Start  int    `query:"start" default:"0" doc:"Start index for the page"`
-	Limit  int    `query:"limit" default:"20" doc:"Requested page size"`
-	Body   backup.SystemBackupRecoveryKey
+type SystemBackupOutput struct{ Body backup.SystemBackupRun }
+type UploadSystemBackupInput struct{}
+type SystemBackupOperationOutput struct{ Body backup.SystemBackupOperation }
+type SystemBackupStorageOutput struct{ Body backup.SystemBackupStorage }
+type SystemBackupMaintenanceOutput struct {
+	Body backup.SystemBackupMaintenance
+}
+type BackupIDInput struct {
+	ID string `path:"id" pattern:"^[A-Za-z0-9_-]{1,128}$"`
+}
+type RestoreSystemBackupInput struct {
+	ID   string `path:"id" pattern:"^[A-Za-z0-9_-]{1,128}$"`
+	Body backup.RestoreSystemBackupRequest
 }
 
-// RestoreSystemBackupFilesInput selects project files to restore from a system backup.
-type RestoreSystemBackupFilesInput struct {
-	ID   string `path:"id"`
-	Body backup.RestoreSystemBackupFilesRequest
-}
-
-type DeleteSystemBackupInput struct {
-	ID   string `path:"id"`
-	Body backup.DeleteSystemBackupRequest
-}
-
-func NewHandler(service *Service, activityService *activity.ActivityService, appCtx context.Context) *Handler {
-	return &Handler{service: service, activity: activityService, appCtx: appCtx}
+func NewHandler(service *Service, _ *activity.ActivityService, appCtx context.Context) *Handler {
+	return &Handler{service: service, appCtx: appCtx}
 }
 
 func (h *Handler) ListHistory(ctx context.Context, input *ListBackupHistoryInput) (*handlerutil.Page[backup.HistoryEntry], error) {
@@ -110,190 +79,158 @@ func (h *Handler) ListHistory(ctx context.Context, input *ListBackupHistoryInput
 	params.Filters = map[string]string{"type": input.Type}
 	history, page, err := h.service.ListBackupHistory(ctx, params)
 	if err != nil {
-		return nil, huma.Error500InternalServerError(err.Error())
+		return nil, huma.Error500InternalServerError("backup.history_unavailable")
 	}
-	return &handlerutil.Page[backup.HistoryEntry]{
-		Body: base.Paginated[backup.HistoryEntry]{
-			Success:    true,
-			Data:       history,
-			Pagination: handlerutil.PaginationResponse(page),
-		},
-	}, nil
+	return &handlerutil.Page[backup.HistoryEntry]{Body: base.Paginated[backup.HistoryEntry]{
+		Success: true, Data: history, Pagination: handlerutil.PaginationResponse(page),
+	}}, nil
 }
 
 func (h *Handler) List(ctx context.Context, input *ListSystemBackupsInput) (*handlerutil.Page[backup.SystemBackupRun], error) {
 	params := handlerutil.PaginationParams(input.Start, input.Limit, input.Sort, input.Order, input.Search)
 	runs, page, err := h.service.ListBackups(ctx, params)
 	if err != nil {
-		return nil, huma.Error500InternalServerError(err.Error())
+		return nil, huma.Error500InternalServerError("backup.list_unavailable")
 	}
-	return &handlerutil.Page[backup.SystemBackupRun]{
-		Body: base.Paginated[backup.SystemBackupRun]{
-			Success:    true,
-			Data:       runs,
-			Pagination: handlerutil.PaginationResponse(page),
-		},
-	}, nil
+	return &handlerutil.Page[backup.SystemBackupRun]{Body: base.Paginated[backup.SystemBackupRun]{
+		Success: true, Data: runs, Pagination: handlerutil.PaginationResponse(page),
+	}}, nil
 }
 
 func (h *Handler) GetPolicies(ctx context.Context, _ *struct{}) (*SystemBackupPoliciesOutput, error) {
 	policies, err := h.service.GetPolicies(ctx)
 	if err != nil {
-		return nil, huma.Error500InternalServerError(err.Error())
+		return nil, huma.Error500InternalServerError("backup.policies_unavailable")
 	}
 	return &SystemBackupPoliciesOutput{Body: *policies}, nil
 }
 
 func (h *Handler) UpdatePolicies(ctx context.Context, input *UpdateSystemBackupPoliciesInput) (*SystemBackupPoliciesOutput, error) {
-	user, err := handlerutil.RequireUser(ctx)
-	if err != nil {
-		return nil, err
+	if h.service == nil {
+		return nil, huma.Error501NotImplemented("backup.not_implemented")
 	}
-	var policies *backup.SystemBackupPolicyCollection
-	_, err = activitylib.RunHandlerActivity(utils.ActivityRuntimeContext(ctx, h.appCtx), h.activity, activitylib.HandlerOptions{
-		EnvironmentID: "0", Type: activitytypes.TypeResourceAction, ResourceType: "system_backup", ResourceID: "policies", ResourceName: "Arcane", User: user,
-		Step: "Saving system backup schedules", Message: "Saving Arcane system backup schedules", SuccessMessage: "Arcane system backup schedules saved",
-		Metadata: database.JSON{"action": "update_system_backup_policies", "policyCount": len(input.Body.Policies)},
-	}, func(activityCtx context.Context) error {
-		var updateErr error
-		policies, updateErr = h.service.UpdatePolicies(activityCtx, input.Body.Policies)
-		return updateErr
-	})
+	policies, err := h.service.UpdatePolicies(ctx, input.Body.Policies)
+	if errors.Is(err, ErrSystemBackupTargetUnavailable) {
+		return nil, huma.Error422UnprocessableEntity("backup.target_unavailable")
+	}
+	if errors.Is(err, ErrSystemBackupUnavailable) {
+		return nil, huma.Error503ServiceUnavailable("backup.storage_unavailable")
+	}
+	if errors.Is(err, ErrSystemBackupToolsUnavailable) {
+		return nil, huma.Error503ServiceUnavailable("backup.tools_unavailable")
+	}
+	if errors.Is(err, sharedbackup.ErrPolicyValidation) {
+		return nil, huma.Error400BadRequest("backup.invalid_policy")
+	}
 	if err != nil {
-		return nil, huma.Error400BadRequest(err.Error())
+		return nil, huma.Error500InternalServerError("backup.failed")
 	}
 	return &SystemBackupPoliciesOutput{Body: *policies}, nil
 }
-
-func (h *Handler) GenerateRecoveryKey(_ context.Context, _ *struct{}) (*GenerateSystemBackupRecoveryKeyOutput, error) {
-	recoveryKey, err := h.service.GenerateRecoveryKey()
-	if err != nil {
-		return nil, huma.Error500InternalServerError(err.Error())
-	}
-	return &GenerateSystemBackupRecoveryKeyOutput{Body: *recoveryKey}, nil
-}
-
-func (h *Handler) SetRecoveryKey(ctx context.Context, input *SetSystemBackupRecoveryKeyInput) (*SystemBackupRecoveryKeyOutput, error) {
-	user, err := handlerutil.RequireUser(ctx)
-	if err != nil {
-		return nil, err
-	}
-	var status *backup.SystemBackupRecoveryKeyStatus
-	_, err = activitylib.RunHandlerActivity(utils.ActivityRuntimeContext(ctx, h.appCtx), h.activity, activitylib.HandlerOptions{
-		EnvironmentID: "0", Type: activitytypes.TypeResourceAction, ResourceType: "system_backup", ResourceID: "recovery-key", ResourceName: "Arcane", User: user,
-		Step: "Configuring recovery key", Message: "Configuring Arcane system backup recovery key", SuccessMessage: "Arcane system backup recovery key configured",
-		Metadata: database.JSON{"action": "set_system_backup_recovery_key"},
-	}, func(activityCtx context.Context) error {
-		var setErr error
-		status, setErr = h.service.SetRecoveryKey(activityCtx, input.Body.RecoveryKey)
-		return setErr
-	})
-	if err != nil {
-		return nil, huma.Error400BadRequest(err.Error())
-	}
-	return &SystemBackupRecoveryKeyOutput{Body: *status}, nil
-}
-
 func (h *Handler) Create(ctx context.Context, input *CreateSystemBackupInput) (*SystemBackupOutput, error) {
-	user, err := handlerutil.RequireUser(ctx)
-	if err != nil {
-		return nil, err
+	if h.service == nil {
+		return nil, huma.Error501NotImplemented("backup.not_implemented")
 	}
-	run, err := h.service.StartBackup(utils.ActivityRuntimeContext(ctx, h.appCtx), *user, input.Body)
+	actor := usertypes.Actor{}
+	if currentUser, exists := userdomain.CurrentUserFromContext(ctx); exists && currentUser != nil {
+		actor = *currentUser.Actor()
+	}
+	run, err := h.service.StartBackup(ctx, actor, input.Body)
 	if errors.Is(err, ErrSystemBackupAlreadyRunning) {
-		return nil, huma.Error409Conflict(err.Error())
+		return nil, huma.Error409Conflict("run.busy")
+	}
+	if errors.Is(err, ErrSystemBackupNotFound) {
+		return nil, huma.Error404NotFound("backup.not_found")
+	}
+	if errors.Is(err, ErrSystemBackupTargetUnavailable) {
+		return nil, huma.Error422UnprocessableEntity("backup.target_unavailable")
+	}
+	if errors.Is(err, ErrSystemBackupUnavailable) {
+		return nil, huma.Error503ServiceUnavailable("backup.storage_unavailable")
+	}
+	if errors.Is(err, ErrSystemBackupToolsUnavailable) {
+		return nil, huma.Error503ServiceUnavailable("backup.tools_unavailable")
 	}
 	if err != nil {
-		return nil, huma.Error500InternalServerError(err.Error())
+		return nil, huma.Error500InternalServerError("backup.failed")
 	}
 	return &SystemBackupOutput{Body: *run}, nil
 }
-
-func (h *Handler) Restore(ctx context.Context, input *RestoreSystemBackupInput) (*handlerutil.Out[base.MessageResponse], error) {
-	user, err := handlerutil.RequireUser(ctx)
-	if err != nil {
-		return nil, err
+func (h *Handler) Upload(ctx context.Context, _ *UploadSystemBackupInput) (*SystemBackupOperationOutput, error) {
+	operation, ok := ctx.Value(uploadResultKey{}).(*backup.SystemBackupOperation)
+	if !ok || operation == nil {
+		return nil, huma.Error501NotImplemented("backup.not_implemented")
 	}
-	activityID, err := activitylib.RunHandlerActivity(utils.ActivityRuntimeContext(ctx, h.appCtx), h.activity, activitylib.HandlerOptions{
-		EnvironmentID: "0", Type: activitytypes.TypeResourceAction, ResourceType: "system_backup", ResourceID: input.ID, ResourceName: "Arcane", User: user,
-		Step: "Preparing system restore", Message: "Preparing Arcane system restore", SuccessMessage: "Arcane system restore started",
-		Metadata: database.JSON{"action": "restore_system_backup", "backupId": input.ID},
-	}, func(activityCtx context.Context) error {
-		return h.service.RestoreBackup(activityCtx, input.ID, input.Body.RecoveryKey, *user)
-	})
-	if err != nil {
-		return nil, huma.Error500InternalServerError(err.Error())
-	}
-	return messageOutputInternal("Arcane system restore started", activityID), nil
+	return &SystemBackupOperationOutput{Body: *operation}, nil
 }
-
-// BrowseFiles returns one lazy-loaded project tree page.
-func (h *Handler) BrowseFiles(ctx context.Context, input *BrowseSystemBackupFilesInput) (*handlerutil.Page[backup.BackupFileEntry], error) {
-	params := handlerutil.PaginationParams(input.Start, input.Limit, "", "", input.Search)
-	items, page, err := h.service.BrowseBackupFiles(ctx, input.ID, input.Body.RecoveryKey, input.Path, params)
-	if err != nil {
-		return nil, huma.Error400BadRequest(err.Error())
+func (h *Handler) Download(ctx context.Context, input *BackupIDInput) (*huma.StreamResponse, error) {
+	if h.service == nil {
+		return nil, huma.Error501NotImplemented("backup.not_implemented")
 	}
-	return &handlerutil.Page[backup.BackupFileEntry]{Body: base.Paginated[backup.BackupFileEntry]{
-		Success: true, Data: items, Pagination: handlerutil.PaginationResponse(page),
+	reader, size, name, err := h.service.OpenArchive(ctx, input.ID)
+	if err != nil {
+		return nil, huma.Error404NotFound("backup.not_found")
+	}
+	return &huma.StreamResponse{Body: func(out huma.Context) {
+		defer reader.Close()
+		out.SetHeader("Content-Type", "application/octet-stream")
+		out.SetHeader("Content-Disposition", "attachment; filename=\""+name+"\"")
+		out.SetHeader("Cache-Control", "no-store")
+		out.SetHeader("Content-Length", strconv.FormatInt(size, 10))
+		_, _ = io.Copy(out.BodyWriter(), reader)
 	}}, nil
 }
-
-// RestoreFiles restores selected project files from a system backup.
-func (h *Handler) RestoreFiles(ctx context.Context, input *RestoreSystemBackupFilesInput) (*handlerutil.Out[base.MessageResponse], error) {
-	user, err := handlerutil.RequireUser(ctx)
-	if err != nil {
-		return nil, err
+func (h *Handler) Restore(ctx context.Context, input *RestoreSystemBackupInput) (*SystemBackupOperationOutput, error) {
+	if h.service == nil {
+		return nil, huma.Error501NotImplemented("backup.not_implemented")
 	}
-	activityID, err := activitylib.RunHandlerActivity(utils.ActivityRuntimeContext(ctx, h.appCtx), h.activity, activitylib.HandlerOptions{
-		EnvironmentID: "0", Type: activitytypes.TypeResourceAction, ResourceType: "system_backup", ResourceID: input.ID, ResourceName: "Arcane", User: user,
-		Step: "Restoring project files", Message: "Restoring project files from Arcane system backup", SuccessMessage: "Arcane project files restored successfully",
-		Metadata: database.JSON{"action": "restore_system_backup_files", "backupId": input.ID, "pathCount": len(input.Body.Paths), "selectAll": input.Body.SelectAll, "search": input.Body.Search},
-	}, func(activityCtx context.Context) error {
-		return h.service.RestoreBackupFiles(activityCtx, input.ID, input.Body, *user)
-	})
+	actor := usertypes.Actor{}
+	if current, ok := userdomain.CurrentUserFromContext(ctx); ok && current != nil {
+		actor = *current.Actor()
+	}
+	keyID, _ := ctx.Value(middleware.ContextKeyApiKeyID).(string)
+	operation, err := h.service.StartRestore(ctx, actor, keyID, input.ID, input.Body.ConfirmBackupID)
+	switch {
+	case errors.Is(err, ErrSystemBackupNotFound):
+		return nil, huma.Error404NotFound("backup.not_found")
+	case errors.Is(err, ErrSystemBackupAlreadyRunning):
+		return nil, huma.Error409Conflict("run.busy")
+	case errors.Is(err, errInvalidArchive), errors.Is(err, errArchiveMajor), errors.Is(err, errMigration):
+		return nil, huma.Error422UnprocessableEntity(uploadErrorCode(err))
+	case errors.Is(err, ErrSystemBackupUnavailable):
+		return nil, huma.Error503ServiceUnavailable("backup.storage_unavailable")
+	case errors.Is(err, ErrSystemBackupToolsUnavailable):
+		return nil, huma.Error503ServiceUnavailable("backup.tools_unavailable")
+	case err != nil:
+		return nil, huma.Error500InternalServerError("backup.restore_failed")
+	}
+	return &SystemBackupOperationOutput{Body: *operation}, nil
+}
+func (h *Handler) Delete(ctx context.Context, input *BackupIDInput) (*SystemBackupOperationOutput, error) {
+	if h.service == nil {
+		return nil, huma.Error501NotImplemented("backup.not_implemented")
+	}
+	operation, err := h.service.DeleteBackup(ctx, input.ID)
 	if errors.Is(err, ErrSystemBackupAlreadyRunning) {
-		return nil, huma.Error409Conflict(err.Error())
+		return nil, huma.Error409Conflict("run.busy")
 	}
-	if errors.Is(err, common.ErrBadRequest) {
-		return nil, huma.Error400BadRequest(err.Error())
+	if errors.Is(err, ErrSystemBackupNotFound) {
+		return nil, huma.Error404NotFound("backup.not_found")
 	}
 	if err != nil {
-		return nil, huma.Error500InternalServerError(err.Error())
+		return nil, huma.Error500InternalServerError("backup.failed")
 	}
-	return messageOutputInternal("Arcane project files restored successfully", activityID), nil
+	return &SystemBackupOperationOutput{Body: *operation}, nil
 }
-
-func (h *Handler) Delete(ctx context.Context, input *DeleteSystemBackupInput) (*handlerutil.Out[base.MessageResponse], error) {
-	user, err := handlerutil.RequireUser(ctx)
-	if err != nil {
-		return nil, err
+func (h *Handler) Storage(context.Context, *struct{}) (*SystemBackupStorageOutput, error) {
+	if h.service == nil {
+		return nil, huma.Error501NotImplemented("backup.not_implemented")
 	}
-	activityID, err := activitylib.RunHandlerActivity(utils.ActivityRuntimeContext(ctx, h.appCtx), h.activity, activitylib.HandlerOptions{
-		EnvironmentID: "0", Type: activitytypes.TypeResourceAction, ResourceType: "system_backup", ResourceID: input.ID, ResourceName: "Arcane", User: user,
-		Step: "Deleting system backup", Message: "Deleting Arcane system backup", SuccessMessage: "Arcane system backup deleted successfully",
-		Metadata: database.JSON{"action": "delete_system_backup", "backupId": input.ID},
-	}, func(activityCtx context.Context) error {
-		return h.service.DeleteBackup(activityCtx, input.ID, input.Body.RecoveryKey)
-	})
-	if err != nil {
-		return nil, huma.Error500InternalServerError(err.Error())
-	}
-	return messageOutputInternal("Arcane system backup deleted successfully", activityID), nil
+	return &SystemBackupStorageOutput{Body: h.service.Storage()}, nil
 }
-
-func messageOutputInternal(message, activityID string) *handlerutil.Out[base.MessageResponse] {
-	return &handlerutil.Out[base.MessageResponse]{
-		Body: base.ApiResponse[base.MessageResponse]{
-			Success: true,
-			Data: base.MessageResponse{
-				Message: message,
-				ActivityID: mo.EmptyableToOption(
-					strings.TrimSpace(
-						activityID,
-					),
-				).ToPointer(),
-			},
-		},
+func (h *Handler) Maintenance(context.Context, *struct{}) (*SystemBackupMaintenanceOutput, error) {
+	if h.service == nil {
+		return nil, huma.Error501NotImplemented("backup.not_implemented")
 	}
+	return &SystemBackupMaintenanceOutput{Body: h.service.MaintenanceGate().Status()}, nil
 }

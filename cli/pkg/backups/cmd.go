@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; functional cut: removed S3 backup destinations.
+// Deviations: Local module namespace; Hub archive list, create, delete and policy contract; volume recovery helpers retained.
 
 package backups
 
@@ -18,7 +18,6 @@ import (
 	"github.com/florianfinn/docklet-next/types/backup"
 	"github.com/florianfinn/docklet-next/types/base"
 	"github.com/spf13/cobra"
-	kit "go.getarcane.app/kit/pkg"
 
 	"github.com/florianfinn/docklet-next/cli/internal/client"
 	"github.com/florianfinn/docklet-next/cli/internal/cmdutil"
@@ -34,11 +33,7 @@ var (
 	forceFlag  bool
 	jsonOutput bool
 
-	createDestination string
-	createRecoveryKey string
-	createPolicyID    string
-
-	deleteRecoveryKey string
+	createPolicyID string
 
 	restoreRecoveryKey string
 
@@ -48,25 +43,24 @@ var (
 	policiesUpdateDisabled  bool
 	policiesUpdateSchedule  string
 	policiesUpdateRetention int
-	policiesUpdateLocal     bool
 
 	generateSave   bool
 	setRecoveryKey string
 )
 
-// BackupsCmd is the parent command for Arcane system backup operations (admin-only).
+// BackupsCmd is the parent command for Hub database backup operations (admin-only).
 var BackupsCmd = &cobra.Command{
 	Use:     "backups",
 	Aliases: []string{"backup"},
-	Short:   "Manage Arcane system backups (admin only)",
-	Long: `System backups snapshot Arcane's database and configuration, encrypted with the recovery key.
-Backups are stored in the local repository; policies schedule automatic runs.`,
+	Short:   "Manage Hub database backups (admin only)",
+	Long: `Hub backups archive the SQLite hub and Francis databases on a dedicated local volume.
+Policies schedule automatic archives.`,
 }
 
 var listCmd = &cobra.Command{
 	Use:          "list",
 	Aliases:      []string{"ls"},
-	Short:        "List Arcane system backups",
+	Short:        "List Hub database backups",
 	SilenceUsage: true,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		c, err := cmdutil.ClientFromCommand(cmd)
@@ -79,7 +73,7 @@ var listCmd = &cobra.Command{
 			Endpoint: types.Backups(),
 			Params:   cmdutil.ListParams{Resource: "backups", Limit: limitFlag, FallbackDefault: 20, Start: startFlag, All: allFlag},
 			JSON:     cmdutil.JSONOutputEnabled(cmd),
-			Headers:  []string{"ID", "STATUS", "TRIGGER", "DESTINATION", "SIZE", "CREATED"},
+			Headers:  []string{"ID", "STATUS", "TRIGGER", "SIZE", "CREATED"},
 			Row: func(run backup.SystemBackupRun) []string {
 				size := ""
 				if run.Size > 0 {
@@ -89,7 +83,6 @@ var listCmd = &cobra.Command{
 					run.ID,
 					run.Status,
 					run.Trigger,
-					string(run.Destination),
 					size,
 					run.CreatedAt.Format("2006-01-02 15:04"),
 				}
@@ -100,8 +93,8 @@ var listCmd = &cobra.Command{
 
 var createCmd = &cobra.Command{
 	Use:          "create",
-	Short:        "Create an Arcane system backup",
-	Long:         "Create a local system backup.",
+	Short:        "Create a Hub database archive",
+	Long:         "Create a local SQLite archive.",
 	Args:         cobra.NoArgs,
 	SilenceUsage: true,
 	RunE: func(cmd *cobra.Command, args []string) error {
@@ -110,14 +103,7 @@ var createCmd = &cobra.Command{
 			return err
 		}
 
-		if createDestination != "" && createDestination != string(backup.SystemBackupDestinationLocal) {
-			return fmt.Errorf("invalid --destination %q: must be local", createDestination)
-		}
-		req := backup.CreateSystemBackupRequest{
-			Destination: backup.SystemBackupDestinationLocal,
-			RecoveryKey: createRecoveryKey,
-			PolicyID:    createPolicyID,
-		}
+		req := backup.CreateSystemBackupRequest{PolicyID: createPolicyID}
 
 		run, err := c.DoJSON[backup.SystemBackupRun](cmd.Context(), http.MethodPost, types.Backups(), req)
 		if err != nil {
@@ -128,10 +114,9 @@ var createCmd = &cobra.Command{
 			return cmdutil.PrintJSON(run)
 		}
 
-		output.Success("Backup %s created successfully", run.ID)
+		output.Success("Backup %s started", run.ID)
 		output.KeyValue("ID", run.ID)
 		output.KeyValue("Status", run.Status)
-		output.KeyValue("Destination", string(run.Destination))
 		if run.Size > 0 {
 			output.KeyValue("Size", output.Bytes(run.Size))
 		}
@@ -142,7 +127,7 @@ var createCmd = &cobra.Command{
 var deleteCmd = &cobra.Command{
 	Use:          "delete <backup-id>",
 	Aliases:      []string{"rm", "remove"},
-	Short:        "Delete an Arcane system backup",
+	Short:        "Delete a Hub database archive",
 	Args:         cobra.ExactArgs(1),
 	SilenceUsage: true,
 	RunE: func(cmd *cobra.Command, args []string) error {
@@ -162,16 +147,16 @@ var deleteCmd = &cobra.Command{
 			return err
 		}
 
-		result, err := c.DoJSON[base.ApiResponse[base.MessageResponse]](cmd.Context(), http.MethodDelete, types.Backup(args[0]), backup.DeleteSystemBackupRequest{RecoveryKey: deleteRecoveryKey})
+		result, err := c.DoJSON[backup.SystemBackupOperation](cmd.Context(), http.MethodDelete, types.Backup(args[0]), nil)
 		if err != nil {
 			return fmt.Errorf("failed to delete backup: %w", err)
 		}
 
 		if cmdutil.JSONOutputEnabled(cmd) {
-			return cmdutil.PrintJSON(result.Data)
+			return cmdutil.PrintJSON(result)
 		}
 
-		output.Success("Backup %s deleted successfully", args[0])
+		output.Success("Backup %s deleted", args[0])
 		return nil
 	},
 }
@@ -228,7 +213,7 @@ var restoreCmd = &cobra.Command{
 
 var policiesCmd = &cobra.Command{
 	Use:          "policies",
-	Short:        "Show Arcane system backup policies",
+	Short:        "Show Hub database backup policies",
 	Args:         cobra.NoArgs,
 	SilenceUsage: true,
 	RunE: func(cmd *cobra.Command, args []string) error {
@@ -252,10 +237,8 @@ var policiesCmd = &cobra.Command{
 
 func printPolicies(result backup.SystemBackupPolicyCollection) error {
 	output.Header("System Backup Policies")
-	recoveryKey := kit.Ternary(result.RecoveryKeyStored, "Configured", "Not configured")
-	output.KeyValue("Recovery Key", recoveryKey)
 
-	headers := []string{"ID", "ENABLED", "SCHEDULE", "RETENTION", "LOCAL", "LAST RUN"}
+	headers := []string{"ID", "ENABLED", "SCHEDULE", "RETENTION", "LAST RUN"}
 	rows := make([][]string, len(result.Policies))
 	for i, policy := range result.Policies {
 		lastRun := ""
@@ -267,7 +250,6 @@ func printPolicies(result backup.SystemBackupPolicyCollection) error {
 			strconv.FormatBool(policy.Enabled),
 			policy.Schedule,
 			strconv.Itoa(policy.RetentionCount),
-			strconv.FormatBool(policy.LocalEnabled),
 			lastRun,
 		}
 	}
@@ -276,7 +258,7 @@ func printPolicies(result backup.SystemBackupPolicyCollection) error {
 
 var policiesUpdateCmd = &cobra.Command{
 	Use:   "update",
-	Short: "Update Arcane system backup policies",
+	Short: "Update Hub database backup policies",
 	Long: `Update a system backup policy with flags: the current policies are fetched, the targeted
 policy is modified, and the whole set is saved back. A new policy is created when none exist.
 Alternatively, --file replaces all policies from a raw JSON payload.`,
@@ -290,7 +272,7 @@ Alternatively, --file replaces all policies from a raw JSON payload.`,
 
 		var req backup.UpdateSystemBackupPolicies
 		if policiesUpdateFile != "" {
-			for _, name := range []string{"policy-id", "enabled", "disabled", "schedule", "retention", "local"} {
+			for _, name := range []string{"policy-id", "enabled", "disabled", "schedule", "retention"} {
 				if cmd.Flags().Changed(name) {
 					return fmt.Errorf("--file cannot be combined with --%s", name)
 				}
@@ -325,7 +307,6 @@ Alternatively, --file replaces all policies from a raw JSON payload.`,
 					Enabled:        p.Enabled,
 					Schedule:       p.Schedule,
 					RetentionCount: p.RetentionCount,
-					LocalEnabled:   p.LocalEnabled,
 				}
 				if policiesUpdateID != "" && p.ID == policiesUpdateID {
 					targetIndex = i
@@ -343,8 +324,7 @@ Alternatively, --file replaces all policies from a raw JSON payload.`,
 				if !cmd.Flags().Changed("schedule") {
 					return errors.New("--schedule is required when creating a new backup policy")
 				}
-				// New policies default to local storage unless --local was set explicitly.
-				req.Policies = append(req.Policies, backup.UpdateSystemBackupPolicy{LocalEnabled: !cmd.Flags().Changed("local") || policiesUpdateLocal})
+				req.Policies = append(req.Policies, backup.UpdateSystemBackupPolicy{})
 				targetIndex = len(req.Policies) - 1
 			}
 
@@ -360,9 +340,6 @@ Alternatively, --file replaces all policies from a raw JSON payload.`,
 			}
 			if cmd.Flags().Changed("retention") {
 				target.RetentionCount = policiesUpdateRetention
-			}
-			if cmd.Flags().Changed("local") {
-				target.LocalEnabled = policiesUpdateLocal
 			}
 		}
 
@@ -494,12 +471,9 @@ func init() {
 	listCmd.Flags().BoolVarP(&allFlag, "all", "a", false, cmdutil.AllFlagUsage)
 	listCmd.Flags().BoolVar(&jsonOutput, "json", false, "Output in JSON format")
 
-	createCmd.Flags().StringVar(&createDestination, "destination", "local", "Backup destination: local")
-	createCmd.Flags().StringVar(&createRecoveryKey, "recovery-key", "", "Recovery key used to encrypt the backup")
 	createCmd.Flags().StringVar(&createPolicyID, "policy", "", "Backup policy ID to associate with the run")
 	createCmd.Flags().BoolVar(&jsonOutput, "json", false, "Output in JSON format")
 
-	deleteCmd.Flags().StringVar(&deleteRecoveryKey, "recovery-key", "", "Recovery key used to encrypt the backup")
 	deleteCmd.Flags().BoolVarP(&forceFlag, "force", "f", false, "Delete without confirmation")
 	deleteCmd.Flags().BoolVar(&jsonOutput, "json", false, "Output in JSON format")
 
@@ -515,7 +489,6 @@ func init() {
 	policiesUpdateCmd.Flags().BoolVar(&policiesUpdateDisabled, "disabled", false, "Disable the policy")
 	policiesUpdateCmd.Flags().StringVar(&policiesUpdateSchedule, "schedule", "", "Cron schedule for automatic backups")
 	policiesUpdateCmd.Flags().IntVar(&policiesUpdateRetention, "retention", 0, "Number of backups to retain")
-	policiesUpdateCmd.Flags().BoolVar(&policiesUpdateLocal, "local", false, "Store backups in the local repository")
 	policiesUpdateCmd.Flags().BoolVar(&jsonOutput, "json", false, "Output in JSON format")
 	policiesUpdateCmd.MarkFlagsMutuallyExclusive("enabled", "disabled")
 

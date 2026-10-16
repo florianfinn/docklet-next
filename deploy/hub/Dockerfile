@@ -30,7 +30,7 @@ WORKDIR /app
 COPY --from=build /out/docklet-hub /usr/local/bin/docklet-hub
 COPY --from=build /out/licenses /usr/share/licenses/docklet-next
 COPY --from=web /out/licenses/web /usr/share/licenses/docklet-next/web
-RUN mkdir -p /app/data && chmod 0700 /app/data && test -s /etc/ssl/certs/ca-certificates.crt
+RUN mkdir -p /app/data /var/lib/docklet/backups && chmod 0700 /app/data /var/lib/docklet/backups && test -s /etc/ssl/certs/ca-certificates.crt
 ENV DATABASE_URL=file:/app/data/docklet.db LISTEN=0.0.0.0 PORT=3552
 EXPOSE 3552
 HEALTHCHECK --interval=30s --timeout=5s --start-period=30s --retries=3 CMD ["/usr/local/bin/docklet-hub", "health"]

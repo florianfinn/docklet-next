@@ -1,5 +1,5 @@
 // Source: api/openapi.json
-// Revision: d9161c97c42879e6c9f5aa029ec7bfdc0431f41775e6bf79145257a9e9de6349
+// Revision: d563077f15c4561a4a803b81c91331cb1cf7bf938720118b1837a958f799ecdb
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
 // Deviations: Generated TypeScript declarations from the local Huma export.
@@ -396,10 +396,10 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** List Arcane system backups */
+        /** List Hub database archives */
         get: operations["list-system-backups"];
         put?: never;
-        /** Create Arcane system backup */
+        /** Create a Hub database archive */
         post: operations["create-system-backup"];
         delete?: never;
         options?: never;
@@ -414,8 +414,28 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** List unified backup history */
+        /** List backup history */
         get: operations["list-backup-history"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/backups/maintenance": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Hub restore maintenance status
+         * @description During restore maintenance, the router serves the active phase and activity ID without database access or authentication. Normal reads require system-backups:read.
+         */
+        get: operations["get-system-backup-maintenance"];
         put?: never;
         post?: never;
         delete?: never;
@@ -431,9 +451,9 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Get Arcane system backup policies */
+        /** Get Hub database backup policies */
         get: operations["get-system-backup-policies"];
-        /** Update Arcane system backup policies */
+        /** Update Hub database backup policies */
         put: operations["update-system-backup-policies"];
         post?: never;
         delete?: never;
@@ -442,16 +462,16 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/backups/recovery-key": {
+    "/backups/storage": {
         parameters: {
             query?: never;
             header?: never;
             path?: never;
             cookie?: never;
         };
-        get?: never;
-        /** Configure Arcane system backup recovery key */
-        put: operations["set-system-backup-recovery-key"];
+        /** Get local archive storage usage */
+        get: operations["get-system-backup-storage"];
+        put?: never;
         post?: never;
         delete?: never;
         options?: never;
@@ -459,7 +479,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/backups/recovery-key/generate": {
+    "/backups/upload": {
         parameters: {
             query?: never;
             header?: never;
@@ -468,8 +488,11 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Generate an Arcane system backup recovery key */
-        post: operations["generate-system-backup-recovery-key"];
+        /**
+         * Upload and import a Hub database archive
+         * @description Stream one versioned two-file Docklet SQLite tar archive as application/octet-stream, up to 2 GiB.
+         */
+        post: operations["import-system-backup-upload"];
         delete?: never;
         options?: never;
         head?: never;
@@ -538,24 +561,24 @@ export interface paths {
         get?: never;
         put?: never;
         post?: never;
-        /** Delete Arcane system backup */
+        /** Delete a Hub database archive */
         delete: operations["delete-system-backup"];
         options?: never;
         head?: never;
         patch?: never;
         trace?: never;
     };
-    "/backups/{id}/files/browse": {
+    "/backups/{id}/download": {
         parameters: {
             query?: never;
             header?: never;
             path?: never;
             cookie?: never;
         };
-        get?: never;
+        /** Download a Hub database archive */
+        get: operations["download-system-backup"];
         put?: never;
-        /** Browse project files in an Arcane system backup */
-        post: operations["browse-system-backup-files"];
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -571,25 +594,8 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Restore Arcane system backup */
+        /** Restore a Hub database archive */
         post: operations["restore-system-backup"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/backups/{id}/restore-files": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** Restore project files from an Arcane system backup */
-        post: operations["restore-system-backup-files"];
         delete?: never;
         options?: never;
         head?: never;
@@ -4607,18 +4613,8 @@ export interface components {
              * @example /api/schemas/BackupCreateSystemBackupRequest.json
              */
             readonly $schema?: string;
-            destination?: string;
             policyId?: string;
-            recoveryKey?: string;
-        };
-        BackupDeleteSystemBackupRequest: {
-            /**
-             * Format: uri
-             * @description A URL to the JSON Schema for this object.
-             * @example /api/schemas/BackupDeleteSystemBackupRequest.json
-             */
-            readonly $schema?: string;
-            recoveryKey?: string;
+            targetId?: string;
         };
         BackupHasPathResponse: {
             exists: boolean;
@@ -4651,18 +4647,6 @@ export interface components {
             search?: string;
             selectAll?: boolean;
         };
-        BackupRestoreSystemBackupFilesRequest: {
-            /**
-             * Format: uri
-             * @description A URL to the JSON Schema for this object.
-             * @example /api/schemas/BackupRestoreSystemBackupFilesRequest.json
-             */
-            readonly $schema?: string;
-            paths?: string[] | null;
-            recoveryKey: string;
-            search?: string;
-            selectAll?: boolean;
-        };
         BackupRestoreSystemBackupRequest: {
             /**
              * Format: uri
@@ -4670,7 +4654,7 @@ export interface components {
              * @example /api/schemas/BackupRestoreSystemBackupRequest.json
              */
             readonly $schema?: string;
-            recoveryKey: string;
+            confirmBackupId: string;
         };
         BackupRunSystemVolumeBackupsRequest: {
             /**
@@ -4682,14 +4666,41 @@ export interface components {
             custom?: components["schemas"]["BackupSystemVolumeBackupCustomRun"];
             policyId?: string;
         };
+        BackupSystemBackupMaintenance: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example /api/schemas/BackupSystemBackupMaintenance.json
+             */
+            readonly $schema?: string;
+            active: boolean;
+            activityId?: string;
+            /** @enum {string} */
+            operation?: "backup" | "restore";
+            /** @enum {string} */
+            phase?: "draining" | "applying" | "verifying" | "blocked";
+            reasonCode?: string;
+        };
+        BackupSystemBackupOperation: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example /api/schemas/BackupSystemBackupOperation.json
+             */
+            readonly $schema?: string;
+            activityId: string;
+            backupId: string;
+            /** @enum {string} */
+            status: "running" | "success" | "failed" | "cancelled";
+        };
         BackupSystemBackupPolicy: {
             enabled: boolean;
             id: string;
             lastRun?: components["schemas"]["BackupSystemBackupRun"];
-            localEnabled: boolean;
             /** Format: int64 */
             retentionCount: number;
             schedule: string;
+            targetId?: string;
         };
         BackupSystemBackupPolicyCollection: {
             /**
@@ -4699,25 +4710,6 @@ export interface components {
              */
             readonly $schema?: string;
             policies: components["schemas"]["BackupSystemBackupPolicy"][] | null;
-            recoveryKeyStored: boolean;
-        };
-        BackupSystemBackupRecoveryKey: {
-            /**
-             * Format: uri
-             * @description A URL to the JSON Schema for this object.
-             * @example /api/schemas/BackupSystemBackupRecoveryKey.json
-             */
-            readonly $schema?: string;
-            recoveryKey: string;
-        };
-        BackupSystemBackupRecoveryKeyStatus: {
-            /**
-             * Format: uri
-             * @description A URL to the JSON Schema for this object.
-             * @example /api/schemas/BackupSystemBackupRecoveryKeyStatus.json
-             */
-            readonly $schema?: string;
-            configured: boolean;
         };
         BackupSystemBackupRun: {
             /**
@@ -4727,17 +4719,48 @@ export interface components {
              */
             readonly $schema?: string;
             activityId?: string;
+            archiveName?: string;
+            /** Format: int64 */
+            archiveVersion?: number;
+            /** Format: date-time */
+            completedAt?: string;
+            copyErrorCode?: string;
+            /** @enum {string} */
+            copyState: "none" | "pending" | "succeeded" | "failed";
+            copyTargetId?: string;
             /** Format: date-time */
             createdAt: string;
-            destination: string;
-            error?: string;
+            errorCode?: string;
             id: string;
-            localSnapshotId?: string;
-            policyId?: string;
             /** Format: int64 */
+            migrationVersion?: number;
+            policyId?: string;
+            /**
+             * Format: int64
+             * @description Archive size in bytes
+             */
             size: number;
-            status: string;
-            trigger: string;
+            /** @enum {string} */
+            status: "running" | "succeeded" | "failed";
+            /** @enum {string} */
+            trigger: "manual" | "scheduled" | "uploaded";
+        };
+        BackupSystemBackupStorage: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example /api/schemas/BackupSystemBackupStorage.json
+             */
+            readonly $schema?: string;
+            available: boolean;
+            /** Format: int64 */
+            freeBytes: number;
+            /** Format: int64 */
+            maxArchiveBytes: number;
+            /** @enum {string} */
+            reasonCode?: "backup.tools_unavailable" | "backup.storage_unavailable";
+            /** Format: int64 */
+            usedBytes: number;
         };
         BackupSystemVolumeBackupCustomRun: {
             destination: string;
@@ -4789,7 +4812,15 @@ export interface components {
              * @example /api/schemas/BackupUpdateSystemBackupPolicies.json
              */
             readonly $schema?: string;
-            policies: components["schemas"]["BackupUpdateBackupPolicy"][] | null;
+            policies: components["schemas"]["BackupUpdateSystemBackupPolicy"][] | null;
+        };
+        BackupUpdateSystemBackupPolicy: {
+            enabled: boolean;
+            id?: string;
+            /** Format: int64 */
+            retentionCount: number;
+            schedule: string;
+            targetId?: string;
         };
         BackupUpdateSystemVolumeBackupPolicies: {
             /**
@@ -11501,6 +11532,35 @@ export interface operations {
             };
         };
     };
+    "get-system-backup-maintenance": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BackupSystemBackupMaintenance"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
     "get-system-backup-policies": {
         parameters: {
             query?: never;
@@ -11563,40 +11623,7 @@ export interface operations {
             };
         };
     };
-    "set-system-backup-recovery-key": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["BackupSystemBackupRecoveryKey"];
-            };
-        };
-        responses: {
-            /** @description OK */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["BackupSystemBackupRecoveryKeyStatus"];
-                };
-            };
-            /** @description Error */
-            default: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["ErrorModel"];
-                };
-            };
-        };
-    };
-    "generate-system-backup-recovery-key": {
+    "get-system-backup-storage": {
         parameters: {
             query?: never;
             header?: never;
@@ -11611,11 +11638,62 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["BackupSystemBackupRecoveryKey"];
+                    "application/json": components["schemas"]["BackupSystemBackupStorage"];
                 };
             };
             /** @description Error */
             default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "import-system-backup-upload": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/octet-stream": string;
+            };
+        };
+        responses: {
+            /** @description Accepted */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BackupSystemBackupOperation"];
+                };
+            };
+            /** @description Request Entity Too Large */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Unsupported Media Type */
+            415: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -11758,19 +11836,15 @@ export interface operations {
             };
             cookie?: never;
         };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["BackupDeleteSystemBackupRequest"];
-            };
-        };
+        requestBody?: never;
         responses: {
-            /** @description OK */
-            200: {
+            /** @description Accepted */
+            202: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["BaseApiResponseMessageResponse"];
+                    "application/json": components["schemas"]["BackupSystemBackupOperation"];
                 };
             };
             /** @description Error */
@@ -11784,37 +11858,26 @@ export interface operations {
             };
         };
     };
-    "browse-system-backup-files": {
+    "download-system-backup": {
         parameters: {
-            query?: {
-                /** @description Folder path relative to the backup root */
-                path?: string;
-                /** @description Case-insensitive full-path search */
-                search?: string;
-                /** @description Start index for the page */
-                start?: number;
-                /** @description Requested page size */
-                limit?: number;
-            };
+            query?: never;
             header?: never;
             path: {
                 id: string;
             };
             cookie?: never;
         };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["BackupSystemBackupRecoveryKey"];
-            };
-        };
+        requestBody?: never;
         responses: {
-            /** @description OK */
+            /** @description versioned two-file Docklet SQLite tar archive */
             200: {
                 headers: {
+                    /** @description attachment with a server-selected archive filename */
+                    "Content-Disposition": string;
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["BasePaginatedBackupBackupFileEntry"];
+                    "application/octet-stream": string;
                 };
             };
             /** @description Error */
@@ -11843,48 +11906,13 @@ export interface operations {
             };
         };
         responses: {
-            /** @description OK */
-            200: {
+            /** @description Accepted */
+            202: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["BaseApiResponseMessageResponse"];
-                };
-            };
-            /** @description Error */
-            default: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["ErrorModel"];
-                };
-            };
-        };
-    };
-    "restore-system-backup-files": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                id: string;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["BackupRestoreSystemBackupFilesRequest"];
-            };
-        };
-        responses: {
-            /** @description OK */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["BaseApiResponseMessageResponse"];
+                    "application/json": components["schemas"]["BackupSystemBackupOperation"];
                 };
             };
             /** @description Error */

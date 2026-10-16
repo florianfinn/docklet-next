@@ -4,7 +4,19 @@ import { readFileSync } from "node:fs";
 
 const read = (name) => JSON.parse(readFileSync(new URL(`../api/${name}`, import.meta.url), "utf8"));
 const methods = new Set(["get", "post", "put", "patch", "delete", "head", "options", "trace"]);
-const laterOperations = new Map([["GET /capabilities", "get-capabilities"]]);
+const laterOperations = new Map([
+  ["GET /capabilities", "get-capabilities"],
+  ["GET /backups/maintenance", "get-system-backup-maintenance"],
+  ["GET /backups/storage", "get-system-backup-storage"],
+  ["POST /backups/upload", "import-system-backup-upload"],
+  ["GET /backups/{id}/download", "download-system-backup"],
+]);
+const retiredSystemRecovery = new Map([
+  ["PUT /backups/recovery-key", "set-system-backup-recovery-key"],
+  ["POST /backups/recovery-key/generate", "generate-system-backup-recovery-key"],
+  ["POST /backups/{id}/files/browse", "browse-system-backup-files"],
+  ["POST /backups/{id}/restore-files", "restore-system-backup-files"],
+]);
 const operations = (document) => new Map(
   Object.entries(document.paths).flatMap(([path, entries]) =>
     Object.entries(entries)
@@ -22,7 +34,7 @@ test("the functional cut removes only the reviewed OpenAPI operations", () => {
   ));
 
   assert.equal(baseline.size, manifest.baselineOperations);
-  assert.equal(current.size, manifest.remainingOperations + laterOperations.size);
+  assert.equal(current.size, manifest.remainingOperations + laterOperations.size - retiredSystemRecovery.size);
   assert.equal(removed.size, manifest.removedOperations.length);
   assert.equal(removed.size, 159);
   for (const [key, id] of removed) {
@@ -32,6 +44,12 @@ test("the functional cut removes only the reviewed OpenAPI operations", () => {
   }
   for (const [key, id] of baseline) {
     if (removed.has(key)) continue;
+    if (retiredSystemRecovery.has(key)) {
+      assert.equal(id, retiredSystemRecovery.get(key));
+      assert.equal(current.has(key), false, `obsolete system recovery route remains: ${key}`);
+      assert.equal([...current.values()].includes(id), false, `obsolete system recovery ID remains: ${id}`);
+      continue;
+    }
     assert.equal(current.get(key), id, `retained operation changed: ${key}`);
   }
   for (const [key, id] of current) {

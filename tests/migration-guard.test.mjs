@@ -56,6 +56,7 @@ test("worktree guard rejects all manifest and baseline bypasses", (t) => {
   rejects(/missing-baseline/);
   writeFileSync(baselinePath, readFileSync(new URL("../backend/resources/migrations/sqlite/001_baseline.sql", import.meta.url)));
   writeFileSync(manifestPath, readFileSync(new URL("../scripts/migration-hashes.json", import.meta.url)));
+  copyFileSync(new URL("../backend/resources/migrations/sqlite/002_hub_backup_archive.sql", import.meta.url), join(root, "backend/resources/migrations/sqlite/002_hub_backup_archive.sql"));
   const absentBase = spawnSync(process.execPath, [join(root, "scripts/check-migrations.mjs")], {
     encoding: "utf8", env: { ...cleanEnvironment(), CHECK_BASE_SHA: "f".repeat(40) },
   });

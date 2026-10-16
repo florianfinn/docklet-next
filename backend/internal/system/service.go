@@ -37,6 +37,8 @@ import (
 	"gorm.io/gorm"
 
 	"github.com/florianfinn/docklet-next/backend/internal/activity"
+	"github.com/florianfinn/docklet-next/backend/internal/apikey"
+	"github.com/florianfinn/docklet-next/backend/internal/auth"
 	"github.com/florianfinn/docklet-next/backend/internal/backup"
 	"github.com/florianfinn/docklet-next/backend/internal/config"
 	"github.com/florianfinn/docklet-next/backend/internal/container"
@@ -46,6 +48,7 @@ import (
 	"github.com/florianfinn/docklet-next/backend/internal/imageupdate"
 	"github.com/florianfinn/docklet-next/backend/internal/network"
 	"github.com/florianfinn/docklet-next/backend/internal/project"
+	"github.com/florianfinn/docklet-next/backend/internal/role"
 	"github.com/florianfinn/docklet-next/backend/internal/settings"
 	systembackup "github.com/florianfinn/docklet-next/backend/internal/system/children/backup"
 	"github.com/florianfinn/docklet-next/backend/internal/system/children/prune"
@@ -56,6 +59,7 @@ import (
 	"github.com/florianfinn/docklet-next/backend/pkg/pagination"
 	"github.com/florianfinn/docklet-next/backend/pkg/scheduler/runs"
 	"github.com/florianfinn/docklet-next/backend/pkg/utils"
+	"github.com/florianfinn/docklet-next/backend/pkg/utils/francis"
 )
 
 // SystemService owns Docker system-wide operations and coordinates the prune
@@ -73,6 +77,19 @@ type SystemService struct {
 	backup  *systembackup.Service
 }
 
+func (s *SystemService) BackupMaintenanceGate() *systembackup.MaintenanceGate {
+	if s == nil || s.backup == nil {
+		return nil
+	}
+	return s.backup.MaintenanceGate()
+}
+
+func (s *SystemService) SetRestoreSchedulerRefresh(refresh func(context.Context) error) {
+	if s != nil && s.backup != nil {
+		s.backup.SetRestoreSchedulerRefresh(refresh)
+	}
+}
+
 func NewSystemService(
 	db *database.DB,
 	dockerService *dockerInternal.DockerClientService,
@@ -88,6 +105,12 @@ func NewSystemService(
 	backupEngine *backup.Engine,
 	recoveryKeys *backup.RecoveryKeyStore,
 	cfg *config.Config,
+	authService *auth.AuthService,
+	roles *role.RoleService,
+	coordinator *runs.Coordinator,
+	exitUnready context.CancelFunc,
+	actorRuntime *francis.Runtime,
+	apiKeys *apikey.ApiKeyService,
 ) *SystemService {
 	location := time.UTC
 	if cfg != nil {
@@ -115,17 +138,32 @@ func NewSystemService(
 		Settings:     settingsService,
 		Config:       cfg,
 		RecoveryKeys: recoveryKeys,
+		Auth:         authService,
+		Roles:        roles,
+		Coordinator:  coordinator,
+		Runtime:      actorRuntime,
+		APIKeys:      apiKeys,
 	})
+	s.backup.SetExitUnready(exitUnready)
 	return s
 }
 
 // ReconcileInterruptedBackups fails system backup runs left running by the previous process.
-func (s *SystemService) ReconcileInterruptedBackups(ctx context.Context, protectedIDs ...string) error {
+func (s *SystemService) ReconcileInterruptedBackups(ctx context.Context, _ ...string) error {
 	query := s.db.WithContext(ctx).Model(&SystemBackupRun{}).Where("status = ?", SystemBackupStatusRunning)
-	if len(protectedIDs) > 0 {
-		query = query.Where("id NOT IN ?", protectedIDs)
+	if err := query.Updates(map[string]any{"status": SystemBackupStatusFailed, "error_code": backuptypes.SystemBackupErrorInterrupted}).Error; err != nil {
+		return err
 	}
-	return query.Updates(map[string]any{"status": SystemBackupStatusFailed, "error": "Backup interrupted by application restart"}).Error
+	if s.backup != nil {
+		if err := s.backup.ReconcileStorage(ctx); err != nil {
+			if errors.Is(err, systembackup.ErrSystemBackupUnavailable) {
+				slog.WarnContext(ctx, "Hub backup storage is unavailable", "code", "backup.storage_unavailable")
+				return nil
+			}
+			return err
+		}
+	}
+	return nil
 }
 
 // SetBackupScheduler injects the dynamic scheduler and admission gate for
@@ -459,8 +497,8 @@ func resolveUpgraderRuntimeOptionsInternal(
 	return containerEnv, mounts, "", nil
 }
 
-const systemBackupHistoryUnion = "SELECT id, size, created_at, status, trigger, destination, '' AS format, local_snapshot_id, " +
-	"policy_id, error, 'system' AS type, 'system' AS resource_type, 'Arcane' AS resource_name " +
+const systemBackupHistoryUnion = "SELECT id, size, created_at, status, trigger, 'local' AS destination, 'sqlite_pair_v1' AS format, '' AS local_snapshot_id, " +
+	"policy_id, error_code AS error, 'system' AS type, 'system' AS resource_type, 'Hub database' AS resource_name " +
 	"FROM system_backup_runs UNION ALL SELECT id, size, created_at, status, trigger, destination, format, " +
 	"local_snapshot_id, policy_id, error, CASE WHEN policy_id LIKE 'system-volume:%' THEN 'system' ELSE " +
 	"'volume' END AS type, 'volume' AS resource_type, volume_name AS resource_name FROM volume_backups"
@@ -480,8 +518,8 @@ func (s *SystemService) backupStoreInternal() systembackup.Store {
 			run := systemBackupRunFromDTOInternal(*dto)
 			return s.db.WithContext(ctx).Save(&run).Error
 		},
-		FailRun: func(ctx context.Context, id, message string) error {
-			return s.db.WithContext(ctx).Model(&SystemBackupRun{}).Where("id = ?", id).Updates(map[string]any{"status": SystemBackupStatusFailed, "error": message}).Error
+		FailRun: func(ctx context.Context, id, _ string) error {
+			return s.db.WithContext(ctx).Model(&SystemBackupRun{}).Where("id = ?", id).Updates(map[string]any{"status": SystemBackupStatusFailed, "error_code": backuptypes.SystemBackupErrorFailed}).Error
 		},
 		DeleteRun: func(ctx context.Context, id string) error {
 			return s.db.WithContext(ctx).Where("id = ?", id).Delete(&SystemBackupRun{}).Error
@@ -498,7 +536,7 @@ func (s *SystemService) backupStoreInternal() systembackup.Store {
 			query := s.db.WithContext(ctx).Model(&SystemBackupRun{})
 			if term := strings.TrimSpace(params.Search); term != "" {
 				pattern := "%" + term + "%"
-				query = query.Where("status LIKE ? OR trigger LIKE ? OR destination LIKE ? OR error LIKE ?", pattern, pattern, pattern, pattern)
+				query = query.Where("status LIKE ? OR trigger LIKE ? OR archive_name LIKE ? OR error_code LIKE ?", pattern, pattern, pattern, pattern)
 			}
 			response, err := pagination.PaginateAndSortDB(params, query, &records)
 			if err != nil {
@@ -511,7 +549,11 @@ func (s *SystemService) backupStoreInternal() systembackup.Store {
 			return result, response, nil
 		},
 		ExpiredRunIDs: func(ctx context.Context, policyID string, keep int) ([]string, error) {
-			return backup.ExpiredRunIDs(ctx, s.db, "system_backup_runs", policyID, keep)
+			var ids []string
+			err := s.db.WithContext(ctx).Model(&SystemBackupRun{}).
+				Where("policy_id = ? AND trigger = ? AND status = ? AND archive_name IS NOT NULL", policyID, SystemBackupTriggerScheduled, SystemBackupStatusSucceeded).
+				Order("created_at DESC").Offset(keep).Pluck("id", &ids).Error
+			return ids, err
 		},
 		RunsByID: func(ctx context.Context, ids []string) ([]*backuptypes.SystemBackupRun, error) {
 			var records []SystemBackupRun

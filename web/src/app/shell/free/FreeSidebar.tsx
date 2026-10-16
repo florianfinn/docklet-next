@@ -24,9 +24,10 @@ import {
 } from "@/shared/ui/sidebar";
 
 import { HostFilter } from "../HostFilter";
-import { type NavGroup, type NavItem } from "../nav-items";
+import { type NavGroup, type NavItem, visibleNavItems } from "../nav-items";
 import { isNavActive, useNavCounts, useRunningActionCount, type NavCounts } from "../use-nav-counts";
 import { FreeUserMenu } from "./FreeUserMenu";
+import { useHubBackupAccess } from "@/features/hub-backups/use-backup-access";
 
 /** Shared navigation row look (controls.css), also used by the settings sub-navigation. */
 const ROW = "nav-row group/free-nav";
@@ -74,6 +75,7 @@ export function FreeSidebar({ navigation }: { navigation: NavGroup[] }) {
   const logoMotion = useVisualStyle("logoMotion");
   const logoEntrance = useVisualStyle("logoEntrance");
   const motion = useMotionEnabled();
+  const backupAccess = useHubBackupAccess();
   const closeMobile = () => {
     if (isMobile) setOpenMobile(false);
   };
@@ -131,7 +133,7 @@ export function FreeSidebar({ navigation }: { navigation: NavGroup[] }) {
             </SidebarGroupLabel>
             <SidebarGroupContent>
               <SidebarMenu>
-                {group.items.map((item) => (
+                {visibleNavItems(group.items, backupAccess.data?.read === true).map((item) => (
                   <NavEntry key={item.key} item={item} groupBadge={group.key === "later"} count={counts[item.key]} active={isNavActive(pathname, item.to)} onNavigate={closeMobile} />
                 ))}
               </SidebarMenu>

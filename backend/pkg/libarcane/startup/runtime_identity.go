@@ -50,6 +50,7 @@ type RuntimeIdentityConfig struct {
 	DockerHost        string
 	DockerConfig      string
 	ProjectsDirectory string
+	BackupDirectory   string
 }
 
 // ApplyRequestedRuntimeIdentity switches the current process to the configured
@@ -114,6 +115,11 @@ func ApplyRequestedRuntimeIdentity(ctx context.Context, cfg *RuntimeIdentityConf
 			runtimeUID, runtimeGID, mountpoints, projectsDir, defaultDataDirectory,
 		); prepareWritablePathsWithRootsErr != nil {
 			return prepareWritablePathsWithRootsErr
+		}
+		if cfg.BackupDirectory != "" {
+			if err := prepareBackupDirectoryInternal(runtimeUID, runtimeGID, mountpoints, cfg.BackupDirectory); err != nil {
+				slog.WarnContext(ctx, "Backup storage ownership is unavailable", "code", "backup.storage_unavailable")
+			}
 		}
 	}
 
@@ -396,4 +402,21 @@ func unescapeMountInfoPathInternal(path string) string {
 		`\134`, `\`,
 	)
 	return replacer.Replace(path)
+}
+
+func prepareBackupDirectoryInternal(uid, gid int, mountpoints map[string]struct{}, path string) error {
+	if !filepath.IsAbs(path) {
+		return fmt.Errorf("backup directory must be absolute")
+	}
+	if err := os.MkdirAll(path, 0700); err != nil {
+		return fmt.Errorf("backup directory unavailable")
+	}
+	info, err := os.Lstat(path)
+	if err != nil || !info.IsDir() || info.Mode()&os.ModeSymlink != 0 {
+		return fmt.Errorf("backup directory must be a real directory")
+	}
+	if err := prepareWritablePathsWithRootsInternal(uid, gid, mountpoints, "", path); err != nil {
+		return fmt.Errorf("backup directory ownership unavailable")
+	}
+	return nil
 }

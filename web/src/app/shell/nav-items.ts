@@ -25,6 +25,7 @@ export type NavKey =
   | "volumes"
   | "hosts"
   | "backups"
+  | "hubBackups"
   | "notifications"
   | "proxy"
   | "games";
@@ -65,6 +66,7 @@ export const NAV: NavGroup[] = [
     items: [
       { key: "hosts", to: "/hosts", icon: Server },
       { key: "backups", to: "/backups", icon: Archive },
+      { key: "hubBackups", to: "/hub-backups", icon: Database },
       { key: "notifications", to: "/settings/notifications", icon: BellRing },
     ],
   },
@@ -91,3 +93,7 @@ export const PREVIEW_ICONS: Record<string, LucideIcon> = {
   proxy: Waypoints,
   games: Gamepad2,
 };
+
+export function visibleNavItems(items: NavItem[], canReadHubBackups: boolean): NavItem[] {
+  return items.filter((item) => item.key !== "hubBackups" || canReadHubBackups);
+}

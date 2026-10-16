@@ -65,3 +65,32 @@ building. It checks an empty temporary volume, `/api/health`, the served web
 bundle, second-hub refusal, persistent restart and every extracted licence hash.
 It removes only its own labelled containers and volume. This automated smoke does
 not replace operator approval and practical acceptance of a release package.
+
+## Database archives and recovery
+
+The separate `hub-backups` volume holds unencrypted `<backup-id>.tar` archives of
+both SQLite files. Backups pause database requests and live views briefly; a
+restore revokes all sessions. Keep a protected downloaded copy and the external
+encryption key away from the Hub host. Volume data, project files and external
+secrets are not in these archives. Mount/SMB target copying is a follow-up.
+
+For an empty replacement data volume, stop the hub, place a trusted archive under
+its server-owned filename in the backup volume, and run:
+
+```sh
+docker compose stop hub
+docker compose run --rm hub restore-hub --backup-id example-archive
+docker compose up -d hub
+```
+
+The offline command takes the lifetime lock and refuses a running hub. It
+validates both images, retains safety copies beside the databases, replaces the
+pair, migrates forward and revokes restored sessions before readiness. A durable
+restore marker causes startup to repeat an interrupted installation from protected
+inputs. Keep the marker, recovery directory and safety files if startup refuses
+recovery; do not delete them to bypass validation. Safety copies and staged images
+consume local space and are retained for operator removal after verification.
+
+The UI round-trip acceptance waits for M4 sign-in; a browser check with a synthetic
+session is implementation evidence only. See the indexed backup design and
+practical acceptance procedure.

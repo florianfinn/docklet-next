@@ -48,6 +48,10 @@ func TestGenerate_EnvConfigIncludesTaggedFields(t *testing.T) {
 	assert.Empty(t, dockerConfig.DefaultValue)
 	assert.Equal(t, "config.Config", dockerConfig.Source)
 
+	backupDir, ok := entries["DOCKLET_BACKUP_DIR"]
+	require.True(t, ok)
+	assert.Equal(t, "/var/lib/docklet/backups", backupDir.DefaultValue)
+
 	buildableUsername, ok := entries["AUTO_LOGIN_USERNAME"]
 	require.True(t, ok)
 	assert.True(t, buildableUsername.Conditional)
@@ -202,6 +206,7 @@ var expectedEnvConfigVars = []string{
 	"DIR_PERM",
 	"DOCKER_CONFIG",
 	"DOCKER_HOST",
+	"DOCKLET_BACKUP_DIR",
 	"EDGE_AGENT",
 	"EDGE_MTLS_ASSETS_DIR",
 	"EDGE_MTLS_CA_FILE",

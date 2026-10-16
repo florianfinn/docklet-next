@@ -452,3 +452,12 @@ func TestPrepareWritablePathsInternalChownsTopLevelProjectsShallowly(t *testing.
 	require.False(t, visited[filepath.Clean(demoDir)], "subdir inside projects dir must NOT be chowned")
 	require.False(t, visited[filepath.Clean(keepFile)], "file inside projects dir must NOT be chowned")
 }
+
+func TestBackupDirectoryPreparationRejectsAliases(t *testing.T) {
+	dir := t.TempDir()
+	require.NoError(t, prepareBackupDirectoryInternal(os.Getuid(), os.Getgid(), map[string]struct{}{}, filepath.Join(dir, "backups")))
+	require.Error(t, prepareBackupDirectoryInternal(os.Getuid(), os.Getgid(), nil, "relative"))
+	target := filepath.Join(dir, "alias")
+	require.NoError(t, os.Symlink(filepath.Join(dir, "backups"), target))
+	require.Error(t, prepareBackupDirectoryInternal(os.Getuid(), os.Getgid(), nil, target))
+}
