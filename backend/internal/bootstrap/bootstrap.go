@@ -52,6 +52,9 @@ func Bootstrap(ctx context.Context) error {
 		return fmt.Errorf("load .env: %w", err)
 	}
 	cfg := config.Load()
+	if err := cfg.ValidateSignIn(); err != nil {
+		return err
+	}
 	runtimeIdentityCfg := &startup.RuntimeIdentityConfig{
 		PUID:              cfg.PUID,
 		PGID:              cfg.PGID,
