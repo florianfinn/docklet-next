@@ -31,6 +31,9 @@ IP extraction, `Forwarded` and `X-Forwarded-For` never establish identity. A pee
 outside the list, a malformed peer address, a missing/empty identity or duplicate
 identity headers returns 401. `TRUSTED_PROXIES` remains a separate forwarding
 metadata setting and cannot authorize sign-in.
+Identity values must be valid UTF-8 containing only printable characters;
+controls are rejected before surrounding spaces are trimmed. IPv4-mapped socket
+peers are matched against their unmapped IPv4 address.
 
 The trusted proxy is responsible for authenticating its client, removing any
 client-provided identity header and setting exactly one authoritative value. Each

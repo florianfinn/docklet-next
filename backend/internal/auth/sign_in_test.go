@@ -133,6 +133,8 @@ func TestSignInRequestMatrix(t *testing.T) {
 		{name: "XFF spoof", peer: "198.51.100.5:5000", identity: "operator", xff: "192.0.2.10", localStatus: 401, proxyStatus: 401},
 		{name: "trusted proxy", peer: "192.0.2.10:5000", identity: "operator", xff: "198.51.100.5", localStatus: 401, proxyStatus: 200},
 		{name: "trusted IPv6", peer: "[2001:db8::10]:5000", identity: "operator", localStatus: 401, proxyStatus: 200},
+		{name: "trusted mapped IPv4", peer: "[::ffff:192.0.2.10]:5000", identity: "operator", localStatus: 401, proxyStatus: 200},
+		{name: "untrusted mapped IPv4", peer: "[::ffff:198.51.100.5]:5000", identity: "operator", localStatus: 401, proxyStatus: 401},
 		{name: "trusted missing identity", peer: "192.0.2.10:5000", localStatus: 401, proxyStatus: 401},
 		{name: "stale bearer from prior mode", peer: "198.51.100.5:5000", credential: "stale bearer", localStatus: 401, proxyStatus: 401},
 		{name: "stale cookie from prior mode", peer: "198.51.100.5:5000", credential: "stale cookie", localStatus: 401, proxyStatus: 401},

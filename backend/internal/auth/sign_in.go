@@ -14,6 +14,8 @@ import (
 	"net/netip"
 	"strings"
 	"time"
+	"unicode"
+	"unicode/utf8"
 
 	"github.com/danielgtaylor/huma/v2"
 	"github.com/danielgtaylor/huma/v2/adapters/humaecho"
@@ -45,8 +47,11 @@ func (s *AuthService) ModeRequestUser(ctx context.Context, req *http.Request) (*
 		if len(values) != 1 {
 			return nil, common.ErrInvalidToken
 		}
+		if !utf8.ValidString(values[0]) || strings.IndexFunc(values[0], func(ch rune) bool { return !unicode.IsPrint(ch) }) != -1 {
+			return nil, common.ErrInvalidToken
+		}
 		identity = strings.TrimSpace(values[0])
-		if identity == "" || len(identity) > 255 || strings.ContainsAny(identity, "\r\n\x00") {
+		if identity == "" || len(identity) > 255 {
 			return nil, common.ErrInvalidToken
 		}
 	default:

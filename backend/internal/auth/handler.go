@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; functional cut: removed OIDC and passkeys.
+// Deviations: Local module namespace; removed OIDC/passkeys; startup-mode dispatch before local credentials; shared reserved synthetic agent identity.
 
 package auth
 
@@ -676,7 +676,7 @@ func tryAgentAuthInternal(ctx huma.Context, cfg *config.Config) (*userdomain.Use
 func createAgentSudoUserInternal() *userdomain.User {
 	return &userdomain.User{
 		ID:       "agent",
-		Email:    new("agent@getarcane.app"),
+		Email:    new("agent@example.com"),
 		Username: "agent",
 	}
 }

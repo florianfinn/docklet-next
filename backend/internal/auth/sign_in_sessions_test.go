@@ -123,6 +123,18 @@ func TestSignInProxyHeaderConfiguration(t *testing.T) {
 		{"default header ignored", "Remote-User", []string{"operator"}, 401},
 		{"duplicate identities", "X-Identity", []string{"operator", "other"}, 401},
 		{"blank identity", "X-Identity", []string{" "}, 401},
+		{"printable Unicode", "X-Identity", []string{"Öperator"}, 200},
+		{"tab", "X-Identity", []string{"oper\tator"}, 401},
+		{"leading tab", "X-Identity", []string{"\toperator"}, 401},
+		{"trailing tab", "X-Identity", []string{"operator\t"}, 401},
+		{"escape", "X-Identity", []string{"oper\x1bator"}, 401},
+		{"DEL", "X-Identity", []string{"operator\x7f"}, 401},
+		{"newline", "X-Identity", []string{"operator\n"}, 401},
+		{"carriage return", "X-Identity", []string{"operator\r"}, 401},
+		{"NUL", "X-Identity", []string{"oper\x00ator"}, 401},
+		{"Unicode control", "X-Identity", []string{"operator\u0085"}, 401},
+		{"Unicode format", "X-Identity", []string{"operator\u200b"}, 401},
+		{"invalid UTF-8", "X-Identity", []string{"operator\xff"}, 401},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			req := httptest.NewRequest(http.MethodGet, "/api/secure", http.NoBody)
