@@ -302,7 +302,7 @@ export const enSettings = {
     historyNote: "History keeps 500 events and 100 finished runs per environment. Active runs remain available.",
     errors: { range: "Please enter a number from {min} to {max}.", integer: "Please enter a whole number." },
     output: "Save action output",
-    outputHint: "Step logs in the action center. Without saving, only the result and errors remain.",
+    outputHint: "Controls new raw output lines. Existing output stays until its run is removed; activity messages and results remain.",
   },
   profile: {
     title: "Profile",

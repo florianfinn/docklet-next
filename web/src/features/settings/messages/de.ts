@@ -303,7 +303,7 @@ export const deSettings: typeof enSettings = {
     historyNote: "Der Verlauf behält 500 Ereignisse und 100 abgeschlossene Abläufe je Umgebung. Aktive Abläufe bleiben erhalten.",
     errors: { range: "Bitte eine Zahl von {min} bis {max} eingeben.", integer: "Bitte eine ganze Zahl eingeben." },
     output: "Ausgaben von Aktionen speichern",
-    outputHint: "Schrittprotokolle im Aktionszentrum. Ohne Speicherung bleiben nur Ergebnis und Fehler.",
+    outputHint: "Steuert neue Rohzeilen. Bereits gespeicherte Ausgaben bleiben bis zum Entfernen des Ablaufs erhalten; Meldungen und Ergebnisse bleiben sichtbar.",
   },
   profile: {
     title: "Profil",

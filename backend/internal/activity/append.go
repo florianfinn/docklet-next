@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-15
 // License: BSD-3-Clause
-// Deviations: Extracted batch append path; persisted raw output with coded messages.
+// Deviations: Extracted batch append path; configurable raw output persistence with coded messages.
 
 package activity
 
@@ -39,6 +39,9 @@ func (s *ActivityService) AppendMessages(ctx context.Context, activityID string,
 		if req.Output != nil {
 			output = append(output, *req.Output)
 		}
+	}
+	if len(output) > 0 && s.settings != nil && !s.settings.GetBoolSetting(ctx, "keepActionOutput", true) {
+		output = nil
 	}
 	if len(messages) == 0 && len(output) == 0 {
 		return nil, nil

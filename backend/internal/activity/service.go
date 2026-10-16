@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; SQLite persistence; coded run projection, guarded updates and bounded output persistence.
+// Deviations: Local module namespace; SQLite persistence; coded run projection, guarded updates and configurable bounded output persistence.
 
 package activity
 
@@ -83,7 +83,8 @@ type gateRunContextKey struct{}
 type startupRepairContextKey struct{}
 
 type ActivityService struct {
-	db *database.DB
+	db       *database.DB
+	settings *settings.SettingsService
 
 	subscribersMu sync.RWMutex
 	subscribers   map[int]*activitySubscriber
@@ -106,10 +107,8 @@ type ActivityService struct {
 	slotMu       sync.Mutex
 	slotReleases map[string]func()
 
-	// terminalPublished records when each activity's terminal snapshot was
-	// published, so later non-terminal snapshots from slower goroutines can
-	// be dropped (see admitActivityPublishInternal). Entries are pruned on
-	// terminal publishes once older than terminalPublishRetention.
+	// terminalPublished suppresses stale snapshots after a terminal publish.
+	// Old entries expire after terminalPublishRetention.
 	terminalPublishedMu sync.Mutex
 	terminalPublished   map[string]time.Time
 
@@ -251,6 +250,7 @@ type (
 func NewActivityService(db *database.DB, settingsService *settings.SettingsService) *ActivityService {
 	return &ActivityService{
 		db:                db,
+		settings:          settingsService,
 		subscribers:       map[int]*activitySubscriber{},
 		running:           map[string]context.CancelCauseFunc{},
 		limiter:           newActivitySlotLimiterInternal(settingsService),
