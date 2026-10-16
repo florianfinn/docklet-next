@@ -53,7 +53,7 @@ var BackupsCmd = &cobra.Command{
 	Use:     "backups",
 	Aliases: []string{"backup"},
 	Short:   "Manage Hub database backups (admin only)",
-	Long: `Hub backups archive the PostgreSQL database on a dedicated local volume.
+	Long: `Hub backups archive the SQLite hub and Francis databases on a dedicated local volume.
 Policies schedule automatic archives.`,
 }
 
@@ -94,7 +94,7 @@ var listCmd = &cobra.Command{
 var createCmd = &cobra.Command{
 	Use:          "create",
 	Short:        "Create a Hub database archive",
-	Long:         "Create a local PostgreSQL archive.",
+	Long:         "Create a local SQLite archive.",
 	Args:         cobra.NoArgs,
 	SilenceUsage: true,
 	RunE: func(cmd *cobra.Command, args []string) error {
