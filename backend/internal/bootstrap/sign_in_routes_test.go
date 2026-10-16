@@ -20,12 +20,15 @@ import (
 	"github.com/florianfinn/docklet-next/backend/internal/apikey"
 	"github.com/florianfinn/docklet-next/backend/internal/auth"
 	"github.com/florianfinn/docklet-next/backend/internal/config"
+	"github.com/florianfinn/docklet-next/backend/internal/environment"
+	"github.com/florianfinn/docklet-next/backend/internal/middleware"
 	"github.com/florianfinn/docklet-next/backend/internal/role"
 	"github.com/florianfinn/docklet-next/backend/internal/session"
 	"github.com/florianfinn/docklet-next/backend/internal/settings"
 	"github.com/florianfinn/docklet-next/backend/internal/user"
 	"github.com/florianfinn/docklet-next/backend/pkg/utils/cookie"
 	"github.com/florianfinn/docklet-next/backend/pkg/utils/sqlitestore"
+	apikeytypes "github.com/florianfinn/docklet-next/types/apikey"
 	authtypes "github.com/florianfinn/docklet-next/types/auth"
 	"github.com/labstack/echo/v5"
 	"github.com/stretchr/testify/require"
@@ -52,9 +55,29 @@ func TestSignInForwardingAndStreamMatrix(t *testing.T) {
 	tokens, err := svc.CompleteLogin(t.Context(), admin, authtypes.SessionMeta{}, session.UserSessionSourceLocal)
 	require.NoError(t, err)
 	keys := apikey.NewApiKeyService(db, users, roles)
+	env := &environment.Environment{ID: "example", Name: "Example", ApiUrl: "https://agent.example.com", Enabled: true}
+	require.NoError(t, db.Create(env).Error)
+	bootstrapKey, err := keys.CreateEnvironmentApiKey(t.Context(), env.ID)
+	require.NoError(t, err)
+	personalKey, err := keys.CreatePersonalApiKey(t.Context(), admin.ID, apikeytypes.CreateUserApiKey{Name: "example"})
+	require.NoError(t, err)
+	transportValidator := csrfTransportValidatorInternal(api.HandlerDeps{ApiKey: apikey.New(keys)})
 	validator := createAuthValidatorInternal(api.HandlerDeps{Auth: auth.New(svc, users, settingsSvc), ApiKey: apikey.New(keys), Role: role.New(roles)})
 	for _, mode := range []string{"none", "local", "proxy"} {
 		cfg.AuthMode = mode
+		transportRouter := echo.New()
+		transportRouter.Use(middleware.NewCSRFMiddleware(cfg).WithTransportValidator(transportValidator).Add())
+		transportRouter.POST("/api/transport", func(c *echo.Context) error { return c.NoContent(200) })
+		for _, tc := range []struct {
+			value  string
+			status int
+		}{{bootstrapKey.Key, 200}, {personalKey.Key, 403}, {"invalid", 403}} {
+			req := httptest.NewRequest(http.MethodPost, "/api/transport", http.NoBody)
+			req.Header.Set(middleware.HeaderApiKey, tc.value)
+			rec := httptest.NewRecorder()
+			transportRouter.ServeHTTP(rec, req)
+			require.Equal(t, tc.status, rec.Code)
+		}
 		router := echo.New()
 		router.IPExtractor = func(req *http.Request) string { return req.Header.Get("X-Forwarded-For") }
 		ws.NewWebSocketHandler(router.Group("/api"), nil, nil, nil, nil, auth.NewAuthMiddleware(svc, cfg).WithPermissionResolver(roles), cfg)
