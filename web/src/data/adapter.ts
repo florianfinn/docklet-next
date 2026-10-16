@@ -14,6 +14,7 @@ import type {
 import type { HostsApi, HubApi, ImagesApi, NetworksApi, SettingsApi, VolumesApi } from "./api";
 import type { CodedActionRun, CodedEvent, CodedStackDetail } from "./message-code";
 import type { CapabilityDescriptor, ResourceRef } from "./capability";
+import type { HubBackupApi } from "@/domain/hub-backup";
 
 export type StackCommand = "start" | "stop" | "restart" | "redeploy";
 export type ContainerCommand = "start" | "stop" | "restart";
@@ -55,7 +56,7 @@ export type Unsubscribe = () => void;
 /**
  * Transport-neutral boundary of the UI. Adapters implement this interface.
  */
-export interface DockletAdapter extends HostsApi, VolumesApi, SettingsApi, ImagesApi, NetworksApi, HubApi {
+export interface DockletAdapter extends HostsApi, VolumesApi, SettingsApi, ImagesApi, NetworksApi, HubApi, HubBackupApi {
   readonly kind: "demo" | "http" | "disconnected";
   readonly mappedOperations?: ReadonlySet<string>;
 

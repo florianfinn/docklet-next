@@ -9,6 +9,17 @@ export function createDisconnectedAdapter(): DockletAdapter {
   const subscribe = () => () => {};
   return {
     kind: "disconnected",
+    getHubBackupAccess: unavailable,
+    listHubBackups: unavailable,
+    getHubBackupPolicies: unavailable,
+    saveHubBackupPolicies: unavailable,
+    getHubBackupStorage: unavailable,
+    getHubBackupMaintenance: unavailable,
+    getHubBackupActivityStatus: unavailable,
+    createHubBackup: unavailable,
+    uploadHubBackup: unavailable,
+    restoreHubBackup: unavailable,
+    downloadHubBackup: unavailable,
     getCapability: async (operationId, resourceRef = HUB_REF) => ({ operationId, resourceRef, available: false, disabledReasonCode: GENERIC_REASON }),
     listHosts: unavailable,
     listStacks: unavailable,

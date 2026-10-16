@@ -27,6 +27,7 @@ import { renderRun, type CodedActionRun } from "../message-code";
 import type { CapabilityDescriptor } from "../capability";
 import { createHttpAdapter } from "./http-adapter";
 import { mapActivityDetail, mapEvent } from "./map-dto";
+import type { HubBackupRun } from "@/domain/hub-backup";
 
 type Activity = components["schemas"]["ActivityActivity"];
 type Detail = components["schemas"]["ActivityDetail"];
@@ -428,3 +429,101 @@ function backendResponse(input: string): Response {
   if (url.pathname.endsWith("/capabilities")) return ok(["listActions", "listEvents"].map((operationId) => ({ operationId, available: true, resourceRef: { kind: "hub", id: "0" } })));
   return page([]);
 }
+
+type BackupScenario = "list" | "empty" | "creating" | "storage-unavailable" | "tools-unavailable" | "maintenance" | "no-access";
+
+function backupBackend(scenario: BackupScenario) {
+  const run: HubBackupRun = { id: "system-demo-1", activityId: "activity-demo-1", createdAt: "2026-10-14T09:30:00Z", completedAt: "2026-10-14T09:30:00Z", size: 33_554_432, status: scenario === "creating" ? "running" : "succeeded", trigger: "manual", copyState: "none" };
+  const state = {
+    runs: scenario === "empty" ? [] as HubBackupRun[] : [run],
+    policy: [{ id: "hub-daily", enabled: true, schedule: "0 0 3 * * *", retentionCount: 7 }],
+    requests: [] as { path: string; method: string; body?: string }[],
+  };
+  const fetcher = vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
+    const url = new URL(String(input), "https://example.test");
+    const method = init?.method ?? "GET";
+    state.requests.push({ path: url.pathname, method, body: init?.body as string | undefined });
+    if (url.pathname === "/api/auth/me") return ok({ isGlobalAdmin: scenario !== "no-access", permissionsByEnv: { global: ["system-backups:read", "system-backups:manage", "system-backups:restore"] } });
+    if (scenario === "no-access") return json({ detail: "permission.denied" }, 403);
+    if (url.pathname === "/api/backups" && method === "GET") return page(state.runs);
+    if (url.pathname === "/api/backups" && method === "POST") {
+      const created: HubBackupRun = { ...run, id: "system-new-2", activityId: "activity-new-2", status: "running", size: 0 };
+      state.runs.unshift(created);
+      return json(created, 202);
+    }
+    if (url.pathname === "/api/backups/policies" && method === "GET") return json({ policies: state.policy });
+    if (url.pathname === "/api/backups/policies" && method === "PUT") {
+      state.policy = JSON.parse(String(init?.body)).policies;
+      return json({ policies: state.policy });
+    }
+    if (url.pathname === "/api/backups/storage") return json({ available: scenario !== "storage-unavailable" && scenario !== "tools-unavailable", freeBytes: 9_663_676_416, usedBytes: 33_554_432, maxArchiveBytes: 2_147_483_648, ...(scenario === "storage-unavailable" ? { reasonCode: "backup.storage_unavailable" } : scenario === "tools-unavailable" ? { reasonCode: "backup.tools_unavailable" } : {}) });
+    if (url.pathname === "/api/backups/maintenance") return json({ active: scenario === "maintenance", ...(scenario === "maintenance" ? { phase: "draining", activityId: "activity-restore-1" } : {}) });
+    if (url.pathname.startsWith("/api/environments/0/activities/")) return ok({ activity: { id: "activity-demo-1", status: scenario === "creating" ? "running" : "success" } });
+    if (url.pathname === "/api/backups/system-demo-1/restore") return json({ backupId: run.id, activityId: "activity-restore-1", status: "running" }, 202);
+    return json({ detail: "not-found" }, 404);
+  });
+  return { adapter: createHttpAdapter({ fetch: fetcher as typeof fetch }), state };
+}
+
+describe.each(["demo", "http"] as const)("%s Hub backup contract", (kind) => {
+  it.each(["list", "empty", "creating", "storage-unavailable", "tools-unavailable", "maintenance", "no-access"] as BackupScenario[])("maps %s without changing the archive contract", async (scenario) => {
+    const adapter = kind === "demo" ? createDemoAdapter({ hubBackupScenario: scenario }) : backupBackend(scenario).adapter;
+    const access = await adapter.getHubBackupAccess();
+    expect(access.read).toBe(scenario !== "no-access");
+    const maintenance = await adapter.getHubBackupMaintenance();
+    expect(maintenance.active).toBe(scenario === "maintenance");
+    if (!access.read) { await expect(adapter.listHubBackups()).rejects.toBeTruthy(); return; }
+    const runs = await adapter.listHubBackups();
+    expect(runs.map((run) => [run.id, run.trigger, run.status, run.size])).toEqual(scenario === "empty" ? [] : [["system-demo-1", "manual", scenario === "creating" ? "running" : "succeeded", 33_554_432]]);
+    const storage = await adapter.getHubBackupStorage();
+    expect(storage.reasonCode).toBe(scenario === "storage-unavailable" ? "backup.storage_unavailable" : scenario === "tools-unavailable" ? "backup.tools_unavailable" : undefined);
+    expect((await adapter.getHubBackupPolicies())[0]?.retentionCount).toBe(7);
+    if (scenario === "creating") expect(await adapter.getHubBackupActivityStatus("activity-demo-1")).toBe("running");
+  });
+
+  it("creates an archive, saves policy and starts a confirmed restore", async () => {
+    const setup = backupBackend("list");
+    const adapter = kind === "demo" ? createDemoAdapter() : setup.adapter;
+    const created = await adapter.createHubBackup();
+    expect(created.status).toBe("running");
+    const policy = (await adapter.getHubBackupPolicies())[0]!;
+    const saved = await adapter.saveHubBackupPolicies([{ ...policy, retentionCount: 3 }]);
+    expect(saved[0]?.retentionCount).toBe(3);
+    const restored = await adapter.restoreHubBackup("system-demo-1");
+    expect([restored.backupId, restored.status]).toEqual(["system-demo-1", "running"]);
+    if (kind === "http") {
+      expect(setup.state.requests.some((item) => item.path === "/api/backups" && item.method === "POST")).toBe(true);
+      expect(setup.state.requests.some((item) => item.path.endsWith("/restore") && item.body?.includes('"confirmBackupId":"system-demo-1"'))).toBe(true);
+      expect(setup.state.requests.some((item) => item.path === "/api/backups/policies" && item.method === "PUT")).toBe(true);
+    }
+  });
+});
+
+it("uses an octet-stream upload with progress and an ID-based download", async () => {
+  const request = { url: "", headers: {} as Record<string, string>, body: null as File | null };
+  class FakeUpload {
+    upload = { onprogress: null as ((event: ProgressEvent) => void) | null };
+    responseText = JSON.stringify({ backupId: "system-upload-1", activityId: "activity-upload-1", status: "success" });
+    status = 202;
+    withCredentials = false;
+    onerror: (() => void) | null = null;
+    onload: (() => void) | null = null;
+    open(_method: string, url: string) { request.url = url; }
+    setRequestHeader(key: string, value: string) { request.headers[key] = value; }
+    send(body: File) { request.body = body; this.upload.onprogress?.({ lengthComputable: true, loaded: 5, total: 10 } as ProgressEvent); this.onload?.(); }
+  }
+  const adapter = createHttpAdapter({ fetch: backupBackend("list").adapter.getHubBackupAccess as unknown as typeof fetch, uploadFactory: () => new FakeUpload() as unknown as XMLHttpRequest });
+  const progress: number[] = [];
+  const file = new File(["PGDMP"], "archive.dump", { type: "application/octet-stream" });
+  const result = await adapter.uploadHubBackup(file, (value) => progress.push(value));
+  expect([result.backupId, request.url, request.headers["Content-Type"], request.body === file, progress]).toEqual(["system-upload-1", "/api/backups/upload", "application/octet-stream", true, [50, 100]]);
+  const clicked = vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(() => undefined);
+  await adapter.downloadHubBackup("system-demo-1");
+  expect(clicked).toHaveBeenCalledOnce();
+  expect(new URL((clicked.mock.instances[0] as HTMLAnchorElement).href).pathname).toBe("/api/backups/system-demo-1/download");
+});
+
+it("recognizes a global administrator wildcard permission", async () => {
+  const adapter = createHttpAdapter({ fetch: vi.fn(async () => ok({ isGlobalAdmin: true, permissionsByEnv: { global: ["*"] } })) as typeof fetch });
+  expect(await adapter.getHubBackupAccess()).toEqual({ read: true, manage: true, restore: true });
+});
