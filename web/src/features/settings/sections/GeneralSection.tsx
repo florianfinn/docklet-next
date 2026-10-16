@@ -1,6 +1,7 @@
 import { useTranslations } from "use-intl";
 
 import { LanguageSwitch } from "@/app/i18n/LanguageSwitch";
+import { useAdapter } from "@/data/use-adapter";
 import { notificationBaseUrl, type GeneralSettings, type HubSettings, type LinkBase } from "@/domain/settings";
 import { TextField } from "@/shared/components/form-field";
 import { Field, FieldDescription, FieldGroup, FieldLabel, FieldSet } from "@/shared/ui/field";
@@ -14,11 +15,8 @@ import { SettingsForm } from "../SettingsForm";
 import { useSaveSettings } from "../use-save-settings";
 import { useSectionDraft } from "../use-section-draft";
 
-/**
- * Hub name, the internal address agents reach the hub at, an optional domain
- * and time zone; shared by settings and first-run setup.
- */
-export function GeneralFields({ value, onChange, showErrors, idPrefix = "gen" }: { value: GeneralSettings; onChange: (p: Partial<GeneralSettings>) => void; showErrors: boolean; idPrefix?: string }) {
+/** Hub address, link policy, and time zone shared by settings and first-run setup. */
+export function GeneralFields({ value, onChange, showErrors, idPrefix = "gen", showLanguage = true }: { value: GeneralSettings; onChange: (p: Partial<GeneralSettings>) => void; showErrors: boolean; idPrefix?: string; showLanguage?: boolean }) {
   const t = useTranslations("settings.general");
   const tl = useTranslations("locale.switcher");
   const e = useGeneralErrors(value);
@@ -85,16 +83,17 @@ export function GeneralFields({ value, onChange, showErrors, idPrefix = "gen" }:
         </Select>
         <FieldDescription>{t("timeZoneHint")}</FieldDescription>
       </Field>
-      <Field>
+      {showLanguage && <Field>
         <FieldLabel>{t("language")}</FieldLabel>
         <LanguageSwitch className="self-start" />
         <FieldDescription>{tl("hint")}</FieldDescription>
-      </Field>
+      </Field>}
     </FieldGroup>
   );
 }
 
-export function GeneralSection({ settings }: { settings: HubSettings }) {
+export function GeneralSection({ settings }: { settings: Pick<HubSettings, "general"> }) {
+  const connected = useAdapter().kind === "http";
   const t = useTranslations("settings");
   const save = useSaveSettings();
   const { draft, patch, dirty, reset, commit } = useSectionDraft(settings.general);
@@ -112,7 +111,7 @@ export function GeneralSection({ settings }: { settings: HubSettings }) {
         commit(draft);
       }}
     >
-      <GeneralFields value={draft} onChange={patch} showErrors={dirty} />
+      <GeneralFields value={draft} onChange={patch} showErrors={dirty} showLanguage={!connected} />
     </SettingsForm>
   );
 }

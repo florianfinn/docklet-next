@@ -121,6 +121,12 @@ export function createDemoAdapter(options: DemoAdapterOptions = {}): DockletAdap
 
   const adapter: DockletAdapter = {
     kind: "demo",
+    getAuthMode: async () => db.settings.auth.mode,
+    getCurrentUser: async () => ({ id: "demo-admin", username: db.settings.auth.local.username, requiresPasswordChange: false }),
+    login: async (username) => ({ id: "demo-admin", username, requiresPasswordChange: false }),
+    logout: async () => undefined,
+    changePassword: async () => undefined,
+    updateMyLocale: async (locale) => ({ id: "demo-admin", username: db.settings.auth.local.username, locale, requiresPasswordChange: false }),
     ...createDemoHubBackups(options),
     getCapability: async (operationId, resourceRef = HUB_REF) => {
       const knownResource = resourceRef.kind === "hub" ||

@@ -3,6 +3,7 @@ import { RouterProvider } from "react-router";
 import { IntlProvider } from "use-intl";
 
 import { AdapterProvider } from "@/data/AdapterProvider";
+import { useHubTimeZone } from "@/shared/hooks/use-hub-time-zone";
 import { createAdapter } from "@/runtime";
 import { useApplyDesignTokens, usePrefersReducedMotion, useTokens } from "@/shared/theme/use-design-tokens";
 import { usePointerGlow } from "@/shared/lib/pointer-glow";
@@ -13,6 +14,13 @@ import { TooltipProvider } from "@/shared/ui/tooltip";
 import { catalogs } from "./i18n/catalog";
 import { useAppLocale } from "./i18n/locale-store";
 import { router } from "./router";
+
+function AppContent({ locale }: { locale: ReturnType<typeof useAppLocale> }) {
+  const timeZone = useHubTimeZone();
+  return <IntlProvider locale={locale} messages={catalogs[locale]} timeZone={timeZone}>
+    <TooltipProvider delayDuration={250}><RouterProvider router={router} /></TooltipProvider>
+  </IntlProvider>;
+}
 
 /** Root providers with the adapter selected by the build. */
 export function App() {
@@ -29,12 +37,8 @@ export function App() {
   }, [locale]);
   usePointerGlow(useUiStyle("pointerGlow"), useUiStyle("pointerGlowIntensity"), (reduced && !tokens.ignoreReducedMotion) || tokens.motion === "off", useVisualStyle("glowInside"), useVisualStyle("glowOutside"));
   return (
-    <IntlProvider locale={locale} messages={catalogs[locale]} timeZone="Europe/Berlin">
-      <AdapterProvider adapter={adapter}>
-        <TooltipProvider delayDuration={250}>
-          <RouterProvider router={router} />
-        </TooltipProvider>
-      </AdapterProvider>
-    </IntlProvider>
+    <AdapterProvider adapter={adapter}>
+      <AppContent locale={locale} />
+    </AdapterProvider>
   );
 }

@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; functional cut: removed APNS mobile push, template catalogue, GitOps, Swarm, standalone build workshop, OIDC and passkeys.
+// Deviations: Local module namespace; functional cut: removed APNS mobile push, template catalogue, GitOps, Swarm, standalone build workshop, OIDC and passkeys. #69 first-run setup and hub settings persistence.
 
 package settings
 
@@ -40,6 +40,8 @@ func DefaultSettingsConfig() *Settings {
 		ExpiredSessionsCleanupInterval:        SettingVariable{Value: "0 0 0 * * *"},
 		UpgradeLogRetentionDays:               SettingVariable{Value: "3"},
 		MaxConcurrentActivities:               SettingVariable{Value: "5"},
+		KeepActionOutput:                      SettingVariable{Value: "true"},
+		ActionPresentation:                    SettingVariable{Value: "dialog"},
 		AutoInjectEnv:                         SettingVariable{Value: "false"},
 		DefaultDeployPullPolicy:               SettingVariable{Value: "missing"},
 		ToolsImageRegistry:                    SettingVariable{Value: "ghcr.io"},
@@ -62,6 +64,17 @@ func DefaultSettingsConfig() *Settings {
 		AutoHealRestartWindow:                 SettingVariable{Value: "30"},
 		VolumeHelperIdleTimeout:               SettingVariable{Value: "10"},
 		BaseServerURL:                         SettingVariable{Value: "http://localhost"},
+		SetupCompleted:                        SettingVariable{Value: "false"},
+		HubName:                               SettingVariable{Value: "Docklet"},
+		HubAddress:                            SettingVariable{Value: ""},
+		DomainURL:                             SettingVariable{Value: ""},
+		LinkBase:                              SettingVariable{Value: "auto"},
+		TimeZone:                              SettingVariable{Value: "Europe/Berlin"},
+		AgentInstallDirectory:                 SettingVariable{Value: "/app/data/agent"},
+		DefaultHostConnection:                 SettingVariable{Value: "direct"},
+		DefaultPUID:                           SettingVariable{Value: ""},
+		DefaultPGID:                           SettingVariable{Value: ""},
+		DetectSocketGroup:                     SettingVariable{Value: "true"},
 		EnableGravatar:                        SettingVariable{Value: "true"},
 		ExperimentalFeaturesEnabled:           SettingVariable{Value: "false"},
 		AvatarMaxUploadSizeMb:                 SettingVariable{Value: "2"},

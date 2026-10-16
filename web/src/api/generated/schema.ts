@@ -1,5 +1,5 @@
 // Source: api/openapi.json
-// Revision: 9097252d8ec7a1500977f3146519c7c5a8c454963e5dc664b079c3dc0b7a97f0
+// Revision: 2a8c9b6bf74be62d51e728c6550abe16dc79381e7ca821642b37eaffc49cb24b
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
 // Deviations: Generated TypeScript declarations from the local Huma export.
@@ -9506,6 +9506,8 @@ export interface components {
              * @example /api/schemas/SettingsUpdate.json
              */
             readonly $schema?: string;
+            actionPresentation?: string | null;
+            agentInstallDirectory?: string | null;
             /**
              * @deprecated
              * @description Read-only startup policy; updates are rejected. Use GET /auth/mode.
@@ -9527,15 +9529,20 @@ export interface components {
             buildProvider?: string | null;
             buildTimeout?: string | null;
             defaultDeployPullPolicy?: string | null;
+            defaultHostConnection?: string | null;
+            defaultPgid?: string | null;
+            defaultPuid?: string | null;
             defaultShell?: string | null;
             deployWaitTimeout?: string | null;
             depotProjectId?: string | null;
             depotToken?: string | null;
+            detectSocketGroup?: string | null;
             diskUsagePath?: string | null;
             dockerApiTimeout?: string | null;
             dockerClientRefreshInterval?: string | null;
             dockerHost?: string | null;
             dockerImagePullTimeout?: string | null;
+            domainUrl?: string | null;
             enableGravatar?: string | null;
             environmentHealthInterval?: string | null;
             experimentalFeaturesEnabled?: string | null;
@@ -9543,13 +9550,17 @@ export interface components {
             featureVulnerabilityManagementEnabled?: "true" | "false" | null;
             followProjectSymlinks?: string | null;
             httpClientTimeout?: string | null;
+            hubAddress?: string | null;
+            hubName?: string | null;
             imageAutoPatchEnabled?: string | null;
             imageAutoPatchInterval?: string | null;
             imageEventWatcherEnabled?: string | null;
             imagePatchAllPlatforms?: string | null;
             imagePatchSuffix?: string | null;
             imagePatchTimeoutSec?: string | null;
+            keepActionOutput?: string | null;
             lifecycleMaxTimeoutSec?: string | null;
+            linkBase?: string | null;
             maxConcurrentActivities?: string | null;
             maxImageUploadSize?: string | null;
             pollingEnabled?: string | null;
@@ -9569,6 +9580,8 @@ export interface components {
             registryTimeout?: string | null;
             scheduledPruneEnabled?: string | null;
             scheduledPruneInterval?: string | null;
+            setupCompleted?: string | null;
+            timeZone?: string | null;
             toolsImageRegistry?: string | null;
             trivyConcurrentScanContainers?: string | null;
             trivyConfig?: string | null;

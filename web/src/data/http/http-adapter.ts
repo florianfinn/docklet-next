@@ -13,13 +13,15 @@ import type { CodedActionRun } from "../message-code";
 import { mapActivityDetail, mapEvent } from "./map-dto";
 import { createHttpHubBackups } from "./hub-backups";
 import { createCsrfClient } from "./csrf-client";
+import { createHttpAuth } from "./auth";
+import { createSettingsCore } from "./settings-core";
 
 type ReadOperation = "get-capabilities" | "listEnvironments" | "list-activities" | "get-activity" | "listEvents";
 type Body<I extends ReadOperation> = operations[I]["responses"][200]["content"]["application/json"];
 type StreamPayload = operations["streamClient"]["responses"][200]["content"]["text/event-stream"][number]["data"];
 type Source = Pick<EventSource, "close" | "onopen" | "onmessage" | "onerror"> & Partial<Pick<EventSource, "readyState">>;
 
-const IMPLEMENTED = new Set(["listActions", "listEvents", "subscribeActions", "subscribeChanges"]);
+const IMPLEMENTED = new Set(["listActions", "listEvents", "subscribeActions", "subscribeChanges", "getAuthMode", "getCurrentUser", "login", "logout", "changePassword", "updateMyLocale", "getSetupStatus", "completeSetup", "getConnectedSettings", "saveSettings"]);
 const RECONNECT_MS = 250;
 
 export interface HttpAdapterOptions {
@@ -262,6 +264,8 @@ export function createHttpAdapter(options: HttpAdapterOptions = {}): DockletAdap
   const methods = Object.fromEntries(Object.keys(unsupported).filter((key) => key !== "kind").map((operationId) => [operationId, (...args: unknown[]) => Promise.reject(unavailable(operationId, refFor(operationId, args), "capability.mapping-unavailable"))])) as unknown as DockletAdapter;
   return {
     ...methods,
+    ...createHttpAuth(baseUrl, client),
+    ...createSettingsCore(baseUrl, client),
     ...createHttpHubBackups(baseUrl, client, options.uploadFactory),
     kind: "http",
     mappedOperations: IMPLEMENTED,

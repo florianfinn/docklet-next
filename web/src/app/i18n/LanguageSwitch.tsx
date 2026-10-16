@@ -8,12 +8,8 @@ import { LOCALES, setAppLocale, useAppLocale, type AppLocale } from "./locale-st
 
 const NAME_KEY: Record<AppLocale, "de" | "enUS"> = { de: "de", "en-US": "enUS" };
 
-/**
- * Interface language for this browser; switches every route at once. Each
- * option names its language in that language, so it is findable without
- * reading the current one.
- */
-export function LanguageSwitch({ size = "sm", className }: { size?: "xs" | "sm" | "md"; className?: string }) {
+/** Switches the interface language; callers may also persist the choice. */
+export function LanguageSwitch({ size = "sm", className, onChange = setAppLocale }: { size?: "xs" | "sm" | "md"; className?: string; onChange?: (locale: AppLocale) => void }) {
   const t = useTranslations("locale.switcher");
   const locale = useAppLocale();
   return (
@@ -21,7 +17,7 @@ export function LanguageSwitch({ size = "sm", className }: { size?: "xs" | "sm" 
       <Languages className="size-4 shrink-0 text-muted-foreground" aria-hidden />
       <SegmentedToggle
         value={locale}
-        onChange={setAppLocale}
+        onChange={onChange}
         label={t("label")}
         size={size}
         fit="content"

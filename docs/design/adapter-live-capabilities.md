@@ -2,8 +2,8 @@
 
 ## Boundary and reuse
 
-The production web app currently selects `createDisconnectedAdapter` in
-`web/src/runtime.ts`; development selects `createDemoAdapter`. The existing
+Die Produktionsoberfläche wählt in `web/src/runtime.ts` den HTTP-Adapter;
+die Entwicklung verwendet den Demo-Adapter. Der vorhandene
 `DockletAdapter` port in `web/src/data/adapter.ts` and `api.ts` defines calls and
 `Topic` names. `live.ts` shares action, metric and log subscriptions;
 `AdapterProvider.tsx` maps `subscribeChanges` topics to query invalidation;
@@ -34,7 +34,7 @@ adapter operation available: its mapping and server capability must both exist.
 | `listEvents` | `listEvents` or `getEventsByEnvironment` for the selected scope | Map `EventEvent` to `CodedEvent`; use recorded DTOs. |
 | `subscribeActions`, `subscribeChanges` | `streamClient` (`activities`, `events`) | Parse envelopes and re-read changed snapshots/queries. |
 | `listHosts`, `listStacks`, `getStack`, `listContainers` | `listEnvironments`, `list-projects`, `get-project`, `list-containers` | Expose unavailable until M5 owns the view-model mappings. |
-| `getSecurity`, `listSchedule`, `getSettings` | `get-environment-vulnerability-overview`, `get-job-schedules`, `get-settings` | Expose unavailable until M11, M10 and M4 respectively own their mappings. |
+| `getSecurity`, `listSchedule`, `getSettings` | `get-environment-vulnerability-overview`, `get-job-schedules`, `get-settings` | Die ersten beiden Aufrufe bleiben bis M11 und M10 nicht verfügbar. `getSettings` bleibt für die noch nicht angebundenen Abschnitte gesperrt; M4 liest die angebundenen Abschnitte mit `getConnectedSettings`. |
 | `runStackCommand`, `runContainerCommand` | `deploy-project`/`down-project`/`restart-project`/`redeploy-project`; `start-container`/`stop-container`/`restart-container` | Expose unavailable until M6 supplies guarded run identities and mappings. |
 | Other `DockletAdapter` reads, writes and subscriptions | Existing operation where listed, otherwise no matching operation | Expose unavailable until the owning milestone supplies the complete mapping. Existing log/stats WebSockets remain the later stream transport. |
 
@@ -120,19 +120,29 @@ refresh the subscribed M3 topics. Preserve WebSocket logs and stats as separate
 later streams. The deployment has one hub process per database, so no
 multi-hub fan-out protocol is needed.
 
-## #27 scope and history setting
+## Identität, Einstellungen und Produktionsrouten (#27)
 
-M3 replaces the production `createDisconnectedAdapter` selection with the HTTP
-adapter, which implements run/event reads and the live feed in this step. It removes the empty production value of
-`activity.output.simulated`; real run output has no simulation badge. Other
-unsupported actions remain visibly disabled with their capability reason.
-Login and setup gates and their empty text fallbacks belong to M4; onboarding,
-host installer and host text fallbacks belong to M5. Preview and design-lab
-routes remain development-only. Later domain text fallbacks follow their
-owning milestones in `api-contract.md`.
+M3 stellt den HTTP-Adapter für Ereignisse und Aktivitäten bereit. M4 bindet
+`/auth/mode`, `/auth/me`, lokale Anmeldung und Abmeldung, Passwortwechsel,
+Profil-Sprache und den Setup-Status an diesen Adapter. Der Startmodus kommt
+allein von `/auth/mode`; der alte Wert `authLocalEnabled` ist keine Modusquelle.
+Die Produktionsrouten für Login und Ersteinrichtung verwenden die echten
+Kataloge. Die Routensperre führt vor dem Dashboard durch Anmeldung und
+Ersteinrichtung. Bei lokaler Ersteinrichtung wird ein noch erforderlicher
+Passwortwechsel vor dem Abschluss gespeichert.
 
-Remove the editable history limits from the web settings UI: retention is fixed
-at 500 events and 100 finished runs per environment; running runs are retained.
+`getConnectedSettings` liest Allgemein und Aktivität aus
+`GET /environments/0/settings`. Änderungen gehen abschnittsweise an `PUT`
+desselben Pfads. Die Anmeldeart erscheint nur lesbar. Die Hub-Zeitzone steuert
+`IntlProvider` und Zeitplananzeigen; die Darstellung wichtiger Aktionen liest
+den gespeicherten Aktivitätswert. Profil-Sprache wird pro Administrator unter
+`PUT /auth/me/profile` gespeichert und beim Laden übernommen. Andere
+Einstellungsabschnitte behalten ihre bisherigen Grenzen.
+
+Die Oberfläche bietet keine veränderbaren Verlaufsgrenzen. Die Aufbewahrung
+bleibt bei 500 Ereignissen und 100 abgeschlossenen Läufen je Umgebung;
+laufende Läufe bleiben erhalten. M5 übernimmt Onboarding, Host-Installer und
+deren Text-Fallbacks. Vorschau und Design-Labor bleiben Entwicklungsrouten.
 
 ## Contract test matrix for #38
 

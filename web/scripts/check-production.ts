@@ -22,6 +22,8 @@ const evidence = result.output.find((entry) => entry.type === "asset" && entry.f
 assert(evidence?.type === "asset", "Production graph evidence missing");
 const graph = JSON.parse(String(evidence.source)) as { graph: string[]; shipped: string[] };
 assert(graph.shipped.includes("src/data/http/http-adapter.ts"), "Production HTTP adapter missing");
+assert(graph.shipped.includes("src/features/setup/SetupPage.tsx"), "Production setup route missing");
+assert(graph.shipped.includes("src/features/auth/login/messages/de.ts"), "Production sign-in catalogue missing");
 assert(graph.shipped.includes("src/shared/preferences/FavoritesSection.tsx"), "Product design-code controls missing");
 assert(!graph.graph.some((id) => /data\/demo\/|features\/design-lab\/|runtime\.dev\./.test(id)), "Forbidden production module");
 console.log(`Production boundary passed: ${graph.graph.length} source modules checked, ${graph.shipped.length} shipped; HTTP adapter and preference controls included.`);
@@ -41,7 +43,7 @@ if (process.argv.includes("--prove")) {
   console.log("Red proof passed: test helper rejected in production build.");
   for (const module of [
     "@/features/hosts/InstallSheet.dev",
-    "@/features/setup/SetupPage",
+    "@/features/auth/login/login-model",
     "@/features/hosts/onboarding/OnboardingPage",
     "@/app/preview/PreviewPage",
   ]) {

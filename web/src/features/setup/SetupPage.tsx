@@ -1,5 +1,5 @@
 import { ArrowLeft, ArrowRight, CheckCircle2, LayoutDashboard, Pencil, RotateCcw, Server, Settings2 } from "lucide-react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useState, type ReactNode } from "react";
 import { Link, useSearchParams } from "react-router";
 import { toast } from "sonner";
@@ -8,6 +8,8 @@ import { useTranslations } from "use-intl";
 import { LanguageSwitch } from "@/app/i18n/LanguageSwitch";
 import { errorCode } from "@/data/api";
 import { useAdapter } from "@/data/use-adapter";
+import { useAuthMode, useCurrentUser } from "@/data/queries";
+import { queryKeys } from "@/data/query-keys";
 import { DesignLabPanel } from "@/runtime";
 import { useMotionEnabled, useTokens } from "@/shared/theme/use-design-tokens";
 import { onboardingStore } from "@/features/hosts/onboarding/onboarding-store";
@@ -16,6 +18,7 @@ import { AuthModeFields } from "@/features/settings/sections/AuthModeFields";
 import { GeneralFields } from "@/features/settings/sections/GeneralSection";
 import { HostDefaultsFields } from "@/features/settings/sections/SimpleSections";
 import { BrandLogo } from "@/shared/brand/BrandLogo";
+import { TextField } from "@/shared/components/form-field";
 import { StepRail } from "@/shared/components/step-rail";
 import { useAdapterText } from "@/data/use-adapter-text";
 import { cn } from "@/shared/lib/utils";
@@ -53,15 +56,15 @@ function ReviewBlock({ title, onEdit, rows }: { title: string; onEdit: () => voi
   );
 }
 
-/**
- * First-run setup as a full-screen preview route. The draft lives in memory,
- * so back navigation (button, rail or browser) keeps every entered value.
- */
+/** First-run draft stays in memory while the operator moves between steps. */
 export default function SetupPage() {
   const t = useTranslations("setup");
   const tr = useTranslations("setup.review");
   const dt = useAdapterText();
   const adapter = useAdapter();
+  const mode = useAuthMode();
+  const currentUser = useCurrentUser();
+  const queryClient = useQueryClient();
   const tokens = useTokens();
   const motion = useMotionEnabled();
   const draft = useSetupDraft();
@@ -71,6 +74,12 @@ export default function SetupPage() {
   const general = useGeneralErrors(draft.general);
   const hostErr = useHostDefaultErrors(draft.hostDefaults);
   const authErr = useAuthErrors(draft.auth, draft.password);
+  const connected = adapter.kind === "http";
+  const signedInUser = currentUser.data;
+  useEffect(() => {
+    if (!connected || !mode.data || !signedInUser) return;
+    setupStore.set((state) => ({ ...state, auth: { ...state.auth, mode: mode.data, local: { username: signedInUser.username, passwordSet: !signedInUser.requiresPasswordChange } } }));
+  }, [connected, mode.data, signedInUser]);
   const discovery = useQuery({ queryKey: ["hub-discovery"], queryFn: () => adapter.discoverHub(), staleTime: Infinity, retry: false });
   const unset = draft.hubAddressOrigin === null;
   // Prefill once data is there and again after a replay; typed values are never replaced.
@@ -81,7 +90,7 @@ export default function SetupPage() {
   const requested = params.get("step") as SetupStep | null;
   const index = Math.min(Math.max(0, SETUP_STEPS.indexOf(requested ?? "hub")), draft.reached);
   const step = SETUP_STEPS[index] ?? "hub";
-  const errorCount = { hub: [general.hubName, general.hubAddress, general.domainUrl], projects: Object.values(hostErr), auth: Object.values(authErr), review: [], done: [] }[step].filter(Boolean).length;
+  const errorCount = { hub: [general.hubName, general.hubAddress, general.domainUrl], projects: Object.values(hostErr), auth: [...Object.values(authErr), ...(connected && draft.auth.mode === "local" && !draft.auth.local.passwordSet ? [draft.currentPassword ? undefined : t("currentPasswordRequired")] : [])], review: [], done: [] }[step].filter(Boolean).length;
   const go = (s: SetupStep) => setParams({ step: s });
 
   const next = async () => {
@@ -92,8 +101,13 @@ export default function SetupPage() {
     if (step === "review") {
       setBusy(true);
       try {
+        if (connected && draft.auth.mode === "local" && !draft.auth.local.passwordSet) {
+          await adapter.changePassword(draft.currentPassword, draft.password.password);
+          patchSetup({ auth: { ...draft.auth, local: { ...draft.auth.local, passwordSet: true } }, currentPassword: "", password: { password: "", confirm: "" } });
+          queryClient.setQueryData(queryKeys.currentUser, { ...currentUser.data, requiresPasswordChange: false });
+        }
         const passwordSet = draft.auth.mode === "local" && draft.password.password.length > 0;
-        await adapter.completeSetup({ general: draft.general, hostDefaults: draft.hostDefaults, auth: { ...draft.auth, local: { ...draft.auth.local, passwordSet } } });
+        await adapter.completeSetup({ general: draft.general, hostDefaults: draft.hostDefaults, auth: { ...draft.auth, local: { ...draft.auth.local, passwordSet: connected ? true : passwordSet } } });
         patchSetup({ password: { password: "", confirm: "" }, reached: SETUP_STEPS.length - 1 });
         go("done");
       } catch (e) {
@@ -120,19 +134,19 @@ export default function SetupPage() {
           <BrandLogo size={44} entranceSlot="setup" motion={motion} className="shrink-0" />
           <div className="mr-auto">
             <ToneBadge tone="violet" className="mb-1">
-              {t("badge")}
+              {t(connected ? "badgeConnected" : "badge")}
             </ToneBadge>
             <h1 className="text-2xl font-semibold tracking-tight">{t("title")}</h1>
           </div>
           <LanguageSwitch size="xs" />
-          <Button asChild variant="outline" size="sm">
+          {!connected && <Button asChild variant="outline" size="sm">
             <Link to="/dashboard">
               <ArrowLeft data-icon="inline-start" />
               {t("exit")}
             </Link>
-          </Button>
+          </Button>}
         </header>
-        <p className={cn(READABLE_PLATE, "max-w-3xl self-start px-4 py-2.5 text-sm text-muted-foreground")}>{t("lead")}</p>
+        <p className={cn(READABLE_PLATE, "max-w-3xl self-start px-4 py-2.5 text-sm text-muted-foreground")}>{t(connected ? "leadConnected" : "lead")}</p>
         <div className="grid grid-cols-[minmax(0,1fr)] items-start gap-5 lg:grid-cols-[15rem_minmax(0,1fr)]">
           <div className={cn(READABLE_PLATE, "p-1.5")} data-slot="setup-rail">
             <StepRail steps={steps} current={step} reachable={step === "done" ? -1 : draft.reached} onSelect={(id) => go(id as SetupStep)} label={t("railLabel")} />
@@ -165,7 +179,17 @@ export default function SetupPage() {
                   <p className="text-xs text-muted-foreground">{t("projectsNote")}</p>
                 </>
               )}
-              {step === "auth" && <AuthModeFields value={draft.auth} onChange={(auth) => patchSetup({ auth })} password={draft.password} onPassword={(password) => patchSetup({ password })} showErrors={show} idPrefix="setup-auth" />}
+              {step === "auth" && (connected ? (
+                <div className="flex flex-col gap-4">
+                  <p className="text-sm">{t("activeMode", { mode: tr(`modes.${draft.auth.mode}`) })}</p>
+                  <p className="text-xs text-muted-foreground">{t("modeConfiguredAtStartup")}</p>
+                  {draft.auth.mode === "local" && !draft.auth.local.passwordSet && <div className="grid gap-4 sm:grid-cols-2">
+                    <TextField id="setup-current-password" type="password" label={t("currentPassword")} value={draft.currentPassword} onChange={(currentPassword) => patchSetup({ currentPassword })} error={show && !draft.currentPassword ? t("currentPasswordRequired") : undefined} autoComplete="current-password" className="sm:col-span-2" />
+                    <TextField id="setup-new-password" type="password" label={t("newPassword")} value={draft.password.password} onChange={(password) => patchSetup({ password: { ...draft.password, password } })} error={show ? authErr.password : undefined} autoComplete="new-password" />
+                    <TextField id="setup-confirm-password" type="password" label={t("confirmPassword")} value={draft.password.confirm} onChange={(confirm) => patchSetup({ password: { ...draft.password, confirm } })} error={show ? authErr.confirm : undefined} autoComplete="new-password" />
+                  </div>}
+                </div>
+              ) : <AuthModeFields value={draft.auth} onChange={(auth) => patchSetup({ auth })} password={draft.password} onPassword={(password) => patchSetup({ password })} showErrors={show} idPrefix="setup-auth" />)}
               {step === "review" && (
                 <div className="flex flex-col gap-3">
                   <ReviewBlock
@@ -193,7 +217,7 @@ export default function SetupPage() {
                     onEdit={() => go("auth")}
                     rows={[
                       [tr("mode"), tr(`modes.${draft.auth.mode}`)],
-                      ...(draft.auth.mode === "local" ? ([[tr("user"), draft.auth.local.username], [tr("password"), tr("passwordSet")]] as [string, string][]) : []),
+                      ...(draft.auth.mode === "local" ? ([[tr("user"), draft.auth.local.username], [tr("password"), tr(connected ? draft.auth.local.passwordSet ? "passwordAlreadySet" : "passwordWillChange" : "passwordSet")]] as [string, string][]) : []),
                       ...(draft.auth.mode === "proxy" ? ([[tr("header"), draft.auth.proxy.userHeader]] as [string, string][]) : []),
                     ]}
                   />
@@ -219,28 +243,28 @@ export default function SetupPage() {
                   </span>
                   <div>
                     <h3 className="text-xl font-semibold tracking-tight">{t("done.title", { name: draft.general.hubName })}</h3>
-                    <p className="mt-1 max-w-xl text-sm text-muted-foreground">{t("done.body")}</p>
+                    <p className="mt-1 max-w-xl text-sm text-muted-foreground">{t(connected ? "done.bodyConnected" : "done.body")}</p>
                   </div>
                   <div className="flex flex-wrap gap-2">
-                    <Button asChild>
+                    {!connected && <Button asChild>
                       <Link to="/hosts/new" onClick={() => onboardingStore.set(null)}>
                         <Server data-icon="inline-start" />
                         {t("done.host")}
                       </Link>
-                    </Button>
+                    </Button>}
                     <Button asChild variant="outline">
-                      <Link to="/dashboard">
+                      <Link to="/dashboard" onClick={() => { if (connected) queryClient.setQueryData(queryKeys.setupStatus, true); }}>
                         <LayoutDashboard data-icon="inline-start" />
                         {t("done.dashboard")}
                       </Link>
                     </Button>
                     <Button asChild variant="ghost">
-                      <Link to="/settings/general">
+                      <Link to="/settings/general" onClick={() => { if (connected) queryClient.setQueryData(queryKeys.setupStatus, true); }}>
                         <Settings2 data-icon="inline-start" />
                         {t("done.settings")}
                       </Link>
                     </Button>
-                    {import.meta.env.DEV && (
+                    {!connected && (
                       <Button
                         variant="ghost"
                         onClick={() => {

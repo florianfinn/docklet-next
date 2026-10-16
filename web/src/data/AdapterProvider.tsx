@@ -18,7 +18,7 @@ const TOPIC_KEYS: Record<Topic, readonly (readonly unknown[])[]> = {
   events: [queryKeys.events],
   schedule: [queryKeys.schedule],
   volumes: [queryKeys.volumes, queryKeys.volumeRoot, queryKeys.fileRoot],
-  settings: [queryKeys.settings],
+  settings: [queryKeys.settings, queryKeys.connectedSettings],
   images: [queryKeys.images],
 };
 
