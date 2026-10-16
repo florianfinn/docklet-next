@@ -33,9 +33,12 @@ func TestSignInModeReadOnlyAPI(t *testing.T) {
 			health.RegisterRoutes(api)
 			huma.Register(api, huma.Operation{OperationID: "test-pairing", Method: http.MethodPost, Path: "/environments/pair", Security: []map[string][]string{}}, func(_ context.Context, input *struct {
 				Key string `header:"X-API-Key"`
-			}) (*struct{ Body string }, error) { if input.Key != "example" {
-				return nil, huma.Error401Unauthorized("Invalid machine key")
-			}; return &struct{ Body string }{Body: "paired"}, nil })
+			}) (*struct{ Body string }, error) {
+				if input.Key != "example" {
+					return nil, huma.Error401Unauthorized("Invalid machine key")
+				}
+				return &struct{ Body string }{Body: "paired"}, nil
+			})
 			req := httptest.NewRequest(http.MethodGet, "/api/auth/mode", http.NoBody)
 			req.RemoteAddr = "198.51.100.5:5000"
 			rec := httptest.NewRecorder()
