@@ -1,10 +1,8 @@
-//go:build postgres_integration
-
 // Source: getarcaneapp/arcane/backend/internal/volume/service_test.go
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; functional cut: removed S3 backup destinations; functional cut: removed SQLite runtime and migrations; functional cut: PostgreSQL integration test fixture.
+// Deviations: Local module namespace; functional cut: removed S3 backup destinations; SQLite temp-file persistence fixture.
 
 package volume
 
@@ -23,7 +21,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/florianfinn/docklet-next/backend/internal/testpg"
+	"github.com/florianfinn/docklet-next/backend/internal/testsqlite"
 	"github.com/florianfinn/docklet-next/types/backup"
 	"github.com/florianfinn/docklet-next/types/user"
 	volumetypes "github.com/florianfinn/docklet-next/types/volume"
@@ -121,7 +119,7 @@ func applyVolumeBackupMigrationsInternal(t *testing.T, gormDB *gorm.DB) {
 }
 
 func TestRenameVolumeMetadataInternalPreservesPoliciesAndHistory(t *testing.T) {
-	gormDB, err := gorm.Open(testpg.Dialector(t, "file:volume-rename-metadata?mode=memory&cache=shared"), &gorm.Config{})
+	gormDB, err := gorm.Open(testsqlite.Dialector(t, "file:volume-rename-metadata?mode=memory&cache=shared"), &gorm.Config{})
 	require.NoError(t, err)
 	applyVolumeBackupMigrationsInternal(t, gormDB)
 	require.NoError(t, gormDB.Exec("INSERT INTO volume_backup_policies (id, volume_name, schedule, local_enabled) VALUES (?, ?, ?, ?)", "policy-1", "source-data", "0 0 2 * * *", true).Error)
@@ -166,7 +164,7 @@ func TestBuildVolumePruneMetadataInternal(t *testing.T) {
 }
 
 func TestListBackupsPaginatedByManagementTypeInternal(t *testing.T) {
-	gormDB, err := gorm.Open(testpg.Dialector(t, "file:volume-backup-management?mode=memory&cache=shared"), &gorm.Config{})
+	gormDB, err := gorm.Open(testsqlite.Dialector(t, "file:volume-backup-management?mode=memory&cache=shared"), &gorm.Config{})
 	require.NoError(t, err)
 	require.NoError(t, gormDB.AutoMigrate(&VolumeBackup{}))
 	for _, entry := range []*VolumeBackup{
@@ -440,7 +438,7 @@ func TestUpdateVolumeWorkspaceRejectsStaleRevisionBeforeStaging(t *testing.T) {
 }
 
 func TestVolumeBackupPolicy_GetReturnsLastRunForEachPolicyFromStore(t *testing.T) {
-	gormDB, err := gorm.Open(testpg.Dialector(t, "file:volume-backup-last-runs-store?mode=memory&cache=shared"), &gorm.Config{})
+	gormDB, err := gorm.Open(testsqlite.Dialector(t, "file:volume-backup-last-runs-store?mode=memory&cache=shared"), &gorm.Config{})
 	require.NoError(t, err)
 	applyVolumeBackupMigrationsInternal(t, gormDB)
 	require.NoError(t, gormDB.Create(&VolumeBackup{VolumeName: "app-data", PolicyID: "first-policy", Status: VolumeBackupStatusSucceeded}).Error)

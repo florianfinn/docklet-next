@@ -29,9 +29,9 @@ import (
 	"github.com/italypaleale/francis/internal/testutil"
 )
 
-// Runs the full test suite with a fast, in-memory database
-func TestSQLiteProviderInMemory(t *testing.T) {
-	// Connect to an in-memory database
+// Runs the full suite on an isolated temporary file.
+func TestSQLiteProviderIsolatedFile(t *testing.T) {
+	// Use the production one-connection writer policy.
 	s := initTestProvider(t, testutil.SQLiteConnString(t))
 
 	// Run the test suites
@@ -105,7 +105,12 @@ func initTestProviderWithPrefix(t *testing.T, connString string, tablePrefix str
 	}), clock)
 	log := slog.New(h)
 
-	providerOpts := SQLiteProviderOptions{
+	pool, err := sql.Open("sqlite", strings.Split(connString, "?")[0]+"?_pragma=foreign_keys(1)&_pragma=busy_timeout(2500)&_pragma=journal_mode(WAL)&_pragma=synchronous(FULL)&_pragma=wal_autocheckpoint(1000)&_txlock=immediate")
+	require.NoError(t, err)
+	pool.SetMaxOpenConns(1)
+	pool.SetMaxIdleConns(1)
+	t.Cleanup(func() { require.NoError(t, pool.Close()) })
+	providerOpts := SQLiteProviderOptions{DB: pool,
 		ConnectionString: connString,
 		TablePrefix:      tablePrefix,
 
@@ -429,7 +434,7 @@ func (s *SQLiteProvider) GetAllHosts(ctx context.Context) (comptesting.Spec, err
 }
 
 func TestHostGarbageCollection(t *testing.T) {
-	// Connect to an in-memory database, but note it has a different name form the previous
+	// Use the production one-connection writer policy., but note it has a different name form the previous
 	s := initTestProvider(t, "file:gctest?mode=memory")
 
 	t.Run("garbage collector removes expired hosts", func(t *testing.T) {

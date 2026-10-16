@@ -1,10 +1,8 @@
-//go:build postgres_integration
-
 // Source: getarcaneapp/arcane/backend/internal/apikey/service_test.go
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; functional cut: removed template catalogue; functional cut: removed OIDC and passkeys; functional cut: PostgreSQL integration test fixture.
+// Deviations: Local module namespace; functional cut: removed template catalogue; functional cut: removed OIDC and passkeys; SQLite temp-file persistence fixture.
 
 package apikey
 
@@ -17,7 +15,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/florianfinn/docklet-next/backend/internal/testpg"
+	"github.com/florianfinn/docklet-next/backend/internal/testsqlite"
 	"github.com/florianfinn/docklet-next/types/apikey"
 	"github.com/stretchr/testify/require"
 	"gorm.io/gorm"
@@ -35,7 +33,7 @@ func setupAPIKeyServiceTestDB(t *testing.T) *database.DB {
 	t.Helper()
 
 	dsn := fmt.Sprintf("file:%s?mode=memory&cache=shared", strings.NewReplacer("/", "_", " ", "_").Replace(t.Name()))
-	db, err := gorm.Open(testpg.Dialector(t, dsn), &gorm.Config{})
+	db, err := gorm.Open(testsqlite.Dialector(t, dsn), &gorm.Config{})
 	require.NoError(t, err)
 	require.NoError(t, db.AutoMigrate(
 		&settings.SettingVariable{},

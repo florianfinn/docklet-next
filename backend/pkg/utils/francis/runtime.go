@@ -242,8 +242,8 @@ func (r *Runtime) runHost(ctx context.Context) (*local.Host, chan error, error) 
 	if err != nil {
 		return nil, nil, err
 	}
-	options := append([]local.HostOption{}, r.options...)
-	options = append(options, local.WithSQLiteProvider(sqlite.SQLiteProviderOptions{DB: pool, TablePrefix: TablePrefix}))
+	options := []local.HostOption{local.WithSQLiteProvider(sqlite.SQLiteProviderOptions{DB: pool, TablePrefix: TablePrefix})}
+	options = append(options, r.options...)
 	host, err := local.NewHost(options...)
 	if err != nil {
 		_ = pool.Close()

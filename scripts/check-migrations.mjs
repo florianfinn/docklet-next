@@ -24,6 +24,7 @@ export function migrationProblems(files, manifest, pinnedBaselineHash = baseline
   }
   const versions = new Set();
   for (const name of files.keys()) {
+    if (!/^sqlite\/[^/]+$/.test(name)) problems.push(`invalid-path:${name}`);
     if (!Object.hasOwn(manifest, name)) problems.push(`unmanifested:${name}`);
     const match = /^(\d{3})_[a-z0-9_]+\.sql$/.exec(basename(name));
     if (!match) { problems.push(`invalid-name:${name}`); continue; }

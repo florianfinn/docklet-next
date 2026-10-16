@@ -9,7 +9,9 @@ package testing
 
 import (
 	"context"
+	"github.com/florianfinn/docklet-next/backend/pkg/utils/sqlitestore"
 	"net"
+	"path/filepath"
 	"strings"
 	stdtesting "testing"
 	"time"
@@ -22,7 +24,7 @@ import (
 
 // New constructs a host whose factories can be registered before Start.
 // With no database URL it uses an isolated in-memory provider. Pass a temporary
-// PostgreSQL URL to exercise durable persistence in an explicit integration test.
+// SQLite file URL to exercise durable persistence in an explicit integration test.
 func New(t stdtesting.TB, databaseURLs ...string) *francis.Runtime {
 	t.Helper()
 	var lc net.ListenConfig
@@ -34,7 +36,7 @@ func New(t stdtesting.TB, databaseURLs ...string) *francis.Runtime {
 	if closeErr := listener.Close(); closeErr != nil {
 		t.Fatal(closeErr)
 	}
-	databaseURL := "postgres://actor-test.invalid/unused"
+	databaseURL := sqlitestore.URL(filepath.Join(t.TempDir(), "hub.db"))
 	options := []local.HostOption{
 		local.WithShutdownGracePeriod(time.Second),
 		local.WithAlarmsPollInterval(110 * time.Millisecond),

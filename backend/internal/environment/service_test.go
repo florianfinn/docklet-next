@@ -1,10 +1,8 @@
-//go:build postgres_integration
-
 // Source: getarcaneapp/arcane/backend/internal/environment/service_test.go
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; functional cut: removed GitOps and saved Git repositories; functional cut: removed Swarm; functional cut: removed S3 backup destinations; functional cut: PostgreSQL integration test fixture.
+// Deviations: Local module namespace; functional cut: removed GitOps and saved Git repositories; functional cut: removed Swarm; functional cut: removed S3 backup destinations; SQLite temp-file persistence fixture.
 
 package environment
 
@@ -24,7 +22,7 @@ import (
 	"time"
 
 	"github.com/coder/websocket"
-	"github.com/florianfinn/docklet-next/backend/internal/testpg"
+	"github.com/florianfinn/docklet-next/backend/internal/testsqlite"
 	"github.com/florianfinn/docklet-next/types/containerregistry"
 	"github.com/florianfinn/docklet-next/types/environment"
 	"github.com/florianfinn/docklet-next/types/scheduler"
@@ -106,7 +104,7 @@ func setupEnvironmentServiceTestDB(t *testing.T) *database.DB {
 	t.Helper()
 
 	dsn := fmt.Sprintf("file:%s?mode=memory&cache=shared", strings.NewReplacer("/", "_", " ", "_").Replace(t.Name()))
-	db, err := gorm.Open(testpg.Dialector(t, dsn), &gorm.Config{})
+	db, err := gorm.Open(testsqlite.Dialector(t, dsn), &gorm.Config{})
 	require.NoError(t, err)
 	require.NoError(t, db.AutoMigrate(
 		&Environment{},
@@ -1097,7 +1095,7 @@ func (s *environmentTestSchedulerInternal) Submit(_ context.Context, request sch
 
 func setupSyncDBInternal(t *testing.T) *database.DB {
 	t.Helper()
-	db, err := gorm.Open(testpg.Dialector(t, filepath.Join(t.TempDir(), "sync.db")), &gorm.Config{})
+	db, err := gorm.Open(testsqlite.Dialector(t, filepath.Join(t.TempDir(), "sync.db")), &gorm.Config{})
 	require.NoError(t, err)
 	require.NoError(
 		t,

@@ -25,13 +25,9 @@ export function provenanceFields(text) {
     deviations: field("Deviations"),
   };
 }
-const MIGRATION_PREFIX = "backend/resources/migrations/postgres/";
+const MIGRATION_PREFIX = "backend/resources/migrations/";
 const PROVENANCE_FIELDS = ["source", "revision", "retrieved", "license", "deviations"];
-const SHIPPED_MIGRATION_OVERRIDES = new Set([
-  "001_baseline.sql", "002_run_traces.sql", "003_sync_receipt_lifecycle.sql",
-  "004_gate_owner.sql", "005_gate_lease.sql", "006_single_hub_gate.sql",
-  "007_activity_raw_output.sql",
-].map((name) => MIGRATION_PREFIX + name));
+const SHIPPED_MIGRATION_OVERRIDES = new Set();
 export function validProvenance(record) {
   return (
     record &&

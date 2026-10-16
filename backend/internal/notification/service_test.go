@@ -1,10 +1,8 @@
-//go:build postgres_integration
-
 // Source: getarcaneapp/arcane/backend/internal/notification/service_test.go
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; functional cut: removed APNS mobile push; functional cut: PostgreSQL integration test fixture.
+// Deviations: Local module namespace; functional cut: removed APNS mobile push; SQLite temp-file persistence fixture.
 
 package notification
 
@@ -23,7 +21,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/florianfinn/docklet-next/backend/internal/testpg"
+	"github.com/florianfinn/docklet-next/backend/internal/testsqlite"
 	"github.com/florianfinn/docklet-next/types/imageupdate"
 	"github.com/florianfinn/docklet-next/types/notification"
 	"github.com/florianfinn/docklet-next/types/system"
@@ -43,7 +41,7 @@ import (
 
 func setupNotificationTestDB(t *testing.T) *database.DB {
 	t.Helper()
-	db, err := gorm.Open(testpg.Dialector(t, ":memory:"), &gorm.Config{})
+	db, err := gorm.Open(testsqlite.Dialector(t, ":memory:"), &gorm.Config{})
 	require.NoError(t, err)
 	require.NoError(t, db.AutoMigrate(&NotificationSettings{}, &settings.SettingVariable{}, &environment.Environment{}, &event.Event{}))
 

@@ -1,5 +1,3 @@
-//go:build postgres_integration
-
 // Source: florianfinn/docklet-next/docs/design/run-gate.md
 // Revision: ab701984e86075694baabdc5efe14bed287768fc
 // Retrieved: 2026-10-14
@@ -10,7 +8,6 @@ package activity
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"os"
 	"os/exec"
@@ -19,34 +16,23 @@ import (
 	"time"
 
 	"github.com/florianfinn/docklet-next/backend/internal/database"
+	"github.com/florianfinn/docklet-next/backend/internal/testsqlite"
+	"github.com/florianfinn/docklet-next/backend/pkg/utils/sqlitestore"
 	"github.com/florianfinn/docklet-next/types/activity"
 	"github.com/florianfinn/docklet-next/types/scheduler"
 	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5"
-	"github.com/jackc/pgx/v5/pgconn"
-	"github.com/jackc/pgx/v5/stdlib"
 	"github.com/stretchr/testify/require"
-	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
 )
 
 func TestRunGate_ProcessFixture(t *testing.T) {
 	mode := os.Getenv("RUN_GATE_CHILD_MODE")
 	if mode == "" {
-		t.Skip("subprocess fixture")
+		return
 	}
-	cfg, err := pgx.ParseConfig(os.Getenv("DOCKLET_TEST_POSTGRES_DSN"))
+	db, err := database.InitializeHub(t.Context(), os.Getenv("RUN_GATE_CHILD_URL"), database.MigrationOptions{})
 	require.NoError(t, err)
-	if cfg.RuntimeParams == nil {
-		cfg.RuntimeParams = map[string]string{}
-	}
-	cfg.RuntimeParams["search_path"] = os.Getenv("RUN_GATE_CHILD_SCHEMA")
-	pool := stdlib.OpenDB(*cfg)
-	defer pool.Close()
-	orm, err := gorm.Open(postgres.New(postgres.Config{Conn: pool}), &gorm.Config{})
-	require.NoError(t, err)
-	db := &database.DB{DB: orm}
-	matrixAcquireHubLock(t, db)
+	defer db.Close()
 	svc := NewActivityService(db, nil)
 	if mode == "job_complete" {
 		id := uuid.NewString()
@@ -54,13 +40,13 @@ func TestRunGate_ProcessFixture(t *testing.T) {
 		run := scheduler.Run{ID: "job-" + id, ActivityID: "activity-" + id, JobID: "example-job", EnvironmentID: "0", Status: scheduler.Succeeded, CreatedAt: stamp.Add(-time.Minute), UpdatedAt: stamp}
 		require.NoError(t, svc.SyncJobRun(t.Context(), run, "Example job"))
 		fmt.Printf("RUN_ID:%s\n", run.ActivityID)
-		return
+ os.Exit(0)
 	}
 	if mode == "ungated_queued" {
 		run, err := svc.StartActivity(t.Context(), StartActivityRequest{Type: activity.TypeProjectDeploy, Queue: true, DeferSlot: true})
 		require.NoError(t, err)
 		fmt.Printf("RUN_ID:%s\n", run.ID)
-		return
+ os.Exit(0)
 	}
 	started, err := svc.StartGatedActivity(t.Context(), matrixGateRequest())
 	require.NoError(t, err)
@@ -79,8 +65,8 @@ func TestRunGate_ProcessFixture(t *testing.T) {
 			if err := tx.Model(&Activity{}).Where("id = ?", started.Run.ID).Updates(map[string]any{
 				"status": activity.StatusSuccess, "message_code": activity.CodeActivitySuccess,
 				"latest_message": "done", "progress": 100,
-				"ended_at": gorm.Expr("NOW()"), "updated_at": gorm.Expr("NOW()"),
-				"duration_ms": gorm.Expr("GREATEST(0, EXTRACT(EPOCH FROM (NOW() - started_at)) * 1000)::bigint"),
+				"ended_at": time.Now().UTC(), "updated_at": time.Now().UTC(),
+				"duration_ms": int64(0),
 			}).Error; err != nil {
 				return err
 			}
@@ -89,18 +75,24 @@ func TestRunGate_ProcessFixture(t *testing.T) {
 		require.NoError(t, err)
 	}
 	fmt.Printf("RUN_ID:%s\n", started.Run.ID)
+ os.Exit(0)
 }
 
 func matrixPreviousHub(t *testing.T, db *database.DB, mode string) string {
 	t.Helper()
-	var schema string
-	require.NoError(t, db.Raw("SELECT current_schema()").Scan(&schema).Error)
+	var row struct{ File string }
+	require.NoError(t, db.Raw("PRAGMA database_list").Scan(&row).Error)
+	url := sqlitestore.URL(row.File)
+	require.NoError(t, db.Close())
 	exe, err := os.Executable()
 	require.NoError(t, err)
 	cmd := exec.CommandContext(t.Context(), exe, "-test.run=^TestRunGate_ProcessFixture$", "-test.v")
-	cmd.Env = append(os.Environ(), "RUN_GATE_CHILD_MODE="+mode, "RUN_GATE_CHILD_SCHEMA="+schema)
+	cmd.Env = append(os.Environ(), "RUN_GATE_CHILD_MODE="+mode, "RUN_GATE_CHILD_URL="+url)
 	output, err := cmd.CombinedOutput()
 	require.NoError(t, err, string(output))
+	reopened, err := database.InitializeHub(t.Context(), url, database.MigrationOptions{})
+	require.NoError(t, err)
+	*db = *reopened
 	for _, line := range strings.Split(string(output), "\n") {
 		if id, ok := strings.CutPrefix(line, "RUN_ID:"); ok {
 			return strings.TrimSpace(id)
@@ -112,25 +104,8 @@ func matrixPreviousHub(t *testing.T, db *database.DB, mode string) string {
 
 func matrixNewHub(t *testing.T, db *database.DB) *ActivityService {
 	t.Helper()
-	matrixAcquireHubLock(t, db)
-	t.Cleanup(func() { require.NoError(t, db.HubLock().Stop()) })
-	return NewActivityService(db, nil)
-}
 
-func matrixAcquireHubLock(t *testing.T, db *database.DB) {
-	t.Helper()
-	deadline := time.Now().Add(5 * time.Second)
-	for {
-		err := db.AcquireHubLock(t.Context())
-		if err == nil {
-			return
-		}
-		if !errors.Is(err, database.ErrHubAlreadyRunning) || time.Now().After(deadline) {
-			require.NoError(t, err)
-		}
-		// A crashed process can exit before PostgreSQL releases its session lock.
-		time.Sleep(10 * time.Millisecond)
-	}
+	return NewActivityService(db, nil)
 }
 
 func TestRunGate_Case25_CrashWhileRunning(t *testing.T) {
@@ -242,10 +217,11 @@ func TestRunGate_Case35_PoolCompletionFailureKeepsScope(t *testing.T) {
 	db := setupActivityServiceTestDBInternal(t)
 	svc := matrixNewHub(t, db)
 	started := matrixGate(t, svc)
+	busyError := testsqlite.BusyError(t)
 	var attempts int
 	require.NoError(t, db.Callback().Update().Before("gorm:update").Register("test:retryable_failure", func(tx *gorm.DB) {
 		attempts++
-		tx.AddError(&pgconn.PgError{Code: "40001", Message: "retryable test failure"})
+		tx.AddError(busyError)
 	}))
 	_, err := svc.CompleteActivity(started.WorkContext, started.Run.ID, activity.StatusSuccess, "done", nil)
 	require.Error(t, err)
