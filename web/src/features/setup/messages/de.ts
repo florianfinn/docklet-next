@@ -2,6 +2,12 @@
 import type { enSetup } from "./en";
 
 export const deSetup: typeof enSetup = {
+  activeMode: "Aktive Anmeldeart: {mode}",
+  modeConfiguredAtStartup: "Der Betreiber legt diese Anmeldeart vor dem Start mit AUTH_MODE und den Proxy-Variablen fest.",
+  currentPassword: "Bisheriges Administratorpasswort",
+  currentPasswordRequired: "Bisheriges Passwort eingeben",
+  newPassword: "Neues Administratorpasswort",
+  confirmPassword: "Neues Passwort bestätigen",
   badge: "Ersteinrichtung · Vorschau",
   title: "Docklet einrichten",
   lead: (import.meta.env.DEV ? "Ein neuer Hub fragt diese Angaben einmal ab. Im Prototyp startest du den Ablauf über das Design-Labor; das Dashboard bleibt unverändert erreichbar." : "Ein neuer Hub fragt diese Angaben einmal ab."),

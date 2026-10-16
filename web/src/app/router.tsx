@@ -1,8 +1,8 @@
 import { lazy, Suspense } from "react";
 import { createBrowserRouter, Navigate, type RouteObject } from "react-router";
 import { QueryError } from "@/shared/components/page";
-import { BackendNotice } from "@/data/BackendNotice";
 import { AuthGate } from "./AuthGate";
+import { SetupGate } from "./SetupGate";
 
 import { NotFound } from "./shell/NotFound";
 import { RouteError } from "./shell/RouteError";
@@ -67,7 +67,7 @@ export const routes: RouteObject[] = [
     errorElement: <RouteError />,
     element: (
       <Suspense fallback={null}>
-        {SetupPage ? <SetupPage /> : <main className="mx-auto max-w-3xl p-6"><BackendNotice /></main>}
+        {SetupPage ? <SetupPage /> : <SetupGate />}
       </Suspense>
     ),
   },

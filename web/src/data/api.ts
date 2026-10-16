@@ -194,6 +194,7 @@ export interface TestResult {
 }
 
 export interface SettingsApi {
+  getSetupStatus(): Promise<boolean>;
   getSettings(): Promise<HubSettings>;
   saveSettings<K extends SettingsSection>(section: K, value: HubSettings[K]): Promise<void>;
   /** First-run setup; secrets are not part of the payload. */

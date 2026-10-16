@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; functional cut: removed Swarm; functional cut: removed OIDC and passkeys.
+// Deviations: Local module namespace; functional cut: removed Swarm; functional cut: removed OIDC and passkeys. #69 first-run setup and hub settings persistence.
 
 package settings
 
@@ -274,7 +274,7 @@ func (h *SettingsHandler) GetSettings(ctx context.Context, input *GetSettingsInp
 
 // UpdateSettings updates settings for an environment.
 func (h *SettingsHandler) UpdateSettings(ctx context.Context, input *UpdateSettingsInput) (*handlerutil.Out[[]settings.SettingDto], error) {
-	if err := h.validateSettingsUpdateInput(input.Body); err != nil {
+	if err := h.validateSettingsUpdateInput(ctx, input.Body); err != nil {
 		return nil, err
 	}
 
@@ -285,7 +285,20 @@ func (h *SettingsHandler) UpdateSettings(ctx context.Context, input *UpdateSetti
 	return h.updateSettingsForLocalEnvironment(ctx, input.Body)
 }
 
-func (h *SettingsHandler) validateSettingsUpdateInput(input settings.Update) error {
+func (h *SettingsHandler) validateSettingsUpdateInput(ctx context.Context, input settings.Update) error {
+	if input.SetupCompleted != nil && *input.SetupCompleted == "true" && (h.cfg == nil || h.cfg.SignInMode() == "local") {
+		userID, ok := middleware.GetUserIDFromContext(ctx)
+		if !ok {
+			return huma.Error401Unauthorized("Sign-in required")
+		}
+		var requiresPasswordChange bool
+		if err := h.settingsService.db.WithContext(ctx).Table("users").Select("requires_password_change").Where("id = ?", userID).Scan(&requiresPasswordChange).Error; err != nil {
+			return huma.Error500InternalServerError("Failed to check administrator password")
+		}
+		if requiresPasswordChange {
+			return huma.Error409Conflict("Change the initial administrator password before completing setup")
+		}
+	}
 	// Validate projects directory if provided and changed from current value.
 	// Skip validation when the value matches the current (possibly env-overridden) setting
 	// so that saving unrelated settings doesn't fail due to env-provided directory formats.

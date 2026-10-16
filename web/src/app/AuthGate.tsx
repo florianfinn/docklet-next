@@ -9,13 +9,14 @@ import { Navigate, Outlet, useLocation } from "react-router";
 import { useTranslations } from "use-intl";
 
 import { AdapterOutcomeError } from "@/data/capability";
-import { useAuthMode, useCurrentUser } from "@/data/queries";
+import { useAuthMode, useCurrentUser, useSetupStatus } from "@/data/queries";
 import { Button } from "@/shared/ui/button";
 
 export function AuthGate() {
   const t = useTranslations("login");
   const mode = useAuthMode();
   const currentUser = useCurrentUser();
+  const setup = useSetupStatus(currentUser.isSuccess);
   const location = useLocation();
   const [unauthorized, setUnauthorized] = useState(false);
   useEffect(() => {
@@ -31,5 +32,9 @@ export function AuthGate() {
     if (rejected && mode.data === "proxy") return <main className="p-6" role="alert">{t("proxyRejected")}</main>;
     return <main className="p-6"><p>{t("sessionError")}</p><Button onClick={() => void currentUser.refetch()}>{t("retry")}</Button></main>;
   }
+  if (mode.data === "local" && currentUser.data?.requiresPasswordChange) return <Navigate to="/setup" replace />;
+  if (setup.isPending) return <main aria-busy="true" className="p-6">{t("loading")}</main>;
+  if (setup.isError) return <main className="p-6"><p>{t("setupStatusError")}</p><Button onClick={() => void setup.refetch()}>{t("retry")}</Button></main>;
+  if (!setup.data) return <Navigate to="/setup" replace />;
   return <Outlet />;
 }

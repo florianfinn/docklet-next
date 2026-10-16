@@ -1,6 +1,12 @@
 // American English texts of the first-run setup wizard (preview, started from the design lab).
 
 export const enSetup = {
+  activeMode: "Active sign-in mode: {mode}",
+  modeConfiguredAtStartup: "The operator sets this mode with AUTH_MODE and the proxy variables before starting the hub.",
+  currentPassword: "Current administrator password",
+  currentPasswordRequired: "Enter the current password",
+  newPassword: "New administrator password",
+  confirmPassword: "Confirm new password",
   badge: "First-run setup · Preview",
   title: "Set up Docklet",
   lead: (import.meta.env.DEV ? "A new hub asks for these details once. In the prototype you start the flow from the design lab; the dashboard remains available unchanged." : "A new hub asks for these details once."),

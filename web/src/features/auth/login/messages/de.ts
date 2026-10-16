@@ -10,6 +10,7 @@ export const deLogin: typeof enLogin = {
   retry: "Erneut laden",
   proxyRejected: "Melde dich über deinen Proxy an und lade diese Seite neu. Der Hub hat die Proxy-Identität abgelehnt.",
   sessionError: "Die Sitzung konnte nicht geprüft werden.",
+  setupStatusError: "Der Status der Ersteinrichtung konnte nicht geprüft werden.",
   username: "Benutzername",
   password: "Passwort",
   required: "Pflichtfeld",

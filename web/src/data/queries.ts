@@ -99,6 +99,11 @@ export function useCurrentUser() {
   return useQuery({ queryKey: queryKeys.currentUser, queryFn: () => adapter.getCurrentUser(), staleTime: 0 });
 }
 
+export function useSetupStatus(enabled = true) {
+  const adapter = useAdapter();
+  return useQuery({ queryKey: queryKeys.setupStatus, queryFn: () => adapter.getSetupStatus(), enabled, staleTime: 0 });
+}
+
 export function useImages() {
   const adapter = useAdapter();
   return useQuery({ queryKey: queryKeys.images, queryFn: () => adapter.listImages() });

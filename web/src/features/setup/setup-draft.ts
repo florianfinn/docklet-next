@@ -16,6 +16,7 @@ export interface SetupDraft {
   auth: AuthSettings;
   /** In memory only; cleared on finish and never sent to the adapter. */
   password: PasswordDraft;
+  currentPassword: string;
   reached: number;
 }
 
@@ -31,6 +32,7 @@ export function freshSetupDraft(): SetupDraft {
       proxy: { userHeader: "Remote-User", emailHeader: "Remote-Email", groupsHeader: "Remote-Groups", trustedProxies: "", logoutUrl: "" },
     },
     password: { password: "", confirm: "" },
+    currentPassword: "",
     reached: 0,
   };
 }

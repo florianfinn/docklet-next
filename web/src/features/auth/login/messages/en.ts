@@ -9,6 +9,7 @@ export const enLogin = {
   retry: "Reload",
   proxyRejected: "Sign in through your proxy, then reload this page. The hub rejected the proxy identity.",
   sessionError: "The session could not be checked.",
+  setupStatusError: "First-run setup status could not be checked.",
   username: "Username",
   password: "Password",
   required: "Required",
