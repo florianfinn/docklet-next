@@ -1,9 +1,9 @@
 // American English texts for connected sign-in and its demo preview.
 
 export const enLogin = {
-  badge: "Demo · not a real sign-in",
+  badge: (import.meta.env.DEV ? "Demo · not a real sign-in" : "Sign-in"),
   title: "Sign in to {hub}",
-  exit: "Leave demo",
+  exit: (import.meta.env.DEV ? "Leave demo" : "Back to hub"),
   loading: "Loading sign-in method …",
   settingsError: "The sign-in method could not be loaded. Try again.",
   retry: "Reload",
@@ -15,9 +15,9 @@ export const enLogin = {
   required: "Required",
   submit: "Sign in",
   submitting: "Signing in …",
-  localHint: "Demo: the username must be “{user}”. The password is not checked, stored or sent.",
+  localHint: (import.meta.env.DEV ? "Demo: the username must be “{user}”. The password is not checked, stored or sent." : "Enter the credentials for “{user}”."),
   proxyLead: "Your reverse proxy handles sign-in, e.g. Authentik. Docklet takes the user from the {header} header when the request comes from {proxies}.",
-  proxySubmit: "Continue via the proxy (simulated)",
+  proxySubmit: (import.meta.env.DEV ? "Continue via the proxy (simulated)" : "Continue via the proxy"),
   proxySubmitting: "Checking proxy header …",
   errors: {
     invalid: "Username or password is incorrect.",
@@ -26,12 +26,12 @@ export const enLogin = {
     proxyUnavailable: "The proxy did not send a user header or is not registered as trusted.",
   },
   demo: {
-    title: "Demo controls",
-    hint: "For the preview only: sign-in method and result of the next attempt.",
+    title: (import.meta.env.DEV ? "Demo controls" : "Sign-in information"),
+    hint: (import.meta.env.DEV ? "For the preview only: sign-in method and result of the next attempt." : "The operator configures the sign-in mode at startup."),
     variant: "Sign-in method",
     variants: { settings: "From settings", local: "Local", proxy: "Proxy", none: "None" },
     outcome: "Next attempt",
     outcomes: { none: "Success", invalid: "Wrong credentials", unavailable: "Unreachable", locked: "Locked" },
-    noneHint: "If the hub is set to “No sign-in”, /login redirects straight to the dashboard. Local and proxy remain available via this selection and the design lab (Flows).",
+    noneHint: (import.meta.env.DEV ? "If the hub is set to “No sign-in”, /login redirects straight to the dashboard. Local and proxy remain available via this selection and the design lab (Flows)." : "Without sign-in, /login opens the dashboard."),
   },
 };

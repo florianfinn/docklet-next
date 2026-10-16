@@ -75,10 +75,11 @@ export default function SetupPage() {
   const hostErr = useHostDefaultErrors(draft.hostDefaults);
   const authErr = useAuthErrors(draft.auth, draft.password);
   const connected = adapter.kind === "http";
+  const signedInUser = currentUser.data;
   useEffect(() => {
-    if (!connected || !mode.data || !currentUser.data) return;
-    setupStore.set((state) => ({ ...state, auth: { ...state.auth, mode: mode.data, local: { username: currentUser.data.username, passwordSet: !currentUser.data.requiresPasswordChange } } }));
-  }, [connected, mode.data, currentUser.data?.username, currentUser.data?.requiresPasswordChange]);
+    if (!connected || !mode.data || !signedInUser) return;
+    setupStore.set((state) => ({ ...state, auth: { ...state.auth, mode: mode.data, local: { username: signedInUser.username, passwordSet: !signedInUser.requiresPasswordChange } } }));
+  }, [connected, mode.data, signedInUser]);
   const discovery = useQuery({ queryKey: ["hub-discovery"], queryFn: () => adapter.discoverHub(), staleTime: Infinity, retry: false });
   const unset = draft.hubAddressOrigin === null;
   // Prefill once data is there and again after a replay; typed values are never replaced.

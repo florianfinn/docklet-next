@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; functional cut: removed upstream analytics heartbeat and APNS mobile push; functional cut: removed template catalogue; functional cut: removed GitOps and saved Git repositories; functional cut: removed Swarm; functional cut: removed standalone build workshop; functional cut: removed OIDC and passkeys.; Removed downgrade setting from the configuration contract. Count-based history settings contract.
+// Deviations: Local module namespace; functional cut: removed upstream analytics heartbeat and APNS mobile push; functional cut: removed template catalogue; functional cut: removed GitOps and saved Git repositories; functional cut: removed Swarm; functional cut: removed standalone build workshop; functional cut: removed OIDC and passkeys.; Removed downgrade setting from the configuration contract. Count-based history settings contract. #69 connected hub settings keys.
 
 package schema
 
@@ -256,6 +256,8 @@ var expectedEnvConfigVars = []string{
 }
 
 var expectedSettingOverrideKeys = []string{
+	"actionPresentation",
+	"agentInstallDirectory",
 	"authLocalEnabled",
 	"authPasswordPolicy",
 	"authSessionTimeout",
@@ -273,15 +275,20 @@ var expectedSettingOverrideKeys = []string{
 	"buildProvider",
 	"buildTimeout",
 	"defaultDeployPullPolicy",
+	"defaultHostConnection",
+	"defaultPgid",
+	"defaultPuid",
 	"defaultShell",
 	"deployWaitTimeout",
 	"depotProjectId",
 	"depotToken",
+	"detectSocketGroup",
 	"diskUsagePath",
 	"dockerApiTimeout",
 	"dockerClientRefreshInterval",
 	"dockerHost",
 	"dockerImagePullTimeout",
+	"domainUrl",
 	"enableGravatar",
 	"environmentHealthInterval",
 	"eventCleanupInterval",
@@ -290,13 +297,17 @@ var expectedSettingOverrideKeys = []string{
 	"featureVulnerabilityManagementEnabled",
 	"followProjectSymlinks",
 	"httpClientTimeout",
+	"hubAddress",
+	"hubName",
 	"imageAutoPatchEnabled",
 	"imageAutoPatchInterval",
 	"imageEventWatcherEnabled",
 	"imagePatchAllPlatforms",
 	"imagePatchSuffix",
 	"imagePatchTimeoutSec",
+	"keepActionOutput",
 	"lifecycleMaxTimeoutSec",
+	"linkBase",
 	"maxConcurrentActivities",
 	"maxImageUploadSize",
 	"pollingEnabled",
@@ -316,6 +327,8 @@ var expectedSettingOverrideKeys = []string{
 	"registryTimeout",
 	"scheduledPruneEnabled",
 	"scheduledPruneInterval",
+	"setupCompleted",
+	"timeZone",
 	"toolsImageRegistry",
 	"trivyConcurrentScanContainers",
 	"trivyConfig",
