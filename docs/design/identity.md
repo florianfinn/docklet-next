@@ -84,6 +84,8 @@ A writer sends the header back with the cookie. Missing/wrong Origin or a missin
 wrong or malformed cookie/header token pair returns 403. The public
 `GET /api/auth/mode` is the documented bootstrap endpoint; its mode is read-only
 and constrained to the three protocol values in OpenAPI and generated types.
+The web HTTP adapter remembers this response header, bootstraps it before its
+first write if necessary, and supplies it for both fetch writes and XHR uploads.
 
 Only independently authenticated machine ingress keeps its separate contract:
 agent-only listeners, validated environment-token requests, Edge tunnel tokens
