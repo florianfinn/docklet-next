@@ -27,14 +27,14 @@ The `hub-data` named volume is mounted at `/app/data`. Keep it on local persiste
 storage. Linux bind mounts are supported when their directory is writable by the
 runtime identity; use the named volume on Docker Desktop and other hosts. Named
 volumes backed by SMB/NFS/FUSE are also unsupported for database files. Startup
-refuses detected network storage or filesystem detection errors. Backups may
-later use network archive targets; the hub backup engine is a separate feature.
+refuses detected network storage or filesystem detection errors. Hub backups
+are described below; copies to network archive targets are a later feature.
 
 The hub owns `docklet.db`, `docklet.francis.db`, each file's SQLite-managed `-wal`
 and `-shm` companions, and the stable `docklet.db.lock`. The data directory is
 private (`0700`); database and lock files are `0600`. The runtime identity needs
-creation and rename rights. Allow space for both databases, their WAL files and
-future independent backup archives. WAL autocheckpointing is enabled. Never
+creation and rename rights. Allow space for both databases and their WAL files;
+backup archives live on the separate `hub-backups` volume. WAL autocheckpointing is enabled. Never
 remove a live WAL/SHM file, replace the database beneath a running hub or copy
 only a live main database file as a backup.
 
