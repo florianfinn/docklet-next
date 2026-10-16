@@ -9,6 +9,7 @@ package backup
 import (
 	"archive/tar"
 	"bytes"
+	"context"
 	"encoding/json"
 	"io"
 	"os"
@@ -45,7 +46,9 @@ func fixtureArchive(t *testing.T, db *database.DB, cfg *config.Config, id string
 	conn, err := sidecar.Conn(t.Context())
 	require.NoError(t, err)
 	defer conn.Close()
-	return createSQLiteArchive(t.Context(), cfg.BackupDir, id, hub, conn, limit)
+	snapshotCtx, cancel := context.WithTimeout(t.Context(), snapshotDeadline)
+	defer cancel()
+	return createSQLiteArchive(t.Context(), snapshotCtx, cfg.BackupDir, id, hub, conn, limit)
 }
 func TestSQLiteSnapshotIncludesCommittedWALAndValidatesPair(t *testing.T) {
 	db, cfg := archiveFixture(t)

@@ -10,12 +10,14 @@ import (
 	"context"
 	"database/sql"
 	"os"
-	"path/filepath"
 	"sync"
+	"time"
 
 	"github.com/florianfinn/docklet-next/backend/pkg/utils/sqlitestore"
 	backuptypes "github.com/florianfinn/docklet-next/types/backup"
 )
+
+const snapshotDeadline = 30 * time.Second
 
 func mustNewestMigration() int64 { version, _ := newestMigration(); return version }
 
@@ -25,15 +27,36 @@ func (s *Service) snapshotArchive(workCtx context.Context, activityID, id string
 	if s.db == nil || s.db.HubLock() == nil {
 		return "", 0, ErrSystemBackupUnavailable
 	}
+	if err := s.databaseProviderError(); err != nil {
+		return "", 0, err
+	}
 	if err := s.maintenance.Begin(activityID, "backup"); err != nil {
 		return "", 0, err
 	}
-	defer s.maintenance.End()
+	var hub, sidecar *sql.Conn
+	var writer *sql.DB
+	paused := false
+	release := sync.OnceFunc(func() {
+		if sidecar != nil {
+			_ = sidecar.Close()
+		}
+		if hub != nil {
+			_ = hub.Close()
+		}
+		if writer != nil {
+			_ = writer.Close()
+		}
+		if paused {
+			s.coordinator.Resume()
+		}
+		s.maintenance.End()
+	})
+	defer release()
 	if err := s.maintenance.Wait(ctx); err != nil {
 		return "", 0, archiveValidationError(ctx)
 	}
 	if s.coordinator != nil {
-		defer s.coordinator.Resume()
+		paused = true
 		if err := s.coordinator.PauseAndDrain(ctx); err != nil {
 			return "", 0, archiveValidationError(ctx)
 		}
@@ -41,51 +64,35 @@ func (s *Service) snapshotArchive(workCtx context.Context, activityID, id string
 	if err := s.activityService.CancelAndDrain(ctx, activityID); err != nil {
 		return "", 0, archiveValidationError(ctx)
 	}
-	// Reserving both sole writers drains every transaction, including actor lease
-	// renewals. No transaction or callback can write either file until release.
+	// Reserve Hub then Francis under one deadline, including time waiting for
+	// transactions. Both remain reserved until the two durable images exist.
+	snapshotCtx, stopSnapshot := context.WithTimeout(ctx, snapshotDeadline)
+	defer stopSnapshot()
 	pool, err := s.db.SQLDB()
 	if err != nil {
 		return "", 0, ErrSystemBackupUnavailable
 	}
-	hub, err := pool.Conn(ctx)
+	hub, err = pool.Conn(snapshotCtx)
 	if err != nil {
-		return "", 0, archiveValidationError(ctx)
+		return "", 0, archiveValidationError(snapshotCtx)
 	}
-	defer hub.Close()
-	var sidecar *sql.Conn
 	if s.runtime != nil {
-		sidecar, err = s.runtime.ReserveWriter(ctx)
+		sidecar, err = s.runtime.ReserveWriter(snapshotCtx)
 	} else {
 		// The offline/test owner already holds the lifetime lock; no actor host exists.
 		path := sqlitestore.FrancisPath(s.db.Path())
 		if _, statErr := os.Stat(path); statErr != nil {
 			return "", 0, ErrSystemBackupUnavailable
 		}
-		writer, openErr := sqlitestore.Open(ctx, path, false, false)
-		if openErr != nil {
-			return "", 0, ErrSystemBackupUnavailable
+		writer, err = sqlitestore.Open(snapshotCtx, path, false, false)
+		if err != nil {
+			return "", 0, archiveValidationError(snapshotCtx)
 		}
-		defer writer.Close()
-		sidecar, err = writer.Conn(ctx)
+		sidecar, err = writer.Conn(snapshotCtx)
 	}
 	if err != nil {
-		return "", 0, archiveValidationError(ctx)
-	}
-	defer sidecar.Close()
-	// Never allow archive storage to alias the directory holding the live pair.
-	dir, err := filepath.EvalSymlinks(s.backupDir())
-	if err != nil || dir == filepath.Dir(s.db.Path()) {
-		return "", 0, ErrSystemBackupUnavailable
+		return "", 0, archiveValidationError(snapshotCtx)
 	}
 	s.maintenance.SetPhase("applying")
-	release := sync.OnceFunc(func() {
-		_ = sidecar.Close()
-		_ = hub.Close()
-		if s.coordinator != nil {
-			s.coordinator.Resume()
-		}
-		s.maintenance.End()
-	})
-	defer release()
-	return createSQLiteArchive(ctx, dir, id, hub, sidecar, backuptypes.MaxSystemArchiveBytes, release)
+	return createSQLiteArchive(ctx, snapshotCtx, s.backupDir(), id, hub, sidecar, backuptypes.MaxSystemArchiveBytes, release)
 }

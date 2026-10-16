@@ -159,6 +159,10 @@ func (s *Service) executeRestore(workCtx context.Context, actor usertypes.Actor,
 		blocked()
 		return
 	}
+	if err := checkpointStoppedPair(ctx, s.db.Path()); err != nil {
+		blocked()
+		return
+	}
 	marker, err := preparePair(ctx, s.config, s.db.Path(), id, started.ID)
 	if err != nil {
 		blocked()

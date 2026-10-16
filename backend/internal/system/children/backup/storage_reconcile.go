@@ -22,7 +22,7 @@ import (
 // ReconcileStorage removes incomplete files and records left by a crashed process.
 func (s *Service) ReconcileStorage(ctx context.Context) error {
 	dir := s.backupDir()
-	if err := ensureArchiveDir(dir); err != nil {
+	if err := s.archiveDirectoryError(); err != nil {
 		return ErrSystemBackupUnavailable
 	}
 	entries, err := os.ReadDir(dir)

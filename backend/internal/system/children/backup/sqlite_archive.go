@@ -18,7 +18,6 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
-	"time"
 	"uuid"
 
 	"github.com/florianfinn/docklet-next/backend/internal/database"
@@ -47,7 +46,7 @@ type archiveManifest struct {
 
 // Sources are reserved writer connections, with admissions and transactions
 // drained for both files before either VACUUM starts. SQLite includes all WAL data.
-func createSQLiteArchive(ctx context.Context, dir, id string, hub, francis *sql.Conn, limit int64, release ...func()) (string, int64, error) {
+func createSQLiteArchive(ctx, snapshotCtx context.Context, dir, id string, hub, francis *sql.Conn, limit int64, release ...func()) (string, int64, error) {
 	if err := archiveContextError(ctx); err != nil {
 		return "", 0, err
 	}
@@ -61,8 +60,8 @@ func createSQLiteArchive(ctx context.Context, dir, id string, hub, francis *sql.
 	var estimated int64
 	for _, conn := range []*sql.Conn{hub, francis} {
 		var pages, pageSize int64
-		if conn.QueryRowContext(ctx, "PRAGMA page_count").Scan(&pages) != nil || conn.QueryRowContext(ctx, "PRAGMA page_size").Scan(&pageSize) != nil {
-			return "", 0, errInvalidArchive
+		if conn.QueryRowContext(snapshotCtx, "PRAGMA page_count").Scan(&pages) != nil || conn.QueryRowContext(snapshotCtx, "PRAGMA page_size").Scan(&pageSize) != nil {
+			return "", 0, archiveValidationError(snapshotCtx)
 		}
 		if pages < 1 || pageSize < 1 || pages > (backuptypes.MaxSystemArchiveBytes-estimated)/pageSize {
 			return "", 0, errArchiveLimit
@@ -80,8 +79,6 @@ func createSQLiteArchive(ctx context.Context, dir, id string, hub, francis *sql.
 		return "", 0, ErrSystemBackupUnavailable
 	}
 	defer os.RemoveAll(stage)
-	snapshotCtx, stopSnapshot := context.WithTimeout(ctx, 30*time.Second)
-	defer stopSnapshot()
 	for i, conn := range []*sql.Conn{hub, francis} {
 		image := []string{hubImageName, francisImageName}[i]
 		if _, err = conn.ExecContext(snapshotCtx, "VACUUM INTO ?", filepath.Join(stage, image)); err != nil {
@@ -93,6 +90,9 @@ func createSQLiteArchive(ctx context.Context, dir, id string, hub, francis *sql.
 		if err = syncFile(filepath.Join(stage, image)); err != nil {
 			return "", 0, ErrSystemBackupUnavailable
 		}
+	}
+	if err := archiveContextError(snapshotCtx); err != nil {
+		return "", 0, err
 	}
 	if len(release) > 0 {
 		release[0]()

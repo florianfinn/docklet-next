@@ -34,16 +34,23 @@ after restore. Scheduling remains Off/Daily/Weekly with a time in the Hub's loca
 time zone. Unsupported existing cron expressions stay visible and unchanged until
 explicitly replaced.
 
-Reserve the sole Hub writer connection and the sole Francis writer connection
-before taking either image. Existing transactions have then finished and no
+Reserve the sole Hub writer connection, then the sole Francis writer connection
+before taking either image. Start their shared 30-second deadline before waiting
+for the Hub reservation; it also covers Francis reservation, image sizing and both
+`VACUUM INTO` operations. Existing transactions have then finished and no
 actor, lease renewal, timer or request can write either file until release.
 Execute `VACUUM INTO ?` on each reserved connection to separate new private files.
 This includes committed WAL data and does not copy a live database file through
 ordinary file descriptors. Keep the lifetime Hub file lock throughout. Release
 both reservations and resume admission after both images are durable, before
 hashing, validation and tar streaming. Bound the reserved-connection snapshot
-phase to 30 seconds so it cannot outlive Francis host health/lease deadlines.
-The overall operation retains its 60-minute limit. Release on failure too. A failure to drain never publishes an archive.
+phase, including writer reservation, to 30 seconds so it cannot outlive Francis
+host health/lease deadlines. The overall operation retains its 60-minute limit.
+Release on failure too. A failure to drain never publishes an archive.
+
+Resolve symlinks in the database and archive paths and reject equal directories
+or nesting in either direction. Storage status and startup reconciliation apply
+the same boundary before creating or scanning archives.
 
 Validate both images using read-only immutable SQLite connections. Require one
 `integrity_check` result `ok`, no `foreign_key_check` rows, the Docklet database
@@ -104,7 +111,10 @@ without source metadata or an existing administrator session.
 Enter the same maintenance barrier, drain activities and scheduler work, stop the
 Francis host and its diagnostics, and close the Hub pool. Keep the stable lifetime
 lock inode. Every ordinary connection must close before file replacement, safety
-copying or removal of old WAL/SHM files. The live pair is always on local storage.
+copying or removal of old WAL/SHM files. Explicitly checkpoint both stopped files
+with `wal_checkpoint(TRUNCATE)` before safety copying; a busy result or any error
+keeps live restore blocked and unready. Refuse a non-empty WAL before taking each
+safety copy. The live pair is always on local storage.
 
 Extract and revalidate both images into a private recovery directory next to the
 main database. Flush these immutable inputs and safety copies of the previous

@@ -209,3 +209,36 @@ func TestSQLiteRestoreMigratesOlderSupportedPair(t *testing.T) {
 	require.NoError(t, restored.Raw("SELECT max(version_id) FROM goose_db_version WHERE is_applied=1").Scan(&version).Error)
 	require.Equal(t, mustNewestMigration(), version)
 }
+
+func TestSQLitePreparePairRejectsNonemptyWAL(t *testing.T) {
+	for _, hub := range []bool{true, false} {
+		name := "francis"
+		if hub {
+			name = "hub"
+		}
+		t.Run(name, func(t *testing.T) {
+			source, cfg := archiveFixture(t)
+			_, _, err := fixtureArchive(t, source, cfg, "pair", 2<<30)
+			require.NoError(t, err)
+			target, targetCfg := archiveFixture(t)
+			path := target.Path()
+			require.NoError(t, target.Close())
+			targetCfg.BackupDir = cfg.BackupDir
+			wal := path + "-wal"
+			if !hub {
+				wal = sqlitestore.FrancisPath(path) + "-wal"
+			}
+			require.NoError(t, os.WriteFile(wal, []byte("uncheckpointed"), 0600))
+			_, err = preparePair(t.Context(), targetCfg, path, "pair", "")
+			require.ErrorIs(t, err, ErrRestoreRecoveryRequired)
+			_, err = os.Stat(markerPath(restoreStateDir(path)))
+			require.True(t, os.IsNotExist(err))
+			stages, err := filepath.Glob(path + ".restore-*")
+			require.NoError(t, err)
+			require.Empty(t, stages)
+			data, err := os.ReadFile(wal)
+			require.NoError(t, err)
+			require.Equal(t, "uncheckpointed", string(data))
+		})
+	}
+}

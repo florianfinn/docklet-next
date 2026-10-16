@@ -163,6 +163,15 @@ func preparePair(ctx context.Context, cfg *config.Config, path, id, activityID s
 			return marker, err
 		}
 		marker.Images = append(marker.Images, item)
+		// A safety copy is complete only after every committed WAL frame is in
+		// the main file. Fail closed if checkpointing left any WAL behind.
+		if wal, err := os.Lstat(live + "-wal"); err == nil {
+			if !wal.Mode().IsRegular() || wal.Size() != 0 {
+				return marker, ErrRestoreRecoveryRequired
+			}
+		} else if !errors.Is(err, os.ErrNotExist) {
+			return marker, ErrRestoreRecoveryRequired
+		}
 		// Both pools are closed; ordinary file access cannot break a live SQLite lock.
 		if _, err = os.Stat(live); err == nil {
 			if err = copyDurable(ctx, live, filepath.Join(stage, image+".safety")); err != nil {

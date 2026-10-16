@@ -463,10 +463,6 @@ func (s *Service) applyRetention(ctx context.Context, policyID string, keep int)
 	return nil
 }
 
-func (s *Service) Storage() backuptypes.SystemBackupStorage {
-	return storageStatus(s.backupDir())
-}
-
 // Recovery keys remain available to the separate volume backup policy.
 func (s *Service) GenerateRecoveryKey() (*backuptypes.SystemBackupRecoveryKey, error) {
 	key, err := sharedbackup.GenerateRecoveryKey()

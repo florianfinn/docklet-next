@@ -134,5 +134,46 @@ func (s *Service) databaseProviderError() error {
 	if s == nil || s.config == nil || s.config.DatabaseURL == "" || s.db == nil || s.db.Path() == "" {
 		return ErrSystemBackupUnavailable
 	}
+	if err := s.archiveDirectoryError(); err != nil {
+		return err
+	}
 	return storageAvailable(s.backupDir())
+}
+
+// Resolve both sides before comparing directory boundaries, including aliases
+// through symlinked ancestors. Sibling names with a shared prefix are separate.
+func validateArchiveSeparation(dir, databasePath string) error {
+	archive, err := filepath.EvalSymlinks(dir)
+	if err != nil {
+		return ErrSystemBackupUnavailable
+	}
+	database, err := filepath.EvalSymlinks(databasePath)
+	if err != nil {
+		return ErrSystemBackupUnavailable
+	}
+	data := filepath.Dir(database)
+	for _, paths := range [][2]string{{data, archive}, {archive, data}} {
+		rel, err := filepath.Rel(paths[0], paths[1])
+		if err != nil || (rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator))) {
+			return ErrSystemBackupUnavailable
+		}
+	}
+	return nil
+}
+
+func (s *Service) archiveDirectoryError() error {
+	if err := ensureArchiveDir(s.backupDir()); err != nil {
+		return err
+	}
+	if s.db != nil {
+		return validateArchiveSeparation(s.backupDir(), s.db.Path())
+	}
+	return nil
+}
+
+func (s *Service) Storage() backuptypes.SystemBackupStorage {
+	if err := s.archiveDirectoryError(); err != nil {
+		return backuptypes.SystemBackupStorage{MaxArchiveBytes: backuptypes.MaxSystemArchiveBytes, ReasonCode: backuptypes.SystemBackupStorageMissing}
+	}
+	return storageStatus(s.backupDir())
 }
