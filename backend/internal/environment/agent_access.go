@@ -165,11 +165,18 @@ func (s *EnvironmentService) checkAgentCompatibility(ctx context.Context, id str
 
 	// The attempt belongs to the session; every caller waits with its own budget.
 	go func() {
+		defer func() {
+			// Background attempts must release waiters even when a dependency panics.
+			if recover() != nil {
+				check.info, check.tunnel, check.err = nil, nil, remenv.ErrEnvironmentUnavailable
+				session.checked = false
+			}
+			session.checkMu.Lock()
+			session.check = nil
+			close(check.done)
+			session.checkMu.Unlock()
+		}()
 		check.info, check.tunnel, check.err = s.runAgentCompatibility(context.WithoutCancel(ctx), id, session, force)
-		session.checkMu.Lock()
-		session.check = nil
-		close(check.done)
-		session.checkMu.Unlock()
 	}()
 	return waitAgentCheck(ctx, session, check)
 }
