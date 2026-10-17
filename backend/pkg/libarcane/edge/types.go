@@ -206,6 +206,7 @@ type grpcResponseState struct {
 // AgentTunnel represents an active tunnel connection from an edge agent
 type AgentTunnel struct {
 	APIKeyID      string
+	TokenHash     string
 	EnvironmentID string
 	Conn          TunnelConnection
 	Pending       sync.Map // map[string]*PendingRequest

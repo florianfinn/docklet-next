@@ -8,10 +8,26 @@ package edge
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 )
 
 type sessionKeyContext struct{}
+type sessionCredentialContext struct{}
+type sessionCredential struct {
+	hash    string
+	current func(context.Context, *AgentTunnel) (bool, error)
+}
+
+func AgentTokenHash(token string) string {
+	hash := sha256.Sum256([]byte(token))
+	return hex.EncodeToString(hash[:])
+}
+
+func WithSessionCredential(ctx context.Context, keyID, token string, current func(context.Context, *AgentTunnel) (bool, error)) context.Context {
+	return context.WithValue(WithSessionKey(ctx, keyID), sessionCredentialContext{}, sessionCredential{hash: AgentTokenHash(token), current: current})
+}
 
 func WithSessionKey(ctx context.Context, keyID string) context.Context {
 	return context.WithValue(ctx, sessionKeyContext{}, keyID)
@@ -20,9 +36,12 @@ func WithSessionKey(ctx context.Context, keyID string) context.Context {
 // RequireSessionKey prevents sending a replacement token into an older tunnel.
 func RequireSessionKey(ctx context.Context, tunnel *AgentTunnel) error {
 	expected, checked := ctx.Value(sessionKeyContext{}).(string)
-	if checked && (tunnel == nil || tunnel.APIKeyID != expected) {
-		if tunnel != nil {
-			_ = tunnel.CloseWithReason("agent credential revoked")
+	credential, credentialChecked := ctx.Value(sessionCredentialContext{}).(sessionCredential)
+	if checked && (tunnel == nil || tunnel.APIKeyID != expected || (credentialChecked && tunnel.TokenHash != credential.hash)) {
+		if tunnel != nil && credential.current != nil {
+			if current, err := credential.current(ctx, tunnel); err == nil && !current {
+				_ = tunnel.CloseWithReason("agent credential revoked")
+			}
 		}
 		return errors.New("agent tunnel credential is no longer current")
 	}
@@ -43,6 +62,7 @@ func (s *TunnelServer) bindSessionKey(ctx context.Context, tunnel *AgentTunnel, 
 		return err
 	}
 	tunnel.APIKeyID = keyID
+	tunnel.TokenHash = AgentTokenHash(token)
 	return nil
 }
 

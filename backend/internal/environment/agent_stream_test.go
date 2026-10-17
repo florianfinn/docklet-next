@@ -8,7 +8,12 @@ package environment
 
 import (
 	"context"
+	"github.com/coder/websocket"
+	"github.com/florianfinn/docklet-next/backend/internal/middleware"
+	"github.com/labstack/echo/v5"
 	"net/http"
+	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
@@ -78,6 +83,80 @@ func TestAgentRevocationEndsInflightStreams(t *testing.T) {
 					require.Error(t, err)
 				case <-ctx.Done():
 					t.Fatal("revoked stream did not terminate")
+				}
+			})
+		}
+	}
+}
+
+func TestAgentRevocationEndsMiddlewareWebSocket(t *testing.T) {
+	for _, mode := range []string{"direct", "edge"} {
+		for _, action := range []string{"rotate", "remove"} {
+			t.Run(mode+"/"+action, func(t *testing.T) {
+				ctx, cancel := context.WithTimeout(t.Context(), 3*time.Second)
+				defer cancel()
+				f := newAgentFixture(t, mode, version.Info{AgentContractVersion: contract.AgentHubVersion, AgentContractFingerprint: contract.AgentHubFingerprint})
+				if mode == "direct" {
+					agentServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+						conn, err := websocket.Accept(w, r, nil)
+						if err != nil {
+							return
+						}
+						defer conn.CloseNow()
+						if err := conn.Write(ctx, websocket.MessageText, []byte("ready")); err != nil {
+							return
+						}
+						_, _, _ = conn.Read(ctx)
+					}))
+					defer agentServer.Close()
+					require.NoError(t, f.service.db.Model(&Environment{}).Where("id = ?", f.id).Update("api_url", agentServer.URL).Error)
+				} else {
+					original := f.conn.send
+					f.conn.send = func(m *edge.TunnelMessage) {
+						if m.Type == edge.MessageTypeStreamOpen {
+							pending, ok := f.tunnel.Pending.Load(m.ID)
+							require.True(t, ok)
+							pending.(*edge.PendingRequest).ResponseCh <- &edge.TunnelMessage{ID: m.ID, Type: edge.MessageTypeStreamData, Body: []byte("ready"), WSMessageType: int(websocket.MessageText)}
+							return
+						}
+						original(m)
+					}
+				}
+				resolver := func(ctx context.Context, id string) (string, *string, bool, error) {
+					env, err := f.service.GetEnvironmentByID(ctx, id)
+					if err != nil {
+						return "", nil, false, err
+					}
+					return env.ApiUrl, env.AccessToken, env.Enabled, nil
+				}
+				router := echo.New()
+				router.Use(middleware.NewEnvProxyMiddlewareWithParamAndRegistry("0", "id", resolver, nil, nil, edge.GetRegistry(), func(*http.Request) bool { return true }, middleware.EnvironmentProxySecurity{AgentAccess: f.service.AgentAccess, HTTPClient: f.service.httpClient}))
+				router.GET("/api/environments/:id/ws/system/stats", func(c *echo.Context) error { return c.NoContent(500) })
+				proxyServer := httptest.NewServer(router)
+				defer proxyServer.Close()
+				conn, _, err := websocket.Dial(ctx, "ws"+strings.TrimPrefix(proxyServer.URL, "http")+"/api/environments/"+f.id+"/ws/system/stats", nil)
+				require.NoError(t, err)
+				defer conn.CloseNow()
+				_, ready, err := conn.Read(ctx)
+				require.NoError(t, err)
+				require.Equal(t, "ready", string(ready))
+				finished := make(chan error, 1)
+				go func() { _, _, err := conn.Read(ctx); finished <- err }()
+				if action == "remove" {
+					require.NoError(t, f.service.DeleteEnvironment(ctx, f.id, nil, nil))
+				} else {
+					f.service.apiKeys = apikey.NewApiKeyService(f.service.db, user.NewUserService(f.service.db, nil, nil), nil)
+					env, err := f.service.GetEnvironmentByID(ctx, f.id)
+					require.NoError(t, err)
+					_, err = f.service.RegenerateEnvironmentApiKey(ctx, env, "operator", "operator")
+					require.NoError(t, err)
+				}
+				select {
+				case err := <-finished:
+					require.Error(t, err)
+					require.NotErrorIs(t, err, context.DeadlineExceeded)
+				case <-time.After(500 * time.Millisecond):
+					t.Fatal("revoked middleware WebSocket remained open")
 				}
 			})
 		}

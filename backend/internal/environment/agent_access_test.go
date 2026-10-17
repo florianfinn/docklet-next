@@ -82,6 +82,7 @@ func newAgentFixture(t *testing.T, mode string, info version.Info) *agentFixture
 		f.conn = &agentMemoryConn{}
 		f.tunnel = edge.NewAgentTunnelWithConn(f.id, f.conn)
 		f.tunnel.APIKeyID = "example"
+		f.tunnel.TokenHash = edge.AgentTokenHash(f.token)
 		f.conn.send = func(m *edge.TunnelMessage) {
 			if m.Type != edge.MessageTypeCommandRequest {
 				return
@@ -207,24 +208,27 @@ func TestAgentRotationAndRemovalRevokeEstablishedSessions(t *testing.T) {
 				require.NotEqual(t, f.token, replacement)
 				_, err = f.service.ResolveEdgeSessionKey(ctx, f.id, f.token)
 				require.Error(t, err)
-				current, err := f.service.GetEnvironmentByID(ctx, f.id)
-				require.NoError(t, err)
-				err = edge.RequireSessionKey(edge.WithSessionKey(ctx, *current.ApiKeyID), f.tunnel)
-				require.Error(t, err)
+
 			} else {
 				require.NoError(t, f.service.DeleteEnvironment(ctx, f.id, nil, nil))
 			}
+			require.False(t, edge.GetPollRuntimeRegistry().Get(f.id, time.Now()).IsPresent())
+			require.Equal(t, edge.TunnelStatusIdle, edge.GetDemandRegistry().DesiredStatus(f.id, false, time.Now()))
+			requestCtx, requestCancel := context.WithTimeout(ctx, 100*time.Millisecond)
+			defer requestCancel()
+			_, requestErr := f.service.ExecuteRemoteRequest(requestCtx, f.id, "GET", "/api/environments/0/containers", nil)
+			require.Error(t, requestErr)
+			require.Zero(t, f.count("GET /api/environments/0/containers"))
+			require.Zero(t, f.count("GET /api/app-version"), "replacement token must never reach the revoked tunnel")
 			select {
 			case <-streamCtx.Done():
 			case <-ctx.Done():
 				t.Fatal("proxied stream remained open")
 			}
 			require.True(t, f.conn.IsClosed())
-			require.Zero(t, f.count("GET /api/app-version"), "replacement token must never reach the revoked tunnel")
 			_, err = f.service.ResolveEdgeEnvironmentByToken(ctx, f.token)
 			require.Error(t, err)
-			require.False(t, edge.GetPollRuntimeRegistry().Get(f.id, time.Now()).IsPresent())
-			require.Equal(t, edge.TunnelStatusIdle, edge.GetDemandRegistry().DesiredStatus(f.id, false, time.Now()))
+
 		})
 	}
 }

@@ -58,7 +58,7 @@ func (s *EnvironmentService) AgentAccess(ctx context.Context, id string, token *
 		keyID = *env.ApiKeyID
 	}
 	session := s.agentSessionFor(ctx, env)
-	requestCtx, cancel := context.WithCancel(edge.WithSessionKey(ctx, keyID))
+	requestCtx, cancel := context.WithCancel(edge.WithSessionCredential(ctx, keyID, *env.AccessToken, s.edgeSessionCurrent))
 	stop := context.AfterFunc(session.ctx, cancel)
 	cleanup := func() { stop(); cancel() }
 	if !contract.AgentRecoveryRoute(method, path) {
@@ -176,6 +176,18 @@ func (s *EnvironmentService) ResolveEdgeSessionKey(ctx context.Context, id, toke
 		return "", ErrInvalidEnvironmentAccessToken
 	}
 	return *env.ApiKeyID, nil
+}
+
+// A stale request rejects without disconnecting a freshly registered current tunnel.
+func (s *EnvironmentService) edgeSessionCurrent(ctx context.Context, tunnel *edge.AgentTunnel) (bool, error) {
+	env, err := s.GetEnvironmentByID(ctx, tunnel.EnvironmentID)
+	if errors.Is(err, ErrEnvironmentNotFound) {
+		return false, nil
+	}
+	if err != nil {
+		return false, err
+	}
+	return env.Enabled && env.IsEdge && env.ApiKeyID != nil && *env.ApiKeyID == tunnel.APIKeyID && env.AccessToken != nil && edge.AgentTokenHash(*env.AccessToken) == tunnel.TokenHash, nil
 }
 
 func (s *EnvironmentService) revokeAgentSessions(id string) {

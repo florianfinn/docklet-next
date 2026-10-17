@@ -9,7 +9,12 @@ package edge
 import (
 	"context"
 	"errors"
+	"github.com/coder/websocket"
+	"github.com/coder/websocket/wsjson"
+	"github.com/labstack/echo/v5"
 	"io"
+	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
@@ -73,6 +78,7 @@ func TestEdgeRegistrationInProcessTokenLifecycle(t *testing.T) {
 				tunnel, ok := registry.Get("example-host").Get()
 				require.True(t, ok)
 				require.Equal(t, "example-key", tunnel.APIKeyID)
+				require.Equal(t, AgentTokenHash(token), tunnel.TokenHash)
 			}
 			err := server.authStreamInterceptorInternal()(nil, stream, &grpc.StreamServerInfo{FullMethod: tunnelpb.TunnelService_Connect_FullMethodName}, func(_ any, ss grpc.ServerStream) error {
 				stream.ctx = ss.Context()
@@ -90,6 +96,59 @@ func TestEdgeRegistrationInProcessTokenLifecycle(t *testing.T) {
 				require.Empty(t, stream.sent)
 			}
 			require.False(t, registry.Get("example-host").IsPresent())
+		})
+	}
+}
+
+func TestEdgeWebSocketRegistrationTokenLifecycle(t *testing.T) {
+	for _, state := range []string{"valid", "wrong", "revoked", "revoked-after-auth"} {
+		t.Run(state, func(t *testing.T) {
+			ctx, cancel := context.WithTimeout(t.Context(), 2*time.Second)
+			defer cancel()
+			registry := NewTunnelRegistry()
+			revoked := state == "revoked"
+			token := "example"
+			if state == "wrong" {
+				token = "test-only"
+			}
+			server := NewTunnelServerWithRegistry(registry, func(context.Context, string) (string, error) {
+				if revoked || token != "example" {
+					return "", errors.New("invalid token")
+				}
+				if state == "revoked-after-auth" {
+					revoked = true
+				}
+				return "example-host", nil
+			}, nil)
+			server.SetSessionKeyResolver(func(_ context.Context, id, supplied string) (string, error) {
+				if revoked || supplied != "example" {
+					return "", errors.New("revoked")
+				}
+				return "example-key", nil
+			})
+			router := echo.New()
+			router.GET("/connect", server.HandleConnect)
+			httpServer := httptest.NewServer(router)
+			defer httpServer.Close()
+			conn, _, err := websocket.Dial(ctx, "ws"+strings.TrimPrefix(httpServer.URL, "http")+"/connect", nil)
+			require.NoError(t, err)
+			defer conn.CloseNow()
+			require.NoError(t, wsjson.Write(ctx, conn, &TunnelMessage{Type: MessageTypeRegister, AgentToken: token}))
+			var response TunnelMessage
+			err = wsjson.Read(ctx, conn, &response)
+			if state == "valid" {
+				require.NoError(t, err)
+				require.True(t, response.Accepted)
+				tunnel, ok := registry.Get("example-host").Get()
+				require.True(t, ok)
+				require.Equal(t, "example-key", tunnel.APIKeyID)
+				require.Equal(t, AgentTokenHash(token), tunnel.TokenHash)
+			} else {
+				require.True(t, err != nil || !response.Accepted, "invalid registration must be rejected")
+				require.False(t, registry.Get("example-host").IsPresent())
+			}
+			_ = conn.CloseNow()
+			require.Eventually(t, func() bool { return !registry.Get("example-host").IsPresent() }, time.Second, time.Millisecond)
 		})
 	}
 }

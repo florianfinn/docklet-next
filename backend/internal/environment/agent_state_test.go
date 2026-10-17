@@ -47,6 +47,7 @@ func TestHostDisconnectReconnectAndRestartState(t *testing.T) {
 	f.conn.mu.Unlock()
 	f.tunnel = edge.NewAgentTunnelWithConn(f.id, f.conn)
 	f.tunnel.APIKeyID = "example"
+	f.tunnel.TokenHash = edge.AgentTokenHash(f.token)
 	edge.GetRegistry().Register(f.id, f.tunnel)
 	require.NoError(t, f.service.UpdateEnvironmentConnectionState(ctx, f.id, true))
 	_, err = f.service.CheckAgentCompatibility(ctx, f.id)
@@ -75,6 +76,15 @@ func TestHostRuntimeStateRejectsOldTunnelKey(t *testing.T) {
 	dto := environmenttypes.Environment{ID: f.id, Status: "online", IsEdge: true}
 	f.service.ApplyHostRuntimeState(t.Context(), &dto)
 	require.NotNil(t, dto.Connected)
+	require.False(t, *dto.Connected)
+	require.Equal(t, "offline", dto.Status)
+}
+
+func TestHostRuntimeStateRejectsOldTunnelToken(t *testing.T) {
+	f := newAgentFixture(t, "edge", version.Info{})
+	f.tunnel.TokenHash = edge.AgentTokenHash("test-only")
+	dto := environmenttypes.Environment{ID: f.id, Status: "online", IsEdge: true}
+	f.service.ApplyHostRuntimeState(t.Context(), &dto)
 	require.False(t, *dto.Connected)
 	require.Equal(t, "offline", dto.Status)
 }

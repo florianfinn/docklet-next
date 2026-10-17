@@ -60,6 +60,7 @@ func TestAgentCompatibilityCachedPerSession(t *testing.T) {
 				f.conn.mu.Unlock()
 				f.tunnel = edge.NewAgentTunnelWithConn(f.id, f.conn)
 				f.tunnel.APIKeyID = *env.ApiKeyID
+				f.tunnel.TokenHash = edge.AgentTokenHash(*env.AccessToken)
 				edge.GetRegistry().Register(f.id, f.tunnel)
 			}
 			forward()

@@ -41,6 +41,9 @@ func ApplyEnvironmentRuntimeState(env *environment.Environment, expectedKey ...s
 	if len(expectedKey) > 0 {
 		tunnel, ok := edge.GetRegistry().Get(env.ID).Get()
 		keyCurrent = ok && tunnel != nil && tunnel.APIKeyID == expectedKey[0]
+		if keyCurrent && len(expectedKey) > 1 {
+			keyCurrent = tunnel.TokenHash == expectedKey[1]
+		}
 	}
 	if runtimeState, ok := edge.GetTunnelRuntimeState(env.ID).Get(); ok && keyCurrent {
 		connected = true
@@ -151,7 +154,11 @@ func (s *EnvironmentService) ApplyHostRuntimeState(ctx context.Context, env *env
 	if row.ApiKeyID != nil {
 		keyID = *row.ApiKeyID
 	}
-	ApplyEnvironmentRuntimeState(env, keyID)
+	tokenHash := ""
+	if row.AccessToken != nil {
+		tokenHash = edge.AgentTokenHash(*row.AccessToken)
+	}
+	ApplyEnvironmentRuntimeState(env, keyID, tokenHash)
 	s.agentRuntime.mu.Lock()
 	report, ok := s.agentRuntime.reports[env.ID]
 	s.agentRuntime.mu.Unlock()
