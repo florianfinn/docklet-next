@@ -5,7 +5,7 @@ reached by the hub, Edge agents that dial out to the hub, and the agent HTTP
 surface listed in [agent surface](agent-surface.md). It assumes the product scale
 of one operator and a few private users on one hub. It does not design for
 multiple hub processes, failover or hostile co-tenants. Arcane's behaviour is the
-baseline; anything beyond it is an open decision at the end of this record.
+baseline; anything beyond it is a decision at the end of this record.
 
 File references are relative to `backend/` unless they start with `docs/`, `web/`
 or `types/`.
@@ -239,7 +239,9 @@ generator rules in [host onboarding](host-onboarding.md).
 | T9 Tunnel endpoint exhaustion | N | accepted |
 | T10 Token exposure during onboarding | T | accepted |
 
-## Open decisions
+## Decisions
+
+The maintainer chose option (a), the recommendation, for every item below on 2026-10-17.
 
 D1. **Agent version enforcement (T8).**
 Recommended: (a) after a direct health check or Edge registration, the hub reads

@@ -244,7 +244,9 @@ marked stale with "as of <time>", and actions on that host are unavailable with 
 reason. Reconnection replaces the values on the next successful read. Source:
 **new**; storage is decision 4.
 
-## Open decisions
+## Decisions
+
+The maintainer chose option (a), the recommendation, for every item below on 2026-10-17.
 
 1. **Agent configuration names in generated files.**
    Recommended: (a) generate Arcane's existing variable names (`AGENT_MODE`,
