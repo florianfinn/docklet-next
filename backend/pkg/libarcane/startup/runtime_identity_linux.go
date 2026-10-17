@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: None
+// Deviations: Preserve start groups and forward shutdown during identity re-exec.
 
 //go:build linux
 
@@ -25,7 +25,15 @@ func reexecWithRuntimeIdentityInternal(ctx context.Context, req runtimeIdentityR
 		return fmt.Errorf("resolve executable: %w", err)
 	}
 
-	groups := runtimeIdentitySupplementaryGroupsInternal(req.DockerHost, resolveSocketGroupInternal)
+	startGroups, err := os.Getgroups()
+	if err != nil {
+		return fmt.Errorf("read runtime start groups: %w", err)
+	}
+	initial := make([]uint32, 0, len(startGroups))
+	for _, gid := range startGroups {
+		initial = append(initial, uint32(gid))
+	}
+	groups := runtimeIdentitySupplementaryGroupsInternal(req.DockerHost, resolveSocketGroupInternal, initial...)
 
 	cmd := exec.CommandContext(ctx, executable, os.Args[1:]...) //nolint:gosec // re-executing our own binary with the same args under a different UID/GID
 	// Forward shutdown instead of the default SIGKILL so the child can unregister its actor host.

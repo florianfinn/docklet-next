@@ -76,7 +76,7 @@ export function planFromDraft(d: HostDraft, hubUrl: string, timeZone: string): A
     projectDir: normalizePath(d.projectDir),
     installDir: normalizePath(d.installDir),
     fileOwner: draftFileOwner(d),
-    socketGid: d.detectSocket ? undefined : Number(d.socketGid) || undefined,
+    socketGid: d.detectSocket ? undefined : Number(d.socketGid),
     token: d.token ?? "DEMO-NUR-ANSICHT",
     timeZone,
   };

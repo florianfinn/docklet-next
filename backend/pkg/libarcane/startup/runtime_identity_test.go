@@ -461,3 +461,27 @@ func TestBackupDirectoryPreparationRejectsAliases(t *testing.T) {
 	require.NoError(t, os.Symlink(filepath.Join(dir, "backups"), target))
 	require.Error(t, prepareBackupDirectoryInternal(os.Getuid(), os.Getgid(), nil, target))
 }
+
+func TestRuntimeIdentityPreservesStartGroups(t *testing.T) {
+	for _, tc := range []struct {
+		name   string
+		start  []uint32
+		socket mo.Option[uint32]
+		want   []uint32
+	}{
+		{"adds detected group", []uint32{10, 20}, mo.Some(uint32(997)), []uint32{10, 20, 997}},
+		{"deduplicates both sources", []uint32{10, 997, 10}, mo.Some(uint32(997)), []uint32{10, 997}},
+		{"keeps manual group without socket", []uint32{20}, mo.None[uint32](), []uint32{20}},
+		{"keeps root group", []uint32{0}, mo.Some(uint32(997)), []uint32{0, 997}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			groups := runtimeIdentitySupplementaryGroupsInternal("", func(string) mo.Option[uint32] { return tc.socket }, tc.start...)
+			require.Equal(t, tc.want, groups)
+		})
+	}
+	groups := runtimeIdentitySupplementaryGroupsInternal("tcp://docker.example.com:2376", func(string) mo.Option[uint32] {
+		t.Fatal("non-Unix endpoint must not probe the socket")
+		return mo.None[uint32]()
+	}, 20, 20)
+	require.Equal(t, []uint32{20}, groups)
+}
