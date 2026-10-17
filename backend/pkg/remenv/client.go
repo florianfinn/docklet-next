@@ -254,14 +254,9 @@ func (e *DecodeError) Unwrap() error {
 	return e.Err
 }
 
-// ApplyAgentTokenHeaders sets the agent token in both X- header forms on the
-// given http.Header. It deliberately does NOT set the Authorization header:
-// these helpers are used by the manager when proxying user requests through
-// to remote environments, and the Authorization header in that case carries
-// the calling user's bearer or session token. Direct agent->manager call
-// sites (poll, websocket dial, grpc dial, mTLS enroll) set
-// `Authorization: Bearer <token>` themselves so the token survives reverse
-// proxies that strip non-standard X- headers.
+// ApplyAgentTokenHeaders installs the target agent's X-header credentials.
+// Hub forwarding strips user credentials first. Outbound agent registration
+// sets its own Bearer token separately when a reverse proxy needs it.
 func ApplyAgentTokenHeaders(headers http.Header, accessToken *string) {
 	if headers == nil || accessToken == nil || strings.TrimSpace(*accessToken) == "" {
 		return
@@ -271,8 +266,7 @@ func ApplyAgentTokenHeaders(headers http.Header, accessToken *string) {
 	headers.Set(HeaderAPIKey, *accessToken)
 }
 
-// ApplyAgentTokenHeaderMap mirrors ApplyAgentTokenHeaders for map-based
-// header carriers. Same rationale: do not write Authorization here.
+// ApplyAgentTokenHeaderMap installs the same credentials in map-based carriers.
 func ApplyAgentTokenHeaderMap(headers map[string]string, accessToken *string) {
 	if headers == nil || accessToken == nil || strings.TrimSpace(*accessToken) == "" {
 		return

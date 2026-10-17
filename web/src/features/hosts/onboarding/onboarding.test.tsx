@@ -1,6 +1,7 @@
 import { screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { parse } from "yaml";
 
 import { AppShell } from "@/app/shell/AppShell";
 import { createDemoAdapter } from "@/data/demo/demo-adapter";
@@ -37,7 +38,7 @@ afterEach(() => {
   localStorage.clear();
 });
 
-const next = () => userEvent.click(screen.getByRole("button", { name: "Weiter" }));
+const next = () => userEvent.click(screen.getByRole("button", { name: /^(Weiter|Host anlegen und auf Agent warten)$/ }));
 
 describe("host onboarding", () => {
   it("validates, produces edge artifacts and connects the host into the shared host list", async () => {
@@ -75,15 +76,16 @@ describe("host onboarding", () => {
     await screen.findByText(/^DEMO-NUR-ANSICHT-WERKSTATT-/);
     await userEvent.click(screen.getByRole("radio", { name: /Compose/ }));
     const compose = screen.getByLabelText("/home/docker/docklet-agent/compose.yaml");
-    expect(compose.textContent?.includes("- /home/docker:/home/docker")).toBe(true);
+    expect(parse(compose.textContent ?? "").services.agent.volumes.includes("/home/docker:/home/docker")).toBe(true);
     expect(compose.textContent?.includes('io.docklet.system: "agent"')).toBe(true);
     expect(compose.textContent?.includes("ports:")).toBe(false);
 
-    // Going back keeps the draft; directories are still editable before registration.
+    // Registration precedes installation, so going back keeps the locked directories.
     await userEvent.click(screen.getByRole("button", { name: "Zurück" }));
     expect((screen.getByLabelText("Projektverzeichnis") as HTMLInputElement).value).toBe("/home/docker");
     await next();
-    await userEvent.click(await screen.findByRole("button", { name: "Host anlegen und auf Agent warten" }));
+    expect((screen.getByTestId("agent-token")).textContent?.startsWith("DEMO-NUR-ANSICHT-")).toBe(true);
+    await next();
 
     const filterEntry = await screen.findByRole("button", { name: /^Werkstatt, Wartet auf Agent/ });
     expect(filterEntry !== null).toBe(true);

@@ -20,12 +20,22 @@ WORKDIR /src
 COPY . .
 RUN rm -rf backend/frontend/dist
 COPY --from=web /src/web/dist ./backend/frontend/dist
-ENV CGO_ENABLED=0 GOFLAGS=-p=4 GOCACHE=/var/cache/go-build
+ENV CGO_ENABLED=0 GOFLAGS=-p=2 GOCACHE=/var/cache/go-build
 RUN --mount=type=cache,target=/go/pkg/mod --mount=type=cache,target=/var/cache/go-build go build -trimpath -o /out/docklet-hub ./backend/cmd && \
     go build -trimpath -tags=exclude_frontend -o /out/docklet-agent ./backend/cmd && \
     go run scripts/core-license-files.go bundle /out/licenses
 
-FROM ${RUNTIME_IMAGE}
+FROM ${RUNTIME_IMAGE} AS agent
+WORKDIR /app
+COPY --from=build /out/docklet-agent /usr/local/bin/docklet-agent
+COPY --from=build /out/licenses /usr/share/licenses/docklet-next
+RUN mkdir -p /app/data && chmod 0700 /app/data && test -s /etc/ssl/certs/ca-certificates.crt
+ENV AGENT_MODE=true EDGE_AGENT=false LISTEN=0.0.0.0 PORT=3552
+EXPOSE 3552
+HEALTHCHECK --interval=30s --timeout=5s --start-period=30s --retries=3 CMD ["/usr/local/bin/docklet-agent", "health"]
+ENTRYPOINT ["/usr/local/bin/docklet-agent"]
+
+FROM ${RUNTIME_IMAGE} AS hub
 WORKDIR /app
 COPY --from=build /out/docklet-hub /usr/local/bin/docklet-hub
 COPY --from=build /out/licenses /usr/share/licenses/docklet-next

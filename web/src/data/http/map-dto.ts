@@ -8,6 +8,7 @@ import type { components } from "@/api/generated/schema";
 import type { ActionKind, ActionStatus, DeployStepKey, EventKind, EventLevel, OutputStream, StepState } from "@/domain/model";
 
 import type { CodedActionRun, CodedEvent, MessageCode } from "../message-code";
+import { inventoryId } from "./inventory-mapping";
 
 type Activity = components["schemas"]["ActivityActivity"];
 type Detail = components["schemas"]["ActivityDetail"];
@@ -49,7 +50,7 @@ function stepState(status: string): StepState {
 }
 
 function message(code: string | undefined, sourceText: string): MessageCode {
-  return code ? { code, params: {}, sourceText } : { code: "runMessages.value", params: { value: sourceText } };
+  return code ? { code, params: code === "activity.message" ? { message: sourceText } : {}, sourceText } : { code: "runMessages.value", params: { value: sourceText } };
 }
 
 function stepKey(name: string): DeployStepKey {
@@ -81,8 +82,8 @@ export function mapActivityDetail(detail: Detail): CodedActionRun {
     title: { code: `activity.runKind.${kind}`, params: {} },
     target: { code: "runMessages.value", params: { value: target } },
     hostId: run.environmentId,
-    ...(run.resourceType === "project" && run.resourceId ? { stackId: run.resourceId } : {}),
-    ...(run.resourceType === "container" && run.resourceId ? { containerId: run.resourceId } : {}),
+    ...(run.resourceType === "project" && run.resourceId ? { stackId: inventoryId(run.environmentId, run.resourceId) } : {}),
+    ...(run.resourceType === "container" && run.resourceId ? { containerId: inventoryId(run.environmentId, run.resourceId) } : {}),
     services: run.affectedServices ?? [],
     status: mapStatus(run.status),
     progress: run.progress ?? 0,
@@ -127,6 +128,6 @@ export function mapEvent(event: Event): CodedEvent {
     id: event.id, at: event.timestamp, kind: eventKind(event), level: eventLevel(event.severity),
     title: message(event.messageCode, event.title),
     hostId: event.environmentId,
-    ...(event.resourceType === "project" && event.resourceId ? { stackId: event.resourceId } : {}),
+    ...(event.resourceType === "project" && event.resourceId && event.environmentId ? { stackId: inventoryId(event.environmentId, event.resourceId) } : {}),
   };
 }

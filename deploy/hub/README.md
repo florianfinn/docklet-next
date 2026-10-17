@@ -50,6 +50,38 @@ may still have finished. A second hub refuses startup with `hub.already_running`
 No previous PostgreSQL, Arcane or Docklet database/registration is imported. Begin
 with an empty volume; unsupported or newer schemas are refused.
 
+
+## Agent image and onboarding
+
+Build the separate agent image from the same checkout and version as the hub:
+
+```sh
+docker build --target agent --tag docklet-next-agent:0.0.0 --file deploy/hub/Dockerfile .
+node scripts/smoke-agent-image.mjs docklet-next-agent:0.0.0
+```
+
+Use the hub SemVer instead of `0.0.0` for a versioned candidate. The `agent` target
+contains only the agent executable and Go licence evidence; it has no embedded
+web bundle or hub executable and defaults to `AGENT_MODE=true`. The default
+Dockerfile target remains `hub`. CI builds and smoke-tests both images without
+publishing them.
+
+The hub's onboarding default is `docklet-next-agent:<hub SemVer>` (`0.0.0` for a
+development build). Load that image onto each agent host using `docker save` and
+`docker load`, or publish it to an operator-controlled registry. Set
+`DOCKLET_AGENT_IMAGE` in the hub's private environment file to a pinned registry
+reference when needed, then recreate the hub. The generated Compose also accepts
+that override on the agent host. Direct containers are named `docklet-agent`;
+Edge containers are named `docklet-edge-agent`. Both retain
+`io.docklet.system=agent` for inventory hiding.
+
+Before deploying this onboarding boundary, use a matching hub/agent contract
+version and fingerprint. Environment creation, updates and deletion require a
+global administrator; delegated `environments:*` permissions no longer grant those
+operations. `GET /api/environments/{id}/deployment` returns HTTP 410; use the
+one-time onboarding package and token instead. Ensure the selected agent image
+exists on each target host or is accessible through its configured registry.
+
 ## Sign-in and recovery
 
 `AUTH_MODE=local` is the default and uses the local administrator password and

@@ -12,6 +12,7 @@ export interface MenuAction {
   icon: ReactNode;
   onSelect: () => void;
   disabled?: boolean;
+  title?: string;
   /** Demo-only entries are shown quieter. */
   muted?: boolean;
 }
@@ -36,7 +37,7 @@ export function ActionsMenu({ groups, label }: { groups: MenuGroups; label: stri
             {i > 0 && <DropdownMenuSeparator />}
             <DropdownMenuGroup>
               {group.map((a) => (
-                <DropdownMenuItem key={a.id} data-action={a.id} disabled={a.disabled} onSelect={a.onSelect} className={cn(a.muted && "text-muted-foreground")}>
+                <DropdownMenuItem key={a.id} data-action={a.id} title={a.title} disabled={a.disabled} onSelect={a.onSelect} className={cn(a.muted && "text-muted-foreground")}>
                   {a.icon} {a.label}
                 </DropdownMenuItem>
               ))}
@@ -65,7 +66,7 @@ export function ActionsContextMenu({ groups, title, children }: { groups: MenuGr
             <ContextMenuSeparator />
             <ContextMenuGroup>
               {group.map((a) => (
-                <ContextMenuItem key={a.id} data-action={a.id} disabled={a.disabled} onSelect={a.onSelect} className={cn(a.muted && "text-muted-foreground")}>
+                <ContextMenuItem key={a.id} data-action={a.id} title={a.title} disabled={a.disabled} onSelect={a.onSelect} className={cn(a.muted && "text-muted-foreground")}>
                   {a.icon} {a.label}
                 </ContextMenuItem>
               ))}

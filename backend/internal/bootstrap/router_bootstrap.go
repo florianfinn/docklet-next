@@ -32,6 +32,7 @@ import (
 	"github.com/florianfinn/docklet-next/backend/internal/middleware"
 	hubbackup "github.com/florianfinn/docklet-next/backend/internal/system/children/backup"
 	"github.com/florianfinn/docklet-next/backend/pkg/authz"
+	"github.com/florianfinn/docklet-next/backend/pkg/hoststate"
 	"github.com/florianfinn/docklet-next/backend/pkg/libarcane/edge"
 	"github.com/florianfinn/docklet-next/backend/pkg/utils/cookie"
 	"github.com/florianfinn/docklet-next/backend/pkg/utils/handlerutil"
@@ -285,6 +286,10 @@ func newRouter(p RouterParams) (*echo.Echo, *edge.TunnelServer) {
 
 	permissionMatcher := authz.NewPermissionMatcher()
 
+	var inventorySnapshots *hoststate.Store
+	if hubMode {
+		inventorySnapshots = deps.Environment.Service().ReadSnapshots()
+	}
 	envProxyMiddleware := middleware.NewEnvProxyMiddlewareWithParamAndRegistry(
 		types.LocalDockerEnvironmentID,
 		"id",
@@ -295,6 +300,9 @@ func newRouter(p RouterParams) (*echo.Echo, *edge.TunnelServer) {
 		middleware.WebSocketOriginValidator(cfg, func(req *http.Request) bool {
 			return authMiddleware.ValidateNonCookieCredential(req) || csrfTransportValidatorInternal(deps)(req)
 		}),
+		middleware.EnvironmentProxySecurity{Snapshots: inventorySnapshots, ProxyIdentityHeader: cfg.ProxyIdentityHeader(), AgentAccess: func(ctx context.Context, id string, token *string, method, path string) (context.Context, context.CancelFunc, error) {
+			return deps.Environment.Service().AgentAccess(ctx, id, token, method, path)
+		}},
 	)
 	apiGroup.Use(envProxyMiddleware)
 

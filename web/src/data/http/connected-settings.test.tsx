@@ -21,6 +21,7 @@ import { createHttpAdapter } from "./http-adapter";
 
 const initial = {
   setupCompleted: "true", hubName: "Docklet", hubAddress: "192.0.2.10:8080", domainUrl: "", linkBase: "auto", effectiveTimeZone: "Europe/Berlin",
+  defaultHostConnection: "direct", agentProjectsDirectory: "/srv/projects", agentInstallDirectory: "/srv/projects/docklet-agent", defaultPuid: "", defaultPgid: "", detectSocketGroup: "true",
   keepActionOutput: "true", actionPresentation: "dialog",
 };
 

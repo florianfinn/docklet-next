@@ -3,6 +3,7 @@ import { lazy, Suspense, useState } from "react";
 import { Link } from "react-router";
 import { useTranslations } from "use-intl";
 
+import { useCapability } from "@/data/use-capability";
 import { useContainers, useStacks, useSystemComponents } from "@/data/queries";
 import type { Host } from "@/domain/model";
 import { StatStrip } from "@/shared/component-set/stat-strip";
@@ -17,6 +18,7 @@ const InstallSheet = import.meta.env.DEV ? lazy(() => import("./InstallSheet.dev
 export default function HostsPage() {
   const t = useTranslations("hosts");
   const hosts = useHostScope();
+  const create = useCapability("registerHost");
   const stacks = useStacks();
   const containers = useContainers();
   const system = useSystemComponents();
@@ -32,7 +34,7 @@ export default function HostsPage() {
       <PageHeader
         title={t("title")}
         description={t("description")}
-        actions={import.meta.env.DEV ? (
+        actions={create.available ? (
           <Button asChild className="group">
             <Link to="/hosts/new">
               <Plus data-icon="inline-start" className="transition-transform duration-(--dur) group-hover:rotate-90" />
@@ -61,7 +63,7 @@ export default function HostsPage() {
         <EmptyState
           icon={<Server />}
           title={t("title")}
-          action={import.meta.env.DEV ? (
+          action={create.available ? (
             <Button asChild>
               <Link to="/hosts/new">{t("add")}</Link>
             </Button>

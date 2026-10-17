@@ -25,7 +25,7 @@ export type Tone =
 
 export type HostConnection = "direct" | "edge";
 /** "pending": registered during onboarding, agent has not connected yet. */
-export type HostStatus = "online" | "offline" | "pending";
+export type HostStatus = "online" | "offline" | "pending" | "update-required";
 
 /** File owner IDs used by the agent for project files (PUID/PGID). */
 export interface FileOwner {
@@ -42,15 +42,24 @@ export interface AgentReport {
   projectDirOwner: FileOwner & { name: string };
   projectDirWritable: boolean;
   /** IDs the agent writes project files with and where they came from. */
-  fileOwner: FileOwner;
-  fileOwnerSource: "manual" | "directory-owner";
-  socketGid: number;
-  socketGidSource: "manual" | "detected";
+  fileOwner?: FileOwner;
+  fileOwnerSource?: "manual" | "directory-owner";
+  socketGid?: number;
+  socketGidSource?: "manual" | "detected";
   note: "ok" | "root-owned" | "unraid";
-  simulated: true;
+  simulated?: boolean;
+}
+
+export interface InventoryObservation {
+  observedAt?: string;
+  stale: boolean;
+  reason?: "agent.unavailable" | "agent.invalid-token" | "agent.update-required" | "inventory.read-error" | "inventory.mapping-error";
 }
 
 export interface Host {
+  inventory?: InventoryObservation;
+  /** Inventory and system metadata have not been read; numeric fields are empty sentinels. */
+  detailsUnavailable?: boolean;
   id: string;
   name: string;
   /** Any CSS colour; used for host bars, chips and topology zones. */
@@ -141,6 +150,7 @@ export type AutoUpdateMode = "check" | "scheduled";
 export type AutoUpdatePolicy = { mode: "check" } | { mode: "scheduled"; schedule: Schedule };
 
 export interface Stack {
+  inventory?: InventoryObservation;
   id: string;
   name: string;
   hostId: string;
@@ -245,6 +255,9 @@ export interface StackDetail extends Stack {
 export type ContainerOrigin = "compose" | "standalone" | "unraid" | "unknown";
 
 export interface ContainerInfo {
+  imageId?: string;
+  inventory?: InventoryObservation;
+  restrictions?: { recreate: boolean; reason: string };
   id: string;
   name: string;
   hostId: string;
@@ -309,6 +322,12 @@ export interface ScheduledJob {
 }
 
 export interface HostMetrics {
+  diskUnavailable?: boolean;
+  growthUnavailable?: boolean;
+  inventory?: InventoryObservation;
+  cpuCores?: number;
+  memTotalGb?: number;
+  diskTotalGb?: number;
   hostId: string;
   cpu: number;
   mem: number;
@@ -325,7 +344,7 @@ export interface ContainerMetrics {
 
 export interface MetricsSnapshot {
   at: string;
-  simulated: true;
+  simulated: boolean;
   hosts: Record<string, HostMetrics>;
   /** Keyed by container id. */
   containers: Record<string, ContainerMetrics>;
@@ -368,14 +387,15 @@ export interface SecurityOverview {
   history: ScanRun[];
 }
 
-/** Docker network drivers Docklet shows; only bridge, macvlan and ipvlan can be created. */
-export type NetworkDriver = "bridge" | "host" | "none" | "macvlan" | "ipvlan" | "overlay";
+/** Built-in Docker drivers; plugins remain displayable as arbitrary strings. */
+export type NetworkDriver = "bridge" | "host" | "none" | "null" | "macvlan" | "ipvlan" | "overlay";
 
 export interface TopologyNetwork {
+  inventory?: InventoryObservation;
   id: string;
   name: string;
   hostId: string;
-  driver: NetworkDriver;
+  driver: string;
   /** CIDR; absent for host and none. */
   subnet?: string;
   gateway?: string;

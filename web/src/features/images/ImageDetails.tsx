@@ -1,3 +1,4 @@
+import { useCapability } from "@/data/use-capability";
 import { ArrowRight, Download, Package, ShieldAlert, Trash2 } from "lucide-react";
 import type { ReactNode } from "react";
 import { Link } from "react-router";
@@ -51,6 +52,8 @@ interface ImageDetailsProps {
 export function ImageDetails({ id, image, host, onClose, onPull, onRemove }: ImageDetailsProps) {
   const t = useTranslations("images");
   const td = useTranslations("images.details");
+  const pull = useCapability("pullImage");
+  const remove = useCapability("removeImage");
   const online = host?.status === "online";
   // Where an update is installed: the first user workload of this image (never the agent).
   const user = image?.consumers.find((c) => !c.system);
@@ -97,14 +100,14 @@ export function ImageDetails({ id, image, host, onClose, onPull, onRemove }: Ima
                       <HostChip host={host} />
                     </Row>
                     <Row label={td("architecture")} mono>
-                      {image.os}/{image.architecture}
+                      {image.metadataUnavailable ? td("unknown") : `${image.os}/${image.architecture}`}
                     </Row>
                     <Row label={td("created")}>
                       <span title={formatDateTime(image.createdAt)}>{formatRelative(image.createdAt)}</span>
                     </Row>
                     <Row label={td("pulled")}>{image.pulledAt ? formatRelative(image.pulledAt) : td("pulledNever")}</Row>
                     <Row label={td("size")}>{formatMem(image.sizeMb)}</Row>
-                    <Row label={td("layers")}>{image.layers}</Row>
+                    <Row label={td("layers")}>{image.metadataUnavailable ? td("unknown") : image.layers}</Row>
                     <Row label={td("digest")} mono>
                       <span className="flex flex-wrap items-center gap-2">
                         <span title={image.digest}>{shortDigest(image.digest)}…</span>
@@ -180,11 +183,11 @@ export function ImageDetails({ id, image, host, onClose, onPull, onRemove }: Ima
                 <Separator />
                 <Section title={td("actions")}>
                   <div className="flex flex-wrap gap-2">
-                    <Button size="sm" variant="outline" disabled={!online || image.tag === null} onClick={() => onPull(image)}>
+                    <Button size="sm" variant="outline" disabled={!pull.available || !!image.inventory?.stale || !online || image.tag === null} title={pull.reason} onClick={() => onPull(image)}>
                       <Download data-icon="inline-start" />
                       {t("menu.pullAgain")}
                     </Button>
-                    <Button size="sm" variant="outline" className="text-destructive hover:text-destructive" disabled={!online || image.consumers.length > 0} onClick={() => onRemove(image)}>
+                    <Button size="sm" variant="outline" className="text-destructive hover:text-destructive" disabled={!remove.available || !!image.inventory?.stale || !online || image.consumers.length > 0} title={remove.reason} onClick={() => onRemove(image)}>
                       <Trash2 data-icon="inline-start" />
                       {t("menu.remove")}
                     </Button>

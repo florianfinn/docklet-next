@@ -1,3 +1,4 @@
+import { InventoryNotice } from "@/features/stacks/InventoryNotice";
 import { CalendarClock, Check, Gauge, HardDrive, History, LayoutGrid, Plus, Radar, ScrollText, ShieldAlert, Siren, SlidersHorizontal, Globe } from "lucide-react";
 import { useCallback, useMemo, useState, type ReactNode } from "react";
 import { flushSync } from "react-dom";
@@ -105,7 +106,7 @@ export default function DashboardPage() {
     [hosts.visible, stacks.visible, containers.visible, runs, images, now, diskKey],
   );
   const updates = stacks.visible.reduce((n, s) => n + s.services.filter((x) => hasUpdate(x.update)).length, 0) + containers.visible.filter((c) => c.origin !== "compose" && hasUpdate(c.update)).length;
-  const critical = images.filter((i) => i.usage === "running").reduce((n, i) => n + i.counts.critical, 0);
+  const critical = security.data?.enabled ? images.filter((i) => i.usage === "running").reduce((n, i) => n + i.counts.critical, 0) : undefined;
 
   const coreLoading = hosts.isPending || stacks.isPending || containers.isPending;
   const visible = visibleWidgets(layout).filter((id) => import.meta.env.DEV || !isServiceWidget(id));
@@ -161,7 +162,7 @@ export default function DashboardPage() {
           <ScheduleWidget jobs={schedule.data.filter((j) => !j.hostId || visibleIds.has(j.hostId))} hosts={hosts.byId} now={now} />
         );
       case "security":
-        return security.isPending ? <WidgetBodySkeleton /> : security.isError ? <QueryError compact onRetry={() => void security.refetch()} /> : <SecurityWidget security={security.data} visibleHostIds={visibleIds} />;
+        return security.isPending ? <WidgetBodySkeleton /> : security.isError ? <QueryError compact error={security.error} onRetry={() => void security.refetch()} /> : <SecurityWidget security={security.data} visibleHostIds={visibleIds} />;
       case "apps":
         return <AppsWidget stacks={stacks.visible} hosts={hosts.byId} />;
       case "events":
@@ -194,6 +195,7 @@ export default function DashboardPage() {
           </>
         }
       />
+      <InventoryNotice hosts={hosts.visible} items={[...stacks.visible, ...containers.visible, ...Object.values(metrics ?? {})]} />
       {coreLoading ? (
         <DashboardSkeleton sizes={visible.map((id) => widgetSize(layout, id))} />
       ) : stacks.isError || containers.isError ? (

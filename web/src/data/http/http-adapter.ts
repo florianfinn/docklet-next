@@ -4,12 +4,18 @@
 // License: Apache-2.0
 // Deviations: Original HTTP and SSE adapter for issue 38.
 
-import type { operations, paths } from "@/api/generated/schema";
+import type { components, operations, paths } from "@/api/generated/schema";
 
 import type { DockletAdapter, Topic } from "../adapter";
 import { AdapterOutcomeError, GENERIC_REASON, HUB_REF, unavailable, type CapabilityDescriptor, type ResourceRef } from "../capability";
 import { createDisconnectedAdapter } from "../disconnected-adapter";
 import type { CodedActionRun } from "../message-code";
+import type { InventoryObservation } from "@/domain/model";
+import { createMetricsReader, type MetricsSocket } from "./metrics";
+import { createResourceReader } from "./resources";
+import { createInventoryReader } from "./inventory";
+import { mapHost } from "./hosts";
+import { createHostCommands } from "./host-commands";
 import { mapActivityDetail, mapEvent } from "./map-dto";
 import { createHttpHubBackups } from "./hub-backups";
 import { createCsrfClient } from "./csrf-client";
@@ -21,13 +27,14 @@ type Body<I extends ReadOperation> = operations[I]["responses"][200]["content"][
 type StreamPayload = operations["streamClient"]["responses"][200]["content"]["text/event-stream"][number]["data"];
 type Source = Pick<EventSource, "close" | "onopen" | "onmessage" | "onerror"> & Partial<Pick<EventSource, "readyState">>;
 
-const IMPLEMENTED = new Set(["listActions", "listEvents", "subscribeActions", "subscribeChanges", "getAuthMode", "getCurrentUser", "login", "logout", "changePassword", "updateMyLocale", "getSetupStatus", "completeSetup", "getConnectedSettings", "saveSettings"]);
+const IMPLEMENTED = new Set(["registerHost", "issueAgentToken", "removeHost", "discoverHub", "listStacks", "getStack", "listContainers", "listHosts", "listActions", "listEvents", "subscribeActions", "subscribeChanges", "getAuthMode", "getCurrentUser", "login", "logout", "changePassword", "updateMyLocale", "getSetupStatus", "completeSetup", "getConnectedSettings", "saveSettings", "listImages", "listVolumes", "getVolume", "getTopology", "subscribeMetrics"]);
 const RECONNECT_MS = 250;
 
 export interface HttpAdapterOptions {
   baseUrl?: string;
   fetch?: typeof globalThis.fetch;
   eventSource?: (url: string) => Source;
+  webSocket?: (url: string) => MetricsSocket;
   uploadFactory?: () => XMLHttpRequest;
 }
 
@@ -87,12 +94,30 @@ export function createHttpAdapter(options: HttpAdapterOptions = {}): DockletAdap
     return body as Body<I>;
   }
 
+  const capabilityReads = new Map<string, Promise<Body<"get-capabilities">["data"]>>();
+  let environmentState: string | undefined;
+  const inventoryTopics: Topic[] = ["stacks", "containers", "images", "volumes", "topology"];
+  function invalidateCapabilities() { capabilityReads.clear(); }
+  function environmentKey(rows: components["schemas"]["EnvironmentEnvironment"][]) {
+    return JSON.stringify(rows.map((row) => [row.id, row.status, row.enabled, row.apiUrl, row.isEdge, row.agentReport?.version.currentVersion, row.agentReport?.version.agentContractVersion, row.agentReport?.version.agentContractFingerprint]).sort((a, b) => String(a[0]).localeCompare(String(b[0]))));
+  }
+
   async function getCapability(operationId: string, resourceRef: ResourceRef = HUB_REF): Promise<CapabilityDescriptor> {
     const fallback = (reasonCode = GENERIC_REASON): CapabilityDescriptor => ({ operationId, resourceRef, available: false, disabledReasonCode: reasonCode });
     let descriptors: Body<"get-capabilities">["data"];
     try {
-      const body = await read("get-capabilities", "/capabilities", { kind: resourceRef.kind, id: resourceRef.id });
-      descriptors = body.data;
+      const key = JSON.stringify([resourceRef.kind, resourceRef.id]);
+      let pending = capabilityReads.get(key);
+      if (!pending) {
+        pending = read("get-capabilities", "/capabilities", { kind: resourceRef.kind, id: resourceRef.id }).then((body) => {
+          if (!Array.isArray(body.data)) throw new Error("capabilities.invalid-descriptors");
+          return body.data;
+        });
+        capabilityReads.set(key, pending);
+        const started = pending;
+        void pending.catch(() => { if (capabilityReads.get(key) === started) capabilityReads.delete(key); });
+      }
+      descriptors = await pending;
     } catch { return fallback(); }
     if (!Array.isArray(descriptors)) return fallback();
     const found = descriptors.find((entry) => entry?.operationId === operationId && entry.resourceRef?.kind === resourceRef.kind && entry.resourceRef.id === resourceRef.id);
@@ -183,7 +208,7 @@ export function createHttpAdapter(options: HttpAdapterOptions = {}): DockletAdap
 
   function refreshSubscribed(): void {
     refreshRuns();
-    if (changeListeners.size) changeListeners.forEach((listener) => listener(["events"]));
+    if (changeListeners.size) changeListeners.forEach((listener) => listener(["events", "hosts", "stacks", "containers", "images", "volumes", "topology"]));
   }
 
   function handleStream(data: string, eventId: string): void {
@@ -200,10 +225,20 @@ export function createHttpAdapter(options: HttpAdapterOptions = {}): DockletAdap
       const activityId = envelope.activity.activityId ?? envelope.activity.activity?.id;
       if (activityId) refreshRun(activityId, envelope.activity.environmentId ?? envelope.activity.activity?.environmentId);
       else refreshRuns();
+      changeListeners.forEach((listener) => listener(["events"]));
       return;
     }
     if (envelope.channel === "events" && envelope.eventLog && typeof envelope.eventLog.type === "string") {
       changeListeners.forEach((listener) => listener(["events"]));
+      return;
+    }
+    if (envelope.channel === "environments") {
+      invalidateCapabilities();
+      const rows = envelope.environment?.environments;
+      const next = Array.isArray(rows) ? environmentKey(rows) : undefined;
+      const changed = next === undefined || next !== environmentState;
+      environmentState = next;
+      changeListeners.forEach((listener) => listener(changed ? ["hosts", ...inventoryTopics] : ["hosts"]));
       return;
     }
     refreshSubscribed();
@@ -214,7 +249,7 @@ export function createHttpAdapter(options: HttpAdapterOptions = {}): DockletAdap
     sourceOpen = false;
     let opened: Source;
     try {
-      opened = sourceFactory(`${baseUrl}/stream?channels=activities%2Cevents`);
+      opened = sourceFactory(`${baseUrl}/stream?channels=activities%2Cevents%2Cenvironments`);
     } catch (error) {
       window.dispatchEvent(new CustomEvent("docklet:adapter-error", { detail: classifiedError(error) }));
       scheduleReconnect();
@@ -260,16 +295,37 @@ export function createHttpAdapter(options: HttpAdapterOptions = {}): DockletAdap
     appliedRunSequences.clear();
   }
 
+  const observations = new Map<string, InventoryObservation>();
+  async function listHosts() {
+    await requireCapability("listHosts");
+    const rows = await page("listEnvironments", "/environments", 100);
+    try {
+      const hosts = rows.map((row) => ({ ...mapHost(row), inventory: observations.get(row.id) }));
+      environmentState = environmentKey(rows);
+      return hosts;
+    }
+    catch (error) { throw classifiedError({ code: "listHosts.mapping-error", cause: error }); }
+  }
+  function observeHost(hostId: string, state: InventoryObservation) {
+    const old = observations.get(hostId);
+    observations.set(hostId, state);
+    if (JSON.stringify(old) !== JSON.stringify(state)) changeListeners.forEach((listener) => listener(["hosts"]));
+  }
+  const inventory = createInventoryReader(baseUrl, fetcher, listHosts, requireCapability, observeHost);
   const unsupported = createDisconnectedAdapter();
   const methods = Object.fromEntries(Object.keys(unsupported).filter((key) => key !== "kind").map((operationId) => [operationId, (...args: unknown[]) => Promise.reject(unavailable(operationId, refFor(operationId, args), "capability.mapping-unavailable"))])) as unknown as DockletAdapter;
   return {
     ...methods,
-    ...createHttpAuth(baseUrl, client),
+    ...createHttpAuth(baseUrl, client, invalidateCapabilities),
+    ...createHostCommands(baseUrl, client, requireCapability, () => { invalidateCapabilities(); changeListeners.forEach((listener) => listener(["hosts", ...inventoryTopics])); }),
     ...createSettingsCore(baseUrl, client),
     ...createHttpHubBackups(baseUrl, client, options.uploadFactory),
     kind: "http",
     mappedOperations: IMPLEMENTED,
     getCapability,
+    listHosts,
+    ...inventory,
+    ...createResourceReader(baseUrl, fetcher, listHosts, requireCapability, observeHost),
     listActions: loadActions,
     listEvents: loadEvents,
     subscribeActions(listener) {
@@ -284,7 +340,7 @@ export function createHttpAdapter(options: HttpAdapterOptions = {}): DockletAdap
       connect();
       return () => { changeListeners.delete(listener); disconnectIfUnused(); };
     },
-    subscribeMetrics: () => () => undefined,
+    subscribeMetrics: createMetricsReader(baseUrl, fetcher, listHosts, requireCapability, options.webSocket ?? ((url) => new WebSocket(url)), observeHost),
     subscribeLogs: () => () => undefined,
     subscribeContainerLogs: () => () => undefined,
   };

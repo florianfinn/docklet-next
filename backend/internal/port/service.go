@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace
+// Deviations: Local module namespace; exclude agent port mappings.
 
 package port
 
@@ -37,6 +37,9 @@ func (s *PortService) ListPortsPaginated(ctx context.Context, params pagination.
 
 	items := make([]porttypes.PortMapping, 0)
 	for _, rawContainer := range containers {
+		if rawContainer.Labels["io.docklet.system"] == "agent" {
+			continue
+		}
 		summary := container.NewSummary(rawContainer)
 		containerName := primaryContainerNameInternal(summary.Names, summary.ID)
 		for _, port := range summary.Ports {

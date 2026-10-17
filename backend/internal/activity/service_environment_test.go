@@ -7,6 +7,9 @@
 package activity
 
 import (
+	"encoding/json/v2"
+	"github.com/florianfinn/docklet-next/types/contract"
+	"github.com/florianfinn/docklet-next/types/version"
 	"net/http"
 	"net/http/httptest"
 	"sync"
@@ -47,6 +50,10 @@ func TestSyncResourcesToEnvironmentOutcomes(t *testing.T) {
 				mu.Lock()
 				calls = append(calls, r.URL.Path)
 				mu.Unlock()
+				if r.URL.Path == "/api/app-version" {
+					require.NoError(t, json.MarshalWrite(w, version.Info{AgentContractVersion: contract.AgentHubVersion, AgentContractFingerprint: contract.AgentHubFingerprint}))
+					return
+				}
 				switch tc.failures[r.URL.Path] {
 				case "status":
 					http.Error(w, "private-agent-response", http.StatusUnauthorized)
@@ -85,7 +92,7 @@ func TestSyncResourcesToEnvironmentOutcomes(t *testing.T) {
 			}
 			mu.Lock()
 			defer mu.Unlock()
-			require.Equal(t, paths, calls)
+			require.Equal(t, append([]string{"/api/app-version"}, paths...), calls)
 		})
 	}
 }

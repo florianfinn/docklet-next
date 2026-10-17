@@ -97,7 +97,7 @@ func ProxyWebSocketRequest(c *echo.Context, tunnel *AgentTunnel, targetPath stri
 
 func buildWebSocketHeaders(req *http.Request) map[string]string {
 	headers := make(map[string]string)
-	for k, v := range req.Header {
+	for k, v := range AgentRequestHeaders(req.Header) {
 		if len(v) > 0 && http.CanonicalHeaderKey(k) != HeaderCookie {
 			headers[k] = v[0]
 		}

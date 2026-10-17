@@ -4,7 +4,7 @@ import { deLogin } from "@/features/auth/login/messages/de";
 import { deContainers } from "@/features/containers/messages/de";
 import { deDashboard } from "@/features/dashboard/messages/de";
 import { deRunMessages } from "@/data/messages/run-de";
-import { deHosts } from "@/features/hosts/messages/de";
+import { deHosts, deEnvironmentEvents } from "@/features/hosts/messages/de";
 import { deHubBackups } from "@/features/hub-backups/messages/de";
 import { deImages } from "@/features/images/messages/de";
 import { deSettings } from "@/features/settings/messages/de";
@@ -36,6 +36,7 @@ export const messages: typeof enMessages = {
   shell: deShell,
   preview: import.meta.env.DEV ? dePreview : ({} as typeof dePreview),
   activity: deActivity,
+  environment: deEnvironmentEvents,
   user: deUserEvents,
   lab: import.meta.env.DEV ? deLab : ({} as typeof deLab),
   visual: deVisual,

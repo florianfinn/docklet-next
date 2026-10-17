@@ -372,10 +372,10 @@ export function networkGroup(n: Pick<TopologyNetwork, "driver" | "builtIn">): Ne
   return n.driver === "macvlan" || n.driver === "ipvlan" ? "lan" : "custom";
 }
 
-const DRIVER_ORDER: Record<NetworkDriver, number> = { macvlan: 0, ipvlan: 1, bridge: 2, overlay: 3, host: 4, none: 5 };
+const DRIVER_ORDER: Record<NetworkDriver, number> = { macvlan: 0, ipvlan: 1, bridge: 2, overlay: 3, host: 4, none: 5, null: 5 };
 
 /** Stable display order: group, then stack-less before stack networks, then name. */
 export function sortNetworks<T extends TopologyNetwork>(nets: readonly T[]): T[] {
   const rank = (n: T) => NETWORK_GROUPS.indexOf(networkGroup(n));
-  return nets.toSorted((a, b) => rank(a) - rank(b) || DRIVER_ORDER[a.driver] - DRIVER_ORDER[b.driver] || Number(!!a.stackId) - Number(!!b.stackId) || a.name.localeCompare(b.name, "de"));
+  return nets.toSorted((a, b) => rank(a) - rank(b) || (DRIVER_ORDER[a.driver as NetworkDriver] ?? 6) - (DRIVER_ORDER[b.driver as NetworkDriver] ?? 6) || Number(!!a.stackId) - Number(!!b.stackId) || a.name.localeCompare(b.name, "de"));
 }

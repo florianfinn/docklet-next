@@ -91,14 +91,14 @@ export interface HostsApi {
   /** Restarts the host's own agent container and returns the action id. */
   restartAgent(hostId: string): Promise<string>;
   /** Registers a host that waits for its agent (status "pending"). */
-  registerHost(input: RegisterHostInput): Promise<Host>;
+  registerHost(input: RegisterHostInput): Promise<{ host: Host; token: string }>;
   /** Connects the agent and returns the connection run's action id. */
   connectHost(hostId: string): Promise<string>;
   removeHost(hostId: string): Promise<void>;
   /** Docklet's own components per host; they never appear in stack or container lists. */
   listSystemComponents(): Promise<SystemComponent[]>;
-  /** Issues an agent registration token. */
-  issueAgentToken(hostName: string): Promise<string>;
+  /** Rotates an existing host credential and returns the new token once. */
+  issueAgentToken(hostId: string): Promise<string>;
 }
 
 export interface CreateVolumeInput {
@@ -195,7 +195,7 @@ export interface TestResult {
 
 export interface SettingsApi {
   getSetupStatus(): Promise<boolean>;
-  getConnectedSettings(): Promise<Pick<HubSettings, "general" | "activity">>;
+  getConnectedSettings(): Promise<Pick<HubSettings, "general" | "activity" | "hostDefaults">>;
   getSettings(): Promise<HubSettings>;
   saveSettings<K extends SettingsSection>(section: K, value: HubSettings[K]): Promise<void>;
   /** First-run setup; secrets are not part of the payload. */

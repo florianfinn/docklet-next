@@ -2,7 +2,7 @@ import { Download, FileArchive, FileCode2, KeyRound, RefreshCw, ScrollText, Term
 import { useMemo, useState } from "react";
 import { useTranslations } from "use-intl";
 
-import { buildInstallArtifacts, type AgentInstallPlan } from "@/domain/agent-install";
+import { buildInstallArtifacts, installPackageFiles, type AgentInstallPlan } from "@/domain/agent-install";
 import { formatBytes } from "@/domain/format";
 import { slugify } from "@/domain/validation";
 import { CodeBlock } from "@/shared/components/code-block";
@@ -19,20 +19,17 @@ export function InstallArtifacts({ plan, onRegenerateToken }: { plan: AgentInsta
   const [way, setWay] = useState<Way>("script");
   const a = useMemo(() => buildInstallArtifacts(plan), [plan]);
   const slug = slugify(plan.hostName);
-  const files = [
-    { name: "compose.yaml", content: a.compose, icon: <FileCode2 /> },
-    { name: ".env", content: a.env, icon: <KeyRound /> },
-    { name: "install.sh", content: a.script, icon: <Terminal />, mode: 0o755 },
-    { name: "README.txt", content: a.readme, icon: <ScrollText /> },
-  ];
+  const icons = [<FileCode2 />, <KeyRound />, <Terminal />, <ScrollText />];
+  const files = installPackageFiles(a).map((file, i) => ({ ...file, icon: icons[i] }));
   const tarName = `docklet-agent-${slug}.tar`;
 
   return (
     <div className="flex flex-col gap-4">
       <Alert className="border-warning/30 bg-warning/8">
         <KeyRound className="text-warning" />
-        <AlertDescription className="text-xs">{t("demoNote")}</AlertDescription>
+        <AlertDescription className="text-xs">{t("historyWarning")}</AlertDescription>
       </Alert>
+      {(plan.connection === "direct" || plan.hubUrl.startsWith("http://")) && <Alert><AlertDescription>{t("httpWarning")}</AlertDescription></Alert>}
       <div className="flex flex-wrap items-center gap-3 rounded-xl border bg-card/40 p-3">
         <div className="min-w-0 flex-1">
           <div className="text-xs font-medium text-muted-foreground">{t("token")}</div>
@@ -57,7 +54,9 @@ export function InstallArtifacts({ plan, onRegenerateToken }: { plan: AgentInsta
           { value: "compose", label: t("tabs.compose"), icon: <FileCode2 /> },
           { value: "package", label: t("tabs.package"), icon: <FileArchive /> },
         ]}
-        className="self-start"
+        fit="content"
+        wrap
+        className="max-w-full self-start"
       />
       {way === "script" && (
         <div className="flex flex-col gap-2">

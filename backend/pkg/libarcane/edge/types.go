@@ -205,6 +205,8 @@ type grpcResponseState struct {
 
 // AgentTunnel represents an active tunnel connection from an edge agent
 type AgentTunnel struct {
+	APIKeyID      string
+	TokenHash     string
 	EnvironmentID string
 	Conn          TunnelConnection
 	Pending       sync.Map // map[string]*PendingRequest
@@ -232,6 +234,7 @@ type internalTunnelRequestContextKey struct{}
 
 // TunnelServer handles incoming edge agent connections on the manager side.
 type TunnelServer struct {
+	sessionKeyResolver func(context.Context, string, string) (string, error)
 	registry           *TunnelRegistry
 	resolver           EnvironmentResolver
 	nameResolver       EnvironmentNameResolver

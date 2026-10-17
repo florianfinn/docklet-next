@@ -16,7 +16,7 @@ func TestCapabilityDescriptorAvailabilityInvariantInternal(t *testing.T) {
 	ref := capability.ResourceRef{Kind: "environment", ID: "env-1"}
 	descriptors := capabilityDescriptorsInternal(ref)
 	require.Len(t, descriptors, len(adapterOperationIDs))
-	available := map[string]bool{"listActions": true, "listEvents": true, "subscribeActions": true, "subscribeChanges": true}
+	available := map[string]bool{"listImages": true, "listVolumes": true, "getVolume": true, "getTopology": true, "subscribeMetrics": true, "listStacks": true, "getStack": true, "listContainers": true, "listHosts": true, "listActions": true, "listEvents": true, "subscribeActions": true, "subscribeChanges": true}
 	for _, descriptor := range descriptors {
 		require.Equal(t, ref, descriptor.ResourceRef)
 		require.Equal(t, available[descriptor.OperationID], descriptor.Available)

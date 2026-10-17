@@ -103,7 +103,7 @@ func TestCopyRequestHeaders_SkipsExpectedHeaders(t *testing.T) {
 	require.Empty(t, to.Get("Transfer-Encoding"))
 }
 
-func TestSetAuthHeader_ForwardsAPIKeyAndAuthorization(t *testing.T) {
+func TestSetAuthHeader_DropsHubAPIKeyAndAuthorization(t *testing.T) {
 	e := echo.New()
 	w := httptest.NewRecorder()
 	req0 := httptest.NewRequest(http.MethodGet, "http://example.com", http.NoBody)
@@ -115,11 +115,11 @@ func TestSetAuthHeader_ForwardsAPIKeyAndAuthorization(t *testing.T) {
 	require.NoError(t, err)
 
 	SetAuthHeader(req, c)
-	require.Equal(t, "api-token", req.Header.Get(HeaderAPIKey))
-	require.Equal(t, "Bearer auth", req.Header.Get(HeaderAuthorization))
+	require.Empty(t, req.Header.Get(HeaderAPIKey))
+	require.Empty(t, req.Header.Get(HeaderAuthorization))
 }
 
-func TestSetAuthHeader_UsesCookieTokenWhenNoAuthorization(t *testing.T) {
+func TestSetAuthHeader_DoesNotConvertCookieToBearer(t *testing.T) {
 	e := echo.New()
 	w := httptest.NewRecorder()
 	req0 := httptest.NewRequest(http.MethodGet, "http://example.com", http.NoBody)
@@ -130,7 +130,7 @@ func TestSetAuthHeader_UsesCookieTokenWhenNoAuthorization(t *testing.T) {
 	require.NoError(t, err)
 
 	SetAuthHeader(req, c)
-	require.Equal(t, "Bearer cookie-token", req.Header.Get(HeaderAuthorization))
+	require.Empty(t, req.Header.Get(HeaderAuthorization))
 }
 
 func TestSetAgentToken(t *testing.T) {
@@ -207,7 +207,7 @@ func TestGetSkipHeaders_ContainsExpectedEntries(t *testing.T) {
 	require.Contains(t, skip, "Referer")
 }
 
-func TestBuildWebSocketHeaders_UsesAuthorizationHeaderAndAddsAgentToken(t *testing.T) {
+func TestBuildWebSocketHeaders_DropsAuthorizationAndAddsAgentToken(t *testing.T) {
 	e := echo.New()
 	w := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodGet, "http://example.com", http.NoBody)
@@ -220,12 +220,12 @@ func TestBuildWebSocketHeaders_UsesAuthorizationHeaderAndAddsAgentToken(t *testi
 	headers := BuildWebSocketHeaders(c, &agent)
 
 	require.Equal(t, agent, headers.Get(HeaderAPIKey))
-	require.Equal(t, "Bearer auth", headers.Get(HeaderAuthorization))
+	require.Empty(t, headers.Get(HeaderAuthorization))
 	require.Empty(t, headers.Get(HeaderCookie))
 	require.Equal(t, agent, headers.Get(HeaderAgentToken))
 }
 
-func TestBuildWebSocketHeaders_UsesCookieTokenAsBearer(t *testing.T) {
+func TestBuildWebSocketHeaders_DoesNotConvertCookieToBearer(t *testing.T) {
 	e := echo.New()
 	w := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodGet, "http://example.com", http.NoBody)
@@ -233,7 +233,7 @@ func TestBuildWebSocketHeaders_UsesCookieTokenAsBearer(t *testing.T) {
 	c := e.NewContext(req, w)
 
 	headers := BuildWebSocketHeaders(c, nil)
-	require.Equal(t, "Bearer cookie-token", headers.Get(HeaderAuthorization))
+	require.Empty(t, headers.Get(HeaderAuthorization))
 	require.NotContains(t, headers, HeaderCookie)
 }
 

@@ -1,3 +1,4 @@
+import { InventoryNotice } from "../InventoryNotice";
 import { ArrowLeft, FileCode2, FileText, History, LayoutGrid, Layers } from "lucide-react";
 import { useState } from "react";
 import { Link, useParams, useSearchParams } from "react-router";
@@ -54,6 +55,7 @@ function ExistingStack({ stack }: { stack: StackDetail }) {
 
   return (
     <>
+      <InventoryNotice hosts={host ? [host] : []} items={[stack]} />
       <StackHeader stack={stack} host={host} inline={tab === "deployments"} />
       <Tabs value={tab} onValueChange={(v) => setParams((p) => ({ ...Object.fromEntries(p), tab: v }), { replace: true })}>
         <TabsList aria-label={t("tabsLabel")} className="mb-4 max-w-full flex-wrap justify-start group-data-[orientation=horizontal]/tabs:h-auto">

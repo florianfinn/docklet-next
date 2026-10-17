@@ -5,12 +5,15 @@ import { useTranslations } from "use-intl";
 import { ChoiceCards, TextField } from "@/shared/components/form-field";
 import { ToneBadge } from "@/shared/components/tone";
 import { cn } from "@/shared/lib/utils";
+import { Alert, AlertDescription } from "@/shared/ui/alert";
 import { FieldGroup, FieldLegend, FieldSet } from "@/shared/ui/field";
+
+import type { HubDiscovery } from "@/domain/hub-discovery";
 
 import { HOST_COLORS, patchDraft, type DraftErrors, type HostDraft } from "./onboarding-draft";
 import { useFieldError } from "./use-field-error";
 
-export function ConnectionStep({ draft, errors, showErrors, hubUrl, locked }: { draft: HostDraft; errors: DraftErrors; showErrors: boolean; hubUrl: string; locked: boolean }) {
+export function ConnectionStep({ draft, errors, showErrors, hubUrl, candidates, locked }: { draft: HostDraft; errors: DraftErrors; showErrors: boolean; hubUrl: string; candidates?: HubDiscovery["candidates"]; locked: boolean }) {
   const t = useTranslations("hosts.onboarding");
   const err = useFieldError(errors, showErrors);
   return (
@@ -67,16 +70,21 @@ export function ConnectionStep({ draft, errors, showErrors, hubUrl, locked }: { 
         </div>
       ) : (
         <div className="rounded-xl border bg-card/40 p-3.5">
-          <div className="text-sm font-medium">{t("hubUrl")}</div>
-          <code className="mt-1 block font-mono text-[13px]">{hubUrl}</code>
+          <TextField id="host-hub-url" label={t("hubUrl")} value={hubUrl} onChange={(hubUrl) => patchDraft({ hubUrl })} error={err("hubUrl")} mono disabled={locked} />
+          {candidates && <div className="mt-2 flex flex-col items-start gap-1" aria-label={t("hubCandidates")}>
+            {candidates.map((candidate) => <button type="button" key={candidate.id} disabled={locked} className="max-w-full text-left text-xs break-words text-primary-text hover:underline" onClick={() => patchDraft({ hubUrl: candidate.url })}>
+              {candidate.url} · {t(candidate.reach === "same-host" ? "reachSameHost" : "reachUnknown")}
+            </button>)}
+          </div>}
           <p className="mt-1 text-xs text-muted-foreground">
-            {t("hubUrlHint")}{" "}
+            {t("hubUrlHint")} {t("proxyBypass")}{" "}
             <Link to="/settings/general" className="text-primary-text hover:underline">
               {t("hubUrlEdit")}
             </Link>
           </p>
         </div>
       )}
+      {(draft.connection === "direct" || hubUrl.startsWith("http://")) && <Alert className="border-warning/30 bg-warning/8"><ShieldAlert /><AlertDescription>{t("httpWarning")}</AlertDescription></Alert>}
       <p className="flex items-start gap-2 text-xs text-muted-foreground">
         <ShieldAlert className="mt-0.5 size-3.5 shrink-0" aria-hidden />
         {t("noWireguard")}

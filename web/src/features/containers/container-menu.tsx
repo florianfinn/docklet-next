@@ -1,4 +1,5 @@
 import { Eye, Layers, Package, Pencil, Play, RotateCw, Square, SquareArrowOutUpRight } from "lucide-react";
+import { useCapability } from "@/data/use-capability";
 import { useNavigate } from "react-router";
 import { useTranslations } from "use-intl";
 
@@ -17,6 +18,8 @@ export function useContainerMenu(c: ContainerInfo, open: { onOpen: (id: string) 
   const t = useTranslations("containers");
   const navigate = useNavigate();
   const cmd = useContainerCommands();
+  const command = useCapability("runContainerCommand");
+  const edit = useCapability("recreateContainer");
   const hide = useHideAction("containers");
   const restart = useContainerRestart();
   const run: MenuAction[] =
@@ -34,8 +37,8 @@ export function useContainerMenu(c: ContainerInfo, open: { onOpen: (id: string) 
       { id: "image", label: t("menu.image"), icon: <Package />, onSelect: () => navigate(imageHref(c)) },
     ],
     [
-      ...run,
-      { id: "edit", label: t("menu.edit"), icon: <Pencil />, disabled: c.origin !== "standalone", onSelect: () => open.onEdit(c.id) },
+      ...run.map((action) => ({ ...action, disabled: !command.available || !!c.inventory?.stale, title: command.reason })),
+      { id: "edit", label: t("menu.edit"), icon: <Pencil />, disabled: !edit.available || !!c.inventory?.stale || c.restrictions?.recreate || c.origin !== "standalone", onSelect: () => open.onEdit(c.id) },
       ...(hasUpdate(c.update) && c.origin !== "unraid" && c.origin !== "unknown" ? [{ id: "update", label: t("menu.update"), icon: <RotateCw />, onSelect: () => void cmd.update(c.id) }] : []),
     ],
     [hide(c.id, c.name, hidden)],

@@ -1,0 +1,15 @@
+{
+  "version": 3,
+  "minimumAgentContractVersion": 3,
+  "versionInfoFields": ["agentContractVersion", "agentContractFingerprint", "minimumAgentContractVersion", "onboardingChecks?"],
+  "onboardingCheckFields": ["projectDirectory", "ownerUid", "ownerGid", "writable", "socketGroup"],
+  "restrictedRoutes": ["GET /api/health", "HEAD /api/health", "GET /api/app-version", "GET /api/version", "HEAD /api/environments/0/system/health", "GET /api/environments/0/system/upgrade/check", "POST /api/environments/0/system/upgrade"],
+  "edgeProtocol": "tunnel/v1 (unchanged)",
+  "proxiedOperations": [
+    {
+      "operationId": "get-activity",
+      "detailFields": ["activity", "messages", "stepTrace", "output", "outputTruncated"],
+      "outputLineFields": ["timestamp", "stream", "text", "step?", "level?"]
+    }
+  ]
+}

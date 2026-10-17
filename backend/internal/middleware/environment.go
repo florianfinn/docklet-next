@@ -30,8 +30,10 @@ import (
 
 	"github.com/florianfinn/docklet-next/backend/internal/common"
 	"github.com/florianfinn/docklet-next/backend/pkg/authz"
+	"github.com/florianfinn/docklet-next/backend/pkg/hoststate"
 	"github.com/florianfinn/docklet-next/backend/pkg/libarcane/edge"
 	"github.com/florianfinn/docklet-next/backend/pkg/libarcane/ws"
+	"github.com/florianfinn/docklet-next/backend/pkg/remenv"
 	"github.com/florianfinn/docklet-next/backend/pkg/utils/httpx"
 )
 
@@ -84,7 +86,10 @@ type EnvironmentMiddleware struct {
 	registry      *edge.TunnelRegistry
 	matcher       *authz.PermissionMatcher
 	// checkOrigin shares the local WebSocket origin and credential policy.
-	checkOrigin func(*http.Request) bool
+	checkOrigin         func(*http.Request) bool
+	proxyIdentityHeader string
+	snapshots           *hoststate.Store
+	agentAccess         remenv.AgentAccessCheck
 }
 
 // NewEnvProxyMiddlewareWithParamAndRegistry creates middleware with an injected tunnel registry.
@@ -96,6 +101,7 @@ func NewEnvProxyMiddlewareWithParamAndRegistry(
 	matcher *authz.PermissionMatcher,
 	registry *edge.TunnelRegistry,
 	checkOrigin func(*http.Request) bool,
+	options ...EnvironmentProxySecurity,
 ) echo.MiddlewareFunc {
 	if registry == nil {
 		registry = edge.NewTunnelRegistry()
@@ -111,6 +117,15 @@ func NewEnvProxyMiddlewareWithParamAndRegistry(
 		matcher:       matcher,
 		checkOrigin:   checkOrigin,
 	}
+	if len(options) > 0 {
+		m.proxyIdentityHeader = options[0].ProxyIdentityHeader
+		m.agentAccess = options[0].AgentAccess
+		m.snapshots = options[0].Snapshots
+		if options[0].HTTPClient != nil {
+			m.httpClient = options[0].HTTPClient
+		}
+	}
+
 	return func(next echo.HandlerFunc) echo.HandlerFunc {
 		return func(c *echo.Context) error {
 			return m.Handle(c, next)
@@ -159,13 +174,6 @@ func (m *EnvironmentMiddleware) Handle(c *echo.Context, next echo.HandlerFunc) e
 		})
 	}
 
-	if !enabled {
-		return c.JSON(http.StatusBadRequest, map[string]any{
-			"success": false,
-			"data":    map[string]any{"error": errors.New("Environment is disabled").Error()}, //nolint:staticcheck // Preserve the existing error message.
-		})
-	}
-
 	// SECURITY: Enforce the caller's per-environment permission BEFORE proxying.
 	// Remote agents run with a sudo permission set and perform no authorization
 	// of their own, so authorization for proxied requests must happen here,
@@ -178,6 +186,25 @@ func (m *EnvironmentMiddleware) Handle(c *echo.Context, next echo.HandlerFunc) e
 		})
 	}
 
+	return m.inventoryRead(c, envID, func() error {
+		if !enabled {
+			return c.JSON(http.StatusBadRequest, map[string]any{"success": false, "code": "agent.unavailable"})
+		}
+		return m.forwardInventoryRequest(c, envID, apiURL, accessToken)
+	})
+}
+
+func (m *EnvironmentMiddleware) forwardInventoryRequest(c *echo.Context, envID, apiURL string, accessToken *string) error {
+
+	if m.agentAccess != nil {
+		ctx, cancel, err := m.agentAccess(c.Request().Context(), envID, accessToken, c.Request().Method, m.buildProxyPath(c, envID))
+		if err != nil {
+			status, code := remenv.AgentAccessFailure(err)
+			return c.JSON(status, map[string]any{"success": false, "code": code})
+		}
+		defer cancel()
+		c.SetRequest(c.Request().WithContext(ctx))
+	}
 	isEdgeEnvironment := isEdgeEnvironmentURLInternal(apiURL)
 
 	if handled, proxyActiveEdgeTunnelErr := m.proxyActiveEdgeTunnelInternal(c, envID, accessToken); handled {
@@ -427,6 +454,9 @@ func (m *EnvironmentMiddleware) proxyActiveEdgeTunnelInternal(c *echo.Context, e
 	}
 
 	slog.DebugContext(c.Request().Context(), "Routing request through edge tunnel", "environmentId", envID, "path", c.Request().URL.Path)
+	if err := edge.RequireSessionKey(c.Request().Context(), tunnel); err != nil {
+		return true, m.abortEdgeTunnelUnavailable(c)
+	}
 	m.setProxyContextHeadersInternal(c, accessToken)
 	return true, m.proxyThroughTunnelInternal(c, tunnel, envID)
 }
@@ -440,11 +470,15 @@ func (m *EnvironmentMiddleware) proxyRecoveredEdgeTunnelInternal(c *echo.Context
 	}
 
 	slog.InfoContext(c.Request().Context(), "Recovered edge tunnel during request", "environmentId", envID)
+	if err := edge.RequireSessionKey(c.Request().Context(), tunnel); err != nil {
+		return true, m.abortEdgeTunnelUnavailable(c)
+	}
 	m.setProxyContextHeadersInternal(c, accessToken)
 	return true, m.proxyThroughTunnelInternal(c, tunnel, envID)
 }
 
 func (m *EnvironmentMiddleware) setProxyContextHeadersInternal(c *echo.Context, accessToken *string) {
+	remenv.StripHubCredentials(c.Request().Header, m.proxyIdentityHeader)
 	if accessToken != nil && *accessToken != "" {
 		c.Request().Header.Set(edge.HeaderAgentToken, *accessToken)
 		c.Request().Header.Set(edge.HeaderAPIKey, *accessToken)
@@ -598,6 +632,7 @@ func (m *EnvironmentMiddleware) waitForActiveEdgeTunnelInternal(ctx context.Cont
 func (m *EnvironmentMiddleware) abortEdgeTunnelUnavailable(c *echo.Context) error {
 	return c.JSON(http.StatusBadGateway, map[string]any{
 		"success": false,
+		"code":    "agent.unavailable",
 		"data": map[string]any{
 			"error": "Edge agent is not connected",
 		},
@@ -622,6 +657,7 @@ func (m *EnvironmentMiddleware) proxyWebSocket(c *echo.Context, target string, a
 
 // proxyHTTP handles standard HTTP proxy requests.
 func (m *EnvironmentMiddleware) proxyHTTP(c *echo.Context, target string, accessToken *string) error {
+	edge.CopyResponseHeaders(nil, c.Response().Header(), nil)
 	if isEdgeEnvironmentURLInternal(target) {
 		slog.WarnContext(c.Request().Context(), "Refusing direct HTTP proxy to edge environment without active tunnel", "target", target)
 		return m.abortEdgeTunnelUnavailable(c)
@@ -643,6 +679,7 @@ func (m *EnvironmentMiddleware) proxyHTTP(c *echo.Context, target string, access
 	if err != nil {
 		return c.JSON(http.StatusBadGateway, map[string]any{
 			"success": false,
+			"code":    "agent.unavailable",
 			"data":    map[string]any{"error": "Proxy request failed: " + err.Error()},
 		})
 	}
@@ -696,7 +733,7 @@ func (m *EnvironmentMiddleware) createProxyRequest(c *echo.Context, target strin
 
 	skip := edge.GetSkipHeaders()
 	edge.CopyRequestHeaders(srcReq.Header, req.Header, skip)
-	edge.SetAuthHeader(req, c)
+	remenv.StripHubCredentials(req.Header, m.proxyIdentityHeader)
 	edge.SetAgentToken(req, accessToken)
 	edge.SetForwardedHeaders(req, c.RealIP(), srcReq.Host)
 
@@ -707,10 +744,11 @@ func (m *EnvironmentMiddleware) createProxyRequest(c *echo.Context, target strin
 // 401 means the agent rejected the manager's credentials; passing it through
 // makes browser clients treat it as a lost session, so it becomes a 502.
 func (m *EnvironmentMiddleware) writeProxyResponse(c *echo.Context, resp *http.Response) error {
-	if resp.StatusCode == http.StatusUnauthorized {
+	if remenv.AgentAuthRejected(resp.StatusCode) {
 		slog.WarnContext(c.Request().Context(), "Remote environment rejected the manager's credentials", "target", resp.Request.URL.Host)
 		return c.JSON(http.StatusBadGateway, map[string]any{
 			"success": false,
+			"code":    "agent.invalid-token",
 			"data":    map[string]any{"error": "Remote environment rejected the manager's credentials"},
 		})
 	}
@@ -723,4 +761,12 @@ func (m *EnvironmentMiddleware) writeProxyResponse(c *echo.Context, resp *http.R
 		edge.CopyBodyWithFlush(w, resp.Body)
 	}
 	return nil
+}
+
+// EnvironmentProxySecurity supplies hub-owned identity and agent access boundaries.
+type EnvironmentProxySecurity struct {
+	Snapshots           *hoststate.Store
+	HTTPClient          *http.Client
+	ProxyIdentityHeader string
+	AgentAccess         remenv.AgentAccessCheck
 }

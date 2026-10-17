@@ -10,7 +10,7 @@ invoke the host operations below, so additions require an explicit review.
 | Module | Host exposure and reason |
 | --- | --- |
 | health | Readiness endpoint for the hub and local supervisor. |
-| version | Reports the agent version for protocol compatibility. |
+| version | Public version metadata for protocol compatibility. Only the configured manager credential on an agent adds project-directory ownership, effective write access and socket-group checks; the on-demand write probe is cached for 30 seconds. The hub never includes these checks. |
 | project | Reads and changes Compose projects and project files; needed for stack management. |
 | container | Reads state, logs and processes and controls lifecycle and configuration. |
 | image | Pulls, removes, exports, patches and scans images; needed for image management. |

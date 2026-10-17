@@ -174,7 +174,12 @@ func (s *ProjectService) ListProjects(ctx context.Context, params pagination.Que
 	statusFilter := strings.TrimSpace(params.Filters["status"])
 	updatesFilter := strings.TrimSpace(params.Filters["updates"])
 	labelFilter := strings.TrimSpace(params.Filters["label"])
+	snapshot := s.listing.Snapshot(ctx)
 	query := s.db.WithContext(ctx).Model(&Project{})
+	systemNames := listing.SystemProjectNames(snapshot.Containers)
+	if len(systemNames) > 0 {
+		query = query.Where("LOWER(name) NOT IN ? AND COALESCE(compose_project_name, '') NOT IN ?", systemNames, systemNames)
+	}
 	if archivedFilter := strings.TrimSpace(params.Filters["archived"]); !strings.EqualFold(archivedFilter, "all") {
 		archived, _ := kit.ParseBool(archivedFilter)
 		query = query.Where("is_archived = ?", archived)
@@ -201,7 +206,7 @@ func (s *ProjectService) ListProjects(ctx context.Context, params pagination.Que
 		// The paginated page gets live status from one Docker snapshot plus the
 		// compose-backed presentation fields, sharing one metadata env.
 		env := s.newProjectMetadataEnv(ctx, projectsArray)
-		result := s.projectListRows(ctx, env.projectsDirectory, projectsArray, s.listing.Snapshot(ctx))
+		result := s.projectListRows(ctx, env.projectsDirectory, projectsArray, snapshot)
 		metas := make([]projects.ArcaneComposeMetadata, len(projectsArray))
 		var metaGroup errgroup.Group
 		metaGroup.SetLimit(maxConcurrentComposeReads)
@@ -244,7 +249,6 @@ func (s *ProjectService) ListProjects(ctx context.Context, params pagination.Que
 		return nil, pagination.Response{}, fmt.Errorf("failed to list projects: %w", err)
 	}
 	env := s.newProjectMetadataEnv(ctx, nil)
-	snapshot := s.listing.Snapshot(ctx)
 	items := s.projectListRows(ctx, env.projectsDirectory, projectsArray, snapshot)
 	byID := make(map[string]Project, len(projectsArray))
 	for _, proj := range projectsArray {

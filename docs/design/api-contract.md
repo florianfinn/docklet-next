@@ -27,11 +27,11 @@ the mapping and its contract tests before that feature claims live data.
 
 | DTO schemas or absent wire shape | Web view models and port | Mapping gap | Owner |
 | --- | --- | --- | --- |
-| `EnvironmentEnvironment`, `EnvironmentAgentPairResponse` | `Host`, `AgentReport`, `HostsApi` | Hub environment identity and connection state do not carry the UI onboarding and installer fields directly. | Planned M5 Hosts, transport and read inventory |
+| `EnvironmentEnvironment`, `EnvironmentAgentPairResponse` | `Host`, `AgentReport`, `HostsApi` | Identity, connection state, last successful contact and nullable agent checks map through the host HTTP reader. Onboarding writes and installation metadata remain separate. | M5 #81 reads and state; #84 onboarding |
 | `SystemActorHostInfo`, `SystemActorInstance` | `SystemComponent`, `HostsApi` | Actor diagnostics need a host component projection and availability state. | Planned M5 Hosts, transport and read inventory |
-| No hub-discovery DTO | `HubDiscovery`, `HubApi` | Address candidates and network reachability need a server inspection contract. | Planned M5 Hosts, transport and read inventory |
-| `ProjectDetails`, `ProjectRuntimeService`, `ProjectTag` | `Stack`, `StackDetail`, `Service` | Compose project records need host IDs, service status, labels and UI display fields. | Planned M5 Hosts, transport and read inventory |
-| `ContainerDetails`, `ContainerSummary`, `ContainerComposeInfo` | `ContainerInfo`, `DockletAdapter` | Docker container records need origin classification, restrictions and display status. | Planned M5 Hosts, transport and read inventory |
+| `EnvironmentHubDiscovery` | `HubDiscovery`, `HubApi` | Admin-only inspection supplies a pinned agent image and configured-first URL candidates with unverified reachability hints. | M5 #84 onboarding |
+| `ProjectDetails`, `ProjectRuntimeService`, `ProjectTag` | `Stack`, `StackDetail`, `Service` | Host-scoped IDs, runtime service status/health/ports and project tags map into stack reads; retained observations accompany disconnected reads. | M5 #82 |
+| `ContainerDetails`, `ContainerSummary`, `ContainerComposeInfo` | `ContainerInfo`, `DockletAdapter` | Container summaries map host-scoped IDs, compose/run/unclear origin, protected recreation restrictions and display state. | M5 #82 |
 | `DashboardSnapshot`, `DashboardSnapshotContainers`, `DashboardSnapshotImages` | `HostMetrics`, `ContainerMetrics`, `MetricsSnapshot` | Aggregate dashboard payloads do not directly provide the per-host view and metric units. | Planned M5 Hosts, transport and read inventory |
 | `ActivityActivity`, `ActivityMessage`, `EventEvent` | `ActionRun`, `OpsEvent`, `CodedActionRun`, `CodedEvent` | Map persisted step traces, affected services and message codes into the HTTP adapter view models. | #38 |
 | `JobscheduleConfig`, `JobscheduleJobStatus`, `JobscheduleJobRunResponse` | `ScheduledJob`, `DockletAdapter` | Job state and next-run time need a common schedule projection using the M4 hub time zone. | Planned M10 Images and updates |

@@ -31,12 +31,18 @@ export function freshDraft(defaults: HostDefaults, usedColors: readonly string[]
   };
 }
 
-export type DraftErrors = Partial<Record<"name" | "address" | "port" | "projectDir" | "installDir" | "puid" | "pgid" | "socketGid", ValidationKey | InstallDirProblem>>;
+export type DraftErrors = Partial<Record<"name" | "address" | "port" | "projectDir" | "installDir" | "puid" | "pgid" | "socketGid" | "hubUrl", ValidationKey | InstallDirProblem>>;
 
 export function validateStep(step: OnboardingStep, d: HostDraft, takenNames: readonly string[]): DraftErrors {
   const e: DraftErrors = {};
   if (step === "connection") {
     e.name = hostName(d.name, takenNames);
+    if (d.hubUrl !== undefined) {
+      try {
+        const u = new URL(d.hubUrl);
+        if (!["http:", "https:"].includes(u.protocol) || !u.hostname || u.username || u.password || u.search || u.hash || !["", "/"].includes(u.pathname) || /[\r\n\0]/.test(d.hubUrl)) e.hubUrl = "url";
+      } catch { e.hubUrl = "url"; }
+    }
     if (d.connection === "direct") {
       e.address = hostAddress(d.address);
       e.port = port(d.port);
@@ -76,7 +82,7 @@ export function planFromDraft(d: HostDraft, hubUrl: string, timeZone: string): A
     projectDir: normalizePath(d.projectDir),
     installDir: normalizePath(d.installDir),
     fileOwner: draftFileOwner(d),
-    socketGid: d.detectSocket ? undefined : Number(d.socketGid) || undefined,
+    socketGid: d.detectSocket ? undefined : Number(d.socketGid),
     token: d.token ?? "DEMO-NUR-ANSICHT",
     timeZone,
   };

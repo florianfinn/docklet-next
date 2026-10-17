@@ -4,7 +4,7 @@ import { enLogin } from "@/features/auth/login/messages/en";
 import { enContainers } from "@/features/containers/messages/en";
 import { enDashboard } from "@/features/dashboard/messages/en";
 import { enRunMessages } from "@/data/messages/run-en";
-import { enHosts } from "@/features/hosts/messages/en";
+import { enHosts, enEnvironmentEvents } from "@/features/hosts/messages/en";
 import { enHubBackups } from "@/features/hub-backups/messages/en";
 import { enImages } from "@/features/images/messages/en";
 import { enSettings } from "@/features/settings/messages/en";
@@ -34,6 +34,7 @@ export const enMessages = {
   shell: enShell,
   preview: import.meta.env.DEV ? enPreview : ({} as typeof enPreview),
   activity: enActivity,
+  environment: enEnvironmentEvents,
   user: enUserEvents,
   lab: import.meta.env.DEV ? enLab : ({} as typeof enLab),
   visual: enVisual,

@@ -26,6 +26,7 @@ import { ActivitySection } from "@/features/settings/sections/SimpleSections";
 import { renderRun, type CodedActionRun } from "../message-code";
 import type { CapabilityDescriptor } from "../capability";
 import { createHttpAdapter } from "./http-adapter";
+import { inventoryId } from "./inventory-mapping";
 import { mapActivityDetail, mapEvent } from "./map-dto";
 import type { HubBackupRun } from "@/domain/hub-backup";
 
@@ -207,13 +208,13 @@ describe("#38 adapter contract matrix", () => {
     const demo = createDemoAdapter();
     const demoRun = (await demo.listActions()).find((run) => run.id === activity.id)!;
     const wireRun = (await http.listActions())[0]!;
-    expect([wireRun.id, wireRun.kind, wireRun.status, wireRun.stackId, wireRun.services]).toEqual([demoRun.id, demoRun.kind, demoRun.status, demoRun.stackId, demoRun.services]);
+    expect([wireRun.id, wireRun.kind, wireRun.status, wireRun.stackId, wireRun.services]).toEqual([demoRun.id, demoRun.kind, demoRun.status, demoRun.stackId ? inventoryId(activity.environmentId, demoRun.stackId) : undefined, demoRun.services]);
     expect(wireRun.steps.map((step) => [step.key, step.state, step.label.code])).toEqual([["start", "done", "activity.success"]]);
     expect(wireRun.log.map((entry) => entry.code)).toEqual(["activity.success"]);
     expect(demoRun.steps.length > 0 && demoRun.log.every((entry) => !!entry.code)).toBe(true);
     const demoEvent = (await demo.listEvents()).find((item) => item.id === event.id)!;
     const wireEvent = (await http.listEvents())[0]!;
-    expect([wireEvent.id, wireEvent.kind, wireEvent.level, wireEvent.stackId]).toEqual([demoEvent.id, demoEvent.kind, demoEvent.level, demoEvent.stackId]);
+    expect([wireEvent.id, wireEvent.kind, wireEvent.level, wireEvent.stackId]).toEqual([demoEvent.id, demoEvent.kind, demoEvent.level, demoEvent.stackId ? inventoryId(event.environmentId ?? "0", demoEvent.stackId) : undefined]);
     expect(wireEvent.title.code).toBe("project.deploy");
   });
 

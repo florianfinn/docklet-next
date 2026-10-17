@@ -111,7 +111,7 @@ export default function SecurityPage() {
       {security.isPending || hosts.isPending ? (
         <SecuritySkeleton />
       ) : security.isError ? (
-        <QueryError onRetry={() => void security.refetch()} />
+        <QueryError error={security.error} onRetry={() => void security.refetch()} />
       ) : !security.data.enabled ? (
         <Card className="items-center gap-3 px-6 py-12 text-center">
           <Shield className="size-9 text-muted-foreground" />

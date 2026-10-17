@@ -1,5 +1,4 @@
 import { CheckCircle2, Circle, CircleX, Eye, Layers, Loader2, Plus, Server } from "lucide-react";
-import { useEffect } from "react";
 import { Link } from "react-router";
 import { useTranslations } from "use-intl";
 
@@ -14,19 +13,13 @@ import { Button } from "@/shared/ui/button";
 import { Checkbox } from "@/shared/ui/checkbox";
 import { Label } from "@/shared/ui/label";
 
+import { AgentReportSection } from "../AgentReportSection";
 import { InstallArtifacts } from "../InstallArtifacts";
 import { useHostCommands } from "../use-host-commands";
 import { onboardingStore, patchDraft, type HostDraft } from "./onboarding-draft";
 
 export function InstallStep({ draft, plan }: { draft: HostDraft; plan: AgentInstallPlan }) {
   const t = useTranslations("hosts.onboarding");
-  const cmd = useHostCommands();
-  const needsToken = !draft.token;
-  const name = draft.name;
-  useEffect(() => {
-    if (needsToken) void cmd.token(name).then((token) => token && patchDraft({ token }));
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- issue once per missing token
-  }, [needsToken]);
   const rows: [string, string][] = [
     [t("summary.mode"), draft.connection === "direct" ? `${t("directTitle")} · ${draft.address}:${draft.port}` : `${t("edgeTitle")} · ${plan.hubUrl}`],
     [t("summary.project"), plan.projectDir],
@@ -45,7 +38,7 @@ export function InstallStep({ draft, plan }: { draft: HostDraft; plan: AgentInst
           </div>
         ))}
       </dl>
-      {draft.token ? <InstallArtifacts plan={plan} onRegenerateToken={draft.hostId ? undefined : () => void cmd.token(name).then((token) => token && patchDraft({ token }))} /> : <div className="h-64 animate-pulse rounded-xl bg-muted/40" />}
+      {draft.token ? <InstallArtifacts plan={plan} /> : <div className="h-64 animate-pulse rounded-xl bg-muted/40" />}
     </div>
   );
 }
@@ -91,6 +84,8 @@ export function ConnectStep({ draft, host, hubUrl }: { draft: HostDraft; host: H
           <Stage key={s.key} state={s.state === "done" ? "done" : s.state === "running" ? "running" : s.state === "error" ? "error" : "pending"} title={s.label} detail={s.detail} />
         ))}
       </ol>
+      {host && <AgentReportSection host={host} />}
+      {host?.status === "update-required" && <Alert><AlertDescription>{t("updateRequired")}</AlertDescription></Alert>}
       {connected ? (
         <Alert className="animate-pop-in border-success/40 bg-success/8">
           <CheckCircle2 className="text-success" />
@@ -139,7 +134,7 @@ export function ConnectStep({ draft, host, hubUrl }: { draft: HostDraft; host: H
               </AlertDescription>
             </Alert>
           )}
-          <div className="flex flex-wrap items-center gap-3">
+          {import.meta.env.DEV && <div className="flex flex-wrap items-center gap-3">
             <Button onClick={() => void start()} disabled={running || !draft.hostId}>
               {running ? <Loader2 data-icon="inline-start" className="animate-spin" /> : null}
               {failed ? t("retry") : t("simulate")}
@@ -150,8 +145,8 @@ export function ConnectStep({ draft, host, hubUrl }: { draft: HostDraft; host: H
                 {t("simulateFailure")}
               </Label>
             </div>
-            <ToneBadge tone="violet">Simulation</ToneBadge>
-          </div>
+            <ToneBadge tone="violet">{t("simulation")}</ToneBadge>
+          </div>}
         </div>
       )}
     </div>

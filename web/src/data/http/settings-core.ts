@@ -67,10 +67,13 @@ export function createSettingsCore(baseUrl: string, client: CsrfClient): Pick<Se
       const actionPresentation = field(values, "actionPresentation");
       if (linkBase !== "auto" && linkBase !== "internal" && linkBase !== "domain") throw new Error("settings.invalid.linkBase");
       if (actionPresentation !== "dialog" && actionPresentation !== "toast") throw new Error("settings.invalid.actionPresentation");
+      const connection = field(values, "defaultHostConnection");
+      if (connection !== "direct" && connection !== "edge") throw new Error("settings.invalid.defaultHostConnection");
       const timeZone = field(values, "effectiveTimeZone");
       try { new Intl.DateTimeFormat("en", { timeZone }); } catch { throw new Error("settings.invalid.timeZone"); }
       return {
         general: { hubName: field(values, "hubName"), hubAddress: field(values, "hubAddress"), domainUrl: field(values, "domainUrl"), linkBase, timeZone },
+        hostDefaults: { connection, projectDir: field(values, "agentProjectsDirectory"), installDir: field(values, "agentInstallDirectory"), puid: field(values, "defaultPuid"), pgid: field(values, "defaultPgid"), detectSocketGroup: boolean(values, "detectSocketGroup") },
         activity: { maxEvents: HISTORY_LIMITS.events.default, maxFinishedActions: HISTORY_LIMITS.actions.default, keepActionOutput: boolean(values, "keepActionOutput"), actionPresentation },
       };
     },

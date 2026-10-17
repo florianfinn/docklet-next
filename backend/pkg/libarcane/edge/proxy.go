@@ -16,6 +16,7 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/florianfinn/docklet-next/backend/pkg/remenv"
 	"github.com/labstack/echo/v5"
 	"github.com/samber/mo"
 )
@@ -37,6 +38,9 @@ func DefaultTunnelAcquireTimeout() time.Duration {
 // ProxyRequest sends an HTTP request through an edge tunnel
 // Returns the response status, headers, and body
 func ProxyRequest(ctx context.Context, tunnel *AgentTunnel, method, path, query string, headers map[string]string, body []byte) (int, map[string]string, []byte, error) {
+	if err := RequireSessionKey(ctx, tunnel); err != nil {
+		return 0, nil, nil, err
+	}
 	result, err := DefaultCommandClient.Execute(ctx, tunnel, &CommandRequest{
 		Method:  method,
 		Path:    path,
@@ -199,6 +203,7 @@ func (s *grpcResponseState) handleCommandComplete(incoming *TunnelMessage) (int,
 
 // ProxyHTTPRequest is a helper that proxies an echo context through a tunnel
 func ProxyHTTPRequest(c *echo.Context, tunnel *AgentTunnel, targetPath string) error {
+	CopyResponseHeaders(nil, c.Response().Header(), nil)
 	req := c.Request()
 	ctx := req.Context()
 
@@ -217,7 +222,7 @@ func ProxyHTTPRequest(c *echo.Context, tunnel *AgentTunnel, targetPath string) e
 	}
 
 	headers := make(map[string]string)
-	for k, v := range req.Header {
+	for k, v := range AgentRequestHeaders(req.Header) {
 		if len(v) > 0 {
 			if isHopByHopHeader(k) || isBrowserSecurityHeader(k) {
 				continue
@@ -241,17 +246,20 @@ func ProxyHTTPRequest(c *echo.Context, tunnel *AgentTunnel, targetPath string) e
 		)
 
 		if proxyCtx.Err() != nil {
-			return c.JSON(http.StatusGatewayTimeout, map[string]any{"error": "request timed out"})
+			return c.JSON(http.StatusGatewayTimeout, map[string]any{"success": false, "code": "agent.unavailable", "error": "request timed out"})
 		}
 
-		return c.JSON(http.StatusBadGateway, map[string]any{"error": "failed to proxy request through tunnel"})
+		return c.JSON(http.StatusBadGateway, map[string]any{"success": false, "code": "agent.unavailable", "error": "failed to proxy request through tunnel"})
 	}
 
+	if remenv.AgentAuthRejected(status) {
+		return c.JSON(http.StatusBadGateway, map[string]any{"success": false, "code": "agent.invalid-token"})
+	}
+	responseHeaders := make(http.Header)
 	for k, v := range respHeaders {
-		if !isHopByHopHeader(k) {
-			c.Response().Header().Set(k, v)
-		}
+		responseHeaders.Set(k, v)
 	}
+	CopyResponseHeaders(responseHeaders, c.Response().Header(), BuildHopByHopHeaders(responseHeaders))
 
 	return c.Blob(status, respHeaders["Content-Type"], respBody)
 }
