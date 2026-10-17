@@ -33,7 +33,7 @@ it("runs local sign-in, first setup, connected settings and profile on productio
   let signedIn = false;
   let passwordChanged = false;
   const settings: Record<string, string> = {
-    setupCompleted: "false", hubName: "Docklet", hubAddress: "", domainUrl: "", linkBase: "auto", timeZone: "Europe/Berlin",
+    setupCompleted: "false", hubName: "Docklet", hubAddress: "", domainUrl: "", linkBase: "auto", effectiveTimeZone: "Europe/Berlin",
     keepActionOutput: "true", actionPresentation: "dialog",
   };
   const user = { id: "admin", username: "operator", requiresPasswordChange: true, locale: "de" };

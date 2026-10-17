@@ -15,3 +15,7 @@ retain [BSD-3-Clause](LICENSES/BSD-3-Clause-Arcane.txt). See [NOTICE](NOTICE) an
 Start with [CONTRIBUTING.md](CONTRIBUTING.md), the binding [AGENTS.md](AGENTS.md),
 and the [design index](docs/design/README.md). Report vulnerabilities privately
 as described in [SECURITY.md](SECURITY.md).
+
+The hub uses `TZ` for schedules and date display, defaulting to `UTC`. Configure
+an IANA zone in the deployment environment and restart the hub after changes;
+General settings show the effective zone read-only.

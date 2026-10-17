@@ -142,3 +142,5 @@ export const deActivity: typeof enActivity = {
     foldNote: "Layer-Fortschritt steht wie im Terminal in einer Zeile, die sich aktualisiert.",
   },
 };
+
+export const deUserEvents = { login: "Benutzer angemeldet.", logout: "Benutzer abgemeldet." };

@@ -35,9 +35,9 @@ export const deHelp: typeof enHelp = {
       },
       timeZone: {
         title: "Zeitzone des Hubs",
-        short: "Alle Zeitpläne laufen in dieser Zeitzone, nicht in der des Browsers.",
-        full: "Updates, Backups und Scans werden in dieser Zeitzone geplant, damit jeder Betrachter dieselben Zeiten sieht. Sommer- und Winterzeit werden berücksichtigt; eine Uhrzeit in der bei der Umstellung übersprungenen Stunde läuft eine Stunde später, z. B. 02:30 um 03:30.",
-        impact: "Eine Änderung verschiebt alle geplanten Läufe auf die neue Ortszeit.",
+        short: "Zeitpläne und Datumsanzeigen verwenden die Prozesszeitzone des Hubs.",
+        full: "Die Variable TZ legt die Zeitzone beim Start fest. Allgemein zeigt den effektiven Wert nur lesbar; ändere die Startumgebung und starte den Hub neu.",
+        impact: "Eine Änderung von TZ verändert Zeitpläne und Datumsanzeigen nach dem Neustart.",
       },
     },
     settingsAppearance: {

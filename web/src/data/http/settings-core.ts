@@ -52,8 +52,7 @@ export function createSettingsCore(baseUrl: string, client: CsrfClient): Pick<Se
         hubAddress: input.general.hubAddress,
         domainUrl: input.general.domainUrl,
         linkBase: input.general.linkBase,
-        timeZone: input.general.timeZone,
-        projectsDirectory: input.hostDefaults.projectDir,
+        agentProjectsDirectory: input.hostDefaults.projectDir,
         agentInstallDirectory: input.hostDefaults.installDir,
         defaultHostConnection: input.hostDefaults.connection,
         defaultPuid: input.hostDefaults.puid,
@@ -68,7 +67,7 @@ export function createSettingsCore(baseUrl: string, client: CsrfClient): Pick<Se
       const actionPresentation = field(values, "actionPresentation");
       if (linkBase !== "auto" && linkBase !== "internal" && linkBase !== "domain") throw new Error("settings.invalid.linkBase");
       if (actionPresentation !== "dialog" && actionPresentation !== "toast") throw new Error("settings.invalid.actionPresentation");
-      const timeZone = field(values, "timeZone");
+      const timeZone = field(values, "effectiveTimeZone");
       try { new Intl.DateTimeFormat("en", { timeZone }); } catch { throw new Error("settings.invalid.timeZone"); }
       return {
         general: { hubName: field(values, "hubName"), hubAddress: field(values, "hubAddress"), domainUrl: field(values, "domainUrl"), linkBase, timeZone },
@@ -78,7 +77,7 @@ export function createSettingsCore(baseUrl: string, client: CsrfClient): Pick<Se
     async saveSettings<K extends SettingsSection>(section: K, value: HubSettings[K]) {
       if (section === "general") {
         const general = value as HubSettings["general"];
-        await write({ hubName: general.hubName, hubAddress: general.hubAddress, domainUrl: general.domainUrl, linkBase: general.linkBase, timeZone: general.timeZone });
+        await write({ hubName: general.hubName, hubAddress: general.hubAddress, domainUrl: general.domainUrl, linkBase: general.linkBase });
         return;
       }
       if (section === "activity") {

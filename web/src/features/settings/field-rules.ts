@@ -3,7 +3,6 @@ import { useTranslations } from "use-intl";
 import type { AuthSettings, GeneralSettings, HostDefaults, ProxyAuth } from "@/domain/settings";
 import { absolutePath, headerName, hubAddress, installDirProblem, optionalId, required, url } from "@/domain/validation";
 
-export const TIME_ZONES = ["Europe/Berlin", "Europe/Vienna", "Europe/Zurich", "Europe/London", "UTC", "America/New_York"];
 
 /** Synthetic Authentik proxy-outpost values; example domains and RFC 5737 addresses only. */
 export const AUTHENTIK_EXAMPLE: ProxyAuth = {

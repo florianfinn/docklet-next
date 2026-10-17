@@ -69,7 +69,7 @@ func DefaultSettingsConfig() *Settings {
 		HubAddress:                            SettingVariable{Value: ""},
 		DomainURL:                             SettingVariable{Value: ""},
 		LinkBase:                              SettingVariable{Value: "auto"},
-		TimeZone:                              SettingVariable{Value: "Europe/Berlin"},
+		AgentProjectsDirectory:                SettingVariable{Value: "/home/docker"},
 		AgentInstallDirectory:                 SettingVariable{Value: "/app/data/agent"},
 		DefaultHostConnection:                 SettingVariable{Value: "direct"},
 		DefaultPUID:                           SettingVariable{Value: ""},

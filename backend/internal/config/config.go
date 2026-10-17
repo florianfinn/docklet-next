@@ -99,7 +99,7 @@ type Config struct {
 	HTTPProxy         string      `env:"HTTP_PROXY" default:""`
 	HTTPSProxy        string      `env:"HTTPS_PROXY" default:""`
 	NoProxy           string      `env:"NO_PROXY" default:""`
-	Timezone          string      `env:"TZ" default:"Local"`
+	Timezone          string      `env:"TZ" default:"UTC"`
 }
 
 func Load() *Config {

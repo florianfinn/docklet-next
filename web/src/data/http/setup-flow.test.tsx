@@ -6,8 +6,11 @@
 
 import { screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { afterEach, expect, it } from "vitest";
+import { afterEach, expect, it, vi } from "vitest";
 
+import { toast } from "sonner";
+
+import { AuthGate } from "@/app/AuthGate";
 import { SetupGate } from "@/app/SetupGate";
 import { renderRoutes } from "@/test/render";
 import { restartSetup } from "@/features/setup/setup-draft";
@@ -16,7 +19,9 @@ import { createHttpAdapter } from "./http-adapter";
 
 afterEach(() => { restartSetup(); localStorage.clear(); });
 
-it("changes the initial password before storing setup through the core adapter", async () => {
+it.each(["/dashboard", "/settings/general", "failure"])("stores host defaults separately and localizes setup write errors (fail=%s)", async (target) => {
+  const fail = target === "failure";
+  const errorToast = vi.spyOn(toast, "error");
   restartSetup();
   const settings: Record<string, string> = { setupCompleted: "false" };
   let changedPassword = false;
@@ -37,6 +42,7 @@ it("changes the initial password before storing setup through the core adapter",
         expect(changedPassword).toBe(true);
         const values = JSON.parse(String(init.body)) as Record<string, string>;
         writes.push(values);
+        if (fail) return new Response(JSON.stringify({ detail: "Not writable" }), { status: 400 });
         Object.assign(settings, values);
         return new Response(JSON.stringify({ success: true, data: [] }));
       }
@@ -45,7 +51,7 @@ it("changes the initial password before storing setup through the core adapter",
     throw new Error(`unexpected ${path}`);
   };
   const adapter = createHttpAdapter({ fetch: fetcher as typeof fetch, eventSource: () => ({ close() {}, onopen: null, onmessage: null, onerror: null }) });
-  renderRoutes([{ path: "/setup", element: <SetupGate /> }, { path: "/dashboard", element: <p>Dashboard</p> }, { path: "/login", element: <p>Login</p> }], ["/setup"], adapter);
+  const { router } = renderRoutes([{ path: "/setup", element: <SetupGate /> }, { element: <AuthGate />, children: [{ path: "/dashboard", element: <p>Dashboard target</p> }, { path: "/settings/general", element: <p>Settings target</p> }] }, { path: "/login", element: <p>Login</p> }], ["/setup"], adapter);
   const next = () => userEvent.click(screen.getByRole("button", { name: "Weiter" }));
   await userEvent.type(await screen.findByLabelText("Interne Hub-Adresse"), "192.0.2.10:8080");
   await next();
@@ -56,9 +62,18 @@ it("changes the initial password before storing setup through the core adapter",
   await userEvent.type(screen.getByLabelText("Neues Passwort bestätigen"), "New-password1!");
   await next();
   await userEvent.click(await screen.findByRole("button", { name: "Einrichtung abschließen" }));
-  await waitFor(() => expect(settings.setupCompleted).toBe("true"));
+  if (fail) await waitFor(() => expect(errorToast).toHaveBeenCalledWith("Die Einrichtung konnte nicht gespeichert werden. Prüfe die Angaben und versuche es erneut."));
+  else await waitFor(() => expect(settings.setupCompleted).toBe("true"));
+  expect(writes[0]?.agentProjectsDirectory).toBe("/home/docker");
+  expect(writes[0]?.projectsDirectory).toBeUndefined();
+  if (!fail) {
+    await userEvent.click(await screen.findByRole("link", { name: target === "/dashboard" ? "Zum Dashboard" : "Hub-Einstellungen ansehen" }));
+    await screen.findByText(target === "/dashboard" ? "Dashboard target" : "Settings target");
+    expect(router.state.location.pathname).toBe(target);
+  }
+  errorToast.mockRestore();
   expect(changedPassword).toBe(true);
   expect(writes).toHaveLength(1);
-  expect(writes[0]?.timeZone).toBe("Europe/Berlin");
+  expect(writes[0]?.timeZone).toBeUndefined();
   expect(JSON.stringify(writes).includes("old-password") || JSON.stringify(writes).includes("New-password1!")).toBe(false);
 });

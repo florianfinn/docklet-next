@@ -37,19 +37,19 @@ type SettingDto struct {
 
 // Update is used to update application settings.
 type Update struct {
-	SetupCompleted        *string `json:"setupCompleted,omitzero"`
-	HubName               *string `json:"hubName,omitzero"`
-	HubAddress            *string `json:"hubAddress,omitzero"`
-	DomainURL             *string `json:"domainUrl,omitzero"`
-	LinkBase              *string `json:"linkBase,omitzero"`
-	TimeZone              *string `json:"timeZone,omitzero"`
-	AgentInstallDirectory *string `json:"agentInstallDirectory,omitzero"`
-	DefaultHostConnection *string `json:"defaultHostConnection,omitzero"`
-	DefaultPUID           *string `json:"defaultPuid,omitzero"`
-	DefaultPGID           *string `json:"defaultPgid,omitzero"`
-	DetectSocketGroup     *string `json:"detectSocketGroup,omitzero"`
-	KeepActionOutput      *string `json:"keepActionOutput,omitzero"`
-	ActionPresentation    *string `json:"actionPresentation,omitzero"`
+	SetupCompleted         *string `json:"setupCompleted,omitzero"`
+	HubName                *string `json:"hubName,omitzero"`
+	HubAddress             *string `json:"hubAddress,omitzero"`
+	DomainURL              *string `json:"domainUrl,omitzero"`
+	LinkBase               *string `json:"linkBase,omitzero"`
+	AgentProjectsDirectory *string `json:"agentProjectsDirectory,omitzero"`
+	AgentInstallDirectory  *string `json:"agentInstallDirectory,omitzero"`
+	DefaultHostConnection  *string `json:"defaultHostConnection,omitzero"`
+	DefaultPUID            *string `json:"defaultPuid,omitzero"`
+	DefaultPGID            *string `json:"defaultPgid,omitzero"`
+	DetectSocketGroup      *string `json:"detectSocketGroup,omitzero"`
+	KeepActionOutput       *string `json:"keepActionOutput,omitzero"`
+	ActionPresentation     *string `json:"actionPresentation,omitzero"`
 	// ProjectsDirectory is the directory path where projects are stored.
 	// Must be an absolute path.
 	//

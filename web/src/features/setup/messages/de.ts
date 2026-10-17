@@ -94,6 +94,7 @@ export const deSetup: typeof enSetup = {
     urlCheck: "Adresse formal gültig. Ob ein Agent sie erreicht, zeigt erst seine erste Verbindung – Docklet prüft das nicht vorab und öffnet keine Ports.",
     modes: { none: "Kein Login", local: "Lokaler Admin", proxy: "Reverse Proxy" },
   },
+  saveError: "Die Einrichtung konnte nicht gespeichert werden. Prüfe die Angaben und versuche es erneut.",
   done: {
     title: "{name} ist eingerichtet",
     body: (import.meta.env.DEV ? "Die Angaben stehen jetzt in den Hub-Einstellungen dieses Demo-Tabs. Passwörter wurden verworfen, nicht gespeichert." : "Die Angaben stehen in den Hub-Einstellungen. Passwörter wurden verworfen."),

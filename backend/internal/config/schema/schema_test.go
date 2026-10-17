@@ -27,6 +27,7 @@ func TestGenerate_EnvConfigIncludesTaggedFields(t *testing.T) {
 	assert.Equal(t, expectedEnvConfigVars, envNames(doc.EnvConfig))
 
 	entries := mapEnvEntries(doc.EnvConfig)
+	assert.Equal(t, "UTC", entries["TZ"].DefaultValue)
 
 	appURL, ok := entries["APP_URL"]
 	require.True(t, ok)
@@ -84,6 +85,9 @@ func TestGenerate_SettingEnvOverridesMatchModelMetadata(t *testing.T) {
 	assert.Equal(t, "timeouts", dockerTimeout.Category)
 	assert.Equal(t, "settings.Settings + settings.DefaultSettingsConfig", dockerTimeout.Source)
 
+	assert.Contains(t, entries, "agentProjectsDirectory")
+	assert.NotContains(t, entries, "timeZone")
+	assert.NotContains(t, entries, "effectiveTimeZone")
 	_, hasRuntimeDerived := entries["uiConfigDisabled"]
 	assert.False(t, hasRuntimeDerived)
 }
@@ -258,6 +262,7 @@ var expectedEnvConfigVars = []string{
 var expectedSettingOverrideKeys = []string{
 	"actionPresentation",
 	"agentInstallDirectory",
+	"agentProjectsDirectory",
 	"authLocalEnabled",
 	"authPasswordPolicy",
 	"authSessionTimeout",
@@ -328,7 +333,6 @@ var expectedSettingOverrideKeys = []string{
 	"scheduledPruneEnabled",
 	"scheduledPruneInterval",
 	"setupCompleted",
-	"timeZone",
 	"toolsImageRegistry",
 	"trivyConcurrentScanContainers",
 	"trivyConfig",

@@ -5,6 +5,8 @@ import { Link, useSearchParams } from "react-router";
 import { toast } from "sonner";
 import { useTranslations } from "use-intl";
 
+import { useHubTimeZone } from "@/shared/hooks/use-hub-time-zone";
+
 import { LanguageSwitch } from "@/app/i18n/LanguageSwitch";
 import { errorCode } from "@/data/api";
 import { useAdapter } from "@/data/use-adapter";
@@ -63,6 +65,7 @@ export default function SetupPage() {
   const dt = useAdapterText();
   const adapter = useAdapter();
   const mode = useAuthMode();
+  const timeZone = useHubTimeZone();
   const currentUser = useCurrentUser();
   const queryClient = useQueryClient();
   const tokens = useTokens();
@@ -111,7 +114,8 @@ export default function SetupPage() {
         patchSetup({ password: { password: "", confirm: "" }, reached: SETUP_STEPS.length - 1 });
         go("done");
       } catch (e) {
-        toast.error(errorCode(e) ?? dt(e instanceof Error ? e.message : String(e)));
+        const message = e instanceof Error ? e.message : String(e);
+        toast.error(message.startsWith("settings.write.") ? t("saveError") : errorCode(e) ?? dt(message));
       } finally {
         setBusy(false);
       }
@@ -166,7 +170,7 @@ export default function SetupPage() {
                     onPick={(c) => patchSetup({ general: { ...draft.general, hubAddress: c.address }, hubAddressOrigin: { kind: "discovered", candidateId: c.id } })}
                   />
                   <GeneralFields
-                    value={draft.general}
+                    value={{ ...draft.general, timeZone }}
                     onChange={(p) => patchSetup({ general: { ...draft.general, ...p }, ...(p.hubAddress !== undefined ? { hubAddressOrigin: { kind: "manual" as const } } : {}) })}
                     showErrors={show}
                     idPrefix="setup-gen"
@@ -199,7 +203,7 @@ export default function SetupPage() {
                       [tr("name"), draft.general.hubName],
                       [tr("url"), draft.general.hubAddress],
                       [tr("domain"), draft.general.domainUrl || tr("domainNone")],
-                      [tr("tz"), draft.general.timeZone],
+                      [tr("tz"), timeZone],
                     ]}
                   />
                   <ReviewBlock

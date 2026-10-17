@@ -32,7 +32,7 @@ function server(mode: AuthMode, initialSession = true) {
       return new Response(JSON.stringify({ success: true, data: { message: "signed out" } }));
     }
     if (path === "/api/environments/0/settings") return new Response(JSON.stringify(Object.entries({
-      setupCompleted: "true", hubName: "Docklet", hubAddress: "192.0.2.10:8080", domainUrl: "", linkBase: "auto", timeZone: "Europe/Berlin",
+      setupCompleted: "true", hubName: "Docklet", hubAddress: "192.0.2.10:8080", domainUrl: "", linkBase: "auto", effectiveTimeZone: "Europe/Berlin",
       keepActionOutput: "true", actionPresentation: "dialog",
     }).map(([key, value]) => ({ key, value, type: "text" }))));
     throw new Error(`unexpected ${path}`);

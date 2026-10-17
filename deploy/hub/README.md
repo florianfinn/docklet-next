@@ -23,6 +23,10 @@ Compose commands. The listener is published on loopback; attach the operator's
 reverse proxy to it. Sub-path hosting is unsupported. The Docker socket grants
 management access to the local Docker host.
 
+`TZ` selects the hub time zone for schedules and date display (default `UTC`).
+Set an IANA zone such as `Europe/Berlin` in the private environment file and recreate
+the hub after changing it. General settings show the effective zone read-only.
+
 The `hub-data` named volume is mounted at `/app/data`. Keep it on local persistent
 storage. Linux bind mounts are supported when their directory is writable by the
 runtime identity; use the named volume on Docker Desktop and other hosts. Named
@@ -77,7 +81,9 @@ with `docker compose up -d --force-recreate hub` using the same `--env-file` as 
 installation. Merely restarting a container does not update its environment.
 Changing modes revokes previous sessions; a same-mode restart preserves them.
 `GET /api/auth/mode` exposes the active mode without credentials. The UI cannot
-change it. No web sign-in screens are introduced by this backend step.
+change it. Production login, setup and profile screens use this policy.
+After switching to local mode, the initial password remains valid until changed;
+the UI forces the password change even when setup was already completed.
 
 For recovery, set `AUTH_RESET_ADMIN_PASSWORD` in that private environment file to
 a new password satisfying the configured password policy, then recreate the hub.

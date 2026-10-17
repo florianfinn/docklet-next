@@ -5,7 +5,7 @@
 // Deviations: Connected local login and proxy rejection screen.
 
 import { useState } from "react";
-import { Navigate, useNavigate } from "react-router";
+import { Navigate } from "react-router";
 import { useQueryClient } from "@tanstack/react-query";
 import { useTranslations } from "use-intl";
 
@@ -23,7 +23,6 @@ export default function ProductLoginPage() {
   const currentUser = useCurrentUser();
   const adapter = useAdapter();
   const client = useQueryClient();
-  const navigate = useNavigate();
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [busy, setBusy] = useState(false);
@@ -44,7 +43,6 @@ export default function ProductLoginPage() {
         client.setQueryData(queryKeys.currentUser, user);
         await client.invalidateQueries({ queryKey: queryKeys.currentUser });
         await client.invalidateQueries({ queryKey: queryKeys.connectedSettings });
-        void navigate("/dashboard", { replace: true });
       }).catch((cause: unknown) => {
         const invalid = cause instanceof AdapterOutcomeError && cause.outcome.kind === "error" && cause.outcome.status === 401;
         setError(t(invalid ? "errors.invalid" : "errors.unavailable"));

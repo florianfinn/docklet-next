@@ -1,5 +1,5 @@
 // Source: api/openapi.json
-// Revision: 2a8c9b6bf74be62d51e728c6550abe16dc79381e7ca821642b37eaffc49cb24b
+// Revision: 2b8dd4af7df85f049fbea654d3bcf95d5d71c396d43a7a13995de8cf33c763e6
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
 // Deviations: Generated TypeScript declarations from the local Huma export.
@@ -9508,6 +9508,7 @@ export interface components {
             readonly $schema?: string;
             actionPresentation?: string | null;
             agentInstallDirectory?: string | null;
+            agentProjectsDirectory?: string | null;
             /**
              * @deprecated
              * @description Read-only startup policy; updates are rejected. Use GET /auth/mode.
@@ -9581,7 +9582,6 @@ export interface components {
             scheduledPruneEnabled?: string | null;
             scheduledPruneInterval?: string | null;
             setupCompleted?: string | null;
-            timeZone?: string | null;
             toolsImageRegistry?: string | null;
             trivyConcurrentScanContainers?: string | null;
             trivyConfig?: string | null;
