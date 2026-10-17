@@ -105,7 +105,7 @@ machine routes already keep their own contract ([identity](identity.md)).
 | --- | --- | --- |
 | Creation | Random environment bootstrap key; `api_keys` keeps its Argon2 hash and environment-scoped grants, `environments.access_token` keeps the raw value | Arcane (`CreateEnvironmentApiKey` in `internal/apikey/service.go`) |
 | Display | Shown inside the installation artefacts; reopening them for a host reveals the stored token again to an administrator | Arcane (`GetDeploymentSnippets` reads `access_token`); reference artefact view |
-| On the host | Written only to the install directory's `.env` with mode 600; never a command-line argument | Reference generator; Arcane also reads the token from a file (`options:"file"`) |
+| On the host | Only in the install directory's `.env`, mode 600, created under a private umask; never a command-line argument, never in `install.sh` or a fixed temporary file | Generator rules below, **new** in #84 (the reference embeds the token in `install.sh` and leaves readable copies, threat review T10); Arcane also reads the token from a file (`options:"file"`) |
 | Use | Same value in both directions and as the hub API key for that host | Arcane (threat review T3) |
 | Rotation | Regenerate action in the artefact view: new key, host set to `pending`, old key deleted, Edge token cache synced; the operator reruns the install or edits `.env` | Arcane (`RegenerateEnvironmentApiKey`); reference button in `InstallArtifacts.tsx`, live wiring **new** |
 | Rotation, sessions | Established tunnels and proxied streams of the host are closed; the new token is never sent through a session authenticated with the old one | **New**, #81 (review decision B2 in the threat review) |
@@ -126,7 +126,8 @@ The reference generator `buildInstallArtifacts` in
 - `.env` with connection, token, project directory, PUID/PGID, socket group and
   time zone,
 - `install.sh`, which checks the host and then writes both files and starts the
-  agent,
+  agent; the reference embeds the `.env` content in it, which the generator rules
+  below replace,
 - a README,
 - a **compose command**: a copyable heredoc that writes both files and runs
   `docker compose up -d`,
@@ -145,9 +146,17 @@ Generator rules for M5:
   `DOCKLET_AGENT_IMAGE` override kept from the reference. A locally built image
   stays possible as the fallback without registry access.
 - The token appears only in `.env` content, never as a command argument, in
-  compose or in the README. The copyable commands write `.env` through a
-  heredoc, so the pasted token can remain in interactive shell history; the
-  install step says so and the downloaded package avoids it.
+  compose, in `install.sh` or in the README. The copyable commands write `.env`
+  through a heredoc, so the pasted token can remain in interactive shell
+  history; the install step says so and the downloaded package avoids it.
+- Every file that holds the token is private from its creation (review decision
+  B4, **new** in #84). `.env` is created under `umask 077` and ends with mode 600;
+  no `chmod` after a readable creation. `install.sh` reads the token from the
+  `.env` shipped next to it and writes the installed `.env` the same way. The
+  archive stores `.env` with mode 600 and `install.sh` with mode 700. The script
+  command uses a private `mktemp -d` directory for `.env` and `install.sh`,
+  removes it on exit through `trap`, and uses no fixed temporary file name. The
+  README tells the operator to delete the downloaded archive after installation.
 - The compose file mounts the Docker socket, the project directory at the same
   path on both sides, and the agent data directory. Arcane's
   `PathMapper` can translate differing paths through mount discovery
@@ -287,3 +296,14 @@ The maintainer chose option (a), the recommendation, for every item below on 202
    token, pinned image reference and hub address candidates, and Arcane's snippet
    endpoint is not used by the UI. (b) on the hub, by porting the generator to Go
    and replacing Arcane's snippet output; downloads then come from the hub.
+
+## Review decisions
+
+The maintainer decided the following after the first independent review of
+this record on 2026-10-17. B1 to B3 and S2 are in the
+[Edge threat review](edge-threat-review.md#review-decisions).
+
+- **B4. Token only in a private `.env`, #84.** The generator rules under
+  [Installation artefacts](#installation-artefacts) apply to every artefact that
+  carries the token. The accepted shell-history warning and browser-side
+  generation (decision 6) stay.

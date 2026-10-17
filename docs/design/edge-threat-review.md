@@ -240,14 +240,24 @@ Arcane's snippets embed the token as `-e AGENT_TOKEN=<token>` in a `docker run`
 command and inline in compose (`snippets/service.go`). That places it in shell
 history, process listings and copied compose files. Arcane also accepts the token
 from a file (`AGENT_TOKEN` with `options:"file"` in `internal/config/config.go`).
-The frozen reference writes the token only into `.env` with mode 600
-(`web/src/domain/agent-install.ts`, `agentScript`).
 
-Residual risk: the token stays visible in `docker inspect` to anyone with Docker
-access on that host, who has root there already. The copyable commands write
-`.env` through a heredoc, so a pasted token can stay in interactive shell
-history; the downloadable package avoids that. Verdict: **accepted** with the
-generator rules in [host onboarding](host-onboarding.md).
+The frozen reference does not confine the token to a protected `.env` either.
+`agentScript` embeds the `.env` content, token included, in `install.sh`
+(`web/src/domain/agent-install.ts`). The download packs `install.sh` with mode
+755 and `.env` with the tar default 644 (`InstallArtifacts.tsx`, `createTar` in
+`web/src/shared/lib/tar.ts`). The copyable script command writes that script to
+the fixed path `/tmp/install-docklet-agent.sh` without restrictive permissions
+or cleanup. The script and the compose command create `.env` before
+`chmod 600`, without a private umask. Each copy is readable by other local users
+who have no Docker access.
+
+Residual risk: with the generator rules of review decision B4 in
+[host onboarding](host-onboarding.md), the token stays visible in
+`docker inspect` to anyone with Docker access on that host, who has root there
+already. The copyable commands write `.env` through a heredoc, so a pasted token
+can stay in interactive shell history; the downloadable package avoids that. The
+downloaded archive holds the token until the operator deletes it. Verdict:
+**accepted** with those generator rules, which are new work in #84.
 
 ### T11. Hub user credentials forwarded to agents (H, T)
 
@@ -375,3 +385,6 @@ this record on 2026-10-17. Each item is new work in the issue named.
   Bearer header. They then set only the agent token headers. The four tests
   named in T11 confirm the current forwarding and change in #81 to assert its
   absence.
+- **B4. Installer token handling (T10), #84.** The token lives only in a
+  mode-600 `.env` created under a private umask; details are in
+  [host onboarding](host-onboarding.md#review-decisions).
