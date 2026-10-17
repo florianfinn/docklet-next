@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, useSyncExternalStore } from "react";
+import { useCallback, useEffect, useMemo, useState, useSyncExternalStore } from "react";
 import { useLocale } from "use-intl";
 
 import type { ActionRun, LogLine, MetricsSnapshot } from "@/domain/model";
@@ -31,7 +31,7 @@ function createChannel<T>(connect: Connect<T>) {
     const adapter = useAdapter();
     const ch = channelFor(adapter);
     return useSyncExternalStore(
-      (notify) => {
+      useCallback((notify: () => void) => {
         ch.listeners.add(notify);
         if (!ch.stop) {
           ch.stop = connect(adapter, (v) => {
@@ -46,7 +46,7 @@ function createChannel<T>(connect: Connect<T>) {
             ch.stop = undefined;
           }
         };
-      },
+      }, [adapter, ch]),
       () => selector(ch.value),
       () => selector(ch.value),
     );

@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace
+// Deviations: Local module namespace; exclude dedicated agent resources from snapshot counters.
 
 package dashboard
 
@@ -10,6 +10,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/florianfinn/docklet-next/backend/pkg/inventory"
 	"sort"
 	"strconv"
 	"sync/atomic"
@@ -170,7 +171,7 @@ func (s *DashboardService) buildSnapshotInternal(ctx context.Context, options Da
 		return nil, err
 	}
 	dockerContainers := dockerSnapshot.Containers
-	dockerImages := dockerSnapshot.Images
+	dockerImages := inventory.Images(dockerSnapshot.Images, dockerContainers)
 
 	filteredContainers := container.FilterExcludedContainers(dockerContainers, false, false)
 	imageConsumers := container.FilterExcludedContainers(dockerContainers, false, true)

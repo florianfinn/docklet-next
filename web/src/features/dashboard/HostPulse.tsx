@@ -2,7 +2,7 @@ import { Cpu, HardDrive, MemoryStick, Unplug } from "lucide-react";
 import { useTranslations } from "use-intl";
 
 import { useMetrics } from "@/data/live";
-import { formatGb, formatRelative } from "@/domain/format";
+import { formatGb } from "@/domain/format";
 import { hostTone } from "@/domain/hosts";
 import type { Host } from "@/domain/model";
 import { Sparkline } from "@/shared/component-set/sparkline";
@@ -10,9 +10,10 @@ import { Meter } from "@/shared/components/meter";
 import { ToneBadge, ToneDot } from "@/shared/components/tone";
 import { cn } from "@/shared/lib/utils";
 
-/** Arcane environment card: live CPU trend plus CPU/RAM/disk meters (simulated). */
+/** Host resource samples remain visible with their observation notice on disconnect. */
 export function HostPulse({ host, stacks, containers, className }: { host: Host; stacks: number; containers: number; className?: string }) {
   const t = useTranslations("dashboard.summary");
+  const td = useTranslations("dashboard");
   const tc = useTranslations("common.host");
   const m = useMetrics((s) => s?.hosts[host.id]);
   const offline = host.status !== "online";
@@ -47,23 +48,23 @@ export function HostPulse({ host, stacks, containers, className }: { host: Host;
             {t("hostStacks", { count: stacks })} · {t("hostContainers", { count: containers })}
           </div>
         </div>
-        {m && <Sparkline data={m.cpuHistory} type="area" color={offline ? "var(--muted-foreground)" : host.color} domain={[0, 100]} className="h-auto min-h-9 w-[45%] max-w-64 min-w-28 self-stretch" label={`CPU ${host.name}`} />}
+        {m && <Sparkline data={m.cpuHistory} type="area" color={offline ? "var(--muted-foreground)" : host.color} domain={[0, 100]} className="h-auto min-h-9 w-[45%] max-w-64 min-w-28 self-stretch" label={t("cpuHistory", { name: host.name })} />}
       </div>
       {pending ? (
         <p className="flex items-center gap-1.5 text-xs text-info">
           <Unplug className="size-3.5" aria-hidden />
           {t("pending")}
         </p>
-      ) : offline ? (
+      ) : !m ? (
         <p data-tone="orange" className="flex items-center gap-1.5 text-xs text-(--tone-text)">
           <Unplug className="size-3.5" aria-hidden />
-          {t("offline", { time: formatRelative(host.lastSeen) })} · {t("stale")}
+          {td("metricsUnavailable")}
         </p>
       ) : (
         <div className="grid grid-cols-3 gap-2.5">
-          <Meter label="CPU" icon={<Cpu />} value={m?.cpu ?? 0} size="sm" color={host.color} sub={t("cores", { count: host.cpuCores })} />
-          <Meter label="RAM" icon={<MemoryStick />} value={m?.mem ?? 0} size="sm" color={host.color} sub={t("of", { total: `${host.memTotalGb} GB` })} />
-          <Meter label="Disk" icon={<HardDrive />} value={m?.disk ?? 0} size="sm" color={host.color} sub={t("of", { total: formatGb(host.diskTotalGb) })} />
+          <Meter label={t("cpuLabel")} icon={<Cpu />} value={m.cpu} size="sm" color={host.color} sub={t("cores", { count: m.cpuCores ?? host.cpuCores })} />
+          <Meter label={t("memoryLabel")} icon={<MemoryStick />} value={m.mem} size="sm" color={host.color} sub={t("of", { total: formatGb(m.memTotalGb ?? host.memTotalGb) })} />
+          {!m.diskUnavailable && <Meter label={t("diskLabel")} icon={<HardDrive />} value={m.disk} size="sm" color={host.color} sub={t("of", { total: formatGb(m.diskTotalGb ?? host.diskTotalGb) })} />}
         </div>
       )}
     </article>

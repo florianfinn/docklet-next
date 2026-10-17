@@ -22,7 +22,7 @@ import (
 func (m *EnvironmentMiddleware) inventoryRead(c *echo.Context, hostID string, forward func() error) error {
 	suffix := m.buildResourceSuffix(c.Request().URL.Path, hostID)
 	parts := strings.Split(strings.Trim(suffix, "/"), "/")
-	if m.snapshots == nil || c.Request().Method != http.MethodGet || !(suffix == "/containers" || suffix == "/projects" || (len(parts) == 2 && parts[0] == "projects")) {
+	if m.snapshots == nil || c.Request().Method != http.MethodGet || !inventorySuffix(suffix, parts) {
 		return forward()
 	}
 	c.Request().Header.Set("Accept-Encoding", "identity")
@@ -87,4 +87,12 @@ func (w *inventoryResponse) Write(data []byte) (int, error) {
 		w.status = http.StatusOK
 	}
 	return w.body.Write(data)
+}
+
+func inventorySuffix(suffix string, parts []string) bool {
+	switch suffix {
+	case "/containers", "/projects", "/images", "/volumes", "/networks", "/ports", "/networks/topology", "/dashboard":
+		return true
+	}
+	return len(parts) == 2 && (parts[0] == "projects" || parts[0] == "networks" || parts[0] == "volumes")
 }

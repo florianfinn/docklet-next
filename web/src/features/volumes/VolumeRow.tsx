@@ -62,7 +62,7 @@ export const VolumeRow = memo(function VolumeRow({ volume: v, host, view, column
     kind,
     host: <HostChip host={host} />,
     consumers: <ConsumerChips volume={v} />,
-    size: <span className="font-mono text-xs tabular">{formatBytes(v.sizeBytes)}</span>,
+    size: <span className="font-mono text-xs tabular">{v.sizeUnavailable ? t("unknown") : formatBytes(v.sizeBytes)}</span>,
     backup: <BackupBadge volume={v} />,
   };
   return (

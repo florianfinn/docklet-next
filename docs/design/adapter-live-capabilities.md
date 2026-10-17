@@ -201,3 +201,18 @@ Recreation restrictions include Compose ownership, unclear origin and the
 server's protected-container flag. Agent-labeled workloads are excluded from
 both lists; the backend excludes their tracked Compose projects before pagination.
 All write operations keep their unavailable adapter mapping.
+
+Images, volumes, network details/topology, published ports and dashboard reads
+use the same retained-response store and observation headers. Dedicated agent
+resources are hidden before pagination; shared resources and Docker's built-in
+networks remain visible. Image consumers include stopped containers. Network
+edges describe membership and configured Compose `depends_on`, never traffic.
+
+The HTTP adapter reads host resource measurements through the existing
+compatibility-gated `/ws/system/stats` forwarding route and collects container
+samples through resource-sorted container reads. Percentages and byte units
+are mapped explicitly. Host histories retain up to 60 observed samples in the
+adapter session; a disconnect preserves the last sample with its time and host
+reason. A new browser session has no retained metric samples. Unreported disk
+capacity, growth, image metadata and volume sizes remain explicitly unavailable.
+All image, volume and network writes retain their unavailable mappings.

@@ -2,6 +2,8 @@
 import type { enDashboard } from "./en";
 
 export const deDashboard: typeof enDashboard = {
+  metricsUnavailable: "Messwerte noch nicht verfügbar",
+  growthUnavailable: "Wachstum noch nicht verfügbar",
   title: "Dashboard",
   description: "Lagebild aller gefilterten Hosts. Stacks und Container verwaltest du in eigenen Bereichen.",
   customize: "Anpassen",
@@ -10,6 +12,12 @@ export const deDashboard: typeof enDashboard = {
   addWidget: "Widget hinzufügen",
   editHint: "Bearbeiten: Karten ziehen (Maus, Stift oder Finger) – die anderen rücken nach. Die Ecke unten rechts ändert Breite und Höhe in Rasterschritten. Ohne Zeiger: Karte fokussieren, Alt + Pfeiltasten verschieben, Alt + Umschalt + Pfeiltasten ändern die Größe; die Knöpfe im Kopf tun dasselbe. Hostkarten im Lagebild lassen sich ebenso umordnen. Escape bricht Ziehen und Größenänderung ab.",
   summary: {
+    cpuLabel: "CPU",
+    memoryLabel: "RAM",
+    diskLabel: "Disk",
+    cpuHistory: "CPU {name}",
+    uncheckedSub: "Update-Status noch nicht geprüft.",
+    securityUnknown: "Sicherheitsstatus unbekannt",
     title: "Lagebild",
     scopeAll: "Alle {count} Hosts",
     scopeSome: "{shown} von {count} Hosts",
@@ -219,6 +227,7 @@ export const deDashboard: typeof enDashboard = {
     actions: { logs: "Logs", restart: "Neustart", check: "Prüfen", restore: "Wiederherstellen", security: "Ansehen", open: "Öffnen", assign: "Zuordnen", forecast: "Prognose" },
   },
   radar: {
+    unchecked: "Update-Status noch nicht geprüft.",
     major: "Hauptversion",
     minor: "Version",
     patch: "Patch",

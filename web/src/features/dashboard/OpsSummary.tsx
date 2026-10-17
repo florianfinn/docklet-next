@@ -141,7 +141,7 @@ interface OpsSummaryProps {
   attention: AttentionItem[];
   attentionText: (item: AttentionItem) => string;
   updates: number;
-  critical: number;
+  critical: number | undefined;
   runningActions: number;
   editing: boolean;
   animate: boolean;
@@ -182,6 +182,7 @@ export function OpsSummary({ hosts: byName, allHostsCount, stacks, containers, a
   const problems = problemItems(attention).length;
   const online = hosts.filter((h) => h.status === "online").length;
   const calm = attention.length === 0;
+  const unchecked = stacks.some((s) => s.services.some((svc) => svc.update.state === "unchecked")) || containers.some((c) => c.update.state === "unchecked");
   const top = attention[0];
   const verdictTone: Tone = calm ? "ok" : problems || attention.some((a) => a.tone === "err") ? "err" : "warn";
 
@@ -205,7 +206,7 @@ export function OpsSummary({ hosts: byName, allHostsCount, stacks, containers, a
             <h2 data-tone={verdictTone} className="text-xl font-semibold tracking-tight text-(--tone)">
               {calm ? t("calm") : t("attention", { count: attention.length })}
             </h2>
-            <p className="text-sm text-muted-foreground">{calm ? t("calmSub", { updates }) : t("attentionSub", { first: top ? attentionText(top) : "" })}</p>
+            <p className="text-sm text-muted-foreground">{calm ? unchecked && !updates ? t("uncheckedSub") : t("calmSub", { updates }) : t("attentionSub", { first: top ? attentionText(top) : "" })}</p>
           </div>
         </div>
         <div className="flex flex-wrap gap-2">
@@ -216,8 +217,8 @@ export function OpsSummary({ hosts: byName, allHostsCount, stacks, containers, a
           <PulseChip tone={online === hosts.length ? "ok" : "err"} icon={<ServerCog />} to="/hosts">
             {t("chips.hosts", { online, total: hosts.length })}
           </PulseChip>
-          <PulseChip tone={critical ? "err" : "ok"} icon={<ShieldAlert />} to="/security">
-            {t("chips.critical", { count: critical })}
+          <PulseChip tone={critical === undefined ? "info" : critical ? "err" : "ok"} icon={<ShieldAlert />} to="/security">
+            {critical === undefined ? t("securityUnknown") : t("chips.critical", { count: critical })}
           </PulseChip>
           {runningActions > 0 && (
             <PulseChip tone="accent" icon={<Activity className="animate-pulse" />} onClick={() => openActivity()}>

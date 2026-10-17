@@ -1,3 +1,4 @@
+import { useCapability } from "@/data/use-capability";
 import { Boxes, Crosshair, Link2, RotateCcw, Trash2 } from "lucide-react";
 import { useMemo, useState } from "react";
 import { useTranslations } from "use-intl";
@@ -58,6 +59,8 @@ export function NetworkTable({ host, networks, topology, containers, focus, quer
   const t = useTranslations("networks");
   const [group, setGroup] = useState<GroupFilter>("all");
   const [sort, setSort] = useState<SortState<SortKey>>({ key: "order", dir: "asc" });
+  const connect = useCapability("connectNetwork");
+  const remove = useCapability("removeNetwork");
   const online = host.status === "online";
   const members = useMemo(() => {
     const out = new Map<string, number>();
@@ -92,8 +95,8 @@ export function NetworkTable({ host, networks, topology, containers, focus, quer
 
   const menu = (n: TopologyNetwork): MenuGroups => [
     [{ id: "focus", label: t("menu.focus"), icon: <Crosshair />, onSelect: () => onFocus(n.id) }],
-    [{ id: "connect", label: t("menu.connect"), icon: <Link2 />, disabled: !online || n.driver === "host" || n.driver === "none", onSelect: () => onConnect({ mode: "connect", networkId: n.id }) }],
-    [{ id: "remove", label: t("menu.remove"), icon: <Trash2 />, disabled: !online || !!removeBlock(topology, n), onSelect: () => onRemove(n) }],
+    [{ id: "connect", label: t("menu.connect"), icon: <Link2 />, disabled: !connect.available || !!n.inventory?.stale || !online || n.driver === "host" || n.driver === "none", onSelect: () => onConnect({ mode: "connect", networkId: n.id }) }],
+    [{ id: "remove", label: t("menu.remove"), icon: <Trash2 />, disabled: !remove.available || !!n.inventory?.stale || !online || !!removeBlock(topology, n), title: remove.reason, onSelect: () => onRemove(n) }],
   ];
 
   return (
