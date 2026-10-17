@@ -72,7 +72,18 @@ it.each(["/dashboard", "/settings/general", "failure"])("stores host defaults se
   expect(writes[0]?.agentProjectsDirectory).toBe("/home/docker");
   expect(writes[0]?.projectsDirectory).toBeUndefined();
   if (!fail) {
-    await userEvent.click(await screen.findByRole("link", { name: target === "/dashboard" ? "Zum Dashboard" : "Hub-Einstellungen ansehen" }));
+    const locations: string[] = [];
+    const unsubscribe = router.subscribe((state) => locations.push(state.location.pathname));
+    const doneLink = await screen.findByRole("link", { name: target === "/dashboard" ? "Zum Dashboard" : "Hub-Einstellungen ansehen" });
+    // Publish completion first, so batching with Link navigation cannot hide a gate redirect.
+    doneLink.addEventListener("click", (event) => event.preventDefault(), { once: true });
+    await userEvent.click(doneLink);
+    expect(router.state.location.pathname).toBe("/setup");
+    expect(locations).toEqual([]);
+    expect(screen.queryByRole("link", { name: "Hub-Einstellungen ansehen" }) !== null).toBe(true);
+    await userEvent.click(doneLink);
+    unsubscribe();
+    expect(locations).toEqual([target]);
     if (target === "/dashboard") await screen.findByText("Dashboard target");
     else {
       await waitFor(() => expect((screen.getByLabelText("Name des Hubs") as HTMLInputElement).value).toBe("Setup Hub"));
