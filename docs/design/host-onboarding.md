@@ -19,7 +19,8 @@ File references are relative to `backend/` unless they start with `web/` or
   in agent mode (direct) or Edge agent mode (`AGENT_MODE`, `EDGE_AGENT` in
   `internal/config/config.go`; `EDGE_AGENT` implies agent mode).
 - **Install directory** holds only the agent's own files: `compose.yaml`, `.env`
-  and the agent data directory. It is never a stack.
+  and the agent data directory. It is never a stack; the installer refuses a
+  directory that already holds an unrelated stack.
 - **Project directory** holds the host's stacks as `<project dir>/<stack>/compose.yaml`.
   Its default comes from the hub setting `agentProjectsDirectory`, set in M4
   setup ([adapter and capabilities](adapter-live-capabilities.md)).
@@ -183,7 +184,8 @@ The hub cannot see a host before its agent runs, so checks run in two places.
 | Check | Where | Source |
 | --- | --- | --- |
 | Paths are absolute and normalised | UI, before install | Reference (`absolutePath`, `normalizePath` in `web/src/domain/validation.ts`) |
-| Install directory is not the project directory, does not contain it and is not inside a stack folder; its own subfolder of the project directory is allowed | UI and `install.sh` | Reference (`installDirProblem`); decision 5 |
+| Install directory is not the project directory, does not contain it and is not inside a stack folder; its own subfolder of the project directory is allowed | UI and `install.sh` | UI: reference (`installDirProblem`, path relationships only); decision 5. `install.sh` in the reference checks only equality; the other relationships **new** (#84) |
+| Install directory holds no unrelated stack: before any write, `install.sh` and the compose command stop if it contains a compose file (`compose.yaml`, `compose.yml`, `docker-compose.yaml`, `docker-compose.yml`) without the label `io.docklet.system=agent`; a recognised agent install is reinstalled in place | `install.sh` and compose command | **New** (#84), review decision S4; the reference truncates `compose.yaml` and `.env` without this check |
 | Project directory exists | `install.sh`; it stops otherwise | Reference |
 | Project directory is writable for the installing user | `install.sh`, warning only | Reference |
 | Agent can read and write the project directory as PUID/PGID | Agent at runtime | Arcane reports unreadable project directories (`pkg/projects/discovery.go`, `pkg/projects/env.go`); write check **new** |
@@ -216,6 +218,16 @@ PUID/PGID (`runtimeIdentitySupplementaryGroupsInternal` in
 accepted when detection is switched off. Which mechanism is authoritative is
 decision 2.
 
+Under decision 2 (a) a manual group from compose `group_add` does not yet reach
+the agent: the re-exec sets the child's supplementary groups explicitly to the
+detected socket group or none (`reexecWithRuntimeIdentityInternal` in
+`runtime_identity_linux.go`) and drops the groups the container started with. M5
+applies the union of both: the groups the root process started with, which
+include compose `group_add`, plus the detected socket group, without duplicates.
+Detection stays authoritative for the socket and follows group changes; the
+manual group is added to it and is the only one when detection finds nothing.
+Source: **new** (#84), review decision S1.
+
 ### Reported results
 
 The reference promises that the agent reports owner, write access and socket
@@ -238,10 +250,12 @@ component; the planned `SystemComponent` mapping reads that label
 reference.
 
 File-based project discovery scans the project directory to
-`PROJECT_SCAN_MAX_DEPTH` (default 3) and skips only the names in
-`PROJECT_SCAN_SKIP_DIRS` (`internal/config/config.go`). An install directory
-inside the project directory would therefore be discovered as a stack. When
-decision 5 keeps that layout allowed, the agent excludes its own install
+`PROJECT_SCAN_MAX_DEPTH` (default 3) and skips the names in
+`PROJECT_SCAN_SKIP_DIRS` (`internal/config/config.go`) as well as Arcane's own
+scratch and filesystem snapshot directories (`IsIgnoredProjectDirName` in
+`pkg/projects/discovery.go`). Neither covers an agent install directory, so an
+install directory inside the project directory would be discovered as a stack.
+When decision 5 keeps that layout allowed, the agent excludes its own install
 directory from discovery. Source: **new**.
 
 ## Disconnected host
@@ -313,3 +327,11 @@ this record on 2026-10-17. B1 to B3, S2 and S3 are in the
   [Installation artefacts](#installation-artefacts) apply to every artefact that
   carries the token. The accepted shell-history warning and browser-side
   generation (decision 6) stay.
+- **S1. Manual socket group with runtime detection, #84.** Decision 2 (a) stays;
+  the agent applies a manual `group_add` group together with the detected socket
+  group, as described under [Docker socket group](#docker-socket-group).
+- **S4. No overwrite of an existing stack, #84.** A direct subfolder of the
+  project directory stays allowed (decision 5). Before any write, the host-side
+  check rejects an install directory holding an unrelated stack and allows a
+  recognised agent reinstall, as listed under
+  [Checks before installation](#checks-before-installation).
