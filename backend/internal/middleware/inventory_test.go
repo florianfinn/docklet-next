@@ -21,7 +21,7 @@ import (
 )
 
 func TestInventoryStaleAndReconnect(t *testing.T) {
-	for _, suffix := range []string{"projects", "images", "volumes", "networks", "ports", "networks/topology", "networks/user", "dashboard"} {
+	for _, suffix := range []string{"containers", "projects", "images", "volumes", "networks", "ports", "networks/topology", "networks/user", "dashboard"} {
 		t.Run(suffix, func(t *testing.T) {
 			m := &EnvironmentMiddleware{snapshots: &hoststate.Store{}}
 			read := func(status int, body string) *httptest.ResponseRecorder {
@@ -51,7 +51,7 @@ func TestInventoryStaleAndReconnect(t *testing.T) {
 }
 
 func TestInventoryCompatibilityBlocksOrdinaryRead(t *testing.T) {
-	for _, suffix := range []string{"projects", "images", "volumes", "networks", "ports", "dashboard"} {
+	for _, suffix := range []string{"containers", "projects", "images", "volumes", "networks", "ports", "dashboard"} {
 		t.Run(suffix, func(t *testing.T) {
 			reads := 0
 			incompatible := false
@@ -98,3 +98,24 @@ func TestInventoryCompatibilityBlocksOrdinaryRead(t *testing.T) {
 type inventoryTransport func(*http.Request) (*http.Response, error)
 
 func (f inventoryTransport) RoundTrip(r *http.Request) (*http.Response, error) { return f(r) }
+
+func TestInventorySnapshotsAreIsolatedByHost(t *testing.T) {
+	m := &EnvironmentMiddleware{snapshots: &hoststate.Store{}}
+	read := func(host string, status int, body string) *httptest.ResponseRecorder {
+		rec := httptest.NewRecorder()
+		c := echo.New().NewContext(httptest.NewRequest(http.MethodGet, "/api/environments/"+host+"/containers?limit=100", nil), rec)
+		require.NoError(t, m.inventoryRead(c, host, func() error { return c.JSONBlob(status, []byte(body)) }))
+		return rec
+	}
+	a := read("host-a", 200, `{"success":true,"data":[{"id":"only-a"}]}`)
+	missing := read("host-b", 502, `{"success":false,"code":"agent.unavailable"}`)
+	require.Equal(t, 502, missing.Code)
+	require.NotContains(t, missing.Body.String(), "only-a")
+	b := read("host-b", 200, `{"success":true,"data":[{"id":"only-b"}]}`)
+	for host, fresh := range map[string]*httptest.ResponseRecorder{"host-a": a, "host-b": b} {
+		stale := read(host, 502, `{"success":false,"code":"agent.unavailable"}`)
+		require.Equal(t, 200, stale.Code)
+		require.JSONEq(t, fresh.Body.String(), stale.Body.String())
+		require.Equal(t, fresh.Header().Get("X-Docklet-Observed-At"), stale.Header().Get("X-Docklet-Observed-At"))
+	}
+}
