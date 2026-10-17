@@ -22,10 +22,11 @@ export function createResourceReader(baseUrl: string, fetcher: typeof fetch, hos
     onState(hostId, inventory);
     return inventory;
   }
-  async function aggregate<T>(operation: string, load: (host: Host) => Promise<T[]>): Promise<T[]> {
+  async function aggregate<T>(operation: string, load: (host: Host) => Promise<T[]>, onPartial?: (rows: T[]) => void): Promise<T[]> {
     await requireCapability(operation);
+    const completed: T[] = [];
     const batches = await Promise.all((await hosts()).map(async (host) => {
-      try { return await load(host); }
+      try { const rows = await load(host); completed.push(...rows); onPartial?.([...completed]); return rows; }
       catch (error) {
         onState(host.id, inventoryFailure(host.id, error));
         return [];
@@ -33,10 +34,10 @@ export function createResourceReader(baseUrl: string, fetcher: typeof fetch, hos
     }));
     return batches.flat();
   }
-  const listVolumes = () => aggregate("listVolumes", async (h) => {
+  const listVolumes: DockletAdapter["listVolumes"] = (onPartial) => aggregate("listVolumes", async (h) => {
     const [volumes, ctx] = await Promise.all([list("list-volumes", h.id, "volumes"), context(h.id)]);
     return mapVolumes(volumes.rows, h.id, ctx.containers, ctx.projects, observe(h.id, [...ctx.observations, volumes.observation]));
-  });
+  }, onPartial);
   return {
     listVolumes,
     async getVolume(id) {
@@ -46,19 +47,20 @@ export function createResourceReader(baseUrl: string, fetcher: typeof fetch, hos
       if (!volume) throw new AdapterOutcomeError({ kind: "error", code: "get-volume.not-found" });
       return { ...volume, backups: [] };
     },
-    listImages: () => aggregate("listImages", async (h) => {
+    listImages: (onPartial) => aggregate("listImages", async (h) => {
       const [images, ctx] = await Promise.all([list("list-images", h.id, "images"), context(h.id)]);
       const inventory = observe(h.id, [...ctx.observations, images.observation]);
       return images.rows.filter((i) => i.labels?.["io.docklet.system"] !== "agent").map((i) => mapImage(i, h.id, ctx.containers, ctx.projects, inventory));
-    }),
-    async getTopology() {
+    }, onPartial),
+    async getTopology(onPartial) {
+      const merge = (graphs: Awaited<ReturnType<typeof mapTopology>>[]) => ({ networks: graphs.flatMap((g) => g.networks), attachments: graphs.flatMap((g) => g.attachments), dependencies: graphs.flatMap((g) => g.dependencies) });
       const graphs = await aggregate("getTopology", async (h) => {
         const [networks, ctx] = await Promise.all([list("list-networks", h.id, "networks"), context(h.id)]);
         const details = await Promise.all(networks.rows.map((n) => read("get-network", h.id, `networks/${encodeURIComponent(n.id)}`)));
         const inventory = observe(h.id, [...ctx.observations, networks.observation, ...details.map((d) => d.observation)]);
         return [mapTopology(details.map((d) => d.body.data), h.id, ctx.containers, ctx.projects, inventory)];
-      });
-      return { networks: graphs.flatMap((g) => g.networks), attachments: graphs.flatMap((g) => g.attachments), dependencies: graphs.flatMap((g) => g.dependencies) };
+      }, (graphs) => onPartial?.(merge(graphs)));
+      return merge(graphs);
     },
   };
 }

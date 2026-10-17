@@ -19,7 +19,7 @@ export function filterImages(images: readonly DockerImage[], f: { query: string;
   return images.filter(
     (i) =>
       (f.usage === "all" || imageUsage(i) === f.usage) &&
-      (!q || `${imageReference(i)} ${i.version ?? ""} ${i.aliases.join(" ")} ${i.consumers.map((c) => `${c.name} ${c.stackId ?? ""}`).join(" ")}`.toLowerCase().includes(q)),
+      (!q || `${imageReference(i)} ${i.version ?? ""} ${i.aliases.join(" ")} ${i.consumers.map((c) => `${c.name} ${c.stackName ?? ""}`).join(" ")}`.toLowerCase().includes(q)),
   );
 }
 

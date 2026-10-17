@@ -194,8 +194,19 @@ func (m *EnvironmentMiddleware) Handle(c *echo.Context, next echo.HandlerFunc) e
 	})
 }
 
+func (m *EnvironmentMiddleware) hasActiveEdgeTunnelInternal(envID string) bool {
+	_, ok := m.getActiveEdgeTunnelInternal(envID).Get()
+	return ok
+}
+
 func (m *EnvironmentMiddleware) forwardInventoryRequest(c *echo.Context, envID, apiURL string, accessToken *string) error {
 
+	suffix := m.buildResourceSuffix(c.Request().URL.Path, envID)
+	// Hub snapshots answer disconnected reads; other proxy modes retain transport recovery.
+	if m.snapshots != nil && isEdgeEnvironmentURLInternal(apiURL) && c.Request().Method == http.MethodGet && inventorySuffix(suffix, strings.Split(strings.Trim(suffix, "/"), "/")) && !m.hasActiveEdgeTunnelInternal(envID) {
+		edge.TouchTunnelDemand(envID, edge.DefaultTunnelDemandTTL)
+		return m.abortEdgeTunnelUnavailable(c)
+	}
 	if m.agentAccess != nil {
 		ctx, cancel, err := m.agentAccess(c.Request().Context(), envID, accessToken, c.Request().Method, m.buildProxyPath(c, envID))
 		if err != nil {

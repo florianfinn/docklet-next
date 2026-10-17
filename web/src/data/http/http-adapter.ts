@@ -4,6 +4,8 @@
 // License: Apache-2.0
 // Deviations: Original HTTP and SSE adapter for issue 38.
 
+import { QueryClient } from "@tanstack/react-query";
+
 import type { components, operations, paths } from "@/api/generated/schema";
 
 import type { DockletAdapter, Topic } from "../adapter";
@@ -97,7 +99,12 @@ export function createHttpAdapter(options: HttpAdapterOptions = {}): DockletAdap
   const capabilityReads = new Map<string, Promise<Body<"get-capabilities">["data"]>>();
   let environmentState: string | undefined;
   const inventoryTopics: Topic[] = ["stacks", "containers", "images", "volumes", "topology"];
+  const environmentCache = new QueryClient({ defaultOptions: { queries: { retry: false, staleTime: 10_000, gcTime: 30_000 } } });
+  const environmentsKey = ["environments"];
+  const environments = () => environmentCache.fetchQuery({ queryKey: environmentsKey, queryFn: () => page("listEnvironments", "/environments", 100) });
   function invalidateCapabilities() { capabilityReads.clear(); }
+  function invalidateEnvironments() { void environmentCache.invalidateQueries({ queryKey: environmentsKey }); }
+  function invalidateIdentity() { invalidateCapabilities(); environmentCache.clear(); observations.clear(); }
   function environmentKey(rows: components["schemas"]["EnvironmentEnvironment"][]) {
     return JSON.stringify(rows.map((row) => [row.id, row.status, row.enabled, row.apiUrl, row.isEdge, row.agentReport?.version.currentVersion, row.agentReport?.version.agentContractVersion, row.agentReport?.version.agentContractFingerprint]).sort((a, b) => String(a[0]).localeCompare(String(b[0]))));
   }
@@ -147,8 +154,8 @@ export function createHttpAdapter(options: HttpAdapterOptions = {}): DockletAdap
 
   async function loadActions(): Promise<CodedActionRun[]> {
     await requireCapability("listActions");
-    const environments = await page("listEnvironments", "/environments", 100);
-    const ids = new Set(["0", ...environments.map((item) => item.id)]);
+    const rows = await environments();
+    const ids = new Set(["0", ...rows.map((item) => item.id)]);
     const batches = await Promise.all([...ids].map((id) => page("list-activities", `/environments/${encodeURIComponent(id)}/activities`, 100)));
     const items = batches.flat();
     const runs = await Promise.all(items.map(async (item) => {
@@ -207,6 +214,7 @@ export function createHttpAdapter(options: HttpAdapterOptions = {}): DockletAdap
   }
 
   function refreshSubscribed(): void {
+    invalidateEnvironments();
     refreshRuns();
     if (changeListeners.size) changeListeners.forEach((listener) => listener(["events", "hosts", "stacks", "containers", "images", "volumes", "topology"]));
   }
@@ -234,6 +242,7 @@ export function createHttpAdapter(options: HttpAdapterOptions = {}): DockletAdap
     }
     if (envelope.channel === "environments") {
       invalidateCapabilities();
+      invalidateEnvironments();
       const rows = envelope.environment?.environments;
       const next = Array.isArray(rows) ? environmentKey(rows) : undefined;
       const changed = next === undefined || next !== environmentState;
@@ -298,7 +307,7 @@ export function createHttpAdapter(options: HttpAdapterOptions = {}): DockletAdap
   const observations = new Map<string, InventoryObservation>();
   async function listHosts() {
     await requireCapability("listHosts");
-    const rows = await page("listEnvironments", "/environments", 100);
+    const rows = await environments();
     try {
       const hosts = rows.map((row) => ({ ...mapHost(row), inventory: observations.get(row.id) }));
       environmentState = environmentKey(rows);
@@ -316,8 +325,8 @@ export function createHttpAdapter(options: HttpAdapterOptions = {}): DockletAdap
   const methods = Object.fromEntries(Object.keys(unsupported).filter((key) => key !== "kind").map((operationId) => [operationId, (...args: unknown[]) => Promise.reject(unavailable(operationId, refFor(operationId, args), "capability.mapping-unavailable"))])) as unknown as DockletAdapter;
   return {
     ...methods,
-    ...createHttpAuth(baseUrl, client, invalidateCapabilities),
-    ...createHostCommands(baseUrl, client, requireCapability, () => { invalidateCapabilities(); changeListeners.forEach((listener) => listener(["hosts", ...inventoryTopics])); }),
+    ...createHttpAuth(baseUrl, client, invalidateIdentity),
+    ...createHostCommands(baseUrl, client, requireCapability, () => { invalidateCapabilities(); invalidateEnvironments(); changeListeners.forEach((listener) => listener(["hosts", ...inventoryTopics])); }),
     ...createSettingsCore(baseUrl, client),
     ...createHttpHubBackups(baseUrl, client, options.uploadFactory),
     kind: "http",

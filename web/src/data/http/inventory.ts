@@ -29,13 +29,19 @@ export function createInventoryReader(baseUrl: string, fetcher: typeof fetch, ho
       return { stacks: [], containers: [] };
     }
   }
-  async function aggregate(operation: string) {
+  async function aggregate(operation: string, onPartial?: (batches: Awaited<ReturnType<typeof hostInventory>>[]) => void) {
     await requireCapability(operation);
-    return Promise.all((await hosts()).map(hostInventory));
+    const batches: Awaited<ReturnType<typeof hostInventory>>[] = [];
+    return Promise.all((await hosts()).map(async (host) => {
+      const batch = await hostInventory(host);
+      batches.push(batch);
+      onPartial?.(batches);
+      return batch;
+    }));
   }
   return {
-    async listStacks() { return (await aggregate("listStacks")).flatMap((batch) => batch.stacks); },
-    async listContainers() { return (await aggregate("listContainers")).flatMap((batch) => batch.containers); },
+    async listStacks(onPartial) { return (await aggregate("listStacks", (batches) => onPartial?.(batches.flatMap((b) => b.stacks)))).flatMap((batch) => batch.stacks); },
+    async listContainers(onPartial) { return (await aggregate("listContainers", (batches) => onPartial?.(batches.flatMap((b) => b.containers)))).flatMap((batch) => batch.containers); },
     async getStack(id) {
       await requireCapability("getStack");
       const [hostId, projectId] = splitInventoryId(id);

@@ -62,6 +62,7 @@ export const deStacks: typeof enStacks = {
     draftMeta: "Noch nicht deployt · Ziel: {host} · Easy und Advanced bearbeiten denselben Entwurf.",
     servicesCount: "{count, plural, one {# Service} other {# Services}}",
     deployed: "Deploy {time}",
+    unknownDeploy: "Unbekannt",
     never: "noch nie",
     hostOffline: "{host} ist nicht verbunden – Werte sind veraltet, Aktionen schlagen fehl.",
     tabs: { overview: "Übersicht", editor: "Editor", logs: "Logs", deployments: "Deployments" },

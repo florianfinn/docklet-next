@@ -47,7 +47,7 @@ export function LoadView({ values, memLimitMb, display, className }: { values: L
     );
   }
 
-  const memPct = values ? (values.memMb / Math.max(1, memLimitMb)) * 100 : null;
+  const memPct = values && memLimitMb > 0 ? (values.memMb / memLimitMb) * 100 : null;
   return (
     <span data-slot="container-load" data-display="rings" className={cn("flex w-[10.5rem] items-center gap-2", className)}>
       <RingMetric
@@ -62,7 +62,7 @@ export function LoadView({ values, memLimitMb, display, className }: { values: L
         percent={memPct}
         centre={memPct === null ? "–" : String(Math.round(memPct))}
         detail={values ? formatMem(values.memMb) : t("off")}
-        valueText={values && memPct !== null ? t("ramValue", { used: formatMem(values.memMb), limit: formatMem(memLimitMb), percent: Math.round(memPct) }) : t("unavailable")}
+        valueText={values && memPct !== null ? t("ramValue", { used: formatMem(values.memMb), limit: formatMem(memLimitMb), percent: Math.round(memPct) }) : values ? formatMem(values.memMb) : t("unavailable")}
       />
     </span>
   );

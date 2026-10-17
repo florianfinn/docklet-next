@@ -25,7 +25,7 @@ export function resourceFixture() {
     sockets.set(url.includes("first") ? "first" : "second", socket);
     return socket;
   });
-  const json = (data: unknown, paginated = false, observed = false, status = 200) => new Response(JSON.stringify(status === 200 ? { success: true, data, ...(paginated ? { pagination: { totalItems: Array.isArray(data) ? data.length : 0 } } : {}) } : { success: false, code: data }), { status, headers: { "Content-Type": "application/json", ...(observed ? { "X-Docklet-Observed-At": state.dynamicObservation ? new Date().toISOString() : state.observedAt, ...(state.reason ? { "X-Docklet-Host-Reason": state.reason } : {}) } : {}) } });
+  const json = (data: unknown, paginated = false, observed = false, status = 200) => new Response(JSON.stringify(status === 200 ? { success: true, data, ...(paginated ? { pagination: { totalItems: Array.isArray(data) ? data.length : 0 } } : {}) } : { success: false, code: data }), { status, headers: { "Content-Type": "application/json", "X-CSRF-Token": "example".padEnd(43, "x"), ...(observed ? { "X-Docklet-Observed-At": state.dynamicObservation ? new Date().toISOString() : state.observedAt, ...(state.reason ? { "X-Docklet-Host-Reason": state.reason } : {}) } : {}) } });
   const fetcher = vi.fn(async (input: string | URL | Request) => {
     const url = new URL(String(input), "https://hub.example.com");
     if (url.pathname === "/api/capabilities") return json(["listHosts", "listStacks", "listContainers", "listImages", "listVolumes", "getVolume", "getTopology", "subscribeMetrics"].map((operationId) => ({ operationId, available: true, resourceRef: { kind: url.searchParams.get("kind") ?? "hub", id: url.searchParams.get("id") ?? "0" } })));

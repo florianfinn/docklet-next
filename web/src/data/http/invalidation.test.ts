@@ -26,7 +26,7 @@ it("budgets at most 78 HTTP reads for an idle stacks page with seven ordinary SS
     await vi.advanceTimersByTimeAsync(0);
     await Promise.all(pending.splice(0));
     const initial = f.fetcher.mock.calls.length;
-    expect(initial).toBe(12); // One capability, three host lists, six inventory lists and two observation notices.
+    expect(initial).toBe(8); // One capability, one shared host list and six inventory reads.
     for (let second = 0; second < 60; second += 10) {
       const payload = second % 20 === 0 ? { channel: "activities", activity: { type: "updated" } } : { channel: "environments", environment: { type: "snapshot", environments: f.state.hostIds.map((id) => ({ id, name: id, apiUrl: "http://agent.example.com", enabled: true, status: "online", isEdge: false, lastSeen: `2026-10-17T12:00:${second}Z` })) } };
       f.source.onmessage?.({ data: JSON.stringify({ ...payload, timestamp: at }), lastEventId: "" } as MessageEvent);

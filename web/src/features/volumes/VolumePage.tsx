@@ -47,7 +47,7 @@ function OverviewTab({ volume: v, host }: { volume: VolumeDetail; host: Host | u
   const rows: [string, string][] = [
     [t("driver"), v.driver ?? t("none")],
     [v.kind === "volume" ? t("mountpoint") : t("source"), v.source],
-    [t("compose"), v.composeName ? `${v.stackId}/${v.composeName}` : t("none")],
+    [t("compose"), v.composeName ? `${v.stackName ?? v.stackId}/${v.composeName}` : t("none")],
     [t("created"), v.createdAt ? formatDate(v.createdAt) : t("none")],
   ];
   return (

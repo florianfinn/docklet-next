@@ -11,6 +11,7 @@ export interface VolumeConsumer {
   containerId: string;
   containerName: string;
   stackId?: string;
+  stackName?: string;
   service?: string;
   target: string;
   readOnly: boolean;
@@ -62,6 +63,7 @@ export interface Volume {
   /** Key in compose.yaml when the volume belongs to a stack. */
   composeName?: string;
   stackId?: string;
+  stackName?: string;
   /** Bind mount of a single file instead of a directory. */
   fileBind?: boolean;
   sizeBytes: number;
@@ -144,6 +146,7 @@ export interface MountUsage {
   kind: StorageKind;
   hostId: string;
   stackId?: string;
+  stackName?: string;
   composeName?: string;
   fileBind: boolean;
   consumers: VolumeConsumer[];
@@ -154,6 +157,7 @@ interface MountingContainer {
   name: string;
   hostId: string;
   stackId?: string;
+  stackName?: string;
   serviceName?: string;
   state: string;
   mounts: string[];

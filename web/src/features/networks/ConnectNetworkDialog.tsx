@@ -34,7 +34,7 @@ interface Props {
   containers: ContainerInfo[];
 }
 
-const label = (c: Pick<ContainerInfo, "name" | "serviceName" | "stackId">) => (c.stackId && c.serviceName ? `${c.stackId} · ${c.serviceName}` : c.name);
+const label = (c: Pick<ContainerInfo, "name" | "serviceName" | "stackId" | "stackName">) => (c.stackId && c.serviceName ? `${c.stackName ?? c.stackId} · ${c.serviceName}` : c.name);
 
 /**
  * Connect or disconnect wizard for one host: pick container and network,

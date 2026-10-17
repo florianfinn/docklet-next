@@ -24,7 +24,7 @@ export const deImages: typeof enImages = {
   system: "Docklet-Agent (System)",
   securityLabel: "Befunde: {all} – zur Sicherheit",
   securityClean: "keine",
-  footer: "{shown} von {total} Images · Zeile öffnet die Details. Alle Werte sind synthetisch.",
+  footer: "{shown} von {total} Images · Zeile öffnet die Details.",
   empty: { title: "Keine Images für diese Filter", reset: "Filter zurücksetzen" },
   emptyAll: { title: "Keine Images", description: "Auf den gefilterten Hosts sind keine Images bekannt." },
   blocks: { region: "Images nach Host", empty: "Keine passenden Images auf diesem Host.", summary: "{count} Images · {size}" },

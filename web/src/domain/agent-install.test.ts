@@ -189,3 +189,13 @@ it.each([["direct", "docklet-agent"], ["edge", "docklet-edge-agent"]] as const)(
   expect(a.compose).toContain(`    container_name: ${name}\n`);
   expect(a.compose).toContain('io.docklet.system: "agent"');
 });
+
+it("D5 generates BusyBox-compatible preflight for every installer entry point", () => {
+  const a = buildInstallArtifacts(plan);
+  for (const script of [a.script, a.composeCommand, a.scriptCommand]) {
+    expect(script).not.toMatch(/realpath\s+-m/);
+    expect(spawnSync("sh", ["-n"], { input: script }).status).toBe(0);
+  }
+  expect(a.readme).toContain("BusyBox is supported");
+  expect(a.readme).not.toContain("realpath");
+});

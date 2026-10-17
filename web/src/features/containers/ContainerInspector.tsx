@@ -1,14 +1,15 @@
-import { Cpu, Layers, MemoryStick, SquareArrowOutUpRight } from "lucide-react";
+import { Cpu, Layers, SquareArrowOutUpRight } from "lucide-react";
 import { Link } from "react-router";
 import { useTranslations } from "use-intl";
 
 import { useMetrics } from "@/data/live";
-import { formatMem } from "@/domain/format";
+
 import type { ContainerInfo, Host } from "@/domain/model";
 import { containerRuntime, RUNTIME_TONE } from "@/domain/status";
 import { keepOpenForCoordinatedLayers } from "@/features/activity/layer-coordination";
 import { HiddenBadge } from "@/shared/components/hidden-badge";
 import { HostChip } from "@/shared/components/host-chip";
+import { ContainerMemory } from "@/shared/components/container-memory";
 import { Meter } from "@/shared/components/meter";
 import { SimulationBadge } from "@/shared/components/simulation-badge";
 import { IconTile, ToneBadge } from "@/shared/components/tone";
@@ -99,7 +100,7 @@ export function ContainerInspector({ container: c, host, onClose }: InspectorPro
                   </div>
                   <div className="grid grid-cols-2 gap-4 rounded-xl border p-3">
                     <Meter label="CPU" icon={<Cpu />} value={m?.cpu ?? 0} color={host?.color} />
-                    <Meter label="RAM" icon={<MemoryStick />} value={m ? (m.memMb / Math.max(1, c.memLimitMb)) * 100 : 0} color={host?.color} sub={m ? `${formatMem(m.memMb)} / ${formatMem(c.memLimitMb)}` : undefined} />
+                    <ContainerMemory usedMb={m?.memMb} limitMb={c.memLimitMb} color={host?.color} />
                   </div>
                 </section>
                 <section className="overflow-hidden rounded-xl border">

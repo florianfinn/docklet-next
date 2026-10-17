@@ -23,7 +23,7 @@ export const enImages = {
   system: "Docklet agent (system)",
   securityLabel: "Findings: {all} – go to Security",
   securityClean: "none",
-  footer: "{shown} of {total} images · Row opens the details. All values are synthetic.",
+  footer: "{shown} of {total} images · Row opens the details.",
   empty: { title: "No images for these filters", reset: "Reset filters" },
   emptyAll: { title: "No images", description: "No images are known on the filtered hosts." },
   blocks: { region: "Images by host", empty: "No matching images on this host.", summary: "{count} images · {size}" },

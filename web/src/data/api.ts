@@ -116,7 +116,7 @@ export interface VolumePruneResult {
 }
 
 export interface VolumesApi {
-  listVolumes(): Promise<Volume[]>;
+  listVolumes(onPartial?: (rows: Volume[]) => void): Promise<Volume[]>;
   getVolume(id: string): Promise<VolumeDetail>;
   createVolume(input: CreateVolumeInput): Promise<Volume>;
   deleteVolume(id: string): Promise<void>;
@@ -157,7 +157,7 @@ export interface ConnectNetworkInput {
  * "containers" topics; every call is checked again on the adapter side.
  */
 export interface NetworksApi {
-  getTopology(): Promise<Topology>;
+  getTopology(onPartial?: (rows: Topology) => void): Promise<Topology>;
   /** Field errors throw "invalid-network"; disconnected hosts "host-offline". */
   createNetwork(input: CreateNetworkInput): Promise<TopologyNetwork>;
   /** Refused for Docker's own networks, Compose-owned networks and while containers are attached. */
@@ -179,7 +179,7 @@ export interface PullImageInput {
 
 export interface ImagesApi {
   /** Images of all connected and disconnected hosts with consumers derived from the containers. */
-  listImages(): Promise<DockerImage[]>;
+  listImages(onPartial?: (rows: DockerImage[]) => void): Promise<DockerImage[]>;
   /** Pulls an image and returns the action id. */
   pullImage(input: PullImageInput): Promise<string>;
   /** Refused with "in-use" while any container (running or stopped) uses the image. */

@@ -14,6 +14,7 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/florianfinn/docklet-next/backend/pkg/hoststate"
 	"github.com/labstack/echo/v5"
@@ -117,5 +118,27 @@ func TestInventorySnapshotsAreIsolatedByHost(t *testing.T) {
 		require.Equal(t, 200, stale.Code)
 		require.JSONEq(t, fresh.Body.String(), stale.Body.String())
 		require.Equal(t, fresh.Header().Get("X-Docklet-Observed-At"), stale.Header().Get("X-Docklet-Observed-At"))
+	}
+}
+
+func TestD2DisconnectedEdgeInventoryUsesSnapshotWithoutAgentIO(t *testing.T) {
+	for _, suffix := range []string{"containers", "projects", "images", "volumes", "networks", "dashboard", "projects/app"} {
+		t.Run(suffix, func(t *testing.T) {
+			store := &hoststate.Store{}
+			cached := store.Put(hoststate.Key{HostID: "edge-offline", List: "/" + suffix + "?"}, []byte(`{"success":true,"data":[{"name":"cached"}]}`))
+			m := &EnvironmentMiddleware{snapshots: store, agentAccess: func(context.Context, string, *string, string, string) (context.Context, context.CancelFunc, error) {
+				t.Fatal("disconnected Edge read must not wait for agent compatibility or connection")
+				return nil, nil, nil
+			}}
+			rec := httptest.NewRecorder()
+			c := echo.New().NewContext(httptest.NewRequest(http.MethodGet, "/api/environments/edge-offline/"+suffix, nil), rec)
+			started := time.Now()
+			require.NoError(t, m.inventoryRead(c, "edge-offline", func() error { return m.forwardInventoryRequest(c, "edge-offline", "edge://offline", nil) }))
+			require.Less(t, time.Since(started), time.Second)
+			require.Equal(t, http.StatusOK, rec.Code)
+			require.Contains(t, rec.Body.String(), "cached")
+			require.Equal(t, "agent.unavailable", rec.Header().Get("X-Docklet-Host-Reason"))
+			require.Equal(t, cached.ObservedAt.Format(time.RFC3339Nano), rec.Header().Get("X-Docklet-Observed-At"))
+		})
 	}
 }

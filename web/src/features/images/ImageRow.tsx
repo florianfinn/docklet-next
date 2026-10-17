@@ -53,7 +53,7 @@ export function ConsumerLinks({ image, limit = 3 }: { image: DockerImage; limit?
             className="inline-flex items-center gap-1 rounded-md border bg-muted/30 px-1.5 py-0.5 text-xs outline-none hover:bg-muted focus-visible:ring-2 focus-visible:ring-ring"
           >
             {c.stackId ? <Layers className="size-3 text-muted-foreground" aria-hidden /> : <Package className="size-3 text-muted-foreground" aria-hidden />}
-            {c.stackId ? `${c.stackId} · ${c.serviceName}` : c.name}
+            {c.stackId ? `${c.stackName ?? c.stackId} · ${c.serviceName}` : c.name}
           </Link>
         ),
       )}

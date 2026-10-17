@@ -1,4 +1,4 @@
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useMemo } from "react";
 import { useLocale } from "use-intl";
 
@@ -27,7 +27,8 @@ export function useSystemComponents() {
 
 export function useStacks() {
   const adapter = useAdapter();
-  return useQuery({ queryKey: queryKeys.stacks, queryFn: () => adapter.listStacks() });
+  const client = useQueryClient();
+  return useQuery({ queryKey: queryKeys.stacks, queryFn: ({ signal }) => adapter.listStacks((rows) => { if (!signal.aborted) client.setQueryData(queryKeys.stacks, rows); }) });
 }
 
 export function useStack(id: string | undefined) {
@@ -39,7 +40,8 @@ export function useStack(id: string | undefined) {
 
 export function useContainers() {
   const adapter = useAdapter();
-  return useQuery({ queryKey: queryKeys.containers, queryFn: () => adapter.listContainers(), select: useLocalized(localizeContainers) });
+  const client = useQueryClient();
+  return useQuery({ queryKey: queryKeys.containers, queryFn: ({ signal }) => adapter.listContainers((rows) => { if (!signal.aborted) client.setQueryData(queryKeys.containers, rows); }), select: useLocalized(localizeContainers) });
 }
 
 export function useSecurity() {
@@ -49,7 +51,8 @@ export function useSecurity() {
 
 export function useTopology() {
   const adapter = useAdapter();
-  return useQuery({ queryKey: queryKeys.topology, queryFn: () => adapter.getTopology() });
+  const client = useQueryClient();
+  return useQuery({ queryKey: queryKeys.topology, queryFn: ({ signal }) => adapter.getTopology((rows) => { if (!signal.aborted) client.setQueryData(queryKeys.topology, rows); }) });
 }
 
 export function useEvents() {
@@ -71,7 +74,8 @@ export function useSchedule() {
 
 export function useVolumes() {
   const adapter = useAdapter();
-  return useQuery({ queryKey: queryKeys.volumes, queryFn: () => adapter.listVolumes() });
+  const client = useQueryClient();
+  return useQuery({ queryKey: queryKeys.volumes, queryFn: ({ signal }) => adapter.listVolumes((rows) => { if (!signal.aborted) client.setQueryData(queryKeys.volumes, rows); }) });
 }
 
 export function useVolume(id: string | undefined) {
@@ -111,5 +115,6 @@ export function useSetupStatus(enabled = true) {
 
 export function useImages() {
   const adapter = useAdapter();
-  return useQuery({ queryKey: queryKeys.images, queryFn: () => adapter.listImages() });
+  const client = useQueryClient();
+  return useQuery({ queryKey: queryKeys.images, queryFn: ({ signal }) => adapter.listImages((rows) => { if (!signal.aborted) client.setQueryData(queryKeys.images, rows); }) });
 }

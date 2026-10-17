@@ -275,6 +275,7 @@ func (
 	}
 	for _, dc := range containers {
 		summary := containertypes.NewSummary(dc)
+		summary.Ports = mergePortBindings(summary.Ports)
 		policy := updater.DefaultLabelPolicy().TagPolicy(dc.Labels)
 		resolved, policyErr := tagpolicy.Resolve(dc.Image, policy)
 		summary.UpdateStrategy = resolved.Strategy

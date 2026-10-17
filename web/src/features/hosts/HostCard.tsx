@@ -81,7 +81,7 @@ export function HostCard({ host, system, stacks, containers, allIds, onFiles }: 
   const [settings, setSettings] = useState(false);
   const visible = isHostVisible(selection, host.id);
   const remove = useCapability("removeHost");
-  const removable = remove.available && host.id !== "0" && stacks === 0 && containers === 0;
+  const removable = remove.available && host.id !== "0";
   const pending = host.status === "pending";
   const connect = useHostAction(host.id, "onboard", () => cmd.connect(host.id));
   const check = useHostAction(host.id, "reconnect", () => cmd.reconnect(host.id));
@@ -136,14 +136,14 @@ export function HostCard({ host, system, stacks, containers, allIds, onFiles }: 
             {host.fileOwner ? `${host.fileOwner.uid}:${host.fileOwner.gid}` : t("card.fileIdsAuto")}
           </Row>
         )}
-        <Row label={t("card.versions")} mono>
-          {host.agentVersion} / {host.dockerVersion}
+        <Row label={t(host.dockerVersion ? "card.versions" : "card.agentVersion")} mono>
+          {[host.agentVersion, host.dockerVersion].filter(Boolean).join(" / ")}
         </Row>
         <Row label={t("card.system")}>{host.os}</Row>
         <Row label={t("card.lastSeen")}>{host.status === "online" ? tc("online") : formatRelative(host.lastSeen)}</Row>
       </dl>
       <AgentReportSection host={host} />
-      <SystemSection component={system} />
+      {(system || !host.agentVersion && !host.agentReport) && <SystemSection component={system} />}
       <p className="text-xs text-muted-foreground">{t("card.usage", { stacks, containers })}</p>
       <footer className="flex flex-wrap gap-2 border-t pt-3">
         {pending ? (import.meta.env.DEV ? (

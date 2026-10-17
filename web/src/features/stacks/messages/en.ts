@@ -61,6 +61,7 @@ export const enStacks = {
     draftMeta: "Not deployed yet · Target: {host} · Easy and Advanced edit the same draft.",
     servicesCount: "{count, plural, one {# service} other {# services}}",
     deployed: "Deploy {time}",
+    unknownDeploy: "Unknown",
     never: "never",
     hostOffline: "{host} is not connected – values are outdated, actions fail.",
     tabs: { overview: "Overview", editor: "Editor", logs: "Logs", deployments: "Deployments" },
