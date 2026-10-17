@@ -45,6 +45,7 @@ export const deCommon: typeof enCommon = {
     badge: "Aus Übersicht ausgeblendet",
   },
   query: {
+    unavailableTitle: "Diese Funktion ist nicht verfügbar",
     errorTitle: "Daten konnten nicht geladen werden",
     errorHint: (import.meta.env.DEV ? "Im Design-Labor ist eine Fehlersimulation aktiv oder die Quelle antwortet nicht." : "Die Quelle ist nicht erreichbar."),
     emptyTitle: "Keine Einträge",
