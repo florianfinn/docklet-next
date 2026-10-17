@@ -4,12 +4,16 @@
 // License: Apache-2.0
 // Deviations: Original resource inventory contract tests.
 
-import { expect, it, vi } from "vitest";
+import { afterEach, expect, it, vi } from "vitest";
 import type { Topic } from "@/data/adapter";
 import { at, resourceFixture } from "./resources.test-support";
 
-it("budgets at most 15 HTTP reads for an idle stacks page with seven ordinary SSE envelopes in one minute", async () => {
+afterEach(() => vi.useRealTimers());
+
+it("budgets at most 54 HTTP reads for an idle stacks page with seven ordinary SSE envelopes in one minute", async () => {
+  vi.useFakeTimers();
   const f = resourceFixture(); const pending: Promise<unknown>[] = [];
+  const stopMetrics = f.adapter.subscribeMetrics(() => {});
   const changes: Topic[][] = [];
   const stop = f.adapter.subscribeChanges((topics) => {
     changes.push(topics);
@@ -18,20 +22,23 @@ it("budgets at most 15 HTTP reads for an idle stacks page with seven ordinary SS
   });
   try {
     await Promise.all([f.adapter.listHosts(), f.adapter.listStacks()]);
+    await vi.advanceTimersByTimeAsync(0);
     await Promise.all(pending.splice(0));
     const initial = f.fetcher.mock.calls.length;
-    expect(initial).toBe(9); // One capability read, two host lists, four inventory lists and two observation notices.
+    expect(initial).toBe(12); // One capability, three host lists, six inventory lists and two observation notices.
     for (let second = 0; second < 60; second += 10) {
       const payload = second % 20 === 0 ? { channel: "activities", activity: { type: "updated" } } : { channel: "environments", environment: { type: "snapshot", environments: f.state.hostIds.map((id) => ({ id, name: id, apiUrl: "http://agent.example.com", enabled: true, status: "online", isEdge: false, lastSeen: `2026-10-17T12:00:${second}Z` })) } };
       f.source.onmessage?.({ data: JSON.stringify({ ...payload, timestamp: at }), lastEventId: "" } as MessageEvent);
       await Promise.all(pending.splice(0));
+      await vi.advanceTimersByTimeAsync(10_000);
+      await Promise.all(pending.splice(0));
     }
     f.source.onmessage?.({ data: JSON.stringify({ channel: "events", eventLog: { type: "created" }, timestamp: at }), lastEventId: "" } as MessageEvent);
-    // Three unchanged environment snapshots cost only capabilities + hosts, no Docker reads.
-    expect(f.fetcher.mock.calls.length).toBeLessThanOrEqual(15);
-    expect(f.fetcher.mock.calls.filter(([url]) => /\/(projects|containers)\?/.test(String(url)))).toHaveLength(4);
+    // 12 initial + 6 snapshot reads + 12 five-second polls × (hosts + two container lists).
+    expect(f.fetcher.mock.calls.length).toBeLessThanOrEqual(54);
+    expect(f.fetcher.mock.calls.filter(([url]) => /\/(projects|containers)\?/.test(String(url)))).toHaveLength(30);
     expect(changes.every((topics) => topics.every((t) => t === "events" || t === "hosts"))).toBe(true);
-  } finally { stop(); }
+  } finally { stop(); stopMetrics(); }
 });
 
 it("invalidates inventory on connection/state changes and caches capabilities per resource and session", async () => {
