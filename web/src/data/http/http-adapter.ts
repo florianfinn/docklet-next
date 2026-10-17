@@ -13,6 +13,7 @@ import type { CodedActionRun } from "../message-code";
 import type { InventoryObservation } from "@/domain/model";
 import { createInventoryReader } from "./inventory";
 import { mapHost } from "./hosts";
+import { createHostCommands } from "./host-commands";
 import { mapActivityDetail, mapEvent } from "./map-dto";
 import { createHttpHubBackups } from "./hub-backups";
 import { createCsrfClient } from "./csrf-client";
@@ -24,7 +25,7 @@ type Body<I extends ReadOperation> = operations[I]["responses"][200]["content"][
 type StreamPayload = operations["streamClient"]["responses"][200]["content"]["text/event-stream"][number]["data"];
 type Source = Pick<EventSource, "close" | "onopen" | "onmessage" | "onerror"> & Partial<Pick<EventSource, "readyState">>;
 
-const IMPLEMENTED = new Set(["listStacks", "getStack", "listContainers", "listHosts","listActions", "listEvents", "subscribeActions", "subscribeChanges", "getAuthMode", "getCurrentUser", "login", "logout", "changePassword", "updateMyLocale", "getSetupStatus", "completeSetup", "getConnectedSettings", "saveSettings"]);
+const IMPLEMENTED = new Set(["registerHost", "issueAgentToken", "removeHost", "discoverHub", "listStacks", "getStack", "listContainers", "listHosts","listActions", "listEvents", "subscribeActions", "subscribeChanges", "getAuthMode", "getCurrentUser", "login", "logout", "changePassword", "updateMyLocale", "getSetupStatus", "completeSetup", "getConnectedSettings", "saveSettings"]);
 const RECONNECT_MS = 250;
 
 export interface HttpAdapterOptions {
@@ -284,6 +285,7 @@ export function createHttpAdapter(options: HttpAdapterOptions = {}): DockletAdap
   return {
     ...methods,
     ...createHttpAuth(baseUrl, client),
+    ...createHostCommands(baseUrl, client, requireCapability, () => changeListeners.forEach((listener) => listener(["hosts"]))),
     ...createSettingsCore(baseUrl, client),
     ...createHttpHubBackups(baseUrl, client, options.uploadFactory),
     kind: "http",

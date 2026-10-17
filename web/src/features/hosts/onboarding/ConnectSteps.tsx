@@ -1,5 +1,4 @@
 import { CheckCircle2, Circle, CircleX, Eye, Layers, Loader2, Plus, Server } from "lucide-react";
-import { useEffect } from "react";
 import { Link } from "react-router";
 import { useTranslations } from "use-intl";
 
@@ -21,13 +20,6 @@ import { onboardingStore, patchDraft, type HostDraft } from "./onboarding-draft"
 
 export function InstallStep({ draft, plan }: { draft: HostDraft; plan: AgentInstallPlan }) {
   const t = useTranslations("hosts.onboarding");
-  const cmd = useHostCommands();
-  const needsToken = !draft.token;
-  const name = draft.name;
-  useEffect(() => {
-    if (needsToken) void cmd.token(name).then((token) => token && patchDraft({ token }));
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- issue once per missing token
-  }, [needsToken]);
   const rows: [string, string][] = [
     [t("summary.mode"), draft.connection === "direct" ? `${t("directTitle")} · ${draft.address}:${draft.port}` : `${t("edgeTitle")} · ${plan.hubUrl}`],
     [t("summary.project"), plan.projectDir],
@@ -46,7 +38,7 @@ export function InstallStep({ draft, plan }: { draft: HostDraft; plan: AgentInst
           </div>
         ))}
       </dl>
-      {draft.token ? <InstallArtifacts plan={plan} onRegenerateToken={draft.hostId ? undefined : () => void cmd.token(name).then((token) => token && patchDraft({ token }))} /> : <div className="h-64 animate-pulse rounded-xl bg-muted/40" />}
+      {draft.token ? <InstallArtifacts plan={plan} /> : <div className="h-64 animate-pulse rounded-xl bg-muted/40" />}
     </div>
   );
 }

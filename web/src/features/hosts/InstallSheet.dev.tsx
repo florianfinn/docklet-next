@@ -43,7 +43,7 @@ export default function InstallSheet({ host, onClose }: { host: Host | null; onC
   useEffect(() => {
     if (!hostName) return;
     let live = true;
-    void cmd.token(hostName).then((tk) => live && setToken(tk ?? null));
+    void cmd.token(host?.id ?? "").then((tk) => live && setToken(tk ?? null));
     return () => {
       live = false;
       setToken(null);
@@ -63,7 +63,7 @@ export default function InstallSheet({ host, onClose }: { host: Host | null; onC
             <ScrollArea className="min-h-0 flex-1">
               <div className="p-4">
                 {token && general ? (
-                  <InstallArtifacts plan={planFromDraft(draftOf(host, token), agentHubUrl(general), general.timeZone)} onRegenerateToken={() => void cmd.token(host.name).then((tk) => tk && setToken(tk))} />
+                  <InstallArtifacts plan={planFromDraft(draftOf(host, token), agentHubUrl(general), general.timeZone)} onRegenerateToken={() => void cmd.token(host.id).then((tk) => tk && setToken(tk))} />
                 ) : (
                   <Skeleton className="h-80 rounded-xl" />
                 )}

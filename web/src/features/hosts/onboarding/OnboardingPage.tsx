@@ -3,7 +3,10 @@ import { useEffect, useMemo, useState } from "react";
 import { Link, useSearchParams } from "react-router";
 import { useTranslations } from "use-intl";
 
-import { useSettings } from "@/data/queries";
+import { useQuery } from "@tanstack/react-query";
+import { useAdapter } from "@/data/use-adapter";
+import { useCapability } from "@/data/use-capability";
+import { useConnectedSettings } from "@/data/queries";
 import { agentHubUrl } from "@/domain/settings";
 import { ConfirmDialog } from "@/shared/components/confirm-dialog";
 import { PageHeader, QueryError } from "@/shared/components/page";
@@ -21,10 +24,18 @@ import { ConnectStep, InstallStep } from "./ConnectSteps";
 import { DirectoriesStep } from "./DirectoriesStep";
 import { draftFileOwner, freshDraft, ONBOARDING_STEPS, onboardingStore, patchDraft, planFromDraft, useOnboardingDraft, validateStep, type OnboardingStep } from "./onboarding-draft";
 
-/** Four-step host onboarding; the draft lives in memory so leaving and returning keeps it. */
+/** Four-step host onboarding; credentials are discarded when the page closes. */
 export default function OnboardingPage() {
+  const capability = useCapability("registerHost");
+  return capability.available ? <OnboardingFlow /> : <QueryError />;
+}
+
+function OnboardingFlow() {
   const t = useTranslations("hosts.onboarding");
-  const settings = useSettings();
+  const settings = useConnectedSettings();
+  const adapter = useAdapter();
+  const discovery = useQuery({ queryKey: ["hub", "discovery"], queryFn: () => adapter.discoverHub(), enabled: adapter.kind === "http" });
+  useEffect(() => () => onboardingStore.set(null), []);
   const hosts = useHostScope();
   const cmd = useHostCommands();
   const draft = useOnboardingDraft();
@@ -47,7 +58,9 @@ export default function OnboardingPage() {
   const taken = useMemo(() => hosts.all.filter((h) => h.id !== draft?.hostId).map((h) => h.name), [hosts.all, draft?.hostId]);
   const errors = draft ? validateStep(step, draft, taken) : {};
   const general = settings.data?.general;
-  const plan = draft && general ? planFromDraft(draft, agentHubUrl(general), general.timeZone) : undefined;
+  const plan = draft && general ? planFromDraft(draft, draft.hubUrl ?? discovery.data?.candidates?.[0]?.url ?? agentHubUrl(general), general.timeZone) : undefined;
+
+  if (plan && discovery.data?.agentImage) plan.image = discovery.data.agentImage;
 
   const go = (next: OnboardingStep) => setParams({ step: next });
 
@@ -57,9 +70,9 @@ export default function OnboardingPage() {
       setAttempted((a) => [...new Set([...a, step])]);
       return;
     }
-    if (step === "install" && !locked) {
+    if (step === "directories" && !locked) {
       setBusy(true);
-      const host = await cmd.register({
+      const registration = await cmd.register({
         name: draft.name.trim(),
         color: draft.color,
         connection: draft.connection,
@@ -70,8 +83,8 @@ export default function OnboardingPage() {
         socketGid: plan.socketGid,
       });
       setBusy(false);
-      if (!host) return;
-      patchDraft({ hostId: host.id });
+      if (!registration) return;
+      patchDraft({ hostId: registration.host.id, token: registration.token, hubUrl: plan.hubUrl });
     }
     const nextIndex = index + 1;
     patchDraft({ reached: Math.max(reached, nextIndex) });
@@ -101,9 +114,9 @@ export default function OnboardingPage() {
           )
         }
       />
-      {settings.isError ? (
-        <QueryError onRetry={() => void settings.refetch()} />
-      ) : !draft || !plan ? (
+      {settings.isError || discovery.isError || hosts.isError ? (
+        <QueryError onRetry={() => void Promise.allSettled([settings.refetch(), discovery.refetch(), hosts.refetch()])} />
+      ) : !draft || !plan || (adapter.kind === "http" && !discovery.data) ? (
         <div className="grid gap-5 lg:grid-cols-[15rem_1fr]">
           <Skeleton className="h-56 rounded-2xl" />
           <Skeleton className="h-[28rem] rounded-2xl" />
@@ -130,7 +143,7 @@ export default function OnboardingPage() {
                   <AlertDescription className="text-xs">{t("locked")}</AlertDescription>
                 </Alert>
               )}
-              {step === "connection" && <ConnectionStep draft={draft} errors={errors} showErrors={attempted.includes(step)} hubUrl={plan.hubUrl} locked={locked} />}
+              {step === "connection" && <ConnectionStep draft={draft} errors={errors} showErrors={attempted.includes(step)} hubUrl={plan.hubUrl} candidates={discovery.data?.candidates} locked={locked} />}
               {step === "directories" && <DirectoriesStep draft={draft} errors={errors} showErrors={attempted.includes(step)} locked={locked} />}
               {step === "install" && <InstallStep draft={draft} plan={plan} />}
               {step === "connect" && <ConnectStep draft={draft} host={registered} hubUrl={plan.hubUrl} />}
@@ -149,7 +162,7 @@ export default function OnboardingPage() {
               {step !== "connect" && (
                 <Button onClick={() => void onNext()} disabled={busy || (step === "install" && !draft.token)}>
                   {busy ? <Spinner data-icon="inline-start" /> : null}
-                  {step === "install" && !locked ? (busy ? t("registering") : t("register")) : t("next")}
+                  {step === "directories" && !locked ? (busy ? t("registering") : t("register")) : t("next")}
                   {!busy && <ArrowRight data-icon="inline-end" />}
                 </Button>
               )}

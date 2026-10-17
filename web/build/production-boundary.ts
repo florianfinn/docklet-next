@@ -15,7 +15,7 @@ export function productionBoundary(): Plugin {
     apply: "build",
     generateBundle(_options, bundle) {
       const modules = [...this.getModuleIds()].map((id) => id.replaceAll("\\", "/"));
-      const forbidden = modules.filter((id) => /\/src\/(?:data\/demo\/|features\/design-lab\/|(?:[^/]+\/)*[^/]*\.dev\.|features\/hosts\/onboarding\/OnboardingPage\.|app\/preview\/PreviewPage\.|features\/auth\/login\/login-model\.|features\/activity\/(?:NotificationLab|sample-run)\.|test\/|(?:[^/]+\/)*[^/]*\.(?:test|test-support)\.)/.test(id));
+      const forbidden = modules.filter((id) => /\/src\/(?:data\/demo\/|features\/design-lab\/|(?:[^/]+\/)*[^/]*\.dev\.|app\/preview\/PreviewPage\.|features\/auth\/login\/login-model\.|features\/activity\/(?:NotificationLab|sample-run)\.|test\/|(?:[^/]+\/)*[^/]*\.(?:test|test-support)\.)/.test(id));
       if (forbidden.length) {
         this.error(`Production boundary: forbidden module ${forbidden[0].split("/src/").at(-1)}`);
       }

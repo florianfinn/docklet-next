@@ -15,6 +15,7 @@ export interface HostDraft {
   detectSocket: boolean;
   socketGid: string;
   token?: string;
+  hubUrl?: string;
   /** Set once the host is registered; earlier steps become read-only. */
   hostId?: string;
   runId?: string;

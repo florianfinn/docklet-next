@@ -16,6 +16,10 @@ function randomBlock(n: number): string {
   return out;
 }
 
+function demoAgentToken(name: string): string {
+  return `DEMO-NUR-ANSICHT-${slugify(name).slice(0, 12).toUpperCase()}-${randomBlock(4)}-${randomBlock(4)}`;
+}
+
 export function createHostsApi({ db, runner, forcedFailure, demoFailure }: DemoContext): HostsApi {
   /** Edge agents dial the internal hub address; nothing is exposed to the internet. */
   const hubHost = () => {
@@ -59,7 +63,7 @@ export function createHostsApi({ db, runner, forcedFailure, demoFailure }: DemoC
       if (input.socketGid !== undefined) manualSocket.add(id);
       db.pushEvent({ kind: "host", level: "info", title: `${host.name} angelegt – wartet auf den Agent`, hostId: id });
       db.changed("hosts");
-      return structuredClone(host);
+      return { host: structuredClone(host), token: demoAgentToken(input.name) };
     },
 
     async connectHost(hostId) {
@@ -169,9 +173,10 @@ export function createHostsApi({ db, runner, forcedFailure, demoFailure }: DemoC
       return db.hosts.filter((h) => h.status !== "pending").map(systemComponent);
     },
 
-    async issueAgentToken(hostName) {
+    async issueAgentToken(hostId) {
+      const hostName = db.host(hostId)?.name ?? hostId;
       await wait(150);
-      return `DEMO-NUR-ANSICHT-${slugify(hostName).slice(0, 12).toUpperCase()}-${randomBlock(4)}-${randomBlock(4)}`;
+      return demoAgentToken(hostName);
     },
   };
 }

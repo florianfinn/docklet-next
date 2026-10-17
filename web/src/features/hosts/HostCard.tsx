@@ -2,6 +2,8 @@ import { Bot, Cable, Eye, FileArchive, Filter, PlugZap, Settings2, Trash2, Unplu
 import { useState, type ReactNode } from "react";
 import { useTranslations } from "use-intl";
 
+import { useCapability } from "@/data/use-capability";
+import { RotateTokenButton } from "./RotateTokenButton";
 import { formatRelative } from "@/domain/format";
 import { hostTone, isHostVisible } from "@/domain/hosts";
 import type { Host } from "@/domain/model";
@@ -78,7 +80,8 @@ export function HostCard({ host, system, stacks, containers, allIds, onFiles }: 
   const [confirm, setConfirm] = useState(false);
   const [settings, setSettings] = useState(false);
   const visible = isHostVisible(selection, host.id);
-  const removable = stacks === 0 && containers === 0;
+  const remove = useCapability("removeHost");
+  const removable = remove.available && host.id !== "0" && stacks === 0 && containers === 0;
   const pending = host.status === "pending";
   const connect = useHostAction(host.id, "onboard", () => cmd.connect(host.id));
   const check = useHostAction(host.id, "reconnect", () => cmd.reconnect(host.id));
@@ -143,11 +146,11 @@ export function HostCard({ host, system, stacks, containers, allIds, onFiles }: 
       <SystemSection component={system} />
       <p className="text-xs text-muted-foreground">{t("card.usage", { stacks, containers })}</p>
       <footer className="flex flex-wrap gap-2 border-t pt-3">
-        {pending ? (
+        {pending ? (import.meta.env.DEV ? (
           <BusyButton size="sm" busy={connect.busy} busyLabel={t("card.connecting")} icon={<PlugZap data-icon="inline-start" />} onClick={() => void connect.run()}>
             {t("card.connect")}
           </BusyButton>
-        ) : (
+        ) : <span className="self-center text-xs text-muted-foreground">{t("card.waiting")}</span>) : (
           <BusyButton
             size="sm"
             variant="outline"
@@ -160,6 +163,7 @@ export function HostCard({ host, system, stacks, containers, allIds, onFiles }: 
             {t("card.check")}
           </BusyButton>
         )}
+        <RotateTokenButton host={host} />
         {onFiles && <Button size="sm" variant="outline" onClick={() => onFiles(host)}>
           <FileArchive data-icon="inline-start" />
           {t("card.files")}

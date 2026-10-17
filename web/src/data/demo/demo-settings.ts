@@ -24,7 +24,7 @@ export function createSettingsApi({ db, runner }: DemoContext): SettingsApi {
 
   return {
     getSetupStatus: async () => db.settings.setupCompleted,
-    getConnectedSettings: async () => ({ general: structuredClone(db.settings.general), activity: structuredClone(db.settings.activity) }),
+    getConnectedSettings: async () => ({ general: structuredClone(db.settings.general), activity: structuredClone(db.settings.activity), hostDefaults: structuredClone(db.settings.hostDefaults) }),
     getSettings: () => simulateRead("settings", snapshot),
 
     async saveSettings(section, value) {

@@ -54,7 +54,9 @@ export function InstallArtifacts({ plan, onRegenerateToken }: { plan: AgentInsta
           { value: "compose", label: t("tabs.compose"), icon: <FileCode2 /> },
           { value: "package", label: t("tabs.package"), icon: <FileArchive /> },
         ]}
-        className="self-start"
+        fit="content"
+        wrap
+        className="max-w-full self-start"
       />
       {way === "script" && (
         <div className="flex flex-col gap-2">
