@@ -163,12 +163,15 @@ func (s *EnvironmentService) checkAgentCompatibility(ctx context.Context, id str
 	session.check = check
 	session.checkMu.Unlock()
 
-	check.info, check.tunnel, check.err = s.runAgentCompatibility(ctx, id, session, force)
-	session.checkMu.Lock()
-	session.check = nil
-	close(check.done)
-	session.checkMu.Unlock()
-	return check.info, check.tunnel, check.err
+	// The attempt belongs to the session; every caller waits with its own budget.
+	go func() {
+		check.info, check.tunnel, check.err = s.runAgentCompatibility(context.WithoutCancel(ctx), id, session, force)
+		session.checkMu.Lock()
+		session.check = nil
+		close(check.done)
+		session.checkMu.Unlock()
+	}()
+	return waitAgentCheck(ctx, session, check)
 }
 
 // Only overlapping checks share errors; subsequent calls can retry immediately.

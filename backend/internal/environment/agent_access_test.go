@@ -73,6 +73,27 @@ func newAgentFixture(t *testing.T, mode string, info version.Info) *agentFixture
 		return &http.Response{StatusCode: 200, Body: io.NopCloser(strings.NewReader(string(body))), Header: http.Header{"Content-Type": {"application/json"}}, Request: r}, nil
 	})}
 	f.service = NewEnvironmentService(db, httpClient, nil, nil, nil, nil)
+	t.Cleanup(func() {
+		f.service.agentRuntime.mu.Lock()
+		sessions := make([]*agentSession, 0, len(f.service.agentRuntime.sessions))
+		for _, session := range f.service.agentRuntime.sessions {
+			session.cancel()
+			sessions = append(sessions, session)
+		}
+		f.service.agentRuntime.mu.Unlock()
+		for _, session := range sessions {
+			session.checkMu.Lock()
+			check := session.check
+			session.checkMu.Unlock()
+			if check != nil {
+				select {
+				case <-check.done:
+				case <-time.After(11 * time.Second):
+					t.Error("shared agent check outlived its attempt cap")
+				}
+			}
+		}
+	})
 	apiURL := "http://agent.example.com"
 	if mode == "edge" {
 		apiURL = "edge://example"

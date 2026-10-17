@@ -37,11 +37,24 @@ func TestAgentForcedCheckStopsOnSessionRevocation(t *testing.T) {
 	require.Eventually(t, func() bool {
 		return edge.GetDemandRegistry().DesiredStatus(f.id, false, time.Now()) == edge.TunnelStatusRequired
 	}, time.Second, time.Millisecond)
+	f.service.agentRuntime.mu.Lock()
+	session := f.service.agentRuntime.sessions[f.id]
+	f.service.agentRuntime.mu.Unlock()
+	session.checkMu.Lock()
+	check := session.check
+	session.checkMu.Unlock()
+	require.NotNil(t, check)
 	// Revoke during acquisition, before nested version access can supply cancellation.
 	f.service.revokeAgentSessions(f.id)
 	select {
 	case err := <-done:
-		require.ErrorIs(t, err, remenv.ErrEnvironmentUnavailable)
+		require.Error(t, err)
+	case <-time.After(200 * time.Millisecond):
+		t.Fatal("forced caller must stop when its credential session is revoked")
+	}
+	select {
+	case <-check.done:
+		require.ErrorIs(t, check.err, remenv.ErrEnvironmentUnavailable)
 	case <-time.After(200 * time.Millisecond):
 		t.Fatal("forced check must stop acquiring a tunnel when its credential session is revoked")
 	}

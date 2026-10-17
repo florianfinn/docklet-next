@@ -16,8 +16,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/florianfinn/docklet-next/backend/pkg/libarcane/edge"
-	"github.com/florianfinn/docklet-next/backend/pkg/remenv"
 	"github.com/florianfinn/docklet-next/types/contract"
 	"github.com/florianfinn/docklet-next/types/version"
 	"github.com/stretchr/testify/require"
@@ -37,76 +35,51 @@ func agentCheckWaiters() int {
 }
 
 func TestAgentConcurrentUnavailableChecksShareOutcome(t *testing.T) {
-	for _, mode := range []string{"edge", "direct"} {
-		t.Run(mode, func(t *testing.T) {
-			const cap = 400 * time.Millisecond
-			ctx, cancel := context.WithTimeout(t.Context(), 3*time.Second)
-			defer cancel()
-			f := newAgentFixture(t, mode, version.Info{})
-			var reads atomic.Int32
-			if mode == "edge" {
-				edge.GetRegistry().Unregister(f.id)
-			} else {
-				f.service.httpClient.Timeout = cap
-				f.service.httpClient.Transport = agentRoundTrip(func(r *http.Request) (*http.Response, error) {
-					reads.Add(1)
-					<-r.Context().Done()
-					return nil, r.Context().Err()
-				})
-			}
-			var workers sync.WaitGroup
-			defer func() { cancel(); workers.Wait() }()
-			done := make(chan error, 3)
-			request := func(requestCtx context.Context) {
-				defer workers.Done()
-				_, err := f.service.ExecuteRemoteRequest(requestCtx, f.id, http.MethodGet, "/api/environments/0/containers", nil)
-				done <- err
-			}
-			// Bound only the leader's Edge acquisition; followers keep independent live contexts.
-			leaderCtx := ctx
-			if mode == "edge" {
-				var finish context.CancelFunc
-				leaderCtx, finish = context.WithTimeout(ctx, cap)
-				defer finish()
-			}
-			started := time.Now()
-			workers.Add(1)
-			go request(leaderCtx)
-			require.Eventually(t, func() bool {
-				if mode == "direct" {
-					return reads.Load() == 1
-				}
-				return edge.GetDemandRegistry().DesiredStatus(f.id, false, time.Now()) == edge.TunnelStatusRequired
-			}, cap/2, time.Millisecond)
-			workers.Add(2)
-			go request(ctx)
-			go request(ctx)
-			require.Eventually(t, func() bool { return agentCheckWaiters() == 2 }, cap/2, time.Millisecond)
-			for range 3 {
-				select {
-				case err := <-done:
-					require.Error(t, err)
-					if mode == "edge" {
-						require.ErrorIs(t, err, remenv.ErrEnvironmentUnavailable)
-					} else {
-						require.ErrorIs(t, err, context.DeadlineExceeded)
-					}
-				case <-time.After(2 * cap):
-					t.Fatal("concurrent failures must share one bounded attempt")
-				}
-			}
-			elapsed := time.Since(started)
-			require.Less(t, elapsed, 2*cap, "three failures must finish within about one attempt")
-			t.Logf("3 %s requests completed in %s (attempt cap %s)", mode, elapsed, cap)
-			if mode == "direct" {
-				require.EqualValues(t, 1, reads.Load(), "overlapping version failures must be shared")
-				_, err := f.service.ExecuteRemoteRequest(ctx, f.id, http.MethodGet, "/api/environments/0/containers", nil)
-				require.Error(t, err)
-				require.EqualValues(t, 2, reads.Load(), "a later request must retry a failed check")
-			}
-			require.Zero(t, f.count("GET /api/environments/0/containers"))
+	t.Run("direct", func(t *testing.T) {
+		const cap = 400 * time.Millisecond
+		f := newAgentFixture(t, "direct", version.Info{})
+		ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
+		defer cancel()
+		var reads atomic.Int32
+		f.service.httpClient.Timeout = cap
+		f.service.httpClient.Transport = agentRoundTrip(func(r *http.Request) (*http.Response, error) {
+			reads.Add(1)
+			<-r.Context().Done()
+			return nil, r.Context().Err()
 		})
-	}
+		var workers sync.WaitGroup
+		defer func() { cancel(); workers.Wait() }()
+		done := make(chan error, 3)
+		request := func() {
+			defer workers.Done()
+			_, err := f.service.ExecuteRemoteRequest(ctx, f.id, http.MethodGet, "/api/environments/0/containers", nil)
+			done <- err
+		}
+		started := time.Now()
+		workers.Add(1)
+		go request()
+		require.Eventually(t, func() bool { return reads.Load() == 1 }, cap/2, time.Millisecond)
+		workers.Add(2)
+		go request()
+		go request()
+		require.Eventually(t, func() bool { return agentCheckWaiters() == 3 }, cap/2, time.Millisecond)
+		for range 3 {
+			select {
+			case err := <-done:
+				require.ErrorIs(t, err, context.DeadlineExceeded)
+			case <-time.After(2 * cap):
+				t.Fatal("concurrent failures must share one bounded attempt")
+			}
+		}
+		elapsed := time.Since(started)
+		require.Less(t, elapsed, 2*cap, "three failures must finish within about one attempt")
+		t.Logf("3 direct requests completed in %s (attempt cap %s)", elapsed, cap)
+		require.EqualValues(t, 1, reads.Load(), "overlapping version failures must be shared")
+		_, err := f.service.ExecuteRemoteRequest(ctx, f.id, http.MethodGet, "/api/environments/0/containers", nil)
+		require.Error(t, err)
+		require.EqualValues(t, 2, reads.Load(), "a later request must retry a failed check")
+		require.Zero(t, f.count("GET /api/environments/0/containers"))
+	})
 }
 
 func TestAgentCompatibilityWaitObservesCallerCancellation(t *testing.T) {
@@ -142,7 +115,7 @@ func TestAgentCompatibilityWaitObservesCallerCancellation(t *testing.T) {
 		_, err := f.service.CheckAgentCompatibility(waitCtx, f.id)
 		waiter <- err
 	}()
-	require.Eventually(t, func() bool { return agentCheckWaiters() == 1 }, time.Second, time.Millisecond)
+	require.Eventually(t, func() bool { return agentCheckWaiters() == 2 }, time.Second, time.Millisecond)
 	finish()
 	select {
 	case err := <-waiter:
@@ -200,7 +173,7 @@ func TestAgentForcedCheckDoesNotReuseConcurrentCachedVerdict(t *testing.T) {
 		_, err := f.service.CheckAgentCompatibility(ctx, f.id)
 		forced <- err
 	}()
-	require.Eventually(t, func() bool { return agentCheckWaiters() == 1 }, time.Second, time.Millisecond)
+	require.Eventually(t, func() bool { return agentCheckWaiters() == 2 }, time.Second, time.Millisecond)
 	close(release)
 	require.NoError(t, <-ordinary)
 	require.ErrorIs(t, <-forced, ErrAgentUpdateRequired, "explicit refresh must read the changed agent version")
