@@ -20,12 +20,17 @@ import { SetupGate } from "./SetupGate";
 
 afterEach(() => { cleanup(); restartSetup(); localStorage.clear(); });
 
-function adapter(mode: AuthMode, completed: boolean, change: boolean, authenticated: boolean) {
+function adapter(mode: AuthMode, completed: boolean, change: boolean, authenticated: boolean, allowLogin = false) {
+  let signedIn = authenticated;
+  let needsChange = change;
+  const user = () => ({ id: "admin", username: "operator", requiresPasswordChange: needsChange });
   return createHttpAdapter({ fetch: async (input) => {
     const path = new URL(String(input), "https://hub.example.com").pathname;
     const json = (data: unknown) => new Response(JSON.stringify({ success: true, data }), { headers: { "X-CSRF-Token": "example".padEnd(43, "x") } });
     if (path === "/api/auth/mode") return json({ mode });
-    if (path === "/api/auth/me") return authenticated ? json({ id: "admin", username: "operator", requiresPasswordChange: change }) : new Response("{}", { status: 401 });
+    if (path === "/api/auth/me") return signedIn ? json(user()) : new Response("{}", { status: 401 });
+    if (allowLogin && path === "/api/auth/login") { signedIn = true; return json({ user: user() }); }
+    if (allowLogin && path === "/api/auth/password") { needsChange = false; return json({ message: "changed" }); }
     if (path === "/api/auth/password" || path === "/api/auth/login") return new Response("{}", { status: 401 });
     if (path === "/api/environments/0/settings") return new Response(JSON.stringify(Object.entries({ setupCompleted: String(completed), hubName: "Docklet", hubAddress: "192.0.2.10:8080", domainUrl: "", linkBase: "auto", effectiveTimeZone: "UTC", keepActionOutput: "true", actionPresentation: "dialog" }).map(([key, value]) => ({ key, value }))));
     return new Response("{}", { status: 503 });
@@ -85,4 +90,26 @@ it("keeps a wrong login inline without broadcasting session loss", async () => {
     await expect(current.login("operator", "wrong-password")).rejects.toMatchObject({ outcome: { status: 401 } });
     expect(losses).toBe(0);
   } finally { window.removeEventListener("docklet:unauthorized", reject); }
+});
+
+it("navigates once per gate from login through an outstanding password change", async () => {
+  const { router } = renderRoutes([
+    { path: "/login", element: <ProductLoginPage /> },
+    { path: "/setup", element: <SetupGate /> },
+    { element: <AuthGate />, children: [{ path: "/dashboard", element: <p>Dashboard terminal</p> }] },
+  ], ["/login"], adapter("local", true, true, false, true));
+  const paths = ["/login"];
+  let key = router.state.location.key;
+  const stop = router.subscribe(state => { if (state.location.key !== key) { key = state.location.key; paths.push(state.location.pathname); } });
+  await userEvent.type(await screen.findByLabelText("Benutzername"), "operator");
+  await userEvent.type(screen.getByLabelText("Passwort"), "old-password");
+  await userEvent.click(screen.getByRole("button", { name: "Anmelden" }));
+  await userEvent.type(await screen.findByLabelText("Bisheriges Administratorpasswort"), "old-password");
+  expect(paths).toEqual(["/login", "/dashboard", "/setup"]);
+  await userEvent.type(screen.getByLabelText("Neues Administratorpasswort"), "New-password1!");
+  await userEvent.type(screen.getByLabelText("Neues Passwort bestätigen"), "New-password1!");
+  await userEvent.click(screen.getByRole("button", { name: "Passwort ändern" }));
+  await screen.findByText("Dashboard terminal");
+  expect(paths).toEqual(["/login", "/dashboard", "/setup", "/dashboard"]);
+  stop();
 });

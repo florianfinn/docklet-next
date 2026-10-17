@@ -6,7 +6,6 @@
 
 import { useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import { useNavigate } from "react-router";
 import { useTranslations } from "use-intl";
 
 import { useCurrentUser } from "@/data/queries";
@@ -21,7 +20,6 @@ export function InitialPasswordPage() {
   const adapter = useAdapter();
   const user = useCurrentUser();
   const client = useQueryClient();
-  const navigate = useNavigate();
   const [current, setCurrent] = useState("");
   const [password, setPassword] = useState("");
   const [confirm, setConfirm] = useState("");
@@ -36,7 +34,6 @@ export function InitialPasswordPage() {
       setFailed(false);
       void adapter.changePassword(current, password).then(() => {
         client.setQueryData(queryKeys.currentUser, { ...user.data, requiresPasswordChange: false });
-        void navigate("/dashboard", { replace: true });
       }).catch(() => setFailed(true)).finally(() => setBusy(false));
     }}>
       <TextField id="initial-current" type="password" label={t("currentPassword")} value={current} onChange={setCurrent} autoComplete="current-password" />
