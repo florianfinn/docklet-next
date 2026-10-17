@@ -14,7 +14,6 @@ import (
 	"github.com/labstack/echo/v5"
 
 	"github.com/florianfinn/docklet-next/backend/pkg/remenv"
-	"github.com/florianfinn/docklet-next/backend/pkg/utils/cookie"
 )
 
 const (
@@ -31,7 +30,7 @@ const (
 func CopyRequestHeaders(from, to http.Header, skip map[string]struct{}) {
 	for k, vs := range from {
 		ck := http.CanonicalHeaderKey(k)
-		if _, ok := skip[ck]; ok || ck == http.CanonicalHeaderKey(HeaderAuthorization) || ck == http.CanonicalHeaderKey(HeaderAPIKey) {
+		if _, ok := skip[ck]; ok || ck == http.CanonicalHeaderKey(HeaderAuthorization) || ck == http.CanonicalHeaderKey(HeaderAPIKey) || ck == "Remote-User" || ck == HeaderAgentToken {
 			continue
 		}
 		for _, v := range vs {
@@ -40,45 +39,18 @@ func CopyRequestHeaders(from, to http.Header, skip map[string]struct{}) {
 	}
 }
 
-func SetAuthHeader(req *http.Request, c *echo.Context) {
-	// Forward API key header if present
-	if apiKey := c.Request().Header.Get(HeaderAPIKey); apiKey != "" {
-		req.Header.Set(HeaderAPIKey, apiKey)
-	}
-
-	// Forward Authorization header or cookie token
-	if auth := c.Request().Header.Get(HeaderAuthorization); auth != "" {
-		req.Header.Set(HeaderAuthorization, auth)
-	} else if token, err := cookie.GetTokenCookie(c.Request()); err == nil && token != "" {
-		req.Header.Set(HeaderAuthorization, "Bearer "+token)
-	}
+func SetAuthHeader(req *http.Request, _ *echo.Context) {
+	remenv.StripHubCredentials(req.Header, "Remote-User")
 }
 
 func SetAgentToken(req *http.Request, accessToken *string) {
 	remenv.ApplyAgentTokenHeaders(req.Header, accessToken)
 }
 
-// BuildWebSocketHeaders constructs a header set for proxying WebSocket requests
-// to a remote environment, forwarding authentication in the same way as HTTP proxying.
-func BuildWebSocketHeaders(c *echo.Context, accessToken *string) http.Header {
+// BuildWebSocketHeaders sends only the target agent credential.
+func BuildWebSocketHeaders(_ *echo.Context, accessToken *string) http.Header {
 	headers := http.Header{}
-	req := c.Request()
-
-	// Forward API key if present
-	if apiKey := req.Header.Get(HeaderAPIKey); apiKey != "" {
-		headers.Set(HeaderAPIKey, apiKey)
-	}
-
-	// Forward authorization (header or cookie)
-	if auth := req.Header.Get(HeaderAuthorization); auth != "" {
-		headers.Set(HeaderAuthorization, auth)
-	} else if token, err := cookie.GetTokenCookie(req); err == nil && token != "" {
-		headers.Set(HeaderAuthorization, "Bearer "+token)
-	}
-
-	// Set agent token for remote environment authentication
 	remenv.ApplyAgentTokenHeaders(headers, accessToken)
-
 	return headers
 }
 
@@ -150,15 +122,7 @@ func BuildHopByHopHeaders(respHeader http.Header) map[string]struct{} {
 }
 
 func CopyResponseHeaders(from, to http.Header, hop map[string]struct{}) {
-	for k, vs := range from {
-		ck := http.CanonicalHeaderKey(k)
-		if _, ok := hop[ck]; ok {
-			continue
-		}
-		for _, v := range vs {
-			to.Add(k, v)
-		}
-	}
+	remenv.CopyAgentResponseHeaders(from, to, hop)
 }
 
 func GetSkipHeaders() map[string]struct{} {
@@ -168,4 +132,13 @@ func GetSkipHeaders() map[string]struct{} {
 		"Upgrade": {}, "Content-Length": {}, "Accept-Encoding": {}, "Origin": {}, "Referer": {},
 		"Access-Control-Request-Method": {}, "Access-Control-Request-Headers": {}, "Cookie": {},
 	}
+}
+
+// AgentRequestHeaders removes browser credentials while retaining the injected agent token.
+func AgentRequestHeaders(source http.Header) http.Header {
+	headers := source.Clone()
+	token := source.Get(HeaderAgentToken)
+	remenv.StripHubCredentials(headers, "Remote-User")
+	remenv.ApplyAgentTokenHeaders(headers, &token)
+	return headers
 }

@@ -413,7 +413,7 @@ func TestProxyHTTPRequest_StripsBrowserHeaders(t *testing.T) {
 	assert.Equal(t, "application/json", receivedHeaders["Content-Type"])
 	assert.Equal(t, "agent-tok-123", receivedHeaders["X-Arcane-Agent-Token"])
 	assert.Equal(t, "agent-tok-123", receivedHeaders["X-Api-Key"])
-	assert.Equal(t, "Bearer jwt-token", receivedHeaders["Authorization"])
+	assert.Empty(t, receivedHeaders["Authorization"])
 }
 
 func TestProxyHTTPRequest_ForwardsBodyCorrectly(t *testing.T) {

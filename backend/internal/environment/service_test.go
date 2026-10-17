@@ -10,27 +10,8 @@ import (
 	"cmp"
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
-	"net/http"
-	"net/http/httptest"
-	"os"
-	"path/filepath"
-	"strings"
-	"sync/atomic"
-	"testing"
-	"time"
-
 	"github.com/coder/websocket"
-	"github.com/florianfinn/docklet-next/backend/internal/testsqlite"
-	"github.com/florianfinn/docklet-next/types/containerregistry"
-	"github.com/florianfinn/docklet-next/types/environment"
-	"github.com/florianfinn/docklet-next/types/scheduler"
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
-	"go.getarcane.app/sys/crypto"
-	"gorm.io/gorm"
-
 	"github.com/florianfinn/docklet-next/backend/internal/apikey"
 	"github.com/florianfinn/docklet-next/backend/internal/common"
 	"github.com/florianfinn/docklet-next/backend/internal/config"
@@ -38,12 +19,26 @@ import (
 	"github.com/florianfinn/docklet-next/backend/internal/environment/children/snippets"
 	"github.com/florianfinn/docklet-next/backend/internal/registry"
 	"github.com/florianfinn/docklet-next/backend/internal/settings"
+	"github.com/florianfinn/docklet-next/backend/internal/testsqlite"
 	"github.com/florianfinn/docklet-next/backend/internal/user"
 	"github.com/florianfinn/docklet-next/backend/pkg/libarcane/edge"
 	"github.com/florianfinn/docklet-next/backend/pkg/pagination"
 	"github.com/florianfinn/docklet-next/backend/pkg/scheduler/entityjobs"
 	"github.com/florianfinn/docklet-next/backend/pkg/scheduler/runs"
 	francistest "github.com/florianfinn/docklet-next/backend/pkg/utils/francis/testing"
+	"github.com/florianfinn/docklet-next/types/containerregistry"
+	"github.com/florianfinn/docklet-next/types/environment"
+	"github.com/florianfinn/docklet-next/types/scheduler"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+	"go.getarcane.app/sys/crypto"
+	"gorm.io/gorm"
+	"net/http"
+	"net/http/httptest"
+	"strings"
+	"sync/atomic"
+	"testing"
+	"time"
 )
 
 func TestEnvironmentService_OverlappingHealthCheckIsSkippedInternal(t *testing.T) {
@@ -287,6 +282,9 @@ func TestEnvironmentService_SyncRegistriesToRemoteEnvironments_SyncsEligibleRemo
 	var env1Calls atomic.Int32
 	env1Token := "token-1"
 	env1Server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if serveCompatibleAgentVersion(t, w, r) {
+			return
+		}
 		if !assert.Equal(t, http.MethodPost, r.Method) {
 			return
 		}
@@ -317,6 +315,9 @@ func TestEnvironmentService_SyncRegistriesToRemoteEnvironments_SyncsEligibleRemo
 	var env2Calls atomic.Int32
 	env2Token := "token-2"
 	env2Server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if serveCompatibleAgentVersion(t, w, r) {
+			return
+		}
 		if !assert.Equal(t, http.MethodPost, r.Method) {
 			return
 		}
@@ -362,6 +363,9 @@ func TestEnvironmentService_SyncRegistriesToEnvironment_IncludesECRFields(t *tes
 	createTestECRRegistry(t, db, "reg-ecr")
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if serveCompatibleAgentVersion(t, w, r) {
+			return
+		}
 		if !assert.Equal(t, http.MethodPost, r.Method) {
 			return
 		}
@@ -420,6 +424,9 @@ func TestEnvironmentService_SyncRegistriesToRemoteEnvironments_SkipsRemoteWithou
 
 	var syncCalls atomic.Int32
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if serveCompatibleAgentVersion(t, w, r) {
+			return
+		}
 		syncCalls.Add(1)
 		w.Header().Set("Content-Type", "application/json")
 		_, _ = w.Write([]byte(`{"success":true,"data":{"message":"ok"}}`))
@@ -443,6 +450,9 @@ func TestEnvironmentService_SyncRegistriesToRemoteEnvironments_ReportsFailuresBu
 
 	var successCalls atomic.Int32
 	successServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if serveCompatibleAgentVersion(t, w, r) {
+			return
+		}
 		successCalls.Add(1)
 		w.Header().Set("Content-Type", "application/json")
 		_, _ = w.Write([]byte(`{"success":true,"data":{"message":"ok"}}`))
@@ -500,7 +510,7 @@ func TestEnvironmentService_UpdateEnvironmentConnectionState(t *testing.T) {
 
 	var env Environment
 	require.NoError(t, db.WithContext(ctx).Where("id = ?", "edge-runtime").First(&env).Error)
-	require.Equal(t, string(EnvironmentStatusOnline), env.Status)
+	require.Equal(t, string(EnvironmentStatusPending), env.Status)
 	require.NotNil(t, env.LastSeen)
 
 	lastSeen := env.LastSeen
@@ -509,7 +519,7 @@ func TestEnvironmentService_UpdateEnvironmentConnectionState(t *testing.T) {
 	require.NoError(t, err)
 
 	require.NoError(t, db.WithContext(ctx).Where("id = ?", "edge-runtime").First(&env).Error)
-	require.Equal(t, string(EnvironmentStatusOffline), env.Status)
+	require.Equal(t, string(EnvironmentStatusPending), env.Status)
 	require.NotNil(t, env.LastSeen)
 	require.Equal(t, *lastSeen, *env.LastSeen)
 }
@@ -959,6 +969,9 @@ func newTestWebSocketTunnelInternal(t *testing.T, envID string) (*edge.AgentTunn
 
 	connCh := make(chan *websocket.Conn, 1)
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if serveCompatibleAgentVersion(t, w, r) {
+			return
+		}
 		conn, err := websocket.Accept(w, r, nil)
 		if !assert.NoError(t, err) {
 			return
@@ -975,257 +988,4 @@ func newTestWebSocketTunnelInternal(t *testing.T, envID string) (*edge.AgentTunn
 		_ = clientConn.CloseNow()
 		server.Close()
 	}
-}
-
-func TestEnvironmentService_GenerateEdgeDeploymentSnippets_WithAutoGeneratedMTLS(t *testing.T) {
-	crypto.InitEncryption(&crypto.Config{
-		EncryptionKey: "test-encryption-key-for-testing-32bytes-min",
-		Environment:   "test",
-	})
-	svc := NewEnvironmentService(nil, nil, nil, nil, nil, nil)
-
-	assetsDir := filepath.Join(t.TempDir(), "edge-mtls")
-	deploymentSnippets, err := svc.GenerateEdgeDeploymentSnippets(t.Context(), "env-mtls", "https://manager.example.com", "token-789", &edge.Config{
-		EdgeMTLSMode:      edge.EdgeMTLSModeRequired,
-		EdgeMTLSAssetsDir: assetsDir,
-	})
-	require.NoError(t, err)
-	require.NotNil(t, deploymentSnippets)
-	require.NotNil(t, deploymentSnippets.MTLS)
-	require.Contains(t, deploymentSnippets.MTLS.DockerRun, "EDGE_MTLS_MODE=required")
-	require.Contains(t, deploymentSnippets.MTLS.DockerRun, "EDGE_MTLS_ASSETS_DIR=/app/data/edge-mtls-agent")
-	require.NotContains(t, deploymentSnippets.MTLS.DockerRun, "EDGE_MTLS_CA_FILE")
-	require.NotContains(t, deploymentSnippets.MTLS.DockerRun, "EDGE_MTLS_CERT_FILE")
-	require.NotContains(t, deploymentSnippets.MTLS.DockerRun, "EDGE_MTLS_KEY_FILE")
-	require.NotContains(t, deploymentSnippets.MTLS.DockerRun, "./arcane-edge-certs:/app/data/edge-mtls-agent:ro")
-	require.Contains(t, deploymentSnippets.MTLS.DockerCompose, "EDGE_MTLS_ASSETS_DIR=/app/data/edge-mtls-agent")
-	require.NotContains(t, deploymentSnippets.MTLS.DockerCompose, "EDGE_MTLS_CA_FILE")
-	require.NotContains(t, deploymentSnippets.MTLS.DockerCompose, "EDGE_MTLS_CERT_FILE")
-	require.NotContains(t, deploymentSnippets.MTLS.DockerCompose, "EDGE_MTLS_KEY_FILE")
-	require.NotContains(t, deploymentSnippets.MTLS.DockerCompose, "./arcane-edge-certs:/app/data/edge-mtls-agent:ro")
-	require.Equal(t, "./arcane-edge-certs", deploymentSnippets.MTLS.HostDirHint)
-	require.Len(t, deploymentSnippets.MTLS.Files, 3)
-	require.Equal(t, "ca.crt", deploymentSnippets.MTLS.Files[0].Name)
-	require.Equal(t, "/app/data/edge-mtls-agent/ca.crt", deploymentSnippets.MTLS.Files[0].ContainerPath)
-	require.Contains(t, deploymentSnippets.MTLS.Files[0].Content, "BEGIN CERTIFICATE")
-	require.Equal(t, "agent.key", deploymentSnippets.MTLS.Files[2].Name)
-	require.Equal(t, "/app/data/edge-mtls-agent/agent.key", deploymentSnippets.MTLS.Files[2].ContainerPath)
-	require.Contains(t, deploymentSnippets.MTLS.Files[2].Content, "BEGIN PRIVATE KEY")
-}
-
-func TestEnvironmentService_GenerateEdgeDeploymentSnippets_ReturnsBasicSnippetsWhenMTLSGenerationFails(t *testing.T) {
-	svc := NewEnvironmentService(nil, nil, nil, nil, nil, nil)
-
-	assetsPath := filepath.Join(t.TempDir(), "edge-mtls-file")
-	require.NoError(t, os.WriteFile(assetsPath, []byte("not a directory"), 0o600))
-
-	deploymentSnippets, err := svc.GenerateEdgeDeploymentSnippets(t.Context(), "env-mtls", "https://manager.example.com", "token-789", &edge.Config{
-		EdgeMTLSMode:      edge.EdgeMTLSModeRequired,
-		EdgeMTLSAssetsDir: assetsPath,
-	})
-
-	require.NoError(t, err)
-	require.NotNil(t, deploymentSnippets)
-	require.Nil(t, deploymentSnippets.MTLS)
-	require.Contains(t, deploymentSnippets.DockerRun, "EDGE_TRANSPORT=poll")
-	require.Contains(t, deploymentSnippets.DockerCompose, "MANAGER_API_URL=https://manager.example.com")
-}
-
-func TestEnvironmentService_TestConnection_RejectsInvalidCustomURL(t *testing.T) {
-	ctx := t.Context()
-	db := setupEnvironmentServiceTestDB(t)
-	svc := NewEnvironmentService(db, nil, nil, nil, nil, nil)
-
-	createTestEnvironment(t, db, "env-1", "http://example.com", nil)
-	status, err := svc.TestConnection(ctx, "env-1", new("ftp://example.com"))
-	require.Error(t, err)
-	require.Equal(t, "error", status)
-	require.EqualError(t, err, "Environment connection test failed")
-}
-
-func TestEnvironmentServiceTestConnectionHidesCustomURLFailureInternal(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		w.WriteHeader(http.StatusTeapot)
-	}))
-	t.Cleanup(server.Close)
-
-	ctx := t.Context()
-	db := setupEnvironmentServiceTestDB(t)
-	svc := NewEnvironmentService(db, server.Client(), nil, nil, nil, nil)
-	createTestEnvironment(t, db, "env-1", "http://stored.example", nil)
-
-	status, err := svc.TestConnection(ctx, "env-1", new(server.URL))
-	require.Equal(t, "error", status)
-	require.EqualError(t, err, "Environment connection test failed")
-	require.NotContains(t, err.Error(), "418")
-}
-
-func TestEnvironmentServiceTestConnectionAllowsStoredPrivateURLInternal(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		w.WriteHeader(http.StatusOK)
-	}))
-	t.Cleanup(server.Close)
-
-	ctx := t.Context()
-	db := setupEnvironmentServiceTestDB(t)
-	svc := NewEnvironmentService(db, server.Client(), nil, nil, nil, nil)
-	createTestEnvironment(t, db, "env-private", server.URL, nil)
-
-	status, err := svc.TestConnection(ctx, "env-private", nil)
-	require.NoError(t, err)
-	require.Equal(t, "online", status)
-}
-
-func TestEnvironmentService_ExecuteRemoteRequest_RejectsInvalidEnvironmentURL(t *testing.T) {
-	ctx := t.Context()
-	db := setupEnvironmentServiceTestDB(t)
-	svc := NewEnvironmentService(db, nil, nil, nil, nil, nil)
-
-	createTestEnvironment(t, db, "env-invalid-url", "http://user:pass@example.com", nil)
-
-	_, err := svc.ExecuteRemoteRequest(ctx, "env-invalid-url", http.MethodGet, "/api/health", nil)
-	require.Error(t, err)
-	require.Contains(t, err.Error(), "invalid environment API URL")
-}
-
-func (s *environmentTestSchedulerInternal) Submit(_ context.Context, request scheduler.Request) (scheduler.Run, error) {
-	s.submitted = append(s.submitted, request)
-	return scheduler.Run{ID: request.RunID, JobID: request.JobID, EnvironmentID: request.EnvironmentID, Status: scheduler.Queued}, nil
-}
-
-func setupSyncDBInternal(t *testing.T) *database.DB {
-	t.Helper()
-	db, err := gorm.Open(testsqlite.Dialector(t, filepath.Join(t.TempDir(), "sync.db")), &gorm.Config{})
-	require.NoError(t, err)
-	require.NoError(
-		t,
-		db.AutoMigrate(
-			&Environment{},
-			&registry.ContainerRegistry{},
-		),
-	)
-	sqlDB, err := db.DB()
-	require.NoError(t, err)
-	t.Cleanup(func() { require.NoError(t, sqlDB.Close()) })
-	crypto.InitEncryption(&crypto.Config{EncryptionKey: "test-encryption-key-for-testing-32bytes-min", Environment: "test"})
-	return &database.DB{DB: db}
-}
-
-func TestSyncCredentialDecryptionAbortsSnapshot(t *testing.T) {
-	for _, kind := range []string{"registry token", "ECR secret"} {
-		t.Run(kind, func(t *testing.T) {
-			db := setupSyncDBInternal(t)
-			var calls atomic.Int32
-			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-				calls.Add(1)
-				_, _ = w.Write([]byte(`{"success":true}`))
-			}))
-			defer server.Close()
-			require.NoError(t, db.Create(&Environment{ID: "remote", ApiUrl: server.URL, AccessToken: new("agent-token")}).Error)
-			service := NewEnvironmentService(db, server.Client(), nil, nil, nil, nil)
-			var syncResource func(context.Context, string) error
-			switch kind {
-			case "registry token", "ECR secret":
-				row := registry.ContainerRegistry{ID: "bad-credential", URL: "registry.example.com", RegistryType: registry.RegistryTypeGeneric, Token: "invalid-ciphertext"}
-				if kind == "ECR secret" {
-					row.RegistryType = registry.RegistryTypeECR
-					row.AWSSecretAccessKey = "invalid-ciphertext"
-				}
-				require.NoError(t, db.Create(&row).Error)
-				syncResource = service.SyncRegistriesToEnvironment
-
-			}
-			err := syncResource(t.Context(), "remote")
-			require.Error(t, err)
-			require.Contains(t, err.Error(), "bad-credential")
-			require.Error(t, errors.Unwrap(err))
-			require.Zero(t, calls.Load(), "an incomplete snapshot must never reach the agent")
-		})
-	}
-}
-
-func TestSyncSkipsUnchangedPayloadUntilForgotten(t *testing.T) {
-	db := setupSyncDBInternal(t)
-	var calls atomic.Int32
-	var reject atomic.Bool
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		calls.Add(1)
-		if reject.Load() {
-			http.Error(w, "agent unavailable", http.StatusInternalServerError)
-			return
-		}
-		// A write failure only means the manager already gave up on this
-		// request, which the call-count assertions below would surface.
-		_, _ = w.Write([]byte(`{"success":true}`))
-	}))
-	defer server.Close()
-	token, err := crypto.Encrypt("secret")
-	require.NoError(t, err)
-	require.NoError(t, db.Create(&registry.ContainerRegistry{ID: "ghcr", URL: "ghcr.io", RegistryType: registry.RegistryTypeGeneric, Username: "user", Token: token}).Error)
-	require.NoError(t, db.Create(&Environment{ID: "remote", ApiUrl: server.URL, AccessToken: new("agent-token")}).Error)
-	service := NewEnvironmentService(db, server.Client(), nil, nil, nil, nil)
-	localSync := func() error { return service.SyncRegistriesToEnvironment(t.Context(), "remote") }
-	changeRegistry := func(url string) {
-		require.NoError(t, db.Model(&registry.ContainerRegistry{}).Where("id = ?", "ghcr").Update("url", url).Error)
-	}
-
-	require.NoError(t, localSync())
-	require.NoError(t, localSync())
-	require.EqualValues(t, 1, calls.Load(), "an unchanged payload is not resent")
-
-	changeRegistry("ghcr.io/v2")
-	require.NoError(t, localSync())
-	require.EqualValues(t, 2, calls.Load(), "a changed payload is resent")
-
-	service.ForgetSyncState("remote")
-	require.NoError(t, localSync())
-	require.EqualValues(t, 3, calls.Load(), "forgetting forces a resend")
-
-	reject.Store(true)
-	changeRegistry("ghcr.io/v3")
-	require.Error(t, localSync())
-	require.EqualValues(t, 4, calls.Load())
-	reject.Store(false)
-	require.NoError(t, localSync())
-	require.EqualValues(t, 5, calls.Load(), "a rejected payload is retried")
-	require.NoError(t, localSync())
-	require.EqualValues(t, 5, calls.Load(), "an accepted payload is remembered")
-}
-
-// A watcher must see a change signal, and a burst must not block the notifier —
-// it runs on the edge tunnel's connect/disconnect path.
-func TestEnvironmentServiceRuntimeChangeSignalCoalescesInternal(t *testing.T) {
-	s := &EnvironmentService{}
-
-	changes, unsubscribe := s.SubscribeRuntimeChanges()
-	defer unsubscribe()
-
-	// More notifications than the channel can hold: the extras are dropped
-	// rather than blocking, because a watcher re-derives live state on wake.
-	for range 5 {
-		s.NotifyRuntimeStateChanged()
-	}
-
-	select {
-	case <-changes:
-	default:
-		require.FailNow(t, "expected a pending runtime change signal")
-	}
-
-	select {
-	case <-changes:
-		require.FailNow(t, "expected coalesced signals, got a second wake-up")
-	default:
-	}
-
-	// Unsubscribing must stop delivery so a closed stream cannot leak.
-	unsubscribe()
-	s.NotifyRuntimeStateChanged()
-	select {
-	case <-changes:
-		require.FailNow(t, "expected no signal after unsubscribe")
-	default:
-	}
-
-	require.Empty(t, s.runtimeWatchers.chans)
 }

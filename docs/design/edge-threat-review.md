@@ -170,7 +170,7 @@ matches the operator's own trust in each host. Verdict: **accepted**; the
 
 ### T6. Malicious agent responses reach the browser on the hub origin (H, T)
 
-The hub copies the agent's response headers to the browser, removing only
+(baseline before #81) The hub copies the agent's response headers to the browser, removing only
 hop-by-hop headers: `ProxyHTTPRequest` in `pkg/libarcane/edge/proxy.go` for Edge
 and `writeProxyResponse` with `CopyResponseHeaders` in
 `internal/middleware/environment.go` for direct hosts. No global
@@ -203,7 +203,7 @@ be protected like host root credentials.
 
 ### T8. Incompatible or downgraded agent (N, T, H)
 
-Arcane enforces no agent version. The hub publishes `agentContractVersion`,
+(baseline before #81) Arcane enforces no agent version. The hub publishes `agentContractVersion`,
 `agentContractFingerprint` and `minimumAgentContractVersion` in its version info
 (`internal/version/service.go`, `types/contract/agent.go`: both versions are 2),
 and an agent returns the same structure on `/api/app-version`. No code compares
@@ -259,7 +259,7 @@ downloaded archive holds the token until the operator deletes it. Verdict:
 
 ### T11. Hub user credentials forwarded to agents (H, T)
 
-When the hub forwards a user request, it also passes that user's hub
+(baseline before #81) When the hub forwards a user request, it also passes that user's hub
 credentials. Direct HTTP and WebSocket forwarding copy the caller's
 `Authorization` header or, without one, turn the hub session cookie into
 `Authorization: Bearer <session token>` (`SetAuthHeader` and
@@ -377,9 +377,9 @@ this record on 2026-10-17. Items that name an issue are new work there.
 - **B1. Sandbox policy on proxied agent responses (T6), #81.** In addition to the
   D2 header allowlist, the hub sets `Content-Security-Policy: sandbox;
   default-src 'none'` on every proxied agent HTTP response, whatever its content
-  type, and replaces any policy the agent sends. The policy only affects a
-  response opened as a document; JSON reads, downloads and images embedded by the
-  hub UI are unaffected, so no content type needs an exception. Direct and Edge
+  type, and replaces any policy the agent sends. The policy confines active content when a response is opened as a document
+  and also applies to worker globals. The intended JSON fetch reads and file
+  downloads do not execute the response as active content and need no exception. Direct and Edge
   forwarding use one shared response filter for allowlist, `nosniff` and policy;
   where a transport copies agent headers onto a WebSocket handshake response,
   the same filter applies. Verification on both transports: an agent response

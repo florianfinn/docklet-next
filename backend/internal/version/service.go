@@ -14,6 +14,7 @@ import (
 	"log/slog"
 	"net/http"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/distribution/reference"
@@ -52,6 +53,10 @@ type latestRelease struct {
 }
 
 type VersionService struct {
+	onboardingMu             sync.Mutex
+	onboardingCache          *version.OnboardingChecks
+	onboardingCachedAt       time.Time
+	onboardingDockerHost     string
 	httpClient               *http.Client
 	cache                    *hot.HotCache[struct{}, latestRelease]
 	disabled                 bool

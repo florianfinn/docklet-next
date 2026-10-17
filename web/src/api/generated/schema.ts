@@ -1,5 +1,5 @@
 // Source: api/openapi.json
-// Revision: 2b8dd4af7df85f049fbea654d3bcf95d5d71c396d43a7a13995de8cf33c763e6
+// Revision: 88ea016006a2a90cb75c20d35bd161e535dceca5cfa15c14e1e3a3da331b3856
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
 // Deviations: Generated TypeScript declarations from the local Huma export.
@@ -7824,6 +7824,11 @@ export interface components {
         EnvironmentAgentPairResponse: {
             token: string;
         };
+        EnvironmentAgentReport: {
+            /** Format: date-time */
+            reportedAt: string;
+            version: components["schemas"]["VersionInfo"];
+        };
         EnvironmentCreate: {
             /**
              * Format: uri
@@ -7848,6 +7853,7 @@ export interface components {
             expiringSoon: boolean;
         };
         EnvironmentEnvironment: {
+            agentReport?: components["schemas"]["EnvironmentAgentReport"];
             apiKey?: string;
             apiUrl: string;
             connected?: boolean;
@@ -7933,6 +7939,7 @@ export interface components {
             toVersion?: string;
         };
         EnvironmentWithApiKey: {
+            agentReport?: components["schemas"]["EnvironmentAgentReport"];
             /** @description API key for pairing (only shown once during creation) */
             apiKey?: string;
             apiUrl: string;
@@ -10147,12 +10154,23 @@ export interface components {
             newestDigest?: string;
             newestVersion?: string;
             nodeVersion: string;
+            onboardingChecks?: components["schemas"]["VersionOnboardingChecks"];
             releaseNotes?: string;
             releaseUrl?: string;
             releasedAt?: string;
             revision: string;
             shortRevision: string;
             updateAvailable: boolean;
+        };
+        VersionOnboardingChecks: {
+            /** Format: int32 */
+            ownerGid: number | null;
+            /** Format: int32 */
+            ownerUid: number | null;
+            projectDirectory: string;
+            /** Format: int32 */
+            socketGroup: number | null;
+            writable: boolean | null;
         };
         VersionStreamEvent: {
             info?: components["schemas"]["VersionInfo"];

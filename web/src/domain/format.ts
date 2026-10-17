@@ -41,6 +41,7 @@ export function formatRelative(iso: string, now = Date.now()): string {
   const w = WORDS[activeLocale()];
   const rtf = relativeFormat();
   const diff = new Date(iso).getTime() - now;
+  if (!Number.isFinite(diff)) return "–";
   const abs = Math.abs(diff);
   if (abs < 45_000) return diff <= 0 ? w.justNow : w.soon;
   if (abs < 3_600_000) return rtf.format(Math.round(diff / 60_000), "minute");

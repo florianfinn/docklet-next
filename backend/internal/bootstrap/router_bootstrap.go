@@ -295,6 +295,9 @@ func newRouter(p RouterParams) (*echo.Echo, *edge.TunnelServer) {
 		middleware.WebSocketOriginValidator(cfg, func(req *http.Request) bool {
 			return authMiddleware.ValidateNonCookieCredential(req) || csrfTransportValidatorInternal(deps)(req)
 		}),
+		middleware.EnvironmentProxySecurity{ProxyIdentityHeader: cfg.ProxyIdentityHeader(), AgentAccess: func(ctx context.Context, id string, token *string, method, path string) (context.Context, context.CancelFunc, error) {
+			return deps.Environment.Service().AgentAccess(ctx, id, token, method, path)
+		}},
 	)
 	apiGroup.Use(envProxyMiddleware)
 

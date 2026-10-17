@@ -19,6 +19,9 @@ export const enHosts = {
     report: {
       title: "Installer’s local check",
       reported: (import.meta.env.DEV ? "Reported by the agent {time} · Simulation" : ""),
+      reportedLive: "Reported by the agent {time}",
+      reportedUpdateRequired: "Report {time} – agent update required",
+      reportedPending: "Report {time} – waiting for compatibility check",
       lastReported: "Last report {time} – host currently disconnected",
       pending: "Reported after the first connection. The installer checks locally on the host; the hub cannot check anything beforehand.",
       owner: "Project directory owner",

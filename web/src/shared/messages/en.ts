@@ -54,6 +54,7 @@ export const enCommon = {
     paused: "Paused",
   },
   host: {
+    "update-required": "Update required",
     online: "Online",
     offline: "Disconnected",
     pending: "Waiting for agent",

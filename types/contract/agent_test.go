@@ -15,17 +15,19 @@ import (
 	"time"
 
 	"github.com/florianfinn/docklet-next/types/activity"
+	"github.com/florianfinn/docklet-next/types/version"
 	"github.com/stretchr/testify/require"
 )
 
 func TestAgentHubDetailFixture(t *testing.T) {
-	fixture, err := os.ReadFile("testdata/agent-hub-v2.json")
+	fixture, err := os.ReadFile("testdata/agent-hub-v3.json")
 	require.NoError(t, err)
 	digest := sha256.Sum256(fixture)
 	require.Equal(t, AgentHubFingerprint, hex.EncodeToString(digest[:]))
 	var manifest struct {
-		Version                     int `json:"version"`
-		MinimumAgentContractVersion int `json:"minimumAgentContractVersion"`
+		Version                     int      `json:"version"`
+		OnboardingCheckFields       []string `json:"onboardingCheckFields"`
+		MinimumAgentContractVersion int      `json:"minimumAgentContractVersion"`
 		ProxiedOperations           []struct {
 			OperationID      string   `json:"operationId"`
 			DetailFields     []string `json:"detailFields"`
@@ -43,6 +45,7 @@ func TestAgentHubDetailFixture(t *testing.T) {
 		value  any
 		fields []string
 	}{
+		{version.OnboardingChecks{}, manifest.OnboardingCheckFields},
 		{detail, manifest.ProxiedOperations[0].DetailFields},
 		{line, manifest.ProxiedOperations[0].OutputLineFields},
 	} {

@@ -19,9 +19,11 @@ import (
 
 	"github.com/florianfinn/docklet-next/backend/internal/testsqlite"
 	activitytypes "github.com/florianfinn/docklet-next/types/activity"
+	"github.com/florianfinn/docklet-next/types/contract"
 	"github.com/florianfinn/docklet-next/types/jobschedule"
 	"github.com/florianfinn/docklet-next/types/scheduler"
 	"github.com/florianfinn/docklet-next/types/user"
+	"github.com/florianfinn/docklet-next/types/version"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"gorm.io/gorm"
@@ -712,6 +714,12 @@ func TestResolveRemoteRunConfirmsOwnerAfterLostResponse(t *testing.T) {
 			}
 			mutations, acknowledgements := 0, 0
 			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				if r.URL.Path == "/api/app-version" {
+					require.Equal(t, "example", r.Header.Get("X-Arcane-Agent-Token"))
+					require.NoError(t, json.MarshalWrite(w, version.Info{AgentContractVersion: contract.AgentHubVersion, AgentContractFingerprint: contract.AgentHubFingerprint}))
+					return
+				}
+
 				switch {
 				case r.Method == http.MethodGet && r.URL.Query().Has("page"):
 					raw, marshalErr := json.Marshal(scheduler.RunList{Runs: []scheduler.Run{agentRun}, Total: 1})
@@ -749,7 +757,7 @@ func TestResolveRemoteRunConfirmsOwnerAfterLostResponse(t *testing.T) {
 				assert.NoError(t, writeErr)
 			}))
 			defer server.Close()
-			require.NoError(t, db.Create(&environment.Environment{ID: "remote", Name: "agent", ApiUrl: server.URL, Enabled: true}).Error)
+			require.NoError(t, db.Create(&environment.Environment{ID: "remote", Name: "agent", ApiUrl: server.URL, AccessToken: new("example"), Enabled: true}).Error)
 			environments := environment.NewEnvironmentService(db, server.Client(), nil, nil, nil, nil)
 			svc := &JobService{runs: q, environment: environments, remote: remote.New(q, nil, environments)}
 			ctx := context.WithValue(t.Context(), middleware.ContextKeyUserPermissions, authz.EnvironmentPermissionSet("remote"))

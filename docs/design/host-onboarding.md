@@ -78,7 +78,9 @@ plain-HTTP warnings follow decision D5 in the threat review.
 
 ## Edge registration
 
-1. The hub creates the environment as above with `is_edge` set. Edge hosts use an
+1. The hub creates the environment as above with `is_edge` set and API key
+   registration (`useApiKey=true`). Legacy token-only Edge creation is rejected
+   with HTTP 400 before a host is persisted. Edge hosts use an
    `edge://` API URL marker (`isEdgeEnvironmentURLInternal` in
    `internal/middleware/environment.go`). Source: Arcane.
 2. The installer starts the agent with `EDGE_AGENT=true`, `MANAGER_API_URL` and
@@ -274,6 +276,46 @@ time. While the host is not online, lists and the dashboard show those values
 marked stale with "as of <time>", and actions on that host are unavailable with a
 reason. Reconnection replaces the values on the next successful read. Source:
 **new**; storage is decision 4.
+
+## Runtime read contract
+
+The agent contract and minimum are version 3. The version fixture in
+`types/contract/testdata/agent-hub-v3.json` owns the fingerprint. The hub checks
+`/api/app-version` before ordinary requests and registry or configuration
+synchronisation. The credential session (token, endpoint and key ID) is revoked
+on credential changes, endpoint changes, disablement or removal. Compatibility
+verdicts are cached within that session for the concrete Edge tunnel and refreshed
+on Edge connect and health checks. Ordinary Edge requests acquire a concrete tunnel
+before checking compatibility; a tunnel change invalidates its verdict without
+cancelling requests or streams in the credential session. An update-required verdict
+replaces prior compatibility and blocks ordinary forwarding until a fresh check succeeds. Below-minimum agents and same-version fingerprint mismatches
+have status `update-required`; health, version and agent self-upgrade stay
+available. System health uses HEAD, as its registered operation specifies.
+Forwarded HTTP access failures distinguish `agent.update-required` (HTTP 409),
+`agent.invalid-token` (HTTP 502 for credential rejection, including forwarded
+agent HTTP 401 responses; ordinary agent HTTP 403 remains an authorization response) and
+`agent.unavailable` (HTTP 502, or 504 for a timed-out Edge request). An update-required health job reports a partial
+result with "Agent update required", rather than offline, and sends no sync.
+
+`Environment.agentReport` contains the last successful process-local version
+report and its observation time. Only agent version requests authenticated with the
+configured manager credential add nullable
+`onboardingChecks`: project directory, numeric owner UID/GID, effective write
+access and socket group. Anonymous agent reads and all hub version reads omit
+these fields. The on-demand write probe is cached for 30 seconds. Missing checks remain unknown. These fields do not
+claim a manual identity source or resolve host account names. The HTTP adapter
+maps this report and connection state through `listHosts`; host mutations and
+system-component inventory keep their separate capability boundaries. Inventory
+metadata absent from this read has `detailsUnavailable` set; numeric fields in
+the existing view model are empty sentinels, not host measurements.
+
+`EnvironmentService.ReadSnapshots()` exposes the process-local inventory store
+in `backend/pkg/hoststate/`: `Put`, `Get` and `Forget` use a host/list key and
+carry the successful read time. Read adapters own their list payloads. Stored
+bytes are copied at both boundaries. Disconnects retain snapshots, the next
+successful read replaces them, and host removal forgets them. A new hub process
+starts with an empty store and no agent reports; persisted `last_seen` remains
+the last successful contact, and failed checks do not advance it.
 
 ## Decisions
 

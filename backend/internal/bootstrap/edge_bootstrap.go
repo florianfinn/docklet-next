@@ -12,6 +12,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"time"
 
 	notificationdto "github.com/florianfinn/docklet-next/types/notification"
 	"github.com/labstack/echo/v5"
@@ -49,6 +50,15 @@ func registerEdgeTunnelRoutes(
 	// Status callback to update environment status when agent connects/disconnects
 	statusCallback := func(ctx context.Context, envID string, connected bool) {
 		handleEdgeStatusChange(ctx, environmentService, eventService, envID, connected)
+		if connected {
+			go func() {
+				checkCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 15*time.Second)
+				defer cancel()
+				if _, err := environmentService.CheckAgentCompatibility(checkCtx, envID); err == nil {
+					_ = environmentService.SyncRegistriesToEnvironment(checkCtx, envID)
+				}
+			}()
+		}
 	}
 
 	eventCallback := func(ctx context.Context, envID string, evt *edge.TunnelEvent) error {
@@ -56,6 +66,7 @@ func registerEdgeTunnelRoutes(
 	}
 
 	server := edge.NewTunnelServerWithRegistry(registry, resolver, statusCallback)
+	server.SetSessionKeyResolver(environmentService.ResolveEdgeSessionKey)
 	server.SetConfig(&edge.Config{
 		EdgeMTLSMode:       cfg.EdgeMTLSMode,
 		EdgeMTLSCAFile:     cfg.EdgeMTLSCAFile,

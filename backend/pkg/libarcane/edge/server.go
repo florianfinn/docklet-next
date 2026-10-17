@@ -182,6 +182,9 @@ func (s *TunnelServer) HandleConnect(c *echo.Context) error {
 	}
 
 	tunnel := NewAgentTunnelWithConn(envID, tunnelConn)
+	if err := s.bindSessionKey(ctx, tunnel, token); err != nil {
+		return nil
+	}
 	s.populateSessionMetadata(tunnel, firstMsg, requestSecurityModeInternal(req))
 	s.manageConnectedTunnel(ctx, callbackCtx, tunnel)
 	return nil
@@ -295,6 +298,9 @@ func (s *TunnelServer) Connect(stream grpc.BidiStreamingServer[tunnelpb.AgentMes
 	managerConn := NewGRPCManagerTunnelConn(stream)
 	managerConn.SetParityEncoding(slices.Contains(register.GetCapabilities(), tunnelCapabilityProtoParity))
 	tunnel := NewAgentTunnelWithConn(envID, managerConn)
+	if err := s.bindSessionKey(ctx, tunnel, tokenFromMetadataInternal(ctx)); err != nil {
+		return status.Error(codes.Unauthenticated, "invalid agent token")
+	}
 	s.populateSessionMetadata(tunnel, &TunnelMessage{
 		AgentInstance: register.GetAgentInstanceId(),
 		Capabilities:  append([]string(nil), register.GetCapabilities()...),

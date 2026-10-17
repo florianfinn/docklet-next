@@ -10,6 +10,7 @@ import (
 	"context"
 	"strings"
 
+	"github.com/florianfinn/docklet-next/backend/internal/middleware"
 	"github.com/florianfinn/docklet-next/types/version"
 )
 
@@ -45,6 +46,9 @@ func (h *VersionHandler) GetVersion(ctx context.Context, input *GetVersionInput)
 // GetAppVersion returns the current application version.
 func (h *VersionHandler) GetAppVersion(ctx context.Context, _ *GetAppVersionInput) (*GetAppVersionOutput, error) {
 	info := h.versionService.GetAppVersionInfo(ctx)
+	if middleware.HasAgentCredential(ctx) {
+		info.OnboardingChecks = h.versionService.cachedOnboardingChecks()
+	}
 
 	return &GetAppVersionOutput{
 		Body: *info,

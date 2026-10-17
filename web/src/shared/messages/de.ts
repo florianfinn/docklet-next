@@ -55,6 +55,7 @@ export const deCommon: typeof enCommon = {
     paused: "Pausiert",
   },
   host: {
+    "update-required": "Update erforderlich",
     online: "Online",
     offline: "Getrennt",
     pending: "Wartet auf Agent",
