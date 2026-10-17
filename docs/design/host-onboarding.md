@@ -78,7 +78,9 @@ plain-HTTP warnings follow decision D5 in the threat review.
 
 ## Edge registration
 
-1. The hub creates the environment as above with `is_edge` set. Edge hosts use an
+1. The hub creates the environment as above with `is_edge` set and API key
+   registration (`useApiKey=true`). Legacy token-only Edge creation is rejected
+   with HTTP 400 before a host is persisted. Edge hosts use an
    `edge://` API URL marker (`isEdgeEnvironmentURLInternal` in
    `internal/middleware/environment.go`). Source: Arcane.
 2. The installer starts the agent with `EDGE_AGENT=true`, `MANAGER_API_URL` and

@@ -116,6 +116,9 @@ func (h *EnvironmentHandler) createEnvironmentWithApiKeyInternal(ctx context.Con
 }
 
 func (h *EnvironmentHandler) createEnvironmentLegacyInternal(ctx context.Context, env *Environment, user *usertypes.Actor, body environment.Create) (*handlerutil.Out[EnvironmentWithApiKey], error) {
+	if env.IsEdge || strings.HasPrefix(strings.ToLower(strings.TrimSpace(env.ApiUrl)), "edge://") {
+		return nil, huma.Error400BadRequest("Edge hosts require API key registration (useApiKey=true)")
+	}
 	if body.AccessToken != nil && *body.AccessToken != "" {
 		env.AccessToken = body.AccessToken
 	}
