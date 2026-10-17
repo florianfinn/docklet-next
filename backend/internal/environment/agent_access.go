@@ -50,6 +50,7 @@ type agentReport struct {
 }
 
 type agentRuntime struct {
+	// Never take agentRuntime.mu inside a DB transaction: session replacement reads the DB under this lock.
 	mu       sync.Mutex
 	sessions map[string]*agentSession
 	reports  map[string]agentReport
