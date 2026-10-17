@@ -28,11 +28,20 @@ type agentSession struct {
 	keyID         string
 	verdictTunnel *edge.AgentTunnel
 	checkMu       sync.Mutex
+	check         *agentCheck
 	checked       bool
 	info          *version.Info
 	verdict       error
 	ctx           context.Context
 	cancel        context.CancelFunc
+}
+
+type agentCheck struct {
+	done   chan struct{}
+	force  bool
+	info   *version.Info
+	tunnel *edge.AgentTunnel
+	err    error
 }
 
 type agentReport struct {
@@ -118,8 +127,44 @@ func (s *EnvironmentService) CheckAgentCompatibility(ctx context.Context, id str
 
 // Verdicts belong to a concrete connection; tunnel changes never revoke the credential session.
 func (s *EnvironmentService) checkAgentCompatibility(ctx context.Context, id string, session *agentSession, force bool) (*version.Info, *edge.AgentTunnel, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, nil, err
+	}
 	session.checkMu.Lock()
-	defer session.checkMu.Unlock()
+	if check := session.check; check != nil {
+		session.checkMu.Unlock()
+		info, tunnel, err := waitAgentCheck(ctx, session, check)
+		// An ordinary check can reuse a cached verdict; explicit refreshes must bypass it.
+		if force && !check.force && (err == nil || errors.Is(err, ErrAgentUpdateRequired)) {
+			return s.checkAgentCompatibility(ctx, id, session, force)
+		}
+		return info, tunnel, err
+	}
+	check := &agentCheck{done: make(chan struct{}), force: force}
+	session.check = check
+	session.checkMu.Unlock()
+
+	check.info, check.tunnel, check.err = s.runAgentCompatibility(ctx, id, session, force)
+	session.checkMu.Lock()
+	session.check = nil
+	close(check.done)
+	session.checkMu.Unlock()
+	return check.info, check.tunnel, check.err
+}
+
+// Only overlapping checks share errors; subsequent calls can retry immediately.
+func waitAgentCheck(ctx context.Context, session *agentSession, check *agentCheck) (*version.Info, *edge.AgentTunnel, error) {
+	select {
+	case <-ctx.Done():
+		return nil, nil, ctx.Err()
+	case <-session.ctx.Done():
+		return nil, nil, session.ctx.Err()
+	case <-check.done:
+		return check.info, check.tunnel, check.err
+	}
+}
+
+func (s *EnvironmentService) runAgentCompatibility(ctx context.Context, id string, session *agentSession, force bool) (*version.Info, *edge.AgentTunnel, error) {
 	if err := session.ctx.Err(); err != nil {
 		return nil, nil, err
 	}
