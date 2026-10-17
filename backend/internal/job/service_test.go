@@ -872,3 +872,16 @@ func TestResolveRunChecksCurrentOperatorPermission(t *testing.T) {
 	require.Equal(t, "interrupted", resolved.Outcome.Message)
 	require.Equal(t, "operator", resolved.Resolution.ResolvedBy)
 }
+
+func TestBackupJobsRequireDockerOnlyForVolumeArchives(t *testing.T) {
+	for _, test := range []struct {
+		jobID    string
+		required bool
+	}{
+		{"system-backup:daily", false},
+		{"system-backup:volumes:daily", true},
+		{"volume-backup:daily", true},
+	} {
+		t.Run(test.jobID, func(t *testing.T) { require.Equal(t, test.required, requiresDockerInternal(test.jobID)) })
+	}
+}
