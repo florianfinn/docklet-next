@@ -162,7 +162,7 @@ export default function DashboardPage() {
           <ScheduleWidget jobs={schedule.data.filter((j) => !j.hostId || visibleIds.has(j.hostId))} hosts={hosts.byId} now={now} />
         );
       case "security":
-        return security.isPending ? <WidgetBodySkeleton /> : security.isError ? <QueryError compact onRetry={() => void security.refetch()} /> : <SecurityWidget security={security.data} visibleHostIds={visibleIds} />;
+        return security.isPending ? <WidgetBodySkeleton /> : security.isError ? <QueryError compact error={security.error} onRetry={() => void security.refetch()} /> : <SecurityWidget security={security.data} visibleHostIds={visibleIds} />;
       case "apps":
         return <AppsWidget stacks={stacks.visible} hosts={hosts.byId} />;
       case "events":

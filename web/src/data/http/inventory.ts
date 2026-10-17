@@ -8,7 +8,7 @@ import type { DockletAdapter } from "@/data/adapter";
 import { AdapterOutcomeError } from "@/data/capability";
 import type { Host, InventoryObservation } from "@/domain/model";
 import { withoutSystem } from "@/domain/system";
-import { createInventoryTransport, reasons } from "./inventory-transport";
+import { createInventoryTransport, inventoryFailure } from "./inventory-transport";
 import { inventoryId, mapContainer, mapStack, splitInventoryId, type ContainerRow, type ProjectRow } from "./inventory-mapping";
 
 export function createInventoryReader(baseUrl: string, fetcher: typeof fetch, hosts: () => Promise<Host[]>, requireCapability: (operation: string) => Promise<void>, onState: (hostId: string, state: InventoryObservation) => void): Pick<DockletAdapter, "listStacks" | "listContainers" | "getStack"> {
@@ -25,9 +25,8 @@ export function createInventoryReader(baseUrl: string, fetcher: typeof fetch, ho
       const stacks = withoutSystem(projectRows.map((row) => mapStack(row, host.id, allContainers, observation)));
       return { stacks, containers: withoutSystem(allContainers) };
     } catch (error) {
-      if (error instanceof AdapterOutcomeError && error.outcome.kind === "error" && reasons.has(error.outcome.code)) return { stacks: [], containers: [] };
-      if (error instanceof AdapterOutcomeError) throw error;
-      return fail("inventory.mapping-error");
+      onState(host.id, inventoryFailure(host.id, error));
+      return { stacks: [], containers: [] };
     }
   }
   async function aggregate(operation: string) {

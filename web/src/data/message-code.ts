@@ -40,6 +40,7 @@ export function renderMessage(message: MessageCode, locale: AppLocale): string {
     values[key] = typeof value === "object" ? renderMessage(value, locale) : value;
   }
   const translate = translators[locale] as unknown as (key: string, values: Record<string, string | number>) => string;
+  if (!translators[locale].has(message.code as never)) return message.sourceText ?? message.code;
   try {
     return translate(message.code, values);
   } catch (error) {

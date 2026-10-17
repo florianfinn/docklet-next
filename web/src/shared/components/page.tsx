@@ -2,6 +2,7 @@ import { AlertTriangle, RotateCw } from "lucide-react";
 import type { ReactNode } from "react";
 import { useTranslations } from "use-intl";
 
+import { AdapterOutcomeError } from "@/data/capability";
 import { cn } from "@/shared/lib/utils";
 import { Alert, AlertDescription, AlertTitle } from "@/shared/ui/alert";
 import { Button } from "@/shared/ui/button";
@@ -25,8 +26,12 @@ export function PageHeader({ title, description, actions, eyebrow }: { title: Re
   );
 }
 
-export function QueryError({ onRetry, className, compact }: { onRetry?: () => void; className?: string; compact?: boolean }) {
+export function QueryError({ onRetry, className, compact, error }: { onRetry?: () => void; className?: string; compact?: boolean; error?: unknown }) {
   const t = useTranslations("common");
+  const capability = useTranslations("activity.capability");
+  if (error instanceof AdapterOutcomeError && error.outcome.kind === "not-available") {
+    return <div role="status" className={cn("space-y-2 text-sm text-muted-foreground", className)}><p>{t("query.unavailableTitle")}</p><p>{capability(error.outcome.reasonCode === "capability.mapping-unavailable" ? "mappingUnavailable" : "unavailable")}</p></div>;
+  }
   return (
     <Alert variant="destructive" className={cn("border-destructive/30 bg-destructive/5", className)}>
       <AlertTriangle />

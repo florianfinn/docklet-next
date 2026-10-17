@@ -102,7 +102,8 @@ describe("host inventory HTTP reads", () => {
     const detail = await f.adapter.getStack(inventoryId("second", "project"));
     expect(detail).toMatchObject({ hostId: "second", labels: ["example"], compose: "name: app\nservices: {}", env: "EXAMPLE=value", deployments: [], restorePoints: [] });
     f.state.malformed = true;
-    await expect(f.adapter.listContainers()).rejects.toMatchObject({ outcome: { kind: "error", code: "inventory.mapping-error" } });
+    expect(await f.adapter.listContainers()).toEqual([]);
+    expect((await f.adapter.listHosts()).every((h) => h.inventory?.reason === "inventory.mapping-error")).toBe(true);
   });
 
   it("keeps write operations unavailable without any request", async () => {

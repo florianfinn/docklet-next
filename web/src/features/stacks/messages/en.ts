@@ -1,7 +1,7 @@
 // American English texts of the stacks feature: overview, stack page, logs and deployments.
 
 export const enStacks = {
-  inventory: { host: "{name}: {reason}.", asOf: "Stale values, as of {time}.", noSnapshot: "No retained values available yet.", updateRequired: "Agent update required", credentialRejected: "Agent token invalid", unavailable: "Host unreachable" },
+  inventory: { readError: "Inventory could not be read", mappingError: "Invalid inventory data", host: "{name}: {reason}.", asOf: "Stale values, as of {time}.", noSnapshot: "No retained values available yet.", updateRequired: "Agent update required", credentialRejected: "Agent token invalid", unavailable: "Host unreachable" },
   title: "Stacks",
   description: "{scope} · stacks only. Run, Unraid and other containers without Compose are under Containers.",
   scopeAll: "All hosts combined",

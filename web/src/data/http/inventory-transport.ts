@@ -53,3 +53,10 @@ export function createInventoryTransport(baseUrl: string, fetcher: typeof fetch,
 }
 
 export { reasons };
+
+/** Host-local failures never discard another host's inventory. */
+export function inventoryFailure(hostId: string, error: unknown): InventoryObservation {
+  const code = error instanceof AdapterOutcomeError && error.outcome.kind === "error" ? error.outcome.code : undefined;
+  const reason = code && reasons.has(code) ? code as InventoryObservation["reason"] : code === "http.error" || error instanceof AdapterOutcomeError && error.outcome.kind === "error" && error.outcome.status && error.outcome.status >= 400 ? hostId === "0" ? "agent.unavailable" : "inventory.read-error" : "inventory.mapping-error";
+  return { stale: true, reason };
+}

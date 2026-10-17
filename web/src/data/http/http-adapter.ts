@@ -4,7 +4,7 @@
 // License: Apache-2.0
 // Deviations: Original HTTP and SSE adapter for issue 38.
 
-import type { operations, paths } from "@/api/generated/schema";
+import type { components, operations, paths } from "@/api/generated/schema";
 
 import type { DockletAdapter, Topic } from "../adapter";
 import { AdapterOutcomeError, GENERIC_REASON, HUB_REF, unavailable, type CapabilityDescriptor, type ResourceRef } from "../capability";
@@ -94,12 +94,30 @@ export function createHttpAdapter(options: HttpAdapterOptions = {}): DockletAdap
     return body as Body<I>;
   }
 
+  const capabilityReads = new Map<string, Promise<Body<"get-capabilities">["data"]>>();
+  let environmentState: string | undefined;
+  const inventoryTopics: Topic[] = ["stacks", "containers", "images", "volumes", "topology"];
+  function invalidateCapabilities() { capabilityReads.clear(); }
+  function environmentKey(rows: components["schemas"]["EnvironmentEnvironment"][]) {
+    return JSON.stringify(rows.map((row) => [row.id, row.status, row.enabled, row.apiUrl, row.isEdge, row.agentReport?.version.currentVersion, row.agentReport?.version.agentContractVersion, row.agentReport?.version.agentContractFingerprint]).sort((a, b) => String(a[0]).localeCompare(String(b[0]))));
+  }
+
   async function getCapability(operationId: string, resourceRef: ResourceRef = HUB_REF): Promise<CapabilityDescriptor> {
     const fallback = (reasonCode = GENERIC_REASON): CapabilityDescriptor => ({ operationId, resourceRef, available: false, disabledReasonCode: reasonCode });
     let descriptors: Body<"get-capabilities">["data"];
     try {
-      const body = await read("get-capabilities", "/capabilities", { kind: resourceRef.kind, id: resourceRef.id });
-      descriptors = body.data;
+      const key = JSON.stringify([resourceRef.kind, resourceRef.id]);
+      let pending = capabilityReads.get(key);
+      if (!pending) {
+        pending = read("get-capabilities", "/capabilities", { kind: resourceRef.kind, id: resourceRef.id }).then((body) => {
+          if (!Array.isArray(body.data)) throw new Error("capabilities.invalid-descriptors");
+          return body.data;
+        });
+        capabilityReads.set(key, pending);
+        const started = pending;
+        void pending.catch(() => { if (capabilityReads.get(key) === started) capabilityReads.delete(key); });
+      }
+      descriptors = await pending;
     } catch { return fallback(); }
     if (!Array.isArray(descriptors)) return fallback();
     const found = descriptors.find((entry) => entry?.operationId === operationId && entry.resourceRef?.kind === resourceRef.kind && entry.resourceRef.id === resourceRef.id);
@@ -207,6 +225,7 @@ export function createHttpAdapter(options: HttpAdapterOptions = {}): DockletAdap
       const activityId = envelope.activity.activityId ?? envelope.activity.activity?.id;
       if (activityId) refreshRun(activityId, envelope.activity.environmentId ?? envelope.activity.activity?.environmentId);
       else refreshRuns();
+      changeListeners.forEach((listener) => listener(["events"]));
       return;
     }
     if (envelope.channel === "events" && envelope.eventLog && typeof envelope.eventLog.type === "string") {
@@ -214,7 +233,12 @@ export function createHttpAdapter(options: HttpAdapterOptions = {}): DockletAdap
       return;
     }
     if (envelope.channel === "environments") {
-      changeListeners.forEach((listener) => listener(["hosts", "stacks", "containers", "images", "volumes", "topology"]));
+      invalidateCapabilities();
+      const rows = envelope.environment?.environments;
+      const next = Array.isArray(rows) ? environmentKey(rows) : undefined;
+      const changed = next === undefined || next !== environmentState;
+      environmentState = next;
+      changeListeners.forEach((listener) => listener(changed ? ["hosts", ...inventoryTopics] : ["hosts"]));
       return;
     }
     refreshSubscribed();
@@ -275,7 +299,11 @@ export function createHttpAdapter(options: HttpAdapterOptions = {}): DockletAdap
   async function listHosts() {
     await requireCapability("listHosts");
     const rows = await page("listEnvironments", "/environments", 100);
-    try { return rows.map((row) => ({ ...mapHost(row), inventory: observations.get(row.id) })); }
+    try {
+      const hosts = rows.map((row) => ({ ...mapHost(row), inventory: observations.get(row.id) }));
+      environmentState = environmentKey(rows);
+      return hosts;
+    }
     catch (error) { throw classifiedError({ code: "listHosts.mapping-error", cause: error }); }
   }
   function observeHost(hostId: string, state: InventoryObservation) {
@@ -288,8 +316,8 @@ export function createHttpAdapter(options: HttpAdapterOptions = {}): DockletAdap
   const methods = Object.fromEntries(Object.keys(unsupported).filter((key) => key !== "kind").map((operationId) => [operationId, (...args: unknown[]) => Promise.reject(unavailable(operationId, refFor(operationId, args), "capability.mapping-unavailable"))])) as unknown as DockletAdapter;
   return {
     ...methods,
-    ...createHttpAuth(baseUrl, client),
-    ...createHostCommands(baseUrl, client, requireCapability, () => changeListeners.forEach((listener) => listener(["hosts"]))),
+    ...createHttpAuth(baseUrl, client, invalidateCapabilities),
+    ...createHostCommands(baseUrl, client, requireCapability, () => { invalidateCapabilities(); changeListeners.forEach((listener) => listener(["hosts", ...inventoryTopics])); }),
     ...createSettingsCore(baseUrl, client),
     ...createHttpHubBackups(baseUrl, client, options.uploadFactory),
     kind: "http",
@@ -312,7 +340,7 @@ export function createHttpAdapter(options: HttpAdapterOptions = {}): DockletAdap
       connect();
       return () => { changeListeners.delete(listener); disconnectIfUnused(); };
     },
-    subscribeMetrics: createMetricsReader(baseUrl, fetcher, listHosts, requireCapability, options.webSocket ?? ((url) => new WebSocket(url))),
+    subscribeMetrics: createMetricsReader(baseUrl, fetcher, listHosts, requireCapability, options.webSocket ?? ((url) => new WebSocket(url)), observeHost),
     subscribeLogs: () => () => undefined,
     subscribeContainerLogs: () => () => undefined,
   };

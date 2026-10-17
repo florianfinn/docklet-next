@@ -57,10 +57,12 @@ describe("English catalogue", () => {
 });
 
 describe("German catalogue", () => {
-  it("renders the German catalogue with the language switch and Hub backup namespace", () => {
+  it("renders the German catalogue with the language switch, Hub backup and environment event namespaces", () => {
     expect(catalogs.de).toBe(messages);
     const { locale, ...older } = messages;
-    expect(Object.keys(older)).toHaveLength(24);
+    expect(Object.keys(older)).toHaveLength(25);
+    expect(older.environment.connect).toBe("Host verbunden");
+    expect(catalogs["en-US"].environment.connect).toBe("Host connected");
     expect(older.user).toEqual({ login: "Benutzer angemeldet.", logout: "Benutzer abgemeldet." });
     expect(catalogs["en-US"].user).toEqual({ login: "User signed in.", logout: "User signed out." });
     expect(older.hubBackups.title).toBe("Backups der Hub-Datenbank");

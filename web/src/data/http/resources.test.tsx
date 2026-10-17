@@ -70,9 +70,10 @@ it.each(["agent.update-required", "agent.invalid-token"])("keeps reason %s witho
   expect(await f.adapter.listImages()).toEqual([]);
   expect((await f.adapter.listHosts())[0]?.inventory).toEqual({ stale: true, reason });
 });
-it("rejects malformed resource data instead of showing an empty successful list", async () => {
+it("marks malformed resource data with a host-local reason", async () => {
   const f = resourceFixture(); f.state.malformed = true;
-  await expect(f.adapter.listImages()).rejects.toMatchObject({ outcome: { kind: "error", code: "inventory.mapping-error" } });
+  expect(await f.adapter.listImages()).toEqual([]);
+  expect((await f.adapter.listHosts()).every((h) => h.inventory?.reason === "inventory.mapping-error")).toBe(true);
 });
 it("blocks all storage and image writes without sending a request", async () => {
   const f = resourceFixture();
@@ -173,4 +174,12 @@ it("renders a bind detail route without fabricated size or non-finite host usage
   await waitFor(() => expect(screen.getByRole("heading", { name: "/srv/example~data" }).textContent).toBe("/srv/example~data"));
   expect(view.container.textContent?.includes("NaN")).toBe(false);
   expect(view.container.textContent?.includes("Unbekannt")).toBe(true);
+});
+
+it("displays Docker built-in and plugin drivers without rejecting a healthy host", async () => {
+  const f = resourceFixture();
+  const base = f.state.networks[0]!;
+  f.state.networks = [["bridge", "bridge"], ["host", "host"], ["none", "null"], ["custom", "vendor/plugin"]].map(([name, driver]) => ({ ...base, id: name!, name: name!, driver: driver! }));
+  const graph = await f.adapter.getTopology();
+  expect(graph.networks.filter((n) => n.hostId === "first").map((n) => [n.name, n.driver, n.builtIn])).toEqual([["bridge", "bridge", true], ["host", "host", true], ["none", "null", true], ["custom", "vendor/plugin", false]]);
 });

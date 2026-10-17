@@ -6,7 +6,7 @@
 
 // @vitest-environment node
 import { execFileSync, spawnSync } from "node:child_process";
-import { mkdtempSync, mkdirSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { chmodSync, mkdtempSync, mkdirSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
@@ -23,11 +23,11 @@ const plan: AgentInstallPlan = {
   token: "test-only", timeZone: "UTC", image: "registry.example.com/docklet/agent:0.1.0",
 };
 
-function fixture() {
+function fixture(outside = false) {
   const root = mkdtempSync(join(tmpdir(), "docklet-installer-"));
   roots.push(root);
   for (const dir of ["projects", "package", "bin", "temp"]) mkdirSync(join(root, dir));
-  const installPlan = { ...plan, projectDir: join(root, "projects"), installDir: join(root, "projects", "agent") };
+  const installPlan = { ...plan, projectDir: join(root, "projects"), installDir: outside ? join(root, "agent") : join(root, "projects", "agent") };
   const a = buildInstallArtifacts(installPlan);
   for (const file of installPackageFiles(a)) writeFileSync(join(root, "package", file.name), file.content, { mode: file.mode });
   // Canonical Compose output; no Docker endpoint or running service is used.
@@ -162,4 +162,30 @@ describe("agent installer security contract", () => {
       expect(() => buildInstallArtifacts({ ...plan, ...patch })).toThrow();
     }
   });
+});
+
+it.each([["192.0.2.12", "192.0.2.12:"], ["[2001:db8::12]", "[2001:db8::12]:"], ["2001:db8::12", "[2001:db8::12]:"], ["agent.example.com", ""]])("binds direct agent address %s to the configured IP when literal", (address, binding) => {
+  const a = buildInstallArtifacts({ ...plan, connection: "direct", address, port: 4552 });
+  expect(a.compose).toContain(`      - "${binding}4552:3552"`);
+  expect(a.compose).toContain("host firewall");
+});
+
+it.each(["script", "composeCommand", "scriptCommand"] as const)("%s warns and continues when only the agent identity can write projects", (kind) => {
+  const f = fixture(true);
+  chmodSync(f.installPlan.projectDir, 0o555);
+  try {
+    expect(spawnSync("test", ["-w", f.installPlan.projectDir]).status).toBe(1);
+    const result = f.run(kind);
+    expect(result.status).toBe(0);
+    expect(result.stderr).toContain("Warning: project directory is not writable");
+    expect(readFileSync(join(f.root, "env-mode"), "utf8").trim()).toBe("600");
+    expect(statSync(f.installPlan.projectDir).mode & 0o777).toBe(0o555);
+  } finally { chmodSync(f.installPlan.projectDir, 0o755); }
+});
+
+it.each([["direct", "docklet-agent"], ["edge", "docklet-edge-agent"]] as const)("names the %s agent container and preserves its system label", (connection, name) => {
+  const a = buildInstallArtifacts({ ...plan, connection });
+  expect(a.compose).toContain(`name: ${name}\n`);
+  expect(a.compose).toContain(`    container_name: ${name}\n`);
+  expect(a.compose).toContain('io.docklet.system: "agent"');
 });

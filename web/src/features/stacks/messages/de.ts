@@ -2,7 +2,7 @@
 import type { enStacks } from "./en";
 
 export const deStacks: typeof enStacks = {
-  inventory: { host: "{name}: {reason}.", asOf: "Veraltete Werte, Stand {time}.", noSnapshot: "Noch keine gespeicherten Werte vorhanden.", updateRequired: "Agent-Update erforderlich", credentialRejected: "Agent-Token ungültig", unavailable: "Host nicht erreichbar" },
+  inventory: { readError: "Inventar konnte nicht gelesen werden", mappingError: "Ungültige Inventardaten", host: "{name}: {reason}.", asOf: "Veraltete Werte, Stand {time}.", noSnapshot: "Noch keine gespeicherten Werte vorhanden.", updateRequired: "Agent-Update erforderlich", credentialRejected: "Agent-Token ungültig", unavailable: "Host nicht erreichbar" },
   title: "Stacks",
   description: "{scope} · nur Stacks. Run-, Unraid- und andere Container ohne Compose stehen unter Container.",
   scopeAll: "Alle Hosts gemeinsam",

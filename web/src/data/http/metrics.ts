@@ -5,8 +5,8 @@
 // Deviations: Existing per-host stats streams with retained observations.
 
 import type { Host, HostMetrics, InventoryObservation, MetricsSnapshot } from "@/domain/model";
-import { inventoryId } from "./inventory-mapping";
-import { createInventoryTransport } from "./inventory-transport";
+import { inventoryId, mapContainer } from "./inventory-mapping";
+import { createInventoryTransport, inventoryFailure } from "./inventory-transport";
 
 export interface MetricsSocket {
   onmessage: ((event: MessageEvent) => void) | null;
@@ -32,7 +32,7 @@ export function mapHostMetrics(value: unknown, hostId: string, previous?: HostMe
     cpuHistory: [...previous?.cpuHistory ?? [], cpu].slice(-60), memHistory: [...previous?.memHistory ?? [], mem].slice(-60), inventory: { stale: false, observedAt: new Date().toISOString() } };
 }
 
-export function createMetricsReader(baseUrl: string, fetcher: typeof fetch, listHosts: () => Promise<Host[]>, requireCapability: (op: string) => Promise<void>, socketFactory: (url: string) => MetricsSocket) {
+export function createMetricsReader(baseUrl: string, fetcher: typeof fetch, listHosts: () => Promise<Host[]>, requireCapability: (op: string) => Promise<void>, socketFactory: (url: string) => MetricsSocket, onState: (hostId: string, state: InventoryObservation) => void) {
   const retained: Record<string, HostMetrics> = {};
   const containers: MetricsSnapshot["containers"] = {};
   const listeners = new Set<(snapshot: MetricsSnapshot) => void>();
@@ -72,7 +72,7 @@ export function createMetricsReader(baseUrl: string, fetcher: typeof fetch, list
           socket.onmessage = (event) => {
             if (current !== generation || sockets.get(h.id) !== socket) return;
             try { retained[h.id] = mapHostMetrics(JSON.parse(String(event.data)), h.id, retained[h.id]); emit(); }
-            catch (error) { stale(h.id); emit(); report(error); }
+            catch (error) { const state = inventoryFailure(h.id, error); stale(h.id, state.reason); onState(h.id, state); emit(); }
           };
           socket.onclose = socket.onerror = () => {
             if (current !== generation || sockets.get(h.id) !== socket) return;
@@ -81,16 +81,28 @@ export function createMetricsReader(baseUrl: string, fetcher: typeof fetch, list
         }
       }
       emit();
-      await Promise.all(hosts.map(async (h) => {
+      await Promise.all(hosts.filter((h) => h.status === "online").map(async (h) => {
         // Resource sorting asks the existing container read to collect real samples.
         try {
           const result = await list("list-containers", h.id, "containers", { sort: "cpuUsage" });
           if (current !== generation) return;
-          for (const id of Object.keys(containers)) if (id.startsWith(`${h.id}~`)) delete containers[id];
-          for (const row of result.rows) if (row.resourceSample && row.labels?.["io.docklet.system"] !== "agent") {
-            containers[inventoryId(h.id, row.id)] = { cpu: row.resourceSample.cpuPercent, memMb: row.resourceSample.memoryUsageBytes / 1024 ** 2 };
+          const samples: MetricsSnapshot["containers"] = {};
+          for (const row of result.rows) {
+            mapContainer(row, h.id, [], result.observation);
+            const sample = row.resourceSample;
+            if (!sample || row.labels?.["io.docklet.system"] === "agent") continue;
+            if (![sample.cpuPercent, sample.memoryUsageBytes].every((n) => typeof n === "number" && Number.isFinite(n) && n >= 0)) throw new Error("metrics.invalid-sample");
+            samples[inventoryId(h.id, row.id)] = { cpu: sample.cpuPercent, memMb: sample.memoryUsageBytes / 1024 ** 2 };
           }
-        } catch (error) { report(error); }
+          for (const id of Object.keys(containers)) if (id.startsWith(`${h.id}~`)) delete containers[id];
+          Object.assign(containers, samples);
+          onState(h.id, result.observation);
+        } catch (error) {
+          if (current !== generation) return;
+          const state = inventoryFailure(h.id, error);
+          for (const id of Object.keys(containers)) if (id.startsWith(`${h.id}~`)) delete containers[id];
+          stale(h.id, state.reason); onState(h.id, state);
+        }
       }));
       if (current === generation) emit();
     } catch (error) { if (current === generation) report(error); }

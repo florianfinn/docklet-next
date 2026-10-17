@@ -97,7 +97,9 @@ jobs:
         with:
           node-version: 24
       - run: docker build --tag docklet-next-hub:0.0.0 --file deploy/hub/Dockerfile .
+      - run: docker build --target agent --tag docklet-next-agent:0.0.0 --file deploy/hub/Dockerfile .
       - run: node scripts/smoke-hub-image.mjs docklet-next-hub:0.0.0
+      - run: node scripts/smoke-agent-image.mjs docklet-next-agent:0.0.0
   checks:
     name: checks
     needs: [scope, verify, package-image]

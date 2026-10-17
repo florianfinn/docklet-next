@@ -1,5 +1,7 @@
 // Generates installation artefacts locally; host access only happens in the installer.
 import type { FileOwner, HostConnection } from "./model";
+import { parseIp } from "./networks";
+import { parseIp6 } from "./ipv6";
 import { SYSTEM_LABEL } from "./system";
 import { absolutePath, installDirProblem, isInside } from "./validation";
 
@@ -49,11 +51,14 @@ function validatePlan(plan: AgentInstallPlan): void {
 }
 
 export function agentCompose(plan: AgentInstallPlan): string {
+  const address = plan.address.replace(/^\[|\]$/g, "");
+  const binding = parseIp(address) !== undefined ? `${address}:` : parseIp6(address) !== undefined ? `[${address}]:` : "";
   return [
     "# Docklet agent; runtime detects the Docker socket group before dropping privileges.",
-    "name: docklet-agent",
+    `name: ${plan.connection === "edge" ? "docklet-edge-agent" : "docklet-agent"}`,
     "services:",
     "  agent:",
+    `    container_name: ${plan.connection === "edge" ? "docklet-edge-agent" : "docklet-agent"}`,
     `    image: \${DOCKLET_AGENT_IMAGE:-${plan.image ?? AGENT_IMAGE}}`,
     "    restart: unless-stopped",
     "    env_file: .env",
@@ -61,7 +66,7 @@ export function agentCompose(plan: AgentInstallPlan): string {
     `      ${SYSTEM_LABEL}: "agent"`,
     '      com.getarcaneapp.arcane.hidden: "true"',
     ...(plan.socketGid === undefined ? [] : ["    group_add:", `      - "${plan.socketGid}"`]),
-    ...(plan.connection === "direct" ? ["    # Restrict this published port to the hub with the host firewall.", "    ports:", `      - "${plan.port}:${AGENT_PORT}"`] : []),
+    ...(plan.connection === "direct" ? ["    # Restrict this published port to the hub with the host firewall.", "    ports:", `      - "${binding}${plan.port}:${AGENT_PORT}"`] : []),
     "    volumes:",
     "      - /var/run/docker.sock:/var/run/docker.sock",
     `      - ${JSON.stringify(`${plan.projectDir}:${plan.projectDir}`)}`,
@@ -95,7 +100,7 @@ function preflight(plan: AgentInstallPlan): string[] {
     'INSTALL_DIR=$(realpath -m "$INSTALL_DIR")',
     'case "$PROJECT_DIR/" in "$INSTALL_DIR/"*) echo "Install directory must not equal or contain the project directory." >&2; exit 1;; esac',
     'case "$INSTALL_DIR" in "$PROJECT_DIR"/*) RELATIVE=${INSTALL_DIR#"$PROJECT_DIR"/}; case "$RELATIVE" in */*) echo "Use a direct subfolder, outside any stack." >&2; exit 1;; esac;; esac',
-    '[ -w "$PROJECT_DIR" ] || { echo "Project directory is not writable for the installer identity." >&2; exit 1; }',
+    '[ -w "$PROJECT_DIR" ] || { echo "Warning: project directory is not writable for the installer identity; ensure the agent identity can write it." >&2; }',
     'for NAME in compose.yaml compose.yml docker-compose.yaml docker-compose.yml compose.override.yaml compose.override.yml docker-compose.override.yaml docker-compose.override.yml; do',
     '  EXISTING="$INSTALL_DIR/$NAME"',
     '  if [ -e "$EXISTING" ] || [ -L "$EXISTING" ]; then',
@@ -156,7 +161,7 @@ export function agentReadme(plan: AgentInstallPlan): string {
     `Project directory: ${plan.projectDir}`,
     ...(isInside(plan.installDir, plan.projectDir) ? [`The agent is hidden from discovery by ${SYSTEM_LABEL}=agent and the Arcane hidden label.`] : []),
     "Extract the private archive, then run: sh install.sh",
-    "Requires Docker Compose v2, realpath, stat, awk and a writable project directory.",
+    "Requires Docker Compose v2, realpath, stat and awk. The agent identity needs a writable project directory.",
     "The installer refuses existing Compose projects unless every service is labelled io.docklet.system=agent.",
     "It proposes the directory owner as PUID/PGID; the agent detects the socket group at every start.",
     "No project ownership or permissions are changed. Startup may chown the agent data directory (/app/data).",

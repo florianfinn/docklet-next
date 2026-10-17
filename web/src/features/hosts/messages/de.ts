@@ -257,3 +257,12 @@ export const deHosts: typeof enHosts = {
     "host-in-use": "Der Host hat noch Stacks oder Container.",
   },
 };
+
+export const deEnvironmentEvents = {
+  create: "Host erstellt",
+  update: "Host aktualisiert",
+  delete: "Host entfernt",
+  connect: "Host verbunden",
+  disconnect: "Host getrennt",
+  api_key: { regenerated: "Agent-Token erneuert" },
+};
