@@ -52,6 +52,7 @@ export function mapContainer(row: ContainerRow, hostId: string, projects: Projec
   const owner = projects.find((item) => item.name === project || item.runtimeServices?.some((runtime) => runtime.containerId === row.id));
   const image = imageVersion(row.image);
   return {
+    imageId: row.imageId ? inventoryId(hostId, row.imageId) : undefined,
     id: inventoryId(hostId, row.id), name: row.names[0].replace(/^\//, ""), hostId,
     ...(owner && origin === "compose" ? { stackId: inventoryId(hostId, owner.id) } : {}),
     ...(service ? { serviceName: service } : {}), origin, image,

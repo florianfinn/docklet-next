@@ -44,7 +44,7 @@ function OverviewTab({ volume: v, host }: { volume: VolumeDetail; host: Host | u
     [t("driver"), v.driver ?? t("none")],
     [v.kind === "volume" ? t("mountpoint") : t("source"), v.source],
     [t("compose"), v.composeName ? `${v.stackId}/${v.composeName}` : t("none")],
-    [t("created"), formatDate(v.createdAt)],
+    [t("created"), v.createdAt ? formatDate(v.createdAt) : t("none")],
   ];
   return (
     <div className="grid gap-4 lg:grid-cols-3">

@@ -255,6 +255,7 @@ export interface StackDetail extends Stack {
 export type ContainerOrigin = "compose" | "standalone" | "unraid" | "unknown";
 
 export interface ContainerInfo {
+  imageId?: string;
   inventory?: InventoryObservation;
   restrictions?: { recreate: boolean; reason: string };
   id: string;
@@ -321,6 +322,12 @@ export interface ScheduledJob {
 }
 
 export interface HostMetrics {
+  diskUnavailable?: boolean;
+  growthUnavailable?: boolean;
+  inventory?: InventoryObservation;
+  cpuCores?: number;
+  memTotalGb?: number;
+  diskTotalGb?: number;
   hostId: string;
   cpu: number;
   mem: number;
@@ -337,7 +344,7 @@ export interface ContainerMetrics {
 
 export interface MetricsSnapshot {
   at: string;
-  simulated: true;
+  simulated: boolean;
   hosts: Record<string, HostMetrics>;
   /** Keyed by container id. */
   containers: Record<string, ContainerMetrics>;
@@ -384,6 +391,7 @@ export interface SecurityOverview {
 export type NetworkDriver = "bridge" | "host" | "none" | "macvlan" | "ipvlan" | "overlay";
 
 export interface TopologyNetwork {
+  inventory?: InventoryObservation;
   id: string;
   name: string;
   hostId: string;

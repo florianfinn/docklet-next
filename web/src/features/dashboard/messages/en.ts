@@ -1,6 +1,8 @@
 // American English texts of the operations dashboard.
 
 export const enDashboard = {
+  metricsUnavailable: "Metrics not yet available",
+  growthUnavailable: "Growth not yet available",
   title: "Dashboard",
   description: "Situation overview of all filtered hosts. You manage stacks and containers in their own sections.",
   customize: "Customize",

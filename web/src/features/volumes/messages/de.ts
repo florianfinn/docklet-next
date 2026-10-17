@@ -2,6 +2,7 @@
 import type { enVolumes } from "./en";
 
 export const deVolumes: typeof enVolumes = {
+  unknown: "Unbekannt",
   title: "Volumes",
   description: "{scope} · Docker-Volumes und Bind-Mounts gemeinsam, mit Dateibrowser und Backups.",
   create: "Volume anlegen",

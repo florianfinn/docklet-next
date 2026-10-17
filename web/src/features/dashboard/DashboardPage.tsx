@@ -1,3 +1,4 @@
+import { InventoryNotice } from "@/features/stacks/InventoryNotice";
 import { CalendarClock, Check, Gauge, HardDrive, History, LayoutGrid, Plus, Radar, ScrollText, ShieldAlert, Siren, SlidersHorizontal, Globe } from "lucide-react";
 import { useCallback, useMemo, useState, type ReactNode } from "react";
 import { flushSync } from "react-dom";
@@ -194,6 +195,7 @@ export default function DashboardPage() {
           </>
         }
       />
+      <InventoryNotice hosts={hosts.visible} items={[...stacks.visible, ...containers.visible, ...Object.values(metrics ?? {})]} />
       {coreLoading ? (
         <DashboardSkeleton sizes={visible.map((id) => widgetSize(layout, id))} />
       ) : stacks.isError || containers.isError ? (

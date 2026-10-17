@@ -2,6 +2,8 @@
 import type { enDashboard } from "./en";
 
 export const deDashboard: typeof enDashboard = {
+  metricsUnavailable: "Messwerte noch nicht verfügbar",
+  growthUnavailable: "Wachstum noch nicht verfügbar",
   title: "Dashboard",
   description: "Lagebild aller gefilterten Hosts. Stacks und Container verwaltest du in eigenen Bereichen.",
   customize: "Anpassen",

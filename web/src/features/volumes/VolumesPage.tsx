@@ -1,3 +1,5 @@
+import { InventoryNotice } from "@/features/stacks/InventoryNotice";
+import { useCapability } from "@/data/use-capability";
 import { SegmentedToggle } from "@/shared/components/segmented-toggle";
 import { Archive, Database, Eraser, FolderInput, HardDrive, PackageOpen, Plus, Search } from "lucide-react";
 import { useCallback, useMemo, useState } from "react";
@@ -34,6 +36,8 @@ export default function VolumesPage() {
   const ts = useTranslations("stacks");
   const tc = useTranslations("common.host");
   const volumes = useVolumes();
+  const createCapability = useCapability("createVolume");
+  const pruneCapability = useCapability("planVolumePrune");
   const layout = usePreference("volumesLayout");
   const [sort, setSort] = useState<VolumeSort>(DEFAULT_VOLUME_SORT);
   const [hostDir, setHostDir] = useState<SortDir>("asc");
@@ -115,17 +119,18 @@ export default function VolumesPage() {
                 {t("backups.title")}
               </Link>
             </Button>
-            <Button variant="outline" onClick={() => setPruning(true)} disabled={pending}>
+            <Button variant="outline" onClick={() => setPruning(true)} disabled={pending || !pruneCapability.available} title={pruneCapability.reason}>
               <Eraser data-icon="inline-start" />
               {t("prune.open")}
             </Button>
-            <Button className="group" onClick={() => setCreating(true)}>
+            <Button className="group" disabled={!createCapability.available} title={createCapability.reason} onClick={() => setCreating(true)}>
               <Plus data-icon="inline-start" className="transition-transform duration-(--dur) group-hover:rotate-90" />
               {t("create")}
             </Button>
           </>
         }
       />
+      <InventoryNotice hosts={hosts.visible} items={visible} />
       <StatStrip
         className="md:grid-cols-5"
         items={[
