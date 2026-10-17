@@ -54,7 +54,7 @@ const event: Event = {
 };
 
 const pagination = (count: number) => ({ currentPage: 1, itemsPerPage: 500, totalItems: count, totalPages: 1 });
-const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json" } });
+const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json", "X-CSRF-Token": "example".padEnd(43, "x") } });
 const ok = (data: unknown) => json({ success: true, data });
 const page = (data: unknown[]) => json({ success: true, data, pagination: pagination(data.length) });
 
