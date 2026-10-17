@@ -60,7 +60,7 @@ The reference UI has four steps: connection, directories, install, connect
    Source: Arcane.
 3. The hub's environment health job calls the agent with the token
    (`runHealthCheckInternal`, `TestConnection` in
-   `internal/environment/service.go`). Success marks the host reachable. Source:
+   `internal/environment/service.go`). Success marks the host online. Source:
    Arcane.
 4. The hub reads the agent's version info and applies the compatibility rule
    before anything else is forwarded. Source: **new**, decision D1 and review
