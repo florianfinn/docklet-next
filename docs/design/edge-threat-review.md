@@ -377,9 +377,9 @@ this record on 2026-10-17. Items that name an issue are new work there.
 - **B1. Sandbox policy on proxied agent responses (T6), #81.** In addition to the
   D2 header allowlist, the hub sets `Content-Security-Policy: sandbox;
   default-src 'none'` on every proxied agent HTTP response, whatever its content
-  type, and replaces any policy the agent sends. The policy only affects a
-  response opened as a document; JSON reads, downloads and images embedded by the
-  hub UI are unaffected, so no content type needs an exception. Direct and Edge
+  type, and replaces any policy the agent sends. The policy confines active content when a response is opened as a document
+  and also applies to worker globals. The intended JSON fetch reads and file
+  downloads do not execute the response as active content and need no exception. Direct and Edge
   forwarding use one shared response filter for allowlist, `nosniff` and policy;
   where a transport copies agent headers onto a WebSocket handshake response,
   the same filter applies. Verification on both transports: an agent response
