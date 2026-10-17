@@ -1,6 +1,7 @@
 // American English texts of the activity feature (progress toasts, action center, events).
 
 export const enActivity = {
+  message: "{message}",
   open: "Activity",
   openWithCount: "Activity, {count} active",
   running: "{count} running",

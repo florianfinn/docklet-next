@@ -50,7 +50,7 @@ function stepState(status: string): StepState {
 }
 
 function message(code: string | undefined, sourceText: string): MessageCode {
-  return code ? { code, params: {}, sourceText } : { code: "runMessages.value", params: { value: sourceText } };
+  return code ? { code, params: code === "activity.message" ? { message: sourceText } : {}, sourceText } : { code: "runMessages.value", params: { value: sourceText } };
 }
 
 function stepKey(name: string): DeployStepKey {

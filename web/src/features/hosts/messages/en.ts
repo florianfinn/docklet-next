@@ -256,3 +256,12 @@ export const enHosts = {
     "host-in-use": "The host still has stacks or containers.",
   },
 };
+
+export const enEnvironmentEvents = {
+  create: "Host created",
+  update: "Host updated",
+  delete: "Host removed",
+  connect: "Host connected",
+  disconnect: "Host disconnected",
+  api_key: { regenerated: "Agent token regenerated" },
+};
