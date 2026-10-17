@@ -73,6 +73,27 @@ func newAgentFixture(t *testing.T, mode string, info version.Info) *agentFixture
 		return &http.Response{StatusCode: 200, Body: io.NopCloser(strings.NewReader(string(body))), Header: http.Header{"Content-Type": {"application/json"}}, Request: r}, nil
 	})}
 	f.service = NewEnvironmentService(db, httpClient, nil, nil, nil, nil)
+	t.Cleanup(func() {
+		f.service.agentRuntime.mu.Lock()
+		sessions := make([]*agentSession, 0, len(f.service.agentRuntime.sessions))
+		for _, session := range f.service.agentRuntime.sessions {
+			session.cancel()
+			sessions = append(sessions, session)
+		}
+		f.service.agentRuntime.mu.Unlock()
+		for _, session := range sessions {
+			session.checkMu.Lock()
+			check := session.check
+			session.checkMu.Unlock()
+			if check != nil {
+				select {
+				case <-check.done:
+				case <-time.After(11 * time.Second):
+					t.Error("shared agent check outlived its attempt cap")
+				}
+			}
+		}
+	})
 	apiURL := "http://agent.example.com"
 	if mode == "edge" {
 		apiURL = "edge://example"
@@ -127,8 +148,6 @@ func TestHostAgentVersionMatrix(t *testing.T) {
 	for _, mode := range []string{"direct", "edge"} {
 		for _, state := range []string{"ok", "below-minimum", "fingerprint-mismatch"} {
 			t.Run(mode+"/"+state, func(t *testing.T) {
-				ctx, cancel := context.WithTimeout(t.Context(), 3*time.Second)
-				defer cancel()
 				info := version.Info{AgentContractVersion: contract.AgentHubVersion, AgentContractFingerprint: contract.AgentHubFingerprint}
 				if state == "below-minimum" {
 					info.AgentContractVersion = contract.MinimumAgentVersion - 1
@@ -137,6 +156,8 @@ func TestHostAgentVersionMatrix(t *testing.T) {
 					info.AgentContractFingerprint = "different"
 				}
 				f := newAgentFixture(t, mode, info)
+				ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
+				defer cancel()
 				expected := "online"
 				if state != "ok" {
 					expected = "update-required"

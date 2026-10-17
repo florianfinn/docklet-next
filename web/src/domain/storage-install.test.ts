@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { parse } from "yaml";
 
 import { createTar } from "@/shared/lib/tar";
 
@@ -26,20 +27,20 @@ describe("agent installation artifacts", () => {
     const direct = buildInstallArtifacts(plan());
     const edge = buildInstallArtifacts(plan({ connection: "edge" }));
     expect(direct.compose.includes('"3552:3552"')).toBe(true);
-    expect(direct.env.includes("DOCKLET_HUB_URL")).toBe(false);
+    expect(direct.env.includes("AGENT_MODE=true") && direct.env.includes("EDGE_AGENT=false")).toBe(true);
     expect(edge.compose.includes("ports:")).toBe(false);
-    expect(edge.env.includes("DOCKLET_HUB_URL=http://192.0.2.10:8080")).toBe(true);
+    expect(edge.env.includes("MANAGER_API_URL='http://192.0.2.10:8080'") && edge.env.includes("EDGE_AGENT=true")).toBe(true);
   });
 
   it("installs the agent into its own folder inside the project directory and labels it as a system component", () => {
     const a = buildInstallArtifacts(plan());
-    expect(a.compose.includes("- /home/docker:/home/docker")).toBe(true);
+    expect(parse(a.compose).services.agent.volumes.includes(`${plan().projectDir}:${plan().projectDir}`)).toBe(true);
     expect(a.compose.includes('io.docklet.system: "agent"')).toBe(true);
-    expect(a.scriptCommand.startsWith("cat > /tmp/install-docklet-agent.sh")).toBe(true);
+    expect(a.scriptCommand.includes("mktemp -d") && !a.scriptCommand.includes("/tmp/install-docklet-agent.sh")).toBe(true);
     expect(a.script.includes(`INSTALL_DIR='/home/docker/docklet-agent'`) && a.script.includes('cd "$INSTALL_DIR"')).toBe(true);
-    expect(a.composeCommand.includes('mkdir -p "$INSTALL_DIR/data" && cd "$INSTALL_DIR"')).toBe(true);
-    // The installer refuses the project root itself and says what it checks locally.
-    expect(a.script.includes('if [ "$INSTALL_DIR" = "$PROJECT_DIR" ]; then') && a.script.includes("# Local checks on this host")).toBe(true);
+    expect(a.composeCommand.includes('mkdir -p "$INSTALL_DIR/data"') && a.composeCommand.includes('cd "$INSTALL_DIR"')).toBe(true);
+    // Canonical paths are checked before creating the agent data directory.
+    expect(a.script.indexOf("Install directory must not equal") < a.script.indexOf('mkdir -p "$INSTALL_DIR/data"')).toBe(true);
     expect(a.readme.includes("io.docklet.system=agent")).toBe(true);
   });
 
@@ -48,13 +49,16 @@ describe("agent installation artifacts", () => {
     expect(auto.script.includes('stat -c %u "$PROJECT_DIR"') && auto.script.includes("stat -c %g /var/run/docker.sock")).toBe(true);
     expect(/^\s*(sudo\s+)?(chown|chmod\s+-R)\b/m.test(auto.script + auto.composeCommand)).toBe(false);
     const manual = buildInstallArtifacts(plan({ fileOwner: { uid: 1000, gid: 1001 }, socketGid: 998 }));
-    expect(manual.env.includes("PUID=1000") && manual.env.includes("PGID=1001") && manual.env.includes("DOCKER_SOCKET_GID=998")).toBe(true);
-    // Manual IDs are written as given; stat only reports the owner for the log.
-    expect(manual.script.includes('PUID="${PUID:-$(stat') || manual.script.includes("stat -c %g /var/run/docker.sock")).toBe(false);
+    expect(manual.env.includes("PUID=1000") && manual.env.includes("PGID=1001") && parse(manual.compose).services.agent.group_add.includes("998")).toBe(true);
+    // Manual IDs are retained; socket detection remains a runtime responsibility.
+    expect(manual.script.includes("PUID='1000'") && manual.script.includes("PGID='1001'")).toBe(true);
+    expect(manual.env.includes("DOCKER_SOCKET_GID")).toBe(false);
   });
 
-  it("marks the token as a placeholder", () => {
-    expect(buildInstallArtifacts(plan()).env.includes("DOCKLET_AGENT_TOKEN=DEMO-NUR-ANSICHT-TEST")).toBe(true);
+  it("keeps the supplied token in env only", () => {
+    const a = buildInstallArtifacts(plan());
+    expect(a.env.includes(plan().token)).toBe(true);
+    expect([a.compose, a.script, a.readme].some((file) => file.includes(plan().token))).toBe(false);
   });
 });
 

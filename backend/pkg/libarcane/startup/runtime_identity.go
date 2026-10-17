@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; functional cut: removed standalone build workshop; SQLite-only local persistence.
+// Deviations: Preserve start groups during privilege drop; Local module namespace; functional cut: removed standalone build workshop; SQLite-only local persistence.
 
 package startup
 
@@ -254,17 +254,29 @@ func configureRuntimeDockerConfigEnvInternal(cfg *RuntimeIdentityConfig, setenv 
 	return configDir, nil
 }
 
-func runtimeIdentitySupplementaryGroupsInternal(dockerHost string, resolveSocketGroup func(string) mo.Option[uint32]) []uint32 {
+func runtimeIdentitySupplementaryGroupsInternal(dockerHost string, resolveSocketGroup func(string) mo.Option[uint32], startGroups ...uint32) []uint32 {
+	var groups []uint32
+	seen := make(map[uint32]bool, len(startGroups)+1)
+	appendGroup := func(gid uint32) {
+		if !seen[gid] {
+			groups = append(groups, gid)
+			seen[gid] = true
+		}
+	}
+	for _, gid := range startGroups {
+		appendGroup(gid)
+	}
 	socketPath, ok := dockerSocketPathInternal(dockerHost).Get()
 	if !ok {
-		return nil
+		return groups
 	}
 
 	socketGID, ok := resolveSocketGroup(socketPath).Get()
 	if !ok {
-		return nil
+		return groups
 	}
-	return []uint32{socketGID}
+	appendGroup(socketGID)
+	return groups
 }
 
 func dockerSocketPathInternal(raw string) mo.Option[string] {

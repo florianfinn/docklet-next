@@ -28,9 +28,9 @@ func TestAgentAccessFailureCodes(t *testing.T) {
 	for _, mode := range []string{"direct", "edge"} {
 		for _, state := range []string{"update-required", "invalid-token", "unavailable", "stale-token"} {
 			t.Run(mode+"/"+state, func(t *testing.T) {
-				ctx, cancel := context.WithTimeout(t.Context(), 200*time.Millisecond)
-				defer cancel()
 				f := newAgentFixture(t, mode, version.Info{AgentContractVersion: contract.AgentHubVersion, AgentContractFingerprint: "different"})
+				ctx, cancel := context.WithTimeout(t.Context(), 2*time.Second)
+				defer cancel()
 				if mode == "direct" && state != "update-required" {
 					f.service.httpClient.Transport = agentRoundTrip(func(r *http.Request) (*http.Response, error) {
 						if state == "unavailable" {
@@ -61,7 +61,13 @@ func TestAgentAccessFailureCodes(t *testing.T) {
 				router.Use(middleware.NewEnvProxyMiddlewareWithParamAndRegistry("0", "id", resolver, nil, nil, edge.GetRegistry(), nil, middleware.EnvironmentProxySecurity{AgentAccess: f.service.AgentAccess, HTTPClient: f.service.httpClient}))
 				router.GET("/api/environments/:id/containers", func(c *echo.Context) error { return c.NoContent(500) })
 				rec := httptest.NewRecorder()
-				router.ServeHTTP(rec, httptest.NewRequest("GET", "/api/environments/"+f.id+"/containers", nil).WithContext(ctx))
+				requestCtx := ctx
+				if mode == "edge" && state == "unavailable" {
+					var finish context.CancelFunc
+					requestCtx, finish = context.WithTimeout(ctx, 500*time.Millisecond)
+					defer finish()
+				}
+				router.ServeHTTP(rec, httptest.NewRequest("GET", "/api/environments/"+f.id+"/containers", nil).WithContext(requestCtx))
 				code := state
 				if state == "stale-token" {
 					code = "invalid-token"

@@ -28,11 +28,20 @@ type agentSession struct {
 	keyID         string
 	verdictTunnel *edge.AgentTunnel
 	checkMu       sync.Mutex
+	check         *agentCheck
 	checked       bool
 	info          *version.Info
 	verdict       error
 	ctx           context.Context
 	cancel        context.CancelFunc
+}
+
+type agentCheck struct {
+	done   chan struct{}
+	force  bool
+	info   *version.Info
+	tunnel *edge.AgentTunnel
+	err    error
 }
 
 type agentReport struct {
@@ -41,6 +50,7 @@ type agentReport struct {
 }
 
 type agentRuntime struct {
+	// Never take agentRuntime.mu inside a DB transaction: session replacement reads the DB under this lock.
 	mu       sync.Mutex
 	sessions map[string]*agentSession
 	reports  map[string]agentReport
@@ -59,7 +69,10 @@ func (s *EnvironmentService) AgentAccess(ctx context.Context, id string, token *
 	if env.ApiKeyID != nil {
 		keyID = *env.ApiKeyID
 	}
-	session := s.agentSessionFor(ctx, env)
+	session, err := s.agentSessionFor(ctx, env)
+	if err != nil {
+		return nil, nil, err
+	}
 	boundCtx := edge.WithSessionCredential(ctx, keyID, *env.AccessToken, s.edgeSessionCurrent)
 	requestCtx, cancel := context.WithCancel(boundCtx)
 	stop := context.AfterFunc(session.ctx, cancel)
@@ -81,7 +94,7 @@ func (s *EnvironmentService) AgentAccess(ctx context.Context, id string, token *
 	return requestCtx, cleanup, nil
 }
 
-func (s *EnvironmentService) agentSessionFor(ctx context.Context, env *Environment) *agentSession {
+func (s *EnvironmentService) agentSessionFor(ctx context.Context, env *Environment) (*agentSession, error) {
 	keyID := ""
 	if env.ApiKeyID != nil {
 		keyID = *env.ApiKeyID
@@ -94,13 +107,25 @@ func (s *EnvironmentService) agentSessionFor(ctx context.Context, env *Environme
 	session := s.agentRuntime.sessions[env.ID]
 	if session == nil || session.token != *env.AccessToken || session.endpoint != env.ApiUrl || session.keyID != keyID {
 		if session != nil {
+			// Re-read under the lock before a credential observer can revoke another session.
+			current, err := s.GetEnvironmentByID(ctx, env.ID)
+			if err != nil {
+				return nil, err
+			}
+			currentKeyID := ""
+			if current.ApiKeyID != nil {
+				currentKeyID = *current.ApiKeyID
+			}
+			if !current.Enabled || current.AccessToken == nil || *current.AccessToken != *env.AccessToken || current.ApiUrl != env.ApiUrl || currentKeyID != keyID {
+				return nil, ErrInvalidEnvironmentAccessToken
+			}
 			session.cancel()
 		}
 		sessionCtx, cancel := context.WithCancel(context.WithoutCancel(ctx))
 		session = &agentSession{token: *env.AccessToken, endpoint: env.ApiUrl, keyID: keyID, ctx: sessionCtx, cancel: cancel}
 		s.agentRuntime.sessions[env.ID] = session
 	}
-	return session
+	return session, nil
 }
 
 // CheckAgentCompatibility refreshes the session verdict on health checks and Edge connect.
@@ -112,14 +137,64 @@ func (s *EnvironmentService) CheckAgentCompatibility(ctx context.Context, id str
 	if !env.Enabled || env.AccessToken == nil {
 		return nil, ErrInvalidEnvironmentAccessToken
 	}
-	info, _, err := s.checkAgentCompatibility(ctx, id, s.agentSessionFor(ctx, env), true)
+	session, err := s.agentSessionFor(ctx, env)
+	if err != nil {
+		return nil, err
+	}
+	info, _, err := s.checkAgentCompatibility(ctx, id, session, true)
 	return info, err
 }
 
 // Verdicts belong to a concrete connection; tunnel changes never revoke the credential session.
 func (s *EnvironmentService) checkAgentCompatibility(ctx context.Context, id string, session *agentSession, force bool) (*version.Info, *edge.AgentTunnel, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, nil, err
+	}
 	session.checkMu.Lock()
-	defer session.checkMu.Unlock()
+	if check := session.check; check != nil {
+		session.checkMu.Unlock()
+		info, tunnel, err := waitAgentCheck(ctx, session, check)
+		// An ordinary check can reuse a cached verdict; explicit refreshes must bypass it.
+		if force && !check.force && (err == nil || errors.Is(err, ErrAgentUpdateRequired)) {
+			return s.checkAgentCompatibility(ctx, id, session, force)
+		}
+		return info, tunnel, err
+	}
+	check := &agentCheck{done: make(chan struct{}), force: force}
+	session.check = check
+	session.checkMu.Unlock()
+
+	// The attempt belongs to the session; every caller waits with its own budget.
+	go func() {
+		defer func() {
+			// Background attempts must release waiters even when a dependency panics.
+			if recover() != nil {
+				check.info, check.tunnel, check.err = nil, nil, remenv.ErrEnvironmentUnavailable
+				session.checked = false
+			}
+			session.checkMu.Lock()
+			session.check = nil
+			close(check.done)
+			session.checkMu.Unlock()
+		}()
+		check.info, check.tunnel, check.err = s.runAgentCompatibility(context.WithoutCancel(ctx), id, session, force)
+	}()
+	return waitAgentCheck(ctx, session, check)
+}
+
+// Only overlapping checks share errors; subsequent calls can retry immediately.
+func waitAgentCheck(ctx context.Context, session *agentSession, check *agentCheck) (*version.Info, *edge.AgentTunnel, error) {
+	select {
+	case <-ctx.Done():
+		return nil, nil, ctx.Err()
+	case <-session.ctx.Done():
+		return nil, nil, session.ctx.Err()
+	case <-check.done:
+		return check.info, check.tunnel, check.err
+	}
+}
+
+func (s *EnvironmentService) runAgentCompatibility(ctx context.Context, id string, session *agentSession, force bool) (*version.Info, *edge.AgentTunnel, error) {
 	if err := session.ctx.Err(); err != nil {
 		return nil, nil, err
 	}

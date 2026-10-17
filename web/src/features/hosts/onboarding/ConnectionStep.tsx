@@ -5,6 +5,7 @@ import { useTranslations } from "use-intl";
 import { ChoiceCards, TextField } from "@/shared/components/form-field";
 import { ToneBadge } from "@/shared/components/tone";
 import { cn } from "@/shared/lib/utils";
+import { Alert, AlertDescription } from "@/shared/ui/alert";
 import { FieldGroup, FieldLegend, FieldSet } from "@/shared/ui/field";
 
 import { HOST_COLORS, patchDraft, type DraftErrors, type HostDraft } from "./onboarding-draft";
@@ -70,13 +71,14 @@ export function ConnectionStep({ draft, errors, showErrors, hubUrl, locked }: { 
           <div className="text-sm font-medium">{t("hubUrl")}</div>
           <code className="mt-1 block font-mono text-[13px]">{hubUrl}</code>
           <p className="mt-1 text-xs text-muted-foreground">
-            {t("hubUrlHint")}{" "}
+            {t("hubUrlHint")} {t("proxyBypass")}{" "}
             <Link to="/settings/general" className="text-primary-text hover:underline">
               {t("hubUrlEdit")}
             </Link>
           </p>
         </div>
       )}
+      {(draft.connection === "direct" || hubUrl.startsWith("http://")) && <Alert className="border-warning/30 bg-warning/8"><ShieldAlert /><AlertDescription>{t("httpWarning")}</AlertDescription></Alert>}
       <p className="flex items-start gap-2 text-xs text-muted-foreground">
         <ShieldAlert className="mt-0.5 size-3.5 shrink-0" aria-hidden />
         {t("noWireguard")}

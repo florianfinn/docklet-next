@@ -1,6 +1,7 @@
 import { screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { parse } from "yaml";
 
 import { AppShell } from "@/app/shell/AppShell";
 import { createDemoAdapter } from "@/data/demo/demo-adapter";
@@ -75,7 +76,7 @@ describe("host onboarding", () => {
     await screen.findByText(/^DEMO-NUR-ANSICHT-WERKSTATT-/);
     await userEvent.click(screen.getByRole("radio", { name: /Compose/ }));
     const compose = screen.getByLabelText("/home/docker/docklet-agent/compose.yaml");
-    expect(compose.textContent?.includes("- /home/docker:/home/docker")).toBe(true);
+    expect(parse(compose.textContent ?? "").services.agent.volumes.includes("/home/docker:/home/docker")).toBe(true);
     expect(compose.textContent?.includes('io.docklet.system: "agent"')).toBe(true);
     expect(compose.textContent?.includes("ports:")).toBe(false);
 
