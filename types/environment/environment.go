@@ -2,11 +2,14 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: None
+// Deviations: Added process-local agent reports to host read responses.
 
 package environment
 
-import "time"
+import (
+	"github.com/florianfinn/docklet-next/types/version"
+	"time"
+)
 
 // Create trims and NFC-normalizes tagged display fields.
 type Create struct {
@@ -116,7 +119,13 @@ type EdgeMTLSCertificate struct {
 }
 
 // Environment represents an environment in API responses.
+type AgentReport struct {
+	Version    version.Info `json:"version"`
+	ReportedAt time.Time    `json:"reportedAt"`
+}
+
 type Environment struct {
+	AgentReport *AgentReport `json:"agentReport,omitempty"`
 	// ID of the environment.
 	//
 	// Required: true

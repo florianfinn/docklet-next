@@ -19,6 +19,7 @@ import (
 	"github.com/florianfinn/docklet-next/backend/internal/event"
 	"github.com/florianfinn/docklet-next/backend/internal/registry"
 	"github.com/florianfinn/docklet-next/backend/internal/settings"
+	"github.com/florianfinn/docklet-next/backend/pkg/hoststate"
 	"github.com/florianfinn/docklet-next/backend/pkg/remenv"
 	"github.com/florianfinn/docklet-next/backend/pkg/scheduler/entityjobs"
 	"github.com/florianfinn/docklet-next/backend/pkg/utils"
@@ -38,6 +39,8 @@ import (
 )
 
 type EnvironmentService struct {
+	snapshots        hoststate.Store
+	agentRuntime     agentRuntime
 	db               *database.DB
 	httpClient       *http.Client
 	dockerService    *docker.DockerClientService
@@ -118,6 +121,7 @@ func NewEnvironmentService(
 		apiKeys:          apiKeyService,
 	}
 	s.proxy = proxy.New(db, httpClient, settingsService, &s.syncGate)
+	s.proxy.SetAccessCheck(s.AgentAccess)
 	return s
 }
 
@@ -127,13 +131,10 @@ func (s *EnvironmentService) ResolveEdgeEnvironmentByToken(ctx context.Context, 
 		return "", errors.New("agent token required")
 	}
 
-	if envID, ok := s.edgeTokens.environmentID(token).Get(); ok {
-		return envID, nil
-	}
-
 	var env Environment
 	if err := s.db.WithContext(ctx).
 		Select("id", "access_token").
+		Where("enabled = ?", true).
 		Where("is_edge = ?", true).
 		Where("access_token = ?", token).
 		First(&env).Error; err != nil {
@@ -349,6 +350,7 @@ func (s *EnvironmentService) UpdateEnvironment(ctx context.Context, id string, u
 
 	if rawAccessToken, ok := updates["access_token"]; ok {
 		accessToken, _ := rawAccessToken.(string)
+		s.revokeAgentSessions(id)
 		s.edgeTokens.sync(id, accessToken)
 	}
 
@@ -403,9 +405,11 @@ func (s *EnvironmentService) DeleteEnvironment(ctx context.Context, id string, u
 		return fmt.Errorf("failed to delete environment: %w", deleteEnvironmentErr)
 	}
 
+	s.revokeAgentSessions(id)
 	s.edgeTokens.invalidate(id)
 	s.ForgetSyncState(id)
 	s.remoteEnvs.remove(id)
+	s.snapshots.Forget(id)
 	s.invalidateEnvironmentCacheInternal(id)
 	s.NotifyRuntimeStateChanged()
 
@@ -510,6 +514,7 @@ func (s *EnvironmentService) linkEnvironmentApiKey(ctx context.Context, envID, n
 	s.invalidateEnvironmentCacheInternal(envID)
 	s.NotifyRuntimeStateChanged()
 
+	s.revokeAgentSessions(envID)
 	s.edgeTokens.sync(envID, apiKey)
 	now := time.Now()
 	s.remoteEnvs.update(envID, func(env *Environment) {
@@ -593,3 +598,6 @@ func (s *EnvironmentService) GetEnabledRegistryCredentials(ctx context.Context) 
 
 	return creds, nil
 }
+
+// ReadSnapshots shares successful inventory reads with the owning read adapters.
+func (s *EnvironmentService) ReadSnapshots() *hoststate.Store { return &s.snapshots }

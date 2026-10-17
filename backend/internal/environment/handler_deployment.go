@@ -8,18 +8,13 @@ package environment
 
 import (
 	"context"
-	"encoding/json/v2"
 	"fmt"
 	"github.com/danielgtaylor/huma/v2"
 	"github.com/florianfinn/docklet-next/backend/pkg/libarcane/edge"
 	"github.com/florianfinn/docklet-next/backend/pkg/utils/handlerutil"
-	"github.com/florianfinn/docklet-next/backend/pkg/utils/httpx"
 	"github.com/florianfinn/docklet-next/types/base"
 	"github.com/florianfinn/docklet-next/types/version"
 	"log/slog"
-	"net/http"
-	"strings"
-	"time"
 )
 
 // GetDeploymentSnippets returns deployment snippets for an environment.
@@ -95,76 +90,9 @@ func (h *EnvironmentHandler) GetDeploymentSnippets(ctx context.Context, input *G
 
 // GetEnvironmentVersion returns the version of a remote environment.
 func (h *EnvironmentHandler) GetEnvironmentVersion(ctx context.Context, input *GetEnvironmentVersionInput) (*handlerutil.Out[version.Info], error) {
-	env, err := h.environmentService.GetEnvironmentByID(ctx, input.ID)
-	if err != nil {
-		return nil, huma.Error404NotFound("Environment not found")
+	info, err := h.environmentService.CheckAgentCompatibility(ctx, input.ID)
+	if err != nil && info == nil {
+		return nil, huma.Error503ServiceUnavailable("Agent version is unavailable")
 	}
-
-	reqCtx, cancel := context.WithTimeout(ctx, 15*time.Second)
-	defer cancel()
-
-	var versionInfo version.Info
-
-	// For edge environments, route through the tunnel
-	if env.IsEdge {
-		if !edge.HasActiveTunnel(input.ID) {
-			if _, ok := edge.RequestTunnelAndWait(reqCtx, input.ID, edge.DefaultTunnelDemandTTL, edge.DefaultTunnelAcquireTimeout()).Get(); !ok {
-				return nil, huma.Error503ServiceUnavailable("Edge agent is not connected")
-			}
-		}
-
-		statusCode, respBody, doRequestErr := edge.DoRequest(reqCtx, input.ID, http.MethodGet, "/api/app-version", nil)
-		if doRequestErr != nil {
-			return nil, huma.Error500InternalServerError("Request via tunnel failed: " + doRequestErr.Error())
-		}
-		if statusCode != http.StatusOK {
-			return nil, huma.Error500InternalServerError(fmt.Sprintf("Unexpected status code: %d", statusCode))
-		}
-
-		if unmarshalErr := json.Unmarshal(respBody, &versionInfo); unmarshalErr != nil {
-			return nil, huma.Error500InternalServerError("Failed to decode version response")
-		}
-	} else {
-		// Direct HTTP request for non-edge environments
-		validatedURL, validateErr := httpx.ValidateOutboundHTTPURL(env.ApiUrl)
-		if validateErr != nil {
-			return nil, huma.Error400BadRequest("Invalid environment API URL")
-		}
-		validatedURL.RawQuery = ""
-		validatedURL.Fragment = ""
-		validatedURL.Path = strings.TrimRight(validatedURL.Path, "/") + "/api/app-version"
-
-		req, newRequestWithContextErr := http.NewRequestWithContext(reqCtx, http.MethodGet, validatedURL.String(), http.NoBody)
-		if newRequestWithContextErr != nil {
-			return nil, huma.Error500InternalServerError("Failed to create request")
-		}
-
-		client := &http.Client{Timeout: 15 * time.Second}
-		resp, newRequestWithContextErr := client.Do(req)
-		if newRequestWithContextErr != nil {
-			return nil, huma.Error500InternalServerError("Request failed: " + newRequestWithContextErr.Error())
-		}
-		defer func() { _ = resp.Body.Close() }()
-
-		if resp.StatusCode != http.StatusOK {
-			return nil, huma.Error500InternalServerError(fmt.Sprintf("Unexpected status code: %d", resp.StatusCode))
-		}
-
-		if unmarshalReadErr := json.UnmarshalRead(resp.Body, &versionInfo); unmarshalReadErr != nil {
-			return nil, huma.Error500InternalServerError("Failed to decode version response")
-		}
-	}
-
-	// Update environment status to online since we successfully contacted it
-	if updateErr := h.environmentService.UpdateEnvironmentHeartbeat(ctx, input.ID); updateErr != nil {
-		slog.WarnContext(ctx, "Failed to update environment heartbeat", "environmentId", input.ID, "error", updateErr)
-		// Don't fail the request if heartbeat update fails
-	}
-
-	return &handlerutil.Out[version.Info]{
-		Body: base.ApiResponse[version.Info]{
-			Success: true,
-			Data:    versionInfo,
-		},
-	}, nil
+	return &handlerutil.Out[version.Info]{Body: base.ApiResponse[version.Info]{Success: true, Data: *info}}, nil
 }

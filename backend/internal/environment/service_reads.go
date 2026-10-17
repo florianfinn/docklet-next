@@ -223,7 +223,7 @@ func (
 	}
 
 	for i := range items {
-		ApplyEnvironmentRuntimeState(&items[i])
+		s.ApplyHostRuntimeState(ctx, &items[i])
 	}
 
 	config := pagination.Config[environment.Environment]{

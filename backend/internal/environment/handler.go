@@ -24,6 +24,7 @@ import (
 	"log/slog"
 	"maps"
 	"slices"
+	"sync"
 	"time"
 )
 
@@ -41,6 +42,7 @@ const (
 
 // EnvironmentHandler handles environment management endpoints.
 type EnvironmentHandler struct {
+	background         sync.WaitGroup
 	environmentService *EnvironmentService
 	settingsService    *settings.SettingsService
 	apiKeyService      *apikey.ApiKeyService
@@ -176,7 +178,7 @@ func (h *EnvironmentHandler) ListEnvironments(ctx context.Context, input *ListEn
 		return nil, huma.Error500InternalServerError("Failed to fetch environments")
 	}
 	for i := range envs {
-		h.applyEdgeRuntimeStateInternal(&envs[i])
+		h.applyEdgeRuntimeStateInternal(ctx, &envs[i])
 	}
 
 	return &handlerutil.Page[environment.Environment]{
@@ -269,7 +271,7 @@ func (h *EnvironmentHandler) runEnvironmentStreamListerInternal(ctx context.Cont
 		}
 		envs := slices.Clone(rows)
 		for i := range envs {
-			ApplyEnvironmentRuntimeState(&envs[i])
+			h.environmentService.ApplyHostRuntimeState(ctx, &envs[i])
 		}
 		publish(envs)
 	}

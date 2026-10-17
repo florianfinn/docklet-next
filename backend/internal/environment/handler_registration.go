@@ -103,7 +103,7 @@ func (h *EnvironmentHandler) createEnvironmentWithApiKeyInternal(ctx context.Con
 	if mapErr != nil {
 		return nil, huma.Error500InternalServerError("Failed to map environment")
 	}
-	h.applyEdgeRuntimeStateInternal(&out)
+	h.applyEdgeRuntimeStateInternal(ctx, &out)
 
 	return &handlerutil.Out[EnvironmentWithApiKey]{
 		Body: base.ApiResponse[EnvironmentWithApiKey]{
@@ -135,7 +135,7 @@ func (h *EnvironmentHandler) createEnvironmentLegacyInternal(ctx context.Context
 	if mapErr != nil {
 		return nil, huma.Error500InternalServerError("Failed to map environment")
 	}
-	h.applyEdgeRuntimeStateInternal(&out)
+	h.applyEdgeRuntimeStateInternal(ctx, &out)
 
 	return &handlerutil.Out[EnvironmentWithApiKey]{
 		Body: base.ApiResponse[EnvironmentWithApiKey]{
@@ -158,7 +158,7 @@ func (h *EnvironmentHandler) GetEnvironment(ctx context.Context, input *GetEnvir
 	if mapErr != nil {
 		return nil, huma.Error500InternalServerError("Failed to map environment")
 	}
-	h.applyEdgeRuntimeStateInternal(&out)
+	h.applyEdgeRuntimeStateInternal(ctx, &out)
 	if env.IsEdge {
 		if certInfo, certErr := readGeneratedEdgeMTLSCertificateInfoInternal(h.cfg, env.ID); certErr == nil {
 			out.EdgeMTLSCertificate = certInfo
@@ -201,7 +201,7 @@ func (h *EnvironmentHandler) UpdateEnvironment(ctx context.Context, input *Updat
 	if mapErr != nil {
 		return nil, huma.Error500InternalServerError("Failed to map environment")
 	}
-	h.applyEdgeRuntimeStateInternal(&out)
+	h.applyEdgeRuntimeStateInternal(ctx, &out)
 
 	// If regenerating API key, return the new key
 	var newApiKey *string
@@ -229,7 +229,7 @@ func (h *EnvironmentHandler) UpdateEnvironment(ctx context.Context, input *Updat
 		if mapErr != nil {
 			return nil, huma.Error500InternalServerError("Failed to map environment")
 		}
-		h.applyEdgeRuntimeStateInternal(&out)
+		h.applyEdgeRuntimeStateInternal(ctx, &out)
 
 		newApiKey = new(apiKey)
 	}
@@ -245,8 +245,8 @@ func (h *EnvironmentHandler) UpdateEnvironment(ctx context.Context, input *Updat
 	}, nil
 }
 
-func (h *EnvironmentHandler) applyEdgeRuntimeStateInternal(env *environment.Environment) {
-	ApplyEnvironmentRuntimeState(env)
+func (h *EnvironmentHandler) applyEdgeRuntimeStateInternal(ctx context.Context, env *environment.Environment) {
+	h.environmentService.ApplyHostRuntimeState(ctx, env)
 }
 
 // DeleteEnvironment deletes an environment.
@@ -412,7 +412,9 @@ func (h *EnvironmentHandler) handleEnvironmentPairingInternal(ctx context.Contex
 func (h *EnvironmentHandler) triggerPostUpdateTasksInternal(ctx context.Context, environmentID string, updated *Environment, req *environment.Update) {
 	if updated.Enabled {
 		detachedCtx := context.WithoutCancel(ctx)
+		h.background.Add(1)
 		go func(syncCtx context.Context, envID, envName string) {
+			defer h.background.Done()
 			status, err := h.environmentService.TestConnection(syncCtx, envID, nil)
 			if err != nil {
 				slog.WarnContext(syncCtx, "Failed to test connection after environment update",
@@ -430,7 +432,9 @@ func (h *EnvironmentHandler) triggerEnvironmentResourceSyncInternal(ctx context.
 	h.environmentService.ForgetSyncState(environmentID)
 	detachedCtx := context.WithoutCancel(ctx)
 
+	h.background.Add(1)
 	go func(syncCtx context.Context, envID, envName, syncReason string) {
+		defer h.background.Done()
 		syncCtx, cancel := context.WithTimeout(syncCtx, edge.DefaultProxyTimeout)
 		defer cancel()
 		if err := h.environmentService.SyncRegistriesToEnvironment(syncCtx, envID); err != nil {
@@ -471,7 +475,7 @@ func (h *EnvironmentHandler) PairEnvironment(ctx context.Context, input *PairEnv
 	}
 
 	updates := map[string]any{
-		"status": string(EnvironmentStatusOnline),
+		"status": string(EnvironmentStatusPending),
 	}
 	_, err = h.environmentService.UpdateEnvironment(ctx, *envID, updates, nil, nil)
 	if err != nil {

@@ -17,6 +17,7 @@ import (
 	"github.com/florianfinn/docklet-next/types/scheduler"
 	"go.getarcane.app/kit/pkg"
 	"log/slog"
+	"net/http"
 	"time"
 )
 
@@ -204,6 +205,27 @@ func (s *EnvironmentService) TestConnection(ctx context.Context, id string, cust
 		return "error", err
 	}
 
+	if id != "0" && customApiUrl == nil {
+		reqCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
+		defer cancel()
+		response, probeErr := s.ExecuteRemoteRequest(reqCtx, id, http.MethodGet, "/api/health", nil)
+		if probeErr != nil {
+			_ = s.updateEnvironmentStatusInternal(ctx, id, "offline")
+			return "offline", probeErr
+		}
+		if err := response.RequireSuccess(); err != nil {
+			_ = s.updateEnvironmentStatusInternal(ctx, id, "offline")
+			return "offline", err
+		}
+		if _, err := s.CheckAgentCompatibility(reqCtx, id); err != nil {
+			if errors.Is(err, ErrAgentUpdateRequired) {
+				return string(EnvironmentStatusUpdateRequired), nil
+			}
+			_ = s.updateEnvironmentStatusInternal(ctx, id, "offline")
+			return "offline", err
+		}
+		return "online", nil
+	}
 	apiURL := envRecord.ApiUrl
 	if customApiUrl != nil {
 		apiURL = *customApiUrl
@@ -241,9 +263,12 @@ func (s *EnvironmentService) updateEnvironmentStatusInternal(ctx context.Context
 
 	now := time.Now()
 	updates := map[string]any{
-		"status":     status,
-		"last_seen":  &now,
+		"status": status,
+
 		"updated_at": &now,
+	}
+	if status == string(EnvironmentStatusOnline) || status == string(EnvironmentStatusUpdateRequired) {
+		updates["last_seen"] = &now
 	}
 	if err := s.db.WithContext(ctx).Model(&Environment{}).Where("id = ?", id).Updates(updates).Error; err != nil {
 		return fmt.Errorf("failed to update environment status: %w", err)
@@ -255,6 +280,10 @@ func (s *EnvironmentService) updateEnvironmentStatusInternal(ctx context.Context
 }
 
 func (s *EnvironmentService) UpdateEnvironmentHeartbeat(ctx context.Context, id string) error {
+	if id != "0" {
+		_, err := s.CheckAgentCompatibility(ctx, id)
+		return err
+	}
 	now := time.Now()
 
 	// Use Exec with raw SQL for better performance
@@ -288,7 +317,7 @@ func (s *EnvironmentService) UpdateEnvironmentConnectionState(ctx context.Contex
 		"updated_at": &now,
 	}
 	if connected {
-		updates["status"] = string(EnvironmentStatusOnline)
+		updates["status"] = string(EnvironmentStatusPending)
 		updates["last_seen"] = &now
 		// Remember the tunnel transport so the UI can keep showing it after
 		// the tunnel drops or while the agent is poll-only.
@@ -296,13 +325,20 @@ func (s *EnvironmentService) UpdateEnvironmentConnectionState(ctx context.Contex
 			updates["last_edge_transport"] = state.Transport
 		}
 	} else {
-		updates["status"] = string(EnvironmentStatusOffline)
+		var current Environment
+		if err := s.db.WithContext(ctx).Select("status").Where("id = ?", id).First(&current).Error; err != nil {
+			return err
+		}
+		if current.Status != string(EnvironmentStatusPending) {
+			updates["status"] = string(EnvironmentStatusOffline)
+		}
 	}
 
 	if err := s.db.WithContext(ctx).Model(&Environment{}).Where("id = ?", id).Updates(updates).Error; err != nil {
 		return fmt.Errorf("failed to update environment connection state: %w", err)
 	}
 
+	s.invalidateEnvironmentCacheInternal(id)
 	s.NotifyRuntimeStateChanged()
 
 	return nil

@@ -87,6 +87,7 @@ type EnvironmentMiddleware struct {
 	// checkOrigin shares the local WebSocket origin and credential policy.
 	checkOrigin         func(*http.Request) bool
 	proxyIdentityHeader string
+	agentAccess         remenv.AgentAccessCheck
 }
 
 // NewEnvProxyMiddlewareWithParamAndRegistry creates middleware with an injected tunnel registry.
@@ -98,7 +99,7 @@ func NewEnvProxyMiddlewareWithParamAndRegistry(
 	matcher *authz.PermissionMatcher,
 	registry *edge.TunnelRegistry,
 	checkOrigin func(*http.Request) bool,
-	proxyIdentityHeader ...string,
+	options ...EnvironmentProxySecurity,
 ) echo.MiddlewareFunc {
 	if registry == nil {
 		registry = edge.NewTunnelRegistry()
@@ -114,9 +115,14 @@ func NewEnvProxyMiddlewareWithParamAndRegistry(
 		matcher:       matcher,
 		checkOrigin:   checkOrigin,
 	}
-	if len(proxyIdentityHeader) > 0 {
-		m.proxyIdentityHeader = proxyIdentityHeader[0]
+	if len(options) > 0 {
+		m.proxyIdentityHeader = options[0].ProxyIdentityHeader
+		m.agentAccess = options[0].AgentAccess
+		if options[0].HTTPClient != nil {
+			m.httpClient = options[0].HTTPClient
+		}
 	}
+
 	return func(next echo.HandlerFunc) echo.HandlerFunc {
 		return func(c *echo.Context) error {
 			return m.Handle(c, next)
@@ -184,6 +190,14 @@ func (m *EnvironmentMiddleware) Handle(c *echo.Context, next echo.HandlerFunc) e
 		})
 	}
 
+	if m.agentAccess != nil {
+		ctx, cancel, err := m.agentAccess(c.Request().Context(), envID, accessToken, c.Request().Method, m.buildProxyPath(c, envID))
+		if err != nil {
+			return c.JSON(http.StatusConflict, map[string]any{"success": false, "code": "agent.unavailable"})
+		}
+		defer cancel()
+		c.SetRequest(c.Request().WithContext(ctx))
+	}
 	isEdgeEnvironment := isEdgeEnvironmentURLInternal(apiURL)
 
 	if handled, proxyActiveEdgeTunnelErr := m.proxyActiveEdgeTunnelInternal(c, envID, accessToken); handled {
@@ -433,6 +447,9 @@ func (m *EnvironmentMiddleware) proxyActiveEdgeTunnelInternal(c *echo.Context, e
 	}
 
 	slog.DebugContext(c.Request().Context(), "Routing request through edge tunnel", "environmentId", envID, "path", c.Request().URL.Path)
+	if err := edge.RequireSessionKey(c.Request().Context(), tunnel); err != nil {
+		return true, m.abortEdgeTunnelUnavailable(c)
+	}
 	m.setProxyContextHeadersInternal(c, accessToken)
 	return true, m.proxyThroughTunnelInternal(c, tunnel, envID)
 }
@@ -446,6 +463,9 @@ func (m *EnvironmentMiddleware) proxyRecoveredEdgeTunnelInternal(c *echo.Context
 	}
 
 	slog.InfoContext(c.Request().Context(), "Recovered edge tunnel during request", "environmentId", envID)
+	if err := edge.RequireSessionKey(c.Request().Context(), tunnel); err != nil {
+		return true, m.abortEdgeTunnelUnavailable(c)
+	}
 	m.setProxyContextHeadersInternal(c, accessToken)
 	return true, m.proxyThroughTunnelInternal(c, tunnel, envID)
 }
@@ -730,4 +750,11 @@ func (m *EnvironmentMiddleware) writeProxyResponse(c *echo.Context, resp *http.R
 		edge.CopyBodyWithFlush(w, resp.Body)
 	}
 	return nil
+}
+
+// EnvironmentProxySecurity supplies hub-owned identity and agent access boundaries.
+type EnvironmentProxySecurity struct {
+	HTTPClient          *http.Client
+	ProxyIdentityHeader string
+	AgentAccess         remenv.AgentAccessCheck
 }

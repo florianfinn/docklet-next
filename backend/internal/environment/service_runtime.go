@@ -17,7 +17,7 @@ import (
 
 // ApplyEnvironmentRuntimeState normalizes edge environment runtime status using
 // in-memory tunnel and poll registries without mutating persisted state.
-func ApplyEnvironmentRuntimeState(env *environment.Environment) {
+func ApplyEnvironmentRuntimeState(env *environment.Environment, expectedKey ...string) {
 	if env == nil || !env.IsEdge {
 		return
 	}
@@ -37,10 +37,17 @@ func ApplyEnvironmentRuntimeState(env *environment.Environment) {
 		env.LastPollAt = pollState.LastPollAt
 	}
 
-	if runtimeState, ok := edge.GetTunnelRuntimeState(env.ID).Get(); ok {
+	keyCurrent := true
+	if len(expectedKey) > 0 {
+		tunnel, ok := edge.GetRegistry().Get(env.ID).Get()
+		keyCurrent = ok && tunnel != nil && tunnel.APIKeyID == expectedKey[0]
+	}
+	if runtimeState, ok := edge.GetTunnelRuntimeState(env.ID).Get(); ok && keyCurrent {
 		connected = true
 		env.Connected = &connected
-		env.Status = string(EnvironmentStatusOnline)
+		if env.Status != string(EnvironmentStatusUpdateRequired) && env.Status != string(EnvironmentStatusPending) {
+			env.Status = string(EnvironmentStatusOnline)
+		}
 		env.ConnectedAt = runtimeState.ConnectedAt
 		env.LastHeartbeat = runtimeState.LastHeartbeat
 		if runtimeState.SecurityMode != "" {
@@ -131,4 +138,25 @@ func (s *EnvironmentService) SyncRegistriesToRemoteEnvironments(ctx context.Cont
 	}
 
 	return nil
+}
+
+// ApplyHostRuntimeState projects process-local reports without persisting stale data.
+func (s *EnvironmentService) ApplyHostRuntimeState(ctx context.Context, env *environment.Environment) {
+	row, err := s.GetEnvironmentByID(ctx, env.ID)
+	if err != nil {
+		env.Status = string(EnvironmentStatusOffline)
+		return
+	}
+	keyID := ""
+	if row.ApiKeyID != nil {
+		keyID = *row.ApiKeyID
+	}
+	ApplyEnvironmentRuntimeState(env, keyID)
+	s.agentRuntime.mu.Lock()
+	report, ok := s.agentRuntime.reports[env.ID]
+	s.agentRuntime.mu.Unlock()
+	if ok && row.AccessToken != nil && report.token == *row.AccessToken {
+		copy := report.report
+		env.AgentReport = &copy
+	}
 }

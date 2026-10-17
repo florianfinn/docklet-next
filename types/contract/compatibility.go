@@ -13,9 +13,12 @@ func AgentCompatible(version int, fingerprint string) bool {
 
 // AgentRecoveryRoute is the complete pre-compatibility forwarding surface.
 func AgentRecoveryRoute(method, path string) bool {
+	if method == "HEAD" && (path == "/api/health" || path == "/api/environments/0/system/health") {
+		return true
+	}
 	if method == "GET" {
 		switch path {
-		case "/api/health", "/api/app-version", "/api/version", "/api/environments/0/system/health", "/api/environments/0/system/upgrade/check":
+		case "/api/health", "/api/app-version", "/api/version", "/api/environments/0/system/upgrade/check":
 			return true
 		}
 	}

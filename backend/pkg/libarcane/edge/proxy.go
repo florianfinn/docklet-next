@@ -37,6 +37,9 @@ func DefaultTunnelAcquireTimeout() time.Duration {
 // ProxyRequest sends an HTTP request through an edge tunnel
 // Returns the response status, headers, and body
 func ProxyRequest(ctx context.Context, tunnel *AgentTunnel, method, path, query string, headers map[string]string, body []byte) (int, map[string]string, []byte, error) {
+	if err := RequireSessionKey(ctx, tunnel); err != nil {
+		return 0, nil, nil, err
+	}
 	result, err := DefaultCommandClient.Execute(ctx, tunnel, &CommandRequest{
 		Method:  method,
 		Path:    path,

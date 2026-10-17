@@ -36,6 +36,7 @@ import (
 // Service sends requests to remote environment agents over HTTP or edge
 // tunnels and pushes manager-owned configuration to them.
 type Service struct {
+	accessCheck     remenv.AgentAccessCheck
 	db              *database.DB
 	client          *remenv.Client
 	settingsService *settings.SettingsService
@@ -137,6 +138,14 @@ func (s *Service) Execute(
 	path string,
 	body []byte,
 ) (*remenv.Response, error) {
+	if s.accessCheck != nil {
+		checkedCtx, cancel, err := s.accessCheck(ctx, target.id, target.accessToken, method, path)
+		if err != nil {
+			return nil, err
+		}
+		defer cancel()
+		ctx = checkedCtx
+	}
 	// Forward the activity batch ID so bulk actions proxied to a remote
 	// environment group the same way they do locally.
 	var headers map[string]string
@@ -341,3 +350,6 @@ func ensureTunnelAvailableInternal(ctx context.Context, envID string) error {
 
 	return remenv.ErrEnvironmentUnavailable
 }
+
+// SetAccessCheck applies the hub's credential and compatibility gate to all callers.
+func (s *Service) SetAccessCheck(check remenv.AgentAccessCheck) { s.accessCheck = check }
