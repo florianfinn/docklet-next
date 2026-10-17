@@ -16,7 +16,7 @@ export function InventoryNotice({ hosts, items }: { hosts: Host[]; items: { host
       const state = retained ?? host.inventory;
       if (!state?.stale && host.status === "online") return null;
       const reason = state?.reason ?? (host.status === "update-required" ? "agent.update-required" : "agent.unavailable");
-      return <p key={host.id}>{t("host", { name: host.name, reason: t(reason === "agent.update-required" ? "updateRequired" : reason === "agent.invalid-token" ? "credentialRejected" : "unavailable") })} {state?.observedAt ? t("asOf", { time: format.dateTime(new Date(state.observedAt), { dateStyle: "medium", timeStyle: "medium" }) }) : t("noSnapshot")}</p>;
+      return <p key={host.id}>{t("host", { name: host.name, reason: t(reason === "agent.update-required" ? "updateRequired" : reason === "agent.invalid-token" ? "credentialRejected" : reason === "inventory.mapping-error" ? "mappingError" : reason === "inventory.read-error" ? "readError" : "unavailable") })} {state?.observedAt ? t("asOf", { time: format.dateTime(new Date(state.observedAt), { dateStyle: "medium", timeStyle: "medium" }) }) : t("noSnapshot")}</p>;
     })}
   </div>;
 }

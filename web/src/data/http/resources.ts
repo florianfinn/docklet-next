@@ -8,7 +8,7 @@ import type { DockletAdapter } from "@/data/adapter";
 import { AdapterOutcomeError } from "@/data/capability";
 import type { Host, InventoryObservation } from "@/domain/model";
 import { splitInventoryId } from "./inventory-mapping";
-import { createInventoryTransport, reasons } from "./inventory-transport";
+import { createInventoryTransport, inventoryFailure } from "./inventory-transport";
 import { mapImage, mapTopology, mapVolumes } from "./resource-mapping";
 
 export function createResourceReader(baseUrl: string, fetcher: typeof fetch, hosts: () => Promise<Host[]>, requireCapability: (operation: string) => Promise<void>, onState: (hostId: string, state: InventoryObservation) => void): Pick<DockletAdapter, "listImages" | "listVolumes" | "getVolume" | "getTopology"> {
@@ -27,9 +27,8 @@ export function createResourceReader(baseUrl: string, fetcher: typeof fetch, hos
     const batches = await Promise.all((await hosts()).map(async (host) => {
       try { return await load(host); }
       catch (error) {
-        if (error instanceof AdapterOutcomeError && error.outcome.kind === "error" && reasons.has(error.outcome.code)) return [];
-        if (error instanceof AdapterOutcomeError) throw error;
-        throw new AdapterOutcomeError({ kind: "error", code: "inventory.mapping-error" });
+        onState(host.id, inventoryFailure(host.id, error));
+        return [];
       }
     }));
     return batches.flat();

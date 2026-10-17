@@ -53,7 +53,7 @@ export interface AgentReport {
 export interface InventoryObservation {
   observedAt?: string;
   stale: boolean;
-  reason?: "agent.unavailable" | "agent.invalid-token" | "agent.update-required";
+  reason?: "agent.unavailable" | "agent.invalid-token" | "agent.update-required" | "inventory.read-error" | "inventory.mapping-error";
 }
 
 export interface Host {
