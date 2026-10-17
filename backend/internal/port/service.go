@@ -37,6 +37,9 @@ func (s *PortService) ListPortsPaginated(ctx context.Context, params pagination.
 
 	items := make([]porttypes.PortMapping, 0)
 	for _, rawContainer := range containers {
+		if rawContainer.Labels["io.docklet.system"] == "agent" {
+			continue
+		}
 		summary := container.NewSummary(rawContainer)
 		containerName := primaryContainerNameInternal(summary.Names, summary.ID)
 		for _, port := range summary.Ports {

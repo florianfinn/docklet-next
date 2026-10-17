@@ -10,6 +10,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/florianfinn/docklet-next/backend/pkg/inventory"
 	"sort"
 	"strconv"
 	"sync/atomic"
@@ -170,7 +171,7 @@ func (s *DashboardService) buildSnapshotInternal(ctx context.Context, options Da
 		return nil, err
 	}
 	dockerContainers := dockerSnapshot.Containers
-	dockerImages := dockerSnapshot.Images
+	dockerImages := inventory.Images(dockerSnapshot.Images, dockerContainers)
 
 	filteredContainers := container.FilterExcludedContainers(dockerContainers, false, false)
 	imageConsumers := container.FilterExcludedContainers(dockerContainers, false, true)

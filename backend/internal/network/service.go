@@ -10,6 +10,7 @@ import (
 	"cmp"
 	"context"
 	"fmt"
+	"github.com/florianfinn/docklet-next/backend/pkg/inventory"
 	"log/slog"
 	"net/netip"
 	"slices"
@@ -75,12 +76,19 @@ func (s *NetworkService) GetNetworkTopology(ctx context.Context) (*networktypes.
 	}
 
 	containerInfoByID := buildTopologyContainerInfoInternal(containers)
+	systemIDs := map[string]bool{}
+	for _, c := range containers {
+		if c.Labels[inventory.SystemLabel] == "agent" {
+			systemIDs[c.ID] = true
+		}
+	}
 
 	networkList, err := compat.NetworkListWithCompatibility(ctx, dockerClient, client.NetworkListOptions{})
 	if err != nil {
 		return nil, fmt.Errorf("failed to list Docker networks: %w", err)
 	}
 
+	networkList.Items = inventory.Networks(networkList.Items, containers)
 	topology := &networktypes.Topology{
 		Nodes: make([]networktypes.TopologyNode, 0, len(networkList.Items)),
 		Edges: make([]networktypes.TopologyEdge, 0),
@@ -133,6 +141,9 @@ func (s *NetworkService) GetNetworkTopology(ctx context.Context) (*networktypes.
 		})
 
 		for containerID, endpoint := range inspectedNetwork.inspect.Containers {
+			if systemIDs[containerID] {
+				continue
+			}
 			info, ok := containerInfoByID[containerID]
 			if !ok {
 				info = topologyContainerInfo{Name: endpoint.Name}
@@ -395,7 +406,7 @@ func (s *NetworkService) ListNetworksPaginated(ctx context.Context, params pagin
 	if err != nil {
 		return nil, pagination.Response{}, networktypes.UsageCounts{}, fmt.Errorf("failed to list Docker networks: %w", err)
 	}
-	rawNets := networkList.Items
+	rawNets := inventory.Networks(networkList.Items, containers)
 
 	items, err := s.convertToNetworkSummaries(rawNets, inUseByID, inUseByName)
 	if err != nil {
