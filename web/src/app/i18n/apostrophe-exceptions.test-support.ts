@@ -6,7 +6,6 @@ export const apostropheExceptions = [
   {"file": "/src/features/settings/messages/en.ts", "key": "security.healHint", "sha256": "51bb1a3ad1416a751925744711caf00c0b86af765dea80db1b36ba8c9a4ff4c0"},
   {"file": "/src/features/stacks/editor/messages/en.ts", "key": "stack.projectDirHint", "sha256": "de4aea034731e043c6ffe3ec66570f0ed468f93bfe207a7cf11a2670dd68df64"},
   {"file": "/src/features/stacks/editor/messages/en.ts", "key": "services.commandHint", "sha256": "3356c197c5379732e2ff6bd7a4f2789258c11565bbdfb3d48ad402bc00b76f7a"},
-  {"file": "/src/shared/help/messages/en.ts", "key": "topics.settingsGeneral.timeZone.short", "sha256": "1a782403ecef0cc8b9f34503f1b1f71a9d315894ae437df849b9e320c9019004"},
   {"file": "/src/shared/help/messages/en.ts", "key": "topics.settingsHosts.installDir.short", "sha256": "139551c5bff5561aa5f30485779b2eda1c34e8ad5ac2cdc564ba6c4382d92468"},
   {"file": "/src/shared/help/messages/en.ts", "key": "topics.settingsNotifications.secret.short", "sha256": "e08300315c73ebbe54486369625ef0c8f2861f351b06bb8ae53da08316cafee0"},
   {"file": "/src/shared/help/messages/en.ts", "key": "topics.settingsScans.enabled.full", "sha256": "b493f051737f63b412b9786194e39a10604ee29b3c7b5266c0c90593f76d7cd4"},

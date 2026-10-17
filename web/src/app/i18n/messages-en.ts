@@ -1,5 +1,5 @@
 // American English interface texts define the catalogue shape for every locale.
-import { enActivity } from "@/features/activity/messages/en";
+import { enActivity, enUserEvents } from "@/features/activity/messages/en";
 import { enLogin } from "@/features/auth/login/messages/en";
 import { enContainers } from "@/features/containers/messages/en";
 import { enDashboard } from "@/features/dashboard/messages/en";
@@ -34,6 +34,7 @@ export const enMessages = {
   shell: enShell,
   preview: import.meta.env.DEV ? enPreview : ({} as typeof enPreview),
   activity: enActivity,
+  user: enUserEvents,
   lab: import.meta.env.DEV ? enLab : ({} as typeof enLab),
   visual: enVisual,
   dashboard: enDashboard,

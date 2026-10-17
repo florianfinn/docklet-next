@@ -1,5 +1,5 @@
 // German interface texts follow the English base. Feature files own their texts.
-import { deActivity } from "@/features/activity/messages/de";
+import { deActivity, deUserEvents } from "@/features/activity/messages/de";
 import { deLogin } from "@/features/auth/login/messages/de";
 import { deContainers } from "@/features/containers/messages/de";
 import { deDashboard } from "@/features/dashboard/messages/de";
@@ -36,6 +36,7 @@ export const messages: typeof enMessages = {
   shell: deShell,
   preview: import.meta.env.DEV ? dePreview : ({} as typeof dePreview),
   activity: deActivity,
+  user: deUserEvents,
   lab: import.meta.env.DEV ? deLab : ({} as typeof deLab),
   visual: deVisual,
   dashboard: deDashboard,
