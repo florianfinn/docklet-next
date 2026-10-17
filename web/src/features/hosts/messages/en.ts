@@ -69,6 +69,7 @@ export const enHosts = {
     sheetTitle: "Installation files for {name}",
     sheetDescription: (import.meta.env.DEV ? "Regenerated with a new demo token. A real hub would invalidate the old token." : ""),
     demoNote: (import.meta.env.DEV ? "Demo artifacts: the token is a placeholder, the hub address an example. The files can really be downloaded but don’t connect anything." : ""),
+    historyWarning: "Copied commands contain the token and may remain in shell history. The package avoids this entry; delete the archive after installation.",
     wayLabel: "Installation method",
     tabs: { script: "Installer script", compose: "Compose", package: "Package" },
     scriptHint: "One command: writes the installer script and runs it. It reads the directory owner and socket group, writes compose.yaml and .env to the install directory and starts the agent.",

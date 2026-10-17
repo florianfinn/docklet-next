@@ -70,6 +70,7 @@ export const deHosts: typeof enHosts = {
     sheetTitle: "Installationsdateien für {name}",
     sheetDescription: (import.meta.env.DEV ? "Erneut erzeugt mit einem neuen Demo-Token. Ein echter Hub würde das alte Token dabei ungültig machen." : ""),
     demoNote: (import.meta.env.DEV ? "Demo-Artefakte: Das Token ist ein Platzhalter, die Hub-Adresse ein Beispiel. Die Dateien sind echt herunterladbar, verbinden aber nichts." : ""),
+    historyWarning: "Kopierte Befehle enthalten das Token und können in der Shell-Historie bleiben. Das Paket vermeidet diesen Eintrag; Archiv nach der Installation löschen.",
     wayLabel: "Installationsweg",
     tabs: { script: "Installer-Skript", compose: "Compose", package: "Paket" },
     scriptHint: "Ein Befehl: schreibt das Installer-Skript und führt es aus. Es liest Verzeichnisbesitzer und Socket-Gruppe, schreibt compose.yaml und .env ins Installationsverzeichnis und startet den Agent.",

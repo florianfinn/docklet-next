@@ -28,7 +28,7 @@ export function absolutePath(value: string): ValidationKey | undefined {
   const v = value.trim();
   if (!v) return "required";
   if (!v.startsWith("/")) return "absolutePath";
-  if (/[\s"'`$\\]/.test(v) || v.includes("//") || v.split("/").includes("..")) return "pathChars";
+  if (/[\s"'`$\\]/.test(v) || v.includes("//") || v.split("/").some((part) => part === ".." || part === ".")) return "pathChars";
   return undefined;
 }
 
