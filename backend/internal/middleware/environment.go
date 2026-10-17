@@ -735,7 +735,7 @@ func (m *EnvironmentMiddleware) createProxyRequest(c *echo.Context, target strin
 }
 
 // writeProxyResponse copies the proxy response back to the client. An upstream
-// 401/403 means the agent rejected the manager's credentials; passing it through
+// 401 means the agent rejected the manager's credentials; passing it through
 // makes browser clients treat it as a lost session, so it becomes a 502.
 func (m *EnvironmentMiddleware) writeProxyResponse(c *echo.Context, resp *http.Response) error {
 	if remenv.AgentAuthRejected(resp.StatusCode) {

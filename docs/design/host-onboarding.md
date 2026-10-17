@@ -283,14 +283,15 @@ The agent contract and minimum are version 3. The version fixture in
 `types/contract/testdata/agent-hub-v3.json` owns the fingerprint. The hub checks
 `/api/app-version` before ordinary requests and registry or configuration
 synchronisation. The verdict is cached per agent session (token, endpoint and
-key ID), refreshed on Edge connect and health checks, and discarded on credential
+key ID, plus concrete tunnel identity for Edge), refreshed on Edge connect and health checks, and discarded on credential
 changes, endpoint changes, disablement or removal. An update-required verdict
 replaces prior compatibility and blocks ordinary forwarding until a fresh check succeeds. Below-minimum agents and same-version fingerprint mismatches
 have status `update-required`; health, version and agent self-upgrade stay
 available. System health uses HEAD, as its registered operation specifies.
-Forwarded access failures distinguish `agent.update-required` (HTTP 409),
-`agent.invalid-token` (HTTP 502, including agent HTTP 401/403 responses) and
-`agent.unavailable` (HTTP 502). An update-required health job reports a partial
+Forwarded HTTP access failures distinguish `agent.update-required` (HTTP 409),
+`agent.invalid-token` (HTTP 502 for credential rejection, including forwarded
+agent HTTP 401 responses; ordinary agent HTTP 403 remains an authorization response) and
+`agent.unavailable` (HTTP 502, or 504 for a timed-out Edge request). An update-required health job reports a partial
 result with "Agent update required", rather than offline, and sends no sync.
 
 `Environment.agentReport` contains the last successful process-local version

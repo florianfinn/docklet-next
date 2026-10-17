@@ -130,6 +130,12 @@ func TestAgentForwardingFailureCodesAfterCompatibility(t *testing.T) {
 				router.GET("/api/environments/:id/containers", func(c *echo.Context) error { return c.NoContent(500) })
 				rec := httptest.NewRecorder()
 				router.ServeHTTP(rec, httptest.NewRequest("GET", "/api/environments/"+f.id+"/containers", nil).WithContext(ctx))
+				if status == http.StatusForbidden {
+					require.Equal(t, http.StatusForbidden, rec.Code)
+					require.Equal(t, "agent rejected credential", rec.Body.String(), "authorization responses retain their original meaning")
+					require.NotContains(t, rec.Body.String(), "agent.invalid-token")
+					return
+				}
 				code := "invalid-token"
 				if status == 0 {
 					code = "unavailable"

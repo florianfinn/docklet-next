@@ -18,7 +18,7 @@ var (
 )
 
 func AgentAuthRejected(status int) bool {
-	return status == http.StatusUnauthorized || status == http.StatusForbidden
+	return status == http.StatusUnauthorized
 }
 
 // AgentAccessFailure keeps host connectivity failures distinct from caller authentication.
@@ -27,7 +27,7 @@ func AgentAccessFailure(err error) (int, string) {
 		return http.StatusConflict, "agent.update-required"
 	}
 	var status *StatusError
-	if errors.Is(err, ErrAgentInvalidToken) || (errors.As(err, &status) && AgentAuthRejected(status.StatusCode)) {
+	if errors.Is(err, ErrAgentInvalidToken) || (errors.As(err, &status) && (AgentAuthRejected(status.StatusCode) || status.StatusCode == http.StatusForbidden)) {
 		return http.StatusBadGateway, "agent.invalid-token"
 	}
 	return http.StatusBadGateway, "agent.unavailable"
