@@ -8,9 +8,8 @@ import { Field, FieldDescription, FieldGroup, FieldLabel, FieldSet } from "@/sha
 import { RadioGroup, RadioGroupItem } from "@/shared/ui/radio-group";
 import { HelpLabel, HelpLegend } from "@/shared/help/help-tooltip";
 import { Label } from "@/shared/ui/label";
-import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from "@/shared/ui/select";
 
-import { TIME_ZONES, useGeneralErrors } from "../field-rules";
+import { useGeneralErrors } from "../field-rules";
 import { SettingsForm } from "../SettingsForm";
 import { useSaveSettings } from "../use-save-settings";
 import { useSectionDraft } from "../use-section-draft";
@@ -67,20 +66,7 @@ export function GeneralFields({ value, onChange, showErrors, idPrefix = "gen", s
         <HelpLabel htmlFor={`${idPrefix}-tz`} topic="settingsGeneral.timeZone">
           {t("timeZone")}
         </HelpLabel>
-        <Select value={value.timeZone} onValueChange={(timeZone) => onChange({ timeZone })}>
-          <SelectTrigger id={`${idPrefix}-tz`} className="w-full sm:w-72">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectGroup>
-              {TIME_ZONES.map((z) => (
-                <SelectItem key={z} value={z}>
-                  {z}
-                </SelectItem>
-              ))}
-            </SelectGroup>
-          </SelectContent>
-        </Select>
+        <input id={`${idPrefix}-tz`} className="font-mono text-sm" readOnly value={value.timeZone} />
         <FieldDescription>{t("timeZoneHint")}</FieldDescription>
       </Field>
       {showLanguage && <Field>

@@ -23,6 +23,10 @@ Compose commands. The listener is published on loopback; attach the operator's
 reverse proxy to it. Sub-path hosting is unsupported. The Docker socket grants
 management access to the local Docker host.
 
+`TZ` selects the hub time zone for schedules and date display (default `UTC`).
+Set an IANA zone such as `Europe/Berlin` in the private environment file and recreate
+the hub after changing it. General settings show the effective zone read-only.
+
 The `hub-data` named volume is mounted at `/app/data`. Keep it on local persistent
 storage. Linux bind mounts are supported when their directory is writable by the
 runtime identity; use the named volume on Docker Desktop and other hosts. Named

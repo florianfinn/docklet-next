@@ -1,5 +1,5 @@
 // Source: api/openapi.json
-// Revision: a8eb3743593832593beb9a07f10a43142b132207e5b448a8b16a18ec66b77f57
+// Revision: 2b8dd4af7df85f049fbea654d3bcf95d5d71c396d43a7a13995de8cf33c763e6
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
 // Deviations: Generated TypeScript declarations from the local Huma export.
@@ -9582,7 +9582,6 @@ export interface components {
             scheduledPruneEnabled?: string | null;
             scheduledPruneInterval?: string | null;
             setupCompleted?: string | null;
-            timeZone?: string | null;
             toolsImageRegistry?: string | null;
             trivyConcurrentScanContainers?: string | null;
             trivyConfig?: string | null;

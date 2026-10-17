@@ -42,7 +42,7 @@ export const enHubBackups = {
   weekday: "Weekday",
   weekdays: { "0": "Sunday", "1": "Monday", "2": "Tuesday", "3": "Wednesday", "4": "Thursday", "5": "Friday", "6": "Saturday" },
   time: "Time of day",
-  timeHint: "24-hour time in the Hub''s local time zone.",
+  timeHint: "24-hour time in the hub time zone set by TZ.",
   customSchedule: "Current custom schedule",
   customScheduleHint: "This schedule cannot be shown in the simple picker. It stays unchanged until you choose to replace it.",
   replaceSchedule: "Replace with a simple schedule",

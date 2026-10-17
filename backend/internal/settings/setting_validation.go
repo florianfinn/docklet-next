@@ -10,7 +10,6 @@ import (
 	"errors"
 	"fmt"
 	"strconv"
-	"time"
 
 	"github.com/florianfinn/docklet-next/backend/internal/common"
 	"github.com/florianfinn/docklet-next/types/features"
@@ -27,11 +26,6 @@ func validateSettingValueInternal(key, value string) error {
 	}
 	if key == "defaultHostConnection" && value != "direct" && value != "edge" {
 		return common.Classify(common.ErrValidation, errors.New("defaultHostConnection must be direct or edge"))
-	}
-	if key == "timeZone" && value != "" {
-		if _, err := time.LoadLocation(value); err != nil {
-			return common.Classify(common.ErrValidation, errors.New("timeZone must be an IANA time zone"))
-		}
 	}
 	if key == "actionPresentation" && value != "dialog" && value != "toast" {
 		return common.Classify(common.ErrValidation, errors.New("actionPresentation must be dialog or toast"))

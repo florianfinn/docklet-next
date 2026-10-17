@@ -42,7 +42,6 @@ type Update struct {
 	HubAddress             *string `json:"hubAddress,omitzero"`
 	DomainURL              *string `json:"domainUrl,omitzero"`
 	LinkBase               *string `json:"linkBase,omitzero"`
-	TimeZone               *string `json:"timeZone,omitzero"`
 	AgentProjectsDirectory *string `json:"agentProjectsDirectory,omitzero"`
 	AgentInstallDirectory  *string `json:"agentInstallDirectory,omitzero"`
 	DefaultHostConnection  *string `json:"defaultHostConnection,omitzero"`

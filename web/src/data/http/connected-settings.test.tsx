@@ -4,6 +4,8 @@
 // License: Apache-2.0
 // Deviations: Original connected settings persistence and in-flight draft tests.
 
+import { useFormatter } from "use-intl";
+
 import { screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -18,12 +20,12 @@ import SettingsPage from "@/features/settings/SettingsPage";
 import { createHttpAdapter } from "./http-adapter";
 
 const initial = {
-  setupCompleted: "true", hubName: "Docklet", hubAddress: "192.0.2.10:8080", domainUrl: "", linkBase: "auto", timeZone: "Europe/Berlin",
+  setupCompleted: "true", hubName: "Docklet", hubAddress: "192.0.2.10:8080", domainUrl: "", linkBase: "auto", effectiveTimeZone: "Europe/Berlin",
   keepActionOutput: "true", actionPresentation: "dialog",
 };
 
-function connectedServer() {
-  const settings: Record<string, string> = { ...initial };
+function connectedServer(zone = "Europe/Berlin") {
+  const settings: Record<string, string> = { ...initial, effectiveTimeZone: zone };
   const writes: Record<string, string>[] = [];
   let release: (() => void) | undefined;
   let pending = false;
@@ -53,9 +55,10 @@ function connectedServer() {
 
 function ScheduleProbe() {
   const zone = useHubTimeZone();
+  const formatter = useFormatter();
   const schedule = useScheduleText();
   const next = schedule.next({ mode: "daily", time: "09:00" }, new Date("2026-10-17T12:00:00Z"), zone);
-  return <p data-testid="schedule-zone">{next?.zone}</p>;
+  return <><p data-testid="schedule-zone">{next?.zone}</p><p data-testid="schedule-instant">{next?.at.toISOString()}</p><p data-testid="formatted-date">{formatter.dateTime(new Date("2026-10-17T12:00:00Z"), { hour: "2-digit", minute: "2-digit", hour12: false })}</p></>;
 }
 
 function GeneralWithSchedule() {
@@ -66,17 +69,18 @@ function GeneralWithSchedule() {
 afterEach(() => { localStorage.clear(); });
 
 describe("connected hub settings", () => {
-  it("reads settings back through the HTTP adapter and updates schedule time zone", async () => {
-    const server = connectedServer();
+  it.each([["Europe/Berlin", "2026-10-18T07:00:00.000Z", "14:00"], ["UTC", "2026-10-18T09:00:00.000Z", "12:00"], ["America/New_York", "2026-10-17T13:00:00.000Z", "08:00"]])("reads process zone %s for schedules and IntlProvider without writing a time zone", async (zone, instant, time) => {
+    const server = connectedServer(zone);
     renderRoutes([{ path: "/", element: <GeneralWithSchedule /> }], ["/"], server.adapter);
-    expect((await screen.findByTestId("schedule-zone")).textContent?.includes("Europe/Berlin")).toBe(true);
-    (await screen.findByRole("combobox", { name: "Zeitzone" })).focus();
-    await userEvent.keyboard("{Enter}");
-    await userEvent.click(await screen.findByRole("option", { name: "UTC" }));
-    await userEvent.click(screen.getByRole("button", { name: "Speichern" }));
-    await waitFor(() => expect(screen.getByTestId("schedule-zone").textContent?.includes("UTC")).toBe(true));
-    expect(server.writes.at(-1)?.timeZone).toBe("UTC");
-    expect((await server.adapter.getConnectedSettings()).general.timeZone).toBe("UTC");
+    await waitFor(() => expect(screen.getByTestId("schedule-zone").textContent?.includes(zone)).toBe(true));
+    expect((await screen.findByLabelText("Zeitzone") as HTMLInputElement).value).toBe(zone);
+    expect(screen.queryByRole("combobox", { name: "Zeitzone" }) === null).toBe(true);
+    expect((await server.adapter.getConnectedSettings()).general.timeZone).toBe(zone);
+    await server.adapter.saveSettings("general", { ...(await server.adapter.getConnectedSettings()).general, timeZone: "UTC" });
+    expect(screen.getByTestId("schedule-instant").textContent).toBe(instant);
+    expect(screen.getByTestId("formatted-date").textContent).toBe(time);
+    expect(server.writes.at(-1)?.timeZone).toBeUndefined();
+    expect(server.writes.at(-1)?.effectiveTimeZone).toBeUndefined();
   });
 
   it("keeps General input typed while an HTTP save is in flight", async () => {

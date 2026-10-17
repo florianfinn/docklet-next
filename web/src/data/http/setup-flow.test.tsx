@@ -74,6 +74,6 @@ it.each(["/dashboard", "/settings/general", "failure"])("stores host defaults se
   errorToast.mockRestore();
   expect(changedPassword).toBe(true);
   expect(writes).toHaveLength(1);
-  expect(writes[0]?.timeZone).toBe("Europe/Berlin");
+  expect(writes[0]?.timeZone).toBeUndefined();
   expect(JSON.stringify(writes).includes("old-password") || JSON.stringify(writes).includes("New-password1!")).toBe(false);
 });

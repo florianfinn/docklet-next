@@ -53,7 +53,7 @@ type GetSettingsInput struct {
 }
 
 type GetSettingsOutput struct {
-	Body []settings.PublicSetting
+	Body []settings.PublicSetting `doc:"Settings including the read-only effectiveTimeZone from TZ"`
 }
 
 type GetPublicSettingsInput struct {
@@ -153,6 +153,12 @@ func (h *SettingsHandler) appendRuntimeSettingsInternal(settingsDto []settings.P
 	if !includeAuthenticatedOnly {
 		return settingsDto
 	}
+
+	cfg := h.cfg
+	if cfg == nil {
+		cfg = config.Load()
+	}
+	settingsDto = append(settingsDto, settings.PublicSetting{Key: "effectiveTimeZone", Value: cfg.GetLocation().String(), Type: "string"})
 
 	uiConfigDisabled := false
 	if h.cfg != nil {

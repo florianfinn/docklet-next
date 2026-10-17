@@ -17,6 +17,7 @@ import (
 	"github.com/florianfinn/docklet-next/backend/internal/database"
 	"github.com/florianfinn/docklet-next/backend/internal/middleware"
 	"github.com/florianfinn/docklet-next/backend/internal/testsqlite"
+	"github.com/florianfinn/docklet-next/backend/pkg/authz"
 	settingstypes "github.com/florianfinn/docklet-next/types/settings"
 	"github.com/stretchr/testify/require"
 	"gorm.io/gorm"
@@ -48,7 +49,7 @@ func TestSetupSettingsPersistAcrossServiceRestart(t *testing.T) {
 	first, err := NewSettingsService(t.Context(), open())
 	require.NoError(t, err)
 	_, err = first.UpdateSettings(t.Context(), settingstypes.Update{
-		SetupCompleted: new("true"), HubName: new("Example Hub"), TimeZone: new("UTC"),
+		SetupCompleted: new("true"), HubName: new("Example Hub"),
 		KeepActionOutput: new("false"), ActionPresentation: new("toast"),
 	})
 	require.NoError(t, err)
@@ -60,7 +61,6 @@ func TestSetupSettingsPersistAcrossServiceRestart(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, "true", stored.SetupCompleted.Value)
 	require.Equal(t, "Example Hub", stored.HubName.Value)
-	require.Equal(t, "UTC", stored.TimeZone.Value)
 	require.Equal(t, "false", stored.KeepActionOutput.Value)
 	require.Equal(t, "toast", stored.ActionPresentation.Value)
 }
@@ -78,7 +78,7 @@ func TestSetupDefaultHostDirectoriesDoNotTouchHubProjects(t *testing.T) {
 	require.Equal(t, hubProjects, cfg.ProjectsDirectory.Value)
 	handler := &SettingsHandler{settingsService: svc, cfg: &config.Config{AuthMode: "none"}}
 	// Matches the default web setup payload; agent paths must never be opened on the hub.
-	payload := `{"hubName":"Docklet","hubAddress":"192.0.2.10:8080","domainUrl":"","linkBase":"auto","timeZone":"Europe/Berlin","agentProjectsDirectory":"/home/docker","agentInstallDirectory":"/home/docker/docklet-agent","defaultHostConnection":"direct","defaultPuid":"","defaultPgid":"","detectSocketGroup":"true","setupCompleted":"true"}`
+	payload := `{"hubName":"Docklet","hubAddress":"192.0.2.10:8080","domainUrl":"","linkBase":"auto","agentProjectsDirectory":"/home/docker","agentInstallDirectory":"/home/docker/docklet-agent","defaultHostConnection":"direct","defaultPuid":"","defaultPgid":"","detectSocketGroup":"true","setupCompleted":"true"}`
 	var input settingstypes.Update
 	require.NoError(t, json.Unmarshal([]byte(payload), &input))
 	require.Nil(t, input.ProjectsDirectory)
@@ -114,6 +114,29 @@ func TestSetupCompletionSignInModeGate(t *testing.T) {
 			} else {
 				require.NoError(t, err)
 			}
+		})
+	}
+}
+
+func TestSettingsReadEffectiveTimeZoneFromProcessTZ(t *testing.T) {
+	for _, zone := range []string{"", "UTC", "Europe/Berlin", "America/New_York"} {
+		t.Run(zone, func(t *testing.T) {
+			t.Setenv("TZ", zone)
+			cfg := config.Load()
+			svc, err := newSettingsServiceForTestInternal(t, t.Context(), setupSettingsTestDB(t))
+			require.NoError(t, err)
+			handler := &SettingsHandler{settingsService: svc, cfg: cfg}
+			ctx := context.WithValue(t.Context(), middleware.ContextKeyUserPermissions, authz.SudoPermissionSet())
+			output, err := handler.GetSettings(ctx, &GetSettingsInput{EnvironmentID: "0"})
+			require.NoError(t, err)
+			values := runtimeSettingKeysInternal(output.Body)
+			expected := zone
+			if expected == "" {
+				expected = "UTC"
+			}
+			require.Equal(t, expected, values["effectiveTimeZone"])
+			require.Equal(t, cfg.GetLocation().String(), values["effectiveTimeZone"])
+			require.NotContains(t, values, "timeZone")
 		})
 	}
 }

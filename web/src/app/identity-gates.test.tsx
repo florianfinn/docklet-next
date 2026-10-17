@@ -27,7 +27,7 @@ function adapter(mode: AuthMode, completed: boolean, change: boolean, authentica
     if (path === "/api/auth/mode") return json({ mode });
     if (path === "/api/auth/me") return authenticated ? json({ id: "admin", username: "operator", requiresPasswordChange: change }) : new Response("{}", { status: 401 });
     if (path === "/api/auth/password" || path === "/api/auth/login") return new Response("{}", { status: 401 });
-    if (path === "/api/environments/0/settings") return new Response(JSON.stringify(Object.entries({ setupCompleted: String(completed), hubName: "Docklet", hubAddress: "192.0.2.10:8080", domainUrl: "", linkBase: "auto", timeZone: "UTC", keepActionOutput: "true", actionPresentation: "dialog" }).map(([key, value]) => ({ key, value }))));
+    if (path === "/api/environments/0/settings") return new Response(JSON.stringify(Object.entries({ setupCompleted: String(completed), hubName: "Docklet", hubAddress: "192.0.2.10:8080", domainUrl: "", linkBase: "auto", effectiveTimeZone: "UTC", keepActionOutput: "true", actionPresentation: "dialog" }).map(([key, value]) => ({ key, value }))));
     return new Response("{}", { status: 503 });
   } });
 }
