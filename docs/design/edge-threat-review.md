@@ -34,7 +34,8 @@ or `types/`.
    user permissions before it forwards anything to an agent.
 2. Hub to direct agent: HTTP(S) to the host's published agent port, token in
    `X-Arcane-Agent-Token`, `X-API-Key` and `Authorization: Bearer`
-   (`pkg/remenv/client.go`, `ApplyAgentTokenHeaders`).
+   (`pkg/remenv/client.go`, `ApplyAgentTokenHeaders`). Arcane also passes the
+   calling user's hub credentials across this boundary (T11).
 3. Edge agent to hub: outbound WebSocket, gRPC or poll to `/api/tunnel/*` on the
    hub listener, token in headers or the first register message
    (`pkg/libarcane/edge/server.go`, `HandleConnect`, `authStreamInterceptorInternal`,
@@ -143,6 +144,9 @@ inventory, and emit misleading events. It cannot use its token for another host:
 hub grants come from `EnvironmentPermissionSet` (`pkg/authz/permission_set.go`)
 and tunnel registration resolves one environment ID per token.
 
+H also receives the hub credentials of users whose requests reach it; that
+crossing is T11.
+
 Residual risk: registry credentials leak to every host, and that host's own view
 is untrustworthy. With one operator who uses the same registries everywhere this
 matches the operator's own trust in each host. Verdict: **accepted**; the
@@ -158,12 +162,17 @@ and `writeProxyResponse` with `CopyResponseHeaders` in
 responses. A malicious agent can therefore return `Set-Cookie` for the hub origin
 or HTML/script with an active content type on an environment path. If an admin
 opens such a path, for example a download link, script runs with the admin's
-session and can command every host. Body size is bounded by the tunnel frame
+session and can command every host. `X-Content-Type-Options: nosniff` alone would
+not help: it stops type guessing, not script in a correctly labelled `text/html`
+or `image/svg+xml` body. Body size is bounded by the tunnel frame
 limit of 16 MiB per gRPC message and 32 MiB per WebSocket frame (`tunnel.go`,
 `server.go` `MaxRecvMsgSize`) and by proxy timeouts.
 
 Residual risk: one compromised host or token escalates to the hub and all hosts.
-Verdict: **needs change** (D2): filter proxied response headers.
+Verdict: **needs change** (D2 and review decision B1): filter proxied response
+headers and confine active content with a hub-owned sandbox policy. After both,
+an agent can still show static, script-free content on an environment path; it
+cannot run script, submit forms or read the hub origin's cookies.
 
 ### T7. Compromised hub or leaked hub backup (M)
 
@@ -224,6 +233,40 @@ access on that host, who has root there already. The copyable commands write
 history; the downloadable package avoids that. Verdict: **accepted** with the
 generator rules in [host onboarding](host-onboarding.md).
 
+### T11. Hub user credentials forwarded to agents (H, T)
+
+When the hub forwards a user request, it also passes that user's hub
+credentials. Direct HTTP and WebSocket forwarding copy the caller's
+`Authorization` header or, without one, turn the hub session cookie into
+`Authorization: Bearer <session token>` (`SetAuthHeader` and
+`BuildWebSocketHeaders` in `pkg/libarcane/edge/remenv.go`, called before
+`SetAgentToken` in `internal/middleware/environment.go`).
+`ApplyAgentTokenHeaders` in `pkg/remenv/client.go` deliberately leaves
+`Authorization` in place; it overwrites only a caller's `X-API-Key`. Edge HTTP
+and WebSocket forwarding drop `Cookie` but pass an explicit caller
+`Authorization` header into the tunnel (`ProxyHTTPRequest` in
+`pkg/libarcane/edge/proxy.go`, `buildWebSocketHeaders` in `ws_proxy.go`). The
+Edge agent strips it only when it replays a WebSocket locally
+(`buildLocalWebSocketHeadersInternal` in `client.go`), after the agent process
+has received it. Existing tests assert this forwarding
+(`TestSetAuthHeader_ForwardsAPIKeyAndAuthorization`,
+`TestSetAuthHeader_UsesCookieTokenWhenNoAuthorization`,
+`TestBuildWebSocketHeaders_UsesAuthorizationHeaderAndAddsAgentToken`,
+`TestBuildWebSocketHeaders_UsesCookieTokenAsBearer` in `remenv_test.go`).
+
+The agent does not need these values: `agentAuth` grants its superuser from the
+agent token alone (`agentSudoInternal` in `internal/auth/middleware_echo.go`). A
+compromised direct host therefore collects the session token of every user whose
+browser reads it, during ordinary inventory requests and without any user
+interaction, and can replay it as the hub session cookie. An explicit access
+token can be replayed as a Bearer credential; on Edge this applies to explicit
+`Authorization` headers. A token thief who wins an Edge session (T4) collects the
+same. Raw `Cookie` stripping does not prevent any of this.
+
+Residual risk: compromise of one host becomes hub administrator access and so
+control of all hosts. Verdict: **needs change** (review decision B3): hub user
+credentials never leave the hub boundary; agents receive only the agent token.
+
 ## Summary
 
 | Threat | Position | Verdict |
@@ -238,6 +281,7 @@ generator rules in [host onboarding](host-onboarding.md).
 | T8 Incompatible or downgraded agent | N, T, H | needs change |
 | T9 Tunnel endpoint exhaustion | N | accepted |
 | T10 Token exposure during onboarding | T | accepted |
+| T11 Hub user credentials forwarded to agents | H, T | needs change |
 
 ## Decisions
 
@@ -278,3 +322,28 @@ Recommended: (a) allow `http://` agent addresses and hub URLs, with an onboardin
 warning that the network must be trusted, and generate the direct port binding
 for the address the hub uses. (b) require HTTPS for Edge hub URLs and TLS for
 direct agents, except loopback.
+
+## Review decisions
+
+The maintainer decided the following after the first independent review of
+this record on 2026-10-17. Each item is new work in the issue named.
+
+- **B1. Sandbox policy on proxied agent responses (T6), #81.** In addition to the
+  D2 header allowlist, the hub sets `Content-Security-Policy: sandbox;
+  default-src 'none'` on every proxied agent HTTP response, whatever its content
+  type, and replaces any policy the agent sends. The policy only affects a
+  response opened as a document; JSON reads, downloads and images embedded by the
+  hub UI are unaffected, so no content type needs an exception. Direct and Edge
+  forwarding use one shared response filter for allowlist, `nosniff` and policy;
+  where a transport copies agent headers onto a WebSocket handshake response,
+  the same filter applies. Verification on both transports: an agent response
+  with `text/html` and with `image/svg+xml`, each with inline script and no
+  `Content-Disposition`, reaches the browser with the policy, `nosniff`, no
+  `Set-Cookie` and only allowlisted headers.
+- **B3. Hub user credentials stay at the hub (T11), #81.** Before forwarding,
+  direct and Edge transports, HTTP and WebSocket alike, remove the caller's
+  `Authorization`, `Cookie` and `X-API-Key` headers and the configured
+  `AUTH_PROXY_HEADER` ([identity](identity.md)), and convert no cookie into a
+  Bearer header. They then set only the agent token headers. The four tests
+  named in T11 confirm the current forwarding and change in #81 to assert its
+  absence.
