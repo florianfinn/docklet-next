@@ -67,11 +67,11 @@ describe("host HTTP reads", () => {
   it("renders a real report and update-required state with unknown fields absent", () => {
     const host = mapHost({ ...row, status: "update-required", lastSeen: undefined, agentReport: { reportedAt: at, version: info } });
     renderWithApp(<HostCard host={host} system={undefined} stacks={0} containers={0} allIds={[host.id]} />);
-    expect(screen.getByText("Update erforderlich")).not.toBeNull();
-    expect(screen.getByText(/1000:1000.*nicht schreibbar/)).not.toBeNull();
-    expect(screen.getByText(/GID 998/)).not.toBeNull();
-    expect(screen.queryByText("PUID/PGID des Agents")).toBeNull();
-    expect(screen.queryByText(/Simulation/)).toBeNull();
+    expect(screen.queryByText("Update erforderlich") !== null).toBe(true);
+    expect(screen.queryByText(/1000:1000.*nicht schreibbar/) !== null).toBe(true);
+    expect(screen.queryByText(/GID 998/) !== null).toBe(true);
+    expect(screen.queryByText("PUID/PGID des Agents") === null).toBe(true);
+    expect(screen.queryByText(/Simulation/) === null).toBe(true);
   });
 });
 
