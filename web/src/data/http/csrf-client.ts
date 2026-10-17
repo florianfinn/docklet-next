@@ -44,7 +44,9 @@ export function createCsrfClient(baseUrl: string, fetcher: typeof fetch): CsrfCl
       if (!["GET", "HEAD", "OPTIONS"].includes(method)) headers.set(CSRF_HEADER, await requireToken());
       const response = await fetcher(input, { ...init, credentials: "same-origin", headers });
       remember(response);
-      if (response.status === 401 && typeof window !== "undefined") window.dispatchEvent(new Event("docklet:unauthorized"));
+      const path = new URL(request?.url ?? String(input), "https://hub.example.com").pathname;
+      const credentialCheck = ["/auth/password", "/auth/login"].some((suffix) => path === new URL(baseUrl, "https://hub.example.com").pathname + suffix);
+      if (response.status === 401 && !credentialCheck && typeof window !== "undefined") window.dispatchEvent(new Event("docklet:unauthorized"));
       return response;
     },
   };

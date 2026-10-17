@@ -4,9 +4,11 @@
 // License: Apache-2.0
 // Deviations: Original first-run route gate and administrator locale sync.
 
-import { lazy, Suspense, useEffect } from "react";
+import { lazy, Suspense, useEffect, useState } from "react";
 import { Navigate } from "react-router";
 import { useTranslations } from "use-intl";
+
+import { InitialPasswordPage } from "@/features/setup/InitialPasswordPage";
 
 import { setAppLocale } from "@/app/i18n/locale-store";
 import { AdapterOutcomeError } from "@/data/capability";
@@ -31,6 +33,14 @@ export function SetupGate() {
   }
   if (mode.isError || currentUser.isError || setup.isError) return <main className="p-6"><p>{t("setupStatusError")}</p><Button onClick={() => { void mode.refetch(); void currentUser.refetch(); void setup.refetch(); }}>{t("retry")}</Button></main>;
   if (setup.isPending) return <main aria-busy="true" className="p-6">{t("loading")}</main>;
-  if (setup.data) return <Navigate to="/dashboard" replace />;
+  if (setup.data && mode.data === "local" && currentUser.data?.requiresPasswordChange) return <InitialPasswordPage />;
+  return <SetupSession completed={setup.data} />;
+}
+
+function SetupSession({ completed }: { completed: boolean }) {
+  const t = useTranslations("login");
+  // Keep the Done screen mounted when its link publishes the completed setup status.
+  const [startedHere] = useState(!completed);
+  if (completed && !startedHere) return <Navigate to="/dashboard" replace />;
   return <Suspense fallback={<main aria-busy="true" className="p-6">{t("loading")}</main>}><SetupPage /></Suspense>;
 }

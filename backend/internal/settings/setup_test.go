@@ -91,3 +91,29 @@ func TestSetupDefaultHostDirectoriesDoNotTouchHubProjects(t *testing.T) {
 	require.Equal(t, "/home/docker/docklet-agent", stored.AgentInstallDirectory.Value)
 	require.Equal(t, "true", stored.SetupCompleted.Value)
 }
+
+func TestSetupCompletionSignInModeGate(t *testing.T) {
+	for _, mode := range []string{"local", "none", "proxy"} {
+		t.Run(mode, func(t *testing.T) {
+			db := setupSettingsTestDB(t)
+			require.NoError(t, db.Exec("CREATE TABLE users (id TEXT PRIMARY KEY, requires_password_change BOOLEAN NOT NULL)").Error)
+			require.NoError(t, db.Exec("INSERT INTO users (id, requires_password_change) VALUES (?, ?)", "admin", true).Error)
+			svc, err := newSettingsServiceForTestInternal(t, t.Context(), db)
+			require.NoError(t, err)
+			handler := &SettingsHandler{settingsService: svc, cfg: &config.Config{AuthMode: mode}}
+			input := &UpdateSettingsInput{EnvironmentID: "0", Body: settingstypes.Update{SetupCompleted: new("true")}}
+			actor := context.WithValue(t.Context(), middleware.ContextKeyUserID, "admin")
+			_, err = handler.UpdateSettings(actor, input)
+			if mode == "local" {
+				require.ErrorContains(t, err, "Change the initial administrator password")
+				_, err = handler.UpdateSettings(t.Context(), input)
+				require.ErrorContains(t, err, "Sign-in required")
+				require.NoError(t, db.Exec("UPDATE users SET requires_password_change = ?", false).Error)
+				_, err = handler.UpdateSettings(actor, input)
+				require.NoError(t, err)
+			} else {
+				require.NoError(t, err)
+			}
+		})
+	}
+}

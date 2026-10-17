@@ -10,6 +10,7 @@ import { afterEach, expect, it, vi } from "vitest";
 
 import { toast } from "sonner";
 
+import { AuthGate } from "@/app/AuthGate";
 import { SetupGate } from "@/app/SetupGate";
 import { renderRoutes } from "@/test/render";
 import { restartSetup } from "@/features/setup/setup-draft";
@@ -18,7 +19,8 @@ import { createHttpAdapter } from "./http-adapter";
 
 afterEach(() => { restartSetup(); localStorage.clear(); });
 
-it.each([false, true])("stores host defaults separately and localizes setup write errors (fail=%s)", async (fail) => {
+it.each(["/dashboard", "/settings/general", "failure"])("stores host defaults separately and localizes setup write errors (fail=%s)", async (target) => {
+  const fail = target === "failure";
   const errorToast = vi.spyOn(toast, "error");
   restartSetup();
   const settings: Record<string, string> = { setupCompleted: "false" };
@@ -49,7 +51,7 @@ it.each([false, true])("stores host defaults separately and localizes setup writ
     throw new Error(`unexpected ${path}`);
   };
   const adapter = createHttpAdapter({ fetch: fetcher as typeof fetch, eventSource: () => ({ close() {}, onopen: null, onmessage: null, onerror: null }) });
-  renderRoutes([{ path: "/setup", element: <SetupGate /> }, { path: "/dashboard", element: <p>Dashboard</p> }, { path: "/login", element: <p>Login</p> }], ["/setup"], adapter);
+  const { router } = renderRoutes([{ path: "/setup", element: <SetupGate /> }, { element: <AuthGate />, children: [{ path: "/dashboard", element: <p>Dashboard target</p> }, { path: "/settings/general", element: <p>Settings target</p> }] }, { path: "/login", element: <p>Login</p> }], ["/setup"], adapter);
   const next = () => userEvent.click(screen.getByRole("button", { name: "Weiter" }));
   await userEvent.type(await screen.findByLabelText("Interne Hub-Adresse"), "192.0.2.10:8080");
   await next();
@@ -64,6 +66,11 @@ it.each([false, true])("stores host defaults separately and localizes setup writ
   else await waitFor(() => expect(settings.setupCompleted).toBe("true"));
   expect(writes[0]?.agentProjectsDirectory).toBe("/home/docker");
   expect(writes[0]?.projectsDirectory).toBeUndefined();
+  if (!fail) {
+    await userEvent.click(await screen.findByRole("link", { name: target === "/dashboard" ? "Zum Dashboard" : "Hub-Einstellungen ansehen" }));
+    await screen.findByText(target === "/dashboard" ? "Dashboard target" : "Settings target");
+    expect(router.state.location.pathname).toBe(target);
+  }
   errorToast.mockRestore();
   expect(changedPassword).toBe(true);
   expect(writes).toHaveLength(1);
