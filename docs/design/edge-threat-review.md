@@ -170,7 +170,7 @@ matches the operator's own trust in each host. Verdict: **accepted**; the
 
 ### T6. Malicious agent responses reach the browser on the hub origin (H, T)
 
-The hub copies the agent's response headers to the browser, removing only
+(baseline before #81) The hub copies the agent's response headers to the browser, removing only
 hop-by-hop headers: `ProxyHTTPRequest` in `pkg/libarcane/edge/proxy.go` for Edge
 and `writeProxyResponse` with `CopyResponseHeaders` in
 `internal/middleware/environment.go` for direct hosts. No global
@@ -203,7 +203,7 @@ be protected like host root credentials.
 
 ### T8. Incompatible or downgraded agent (N, T, H)
 
-Arcane enforces no agent version. The hub publishes `agentContractVersion`,
+(baseline before #81) Arcane enforces no agent version. The hub publishes `agentContractVersion`,
 `agentContractFingerprint` and `minimumAgentContractVersion` in its version info
 (`internal/version/service.go`, `types/contract/agent.go`: both versions are 2),
 and an agent returns the same structure on `/api/app-version`. No code compares
@@ -259,7 +259,7 @@ downloaded archive holds the token until the operator deletes it. Verdict:
 
 ### T11. Hub user credentials forwarded to agents (H, T)
 
-When the hub forwards a user request, it also passes that user's hub
+(baseline before #81) When the hub forwards a user request, it also passes that user's hub
 credentials. Direct HTTP and WebSocket forwarding copy the caller's
 `Authorization` header or, without one, turn the hub session cookie into
 `Authorization: Bearer <session token>` (`SetAuthHeader` and
