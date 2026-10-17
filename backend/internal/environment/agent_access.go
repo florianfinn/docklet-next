@@ -68,7 +68,10 @@ func (s *EnvironmentService) AgentAccess(ctx context.Context, id string, token *
 	if env.ApiKeyID != nil {
 		keyID = *env.ApiKeyID
 	}
-	session := s.agentSessionFor(ctx, env)
+	session, err := s.agentSessionFor(ctx, env)
+	if err != nil {
+		return nil, nil, err
+	}
 	boundCtx := edge.WithSessionCredential(ctx, keyID, *env.AccessToken, s.edgeSessionCurrent)
 	requestCtx, cancel := context.WithCancel(boundCtx)
 	stop := context.AfterFunc(session.ctx, cancel)
@@ -90,7 +93,7 @@ func (s *EnvironmentService) AgentAccess(ctx context.Context, id string, token *
 	return requestCtx, cleanup, nil
 }
 
-func (s *EnvironmentService) agentSessionFor(ctx context.Context, env *Environment) *agentSession {
+func (s *EnvironmentService) agentSessionFor(ctx context.Context, env *Environment) (*agentSession, error) {
 	keyID := ""
 	if env.ApiKeyID != nil {
 		keyID = *env.ApiKeyID
@@ -103,13 +106,25 @@ func (s *EnvironmentService) agentSessionFor(ctx context.Context, env *Environme
 	session := s.agentRuntime.sessions[env.ID]
 	if session == nil || session.token != *env.AccessToken || session.endpoint != env.ApiUrl || session.keyID != keyID {
 		if session != nil {
+			// Re-read under the lock before a credential observer can revoke another session.
+			current, err := s.GetEnvironmentByID(ctx, env.ID)
+			if err != nil {
+				return nil, err
+			}
+			currentKeyID := ""
+			if current.ApiKeyID != nil {
+				currentKeyID = *current.ApiKeyID
+			}
+			if !current.Enabled || current.AccessToken == nil || *current.AccessToken != *env.AccessToken || current.ApiUrl != env.ApiUrl || currentKeyID != keyID {
+				return nil, ErrInvalidEnvironmentAccessToken
+			}
 			session.cancel()
 		}
 		sessionCtx, cancel := context.WithCancel(context.WithoutCancel(ctx))
 		session = &agentSession{token: *env.AccessToken, endpoint: env.ApiUrl, keyID: keyID, ctx: sessionCtx, cancel: cancel}
 		s.agentRuntime.sessions[env.ID] = session
 	}
-	return session
+	return session, nil
 }
 
 // CheckAgentCompatibility refreshes the session verdict on health checks and Edge connect.
@@ -121,7 +136,11 @@ func (s *EnvironmentService) CheckAgentCompatibility(ctx context.Context, id str
 	if !env.Enabled || env.AccessToken == nil {
 		return nil, ErrInvalidEnvironmentAccessToken
 	}
-	info, _, err := s.checkAgentCompatibility(ctx, id, s.agentSessionFor(ctx, env), true)
+	session, err := s.agentSessionFor(ctx, env)
+	if err != nil {
+		return nil, err
+	}
+	info, _, err := s.checkAgentCompatibility(ctx, id, session, true)
 	return info, err
 }
 
