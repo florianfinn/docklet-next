@@ -115,6 +115,7 @@ func TestEdgeReconnectRefreshesCompatibility(t *testing.T) {
 	require.ErrorIs(t, err, ErrAgentUpdateRequired)
 	require.Equal(t, 2, f.count("GET /api/app-version"))
 	require.Equal(t, 1, f.count("GET /api/environments/0/containers"))
+	require.NoError(t, oldContext.Err(), "a different tunnel verdict must not revoke in-flight work")
 	require.Error(t, edge.RequireSessionKey(oldContext, f.tunnel))
 	require.False(t, f.conn.IsClosed(), "the rejected old request must leave the current connection open")
 }

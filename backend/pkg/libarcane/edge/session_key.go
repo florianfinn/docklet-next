@@ -19,6 +19,9 @@ type sessionTunnelContext struct{}
 
 // WithSessionTunnel binds a compatibility verdict to the concrete Edge connection.
 func WithSessionTunnel(ctx context.Context, tunnel *AgentTunnel) context.Context {
+	if tunnel == nil {
+		return ctx
+	}
 	return context.WithValue(ctx, sessionTunnelContext{}, tunnel)
 }
 
@@ -45,7 +48,7 @@ func RequireSessionKey(ctx context.Context, tunnel *AgentTunnel) error {
 	expected, checked := ctx.Value(sessionKeyContext{}).(string)
 	credential, credentialChecked := ctx.Value(sessionCredentialContext{}).(sessionCredential)
 	expectedTunnel, tunnelChecked := ctx.Value(sessionTunnelContext{}).(*AgentTunnel)
-	if checked && (tunnel == nil || tunnel.APIKeyID != expected || (credentialChecked && tunnel.TokenHash != credential.hash) || (tunnelChecked && tunnel != expectedTunnel)) {
+	if checked && (tunnel == nil || tunnel.APIKeyID != expected || (credentialChecked && tunnel.TokenHash != credential.hash) || (tunnelChecked && expectedTunnel != nil && tunnel != expectedTunnel)) {
 		if tunnel != nil && credential.current != nil {
 			if current, err := credential.current(ctx, tunnel); err == nil && !current {
 				_ = tunnel.CloseWithReason("agent credential revoked")

@@ -282,9 +282,12 @@ reason. Reconnection replaces the values on the next successful read. Source:
 The agent contract and minimum are version 3. The version fixture in
 `types/contract/testdata/agent-hub-v3.json` owns the fingerprint. The hub checks
 `/api/app-version` before ordinary requests and registry or configuration
-synchronisation. The verdict is cached per agent session (token, endpoint and
-key ID, plus concrete tunnel identity for Edge), refreshed on Edge connect and health checks, and discarded on credential
-changes, endpoint changes, disablement or removal. An update-required verdict
+synchronisation. The credential session (token, endpoint and key ID) is revoked
+on credential changes, endpoint changes, disablement or removal. Compatibility
+verdicts are cached within that session for the concrete Edge tunnel and refreshed
+on Edge connect and health checks. Ordinary Edge requests acquire a concrete tunnel
+before checking compatibility; a tunnel change invalidates its verdict without
+cancelling requests or streams in the credential session. An update-required verdict
 replaces prior compatibility and blocks ordinary forwarding until a fresh check succeeds. Below-minimum agents and same-version fingerprint mismatches
 have status `update-required`; health, version and agent self-upgrade stay
 available. System health uses HEAD, as its registered operation specifies.
