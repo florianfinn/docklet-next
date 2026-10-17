@@ -45,7 +45,7 @@ export function resourceFixture() {
     if (detail) return json(detail, false, true);
     return json("not-found", false, false, 404);
   });
-  const source = { close() {}, onopen: null as EventSource["onopen"], onmessage: null as EventSource["onmessage"], onerror: null as EventSource["onerror"] };
+  const source = { close() {}, onopen: null as ((event: Event) => void) | null, onmessage: null as ((event: MessageEvent) => void) | null, onerror: null as ((event: Event) => void) | null };
   const adapter = createHttpAdapter({ fetch: fetcher as typeof fetch, webSocket, eventSource: () => source });
   const sample = (hostId: string, cpu = 25) => sockets.get(hostId)?.onmessage?.({ data: JSON.stringify({ cpuUsage: cpu, memoryUsage: 1073741824, memoryTotal: 4294967296, diskUsage: 2147483648, diskTotal: 8589934592, cpuCount: 4 }) } as MessageEvent);
   return { adapter, state, fetcher, sockets, webSocket, sample, source };
