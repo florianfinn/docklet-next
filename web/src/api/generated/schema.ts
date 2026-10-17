@@ -1,5 +1,5 @@
 // Source: api/openapi.json
-// Revision: 2a8c9b6bf74be62d51e728c6550abe16dc79381e7ca821642b37eaffc49cb24b
+// Revision: a8eb3743593832593beb9a07f10a43142b132207e5b448a8b16a18ec66b77f57
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
 // Deviations: Generated TypeScript declarations from the local Huma export.
@@ -9508,6 +9508,7 @@ export interface components {
             readonly $schema?: string;
             actionPresentation?: string | null;
             agentInstallDirectory?: string | null;
+            agentProjectsDirectory?: string | null;
             /**
              * @deprecated
              * @description Read-only startup policy; updates are rejected. Use GET /auth/mode.

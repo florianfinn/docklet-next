@@ -8,9 +8,12 @@ package settings
 
 import (
 	"context"
+	"encoding/json"
+	"os"
 	"path/filepath"
 	"testing"
 
+	"github.com/florianfinn/docklet-next/backend/internal/config"
 	"github.com/florianfinn/docklet-next/backend/internal/database"
 	"github.com/florianfinn/docklet-next/backend/internal/middleware"
 	"github.com/florianfinn/docklet-next/backend/internal/testsqlite"
@@ -60,4 +63,31 @@ func TestSetupSettingsPersistAcrossServiceRestart(t *testing.T) {
 	require.Equal(t, "UTC", stored.TimeZone.Value)
 	require.Equal(t, "false", stored.KeepActionOutput.Value)
 	require.Equal(t, "toast", stored.ActionPresentation.Value)
+}
+
+func TestSetupDefaultHostDirectoriesDoNotTouchHubProjects(t *testing.T) {
+	if os.Geteuid() == 0 {
+		t.Skip("permission regression requires a non-root process")
+	}
+	hubProjects := filepath.Join(t.TempDir(), "hub-projects")
+	require.NoError(t, os.Mkdir(hubProjects, 0700))
+	t.Setenv("PROJECTS_DIRECTORY", hubProjects)
+	svc, err := newSettingsServiceForTestInternal(t, t.Context(), setupSettingsTestDB(t))
+	require.NoError(t, err)
+	cfg := svc.GetSettingsConfig()
+	require.Equal(t, hubProjects, cfg.ProjectsDirectory.Value)
+	handler := &SettingsHandler{settingsService: svc, cfg: &config.Config{AuthMode: "none"}}
+	// Matches the default web setup payload; agent paths must never be opened on the hub.
+	payload := `{"hubName":"Docklet","hubAddress":"192.0.2.10:8080","domainUrl":"","linkBase":"auto","timeZone":"Europe/Berlin","agentProjectsDirectory":"/home/docker","agentInstallDirectory":"/home/docker/docklet-agent","defaultHostConnection":"direct","defaultPuid":"","defaultPgid":"","detectSocketGroup":"true","setupCompleted":"true"}`
+	var input settingstypes.Update
+	require.NoError(t, json.Unmarshal([]byte(payload), &input))
+	require.Nil(t, input.ProjectsDirectory)
+	output, err := handler.UpdateSettings(t.Context(), &UpdateSettingsInput{EnvironmentID: "0", Body: input})
+	require.NoError(t, err)
+	require.True(t, output.Body.Success)
+	stored := svc.GetSettingsConfig()
+	require.Equal(t, hubProjects, stored.ProjectsDirectory.Value)
+	require.Equal(t, "/home/docker", stored.AgentProjectsDirectory.Value)
+	require.Equal(t, "/home/docker/docklet-agent", stored.AgentInstallDirectory.Value)
+	require.Equal(t, "true", stored.SetupCompleted.Value)
 }

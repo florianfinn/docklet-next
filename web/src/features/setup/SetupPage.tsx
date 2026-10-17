@@ -111,7 +111,8 @@ export default function SetupPage() {
         patchSetup({ password: { password: "", confirm: "" }, reached: SETUP_STEPS.length - 1 });
         go("done");
       } catch (e) {
-        toast.error(errorCode(e) ?? dt(e instanceof Error ? e.message : String(e)));
+        const message = e instanceof Error ? e.message : String(e);
+        toast.error(message.startsWith("settings.write.") ? t("saveError") : errorCode(e) ?? dt(message));
       } finally {
         setBusy(false);
       }

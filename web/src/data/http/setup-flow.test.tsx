@@ -6,7 +6,9 @@
 
 import { screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { afterEach, expect, it } from "vitest";
+import { afterEach, expect, it, vi } from "vitest";
+
+import { toast } from "sonner";
 
 import { SetupGate } from "@/app/SetupGate";
 import { renderRoutes } from "@/test/render";
@@ -16,7 +18,8 @@ import { createHttpAdapter } from "./http-adapter";
 
 afterEach(() => { restartSetup(); localStorage.clear(); });
 
-it("changes the initial password before storing setup through the core adapter", async () => {
+it.each([false, true])("stores host defaults separately and localizes setup write errors (fail=%s)", async (fail) => {
+  const errorToast = vi.spyOn(toast, "error");
   restartSetup();
   const settings: Record<string, string> = { setupCompleted: "false" };
   let changedPassword = false;
@@ -37,6 +40,7 @@ it("changes the initial password before storing setup through the core adapter",
         expect(changedPassword).toBe(true);
         const values = JSON.parse(String(init.body)) as Record<string, string>;
         writes.push(values);
+        if (fail) return new Response(JSON.stringify({ detail: "Not writable" }), { status: 400 });
         Object.assign(settings, values);
         return new Response(JSON.stringify({ success: true, data: [] }));
       }
@@ -56,7 +60,11 @@ it("changes the initial password before storing setup through the core adapter",
   await userEvent.type(screen.getByLabelText("Neues Passwort bestätigen"), "New-password1!");
   await next();
   await userEvent.click(await screen.findByRole("button", { name: "Einrichtung abschließen" }));
-  await waitFor(() => expect(settings.setupCompleted).toBe("true"));
+  if (fail) await waitFor(() => expect(errorToast).toHaveBeenCalledWith("Die Einrichtung konnte nicht gespeichert werden. Prüfe die Angaben und versuche es erneut."));
+  else await waitFor(() => expect(settings.setupCompleted).toBe("true"));
+  expect(writes[0]?.agentProjectsDirectory).toBe("/home/docker");
+  expect(writes[0]?.projectsDirectory).toBeUndefined();
+  errorToast.mockRestore();
   expect(changedPassword).toBe(true);
   expect(writes).toHaveLength(1);
   expect(writes[0]?.timeZone).toBe("Europe/Berlin");

@@ -80,6 +80,7 @@ type Settings struct {
 	DomainURL                   SettingVariable `key:"domainUrl" meta:"label=Domain URL;type=text;category=general;description=Optional public hub URL"`
 	LinkBase                    SettingVariable `key:"linkBase" meta:"label=Link Base;type=select;category=general;description=Which hub address links use"`
 	TimeZone                    SettingVariable `key:"timeZone" meta:"label=Time Zone;type=text;category=general;description=Time zone for hub schedules"`
+	AgentProjectsDirectory      SettingVariable `key:"agentProjectsDirectory" meta:"label=Agent Projects Directory;type=text;category=general;description=Default project directory on agent hosts"`
 	AgentInstallDirectory       SettingVariable `key:"agentInstallDirectory" meta:"label=Agent Install Directory;type=text;category=general;description=Default agent installation directory"`
 	DefaultHostConnection       SettingVariable `key:"defaultHostConnection" meta:"label=Default Host Connection;type=select;category=general;description=Default host connection method"`
 	DefaultPUID                 SettingVariable `key:"defaultPuid" meta:"label=Default PUID;type=text;category=general;description=Default file owner user ID"`

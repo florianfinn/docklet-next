@@ -53,7 +53,7 @@ export function createSettingsCore(baseUrl: string, client: CsrfClient): Pick<Se
         domainUrl: input.general.domainUrl,
         linkBase: input.general.linkBase,
         timeZone: input.general.timeZone,
-        projectsDirectory: input.hostDefaults.projectDir,
+        agentProjectsDirectory: input.hostDefaults.projectDir,
         agentInstallDirectory: input.hostDefaults.installDir,
         defaultHostConnection: input.hostDefaults.connection,
         defaultPuid: input.hostDefaults.puid,

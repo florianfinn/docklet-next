@@ -93,6 +93,7 @@ export const enSetup = {
     urlCheck: "Address is formally valid. Whether an agent reaches it only shows with its first connection – Docklet does not check this in advance and opens no ports.",
     modes: { none: "No login", local: "Local admin", proxy: "Reverse proxy" },
   },
+  saveError: "The setup settings could not be saved. Check the values and try again.",
   done: {
     title: "{name} is set up",
     body: (import.meta.env.DEV ? "The details are now in the hub settings of this demo tab. Passwords were discarded, not saved." : "The details are available in hub settings. Passwords were discarded."),
