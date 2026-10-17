@@ -50,7 +50,14 @@ export interface AgentReport {
   simulated?: boolean;
 }
 
+export interface InventoryObservation {
+  observedAt?: string;
+  stale: boolean;
+  reason?: "agent.unavailable" | "agent.invalid-token" | "agent.update-required";
+}
+
 export interface Host {
+  inventory?: InventoryObservation;
   /** Inventory and system metadata have not been read; numeric fields are empty sentinels. */
   detailsUnavailable?: boolean;
   id: string;
@@ -143,6 +150,7 @@ export type AutoUpdateMode = "check" | "scheduled";
 export type AutoUpdatePolicy = { mode: "check" } | { mode: "scheduled"; schedule: Schedule };
 
 export interface Stack {
+  inventory?: InventoryObservation;
   id: string;
   name: string;
   hostId: string;
@@ -247,6 +255,8 @@ export interface StackDetail extends Stack {
 export type ContainerOrigin = "compose" | "standalone" | "unraid" | "unknown";
 
 export interface ContainerInfo {
+  inventory?: InventoryObservation;
+  restrictions?: { recreate: boolean; reason: string };
   id: string;
   name: string;
   hostId: string;

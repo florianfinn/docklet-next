@@ -34,7 +34,7 @@ export function StackUpdateIndicator({
 }) {
   const t = useTranslations("common.updates");
   const s = summarizeUpdates(services);
-  const state = s.pending ? t("chipPending", { count: s.pending }) : t("chipCurrent");
+  const state = s.pending ? t("chipPending", { count: s.pending }) : s.errors ? t("chipError") : s.visual === "unchecked" ? t("chipUnchecked") : t("chipCurrent");
   return (
     <InteractiveHoverCard label={t("triggerLabel", { name, state })} side={side} content={<StackUpdatePanel services={services} actions={actions} times={times} />}>
       <StackUpdateChip services={services} />

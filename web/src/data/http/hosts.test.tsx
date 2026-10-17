@@ -106,9 +106,9 @@ it("invalidates host reads on environment state and reconnect envelopes", () => 
   const changed = vi.fn();
   const stop = adapter.subscribeChanges(changed);
   source.onopen?.();
-  expect(changed).toHaveBeenCalledWith(["events", "hosts"]);
+  expect(changed).toHaveBeenCalledWith(["events", "hosts", "stacks", "containers"]);
   changed.mockClear();
   source.onmessage?.({ data: JSON.stringify({ channel: "environments", type: "snapshot", timestamp: at }), lastEventId: "1" } as MessageEvent);
-  expect(changed).toHaveBeenCalledWith(["hosts"]);
+  expect(changed).toHaveBeenCalledWith(["hosts", "stacks", "containers"]);
   stop();
 });

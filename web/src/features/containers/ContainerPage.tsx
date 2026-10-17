@@ -1,3 +1,5 @@
+import { useCapability } from "@/data/use-capability";
+import { InventoryNotice } from "@/features/stacks/InventoryNotice";
 import { ArrowLeft, Boxes, Cpu, Layers, Lock, MemoryStick, Package, Pencil, Play, RotateCw, Square } from "lucide-react";
 import { useMemo, useState } from "react";
 import { Link, useParams } from "react-router";
@@ -71,30 +73,32 @@ function ContainerActions({ c, onEdit }: { c: ContainerInfo; onEdit: () => void 
   const tm = useTranslations("containers.menu");
   const to = useTranslations("containers.origin");
   const cmd = useContainerCommands();
+  const command = useCapability("runContainerCommand");
+  const edit = useCapability("recreateContainer");
   const restart = useContainerRestart();
   return (
     <>
       {c.state === "running" ? (
         <>
           <HelpTarget topic="action.stop">
-            <Button size="sm" variant="outline" onClick={() => void cmd.run(c.id, "stop")}>
+            <Button size="sm" variant="outline" disabled={!command.available || !!c.inventory?.stale} title={command.reason} onClick={() => void cmd.run(c.id, "stop")}>
               <Square data-icon="inline-start" /> {tm("stop")}
             </Button>
           </HelpTarget>
           <HelpTarget topic="action.restart">
-            <Button size="sm" variant="outline" className="group" onClick={() => restart([c])}>
+            <Button size="sm" variant="outline" className="group" disabled={!command.available || !!c.inventory?.stale} title={command.reason} onClick={() => restart([c])}>
               <RotateCw data-icon="inline-start" className="spin-on-hover" /> {tm("restart")}
             </Button>
           </HelpTarget>
         </>
       ) : (
-        <Button size="sm" variant="outline" onClick={() => void cmd.run(c.id, "start")}>
+        <Button size="sm" variant="outline" disabled={!command.available || !!c.inventory?.stale} title={command.reason} onClick={() => void cmd.run(c.id, "start")}>
           <Play data-icon="inline-start" /> {tm("start")}
         </Button>
       )}
       {c.origin === "standalone" && (
         <HelpTarget topic="container.recreate">
-          <Button size="sm" onClick={onEdit}>
+          <Button size="sm" disabled={!edit.available || !!c.inventory?.stale || c.restrictions?.recreate} title={edit.reason} onClick={onEdit}>
             <Pencil data-icon="inline-start" /> {t("edit")}
           </Button>
         </HelpTarget>
@@ -225,5 +229,5 @@ export default function ContainerPage() {
         }
       />
     );
-  return <Body c={c} host={hosts.byId.get(c.hostId)} />;
+  return <><InventoryNotice hosts={hosts.all.filter((host) => host.id === c.hostId)} items={[c]} /><Body c={c} host={hosts.byId.get(c.hostId)} /></>;
 }

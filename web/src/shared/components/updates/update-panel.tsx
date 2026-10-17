@@ -253,9 +253,9 @@ export function StackUpdateChip({ services }: { services: Pick<Service, "name" |
   const t = useTranslations("common.updates");
   const s = summarizeUpdates(services);
   const Icon = UPDATE_ICON[s.visual];
-  const text = s.pending ? t("chipPending", { count: s.pending }) : s.errors ? t("chipError") : t("chipCurrent");
+  const text = s.pending ? t("chipPending", { count: s.pending }) : s.errors ? t("chipError") : s.visual === "unchecked" ? t("chipUnchecked") : t("chipCurrent");
   return (
-    <ToneBadge tone={s.pending ? UPDATE_TONE[s.visual] : s.errors ? "err" : "ok"} className="cursor-pointer">
+    <ToneBadge tone={UPDATE_TONE[s.visual]} className="cursor-pointer">
       <Icon aria-hidden />
       {text}
     </ToneBadge>

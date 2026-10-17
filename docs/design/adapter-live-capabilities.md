@@ -33,7 +33,7 @@ adapter operation available: its mapping and server capability must both exist.
 | `listActions`, run refresh | `list-activities`, `get-activity` per environment | Map recorded activity, message, step and output DTOs; enable the full `CodedActionRun` projection only where required fields have wire sources. |
 | `listEvents` | `listEvents` or `getEventsByEnvironment` for the selected scope | Map `EventEvent` to `CodedEvent`; use recorded DTOs. |
 | `subscribeActions`, `subscribeChanges` | `streamClient` (`activities`, `events`) | Parse envelopes and re-read changed snapshots/queries. |
-| `listHosts`, `listStacks`, `getStack`, `listContainers` | `listEnvironments`, `list-projects`, `get-project`, `list-containers` | Expose unavailable until M5 owns the view-model mappings. |
+| `listHosts`, `listStacks`, `getStack`, `listContainers` | `listEnvironments`, `list-projects`, `get-project`, `list-containers` | Read host identity and aggregate host-scoped projects and containers through the shared agent forwarding path. |
 | `getSecurity`, `listSchedule`, `getSettings` | `get-environment-vulnerability-overview`, `get-job-schedules`, `get-settings` | The first two calls remain unavailable until M11 and M10. `getSettings` stays unavailable for unconnected sections; M4 reads connected sections with `getConnectedSettings`. |
 | `runStackCommand`, `runContainerCommand` | `deploy-project`/`down-project`/`restart-project`/`redeploy-project`; `start-container`/`stop-container`/`restart-container` | Expose unavailable until M6 supplies guarded run identities and mappings. |
 | Other `DockletAdapter` reads, writes and subscriptions | Existing operation where listed, otherwise no matching operation | Expose unavailable until the owning milestone supplies the complete mapping. Existing log/stats WebSockets remain the later stream transport. |
@@ -169,3 +169,35 @@ make the case fail.
 | 12 | Pruning a finished run removes its output while a retained active run keeps its output. | Store output without activity-row ownership or delete active output. |
 | 13 | Wire `queued` renders the distinct Wartet/Queued label and stays nonterminal. | Map `queued` to `running` or reuse its label. |
 | 14 | Wire `cancelled` renders the distinct Abgebrochen/Cancelled label and is terminal. | Map `cancelled` to `failed` or reuse its label. |
+
+## Host inventory observations
+
+The hub retains successful project and container JSON reads in its process-local
+hoststate store after caller authentication and resource authorization. Keys
+include host ID, resource suffix and the normalized pagination/filter query.
+`X-Docklet-Observed-At` carries the successful read time. On
+`agent.unavailable`, `agent.invalid-token` or `agent.update-required`, a retained
+response keeps that time and adds `X-Docklet-Host-Reason`. Fresh successful reads
+replace the retained value and omit the reason. Other failures, including caller
+authorization failures, never become cached successes. These headers are hub
+projections and do not change the agent contract or its compatibility boundary.
+
+The HTTP adapter gives inventory resources IDs of `<host-id>~<resource-id>` to
+prevent collisions across agents; raw IDs are restored at the HTTP boundary.
+Activity and event resource links use the same host-scoped IDs; events without
+a host identity expose no project link.
+The backend owns both IDs and neither contains the separator. The UI keeps
+retained rows visible and displays their timestamp and distinct host reason.
+Without a successful snapshot it shows the host reason and states explicitly
+that no retained values exist. A hub restart clears snapshots. Ordinary reads
+still pass through the compatibility check before either direct or Edge
+forwarding; an update-required host receives no ordinary agent request.
+
+Compose project tags map to stack labels; runtime containers supply service
+status, health and published ports. Complete Compose project/service labels
+identify Compose containers. Partial Compose metadata or evidence of an external
+manager leaves origin unclear. Containers without these labels map to Run.
+Recreation restrictions include Compose ownership, unclear origin and the
+server's protected-container flag. Agent-labeled workloads are excluded from
+both lists; the backend excludes their tracked Compose projects before pagination.
+All write operations keep their unavailable adapter mapping.
