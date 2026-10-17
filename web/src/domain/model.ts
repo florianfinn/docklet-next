@@ -387,15 +387,15 @@ export interface SecurityOverview {
   history: ScanRun[];
 }
 
-/** Docker network drivers Docklet shows; only bridge, macvlan and ipvlan can be created. */
-export type NetworkDriver = "bridge" | "host" | "none" | "macvlan" | "ipvlan" | "overlay";
+/** Built-in Docker drivers; plugins remain displayable as arbitrary strings. */
+export type NetworkDriver = "bridge" | "host" | "none" | "null" | "macvlan" | "ipvlan" | "overlay";
 
 export interface TopologyNetwork {
   inventory?: InventoryObservation;
   id: string;
   name: string;
   hostId: string;
-  driver: NetworkDriver;
+  driver: string;
   /** CIDR; absent for host and none. */
   subnet?: string;
   gateway?: string;

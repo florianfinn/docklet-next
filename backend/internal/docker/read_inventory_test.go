@@ -43,9 +43,16 @@ func TestReadInventoryFakeDocker(t *testing.T) {
 		case strings.HasSuffix(r.URL.Path, "/volumes"):
 			value = map[string]any{"Volumes": []map[string]any{{"Name": "user-data", "Driver": "local", "Labels": map[string]string{}}, {"Name": "agent-data", "Driver": "local", "Labels": map[string]string{}}}}
 		case strings.HasSuffix(r.URL.Path, "/networks"):
-			value = []map[string]any{{"Id": "user-net", "Name": "user-net", "Driver": "bridge"}, {"Id": "agent-net", "Name": "agent-net", "Driver": "bridge"}}
+			value = []map[string]any{{"Id": "user-net", "Name": "user-net", "Driver": "bridge"}, {"Id": "agent-net", "Name": "agent-net", "Driver": "bridge"}, {"Id": "bridge", "Name": "bridge", "Driver": "bridge"}, {"Id": "host", "Name": "host", "Driver": "host"}, {"Id": "none", "Name": "none", "Driver": "null"}}
 		case strings.HasSuffix(r.URL.Path, "/networks/user-net"):
 			value = map[string]any{"Id": "user-net", "Name": "user-net", "Driver": "bridge", "Containers": map[string]any{"app": map[string]any{"Name": "app", "IPv4Address": "192.0.2.2/24"}, "agent": map[string]any{"Name": "agent"}}}
+		case strings.Contains(r.URL.Path, "/networks/"):
+			name := r.URL.Path[strings.LastIndex(r.URL.Path, "/")+1:]
+			driver := name
+			if name == "none" {
+				driver = "null"
+			}
+			value = map[string]any{"Id": name, "Name": name, "Driver": driver}
 		default:
 			http.NotFound(w, r)
 			return
@@ -85,14 +92,17 @@ func TestReadInventoryFakeDocker(t *testing.T) {
 		service := network.NewNetworkService(nil, svc, nil)
 		rows, page, counts, err := service.ListNetworksPaginated(t.Context(), params)
 		require.NoError(t, err)
-		require.Len(t, rows, 1)
-		require.EqualValues(t, 1, page.TotalItems)
-		require.Equal(t, 1, counts.Total)
-		require.Equal(t, "user-net", rows[0].ID)
-		require.True(t, rows[0].InUse)
+		require.Len(t, rows, 4)
+		require.EqualValues(t, 4, page.TotalItems)
+		require.Equal(t, 4, counts.Total)
+		drivers := map[string]string{}
+		for _, row := range rows {
+			drivers[row.Name] = row.Driver
+		}
+		require.Equal(t, map[string]string{"user-net": "bridge", "bridge": "bridge", "host": "host", "none": "null"}, drivers)
 		graph, err := service.GetNetworkTopology(t.Context())
 		require.NoError(t, err)
-		require.Len(t, graph.Nodes, 2)
+		require.Len(t, graph.Nodes, 5)
 		require.Len(t, graph.Edges, 1)
 		require.Equal(t, "app", graph.Edges[0].Target)
 	})

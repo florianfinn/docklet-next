@@ -60,11 +60,11 @@ export function mapVolumes(rows: Schema["VolumeVolume"][], hostId: string, conta
 
 export function mapTopology(rows: Schema["NetworkInspect"][], hostId: string, containers: ContainerRow[], projects: ProjectRow[], inventory: InventoryObservation): Topology {
   const networks: TopologyNetwork[] = rows.filter((r) => r.labels?.["io.docklet.system"] !== "agent").map((r) => {
-    if (!r?.id || !r.name || !["bridge", "host", "none", "macvlan", "ipvlan", "overlay"].includes(r.driver)) throw new Error("inventory.invalid-network");
+    if (!r?.id || !r.name || typeof r.driver !== "string" || !r.driver) throw new Error("inventory.invalid-network");
     const { internal } = r;
     const ip4 = r.ipam.config?.find((c) => c.subnet && !c.subnet.includes(":"));
     const ip6 = r.ipam.config?.find((c) => c.subnet?.includes(":"));
-    return { id: inventoryId(hostId, r.id), hostId, name: r.name, driver: r.driver as TopologyNetwork["driver"], internal, builtIn: ["bridge", "host", "none"].includes(r.name), ipv4: r.enableIPv4, ipv6: r.enableIPv6, subnet: ip4?.subnet, gateway: ip4?.gateway, ipRange: ip4?.ipRange, subnetConfigured: !!ip4?.subnet, subnet6: ip6?.subnet, gateway6: ip6?.gateway, ipRange6: ip6?.ipRange, subnet6Configured: !!ip6?.subnet, parent: r.options?.parent, stackId: owner(r.labels, hostId, projects), inventory };
+    return { id: inventoryId(hostId, r.id), hostId, name: r.name, driver: r.driver, internal, builtIn: ["bridge", "host", "none"].includes(r.name), ipv4: r.enableIPv4, ipv6: r.enableIPv6, subnet: ip4?.subnet, gateway: ip4?.gateway, ipRange: ip4?.ipRange, subnetConfigured: !!ip4?.subnet, subnet6: ip6?.subnet, gateway6: ip6?.gateway, ipRange6: ip6?.ipRange, subnet6Configured: !!ip6?.subnet, parent: r.options?.parent, stackId: owner(r.labels, hostId, projects), inventory };
   });
   const users = containers.filter((c) => c.labels?.["io.docklet.system"] !== "agent");
   const attachments: Topology["attachments"] = [];

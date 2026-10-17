@@ -18,7 +18,7 @@ const volume: components["schemas"]["VolumeVolume"] = { id: "data", name: "data"
 const network: components["schemas"]["NetworkInspect"] = { id: "net", name: "front", driver: "bridge", scope: "local", created: at, ipam: { driver: "default", options: {}, config: [{ subnet: "192.0.2.0/24", gateway: "192.0.2.1" }] }, configFrom: { Network: "" }, containers: {}, options: {}, labels: { "com.docker.compose.project": "app" }, containersList: [], enableIPv4: true, enableIPv6: true, internal: true, attachable: false, ingress: false, configOnly: false };
 
 export function resourceFixture() {
-  const state = { reason: "", observedAt: at, status: "online", malformed: false, noSnapshot: false, bind: false };
+  const state = { reason: "", observedAt: at, status: "online", malformed: false, noSnapshot: false, bind: false, networks: [network] };
   const sockets = new Map<string, MetricsSocket>();
   const webSocket = vi.fn((url: string): MetricsSocket => {
     const socket: MetricsSocket = { onmessage: null, onclose: null, onerror: null, close: vi.fn() };
@@ -36,8 +36,9 @@ export function resourceFixture() {
     if (url.pathname.endsWith("/containers")) return json([{ ...container, mounts: state.bind ? [{ type: "bind", name: "", source: "/srv/example~data", destination: "/data", rw: true }] : container.mounts }, { ...container, id: "db", names: ["/db"], state: "exited", labels: { "com.docker.compose.project": "app", "com.docker.compose.service": "db" }, ports: [], mounts: [] }], true, true);
     if (url.pathname.endsWith("/images")) return json(state.malformed ? [{ id: "bad" }] : [image, { ...image, id: "unused", repoTags: ["unused:1"], usedBy: [], inUse: false }, { ...image, id: "dangling", repoTags: [], usedBy: [], inUse: false }], true, true);
     if (url.pathname.endsWith("/volumes")) return json([volume], true, true);
-    if (url.pathname.endsWith("/networks")) return json([network], true, true);
-    if (url.pathname.endsWith("/networks/net")) return json(network, false, true);
+    if (url.pathname.endsWith("/networks")) return json(state.networks, true, true);
+    const detail = state.networks.find((n) => url.pathname.endsWith(`/networks/${n.id}`));
+    if (detail) return json(detail, false, true);
     return json("not-found", false, false, 404);
   });
   const adapter = createHttpAdapter({ fetch: fetcher as typeof fetch, webSocket, eventSource: () => ({ close() {}, onopen: null, onmessage: null, onerror: null }) });

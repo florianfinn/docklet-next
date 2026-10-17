@@ -174,3 +174,11 @@ it("renders a bind detail route without fabricated size or non-finite host usage
   expect(view.container.textContent?.includes("NaN")).toBe(false);
   expect(view.container.textContent?.includes("Unbekannt")).toBe(true);
 });
+
+it("displays Docker built-in and plugin drivers without rejecting a healthy host", async () => {
+  const f = resourceFixture();
+  const base = f.state.networks[0]!;
+  f.state.networks = [["bridge", "bridge"], ["host", "host"], ["none", "null"], ["custom", "vendor/plugin"]].map(([name, driver]) => ({ ...base, id: name!, name: name!, driver: driver! }));
+  const graph = await f.adapter.getTopology();
+  expect(graph.networks.filter((n) => n.hostId === "first").map((n) => [n.name, n.driver, n.builtIn])).toEqual([["bridge", "bridge", true], ["host", "host", true], ["none", "null", true], ["custom", "vendor/plugin", false]]);
+});
