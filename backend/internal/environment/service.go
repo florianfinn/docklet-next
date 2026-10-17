@@ -347,6 +347,12 @@ func (s *EnvironmentService) UpdateEnvironment(ctx context.Context, id string, u
 		return nil, err
 	}
 	s.remoteEnvs.put(*updated)
+	if _, endpointChanged := updates["api_url"]; endpointChanged {
+		s.revokeAgentSessions(id)
+	}
+	if enabled, changed := updates["enabled"].(bool); changed && !enabled {
+		s.revokeAgentSessions(id)
+	}
 
 	if rawAccessToken, ok := updates["access_token"]; ok {
 		accessToken, _ := rawAccessToken.(string)

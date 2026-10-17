@@ -24,6 +24,11 @@ var ErrAgentUpdateRequired = errors.New("agent update required")
 type agentSession struct {
 	token    string
 	endpoint string
+	keyID    string
+	checkMu  sync.Mutex
+	checked  bool
+	info     *version.Info
+	verdict  error
 	ctx      context.Context
 	cancel   context.CancelFunc
 }
@@ -52,25 +57,12 @@ func (s *EnvironmentService) AgentAccess(ctx context.Context, id string, token *
 	if env.ApiKeyID != nil {
 		keyID = *env.ApiKeyID
 	}
-	s.agentRuntime.mu.Lock()
-	if s.agentRuntime.sessions == nil {
-		s.agentRuntime.sessions = make(map[string]*agentSession)
-	}
-	session := s.agentRuntime.sessions[id]
-	if session == nil || session.token != *token || session.endpoint != env.ApiUrl {
-		if session != nil {
-			session.cancel()
-		}
-		sessionCtx, cancel := context.WithCancel(context.WithoutCancel(ctx))
-		session = &agentSession{token: *token, endpoint: env.ApiUrl, ctx: sessionCtx, cancel: cancel}
-		s.agentRuntime.sessions[id] = session
-	}
-	s.agentRuntime.mu.Unlock()
+	session := s.agentSessionFor(ctx, env)
 	requestCtx, cancel := context.WithCancel(edge.WithSessionKey(ctx, keyID))
 	stop := context.AfterFunc(session.ctx, cancel)
 	cleanup := func() { stop(); cancel() }
 	if !contract.AgentRecoveryRoute(method, path) {
-		if _, err = s.CheckAgentCompatibility(requestCtx, id); err != nil {
+		if _, err = s.checkAgentCompatibility(requestCtx, id, session, false); err != nil {
 			cleanup()
 			return nil, nil, err
 		}
@@ -82,13 +74,60 @@ func (s *EnvironmentService) AgentAccess(ctx context.Context, id string, token *
 	return requestCtx, cleanup, nil
 }
 
-// CheckAgentCompatibility uses the same transport and key binding as ordinary requests.
+func (s *EnvironmentService) agentSessionFor(ctx context.Context, env *Environment) *agentSession {
+	keyID := ""
+	if env.ApiKeyID != nil {
+		keyID = *env.ApiKeyID
+	}
+	s.agentRuntime.mu.Lock()
+	defer s.agentRuntime.mu.Unlock()
+	if s.agentRuntime.sessions == nil {
+		s.agentRuntime.sessions = make(map[string]*agentSession)
+	}
+	session := s.agentRuntime.sessions[env.ID]
+	if session == nil || session.token != *env.AccessToken || session.endpoint != env.ApiUrl || session.keyID != keyID {
+		if session != nil {
+			session.cancel()
+		}
+		sessionCtx, cancel := context.WithCancel(context.WithoutCancel(ctx))
+		session = &agentSession{token: *env.AccessToken, endpoint: env.ApiUrl, keyID: keyID, ctx: sessionCtx, cancel: cancel}
+		s.agentRuntime.sessions[env.ID] = session
+	}
+	return session
+}
+
+// CheckAgentCompatibility refreshes the session verdict on health checks and Edge connect.
 func (s *EnvironmentService) CheckAgentCompatibility(ctx context.Context, id string) (*version.Info, error) {
+	env, err := s.GetEnvironmentByID(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+	if !env.Enabled || env.AccessToken == nil {
+		return nil, ErrInvalidEnvironmentAccessToken
+	}
+	return s.checkAgentCompatibility(ctx, id, s.agentSessionFor(ctx, env), true)
+}
+
+// Ordinary forwarding shares a serialized verdict for this credential and endpoint.
+func (s *EnvironmentService) checkAgentCompatibility(ctx context.Context, id string, session *agentSession, force bool) (*version.Info, error) {
+	session.checkMu.Lock()
+	defer session.checkMu.Unlock()
+	if err := session.ctx.Err(); err != nil {
+		return nil, err
+	}
+	if !force && session.checked {
+		return session.info, session.verdict
+	}
+	session.checked = false
+
 	checkCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
 	defer cancel()
 	env, err := s.GetEnvironmentByID(checkCtx, id)
 	if err != nil {
 		return nil, err
+	}
+	if env.AccessToken == nil || *env.AccessToken != session.token || env.ApiUrl != session.endpoint || (env.ApiKeyID != nil && *env.ApiKeyID != session.keyID) {
+		return nil, ErrInvalidEnvironmentAccessToken
 	}
 	var info version.Info
 	if err := s.ProxyJSONRequest(checkCtx, id, http.MethodGet, "/api/app-version", nil, &info); err != nil {
@@ -103,7 +142,7 @@ func (s *EnvironmentService) CheckAgentCompatibility(ctx context.Context, id str
 		return nil, err
 	}
 	now := time.Now()
-	result := s.db.WithContext(checkCtx).Model(&Environment{}).Where("id = ?", id).Where(map[string]any{"access_token": env.AccessToken, "api_url": env.ApiUrl}).Updates(map[string]any{"status": status, "last_seen": &now, "updated_at": &now})
+	result := s.db.WithContext(checkCtx).Model(&Environment{}).Where("id = ?", id).Where(map[string]any{"access_token": session.token, "api_url": session.endpoint, "api_key_id": env.ApiKeyID}).Updates(map[string]any{"status": status, "last_seen": &now, "updated_at": &now})
 	if result.Error != nil {
 		return nil, result.Error
 	}
@@ -118,10 +157,13 @@ func (s *EnvironmentService) CheckAgentCompatibility(ctx context.Context, id str
 	s.agentRuntime.reports[id] = agentReport{token: *env.AccessToken, report: environmenttypes.AgentReport{Version: info, ReportedAt: now}}
 	s.agentRuntime.mu.Unlock()
 	s.NotifyRuntimeStateChanged()
+	session.info = &info
+	session.checked = true
+	session.verdict = nil
 	if !compatible {
-		return &info, ErrAgentUpdateRequired
+		session.verdict = ErrAgentUpdateRequired
 	}
-	return &info, nil
+	return &info, session.verdict
 }
 
 // ResolveEdgeSessionKey rechecks the token at registration, including cached-token misses.
