@@ -764,7 +764,7 @@ func requiresDockerInternal(jobID string) bool {
 	case "auto-update", "auto-patch", "auto-heal", "scheduled-prune", "vulnerability-scan", "image-polling":
 		return true
 	}
-	return strings.HasPrefix(jobID, "volume-backup:") || strings.HasPrefix(jobID, "system-backup:")
+	return strings.HasPrefix(jobID, "volume-backup:") || strings.HasPrefix(jobID, "system-backup:volumes:")
 }
 
 // ResolveRun authorizes the current operator independently of the original requester.

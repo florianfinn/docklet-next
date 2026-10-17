@@ -4,8 +4,8 @@
 // License: BSD-3-Clause
 // Deviations: Local module namespace; functional cut: removed GitOps and saved Git repositories.
 
-// Package entityjobs holds the per-entity dynamic-job registry shared by the
-// health checks). It lives beside the scheduler rather than inside it because
+// Package entityjobs holds the per-entity registry for backups and health
+// checks. It lives beside the scheduler rather than inside it because
 // package scheduler imports the services that would use this registry.
 package entityjobs
 
@@ -83,7 +83,7 @@ func (r *Registry) Context(ctx context.Context) context.Context {
 // JobName returns the scheduler job name for entityID.
 func (r *Registry) JobName(entityID string) string { return r.jobPrefix + entityID }
 
-// Register adds (or replaces) the dynamic job for entityID.
+// Register adds (or replaces) the dynamic job for entityID and reports success.
 func (r *Registry) Register(ctx context.Context,
 	entityID string,
 	schedule func(context.Context) string,
@@ -92,9 +92,9 @@ func (r *Registry) Register(ctx context.Context,
 	reconcile ...func(context.Context,
 		schedulertypes.Run) (schedulertypes.Outcome,
 		error),
-) {
+) bool {
 	if r.scheduler == nil {
-		return
+		return false
 	}
 	schedulerCtx := r.Context(ctx)
 	job := &schedulertypes.GenericJob{
@@ -107,7 +107,9 @@ func (r *Registry) Register(ctx context.Context,
 	}
 	if err := r.scheduler.AddJob(schedulerCtx, job); err != nil {
 		slog.ErrorContext(schedulerCtx, "failed to register scheduled job", "job", job.JobName, "error", err)
+		return false
 	}
+	return true
 }
 
 // Unregister removes the dynamic job for entityID.
