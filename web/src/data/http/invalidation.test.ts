@@ -10,9 +10,10 @@ import { at, resourceFixture } from "./resources.test-support";
 
 afterEach(() => vi.useRealTimers());
 
-it("budgets at most 54 HTTP reads for an idle stacks page with seven ordinary SSE envelopes in one minute", async () => {
-  vi.useFakeTimers();
-  const f = resourceFixture(); const pending: Promise<unknown>[] = [];
+it("budgets at most 78 HTTP reads for an idle stacks page with seven ordinary SSE envelopes in one minute", async () => {
+  vi.useFakeTimers(); vi.setSystemTime(new Date(at));
+  const f = resourceFixture(); f.state.dynamicObservation = true;
+  const pending: Promise<unknown>[] = [];
   const stopMetrics = f.adapter.subscribeMetrics(() => {});
   const changes: Topic[][] = [];
   const stop = f.adapter.subscribeChanges((topics) => {
@@ -34,8 +35,8 @@ it("budgets at most 54 HTTP reads for an idle stacks page with seven ordinary SS
       await Promise.all(pending.splice(0));
     }
     f.source.onmessage?.({ data: JSON.stringify({ channel: "events", eventLog: { type: "created" }, timestamp: at }), lastEventId: "" } as MessageEvent);
-    // 12 initial + 6 snapshot reads + 12 five-second polls × (hosts + two container lists).
-    expect(f.fetcher.mock.calls.length).toBeLessThanOrEqual(54);
+    // 12 initial + 6 snapshots + 12 polls × (hosts + two container lists + two fresh observation notices).
+    expect(f.fetcher.mock.calls.length).toBeLessThanOrEqual(78);
     expect(f.fetcher.mock.calls.filter(([url]) => /\/(projects|containers)\?/.test(String(url)))).toHaveLength(30);
     expect(changes.every((topics) => topics.every((t) => t === "events" || t === "hosts"))).toBe(true);
   } finally { stop(); stopMetrics(); }
