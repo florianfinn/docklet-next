@@ -46,7 +46,7 @@ export function useHostCommands() {
         preferencesStore.set((p) => ({ ...p, hostSelection: p.hostSelection.filter((id) => id !== hostId) }));
         return true;
       }),
-    token: (name: string) => guard(() => adapter.issueAgentToken(name)),
+    token: (hostId: string) => guard(() => adapter.issueAgentToken(hostId)),
   };
 }
 

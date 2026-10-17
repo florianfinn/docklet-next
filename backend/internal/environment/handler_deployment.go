@@ -14,7 +14,7 @@ import (
 	"github.com/florianfinn/docklet-next/types/version"
 )
 
-// GetDeploymentSnippets returns deployment snippets for an environment.
+// GetDeploymentSnippets refuses stored-token reads; the browser generates installers.
 func (h *EnvironmentHandler) GetDeploymentSnippets(ctx context.Context, input *GetDeploymentSnippetsInput) (*handlerutil.Out[DeploymentSnippet], error) {
 	return nil, huma.Error410Gone("Installation credentials are returned only on host creation or token rotation")
 }
