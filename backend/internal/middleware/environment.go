@@ -30,6 +30,7 @@ import (
 
 	"github.com/florianfinn/docklet-next/backend/internal/common"
 	"github.com/florianfinn/docklet-next/backend/pkg/authz"
+	"github.com/florianfinn/docklet-next/backend/pkg/hoststate"
 	"github.com/florianfinn/docklet-next/backend/pkg/libarcane/edge"
 	"github.com/florianfinn/docklet-next/backend/pkg/libarcane/ws"
 	"github.com/florianfinn/docklet-next/backend/pkg/remenv"
@@ -87,6 +88,7 @@ type EnvironmentMiddleware struct {
 	// checkOrigin shares the local WebSocket origin and credential policy.
 	checkOrigin         func(*http.Request) bool
 	proxyIdentityHeader string
+	snapshots           *hoststate.Store
 	agentAccess         remenv.AgentAccessCheck
 }
 
@@ -118,6 +120,7 @@ func NewEnvProxyMiddlewareWithParamAndRegistry(
 	if len(options) > 0 {
 		m.proxyIdentityHeader = options[0].ProxyIdentityHeader
 		m.agentAccess = options[0].AgentAccess
+		m.snapshots = options[0].Snapshots
 		if options[0].HTTPClient != nil {
 			m.httpClient = options[0].HTTPClient
 		}
@@ -189,6 +192,11 @@ func (m *EnvironmentMiddleware) Handle(c *echo.Context, next echo.HandlerFunc) e
 			"data":    map[string]any{"error": "You don't have permission to perform this action on this environment"},
 		})
 	}
+
+	return m.inventoryRead(c, envID, func() error { return m.forwardInventoryRequest(c, envID, apiURL, accessToken) })
+}
+
+func (m *EnvironmentMiddleware) forwardInventoryRequest(c *echo.Context, envID, apiURL string, accessToken *string) error {
 
 	if m.agentAccess != nil {
 		ctx, cancel, err := m.agentAccess(c.Request().Context(), envID, accessToken, c.Request().Method, m.buildProxyPath(c, envID))
@@ -759,6 +767,7 @@ func (m *EnvironmentMiddleware) writeProxyResponse(c *echo.Context, resp *http.R
 
 // EnvironmentProxySecurity supplies hub-owned identity and agent access boundaries.
 type EnvironmentProxySecurity struct {
+	Snapshots           *hoststate.Store
 	HTTPClient          *http.Client
 	ProxyIdentityHeader string
 	AgentAccess         remenv.AgentAccessCheck
