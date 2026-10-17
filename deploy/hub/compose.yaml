@@ -16,6 +16,7 @@ services:
       - "127.0.0.1:${HUB_PORT:-3552}:3552"
     environment:
       TZ: ${TZ:-UTC}
+      DOCKLET_AGENT_IMAGE: ${DOCKLET_AGENT_IMAGE:-}
       APP_URL: ${APP_URL:-http://localhost:3552}
       AUTH_MODE: ${AUTH_MODE:-local}
       AUTH_PROXY_HEADER: ${AUTH_PROXY_HEADER:-Remote-User}

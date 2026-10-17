@@ -98,8 +98,11 @@ plain-HTTP warnings follow decision D5 in the threat review.
    described in the threat review (T4, T9). Source: Arcane.
 5. Version check, then sync and completion as in direct steps 4 to 6.
 
-The hub URL in the artefacts comes from `hubAddress`, or `domainUrl` when the
-operator chooses it. The reference allows an internal LAN or VPN address
+The hub supplies `/hub/discovery` to global administrators. It ranks the configured
+public `domainUrl` first, then `APP_URL`, `hubAddress` and detected process
+interface addresses. Candidates carry reachability hints, not an agent-side
+connectivity verdict; loopback is marked same-host and other candidates unknown.
+The operator selects or edits the hub URL in onboarding. The reference allows an internal LAN or VPN address
 (`hubUrl` in `web/src/domain/agent-install.ts`), and the planned `HubDiscovery`
 contract ranks address candidates ([API contract](api-contract.md)). The agent
 must reach `/api/environments/pair` and `/api/tunnel/*` without a browser sign-in.
@@ -113,7 +116,7 @@ machine routes already keep their own contract ([identity](identity.md)).
 | Stage | Behaviour | Source |
 | --- | --- | --- |
 | Creation | Random environment bootstrap key; `api_keys` keeps its Argon2 hash and environment-scoped grants, `environments.access_token` keeps the raw value | Arcane (`CreateEnvironmentApiKey` in `internal/apikey/service.go`) |
-| Display | Shown inside the installation artefacts; reopening them for a host reveals the stored token again to an administrator | Arcane (`GetDeploymentSnippets` reads `access_token`); reference artefact view |
+| Display | Returned once by creation or rotation and held only in the open browser flow; list, detail and legacy deployment reads never return it | New in #84; the legacy deployment endpoint returns HTTP 410 |
 | On the host | Only in the install directory's `.env`, mode 600, created under a private umask; never a command-line argument, never in `install.sh` or a fixed temporary file | Generator rules below, **new** in #84 (the reference embeds the token in `install.sh` and leaves readable copies, threat review T10); Arcane also reads the token from a file (`options:"file"`) |
 | Use | Same value in both directions and as the hub API key for that host | Arcane (threat review T3) |
 | Rotation | Regenerate action in the artefact view: new key, host set to `pending`, old key deleted, Edge token cache synced; the operator reruns the install or edits `.env` | Arcane (`RegenerateEnvironmentApiKey`); reference button in `InstallArtifacts.tsx`, live wiring **new** |
@@ -151,9 +154,11 @@ decision 6.
 
 Generator rules for M5:
 
-- The image is pinned to the hub's SemVer and digest where published, with the
-  `DOCKLET_AGENT_IMAGE` override kept from the reference. A locally built image
-  stays possible as the fallback without registry access.
+- The hub supplies the pinned `DOCKLET_AGENT_IMAGE` override, including a digest
+  when available. Without an override it supplies `docklet-next-agent:<hub SemVer>`
+  (`0.0.0` for development builds), a local-build fallback without a published
+  registry or invented digest. An invalid override fails discovery. The agent
+  image must be available on the target host before installation.
 - The token appears only in `.env` content, never as a command argument, in
   compose, in `install.sh` or in the README. The copyable commands write `.env`
   through a heredoc, so the pasted token can remain in interactive shell
