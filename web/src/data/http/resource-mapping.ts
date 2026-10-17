@@ -48,12 +48,12 @@ export function mapVolumes(rows: Schema["VolumeVolume"][], hostId: string, conta
       const consumers = usage.get(key) ?? [];
       consumers.push({ containerId: c.id, containerName: c.name, stackId: c.stackId, service: c.serviceName, target: m.destination, readOnly: !m.rw, running: raw.state === "running" });
       usage.set(key, consumers);
-      if (m.type === "bind") binds.set(key, { id: inventoryId(hostId, `bind:${encodeURIComponent(name).replaceAll("~", "%7E")}`), name, hostId, kind: "bind", source: name, sizeBytes: 0, sizeUnavailable: true, createdAt: "", consumers, labels: {}, inventory });
+      if (m.type === "bind") binds.set(key, { id: inventoryId(hostId, `bind:${Array.from(new TextEncoder().encode(name), (byte) => byte.toString(16).padStart(2, "0")).join("")}`), name, hostId, kind: "bind", source: name, sizeBytes: 0, sizeUnavailable: true, createdAt: "", consumers, labels: {}, inventory });
     }
   }
   return [...rows.filter((r) => r.labels?.["io.docklet.system"] !== "agent").map((r): Volume => {
     if (!r?.name || !r.driver) throw new Error("inventory.invalid-volume");
-    const size = r.usageData?.Size ?? r.size;
+    const size = r.usageData?.Size ?? (r.size > 0 ? r.size : undefined);
     return { id: inventoryId(hostId, r.name), hostId, name: r.name, kind: "volume", driver: r.driver, source: r.mountpoint, composeName: r.labels?.["com.docker.compose.volume"], stackId: owner(r.labels, hostId, projects), sizeBytes: typeof size === "number" && size >= 0 ? size : 0, sizeUnavailable: size == null || size < 0, createdAt: r.createdAt || "", labels: r.labels ?? {}, consumers: usage.get(`volume:${r.name}`) ?? [], inventory };
   }), ...binds.values()];
 }

@@ -48,7 +48,7 @@ export function HostPulse({ host, stacks, containers, className }: { host: Host;
             {t("hostStacks", { count: stacks })} · {t("hostContainers", { count: containers })}
           </div>
         </div>
-        {m && <Sparkline data={m.cpuHistory} type="area" color={offline ? "var(--muted-foreground)" : host.color} domain={[0, 100]} className="h-auto min-h-9 w-[45%] max-w-64 min-w-28 self-stretch" label={`CPU ${host.name}`} />}
+        {m && <Sparkline data={m.cpuHistory} type="area" color={offline ? "var(--muted-foreground)" : host.color} domain={[0, 100]} className="h-auto min-h-9 w-[45%] max-w-64 min-w-28 self-stretch" label={t("cpuHistory", { name: host.name })} />}
       </div>
       {pending ? (
         <p className="flex items-center gap-1.5 text-xs text-info">
@@ -62,9 +62,9 @@ export function HostPulse({ host, stacks, containers, className }: { host: Host;
         </p>
       ) : (
         <div className="grid grid-cols-3 gap-2.5">
-          <Meter label="CPU" icon={<Cpu />} value={m.cpu} size="sm" color={host.color} sub={t("cores", { count: m.cpuCores ?? host.cpuCores })} />
-          <Meter label="RAM" icon={<MemoryStick />} value={m.mem} size="sm" color={host.color} sub={t("of", { total: `${(m.memTotalGb ?? host.memTotalGb).toFixed(1)} GB` })} />
-          {!m.diskUnavailable && <Meter label="Disk" icon={<HardDrive />} value={m.disk} size="sm" color={host.color} sub={t("of", { total: formatGb(m.diskTotalGb ?? host.diskTotalGb) })} />}
+          <Meter label={t("cpuLabel")} icon={<Cpu />} value={m.cpu} size="sm" color={host.color} sub={t("cores", { count: m.cpuCores ?? host.cpuCores })} />
+          <Meter label={t("memoryLabel")} icon={<MemoryStick />} value={m.mem} size="sm" color={host.color} sub={t("of", { total: formatGb(m.memTotalGb ?? host.memTotalGb) })} />
+          {!m.diskUnavailable && <Meter label={t("diskLabel")} icon={<HardDrive />} value={m.disk} size="sm" color={host.color} sub={t("of", { total: formatGb(m.diskTotalGb ?? host.diskTotalGb) })} />}
         </div>
       )}
     </article>

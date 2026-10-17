@@ -117,6 +117,7 @@ function Canvas({ source }: { source: Source }) {
   const [canvasSize, setCanvas, canvasEl] = useElementSize();
   const cmd = useNetworkCommands();
   const createCapability = useCapability("createNetwork");
+  const connectCapability = useCapability("connectNetwork");
   const [params, setParams] = useSearchParams();
   const [query, setQuery] = useState("");
   const [dependencies, setDependencies] = useState(true);
@@ -264,7 +265,7 @@ function Canvas({ source }: { source: Source }) {
             <TooltipContent>{t("overviewHint")}</TooltipContent>
           </Tooltip>
           <span className="flex-1" />
-          <Button variant="outline" size="sm" disabled={!online || source.bench} onClick={() => setConnectRequest({ mode: "connect" })}>
+          <Button variant="outline" size="sm" disabled={!connectCapability.available || !online || source.bench} title={connectCapability.reason} onClick={() => setConnectRequest({ mode: "connect" })}>
             <Link2 data-icon="inline-start" /> {t("connect")}
           </Button>
           <Button size="sm" disabled={!createCapability.available || !source.hosts.some((h) => h.status === "online") || source.bench} title={createCapability.reason} onClick={() => setCreating(true)}>

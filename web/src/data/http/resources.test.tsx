@@ -10,12 +10,15 @@ import { setAppLocale } from "@/app/i18n/locale-store";
 import { imageUsage } from "@/domain/images";
 import type { MetricsSnapshot } from "@/domain/model";
 import ImagesPage from "@/features/images/ImagesPage";
+import VolumePage from "@/features/volumes/VolumePage";
 import VolumesPage from "@/features/volumes/VolumesPage";
 import NetworksPage from "@/features/networks/NetworksPage";
+import { OpsSummary } from "@/features/dashboard/OpsSummary";
 import { HostPulse } from "@/features/dashboard/HostPulse";
 import { useHostScope } from "@/shared/hooks/use-host-scope";
 import { setPreference } from "@/shared/preferences/preferences-store";
-import { renderWithApp } from "@/test/render";
+import { renderRoutes, renderWithApp } from "@/test/render";
+import { imageHref } from "@/features/images/image-links";
 import { mapHostMetrics } from "./metrics";
 import { at, resourceFixture } from "./resources.test-support";
 
@@ -79,10 +82,13 @@ it("blocks all storage and image writes without sending a request", async () => 
 it.each([ImagesPage, VolumesPage, NetworksPage])("filters the rendered list page %s by host and shows retained time", async (Page) => {
   const f = resourceFixture(); f.state.reason = "agent.unavailable";
   setPreference("hostSelection", ["second"]);
-  renderWithApp(<Page />, f.adapter);
+  const view = renderWithApp(<Page />, f.adapter);
   await waitFor(() => expect(screen.getByRole("status").textContent?.includes("second")).toBe(true));
   expect(screen.getByRole("status").textContent?.includes("first")).toBe(false);
   expect(screen.getByRole("status").textContent?.includes("Stand")).toBe(true);
+  if (Page === ImagesPage) expect(view.container.querySelectorAll("tbody tr").length).toBe(3);
+  if (Page === VolumesPage) expect(view.container.querySelectorAll('a[href="/volumes/first~data"]').length).toBe(0);
+  if (Page === NetworksPage) expect(screen.getAllByRole("radio", { name: /second/ }).length).toBe(1);
   act(() => setPreference("hostSelection", ["first"]));
   await waitFor(() => expect(screen.getByRole("status").textContent?.includes("first")).toBe(true));
   expect(screen.getByRole("status").textContent?.includes("second")).toBe(false);
@@ -121,4 +127,50 @@ it("renders two dashboard host cards with distinct real measurements", async () 
   act(() => setPreference("hostSelection", ["second"]));
   expect(screen.getAllByRole("article")).toHaveLength(1);
   expect(screen.getByRole("article").textContent?.includes("second")).toBe(true);
+});
+
+it("opens the image details using the host-scoped Docker ID", async () => {
+  const f = resourceFixture();
+  const [container] = await f.adapter.listContainers();
+  expect(imageHref(container!)).toBe("/images?image=first~sha256%3Auser");
+});
+it.each(["de", "en-US"] as const)("shows retained inventory notices in %s", async (locale) => {
+  const f = resourceFixture(); f.state.reason = "agent.update-required"; setAppLocale(locale);
+  renderWithApp(<ImagesPage />, f.adapter);
+  await waitFor(() => expect(screen.getByRole("status").textContent?.includes(locale === "de" ? "Agent-Update erforderlich" : "Agent update required")).toBe(true));
+  expect(screen.getByRole("status").textContent?.includes(locale === "de" ? "Stand" : "as of")).toBe(true);
+});
+it("leaves measurements absent until the first observed sample and blocks incompatible-host streams", async () => {
+  vi.useFakeTimers(); const f = resourceFixture(); f.state.status = "update-required";
+  let snapshot: MetricsSnapshot | undefined;
+  const stop = f.adapter.subscribeMetrics((s) => { snapshot = s; });
+  await vi.advanceTimersByTimeAsync(0);
+  expect(f.webSocket).not.toHaveBeenCalled(); expect(snapshot?.hosts).toEqual({}); stop();
+});
+
+it("does not claim unchecked updates or unavailable security are healthy", async () => {
+  const f = resourceFixture(); const [hosts, stacks, containers] = await Promise.all([f.adapter.listHosts(), f.adapter.listStacks(), f.adapter.listContainers()]);
+  const view = renderWithApp(<OpsSummary hosts={hosts} allHostsCount={2} stacks={stacks} containers={containers} attention={[]} attentionText={() => ""} updates={0} critical={undefined} runningActions={0} editing={false} animate={false} duration={0} />, f.adapter);
+  expect(view.container.textContent?.includes("Alle Images aktuell")).toBe(false);
+  expect(view.container.textContent?.includes("noch nicht geprüft")).toBe(true);
+  expect(view.container.textContent?.includes("Sicherheitsstatus unbekannt")).toBe(true);
+});
+
+it("keeps bind identities collision-free and stable through route decoding", async () => {
+  const f = resourceFixture(); f.state.bind = true;
+  const binds = (await f.adapter.listVolumes()).filter((v) => v.kind === "bind");
+  expect(binds).toHaveLength(2);
+  expect(binds[0]?.id).not.toBe(binds[1]?.id);
+  const id = binds[0]!.id;
+  expect(decodeURIComponent(id)).toBe(id);
+  expect(await f.adapter.getVolume(decodeURIComponent(id))).toMatchObject({ kind: "bind", source: "/srv/example~data", sizeUnavailable: true, consumers: [{ target: "/data", readOnly: false }] });
+});
+
+it("renders a bind detail route without fabricated size or non-finite host usage", async () => {
+  const f = resourceFixture(); f.state.bind = true;
+  const bind = (await f.adapter.listVolumes()).find((v) => v.kind === "bind")!;
+  const view = renderRoutes([{ path: "/volumes/:volumeId", element: <VolumePage /> }], [`/volumes/${bind.id}`], f.adapter);
+  await waitFor(() => expect(screen.getByRole("heading", { name: "/srv/example~data" }).textContent).toBe("/srv/example~data"));
+  expect(view.container.textContent?.includes("NaN")).toBe(false);
+  expect(view.container.textContent?.includes("Unbekannt")).toBe(true);
 });

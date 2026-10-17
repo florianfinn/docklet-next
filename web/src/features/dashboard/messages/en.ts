@@ -11,6 +11,12 @@ export const enDashboard = {
   addWidget: "Add widget",
   editHint: "Editing: drag cards (mouse, pen or finger) – the others move up. The bottom-right corner changes width and height in grid steps. Without a pointer: focus a card, Alt + arrow keys move it, Alt + Shift + arrow keys resize it; the buttons in the header do the same. Host cards in the situation overview can be reordered the same way. Escape cancels dragging and resizing.",
   summary: {
+    cpuLabel: "CPU",
+    memoryLabel: "RAM",
+    diskLabel: "Disk",
+    cpuHistory: "CPU {name}",
+    uncheckedSub: "Update status has not been checked yet.",
+    securityUnknown: "Security status unknown",
     title: "Situation overview",
     scopeAll: "All {count} hosts",
     scopeSome: "{shown} of {count} hosts",
@@ -220,6 +226,7 @@ export const enDashboard = {
     actions: { logs: "Logs", restart: "Restart", check: "Check", restore: "Restore", security: "View", open: "Open", assign: "Assign", forecast: "Forecast" },
   },
   radar: {
+    unchecked: "Update status has not been checked yet.",
     major: "Major version",
     minor: "Version",
     patch: "Patch",

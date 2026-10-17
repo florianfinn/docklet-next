@@ -137,7 +137,7 @@ export default function VolumesPage() {
           { label: t("strip.volumes"), value: pending ? "–" : stats.volumes, icon: <Database /> },
           { label: t("strip.binds"), value: pending ? "–" : stats.binds, icon: <FolderInput /> },
           { label: t("strip.unused"), value: pending ? "–" : stats.unused, icon: <PackageOpen />, tone: stats.unused ? "warn" : undefined },
-          { label: t("strip.size"), value: pending ? "–" : formatBytes(stats.size), icon: <HardDrive /> },
+          { label: t("strip.size"), value: pending ? "–" : visible.some((v) => v.sizeUnavailable) ? t("unknown") : formatBytes(stats.size), icon: <HardDrive /> },
           { label: t("strip.backup"), value: pending ? "–" : `${stats.backup}/${visible.length}`, icon: <Archive />, tone: "ok" },
         ]}
       />

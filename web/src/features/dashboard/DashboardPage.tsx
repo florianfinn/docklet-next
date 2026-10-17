@@ -106,7 +106,7 @@ export default function DashboardPage() {
     [hosts.visible, stacks.visible, containers.visible, runs, images, now, diskKey],
   );
   const updates = stacks.visible.reduce((n, s) => n + s.services.filter((x) => hasUpdate(x.update)).length, 0) + containers.visible.filter((c) => c.origin !== "compose" && hasUpdate(c.update)).length;
-  const critical = images.filter((i) => i.usage === "running").reduce((n, i) => n + i.counts.critical, 0);
+  const critical = security.data?.enabled ? images.filter((i) => i.usage === "running").reduce((n, i) => n + i.counts.critical, 0) : undefined;
 
   const coreLoading = hosts.isPending || stacks.isPending || containers.isPending;
   const visible = visibleWidgets(layout).filter((id) => import.meta.env.DEV || !isServiceWidget(id));
