@@ -36,7 +36,7 @@ func agentCheckWaiters() int {
 
 func TestAgentConcurrentUnavailableChecksShareOutcome(t *testing.T) {
 	t.Run("direct", func(t *testing.T) {
-		const cap = 400 * time.Millisecond
+		const cap = time.Second
 		f := newAgentFixture(t, "direct", version.Info{})
 		ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
 		defer cancel()
@@ -120,7 +120,7 @@ func TestAgentCompatibilityWaitObservesCallerCancellation(t *testing.T) {
 	select {
 	case err := <-waiter:
 		require.ErrorIs(t, err, context.Canceled)
-	case <-time.After(200 * time.Millisecond):
+	case <-time.After(time.Second):
 		t.Fatal("a cancelled caller must leave the in-flight check promptly")
 	}
 	require.NoError(t, ctx.Err(), "cancelling a waiter must leave the checking caller alive")

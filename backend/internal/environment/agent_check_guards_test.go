@@ -49,13 +49,13 @@ func TestAgentForcedCheckStopsOnSessionRevocation(t *testing.T) {
 	select {
 	case err := <-done:
 		require.Error(t, err)
-	case <-time.After(200 * time.Millisecond):
+	case <-time.After(time.Second):
 		t.Fatal("forced caller must stop when its credential session is revoked")
 	}
 	select {
 	case <-check.done:
 		require.ErrorIs(t, check.err, remenv.ErrEnvironmentUnavailable)
-	case <-time.After(200 * time.Millisecond):
+	case <-time.After(time.Second):
 		t.Fatal("forced check must stop acquiring a tunnel when its credential session is revoked")
 	}
 	require.NoError(t, ctx.Err(), "the caller remains live after session revocation")

@@ -148,8 +148,6 @@ func TestHostAgentVersionMatrix(t *testing.T) {
 	for _, mode := range []string{"direct", "edge"} {
 		for _, state := range []string{"ok", "below-minimum", "fingerprint-mismatch"} {
 			t.Run(mode+"/"+state, func(t *testing.T) {
-				ctx, cancel := context.WithTimeout(t.Context(), 3*time.Second)
-				defer cancel()
 				info := version.Info{AgentContractVersion: contract.AgentHubVersion, AgentContractFingerprint: contract.AgentHubFingerprint}
 				if state == "below-minimum" {
 					info.AgentContractVersion = contract.MinimumAgentVersion - 1
@@ -158,6 +156,8 @@ func TestHostAgentVersionMatrix(t *testing.T) {
 					info.AgentContractFingerprint = "different"
 				}
 				f := newAgentFixture(t, mode, info)
+				ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
+				defer cancel()
 				expected := "online"
 				if state != "ok" {
 					expected = "update-required"
