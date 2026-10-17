@@ -59,11 +59,15 @@ The reference UI has four steps: connection, directories, install, connect
    Source: Arcane.
 3. The hub's environment health job calls the agent with the token
    (`runHealthCheckInternal`, `TestConnection` in
-   `internal/environment/service.go`). Success marks the host online, resends sync
-   state after an outage and pushes registry credentials. Source: Arcane.
-4. The hub reads the agent's version info and applies the compatibility rule.
-   Source: **new**, decision D1 in the threat review.
-5. The host appears in the host list and the onboarding step completes. The
+   `internal/environment/service.go`). Success marks the host reachable. Source:
+   Arcane.
+4. The hub reads the agent's version info and applies the compatibility rule
+   before anything else is forwarded. Source: **new**, decision D1 and review
+   decision S3 in the threat review.
+5. Only a compatible agent receives sync state and registry credentials; Arcane
+   pushes them in the health job right after the connection test, before any
+   version check. Source: Arcane sync, ordering **new** (#81).
+6. The host appears in the host list and the onboarding step completes. The
    agent's local check results are shown when available (decision 3).
 
 The direct agent publishes one port on its host. The generated compose maps it
@@ -82,12 +86,14 @@ plain-HTTP warnings follow decision D5 in the threat review.
 3. At startup the agent pairs once: it posts its key to the hub's pairing
    endpoint, which moves a `pending` host to `online` and triggers resource sync
    (`handleAgentBootstrapPairing` in `internal/bootstrap/bootstrap.go`,
-   `PairEnvironment` in `internal/environment/handler.go`). Source: Arcane.
+   `PairEnvironment` in `internal/environment/handler.go`). Source: Arcane. In M5
+   that sync waits for the compatibility check in step 5 (review decision S3,
+   **new**).
 4. The agent opens the tunnel to `/api/tunnel/connect` or polls
    `/api/tunnel/poll`, chosen by `EDGE_TRANSPORT` (`auto` by default; Arcane's
    snippets set `poll`). Registration rules, rate limits and stale handling are
    described in the threat review (T4, T9). Source: Arcane.
-5. Version check and completion as in direct steps 4 and 5.
+5. Version check, then sync and completion as in direct steps 4 to 6.
 
 The hub URL in the artefacts comes from `hubAddress`, or `domainUrl` when the
 operator chooses it. The reference allows an internal LAN or VPN address
@@ -300,7 +306,7 @@ The maintainer chose option (a), the recommendation, for every item below on 202
 ## Review decisions
 
 The maintainer decided the following after the first independent review of
-this record on 2026-10-17. B1 to B3 and S2 are in the
+this record on 2026-10-17. B1 to B3, S2 and S3 are in the
 [Edge threat review](edge-threat-review.md#review-decisions).
 
 - **B4. Token only in a private `.env`, #84.** The generator rules under

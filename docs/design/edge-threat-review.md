@@ -180,9 +180,7 @@ or HTML/script with an active content type on an environment path. If an admin
 opens such a path, for example a download link, script runs with the admin's
 session and can command every host. `X-Content-Type-Options: nosniff` alone would
 not help: it stops type guessing, not script in a correctly labelled `text/html`
-or `image/svg+xml` body. Body size is bounded by the tunnel frame
-limit of 16 MiB per gRPC message and 32 MiB per WebSocket frame (`tunnel.go`,
-`server.go` `MaxRecvMsgSize`) and by proxy timeouts.
+or `image/svg+xml` body. Response size is a separate threat (T12).
 
 Residual risk: one compromised host or token escalates to the hub and all hosts.
 Verdict: **needs change** (D2 and review decision B1): filter proxied response
@@ -213,8 +211,8 @@ them; `GetEnvironmentVersion` in `internal/environment/handler.go` only reads
 and returns the value. The Edge register message carries token, instance ID,
 capabilities and resume session, but no version (`proto/tunnel/v1/tunnel.proto`,
 `RegisterRequest`); capabilities are feature flags such as `proto-parity-v1` and
-`chunked-request` (`pkg/libarcane/edge/command_client.go`). Protocol size limits
-are enforced on both sides as listed under T6, and stale sessions are reaped every
+`chunked-request` (`pkg/libarcane/edge/command_client.go`). Per-message size
+limits are enforced on both sides (T12), and stale sessions are reaped every
 minute (`StartCleanupLoop`).
 
 Residual risk: an old agent may lack checks that the hub relies on, or silently
@@ -227,8 +225,8 @@ misread changed payloads. #81 requires enforcement. Verdict: **needs change**
 token (10, burst 3); `/api/tunnel/mtls/enroll` per IP and per token (10, burst 3);
 `/api/tunnel/poll` has no rate limit (`registerEdgeTunnelRoutes` in
 `internal/bootstrap/edge_bootstrap.go`). Valid tokens are cached; misses query
-SQLite (`ResolveEdgeEnvironmentByToken`). Message sizes and stream delivery
-(`streamDeliveryTimeout`, 5 seconds) are bounded.
+SQLite (`ResolveEdgeEnvironmentByToken`). Each tunnel message is bounded
+(T12), and stream delivery waits at most `streamDeliveryTimeout` (5 seconds).
 
 Residual risk: an unauthenticated flood on the poll endpoint costs one indexed
 lookup per request. At this scale a reverse proxy or firewall in front of the hub
@@ -293,6 +291,27 @@ Residual risk: compromise of one host becomes hub administrator access and so
 control of all hosts. Verdict: **needs change** (review decision B3): hub user
 credentials never leave the hub boundary; agents receive only the agent token.
 
+### T12. Authenticated agent exhausts hub memory (H, T)
+
+The tunnel limits apply per message: 16 MiB per gRPC message
+(`maxGRPCTunnelMessageSize` with `MaxRecvMsgSize` in `server.go`) and 32 MiB per
+WebSocket message (`maxWebSocketTunnelMessageSize` with `SetReadLimit` in
+`tunnel.go`). They do not bound a response body. For Edge HTTP proxying the hub
+appends every response, stream and data chunk to one in-memory buffer without an
+aggregate byte cap (`grpcResponseState` in `pkg/libarcane/edge/proxy.go`) until
+the response ends or the proxy deadline passes, and then writes it as one blob
+(`ProxyHTTPRequest`). An Edge agent, or a token thief holding its session (T4),
+can therefore send many valid small messages and grow hub memory until that
+deadline. Direct responses are copied to the browser as they arrive
+(`CopyBodyWithFlush` in `remenv.go`); they have no tunnel message limit and are
+not collected in hub memory.
+
+Residual risk: an authenticated agent can slow or crash the single hub process by
+memory exhaustion; a restart recovers it. This is separate from the
+unauthenticated poll flood in T9. At the product scale the agent's holder already
+controls a host the operator chose to trust. Verdict: **accepted**; no aggregate
+body cap is added in M5 (review decision S2).
+
 ## Summary
 
 | Threat | Position | Verdict |
@@ -308,6 +327,7 @@ credentials never leave the hub boundary; agents receive only the agent token.
 | T9 Tunnel endpoint exhaustion | N | accepted |
 | T10 Token exposure during onboarding | T | accepted |
 | T11 Hub user credentials forwarded to agents | H, T | needs change |
+| T12 Authenticated agent exhausts hub memory | H, T | accepted |
 
 ## Decisions
 
@@ -385,6 +405,18 @@ this record on 2026-10-17. Each item is new work in the issue named.
   Bearer header. They then set only the agent token headers. The four tests
   named in T11 confirm the current forwarding and change in #81 to assert its
   absence.
+- **S2. Per-message limits (T12).** Frame limits are described per message. The
+  accumulated Edge response body is an accepted residual at single-operator
+  scale; no new byte budget or transport change follows.
+- **S3. Compatibility before forwarding and sync (T8, D1), #81.** The hub
+  establishes an agent's compatibility before any ordinary forwarding and before
+  any configuration or registry sync. This includes the sync triggered by
+  pairing, creation and update (`triggerEnvironmentResourceSyncInternal` in
+  `internal/environment/handler.go`) and the health job, which today pushes
+  registry credentials right after a successful connection test
+  (`runHealthCheckInternal` in `internal/environment/service.go`). Until then
+  only health, version and agent self-upgrade are forwarded, as D1 states. D1's
+  version read after registration and the unchanged tunnel protocol stay.
 - **B4. Installer token handling (T10), #84.** The token lives only in a
   mode-600 `.env` created under a private umask; details are in
   [host onboarding](host-onboarding.md#review-decisions).
