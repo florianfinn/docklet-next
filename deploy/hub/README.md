@@ -81,7 +81,9 @@ with `docker compose up -d --force-recreate hub` using the same `--env-file` as 
 installation. Merely restarting a container does not update its environment.
 Changing modes revokes previous sessions; a same-mode restart preserves them.
 `GET /api/auth/mode` exposes the active mode without credentials. The UI cannot
-change it. No web sign-in screens are introduced by this backend step.
+change it. Production login, setup and profile screens use this policy.
+After switching to local mode, the initial password remains valid until changed;
+the UI forces the password change even when setup was already completed.
 
 For recovery, set `AUTH_RESET_ADMIN_PASSWORD` in that private environment file to
 a new password satisfying the configured password policy, then recreate the hub.

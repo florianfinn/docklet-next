@@ -14,13 +14,12 @@ resource rights are outside this decision and belong to M15.
 Clients read the active policy from `GET /api/auth/mode`, not the legacy
 `authLocalEnabled` setting, whose stored value does not describe none/proxy mode.
 
-Die Weboberfläche zeigt diese Startkonfiguration im Anmeldeabschnitt nur
-lesbar. Bei `local` führt `/login` durch die echte Cookie-Sitzung und den
-vorhandenen CSRF-Vertrag; bei `proxy` erklärt ein abgewiesener Aufruf die
-Anmeldung über den Proxy; bei `none` entfällt die Anmeldeseite. Ein lokaler
-Erststart verlangt den Wechsel des markierten Administratorpassworts vor dem
-Abschluss der Einrichtung. Die Profilsprache liegt beim Administrator im
-Core und wird nach dem Laden auf die Oberfläche angewendet.
+The web Sign-in section displays this startup policy read-only. In `local` mode,
+`/login` uses the cookie session and CSRF contract; in `proxy` mode, a rejected
+request explains that sign-in happens through the proxy; `none` skips the login
+screen. Local first-run setup requires changing the marked initial administrator
+password before completion. The administrator's profile language is stored in
+the core and applied when the UI loads.
 
 `none` maps every ordinary hub request to the global administrator. `proxy` maps
 each accepted proxy identity to that same persisted administrator ID. Proxy names
@@ -106,8 +105,11 @@ A writer sends the header back with the cookie. Missing/wrong Origin or a missin
 wrong or malformed cookie/header token pair returns 403. The public
 `GET /api/auth/mode` is the documented bootstrap endpoint; its mode is read-only
 and constrained to the three protocol values in OpenAPI and generated types.
-The web HTTP adapter remembers this response header, bootstraps it before its
-first write if necessary, and supplies it for both fetch writes and XHR uploads.
+The web HTTP adapter serializes the first tokenless API request so concurrent
+reads share its cookie/header pair. It supplies the token for fetch writes and
+XHR uploads; a CSRF-specific fetch 403 refreshes the token through one safe GET
+and retries the write once. Credential-check 401s stay inline rather than
+broadcasting session loss.
 
 Only independently authenticated machine ingress keeps its separate contract:
 agent-only listeners, validated environment-token requests, Edge tunnel tokens
@@ -135,4 +137,7 @@ Recovery is also possible by selecting none mode and restarting. There is no
 password-reset CLI. All four startup variables support the existing `_FILE` and
 `__FILE` loader variants; deployment and secret-file details belong to the
 [hub package](../../deploy/hub/README.md). The active mode and token bootstrap are
-backend contracts for M4-02; this decision adds no web UI screens.
+read-only contracts used by the production login, setup and profile screens.
+
+After switching to local mode, the initial password remains valid until changed;
+the UI forces the password change even when setup was already completed.
