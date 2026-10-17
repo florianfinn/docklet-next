@@ -1,5 +1,5 @@
 // Source: api/openapi.json
-// Revision: 2b8dd4af7df85f049fbea654d3bcf95d5d71c396d43a7a13995de8cf33c763e6
+// Revision: 3c1e113087d39c78acf837039508c666cfa00300b531df7a7c6962fb960f41cc
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
 // Deviations: Generated TypeScript declarations from the local Huma export.
@@ -10147,12 +10147,23 @@ export interface components {
             newestDigest?: string;
             newestVersion?: string;
             nodeVersion: string;
+            onboardingChecks?: components["schemas"]["VersionOnboardingChecks"];
             releaseNotes?: string;
             releaseUrl?: string;
             releasedAt?: string;
             revision: string;
             shortRevision: string;
             updateAvailable: boolean;
+        };
+        VersionOnboardingChecks: {
+            /** Format: int32 */
+            ownerGid: number | null;
+            /** Format: int32 */
+            ownerUid: number | null;
+            projectDirectory: string;
+            /** Format: int32 */
+            socketGroup: number | null;
+            writable: boolean | null;
         };
         VersionStreamEvent: {
             info?: components["schemas"]["VersionInfo"];

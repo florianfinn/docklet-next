@@ -14,9 +14,10 @@ import (
 
 // Info contains detailed version information about the application.
 type Info struct {
-	AgentContractVersion        int    `json:"agentContractVersion"`
-	AgentContractFingerprint    string `json:"agentContractFingerprint"`
-	MinimumAgentContractVersion int    `json:"minimumAgentContractVersion"`
+	OnboardingChecks            *OnboardingChecks `json:"onboardingChecks,omitempty"`
+	AgentContractVersion        int               `json:"agentContractVersion"`
+	AgentContractFingerprint    string            `json:"agentContractFingerprint"`
+	MinimumAgentContractVersion int               `json:"minimumAgentContractVersion"`
 	// CurrentVersion is the current version string.
 	//
 	// Required: true

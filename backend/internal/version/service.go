@@ -343,6 +343,15 @@ func (s *VersionService) GetAppVersionInfo(ctx context.Context) *version.Info {
 		UpdateAvailable:             false,
 	}
 
+	if s.settingsService != nil {
+		settings := s.settingsService.GetSettingsConfig()
+		dockerHost := ""
+		if s.dockerService != nil {
+			dockerHost = s.dockerService.DockerHost()
+		}
+		info.OnboardingChecks = inspectOnboarding(settings.ProjectsDirectory.Value, dockerHost)
+	}
+
 	// If update checks disabled, return base info
 	if s.disabled {
 		return info

@@ -5,6 +5,6 @@
 // Deviations: Original implementation for issue 38.
 package contract
 
-const AgentHubVersion = 2
-const MinimumAgentVersion = 2
-const AgentHubFingerprint = "a66687865477286781e247a7a45be7d9f4310492e84033b5d3ad4a1c615bb343"
+const AgentHubVersion = 3
+const MinimumAgentVersion = 3
+const AgentHubFingerprint = "b30d73c4750e61127235c7e9d7b9ae907b832cd05ac2320d404097f6651eb7fe"
