@@ -8,16 +8,18 @@ import { act, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { components } from "@/api/generated/schema";
 import { setAppLocale } from "@/app/i18n/locale-store";
+import { StackUpdateIndicator } from "@/shared/components/updates/update-indicator";
 import { InventoryNotice } from "@/features/stacks/InventoryNotice";
 import { useHostScope, useVisibleContainers, useVisibleStacks } from "@/shared/hooks/use-host-scope";
 import { setPreference } from "@/shared/preferences/preferences-store";
 import { renderWithApp } from "@/test/render";
 import { createHttpAdapter } from "./http-adapter";
+import { mapActivityDetail, mapEvent } from "./map-dto";
 import { inventoryId, mapContainer, type ContainerRow, type ProjectRow } from "./inventory-mapping";
 
 const at = "2026-10-17T12:00:00Z";
 const later = "2026-10-17T12:05:00Z";
-const project: ProjectRow = { id: "project", name: "app", status: "running", path: "/srv/projects/app", createdAt: at, updatedAt: at, tags: [{ name: "example", color: "blue", sources: ["ui"] }], runtimeServices: [{ name: "web", image: "example:1.0.0", status: "running", containerId: "web" }] };
+const project: ProjectRow = { id: "project", name: "app", status: "running", isArchived: false, runningCount: 1, serviceCount: 1, path: "/srv/projects/app", createdAt: at, updatedAt: at, tags: [{ name: "example", color: "blue", sources: ["ui"] }], runtimeServices: [{ name: "web", image: "example:1.0.0", status: "running", containerId: "web" }] };
 const container: ContainerRow = { id: "web", names: ["/web"], image: "example:1.0.0", imageId: "example", command: "serve", created: 0, ports: [{ privatePort: 80, publicPort: 8080, type: "tcp" }], labels: { "com.docker.compose.project": "app", "com.docker.compose.service": "web" }, state: "running", status: "Up (healthy)", hostConfig: { restartPolicy: "unless-stopped", memory: 104857600 }, networkSettings: { networks: {} }, mounts: [], autoUpdateEnabled: false };
 
 function fixture() {
@@ -120,4 +122,22 @@ describe("host inventory HTTP reads", () => {
       await waitFor(() => expect(screen.getByRole("status").textContent?.includes(locale === "de" ? "Agent-Update erforderlich" : "Agent update required")).toBe(true));
     })();
   });
+});
+
+it("does not report unchecked inventory updates as current", async () => {
+  const f = fixture();
+  const [stack] = await f.adapter.listStacks();
+  if (!stack) throw new Error("fixture missing");
+  const view = renderWithApp(<StackUpdateIndicator name={stack.name} services={stack.services} />);
+  expect(view.container.textContent?.includes("Aktuell")).toBe(false);
+  expect(view.container.textContent?.includes("geprüft")).toBe(true);
+});
+
+it("keeps activity and event resource links in the inventory host namespace", () => {
+  const activity: components["schemas"]["ActivityActivity"] = { id: "run", environmentId: "second", type: "project_deploy", status: "success", resourceType: "project", resourceId: "project", startedAt: at, createdAt: at };
+  expect(mapActivityDetail({ activity, outputTruncated: false, messages: [], output: [], stepTrace: [] }).stackId).toBe(inventoryId("second", "project"));
+  expect(mapActivityDetail({ activity: { ...activity, resourceType: "container", resourceId: "web" }, outputTruncated: false, messages: [], output: [], stepTrace: [] }).containerId).toBe(inventoryId("second", "web"));
+  const event: components["schemas"]["EventEvent"] = { id: "event", type: "project.deploy", messageCode: "project.deploy", severity: "success", title: "Example", timestamp: at, createdAt: at, environmentId: "second", resourceType: "project", resourceId: "project" };
+  expect(mapEvent(event).stackId).toBe(inventoryId("second", "project"));
+  expect(mapEvent({ ...event, environmentId: undefined }).stackId).toBeUndefined();
 });

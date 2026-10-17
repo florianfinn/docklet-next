@@ -7,7 +7,6 @@
     "backend/internal/auth/handler.go": 1264,
     "backend/internal/auth/service.go": 615,
     "backend/internal/backup/service.go": 1214,
-    "backend/internal/container/service.go": 2320,
     "backend/internal/container/service_test.go": 1272,
     "backend/internal/database/database_test.go": 41,
     "backend/internal/event/service.go": 1020,

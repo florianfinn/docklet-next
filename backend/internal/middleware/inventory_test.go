@@ -7,8 +7,12 @@
 package middleware
 
 import (
+	"context"
+	"github.com/florianfinn/docklet-next/backend/pkg/remenv"
+	"io"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/florianfinn/docklet-next/backend/pkg/hoststate"
@@ -41,3 +45,48 @@ func TestInventoryStaleAndReconnect(t *testing.T) {
 	require.Empty(t, reconnected.Header().Get("X-Docklet-Host-Reason"))
 	require.NotEqual(t, observed, reconnected.Header().Get("X-Docklet-Observed-At"))
 }
+
+func TestInventoryCompatibilityBlocksOrdinaryRead(t *testing.T) {
+	reads := 0
+	incompatible := false
+	store := &hoststate.Store{}
+	router := echo.New()
+	router.Use(NewEnvProxyMiddlewareWithParamAndRegistry("0", "id",
+		func(context.Context, string) (string, *string, bool, error) {
+			token := "example"
+			return "http://agent.example.com", &token, true, nil
+		},
+		nil, nil, nil, nil, EnvironmentProxySecurity{
+			Snapshots: store,
+			AgentAccess: func(ctx context.Context, _ string, _ *string, _, _ string) (context.Context, context.CancelFunc, error) {
+				if incompatible {
+					return nil, nil, remenv.ErrAgentUpdateRequired
+				}
+				return ctx, func() {}, nil
+			},
+			HTTPClient: &http.Client{Transport: inventoryTransport(func(r *http.Request) (*http.Response, error) {
+				reads++
+				return &http.Response{StatusCode: 200, Header: make(http.Header), Body: io.NopCloser(strings.NewReader(`{"success":true,"data":[{"id":"app"}]}`)), Request: r}, nil
+			})},
+		}))
+	router.GET("/api/environments/:id/projects", func(c *echo.Context) error { return c.NoContent(500) })
+	request := func() *httptest.ResponseRecorder {
+		rec := httptest.NewRecorder()
+		router.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/api/environments/host/projects", nil))
+		return rec
+	}
+	fresh := request()
+	require.Equal(t, 200, fresh.Code)
+	require.Equal(t, 1, reads)
+	incompatible = true
+	stale := request()
+	require.Equal(t, 1, reads, "incompatible host must receive no ordinary agent read")
+	require.Equal(t, 200, stale.Code)
+	require.JSONEq(t, fresh.Body.String(), stale.Body.String())
+	require.Equal(t, "agent.update-required", stale.Header().Get("X-Docklet-Host-Reason"))
+	require.Equal(t, fresh.Header().Get("X-Docklet-Observed-At"), stale.Header().Get("X-Docklet-Observed-At"))
+}
+
+type inventoryTransport func(*http.Request) (*http.Response, error)
+
+func (f inventoryTransport) RoundTrip(r *http.Request) (*http.Response, error) { return f(r) }

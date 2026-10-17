@@ -178,7 +178,7 @@ func (s *ProjectService) ListProjects(ctx context.Context, params pagination.Que
 	query := s.db.WithContext(ctx).Model(&Project{})
 	systemNames := listing.SystemProjectNames(snapshot.Containers)
 	if len(systemNames) > 0 {
-		query = query.Where("name NOT IN ? AND COALESCE(compose_project_name, '') NOT IN ?", systemNames, systemNames)
+		query = query.Where("LOWER(name) NOT IN ? AND COALESCE(compose_project_name, '') NOT IN ?", systemNames, systemNames)
 	}
 	if archivedFilter := strings.TrimSpace(params.Filters["archived"]); !strings.EqualFold(archivedFilter, "all") {
 		archived, _ := kit.ParseBool(archivedFilter)
