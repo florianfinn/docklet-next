@@ -32,6 +32,7 @@ func agentImageReference(cfg *config.Config) (string, error) {
 		if !imageVersion.MatchString(tag) {
 			tag = "0.0.0"
 		}
+		// The deploy/hub/Dockerfile agent target supplies this registry-free fallback.
 		image = "docklet-next-agent:" + tag
 	}
 	if !pinnedAgentImage.MatchString(image) {

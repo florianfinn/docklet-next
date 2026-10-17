@@ -55,9 +55,10 @@ export function agentCompose(plan: AgentInstallPlan): string {
   const binding = parseIp(address) !== undefined ? `${address}:` : parseIp6(address) !== undefined ? `[${address}]:` : "";
   return [
     "# Docklet agent; runtime detects the Docker socket group before dropping privileges.",
-    "name: docklet-agent",
+    `name: ${plan.connection === "edge" ? "docklet-edge-agent" : "docklet-agent"}`,
     "services:",
     "  agent:",
+    `    container_name: ${plan.connection === "edge" ? "docklet-edge-agent" : "docklet-agent"}`,
     `    image: \${DOCKLET_AGENT_IMAGE:-${plan.image ?? AGENT_IMAGE}}`,
     "    restart: unless-stopped",
     "    env_file: .env",

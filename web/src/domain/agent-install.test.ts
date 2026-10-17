@@ -182,3 +182,10 @@ it.each(["script", "composeCommand", "scriptCommand"] as const)("%s warns and co
     expect(statSync(f.installPlan.projectDir).mode & 0o777).toBe(0o555);
   } finally { chmodSync(f.installPlan.projectDir, 0o755); }
 });
+
+it.each([["direct", "docklet-agent"], ["edge", "docklet-edge-agent"]] as const)("names the %s agent container and preserves its system label", (connection, name) => {
+  const a = buildInstallArtifacts({ ...plan, connection });
+  expect(a.compose).toContain(`name: ${name}\n`);
+  expect(a.compose).toContain(`    container_name: ${name}\n`);
+  expect(a.compose).toContain('io.docklet.system: "agent"');
+});
