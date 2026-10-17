@@ -22,3 +22,11 @@ test("agent target ships only the agent executable and defaults to agent mode", 
   assert.match(workflow, /docker build --tag docklet-next-hub:0\.0\.0/);
   assert.doesNotMatch(workflow, /docker push/);
 });
+
+test("deployment notes name onboarding authorization, retired endpoint and agent image requirements", () => {
+  const readme = readFileSync("deploy/hub/README.md", "utf8");
+  assert.match(readme, /Environment creation, updates and deletion require a\nglobal administrator/);
+  assert.match(readme, /`GET \/api\/environments\/\{id\}\/deployment` returns HTTP 410/);
+  assert.match(readme, /DOCKLET_AGENT_IMAGE/);
+  assert.match(readme, /Ensure the selected agent image\nexists on each target host/);
+});
