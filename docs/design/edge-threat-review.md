@@ -104,7 +104,10 @@ Edge host exposes no port.
 Mitigations in Arcane: tokens are long random values compared in constant time;
 rotation replaces the key, sets the host to pending and deletes the old key
 (`RegenerateEnvironmentApiKey`, `linkEnvironmentApiKey` in
-`internal/environment/service.go`); deleting a host cascades its key.
+`internal/environment/service.go`); deleting a host cascades its key. Both reject
+new authentication with the old key: hub API calls, Edge registrations and each
+Edge poll request resolve the token again. Neither revokes an established
+session (T4).
 
 Residual risk: the token equals root on one host, in both modes. The scope stays
 one host. Verdict: **accepted**. Onboarding keeps the token out of command-line
@@ -130,9 +133,22 @@ provisioned outside the hub with `EDGE_MTLS_MODE=required` bind a session to mor
 than the token. Connect and disconnect transitions are recorded as events
 (`createEdgeConnectionEvent`).
 
-Residual risk: equal to T3 plus disclosure of what the hub sends to that host.
-Verdict: **accepted**; the Hosts page shows connection events and the connected
-agent instance, and rotation ends the impersonation (D4 on mTLS).
+Rotation does not end an established WebSocket or gRPC tunnel. The session
+authenticates once at registration; later frames and heartbeats are not checked
+against the current token (`server.go`, message loop and `handleHeartbeat`).
+Forwarding selects the tunnel by environment ID and injects the current token
+(`proxyActiveEdgeTunnelInternal` and `setProxyContextHeadersInternal` in
+`internal/middleware/environment.go`), so an impersonator learns the replacement
+token from the next proxied request. `ApplyEnvironmentRuntimeState` even reports
+the host online over its persisted `pending` state while that tunnel exists.
+Deleting the host rejects new registrations and stops ordinary forwarding once
+the row is gone, but leaves the tunnel open.
+
+Residual risk: equal to T3 plus disclosure of what the hub sends to that host,
+and incident recovery by rotation fails against a connected impersonator.
+Verdict: **needs change** (review decision B2): rotation and removal revoke
+established sessions. The Hosts page shows connection events and the connected
+agent instance; D4 covers mTLS.
 
 ### T5. Compromised host reaches beyond itself (H)
 
@@ -274,7 +290,7 @@ credentials never leave the hub boundary; agents receive only the agent token.
 | T1 Direct eavesdropping | N | accepted |
 | T2 Edge eavesdropping or hub impersonation | N | accepted |
 | T3 Stolen token controls its host | T | accepted |
-| T4 Stolen token impersonates Edge agent | T | accepted |
+| T4 Stolen token impersonates Edge agent | T | needs change |
 | T5 Compromised host reaches beyond itself | H | accepted |
 | T6 Agent responses on hub origin | H, T | needs change |
 | T7 Compromised hub or backup | M | accepted |
@@ -340,6 +356,18 @@ this record on 2026-10-17. Each item is new work in the issue named.
   with `text/html` and with `image/svg+xml`, each with inline script and no
   `Content-Disposition`, reaches the browser with the policy, `nosniff`, no
   `Set-Cookie` and only allowlisted headers.
+- **B2. Rotation and removal revoke established sessions (T3, T4), #81.** Two
+  effects are kept apart. Rejecting new authentication with the old key exists
+  in Arcane. Revoking established sessions is new: rotating a host's token or
+  removing the host closes its Edge WebSocket or gRPC tunnel, drops its poll
+  session state and ends open proxied streams such as shells and logs, for
+  direct and Edge hosts. Each tunnel records the API key ID it registered with;
+  forwarding injects the agent token only into a tunnel whose key ID is current
+  and closes any other, so a new token is never delivered through a session
+  authenticated with the old token. Runtime state reports a host online only for
+  a tunnel with the current key. Verification: after rotation and after removal,
+  an Edge session registered with the old token is closed, receives no request
+  carrying the new token, and a new registration with the old token is rejected.
 - **B3. Hub user credentials stay at the hub (T11), #81.** Before forwarding,
   direct and Edge transports, HTTP and WebSocket alike, remove the caller's
   `Authorization`, `Cookie` and `X-API-Key` headers and the configured

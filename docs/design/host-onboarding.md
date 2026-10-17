@@ -108,8 +108,10 @@ machine routes already keep their own contract ([identity](identity.md)).
 | On the host | Written only to the install directory's `.env` with mode 600; never a command-line argument | Reference generator; Arcane also reads the token from a file (`options:"file"`) |
 | Use | Same value in both directions and as the hub API key for that host | Arcane (threat review T3) |
 | Rotation | Regenerate action in the artefact view: new key, host set to `pending`, old key deleted, Edge token cache synced; the operator reruns the install or edits `.env` | Arcane (`RegenerateEnvironmentApiKey`); reference button in `InstallArtifacts.tsx`, live wiring **new** |
+| Rotation, sessions | Established tunnels and proxied streams of the host are closed; the new token is never sent through a session authenticated with the old one | **New**, #81 (review decision B2 in the threat review) |
 | Pending | A `pending` host's token stays valid with no expiry; deleting the host revokes it | Arcane |
-| Removal | Deleting a host cascades its key; the hub API and the Edge tunnel then reject it | Arcane |
+| Removal | Deleting a host cascades its key; the hub API and Edge registration then reject new authentication with it | Arcane |
+| Removal, sessions | Established tunnels and proxied streams of the host are closed | **New**, #81 (review decision B2) |
 
 Rotation and deletion produce environment events
 (`EventTypeEnvironmentApiKeyRegenerated` and create/delete events in
