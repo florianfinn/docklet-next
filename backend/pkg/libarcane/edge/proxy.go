@@ -217,7 +217,7 @@ func ProxyHTTPRequest(c *echo.Context, tunnel *AgentTunnel, targetPath string) e
 	}
 
 	headers := make(map[string]string)
-	for k, v := range req.Header {
+	for k, v := range AgentRequestHeaders(req.Header) {
 		if len(v) > 0 {
 			if isHopByHopHeader(k) || isBrowserSecurityHeader(k) {
 				continue
@@ -247,11 +247,11 @@ func ProxyHTTPRequest(c *echo.Context, tunnel *AgentTunnel, targetPath string) e
 		return c.JSON(http.StatusBadGateway, map[string]any{"error": "failed to proxy request through tunnel"})
 	}
 
+	responseHeaders := make(http.Header)
 	for k, v := range respHeaders {
-		if !isHopByHopHeader(k) {
-			c.Response().Header().Set(k, v)
-		}
+		responseHeaders.Set(k, v)
 	}
+	CopyResponseHeaders(responseHeaders, c.Response().Header(), BuildHopByHopHeaders(responseHeaders))
 
 	return c.Blob(status, respHeaders["Content-Type"], respBody)
 }

@@ -32,6 +32,7 @@ import (
 	"github.com/florianfinn/docklet-next/backend/pkg/authz"
 	"github.com/florianfinn/docklet-next/backend/pkg/libarcane/edge"
 	"github.com/florianfinn/docklet-next/backend/pkg/libarcane/ws"
+	"github.com/florianfinn/docklet-next/backend/pkg/remenv"
 	"github.com/florianfinn/docklet-next/backend/pkg/utils/httpx"
 )
 
@@ -84,7 +85,8 @@ type EnvironmentMiddleware struct {
 	registry      *edge.TunnelRegistry
 	matcher       *authz.PermissionMatcher
 	// checkOrigin shares the local WebSocket origin and credential policy.
-	checkOrigin func(*http.Request) bool
+	checkOrigin         func(*http.Request) bool
+	proxyIdentityHeader string
 }
 
 // NewEnvProxyMiddlewareWithParamAndRegistry creates middleware with an injected tunnel registry.
@@ -96,6 +98,7 @@ func NewEnvProxyMiddlewareWithParamAndRegistry(
 	matcher *authz.PermissionMatcher,
 	registry *edge.TunnelRegistry,
 	checkOrigin func(*http.Request) bool,
+	proxyIdentityHeader ...string,
 ) echo.MiddlewareFunc {
 	if registry == nil {
 		registry = edge.NewTunnelRegistry()
@@ -110,6 +113,9 @@ func NewEnvProxyMiddlewareWithParamAndRegistry(
 		registry:      registry,
 		matcher:       matcher,
 		checkOrigin:   checkOrigin,
+	}
+	if len(proxyIdentityHeader) > 0 {
+		m.proxyIdentityHeader = proxyIdentityHeader[0]
 	}
 	return func(next echo.HandlerFunc) echo.HandlerFunc {
 		return func(c *echo.Context) error {
@@ -445,6 +451,7 @@ func (m *EnvironmentMiddleware) proxyRecoveredEdgeTunnelInternal(c *echo.Context
 }
 
 func (m *EnvironmentMiddleware) setProxyContextHeadersInternal(c *echo.Context, accessToken *string) {
+	remenv.StripHubCredentials(c.Request().Header, m.proxyIdentityHeader)
 	if accessToken != nil && *accessToken != "" {
 		c.Request().Header.Set(edge.HeaderAgentToken, *accessToken)
 		c.Request().Header.Set(edge.HeaderAPIKey, *accessToken)
@@ -696,7 +703,7 @@ func (m *EnvironmentMiddleware) createProxyRequest(c *echo.Context, target strin
 
 	skip := edge.GetSkipHeaders()
 	edge.CopyRequestHeaders(srcReq.Header, req.Header, skip)
-	edge.SetAuthHeader(req, c)
+	remenv.StripHubCredentials(req.Header, m.proxyIdentityHeader)
 	edge.SetAgentToken(req, accessToken)
 	edge.SetForwardedHeaders(req, c.RealIP(), srcReq.Host)
 

@@ -106,11 +106,8 @@ func TestSignInDirectAgentCookieBoundary(t *testing.T) {
 					require.NotContains(t, got.header, "Cookie")
 					require.NotContains(t, got.header, "Origin")
 					require.Equal(t, agentToken, got.header.Get(middleware.HeaderAgentToken))
-					if mode == "local" {
-						require.Equal(t, "Bearer "+f.tokens.BrowserToken, got.header.Get("Authorization"))
-					} else {
-						require.Empty(t, got.header.Get("Authorization"))
-					}
+					require.Empty(t, got.header.Get("Authorization"))
+					require.Empty(t, got.header.Get("Remote-User"))
 				case <-ctx.Done():
 					t.Fatal("agent request did not complete before the deadline")
 				}
