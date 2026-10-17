@@ -649,6 +649,7 @@ func (m *EnvironmentMiddleware) proxyWebSocket(c *echo.Context, target string, a
 
 // proxyHTTP handles standard HTTP proxy requests.
 func (m *EnvironmentMiddleware) proxyHTTP(c *echo.Context, target string, accessToken *string) error {
+	edge.CopyResponseHeaders(nil, c.Response().Header(), nil)
 	if isEdgeEnvironmentURLInternal(target) {
 		slog.WarnContext(c.Request().Context(), "Refusing direct HTTP proxy to edge environment without active tunnel", "target", target)
 		return m.abortEdgeTunnelUnavailable(c)

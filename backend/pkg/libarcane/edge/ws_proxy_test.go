@@ -109,7 +109,7 @@ func TestProxyWebSocketRequest(t *testing.T) {
 	// Client Connect
 	proxyURL := "ws" + strings.TrimPrefix(proxyServer.URL, "http") + "/proxy-ws"
 	clientConn, _, err := websocket.Dial(t.Context(), proxyURL, &websocket.DialOptions{
-		HTTPHeader: http.Header{"Cookie": {"docklet_csrf=example; proxy_session=example"}},
+		HTTPHeader: http.Header{"Cookie": {"docklet_csrf=example; proxy_session=example"}, "Authorization": {"Bearer example"}, "X-Api-Key": {"example"}, "Remote-User": {"operator"}},
 	})
 	require.NoError(t, err)
 	defer func() { _ = clientConn.CloseNow() }()
@@ -119,7 +119,7 @@ func TestProxyWebSocketRequest(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, "hello", string(msg))
 	for name := range <-receivedHeaders {
-		assert.NotEqual(t, "Cookie", http.CanonicalHeaderKey(name))
+		require.NotContains(t, []string{"Cookie", "Authorization", "X-Api-Key", "Remote-User"}, http.CanonicalHeaderKey(name))
 	}
 
 	// Send data from Client to Agent

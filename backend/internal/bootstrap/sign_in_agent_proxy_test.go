@@ -90,7 +90,7 @@ func TestSignInDirectAgentCookieBoundary(t *testing.T) {
 			hub.Start()
 			defer hub.Close()
 
-			headers := http.Header{"Origin": {f.cfg.AppUrl}, "Remote-User": {"operator"}}
+			headers := http.Header{"Origin": {f.cfg.AppUrl}, "Remote-User": {"operator"}, "Authorization": {"Bearer " + f.tokens.AccessToken}}
 			browserRequest := &http.Request{Header: headers}
 			browserRequest.AddCookie(&http.Cookie{Name: "docklet_csrf", Value: "example-csrf"})
 			browserRequest.AddCookie(&http.Cookie{Name: "proxy_session", Value: "example-proxy-session"})

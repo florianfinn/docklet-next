@@ -202,6 +202,7 @@ func (s *grpcResponseState) handleCommandComplete(incoming *TunnelMessage) (int,
 
 // ProxyHTTPRequest is a helper that proxies an echo context through a tunnel
 func ProxyHTTPRequest(c *echo.Context, tunnel *AgentTunnel, targetPath string) error {
+	CopyResponseHeaders(nil, c.Response().Header(), nil)
 	req := c.Request()
 	ctx := req.Context()
 

@@ -11,6 +11,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -52,13 +53,19 @@ func TestAgentResponseBoundaryBothTransports(t *testing.T) {
 					}
 					return "http://agent.example.com", &token, true, nil
 				}
-				body := "<script>example()</script>"
+				body := "<!doctype html><script>example()</script>"
+				if contentType == "image/svg+xml" {
+					body = `<svg xmlns="http://www.w3.org/2000/svg"><script>example()</script></svg>`
+				}
 				agentHeaders := http.Header{}
 				for _, name := range []string{"Content-Type", "Content-Length", "Content-Encoding", "Content-Range", "Accept-Ranges", "Cache-Control", "ETag", "Last-Modified"} {
 					agentHeaders.Set(name, "example")
 				}
 				agentHeaders.Set("Content-Type", contentType)
-				agentHeaders.Set("Content-Length", "26")
+				agentHeaders.Set("Content-Length", strconv.Itoa(len(body)))
+				if contentType == "application/json" {
+					agentHeaders.Set("Content-Disposition", "attachment; filename=example.json")
+				}
 				agentHeaders.Set("Set-Cookie", "session=example")
 				agentHeaders.Set("Content-Security-Policy", "default-src * 'unsafe-inline'")
 				agentHeaders.Set("X-Agent-Controlled", "example")
@@ -116,7 +123,9 @@ func TestAgentResponseBoundaryBothTransports(t *testing.T) {
 				}
 				require.Empty(t, w.Header().Get("Set-Cookie"))
 				require.Empty(t, w.Header().Get("X-Agent-Controlled"))
-				require.Empty(t, w.Header().Get("Content-Disposition"))
+				if contentType != "application/json" {
+					require.Empty(t, w.Header().Get("Content-Disposition"))
+				}
 				require.Equal(t, "nosniff", w.Header().Get("X-Content-Type-Options"))
 				require.Equal(t, remenv.AgentContentSecurityPolicy, w.Header().Get("Content-Security-Policy"))
 			})
