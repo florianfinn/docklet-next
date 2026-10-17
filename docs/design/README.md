@@ -15,6 +15,7 @@ GitHub issues and milestones hold implementation and acceptance evidence.
 | [Run gate and single-hub operation](run-gate.md) | Activity states, gated admission, cancellation, restart recovery and one hub per database |
 | [Database baseline](database-baseline.md) | SQLite baseline contract, forward-only policy and historical integrity reference |
 | [Agent surface](agent-surface.md) | Agent and Edge agent module allowlist and host exposure |
+| [Edge threat review](edge-threat-review.md) | Assets, attacker positions and verdicts for the adopted Edge tunnel and agent mode |
 | [Functional cut](functional-cut.md) | M1 module decisions and the R5 evaluation |
 | [Frontend consolidation](frontend-consolidation.md) | Frozen React reference and product/demo boundary |
 | [Language](language.md) | English repository and UI base, complete German |
