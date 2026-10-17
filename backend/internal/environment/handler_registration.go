@@ -61,7 +61,6 @@ func (h *EnvironmentHandler) CreateEnvironment(ctx context.Context, input *Creat
 }
 
 func (h *EnvironmentHandler) createEnvironmentWithApiKeyInternal(ctx context.Context, env *Environment, user *usertypes.Actor) (*handlerutil.Out[EnvironmentWithApiKey], error) {
-	// New API key-based pairing flow
 	env.Status = string(EnvironmentStatusPending)
 
 	created, err := h.environmentService.CreateEnvironment(ctx, env, &user.ID, &user.Username)
@@ -126,7 +125,7 @@ func (h *EnvironmentHandler) createEnvironmentLegacyInternal(ctx context.Context
 		return nil, huma.Error500InternalServerError("Failed to create environment: " + err.Error())
 	}
 
-	// Sync registries and git repositories in background (intentionally detached from request context)
+	// Registry delivery is detached from the request and gated by agent compatibility.
 	if created.AccessToken != nil && *created.AccessToken != "" {
 		h.triggerEnvironmentResourceSyncInternal(ctx, created.ID, created.Name, "environment creation")
 	}

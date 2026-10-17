@@ -136,7 +136,7 @@ func (s *EnvironmentService) RunHealthChecksNow(ctx context.Context) error {
 }
 
 // runHealthCheckInternal tests one environment's connection (updating its DB status)
-// and, for online remotes, syncs registries and repositories to it.
+// and syncs registries only to compatible remote agents.
 func (s *EnvironmentService) runHealthCheckInternal(ctx context.Context, envID string) (scheduler.Outcome, error) {
 	lease, admitted, err := s.jobs.TryAcquire(ctx, envID)
 	if err != nil {
