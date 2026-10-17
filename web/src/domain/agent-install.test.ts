@@ -163,3 +163,9 @@ describe("agent installer security contract", () => {
     }
   });
 });
+
+it.each([["192.0.2.12", "192.0.2.12:"], ["[2001:db8::12]", "[2001:db8::12]:"], ["2001:db8::12", "[2001:db8::12]:"], ["agent.example.com", ""]])("binds direct agent address %s to the configured IP when literal", (address, binding) => {
+  const a = buildInstallArtifacts({ ...plan, connection: "direct", address, port: 4552 });
+  expect(a.compose).toContain(`      - "${binding}4552:3552"`);
+  expect(a.compose).toContain("host firewall");
+});

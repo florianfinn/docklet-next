@@ -1,5 +1,7 @@
 // Generates installation artefacts locally; host access only happens in the installer.
 import type { FileOwner, HostConnection } from "./model";
+import { parseIp } from "./networks";
+import { parseIp6 } from "./ipv6";
 import { SYSTEM_LABEL } from "./system";
 import { absolutePath, installDirProblem, isInside } from "./validation";
 
@@ -49,6 +51,8 @@ function validatePlan(plan: AgentInstallPlan): void {
 }
 
 export function agentCompose(plan: AgentInstallPlan): string {
+  const address = plan.address.replace(/^\[|\]$/g, "");
+  const binding = parseIp(address) !== undefined ? `${address}:` : parseIp6(address) !== undefined ? `[${address}]:` : "";
   return [
     "# Docklet agent; runtime detects the Docker socket group before dropping privileges.",
     "name: docklet-agent",
@@ -61,7 +65,7 @@ export function agentCompose(plan: AgentInstallPlan): string {
     `      ${SYSTEM_LABEL}: "agent"`,
     '      com.getarcaneapp.arcane.hidden: "true"',
     ...(plan.socketGid === undefined ? [] : ["    group_add:", `      - "${plan.socketGid}"`]),
-    ...(plan.connection === "direct" ? ["    # Restrict this published port to the hub with the host firewall.", "    ports:", `      - "${plan.port}:${AGENT_PORT}"`] : []),
+    ...(plan.connection === "direct" ? ["    # Restrict this published port to the hub with the host firewall.", "    ports:", `      - "${binding}${plan.port}:${AGENT_PORT}"`] : []),
     "    volumes:",
     "      - /var/run/docker.sock:/var/run/docker.sock",
     `      - ${JSON.stringify(`${plan.projectDir}:${plan.projectDir}`)}`,
