@@ -111,6 +111,7 @@ export default function SetupPage() {
         }
         const passwordSet = draft.auth.mode === "local" && draft.password.password.length > 0;
         await adapter.completeSetup({ general: draft.general, hostDefaults: draft.hostDefaults, auth: { ...draft.auth, local: { ...draft.auth.local, passwordSet: connected ? true : passwordSet } } });
+        await Promise.all([queryClient.invalidateQueries({ queryKey: queryKeys.settings }), queryClient.invalidateQueries({ queryKey: queryKeys.connectedSettings })]);
         patchSetup({ password: { password: "", confirm: "" }, reached: SETUP_STEPS.length - 1 });
         go("done");
       } catch (e) {

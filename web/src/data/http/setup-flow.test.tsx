@@ -13,6 +13,7 @@ import { toast } from "sonner";
 import { AuthGate } from "@/app/AuthGate";
 import { SetupGate } from "@/app/SetupGate";
 import { renderRoutes } from "@/test/render";
+import SettingsPage from "@/features/settings/SettingsPage";
 import { restartSetup } from "@/features/setup/setup-draft";
 
 import { createHttpAdapter } from "./http-adapter";
@@ -23,7 +24,7 @@ it.each(["/dashboard", "/settings/general", "failure"])("stores host defaults se
   const fail = target === "failure";
   const errorToast = vi.spyOn(toast, "error");
   restartSetup();
-  const settings: Record<string, string> = { setupCompleted: "false" };
+  const settings: Record<string, string> = { setupCompleted: "false", hubName: "Before setup", hubAddress: "", domainUrl: "", linkBase: "auto", effectiveTimeZone: "Europe/Berlin", actionPresentation: "dialog", keepActionOutput: "true" };
   let changedPassword = false;
   const writes: Record<string, string>[] = [];
   const fetcher = async (input: RequestInfo | URL, init?: RequestInit) => {
@@ -51,9 +52,13 @@ it.each(["/dashboard", "/settings/general", "failure"])("stores host defaults se
     throw new Error(`unexpected ${path}`);
   };
   const adapter = createHttpAdapter({ fetch: fetcher as typeof fetch, eventSource: () => ({ close() {}, onopen: null, onmessage: null, onerror: null }) });
-  const { router } = renderRoutes([{ path: "/setup", element: <SetupGate /> }, { element: <AuthGate />, children: [{ path: "/dashboard", element: <p>Dashboard target</p> }, { path: "/settings/general", element: <p>Settings target</p> }] }, { path: "/login", element: <p>Login</p> }], ["/setup"], adapter);
+  const { router } = renderRoutes([{ path: "/setup", element: <SetupGate /> }, { element: <AuthGate />, children: [{ path: "/dashboard", element: <p>Dashboard target</p> }, { path: "/settings/:section", element: <SettingsPage /> }] }, { path: "/login", element: <p>Login</p> }], ["/setup"], adapter);
   const next = () => userEvent.click(screen.getByRole("button", { name: "Weiter" }));
   await userEvent.type(await screen.findByLabelText("Interne Hub-Adresse"), "192.0.2.10:8080");
+  const name = screen.getByLabelText("Name des Hubs");
+  await userEvent.clear(name);
+  await userEvent.type(name, "Setup Hub");
+  await userEvent.type(screen.getByLabelText("Domain (optional)"), "https://docklet.example.com");
   await next();
   await screen.findByLabelText("Standard-Projektverzeichnis");
   await next();
@@ -67,13 +72,37 @@ it.each(["/dashboard", "/settings/general", "failure"])("stores host defaults se
   expect(writes[0]?.agentProjectsDirectory).toBe("/home/docker");
   expect(writes[0]?.projectsDirectory).toBeUndefined();
   if (!fail) {
-    await userEvent.click(await screen.findByRole("link", { name: target === "/dashboard" ? "Zum Dashboard" : "Hub-Einstellungen ansehen" }));
-    await screen.findByText(target === "/dashboard" ? "Dashboard target" : "Settings target");
+    const locations: string[] = [];
+    const unsubscribe = router.subscribe((state) => locations.push(state.location.pathname));
+    const doneLink = await screen.findByRole("link", { name: target === "/dashboard" ? "Zum Dashboard" : "Hub-Einstellungen ansehen" });
+    // Publish completion first, so batching with Link navigation cannot hide a gate redirect.
+    doneLink.addEventListener("click", (event) => event.preventDefault(), { once: true });
+    await userEvent.click(doneLink);
+    expect(router.state.location.pathname).toBe("/setup");
+    expect(locations).toEqual([]);
+    expect(screen.queryByRole("link", { name: "Hub-Einstellungen ansehen" }) !== null).toBe(true);
+    await userEvent.click(doneLink);
+    unsubscribe();
+    expect(locations).toEqual([target]);
+    if (target === "/dashboard") await screen.findByText("Dashboard target");
+    else {
+      await waitFor(() => expect((screen.getByLabelText("Name des Hubs") as HTMLInputElement).value).toBe("Setup Hub"));
+      expect((screen.getByLabelText("Interne Hub-Adresse") as HTMLInputElement).value).toBe("192.0.2.10:8080");
+      expect((screen.getByLabelText("Domain (optional)") as HTMLInputElement).value).toBe("https://docklet.example.com");
+      const domain = screen.getByLabelText("Domain (optional)");
+      await userEvent.clear(domain);
+      await userEvent.type(domain, "https://hub.example.com");
+      await userEvent.click(screen.getByRole("button", { name: "Speichern" }));
+      await screen.findByText("Alles gespeichert");
+      expect(settings.hubName).toBe("Setup Hub");
+      expect(settings.hubAddress).toBe("192.0.2.10:8080");
+      expect(settings.domainUrl).toBe("https://hub.example.com");
+    }
     expect(router.state.location.pathname).toBe(target);
   }
   errorToast.mockRestore();
   expect(changedPassword).toBe(true);
-  expect(writes).toHaveLength(1);
+  expect(writes).toHaveLength(target === "/settings/general" ? 2 : 1);
   expect(writes[0]?.timeZone).toBeUndefined();
   expect(JSON.stringify(writes).includes("old-password") || JSON.stringify(writes).includes("New-password1!")).toBe(false);
 });
