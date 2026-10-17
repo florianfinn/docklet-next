@@ -26,6 +26,7 @@ type agentSession struct {
 	token    string
 	endpoint string
 	keyID    string
+	tunnel   *edge.AgentTunnel
 	checkMu  sync.Mutex
 	checked  bool
 	info     *version.Info
@@ -59,7 +60,11 @@ func (s *EnvironmentService) AgentAccess(ctx context.Context, id string, token *
 		keyID = *env.ApiKeyID
 	}
 	session := s.agentSessionFor(ctx, env)
-	requestCtx, cancel := context.WithCancel(edge.WithSessionCredential(ctx, keyID, *env.AccessToken, s.edgeSessionCurrent))
+	boundCtx := edge.WithSessionCredential(ctx, keyID, *env.AccessToken, s.edgeSessionCurrent)
+	if env.IsEdge && !contract.AgentRecoveryRoute(method, path) {
+		boundCtx = edge.WithSessionTunnel(boundCtx, session.tunnel)
+	}
+	requestCtx, cancel := context.WithCancel(boundCtx)
 	stop := context.AfterFunc(session.ctx, cancel)
 	cleanup := func() { stop(); cancel() }
 	if !contract.AgentRecoveryRoute(method, path) {
@@ -80,18 +85,22 @@ func (s *EnvironmentService) agentSessionFor(ctx context.Context, env *Environme
 	if env.ApiKeyID != nil {
 		keyID = *env.ApiKeyID
 	}
+	var tunnel *edge.AgentTunnel
+	if env.IsEdge {
+		tunnel, _ = edge.GetRegistry().Get(env.ID).Get()
+	}
 	s.agentRuntime.mu.Lock()
 	defer s.agentRuntime.mu.Unlock()
 	if s.agentRuntime.sessions == nil {
 		s.agentRuntime.sessions = make(map[string]*agentSession)
 	}
 	session := s.agentRuntime.sessions[env.ID]
-	if session == nil || session.token != *env.AccessToken || session.endpoint != env.ApiUrl || session.keyID != keyID {
+	if session == nil || session.token != *env.AccessToken || session.endpoint != env.ApiUrl || session.keyID != keyID || session.tunnel != tunnel {
 		if session != nil {
 			session.cancel()
 		}
 		sessionCtx, cancel := context.WithCancel(context.WithoutCancel(ctx))
-		session = &agentSession{token: *env.AccessToken, endpoint: env.ApiUrl, keyID: keyID, ctx: sessionCtx, cancel: cancel}
+		session = &agentSession{token: *env.AccessToken, endpoint: env.ApiUrl, keyID: keyID, tunnel: tunnel, ctx: sessionCtx, cancel: cancel}
 		s.agentRuntime.sessions[env.ID] = session
 	}
 	return session

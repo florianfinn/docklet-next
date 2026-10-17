@@ -95,3 +95,26 @@ func TestAgentCompatibilityRefreshInvalidatesVerdict(t *testing.T) {
 	}
 	require.Equal(t, 6, f.count("GET /api/app-version"))
 }
+
+func TestEdgeReconnectRefreshesCompatibility(t *testing.T) {
+	f := newAgentFixture(t, "edge", version.Info{AgentContractVersion: contract.AgentHubVersion, AgentContractFingerprint: contract.AgentHubFingerprint})
+	_, err := f.service.ExecuteRemoteRequest(t.Context(), f.id, "GET", "/api/environments/0/containers", nil)
+	require.NoError(t, err)
+	oldContext, cancel, err := f.service.AgentAccess(t.Context(), f.id, &f.token, "GET", "/api/environments/0/containers")
+	require.NoError(t, err)
+	defer cancel()
+	// Reconnection is visible in the registry before its asynchronous version callback.
+	send := f.conn.send
+	f.conn = &agentMemoryConn{send: send}
+	f.tunnel = edge.NewAgentTunnelWithConn(f.id, f.conn)
+	f.tunnel.APIKeyID = "example"
+	f.tunnel.TokenHash = edge.AgentTokenHash(f.token)
+	edge.GetRegistry().Register(f.id, f.tunnel)
+	f.info.AgentContractFingerprint = "different"
+	_, err = f.service.ExecuteRemoteRequest(t.Context(), f.id, "GET", "/api/environments/0/containers", nil)
+	require.ErrorIs(t, err, ErrAgentUpdateRequired)
+	require.Equal(t, 2, f.count("GET /api/app-version"))
+	require.Equal(t, 1, f.count("GET /api/environments/0/containers"))
+	require.Error(t, edge.RequireSessionKey(oldContext, f.tunnel))
+	require.False(t, f.conn.IsClosed(), "the rejected old request must leave the current connection open")
+}
