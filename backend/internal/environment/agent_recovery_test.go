@@ -161,7 +161,8 @@ func TestEdgeOldTunnelObserverDoesNotCancelCurrentSession(t *testing.T) {
 	f := newAgentFixture(t, "edge", version.Info{})
 	env, err := f.service.GetEnvironmentByID(ctx, f.id)
 	require.NoError(t, err)
-	initial := f.service.agentSessionFor(ctx, env)
+	initial, err := f.service.agentSessionFor(ctx, env)
+	require.NoError(t, err)
 	defer initial.cancel()
 
 	f.service.agentRuntime.mu.Lock()
@@ -172,7 +173,12 @@ func TestEdgeOldTunnelObserverDoesNotCancelCurrentSession(t *testing.T) {
 		}
 	}()
 	observed := make(chan *agentSession, 1)
-	go func() { observed <- f.service.agentSessionFor(ctx, env) }()
+	observerError := make(chan error, 1)
+	go func() {
+		session, err := f.service.agentSessionFor(ctx, env)
+		observed <- session
+		observerError <- err
+	}()
 	require.Eventually(t, func() bool {
 		return agentStackContains("TestEdgeOldTunnelObserverDoesNotCancelCurrentSession.func", "agentSessionFor")
 	}, time.Second, time.Millisecond, "old registry observer must be blocked on the runtime lock")
@@ -182,7 +188,8 @@ func TestEdgeOldTunnelObserverDoesNotCancelCurrentSession(t *testing.T) {
 	edge.GetRegistry().Register(f.id, replacement)
 	// Install the session a reconnect observer created before the older reader got the lock.
 	newOwner := &EnvironmentService{}
-	current := newOwner.agentSessionFor(ctx, env)
+	current, err := newOwner.agentSessionFor(ctx, env)
+	require.NoError(t, err)
 	defer current.cancel()
 	f.service.agentRuntime.sessions[f.id] = current
 	streamCtx, finish := context.WithCancel(ctx)
@@ -194,6 +201,7 @@ func TestEdgeOldTunnelObserverDoesNotCancelCurrentSession(t *testing.T) {
 
 	select {
 	case stale := <-observed:
+		require.NoError(t, <-observerError)
 		require.NoError(t, current.ctx.Err(), "old tunnel identity must not revoke the current session")
 		require.Same(t, current, stale, "an old tunnel snapshot must reuse the credential session")
 	case <-ctx.Done():
