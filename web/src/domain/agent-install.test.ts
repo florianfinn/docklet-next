@@ -20,7 +20,7 @@ afterEach(() => { for (const root of roots.splice(0)) rmSync(root, { recursive: 
 const plan: AgentInstallPlan = {
   hostName: "Example host", connection: "edge", address: "agent.example.com", port: 3552,
   hubUrl: "http://hub.example.com", projectDir: "/srv/projects", installDir: "/srv/projects/docklet-agent",
-  token: "example", timeZone: "UTC", image: "registry.example.com/docklet/agent:0.1.0",
+  token: "test-only", timeZone: "UTC", image: "registry.example.com/docklet/agent:0.1.0",
 };
 
 function fixture() {

@@ -1,4 +1,4 @@
-import { Bot, Cable, ClipboardCheck, Eye, FileArchive, Filter, PlugZap, Settings2, Trash2, TriangleAlert, Unplug } from "lucide-react";
+import { Bot, Cable, Eye, FileArchive, Filter, PlugZap, Settings2, Trash2, Unplug } from "lucide-react";
 import { useState, type ReactNode } from "react";
 import { useTranslations } from "use-intl";
 
@@ -17,6 +17,7 @@ import { Button } from "@/shared/ui/button";
 import { Card } from "@/shared/ui/card";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/shared/ui/tooltip";
 
+import { AgentReportSection } from "./AgentReportSection";
 import { HostSettingsDialog } from "./HostSettingsDialog";
 import { useHostAction, useHostCommands } from "./use-host-commands";
 
@@ -26,45 +27,6 @@ function Row({ label, children, mono }: { label: string; children: ReactNode; mo
       <dt className="text-muted-foreground">{label}</dt>
       <dd className={cn("min-w-0 break-words", mono && "font-mono text-xs")}>{children}</dd>
     </>
-  );
-}
-
-/** What the installer found locally on the host, as the agent reported it after connecting. */
-function AgentReportSection({ host }: { host: Host }) {
-  const t = useTranslations("hosts.card.report");
-  const r = host.agentReport;
-  const reportTimeKey = host.status === "offline" ? "lastReported" : host.status === "update-required" ? "reportedUpdateRequired" : host.status === "pending" ? "reportedPending" : r?.simulated ? "reported" : "reportedLive";
-  return (
-    <section aria-label={t("title")} className="rounded-xl border bg-card/40 p-3">
-      <h3 className="mb-1.5 flex items-center gap-1.5 text-xs font-semibold text-muted-foreground">
-        <ClipboardCheck className="size-3.5" aria-hidden />
-        {t("title")}
-      </h3>
-      {!r ? (
-        <p className="text-xs text-muted-foreground">{t("pending")}</p>
-      ) : (
-        <>
-          <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1 text-sm">
-            <Row label={t("owner")} mono>
-              {t("ownerValue", { name: r.projectDirOwner.name, uid: r.projectDirOwner.uid, gid: r.projectDirOwner.gid, writable: String(r.projectDirWritable) })}
-            </Row>
-            {r.fileOwner && r.fileOwnerSource ? <Row label={t("fileIds")} mono>
-              {t("fileIdsValue", { uid: r.fileOwner.uid, gid: r.fileOwner.gid, source: r.fileOwnerSource })}
-            </Row> : null}
-            {r.socketGid !== undefined ? <Row label={t("socket")} mono>
-              {t("socketValue", { gid: r.socketGid, source: r.socketGidSource ?? "detected" })}
-            </Row> : null}
-          </dl>
-          {r.note !== "ok" && (
-            <p className={cn("mt-1.5 flex items-start gap-1.5 text-xs", r.note === "root-owned" ? "text-warning" : "text-muted-foreground")}>
-              {r.note === "root-owned" && <TriangleAlert className="mt-0.5 size-3.5 shrink-0" aria-hidden />}
-              {t(r.note === "root-owned" ? "root" : "unraid")}
-            </p>
-          )}
-          <p className="mt-1.5 text-[11px] text-muted-foreground">{t(reportTimeKey, { time: formatRelative(r.reportedAt) })}</p>
-        </>
-      )}
-    </section>
   );
 }
 

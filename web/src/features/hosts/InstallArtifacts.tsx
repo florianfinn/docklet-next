@@ -29,6 +29,7 @@ export function InstallArtifacts({ plan, onRegenerateToken }: { plan: AgentInsta
         <KeyRound className="text-warning" />
         <AlertDescription className="text-xs">{t("historyWarning")}</AlertDescription>
       </Alert>
+      {(plan.connection === "direct" || plan.hubUrl.startsWith("http://")) && <Alert><AlertDescription>{t("httpWarning")}</AlertDescription></Alert>}
       <div className="flex flex-wrap items-center gap-3 rounded-xl border bg-card/40 p-3">
         <div className="min-w-0 flex-1">
           <div className="text-xs font-medium text-muted-foreground">{t("token")}</div>

@@ -14,6 +14,7 @@ import { Button } from "@/shared/ui/button";
 import { Checkbox } from "@/shared/ui/checkbox";
 import { Label } from "@/shared/ui/label";
 
+import { AgentReportSection } from "../AgentReportSection";
 import { InstallArtifacts } from "../InstallArtifacts";
 import { useHostCommands } from "../use-host-commands";
 import { onboardingStore, patchDraft, type HostDraft } from "./onboarding-draft";
@@ -91,6 +92,8 @@ export function ConnectStep({ draft, host, hubUrl }: { draft: HostDraft; host: H
           <Stage key={s.key} state={s.state === "done" ? "done" : s.state === "running" ? "running" : s.state === "error" ? "error" : "pending"} title={s.label} detail={s.detail} />
         ))}
       </ol>
+      {host && <AgentReportSection host={host} />}
+      {host?.status === "update-required" && <Alert><AlertDescription>{t("updateRequired")}</AlertDescription></Alert>}
       {connected ? (
         <Alert className="animate-pop-in border-success/40 bg-success/8">
           <CheckCircle2 className="text-success" />
@@ -139,7 +142,7 @@ export function ConnectStep({ draft, host, hubUrl }: { draft: HostDraft; host: H
               </AlertDescription>
             </Alert>
           )}
-          <div className="flex flex-wrap items-center gap-3">
+          {import.meta.env.DEV && <div className="flex flex-wrap items-center gap-3">
             <Button onClick={() => void start()} disabled={running || !draft.hostId}>
               {running ? <Loader2 data-icon="inline-start" className="animate-spin" /> : null}
               {failed ? t("retry") : t("simulate")}
@@ -150,8 +153,8 @@ export function ConnectStep({ draft, host, hubUrl }: { draft: HostDraft; host: H
                 {t("simulateFailure")}
               </Label>
             </div>
-            <ToneBadge tone="violet">Simulation</ToneBadge>
-          </div>
+            <ToneBadge tone="violet">{t("simulation")}</ToneBadge>
+          </div>}
         </div>
       )}
     </div>
