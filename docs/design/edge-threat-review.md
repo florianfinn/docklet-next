@@ -372,7 +372,7 @@ direct agents, except loopback.
 ## Review decisions
 
 The maintainer decided the following after the first independent review of
-this record on 2026-10-17. Each item is new work in the issue named.
+this record on 2026-10-17. Items that name an issue are new work there.
 
 - **B1. Sandbox policy on proxied agent responses (T6), #81.** In addition to the
   D2 header allowlist, the hub sets `Content-Security-Policy: sandbox;
@@ -405,6 +405,9 @@ this record on 2026-10-17. Each item is new work in the issue named.
   Bearer header. They then set only the agent token headers. The four tests
   named in T11 confirm the current forwarding and change in #81 to assert its
   absence.
+- **B4. Installer token handling (T10), #84.** The token lives only in a
+  mode-600 `.env` created under a private umask; details are in
+  [host onboarding](host-onboarding.md#review-decisions).
 - **S2. Per-message limits (T12).** Frame limits are described per message. The
   accumulated Edge response body is an accepted residual at single-operator
   scale; no new byte budget or transport change follows.
@@ -417,6 +420,3 @@ this record on 2026-10-17. Each item is new work in the issue named.
   (`runHealthCheckInternal` in `internal/environment/service.go`). Until then
   only health, version and agent self-upgrade are forwarded, as D1 states. D1's
   version read after registration and the unchanged tunnel protocol stay.
-- **B4. Installer token handling (T10), #84.** The token lives only in a
-  mode-600 `.env` created under a private umask; details are in
-  [host onboarding](host-onboarding.md#review-decisions).
