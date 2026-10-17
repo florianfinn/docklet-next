@@ -14,6 +14,7 @@ import (
 	"log/slog"
 	"net/http"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/distribution/reference"
@@ -52,6 +53,10 @@ type latestRelease struct {
 }
 
 type VersionService struct {
+	onboardingMu             sync.Mutex
+	onboardingCache          *version.OnboardingChecks
+	onboardingCachedAt       time.Time
+	onboardingDockerHost     string
 	httpClient               *http.Client
 	cache                    *hot.HotCache[struct{}, latestRelease]
 	disabled                 bool
@@ -341,15 +346,6 @@ func (s *VersionService) GetAppVersionInfo(ctx context.Context) *version.Info {
 		BuildTime:                   config.BuildTime,
 		IsSemverVersion:             isSemver,
 		UpdateAvailable:             false,
-	}
-
-	if s.settingsService != nil {
-		settings := s.settingsService.GetSettingsConfig()
-		dockerHost := ""
-		if s.dockerService != nil {
-			dockerHost = s.dockerService.DockerHost()
-		}
-		info.OnboardingChecks = inspectOnboarding(settings.ProjectsDirectory.Value, dockerHost)
 	}
 
 	// If update checks disabled, return base info

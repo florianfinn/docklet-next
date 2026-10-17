@@ -285,9 +285,11 @@ have status `update-required`; health, version and agent self-upgrade stay
 available. System health uses HEAD, as its registered operation specifies.
 
 `Environment.agentReport` contains the last successful process-local version
-report and its observation time. The version response adds nullable
+report and its observation time. Only agent version requests authenticated with the
+configured manager credential add nullable
 `onboardingChecks`: project directory, numeric owner UID/GID, effective write
-access and socket group. Missing checks remain unknown. These fields do not
+access and socket group. Anonymous agent reads and all hub version reads omit
+these fields. The on-demand write probe is cached for 30 seconds. Missing checks remain unknown. These fields do not
 claim a manual identity source or resolve host account names. The HTTP adapter
 maps this report and connection state through `listHosts`; host mutations and
 system-component inventory keep their separate capability boundaries. Inventory

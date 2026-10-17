@@ -26,6 +26,10 @@ func RegisterVersion(api huma.API, versionService *VersionService) {
 
 	huma.Register(api, huma.Operation{
 		OperationID: "getAppVersion",
+		Middlewares: huma.Middlewares{func(ctx huma.Context, next func(huma.Context)) {
+			ctx.SetHeader("Cache-Control", "no-store")
+			next(ctx)
+		}},
 		Method:      "GET",
 		Path:        "/app-version",
 		Summary:     "Get app version",
