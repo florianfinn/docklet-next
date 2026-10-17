@@ -1,3 +1,4 @@
+import { useCapability } from "@/data/use-capability";
 import { Archive, Eye, FolderOpen, Layers, Play, Trash2 } from "lucide-react";
 import { useNavigate } from "react-router";
 import { useTranslations } from "use-intl";
@@ -20,17 +21,20 @@ export function deleteBlock(v: Pick<Volume, "kind" | "consumers">, host: Pick<Ho
 export function useVolumeMenu(v: Volume, host: Host | undefined, on: { remove: (v: Volume) => void; backup: (v: Volume) => void }): MenuGroups {
   const t = useTranslations("volumes.menu");
   const navigate = useNavigate();
+  const remove = useCapability("deleteVolume");
+  const backup = useCapability("runBackup");
+  const files = useCapability("listFiles");
   const online = host?.status === "online";
   return [
     [
       { id: "open", label: t("open"), icon: <Eye />, onSelect: () => navigate(`/volumes/${v.id}`) },
-      { id: "files", label: t("files"), icon: <FolderOpen />, disabled: !online, onSelect: () => navigate(filesHref(v)) },
+      { id: "files", label: t("files"), icon: <FolderOpen />, disabled: !files.available || !online, title: files.reason, onSelect: () => navigate(filesHref(v)) },
       { id: "backups", label: t("backups"), icon: <Archive />, onSelect: () => navigate(`/volumes/${v.id}?tab=backups`) },
     ],
     [
       ...(v.stackId ? [{ id: "stack", label: t("stack"), icon: <Layers />, onSelect: () => navigate(`/stacks/${v.stackId}`) }] : []),
-      { id: "backup", label: t("backupNow"), icon: <Play />, disabled: !online || !v.backup, onSelect: () => on.backup(v) },
+      { id: "backup", label: t("backupNow"), icon: <Play />, disabled: !backup.available || !!v.inventory?.stale || !online || !v.backup, title: backup.reason, onSelect: () => on.backup(v) },
     ],
-    v.kind === "volume" ? [{ id: "delete", label: t("delete"), icon: <Trash2 />, disabled: !!deleteBlock(v, host), onSelect: () => on.remove(v) }] : [],
+    v.kind === "volume" ? [{ id: "delete", label: t("delete"), icon: <Trash2 />, disabled: !remove.available || !!v.inventory?.stale || !!deleteBlock(v, host), title: remove.reason, onSelect: () => on.remove(v) }] : [],
   ];
 }

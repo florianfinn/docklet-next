@@ -32,6 +32,7 @@ export const enImages = {
   offlineNote: "Host disconnected – last known state, actions locked.",
   menu: { details: "Details", pullAgain: "Pull again", remove: "Remove", openUpdate: "Open update", security: "View findings" },
   details: {
+    unknown: "Unknown",
     title: "Image {name}",
     overview: "Overview",
     reference: "Reference",

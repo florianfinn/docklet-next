@@ -8,12 +8,12 @@ import type { Host, MetricsSnapshot } from "@/domain/model";
 import { SimulationBadge } from "@/shared/components/simulation-badge";
 import { ChartContainer, ChartTooltip, ChartTooltipContent, type ChartConfig } from "@/shared/ui/chart";
 
-/** Live CPU/RAM history per visible host; values come from the simulator. */
+/** CPU and memory histories contain only observed host samples. */
 export function LoadWidget({ hosts }: { hosts: Host[] }) {
   const t = useTranslations("dashboard.load");
   const [metric, setMetric] = useState<"cpu" | "mem">("cpu");
   const snapshot = useMetrics((s) => s) as MetricsSnapshot | undefined;
-  const online = hosts.filter((h) => h.status === "online");
+  const online = hosts.filter((h) => !!snapshot?.hosts[h.id]);
   const config = useMemo(() => Object.fromEntries(online.map((h) => [h.id, { label: h.name, color: h.color }])) satisfies ChartConfig, [online]);
   const data = useMemo(() => {
     const len = Math.max(0, ...online.map((h) => snapshot?.hosts[h.id]?.cpuHistory.length ?? 0));
@@ -21,7 +21,9 @@ export function LoadWidget({ hosts }: { hosts: Host[] }) {
       const row: Record<string, number> = { i };
       for (const h of online) {
         const hm = snapshot?.hosts[h.id];
-        row[h.id] = (metric === "cpu" ? hm?.cpuHistory : hm?.memHistory)?.[i] ?? 0;
+        const history = metric === "cpu" ? hm?.cpuHistory : hm?.memHistory;
+        const value = history?.[i - (len - history.length)];
+        if (value !== undefined) row[h.id] = value;
       }
       return row;
     });

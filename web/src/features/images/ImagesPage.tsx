@@ -1,3 +1,5 @@
+import { InventoryNotice } from "@/features/stacks/InventoryNotice";
+import { useCapability } from "@/data/use-capability";
 import { Download, Eraser, HardDrive, Package, PackageOpen, Search, Unlink } from "lucide-react";
 import { useCallback, useMemo, useState } from "react";
 import { useSearchParams } from "react-router";
@@ -41,6 +43,8 @@ export default function ImagesPage() {
   const ts = useTranslations("stacks");
   const tc = useTranslations("common.host");
   const images = useImages();
+  const createCapability = useCapability("pullImage");
+  const pruneCapability = useCapability("pruneImages");
   const hosts = useHostScope();
   const selection = useHostSelection();
   const layout = usePreference("imagesLayout");
@@ -123,17 +127,18 @@ export default function ImagesPage() {
         description={t("description", { scope })}
         actions={
           <>
-            <Button variant="outline" onClick={() => setPruning(true)} disabled={pending}>
+            <Button variant="outline" onClick={() => setPruning(true)} disabled={pending || !pruneCapability.available} title={pruneCapability.reason}>
               <Eraser data-icon="inline-start" />
               {t("prune")}
             </Button>
-            <Button onClick={() => setPulling({ hostId: scopeHosts.find((h) => h.status === "online")?.id ?? "", reference: "" })}>
+            <Button disabled={!createCapability.available} title={createCapability.reason} onClick={() => setPulling({ hostId: scopeHosts.find((h) => h.status === "online")?.id ?? "", reference: "" })}>
               <Download data-icon="inline-start" />
               {t("pull")}
             </Button>
           </>
         }
       />
+      <InventoryNotice hosts={hosts.visible} items={visible} />
       <StatStrip
         className="md:grid-cols-5"
         items={[

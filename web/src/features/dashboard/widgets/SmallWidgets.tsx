@@ -20,24 +20,27 @@ import { ScrollArea } from "@/shared/ui/scroll-area";
 
 export function CapacityWidget({ hosts }: { hosts: Host[] }) {
   const t = useTranslations("dashboard.capacity");
+  const td = useTranslations("dashboard");
   const metrics = useMetrics((s) => s?.hosts);
   return (
     <ScrollArea className="h-full">
     <ul className="flex flex-col gap-3.5 pr-2">
       {hosts.map((h) => {
         const m = metrics?.[h.id];
-        const used = ((m?.disk ?? 0) / 100) * h.diskTotalGb;
-        const free = h.diskTotalGb - used;
+        const total = m?.diskTotalGb ?? h.diskTotalGb;
+        if (!m || m.diskUnavailable) return <li key={h.id}>{h.name}: {td("metricsUnavailable")}</li>;
+        const used = m.disk / 100 * total;
+        const free = total - used;
         const days = m && m.diskGrowthGbPerDay > 0 ? Math.round(free / m.diskGrowthGbPerDay) : Infinity;
         const tone = days < 30 ? "err" : days < 90 ? "warn" : "ok";
         return (
           <li key={h.id} className="flex flex-col gap-1.5">
-            <Meter label={h.name} value={m?.disk ?? 0} color={h.color} sub={t("used", { used: formatGb(used), total: formatGb(h.diskTotalGb) })} />
+            <Meter label={h.name} value={m?.disk ?? 0} color={h.color} sub={t("used", { used: formatGb(used), total: formatGb(total) })} />
             <div className="flex items-center justify-between text-[11px]">
               <span data-tone={h.status !== "online" ? "gray" : tone} className="font-medium text-(--tone)">
-                {h.status !== "online" ? t("offline") : Number.isFinite(days) && days < 365 ? t("days", { days }) : t("plenty")}
+                {m.inventory?.stale || h.status !== "online" ? t("offline") : m.growthUnavailable ? "" : Number.isFinite(days) && days < 365 ? t("days", { days }) : t("plenty")}
               </span>
-              <span className="text-muted-foreground tabular">{t("growth", { gb: formatNumber(m?.diskGrowthGbPerDay ?? 0) })}</span>
+              <span className="text-muted-foreground tabular">{m.growthUnavailable ? td("growthUnavailable") : t("growth", { gb: formatNumber(m.diskGrowthGbPerDay) })}</span>
             </div>
           </li>
         );

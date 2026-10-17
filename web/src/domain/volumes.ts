@@ -1,6 +1,7 @@
 // Volumes and bind mounts as one storage model. Bind mounts are browsed with
 // the same UI; `kind` keeps the difference visible.
 
+import type { InventoryObservation } from "./model";
 import type { Retention } from "./retention";
 import { nextOccurrence, type PlanSchedule } from "./schedule";
 
@@ -47,13 +48,15 @@ export interface BackupRun {
 }
 
 export interface Volume {
+  inventory?: InventoryObservation;
+  sizeUnavailable?: boolean;
   /** Stable id used in routes: vol-<host>-<docker name> or bind-<host>-<path slug>. */
   id: string;
   /** Docker volume name or the absolute host path of a bind mount. */
   name: string;
   hostId: string;
   kind: StorageKind;
-  driver?: "local";
+  driver?: string;
   /** Mountpoint on the host (volumes) or source path (bind mounts). */
   source: string;
   /** Key in compose.yaml when the volume belongs to a stack. */

@@ -11,6 +11,8 @@ import { AdapterOutcomeError, GENERIC_REASON, HUB_REF, unavailable, type Capabil
 import { createDisconnectedAdapter } from "../disconnected-adapter";
 import type { CodedActionRun } from "../message-code";
 import type { InventoryObservation } from "@/domain/model";
+import { createMetricsReader, type MetricsSocket } from "./metrics";
+import { createResourceReader } from "./resources";
 import { createInventoryReader } from "./inventory";
 import { mapHost } from "./hosts";
 import { mapActivityDetail, mapEvent } from "./map-dto";
@@ -24,13 +26,14 @@ type Body<I extends ReadOperation> = operations[I]["responses"][200]["content"][
 type StreamPayload = operations["streamClient"]["responses"][200]["content"]["text/event-stream"][number]["data"];
 type Source = Pick<EventSource, "close" | "onopen" | "onmessage" | "onerror"> & Partial<Pick<EventSource, "readyState">>;
 
-const IMPLEMENTED = new Set(["listStacks", "getStack", "listContainers", "listHosts","listActions", "listEvents", "subscribeActions", "subscribeChanges", "getAuthMode", "getCurrentUser", "login", "logout", "changePassword", "updateMyLocale", "getSetupStatus", "completeSetup", "getConnectedSettings", "saveSettings"]);
+const IMPLEMENTED = new Set(["listImages", "listVolumes", "getVolume", "getTopology", "subscribeMetrics", "listStacks", "getStack", "listContainers", "listHosts","listActions", "listEvents", "subscribeActions", "subscribeChanges", "getAuthMode", "getCurrentUser", "login", "logout", "changePassword", "updateMyLocale", "getSetupStatus", "completeSetup", "getConnectedSettings", "saveSettings"]);
 const RECONNECT_MS = 250;
 
 export interface HttpAdapterOptions {
   baseUrl?: string;
   fetch?: typeof globalThis.fetch;
   eventSource?: (url: string) => Source;
+  webSocket?: (url: string) => MetricsSocket;
   uploadFactory?: () => XMLHttpRequest;
 }
 
@@ -186,7 +189,7 @@ export function createHttpAdapter(options: HttpAdapterOptions = {}): DockletAdap
 
   function refreshSubscribed(): void {
     refreshRuns();
-    if (changeListeners.size) changeListeners.forEach((listener) => listener(["events", "hosts", "stacks", "containers"]));
+    if (changeListeners.size) changeListeners.forEach((listener) => listener(["events", "hosts", "stacks", "containers", "images", "volumes", "topology"]));
   }
 
   function handleStream(data: string, eventId: string): void {
@@ -210,7 +213,7 @@ export function createHttpAdapter(options: HttpAdapterOptions = {}): DockletAdap
       return;
     }
     if (envelope.channel === "environments") {
-      changeListeners.forEach((listener) => listener(["hosts", "stacks", "containers"]));
+      changeListeners.forEach((listener) => listener(["hosts", "stacks", "containers", "images", "volumes", "topology"]));
       return;
     }
     refreshSubscribed();
@@ -274,11 +277,12 @@ export function createHttpAdapter(options: HttpAdapterOptions = {}): DockletAdap
     try { return rows.map((row) => ({ ...mapHost(row), inventory: observations.get(row.id) })); }
     catch (error) { throw classifiedError({ code: "listHosts.mapping-error", cause: error }); }
   }
-  const inventory = createInventoryReader(baseUrl, fetcher, listHosts, requireCapability, (hostId, state) => {
+  function observeHost(hostId: string, state: InventoryObservation) {
     const old = observations.get(hostId);
     observations.set(hostId, state);
     if (JSON.stringify(old) !== JSON.stringify(state)) changeListeners.forEach((listener) => listener(["hosts"]));
-  });
+  }
+  const inventory = createInventoryReader(baseUrl, fetcher, listHosts, requireCapability, observeHost);
   const unsupported = createDisconnectedAdapter();
   const methods = Object.fromEntries(Object.keys(unsupported).filter((key) => key !== "kind").map((operationId) => [operationId, (...args: unknown[]) => Promise.reject(unavailable(operationId, refFor(operationId, args), "capability.mapping-unavailable"))])) as unknown as DockletAdapter;
   return {
@@ -291,6 +295,7 @@ export function createHttpAdapter(options: HttpAdapterOptions = {}): DockletAdap
     getCapability,
     listHosts,
     ...inventory,
+    ...createResourceReader(baseUrl, fetcher, listHosts, requireCapability, observeHost),
     listActions: loadActions,
     listEvents: loadEvents,
     subscribeActions(listener) {
@@ -305,7 +310,7 @@ export function createHttpAdapter(options: HttpAdapterOptions = {}): DockletAdap
       connect();
       return () => { changeListeners.delete(listener); disconnectIfUnused(); };
     },
-    subscribeMetrics: () => () => undefined,
+    subscribeMetrics: createMetricsReader(baseUrl, fetcher, listHosts, requireCapability, options.webSocket ?? ((url) => new WebSocket(url))),
     subscribeLogs: () => () => undefined,
     subscribeContainerLogs: () => () => undefined,
   };

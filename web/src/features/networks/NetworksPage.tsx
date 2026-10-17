@@ -1,3 +1,5 @@
+import { InventoryNotice } from "@/features/stacks/InventoryNotice";
+import { useCapability } from "@/data/use-capability";
 import "@xyflow/react/dist/style.css";
 import "./topology.css";
 
@@ -114,6 +116,8 @@ function Canvas({ source }: { source: Source }) {
   const flow = useReactFlow();
   const [canvasSize, setCanvas, canvasEl] = useElementSize();
   const cmd = useNetworkCommands();
+  const createCapability = useCapability("createNetwork");
+  const connectCapability = useCapability("connectNetwork");
   const [params, setParams] = useSearchParams();
   const [query, setQuery] = useState("");
   const [dependencies, setDependencies] = useState(true);
@@ -212,7 +216,7 @@ function Canvas({ source }: { source: Source }) {
     fit(motion ? 250 : 0);
   };
 
-  if (!host) return <EmptyState icon={<Network />} title={t("empty.title")} description={t("empty.body")} />;
+  if (!host) return <><InventoryNotice hosts={source.hosts} items={[]} /><EmptyState icon={<Network />} title={t("empty.title")} description={t("empty.body")} /></>;
   const online = host.status === "online";
   const focusName = focus ? (hostNets.find((n) => n.id === focus)?.name ?? hostContainers.find((c) => c.id === focus)?.name) : undefined;
 
@@ -261,10 +265,10 @@ function Canvas({ source }: { source: Source }) {
             <TooltipContent>{t("overviewHint")}</TooltipContent>
           </Tooltip>
           <span className="flex-1" />
-          <Button variant="outline" size="sm" disabled={!online || source.bench} onClick={() => setConnectRequest({ mode: "connect" })}>
+          <Button variant="outline" size="sm" disabled={!connectCapability.available || !online || source.bench} title={connectCapability.reason} onClick={() => setConnectRequest({ mode: "connect" })}>
             <Link2 data-icon="inline-start" /> {t("connect")}
           </Button>
-          <Button size="sm" disabled={!source.hosts.some((h) => h.status === "online") || source.bench} onClick={() => setCreating(true)}>
+          <Button size="sm" disabled={!createCapability.available || !source.hosts.some((h) => h.status === "online") || source.bench} title={createCapability.reason} onClick={() => setCreating(true)}>
             <Plus data-icon="inline-start" /> {t("create")}
           </Button>
         </div>
@@ -410,8 +414,8 @@ function TopologySection() {
     );
   }
   if (source.isError) return <QueryError onRetry={source.refetch} />;
-  if (!source.topology.networks.some((n) => source.hosts.some((h) => h.id === n.hostId))) return <EmptyState icon={<Network />} title={t("empty.title")} description={t("empty.body")} />;
-  return <Canvas source={source} />;
+  if (!source.topology.networks.some((n) => source.hosts.some((h) => h.id === n.hostId))) return <><InventoryNotice hosts={source.hosts} items={[]} /><EmptyState icon={<Network />} title={t("empty.title")} description={t("empty.body")} /></>;
+  return <><InventoryNotice hosts={source.hosts} items={source.topology.networks} /><Canvas source={source} /></>;
 }
 
 export default function NetworksPage() {

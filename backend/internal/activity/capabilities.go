@@ -43,7 +43,7 @@ func capabilityDescriptorsInternal(ref capability.ResourceRef) []capability.Desc
 	for _, operationID := range adapterOperationIDs {
 		descriptor := capability.Descriptor{OperationID: operationID, ResourceRef: ref}
 		switch operationID {
-		case "listStacks", "getStack", "listContainers", "listHosts", "listActions", "listEvents", "subscribeActions", "subscribeChanges":
+		case "listImages", "listVolumes", "getVolume", "getTopology", "subscribeMetrics", "listStacks", "getStack", "listContainers", "listHosts", "listActions", "listEvents", "subscribeActions", "subscribeChanges":
 			descriptor.Available = true
 		default:
 			descriptor.DisabledReasonCode = "capability.mapping-unavailable"

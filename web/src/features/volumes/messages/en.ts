@@ -1,6 +1,7 @@
 // American English texts of volumes, bind mounts, the file browser and backups.
 
 export const enVolumes = {
+  unknown: "Unknown",
   title: "Volumes",
   description: "{scope} · Docker volumes and bind mounts together, with file browser and backups.",
   create: "Create volume",

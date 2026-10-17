@@ -24,7 +24,7 @@ export function UpdateRadarWidget({ stacks, hosts }: { stacks: Stack[]; hosts: M
   const total = items.length;
   const scheduled = stacks.filter((s) => s.autoUpdate.mode === "scheduled" && s.services.some((x) => x.update.state === "version" || x.update.state === "rebuild"));
 
-  if (!total) return <p className="text-sm text-muted-foreground">{t("none")}</p>;
+  if (!total) return <p className="text-sm text-muted-foreground">{t(stacks.some((s) => s.services.some((svc) => svc.update.state === "unchecked")) ? "unchecked" : "none")}</p>;
   return (
     <div className="flex h-full flex-col gap-3">
       <div className="flex h-2.5 overflow-hidden rounded-full bg-muted" aria-hidden>

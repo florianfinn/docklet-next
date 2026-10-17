@@ -1,3 +1,5 @@
+import { InventoryNotice } from "@/features/stacks/InventoryNotice";
+import { useCapability } from "@/data/use-capability";
 import { Archive, ArrowLeft, Box, Database, FolderOpen, Info, Layers, LayoutGrid, Trash2, Unplug } from "lucide-react";
 import { useState } from "react";
 import { Link, useNavigate, useParams, useSearchParams } from "react-router";
@@ -34,17 +36,19 @@ type Tab = "overview" | "files" | "backups";
 
 function OverviewTab({ volume: v, host }: { volume: VolumeDetail; host: Host | undefined }) {
   const t = useTranslations("volumes.detail");
+  const tv = useTranslations("volumes");
+  const remove = useCapability("deleteVolume");
   const cmd = useVolumeCommands();
   const navigate = useNavigate();
   const [confirm, setConfirm] = useState(false);
-  const share = host ? (v.sizeBytes / (host.diskTotalGb * 1024 ** 3)) * 100 : 0;
+  const share = !v.sizeUnavailable && host && host.diskTotalGb > 0 ? (v.sizeBytes / (host.diskTotalGb * 1024 ** 3)) * 100 : undefined;
   const block = deleteBlock(v, host);
   const blocked = block === "bind" ? t("deleteBind") : block === "in-use" ? t("deleteBlocked") : block === "offline" ? t("deleteOffline") : undefined;
   const rows: [string, string][] = [
     [t("driver"), v.driver ?? t("none")],
     [v.kind === "volume" ? t("mountpoint") : t("source"), v.source],
     [t("compose"), v.composeName ? `${v.stackId}/${v.composeName}` : t("none")],
-    [t("created"), formatDate(v.createdAt)],
+    [t("created"), v.createdAt ? formatDate(v.createdAt) : t("none")],
   ];
   return (
     <div className="grid gap-4 lg:grid-cols-3">
@@ -104,8 +108,8 @@ function OverviewTab({ volume: v, host }: { volume: VolumeDetail; host: Host | u
           <CardTitle>{t("usage")}</CardTitle>
         </CardHeader>
         <CardContent className="flex flex-col gap-3 px-4">
-          <div className="text-2xl font-semibold tracking-tight tabular">{formatBytes(v.sizeBytes)}</div>
-          <Meter label={t("usage")} value={Math.max(share, 0.5)} color={host?.color} sub={t("usageOfHost", { percent: `${share < 0.1 ? "< " : ""}${formatPercentNumber(Math.max(share, 0.1), { maximumFractionDigits: 1 })}`, total: `${host?.diskTotalGb ?? "–"} GB` })} />
+          <div className="text-2xl font-semibold tracking-tight tabular">{v.sizeUnavailable ? tv("unknown") : formatBytes(v.sizeBytes)}</div>
+          {share !== undefined && <Meter label={t("usage")} value={share} color={host?.color} sub={t("usageOfHost", { percent: `${share < 0.1 ? "< " : ""}${formatPercentNumber(Math.max(share, 0.1), { maximumFractionDigits: 1 })}`, total: `${host?.diskTotalGb ?? "–"} GB` })} />}
           <p className="text-[11px] text-muted-foreground">{t("usageSub")}</p>
         </CardContent>
       </Card>
@@ -140,7 +144,7 @@ function OverviewTab({ volume: v, host }: { volume: VolumeDetail; host: Host | u
             <Tooltip>
               <TooltipTrigger asChild>
                 <span>
-                  <Button variant="ghost" className="text-destructive hover:text-destructive" disabled={!!blocked} onClick={() => setConfirm(true)}>
+                  <Button variant="ghost" className="text-destructive hover:text-destructive" disabled={!remove.available || !!v.inventory?.stale || !!blocked} title={remove.reason} onClick={() => setConfirm(true)}>
                     <Trash2 data-icon="inline-start" />
                     {t("delete")}
                   </Button>
@@ -208,6 +212,7 @@ export default function VolumePage() {
       ) : (
         v && (
           <>
+            <InventoryNotice hosts={host ? [host] : []} items={[v]} />
             <header data-page-actions className="mb-5 flex flex-wrap items-start gap-4">
               <IconTile color={host?.color} size="lg">
                 {v.kind === "volume" ? <Database /> : <FolderOpen />}
