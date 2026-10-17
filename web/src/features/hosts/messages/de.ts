@@ -20,6 +20,7 @@ export const deHosts: typeof enHosts = {
     report: {
       title: "Lokale Prüfung des Installers",
       reported: (import.meta.env.DEV ? "Vom Agent gemeldet {time} · Simulation" : ""),
+      reportedLive: "Vom Agent gemeldet {time}",
       lastReported: "Letzter Bericht {time} – Host derzeit getrennt",
       pending: "Wird nach der ersten Verbindung gemeldet. Der Installer prüft lokal auf dem Host; der Hub kann vorher nichts prüfen.",
       owner: "Besitzer Projektverzeichnis",

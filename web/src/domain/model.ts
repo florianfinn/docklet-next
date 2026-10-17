@@ -25,7 +25,7 @@ export type Tone =
 
 export type HostConnection = "direct" | "edge";
 /** "pending": registered during onboarding, agent has not connected yet. */
-export type HostStatus = "online" | "offline" | "pending";
+export type HostStatus = "online" | "offline" | "pending" | "update-required";
 
 /** File owner IDs used by the agent for project files (PUID/PGID). */
 export interface FileOwner {
@@ -42,15 +42,17 @@ export interface AgentReport {
   projectDirOwner: FileOwner & { name: string };
   projectDirWritable: boolean;
   /** IDs the agent writes project files with and where they came from. */
-  fileOwner: FileOwner;
-  fileOwnerSource: "manual" | "directory-owner";
-  socketGid: number;
-  socketGidSource: "manual" | "detected";
+  fileOwner?: FileOwner;
+  fileOwnerSource?: "manual" | "directory-owner";
+  socketGid?: number;
+  socketGidSource?: "manual" | "detected";
   note: "ok" | "root-owned" | "unraid";
-  simulated: true;
+  simulated?: boolean;
 }
 
 export interface Host {
+  /** Inventory and system metadata have not been read; numeric fields are empty sentinels. */
+  detailsUnavailable?: boolean;
   id: string;
   name: string;
   /** Any CSS colour; used for host bars, chips and topology zones. */

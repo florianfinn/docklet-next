@@ -10,6 +10,7 @@ import type { DockletAdapter, Topic } from "../adapter";
 import { AdapterOutcomeError, GENERIC_REASON, HUB_REF, unavailable, type CapabilityDescriptor, type ResourceRef } from "../capability";
 import { createDisconnectedAdapter } from "../disconnected-adapter";
 import type { CodedActionRun } from "../message-code";
+import { mapHost } from "./hosts";
 import { mapActivityDetail, mapEvent } from "./map-dto";
 import { createHttpHubBackups } from "./hub-backups";
 import { createCsrfClient } from "./csrf-client";
@@ -21,7 +22,7 @@ type Body<I extends ReadOperation> = operations[I]["responses"][200]["content"][
 type StreamPayload = operations["streamClient"]["responses"][200]["content"]["text/event-stream"][number]["data"];
 type Source = Pick<EventSource, "close" | "onopen" | "onmessage" | "onerror"> & Partial<Pick<EventSource, "readyState">>;
 
-const IMPLEMENTED = new Set(["listActions", "listEvents", "subscribeActions", "subscribeChanges", "getAuthMode", "getCurrentUser", "login", "logout", "changePassword", "updateMyLocale", "getSetupStatus", "completeSetup", "getConnectedSettings", "saveSettings"]);
+const IMPLEMENTED = new Set(["listHosts","listActions", "listEvents", "subscribeActions", "subscribeChanges", "getAuthMode", "getCurrentUser", "login", "logout", "changePassword", "updateMyLocale", "getSetupStatus", "completeSetup", "getConnectedSettings", "saveSettings"]);
 const RECONNECT_MS = 250;
 
 export interface HttpAdapterOptions {
@@ -183,7 +184,7 @@ export function createHttpAdapter(options: HttpAdapterOptions = {}): DockletAdap
 
   function refreshSubscribed(): void {
     refreshRuns();
-    if (changeListeners.size) changeListeners.forEach((listener) => listener(["events"]));
+    if (changeListeners.size) changeListeners.forEach((listener) => listener(["events", "hosts"]));
   }
 
   function handleStream(data: string, eventId: string): void {
@@ -206,6 +207,10 @@ export function createHttpAdapter(options: HttpAdapterOptions = {}): DockletAdap
       changeListeners.forEach((listener) => listener(["events"]));
       return;
     }
+    if (envelope.channel === "environments") {
+      changeListeners.forEach((listener) => listener(["hosts"]));
+      return;
+    }
     refreshSubscribed();
   }
 
@@ -214,7 +219,7 @@ export function createHttpAdapter(options: HttpAdapterOptions = {}): DockletAdap
     sourceOpen = false;
     let opened: Source;
     try {
-      opened = sourceFactory(`${baseUrl}/stream?channels=activities%2Cevents`);
+      opened = sourceFactory(`${baseUrl}/stream?channels=activities%2Cevents%2Cenvironments`);
     } catch (error) {
       window.dispatchEvent(new CustomEvent("docklet:adapter-error", { detail: classifiedError(error) }));
       scheduleReconnect();
@@ -270,6 +275,11 @@ export function createHttpAdapter(options: HttpAdapterOptions = {}): DockletAdap
     kind: "http",
     mappedOperations: IMPLEMENTED,
     getCapability,
+    async listHosts() {
+      await requireCapability("listHosts");
+      const rows = await page("listEnvironments", "/environments", 100);
+      try { return rows.map(mapHost); } catch (error) { throw classifiedError({ code: "listHosts.mapping-error", cause: error }); }
+    },
     listActions: loadActions,
     listEvents: loadEvents,
     subscribeActions(listener) {

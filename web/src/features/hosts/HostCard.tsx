@@ -47,12 +47,12 @@ function AgentReportSection({ host }: { host: Host }) {
             <Row label={t("owner")} mono>
               {t("ownerValue", { name: r.projectDirOwner.name, uid: r.projectDirOwner.uid, gid: r.projectDirOwner.gid, writable: String(r.projectDirWritable) })}
             </Row>
-            <Row label={t("fileIds")} mono>
+            {r.fileOwner && r.fileOwnerSource ? <Row label={t("fileIds")} mono>
               {t("fileIdsValue", { uid: r.fileOwner.uid, gid: r.fileOwner.gid, source: r.fileOwnerSource })}
-            </Row>
-            <Row label={t("socket")} mono>
-              {t("socketValue", { gid: r.socketGid, source: r.socketGidSource })}
-            </Row>
+            </Row> : null}
+            {r.socketGid !== undefined ? <Row label={t("socket")} mono>
+              {t("socketValue", { gid: r.socketGid, source: r.socketGidSource ?? "detected" })}
+            </Row> : null}
           </dl>
           {r.note !== "ok" && (
             <p className={cn("mt-1.5 flex items-start gap-1.5 text-xs", r.note === "root-owned" ? "text-warning" : "text-muted-foreground")}>
@@ -60,7 +60,7 @@ function AgentReportSection({ host }: { host: Host }) {
               {t(r.note === "root-owned" ? "root" : "unraid")}
             </p>
           )}
-          <p className="mt-1.5 text-[11px] text-muted-foreground">{host.status === "offline" ? t("lastReported", { time: formatRelative(r.reportedAt) }) : t("reported", { time: formatRelative(r.reportedAt) })}</p>
+          <p className="mt-1.5 text-[11px] text-muted-foreground">{host.status !== "online" ? t("lastReported", { time: formatRelative(r.reportedAt) }) : t(r.simulated ? "reported" : "reportedLive", { time: formatRelative(r.reportedAt) })}</p>
         </>
       )}
     </section>

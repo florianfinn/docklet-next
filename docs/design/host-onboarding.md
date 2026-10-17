@@ -275,6 +275,33 @@ marked stale with "as of <time>", and actions on that host are unavailable with 
 reason. Reconnection replaces the values on the next successful read. Source:
 **new**; storage is decision 4.
 
+## Runtime read contract
+
+The agent contract and minimum are version 3. The version fixture in
+`types/contract/testdata/agent-hub-v3.json` owns the fingerprint. The hub checks
+`/api/app-version` before ordinary requests and registry or configuration
+synchronisation. Below-minimum agents and same-version fingerprint mismatches
+have status `update-required`; health, version and agent self-upgrade stay
+available. System health uses HEAD, as its registered operation specifies.
+
+`Environment.agentReport` contains the last successful process-local version
+report and its observation time. The version response adds nullable
+`onboardingChecks`: project directory, numeric owner UID/GID, effective write
+access and socket group. Missing checks remain unknown. These fields do not
+claim a manual identity source or resolve host account names. The HTTP adapter
+maps this report and connection state through `listHosts`; host mutations and
+system-component inventory keep their separate capability boundaries. Inventory
+metadata absent from this read has `detailsUnavailable` set; numeric fields in
+the existing view model are empty sentinels, not host measurements.
+
+`EnvironmentService.ReadSnapshots()` exposes the process-local inventory store
+in `backend/pkg/hoststate/`: `Put`, `Get` and `Forget` use a host/list key and
+carry the successful read time. Read adapters own their list payloads. Stored
+bytes are copied at both boundaries. Disconnects retain snapshots, the next
+successful read replaces them, and host removal forgets them. A new hub process
+starts with an empty store and no agent reports; persisted `last_seen` remains
+the last successful contact, and failed checks do not advance it.
+
 ## Decisions
 
 The maintainer chose option (a), the recommendation, for every item below on 2026-10-17.
