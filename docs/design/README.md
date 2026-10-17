@@ -8,6 +8,7 @@ GitHub issues and milestones hold implementation and acceptance evidence.
 | [Arcane revision and module map](arcane-adoption.md) | Selected revision, local module identities and reproducible Go licence inventory |
 | [SQLite licence assessment](sqlite-license-assessment.md) | Exact compiled header grants, selected Go/web evidence and packaging boundaries |
 | [SQLite hub database](sqlite-database.md) | Driver, files, transactions, fresh schema, Francis, acceptance and the single implementation step |
+| [Identity](identity.md) | Startup sign-in modes, direct-peer proxy trust, session boundaries and recovery |
 | [Core adoption](core-adoption.md) | One-time Go adoption, scope boundaries and evaluation gates |
 | [API contract and UI mapping](api-contract.md) | Reproducible OpenAPI export, generated types and owned DTO/UI gaps |
 | [HTTP adapter, live channel and capabilities](adapter-live-capabilities.md) | M3 adapter outcomes, server capabilities, run/event refresh and contract matrix |

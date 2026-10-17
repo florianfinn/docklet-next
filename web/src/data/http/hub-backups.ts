@@ -8,6 +8,7 @@ import type { components, operations } from "@/api/generated/schema";
 import type { HubBackupApi, HubBackupAccess, HubBackupOperation, HubBackupPolicy, HubBackupRun } from "@/domain/hub-backup";
 
 import { AdapterOutcomeError } from "../capability";
+import type { CsrfClient } from "./csrf-client";
 
 type User = components["schemas"]["UserUser"];
 type Activity = operations["get-activity"]["responses"][200]["content"]["application/json"];
@@ -31,14 +32,17 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === "object" && !Array.isArray(value);
 }
 
-export function createHttpHubBackups(baseUrl: string, fetcher: typeof fetch, uploadFactory: () => XMLHttpRequest = () => new XMLHttpRequest()): HubBackupApi {
+export function createHttpHubBackups(baseUrl: string, client: CsrfClient, uploadFactory: () => XMLHttpRequest = () => new XMLHttpRequest()): HubBackupApi {
   async function request(route: string, init?: RequestInit): Promise<unknown> {
     let response: Response;
     try {
-      response = await fetcher(`${baseUrl}${route}`, {
-        credentials: "same-origin", headers: { Accept: "application/json", ...init?.headers }, ...init,
+      response = await client.fetch(`${baseUrl}${route}`, {
+        ...init, headers: { Accept: "application/json", ...init?.headers },
       });
-    } catch { throw error(null, 0); }
+    } catch (cause) {
+      if (cause instanceof AdapterOutcomeError) throw cause;
+      throw error(null, 0);
+    }
     let body: unknown;
     try { body = await response.json(); } catch { throw error(null, response.status); }
     if (!response.ok) throw error(body, response.status);
@@ -117,13 +121,20 @@ export function createHttpHubBackups(baseUrl: string, fetcher: typeof fetch, upl
       if (!isRecord(body) || typeof body.id !== "string") throw error({ code: "backup.invalid_response" }, 200);
       return body as HubBackupRun;
     },
-    uploadHubBackup(file, onProgress) {
+    async uploadHubBackup(file, onProgress) {
+      let csrfToken: string;
+      try { csrfToken = await client.token(); }
+      catch (cause) {
+        if (cause instanceof AdapterOutcomeError) throw cause;
+        throw error(null, 0);
+      }
       return new Promise<HubBackupOperation>((resolve, reject) => {
         const xhr = uploadFactory();
         xhr.open("POST", `${baseUrl}/backups/upload`);
         xhr.withCredentials = true;
         xhr.setRequestHeader("Content-Type", "application/octet-stream");
         xhr.setRequestHeader("Accept", "application/json");
+        xhr.setRequestHeader("X-CSRF-Token", csrfToken);
         xhr.upload.onprogress = (event) => { if (event.lengthComputable) onProgress(Math.round(event.loaded / event.total * 100)); };
         xhr.onerror = () => reject(error(null, 0));
         xhr.onload = () => {

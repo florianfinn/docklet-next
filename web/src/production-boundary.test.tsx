@@ -3,7 +3,7 @@ import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 // Exercise the actual production entry while the rest of the suite keeps its demo runtime.
-vi.mock("@/runtime", () => import("./runtime"));
+vi.mock("@/runtime", () => vi.importActual("./runtime"));
 
 import { routes } from "@/app/router";
 import { designStore, tokenPreviewStore } from "@/shared/theme/design-tokens";
@@ -12,7 +12,13 @@ import { helpStore } from "@/shared/preferences/help-store";
 import { renderRoutes } from "@/test/render";
 import { createAdapter } from "./runtime";
 
-beforeEach(() => vi.stubGlobal("fetch", vi.fn(async () => new Response(JSON.stringify({ code: "offline" }), { status: 503 }))));
+beforeEach(() => vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL) => {
+  const path = new URL(String(input), "http://localhost").pathname;
+  if (path === "/api/auth/mode") return Response.json({ success: true, data: { mode: "none" } });
+  if (path === "/api/auth/me") return Response.json({ success: true, data: { id: "admin", username: "admin", requiresPasswordChange: false } });
+  if (path === "/api/environments/0/settings") return Response.json([{ key: "setupCompleted", value: "true" }]);
+  return new Response(JSON.stringify({ code: "offline" }), { status: 503 });
+})));
 
 afterEach(() => {
   designStore.reset();

@@ -141,3 +141,5 @@ export const enActivity = {
     foldNote: "Layer progress stays in one updating line, as in the terminal.",
   },
 };
+
+export const enUserEvents = { login: "User signed in.", logout: "User signed out." };

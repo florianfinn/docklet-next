@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Functional cut: removed APNS mobile push, template catalogue, federated credentials, GitOps, Swarm, S3 backup destinations, standalone build workshop, OIDC and passkeys.
+// Deviations: Functional cut: removed APNS mobile push, template catalogue, federated credentials, GitOps, Swarm, S3 backup destinations, standalone build workshop, OIDC and passkeys. #69 first-run setup and hub settings persistence.
 
 package settings
 
@@ -74,6 +74,17 @@ type Settings struct {
 	FollowProjectSymlinks       SettingVariable `key:"followProjectSymlinks,envOverride" meta:"label=Follow Project Symlinks;type=boolean;keywords=projects,symlink,symlinks,symbolic links,compose,directory,discovery;category=general;description=Treat symlinked child directories inside the projects directory as Docker Compose projects"`
 	DiskUsagePath               SettingVariable `key:"diskUsagePath" meta:"label=Disk Usage Path;type=text;keywords=disk,usage,path,storage,folder,files;category=general;description=Path used for disk usage calculations"`
 	BaseServerURL               SettingVariable `key:"baseServerUrl" meta:"label=Base Server URL;type=text;keywords=base,url,server,domain,host,endpoint,address,link;category=general;description=Set the base URL for the application"`
+	SetupCompleted              SettingVariable `key:"setupCompleted" meta:"label=Setup Completed;type=boolean;category=internal;description=Whether first-run setup has finished"`
+	HubName                     SettingVariable `key:"hubName" meta:"label=Hub Name;type=text;category=general;description=Name displayed for this hub"`
+	HubAddress                  SettingVariable `key:"hubAddress" meta:"label=Hub Address;type=text;category=general;description=Address agents use to reach this hub"`
+	DomainURL                   SettingVariable `key:"domainUrl" meta:"label=Domain URL;type=text;category=general;description=Optional public hub URL"`
+	LinkBase                    SettingVariable `key:"linkBase" meta:"label=Link Base;type=select;category=general;description=Which hub address links use"`
+	AgentProjectsDirectory      SettingVariable `key:"agentProjectsDirectory" meta:"label=Agent Projects Directory;type=text;category=general;description=Default project directory on agent hosts"`
+	AgentInstallDirectory       SettingVariable `key:"agentInstallDirectory" meta:"label=Agent Install Directory;type=text;category=general;description=Default agent installation directory"`
+	DefaultHostConnection       SettingVariable `key:"defaultHostConnection" meta:"label=Default Host Connection;type=select;category=general;description=Default host connection method"`
+	DefaultPUID                 SettingVariable `key:"defaultPuid" meta:"label=Default PUID;type=text;category=general;description=Default file owner user ID"`
+	DefaultPGID                 SettingVariable `key:"defaultPgid" meta:"label=Default PGID;type=text;category=general;description=Default file owner group ID"`
+	DetectSocketGroup           SettingVariable `key:"detectSocketGroup" meta:"label=Detect Socket Group;type=boolean;category=general;description=Detect agent Docker socket group"`
 	EnableGravatar              SettingVariable `key:"enableGravatar,authrequired" meta:"label=Enable Gravatar;type=boolean;keywords=gravatar,avatar,profile,picture,image,user,photo;category=users;description=Enable Gravatar profile pictures for users"`
 	AvatarMaxUploadSizeMb       SettingVariable `key:"avatarMaxUploadSizeMb,authrequired" meta:"label=Avatar Max Upload Size (MB);type=number;keywords=avatar,profile,picture,upload,size,limit,maximum,image,user,photo,mb;category=users;description=Maximum size in MB for profile picture uploads (default: 2)"`
 	DefaultShell                SettingVariable `key:"defaultShell" meta:"label=Default Shell;type=text;keywords=shell,default,shellpath,path,login;category=general;description=Default shell to use for commands"`
@@ -92,6 +103,8 @@ type Settings struct {
 	ExpiredSessionsCleanupInterval SettingVariable `key:"expiredSessionsCleanupInterval" meta:"label=Expired Sessions Cleanup Interval;type=cron;keywords=sessions,cleanup,retention,expired,revoked,interval,frequency,schedule,auth,jobs;description=How often to delete expired and old revoked sessions (cron expression)"`
 	UpgradeLogRetentionDays        SettingVariable `key:"upgradeLogRetentionDays" meta:"label=Upgrade Log Retention;type=number;keywords=upgrade,logs,retention,days,cleanup;category=activity;description=Delete upgrade log files older than this many days. Cleanup runs hourly. Default: 3 days. Set 0 to keep logs indefinitely."`
 	MaxConcurrentActivities        SettingVariable `key:"maxConcurrentActivities" meta:"label=Concurrent Activity Limit;type=number;keywords=activity,concurrency,limit,queue,parallel,bulk,background,tasks;category=activity;description=Maximum long-running activities per environment before new ones queue. Set 0 for unlimited."`
+	KeepActionOutput               SettingVariable `key:"keepActionOutput" meta:"label=Keep Action Output;type=boolean;category=activity;description=Configured action output retention"`
+	ActionPresentation             SettingVariable `key:"actionPresentation" meta:"label=Action Presentation;type=select;category=activity;description=Browser presentation of important actions"`
 	AutoInjectEnv                  SettingVariable `key:"autoInjectEnv" meta:"label=Auto Inject Env Variables;type=boolean;keywords=auto,inject,env,environment,variables,interpolation;category=internal;description=Automatically inject project .env variables into all containers (default: false)"`
 	DefaultDeployPullPolicy        SettingVariable `key:"defaultDeployPullPolicy" meta:"label=Default Deploy Pull Policy;type=select;keywords=deploy,pull,policy,compose,up,missing,always;category=internal;description=Default image pull policy when deploying projects"`
 	ToolsImageRegistry             SettingVariable `key:"toolsImageRegistry,envOverride" meta:"label=Tools Image Registry;type=select;keywords=tools,image,registry,ghcr,docker,hub,helper,volume;category=internal;description=Container registry used to pull the Arcane tools helper image"`
@@ -156,6 +169,7 @@ type Settings struct {
 	BrowserSessionSigningKey SettingVariable `key:"browserSessionSigningKey,internal,sensitive"`
 	JwtSigningKeySeed        SettingVariable `key:"jwtSigningKeySeed,internal,sensitive"`
 	InstanceID               SettingVariable `key:"instanceId,internal"`
+	AuthLastMode             SettingVariable `key:"authLastMode,internal"`
 
 	// Users category (admin management page - no actual settings)
 	UsersCategoryPlaceholder SettingVariable `key:"usersCategory,internal" meta:"label=Users;type=internal;keywords=users,accounts,management,admin,access,permissions,roles;category=users;description=Manage user accounts and permissions" catmeta:"id=users;title=Users;icon=user;url=/settings/users;description=Manage user accounts and access control"`

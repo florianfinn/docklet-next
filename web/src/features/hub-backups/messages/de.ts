@@ -44,7 +44,7 @@ export const deHubBackups: typeof enHubBackups = {
   weekday: "Wochentag",
   weekdays: { "0": "Sonntag", "1": "Montag", "2": "Dienstag", "3": "Mittwoch", "4": "Donnerstag", "5": "Freitag", "6": "Samstag" },
   time: "Uhrzeit",
-  timeHint: "24-Stunden-Format in der lokalen Zeitzone des Hubs.",
+  timeHint: "24-Stunden-Format in der durch TZ festgelegten Hub-Zeitzone.",
   customSchedule: "Aktueller benutzerdefinierter Zeitplan",
   customScheduleHint: "Dieser Zeitplan lässt sich nicht mit der einfachen Auswahl darstellen. Er bleibt unverändert, bis du ihn ausdrücklich ersetzt.",
   replaceSchedule: "Durch einfachen Zeitplan ersetzen",

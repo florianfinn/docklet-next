@@ -60,7 +60,9 @@ describe("German catalogue", () => {
   it("renders the German catalogue with the language switch and Hub backup namespace", () => {
     expect(catalogs.de).toBe(messages);
     const { locale, ...older } = messages;
-    expect(Object.keys(older)).toHaveLength(23);
+    expect(Object.keys(older)).toHaveLength(24);
+    expect(older.user).toEqual({ login: "Benutzer angemeldet.", logout: "Benutzer abgemeldet." });
+    expect(catalogs["en-US"].user).toEqual({ login: "User signed in.", logout: "User signed out." });
     expect(older.hubBackups.title).toBe("Backups der Hub-Datenbank");
     expect(leaves(locale as unknown as Tree).map(([, v]) => v)).toContain("Sprache");
   });

@@ -15,7 +15,7 @@ export function productionBoundary(): Plugin {
     apply: "build",
     generateBundle(_options, bundle) {
       const modules = [...this.getModuleIds()].map((id) => id.replaceAll("\\", "/"));
-      const forbidden = modules.filter((id) => /\/src\/(?:data\/demo\/|features\/design-lab\/|(?:[^/]+\/)*[^/]*\.dev\.|features\/setup\/SetupPage\.|features\/hosts\/onboarding\/OnboardingPage\.|app\/preview\/PreviewPage\.|features\/auth\/login\/login-model\.|features\/activity\/(?:NotificationLab|sample-run)\.|test\/|(?:[^/]+\/)*[^/]*\.(?:test|test-support)\.)/.test(id));
+      const forbidden = modules.filter((id) => /\/src\/(?:data\/demo\/|features\/design-lab\/|(?:[^/]+\/)*[^/]*\.dev\.|features\/hosts\/onboarding\/OnboardingPage\.|app\/preview\/PreviewPage\.|features\/auth\/login\/login-model\.|features\/activity\/(?:NotificationLab|sample-run)\.|test\/|(?:[^/]+\/)*[^/]*\.(?:test|test-support)\.)/.test(id));
       if (forbidden.length) {
         this.error(`Production boundary: forbidden module ${forbidden[0].split("/src/").at(-1)}`);
       }
@@ -28,7 +28,7 @@ export function productionBoundary(): Plugin {
           checkAsset(output.fileName, output.source);
         }
       }
-      const demoCatalog = [...shipped].filter((id) => /\/src\/(?:shared\/preferences\/messages\/(?:de|en)|features\/auth\/login\/messages\/(?:de|en)|app\/preview\/messages\/(?:de|en)|features\/setup\/messages\/(?:de|en))\.ts$/.test(id));
+      const demoCatalog = [...shipped].filter((id) => /\/src\/(?:shared\/preferences\/messages\/(?:de|en)|app\/preview\/messages\/(?:de|en))\.ts$/.test(id));
       if (demoCatalog.length) this.error(`Production boundary: shipped demo catalogue ${demoCatalog[0].split("/src/").at(-1)}`);
       const sourcePaths = (ids: Iterable<string>) => [...ids].filter((id) => id.includes("/src/") && !id.includes("/node_modules/")).map((id) => `src/${id.split("/src/").at(-1)}`).sort();
       this.emitFile({

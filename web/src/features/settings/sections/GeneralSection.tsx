@@ -1,24 +1,21 @@
 import { useTranslations } from "use-intl";
 
 import { LanguageSwitch } from "@/app/i18n/LanguageSwitch";
+import { useAdapter } from "@/data/use-adapter";
 import { notificationBaseUrl, type GeneralSettings, type HubSettings, type LinkBase } from "@/domain/settings";
 import { TextField } from "@/shared/components/form-field";
 import { Field, FieldDescription, FieldGroup, FieldLabel, FieldSet } from "@/shared/ui/field";
 import { RadioGroup, RadioGroupItem } from "@/shared/ui/radio-group";
 import { HelpLabel, HelpLegend } from "@/shared/help/help-tooltip";
 import { Label } from "@/shared/ui/label";
-import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from "@/shared/ui/select";
 
-import { TIME_ZONES, useGeneralErrors } from "../field-rules";
+import { useGeneralErrors } from "../field-rules";
 import { SettingsForm } from "../SettingsForm";
 import { useSaveSettings } from "../use-save-settings";
 import { useSectionDraft } from "../use-section-draft";
 
-/**
- * Hub name, the internal address agents reach the hub at, an optional domain
- * and time zone; shared by settings and first-run setup.
- */
-export function GeneralFields({ value, onChange, showErrors, idPrefix = "gen" }: { value: GeneralSettings; onChange: (p: Partial<GeneralSettings>) => void; showErrors: boolean; idPrefix?: string }) {
+/** Hub address, link policy, and time zone shared by settings and first-run setup. */
+export function GeneralFields({ value, onChange, showErrors, idPrefix = "gen", showLanguage = true }: { value: GeneralSettings; onChange: (p: Partial<GeneralSettings>) => void; showErrors: boolean; idPrefix?: string; showLanguage?: boolean }) {
   const t = useTranslations("settings.general");
   const tl = useTranslations("locale.switcher");
   const e = useGeneralErrors(value);
@@ -69,32 +66,20 @@ export function GeneralFields({ value, onChange, showErrors, idPrefix = "gen" }:
         <HelpLabel htmlFor={`${idPrefix}-tz`} topic="settingsGeneral.timeZone">
           {t("timeZone")}
         </HelpLabel>
-        <Select value={value.timeZone} onValueChange={(timeZone) => onChange({ timeZone })}>
-          <SelectTrigger id={`${idPrefix}-tz`} className="w-full sm:w-72">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectGroup>
-              {TIME_ZONES.map((z) => (
-                <SelectItem key={z} value={z}>
-                  {z}
-                </SelectItem>
-              ))}
-            </SelectGroup>
-          </SelectContent>
-        </Select>
+        <input id={`${idPrefix}-tz`} className="font-mono text-sm" readOnly value={value.timeZone} />
         <FieldDescription>{t("timeZoneHint")}</FieldDescription>
       </Field>
-      <Field>
+      {showLanguage && <Field>
         <FieldLabel>{t("language")}</FieldLabel>
         <LanguageSwitch className="self-start" />
         <FieldDescription>{tl("hint")}</FieldDescription>
-      </Field>
+      </Field>}
     </FieldGroup>
   );
 }
 
-export function GeneralSection({ settings }: { settings: HubSettings }) {
+export function GeneralSection({ settings }: { settings: Pick<HubSettings, "general"> }) {
+  const connected = useAdapter().kind === "http";
   const t = useTranslations("settings");
   const save = useSaveSettings();
   const { draft, patch, dirty, reset, commit } = useSectionDraft(settings.general);
@@ -112,7 +97,7 @@ export function GeneralSection({ settings }: { settings: HubSettings }) {
         commit(draft);
       }}
     >
-      <GeneralFields value={draft} onChange={patch} showErrors={dirty} />
+      <GeneralFields value={draft} onChange={patch} showErrors={dirty} showLanguage={!connected} />
     </SettingsForm>
   );
 }

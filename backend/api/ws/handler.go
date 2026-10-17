@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; functional cut: removed Swarm.
+// Deviations: Local module namespace; functional cut: removed Swarm; shared exact hub-origin and validated stream-credential policy.
 
 package ws
 
@@ -31,7 +31,6 @@ import (
 	systemlib "github.com/florianfinn/docklet-next/backend/pkg/libarcane/system"
 	wshub "github.com/florianfinn/docklet-next/backend/pkg/libarcane/ws"
 	"github.com/florianfinn/docklet-next/backend/pkg/utils/concurrency"
-	"github.com/florianfinn/docklet-next/backend/pkg/utils/httpx"
 )
 
 var defaultWebSocketMetrics = wshub.NewWebSocketMetrics()
@@ -99,7 +98,7 @@ func NewWebSocketHandler(
 		diskUsagePathCache: hot.NewHotCache[struct{}, string](hot.LRU, 1).
 			WithTTL(5 * time.Minute).
 			Build(),
-		checkWSOrigin: httpx.ValidateWebSocketOrigin(cfg.GetAppURL()),
+		checkWSOrigin: middleware.WebSocketOriginValidator(cfg, authMiddleware.ValidateNonCookieCredential),
 	}
 	if systemService != nil {
 		handler.maintenance = systemService.BackupMaintenanceGate()

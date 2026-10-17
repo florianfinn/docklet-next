@@ -11,7 +11,7 @@ const suffix = randomBytes(6).toString("hex"), volume = `docklet-sqlite-smoke-${
 const encryption = randomBytes(32).toString("hex");
 const adminKey = "arc_" + randomBytes(32).toString("hex"), backups = `${volume}-backups`;
 const labels = process.env.SMOKE_DOCKER_LABEL ? ["--label", process.env.SMOKE_DOCKER_LABEL] : [];
-const common = [...labels, "-v", `${volume}:/app/data`, "-v", `${backups}:/var/lib/docklet/backups`, "-e", `ADMIN_STATIC_API_KEY=${adminKey}`, "-e", `ENCRYPTION_KEY=${encryption}`, "-e", "APP_URL=http://localhost:3552"];
+const common = [...labels, "-v", `${volume}:/app/data`, "-v", `${backups}:/var/lib/docklet/backups`, "-e", `ADMIN_STATIC_API_KEY=${adminKey}`, "-e", `ENCRYPTION_KEY=${encryption}`, "-e", "APP_URL=http://localhost:3552", "-e", "TZ=Europe/Berlin"];
 function docker(args, required = true) {
   const result = spawnSync("docker", args, { encoding: "utf8", maxBuffer: 4 * 1024 * 1024 });
   if (required && result.status !== 0) throw new Error("candidate image operation failed");
@@ -50,6 +50,9 @@ try {
     if (!response.ok) throw new Error("candidate backup API operation failed");
     return response;
   }
+  const settings = await (await api("/environments/0/settings")).json();
+  if (!Array.isArray(settings) || settings.find(item => item.key === "effectiveTimeZone")?.value !== "Europe/Berlin")
+    throw new Error("candidate did not resolve the configured IANA time zone");
   const storage = await (await api("/backups/storage")).json();
   if (!storage.available) throw new Error("candidate backup volume is unavailable");
   const created = await (await api("/backups", { method: "POST", headers: { "Content-Type": "application/json" }, body: "{}" })).json();
@@ -86,7 +89,7 @@ try {
   for(const module of web) for(const file of module.evidence)
     if(digest(join(target,"web",`${module.name}@${module.version}`,file.path)) !== file.sha256) throw new Error("extracted web licence hash mismatch");
   if (!readdirSync(join(target, "web")).length) throw new Error("web licence bundle is empty");
-  console.log("Candidate image: empty install, health, production UI, second-hub refusal, restart, SQLite create/download/upload/offline restore and extracted licence evidence passed.");
+  console.log("Candidate image: empty install, health, production UI, Europe/Berlin time zone, second-hub refusal, restart, SQLite create/download/upload/offline restore and extracted licence evidence passed.");
 } finally {
   if (id) docker(["rm", "-f", id], false);
   docker(["volume", "rm", volume], false);

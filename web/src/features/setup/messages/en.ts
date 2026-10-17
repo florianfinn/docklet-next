@@ -1,9 +1,17 @@
 // American English texts of the first-run setup wizard (preview, started from the design lab).
 
 export const enSetup = {
+  activeMode: "Active sign-in mode: {mode}",
+  modeConfiguredAtStartup: "The operator sets this mode with AUTH_MODE and the proxy variables before starting the hub.",
+  currentPassword: "Current administrator password",
+  currentPasswordRequired: "Enter the current password",
+  newPassword: "New administrator password",
+  confirmPassword: "Confirm new password",
   badge: "First-run setup · Preview",
+  badgeConnected: "First-run setup",
   title: "Set up Docklet",
   lead: (import.meta.env.DEV ? "A new hub asks for these details once. In the prototype you start the flow from the design lab; the dashboard remains available unchanged." : "A new hub asks for these details once."),
+  leadConnected: "Configure the hub before using it. Your changes are saved when setup finishes.",
   exit: "Leave preview",
   railLabel: "First-run setup steps",
   steps: {
@@ -27,7 +35,7 @@ export const enSetup = {
   discovery: {
     title: "Internal address from hub discovery",
     lead: "The hub inspects its container and its Docker networks on the server. The browser itself cannot see Docker addresses.",
-    simulated: (import.meta.env.DEV ? "Simulated" : ""),
+    simulated: "Simulated",
     loading: "Hub is discovering its networks …",
     failed: "Discovery not possible – please enter the address yourself.",
     retry: "Discover again",
@@ -77,15 +85,19 @@ export const enSetup = {
     user: "Admin",
     password: "Password",
     passwordSet: "set (not saved)",
+    passwordWillChange: "Will be changed before setup finishes",
+    passwordAlreadySet: "Already set",
     header: "User header",
     hosts: "Hosts",
     hostsNone: "None yet – after finishing, Docklet offers host onboarding.",
     urlCheck: "Address is formally valid. Whether an agent reaches it only shows with its first connection – Docklet does not check this in advance and opens no ports.",
     modes: { none: "No login", local: "Local admin", proxy: "Reverse proxy" },
   },
+  saveError: "The setup settings could not be saved. Check the values and try again.",
   done: {
     title: "{name} is set up",
     body: (import.meta.env.DEV ? "The details are now in the hub settings of this demo tab. Passwords were discarded, not saved." : "The details are available in hub settings. Passwords were discarded."),
+    bodyConnected: "Hub settings have been saved. Continue to the dashboard.",
     host: "Connect first host",
     dashboard: "Go to dashboard",
     settings: "View hub settings",

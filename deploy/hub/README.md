@@ -23,6 +23,10 @@ Compose commands. The listener is published on loopback; attach the operator's
 reverse proxy to it. Sub-path hosting is unsupported. The Docker socket grants
 management access to the local Docker host.
 
+`TZ` selects the hub time zone for schedules and date display (default `UTC`).
+Set an IANA zone such as `Europe/Berlin` in the private environment file and recreate
+the hub after changing it. General settings show the effective zone read-only.
+
 The `hub-data` named volume is mounted at `/app/data`. Keep it on local persistent
 storage. Linux bind mounts are supported when their directory is writable by the
 runtime identity; use the named volume on Docker Desktop and other hosts. Named
@@ -46,19 +50,63 @@ may still have finished. A second hub refuses startup with `hub.already_running`
 No previous PostgreSQL, Arcane or Docklet database/registration is imported. Begin
 with an empty volume; unsupported or newer schemas are refused.
 
-Offline password recovery uses the same volume and runtime identity:
+## Sign-in and recovery
 
-```sh
-docker compose stop hub
-docker compose run --rm -e ALLOW_CLI_PASSWORD_RESET=true hub admin reset-password --username example-admin
-docker compose up -d hub
-```
+`AUTH_MODE=local` is the default and uses the local administrator password and
+sessions. `AUTH_MODE=none` grants full administrator access to anyone who can reach
+the hub; the operator deliberately accepts that access. Switching away from none
+revokes sessions but preserves users, API keys, environment tokens and webhook
+tokens created meanwhile. Review users and revoke or rotate unwanted credentials.
+The hub does not allowlist the request Host header; none-mode reads remain
+unauthenticated, including requests using another Host. Browser write and WebSocket
+Origin checks do not add Host validation for reads.
 
-Run these commands from this directory, or pass `-f deploy/hub/compose.yaml` from
-the repository root. Supply the real administrator name. Enter the new password
-only at the terminal prompt. `docker exec` against a running hub is refused with
-`hub.already_running`; the enable flag does not bypass the lifetime lock. Recovery
-revokes other sessions. Creating a missing data directory also uses `PUID`/`PGID`.
+`AUTH_MODE=proxy` accepts
+the identity in `AUTH_PROXY_HEADER` (default `Remote-User`) only from the direct TCP
+peer addresses or CIDRs in `AUTH_TRUSTED_PROXIES`. The list is comma-separated and
+has no default; missing/malformed configuration and all-address `/0` networks
+prevent startup. Identity values must contain printable UTF-8 characters only.
+
+Every accepted proxy name maps to the same administrator; it is used only for
+activity attribution. Configure the proxy to authenticate every request and strip
+and replace the identity header. Trust the address seen by the hub after any
+container networking or address translation. For example, a documentation-only
+policy can list `192.0.2.10,2001:db8::/32`. Forwarded addresses, including
+`X-Forwarded-For`, never establish sign-in identity. `TRUSTED_PROXIES` separately
+controls forwarded client/TLS metadata and does not grant identity trust. Local
+passwords, sessions and personal API keys cannot bypass proxy sign-in.
+
+Put these values in the private Compose environment file and recreate the hub
+with `docker compose up -d --force-recreate hub` using the same `--env-file` as for
+installation. Merely restarting a container does not update its environment.
+Changing modes revokes previous sessions; a same-mode restart preserves them.
+`GET /api/auth/mode` exposes the active mode without credentials. The UI cannot
+change it. Production login, setup and profile screens use this policy.
+After switching to local mode, the initial password remains valid until changed;
+the UI forces the password change even when setup was already completed.
+
+For recovery, set `AUTH_RESET_ADMIN_PASSWORD` in that private environment file to
+a new password satisfying the configured password policy, then recreate the hub.
+Startup updates the global administrator password and revokes its sessions once
+per start. The log records that a reset occurred without printing the password.
+Remove the variable after successful recovery and recreate the hub again; leaving
+it set repeats the reset on the next start. Alternatively select `AUTH_MODE=none`,
+restart, and restore the intended mode when operator work is complete. There is
+no password-reset CLI.
+
+`AUTH_MODE`, `AUTH_PROXY_HEADER`, `AUTH_TRUSTED_PROXIES` and
+`AUTH_RESET_ADMIN_PASSWORD` all support `_FILE` and `__FILE` variants. Mount the
+referenced files into the hub container and set their container paths. `__FILE`
+has precedence over `_FILE`, then the direct value; the existing loader warns
+and falls back to the direct value if a file cannot be read. Empty direct mode
+values use `local`. An invalid recovery value prevents startup.
+
+For every hub mode, fetch `GET /api/auth/mode`, retain the returned CSRF cookie
+and `X-CSRF-Token` header, then send that token header plus the exact `APP_URL`
+Origin on every POST, PUT, PATCH or DELETE. Missing/wrong Origin or CSRF tokens
+return 403, including requests carrying local Bearer/API-key or proxy identity
+headers. Machine transports authenticated by environment/agent tokens and
+path-token webhook ingress retain their separate authentication contracts.
 
 For a local candidate check, run `node scripts/smoke-hub-image.mjs IMAGE` after
 building. It checks an empty temporary volume, `/api/health`, the served web

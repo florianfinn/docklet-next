@@ -10,6 +10,23 @@ import type { BackupTarget, HubSettings, NotificationChannel, SettingsSection } 
 import type { SystemComponent } from "@/domain/system";
 import type { PruneSkipReason, VolumePrunePlan } from "@/domain/volume-prune";
 import type { BackupPolicy, Volume, VolumeDetail } from "@/domain/volumes";
+import type { AuthMode } from "@/domain/settings";
+
+export interface CurrentUser {
+  id: string;
+  username: string;
+  locale?: string | null;
+  requiresPasswordChange: boolean;
+}
+
+export interface AuthApi {
+  getAuthMode(): Promise<AuthMode>;
+  getCurrentUser(): Promise<CurrentUser>;
+  login(username: string, password: string): Promise<CurrentUser>;
+  logout(): Promise<void>;
+  changePassword(currentPassword: string, newPassword: string): Promise<void>;
+  updateMyLocale(locale: string): Promise<CurrentUser>;
+}
 
 /** Error codes of the hosts, storage and settings contracts; UIs translate them. */
 export type AdapterErrorCode =
@@ -177,6 +194,8 @@ export interface TestResult {
 }
 
 export interface SettingsApi {
+  getSetupStatus(): Promise<boolean>;
+  getConnectedSettings(): Promise<Pick<HubSettings, "general" | "activity">>;
   getSettings(): Promise<HubSettings>;
   saveSettings<K extends SettingsSection>(section: K, value: HubSettings[K]): Promise<void>;
   /** First-run setup; secrets are not part of the payload. */

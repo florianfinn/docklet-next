@@ -3,7 +3,7 @@ import { Profiler } from "react";
 import { matchRoutes, type RouteObject } from "react-router";
 import { afterAll, afterEach, beforeAll, expect, it, vi } from "vitest";
 
-vi.mock("@/runtime", () => import("./runtime"));
+vi.mock("@/runtime", () => vi.importActual("./runtime"));
 
 import { NAV } from "@/app/shell/nav-items";
 import type { renderRoutes, renderWithApp } from "@/test/render";
@@ -65,20 +65,15 @@ it.each(paths)("settles with the product HTTP adapter when the backend is unavai
   }
 }, 9000);
 
-it("shows only sidebar links backed by a production route", async () => {
+it("keeps protected navigation hidden while the sign-in policy is unavailable", async () => {
   renderProductRoutes(routes, ["/dashboard"], productAdapter());
-  await waitFor(() => expect(document.querySelector('[data-slot="sidebar"] a[href="/dashboard"]')).not.toBeNull());
+  await screen.findByText("Die Anmeldeart konnte nicht geladen werden. Bitte erneut versuchen.");
+  expect(document.querySelector('[data-slot="sidebar"]')).toBeNull();
   const links = navigation.flatMap((group) => group.items);
   expect(links.length).toBeGreaterThan(0);
   expect(links.some((item) => item.to.startsWith("/preview/"))).toBe(false);
   for (const item of links) {
     const matches = matchRoutes(routes, item.to);
-    expect(matches?.length).toBeGreaterThan(0);
-    expect(matches?.some(({ route }) => route.path === "*")).toBe(false);
-  }
-  const sidebarLinks = [...document.querySelectorAll<HTMLAnchorElement>('[data-slot="sidebar"] a[href^="/"]')];
-  for (const link of sidebarLinks) {
-    const matches = matchRoutes(routes, link.pathname);
     expect(matches?.length).toBeGreaterThan(0);
     expect(matches?.some(({ route }) => route.path === "*")).toBe(false);
   }

@@ -207,7 +207,7 @@ describe("Hub database backup page", () => {
     expect(screen.getByText(deHubBackups.timeHint)).toBeTruthy();
     setAppLocale("en-US");
     expect(await screen.findByRole("combobox", { name: enHubBackups.frequency })).toBeTruthy();
-    expect(screen.getByText("24-hour time in the Hub's local time zone.")).toBeTruthy();
+    expect(screen.getByText("24-hour time in the hub time zone set by TZ.") !== null).toBe(true);
   });
 
   it("shows maintenance progress and redirects after sessions are revoked", async () => {

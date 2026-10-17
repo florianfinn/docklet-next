@@ -57,6 +57,7 @@ func (m *CORSMiddleware) Add() echo.MiddlewareFunc {
 			"X-API-Key",
 		},
 		ExposeHeaders: []string{
+			CSRFHeader,
 			"Content-Length",
 			"Content-Type",
 			"X-Total-Count",

@@ -2,8 +2,8 @@
 
 ## Boundary and reuse
 
-The production web app currently selects `createDisconnectedAdapter` in
-`web/src/runtime.ts`; development selects `createDemoAdapter`. The existing
+The production UI selects the HTTP adapter in `web/src/runtime.ts`; development
+uses the demo adapter. The existing
 `DockletAdapter` port in `web/src/data/adapter.ts` and `api.ts` defines calls and
 `Topic` names. `live.ts` shares action, metric and log subscriptions;
 `AdapterProvider.tsx` maps `subscribeChanges` topics to query invalidation;
@@ -34,7 +34,7 @@ adapter operation available: its mapping and server capability must both exist.
 | `listEvents` | `listEvents` or `getEventsByEnvironment` for the selected scope | Map `EventEvent` to `CodedEvent`; use recorded DTOs. |
 | `subscribeActions`, `subscribeChanges` | `streamClient` (`activities`, `events`) | Parse envelopes and re-read changed snapshots/queries. |
 | `listHosts`, `listStacks`, `getStack`, `listContainers` | `listEnvironments`, `list-projects`, `get-project`, `list-containers` | Expose unavailable until M5 owns the view-model mappings. |
-| `getSecurity`, `listSchedule`, `getSettings` | `get-environment-vulnerability-overview`, `get-job-schedules`, `get-settings` | Expose unavailable until M11, M10 and M4 respectively own their mappings. |
+| `getSecurity`, `listSchedule`, `getSettings` | `get-environment-vulnerability-overview`, `get-job-schedules`, `get-settings` | The first two calls remain unavailable until M11 and M10. `getSettings` stays unavailable for unconnected sections; M4 reads connected sections with `getConnectedSettings`. |
 | `runStackCommand`, `runContainerCommand` | `deploy-project`/`down-project`/`restart-project`/`redeploy-project`; `start-container`/`stop-container`/`restart-container` | Expose unavailable until M6 supplies guarded run identities and mappings. |
 | Other `DockletAdapter` reads, writes and subscriptions | Existing operation where listed, otherwise no matching operation | Expose unavailable until the owning milestone supplies the complete mapping. Existing log/stats WebSockets remain the later stream transport. |
 
@@ -120,19 +120,31 @@ refresh the subscribed M3 topics. Preserve WebSocket logs and stats as separate
 later streams. The deployment has one hub process per database, so no
 multi-hub fan-out protocol is needed.
 
-## #27 scope and history setting
+## Identity, settings and production routes (#27)
 
-M3 replaces the production `createDisconnectedAdapter` selection with the HTTP
-adapter, which implements run/event reads and the live feed in this step. It removes the empty production value of
-`activity.output.simulated`; real run output has no simulation badge. Other
-unsupported actions remain visibly disabled with their capability reason.
-Login and setup gates and their empty text fallbacks belong to M4; onboarding,
-host installer and host text fallbacks belong to M5. Preview and design-lab
-routes remain development-only. Later domain text fallbacks follow their
-owning milestones in `api-contract.md`.
+M3 provides the HTTP adapter for events and activities. M4 connects `/auth/mode`,
+`/auth/me`, local login/logout, password changes, profile language and setup status
+through that adapter. Only `/auth/mode` selects the active policy; the legacy
+`authLocalEnabled` value is not a mode source. Production login/setup routes use
+complete catalogues. Route gates require sign-in and setup before the dashboard.
+Local first-run setup changes the initial password before completion. Switching
+an already configured hub to local also forces any outstanding password change.
 
-Remove the editable history limits from the web settings UI: retention is fixed
-at 500 events and 100 finished runs per environment; running runs are retained.
+`getConnectedSettings` reads General and Activity through
+`GET /environments/0/settings`; section writes use `PUT` on the same path. Sign-in
+mode is read-only. The process `TZ` drives backend schedules and is projected as
+read-only `effectiveTimeZone` for `IntlProvider` and schedule display. General
+explains that operators change `TZ` in the startup environment and restart the
+hub. Setup stores agent-host project defaults under `agentProjectsDirectory`,
+separately from the hub's own `projectsDirectory`. Important-action presentation
+uses the stored Activity value. Profile language is stored per administrator via
+`PUT /auth/me/profile` and applied on load. Other settings sections retain their
+existing boundaries.
+
+The UI exposes no editable history limits. Retention stays at 500 events and
+100 finished runs per environment; active runs remain. M5 owns onboarding,
+host installation and their text fallbacks. Preview and the design lab remain
+development routes.
 
 ## Contract test matrix for #38
 

@@ -23,6 +23,8 @@ export function createSettingsApi({ db, runner }: DemoContext): SettingsApi {
   const snapshot = (): HubSettings => ({ ...structuredClone(db.settings), security: { scanEnabled: db.security.enabled, schedule: db.security.schedule } });
 
   return {
+    getSetupStatus: async () => db.settings.setupCompleted,
+    getConnectedSettings: async () => ({ general: structuredClone(db.settings.general), activity: structuredClone(db.settings.activity) }),
     getSettings: () => simulateRead("settings", snapshot),
 
     async saveSettings(section, value) {

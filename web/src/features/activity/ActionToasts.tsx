@@ -4,9 +4,9 @@ import { useLocale, useTranslations } from "use-intl";
 
 import { useActionRun } from "@/data/live";
 import { renderMessage, renderRun } from "@/data/message-code";
-import { useSettings } from "@/data/queries";
-import { runGateOf, type GateNotice } from "@/data/run-gate";
+import { useConnectedSettings, useSettings } from "@/data/queries";
 import { useAdapter } from "@/data/use-adapter";
+import { runGateOf, type GateNotice } from "@/data/run-gate";
 import { effectivePresentation, toastDetail, uiStyleStore, useUiStyle } from "@/shared/preferences/ui-style-store";
 
 import { actionDialogStore, offerActionDialog, openActionDialog } from "./action-dialog-store";
@@ -53,7 +53,10 @@ export function ActionToasts() {
     localeRef.current = locale;
   });
   // The hub setting decides for new runs; the design-lab override wins in this browser.
-  const hubPresentation = useSettings().data?.activity.actionPresentation;
+  const connected = adapter.kind === "http";
+  const demoPresentation = useSettings(!connected).data?.activity.actionPresentation;
+  const corePresentation = useConnectedSettings(connected).data?.activity.actionPresentation;
+  const hubPresentation = connected ? corePresentation : demoPresentation;
   const hubRef = useRef(hubPresentation);
   useLayoutEffect(() => {
     hubRef.current = hubPresentation;

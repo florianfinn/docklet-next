@@ -34,9 +34,9 @@ export const enHelp = {
       },
       timeZone: {
         title: "Hub time zone",
-        short: "All schedules run in this time zone, not in the browser's.",
-        full: "Updates, backups and scans are scheduled in this time zone so every viewer sees the same times. Daylight saving time is taken into account; a time in the hour skipped by the change runs one hour later, e.g. 02:30 at 03:30.",
-        impact: "A change moves all scheduled runs to the new local time.",
+        short: "Schedules and date display use the hub process time zone.",
+        full: "The TZ variable sets the zone at startup. General shows the effective value read-only; change the deployment environment and restart the hub.",
+        impact: "Changing TZ changes schedule times and date display after restart.",
       },
     },
     settingsAppearance: {

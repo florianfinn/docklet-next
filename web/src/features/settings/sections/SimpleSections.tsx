@@ -80,7 +80,7 @@ export function HostDefaultsSection({ settings }: { settings: HubSettings }) {
   );
 }
 
-export function ActivitySection({ settings }: { settings: HubSettings }) {
+export function ActivitySection({ settings }: { settings: Pick<HubSettings, "activity"> }) {
   const t = useTranslations("settings");
   const ta = useTranslations("settings.activity");
   const save = useSaveSettings();

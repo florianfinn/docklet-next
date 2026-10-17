@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Functional cut: removed APNS mobile push; functional cut: removed template catalogue; functional cut: removed GitOps and saved Git repositories; functional cut: removed Swarm; functional cut: removed standalone build workshop; functional cut: removed OIDC and passkeys.
+// Deviations: Functional cut: removed APNS mobile push; functional cut: removed template catalogue; functional cut: removed GitOps and saved Git repositories; functional cut: removed Swarm; functional cut: removed standalone build workshop; functional cut: removed OIDC and passkeys. #69 first-run setup and hub settings persistence.
 
 package settings
 
@@ -37,6 +37,19 @@ type SettingDto struct {
 
 // Update is used to update application settings.
 type Update struct {
+	SetupCompleted         *string `json:"setupCompleted,omitzero"`
+	HubName                *string `json:"hubName,omitzero"`
+	HubAddress             *string `json:"hubAddress,omitzero"`
+	DomainURL              *string `json:"domainUrl,omitzero"`
+	LinkBase               *string `json:"linkBase,omitzero"`
+	AgentProjectsDirectory *string `json:"agentProjectsDirectory,omitzero"`
+	AgentInstallDirectory  *string `json:"agentInstallDirectory,omitzero"`
+	DefaultHostConnection  *string `json:"defaultHostConnection,omitzero"`
+	DefaultPUID            *string `json:"defaultPuid,omitzero"`
+	DefaultPGID            *string `json:"defaultPgid,omitzero"`
+	DetectSocketGroup      *string `json:"detectSocketGroup,omitzero"`
+	KeepActionOutput       *string `json:"keepActionOutput,omitzero"`
+	ActionPresentation     *string `json:"actionPresentation,omitzero"`
 	// ProjectsDirectory is the directory path where projects are stored.
 	// Must be an absolute path.
 	//
@@ -240,7 +253,7 @@ type Update struct {
 	// AuthLocalEnabled indicates if local authentication is enabled.
 	//
 	// Required: false
-	AuthLocalEnabled *string `json:"authLocalEnabled,omitzero"`
+	AuthLocalEnabled *string `json:"authLocalEnabled,omitzero" deprecated:"true" doc:"Read-only startup policy; updates are rejected. Use GET /auth/mode."`
 
 	//
 	// Required: false

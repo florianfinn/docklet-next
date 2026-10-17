@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace
+// Deviations: Local module namespace; retain browser cookies at the hub boundary.
 
 package edge
 
@@ -98,7 +98,7 @@ func ProxyWebSocketRequest(c *echo.Context, tunnel *AgentTunnel, targetPath stri
 func buildWebSocketHeaders(req *http.Request) map[string]string {
 	headers := make(map[string]string)
 	for k, v := range req.Header {
-		if len(v) > 0 {
+		if len(v) > 0 && http.CanonicalHeaderKey(k) != HeaderCookie {
 			headers[k] = v[0]
 		}
 	}

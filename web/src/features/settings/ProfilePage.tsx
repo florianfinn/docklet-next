@@ -6,6 +6,7 @@ import { useTranslations } from "use-intl";
 
 import { LogoutDialog } from "@/app/shell/LogoutDialog";
 import { useSettings } from "@/data/queries";
+import { useAdapter } from "@/data/use-adapter";
 import { TextField } from "@/shared/components/form-field";
 import { PageHeader, QueryError } from "@/shared/components/page";
 import { ToneBadge } from "@/shared/components/tone";
@@ -15,9 +16,15 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/sha
 import { Skeleton } from "@/shared/ui/skeleton";
 
 import { useAuthErrors } from "./field-rules";
+import { ConnectedProfilePage } from "./ConnectedProfilePage";
 
 /** Own profile and session; content follows the hub's login mode. */
 export default function ProfilePage() {
+  const adapter = useAdapter();
+  return adapter.kind === "http" ? <ConnectedProfilePage /> : <DemoProfilePage />;
+}
+
+function DemoProfilePage() {
   const t = useTranslations("settings.profile");
   const tu = useTranslations("shell.user");
   const ta = useTranslations("settings.auth");

@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; functional cut: removed upstream analytics heartbeat and APNS mobile push; functional cut: removed template catalogue; functional cut: removed GitOps and saved Git repositories; functional cut: removed Swarm; functional cut: removed standalone build workshop; functional cut: removed OIDC and passkeys.; Removed downgrade setting from the configuration contract. Count-based history settings contract.
+// Deviations: Local module namespace; functional cut: removed upstream analytics heartbeat and APNS mobile push; functional cut: removed template catalogue; functional cut: removed GitOps and saved Git repositories; functional cut: removed Swarm; functional cut: removed standalone build workshop; functional cut: removed OIDC and passkeys.; Removed downgrade setting from the configuration contract. Count-based history settings contract. #69 connected hub settings keys.
 
 package schema
 
@@ -27,6 +27,7 @@ func TestGenerate_EnvConfigIncludesTaggedFields(t *testing.T) {
 	assert.Equal(t, expectedEnvConfigVars, envNames(doc.EnvConfig))
 
 	entries := mapEnvEntries(doc.EnvConfig)
+	assert.Equal(t, "UTC", entries["TZ"].DefaultValue)
 
 	appURL, ok := entries["APP_URL"]
 	require.True(t, ok)
@@ -84,6 +85,9 @@ func TestGenerate_SettingEnvOverridesMatchModelMetadata(t *testing.T) {
 	assert.Equal(t, "timeouts", dockerTimeout.Category)
 	assert.Equal(t, "settings.Settings + settings.DefaultSettingsConfig", dockerTimeout.Source)
 
+	assert.Contains(t, entries, "agentProjectsDirectory")
+	assert.NotContains(t, entries, "timeZone")
+	assert.NotContains(t, entries, "effectiveTimeZone")
 	_, hasRuntimeDerived := entries["uiConfigDisabled"]
 	assert.False(t, hasRuntimeDerived)
 }
@@ -197,9 +201,12 @@ var expectedEnvConfigVars = []string{
 	"ADMIN_STATIC_API_KEY",
 	"AGENT_MODE",
 	"AGENT_TOKEN",
-	"ALLOW_CLI_PASSWORD_RESET",
 	"APP_URL",
 	"ARCANE_BACKUP_VOLUME_NAME",
+	"AUTH_MODE",
+	"AUTH_PROXY_HEADER",
+	"AUTH_RESET_ADMIN_PASSWORD",
+	"AUTH_TRUSTED_PROXIES",
 	"AUTO_LOGIN_PASSWORD",
 	"AUTO_LOGIN_USERNAME",
 	"DATABASE_URL",
@@ -253,6 +260,9 @@ var expectedEnvConfigVars = []string{
 }
 
 var expectedSettingOverrideKeys = []string{
+	"actionPresentation",
+	"agentInstallDirectory",
+	"agentProjectsDirectory",
 	"authLocalEnabled",
 	"authPasswordPolicy",
 	"authSessionTimeout",
@@ -270,15 +280,20 @@ var expectedSettingOverrideKeys = []string{
 	"buildProvider",
 	"buildTimeout",
 	"defaultDeployPullPolicy",
+	"defaultHostConnection",
+	"defaultPgid",
+	"defaultPuid",
 	"defaultShell",
 	"deployWaitTimeout",
 	"depotProjectId",
 	"depotToken",
+	"detectSocketGroup",
 	"diskUsagePath",
 	"dockerApiTimeout",
 	"dockerClientRefreshInterval",
 	"dockerHost",
 	"dockerImagePullTimeout",
+	"domainUrl",
 	"enableGravatar",
 	"environmentHealthInterval",
 	"eventCleanupInterval",
@@ -287,13 +302,17 @@ var expectedSettingOverrideKeys = []string{
 	"featureVulnerabilityManagementEnabled",
 	"followProjectSymlinks",
 	"httpClientTimeout",
+	"hubAddress",
+	"hubName",
 	"imageAutoPatchEnabled",
 	"imageAutoPatchInterval",
 	"imageEventWatcherEnabled",
 	"imagePatchAllPlatforms",
 	"imagePatchSuffix",
 	"imagePatchTimeoutSec",
+	"keepActionOutput",
 	"lifecycleMaxTimeoutSec",
+	"linkBase",
 	"maxConcurrentActivities",
 	"maxImageUploadSize",
 	"pollingEnabled",
@@ -313,6 +332,7 @@ var expectedSettingOverrideKeys = []string{
 	"registryTimeout",
 	"scheduledPruneEnabled",
 	"scheduledPruneInterval",
+	"setupCompleted",
 	"toolsImageRegistry",
 	"trivyConcurrentScanContainers",
 	"trivyConfig",

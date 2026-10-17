@@ -9,6 +9,12 @@ export function createDisconnectedAdapter(): DockletAdapter {
   const subscribe = () => () => {};
   return {
     kind: "disconnected",
+    getAuthMode: unavailable,
+    getCurrentUser: unavailable,
+    login: unavailable,
+    logout: unavailable,
+    changePassword: unavailable,
+    updateMyLocale: unavailable,
     getHubBackupAccess: unavailable,
     listHubBackups: unavailable,
     getHubBackupPolicies: unavailable,
@@ -86,6 +92,8 @@ export function createDisconnectedAdapter(): DockletAdapter {
     removeImage: unavailable,
     pruneImages: unavailable,
     getSettings: unavailable,
+    getSetupStatus: unavailable,
+    getConnectedSettings: unavailable,
     saveSettings: unavailable,
     completeSetup: unavailable,
     testBackupTarget: unavailable,

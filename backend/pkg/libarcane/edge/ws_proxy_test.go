@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: None
+// Deviations: Assert browser cookies are stripped before opening an Edge WebSocket stream.
 
 package edge
 
@@ -21,6 +21,7 @@ import (
 )
 
 func TestProxyWebSocketRequest(t *testing.T) {
+	receivedHeaders := make(chan map[string]string, 1)
 	// Custom Mock Agent Server
 	agentServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		conn, err := websocket.Accept(w, r, nil)
@@ -39,6 +40,7 @@ func TestProxyWebSocketRequest(t *testing.T) {
 			_ = json.Unmarshal(data, &msg)
 
 			if msg.Type == MessageTypeStreamOpen {
+				receivedHeaders <- msg.Headers
 				// 1. Send Data
 				resp := &TunnelMessage{
 					ID:            msg.ID,
@@ -106,7 +108,9 @@ func TestProxyWebSocketRequest(t *testing.T) {
 
 	// Client Connect
 	proxyURL := "ws" + strings.TrimPrefix(proxyServer.URL, "http") + "/proxy-ws"
-	clientConn, _, err := websocket.Dial(t.Context(), proxyURL, nil)
+	clientConn, _, err := websocket.Dial(t.Context(), proxyURL, &websocket.DialOptions{
+		HTTPHeader: http.Header{"Cookie": {"docklet_csrf=example; proxy_session=example"}},
+	})
 	require.NoError(t, err)
 	defer func() { _ = clientConn.CloseNow() }()
 
@@ -114,6 +118,9 @@ func TestProxyWebSocketRequest(t *testing.T) {
 	_, msg, err := clientConn.Read(t.Context())
 	require.NoError(t, err)
 	assert.Equal(t, "hello", string(msg))
+	for name := range <-receivedHeaders {
+		assert.NotEqual(t, "Cookie", http.CanonicalHeaderKey(name))
+	}
 
 	// Send data from Client to Agent
 	err = clientConn.Write(t.Context(), websocket.MessageText, []byte("client-data"))

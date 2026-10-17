@@ -35,7 +35,6 @@ import (
 	"github.com/florianfinn/docklet-next/backend/pkg/libarcane/edge"
 	"github.com/florianfinn/docklet-next/backend/pkg/utils/cookie"
 	"github.com/florianfinn/docklet-next/backend/pkg/utils/handlerutil"
-	"github.com/florianfinn/docklet-next/backend/pkg/utils/httpx"
 )
 
 var (
@@ -123,6 +122,15 @@ func createAuthValidatorInternal(deps api.HandlerDeps) middleware.AuthValidator 
 	}
 	return func(ctx context.Context, c *echo.Context) (*authz.PermissionSet, *usertypes.Actor, bool) {
 		req := c.Request()
+		if deps.Auth.Service().SignInMode() != "local" {
+			if apiKey := req.Header.Get(middleware.HeaderApiKey); apiKey != "" {
+				if envID, err := deps.ApiKey.Service().GetEnvironmentByApiKey(ctx, apiKey); err == nil && envID != nil {
+					return authz.EnvironmentPermissionSet(*envID), nil, true
+				}
+			}
+			actor, ok := verifyRouterRequestUserInternal(ctx, deps.Auth.Service(), req)
+			return authz.SudoPermissionSet(), actor, ok
+		}
 		// Check for API key authentication
 		if apiKey := req.Header.Get(middleware.HeaderApiKey); apiKey != "" {
 			// User-owned API key: personal keys inherit the owner's role
@@ -150,8 +158,12 @@ func createAuthValidatorInternal(deps api.HandlerDeps) middleware.AuthValidator 
 }
 
 func verifyRouterRequestUserInternal(ctx context.Context, authService *auth.AuthService, req *http.Request) (*usertypes.Actor, bool) {
-	if authHeader := req.Header.Get("Authorization"); strings.HasPrefix(authHeader, "Bearer ") {
-		user, _, err := authService.VerifyToken(ctx, strings.TrimPrefix(authHeader, "Bearer "))
+	if authService.SignInMode() != "local" {
+		requestUser, err := authService.ModeRequestUser(ctx, req)
+		return requestUser.Actor(), err == nil && requestUser != nil
+	}
+	if token, ok := auth.BearerToken(req.Header.Get("Authorization")); ok {
+		user, _, err := authService.VerifyToken(ctx, token)
 		return user.Actor(), err == nil && user != nil
 	}
 
@@ -224,7 +236,9 @@ func newRouter(p RouterParams) (*echo.Echo, *edge.TunnelServer) {
 
 	authMiddleware := p.AuthMiddleware
 	e.Use(middleware.NewCORSMiddleware(cfg).Add())
-	e.Use(middleware.NewCSRFMiddleware(cfg).Add())
+	e.Use(middleware.NewCSRFMiddleware(cfg).
+		WithTransportValidator(csrfTransportValidatorInternal(deps)).
+		WithLocalCredentialValidator(authMiddleware.ValidateLocalHeaderCredential).Add())
 
 	apiGroup := e.Group("/api")
 
@@ -278,7 +292,9 @@ func newRouter(p RouterParams) (*echo.Echo, *edge.TunnelServer) {
 		createAuthValidatorInternal(deps),
 		permissionMatcher,
 		p.TunnelRegistry,
-		httpx.ValidateWebSocketOrigin(cfg.GetAppURL()),
+		middleware.WebSocketOriginValidator(cfg, func(req *http.Request) bool {
+			return authMiddleware.ValidateNonCookieCredential(req) || csrfTransportValidatorInternal(deps)(req)
+		}),
 	)
 	apiGroup.Use(envProxyMiddleware)
 

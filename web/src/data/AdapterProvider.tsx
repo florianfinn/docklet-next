@@ -7,6 +7,7 @@ import type { DockletAdapter, Topic } from "./adapter";
 import { runGateOf, withRunGate } from "./run-gate";
 import { AdapterContext } from "./use-adapter";
 import { queryKeys } from "./query-keys";
+import { useCurrentUser } from "./queries";
 
 const TOPIC_KEYS: Record<Topic, readonly (readonly unknown[])[]> = {
   hosts: [queryKeys.hosts, queryKeys.systemComponents],
@@ -18,21 +19,25 @@ const TOPIC_KEYS: Record<Topic, readonly (readonly unknown[])[]> = {
   events: [queryKeys.events],
   schedule: [queryKeys.schedule],
   volumes: [queryKeys.volumes, queryKeys.volumeRoot, queryKeys.fileRoot],
-  settings: [queryKeys.settings],
+  settings: [queryKeys.settings, queryKeys.connectedSettings],
   images: [queryKeys.images],
 };
 
 /** Invalidates cached reads when the adapter reports changes (SSE-like). */
 function ChangeBridge({ adapter }: { adapter: DockletAdapter }) {
   const client = useQueryClient();
+  const identity = useCurrentUser(adapter.kind === "http");
+  const enabled = adapter.kind !== "http" || (identity.isSuccess && !!identity.data);
   useEffect(
-    () =>
-      adapter.subscribeChanges((topics) => {
+    () => {
+      if (!enabled) return;
+      return adapter.subscribeChanges((topics) => {
         for (const topic of new Set(topics)) {
           for (const key of TOPIC_KEYS[topic]) void client.invalidateQueries({ queryKey: key });
         }
-      }),
-    [adapter, client],
+      });
+    },
+    [adapter, client, enabled],
   );
   return null;
 }

@@ -8,7 +8,7 @@ export interface DemoFailure {
   at?: "none" | "pull" | "start" | "health";
 }
 export function queueDemoFailure(_adapter: DockletAdapter, _failure: DemoFailure): void {}
-export { BackendNotice as LoginPage } from "@/data/BackendNotice";
+export { default as LoginPage } from "@/features/auth/login/ProductLoginPage";
 
 export function DesignLabPanel() { return null; }
 export function LiveToggle() { return null; }
