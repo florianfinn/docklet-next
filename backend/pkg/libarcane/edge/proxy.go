@@ -16,6 +16,7 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/florianfinn/docklet-next/backend/pkg/remenv"
 	"github.com/labstack/echo/v5"
 	"github.com/samber/mo"
 )
@@ -245,12 +246,15 @@ func ProxyHTTPRequest(c *echo.Context, tunnel *AgentTunnel, targetPath string) e
 		)
 
 		if proxyCtx.Err() != nil {
-			return c.JSON(http.StatusGatewayTimeout, map[string]any{"error": "request timed out"})
+			return c.JSON(http.StatusGatewayTimeout, map[string]any{"success": false, "code": "agent.unavailable", "error": "request timed out"})
 		}
 
-		return c.JSON(http.StatusBadGateway, map[string]any{"error": "failed to proxy request through tunnel"})
+		return c.JSON(http.StatusBadGateway, map[string]any{"success": false, "code": "agent.unavailable", "error": "failed to proxy request through tunnel"})
 	}
 
+	if remenv.AgentAuthRejected(status) {
+		return c.JSON(http.StatusBadGateway, map[string]any{"success": false, "code": "agent.invalid-token"})
+	}
 	responseHeaders := make(http.Header)
 	for k, v := range respHeaders {
 		responseHeaders.Set(k, v)

@@ -6,7 +6,32 @@
 
 package remenv
 
-import "context"
+import (
+	"context"
+	"errors"
+	"net/http"
+)
+
+var (
+	ErrAgentUpdateRequired = errors.New("agent update required")
+	ErrAgentInvalidToken   = errors.New("invalid environment access token")
+)
+
+func AgentAuthRejected(status int) bool {
+	return status == http.StatusUnauthorized || status == http.StatusForbidden
+}
+
+// AgentAccessFailure keeps host connectivity failures distinct from caller authentication.
+func AgentAccessFailure(err error) (int, string) {
+	if errors.Is(err, ErrAgentUpdateRequired) {
+		return http.StatusConflict, "agent.update-required"
+	}
+	var status *StatusError
+	if errors.Is(err, ErrAgentInvalidToken) || (errors.As(err, &status) && AgentAuthRejected(status.StatusCode)) {
+		return http.StatusBadGateway, "agent.invalid-token"
+	}
+	return http.StatusBadGateway, "agent.unavailable"
+}
 
 // AgentAccessCheck binds a forwarded operation to the current host credential.
 type AgentAccessCheck func(context.Context, string, *string, string, string) (context.Context, context.CancelFunc, error)

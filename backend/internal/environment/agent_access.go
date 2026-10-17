@@ -14,12 +14,13 @@ import (
 	"time"
 
 	"github.com/florianfinn/docklet-next/backend/pkg/libarcane/edge"
+	"github.com/florianfinn/docklet-next/backend/pkg/remenv"
 	"github.com/florianfinn/docklet-next/types/contract"
 	environmenttypes "github.com/florianfinn/docklet-next/types/environment"
 	"github.com/florianfinn/docklet-next/types/version"
 )
 
-var ErrAgentUpdateRequired = errors.New("agent update required")
+var ErrAgentUpdateRequired = remenv.ErrAgentUpdateRequired
 
 type agentSession struct {
 	token    string

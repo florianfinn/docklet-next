@@ -193,7 +193,8 @@ func (m *EnvironmentMiddleware) Handle(c *echo.Context, next echo.HandlerFunc) e
 	if m.agentAccess != nil {
 		ctx, cancel, err := m.agentAccess(c.Request().Context(), envID, accessToken, c.Request().Method, m.buildProxyPath(c, envID))
 		if err != nil {
-			return c.JSON(http.StatusConflict, map[string]any{"success": false, "code": "agent.unavailable"})
+			status, code := remenv.AgentAccessFailure(err)
+			return c.JSON(status, map[string]any{"success": false, "code": code})
 		}
 		defer cancel()
 		c.SetRequest(c.Request().WithContext(ctx))
@@ -625,6 +626,7 @@ func (m *EnvironmentMiddleware) waitForActiveEdgeTunnelInternal(ctx context.Cont
 func (m *EnvironmentMiddleware) abortEdgeTunnelUnavailable(c *echo.Context) error {
 	return c.JSON(http.StatusBadGateway, map[string]any{
 		"success": false,
+		"code":    "agent.unavailable",
 		"data": map[string]any{
 			"error": "Edge agent is not connected",
 		},
@@ -671,6 +673,7 @@ func (m *EnvironmentMiddleware) proxyHTTP(c *echo.Context, target string, access
 	if err != nil {
 		return c.JSON(http.StatusBadGateway, map[string]any{
 			"success": false,
+			"code":    "agent.unavailable",
 			"data":    map[string]any{"error": "Proxy request failed: " + err.Error()},
 		})
 	}
@@ -732,13 +735,14 @@ func (m *EnvironmentMiddleware) createProxyRequest(c *echo.Context, target strin
 }
 
 // writeProxyResponse copies the proxy response back to the client. An upstream
-// 401 means the agent rejected the manager's credentials; passing it through
+// 401/403 means the agent rejected the manager's credentials; passing it through
 // makes browser clients treat it as a lost session, so it becomes a 502.
 func (m *EnvironmentMiddleware) writeProxyResponse(c *echo.Context, resp *http.Response) error {
-	if resp.StatusCode == http.StatusUnauthorized {
+	if remenv.AgentAuthRejected(resp.StatusCode) {
 		slog.WarnContext(c.Request().Context(), "Remote environment rejected the manager's credentials", "target", resp.Request.URL.Host)
 		return c.JSON(http.StatusBadGateway, map[string]any{
 			"success": false,
+			"code":    "agent.invalid-token",
 			"data":    map[string]any{"error": "Remote environment rejected the manager's credentials"},
 		})
 	}

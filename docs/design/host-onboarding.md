@@ -288,6 +288,10 @@ changes, endpoint changes, disablement or removal. An update-required verdict
 replaces prior compatibility and blocks ordinary forwarding until a fresh check succeeds. Below-minimum agents and same-version fingerprint mismatches
 have status `update-required`; health, version and agent self-upgrade stay
 available. System health uses HEAD, as its registered operation specifies.
+Forwarded access failures distinguish `agent.update-required` (HTTP 409),
+`agent.invalid-token` (HTTP 502, including agent HTTP 401/403 responses) and
+`agent.unavailable` (HTTP 502). An update-required health job reports a partial
+result with "Agent update required", rather than offline, and sends no sync.
 
 `Environment.agentReport` contains the last successful process-local version
 report and its observation time. Only agent version requests authenticated with the

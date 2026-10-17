@@ -159,6 +159,8 @@ func (s *EnvironmentService) runHealthCheckInternal(ctx context.Context, envID s
 	wasOnline := localEnvironment.Status == string(EnvironmentStatusOnline)
 	status, err := s.TestConnection(ctx, envID, nil)
 	switch {
+	case status == string(EnvironmentStatusUpdateRequired):
+		return scheduler.Outcome{Status: scheduler.Partial, Message: "Agent update required"}, ErrAgentUpdateRequired
 	case err != nil:
 		slog.WarnContext(ctx, "environment health check failed", "environmentId", envID, "status", status, "error", err)
 		return scheduler.Outcome{Status: scheduler.Retrying}, err

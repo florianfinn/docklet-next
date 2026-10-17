@@ -84,7 +84,7 @@ const (
 
 var (
 	ErrEnvironmentAccessTokenRequired = errors.New("environment access token required")
-	ErrInvalidEnvironmentAccessToken  = errors.New("invalid environment access token")
+	ErrInvalidEnvironmentAccessToken  = remenv.ErrAgentInvalidToken
 	ErrEnvironmentNotFound            = errors.New("environment not found")
 )
 
