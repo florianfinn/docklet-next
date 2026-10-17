@@ -52,15 +52,15 @@ The reference UI has four steps: connection, directories, install, connect
 1. The hub creates the environment with the bootstrap key flow
    (`createEnvironmentWithApiKeyInternal` with `useApiKey` in
    `internal/environment/handler.go`). The host is `pending`; the raw key is
-   returned once and also stored in `environments.access_token` for
+   returned in the create response and also stored in `environments.access_token` for
    hub-to-agent requests. Source: Arcane.
 2. The operator runs the installer on the host. The agent starts passively and
    waits for the hub (direct-mode branch in `internal/bootstrap/bootstrap.go`).
    Source: Arcane.
 3. The hub's environment health job calls the agent with the token
    (`runHealthCheckInternal`, `TestConnection` in
-   `internal/environment/service.go`). Success marks the host online, resets the
-   sync state and pushes registry credentials. Source: Arcane.
+   `internal/environment/service.go`). Success marks the host online, resends sync
+   state after an outage and pushes registry credentials. Source: Arcane.
 4. The hub reads the agent's version info and applies the compatibility rule.
    Source: **new**, decision D1 in the threat review.
 5. The host appears in the host list and the onboarding step completes. The
@@ -105,11 +105,11 @@ machine routes already keep their own contract ([identity](identity.md)).
 | --- | --- | --- |
 | Creation | Random environment bootstrap key; `api_keys` keeps its Argon2 hash and environment-scoped grants, `environments.access_token` keeps the raw value | Arcane (`CreateEnvironmentApiKey` in `internal/apikey/service.go`) |
 | Display | Shown inside the installation artefacts; reopening them for a host reveals the stored token again to an administrator | Arcane (`GetDeploymentSnippets` reads `access_token`); reference artefact view |
-| On the host | Written only to the install directory's `.env` with mode 600; never in a command-line argument | Reference generator; Arcane also reads the token from a file (`options:"file"`) |
+| On the host | Written only to the install directory's `.env` with mode 600; never a command-line argument | Reference generator; Arcane also reads the token from a file (`options:"file"`) |
 | Use | Same value in both directions and as the hub API key for that host | Arcane (threat review T3) |
 | Rotation | Regenerate action in the artefact view: new key, host set to `pending`, old key deleted, Edge token cache synced; the operator reruns the install or edits `.env` | Arcane (`RegenerateEnvironmentApiKey`); reference button in `InstallArtifacts.tsx`, live wiring **new** |
 | Pending | A `pending` host's token stays valid with no expiry; deleting the host revokes it | Arcane |
-| Removal | Deleting a host cascades its key; the agent then fails authentication | Arcane |
+| Removal | Deleting a host cascades its key; the hub API and the Edge tunnel then reject it | Arcane |
 
 Rotation and deletion produce environment events
 (`EventTypeEnvironmentApiKeyRegenerated` and create/delete events in
@@ -142,8 +142,10 @@ Generator rules for M5:
 - The image is pinned to the hub's SemVer and digest where published, with the
   `DOCKLET_AGENT_IMAGE` override kept from the reference. A locally built image
   stays possible as the fallback without registry access.
-- The token appears only in `.env`, never in a heredoc header, command argument
-  or README.
+- The token appears only in `.env` content, never as a command argument, in
+  compose or in the README. The copyable commands write `.env` through a
+  heredoc, so the pasted token can remain in interactive shell history; the
+  install step says so and the downloaded package avoids it.
 - The compose file mounts the Docker socket, the project directory at the same
   path on both sides, and the agent data directory. Arcane's
   `PathMapper` can translate differing paths through mount discovery

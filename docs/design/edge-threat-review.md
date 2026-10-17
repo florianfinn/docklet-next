@@ -81,8 +81,9 @@ recommends binding the published port to the address the hub uses (D5).
 
 The Edge agent dials `MANAGER_API_URL`. HTTPS and WSS use system roots or
 `EDGE_MTLS_CA_FILE` and `EDGE_MTLS_SERVER_NAME`
-(`buildManagerClientTLSConfigInternal` in `pkg/libarcane/edge/tls.go`). Plain `http://` and `ws://` remain allowed; gRPC then uses insecure
-credentials (`pkg/libarcane/edge/client_transport_grpc.go`).
+(`buildManagerClientTLSConfigInternal` in `pkg/libarcane/edge/tls.go`). Plain
+`http://` and `ws://` remain allowed; gRPC then uses insecure credentials
+(`pkg/libarcane/edge/client_transport_grpc.go`).
 
 Residual risk: with a plain URL, N reads the token and every tunneled request,
 and can pose as the hub to the agent. Verdict: **accepted** with the same warning
@@ -218,7 +219,9 @@ The frozen reference writes the token only into `.env` with mode 600
 (`web/src/domain/agent-install.ts`, `agentScript`).
 
 Residual risk: the token stays visible in `docker inspect` to anyone with Docker
-access on that host, who has root there already. Verdict: **accepted** with the
+access on that host, who has root there already. The copyable commands write
+`.env` through a heredoc, so a pasted token can stay in interactive shell
+history; the downloadable package avoids that. Verdict: **accepted** with the
 generator rules in [host onboarding](host-onboarding.md).
 
 ## Summary
