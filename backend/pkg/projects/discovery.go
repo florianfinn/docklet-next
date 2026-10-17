@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; functional cut: removed GitOps and saved Git repositories.
+// Deviations: Local module namespace; removed GitOps; skip labelled agent installation directories.
 
 package projects
 
@@ -152,6 +152,9 @@ func walkProjectDirectoriesInternal(ctx context.Context,
 	// to contain its own compose file.
 	switch composePath, detectComposeFileErr := DetectComposeFile(ctx, root, path); {
 	case detectComposeFileErr == nil, errors.Is(detectComposeFileErr, common.ErrProjectEnvUnreadable) && composePath != "":
+		if isAgentInstallComposeInternal(composePath) {
+			return nil
+		}
 		if detectComposeFileErr != nil {
 			slog.WarnContext(ctx, "Discovered project with an unreadable .env",
 				"path", path,
@@ -355,4 +358,42 @@ func entriesNeedDirectorySyncInternal(entries []string, allowed map[string]struc
 		}
 	}
 	return false
+}
+
+// Inspect labels without interpolating the private agent .env or requiring Docker.
+func isAgentInstallComposeInternal(path string) bool {
+	content, err := os.ReadFile(path)
+	if err != nil {
+		return false
+	}
+	var doc struct {
+		Services map[string]struct {
+			Labels yaml.Node `yaml:"labels"`
+		} `yaml:"services"`
+	}
+	if yaml.Unmarshal(content, &doc) != nil || len(doc.Services) == 0 {
+		return false
+	}
+	for _, service := range doc.Services {
+		labelled := false
+		labels := service.Labels
+		switch labels.Kind {
+		case yaml.MappingNode:
+			for i := 0; i+1 < len(labels.Content); i += 2 {
+				if labels.Content[i].Value == "io.docklet.system" && labels.Content[i+1].Value == "agent" {
+					labelled = true
+				}
+			}
+		case yaml.SequenceNode:
+			for _, label := range labels.Content {
+				if label.Value == "io.docklet.system=agent" {
+					labelled = true
+				}
+			}
+		}
+		if !labelled {
+			return false
+		}
+	}
+	return true
 }

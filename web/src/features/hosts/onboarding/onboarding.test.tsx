@@ -38,7 +38,7 @@ afterEach(() => {
   localStorage.clear();
 });
 
-const next = () => userEvent.click(screen.getByRole("button", { name: "Weiter" }));
+const next = () => userEvent.click(screen.getByRole("button", { name: /^(Weiter|Host anlegen und auf Agent warten)$/ }));
 
 describe("host onboarding", () => {
   it("validates, produces edge artifacts and connects the host into the shared host list", async () => {
@@ -80,11 +80,12 @@ describe("host onboarding", () => {
     expect(compose.textContent?.includes('io.docklet.system: "agent"')).toBe(true);
     expect(compose.textContent?.includes("ports:")).toBe(false);
 
-    // Going back keeps the draft; directories are still editable before registration.
+    // Registration precedes installation, so going back keeps the locked directories.
     await userEvent.click(screen.getByRole("button", { name: "Zurück" }));
     expect((screen.getByLabelText("Projektverzeichnis") as HTMLInputElement).value).toBe("/home/docker");
     await next();
-    await userEvent.click(await screen.findByRole("button", { name: "Host anlegen und auf Agent warten" }));
+    expect((screen.getByTestId("agent-token")).textContent?.startsWith("DEMO-NUR-ANSICHT-")).toBe(true);
+    await next();
 
     const filterEntry = await screen.findByRole("button", { name: /^Werkstatt, Wartet auf Agent/ });
     expect(filterEntry !== null).toBe(true);

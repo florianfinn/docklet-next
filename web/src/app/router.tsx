@@ -1,6 +1,5 @@
 import { lazy, Suspense } from "react";
 import { createBrowserRouter, Navigate, Outlet, type RouteObject } from "react-router";
-import { QueryError } from "@/shared/components/page";
 import { useAdapter } from "@/data/use-adapter";
 import { AuthGate } from "./AuthGate";
 import { SetupGate } from "./SetupGate";
@@ -19,7 +18,7 @@ const ContainerPage = lazy(() => import("@/features/containers/ContainerPage"));
 const SecurityPage = lazy(() => import("@/features/security/SecurityPage"));
 const NetworksPage = lazy(() => import("@/features/networks/NetworksPage"));
 const HostsPage = lazy(() => import("@/features/hosts/HostsPage"));
-const OnboardingPage = import.meta.env.DEV ? lazy(() => import("@/features/hosts/onboarding/OnboardingPage")) : null;
+const OnboardingPage = lazy(() => import("@/features/hosts/onboarding/OnboardingPage"));
 const VolumesPage = lazy(() => import("@/features/volumes/VolumesPage"));
 const ImagesPage = lazy(() => import("@/features/images/ImagesPage"));
 const VolumePage = lazy(() => import("@/features/volumes/VolumePage"));
@@ -57,7 +56,7 @@ const shellRoutes: RouteObject[] = [
       { path: "security", element: <SecurityPage /> },
       { path: "networks", element: <NetworksPage /> },
       { path: "hosts", element: <HostsPage /> },
-      { path: "hosts/new", element: OnboardingPage ? <OnboardingPage /> : <QueryError /> },
+      { path: "hosts/new", element: <OnboardingPage /> },
       { path: "volumes", element: <VolumesPage /> },
       { path: "images", element: <ImagesPage /> },
       { path: "volumes/:volumeId", element: <VolumePage /> },

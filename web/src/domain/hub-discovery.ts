@@ -18,6 +18,9 @@ export interface HubInterface {
 
 export interface HubDiscovery {
   detectedAt: string;
+  /** Present on live hubs; supplied by the server rather than the browser. */
+  agentImage?: string;
+  candidates?: { id: string; url: string; reach: "unknown" | "same-host"; source: "configured" | "interface" }[];
   /** The hub's own container; absent when the hub does not run in Docker. */
   container?: {
     name: string;
@@ -76,6 +79,11 @@ function splitHost(hostHeader: string): { host: string; port?: number } {
  * of how the browser reached the hub, never a container address.
  */
 export function hubAddressCandidates(d: HubDiscovery): HubAddressCandidate[] {
+  if (d.candidates) return d.candidates.map((candidate, index) => ({
+    id: candidate.id, address: new URL(candidate.url).host,
+    kind: candidate.source === "configured" ? "request" : "host-address",
+    reach: candidate.reach, recommended: index === 0,
+  }));
   const out: Omit<HubAddressCandidate, "recommended">[] = [];
   const c = d.container;
   const listen = c?.listenPort ?? 8080;

@@ -1,5 +1,5 @@
 // Source: api/openapi.json
-// Revision: 88ea016006a2a90cb75c20d35bd161e535dceca5cfa15c14e1e3a3da331b3856
+// Revision: d925452498ef0a7c21d33651e9bb0dcee4fed4043bfc2f1d2cedbb307c8878ea
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
 // Deviations: Generated TypeScript declarations from the local Huma export.
@@ -4005,6 +4005,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/hub/discovery": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Inspect hub installation metadata and address candidates */
+        get: operations["discoverHub"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/notifications/dispatch": {
         parameters: {
             query?: never;
@@ -5155,6 +5172,18 @@ export interface components {
             readonly $schema?: string;
             /** @description Response data */
             data: components["schemas"]["EnvironmentEnvironment"];
+            /** @description Whether the request was successful */
+            success: boolean;
+        };
+        BaseApiResponseEnvironmentHubDiscovery: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example /api/schemas/BaseApiResponseEnvironmentHubDiscovery.json
+             */
+            readonly $schema?: string;
+            /** @description Response data */
+            data: components["schemas"]["EnvironmentHubDiscovery"];
             /** @description Whether the request was successful */
             success: boolean;
         };
@@ -7877,6 +7906,20 @@ export interface components {
             lastSeen?: string;
             name?: string;
             status: string;
+        };
+        EnvironmentHubAddressCandidate: {
+            id: string;
+            /** @enum {string} */
+            reach: "unknown" | "same-host";
+            /** @enum {string} */
+            source: "configured" | "interface";
+            url: string;
+        };
+        EnvironmentHubDiscovery: {
+            agentImage: string;
+            candidates: components["schemas"]["EnvironmentHubAddressCandidate"][] | null;
+            /** Format: date-time */
+            detectedAt: string;
         };
         EnvironmentStreamEvent: {
             environments?: components["schemas"]["EnvironmentEnvironment"][] | null;
@@ -19201,6 +19244,35 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    discoverHub: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BaseApiResponseEnvironmentHubDiscovery"];
+                };
             };
             /** @description Error */
             default: {

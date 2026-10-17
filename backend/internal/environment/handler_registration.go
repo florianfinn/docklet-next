@@ -197,8 +197,6 @@ func (h *EnvironmentHandler) UpdateEnvironment(ctx context.Context, input *Updat
 		return nil, huma.NewError(apiErr.HTTPStatus(), apiErr.Message)
 	}
 
-	h.triggerPostUpdateTasksInternal(ctx, input.ID, updated, &input.Body)
-
 	out, mapErr := mapping.MapOne[*Environment, environment.Environment](updated)
 	if mapErr != nil {
 		return nil, huma.Error500InternalServerError("Failed to map environment")
@@ -234,6 +232,10 @@ func (h *EnvironmentHandler) UpdateEnvironment(ctx context.Context, input *Updat
 		h.applyEdgeRuntimeStateInternal(ctx, &out)
 
 		newApiKey = new(apiKey)
+	}
+
+	if newApiKey == nil {
+		h.triggerPostUpdateTasksInternal(ctx, input.ID, updated, &input.Body)
 	}
 
 	// Set the API key on the response if regenerated

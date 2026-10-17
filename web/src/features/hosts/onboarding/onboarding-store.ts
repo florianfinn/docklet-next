@@ -15,6 +15,7 @@ export interface HostDraft {
   detectSocket: boolean;
   socketGid: string;
   token?: string;
+  hubUrl?: string;
   /** Set once the host is registered; earlier steps become read-only. */
   hostId?: string;
   runId?: string;
@@ -23,7 +24,7 @@ export interface HostDraft {
   reached: number;
 }
 
-/** Draft of the running onboarding; in memory only, survives navigation inside the app. */
+/** Draft for the open onboarding flow; credentials are never persisted. */
 export const onboardingStore = createStore<HostDraft | null>(null);
 
 export function useOnboardingDraft(): HostDraft | null {

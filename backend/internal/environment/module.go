@@ -66,6 +66,13 @@ func (m *Module) RegisterRoutes(api huma.API, appCtx handlerutil.ActivityAppCont
 // RegisterEnvironments registers all environment management endpoints.
 func RegisterEnvironments(api huma.API, h *EnvironmentHandler) {
 	huma.Register(api, huma.Operation{
+		OperationID: "discoverHub", Method: "GET", Path: "/hub/discovery",
+		Summary: "Inspect hub installation metadata and address candidates",
+		Tags:    []string{"Environments"}, Security: handlerutil.DefaultOperationSecurity(),
+		Middlewares: middleware.RequireGlobalAdmin(api),
+	}, h.DiscoverHub)
+
+	huma.Register(api, huma.Operation{
 		OperationID: "listEnvironments",
 		Method:      "GET",
 		Path:        "/environments",
@@ -87,7 +94,7 @@ func RegisterEnvironments(api huma.API, h *EnvironmentHandler) {
 		Description: "Create a new Docker environment",
 		Tags:        []string{"Environments"},
 		Security:    handlerutil.DefaultOperationSecurity(),
-		Middlewares: middleware.RequirePermission(api, authz.PermEnvironmentsCreate),
+		Middlewares: middleware.RequireGlobalAdmin(api),
 	}, h.CreateEnvironment)
 
 	huma.Register(api, huma.Operation{
@@ -109,7 +116,7 @@ func RegisterEnvironments(api huma.API, h *EnvironmentHandler) {
 		Description: "Update a Docker environment",
 		Tags:        []string{"Environments"},
 		Security:    handlerutil.DefaultOperationSecurity(),
-		Middlewares: middleware.RequirePermission(api, authz.PermEnvironmentsUpdate),
+		Middlewares: middleware.RequireGlobalAdmin(api),
 	}, h.UpdateEnvironment)
 
 	huma.Register(api, huma.Operation{
@@ -120,7 +127,7 @@ func RegisterEnvironments(api huma.API, h *EnvironmentHandler) {
 		Description: "Delete a Arcane environment",
 		Tags:        []string{"Environments"},
 		Security:    handlerutil.DefaultOperationSecurity(),
-		Middlewares: middleware.RequirePermission(api, authz.PermEnvironmentsDelete),
+		Middlewares: middleware.RequireGlobalAdmin(api),
 	}, h.DeleteEnvironment)
 
 	middleware.RegisterWithPermission(api, huma.Operation{

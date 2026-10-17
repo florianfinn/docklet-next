@@ -10,6 +10,7 @@ import (
 	"net/http"
 
 	"github.com/danielgtaylor/huma/v2"
+	"github.com/florianfinn/docklet-next/backend/internal/middleware"
 	"github.com/florianfinn/docklet-next/backend/pkg/utils/handlerutil"
 	"github.com/florianfinn/docklet-next/types/base"
 	"github.com/florianfinn/docklet-next/types/capability"
@@ -53,10 +54,23 @@ func capabilityDescriptorsInternal(ref capability.ResourceRef) []capability.Desc
 	return result
 }
 
-func getCapabilities(_ context.Context, input *GetCapabilitiesInput) (*handlerutil.Out[[]capability.Descriptor], error) {
+func getCapabilities(ctx context.Context, input *GetCapabilitiesInput) (*handlerutil.Out[[]capability.Descriptor], error) {
+	descriptors := capabilityDescriptorsInternal(capability.ResourceRef{Kind: input.Kind, ID: input.ID})
+	permissions, _ := middleware.PermissionsFromContext(ctx)
+	for i := range descriptors {
+		switch descriptors[i].OperationID {
+		case "registerHost", "issueAgentToken", "removeHost", "discoverHub":
+			descriptors[i].Available = permissions.IsGlobalAdmin()
+			if descriptors[i].Available {
+				descriptors[i].DisabledReasonCode = ""
+			} else {
+				descriptors[i].DisabledReasonCode = "capability.unavailable"
+			}
+		}
+	}
 	return &handlerutil.Out[[]capability.Descriptor]{Body: base.ApiResponse[[]capability.Descriptor]{
 		Success: true,
-		Data:    capabilityDescriptorsInternal(capability.ResourceRef{Kind: input.Kind, ID: input.ID}),
+		Data:    descriptors,
 	}}, nil
 }
 

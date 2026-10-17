@@ -213,6 +213,7 @@ var expectedEnvConfigVars = []string{
 	"DIR_PERM",
 	"DOCKER_CONFIG",
 	"DOCKER_HOST",
+	"DOCKLET_AGENT_IMAGE",
 	"DOCKLET_BACKUP_DIR",
 	"EDGE_AGENT",
 	"EDGE_MTLS_ASSETS_DIR",

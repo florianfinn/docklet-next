@@ -40,6 +40,7 @@ const (
 type Config struct {
 	BuildablesConfig
 
+	AgentImage             string         `env:"DOCKLET_AGENT_IMAGE" default:""`
 	AppUrl                 string         `env:"APP_URL" default:"http://localhost:3552"`
 	DatabaseURL            string         `env:"DATABASE_URL" default:"file:data/docklet.db"`
 	ActorPort              string         `env:"ACTOR_PORT" default:"3551"`
