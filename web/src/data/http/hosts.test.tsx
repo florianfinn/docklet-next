@@ -9,6 +9,7 @@ import { describe, expect, it, vi } from "vitest";
 
 import type { components } from "@/api/generated/schema";
 import { HostCard } from "@/features/hosts/HostCard";
+import { setAppLocale } from "@/app/i18n/locale-store";
 import { renderWithApp } from "@/test/render";
 
 import { createHttpAdapter } from "./http-adapter";
@@ -62,6 +63,25 @@ describe("host HTTP reads", () => {
   it("does not turn malformed host data into an empty success", async () => {
     const f = fixture([{ ...row, status: "invented" }]);
     await expect(f.adapter.listHosts()).rejects.toMatchObject({ outcome: { kind: "error", code: "listHosts.mapping-error" } });
+  });
+
+  it.each(["de", "en-US"] as const)("describes connected update-required and pending reports accurately in %s", (locale) => {
+    setAppLocale(locale);
+    try {
+      for (const status of ["update-required", "pending", "offline"] as const) {
+        const host = mapHost({ ...row, status, agentReport: { reportedAt: at, version: info } });
+        const view = renderWithApp(<HostCard host={host} system={undefined} stacks={0} containers={0} allIds={[host.id]} />);
+        const report = locale === "de" ? /Bericht .*Agent-Update erforderlich/ : /Report .*agent update required/;
+        const pending = locale === "de" ? /Bericht .*Kompatibilitätsprüfung ausstehend/ : /Report .*waiting for compatibility check/;
+        const disconnected = /host currently disconnected|Host derzeit getrennt/;
+        expect(view.container.textContent?.match(disconnected) !== null).toBe(status === "offline");
+        if (status === "update-required") expect(view.container.textContent?.match(report) !== null).toBe(true);
+        if (status === "pending") expect(view.container.textContent?.match(pending) !== null).toBe(true);
+        view.unmount();
+      }
+    } finally {
+      setAppLocale("de");
+    }
   });
 
   it("renders a real report and update-required state with unknown fields absent", () => {
