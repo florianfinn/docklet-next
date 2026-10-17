@@ -26,7 +26,7 @@ func (m *EnvironmentMiddleware) inventoryRead(c *echo.Context, hostID string, fo
 		return forward()
 	}
 	c.Request().Header.Set("Accept-Encoding", "identity")
- key := hoststate.Key{HostID: hostID, List: suffix + "?" + c.Request().URL.Query().Encode()}
+	key := hoststate.Key{HostID: hostID, List: suffix + "?" + c.Request().URL.Query().Encode()}
 	original := c.Response()
 	capture := &inventoryResponse{header: make(http.Header)}
 	c.SetResponse(capture)

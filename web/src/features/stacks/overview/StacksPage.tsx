@@ -1,3 +1,4 @@
+import { InventoryNotice } from "../InventoryNotice";
 import { AlertTriangle, Download, Layers, Play, Plus, RefreshCw, RotateCw, Square } from "lucide-react";
 import { useMemo, useState } from "react";
 import { Link } from "react-router";
@@ -155,6 +156,7 @@ export default function StacksPage() {
           </Button> : <Button disabled title={deployCapability.reason}><Plus data-icon="inline-start" />{t("newStack")}</Button>
         }
       />
+      <InventoryNotice hosts={hosts.visible} items={stacks.visible} />
       <StatStrip
         items={[
           { label: t("strip.stacks"), value: stacks.isPending ? "–" : stacks.visible.length, icon: <Layers /> },

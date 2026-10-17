@@ -1,3 +1,5 @@
+import { useCapability } from "@/data/use-capability";
+import { InventoryNotice } from "@/features/stacks/InventoryNotice";
 import { SegmentedToggle } from "@/shared/components/segmented-toggle";
 import { AlertTriangle, Box, Boxes, Play, RotateCw, Search, Square } from "lucide-react";
 import { useCallback, useMemo, useState } from "react";
@@ -45,6 +47,7 @@ export default function ContainersPage() {
   const containers = useVisibleContainers();
   const hosts = useHostScope();
   const cmd = useContainerCommands();
+  const command = useCapability("runContainerCommand");
   const restart = useContainerRestart();
   const mode = usePreference("containersMode");
   const layout = usePreference("containersLayout");
@@ -157,6 +160,7 @@ export default function ContainersPage() {
   return (
     <>
       <PageHeader title={t("title")} description={t("description", { scope })} />
+      <InventoryNotice hosts={hosts.visible} items={containers.visible} />
       <StatStrip
         items={[
           { label: t("strip.total"), value: containers.isPending ? "–" : containers.visible.length, icon: <Boxes /> },
@@ -258,13 +262,13 @@ export default function ContainersPage() {
       <ContainerInspector container={current} host={current ? hosts.byId.get(current.hostId) : undefined} onClose={close} />
       <RecreateDialog container={editTarget} open={!!editTarget} onOpenChange={(o) => !o && setEditing(null)} />
       <BulkActionBar count={visibleSelected.length} selectedLabel={t("select.selected", { count: visibleSelected.length })} clearLabel={t("select.clear")} onClear={clearSelection}>
-        <Button size="sm" variant="secondary" className="h-8" onClick={() => bulk("start")}>
+        <Button size="sm" variant="secondary" className="h-8" disabled={!command.available || containers.visible.some((item) => visibleSelected.includes(item.id) && item.inventory?.stale)} title={command.reason} onClick={() => bulk("start")}>
           <Play data-icon="inline-start" /> {t("bulk.start")}
         </Button>
-        <Button size="sm" variant="secondary" className="h-8" onClick={() => bulk("stop")}>
+        <Button size="sm" variant="secondary" className="h-8" disabled={!command.available || containers.visible.some((item) => visibleSelected.includes(item.id) && item.inventory?.stale)} title={command.reason} onClick={() => bulk("stop")}>
           <Square data-icon="inline-start" /> {t("bulk.stop")}
         </Button>
-        <Button size="sm" variant="secondary" className="h-8" onClick={() => bulk("restart")}>
+        <Button size="sm" variant="secondary" className="h-8" disabled={!command.available || containers.visible.some((item) => visibleSelected.includes(item.id) && item.inventory?.stale)} title={command.reason} onClick={() => bulk("restart")}>
           <RotateCw data-icon="inline-start" /> {t("bulk.restart")}
         </Button>
       </BulkActionBar>

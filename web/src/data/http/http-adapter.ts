@@ -10,6 +10,8 @@ import type { DockletAdapter, Topic } from "../adapter";
 import { AdapterOutcomeError, GENERIC_REASON, HUB_REF, unavailable, type CapabilityDescriptor, type ResourceRef } from "../capability";
 import { createDisconnectedAdapter } from "../disconnected-adapter";
 import type { CodedActionRun } from "../message-code";
+import type { InventoryObservation } from "@/domain/model";
+import { createInventoryReader } from "./inventory";
 import { mapHost } from "./hosts";
 import { mapActivityDetail, mapEvent } from "./map-dto";
 import { createHttpHubBackups } from "./hub-backups";
@@ -22,7 +24,7 @@ type Body<I extends ReadOperation> = operations[I]["responses"][200]["content"][
 type StreamPayload = operations["streamClient"]["responses"][200]["content"]["text/event-stream"][number]["data"];
 type Source = Pick<EventSource, "close" | "onopen" | "onmessage" | "onerror"> & Partial<Pick<EventSource, "readyState">>;
 
-const IMPLEMENTED = new Set(["listHosts","listActions", "listEvents", "subscribeActions", "subscribeChanges", "getAuthMode", "getCurrentUser", "login", "logout", "changePassword", "updateMyLocale", "getSetupStatus", "completeSetup", "getConnectedSettings", "saveSettings"]);
+const IMPLEMENTED = new Set(["listStacks", "getStack", "listContainers", "listHosts","listActions", "listEvents", "subscribeActions", "subscribeChanges", "getAuthMode", "getCurrentUser", "login", "logout", "changePassword", "updateMyLocale", "getSetupStatus", "completeSetup", "getConnectedSettings", "saveSettings"]);
 const RECONNECT_MS = 250;
 
 export interface HttpAdapterOptions {
@@ -184,7 +186,7 @@ export function createHttpAdapter(options: HttpAdapterOptions = {}): DockletAdap
 
   function refreshSubscribed(): void {
     refreshRuns();
-    if (changeListeners.size) changeListeners.forEach((listener) => listener(["events", "hosts"]));
+    if (changeListeners.size) changeListeners.forEach((listener) => listener(["events", "hosts", "stacks", "containers"]));
   }
 
   function handleStream(data: string, eventId: string): void {
@@ -208,7 +210,7 @@ export function createHttpAdapter(options: HttpAdapterOptions = {}): DockletAdap
       return;
     }
     if (envelope.channel === "environments") {
-      changeListeners.forEach((listener) => listener(["hosts"]));
+      changeListeners.forEach((listener) => listener(["hosts", "stacks", "containers"]));
       return;
     }
     refreshSubscribed();
@@ -265,6 +267,18 @@ export function createHttpAdapter(options: HttpAdapterOptions = {}): DockletAdap
     appliedRunSequences.clear();
   }
 
+  const observations = new Map<string, InventoryObservation>();
+  async function listHosts() {
+    await requireCapability("listHosts");
+    const rows = await page("listEnvironments", "/environments", 100);
+    try { return rows.map((row) => ({ ...mapHost(row), inventory: observations.get(row.id) })); }
+    catch (error) { throw classifiedError({ code: "listHosts.mapping-error", cause: error }); }
+  }
+  const inventory = createInventoryReader(baseUrl, fetcher, listHosts, requireCapability, (hostId, state) => {
+    const old = observations.get(hostId);
+    observations.set(hostId, state);
+    if (JSON.stringify(old) !== JSON.stringify(state)) changeListeners.forEach((listener) => listener(["hosts"]));
+  });
   const unsupported = createDisconnectedAdapter();
   const methods = Object.fromEntries(Object.keys(unsupported).filter((key) => key !== "kind").map((operationId) => [operationId, (...args: unknown[]) => Promise.reject(unavailable(operationId, refFor(operationId, args), "capability.mapping-unavailable"))])) as unknown as DockletAdapter;
   return {
@@ -275,11 +289,8 @@ export function createHttpAdapter(options: HttpAdapterOptions = {}): DockletAdap
     kind: "http",
     mappedOperations: IMPLEMENTED,
     getCapability,
-    async listHosts() {
-      await requireCapability("listHosts");
-      const rows = await page("listEnvironments", "/environments", 100);
-      try { return rows.map(mapHost); } catch (error) { throw classifiedError({ code: "listHosts.mapping-error", cause: error }); }
-    },
+    listHosts,
+    ...inventory,
     listActions: loadActions,
     listEvents: loadEvents,
     subscribeActions(listener) {

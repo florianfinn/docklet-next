@@ -174,13 +174,6 @@ func (m *EnvironmentMiddleware) Handle(c *echo.Context, next echo.HandlerFunc) e
 		})
 	}
 
-	if !enabled {
-		return c.JSON(http.StatusBadRequest, map[string]any{
-			"success": false,
-			"data":    map[string]any{"error": errors.New("Environment is disabled").Error()}, //nolint:staticcheck // Preserve the existing error message.
-		})
-	}
-
 	// SECURITY: Enforce the caller's per-environment permission BEFORE proxying.
 	// Remote agents run with a sudo permission set and perform no authorization
 	// of their own, so authorization for proxied requests must happen here,
@@ -193,7 +186,12 @@ func (m *EnvironmentMiddleware) Handle(c *echo.Context, next echo.HandlerFunc) e
 		})
 	}
 
-	return m.inventoryRead(c, envID, func() error { return m.forwardInventoryRequest(c, envID, apiURL, accessToken) })
+	return m.inventoryRead(c, envID, func() error {
+		if !enabled {
+			return c.JSON(http.StatusBadRequest, map[string]any{"success": false, "code": "agent.unavailable"})
+		}
+		return m.forwardInventoryRequest(c, envID, apiURL, accessToken)
+	})
 }
 
 func (m *EnvironmentMiddleware) forwardInventoryRequest(c *echo.Context, envID, apiURL string, accessToken *string) error {
