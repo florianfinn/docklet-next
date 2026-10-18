@@ -32,7 +32,9 @@ export function activityFixture(isEdge = false, reverse = false) {
     details: { "run-good": detail("good"), "run-bad": detail("bad") } as Record<string, Detail>,
     failure: "" as "" | "network" | "page500" | "page502" | "page403" | "page401" | "detail404" | "missing" | "mapping" | "wrong-host" | "pagination",
     hubStatus: 200,
-    hold: undefined as undefined | ((path: string, response: Response) => Promise<Response>),
+    user: { id: "operator", username: "operator", requiresPasswordChange: false, locale: "en-US" },
+    authStatus: 200,
+    hold: undefined as undefined | ((path: string, response: Response, url: URL) => Promise<Response>),
   };
   const sources: ActivitySource[] = [];
   const requests: string[] = [];
@@ -43,7 +45,7 @@ export function activityFixture(isEdge = false, reverse = false) {
     let response: Response;
     if (path === "/api/capabilities") response = json(["listActions", "listHosts"].map((operationId) => ({ operationId, available: true, resourceRef: { kind: "hub", id: "0" } })));
     else if (path === "/api/environments") response = json(state.hosts.map((id) => ({ id, name: id === "good" ? "Available example" : "Unavailable example", apiUrl: "https://agent.example.com", isEdge, enabled: true, status: "online" })), state.hubStatus);
-    else if (path.startsWith("/api/auth/")) response = json(path.endsWith("/me") ? { id: "operator", username: "operator", requiresPasswordChange: false } : {});
+    else if (path.startsWith("/api/auth/")) response = json(path.endsWith("/mode") ? { mode: "local" } : path.endsWith("/me") ? state.user : path.endsWith("/login") ? { user: state.user } : {}, state.authStatus);
     else if (path === "/api/settings/timezone") response = json({ timezone: "UTC" });
     else {
       const match = path.match(/\/environments\/([^/]+)\/activities(?:\/(.+))?$/);
@@ -59,13 +61,14 @@ export function activityFixture(isEdge = false, reverse = false) {
       else if (hostId === "bad" && state.failure === "wrong-host") response = json({ ...state.details[id], activity: { ...state.details[id]!.activity, environmentId: "good" } });
       else response = json(state.details[id]);
     }
-    return state.hold ? state.hold(path, response) : response;
+    return state.hold ? state.hold(path, response, url) : response;
   });
   const adapter = createHttpAdapter({ fetch: fetcher as typeof fetch, eventSource: () => { const source = new ActivitySource(); sources.push(source); return source as unknown as EventSource; } });
   return { state, sources, requests, fetcher, adapter };
 }
 export function deferred<T>() {
   let resolve!: (value: T) => void;
-  const promise = new Promise<T>((r) => { resolve = r; });
-  return { promise, resolve };
+  let reject!: (reason: unknown) => void;
+  const promise = new Promise<T>((r, fail) => { resolve = r; reject = fail; });
+  return { promise, resolve, reject };
 }

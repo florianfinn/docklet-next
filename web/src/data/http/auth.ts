@@ -4,6 +4,8 @@
 // License: Apache-2.0
 // Deviations: Connected sign-in and profile HTTP calls.
 
+import { CancelledError } from "@tanstack/react-query";
+
 import type { AuthApi, CurrentUser } from "@/data/api";
 import type { AuthMode } from "@/domain/settings";
 
@@ -17,9 +19,20 @@ function user(value: unknown): CurrentUser {
   return { id: item.id, username: item.username, requiresPasswordChange: item.requiresPasswordChange, locale: typeof item.locale === "string" ? item.locale : null };
 }
 
-export function createHttpAuth(baseUrl: string, client: CsrfClient, onSessionChange: () => void = () => {}): AuthApi {
+export type SessionChange = "established" | "confirmed" | "lost";
+
+// Established sessions renew consumers; confirmations resume suspended consumers; loss never reconnects.
+export function createHttpAuth(baseUrl: string, client: CsrfClient, onSessionChange: (change: SessionChange) => void = () => {}, sessionGeneration: () => number = () => 0): AuthApi {
   let currentUserId: string | undefined;
-  function sessionChanged(id?: string) { currentUserId = id; onSessionChange(); }
+  let sessionVersion = 0;
+  function sessionChanged(change: SessionChange, id?: string) {
+    ++sessionVersion;
+    currentUserId = id;
+    onSessionChange(change);
+  }
+  function assertCurrent(version: number) {
+    if (version !== sessionVersion + sessionGeneration()) throw new CancelledError({ silent: true });
+  }
   async function request(path: string, method = "GET", body?: object): Promise<unknown> {
     let response: Response;
     try {
@@ -45,18 +58,39 @@ export function createHttpAuth(baseUrl: string, client: CsrfClient, onSessionCha
       return payload.mode as AuthMode;
     },
     async getCurrentUser() {
-      const result = user(await request("/auth/me"));
-      if (result.id !== currentUserId) sessionChanged(result.id);
-      return result;
+      const version = sessionVersion + sessionGeneration();
+      try {
+        const result = user(await request("/auth/me"));
+        assertCurrent(version);
+        if (result.id !== currentUserId) sessionChanged("established", result.id);
+        else onSessionChange("confirmed");
+        return result;
+      } catch (error) {
+        assertCurrent(version);
+        if (error instanceof AdapterOutcomeError && error.outcome.kind === "error" && error.outcome.status === 401) sessionChanged("lost");
+        throw error;
+      }
     },
     async login(username, password) {
+      const version = ++sessionVersion + sessionGeneration();
       const result = await request("/auth/login", "POST", { username, password }) as { user?: unknown };
       const signedIn = user(result.user);
-      sessionChanged(signedIn.id);
+      assertCurrent(version);
+      sessionChanged("established", signedIn.id);
       return signedIn;
     },
-    async logout() { await request("/auth/logout", "POST"); sessionChanged(); },
-    async changePassword(currentPassword, newPassword) { await request("/auth/password", "POST", { currentPassword, newPassword }); sessionChanged(); },
+    async logout() {
+      const version = ++sessionVersion + sessionGeneration();
+      await request("/auth/logout", "POST");
+      assertCurrent(version);
+      sessionChanged("lost");
+    },
+    async changePassword(currentPassword, newPassword) {
+      const version = ++sessionVersion + sessionGeneration();
+      await request("/auth/password", "POST", { currentPassword, newPassword });
+      assertCurrent(version);
+      sessionChanged("established", currentUserId);
+    },
     async updateMyLocale(locale) { return user(await request("/auth/me/profile", "PUT", { locale })); },
   };
 }

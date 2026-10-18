@@ -4,6 +4,8 @@
 // License: Apache-2.0
 // Deviations: Original focused activity source isolation and read-health projection.
 
+import { CancelledError, isCancelledError } from "@tanstack/react-query";
+
 import type { components } from "@/api/generated/schema";
 import type { ActionReadFailure, ActionReadHealth } from "../adapter";
 import { AdapterOutcomeError } from "../capability";
@@ -19,9 +21,10 @@ interface SourceRead {
 }
 interface Reads {
   hosts: () => Promise<string[]>;
-  page: (hostId: string) => Promise<Activity[]>;
+  page: (hostId: string) => Promise<{ items: Activity[]; incomplete: boolean }>;
   detail: (hostId: string, id: string) => Promise<Detail>;
   publish: (runs: CodedActionRun[], health: ActionReadHealth) => void;
+  unauthorized: () => void;
 }
 
 function invalid(): never {
@@ -64,13 +67,13 @@ export function createActivityReader(reads: Reads) {
     publish();
   }
   async function source(hostId: string): Promise<SourceRead> {
-    let items: Activity[];
-    try { items = await reads.page(hostId); }
+    let page: { items: Activity[]; incomplete: boolean };
+    try { page = await reads.page(hostId); }
     catch (error) {
       if (isUnauthorized(error)) throw error;
       return { hostId, runs: [], failure: failure(error, hostId) };
     }
-    const results = await Promise.all(items.map(async (item) => {
+    const results = await Promise.all(page.items.map(async (item) => {
       try {
         if (!item || typeof item.id !== "string" || !item.id || item.environmentId !== hostId) invalid();
         return { run: mapped(await reads.detail(hostId, item.id), hostId, item.id) };
@@ -79,7 +82,7 @@ export function createActivityReader(reads: Reads) {
         return { failure: failure(error, hostId) };
       }
     }));
-    return { hostId, runs: results.flatMap((r) => r.run ? [r.run] : []), failure: results.find((r) => r.failure)?.failure };
+    return { hostId, runs: results.flatMap((r) => r.run ? [r.run] : []), failure: results.find((r) => r.failure)?.failure ?? (page.incomplete ? { hostId, reason: "unavailable" } : undefined) };
   }
   async function load(): Promise<CodedActionRun[]> {
     const started = ++sequence;
@@ -87,7 +90,7 @@ export function createActivityReader(reads: Reads) {
     try {
       const hosts = new Set(await reads.hosts());
       const batches = await Promise.all([...hosts].map(source));
-      if (version !== generation) return [];
+      if (version !== generation) throw new CancelledError({ silent: true });
       // A raw run UUID belongs to one source. Reject conflicting claims without changing IDs.
       const owners = new Map(current.map((run) => [run.id, run.hostId]));
       const claims = new Map<string, Set<string>>();
@@ -130,14 +133,15 @@ export function createActivityReader(reads: Reads) {
       }
       initialized = true;
       current = sorted(merged.values());
-      if (started > globalHealthSequence) { globalHealthSequence = started; globalFailure = undefined; publishHealth(); }
-      else publish();
+      if (started > globalHealthSequence) { globalHealthSequence = started; globalFailure = undefined; }
+      publishHealth();
       return sorted(observed.values());
     } catch (error) {
-      if (version !== generation) return [];
+      if (version !== generation) throw new CancelledError({ silent: true });
+      if (isCancelledError(error)) throw error;
       if (started > globalHealthSequence) {
         globalHealthSequence = started; globalFailure = failure(error);
-        if (isUnauthorized(error)) { ++generation; initialized = true; current = []; failures.clear(); }
+        if (isUnauthorized(error)) { ++generation; initialized = true; current = []; failures.clear(); reads.unauthorized(); }
         publishHealth();
       }
       throw error;
@@ -148,17 +152,20 @@ export function createActivityReader(reads: Reads) {
     const version = generation;
     try {
       const run = mapped(await reads.detail(hostId, id), hostId, id);
-      if (version !== generation || started <= Math.max(runSequences.get(id) ?? 0, fullSequences.get(hostId) ?? 0) || !current.some((r) => r.id === id && r.hostId === hostId)) return;
+      if (version !== generation) throw new CancelledError({ silent: true });
+      if (started <= Math.max(runSequences.get(id) ?? 0, fullSequences.get(hostId) ?? 0) || !current.some((r) => r.id === id && r.hostId === hostId)) return;
       current = current.map((r) => r.id === id ? run : r);
       runSequences.set(id, started);
       publish();
       if (run.status !== "queued" && run.status !== "running") await load();
     } catch (error) {
-      if (version !== generation || started <= Math.max(runSequences.get(id) ?? 0, fullSequences.get(hostId) ?? 0, healthSequences.get(hostId) ?? 0)) return;
+      if (version !== generation) throw new CancelledError({ silent: true });
+      if (isCancelledError(error)) throw error;
+      if (started <= Math.max(runSequences.get(id) ?? 0, fullSequences.get(hostId) ?? 0, healthSequences.get(hostId) ?? 0)) return;
       healthSequences.set(hostId, started);
       runSequences.set(id, started);
       if (isUnauthorized(error)) {
-        ++generation; initialized = true; current = []; failures.clear();
+        ++generation; initialized = true; current = []; failures.clear(); reads.unauthorized();
         globalHealthSequence = started; globalFailure = failure(error); publishHealth();
       }
       else { failures.set(hostId, failure(error, hostId)); publishHealth(); }

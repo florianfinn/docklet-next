@@ -4,7 +4,7 @@
 // License: Apache-2.0
 // Deviations: Original HTTP and SSE adapter for issue 38.
 
-import { QueryClient } from "@tanstack/react-query";
+import { isCancelledError, QueryClient } from "@tanstack/react-query";
 
 import type { components, operations, paths } from "@/api/generated/schema";
 
@@ -21,7 +21,7 @@ import { createHostCommands } from "./host-commands";
 import { mapEvent } from "./map-dto";
 import { createHttpHubBackups } from "./hub-backups";
 import { createCsrfClient } from "./csrf-client";
-import { createHttpAuth } from "./auth";
+import { createHttpAuth, type SessionChange } from "./auth";
 import { createSettingsCore } from "./settings-core";
 import { createSharedReads } from "./shared-reads";
 import { createActivityReader } from "./activity-reader";
@@ -74,9 +74,11 @@ export function createHttpAdapter(options: HttpAdapterOptions = {}): DockletAdap
   const healthListeners = new Set<(health: ActionReadHealth) => void>();
   let lastEventId: number | undefined;
   let sourceOpen = false;
+  let authenticated = true;
+  let identityGeneration = 0;
   let reconnectTimer: ReturnType<typeof setTimeout> | undefined;
 
-  async function read<I extends ReadOperation>(operationId: I, route: keyof paths | string, query?: Record<string, string | number>): Promise<Body<I>> {
+  async function read<I extends ReadOperation>(operationId: I, route: keyof paths | string, query?: Record<string, string | number>, observeResponse?: (response: Response) => void): Promise<Body<I>> {
     const params = new URLSearchParams();
     for (const [key, value] of Object.entries(query ?? {})) params.set(key, String(value));
     const url = `${baseUrl}${route}${params.size ? `?${params}` : ""}`;
@@ -90,6 +92,7 @@ export function createHttpAdapter(options: HttpAdapterOptions = {}): DockletAdap
     if (!body || typeof body !== "object" || (body as { success?: unknown }).success !== true || !("data" in body)) {
       throw classifiedError({ code: `${operationId}.invalid-response` }, response.status);
     }
+    observeResponse?.(response);
     return body as Body<I>;
   }
 
@@ -101,12 +104,20 @@ export function createHttpAdapter(options: HttpAdapterOptions = {}): DockletAdap
   const environments = () => environmentCache.fetchQuery({ queryKey: environmentsKey, queryFn: () => page("listEnvironments", "/environments", 100) });
   function invalidateCapabilities() { capabilityReads.clear(); }
   function invalidateEnvironments() { sharedReads.clear(); void environmentCache.invalidateQueries({ queryKey: environmentsKey }); }
-  function invalidateIdentity() {
+  function suspendIdentity() {
+    ++identityGeneration;
+    authenticated = false;
     sharedReads.clear(); invalidateCapabilities(); environmentCache.clear(); observations.clear();
     source?.close(); source = undefined; sourceOpen = false;
     if (reconnectTimer) clearTimeout(reconnectTimer);
     reconnectTimer = undefined;
+  }
+  function invalidateIdentity(change: SessionChange) {
+    if (change === "confirmed" && authenticated) return;
+    suspendIdentity();
     actions.reset();
+    authenticated = change !== "lost";
+    if (authenticated) connect();
   }
   function environmentKey(rows: components["schemas"]["EnvironmentEnvironment"][]) {
     return JSON.stringify(rows.map((row) => [row.id, row.status, row.enabled, row.apiUrl, row.isEdge, row.agentReport?.version.currentVersion, row.agentReport?.version.agentContractVersion, row.agentReport?.version.agentContractFingerprint]).sort((a, b) => String(a[0]).localeCompare(String(b[0]))));
@@ -145,11 +156,11 @@ export function createHttpAdapter(options: HttpAdapterOptions = {}): DockletAdap
     if (!descriptor.available) throw unavailable(operationId, descriptor.resourceRef, descriptor.disabledReasonCode);
   }
 
-  async function page<I extends "listEnvironments" | "list-activities" | "listEvents">(operationId: I, route: string, limit: number): Promise<NonNullable<Body<I>["data"]>> {
+  async function page<I extends "listEnvironments" | "list-activities" | "listEvents">(operationId: I, route: string, limit: number, observeResponse?: (response: Response) => void): Promise<NonNullable<Body<I>["data"]>> {
     const result: NonNullable<Body<I>["data"]> = [] as unknown as NonNullable<Body<I>["data"]>;
     let start = 0;
     for (;;) {
-      const body = await read(operationId, route, { start, limit, order: "desc" });
+      const body = await read(operationId, route, { start, limit, order: "desc" }, observeResponse);
       if (!Array.isArray(body.data) || !body.pagination || !Number.isInteger(body.pagination.totalItems)) throw classifiedError({ code: `${operationId}.invalid-page` });
       result.push(...body.data as never[]);
       start += body.data.length;
@@ -163,7 +174,14 @@ export function createHttpAdapter(options: HttpAdapterOptions = {}): DockletAdap
       await requireCapability("listActions");
       return [...new Set(["0", ...(await environments()).map((item) => item.id)])];
     },
-    page: (hostId) => page("list-activities", `/environments/${encodeURIComponent(hostId)}/activities`, 100),
+    page: async (hostId) => {
+      let incomplete = false;
+      const items = await page("list-activities", `/environments/${encodeURIComponent(hostId)}/activities`, 100, (response) => {
+        if (response.headers.get("X-Docklet-Host-Reason") === "agent.unavailable") incomplete = true;
+      });
+      return { items, incomplete };
+    },
+    unauthorized: suspendIdentity,
     detail: async (hostId, id) => (await read("get-activity", `/environments/${encodeURIComponent(hostId)}/activities/${encodeURIComponent(id)}`, { limit: 500 })).data!,
     publish: (runs, health) => {
       healthListeners.forEach((listener) => listener(health));
@@ -179,13 +197,13 @@ export function createHttpAdapter(options: HttpAdapterOptions = {}): DockletAdap
 
   function refreshRuns(): void {
     if (actionListeners.size === 0) return;
-    void actions.load().catch((error) => { window.dispatchEvent(new CustomEvent("docklet:adapter-error", { detail: error })); });
+    void actions.load().catch((error) => { if (isCancelledError(error)) return; window.dispatchEvent(new CustomEvent("docklet:adapter-error", { detail: error })); });
   }
 
   function refreshRun(activityId: string, environmentId?: string): void {
     const previous = actions.runs().find((run) => run.id === activityId && run.hostId === environmentId);
     if (!previous || !environmentId) { refreshRuns(); return; }
-    void actions.refreshOne(activityId, environmentId);
+    void actions.refreshOne(activityId, environmentId).catch((error) => { if (!isCancelledError(error)) window.dispatchEvent(new CustomEvent("docklet:adapter-error", { detail: error })); });
   }
 
   function refreshSubscribed(): void {
@@ -232,7 +250,7 @@ export function createHttpAdapter(options: HttpAdapterOptions = {}): DockletAdap
   }
 
   function connect(): void {
-    if (source || (!actionListeners.size && !changeListeners.size)) return;
+    if (!authenticated || source || (!actionListeners.size && !changeListeners.size)) return;
     sourceOpen = false;
     let opened: Source;
     try {
@@ -263,7 +281,7 @@ export function createHttpAdapter(options: HttpAdapterOptions = {}): DockletAdap
   }
 
   function scheduleReconnect(): void {
-    if (reconnectTimer || (!actionListeners.size && !changeListeners.size)) return;
+    if (!authenticated || reconnectTimer || (!actionListeners.size && !changeListeners.size)) return;
     reconnectTimer = setTimeout(() => {
       reconnectTimer = undefined;
       connect();
@@ -301,7 +319,7 @@ export function createHttpAdapter(options: HttpAdapterOptions = {}): DockletAdap
   const methods = Object.fromEntries(Object.keys(unsupported).filter((key) => key !== "kind").map((operationId) => [operationId, (...args: unknown[]) => Promise.reject(unavailable(operationId, refFor(operationId, args), "capability.mapping-unavailable"))])) as unknown as DockletAdapter;
   return {
     ...methods,
-    ...createHttpAuth(baseUrl, client, invalidateIdentity),
+    ...createHttpAuth(baseUrl, client, invalidateIdentity, () => identityGeneration),
     ...createHostCommands(baseUrl, client, requireCapability, () => { invalidateCapabilities(); invalidateEnvironments(); changeListeners.forEach((listener) => listener(["hosts", ...inventoryTopics])); }),
     ...createSettingsCore(baseUrl, client),
     ...createHttpHubBackups(baseUrl, client, options.uploadFactory),

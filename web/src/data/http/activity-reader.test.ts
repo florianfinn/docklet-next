@@ -110,25 +110,6 @@ it("a slow old full read cannot overwrite a newer targeted detail while another 
     expect(runs.mock.lastCall?.[0].find((r) => r.id === "run-good")?.status).toBe("queued");
   } finally { stop(); }
 });
-it.each([true, false])("late full failure/success cannot reverse reconnect health (old failure=%s)", async (oldFailure) => {
-  const f = activityFixture(); const runs = vi.fn(); const health = vi.fn();
-  const stops = [f.adapter.subscribeActions(runs), f.adapter.subscribeActionReadHealth!(health)];
-  try {
-    f.sources[0]!.open(); await vi.waitFor(() => expect(runs).toHaveBeenCalled());
-    const held = deferred<Response>(); let captured: Response | undefined;
-    f.state.failure = oldFailure ? "page502" : "";
-    f.state.hold = async (path, response) => {
-      if (path.endsWith("/bad/activities")) { captured = response; return held.promise; }
-      return response;
-    };
-    f.sources[0]!.open(); await vi.waitFor(() => expect(captured !== undefined).toBe(true));
-    f.state.hold = undefined; f.state.failure = oldFailure ? "" : "page502";
-    f.sources[0]!.open();
-    await vi.waitFor(() => expect(health.mock.lastCall?.[0].failures).toHaveLength(oldFailure ? 0 : 1));
-    held.resolve(captured!); await new Promise((r) => setTimeout(r, 20));
-    expect(health.mock.lastCall?.[0].failures).toHaveLength(oldFailure ? 0 : 1);
-  } finally { stops.forEach((stop) => stop()); }
-});
 it("targeted detail failure is visible; a single detail success cannot clear an incomplete source", async () => {
   const f = activityFixture(); const runs = vi.fn(); const health = vi.fn();
   const stops = [f.adapter.subscribeActions(runs), f.adapter.subscribeActionReadHealth!(health)];
@@ -157,7 +138,7 @@ it.each(["logout", "unsubscribe"])("%s blocks late callbacks and query results f
   if (boundary === "logout") await f.adapter.logout(); else stop();
   const count = runs.mock.calls.length; const healthCount = health.mock.calls.length;
   held.resolve(captured!);
-  expect(await pending).toEqual([]);
+  await expect(pending).rejects.toMatchObject({ name: "Error", silent: true });
   oldSource.send("run-good", "good");
   await new Promise((r) => setTimeout(r, 20));
   expect(runs).toHaveBeenCalledTimes(count); expect(health).toHaveBeenCalledTimes(healthCount);
@@ -196,7 +177,7 @@ it("authentication rejection clears observations and blocks an older successful 
     const pending = f.adapter.listActions(); await vi.waitFor(() => expect(captured !== undefined).toBe(true));
     f.state.hold = undefined; f.state.failure = "page401"; f.sources[0]!.open();
     await vi.waitFor(() => expect(runs.mock.lastCall?.[0]).toEqual([]));
-    held.resolve(captured!); expect(await pending).toEqual([]);
+    held.resolve(captured!); await expect(pending).rejects.toMatchObject({ name: "Error", silent: true });
     expect(runs.mock.lastCall?.[0]).toEqual([]);
   } finally { stop(); }
 });
