@@ -17,6 +17,29 @@ schema produces more than 19,000 lines. ESLint ignores only that exact file;
 TypeScript still compiles it as part of the web project. The generator is an
 MIT-licensed development dependency and adds no runtime client.
 
+## Activity list source completeness
+
+`GET /api/environments/{id}/activities` adds the optional response header
+`X-Docklet-Host-Reason: agent.unavailable` only to HTTP 200 pages that fall back
+to hub-stored summaries because a remote transport is unavailable. The existing
+paginated body keeps `success: true`: the hub read succeeded, while the agent
+source is incomplete. Empty partial pages carry the same header. Stored summaries
+retain their status and timestamps and are attributed to the registered host ID;
+this metadata supplies no fresh observation time or execution-completion evidence.
+
+The signal applies per page. Readers must inspect every page and treat the entire
+host read as incomplete if any page is marked. Such a read must preserve earlier
+agent observations instead of treating their absence as deletion. Only a complete
+successful host read can clear the incomplete-source condition. Healthy complete
+local/remote reads, including empty reads and recovery, omit the header.
+
+Only typed transport-unavailable errors (Direct dial/timeout or disconnected
+Edge transport) permit this fallback. Credential rejection, authorization,
+upstream HTTP errors, decode/mapping failures and caller cancellation keep their
+existing error behavior and do not become partial HTTP 200 responses. This
+endpoint-specific hub read metadata does not change the agent v3/minimum-v3
+contract, its fingerprint, `tunnel/v1`, inventory reads or runtime receipts.
+
 ## DTO to view-model gaps
 
 Each row names one mapping gap and exactly one accountable issue or planned

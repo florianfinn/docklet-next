@@ -1,5 +1,5 @@
 // Source: api/openapi.json
-// Revision: d925452498ef0a7c21d33651e9bb0dcee4fed4043bfc2f1d2cedbb307c8878ea
+// Revision: 2d6801774774bae9a0b5e16195552058f7d796ba575a5f95462266a77ca3da1d
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
 // Deviations: Generated TypeScript declarations from the local Huma export.
@@ -12827,6 +12827,7 @@ export interface operations {
             /** @description OK */
             200: {
                 headers: {
+                    "X-Docklet-Host-Reason"?: "agent.unavailable";
                     [name: string]: unknown;
                 };
                 content: {
