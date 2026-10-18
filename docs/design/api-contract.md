@@ -75,9 +75,13 @@ query/cancel/recovery routes, bounded retry/receipt retention and explicit
 mismatch/interruption/unknown handling. These do not exist
 merely because the current route or a bulk DTO is registered. One foundation
 owner supplies wire types, v4/minimum-v4 agent fixture/hash, current exports,
-route snapshots, adapter shared fields and forward SQLite migration together.
-That same complete foundation owner integrates required behavior before v4
-advertising; no later consumer becomes a second runtime contract editor.
+route snapshots, adapter shared fields and forward SQLite migration under one
+owning issue. The same owner merges sequential F-a/b/c step PRs into the M6
+feature branch, each with self-checks and CI; an independent risk review after
+F-c precedes final F-d activation review. All runtime route wiring, v4 advertising,
+exports and capability activation wait for complete F-d behavior. Command, log
+and session consumers start only after F-d merges; no later consumer becomes a
+second runtime contract editor.
 Synchronous non-success uses the typed non-2xx activity-ID envelope defined in
 the runtime record. Optional log metadata and the narrow CLI EOF fix belong to
 the log and executor-compatibility subpackages respectively.

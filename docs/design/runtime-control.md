@@ -152,6 +152,10 @@ An authenticated one-shot dispatch binds manager, registered target, executor
 storage generation, run ID and digest. It carries no wall-clock issue/expiry
 fields. The supported delivery budget is at most **30 minutes** on direct and
 Edge paths, without automatic retransmission or a persistent dispatch queue.
+The runtime sender must disable HTTP redirects/body replay and not forward the
+client idempotency header to the execute transport; the run ID provides receiver
+deduplication. Current remenv builds a request from a replayable byte reader,
+so its default client alone is not proof of this target one-shot behavior.
 The generic direct proxy waits up to 30 minutes
 (`backend/internal/middleware/environment.go:proxyTimeout`); the remenv fallback
 client uses 30 seconds (`backend/pkg/remenv/client.go:NewClient`). Edge waits
@@ -342,8 +346,8 @@ request received before executor registration. For a remote run still admitted,
 the hub's dispatch transaction rechecks that intent and commits cancelled with
 no send; this hub writer alone settles pre-dispatch cancellation. Once dispatching
 is committed, cancellation follows the remote outcome path. Repeated requests
-are idempotent; late cancellation of terminal work returns the terminal run. The executor owns
-an application-lifetime context, detached from the HTTP caller, with the existing
+are idempotent; late cancellation of terminal work returns the terminal run.
+The executor owns an application-lifetime context, detached from the HTTP caller, with the existing
 Compose/Docker options and a 30-minute maximum workflow deadline. Docker stop's
 existing 30-second grace stays unchanged. Deadline/cancel requests interrupt
 local waiting but cannot reverse accepted Docker work. Once the worker and
@@ -619,27 +623,38 @@ agent remains the separate first-release boundary.
 
 ## Shared foundation and verification boundaries
 
-One runtime foundation owner changes the following together and merges before
-consumers: `types/{activity,project,container,contract}` wire vocabulary and v4
-fixture/hash; runtime route registrations, agent allowlist/permission snapshots;
-current OpenAPI, generated TypeScript and spec provenance hash; capability/adapter
-port/domain shared fields; receipt models, schema registry/integrity proofs and
-a new forward migration/manifest entry. Include runtime output cursors/codes,
-storage-generation and bounded-retention vocabulary in this owner. Optional log metadata
-belongs only to the log step; the CLI EOF behavior fix belongs to executor
-compatibility. Foundation work can use bounded sequential subpackages under this
-same owner, but is reviewed/integrated as one complete foundation before any
-consumer starts. There is no second consumer-stage editor of runtime contracts.
+One runtime foundation owner controls `types/{activity,project,container,contract}`
+wire vocabulary and v4 fixture/hash; runtime routes, agent allowlist/permission
+snapshots; current OpenAPI, generated TypeScript and spec provenance hash;
+capability/adapter port/domain fields; receipt models, schema registry/integrity
+proofs and a new forward migration/manifest entry. Runtime output cursors/codes,
+storage generation and bounded retention belong to that owner. Optional log
+metadata belongs only to the log step; the narrow CLI EOF fix belongs to executor
+compatibility within this foundation. No consumer becomes a second runtime
+contract editor.
 
-Contract version/hash and route exports cannot advertise executable v4 semantics
-before behavior exists. The complete foundation therefore also owns the minimal
-admission/execution/query/cancel/release behavior and legacy compatibility needed
-to enforce that contract, reviewed together before merge. Its focused behavior
-subpackages precede final v4 activation/exports; no partial foundation merges.
-Capability descriptors and adapter mappings remain honestly unavailable until
-complete UI consumers pass. Later execution consumers may add hardening/tests
-within the frozen contract, never deferred routes/exports/version edits. Fixtures
-alone do not implement the protocol.
+Single ownership does not require one monolithic PR. The same owner and owning
+issue deliver bounded **sequential step PRs into the M6 feature branch**:
+
+| Foundation package | Scope and ready evidence |
+| --- | --- |
+| F-a storage and vocabulary | Receipt/key/generation models, forward migration, runtime types/codes and shared port/domain fields; atomic bindings, compact pruning, active/unknown protection and reopen proofs; database risk gate applies |
+| F-b admission and local execution | Pre-forward admission service, parent conflicts, cancellation/registration and local settlement/startup helpers; seven-operation concurrency and interruption tests; keep production wiring inactive |
+| F-c remote execution and recovery | Trusted execute/query/cancel/release helpers, direct/Edge transport integration and receiver admission bounds, generation/tombstone races, output relay, reconciliation and administrator disposition; real transport/process evidence via test wiring |
+| F-d compatibility and activation | Legacy HTTP/NDJSON behavior and narrow CLI EOF correction; wire the complete behavior, then activate runtime routes/middleware, agent allowlists/snapshots, v4/minimum/hash/fixture, current OpenAPI/generated exports and capability declarations together |
+
+F-a, F-b and F-c each merge after self-checks and green CI. New runtime route
+wiring, version advertising, exports and capability activation stay in F-d;
+previous packages add tested internal behavior without advertising executable v4
+semantics or switching the existing lifecycle paths. Apply the database gate at
+F-a and require an independent interim risk review after F-c, including the agent
+surface/allowlist target, before F-d activation. F-d receives independent activation
+review and green checks on the integrated foundation. All consumers C (commands),
+L (logs) and S (session closure) wait until F-d is merged; none uses provisional
+contracts from an earlier step. UI capabilities stay unavailable until their
+complete mappings pass. This permits bounded integration while preserving one
+contract owner and a complete reviewed activation boundary. Fixtures alone do
+not implement the protocol.
 
 Preserve `api/openapi.before-cut.json`, shipped SQLite `001`/`002` and their
 hashes. Update current route snapshots/functional-cut reviewed additions rather
