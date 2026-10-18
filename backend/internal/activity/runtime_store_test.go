@@ -139,7 +139,7 @@ func TestRuntimeStoreBindingsAndRetainedRetry(t *testing.T) {
 	require.Equal(t, original.RunID, storedActivity.ID)
 	require.Equal(t, request.Binding.CallerID, *storedActivity.StartedByUserID)
 	for _, age := range []time.Duration{9 * time.Minute, 10 * time.Minute, 11 * time.Minute, 25 * time.Hour} {
-		f.now = f.now.Add(age)
+		f.now = original.AdmittedAt.Add(age)
 		retry := request
 		retry.Identity.RunID = uuid.NewString()
 		row, err := f.admit(retry)
