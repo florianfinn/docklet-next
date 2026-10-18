@@ -69,7 +69,7 @@ export function sourceFixture(reverse = false) {
     const off = f.adapter.subscribeActions(observed); const offHealth = f.adapter.subscribeActionReadHealth?.(health);
     const content = createElement(Fragment, null, createElement(ActionToasts), createElement(AppToaster), center && createElement(ActivityCenter));
     const router = createElement(MemoryRouter, null, content);
-    const intl = createElement(IntlProvider, { locale: "en-US", messages: catalogs["en-US"], timeZone: "UTC" }, router);
+    const intl = createElement(IntlProvider, { locale: "en-US", messages: catalogs["en-US"], timeZone: "UTC", children: router });
     const view = render(createElement(AdapterContext.Provider, { value: f.adapter }, createElement(QueryClientProvider, { client }, intl)));
     return { ...view, stop: () => { view.unmount(); off(); offHealth?.(); } };
   };
