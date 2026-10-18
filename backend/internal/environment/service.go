@@ -505,7 +505,6 @@ func (s *EnvironmentService) linkEnvironmentApiKey(ctx context.Context, envID, n
 		"api_key_id":   newApiKeyID,
 		"access_token": apiKey,
 		"status":       string(EnvironmentStatusPending),
-		"last_seen":    nil, // Clear last seen time
 	}
 
 	result := s.db.WithContext(ctx).Model(&Environment{}).Where("id = ?", envID).Updates(updates)
@@ -520,14 +519,13 @@ func (s *EnvironmentService) linkEnvironmentApiKey(ctx context.Context, envID, n
 	s.invalidateEnvironmentCacheInternal(envID)
 	s.NotifyRuntimeStateChanged()
 
-	s.revokeAgentSessions(envID)
+	s.revokeAgentSessionsInternal(envID, true)
 	s.edgeTokens.sync(envID, apiKey)
 	now := time.Now()
 	s.remoteEnvs.update(envID, func(env *Environment) {
 		env.ApiKeyID = &newApiKeyID
 		env.AccessToken = &apiKey
 		env.Status = string(EnvironmentStatusPending)
-		env.LastSeen = nil
 		env.UpdatedAt = &now
 	})
 

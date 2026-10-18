@@ -126,10 +126,10 @@ export function HostCard({ host, system, stacks, containers, allIds, onFiles }: 
           {dt(host.address)}
         </Row>
         <Row label={t("card.projectDir")} mono>
-          {host.projectDir}
+          {host.projectDir || t("card.unavailable")}
         </Row>
         <Row label={t("card.installDir")} mono>
-          {host.installDir}
+          {host.installDir || t("card.unavailable")}
         </Row>
         {!host.agentReport && (
           <Row label={t("card.fileIds")} mono>
@@ -137,10 +137,10 @@ export function HostCard({ host, system, stacks, containers, allIds, onFiles }: 
           </Row>
         )}
         <Row label={t(host.dockerVersion ? "card.versions" : "card.agentVersion")} mono>
-          {[host.agentVersion, host.dockerVersion].filter(Boolean).join(" / ")}
+          {[host.agentVersion === "dev" ? t("card.development") : host.agentVersion, host.dockerVersion].filter(Boolean).join(" / ") || t("card.unavailable")}
         </Row>
-        <Row label={t("card.system")}>{host.os}</Row>
-        <Row label={t("card.lastSeen")}>{host.status === "online" ? tc("online") : formatRelative(host.lastSeen)}</Row>
+        <Row label={t("card.system")}>{host.os || t("card.unavailable")}</Row>
+        <Row label={t("card.lastSeen")}>{host.status === "online" ? tc("online") : host.lastSeen ? formatRelative(host.lastSeen) : t("card.unavailable")}</Row>
       </dl>
       {host.status === "token-rejected" && <p role="status" className="text-sm text-destructive">{t("tokenRejected")}</p>}
       <AgentReportSection host={host} />

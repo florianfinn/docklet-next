@@ -104,7 +104,7 @@ func TestAgentForwardingFailureCodesAfterCompatibility(t *testing.T) {
 	for _, mode := range []string{"direct", "edge"} {
 		for _, status := range []int{http.StatusUnauthorized, http.StatusForbidden, 0} {
 			t.Run(mode+"/"+http.StatusText(status), func(t *testing.T) {
-				ctx, cancel := context.WithTimeout(t.Context(), 200*time.Millisecond)
+				ctx, cancel := context.WithCancel(t.Context())
 				defer cancel()
 				f := newAgentFixture(t, mode, version.Info{AgentContractVersion: contract.AgentHubVersion, AgentContractFingerprint: contract.AgentHubFingerprint})
 				_, err := f.service.CheckAgentCompatibility(ctx, f.id)
@@ -112,6 +112,8 @@ func TestAgentForwardingFailureCodesAfterCompatibility(t *testing.T) {
 				if mode == "direct" {
 					f.service.httpClient.Transport = agentRoundTrip(func(r *http.Request) (*http.Response, error) {
 						if status == 0 {
+							// Cancel only after the forwarded request reaches the tunnel.
+							cancel()
 							return nil, errors.New("agent unreachable")
 						}
 						return &http.Response{StatusCode: status, Header: http.Header{}, Body: io.NopCloser(strings.NewReader("agent rejected credential")), Request: r}, nil
@@ -119,6 +121,8 @@ func TestAgentForwardingFailureCodesAfterCompatibility(t *testing.T) {
 				} else {
 					f.conn.send = func(m *edge.TunnelMessage) {
 						if status == 0 {
+							// Cancel only after the forwarded request reaches the tunnel.
+							cancel()
 							return
 						}
 						pending, ok := f.tunnel.Pending.Load(m.ID)

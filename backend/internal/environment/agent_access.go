@@ -45,7 +45,6 @@ type agentCheck struct {
 }
 
 type agentReport struct {
-	token  string
 	report environmenttypes.AgentReport
 }
 
@@ -258,7 +257,7 @@ func (s *EnvironmentService) runAgentCompatibility(ctx context.Context, id strin
 	if s.agentRuntime.reports == nil {
 		s.agentRuntime.reports = make(map[string]agentReport)
 	}
-	s.agentRuntime.reports[id] = agentReport{token: *env.AccessToken, report: environmenttypes.AgentReport{Version: info, ReportedAt: now}}
+	s.agentRuntime.reports[id] = agentReport{report: environmenttypes.AgentReport{Version: info, ReportedAt: now}}
 	s.agentRuntime.mu.Unlock()
 	s.NotifyRuntimeStateChanged()
 	session.info = &info
@@ -316,12 +315,19 @@ func (s *EnvironmentService) edgeSessionCurrent(ctx context.Context, tunnel *edg
 }
 
 func (s *EnvironmentService) revokeAgentSessions(id string) {
+	s.revokeAgentSessionsInternal(id, false)
+}
+
+// Rotation keeps the last report for display, never as an admission verdict.
+func (s *EnvironmentService) revokeAgentSessionsInternal(id string, keepReport bool) {
 	s.agentRuntime.mu.Lock()
 	if session := s.agentRuntime.sessions[id]; session != nil {
 		session.cancel()
 		delete(s.agentRuntime.sessions, id)
 	}
-	delete(s.agentRuntime.reports, id)
+	if !keepReport {
+		delete(s.agentRuntime.reports, id)
+	}
 	s.agentRuntime.mu.Unlock()
 	if tunnel, ok := edge.GetRegistry().Get(id).Get(); ok {
 		_ = tunnel.CloseWithReason("agent credential revoked")

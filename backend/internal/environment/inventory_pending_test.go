@@ -58,11 +58,18 @@ func TestAB2InventoryAfterRegistrationRotationAndReconnect(t *testing.T) {
 				env, err := f.service.GetEnvironmentByID(ctx, f.id)
 				require.NoError(t, err)
 				require.Equal(t, "pending", env.Status)
-				if transition != "reconnect" {
+				if transition == "registration" {
 					require.Nil(t, env.LastSeen)
 					dto := environmenttypes.Environment{ID: f.id, Status: env.Status, IsEdge: mode == "edge"}
 					f.service.ApplyHostRuntimeState(ctx, &dto)
 					require.Nil(t, dto.AgentReport)
+				}
+				if transition == "rotation" {
+					require.NotNil(t, env.LastSeen, "rotation retains the last successful contact")
+					dto := environmenttypes.Environment{ID: f.id, Status: env.Status, IsEdge: mode == "edge"}
+					f.service.ApplyHostRuntimeState(ctx, &dto)
+					require.NotNil(t, dto.AgentReport, "rotation retains the historical report")
+					require.Equal(t, "pending", dto.Status)
 				}
 				pending, err := f.service.InventoryPending(ctx, f.id)
 				require.NoError(t, err)
