@@ -53,6 +53,8 @@ non-`ok` outcome; the UI can use the same shape for error rendering.
 run remains `running` until completion. The HTTP adapter never exposes the
 server's executable work context. The client-side `run-gate.ts` remains a UI
 deduplication aid; server admission decides cross-tab conflicts and freshness.
+Runtime controls use deliberate command admission without the generic freshness
+shortcut, as defined in the [runtime record](runtime-control.md).
 
 Raw run output is a retained debugging feature. The hub persists it per run in
 `activities`, separate from coded messages: `backend/pkg/libarcane/activity/writer.go`
@@ -86,6 +88,44 @@ The web run states map directly from the wire, except `success`:
 
 The activity feature catalogues supply these labels; queued and cancelled
 render as distinct states throughout run surfaces, including the result view.
+
+## Runtime mapping target
+
+The [runtime-control record](runtime-control.md) defines the M6 specialization,
+including requirements that are not current adapter support: command calls opt
+into admission JSON and resolve the same durable hub/agent ID, preserve coded
+conflicts (including request mismatch), and refresh targeted hub runtime detail.
+Unanswered/lost-continuity executor knowledge stays visibly blocked; settled
+local interruption fails with effect unverified and releases. Accepted admin
+recovery is a separate hub disposition, never inferred success. Legacy CLI
+NDJSON/message callers retain their response modes. Bulk `ContainerActionResult`
+is not the wire source for single-container admission.
+
+Runtime logs use the existing Echo WS routes. Subscription attempt plus seq
+identifies lines; seq orders arrival within that source, not timestamps across
+services or stdout/stderr. Resource changes clear hook state, reconnect establishes a tail
+boundary and bounded buffers expose loss/truncation. Runtime logs remain separate
+from retained run output. Local session revocation closes SSE and all viewer WS
+connections through explicit closers and bounded durable session revalidation,
+clears adapter/live caches and rejects late identity-generation callbacks;
+accepted Docker work continues. Other tabs observe server closure/identity
+rejection without a new broadcast mechanism.
+
+The cross-host action-load failure in #102 requires a bounded, separately owned
+projection prerequisite before M6 action UI activation: healthy runs plus explicit
+source failures, targeted detail availability and reconnect recovery. No failed
+source may become an empty successful read. Its owner controls shared partial-read
+fields before runtime consumers adopt them; this does not redesign inventory.
+The runtime foundation owns the other shared port/domain/capability additions
+and required v4 execution/outcome contract changes; optional additive log metadata
+belongs to the log owner. Opaque UUID retries use ten minutes from the hub's
+first-seen binding, without client/agent clock validation; compact outcome
+evidence lasts at least twenty-four hours independently of full output history.
+Supported delivery and receiver admission are bounded before acceptance; accepted
+work survives caller timeout. Only recent, continuous-generation negative proof
+may release a scope; old or uncertain absence stays unknown.
+Keep controls/log capabilities disabled until complete mappings and execution
+paths are verified.
 
 ## Capability descriptor
 

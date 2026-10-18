@@ -2,6 +2,13 @@
 
 ## Scope and guarantees
 
+[Runtime control](runtime-control.md) defines the M6 specialization for stack
+and container lifecycle runs. Its durable receipts, parent/child exclusions,
+cancellation intent and outcome reconciliation take precedence for those runs.
+The generic rules and matrix below continue to cover other activity users;
+backup/job coordinators retain their own recovery contracts. The runtime target
+is a design contract, not a claim that existing handlers implement it.
+
 The private deployment operates one hub process in one hub container against
 SQLite on local persistent storage. A second hub must not start while the first
 holds its lifetime file lock. The [SQLite contract](sqlite-database.md) defines
@@ -18,9 +25,10 @@ A gated run has at most one active row per `(environment_id, gate_scope)`.
 waiting for a local concurrency slot; it has no gate scope or gate admission
 result. A gated `running` row occupies its scope; an ungated `queued` row
 waits without holding a slot, and an ungated `running` row holds one.
-`success`, `failed` and `cancelled` are terminal. Cancellation is a local
-context signal; it is not persisted. There is no automatic operation replay or
-atomicity guarantee for external effects. The guarantees cover unique gated
+`success`, `failed` and `cancelled` are terminal. For generic gated runs,
+cancellation is a local context signal and is not persisted; runtime receipts
+persist intent separately. There is no automatic operation replay or atomicity
+guarantee for external effects. The guarantees cover unique gated
 admission and one durable terminal transition per activity row.
 
 ## States and transitions
@@ -129,12 +137,21 @@ interruption message and terminal timestamp. Repair also covers crashes during
 cancellation and abandoned ungated work. Special coordinators, including job
 runs and an occupied self-update completion, reconcile their own durable state.
 
-The repair frees the gated scope. The next intake reads the resource state
-before acting, following the current Arcane behaviour. An agent may still
-finish an action accepted before the crash, so the next action can overlap
-that external action. Blocking a scope until the agent confirms the outcome,
-with a query by run ID, timeout and manual release, is a separate follow-up
-requiring a hub–agent contract change.
+For generic gated activities the repair frees the scope. The next intake reads
+resource state before acting, following current Arcane behaviour; an already
+accepted external action can still overlap. Runtime controls instead follow
+[query-by-run-ID reconciliation](runtime-control.md#dispatch-disconnect-and-reconciliation):
+restore their exclusions before readiness and exclude their IDs from generic
+startup repair. A remote dispatch with uncertain acceptance remains blocked until a matching
+settled executor answer, recent continuous-store not-received proof under the
+runtime record's hub-local age rule, or accepted
+administrator recovery. Own local executor restart, or settled worker/children
+after interruption, commits failed/interrupted with effect unverified and frees
+the scope. Startup settlement of an admitted receipt also says effect unverified:
+a restored row cannot prove that no dispatch occurred after backup. An accepted
+daemon effect may still finish; re-read actual state
+before acting. A remote waiter timeout or hub restart cannot settle agent work. This changes the hub–agent
+contract for runtime work; it does not alter existing coordinator recovery.
 
 A terminal write atomically checks `status IN ('queued', 'running')` and
 writes status, code and latest message in one transaction. A second
@@ -157,8 +174,9 @@ within the existing 10-second owner-write deadline; exhausted SQLite busy errors
 use the existing retry classifier, with no additional retry layer. After
 the final failure it returns the error; it must not
 claim success or free the durable scope. The row remains active and blocks
-another gated admission on that scope. An operator restart triggers startup
-repair and releases the scope.
+another gated admission on that scope. For generic runs an operator restart
+triggers startup repair and releases the scope. Runtime local-executor repair
+records interruption; unanswered remote receipt exclusions survive hub restart.
 
 ## Single-instance lock
 
@@ -204,8 +222,9 @@ migrations remain immutable.
 | Configurable event and activity count limits | Remove | Cleanup keeps 500 events and 100 finished activities per environment. |
 | Job run age retention | Keep | Finished job history is limited to 100 runs and seven days. |
 
-During normal operation, a scope stays occupied until its local worker
-returns or the hub process exits.
+For generic gated work a scope stays occupied until its local worker returns
+or the hub process exits. Runtime receipt scopes also survive a hub exit when
+the executor outcome remains unknown.
 
 ## Review notes for the implementation step
 
@@ -218,7 +237,9 @@ The following points come from [review round 5 on PR #42](https://github.com/flo
 
 ## Test matrix for the implementation step
 
-Each row needs an automated test and a targeted counterexample: the named
+This matrix covers the generic gate; the runtime record adds its exception
+cases for durable outcome knowledge and scope retention. Each row needs an
+automated test and a targeted counterexample: the named
 mutation must make that test fail. Restart tests use two consecutive hub
 lifetimes against the same temporary SQLite files, actually ending the first
 process and releasing its file descriptor. A second service in one process is
