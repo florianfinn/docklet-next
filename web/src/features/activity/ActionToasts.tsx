@@ -7,6 +7,7 @@ import { useActionRun } from "@/data/live";
 import { renderMessage, renderRun } from "@/data/message-code";
 import { useConnectedSettings, useSettings } from "@/data/queries";
 import type { CurrentUser } from "@/data/api";
+import type { ActionReadHealth } from "@/data/adapter";
 import { queryKeys } from "@/data/query-keys";
 import { useAdapter } from "@/data/use-adapter";
 import { runGateOf, type GateNotice } from "@/data/run-gate";
@@ -85,6 +86,9 @@ export function ActionToasts() {
     );
     let coordinator = createCoordinator();
     let observed = false;
+    let health: ActionReadHealth = { failures: [] };
+    let initialSources: Set<string> | undefined;
+    const offHealth = adapter.subscribeActionReadHealth?.((next) => { health = next; });
     const offRuns = adapter.subscribeActions((runs) => {
       // Identity replacement seeds new history; same-user renewal retains seen/dismissed runs.
       const nextIdentity = identity();
@@ -92,9 +96,18 @@ export function ActionToasts() {
         clearOwned();
         coordinator = createCoordinator();
         identityId = nextIdentity;
+        initialSources = undefined;
+      }
+      const failed = new Set(health.failures.flatMap((failure) => failure.hostId === undefined ? [] : [failure.hostId]));
+      // Only initially incomplete sources await history; later outages keep ordinary notifications.
+      const pending = initialSources ??= new Set(failed);
+      const history = new Set(runs.filter((run) => run.hostId !== undefined && pending.has(run.hostId)).map((run) => run.id));
+      // Health clears before its array: seed this last history first, then retire the source.
+      if (!health.failures.some((failure) => failure.hostId === undefined)) {
+        for (const hostId of pending) if (!failed.has(hostId)) pending.delete(hostId);
       }
       observed = true;
-      coordinator.sync(runs.map((run) => renderRun(run, localeRef.current)));
+      coordinator.sync(runs.map((run) => renderRun(run, localeRef.current)), history);
     });
     // Presentation changes are not action observations and cannot seed initial history.
     const syncPresentation = () => { if (observed) coordinator.sync(); };
@@ -119,6 +132,7 @@ export function ActionToasts() {
     });
     return () => {
       offRuns();
+      offHealth?.();
       clearOwned();
       offDialog();
       offSurfaces();

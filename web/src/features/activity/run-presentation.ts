@@ -121,13 +121,15 @@ interface Seen {
  * surface goes away, a still running run gets its toast back, a settled one
  * none. A failure that happens uncovered always shows, even after its toast
  * was closed. Runs present at the first sync are history and get no toast
- * of their own; they only follow later coverage changes.
+ * of their own; they only follow later coverage changes. Later source histories
+ * can seed their current status and coverage with the corresponding observation.
  */
 export class RunToastCoordinator {
   private seen: Map<string, Seen> | null = null;
   private syncing = false;
   private again = false;
   private runs: ActionRun[] = [];
+  private history = new Set<string>();
   private readonly port: RunToastPort;
   private readonly ctx: RunToastContext;
 
@@ -136,9 +138,9 @@ export class RunToastCoordinator {
     this.ctx = ctx;
   }
 
-  /** Call with the latest run list, or without one after the dialog or surfaces changed. */
-  sync(runs?: ActionRun[]): void {
-    if (runs) this.runs = runs;
+  /** History IDs seed silently for this observation; calls without runs only update presentation. */
+  sync(runs?: ActionRun[], history?: ReadonlySet<string>): void {
+    if (runs) { this.runs = runs; this.history = new Set(history); }
     // Offering the dialog or binding a claim notifies stores that call sync again.
     if (this.syncing) {
       this.again = true;
@@ -168,8 +170,13 @@ export class RunToastCoordinator {
   private pass(): void {
     if (!this.seen) {
       this.seen = new Map(this.runs.map((r) => [r.id, { status: r.status, covered: this.covered(r) }]));
+      this.history.clear();
       return;
     }
+    // Only this observation seeds source history; reentrant presentation passes visit normally.
+    const history = this.history;
+    this.history = new Set();
+    for (const run of this.runs) if (history.has(run.id)) this.seen.set(run.id, { status: run.status, covered: this.covered(run) });
     this.visit();
     this.forget();
   }
