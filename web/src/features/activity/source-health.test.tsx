@@ -71,3 +71,25 @@ it("retained rows still show a global refresh failure and reconnect clears it", 
   await waitFor(() => expect(screen.queryByRole("alert") === null).toBe(true));
   view.unmount();
 });
+
+for (const locale of ["en-US", "de"] as const) {
+  it(`${locale}: partial hub summaries show the existing warning and retry clears it after complete success`, async () => {
+    const f = activityFixture(true);
+    f.state.hold = async (path, response) => {
+      if (path.endsWith("/bad/activities")) response.headers.set("X-Docklet-Host-Reason", "agent.unavailable");
+      return response;
+    };
+    const view = mount(f, locale);
+    const warning = await screen.findByRole("alert");
+    expect(warning.textContent?.includes("Unavailable example")).toBe(true);
+    expect(warning.textContent?.includes(locale === "en-US" ? "does not confirm completion" : "bestätigt keinen Abschluss")).toBe(true);
+    expect(warning.textContent?.includes("agent.unavailable")).toBe(false);
+    expect(screen.queryByText(/Example good/) !== null).toBe(true);
+    expect(screen.queryByText(/Example bad/) !== null).toBe(true);
+    f.state.hold = undefined;
+    await userEvent.click(within(warning).getByRole("button", { name: locale === "en-US" ? "Retry activity reads" : "Aktivitäten erneut lesen" }));
+    await waitFor(() => expect(screen.queryByRole("alert") === null).toBe(true));
+    expect(screen.queryByText(/Example bad/) !== null).toBe(true);
+    view.unmount();
+  });
+}

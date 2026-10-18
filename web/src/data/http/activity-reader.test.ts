@@ -4,6 +4,7 @@
 // License: Apache-2.0
 // Deviations: Original activity isolation, recovery and ordering regressions.
 
+import { CancelledError } from "@tanstack/react-query";
 import { expect, it, vi } from "vitest";
 import type { ActionReadHealth } from "../adapter";
 import type { CodedActionRun } from "../message-code";
@@ -99,14 +100,14 @@ it("a slow old full read cannot overwrite a newer targeted detail while another 
       if (path.endsWith("/good/activities/run-good")) { captured = response; return held.promise; }
       return response;
     };
-    f.state.failure = "page502"; f.sources[0]!.open();
+    f.state.failure = "page502"; const older = f.adapter.listActions();
     await vi.waitFor(() => expect(captured !== undefined).toBe(true));
     f.state.hold = undefined; f.state.details["run-good"]!.activity.status = "queued";
     f.sources[0]!.send("run-good", "good");
     await vi.waitFor(() => expect(runs.mock.lastCall?.[0].find((r) => r.id === "run-good")?.status).toBe("queued"));
     held.resolve(captured!);
-    await vi.waitFor(() => expect(runs.mock.lastCall?.[0]).toHaveLength(2));
-    await new Promise((r) => setTimeout(r, 0));
+    await older;
+    expect(runs.mock.lastCall?.[0]).toHaveLength(2);
     expect(runs.mock.lastCall?.[0].find((r) => r.id === "run-good")?.status).toBe("queued");
   } finally { stop(); }
 });
@@ -138,9 +139,10 @@ it.each(["logout", "unsubscribe"])("%s blocks late callbacks and query results f
   if (boundary === "logout") await f.adapter.logout(); else stop();
   const count = runs.mock.calls.length; const healthCount = health.mock.calls.length;
   held.resolve(captured!);
-  await expect(pending).rejects.toMatchObject({ name: "Error", silent: true });
+  await expect(pending).rejects.toBeInstanceOf(CancelledError);
+  const requests = f.requests.length;
   oldSource.send("run-good", "good");
-  await new Promise((r) => setTimeout(r, 20));
+  expect(f.requests).toHaveLength(requests);
   expect(runs).toHaveBeenCalledTimes(count); expect(health).toHaveBeenCalledTimes(healthCount);
   if (boundary === "logout") expect(runs.mock.lastCall?.[0]).toEqual([]);
   stop(); off();
@@ -177,7 +179,7 @@ it("authentication rejection clears observations and blocks an older successful 
     const pending = f.adapter.listActions(); await vi.waitFor(() => expect(captured !== undefined).toBe(true));
     f.state.hold = undefined; f.state.failure = "page401"; f.sources[0]!.open();
     await vi.waitFor(() => expect(runs.mock.lastCall?.[0]).toEqual([]));
-    held.resolve(captured!); await expect(pending).rejects.toMatchObject({ name: "Error", silent: true });
+    held.resolve(captured!); await expect(pending).rejects.toBeInstanceOf(CancelledError);
     expect(runs.mock.lastCall?.[0]).toEqual([]);
   } finally { stop(); }
 });
@@ -196,12 +198,14 @@ it.each(["logout", "unsubscribe"])("ignores a held targeted completion after %s"
     await vi.waitFor(() => expect(captured !== undefined).toBe(true));
     f.state.hold = undefined;
     if (boundary === "logout") await f.adapter.logout(); else stop();
+    vi.useFakeTimers();
     held.resolve(captured!);
-    await new Promise((r) => setTimeout(r, 20));
+    await vi.runAllTimersAsync();
+    vi.useRealTimers();
     const resumed = vi.fn(); off = f.adapter.subscribeActions(resumed);
     if (boundary === "logout") expect(resumed.mock.lastCall?.[0]).toEqual([]);
     else expect(resumed.mock.lastCall?.[0].find((r: CodedActionRun) => r.id === "run-good")?.status).toBe("running");
-  } finally { off(); stop(); }
+  } finally { vi.useRealTimers(); off(); stop(); }
 });
 it("rejects valid cross-host details claiming the same run UUID without hiding an unrelated healthy run", async () => {
   const f = activityFixture();
