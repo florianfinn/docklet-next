@@ -6,8 +6,9 @@ This record defines the target M6 contract for one hub on local SQLite and one
 self-hosting operator. It extends [run admission](run-gate.md) only for runtime
 controls and outcome reconciliation. It does not change backup/job coordinator
 recovery, the hub lifetime lock, identity modes or resource-right policy.
-Implementation must follow independent design review and acceptance of the
-manual-release and action-projection prerequisite choices described below.
+Implementation follows independent design review. Conscious administrator
+recovery and the separately owned action-projection prerequisite below are
+accepted scope; neither introduces failover or automatic effect replay.
 
 | Web command | Existing operation and suffix under `/api/environments/{id}` | Existing authority |
 | --- | --- | --- |
@@ -64,17 +65,28 @@ source host on projection. Browser resource IDs remain `<host>~<raw-id>` and are
 decoded only at the adapter boundary. Gate strings contain canonical raw IDs,
 never display names or browser-composed IDs.
 
-A client creates `Idempotency-Key` (UUID) per deliberate command, retaining it
-across CSRF refresh and transport retry. The receipt uniquely binds
-`(environmentId, idempotencyKey)` to run ID, caller identity and a canonical
-request digest: operation ID, raw target, accepted options and parent. Same key
-and digest returns the same run, including after terminal completion; permission
-and bound caller identity are checked again before returning it. Same key with another digest is HTTP 409
-`run.request-mismatch`, with no worker. A new key expresses a new intent; two
-tabs starting the same active operation join the first run and both keys bind to
-it. Joining never registers a second executor. Legacy requests lacking a key
-receive a server-generated key; their ambiguous retransmission after completion
-cannot be deduplicated and must never be automatic.
+A client creates a timestamp-bearing UUIDv7 `Idempotency-Key` per deliberate
+command. Its timestamp fixes a ten-minute retry window; the hub rejects expired
+keys with HTTP 410 `run.retry-expired`, and malformed or more than one minute
+future-dated keys with HTTP 400 `run.invalid-key`, before admitting work. Client
+clock errors require correction, never automatic creation of a replacement
+intent. The adapter retains the key across CSRF/transport retries only within
+that window, discards it after the final response or window expiry, and then
+refreshes known run detail rather than replaying the command. These are target
+key rules, not current adapter support.
+
+The binding uniquely maps `(environmentId, idempotencyKey)` to run ID, requesting
+caller and canonical digest: operation ID, raw target, accepted options and
+parent. Within the window, same key/digest returns the same ID and compact
+outcome even after output/history pruning; recheck caller identity and current
+operation/activity-read permissions. A changed digest is HTTP 409
+`run.request-mismatch`, without a worker. Two permitted callers issuing the same
+active operation join the first run. The activity/receipt keeps its original
+actor; each joining key records its own caller and join audit attribution.
+Joining reveals only the authorized run projection and grants no extra cancel
+permission. It never creates an executor or changes the original actor.
+Legacy requests without a key receive a hub-generated key; an ambiguous
+retransmission without that key cannot be deduplicated and is never automatic.
 
 Known key retries and conflicts against held scopes are resolved from durable
 receipts first, without requiring a reachable executor. Before admitting new
@@ -97,7 +109,8 @@ active-scope uniqueness remains a second defense for equal scopes; the
 transaction's parent predicate provides the additional exclusion. No transaction
 spans network, Docker or Compose work. Dispatch registration uses the same local
 mutex boundary as committed admission. Unknown receipts participate in conflict
-checks even if a historical activity has been terminalized. Agents enforce the
+checks. Only the hub administrator disposition below may terminalize its
+activity while executor knowledge stays unknown; ordinary waiters cannot. Agents enforce the
 same predicates before executing, including legacy requests reaching their local
 listener. This second guard protects local callers; it is not a distributed lease.
 
@@ -112,21 +125,50 @@ are deliberate effects. Other run-gate users keep their existing freshness rule.
 A new forward SQLite migration adds a runtime receipt and idempotency bindings,
 separate from retained activity output. Use the same schema on hub and agent;
 local execution has one receipt, not a mirrored pair in the same database.
-Minimum receipt fields are run ID, source environment, caller attribution,
-canonical operation/target/parent/digest, admission time, dispatch state,
-executor state, cancellation request, terminal result, error code and last
-reconciliation time. Bindings contain the key and digest. Active/unknown receipts
-and compact terminal identity/result receipts survive activity-history pruning;
-no cascading activity FK may erase them. Never reuse a pruned run ID as new work.
+Minimum fields are run ID, environment/registration identity, executor storage
+generation, original caller, operation/target/parent/digest, admission time,
+dispatch deadline/state, executor state, cancel intent, result/error and last
+reconciliation time. Key bindings contain caller, digest and retry expiry.
+Storage failure refuses admission before effects.
 
-Retain compact receipts and key bindings for the lifetime of this installation;
-M6 does not garbage-collect deduplication evidence. Retained traces/output still
-follow 100 finished activities per environment. Receipts contain no raw logs or
-secrets, and their per-command storage growth must be measured. This deliberate
-small ledger cost buys retry safety after history pruning; a future retention
-policy must define an explicit expired-key refusal before deleting evidence.
-Storage failure refuses admission before effects, rather than falling back to
-best-effort activity creation.
+Keep full activity/output retention at **100 finished activities per environment**;
+clearing history may remove terminal output immediately. Separate compact
+receipts/key bindings/refusal tombstones survive either operation without a
+cascading activity FK. Unresolved active and unknown receipts never expire or clear with
+history. Explicit administrator disposition makes the hub receipt terminal for
+retention purposes while preserving that external effect knowledge is unknown. Terminal receipts, joining bindings and not-received tombstones have a
+**24-hour minimum retention** from their final write (including a later binding),
+and cannot prune before all bound retry windows and dispatch deadlines expire.
+A bounded cleanup batch runs at startup and hourly, deleting eligible compact
+records deterministically by expiry then ID. This bounds terminal evidence by
+recent traffic, not by installation age; active/unknown evidence remains until
+settled or explicitly disposed. No full output is retained for this grace.
+
+An authenticated dispatch carries immutable issued-at/not-after timestamps,
+with at most **30 minutes** validity, and binds manager, registered target,
+executor storage generation, run ID and digest. Each direct/Edge request also
+has a maximum 30-minute lifetime; the generic proxy timeout alone is insufficient.
+Before creating a worker, the executor refuses expired envelopes with HTTP 410
+`runtime.dispatch-expired`, invalid/future-dated envelopes with 400, and wrong
+identity/generation with 409. Permit at most one minute of future clock skew;
+clock checks govern envelope validity only, never effect ordering or gate release.
+Pruning atomically advances a durable expired-deadline cutoff before deleting
+records; reject any envelope at/below that cutoff even after clock rollback.
+Only delete records whose dispatch deadline is at/below that cutoff. The hub
+uses the analogous expired-key timestamp cutoff when pruning key bindings.
+These are two scalar cutoffs per store, not a per-command permanent ledger.
+
+After compact evidence expires an opaque old run UUID is no longer recognizable;
+a query reports evidence expired/absent, never historical success. Timestamped
+keys and dispatch deadlines refuse late execution without retaining every UUID.
+Within the guarantee window, retries/query/tombstone races must be atomic.
+Outside it, callers refresh actual state and make a new deliberate intent.
+Host removal refuses while active/unknown receipts remain, with links to cancel,
+refresh or administrator recovery. Once disposed, removal may delete the target
+and full history but retains compact evidence through its grace, keyed to the
+removed registration. Retry against that removed target is HTTP 410
+`runtime.target-removed`, never dispatch; it may return the authorized old ID.
+Re-registration gets a new identity and cannot inherit old commands or conflicts.
 
 Hub timestamps use its bound UTC microsecond clock, one sample per transaction.
 Agent execution times use the agent's clock and are labeled executor times;
@@ -146,7 +188,8 @@ write does not invoke Docker again.
 | `accepted` → `executing` | Executor checks cancellation, then starts work once | `running`; held |
 | Active → cancellation requested | Hub persists intent; executor persists it before signaling registered context | Still `running`; held |
 | Active → terminal `success`/`failed`/`cancelled` | Executor has settled work and persists actual outcome | Matching existing activity state; releasable |
-| Dispatch/active → `unknown` | Hub transport loss or either process loses execution knowledge | `running` with explicit unknown reason; held |
+| Dispatch/active → `unknown` | Hub has no authoritative executor answer, or storage/host continuity is lost | `running` with explicit unknown reason; held |
+| Abandoned local executor → terminal `failed` | Executor startup proves old process ended, or worker/known children settle after interruption | Interrupted, effect unverified; release after durable commit |
 | `unknown` → active/terminal | Hub applies authenticated matching executor answer | Held until confirmed terminal commit |
 | `unknown` → manually released | Administrator recovery procedure below | `failed`, interrupted/unknown reason; release audited |
 
@@ -155,15 +198,17 @@ Add `outcomeState: known|unknown` and `cancelRequested: boolean` to runtime
 snapshot projection; preserve queued/running/success/failed/cancelled statuses.
 Validate both fields only for runtime activities; unrelated historical rows need
 no invented executor knowledge.
-An unknown result renders visibly as outcome unknown, never a spinning claim of
-progress or success. Agent terminal receipts remain immutable. Hub manual release
+An unknown result renders visibly as outcome unknown, never a claim of progress
+or success. A manual hub disposition can project failed while executor knowledge
+remains unknown; it records the hub writer, reason and acknowledged release
+separately. Agent terminal receipts remain immutable. Hub manual release
 is a separate disposition and must not overwrite a later recovered executor
 result; show that result as late evidence without reopening or rewriting history.
 
 ## Dispatch, disconnect and reconciliation
 
 Add agent-only `POST /api/environments/0/runtime-runs` (`execute-runtime-run`),
-with run ID, canonical command/digest and attribution, plus
+with the bounded identity/deadline envelope above and attribution, plus
 `GET /api/environments/0/runtime-runs/{runId}` (`get-runtime-run-outcome`) and
 `POST .../{runId}/cancel` (`cancel-runtime-run`). Query/cancel have hub-facing
 `{id}` equivalents served locally from the hub receipt, with no generic proxy
@@ -171,26 +216,42 @@ bypass. The hub's worker uses existing direct/Edge request transport to the agen
 route; token stripping/injection, compatible-host checks and Edge-only no-direct
 fallback stay unchanged. An execute acknowledgment is bounded JSON, not an open
 Docker execution stream. A duplicate execution envelope returns the persisted
-receipt, never invokes the executor again, even if its activity was pruned.
+receipt within its retention window, never invokes the executor again. Expired
+envelopes are refused even after that receipt was pruned.
 Execution accepts only the seven canonical operations and bounded validated
 options, never arbitrary routes or commands. An authenticated agent admission
 refusal proves this dispatch started no worker; the hub records a failed/refused
 run with the agent conflict reason and releases its own admission. A transport
 error while receiving that refusal is uncertain and keeps the scope blocked.
 
-Agent outcome query is authoritative only for its matching run/digest. Responses:
-`active` with phase/cancel flag; `terminal` with settled status/code/error/times;
-or `unknown` with `not-found`, `interrupted` or `storage-unavailable` reason.
-Use HTTP 200 for a valid query with unknown knowledge, 401/403 for authentication,
-409 for identity/digest mismatch, and 503 for an unreadable store. An offline
-transport is no answer, not `not-found`. An authenticated `not-found` also does
-not prove that an older dispatch is not delayed in transit.
+Agent outcome query is authoritative only for the matching run/digest,
+registered executor and continuous storage generation. Valid answers use HTTP
+200: `active`, `terminal`, or `not-received` backed by a refusal tombstone.
+Query of a never-received ID atomically inserts that tombstone before answering;
+a racing/delayed execute then refuses, so the hub may fail as not dispatched and
+release. Query includes the original dispatch deadline; after evidence expiry,
+absence alone is `unknown` (`evidence-expired`), not proof of no old effect.
+Use 401/403 for authentication, 409 for identity/digest/generation mismatch, and
+503 for an unreadable store. Offline transport is no answer.
+
+The new v4 storage-generation identifier is persisted outside activity pruning,
+returned by authenticated executor metadata/query and bound before dispatch.
+A normal restart preserves it. Lost/replaced storage gets a new generation;
+restored/stale storage cannot assert uninterrupted evidence. Existing host IDs,
+tokens and version fingerprints do not prove this continuity. An empty new store
+must refuse an old-generation query/execute, never manufacture not-received for
+it. Undetectable external database rollback is outside the guarantee: after
+restore or uncertain continuity, stop intake and use administrator recovery
+before trusting negative evidence. No generation change proves an old executor
+stopped. The foundation owns this evidence contract; executor readiness enforces
+it. This adds no lease, second hub or workflow replay.
 
 An active/terminal answer carries the existing activity snapshot/detail vocabulary
 (progress, affected services, coded steps/messages and capped execution output),
 plus receipt knowledge fields. Runtime retained output lines also carry a
-monotonic executor-local `outputSeq` and a retained-start cursor; this is separate
-from runtime-log WS seq. Replace snapshot output as a bounded window, and relay
+monotonic executor-local `outputSeq` to avoid repeating progress on repeated
+queries and a retained-start cursor to detect eviction before a waiter catches
+up; these serve the existing remote CLI, separate from runtime-log WS seq. Replace snapshot output as a bounded window, and relay
 only unseen sequence entries to legacy waiters. If entries were evicted before
 a waiter read them, emit an explicit truncation output marker. No lossless
 execution-output history is promised beyond the existing 256 KiB cap.
@@ -213,19 +274,20 @@ release a scope without the matching settled receipt.
 | Lost acknowledgment after agent acceptance | Agent continues on application lifetime; hub queries same ID and adopts active/terminal result |
 | Browser disconnect/logout | Detach viewer only; hub worker and accepted agent work continue |
 | Remote worker returns a settled error | Persist failed result, project it, release; failure is not rollback |
-| Hub restart | Restore runtime exclusions before readiness; exclude these IDs from generic startup repair; query outstanding dispatches, never resend effects |
-| Agent restart with accepted/executing receipt | Mark knowledge unknown/interrupted before readiness, retain exclusion; Docker may have continued; do not restart workflow or claim terminal effect |
+| Hub restart | Before readiness, fail abandoned local-executor work as interrupted and release; restore remote exclusions and query them, never resend effects |
+| Agent restart with accepted/executing receipt in continuous storage | Before readiness commit failed/interrupted, effect unverified, and release its local exclusion; hub applies that authoritative answer; do not restart workflow |
 | Terminal commit or final message fails | Keep exclusion; return persistence error and reconcile later; reuse existing bounded DB retry classifier |
 | Terminal commit succeeds, event/response is lost | Query returns same terminal result; conditional projection adds one final message |
-| Token rotation/removal or incompatible agent | End viewers per existing transport policy; keep unresolved receipt; no compatibility bypass or automatic success |
+| Token rotation or incompatible agent | End viewers per existing policy; keep unanswered remote receipt; no compatibility bypass or automatic success |
+| Lost executor storage/replaced host | Keep old run unknown until matching authenticated evidence or accepted administrator recovery; a new empty store is not negative proof |
 
 Reconcile on hub startup, transport recovery and explicit run refresh. For each
 outstanding run, allow one query in flight, a 5-second query deadline and at most
 three attempts spaced 2 and 5 seconds in one reconciliation cycle. Thereafter
 leave a visible unknown/blocked run and offer explicit refresh. Do not poll a
 failed host indefinitely or let it block healthy-host reads. An active answer
-can be refreshed while viewed; no age expires the gate. Restarting the hub is
-not a way to release runtime scopes. Queries may retry; dispatch is never
+can be refreshed while viewed; no age expires an unknown gate. A hub restart
+settles its own abandoned local work; it cannot settle a remote agent worker. Queries may retry; dispatch is never
 automatically replayed on startup or ambiguous transport failure.
 
 Cancellation uses existing `activities:cancel` authorization at the hub and the
@@ -235,26 +297,28 @@ late cancellation of terminal work returns the terminal run. The executor owns
 an application-lifetime context, detached from the HTTP caller, with the existing
 Compose/Docker options and a 30-minute maximum workflow deadline. Docker stop's
 existing 30-second grace stays unchanged. Deadline/cancel requests interrupt
-local waiting but cannot reverse accepted Docker work. Release only after all
-executor children settle and the outcome is known. An in-flight Docker call
-with indeterminate effect becomes unknown and holds the gate; a worker return
-caused only by lost transport is not proof of cancellation. A cancellation that
-settles locally records cancelled even if some effects already occurred.
+local waiting but cannot reverse accepted Docker work. Once the worker and
+known children have settled so they cannot issue more commands, commit failed
+with reason `interrupted` for deadline/process interruption, or cancelled for
+settled cancellation; effect state remains unverified. Release and re-read actual
+Docker/Compose state before the next action. A daemon effect already accepted
+may still complete; no rollback or exactly-once external effect is promised.
+A live worker still unwinding retains its exclusion. Unanswered/unreachable
+remote executors and lost storage/host continuity remain unknown, not settled
+failure merely because the hub waiter or transport returned.
 
-Recommended operator recovery for a permanently unknown result is an
-administrator-only `POST .../runtime-runs/{runId}/release`
-(`release-runtime-run`) with explicit risk acknowledgment and a nonempty reason.
-Before accepting it, cancel and join any hub dispatch task for this run and
-close its transport handles. Require the operator to stop the affected executor
-process (ending accepted handlers and delayed requests), inspect actual resource
-state and acknowledge that no prior workflow can issue further commands. Reopen
-the executor only after those old connections are gone. The hub cannot
-mechanically prove the operator-controlled facts. Persist an audit record and conditional interruption disposition
-before freeing the scope. No timer, reconnect or repeated cancel is manual
-release. This choice requires maintainer acceptance before implementation;
-without it, unknown remains blocked until authoritative recovery. Data loss or
-restoring stale hub/agent databases cannot establish prior external outcomes;
-use this recovery boundary, not replay or a claim of exactly-once Docker effects.
+For a permanently unknown result, the accepted recovery is administrator-only
+`POST .../runtime-runs/{runId}/release` (`release-runtime-run`) with explicit
+risk acknowledgment and nonempty reason. Cancel/join any hub dispatch task and
+close its transports first. Require the operator to stop the affected executor,
+end its old handlers/connections, inspect actual Docker state and acknowledge
+that no prior workflow can issue further commands; reopen only afterwards.
+The hub cannot mechanically prove those operator-controlled facts. Persist the
+hub interruption disposition and audit atomically before freeing the scope.
+This is conscious administrator recovery, never a timer or automatic success.
+Late executor evidence is recorded separately against that disposition without
+reopening/overwriting history or replaying effects. Data loss/stale restore
+requires this boundary when authoritative evidence cannot be recovered.
 
 ## HTTP and adapter compatibility
 

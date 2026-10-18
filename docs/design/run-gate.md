@@ -142,9 +142,12 @@ resource state before acting, following current Arcane behaviour; an already
 accepted external action can still overlap. Runtime controls instead follow
 [query-by-run-ID reconciliation](runtime-control.md#dispatch-disconnect-and-reconciliation):
 restore their exclusions before readiness and exclude their IDs from generic
-startup repair. A dispatch with uncertain acceptance remains blocked until a
-matching settled executor result or the explicitly accepted recovery procedure.
-A timeout or hub restart alone does not release it. This changes the hub–agent
+startup repair. A remote dispatch with uncertain acceptance remains blocked until a matching
+settled executor answer, continuous-store not-received tombstone or accepted
+administrator recovery. Own local executor restart, or settled worker/children
+after interruption, commits failed/interrupted with effect unverified and frees
+the scope. An accepted daemon effect may still finish; re-read actual state
+before acting. A remote waiter timeout or hub restart cannot settle agent work. This changes the hub–agent
 contract for runtime work; it does not alter existing coordinator recovery.
 
 A terminal write atomically checks `status IN ('queued', 'running')` and
@@ -169,8 +172,8 @@ use the existing retry classifier, with no additional retry layer. After
 the final failure it returns the error; it must not
 claim success or free the durable scope. The row remains active and blocks
 another gated admission on that scope. For generic runs an operator restart
-triggers startup repair and releases the scope; runtime receipt exclusions
-survive restart.
+triggers startup repair and releases the scope. Runtime local-executor repair
+records interruption; unanswered remote receipt exclusions survive hub restart.
 
 ## Single-instance lock
 
