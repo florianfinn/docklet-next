@@ -200,6 +200,8 @@ export function createHttpAdapter(options: HttpAdapterOptions = {}): DockletAdap
   }
 
   function refreshRun(activityId: string, environmentId?: string): void {
+    // A newer activity event must never join a read started before that event.
+    sharedReads.clear();
     const previous = currentRuns?.find((run) => run.id === activityId);
     if (!previous || !environmentId || previous.hostId !== environmentId) { refreshRuns(); return; }
     const generation = subscriptionVersion;

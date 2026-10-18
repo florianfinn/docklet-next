@@ -14,6 +14,7 @@ it("shares simultaneous navigation and page inventory reads but refetches later"
   expect(images).toHaveLength(6); expect(volumes).toHaveLength(2); expect(topology.networks).toHaveLength(2);
   const counts = () => f.fetcher.mock.calls.filter(([url]) => /\/first\/(projects|containers)\?/.test(String(url))).length;
   expect(counts()).toBe(2);
+  expect(f.fetcher.mock.calls).toHaveLength(14);
   await f.adapter.listContainers();
   expect(counts()).toBe(4);
 });
