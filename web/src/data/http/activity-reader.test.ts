@@ -40,21 +40,21 @@ it.each(["page401", "hub401"])("rejects global authentication failure %s and pre
 it("retains unavailable observations without terminalizing; successful empty and host removal delete rows", async () => {
   const f = activityFixture();
   const health = vi.fn(); const stop = f.adapter.subscribeActionReadHealth!(health);
+  const runs = vi.fn(); const unsubscribe = f.adapter.subscribeActions(runs);
   try {
     await f.adapter.listActions();
     f.state.failure = "page502"; f.state.lists.good = [];
     expect((await f.adapter.listActions()).map((r) => [r.id, r.status, r.finishedAt])).toEqual([["run-bad", "running", undefined]]);
     expect(health.mock.lastCall?.[0].failures).toHaveLength(1);
+    expect(runs.mock.lastCall?.[0].map((r: CodedActionRun) => [r.id, r.status])).toEqual([["run-bad", "running"]]);
     f.state.failure = ""; f.state.lists.bad = [];
     expect(await f.adapter.listActions()).toEqual([]);
     expect(health.mock.lastCall?.[0].failures).toEqual([]);
     f.state.lists.bad = [activity("bad")]; await f.adapter.listActions();
-    const runs = vi.fn(); const unsubscribe = f.adapter.subscribeActions(runs);
     f.state.hosts = ["good"];
     f.sources[0]!.environments();
     await vi.waitFor(() => expect(runs.mock.lastCall?.[0]).toEqual([]));
-    unsubscribe();
-  } finally { stop(); }
+  } finally { unsubscribe(); stop(); }
 });
 it("keeps valid details from an incomplete source and rejects colliding or misattributed identities", async () => {
   const f = activityFixture();
@@ -199,4 +199,26 @@ it("authentication rejection clears observations and blocks an older successful 
     held.resolve(captured!); expect(await pending).toEqual([]);
     expect(runs.mock.lastCall?.[0]).toEqual([]);
   } finally { stop(); }
+});
+it.each(["logout", "unsubscribe"])("ignores a held targeted completion after %s", async (boundary) => {
+  const f = activityFixture(); const runs = vi.fn(); const stop = f.adapter.subscribeActions(runs);
+  let off = () => {};
+  try {
+    f.sources[0]!.open(); await vi.waitFor(() => expect(runs).toHaveBeenCalled());
+    const held = deferred<Response>(); let captured: Response | undefined;
+    f.state.details["run-good"]!.activity.status = "success";
+    f.state.hold = async (path, response) => {
+      if (path.endsWith("/good/activities/run-good")) { captured = response; return held.promise; }
+      return response;
+    };
+    f.sources[0]!.send("run-good", "good");
+    await vi.waitFor(() => expect(captured !== undefined).toBe(true));
+    f.state.hold = undefined;
+    if (boundary === "logout") await f.adapter.logout(); else stop();
+    held.resolve(captured!);
+    await new Promise((r) => setTimeout(r, 20));
+    const resumed = vi.fn(); off = f.adapter.subscribeActions(resumed);
+    if (boundary === "logout") expect(resumed.mock.lastCall?.[0]).toEqual([]);
+    else expect(resumed.mock.lastCall?.[0].find((r: CodedActionRun) => r.id === "run-good")?.status).toBe("running");
+  } finally { off(); stop(); }
 });

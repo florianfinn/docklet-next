@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router";
 import { useTranslations } from "use-intl";
 
-import { useActionRuns } from "@/data/live";
+import { useActionReadHealth, useActionRuns } from "@/data/live";
 import { useActionsQuery, useEvents } from "@/data/queries";
 import { HISTORY_LIMITS } from "@/domain/activity-history";
 import { formatRelative, formatTime } from "@/domain/format";
@@ -17,6 +17,7 @@ import { ToneDot } from "@/shared/components/tone";
 import { useHostScope } from "@/shared/hooks/use-host-scope";
 import { useStore } from "@/shared/lib/store";
 import { cn } from "@/shared/lib/utils";
+import { Alert, AlertDescription, AlertTitle } from "@/shared/ui/alert";
 import { Button } from "@/shared/ui/button";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/shared/ui/collapsible";
 import { ScrollArea } from "@/shared/ui/scroll-area";
@@ -80,6 +81,8 @@ function RunBody({ run, defaultOpen }: { run: ActionRun; defaultOpen: boolean })
 function ActionsTab({ focusRunId }: { focusRunId?: string }) {
   const t = useTranslations("activity");
   const runs = useActionRuns();
+  const health = useActionReadHealth();
+  const { byId } = useHostScope();
   const query = useActionsQuery();
   const [hideFinished, setHideFinished] = useState(false);
   const shown = hideFinished ? runs.filter((r) => r.status === "running" || r.status === "queued") : runs;
@@ -88,11 +91,28 @@ function ActionsTab({ focusRunId }: { focusRunId?: string }) {
     if (focusRunId) requestAnimationFrame(() => document.getElementById(`run-${focusRunId}`)?.scrollIntoView({ block: "nearest" }));
   }, [focusRunId]);
 
-  if (query.isError && !runs.length) return <QueryError onRetry={() => void query.refetch()} compact />;
-  if (query.isPending && !runs.length) return <Skeleton className="h-24 rounded-xl" />;
-  if (!runs.length) return <EmptyState icon={<History />} title={t("emptyActions")} />;
+  if (query.isError && !runs.length && !health.failures.length) return <QueryError onRetry={() => void query.refetch()} compact />;
+  if (query.isPending && !runs.length && !health.failures.length) return <Skeleton className="h-24 rounded-xl" />;
+  if (!runs.length && !health.failures.length) return <EmptyState icon={<History />} title={t("emptyActions")} />;
   return (
     <div className="flex flex-col gap-3">
+      {health.failures.length > 0 && (
+        <Alert>
+          <AlertTitle className="line-clamp-none">{t("readHealth.title")}</AlertTitle>
+          <AlertDescription className="min-w-0 gap-3 break-words">
+            <p>{t("readHealth.stale")}</p>
+            <ul className="flex min-w-0 flex-col gap-2">
+              {health.failures.map((failure) => (
+                <li key={failure.hostId ?? "global"}>
+                  {failure.hostId === undefined ? t("readHealth.all") : t("readHealth.host", { host: byId.get(failure.hostId)?.name ?? failure.hostId })}
+                  {": "}{t(`readHealth.${failure.reason}`)}
+                </li>
+              ))}
+            </ul>
+            <Button variant="outline" size="sm" disabled={query.isFetching} onClick={() => void query.refetch()}>{t("readHealth.retry")}</Button>
+          </AlertDescription>
+        </Alert>
+      )}
       <div className="flex flex-wrap items-center justify-between gap-2">
         <HistoryLimit kind="actions" />
         <Button
