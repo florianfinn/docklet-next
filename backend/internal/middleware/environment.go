@@ -202,9 +202,9 @@ func (m *EnvironmentMiddleware) hasActiveEdgeTunnelInternal(envID string) bool {
 func (m *EnvironmentMiddleware) forwardInventoryRequest(c *echo.Context, envID, apiURL string, accessToken *string) error {
 
 	suffix := m.buildResourceSuffix(c.Request().URL.Path, envID)
-	// Hub snapshots answer disconnected reads; other proxy modes retain transport recovery.
-	if m.snapshots != nil && isEdgeEnvironmentURLInternal(apiURL) && c.Request().Method == http.MethodGet && inventorySuffix(suffix, strings.Split(strings.Trim(suffix, "/"), "/")) && !m.hasActiveEdgeTunnelInternal(envID) {
-		edge.TouchTunnelDemand(envID, edge.DefaultTunnelDemandTTL)
+	// Cached inventory answers immediately; cold reads allow bounded tunnel recovery.
+	edgeInventory := m.snapshots != nil && isEdgeEnvironmentURLInternal(apiURL) && c.Request().Method == http.MethodGet && inventorySuffix(suffix, strings.Split(strings.Trim(suffix, "/"), "/"))
+	if edgeInventory && !m.hasActiveEdgeTunnelInternal(envID) && !m.recoverInventoryTunnel(c, envID, suffix) {
 		return m.abortEdgeTunnelUnavailable(c)
 	}
 	if m.agentAccess != nil {
@@ -223,8 +223,10 @@ func (m *EnvironmentMiddleware) forwardInventoryRequest(c *echo.Context, envID, 
 	}
 
 	if isEdgeEnvironment {
-		if handled, proxyRecoveredEdgeTunnelErr := m.proxyRecoveredEdgeTunnelInternal(c, envID, accessToken); handled {
-			return proxyRecoveredEdgeTunnelErr
+		if !edgeInventory {
+			if handled, proxyRecoveredEdgeTunnelErr := m.proxyRecoveredEdgeTunnelInternal(c, envID, accessToken); handled {
+				return proxyRecoveredEdgeTunnelErr
+			}
 		}
 
 		slog.WarnContext(c.Request().Context(), "No active edge tunnel for environment", "environmentId", envID)

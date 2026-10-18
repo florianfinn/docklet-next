@@ -24,3 +24,23 @@ func TestD6MergeAddressFamilyBindings(t *testing.T) {
 	summaries := service.BuildSummaries(t.Context(), []dockercontainer.Summary{{ID: "example", Image: "example:1.0.0", Ports: []dockercontainer.PortSummary{{IP: netip.MustParseAddr("0.0.0.0"), PrivatePort: 80, PublicPort: 8080, Type: "tcp"}, {IP: netip.MustParseAddr("::"), PrivatePort: 80, PublicPort: 8080, Type: "tcp"}}}}, nil, "", nil)
 	require.Len(t, summaries[0].Ports, 1)
 }
+
+func TestAN3ExplicitPortAddressesRemainDistinct(t *testing.T) {
+	for _, addresses := range [][]string{
+		{"0.0.0.0", "::", "127.0.0.1", "192.0.2.10", "2001:db8::10", ""},
+		{"::", "0.0.0.0", "2001:db8::10", "192.0.2.10", "127.0.0.1", ""},
+	} {
+		ports := make([]containertypes.Port, 0, len(addresses))
+		for _, address := range addresses {
+			ports = append(ports, containertypes.Port{IP: address, PrivatePort: 80, PublicPort: 8080, Type: "tcp"})
+		}
+		merged := mergePortBindings(ports)
+		require.Len(t, merged, 5)
+		require.Empty(t, merged[0].IP)
+		require.Equal(t, ports[2:], merged[1:])
+	}
+	for _, address := range []string{"0.0.0.0", "::", "192.0.2.10", "2001:db8::10", ""} {
+		port := containertypes.Port{IP: address, PrivatePort: 80, PublicPort: 8080, Type: "tcp"}
+		require.Equal(t, []containertypes.Port{port}, mergePortBindings([]containertypes.Port{port}))
+	}
+}

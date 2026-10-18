@@ -262,7 +262,7 @@ export function TopologyDetails({ selected, topology, containers, hosts, onSelec
               <TooltipTrigger asChild>
                 <span tabIndex={0}>{removeButton}</span>
               </TooltipTrigger>
-              <TooltipContent className="max-w-64">{tn(`removeBlocked.${blocked}`, { stack: net.stackName ?? "", count: peers.length })}</TooltipContent>
+              <TooltipContent className="max-w-64">{tn(`removeBlocked.${blocked}`, { stack: net.stackName ?? net.stackId ?? "", count: peers.length })}</TooltipContent>
             </Tooltip>
           ) : (
             removeButton

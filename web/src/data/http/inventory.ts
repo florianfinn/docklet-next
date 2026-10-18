@@ -32,7 +32,7 @@ export function createInventoryReader(baseUrl: string, fetcher: typeof fetch, ho
   async function aggregate(operation: string, onPartial?: (batches: Awaited<ReturnType<typeof hostInventory>>[]) => void) {
     await requireCapability(operation);
     const batches: Awaited<ReturnType<typeof hostInventory>>[] = [];
-    return Promise.all((await hosts()).map(async (host) => {
+    return Promise.all((await hosts()).filter((host) => host.status !== "pending").map(async (host) => {
       const batch = await hostInventory(host);
       batches.push(batch);
       onPartial?.(batches);
@@ -47,6 +47,7 @@ export function createInventoryReader(baseUrl: string, fetcher: typeof fetch, ho
       const [hostId, projectId] = splitInventoryId(id);
       const host = (await hosts()).find((item) => item.id === hostId);
       if (!host) return fail("get-project.host-not-found");
+      if (host.status === "pending") return fail("agent.unavailable");
       const [detail, batch] = await Promise.all([read("get-project", hostId, `projects/${encodeURIComponent(projectId)}`), hostInventory(host)]);
       if (!detail.body.data || detail.body.data.id !== projectId) return fail("get-project.invalid-detail");
       if (!batch.stacks.some((item) => item.id === inventoryId(hostId, projectId))) return fail("get-project.not-found");

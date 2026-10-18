@@ -320,7 +320,12 @@ carry the successful read time. Read adapters own their list payloads. Stored
 bytes are copied at both boundaries. Disconnects retain snapshots, the next
 successful read replaces them, and host removal forgets them. A new hub process
 starts with an empty store and no agent reports; persisted `last_seen` remains
-the last successful contact, and failed checks do not advance it.
+the last successful contact, and failed checks do not advance it. Disconnected
+Edge inventory reads return a matching snapshot immediately. Without a matching
+snapshot, they wait at most one second for tunnel recovery before reporting
+unavailable. Web inventory readers skip pending registrations until pairing
+completes. Initial list queries publish completed hosts progressively; background
+refetches retain the cached list until all hosts finish.
 
 ## Decisions
 

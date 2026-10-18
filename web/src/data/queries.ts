@@ -1,4 +1,4 @@
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient, type QueryClient, type QueryKey } from "@tanstack/react-query";
 import { useMemo } from "react";
 import { useLocale } from "use-intl";
 
@@ -8,6 +8,12 @@ import { localizeContainers, localizeSchedule, localizeSecurity } from "@/runtim
 import { renderEvent, renderStackDetail, type CodedEvent, type CodedStackDetail } from "./message-code";
 import { useAdapter } from "./use-adapter";
 import { queryKeys } from "./query-keys";
+
+// Initial reads stream host batches; refetches retain the complete cached result.
+function initialBatches<T>(client: QueryClient, key: QueryKey, signal: AbortSignal): (rows: T) => void {
+  const publish = client.getQueryData(key) === undefined;
+  return (rows) => { if (publish && !signal.aborted) client.setQueryData(key, rows); };
+}
 
 /** Query select that shows demo texts in the interface language; German keeps the cached data as is. */
 function useLocalized<T>(localize: (data: T, locale: AppLocale) => T): ((data: T) => T) | undefined {
@@ -28,7 +34,7 @@ export function useSystemComponents() {
 export function useStacks() {
   const adapter = useAdapter();
   const client = useQueryClient();
-  return useQuery({ queryKey: queryKeys.stacks, queryFn: ({ signal }) => adapter.listStacks((rows) => { if (!signal.aborted) client.setQueryData(queryKeys.stacks, rows); }) });
+  return useQuery({ queryKey: queryKeys.stacks, queryFn: ({ signal }) => adapter.listStacks(initialBatches(client, queryKeys.stacks, signal)) });
 }
 
 export function useStack(id: string | undefined) {
@@ -41,7 +47,7 @@ export function useStack(id: string | undefined) {
 export function useContainers() {
   const adapter = useAdapter();
   const client = useQueryClient();
-  return useQuery({ queryKey: queryKeys.containers, queryFn: ({ signal }) => adapter.listContainers((rows) => { if (!signal.aborted) client.setQueryData(queryKeys.containers, rows); }), select: useLocalized(localizeContainers) });
+  return useQuery({ queryKey: queryKeys.containers, queryFn: ({ signal }) => adapter.listContainers(initialBatches(client, queryKeys.containers, signal)), select: useLocalized(localizeContainers) });
 }
 
 export function useSecurity() {
@@ -52,7 +58,7 @@ export function useSecurity() {
 export function useTopology() {
   const adapter = useAdapter();
   const client = useQueryClient();
-  return useQuery({ queryKey: queryKeys.topology, queryFn: ({ signal }) => adapter.getTopology((rows) => { if (!signal.aborted) client.setQueryData(queryKeys.topology, rows); }) });
+  return useQuery({ queryKey: queryKeys.topology, queryFn: ({ signal }) => adapter.getTopology(initialBatches(client, queryKeys.topology, signal)) });
 }
 
 export function useEvents() {
@@ -75,7 +81,7 @@ export function useSchedule() {
 export function useVolumes() {
   const adapter = useAdapter();
   const client = useQueryClient();
-  return useQuery({ queryKey: queryKeys.volumes, queryFn: ({ signal }) => adapter.listVolumes((rows) => { if (!signal.aborted) client.setQueryData(queryKeys.volumes, rows); }) });
+  return useQuery({ queryKey: queryKeys.volumes, queryFn: ({ signal }) => adapter.listVolumes(initialBatches(client, queryKeys.volumes, signal)) });
 }
 
 export function useVolume(id: string | undefined) {
@@ -116,5 +122,5 @@ export function useSetupStatus(enabled = true) {
 export function useImages() {
   const adapter = useAdapter();
   const client = useQueryClient();
-  return useQuery({ queryKey: queryKeys.images, queryFn: ({ signal }) => adapter.listImages((rows) => { if (!signal.aborted) client.setQueryData(queryKeys.images, rows); }) });
+  return useQuery({ queryKey: queryKeys.images, queryFn: ({ signal }) => adapter.listImages(initialBatches(client, queryKeys.images, signal)) });
 }

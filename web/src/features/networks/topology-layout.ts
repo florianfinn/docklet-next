@@ -288,7 +288,7 @@ export function decorate(layout: HostLayout, { query, onlyProblems, focus, showD
       return dim === d.dim && !!n.selected === selected ? n : { ...n, selected, data: { ...d, dim } };
     }
     const d = n.data;
-    const hay = `${d.container.name} ${d.container.stackName ?? ""}`.toLowerCase();
+    const hay = `${d.container.name} ${d.container.stackName ?? d.container.stackId ?? ""}`.toLowerCase();
     const dim = (!!focus && !neighbours.has(n.id)) || (!!q && !hay.includes(q)) || (onlyProblems && !PROBLEM.has(d.status));
     const found = addressesOf.get(n.id);
     // Unchanged nodes keep their identity, so memoised node components skip the repaint.

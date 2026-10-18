@@ -8,16 +8,19 @@ package container
 
 import containertypes "github.com/florianfinn/docklet-next/types/container"
 
-// The inventory presents a published port once across address families.
+// Only wildcard bindings share a published port across address families.
 func mergePortBindings(ports []containertypes.Port) []containertypes.Port {
 	type key struct {
-		host, container int
-		protocol        string
+		host, container   int
+		protocol, address string
 	}
 	seen := make(map[key]int)
 	merged := make([]containertypes.Port, 0, len(ports))
 	for _, port := range ports {
-		k := key{port.PublicPort, port.PrivatePort, port.Type}
+		k := key{port.PublicPort, port.PrivatePort, port.Type, port.IP}
+		if port.IP == "0.0.0.0" || port.IP == "::" {
+			k.address = "*"
+		}
 		if index, ok := seen[k]; ok {
 			if merged[index].IP != port.IP {
 				merged[index].IP = ""

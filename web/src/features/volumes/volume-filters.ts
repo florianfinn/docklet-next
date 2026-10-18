@@ -25,7 +25,7 @@ export function filterVolumes(volumes: Volume[], f: { query: string; kind: KindF
   const q = f.query.trim().toLowerCase();
   return volumes
     .filter((v) => (f.kind === "all" || v.kind === f.kind) && (f.usage === "all" || (f.usage === "used" ? v.consumers.length > 0 : v.consumers.length === 0)))
-    .filter((v) => !q || `${v.name} ${v.composeName ?? ""} ${v.stackName ?? ""} ${v.consumers.map((c) => c.containerName).join(" ")}`.toLowerCase().includes(q));
+    .filter((v) => !q || `${v.name} ${v.composeName ?? ""} ${v.stackName ?? v.stackId ?? ""} ${v.consumers.map((c) => c.containerName).join(" ")}`.toLowerCase().includes(q));
 }
 
 /** Column sort with the shared tie-breakers (host, then display name, then id). */
