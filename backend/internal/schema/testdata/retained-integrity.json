@@ -7,6 +7,7 @@
 ["constraint","runtime_receipts","CHECK (kind IN ('receipt','not_received'))"],
 ["constraint","runtime_receipts","CHECK (cancel_requested IN (0,1) AND (cancel_requested = 1) = (cancel_requested_at IS NOT NULL))"],
 ["constraint","runtime_receipts","CHECK (dispatch_state IS NULL OR dispatch_state IN ('pending','dispatching','accepted'))"],
+["constraint","runtime_receipts","CHECK ((dispatch_state IS NOT NULL AND dispatch_state IN ('dispatching','accepted')) = (dispatched_at IS NOT NULL))"],
 ["constraint","runtime_receipts","CHECK (executor_state IS NULL OR executor_state IN ('pending','accepted','executing','unknown','success','failed','cancelled'))"],
 ["constraint","runtime_receipts","CHECK ((executor_state IS NOT NULL AND executor_state IN ('success','failed','cancelled')) = (executor_settled_at IS NOT NULL))"],
 ["constraint","runtime_receipts","CHECK (hub_disposition IS NULL OR hub_disposition IN ('cancelled','interrupted','released','refused','not_received'))"],

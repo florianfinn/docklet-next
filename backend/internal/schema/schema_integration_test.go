@@ -212,6 +212,8 @@ func TestIntegrityReferenceRejectsUnknownAndMalformedFacts(t *testing.T) {
 	}
 	var rows [][]string
 	require.NoError(t, json.Unmarshal(retainedIntegrityReference, &rows))
+	// Keep dispatch evidence independently specified even when SQL and overlay agree.
+	require.Contains(t, rows, []string{"constraint", "runtime_receipts", "CHECK ((dispatch_state IS NOT NULL AND dispatch_state IN ('dispatching','accepted')) = (dispatched_at IS NOT NULL))"})
 	for _, row := range rows {
 		_, err := integrityReferenceKind(row)
 		require.NoError(t, err, "%v", row)
@@ -268,6 +270,7 @@ func TestRuntimeSchemaRejectsInvalidEvidence(t *testing.T) {
 		{"unknown_dispatch", map[string]any{"dispatch_state": "sent"}},
 		{"missing_dispatch", map[string]any{"dispatch_state": nil}},
 		{"dispatching_without_time", map[string]any{"dispatch_state": "dispatching"}},
+		{"accepted_without_time", map[string]any{"dispatch_state": "accepted", "executor_state": "accepted"}},
 		{"time_without_dispatch", map[string]any{"dispatched_at": stamp}},
 		{"unknown_executor_state", map[string]any{"executor_state": "done"}},
 		{"missing_executor_state", map[string]any{"executor_state": nil}},
@@ -301,6 +304,89 @@ func TestRuntimeSchemaRejectsInvalidEvidence(t *testing.T) {
 			require.ErrorContains(t, err, "constraint failed", "invalid compact evidence must be rejected")
 		})
 	}
+}
+
+func TestRuntimeSchemaDispatchEvidenceSurvivesReopen(t *testing.T) {
+	url := freshDatabase(t)
+	db, err := database.Initialize(t.Context(), url, database.MigrationOptions{})
+	require.NoError(t, err)
+	t.Cleanup(func() { require.NoError(t, db.Close()) })
+	row := runtimeReceiptFixture()
+	row["environment_id"] = "registered-target"
+	require.NoError(t, db.Table("runtime_receipts").Create(maps.Clone(row)).Error)
+	read := func(id string) activity.RuntimeReceipt {
+		t.Helper()
+		var receipt activity.RuntimeReceipt
+		require.NoError(t, db.First(&receipt, "run_id = ?", id).Error)
+		return receipt
+	}
+	before := read("runtime-run")
+	require.Equal(t, "pending", *before.DispatchState)
+	require.Nil(t, before.DispatchedAt)
+	dispatched := row["admitted_at"].(time.Time).Add(time.Second)
+	accepted := dispatched.Add(time.Minute)
+	// DispatchState records the hub send marker; ExecutorState records acceptance/work.
+	require.NoError(t, db.Transaction(func(tx *gorm.DB) error {
+		return tx.Exec("UPDATE runtime_receipts SET dispatch_state='dispatching',dispatched_at=?,final_write_at=? WHERE run_id='runtime-run'", dispatched, dispatched).Error
+	}))
+	sending := read("runtime-run")
+	require.Equal(t, "dispatching", *sending.DispatchState)
+	require.Equal(t, dispatched, *sending.DispatchedAt)
+	require.Equal(t, "pending", *sending.ExecutorState)
+	require.NoError(t, db.Transaction(func(tx *gorm.DB) error {
+		return tx.Exec("UPDATE runtime_receipts SET dispatch_state='accepted',executor_state='accepted',final_write_at=? WHERE run_id='runtime-run'", accepted).Error
+	}))
+	acknowledged := read("runtime-run")
+	want := sending
+	want.DispatchState, want.ExecutorState, want.FinalWriteAt = new("accepted"), new("accepted"), accepted
+	require.Equal(t, want, acknowledged)
+	require.Equal(t, dispatched, *acknowledged.DispatchedAt)
+
+	// Executor-local acceptance has no hub send to invent, including local execution.
+	for _, state := range []string{"accepted", "executing"} {
+		executor := runtimeReceiptFixture()
+		executor["run_id"], executor["gate_scope"] = "executor-"+state, "container:executor-"+state
+		executor["executor_generation"], executor["executor_state"] = "own-generation", state
+		if state == "executing" {
+			executor["executor_started_at"] = accepted.Add(time.Hour)
+		}
+		require.NoError(t, db.Table("runtime_receipts").Create(maps.Clone(executor)).Error)
+	}
+	require.NoError(t, db.Close())
+	db, err = database.Initialize(t.Context(), url, database.MigrationOptions{})
+	require.NoError(t, err)
+	require.Equal(t, acknowledged, read("runtime-run"))
+	pool, err := db.SQLDB()
+	require.NoError(t, err)
+	require.Equal(t, [][]string{{fmt.Sprint(dispatched.UnixMicro())}}, sqlRows(t, pool, "SELECT CAST(dispatched_at AS INTEGER) FROM runtime_receipts WHERE run_id='runtime-run'"))
+	for _, state := range []string{"accepted", "executing"} {
+		executor := read("executor-" + state)
+		require.Equal(t, "0", executor.EnvironmentID)
+		require.Equal(t, executor.StoreGeneration, executor.ExecutorGeneration)
+		require.Equal(t, "pending", *executor.DispatchState)
+		require.Nil(t, executor.DispatchedAt)
+		require.Equal(t, state, *executor.ExecutorState)
+		if state == "executing" {
+			require.Equal(t, accepted.Add(time.Hour), *executor.ExecutorStartedAt)
+		}
+	}
+	// An independent hub release and later executor result retain the original send.
+	released := accepted.Add(time.Hour)
+	late := released.Add(time.Hour)
+	require.NoError(t, db.Exec("UPDATE runtime_receipts SET executor_state='unknown',unknown_reason='transport',hub_disposition='released',release_acknowledged=1,hub_disposition_by='admin',hub_disposition_reason='Executor stopped and state inspected',hub_disposition_at=?,settled_at=?,final_write_at=? WHERE run_id='runtime-run'", released, released, released).Error)
+	disposed := read("runtime-run")
+	require.Equal(t, dispatched, *disposed.DispatchedAt)
+	require.Equal(t, "accepted", *disposed.DispatchState)
+	require.Equal(t, "unknown", *disposed.ExecutorState)
+	require.NoError(t, db.Exec("UPDATE runtime_receipts SET executor_state='success',unknown_reason=NULL,executor_result_code='runtime.succeeded',executor_settled_at=?,final_write_at=? WHERE run_id='runtime-run'", late, late).Error)
+	want = disposed
+	want.ExecutorState, want.UnknownReason, want.ExecutorResultCode = new("success"), nil, new("runtime.succeeded")
+	want.ExecutorSettledAt, want.FinalWriteAt = &late, late
+	require.Equal(t, want, read("runtime-run"))
+	require.NoError(t, db.Close())
+	db, err = database.Initialize(t.Context(), url, database.MigrationOptions{})
+	require.NoError(t, err)
+	require.Equal(t, want, read("runtime-run"))
 }
 
 func TestRuntimeSchemaIdentityRetentionAndLateEvidence(t *testing.T) {
@@ -387,7 +473,7 @@ func TestRuntimeSchemaTombstoneAndGeneration(t *testing.T) {
 	stamp := time.Unix(1760000000, 123456000).UTC()
 	tombstone := map[string]any{"run_id": "negative-run", "kind": "not_received", "store_generation": "own-generation", "manager_id": "manager", "registration_id": "registered-target", "environment_id": "0", "executor_generation": "own-generation", "request_digest": "canonical-digest", "cancel_requested": false, "release_acknowledged": false, "settled_at": stamp, "final_write_at": stamp}
 	require.NoError(t, db.Table("runtime_receipts").Create(maps.Clone(tombstone)).Error)
-	for column, value := range map[string]any{"caller_id": "actor", "caller_name": "name", "operation_id": "start-container", "target_id": "target", "gate_scope": "container:target", "admitted_at": stamp, "executor_state": "pending", "cancel_requested": true, "hub_disposition_by": "admin", "settled_at": nil} {
+	for column, value := range map[string]any{"caller_id": "actor", "caller_name": "name", "operation_id": "start-container", "target_id": "target", "gate_scope": "container:target", "admitted_at": stamp, "dispatch_state": "accepted", "dispatched_at": stamp, "executor_state": "pending", "cancel_requested": true, "hub_disposition_by": "admin", "settled_at": nil} {
 		row := maps.Clone(tombstone)
 		row["run_id"], row[column] = "invalid-negative", value
 		err := db.Table("runtime_receipts").Create(maps.Clone(row)).Error
@@ -423,8 +509,10 @@ func TestRuntimeSchemaAdmitsRequiredStates(t *testing.T) {
 		patch map[string]any
 	}{
 		{"dispatching", map[string]any{"dispatch_state": "dispatching", "dispatched_at": stamp}},
-		{"accepted", map[string]any{"dispatch_state": "accepted", "executor_state": "accepted"}},
-		{"executing", map[string]any{"dispatch_state": "accepted", "executor_state": "executing", "executor_started_at": stamp}},
+		{"hub_accepted", map[string]any{"dispatch_state": "accepted", "dispatched_at": stamp, "executor_state": "accepted"}},
+		{"hub_executing", map[string]any{"dispatch_state": "accepted", "dispatched_at": stamp, "executor_state": "executing", "executor_started_at": stamp}},
+		{"executor_accepted", map[string]any{"executor_state": "accepted"}},
+		{"executor_executing", map[string]any{"executor_state": "executing", "executor_started_at": stamp}},
 		{"cancelling", map[string]any{"cancel_requested": true, "cancel_requested_at": stamp}},
 		{"unknown", map[string]any{"executor_state": "unknown", "unknown_reason": "transport"}},
 		{"success", map[string]any{"executor_state": "success", "executor_settled_at": stamp, "settled_at": stamp}},
