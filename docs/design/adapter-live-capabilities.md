@@ -53,6 +53,8 @@ non-`ok` outcome; the UI can use the same shape for error rendering.
 run remains `running` until completion. The HTTP adapter never exposes the
 server's executable work context. The client-side `run-gate.ts` remains a UI
 deduplication aid; server admission decides cross-tab conflicts and freshness.
+Runtime controls use deliberate command admission without the generic freshness
+shortcut, as defined in the [runtime record](runtime-control.md).
 
 Raw run output is a retained debugging feature. The hub persists it per run in
 `activities`, separate from coded messages: `backend/pkg/libarcane/activity/writer.go`
@@ -86,6 +88,33 @@ The web run states map directly from the wire, except `success`:
 
 The activity feature catalogues supply these labels; queued and cancelled
 render as distinct states throughout run surfaces, including the result view.
+
+## Runtime mapping target
+
+The [runtime-control record](runtime-control.md) defines the M6 specialization,
+including requirements that are not current adapter support: command calls opt
+into admission JSON and resolve the same durable hub/agent ID, preserve coded
+conflicts (including request mismatch), and refresh targeted hub runtime detail.
+Unknown executor knowledge stays visibly nonterminal and blocked. Legacy CLI
+NDJSON/message callers retain their response modes. Bulk `ContainerActionResult`
+is not the wire source for single-container admission.
+
+Runtime logs use the existing Echo WS routes. Source epoch plus seq identifies
+lines; seq orders arrival within that source, not timestamps across services or
+stdout/stderr. Resource changes clear hook state, reconnect establishes a tail
+boundary and bounded buffers expose loss/truncation. Runtime logs remain separate
+from retained run output. Local session revocation closes SSE and all viewer WS
+connections, clears adapter/live caches and rejects late identity-generation
+callbacks; accepted Docker work continues.
+
+The cross-host action-load failure in #102 requires a bounded, separately owned
+projection prerequisite before M6 action UI activation: healthy runs plus explicit
+source failures, targeted detail availability and reconnect recovery. No failed
+source may become an empty successful read. Its owner controls shared partial-read
+fields before runtime consumers adopt them; this does not redesign inventory.
+The runtime foundation owns the other shared port/domain/capability additions
+and v4 agent contract changes. Keep controls/log capabilities disabled until the
+complete mappings and execution paths are verified.
 
 ## Capability descriptor
 

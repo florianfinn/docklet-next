@@ -37,9 +37,9 @@ the mapping and its contract tests before that feature claims live data.
 | `JobscheduleConfig`, `JobscheduleJobStatus`, `JobscheduleJobRunResponse` | `ScheduledJob`, `DockletAdapter` | Job state and next-run time need a common schedule projection using the M4 hub time zone. | Planned M10 Images and updates |
 | `StreamEvent`, `ActivityStreamEvent`, `EventStreamEvent` | `subscribeActions`, `subscribeChanges` | SSE channel envelopes need parsing, reconnect and query invalidation. | #38 |
 | `ProjectDeployOptions`, `ProjectCreateReponse`, `SystemConvertDockerRunResponse` | `DeployInput`, `ImportResult` | UI drafts and imports need lossless Compose fields and action identity. | Planned M7 Stack authoring and deployment |
-| `ContainerActionResult`, `ContainerEdit`, `ContainerHealth` | `ActionRun`, `ContainerInfo` | Lifecycle results and edit constraints need run identity and guarded actions. | Planned M6 Runtime control |
-| Project lifecycle operation responses | `runStackCommand`, `StackCommand` | Start, stop, restart and redeploy need guarded stack runs and stable action IDs. | Planned M6 Runtime control |
-| No combined stack-log DTO | `LogLine`, `subscribeLogs`, `subscribeContainerLogs` | Service source and ordering must be supplied for stack and container streams. | Planned M6 Runtime control |
+| Single-container `MessageResponse`; bulk `ContainerActionResult` remains separate | `ActionRun`, `runContainerCommand` | Single start/stop/restart need durable admission IDs; bulk partial results do not prove a single run succeeded. Edit/health/recreation are outside this mapping. | [M6 runtime control](runtime-control.md) |
+| Project lifecycle NDJSON and message responses | `runStackCommand`, `StackCommand` | Start→deploy/up, stop→down, restart and redeploy need guarded admission; preserve legacy stream/message callers. | [M6 runtime control](runtime-control.md) |
+| Echo WS JSON `LogMessage` (outside OpenAPI) | `LogLine`, `subscribeLogs`, `subscribeContainerLogs` | Add source epoch/stream/time-origin mapping; seq is source arrival order, without cross-service chronology or durable replay. | [M6 runtime control](runtime-control.md) |
 | `WorkspaceFileEntry`, `WorkspaceFileContent` | `DirListing`, `FileContent`, `VolumesApi` | Wire file entries need tree, path and editable-content projections. | Planned M8 Storage and file workspace |
 | `VolumeVolume` | `Volume`, `VolumeDetail` | Storage kind and consumers need a host-aware projection. | Planned M8 Storage and file workspace |
 | No volume-prune preview DTO | `VolumePrunePlan`, `VolumesApi` | Candidate reasons and execution re-check results need a server contract. | Planned M8 Storage and file workspace |
@@ -66,6 +66,18 @@ The table records existing mismatches, not a promise that every listed API
 operation is ready for production use. Some schema types are nested Docker
 structures rather than separately callable operations. The owning milestone
 resolves each mapping when its endpoint and UI slice are implemented.
+
+## Runtime contract target
+
+[Runtime control](runtime-control.md) specifies proposed async admission on the
+existing seven lifecycle paths, legacy response compatibility, durable outcome
+query/cancel routes and explicit mismatch/unknown handling. These do not exist
+merely because the current route or a bulk DTO is registered. One foundation
+owner supplies wire types, v4/minimum-v4 agent fixture/hash, current exports,
+route snapshots, adapter shared fields and forward SQLite migration together.
+The fingerprint hashes the versioned agent fixture bytes, not this OpenAPI file;
+`tunnel/v1`, historical OpenAPI and shipped migrations remain unchanged.
+Runtime JSON logs reuse Echo WS and remain outside the Huma export.
 
 ## Stable message codes
 
@@ -105,5 +117,7 @@ status. Clients should use message levels for per-step warnings and errors.
 
 Event history is capped at 500 entries. Completed activity history is capped
 at 100 entries per environment. Environment overrides follow Arcane settings
-initialization and do not fail startup on invalid values. Cancellation is a
-local worker signal; the activity DTO has no cancellation-request timestamp.
+initialization and do not fail startup on invalid values. Generic cancellation is a
+local worker signal; the current activity DTO has no cancellation-request
+timestamp. The runtime target adds receipt-backed cancellation/unknown knowledge
+fields without treating either as a new terminal activity status.

@@ -69,15 +69,17 @@ across CSRF refresh and transport retry. The receipt uniquely binds
 `(environmentId, idempotencyKey)` to run ID, caller identity and a canonical
 request digest: operation ID, raw target, accepted options and parent. Same key
 and digest returns the same run, including after terminal completion; permission
-is checked again before returning it. Same key with another digest is HTTP 409
+and bound caller identity are checked again before returning it. Same key with another digest is HTTP 409
 `run.request-mismatch`, with no worker. A new key expresses a new intent; two
 tabs starting the same active operation join the first run and both keys bind to
 it. Joining never registers a second executor. Legacy requests lacking a key
 receive a server-generated key; their ambiguous retransmission after completion
 cannot be deduplicated and must never be automatic.
 
-The hub reads current target/Compose identity before intake, not retained
-inventory. A failed read refuses new admission. The executor validates identity
+Known key retries and conflicts against held scopes are resolved from durable
+receipts first, without requiring a reachable executor. Before admitting new
+work, the hub reads current target/Compose identity, not retained inventory.
+A failed read refuses new admission. The executor validates identity
 again before effect. Container IDs use inspected full IDs. A known Compose child
 binds to its persisted project ID; unresolved Compose ownership refuses control
 with `runtime.parent-unresolved` rather than inventing an unparented scope.
@@ -151,6 +153,8 @@ write does not invoke Docker again.
 `unknown` is receipt outcome knowledge, not a new terminal ActionRun status.
 Add `outcomeState: known|unknown` and `cancelRequested: boolean` to runtime
 snapshot projection; preserve queued/running/success/failed/cancelled statuses.
+Validate both fields only for runtime activities; unrelated historical rows need
+no invented executor knowledge.
 An unknown result renders visibly as outcome unknown, never a spinning claim of
 progress or success. Agent terminal receipts remain immutable. Hub manual release
 is a separate disposition and must not overwrite a later recovered executor
@@ -168,6 +172,11 @@ route; token stripping/injection, compatible-host checks and Edge-only no-direct
 fallback stay unchanged. An execute acknowledgment is bounded JSON, not an open
 Docker execution stream. A duplicate execution envelope returns the persisted
 receipt, never invokes the executor again, even if its activity was pruned.
+Execution accepts only the seven canonical operations and bounded validated
+options, never arbitrary routes or commands. An authenticated agent admission
+refusal proves this dispatch started no worker; the hub records a failed/refused
+run with the agent conflict reason and releases its own admission. A transport
+error while receiving that refusal is uncertain and keeps the scope blocked.
 
 Agent outcome query is authoritative only for its matching run/digest. Responses:
 `active` with phase/cancel flag; `terminal` with settled status/code/error/times;
@@ -176,6 +185,25 @@ Use HTTP 200 for a valid query with unknown knowledge, 401/403 for authenticatio
 409 for identity/digest mismatch, and 503 for an unreadable store. An offline
 transport is no answer, not `not-found`. An authenticated `not-found` also does
 not prove that an older dispatch is not delayed in transit.
+
+An active/terminal answer carries the existing activity snapshot/detail vocabulary
+(progress, affected services, coded steps/messages and capped execution output),
+plus receipt knowledge fields. Runtime retained output lines also carry a
+monotonic executor-local `outputSeq` and a retained-start cursor; this is separate
+from runtime-log WS seq. Replace snapshot output as a bounded window, and relay
+only unseen sequence entries to legacy waiters. If entries were evicted before
+a waiter read them, emit an explicit truncation output marker. No lossless
+execution-output history is promised beyond the existing 256 KiB cap.
+The hub applies executor snapshots to its local
+runtime activity with the existing conditional activity writer; terminal apply
+and receipt release are one transaction. While a known active worker exists,
+query at most once every two seconds; an unavailable answer enters the bounded
+reconciliation cycle below. Publish existing hub activity SSE notifications after
+projection commits. No new SSE channel or remote-event delivery guarantee is
+assumed. Hub activity detail/cancel first resolve an owned runtime receipt before
+existing remote fallback; list aggregation deduplicates `(host,runId)` when agent
+history contains the same identity. Agent history or live messages alone cannot
+release a scope without the matching settled receipt.
 
 | Failure point | Required behavior |
 | --- | --- |
@@ -254,7 +282,13 @@ subscribe to the admitted worker rather than executing it; disconnect ends only
 that wait. Stream started frames expose the same ID. Error/conflict status must
 be decided before headers flush. A loss after started is not a done frame. The
 new adapter opts into admission JSON; CLI need not interpret a 202 as completed
-success. Cover both response modes in contract tests before enabling capability.
+success. The existing CLI `printOperationStreamInternal` returns scanner.Err()
+at EOF and therefore accepts a clean EOF without a done frame. A narrowly owned
+CLI compatibility correction must require done or return interruption, including
+EOF immediately after started; keep its printed log and terminal-error formats.
+Own that parser and its focused integration tests explicitly in the foundation,
+before changing streamed execution behavior. Do not mask missing completion by
+inventing a done frame. Cover both response modes before enabling capability.
 Do not repurpose bulk `ContainerActionResult.success`, alter its array semantics
 or enable bulk capabilities. No new Huma log route is needed.
 
@@ -291,7 +325,8 @@ services, stdout/stderr or hosts. Reopening a source can restart seq and repeat
 the requested tail; it is not a resumable cursor.
 
 Extend JSON frames additively with `sourceId` (random shared-source-instance ID),
-`stream: stdout|stderr|combined|unknown`, and `timestampOrigin: runtime|received`.
+`stream: stdout|stderr|combined|unknown`, `timestampOrigin: runtime|received`
+and `truncated: boolean`.
 Populate these before existing text normalization loses source information. Keep
 service/containerId when known; use trusted Compose metadata for service identity,
 not arbitrary log message text. TTY is combined; missing stream stays unknown.
@@ -306,7 +341,7 @@ structured severities by parsing arbitrary application messages.
 | `ts` | Valid wire timestamp; preserve timestamp origin; invalid required fields terminate as mapping error |
 | `service` | Wire Compose service; otherwise known container display identity, or localized unknown source |
 | `level`, `message` | Semantic level rule above, message text unchanged by adapter |
-| Add `sourceId`, `seq`, `stream`, `timestampOrigin` | Shared adapter/domain fields, not feature imports of wire DTOs |
+| Add `sourceId`, `seq`, `stream`, `timestampOrigin`, `truncated` | Shared adapter/domain fields, not feature imports of wire DTOs |
 
 Within a source append by seq; never sort logs by ts. Gaps produce a visible
 localized lost-lines marker, not interpolation or synthetic runtime entries.
@@ -326,9 +361,13 @@ resource's bounded visible buffer; resume requests a new tail with a boundary.
 Unmount/last unsubscribe cancels timers and source references.
 
 Keep current source queues (raw/mapped 256, broadcast 1,024, per-client 256;
-`log_streams.go` and `backend/pkg/libarcane/ws/{hub,client}.go`). Bound normalized
-line payloads to 64 KiB before these queues and mark truncation; enforce the
-corresponding frame bound. A full source broadcast queue currently drops data;
+`log_streams.go` and `backend/pkg/libarcane/ws/{hub,client}.go`). Bound line
+payloads to 64 KiB at the producer before these queues, discarding
+excess bytes until the next newline without building an unbounded string; carry
+a truncation flag through normalization. Enforce the corresponding JSON frame
+bound including metadata/escaping (up to 512 KiB per unbatched frame, and bounded
+50-entry batches for legacy batch consumers). A full source broadcast queue
+currently drops data;
 change it to terminate that source visibly as a gap/error, and close slow
 consumers rather than accumulate. Closing on error is sufficient even if the
 error frame cannot be queued. Reconnect uses a bounded delay, pauses when offline
@@ -421,8 +460,10 @@ consumers: `types/{activity,project,container,contract}` wire vocabulary and v4
 fixture/hash; runtime route registrations, agent allowlist/permission snapshots;
 current OpenAPI, generated TypeScript and spec provenance hash; capability/adapter
 port/domain shared fields; receipt models, schema registry/integrity proofs and
-a new forward migration/manifest entry. Include JSON log metadata declarations
-and runtime codes in this owner. Keep capabilities disabled until their complete
+a new forward migration/manifest entry. Include JSON log metadata declarations, runtime output cursors
+and runtime codes in this owner. Include the focused CLI NDJSON EOF correction
+and compatibility test so legacy consumers cannot report unknown as success.
+Keep capabilities disabled until their complete
 executor, adapter and UI paths pass. Foundation acceptance must compile every
 consumer with unavailable mappings; fixtures alone do not implement the protocol.
 
