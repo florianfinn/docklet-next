@@ -162,7 +162,8 @@ func (s *EnvironmentService) ApplyHostRuntimeState(ctx context.Context, env *env
 	s.agentRuntime.mu.Lock()
 	report, ok := s.agentRuntime.reports[env.ID]
 	s.agentRuntime.mu.Unlock()
-	if ok && row.AccessToken != nil && report.token == *row.AccessToken {
+	// Historical report data is display-only; session admission checks current credentials.
+	if ok {
 		copy := report.report
 		env.AgentReport = &copy
 	}

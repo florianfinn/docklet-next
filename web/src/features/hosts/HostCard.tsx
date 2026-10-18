@@ -123,13 +123,13 @@ export function HostCard({ host, system, stacks, containers, allIds, onFiles }: 
       <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1.5 text-sm">
         <Row label={t("card.connection")}>{t(`mode.${host.connection}Long`)}</Row>
         <Row label={t("card.address")} mono>
-          {dt(host.address)}
+          {dt(host.address) || t(host.connection === "edge" ? "card.addressNotRequired" : "card.addressNotConfigured")}
         </Row>
         <Row label={t("card.projectDir")} mono>
-          {host.projectDir}
+          {host.projectDir || t("card.unavailable")}
         </Row>
         <Row label={t("card.installDir")} mono>
-          {host.installDir}
+          {host.installDir || t("card.unavailable")}
         </Row>
         {!host.agentReport && (
           <Row label={t("card.fileIds")} mono>
@@ -137,10 +137,10 @@ export function HostCard({ host, system, stacks, containers, allIds, onFiles }: 
           </Row>
         )}
         <Row label={t(host.dockerVersion ? "card.versions" : "card.agentVersion")} mono>
-          {[host.agentVersion, host.dockerVersion].filter(Boolean).join(" / ")}
+          {[host.agentVersion === "dev" ? t("card.development") : host.agentVersion, host.dockerVersion].filter(Boolean).join(" / ") || t("card.unavailable")}
         </Row>
-        <Row label={t("card.system")}>{host.os}</Row>
-        <Row label={t("card.lastSeen")}>{host.status === "online" ? tc("online") : formatRelative(host.lastSeen)}</Row>
+        <Row label={t("card.system")}>{host.os || t("card.unavailable")}</Row>
+        <Row label={t("card.lastSeen")}>{host.status === "online" ? tc("online") : host.lastSeen ? formatRelative(host.lastSeen) : t("card.neverContacted")}</Row>
       </dl>
       {host.status === "token-rejected" && <p role="status" className="text-sm text-destructive">{t("tokenRejected")}</p>}
       <AgentReportSection host={host} />

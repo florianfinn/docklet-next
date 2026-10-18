@@ -1,22 +1,20 @@
 import { useCallback } from "react";
 import { toast } from "sonner";
-import { useTranslations } from "use-intl";
 
-import { errorCode, type RegisterHostInput } from "@/data/api";
+import { type RegisterHostInput } from "@/data/api";
 import { useActionRuns } from "@/data/live";
 import { isRunBusy } from "@/data/run-gate";
 import { useAdapter } from "@/data/use-adapter";
 import { queueDemoFailure } from "@/runtime";
 import type { ActionKind } from "@/domain/model";
 import { useBusyAction } from "@/shared/components/use-busy-action";
-import { useAdapterText } from "@/data/use-adapter-text";
+import { useHostError } from "./use-host-error";
 import { preferencesStore } from "@/shared/preferences/preferences-store";
 
 /** Host commands with translated errors; progress of connections is shown by action toasts. */
 export function useHostCommands() {
   const adapter = useAdapter();
-  const t = useTranslations("hosts.errors");
-  const dt = useAdapterText();
+  const errorText = useHostError();
   const guard = useCallback(
     async <T,>(fn: () => Promise<T>): Promise<T | undefined> => {
       try {
@@ -24,12 +22,11 @@ export function useHostCommands() {
       } catch (e) {
         // The gate already reported the busy target once (see ActionToasts).
         if (isRunBusy(e)) return undefined;
-        const code = errorCode(e);
-        toast.error(code === "exists" || code === "not-found" || code === "host-in-use" ? t(code) : dt(e instanceof Error ? e.message : String(e)));
+        toast.error(errorText(e));
         return undefined;
       }
     },
-    [t, dt],
+    [errorText],
   );
   return {
     register: (input: RegisterHostInput) => guard(() => adapter.registerHost(input)),
