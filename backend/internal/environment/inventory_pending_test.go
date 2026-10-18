@@ -31,7 +31,7 @@ func TestAB2InventoryAfterRegistrationRotationAndReconnect(t *testing.T) {
 				continue
 			}
 			t.Run(mode+"/"+transition, func(t *testing.T) {
-				f := newAgentFixture(t, mode, version.Info{AgentContractVersion: contract.AgentHubVersion, AgentContractFingerprint: contract.AgentHubFingerprint})
+				f := newAgentFixture(t, mode, version.Info{AgentContractVersion: contract.AgentHubVersion, AgentContractFingerprint: contract.AgentHubFingerprint, OnboardingChecks: &version.OnboardingChecks{ProjectDirectory: "/srv/projects"}})
 				ctx := t.Context()
 				suffixes := []string{"containers", "projects", "images", "volumes", "networks", "projects/app", "volumes/data", "networks/front"}
 				observed := map[string]string{}
@@ -69,6 +69,7 @@ func TestAB2InventoryAfterRegistrationRotationAndReconnect(t *testing.T) {
 					dto := environmenttypes.Environment{ID: f.id, Status: env.Status, IsEdge: mode == "edge"}
 					f.service.ApplyHostRuntimeState(ctx, &dto)
 					require.NotNil(t, dto.AgentReport, "rotation retains the historical report")
+					require.Equal(t, "/srv/projects", dto.AgentReport.Version.OnboardingChecks.ProjectDirectory)
 					require.Equal(t, "pending", dto.Status)
 				}
 				pending, err := f.service.InventoryPending(ctx, f.id)

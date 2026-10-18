@@ -82,6 +82,17 @@ function backend() {
   return { http, state, fetcher, requests };
 }
 
+it("shares concurrent activity history reads without caching later refreshes", async () => {
+  const b = backend();
+  const [query, subscription] = await Promise.all([b.http.listActions(), b.http.listActions()]);
+  expect(query).toEqual(subscription);
+  expect(query).toHaveLength(1);
+  expect(b.requests.filter((path) => path.endsWith("/activities"))).toHaveLength(1);
+  expect(b.requests.filter((path) => path.endsWith("/activities/run-dns-1"))).toHaveLength(1);
+  await b.http.listActions();
+  expect(b.requests.filter((path) => path.endsWith("/activities/run-dns-1"))).toHaveLength(2);
+});
+
 class FakeSource {
   readyState = 0;
   onopen: ((event: Event) => void) | null = null;

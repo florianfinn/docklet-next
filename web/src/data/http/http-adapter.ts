@@ -23,6 +23,7 @@ import { createHttpHubBackups } from "./hub-backups";
 import { createCsrfClient } from "./csrf-client";
 import { createHttpAuth } from "./auth";
 import { createSettingsCore } from "./settings-core";
+import { createSharedReads } from "./shared-reads";
 
 type ReadOperation = "get-capabilities" | "listEnvironments" | "list-activities" | "get-activity" | "listEvents";
 type Body<I extends ReadOperation> = operations[I]["responses"][200]["content"]["application/json"];
@@ -63,7 +64,8 @@ function classifiedError(error: unknown, status?: number): AdapterOutcomeError {
 export function createHttpAdapter(options: HttpAdapterOptions = {}): DockletAdapter {
   const baseUrl = (options.baseUrl ?? "/api").replace(/\/$/, "");
   const client = createCsrfClient(baseUrl, options.fetch ?? globalThis.fetch);
-  const fetcher = client.fetch;
+  const sharedReads = createSharedReads(client.fetch);
+  const fetcher = sharedReads.fetch;
   const sourceFactory = options.eventSource ?? ((url: string) => new EventSource(url, { withCredentials: true }));
   const changeListeners = new Set<(topics: Topic[]) => void>();
   const actionListeners = new Set<(runs: CodedActionRun[]) => void>();
@@ -103,8 +105,8 @@ export function createHttpAdapter(options: HttpAdapterOptions = {}): DockletAdap
   const environmentsKey = ["environments"];
   const environments = () => environmentCache.fetchQuery({ queryKey: environmentsKey, queryFn: () => page("listEnvironments", "/environments", 100) });
   function invalidateCapabilities() { capabilityReads.clear(); }
-  function invalidateEnvironments() { void environmentCache.invalidateQueries({ queryKey: environmentsKey }); }
-  function invalidateIdentity() { invalidateCapabilities(); environmentCache.clear(); observations.clear(); }
+  function invalidateEnvironments() { sharedReads.clear(); void environmentCache.invalidateQueries({ queryKey: environmentsKey }); }
+  function invalidateIdentity() { sharedReads.clear(); invalidateCapabilities(); environmentCache.clear(); observations.clear(); }
   function environmentKey(rows: components["schemas"]["EnvironmentEnvironment"][]) {
     return JSON.stringify(rows.map((row) => [row.id, row.status, row.enabled, row.apiUrl, row.isEdge, row.agentReport?.version.currentVersion, row.agentReport?.version.agentContractVersion, row.agentReport?.version.agentContractFingerprint]).sort((a, b) => String(a[0]).localeCompare(String(b[0]))));
   }

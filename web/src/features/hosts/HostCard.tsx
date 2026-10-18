@@ -123,7 +123,7 @@ export function HostCard({ host, system, stacks, containers, allIds, onFiles }: 
       <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1.5 text-sm">
         <Row label={t("card.connection")}>{t(`mode.${host.connection}Long`)}</Row>
         <Row label={t("card.address")} mono>
-          {dt(host.address)}
+          {dt(host.address) || t("card.unavailable")}
         </Row>
         <Row label={t("card.projectDir")} mono>
           {host.projectDir || t("card.unavailable")}

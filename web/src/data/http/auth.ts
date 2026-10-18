@@ -18,6 +18,8 @@ function user(value: unknown): CurrentUser {
 }
 
 export function createHttpAuth(baseUrl: string, client: CsrfClient, onSessionChange: () => void = () => {}): AuthApi {
+  let currentUserId: string | undefined;
+  function sessionChanged(id?: string) { currentUserId = id; onSessionChange(); }
   async function request(path: string, method = "GET", body?: object): Promise<unknown> {
     let response: Response;
     try {
@@ -42,14 +44,19 @@ export function createHttpAuth(baseUrl: string, client: CsrfClient, onSessionCha
       if (payload.mode !== "local" && payload.mode !== "proxy" && payload.mode !== "none") throw new Error("auth.invalid-mode");
       return payload.mode as AuthMode;
     },
-    async getCurrentUser() { const result = user(await request("/auth/me")); onSessionChange(); return result; },
+    async getCurrentUser() {
+      const result = user(await request("/auth/me"));
+      if (result.id !== currentUserId) sessionChanged(result.id);
+      return result;
+    },
     async login(username, password) {
       const result = await request("/auth/login", "POST", { username, password }) as { user?: unknown };
-      onSessionChange();
-      return user(result.user);
+      const signedIn = user(result.user);
+      sessionChanged(signedIn.id);
+      return signedIn;
     },
-    async logout() { await request("/auth/logout", "POST"); onSessionChange(); },
-    async changePassword(currentPassword, newPassword) { await request("/auth/password", "POST", { currentPassword, newPassword }); onSessionChange(); },
+    async logout() { await request("/auth/logout", "POST"); sessionChanged(); },
+    async changePassword(currentPassword, newPassword) { await request("/auth/password", "POST", { currentPassword, newPassword }); sessionChanged(); },
     async updateMyLocale(locale) { return user(await request("/auth/me/profile", "PUT", { locale })); },
   };
 }
