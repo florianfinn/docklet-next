@@ -11,7 +11,7 @@ type Environment = components["schemas"]["EnvironmentEnvironment"];
 
 function mapStatus(status: string): HostStatus {
   switch (status) {
-    case "online": case "pending": case "update-required": return status;
+    case "online": case "pending": case "update-required": case "token-rejected": return status;
     case "offline": case "standby": case "error": return "offline";
     default: throw new Error("hosts.invalid-status");
   }

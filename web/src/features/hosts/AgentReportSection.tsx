@@ -20,7 +20,7 @@ function ReportRow({ label, children }: { label: string; children: ReactNode; mo
 export function AgentReportSection({ host }: { host: Host }) {
   const t = useTranslations("hosts.card.report");
   const r = host.agentReport;
-  const reportTimeKey = host.status === "offline" ? "lastReported" : host.status === "update-required" ? "reportedUpdateRequired" : host.status === "pending" ? "reportedPending" : r?.simulated ? "reported" : "reportedLive";
+  const reportTimeKey = host.status === "offline" ? "lastReported" : host.status === "token-rejected" ? "reportedTokenRejected" : host.status === "update-required" ? "reportedUpdateRequired" : host.status === "pending" ? "reportedPending" : r?.simulated ? "reported" : "reportedLive";
   return (
     <section aria-label={t("title")} className="rounded-xl border bg-card/40 p-3">
       <h3 className="mb-1.5 flex items-center gap-1.5 text-xs font-semibold text-muted-foreground">

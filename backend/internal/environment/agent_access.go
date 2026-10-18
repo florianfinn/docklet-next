@@ -229,7 +229,13 @@ func (s *EnvironmentService) runAgentCompatibility(ctx context.Context, id strin
 
 	var info version.Info
 	if err := s.ProxyJSONRequest(checkCtx, id, http.MethodGet, "/api/app-version", nil, &info); err != nil {
-		return nil, nil, err
+		return nil, nil, s.agentCompatibilityFailure(checkCtx, env, session, err)
+	}
+	if !env.IsEdge {
+		// The public version route proves compatibility, not possession of the current token.
+		if err := s.ProxyJSONRequest(checkCtx, id, http.MethodHead, "/api/environments/0/system/health", nil, nil); err != nil {
+			return nil, nil, s.agentCompatibilityFailure(checkCtx, env, session, err)
+		}
 	}
 	compatible := contract.AgentCompatible(info.AgentContractVersion, info.AgentContractFingerprint)
 	status := string(EnvironmentStatusOnline)
@@ -263,6 +269,26 @@ func (s *EnvironmentService) runAgentCompatibility(ctx context.Context, id strin
 		session.verdict = ErrAgentUpdateRequired
 	}
 	return &info, tunnel, session.verdict
+}
+
+// Credential rejection belongs only to the session that made the probe.
+func (s *EnvironmentService) agentCompatibilityFailure(ctx context.Context, env *Environment, session *agentSession, err error) error {
+	var status *remenv.StatusError
+	if env.IsEdge || !errors.As(err, &status) || (status.StatusCode != http.StatusUnauthorized && status.StatusCode != http.StatusForbidden) {
+		return err
+	}
+	result := s.db.WithContext(ctx).Model(&Environment{}).Where("id = ?", env.ID).
+		Where(map[string]any{"access_token": session.token, "api_url": session.endpoint, "api_key_id": env.ApiKeyID, "enabled": true}).
+		Updates(map[string]any{"status": string(EnvironmentStatusTokenRejected), "updated_at": time.Now()})
+	if result.Error != nil {
+		return errors.Join(err, result.Error)
+	}
+	if result.RowsAffected == 0 {
+		return ErrInvalidEnvironmentAccessToken
+	}
+	s.invalidateEnvironmentCacheInternal(env.ID)
+	s.NotifyRuntimeStateChanged()
+	return errors.Join(remenv.ErrAgentInvalidToken, err)
 }
 
 // ResolveEdgeSessionKey rechecks the token at registration, including cached-token misses.

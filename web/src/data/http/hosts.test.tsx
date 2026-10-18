@@ -36,7 +36,7 @@ function fixture(rows: Environment[]) {
 }
 
 describe("host HTTP reads", () => {
-  it.each(["online", "offline", "pending", "update-required", "standby", "error"])("maps %s and last_seen without inventing a contact", async (status) => {
+  it.each(["online", "offline", "pending", "update-required", "token-rejected", "standby", "error"])("maps %s and last_seen without inventing a contact", async (status) => {
     const f = fixture([{ ...row, status }]);
     const [host] = await f.adapter.listHosts();
     expect(host?.status).toBe(["standby", "error"].includes(status) ? "offline" : status);
@@ -68,7 +68,7 @@ describe("host HTTP reads", () => {
   it.each(["de", "en-US"] as const)("describes connected update-required and pending reports accurately in %s", (locale) => {
     setAppLocale(locale);
     try {
-      for (const status of ["update-required", "pending", "offline"] as const) {
+      for (const status of ["update-required", "pending", "offline", "token-rejected"] as const) {
         const host = mapHost({ ...row, status, agentReport: { reportedAt: at, version: info } });
         const view = renderWithApp(<HostCard host={host} system={undefined} stacks={0} containers={0} allIds={[host.id]} />);
         const report = locale === "de" ? /Bericht .*Agent-Update erforderlich/ : /Report .*agent update required/;
@@ -76,12 +76,24 @@ describe("host HTTP reads", () => {
         const disconnected = /host currently disconnected|Host derzeit getrennt/;
         expect(view.container.textContent?.match(disconnected) !== null).toBe(status === "offline");
         if (status === "update-required") expect(view.container.textContent?.match(report) !== null).toBe(true);
+        if (status === "token-rejected") expect(view.container.textContent?.match(/Bericht .*Agent-Token ungültig|Report .*agent token invalid/) !== null).toBe(true);
         if (status === "pending") expect(view.container.textContent?.match(pending) !== null).toBe(true);
         view.unmount();
       }
     } finally {
       setAppLocale("de");
     }
+  });
+
+  it.each(["de", "en-US"] as const)("shows rejected rotation credentials and a repair reason in %s", (locale) => {
+    setAppLocale(locale);
+    try {
+      const host = mapHost({ ...row, status: "token-rejected", lastSeen: undefined });
+      renderWithApp(<HostCard host={host} system={undefined} stacks={1} containers={3} allIds={[host.id]} />);
+      expect(screen.queryByText(locale === "de" ? "Agent-Token ungültig" : "Agent token invalid") !== null).toBe(true);
+      expect(screen.getByRole("status").textContent?.includes(locale === "de" ? "Installiere das neu ausgestellte Token" : "Install the newly issued token")).toBe(true);
+      expect(screen.queryByText("Online") === null).toBe(true);
+    } finally { setAppLocale("de"); }
   });
 
   it("renders a real report and update-required state with unknown fields absent", () => {

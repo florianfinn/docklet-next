@@ -37,4 +37,5 @@ const (
 	EnvironmentStatusError          EnvironmentStatus = "error"
 	EnvironmentStatusPending        EnvironmentStatus = "pending"
 	EnvironmentStatusUpdateRequired EnvironmentStatus = "update-required"
+	EnvironmentStatusTokenRejected  EnvironmentStatus = "token-rejected"
 )

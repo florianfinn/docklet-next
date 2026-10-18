@@ -47,6 +47,14 @@ describe.each(["de", "en-US"] as const)("onboarding agent checks (%s)", (locale)
     expect(screen.queryByText(/Example ist verbunden|Example is connected/) === null).toBe(true);
   });
 
+  it("explains a rejected token without completing onboarding", () => {
+    setAppLocale(locale);
+    const host = mapHost({ ...row, status: "token-rejected", agentReport: undefined });
+    renderWithApp(<ConnectStep draft={draft} host={host} hubUrl="http://hub.example.com" />);
+    expect(screen.getByText(/Installiere das neu ausgestellte Token|Install the newly issued token/) !== null).toBe(true);
+    expect(screen.queryByText(/Example ist verbunden|Example is connected/) === null).toBe(true);
+  });
+
   it("warns about HTTP and proxy sign-in without offering mTLS", () => {
     setAppLocale(locale);
     const view = renderWithApp(<ConnectionStep draft={draft} errors={{}} showErrors={false} locked={false} hubUrl="http://hub.example.com" />);

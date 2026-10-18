@@ -72,3 +72,17 @@ it.each([false, true])("A-B2 rotation retains all five lists and saved details (
     expect(row.inventory).toMatchObject({ stale: true, observedAt: at, reason: "agent.unavailable" });
   }
 });
+
+it("keeps all five stale lists when a rotated direct host rejects the current token", async () => {
+  const f = resourceFixture();
+  f.state.status = "token-rejected";
+  f.state.reason = "agent.invalid-token";
+  const [stacks, containers, images, volumes, topology] = await Promise.all([f.adapter.listStacks(), f.adapter.listContainers(), f.adapter.listImages(), f.adapter.listVolumes(), f.adapter.getTopology()]);
+  for (const rows of [stacks, containers, images, volumes, topology.networks]) {
+    const saved = rows.filter((row) => row.hostId === "second");
+    expect(saved.length).toBeGreaterThan(0);
+    for (const row of saved) expect(row.inventory).toMatchObject({ stale: true, observedAt: at, reason: "agent.invalid-token" });
+  }
+  const host = (await f.adapter.listHosts()).find((row) => row.id === "second");
+  expect(host).toMatchObject({ status: "token-rejected", inventory: { stale: true, observedAt: at, reason: "agent.invalid-token" } });
+});

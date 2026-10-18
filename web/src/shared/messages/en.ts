@@ -55,6 +55,7 @@ export const enCommon = {
     paused: "Paused",
   },
   host: {
+    "token-rejected": "Agent token invalid",
     "update-required": "Update required",
     online: "Online",
     offline: "Disconnected",

@@ -60,7 +60,7 @@ export function createMetricsReader(baseUrl: string, fetcher: typeof fetch, list
       for (const [id, socket] of sockets) if (!ids.has(id)) { sockets.delete(id); socket.close(); }
       for (const h of hosts) {
         if (h.status !== "online") {
-          stale(h.id, h.inventory?.reason ?? (h.status === "update-required" ? "agent.update-required" : "agent.unavailable"));
+          stale(h.id, h.inventory?.reason ?? (h.status === "update-required" ? "agent.update-required" : h.status === "token-rejected" ? "agent.invalid-token" : "agent.unavailable"));
           const socket = sockets.get(h.id); sockets.delete(h.id); socket?.close();
           continue;
         }

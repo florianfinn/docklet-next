@@ -62,6 +62,7 @@ function Stage({ state, title, detail }: { state: StageState; title: string; det
 
 export function ConnectStep({ draft, host, hubUrl }: { draft: HostDraft; host: Host | undefined; hubUrl: string }) {
   const t = useTranslations("hosts.onboarding");
+  const th = useTranslations("hosts");
   const cmd = useHostCommands();
   const run = useActionRun(draft.runId);
   const connected = host?.status === "online";
@@ -85,6 +86,7 @@ export function ConnectStep({ draft, host, hubUrl }: { draft: HostDraft; host: H
         ))}
       </ol>
       {host && <AgentReportSection host={host} />}
+      {host?.status === "token-rejected" && <Alert variant="destructive"><AlertDescription>{th("tokenRejected")}</AlertDescription></Alert>}
       {host?.status === "update-required" && <Alert><AlertDescription>{t("updateRequired")}</AlertDescription></Alert>}
       {connected ? (
         <Alert className="animate-pop-in border-success/40 bg-success/8">
