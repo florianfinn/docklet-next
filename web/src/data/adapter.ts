@@ -53,6 +53,13 @@ export type Topic = "hosts" | "stacks" | "containers" | "security" | "topology" 
 
 export type Unsubscribe = () => void;
 
+/** Activity reads are observations; a failed source cannot establish removal or completion. */
+export interface ActionReadFailure {
+  hostId?: string;
+  reason: "unavailable" | "permission" | "authentication" | "invalid-data";
+}
+export interface ActionReadHealth { failures: readonly ActionReadFailure[] }
+
 /**
  * Transport-neutral boundary of the UI. Adapters implement this interface.
  */
@@ -91,6 +98,7 @@ export interface DockletAdapter extends AuthApi, HostsApi, VolumesApi, SettingsA
   runScan(): Promise<string>;
   setScanEnabled(enabled: boolean): Promise<void>;
 
+  subscribeActionReadHealth?(listener: (health: ActionReadHealth) => void): Unsubscribe;
   subscribeActions(listener: (runs: CodedActionRun[]) => void): Unsubscribe;
   subscribeMetrics(listener: (snapshot: MetricsSnapshot) => void): Unsubscribe;
   subscribeLogs(stackId: string, listener: (lines: LogLine[]) => void): Unsubscribe;
