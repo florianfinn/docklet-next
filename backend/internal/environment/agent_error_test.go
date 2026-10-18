@@ -112,7 +112,7 @@ func TestAgentForwardingFailureCodesAfterCompatibility(t *testing.T) {
 				if mode == "direct" {
 					f.service.httpClient.Transport = agentRoundTrip(func(r *http.Request) (*http.Response, error) {
 						if status == 0 {
-							// Cancel only after the forwarded request reaches the tunnel.
+							// Cancel only after the forwarded request reaches the transport.
 							cancel()
 							return nil, errors.New("agent unreachable")
 						}
@@ -121,7 +121,7 @@ func TestAgentForwardingFailureCodesAfterCompatibility(t *testing.T) {
 				} else {
 					f.conn.send = func(m *edge.TunnelMessage) {
 						if status == 0 {
-							// Cancel only after the forwarded request reaches the tunnel.
+							// Cancel only after the forwarded request reaches the transport.
 							cancel()
 							return
 						}
