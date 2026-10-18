@@ -98,7 +98,8 @@ it.each(["logout", "unsubscribe"])("%s rejects an invalidated actions query with
     held.resolve(captured); await rejection;
     expect(success).not.toHaveBeenCalled();
     expect(client.getQueryData(queryKey)).toBeUndefined();
-    expect(client.getQueryState(queryKey)?.status).not.toBe("success");
+    expect(client.getQueryState(queryKey)?.status).toBe("error");
+    expect(client.getQueryState(queryKey)?.fetchStatus).toBe("idle");
     expect(runs).toHaveBeenCalledTimes(calls); expect(health).toHaveBeenCalledTimes(healthCalls);
     expect(errors).not.toHaveBeenCalled();
   } finally { stop(); off(); client.clear(); window.removeEventListener("docklet:adapter-error", errors); }

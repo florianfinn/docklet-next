@@ -19,9 +19,9 @@ function user(value: unknown): CurrentUser {
   return { id: item.id, username: item.username, requiresPasswordChange: item.requiresPasswordChange, locale: typeof item.locale === "string" ? item.locale : null };
 }
 
-export type SessionChange = "established" | "confirmed" | "lost";
+export type SessionChange = "established" | "renewed" | "confirmed" | "lost";
 
-// Established sessions renew consumers; confirmations resume suspended consumers; loss never reconnects.
+// Replacement clears observations; renewal keeps same-user history; loss never reconnects.
 export function createHttpAuth(baseUrl: string, client: CsrfClient, onSessionChange: (change: SessionChange) => void = () => {}, sessionGeneration: () => number = () => 0): AuthApi {
   let currentUserId: string | undefined;
   let sessionVersion = 0;
@@ -31,7 +31,7 @@ export function createHttpAuth(baseUrl: string, client: CsrfClient, onSessionCha
     onSessionChange(change);
   }
   function assertCurrent(version: number) {
-    if (version !== sessionVersion + sessionGeneration()) throw new CancelledError({ silent: true });
+    if (version !== sessionVersion + sessionGeneration()) throw new CancelledError();
   }
   async function request(path: string, method = "GET", body?: object): Promise<unknown> {
     let response: Response;
@@ -76,7 +76,7 @@ export function createHttpAuth(baseUrl: string, client: CsrfClient, onSessionCha
       const result = await request("/auth/login", "POST", { username, password }) as { user?: unknown };
       const signedIn = user(result.user);
       assertCurrent(version);
-      sessionChanged("established", signedIn.id);
+      sessionChanged(signedIn.id === currentUserId ? "renewed" : "established", signedIn.id);
       return signedIn;
     },
     async logout() {
@@ -89,7 +89,7 @@ export function createHttpAuth(baseUrl: string, client: CsrfClient, onSessionCha
       const version = ++sessionVersion + sessionGeneration();
       await request("/auth/password", "POST", { currentPassword, newPassword });
       assertCurrent(version);
-      sessionChanged("established", currentUserId);
+      sessionChanged("renewed", currentUserId);
     },
     async updateMyLocale(locale) { return user(await request("/auth/me/profile", "PUT", { locale })); },
   };

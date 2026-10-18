@@ -67,6 +67,7 @@ it("keeps the profile mounted and resumes activity/change delivery after a passw
     const old = f.sources[0]!;
     await act(async () => old.open());
     await waitFor(() => expect(runs.mock.lastCall?.[0]).toHaveLength(2));
+    const publications = runs.mock.calls.length;
     const user = userEvent.setup();
     await user.type(screen.getByLabelText("Current password"), "Example-password1!");
     await user.type(screen.getByLabelText("New password"), "New-example-password2!");
@@ -74,6 +75,7 @@ it("keeps the profile mounted and resumes activity/change delivery after a passw
     await user.click(screen.getByRole("button", { name: "Change password" }));
     await screen.findByRole("status");
     expect(screen.queryByRole("heading", { name: "Profile" }) !== null).toBe(true);
+    expect(runs.mock.calls.slice(publications)).toEqual([]);
     expect(f.sources).toHaveLength(2); expect(old.close).toHaveBeenCalledTimes(1);
     const request = f.requests.length; const changeCount = changes.mock.calls.length;
     old.send("run-good", "good"); old.environments();
@@ -82,6 +84,7 @@ it("keeps the profile mounted and resumes activity/change delivery after a passw
     await act(async () => f.sources[1]!.open());
     await waitFor(() => expect(runs.mock.lastCall?.[0].find((r: { id: string }) => r.id === "run-good")?.status).toBe("queued"));
     expect(changes.mock.calls.length).toBeGreaterThan(changeCount);
+    expect(runs.mock.calls.slice(publications).every(([list]) => list.length === 2)).toBe(true);
     expect(f.requests.filter((path) => path === "/api/auth/password")).toHaveLength(1);
   } finally { view.unmount(); stops.forEach((stop) => stop()); }
 });

@@ -90,7 +90,7 @@ export function createActivityReader(reads: Reads) {
     try {
       const hosts = new Set(await reads.hosts());
       const batches = await Promise.all([...hosts].map(source));
-      if (version !== generation) throw new CancelledError({ silent: true });
+      if (version !== generation) throw new CancelledError();
       // A raw run UUID belongs to one source. Reject conflicting claims without changing IDs.
       const owners = new Map(current.map((run) => [run.id, run.hostId]));
       const claims = new Map<string, Set<string>>();
@@ -137,7 +137,7 @@ export function createActivityReader(reads: Reads) {
       publishHealth();
       return sorted(observed.values());
     } catch (error) {
-      if (version !== generation) throw new CancelledError({ silent: true });
+      if (version !== generation) throw new CancelledError();
       if (isCancelledError(error)) throw error;
       if (started > globalHealthSequence) {
         globalHealthSequence = started; globalFailure = failure(error);
@@ -152,14 +152,14 @@ export function createActivityReader(reads: Reads) {
     const version = generation;
     try {
       const run = mapped(await reads.detail(hostId, id), hostId, id);
-      if (version !== generation) throw new CancelledError({ silent: true });
+      if (version !== generation) throw new CancelledError();
       if (started <= Math.max(runSequences.get(id) ?? 0, fullSequences.get(hostId) ?? 0) || !current.some((r) => r.id === id && r.hostId === hostId)) return;
       current = current.map((r) => r.id === id ? run : r);
       runSequences.set(id, started);
       publish();
       if (run.status !== "queued" && run.status !== "running") await load();
     } catch (error) {
-      if (version !== generation) throw new CancelledError({ silent: true });
+      if (version !== generation) throw new CancelledError();
       if (isCancelledError(error)) throw error;
       if (started <= Math.max(runSequences.get(id) ?? 0, fullSequences.get(hostId) ?? 0, healthSequences.get(hostId) ?? 0)) return;
       healthSequences.set(hostId, started);
@@ -177,10 +177,12 @@ export function createActivityReader(reads: Reads) {
     hasSnapshot: () => initialized,
     health: () => health,
     invalidate() { ++generation; },
-    reset() {
-      ++generation; initialized = true; current = []; health = { failures: [] }; globalFailure = undefined; knownHosts.clear();
+    // Loss clears current consumers; a new identity waits for its first real observation.
+    reset(hasSnapshot = true) {
+      const wasInitialized = initialized;
+      ++generation; initialized = hasSnapshot; current = []; health = { failures: [] }; globalFailure = undefined; knownHosts.clear();
       failures.clear(); fullSequences.clear(); runSequences.clear(); healthSequences.clear();
-      publish();
+      if (wasInitialized || hasSnapshot) publish();
     },
   };
 }

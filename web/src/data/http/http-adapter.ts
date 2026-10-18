@@ -114,8 +114,9 @@ export function createHttpAdapter(options: HttpAdapterOptions = {}): DockletAdap
   }
   function invalidateIdentity(change: SessionChange) {
     if (change === "confirmed" && authenticated) return;
+    const retain = change === "renewed" && authenticated;
     suspendIdentity();
-    actions.reset();
+    if (retain) actions.invalidate(); else actions.reset(change === "lost");
     authenticated = change !== "lost";
     if (authenticated) connect();
   }
