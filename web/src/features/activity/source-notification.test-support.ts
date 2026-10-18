@@ -7,6 +7,7 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { act, render, waitFor as testingWaitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { createElement, Fragment } from "react";
 import { MemoryRouter } from "react-router";
 import { toast } from "sonner";
 import { IntlProvider } from "use-intl";
@@ -66,7 +67,10 @@ export function sourceFixture(reverse = false) {
   const mount = (center = false, presentation: "toast" | "dialog" = "toast") => {
     setUiStyle({ actionPresentationOverride: presentation });
     const off = f.adapter.subscribeActions(observed); const offHealth = f.adapter.subscribeActionReadHealth?.(health);
-    const view = render(<AdapterContext.Provider value={f.adapter}><QueryClientProvider client={client}><IntlProvider locale="en-US" messages={catalogs["en-US"]} timeZone="UTC"><MemoryRouter><ActionToasts /><AppToaster />{center && <ActivityCenter />}</MemoryRouter></IntlProvider></QueryClientProvider></AdapterContext.Provider>);
+    const content = createElement(Fragment, null, createElement(ActionToasts), createElement(AppToaster), center && createElement(ActivityCenter));
+    const router = createElement(MemoryRouter, null, content);
+    const intl = createElement(IntlProvider, { locale: "en-US", messages: catalogs["en-US"], timeZone: "UTC" }, router);
+    const view = render(createElement(AdapterContext.Provider, { value: f.adapter }, createElement(QueryClientProvider, { client }, intl)));
     return { ...view, stop: () => { view.unmount(); off(); offHealth?.(); } };
   };
   const openCenter = () => act(() => activityStore.set((s) => ({ ...s, open: true, tab: "actions" })));
