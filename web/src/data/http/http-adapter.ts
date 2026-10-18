@@ -200,8 +200,6 @@ export function createHttpAdapter(options: HttpAdapterOptions = {}): DockletAdap
   }
 
   function refreshRun(activityId: string, environmentId?: string): void {
-    // A newer activity event must never join a read started before that event.
-    sharedReads.clear();
     const previous = currentRuns?.find((run) => run.id === activityId);
     if (!previous || !environmentId || previous.hostId !== environmentId) { refreshRuns(); return; }
     const generation = subscriptionVersion;
@@ -233,6 +231,8 @@ export function createHttpAdapter(options: HttpAdapterOptions = {}): DockletAdap
     try { envelope = JSON.parse(data) as StreamPayload; } catch { refreshSubscribed(); return; }
     if (!envelope || typeof envelope !== "object" || typeof envelope.timestamp !== "string") { refreshSubscribed(); return; }
     if (envelope.type === "heartbeat") return;
+    // Post-notification reads must not join snapshots started before the change.
+    sharedReads.clear();
     if (envelope.channel === "activities" && envelope.activity && typeof envelope.activity.type === "string") {
       const activityId = envelope.activity.activityId ?? envelope.activity.activity?.id;
       if (activityId) refreshRun(activityId, envelope.activity.environmentId ?? envelope.activity.activity?.environmentId);
