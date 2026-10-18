@@ -272,3 +272,33 @@ describe("update times", () => {
     expect(times).toEqual({ checkedAt: undefined, unchecked: 0, updatedAt: "2026-10-11T13:00:00.000Z" });
   });
 });
+
+describe("source history supplied with an observation", () => {
+  it("seeds incomplete history statuses silently through the complete read, then reports a later failure", () => {
+    const h = harness(false); h.coordinator.sync([]);
+    h.coordinator.sync([run("history", "redeploy")], new Set(["history"]));
+    h.coordinator.sync([run("history", "redeploy", "failed")], new Set(["history"]));
+    expect(h.log).toEqual([]);
+    h.coordinator.sync([run("history", "redeploy", "running")]);
+    h.coordinator.sync([run("history", "redeploy", "failed")]);
+    expect(h.log).toEqual(["show:history"]);
+  });
+
+  it("preserves a genuine simultaneous major dialog across reentrant passes and later coverage changes", () => {
+    const h = harness(); h.coordinator.sync([]);
+    h.coordinator.sync([run("history", "redeploy"), run("genuine", "redeploy")], new Set(["history"]));
+    expect([h.log, h.waiting]).toEqual([["offer:genuine"], []]);
+    // A presentation-only sync after seeding must use recorded coverage, rather than seed again.
+    h.show("history"); h.close();
+    expect(h.log).toEqual(["offer:genuine", "show:genuine", "hide:history", "show:history"]);
+  });
+
+  it("forgets seeded history and its bindings after authoritative removal", () => {
+    const h = harness(false); h.coordinator.sync([]);
+    h.coordinator.sync([run("history", "redeploy", "failed")], new Set(["history"]));
+    bindPresentation("history", "toast"); h.coordinator.sync([]);
+    expect(presentationStore.get().byRun).toEqual({});
+    h.coordinator.sync([run("history", "redeploy", "failed")]);
+    expect(h.log).toEqual(["show:history"]);
+  });
+});

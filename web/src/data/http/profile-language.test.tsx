@@ -4,7 +4,7 @@
 // License: Apache-2.0
 // Deviations: Original persisted administrator locale route test.
 
-import { screen, waitFor } from "@testing-library/react";
+import { act, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, expect, it, vi } from "vitest";
 
@@ -13,6 +13,7 @@ import { localeStore, setAppLocale } from "@/app/i18n/locale-store";
 import ProfilePage from "@/features/settings/ProfilePage";
 import { renderRoutes } from "@/test/render";
 
+import { activityFixture } from "./activity-reader.test-support";
 import { createHttpAdapter } from "./http-adapter";
 
 afterEach(() => { localeStore.reset(); localStorage.clear(); });
@@ -52,4 +53,38 @@ it("loads the administrator language from the core and saves a change with CSRF"
   renderRoutes(routes, ["/profile"], createHttpAdapter({ fetch: fetcher as typeof fetch }));
   await waitFor(() => expect(localeStore.get()).toBe("de"));
   expect((await screen.findByRole("heading", { name: "Profil" })) !== null).toBe(true);
+});
+
+it("keeps the profile mounted and resumes activity/change delivery after a password gesture", async () => {
+  setAppLocale("en-US");
+  const f = activityFixture();
+  await f.adapter.getCurrentUser();
+  const runs = vi.fn(); const changes = vi.fn();
+  const stops = [f.adapter.subscribeActions(runs), f.adapter.subscribeChanges(changes)];
+  const view = renderRoutes([{ path: "/profile", element: <ProfilePage /> }], ["/profile"], f.adapter);
+  try {
+    await screen.findByRole("heading", { name: "Profile" });
+    const old = f.sources[0]!;
+    await act(async () => old.open());
+    await waitFor(() => expect(runs.mock.lastCall?.[0]).toHaveLength(2));
+    const publications = runs.mock.calls.length;
+    const user = userEvent.setup();
+    await user.type(screen.getByLabelText("Current password"), "Example-password1!");
+    await user.type(screen.getByLabelText("New password"), "New-example-password2!");
+    await user.type(screen.getByLabelText("Repeat password"), "New-example-password2!");
+    await user.click(screen.getByRole("button", { name: "Change password" }));
+    await screen.findByRole("status");
+    expect(screen.queryByRole("heading", { name: "Profile" }) !== null).toBe(true);
+    expect(runs.mock.calls.slice(publications)).toEqual([]);
+    expect(f.sources).toHaveLength(2); expect(old.close).toHaveBeenCalledTimes(1);
+    const request = f.requests.length; const changeCount = changes.mock.calls.length;
+    old.send("run-good", "good"); old.environments();
+    expect(f.requests).toHaveLength(request); expect(changes).toHaveBeenCalledTimes(changeCount);
+    f.state.details["run-good"]!.activity.status = "queued";
+    await act(async () => f.sources[1]!.open());
+    await waitFor(() => expect(runs.mock.lastCall?.[0].find((r: { id: string }) => r.id === "run-good")?.status).toBe("queued"));
+    expect(changes.mock.calls.length).toBeGreaterThan(changeCount);
+    expect(runs.mock.calls.slice(publications).every(([list]) => list.length === 2)).toBe(true);
+    expect(f.requests.filter((path) => path === "/api/auth/password")).toHaveLength(1);
+  } finally { view.unmount(); stops.forEach((stop) => stop()); }
 });

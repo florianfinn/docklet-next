@@ -3,7 +3,7 @@ import { useLocale } from "use-intl";
 
 import type { ActionRun, LogLine, MetricsSnapshot } from "@/domain/model";
 
-import type { DockletAdapter } from "./adapter";
+import type { ActionReadHealth, DockletAdapter } from "./adapter";
 import { renderRun, type CodedActionRun } from "./message-code";
 import { useAdapter } from "./use-adapter";
 import { useActionsQuery } from "./queries";
@@ -17,7 +17,7 @@ interface Channel<T> {
 type Connect<T> = (adapter: DockletAdapter, push: (value: T) => void) => () => void;
 
 /** Shares one adapter subscription between all components reading a stream. */
-function createChannel<T>(connect: Connect<T>) {
+function createChannel<T>(connect: Connect<T>, clearOnDisconnect = false) {
   const channels = new WeakMap<DockletAdapter, Channel<T>>();
   const channelFor = (adapter: DockletAdapter) => {
     let ch = channels.get(adapter);
@@ -44,6 +44,7 @@ function createChannel<T>(connect: Connect<T>) {
           if (ch.listeners.size === 0) {
             ch.stop?.();
             ch.stop = undefined;
+            if (clearOnDisconnect) ch.value = undefined;
           }
         };
       }, [adapter, ch]),
@@ -54,7 +55,13 @@ function createChannel<T>(connect: Connect<T>) {
 }
 
 const useMetricsChannel = createChannel<MetricsSnapshot>((adapter, push) => adapter.subscribeMetrics(push));
-const useActionsChannel = createChannel<CodedActionRun[]>((adapter, push) => adapter.subscribeActions(push));
+const EMPTY_HEALTH: ActionReadHealth = { failures: [] };
+const useActionHealthChannel = createChannel<ActionReadHealth>((adapter, push) => adapter.subscribeActionReadHealth?.(push) ?? (() => {}), true);
+export function useActionReadHealth(): ActionReadHealth {
+  return useActionHealthChannel((health) => health ?? EMPTY_HEALTH);
+}
+
+const useActionsChannel = createChannel<CodedActionRun[]>((adapter, push) => adapter.subscribeActions(push), true);
 
 /** Resource values with selectors that keep re-renders narrow. */
 export function useMetrics<S>(selector: (snapshot: MetricsSnapshot | undefined) => S): S {
@@ -65,10 +72,12 @@ const EMPTY_RUNS: CodedActionRun[] = [];
 
 /** Run codes rendered in the interface language. */
 export function useActionRuns(): ActionRun[] {
+  const adapter = useAdapter();
   const runs = useActionsChannel((r) => r);
   const query = useActionsQuery();
   const locale = useLocale();
-  const chosen = runs ?? query.data ?? EMPTY_RUNS;
+  // HTTP reads publish their observation before resolving; cached query rows may belong to a prior identity.
+  const chosen = runs ?? (adapter.kind === "http" ? EMPTY_RUNS : query.data ?? EMPTY_RUNS);
   return useMemo(() => chosen.map((r) => renderRun(r, locale)), [chosen, locale]);
 }
 

@@ -1,3 +1,4 @@
+import { useQueryClient } from "@tanstack/react-query";
 import { useEffect, useLayoutEffect, useRef } from "react";
 import { toast } from "sonner";
 import { useLocale, useTranslations } from "use-intl";
@@ -5,6 +6,9 @@ import { useLocale, useTranslations } from "use-intl";
 import { useActionRun } from "@/data/live";
 import { renderMessage, renderRun } from "@/data/message-code";
 import { useConnectedSettings, useSettings } from "@/data/queries";
+import type { CurrentUser } from "@/data/api";
+import type { ActionReadHealth } from "@/data/adapter";
+import { queryKeys } from "@/data/query-keys";
 import { useAdapter } from "@/data/use-adapter";
 import { runGateOf, type GateNotice } from "@/data/run-gate";
 import { effectivePresentation, toastDetail, uiStyleStore, useUiStyle } from "@/shared/preferences/ui-style-store";
@@ -44,6 +48,7 @@ function ActionToast({ id, toastId }: { id: string; toastId: string | number }) 
  */
 export function ActionToasts() {
   const adapter = useAdapter();
+  const client = useQueryClient();
   const t = useTranslations("activity.gate");
   const locale = useLocale();
   const tRef = useRef(t);
@@ -63,9 +68,13 @@ export function ActionToasts() {
   });
 
   useEffect(() => {
-    const coordinator = new RunToastCoordinator(
+    const owned = new Set<string>();
+    const clearOwned = () => { for (const id of owned) toast.dismiss(id); owned.clear(); };
+    const identity = () => client.getQueryData<CurrentUser>(queryKeys.currentUser)?.id;
+    let identityId = identity();
+    const createCoordinator = () => new RunToastCoordinator(
       {
-        show: (id) => toast.custom((toastId) => <ActionToast id={id} toastId={toastId} />, { id, duration: Number.POSITIVE_INFINITY, unstyled: true }),
+        show: (id) => { owned.add(id); toast.custom((toastId) => <ActionToast id={id} toastId={toastId} />, { id, duration: Number.POSITIVE_INFINITY, unstyled: true }); },
         hide: (id) => toast.dismiss(id),
         offerDialog: offerActionDialog,
       },
@@ -75,9 +84,35 @@ export function ActionToasts() {
         state: () => presentationStore.get(),
       },
     );
-    const offRuns = adapter.subscribeActions((runs) => coordinator.sync(runs.map((run) => renderRun(run, localeRef.current))));
-    const offDialog = actionDialogStore.subscribe(() => coordinator.sync());
-    const offSurfaces = presentationStore.subscribe(() => coordinator.sync());
+    let coordinator = createCoordinator();
+    let observed = false;
+    let health: ActionReadHealth = { failures: [] };
+    let initialSources: Set<string> | undefined;
+    const offHealth = adapter.subscribeActionReadHealth?.((next) => { health = next; });
+    const offRuns = adapter.subscribeActions((runs) => {
+      // Identity replacement seeds new history; same-user renewal retains seen/dismissed runs.
+      const nextIdentity = identity();
+      if (nextIdentity !== identityId) {
+        clearOwned();
+        coordinator = createCoordinator();
+        identityId = nextIdentity;
+        initialSources = undefined;
+      }
+      const failed = new Set(health.failures.flatMap((failure) => failure.hostId === undefined ? [] : [failure.hostId]));
+      // Only initially incomplete sources await history; later outages keep ordinary notifications.
+      const pending = initialSources ??= new Set(failed);
+      const history = new Set(runs.filter((run) => run.hostId !== undefined && pending.has(run.hostId)).map((run) => run.id));
+      // Health clears before its array: seed this last history first, then retire the source.
+      if (!health.failures.some((failure) => failure.hostId === undefined)) {
+        for (const hostId of pending) if (!failed.has(hostId)) pending.delete(hostId);
+      }
+      observed = true;
+      coordinator.sync(runs.map((run) => renderRun(run, localeRef.current)), history);
+    });
+    // Presentation changes are not action observations and cannot seed initial history.
+    const syncPresentation = () => { if (observed) coordinator.sync(); };
+    const offDialog = actionDialogStore.subscribe(syncPresentation);
+    const offSurfaces = presentationStore.subscribe(syncPresentation);
     // One notice per target, replaced on every repeat (stable toast id), never a new run toast.
     const offGate = runGateOf(adapter)?.subscribe((n: GateNotice) => {
       const tr = tRef.current;
@@ -97,11 +132,13 @@ export function ActionToasts() {
     });
     return () => {
       offRuns();
+      offHealth?.();
+      clearOwned();
       offDialog();
       offSurfaces();
       offGate?.();
     };
-  }, [adapter]);
+  }, [adapter, client]);
 
   return null;
 }

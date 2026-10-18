@@ -4,11 +4,11 @@
 // License: Apache-2.0
 // Deviations: Original HTTP and SSE adapter for issue 38.
 
-import { QueryClient } from "@tanstack/react-query";
+import { isCancelledError, QueryClient } from "@tanstack/react-query";
 
 import type { components, operations, paths } from "@/api/generated/schema";
 
-import type { DockletAdapter, Topic } from "../adapter";
+import type { ActionReadHealth, DockletAdapter, Topic } from "../adapter";
 import { AdapterOutcomeError, GENERIC_REASON, HUB_REF, unavailable, type CapabilityDescriptor, type ResourceRef } from "../capability";
 import { createDisconnectedAdapter } from "../disconnected-adapter";
 import type { CodedActionRun } from "../message-code";
@@ -18,12 +18,13 @@ import { createResourceReader } from "./resources";
 import { createInventoryReader } from "./inventory";
 import { mapHost } from "./hosts";
 import { createHostCommands } from "./host-commands";
-import { mapActivityDetail, mapEvent } from "./map-dto";
+import { mapEvent } from "./map-dto";
 import { createHttpHubBackups } from "./hub-backups";
 import { createCsrfClient } from "./csrf-client";
-import { createHttpAuth } from "./auth";
+import { createHttpAuth, type SessionChange } from "./auth";
 import { createSettingsCore } from "./settings-core";
 import { createSharedReads } from "./shared-reads";
+import { createActivityReader } from "./activity-reader";
 
 type ReadOperation = "get-capabilities" | "listEnvironments" | "list-activities" | "get-activity" | "listEvents";
 type Body<I extends ReadOperation> = operations[I]["responses"][200]["content"]["application/json"];
@@ -70,18 +71,14 @@ export function createHttpAdapter(options: HttpAdapterOptions = {}): DockletAdap
   const changeListeners = new Set<(topics: Topic[]) => void>();
   const actionListeners = new Set<(runs: CodedActionRun[]) => void>();
   let source: Source | undefined;
-  let currentRuns: CodedActionRun[] | undefined;
+  const healthListeners = new Set<(health: ActionReadHealth) => void>();
   let lastEventId: number | undefined;
-  let subscriptionVersion = 0;
-  let readSequence = 0;
-  let lastFullSequence = 0;
-  // Reads apply per run only when they started after its last applied read.
-  // Full reads record removals, so older results cannot restore absent runs.
-  const appliedRunSequences = new Map<string, number>();
   let sourceOpen = false;
+  let authenticated = true;
+  let identityGeneration = 0;
   let reconnectTimer: ReturnType<typeof setTimeout> | undefined;
 
-  async function read<I extends ReadOperation>(operationId: I, route: keyof paths | string, query?: Record<string, string | number>): Promise<Body<I>> {
+  async function read<I extends ReadOperation>(operationId: I, route: keyof paths | string, query?: Record<string, string | number>, observeResponse?: (response: Response) => void): Promise<Body<I>> {
     const params = new URLSearchParams();
     for (const [key, value] of Object.entries(query ?? {})) params.set(key, String(value));
     const url = `${baseUrl}${route}${params.size ? `?${params}` : ""}`;
@@ -95,6 +92,7 @@ export function createHttpAdapter(options: HttpAdapterOptions = {}): DockletAdap
     if (!body || typeof body !== "object" || (body as { success?: unknown }).success !== true || !("data" in body)) {
       throw classifiedError({ code: `${operationId}.invalid-response` }, response.status);
     }
+    observeResponse?.(response);
     return body as Body<I>;
   }
 
@@ -106,7 +104,22 @@ export function createHttpAdapter(options: HttpAdapterOptions = {}): DockletAdap
   const environments = () => environmentCache.fetchQuery({ queryKey: environmentsKey, queryFn: () => page("listEnvironments", "/environments", 100) });
   function invalidateCapabilities() { capabilityReads.clear(); }
   function invalidateEnvironments() { sharedReads.clear(); void environmentCache.invalidateQueries({ queryKey: environmentsKey }); }
-  function invalidateIdentity() { sharedReads.clear(); invalidateCapabilities(); environmentCache.clear(); observations.clear(); }
+  function suspendIdentity() {
+    ++identityGeneration;
+    authenticated = false;
+    sharedReads.clear(); invalidateCapabilities(); environmentCache.clear(); observations.clear();
+    source?.close(); source = undefined; sourceOpen = false;
+    if (reconnectTimer) clearTimeout(reconnectTimer);
+    reconnectTimer = undefined;
+  }
+  function invalidateIdentity(change: SessionChange) {
+    if (change === "confirmed" && authenticated) return;
+    const retain = change === "renewed" && authenticated;
+    suspendIdentity();
+    if (retain) actions.invalidate(true); else actions.reset(change === "lost");
+    authenticated = change !== "lost";
+    if (authenticated) connect();
+  }
   function environmentKey(rows: components["schemas"]["EnvironmentEnvironment"][]) {
     return JSON.stringify(rows.map((row) => [row.id, row.status, row.enabled, row.apiUrl, row.isEdge, row.agentReport?.version.currentVersion, row.agentReport?.version.agentContractVersion, row.agentReport?.version.agentContractFingerprint]).sort((a, b) => String(a[0]).localeCompare(String(b[0]))));
   }
@@ -127,7 +140,10 @@ export function createHttpAdapter(options: HttpAdapterOptions = {}): DockletAdap
         void pending.catch(() => { if (capabilityReads.get(key) === started) capabilityReads.delete(key); });
       }
       descriptors = await pending;
-    } catch { return fallback(); }
+    } catch (error) {
+      if (operationId === "listActions" && error instanceof AdapterOutcomeError && error.outcome.kind === "error" && error.outcome.status === 401) throw error;
+      return fallback();
+    }
     if (!Array.isArray(descriptors)) return fallback();
     const found = descriptors.find((entry) => entry?.operationId === operationId && entry.resourceRef?.kind === resourceRef.kind && entry.resourceRef.id === resourceRef.id);
     if (!found || typeof found.available !== "boolean") return fallback();
@@ -141,11 +157,11 @@ export function createHttpAdapter(options: HttpAdapterOptions = {}): DockletAdap
     if (!descriptor.available) throw unavailable(operationId, descriptor.resourceRef, descriptor.disabledReasonCode);
   }
 
-  async function page<I extends "listEnvironments" | "list-activities" | "listEvents">(operationId: I, route: string, limit: number): Promise<NonNullable<Body<I>["data"]>> {
+  async function page<I extends "listEnvironments" | "list-activities" | "listEvents">(operationId: I, route: string, limit: number, observeResponse?: (response: Response) => void): Promise<NonNullable<Body<I>["data"]>> {
     const result: NonNullable<Body<I>["data"]> = [] as unknown as NonNullable<Body<I>["data"]>;
     let start = 0;
     for (;;) {
-      const body = await read(operationId, route, { start, limit, order: "desc" });
+      const body = await read(operationId, route, { start, limit, order: "desc" }, observeResponse);
       if (!Array.isArray(body.data) || !body.pagination || !Number.isInteger(body.pagination.totalItems)) throw classifiedError({ code: `${operationId}.invalid-page` });
       result.push(...body.data as never[]);
       start += body.data.length;
@@ -154,19 +170,25 @@ export function createHttpAdapter(options: HttpAdapterOptions = {}): DockletAdap
     }
   }
 
-  async function loadActions(): Promise<CodedActionRun[]> {
-    await requireCapability("listActions");
-    const rows = await environments();
-    const ids = new Set(["0", ...rows.map((item) => item.id)]);
-    const batches = await Promise.all([...ids].map((id) => page("list-activities", `/environments/${encodeURIComponent(id)}/activities`, 100)));
-    const items = batches.flat();
-    const runs = await Promise.all(items.map(async (item) => {
-      const body = await read("get-activity", `/environments/${encodeURIComponent(item.environmentId)}/activities/${encodeURIComponent(item.id)}`, { limit: 500 });
-      if (!body.data || !body.data.activity || body.data.activity.id !== item.id) throw classifiedError({ code: "get-activity.invalid-detail" });
-      try { return mapActivityDetail(body.data); } catch (error) { throw classifiedError({ code: "get-activity.mapping-error", cause: error }); }
-    }));
-    return runs.sort((a, b) => Date.parse(b.startedAt) - Date.parse(a.startedAt));
-  }
+  const actions = createActivityReader({
+    hosts: async () => {
+      await requireCapability("listActions");
+      return [...new Set(["0", ...(await environments()).map((item) => item.id)])];
+    },
+    page: async (hostId) => {
+      let incomplete = false;
+      const items = await page("list-activities", `/environments/${encodeURIComponent(hostId)}/activities`, 100, (response) => {
+        if (response.headers.get("X-Docklet-Host-Reason") === "agent.unavailable") incomplete = true;
+      });
+      return { items, incomplete };
+    },
+    unauthorized: suspendIdentity,
+    detail: async (hostId, id) => (await read("get-activity", `/environments/${encodeURIComponent(hostId)}/activities/${encodeURIComponent(id)}`, { limit: 500 })).data!,
+    publish: (runs, health) => {
+      healthListeners.forEach((listener) => listener(health));
+      if (runs) actionListeners.forEach((listener) => listener(runs));
+    },
+  });
 
   async function loadEvents() {
     await requireCapability("listEvents");
@@ -176,43 +198,13 @@ export function createHttpAdapter(options: HttpAdapterOptions = {}): DockletAdap
 
   function refreshRuns(): void {
     if (actionListeners.size === 0) return;
-    const sequence = ++readSequence;
-    const generation = subscriptionVersion;
-    void loadActions().then((runs) => {
-      if (generation !== subscriptionVersion || !actionListeners.size) return;
-      const merged = new Map(currentRuns?.map((run) => [run.id, run]));
-      const incoming = new Set(runs.map((run) => run.id));
-      const canApply = (id: string) => sequence > Math.max(appliedRunSequences.get(id) ?? 0, lastFullSequence);
-      for (const run of runs) {
-        if (!canApply(run.id)) continue;
-        merged.set(run.id, run);
-        appliedRunSequences.set(run.id, sequence);
-      }
-      for (const id of merged.keys()) {
-        if (incoming.has(id) || !canApply(id)) continue;
-        merged.delete(id);
-        appliedRunSequences.set(id, sequence);
-      }
-      lastFullSequence = Math.max(lastFullSequence, sequence);
-      currentRuns = [...merged.values()].sort((a, b) => Date.parse(b.startedAt) - Date.parse(a.startedAt));
-      actionListeners.forEach((listener) => listener(currentRuns!));
-    }).catch((error) => { window.dispatchEvent(new CustomEvent("docklet:adapter-error", { detail: error })); });
+    void actions.load().catch((error) => { if (isCancelledError(error)) return; window.dispatchEvent(new CustomEvent("docklet:adapter-error", { detail: error })); });
   }
 
   function refreshRun(activityId: string, environmentId?: string): void {
-    const previous = currentRuns?.find((run) => run.id === activityId);
-    if (!previous || !environmentId || previous.hostId !== environmentId) { refreshRuns(); return; }
-    const generation = subscriptionVersion;
-    const sequence = ++readSequence;
-    void read("get-activity", `/environments/${encodeURIComponent(environmentId)}/activities/${encodeURIComponent(activityId)}`, { limit: 500 }).then((body) => {
-      if (!body.data || body.data.activity?.id !== activityId) throw classifiedError({ code: "get-activity.invalid-detail" });
-      const updated = mapActivityDetail(body.data);
-      if (generation !== subscriptionVersion || sequence <= Math.max(appliedRunSequences.get(activityId) ?? 0, lastFullSequence) || !currentRuns?.some((run) => run.id === activityId)) return;
-      appliedRunSequences.set(activityId, sequence);
-      currentRuns = currentRuns.map((run) => run.id === activityId ? updated : run);
-      actionListeners.forEach((listener) => listener(currentRuns!));
-      if (updated.status !== "queued" && updated.status !== "running") refreshRuns();
-    }).catch((error) => { window.dispatchEvent(new CustomEvent("docklet:adapter-error", { detail: classifiedError(error) })); });
+    const previous = actions.runs().find((run) => run.id === activityId && run.hostId === environmentId);
+    if (!previous || !environmentId) { refreshRuns(); return; }
+    void actions.refreshOne(activityId, environmentId).catch((error) => { if (!isCancelledError(error)) window.dispatchEvent(new CustomEvent("docklet:adapter-error", { detail: error })); });
   }
 
   function refreshSubscribed(): void {
@@ -251,6 +243,7 @@ export function createHttpAdapter(options: HttpAdapterOptions = {}): DockletAdap
       const next = Array.isArray(rows) ? environmentKey(rows) : undefined;
       const changed = next === undefined || next !== environmentState;
       environmentState = next;
+      if (changed) refreshRuns();
       changeListeners.forEach((listener) => listener(changed ? ["hosts", ...inventoryTopics] : ["hosts"]));
       return;
     }
@@ -258,7 +251,7 @@ export function createHttpAdapter(options: HttpAdapterOptions = {}): DockletAdap
   }
 
   function connect(): void {
-    if (source || (!actionListeners.size && !changeListeners.size)) return;
+    if (!authenticated || source || (!actionListeners.size && !changeListeners.size)) return;
     sourceOpen = false;
     let opened: Source;
     try {
@@ -289,7 +282,7 @@ export function createHttpAdapter(options: HttpAdapterOptions = {}): DockletAdap
   }
 
   function scheduleReconnect(): void {
-    if (reconnectTimer || (!actionListeners.size && !changeListeners.size)) return;
+    if (!authenticated || reconnectTimer || (!actionListeners.size && !changeListeners.size)) return;
     reconnectTimer = setTimeout(() => {
       reconnectTimer = undefined;
       connect();
@@ -303,9 +296,7 @@ export function createHttpAdapter(options: HttpAdapterOptions = {}): DockletAdap
     source?.close();
     source = undefined;
     sourceOpen = false;
-    ++subscriptionVersion;
-    lastFullSequence = 0;
-    appliedRunSequences.clear();
+    actions.invalidate();
   }
 
   const observations = new Map<string, InventoryObservation>();
@@ -329,7 +320,7 @@ export function createHttpAdapter(options: HttpAdapterOptions = {}): DockletAdap
   const methods = Object.fromEntries(Object.keys(unsupported).filter((key) => key !== "kind").map((operationId) => [operationId, (...args: unknown[]) => Promise.reject(unavailable(operationId, refFor(operationId, args), "capability.mapping-unavailable"))])) as unknown as DockletAdapter;
   return {
     ...methods,
-    ...createHttpAuth(baseUrl, client, invalidateIdentity),
+    ...createHttpAuth(baseUrl, client, invalidateIdentity, () => identityGeneration),
     ...createHostCommands(baseUrl, client, requireCapability, () => { invalidateCapabilities(); invalidateEnvironments(); changeListeners.forEach((listener) => listener(["hosts", ...inventoryTopics])); }),
     ...createSettingsCore(baseUrl, client),
     ...createHttpHubBackups(baseUrl, client, options.uploadFactory),
@@ -339,13 +330,18 @@ export function createHttpAdapter(options: HttpAdapterOptions = {}): DockletAdap
     listHosts,
     ...inventory,
     ...createResourceReader(baseUrl, fetcher, listHosts, requireCapability, observeHost),
-    listActions: loadActions,
+    listActions: actions.load,
+    subscribeActionReadHealth(listener) {
+      healthListeners.add(listener);
+      listener(actions.health());
+      return () => { healthListeners.delete(listener); };
+    },
     listEvents: loadEvents,
     subscribeActions(listener) {
       actionListeners.add(listener);
       connect();
       if (actionListeners.size === 1 && sourceOpen) refreshRuns();
-      else if (currentRuns) listener(currentRuns);
+      else if (actions.hasSnapshot()) listener(actions.runs());
       return () => { actionListeners.delete(listener); disconnectIfUnused(); };
     },
     subscribeChanges(listener) {
