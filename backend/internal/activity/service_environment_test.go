@@ -54,6 +54,13 @@ func TestSyncResourcesToEnvironmentOutcomes(t *testing.T) {
 					require.NoError(t, json.MarshalWrite(w, version.Info{AgentContractVersion: contract.AgentHubVersion, AgentContractFingerprint: contract.AgentHubFingerprint}))
 					return
 				}
+				if r.URL.Path == "/api/environments/0/system/health" {
+					require.Equal(t, http.MethodHead, r.Method)
+					require.Equal(t, "agent-token", r.Header.Get("X-Arcane-Agent-Token"))
+					require.Equal(t, "agent-token", r.Header.Get("X-API-Key"))
+					w.WriteHeader(http.StatusOK)
+					return
+				}
 				switch tc.failures[r.URL.Path] {
 				case "status":
 					http.Error(w, "private-agent-response", http.StatusUnauthorized)
@@ -92,7 +99,7 @@ func TestSyncResourcesToEnvironmentOutcomes(t *testing.T) {
 			}
 			mu.Lock()
 			defer mu.Unlock()
-			require.Equal(t, append([]string{"/api/app-version"}, paths...), calls)
+			require.Equal(t, append([]string{"/api/app-version", "/api/environments/0/system/health"}, paths...), calls)
 		})
 	}
 }

@@ -2,6 +2,7 @@
 import type { enHosts } from "./en";
 
 export const deHosts: typeof enHosts = {
+  tokenRejected: "Der Agent lehnt das aktuelle Token ab. Installiere das neu ausgestellte Token auf dem Host und prüfe die Verbindung erneut.",
   title: "Hosts",
   description: "Alle verbundenen Hosts gemeinsam. Der Hostfilter in der Navigation blendet nur aus – er wechselt keine Umgebung.",
   add: "Host hinzufügen",
@@ -21,6 +22,7 @@ export const deHosts: typeof enHosts = {
       title: "Lokale Prüfung des Agents",
       reported: (import.meta.env.DEV ? "Vom Agent gemeldet {time} · Simulation" : ""),
       reportedLive: "Vom Agent gemeldet {time}",
+      reportedTokenRejected: "Bericht {time} · Agent-Token ungültig",
       reportedUpdateRequired: "Bericht {time} – Agent-Update erforderlich",
       reportedPending: "Bericht {time} – Kompatibilitätsprüfung ausstehend",
       lastReported: "Letzter Bericht {time} – Host derzeit getrennt",

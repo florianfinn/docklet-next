@@ -720,6 +720,14 @@ func TestResolveRemoteRunConfirmsOwnerAfterLostResponse(t *testing.T) {
 					return
 				}
 
+				if r.URL.Path == "/api/environments/0/system/health" {
+					require.Equal(t, http.MethodHead, r.Method)
+					require.Equal(t, "example", r.Header.Get("X-Arcane-Agent-Token"))
+					require.Equal(t, "example", r.Header.Get("X-API-Key"))
+					w.WriteHeader(http.StatusOK)
+					return
+				}
+
 				switch {
 				case r.Method == http.MethodGet && r.URL.Query().Has("page"):
 					raw, marshalErr := json.Marshal(scheduler.RunList{Runs: []scheduler.Run{agentRun}, Total: 1})

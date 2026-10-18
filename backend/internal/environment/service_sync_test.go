@@ -93,7 +93,7 @@ func TestEnvironmentService_TestConnection_RejectsInvalidCustomURL(t *testing.T)
 
 func TestEnvironmentServiceTestConnectionHidesCustomURLFailureInternal(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if serveCompatibleAgentVersion(t, w, r) {
+		if serveCompatibleAgentCheck(t, w, r) {
 			return
 		}
 		w.WriteHeader(http.StatusTeapot)
@@ -113,7 +113,7 @@ func TestEnvironmentServiceTestConnectionHidesCustomURLFailureInternal(t *testin
 
 func TestEnvironmentServiceTestConnectionAllowsStoredPrivateURLInternal(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if serveCompatibleAgentVersion(t, w, r) {
+		if serveCompatibleAgentCheck(t, w, r) {
 			return
 		}
 		w.WriteHeader(http.StatusOK)
@@ -171,7 +171,7 @@ func TestSyncCredentialDecryptionAbortsSnapshot(t *testing.T) {
 			db := setupSyncDBInternal(t)
 			var calls atomic.Int32
 			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-				if serveCompatibleAgentVersion(t, w, r) {
+				if serveCompatibleAgentCheck(t, w, r) {
 					return
 				}
 				calls.Add(1)
@@ -206,7 +206,7 @@ func TestSyncSkipsUnchangedPayloadUntilForgotten(t *testing.T) {
 	var calls atomic.Int32
 	var reject atomic.Bool
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if serveCompatibleAgentVersion(t, w, r) {
+		if serveCompatibleAgentCheck(t, w, r) {
 			return
 		}
 		calls.Add(1)

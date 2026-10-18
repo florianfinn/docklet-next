@@ -282,7 +282,7 @@ func TestEnvironmentService_SyncRegistriesToRemoteEnvironments_SyncsEligibleRemo
 	var env1Calls atomic.Int32
 	env1Token := "token-1"
 	env1Server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if serveCompatibleAgentVersion(t, w, r) {
+		if serveCompatibleAgentCheck(t, w, r) {
 			return
 		}
 		if !assert.Equal(t, http.MethodPost, r.Method) {
@@ -315,7 +315,7 @@ func TestEnvironmentService_SyncRegistriesToRemoteEnvironments_SyncsEligibleRemo
 	var env2Calls atomic.Int32
 	env2Token := "token-2"
 	env2Server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if serveCompatibleAgentVersion(t, w, r) {
+		if serveCompatibleAgentCheck(t, w, r) {
 			return
 		}
 		if !assert.Equal(t, http.MethodPost, r.Method) {
@@ -363,7 +363,7 @@ func TestEnvironmentService_SyncRegistriesToEnvironment_IncludesECRFields(t *tes
 	createTestECRRegistry(t, db, "reg-ecr")
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if serveCompatibleAgentVersion(t, w, r) {
+		if serveCompatibleAgentCheck(t, w, r) {
 			return
 		}
 		if !assert.Equal(t, http.MethodPost, r.Method) {
@@ -424,7 +424,7 @@ func TestEnvironmentService_SyncRegistriesToRemoteEnvironments_SkipsRemoteWithou
 
 	var syncCalls atomic.Int32
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if serveCompatibleAgentVersion(t, w, r) {
+		if serveCompatibleAgentCheck(t, w, r) {
 			return
 		}
 		syncCalls.Add(1)
@@ -450,7 +450,7 @@ func TestEnvironmentService_SyncRegistriesToRemoteEnvironments_ReportsFailuresBu
 
 	var successCalls atomic.Int32
 	successServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if serveCompatibleAgentVersion(t, w, r) {
+		if serveCompatibleAgentCheck(t, w, r) {
 			return
 		}
 		successCalls.Add(1)
@@ -969,7 +969,7 @@ func newTestWebSocketTunnelInternal(t *testing.T, envID string) (*edge.AgentTunn
 
 	connCh := make(chan *websocket.Conn, 1)
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if serveCompatibleAgentVersion(t, w, r) {
+		if serveCompatibleAgentCheck(t, w, r) {
 			return
 		}
 		conn, err := websocket.Accept(w, r, nil)

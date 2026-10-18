@@ -142,6 +142,7 @@ export function HostCard({ host, system, stacks, containers, allIds, onFiles }: 
         <Row label={t("card.system")}>{host.os}</Row>
         <Row label={t("card.lastSeen")}>{host.status === "online" ? tc("online") : formatRelative(host.lastSeen)}</Row>
       </dl>
+      {host.status === "token-rejected" && <p role="status" className="text-sm text-destructive">{t("tokenRejected")}</p>}
       <AgentReportSection host={host} />
       {(system || !host.agentVersion && !host.agentReport) && <SystemSection component={system} />}
       <p className="text-xs text-muted-foreground">{t("card.usage", { stacks, containers })}</p>

@@ -1,6 +1,7 @@
 // American English texts of host management and host onboarding.
 
 export const enHosts = {
+  tokenRejected: "The agent rejected the current token. Install the newly issued token on the host and check the connection again.",
   title: "Hosts",
   description: "All connected hosts together. The host filter in the navigation only hides hosts – it does not switch environments.",
   add: "Add host",
@@ -20,6 +21,7 @@ export const enHosts = {
       title: "Agent’s local check",
       reported: (import.meta.env.DEV ? "Reported by the agent {time} · Simulation" : ""),
       reportedLive: "Reported by the agent {time}",
+      reportedTokenRejected: "Report {time} · agent token invalid",
       reportedUpdateRequired: "Report {time} – agent update required",
       reportedPending: "Report {time} – waiting for compatibility check",
       lastReported: "Last report {time} – host currently disconnected",

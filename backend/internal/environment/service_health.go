@@ -12,6 +12,7 @@ import (
 	"fmt"
 	"github.com/florianfinn/docklet-next/backend/internal/common"
 	"github.com/florianfinn/docklet-next/backend/pkg/libarcane/edge"
+	"github.com/florianfinn/docklet-next/backend/pkg/remenv"
 	"github.com/florianfinn/docklet-next/backend/pkg/scheduler/jobcontext"
 	"github.com/florianfinn/docklet-next/backend/pkg/scheduler/runs"
 	"github.com/florianfinn/docklet-next/types/scheduler"
@@ -222,6 +223,9 @@ func (s *EnvironmentService) TestConnection(ctx context.Context, id string, cust
 		if _, err := s.CheckAgentCompatibility(reqCtx, id); err != nil {
 			if errors.Is(err, ErrAgentUpdateRequired) {
 				return string(EnvironmentStatusUpdateRequired), nil
+			}
+			if !envRecord.IsEdge && errors.Is(err, remenv.ErrAgentInvalidToken) {
+				return string(EnvironmentStatusTokenRejected), err
 			}
 			_ = s.updateEnvironmentStatusInternal(ctx, id, "offline")
 			return "offline", err

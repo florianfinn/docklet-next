@@ -16,8 +16,15 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func serveCompatibleAgentVersion(t *testing.T, w http.ResponseWriter, r *http.Request) bool {
+func serveCompatibleAgentCheck(t *testing.T, w http.ResponseWriter, r *http.Request) bool {
 	t.Helper()
+	if r.URL.Path == "/api/environments/0/system/health" {
+		require.Equal(t, http.MethodHead, r.Method)
+		require.NotEmpty(t, r.Header.Get("X-Arcane-Agent-Token"))
+		require.Equal(t, r.Header.Get("X-Arcane-Agent-Token"), r.Header.Get("X-API-Key"))
+		w.WriteHeader(http.StatusOK)
+		return true
+	}
 	if r.URL.Path != "/api/app-version" {
 		return false
 	}

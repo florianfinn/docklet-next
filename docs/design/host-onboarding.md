@@ -286,11 +286,17 @@ reason. Reconnection replaces the values on the next successful read. Source:
 
 The agent contract and minimum are version 3. The version fixture in
 `types/contract/testdata/agent-hub-v3.json` owns the fingerprint. The hub checks
-`/api/app-version` before ordinary requests and registry or configuration
+`/api/app-version` and, for direct hosts, the token-protected
+`HEAD /api/environments/0/system/health` before ordinary requests and registry or configuration
 synchronisation. The credential session (token, endpoint and key ID) is revoked
 on credential changes, endpoint changes, disablement or removal. Compatibility
 verdicts are cached within that session for the concrete Edge tunnel and refreshed
-on Edge connect and health checks. Ordinary Edge requests acquire a concrete tunnel
+on Edge connect and health checks. Direct hosts become online only after the
+protected probe succeeds with the current token. A probe returning 401 or 403 sets
+`token-rejected` without advancing `last_seen`; the host card and onboarding show
+the credential rejection in English and German. Failed probes are retried on the
+next check, and retained inventory snapshots keep their existing stale semantics.
+Ordinary Edge requests acquire a concrete tunnel
 before checking compatibility; a tunnel change invalidates its verdict without
 cancelling requests or streams in the credential session. An update-required verdict
 replaces prior compatibility and blocks ordinary forwarding until a fresh check succeeds. Below-minimum agents and same-version fingerprint mismatches

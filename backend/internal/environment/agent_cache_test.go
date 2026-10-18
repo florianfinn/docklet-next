@@ -41,6 +41,11 @@ func TestAgentCompatibilityCachedPerSession(t *testing.T) {
 			}
 			require.Equal(t, 1, f.count("GET /api/app-version"))
 			require.Equal(t, 6, f.count("GET /api/environments/0/containers"))
+			if mode == "direct" {
+				require.Equal(t, 1, f.count("HEAD /api/environments/0/system/health"))
+			} else {
+				require.Zero(t, f.count("HEAD /api/environments/0/system/health"), "Edge keeps its tunnel credential proof")
+			}
 			require.Equal(t, 1, writes, "cached requests must not update the database")
 			select {
 			case <-changes:

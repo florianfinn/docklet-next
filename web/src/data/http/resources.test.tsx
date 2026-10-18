@@ -142,8 +142,8 @@ it.each(["de", "en-US"] as const)("shows retained inventory notices in %s", asyn
   await waitFor(() => expect(screen.getByRole("status").textContent?.includes(locale === "de" ? "Agent-Update erforderlich" : "Agent update required")).toBe(true));
   expect(screen.getByRole("status").textContent?.includes(locale === "de" ? "Stand" : "as of")).toBe(true);
 });
-it("leaves measurements absent until the first observed sample and blocks incompatible-host streams", async () => {
-  vi.useFakeTimers(); const f = resourceFixture(); f.state.status = "update-required";
+it.each(["update-required", "token-rejected"])("leaves measurements absent and blocks %s host streams", async (status) => {
+  vi.useFakeTimers(); const f = resourceFixture(); f.state.status = status;
   let snapshot: MetricsSnapshot | undefined;
   const stop = f.adapter.subscribeMetrics((s) => { snapshot = s; });
   await vi.advanceTimersByTimeAsync(0);
