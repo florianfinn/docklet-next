@@ -122,7 +122,7 @@ machine routes already keep their own contract ([identity](identity.md)).
 | Rotation | Regenerate action in the artefact view: new key, host set to `pending`, old key deleted, Edge token cache synced; the operator reruns the install or edits `.env` | Arcane (`RegenerateEnvironmentApiKey`); reference button in `InstallArtifacts.tsx`, live wiring **new** |
 | Rotation, sessions | Established tunnels and proxied streams of the host are closed; the new token is never sent through a session authenticated with the old one | **New**, #81 (review decision B2 in the threat review) |
 | Pending | A `pending` host's token stays valid with no expiry; deleting the host revokes it | Arcane |
-| Removal | Deleting a host cascades its key; the hub API and Edge registration then reject new authentication with it | Arcane |
+| Removal | Workloads do not prevent removal; containers and stacks keep running on the host. Only the hub registration and credential are removed. Deleting a host cascades its key; the hub API and Edge registration then reject new authentication with it | Arcane |
 | Removal, sessions | Established tunnels and proxied streams of the host are closed | **New**, #81 (review decision B2) |
 
 Rotation and deletion produce environment events
@@ -320,7 +320,14 @@ carry the successful read time. Read adapters own their list payloads. Stored
 bytes are copied at both boundaries. Disconnects retain snapshots, the next
 successful read replaces them, and host removal forgets them. A new hub process
 starts with an empty store and no agent reports; persisted `last_seen` remains
-the last successful contact, and failed checks do not advance it.
+the last successful contact, and failed checks do not advance it. Disconnected
+Edge inventory reads return a matching snapshot immediately. Without a matching
+snapshot, they wait at most one second for tunnel recovery before reporting
+unavailable. Pending hosts return a matching snapshot or unavailable immediately,
+without agent I/O or tunnel recovery. Inventory readers include pending hosts
+because token rotation and Edge reconnect also enter that state. Initial list
+queries publish completed hosts progressively; background
+refetches retain the cached list until all hosts finish.
 
 ## Decisions
 

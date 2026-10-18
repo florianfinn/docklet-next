@@ -440,6 +440,7 @@ func (s *ContainerService) GetContainerDetails(ctx context.Context, id string) (
 	}
 
 	details := containertypes.NewDetails(containerInspect)
+	details.Ports = mergePortBindings(details.Ports)
 	currentContainerID, currentContainerErr := cgroup.CurrentContainerID()
 	details.RedeployDisabled = labels.ShouldDisableArcaneServerRedeploy(details.Labels, details.ID, currentContainerID, currentContainerErr)
 	var excluded map[string]bool

@@ -54,10 +54,10 @@ export function mapContainer(row: ContainerRow, hostId: string, projects: Projec
   return {
     imageId: row.imageId ? inventoryId(hostId, row.imageId) : undefined,
     id: inventoryId(hostId, row.id), name: row.names[0].replace(/^\//, ""), hostId,
-    ...(owner && origin === "compose" ? { stackId: inventoryId(hostId, owner.id) } : {}),
+    ...(owner && origin === "compose" ? { stackId: inventoryId(hostId, owner.id), stackName: owner.name } : {}),
     ...(service ? { serviceName: service } : {}), origin, image,
     state: state(row.state), health: health(row.status),
-    ports: (row.ports ?? []).map((port) => ({ container: String(port.privatePort), ...(port.publicPort ? { host: String(port.publicPort) } : {}), ...(port.type === "tcp" || port.type === "udp" ? { protocol: port.type } : {}) })),
+    ports: (row.ports ?? []).filter((port, index, ports) => ports.findIndex((other) => other.publicPort === port.publicPort && other.privatePort === port.privatePort && other.type === port.type) === index).map((port) => ({ container: String(port.privatePort), ...(port.publicPort ? { host: String(port.publicPort) } : {}), ...(port.type === "tcp" || port.type === "udp" ? { protocol: port.type } : {}) })),
     networks: Object.keys(row.networkSettings?.networks ?? {}), mounts: (row.mounts ?? []).map((mount) => mount.name || mount.destination),
     env: {}, restartPolicy: row.hostConfig?.restartPolicy ?? "", memLimitMb: (row.hostConfig?.memory ?? 0) / 1024 / 1024,
     update: { state: "unchecked", current: image }, dockerLabels: labels, inventory,
@@ -68,13 +68,13 @@ export function mapContainer(row: ContainerRow, hostId: string, projects: Projec
 export function mapStack(row: ProjectRow, hostId: string, containers: ContainerInfo[], inventory: InventoryObservation): Stack {
   if (!row?.id || !row.name || typeof row.status !== "string") throw new Error("inventory.invalid-project");
   const members = containers.filter((item) => item.dockerLabels?.["com.docker.compose.project"] === row.name || row.runtimeServices?.some((runtime) => item.id === inventoryId(hostId, runtime.containerId || "absent")));
-  const services: Service[] = (row.runtimeServices ?? []).map((runtime) => {
+  const services: Service[] = (row.runtimeServices?.length ? row.runtimeServices : members.map((c) => ({ name: c.serviceName ?? c.name, image: `${c.image.repository}:${c.image.tag}`, status: c.state, health: c.health, containerId: splitInventoryId(c.id)[1] }))).map((runtime) => {
     const container = members.find((item) => item.id === inventoryId(hostId, runtime.containerId || "absent"));
     const image = imageVersion(runtime.image);
     return { name: runtime.name, image, state: state(runtime.status), health: runtime.health === "healthy" || runtime.health === "unhealthy" || runtime.health === "starting" ? runtime.health : container?.health ?? "none",
       ports: container?.ports ?? [], networks: container?.networks ?? [], restartPolicy: container?.restartPolicy ?? "", memLimitMb: container?.memLimitMb ?? 0, restarts24h: 0,
       update: { state: "unchecked", current: image } };
   });
-  return { id: inventoryId(hostId, row.id), hostId, name: row.name, labels: (row.tags ?? []).map((tag) => tag.name), services, autoUpdate: { mode: "check" }, inventory,
+  return { id: inventoryId(hostId, row.id), hostId, name: row.name, path: row.path, reportedStatus: row.status, serviceCount: row.serviceCount, runningCount: row.runningCount, deployHistoryUnavailable: true, labels: (row.tags ?? []).map((tag) => tag.name), services, autoUpdate: { mode: "check" }, inventory,
     ...(members.some((item) => item.dockerLabels?.[SYSTEM_LABEL] === "agent") ? { dockerLabels: { [SYSTEM_LABEL]: "agent" } } : {}) };
 }

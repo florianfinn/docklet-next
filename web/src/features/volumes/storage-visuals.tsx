@@ -69,7 +69,7 @@ export function ConsumerChips({ volume, max = 3, className }: { volume: Pick<Vol
           className="inline-flex max-w-full items-center gap-1 rounded-md border bg-background/50 px-1.5 py-0.5 text-[11.5px] outline-none hover:border-primary/50 hover:text-primary-text focus-visible:ring-2 focus-visible:ring-ring"
         >
           {c.stackId ? <Layers className="size-3 shrink-0 text-muted-foreground" aria-hidden /> : <Box className="size-3 shrink-0 text-muted-foreground" aria-hidden />}
-          <span className="min-w-0 [overflow-wrap:anywhere]">{c.stackId && c.service ? `${c.stackId}/${c.service}` : c.containerName}</span>
+          <span className="min-w-0 [overflow-wrap:anywhere]">{c.stackId && c.service ? `${c.stackName ?? c.stackId}/${c.service}` : c.containerName}</span>
           {!c.running && <span className="size-1.5 shrink-0 rounded-full bg-muted-foreground" aria-hidden />}
         </Link>
       ))}

@@ -119,7 +119,7 @@ export function OverviewTab({ stack, host }: { stack: StackDetail; host: Host | 
               </dd>
               <dt className="text-muted-foreground">{t("projectDir")}</dt>
               <dd className="font-mono text-xs break-all">
-                {host?.projectDir}/{stack.id}
+                {stack.path ?? `${host?.projectDir}/${stack.name}`}
               </dd>
               {stack.url && (
                 <>

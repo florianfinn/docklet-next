@@ -6,6 +6,11 @@ export function stackStatus(stack: Stack, host: Host | undefined): StackStatus {
   if (stack.busyActionId) return "busy";
   if (host?.status === "offline") return "unreachable";
   if (stack.services.some((s) => s.health === "unhealthy" || s.state === "restarting")) return "problem";
+  if (stack.reportedStatus) {
+    if (stack.reportedStatus === "running") return "running";
+    if (stack.reportedStatus === "stopped") return "stopped";
+    return "partial";
+  }
   if (stack.services.every((s) => s.state === "stopped")) return "stopped";
   if (stack.services.some((s) => s.state !== "running")) return "partial";
   return "running";
@@ -49,5 +54,5 @@ export function containerRuntime(container: ContainerInfo, host: Host | undefine
 }
 
 export function runningCount(stack: Stack): number {
-  return stack.services.filter((s) => s.state === "running").length;
+  return stack.runningCount ?? stack.services.filter((s) => s.state === "running").length;
 }

@@ -128,7 +128,7 @@ export function ImageDetails({ id, image, host, onClose, onPull, onRemove }: Ima
                           {!c.system && (
                             <Button asChild size="sm" variant="ghost" className="h-7 text-xs">
                               <Link to={c.stackId ? `/stacks/${c.stackId}` : `/containers?c=${c.containerId}`} onClick={onClose}>
-                                {c.stackId ? `${c.stackId} · ${c.serviceName}` : t("menu.details")}
+                                {c.stackId ? `${c.stackName ?? c.stackId} · ${c.serviceName}` : t("menu.details")}
                                 <ArrowRight data-icon="inline-end" />
                               </Link>
                             </Button>

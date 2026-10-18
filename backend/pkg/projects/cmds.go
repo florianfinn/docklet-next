@@ -11,6 +11,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"slices"
 	"strings"
 	"time"
 
@@ -323,7 +324,7 @@ func FormatPorts(publishers []api.PortPublisher) []string {
 			ports = append(ports, fmt.Sprintf("%d/%s", pub.TargetPort, pub.Protocol))
 		}
 	}
-	return ports
+	return uniquePorts(ports)
 }
 
 // FormatDockerPorts renders container port summaries in the same shape as
@@ -337,5 +338,15 @@ func FormatDockerPorts(ports []container.PortSummary) []string {
 			res = append(res, fmt.Sprintf("%d:%d/%s", p.PublicPort, p.PrivatePort, p.Type))
 		}
 	}
-	return res
+	return uniquePorts(res)
+}
+
+func uniquePorts(values []string) []string {
+	var result []string
+	for _, value := range values {
+		if !slices.Contains(result, value) {
+			result = append(result, value)
+		}
+	}
+	return result
 }

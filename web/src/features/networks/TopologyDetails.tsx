@@ -143,7 +143,7 @@ export function TopologyDetails({ selected, topology, containers, hosts, onSelec
             )}
             {net.subnet6 && <Kv label={t("staticIp6")}>{net.subnet6Configured ? t("staticYes") : t("staticNo")}</Kv>}
             <Kv label={t("internal")}>{net.internal ? t("internalYes") : t("internalNo")}</Kv>
-            <Kv label={t("origin")}>{net.stackId ? t("stack", { name: net.stackId }) : net.builtIn ? t("standard") : t("own")}</Kv>
+            <Kv label={t("origin")}>{net.stackId ? t("stack", { name: net.stackName ?? net.stackId }) : net.builtIn ? t("standard") : t("own")}</Kv>
           </>
         ) : (
           container && (
@@ -262,7 +262,7 @@ export function TopologyDetails({ selected, topology, containers, hosts, onSelec
               <TooltipTrigger asChild>
                 <span tabIndex={0}>{removeButton}</span>
               </TooltipTrigger>
-              <TooltipContent className="max-w-64">{tn(`removeBlocked.${blocked}`, { stack: net.stackId ?? "", count: peers.length })}</TooltipContent>
+              <TooltipContent className="max-w-64">{tn(`removeBlocked.${blocked}`, { stack: net.stackName ?? net.stackId ?? "", count: peers.length })}</TooltipContent>
             </Tooltip>
           ) : (
             removeButton

@@ -1,17 +1,18 @@
 import { useCapability } from "@/data/use-capability";
 import { InventoryNotice } from "@/features/stacks/InventoryNotice";
-import { ArrowLeft, Boxes, Cpu, Layers, Lock, MemoryStick, Package, Pencil, Play, RotateCw, Square } from "lucide-react";
+import { ArrowLeft, Boxes, Cpu, Layers, Lock, Package, Pencil, Play, RotateCw, Square } from "lucide-react";
 import { useMemo, useState } from "react";
 import { Link, useParams } from "react-router";
 import { useTranslations } from "use-intl";
 
 import { useContainerLogs, useMetrics } from "@/data/live";
 import { useContainers } from "@/data/queries";
-import { formatMem, formatTime } from "@/domain/format";
+import { formatTime } from "@/domain/format";
 import type { ContainerInfo, Host } from "@/domain/model";
 import { containerRuntime, RUNTIME_TONE } from "@/domain/status";
 import { imageHref } from "@/features/images/image-links";
 import { HostChip } from "@/shared/components/host-chip";
+import { ContainerMemory } from "@/shared/components/container-memory";
 import { Meter } from "@/shared/components/meter";
 import { EmptyState, PageHeader, QueryError } from "@/shared/components/page";
 import { SimulationBadge } from "@/shared/components/simulation-badge";
@@ -162,7 +163,7 @@ function Body({ c, host }: { c: ContainerInfo; host: Host | undefined }) {
             </CardHeader>
             <CardContent className="grid grid-cols-2 gap-4 px-4">
               <Meter label="CPU" icon={<Cpu />} value={m?.cpu ?? 0} color={host?.color} />
-              <Meter label="RAM" icon={<MemoryStick />} value={m ? (m.memMb / Math.max(1, c.memLimitMb)) * 100 : 0} color={host?.color} sub={m ? `${formatMem(m.memMb)} / ${formatMem(c.memLimitMb)}` : undefined} />
+              <ContainerMemory usedMb={m?.memMb} limitMb={c.memLimitMb} color={host?.color} />
             </CardContent>
           </Card>
           <Card className="gap-0 overflow-hidden py-0">

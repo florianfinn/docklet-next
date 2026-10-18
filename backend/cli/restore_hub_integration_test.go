@@ -54,3 +54,21 @@ func TestRestoreHubCommandIntoEmptyDatabase(t *testing.T) {
 	require.NoError(t, restarted.Raw("SELECT value FROM settings WHERE key='cli-restore-example'").Scan(&value).Error)
 	require.Equal(t, "saved", value)
 }
+
+func TestD11RestoreHubValidationPrintsErrorWithoutUsage(t *testing.T) {
+	restoreHubCmd.SetContext(t.Context())
+	t.Cleanup(func() { restoreHubCmd.SetContext(nil) })
+	rootCmd.SetArgs([]string{"restore-hub", "--backup-id", "missing-example"})
+	t.Setenv("DATABASE_URL", sqlitestore.URL(filepath.Join(t.TempDir(), "target.db")))
+	t.Setenv("DOCKLET_BACKUP_DIR", t.TempDir())
+	t.Setenv("DOCKER_CONFIG", filepath.Join(t.TempDir(), "docker-config"))
+	t.Setenv("PROJECTS_DIRECTORY", filepath.Join(t.TempDir(), "projects"))
+	var output bytes.Buffer
+	rootCmd.SetOut(&output)
+	rootCmd.SetErr(&output)
+	t.Cleanup(func() { rootCmd.SetOut(nil); rootCmd.SetErr(nil); rootCmd.SetArgs(nil) })
+	require.Error(t, rootCmd.ExecuteContext(t.Context()))
+	require.Contains(t, output.String(), "backup.invalid_archive")
+	require.NotContains(t, output.String(), "Usage:")
+	require.NotContains(t, output.String(), "Flags:")
+}

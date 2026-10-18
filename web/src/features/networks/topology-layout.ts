@@ -134,7 +134,7 @@ export function layoutHost({ topology, containers, host, expanded, budget = Infi
   const sizeOf = new Map(
     [...byId.values()].map((c) => {
       const status = containerRuntime(c, host);
-      return [c.id, { status, ...containerSize({ title: c.serviceName ?? c.name, meta: `${c.stackId ?? c.origin} · ${status.padEnd(12)}`, rows: rowsOf.get(c.id) ?? [] }) }];
+      return [c.id, { status, ...containerSize({ title: c.serviceName ?? c.name, meta: `${c.stackName ?? c.stackId ?? c.origin} · ${status.padEnd(12)}`, rows: rowsOf.get(c.id) ?? [] }) }];
     }),
   );
   const netSize = new Map(nets.map((n) => [n.id, networkSize(n)]));
@@ -288,7 +288,7 @@ export function decorate(layout: HostLayout, { query, onlyProblems, focus, showD
       return dim === d.dim && !!n.selected === selected ? n : { ...n, selected, data: { ...d, dim } };
     }
     const d = n.data;
-    const hay = `${d.container.name} ${d.container.stackId ?? ""}`.toLowerCase();
+    const hay = `${d.container.name} ${d.container.stackName ?? d.container.stackId ?? ""}`.toLowerCase();
     const dim = (!!focus && !neighbours.has(n.id)) || (!!q && !hay.includes(q)) || (onlyProblems && !PROBLEM.has(d.status));
     const found = addressesOf.get(n.id);
     // Unchanged nodes keep their identity, so memoised node components skip the repaint.

@@ -96,7 +96,7 @@ it.each([ImagesPage, VolumesPage, NetworksPage])("filters the rendered list page
 });
 it("maps measured host units, retains two hosts, then recovers from disconnect", async () => {
   vi.useFakeTimers();
-  const f = resourceFixture(); let snapshot: MetricsSnapshot | undefined;
+  const f = resourceFixture(); const stopChanges = f.adapter.subscribeChanges(() => {}); let snapshot: MetricsSnapshot | undefined;
   const stop = f.adapter.subscribeMetrics((s) => { snapshot = s; });
   await vi.advanceTimersByTimeAsync(0);
   expect(f.webSocket).toHaveBeenCalledTimes(2);
@@ -106,11 +106,12 @@ it("maps measured host units, retains two hosts, then recovers from disconnect",
   expect(snapshot?.hosts.second?.cpu).toBe(50);
   expect(snapshot?.containers["first~web"]).toEqual({ cpu: 2.5, memMb: 100 });
   const observedAt = snapshot?.hosts.first?.inventory?.observedAt;
-  f.state.status = "offline"; await vi.advanceTimersByTimeAsync(5000);
+  f.state.status = "offline"; f.source.onmessage?.({ data: JSON.stringify({ timestamp: at, channel: "environments" }), lastEventId: "" } as MessageEvent); await vi.advanceTimersByTimeAsync(5000);
   expect(snapshot?.hosts.first).toMatchObject({ cpu: 25, inventory: { stale: true, observedAt, reason: "agent.unavailable" } });
-  f.state.status = "online"; await vi.advanceTimersByTimeAsync(5000); f.sample("first", 35);
+  f.state.status = "online"; f.source.onmessage?.({ data: JSON.stringify({ timestamp: at, channel: "environments" }), lastEventId: "" } as MessageEvent); await vi.advanceTimersByTimeAsync(5000); f.sample("first", 35);
   expect(snapshot?.hosts.first).toMatchObject({ cpu: 35, inventory: { stale: false } });
   stop(); expect([...f.sockets.values()].every((s) => vi.mocked(s.close).mock.calls.length > 0)).toBe(true);
+  stopChanges();
 });
 it("rejects malformed metrics and keeps unknown disk/growth explicitly unavailable", () => {
   expect(() => mapHostMetrics({ cpuUsage: "bad" }, "first")).toThrow();

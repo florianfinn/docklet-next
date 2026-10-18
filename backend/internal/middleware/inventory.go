@@ -18,6 +18,17 @@ import (
 	"github.com/labstack/echo/v5"
 )
 
+// A cold inventory read waits at most one second for an Edge agent to reconnect.
+func (m *EnvironmentMiddleware) recoverInventoryTunnel(c *echo.Context, hostID, suffix string) bool {
+	edge.TouchTunnelDemand(hostID, edge.DefaultTunnelDemandTTL)
+	key := hoststate.Key{HostID: hostID, List: suffix + "?" + c.Request().URL.Query().Encode()}
+	if _, cached := m.snapshots.Get(key); cached {
+		return false
+	}
+	_, recovered := m.waitForActiveEdgeTunnelInternal(c.Request().Context(), hostID, time.Second).Get()
+	return recovered
+}
+
 // Inventory reads retain only successful JSON responses, after caller authorization.
 func (m *EnvironmentMiddleware) inventoryRead(c *echo.Context, hostID string, forward func() error) error {
 	suffix := m.buildResourceSuffix(c.Request().URL.Path, hostID)

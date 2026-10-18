@@ -19,9 +19,10 @@ import (
 var restoreHubBackupID string
 
 var restoreHubCmd = &cobra.Command{
-	Use:   "restore-hub",
-	Short: "Restore a trusted local Hub archive before starting HTTP",
-	Args:  cobra.NoArgs,
+	Use:          "restore-hub",
+	SilenceUsage: true,
+	Short:        "Restore a trusted local Hub archive before starting HTTP",
+	Args:         cobra.NoArgs,
 	RunE: func(cmd *cobra.Command, _ []string) error {
 		if restoreHubBackupID == "" {
 			return errors.New("backup ID is required")

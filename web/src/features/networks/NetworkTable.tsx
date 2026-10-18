@@ -68,7 +68,7 @@ export function NetworkTable({ host, networks, topology, containers, focus, quer
     return out;
   }, [topology.attachments]);
   const memberNames = useMemo(() => {
-    const names = new Map(containers.map((c) => [c.id, [c.name, c.serviceName ?? "", c.stackId ?? ""]]));
+    const names = new Map(containers.map((c) => [c.id, [c.name, c.serviceName ?? "", c.stackName ?? c.stackId ?? ""]]));
     const out = new Map<string, string[]>();
     for (const a of topology.attachments) out.set(a.networkId, [...(out.get(a.networkId) ?? []), ...(names.get(a.containerId) ?? [])]);
     return out;

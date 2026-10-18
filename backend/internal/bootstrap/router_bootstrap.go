@@ -302,7 +302,7 @@ func newRouter(p RouterParams) (*echo.Echo, *edge.TunnelServer) {
 		}),
 		middleware.EnvironmentProxySecurity{Snapshots: inventorySnapshots, ProxyIdentityHeader: cfg.ProxyIdentityHeader(), AgentAccess: func(ctx context.Context, id string, token *string, method, path string) (context.Context, context.CancelFunc, error) {
 			return deps.Environment.Service().AgentAccess(ctx, id, token, method, path)
-		}},
+		}, InventoryPending: deps.Environment.Service().InventoryPending},
 	)
 	apiGroup.Use(envProxyMiddleware)
 

@@ -15,6 +15,7 @@ import { setPreference } from "@/shared/preferences/preferences-store";
 import { renderWithApp } from "@/test/render";
 import { createHttpAdapter } from "./http-adapter";
 import { mapActivityDetail, mapEvent } from "./map-dto";
+import { stackStatus } from "@/domain/status";
 import { inventoryId, mapContainer, type ContainerRow, type ProjectRow } from "./inventory-mapping";
 
 const at = "2026-10-17T12:00:00Z";
@@ -141,4 +142,26 @@ it("keeps activity and event resource links in the inventory host namespace", ()
   const event: components["schemas"]["EventEvent"] = { id: "event", type: "project.deploy", messageCode: "project.deploy", severity: "success", title: "Example", timestamp: at, createdAt: at, environmentId: "second", resourceType: "project", resourceId: "project" };
   expect(mapEvent(event).stackId).toBe(inventoryId("second", "project"));
   expect(mapEvent({ ...event, environmentId: undefined }).stackId).toBeUndefined();
+});
+
+it("D1 preserves project detail counts, state and path when runtime services are omitted", async () => {
+  const f = fixture(); const original = f.fetcher.getMockImplementation()!;
+  f.fetcher.mockImplementation(async (input) => {
+    const response = await original(input);
+    if (String(input).includes("/projects/project")) {
+      const body = await response.json(); delete body.data.runtimeServices;
+      return new Response(JSON.stringify(body), { headers: response.headers });
+    }
+    return response;
+  });
+  const detail = await f.adapter.getStack("second~project");
+  expect(detail).toMatchObject({ path: "/srv/projects/app", serviceCount: 1, runningCount: 1, reportedStatus: "running", deployHistoryUnavailable: true });
+  expect(detail.services.map((s) => [s.name, s.state])).toEqual([["web", "running"]]);
+  expect(stackStatus(detail, undefined)).toBe("running");
+});
+
+it("D6 merges address-family port duplicates while preserving protocol and port distinctions", () => {
+  const ports = [{ privatePort: 80, publicPort: 8080, type: "tcp", ip: "0.0.0.0" }, { privatePort: 80, publicPort: 8080, type: "tcp", ip: "::" }, { privatePort: 80, publicPort: 8080, type: "udp" }, { privatePort: 80, publicPort: 8081, type: "tcp" }];
+  const mapped = mapContainer({ ...container, ports }, "first", [project], { stale: false });
+  expect(mapped.ports).toEqual([{ host: "8080", container: "80", protocol: "tcp" }, { host: "8080", container: "80", protocol: "udp" }, { host: "8081", container: "80", protocol: "tcp" }]);
 });

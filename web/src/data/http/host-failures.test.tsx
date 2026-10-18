@@ -9,7 +9,7 @@ import { afterEach, expect, it, vi } from "vitest";
 import type { MetricsSnapshot } from "@/domain/model";
 import { InventoryNotice } from "@/features/stacks/InventoryNotice";
 import { renderWithApp } from "@/test/render";
-import { resourceFixture } from "./resources.test-support";
+import { at, resourceFixture } from "./resources.test-support";
 
 afterEach(() => vi.useRealTimers());
 
@@ -49,14 +49,15 @@ it.each(["http", "mapping"])("isolates %s failures in the metrics subscription w
 });
 
 it("maps unavailable local Docker to the unavailable reason and skips offline metrics reads", async () => {
-  vi.useFakeTimers(); const f = resourceFixture();
+  vi.useFakeTimers(); const f = resourceFixture(); const stopChanges = f.adapter.subscribeChanges(() => {});
   f.state.hostIds = ["first", "0"]; f.state.failureHost = "0"; f.state.failure = "http";
   expect((await f.adapter.listStacks()).map((s) => s.hostId)).toEqual(["first"]);
   expect((await f.adapter.listHosts()).find((h) => h.id === "0")?.inventory?.reason).toBe("agent.unavailable");
-  f.state.status = "offline"; f.fetcher.mockClear();
+  f.state.status = "offline"; f.source.onmessage?.({ data: JSON.stringify({ timestamp: at, channel: "environments" }), lastEventId: "" } as MessageEvent); f.fetcher.mockClear();
   const stop = f.adapter.subscribeMetrics(() => {});
   await vi.advanceTimersByTimeAsync(5000); stop();
   expect(f.fetcher.mock.calls.some(([url]) => String(url).includes("/containers"))).toBe(false);
+  stopChanges();
 });
 
 it.each(["/api/environments", "/api/capabilities"])("keeps hub-level %s failures visible", async (route) => {

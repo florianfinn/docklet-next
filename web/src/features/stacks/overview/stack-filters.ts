@@ -75,7 +75,7 @@ export function sortStacks(stacks: Stack[], hosts: Map<string, Host>, sort: Stac
         case "host":
           return hosts.get(s.hostId)?.name ?? s.hostId;
         case "services":
-          return s.services.length;
+          return s.serviceCount ?? s.services.length;
         case "updates":
           return summarizeUpdates(s.services).pending;
         case "load":

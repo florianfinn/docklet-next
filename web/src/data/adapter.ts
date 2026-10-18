@@ -63,9 +63,9 @@ export interface DockletAdapter extends AuthApi, HostsApi, VolumesApi, SettingsA
   getCapability(operationId: string, resourceRef?: ResourceRef): Promise<CapabilityDescriptor>;
 
   listHosts(): Promise<Host[]>;
-  listStacks(): Promise<Stack[]>;
+  listStacks(onPartial?: (rows: Stack[]) => void): Promise<Stack[]>;
   getStack(id: string): Promise<CodedStackDetail>;
-  listContainers(): Promise<ContainerInfo[]>;
+  listContainers(onPartial?: (rows: ContainerInfo[]) => void): Promise<ContainerInfo[]>;
   getSecurity(): Promise<SecurityOverview>;
   listEvents(): Promise<CodedEvent[]>;
   listSchedule(): Promise<ScheduledJob[]>;

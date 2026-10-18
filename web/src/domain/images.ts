@@ -8,6 +8,7 @@ export interface ImageConsumer {
   name: string;
   hostId: string;
   stackId?: string;
+  stackName?: string;
   serviceName?: string;
   state: ContainerState;
   /** Docklet's own agent; listed for honesty, never linked as a user workload. */

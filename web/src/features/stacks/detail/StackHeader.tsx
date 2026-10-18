@@ -48,8 +48,8 @@ export function StackHeader({ stack, host, inline = false }: { stack: StackDetai
           </div>
           <div className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
             <HostChip host={host} />
-            <span>{t("servicesCount", { count: stack.services.length })}</span>
-            <span>{t("deployed", { time: stack.lastDeployAt ? formatRelative(stack.lastDeployAt) : t("never") })}</span>
+            <span>{t("servicesCount", { count: stack.serviceCount ?? stack.services.length })}</span>
+            <span>{t("deployed", { time: stack.lastDeployAt ? formatRelative(stack.lastDeployAt) : t(stack.deployHistoryUnavailable ? "unknownDeploy" : "never") })}</span>
             {stack.url && (
               <ToneBadge tone="info" className="h-5 text-foreground">
                 <Globe className="text-info" aria-hidden /> {stack.url.replace(/^https?:\/\//, "")}

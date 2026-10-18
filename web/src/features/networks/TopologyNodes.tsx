@@ -147,7 +147,7 @@ export const ContainerNode = memo(function ContainerNode({ data, selected }: Nod
         </span>
       </div>
       <div className="mt-[2px] h-[15px] truncate text-[10.5px] leading-[15px] text-muted-foreground">
-        {container.stackId ?? container.origin} · {ts(status)}
+        {container.stackName ?? container.stackId ?? container.origin} · {ts(status)}
       </div>
       {addresses.length > 0 && <AddressLines addresses={addresses} />}
     </div>

@@ -150,6 +150,11 @@ export type AutoUpdateMode = "check" | "scheduled";
 export type AutoUpdatePolicy = { mode: "check" } | { mode: "scheduled"; schedule: Schedule };
 
 export interface Stack {
+  path?: string;
+  reportedStatus?: string;
+  serviceCount?: number;
+  runningCount?: number;
+  deployHistoryUnavailable?: boolean;
   inventory?: InventoryObservation;
   id: string;
   name: string;
@@ -262,6 +267,7 @@ export interface ContainerInfo {
   name: string;
   hostId: string;
   stackId?: string;
+  stackName?: string;
   serviceName?: string;
   origin: ContainerOrigin;
   /** Why origin is unclear or how it was detected; shown in explanations. */
@@ -420,6 +426,7 @@ export interface TopologyNetwork {
   builtIn?: boolean;
   /** Compose project that owns the network; Compose recreates or removes it. */
   stackId?: string;
+  stackName?: string;
 }
 
 export interface NetworkAttachment {
