@@ -222,3 +222,23 @@ it.each(["logout", "unsubscribe"])("ignores a held targeted completion after %s"
     else expect(resumed.mock.lastCall?.[0].find((r: CodedActionRun) => r.id === "run-good")?.status).toBe("running");
   } finally { off(); stop(); }
 });
+it("rejects valid cross-host details claiming the same run UUID without hiding an unrelated healthy run", async () => {
+  const f = activityFixture();
+  f.state.lists.good = [activity("good", "shared-run"), activity("good")];
+  f.state.lists.bad = [activity("bad", "shared-run")];
+  f.state.hold = async (path, response) => {
+    if (path.endsWith("/good/activities/shared-run")) return json(detail("good", "shared-run"));
+    if (path.endsWith("/bad/activities/shared-run")) return json(detail("bad", "shared-run"));
+    return response;
+  };
+  const health = vi.fn(); const stop = f.adapter.subscribeActionReadHealth!(health);
+  try {
+    expect((await f.adapter.listActions()).map((r) => [r.id, r.hostId])).toEqual([["run-good", "good"]]);
+    expect(health.mock.lastCall?.[0].failures).toEqual([
+      { hostId: "good", reason: "invalid-data" }, { hostId: "bad", reason: "invalid-data" },
+    ]);
+    f.state.lists.bad = [];
+    expect((await f.adapter.listActions()).map((r) => r.id)).toEqual(["shared-run", "run-good"]);
+    expect(health.mock.lastCall?.[0].failures).toEqual([]);
+  } finally { stop(); }
+});
