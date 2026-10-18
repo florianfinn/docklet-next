@@ -83,7 +83,7 @@ describe.each(["de", "en-US"] as const)("host polish (%s)", (locale) => {
 
   it.each(["direct", "edge"] as const)("uses row-specific missing values for a %s host", (connection) => {
     setAppLocale(locale);
-    const view = renderWithApp(<HostCard host={{ ...host, connection, address: "", status: "offline", lastSeen: undefined }} system={undefined} stacks={2} containers={3} allIds={[host.id]} />);
+    const view = renderWithApp(<HostCard host={{ ...host, connection, address: "", status: "offline", lastSeen: "" }} system={undefined} stacks={2} containers={3} allIds={[host.id]} />);
     const value = (label: string) => [...view.container.querySelectorAll("dt")].find((row) => row.textContent === label)?.nextElementSibling?.textContent;
     expect(value(locale === "de" ? "Adresse" : "Address")).toBe(connection === "edge"
       ? locale === "de" ? "Für Edge nicht erforderlich" : "Not required for Edge"
