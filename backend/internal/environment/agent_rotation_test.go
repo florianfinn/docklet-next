@@ -77,18 +77,19 @@ func TestDirectRotationRequiresCurrentAgentToken(t *testing.T) {
 				require.Equal(t, "online", env.Status)
 				require.NotNil(t, env.LastSeen)
 
+				lastSeen := env.LastSeen
 				f.service.apiKeys = apikey.NewApiKeyService(f.service.db, user.NewUserService(f.service.db, nil, nil), nil)
 				replacement, err := f.service.RegenerateEnvironmentApiKey(ctx, env, "operator", "operator")
 				require.NoError(t, err)
 				env, err = f.service.GetEnvironmentByIDCached(ctx, f.id)
 				require.NoError(t, err)
 				require.Equal(t, "pending", env.Status)
-				require.Nil(t, env.LastSeen)
+				require.Equal(t, lastSeen, env.LastSeen)
 				require.ErrorIs(t, check(), remenv.ErrAgentInvalidToken)
 				env, err = f.service.GetEnvironmentByIDCached(ctx, f.id)
 				require.NoError(t, err)
 				require.Equal(t, "token-rejected", env.Status)
-				require.Nil(t, env.LastSeen, "a rejected credential is not successful contact")
+				require.Equal(t, lastSeen, env.LastSeen, "a rejected credential must not replace the last successful contact")
 				require.Equal(t, 2, f.count("HEAD /api/environments/0/system/health"), "rotation invalidates the successful verdict")
 
 				assertRejectedRotationSnapshots(t, f)

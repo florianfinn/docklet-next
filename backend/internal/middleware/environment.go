@@ -657,7 +657,7 @@ func (m *EnvironmentMiddleware) abortEdgeTunnelUnavailable(c *echo.Context) erro
 		"success": false,
 		"code":    "agent.unavailable",
 		"data": map[string]any{
-			"error": "Edge agent is not connected",
+			"error": "Agent is not connected",
 		},
 	})
 }

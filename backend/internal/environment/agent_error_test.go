@@ -20,6 +20,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 )
@@ -104,21 +105,28 @@ func TestAgentForwardingFailureCodesAfterCompatibility(t *testing.T) {
 	for _, mode := range []string{"direct", "edge"} {
 		for _, status := range []int{http.StatusUnauthorized, http.StatusForbidden, 0} {
 			t.Run(mode+"/"+http.StatusText(status), func(t *testing.T) {
-				ctx, cancel := context.WithTimeout(t.Context(), 200*time.Millisecond)
+				ctx, cancel := context.WithCancel(t.Context())
 				defer cancel()
 				f := newAgentFixture(t, mode, version.Info{AgentContractVersion: contract.AgentHubVersion, AgentContractFingerprint: contract.AgentHubFingerprint})
 				_, err := f.service.CheckAgentCompatibility(ctx, f.id)
 				require.NoError(t, err)
+				var reached atomic.Bool
 				if mode == "direct" {
 					f.service.httpClient.Transport = agentRoundTrip(func(r *http.Request) (*http.Response, error) {
+						reached.Store(true)
 						if status == 0 {
+							// Cancel only after the forwarded request reaches the transport.
+							cancel()
 							return nil, errors.New("agent unreachable")
 						}
 						return &http.Response{StatusCode: status, Header: http.Header{}, Body: io.NopCloser(strings.NewReader("agent rejected credential")), Request: r}, nil
 					})
 				} else {
 					f.conn.send = func(m *edge.TunnelMessage) {
+						reached.Store(true)
 						if status == 0 {
+							// Cancel only after the forwarded request reaches the transport.
+							cancel()
 							return
 						}
 						pending, ok := f.tunnel.Pending.Load(m.ID)
@@ -136,6 +144,7 @@ func TestAgentForwardingFailureCodesAfterCompatibility(t *testing.T) {
 				router.GET("/api/environments/:id/containers", func(c *echo.Context) error { return c.NoContent(500) })
 				rec := httptest.NewRecorder()
 				router.ServeHTTP(rec, httptest.NewRequest("GET", "/api/environments/"+f.id+"/containers", nil).WithContext(ctx))
+				require.True(t, reached.Load(), "the forwarded request must reach the transport or tunnel")
 				if status == http.StatusForbidden {
 					require.Equal(t, http.StatusForbidden, rec.Code)
 					require.Equal(t, "agent rejected credential", rec.Body.String(), "authorization responses retain their original meaning")

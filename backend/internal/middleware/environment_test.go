@@ -71,7 +71,7 @@ func TestEnvironmentMiddleware_ReturnsBadGatewayForEdgeResourcesWithoutTunnel(t 
 	router.ServeHTTP(recorder, req)
 
 	assert.Equal(t, http.StatusBadGateway, recorder.Code)
-	assert.Contains(t, recorder.Body.String(), "Edge agent is not connected")
+	assert.Contains(t, recorder.Body.String(), "Agent is not connected")
 	assert.False(t, localHandlerHit)
 }
 
@@ -92,7 +92,7 @@ func TestEnvironmentMiddleware_ProxiesDashboardResourcesForRemoteEnvironments(t 
 	router.ServeHTTP(recorder, req)
 
 	assert.Equal(t, http.StatusBadGateway, recorder.Code)
-	assert.Contains(t, recorder.Body.String(), "Edge agent is not connected")
+	assert.Contains(t, recorder.Body.String(), "Agent is not connected")
 	assert.False(t, localHandlerHit)
 }
 
@@ -293,7 +293,7 @@ func TestEnvironmentMiddleware_ProxyWebSocketRejectsEdgeTargetsWithoutTunnel(t *
 	_ = middleware.proxyWebSocket(c, "edge://oracle-1/api/environments/0/ws/system/stats", nil, "env-edge")
 
 	assert.Equal(t, http.StatusBadGateway, recorder.Code)
-	assert.Contains(t, recorder.Body.String(), "Edge agent is not connected")
+	assert.Contains(t, recorder.Body.String(), "Agent is not connected")
 }
 
 func TestEnvironmentMiddleware_ProxyHTTPRejectsEdgeTargetsWithoutTunnel(t *testing.T) {
@@ -306,7 +306,7 @@ func TestEnvironmentMiddleware_ProxyHTTPRejectsEdgeTargetsWithoutTunnel(t *testi
 	_ = middleware.proxyHTTP(c, "edge://oracle-1/api/environments/0/containers", nil)
 
 	assert.Equal(t, http.StatusBadGateway, recorder.Code)
-	assert.Contains(t, recorder.Body.String(), "Edge agent is not connected")
+	assert.Contains(t, recorder.Body.String(), "Agent is not connected")
 }
 
 func TestEnvironmentMiddleware_CreateProxyRequest_RejectsInvalidProxyTarget(t *testing.T) {

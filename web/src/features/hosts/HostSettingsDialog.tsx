@@ -3,7 +3,7 @@ import { useState, type ReactNode } from "react";
 import { toast } from "sonner";
 import { useTranslations } from "use-intl";
 
-import { errorCode } from "@/data/api";
+import { useHostError } from "./use-host-error";
 import { useAdapter } from "@/data/use-adapter";
 import { formatMem, formatPorts, formatRelative, formatTime } from "@/domain/format";
 import type { Host } from "@/domain/model";
@@ -119,7 +119,7 @@ function AgentPanel({ host, component }: { host: Host; component: SystemComponen
  */
 export function HostSettingsDialog({ host, component, open, onOpenChange }: { host: Host; component: SystemComponent | undefined; open: boolean; onOpenChange: (open: boolean) => void }) {
   const t = useTranslations("hosts.settings");
-  const te = useTranslations("hosts.errors");
+  const errorText = useHostError();
   const adapter = useAdapter();
   const [name, setName] = useState(host.name);
   const [color, setColor] = useState(host.color);
@@ -152,8 +152,7 @@ export function HostSettingsDialog({ host, component, open, onOpenChange }: { ho
       toast.success(t("saved", { name: saved.name }));
       onOpenChange(false);
     } catch (e) {
-      const code = errorCode(e);
-      setServerError(code === "exists" || code === "invalid-name" || code === "invalid-color" || code === "not-found" ? te(code) : String(e));
+      setServerError(errorText(e));
     } finally {
       setSaving(false);
     }
