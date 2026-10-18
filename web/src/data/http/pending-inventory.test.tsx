@@ -10,13 +10,14 @@ import { resourceFixture } from "./resources.test-support";
 
 afterEach(() => vi.useRealTimers());
 
-it.each([false, true])("A-N5 skips inventory for pending registrations (Edge=%s)", async (isEdge) => {
+it.each([false, true])("A-N5 reads pending registrations without snapshots while other hosts remain populated (Edge=%s)", async (isEdge) => {
  vi.useFakeTimers();
  const f = resourceFixture();
  const original = f.fetcher.getMockImplementation()!;
  f.fetcher.mockImplementation(async (input) => {
-  const response = await original(input);
   const url = new URL(String(input), "https://hub.example.com");
+  if (url.pathname.startsWith("/api/environments/second/")) return new Response(JSON.stringify({ success: false, code: "agent.unavailable" }), { status: 502 });
+  const response = await original(input);
   if (url.pathname === "/api/capabilities") {
    const body = await response.json();
    body.data.push({ operationId: "getStack", available: true, resourceRef: { kind: url.searchParams.get("kind") ?? "hub", id: url.searchParams.get("id") ?? "0" } });
@@ -42,7 +43,9 @@ it.each([false, true])("A-N5 skips inventory for pending registrations (Edge=%s)
    await expect(adapter.getVolume("second~data")).rejects.toBeDefined();
    await act(() => vi.advanceTimersByTimeAsync(10_000));
   }
-  expect(reads()).toHaveLength(0);
+  expect(reads().length).toBeGreaterThan(0);
+  const host = (await adapter.listHosts()).find((row) => row.id === "second");
+  expect(host?.inventory).toEqual({ stale: true, reason: "agent.unavailable" });
   expect(f.webSocket.mock.calls.some(([url]) => url.includes("second"))).toBe(false);
   // The next environment snapshot admits the host as soon as pairing completes.
   f.fetcher.mockImplementation(original);

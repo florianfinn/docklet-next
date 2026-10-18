@@ -607,3 +607,12 @@ func (s *EnvironmentService) GetEnabledRegistryCredentials(ctx context.Context) 
 
 // ReadSnapshots shares successful inventory reads with the owning read adapters.
 func (s *EnvironmentService) ReadSnapshots() *hoststate.Store { return &s.snapshots }
+
+// InventoryPending keeps unpaired credentials off the ordinary inventory path.
+func (s *EnvironmentService) InventoryPending(ctx context.Context, id string) (bool, error) {
+	env, err := s.GetEnvironmentByIDCached(ctx, id)
+	if err != nil {
+		return false, err
+	}
+	return env.Status == string(EnvironmentStatusPending), nil
+}

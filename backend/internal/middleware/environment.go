@@ -89,6 +89,7 @@ type EnvironmentMiddleware struct {
 	checkOrigin         func(*http.Request) bool
 	proxyIdentityHeader string
 	snapshots           *hoststate.Store
+	inventoryPending    func(context.Context, string) (bool, error)
 	agentAccess         remenv.AgentAccessCheck
 }
 
@@ -121,6 +122,7 @@ func NewEnvProxyMiddlewareWithParamAndRegistry(
 		m.proxyIdentityHeader = options[0].ProxyIdentityHeader
 		m.agentAccess = options[0].AgentAccess
 		m.snapshots = options[0].Snapshots
+		m.inventoryPending = options[0].InventoryPending
 		if options[0].HTTPClient != nil {
 			m.httpClient = options[0].HTTPClient
 		}
@@ -202,8 +204,16 @@ func (m *EnvironmentMiddleware) hasActiveEdgeTunnelInternal(envID string) bool {
 func (m *EnvironmentMiddleware) forwardInventoryRequest(c *echo.Context, envID, apiURL string, accessToken *string) error {
 
 	suffix := m.buildResourceSuffix(c.Request().URL.Path, envID)
+	// Pending credentials retain snapshots without probing an unpaired agent.
+	inventory := m.snapshots != nil && c.Request().Method == http.MethodGet && inventorySuffix(suffix, strings.Split(strings.Trim(suffix, "/"), "/"))
+	if inventory && m.inventoryPending != nil {
+		pending, err := m.inventoryPending(c.Request().Context(), envID)
+		if err != nil || pending {
+			return m.abortEdgeTunnelUnavailable(c)
+		}
+	}
 	// Cached inventory answers immediately; cold reads allow bounded tunnel recovery.
-	edgeInventory := m.snapshots != nil && isEdgeEnvironmentURLInternal(apiURL) && c.Request().Method == http.MethodGet && inventorySuffix(suffix, strings.Split(strings.Trim(suffix, "/"), "/"))
+	edgeInventory := inventory && isEdgeEnvironmentURLInternal(apiURL)
 	if edgeInventory && !m.hasActiveEdgeTunnelInternal(envID) && !m.recoverInventoryTunnel(c, envID, suffix) {
 		return m.abortEdgeTunnelUnavailable(c)
 	}
@@ -779,6 +789,7 @@ func (m *EnvironmentMiddleware) writeProxyResponse(c *echo.Context, resp *http.R
 // EnvironmentProxySecurity supplies hub-owned identity and agent access boundaries.
 type EnvironmentProxySecurity struct {
 	Snapshots           *hoststate.Store
+	InventoryPending    func(context.Context, string) (bool, error)
 	HTTPClient          *http.Client
 	ProxyIdentityHeader string
 	AgentAccess         remenv.AgentAccessCheck

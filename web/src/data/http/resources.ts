@@ -25,7 +25,7 @@ export function createResourceReader(baseUrl: string, fetcher: typeof fetch, hos
   async function aggregate<T>(operation: string, load: (host: Host) => Promise<T[]>, onPartial?: (rows: T[]) => void): Promise<T[]> {
     await requireCapability(operation);
     const completed: T[] = [];
-    const batches = await Promise.all((await hosts()).filter((host) => host.status !== "pending").map(async (host) => {
+    const batches = await Promise.all((await hosts()).map(async (host) => {
       try { const rows = await load(host); completed.push(...rows); onPartial?.([...completed]); return rows; }
       catch (error) {
         onState(host.id, inventoryFailure(host.id, error));

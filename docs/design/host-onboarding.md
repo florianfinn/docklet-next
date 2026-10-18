@@ -323,8 +323,10 @@ starts with an empty store and no agent reports; persisted `last_seen` remains
 the last successful contact, and failed checks do not advance it. Disconnected
 Edge inventory reads return a matching snapshot immediately. Without a matching
 snapshot, they wait at most one second for tunnel recovery before reporting
-unavailable. Web inventory readers skip pending registrations until pairing
-completes. Initial list queries publish completed hosts progressively; background
+unavailable. Pending hosts return a matching snapshot or unavailable immediately,
+without agent I/O or tunnel recovery. Inventory readers include pending hosts
+because token rotation and Edge reconnect also enter that state. Initial list
+queries publish completed hosts progressively; background
 refetches retain the cached list until all hosts finish.
 
 ## Decisions
