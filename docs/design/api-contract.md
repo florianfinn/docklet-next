@@ -39,7 +39,7 @@ the mapping and its contract tests before that feature claims live data.
 | `ProjectDeployOptions`, `ProjectCreateReponse`, `SystemConvertDockerRunResponse` | `DeployInput`, `ImportResult` | UI drafts and imports need lossless Compose fields and action identity. | Planned M7 Stack authoring and deployment |
 | Single-container `MessageResponse`; bulk `ContainerActionResult` remains separate | `ActionRun`, `runContainerCommand` | Single start/stop/restart need durable admission IDs; bulk partial results do not prove a single run succeeded. Edit/health/recreation are outside this mapping. | [M6 runtime control](runtime-control.md) |
 | Project lifecycle NDJSON and message responses | `runStackCommand`, `StackCommand` | Start→deploy/up, stop→down, restart and redeploy need guarded admission; preserve legacy stream/message callers. | [M6 runtime control](runtime-control.md) |
-| Echo WS JSON `LogMessage` (outside OpenAPI) | `LogLine`, `subscribeLogs`, `subscribeContainerLogs` | Add source epoch/stream/time-origin mapping; seq is source arrival order, without cross-service chronology or durable replay. | [M6 runtime control](runtime-control.md) |
+| Echo WS JSON `LogMessage` (outside OpenAPI) | `LogLine`, `subscribeLogs`, `subscribeContainerLogs` | Use subscription-attempt/seq identity and optional stream/truncation metadata; seq is arrival order, without cross-service chronology or durable replay. | [M6 runtime control](runtime-control.md) |
 | `WorkspaceFileEntry`, `WorkspaceFileContent` | `DirListing`, `FileContent`, `VolumesApi` | Wire file entries need tree, path and editable-content projections. | Planned M8 Storage and file workspace |
 | `VolumeVolume` | `Volume`, `VolumeDetail` | Storage kind and consumers need a host-aware projection. | Planned M8 Storage and file workspace |
 | No volume-prune preview DTO | `VolumePrunePlan`, `VolumesApi` | Candidate reasons and execution re-check results need a server contract. | Planned M8 Storage and file workspace |
@@ -71,10 +71,16 @@ resolves each mapping when its endpoint and UI slice are implemented.
 
 [Runtime control](runtime-control.md) specifies proposed async admission on the
 existing seven lifecycle paths, legacy response compatibility, durable outcome
-query/cancel routes and explicit mismatch/unknown handling. These do not exist
+query/cancel/recovery routes, bounded retry/dispatch expiry and explicit
+mismatch/interruption/unknown handling. These do not exist
 merely because the current route or a bulk DTO is registered. One foundation
 owner supplies wire types, v4/minimum-v4 agent fixture/hash, current exports,
 route snapshots, adapter shared fields and forward SQLite migration together.
+That same complete foundation owner integrates required behavior before v4
+advertising; no later consumer becomes a second runtime contract editor.
+Synchronous non-success uses the typed non-2xx activity-ID envelope defined in
+the runtime record. Optional log metadata and the narrow CLI EOF fix belong to
+the log and executor-compatibility subpackages respectively.
 The fingerprint hashes the versioned agent fixture bytes, not this OpenAPI file;
 `tunnel/v1`, historical OpenAPI and shipped migrations remain unchanged.
 Runtime JSON logs reuse Echo WS and remain outside the Huma export.

@@ -13,7 +13,7 @@ GitHub issues and milestones hold implementation and acceptance evidence.
 | [API contract and UI mapping](api-contract.md) | Reproducible OpenAPI export, generated types and owned DTO/UI gaps |
 | [HTTP adapter, live channel and capabilities](adapter-live-capabilities.md) | M3 adapter outcomes, server capabilities, run/event refresh and contract matrix |
 | [Run gate and single-hub operation](run-gate.md) | Activity states, gated admission, cancellation, restart recovery and one hub per database |
-| [Runtime control and log lifecycle](runtime-control.md) | Stack/container admission, durable agent outcomes, runtime logs, session closure and the v4 contract boundary |
+| [Runtime control and log lifecycle](runtime-control.md) | Bounded runtime retries, settled interruption and unknown recovery, logs/session closure and the v4 foundation |
 | [Database baseline](database-baseline.md) | SQLite baseline contract, forward-only policy and historical integrity reference |
 | [Agent surface](agent-surface.md) | Agent and Edge agent module allowlist and host exposure |
 | [Edge threat review](edge-threat-review.md) | Assets, attacker positions and verdicts for the adopted Edge tunnel and agent mode |

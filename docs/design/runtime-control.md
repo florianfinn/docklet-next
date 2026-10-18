@@ -110,9 +110,10 @@ transaction's parent predicate provides the additional exclusion. No transaction
 spans network, Docker or Compose work. Dispatch registration uses the same local
 mutex boundary as committed admission. Unknown receipts participate in conflict
 checks. Only the hub administrator disposition below may terminalize its
-activity while executor knowledge stays unknown; ordinary waiters cannot. Agents enforce the
-same predicates before executing, including legacy requests reaching their local
-listener. This second guard protects local callers; it is not a distributed lease.
+activity while executor knowledge stays unknown; ordinary waiters cannot. Agents
+enforce the same scope predicates on trusted execution envelopes. Their legacy
+lifecycle listeners must refuse requests that bypass hub admission; a manager
+credential alone cannot create an unguarded worker. This is no distributed lease.
 
 `gate_key` is the operation ID plus digest of semantic options. Active same-key
 intake returns `run.joined`; another operation/parent conflict returns
@@ -134,9 +135,10 @@ Storage failure refuses admission before effects.
 Keep full activity/output retention at **100 finished activities per environment**;
 clearing history may remove terminal output immediately. Separate compact
 receipts/key bindings/refusal tombstones survive either operation without a
-cascading activity FK. Unresolved active and unknown receipts never expire or clear with
-history. Explicit administrator disposition makes the hub receipt terminal for
-retention purposes while preserving that external effect knowledge is unknown. Terminal receipts, joining bindings and not-received tombstones have a
+cascading activity FK. Unresolved active and unknown receipts never expire or
+clear with history. Explicit administrator disposition makes the hub receipt
+terminal for retention while preserving unknown external effect knowledge.
+Terminal receipts, joining bindings and not-received tombstones have a
 **24-hour minimum retention** from their final write (including a later binding),
 and cannot prune before all bound retry windows and dispatch deadlines expire.
 A bounded cleanup batch runs at startup and hourly, deleting eligible compact
@@ -152,8 +154,8 @@ Before creating a worker, the executor refuses expired envelopes with HTTP 410
 `runtime.dispatch-expired`, invalid/future-dated envelopes with 400, and wrong
 identity/generation with 409. Permit at most one minute of future clock skew;
 clock checks govern envelope validity only, never effect ordering or gate release.
-Pruning atomically advances a durable expired-deadline cutoff before deleting
-records; reject any envelope at/below that cutoff even after clock rollback.
+Pruning atomically advances a durable expired-deadline cutoff to at most
+current store UTC minus 24 hours before deleting records; reject any envelope at/below that cutoff even after clock rollback.
 Only delete records whose dispatch deadline is at/below that cutoff. The hub
 uses the analogous expired-key timestamp cutoff when pruning key bindings.
 These are two scalar cutoffs per store, not a per-command permanent ledger.
@@ -248,7 +250,8 @@ it. This adds no lease, second hub or workflow replay.
 
 An active/terminal answer carries the existing activity snapshot/detail vocabulary
 (progress, affected services, coded steps/messages and capped execution output),
-plus receipt knowledge fields. Runtime retained output lines also carry a
+plus receipt knowledge fields. Known outcome means a settled workflow disposition,
+not verified Docker state after interruption. Runtime retained output lines also carry a
 monotonic executor-local `outputSeq` to avoid repeating progress on repeated
 queries and a retained-start cursor to detect eviction before a waiter catches
 up; these serve the existing remote CLI, separate from runtime-log WS seq. Replace snapshot output as a bounded window, and relay
@@ -340,34 +343,60 @@ Add the mismatch code to the adapter conflict union with localized text; consume
 must not assume every conflict means another running command.
 
 Without the preference, preserve project started/output/done/error NDJSON and
-synchronous MessageResponse bodies, including `activityId`, for the shipped CLI
-(`cli/pkg/projects/cmd.go`, `cli/pkg/containers/cmd.go`). Legacy waiters
-subscribe to the admitted worker rather than executing it; disconnect ends only
-that wait. Stream started frames expose the same ID. Error/conflict status must
-be decided before headers flush. A loss after started is not a done frame. The
-new adapter opts into admission JSON; CLI need not interpret a 202 as completed
-success. The existing CLI `printOperationStreamInternal` returns scanner.Err()
-at EOF and therefore accepts a clean EOF without a done frame. A narrowly owned
-CLI compatibility correction must require done or return interruption, including
-EOF immediately after started; keep its printed log and terminal-error formats.
-Own that parser and its focused integration tests explicitly in the foundation,
-before changing streamed execution behavior. Do not mask missing completion by
-inventing a done frame. Cover both response modes before enabling capability.
-Do not repurpose bulk `ContainerActionResult.success`, alter its array semantics
-or enable bulk capabilities. No new Huma log route is needed.
+successful synchronous MessageResponse bodies with `activityId`. Legacy waiters
+subscribe to the admitted worker, never execute it. Started exposes the same ID;
+pre-admission errors/conflicts are decided before flush. Once NDJSON is flushed,
+non-success emits an error frame carrying `activityId` and the code below,
+never done/success; a dead socket can receive nothing. Disconnect only detaches
+the waiter; durable admission identity and execution remain intact.
+
+For synchronous project down/restart and single-container callers, only confirmed
+success returns HTTP 200 with the existing success MessageResponse and ID.
+Every writable non-success response uses
+`{success:false,error:{code,message},data:{activityId}}` after admission:
+
+| Result at waiter boundary | HTTP status | Error code |
+| --- | --- | --- |
+| Executor outcome unanswered/lost continuity | 503 | `runtime.outcome-unknown` |
+| Settled process/deadline interruption, effect unverified | 409 | `runtime.interrupted` |
+| Settled cancellation | 409 | `runtime.cancelled` |
+| Other settled executor failure | 500 | `runtime.failed` |
+| Wait budget expires while execution remains active | 504 | `runtime.wait-timeout` |
+| Waiter cancelled but response still writable | 408 | `runtime.waiter-disconnected` |
+
+The waiter is bounded to at most thirty minutes and can expire before the worker
+settles; this changes no receipt state and releases no scope. If the socket is
+already gone, write no HTTP response or invented status: retain the ID in the
+receipt and recover it via a valid key retry/targeted read. Pre-admission failures
+have no admitted ID. Async admission may still return the admitted ID with
+unknown knowledge; its 202 never claims completed success.
+
+`cli/internal/cmdutil/run.go:RunPostAction` prints its configured success text
+when `PostJSON` succeeds, so non-success must be non-2xx. Preserve its normal
+progress/error handling and test all message callers. The existing project
+`printOperationStreamInternal` returns `scanner.Err()` at clean EOF without
+requiring done (`cli/pkg/projects/cmd.go`). The executor/legacy compatibility
+step owns the narrow fix and tests: EOF before done returns interruption,
+including immediately after started; preserve printed progress and terminal
+errors. Never fabricate done to mask missing completion. Both response modes
+pass before enabling capabilities; no CLI rewrite or CLI edit in the shared
+types/schema subpackage.
+Do not repurpose bulk `ContainerActionResult.success` or enable bulk controls.
 
 `#102` is required before enabling M6 action UI: the current
 `web/src/data/http/http-adapter.ts:loadActions` uses cross-host `Promise.all` and
 rejects healthy-host runs if one source fails. A separate action-projection
-foundation owner must supply healthy results plus typed per-host failure/last
-observation, stable host/run deduplication, authenticated failure handling and
-reconnect recovery. Its shared adapter result fields belong to that owner;
+prerequisite owner supplies healthy-host results plus minimal honest failure
+projection and reconnect recovery, preferring existing error/observation
+channels. Preserve stable host/run identity without creating a new framework.
+Its shared adapter result fields belong to that owner;
 the runtime foundation consumes the merged contract rather than editing them
 concurrently. This bounded prerequisite does not change other inventory readers.
 Targeted hub runtime detail must work even while a remote host is unavailable;
 all-host refresh failure must never hide an admitted run. Retained remote activity
-reads are observations, not proof of effect completion. Scheduling this
-prerequisite requires the coordinator's explicit scope/owner decision.
+reads are observations, not proof of effect completion. This prerequisite is
+separately accepted and coordinator-scheduled, before the runtime foundation
+freezes shared projection fields and before action UI.
 
 ## Runtime logs
 
@@ -388,32 +417,27 @@ implementation order. Thus seq is arrival serialization, not chronology across
 services, stdout/stderr or hosts. Reopening a source can restart seq and repeat
 the requested tail; it is not a resumable cursor.
 
-Extend JSON frames additively with `sourceId` (random shared-source-instance ID),
-`stream: stdout|stderr|combined|unknown`, `timestampOrigin: runtime|received`
-and `truncated: boolean`.
-Populate these before existing text normalization loses source information. Keep
-service/containerId when known; use trusted Compose metadata for service identity,
-not arbitrary log message text. TTY is combined; missing stream stays unknown.
-Do not classify stderr as application error: wire `level` currently can encode
-transport classification. Only an explicitly recognized semantic level maps to
-`LogLine.level`; otherwise use info and retain stream separately. Do not guess
-structured severities by parsing arbitrary application messages.
+Use `(subscription attempt, seq)` for line identity, scoped by host/kind/raw
+resource. Increment the client attempt on every connect/reconnect, including
+reopening a surviving shared source; no wire sourceId or timestamp-origin field
+is required. Seq orders source arrival, never timestamp chronology. A gap emits
+a localized loss marker. Reconnect displays a boundary and replaces the bounded
+tail; repeated text is not content-deduplicated or claimed as exactly-once replay.
 
 | `LogLine` target field | Source and rule |
 | --- | --- |
-| `id` | Tuple of subscription host/kind/raw resource, `sourceId`, `seq`; same source/seq deduplicates |
-| `ts` | Valid wire timestamp; preserve timestamp origin; invalid required fields terminate as mapping error |
-| `service` | Wire Compose service; otherwise known container display identity, or localized unknown source |
-| `level`, `message` | Semantic level rule above, message text unchanged by adapter |
-| Add `sourceId`, `seq`, `stream`, `timestampOrigin`, `truncated` | Shared adapter/domain fields, not feature imports of wire DTOs |
+| `id` | Resource identity plus subscription attempt and wire seq |
+| `ts` | Valid wire timestamp; timestamps requested from runtime, current normalizer may fall back to receive time |
+| `service` | Trusted Compose metadata/prefix; otherwise known container identity or localized unknown source |
+| `level`, `message` | Only recognized semantic level maps to severity; otherwise info; preserve message text |
+| Optional `seq`, `stream`, `truncated` | Log-owner adapter/domain additions; missing metadata uses unknown/false fallback |
 
-Within a source append by seq; never sort logs by ts. Gaps produce a visible
-localized lost-lines marker, not interpolation or synthetic runtime entries.
-Each reconnect is a new subscription attempt; a surviving shared source may keep
-its epoch, a new one gets a new epoch. Display a reconnect boundary and replace
-its tail buffer rather than claiming exactly-once history. No cross-epoch
-content-based deduplication: identical text may be real repeated output. No
-cross-source chronological guarantee or durable replay is offered.
+Stderr describes a transport stream, not application error severity. TTY is
+combined, otherwise stream is stdout/stderr only when available before text
+normalization loses it; omission maps to unknown. The log step may add optional
+`stream`/`truncated` JSON metadata and matching domain fields. Older agents omit
+these fields; that alone needs no mandatory v4 bump. Never infer structured
+severity from arbitrary message text. Invalid mandatory fields are mapping errors.
 
 The browser retains at most 2,000 lines and 1 MiB of serialized UTF-8 payload
 per resource subscription, dropping oldest complete entries and displaying a
@@ -426,19 +450,23 @@ Unmount/last unsubscribe cancels timers and source references.
 
 Keep current source queues (raw/mapped 256, broadcast 1,024, per-client 256;
 `log_streams.go` and `backend/pkg/libarcane/ws/{hub,client}.go`). Bound line
-payloads to 64 KiB at the producer before these queues, discarding
-excess bytes until the next newline without building an unbounded string; carry
-a truncation flag through normalization. Enforce the corresponding JSON frame
-bound including metadata/escaping (up to 512 KiB per unbatched frame, and bounded
-50-entry batches for legacy batch consumers). A full source broadcast queue
-currently drops data;
-change it to terminate that source visibly as a gap/error, and close slow
-consumers rather than accumulate. Closing on error is sufficient even if the
-error frame cannot be queued. Reconnect uses a bounded delay, pauses when offline
-or unauthenticated, and never claims to fill a missing interval. Real WS pressure
-tests must prove cancellation and memory limits, including batches and a huge
-line. Runtime logs are ephemeral viewer data; the separate 256 KiB retained
-`ActionRun.output` is execution debugging output and keeps its existing policy.
+payloads to 64 KiB at the producer before these queues, discarding excess
+through the newline without building an unbounded string. The log owner edits
+adopted `third_party/arcane/docker/logs.go:ReadLogLines` (currently unbounded
+ReadString), preserves its notice and records the bounded-reader deviation in
+provenance. Cover follow and non-follow buffering as well as Compose writers;
+no entire output may accumulate before the bounded reader. Optional truncation
+metadata or a visible producer marker exposes the cut. Existing 50-entry batches
+stay bounded by the line bound; no independent 512 KiB frame rule is needed.
+
+Keep shared `wshub.Hub.Broadcast` drop behavior and existing slow-client removal;
+the hub also serves stats. Seq is assigned before broadcast, so clients detect
+subsequent gaps without terminating every source. A final drop without a later
+seq is not provably detectable; do not promise lossless delivery. Reconnect is
+bounded/delayed and pauses offline or unauthenticated; it cannot fill a lost
+interval. Real WS pressure tests prove queue/producer/browser bounds and last-ref
+cleanup. Runtime logs remain ephemeral and separate from the existing 256 KiB
+retained execution-output cap and bounded remote CLI relay.
 
 ## Session-bound stream closure
 
@@ -446,14 +474,36 @@ In local mode the browser session ID is the revocation key. Add a shared
 session-to-closers registry at authenticated SSE and WS acceptance, including
 activity SSE, logs, stats, shells and direct/Edge proxied viewer connections.
 Register then revalidate durable session state before sending data, closing the
-race with revocation. Successful `SessionService` revocation invalidates auth
-cache and closes matching handles idempotently. All revocation paths, including
-logout, password recovery, expiry and revoke-all, share this mechanism. Register
-an expiry timer for accepted sessions; startup mode changes/restore already end
-connections with process shutdown. A failed durable revoke must return an error,
-close locally known handles and not report successful global logout. Cookie
-clearing alone is insufficient: `AuthHandler.Logout` currently logs revocation
-failure and continues (`backend/internal/auth/handler.go`).
+accept/revoke race. Explicit logout/revoke uses a shared closer registry to close
+matching handles idempotently after durable revocation. Revalidate durable
+session/user existence, revoked state and expiry at the existing SSE heartbeat
+(15 seconds) and browser-facing WS ping, bypassing token caches. A failed
+validation or unreadable durable session closes the viewer. There is no
+per-session expiry timer or new logout error policy.
+
+Actual cadence owners are `backend/api/handlers/stream.go`, local
+`backend/pkg/libarcane/ws/client.go` (54-second ping), WS handler keepalive for
+system stats/exec, diagnostics' own 54-second ping, and
+`backend/pkg/libarcane/edge/ws_proxy.go` (54-second browser-facing ping).
+The direct bridge `backend/pkg/libarcane/ws/proxy.go` only relays frames: it has
+no ping loop. The session step explicitly adds a cancellable 54-second durable
+session recheck there, sharing the session helper and closer lifetime; no remote
+agent ping can validate a hub browser session. Close both viewer legs on rejection.
+This is one bounded connection check where no existing cadence exists, not an
+expiry scheduler. Tests exercise idle direct/Edge viewers as well as active ones.
+
+Do not assume all SQL mutations use one SessionService instance. Password change
+and administrator recovery call user `SetPasswordAndRevokeSessionsExcept`, wired
+to `session.RevokeAllUserSessionsExceptInDB` in `di.go`; restore constructs its
+own SessionService in `system/children/backup/restore.go`. Session/user deletion,
+expiry cleanup and startup mode revocation must also fail durable revalidation.
+The shared registry handles explicit service revocation; cadence validation
+catches bypassing transactions/instances without changing their identity policy.
+Restore/mode transitions retain their existing maintenance/process boundary.
+`AuthHandler.Logout` currently logs durable-revoke failure and continues; this
+step does not change that handler behavior or claim durable global logout when
+revocation failed. Keep the adopted oversized auth handler read-only: use focused
+session/transport helpers, not a substantive handler edit or ceiling increase.
 
 Revoking one session closes every tab using it; other sessions remain. SSE cancels
 its send loop; local WS closes the client; remote WS closes both viewer proxy
@@ -466,10 +516,11 @@ On logout success or authoritative session rejection, synchronously invalidate
 the adapter identity generation, close EventSource and every WS/reconnect timer,
 clear current runs, RunGate entries/listeners, metrics histories, live channel
 values and log buffers, and set currentUser to null. Abort pending reads and
-ignore callbacks from older generations even if abort is late. Broadcast a
-same-origin logout signal to other tabs to clear their retained views too;
-server closure and a fresh identity check remain authoritative if that signal
-is missed. A successful login creates a fresh generation; an old close/error
+ignore callbacks from older generations even if abort is late. Other tabs close
+through server revocation checks and existing authoritative identity rejection;
+no cross-tab broadcast is required. A stream close alone is not proof of logout: a
+subsequent identity check distinguishes transport loss from revoked identity.
+A successful login creates a fresh generation; an old close/error
 callback cannot invalidate it. Identity rejection during a credential-check
 form remains inline under the existing identity policy.
 
@@ -502,8 +553,9 @@ the action; failure after effects retains an unresolved receipt and visible erro
 Current `types/contract/agent.go` advertises version/minimum **3**; its fingerprint
 hashes the bytes of `types/contract/testdata/agent-hub-v3.json`, not OpenAPI.
 The target is agent contract **4**, minimum **4**: durable execute/query/cancel
-semantics, supplied run identity, new receipt/snapshot fields, admission response
-mode and JSON log metadata are required together. These are additive routes/fields
+semantics, supplied run identity, bounded key/dispatch expiry, storage-generation
+evidence, receipt/snapshot fields and admission response mode are required together.
+Optional log metadata remains owned by the log step. These are additive routes/fields
 but a breaking behavioral compatibility boundary: a v3 agent cannot promise
 idempotent execution or outcome reconciliation. Preserve the v3 fixture and add
 v4 bytes/fingerprint; do not calculate the fingerprint from generated OpenAPI.
@@ -524,12 +576,22 @@ consumers: `types/{activity,project,container,contract}` wire vocabulary and v4
 fixture/hash; runtime route registrations, agent allowlist/permission snapshots;
 current OpenAPI, generated TypeScript and spec provenance hash; capability/adapter
 port/domain shared fields; receipt models, schema registry/integrity proofs and
-a new forward migration/manifest entry. Include JSON log metadata declarations, runtime output cursors
-and runtime codes in this owner. Include the focused CLI NDJSON EOF correction
-and compatibility test so legacy consumers cannot report unknown as success.
-Keep capabilities disabled until their complete
-executor, adapter and UI paths pass. Foundation acceptance must compile every
-consumer with unavailable mappings; fixtures alone do not implement the protocol.
+a new forward migration/manifest entry. Include runtime output cursors/codes,
+storage-generation and expiry vocabulary in this owner. Optional log metadata
+belongs only to the log step; the CLI EOF behavior fix belongs to executor
+compatibility. Foundation work can use bounded sequential subpackages under this
+same owner, but is reviewed/integrated as one complete foundation before any
+consumer starts. There is no second consumer-stage editor of runtime contracts.
+
+Contract version/hash and route exports cannot advertise executable v4 semantics
+before behavior exists. The complete foundation therefore also owns the minimal
+admission/execution/query/cancel/release behavior and legacy compatibility needed
+to enforce that contract, reviewed together before merge. Its focused behavior
+subpackages precede final v4 activation/exports; no partial foundation merges.
+Capability descriptors and adapter mappings remain honestly unavailable until
+complete UI consumers pass. Later execution consumers may add hardening/tests
+within the frozen contract, never deferred routes/exports/version edits. Fixtures
+alone do not implement the protocol.
 
 Preserve `api/openapi.before-cut.json`, shipped SQLite `001`/`002` and their
 hashes. Update current route snapshots/functional-cut reviewed additions rather
@@ -551,22 +613,22 @@ supplies actual effects separately.
 | Case and method | Required observation | Mutation/counterexample |
 | --- | --- | --- |
 | Competing exact/parent/sibling admission; SQLite service test | One worker for same command/key; parent excludes child both ways; siblings independent; hosts independent | Remove parent predicate or split read/insert transaction |
-| Duplicate key after terminal/history pruning; receipt test | Same ID/result, no second Docker effect; changed digest 409 | Delete receipt with activity or ignore digest |
+| Key retry/history clear and expiry/pruning; receipt test | Within 10min same ID/outcome, digest mismatch 409; after expiry 410; 24h compact grace, active/unknown protected | Delete compact evidence with history or accept expired key |
 | Both legacy and async seven-route callers; HTTP/CLI tests | Correct run ID, preserved NDJSON/messages, coded 409 before flush | Gate only local handler or treat 202 as completion |
 | Persistence/audit refusal; injected storage fault | Zero dispatch/effect, no fabricated ID | Fall back to StartHandlerActivity |
 | Cancellation before registration, during call, twice and after terminal | Persist intent, no early release; cancellation distinct from rollback | Release on request cancellation |
-| Deadline with indeterminate Docker effect; controlled executor | Unknown held until proof/recovery | Map timeout directly to terminal failed/release |
+| Deadline/cancel while worker unwinds then settles; controlled executor | Held until worker/children settle; then failed/interrupted or cancelled, effect unverified, re-read | Release at timer before worker settles |
 | Direct and Edge response lost before/after acceptance; real transports | Same run ID queried; no retransmission or duplicate effect | Replay POST on reconnect |
-| Hub crash before send, after dispatch mark, after terminal commit; child processes | Proven unsent may release; ambiguous held; one final message | Let generic startup repair fail runtime receipts |
-| Agent crash/reopen with executing receipt; child processes | Unknown/interrupted survives, no effect replay or age release | Treat missing worker as settled failure |
-| Outcome active/terminal/not-found, wrong digest/token and unreachable | Release only matching terminal proof; honest unknown | Treat 404/transport error as terminal success |
+| Hub crash before send, after dispatch mark, after terminal commit; child processes | Unsent/local executor interrupted; remote ambiguity held; one final message | Generic repair releases unanswered remote work |
+| Agent crash/reopen with continuous store; child processes | Failed/interrupted before readiness, effect unverified; no replay | Block ordinary own-process restart indefinitely |
+| Outcome/tombstone race, lost store/host, late envelope after prune; transport/store tests | Same-generation not-received fences delayed execute; new store stays unknown; expired dispatch refused after pruning/clock rollback | Trust empty replacement store or accept old deadline |
 | Completion DB busy/full; temporary file fault injection | Bounded retries, scope retained after failure | Swallow terminal persistence error |
-| Manual release and late receipt, if accepted | Admin acknowledgment audited; original disposition retained | Allow ordinary user or overwrite released history |
+| Accepted administrator release and late receipt | Admin acknowledgment audited; original disposition retained | Allow ordinary user or overwrite released history |
 | #102 two-host reads, direct/Edge rejection and reconnect | Healthy runs retained, source failure explicit, targeted run visible | Restore cross-host Promise.all rejection |
-| Runtime JSON/text/batch, TTY and two Compose services; real WS | Service and stream exact, stable epoch/seq, arrival order only | Sort by timestamp or label stderr as error |
-| Reconnect/new epoch and resource switch/pause/unmount | No ID collisions/stale hook rows; tail boundary explicit; last ref cancels | Reuse seq as global ID or retain old hook state |
-| Slow reader/full source/huge line; real WS and bounded heap probe | Caps, visible loss/truncation, source/clients close | Unbounded queue or silent broadcast loss |
-| Local logout/revoke/expiry during accept; SSE/local/direct/Edge WS | All matching session viewers close, another session and worker survive | Skip registry recheck or close whole Edge tunnel |
+| Runtime JSON/text/batch, TTY and two Compose services; real WS | Service and stream exact, attempt/seq identity, arrival order only | Sort by timestamp or label stderr as error |
+| Reconnect/new attempt and resource switch/pause/unmount | No ID collisions/stale hook rows; tail boundary explicit; last ref cancels | Reuse seq as global ID or retain old hook state |
+| Slow reader/full source/huge line; real WS and bounded heap probe | Caps, visible loss/truncation, existing slow-client removal and subsequent seq gap | Unbounded producer read or hide seq gaps |
+| Local logout/revoke/expiry, password/recovery/restore bypasses; SSE/local/direct/Edge WS | Immediate explicit close or next bounded durable check, another session/worker survive | Use auth cache, omit direct-proxy cadence or close whole Edge tunnel |
 | Two tabs/logout/relogin with delayed callbacks; browser tests | Buffers/timers cleared, old identity cannot overwrite new | Omit generation check or leave RunGate listener |
 | Admin/denied-user, local/proxy/none; permission tests | Existing grants and Origin/CSRF policy preserved; denied has no effects | Authorize only after dispatch |
 | v3 and fingerprint mismatch, direct/Edge; contract tests | Update-required, no ordinary forwarding, recovery exceptions intact | Ignore minimum/fingerprint |
