@@ -71,7 +71,7 @@ resolves each mapping when its endpoint and UI slice are implemented.
 
 [Runtime control](runtime-control.md) specifies proposed async admission on the
 existing seven lifecycle paths, legacy response compatibility, durable outcome
-query/cancel/recovery routes, bounded retry/dispatch expiry and explicit
+query/cancel/recovery routes, bounded retry/receipt retention and explicit
 mismatch/interruption/unknown handling. These do not exist
 merely because the current route or a bulk DTO is registered. One foundation
 owner supplies wire types, v4/minimum-v4 agent fixture/hash, current exports,

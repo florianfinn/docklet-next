@@ -65,24 +65,26 @@ source host on projection. Browser resource IDs remain `<host>~<raw-id>` and are
 decoded only at the adapter boundary. Gate strings contain canonical raw IDs,
 never display names or browser-composed IDs.
 
-A client creates a timestamp-bearing UUIDv7 `Idempotency-Key` per deliberate
-command. Its timestamp fixes a ten-minute retry window; the hub rejects expired
-keys with HTTP 410 `run.retry-expired`, and malformed or more than one minute
-future-dated keys with HTTP 400 `run.invalid-key`, before admitting work. Client
-clock errors require correction, never automatic creation of a replacement
-intent. The adapter retains the key across CSRF/transport retries only within
-that window, discards it after the final response or window expiry, and then
-refreshes known run detail rather than replaying the command. These are target
+A client creates an opaque UUID `Idempotency-Key` per deliberate command; any
+UUID version is accepted without reading a client timestamp. The hub measures
+the ten-minute retry window from its first-seen binding. The adapter retains the
+key across CSRF/transport retries for at most ten minutes of local elapsed time,
+discards it after the final response or that window, and then refreshes known
+run detail rather than replaying the command. It never creates a replacement
+intent automatically. A retained binding always resolves to its original run,
+even after the retry window; it cannot admit another effect. These are target
 key rules, not current adapter support.
 
 The binding uniquely maps `(environmentId, idempotencyKey)` to run ID, requesting
 caller and canonical digest: operation ID, raw target, accepted options and
 parent. Within the window, same key/digest returns the same ID and compact
 outcome even after output/history pruning; recheck caller identity and current
-operation/activity-read permissions. A changed digest is HTTP 409
-`run.request-mismatch`, without a worker. Two permitted callers issuing the same
-active operation join the first run. The activity/receipt keeps its original
-actor; each joining key records its own caller and join audit attribution.
+operation/activity-read permissions. A different caller presenting an already
+bound key receives HTTP 409 `run.request-mismatch` without the bound ID or other
+run details, even when the digest matches. A changed digest also returns 409
+without a worker. Independently authorized callers with different keys join by
+active gate key, not by sharing an idempotency key. The activity/receipt keeps
+its original actor; each joining key records its own caller and join audit attribution.
 Joining reveals only the authorized run projection and grants no extra cancel
 permission. It never creates an executor or changes the original actor.
 Legacy requests without a key receive a hub-generated key; an ambiguous
@@ -128,8 +130,8 @@ separate from retained activity output. Use the same schema on hub and agent;
 local execution has one receipt, not a mirrored pair in the same database.
 Minimum fields are run ID, environment/registration identity, executor storage
 generation, original caller, operation/target/parent/digest, admission time,
-dispatch deadline/state, executor state, cancel intent, result/error and last
-reconciliation time. Key bindings contain caller, digest and retry expiry.
+dispatch commit time/state, executor state, cancel intent, result/error and last
+reconciliation time. Key bindings contain caller, digest and hub first-seen time.
 Storage failure refuses admission before effects.
 
 Keep full activity/output retention at **100 finished activities per environment**;
@@ -140,31 +142,59 @@ clear with history. Explicit administrator disposition makes the hub receipt
 terminal for retention while preserving unknown external effect knowledge.
 Terminal receipts, joining bindings and not-received tombstones have a
 **24-hour minimum retention** from their final write (including a later binding),
-and cannot prune before all bound retry windows and dispatch deadlines expire.
-A bounded cleanup batch runs at startup and hourly, deleting eligible compact
-records deterministically by expiry then ID. This bounds terminal evidence by
+which exceeds all supported retry and delivery budgets. A bounded cleanup batch
+runs at startup and hourly, deleting eligible compact records deterministically
+by final-write time then ID. This bounds terminal evidence by
 recent traffic, not by installation age; active/unknown evidence remains until
 settled or explicitly disposed. No full output is retained for this grace.
 
-An authenticated dispatch carries immutable issued-at/not-after timestamps,
-with at most **30 minutes** validity, and binds manager, registered target,
-executor storage generation, run ID and digest. Each direct/Edge request also
-has a maximum 30-minute lifetime; the generic proxy timeout alone is insufficient.
-Before creating a worker, the executor refuses expired envelopes with HTTP 410
-`runtime.dispatch-expired`, invalid/future-dated envelopes with 400, and wrong
-identity/generation with 409. Permit at most one minute of future clock skew;
-clock checks govern envelope validity only, never effect ordering or gate release.
-Pruning atomically advances a durable expired-deadline cutoff to at most
-current store UTC minus 24 hours before deleting records; reject any envelope at/below that cutoff even after clock rollback.
-Only delete records whose dispatch deadline is at/below that cutoff. The hub
-uses the analogous expired-key timestamp cutoff when pruning key bindings.
-These are two scalar cutoffs per store, not a per-command permanent ledger.
+An authenticated one-shot dispatch binds manager, registered target, executor
+storage generation, run ID and digest. It carries no wall-clock issue/expiry
+fields. The supported delivery budget is at most **30 minutes** on direct and
+Edge paths, without automatic retransmission or a persistent dispatch queue.
+The generic direct proxy waits up to 30 minutes
+(`backend/internal/middleware/environment.go:proxyTimeout`); the remenv fallback
+client uses 30 seconds (`backend/pkg/remenv/client.go:NewClient`). Edge waits
+five minutes by default (`backend/pkg/libarcane/edge/proxy.go:DefaultProxyTimeout`)
+and its pending responses are tunnel-local memory; `CommandClient.Execute`
+sends once and removes its pending entry when waiting ends. The CLI's default
+wait is ten minutes (`cli/internal/client/client.go:defaultTimeout`). Thus the
+30-minute delivery budget plus ten-minute retry budget is well below the
+24-hour compact floor. These are bounded supported deliveries, not a claim that
+sender timeout prevents an already-running receiver from acting.
 
-After compact evidence expires an opaque old run UUID is no longer recognizable;
-a query reports evidence expired/absent, never historical success. Timestamped
-keys and dispatch deadlines refuse late execution without retaining every UUID.
-Within the guarantee window, retries/query/tombstone races must be atomic.
-Outside it, callers refresh actual state and make a new deliberate intent.
+The foundation must enforce the short **pre-acceptance** boundary as well:
+create a receiver-local monotonic admission deadline at ingress, before Edge
+worker scheduling/body assembly or direct handler waits. Cap it at five minutes
+and use the request/session cancellation context through receipt admission.
+Check cancellation/deadline after waits and inside the transaction before commit.
+Before worker registration, resolve whether durable acceptance won under the
+admission mutex: failed admission starts no effect; a committed receipt hands
+off to application lifetime and wins subsequent duplicate/query races. Never
+abandon a committed receipt merely because the caller disconnected. A cancellation
+racing with commit may leave accepted work, which is queried rather than assumed
+absent.
+Even counting a separate five-minute receiver budget conservatively, delivery
+plus admission plus retry is far below 24 hours. No handler may wait indefinitely
+and then detach a new admission from a cancelled context.
+
+These checks are target behavior, not existing transport guarantees. Edge's
+`client.go:messageLoop` currently ignores cancel-request messages; its local
+request timeout starts inside the scheduled handler, and `ServeHTTP` does not
+itself stop a handler on context expiry. Removing a hub pending entry therefore
+proves nothing about receiver admission. Tests must stall the actual receiver
+before its receipt transaction and expire its ingress context on both transports.
+Arbitrary manual replay, externally suspended connections/processes delivering
+beyond the supported budgets, and replay after retention are outside this bounded
+contract; do not rebuild perpetual recognition to cover them.
+
+After compact evidence is pruned an old opaque UUID is no longer recognizable;
+absence is not historical success or proof of no effect. Supported clients stop
+retrying within their budget and never reuse an old UUID for a new intent.
+Within the compact window duplicate execute returns the original receipt or
+refusal tombstone with zero additional effects. Query/tombstone races are atomic.
+Outside that evidence window, absence stays unknown and uses the recovery rule
+below; callers refresh actual state before a new deliberate intent.
 Host removal refuses while active/unknown receipts remain, with links to cancel,
 refresh or administrator recovery. Once disposed, removal may delete the target
 and full history but retains compact evidence through its grace, keyed to the
@@ -185,7 +215,7 @@ write does not invoke Docker again.
 | Receipt transition | Sole writer and precondition | Activity projection and scope |
 | --- | --- | --- |
 | Absent → `admitted` | Hub admission transaction | `running`, `run.started`; held |
-| `admitted` → `dispatching` | Hub commits before any remote send | `running`; held |
+| `admitted` → `dispatching` or terminal `cancelled` | Hub transaction rechecks cancel intent before any remote send; intent settles cancelled with no send, otherwise commits dispatching | Held for dispatch; released after cancellation commit |
 | Absent executor receipt → `accepted` | Agent commits same ID/digest and local gate before registering worker | `running`; held |
 | `accepted` → `executing` | Executor checks cancellation, then starts work once | `running`; held |
 | Active → cancellation requested | Hub persists intent; executor persists it before signaling registered context | Still `running`; held |
@@ -210,7 +240,7 @@ result; show that result as late evidence without reopening or rewriting history
 ## Dispatch, disconnect and reconciliation
 
 Add agent-only `POST /api/environments/0/runtime-runs` (`execute-runtime-run`),
-with the bounded identity/deadline envelope above and attribution, plus
+with the authenticated identity binding above and attribution, plus
 `GET /api/environments/0/runtime-runs/{runId}` (`get-runtime-run-outcome`) and
 `POST .../{runId}/cancel` (`cancel-runtime-run`). Query/cancel have hub-facing
 `{id}` equivalents served locally from the hub receipt, with no generic proxy
@@ -218,8 +248,8 @@ bypass. The hub's worker uses existing direct/Edge request transport to the agen
 route; token stripping/injection, compatible-host checks and Edge-only no-direct
 fallback stay unchanged. An execute acknowledgment is bounded JSON, not an open
 Docker execution stream. A duplicate execution envelope returns the persisted
-receipt within its retention window, never invokes the executor again. Expired
-envelopes are refused even after that receipt was pruned.
+receipt within its retention window, never invokes the executor again. No
+post-pruning recognition or arbitrary old-envelope refusal is promised.
 Execution accepts only the seven canonical operations and bounded validated
 options, never arbitrary routes or commands. An authenticated agent admission
 refusal proves this dispatch started no worker; the hub records a failed/refused
@@ -230,9 +260,16 @@ Agent outcome query is authoritative only for the matching run/digest,
 registered executor and continuous storage generation. Valid answers use HTTP
 200: `active`, `terminal`, or `not-received` backed by a refusal tombstone.
 Query of a never-received ID atomically inserts that tombstone before answering;
-a racing/delayed execute then refuses, so the hub may fail as not dispatched and
-release. Query includes the original dispatch deadline; after evidence expiry,
-absence alone is `unknown` (`evidence-expired`), not proof of no old effect.
+a racing/delayed execute then refuses. The hub may fail as not dispatched and
+release only when that negative proof also satisfies its own recent-dispatch
+rule: elapsed age from its dispatching commit is nonnegative and less than
+**one hour**, in the same hub process lifetime, with no restore or clock/continuity
+uncertainty. Use its local monotonic elapsed time, not agent/browser timestamps.
+The persisted hub dispatch time alone cannot re-establish that proof after a
+restart or restore. Otherwise treat absence/tombstone as `unknown` with reason
+`evidence-expired`, including a query after the agent pruned a terminal receipt;
+never relabel an old effect as not dispatched. A matching retained active or
+terminal receipt remains usable without this negative-proof age test.
 Use 401/403 for authentication, 409 for identity/digest/generation mismatch, and
 503 for an unreadable store. Offline transport is no answer.
 
@@ -244,9 +281,15 @@ tokens and version fingerprints do not prove this continuity. An empty new store
 must refuse an old-generation query/execute, never manufacture not-received for
 it. Undetectable external database rollback is outside the guarantee: after
 restore or uncertain continuity, stop intake and use administrator recovery
-before trusting negative evidence. No generation change proves an old executor
-stopped. The foundation owns this evidence contract; executor readiness enforces
-it. This adds no lease, second hub or workflow replay.
+before trusting negative evidence. Ordinary browser/agent clock skew, including
+plus or minus one hour, refuses no command. Local retention uses each store's
+clock; an external forward jump large enough to prune a live-window tombstone
+can invalidate the retention premise, just as stale database rollback can.
+Backward jumps can delay cleanup. Neither direction persists a refusal cutoff
+or blocks new intents until a wall clock catches up. These external interference
+limits need no clock service or cross-host clock comparison. No generation
+change proves an old executor stopped. The foundation owns this evidence
+contract; executor readiness enforces it. This adds no lease, second hub or workflow replay.
 
 An active/terminal answer carries the existing activity snapshot/detail vocabulary
 (progress, affected services, coded steps/messages and capped execution output),
@@ -272,7 +315,7 @@ release a scope without the matching settled receipt.
 | Failure point | Required behavior |
 | --- | --- |
 | Hub cannot commit admission | Fail request; no dispatch and no Docker call |
-| Hub has admitted but has not committed `dispatching` | After restart it can prove no send was allowed: fail as interrupted/not dispatched and release |
+| Hub startup finds an `admitted` receipt | Settle failed/interrupted, effect unverified, and release; a restored backup row cannot prove no later send occurred |
 | Direct/Edge disconnect before acknowledgment | If `dispatching` is committed, acceptance is uncertain even if send reports failure: hold and query by ID |
 | Lost acknowledgment after agent acceptance | Agent continues on application lifetime; hub queries same ID and adopts active/terminal result |
 | Browser disconnect/logout | Detach viewer only; hub worker and accepted agent work continue |
@@ -295,8 +338,11 @@ automatically replayed on startup or ambiguous transport failure.
 
 Cancellation uses existing `activities:cancel` authorization at the hub and the
 new agent cancel receipt path. It records intent before signaling, including a
-request received before executor registration. Repeated requests are idempotent;
-late cancellation of terminal work returns the terminal run. The executor owns
+request received before executor registration. For a remote run still admitted,
+the hub's dispatch transaction rechecks that intent and commits cancelled with
+no send; this hub writer alone settles pre-dispatch cancellation. Once dispatching
+is committed, cancellation follows the remote outcome path. Repeated requests
+are idempotent; late cancellation of terminal work returns the terminal run. The executor owns
 an application-lifetime context, detached from the HTTP caller, with the existing
 Compose/Docker options and a 30-minute maximum workflow deadline. Docker stop's
 existing 30-second grace stays unchanged. Deadline/cancel requests interrupt
@@ -334,8 +380,10 @@ hub/agent run ID. Admission confirms acceptance only. `runStackCommand` and
 outcome arrive through targeted detail reads and existing activity SSE reloads.
 
 HTTP 409 uses `{success:false,data:{code,activeRunId}}` for `run.busy` or
-`run.cancelling`; mismatch uses `code:run.request-mismatch` with the bound ID
-only when authorized. Translate internal `GateConflict.runId` explicitly.
+`run.cancelling`; mismatch uses `code:run.request-mismatch`. Reuse by a different
+caller never includes the bound ID or run details; same-caller digest mismatch
+may include the ID only with current activity-read permission. Translate internal
+`GateConflict.runId` explicitly.
 Persistence/transport/mapping errors remain typed errors, not fake runs. Return
 an admitted ID with unknown knowledge if dispatch becomes ambiguous; losing the
 HTTP response is recoverable via the same idempotency key, without a new effect.
@@ -553,7 +601,7 @@ the action; failure after effects retains an unresolved receipt and visible erro
 Current `types/contract/agent.go` advertises version/minimum **3**; its fingerprint
 hashes the bytes of `types/contract/testdata/agent-hub-v3.json`, not OpenAPI.
 The target is agent contract **4**, minimum **4**: durable execute/query/cancel
-semantics, supplied run identity, bounded key/dispatch expiry, storage-generation
+semantics, supplied run identity, bounded retry/receipt retention, storage-generation
 evidence, receipt/snapshot fields and admission response mode are required together.
 Optional log metadata remains owned by the log step. These are additive routes/fields
 but a breaking behavioral compatibility boundary: a v3 agent cannot promise
@@ -577,7 +625,7 @@ fixture/hash; runtime route registrations, agent allowlist/permission snapshots;
 current OpenAPI, generated TypeScript and spec provenance hash; capability/adapter
 port/domain shared fields; receipt models, schema registry/integrity proofs and
 a new forward migration/manifest entry. Include runtime output cursors/codes,
-storage-generation and expiry vocabulary in this owner. Optional log metadata
+storage-generation and bounded-retention vocabulary in this owner. Optional log metadata
 belongs only to the log step; the CLI EOF behavior fix belongs to executor
 compatibility. Foundation work can use bounded sequential subpackages under this
 same owner, but is reviewed/integrated as one complete foundation before any
@@ -613,15 +661,15 @@ supplies actual effects separately.
 | Case and method | Required observation | Mutation/counterexample |
 | --- | --- | --- |
 | Competing exact/parent/sibling admission; SQLite service test | One worker for same command/key; parent excludes child both ways; siblings independent; hosts independent | Remove parent predicate or split read/insert transaction |
-| Key retry/history clear and expiry/pruning; receipt test | Within 10min same ID/outcome, digest mismatch 409; after expiry 410; 24h compact grace, active/unknown protected | Delete compact evidence with history or accept expired key |
+| Opaque-key retry/history clear and compact pruning; receipt test | Hub-first-seen 10min retry budget; retained key returns original ID/outcome; cross-caller reuse gives non-disclosing 409; new-key authorized join preserves original actor; duplicate within 24h has zero additional effects; active/unknown protected | Delete compact evidence with history, leak bound ID to another caller or start another worker |
 | Both legacy and async seven-route callers; HTTP/CLI tests | Correct run ID, preserved NDJSON/messages, coded 409 before flush | Gate only local handler or treat 202 as completion |
 | Persistence/audit refusal; injected storage fault | Zero dispatch/effect, no fabricated ID | Fall back to StartHandlerActivity |
-| Cancellation before registration, during call, twice and after terminal | Persist intent, no early release; cancellation distinct from rollback | Release on request cancellation |
+| Cancellation before dispatch/registration, during call, twice and after terminal | Hub dispatch transaction settles admitted cancellation with zero sends; later intent holds until worker settles; cancellation distinct from rollback | Skip dispatch intent recheck or release on request cancellation |
 | Deadline/cancel while worker unwinds then settles; controlled executor | Held until worker/children settle; then failed/interrupted or cancelled, effect unverified, re-read | Release at timer before worker settles |
 | Direct and Edge response lost before/after acceptance; real transports | Same run ID queried; no retransmission or duplicate effect | Replay POST on reconnect |
-| Hub crash before send, after dispatch mark, after terminal commit; child processes | Unsent/local executor interrupted; remote ambiguity held; one final message | Generic repair releases unanswered remote work |
+| Hub crash before send, after dispatch mark, after terminal commit, restore of admitted row; child processes/store fixture | Startup settlement says interrupted/effect unverified; remote ambiguity held; one final message; restored row never claims not dispatched | Label restored admission not dispatched or let generic repair release unanswered remote work |
 | Agent crash/reopen with continuous store; child processes | Failed/interrupted before readiness, effect unverified; no replay | Block ordinary own-process restart indefinitely |
-| Outcome/tombstone race, lost store/host, late envelope after prune; transport/store tests | Same-generation not-received fences delayed execute; new store stays unknown; expired dispatch refused after pruning/clock rollback | Trust empty replacement store or accept old deadline |
+| Outcome/tombstone race, delayed receiver, lost store/host, old query and clocks; real transport/store tests | Same-generation recent negative proof fences execute; ingress expiry prevents delayed admission; accepted work survives caller timeout; pruned/old query stays unknown; browser/agent ±1h refuses nothing; hub/agent jumps never latch refusal | Ignore ingress cancellation, trust old/uncertain negative proof or empty replacement store, or restore timestamp-based refusal |
 | Completion DB busy/full; temporary file fault injection | Bounded retries, scope retained after failure | Swallow terminal persistence error |
 | Accepted administrator release and late receipt | Admin acknowledgment audited; original disposition retained | Allow ordinary user or overwrite released history |
 | #102 two-host reads, direct/Edge rejection and reconnect | Healthy runs retained, source failure explicit, targeted run visible | Restore cross-host Promise.all rejection |

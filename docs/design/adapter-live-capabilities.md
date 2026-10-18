@@ -118,8 +118,12 @@ source may become an empty successful read. Its owner controls shared partial-re
 fields before runtime consumers adopt them; this does not redesign inventory.
 The runtime foundation owns the other shared port/domain/capability additions
 and required v4 execution/outcome contract changes; optional additive log metadata
-belongs to the log owner. Retry keys expire after ten minutes; compact outcome
+belongs to the log owner. Opaque UUID retries use ten minutes from the hub's
+first-seen binding, without client/agent clock validation; compact outcome
 evidence lasts at least twenty-four hours independently of full output history.
+Supported delivery and receiver admission are bounded before acceptance; accepted
+work survives caller timeout. Only recent, continuous-generation negative proof
+may release a scope; old or uncertain absence stays unknown.
 Keep controls/log capabilities disabled until complete mappings and execution
 paths are verified.
 

@@ -143,10 +143,13 @@ accepted external action can still overlap. Runtime controls instead follow
 [query-by-run-ID reconciliation](runtime-control.md#dispatch-disconnect-and-reconciliation):
 restore their exclusions before readiness and exclude their IDs from generic
 startup repair. A remote dispatch with uncertain acceptance remains blocked until a matching
-settled executor answer, continuous-store not-received tombstone or accepted
+settled executor answer, recent continuous-store not-received proof under the
+runtime record's hub-local age rule, or accepted
 administrator recovery. Own local executor restart, or settled worker/children
 after interruption, commits failed/interrupted with effect unverified and frees
-the scope. An accepted daemon effect may still finish; re-read actual state
+the scope. Startup settlement of an admitted receipt also says effect unverified:
+a restored row cannot prove that no dispatch occurred after backup. An accepted
+daemon effect may still finish; re-read actual state
 before acting. A remote waiter timeout or hub restart cannot settle agent work. This changes the hub–agent
 contract for runtime work; it does not alter existing coordinator recovery.
 
