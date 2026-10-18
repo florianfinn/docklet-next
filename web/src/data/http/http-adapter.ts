@@ -116,7 +116,7 @@ export function createHttpAdapter(options: HttpAdapterOptions = {}): DockletAdap
     if (change === "confirmed" && authenticated) return;
     const retain = change === "renewed" && authenticated;
     suspendIdentity();
-    if (retain) actions.invalidate(); else actions.reset(change === "lost");
+    if (retain) actions.invalidate(true); else actions.reset(change === "lost");
     authenticated = change !== "lost";
     if (authenticated) connect();
   }
@@ -186,7 +186,7 @@ export function createHttpAdapter(options: HttpAdapterOptions = {}): DockletAdap
     detail: async (hostId, id) => (await read("get-activity", `/environments/${encodeURIComponent(hostId)}/activities/${encodeURIComponent(id)}`, { limit: 500 })).data!,
     publish: (runs, health) => {
       healthListeners.forEach((listener) => listener(health));
-      actionListeners.forEach((listener) => listener(runs));
+      if (runs) actionListeners.forEach((listener) => listener(runs));
     },
   });
 

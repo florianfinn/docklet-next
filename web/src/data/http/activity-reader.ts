@@ -23,7 +23,7 @@ interface Reads {
   hosts: () => Promise<string[]>;
   page: (hostId: string) => Promise<{ items: Activity[]; incomplete: boolean }>;
   detail: (hostId: string, id: string) => Promise<Detail>;
-  publish: (runs: CodedActionRun[], health: ActionReadHealth) => void;
+  publish: (runs: CodedActionRun[] | undefined, health: ActionReadHealth) => void;
   unauthorized: () => void;
 }
 
@@ -53,6 +53,7 @@ export function createActivityReader(reads: Reads) {
   let health: ActionReadHealth = { failures: [] };
   let sequence = 0;
   let generation = 0;
+  let cancellationEpoch = 0;
   let globalHealthSequence = 0;
   let globalFailure: ActionReadFailure | undefined;
   let discoverySequence = 0;
@@ -64,7 +65,8 @@ export function createActivityReader(reads: Reads) {
   const publish = () => reads.publish(current, health);
   function publishHealth() {
     health = { failures: globalFailure ? [globalFailure, ...failures.values()] : [...failures.values()] };
-    publish();
+    // Health before the first observation must not initialize action history.
+    reads.publish(initialized ? current : undefined, health);
   }
   async function source(hostId: string): Promise<SourceRead> {
     let page: { items: Activity[]; incomplete: boolean };
@@ -84,9 +86,10 @@ export function createActivityReader(reads: Reads) {
     }));
     return { hostId, runs: results.flatMap((r) => r.run ? [r.run] : []), failure: results.find((r) => r.failure)?.failure ?? (page.incomplete ? { hostId, reason: "unavailable" } : undefined) };
   }
-  async function load(): Promise<CodedActionRun[]> {
+  async function load(rereadRenewal = true): Promise<CodedActionRun[]> {
     const started = ++sequence;
     const version = generation;
+    const epoch = cancellationEpoch;
     try {
       const hosts = new Set(await reads.hosts());
       const batches = await Promise.all([...hosts].map(source));
@@ -137,11 +140,15 @@ export function createActivityReader(reads: Reads) {
       publishHealth();
       return sorted(observed.values());
     } catch (error) {
-      if (version !== generation) throw new CancelledError();
+      if (version !== generation) {
+        // One fresh read may replace work invalidated only by a valid renewal.
+        if (rereadRenewal && epoch === cancellationEpoch) return load(false);
+        throw new CancelledError();
+      }
       if (isCancelledError(error)) throw error;
       if (started > globalHealthSequence) {
         globalHealthSequence = started; globalFailure = failure(error);
-        if (isUnauthorized(error)) { ++generation; initialized = true; current = []; failures.clear(); reads.unauthorized(); }
+        if (isUnauthorized(error)) { ++generation; ++cancellationEpoch; initialized = true; current = []; failures.clear(); reads.unauthorized(); }
         publishHealth();
       }
       throw error;
@@ -165,7 +172,7 @@ export function createActivityReader(reads: Reads) {
       healthSequences.set(hostId, started);
       runSequences.set(id, started);
       if (isUnauthorized(error)) {
-        ++generation; initialized = true; current = []; failures.clear(); reads.unauthorized();
+        ++generation; ++cancellationEpoch; initialized = true; current = []; failures.clear(); reads.unauthorized();
         globalHealthSequence = started; globalFailure = failure(error); publishHealth();
       }
       else { failures.set(hostId, failure(error, hostId)); publishHealth(); }
@@ -176,11 +183,11 @@ export function createActivityReader(reads: Reads) {
     runs: () => current,
     hasSnapshot: () => initialized,
     health: () => health,
-    invalidate() { ++generation; },
+    invalidate(renewed = false) { ++generation; if (!renewed) ++cancellationEpoch; },
     // Loss clears current consumers; a new identity waits for its first real observation.
     reset(hasSnapshot = true) {
       const wasInitialized = initialized;
-      ++generation; initialized = hasSnapshot; current = []; health = { failures: [] }; globalFailure = undefined; knownHosts.clear();
+      ++generation; ++cancellationEpoch; initialized = hasSnapshot; current = []; health = { failures: [] }; globalFailure = undefined; knownHosts.clear();
       failures.clear(); fullSequences.clear(); runSequences.clear(); healthSequences.clear();
       if (wasInitialized || hasSnapshot) publish();
     },

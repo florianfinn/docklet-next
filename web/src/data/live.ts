@@ -72,10 +72,12 @@ const EMPTY_RUNS: CodedActionRun[] = [];
 
 /** Run codes rendered in the interface language. */
 export function useActionRuns(): ActionRun[] {
+  const adapter = useAdapter();
   const runs = useActionsChannel((r) => r);
   const query = useActionsQuery();
   const locale = useLocale();
-  const chosen = runs ?? query.data ?? EMPTY_RUNS;
+  // HTTP reads publish their observation before resolving; cached query rows may belong to a prior identity.
+  const chosen = runs ?? (adapter.kind === "http" ? EMPTY_RUNS : query.data ?? EMPTY_RUNS);
   return useMemo(() => chosen.map((r) => renderRun(r, locale)), [chosen, locale]);
 }
 

@@ -25,10 +25,16 @@ export type SessionChange = "established" | "renewed" | "confirmed" | "lost";
 export function createHttpAuth(baseUrl: string, client: CsrfClient, onSessionChange: (change: SessionChange) => void = () => {}, sessionGeneration: () => number = () => 0): AuthApi {
   let currentUserId: string | undefined;
   let sessionVersion = 0;
-  function sessionChanged(change: SessionChange, id?: string) {
+  let identityEpoch = 0;
+  let renewedStamp: number | undefined;
+  let renewedFrom: number | undefined;
+  function sessionChanged(change: SessionChange, id?: string, from?: number) {
+    renewedFrom = change === "renewed" && from === renewedStamp ? renewedFrom : from;
     ++sessionVersion;
+    if (change !== "renewed") ++identityEpoch;
     currentUserId = id;
     onSessionChange(change);
+    renewedStamp = change === "renewed" && id ? sessionVersion + sessionGeneration() : undefined;
   }
   function assertCurrent(version: number) {
     if (version !== sessionVersion + sessionGeneration()) throw new CancelledError();
@@ -51,32 +57,41 @@ export function createHttpAuth(baseUrl: string, client: CsrfClient, onSessionCha
     return payload.data;
   }
 
+  async function getCurrentUser(rereadRenewal = true): Promise<CurrentUser> {
+    const version = sessionVersion + sessionGeneration();
+    const epoch = identityEpoch;
+    const identity = currentUserId;
+    try {
+      const result = user(await request("/auth/me"));
+      assertCurrent(version);
+      if (result.id !== currentUserId) sessionChanged("established", result.id);
+      else onSessionChange("confirmed");
+      return result;
+    } catch (error) {
+      if (version !== sessionVersion + sessionGeneration()) {
+        // Revalidate once after known same-user renewal; never accept the old response.
+        if (rereadRenewal && identity && identity === currentUserId && epoch === identityEpoch && renewedFrom !== undefined && version >= renewedFrom && renewedStamp === sessionVersion + sessionGeneration()) return getCurrentUser(false);
+        throw new CancelledError();
+      }
+      if (error instanceof AdapterOutcomeError && error.outcome.kind === "error" && error.outcome.status === 401) sessionChanged("lost");
+      throw error;
+    }
+  }
+
   return {
     async getAuthMode() {
       const payload = await request("/auth/mode") as { mode?: unknown };
       if (payload.mode !== "local" && payload.mode !== "proxy" && payload.mode !== "none") throw new Error("auth.invalid-mode");
       return payload.mode as AuthMode;
     },
-    async getCurrentUser() {
-      const version = sessionVersion + sessionGeneration();
-      try {
-        const result = user(await request("/auth/me"));
-        assertCurrent(version);
-        if (result.id !== currentUserId) sessionChanged("established", result.id);
-        else onSessionChange("confirmed");
-        return result;
-      } catch (error) {
-        assertCurrent(version);
-        if (error instanceof AdapterOutcomeError && error.outcome.kind === "error" && error.outcome.status === 401) sessionChanged("lost");
-        throw error;
-      }
-    },
+    getCurrentUser,
     async login(username, password) {
+      const from = sessionVersion + sessionGeneration();
       const version = ++sessionVersion + sessionGeneration();
       const result = await request("/auth/login", "POST", { username, password }) as { user?: unknown };
       const signedIn = user(result.user);
       assertCurrent(version);
-      sessionChanged(signedIn.id === currentUserId ? "renewed" : "established", signedIn.id);
+      sessionChanged(signedIn.id === currentUserId ? "renewed" : "established", signedIn.id, from);
       return signedIn;
     },
     async logout() {
@@ -86,10 +101,11 @@ export function createHttpAuth(baseUrl: string, client: CsrfClient, onSessionCha
       sessionChanged("lost");
     },
     async changePassword(currentPassword, newPassword) {
+      const from = sessionVersion + sessionGeneration();
       const version = ++sessionVersion + sessionGeneration();
       await request("/auth/password", "POST", { currentPassword, newPassword });
       assertCurrent(version);
-      sessionChanged("renewed", currentUserId);
+      sessionChanged("renewed", currentUserId, from);
     },
     async updateMyLocale(locale) { return user(await request("/auth/me/profile", "PUT", { locale })); },
   };
