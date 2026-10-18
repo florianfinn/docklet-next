@@ -143,3 +143,17 @@ it.each(["replacement", "logout", "auth401", "activity401"])("%s clears old iden
     expect(actionDialogStore.get()).toEqual({ waiting: [] });
   } finally { view.unmount(); off(); f.client.clear(); }
 });
+
+
+it.each(["surface", "dialog"])("%s changes before the first observation cannot initialize toast history", async (source) => {
+  const f = fixture(); await f.discover(); setUiStyle({ actionPresentationOverride: "toast" });
+  const view = f.mount();
+  try {
+    act(() => {
+      if (source === "surface") presentationStore.set((s) => ({ ...s, surfaces: { "good~example": 1 } }));
+      else actionDialogStore.set({ runId: "unrelated-example", waiting: [] });
+    });
+    await f.load();
+    expect(f.shows).not.toHaveBeenCalled(); expect(count()).toBe(0);
+  } finally { view.unmount(); f.client.clear(); }
+});

@@ -84,6 +84,7 @@ export function ActionToasts() {
       },
     );
     let coordinator = createCoordinator();
+    let observed = false;
     const offRuns = adapter.subscribeActions((runs) => {
       // Identity replacement seeds new history; same-user renewal retains seen/dismissed runs.
       const nextIdentity = identity();
@@ -92,10 +93,13 @@ export function ActionToasts() {
         coordinator = createCoordinator();
         identityId = nextIdentity;
       }
+      observed = true;
       coordinator.sync(runs.map((run) => renderRun(run, localeRef.current)));
     });
-    const offDialog = actionDialogStore.subscribe(() => coordinator.sync());
-    const offSurfaces = presentationStore.subscribe(() => coordinator.sync());
+    // Presentation changes are not action observations and cannot seed initial history.
+    const syncPresentation = () => { if (observed) coordinator.sync(); };
+    const offDialog = actionDialogStore.subscribe(syncPresentation);
+    const offSurfaces = presentationStore.subscribe(syncPresentation);
     // One notice per target, replaced on every repeat (stable toast id), never a new run toast.
     const offGate = runGateOf(adapter)?.subscribe((n: GateNotice) => {
       const tr = tRef.current;
