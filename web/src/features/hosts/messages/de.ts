@@ -12,6 +12,9 @@ export const deHosts: typeof enHosts = {
   onlyThis: "Nur diesen Host anzeigen",
   card: {
     unavailable: "Vom Agent nicht gemeldet",
+    addressNotConfigured: "Nicht konfiguriert",
+    addressNotRequired: "Für Edge nicht erforderlich",
+    neverContacted: "Noch nie",
     development: "Entwicklungsbuild",
     connection: "Verbindung",
     address: "Adresse",

@@ -11,6 +11,9 @@ export const enHosts = {
   onlyThis: "Show only this host",
   card: {
     unavailable: "Not reported by the agent",
+    addressNotConfigured: "Not configured",
+    addressNotRequired: "Not required for Edge",
+    neverContacted: "Never",
     development: "Development build",
     connection: "Connection",
     address: "Address",
