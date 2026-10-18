@@ -157,3 +157,60 @@ it.each(["surface", "dialog"])("%s changes before the first observation cannot i
     expect(f.shows).not.toHaveBeenCalled(); expect(count()).toBe(0);
   } finally { view.unmount(); f.client.clear(); }
 });
+
+it("activity401 then same-user login into a fresh shell seeds real history", async () => {
+  const f = fixture(); await f.discover(); setUiStyle({ actionPresentationOverride: "toast" });
+  let view = f.mount();
+  try {
+    await f.load(); expect(f.shows).not.toHaveBeenCalled();
+    f.state.failure = "page401";
+    await act(async () => { await expect(f.adapter.listActions()).rejects.toMatchObject({ outcome: { status: 401 } }); });
+    view.unmount(); f.state.failure = "";
+    f.client.setQueryData(queryKeys.currentUser, await f.adapter.login("operator", "Example-password1!"));
+    const observed = vi.fn(); const off = f.adapter.subscribeActions(observed);
+    try {
+      view = f.mount(); await f.load();
+      expect(observed.mock.lastCall?.[0]).toHaveLength(3);
+      expect(f.shows).not.toHaveBeenCalled(); expect(count()).toBe(0);
+    } finally { off(); }
+    f.state.lists.good!.push(activity("good", "after-relogin")); f.state.details["after-relogin"] = detail("good", "after-relogin");
+    await f.load(); await waitFor(() => expect(count()).toBe(1));
+    expect(f.shows).toHaveBeenCalledTimes(1);
+  } finally { view.unmount(); f.client.clear(); }
+});
+
+it("identity replacement still notifies genuinely new runs in the mounted shell", async () => {
+  const f = fixture(); await f.discover(); setUiStyle({ actionPresentationOverride: "toast" });
+  const view = f.mount();
+  try {
+    await f.load(); f.state.user.id = "next-operator";
+    await act(async () => { await f.discover(); });
+    await f.load(); expect(f.shows).not.toHaveBeenCalled();
+    f.state.lists.good!.push(activity("good", "genuine-new")); f.state.details["genuine-new"] = detail("good", "genuine-new");
+    await f.load();
+    expect(f.shows).toHaveBeenCalledTimes(1);
+    await waitFor(() => expect(count()).toBe(1));
+  } finally { view.unmount(); f.client.clear(); }
+});
+
+it("identity replacement dismisses the prior owned toast even when the same UUID survives", async () => {
+  const f = fixture(); await f.discover(); setUiStyle({ actionPresentationOverride: "toast" });
+  const dismiss = vi.spyOn(toast, "dismiss");
+  const view = f.mount();
+  try {
+    await f.load();
+    f.state.lists.good!.push(activity("good", "same-run")); f.state.details["same-run"] = detail("good", "same-run");
+    await f.load(); await waitFor(() => expect(count()).toBe(1));
+    f.state.user.id = "next-operator";
+    await act(async () => { await f.discover(); });
+    await f.load();
+    expect(dismiss).toHaveBeenCalledWith("same-run");
+    await waitFor(() => expect(count()).toBe(0));
+    expect(f.shows).toHaveBeenCalledTimes(1);
+    f.state.details["same-run"]!.activity.status = "failed";
+    await f.load();
+    expect(f.shows).toHaveBeenCalledTimes(2);
+    await waitFor(() => expect(count()).toBe(1));
+    expect(document.querySelector('[data-slot="action-toast"]')?.getAttribute("data-status")).toBe("failed");
+  } finally { view.unmount(); f.client.clear(); }
+});
