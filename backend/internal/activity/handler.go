@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace
+// Deviations: Local module namespace; explicit incomplete remote activity-list signal.
 
 package activity
 
@@ -95,7 +95,7 @@ func NewHandler(activityService *ActivityService, localEnvironment EnvironmentDe
 	}
 }
 
-func (h *ActivityHandler) ListActivities(ctx context.Context, input *ListActivitiesInput) (*handlerutil.Page[activity.Activity], error) {
+func (h *ActivityHandler) ListActivities(ctx context.Context, input *ListActivitiesInput) (*ListActivitiesOutput, error) {
 	if input.EnvironmentID != "0" {
 		return h.proxyListActivitiesInternal(ctx, input)
 	}
@@ -108,7 +108,7 @@ func (h *ActivityHandler) ListActivities(ctx context.Context, input *ListActivit
 	}
 	h.applyActivitySourceLabelsInternal(ctx, input.EnvironmentID, activities)
 
-	return &handlerutil.Page[activity.Activity]{
+	return &ListActivitiesOutput{
 		Body: base.Paginated[activity.Activity]{
 			Success:    true,
 			Data:       activities,
@@ -528,13 +528,14 @@ func activityListParamsInternal(input *ListActivitiesInput) pagination.QueryPara
 	return params
 }
 
-func (h *ActivityHandler) proxyListActivitiesInternal(ctx context.Context, input *ListActivitiesInput) (*handlerutil.Page[activity.Activity], error) {
+func (h *ActivityHandler) proxyListActivitiesInternal(ctx context.Context, input *ListActivitiesInput) (*ListActivitiesOutput, error) {
 	unavailable := false
 	out, err := h.listRemoteActivitiesInternal(ctx, input, func(path string) (*base.Paginated[activity.Activity], error) {
 		var remote base.Paginated[activity.Activity]
 		if proxyErr := h.environment.ProxyJSONRequest(ctx, input.EnvironmentID, http.MethodGet, path, nil, &remote); proxyErr != nil {
 			var transportErr *remenv.TransportError
-			unavailable = errors.As(proxyErr, &transportErr) && transportErr.Unavailable()
+			unavailable = errors.Is(proxyErr, remenv.ErrEnvironmentUnavailable) ||
+				(errors.As(proxyErr, &transportErr) && transportErr.Unavailable())
 			return nil, handlerutil.TranslateRemoteProxyError(proxyErr)
 		}
 		return &remote, nil
@@ -548,10 +549,14 @@ func (h *ActivityHandler) proxyListActivitiesInternal(ctx context.Context, input
 	if err != nil && !unavailable {
 		return nil, err
 	}
-	// HTTP responses must not discard stored summaries when the agent is offline.
+	// Keep hub summaries readable while explicitly marking an incomplete agent page.
 	// Stream pollers retain the proxy error from the shared listing path.
-	out.Body.Success = true
-	return out, nil
+	result := &ListActivitiesOutput{Body: out.Body}
+	if unavailable {
+		result.HostReason = "agent.unavailable"
+	}
+	result.Body.Success = true
+	return result, nil
 }
 
 func (
