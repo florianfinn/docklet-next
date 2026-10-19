@@ -34,7 +34,8 @@ func (s *ProjectService) ResolveRuntimeProjectIdentity(ctx context.Context, proj
 	for i := range rows {
 		row := &rows[i]
 		// A requested ID must be checked, even when the name lookup would not
-		// otherwise select it. Every row is checked for ambiguous Compose ownership.
+		// otherwise select it. Unreadable peers, including archived rows, can
+		// conceal duplicate ownership and therefore block every successful lookup.
 		name, err := s.runtimeComposeName(ctx, row)
 		if err != nil {
 			return projecttypes.Reference{}, false, fmt.Errorf("read runtime project identity: %w", err)
@@ -69,7 +70,7 @@ func (s *ProjectService) runtimeComposeName(ctx context.Context, row *Project) (
 	}
 	autoInject := kit.ParseOrDefault(settings.AutoInjectEnv.Value, false, strconv.ParseBool)
 	dirName := cmp.Or(derefRuntimeDirName(row.DirName), row.Name)
-	metadata, err := projectsync.LoadComposeMetadata(ctx, row.Path, dirName, projectsDirectory, autoInject, s.projectPathMapper(ctx))
+	metadata, err := projectsync.LoadComposeMetadata(ctx, row.Path, dirName, projectsDirectory, &row.Name, autoInject, s.projectPathMapper(ctx))
 	if err != nil {
 		return "", err
 	}
