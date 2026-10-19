@@ -49,7 +49,8 @@ func (s *ActivityService) repairMatchingInternal(ctx context.Context, kind activ
 	if err := s.checkInitInternal(); err != nil {
 		return 0, err
 	}
-	query := s.db.WithContext(ctx).Where("status IN ? AND type <> ?", []activity.Status{activity.StatusQueued, activity.StatusRunning}, activity.TypeJobRun)
+	query := s.db.WithContext(ctx).Where("status IN ? AND type <> ?", []activity.Status{activity.StatusQueued, activity.StatusRunning}, activity.TypeJobRun).
+		Where("NOT EXISTS (SELECT 1 FROM runtime_receipts AS owned WHERE owned.kind = 'receipt' AND owned.environment_id = activities.environment_id AND owned.run_id = activities.id)")
 	if kind != "" {
 		query = query.Where("type = ?", kind)
 	}
