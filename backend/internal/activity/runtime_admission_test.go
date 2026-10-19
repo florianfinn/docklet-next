@@ -113,6 +113,10 @@ func TestRuntimeAdmissionIdentityMismatchNonDisclosing(t *testing.T) {
 				result, err = f.service.Admit(t.Context(), c)
 				b1Mismatch(t, result, err, first.ActivityID)
 				require.Equal(t, before, runtimeBoundarySnapshot(t, f.store))
+				c.Operation = RuntimeDownProject
+				result, err = f.service.Admit(t.Context(), c)
+				b1Mismatch(t, result, err, first.ActivityID)
+				require.Equal(t, before, runtimeBoundarySnapshot(t, f.store))
 			}
 		})
 	}

@@ -151,6 +151,11 @@ func runtimeActiveConflictTxInternal(tx *gorm.DB, c runtimeCanonicalCommandInter
 	var exact *RuntimeReceipt
 	for i := range rows {
 		row := &rows[i]
+		identity := c.identity(row.RunID)
+		identity.RequestDigest = row.RequestDigest // Different commands may conflict.
+		if !runtimeMatchesInternal(row, identity) {
+			return nil, &runtimeConflictInternal{}
+		}
 		if *row.GateScope != c.gateScope || *row.GateKey != c.gateKey {
 			return nil, &GateConflict{RunID: row.RunID, Code: string(activitytypes.CodeRunBusy)}
 		}
