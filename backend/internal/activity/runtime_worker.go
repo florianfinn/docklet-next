@@ -86,10 +86,7 @@ func (s *RuntimeService) runLocalInternal(owner *runtimeOwnerInternal) {
 	s.activity.runningMu.Unlock()
 	execute := false
 	if phaseErr == nil {
-		execute, phaseErr = s.localPhaseInternal(owner, false)
-		if execute && phaseErr == nil {
-			execute, phaseErr = s.localPhaseInternal(owner, true)
-		}
+		execute, phaseErr = s.acquireLocalSlotInternal(owner)
 	}
 	var outputErr error
 	if execute && phaseErr == nil && owner.ctx.Err() == nil {
@@ -114,10 +111,15 @@ func (s *RuntimeService) runLocalInternal(owner *runtimeOwnerInternal) {
 func (s *RuntimeService) localPhaseInternal(owner *runtimeOwnerInternal, executing bool) (bool, error) {
 	s.activity.runningMu.Lock()
 	defer s.activity.runningMu.Unlock()
+	lock := s.activity.publishLockInternal(owner.id.RunID)
+	lock.Lock()
+	defer lock.Unlock()
 	execute := false
 	var startedAt *time.Time
+	var snapshot activitytypes.RuntimeSnapshot
 	err := s.ownerTransactionInternal(owner.ctx, func(tx *gorm.DB, now time.Time) error {
 		execute, startedAt = false, nil
+		snapshot = activitytypes.RuntimeSnapshot{}
 		row, err := runtimeMutableReceiptTxInternal(tx, owner.id)
 		if err != nil {
 			return err
@@ -138,12 +140,29 @@ func (s *RuntimeService) localPhaseInternal(owner *runtimeOwnerInternal, executi
 		if err != nil {
 			return err
 		}
+		if executing && runtimeQueuesInternal(owner.command.command.Operation) {
+			changed := tx.Model(&Activity{}).Where("id = ? AND environment_id = ? AND status = ?", row.RunID, row.EnvironmentID,
+				activitytypes.StatusQueued).UpdateColumns(map[string]any{"status": activitytypes.StatusRunning, "updated_at": now})
+			if changed.Error != nil {
+				return changed.Error
+			}
+			if changed.RowsAffected != 1 {
+				return &runtimeConflictInternal{}
+			}
+			snapshot, err = runtimeSnapshotTxInternal(tx, row)
+			if err != nil {
+				return err
+			}
+		}
 		startedAt = copyPtrInternal(row.ExecutorStartedAt)
 		execute = true
 		return nil
 	})
 	if err == nil {
 		owner.startedAt = startedAt
+		if snapshot.ID != "" {
+			s.activity.publishActivityInternal(snapshot.Activity)
+		}
 	}
 	return execute && err == nil, err
 }

@@ -124,6 +124,31 @@ intake returns `run.joined`; another operation/parent conflict returns
 never use the 30-second `Check` freshness shortcut: start/stop/restart/redeploy
 are deliberate effects. Other run-gate users keep their existing freshness rule.
 
+## Existing deployment activity limits
+
+Local deploy and redeploy retain the existing per-environment
+`maxConcurrentActivities` limiter shared with queue-opted pull/build work.
+The default is five; nonpositive values remain unlimited while counting holders,
+and settings changes keep their existing effect on running work and waiters.
+The other five runtime commands do not acquire activity slots.
+
+Durable admission commits the receipt, key, exclusion, start audit and queued
+Activity before waiting. Local pending/accepted eligible receipts project queued
+only while their Activity records that local wait; remote admission alone is no
+queue evidence. Acceptance precedes a cancellable wait outside owner locks and
+transactions. The existing 30-minute owned workflow budget includes that wait;
+viewer disconnect does not cancel accepted work. Durable intent and owner
+cancellation are checked before acquisition and again before the executing
+receipt and running Activity commit together. Only then may effects start.
+
+A granted slot remains held through actual workflow/child/output join and the
+successful terminal receipt/Activity/final-message commit. Failed persistence
+retains the slot, owner, exclusion and frozen result for storage-only settlement
+retry. A cancellation racing with a grant follows that same release boundary.
+Executing, terminal and unknown receipts remain authoritative over stale Activity
+status. This preserves the operator limit without introducing another queue or
+changing Docker/Compose operations or resource rights.
+
 ## Durable receipt and writers
 
 A new forward SQLite migration adds a runtime receipt and idempotency bindings,
@@ -219,11 +244,11 @@ write does not invoke Docker again.
 
 | Receipt transition | Sole writer and precondition | Activity projection and scope |
 | --- | --- | --- |
-| Absent → `admitted` | Hub admission transaction | `running`, `run.started`; held |
+| Absent → `admitted` | Hub admission transaction | Locally eligible deployment `queued`, otherwise `running`; `run.started`; held |
 | `admitted` → `dispatching` or terminal `cancelled` | Hub transaction rechecks cancel intent before any remote send; intent settles cancelled with no send, otherwise commits dispatching | Held for dispatch; released after cancellation commit |
-| Absent executor receipt → `accepted` | Agent commits same ID/digest and local gate before registering worker | `running`; held |
+| Absent executor receipt → `accepted` | Agent commits same ID/digest and local gate before registering worker | Eligible local deployment `queued` until its slot grant, otherwise `running`; held |
 | `accepted` → `executing` | Executor checks cancellation, then starts work once | `running`; held |
-| Active → cancellation requested | Hub persists intent; executor persists it before signaling registered context | Still `running`; held |
+| Active → cancellation requested | Hub persists intent; executor persists it before signaling registered context | Retain current queued/running state; held |
 | Active → terminal `success`/`failed`/`cancelled` | Executor has settled work and persists actual outcome | Matching existing activity state; releasable |
 | Dispatch/active → `unknown` | Hub has no authoritative executor answer, or storage/host continuity is lost | `running` with explicit unknown reason; held |
 | Abandoned local executor → terminal `failed` | Executor startup proves old process ended, or worker/known children settle after interruption | Interrupted, effect unverified; release after durable commit |

@@ -172,3 +172,58 @@ func TestRuntimeProjectionLegacyActivityHasNoInventedKnowledge(t *testing.T) {
 	require.NotContains(t, string(data), "outcomeState")
 	require.NotContains(t, string(data), "cancelRequested")
 }
+
+func TestRuntimeProjectionQueuedRequiresLocalEligiblePendingEvidence(t *testing.T) {
+	for _, tc := range []struct {
+		name, state     string
+		operation       RuntimeOperation
+		remote, missing bool
+		want            activitytypes.Status
+	}{
+		{name: "pending", state: "pending", operation: RuntimeDeployProject, want: activitytypes.StatusQueued},
+		{name: "accepted-redeploy", state: "accepted", operation: RuntimeRedeployProject, want: activitytypes.StatusQueued},
+		{name: "executing-stale-queued", state: "executing", operation: RuntimeDeployProject, want: activitytypes.StatusRunning},
+		{name: "success-stale-queued", state: "success", operation: RuntimeDeployProject, want: activitytypes.StatusSuccess},
+		{name: "failed-stale-queued", state: "failed", operation: RuntimeDeployProject, want: activitytypes.StatusFailed},
+		{name: "cancelled-stale-queued", state: "cancelled", operation: RuntimeDeployProject, want: activitytypes.StatusCancelled},
+		{name: "unknown-stale-queued", state: "unknown", operation: RuntimeDeployProject, want: activitytypes.StatusRunning},
+		{name: "remote-pending", state: "pending", operation: RuntimeDeployProject, remote: true, want: activitytypes.StatusRunning},
+		{name: "remote-accepted", state: "accepted", operation: RuntimeRedeployProject, remote: true, want: activitytypes.StatusRunning},
+		{name: "unqueued-operation", state: "pending", operation: RuntimeDownProject, want: activitytypes.StatusRunning},
+		{name: "missing-local-evidence", state: "pending", operation: RuntimeDeployProject, missing: true, want: activitytypes.StatusRunning},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			f := b1Fixture(t)
+			c := f.command()
+			c.Operation = tc.operation
+			if tc.remote {
+				c.Store.EnvironmentID = "example-remote"
+				c.Store.ExecutorGeneration = uuid.NewString()
+			}
+			id := b3Admit(t, f, c)
+			require.NoError(t, f.store.svc.db.Model(&Activity{}).Where("id = ?", id).UpdateColumn("status", activitytypes.StatusQueued).Error)
+			b1Tx(t, f, func(tx *gorm.DB, now time.Time) error {
+				if tc.state == "pending" {
+					return nil
+				}
+				evidence := runtimeEvidenceInternal{State: tc.state}
+				if tc.state == "unknown" {
+					evidence.UnknownReason = new("executor-unavailable")
+				}
+				if tc.state == "success" || tc.state == "failed" || tc.state == "cancelled" {
+					evidence.SettledAt = new(now)
+				}
+				_, err := runtimeEvidenceTxInternal(tx, now, b1Identity(t, c, id), evidence)
+				return err
+			})
+			if tc.missing {
+				require.NoError(t, f.store.svc.db.Where("id = ?", id).Delete(&Activity{}).Error)
+			}
+			receipt := b3Receipt(t, f, id)
+			knowledge := runtimeKnowledgeInternal(&receipt)
+			snapshot := b3Projection(t, f, id)
+			require.Equal(t, tc.want, snapshot.Status)
+			require.Equal(t, knowledge, snapshot.RuntimeKnowledge, "queue projection must not alter receipt knowledge")
+		})
+	}
+}

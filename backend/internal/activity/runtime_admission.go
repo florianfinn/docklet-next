@@ -106,6 +106,16 @@ func (s *RuntimeService) admissionPassInternal(ctx context.Context, c runtimeCan
 				if err != nil {
 					return err
 				}
+				if s.localExecution != nil && runtimeQueuesInternal(c.command.Operation) {
+					changed := tx.Model(&Activity{}).Where("id = ? AND environment_id = ?", row.RunID, row.EnvironmentID).
+						UpdateColumns(map[string]any{"status": activitytypes.StatusQueued, "updated_at": now})
+					if changed.Error != nil {
+						return changed.Error
+					}
+					if changed.RowsAffected != 1 {
+						return &runtimeConflictInternal{}
+					}
+				}
 				if c.command.Actor.DisplayName != nil {
 					// Keep the transaction's clock sample; the generic model's update
 					// hook otherwise replaces UpdatedAt with the wall clock.
@@ -133,6 +143,12 @@ func (s *RuntimeService) admissionPassInternal(ctx context.Context, c runtimeCan
 		return RuntimeAdmissionResult{}, false, err
 	}
 	if found && result.Code == activitytypes.CodeRunStarted && s.localExecution != nil {
+		if runtimeQueuesInternal(c.command.Operation) {
+			lock := s.activity.publishLockInternal(result.ActivityID)
+			lock.Lock()
+			s.activity.publishActivityInternal(result.Activity.Activity)
+			lock.Unlock()
+		}
 		s.registerLocalInternal(ctx, c, result.ActivityID)
 	}
 	return result, found, nil

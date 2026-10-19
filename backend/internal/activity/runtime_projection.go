@@ -63,7 +63,13 @@ func runtimeSnapshotTxInternal(tx *gorm.DB, row *RuntimeReceipt) (activitytypes.
 	}
 	// Knowledge and workflow disposition come from the receipt, independently of
 	// legacy status/read health. A manual release retains unknown external outcome.
-	model.Status = runtimeStatusInternal(row)
+	status := runtimeStatusInternal(row)
+	if status == activitytypes.StatusRunning && model.Status == activitytypes.StatusQueued &&
+		row.EnvironmentID == "0" && row.ExecutorGeneration == row.StoreGeneration && *row.DispatchState == "pending" &&
+		(*row.ExecutorState == "pending" || *row.ExecutorState == "accepted") && runtimeQueuesInternal(RuntimeOperation(*row.OperationID)) {
+		status = activitytypes.StatusQueued
+	}
+	model.Status = status
 	if row.HubDisposition != nil {
 		model.MessageCode = string(activitytypes.CodeRuntimeInterrupted)
 		model.Error = row.HubDispositionReason

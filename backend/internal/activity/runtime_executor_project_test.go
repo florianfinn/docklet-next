@@ -22,6 +22,7 @@ import (
 	"github.com/florianfinn/docklet-next/backend/internal/activity"
 	"github.com/florianfinn/docklet-next/backend/internal/project"
 	"github.com/florianfinn/docklet-next/backend/pkg/utils/sqlitestore"
+	activitytypes "github.com/florianfinn/docklet-next/types/activity"
 	projecttypes "github.com/florianfinn/docklet-next/types/project"
 	usertypes "github.com/florianfinn/docklet-next/types/user"
 	"github.com/stretchr/testify/require"
@@ -589,4 +590,150 @@ func TestRuntimeExecutorRealComposeOutputDrainsBeforeTerminal(t *testing.T) {
 	require.NoError(t, f.db.Raw("SELECT code FROM activity_messages WHERE activity_id = ? ORDER BY rowid", admitted.ActivityID).Scan(&codes).Error)
 	require.Greater(t, len(codes), 2)
 	require.Equal(t, "activity.success", codes[len(codes)-1])
+}
+
+func TestRuntimeExecutorProjectSlotsAtLimitOne(t *testing.T) {
+	for _, operation := range []activity.RuntimeOperation{activity.RuntimeDeployProject, activity.RuntimeRedeployProject} {
+		t.Run(string(operation), func(t *testing.T) {
+			f := newRuntimeServicesFixture(t)
+			app, stop := context.WithTimeout(t.Context(), 8*time.Second)
+			defer stop()
+			f.runtime = activity.NewRuntimeService(f.activity, f.adapter, activity.RuntimeLocalConfig{ApplicationContext: app, Store: f.store, Executor: f.adapter})
+			require.NoError(t, f.settings.SetIntSetting(t.Context(), "maxConcurrentActivities", 1))
+			f.project("example-project", "example-project", "name: example_stack\nservices:\n  app:\n    image: registry.example.com/app:1\n")
+			f.http.setLabels(map[string]string{"com.docker.compose.project": "example_stack", "com.docker.compose.service": "app", "com.docker.compose.container-number": "1", "com.docker.compose.config-hash": "example-hash"})
+			legacy, err := f.activity.StartActivity(t.Context(), activity.StartActivityRequest{Type: activitytypes.TypeImagePull, Queue: true})
+			require.NoError(t, err)
+			entered, release := make(chan struct{}), make(chan struct{})
+			var once sync.Once
+			unblock := func() { once.Do(func() { close(release) }) }
+			defer unblock()
+			var observed sync.Once
+			f.http.mu.Lock()
+			f.http.onCall = func(_ http.ResponseWriter, r *http.Request) bool {
+				// Deploy reaches image preparation; redeploy first reaches its actual
+				// preliminary ImageService pull. Both execute under the parent's one slot.
+				inspect := r.Method == http.MethodGet && strings.Contains(r.URL.Path, "/images/") && strings.HasSuffix(r.URL.Path, "/json")
+				pull := r.Method == http.MethodPost && strings.HasSuffix(r.URL.Path, "/images/create")
+				if (operation == activity.RuntimeDeployProject && inspect) || (operation == activity.RuntimeRedeployProject && pull) {
+					observed.Do(func() { close(entered) })
+					select {
+					case <-release:
+					case <-r.Context().Done():
+					}
+				}
+				return false
+			}
+			f.http.mu.Unlock()
+			command := f.command(operation, activity.RuntimeTarget{Kind: "stack", ID: "example-project"})
+			command.Options.Deploy = &projecttypes.DeployOptions{PullPolicy: "never", ForceRecreate: true, RemoveOrphans: true, RecreateVolumes: true}
+			admitted, err := f.runtime.Admit(t.Context(), command)
+			require.NoError(t, err)
+			// Any assertion failure must unblock handlers and join the accepted owner
+			// before fixture teardown closes the SQLite store and synthetic HTTP server.
+			defer func() {
+				unblock()
+				f.activity.CompleteActivity(context.WithoutCancel(t.Context()), legacy.ID, activitytypes.StatusSuccess, "Complete", nil)
+				_, _ = f.waitLocal(admitted.ActivityID)
+			}()
+			require.Equal(t, activitytypes.StatusQueued, admitted.Activity.Status)
+			require.Equal(t, command.Actor.ID, admitted.Activity.StartedBy.UserID)
+			var receipt activity.RuntimeReceipt
+			require.Eventually(t, func() bool {
+				return f.db.First(&receipt, "run_id = ?", admitted.ActivityID).Error == nil && *receipt.ExecutorState != "pending"
+			}, 3*time.Second, 5*time.Millisecond)
+			require.Equal(t, "accepted", *receipt.ExecutorState)
+			require.Nil(t, receipt.ExecutorStartedAt)
+			require.Empty(t, runtimeEffectEvents(f.http.snapshot()), "no create/start/pull while the parent is queued")
+			detail, err := f.activity.GetActivityDetail(t.Context(), "0", admitted.ActivityID, 100)
+			require.NoError(t, err)
+			require.Equal(t, activitytypes.StatusQueued, detail.Activity.Status)
+			joined, err := f.runtime.Admit(t.Context(), command)
+			require.NoError(t, err)
+			require.Equal(t, admitted.ActivityID, joined.ActivityID)
+			_, err = f.activity.CompleteActivity(t.Context(), legacy.ID, activitytypes.StatusSuccess, "Complete", nil)
+			require.NoError(t, err)
+			select {
+			case <-entered:
+			case <-time.After(8 * time.Second):
+				t.Fatal("actual image preparation or preliminary pull did not enter at limit one")
+			}
+			require.NoError(t, f.db.First(&receipt, "run_id = ?", admitted.ActivityID).Error)
+			require.Equal(t, "executing", *receipt.ExecutorState)
+			detail, err = f.activity.GetActivityDetail(t.Context(), "0", admitted.ActivityID, 100)
+			require.NoError(t, err)
+			require.Equal(t, activitytypes.StatusRunning, detail.Activity.Status)
+			for _, e := range f.http.snapshot() {
+				require.False(t, e.Method == http.MethodPost && strings.HasSuffix(e.Path, "/containers/create"), "preparation must join before Up")
+			}
+			unblock()
+			snapshot, err := f.waitLocal(admitted.ActivityID)
+			require.NoError(t, err)
+			require.Equal(t, activitytypes.StatusSuccess, snapshot.Status, f.debugEvents())
+			var creates, starts, pulls int
+			for _, e := range f.http.snapshot() {
+				if e.Method != http.MethodPost {
+					continue
+				}
+				if strings.HasSuffix(e.Path, "/containers/create") {
+					creates++
+				}
+				if strings.HasSuffix(e.Path, "/start") {
+					starts++
+				}
+				if strings.HasSuffix(e.Path, "/images/create") {
+					pulls++
+				}
+			}
+			require.Equal(t, 1, creates)
+			require.Equal(t, 1, starts)
+			if operation == activity.RuntimeRedeployProject {
+				require.Equal(t, 1, pulls)
+			} else {
+				require.Zero(t, pulls)
+			}
+			var lifecycle, receipts, finals int64
+			require.NoError(t, f.db.Model(&activity.Activity{}).Where("id = ?", admitted.ActivityID).Count(&lifecycle).Error)
+			require.NoError(t, f.db.Model(&activity.RuntimeReceipt{}).Where("run_id = ?", admitted.ActivityID).Count(&receipts).Error)
+			require.NoError(t, f.db.Table("activity_messages").Where("activity_id = ? AND code = 'activity.success'", admitted.ActivityID).Count(&finals).Error)
+			require.EqualValues(t, 1, lifecycle)
+			require.EqualValues(t, 1, receipts)
+			require.EqualValues(t, 1, finals)
+			var row activity.Activity
+			require.NoError(t, f.db.First(&row, "id = ?", admitted.ActivityID).Error)
+			require.NotEmpty(t, row.Output)
+			next, err := f.activity.StartActivity(t.Context(), activity.StartActivityRequest{Type: activitytypes.TypeImagePull, Queue: true})
+			require.NoError(t, err)
+			require.Equal(t, activitytypes.StatusRunning, next.Status)
+			_, err = f.activity.CompleteActivity(t.Context(), next.ID, activitytypes.StatusSuccess, "Complete", nil)
+			require.NoError(t, err)
+		})
+	}
+}
+
+func TestRuntimeExecutorBuildErrorReturnsParentSlotAtLimitOne(t *testing.T) {
+	f := newRuntimeServicesFixture(t)
+	app, stop := context.WithTimeout(t.Context(), 8*time.Second)
+	defer stop()
+	f.runtime = activity.NewRuntimeService(f.activity, f.adapter, activity.RuntimeLocalConfig{ApplicationContext: app, Store: f.store, Executor: f.adapter})
+	require.NoError(t, f.settings.SetIntSetting(t.Context(), "maxConcurrentActivities", 1))
+	f.project("example-project", "example-project", "name: example_stack\nservices:\n  app:\n    image: registry.example.com/app:1\n    pull_policy: build\n    build:\n      context: .\n      dockerfile: Missing.Dockerfile\n")
+	command := f.command(activity.RuntimeDeployProject, activity.RuntimeTarget{Kind: "stack", ID: "example-project"})
+	command.Options.Deploy = &projecttypes.DeployOptions{PullPolicy: "never"}
+	admitted, err := f.runtime.Admit(t.Context(), command)
+	require.NoError(t, err)
+	snapshot, err := f.waitLocal(admitted.ActivityID)
+	require.NoError(t, err)
+	require.Equal(t, activitytypes.StatusFailed, snapshot.Status)
+	var failures int64
+	require.NoError(t, f.db.Table("events").Where("resource_type = 'image' AND type = 'image.error' AND user_id = ?", command.Actor.ID).Count(&failures).Error)
+	require.Positive(t, failures, "actual BuildService returns from missing Dockerfile preparation; this is not successful BuildKit transport")
+	for _, e := range f.http.snapshot() {
+		require.False(t, e.Method == http.MethodPost && (strings.HasSuffix(e.Path, "/containers/create") || strings.HasSuffix(e.Path, "/start")))
+	}
+	next, err := f.activity.StartActivity(t.Context(), activity.StartActivityRequest{Type: activitytypes.TypeImagePull, Queue: true})
+	require.NoError(t, err)
+	require.Equal(t, activitytypes.StatusRunning, next.Status)
+	_, err = f.activity.CompleteActivity(t.Context(), next.ID, activitytypes.StatusSuccess, "Complete", nil)
+	require.NoError(t, err)
 }
