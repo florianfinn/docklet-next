@@ -38,6 +38,12 @@ func TestRuntimeExecutorContainerSevenBoundary(t *testing.T) {
 			require.EqualValues(t, 1, receiptCount)
 			require.EqualValues(t, 1, activityCount)
 			require.EqualValues(t, 1, finalCount)
+			var stored activity.Activity
+			require.NoError(t, f.db.First(&stored, "id = ?", runID).Error)
+			require.Equal(t, new(command.Actor.ID), stored.StartedByUserID)
+			var attributedEvents int64
+			require.NoError(t, f.db.Table("events").Where("user_id = ? AND resource_id = ?", command.Actor.ID, runtimeContainerID).Count(&attributedEvents).Error)
+			require.EqualValues(t, 1, attributedEvents)
 			effects := runtimeEffectEvents(f.http.snapshot())
 			require.Len(t, effects, 1, f.debugEvents())
 			require.Equal(t, http.MethodPost, effects[0].Method)

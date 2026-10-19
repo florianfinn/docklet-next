@@ -30,6 +30,7 @@ func (s *ProjectService) ResolveRuntimeProjectIdentity(ctx context.Context, proj
 		return projecttypes.Reference{}, false, fmt.Errorf("list runtime project identities: %w", err)
 	}
 	var match projecttypes.Reference
+	owners := make(map[string]int, len(rows))
 	for i := range rows {
 		row := &rows[i]
 		// A requested ID must be checked, even when the name lookup would not
@@ -38,20 +39,20 @@ func (s *ProjectService) ResolveRuntimeProjectIdentity(ctx context.Context, proj
 		if err != nil {
 			return projecttypes.Reference{}, false, fmt.Errorf("read runtime project identity: %w", err)
 		}
-		if name == "" || (composeName != "" && name != composeName) {
+		if name == "" {
 			continue
 		}
-		if projectID != "" && row.ID != projectID {
-			if composeName == "" {
-				continue
+		owners[name]++
+		if projectID != "" {
+			if row.ID == projectID {
+				match = projecttypes.Reference{ID: row.ID, Name: name}
 			}
-			// A supplied ID and Compose name must identify the same sole row.
-			return projecttypes.Reference{}, false, nil
+		} else if name == composeName {
+			match = projecttypes.Reference{ID: row.ID, Name: name}
 		}
-		if match.ID != "" {
-			return projecttypes.Reference{}, false, nil
-		}
-		match = projecttypes.Reference{ID: row.ID, Name: row.Name}
+	}
+	if match.ID == "" || (composeName != "" && match.Name != composeName) || owners[match.Name] != 1 {
+		return projecttypes.Reference{}, false, nil
 	}
 	return match, match.ID != "", nil
 }

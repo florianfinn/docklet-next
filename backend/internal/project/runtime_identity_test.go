@@ -52,6 +52,7 @@ func TestResolveRuntimeProjectIdentityFreshFilesAndOwnership(t *testing.T) {
 	require.NoError(t, err)
 	require.True(t, found)
 	require.Equal(t, row.ID, ref.ID)
+	require.Equal(t, "custom_stack", ref.Name)
 	ref, found, err = svc.ResolveRuntimeProjectIdentity(ctx, row.ID, "custom_stack")
 	require.NoError(t, err)
 	require.True(t, found)
