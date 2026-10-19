@@ -459,6 +459,7 @@ func (w *Writer) drainRuntimeInternal() {
 		if len(batch) > 0 {
 			ctx, cancel := context.WithTimeout(w.persistCtx, runtimeAppendTimeout)
 			_, err := w.activityService.AppendMessages(ctx, w.activityID, batch)
+			err = errors.Join(err, ctx.Err())
 			cancel()
 			if err != nil {
 				w.mu.Lock()

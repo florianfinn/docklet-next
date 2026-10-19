@@ -10,6 +10,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"runtime"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -82,17 +83,21 @@ func TestRuntimeWriterDrainBackpressureCancelAndTail(t *testing.T) {
 		}
 		close(wrote)
 	}()
-	// Establish ingress ownership while its enqueue is blocked, without sleeps.
+	// Observe extraction before Finish so this producer is known accepted,
+	// not merely waiting for ingress. A full queue holds it at enqueue.
 	deadline := time.After(5 * time.Second)
 	for {
-		if !w.runtime.ingress.TryLock() {
+		w.mu.Lock()
+		acceptedTail := string(w.buffer) == "tail"
+		w.mu.Unlock()
+		if acceptedTail {
 			break
 		}
-		w.runtime.ingress.Unlock()
 		select {
 		case <-deadline:
-			t.Fatal("writer did not enter ingress")
+			t.Fatal("writer did not reach enqueue")
 		default:
+			runtime.Gosched()
 		}
 	}
 	wait, stop := context.WithCancel(t.Context())
