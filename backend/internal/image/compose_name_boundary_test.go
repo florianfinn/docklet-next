@@ -65,6 +65,7 @@ func TestComposeNameImageAndDashboardResponses(t *testing.T) {
 	t.Cleanup(func() { require.NoError(t, cli.Close()) })
 	dockerSvc := docker.NewDockerClientService(t.Context(), nil, nil, nil).WithClient(cli)
 	imageSvc := image.NewImageService(db, dockerSvc, nil, nil, nil, nil, nil, nil)
+	dashboardImageSvc := image.NewImageService(db, dockerSvc, nil, nil, nil, nil, nil, nil)
 	assertUsage := func(t *testing.T, rows []imagetypes.Summary) {
 		t.Helper()
 		data, err := json.Marshal(rows)
@@ -87,9 +88,9 @@ func TestComposeNameImageAndDashboardResponses(t *testing.T) {
 			rows, _, err := imageSvc.ListImagesPaginated(ctx, pagination.QueryParams{Limit: -1})
 			require.NoError(t, err)
 			assertUsage(t, rows)
-			// A fresh dashboard avoids its own snapshot cache while sharing the image
-			// map, proving both consumers under cold/warm image-map cache state.
-			dashboardSvc := dashboard.NewDashboardService(db, dockerSvc, nil, nil, imageSvc, nil, nil, nil, nil, nil)
+			// A fresh dashboard avoids its snapshot cache. Its separate image map
+			// proves cold/warm usage independently of the image list above.
+			dashboardSvc := dashboard.NewDashboardService(db, dockerSvc, nil, nil, dashboardImageSvc, nil, nil, nil, nil, nil)
 			snapshot, err := dashboardSvc.GetSnapshot(ctx, dashboard.DashboardActionItemsOptions{DebugAllGood: true}, true)
 			require.NoError(t, err)
 			assertUsage(t, snapshot.Images.Data)
