@@ -15,37 +15,26 @@ import (
 	"unicode"
 	"unicode/utf8"
 
+	activitytypes "github.com/florianfinn/docklet-next/types/activity"
 	projecttypes "github.com/florianfinn/docklet-next/types/project"
 	usertypes "github.com/florianfinn/docklet-next/types/user"
 )
 
-type RuntimeOperation string
+// Aliases keep the trusted internal port names while sharing dormant wire vocabulary.
+type RuntimeOperation = activitytypes.RuntimeOperation
 
 const (
-	RuntimeDeployProject    RuntimeOperation = "deploy-project"
-	RuntimeDownProject      RuntimeOperation = "down-project"
-	RuntimeRestartProject   RuntimeOperation = "restart-project"
-	RuntimeRedeployProject  RuntimeOperation = "redeploy-project"
-	RuntimeStartContainer   RuntimeOperation = "start-container"
-	RuntimeStopContainer    RuntimeOperation = "stop-container"
-	RuntimeRestartContainer RuntimeOperation = "restart-container"
+	RuntimeDeployProject    = activitytypes.RuntimeDeployProject
+	RuntimeDownProject      = activitytypes.RuntimeDownProject
+	RuntimeRestartProject   = activitytypes.RuntimeRestartProject
+	RuntimeRedeployProject  = activitytypes.RuntimeRedeployProject
+	RuntimeStartContainer   = activitytypes.RuntimeStartContainer
+	RuntimeStopContainer    = activitytypes.RuntimeStopContainer
+	RuntimeRestartContainer = activitytypes.RuntimeRestartContainer
 )
 
-// RuntimeTarget must already identify a canonical raw resource. Aliases and
-// browser host~ID values require boundary resolution before entering this port.
-type RuntimeTarget struct {
-	Kind            string
-	ID              string
-	ParentProjectID *string
-	Name            *string
-}
-
-// RuntimeOptions preserves the selected legacy route shapes. RestartServices is
-// a set (Compose selects a dependency graph); an empty set means the whole stack.
-type RuntimeOptions struct {
-	Deploy          *projecttypes.DeployOptions
-	RestartServices []string
-}
+type RuntimeTarget = activitytypes.RuntimeTarget
+type RuntimeOptions = activitytypes.RuntimeOptions
 
 type RuntimeStoreBinding struct {
 	StoreGeneration, ManagerID, RegistrationID string
@@ -80,18 +69,45 @@ func runtimeTargetValidInternal(target RuntimeTarget) bool {
 		(target.ParentProjectID == nil || (target.Kind == "container" && runtimeTextInternal(*target.ParentProjectID, 256) && !strings.Contains(*target.ParentProjectID, "~")))
 }
 
+// Hub intake alone accepts a client key. A missing key is never synthesized here.
 func runtimeCanonicalizeInternal(command RuntimeCommand) (runtimeCanonicalCommandInternal, error) {
+	key, err := runtimeUUIDInternal(command.Key)
+	if err != nil {
+		return runtimeCanonicalCommandInternal{}, errRuntimeInvalidInternal
+	}
+	command.Key = key
+	return runtimeCanonicalizeSemanticInternal(command)
+}
+
+// Pure trusted executor preparation, not receiver acceptance or permission. C2
+// supplies authenticated store ownership and attribution before calling this.
+// Run-ID deduplication belongs to its receipt transaction, never a hub key lookup.
+func runtimeCanonicalizeExecutorInternal(command RuntimeCommand, claimedDigest string) (runtimeCanonicalCommandInternal, error) {
+	if command.Key != "" || command.ProposedRunID == "" || command.Store.EnvironmentID != "0" ||
+		command.Store.StoreGeneration != command.Store.ExecutorGeneration {
+		return runtimeCanonicalCommandInternal{}, errRuntimeInvalidInternal
+	}
+	// Only attribution crosses the execution boundary; personal preferences do not.
+	command.Actor = usertypes.Actor{ID: command.Actor.ID, Username: command.Actor.Username, DisplayName: command.Actor.DisplayName}
+	canonical, err := runtimeCanonicalizeSemanticInternal(command)
+	if err != nil {
+		return runtimeCanonicalCommandInternal{}, err
+	}
+	if claimedDigest != canonical.digest {
+		return runtimeCanonicalCommandInternal{}, &runtimeConflictInternal{}
+	}
+	return canonical, nil
+}
+
+// Both intakes use exactly this validator, owned copy and fixed-array encoder.
+// Store/actor validation is structural; it cannot authenticate a wire identity.
+func runtimeCanonicalizeSemanticInternal(command RuntimeCommand) (runtimeCanonicalCommandInternal, error) {
 	invalid := func() (runtimeCanonicalCommandInternal, error) {
 		return runtimeCanonicalCommandInternal{}, errRuntimeInvalidInternal
 	}
 	if _, ok := runtimeActivityTypeInternal(string(command.Operation), command.Target.Kind); !ok || !runtimeTargetValidInternal(command.Target) {
 		return invalid()
 	}
-	key, err := runtimeUUIDInternal(command.Key)
-	if err != nil {
-		return invalid()
-	}
-	command.Key = key
 	if command.ProposedRunID != "" {
 		id, err := runtimeUUIDInternal(command.ProposedRunID)
 		if err != nil {
