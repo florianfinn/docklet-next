@@ -116,7 +116,7 @@ func runtimeCanonicalizeInternal(command RuntimeCommand) (runtimeCanonicalComman
 	command.Actor.DisplayName = copyPtrInternal(command.Actor.DisplayName)
 	switch command.Operation {
 	case RuntimeDeployProject, RuntimeRedeployProject:
-		if len(command.Options.RestartServices) != 0 {
+		if command.Options.RestartServices != nil {
 			return invalid()
 		}
 		options := projecttypes.DeployOptions{}
@@ -149,7 +149,7 @@ func runtimeCanonicalizeInternal(command RuntimeCommand) (runtimeCanonicalComman
 		slices.Sort(services)
 		command.Options.RestartServices = slices.Compact(services)
 	default:
-		if command.Options.Deploy != nil || len(command.Options.RestartServices) != 0 {
+		if command.Options.Deploy != nil || command.Options.RestartServices != nil {
 			return invalid()
 		}
 	}
