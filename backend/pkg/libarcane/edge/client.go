@@ -7,11 +7,11 @@
 package edge
 
 import (
- "github.com/cenkalti/backoff/v5"
 	"context"
 	"crypto/tls"
 	"errors"
 	"fmt"
+	"github.com/cenkalti/backoff/v5"
 	"io"
 	"log/slog"
 	"net/http"

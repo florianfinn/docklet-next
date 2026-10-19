@@ -20,8 +20,8 @@ import (
 	"github.com/florianfinn/docklet-next/backend/internal/auth"
 	"github.com/florianfinn/docklet-next/backend/internal/config"
 	activitytypes "github.com/florianfinn/docklet-next/types/activity"
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
- "github.com/google/uuid"
 )
 
 var receiverTestToken = uuid.NewString()
@@ -54,8 +54,8 @@ func TestRuntimeHTTPAuthenticationShapeAndAuthority(t *testing.T) {
 	e := receiverEnvelope(t, f.command())
 	body, err := json.Marshal(e, json.FormatNilSliceAsNull(true))
 	require.NoError(t, err)
- var decoded activitytypes.RuntimeExecutionEnvelope
- require.NoError(t,activitytypes.DecodeRuntimeJSON(body,&decoded),string(body))
+	var decoded activitytypes.RuntimeExecutionEnvelope
+	require.NoError(t, activitytypes.DecodeRuntimeJSON(body, &decoded), string(body))
 	for _, token := range []string{"", "invalid-token"} {
 		status, b := receiverHTTPCall(t, server, "POST", "/api/environments/0/runtime-runs", token, body)
 		require.Equal(t, 401, status)
