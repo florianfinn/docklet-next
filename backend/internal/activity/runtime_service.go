@@ -12,6 +12,7 @@ import (
 	"fmt"
 	"time"
 
+	activitylib "github.com/florianfinn/docklet-next/backend/pkg/libarcane/activity"
 	activitytypes "github.com/florianfinn/docklet-next/types/activity"
 	"gorm.io/gorm"
 )
@@ -28,15 +29,32 @@ type RuntimeTargetResolver interface {
 }
 
 // RuntimeService shares the existing ActivityService mutex, pool and clock.
-// Only tests construct it until compatibility activation. B1 commits acceptance
-// only; worker registration must later share its final mutex/commit boundary.
+// Only tests construct it until compatibility activation. Optional local owners
+// register inside the final admission mutex/commit boundary.
 type RuntimeService struct {
-	activity *ActivityService
-	resolver RuntimeTargetResolver
+	activity       *ActivityService
+	resolver       RuntimeTargetResolver
+	localExecution *RuntimeLocalConfig
+	owners         map[string]*runtimeOwnerInternal
+	configErr      error
+	outputAppender activitylib.MessageAppender
 }
 
-func NewRuntimeService(activity *ActivityService, resolver RuntimeTargetResolver) *RuntimeService {
-	return &RuntimeService{activity: activity, resolver: resolver}
+func NewRuntimeService(activity *ActivityService, resolver RuntimeTargetResolver, local ...RuntimeLocalConfig) *RuntimeService {
+	s := &RuntimeService{activity: activity, resolver: resolver, outputAppender: activity, owners: make(map[string]*runtimeOwnerInternal)}
+	if len(local) > 1 {
+		s.configErr = errRuntimeInvalidInternal
+	}
+	if len(local) == 1 {
+		config := local[0]
+		s.localExecution = &config
+		if config.ApplicationContext == nil || config.Executor == nil || config.Store.EnvironmentID != "0" ||
+			config.Store.StoreGeneration == "" || config.Store.ExecutorGeneration != config.Store.StoreGeneration ||
+			config.Store.ManagerID == "" || config.Store.RegistrationID == "" {
+			s.configErr = errRuntimeInvalidInternal
+		}
+	}
+	return s
 }
 
 // RuntimeStoreError refuses intake while preserving the driver's or generation
@@ -77,6 +95,9 @@ func runtimeClassifyStoreInternal(ctx context.Context, err error) error {
 func (s *RuntimeService) checkInternal() error {
 	if s == nil || s.activity == nil {
 		return &RuntimeStoreError{Cause: errors.New("runtime activity store unavailable")}
+	}
+	if s.configErr != nil {
+		return s.configErr
 	}
 	if err := s.activity.checkInitInternal(); err != nil {
 		return &RuntimeStoreError{Cause: err}

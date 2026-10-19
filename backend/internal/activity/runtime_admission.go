@@ -18,7 +18,7 @@ import (
 )
 
 // Admit requires trusted canonical identity plus current operation/read grants.
-// A started result confirms durable acceptance only. No worker exists in B1.
+// A started result confirms durable acceptance, not completed execution.
 func (s *RuntimeService) Admit(ctx context.Context, command RuntimeCommand) (RuntimeAdmissionResult, error) {
 	if err := s.checkInternal(); err != nil {
 		return RuntimeAdmissionResult{}, err
@@ -26,6 +26,9 @@ func (s *RuntimeService) Admit(ctx context.Context, command RuntimeCommand) (Run
 	canonical, err := runtimeCanonicalizeInternal(command)
 	if err != nil {
 		return RuntimeAdmissionResult{}, err
+	}
+	if s.localExecution != nil && canonical.command.Store != s.localExecution.Store {
+		return RuntimeAdmissionResult{}, &runtimeConflictInternal{}
 	}
 	// Known keys and held-scope answers are durable, including while identity I/O
 	// is unavailable. New effects alone require a fresh read outside runningMu/TX.
@@ -58,9 +61,8 @@ func (s *RuntimeService) Admit(ctx context.Context, command RuntimeCommand) (Run
 	return result, err
 }
 
-// B2 registration belongs inside this same runningMu boundary after successful
-// commit, before unlock. It must recheck persisted cancellation; Track replaces
-// registrations and clears cancellation, so it is not a runtime handoff API.
+// Commit and local registration share runningMu. Retries/joins never register,
+// and post-commit owner failures cannot turn durable acceptance into refusal.
 func (s *RuntimeService) admissionPassInternal(ctx context.Context, c runtimeCanonicalCommandInternal, fresh bool) (RuntimeAdmissionResult, bool, error) {
 	s.activity.runningMu.Lock()
 	defer s.activity.runningMu.Unlock()
@@ -129,6 +131,9 @@ func (s *RuntimeService) admissionPassInternal(ctx context.Context, c runtimeCan
 	})
 	if err != nil {
 		return RuntimeAdmissionResult{}, false, err
+	}
+	if found && result.Code == activitytypes.CodeRunStarted && s.localExecution != nil {
+		s.registerLocalInternal(ctx, c, result.ActivityID)
 	}
 	return result, found, nil
 }
