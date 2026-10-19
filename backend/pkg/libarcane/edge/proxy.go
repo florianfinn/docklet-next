@@ -69,6 +69,9 @@ func registerPendingRequestInternal(tunnel *AgentTunnel, requestID string) (*Pen
 }
 
 func collectCommandResponseInternal(ctx context.Context, tunnel *AgentTunnel, pending *PendingRequest, method string) (int, map[string]string, []byte, error) {
+	return collectCommandResponseBoundedInternal(ctx, tunnel, pending, method, 0)
+}
+func collectCommandResponseBoundedInternal(ctx context.Context, tunnel *AgentTunnel, pending *PendingRequest, method string, limit int) (int, map[string]string, []byte, error) {
 	state := &grpcResponseState{}
 
 	for {
@@ -88,6 +91,9 @@ func collectCommandResponseInternal(ctx context.Context, tunnel *AgentTunnel, pe
 		case incoming, ok := <-pending.ResponseCh:
 			if !ok {
 				return 0, nil, nil, fmt.Errorf("edge tunnel response channel closed before a response was received: %w", ErrTunnelConnectionClosed)
+			}
+			if limit > 0 && incoming != nil && state.respBody.Len()+len(incoming.Body) > limit {
+				return 0, nil, nil, errors.New("runtime response too large")
 			}
 			if done, status, headers, body, err := state.handleTunnelMessageInternal(method, incoming); done {
 				return status, headers, body, err

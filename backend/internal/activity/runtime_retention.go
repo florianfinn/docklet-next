@@ -31,6 +31,9 @@ func runtimePruneTxInternal(tx *gorm.DB, now time.Time, limit int) (int64, error
 		Order("final_write_at ASC, run_id ASC").Limit(limit).Pluck("run_id", &ids).Error; err != nil {
 		return 0, err
 	}
+	if err := tx.Where("removed_at <= ? AND NOT EXISTS (SELECT 1 FROM runtime_receipts WHERE runtime_receipts.registration_id = runtime_removed_targets.registration_id)", runtimeTimeInternal(now).Add(-runtimeRetentionInternal)).Delete(&RuntimeRemovedTarget{}).Error; err != nil {
+		return 0, err
+	}
 	if len(ids) == 0 {
 		return 0, nil
 	}

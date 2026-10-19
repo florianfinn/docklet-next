@@ -68,7 +68,9 @@ func catalog(t *testing.T, db *sql.DB) []string {
 	objects := sqlRows(t, db, "SELECT type,name,tbl_name,sql FROM sqlite_master WHERE name NOT LIKE 'sqlite_%' AND name <> 'goose_db_version' AND tbl_name <> 'goose_db_version' ORDER BY type,name")
 	var result []string
 	for _, o := range objects {
-		result = append(result, strings.Join(o, ":"))
+		// SQLite ALTER inserts comma whitespace; it is not a schema property.
+        o[3] = strings.ReplaceAll(o[3], ", ", ",")
+        result = append(result, strings.Join(o, ":"))
 		if o[0] != "table" {
 			continue
 		}

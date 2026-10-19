@@ -1,5 +1,6 @@
 {
   "sqlite/001_baseline.sql": "a07e07cf4bd91985e8f72bc7b21903510426384cfede6a7e18d1b9022937cecd",
   "sqlite/002_hub_backup_archive.sql": "524cb0ebf27896c4831e5b5ee89f3767265fe12835d8f17a99e99e4fb431ad78",
-  "sqlite/003_runtime_receipts.sql": "2e1e2103a728617ca1ea772b68faf087b3d9d78bf4f1024c997ffc6ec7776593"
+  "sqlite/003_runtime_receipts.sql": "2e1e2103a728617ca1ea772b68faf087b3d9d78bf4f1024c997ffc6ec7776593",
+  "sqlite/004_runtime_output.sql": "5bbd5e61d7b6be641cfb40d86e4e8cb82c9aee7a1e006cd371f31ce75eaac6fd"
 }

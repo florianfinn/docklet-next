@@ -49,12 +49,12 @@ func NewRuntimeReceiver(service *RuntimeService) (*RuntimeReceiver, error) {
 	return &RuntimeReceiver{service: service, store: store}, nil
 }
 
-// RuntimeReceiverResult is receipt-backed internal evidence, not a complete wire
-// outcome. C5 must capture actual bounded output/messages/sequence windows before
-// constructing RuntimeExecutionDetail. A committed refusal fence has nil Snapshot.
+// RuntimeReceiverResult captures receipt and bounded detail in one storage transaction.
+// A committed refusal fence has neither a snapshot nor detail.
 type RuntimeReceiverResult struct {
 	Identity activitytypes.RuntimeRunIdentity
 	State    activitytypes.RuntimeAnswerState
+	Detail   *activitytypes.RuntimeExecutionDetail
 	Snapshot *activitytypes.RuntimeSnapshot
 }
 
@@ -86,11 +86,11 @@ func runtimeReceiverResultTxInternal(tx *gorm.DB, row *RuntimeReceipt) (RuntimeR
 	if row.Kind == "not_received" {
 		return result, nil
 	}
-	snapshot, err := runtimeSnapshotTxInternal(tx, row)
+	detail, err := runtimeDetailTxInternal(tx, row)
 	if err != nil {
 		return RuntimeReceiverResult{}, err
 	}
-	result.State, result.Snapshot = activitytypes.RuntimeAnswerActive, &snapshot
+	result.State, result.Detail, result.Snapshot = activitytypes.RuntimeAnswerActive, detail, &detail.Activity
 	if row.SettledAt != nil {
 		result.State = activitytypes.RuntimeAnswerTerminal
 	}

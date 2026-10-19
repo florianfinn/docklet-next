@@ -48,6 +48,7 @@ type RuntimeReceipt struct {
 	HubDispositionAt     *time.Time `gorm:"column:hub_disposition_at"`
 	SettledAt            *time.Time `gorm:"column:settled_at"`
 	FinalWriteAt         time.Time  `gorm:"column:final_write_at;not null"`
+	OutputNextSeq        uint64     `gorm:"column:output_next_seq;not null;default:1"`
 }
 
 func (RuntimeReceipt) TableName() string { return "runtime_receipts" }

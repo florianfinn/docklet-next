@@ -36,6 +36,7 @@ type wsPayload struct {
 }
 
 type commandRequestTransfer struct {
+	ctx          context.Context
 	request      *TunnelMessage
 	conn         TunnelConnection
 	body         bytes.Buffer
@@ -57,6 +58,9 @@ type TunnelClient struct {
 	managerGRPCAddr        string
 	localPort              string // Port the agent is running on locally
 	conn                   atomic.Pointer[connBox]
+	runtimeCommands        bool
+	runtimeRequestMu       sync.Mutex
+	runtimeRequests        map[string]*runtimeRequestIngressInternal
 	requestTimeout         time.Duration
 	activeStreams          sync.Map // map[string]*activeWSStream
 	requestTransfers       sync.Map // map[string]*commandRequestTransfer

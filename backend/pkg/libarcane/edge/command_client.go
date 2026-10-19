@@ -79,6 +79,12 @@ func (c *CommandClient) Execute(ctx context.Context, tunnel *AgentTunnel, req *C
 		return nil, err
 	}
 	defer tunnel.Pending.Delete(requestID)
+	completed := false
+	defer func() {
+		if !completed && runtimeRequestPathInternal(req.Path) {
+			_ = tunnel.Conn.Send(&TunnelMessage{ID: requestID, Type: MessageTypeCancelRequest})
+		}
+	}()
 
 	chunkRequestBody := len(req.Body) > defaultCommandChunkSize && slices.Contains(tunnel.Capabilities, tunnelCapabilityChunkedRequest)
 	if chunkRequestBody {
@@ -107,11 +113,16 @@ func (c *CommandClient) Execute(ctx context.Context, tunnel *AgentTunnel, req *C
 		}
 	}
 
-	status, headers, body, err := collectCommandResponseInternal(ctx, tunnel, pending, req.Method)
+	limit := 0
+	if runtimeRequestPathInternal(req.Path) {
+		limit = runtimeRequestBodyLimit
+	}
+	status, headers, body, err := collectCommandResponseBoundedInternal(ctx, tunnel, pending, req.Method, limit)
 	if err != nil {
 		return nil, err
 	}
 
+	completed = true
 	return &CommandResult{
 		Status:  status,
 		Headers: headers,

@@ -40,9 +40,7 @@ func (s *ActivityService) AppendMessages(ctx context.Context, activityID string,
 			output = append(output, *req.Output)
 		}
 	}
-	if len(output) > 0 && s.settings != nil && !s.settings.GetBoolSetting(ctx, "keepActionOutput", true) {
-		output = nil
-	}
+	retainOutput := s.settings == nil || s.settings.GetBoolSetting(ctx, "keepActionOutput", true)
 	if len(messages) == 0 && len(output) == 0 {
 		return nil, nil
 	}
@@ -58,7 +56,7 @@ func (s *ActivityService) AppendMessages(ctx context.Context, activityID string,
 	lock.Lock()
 	defer lock.Unlock()
 
-	current, err := s.appendBatchWithRetryInternal(ctx, activityID, messages, updates, output)
+	current, err := s.appendBatchWithRetryInternal(ctx, activityID, messages, updates, output, retainOutput)
 	if err != nil {
 		return nil, err
 	}
