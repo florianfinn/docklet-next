@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; run gate, service effects, coded steps and output columns.
+// Deviations: Local module namespace; run gate, service effects, coded steps, output columns and compact runtime model registration.
 
 package activity
 
@@ -87,4 +87,7 @@ type ActivitySyncReceipt struct {
 func (ActivitySyncReceipt) TableName() string { return "activity_sync_receipts" }
 
 // Models returns the persistent activity schema for integration fixtures and the core registry.
-func Models() []any { return []any{&Activity{}, &ActivityMessage{}, &ActivitySyncReceipt{}} }
+func Models() []any {
+	return []any{&Activity{}, &ActivityMessage{}, &ActivitySyncReceipt{},
+		&RuntimeReceipt{}, &RuntimeKeyBinding{}, &RuntimeStoreGeneration{}}
+}

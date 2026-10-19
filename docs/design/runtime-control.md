@@ -66,22 +66,23 @@ decoded only at the adapter boundary. Gate strings contain canonical raw IDs,
 never display names or browser-composed IDs.
 
 A client creates an opaque UUID `Idempotency-Key` per deliberate command; any
-UUID version is accepted without reading a client timestamp. The hub measures
-the ten-minute retry window from its first-seen binding. The adapter retains the
-key across CSRF/transport retries for at most ten minutes of local elapsed time,
-discards it after the final response or that window, and then refreshes known
-run detail rather than replaying the command. It never creates a replacement
-intent automatically. A retained binding always resolves to its original run,
-even after the retry window; it cannot admit another effect. These are target
-key rules, not current adapter support.
+UUID version is accepted without reading a client timestamp. The ten-minute
+window governs only client retry/discard; hub first-seen time is audit/diagnostic
+attribution, never an age cutoff for server rejection or new admission. The
+adapter retains the key across CSRF/transport retries for at most ten minutes of
+local elapsed time, discards it after the final response or that window, and then
+refreshes known run detail rather than replaying the command. It never creates a
+replacement intent automatically. A retained binding always resolves to its
+original run, even after the retry window; it cannot admit another effect. These
+are target key rules, not current adapter support.
 
 The binding uniquely maps `(environmentId, idempotencyKey)` to run ID, requesting
 caller and canonical digest: operation ID, raw target, accepted options and
-parent. Within the window, same key/digest returns the same ID and compact
-outcome even after output/history pruning; recheck caller identity and current
-operation/activity-read permissions. A different caller presenting an already
-bound key receives HTTP 409 `run.request-mismatch` without the bound ID or other
-run details, even when the digest matches. A changed digest also returns 409
+parent. A retained key with the same digest returns the same ID and compact
+outcome even after ten minutes or output/history pruning; recheck caller identity
+and current operation/activity-read permissions. A different caller presenting an
+already bound key receives HTTP 409 `run.request-mismatch` without the bound ID or
+other run details, even when the digest matches. A changed digest also returns 409
 without a worker. Independently authorized callers with different keys join by
 active gate key, not by sharing an idempotency key. The activity/receipt keeps
 its original actor; each joining key records its own caller and join audit attribution.
@@ -676,7 +677,7 @@ supplies actual effects separately.
 | Case and method | Required observation | Mutation/counterexample |
 | --- | --- | --- |
 | Competing exact/parent/sibling admission; SQLite service test | One worker for same command/key; parent excludes child both ways; siblings independent; hosts independent | Remove parent predicate or split read/insert transaction |
-| Opaque-key retry/history clear and compact pruning; receipt test | Hub-first-seen 10min retry budget; retained key returns original ID/outcome; cross-caller reuse gives non-disclosing 409; new-key authorized join preserves original actor; duplicate within 24h has zero additional effects; active/unknown protected | Delete compact evidence with history, leak bound ID to another caller or start another worker |
+| Opaque-key retry/history clear and compact pruning; receipt test | Client-local 10min retry/discard budget; first-seen is audit only; retained key returns original ID/outcome beyond 10min; cross-caller reuse gives non-disclosing 409; new-key authorized join preserves original actor; duplicate within 24h has zero additional effects; active/unknown protected | Delete compact evidence with history, leak bound ID to another caller or start another worker |
 | Both legacy and async seven-route callers; HTTP/CLI tests | Correct run ID, preserved NDJSON/messages, coded 409 before flush | Gate only local handler or treat 202 as completion |
 | Persistence/audit refusal; injected storage fault | Zero dispatch/effect, no fabricated ID | Fall back to StartHandlerActivity |
 | Cancellation before dispatch/registration, during call, twice and after terminal | Hub dispatch transaction settles admitted cancellation with zero sends; later intent holds until worker settles; cancellation distinct from rollback | Skip dispatch intent recheck or release on request cancellation |

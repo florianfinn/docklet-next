@@ -205,6 +205,15 @@ export type ActionKind =
 
 export type ActionStatus = "queued" | "running" | "succeeded" | "failed" | "cancelled";
 
+/** Receipt knowledge is independent of workflow status and verified Docker state. */
+export type RuntimeOutcomeState = "known" | "unknown";
+
+/** Both fields are required on runtime projections, including explicit false intent. */
+export interface RuntimeKnowledge {
+  outcomeState: RuntimeOutcomeState;
+  cancelRequested: boolean;
+}
+
 /** "cmd" echoes the command, "note" marks the output as simulated; Docker writes progress to stderr. */
 export type OutputStream = "cmd" | "stdout" | "stderr" | "note";
 
@@ -229,6 +238,10 @@ export interface ActionRun {
   services: string[];
   steps: ActionStep[];
   status: ActionStatus;
+  /** Runtime receipt knowledge only; historical and unrelated runs may omit it. */
+  outcomeState?: RuntimeOutcomeState;
+  /** Persisted intent, independent of settled cancellation or rollback. */
+  cancelRequested?: boolean;
   progress: number;
   startedAt: string;
   finishedAt?: string;
@@ -240,6 +253,8 @@ export interface ActionRun {
   /** Restore point created before this run; offered manually after failures. */
   restorePointId?: string;
 }
+
+export type RuntimeActionRun = ActionRun & RuntimeKnowledge;
 
 export interface RestorePoint {
   id: string;
