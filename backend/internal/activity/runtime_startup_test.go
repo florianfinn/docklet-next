@@ -16,6 +16,7 @@ import (
 	"github.com/florianfinn/docklet-next/backend/internal/database"
 	activitytypes "github.com/florianfinn/docklet-next/types/activity"
 	"github.com/google/uuid"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"gorm.io/gorm"
 )
@@ -211,9 +212,9 @@ func TestRuntimeStartupAtomicFaults(t *testing.T) {
 				b2Deferred(t, f, "NEW.code = 'runtime.interrupted'")
 			}
 			count, err := f.service.SettleLocalStartup(t.Context(), c.Store)
-			require.Error(t, err)
-			require.Zero(t, count)
-			require.Equal(t, before, runtimeBoundarySnapshot(t, f.store))
+			assert.Error(t, err)
+			assert.Zero(t, count)
+			assert.Equal(t, before, runtimeBoundarySnapshot(t, f.store), "failed composed write must leave every table unchanged")
 			genericCount, genericErr := f.store.svc.RepairStartup(t.Context())
 			require.NoError(t, genericErr)
 			require.Zero(t, genericCount, "generic repair cannot consume a failed runtime write")
@@ -229,4 +230,71 @@ func TestRuntimeStartupAtomicFaults(t *testing.T) {
 			b3Interrupted(t, f, id, nil)
 		})
 	}
+}
+
+func TestRuntimeStartupRemoteCohortsRemainHeld(t *testing.T) {
+	f := b1Fixture(t)
+	var ids []string
+	for _, state := range []string{"pending", "dispatching", "accepted", "unknown"} {
+		c := f.command()
+		c.Store.EnvironmentID = "example-remote"
+		c.Store.ExecutorGeneration = uuid.NewString()
+		c.Target.ID = "example-" + state
+		id := b3Admit(t, f, c)
+		ids = append(ids, id)
+		if state != "pending" {
+			b1Tx(t, f, func(tx *gorm.DB, now time.Time) error {
+				identity := b1Identity(t, c, id)
+				_, err := runtimeDispatchTxInternal(tx, now, identity, false)
+				if err != nil {
+					return err
+				}
+				if state == "accepted" {
+					_, err = runtimeDispatchTxInternal(tx, now, identity, true)
+				}
+				if state == "unknown" {
+					_, err = runtimeEvidenceTxInternal(tx, now, identity, runtimeEvidenceInternal{State: "unknown", UnknownReason: new("executor-unavailable")})
+				}
+				return err
+			})
+		}
+	}
+	before := runtimeBoundarySnapshot(t, f.store)
+	count, err := f.service.SettleLocalStartup(t.Context(), f.command().Store)
+	require.NoError(t, err)
+	require.Zero(t, count)
+	genericCount, err := f.store.svc.RepairStartup(t.Context())
+	require.NoError(t, err)
+	require.Zero(t, genericCount)
+	require.Equal(t, before, runtimeBoundarySnapshot(t, f.store))
+	for _, id := range ids {
+		require.Nil(t, b3Receipt(t, f, id).SettledAt)
+	}
+}
+
+func TestRuntimeStartupTombstoneIsNotRepairOwner(t *testing.T) {
+	f := b1Fixture(t)
+	c := f.command()
+	runID := uuid.NewString()
+	identity := b1Identity(t, c, runID)
+	b1Tx(t, f, func(tx *gorm.DB, now time.Time) error {
+		_, err := runtimeQueryTxInternal(tx, now, identity)
+		return err
+	})
+	require.NoError(t, f.store.svc.db.Create(&Activity{BaseModel: database.BaseModel{ID: runID, CreatedAt: f.store.now},
+		EnvironmentID: "0", Type: activitytypes.TypeResourceAction, Status: activitytypes.StatusQueued,
+		StartedAt: f.store.now, Metadata: database.JSON{}, AffectedServices: database.JSON{}}).Error)
+	count, err := f.store.svc.RepairStartup(t.Context())
+	require.NoError(t, err)
+	require.EqualValues(t, 1, count)
+	require.Equal(t, activitytypes.StatusFailed, b3Activity(t, f, runID).Status)
+	require.Equal(t, "not_received", b3Receipt(t, f, runID).Kind)
+}
+
+func TestRuntimeStartupRepairRequiresMigratedReceiptTable(t *testing.T) {
+	f := b1Fixture(t)
+	require.NoError(t, f.store.svc.db.Exec("ALTER TABLE runtime_receipts RENAME TO fixture_missing_receipts").Error)
+	count, err := f.store.svc.RepairStartup(t.Context())
+	require.Zero(t, count)
+	require.ErrorContains(t, err, "no such table: runtime_receipts")
 }

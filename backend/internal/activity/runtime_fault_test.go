@@ -10,7 +10,10 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"fmt"
+	"io"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -20,6 +23,8 @@ import (
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 	"gorm.io/gorm"
+	"modernc.org/sqlite"
+	sqlitecode "modernc.org/sqlite/lib"
 )
 
 func TestRuntimeAdmissionFaultAtomicWrites(t *testing.T) {
@@ -400,4 +405,52 @@ func TestRuntimeAdmissionFaultCancelledBeforeCommit(t *testing.T) {
 	b1Zero(t, result)
 	require.ErrorIs(t, err, context.Canceled)
 	require.Equal(t, before, runtimeBoundarySnapshot(t, f.store))
+}
+
+// SQLite's real page quota forces file growth to fail inside the composed
+// terminal transaction. This is SQLITE_FULL, not a synthetic RAISE message or
+// proof that the host filesystem is full.
+func TestRuntimeFaultRealSQLiteFullRetainsOwnerAndRetriesStorageOnly(t *testing.T) {
+	entered, release := make(chan struct{}), make(chan struct{})
+	var calls atomic.Int64
+	f := b2Fixture(t, t.Context(), func(context.Context, RuntimeCommand, io.Writer) error {
+		calls.Add(1)
+		close(entered)
+		<-release
+		return nil
+	})
+	c := f.command()
+	admitted, err := f.service.Admit(t.Context(), c)
+	require.NoError(t, err)
+	b1Await(t, entered)
+	owner := b2Owner(t, f, admitted.ActivityID)
+	before := runtimeBoundarySnapshot(t, f.store)
+	require.NoError(t, f.store.svc.db.Exec("CREATE TABLE fixture_b3_growth(payload BLOB NOT NULL)").Error)
+	require.NoError(t, f.store.svc.db.Exec("CREATE TRIGGER fixture_b3_full AFTER INSERT ON activity_messages WHEN NEW.code = 'activity.success' BEGIN INSERT INTO fixture_b3_growth VALUES(zeroblob(1048576)); END").Error)
+	var pages int64
+	require.NoError(t, f.store.svc.db.Raw("PRAGMA page_count").Scan(&pages).Error)
+	require.Greater(t, pages, int64(0))
+	require.NoError(t, f.store.svc.db.Exec(fmt.Sprintf("PRAGMA max_page_count = %d", pages+2)).Error)
+	close(release)
+	b1Await(t, owner.attemptDone)
+	f.store.svc.runningMu.Lock()
+	writeErr := owner.err
+	frozen := *owner.result
+	f.store.svc.runningMu.Unlock()
+	var sqliteErr *sqlite.Error
+	require.ErrorAs(t, writeErr, &sqliteErr)
+	require.Equal(t, sqlitecode.SQLITE_FULL, sqliteErr.Code()&0xff)
+	require.False(t, dbutil.IsRetryableWriteError(writeErr))
+	require.Equal(t, before, runtimeBoundarySnapshot(t, f.store))
+	b2Held(t, f, c, admitted.ActivityID)
+	b2FinalCount(t, f, admitted.ActivityID, 0)
+	require.EqualValues(t, 1, calls.Load())
+	require.NoError(t, f.store.svc.db.Exec("PRAGMA max_page_count = 1000000").Error)
+	require.NoError(t, f.store.svc.db.Exec("DROP TRIGGER fixture_b3_full").Error)
+	settled, err := f.service.RetrySettlement(t.Context(), b2Ref(c, admitted.ActivityID))
+	require.NoError(t, err)
+	require.Equal(t, activitytypes.StatusSuccess, settled.Status)
+	require.Equal(t, &frozen.settledAt, b3Receipt(t, f, admitted.ActivityID).ExecutorSettledAt)
+	b2FinalCount(t, f, admitted.ActivityID, 1)
+	require.EqualValues(t, 1, calls.Load())
 }
