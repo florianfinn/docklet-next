@@ -400,9 +400,10 @@ func TestRuntimeSlotsQueuedCancellationAndLifetime(t *testing.T) {
 		t.Run(mode, func(t *testing.T) {
 			app, stop := context.WithCancel(t.Context())
 			defer stop()
+			var deadline *runtimeDeadlineFixture
 			if mode == "earlier-deadline" {
-				app, stop = context.WithTimeout(t.Context(), 750*time.Millisecond)
-				defer stop()
+				deadline = newRuntimeDeadlineFixture(t)
+				app = deadline
 			}
 			probe := slotsNewProbe(t)
 			f := slotsFixture(t, app, new(1), func(ctx context.Context, _ RuntimeCommand, _ io.Writer) error { return probe.run(ctx) })
@@ -425,6 +426,9 @@ func TestRuntimeSlotsQueuedCancellationAndLifetime(t *testing.T) {
 				}
 			} else if mode == "app-stop" {
 				stop()
+			} else if deadline != nil {
+				owner := b2Owner(t, f, id)
+				deadline.expire(t, owner.ctx)
 			}
 			snapshot, err := b2Wait(t, f, c, id)
 			require.NoError(t, err)
@@ -641,9 +645,10 @@ func TestRuntimeSlotsInterruptedChildHoldsLegacyWaiter(t *testing.T) {
 		t.Run(mode, func(t *testing.T) {
 			app, stop := context.WithCancel(t.Context())
 			defer stop()
+			var deadline *runtimeDeadlineFixture
 			if mode == "deadline" {
-				app, stop = context.WithTimeout(t.Context(), 750*time.Millisecond)
-				defer stop()
+				deadline = newRuntimeDeadlineFixture(t)
+				app = deadline
 			}
 			probe := slotsNewProbe(t)
 			f := slotsFixture(t, app, new(1), func(ctx context.Context, _ RuntimeCommand, _ io.Writer) error {
@@ -668,6 +673,8 @@ func TestRuntimeSlotsInterruptedChildHoldsLegacyWaiter(t *testing.T) {
 				require.NoError(t, err)
 			} else if mode == "application" {
 				stop()
+			} else if deadline != nil {
+				deadline.expire(t, owner.ctx)
 			}
 			b1Await(t, owner.ctx.Done())
 			premature := false
