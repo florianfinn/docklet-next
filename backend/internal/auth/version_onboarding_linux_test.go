@@ -6,18 +6,28 @@
 // License: Apache-2.0
 // Deviations: Original host registration implementation.
 
-package auth
+package auth_test
 
 import (
+	"context"
 	"net/http"
 	"net/http/httptest"
+	"path/filepath"
 	"syscall"
 	"testing"
 
 	"github.com/danielgtaylor/huma/v2"
 	"github.com/danielgtaylor/huma/v2/adapters/humaecho"
+	"github.com/florianfinn/docklet-next/backend/internal/auth"
+	"github.com/florianfinn/docklet-next/backend/internal/config"
+	"github.com/florianfinn/docklet-next/backend/internal/database"
 	"github.com/florianfinn/docklet-next/backend/internal/middleware"
+	"github.com/florianfinn/docklet-next/backend/internal/role"
+	"github.com/florianfinn/docklet-next/backend/internal/session"
+	"github.com/florianfinn/docklet-next/backend/internal/settings"
+	"github.com/florianfinn/docklet-next/backend/internal/user"
 	"github.com/florianfinn/docklet-next/backend/internal/version"
+	"github.com/florianfinn/docklet-next/backend/pkg/utils/sqlitestore"
 	settingstypes "github.com/florianfinn/docklet-next/types/settings"
 	"github.com/labstack/echo/v5"
 	"github.com/stretchr/testify/require"
@@ -26,16 +36,22 @@ import (
 func TestVersionOnboardingCredentialBoundary(t *testing.T) {
 	for _, mode := range []string{"hub", "agent"} {
 		t.Run(mode, func(t *testing.T) {
-			svc, _ := modeTestService(t)
-			svc.config.AgentMode = mode == "agent"
-			svc.config.AgentToken = "example"
-			directory := t.TempDir()
-			_, err := svc.settingsService.UpdateSettings(t.Context(), settingstypes.Update{ProjectsDirectory: &directory})
+			db, err := database.InitializeHub(t.Context(), sqlitestore.URL(filepath.Join(t.TempDir(), "version.db")), database.MigrationOptions{})
 			require.NoError(t, err)
-			versionService := version.NewVersionService(nil, true, "dev", "unknown", nil, nil, nil, svc.settingsService)
+			t.Cleanup(func() { require.NoError(t, db.Close()) })
+			settingsService, err := settings.NewSettingsService(t.Context(), db)
+			require.NoError(t, err)
+			t.Cleanup(func() { require.NoError(t, settingsService.Stop(context.WithoutCancel(t.Context()))) })
+			cfg := &config.Config{AuthMode: "local", AgentMode: mode == "agent", AgentToken: "example"}
+			users := user.NewUserService(db, role.NewRoleService(db), session.RevokeAllUserSessionsExceptInDB)
+			svc := auth.NewAuthService(users, settingsService, nil, session.NewSessionService(db), cfg)
+			directory := t.TempDir()
+			_, err = settingsService.UpdateSettings(t.Context(), settingstypes.Update{ProjectsDirectory: &directory})
+			require.NoError(t, err)
+			versionService := version.NewVersionService(nil, true, "dev", "unknown", nil, nil, nil, settingsService)
 			router := echo.New()
 			api := humaecho.NewWithGroup(router, router.Group("/api"), huma.DefaultConfig("test", "1.0.0"))
-			api.UseMiddleware(NewHumaMiddleware(api, svc, nil, nil, nil, svc.config))
+			api.UseMiddleware(auth.NewHumaMiddleware(api, svc, nil, nil, nil, cfg))
 			version.RegisterVersion(api, versionService)
 			fd, err := syscall.InotifyInit1(syscall.IN_NONBLOCK | syscall.IN_CLOEXEC)
 			require.NoError(t, err)
@@ -49,11 +65,11 @@ func TestVersionOnboardingCredentialBoundary(t *testing.T) {
 					case "invalid":
 						req.Header.Set(middleware.HeaderAgentToken, "wrong")
 					case "bootstrap":
-						req.Header.Set(middleware.HeaderAgentBootstrap, svc.config.AgentToken)
+						req.Header.Set(middleware.HeaderAgentBootstrap, cfg.AgentToken)
 					case "agent-token", "cached":
-						req.Header.Set(middleware.HeaderAgentToken, svc.config.AgentToken)
+						req.Header.Set(middleware.HeaderAgentToken, cfg.AgentToken)
 					case "api-key":
-						req.Header.Set(middleware.HeaderApiKey, svc.config.AgentToken)
+						req.Header.Set(middleware.HeaderApiKey, cfg.AgentToken)
 					}
 					rec := httptest.NewRecorder()
 					router.ServeHTTP(rec, req)
