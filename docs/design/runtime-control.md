@@ -105,12 +105,26 @@ normalized persisted `Name` as a non-imperative default. An explicit YAML name,
 including an interpolated one, may override it; an environment-only
 `COMPOSE_PROJECT_NAME` does not replace a nonempty supplied default. Initial
 filesystem discovery retains its unnamed-first environment-derived naming and
-directory fallback. Subsequent filesystem sync and metadata refresh observe the
+directory fallback. With a literal YAML name and conflicting environment name,
+initial discovery records the environment name; execution uses the YAML name.
+The next stored refresh corrects this inherited transient metadata mismatch.
+Subsequent filesystem sync and metadata refresh observe the
 actual model name and service count without automatically rewriting the stored
 `Name`. `ComposeProjectName` records an effective name differing from the
 normalized stored default. Explicit rename retains its existing workflow and
 stable persisted ID. Removing a YAML override therefore restores that stored
 default, rather than a name fed back by an earlier metadata refresh.
+
+Existing Compose-label consumers (container redeploy, automatic updates, service
+image lookup and icon metadata) resolve the observed `ComposeProjectName`, with
+normalized stored `Name` as the fallback when override metadata is absent or
+empty. A known override replaces its stored-default alias, so another project's
+default cannot steal an effective label. Direct lookup precedes normalized cache
+lookup; cached IDs are revalidated against current stored observations and
+missing or changed aliases are removed. Rebuilds and duplicate-name warnings use
+the same observations. This legacy lookup reads database metadata, without the
+fresh filesystem ownership proof required for runtime admission below. Duplicate
+observations retain warnings rather than adding a new refusal policy.
 
 Selection, metadata and lifecycle loading share fresh reads and parsing of the
 same primary and auxiliary environment bytes on every load, including supported
@@ -125,6 +139,12 @@ parsed options. Invalid `COMPOSE_FILE` selection still refuses the whole
 selection. Only the existing timezone/locale process allowlist enters project
 interpolation. Runtime identity and execution bypass inventory model/selection
 caches; this does not promise byte freshness for every inventory cache.
+
+The shared auxiliary warning/skip policy also applies to compose/environment
+save validation: an escaping `COMPOSE_ENV_FILES` entry is excluded rather than
+rejecting the save. Include-file discovery in project details ignores a primary
+environment parse error and expands paths using only the process allowlist;
+lifecycle loading still refuses the malformed primary file.
 
 Authoritative project and managed-parent lookup scans every persisted row,
 including archived projects, and requires unique current effective Compose

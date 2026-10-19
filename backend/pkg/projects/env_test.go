@@ -280,8 +280,10 @@ func TestEnvironmentAuxiliarySkipSelectionAndRepair(t *testing.T) {
 	bad := filepath.Join(dir, "bad.env")
 	require.NoError(t, os.WriteFile(bad, []byte("VALUE=\"unterminated\n"), 0600))
 	for _, value := range []string{"project-first", "repaired"} {
+		expectedConfigFiles := []string{filepath.Join(dir, "first.yml")}
 		if value == "repaired" {
 			rewriteEnvSameMtime(t, bad, "COMPOSE_FILE=second.yml\nVALUE=repaired\n")
+			expectedConfigFiles = []string{filepath.Join(dir, "second.yml")}
 		}
 		env, injected, err := NewEnvLoader(dir, dir, true).LoadEnvironment(t.Context())
 		require.NoError(t, err)
@@ -289,10 +291,11 @@ func TestEnvironmentAuxiliarySkipSelectionAndRepair(t *testing.T) {
 		require.Equal(t, value, injected["VALUE"])
 		opts, err := ParseComposeEnvOptions(dir, env)
 		require.NoError(t, err)
+		require.Equal(t, expectedConfigFiles, opts.ConfigFiles)
 		require.NotContains(t, opts.EnvFiles, filepath.Join(filepath.Dir(dir), "outside.env"))
 		selected, err := ComposeFileEnvSelection(t.Context(), dir, dir)
 		require.NoError(t, err)
-		require.Equal(t, opts.ConfigFiles, selected)
+		require.Equal(t, expectedConfigFiles, selected)
 	}
 	require.NoError(t, os.WriteFile(bad, []byte("COMPOSE_FILE=first.yml:../outside.yml\n"), 0600))
 	_, err := ComposeFileEnvSelection(t.Context(), dir, dir)

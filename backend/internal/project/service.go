@@ -38,6 +38,7 @@ import (
 	dockertypes "go.getarcane.app/docker/types"
 	kit "go.getarcane.app/kit/pkg"
 	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 	"io"
 	"log/slog"
 	"path/filepath"
@@ -248,7 +249,12 @@ func (s *ProjectService) GetProjectByComposeName(ctx context.Context, name strin
 	normalized := projects.NormalizeProjectName(name)
 
 	var proj Project
-	err := s.db.WithContext(ctx).Where("name = ? OR name = ?", name, normalized).First(&proj).Error
+	// An observed override replaces the stored default as the Compose label.
+	// Check exact observations before normalized aliases, including warm caches.
+	err := s.db.WithContext(ctx).
+		Where(observedComposeNameSQL+" = ? OR "+observedComposeNameSQL+" = ?", name, normalized).
+		Order(clause.OrderBy{Expression: gorm.Expr("CASE WHEN compose_project_name = ? THEN 0 WHEN compose_project_name = ? THEN 1 WHEN name = ? THEN 2 ELSE 3 END, id", name, normalized, name)}).
+		Take(&proj).Error
 	if err == nil {
 		s.composeNames.put(normalized, proj.ID)
 		return &proj, nil
@@ -264,12 +270,13 @@ func (s *ProjectService) GetProjectByComposeName(ctx context.Context, name strin
 	}
 
 	var projectModels []Project
-	if listErr := s.db.WithContext(ctx).Select("id", "name").Find(&projectModels).Error; listErr != nil {
+	if listErr := s.db.WithContext(ctx).Select("id", "name", "compose_project_name").
+		Order("CASE WHEN compose_project_name IS NULL OR compose_project_name = '' THEN 1 ELSE 0 END").Order("id").Find(&projectModels).Error; listErr != nil {
 		return nil, fmt.Errorf("failed to list projects by compose name: %w", listErr)
 	}
 	byName := make(map[string]string, len(projectModels))
 	for _, projectModel := range projectModels {
-		if normalizedName := projects.NormalizeProjectName(projectModel.Name); normalizedName != "" {
+		if normalizedName := observedComposeName(projectModel); normalizedName != "" {
 			if _, exists := byName[normalizedName]; !exists {
 				byName[normalizedName] = projectModel.ID
 			}
@@ -284,6 +291,16 @@ func (s *ProjectService) GetProjectByComposeName(ctx context.Context, name strin
 	}
 
 	return nil, common.Classify(common.ErrNotFound, fmt.Errorf("project not found: %s", name))
+}
+
+const observedComposeNameSQL = "COALESCE(NULLIF(compose_project_name, ''), name)"
+
+// Legacy rows without override metadata retain their normalized stored default.
+func observedComposeName(proj Project) string {
+	if proj.ComposeProjectName != nil && *proj.ComposeProjectName != "" {
+		return projects.NormalizeProjectName(*proj.ComposeProjectName)
+	}
+	return projects.NormalizeProjectName(proj.Name)
 }
 
 // ComposeServiceImage returns the effective image of serviceName in the
@@ -382,7 +399,7 @@ func (s *ProjectService) lookupProjectByCachedComposeName(ctx context.Context, n
 		}
 		return nil, false, fmt.Errorf("failed to get project by cached compose name: %w", err)
 	}
-	if projects.NormalizeProjectName(projectModel.Name) != normalizedName {
+	if observedComposeName(projectModel) != normalizedName {
 		s.composeNames.invalidate(normalizedName)
 		return nil, false, nil
 	}

@@ -655,14 +655,7 @@ func (s *ProjectService) upsertProjectForDir(ctx context.Context, dirName, dirPa
 		if cerr := s.db.WithContext(ctx).Create(proj).Error; cerr != nil {
 			return fmt.Errorf("create project for %q failed: %w", dirPath, cerr)
 		}
-		if composeName := composeMetadata.ResolvedProjectName; strings.TrimSpace(composeName) != "" {
-			var duplicates int64
-			if countErr := s.db.WithContext(ctx).Model(&Project{}).Where("name = ? AND path <> ? AND id <> ?", composeName, dirPath, proj.ID).Count(&duplicates).Error; countErr != nil {
-				slog.WarnContext(ctx, "failed to check duplicate compose project names during project sync", "composeProjectName", composeName, "path", dirPath, "error", countErr)
-			} else if duplicates > 0 {
-				slog.WarnContext(ctx, "multiple project directories resolve to the same compose project name", "composeProjectName", composeName, "path", dirPath, "duplicates", duplicates)
-			}
-		}
+		s.warnDuplicateComposeName(ctx, composeMetadata.ResolvedProjectName, dirPath, proj.ID)
 		return s.reconcileComposeTagsForProject(ctx, proj)
 	}
 	// Refresh observations without feeding the effective name back into its default.
@@ -682,6 +675,9 @@ func (s *ProjectService) upsertProjectForDir(ctx context.Context, dirName, dirPa
 		updates["compose_project_name"] = composeMetadata.ComposeProjectName
 	}
 	if len(updates) == 0 {
+		if serviceCountErr == nil {
+			s.warnDuplicateComposeName(ctx, composeMetadata.ResolvedProjectName, dirPath, existing.ID)
+		}
 		return s.reconcileComposeTagsForProject(ctx, &existing)
 	}
 
@@ -692,15 +688,31 @@ func (s *ProjectService) upsertProjectForDir(ctx context.Context, dirName, dirPa
 		Updates(updates).Error; uerr != nil {
 		return fmt.Errorf("update project %s failed: %w", existing.ID, uerr)
 	}
-	if composeName := composeMetadata.ResolvedProjectName; serviceCountErr == nil && strings.TrimSpace(composeName) != "" {
-		var duplicates int64
-		if countErr := s.db.WithContext(ctx).Model(&Project{}).Where("name = ? AND path <> ? AND id <> ?", composeName, dirPath, existing.ID).Count(&duplicates).Error; countErr != nil {
-			slog.WarnContext(ctx, "failed to check duplicate compose project names during project sync", "composeProjectName", composeName, "path", dirPath, "error", countErr)
-		} else if duplicates > 0 {
-			slog.WarnContext(ctx, "multiple project directories resolve to the same compose project name", "composeProjectName", composeName, "path", dirPath, "duplicates", duplicates)
-		}
+	if serviceCountErr == nil {
+		s.warnDuplicateComposeName(ctx, composeMetadata.ResolvedProjectName, dirPath, existing.ID)
 	}
 	return s.reconcileComposeTagsForProject(ctx, &existing)
+}
+
+func (s *ProjectService) warnDuplicateComposeName(ctx context.Context, name, path, id string) {
+	if strings.TrimSpace(name) == "" {
+		return
+	}
+	var peers []Project
+	if err := s.db.WithContext(ctx).Select("id", "name", "compose_project_name").
+		Where("path <> ? AND id <> ?", path, id).Find(&peers).Error; err != nil {
+		slog.WarnContext(ctx, "failed to check duplicate compose project names during project sync", "composeProjectName", name, "path", path, "error", err)
+		return
+	}
+	duplicates := 0
+	for _, peer := range peers {
+		if observedComposeName(peer) == projects.NormalizeProjectName(name) {
+			duplicates++
+		}
+	}
+	if duplicates > 0 {
+		slog.WarnContext(ctx, "multiple project directories resolve to the same compose project name", "composeProjectName", name, "path", path, "duplicates", duplicates)
+	}
 }
 
 // evaluateProjectCleanup decides whether a project missing from the current
