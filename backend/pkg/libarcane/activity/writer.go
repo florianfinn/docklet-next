@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; raw line capture, bounded blocking queue and trailing line flush.
+// Deviations: Local module namespace; raw line capture, bounded blocking queue and trailing line flush; additive runtime seal, error and drain join.
 
 package activity
 
@@ -10,6 +10,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json/v2"
+	"errors"
 	"io"
 	"log/slog"
 	"net/http"
@@ -38,6 +39,8 @@ type Writer struct {
 	defaultStep     string
 	queueCh         chan writerQueueItem
 
+	runtime *runtimeWriterInternal
+
 	mu     sync.Mutex
 	buffer []byte
 }
@@ -60,6 +63,7 @@ type writerAppendMessage struct {
 type writerQueueItem struct {
 	message *writerAppendMessage
 	flush   chan struct{}
+	finish  bool
 }
 
 func NewWriter(ctx context.Context, activityService MessageAppender, activityID string, writer io.Writer, defaultStep string) io.Writer {
@@ -67,7 +71,11 @@ func NewWriter(ctx context.Context, activityService MessageAppender, activityID 
 		return kit.Ternary(writer == nil, io.Discard, writer)
 	}
 	if existing, ok := writer.(*Writer); ok {
-		return existing
+		if existing.runtime == nil || existing.activityID == strings.TrimSpace(activityID) {
+			return existing
+		}
+		// A different run must never write into its predecessor's capture.
+		writer = io.Discard
 	}
 	persistCtx := ctx
 	if persistCtx != nil {
@@ -87,6 +95,9 @@ func NewWriter(ctx context.Context, activityService MessageAppender, activityID 
 }
 
 func (w *Writer) Write(p []byte) (int, error) {
+	if w.runtime != nil {
+		return w.writeRuntimeInternal(p)
+	}
 	if w.writer != nil {
 		// Keep activity capture alive when the client-side response stream disconnects.
 		_, _ = w.writer.Write(p)
@@ -114,6 +125,10 @@ func (w *Writer) Write(p []byte) (int, error) {
 }
 
 func (w *Writer) Flush() {
+	if w.runtime != nil {
+		w.flushRuntimeInternal()
+		return
+	}
 	if flusher, ok := w.writer.(http.Flusher); ok {
 		flusher.Flush()
 	}
@@ -292,4 +307,172 @@ func doneInternal(ctx context.Context) <-chan struct{} {
 		return nil
 	}
 	return ctx.Done()
+}
+
+// Runtime capture owns its output independently from execution cancellation.
+// ingress serializes extraction through enqueue; the drain never acquires it.
+type runtimeWriterInternal struct {
+	ingress    sync.Mutex
+	finishOnce sync.Once
+	done       chan struct{}
+	sealed     bool // protected by Writer.mu, as is firstError
+	firstError error
+}
+
+var ErrWriterFinished = errors.New("runtime output is finished")
+var ErrWriterNotRuntime = errors.New("writer is not a runtime capture")
+
+const runtimeAppendTimeout = 10 * time.Second
+
+// NewRuntimeWriter captures only worker-owned output; no response/socket writer
+// is called. MessageAppender stays unchanged. Each actual append has its own
+// bounded context, preserving values while detaching execution cancellation.
+func NewRuntimeWriter(ctx context.Context, service MessageAppender, activityID, defaultStep string) (*Writer, error) {
+	if ctx == nil || service == nil || strings.TrimSpace(activityID) == "" {
+		return nil, errors.New("runtime capture requires context, appender and run")
+	}
+	w := &Writer{ctx: ctx, persistCtx: context.WithoutCancel(ctx), activityService: service,
+		activityID: strings.TrimSpace(activityID), writer: io.Discard, defaultStep: strings.TrimSpace(defaultStep),
+		queueCh: make(chan writerQueueItem, writerAppendQueueSize), runtime: &runtimeWriterInternal{done: make(chan struct{})}}
+	go w.drainRuntimeInternal()
+	return w, nil
+}
+
+// Done closes only after every accepted item and the final tail have drained.
+// Legacy writers have no completion contract and return a nil channel.
+func (w *Writer) Done() <-chan struct{} {
+	if w.runtime == nil {
+		return nil
+	}
+	return w.runtime.done
+}
+
+// Finish seals intake once. A timed-out caller does not terminate the finisher
+// or the drain: callers must retain ownership until Done actually closes.
+func (w *Writer) Finish(waitCtx context.Context) error {
+	if w.runtime == nil {
+		return ErrWriterNotRuntime
+	}
+	w.runtime.finishOnce.Do(func() {
+		w.mu.Lock()
+		w.runtime.sealed = true
+		w.mu.Unlock()
+		go func() {
+			w.runtime.ingress.Lock()
+			w.enqueueRuntimeTailInternal()
+			w.queueCh <- writerQueueItem{finish: true}
+			w.runtime.ingress.Unlock()
+		}()
+	})
+	select {
+	case <-w.runtime.done:
+		w.mu.Lock()
+		defer w.mu.Unlock()
+		return w.runtime.firstError
+	case <-waitCtx.Done():
+		return waitCtx.Err()
+	}
+}
+
+func (w *Writer) writeRuntimeInternal(p []byte) (int, error) {
+	w.runtime.ingress.Lock()
+	defer w.runtime.ingress.Unlock()
+	w.mu.Lock()
+	if w.runtime.sealed {
+		w.mu.Unlock()
+		return 0, ErrWriterFinished
+	}
+	var messages []writerAppendMessage
+	w.buffer = append(w.buffer, p...)
+	for {
+		idx := bytes.IndexByte(w.buffer, '\n')
+		if idx < 0 {
+			break
+		}
+		messages = append(messages, w.captureLineInternal(string(w.buffer[:idx])))
+		w.buffer = w.buffer[idx+1:]
+	}
+	w.mu.Unlock()
+	for i := range messages {
+		w.queueCh <- writerQueueItem{message: &messages[i]}
+	}
+	return len(p), nil
+}
+
+func (w *Writer) enqueueRuntimeTailInternal() {
+	w.mu.Lock()
+	var tail *writerAppendMessage
+	if len(w.buffer) > 0 {
+		item := w.captureLineInternal(string(w.buffer))
+		tail = &item
+		w.buffer = nil
+	}
+	w.mu.Unlock()
+	if tail != nil {
+		w.queueCh <- writerQueueItem{message: tail}
+	}
+}
+
+func (w *Writer) flushRuntimeInternal() {
+	w.runtime.ingress.Lock()
+	w.mu.Lock()
+	sealed := w.runtime.sealed
+	w.mu.Unlock()
+	if sealed {
+		w.runtime.ingress.Unlock()
+		<-w.runtime.done
+		return
+	}
+	w.enqueueRuntimeTailInternal()
+	flushed := make(chan struct{})
+	w.queueCh <- writerQueueItem{flush: flushed}
+	w.runtime.ingress.Unlock()
+	<-flushed
+}
+
+func (w *Writer) drainRuntimeInternal() {
+	defer close(w.runtime.done)
+	for {
+		item := <-w.queueCh
+		var batch []AppendMessageRequest
+		var flushes []chan struct{}
+		finished := false
+		collect := func(item writerQueueItem) {
+			finished = finished || item.finish
+			if item.flush != nil {
+				flushes = append(flushes, item.flush)
+			}
+			if m := item.message; m != nil {
+				batch = append(batch, AppendMessageRequest{Level: m.level, Message: m.message, Payload: m.payload, Step: m.step, Output: m.output})
+			}
+		}
+		collect(item)
+	collectBatch:
+		for !finished && len(batch) < writerAppendBatchSize {
+			select {
+			case next := <-w.queueCh:
+				collect(next)
+			default:
+				break collectBatch
+			}
+		}
+		if len(batch) > 0 {
+			ctx, cancel := context.WithTimeout(w.persistCtx, runtimeAppendTimeout)
+			_, err := w.activityService.AppendMessages(ctx, w.activityID, batch)
+			cancel()
+			if err != nil {
+				w.mu.Lock()
+				if w.runtime.firstError == nil {
+					w.runtime.firstError = err
+				}
+				w.mu.Unlock()
+			}
+		}
+		for _, flushed := range flushes {
+			close(flushed)
+		}
+		if finished {
+			return
+		}
+	}
 }
