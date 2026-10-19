@@ -107,9 +107,13 @@ func (s *RuntimeService) admissionPassInternal(ctx context.Context, c runtimeCan
 					return err
 				}
 				if s.localExecution != nil && runtimeQueuesInternal(c.command.Operation) {
-					if err := tx.Model(&Activity{}).Where("id = ? AND environment_id = ?", row.RunID, row.EnvironmentID).
-						UpdateColumns(map[string]any{"status": activitytypes.StatusQueued, "updated_at": now}).Error; err != nil {
-						return err
+					changed := tx.Model(&Activity{}).Where("id = ? AND environment_id = ?", row.RunID, row.EnvironmentID).
+						UpdateColumns(map[string]any{"status": activitytypes.StatusQueued, "updated_at": now})
+					if changed.Error != nil {
+						return changed.Error
+					}
+					if changed.RowsAffected != 1 {
+						return &runtimeConflictInternal{}
 					}
 				}
 				if c.command.Actor.DisplayName != nil {

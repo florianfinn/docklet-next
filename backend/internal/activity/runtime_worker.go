@@ -119,6 +119,7 @@ func (s *RuntimeService) localPhaseInternal(owner *runtimeOwnerInternal, executi
 	var snapshot activitytypes.RuntimeSnapshot
 	err := s.ownerTransactionInternal(owner.ctx, func(tx *gorm.DB, now time.Time) error {
 		execute, startedAt = false, nil
+		snapshot = activitytypes.RuntimeSnapshot{}
 		row, err := runtimeMutableReceiptTxInternal(tx, owner.id)
 		if err != nil {
 			return err
