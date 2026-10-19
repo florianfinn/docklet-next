@@ -35,6 +35,8 @@ func TestRuntimeAdmissionRetainedRetryAndJoin(t *testing.T) {
 	require.Equal(t, string(activitytypes.CodeRunStarted), before.Messages[0].Code)
 	require.Equal(t, command.Actor.ID, before.Messages[0].Payload["actorId"])
 	require.Equal(t, before.Receipts[0].AdmittedAt, new(before.Messages[0].CreatedAt))
+	require.Equal(t, before.Receipts[0].AdmittedAt, before.Activities[0].UpdatedAt)
+	require.Equal(t, before.Receipts[0].AdmittedAt, before.Messages[0].UpdatedAt)
 	require.Equal(t, time.UTC, before.Messages[0].CreatedAt.Location())
 	require.Equal(t, before.Messages[0].CreatedAt.Truncate(time.Microsecond), before.Messages[0].CreatedAt)
 	f.resolver.resolve = func(context.Context, RuntimeTarget) (RuntimeResolvedTarget, error) {

@@ -105,7 +105,11 @@ func (s *RuntimeService) admissionPassInternal(ctx context.Context, c runtimeCan
 					return err
 				}
 				if c.command.Actor.DisplayName != nil {
-					if err := tx.Model(&Activity{}).Where("id = ?", row.RunID).Update("started_by_display_name", *c.command.Actor.DisplayName).Error; err != nil {
+					// Keep the transaction's clock sample; the generic model's update
+					// hook otherwise replaces UpdatedAt with the wall clock.
+					if err := tx.Model(&Activity{}).Where("id = ?", row.RunID).UpdateColumns(map[string]any{
+						"started_by_display_name": *c.command.Actor.DisplayName, "updated_at": now,
+					}).Error; err != nil {
 						return err
 					}
 				}
