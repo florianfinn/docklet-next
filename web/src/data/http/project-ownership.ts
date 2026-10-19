@@ -1,8 +1,8 @@
 // Source: docklet-next/docs/design/runtime-control.md
-// Revision: 281d561206c422724c50a8fe45588fb9ca6980153eaf2aeb6afce07f8cae0e31
+// Revision: f0447218f504f481d9e941df04bb6a19716ed6d7203060744204c44c3cc7cda8
 // Retrieved: 2026-10-19
 // License: Apache-2.0
-// Deviations: Original effective Compose-label consequence regression coverage.
+// Deviations: Original effective Compose-label and explicit runtime membership projection.
 
 import type { ProjectRow } from "./inventory-mapping";
 
@@ -28,7 +28,8 @@ export function composeProjectOwner(projects: ProjectRow[], label: string | unde
     return rank(a) - rank(b) || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0);
   });
   if (candidates.length) return candidates[0];
-  // Older peers omit the observation. Explicit runtime container IDs can then
-  // link that container only; they cannot establish volume/network ownership.
-  return containerId ? projects.filter((project) => !project.composeProjectName && project.runtimeServices?.some((service) => service.containerId === containerId)).sort((a, b) => a.id < b.id ? -1 : a.id > b.id ? 1 : 0)[0] : undefined;
+  // With no visible label owner, explicit backend runtime IDs retain container
+  // membership (including directory fallback) for current and older peers.
+  // This evidence cannot establish volume/network ownership.
+  return containerId ? projects.filter((project) => project.runtimeServices?.some((service) => service.containerId === containerId)).sort((a, b) => a.id < b.id ? -1 : a.id > b.id ? 1 : 0)[0] : undefined;
 }

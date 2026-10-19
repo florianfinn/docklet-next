@@ -69,9 +69,11 @@ export function mapContainer(row: ContainerRow, hostId: string, projects: Projec
 export function mapStack(row: ProjectRow, hostId: string, containers: ContainerInfo[], inventory: InventoryObservation): Stack {
   if (!row?.id || !row.name || typeof row.status !== "string") throw new Error("inventory.invalid-project");
   const members = containers.filter((item) => item.stackId === inventoryId(hostId, row.id));
+  // Missing or unowned inventory cannot disprove explicit backend membership.
+  // Only a concrete conflicting web owner excludes a runtime entry.
   const runtimeServices = row.runtimeServices?.filter((runtime) => {
     const id = runtime.containerId;
-    return !id || !containers.some((item) => item.id === inventoryId(hostId, id) && item.stackId !== inventoryId(hostId, row.id));
+    return !id || !containers.some((item) => item.id === inventoryId(hostId, id) && !!item.stackId && item.stackId !== inventoryId(hostId, row.id));
   });
   const services: Service[] = (runtimeServices?.length ? runtimeServices : members.map((c) => ({ name: c.serviceName ?? c.name, image: `${c.image.repository}:${c.image.tag}`, status: c.state, health: c.health, containerId: splitInventoryId(c.id)[1] }))).map((runtime) => {
     const container = members.find((item) => item.id === inventoryId(hostId, runtime.containerId || "absent"));

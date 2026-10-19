@@ -139,18 +139,26 @@ normalized recorded observation, falling back to normalized stored `Name` for
 legacy rows with absent or empty metadata. `name` remains the stable display and
 configuration default. Container, stack, volume and network mappings use this
 label, including resources with no containers; network ownership therefore
-retains the Compose-managed removal restriction. Older peers without the field
-can link a container by an explicit runtime container ID, but that evidence alone
-cannot claim volume or network ownership.
+retains the Compose-managed removal restriction. When no visible label candidate
+exists, explicit backend runtime container IDs also retain container membership
+for current and older peers, including the unique-directory fallback. A visible
+conflicting label owner takes priority over stale runtime IDs. Stack runtime
+entries remain visible when container inventory is absent or has no assigned web
+owner; only a concrete conflicting owner excludes an entry. These container-only
+fallbacks do not change unlabelled/partial-label origin semantics or establish
+volume or network ownership, even through a linked consumer.
 
 Listing selects the observed group before directory fallback and never substitutes
 a replaced default group. Known-name discovery and system-project exclusion use
 the effective label, so a stale default does not hide orphan groups or unrelated
-projects. Full-table observed owners precede normalized legacy aliases regardless
-of pagination or row order. On the wire, exact default spellings precede
-normalized aliases; otherwise equal evidence uses stable ID order for these read
-projections. Image and dashboard project usage use the same observation/fallback
-and priority, retaining their existing short cache lifetime. These are metadata
+projects. Listing and image/dashboard maps rank recorded metadata before legacy
+fallbacks, then stable ID, over all persisted rows before pagination or filtering.
+Legacy lookup additionally favors exact observation spelling and exact stored
+names. The visible web projection ranks differing observations, then exact default
+spellings, then stable ID. The wire does not distinguish recorded metadata from
+legacy fallback, so genuine duplicate labels can select different read owners,
+including archived/system/off-page cases; these ties do not prove unique runtime
+ownership. Image/dashboard maps retain their existing short cache lifetime. These are metadata
 reads, not fresh ownership proof: missing or malformed current files do not add
 a new availability condition. The updater active-project used-image source still
 uses stored names; its accepted follow-up remains separate, and normal eligible

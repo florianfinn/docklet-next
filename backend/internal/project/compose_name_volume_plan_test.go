@@ -1,5 +1,5 @@
 // Source: docklet-next/docs/design/runtime-control.md
-// Revision: 281d561206c422724c50a8fe45588fb9ca6980153eaf2aeb6afce07f8cae0e31
+// Revision: f0447218f504f481d9e941df04bb6a19716ed6d7203060744204c44c3cc7cda8
 // Retrieved: 2026-10-19
 // License: Apache-2.0
 // Deviations: Original current/pending Compose namespace planning regression coverage.
