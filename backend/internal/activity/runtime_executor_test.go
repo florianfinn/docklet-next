@@ -90,7 +90,7 @@ func TestRuntimeExecutorFreshContainerIdentityBeforeEffects(t *testing.T) {
 	require.NoError(t, err)
 	// The second live inspection is the executor preflight, independent of
 	// scheduling between Admit's return and worker registration.
-	_, waitErr := f.runtime.WaitLocal(t.Context(), activity.RuntimeRunReference{Store: f.store, RunID: admitted.ActivityID})
+	_, waitErr := f.waitLocal(admitted.ActivityID)
 	require.NoError(t, waitErr) // A settled failed workflow is an authoritative snapshot.
 	require.EqualValues(t, 2, inspections.Load())
 	require.Empty(t, runtimeEffectEvents(f.http.snapshot()))
@@ -193,7 +193,7 @@ func TestRuntimeExecutorChangedManagedParentAndRemovedTarget(t *testing.T) {
 			command := f.command(activity.RuntimeStopContainer, activity.RuntimeTarget{Kind: "container", ID: runtimeContainerID, ParentProjectID: &parent})
 			admitted, err := f.runtime.Admit(t.Context(), command)
 			require.NoError(t, err)
-			snapshot, err := f.runtime.WaitLocal(t.Context(), activity.RuntimeRunReference{Store: f.store, RunID: admitted.ActivityID})
+			snapshot, err := f.waitLocal(admitted.ActivityID)
 			require.NoError(t, err)
 			require.Equal(t, "failed", string(snapshot.Status))
 			require.EqualValues(t, 2, inspections.Load())

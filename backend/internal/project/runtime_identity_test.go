@@ -127,3 +127,20 @@ func TestResolveRuntimeProjectIdentityUnreadableAndNameDisagreement(t *testing.T
 	require.Error(t, err)
 	require.False(t, found)
 }
+
+func TestResolveRuntimeProjectIdentityUnrelatedUnreadableRowFailsClosed(t *testing.T) {
+	svc, root := runtimeIdentityFixture(t)
+	healthy := runtimeIdentityProject(t, svc, root, "example-project-healthy", "healthy", "name: healthy_stack\nservices:\n  app:\n    image: example.invalid/app:1\n")
+	unrelated := runtimeIdentityProject(t, svc, root, "example-project-broken", "broken", "not: [valid")
+	for _, selector := range []struct{ id, name string }{{healthy.ID, ""}, {"", "healthy_stack"}} {
+		ref, found, err := svc.ResolveRuntimeProjectIdentity(t.Context(), selector.id, selector.name)
+		require.Error(t, err, "an unreadable project cannot be skipped during ambiguity checking")
+		require.False(t, found)
+		require.Empty(t, ref.ID)
+	}
+	require.NoError(t, os.WriteFile(filepath.Join(unrelated.Path, "compose.yaml"), []byte("name: unrelated_stack\nservices:\n  app:\n    image: example.invalid/app:1\n"), 0644))
+	ref, found, err := svc.ResolveRuntimeProjectIdentity(t.Context(), healthy.ID, "")
+	require.NoError(t, err)
+	require.True(t, found)
+	require.Equal(t, healthy.ID, ref.ID)
+}

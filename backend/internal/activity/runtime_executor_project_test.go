@@ -9,17 +9,23 @@ package activity_test
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"io"
 	"net/http"
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
 	"github.com/florianfinn/docklet-next/backend/internal/activity"
+	"github.com/florianfinn/docklet-next/backend/internal/project"
+	"github.com/florianfinn/docklet-next/backend/pkg/utils/sqlitestore"
 	projecttypes "github.com/florianfinn/docklet-next/types/project"
+	usertypes "github.com/florianfinn/docklet-next/types/user"
 	"github.com/stretchr/testify/require"
+	dockertypes "go.getarcane.app/docker/types"
 )
 
 func runtimeCreatedLabels(t *testing.T, events []runtimeHTTPEvent) map[string]string {
@@ -136,6 +142,12 @@ func TestRuntimeExecutorProjectDeploy(t *testing.T) {
 	var run activity.Activity
 	require.NoError(t, f.db.First(&run, "id = ?", runID).Error)
 	require.NotEmpty(t, run.Output, "real Compose progress must use the runtime capture")
+	require.NotEmpty(t, run.Output[len(run.Output)-1].Text, "the final accepted SDK progress line must drain")
+	var codes []string
+	require.NoError(t, f.db.Raw("SELECT code FROM activity_messages WHERE activity_id = ? ORDER BY rowid", runID).Scan(&codes).Error)
+	require.Greater(t, len(codes), 2, "SDK output should precede the final message")
+	require.Equal(t, "run.started", codes[0])
+	require.Equal(t, "activity.success", codes[len(codes)-1])
 	var create, start int
 	for _, event := range f.http.snapshot() {
 		if event.Method == http.MethodPost && strings.HasSuffix(event.Path, "/containers/create") {
@@ -312,6 +324,9 @@ func TestRuntimeExecutorProjectPreparationBeforeUp(t *testing.T) {
 	f.http.setLabels(map[string]string{"com.docker.compose.project": "example_stack", "com.docker.compose.service": "app", "com.docker.compose.container-number": "1", "com.docker.compose.config-hash": "example-hash"})
 	entered := make(chan struct{})
 	release := make(chan struct{})
+	var releaseOnce sync.Once
+	unblock := func() { releaseOnce.Do(func() { close(release) }) }
+	defer unblock()
 	f.http.mu.Lock()
 	f.http.onCall = func(_ http.ResponseWriter, r *http.Request) bool {
 		if r.Method == http.MethodGet && strings.Contains(r.URL.Path, "/images/") && strings.HasSuffix(r.URL.Path, "/json") {
@@ -320,7 +335,10 @@ func TestRuntimeExecutorProjectPreparationBeforeUp(t *testing.T) {
 			default:
 				close(entered)
 			}
-			<-release
+			select {
+			case <-release:
+			case <-r.Context().Done():
+			}
 		}
 		return false
 	}
@@ -338,8 +356,8 @@ func TestRuntimeExecutorProjectPreparationBeforeUp(t *testing.T) {
 		require.False(t, event.Method == http.MethodPost && strings.HasSuffix(event.Path, "/containers/create"), f.debugEvents())
 		require.False(t, event.Method == http.MethodPost && strings.HasSuffix(event.Path, "/start"), f.debugEvents())
 	}
-	close(release)
-	snapshot, err := f.runtime.WaitLocal(t.Context(), activity.RuntimeRunReference{Store: f.store, RunID: admitted.ActivityID})
+	unblock()
+	snapshot, err := f.waitLocal(admitted.ActivityID)
 	require.NoError(t, err)
 	require.Equal(t, "success", string(snapshot.Status), f.debugEvents())
 }
@@ -360,7 +378,7 @@ func TestRuntimeExecutorProjectPreparationErrorHasNoUp(t *testing.T) {
 	command.Options.Deploy = &projecttypes.DeployOptions{PullPolicy: "never"}
 	admitted, err := f.runtime.Admit(t.Context(), command)
 	require.NoError(t, err)
-	snapshot, err := f.runtime.WaitLocal(t.Context(), activity.RuntimeRunReference{Store: f.store, RunID: admitted.ActivityID})
+	snapshot, err := f.waitLocal(admitted.ActivityID)
 	require.NoError(t, err)
 	require.Equal(t, "failed", string(snapshot.Status))
 	for _, event := range f.http.snapshot() {
@@ -369,52 +387,96 @@ func TestRuntimeExecutorProjectPreparationErrorHasNoUp(t *testing.T) {
 	}
 }
 
-func TestRuntimeExecutorComposeCallKeepsLifecycleCancellation(t *testing.T) {
+func TestRuntimeExecutorBuildCollaboratorErrorBeforeUp(t *testing.T) {
 	f := newRuntimeServicesFixture(t)
-	f.project("example-project", "example-project", "name: example_stack\nservices:\n  app:\n    image: registry.example.com/app:1\n")
+	f.project("example-project", "example-project", "name: example_stack\nservices:\n  app:\n    image: registry.example.com/app:1\n    pull_policy: build\n    build:\n      context: .\n      dockerfile: Missing.Dockerfile\n")
 	f.http.setLabels(map[string]string{"com.docker.compose.project": "example_stack", "com.docker.compose.service": "app", "com.docker.compose.container-number": "1", "com.docker.compose.config-hash": "example-hash"})
-	app, stop := context.WithCancel(context.Background())
-	defer stop()
-	f.runtime = activity.NewRuntimeService(f.activity, f.adapter, activity.RuntimeLocalConfig{ApplicationContext: app, Store: f.store, Executor: f.adapter})
-	entered := make(chan struct{})
-	cancelled := make(chan struct{})
-	release := make(chan struct{})
-	f.http.mu.Lock()
-	f.http.onCall = func(w http.ResponseWriter, r *http.Request) bool {
-		if r.Method == http.MethodPost && strings.HasSuffix(r.URL.Path, "/containers/"+runtimeContainerID+"/start") {
-			close(entered)
-			select {
-			case <-r.Context().Done():
-				close(cancelled)
-			case <-release:
-			}
-			http.Error(w, "synthetic cancelled request", http.StatusServiceUnavailable)
-			return true
-		}
-		return false
-	}
-	f.http.mu.Unlock()
 	command := f.command(activity.RuntimeDeployProject, activity.RuntimeTarget{Kind: "stack", ID: "example-project"})
 	command.Options.Deploy = &projecttypes.DeployOptions{PullPolicy: "never"}
 	admitted, err := f.runtime.Admit(t.Context(), command)
 	require.NoError(t, err)
-	select {
-	case <-entered:
-	case <-time.After(10 * time.Second):
-		t.Fatal("Compose did not reach the SDK start call")
-	}
-	stop()
-	observed := false
-	select {
-	case <-cancelled:
-		observed = true
-	case <-time.After(2 * time.Second):
-	}
-	close(release)
-	require.True(t, observed, "Compose SDK request lost the worker's cancellation")
-	snapshot, err := f.runtime.WaitLocal(t.Context(), activity.RuntimeRunReference{Store: f.store, RunID: admitted.ActivityID})
+	waitCtx, cancel := context.WithTimeout(t.Context(), 8*time.Second)
+	defer cancel()
+	snapshot, err := f.runtime.WaitLocal(waitCtx, activity.RuntimeRunReference{Store: f.store, RunID: admitted.ActivityID})
 	require.NoError(t, err)
-	require.Equal(t, "failed", string(snapshot.Status))
+	require.Equal(t, "failed", string(snapshot.Status), f.debugEvents())
+	for _, event := range f.http.snapshot() {
+		require.False(t, event.Method == http.MethodPost && strings.HasSuffix(event.Path, "/containers/create"), f.debugEvents())
+		require.False(t, event.Method == http.MethodPost && strings.HasSuffix(event.Path, "/start"), f.debugEvents())
+	}
+	var buildFailures int64
+	require.NoError(t, f.db.Table("events").Where("resource_type = ? AND type = ?", "image", "image.error").Count(&buildFailures).Error)
+	require.Positive(t, buildFailures, "actual BuildService should record a failed build")
+}
+
+func TestRuntimeExecutorComposeSDKCancellationMatrix(t *testing.T) {
+	for _, cause := range []string{"user", "application", "deadline"} {
+		t.Run(cause, func(t *testing.T) {
+			f := newRuntimeServicesFixture(t)
+			f.project("example-project", "example-project", "name: example_stack\nservices:\n  app:\n    image: registry.example.com/app:1\n")
+			f.http.setLabels(map[string]string{"com.docker.compose.project": "example_stack", "com.docker.compose.service": "app", "com.docker.compose.container-number": "1", "com.docker.compose.config-hash": "example-hash"})
+			var app context.Context
+			var stop context.CancelFunc
+			if cause == "deadline" {
+				app, stop = context.WithTimeout(context.Background(), 4*time.Second)
+			} else {
+				app, stop = context.WithCancel(context.Background())
+			}
+			defer stop()
+			f.runtime = activity.NewRuntimeService(f.activity, f.adapter, activity.RuntimeLocalConfig{ApplicationContext: app, Store: f.store, Executor: f.adapter})
+			entered, cancelled, release := make(chan struct{}), make(chan struct{}), make(chan struct{})
+			var releaseOnce sync.Once
+			unblock := func() { releaseOnce.Do(func() { close(release) }) }
+			defer unblock()
+			f.http.mu.Lock()
+			f.http.onCall = func(w http.ResponseWriter, r *http.Request) bool {
+				if r.Method != http.MethodPost || !strings.HasSuffix(r.URL.Path, "/containers/"+runtimeContainerID+"/start") {
+					return false
+				}
+				close(entered)
+				select {
+				case <-r.Context().Done():
+					close(cancelled)
+				case <-release:
+				}
+				http.Error(w, "synthetic cancelled request", http.StatusServiceUnavailable)
+				return true
+			}
+			f.http.mu.Unlock()
+			command := f.command(activity.RuntimeDeployProject, activity.RuntimeTarget{Kind: "stack", ID: "example-project"})
+			command.Options.Deploy = &projecttypes.DeployOptions{PullPolicy: "never"}
+			admitted, err := f.runtime.Admit(t.Context(), command)
+			require.NoError(t, err)
+			select {
+			case <-entered:
+			case <-time.After(3 * time.Second):
+				t.Fatal("Compose did not reach the SDK start call")
+			}
+			if cause == "user" {
+				cancelCtx, cancel := context.WithTimeout(t.Context(), 3*time.Second)
+				_, err = f.runtime.Cancel(cancelCtx, activity.RuntimeRunReference{Store: f.store, RunID: admitted.ActivityID}, usertypes.Actor{ID: "example-owner", Username: "Operator"})
+				cancel()
+				require.NoError(t, err)
+			} else if cause == "application" {
+				stop()
+			}
+			select {
+			case <-cancelled:
+			case <-time.After(5 * time.Second):
+				t.Error("actual Compose SDK HTTP request did not receive lifecycle cancellation")
+			}
+			unblock()
+			waitCtx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
+			defer cancel()
+			snapshot, err := f.runtime.WaitLocal(waitCtx, activity.RuntimeRunReference{Store: f.store, RunID: admitted.ActivityID})
+			require.NoError(t, err)
+			if cause == "user" {
+				require.Equal(t, "cancelled", string(snapshot.Status))
+			} else {
+				require.Equal(t, "failed", string(snapshot.Status))
+			}
+		})
+	}
 }
 
 func TestRuntimeExecutorRealComposeOutputFailureSettlesFailed(t *testing.T) {
@@ -427,10 +489,104 @@ func TestRuntimeExecutorRealComposeOutputFailureSettlesFailed(t *testing.T) {
 	command.Options.Deploy = &projecttypes.DeployOptions{PullPolicy: "never"}
 	admitted, err := f.runtime.Admit(t.Context(), command)
 	require.NoError(t, err)
-	snapshot, err := f.runtime.WaitLocal(t.Context(), activity.RuntimeRunReference{Store: f.store, RunID: admitted.ActivityID})
+	snapshot, err := f.waitLocal(admitted.ActivityID)
 	require.NoError(t, err)
 	require.Equal(t, "failed", string(snapshot.Status), f.debugEvents())
 	var finalCount int64
 	require.NoError(t, f.db.Table("activity_messages").Where("activity_id = ? AND code = ?", admitted.ActivityID, "runtime.failed").Count(&finalCount).Error)
 	require.EqualValues(t, 1, finalCount)
+}
+
+// This test-only port delegates the actual ProjectService, then holds a local
+// progress producer after the SDK returns. Server handler lifetime is not the join.
+type runtimeHeldProjectPort struct {
+	*project.ProjectService
+	entered, release, wrote chan struct{}
+}
+
+func (p *runtimeHeldProjectPort) DeployProject(ctx context.Context, id string, actor usertypes.Actor, options *projecttypes.DeployOptions) error {
+	if err := p.ProjectService.DeployProject(ctx, id, actor, options); err != nil {
+		return err
+	}
+	progress, ok := ctx.Value(dockertypes.ProgressWriterKey{}).(io.Writer)
+	if !ok {
+		return errors.New("missing real service progress writer")
+	}
+	close(p.entered)
+	<-p.release
+	_, err := io.WriteString(progress, "local producer tail without newline")
+	close(p.wrote)
+	return err
+}
+
+func TestRuntimeExecutorRealComposeOutputDrainsBeforeTerminal(t *testing.T) {
+	f := newRuntimeServicesFixture(t)
+	f.project("example-project", "example-project", "name: example_stack\nservices:\n  app:\n    image: registry.example.com/app:1\n")
+	f.http.setLabels(map[string]string{"com.docker.compose.project": "example_stack", "com.docker.compose.service": "app", "com.docker.compose.container-number": "1", "com.docker.compose.config-hash": "example-hash"})
+	entered, release, wrote := make(chan struct{}), make(chan struct{}), make(chan struct{})
+	var releaseOnce sync.Once
+	unblock := func() { releaseOnce.Do(func() { close(release) }) }
+	defer unblock()
+	held := &runtimeHeldProjectPort{ProjectService: f.projects, entered: entered, release: release, wrote: wrote}
+	f.adapter = activity.NewRuntimeServiceAdapter(held, f.containers)
+	f.runtime = activity.NewRuntimeService(f.activity, f.adapter, activity.RuntimeLocalConfig{ApplicationContext: t.Context(), Store: f.store, Executor: f.adapter})
+	command := f.command(activity.RuntimeDeployProject, activity.RuntimeTarget{Kind: "stack", ID: "example-project"})
+	command.Options.Deploy = &projecttypes.DeployOptions{PullPolicy: "never"}
+	admitted, err := f.runtime.Admit(t.Context(), command)
+	require.NoError(t, err)
+	select {
+	case <-entered:
+	case <-time.After(3 * time.Second):
+		t.Fatal("actual ProjectService and held local producer did not return")
+	}
+	var unsettled, finalCount int64
+	require.NoError(t, f.db.Table("runtime_receipts").Where("run_id = ? AND settled_at IS NULL", admitted.ActivityID).Count(&unsettled).Error)
+	require.EqualValues(t, 1, unsettled, "local producer holds the durable scope")
+	require.NoError(t, f.db.Table("activity_messages").Where("activity_id = ? AND code = ?", admitted.ActivityID, "activity.success").Count(&finalCount).Error)
+	require.Zero(t, finalCount)
+	competing := f.command(activity.RuntimeDownProject, activity.RuntimeTarget{Kind: "stack", ID: "example-project"})
+	refused, err := f.runtime.Admit(t.Context(), competing)
+	require.Empty(t, refused.ActivityID)
+	var conflict *activity.GateConflict
+	require.ErrorAs(t, err, &conflict)
+	lockCtx, cancelLock := context.WithTimeout(t.Context(), 5*time.Second)
+	defer cancelLock()
+	writePool, err := sqlitestore.Open(lockCtx, f.dbPath, true, false)
+	require.NoError(t, err)
+	defer writePool.Close()
+	lock, err := writePool.BeginTx(lockCtx, nil)
+	require.NoError(t, err)
+	defer lock.Rollback()
+	_, err = lock.ExecContext(lockCtx, "UPDATE projects SET status = status WHERE id = ?", "example-project")
+	require.NoError(t, err)
+	readPool, err := sqlitestore.Open(lockCtx, f.dbPath, true, true)
+	require.NoError(t, err)
+	defer readPool.Close()
+	unblock()
+	select {
+	case <-wrote:
+	case <-time.After(2 * time.Second):
+		t.Fatal("local output producer did not return")
+	}
+	sqlDB, err := f.db.DB.DB()
+	require.NoError(t, err)
+	require.Eventually(t, func() bool { return sqlDB.Stats().InUse == 1 }, 2*time.Second, 10*time.Millisecond,
+		"the real ActivityService append must be waiting on the SQLite write lock")
+	var heldReceipt, heldFinal int
+	require.NoError(t, readPool.QueryRowContext(lockCtx, "SELECT count(*) FROM runtime_receipts WHERE run_id = ? AND settled_at IS NULL", admitted.ActivityID).Scan(&heldReceipt))
+	require.Equal(t, 1, heldReceipt)
+	require.NoError(t, readPool.QueryRowContext(lockCtx, "SELECT count(*) FROM activity_messages WHERE activity_id = ? AND code = 'activity.success'", admitted.ActivityID).Scan(&heldFinal))
+	require.Zero(t, heldFinal)
+	require.NoError(t, lock.Rollback())
+	snapshot, err := f.waitLocal(admitted.ActivityID)
+	require.NoError(t, err)
+	require.Equal(t, "success", string(snapshot.Status), f.debugEvents())
+	var run activity.Activity
+	require.NoError(t, f.db.First(&run, "id = ?", admitted.ActivityID).Error)
+	require.NotEmpty(t, run.Output)
+	require.True(t, strings.HasSuffix(run.Output[len(run.Output)-1].Text, "local producer tail without newline"))
+	var codes []string
+	require.NoError(t, f.db.Raw("SELECT code FROM activity_messages WHERE activity_id = ? ORDER BY rowid", admitted.ActivityID).Scan(&codes).Error)
+	require.Greater(t, len(codes), 2)
+	require.Equal(t, "activity.success", codes[len(codes)-1])
 }

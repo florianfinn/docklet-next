@@ -19,6 +19,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/florianfinn/docklet-next/backend/internal/activity"
 	"github.com/florianfinn/docklet-next/backend/internal/build"
@@ -32,6 +33,7 @@ import (
 	"github.com/florianfinn/docklet-next/backend/internal/registry"
 	"github.com/florianfinn/docklet-next/backend/internal/settings"
 	"github.com/florianfinn/docklet-next/backend/pkg/utils/sqlitestore"
+	activitytypes "github.com/florianfinn/docklet-next/types/activity"
 	usertypes "github.com/florianfinn/docklet-next/types/user"
 	"github.com/google/uuid"
 	"github.com/moby/moby/client"
@@ -303,6 +305,7 @@ type runtimeServicesFixture struct {
 	adapter    *activity.RuntimeServiceAdapter
 	runtime    *activity.RuntimeService
 	http       *runtimeHTTPFixture
+	dbPath     string
 	root       string
 	store      activity.RuntimeStoreBinding
 }
@@ -318,7 +321,8 @@ func newRuntimeServicesFixture(t *testing.T) *runtimeServicesFixture {
 	t.Setenv("DOCKER_TLS_VERIFY", "")
 	t.Setenv("DOCKER_CERT_PATH", "")
 	ctx := t.Context()
-	db, err := database.InitializeHub(ctx, sqlitestore.URL(filepath.Join(t.TempDir(), "runtime.db")), database.MigrationOptions{})
+	dbPath := filepath.Join(t.TempDir(), "runtime.db")
+	db, err := database.InitializeHub(ctx, sqlitestore.URL(dbPath), database.MigrationOptions{})
 	require.NoError(t, err)
 	t.Cleanup(func() { require.NoError(t, db.Close()) })
 	settingsService, err := settings.NewSettingsService(ctx, db)
@@ -346,7 +350,7 @@ func newRuntimeServicesFixture(t *testing.T) *runtimeServicesFixture {
 	store := activity.RuntimeStoreBinding{StoreGeneration: generation, ExecutorGeneration: generation, ManagerID: "example-manager", RegistrationID: "example-registration", EnvironmentID: "0"}
 	runtime := activity.NewRuntimeService(activityService, adapter, activity.RuntimeLocalConfig{ApplicationContext: context.Background(), Store: store, Executor: adapter})
 	return &runtimeServicesFixture{t: t, db: db, settings: settingsService, activity: activityService, projects: projects,
-		containers: containers, adapter: adapter, runtime: runtime, http: httpFixture, root: root, store: store}
+		containers: containers, adapter: adapter, runtime: runtime, http: httpFixture, dbPath: dbPath, root: root, store: store}
 }
 
 func (f *runtimeServicesFixture) command(operation activity.RuntimeOperation, target activity.RuntimeTarget) activity.RuntimeCommand {
@@ -380,10 +384,16 @@ func (f *runtimeServicesFixture) run(command activity.RuntimeCommand) string {
 	admitted, err := f.runtime.Admit(f.t.Context(), command)
 	require.NoError(f.t, err)
 	require.NotEmpty(f.t, admitted.ActivityID)
-	snapshot, err := f.runtime.WaitLocal(f.t.Context(), activity.RuntimeRunReference{Store: f.store, RunID: admitted.ActivityID})
+	snapshot, err := f.waitLocal(admitted.ActivityID)
 	require.NoError(f.t, err)
 	require.Equal(f.t, "success", string(snapshot.Status), f.debugEvents())
 	return admitted.ActivityID
+}
+
+func (f *runtimeServicesFixture) waitLocal(runID string) (activitytypes.RuntimeSnapshot, error) {
+	ctx, cancel := context.WithTimeout(f.t.Context(), 10*time.Second)
+	defer cancel()
+	return f.runtime.WaitLocal(ctx, activity.RuntimeRunReference{Store: f.store, RunID: runID})
 }
 
 func (f *runtimeServicesFixture) debugEvents() string {
