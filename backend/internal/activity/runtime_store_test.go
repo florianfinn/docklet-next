@@ -575,14 +575,14 @@ func TestRuntimeStoreMissingGenerationCannotAdmitOrProveAbsence(t *testing.T) {
 	require.NoError(t, f.svc.db.Where("id = 1").Delete(&RuntimeStoreGeneration{}).Error)
 	row, err := f.admit(request)
 	require.Nil(t, row)
-	require.ErrorIs(t, err, gorm.ErrRecordNotFound)
+	require.ErrorIs(t, err, errRuntimeGenerationUnavailableInternal)
 	err = f.tx(func(tx *gorm.DB, now time.Time) error {
 		var err error
 		row, err = runtimeQueryTxInternal(tx, now, request.Identity)
 		return err
 	})
 	require.Nil(t, row)
-	require.ErrorIs(t, err, gorm.ErrRecordNotFound)
+	require.ErrorIs(t, err, errRuntimeGenerationUnavailableInternal)
 	runtimeCount(t, f.svc.db.DB, &RuntimeReceipt{}, 0)
 }
 

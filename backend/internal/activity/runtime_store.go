@@ -26,6 +26,9 @@ func (*runtimeConflictInternal) Error() string { return "runtime request mismatc
 
 var errRuntimeInvalidInternal = errors.New("invalid runtime storage input")
 
+// An uninitialized store cannot establish key absence or executor continuity.
+var errRuntimeGenerationUnavailableInternal = errors.New("runtime store generation unavailable")
+
 // Every Tx helper requires the same caller-owned BEGIN IMMEDIATE transaction.
 // Sample the existing service clock once, under runningMu before opening that
 // transaction when composing with admission/worker state. Publish only after commit.
@@ -84,6 +87,9 @@ func runtimeCheckStoreTxInternal(tx *gorm.DB, id runtimeIdentityInternal) error 
 	}
 	var own RuntimeStoreGeneration
 	if err := tx.First(&own, "id = 1").Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return errRuntimeGenerationUnavailableInternal
+		}
 		return err
 	}
 	if own.Generation != id.StoreGeneration {
@@ -155,7 +161,7 @@ func runtimeWriteErrorInternal(err error) error {
 	return err
 }
 
-// Admission persists the supplied raw UUID and actor once. It does not arbitrate
+// Hub intake persists the supplied raw UUID and client-key actor once. It does not arbitrate
 // parent scopes, authorize, register workers, append output or dispatch effects.
 // Callers must discard all returned evidence if their enclosing commit fails.
 func runtimeAdmitTxInternal(tx *gorm.DB, now time.Time, request runtimeAdmissionInternal) (*RuntimeReceipt, error) {
