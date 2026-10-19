@@ -1,5 +1,5 @@
 // Source: docklet-next/docs/design/runtime-control.md
-// Revision: 793b7fb08935a2e1b83d65aa6e2354a30330cd46d3ac6894b8d13d82938497cf
+// Revision: cdfb339023d76259b5de81589b8081255683560f7f129b911cab8db4b23a642a
 // Retrieved: 2026-10-19
 // License: Apache-2.0
 // Deviations: Original effective Compose-label consequence regression coverage.
@@ -21,10 +21,11 @@ export function composeProjectOwner(projects: ProjectRow[], label: string | unde
   if (!label) return undefined;
   const candidates = projects.filter((project) => effectiveName(project) === label);
   // Current responses carry the effective label even for legacy fallback rows.
-  // A differing observation outranks a default alias, independent of row order.
+  // A differing observation outranks defaults; exact default spellings then
+  // precede normalized aliases, including initial-discovery observations.
   candidates.sort((a, b) => {
-    const observed = (project: ProjectRow) => Boolean(project.composeProjectName && effectiveName(project) !== normalizeProjectName(project.name));
-    return Number(observed(b)) - Number(observed(a)) || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0);
+    const rank = (project: ProjectRow) => project.composeProjectName && effectiveName(project) !== normalizeProjectName(project.name) ? 0 : project.name === label ? 1 : 2;
+    return rank(a) - rank(b) || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0);
   });
   if (candidates.length) return candidates[0];
   // Older peers omit the observation. Explicit runtime container IDs can then

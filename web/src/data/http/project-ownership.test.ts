@@ -1,5 +1,5 @@
 // Source: docklet-next/docs/design/runtime-control.md
-// Revision: 793b7fb08935a2e1b83d65aa6e2354a30330cd46d3ac6894b8d13d82938497cf
+// Revision: cdfb339023d76259b5de81589b8081255683560f7f129b911cab8db4b23a642a
 // Retrieved: 2026-10-19
 // License: Apache-2.0
 // Deviations: Original effective Compose-label consequence regression coverage.
@@ -60,8 +60,8 @@ describe("effective Compose label across actual HTTP mappings", () => {
  it("preserves the actual domain removal refusal for an unattached Compose network", () => {
   const topology = mapTopology([network], "h1", [], [project()], inventory);
   expect(topology.attachments).toEqual([]);
-  expect(topology.networks[0]?.stackId).toBe("h1~example-project");
   expect(removeBlock(topology, topology.networks[0]!)).toBe("compose-managed");
+  expect(topology.networks[0]?.stackId).toBe("h1~example-project");
  });
  it("does not substitute a coexisting stale-default container group for effective members", () => {
   const rows = [container, { ...container, id: "stale", labels: { ...labels, "com.docker.compose.project": "alpha" } }];
@@ -77,6 +77,11 @@ describe("effective Compose label across actual HTTP mappings", () => {
    const alias = project({ id: "a-alias", name: "Beta_Stack", composeProjectName: metadata });
    for (const rows of [[alias, owner], [owner, alias]]) assertOwners(rows);
   }
+ });
+ it("prefers an initial-discovery exact name over a normalized legacy alias", () => {
+  const owner = project({ name: "beta_stack" });
+  const alias = project({ id: "a-alias", name: "Beta_Stack", composeProjectName: "beta_stack" });
+  for (const rows of [[alias, owner], [owner, alias]]) assertOwners(rows);
  });
  it("does not let a stale runtime ID or default displace a conflicting observed label owner", () => {
   const wrong = project({ id: "a-wrong", name: "beta_stack", composeProjectName: "other_stack", runtimeServices: [{ name: "web", image: container.image, status: "running", containerId: container.id }] });

@@ -139,7 +139,8 @@ Listing selects the observed group before directory fallback and never substitut
 a replaced default group. Known-name discovery and system-project exclusion use
 the effective label, so a stale default does not hide orphan groups or unrelated
 projects. Full-table observed owners precede normalized legacy aliases regardless
-of pagination or row order; equal observations use stable ID order for these read
+of pagination or row order. On the wire, exact default spellings precede
+normalized aliases; otherwise equal evidence uses stable ID order for these read
 projections. Image and dashboard project usage use the same observation/fallback
 and priority, retaining their existing short cache lifetime. These are metadata
 reads, not fresh ownership proof: missing or malformed current files do not add

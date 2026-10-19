@@ -1,5 +1,5 @@
 // Source: docklet-next/docs/design/runtime-control.md
-// Revision: 793b7fb08935a2e1b83d65aa6e2354a30330cd46d3ac6894b8d13d82938497cf
+// Revision: cdfb339023d76259b5de81589b8081255683560f7f129b911cab8db4b23a642a
 // Retrieved: 2026-10-19
 // License: Apache-2.0
 // Deviations: Original effective Compose-label consequence regression coverage.
@@ -199,4 +199,18 @@ func TestComposeNameResponseOwnersAcrossPagesAndSystemAliases(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, rows, 1)
 	require.Equal(t, owner.ID, rows[0].ID)
+}
+
+func TestComposeNameResponseInitialDiscovery(t *testing.T) {
+	composeLogDocker(t)
+	svc, root := runtimeIdentityFixture(t)
+	directory := filepath.Join(root, "example-directory")
+	require.NoError(t, os.MkdirAll(directory, 0755))
+	require.NoError(t, os.WriteFile(filepath.Join(directory, "compose.yaml"), []byte("name: beta_stack\n"+identityServices), 0600))
+	require.NoError(t, svc.SyncProjectsFromFileSystem(t.Context()))
+	var stored Project
+	require.NoError(t, svc.db.Where("path = ?", directory).Take(&stored).Error)
+	require.Equal(t, "beta_stack", stored.Name)
+	require.Equal(t, new("beta_stack"), stored.ComposeProjectName)
+	assertComposeResponse(t, svc, stored.ID, "beta_stack", "beta_stack")
 }
