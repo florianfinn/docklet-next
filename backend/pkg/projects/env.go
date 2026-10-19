@@ -62,17 +62,12 @@ type ProjectEnvState struct {
 }
 
 type EnvLoader struct {
-	projectsDir   string
 	workdir       string
 	autoInjectEnv bool
 }
 
-func NewEnvLoader(projectsDir, workdir string, autoInjectEnv bool) *EnvLoader {
-	return &EnvLoader{
-		projectsDir:   projectsDir,
-		workdir:       workdir,
-		autoInjectEnv: autoInjectEnv,
-	}
+func NewEnvLoader(_ string, workdir string, autoInjectEnv bool) *EnvLoader {
+	return &EnvLoader{workdir: workdir, autoInjectEnv: autoInjectEnv}
 }
 
 // processEnvAllowlist is the only part of Arcane's own process environment
@@ -113,6 +108,9 @@ func (l *EnvLoader) LoadEnvironment(ctx context.Context) (envMap, injectionVars 
 			switch {
 			case errors.Is(loadAndMergeProjectEnvErr, os.ErrNotExist):
 				slog.DebugContext(ctx, "Project .env file does not exist", "path", projectEnvPath)
+			case errors.Is(loadAndMergeProjectEnvErr, syscall.EISDIR):
+				// A non-file .env retains the existing absent/leave-untouched policy.
+				slog.WarnContext(ctx, "Project .env path is a directory; skipping", "path", projectEnvPath)
 			case errors.Is(loadAndMergeProjectEnvErr, os.ErrPermission):
 				return envMap,
 					injectionVars,

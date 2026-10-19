@@ -497,7 +497,7 @@ func (s *ProjectService) refreshComposeProjectName(ctx context.Context, proj *Pr
 	if err == nil {
 		dirName := cmp.Or(mo.PointerToOption(proj.DirName).OrEmpty(), proj.Name)
 		autoInjectEnv := kit.ParseOrDefault(cfg.AutoInjectEnv.Value, false, strconv.ParseBool)
-		meta, err = projectsync.LoadComposeMetadata(ctx, proj.Path, dirName, projectsDirectory, autoInjectEnv, s.projectPathMapper(ctx))
+		meta, err = projectsync.LoadComposeMetadata(ctx, proj.Path, dirName, projectsDirectory, &proj.Name, autoInjectEnv, s.projectPathMapper(ctx))
 	}
 	if err != nil {
 		if errors.Is(err, common.ErrProjectEnvUnreadable) {
@@ -508,11 +508,8 @@ func (s *ProjectService) refreshComposeProjectName(ctx context.Context, proj *Pr
 		return
 	}
 
+	// The stored Name remains the executable default; metadata only observes overrides.
 	updates := map[string]any{}
-	shouldUpdateName := meta.ExplicitProjectName || projects.NormalizeProjectName(proj.Name) != proj.Name
-	if shouldUpdateName && meta.ResolvedProjectName != "" && proj.Name != meta.ResolvedProjectName {
-		updates["name"] = meta.ResolvedProjectName
-	}
 	if mo.PointerToOption(proj.ComposeProjectName) != mo.PointerToOption(meta.ComposeProjectName) {
 		updates["compose_project_name"] = meta.ComposeProjectName
 	}
@@ -529,9 +526,6 @@ func (s *ProjectService) refreshComposeProjectName(ctx context.Context, proj *Pr
 		return
 	}
 
-	if name, ok := updates["name"].(string); ok {
-		proj.Name = name
-	}
 	if _, ok := updates["compose_project_name"]; ok {
 		proj.ComposeProjectName = meta.ComposeProjectName
 	}

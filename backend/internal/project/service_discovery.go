@@ -615,13 +615,20 @@ func (s *ProjectService) upsertProjectForDir(ctx context.Context, dirName, dirPa
 	err := s.db.WithContext(ctx).
 		Where("path = ?", dirPath).
 		First(&existing).Error
+	if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
+		return fmt.Errorf("query existing project for %q failed: %w", dirPath, err)
+	}
+	var persistedName *string
+	if err == nil {
+		persistedName = &existing.Name
+	}
 
 	cfg := s.settingsService.GetSettingsOrDefaults(ctx)
 	composeMetadata := projecttypes.ComposeIdentity{ResolvedProjectName: projects.NormalizeProjectName(dirName)}
 	projectsDirectory, serviceCountErr := projects.GetProjectsDirectory(ctx, cfg.ProjectsDirectory.Value)
 	if serviceCountErr == nil {
 		autoInjectEnv := kit.ParseOrDefault(cfg.AutoInjectEnv.Value, false, strconv.ParseBool)
-		composeMetadata, serviceCountErr = projectsync.LoadComposeMetadata(ctx, dirPath, dirName, projectsDirectory, autoInjectEnv, s.projectPathMapper(ctx))
+		composeMetadata, serviceCountErr = projectsync.LoadComposeMetadata(ctx, dirPath, dirName, projectsDirectory, persistedName, autoInjectEnv, s.projectPathMapper(ctx))
 	}
 	serviceCountLogLevel := kit.Ternary(errors.Is(serviceCountErr, common.ErrProjectEnvUnreadable), slog.LevelDebug, slog.LevelWarn)
 
@@ -658,10 +665,7 @@ func (s *ProjectService) upsertProjectForDir(ctx context.Context, dirName, dirPa
 		}
 		return s.reconcileComposeTagsForProject(ctx, proj)
 	}
-	if err != nil {
-		return fmt.Errorf("query existing project for %q failed: %w", dirPath, err)
-	}
-
+	// Refresh observations without feeding the effective name back into its default.
 	updates := map[string]any{}
 	if existing.Path != dirPath {
 		updates["path"] = dirPath
@@ -676,15 +680,6 @@ func (s *ProjectService) upsertProjectForDir(ctx context.Context, dirName, dirPa
 	}
 	if serviceCountErr == nil && mo.PointerToOption(existing.ComposeProjectName) != mo.PointerToOption(composeMetadata.ComposeProjectName) {
 		updates["compose_project_name"] = composeMetadata.ComposeProjectName
-	}
-	if serviceCountErr == nil {
-		if composeMetadata.ExplicitProjectName {
-			if existing.Name != composeMetadata.ResolvedProjectName {
-				updates["name"] = composeMetadata.ResolvedProjectName
-			}
-		} else if normalizedExistingName := projects.NormalizeProjectName(existing.Name); normalizedExistingName != existing.Name {
-			updates["name"] = normalizedExistingName
-		}
 	}
 	if len(updates) == 0 {
 		return s.reconcileComposeTagsForProject(ctx, &existing)

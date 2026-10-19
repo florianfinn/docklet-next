@@ -50,35 +50,33 @@ func EnsureEffectiveEnvFile(ctx context.Context, projectPath, projectsDirectory 
 	return projects.EnsureEnvFile(ctx, projectsDirectory, projectPath)
 }
 
-// LoadComposeMetadata loads a discovered project's compose file once and
-// returns the service count plus compose-go's effective project name.
-func LoadComposeMetadata(ctx context.Context, dirPath, dirName, projectsDirectory string, autoInjectEnv bool, pathMapper *projects.PathMapper) (project.ComposeIdentity, error) {
+// LoadComposeMetadata uses the executable default for stored projects. A nil
+// persistedName retains initial discovery's unnamed-first naming behavior.
+func LoadComposeMetadata(ctx context.Context, dirPath, dirName, projectsDirectory string, persistedName *string, autoInjectEnv bool, pathMapper *projects.PathMapper) (project.ComposeIdentity, error) {
 	normName := projects.NormalizeProjectName(dirName)
-	meta := project.ComposeIdentity{
-		ResolvedProjectName: normName,
+	if persistedName != nil {
+		normName = projects.NormalizeProjectName(*persistedName)
 	}
-
-	// Load unnamed first so COMPOSE_PROJECT_NAME from .env wins; fall back to
-	// the normalized directory name when that fails.
-	proj, _, err := projects.LoadComposeProjectFromDir(ctx, dirPath, "", projectsDirectory, autoInjectEnv, pathMapper)
-	if err != nil {
-		proj, _, err = projects.LoadComposeProjectFromDir(ctx, dirPath, normName, projectsDirectory, autoInjectEnv, pathMapper)
+	meta := project.ComposeIdentity{ResolvedProjectName: normName}
+	loadName := normName
+	if persistedName == nil {
+		loadName = ""
+	}
+	proj, _, err := projects.LoadComposeProjectFromDir(ctx, dirPath, loadName, projectsDirectory, autoInjectEnv, pathMapper)
+	if persistedName == nil {
 		if err != nil {
-			return meta, err
+			proj, _, err = projects.LoadComposeProjectFromDir(ctx, dirPath, normName, projectsDirectory, autoInjectEnv, pathMapper)
+		} else if proj.Name != "" && proj.Name != normName {
+			meta.ExplicitProjectName = true
 		}
-	} else if proj.Name != "" && proj.Name != normName {
-		meta.ExplicitProjectName = true
 	}
-
+	if err != nil {
+		return meta, err
+	}
 	meta.ServiceCount = len(proj.Services)
-	if proj.Name != "" {
-		meta.ResolvedProjectName = proj.Name
-	}
-
-	// Keep a COMPOSE_PROJECT_NAME override so containers match.
+	meta.ResolvedProjectName = proj.Name
 	if proj.Name != "" && proj.Name != normName {
 		meta.ComposeProjectName = new(proj.Name)
 	}
-
 	return meta, nil
 }

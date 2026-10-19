@@ -100,6 +100,43 @@ binds to its persisted project ID; unresolved Compose ownership refuses control
 with `runtime.parent-unresolved` rather than inventing an unparented scope.
 Docker calls outside Docklet remain an accepted external interference boundary.
 
+Stored project metadata and runtime ownership use the executable loader's
+normalized persisted `Name` as a non-imperative default. An explicit YAML name,
+including an interpolated one, may override it; an environment-only
+`COMPOSE_PROJECT_NAME` does not replace a nonempty supplied default. Initial
+filesystem discovery retains its unnamed-first environment-derived naming and
+directory fallback. Subsequent filesystem sync and metadata refresh observe the
+actual model name and service count without automatically rewriting the stored
+`Name`. `ComposeProjectName` records an effective name differing from the
+normalized stored default. Explicit rename retains its existing workflow and
+stable persisted ID. Removing a YAML override therefore restores that stored
+default, rather than a name fed back by an earlier metadata refresh.
+
+Selection, metadata and lifecycle loading share fresh reads and parsing of the
+same primary and auxiliary environment bytes on every load, including supported
+external environment-file symlink targets. A missing primary `.env` is optional;
+a malformed or unreadable primary file refuses loading. A directory at `.env`
+retains the existing absent/leave-untouched behavior. Declared `COMPOSE_ENV_FILES`
+entries remain additive and ordered, with later usable entries winning. Missing,
+malformed or excluded auxiliary entries warn and skip; earlier valid overlays or
+the existing default remain usable, and repaired entries are read on the next
+load. Invalid auxiliary paths are excluded before reads and stay excluded from
+parsed options. Invalid `COMPOSE_FILE` selection still refuses the whole
+selection. Only the existing timezone/locale process allowlist enters project
+interpolation. Runtime identity and execution bypass inventory model/selection
+caches; this does not promise byte freshness for every inventory cache.
+
+Authoritative project and managed-parent lookup scans every persisted row,
+including archived projects, and requires unique current effective Compose
+ownership even for an exact ID. A failed peer read can conceal a duplicate, so
+it blocks otherwise healthy ID and name/parent lookup. Availability and read
+cost are consequently coupled to all persisted projects; repairing the peer's
+files restores lookup. Retained names and caches cannot exclude unknown owners.
+Archived identity remains usable as a parent while the existing archived stack
+mutation guard remains in force. Identity reads do not prepare bind directories
+or persist metadata. The pre-effect recheck refuses changed or uncertain identity;
+external edits after that read remain outside atomic application control.
+
 | Target | Stored primary scope | Conflict predicate in the same environment |
 | --- | --- | --- |
 | Stack | `stack:<projectId>` | Same stack or any active child with that parent |

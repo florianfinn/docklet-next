@@ -309,3 +309,34 @@ func TestEnvironmentSelectionUsesAllowlistedContext(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, []string{filepath.Join(dir, "base.yml")}, selected)
 }
+
+func TestEnvironmentDirectoryRemainsOptionalAndUntouched(t *testing.T) {
+	dir := t.TempDir()
+	env := filepath.Join(dir, ".env")
+	require.NoError(t, os.Mkdir(env, 0700))
+	marker := filepath.Join(env, "keep")
+	require.NoError(t, os.WriteFile(marker, []byte("preserved"), 0600))
+	_, _, err := NewEnvLoader(dir, dir, false).LoadEnvironment(t.Context())
+	require.NoError(t, err)
+	selected, err := ComposeFileEnvSelection(t.Context(), dir, dir)
+	require.NoError(t, err)
+	require.Empty(t, selected)
+	content, err := os.ReadFile(marker)
+	require.NoError(t, err)
+	require.Equal(t, "preserved", string(content))
+}
+
+func TestEnvironmentExcludedAuxiliaryCannotSupplyValues(t *testing.T) {
+	root := t.TempDir()
+	dir := filepath.Join(root, "project")
+	require.NoError(t, os.Mkdir(dir, 0700))
+	require.NoError(t, os.WriteFile(filepath.Join(root, "outside.env"), []byte("VALUE=outside\nCOMPOSE_FILE=outside.yml\n"), 0600))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, ".env"), []byte("COMPOSE_ENV_FILES=../outside.env\nVALUE=inside\n"), 0600))
+	env, _, err := NewEnvLoader(root, dir, false).LoadEnvironment(t.Context())
+	require.NoError(t, err)
+	require.Equal(t, "inside", env["VALUE"])
+	require.NotContains(t, env, "COMPOSE_FILE")
+	selected, err := ComposeFileEnvSelection(t.Context(), root, dir)
+	require.NoError(t, err)
+	require.Empty(t, selected)
+}
