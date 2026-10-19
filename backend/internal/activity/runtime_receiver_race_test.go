@@ -9,6 +9,7 @@ package activity
 import (
 	"context"
 	"database/sql"
+	"io"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -16,6 +17,7 @@ import (
 
 	"github.com/florianfinn/docklet-next/backend/internal/database"
 	activitytypes "github.com/florianfinn/docklet-next/types/activity"
+	projecttypes "github.com/florianfinn/docklet-next/types/project"
 	"github.com/stretchr/testify/require"
 	"gorm.io/gorm"
 )
@@ -35,7 +37,7 @@ func (p *receiverPools) BeginTx(ctx context.Context, opts *sql.TxOptions) (*sql.
 	}
 	return p.DB.BeginTx(ctx, opts)
 }
-func receiverTwoPools(t *testing.T, f *receiverFixture) *receiverPools {
+func receiverTwoPools(t *testing.T, f *receiverFixture, probes ...*slotsProbe) *receiverPools {
 	t.Helper()
 	other := runtimeContender(t, f.store)
 	second, err := other.DB()
@@ -47,7 +49,7 @@ func receiverTwoPools(t *testing.T, f *receiverFixture) *receiverPools {
 	session.Config.ConnPool = pools
 	session.Statement.ConnPool = pools
 	f.store.svc.db = &database.DB{DB: session}
-	slotsCleanup(t, f.b1FixtureInternal)
+	slotsCleanup(t, f.b1FixtureInternal, probes...)
 	return pools
 }
 
@@ -69,7 +71,7 @@ func receiverAnswerWait(t *testing.T, done <-chan receiverAnswer) receiverAnswer
 
 func TestRuntimeReceiverSimultaneousSameUUIDTwoPools(t *testing.T) {
 	f, p := receiverProbeFixture(t)
-	pools := receiverTwoPools(t, f)
+	pools := receiverTwoPools(t, f, p)
 	entered, release := make(chan struct{}, 2), make(chan struct{})
 	var once sync.Once
 	unblock := func() { once.Do(func() { close(release) }) }
@@ -115,7 +117,7 @@ func TestRuntimeReceiverQueryExecuteDeterministicWinners(t *testing.T) {
 	for _, winner := range []string{"query", "execute"} {
 		t.Run(winner, func(t *testing.T) {
 			f, p := receiverProbeFixture(t)
-			receiverTwoPools(t, f)
+			receiverTwoPools(t, f, p)
 			e := receiverEnvelope(t, f.command())
 			entered, release := make(chan struct{}), make(chan struct{})
 			var once sync.Once
@@ -177,7 +179,7 @@ func TestRuntimeReceiverQueryExecuteDeterministicWinners(t *testing.T) {
 
 func TestRuntimeReceiverCancelExecutingAndRepeated(t *testing.T) {
 	f, p := receiverProbeFixture(t)
-	receiverTwoPools(t, f)
+	receiverTwoPools(t, f, p)
 	e := receiverEnvelope(t, f.command())
 	receiverExecute(t, f, e)
 	b1Await(t, p.entered)
@@ -196,4 +198,50 @@ func TestRuntimeReceiverCancelExecutingAndRepeated(t *testing.T) {
 	require.Equal(t, activitytypes.StatusCancelled, receiverWait(t, f, e).Status)
 	slotsHeld(t, f.b1FixtureInternal, 0)
 	require.EqualValues(t, 1, p.calls.Load())
+}
+
+func TestRuntimeReceiverOwnsWireCopiesAcrossResolution(t *testing.T) {
+	commands := make(chan RuntimeCommand, 1)
+	f := receiverNew(t, func(_ context.Context, c RuntimeCommand, _ io.Writer) error { commands <- c; return nil })
+	entered, release := make(chan struct{}), make(chan struct{})
+	var once sync.Once
+	unblock := func() { once.Do(func() { close(release) }) }
+	defer unblock()
+	f.resolver.resolve = func(ctx context.Context, target RuntimeTarget) (RuntimeResolvedTarget, error) {
+		close(entered)
+		select {
+		case <-release:
+		case <-ctx.Done():
+			return RuntimeResolvedTarget{}, ctx.Err()
+		}
+		target.Name = new("Local name")
+		return RuntimeResolvedTarget{Target: target}, nil
+	}
+	c := f.command()
+	c.Options.Deploy = &projecttypes.DeployOptions{PullPolicy: "if_not_present", ForceRecreate: true}
+	e := receiverEnvelope(t, c)
+	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
+	defer cancel()
+	done := make(chan receiverAnswer, 1)
+	go func() { r, err := f.receiver.Execute(ctx, e); done <- receiverAnswer{r, err} }()
+	b1Await(t, entered)
+	// Resolution proves canonicalization/copy is complete before these writes.
+	e.Options.Deploy.PullPolicy = "always"
+	e.Options.Deploy.ForceRecreate = false
+	*e.Attribution.DisplayName = "Changed actor"
+	*e.Target.Name = "Changed display"
+	unblock()
+	got := receiverAnswerWait(t, done)
+	require.NoError(t, got.err)
+	receiverWait(t, f, e)
+	select {
+	case command := <-commands:
+		require.Equal(t, "missing", command.Options.Deploy.PullPolicy)
+		require.True(t, command.Options.Deploy.ForceRecreate)
+		require.Equal(t, "Original operator", *command.Actor.DisplayName)
+		require.Equal(t, "Local name", *command.Target.Name)
+	case <-ctx.Done():
+		t.Fatal("owned command did not arrive")
+	}
+	require.Equal(t, "Original operator", got.result.Snapshot.StartedBy.DisplayName)
 }

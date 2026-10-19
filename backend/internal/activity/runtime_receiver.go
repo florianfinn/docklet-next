@@ -41,7 +41,7 @@ func NewRuntimeReceiver(service *RuntimeService) (*RuntimeReceiver, error) {
 	}
 	store := local.Store
 	generation, err := uuid.Parse(store.StoreGeneration)
-	if err != nil || generation.Version() != 4 || generation.String() != store.StoreGeneration ||
+	if err != nil || generation.Version() != 4 || generation.Variant() != uuid.RFC4122 || generation.String() != store.StoreGeneration ||
 		store.EnvironmentID != "0" || store.ExecutorGeneration != store.StoreGeneration ||
 		!runtimeTextInternal(store.ManagerID, 256) || !runtimeTextInternal(store.RegistrationID, 256) {
 		return nil, errRuntimeInvalidInternal
@@ -198,6 +198,14 @@ func (r *RuntimeReceiver) Query(ctx context.Context, wire activitytypes.RuntimeR
 		if err != nil {
 			return err
 		}
+		// An ignored insert is not durable negative evidence. Verify the fence in
+		// storage in this same immediate transaction before exposing an answer.
+		if row.Kind == "not_received" {
+			row, err = runtimeReadTxInternal(tx, id)
+			if err != nil {
+				return err
+			}
+		}
 		result, err = runtimeReceiverResultTxInternal(tx, row)
 		return err
 	})
@@ -245,7 +253,7 @@ func (r *RuntimeReceiver) Cancel(ctx context.Context, wire activitytypes.Runtime
 			message = &ActivityMessage{BaseModel: database.BaseModel{ID: uuid.NewString(), CreatedAt: now, UpdatedAt: new(now)},
 				ActivityID: id.RunID, Level: activitytypes.MessageLevelWarning, Code: string(activitytypes.CodeRunCancelling),
 				Message: "Runtime cancellation requested", Payload: database.JSON{"actorId": attribution.ID, "operation": *row.OperationID}}
-			if err := tx.Create(message).Error; err != nil {
+			if err := runtimeReceiverCreateTxInternal(tx, message); err != nil {
 				return err
 			}
 		}

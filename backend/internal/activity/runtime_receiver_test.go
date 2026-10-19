@@ -19,6 +19,7 @@ import (
 	usertypes "github.com/florianfinn/docklet-next/types/user"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
+	"gorm.io/gorm"
 )
 
 func TestRuntimeReceiverOriginalReceiptBeforeResolver(t *testing.T) {
@@ -343,4 +344,57 @@ func TestRuntimeReceiverRequiresLocalTrustedConfig(t *testing.T) {
 		_, err := NewRuntimeReceiver(NewRuntimeService(f.store.svc, f.resolver, local))
 		require.ErrorIs(t, err, errRuntimeInvalidInternal)
 	}
+}
+
+func TestRuntimeReceiverCompactRetentionUsesFinalWrite(t *testing.T) {
+	f, p := receiverProbeFixture(t)
+	e := receiverEnvelope(t, f.command())
+	receiverExecute(t, f, e)
+	b1Await(t, p.entered)
+	p.unblock()
+	receiverWait(t, f, e)
+	absent := e.Identity
+	absent.RunID = uuid.NewString()
+	negative, err := f.receiver.Query(t.Context(), absent)
+	require.NoError(t, err)
+	require.Nil(t, negative.Snapshot)
+	before := runtimeBoundarySnapshot(t, f.store)
+	_, err = f.store.svc.DeleteHistory(t.Context(), "0")
+	require.NoError(t, err)
+	require.NoError(t, f.store.tx(func(tx *gorm.DB, _ time.Time) error {
+		count, err := runtimePruneTxInternal(tx, before.Receipts[0].FinalWriteAt.Add(24*time.Hour-time.Microsecond), 100)
+		require.Zero(t, count)
+		return err
+	}))
+	retained := receiverExecute(t, f, e)
+	require.Equal(t, activitytypes.RuntimeAnswerTerminal, retained.State)
+	// A later compact final write extends the floor independently of admission.
+	later := f.store.now.Add(time.Hour)
+	require.NoError(t, f.store.tx(func(tx *gorm.DB, _ time.Time) error {
+		row, err := runtimeReadTxInternal(tx, runtimeIdentityInternal{RunID: e.Identity.RunID, StoreGeneration: f.receiver.store.StoreGeneration, ManagerID: e.Identity.ManagerID,
+			RegistrationID: e.Identity.RegistrationID, EnvironmentID: "0", ExecutorGeneration: e.Identity.ExecutorGeneration, RequestDigest: e.Identity.RequestDigest})
+		if err != nil {
+			return err
+		}
+		return runtimeUpdateTxInternal(tx, later, row, map[string]any{})
+	}))
+	require.NoError(t, f.store.tx(func(tx *gorm.DB, _ time.Time) error {
+		count, err := runtimePruneTxInternal(tx, later.Add(24*time.Hour-time.Microsecond), 100)
+		require.EqualValues(t, 1, count)
+		return err
+	}))
+	receiverCounts(t, f, 1, 0, 0)
+	require.NoError(t, f.store.tx(func(tx *gorm.DB, _ time.Time) error {
+		count, err := runtimePruneTxInternal(tx, later.Add(24*time.Hour), 100)
+		require.EqualValues(t, 1, count)
+		return err
+	}))
+	receiverCounts(t, f, 0, 0, 0)
+	require.EqualValues(t, 1, p.calls.Load())
+	// A fresh fence after retention is executor evidence only; C6 owns whether
+	// the hub can trust it as recent negative authority. Never execute the old ID.
+	result, err := f.receiver.Query(t.Context(), e.Identity)
+	require.NoError(t, err)
+	require.Equal(t, activitytypes.RuntimeAnswerNotReceived, result.State)
+	require.Nil(t, result.Snapshot)
 }
