@@ -10,6 +10,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -38,9 +39,16 @@ import (
 )
 
 const runtimeContainerID = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+const runtimeSecondContainerID = "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
 
 type runtimeHTTPEvent struct {
-	Method, Path, Query string
+	Method, Path, Query, Body string
+}
+
+type runtimeFixtureContainer struct {
+	name string
+	labels map[string]string
+	running bool
 }
 
 type runtimeHTTPFixture struct {
@@ -50,6 +58,7 @@ type runtimeHTTPFixture struct {
 	labels           map[string]string
 	composeContainer bool
 	running          bool
+	extraContainers  map[string]runtimeFixtureContainer
 	onCall           func(http.ResponseWriter, *http.Request) bool
 	server           *httptest.Server
 }
@@ -63,8 +72,14 @@ func newRuntimeHTTPFixture(t *testing.T) *runtimeHTTPFixture {
 }
 
 func (f *runtimeHTTPFixture) serve(w http.ResponseWriter, r *http.Request) {
+	body, readErr := io.ReadAll(io.LimitReader(r.Body, 1<<20))
+	if readErr != nil {
+		f.t.Errorf("read Docker HTTP request: %v", readErr)
+		http.Error(w, "unreadable synthetic request", http.StatusBadRequest)
+		return
+	}
 	f.mu.Lock()
-	f.events = append(f.events, runtimeHTTPEvent{r.Method, r.URL.Path, r.URL.RawQuery})
+	f.events = append(f.events, runtimeHTTPEvent{r.Method, r.URL.Path, r.URL.RawQuery, string(body)})
 	labels := make(map[string]string, len(f.labels))
 	for key, value := range f.labels {
 		labels[key] = value
@@ -72,6 +87,10 @@ func (f *runtimeHTTPFixture) serve(w http.ResponseWriter, r *http.Request) {
 	onCall := f.onCall
 	composeContainer := f.composeContainer
 	running := f.running
+	extra := make(map[string]runtimeFixtureContainer, len(f.extraContainers))
+	for id, container := range f.extraContainers {
+		extra[id] = container
+	}
 	f.mu.Unlock()
 	if onCall != nil && onCall(w, r) {
 		return
@@ -88,7 +107,13 @@ func (f *runtimeHTTPFixture) serve(w http.ResponseWriter, r *http.Request) {
 			if running {
 				state, status = "running", "Up"
 			}
-			_ = json.NewEncoder(w).Encode([]map[string]any{{"Id": runtimeContainerID, "Names": []string{"/example_stack-app-1"}, "Image": "registry.example.com/app:1", "Labels": labels, "State": state, "Status": status}})
+			containers := []map[string]any{{"Id": runtimeContainerID, "Names": []string{"/example_stack-app-1"}, "Image": "registry.example.com/app:1", "Labels": labels, "State": state, "Status": status}}
+			for id, container := range extra {
+				state, status := "exited", "Exited"
+				if container.running { state, status = "running", "Up" }
+				containers = append(containers, map[string]any{"Id": id, "Names": []string{container.name}, "Image": "registry.example.com/worker:1", "Labels": container.labels, "State": state, "Status": status})
+			}
+			_ = json.NewEncoder(w).Encode(containers)
 		} else {
 			_ = json.NewEncoder(w).Encode([]any{})
 		}
@@ -116,21 +141,31 @@ func (f *runtimeHTTPFixture) serve(w http.ResponseWriter, r *http.Request) {
 			state = "running"
 		}
 		_ = json.NewEncoder(w).Encode(map[string]any{"Id": runtimeContainerID, "Name": "/example_stack-app-1", "Config": map[string]any{"Labels": labels}, "State": map[string]any{"Status": state, "Running": running}, "NetworkSettings": map[string]any{"Networks": map[string]any{}}})
+	case r.Method == http.MethodGet && strings.HasSuffix(r.URL.Path, "/containers/"+runtimeSecondContainerID+"/json"):
+		container, ok := extra[runtimeSecondContainerID]
+		if !ok { http.NotFound(w, r); return }
+		state := "exited"
+		if container.running { state = "running" }
+		_ = json.NewEncoder(w).Encode(map[string]any{"Id": runtimeSecondContainerID, "Name": container.name, "Config": map[string]any{"Labels": container.labels}, "State": map[string]any{"Status": state, "Running": container.running}, "NetworkSettings": map[string]any{"Networks": map[string]any{}}})
 	case r.Method == http.MethodGet && strings.Contains(r.URL.Path, "/containers/") && strings.HasSuffix(r.URL.Path, "/json"):
 		http.NotFound(w, r)
-	case r.Method == http.MethodPost && (strings.HasSuffix(r.URL.Path, "/containers/"+runtimeContainerID+"/start") ||
-		strings.HasSuffix(r.URL.Path, "/containers/"+runtimeContainerID+"/stop") || strings.HasSuffix(r.URL.Path, "/containers/"+runtimeContainerID+"/restart")):
+	case r.Method == http.MethodPost && (strings.HasSuffix(r.URL.Path, "/start") || strings.HasSuffix(r.URL.Path, "/stop") || strings.HasSuffix(r.URL.Path, "/restart")) && strings.Contains(r.URL.Path, "/containers/"):
+		parts := strings.Split(r.URL.Path, "/")
+		id := parts[len(parts)-2]
+		if id != runtimeContainerID && id != runtimeSecondContainerID { f.t.Errorf("unexpected container ID: %s", id); http.NotFound(w,r); return }
 		f.mu.Lock()
-		if strings.HasSuffix(r.URL.Path, "/start") || strings.HasSuffix(r.URL.Path, "/restart") {
-			f.running = true
+		if id == runtimeContainerID {
+			f.running = !strings.HasSuffix(r.URL.Path, "/stop")
 		} else {
-			f.running = false
+			container := f.extraContainers[id]
+			container.running = !strings.HasSuffix(r.URL.Path, "/stop")
+			f.extraContainers[id] = container
 		}
 		f.mu.Unlock()
 		w.WriteHeader(http.StatusNoContent)
 	case r.Method == http.MethodDelete && strings.Contains(r.URL.Path, "/containers/"):
 		f.mu.Lock()
-		f.composeContainer = false
+		if strings.Contains(r.URL.Path, runtimeContainerID) { f.composeContainer = false } else { delete(f.extraContainers, runtimeSecondContainerID) }
 		f.mu.Unlock()
 		w.WriteHeader(http.StatusNoContent)
 	default:
@@ -155,6 +190,12 @@ func (f *runtimeHTTPFixture) setComposeContainer(present bool) {
 	f.mu.Lock()
 	f.composeContainer = present
 	f.running = present
+	f.mu.Unlock()
+}
+
+func (f *runtimeHTTPFixture) setSecondComposeContainer(labels map[string]string) {
+	f.mu.Lock()
+	f.extraContainers = map[string]runtimeFixtureContainer{runtimeSecondContainerID: {name: "/example_stack-worker-1", labels: labels, running: true}}
 	f.mu.Unlock()
 }
 

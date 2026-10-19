@@ -62,6 +62,36 @@ func TestRuntimeExecutorProjectDownAndRestart(t *testing.T) {
 	}
 }
 
+func TestRuntimeExecutorRestartSelectedAndWholeServiceSets(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		selected []string
+		want []string
+	}{
+		{name: "selected", selected: []string{"app"}, want: []string{runtimeContainerID}},
+		{name: "whole", want: []string{runtimeContainerID, runtimeSecondContainerID}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			f := newRuntimeServicesFixture(t)
+			f.project("example-project", "example-project", "name: example_stack\nservices:\n  app:\n    image: registry.example.com/app:1\n  worker:\n    image: registry.example.com/worker:1\n")
+			f.http.setLabels(map[string]string{"com.docker.compose.project": "example_stack", "com.docker.compose.service": "app", "com.docker.compose.container-number": "1", "com.docker.compose.config-hash": "example-app-hash"})
+			f.http.setComposeContainer(true)
+			f.http.setSecondComposeContainer(map[string]string{"com.docker.compose.project": "example_stack", "com.docker.compose.service": "worker", "com.docker.compose.container-number": "1", "com.docker.compose.config-hash": "example-worker-hash"})
+			command := f.command(activity.RuntimeRestartProject, activity.RuntimeTarget{Kind: "stack", ID: "example-project"})
+			command.Options.RestartServices = tc.selected
+			f.run(command)
+			var actual []string
+			for _, event := range f.http.snapshot() {
+				if event.Method == http.MethodPost && strings.HasSuffix(event.Path, "/restart") {
+					parts := strings.Split(event.Path, "/")
+					actual = append(actual, parts[len(parts)-2])
+				}
+			}
+			require.ElementsMatch(t, tc.want, actual, f.debugEvents())
+		})
+	}
+}
+
 func TestRuntimeExecutorChangedProjectFileStopsBeforeCompose(t *testing.T) {
 	f := newRuntimeServicesFixture(t)
 	path := f.project("example-project", "example-project", "name: example_stack\nservices:\n  app:\n    image: registry.example.com/app:1\n")
