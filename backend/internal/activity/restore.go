@@ -49,8 +49,10 @@ func (s *ActivityService) FailInterruptedAfterRestore(ctx context.Context) error
 
 func failInterruptedForRestoreInternal(tx *gorm.DB) error {
 	now := time.Now().UTC()
+	// Receipt identity owns even settled rows with stale Activity state or copied scopes.
 	return tx.Model(&Activity{}).
 		Where("status IN ?", []activitytypes.Status{activitytypes.StatusRunning, activitytypes.StatusQueued}).
+		Where("NOT EXISTS (SELECT 1 FROM runtime_receipts AS owned WHERE owned.kind = 'receipt' AND owned.environment_id = activities.environment_id AND owned.run_id = activities.id)").
 		Updates(map[string]any{
 			"status": activitytypes.StatusFailed, "message_code": "activity.failed",
 			"error": "backup.interrupted", "ended_at": now,
