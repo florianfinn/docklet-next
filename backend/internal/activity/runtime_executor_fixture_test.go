@@ -40,15 +40,21 @@ import (
 
 const runtimeContainerID = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
 const runtimeSecondContainerID = "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+const runtimeReplacementContainerID = "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"
 
 type runtimeHTTPEvent struct {
 	Method, Path, Query, Body string
 }
 
 type runtimeFixtureContainer struct {
-	name string
-	labels map[string]string
+	name    string
+	labels  map[string]string
 	running bool
+}
+
+type runtimeFixtureVolume struct {
+	name   string
+	labels map[string]string
 }
 
 type runtimeHTTPFixture struct {
@@ -58,14 +64,16 @@ type runtimeHTTPFixture struct {
 	labels           map[string]string
 	composeContainer bool
 	running          bool
+	activeID         string
 	extraContainers  map[string]runtimeFixtureContainer
+	volume           *runtimeFixtureVolume
 	onCall           func(http.ResponseWriter, *http.Request) bool
 	server           *httptest.Server
 }
 
 func newRuntimeHTTPFixture(t *testing.T) *runtimeHTTPFixture {
 	t.Helper()
-	f := &runtimeHTTPFixture{t: t, labels: map[string]string{}}
+	f := &runtimeHTTPFixture{t: t, labels: map[string]string{}, activeID: runtimeContainerID}
 	f.server = httptest.NewServer(http.HandlerFunc(f.serve))
 	t.Cleanup(f.server.Close)
 	return f
@@ -87,9 +95,15 @@ func (f *runtimeHTTPFixture) serve(w http.ResponseWriter, r *http.Request) {
 	onCall := f.onCall
 	composeContainer := f.composeContainer
 	running := f.running
+	activeID := f.activeID
 	extra := make(map[string]runtimeFixtureContainer, len(f.extraContainers))
 	for id, container := range f.extraContainers {
 		extra[id] = container
+	}
+	var volume *runtimeFixtureVolume
+	if f.volume != nil {
+		copy := *f.volume
+		volume = &copy
 	}
 	f.mu.Unlock()
 	if onCall != nil && onCall(w, r) {
@@ -107,10 +121,12 @@ func (f *runtimeHTTPFixture) serve(w http.ResponseWriter, r *http.Request) {
 			if running {
 				state, status = "running", "Up"
 			}
-			containers := []map[string]any{{"Id": runtimeContainerID, "Names": []string{"/example_stack-app-1"}, "Image": "registry.example.com/app:1", "Labels": labels, "State": state, "Status": status}}
+			containers := []map[string]any{{"Id": activeID, "Names": []string{"/example_stack-app-1"}, "Image": "registry.example.com/app:1", "Labels": labels, "State": state, "Status": status}}
 			for id, container := range extra {
 				state, status := "exited", "Exited"
-				if container.running { state, status = "running", "Up" }
+				if container.running {
+					state, status = "running", "Up"
+				}
 				containers = append(containers, map[string]any{"Id": id, "Names": []string{container.name}, "Image": "registry.example.com/worker:1", "Labels": container.labels, "State": state, "Status": status})
 			}
 			_ = json.NewEncoder(w).Encode(containers)
@@ -118,7 +134,36 @@ func (f *runtimeHTTPFixture) serve(w http.ResponseWriter, r *http.Request) {
 			_ = json.NewEncoder(w).Encode([]any{})
 		}
 	case r.Method == http.MethodGet && strings.HasSuffix(r.URL.Path, "/volumes"):
-		_ = json.NewEncoder(w).Encode(map[string]any{"Volumes": []any{}, "Warnings": []any{}})
+		volumes := []any{}
+		if volume != nil {
+			volumes = append(volumes, map[string]any{"Name": volume.name, "Driver": "local", "Mountpoint": "/example/volume", "Labels": volume.labels})
+		}
+		_ = json.NewEncoder(w).Encode(map[string]any{"Volumes": volumes, "Warnings": []any{}})
+	case r.Method == http.MethodGet && strings.Contains(r.URL.Path, "/volumes/"):
+		if volume == nil || !strings.HasSuffix(r.URL.Path, "/"+volume.name) {
+			http.NotFound(w, r)
+			return
+		}
+		_ = json.NewEncoder(w).Encode(map[string]any{"Name": volume.name, "Driver": "local", "Mountpoint": "/example/volume", "Labels": volume.labels})
+	case r.Method == http.MethodPost && strings.HasSuffix(r.URL.Path, "/volumes/create"):
+		var request struct {
+			Name   string            `json:"Name"`
+			Labels map[string]string `json:"Labels"`
+		}
+		if err := json.Unmarshal(body, &request); err != nil || request.Name == "" {
+			f.t.Errorf("invalid volume create: %v", err)
+			http.Error(w, "invalid volume", http.StatusBadRequest)
+			return
+		}
+		f.mu.Lock()
+		f.volume = &runtimeFixtureVolume{name: request.Name, labels: request.Labels}
+		f.mu.Unlock()
+		_ = json.NewEncoder(w).Encode(map[string]any{"Name": request.Name, "Driver": "local", "Mountpoint": "/example/volume", "Labels": request.Labels})
+	case r.Method == http.MethodDelete && strings.Contains(r.URL.Path, "/volumes/"):
+		f.mu.Lock()
+		f.volume = nil
+		f.mu.Unlock()
+		w.WriteHeader(http.StatusNoContent)
 	case r.Method == http.MethodGet && strings.HasSuffix(r.URL.Path, "/networks"):
 		_ = json.NewEncoder(w).Encode([]any{})
 	case r.Method == http.MethodGet && strings.Contains(r.URL.Path, "/images/") && strings.HasSuffix(r.URL.Path, "/json"):
@@ -131,31 +176,65 @@ func (f *runtimeHTTPFixture) serve(w http.ResponseWriter, r *http.Request) {
 		_ = json.NewEncoder(w).Encode(map[string]any{"Id": "example-network-id"})
 	case r.Method == http.MethodPost && strings.HasSuffix(r.URL.Path, "/containers/create"):
 		f.mu.Lock()
+		if f.composeContainer {
+			f.activeID = runtimeReplacementContainerID
+		} else if f.activeID == "" {
+			f.activeID = runtimeContainerID
+		}
 		f.composeContainer = true
 		f.running = false
+		createdID := f.activeID
 		f.mu.Unlock()
-		_ = json.NewEncoder(w).Encode(map[string]any{"Id": runtimeContainerID, "Warnings": []string{}})
+		_ = json.NewEncoder(w).Encode(map[string]any{"Id": createdID, "Warnings": []string{}})
+	case r.Method == http.MethodPost && (strings.HasSuffix(r.URL.Path, "/containers/"+runtimeContainerID+"/rename") || strings.HasSuffix(r.URL.Path, "/containers/"+runtimeReplacementContainerID+"/rename")):
+		if r.URL.Query().Get("name") == "" {
+			f.t.Error("missing replacement rename")
+			http.Error(w, "missing name", http.StatusBadRequest)
+			return
+		}
+		w.WriteHeader(http.StatusNoContent)
 	case r.Method == http.MethodGet && strings.HasSuffix(r.URL.Path, "/containers/"+runtimeContainerID+"/json"):
 		state := "exited"
 		if running {
 			state = "running"
 		}
 		_ = json.NewEncoder(w).Encode(map[string]any{"Id": runtimeContainerID, "Name": "/example_stack-app-1", "Config": map[string]any{"Labels": labels}, "State": map[string]any{"Status": state, "Running": running}, "NetworkSettings": map[string]any{"Networks": map[string]any{}}})
+	case r.Method == http.MethodGet && strings.HasSuffix(r.URL.Path, "/containers/"+runtimeReplacementContainerID+"/json"):
+		if activeID != runtimeReplacementContainerID {
+			http.NotFound(w, r)
+			return
+		}
+		state := "exited"
+		if running {
+			state = "running"
+		}
+		_ = json.NewEncoder(w).Encode(map[string]any{"Id": activeID, "Name": "/example_stack-app-1", "Config": map[string]any{"Labels": labels}, "State": map[string]any{"Status": state, "Running": running}, "NetworkSettings": map[string]any{"Networks": map[string]any{}}})
 	case r.Method == http.MethodGet && strings.HasSuffix(r.URL.Path, "/containers/"+runtimeSecondContainerID+"/json"):
 		container, ok := extra[runtimeSecondContainerID]
-		if !ok { http.NotFound(w, r); return }
+		if !ok {
+			http.NotFound(w, r)
+			return
+		}
 		state := "exited"
-		if container.running { state = "running" }
+		if container.running {
+			state = "running"
+		}
 		_ = json.NewEncoder(w).Encode(map[string]any{"Id": runtimeSecondContainerID, "Name": container.name, "Config": map[string]any{"Labels": container.labels}, "State": map[string]any{"Status": state, "Running": container.running}, "NetworkSettings": map[string]any{"Networks": map[string]any{}}})
 	case r.Method == http.MethodGet && strings.Contains(r.URL.Path, "/containers/") && strings.HasSuffix(r.URL.Path, "/json"):
 		http.NotFound(w, r)
 	case r.Method == http.MethodPost && (strings.HasSuffix(r.URL.Path, "/start") || strings.HasSuffix(r.URL.Path, "/stop") || strings.HasSuffix(r.URL.Path, "/restart")) && strings.Contains(r.URL.Path, "/containers/"):
 		parts := strings.Split(r.URL.Path, "/")
 		id := parts[len(parts)-2]
-		if id != runtimeContainerID && id != runtimeSecondContainerID { f.t.Errorf("unexpected container ID: %s", id); http.NotFound(w,r); return }
+		if id != runtimeContainerID && id != runtimeSecondContainerID && id != runtimeReplacementContainerID {
+			f.t.Errorf("unexpected container ID: %s", id)
+			http.NotFound(w, r)
+			return
+		}
 		f.mu.Lock()
-		if id == runtimeContainerID {
-			f.running = !strings.HasSuffix(r.URL.Path, "/stop")
+		if id == runtimeContainerID || id == runtimeReplacementContainerID {
+			if id == f.activeID {
+				f.running = !strings.HasSuffix(r.URL.Path, "/stop")
+			}
 		} else {
 			container := f.extraContainers[id]
 			container.running = !strings.HasSuffix(r.URL.Path, "/stop")
@@ -165,7 +244,12 @@ func (f *runtimeHTTPFixture) serve(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusNoContent)
 	case r.Method == http.MethodDelete && strings.Contains(r.URL.Path, "/containers/"):
 		f.mu.Lock()
-		if strings.Contains(r.URL.Path, runtimeContainerID) { f.composeContainer = false } else { delete(f.extraContainers, runtimeSecondContainerID) }
+		if strings.Contains(r.URL.Path, f.activeID) {
+			f.composeContainer = false
+			f.activeID = ""
+		} else {
+			delete(f.extraContainers, runtimeSecondContainerID)
+		}
 		f.mu.Unlock()
 		w.WriteHeader(http.StatusNoContent)
 	default:
@@ -190,6 +274,7 @@ func (f *runtimeHTTPFixture) setComposeContainer(present bool) {
 	f.mu.Lock()
 	f.composeContainer = present
 	f.running = present
+	f.activeID = runtimeContainerID
 	f.mu.Unlock()
 }
 
@@ -197,6 +282,15 @@ func (f *runtimeHTTPFixture) setSecondComposeContainer(labels map[string]string)
 	f.mu.Lock()
 	f.extraContainers = map[string]runtimeFixtureContainer{runtimeSecondContainerID: {name: "/example_stack-worker-1", labels: labels, running: true}}
 	f.mu.Unlock()
+}
+
+func (f *runtimeHTTPFixture) setVolumeHash(hash string) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if f.volume == nil {
+		f.t.Fatal("volume not created")
+	}
+	f.volume.labels["com.docker.compose.config-hash"] = hash
 }
 
 type runtimeServicesFixture struct {

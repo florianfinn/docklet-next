@@ -8,6 +8,7 @@ package activity_test
 
 import (
 	"context"
+	"encoding/json"
 	"io"
 	"net/http"
 	"os"
@@ -20,6 +21,23 @@ import (
 	projecttypes "github.com/florianfinn/docklet-next/types/project"
 	"github.com/stretchr/testify/require"
 )
+
+func runtimeCreatedLabels(t *testing.T, events []runtimeHTTPEvent) map[string]string {
+	t.Helper()
+	for _, event := range events {
+		if event.Method != http.MethodPost || !strings.HasSuffix(event.Path, "/containers/create") {
+			continue
+		}
+		var body struct {
+			Labels map[string]string `json:"Labels"`
+		}
+		require.NoError(t, json.Unmarshal([]byte(event.Body), &body))
+		require.NotEmpty(t, body.Labels["com.docker.compose.config-hash"])
+		return body.Labels
+	}
+	t.Fatal("Compose did not create a container")
+	return nil
+}
 
 func TestRuntimeExecutorProjectDownAndRestart(t *testing.T) {
 	for _, operation := range []activity.RuntimeOperation{activity.RuntimeDownProject, activity.RuntimeRestartProject} {
@@ -64,9 +82,9 @@ func TestRuntimeExecutorProjectDownAndRestart(t *testing.T) {
 
 func TestRuntimeExecutorRestartSelectedAndWholeServiceSets(t *testing.T) {
 	for _, tc := range []struct {
-		name string
+		name     string
 		selected []string
-		want []string
+		want     []string
 	}{
 		{name: "selected", selected: []string{"app"}, want: []string{runtimeContainerID}},
 		{name: "whole", want: []string{runtimeContainerID, runtimeSecondContainerID}},
@@ -129,6 +147,133 @@ func TestRuntimeExecutorProjectDeploy(t *testing.T) {
 	}
 	require.Equal(t, 1, create, f.debugEvents())
 	require.Equal(t, 1, start, f.debugEvents())
+}
+
+func TestRuntimeExecutorDeployForceRecreateAtSDK(t *testing.T) {
+	for _, force := range []bool{false, true} {
+		t.Run(map[bool]string{false: "diverged", true: "force"}[force], func(t *testing.T) {
+			f := newRuntimeServicesFixture(t)
+			f.project("example-project", "example-project", "name: example_stack\nservices:\n  app:\n    image: registry.example.com/app:1\n")
+			f.http.setLabels(map[string]string{"com.docker.compose.project": "example_stack", "com.docker.compose.service": "app", "com.docker.compose.container-number": "1", "com.docker.compose.config-hash": "example-initial-hash"})
+			initial := f.command(activity.RuntimeDeployProject, activity.RuntimeTarget{Kind: "stack", ID: "example-project"})
+			initial.Options.Deploy = &projecttypes.DeployOptions{PullPolicy: "never"}
+			f.run(initial)
+			labels := runtimeCreatedLabels(t, f.http.snapshot())
+			f.http.setLabels(labels)
+			before := len(f.http.snapshot())
+			command := f.command(activity.RuntimeDeployProject, activity.RuntimeTarget{Kind: "stack", ID: "example-project"})
+			command.Options.Deploy = &projecttypes.DeployOptions{PullPolicy: "never", ForceRecreate: force}
+			f.run(command)
+			var removes, creates int
+			for _, event := range f.http.snapshot()[before:] {
+				if event.Method == http.MethodDelete && strings.Contains(event.Path, "/containers/") {
+					removes++
+				}
+				if event.Method == http.MethodPost && strings.HasSuffix(event.Path, "/containers/create") {
+					creates++
+				}
+			}
+			if force {
+				require.Equal(t, 1, removes, f.debugEvents())
+				require.Equal(t, 1, creates, f.debugEvents())
+			} else {
+				require.Zero(t, removes, f.debugEvents())
+				require.Zero(t, creates, f.debugEvents())
+			}
+		})
+	}
+}
+
+func TestRuntimeExecutorDeployPullPolicyAtSDK(t *testing.T) {
+	for _, tc := range []struct {
+		policy string
+		pulls  int
+	}{{"never", 0}, {"always", 1}} {
+		t.Run(tc.policy, func(t *testing.T) {
+			f := newRuntimeServicesFixture(t)
+			f.project("example-project", "example-project", "name: example_stack\nservices:\n  app:\n    image: registry.example.com/app:1\n")
+			f.http.setLabels(map[string]string{"com.docker.compose.project": "example_stack", "com.docker.compose.service": "app", "com.docker.compose.container-number": "1", "com.docker.compose.config-hash": "example-hash"})
+			command := f.command(activity.RuntimeDeployProject, activity.RuntimeTarget{Kind: "stack", ID: "example-project"})
+			command.Options.Deploy = &projecttypes.DeployOptions{PullPolicy: tc.policy}
+			f.run(command)
+			var pulls, creates int
+			for _, event := range f.http.snapshot() {
+				if event.Method == http.MethodPost && strings.HasSuffix(event.Path, "/images/create") {
+					pulls++
+				}
+				if event.Method == http.MethodPost && strings.HasSuffix(event.Path, "/containers/create") {
+					creates++
+				}
+			}
+			require.Equal(t, tc.pulls, pulls, f.debugEvents())
+			require.Equal(t, 1, creates, f.debugEvents())
+		})
+	}
+}
+
+func TestRuntimeExecutorDeployRemoveOrphansAtSDK(t *testing.T) {
+	for _, remove := range []bool{false, true} {
+		t.Run(map[bool]string{false: "keep", true: "remove"}[remove], func(t *testing.T) {
+			f := newRuntimeServicesFixture(t)
+			f.project("example-project", "example-project", "name: example_stack\nservices:\n  app:\n    image: registry.example.com/app:1\n")
+			f.http.setLabels(map[string]string{"com.docker.compose.project": "example_stack", "com.docker.compose.service": "app", "com.docker.compose.container-number": "1", "com.docker.compose.config-hash": "example-initial-hash"})
+			initial := f.command(activity.RuntimeDeployProject, activity.RuntimeTarget{Kind: "stack", ID: "example-project"})
+			initial.Options.Deploy = &projecttypes.DeployOptions{PullPolicy: "never"}
+			f.run(initial)
+			f.http.setLabels(runtimeCreatedLabels(t, f.http.snapshot()))
+			f.http.setSecondComposeContainer(map[string]string{"com.docker.compose.project": "example_stack", "com.docker.compose.service": "old", "com.docker.compose.container-number": "1", "com.docker.compose.config-hash": "example-old-hash"})
+			before := len(f.http.snapshot())
+			command := f.command(activity.RuntimeDeployProject, activity.RuntimeTarget{Kind: "stack", ID: "example-project"})
+			command.Options.Deploy = &projecttypes.DeployOptions{PullPolicy: "never", RemoveOrphans: remove}
+			f.run(command)
+			var deletes int
+			for _, event := range f.http.snapshot()[before:] {
+				if event.Method == http.MethodDelete && strings.Contains(event.Path, runtimeSecondContainerID) {
+					deletes++
+				}
+			}
+			if remove {
+				require.Equal(t, 1, deletes, f.debugEvents())
+			} else {
+				require.Zero(t, deletes, f.debugEvents())
+			}
+		})
+	}
+}
+
+func TestRuntimeExecutorDeployRecreateVolumesAtSDK(t *testing.T) {
+	for _, recreate := range []bool{false, true} {
+		t.Run(map[bool]string{false: "preserve", true: "recreate"}[recreate], func(t *testing.T) {
+			f := newRuntimeServicesFixture(t)
+			f.project("example-project", "example-project", "name: example_stack\nservices:\n  app:\n    image: registry.example.com/app:1\n    volumes:\n      - data:/data\nvolumes:\n  data: {}\n")
+			f.http.setLabels(map[string]string{"com.docker.compose.project": "example_stack", "com.docker.compose.service": "app", "com.docker.compose.container-number": "1", "com.docker.compose.config-hash": "example-initial-hash"})
+			initial := f.command(activity.RuntimeDeployProject, activity.RuntimeTarget{Kind: "stack", ID: "example-project"})
+			initial.Options.Deploy = &projecttypes.DeployOptions{PullPolicy: "never"}
+			f.run(initial)
+			f.http.setLabels(runtimeCreatedLabels(t, f.http.snapshot()))
+			f.http.setVolumeHash("example-stale-volume-hash")
+			before := len(f.http.snapshot())
+			command := f.command(activity.RuntimeDeployProject, activity.RuntimeTarget{Kind: "stack", ID: "example-project"})
+			command.Options.Deploy = &projecttypes.DeployOptions{PullPolicy: "never", RecreateVolumes: recreate}
+			f.run(command)
+			var deletes, creates int
+			for _, event := range f.http.snapshot()[before:] {
+				if event.Method == http.MethodDelete && strings.Contains(event.Path, "/volumes/") {
+					deletes++
+				}
+				if event.Method == http.MethodPost && strings.HasSuffix(event.Path, "/volumes/create") {
+					creates++
+				}
+			}
+			if recreate {
+				require.Equal(t, 1, deletes, f.debugEvents())
+				require.Equal(t, 1, creates, f.debugEvents())
+			} else {
+				require.Zero(t, deletes, f.debugEvents())
+				require.Zero(t, creates, f.debugEvents())
+			}
+		})
+	}
 }
 
 func TestRuntimeExecutorProjectRedeployPreliminaryPull(t *testing.T) {
