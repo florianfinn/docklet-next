@@ -2,7 +2,7 @@
 // Revision: 83d91f19f60b2967cc85c46161c98203e80e4989
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: None
+// Deviations: Join status rendering before every post-Solve return, including failures.
 
 package api
 
@@ -152,13 +152,14 @@ func (b *Service) buildWithBuildkitSessionInternal(
 	}()
 
 	resp, err := bkSession.Client.Solve(ctx, nil, solveOpt, statusCh)
+	streamErr := <-streamErrCh
 	if err != nil {
 		err = wrapBuildkitSolveErrorInternal(err, providerName)
 		buildErr = err
 		return nil, err
 	}
 
-	if streamErr := <-streamErrCh; streamErr != nil && !errors.Is(streamErr, context.Canceled) {
+	if streamErr != nil && !errors.Is(streamErr, context.Canceled) {
 		slog.WarnContext(ctx, "build progress stream error", "provider", providerName, "error", streamErr)
 	}
 
