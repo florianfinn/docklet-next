@@ -562,7 +562,7 @@ func (s *ProjectService) StreamProjectLogs(ctx context.Context, projectID string
 	if err != nil {
 		return err
 	}
-	return projectdetails.Logs(ctx, proj.Name, logsChan, follow, tail, since, timestamps)
+	return projectdetails.Logs(ctx, observedComposeName(*proj), logsChan, follow, tail, since, timestamps)
 }
 
 func (s *ProjectService) GetProjectStatusCounts(ctx context.Context) (projecttypes.StatusCounts, error) {

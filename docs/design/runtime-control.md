@@ -535,6 +535,11 @@ freezes shared projection fields and before action UI.
 
 ## Runtime logs
 
+Current project log streaming selects the recorded `ComposeProjectName`, falling
+back to normalized stored `Name` when override metadata is absent or empty.
+Existing metadata refresh and filesystem sync update that observation; log reads
+do not reload Compose files or require usable environment files.
+
 Reuse Echo `/api/environments/:id/ws/projects/:projectId/logs` and
 `/containers/:containerId/logs`, permissions `projects:logs`/`containers:logs`
 from `backend/api/ws/proxy_permissions.go`. Request JSON with `follow=true`,
