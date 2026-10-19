@@ -385,3 +385,52 @@ func TestRuntimeStoreBoundaryGenerationReadErrors(t *testing.T) {
 	require.False(t, errors.Is(err, gorm.ErrRecordNotFound))
 	require.Equal(t, before, runtimeBoundarySnapshot(t, f))
 }
+
+// Ordinary terminal evidence has no administrator disposition. Keep every
+// follower terminal and the original start unchanged, so SQL/start predicates
+// cannot mask the unconditional terminal immutability guard.
+func TestRuntimeStoreBoundaryOrdinaryTerminalEvidenceImmutable(t *testing.T) {
+	for _, knownStart := range []bool{true, false} {
+		name := "nil-start"
+		if knownStart {
+			name = "known-start"
+		}
+		t.Run(name, func(t *testing.T) {
+			f := runtimeFixture(t)
+			request := f.request()
+			_, err := f.admit(request)
+			require.NoError(t, err)
+			var started *time.Time
+			if knownStart {
+				started = new(runtimeTimeInternal(f.now.Add(-time.Hour)))
+			}
+			settled := runtimeTimeInternal(f.now.Add(-time.Minute))
+			terminal := runtimeEvidenceInternal{State: "success", StartedAt: started, SettledAt: new(settled), ResultCode: new("example-success")}
+			_, err = runtimeBoundaryEvidence(f, request.Identity, terminal)
+			require.NoError(t, err)
+			before := runtimeBoundarySnapshot(t, f)
+			require.Nil(t, before.Receipts[0].HubDisposition)
+			f.now = f.now.Add(time.Hour)
+			for _, change := range []struct {
+				name     string
+				evidence runtimeEvidenceInternal
+			}{
+				{"failed", runtimeEvidenceInternal{State: "failed", StartedAt: started, SettledAt: new(settled), ResultCode: terminal.ResultCode}},
+				{"cancelled", runtimeEvidenceInternal{State: "cancelled", StartedAt: started, SettledAt: new(settled), ResultCode: terminal.ResultCode}},
+				{"result", runtimeEvidenceInternal{State: "success", StartedAt: started, SettledAt: new(settled), ResultCode: new("changed")}},
+				{"error", runtimeEvidenceInternal{State: "success", StartedAt: started, SettledAt: new(settled), ResultCode: terminal.ResultCode, Error: new("changed")}},
+				{"settled-time", runtimeEvidenceInternal{State: "success", StartedAt: started, SettledAt: new(settled.Add(time.Second)), ResultCode: terminal.ResultCode}},
+			} {
+				t.Run(change.name, func(t *testing.T) {
+					row, err := runtimeBoundaryEvidence(f, request.Identity, change.evidence)
+					runtimeMismatch(t, row, err, request.Identity.RunID)
+					require.Equal(t, before, runtimeBoundarySnapshot(t, f))
+					row, err = runtimeBoundaryEvidence(f, request.Identity, terminal)
+					require.NoError(t, err)
+					require.Equal(t, before.Receipts[0], *row)
+					require.Equal(t, before, runtimeBoundarySnapshot(t, f))
+				})
+			}
+		})
+	}
+}
