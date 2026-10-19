@@ -250,15 +250,16 @@ func (s *ProjectService) getProjectForUpdate(ctx context.Context, projectID stri
 }
 
 // prepareProjectRenameVolumeMigration plans the volume rename for a
-// stopped project. Content changes are applied to a scratch preview first so
-// the plan reflects the updated compose files.
+// stopped project. The current and pending models supply the resource namespaces;
+// submitted changes are validated in a scratch preview with the requested default.
 func (s *ProjectService) prepareProjectRenameVolumeMigration(
 	ctx context.Context,
 	proj *Project,
 	newName, projectsDirectory string,
 	composeContent, envContent, overrideContent *string,
 ) (volume.Migration, error) {
-	target := proj
+	target := *proj
+	target.Name = newName
 	if composeContent != nil || envContent != nil || overrideContent != nil {
 		previewLogical, err := acfs.MkdirTemp(ctx, projectsDirectory, "/", ".project-update-preview-*")
 		if err != nil {
@@ -277,25 +278,35 @@ func (s *ProjectService) prepareProjectRenameVolumeMigration(
 		if _, copyDirErr := acfs.CopyDir(ctx, proj.Path, previewPath, acfstypes.CopyOptions{}); copyDirErr != nil {
 			return nil, fmt.Errorf("failed to prepare project update preview: %w", copyDirErr)
 		}
-		previewProject := *proj
+		previewProject := target
 		previewProject.Path = previewPath
 		if persistErr := s.persistUpdatedProjectFiles(ctx, &previewProject, projectsDirectory, composeContent, envContent, overrideContent); persistErr != nil {
 			return nil, fmt.Errorf("failed to prepare project update preview: %w", persistErr)
 		}
-		target = &previewProject
+		target = previewProject
 	}
 
-	oldComposeName, newComposeName := projects.NormalizeProjectName(target.Name), projects.NormalizeProjectName(newName)
-	if s.dockerService == nil || target.Status != ProjectStatusStopped || oldComposeName == "" || newComposeName == "" || oldComposeName == newComposeName {
+	if s.dockerService == nil || proj.Status != ProjectStatusStopped || projects.NormalizeProjectName(newName) == "" {
 		return nil, nil
 	}
 
-	composeProject, _, err := s.loadComposeProjectForProject(ctx, target, nil)
+	current, _, err := s.loadComposeProjectForProject(ctx, proj, nil)
 	if err != nil {
 		if errors.Is(err, common.ErrProjectComposeFileNotFound) {
 			return nil, nil
 		}
-		return nil, fmt.Errorf("failed to load compose project for volume rename: %w", err)
+		return nil, fmt.Errorf("failed to load current compose project for volume rename: %w", err)
+	}
+	composeProject, _, err := s.loadComposeProjectForProject(ctx, &target, nil)
+	if err != nil {
+		if errors.Is(err, common.ErrProjectComposeFileNotFound) {
+			return nil, nil
+		}
+		return nil, fmt.Errorf("failed to load pending compose project for volume rename: %w", err)
+	}
+	oldComposeName, newComposeName := current.Name, composeProject.Name
+	if oldComposeName == "" || newComposeName == "" || oldComposeName == newComposeName {
+		return nil, nil
 	}
 
 	dockerClient, err := s.dockerService.GetClient(ctx)

@@ -1,5 +1,5 @@
 // Source: docklet-next/docs/design/runtime-control.md
-// Revision: cdfb339023d76259b5de81589b8081255683560f7f129b911cab8db4b23a642a
+// Revision: 281d561206c422724c50a8fe45588fb9ca6980153eaf2aeb6afce07f8cae0e31
 // Retrieved: 2026-10-19
 // License: Apache-2.0
 // Deviations: Original effective Compose-label consequence regression coverage.

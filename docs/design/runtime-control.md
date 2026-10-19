@@ -115,6 +115,14 @@ normalized stored default. Explicit rename retains its existing workflow and
 stable persisted ID. Removing a YAML override therefore restores that stored
 default, rather than a name fed back by an earlier metadata refresh.
 
+Explicit-rename volume planning loads the current model for the source namespace
+and the pending compose/environment/override model with the requested rename
+default for the target namespace. Recorded observations do not authorize this
+resource selection. Equal effective names require no volume migration. Planning
+retains stopped-only admission, attached-source and target-conflict guards, and
+explicit/external-volume exclusions; invalid current or pending models refuse
+before volume inspection. Apply, rollback and journal recovery remain unchanged.
+
 Existing Compose-label consumers (container redeploy, automatic updates, service
 image lookup and icon metadata) resolve the observed `ComposeProjectName`, with
 normalized stored `Name` as the fallback when override metadata is absent or
