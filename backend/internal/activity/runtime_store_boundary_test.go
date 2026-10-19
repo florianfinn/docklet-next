@@ -9,6 +9,7 @@ package activity
 import (
 	"context"
 	"errors"
+	"fmt"
 	"testing"
 	"time"
 
@@ -433,4 +434,38 @@ func TestRuntimeStoreBoundaryOrdinaryTerminalEvidenceImmutable(t *testing.T) {
 			}
 		})
 	}
+}
+
+// A recovered mutation panic is an assertion failure, never a typed refusal.
+func runtimeBoundaryTombstoneCall(f *runtimeFixtureInternal, request runtimeAdmissionInternal, operation string) (row *RuntimeReceipt, err error) {
+	defer func() {
+		if recovered := recover(); recovered != nil {
+			err = fmt.Errorf("unexpected writer panic: %v", recovered)
+		}
+	}()
+	return runtimeBoundaryCall(f, request, operation)
+}
+
+func TestRuntimeStoreBoundaryTombstoneEvidence(t *testing.T) {
+	runtimeBoundaryTombstoneWriter(t, "evidence")
+}
+func TestRuntimeStoreBoundaryTombstoneDisposition(t *testing.T) {
+	runtimeBoundaryTombstoneWriter(t, "disposition")
+}
+func runtimeBoundaryTombstoneWriter(t *testing.T, operation string) {
+	t.Helper()
+	f := runtimeFixture(t)
+	request := f.request()
+	row, err := runtimeBoundaryCall(f, request, "query")
+	require.NoError(t, err)
+	require.Equal(t, "not_received", row.Kind)
+	before := runtimeBoundarySnapshot(t, f)
+	require.Len(t, before.Receipts, 1)
+	require.Empty(t, before.Bindings)
+	require.Empty(t, before.Activities)
+	require.Empty(t, before.Messages)
+	f.now = f.now.Add(time.Hour)
+	row, err = runtimeBoundaryTombstoneCall(f, request, operation)
+	runtimeMismatch(t, row, err, request.Identity.RunID)
+	require.Equal(t, before, runtimeBoundarySnapshot(t, f), "all durable evidence remains unchanged")
 }

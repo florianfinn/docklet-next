@@ -698,10 +698,16 @@ func TestRuntimeSlotsInterruptedChildHoldsLegacyWaiter(t *testing.T) {
 }
 
 func TestRuntimeSlotsAdmissionAndExecutingFaultsNeverEffect(t *testing.T) {
-	for _, mode := range []string{"queued-status", "queued-status-ignored", "accepted-commit", "executing-status", "executing-commit"} {
+	for _, mode := range []string{"queued-status", "queued-status-ignored", "accepted-commit", "executing-status", "executing-status-ignored", "executing-commit"} {
 		t.Run(mode, func(t *testing.T) {
 			probe := slotsNewProbe(t)
-			f := slotsFixture(t, t.Context(), new(1), func(ctx context.Context, _ RuntimeCommand, _ io.Writer) error { return probe.run(ctx) })
+			f := slotsFixture(t, t.Context(), new(1), func(ctx context.Context, _ RuntimeCommand, _ io.Writer) error {
+				if mode == "executing-status-ignored" {
+					probe.calls.Add(1)
+					return nil
+				}
+				return probe.run(ctx)
+			})
 			slotsCleanup(t, f, probe)
 			c := f.command()
 			before := runtimeBoundarySnapshot(t, f.store)
@@ -723,8 +729,12 @@ func TestRuntimeSlotsAdmissionAndExecutingFaultsNeverEffect(t *testing.T) {
 			// Also fail terminal persistence to inspect the rolled-back phase and real
 			// grant before storage-only retry. No generic failure release is permitted.
 			require.NoError(t, f.store.svc.db.Exec("CREATE TRIGGER fixture_slots_terminal BEFORE INSERT ON activity_messages WHEN NEW.code = 'runtime.failed' BEGIN SELECT RAISE(ABORT, 'fixture retain phase failure'); END").Error)
-			if mode == "executing-status" {
-				require.NoError(t, f.store.svc.db.Exec("CREATE TRIGGER fixture_slots_fault BEFORE UPDATE OF status ON activities WHEN NEW.status = 'running' BEGIN SELECT RAISE(ABORT, 'fixture running status'); END").Error)
+			if mode == "executing-status" || mode == "executing-status-ignored" {
+				statement := "SELECT RAISE(ABORT, 'fixture running status');"
+				if mode == "executing-status-ignored" {
+					statement = "SELECT RAISE(IGNORE);"
+				}
+				require.NoError(t, f.store.svc.db.Exec("CREATE TRIGGER fixture_slots_fault BEFORE UPDATE OF status ON activities WHEN NEW.status = 'running' BEGIN "+statement+" END").Error)
 			} else {
 				require.NoError(t, f.store.svc.db.Exec("CREATE TABLE fixture_slots_parent(id INTEGER PRIMARY KEY)").Error)
 				require.NoError(t, f.store.svc.db.Exec("CREATE TABLE fixture_slots_deferred(id INTEGER REFERENCES fixture_slots_parent(id) DEFERRABLE INITIALLY DEFERRED)").Error)
