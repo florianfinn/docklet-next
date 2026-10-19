@@ -199,6 +199,14 @@ func TestRuntimeCommandInvalidBeforeWrites(t *testing.T) {
 		},
 		func(c *RuntimeCommand) { c.Operation = RuntimeRestartProject; c.Options.RestartServices = []string{""} },
 		func(c *RuntimeCommand) { c.Actor.ID = "" }, func(c *RuntimeCommand) { c.Store.EnvironmentID = "" },
+		func(c *RuntimeCommand) { c.Target.ID = "example-\xff" },
+		func(c *RuntimeCommand) { c.Target.Name = new("example-\xff") },
+		func(c *RuntimeCommand) {
+			c.Operation = RuntimeStartContainer
+			c.Target.Kind = "container"
+			c.Target.ParentProjectID = new("example-\xff")
+		},
+		func(c *RuntimeCommand) { c.Actor.Username = "example-\xff" },
 	} {
 		c := f.command()
 		mutate(&c)

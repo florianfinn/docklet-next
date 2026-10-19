@@ -13,6 +13,7 @@ import (
 	"slices"
 	"strings"
 	"unicode"
+	"unicode/utf8"
 
 	projecttypes "github.com/florianfinn/docklet-next/types/project"
 	usertypes "github.com/florianfinn/docklet-next/types/user"
@@ -69,7 +70,7 @@ type runtimeCanonicalCommandInternal struct {
 }
 
 func runtimeTextInternal(value string, max int) bool {
-	return value != "" && len(value) <= max && strings.TrimSpace(value) == value &&
+	return value != "" && utf8.ValidString(value) && len(value) <= max && strings.TrimSpace(value) == value &&
 		!strings.ContainsFunc(value, unicode.IsControl)
 }
 
@@ -104,8 +105,8 @@ func runtimeCanonicalizeInternal(command RuntimeCommand) (runtimeCanonicalComman
 			return invalid()
 		}
 	}
-	if len(command.Actor.Username) > 256 || strings.ContainsFunc(command.Actor.Username, unicode.IsControl) ||
-		(command.Actor.DisplayName != nil && (len(*command.Actor.DisplayName) > 256 || strings.ContainsFunc(*command.Actor.DisplayName, unicode.IsControl))) {
+	if !utf8.ValidString(command.Actor.Username) || len(command.Actor.Username) > 256 || strings.ContainsFunc(command.Actor.Username, unicode.IsControl) ||
+		(command.Actor.DisplayName != nil && (!utf8.ValidString(*command.Actor.DisplayName) || len(*command.Actor.DisplayName) > 256 || strings.ContainsFunc(*command.Actor.DisplayName, unicode.IsControl))) {
 		return invalid()
 	}
 	// Copy all semantic input so caller mutation during resolution cannot alter
@@ -154,6 +155,8 @@ func runtimeCanonicalizeInternal(command RuntimeCommand) (runtimeCanonicalComman
 	}
 	// Arrays give a fixed-field, length-delimited encoding, independent of object
 	// order. The nullable parent is explicit; display and transport are excluded.
+	// Text validation rejects invalid UTF-8 rather than allowing JSON replacement
+	// characters to collapse distinct byte strings into the same semantic intent.
 	var options any = [0]string{}
 	if deploy := command.Options.Deploy; deploy != nil {
 		options = [4]any{deploy.PullPolicy, deploy.ForceRecreate, deploy.RemoveOrphans, deploy.RecreateVolumes}
