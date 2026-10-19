@@ -1,5 +1,5 @@
 // Source: docklet-next/docs/design/runtime-control.md
-// Revision: 687e1abd5ed1be0e69a7fdc4c4677da2db78b85d
+// Revision: d4229b124f079376c959142b63235f6a739be2a9711e0228ec5a63ab552f8cf0
 // Retrieved: 2026-10-19
 // License: Apache-2.0
 // Deviations: Dormant runtime projection vocabulary, separate from registered v3 DTOs.

@@ -72,19 +72,17 @@ attribution, never an age cutoff for server rejection or new admission. The
 adapter retains the key across CSRF/transport retries for at most ten minutes of
 local elapsed time, discards it after the final response or that window, and then
 refreshes known run detail rather than replaying the command. It never creates a
-replacement
-intent automatically. A retained binding always resolves to its original run,
-even after the retry window; it cannot admit another effect. These are target
-key rules, not current adapter support.
+replacement intent automatically. A retained binding always resolves to its
+original run, even after the retry window; it cannot admit another effect. These
+are target key rules, not current adapter support.
 
 The binding uniquely maps `(environmentId, idempotencyKey)` to run ID, requesting
 caller and canonical digest: operation ID, raw target, accepted options and
 parent. A retained key with the same digest returns the same ID and compact
 outcome even after ten minutes or output/history pruning; recheck caller identity
 and current operation/activity-read permissions. A different caller presenting an
-already
-bound key receives HTTP 409 `run.request-mismatch` without the bound ID or other
-run details, even when the digest matches. A changed digest also returns 409
+already bound key receives HTTP 409 `run.request-mismatch` without the bound ID or
+other run details, even when the digest matches. A changed digest also returns 409
 without a worker. Independently authorized callers with different keys join by
 active gate key, not by sharing an idempotency key. The activity/receipt keeps
 its original actor; each joining key records its own caller and join audit attribution.
