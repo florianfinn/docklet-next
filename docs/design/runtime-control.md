@@ -126,6 +126,27 @@ the same observations. This legacy lookup reads database metadata, without the
 fresh filesystem ownership proof required for runtime admission below. Duplicate
 observations retain warnings rather than adding a new refusal policy.
 
+Project list and detail JSON expose optional `composeProjectName` as the
+normalized recorded observation, falling back to normalized stored `Name` for
+legacy rows with absent or empty metadata. `name` remains the stable display and
+configuration default. Container, stack, volume and network mappings use this
+label, including resources with no containers; network ownership therefore
+retains the Compose-managed removal restriction. Older peers without the field
+can link a container by an explicit runtime container ID, but that evidence alone
+cannot claim volume or network ownership.
+
+Listing selects the observed group before directory fallback and never substitutes
+a replaced default group. Known-name discovery and system-project exclusion use
+the effective label, so a stale default does not hide orphan groups or unrelated
+projects. Full-table observed owners precede normalized legacy aliases regardless
+of pagination or row order; equal observations use stable ID order for these read
+projections. Image and dashboard project usage use the same observation/fallback
+and priority, retaining their existing short cache lifetime. These are metadata
+reads, not fresh ownership proof: missing or malformed current files do not add
+a new availability condition. The updater active-project used-image source still
+uses stored names; its accepted follow-up remains separate, and normal eligible
+running-container collection does not cover every stopped or excluded container.
+
 Selection, metadata and lifecycle loading share fresh reads and parsing of the
 same primary and auxiliary environment bytes on every load, including supported
 external environment-file symlink targets. A missing primary `.env` is optional;

@@ -175,10 +175,22 @@ func (s *ProjectService) ListProjects(ctx context.Context, params pagination.Que
 	updatesFilter := strings.TrimSpace(params.Filters["updates"])
 	labelFilter := strings.TrimSpace(params.Filters["label"])
 	snapshot := s.listing.Snapshot(ctx)
+	owners, identities, ownerErr := s.projectComposeOwners(ctx)
+	if ownerErr != nil {
+		return nil, pagination.Response{}, ownerErr
+	}
 	query := s.db.WithContext(ctx).Model(&Project{})
 	systemNames := listing.SystemProjectNames(snapshot.Containers)
 	if len(systemNames) > 0 {
-		query = query.Where("LOWER(name) NOT IN ? AND COALESCE(compose_project_name, '') NOT IN ?", systemNames, systemNames)
+		var systemIDs []string
+		for _, identity := range identities {
+			if slices.Contains(systemNames, listing.ObservedComposeName(identity)) {
+				systemIDs = append(systemIDs, identity.ID)
+			}
+		}
+		if len(systemIDs) > 0 {
+			query = query.Where("id NOT IN ?", systemIDs)
+		}
 	}
 	if archivedFilter := strings.TrimSpace(params.Filters["archived"]); !strings.EqualFold(archivedFilter, "all") {
 		archived, _ := kit.ParseBool(archivedFilter)
@@ -206,7 +218,7 @@ func (s *ProjectService) ListProjects(ctx context.Context, params pagination.Que
 		// The paginated page gets live status from one Docker snapshot plus the
 		// compose-backed presentation fields, sharing one metadata env.
 		env := s.newProjectMetadataEnv(ctx, projectsArray)
-		result := s.projectListRows(ctx, env.projectsDirectory, projectsArray, snapshot)
+		result := s.projectListRows(ctx, env.projectsDirectory, projectsArray, snapshot, owners)
 		metas := make([]projects.ArcaneComposeMetadata, len(projectsArray))
 		var metaGroup errgroup.Group
 		metaGroup.SetLimit(maxConcurrentComposeReads)
@@ -249,7 +261,7 @@ func (s *ProjectService) ListProjects(ctx context.Context, params pagination.Que
 		return nil, pagination.Response{}, fmt.Errorf("failed to list projects: %w", err)
 	}
 	env := s.newProjectMetadataEnv(ctx, nil)
-	items := s.projectListRows(ctx, env.projectsDirectory, projectsArray, snapshot)
+	items := s.projectListRows(ctx, env.projectsDirectory, projectsArray, snapshot, owners)
 	byID := make(map[string]Project, len(projectsArray))
 	for _, proj := range projectsArray {
 		byID[proj.ID] = proj
@@ -348,9 +360,10 @@ func (s *ProjectService) CountProjectsWithPendingUpdates(ctx context.Context, al
 	// Runtime container IDs keep tag-policy updates scoped to their project.
 	details := make([]projecttypes.Details, len(activeProjects))
 	containersByProject := listing.GroupComposeContainersByProject(allContainers)
+	owners := listing.ComposeProjectOwners(projectRecords(allProjects))
 	for i, proj := range activeProjects {
 		details[i].ID = proj.ID
-		for _, c := range listing.ProjectContainers(projectRecord(proj), containersByProject) {
+		for _, c := range listing.ProjectContainers(projectRecord(proj), containersByProject, owners) {
 			details[i].RuntimeServices = append(
 				details[i].RuntimeServices,
 				projecttypes.RuntimeService{

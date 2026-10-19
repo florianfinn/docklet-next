@@ -25,6 +25,7 @@ import (
 	usertypes "github.com/florianfinn/docklet-next/types/user"
 	"github.com/florianfinn/docklet-next/types/volume"
 	workspacetypes "github.com/florianfinn/docklet-next/types/workspace"
+	"github.com/moby/moby/api/types/container"
 	"github.com/samber/mo"
 	"go.getarcane.app/acfs"
 	acfstypes "go.getarcane.app/acfs/types"
@@ -537,7 +538,10 @@ func (s *ProjectService) projectServices(ctx context.Context, projectID string) 
 			return nil, listErr
 		}
 		meta := s.ProjectMetadata(ctx, *projectFromDb, nil)
-		matched := listing.ProjectContainers(projectRecord(*projectFromDb), listing.GroupComposeContainersByProject(containers))
+		matched, ownerErr := s.projectContainers(ctx, *projectFromDb, containers)
+		if ownerErr != nil {
+			return nil, ownerErr
+		}
 		currentContainerID, currentContainerErr := cgroup.CurrentContainerID()
 		services := make([]projecttypes.RuntimeService, 0, len(matched))
 		for _, c := range matched {
@@ -575,8 +579,8 @@ func (s *ProjectService) GetProjectStatusCounts(ctx context.Context) (projecttyp
 
 // projectListRows builds list rows and persists live-inferred service counts
 // over stored zeros, since SQL sorts and paginates on service_count.
-func (s *ProjectService) projectListRows(ctx context.Context, projectsDir string, projectsList []Project, snapshot listing.Snapshot) []projecttypes.Details {
-	rows, inferredCounts := listing.Rows(projectsDir, IconCatalogForContext(ctx), projectRecords(projectsList), snapshot)
+func (s *ProjectService) projectListRows(ctx context.Context, projectsDir string, projectsList []Project, snapshot listing.Snapshot, ownership ...map[string]string) []projecttypes.Details {
+	rows, inferredCounts := listing.Rows(projectsDir, IconCatalogForContext(ctx), projectRecords(projectsList), snapshot, ownership...)
 	ids := slices.Collect(maps.Keys(inferredCounts))
 	for chunk := range slices.Chunk(ids, inferredServiceCountBatchSize) {
 		var caseExpr strings.Builder
@@ -666,4 +670,22 @@ func (s *ProjectService) reconcileComposeProjectTags(ctx context.Context, projec
 		}
 		return tags.ReplaceCompose(tagStore{tx: tx}, projectID, normalized)
 	})
+}
+
+// projectComposeOwners reads all identities so filters/pages cannot promote aliases.
+func (s *ProjectService) projectComposeOwners(ctx context.Context) (map[string]string, []projecttypes.Record, error) {
+	var records []Project
+	if err := s.db.WithContext(ctx).Select("id", "name", "compose_project_name").Find(&records).Error; err != nil {
+		return nil, nil, fmt.Errorf("load Compose project owners: %w", err)
+	}
+	identities := projectRecords(records)
+	return listing.ComposeProjectOwners(identities), identities, nil
+}
+
+func (s *ProjectService) projectContainers(ctx context.Context, p Project, containers []container.Summary) ([]container.Summary, error) {
+	owners, _, err := s.projectComposeOwners(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return listing.ProjectContainers(projectRecord(p), listing.GroupComposeContainersByProject(containers), owners), nil
 }

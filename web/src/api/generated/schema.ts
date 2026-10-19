@@ -1,5 +1,5 @@
 // Source: api/openapi.json
-// Revision: 2d6801774774bae9a0b5e16195552058f7d796ba575a5f95462266a77ca3da1d
+// Revision: c061602d0b5502f4e229739ccf0353d3d473167ffeaa448fb98e6fa1fa7b7b0c
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
 // Deviations: Generated TypeScript declarations from the local Huma export.
@@ -8837,6 +8837,7 @@ export interface components {
             composeContent?: string;
             composeFileName?: string;
             composeFiles?: string[] | null;
+            composeProjectName?: string;
             configurationError?: components["schemas"]["ProjectConfigurationError"];
             createdAt: string;
             dirName?: string;
