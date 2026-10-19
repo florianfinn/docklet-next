@@ -7,6 +7,7 @@
 import type { components } from "@/api/generated/schema";
 import type { ContainerInfo, ContainerState, Health, ImageVersion, InventoryObservation, Service, Stack } from "@/domain/model";
 import { SYSTEM_LABEL } from "@/domain/system";
+import { composeProjectOwner } from "./project-ownership";
 
 export type ProjectRow = components["schemas"]["ProjectDetails"];
 export type ContainerRow = components["schemas"]["ContainerSummary"];
@@ -49,7 +50,7 @@ export function mapContainer(row: ContainerRow, hostId: string, projects: Projec
   const composeHints = Object.keys(labels).some((key) => key.startsWith("com.docker.compose."));
   // An unlabelled container has no evidence of an external manager; partial Compose labels are ambiguous.
   const origin = project && service ? "compose" : composeHints || labels["net.unraid.docker.managed"] ? "unknown" : "standalone";
-  const owner = projects.find((item) => item.name === project || item.runtimeServices?.some((runtime) => runtime.containerId === row.id));
+  const owner = composeProjectOwner(projects, project, row.id);
   const image = imageVersion(row.image);
   return {
     imageId: row.imageId ? inventoryId(hostId, row.imageId) : undefined,
@@ -67,8 +68,14 @@ export function mapContainer(row: ContainerRow, hostId: string, projects: Projec
 
 export function mapStack(row: ProjectRow, hostId: string, containers: ContainerInfo[], inventory: InventoryObservation): Stack {
   if (!row?.id || !row.name || typeof row.status !== "string") throw new Error("inventory.invalid-project");
-  const members = containers.filter((item) => item.dockerLabels?.["com.docker.compose.project"] === row.name || row.runtimeServices?.some((runtime) => item.id === inventoryId(hostId, runtime.containerId || "absent")));
-  const services: Service[] = (row.runtimeServices?.length ? row.runtimeServices : members.map((c) => ({ name: c.serviceName ?? c.name, image: `${c.image.repository}:${c.image.tag}`, status: c.state, health: c.health, containerId: splitInventoryId(c.id)[1] }))).map((runtime) => {
+  const members = containers.filter((item) => item.stackId === inventoryId(hostId, row.id));
+  // Missing or unowned inventory cannot disprove explicit backend membership.
+  // Only a concrete conflicting web owner excludes a runtime entry.
+  const runtimeServices = row.runtimeServices?.filter((runtime) => {
+    const id = runtime.containerId;
+    return !id || !containers.some((item) => item.id === inventoryId(hostId, id) && !!item.stackId && item.stackId !== inventoryId(hostId, row.id));
+  });
+  const services: Service[] = (runtimeServices?.length ? runtimeServices : members.map((c) => ({ name: c.serviceName ?? c.name, image: `${c.image.repository}:${c.image.tag}`, status: c.state, health: c.health, containerId: splitInventoryId(c.id)[1] }))).map((runtime) => {
     const container = members.find((item) => item.id === inventoryId(hostId, runtime.containerId || "absent"));
     const image = imageVersion(runtime.image);
     return { name: runtime.name, image, state: state(runtime.status), health: runtime.health === "healthy" || runtime.health === "unhealthy" || runtime.health === "starting" ? runtime.health : container?.health ?? "none",

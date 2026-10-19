@@ -10,6 +10,8 @@ import type { InventoryObservation, Topology, TopologyNetwork } from "@/domain/m
 import type { Volume, VolumeConsumer } from "@/domain/volumes";
 import { inventoryId, mapContainer, type ContainerRow, type ProjectRow } from "./inventory-mapping";
 
+import { composeProjectOwner } from "./project-ownership";
+
 type Schema = components["schemas"];
 export function mapImage(row: Schema["ImageSummary"], hostId: string, containers: ContainerRow[], projects: ProjectRow[], inventory: InventoryObservation): DockerImage {
   if (!row?.id || typeof row.size !== "number" || !Number.isFinite(row.created)) throw new Error("inventory.invalid-image");
@@ -31,7 +33,7 @@ export function mapImage(row: Schema["ImageSummary"], hostId: string, containers
 }
 
 function owner(labels: Record<string, string> | null | undefined, hostId: string, projects: ProjectRow[]) {
-  const project = projects.find((p) => p.name === labels?.["com.docker.compose.project"]);
+  const project = composeProjectOwner(projects, labels?.["com.docker.compose.project"]);
   return project ? { stackId: inventoryId(hostId, project.id), stackName: project.name } : {};
 }
 export function mapVolumes(rows: Schema["VolumeVolume"][], hostId: string, containers: ContainerRow[], projects: ProjectRow[], inventory: InventoryObservation): Volume[] {

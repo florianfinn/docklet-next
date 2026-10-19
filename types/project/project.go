@@ -441,6 +441,12 @@ type ConfigurationError struct {
 
 // Details contains detailed information about a project.
 type Details struct {
+	// ComposeProjectName is the recorded effective Compose label, falling back
+	// to the normalized stored name for legacy rows. It is not execution authority.
+	//
+	// Required: false
+	ComposeProjectName string `json:"composeProjectName,omitempty"`
+
 	// Tags are the effective UI and Compose tags for the project.
 	Tags []Tag `json:"tags"`
 
