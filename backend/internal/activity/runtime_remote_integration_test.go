@@ -223,6 +223,7 @@ func TestRuntimeRemoteActualDirectAndEdgeSevenOperations(t *testing.T) {
 				require.NotEmpty(t, effects, f.agent.debugEvents())
 				_, err = f.control.Start(t.Context(), ref, command.Options)
 				require.NoError(t, err)
+				require.NoError(t, f.control.WaitDispatch(wait, ref.RunID))
 				require.EqualValues(t, 1, f.executeCalls.Load())
 				require.Equal(t, effects, runtimeEffectEvents(f.agent.http.snapshot()))
 				var receipt activity.RuntimeReceipt
@@ -266,6 +267,7 @@ func TestRuntimeRemoteActualLostAcknowledgmentNeverReplays(t *testing.T) {
 			require.Len(t, runtimeEffectEvents(f.agent.http.snapshot()), 1)
 			_, err = f.control.Start(wait, ref, command.Options)
 			require.NoError(t, err)
+			require.NoError(t, f.control.WaitDispatch(wait, ref.RunID))
 			require.EqualValues(t, 1, f.executeCalls.Load())
 		})
 	}

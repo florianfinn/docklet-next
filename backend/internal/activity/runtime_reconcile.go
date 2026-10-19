@@ -176,8 +176,9 @@ func (c *RuntimeRemoteCoordinator) reconcileInternal(ctx context.Context, ref Ru
 		if !cancelled {
 			return
 		}
-		// Absent Cancel is never authority. A later matching active query requires
-		// forwarding the durable intent again, with the original audit attribution.
+		// Absent Cancel is never authority. Forward durable intent again after a
+		// matching active query, attributed to the reconciler at the executor.
+		// The hub audit retains the original caller.
 		cancelCtx, cancelCall := context.WithTimeout(ctx, 5*time.Second)
 		answer, cancelErr := transport.Cancel(cancelCtx, activitytypes.RuntimeCancellation{Identity: id, Attribution: activitytypes.RuntimeAttribution{ID: "runtime-reconciler", Username: "Runtime reconciler"}})
 		cancelCall()

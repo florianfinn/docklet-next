@@ -144,8 +144,7 @@ func TestRuntimeRemoteUncertaintyNeverReplaysOrReleases(t *testing.T) {
 				require.Equal(t, "unknown", *row.ExecutorState)
 				require.EqualValues(t, 3, p.queries.Load())
 			}
-			_, err := f.control.Start(t.Context(), f.ref, f.commandValue.Options)
-			require.NoError(t, err)
+			f.start(t)
 			require.EqualValues(t, 1, p.executes.Load())
 		})
 	}
@@ -264,13 +263,29 @@ func TestRuntimeRemoteWindowReplacementRelayAndTerminalWins(t *testing.T) {
 	gap := remoteAnswer(id, f.store.now, activitytypes.StatusRunning, 9)
 	require.NoError(t, relay.Relay(gap.Detail, emit))
 	require.Len(t, lines, 6)
+	require.True(t, relay.LossReported)
+	internalGap := remoteAnswer(id, f.store.now, activitytypes.StatusRunning, 9, 10, 13)
+	_, err = f.service.applyRemoteInternal(t.Context(), f.ref, internalGap, true)
+	require.NoError(t, err)
+	detail, err = f.service.GetRuntimeDetail(t.Context(), f.ref)
+	require.NoError(t, err)
+	require.Equal(t, uint64(9), detail.RetainedStartSeq)
+	require.NoError(t, relay.Relay(detail, emit))
+	var added []string
+	for _, line := range lines[6:] {
+		added = append(added, line.Text)
+	}
+	require.Equal(t, []string{"line", "[runtime output truncated]", "line"}, added)
+	require.Equal(t, uint64(13), relay.Seen)
+	require.NoError(t, relay.Relay(detail, emit))
+	require.Len(t, lines, 9)
 	empty := remoteAnswer(id, f.store.now, activitytypes.StatusRunning)
-	empty.Detail.RetainedStartSeq = 12
+	empty.Detail.RetainedStartSeq = 16
 	empty.Detail.OutputTruncated = true
 	require.NoError(t, relay.Relay(empty.Detail, emit))
-	require.Len(t, lines, 7)
-	require.Equal(t, uint64(11), relay.Seen)
-	terminal := remoteAnswer(id, f.store.now, activitytypes.StatusSuccess, 12)
+	require.Len(t, lines, 10)
+	require.Equal(t, uint64(15), relay.Seen)
+	terminal := remoteAnswer(id, f.store.now, activitytypes.StatusSuccess, 16)
 	_, err = f.service.applyRemoteInternal(t.Context(), f.ref, terminal, true)
 	require.NoError(t, err)
 	before := b3Activity(t, f.b1FixtureInternal, f.ref.RunID)

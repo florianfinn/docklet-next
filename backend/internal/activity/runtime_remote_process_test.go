@@ -167,6 +167,7 @@ func TestRuntimeRemoteHubCrashReopenNeverResends(t *testing.T) {
 			before := f.executeCalls.Load()
 			_, err = control.Start(ctx, ref, activity.RuntimeOptions{})
 			require.NoError(t, err)
+			require.NoError(t, control.WaitDispatch(ctx, ref.RunID))
 			require.Equal(t, before, f.executeCalls.Load())
 			if phase == "accepted" || phase == "terminal" {
 				require.Len(t, runtimeEffectEvents(f.agent.http.snapshot()), 1)

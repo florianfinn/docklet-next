@@ -135,10 +135,15 @@ func TestRuntimeReceiverNonqueuedIgnoredActivityInsert(t *testing.T) {
 	before := runtimeBoundarySnapshot(t, f.store)
 	require.NoError(t, f.store.svc.db.Exec("CREATE TRIGGER running_activity_ignore BEFORE INSERT ON activities BEGIN SELECT RAISE(IGNORE); END").Error)
 	result, err := f.receiver.Execute(t.Context(), receiverEnvelope(t, command))
-	require.Error(t, err)
+	var conflict *runtimeConflictInternal
+	require.ErrorAs(t, err, &conflict)
 	receiverZero(t, result)
 	require.Equal(t, before, runtimeBoundarySnapshot(t, f.store))
 	require.Zero(t, p.calls.Load())
+	f.service.activity.runningMu.Lock()
+	owners := len(f.service.owners)
+	f.service.activity.runningMu.Unlock()
+	require.Zero(t, owners)
 	require.NoError(t, f.store.svc.db.Exec("DROP TRIGGER running_activity_ignore").Error)
 }
 
