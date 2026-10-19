@@ -14,6 +14,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"io/fs"
 	"path/filepath"
+	"strings"
 	"testing"
 	"testing/fstest"
 	"time"
@@ -132,30 +133,48 @@ func TestRuntimeMigrationUpgradesRealSQLiteHistory(t *testing.T) {
 	}
 	var oldCatalog string
 	require.NoError(t, db.Raw("SELECT group_concat(sql,';') FROM (SELECT sql FROM sqlite_master WHERE name NOT LIKE 'sqlite_%' AND name <> 'goose_db_version' AND tbl_name <> 'goose_db_version' ORDER BY type,name)").Scan(&oldCatalog).Error)
+	// Check the historical 003 contract before a later migration changes old tables.
+	require.NoError(t, migrateDatabaseToVersionInternal(t.Context(), pool, dbProviderSQLite, MigrationOptions{}, 3))
+	const historicalCatalogQuery = "SELECT group_concat(sql,';') FROM (SELECT sql FROM sqlite_master WHERE name NOT LIKE 'sqlite_%' AND name NOT LIKE 'runtime_%' AND name NOT LIKE 'idx_runtime_%' AND name <> 'goose_db_version' AND tbl_name <> 'goose_db_version' ORDER BY type,name)"
+	var actual string
+	require.NoError(t, db.Raw(historicalCatalogQuery).Scan(&actual).Error)
+	require.Equal(t, oldCatalog, actual, "003 must leave all existing schema objects intact")
+	for _, table := range []string{"runtime_receipts", "runtime_key_bindings", "runtime_store_generation"} {
+		var count int64
+		require.NoError(t, db.Table(table).Count(&count).Error)
+		require.Zero(t, count, "migration must leave application tables empty: %s", table)
+	}
+	// Seed actual 003 rows so 004 must preserve compact evidence and backfill defaults.
+	require.NoError(t, db.Exec("INSERT INTO runtime_store_generation(id,generation,created_at) VALUES(1,'fixture-generation',?)", stamp).Error)
+	require.NoError(t, db.Exec("INSERT INTO runtime_receipts(run_id,kind,store_generation,manager_id,registration_id,environment_id,executor_generation,request_digest,caller_id,operation_id,target_kind,target_id,gate_scope,gate_key,admitted_at,dispatch_state,executor_state,cancel_requested,release_acknowledged,final_write_at) VALUES('compact-run','receipt','fixture-generation','manager','registration','0','executor-generation','digest','caller','start-container','container','container-id','container:container-id','start:digest',?,'pending','pending',0,0,?)", stamp, stamp).Error)
+	require.NoError(t, db.Exec("INSERT INTO runtime_key_bindings(environment_id,idempotency_key,run_id,caller_id,request_digest,first_seen_at) VALUES('0','opaque-key','compact-run','joining-caller','digest',?)", stamp).Error)
+	require.NoError(t, db.Exec("INSERT INTO runtime_receipts(run_id,kind,store_generation,manager_id,registration_id,environment_id,executor_generation,request_digest,cancel_requested,release_acknowledged,settled_at,final_write_at) VALUES('compact-negative','not_received','fixture-generation','manager','registration','0','fixture-generation','negative-digest',0,0,?,?)", stamp, stamp).Error)
+	require.NoError(t, db.Exec("INSERT INTO activities(id,created_at,environment_id,type,status,started_at,output) VALUES('compact-run',1760000000000000,'0','container_start','success',1760000000000000,'[{\"text\":\"old runtime output\"}]')").Error)
+	require.NoError(t, db.Exec("INSERT INTO activities(id,created_at,environment_id,type,status,started_at,output) VALUES('legacy-output',1760000000000000,'0','image_pull','success',1760000000000000,'[{\"text\":\"legacy output\"}]')").Error)
+	// SQLite inserts ALTER columns before table constraints; compare the exact additions.
+	expected004Catalog := oldCatalog
+	for _, addition := range []struct{ before, after string }{
+		{`"output_truncated" numeric NOT NULL DEFAULT false,PRIMARY`, `"output_truncated" numeric NOT NULL DEFAULT false, "runtime_output" TEXT NOT NULL DEFAULT '[]', "runtime_step_trace" TEXT NOT NULL DEFAULT '[]',PRIMARY`},
+		{`"code" TEXT,"step" TEXT,PRIMARY`, `"code" TEXT,"step" TEXT, "runtime_remote" numeric NOT NULL DEFAULT false,PRIMARY`},
+	} {
+		require.Equal(t, 1, strings.Count(expected004Catalog, addition.before))
+		expected004Catalog = strings.Replace(expected004Catalog, addition.before, addition.after, 1)
+	}
 	require.NoError(t, db.Close())
 
 	var upgradedCatalog string
 	for attempt := 0; attempt < 3; attempt++ {
 		db, err = Initialize(t.Context(), url, MigrationOptions{})
 		require.NoError(t, err)
-		var actual string
-		require.NoError(t, db.Raw("SELECT group_concat(sql,';') FROM (SELECT sql FROM sqlite_master WHERE name NOT LIKE 'sqlite_%' AND name NOT LIKE 'runtime_%' AND name NOT LIKE 'idx_runtime_%' AND name <> 'goose_db_version' AND tbl_name <> 'goose_db_version' ORDER BY type,name)").Scan(&actual).Error)
-		require.Equal(t, oldCatalog, actual, "003 must leave all existing schema objects intact")
+		require.NoError(t, db.Raw(historicalCatalogQuery).Scan(&actual).Error)
+		require.Equal(t, expected004Catalog, actual, "004 must add only the declared columns to historical schema objects")
 		require.NoError(t, db.Raw("SELECT group_concat(sql,';') FROM (SELECT sql FROM sqlite_master ORDER BY type,name)").Scan(&actual).Error)
 		if attempt == 0 {
 			upgradedCatalog = actual
-			for _, table := range []string{"runtime_receipts", "runtime_key_bindings", "runtime_store_generation"} {
-				var count int64
-				require.NoError(t, db.Table(table).Count(&count).Error)
-				require.Zero(t, count, "migration must leave application tables empty: %s", table)
-			}
-			// Seed a generation only as test data; migration creates none.
-			require.NoError(t, db.Exec("INSERT INTO runtime_store_generation(id,generation,created_at) VALUES(1,'fixture-generation',?)", stamp).Error)
-			require.NoError(t, db.Exec("INSERT INTO runtime_receipts(run_id,kind,store_generation,manager_id,registration_id,environment_id,executor_generation,request_digest,caller_id,operation_id,target_kind,target_id,gate_scope,gate_key,admitted_at,dispatch_state,executor_state,cancel_requested,release_acknowledged,final_write_at) VALUES('compact-run','receipt','fixture-generation','manager','registration','0','executor-generation','digest','caller','start-container','container','container-id','container:container-id','start:digest',?,'pending','pending',0,0,?)", stamp, stamp).Error)
-			require.NoError(t, db.Exec("INSERT INTO runtime_key_bindings(environment_id,idempotency_key,run_id,caller_id,request_digest,first_seen_at) VALUES('0','opaque-key','compact-run','joining-caller','digest',?)", stamp).Error)
-			require.NoError(t, db.Exec("INSERT INTO runtime_receipts(run_id,kind,store_generation,manager_id,registration_id,environment_id,executor_generation,request_digest,cancel_requested,release_acknowledged,settled_at,final_write_at) VALUES('compact-negative','not_received','fixture-generation','manager','registration','0','fixture-generation','negative-digest',0,0,?,?)", stamp, stamp).Error)
+			assertRuntimeOutputUpgrade(t, db, stamp)
 		}
 		require.Equal(t, upgradedCatalog, actual, "repeat initialization must not alter the current schema")
+		assertRuntimeOutputPersists(t, db, stamp)
 		var value, output, message, identity string
 		var truncated bool
 		require.NoError(t, db.Raw("SELECT value FROM kv WHERE key='retained'").Scan(&value).Error)
@@ -203,4 +222,83 @@ func TestRuntimeMigrationUpgradesRealSQLiteHistory(t *testing.T) {
 		require.NoError(t, rows.Close())
 		require.NoError(t, db.Close())
 	}
+}
+
+func assertRuntimeOutputUpgrade(t *testing.T, db *DB, stamp time.Time) {
+	t.Helper()
+	for _, column := range []struct{ table, name, kind, defaultValue string }{
+		{"activities", "runtime_output", "TEXT", "'[]'"},
+		{"activities", "runtime_step_trace", "TEXT", "'[]'"},
+		{"activity_messages", "runtime_remote", "numeric", "false"},
+		{"runtime_receipts", "output_next_seq", "INTEGER", "1"},
+	} {
+		var kind, defaultValue string
+		var notNull, primaryKey int
+		require.NoError(t, db.Raw(`SELECT type,"notnull",dflt_value,pk FROM pragma_table_info(?) WHERE name=?`, column.table, column.name).Row().Scan(&kind, &notNull, &defaultValue, &primaryKey))
+		require.Equal(t, column.kind, kind, column.name)
+		require.Equal(t, 1, notNull, column.name)
+		require.Equal(t, column.defaultValue, defaultValue, column.name)
+		require.Zero(t, primaryKey, column.name)
+	}
+	for _, id := range []string{"retained-run", "compact-run", "legacy-output"} {
+		var output, steps string
+		require.NoError(t, db.Raw("SELECT runtime_output,runtime_step_trace FROM activities WHERE id=?", id).Row().Scan(&output, &steps))
+		require.Equal(t, "[]", output, id)
+		require.Equal(t, "[]", steps, id)
+	}
+	var remote bool
+	require.NoError(t, db.Raw("SELECT runtime_remote FROM activity_messages WHERE id='retained-message'").Row().Scan(&remote))
+	require.False(t, remote)
+	for _, id := range []string{"compact-run", "compact-negative"} {
+		var next int64
+		require.NoError(t, db.Raw("SELECT output_next_seq FROM runtime_receipts WHERE run_id=?", id).Row().Scan(&next))
+		require.EqualValues(t, 1, next, id)
+	}
+	var output string
+	var truncated bool
+	require.NoError(t, db.Raw("SELECT output,output_truncated FROM activities WHERE id='compact-run'").Row().Scan(&output, &truncated))
+	require.JSONEq(t, `[{"text":"old runtime output"}]`, output)
+	require.True(t, truncated, "004 must expose lost sequence history for preexisting runtime output")
+	var count int64
+	require.NoError(t, db.Table("runtime_removed_targets").Count(&count).Error)
+	require.Zero(t, count, "004 must not invent removed registrations")
+	require.NoError(t, db.Exec("UPDATE runtime_receipts SET output_next_seq=8 WHERE run_id='compact-run'").Error)
+	require.NoError(t, db.Exec("UPDATE activities SET runtime_output=?,runtime_step_trace=? WHERE id='compact-run'", `[{"outputSeq":7,"text":"new runtime output"}]`, `[{"code":"runtime.succeeded"}]`).Error)
+	require.NoError(t, db.Exec("INSERT INTO activity_messages(id,created_at,activity_id,level,message,runtime_remote) VALUES('remote-message',1760000000000003,'compact-run','info','remote output',1)").Error)
+	require.NoError(t, db.Exec("INSERT INTO runtime_removed_targets(registration_id,manager_id,environment_id,store_generation,executor_generation,removed_at) VALUES('removed-registration','manager','removed-environment','fixture-generation','executor-generation',?)", stamp).Error)
+}
+
+func assertRuntimeOutputPersists(t *testing.T, db *DB, stamp time.Time) {
+	t.Helper()
+	var output, steps, message string
+	var remote, truncated bool
+	var next int64
+	require.NoError(t, db.Raw("SELECT runtime_output,runtime_step_trace FROM activities WHERE id='compact-run'").Row().Scan(&output, &steps))
+	require.JSONEq(t, `[{"outputSeq":7,"text":"new runtime output"}]`, output)
+	require.JSONEq(t, `[{"code":"runtime.succeeded"}]`, steps)
+	require.NoError(t, db.Raw("SELECT output_next_seq FROM runtime_receipts WHERE run_id='compact-run'").Row().Scan(&next))
+	require.EqualValues(t, 8, next)
+	require.NoError(t, db.Raw("SELECT output_next_seq FROM runtime_receipts WHERE run_id='compact-negative'").Row().Scan(&next))
+	require.EqualValues(t, 1, next)
+	require.NoError(t, db.Raw("SELECT message,runtime_remote FROM activity_messages WHERE id='remote-message'").Row().Scan(&message, &remote))
+	require.Equal(t, "remote output", message)
+	require.True(t, remote)
+	require.NoError(t, db.Raw("SELECT runtime_remote FROM activity_messages WHERE id='retained-message'").Row().Scan(&remote))
+	require.False(t, remote)
+	for _, id := range []string{"retained-run", "legacy-output"} {
+		require.NoError(t, db.Raw("SELECT runtime_output,runtime_step_trace FROM activities WHERE id=?", id).Row().Scan(&output, &steps))
+		require.Equal(t, "[]", output, id)
+		require.Equal(t, "[]", steps, id)
+	}
+	require.NoError(t, db.Raw("SELECT output,output_truncated FROM activities WHERE id='legacy-output'").Row().Scan(&output, &truncated))
+	require.JSONEq(t, `[{"text":"legacy output"}]`, output)
+	require.False(t, truncated, "004 must not mark unrelated legacy output as lost runtime history")
+	var manager, environment, generation, executor string
+	var removed time.Time
+	require.NoError(t, db.Raw("SELECT manager_id,environment_id,store_generation,executor_generation,removed_at FROM runtime_removed_targets WHERE registration_id='removed-registration'").Row().Scan(&manager, &environment, &generation, &executor, &removed))
+	require.Equal(t, "manager", manager)
+	require.Equal(t, "removed-environment", environment)
+	require.Equal(t, "fixture-generation", generation)
+	require.Equal(t, "executor-generation", executor)
+	require.Equal(t, stamp, removed)
 }
