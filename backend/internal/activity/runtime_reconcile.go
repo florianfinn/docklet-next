@@ -39,6 +39,9 @@ func (s *RuntimeService) remoteUnknownInternal(ctx context.Context, ref RuntimeR
 		if err != nil {
 			return err
 		}
+		if *row.ExecutorState != "unknown" || row.UnknownReason == nil || *row.UnknownReason != reason {
+			return &runtimeConflictInternal{}
+		}
 		if !unchanged {
 			message = &ActivityMessage{BaseModel: database.BaseModel{ID: uuid.NewString(), CreatedAt: now, UpdatedAt: new(now)}, ActivityID: row.RunID, Code: string(activitytypes.CodeRuntimeOutcomeUnknown), Level: activitytypes.MessageLevelWarning, Message: "Runtime outcome unknown", Payload: database.JSON{"reason": reason, "operation": *row.OperationID}}
 			if err := runtimeReceiverCreateTxInternal(tx, message); err != nil {
@@ -68,10 +71,14 @@ func (s *RuntimeService) remoteUnknownInternal(ctx context.Context, ref RuntimeR
 // Refresh shares one application-owned bounded query cycle per run. Viewer
 // cancellation detaches only its wait. A failed host has no recurring poll loop.
 func (c *RuntimeRemoteCoordinator) Refresh(ctx context.Context, ref RuntimeRunReference) (activitytypes.RuntimeSnapshot, error) {
+	return c.refreshInternal(ctx, ref, false)
+}
+func (c *RuntimeRemoteCoordinator) refreshInternal(ctx context.Context, ref RuntimeRunReference, force bool) (activitytypes.RuntimeSnapshot, error) {
 	snapshot, err := c.Snapshot(ctx, ref)
 	if err != nil {
 		return activitytypes.RuntimeSnapshot{}, err
 	}
+
 	c.mu.Lock()
 	if c.recovering[ref.RunID] {
 		c.mu.Unlock()
@@ -79,7 +86,7 @@ func (c *RuntimeRemoteCoordinator) Refresh(ctx context.Context, ref RuntimeRunRe
 	}
 	task := c.queries[ref.RunID]
 	if task == nil {
-		if snapshot.OutcomeState == activitytypes.RuntimeOutcomeKnown && !isTerminalActivityStatusInternal(snapshot.Status) {
+		if !force && snapshot.OutcomeState == activitytypes.RuntimeOutcomeKnown && !isTerminalActivityStatusInternal(snapshot.Status) {
 			if last, ok := c.lastQuery[ref.RunID]; ok && c.schedule.Now().Sub(last) < 2*time.Second {
 				c.mu.Unlock()
 				return snapshot, nil
@@ -90,7 +97,18 @@ func (c *RuntimeRemoteCoordinator) Refresh(ctx context.Context, ref RuntimeRunRe
 		c.queries[ref.RunID] = task
 		c.lastQuery[ref.RunID] = c.schedule.Now()
 		go func() {
-			defer func() { cancel(); c.mu.Lock(); delete(c.queries, ref.RunID); close(task.done); c.mu.Unlock() }()
+			defer func() {
+				cancel()
+				snapshot, err := c.Snapshot(context.WithoutCancel(taskCtx), ref)
+				c.mu.Lock()
+				delete(c.queries, ref.RunID)
+				if err == nil && isTerminalActivityStatusInternal(snapshot.Status) {
+					delete(c.stamps, ref.RunID)
+					delete(c.lastQuery, ref.RunID)
+				}
+				close(task.done)
+				c.mu.Unlock()
+			}()
 			c.reconcileInternal(taskCtx, ref)
 		}()
 	}
@@ -121,6 +139,9 @@ func (c *RuntimeRemoteCoordinator) reconcileInternal(ctx context.Context, ref Ru
 		started := c.schedule.Now()
 		transport, err := c.transport(budget, ref.Store)
 		var outcome activitytypes.RuntimeExecutionOutcome
+		if err == nil && transport == nil {
+			err = ErrRuntimeTransport
+		}
 		if err == nil {
 			outcome, err = transport.Query(budget, id)
 		}
@@ -236,5 +257,5 @@ func (c *RuntimeRemoteCoordinator) Cancel(ctx context.Context, ref RuntimeRunRef
 	if pending {
 		return snapshot, nil
 	}
-	return c.Refresh(ctx, ref)
+	return c.refreshInternal(ctx, ref, true)
 }

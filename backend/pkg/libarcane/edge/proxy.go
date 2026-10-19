@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: None
+// Deviations: Local module namespace; bounded runtime response assembly and pending identity protection.
 
 package edge
 
@@ -56,6 +56,9 @@ func ProxyRequest(ctx context.Context, tunnel *AgentTunnel, method, path, query 
 }
 
 func registerPendingRequestInternal(tunnel *AgentTunnel, requestID string) (*PendingRequest, error) {
+	return registerBoundedPendingRequestInternal(tunnel, requestID, 0)
+}
+func registerBoundedPendingRequestInternal(tunnel *AgentTunnel, requestID string, limit int) (*PendingRequest, error) {
 	if requestID == "" {
 		return nil, errors.New("request ID is required")
 	}
@@ -64,7 +67,16 @@ func registerPendingRequestInternal(tunnel *AgentTunnel, requestID string) (*Pen
 		ResponseCh: make(chan *TunnelMessage, 256),
 		failureCh:  make(chan error, 1),
 	}
-	tunnel.Pending.Store(requestID, pending)
+	tunnel.mu.Lock()
+	defer tunnel.mu.Unlock()
+	count := 0
+	tunnel.Pending.Range(func(_, _ any) bool { count++; return true })
+	if limit > 0 && count >= limit {
+		return nil, errors.New("runtime pending limit")
+	}
+	if _, exists := tunnel.Pending.LoadOrStore(requestID, pending); exists {
+		return nil, errors.New("duplicate pending request")
+	}
 	return pending, nil
 }
 
@@ -79,12 +91,12 @@ func collectCommandResponseBoundedInternal(ctx context.Context, tunnel *AgentTun
 		case <-ctx.Done():
 			return 0, nil, nil, ctx.Err()
 		case <-tunnel.done:
-			if done, status, headers, body, err := state.drainTerminalResponseInternal(pending.ResponseCh, method); done {
+			if done, status, headers, body, err := state.drainTerminalResponseBoundedInternal(pending.ResponseCh, method, limit); done {
 				return status, headers, body, err
 			}
 			return 0, nil, nil, fmt.Errorf("edge tunnel closed while waiting for response: %w", ErrTunnelConnectionClosed)
 		case err := <-pending.failureCh:
-			if done, status, headers, body, drainTerminalResponseErr := state.drainTerminalResponseInternal(pending.ResponseCh, method); done {
+			if done, status, headers, body, drainTerminalResponseErr := state.drainTerminalResponseBoundedInternal(pending.ResponseCh, method, limit); done {
 				return status, headers, body, drainTerminalResponseErr
 			}
 			return 0, nil, nil, err
@@ -138,11 +150,17 @@ func (s *grpcResponseState) handleTunnelMessageInternal(method string, incoming 
 }
 
 func (s *grpcResponseState) drainTerminalResponseInternal(respCh <-chan *TunnelMessage, method string) (bool, int, map[string]string, []byte, error) {
+	return s.drainTerminalResponseBoundedInternal(respCh, method, 0)
+}
+func (s *grpcResponseState) drainTerminalResponseBoundedInternal(respCh <-chan *TunnelMessage, method string, limit int) (bool, int, map[string]string, []byte, error) {
 	for {
 		select {
 		case incoming, ok := <-respCh:
 			if !ok {
 				return true, 0, nil, nil, fmt.Errorf("edge tunnel response channel closed before a response was received: %w", ErrTunnelConnectionClosed)
+			}
+			if limit > 0 && incoming != nil && s.respBody.Len()+len(incoming.Body) > limit {
+				return true, 0, nil, nil, errors.New("runtime response too large")
 			}
 			if done, status, headers, body, err := s.handleTunnelMessageInternal(method, incoming); done {
 				return true, status, headers, body, err

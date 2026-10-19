@@ -24,7 +24,7 @@ const (
 
 // RuntimeTarget contains a canonical raw ID, not a browser host~ID or alias.
 // ParentProjectID is explicit null for a stack or an unparented container; a
-// non-null parent is the persisted project ID. Name is display attribution only.
+// non-null parent is the persisted project ID. Name is outside the semantic digest; stack execution rechecks the receiver-local resolved Compose name.
 type RuntimeTarget struct {
 	Kind            string  `json:"kind"`
 	ID              string  `json:"id"`
@@ -101,7 +101,7 @@ type RuntimeExecutionOutcome struct {
 // RuntimeExecutionDetail preserves existing activity/message/step vocabulary.
 // Activity times are executor times, never cross-host ordering evidence. Metadata
 // and message payloads are observations, never command or permission inputs.
-// C5 owns capped-window production, validation, replacement and progress relay.
+// Producers and consumers enforce the bounded window, validation and unseen-line relay.
 type RuntimeExecutionDetail struct {
 	Activity         RuntimeSnapshot              `json:"activity"`
 	Messages         []Message                    `json:"messages"`

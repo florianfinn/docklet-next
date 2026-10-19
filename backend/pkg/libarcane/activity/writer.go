@@ -53,11 +53,12 @@ const (
 )
 
 type writerAppendMessage struct {
-	level   activitytypes.MessageLevel
-	message string
-	payload database.JSON
-	step    string
-	output  *activitytypes.OutputLine
+	level           activitytypes.MessageLevel
+	message         string
+	payload         database.JSON
+	step            string
+	output          *activitytypes.OutputLine
+	outputTruncated bool
 }
 
 type writerQueueItem struct {
@@ -312,11 +313,12 @@ func doneInternal(ctx context.Context) <-chan struct{} {
 // Runtime capture owns its output independently from execution cancellation.
 // ingress serializes extraction through enqueue; the drain never acquires it.
 type runtimeWriterInternal struct {
-	ingress    sync.Mutex
-	finishOnce sync.Once
-	done       chan struct{}
-	sealed     bool // protected by Writer.mu, as is firstError
-	firstError error
+	ingress       sync.Mutex
+	finishOnce    sync.Once
+	done          chan struct{}
+	sealed        bool // protected by Writer.mu, as is firstError
+	firstError    error
+	lineTruncated bool
 }
 
 var ErrWriterFinished = errors.New("runtime output is finished")
@@ -374,36 +376,11 @@ func (w *Writer) Finish(waitCtx context.Context) error {
 	}
 }
 
-func (w *Writer) writeRuntimeInternal(p []byte) (int, error) {
-	w.runtime.ingress.Lock()
-	defer w.runtime.ingress.Unlock()
-	w.mu.Lock()
-	if w.runtime.sealed {
-		w.mu.Unlock()
-		return 0, ErrWriterFinished
-	}
-	var messages []writerAppendMessage
-	w.buffer = append(w.buffer, p...)
-	for {
-		idx := bytes.IndexByte(w.buffer, '\n')
-		if idx < 0 {
-			break
-		}
-		messages = append(messages, w.captureLineInternal(string(w.buffer[:idx])))
-		w.buffer = w.buffer[idx+1:]
-	}
-	w.mu.Unlock()
-	for i := range messages {
-		w.queueCh <- writerQueueItem{message: &messages[i]}
-	}
-	return len(p), nil
-}
-
 func (w *Writer) enqueueRuntimeTailInternal() {
 	w.mu.Lock()
 	var tail *writerAppendMessage
 	if len(w.buffer) > 0 {
-		item := w.captureLineInternal(string(w.buffer))
+		item := w.runtimeCaptureLineInternal()
 		tail = &item
 		w.buffer = nil
 	}
@@ -443,7 +420,7 @@ func (w *Writer) drainRuntimeInternal() {
 				flushes = append(flushes, item.flush)
 			}
 			if m := item.message; m != nil {
-				batch = append(batch, AppendMessageRequest{Level: m.level, Message: m.message, Payload: m.payload, Step: m.step, Output: m.output})
+				batch = append(batch, AppendMessageRequest{Level: m.level, Message: m.message, Payload: m.payload, Step: m.step, Output: m.output, OutputTruncated: m.outputTruncated})
 			}
 		}
 		collect(item)

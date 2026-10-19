@@ -50,14 +50,13 @@ func (s *RuntimeService) applyRemoteInternal(ctx context.Context, ref RuntimeRun
 			snapshot, err = runtimeSnapshotTxInternal(tx, row)
 			return err
 		}
-		state := "executing"
-		if d.Activity.Status == activitytypes.StatusQueued {
-			state = "accepted"
+		// Active is authoritative receipt acceptance, not proof that effects
+		// started. The carrier does not supply a separate executing timestamp.
+		state := "accepted"
+		if *row.ExecutorState == "executing" {
+			state = "executing"
 		}
 		evidence := runtimeEvidenceInternal{State: state, StartedAt: copyPtrInternal(row.ExecutorStartedAt)}
-		if state == "executing" && evidence.StartedAt == nil {
-			evidence.StartedAt = new(d.Activity.StartedAt)
-		}
 		if terminal {
 			evidence.State = string(d.Activity.Status)
 			evidence.SettledAt = d.Activity.EndedAt
@@ -83,6 +82,9 @@ func (s *RuntimeService) applyRemoteInternal(ctx context.Context, ref RuntimeRun
 		row, err = runtimeEvidenceTxInternal(tx, now, id, evidence)
 		if err != nil {
 			return err
+		}
+		if *row.ExecutorState != evidence.State || !runtimeEqualInternal(row.ExecutorSettledAt, runtimeExecutorTimeInternal(evidence.SettledAt)) || !runtimeEqualInternal(row.ExecutorResultCode, evidence.ResultCode) {
+			return &runtimeConflictInternal{}
 		}
 		if fromQuery {
 			if err := runtimeUpdateTxInternal(tx, now, row, map[string]any{"last_reconciled_at": now}); err != nil {
@@ -116,10 +118,17 @@ func (s *RuntimeService) applyRemoteInternal(ctx context.Context, ref RuntimeRun
 		for _, line := range d.Output {
 			legacy = append(legacy, line.OutputLine)
 		}
-		updates := map[string]any{"status": d.Activity.Status, "progress": d.Activity.Progress, "step": d.Activity.Step, "latest_message": d.Activity.LatestMessage, "message_code": d.Activity.MessageCode, "affected_services": database.JSON{"services": d.Activity.AffectedServices}, "output": legacy, "runtime_output": RuntimeOutputLines(d.Output), "output_truncated": d.OutputTruncated, "updated_at": now, "error": d.Activity.Error}
+		updates := map[string]any{"status": d.Activity.Status, "progress": d.Activity.Progress, "step": d.Activity.Step, "latest_message": d.Activity.LatestMessage, "message_code": d.Activity.MessageCode, "affected_services": servicesJSONInternal(d.Activity.AffectedServices), "metadata": database.JSON(d.Activity.Metadata), "runtime_step_trace": RuntimeStepTrace(d.StepTrace), "output": legacy, "runtime_output": RuntimeOutputLines(d.Output), "output_truncated": model.OutputTruncated || d.OutputTruncated, "updated_at": now, "error": d.Activity.Error}
 		if terminal {
 			updates["ended_at"], updates["duration_ms"] = now, now.Sub(model.StartedAt).Milliseconds()
-			final = &ActivityMessage{BaseModel: database.BaseModel{ID: uuid.NewString(), CreatedAt: now, UpdatedAt: new(now)}, ActivityID: row.RunID, Code: d.Activity.MessageCode, Level: activitytypes.MessageLevelInfo, Message: "Remote workflow settled; effects unverified", Payload: database.JSON{"actorId": *row.CallerID, "operation": *row.OperationID, "effectVerified": false}}
+			level := activitytypes.MessageLevelSuccess
+			if d.Activity.Status == activitytypes.StatusFailed {
+				level = activitytypes.MessageLevelError
+			}
+			if d.Activity.Status == activitytypes.StatusCancelled {
+				level = activitytypes.MessageLevelWarning
+			}
+			final = &ActivityMessage{BaseModel: database.BaseModel{ID: uuid.NewString(), CreatedAt: now, UpdatedAt: new(now)}, ActivityID: row.RunID, Code: d.Activity.MessageCode, Level: level, Message: "Remote workflow settled; effects unverified", Payload: database.JSON{"actorId": *row.CallerID, "operation": *row.OperationID, "effectVerified": false}}
 			if err := runtimeReceiverCreateTxInternal(tx, final); err != nil {
 				return err
 			}
@@ -146,6 +155,9 @@ func (s *RuntimeService) applyRemoteInternal(ctx context.Context, ref RuntimeRun
 		}
 		if err := runtimeUpdateTxInternal(tx, now, row, map[string]any{"output_next_seq": max(row.OutputNextSeq, next)}); err != nil {
 			return err
+		}
+		if row.OutputNextSeq < next {
+			return &runtimeConflictInternal{}
 		}
 		snapshot, err = runtimeSnapshotTxInternal(tx, row)
 		changed = err == nil
@@ -180,6 +192,9 @@ func runtimeHubDispositionTxInternal(tx *gorm.DB, now time.Time, row *RuntimeRec
 	row, err := runtimeDispositionTxInternal(tx, now, runtimeRowIdentityInternal(row), disposition)
 	if err != nil {
 		return empty, nil, err
+	}
+	if row.HubDisposition == nil || *row.HubDisposition != disposition.Disposition || row.SettledAt == nil {
+		return empty, nil, &runtimeConflictInternal{}
 	}
 	code := activitytypes.CodeRuntimeInterrupted
 	status := activitytypes.StatusFailed

@@ -9,3 +9,5 @@ ALTER TABLE runtime_receipts ADD COLUMN "output_next_seq" INTEGER NOT NULL DEFAU
 ALTER TABLE activities ADD COLUMN "runtime_output" TEXT NOT NULL DEFAULT '[]';
 ALTER TABLE activity_messages ADD COLUMN "runtime_remote" numeric NOT NULL DEFAULT false;
 CREATE TABLE "runtime_removed_targets" ("registration_id" TEXT NOT NULL,"manager_id" TEXT NOT NULL,"environment_id" TEXT NOT NULL,"store_generation" TEXT NOT NULL,"executor_generation" TEXT NOT NULL,"removed_at" datetime NOT NULL,PRIMARY KEY ("registration_id"));
+UPDATE activities SET output_truncated = true WHERE id IN (SELECT run_id FROM runtime_receipts WHERE kind = 'receipt') AND output <> '[]';
+ALTER TABLE activities ADD COLUMN "runtime_step_trace" TEXT NOT NULL DEFAULT '[]';

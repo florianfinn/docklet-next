@@ -12,8 +12,10 @@ import (
 	"encoding/json/v2"
 	"errors"
 	"io"
+	"mime"
 	"net/http"
 	"net/url"
+	"strings"
 	"time"
 
 	"github.com/florianfinn/docklet-next/backend/pkg/libarcane/edge"
@@ -64,13 +66,17 @@ func NewRuntimeSender(target RuntimeRemoteTarget, access remenv.AgentAccessCheck
 		copyClient.Timeout = 30 * time.Minute
 	}
 	// Only the standard one-shot transport is supported; no caller retry wrapper.
-	if client.Transport != nil {
-		transport, ok := client.Transport.(*http.Transport)
-		if !ok {
-			return nil, ErrRuntimeTransport
-		}
-		copyClient.Transport = transport.Clone()
+	transport := client.Transport
+	if transport == nil {
+		transport = http.DefaultTransport
 	}
+	standard, ok := transport.(*http.Transport)
+	if !ok {
+		return nil, ErrRuntimeTransport
+	}
+	copyClient.Transport = standard.Clone()
+	copyClient.Transport.(*http.Transport).DisableKeepAlives = true
+
 	if !target.Edge {
 		u, err := url.Parse(target.Endpoint)
 		if err != nil || u.Host == "" || u.User != nil || u.RawQuery != "" || u.Fragment != "" || (u.Scheme != "http" && u.Scheme != "https") || (u.Path != "" && u.Path != "/") {
@@ -116,6 +122,7 @@ func (s *RuntimeSender) request(ctx context.Context, method, path, query string,
 	}
 	headers := map[string]string{"Content-Type": "application/json", "Accept": "application/json", remenv.HeaderAgentToken: s.target.Token}
 	var status int
+	var contentType string
 	var response []byte
 	if s.target.Edge {
 		if s.tunnels == nil {
@@ -134,6 +141,11 @@ func (s *RuntimeSender) request(ctx context.Context, method, path, query string,
 			return empty, ErrRuntimeTransport
 		}
 		status, response = result.Status, result.Body
+		for key, value := range result.Headers {
+			if strings.EqualFold(key, "Content-Type") {
+				contentType = value
+			}
+		}
 	} else {
 		endpoint := s.target.Endpoint
 		if endpoint[len(endpoint)-1:] == "/" {
@@ -166,6 +178,11 @@ func (s *RuntimeSender) request(ctx context.Context, method, path, query string,
 			return empty, ErrRuntimeTransport
 		}
 		status = resp.StatusCode
+		contentType = resp.Header.Get("Content-Type")
+	}
+	media, _, mediaErr := mime.ParseMediaType(contentType)
+	if mediaErr != nil || media != "application/json" {
+		return empty, ErrRuntimeTransport
 	}
 	if len(response) > activitytypes.RuntimeMaxBodyBytes {
 		return empty, ErrRuntimeTransport

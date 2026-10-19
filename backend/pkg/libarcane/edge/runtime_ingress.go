@@ -62,6 +62,9 @@ type runtimeRequestIngressInternal struct {
 	stop       func() bool
 	transferID string
 	running    bool
+	expired    chan struct{}
+	done       chan struct{}
+	finished   sync.Once
 }
 
 func (c *TunnelClient) scheduleRuntimeRequestInternal(ctx context.Context, conn TunnelConnection, msg *TunnelMessage, workers *sync.WaitGroup, command bool) {
@@ -78,7 +81,7 @@ func (c *TunnelClient) scheduleRuntimeRequestInternal(ctx context.Context, conn 
 		timeout = min(timeout, time.Duration(min(msg.TimeoutMillis, int64(300000)))*time.Millisecond)
 	}
 	requestCtx, cancel := context.WithTimeout(ctx, timeout)
-	entry := &runtimeRequestIngressInternal{conn: conn, ctx: requestCtx, cancel: cancel, transferID: strings.TrimSpace(msg.Metadata[bodyTransferMetadataKey])}
+	entry := &runtimeRequestIngressInternal{expired: make(chan struct{}), done: make(chan struct{}), conn: conn, ctx: requestCtx, cancel: cancel, transferID: strings.TrimSpace(msg.Metadata[bodyTransferMetadataKey])}
 	c.runtimeRequestMu.Lock()
 	if c.runtimeRequests == nil {
 		c.runtimeRequests = make(map[string]*runtimeRequestIngressInternal)
@@ -90,7 +93,7 @@ func (c *TunnelClient) scheduleRuntimeRequestInternal(ctx context.Context, conn 
 		return
 	}
 	c.runtimeRequests[msg.ID] = entry
-	entry.stop = context.AfterFunc(requestCtx, func() { c.expireRuntimeRequestInternal(msg.ID, entry) })
+	entry.stop = context.AfterFunc(requestCtx, func() { defer close(entry.expired); c.expireRuntimeRequestInternal(msg.ID, entry) })
 	c.runtimeRequestMu.Unlock()
 	if entry.transferID != "" && command {
 		c.beginCommandRequestTransferInternal(requestCtx, conn, entry.transferID, msg)
@@ -112,13 +115,16 @@ func (c *TunnelClient) startRuntimeHandlerInternal(ctx context.Context, conn Tun
 	c.runtimeRequestMu.Unlock()
 	workers.Go(func() {
 		defer func() {
-			entry.stop()
+			if !entry.stop() {
+				<-entry.expired
+			}
 			entry.cancel()
 			c.runtimeRequestMu.Lock()
 			if c.runtimeRequests[msg.ID] == entry {
 				delete(c.runtimeRequests, msg.ID)
 			}
 			c.runtimeRequestMu.Unlock()
+			entry.finished.Do(func() { close(entry.done) })
 		}()
 		if ctx.Err() != nil {
 			return
@@ -133,20 +139,18 @@ func (c *TunnelClient) startRuntimeHandlerInternal(ctx context.Context, conn Tun
 func (c *TunnelClient) expireRuntimeRequestInternal(id string, entry *runtimeRequestIngressInternal) {
 	c.runtimeRequestMu.Lock()
 	defer c.runtimeRequestMu.Unlock()
-	if c.runtimeRequests[id] != entry {
-		return
-	}
 	if entry.transferID != "" {
 		if value, ok := c.requestTransfers.Load(entry.transferID); ok {
-			if transfer, ok := value.(*commandRequestTransfer); ok && transfer.request.ID == id && transfer.conn == entry.conn {
+			if transfer, ok := value.(*commandRequestTransfer); ok && transfer.request.ID == id && transfer.conn == entry.conn && transfer.ctx == entry.ctx {
 				if c.requestTransfers.CompareAndDelete(entry.transferID, transfer) {
 					transfer.stopInternal()
 				}
 			}
 		}
 	}
-	if !entry.running {
+	if !entry.running && c.runtimeRequests[id] == entry {
 		delete(c.runtimeRequests, id)
+		entry.finished.Do(func() { close(entry.done) })
 	}
 }
 func (c *TunnelClient) cancelRuntimeRequestInternal(conn TunnelConnection, id string) {
@@ -160,14 +164,15 @@ func (c *TunnelClient) cancelRuntimeRequestInternal(conn TunnelConnection, id st
 }
 func (c *TunnelClient) cancelRuntimeSessionInternal(conn TunnelConnection) {
 	c.runtimeRequestMu.Lock()
-	var entries []*runtimeRequestIngressInternal
-	for _, entry := range c.runtimeRequests {
+	entries := make(map[string]*runtimeRequestIngressInternal)
+	for id, entry := range c.runtimeRequests {
 		if entry.conn == conn {
-			entries = append(entries, entry)
+			entries[id] = entry
 		}
 	}
 	c.runtimeRequestMu.Unlock()
-	for _, entry := range entries {
+	for id, entry := range entries {
 		entry.cancel()
+		c.expireRuntimeRequestInternal(id, entry)
 	}
 }

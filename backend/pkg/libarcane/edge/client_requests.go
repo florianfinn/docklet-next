@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; extracted focused request, stream and recorder ownership
+// Deviations: Local module namespace; extracted request handling with dormant bounded runtime ingress and cancellation.
 
 package edge
 
@@ -98,6 +98,9 @@ func (c *TunnelClient) beginCommandRequestTransferInternal(ctx context.Context, 
 	if loaded {
 		if previous, ok := previous.(*commandRequestTransfer); ok {
 			previous.stopInternal()
+			if runtimeRequestPathInternal(previous.request.Path) {
+				c.cancelRuntimeRequestInternal(previous.conn, previous.request.ID)
+			}
 			c.sendCommandCompleteInternal(previous.conn, previous.request.ID, http.StatusBadRequest, "duplicate command body transfer ID")
 		}
 	}
@@ -122,6 +125,9 @@ func (c *TunnelClient) handleCommandRequestChunkInternal(ctx context.Context, ms
 	if msg.Sequence != transfer.nextSequence {
 		if c.requestTransfers.CompareAndDelete(msg.ID, transfer) {
 			transfer.stopInternal()
+			if runtimeRequestPathInternal(transfer.request.Path) {
+				c.cancelRuntimeRequestInternal(transfer.conn, transfer.request.ID)
+			}
 			c.sendCommandCompleteInternal(transfer.conn, transfer.request.ID, http.StatusBadRequest, "command body chunks arrived out of order")
 		}
 		return
@@ -226,7 +232,7 @@ func (c *TunnelClient) buildLocalHTTPRequest(ctx context.Context, msg *TunnelMes
 		return nil, err
 	}
 
-	if bodyBytes != nil {
+	if bodyBytes != nil && !runtimeRequestPathInternal(msg.Path) {
 		req.GetBody = func() (io.ReadCloser, error) {
 			return io.NopCloser(bytes.NewReader(bodyBytes)), nil
 		}

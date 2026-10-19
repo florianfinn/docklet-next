@@ -169,7 +169,7 @@ func (s *RuntimeService) localPhaseInternal(owner *runtimeOwnerInternal, executi
 
 func runtimeResultInternal(owner *runtimeOwnerInternal, workflowErr, outputErr error, now time.Time) *runtimeLocalResultInternal {
 	result := &runtimeLocalResultInternal{state: "success", code: activitytypes.CodeActivitySuccess,
-		message: "Runtime workflow completed", settledAt: now, startedAt: copyPtrInternal(owner.startedAt)}
+		outputLost: outputErr != nil, message: "Runtime workflow completed", settledAt: now, startedAt: copyPtrInternal(owner.startedAt)}
 	switch {
 	case owner.cancelRequested:
 		result.state, result.code, result.message = "cancelled", activitytypes.CodeRuntimeCancelled, "Runtime workflow cancelled; effects unverified"

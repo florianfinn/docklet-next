@@ -51,7 +51,7 @@ func runtimeAppendOutputTxInternal(tx *gorm.DB, current *Activity, updates map[s
 	}
 	next := row.OutputNextSeq
 	window := append(RuntimeOutputLines{}, current.RuntimeOutput...)
-	cut := current.OutputTruncated
+	cut := current.OutputTruncated || updates["output_truncated"] == true
 	for _, line := range incoming {
 		entry := activitytypes.RuntimeExecutionOutputLine{OutputLine: line, OutputSeq: next}
 		next++
@@ -117,3 +117,14 @@ func runtimeAppendOutputTxInternal(tx *gorm.DB, current *Activity, updates map[s
 	updates["runtime_output"], updates["output"], updates["output_truncated"] = window, legacy, cut
 	return nil
 }
+
+// RuntimeStepTrace retains only the current bounded executor projection window.
+type RuntimeStepTrace []activitytypes.StepTraceEntry
+
+func (v RuntimeStepTrace) Value() (driver.Value, error) {
+	if v == nil {
+		v = RuntimeStepTrace{}
+	}
+	return database.JSONValue(false, []activitytypes.StepTraceEntry(v))
+}
+func (v *RuntimeStepTrace) Scan(value any) error { return database.JSONScan(v, value) }

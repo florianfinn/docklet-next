@@ -12,6 +12,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/florianfinn/docklet-next/backend/internal/common"
 	"github.com/florianfinn/docklet-next/backend/internal/middleware"
 	"github.com/florianfinn/docklet-next/backend/internal/user"
 	"github.com/florianfinn/docklet-next/backend/pkg/authz"
@@ -21,7 +22,7 @@ import (
 
 var ErrRuntimeRecoveryDenied = errors.New("runtime recovery permission denied")
 var ErrRuntimeRecoveryInProgress = errors.New("runtime recovery in progress")
-var ErrRuntimeTargetRemoved = errors.New("runtime target removed")
+var ErrRuntimeTargetRemoved = common.NewAPIError("Runtime target removed", common.APIErrorCode(activitytypes.CodeRuntimeTargetRemoved), 410)
 
 type RuntimeRemovedTarget struct {
 	RegistrationID     string    `gorm:"column:registration_id;primaryKey;not null"`

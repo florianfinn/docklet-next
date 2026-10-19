@@ -43,6 +43,7 @@ type Activity struct {
 	Output               OutputLines        `json:"-" gorm:"column:output;type:text;not null;default:'[]'"`
 	OutputTruncated      bool               `json:"-" gorm:"column:output_truncated;not null;default:false"`
 	RuntimeOutput        RuntimeOutputLines `json:"-" gorm:"column:runtime_output;type:text;not null;default:'[]'"`
+	RuntimeStepTrace     RuntimeStepTrace   `json:"-" gorm:"column:runtime_step_trace;type:text;not null;default:'[]'"`
 }
 
 type OutputLines []activity.OutputLine

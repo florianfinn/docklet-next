@@ -55,6 +55,9 @@ func RuntimeReceiverIngress(next http.Handler, budget time.Duration) http.Handle
 		}()
 		ctx = context.WithValue(ctx, runtimeIngressKey{}, true)
 		req = req.WithContext(ctx)
+		if req.Body == nil {
+			req.Body = http.NoBody
+		}
 		req.Body = http.MaxBytesReader(w, req.Body, activitytypes.RuntimeMaxBodyBytes)
 		next.ServeHTTP(w, req)
 	})

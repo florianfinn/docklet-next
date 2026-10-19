@@ -9,6 +9,12 @@ package activity
 import (
 	"context"
 	"encoding/json/v2"
+	"errors"
+	"github.com/florianfinn/docklet-next/backend/internal/database"
+	"github.com/florianfinn/docklet-next/backend/internal/settings"
+	activitylib "github.com/florianfinn/docklet-next/backend/pkg/libarcane/activity"
+	"github.com/florianfinn/docklet-next/backend/pkg/utils/sqlitestore"
+	"io"
 	"strings"
 	"sync"
 	"testing"
@@ -97,5 +103,83 @@ func TestRuntimeWindowRollbackNeverConsumesCursor(t *testing.T) {
 	require.Len(t, answer.Detail.Output, 1)
 	require.Equal(t, uint64(1), answer.Detail.Output[0].OutputSeq)
 	p.unblock()
+	receiverWait(t, f, e)
+}
+
+func TestRuntimeWindowFailedAppendNeverClaimsLosslessEmpty(t *testing.T) {
+	f := receiverNew(t, func(_ context.Context, _ RuntimeCommand, out io.Writer) error {
+		_, err := out.Write([]byte("lost line\n"))
+		return err
+	})
+	f.service.outputAppender = &b2OutputAppender{ActivityService: f.store.svc, before: func(context.Context, string, []activitylib.AppendMessageRequest) error {
+		return errors.New("synthetic output failure")
+	}}
+	e := receiverEnvelope(t, f.command())
+	receiverExecute(t, f, e)
+	snapshot := receiverWait(t, f, e)
+	require.Equal(t, activitytypes.StatusFailed, snapshot.Status)
+	answer, err := f.receiver.Query(t.Context(), e.Identity)
+	require.NoError(t, err)
+	require.Empty(t, answer.Detail.Output)
+	require.True(t, answer.Detail.OutputTruncated)
+}
+
+func TestRuntimeWindowDisabledPreferenceAndDatabaseReopen(t *testing.T) {
+	f := receiverNew(t, func(_ context.Context, _ RuntimeCommand, out io.Writer) error {
+		_, err := out.Write([]byte("disabled output\n"))
+		return err
+	})
+	preferences, err := settings.NewSettingsService(t.Context(), f.store.svc.db)
+	require.NoError(t, err)
+	require.NoError(t, preferences.SetBoolSetting(t.Context(), "keepActionOutput", false))
+	f.store.svc.settings = preferences
+	e := receiverEnvelope(t, f.command())
+	receiverExecute(t, f, e)
+	receiverWait(t, f, e)
+	answer, err := f.receiver.Query(t.Context(), e.Identity)
+	require.NoError(t, err)
+	require.Empty(t, answer.Detail.Output)
+	require.True(t, answer.Detail.OutputTruncated)
+	require.Equal(t, uint64(2), answer.Detail.RetainedStartSeq)
+	require.NoError(t, preferences.Stop(context.WithoutCancel(t.Context())))
+	require.NoError(t, f.store.svc.db.Close())
+	reopened, err := database.InitializeHub(t.Context(), sqlitestore.URL(f.store.path), database.MigrationOptions{})
+	require.NoError(t, err)
+	defer reopened.Close()
+	var calls int
+	runtime := NewRuntimeService(NewActivityService(reopened, nil), &b1ResolverInternal{}, RuntimeLocalConfig{ApplicationContext: t.Context(), Store: f.receiver.store, Executor: b2ExecutorFunc(func(context.Context, RuntimeCommand, io.Writer) error { calls++; return nil })})
+	receiver, err := NewRuntimeReceiver(runtime)
+	require.NoError(t, err)
+	after, err := receiver.Query(t.Context(), e.Identity)
+	require.NoError(t, err)
+	require.Equal(t, answer, after)
+	duplicate, err := receiver.Execute(t.Context(), e)
+	require.NoError(t, err)
+	require.Equal(t, answer, duplicate)
+	require.Zero(t, calls)
+}
+
+func TestRuntimeWindowLargeActualProducerHasBoundedPositiveDetail(t *testing.T) {
+	entered, release := make(chan struct{}), make(chan struct{})
+	var once sync.Once
+	unblock := func() { once.Do(func() { close(release) }) }
+	f := receiverNew(t, func(_ context.Context, _ RuntimeCommand, out io.Writer) error {
+		_, err := out.Write([]byte(strings.Repeat("x", 100<<10) + "\n"))
+		out.(interface{ Flush() }).Flush()
+		close(entered)
+		<-release
+		return err
+	})
+	t.Cleanup(unblock)
+	e := receiverEnvelope(t, f.command())
+	receiverExecute(t, f, e)
+	b1Await(t, entered)
+	answer, err := f.receiver.Query(t.Context(), e.Identity)
+	require.NoError(t, err)
+	require.Len(t, answer.Detail.Output, 1)
+	require.Len(t, answer.Detail.Output[0].Text, 100<<10)
+	require.Len(t, answer.Detail.Activity.LatestMessage, 8192)
+	require.LessOrEqual(t, len(answer.Detail.Activity.LatestMessage), 16<<10)
+	unblock()
 	receiverWait(t, f, e)
 }

@@ -83,9 +83,11 @@ func (c *RuntimeRemoteCoordinator) Start(ctx context.Context, ref RuntimeRunRefe
 	var envelope activitytypes.RuntimeExecutionEnvelope
 	send := false
 	var final *ActivityMessage
+	stamp := runtimeDispatchStampInternal{mono: c.schedule.Now()}
 	lock := s.activity.publishLockInternal(ref.RunID)
 	lock.Lock()
 	err := s.transactionInternal(ctx, func(tx *gorm.DB, now time.Time) error {
+		stamp.wall = now
 		row, err := runtimeReferenceRowTxInternal(tx, ref)
 		if err != nil {
 			return err
@@ -120,6 +122,9 @@ func (c *RuntimeRemoteCoordinator) Start(ctx context.Context, ref RuntimeRunRefe
 		if err != nil {
 			return err
 		}
+		if *row.DispatchState != "dispatching" || row.DispatchedAt == nil {
+			return &runtimeConflictInternal{}
+		}
 		snapshot, err = runtimeSnapshotTxInternal(tx, row)
 		send = err == nil
 		return err
@@ -140,7 +145,7 @@ func (c *RuntimeRemoteCoordinator) Start(ctx context.Context, ref RuntimeRunRefe
 			return snapshot, ErrRuntimeRecoveryInProgress
 		}
 		c.dispatch[ref.RunID] = task
-		c.stamps[ref.RunID] = runtimeDispatchStampInternal{mono: c.schedule.Now(), wall: s.activity.nowInternal()}
+		c.stamps[ref.RunID] = stamp
 		c.mu.Unlock()
 		go c.dispatchInternal(taskCtx, ref, envelope, task)
 	}
@@ -154,15 +159,23 @@ func (c *RuntimeRemoteCoordinator) Start(ctx context.Context, ref RuntimeRunRefe
 func (c *RuntimeRemoteCoordinator) dispatchInternal(ctx context.Context, ref RuntimeRunReference, envelope activitytypes.RuntimeExecutionEnvelope, task *runtimeRemoteTaskInternal) {
 	defer func() {
 		task.cancel()
+		snapshot, err := c.Snapshot(context.WithoutCancel(ctx), ref)
 		c.mu.Lock()
 		if c.dispatch[ref.RunID] == task {
 			delete(c.dispatch, ref.RunID)
+		}
+		if err == nil && isTerminalActivityStatusInternal(snapshot.Status) {
+			delete(c.stamps, ref.RunID)
+			delete(c.lastQuery, ref.RunID)
 		}
 		close(task.done)
 		c.mu.Unlock()
 	}()
 	transport, err := c.transport(ctx, ref.Store)
 	var outcome activitytypes.RuntimeExecutionOutcome
+	if err == nil && transport == nil {
+		err = ErrRuntimeTransport
+	}
 	if err == nil {
 		outcome, err = transport.Execute(ctx, envelope)
 	}
@@ -231,4 +244,11 @@ func (c *RuntimeRemoteCoordinator) Close(ctx context.Context) error {
 		}
 	}
 	return nil
+}
+
+func (c *RuntimeRemoteCoordinator) forgetTerminalInternal(runID string) {
+	c.mu.Lock()
+	delete(c.stamps, runID)
+	delete(c.lastQuery, runID)
+	c.mu.Unlock()
 }

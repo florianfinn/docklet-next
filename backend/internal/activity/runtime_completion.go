@@ -20,12 +20,13 @@ import (
 // Frozen only after the executor and capture have actually joined. Settlement
 // retries reuse these executor times and codes; they never rerun work or drain.
 type runtimeLocalResultInternal struct {
-	state     string
-	code      activitytypes.Code
-	message   string
-	errorText *string
-	startedAt *time.Time
-	settledAt time.Time
+	outputLost bool
+	state      string
+	code       activitytypes.Code
+	message    string
+	errorText  *string
+	startedAt  *time.Time
+	settledAt  time.Time
 }
 
 // Caller holds runningMu. Only accepted owners use this detached write budget.
@@ -93,6 +94,7 @@ func runtimeCompleteTxInternal(tx *gorm.DB, now time.Time, id runtimeIdentityInt
 	updates["message_code"] = string(result.code)
 	updates["updated_at"] = now
 	updates["error"] = result.errorText
+	updates["output_truncated"] = model.OutputTruncated || result.outputLost
 	changed := tx.Model(&Activity{}).Where("id = ? AND environment_id = ? AND status IN ?", id.RunID, id.EnvironmentID,
 		[]activitytypes.Status{activitytypes.StatusQueued, activitytypes.StatusRunning}).UpdateColumns(updates)
 	if changed.Error != nil {

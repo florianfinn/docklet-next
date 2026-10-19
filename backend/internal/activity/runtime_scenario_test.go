@@ -26,6 +26,8 @@ func TestRuntimeScenarioCancelRepairTwoPoolsAndCompactRetry(t *testing.T) {
 		if err != nil {
 			return err
 		}
+		// Freeze persisted progress before comparing the receipt across repair.
+		output.(interface{ Flush() }).Flush()
 		close(entered)
 		<-ctx.Done()
 		close(childDone) // a known child can still complete after cancellation

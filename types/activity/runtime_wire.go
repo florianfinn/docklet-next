@@ -7,10 +7,13 @@
 package activity
 
 import (
+	"bytes"
 	"encoding/hex"
 	"encoding/json/jsontext"
 	"encoding/json/v2"
 	"errors"
+	"io"
+	"math"
 	"net/url"
 	"reflect"
 	"strings"
@@ -43,6 +46,9 @@ func RuntimeIdentityQuery(id RuntimeRunIdentity) string {
 	return url.Values{"managerId": {id.ManagerID}, "registrationId": {id.RegistrationID}, "executorGeneration": {id.ExecutorGeneration}, "requestDigest": {id.RequestDigest}}.Encode()
 }
 func ParseRuntimeIdentityQuery(runID, raw string) (RuntimeRunIdentity, error) {
+	if len(raw) > 2048 {
+		return RuntimeRunIdentity{}, ErrRuntimeWire
+	}
 	v, err := url.ParseQuery(raw)
 	if err != nil || len(v) != 4 {
 		return RuntimeRunIdentity{}, ErrRuntimeWire
@@ -80,6 +86,16 @@ func RuntimeIdentityValid(id RuntimeRunIdentity) bool {
 func DecodeRuntimeJSON(body []byte, value any) error {
 	if len(body) == 0 || len(body) > RuntimeMaxBodyBytes {
 		return ErrRuntimeWire
+	}
+	decoder := jsontext.NewDecoder(bytes.NewReader(body))
+	for {
+		_, err := decoder.ReadToken()
+		if errors.Is(err, io.EOF) {
+			break
+		}
+		if err != nil || decoder.StackDepth() > 32 {
+			return ErrRuntimeWire
+		}
 	}
 	if err := json.Unmarshal(body, value, json.RejectUnknownMembers(true)); err != nil {
 		return ErrRuntimeWire
@@ -134,7 +150,7 @@ func runtimeNullShape(body []byte, typ reflect.Type) error {
 		}
 		raw, ok := fields[name]
 		if !ok {
-			if !strings.Contains(tag, "omitempty") && f.Type.Kind() != reflect.Pointer {
+			if !strings.Contains(tag, "omitempty") {
 				return ErrRuntimeWire
 			}
 			continue
@@ -146,7 +162,7 @@ func runtimeNullShape(body []byte, typ reflect.Type) error {
 	return nil
 }
 func ValidateRuntimeExecutionDetail(d *RuntimeExecutionDetail, runID string) error {
-	if d == nil || d.Activity.ID != runID || d.Activity.EnvironmentID != "0" || d.RetainedStartSeq == 0 || len(d.Messages) > 100 || len(d.StepTrace) > 256 || d.Output == nil || d.Messages == nil || d.StepTrace == nil {
+	if d == nil || d.Activity.ID != runID || d.Activity.EnvironmentID != "0" || d.RetainedStartSeq == 0 || d.RetainedStartSeq > math.MaxInt64 || len(d.Messages) > 100 || len(d.StepTrace) > 256 || d.Output == nil || d.Messages == nil || d.StepTrace == nil {
 		return ErrRuntimeWire
 	}
 	if d.Activity.OutcomeState != RuntimeOutcomeKnown {
@@ -157,17 +173,41 @@ func ValidateRuntimeExecutionDetail(d *RuntimeExecutionDetail, runID string) err
 	default:
 		return ErrRuntimeWire
 	}
+	if d.Activity.Progress != nil && (*d.Activity.Progress < 0 || *d.Activity.Progress > 100) {
+		return ErrRuntimeWire
+	}
+	for _, step := range d.StepTrace {
+		if len(step.Name) > 4096 || step.StartedAt.IsZero() {
+			return ErrRuntimeWire
+		}
+		switch step.Status {
+		case StatusQueued, StatusRunning, StatusSuccess, StatusFailed, StatusCancelled:
+		default:
+			return ErrRuntimeWire
+		}
+	}
 	if d.Activity.StartedAt.IsZero() || d.Activity.CreatedAt.IsZero() {
 		return ErrRuntimeWire
 	}
 	for _, m := range d.Messages {
+		switch m.Level {
+		case MessageLevelInfo, MessageLevelWarning, MessageLevelError, MessageLevelSuccess:
+		default:
+			return ErrRuntimeWire
+		}
 		if m.ActivityID != runID || m.ID == "" || len(m.Message) > 65536 || !utf8.ValidString(m.Message) {
 			return ErrRuntimeWire
 		}
 	}
+	if d.RetainedStartSeq > 1 && !d.OutputTruncated {
+		return ErrRuntimeWire
+	}
 	var previous uint64
 	for i, line := range d.Output {
-		if line.OutputSeq == 0 || (i == 0 && line.OutputSeq != d.RetainedStartSeq) || (i > 0 && line.OutputSeq <= previous) || !utf8.ValidString(line.Text) || line.Timestamp.IsZero() {
+		if line.OutputSeq == 0 || line.OutputSeq >= math.MaxInt64 || (i == 0 && line.OutputSeq != d.RetainedStartSeq) || (i > 0 && line.OutputSeq <= previous) || !utf8.ValidString(line.Text) || line.Timestamp.IsZero() {
+			return ErrRuntimeWire
+		}
+		if i > 0 && line.OutputSeq > previous+1 && !d.OutputTruncated {
 			return ErrRuntimeWire
 		}
 		previous = line.OutputSeq
