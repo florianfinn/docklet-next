@@ -630,7 +630,7 @@ func (
 	if err != nil {
 		return nil, pagination.Response{}, err
 	}
-	remote, duplicates, err := s.deduplicateRuntimeRemoteInternal(ctx, environmentID, activities, remote)
+	remote, duplicates, err := s.deduplicateRuntimeRemoteInternal(ctx, environmentID, remote)
 	if err != nil {
 		return nil, pagination.Response{}, err
 	}
@@ -638,7 +638,10 @@ func (
 		item.EnvironmentID = environmentID
 		activities = append(activities, item)
 	}
-	total := max(0, remoteTotal-duplicates) + localTotal
+	total := remoteTotal + localTotal
+	if duplicates != 0 {
+		total = max(0, remoteTotal-duplicates) + localTotal
+	}
 	config := pagination.Config[activity.Activity]{SortBindings: []pagination.SortBinding[activity.Activity]{{
 		Fn: func(a, b activity.Activity) int { return compareActivitiesInternal(a, b, params) },
 	}}}

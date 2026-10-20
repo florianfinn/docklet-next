@@ -83,26 +83,24 @@ func (s *ActivityService) projectRuntimeListInternal(ctx context.Context, items 
 	})
 }
 
-// Duplicate agent observations never replace a hub receipt projection. Compact
-// ownership also prevents cleared hub history reappearing from agent history.
-func (s *ActivityService) deduplicateRuntimeRemoteInternal(ctx context.Context, environment string, local, remote []activitytypes.Activity) ([]activitytypes.Activity, int64, error) {
-	owned := make(map[string]bool, len(local))
-	for _, item := range local {
-		owned[item.ID] = true
+// Receipt ownership alone suppresses agent observations, including after hub
+// history clearing. Unrelated legacy summaries retain their existing merge.
+func (s *ActivityService) deduplicateRuntimeRemoteInternal(ctx context.Context, environment string, remote []activitytypes.Activity) ([]activitytypes.Activity, int64, error) {
+	if s.runtime == nil || len(remote) == 0 {
+		return remote, 0, nil
 	}
-	if s.runtime != nil {
-		for start := 0; start < len(remote); start += 100 {
-			ids := make([]string, 0, min(100, len(remote)-start))
-			for _, item := range remote[start:min(start+100, len(remote))] {
-				ids = append(ids, item.ID)
-			}
-			var matches []string
-			if err := s.db.WithContext(ctx).Model(&RuntimeReceipt{}).Where("environment_id = ? AND run_id IN ? AND kind = 'receipt'", environment, ids).Pluck("run_id", &matches).Error; err != nil {
-				return nil, 0, err
-			}
-			for _, id := range matches {
-				owned[id] = true
-			}
+	owned := make(map[string]bool, len(remote))
+	for start := 0; start < len(remote); start += 100 {
+		ids := make([]string, 0, min(100, len(remote)-start))
+		for _, item := range remote[start:min(start+100, len(remote))] {
+			ids = append(ids, item.ID)
+		}
+		var matches []string
+		if err := s.db.WithContext(ctx).Model(&RuntimeReceipt{}).Where("environment_id = ? AND run_id IN ? AND kind = 'receipt'", environment, ids).Pluck("run_id", &matches).Error; err != nil {
+			return nil, 0, err
+		}
+		for _, id := range matches {
+			owned[id] = true
 		}
 	}
 	out := make([]activitytypes.Activity, 0, len(remote))
@@ -112,7 +110,6 @@ func (s *ActivityService) deduplicateRuntimeRemoteInternal(ctx context.Context, 
 			duplicates++
 			continue
 		}
-		owned[item.ID] = true
 		out = append(out, item)
 	}
 	return out, duplicates, nil
