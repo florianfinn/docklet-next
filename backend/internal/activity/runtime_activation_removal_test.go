@@ -7,6 +7,7 @@
 package activity_test
 
 import (
+	"encoding/json"
 	"io"
 	"net/http"
 	"strings"
@@ -81,6 +82,22 @@ func TestRuntimeActivationEnvironmentRemovalIsAtomicAndOffline(t *testing.T) {
 	require.EqualValues(t, 1, count)
 	status, body = activationCall(t, hub, path, key, "respond-async", nil)
 	require.Equal(t, 410, status, string(body))
-	require.Contains(t, string(body), "runtime.target-removed")
+	var refusal struct {
+		Code string `json:"code"`
+	}
+	require.NoError(t, json.Unmarshal(body, &refusal))
+	require.Equal(t, "runtime.target-removed", refusal.Code)
+	status, body = activationCall(t, hub, path, uuid.NewString(), "respond-async", nil)
+	require.Equal(t, 410, status, string(body))
+	require.NoError(t, json.Unmarshal(body, &refusal))
+	require.Equal(t, "runtime.target-removed", refusal.Code)
 	require.Equal(t, before, executor.services.http.snapshot(), "offline removal and retry never consult the old executor")
+	replacement := activationApp(t, true, uuid.NewString())
+	replacementID := activationRemote(t, hub, replacement, "direct", uuid.NewString())
+	status, body = activationCall(t, hub, "/api/environments/"+replacementID+"/containers/"+runtimeContainerID+"/start", uuid.NewString(), "respond-async", nil)
+	require.Equal(t, 202, status, string(body))
+	activationJoinRun(t, hub, replacement, replacementID, activationRunID(t, body))
+	require.Len(t, runtimeEffectEvents(replacement.services.http.snapshot()), 1, "a new registration does not inherit the removed registration tombstone")
+	require.Equal(t, before, executor.services.http.snapshot())
+
 }

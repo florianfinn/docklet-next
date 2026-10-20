@@ -83,14 +83,6 @@
     "run.cancelling",
     "run.request-mismatch"
   ],
-  "legacyFailureStatuses": {
-    "runtime.outcome-unknown": 503,
-    "runtime.interrupted": 409,
-    "runtime.cancelled": 409,
-    "runtime.failed": 500,
-    "runtime.wait-timeout": 504,
-    "runtime.waiter-disconnected": 408
-  },
   "limits": {
     "deliveryMinutes": 30,
     "admissionMinutes": 5,
@@ -160,5 +152,32 @@
     "runStack": "unavailable until consumer mapping",
     "runContainer": "unavailable until consumer mapping",
     "deployStack": "unavailable until consumer mapping"
+  },
+  "legacyNonStreamingFailureStatuses": {
+    "runtime.outcome-unknown": 503,
+    "runtime.interrupted": 409,
+    "runtime.cancelled": 409,
+    "runtime.failed": 500,
+    "runtime.wait-timeout": 504,
+    "runtime.waiter-disconnected": 408
+  },
+  "legacyStreaming": {
+    "operations": [
+      "deploy-project",
+      "redeploy-project"
+    ],
+    "contentType": "application/x-ndjson",
+    "startedFields": [
+      "type",
+      "activityId"
+    ],
+    "doneOnConfirmedSuccessOnly": true,
+    "postFlushFailureStatus": 200,
+    "postFlushFailureFields": [
+      "error",
+      "code",
+      "activityId"
+    ],
+    "preFlushAdmissionUsesErrorStatus": true
   }
 }

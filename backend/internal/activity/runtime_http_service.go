@@ -110,6 +110,9 @@ func (h *RuntimeHTTPService) admit(ctx context.Context, environmentID, key strin
 		}
 	}
 	if !retained {
+		if err := h.service.refuseRemovedEnvironmentInternal(ctx, environmentID); err != nil {
+			return empty, noRef, err
+		}
 		command.Store, err = h.ports.Store(ctx, environmentID)
 		if err != nil {
 			return empty, noRef, err

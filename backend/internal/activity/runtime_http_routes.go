@@ -126,7 +126,7 @@ func runtimeLegacyResponse(ctx context.Context, service *ActivityService, enviro
 		case errors.Is(err, remenv.ErrAgentUpdateRequired):
 			return runtimeJSONResponse(503, common.NewAPIError("Agent update required", "agent.update-required", 503)), nil
 		case errors.Is(err, ErrRuntimeTargetRemoved):
-			return nil, huma.NewError(410, string(activitytypes.CodeRuntimeTargetRemoved))
+			return runtimeJSONResponse(410, common.NewAPIError("Runtime target removed", common.APIErrorCode(activitytypes.CodeRuntimeTargetRemoved), 410)), nil
 		default:
 			var status huma.StatusError
 			if errors.As(err, &status) {

@@ -30,6 +30,7 @@ func runtimeHTTPContract(api huma.API, operation RuntimeOperation, op *huma.Oper
 		"202": {Description: "New admission only; activityId equals activity.id", Content: map[string]*huma.MediaType{"application/json": {Schema: admission}}},
 		"409": {Description: "Pre-admission minimal authorized conflict or request mismatch; admitted interrupted/cancelled legacy wait carries activityId", Content: map[string]*huma.MediaType{"application/json": {Schema: &huma.Schema{OneOf: []*huma.Schema{schema(reflect.TypeFor[activitytypes.RuntimeConflictResponse]()), schema(reflect.TypeFor[activitytypes.RuntimeFailureResponse]())}}}}},
 	}
+	op.Responses["410"] = &huma.Response{Description: "Removed registration; runtime.target-removed never dispatches", Content: map[string]*huma.MediaType{"application/json": {Schema: schema(reflect.TypeFor[common.APIError]())}}}
 	for _, status := range []int{408, 500, 503, 504} {
 		op.Responses[strconv.Itoa(status)] = &huma.Response{Description: "Admitted non-success carries stable activityId and runtime code; pre-admission unavailability carries no fabricated run", Content: map[string]*huma.MediaType{"application/json": {Schema: &huma.Schema{OneOf: []*huma.Schema{schema(reflect.TypeFor[activitytypes.RuntimeFailureResponse]()), schema(reflect.TypeFor[huma.ErrorModel]()), schema(reflect.TypeFor[common.APIError]())}}}}}
 	}

@@ -1,5 +1,5 @@
 // Source: api/openapi.json
-// Revision: d1e67c8b5d077799405b504ad0d2daffaa896dad6c0191133ffd40a3a204bc6d
+// Revision: ca0a2884ff6576cc2864a1520596db7d17cda53b7d7c6395c6fcf558a91dd7e7
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
 // Deviations: Generated TypeScript declarations from the local Huma export.
@@ -4429,6 +4429,12 @@ export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
         APIError: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example /api/schemas/APIError.json
+             */
+            readonly $schema?: string;
             code: string;
             details?: unknown;
             message: string;
@@ -14436,6 +14442,15 @@ export interface operations {
                     "application/json": components["schemas"]["ActivityRuntimeConflictResponse"] | components["schemas"]["ActivityRuntimeFailureResponse"];
                 };
             };
+            /** @description Removed registration; runtime.target-removed never dispatches */
+            410: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["APIError"];
+                };
+            };
             /** @description Admitted non-success carries stable activityId and runtime code; pre-admission unavailability carries no fabricated run */
             500: {
                 headers: {
@@ -14522,6 +14537,15 @@ export interface operations {
                     "application/json": components["schemas"]["ActivityRuntimeConflictResponse"] | components["schemas"]["ActivityRuntimeFailureResponse"];
                 };
             };
+            /** @description Removed registration; runtime.target-removed never dispatches */
+            410: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["APIError"];
+                };
+            };
             /** @description Admitted non-success carries stable activityId and runtime code; pre-admission unavailability carries no fabricated run */
             500: {
                 headers: {
@@ -14606,6 +14630,15 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ActivityRuntimeConflictResponse"] | components["schemas"]["ActivityRuntimeFailureResponse"];
+                };
+            };
+            /** @description Removed registration; runtime.target-removed never dispatches */
+            410: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["APIError"];
                 };
             };
             /** @description Admitted non-success carries stable activityId and runtime code; pre-admission unavailability carries no fabricated run */
@@ -17285,6 +17318,15 @@ export interface operations {
                     "application/json": components["schemas"]["ActivityRuntimeConflictResponse"] | components["schemas"]["ActivityRuntimeFailureResponse"];
                 };
             };
+            /** @description Removed registration; runtime.target-removed never dispatches */
+            410: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["APIError"];
+                };
+            };
             /** @description Admitted non-success carries stable activityId and runtime code; pre-admission unavailability carries no fabricated run */
             500: {
                 headers: {
@@ -17407,6 +17449,15 @@ export interface operations {
                     "application/json": components["schemas"]["ActivityRuntimeConflictResponse"] | components["schemas"]["ActivityRuntimeFailureResponse"];
                 };
             };
+            /** @description Removed registration; runtime.target-removed never dispatches */
+            410: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["APIError"];
+                };
+            };
             /** @description Admitted non-success carries stable activityId and runtime code; pre-admission unavailability carries no fabricated run */
             500: {
                 headers: {
@@ -17494,6 +17545,15 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ActivityRuntimeConflictResponse"] | components["schemas"]["ActivityRuntimeFailureResponse"];
+                };
+            };
+            /** @description Removed registration; runtime.target-removed never dispatches */
+            410: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["APIError"];
                 };
             };
             /** @description Admitted non-success carries stable activityId and runtime code; pre-admission unavailability carries no fabricated run */
@@ -17690,6 +17750,15 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ActivityRuntimeConflictResponse"] | components["schemas"]["ActivityRuntimeFailureResponse"];
+                };
+            };
+            /** @description Removed registration; runtime.target-removed never dispatches */
+            410: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["APIError"];
                 };
             };
             /** @description Admitted non-success carries stable activityId and runtime code; pre-admission unavailability carries no fabricated run */

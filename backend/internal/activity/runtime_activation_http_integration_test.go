@@ -141,9 +141,12 @@ func activationApp(t *testing.T, agent bool, token string, setup ...activationSe
 	return &activationFixture{f, environments, registry, router, server, httpService, receiver, remote, cfg}
 }
 
-func activationRemote(t *testing.T, hub, agent *activationFixture, transport string) string {
+func activationRemote(t *testing.T, hub, agent *activationFixture, transport string, registration ...string) string {
 	t.Helper()
 	id := "example-host"
+	if len(registration) > 0 {
+		id = registration[0]
+	}
 	token := agent.cfg.AgentToken
 	endpoint := agent.server.URL
 	if transport == "edge" {

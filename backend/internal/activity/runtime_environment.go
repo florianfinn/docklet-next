@@ -71,3 +71,22 @@ func (s *RuntimeService) RemoveEnvironment(ctx context.Context, environment stri
 		return remove(tx)
 	})
 }
+
+// Removal is durable even after its Environment row disappeared. Check before
+// fresh metadata so a new key cannot hide the required 410 behind a read error.
+func (s *RuntimeService) refuseRemovedEnvironmentInternal(ctx context.Context, environment string) error {
+	if err := s.checkInternal(); err != nil {
+		return err
+	}
+	if environment == "0" {
+		return nil
+	}
+	var count int64
+	if err := s.activity.db.WithContext(ctx).Model(&RuntimeRemovedTarget{}).Where("environment_id = ?", environment).Count(&count).Error; err != nil {
+		return &RuntimeStoreError{Cause: err}
+	}
+	if count != 0 {
+		return ErrRuntimeTargetRemoved
+	}
+	return nil
+}

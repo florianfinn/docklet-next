@@ -79,7 +79,7 @@ func TestRuntimeActivationCurrentRegisteredContract(t *testing.T) {
 		op := find(current, "POST /api/environments/{id}"+path)
 		require.Contains(t, op.Responses["202"].Description, "admission only")
 		require.NotEmpty(t, op.RequestBody.Content, "OpenAPI requestBody content is required even when an optional body is disallowed")
-		for _, status := range []string{"200", "202", "409", "408", "500", "503", "504"} {
+		for _, status := range []string{"200", "202", "409", "408", "410", "500", "503", "504"} {
 			require.NotNil(t, op.Responses[status], path+" "+status)
 		}
 	}

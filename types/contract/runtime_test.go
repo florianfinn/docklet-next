@@ -29,12 +29,28 @@ func TestAgentHubV4RuntimeFixture(t *testing.T) {
 		Identity   []string `json:"identityFields"`
 		Knowledge  []string `json:"knowledgeFields"`
 		Routes     []string `json:"restrictedRoutes"`
+		Streaming  struct {
+			Status int      `json:"postFlushFailureStatus"`
+			Fields []string `json:"postFlushFailureFields"`
+			Done   bool     `json:"doneOnConfirmedSuccessOnly"`
+		} `json:"legacyStreaming"`
 	}
 	require.NoError(t, json.Unmarshal(body, &fixture))
 	require.Equal(t, 4, AgentHubVersion)
 	require.Equal(t, 4, MinimumAgentVersion)
 	require.Equal(t, AgentHubVersion, fixture.Version)
 	require.Equal(t, MinimumAgentVersion, fixture.Minimum)
+	require.Equal(t, 200, fixture.Streaming.Status)
+	require.True(t, fixture.Streaming.Done)
+	stream, err := json.Marshal(activity.RuntimeStreamFailure{})
+	require.NoError(t, err)
+	var fields map[string]json.RawMessage
+	require.NoError(t, json.Unmarshal(stream, &fields))
+	require.Len(t, fields, len(fixture.Streaming.Fields))
+	for _, name := range fixture.Streaming.Fields {
+		require.Contains(t, fields, name)
+	}
+
 	require.Equal(t, []string{"deploy-project", "down-project", "restart-project", "redeploy-project", "start-container", "stop-container", "restart-container"}, fixture.Operations)
 	for _, tc := range []struct {
 		value  any
