@@ -105,12 +105,32 @@ unconfirmed or failed reads stop automatic observation until explicit refresh or
 an activity notification; confirmed active work stays observed until terminal.
 Identity changes abort this consumer's requests and reject late callbacks.
 
+Token preflight failures are pre-admission errors and allow a later deliberate
+intent. The consumer identifies raw token-read transport failures at their source;
+the existing CSRF client retains its header and retry policy. A definitive CSRF
+refusal followed by a failed token refresh also leaves no admission hold, unless
+an earlier command send already had an uncertain response. Such earlier uncertainty
+remains held with the original key; a later denial cannot prove it never ran.
+
 Remote unknown knowledge with no targeted recovery reason is unconfirmed delivery,
 not outcome loss. A present `recovery.unknownReason` shows blocked uncertainty;
 missing detail never manufactures either loss or completion. Cancel intent remains
 nonterminal. Administrator release uses existing effective global-admin and
 activity read/cancel permissions, explicit acknowledgment and a nonempty reason;
 its failed/unknown disposition and later executor evidence remain separate.
+Failed targeted detail during aggregate or single-run projection retains the
+same host/run's cached recovery evidence, cancellation knowledge and current-intent
+marker. A newer successful targeted answer replaces that observation under the
+existing sequence guard. Identity reset clears this consumer cache. A terminal
+unknown run without recovery detail says its outcome is not confirmed, without
+claiming confirmation is pending or that an already released target is blocked.
+
+Permission reads share in-flight work and cache validated successes for at most
+thirty seconds of local elapsed time. Failed reads are evicted for the next access;
+unknown grants are shown as unavailable rather than a fabricated server denial.
+A failed rights read does not discard readable run evidence. Cancellation and
+release still require the existing grants, and actual server denials remain
+authoritative. No grant or authentication policy changes at this boundary.
 
 Notification history seeds unseen rows of initially incomplete sources silently,
 while already observed transitions and identifiable current claims/admissions
