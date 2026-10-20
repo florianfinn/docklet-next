@@ -14,7 +14,7 @@ export function runtimeTokenReads(baseUrl: string, fetcher: typeof fetch): typeo
     try { return await fetcher(input, init); }
     catch (error) {
       const path = new URL(input instanceof Request ? input.url : String(input), "https://hub.example.com").pathname;
-      if (path === tokenPath) throw new RuntimeTokenReadError("Token read unavailable", { cause: error });
+      if (path === tokenPath) throw new RuntimeTokenReadError("runtime.token-read-unavailable", { cause: error });
       throw error;
     }
   };
