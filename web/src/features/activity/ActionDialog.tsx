@@ -17,6 +17,8 @@ import { RunBadge, RunIconTile, StepList, StepTrack } from "./ActionSteps";
 import { useOutputOpen } from "./output-view-store";
 import { elapsedSeconds, RUN_ICON, RUN_TONE, useNow } from "./run-phase";
 import { RunErrorBox, RunFacts, RunFocusView, RunStatusLine } from "./RunFocus";
+import { RuntimeControls } from "./RuntimeControls";
+import { runtimeState } from "./runtime-presentation";
 import { RunOutput } from "./RunOutput";
 
 /** Whether a design opens the raw output by itself. */
@@ -48,7 +50,7 @@ function ConsoleBody({ run, now }: { run: ActionRun; now: number }) {
       <div className="flex shrink-0 items-center gap-3">
         <RunStatusLine run={run} className="min-w-0 flex-1 text-sm" />
         <span className="shrink-0 text-xs text-muted-foreground tabular-nums">
-          {done}/{run.steps.length} · {elapsedSeconds(run, now)} s
+          {run.outcomeState === "unknown" ? "–" : `${done}/${run.steps.length}`} · {elapsedSeconds(run, now)} s
         </span>
       </div>
       <div className="shrink-0">
@@ -152,7 +154,7 @@ function ActionDialogContent({ run, waiting }: { run: ActionRun; waiting: string
           </DialogDescription>
         </div>
         <RunBadge status={run.status} className="mt-1 shrink-0">
-          {t(`status.${run.status}`)}
+          {runtimeState(run) ? t(`runtime.${runtimeState(run)!}`) : t(`status.${run.status}`)}
         </RunBadge>
         <Button size="icon" variant="ghost" className="size-8 shrink-0" onClick={closeActionDialog} aria-label={t("dialog.close")}>
           <X />
@@ -160,7 +162,8 @@ function ActionDialogContent({ run, waiting }: { run: ActionRun; waiting: string
       </header>
       <WaitingOffer waiting={waiting} />
       <div className="flex min-h-0 flex-1 flex-col overflow-y-auto p-4 sm:p-5" data-slot="dialog-body">
-        <Body key={run.id} run={run} now={now} />
+        <RuntimeControls key={run.id} run={run} />
+        <Body key={run.id} run={run.outcomeState === "unknown" ? { ...run, steps: [], progress: 0 } : run} now={now} />
       </div>
       <footer className="flex shrink-0 flex-wrap items-center gap-x-3 gap-y-2 border-t px-4 py-3">
         <p className="min-w-48 flex-1 text-[11px] text-muted-foreground">{t("dialog.closeHint")}</p>

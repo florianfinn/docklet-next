@@ -146,7 +146,7 @@ describe.each(["demo", "http"] as const)("%s shared adapter cases", (kind) => {
   it("2 disables an unsupported action and refuses a direct call without starting a run", async () => {
     const b = backend();
     const adapter = kind === "demo" ? createDemoAdapter() : b.http;
-    const id = kind === "demo" ? "missing" : "dns";
+    const id = kind === "demo" ? "missing" : "0~dns";
     const ref = { kind: "stack" as const, id };
     if (kind === "http") b.state.descriptors.push({ operationId: "runStackCommand", resourceRef: ref, available: false, disabledReasonCode: "capability.mapping-unavailable" });
     const descriptor = await adapter.getCapability("runStackCommand", ref);
@@ -163,10 +163,10 @@ describe.each(["demo", "http"] as const)("%s shared adapter cases", (kind) => {
     const b = backend();
     b.state.descriptors = [];
     const adapter = kind === "demo" ? createDemoAdapter({ missingCapabilities: ["runStackCommand"] }) : b.http;
-    const ref = { kind: "stack" as const, id: "dns" };
+    const ref = { kind: "stack" as const, id: kind === "http" ? "0~dns" : "dns" };
     const descriptor = await adapter.getCapability("runStackCommand", ref);
     expect([descriptor.available, descriptor.disabledReasonCode]).toEqual([false, "capability.unavailable"]);
-    await expect(adapter.runStackCommand("dns", "start")).rejects.toMatchObject({ outcome: { kind: "not-available" } });
+    await expect(adapter.runStackCommand(ref.id, "start")).rejects.toMatchObject({ outcome: { kind: "not-available" } });
     if (kind === "http") {
       expect(b.fetcher.mock.calls.every((call) => String(call[0]).includes("capabilities"))).toBe(true);
       b.fetcher.mockRejectedValueOnce(new Error("offline"));

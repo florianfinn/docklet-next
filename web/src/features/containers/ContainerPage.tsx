@@ -74,7 +74,7 @@ function ContainerActions({ c, onEdit }: { c: ContainerInfo; onEdit: () => void 
   const tm = useTranslations("containers.menu");
   const to = useTranslations("containers.origin");
   const cmd = useContainerCommands();
-  const command = useCapability("runContainerCommand");
+  const command = useCapability("runContainerCommand", { kind: "container", id: c.id });
   const edit = useCapability("recreateContainer");
   const restart = useContainerRestart();
   return (

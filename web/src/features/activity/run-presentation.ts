@@ -3,6 +3,7 @@ import { useEffect } from "react";
 import type { ActionKind, ActionRun, ActionStatus } from "@/domain/model";
 import { createStore } from "@/shared/lib/store";
 
+import { runtimePresentation } from "./runtime-presentation";
 import { DEPLOY_KINDS, isMajorAction } from "./action-policy";
 
 /**
@@ -54,6 +55,12 @@ export function initialPresentation(run: Pick<ActionRun, "id" | "kind" | "stackI
 export function isCovered(run: Pick<ActionRun, "id" | "kind" | "stackId">, dialogRunId: string | undefined, state: PresentationState): boolean {
   if (dialogRunId === run.id) return true;
   return state.byRun[run.id] === "inline" && !!run.stackId && (state.surfaces[run.stackId] ?? 0) > 0 && DEPLOY_KINDS.has(run.kind);
+}
+
+/** A current browser intent is identifiable without comparing server/device clocks. */
+export function hasPresentationIntent(run: ActionRun, state: PresentationState): boolean {
+  return runtimePresentation(run)?.currentIntent === true || state.byRun[run.id] !== undefined ||
+    state.claims.some((claim) => claim.stackId === run.stackId && claim.kinds.has(run.kind));
 }
 
 export function bindPresentation(runId: string, presentation: ActionPresentation, consumed?: PresentationClaim): void {
@@ -169,8 +176,9 @@ export class RunToastCoordinator {
 
   private pass(): void {
     if (!this.seen) {
-      this.seen = new Map(this.runs.map((r) => [r.id, { status: r.status, covered: this.covered(r) }]));
+      this.seen = new Map(this.runs.filter((r) => !hasPresentationIntent(r, this.ctx.state())).map((r) => [r.id, { status: r.status, covered: this.covered(r) }]));
       this.history.clear();
+      this.visit();
       return;
     }
     // Only this observation seeds source history; reentrant presentation passes visit normally.

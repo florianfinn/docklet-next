@@ -1,3 +1,4 @@
+import { useCapability } from "@/data/use-capability";
 import { ChevronDown, FlaskConical, Globe, Layers, Play, RefreshCw, RotateCw, ScanSearch, Square, TriangleAlert } from "lucide-react";
 import { useTranslations } from "use-intl";
 
@@ -28,6 +29,7 @@ export function StackHeader({ stack, host, inline = false }: { stack: StackDetai
   const t = useTranslations("stacks.detail");
   const dt = useAdapterText();
   const cmd = useStackCommands();
+  const command = useCapability("runStackCommand", { kind: "stack", id: stack.id });
   const present = (start: () => Promise<string | undefined>) => void (inline ? startPresented({ stackId: stack.id }, "inline", start) : start());
   const busy = !!stack.busyActionId;
   const updateTimes = useStackUpdateTimes(stack);
@@ -60,18 +62,18 @@ export function StackHeader({ stack, host, inline = false }: { stack: StackDetai
         </div>
         <div data-page-actions className="flex flex-wrap items-center gap-2 self-center">
           {allStopped ? (
-            <Button size="sm" variant="outline" disabled={busy} onClick={() => void cmd.run(stack.id, "start")}>
+            <Button size="sm" variant="outline" disabled={busy || !command.available || !!stack.inventory?.stale} title={command.reason} onClick={() => void cmd.run(stack.id, "start")}>
               <Play data-icon="inline-start" /> {t("actions.start")}
             </Button>
           ) : (
             <>
               <HelpTarget topic="action.stop">
-                <Button size="sm" variant="outline" disabled={busy} onClick={() => void cmd.run(stack.id, "stop")}>
+                <Button size="sm" variant="outline" disabled={busy || !command.available || !!stack.inventory?.stale} title={command.reason} onClick={() => void cmd.run(stack.id, "stop")}>
                   <Square data-icon="inline-start" /> {t("actions.stop")}
                 </Button>
               </HelpTarget>
               <HelpTarget topic="action.restart">
-                <Button size="sm" variant="outline" disabled={busy} onClick={() => void cmd.run(stack.id, "restart")} className="group">
+                <Button size="sm" variant="outline" disabled={busy || !command.available || !!stack.inventory?.stale} title={command.reason} onClick={() => void cmd.run(stack.id, "restart")} className="group">
                   <RotateCw data-icon="inline-start" className="spin-on-hover" /> {t("actions.restart")}
                 </Button>
               </HelpTarget>
@@ -79,7 +81,7 @@ export function StackHeader({ stack, host, inline = false }: { stack: StackDetai
           )}
           <div className="flex">
             <HelpTarget topic="action.redeploy">
-              <Button size="sm" className="group rounded-r-none" disabled={busy} onClick={() => present(() => cmd.run(stack.id, "redeploy"))}>
+              <Button size="sm" className="group rounded-r-none" disabled={busy || !command.available || !!stack.inventory?.stale} title={command.reason} onClick={() => present(() => cmd.run(stack.id, "redeploy"))}>
                 <RefreshCw data-icon="inline-start" className={busy ? "animate-spin" : "spin-on-hover"} /> {t("actions.redeploy")}
               </Button>
             </HelpTarget>

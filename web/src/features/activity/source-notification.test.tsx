@@ -55,14 +55,14 @@ it.each([false, true])("partial summaries and warnings remain visible before sil
     expect(screen.getByRole("alert").textContent).toContain("The source could not be reached or read.");
     expect(document.getElementById("run-good-done") !== null).toBe(true);
     expect(f.shows).not.toHaveBeenCalled();
-    // Even changes to an already visible partial row remain baseline until first complete read.
+    // Already visible partial rows retain their genuine transitions despite malformed history.
     f.state.details["retained-summary"]!.activity.status = "running"; await f.load();
     f.state.details["retained-summary"]!.activity.status = "failed"; await f.load();
-    expect(f.shows).not.toHaveBeenCalled();
+    expect(f.ids()).toEqual(["retained-summary"]);
     f.faults.delete("bad"); await f.load();
-    await waitFor(() => expect(screen.queryByRole("alert") === null).toBe(true));
+    await waitFor(() => expect(screen.queryByText("Some activities could not be read") === null).toBe(true));
     expect(document.getElementById("run-bad-history-failed") !== null).toBe(true);
-    expect(f.shows).not.toHaveBeenCalled(); expect(actionDialogStore.get()).toEqual({ waiting: [] });
+    expect(f.ids()).toEqual(["retained-summary"]); expect(actionDialogStore.get()).toEqual({ waiting: [] });
   } finally { view.stop(); f.client.clear(); }
 });
 

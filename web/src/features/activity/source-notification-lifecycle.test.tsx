@@ -110,7 +110,7 @@ it("global failure while a baseline is pending never completes that source", asy
   } finally { view.stop(); f.client.clear(); }
 });
 
-it("targeted partial-source updates seed silently without certifying source completeness", async () => {
+it("targeted partial-source updates preserve visible transitions without certifying source completeness", async () => {
   const f = sourceFixture(); f.history("bad"); f.faults.set("bad", "partial"); await f.discover(); const view = f.mount();
   try {
     await f.load(); f.state.details["bad-history-failed"]!.activity.status = "running";
@@ -120,7 +120,7 @@ it("targeted partial-source updates seed silently without certifying source comp
     expect(f.health.mock.lastCall?.[0].failures).toEqual([{ hostId: "bad", reason: "unavailable" }]);
     expect(f.shows).not.toHaveBeenCalled();
     f.state.details["bad-history-failed"]!.activity.status = "failed"; f.faults.delete("bad"); await f.load();
-    expect(f.shows).not.toHaveBeenCalled(); f.put("bad", "targeted-genuine"); await f.load(); expect(f.ids()).toEqual(["targeted-genuine"]);
+    expect(f.ids()).toEqual(["bad-history-failed"]); f.put("bad", "targeted-genuine"); await f.load(); expect(f.ids()).toEqual(["bad-history-failed", "targeted-genuine"]);
   } finally { view.stop(); f.client.clear(); }
 });
 

@@ -63,6 +63,8 @@ export function mapActivityDetail(detail: Detail): CodedActionRun {
   const run: Activity = detail.activity;
   for (const [key, value] of Object.entries({ id: run.id, type: run.type, environmentId: run.environmentId, startedAt: run.startedAt })) required(value, key);
   if (typeof detail.outputTruncated !== "boolean") throw new Error("dto.invalid-output-truncation");
+  if ((run.outcomeState !== undefined || run.cancelRequested !== undefined) &&
+      ((run.outcomeState !== "known" && run.outcomeState !== "unknown") || typeof run.cancelRequested !== "boolean")) throw new Error("dto.invalid-runtime-knowledge");
   const kind = KINDS[run.type] ?? "activity";
   const target = run.resourceName || run.resourceId || run.sourceEnvironmentName || run.type;
   const output = (detail.output ?? []).map((line) => {
@@ -86,6 +88,7 @@ export function mapActivityDetail(detail: Detail): CodedActionRun {
     ...(run.resourceType === "container" && run.resourceId ? { containerId: inventoryId(run.environmentId, run.resourceId) } : {}),
     services: run.affectedServices ?? [],
     status: mapStatus(run.status),
+    ...(run.outcomeState !== undefined ? { outcomeState: run.outcomeState, cancelRequested: run.cancelRequested } : {}),
     progress: run.progress ?? 0,
     startedAt: run.startedAt,
     finishedAt: run.endedAt,
