@@ -80,6 +80,20 @@ func getCapabilities(ctx context.Context, input *GetCapabilitiesInput) (*handler
 			} else {
 				descriptors[i].DisabledReasonCode = "capability.unavailable"
 			}
+		case "subscribeLogs", "subscribeContainerLogs":
+			ref := descriptors[i].ResourceRef
+			kind, logGrant, readGrant := "stack", authz.PermProjectsLogs, authz.PermProjectsRead
+			if descriptors[i].OperationID == "subscribeContainerLogs" {
+				kind, logGrant, readGrant = "container", authz.PermContainersLogs, authz.PermContainersRead
+			}
+			env, raw, scoped := strings.Cut(ref.ID, "~")
+			valid := ref.Kind == kind && scoped && env != "" && raw != "" && !strings.Contains(raw, "~") && permissions.Allows(logGrant, env) && permissions.Allows(readGrant, env)
+			descriptors[i].Available = valid
+			if valid {
+				descriptors[i].DisabledReasonCode = ""
+			} else {
+				descriptors[i].DisabledReasonCode = "capability.unavailable"
+			}
 		case "registerHost", "issueAgentToken", "removeHost", "discoverHub":
 			descriptors[i].Available = permissions.IsGlobalAdmin()
 			if descriptors[i].Available {

@@ -120,6 +120,16 @@ export const deStacks: typeof enStacks = {
     trigger: { deploy: "Deploy", redeploy: "Redeploy", update: "Update", restore: "Wiederherstellung" },
   },
   logs: {
+    delivery: {
+      connecting: "Verbindung zu den Logs wird hergestellt …", live: "Live-Logs", retrying: "Verbindung unterbrochen. Neuer Versuch …", offline: "Offline. Die Verbindung wird fortgesetzt, sobald du online bist.",
+      unavailable: "Logs sind für diese Ressource nicht verfügbar.", error: "Logübertragung fehlgeschlagen. Erneut versuchen, um die letzten Zeilen anzufordern.", unauthenticated: "Melde dich an, um Logs zu empfangen.",
+      paused: "Pausiert. Die Verbindung ist geschlossen; Fortsetzen fordert die letzten Zeilen neu an.", retry: "Logs erneut laden",
+      boundary: "Neue Verbindung: Die angeforderten letzten Zeilen ersetzen die bisherigen. Der unterbrochene Zeitraum kann fehlen.",
+      dropped: "{count, plural, one {# älterer Eintrag wurde aus dem begrenzten Puffer entfernt.} other {# ältere Einträge wurden aus dem begrenzten Puffer entfernt.}}",
+      loss: "{count, plural, one {# Logeintrag ging vor dieser Zeile verloren.} other {# Logeinträge gingen vor dieser Zeile verloren.}}",
+      lineCut: "[Zeile gekürzt]", unknownSource: "Unbekannte Quelle",
+      stream: { stdout: "Standardausgabe", stderr: "Standardfehlerkanal (kein Schweregrad)", combined: "Zusammengeführte Terminalausgabe", unknown: "Ausgabekanal unbekannt" },
+    },
     title: "Gemeinsamer Logstream",
     services: "Services filtern",
     level: "Stufe",

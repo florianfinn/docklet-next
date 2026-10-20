@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; functional cut: removed Swarm.
+// Deviations: Local module namespace; functional cut: removed Swarm; bounded producer records and optional metadata.
 
 package ws
 
@@ -13,10 +13,11 @@ import (
 	"errors"
 	"log/slog"
 	"net/http"
-	"strconv"
 	"strings"
 	"sync/atomic"
 	"time"
+
+	"go.getarcane.app/docker"
 
 	systemtypes "github.com/florianfinn/docklet-next/types/system"
 	"github.com/labstack/echo/v5"
@@ -40,17 +41,8 @@ type wsLogStream struct {
 }
 
 func buildLogStreamKeyInternal(envID, kind, resourceID, format string, batched, follow bool, tail, since string, timestamps bool) string {
-	return strings.Join([]string{
-		envID,
-		kind,
-		resourceID,
-		format,
-		strconv.FormatBool(batched),
-		strconv.FormatBool(follow),
-		tail,
-		since,
-		strconv.FormatBool(timestamps),
-	}, "|")
+	encoded, _ := json.Marshal([]any{envID, kind, resourceID, format, batched, follow, tail, since, timestamps})
+	return string(encoded)
 }
 
 func (h *WebSocketHandler) getOrCreateLogStreamInternal(key string, create func(onEmpty func(*wsLogStream)) *wsLogStream) *wsLogStream {
@@ -172,29 +164,6 @@ func (h *WebSocketHandler) serveLogStreamInternal(
 	}
 }
 
-// broadcastLogStreamErrorInternal emits an error message to every client of a log stream.
-// label is the human-readable resource noun (e.g. "project").
-func broadcastLogStreamErrorInternal(ctx context.Context, label, resourceID, format string, err error, ls *wsLogStream) {
-	slog.WarnContext(ctx, "log stream failed", "kind", label, "resourceId", resourceID, "error", err)
-	errorPrefix := "Failed to stream " + label + " logs: "
-
-	if format == "json" {
-		msg := wshub.LogMessage{
-			Seq:       ls.seq.Add(1),
-			Level:     "error",
-			Message:   errorPrefix + err.Error(),
-			Service:   "arcane",
-			Timestamp: wshub.NowRFC3339(),
-		}
-		if b, marshalErr := json.Marshal(msg); marshalErr == nil {
-			ls.hub.Broadcast(b)
-		}
-		return
-	}
-
-	ls.hub.Broadcast([]byte(errorPrefix + err.Error()))
-}
-
 // ============================================================================
 // Project WebSocket/Streaming Endpoints
 // ============================================================================
@@ -312,8 +281,8 @@ func (h *WebSocketHandler) startLogSourceInternal(
 	params logStreamParams,
 	stream func(context.Context, string, chan<- string, bool, string, string, bool) error,
 	ls *wsLogStream,
-) <-chan string {
-	lines := make(chan string, 256)
+) <-chan sourceLogLine {
+	lines := make(chan sourceLogLine, 256)
 	go func() {
 		defer close(lines)
 		// The Docker log stream is only started once someone is listening.
@@ -323,13 +292,41 @@ func (h *WebSocketHandler) startLogSourceInternal(
 		case <-ls.firstSubscriber:
 		}
 
-		if err := stream(ctx, resourceID, lines, params.follow, params.tail, params.since, params.timestamps); err != nil {
+		legacy := make(chan string)
+		joined := make(chan struct{})
+		go func() {
+			defer close(joined)
+			for line := range legacy {
+				text, cut := docker.BoundLogText(line, docker.MaxLogLineBytes)
+				select {
+				case lines <- sourceLogLine{record: docker.LogRecord{Message: text, Truncated: cut}}:
+				case <-ctx.Done():
+					return
+				}
+			}
+		}()
+		sourceCtx := docker.WithLogSink(ctx, func(record docker.LogRecord) error {
+			select {
+			case lines <- sourceLogLine{record: record, structured: true}:
+				return nil
+			case <-ctx.Done():
+				return ctx.Err()
+			}
+		})
+		err := stream(sourceCtx, resourceID, legacy, params.follow, params.tail, params.since, params.timestamps)
+		close(legacy)
+		<-joined
+		if err != nil {
 			if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
 				return
 			}
 
 			h.markLogStreamDoneInternal(key, ls)
-			broadcastLogStreamErrorInternal(ctx, label, resourceID, params.format, err, ls)
+			text, cut := docker.BoundLogText("Failed to stream "+label+" logs: "+err.Error(), docker.MaxLogLineBytes)
+			select {
+			case lines <- sourceLogLine{record: docker.LogRecord{Message: text, Truncated: cut}, failure: true}:
+			case <-ctx.Done():
+			}
 			return
 		}
 
@@ -344,14 +341,14 @@ func (h *WebSocketHandler) startLogSourceInternal(
 func startLogForwardersInternal(
 	ctx context.Context,
 	ls *wsLogStream,
-	lines <-chan string,
+	lines <-chan sourceLogLine,
 	params logStreamParams,
 	normalizeJSON func(string) wshub.LogMessage,
 	normalizeText func(string) string,
 ) {
 	if params.format == "json" {
-		messages := mapLogLinesInternal(ctx, lines, func(line string) wshub.LogMessage {
-			message := normalizeJSON(line)
+		messages := mapLogLinesInternal(ctx, lines, func(line sourceLogLine) wshub.LogMessage {
+			message := normalizeSourceLogLine(line, normalizeJSON)
 			message.Seq = ls.seq.Add(1)
 			if message.Timestamp == "" {
 				message.Timestamp = wshub.NowRFC3339()
@@ -368,14 +365,20 @@ func startLogForwardersInternal(
 		return
 	}
 
-	textLines := lines
-	if normalizeText != nil {
-		textLines = mapLogLinesInternal(ctx, lines, normalizeText)
-	}
+	textLines := mapLogLinesInternal(ctx, lines, func(line sourceLogLine) string {
+		text := line.record.Message
+		if line.structured {
+			text = docker.LogText(line.record)
+		}
+		if normalizeText != nil {
+			text = normalizeText(text)
+		}
+		return text
+	})
 	go wshub.ForwardLines(ctx, ls.hub, textLines)
 }
 
-func mapLogLinesInternal[T any](ctx context.Context, lines <-chan string, transform func(string) T) <-chan T {
+func mapLogLinesInternal[S, T any](ctx context.Context, lines <-chan S, transform func(S) T) <-chan T {
 	mapped := make(chan T, 256)
 	go func() {
 		defer close(mapped)
@@ -437,7 +440,11 @@ func (h *WebSocketHandler) ContainerLogs(c *echo.Context) error {
 			"container",
 			params,
 			streamLogs,
-			normalizeContainerLogMessageInternal,
+			func(line string) wshub.LogMessage {
+				msg := normalizeContainerLogMessageInternal(line)
+				msg.ContainerID = containerID
+				return msg
+			},
 			nil,
 			onEmpty,
 		)

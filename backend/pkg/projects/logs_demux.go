@@ -2,12 +2,12 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: None
+// Deviations: Bound source frames and lines before Compose buffering; preserve
+// producer metadata through the optional in-process log sink.
 
 package projects
 
 import (
-	"bufio"
 	"bytes"
 	"context"
 	"encoding/binary"
@@ -18,8 +18,8 @@ import (
 	"github.com/docker/cli/cli/command"
 	"github.com/moby/moby/api/pkg/stdcopy"
 	"github.com/moby/moby/client"
+	"go.getarcane.app/docker"
 	"go.getarcane.app/docker/compat"
-	kit "go.getarcane.app/kit/pkg"
 )
 
 // logsDemuxCompatibleDockerCliInternal exposes an API client that keeps
@@ -50,19 +50,32 @@ func wrapDockerCLIWithLogsDemuxInternal(cli command.Cli) command.Cli {
 // responses so stderr entries stay identifiable: stderr lines are prefixed
 // with Arcane's stderr marker and every entry is re-framed as a stdout
 // stdcopy frame, which Compose merges through its stdout consumer path. TTY
-// containers pass through untouched because their stream carries no stderr
-// metadata.
+// lines use the same bound and retain their combined-stream meaning.
 type logsDemuxDockerClientInternal struct {
 	client.APIClient
 
-	ttyMu        sync.RWMutex
-	containerTty map[string]bool
+	ttyMu            sync.RWMutex
+	containerTty     map[string]bool
+	containerSources map[string]string
 }
 
 func (c *logsDemuxDockerClientInternal) ContainerInspect(ctx context.Context, containerID string, options client.ContainerInspectOptions) (client.ContainerInspectResult, error) {
 	result, err := c.APIClient.ContainerInspect(ctx, containerID, options)
 	if err == nil && result.Container.Config != nil {
 		c.recordContainerTTYInternal(containerID, result.Container.Config.Tty)
+		source := result.Container.Config.Labels["com.docker.compose.service"]
+		if source == "" {
+			source = strings.TrimPrefix(result.Container.Name, "/")
+		}
+		if source == "" {
+			source = containerID
+		}
+		c.ttyMu.Lock()
+		if c.containerSources == nil {
+			c.containerSources = make(map[string]string)
+		}
+		c.containerSources[strings.ToLower(strings.TrimSpace(containerID))] = source
+		c.ttyMu.Unlock()
 	}
 	return result, err
 }
@@ -74,11 +87,13 @@ func (c *logsDemuxDockerClientInternal) ContainerLogs(ctx context.Context, conta
 	}
 
 	tty, known := c.containerTTYInternal(containerID)
-	if tty || !known || !options.ShowStdout || !options.ShowStderr {
+	if !known {
 		return resp, nil
 	}
-
-	return &stderrMarkedDemuxedStreamInternal{upstream: resp, src: bufio.NewReader(resp)}, nil
+	c.ttyMu.RLock()
+	service := c.containerSources[strings.ToLower(strings.TrimSpace(containerID))]
+	c.ttyMu.RUnlock()
+	return &stderrMarkedDemuxedStreamInternal{upstream: resp, records: docker.NewLogReader(resp, tty), ctx: ctx, tty: tty, sink: docker.LogSinkFromContext(ctx), service: service}, nil
 }
 
 func (c *logsDemuxDockerClientInternal) recordContainerTTYInternal(containerID string, tty bool) {
@@ -99,91 +114,42 @@ func (c *logsDemuxDockerClientInternal) containerTTYInternal(containerID string)
 	return tty, known
 }
 
-// maxLogEntryBytesInternal caps re-framed entries: a newline-less run is
-// split into cap-sized entries so per-line buffering stays bounded end to end.
-const maxLogEntryBytesInternal = 64 * 1024
+// One record is emitted per read refill. The decoder never allocates by the
+// advertised frame size, and both pending source prefixes have a fixed bound.
+const maxLogEntryBytesInternal = docker.MaxLogLineBytes
 
-// stderrMarkedDemuxedStreamInternal transforms a multiplexed Docker log
-// response, pulled frame by frame on demand, into stdout stdcopy frames of
-// one log line each, with stderr lines prefixed by Arcane's stderr marker.
-// Lines are assembled per source stream before merging so frames interleaved
-// mid-line cannot corrupt each other. Closing it closes the upstream
-// response, which also unblocks any pending read.
 type stderrMarkedDemuxedStreamInternal struct {
 	upstream io.ReadCloser
-	src      *bufio.Reader
+	records  *docker.LogReader
+	ctx      context.Context
+	tty      bool
+	sink     docker.LogSink
+	service  string
 	out      bytes.Buffer
-	pending  [2][]byte
-	err      error
 }
 
 func (s *stderrMarkedDemuxedStreamInternal) Read(p []byte) (int, error) {
-	for s.out.Len() == 0 {
-		if s.err != nil {
-			return 0, s.err
+	if s.out.Len() == 0 {
+		record, err := s.records.Next(s.ctx)
+		if err != nil {
+			return 0, err
 		}
-		s.ingestFrameInternal()
+		record.Service = s.service
+		if s.sink != nil {
+			if err = s.sink(record); err != nil {
+				return 0, err
+			}
+		}
+		text := docker.LogText(record)
+		if !s.tty {
+			var header [8]byte
+			header[0] = byte(stdcopy.Stdout)
+			binary.BigEndian.PutUint32(header[4:], uint32(len(text)+1)) //nolint:gosec // bounded log text plus newline
+			s.out.Write(header[:])
+		}
+		s.out.WriteString(text)
+		s.out.WriteByte('\n')
 	}
 	return s.out.Read(p)
 }
-
-func (s *stderrMarkedDemuxedStreamInternal) Close() error {
-	return s.upstream.Close()
-}
-
-func (s *stderrMarkedDemuxedStreamInternal) ingestFrameInternal() {
-	var header [8]byte
-	if _, err := io.ReadFull(s.src, header[:]); err != nil {
-		s.finishInternal(err)
-		return
-	}
-	payload := make([]byte, binary.BigEndian.Uint32(header[4:]))
-	if _, err := io.ReadFull(s.src, payload); err != nil {
-		s.finishInternal(err)
-		return
-	}
-
-	stream := kit.Ternary(header[0] == byte(stdcopy.Stderr), 1, 0)
-	s.pending[stream] = append(s.pending[stream], payload...)
-	buf := s.pending[stream]
-	for len(buf) > 0 {
-		nl := bytes.IndexByte(buf, '\n')
-		if nl < 0 || nl > maxLogEntryBytesInternal {
-			if len(buf) < maxLogEntryBytesInternal {
-				break
-			}
-			s.emitLineInternal(stream, buf[:maxLogEntryBytesInternal])
-			buf = buf[maxLogEntryBytesInternal:]
-			continue
-		}
-		s.emitLineInternal(stream, buf[:nl])
-		buf = buf[nl+1:]
-	}
-	s.pending[stream] = buf
-}
-
-func (s *stderrMarkedDemuxedStreamInternal) finishInternal(err error) {
-	for stream, rest := range s.pending {
-		if len(rest) > 0 {
-			s.emitLineInternal(stream, rest)
-			s.pending[stream] = nil
-		}
-	}
-	s.err = err
-}
-
-func (s *stderrMarkedDemuxedStreamInternal) emitLineInternal(stream int, line []byte) {
-	size := len(line) + 1
-	if stream == 1 {
-		size += len(stderrLogLinePrefixInternal)
-	}
-	var header [8]byte
-	header[0] = byte(stdcopy.Stdout)
-	binary.BigEndian.PutUint32(header[4:], uint32(size)) //nolint:gosec // entries are capped at maxLogEntryBytesInternal
-	s.out.Write(header[:])
-	if stream == 1 {
-		s.out.WriteString(stderrLogLinePrefixInternal)
-	}
-	s.out.Write(line)
-	s.out.WriteByte('\n')
-}
+func (s *stderrMarkedDemuxedStreamInternal) Close() error { return s.upstream.Close() }

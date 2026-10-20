@@ -26,6 +26,7 @@ import { createSettingsCore } from "./settings-core";
 import { createSharedReads } from "./shared-reads";
 import { runtimeTokenReads } from "./runtime-token-read";
 import { createRuntimeCommands } from "./runtime-commands";
+import { createRuntimeLogs } from "./logs";
 import { createActivityReader } from "./activity-reader";
 
 type ReadOperation = "get-capabilities" | "listEnvironments" | "list-activities" | "get-activity" | "listEvents";
@@ -33,7 +34,7 @@ type Body<I extends ReadOperation> = operations[I]["responses"][200]["content"][
 type StreamPayload = operations["streamClient"]["responses"][200]["content"]["text/event-stream"][number]["data"];
 type Source = Pick<EventSource, "close" | "onopen" | "onmessage" | "onerror"> & Partial<Pick<EventSource, "readyState">>;
 
-const IMPLEMENTED = new Set(["runStackCommand", "runContainerCommand", "registerHost", "issueAgentToken", "removeHost", "discoverHub", "listStacks", "getStack", "listContainers", "listHosts", "listActions", "listEvents", "subscribeActions", "subscribeChanges", "getAuthMode", "getCurrentUser", "login", "logout", "changePassword", "updateMyLocale", "getSetupStatus", "completeSetup", "getConnectedSettings", "saveSettings", "listImages", "listVolumes", "getVolume", "getTopology", "subscribeMetrics"]);
+const IMPLEMENTED = new Set(["subscribeLogs", "subscribeContainerLogs", "runStackCommand", "runContainerCommand", "registerHost", "issueAgentToken", "removeHost", "discoverHub", "listStacks", "getStack", "listContainers", "listHosts", "listActions", "listEvents", "subscribeActions", "subscribeChanges", "getAuthMode", "getCurrentUser", "login", "logout", "changePassword", "updateMyLocale", "getSetupStatus", "completeSetup", "getConnectedSettings", "saveSettings", "listImages", "listVolumes", "getVolume", "getTopology", "subscribeMetrics"]);
 const RECONNECT_MS = 250;
 
 export interface HttpAdapterOptions {
@@ -114,6 +115,7 @@ export function createHttpAdapter(options: HttpAdapterOptions = {}): DockletAdap
     ++identityGeneration;
     authenticated = false;
     runtime.reset();
+    logs.reset();
     sharedReads.clear(); invalidateCapabilities(); environmentCache.clear(); observations.clear();
     source?.close(); source = undefined; sourceOpen = false;
     if (reconnectTimer) clearTimeout(reconnectTimer);
@@ -177,6 +179,18 @@ export function createHttpAdapter(options: HttpAdapterOptions = {}): DockletAdap
     }
   }
 
+  const logs = createRuntimeLogs({
+    baseUrl, socket: options.webSocket ?? ((url) => new WebSocket(url)), capability: getCapability,
+    authenticated: () => authenticated,
+    checkIdentity: async (signal) => {
+      const version = identityGeneration;
+      const response = await client.fetch(`${baseUrl}/auth/me`, { signal, credentials: "same-origin" });
+      if (version !== identityGeneration) return false;
+      if (response.status === 401) { suspendIdentity(); return false; }
+      if (!response.ok) throw classifiedError(null, response.status);
+      return authenticated;
+    },
+  });
   const runtime = createRuntimeCommands({ baseUrl, client, capability: getCapability, unauthorized: () => { suspendIdentity(); actions.reset(true); }, publish: (run) => actions.upsert(run) });
   const actions = createActivityReader({
     retained: runtime.retained,
@@ -371,7 +385,7 @@ export function createHttpAdapter(options: HttpAdapterOptions = {}): DockletAdap
       return () => { changeListeners.delete(listener); disconnectIfUnused(); };
     },
     subscribeMetrics: createMetricsReader(baseUrl, fetcher, listHosts, requireCapability, options.webSocket ?? ((url) => new WebSocket(url)), observeHost),
-    subscribeLogs: () => () => undefined,
-    subscribeContainerLogs: () => () => undefined,
+    subscribeLogs: logs.subscribeLogs,
+    subscribeContainerLogs: logs.subscribeContainerLogs,
   };
 }

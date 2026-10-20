@@ -119,6 +119,16 @@ export const enStacks = {
     trigger: { deploy: "Deploy", redeploy: "Redeploy", update: "Update", restore: "Restore" },
   },
   logs: {
+    delivery: {
+      connecting: "Connecting to logs …", live: "Live logs", retrying: "Connection lost. Retrying …", offline: "Offline. Reconnect resumes when online.",
+      unavailable: "Logs are unavailable for this resource.", error: "Log delivery failed. Retry to request a new tail.", unauthenticated: "Sign in to receive logs.",
+      paused: "Paused. The connection is closed; resuming requests a new tail.", retry: "Retry logs",
+      boundary: "New connection: the requested tail replaces previous lines. The disconnected interval may be missing.",
+      dropped: "{count, plural, one {# older entry was removed from the bounded buffer.} other {# older entries were removed from the bounded buffer.}}",
+      loss: "{count, plural, one {# log entry was lost before this line.} other {# log entries were lost before this line.}}",
+      lineCut: "[line truncated]", unknownSource: "Unknown source",
+      stream: { stdout: "Standard output", stderr: "Standard error stream (not a severity)", combined: "Combined terminal output", unknown: "Stream unknown" },
+    },
     title: "Combined log stream",
     services: "Filter services",
     level: "Level",

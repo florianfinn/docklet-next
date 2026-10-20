@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: None
+// Deviations: Optional producer-known stream and truncation metadata for logs.
 
 package ws
 
@@ -13,6 +13,8 @@ import (
 )
 
 type LogMessage struct {
+	Stream      string `json:"stream,omitempty"`
+	Truncated   bool   `json:"truncated,omitzero"`
 	Seq         uint64 `json:"seq"`
 	Level       string `json:"level,omitempty"`
 	Message     string `json:"message"`
