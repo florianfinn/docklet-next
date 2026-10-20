@@ -2,175 +2,70 @@
 // Revision: e3d12f637964a6edd495f9b31a10d2f0a40fa127
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: None
+// Deviations: Bounded UTF-8 line/frame reading and discard through newline;
+// follow and snapshot share incremental demultiplexing; optional source records.
 
 package docker
 
 import (
-	"bufio"
 	"context"
-	"errors"
-	"fmt"
 	"io"
-	"log/slog"
-	"strings"
-	"sync"
-
-	"github.com/moby/moby/api/pkg/stdcopy"
-	kit "go.getarcane.app/kit/pkg"
 )
 
-// StreamContainerLogs streams Docker container logs, handling TTY raw streams
-// and non-TTY multiplexed stdout/stderr streams.
+// StreamContainerLogs retains TTY/stream metadata before legacy text formatting.
 func StreamContainerLogs(ctx context.Context, logs io.ReadCloser, logsChan chan<- string, follow, isTTY bool) error {
-	if isTTY {
-		return ReadLogLines(ctx, logs, logsChan, "")
-	}
-	if follow {
-		return StreamMultiplexedLogs(ctx, logs, logsChan)
-	}
-	return ReadAllLogs(ctx, logs, logsChan)
+	return streamLogRecords(ctx, logs, logsChan, isTTY, "")
 }
 
-// StreamMultiplexedLogs demultiplexes a Docker stdout/stderr log stream and
-// sends non-empty lines to logsChan.
+// StreamMultiplexedLogs merges completed stdout/stderr lines in arrival order.
 func StreamMultiplexedLogs(ctx context.Context, logs io.Reader, logsChan chan<- string) error {
-	stdoutReader, stdoutWriter := io.Pipe()
-	stderrReader, stderrWriter := io.Pipe()
+	return streamLogRecords(ctx, logs, logsChan, false, "")
+}
 
-	var closeOnce sync.Once
-	closeInputs := func() {
-		closeOnce.Do(func() {
-			err := ctx.Err()
-			if err == nil {
-				err = io.ErrClosedPipe
-			}
-			_ = stdoutReader.CloseWithError(err)
-			_ = stderrReader.CloseWithError(err)
-			if closer, ok := logs.(io.Closer); ok {
+// ReadAllLogs drains incrementally; no complete stdout/stderr output is retained.
+func ReadAllLogs(ctx context.Context, logs io.ReadCloser, logsChan chan<- string) error {
+	return streamLogRecords(ctx, logs, logsChan, false, "")
+}
+
+// ReadLogLines retains a bounded prefix and discards excess through the newline.
+func ReadLogLines(ctx context.Context, reader io.Reader, logsChan chan<- string, prefix string) error {
+	return streamLogRecords(ctx, reader, logsChan, true, prefix)
+}
+
+func streamLogRecords(ctx context.Context, reader io.Reader, lines chan<- string, tty bool, prefix string) error {
+	// Joining the cancellation watcher prevents it from closing a reused reader
+	// after this source has returned. A blocking reader must implement io.Closer.
+	done := make(chan struct{})
+	joined := make(chan struct{})
+	go func() {
+		defer close(joined)
+		select {
+		case <-ctx.Done():
+			if closer, ok := reader.(io.Closer); ok {
 				_ = closer.Close()
 			}
-		})
-	}
-
-	copyDone := make(chan struct{})
-	go func() {
-		defer close(copyDone)
-		defer func() { _ = stdoutWriter.Close() }()
-		defer func() { _ = stderrWriter.Close() }()
-		_, err := stdcopy.StdCopy(stdoutWriter, stderrWriter, logs)
-		if err != nil && !errors.Is(err, io.EOF) && ctx.Err() == nil {
-			slog.ErrorContext(ctx, "error demultiplexing logs", "error", err)
-		}
-	}()
-
-	go func() {
-		select {
-		case <-ctx.Done():
-			closeInputs()
-		case <-copyDone:
-		}
-	}()
-
-	done := make(chan error, 2)
-
-	go func() {
-		done <- ReadLogLines(ctx, stdoutReader, logsChan, "")
-	}()
-
-	go func() {
-		done <- ReadLogLines(ctx, stderrReader, logsChan, "[STDERR] ")
-	}()
-
-	select {
-	case <-ctx.Done():
-		closeInputs()
-		return ctx.Err()
-	case err := <-done:
-		if err != nil && !errors.Is(err, io.EOF) {
-			closeInputs()
-			return err
-		}
-		select {
-		case <-ctx.Done():
-			closeInputs()
-			return ctx.Err()
 		case <-done:
-			return nil
-		}
-	}
-}
-
-// ReadAllLogs reads a non-follow Docker multiplexed log stream and sends
-// non-empty stdout/stderr lines to logsChan.
-func ReadAllLogs(ctx context.Context, logs io.ReadCloser, logsChan chan<- string) error {
-	stdoutBuf := &strings.Builder{}
-	stderrBuf := &strings.Builder{}
-	stdCopyDone := make(chan struct{})
-	defer close(stdCopyDone)
-
-	go func() {
-		select {
-		case <-ctx.Done():
-			_ = logs.Close()
-		case <-stdCopyDone:
 		}
 	}()
-
-	_, err := stdcopy.StdCopy(stdoutBuf, stderrBuf, logs)
-	if err != nil && !errors.Is(err, io.EOF) {
-		if ctxErr := ctx.Err(); ctxErr != nil {
-			return ctxErr
+	defer func() { close(done); <-joined }()
+	sink := LogSinkFromContext(ctx)
+	return readLogRecords(ctx, reader, tty, func(record LogRecord) error {
+		if sink != nil {
+			return sink(record)
 		}
-		return fmt.Errorf("failed to demultiplex logs: %w", err)
-	}
-	if ctxErr := ctx.Err(); ctxErr != nil {
-		return ctxErr
-	}
-
-	if stdoutBuf.Len() > 0 {
-		if readLogLinesErr := ReadLogLines(ctx, strings.NewReader(stdoutBuf.String()), logsChan, ""); readLogLinesErr != nil {
-			return readLogLinesErr
-		}
-	}
-
-	if stderrBuf.Len() > 0 {
-		if readLogLinesErr2 := ReadLogLines(ctx, strings.NewReader(stderrBuf.String()), logsChan, "[STDERR] "); readLogLinesErr2 != nil {
-			return readLogLinesErr2
-		}
-	}
-
-	return nil
-}
-
-// ReadLogLines sends each non-empty line from reader to logsChan, prepending
-// prefix, until EOF or ctx is done.
-func ReadLogLines(ctx context.Context, reader io.Reader, logsChan chan<- string, prefix string) error {
-	bufferedReader := bufio.NewReader(reader)
-
-	for {
-		if err := ctx.Err(); err != nil {
-			return err
-		}
-
-		line, err := bufferedReader.ReadString('\n')
-		if line != "" {
-			trimmed := strings.TrimRight(line, "\r\n")
-			if trimmed != "" {
-				if prefix != "" {
-					trimmed = prefix + trimmed
-				}
-
-				select {
-				case logsChan <- trimmed:
-				case <-ctx.Done():
-					return ctx.Err()
-				}
+		text := LogText(record)
+		if prefix != "" {
+			bounded, cut := BoundLogText(prefix+text, MaxLogLineBytes-len(LogTruncatedMarker))
+			text = bounded
+			if cut {
+				text += LogTruncatedMarker
 			}
 		}
-
-		if err != nil {
-			return kit.Ternary(errors.Is(err, io.EOF), nil, err)
+		select {
+		case lines <- text:
+			return nil
+		case <-ctx.Done():
+			return ctx.Err()
 		}
-	}
+	})
 }

@@ -2,17 +2,19 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: None
+// Deviations: Verify structured service/TTY/stream metadata alongside text compatibility.
 
 package projects
 
 import (
 	"bytes"
 	"encoding/json"
+	"go.getarcane.app/docker"
 	"net/http"
 	"net/http/httptest"
 	"regexp"
 	"strings"
+	"sync"
 	"testing"
 
 	"github.com/moby/moby/api/pkg/stdcopy"
@@ -106,6 +108,26 @@ func TestComposeLogsMarksStderrWithoutChangingComposeOptions(t *testing.T) {
 	assert.Contains(t, query, "timestamps=1")
 	assert.NotContains(t, query, "follow=")
 	assert.NotContains(t, query, "tail=")
+	var mu sync.Mutex
+	var records []docker.LogRecord
+	ctx := docker.WithLogSink(t.Context(), func(record docker.LogRecord) error {
+		mu.Lock()
+		defer mu.Unlock()
+		records = append(records, record)
+		return nil
+	})
+	out.Reset()
+	require.NoError(t, ComposeLogs(ctx, composeLogsTestProjectInternal, out, false, "all", "", true))
+	require.Empty(t, out.String(), "structured sources bypass the text pipe")
+	require.Len(t, records, 3)
+	observed := make(map[string]docker.LogRecord)
+	for _, record := range records {
+		observed[record.Stream] = record
+	}
+	require.Equal(t, "web", observed["stdout"].Service)
+	require.Equal(t, "web", observed["stderr"].Service)
+	require.Equal(t, "ttyd", observed["combined"].Service)
+	require.Equal(t, composeLogsTestTimestampInternal+"hello stderr", observed["stderr"].Message)
 }
 
 func writeComposeInspectJSONInternal(t *testing.T, w http.ResponseWriter, containerID, serviceName string, tty bool) {
@@ -124,7 +146,7 @@ func writeComposeInspectJSONInternal(t *testing.T, w http.ResponseWriter, contai
 		"Config": map[string]any{
 			"Tty":    tty,
 			"Image":  "example-image",
-			"Labels": map[string]string{},
+			"Labels": map[string]string{"com.docker.compose.service": serviceName},
 		},
 		"HostConfig":      map[string]any{},
 		"NetworkSettings": map[string]any{},

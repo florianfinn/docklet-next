@@ -2,7 +2,7 @@
 // Revision: e3d12f637964a6edd495f9b31a10d2f0a40fa127
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: None
+// Deviations: Assert bounded long-line truncation for the adopted reader.
 
 package docker
 
@@ -69,7 +69,11 @@ func TestStreamContainerLogsTTYHandlesLongLinesAndPartialEOF(t *testing.T) {
 	err := StreamContainerLogs(t.Context(), io.NopCloser(strings.NewReader(longLine+"\npartial tail")), logsChan, true, true)
 	require.NoError(t, err)
 
-	require.Equal(t, []string{longLine, "partial tail"}, drainLogLinesInternal(logsChan))
+	lines := drainLogLinesInternal(logsChan)
+	require.Len(t, lines, 2)
+	require.LessOrEqual(t, len(lines[0]), MaxLogLineBytes)
+	require.True(t, strings.HasSuffix(lines[0], LogTruncatedMarker))
+	require.Equal(t, "partial tail", lines[1])
 }
 
 func TestStreamContainerLogsTTYPythonLikeFollowDoesNotReturnEmptyLogs(t *testing.T) {
