@@ -103,7 +103,7 @@ func (c *RuntimeRemoteCoordinator) Release(ctx context.Context, ref RuntimeRunRe
 			snapshot, err = runtimeSnapshotTxInternal(tx, row)
 			return err
 		}
-		if row.EnvironmentID == "0" || row.ExecutorSettledAt != nil || runtimeKnowledgeInternal(row).OutcomeState != activitytypes.RuntimeOutcomeUnknown || *row.DispatchState == "pending" {
+		if (row.EnvironmentID == "0" && s.owners[row.RunID] != nil) || row.ExecutorSettledAt != nil || runtimeKnowledgeInternal(row).OutcomeState != activitytypes.RuntimeOutcomeUnknown || (row.EnvironmentID != "0" && *row.DispatchState == "pending") {
 			return &runtimeConflictInternal{}
 		}
 		snapshot, final, err = runtimeHubDispositionTxInternal(tx, now, row, runtimeDispositionInternal{Disposition: "released", By: actor.ID, Reason: reason, ReleaseAcknowledged: true})

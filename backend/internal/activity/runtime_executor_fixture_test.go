@@ -299,6 +299,7 @@ type runtimeServicesFixture struct {
 	t          *testing.T
 	db         *database.DB
 	settings   *settings.SettingsService
+	docker     *docker.DockerClientService
 	activity   *activity.ActivityService
 	projects   *project.ProjectService
 	containers *container.ContainerService
@@ -310,7 +311,7 @@ type runtimeServicesFixture struct {
 	store      activity.RuntimeStoreBinding
 }
 
-func newRuntimeServicesFixture(t *testing.T) *runtimeServicesFixture {
+func newRuntimeServicesFixture(t *testing.T, constructRuntime ...bool) *runtimeServicesFixture {
 	t.Helper()
 	httpFixture := newRuntimeHTTPFixture(t)
 	host, err := url.Parse(httpFixture.server.URL)
@@ -344,13 +345,18 @@ func newRuntimeServicesFixture(t *testing.T) *runtimeServicesFixture {
 	projects := project.NewProjectService(db, settingsService, events, images, dockerService, builds, registries, cfg, nil, nil)
 	containers := container.NewContainerService(events, dockerService, images, settingsService, projects)
 	adapter := activity.NewRuntimeServiceAdapter(projects, containers)
-	bootstrap := activity.NewRuntimeService(activityService, adapter)
-	generation, err := bootstrap.InitializeGeneration(ctx)
+
+	fixture := &runtimeServicesFixture{t: t, db: db, settings: settingsService, activity: activityService, projects: projects, containers: containers, adapter: adapter, docker: dockerService, http: httpFixture, dbPath: dbPath, root: root}
+	if len(constructRuntime) > 0 && !constructRuntime[0] {
+		return fixture
+	}
+	runtime := activity.NewRuntimeService(activityService, adapter)
+	generation, err := runtime.InitializeGeneration(ctx)
 	require.NoError(t, err)
 	store := activity.RuntimeStoreBinding{StoreGeneration: generation, ExecutorGeneration: generation, ManagerID: "example-manager", RegistrationID: "example-registration", EnvironmentID: "0"}
-	runtime := activity.NewRuntimeService(activityService, adapter, activity.RuntimeLocalConfig{ApplicationContext: context.Background(), Store: store, Executor: adapter})
-	return &runtimeServicesFixture{t: t, db: db, settings: settingsService, activity: activityService, projects: projects,
-		containers: containers, adapter: adapter, runtime: runtime, http: httpFixture, dbPath: dbPath, root: root, store: store}
+	require.NoError(t, runtime.ConfigureLocal(activity.RuntimeLocalConfig{ApplicationContext: context.Background(), Store: store, Executor: adapter}))
+	fixture.runtime, fixture.store = runtime, store
+	return fixture
 }
 
 func (f *runtimeServicesFixture) command(operation activity.RuntimeOperation, target activity.RuntimeTarget) activity.RuntimeCommand {

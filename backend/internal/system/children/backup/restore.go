@@ -120,6 +120,7 @@ func (s *Service) executeRestore(workCtx context.Context, actor usertypes.Actor,
 		}
 	}
 	resume := func() {
+		s.activityService.ResumeRuntimeIntake()
 		if s.coordinator != nil {
 			s.coordinator.Resume()
 		}
@@ -236,7 +237,6 @@ func (s *Service) executeRestore(workCtx context.Context, actor usertypes.Actor,
 		blocked()
 		return
 	}
-	s.activityService.ResumeRuntimeIntake()
 	resume()
 }
 

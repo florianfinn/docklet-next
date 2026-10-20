@@ -17,6 +17,7 @@ import (
 	activitytypes "github.com/florianfinn/docklet-next/types/activity"
 	"gorm.io/gorm"
 	"io"
+	"net/http"
 )
 
 type RuntimeExecutorBinding struct {
@@ -47,6 +48,9 @@ func (s *RuntimeService) LocalBinding(ctx context.Context, generation, instance 
 type runtimeReceiverBindingInternal struct{ sync.RWMutex }
 
 func (r *RuntimeReceiver) Register(ctx context.Context, request activitytypes.RuntimeRegistration) (activitytypes.RuntimeExecutorIdentity, error) {
+	if h := r.service.activity.runtimeHTTP; h != nil && !h.ready.Load() {
+		return activitytypes.RuntimeExecutorIdentity{}, ErrRuntimeNotReady
+	}
 	if !runtimeTextInternal(request.ManagerID, 256) || !runtimeTextInternal(request.RegistrationID, 256) {
 		return activitytypes.RuntimeExecutorIdentity{}, errRuntimeInvalidInternal
 	}
@@ -102,7 +106,16 @@ func (r *RuntimeReceiver) Register(ctx context.Context, request activitytypes.Ru
 
 func runtimeMetadataHTTPInternal(receiver *RuntimeReceiver, ctx huma.Context) {
 	body, err := io.ReadAll(io.LimitReader(ctx.BodyReader(), activitytypes.RuntimeMaxBodyBytes+1))
-	if err != nil || len(body) > activitytypes.RuntimeMaxBodyBytes || ctx.URL().RawQuery != "" {
+	var tooLarge *http.MaxBytesError
+	if len(body) > activitytypes.RuntimeMaxBodyBytes || errors.As(err, &tooLarge) {
+		runtimeHTTPErrorInternal(ctx, 413, "Runtime metadata too large")
+		return
+	}
+	if ctx.Context().Err() != nil {
+		runtimeHTTPErrorInternal(ctx, 408, "Runtime metadata interrupted")
+		return
+	}
+	if err != nil || ctx.URL().RawQuery != "" {
 		runtimeHTTPErrorInternal(ctx, 400, "Invalid runtime metadata request")
 		return
 	}
@@ -138,6 +151,9 @@ func runtimeMetadataHTTPInternal(receiver *RuntimeReceiver, ctx huma.Context) {
 }
 
 func (r *RuntimeReceiver) Resolve(ctx context.Context, request activitytypes.RuntimeTargetRequest) (activitytypes.RuntimeTargetMetadata, error) {
+	if h := r.service.activity.runtimeHTTP; h != nil && !h.ready.Load() {
+		return activitytypes.RuntimeTargetMetadata{}, ErrRuntimeNotReady
+	}
 	r.binding.RLock()
 	defer r.binding.RUnlock()
 	if request.Registration.ManagerID != r.store.ManagerID || request.Registration.RegistrationID != r.store.RegistrationID || request.Registration.ExecutorGeneration != r.store.ExecutorGeneration {
@@ -146,7 +162,7 @@ func (r *RuntimeReceiver) Resolve(ctx context.Context, request activitytypes.Run
 	if !runtimeTargetValidInternal(request.Target) || (request.Target.Kind != "stack" && request.Target.Kind != "container") {
 		return activitytypes.RuntimeTargetMetadata{}, errRuntimeInvalidInternal
 	}
-	resolved, err := r.service.resolver.ResolveRuntimeTarget(ctx, request.Target)
+	resolved, err := r.prepare.ResolveRuntimeTarget(ctx, request.Target)
 	if err != nil {
 		return activitytypes.RuntimeTargetMetadata{}, err
 	}

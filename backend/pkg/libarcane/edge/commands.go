@@ -15,6 +15,11 @@ import (
 )
 
 var commandRoutes = []commandRoute{
+	{Method: http.MethodPost, PathPattern: "/api/environments/0/runtime-registration", CommandName: "runtime.register"},
+	{Method: http.MethodPost, PathPattern: "/api/environments/0/runtime-target", CommandName: "runtime.resolve"},
+	{Method: http.MethodPost, PathPattern: "/api/environments/0/runtime-runs", CommandName: "runtime.execute"},
+	{Method: http.MethodGet, PathPattern: "/api/environments/0/runtime-runs/{runId}", CommandName: "runtime.query"},
+	{Method: http.MethodPost, PathPattern: "/api/environments/0/runtime-runs/{runId}/cancel", CommandName: "runtime.cancel"},
 	{Method: http.MethodGet, PathPattern: "/api/health", CommandName: "system.health"},
 	{Method: http.MethodHead, PathPattern: "/api/health", CommandName: "system.health"},
 	{Method: http.MethodGet, PathPattern: "/api/app-version", CommandName: "system.version"},

@@ -81,7 +81,7 @@ func (s *RuntimeService) RetainedCommand(ctx context.Context, command RuntimeCom
 	if err := s.activity.db.WithContext(ctx).First(&row, "run_id = ? AND kind = 'receipt'", binding.RunID).Error; err != nil {
 		return RuntimeCommand{}, false, &RuntimeStoreError{Cause: err}
 	}
-	if row.TargetID == nil || row.TargetKind == nil || *row.TargetID != command.Target.ID || *row.TargetKind != command.Target.Kind {
+	if !runtimeLegacyTargetMatches(command.Target, &row) {
 		return RuntimeCommand{}, false, &runtimeConflictInternal{}
 	}
 	command.Store = runtimeStoreFromRowInternal(&row)

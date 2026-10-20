@@ -17,6 +17,7 @@ import (
 
 type Activity struct {
 	database.BaseModel
+	runtimeKnowledge *activity.RuntimeKnowledge
 
 	EnvironmentID        string             `json:"environmentId" gorm:"column:environment_id;not null;index" sortable:"true"`
 	BatchID              *string            `json:"batchId,omitempty" gorm:"column:batch_id;index"`

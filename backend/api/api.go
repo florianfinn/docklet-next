@@ -330,6 +330,7 @@ func SetupAPI(e *echo.Echo, apiGroup *echo.Group, appCtx handlerutil.ActivityApp
 	api.UseMiddleware(auth.NewHumaMiddleware(api, deps.Auth.Service(), deps.ApiKey.Service(), deps.Role.Service(), deps.Environment.Service(), cfg))
 	api.UseMiddleware(middleware.NewActivityBatchID())
 	registerNormalizationInternal(api)
+	registerRuntimeSchemasInternal(api)
 
 	// Register all Huma handlers
 	registerHandlersInternal(api, deps, appCtx, cfg)
@@ -352,7 +353,9 @@ func registerScalarDocs(apiGroup *echo.Group) {
 // SetupAPIForSpec creates a Huma API instance for OpenAPI spec generation only.
 // No services are required - this is purely for schema generation.
 func SetupAPIForSpec() huma.API {
-	return setupAPIForSpecMode(nil)
+	spec := setupAPIForSpecMode(nil)
+	activity.RegisterRuntimeReceiverRoutes(spec, nil, "")
+	return spec
 }
 
 func setupAPIForSpecMode(cfg *config.Config) huma.API {
@@ -398,6 +401,7 @@ func setupAPIForSpecMode(cfg *config.Config) huma.API {
 
 	// Register handlers with zero-value dependencies for schema discovery only.
 	registerNormalizationInternal(api)
+	registerRuntimeSchemasInternal(api)
 	registerHandlersInternal(api, HandlerDeps{}, handlerutil.NewActivityAppContext(context.Background()), cfg) //nolint:forbidigo // Schema discovery has no running request or application lifecycle.
 
 	return api

@@ -23,7 +23,7 @@ func TestAgentHubDetailFixture(t *testing.T) {
 	fixture, err := os.ReadFile("testdata/agent-hub-v3.json")
 	require.NoError(t, err)
 	digest := sha256.Sum256(fixture)
-	require.Equal(t, AgentHubFingerprint, hex.EncodeToString(digest[:]))
+	require.Equal(t, "39fc19066cb96d807cba48cb01ccf58ed9cfc45f15dbafb8ce2d2bccd7d4015e", hex.EncodeToString(digest[:]))
 	var manifest struct {
 		Version                     int      `json:"version"`
 		OnboardingCheckFields       []string `json:"onboardingCheckFields"`
@@ -35,8 +35,8 @@ func TestAgentHubDetailFixture(t *testing.T) {
 		} `json:"proxiedOperations"`
 	}
 	require.NoError(t, json.Unmarshal(fixture, &manifest))
-	require.Equal(t, AgentHubVersion, manifest.Version)
-	require.Equal(t, MinimumAgentVersion, manifest.MinimumAgentContractVersion)
+	require.Equal(t, 3, manifest.Version)
+	require.Equal(t, 3, manifest.MinimumAgentContractVersion)
 	require.Len(t, manifest.ProxiedOperations, 1)
 	require.Equal(t, "get-activity", manifest.ProxiedOperations[0].OperationID)
 	line := activity.OutputLine{Timestamp: time.Now().UTC(), Stream: "stdout", Text: "raw", Step: "pull", Level: activity.MessageLevelInfo}

@@ -2,7 +2,7 @@
 // Revision: d4229b124f079376c959142b63235f6a739be2a9711e0228ec5a63ab552f8cf0
 // Retrieved: 2026-10-19
 // License: Apache-2.0
-// Deviations: Receipt-owned internal projection and compact fallback; no wire registration.
+// Deviations: Receipt-owned runtime projection and compact fallback shared by current exports.
 
 package activity
 
@@ -22,7 +22,7 @@ func runtimeKnowledgeInternal(row *RuntimeReceipt) activitytypes.RuntimeKnowledg
 	case "pending":
 		if (row.HubDisposition != nil && *row.HubDisposition != "released") ||
 			(row.EnvironmentID == "0" && row.ExecutorGeneration == row.StoreGeneration &&
-				*row.DispatchState == "pending" && row.UnknownReason == nil) {
+				row.UnknownReason == nil) {
 			outcome = activitytypes.RuntimeOutcomeKnown
 		}
 	}
@@ -63,21 +63,7 @@ func runtimeSnapshotTxInternal(tx *gorm.DB, row *RuntimeReceipt) (activitytypes.
 			StartedByUserID: row.CallerID, StartedByUsername: row.CallerName, StartedByDisplayName: row.CallerName,
 			StartedAt: *row.AdmittedAt, EndedAt: row.SettledAt, Error: row.ExecutorError}
 	}
-	// Knowledge and workflow disposition come from the receipt, independently of
-	// legacy status/read health. A manual release retains unknown external outcome.
-	status := runtimeStatusInternal(row)
-	if status == activitytypes.StatusRunning && model.Status == activitytypes.StatusQueued &&
-		row.EnvironmentID == "0" && row.ExecutorGeneration == row.StoreGeneration && *row.DispatchState == "pending" &&
-		(*row.ExecutorState == "pending" || *row.ExecutorState == "accepted") && runtimeQueuesInternal(RuntimeOperation(*row.OperationID)) {
-		status = activitytypes.StatusQueued
-	}
-	model.Status = status
-	if row.HubDisposition != nil {
-		model.MessageCode = string(activitytypes.CodeRuntimeInterrupted)
-		model.Error = row.HubDispositionReason
-	} else if row.ExecutorResultCode != nil {
-		model.MessageCode = *row.ExecutorResultCode
-	}
+	runtimeProjectModelInternal(&model, row)
 	knowledge := runtimeKnowledgeInternal(row)
 	dto := activityToDTOInternal(&model)
 	dto.RuntimeKnowledge = &knowledge

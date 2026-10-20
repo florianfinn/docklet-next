@@ -2,7 +2,7 @@
 // Revision: d4229b124f079376c959142b63235f6a739be2a9711e0228ec5a63ab552f8cf0
 // Retrieved: 2026-10-19
 // License: Apache-2.0
-// Deviations: Dormant runtime projection vocabulary, separate from registered v3 DTOs.
+// Deviations: Required runtime projection vocabulary for activated v4 DTOs.
 
 package activity
 
@@ -18,13 +18,12 @@ const (
 // RuntimeKnowledge is required as a pair on runtime projections. Historical and
 // unrelated Activity values carry neither field; cancellation intent is not outcome.
 type RuntimeKnowledge struct {
-	OutcomeState    RuntimeOutcomeState `json:"outcomeState"`
+	OutcomeState    RuntimeOutcomeState `json:"outcomeState" enum:"known,unknown"`
 	CancelRequested bool                `json:"cancelRequested"`
 }
 
-// RuntimeSnapshot adds flat receipt knowledge without changing registered Activity.
+// RuntimeSnapshot requires flat receipt knowledge beside the activity projection.
 // A hub release may project failed while executor outcome remains unknown.
-// This standalone type is not registered with the public API before activation.
 type RuntimeSnapshot struct {
 	Activity
 	RuntimeKnowledge
@@ -38,8 +37,10 @@ type RuntimeAdmission struct {
 	Activity   RuntimeSnapshot `json:"activity"`
 }
 
-// These dormant codes are deliberately outside Values and registered v3 enums.
+// Runtime codes are part of the activated v4 lifecycle vocabulary.
 const (
+	CodeRuntimeTargetChanged      Code = "runtime.target-changed"
+	CodeRuntimeTargetUnavailable  Code = "runtime.target-unavailable"
 	CodeRunRequestMismatch        Code = "run.request-mismatch"
 	CodeRuntimeOutcomeUnknown     Code = "runtime.outcome-unknown"
 	CodeRuntimeInterrupted        Code = "runtime.interrupted"

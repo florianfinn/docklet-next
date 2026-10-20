@@ -70,6 +70,8 @@ func runtimePermissionInternal(operation RuntimeOperation) string {
 }
 
 func (h *RuntimeHTTPService) admit(ctx context.Context, environmentID, key string, operation RuntimeOperation, target RuntimeTarget, options RuntimeOptions) (RuntimeAdmissionResult, RuntimeRunReference, error) {
+	ctx, cancelAdmission := context.WithTimeout(ctx, RuntimeAdmissionLimit)
+	defer cancelAdmission()
 	empty, noRef := RuntimeAdmissionResult{}, RuntimeRunReference{}
 	if h == nil || !h.ready.Load() {
 		return empty, noRef, huma.Error503ServiceUnavailable("Runtime is not ready")
@@ -100,6 +102,12 @@ func (h *RuntimeHTTPService) admit(ctx context.Context, environmentID, key strin
 	command, retained, err := h.service.RetainedCommand(ctx, command)
 	if err != nil {
 		return empty, noRef, err
+	}
+	if !retained {
+		command, retained, err = h.service.HeldCommand(ctx, command)
+		if err != nil {
+			return empty, noRef, err
+		}
 	}
 	if !retained {
 		command.Store, err = h.ports.Store(ctx, environmentID)

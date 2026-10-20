@@ -24,8 +24,8 @@ func RuntimeIngressBodyBounded(ctx context.Context) bool {
 	return v
 }
 
-// NewRuntimeTunnelClient enables only the dormant runtime request vocabulary on
-// this instance. The ordinary command registry and production client are unchanged.
+// NewRuntimeTunnelClient enables the bounded runtime command vocabulary used
+// by the production agent alongside its existing ordinary commands.
 func NewRuntimeTunnelClient(cfg *Config, handler http.Handler) *TunnelClient {
 	c := NewTunnelClient(cfg, handler)
 	c.runtimeCommands = true

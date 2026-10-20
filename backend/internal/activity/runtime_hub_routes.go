@@ -53,7 +53,7 @@ func runtimeHubReference(ctx context.Context, service *RuntimeService, environme
 
 func RegisterRuntimeHubRoutes(api huma.API, service *RuntimeService) {
 	middleware.RegisterWithPermission(api, huma.Operation{OperationID: "get-hub-runtime-run", Method: http.MethodGet, Path: "/environments/{id}/runtime-runs/{runId}", Tags: []string{"Runtime"}, Summary: "Read a durable runtime run"}, authz.PermActivitiesRead,
-		func(ctx context.Context, input *runtimeHubInput) (*handlerutil.Out[activitytypes.RuntimeExecutionDetail], error) {
+		func(ctx context.Context, input *runtimeHubInput) (*handlerutil.Out[activitytypes.RuntimeHubDetail], error) {
 			ref, err := runtimeHubReference(ctx, service, input.EnvironmentID, input.RunID, false)
 			if err != nil {
 				return nil, err
@@ -61,11 +61,11 @@ func RegisterRuntimeHubRoutes(api huma.API, service *RuntimeService) {
 			if input.Refresh && input.EnvironmentID != "0" && service.remote != nil {
 				_, _ = service.remote.Refresh(ctx, ref)
 			}
-			detail, err := service.GetRuntimeDetail(ctx, ref)
+			detail, err := service.GetRuntimeHubDetail(ctx, ref)
 			if err != nil {
 				return nil, huma.Error503ServiceUnavailable("Runtime detail unavailable")
 			}
-			return &handlerutil.Out[activitytypes.RuntimeExecutionDetail]{Body: base.ApiResponse[activitytypes.RuntimeExecutionDetail]{Success: true, Data: *detail}}, nil
+			return &handlerutil.Out[activitytypes.RuntimeHubDetail]{Body: base.ApiResponse[activitytypes.RuntimeHubDetail]{Success: true, Data: *detail}}, nil
 		})
 	middleware.RegisterWithPermission(api, huma.Operation{OperationID: "cancel-hub-runtime-run", Method: http.MethodPost, Path: "/environments/{id}/runtime-runs/{runId}/cancel", Tags: []string{"Runtime"}, Summary: "Request runtime cancellation"}, authz.PermActivitiesCancel,
 		func(ctx context.Context, input *runtimeHubInput) (*handlerutil.Out[activitytypes.RuntimeSnapshot], error) {

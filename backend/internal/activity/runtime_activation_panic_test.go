@@ -31,17 +31,17 @@ func TestRuntimeActivationPanicChild(t *testing.T) {
 	db, err := database.InitializeHub(ctx, os.Getenv("ACTIVATION_PANIC_URL"), database.MigrationOptions{})
 	require.NoError(t, err)
 	svc := NewActivityService(db, nil)
-	bootstrap := NewRuntimeService(svc, &b1ResolverInternal{})
-	generation, err := bootstrap.InitializeGeneration(ctx)
+	runtime := NewRuntimeService(svc, &b1ResolverInternal{})
+	generation, err := runtime.InitializeGeneration(ctx)
 	require.NoError(t, err)
 	command := b3ProcessCommand(generation, os.Getenv("ACTIVATION_PANIC_RUN"), uuid.NewString())
-	runtime := NewRuntimeService(svc, &b1ResolverInternal{}, RuntimeLocalConfig{ApplicationContext: ctx, Store: command.Store,
+	require.NoError(t, runtime.ConfigureLocal(RuntimeLocalConfig{ApplicationContext: ctx, Store: command.Store,
 		Executor: b2ExecutorFunc(func(context.Context, RuntimeCommand, io.Writer) error {
 			childStarted := make(chan struct{})
 			go func() { close(childStarted); select {} }()
 			<-childStarted
 			panic("synthetic-runtime-child-completion-unknown")
-		})})
+		})}))
 	_, err = runtime.Admit(ctx, command)
 	require.NoError(t, err)
 	_, err = runtime.WaitLocal(ctx, b2Ref(command, command.ProposedRunID))

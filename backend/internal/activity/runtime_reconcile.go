@@ -74,22 +74,44 @@ func (c *RuntimeRemoteCoordinator) Refresh(ctx context.Context, ref RuntimeRunRe
 	return c.refreshInternal(ctx, ref, false)
 }
 func (c *RuntimeRemoteCoordinator) refreshInternal(ctx context.Context, ref RuntimeRunReference, force bool) (activitytypes.RuntimeSnapshot, error) {
+	snapshot, task, err := c.prepareRefreshInternal(ctx, ref, force)
+	if err != nil || task == nil {
+		return snapshot, err
+	}
+	select {
+	case <-ctx.Done():
+		return activitytypes.RuntimeSnapshot{}, ctx.Err()
+	case <-task.done:
+		return c.Snapshot(ctx, ref)
+	}
+}
+
+func (c *RuntimeRemoteCoordinator) scheduleRefreshInternal(ctx context.Context, ref RuntimeRunReference) error {
+	_, _, err := c.prepareRefreshInternal(ctx, ref, false)
+	return err
+}
+
+func (c *RuntimeRemoteCoordinator) prepareRefreshInternal(ctx context.Context, ref RuntimeRunReference, force bool) (activitytypes.RuntimeSnapshot, *runtimeRemoteTaskInternal, error) {
 	snapshot, err := c.Snapshot(ctx, ref)
 	if err != nil {
-		return activitytypes.RuntimeSnapshot{}, err
+		return activitytypes.RuntimeSnapshot{}, nil, err
 	}
 
 	c.mu.Lock()
+	if c.paused {
+		c.mu.Unlock()
+		return snapshot, nil, ErrRuntimeNotReady
+	}
 	if c.recovering[ref.RunID] {
 		c.mu.Unlock()
-		return snapshot, ErrRuntimeRecoveryInProgress
+		return snapshot, nil, ErrRuntimeRecoveryInProgress
 	}
 	task := c.queries[ref.RunID]
 	if task == nil {
 		if !force && snapshot.OutcomeState == activitytypes.RuntimeOutcomeKnown && !isTerminalActivityStatusInternal(snapshot.Status) {
 			if last, ok := c.lastQuery[ref.RunID]; ok && c.schedule.Now().Sub(last) < 2*time.Second {
 				c.mu.Unlock()
-				return snapshot, nil
+				return snapshot, nil, nil
 			}
 		}
 		taskCtx, cancel := context.WithCancel(c.lifetime)
@@ -113,12 +135,7 @@ func (c *RuntimeRemoteCoordinator) refreshInternal(ctx context.Context, ref Runt
 		}()
 	}
 	c.mu.Unlock()
-	select {
-	case <-ctx.Done():
-		return activitytypes.RuntimeSnapshot{}, ctx.Err()
-	case <-task.done:
-		return c.Snapshot(ctx, ref)
-	}
+	return snapshot, task, nil
 }
 func (c *RuntimeRemoteCoordinator) reconcileInternal(ctx context.Context, ref RuntimeRunReference) {
 	for attempt, delay := range []time.Duration{0, 2 * time.Second, 5 * time.Second} {

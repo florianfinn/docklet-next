@@ -24,17 +24,23 @@ import (
 )
 
 // RuntimeReceiver shares the sole local RuntimeService and its lifetime owner.
-// Every entry requires an authenticated manager bound to this immutable trusted
-// construction. Wire identity and attribution never authenticate a caller.
+// Every entry requires the authenticated manager and persisted registration.
+// Wire identity and attribution never authenticate a caller.
 type RuntimeReceiver struct {
 	binding runtimeReceiverBindingInternal
 	service *RuntimeService
 	store   RuntimeStoreBinding
+	prepare RuntimeTargetResolver
 }
 
-func NewRuntimeReceiver(service *RuntimeService) (*RuntimeReceiver, error) {
+func NewRuntimeReceiver(service *RuntimeService, preparer ...RuntimeTargetResolver) (*RuntimeReceiver, error) {
 	if err := service.checkInternal(); err != nil {
 		return nil, err
+	}
+	service.activity.runningMu.Lock()
+	defer service.activity.runningMu.Unlock()
+	if service.receiver != nil {
+		return nil, errRuntimeInvalidInternal
 	}
 	local := service.localExecution
 	if local == nil || local.ApplicationContext == nil || local.Executor == nil {
@@ -47,7 +53,19 @@ func NewRuntimeReceiver(service *RuntimeService) (*RuntimeReceiver, error) {
 		!runtimeTextInternal(store.ManagerID, 256) || !runtimeTextInternal(store.RegistrationID, 256) {
 		return nil, errRuntimeInvalidInternal
 	}
-	return &RuntimeReceiver{service: service, store: store}, nil
+	if len(preparer) > 1 {
+		return nil, errRuntimeInvalidInternal
+	}
+	prepare := service.resolver
+	if len(preparer) == 1 {
+		prepare = preparer[0]
+	}
+	if prepare == nil {
+		return nil, errRuntimeInvalidInternal
+	}
+	receiver := &RuntimeReceiver{service: service, store: store, prepare: prepare}
+	service.receiver = receiver
+	return receiver, nil
 }
 
 // RuntimeReceiverResult captures receipt and bounded detail in one storage transaction.
@@ -65,6 +83,9 @@ func (r *RuntimeReceiver) identityInternal(wire activitytypes.RuntimeRunIdentity
 	}
 	if err := r.service.checkInternal(); err != nil {
 		return runtimeIdentityInternal{}, err
+	}
+	if h := r.service.activity.runtimeHTTP; h != nil && !h.ready.Load() {
+		return runtimeIdentityInternal{}, ErrRuntimeNotReady
 	}
 	// Authenticated tuple comparison precedes all command conversion/normalization.
 	if wire.ManagerID != r.store.ManagerID || wire.RegistrationID != r.store.RegistrationID ||

@@ -82,7 +82,7 @@ func provideRuntimeInternal(ctx context.Context, lc fx.Lifecycle, service *activ
 	if err := runtime.ConfigureLocal(activity.RuntimeLocalConfig{ApplicationContext: runtimeCtx, Store: local, Executor: adapter}); err != nil {
 		return runtimeResult{}, err
 	}
-	receiver, err := activity.NewRuntimeReceiver(runtime)
+	receiver, err := activity.NewRuntimeReceiver(runtime, activity.RuntimeResolverFunc(adapter.PrepareRuntimeTarget))
 	if err != nil {
 		return runtimeResult{}, err
 	}
@@ -102,17 +102,23 @@ func provideRuntimeInternal(ctx context.Context, lc fx.Lifecycle, service *activ
 				return activity.RuntimeStoreBinding{}, err
 			}
 			return activity.RuntimeStoreBinding{StoreGeneration: runtime.LocalStore().StoreGeneration, EnvironmentID: id, ManagerID: identity.ManagerID, RegistrationID: identity.RegistrationID, ExecutorGeneration: identity.ExecutorGeneration}, nil
-		}, PrepareTarget: resolve})
+		}, PrepareTarget: func(ctx context.Context, id string, target activity.RuntimeTarget) (activity.RuntimeResolvedTarget, error) {
+			if id == "0" {
+				return adapter.PrepareRuntimeTarget(ctx, target)
+			}
+			return resolve(ctx, id, target)
+		}})
 	if err != nil {
 		return runtimeResult{}, err
 	}
+	environments.SetRuntimeRemoval(runtime.RemoveEnvironment)
 	var maintenanceCancel context.CancelFunc
 	var maintenanceDone chan error
 	lc.Append(fx.Hook{OnStart: func(start context.Context) error {
 		if err := runtime.PruneRuntime(start); err != nil {
 			return err
 		}
-		if _, err := runtime.SettleLocalStartup(start, runtime.LocalStore()); err != nil {
+		if err := runtime.InitializeLocalStartup(start, runtime.LocalStore()); err != nil {
 			return err
 		}
 		if err := remote.Startup(start); err != nil {

@@ -29,6 +29,7 @@ type runtimeRemoteTaskInternal struct {
 type runtimeDispatchStampInternal struct{ mono, wall time.Time }
 
 type RuntimeRemoteCoordinator struct {
+	paused     bool
 	service    *RuntimeService
 	lifetime   context.Context
 	transport  RuntimeTransportFactory
@@ -140,7 +141,7 @@ func (c *RuntimeRemoteCoordinator) Start(ctx context.Context, ref RuntimeRunRefe
 		taskCtx, cancel := context.WithTimeout(c.lifetime, 30*time.Minute)
 		task := &runtimeRemoteTaskInternal{cancel: cancel, done: make(chan struct{})}
 		c.mu.Lock()
-		if c.recovering[ref.RunID] {
+		if c.paused || c.recovering[ref.RunID] {
 			c.mu.Unlock()
 			cancel()
 			lock.Unlock()
@@ -229,6 +230,7 @@ func (c *RuntimeRemoteCoordinator) InvalidateNegativeContinuity() {
 }
 func (c *RuntimeRemoteCoordinator) Close(ctx context.Context) error {
 	c.mu.Lock()
+	c.paused = true
 	var tasks []*runtimeRemoteTaskInternal
 	for _, task := range c.dispatch {
 		task.cancel()

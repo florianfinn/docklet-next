@@ -17,8 +17,10 @@ import (
 	"time"
 
 	"github.com/danielgtaylor/huma/v2"
+	"github.com/florianfinn/docklet-next/backend/internal/common"
 	"github.com/florianfinn/docklet-next/backend/internal/middleware"
 	activitylib "github.com/florianfinn/docklet-next/backend/pkg/libarcane/activity"
+	"github.com/florianfinn/docklet-next/backend/pkg/remenv"
 	activitytypes "github.com/florianfinn/docklet-next/types/activity"
 	"github.com/florianfinn/docklet-next/types/base"
 	projecttypes "github.com/florianfinn/docklet-next/types/project"
@@ -45,6 +47,10 @@ type runtimeContainerHTTPInput struct {
 // The original permission metadata remains the proxy/API authority source.
 func RegisterRuntimeLifecycle(api huma.API, service *ActivityService, operation RuntimeOperation, op huma.Operation) {
 	op.MaxBodyBytes = activitytypes.RuntimeMaxBodyBytes
+	op.BodyReadTimeout = RuntimeAdmissionLimit
+	// Legacy commands permit an empty body; RawBody otherwise defaults to required.
+	op.RequestBody = &huma.RequestBody{Required: false}
+	runtimeHTTPContract(api, operation, &op)
 	op.Description += " Runtime commands use durable admission; Prefer: respond-async returns 202 for a new run and 200 for a retained or joined run."
 	if strings.HasSuffix(string(operation), "project") {
 		middleware.RegisterWithPermission(api, op, runtimePermissionInternal(operation), func(ctx context.Context, input *runtimeProjectHTTPInput) (*huma.StreamResponse, error) {
@@ -75,6 +81,8 @@ func RegisterRuntimeLifecycle(api huma.API, service *ActivityService, operation 
 			return runtimeLegacyResponse(ctx, service, input.EnvironmentID, input.Key, input.Prefer, operation, RuntimeTarget{Kind: "container", ID: input.ContainerID}, RuntimeOptions{})
 		})
 	}
+	// Huma marks RawBody required during registration. Preserve the legacy optional body.
+	runtimeHTTPBodyContract(api, operation, &op)
 }
 
 func runtimeDecodeLegacyBody(body []byte, destination any) error {
@@ -114,7 +122,9 @@ func runtimeLegacyResponse(ctx context.Context, service *ActivityService, enviro
 		case errors.As(err, &mismatch):
 			return runtimeJSONResponse(409, activitytypes.RuntimeConflictResponse{Data: activitytypes.RuntimeConflict{Code: activitytypes.CodeRunRequestMismatch}}), nil
 		case errors.As(err, &targetErr):
-			return nil, huma.NewError(409, targetErr.Code)
+			return runtimeJSONResponse(409, activitytypes.RuntimeConflictResponse{Data: activitytypes.RuntimeConflict{Code: activitytypes.Code(targetErr.Code)}}), nil
+		case errors.Is(err, remenv.ErrAgentUpdateRequired):
+			return runtimeJSONResponse(503, common.NewAPIError("Agent update required", "agent.update-required", 503)), nil
 		case errors.Is(err, ErrRuntimeTargetRemoved):
 			return nil, huma.NewError(410, string(activitytypes.CodeRuntimeTargetRemoved))
 		default:

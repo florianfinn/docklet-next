@@ -178,3 +178,13 @@ func TestRuntimeActivationMaintenanceRetriesFrozenResult(t *testing.T) {
 	require.EqualValues(t, 1, probe.calls.Load())
 	b2FinalCount(t, f, admitted.ActivityID, 1)
 }
+
+func TestRuntimeActivationPendingDetail(t *testing.T) {
+	f := b1Fixture(t)
+	c := f.command()
+	admitted, err := f.service.Admit(t.Context(), c)
+	require.NoError(t, err)
+	detail, err := f.service.GetRuntimeDetail(t.Context(), b2Ref(c, admitted.ActivityID))
+	require.NoError(t, err)
+	require.NotNil(t, detail.StepTrace)
+}

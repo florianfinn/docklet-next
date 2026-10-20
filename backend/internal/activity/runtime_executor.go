@@ -11,6 +11,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"io"
+	"strings"
 
 	projecttypes "github.com/florianfinn/docklet-next/types/project"
 	usertypes "github.com/florianfinn/docklet-next/types/user"
@@ -73,10 +74,13 @@ func (a *RuntimeServiceAdapter) ResolveRuntimeTarget(ctx context.Context, target
 		if err != nil {
 			return RuntimeResolvedTarget{}, err
 		}
-		if inspect == nil || inspect.ID != target.ID || inspect.Config == nil || inspect.Config.Labels == nil {
+		if inspect == nil || inspect.ID != target.ID || inspect.Config == nil {
 			return RuntimeResolvedTarget{}, errors.New("container inspection identity unavailable")
 		}
 		resolved := RuntimeResolvedTarget{Target: RuntimeTarget{Kind: "container", ID: inspect.ID}}
+		if name := strings.TrimPrefix(inspect.Name, "/"); name != "" {
+			resolved.Target.Name = &name
+		}
 		if composeName, managed := inspect.Config.Labels["com.docker.compose.project"]; managed {
 			resolved.ComposeManaged = true
 			if composeName != "" {

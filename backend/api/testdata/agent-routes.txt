@@ -13,6 +13,7 @@ DELETE /environments/{id}/volumes/backups/{backupId}
 DELETE /environments/{id}/volumes/{volumeName}
 DELETE /environments/{id}/vulnerabilities/ignore/{ignoreId}
 GET /app-version
+GET /environments/0/runtime-runs/{runId}
 GET /environments/{id}/activities
 GET /environments/{id}/activities/{activityId}
 GET /environments/{id}/containers
@@ -93,6 +94,10 @@ HEAD /environments/{id}/system/health
 HEAD /health
 PATCH /environments/{id}/projects/{projectId}/tags
 POST /container-registries/sync
+POST /environments/0/runtime-registration
+POST /environments/0/runtime-runs
+POST /environments/0/runtime-runs/{runId}/cancel
+POST /environments/0/runtime-target
 POST /environments/{id}/activities/{activityId}/cancel
 POST /environments/{id}/containers
 POST /environments/{id}/containers/generate-compose

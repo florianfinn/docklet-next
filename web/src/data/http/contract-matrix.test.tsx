@@ -192,6 +192,11 @@ describe.each(["demo", "http"] as const)("%s shared adapter cases", (kind) => {
       await expect(b.http.listEvents()).rejects.toMatchObject({ outcome: { kind: "conflict", code, activeRunId: "active-1" } });
       expect(b.fetcher.mock.calls.some((call) => String(call[0]).includes("/activities"))).toBe(false);
     }
+    const mismatch = backend();
+    mismatch.fetcher.mockImplementation(async (input) => String(input).includes("/events") ? json({ success: false, data: { code: "run.request-mismatch", activeRunId: "must-not-leak" } }, 409) : backendResponse(String(input)));
+    const error: unknown = await mismatch.http.listEvents().catch((value: unknown) => value);
+    expect(error).toMatchObject({ outcome: { kind: "conflict", code: "run.request-mismatch" } });
+    expect((error as { outcome: object }).outcome).not.toHaveProperty("activeRunId");
   });
 
   it.each([["queued", "Wartet", "Queued"], ["cancelled", "Abgebrochen", "Cancelled"]] as const)("%s has distinct labels and terminal behavior (cases 13/14)", (status, de, en) => {

@@ -227,7 +227,8 @@ func (s *RuntimeSender) Register(ctx context.Context, registration activitytypes
 func (s *RuntimeSender) Resolve(ctx context.Context, request activitytypes.RuntimeTargetRequest) (activitytypes.RuntimeTargetMetadata, error) {
 	var result activitytypes.RuntimeTargetMetadata
 	err := s.metadata(ctx, "/api/environments/0/runtime-target", request, &result)
-	if err == nil && (result.Target.ID != request.Target.ID || result.Target.Kind != request.Target.Kind || !runtimeTargetValidInternal(result.Target)) {
+	if err == nil && (result.Target.Kind != request.Target.Kind || !runtimeTargetValidInternal(result.Target) ||
+		(result.Target.ID != request.Target.ID && (request.Target.Kind != "container" || runtimeFullContainerID(request.Target.ID) || !runtimeFullContainerID(result.Target.ID)))) {
 		err = ErrRuntimeTransport
 	}
 	return result, err

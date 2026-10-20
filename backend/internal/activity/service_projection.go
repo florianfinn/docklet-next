@@ -72,6 +72,9 @@ func (s *ActivityService) ListActivitiesPaginated(ctx context.Context, environme
 	for i := range activities {
 		out = append(out, activityToDTOInternal(&activities[i]))
 	}
+	if err := s.projectRuntimeListInternal(ctx, out); err != nil {
+		return nil, pagination.Response{}, err
+	}
 	return out, paginationResp, nil
 }
 
@@ -220,6 +223,7 @@ func activityToDTOInternal(model *Activity) activity.Activity {
 		return activity.Activity{}
 	}
 	return activity.Activity{
+		RuntimeKnowledge:    copyPtrInternal(model.runtimeKnowledge),
 		ID:                  model.ID,
 		EnvironmentID:       model.EnvironmentID,
 		SourceEnvironmentID: model.EnvironmentID,
@@ -626,11 +630,15 @@ func (
 	if err != nil {
 		return nil, pagination.Response{}, err
 	}
+	remote, duplicates, err := s.deduplicateRuntimeRemoteInternal(ctx, environmentID, activities, remote)
+	if err != nil {
+		return nil, pagination.Response{}, err
+	}
 	for _, item := range remote {
 		item.EnvironmentID = environmentID
 		activities = append(activities, item)
 	}
-	total := remoteTotal + localTotal
+	total := max(0, remoteTotal-duplicates) + localTotal
 	config := pagination.Config[activity.Activity]{SortBindings: []pagination.SortBinding[activity.Activity]{{
 		Fn: func(a, b activity.Activity) int { return compareActivitiesInternal(a, b, params) },
 	}}}

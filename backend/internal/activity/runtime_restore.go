@@ -56,12 +56,37 @@ func (a *ActivityService) FinishRuntimeRestore(ctx context.Context) error {
 	if s == nil {
 		return nil
 	}
+	if s.receiver != nil {
+		s.receiver.binding.Lock()
+		defer s.receiver.binding.Unlock()
+	}
 	var restored RuntimeStoreGeneration
 	if err := a.db.WithContext(ctx).First(&restored, "id = 1").Error; err != nil {
-		return &RuntimeStoreError{Cause: err}
+		if !errors.Is(err, gorm.ErrRecordNotFound) {
+			return &RuntimeStoreError{Cause: err}
+		}
+		var receipts int64
+		if err := a.db.WithContext(ctx).Model(&RuntimeReceipt{}).Count(&receipts).Error; err != nil {
+			return &RuntimeStoreError{Cause: err}
+		}
+		if receipts != 0 {
+			return &RuntimeStoreError{Cause: errors.New("restored runtime generation missing for retained receipts")}
+		}
+		generation, err := s.InitializeGeneration(ctx)
+		if err != nil {
+			return err
+		}
+		restored.Generation = generation
 	}
-	previous := s.LocalStore()
-	binding, err := s.LocalBinding(ctx, restored.Generation, previous.ManagerID)
+	var manager struct{ Value string }
+	read := a.db.WithContext(ctx).Table("settings").Select("value").Where("key = ?", "instanceId").Take(&manager)
+	if read.Error != nil {
+		return &RuntimeStoreError{Cause: read.Error}
+	}
+	if read.RowsAffected != 1 || !runtimeTextInternal(manager.Value, 256) {
+		return &RuntimeStoreError{Cause: errors.New("restored runtime manager identity unavailable")}
+	}
+	binding, err := s.LocalBinding(ctx, restored.Generation, manager.Value)
 	if err != nil {
 		return err
 	}
@@ -72,7 +97,7 @@ func (a *ActivityService) FinishRuntimeRestore(ctx context.Context) error {
 	}
 	s.localExecution.Store = binding
 	a.runningMu.Unlock()
-	if _, err := s.SettleLocalStartup(ctx, binding); err != nil {
+	if err := s.InitializeLocalStartup(ctx, binding); err != nil {
 		return err
 	}
 	generation := uuid.NewString()
@@ -93,6 +118,9 @@ func (a *ActivityService) FinishRuntimeRestore(ctx context.Context) error {
 	if err == nil {
 		binding.StoreGeneration, binding.ExecutorGeneration = generation, generation
 		s.localExecution.Store = binding
+		if s.receiver != nil {
+			s.receiver.store = binding
+		}
 		s.storagePaused = false
 	}
 	a.runningMu.Unlock()

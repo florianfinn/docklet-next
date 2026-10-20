@@ -21,7 +21,6 @@ import (
 	"github.com/samber/mo"
 	"gorm.io/gorm"
 
-	"github.com/florianfinn/docklet-next/backend/internal/common"
 	"github.com/florianfinn/docklet-next/backend/internal/database"
 	"github.com/florianfinn/docklet-next/backend/internal/settings"
 	activitylib "github.com/florianfinn/docklet-next/backend/pkg/libarcane/activity"
@@ -498,7 +497,7 @@ func (s *ActivityService) UpdateActivity(ctx context.Context, activityID string,
 		if err := tx.First(&model, "id = ?", activityID).Error; err != nil {
 			return fmt.Errorf("failed to load updated activity: %w", err)
 		}
-		return nil
+		return s.runtimeAnnotateActivityTxInternal(tx, &model)
 	}); err != nil {
 		return nil, err
 	}
@@ -621,7 +620,7 @@ func (s *ActivityService) appendBatchWithRetryInternal(ctx context.Context, acti
 			if err := tx.First(&current, "id = ?", activityID).Error; err != nil {
 				return fmt.Errorf("failed to load updated activity: %w", err)
 			}
-			return nil
+			return s.runtimeAnnotateActivityTxInternal(tx, &current)
 		})
 		if writeErr == nil {
 			return &current, nil

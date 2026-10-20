@@ -2,7 +2,7 @@
 // Revision: 230a4a3cb92c59cc15e1f6767abd18f017e05ca4b83835524aa8c20e50a89e46
 // Retrieved: 2026-10-19
 // License: Apache-2.0
-// Deviations: Dormant bounded remote runtime implementation; production activation is separate.
+// Deviations: Bounded remote runtime implementation with shared production route registration.
 
 package activity
 
@@ -13,6 +13,7 @@ import (
 	"io"
 	"net/http"
 	"reflect"
+	"strconv"
 	"strings"
 	"time"
 
@@ -22,11 +23,12 @@ import (
 	"github.com/florianfinn/docklet-next/backend/internal/common"
 	"github.com/florianfinn/docklet-next/backend/internal/config"
 	"github.com/florianfinn/docklet-next/backend/internal/middleware"
+	"github.com/florianfinn/docklet-next/backend/pkg/remenv"
 	activitytypes "github.com/florianfinn/docklet-next/types/activity"
 )
 
 // NewRuntimeReceiverHTTP builds a standalone agent-only Huma adapter. Production
-// registration, allowlists, compatibility and API advertising remain separate.
+// registration uses the same route, credential and ingress contracts.
 func NewRuntimeReceiverHTTP(receiver *RuntimeReceiver, authentication *auth.AuthService, cfg *config.Config, budget time.Duration) (http.Handler, error) {
 	if receiver == nil || authentication == nil || cfg == nil || !cfg.AgentMode || strings.TrimSpace(cfg.AgentToken) == "" {
 		return nil, errRuntimeInvalidInternal
@@ -173,6 +175,10 @@ func runtimeReceiverHTTPInternal(receiver *RuntimeReceiver, ctx huma.Context) {
 // RegisterRuntimeReceiverRoutes is the actual agent module registration source.
 // Direct and Edge ingress must wrap the router before auth/body assembly.
 func RegisterRuntimeReceiverRoutes(api huma.API, receiver *RuntimeReceiver, prefix string) {
+	if api.OpenAPI().Components.SecuritySchemes == nil {
+		api.OpenAPI().Components.SecuritySchemes = map[string]*huma.SecurityScheme{}
+	}
+	api.OpenAPI().Components.SecuritySchemes["AgentCredential"] = &huma.SecurityScheme{Type: "apiKey", In: "header", Name: remenv.HeaderAgentToken, Description: "Trusted manager-to-agent credential; ordinary bearer, administrator and bootstrap credentials are refused"}
 	for _, route := range []struct {
 		method, path, operation string
 		input, output           reflect.Type
@@ -183,11 +189,17 @@ func RegisterRuntimeReceiverRoutes(api huma.API, receiver *RuntimeReceiver, pref
 		{http.MethodPost, "/environments/0/runtime-registration", "register-runtime-executor", reflect.TypeFor[activitytypes.RuntimeRegistration](), reflect.TypeFor[activitytypes.RuntimeExecutorIdentity]()},
 		{http.MethodPost, "/environments/0/runtime-target", "resolve-runtime-target", reflect.TypeFor[activitytypes.RuntimeTargetRequest](), reflect.TypeFor[activitytypes.RuntimeTargetMetadata]()},
 	} {
-		op := &huma.Operation{OperationID: route.operation, Method: route.method, Path: prefix + route.path, Tags: []string{"Runtime"}, Security: []map[string][]string{{"ApiKeyAuth": {}}}, MaxBodyBytes: activitytypes.RuntimeMaxBodyBytes}
+		op := &huma.Operation{OperationID: route.operation, Method: route.method, Path: prefix + route.path, Tags: []string{"Runtime"}, Security: []map[string][]string{{"AgentCredential": {}}}, MaxBodyBytes: activitytypes.RuntimeMaxBodyBytes}
 		if route.input != nil {
 			op.RequestBody = &huma.RequestBody{Required: true, Content: map[string]*huma.MediaType{"application/json": {Schema: api.OpenAPI().Components.Schemas.Schema(route.input, true, "")}}}
 		}
 		op.Responses = map[string]*huma.Response{"200": {Description: "Authenticated runtime evidence", Content: map[string]*huma.MediaType{"application/json": {Schema: api.OpenAPI().Components.Schemas.Schema(route.output, true, "")}}}, "409": {Description: "Identity conflict; only a minimal Execute busy/cancelling refusal is negative authority"}, "503": {Description: "Runtime evidence unavailable"}}
+		errorSchema := &huma.Schema{OneOf: []*huma.Schema{api.OpenAPI().Components.Schemas.Schema(reflect.TypeFor[common.APIError](), true, ""), api.OpenAPI().Components.Schemas.Schema(reflect.TypeFor[huma.ErrorModel](), true, "")}}
+		for _, status := range []int{400, 401, 403, 408, 413, 503} {
+			op.Responses[strconv.Itoa(status)] = &huma.Response{Description: "Bounded authenticated runtime request refused; no execution authority", Content: map[string]*huma.MediaType{"application/json": {Schema: errorSchema}}}
+		}
+		op.Responses["409"].Content = map[string]*huma.MediaType{"application/json": {Schema: &huma.Schema{OneOf: []*huma.Schema{api.OpenAPI().Components.Schemas.Schema(reflect.TypeFor[activitytypes.RuntimeExecutionRefusal](), true, ""), errorSchema}}}}
+
 		if strings.Contains(route.path, "{runId}") {
 			op.Parameters = append(op.Parameters, &huma.Param{Name: "runId", In: "path", Required: true, Schema: &huma.Schema{Type: "string", Format: "uuid"}})
 		}
