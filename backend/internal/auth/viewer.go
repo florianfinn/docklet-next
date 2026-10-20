@@ -8,11 +8,12 @@ package auth
 
 import (
 	"context"
+	"net/http"
+	"strings"
+
 	"github.com/danielgtaylor/huma/v2"
 	"github.com/florianfinn/docklet-next/backend/internal/middleware"
 	"github.com/florianfinn/docklet-next/backend/pkg/sessionlife"
-	"net/http"
-	"strings"
 )
 
 func (s *AuthService) ViewerContext(ctx context.Context, sessionID, userID string) context.Context {

@@ -22,7 +22,7 @@ export function SetupGate() {
   const t = useTranslations("login");
   const mode = useAuthMode();
   const currentUser = useCurrentUser();
-  const setup = useSetupStatus(currentUser.isSuccess);
+  const setup = useSetupStatus(currentUser.isSuccess && !!currentUser.data);
   const savedLocale = currentUser.data?.locale;
   useEffect(() => { if (isLocale(savedLocale)) setAppLocale(savedLocale); }, [savedLocale]);
   if (mode.isPending || currentUser.isPending) return <main aria-busy="true" className="p-6">{t("loading")}</main>;

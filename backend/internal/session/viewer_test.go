@@ -9,6 +9,7 @@ package session
 import (
 	"context"
 	"errors"
+	"sync"
 	"testing"
 	"time"
 
@@ -109,4 +110,34 @@ func TestSessionViewerFailedDurableRevokeDoesNotClose(t *testing.T) {
 	require.Error(t, s.RevokeSession(t.Context(), record.ID))
 	require.False(t, closed)
 	require.NoError(t, sessionlife.Check(s.ViewerContext(t.Context(), record.ID, u.ID)))
+}
+
+func TestSessionViewerRegisterRevokeRaceUsesDurableState(t *testing.T) {
+	db := setupAuthServiceTestDB(t)
+	u := &user.User{Username: "example-register-race"}
+	require.NoError(t, db.Create(u).Error)
+	owner := NewSessionService(db)
+	record, _, err := owner.CreateSession(t.Context(), u.ID, time.Now().Add(time.Hour), auth.SessionMeta{})
+	require.NoError(t, err)
+	entered, proceed, closed := make(chan struct{}), make(chan struct{}), make(chan struct{})
+	var once sync.Once
+	require.NoError(t, db.Callback().Query().Before("gorm:query").Register("example-session-barrier", func(tx *gorm.DB) {
+		if tx.Statement.Table == "user_sessions" {
+			once.Do(func() { close(entered); <-proceed })
+		}
+	}))
+	done := make(chan error, 1)
+	go func() {
+		_, err := sessionlife.Register(owner.ViewerContext(t.Context(), record.ID, u.ID), func() { close(closed) })
+		done <- err
+	}()
+	<-entered
+	require.NoError(t, NewSessionService(db).RevokeSession(t.Context(), record.ID))
+	select {
+	case <-closed:
+	default:
+		t.Error("revoke must see a viewer before its durable read")
+	}
+	close(proceed)
+	require.Error(t, <-done, "revocation winning acceptance must reject before any data")
 }

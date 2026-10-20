@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Log only sorted forwarded header names.
+// Deviations: Log only sorted forwarded header names; session-bound viewer lifetime and durable validation.
 
 package ws
 
@@ -78,8 +78,8 @@ func ProxyHTTP(w http.ResponseWriter, r *http.Request, remoteWS string, header h
 
 	slog.DebugContext(dialCtx, "websocket proxy established", "remoteWs", remoteWS)
 
-	// When either pump ends, the handler returns and the deferred CloseNow
-	// calls unblock the other pump.
+	// When either pump ends, close both legs and join the pumps and durable
+	// cadence before returning from this viewer lifetime.
 	pumpCtx, pumpCancel := context.WithCancel(viewerCtx)
 	defer pumpCancel()
 

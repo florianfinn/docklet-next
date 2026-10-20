@@ -18,7 +18,7 @@ export function AuthGate() {
   const t = useTranslations("login");
   const mode = useAuthMode();
   const currentUser = useCurrentUser();
-  const setup = useSetupStatus(currentUser.isSuccess);
+  const setup = useSetupStatus(currentUser.isSuccess && !!currentUser.data);
   const location = useLocation();
   const [unauthorized, setUnauthorized] = useState(false);
   const savedLocale = currentUser.data?.locale;
