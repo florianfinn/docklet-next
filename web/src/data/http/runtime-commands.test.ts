@@ -9,7 +9,7 @@ import { COMMAND_RETRY_MS } from "./runtime-commands";
 import { deferred } from "./activity-reader.test-support";
 import { envelope, response, RUN_ID, runtimeFixture, snapshot } from "./runtime-commands.test-support";
 
-afterEach(() => vi.useRealTimers());
+afterEach(() => { vi.useRealTimers(); vi.unstubAllGlobals(); });
 const operations = [
   ["stack", "start", "up"], ["stack", "stop", "down"], ["stack", "restart", "restart"], ["stack", "redeploy", "redeploy"],
   ["container", "start", "start"], ["container", "stop", "stop"], ["container", "restart", "restart"],
@@ -111,4 +111,21 @@ it("encodes the host segment as well as the raw target without interpreting eith
   expect(await f.adapter.runContainerCommand(`${host}~raw /?#%`, "start")).toBe(RUN_ID);
   expect(f.commands()[0]!.url.pathname).toBe("/api/environments/direct%20%2F%3F%23%25/containers/raw%20%2F%3F%23%25/start");
   expect(f.commands()).toHaveLength(1);
+});
+
+it("creates a secure opaque UUID when the secure-context randomUUID API is unavailable", async () => {
+  const random = crypto.getRandomValues.bind(crypto);
+  const getRandomValues = vi.fn((bytes: Uint8Array<ArrayBuffer>) => random(bytes));
+  vi.stubGlobal("crypto", { getRandomValues });
+  const f = runtimeFixture();
+  expect(await f.helper.runContainerCommand("0~target", "start")).toBe(RUN_ID);
+  const key = new Headers(f.commands()[0]!.init.headers).get("Idempotency-Key");
+  expect(key).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/);
+  expect(getRandomValues).toHaveBeenCalledTimes(1); expect(f.commands()).toHaveLength(1);
+});
+it("unavailable cryptographic randomness refuses before sending any command or inventing a run", async () => {
+  vi.stubGlobal("crypto", { getRandomValues() { throw new Error("Example randomness failure"); } });
+  const f = runtimeFixture();
+  await expect(f.helper.runContainerCommand("0~target", "start")).rejects.toMatchObject({ outcome: { code: "runtime.key-unavailable" } });
+  expect(f.commands()).toHaveLength(0); expect(f.published).toEqual([]);
 });

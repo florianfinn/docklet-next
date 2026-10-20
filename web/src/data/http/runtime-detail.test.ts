@@ -128,3 +128,10 @@ it("bounded terminal history does not exhaust admission capacity for a deliberat
   expect(await f.helper.runContainerCommand("0~target", "start")).toBe(RUN_ID);
   expect(f.commands()).toHaveLength(1); expect(f.helper.retained()).toHaveLength(256); f.helper.reset();
 });
+
+it("malformed outcome objects are typed detail errors and cannot publish a run", async () => {
+  const f = runtimeFixture();
+  f.state.read = () => envelope(runtimeDetail({ ...f.state.run, outcomeState: { toString: null } as never }));
+  await expect(f.helper.getRuntimeRun("0", RUN_ID)).rejects.toMatchObject({ outcome: { code: "runtime.invalid-response" } });
+  expect(f.commands()).toHaveLength(0); expect(f.published).toEqual([]);
+});

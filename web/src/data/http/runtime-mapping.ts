@@ -31,7 +31,7 @@ export function runtimeResponseError(body: unknown, status: number): AdapterOutc
 export function mapRuntime(snapshot: unknown, hostId: string, id?: string, detail?: RuntimeDetail, rights?: RuntimePresentation): RuntimeRun {
   const value = object(snapshot);
   if (typeof value.id !== "string" || !value.id.trim() || (id !== undefined && value.id !== id) || value.environmentId !== hostId ||
-      !["known", "unknown"].includes(String(value.outcomeState)) || typeof value.cancelRequested !== "boolean") throw runtimeError("runtime.invalid-response");
+      (value.outcomeState !== "known" && value.outcomeState !== "unknown") || typeof value.cancelRequested !== "boolean") throw runtimeError("runtime.invalid-response");
   try {
     const run = mapActivityDetail(detail ?? { activity: snapshot as RuntimeSnapshot, output: [], messages: [], stepTrace: [], outputTruncated: false });
     const recovery = detail?.recovery;

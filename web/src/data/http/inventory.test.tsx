@@ -107,11 +107,16 @@ describe("host inventory HTTP reads", () => {
     expect((await f.adapter.listHosts()).every((h) => h.inventory?.reason === "inventory.mapping-error")).toBe(true);
   });
 
-  it("keeps write operations unavailable without any request", async () => {
+  it("requires explicit command capabilities and never posts an ungranted inventory mutation", async () => {
     const f = fixture();
     await expect(f.adapter.runContainerCommand("first~web", "restart")).rejects.toMatchObject({ outcome: { kind: "not-available" } });
     await expect(f.adapter.runStackCommand("first~project", "start")).rejects.toMatchObject({ outcome: { kind: "not-available" } });
-    expect(f.fetcher).not.toHaveBeenCalled();
+    await expect(f.adapter.installContainerUpdate("first~web")).rejects.toMatchObject({ outcome: { kind: "not-available" } });
+    await expect(f.adapter.installStackUpdates("first~project")).rejects.toMatchObject({ outcome: { kind: "not-available" } });
+    expect(f.fetcher.mock.calls.map(([input]) => String(input))).toEqual([
+      "/api/capabilities?kind=container&id=first%7Eweb",
+      "/api/capabilities?kind=stack&id=first%7Eproject",
+    ]);
   });
 
   it.each(["de", "en-US"] as const)("renders host state without a retained snapshot in %s", (locale) => {

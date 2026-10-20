@@ -17,6 +17,17 @@ const LIMIT = 256;
 const stackRoutes: Record<StackCommand, string> = { start: "up", stop: "down", restart: "restart", redeploy: "redeploy" };
 const active = (run: RuntimeRun) => run.status === "running" || run.status === "queued";
 
+/** HTTP contexts still have secure random bytes even without Crypto.randomUUID. */
+function commandUUID(): string {
+  if (typeof crypto.randomUUID === "function") return crypto.randomUUID();
+  const bytes = crypto.getRandomValues(new Uint8Array(16));
+  bytes[6] = (bytes[6]! & 15) | 64;
+  bytes[8] = (bytes[8]! & 63) | 128;
+  const hex = Array.from(bytes, (value) => value.toString(16).padStart(2, "0")).join("");
+  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
+}
+
+
 interface Options {
   baseUrl: string;
   client: CsrfClient;
@@ -28,7 +39,7 @@ interface Options {
 }
 
 /** Commands own only browser intent and observation. The hub owns admission and effects. */
-export function createRuntimeCommands({ baseUrl, client, capability, publish, unauthorized = () => {}, now = () => performance.now(), uuid = () => crypto.randomUUID() }: Options) {
+export function createRuntimeCommands({ baseUrl, client, capability, publish, unauthorized = () => {}, now = () => performance.now(), uuid = commandUUID }: Options) {
   let generation = 0;
   let observed = false;
   let timer: ReturnType<typeof setTimeout> | undefined;
@@ -130,7 +141,9 @@ export function createRuntimeCommands({ baseUrl, client, capability, publish, un
       const operation = kind === "stack" ? "runStackCommand" : "runContainerCommand";
       const descriptor = await capability(operation, { kind, id: target }); check(version);
       if (!descriptor.available) throw unavailable(operation, descriptor.resourceRef, descriptor.disabledReasonCode);
-      const idempotencyKey = uuid(), began = now();
+      let idempotencyKey: string;
+      try { idempotencyKey = uuid(); } catch { throw runtimeError("runtime.key-unavailable"); }
+      const began = now();
       const controller = new AbortController(); controllers.add(controller);
       const timeout = setTimeout(() => controller.abort(), COMMAND_RETRY_MS);
       try {
