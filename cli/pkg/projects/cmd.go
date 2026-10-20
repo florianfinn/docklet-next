@@ -7,12 +7,9 @@
 package projects
 
 import (
-	"bufio"
 	"bytes"
 	"encoding/json/v2"
-	"errors"
 	"fmt"
-	"io"
 	"mime/multipart"
 	"net/http"
 	"net/url"
@@ -377,41 +374,6 @@ func runProjectStreamAction(cmd *cobra.Command, identifier string, cfg projectSt
 
 	output.Success(cfg.successMessage, resolved.Name)
 	return nil
-}
-
-// printOperationStreamInternal consumes an NDJSON operation stream, printing
-// raw docker CLI log lines to stdout. A terminal error frame is returned as an
-// error; unknown frames (e.g. the activity envelope) are skipped.
-func printOperationStreamInternal(body io.Reader) error {
-	scanner := bufio.NewScanner(body)
-	scanner.Buffer(make([]byte, 0, 64*1024), 4*1024*1024)
-
-	for scanner.Scan() {
-		line := strings.TrimSpace(scanner.Text())
-		if line == "" {
-			continue
-		}
-
-		var frame struct {
-			Log   string `json:"log"`
-			Error string `json:"error"`
-			Done  bool   `json:"done"`
-		}
-		if err := json.Unmarshal([]byte(line), &frame); err != nil {
-			continue
-		}
-		if frame.Error != "" {
-			return errors.New(frame.Error)
-		}
-		if frame.Done {
-			return nil
-		}
-		if frame.Log != "" {
-			_, _ = fmt.Fprintln(output.Stdout(), frame.Log)
-		}
-	}
-
-	return scanner.Err()
 }
 
 var createCmd = &cobra.Command{
