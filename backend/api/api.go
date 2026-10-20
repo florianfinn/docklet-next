@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; functional cut: removed APNS mobile push; functional cut: removed template catalogue; functional cut: removed federated credentials; functional cut: removed central variables and .env.global; functional cut: removed GitOps and saved Git repositories; functional cut: removed Swarm; functional cut: removed S3 backup destinations; functional cut: removed standalone build workshop; functional cut: removed OIDC and passkeys; agent route allowlist.
+// Deviations: Local module namespace; functional cut: removed APNS mobile push; functional cut: removed template catalogue; functional cut: removed federated credentials; functional cut: removed central variables and .env.global; functional cut: removed GitOps and saved Git repositories; functional cut: removed Swarm; functional cut: removed S3 backup destinations; functional cut: removed standalone build workshop; functional cut: removed OIDC and passkeys; agent route allowlist; session-bound viewer lifetime and durable validation.
 
 package api
 
@@ -236,6 +236,9 @@ func qualifyGenericArcaneArgumentsInternal(pkgPath, typeName, schemaName string)
 type HandlerDeps struct {
 	fx.In
 
+	Runtime           *activity.RuntimeService
+	RuntimeHTTP       *activity.RuntimeHTTPService
+	RuntimeReceiver   *activity.RuntimeReceiver
 	AppImages         *appimages.ApplicationImagesService
 	User              *user.Module
 	Project           *project.Module
@@ -325,8 +328,10 @@ func SetupAPI(e *echo.Echo, apiGroup *echo.Group, appCtx handlerutil.ActivityApp
 
 	// Add authentication middleware
 	api.UseMiddleware(auth.NewHumaMiddleware(api, deps.Auth.Service(), deps.ApiKey.Service(), deps.Role.Service(), deps.Environment.Service(), cfg))
+	api.UseMiddleware(deps.Auth.Service().ViewerMiddleware(api))
 	api.UseMiddleware(middleware.NewActivityBatchID())
 	registerNormalizationInternal(api)
+	registerRuntimeSchemasInternal(api)
 
 	// Register all Huma handlers
 	registerHandlersInternal(api, deps, appCtx, cfg)
@@ -349,7 +354,9 @@ func registerScalarDocs(apiGroup *echo.Group) {
 // SetupAPIForSpec creates a Huma API instance for OpenAPI spec generation only.
 // No services are required - this is purely for schema generation.
 func SetupAPIForSpec() huma.API {
-	return setupAPIForSpecMode(nil)
+	spec := setupAPIForSpecMode(nil)
+	activity.RegisterRuntimeReceiverRoutes(spec, nil, "")
+	return spec
 }
 
 func setupAPIForSpecMode(cfg *config.Config) huma.API {
@@ -395,6 +402,7 @@ func setupAPIForSpecMode(cfg *config.Config) huma.API {
 
 	// Register handlers with zero-value dependencies for schema discovery only.
 	registerNormalizationInternal(api)
+	registerRuntimeSchemasInternal(api)
 	registerHandlersInternal(api, HandlerDeps{}, handlerutil.NewActivityAppContext(context.Background()), cfg) //nolint:forbidigo // Schema discovery has no running request or application lifecycle.
 
 	return api
@@ -409,6 +417,13 @@ type routeModule struct {
 }
 
 var routeModules = []routeModule{
+	{"runtime", true, func(api huma.API, d HandlerDeps, _ handlerutil.ActivityAppContext, cfg *config.Config) {
+		if cfg != nil && (cfg.AgentMode || cfg.EdgeAgent) {
+			activity.RegisterRuntimeReceiverRoutes(api, d.RuntimeReceiver, "")
+		} else {
+			activity.RegisterRuntimeHubRoutes(api, d.Runtime)
+		}
+	}},
 	{"health", true, func(api huma.API, _ HandlerDeps, _ handlerutil.ActivityAppContext, _ *config.Config) {
 		health.RegisterRoutes(api)
 	}},

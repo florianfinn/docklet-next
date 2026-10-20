@@ -526,6 +526,21 @@ func (m *EnvironmentMiddleware) hasResourcePath(c *echo.Context, envID string) b
 }
 
 func isManagementPathInternal(method, suffix string) bool {
+	if suffix == "/runtime-runs" || strings.HasPrefix(suffix, "/runtime-runs/") || suffix == "/runtime-registration" || suffix == "/runtime-target" {
+		return true
+	}
+	if method == http.MethodPost {
+		parts := strings.Split(strings.Trim(suffix, "/"), "/")
+		if len(parts) == 3 && parts[1] != "" {
+			if parts[0] == "projects" && (parts[2] == "up" || parts[2] == "down" || parts[2] == "restart" || parts[2] == "redeploy") {
+				return true
+			}
+			if parts[0] == "containers" && (parts[2] == "start" || parts[2] == "stop" || parts[2] == "restart") {
+				return true
+			}
+		}
+	}
+
 	if suffix == "/jobs" || strings.HasPrefix(suffix, "/jobs/") {
 		return true
 	}

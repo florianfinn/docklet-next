@@ -25,6 +25,7 @@ import (
 	usertypes "github.com/florianfinn/docklet-next/types/user"
 	"github.com/florianfinn/docklet-next/types/volume"
 	workspacetypes "github.com/florianfinn/docklet-next/types/workspace"
+	"github.com/moby/moby/api/types/container"
 	"github.com/samber/mo"
 	"go.getarcane.app/acfs"
 	acfstypes "go.getarcane.app/acfs/types"
@@ -249,15 +250,16 @@ func (s *ProjectService) getProjectForUpdate(ctx context.Context, projectID stri
 }
 
 // prepareProjectRenameVolumeMigration plans the volume rename for a
-// stopped project. Content changes are applied to a scratch preview first so
-// the plan reflects the updated compose files.
+// stopped project. The current and pending models supply the resource namespaces;
+// submitted changes are validated in a scratch preview with the requested default.
 func (s *ProjectService) prepareProjectRenameVolumeMigration(
 	ctx context.Context,
 	proj *Project,
 	newName, projectsDirectory string,
 	composeContent, envContent, overrideContent *string,
 ) (volume.Migration, error) {
-	target := proj
+	target := *proj
+	target.Name = newName
 	if composeContent != nil || envContent != nil || overrideContent != nil {
 		previewLogical, err := acfs.MkdirTemp(ctx, projectsDirectory, "/", ".project-update-preview-*")
 		if err != nil {
@@ -276,25 +278,35 @@ func (s *ProjectService) prepareProjectRenameVolumeMigration(
 		if _, copyDirErr := acfs.CopyDir(ctx, proj.Path, previewPath, acfstypes.CopyOptions{}); copyDirErr != nil {
 			return nil, fmt.Errorf("failed to prepare project update preview: %w", copyDirErr)
 		}
-		previewProject := *proj
+		previewProject := target
 		previewProject.Path = previewPath
 		if persistErr := s.persistUpdatedProjectFiles(ctx, &previewProject, projectsDirectory, composeContent, envContent, overrideContent); persistErr != nil {
 			return nil, fmt.Errorf("failed to prepare project update preview: %w", persistErr)
 		}
-		target = &previewProject
+		target = previewProject
 	}
 
-	oldComposeName, newComposeName := projects.NormalizeProjectName(target.Name), projects.NormalizeProjectName(newName)
-	if s.dockerService == nil || target.Status != ProjectStatusStopped || oldComposeName == "" || newComposeName == "" || oldComposeName == newComposeName {
+	if s.dockerService == nil || proj.Status != ProjectStatusStopped || projects.NormalizeProjectName(newName) == "" {
 		return nil, nil
 	}
 
-	composeProject, _, err := s.loadComposeProjectForProject(ctx, target, nil)
+	current, _, err := s.loadComposeProjectForProject(ctx, proj, nil)
 	if err != nil {
 		if errors.Is(err, common.ErrProjectComposeFileNotFound) {
 			return nil, nil
 		}
-		return nil, fmt.Errorf("failed to load compose project for volume rename: %w", err)
+		return nil, fmt.Errorf("failed to load current compose project for volume rename: %w", err)
+	}
+	composeProject, _, err := s.loadComposeProjectForProject(ctx, &target, nil)
+	if err != nil {
+		if errors.Is(err, common.ErrProjectComposeFileNotFound) {
+			return nil, nil
+		}
+		return nil, fmt.Errorf("failed to load pending compose project for volume rename: %w", err)
+	}
+	oldComposeName, newComposeName := current.Name, composeProject.Name
+	if oldComposeName == "" || newComposeName == "" || oldComposeName == newComposeName {
+		return nil, nil
 	}
 
 	dockerClient, err := s.dockerService.GetClient(ctx)
@@ -537,7 +549,10 @@ func (s *ProjectService) projectServices(ctx context.Context, projectID string) 
 			return nil, listErr
 		}
 		meta := s.ProjectMetadata(ctx, *projectFromDb, nil)
-		matched := listing.ProjectContainers(projectRecord(*projectFromDb), listing.GroupComposeContainersByProject(containers))
+		matched, ownerErr := s.projectContainers(ctx, *projectFromDb, containers)
+		if ownerErr != nil {
+			return nil, ownerErr
+		}
 		currentContainerID, currentContainerErr := cgroup.CurrentContainerID()
 		services := make([]projecttypes.RuntimeService, 0, len(matched))
 		for _, c := range matched {
@@ -562,7 +577,7 @@ func (s *ProjectService) StreamProjectLogs(ctx context.Context, projectID string
 	if err != nil {
 		return err
 	}
-	return projectdetails.Logs(ctx, proj.Name, logsChan, follow, tail, since, timestamps)
+	return projectdetails.Logs(ctx, observedComposeName(*proj), logsChan, follow, tail, since, timestamps)
 }
 
 func (s *ProjectService) GetProjectStatusCounts(ctx context.Context) (projecttypes.StatusCounts, error) {
@@ -575,8 +590,8 @@ func (s *ProjectService) GetProjectStatusCounts(ctx context.Context) (projecttyp
 
 // projectListRows builds list rows and persists live-inferred service counts
 // over stored zeros, since SQL sorts and paginates on service_count.
-func (s *ProjectService) projectListRows(ctx context.Context, projectsDir string, projectsList []Project, snapshot listing.Snapshot) []projecttypes.Details {
-	rows, inferredCounts := listing.Rows(projectsDir, IconCatalogForContext(ctx), projectRecords(projectsList), snapshot)
+func (s *ProjectService) projectListRows(ctx context.Context, projectsDir string, projectsList []Project, snapshot listing.Snapshot, ownership ...map[string]string) []projecttypes.Details {
+	rows, inferredCounts := listing.Rows(projectsDir, IconCatalogForContext(ctx), projectRecords(projectsList), snapshot, ownership...)
 	ids := slices.Collect(maps.Keys(inferredCounts))
 	for chunk := range slices.Chunk(ids, inferredServiceCountBatchSize) {
 		var caseExpr strings.Builder
@@ -666,4 +681,22 @@ func (s *ProjectService) reconcileComposeProjectTags(ctx context.Context, projec
 		}
 		return tags.ReplaceCompose(tagStore{tx: tx}, projectID, normalized)
 	})
+}
+
+// projectComposeOwners reads all identities so filters/pages cannot promote aliases.
+func (s *ProjectService) projectComposeOwners(ctx context.Context) (map[string]string, []projecttypes.Record, error) {
+	var records []Project
+	if err := s.db.WithContext(ctx).Select("id", "name", "compose_project_name").Find(&records).Error; err != nil {
+		return nil, nil, fmt.Errorf("load Compose project owners: %w", err)
+	}
+	identities := projectRecords(records)
+	return listing.ComposeProjectOwners(identities), identities, nil
+}
+
+func (s *ProjectService) projectContainers(ctx context.Context, p Project, containers []container.Summary) ([]container.Summary, error) {
+	owners, _, err := s.projectComposeOwners(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return listing.ProjectContainers(projectRecord(p), listing.GroupComposeContainersByProject(containers), owners), nil
 }

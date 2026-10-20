@@ -66,22 +66,23 @@ decoded only at the adapter boundary. Gate strings contain canonical raw IDs,
 never display names or browser-composed IDs.
 
 A client creates an opaque UUID `Idempotency-Key` per deliberate command; any
-UUID version is accepted without reading a client timestamp. The hub measures
-the ten-minute retry window from its first-seen binding. The adapter retains the
-key across CSRF/transport retries for at most ten minutes of local elapsed time,
-discards it after the final response or that window, and then refreshes known
-run detail rather than replaying the command. It never creates a replacement
-intent automatically. A retained binding always resolves to its original run,
-even after the retry window; it cannot admit another effect. These are target
-key rules, not current adapter support.
+UUID version is accepted without reading a client timestamp. The ten-minute
+window governs only client retry/discard; hub first-seen time is audit/diagnostic
+attribution, never an age cutoff for server rejection or new admission. The
+adapter retains the key across CSRF/transport retries for at most ten minutes of
+local elapsed time, discards it after the final response or that window, and then
+refreshes known run detail rather than replaying the command. It never creates a
+replacement intent automatically. A retained binding always resolves to its
+original run, even after the retry window; it cannot admit another effect. These
+are target key rules, not current adapter support.
 
 The binding uniquely maps `(environmentId, idempotencyKey)` to run ID, requesting
 caller and canonical digest: operation ID, raw target, accepted options and
-parent. Within the window, same key/digest returns the same ID and compact
-outcome even after output/history pruning; recheck caller identity and current
-operation/activity-read permissions. A different caller presenting an already
-bound key receives HTTP 409 `run.request-mismatch` without the bound ID or other
-run details, even when the digest matches. A changed digest also returns 409
+parent. A retained key with the same digest returns the same ID and compact
+outcome even after ten minutes or output/history pruning; recheck caller identity
+and current operation/activity-read permissions. A different caller presenting an
+already bound key receives HTTP 409 `run.request-mismatch` without the bound ID or
+other run details, even when the digest matches. A changed digest also returns 409
 without a worker. Independently authorized callers with different keys join by
 active gate key, not by sharing an idempotency key. The activity/receipt keeps
 its original actor; each joining key records its own caller and join audit attribution.
@@ -98,6 +99,101 @@ again before effect. Container IDs use inspected full IDs. A known Compose child
 binds to its persisted project ID; unresolved Compose ownership refuses control
 with `runtime.parent-unresolved` rather than inventing an unparented scope.
 Docker calls outside Docklet remain an accepted external interference boundary.
+
+Stored project metadata and runtime ownership use the executable loader's
+normalized persisted `Name` as a non-imperative default. An explicit YAML name,
+including an interpolated one, may override it; an environment-only
+`COMPOSE_PROJECT_NAME` does not replace a nonempty supplied default. Initial
+filesystem discovery retains its unnamed-first environment-derived naming and
+directory fallback. With a literal YAML name and conflicting environment name,
+initial discovery records the environment name; execution uses the YAML name.
+The next stored refresh corrects this inherited transient metadata mismatch.
+Subsequent filesystem sync and metadata refresh observe the
+actual model name and service count without automatically rewriting the stored
+`Name`. `ComposeProjectName` records an effective name differing from the
+normalized stored default. Explicit rename retains its existing workflow and
+stable persisted ID. Removing a YAML override therefore restores that stored
+default, rather than a name fed back by an earlier metadata refresh.
+
+Explicit-rename volume planning loads the current model for the source namespace
+and the pending compose/environment/override model with the requested rename
+default for the target namespace. Recorded observations do not authorize this
+resource selection. Equal effective names require no volume migration. Planning
+retains stopped-only admission, attached-source and target-conflict guards, and
+explicit/external-volume exclusions; invalid current or pending models refuse
+before volume inspection. Apply, rollback and journal recovery remain unchanged.
+
+Existing Compose-label consumers (container redeploy, automatic updates, service
+image lookup and icon metadata) resolve the observed `ComposeProjectName`, with
+normalized stored `Name` as the fallback when override metadata is absent or
+empty. A known override replaces its stored-default alias, so another project's
+default cannot steal an effective label. Direct lookup precedes normalized cache
+lookup; cached IDs are revalidated against current stored observations and
+missing or changed aliases are removed. Rebuilds and duplicate-name warnings use
+the same observations. This legacy lookup reads database metadata, without the
+fresh filesystem ownership proof required for runtime admission below. Duplicate
+observations retain warnings rather than adding a new refusal policy.
+
+Project list and detail JSON expose optional `composeProjectName` as the
+normalized recorded observation, falling back to normalized stored `Name` for
+legacy rows with absent or empty metadata. `name` remains the stable display and
+configuration default. Container, stack, volume and network mappings use this
+label, including resources with no containers; network ownership therefore
+retains the Compose-managed removal restriction. When no visible label candidate
+exists, explicit backend runtime container IDs also retain container membership
+for current and older peers, including the unique-directory fallback. A visible
+conflicting label owner takes priority over stale runtime IDs. Stack runtime
+entries remain visible when container inventory is absent or has no assigned web
+owner; only a concrete conflicting owner excludes an entry. These container-only
+fallbacks do not change unlabelled/partial-label origin semantics or establish
+volume or network ownership, even through a linked consumer.
+
+Listing selects the observed group before directory fallback and never substitutes
+a replaced default group. Known-name discovery and system-project exclusion use
+the effective label, so a stale default does not hide orphan groups or unrelated
+projects. Listing and image/dashboard maps rank recorded metadata before legacy
+fallbacks, then stable ID, over all persisted rows before pagination or filtering.
+Legacy lookup additionally favors exact observation spelling and exact stored
+names. The visible web projection ranks differing observations, then exact default
+spellings, then stable ID. The wire does not distinguish recorded metadata from
+legacy fallback, so genuine duplicate labels can select different read owners,
+including archived/system/off-page cases; these ties do not prove unique runtime
+ownership. Image/dashboard maps retain their existing short cache lifetime. These are metadata
+reads, not fresh ownership proof: missing or malformed current files do not add
+a new availability condition. The updater active-project used-image source still
+uses stored names; its accepted follow-up remains separate, and normal eligible
+running-container collection does not cover every stopped or excluded container.
+
+Selection, metadata and lifecycle loading share fresh reads and parsing of the
+same primary and auxiliary environment bytes on every load, including supported
+external environment-file symlink targets. A missing primary `.env` is optional;
+a malformed or unreadable primary file refuses loading. A directory at `.env`
+retains the existing absent/leave-untouched behavior. Declared `COMPOSE_ENV_FILES`
+entries remain additive and ordered, with later usable entries winning. Missing,
+malformed or excluded auxiliary entries warn and skip; earlier valid overlays or
+the existing default remain usable, and repaired entries are read on the next
+load. Invalid auxiliary paths are excluded before reads and stay excluded from
+parsed options. Invalid `COMPOSE_FILE` selection still refuses the whole
+selection. Only the existing timezone/locale process allowlist enters project
+interpolation. Runtime identity and execution bypass inventory model/selection
+caches; this does not promise byte freshness for every inventory cache.
+
+The shared auxiliary warning/skip policy also applies to compose/environment
+save validation: an escaping `COMPOSE_ENV_FILES` entry is excluded rather than
+rejecting the save. Include-file discovery in project details ignores a primary
+environment parse error and expands paths using only the process allowlist;
+lifecycle loading still refuses the malformed primary file.
+
+Authoritative project and managed-parent lookup scans every persisted row,
+including archived projects, and requires unique current effective Compose
+ownership even for an exact ID. A failed peer read can conceal a duplicate, so
+it blocks otherwise healthy ID and name/parent lookup. Availability and read
+cost are consequently coupled to all persisted projects; repairing the peer's
+files restores lookup. Retained names and caches cannot exclude unknown owners.
+Archived identity remains usable as a parent while the existing archived stack
+mutation guard remains in force. Identity reads do not prepare bind directories
+or persist metadata. The pre-effect recheck refuses changed or uncertain identity;
+external edits after that read remain outside atomic application control.
 
 | Target | Stored primary scope | Conflict predicate in the same environment |
 | --- | --- | --- |
@@ -122,6 +218,31 @@ intake returns `run.joined`; another operation/parent conflict returns
 `run.busy`; same operation cancelling returns `run.cancelling`. Runtime commands
 never use the 30-second `Check` freshness shortcut: start/stop/restart/redeploy
 are deliberate effects. Other run-gate users keep their existing freshness rule.
+
+## Existing deployment activity limits
+
+Local deploy and redeploy retain the existing per-environment
+`maxConcurrentActivities` limiter shared with queue-opted pull/build work.
+The default is five; nonpositive values remain unlimited while counting holders,
+and settings changes keep their existing effect on running work and waiters.
+The other five runtime commands do not acquire activity slots.
+
+Durable admission commits the receipt, key, exclusion, start audit and queued
+Activity before waiting. Local pending/accepted eligible receipts project queued
+only while their Activity records that local wait; remote admission alone is no
+queue evidence. Acceptance precedes a cancellable wait outside owner locks and
+transactions. The existing 30-minute owned workflow budget includes that wait;
+viewer disconnect does not cancel accepted work. Durable intent and owner
+cancellation are checked before acquisition and again before the executing
+receipt and running Activity commit together. Only then may effects start.
+
+A granted slot remains held through actual workflow/child/output join and the
+successful terminal receipt/Activity/final-message commit. Failed persistence
+retains the slot, owner, exclusion and frozen result for storage-only settlement
+retry. A cancellation racing with a grant follows that same release boundary.
+Executing, terminal and unknown receipts remain authoritative over stale Activity
+status. This preserves the operator limit without introducing another queue or
+changing Docker/Compose operations or resource rights.
 
 ## Durable receipt and writers
 
@@ -218,11 +339,11 @@ write does not invoke Docker again.
 
 | Receipt transition | Sole writer and precondition | Activity projection and scope |
 | --- | --- | --- |
-| Absent → `admitted` | Hub admission transaction | `running`, `run.started`; held |
+| Absent → `admitted` | Hub admission transaction | Locally eligible deployment `queued`, otherwise `running`; `run.started`; held |
 | `admitted` → `dispatching` or terminal `cancelled` | Hub transaction rechecks cancel intent before any remote send; intent settles cancelled with no send, otherwise commits dispatching | Held for dispatch; released after cancellation commit |
-| Absent executor receipt → `accepted` | Agent commits same ID/digest and local gate before registering worker | `running`; held |
+| Absent executor receipt → `accepted` | Agent commits same ID/digest and local gate before registering worker | Eligible local deployment `queued` until its slot grant, otherwise `running`; held |
 | `accepted` → `executing` | Executor checks cancellation, then starts work once | `running`; held |
-| Active → cancellation requested | Hub persists intent; executor persists it before signaling registered context | Still `running`; held |
+| Active → cancellation requested | Hub persists intent; executor persists it before signaling registered context | Retain current queued/running state; held |
 | Active → terminal `success`/`failed`/`cancelled` | Executor has settled work and persists actual outcome | Matching existing activity state; releasable |
 | Dispatch/active → `unknown` | Hub has no authoritative executor answer, or storage/host continuity is lost | `running` with explicit unknown reason; held |
 | Abandoned local executor → terminal `failed` | Executor startup proves old process ended, or worker/known children settle after interruption | Interrupted, effect unverified; release after durable commit |
@@ -452,6 +573,11 @@ freezes shared projection fields and before action UI.
 
 ## Runtime logs
 
+Current project log streaming selects the recorded `ComposeProjectName`, falling
+back to normalized stored `Name` when override metadata is absent or empty.
+Existing metadata refresh and filesystem sync update that observation; log reads
+do not reload Compose files or require usable environment files.
+
 Reuse Echo `/api/environments/:id/ws/projects/:projectId/logs` and
 `/containers/:containerId/logs`, permissions `projects:logs`/`containers:logs`
 from `backend/api/ws/proxy_permissions.go`. Request JSON with `follow=true`,
@@ -676,7 +802,7 @@ supplies actual effects separately.
 | Case and method | Required observation | Mutation/counterexample |
 | --- | --- | --- |
 | Competing exact/parent/sibling admission; SQLite service test | One worker for same command/key; parent excludes child both ways; siblings independent; hosts independent | Remove parent predicate or split read/insert transaction |
-| Opaque-key retry/history clear and compact pruning; receipt test | Hub-first-seen 10min retry budget; retained key returns original ID/outcome; cross-caller reuse gives non-disclosing 409; new-key authorized join preserves original actor; duplicate within 24h has zero additional effects; active/unknown protected | Delete compact evidence with history, leak bound ID to another caller or start another worker |
+| Opaque-key retry/history clear and compact pruning; receipt test | Client-local 10min retry/discard budget; first-seen is audit only; retained key returns original ID/outcome beyond 10min; cross-caller reuse gives non-disclosing 409; new-key authorized join preserves original actor; duplicate within 24h has zero additional effects; active/unknown protected | Delete compact evidence with history, leak bound ID to another caller or start another worker |
 | Both legacy and async seven-route callers; HTTP/CLI tests | Correct run ID, preserved NDJSON/messages, coded 409 before flush | Gate only local handler or treat 202 as completion |
 | Persistence/audit refusal; injected storage fault | Zero dispatch/effect, no fabricated ID | Fall back to StartHandlerActivity |
 | Cancellation before dispatch/registration, during call, twice and after terminal | Hub dispatch transaction settles admitted cancellation with zero sends; later intent holds until worker settles; cancellation distinct from rollback | Skip dispatch intent recheck or release on request cancellation |

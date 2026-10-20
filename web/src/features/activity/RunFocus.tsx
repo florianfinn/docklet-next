@@ -6,12 +6,14 @@ import { cn } from "@/shared/lib/utils";
 
 import { RunIconTile, StepTrack } from "./ActionSteps";
 import { elapsedSeconds, RUN_ICON, RUN_TONE, runPhase } from "./run-phase";
+import { runtimeState } from "./runtime-presentation";
 import { RunOutput } from "./RunOutput";
 
 export function RunStatusLine({ run, className }: { run: ActionRun; className?: string }) {
   const t = useTranslations("activity");
   const { index, step } = runPhase(run);
-  const text = run.status === "running" && step ? t("phase", { current: index + 1, total: run.steps.length, label: step.label }) : run.status === "failed" ? t("failedAt", { label: step?.label ?? "" }) : run.status === "succeeded" ? t("dialog.result.succeeded") : t(`status.${run.status}`);
+  const state = runtimeState(run);
+  const text = state ? t(`runtime.${state}`) : run.status === "running" && step ? t("phase", { current: index + 1, total: run.steps.length, label: step.label }) : run.status === "failed" ? t("failedAt", { label: step?.label ?? "" }) : run.status === "succeeded" ? t("dialog.result.succeeded") : t(`status.${run.status}`);
   return (
     <p role="status" aria-live="polite" data-tone={RUN_TONE[run.status]} className={cn("truncate font-medium text-(--tone)", className)}>
       {text}
@@ -24,7 +26,7 @@ export function RunFacts({ run, now, className }: { run: ActionRun; now: number;
   const t = useTranslations("activity.dialog");
   const done = run.steps.filter((s) => s.state === "done").length;
   const items = [
-    ["progress", t("progress"), `${done}/${run.steps.length} · ${withPercent(run.progress)}`],
+    ["progress", t("progress"), run.outcomeState === "unknown" ? "–" : `${done}/${run.steps.length} · ${withPercent(run.progress)}`],
     ["elapsed", t("elapsed"), `${elapsedSeconds(run, now)} s`],
     ["target", t("target"), run.target],
     ["services", t("services"), run.services.join(", ") || t("none")],
@@ -77,7 +79,7 @@ export function RunFocusView({ run, now, fill = false, outputOpen = false, class
         </p>
       </div>
       <div className="shrink-0">
-        <StepTrack steps={run.steps} status={run.status} labels />
+        <StepTrack steps={run.outcomeState === "unknown" ? [] : run.steps} status={run.status} labels />
       </div>
       <RunFacts run={run} now={now} className="shrink-0 rounded-xl border bg-background/40 p-3" />
       <RunErrorBox run={run} />

@@ -370,13 +370,10 @@ func LoadComposeProject(
 
 	envLoader := NewEnvLoader(projectsDirectory, workdir, autoInjectEnv)
 
-	// Load full environment (process + global + project .env) for service injection
+	// Load the allowlisted process environment and current project env for injection.
 	fullEnvMap, injectionVars, err := envLoader.LoadEnvironment(ctx)
 	if err != nil {
-		if errors.Is(err, common.ErrProjectEnvUnreadable) {
-			return nil, err
-		}
-		slog.WarnContext(ctx, "Failed to load environment", "error", err)
+		return nil, err
 	}
 
 	// Override wins: maps.Copy(dst, src) copies src into dst.
@@ -433,9 +430,8 @@ func LoadComposeProject(
 	}
 
 	loaderOptions := []func(*loader.Options){func(opts *loader.Options) {
-		// A caller-supplied name acts like `docker compose -p`, which outranks
-		// COMPOSE_PROJECT_NAME. Only when no name is forced (e.g. the sync
-		// metadata path passes "") does COMPOSE_PROJECT_NAME take effect.
+		// A supplied name is a non-imperative default: YAML can override it,
+		// while env-only COMPOSE_PROJECT_NAME applies only without that default.
 		switch {
 		case projectName != "":
 			opts.SetProjectName(projectName, false)

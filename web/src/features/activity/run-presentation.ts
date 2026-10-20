@@ -3,6 +3,7 @@ import { useEffect } from "react";
 import type { ActionKind, ActionRun, ActionStatus } from "@/domain/model";
 import { createStore } from "@/shared/lib/store";
 
+import { runtimePresentation } from "./runtime-presentation";
 import { DEPLOY_KINDS, isMajorAction } from "./action-policy";
 
 /**
@@ -36,6 +37,11 @@ export const presentationStore = createStore<PresentationState>(EMPTY);
 let claimSeq = 1;
 /** Starts whose response is pending, and ids that left the run list meanwhile (not to be bound late). */
 let pendingStarts = 0;
+let presentationGeneration = 0;
+export function resetActionIdentity(): void {
+  ++presentationGeneration; pendingStarts = 0; retiredWhilePending.clear();
+  presentationStore.set((state) => ({ claims: [], byRun: {}, surfaces: state.surfaces }));
+}
 const retiredWhilePending = new Set<string>();
 
 /**
@@ -56,6 +62,12 @@ export function isCovered(run: Pick<ActionRun, "id" | "kind" | "stackId">, dialo
   return state.byRun[run.id] === "inline" && !!run.stackId && (state.surfaces[run.stackId] ?? 0) > 0 && DEPLOY_KINDS.has(run.kind);
 }
 
+/** A current browser intent is identifiable without comparing server/device clocks. */
+export function hasPresentationIntent(run: ActionRun, state: PresentationState): boolean {
+  return runtimePresentation(run)?.currentIntent === true || state.byRun[run.id] !== undefined ||
+    state.claims.some((claim) => claim.stackId === run.stackId && claim.kinds.has(run.kind));
+}
+
 export function bindPresentation(runId: string, presentation: ActionPresentation, consumed?: PresentationClaim): void {
   presentationStore.set((s) => ({
     ...s,
@@ -71,15 +83,17 @@ export function bindPresentation(runId: string, presentation: ActionPresentation
  * it later.
  */
 export async function startPresented<T extends string | undefined>(scope: { stackId: string; kinds?: ReadonlySet<ActionKind> }, presentation: ActionPresentation, start: () => Promise<T>): Promise<T> {
-  const claim: PresentationClaim = { id: claimSeq++, stackId: scope.stackId, kinds: scope.kinds ?? DEPLOY_KINDS, presentation };
+  const generation = presentationGeneration;
+ const claim: PresentationClaim = { id: claimSeq++, stackId: scope.stackId, kinds: scope.kinds ?? DEPLOY_KINDS, presentation };
   presentationStore.set((s) => ({ ...s, claims: [...s.claims, claim] }));
   pendingStarts++;
   try {
     const runId = await start();
+    if (generation !== presentationGeneration) return undefined as T;
     if (runId && !retiredWhilePending.has(runId)) bindPresentation(runId, presentation);
     return runId;
   } finally {
-    if (--pendingStarts === 0) retiredWhilePending.clear();
+    if (generation === presentationGeneration && --pendingStarts === 0) retiredWhilePending.clear();
     presentationStore.set((s) => (s.claims.some((c) => c.id === claim.id) ? { ...s, claims: s.claims.filter((c) => c.id !== claim.id) } : s));
   }
 }
@@ -169,8 +183,9 @@ export class RunToastCoordinator {
 
   private pass(): void {
     if (!this.seen) {
-      this.seen = new Map(this.runs.map((r) => [r.id, { status: r.status, covered: this.covered(r) }]));
+      this.seen = new Map(this.runs.filter((r) => !hasPresentationIntent(r, this.ctx.state())).map((r) => [r.id, { status: r.status, covered: this.covered(r) }]));
       this.history.clear();
+      this.visit();
       return;
     }
     // Only this observation seeds source history; reentrant presentation passes visit normally.

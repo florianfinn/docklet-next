@@ -37,7 +37,7 @@ export function LogoutDialog({ open, onOpenChange }: { open: boolean; onOpenChan
           <AlertDialogAction onClick={() => {
             if (adapter.kind === "demo" || activeMode !== "local") return;
             void adapter.logout().then(() => {
-              client.removeQueries({ queryKey: queryKeys.currentUser });
+              client.setQueryData(queryKeys.currentUser, null);
               void navigate("/login", { replace: true });
             });
           }}>{t("logoutConfirm")}</AlertDialogAction>

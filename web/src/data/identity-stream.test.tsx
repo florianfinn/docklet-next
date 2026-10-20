@@ -23,6 +23,7 @@ it("opens no stream on a cold login and starts after a successful sign-in", asyn
   const fetcher = vi.fn(async (input: RequestInfo | URL) => {
     const path = new URL(String(input), "https://hub.example.com").pathname;
     if (path === "/api/auth/mode") return json({ mode: "local" });
+    if (path.endsWith("/settings")) return new Response("[]");
     const user = { id: "admin", username: "operator", requiresPasswordChange: false };
     if (path === "/api/auth/login") { signedIn = true; return json({ user }); }
     if (path === "/api/auth/me") return json(signedIn ? user : null, signedIn ? 200 : 401);
@@ -44,7 +45,7 @@ it("opens no stream on a cold login and starts after a successful sign-in", asyn
 
 function IdentityStatus() {
   const user = useCurrentUser();
-  return <><p>{user.isSuccess ? "Known identity" : user.isError ? "Rejected identity" : "Pending identity"}</p><button onClick={() => void user.refetch()}>Refresh identity</button></>;
+  return <><p>{user.isSuccess ? user.data ? "Known identity" : "Rejected identity" : user.isError ? "Rejected identity" : "Pending identity"}</p><button onClick={() => void user.refetch()}>Refresh identity</button></>;
 }
 
 it("waits for identity and closes the stream when the session is rejected", async () => {

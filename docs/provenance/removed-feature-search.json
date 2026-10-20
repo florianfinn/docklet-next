@@ -17,7 +17,7 @@
     {"feature": "Swarm", "pattern": "SwarmService|PermSwarm|/swarm|swarm\\.NewModule|SwarmMode|swarmEnabled", "expectedMatches": []},
     {"feature": "S3 destinations", "pattern": "S3Backup|S3Destination|S3Endpoint|s3_endpoint|S3_ACCESS|/s3", "expectedMatches": []},
     {"feature": "standalone build workshop", "pattern": "BuildWorkspace|buildsDirectory|ImageBuild|BuildRecord|PermImagesBuild|/images/build", "expectedMatches": []},
-    {"feature": "OIDC and passkeys", "pattern": "OIDC|passkey|WebAuthn|MFA", "expectedMatches": []},
+    {"feature": "OIDC and passkeys", "pattern": "[Oo][Ii][Dd][Cc]|[Pp][Aa][Ss][Ss][Kk][Ee][Yy]|[Ww][Ee][Bb][Aa][Uu][Tt][Hh][Nn]|MFA|Mfa|mfa", "caseSensitive": true, "expectedMatches": []},
     {"feature": "SQLite runtime", "pattern": "sqlite|libtnb|modernc", "expectedMatches": []}
   ],
   "environment": {

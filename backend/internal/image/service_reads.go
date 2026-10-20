@@ -14,6 +14,7 @@ import (
 	"github.com/florianfinn/docklet-next/backend/internal/imageupdate"
 	"github.com/florianfinn/docklet-next/backend/pkg/inventory"
 	"github.com/florianfinn/docklet-next/backend/pkg/pagination"
+	"github.com/florianfinn/docklet-next/backend/pkg/projects"
 	"github.com/florianfinn/docklet-next/backend/pkg/utils"
 	"github.com/florianfinn/docklet-next/backend/pkg/utils/imageref"
 	imagetypes "github.com/florianfinn/docklet-next/types/image"
@@ -197,17 +198,28 @@ func (s *ImageService) loadProjectIDByNameCachedInternal(ctx context.Context) ma
 	}
 	stale, staleFound := s.projectIDCache.Peek(struct{}{})
 	byName, found, err := s.projectIDCache.GetWithLoaders(struct{}{}, func(_ []struct{}) (map[struct{}]map[string]string, error) {
-		var projects []struct {
-			ID   string
-			Name string
+		var rows []struct {
+			ID                 string
+			Name               string
+			ComposeProjectName *string
 		}
-		if err := s.db.WithContext(ctx).Table("projects").Select("id", "name").Find(&projects).Error; err != nil {
+		if err := s.db.WithContext(ctx).Table("projects").Select("id", "name", "compose_project_name").
+			Order("CASE WHEN compose_project_name IS NULL OR compose_project_name = '' THEN 1 ELSE 0 END").Order("id").Find(&rows).Error; err != nil {
 			return nil, err
 		}
 
-		loaded := make(map[string]string, len(projects))
-		for _, project := range projects {
-			loaded[project.Name] = project.ID
+		loaded := make(map[string]string, len(rows))
+		for _, row := range rows {
+			name := row.Name
+			if row.ComposeProjectName != nil && *row.ComposeProjectName != "" {
+				name = *row.ComposeProjectName
+			}
+			name = projects.NormalizeProjectName(name)
+			if name != "" {
+				if _, exists := loaded[name]; !exists {
+					loaded[name] = row.ID
+				}
+			}
 		}
 		return map[struct{}]map[string]string{{}: loaded}, nil
 	})

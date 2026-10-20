@@ -266,6 +266,10 @@ func (h *EnvironmentHandler) DeleteEnvironment(ctx context.Context, input *Delet
 		username = new(user.Username)
 	}
 	if err := h.environmentService.DeleteEnvironment(ctx, input.ID, userID, username); err != nil {
+		var refusal *common.APIError
+		if errors.As(err, &refusal) && refusal.HTTPStatus() == 409 {
+			return nil, huma.Error409Conflict(refusal.Message)
+		}
 		return nil, huma.Error500InternalServerError("Failed to delete environment: " + err.Error())
 	}
 

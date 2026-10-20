@@ -2,12 +2,11 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: None
+// Deviations: Verify discard-to-newline and bounded TTY/single-stream wrapping.
 
 package projects
 
 import (
-	"bufio"
 	"bytes"
 	"context"
 	"encoding/binary"
@@ -18,6 +17,7 @@ import (
 	"github.com/moby/moby/api/pkg/stdcopy"
 	"github.com/moby/moby/client"
 	"github.com/stretchr/testify/require"
+	"go.getarcane.app/docker"
 )
 
 func frameLogEntryInternal(fd stdcopy.StdType, payload []byte) []byte {
@@ -48,12 +48,15 @@ func TestDemultiplexedLogStreamWithStderrMarking(t *testing.T) {
 	}, nil)
 
 	resp := io.NopCloser(bytes.NewReader(source))
-	stream := &stderrMarkedDemuxedStreamInternal{upstream: resp, src: bufio.NewReader(resp)}
+	stream := &stderrMarkedDemuxedStreamInternal{upstream: resp, records: docker.NewLogReader(resp, false), ctx: t.Context()}
 
-	require.Equal(t, "line-one\n[STDERR] boom\npartial\n[STDERR] "+
-		longRun[:maxLogEntryBytesInternal]+"\n"+
-		"[STDERR] "+longRun[maxLogEntryBytesInternal:]+"\n"+
-		"[STDERR] final\n", decodeDemuxedStreamInternal(t, stream))
+	body := decodeDemuxedStreamInternal(t, stream)
+	lines := strings.Split(strings.TrimSuffix(body, "\n"), "\n")
+	require.Len(t, lines, 5)
+	require.Equal(t, []string{"line-one", "[STDERR] boom", "partial"}, lines[:3])
+	require.LessOrEqual(t, len(lines[3]), docker.MaxLogLineBytes)
+	require.True(t, strings.HasSuffix(lines[3], docker.LogTruncatedMarker))
+	require.Equal(t, "[STDERR] final", lines[4])
 }
 
 type fakeResponseBodyInternal struct {
@@ -91,14 +94,18 @@ func TestLogsDemuxClientContainerLogsDecisionInternal(t *testing.T) {
 		wantWrapped    bool
 	}{
 		{name: "non-tty streams are transformed", containerKnown: true, showStdout: true, showStderr: true, wantWrapped: true},
-		{name: "tty passthrough", ttyRecorded: true, containerKnown: true, showStdout: true, showStderr: true, wantWrapped: false},
+		{name: "tty bounded", ttyRecorded: true, containerKnown: true, showStdout: true, showStderr: true, wantWrapped: true},
 		{name: "unknown container passthrough", containerKnown: false, showStdout: true, showStderr: true, wantWrapped: false},
-		{name: "single-stream request passthrough", containerKnown: true, showStdout: true, showStderr: false, wantWrapped: false},
+		{name: "single-stream request passthrough", containerKnown: true, showStdout: true, showStderr: false, wantWrapped: true},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			body := &fakeResponseBodyInternal{Reader: bytes.NewReader(muxed)}
+			source := muxed
+			if tt.ttyRecorded {
+				source = []byte("combined\n")
+			}
+			body := &fakeResponseBodyInternal{Reader: bytes.NewReader(source)}
 			inner := &logsDemuxDockerClientInternal{APIClient: &stubLogAPIClientInternal{resp: body}}
 			if tt.containerKnown {
 				inner.recordContainerTTYInternal(" CTR-1 ", tt.ttyRecorded)
@@ -112,7 +119,13 @@ func TestLogsDemuxClientContainerLogsDecisionInternal(t *testing.T) {
 				return
 			}
 
-			require.Equal(t, "out\n[STDERR] err\n", decodeDemuxedStreamInternal(t, got))
+			if tt.ttyRecorded {
+				b, err := io.ReadAll(got)
+				require.NoError(t, err)
+				require.Equal(t, "combined\n", string(b))
+			} else {
+				require.Equal(t, "out\n[STDERR] err\n", decodeDemuxedStreamInternal(t, got))
+			}
 			require.NoError(t, got.Close())
 			require.True(t, body.closed, "closing the wrapped stream must close the upstream response")
 		})

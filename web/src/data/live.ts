@@ -7,6 +7,8 @@ import type { ActionReadHealth, DockletAdapter } from "./adapter";
 import { renderRun, type CodedActionRun } from "./message-code";
 import { useAdapter } from "./use-adapter";
 import { useActionsQuery } from "./queries";
+import { identityLifetime } from "./identity-lifetime";
+import { logLifetime } from "./log-buffer";
 
 interface Channel<T> {
   value: T | undefined;
@@ -34,10 +36,20 @@ function createChannel<T>(connect: Connect<T>, clearOnDisconnect = false) {
       useCallback((notify: () => void) => {
         ch.listeners.add(notify);
         if (!ch.stop) {
-          ch.stop = connect(adapter, (v) => {
-            ch.value = v;
-            ch.listeners.forEach((l) => l());
-          });
+          let stopValue: (() => void) | undefined;
+          const lifetime = identityLifetime(adapter);
+          const start = () => {
+            stopValue?.(); stopValue = undefined;
+            ch.value = undefined; ch.listeners.forEach((l) => l());
+            const generation = lifetime.version();
+            if (lifetime.active()) stopValue = connect(adapter, (v) => {
+              if (generation !== lifetime.version()) return;
+              ch.value = v; ch.listeners.forEach((l) => l());
+            });
+          };
+          const off = lifetime.listen(start);
+          start();
+          ch.stop = () => { off(); stopValue?.(); };
         }
         return () => {
           ch.listeners.delete(notify);
@@ -86,22 +98,32 @@ export function useActionRun(id: string | undefined): ActionRun | undefined {
   return id ? runs.find((run) => run.id === id) : undefined;
 }
 
-export function useContainerLogs(containerId: string, paused: boolean): LogLine[] {
+const EMPTY_LOGS: LogLine[] = [];
+
+function useResourceLogs(id: string, paused: boolean, kind: "stack" | "container"): LogLine[] {
   const adapter = useAdapter();
-  const [lines, setLines] = useState<LogLine[]>([]);
+  const subscribe = kind === "stack" ? adapter.subscribeLogs : adapter.subscribeContainerLogs;
+  const lifetime = logLifetime(subscribe);
+  const generation = useSyncExternalStore(lifetime.listen, lifetime.version, lifetime.version);
+  const [view, setView] = useState({ adapter, id, generation, lines: EMPTY_LOGS });
+  const matches = view.adapter === adapter && view.id === id && view.generation === generation;
+  if (!matches) setView({ adapter, id, generation, lines: EMPTY_LOGS });
+  // The render guard prevents even a single stale-resource paint while the
+  // effect cleanup is pending. Pause retains only this matching snapshot.
   useEffect(() => {
     if (paused) return;
-    return adapter.subscribeContainerLogs(containerId, setLines);
-  }, [adapter, containerId, paused]);
-  return lines;
+    let active = true;
+    const stop = subscribe(id, (lines) => {
+      if (active && generation === lifetime.version()) setView({ adapter, id, generation, lines });
+    });
+    return () => { active = false; stop(); };
+  }, [adapter, id, generation, paused, subscribe, lifetime]);
+  return matches ? view.lines : EMPTY_LOGS;
 }
 
+export function useContainerLogs(containerId: string, paused: boolean): LogLine[] {
+  return useResourceLogs(containerId, paused, "container");
+}
 export function useStackLogs(stackId: string, paused: boolean): LogLine[] {
-  const adapter = useAdapter();
-  const [lines, setLines] = useState<LogLine[]>([]);
-  useEffect(() => {
-    if (paused) return;
-    return adapter.subscribeLogs(stackId, setLines);
-  }, [adapter, stackId, paused]);
-  return lines;
+  return useResourceLogs(stackId, paused, "stack");
 }

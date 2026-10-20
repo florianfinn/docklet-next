@@ -35,8 +35,9 @@ adapter operation available: its mapping and server capability must both exist.
 | `subscribeActions`, `subscribeChanges` | `streamClient` (`activities`, `events`) | Parse envelopes and re-read changed snapshots/queries. |
 | `listHosts`, `listStacks`, `getStack`, `listContainers` | `listEnvironments`, `list-projects`, `get-project`, `list-containers` | Read host identity and aggregate host-scoped projects and containers through the shared agent forwarding path. |
 | `getSecurity`, `listSchedule`, `getSettings` | `get-environment-vulnerability-overview`, `get-job-schedules`, `get-settings` | The first two calls remain unavailable until M11 and M10. `getSettings` stays unavailable for unconnected sections; M4 reads connected sections with `getConnectedSettings`. |
-| `runStackCommand`, `runContainerCommand` | `deploy-project`/`down-project`/`restart-project`/`redeploy-project`; `start-container`/`stop-container`/`restart-container` | Expose unavailable until M6 supplies guarded run identities and mappings. |
-| Other `DockletAdapter` reads, writes and subscriptions | Existing operation where listed, otherwise no matching operation | Expose unavailable until the owning milestone supplies the complete mapping. Existing log/stats WebSockets remain the later stream transport. |
+| `runStackCommand`, `runContainerCommand` | `deploy-project`/`down-project`/`restart-project`/`redeploy-project`; `start-container`/`stop-container`/`restart-container` | Map the seven guarded operation routes with async admission, stable IDs and targeted hub detail. Enable only scoped stack/container descriptors with the complete operation family and activity-read grants; bulk hub controls remain unavailable. |
+| `subscribeLogs`, `subscribeContainerLogs` | Echo project/container log WebSockets (outside OpenAPI) | Scoped log/read grants, JSON source mapping, bounded arrival buffers and reconnect tail replacement. |
+| Other `DockletAdapter` reads, writes and subscriptions | Existing operation where listed, otherwise no matching operation | Expose unavailable until the owning milestone supplies the complete mapping. Existing WebSockets carry connected logs and stats. |
 
 The HTTP boundary classifies an operation into these outcomes. Existing
 `Promise<T>` port methods return the `ok` value or reject with the typed
@@ -89,12 +90,54 @@ The web run states map directly from the wire, except `success`:
 The activity feature catalogues supply these labels; queued and cancelled
 render as distinct states throughout run surfaces, including the result view.
 
-## Runtime mapping target
+## Runtime command mapping
 
 The [runtime-control record](runtime-control.md) defines the M6 specialization,
-including requirements that are not current adapter support: command calls opt
+including the command specialization: command calls opt
 into admission JSON and resolve the same durable hub/agent ID, preserve coded
 conflicts (including request mismatch), and refresh targeted hub runtime detail.
+A command keeps one opaque UUID across CSRF and at most one network retry, bounded
+by ten minutes of local elapsed time. A final response discards that key. A lost
+or malformed final admission remains explicitly ambiguous and prevents automatic
+replacement, including after the browser gate's ordinary missing-run timeout.
+Known IDs are refreshed through hub detail; list absence cannot settle them.
+Detail reads while observed share in-flight work and a two-second cadence. Three
+unconfirmed or failed reads stop automatic observation until explicit refresh or
+an activity notification; confirmed active work stays observed until terminal.
+Identity changes abort this consumer's requests and reject late callbacks.
+
+Token preflight failures are pre-admission errors and allow a later deliberate
+intent. The consumer identifies raw token-read transport failures at their source;
+the existing CSRF client retains its header and retry policy. A definitive CSRF
+refusal followed by a failed token refresh also leaves no admission hold, unless
+an earlier command send already had an uncertain response. Such earlier uncertainty
+remains held with the original key; a later denial cannot prove it never ran.
+
+Remote unknown knowledge with no targeted recovery reason is unconfirmed delivery,
+not outcome loss. A present `recovery.unknownReason` shows blocked uncertainty;
+missing detail never manufactures either loss or completion. Cancel intent remains
+nonterminal. Administrator release uses existing effective global-admin and
+activity read/cancel permissions, explicit acknowledgment and a nonempty reason;
+its failed/unknown disposition and later executor evidence remain separate.
+Failed targeted detail during aggregate or single-run projection retains the
+same host/run's cached recovery evidence, cancellation knowledge and current-intent
+marker. A newer successful targeted answer replaces that observation under the
+existing sequence guard. Identity reset clears this consumer cache. A terminal
+unknown run without recovery detail says its outcome is not confirmed, without
+claiming confirmation is pending or that an already released target is blocked.
+
+Permission reads share in-flight work and cache validated successes for at most
+thirty seconds of local elapsed time. Failed reads are evicted for the next access;
+unknown grants are shown as unavailable rather than a fabricated server denial.
+A failed rights read does not discard readable run evidence. Cancellation and
+release still require the existing grants, and actual server denials remain
+authoritative. No grant or authentication policy changes at this boundary.
+
+Notification history seeds unseen rows of initially incomplete sources silently,
+while already observed transitions and identifiable current claims/admissions
+notify normally. The first complete recovery still seeds unseen history. No
+cross-device clock comparison is used: indistinguishable unseen history and new
+remote actions during initial incompleteness cannot reliably be separated.
 Unanswered/lost-continuity executor knowledge stays visibly blocked; settled
 local interruption fails with effect unverified and releases. Accepted admin
 recovery is a separate hub disposition, never inferred success. Legacy CLI
@@ -118,14 +161,62 @@ source may become an empty successful read. Its owner controls shared partial-re
 fields before runtime consumers adopt them; this does not redesign inventory.
 The runtime foundation owns the other shared port/domain/capability additions
 and required v4 execution/outcome contract changes; optional additive log metadata
-belongs to the log owner. Opaque UUID retries use ten minutes from the hub's
-first-seen binding, without client/agent clock validation; compact outcome
+belongs to the log owner. Opaque UUID retries use ten minutes of client-local elapsed time only. Hub
+first-seen time is audit attribution, never an age rejection or replacement rule;
+retained server bindings still return their original run. Compact outcome
 evidence lasts at least twenty-four hours independently of full output history.
 Supported delivery and receiver admission are bounded before acceptance; accepted
 work survives caller timeout. Only recent, continuous-generation negative proof
 may release a scope; old or uncertain absence stays unknown.
-Keep controls/log capabilities disabled until complete mappings and execution
-paths are verified.
+Only complete scoped command and log mappings enable capabilities. Browser
+identity lifetime also governs every live consumer and query observation.
+
+## Bounded runtime log mapping
+
+The HTTP adapter subscribes to the existing hub-facing project/container Echo
+routes, with `format=json`, `follow=true`, `tail=100`, `timestamps=true` and
+`batched=false`. Direct and Edge selection remains behind the hub route. It sends
+no browser credential to an agent. Only the matching scoped log and resource-read
+grants enable each descriptor; the endpoint retains its existing log permission
+and Origin checks. Existing text/default clients and 50-entry JSON batches remain
+compatible. JSON arrays preserve received order; malformed mandatory fields stop
+mapping visibly. Optional stream/truncation omissions map to unknown/false.
+
+Docker frames are consumed in fixed chunks, with one bounded prefix per stream;
+excess is discarded through the newline. Follow and non-follow use the same
+incremental reader, without whole-output buffering. Completed lines serialize
+arrival, including non-follow stdout/stderr; neither timestamp nor stream implies
+chronology. Compose bounds both TTY and framed input before its own text writer.
+Its existing inspect metadata supplies service and TTY identity, without loading
+Compose/environment files. Structured viewers receive records before normalization;
+legacy text uses the existing stderr marker. Only recognized wire semantic levels
+become severity. Stderr alone stays informational and application text is retained.
+
+The browser shares one source per resource/options and identifies entries with
+resource, a monotonically increasing client connection attempt, and source seq.
+An observed seq gap produces a localized entry; reconnect replaces the requested
+tail and displays a boundary. Equal text is retained. The log owner makes at most
+five delayed reconnect attempts (1, 2, 5, 10, 30 seconds) before explicit retry;
+it pauses offline and after identity rejection. A stream close alone triggers a
+bounded identity read rather than assuming logout. Last unsubscribe closes its
+socket and cancels its frame, identity read and reconnect timer. The existing
+adapter identity reset also clears this log owner's channels and paused-hook views;
+the shared session registry supplies server closure, while adapter identity reset also clears metrics, actions and RunGate state.
+
+The complete browser resource budget is 2,000 entries and 1 MiB of serialized
+UTF-8 data. The published immutable snapshot and the mutable next-frame window
+each reserve half (1,000 entries / 512 KiB), so even a suspended animation frame
+cannot double that budget. Oldest complete entries are evicted visibly; each line
+is at most 64 KiB including JSON escaping. The source has no other pending array,
+and publishes at most once per animation frame. Pause retains only the current
+resource snapshot. Resource/adapter/identity changes clear it. Clear view records
+arrival IDs, so a later message with an older timestamp remains visible.
+
+Source queues remain raw/mapped 256, broadcast 1,024 and per-client 256. The shared
+hub keeps its drop and slow-client removal behavior. Seq is assigned before
+broadcast; a final dropped line without a later seq cannot be detected. Logs are
+ephemeral, with no durable cursor, content deduplication or lossless guarantee.
+The separate retained command-output cap remains unchanged.
 
 ## Capability descriptor
 
@@ -240,7 +331,8 @@ manager leaves origin unclear. Containers without these labels map to Run.
 Recreation restrictions include Compose ownership, unclear origin and the
 server's protected-container flag. Agent-labeled workloads are excluded from
 both lists; the backend excludes their tracked Compose projects before pagination.
-All write operations keep their unavailable adapter mapping.
+Only the seven guarded lifecycle commands have connected write mappings; other
+inventory mutations remain unavailable.
 
 Images, volumes, network details/topology, published ports and dashboard reads
 use the same retained-response store and observation headers. Dedicated agent
@@ -256,3 +348,30 @@ adapter session; a disconnect preserves the last sample with its time and host
 reason. A new browser session has no retained metric samples. Unreported disk
 capacity, growth, image metadata and volume sizes remain explicitly unavailable.
 All image, volume and network writes retain their unavailable mappings.
+
+
+## Browser session lifetime
+
+The local browser session ID binds viewer handles through the process-shared
+`backend/pkg/sessionlife` registry. SessionService supplies durable session and
+user validation independently of token caches. Authentication contexts carry
+that validator to SSE, local WebSockets and the Direct/Edge viewer bridges.
+Registration precedes validation. Explicit service revokes close matching handles
+after persistence; transactional password/recovery writes, deletion, expiry and
+mode changes are detected by the existing 15-second SSE or 54-second viewer
+cadence. Direct forwarding owns its one cancellable 54-second check. Viewer
+closure releases both proxy legs and source references, preserving the host
+Edge tunnel and application-owned runtime execution. API-key streams without a
+session and proxy/none requests retain their existing credential/host lifetime.
+
+The adapter's identity generation aborts old requests, rejects late responses
+and captured callbacks, closes SSE/log/metric sockets and their timers, and
+clears private runs, histories and buffers. RunGate entries and listeners are
+reset on identity loss/replacement, including durable unresolved runs and
+ambiguous intents without a known ID. Mounted live/query observers reattach for
+a fresh identity; paused log views clear through the accepted log lifetime.
+The provider cancels old queries and records `currentUser` as null on loss.
+A socket close alone starts a bounded durable identity read before reconnect;
+credential-check form failures remain inline. Known same-user renewal retains
+its existing observation/notification policy. Server execution remains durable
+and does not depend on any viewer lifetime.

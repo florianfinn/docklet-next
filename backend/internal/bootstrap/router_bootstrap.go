@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; functional cut: removed Svelte-specific metadata or asset paths; functional cut: removed federated credentials; functional cut: removed Swarm; functional cut: removed OIDC and passkeys.; Agent Echo routes omit hub-only ingress, UI and test endpoints.
+// Deviations: Local module namespace; functional cut: removed Svelte-specific metadata or asset paths; functional cut: removed federated credentials; functional cut: removed Swarm; functional cut: removed OIDC and passkeys.; Agent Echo routes omit hub-only ingress, UI and test endpoints; session-bound viewer lifetime and durable validation.
 
 package bootstrap
 
@@ -26,6 +26,7 @@ import (
 	"github.com/florianfinn/docklet-next/backend/api"
 	"github.com/florianfinn/docklet-next/backend/api/ws"
 	"github.com/florianfinn/docklet-next/backend/frontend"
+	"github.com/florianfinn/docklet-next/backend/internal/activity"
 	"github.com/florianfinn/docklet-next/backend/internal/apikey"
 	"github.com/florianfinn/docklet-next/backend/internal/auth"
 	"github.com/florianfinn/docklet-next/backend/internal/config"
@@ -164,7 +165,10 @@ func verifyRouterRequestUserInternal(ctx context.Context, authService *auth.Auth
 		return requestUser.Actor(), err == nil && requestUser != nil
 	}
 	if token, ok := auth.BearerToken(req.Header.Get("Authorization")); ok {
-		user, _, err := authService.VerifyToken(ctx, token)
+		user, sessionID, err := authService.VerifyToken(ctx, token)
+		if err == nil && user != nil {
+			*req = *req.WithContext(authService.ViewerContext(ctx, sessionID, user.ID))
+		}
 		return user.Actor(), err == nil && user != nil
 	}
 
@@ -172,7 +176,10 @@ func verifyRouterRequestUserInternal(ctx context.Context, authService *auth.Auth
 	if err != nil || browserToken == "" {
 		return nil, false
 	}
-	user, _, err := authService.VerifyBrowserToken(ctx, browserToken)
+	user, sessionID, err := authService.VerifyBrowserToken(ctx, browserToken)
+	if err == nil && user != nil {
+		*req = *req.WithContext(authService.ViewerContext(ctx, sessionID, user.ID))
+	}
 	return user.Actor(), err == nil && user != nil
 }
 
@@ -224,6 +231,7 @@ func newRouter(p RouterParams) (*echo.Echo, *edge.TunnelServer) {
 
 	e.Use(echomiddleware.Recover())
 	e.Use(echomiddleware.RequestID())
+	e.Use(activity.RuntimeReceiverMiddleware(cfg.AgentMode || cfg.EdgeAgent, activity.RuntimeAdmissionLimit))
 	e.Use(requestLoggerMiddlewareInternal())
 	e.Use(secureCookieContextMiddlewareInternal(trustedProxyNets))
 	if hubMode && deps.System != nil {

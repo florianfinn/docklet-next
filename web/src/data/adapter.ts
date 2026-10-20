@@ -6,6 +6,7 @@ import type {
   LogLine,
   MetricsSnapshot,
   PortMapping,
+  RuntimeKnowledge,
   ScheduledJob,
   SecurityOverview,
   Stack,
@@ -60,6 +61,15 @@ export interface ActionReadFailure {
 }
 export interface ActionReadHealth { failures: readonly ActionReadFailure[] }
 
+export type CodedRuntimeActionRun = CodedActionRun & RuntimeKnowledge;
+
+/** Administrator acknowledgment that the prior executor is stopped and state inspected. */
+export interface RuntimeReleaseInput {
+  acknowledgeRisk: true;
+  /** Nonempty audit reason; the server validates it when runtime control is activated. */
+  reason: string;
+}
+
 /**
  * Transport-neutral boundary of the UI. Adapters implement this interface.
  */
@@ -77,6 +87,12 @@ export interface DockletAdapter extends AuthApi, HostsApi, VolumesApi, SettingsA
   listEvents(): Promise<CodedEvent[]>;
   listSchedule(): Promise<ScheduledJob[]>;
   listActions(): Promise<CodedActionRun[]>;
+
+  /** Dormant boundaries; returning a snapshot never establishes verified Docker state. */
+  getRuntimeRun?(hostId: string, runId: string): Promise<CodedRuntimeActionRun>;
+  cancelRuntimeRun?(hostId: string, runId: string): Promise<CodedRuntimeActionRun>;
+  /** Releases a hub exclusion with unknown outcome; never replays the command. */
+  releaseRuntimeRun?(hostId: string, runId: string, input: RuntimeReleaseInput): Promise<CodedRuntimeActionRun>;
 
   runStackCommand(stackId: string, command: StackCommand): Promise<string>;
   installStackUpdates(stackId: string, services?: string[]): Promise<string>;

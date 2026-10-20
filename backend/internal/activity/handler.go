@@ -122,6 +122,12 @@ func (h *ActivityHandler) GetActivity(ctx context.Context, input *GetActivityInp
 		return nil, huma.Error400BadRequest("activity id is required")
 	}
 
+	if detail, owned, err := h.getRuntimeActivityInternal(ctx, input); owned || err != nil {
+		if err != nil {
+			return nil, err
+		}
+		return &handlerutil.Out[activity.Detail]{Body: base.ApiResponse[activity.Detail]{Success: true, Data: *detail}}, nil
+	}
 	detail, err := h.activityService.GetActivityDetail(ctx, input.EnvironmentID, input.ActivityID, input.Limit)
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
@@ -173,6 +179,9 @@ func (h *ActivityHandler) CancelActivity(ctx context.Context, input *CancelActiv
 		return nil, huma.Error400BadRequest("activity id is required")
 	}
 
+	if out, owned, err := h.cancelRuntimeInternal(ctx, input); owned || err != nil {
+		return out, err
+	}
 	requestedBy := h.cancelRequestedByInternal(ctx, input.RequestedBy)
 	cancelled, err := h.activityService.CancelActivity(ctx, input.EnvironmentID, input.ActivityID, requestedBy)
 	if err != nil {

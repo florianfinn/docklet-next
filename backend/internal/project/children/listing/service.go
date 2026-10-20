@@ -78,17 +78,54 @@ func (s *Service) Snapshot(ctx context.Context) Snapshot {
 	}
 }
 
-// Containers returns the snapshot's compose containers and listing error.
-
-// ProjectContainers matches project names first, then the working
-// directory if it identifies exactly one Compose project group.
-func ProjectContainers(p project.Record, containersByProject map[string][]container.Summary) []container.Summary {
-	normName := projects.NormalizeProjectName(p.Name)
-	if c := containersByProject[normName]; len(c) > 0 {
-		return c
+// ObservedComposeName uses recorded metadata without requiring current files.
+func ObservedComposeName(p project.Record) string {
+	if p.ComposeProjectName != nil && *p.ComposeProjectName != "" {
+		return projects.NormalizeProjectName(*p.ComposeProjectName)
 	}
-	if p.ComposeProjectName != nil && *p.ComposeProjectName != normName {
-		if c := containersByProject[*p.ComposeProjectName]; len(c) > 0 {
+	return projects.NormalizeProjectName(p.Name)
+}
+
+// ComposeProjectOwners gives recorded overrides priority over legacy defaults.
+// Equal observations retain deterministic ID order; this is not runtime admission.
+func ComposeProjectOwners(records []project.Record) map[string]string {
+	owners := make(map[string]string, len(records))
+	for _, observed := range []bool{true, false} {
+		candidates := make(map[string]string)
+		for _, p := range records {
+			hasObservation := p.ComposeProjectName != nil && *p.ComposeProjectName != ""
+			if hasObservation != observed {
+				continue
+			}
+			name := ObservedComposeName(p)
+			if name == "" {
+				continue
+			}
+			if id, exists := candidates[name]; !exists || p.ID < id {
+				candidates[name] = p.ID
+			}
+		}
+		for name, id := range candidates {
+			if _, exists := owners[name]; !exists {
+				owners[name] = id
+			}
+		}
+	}
+	return owners
+}
+
+// ProjectContainers matches the effective label, then a unique working directory.
+// A recorded override replaces the stored alias. Optional full-table owners keep
+// legacy aliases and directory fallbacks from claiming another observed owner.
+func ProjectContainers(p project.Record, containersByProject map[string][]container.Summary, ownership ...map[string]string) []container.Summary {
+	var owners map[string]string
+	if len(ownership) > 0 {
+		owners = ownership[0]
+	}
+	available := func(name string) bool { id, exists := owners[name]; return !exists || id == p.ID }
+	name := ObservedComposeName(p)
+	if available(name) {
+		if c := containersByProject[name]; len(c) > 0 {
 			return c
 		}
 	}
@@ -99,6 +136,9 @@ func ProjectContainers(p project.Record, containersByProject map[string][]contai
 	var matched []container.Summary
 	var matchedProjectName string
 	for projectName, containers := range containersByProject {
+		if !available(projectName) || (name != projects.NormalizeProjectName(p.Name) && projectName == projects.NormalizeProjectName(p.Name)) {
+			continue
+		}
 		for _, c := range containers {
 			workingDir := c.Labels[api.WorkingDirLabel]
 			if workingDir != "" && filepath.Clean(workingDir) == projectPath {
@@ -203,10 +243,11 @@ func (s *Service) StatusCounts(ctx context.Context, records []project.Record) pr
 		slog.ErrorContext(ctx, "Failed to list global compose containers for counts", "error", err)
 	}
 	containersByProject := GroupComposeContainersByProject(containers)
+	owners := ComposeProjectOwners(records)
 	for _, p := range active {
 		status := p.Status
 		if err == nil {
-			projectContainers := ProjectContainers(p, containersByProject)
+			projectContainers := ProjectContainers(p, containersByProject, owners)
 			services := make([]project.RuntimeService, 0, len(projectContainers))
 			for _, c := range projectContainers {
 				services = append(services, project.RuntimeService{Status: string(c.State)})
@@ -245,10 +286,11 @@ func RelativePath(projectsDir, projectPath string) string {
 
 // row builds the fields list filters, search and sort read from database
 // columns and the container snapshot; compose metadata is left for ApplyPresentation.
-func row(projectsDir, catalog string, p project.Record, snapshot Snapshot) project.Details {
+func row(projectsDir, catalog string, p project.Record, snapshot Snapshot, ownership ...map[string]string) project.Details {
 	var resp project.Details
 	_ = mapping.MapStruct(p, &resp)
 
+	resp.ComposeProjectName = ObservedComposeName(p)
 	resp.CreatedAt = p.CreatedAt.Format(time.RFC3339)
 	resp.UpdatedAt = p.UpdatedAt.Format(time.RFC3339)
 	resp.IsArchived = p.IsArchived
@@ -264,7 +306,7 @@ func row(projectsDir, catalog string, p project.Record, snapshot Snapshot) proje
 		return resp
 	}
 
-	projectContainers := ProjectContainers(p, snapshot.byProject)
+	projectContainers := ProjectContainers(p, snapshot.byProject, ownership...)
 	services := make([]project.RuntimeService, 0, len(projectContainers))
 	for _, c := range projectContainers {
 		service := RuntimeServiceFromContainer(catalog, c, projects.ArcaneComposeMetadata{}, snapshot.currentContainerID, snapshot.currentContainerErr)
@@ -298,11 +340,15 @@ func row(projectsDir, catalog string, p project.Record, snapshot Snapshot) proje
 
 // Rows builds list rows and reports service counts inferred from live
 // containers for projects whose stored count is still zero.
-func Rows(projectsDir, catalog string, records []project.Record, snapshot Snapshot) ([]project.Details, map[string]int) {
+func Rows(projectsDir, catalog string, records []project.Record, snapshot Snapshot, ownership ...map[string]string) ([]project.Details, map[string]int) {
+	owners := ComposeProjectOwners(records)
+	if len(ownership) > 0 {
+		owners = ownership[0]
+	}
 	rows := make([]project.Details, len(records))
 	inferredCounts := make(map[string]int)
 	for i, p := range records {
-		rows[i] = row(projectsDir, catalog, p, snapshot)
+		rows[i] = row(projectsDir, catalog, p, snapshot, owners)
 		if p.ServiceCount == 0 && rows[i].ServiceCount > 0 {
 			inferredCounts[p.ID] = rows[i].ServiceCount
 		}
@@ -328,15 +374,12 @@ func ApplyPresentation(ctx context.Context, projectsDir, catalog string, records
 	}
 }
 
-// KnownComposeProjectNames collects every name a tracked project uses.
+// KnownComposeProjectNames excludes replaced defaults so orphan groups remain discoverable.
 func KnownComposeProjectNames(records []project.Record) map[string]struct{} {
-	known := make(map[string]struct{}, len(records)*2)
+	known := make(map[string]struct{}, len(records))
 	for _, p := range records {
-		for _, name := range kit.TrimNonEmpty([]string{p.Name, mo.PointerToOption(p.ComposeProjectName).OrEmpty()}) {
+		if name := ObservedComposeName(p); name != "" {
 			known[name] = struct{}{}
-			if normalized := projects.NormalizeProjectName(name); normalized != "" {
-				known[normalized] = struct{}{}
-			}
 		}
 	}
 	return known
@@ -453,17 +496,18 @@ func (s *Service) DiscoveredUpdateRows(
 		}
 
 		rows = append(rows, project.Details{
-			ID:              "compose:" + projectName,
-			Name:            projectName,
-			Path:            "",
-			Status:          status,
-			ServiceCount:    serviceCount,
-			RunningCount:    runningCount,
-			IsDiscovered:    true,
-			CreatedAt:       lastCheckedAt,
-			UpdatedAt:       lastCheckedAt,
-			RuntimeServices: runtimeServices,
-			UpdateInfo:      updateInfo,
+			ID:                 "compose:" + projectName,
+			Name:               projectName,
+			ComposeProjectName: projectName,
+			Path:               "",
+			Status:             status,
+			ServiceCount:       serviceCount,
+			RunningCount:       runningCount,
+			IsDiscovered:       true,
+			CreatedAt:          lastCheckedAt,
+			UpdatedAt:          lastCheckedAt,
+			RuntimeServices:    runtimeServices,
+			UpdateInfo:         updateInfo,
 		})
 	}
 

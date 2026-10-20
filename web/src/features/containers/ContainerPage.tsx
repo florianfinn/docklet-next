@@ -1,4 +1,5 @@
 import { useCapability } from "@/data/use-capability";
+import { LogDeliveryNotice, LogMessage, LogSource } from "@/features/stacks/logs/log-presentation";
 import { InventoryNotice } from "@/features/stacks/InventoryNotice";
 import { ArrowLeft, Boxes, Cpu, Layers, Lock, Package, Pencil, Play, RotateCw, Square } from "lucide-react";
 import { useMemo, useState } from "react";
@@ -55,12 +56,14 @@ function ContainerLogs({ c }: { c: ContainerInfo }) {
           </Button>
         )}
       </CardHeader>
+      <LogDeliveryNotice lines={lines} paused={paused} />
       <div role="log" aria-label={t("logs")} aria-live={paused ? "off" : "polite"} className="h-80 overflow-auto bg-code py-2 font-mono text-[12px] leading-relaxed">
         {shown.length === 0 && <p className="px-4 py-6 text-center text-muted-foreground">{t("logsEmpty")}</p>}
         {shown.map((l) => (
           <div key={l.id} className={cn("flex gap-3 px-3 whitespace-pre-wrap", LEVEL_CLASS[l.level])}>
             <span className="shrink-0 text-muted-foreground/70 select-none">{formatTime(l.ts, true)}</span>
-            <span className="min-w-0 break-words">{l.message}</span>
+            <span className="w-28 shrink-0 truncate text-muted-foreground"><LogSource line={l} /></span>
+            <span className="min-w-0 break-words"><LogMessage line={l} /></span>
           </div>
         ))}
       </div>
@@ -74,7 +77,7 @@ function ContainerActions({ c, onEdit }: { c: ContainerInfo; onEdit: () => void 
   const tm = useTranslations("containers.menu");
   const to = useTranslations("containers.origin");
   const cmd = useContainerCommands();
-  const command = useCapability("runContainerCommand");
+  const command = useCapability("runContainerCommand", { kind: "container", id: c.id });
   const edit = useCapability("recreateContainer");
   const restart = useContainerRestart();
   return (
@@ -196,7 +199,7 @@ function Body({ c, host }: { c: ContainerInfo; host: Host | undefined }) {
         </Card>
       </div>
       <div className="mt-4">
-        <ContainerLogs c={c} />
+        <ContainerLogs key={c.id} c={c} />
       </div>
       {c.origin === "standalone" && <RecreateDialog container={editing ? c : undefined} open={editing} onOpenChange={setEditing} />}
     </>

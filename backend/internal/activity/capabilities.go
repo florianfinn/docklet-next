@@ -8,9 +8,11 @@ package activity
 import (
 	"context"
 	"net/http"
+	"strings"
 
 	"github.com/danielgtaylor/huma/v2"
 	"github.com/florianfinn/docklet-next/backend/internal/middleware"
+	"github.com/florianfinn/docklet-next/backend/pkg/authz"
 	"github.com/florianfinn/docklet-next/backend/pkg/utils/handlerutil"
 	"github.com/florianfinn/docklet-next/types/base"
 	"github.com/florianfinn/docklet-next/types/capability"
@@ -59,6 +61,39 @@ func getCapabilities(ctx context.Context, input *GetCapabilitiesInput) (*handler
 	permissions, _ := middleware.PermissionsFromContext(ctx)
 	for i := range descriptors {
 		switch descriptors[i].OperationID {
+		case "runStackCommand", "runContainerCommand":
+			ref := descriptors[i].ResourceRef
+			kind := "stack"
+			required := []string{authz.PermActivitiesRead, authz.PermProjectsDeploy, authz.PermProjectsDown, authz.PermProjectsRestart}
+			if descriptors[i].OperationID == "runContainerCommand" {
+				kind = "container"
+				required = []string{authz.PermActivitiesRead, authz.PermContainersStart, authz.PermContainersStop, authz.PermContainersRestart}
+			}
+			env, raw, scoped := strings.Cut(ref.ID, "~")
+			valid := ref.Kind == kind && scoped && env != "" && raw != "" && !strings.Contains(raw, "~")
+			for _, permission := range required {
+				valid = valid && permissions.Allows(permission, env)
+			}
+			descriptors[i].Available = valid
+			if valid {
+				descriptors[i].DisabledReasonCode = ""
+			} else {
+				descriptors[i].DisabledReasonCode = "capability.unavailable"
+			}
+		case "subscribeLogs", "subscribeContainerLogs":
+			ref := descriptors[i].ResourceRef
+			kind, logGrant, readGrant := "stack", authz.PermProjectsLogs, authz.PermProjectsRead
+			if descriptors[i].OperationID == "subscribeContainerLogs" {
+				kind, logGrant, readGrant = "container", authz.PermContainersLogs, authz.PermContainersRead
+			}
+			env, raw, scoped := strings.Cut(ref.ID, "~")
+			valid := ref.Kind == kind && scoped && env != "" && raw != "" && !strings.Contains(raw, "~") && permissions.Allows(logGrant, env) && permissions.Allows(readGrant, env)
+			descriptors[i].Available = valid
+			if valid {
+				descriptors[i].DisabledReasonCode = ""
+			} else {
+				descriptors[i].DisabledReasonCode = "capability.unavailable"
+			}
 		case "registerHost", "issueAgentToken", "removeHost", "discoverHub":
 			descriptors[i].Available = permissions.IsGlobalAdmin()
 			if descriptors[i].Available {

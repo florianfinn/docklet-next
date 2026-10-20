@@ -17,12 +17,10 @@ import (
 	"strconv"
 	"strings"
 	"syscall"
-	"time"
 
 	"github.com/compose-spec/compose-go/v2/consts"
 	"github.com/compose-spec/compose-go/v2/dotenv"
 	projecttypes "github.com/florianfinn/docklet-next/types/project"
-	"github.com/samber/hot"
 	"go.getarcane.app/acfs"
 	kit "go.getarcane.app/kit/pkg"
 
@@ -64,28 +62,12 @@ type ProjectEnvState struct {
 }
 
 type EnvLoader struct {
-	projectsDir   string
 	workdir       string
 	autoInjectEnv bool
 }
 
-type envFileCacheEntry struct {
-	path   string
-	mtime  time.Time
-	exists bool
-	values EnvMap
-}
-
-var (
-	projectEnvFileCache = hot.NewHotCache[string, envFileCacheEntry](hot.LRU, 4096).Build()
-)
-
-func NewEnvLoader(projectsDir, workdir string, autoInjectEnv bool) *EnvLoader {
-	return &EnvLoader{
-		projectsDir:   projectsDir,
-		workdir:       workdir,
-		autoInjectEnv: autoInjectEnv,
-	}
+func NewEnvLoader(_ string, workdir string, autoInjectEnv bool) *EnvLoader {
+	return &EnvLoader{workdir: workdir, autoInjectEnv: autoInjectEnv}
 }
 
 // processEnvAllowlist is the only part of Arcane's own process environment
@@ -126,6 +108,9 @@ func (l *EnvLoader) LoadEnvironment(ctx context.Context) (envMap, injectionVars 
 			switch {
 			case errors.Is(loadAndMergeProjectEnvErr, os.ErrNotExist):
 				slog.DebugContext(ctx, "Project .env file does not exist", "path", projectEnvPath)
+			case errors.Is(loadAndMergeProjectEnvErr, syscall.EISDIR):
+				// A non-file .env retains the existing absent/leave-untouched policy.
+				slog.WarnContext(ctx, "Project .env path is a directory; skipping", "path", projectEnvPath)
 			case errors.Is(loadAndMergeProjectEnvErr, os.ErrPermission):
 				return envMap,
 					injectionVars,
@@ -136,46 +121,34 @@ func (l *EnvLoader) LoadEnvironment(ctx context.Context) (envMap, injectionVars 
 							os.Getegid(),
 							loadAndMergeProjectEnvErr))
 			default:
-				slog.WarnContext(ctx, "Failed to load project env", "path", projectEnvPath, "error", loadAndMergeProjectEnvErr)
+				return envMap, injectionVars, loadAndMergeProjectEnvErr
 			}
 		}
 	}
 
 	// COMPOSE_ENV_FILES, when declared, layers additional env files on top of
-	// the project .env (later entries win). Reuses the mtime-keyed cache.
+	// the project .env (later entries win), reading current bytes each time.
 	l.mergeComposeEnvFilesInternal(ctx, envMap, injectionVars)
 
 	return envMap, injectionVars, nil
 }
 
 func (l *EnvLoader) mergeComposeEnvFilesInternal(ctx context.Context, envMap, injectionVars EnvMap) {
-	parse := func(path string, contextEnv EnvMap) (EnvMap, error) {
-		key := strings.Join([]string{path, l.projectsDir, strconv.FormatBool(l.autoInjectEnv), strconv.FormatUint(kit.Fingerprint(contextEnv), 16)}, "\x00")
-		entry, err := loadCachedEnvFileInternal(ctx, projectEnvFileCache, key, path, contextEnv)
-		if err != nil {
-			return nil, err
-		}
-		return kit.Ternary(!entry.exists, nil, entry.values), nil
-	}
 	onMerged := func(values EnvMap) {
 		if l.autoInjectEnv {
 			maps.Copy(injectionVars, values)
 		}
 	}
-	mergeComposeEnvFilesInternal(ctx, l.workdir, envMap, parse, onMerged)
+	mergeComposeEnvFilesInternal(ctx, l.workdir, envMap, parseProjectEnvFileExistingInternal, onMerged)
 }
 
 func (l *EnvLoader) loadAndMergeProjectEnv(ctx context.Context, path string, envMap, injectionVars EnvMap) error {
-	key := strings.Join([]string{path, l.projectsDir, strconv.FormatBool(l.autoInjectEnv), strconv.FormatUint(kit.Fingerprint(envMap), 16)}, "\x00")
-	entry, err := loadCachedEnvFileInternal(ctx, projectEnvFileCache, key, path, envMap)
+	values, err := parseProjectEnvFileExistingInternal(path, envMap)
 	if err != nil {
 		return err
 	}
-	if !entry.exists {
-		return os.ErrNotExist
-	}
 
-	for k, v := range entry.values {
+	for k, v := range values {
 		envMap[k] = v
 		if l.autoInjectEnv {
 			injectionVars[k] = v
@@ -186,68 +159,8 @@ func (l *EnvLoader) loadAndMergeProjectEnv(ctx context.Context, path string, env
 	return nil
 }
 
-func loadCachedEnvFileInternal(_ context.Context, envCache *hot.HotCache[string, envFileCacheEntry], key, path string, contextEnv EnvMap) (envFileCacheEntry, error) {
-	if cached, ok := envCache.Peek(key); ok {
-		if validEnvFileCacheEntryInternal(cached) {
-			return cached, nil
-		}
-		envCache.Delete(key)
-	}
-
-	entry, found, err := envCache.GetWithLoaders(key, func(_ []string) (map[string]envFileCacheEntry, error) {
-		entry := envFileCacheEntry{path: path}
-		// Stays on os.*: env files may be symlinks resolving outside any
-		// confinement root (a supported setup), which acfs cannot follow.
-		info, err := os.Stat(path)
-		if err != nil {
-			if errors.Is(err, os.ErrNotExist) {
-				return map[string]envFileCacheEntry{key: entry}, nil
-			}
-			return nil, err
-		}
-		if info.IsDir() {
-			return nil, fmt.Errorf("path is a directory: %s", path)
-		}
-
-		parsed, err := parseProjectEnvFileExistingInternal(path, contextEnv)
-		if err != nil {
-			return nil, fmt.Errorf("parse env file: %w", err)
-		}
-		entry.exists = true
-		entry.mtime = info.ModTime()
-		entry.values = parsed
-		return map[string]envFileCacheEntry{key: entry}, nil
-	})
-	if err != nil {
-		return envFileCacheEntry{}, err
-	}
-	if !found {
-		return envFileCacheEntry{}, errors.New("environment file cache loader returned no entry")
-	}
-	return entry, nil
-}
-
-func validEnvFileCacheEntryInternal(entry envFileCacheEntry) bool {
-	// os.Stat rather than acfs: env files may be symlinks resolving outside
-	// any confinement root (a supported setup).
-	info, err := os.Stat(entry.path)
-	if err != nil {
-		return !entry.exists && errors.Is(err, os.ErrNotExist)
-	}
-	if info.IsDir() {
-		return false
-	}
-	if !entry.exists || !info.ModTime().Equal(entry.mtime) {
-		return false
-	}
-	// A chmod does not bump mtime, so confirm the file is still readable.
-	file, err := os.Open(entry.path)
-	if err != nil {
-		return false
-	}
-	return file.Close() == nil
-}
-
+// Read and parse the same bytes on every load, including supported external
+// symlink targets. Modification times are not authoritative environment data.
 func parseProjectEnvFileExistingInternal(path string, contextEnv EnvMap) (EnvMap, error) {
 	content, err := os.ReadFile(path)
 	if err != nil {
@@ -444,7 +357,8 @@ type ComposeEnvOptions struct {
 }
 
 // ParseComposeEnvOptions extracts the deployment-relevant COMPOSE_* variables
-// from an already-merged environment map. Malformed path selections return a
+// from an already-merged environment map. Invalid auxiliary paths are skipped,
+// matching environment loading. Malformed COMPOSE_FILE selections return a
 // classified common.ErrComposeFileEnvInvalid; malformed scalars are ignored
 // with a debug log, matching `docker compose`'s tolerance.
 func ParseComposeEnvOptions(workdir string, env EnvMap) (ComposeEnvOptions, error) {
@@ -465,7 +379,8 @@ func ParseComposeEnvOptions(workdir string, env EnvMap) (ComposeEnvOptions, erro
 	for _, entry := range ComposeEnvFileEntriesFromEnv(env) {
 		resolved, resErr := ResolvePathWithinDir(workdir, entry)
 		if resErr != nil {
-			return ComposeEnvOptions{}, common.Classify(common.ErrComposeFileEnvInvalid, fmt.Errorf("COMPOSE_ENV_FILES entry %q: %w", entry, resErr))
+			// The environment loader already warns and skips excluded auxiliary paths.
+			continue
 		}
 		opts.EnvFiles = append(opts.EnvFiles, resolved)
 	}
@@ -488,28 +403,10 @@ func ParseComposeEnvOptions(workdir string, env EnvMap) (ComposeEnvOptions, erro
 // project .env and COMPOSE_ENV_FILES entries. Returns nil when the merged
 // environment does not set COMPOSE_FILE.
 func ComposeFileEnvSelection(ctx context.Context, projectsDir, dir string) ([]string, error) {
-	envMap := make(EnvMap)
-	if !parseComposeBoolInternal(envMap, consts.ComposeDisableDefaultEnvFile) {
-		projectEnvPath := filepath.Join(dir, EffectiveEnvFileName)
-		projectEnv, err := ParseProjectEnvFile(projectEnvPath, envMap)
-		if err != nil {
-			if errors.Is(err, os.ErrPermission) {
-				return nil,
-					common.Classify(common.ErrProjectEnvUnreadable,
-						fmt.Errorf("%s is not readable by the runtime user (uid %d, gid %d); fix its ownership/read permission or set PUID/PGID to a user that can read it: %w",
-							projectEnvPath,
-							os.Geteuid(),
-							os.Getegid(),
-							err))
-			}
-			return nil, err
-		}
-		maps.Copy(envMap, projectEnv)
+	envMap, _, err := NewEnvLoader(projectsDir, dir, false).LoadEnvironment(ctx)
+	if err != nil {
+		return nil, err
 	}
-	if len(envMap) == 0 {
-		return nil, nil
-	}
-	mergeComposeEnvFilesInternal(ctx, dir, envMap, ParseProjectEnvFile, nil)
 	return resolveComposeFileSelectionInternal(dir, envMap)
 }
 

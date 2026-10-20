@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-15
 // License: BSD-3-Clause
-// Deviations: Extracted batch append path; configurable raw output persistence with coded messages.
+// Deviations: Extracted batch append; configurable raw output, coded messages and atomic runtime sequence allocation.
 
 package activity
 
@@ -40,14 +40,29 @@ func (s *ActivityService) AppendMessages(ctx context.Context, activityID string,
 			output = append(output, *req.Output)
 		}
 	}
-	if len(output) > 0 && s.settings != nil && !s.settings.GetBoolSetting(ctx, "keepActionOutput", true) {
-		output = nil
+	retainOutput := true
+	if len(output) > 0 && s.settings != nil {
+		retainOutput = s.settings.GetBoolSetting(ctx, "keepActionOutput", true)
+	}
+	if !retainOutput && len(messages) == 0 {
+		var runtimeRows int64
+		if err := s.db.WithContext(ctx).Model(&RuntimeReceipt{}).Where("run_id = ? AND kind = 'receipt'", activityID).Count(&runtimeRows).Error; err != nil {
+			return nil, err
+		}
+		if runtimeRows == 0 {
+			return nil, nil
+		}
 	}
 	if len(messages) == 0 && len(output) == 0 {
 		return nil, nil
 	}
 	if updates == nil {
 		updates = make(map[string]any, 2)
+	}
+	for _, req := range reqs {
+		if req.OutputTruncated {
+			updates["output_truncated"] = true
+		}
 	}
 
 	// Hold the per-activity publish lock across commit and publish so this
@@ -58,7 +73,7 @@ func (s *ActivityService) AppendMessages(ctx context.Context, activityID string,
 	lock.Lock()
 	defer lock.Unlock()
 
-	current, err := s.appendBatchWithRetryInternal(ctx, activityID, messages, updates, output)
+	current, err := s.appendBatchWithRetryInternal(ctx, activityID, messages, updates, output, retainOutput)
 	if err != nil {
 		return nil, err
 	}

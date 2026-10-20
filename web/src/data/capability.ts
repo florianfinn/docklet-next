@@ -12,6 +12,7 @@ export type AdapterOutcome<T> =
   | { kind: "ok"; value: T }
   | { kind: "not-available"; operationId: string; reasonCode: string; resourceRef: ResourceRef }
   | { kind: "conflict"; code: "run.busy" | "run.cancelling"; activeRunId: string }
+  | { kind: "conflict"; code: "run.request-mismatch"; activeRunId?: never }
   | { kind: "error"; code: string; status?: number };
 
 export class AdapterOutcomeError extends Error {

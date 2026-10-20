@@ -56,7 +56,12 @@ test("worktree guard rejects all manifest and baseline bypasses", (t) => {
   rejects(/missing-baseline/);
   writeFileSync(baselinePath, readFileSync(new URL("../backend/resources/migrations/sqlite/001_baseline.sql", import.meta.url)));
   writeFileSync(manifestPath, readFileSync(new URL("../scripts/migration-hashes.json", import.meta.url)));
-  copyFileSync(new URL("../backend/resources/migrations/sqlite/002_hub_backup_archive.sql", import.meta.url), join(root, "backend/resources/migrations/sqlite/002_hub_backup_archive.sql"));
+  const liveManifest = JSON.parse(readFileSync(manifestPath, "utf8"));
+  for (const path of Object.keys(liveManifest)) {
+    copyFileSync(new URL(`../backend/resources/migrations/${path}`, import.meta.url), join(root, "backend/resources/migrations", path));
+  }
+  const complete = run();
+  assert.equal(complete.status, 0, complete.stdout + complete.stderr);
   const absentBase = spawnSync(process.execPath, [join(root, "scripts/check-migrations.mjs")], {
     encoding: "utf8", env: { ...cleanEnvironment(), CHECK_BASE_SHA: "f".repeat(40) },
   });
@@ -74,4 +79,29 @@ test("one-time transition accepts only the exact seven-hash PostgreSQL base", ()
  assert.ok(baseManifestProblems(prior, {...next, "sqlite/001_baseline.sql": "0".repeat(64)}).length);
  assert.ok(baseManifestProblems(next, {}).length);
  assert.ok(baseManifestProblems(next, {...next, "sqlite/001_baseline.sql": "0".repeat(64)}).length);
+});
+
+
+test("SQLite comparison base protects both shipped migrations against deletion and rehashing", () => {
+  const shipped = JSON.parse(readFileSync(new URL("../scripts/migration-hashes.json", import.meta.url)));
+  const previous = Object.fromEntries([
+    "sqlite/001_baseline.sql", "sqlite/002_hub_backup_archive.sql",
+  ].map((name) => [name, shipped[name]]));
+  assert.deepEqual(Object.keys(previous).sort(), ["sqlite/001_baseline.sql", "sqlite/002_hub_backup_archive.sql"]);
+  assert.deepEqual(baseManifestProblems(previous, shipped), []);
+  assert.deepEqual(baseManifestProblems(previous, { ...shipped, "sqlite/999_future.sql": "f".repeat(64) }), []);
+  for (const name of Object.keys(previous)) {
+    const deleted = { ...shipped };
+    delete deleted[name];
+    assert.ok(baseManifestProblems(previous, deleted).includes(`changed-shipped:${name}`));
+    assert.ok(baseManifestProblems(previous, { ...shipped, [name]: "0".repeat(64) }).includes(`changed-shipped:${name}`));
+    const files = new Map(Object.keys(shipped).map((path) => [path,
+      readFileSync(new URL(`../backend/resources/migrations/${path}`, import.meta.url))]));
+    files.delete(name);
+    assert.ok(migrationProblems(files, shipped).includes(`deleted:${name}`));
+    files.set(name, Buffer.from("-- altered shipped SQL\n"));
+    assert.ok(migrationProblems(files, shipped).includes(`changed:${name}`));
+    const rehashed = { ...shipped, [name]: createHash("sha256").update(files.get(name)).digest("hex") };
+    assert.ok(baseManifestProblems(previous, rehashed).includes(`changed-shipped:${name}`));
+  }
 });

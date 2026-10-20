@@ -18,7 +18,7 @@ export function useContainerMenu(c: ContainerInfo, open: { onOpen: (id: string) 
   const t = useTranslations("containers");
   const navigate = useNavigate();
   const cmd = useContainerCommands();
-  const command = useCapability("runContainerCommand");
+  const command = useCapability("runContainerCommand", { kind: "container", id: c.id });
   const edit = useCapability("recreateContainer");
   const hide = useHideAction("containers");
   const restart = useContainerRestart();

@@ -18,7 +18,7 @@ export function AuthGate() {
   const t = useTranslations("login");
   const mode = useAuthMode();
   const currentUser = useCurrentUser();
-  const setup = useSetupStatus(currentUser.isSuccess);
+  const setup = useSetupStatus(currentUser.isSuccess && !!currentUser.data);
   const location = useLocation();
   const [unauthorized, setUnauthorized] = useState(false);
   const savedLocale = currentUser.data?.locale;
@@ -30,8 +30,8 @@ export function AuthGate() {
   }, []);
   if (mode.isPending || (mode.data && currentUser.isPending)) return <main aria-busy="true" className="p-6">{t("loading")}</main>;
   if (mode.isError) return <main className="p-6"><p>{t("settingsError")}</p><Button onClick={() => void mode.refetch()}>{t("retry")}</Button></main>;
-  if (currentUser.isError || unauthorized) {
-    const rejected = unauthorized || (currentUser.error instanceof AdapterOutcomeError && currentUser.error.outcome.kind === "error" && currentUser.error.outcome.status === 401);
+  if (currentUser.isError || unauthorized || (currentUser.isSuccess && !currentUser.data)) {
+    const rejected = (currentUser.isSuccess && !currentUser.data) || unauthorized || (currentUser.error instanceof AdapterOutcomeError && currentUser.error.outcome.kind === "error" && currentUser.error.outcome.status === 401);
     if (rejected && mode.data === "local") return <Navigate to="/login" state={{ from: location.pathname }} replace />;
     if (rejected && mode.data === "proxy") return <main className="p-6" role="alert">{t("proxyRejected")}</main>;
     return <main className="p-6"><p>{t("sessionError")}</p><Button onClick={() => void currentUser.refetch()}>{t("retry")}</Button></main>;

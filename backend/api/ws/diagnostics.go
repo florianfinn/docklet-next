@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace
+// Deviations: Local module namespace; session-bound viewer lifetime and durable validation.
 
 package ws
 
@@ -17,6 +17,7 @@ import (
 	"time"
 
 	"github.com/coder/websocket"
+	"github.com/florianfinn/docklet-next/backend/pkg/sessionlife"
 	systemtypes "github.com/florianfinn/docklet-next/types/system"
 	"github.com/labstack/echo/v5"
 	"go.getarcane.app/streams/logs"
@@ -172,13 +173,14 @@ func (h *WebSocketHandler) streamSnapshotsInternal(c *echo.Context, interval tim
 		}
 	}
 	done := diagnosticsReadLoopInternal(ctx, conn, onMessage)
+	defer func() { _ = conn.CloseNow(); <-done }()
 
 	if !write(build(ctx)) {
 		return nil
 	}
 	ticker := time.NewTicker(interval)
 	defer ticker.Stop()
-	pingTicker := time.NewTicker(diagnosticsPingPeriod)
+	pingTicker := sessionlife.NewTicker(ctx, diagnosticsPingPeriod)
 	defer pingTicker.Stop()
 	for {
 		select {
@@ -216,6 +218,7 @@ func (h *WebSocketHandler) ServerLogsStream(c *echo.Context) error {
 
 	ctx := c.Request().Context()
 	done := diagnosticsReadLoopInternal(ctx, conn, nil)
+	defer func() { _ = conn.CloseNow(); <-done }()
 	write := func(e logs.Entry) bool {
 		b, marshalErr := json.Marshal(e)
 		if marshalErr != nil {
@@ -231,7 +234,7 @@ func (h *WebSocketHandler) ServerLogsStream(c *echo.Context) error {
 			return nil
 		}
 	}
-	pingTicker := time.NewTicker(diagnosticsPingPeriod)
+	pingTicker := sessionlife.NewTicker(ctx, diagnosticsPingPeriod)
 	defer pingTicker.Stop()
 	for {
 		select {
@@ -256,6 +259,10 @@ func (h *WebSocketHandler) ServerLogsStream(c *echo.Context) error {
 // The pong is serviced by the diagnosticsReadLoopInternal reader, so a peer
 // that stops answering fails here within diagnosticsPingWait.
 func pingDiagnosticsConnInternal(ctx context.Context, conn *websocket.Conn) bool {
+	if sessionlife.Check(ctx) != nil {
+		_ = conn.CloseNow()
+		return false
+	}
 	pctx, cancel := context.WithTimeout(ctx, diagnosticsPingWait)
 	defer cancel()
 	return conn.Ping(pctx) == nil

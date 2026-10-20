@@ -1,0 +1,183 @@
+{
+  "version": 4,
+  "minimumAgentContractVersion": 4,
+  "edgeProtocol": "tunnel/v1 (unchanged)",
+  "lifecycleOperations": [
+    "deploy-project",
+    "down-project",
+    "restart-project",
+    "redeploy-project",
+    "start-container",
+    "stop-container",
+    "restart-container"
+  ],
+  "runtimeRoutes": [
+    "POST /api/environments/0/runtime-registration",
+    "POST /api/environments/0/runtime-target",
+    "POST /api/environments/0/runtime-runs",
+    "GET /api/environments/0/runtime-runs/{runId}",
+    "POST /api/environments/0/runtime-runs/{runId}/cancel"
+  ],
+  "identityFields": [
+    "managerId",
+    "registrationId",
+    "executorGeneration",
+    "runId",
+    "requestDigest"
+  ],
+  "registrationFields": [
+    "managerId",
+    "registrationId"
+  ],
+  "attributionFields": [
+    "id",
+    "username",
+    "displayName?"
+  ],
+  "outcomeStates": [
+    "active",
+    "terminal",
+    "not-received"
+  ],
+  "knowledgeFields": [
+    "outcomeState",
+    "cancelRequested"
+  ],
+  "detailFields": [
+    "activity",
+    "messages",
+    "stepTrace",
+    "output",
+    "outputTruncated",
+    "retainedStartSeq"
+  ],
+  "runtimeOutputFields": [
+    "timestamp",
+    "stream",
+    "text",
+    "step?",
+    "level?",
+    "outputSeq"
+  ],
+  "legacyOutputFields": [
+    "timestamp",
+    "stream",
+    "text",
+    "step?",
+    "level?"
+  ],
+  "admission": {
+    "preference": "respond-async",
+    "key": "Idempotency-Key",
+    "newStatus": 202,
+    "retainedStatus": 200,
+    "fields": [
+      "activityId",
+      "code",
+      "activity"
+    ],
+    "completion": false
+  },
+  "conflicts": [
+    "run.busy",
+    "run.cancelling",
+    "run.request-mismatch"
+  ],
+  "limits": {
+    "deliveryMinutes": 30,
+    "admissionMinutes": 5,
+    "clientRetryMinutes": 10,
+    "compactRetentionHours": 24,
+    "negativeEvidenceMinutes": 60,
+    "querySeconds": 5,
+    "bodyBytes": 1048576,
+    "outputBytes": 262144
+  },
+  "recovery": {
+    "globalAdministrator": true,
+    "activityReadAndCancel": true,
+    "reasonAndAcknowledgment": true,
+    "stoppedExecutorAndCheckedDocker": true,
+    "effectReplay": false
+  },
+  "restrictedRoutes": [
+    "GET /api/health",
+    "HEAD /api/health",
+    "GET /api/app-version",
+    "GET /api/version",
+    "HEAD /api/environments/0/system/health",
+    "GET /api/environments/0/system/upgrade/check",
+    "POST /api/environments/0/system/upgrade"
+  ],
+  "hubRuntimeRoutes": [
+    "GET /api/environments/{id}/runtime-runs/{runId}",
+    "POST /api/environments/{id}/runtime-runs/{runId}/cancel",
+    "POST /api/environments/{id}/runtime-runs/{runId}/release"
+  ],
+  "executorIdentityFields": [
+    "managerId",
+    "registrationId",
+    "executorGeneration"
+  ],
+  "recoveryFields": [
+    "unknownReason?",
+    "executorState",
+    "executorResultCode?",
+    "executorError?",
+    "executorSettledAt?",
+    "disposition?",
+    "dispositionBy?",
+    "dispositionReason?",
+    "dispositionAt?",
+    "releaseAcknowledged"
+  ],
+  "preAdmissionCodes": [
+    "run.busy",
+    "run.cancelling",
+    "run.request-mismatch",
+    "runtime.target-changed",
+    "runtime.target-unavailable",
+    "runtime.parent-unresolved",
+    "runtime.target-removed",
+    "agent.update-required"
+  ],
+  "authentication": {
+    "receiver": "AgentCredential",
+    "requestHeader": "X-Arcane-Agent-Token",
+    "ordinaryBearer": false,
+    "bootstrap": false,
+    "wireAttributionGrantsAuthority": false
+  },
+  "capabilities": {
+    "runStack": "unavailable until consumer mapping",
+    "runContainer": "unavailable until consumer mapping",
+    "deployStack": "unavailable until consumer mapping"
+  },
+  "legacyNonStreamingFailureStatuses": {
+    "runtime.outcome-unknown": 503,
+    "runtime.interrupted": 409,
+    "runtime.cancelled": 409,
+    "runtime.failed": 500,
+    "runtime.wait-timeout": 504,
+    "runtime.waiter-disconnected": 408
+  },
+  "legacyStreaming": {
+    "operations": [
+      "deploy-project",
+      "redeploy-project"
+    ],
+    "contentType": "application/x-ndjson",
+    "startedFields": [
+      "type",
+      "activityId"
+    ],
+    "doneOnConfirmedSuccessOnly": true,
+    "postFlushFailureStatus": 200,
+    "postFlushFailureFields": [
+      "error",
+      "code",
+      "activityId"
+    ],
+    "preFlushAdmissionUsesErrorStatus": true
+  }
+}

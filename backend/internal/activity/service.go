@@ -21,11 +21,9 @@ import (
 	"github.com/samber/mo"
 	"gorm.io/gorm"
 
-	"github.com/florianfinn/docklet-next/backend/internal/common"
 	"github.com/florianfinn/docklet-next/backend/internal/database"
 	"github.com/florianfinn/docklet-next/backend/internal/settings"
 	activitylib "github.com/florianfinn/docklet-next/backend/pkg/libarcane/activity"
-	"github.com/florianfinn/docklet-next/backend/pkg/libarcane/timeouts"
 	"github.com/florianfinn/docklet-next/backend/pkg/utils"
 	"github.com/florianfinn/docklet-next/backend/pkg/utils/dbutil"
 )
@@ -83,8 +81,10 @@ type gateRunContextKey struct{}
 type startupRepairContextKey struct{}
 
 type ActivityService struct {
-	db       *database.DB
-	settings *settings.SettingsService
+	runtime     *RuntimeService
+	runtimeHTTP *RuntimeHTTPService
+	db          *database.DB
+	settings    *settings.SettingsService
 
 	subscribersMu sync.RWMutex
 	subscribers   map[int]*activitySubscriber
@@ -105,7 +105,7 @@ type ActivityService struct {
 	// holds; the slot is freed when the activity completes.
 	limiter      *activitySlotLimiter
 	slotMu       sync.Mutex
-	slotReleases map[string]func()
+	slotReleases map[string]activitySlotReleaseInternal
 
 	// terminalPublished suppresses stale snapshots after a terminal publish.
 	// Old entries expire after terminalPublishRetention.
@@ -254,7 +254,7 @@ func NewActivityService(db *database.DB, settingsService *settings.SettingsServi
 		subscribers:       map[int]*activitySubscriber{},
 		running:           map[string]context.CancelCauseFunc{},
 		limiter:           newActivitySlotLimiterInternal(settingsService),
-		slotReleases:      map[string]func(){},
+		slotReleases:      map[string]activitySlotReleaseInternal{},
 		terminalPublished: map[string]time.Time{},
 	}
 }
@@ -393,12 +393,7 @@ func (s *ActivityService) StartTrackedActivity(ctx context.Context, req StartAct
 }
 
 func (s *ActivityService) registerSlotReleaseInternal(activityID string, release func()) {
-	s.slotMu.Lock()
-	if existing, ok := s.slotReleases[activityID]; ok {
-		existing()
-	}
-	s.slotReleases[activityID] = release
-	s.slotMu.Unlock()
+	s.registerOwnedSlotReleaseInternal(activityID, release, false)
 }
 
 func (s *ActivityService) releaseSlotInternal(activityID string) {
@@ -412,66 +407,8 @@ func (s *ActivityService) releaseSlotInternal(activityID string) {
 	}
 	s.slotMu.Unlock()
 	if ok {
-		release()
+		release.release()
 	}
-}
-
-// AwaitActivitySlot blocks until the queued activity holds a concurrency slot,
-// then flips its status to running. It returns immediately when the activity
-// already took a slot at creation. On cancellation the context cause is
-// returned and the activity stays queued for its caller to finalize.
-// Implements activitylib.SlotWaiter.
-func (s *ActivityService) AwaitActivitySlot(ctx context.Context, activityID, environmentID string) error {
-	if err := s.checkInitInternal(); err != nil {
-		return err
-	}
-	activityID = strings.TrimSpace(activityID)
-	if activityID == "" {
-		return errors.New("activity id is required")
-	}
-	environmentID = cmp.Or(strings.TrimSpace(environmentID), "0")
-
-	s.slotMu.Lock()
-	_, held := s.slotReleases[activityID]
-	s.slotMu.Unlock()
-	if held {
-		if err := ctx.Err(); err != nil {
-			return context.Cause(ctx)
-		}
-		return nil
-	}
-
-	release, err := s.limiter.acquireInternal(ctx, environmentID)
-	if err != nil {
-		return err
-	}
-	s.registerSlotReleaseInternal(activityID, release)
-
-	if _, updateErr := s.UpdateActivity(ctx, activityID, UpdateActivityRequest{Status: activity.StatusRunning}); updateErr != nil {
-		s.releaseSlotInternal(activityID)
-		return updateErr
-	}
-	if err := ctx.Err(); err != nil {
-		s.releaseSlotInternal(activityID)
-		return context.Cause(ctx)
-	}
-	return nil
-}
-
-// AwaitActivitySlotBounded waits for a concurrency slot like AwaitActivitySlot
-// but gives up after timeouts.DefaultActivitySlotWait, returning
-// ActivitySlotWaitTimeoutError so the caller fails the queued activity loudly
-// instead of parking forever behind long-running slot holders.
-func (s *ActivityService) AwaitActivitySlotBounded(ctx context.Context, activityID, environmentID string) error {
-	slotCtx, cancel := context.WithTimeout(ctx, timeouts.DefaultActivitySlotWait)
-	defer cancel()
-	if err := s.AwaitActivitySlot(slotCtx, activityID, environmentID); err != nil {
-		if ctx.Err() == nil && errors.Is(err, context.DeadlineExceeded) {
-			return common.Classify(common.ErrTimeout, errors.New("timed out waiting for a free activity slot; other long-running activities are holding all slots"))
-		}
-		return err
-	}
-	return nil
 }
 
 func (s *ActivityService) UpdateActivity(ctx context.Context, activityID string, req UpdateActivityRequest) (*activity.Activity, error) {
@@ -555,7 +492,7 @@ func (s *ActivityService) UpdateActivity(ctx context.Context, activityID string,
 		if err := tx.First(&model, "id = ?", activityID).Error; err != nil {
 			return fmt.Errorf("failed to load updated activity: %w", err)
 		}
-		return nil
+		return s.runtimeAnnotateActivityTxInternal(tx, &model)
 	}); err != nil {
 		return nil, err
 	}
@@ -635,7 +572,7 @@ func buildAppendBatchInternal(activityID string, reqs []AppendActivityMessageReq
 
 // appendBatchWithRetryInternal retries transient write contention because the
 // Writer drain cannot replay a failed message and output batch.
-func (s *ActivityService) appendBatchWithRetryInternal(ctx context.Context, activityID string, messages []*ActivityMessage, updates map[string]any, output []activity.OutputLine) (*Activity, error) {
+func (s *ActivityService) appendBatchWithRetryInternal(ctx context.Context, activityID string, messages []*ActivityMessage, updates map[string]any, output []activity.OutputLine, retainOutput bool) (*Activity, error) {
 	var current Activity
 	const appendWriteAttempts = 3
 	var writeErr error
@@ -658,10 +595,8 @@ func (s *ActivityService) appendBatchWithRetryInternal(ctx context.Context, acti
 			for i := range messages {
 				messages[i].CreatedAt = now.Add(time.Duration(i) * time.Microsecond)
 			}
-			if len(output) > 0 {
-				lines, truncated := appendOutputLinesInternal(current.Output, output)
-				updates["output"] = lines
-				updates["output_truncated"] = current.OutputTruncated || truncated
+			if err := runtimeAppendOutputTxInternal(tx, &current, updates, output, retainOutput); err != nil {
+				return err
 			}
 
 			query := tx.Model(&Activity{}).Where("id = ? AND status IN ?", activityID, []activity.Status{activity.StatusQueued, activity.StatusRunning})
@@ -680,7 +615,7 @@ func (s *ActivityService) appendBatchWithRetryInternal(ctx context.Context, acti
 			if err := tx.First(&current, "id = ?", activityID).Error; err != nil {
 				return fmt.Errorf("failed to load updated activity: %w", err)
 			}
-			return nil
+			return s.runtimeAnnotateActivityTxInternal(tx, &current)
 		})
 		if writeErr == nil {
 			return &current, nil

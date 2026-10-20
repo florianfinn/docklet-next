@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: None
+// Deviations: Local module namespace; finite runtime responses, cancellation signaling and pending limits.
 
 package edge
 
@@ -33,6 +33,9 @@ func NewCommandClient() *CommandClient {
 func (c *CommandClient) Execute(ctx context.Context, tunnel *AgentTunnel, req *CommandRequest) (*CommandResult, error) {
 	if ctx == nil {
 		return nil, errors.New("context is required")
+	}
+	if err := ctx.Err(); err != nil {
+		return nil, err
 	}
 	if err := validateConnectedTunnelInternal(tunnel); err != nil {
 		return nil, err
@@ -74,11 +77,21 @@ func (c *CommandClient) Execute(ctx context.Context, tunnel *AgentTunnel, req *C
 		AgentInstance: tunnel.AgentInstance,
 	}
 
-	pending, err := registerPendingRequestInternal(tunnel, requestID)
+	pendingLimit := 0
+	if runtimeRequestPathInternal(req.Path) {
+		pendingLimit = runtimePendingLimit
+	}
+	pending, err := registerBoundedPendingRequestInternal(tunnel, requestID, pendingLimit)
 	if err != nil {
 		return nil, err
 	}
 	defer tunnel.Pending.Delete(requestID)
+	completed := false
+	defer func() {
+		if !completed && runtimeRequestPathInternal(req.Path) {
+			_ = tunnel.Conn.Send(&TunnelMessage{ID: requestID, Type: MessageTypeCancelRequest})
+		}
+	}()
 
 	chunkRequestBody := len(req.Body) > defaultCommandChunkSize && slices.Contains(tunnel.Capabilities, tunnelCapabilityChunkedRequest)
 	if chunkRequestBody {
@@ -93,6 +106,9 @@ func (c *CommandClient) Execute(ctx context.Context, tunnel *AgentTunnel, req *C
 	if chunkRequestBody {
 		transferID := msg.Metadata[bodyTransferMetadataKey]
 		for sequence, offset := int64(0), 0; offset < len(req.Body); sequence++ {
+			if err := ctx.Err(); err != nil {
+				return nil, err
+			}
 			end := min(offset+defaultCommandChunkSize, len(req.Body))
 			if sendErr2 := tunnel.Conn.Send(&TunnelMessage{
 				ID:       transferID,
@@ -107,11 +123,16 @@ func (c *CommandClient) Execute(ctx context.Context, tunnel *AgentTunnel, req *C
 		}
 	}
 
-	status, headers, body, err := collectCommandResponseInternal(ctx, tunnel, pending, req.Method)
+	limit := 0
+	if runtimeRequestPathInternal(req.Path) {
+		limit = runtimeRequestBodyLimit
+	}
+	status, headers, body, err := collectCommandResponseBoundedInternal(ctx, tunnel, pending, req.Method, limit)
 	if err != nil {
 		return nil, err
 	}
 
+	completed = true
 	return &CommandResult{
 		Status:  status,
 		Headers: headers,

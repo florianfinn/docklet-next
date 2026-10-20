@@ -1,3 +1,4 @@
+import { useCapability } from "@/data/use-capability";
 import { Download, Eye, FileCode2, FileText, FlaskConical, Play, RefreshCw, RotateCw, ScanSearch, Square } from "lucide-react";
 import { useNavigate } from "react-router";
 import { useTranslations } from "use-intl";
@@ -13,16 +14,17 @@ export function useStackMenu(stack: Stack, hidden: boolean): MenuGroups {
   const t = useTranslations("stacks.menu");
   const navigate = useNavigate();
   const cmd = useStackCommands();
+  const command = useCapability("runStackCommand", { kind: "stack", id: stack.id });
   const hide = useHideAction("stacks");
   const allStopped = stack.services.every((s) => s.state === "stopped");
   const pending = summarizeUpdates(stack.services).pending;
   const busy = !!stack.busyActionId;
   const href = `/stacks/${stack.id}`;
   const run: MenuAction[] = allStopped
-    ? [{ id: "start", label: t("start"), icon: <Play />, disabled: busy, onSelect: () => void cmd.run(stack.id, "start") }]
+    ? [{ id: "start", label: t("start"), icon: <Play />, disabled: busy || !command.available || !!stack.inventory?.stale, title: command.reason, onSelect: () => void cmd.run(stack.id, "start") }]
     : [
-        { id: "stop", label: t("stop"), icon: <Square />, disabled: busy, onSelect: () => void cmd.run(stack.id, "stop") },
-        { id: "restart", label: t("restart"), icon: <RotateCw />, disabled: busy, onSelect: () => void cmd.run(stack.id, "restart") },
+        { id: "stop", label: t("stop"), icon: <Square />, disabled: busy || !command.available || !!stack.inventory?.stale, title: command.reason, onSelect: () => void cmd.run(stack.id, "stop") },
+        { id: "restart", label: t("restart"), icon: <RotateCw />, disabled: busy || !command.available || !!stack.inventory?.stale, title: command.reason, onSelect: () => void cmd.run(stack.id, "restart") },
       ];
   return [
     [
@@ -32,7 +34,7 @@ export function useStackMenu(stack: Stack, hidden: boolean): MenuGroups {
     ],
     [
       ...run,
-      { id: "redeploy", label: t("redeploy"), icon: <RefreshCw />, disabled: busy, onSelect: () => void cmd.run(stack.id, "redeploy") },
+      { id: "redeploy", label: t("redeploy"), icon: <RefreshCw />, disabled: busy || !command.available || !!stack.inventory?.stale, title: command.reason, onSelect: () => void cmd.run(stack.id, "redeploy") },
       ...(pending > 0 ? [{ id: "update", label: t("update"), icon: <Download />, disabled: busy, onSelect: () => void cmd.installUpdates(stack.id) }] : []),
       { id: "check", label: t("check"), icon: <ScanSearch />, disabled: busy, onSelect: () => void cmd.checkUpdates(stack.id) },
     ],

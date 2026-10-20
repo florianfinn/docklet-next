@@ -12,6 +12,14 @@ const laterOperations = new Map([
   ["GET /backups/storage", "get-system-backup-storage"],
   ["POST /backups/upload", "import-system-backup-upload"],
   ["GET /backups/{id}/download", "download-system-backup"],
+  ["GET /environments/0/runtime-runs/{runId}", "get-runtime-run-outcome"],
+  ["GET /environments/{id}/runtime-runs/{runId}", "get-hub-runtime-run"],
+  ["POST /environments/0/runtime-registration", "register-runtime-executor"],
+  ["POST /environments/0/runtime-runs", "execute-runtime-run"],
+  ["POST /environments/0/runtime-runs/{runId}/cancel", "cancel-runtime-run"],
+  ["POST /environments/0/runtime-target", "resolve-runtime-target"],
+  ["POST /environments/{id}/runtime-runs/{runId}/cancel", "cancel-hub-runtime-run"],
+  ["POST /environments/{id}/runtime-runs/{runId}/release", "release-runtime-run"],
 ]);
 const retiredSystemRecovery = new Map([
   ["PUT /backups/recovery-key", "set-system-backup-recovery-key"],

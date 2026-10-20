@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; functional cut: removed GitOps and saved Git repositories.
+// Deviations: Local module namespace; functional cut: removed GitOps and saved Git repositories; log-only structured source delivery.
 
 package projects
 
@@ -239,6 +239,10 @@ func ComposeLogs(ctx context.Context, projectName string, out io.Writer, follow 
 	}
 	defer func() { _ = c.Close() }()
 
+	// Structured viewers receive records before Compose text normalization.
+	if docker.LogSinkFromContext(ctx) != nil {
+		out = nil
+	}
 	return c.svc.Logs(ctx, projectName, &writerConsumer{out: out}, api.LogOptions{Follow: follow, Tail: tail, Since: since, Timestamps: timestamps})
 }
 

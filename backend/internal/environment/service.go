@@ -39,6 +39,7 @@ import (
 )
 
 type EnvironmentService struct {
+	runtimeRemoval   RuntimeRemoval
 	snapshots        hoststate.Store
 	agentRuntime     agentRuntime
 	db               *database.DB
@@ -404,7 +405,14 @@ func (s *EnvironmentService) DeleteEnvironment(ctx context.Context, id string, u
 	// Stop the per-environment health job before the row is removed.
 	s.removeHealthJobInternal(ctx, id)
 
-	if deleteEnvironmentErr := s.db.WithContext(ctx).Delete(&Environment{}, "id = ?", id).Error; deleteEnvironmentErr != nil {
+	remove := func(tx *gorm.DB) error { return tx.Delete(&Environment{}, "id = ?", id).Error }
+	var deleteEnvironmentErr error
+	if s.runtimeRemoval != nil {
+		deleteEnvironmentErr = s.runtimeRemoval(ctx, id, remove)
+	} else {
+		deleteEnvironmentErr = remove(s.db.WithContext(ctx))
+	}
+	if deleteEnvironmentErr != nil {
 		if env.Enabled {
 			s.registerHealthJobInternal(ctx, env.ID)
 		}

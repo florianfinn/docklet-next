@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: None
+// Deviations: Bound Compose log writer prefixes and messages before output.
 
 package projects
 
@@ -249,12 +249,21 @@ func (w *writerConsumer) Err(container, msg string) {
 		w.write(container, msg)
 		return
 	}
-	w.write(container, stderrLogLinePrefixInternal+msg)
+	bounded, cut := docker.BoundLogText(msg, docker.MaxLogLineBytes-len(stderrLogLinePrefixInternal)-len(docker.LogTruncatedMarker))
+	if cut {
+		bounded += docker.LogTruncatedMarker
+	}
+	w.write(container, stderrLogLinePrefixInternal+bounded)
 }
 
 func (w *writerConsumer) write(container, msg string) {
 	if w.out == nil {
 		return
+	}
+	container, _ = docker.BoundLogText(container, 256)
+	msg, cut := docker.BoundLogText(msg, docker.MaxLogLineBytes-len(container)-3-len(docker.LogTruncatedMarker)-1)
+	if cut {
+		msg += docker.LogTruncatedMarker
 	}
 	output := kit.Ternary(container != "", container+" | "+msg, msg)
 	if !strings.HasSuffix(output, "\n") {

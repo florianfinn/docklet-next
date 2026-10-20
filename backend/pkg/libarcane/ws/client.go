@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: None
+// Deviations: session-bound viewer lifetime and durable validation.
 
 package ws
 
@@ -17,6 +17,7 @@ import (
 	"time"
 
 	"github.com/coder/websocket"
+	"github.com/florianfinn/docklet-next/backend/pkg/sessionlife"
 )
 
 const (
@@ -102,7 +103,7 @@ func (c *Client) writePump(ctx context.Context, hub *Hub) {
 
 	// Timer instead of Ticker: no drain-after-Stop, and we can reset after each ping
 	// so shutdown sees ctx.Done() without waiting for an extra tick.
-	pingTimer := time.NewTimer(pingPeriod)
+	pingTimer := sessionlife.NewTimer(ctx, pingPeriod)
 	defer func() {
 		pingTimer.Stop()
 		c.safeRemove(hub)
@@ -131,6 +132,10 @@ func (c *Client) writePump(ctx context.Context, hub *Hub) {
 			case <-ctx.Done():
 				return
 			default:
+			}
+			if sessionlife.Check(ctx) != nil {
+				_ = c.conn.CloseNow()
+				return
 			}
 			// Ping round-trips: it fails within writeWait unless the peer pongs,
 			// which readPump services. A failed ping tears the client down.

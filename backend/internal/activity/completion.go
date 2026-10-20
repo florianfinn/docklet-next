@@ -45,21 +45,32 @@ func (
 	if activityID == "" {
 		return nil, errors.New("activity id is required")
 	}
-	defer s.releaseCancelInternal(activityID)
-	defer s.releaseSlotInternal(activityID)
+	workCtx := ctx
+	// Ownership and terminal persistence share the existing bounded write lifetime.
+	ctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), ownerWriteTimeout)
+	defer cancel()
 	s.runningMu.Lock()
-	defer s.runningMu.Unlock()
-	if s.cancelling[activityID] || errors.Is(context.Cause(ctx), activitylib.ErrCanceled) {
+	if err := s.refuseRuntimeWriterInternal(ctx, activityID); err != nil {
+		// A failed read grants no runtime authority. Only positively known legacy
+		// registrations retain their unconditional cleanup on terminal write errors.
+		legacy := !errors.Is(err, ErrRunNotOwned) && s.knownLegacyOwnerInternal(activityID)
+		s.runningMu.Unlock()
+		if legacy {
+			s.releaseCancelInternal(activityID)
+			s.releaseSlotInternal(activityID)
+		}
+		return nil, err
+	}
+	defer func() {
+		s.runningMu.Unlock()
+		s.releaseCancelInternal(activityID)
+		s.releaseSlotInternal(activityID)
+	}()
+	if s.cancelling[activityID] || errors.Is(context.Cause(workCtx), activitylib.ErrCanceled) {
 		status = activity.StatusCancelled
 		finalMessage = cancelledMessageInternal
 		errMessage = nil
 	}
-
-	workCtx := ctx
-	// Completion remains bounded when the worker returns on cancellation.
-	var cancel context.CancelFunc
-	ctx, cancel = context.WithTimeout(context.WithoutCancel(ctx), ownerWriteTimeout)
-	defer cancel()
 
 	var now time.Time
 	var model Activity

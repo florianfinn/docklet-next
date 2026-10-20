@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace
+// Deviations: Local module namespace; dormant runtime ingress ownership fields.
 
 package edge
 
@@ -36,6 +36,7 @@ type wsPayload struct {
 }
 
 type commandRequestTransfer struct {
+	ctx          context.Context
 	request      *TunnelMessage
 	conn         TunnelConnection
 	body         bytes.Buffer
@@ -57,6 +58,9 @@ type TunnelClient struct {
 	managerGRPCAddr        string
 	localPort              string // Port the agent is running on locally
 	conn                   atomic.Pointer[connBox]
+	runtimeCommands        bool
+	runtimeRequestMu       sync.Mutex
+	runtimeRequests        map[string]*runtimeRequestIngressInternal
 	requestTimeout         time.Duration
 	activeStreams          sync.Map // map[string]*activeWSStream
 	requestTransfers       sync.Map // map[string]*commandRequestTransfer

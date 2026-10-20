@@ -311,7 +311,10 @@ func (s *ProjectService) RedeployProject(ctx context.Context, projectID string, 
 		slog.WarnContext(ctx, "could not list compose containers to check self-redeploy guard; skipping guard", "error", listErr)
 	} else {
 		currentContainerID, currentContainerErr := cgroup.CurrentContainerID()
-		projectContainers := listing.ProjectContainers(projectRecord(*proj), listing.GroupComposeContainersByProject(containers))
+		projectContainers, ownerErr := s.projectContainers(ctx, *proj, containers)
+		if ownerErr != nil {
+			return ownerErr
+		}
 		if slices.ContainsFunc(projectContainers, func(c container.Summary) bool {
 			return labels.ShouldDisableArcaneServerRedeploy(c.Labels, c.ID, currentContainerID, currentContainerErr)
 		}) {
@@ -491,6 +494,7 @@ func (s *ProjectService) GetProjectDetails(ctx context.Context, projectID string
 		return projecttypes.Details{}, fmt.Errorf("failed to map project: %w", mapStructErr)
 	}
 
+	resp.ComposeProjectName = observedComposeName(*proj)
 	resp.CreatedAt = proj.CreatedAt.Format(time.RFC3339)
 	resp.UpdatedAt = proj.UpdatedAt.Format(time.RFC3339)
 	resp.IsArchived = proj.IsArchived

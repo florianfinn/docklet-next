@@ -115,32 +115,32 @@ func RegisterContainers(
 		Security:    handlerutil.DefaultOperationSecurity(),
 	}, authz.PermContainersRead, h.GetContainerProcesses)
 
-	middleware.RegisterWithPermission(api, huma.Operation{
+	activity.RegisterRuntimeLifecycle(api, activitySvc, activity.RuntimeStartContainer, huma.Operation{
 		OperationID: "start-container",
 		Method:      http.MethodPost,
 		Path:        "/environments/{id}/containers/{containerId}/start",
 		Summary:     "Start container",
 		Tags:        []string{"Containers"},
 		Security:    handlerutil.DefaultOperationSecurity(),
-	}, authz.PermContainersStart, h.StartContainer)
+	})
 
-	middleware.RegisterWithPermission(api, huma.Operation{
+	activity.RegisterRuntimeLifecycle(api, activitySvc, activity.RuntimeStopContainer, huma.Operation{
 		OperationID: "stop-container",
 		Method:      http.MethodPost,
 		Path:        "/environments/{id}/containers/{containerId}/stop",
 		Summary:     "Stop container",
 		Tags:        []string{"Containers"},
 		Security:    handlerutil.DefaultOperationSecurity(),
-	}, authz.PermContainersStop, h.StopContainer)
+	})
 
-	middleware.RegisterWithPermission(api, huma.Operation{
+	activity.RegisterRuntimeLifecycle(api, activitySvc, activity.RuntimeRestartContainer, huma.Operation{
 		OperationID: "restart-container",
 		Method:      http.MethodPost,
 		Path:        "/environments/{id}/containers/{containerId}/restart",
 		Summary:     "Restart container",
 		Tags:        []string{"Containers"},
 		Security:    handlerutil.DefaultOperationSecurity(),
-	}, authz.PermContainersRestart, h.RestartContainer)
+	})
 
 	middleware.RegisterWithPermission(api, huma.Operation{
 		OperationID: "kill-container",

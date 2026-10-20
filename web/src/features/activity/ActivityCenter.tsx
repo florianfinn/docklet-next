@@ -9,7 +9,7 @@ import { useActionsQuery, useEvents } from "@/data/queries";
 import { HISTORY_LIMITS } from "@/domain/activity-history";
 import { formatRelative, formatTime } from "@/domain/format";
 import type { ActionRun, EventLevel } from "@/domain/model";
-import { ProgressList } from "@/shared/component-set/progress-list";
+import { RuntimeProgressList } from "./RuntimeProgressList";
 import { HostChip } from "@/shared/components/host-chip";
 import { NAV_TAB, NAV_TABS_LIST } from "@/shared/components/nav-tabs";
 import { EmptyState, QueryError } from "@/shared/components/page";
@@ -29,6 +29,8 @@ import { openActionDialog } from "./action-dialog-store";
 import { activityStore } from "./activity-store";
 import { RunIconTile, StepList } from "./ActionSteps";
 import { keepOpenForCoordinatedLayers } from "./layer-coordination";
+import { RuntimeControls } from "./RuntimeControls";
+import { runtimeState } from "./runtime-presentation";
 import { RunOutput } from "./RunOutput";
 
 /** Shared list tones; notifications.css turns the running "accent" into the brand run tone inside the action centre. */
@@ -50,7 +52,7 @@ function RunBody({ run, defaultOpen }: { run: ActionRun; defaultOpen: boolean })
         <div className="mt-2 grid min-w-0 grid-cols-[minmax(0,1fr)] gap-3 rounded-xl border bg-background/50 p-3">
           <div className="flex min-w-0 flex-col items-start gap-3 sm:flex-row">
             <div className="min-w-0 flex-1 max-sm:w-full">
-              <StepList run={run} />
+              <StepList run={run.outcomeState === "unknown" ? { ...run, steps: [] } : run} />
             </div>
             <Button size="sm" variant="outline" className="h-7 shrink-0 text-xs" onClick={() => openActionDialog(run.id)}>
               <Maximize2 data-icon="inline-start" />
@@ -71,6 +73,7 @@ function RunBody({ run, defaultOpen }: { run: ActionRun; defaultOpen: boolean })
               )}
             </div>
           )}
+          <RuntimeControls key={run.id} run={run} />
           <RunOutput run={run} defaultOpen={defaultOpen} />
         </div>
       </CollapsibleContent>
@@ -125,13 +128,14 @@ function ActionsTab({ focusRunId }: { focusRunId?: string }) {
           {t("clearFinished")}
         </Button>
       </div>
-      <ProgressList
+      <RuntimeProgressList
         items={shown.map((run) => {
           const Icon = run.status === "queued" ? History : run.status === "running" ? Loader2 : run.status === "succeeded" ? CheckCircle2 : run.status === "cancelled" ? History : XCircle;
           return {
             id: run.id,
+            unknown: run.outcomeState === "unknown",
             tone: TONE[run.status],
-            progress: run.status === "failed" ? Math.max(run.progress, 8) : run.progress,
+            progress: run.outcomeState === "unknown" ? 0 : run.status === "failed" ? Math.max(run.progress, 8) : run.progress,
             highlighted: run.id === focusRunId,
             media: (
               <RunIconTile status={run.status} size="sm">
@@ -146,7 +150,7 @@ function ActionsTab({ focusRunId }: { focusRunId?: string }) {
             ),
             description: (
               <span className={cn(run.status === "failed" && "text-destructive")}>
-                {t(`status.${run.status}`)} · {run.target}
+                {runtimeState(run) ? t(`runtime.${runtimeState(run)!}`) : t(`status.${run.status}`)} · {run.target}
                 {run.error ? ` · ${run.error}` : ""}
               </span>
             ),

@@ -175,10 +175,22 @@ func (s *ProjectService) ListProjects(ctx context.Context, params pagination.Que
 	updatesFilter := strings.TrimSpace(params.Filters["updates"])
 	labelFilter := strings.TrimSpace(params.Filters["label"])
 	snapshot := s.listing.Snapshot(ctx)
+	owners, identities, ownerErr := s.projectComposeOwners(ctx)
+	if ownerErr != nil {
+		return nil, pagination.Response{}, ownerErr
+	}
 	query := s.db.WithContext(ctx).Model(&Project{})
 	systemNames := listing.SystemProjectNames(snapshot.Containers)
 	if len(systemNames) > 0 {
-		query = query.Where("LOWER(name) NOT IN ? AND COALESCE(compose_project_name, '') NOT IN ?", systemNames, systemNames)
+		var systemIDs []string
+		for _, identity := range identities {
+			if slices.Contains(systemNames, listing.ObservedComposeName(identity)) {
+				systemIDs = append(systemIDs, identity.ID)
+			}
+		}
+		if len(systemIDs) > 0 {
+			query = query.Where("id NOT IN ?", systemIDs)
+		}
 	}
 	if archivedFilter := strings.TrimSpace(params.Filters["archived"]); !strings.EqualFold(archivedFilter, "all") {
 		archived, _ := kit.ParseBool(archivedFilter)
@@ -206,7 +218,7 @@ func (s *ProjectService) ListProjects(ctx context.Context, params pagination.Que
 		// The paginated page gets live status from one Docker snapshot plus the
 		// compose-backed presentation fields, sharing one metadata env.
 		env := s.newProjectMetadataEnv(ctx, projectsArray)
-		result := s.projectListRows(ctx, env.projectsDirectory, projectsArray, snapshot)
+		result := s.projectListRows(ctx, env.projectsDirectory, projectsArray, snapshot, owners)
 		metas := make([]projects.ArcaneComposeMetadata, len(projectsArray))
 		var metaGroup errgroup.Group
 		metaGroup.SetLimit(maxConcurrentComposeReads)
@@ -249,7 +261,7 @@ func (s *ProjectService) ListProjects(ctx context.Context, params pagination.Que
 		return nil, pagination.Response{}, fmt.Errorf("failed to list projects: %w", err)
 	}
 	env := s.newProjectMetadataEnv(ctx, nil)
-	items := s.projectListRows(ctx, env.projectsDirectory, projectsArray, snapshot)
+	items := s.projectListRows(ctx, env.projectsDirectory, projectsArray, snapshot, owners)
 	byID := make(map[string]Project, len(projectsArray))
 	for _, proj := range projectsArray {
 		byID[proj.ID] = proj
@@ -348,9 +360,10 @@ func (s *ProjectService) CountProjectsWithPendingUpdates(ctx context.Context, al
 	// Runtime container IDs keep tag-policy updates scoped to their project.
 	details := make([]projecttypes.Details, len(activeProjects))
 	containersByProject := listing.GroupComposeContainersByProject(allContainers)
+	owners := listing.ComposeProjectOwners(projectRecords(allProjects))
 	for i, proj := range activeProjects {
 		details[i].ID = proj.ID
-		for _, c := range listing.ProjectContainers(projectRecord(proj), containersByProject) {
+		for _, c := range listing.ProjectContainers(projectRecord(proj), containersByProject, owners) {
 			details[i].RuntimeServices = append(
 				details[i].RuntimeServices,
 				projecttypes.RuntimeService{
@@ -615,13 +628,20 @@ func (s *ProjectService) upsertProjectForDir(ctx context.Context, dirName, dirPa
 	err := s.db.WithContext(ctx).
 		Where("path = ?", dirPath).
 		First(&existing).Error
+	if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
+		return fmt.Errorf("query existing project for %q failed: %w", dirPath, err)
+	}
+	var persistedName *string
+	if err == nil {
+		persistedName = &existing.Name
+	}
 
 	cfg := s.settingsService.GetSettingsOrDefaults(ctx)
 	composeMetadata := projecttypes.ComposeIdentity{ResolvedProjectName: projects.NormalizeProjectName(dirName)}
 	projectsDirectory, serviceCountErr := projects.GetProjectsDirectory(ctx, cfg.ProjectsDirectory.Value)
 	if serviceCountErr == nil {
 		autoInjectEnv := kit.ParseOrDefault(cfg.AutoInjectEnv.Value, false, strconv.ParseBool)
-		composeMetadata, serviceCountErr = projectsync.LoadComposeMetadata(ctx, dirPath, dirName, projectsDirectory, autoInjectEnv, s.projectPathMapper(ctx))
+		composeMetadata, serviceCountErr = projectsync.LoadComposeMetadata(ctx, dirPath, dirName, projectsDirectory, persistedName, autoInjectEnv, s.projectPathMapper(ctx))
 	}
 	serviceCountLogLevel := kit.Ternary(errors.Is(serviceCountErr, common.ErrProjectEnvUnreadable), slog.LevelDebug, slog.LevelWarn)
 
@@ -648,20 +668,10 @@ func (s *ProjectService) upsertProjectForDir(ctx context.Context, dirName, dirPa
 		if cerr := s.db.WithContext(ctx).Create(proj).Error; cerr != nil {
 			return fmt.Errorf("create project for %q failed: %w", dirPath, cerr)
 		}
-		if composeName := composeMetadata.ResolvedProjectName; strings.TrimSpace(composeName) != "" {
-			var duplicates int64
-			if countErr := s.db.WithContext(ctx).Model(&Project{}).Where("name = ? AND path <> ? AND id <> ?", composeName, dirPath, proj.ID).Count(&duplicates).Error; countErr != nil {
-				slog.WarnContext(ctx, "failed to check duplicate compose project names during project sync", "composeProjectName", composeName, "path", dirPath, "error", countErr)
-			} else if duplicates > 0 {
-				slog.WarnContext(ctx, "multiple project directories resolve to the same compose project name", "composeProjectName", composeName, "path", dirPath, "duplicates", duplicates)
-			}
-		}
+		s.warnDuplicateComposeName(ctx, composeMetadata.ResolvedProjectName, dirPath, proj.ID)
 		return s.reconcileComposeTagsForProject(ctx, proj)
 	}
-	if err != nil {
-		return fmt.Errorf("query existing project for %q failed: %w", dirPath, err)
-	}
-
+	// Refresh observations without feeding the effective name back into its default.
 	updates := map[string]any{}
 	if existing.Path != dirPath {
 		updates["path"] = dirPath
@@ -677,16 +687,10 @@ func (s *ProjectService) upsertProjectForDir(ctx context.Context, dirName, dirPa
 	if serviceCountErr == nil && mo.PointerToOption(existing.ComposeProjectName) != mo.PointerToOption(composeMetadata.ComposeProjectName) {
 		updates["compose_project_name"] = composeMetadata.ComposeProjectName
 	}
-	if serviceCountErr == nil {
-		if composeMetadata.ExplicitProjectName {
-			if existing.Name != composeMetadata.ResolvedProjectName {
-				updates["name"] = composeMetadata.ResolvedProjectName
-			}
-		} else if normalizedExistingName := projects.NormalizeProjectName(existing.Name); normalizedExistingName != existing.Name {
-			updates["name"] = normalizedExistingName
-		}
-	}
 	if len(updates) == 0 {
+		if serviceCountErr == nil {
+			s.warnDuplicateComposeName(ctx, composeMetadata.ResolvedProjectName, dirPath, existing.ID)
+		}
 		return s.reconcileComposeTagsForProject(ctx, &existing)
 	}
 
@@ -697,15 +701,31 @@ func (s *ProjectService) upsertProjectForDir(ctx context.Context, dirName, dirPa
 		Updates(updates).Error; uerr != nil {
 		return fmt.Errorf("update project %s failed: %w", existing.ID, uerr)
 	}
-	if composeName := composeMetadata.ResolvedProjectName; serviceCountErr == nil && strings.TrimSpace(composeName) != "" {
-		var duplicates int64
-		if countErr := s.db.WithContext(ctx).Model(&Project{}).Where("name = ? AND path <> ? AND id <> ?", composeName, dirPath, existing.ID).Count(&duplicates).Error; countErr != nil {
-			slog.WarnContext(ctx, "failed to check duplicate compose project names during project sync", "composeProjectName", composeName, "path", dirPath, "error", countErr)
-		} else if duplicates > 0 {
-			slog.WarnContext(ctx, "multiple project directories resolve to the same compose project name", "composeProjectName", composeName, "path", dirPath, "duplicates", duplicates)
-		}
+	if serviceCountErr == nil {
+		s.warnDuplicateComposeName(ctx, composeMetadata.ResolvedProjectName, dirPath, existing.ID)
 	}
 	return s.reconcileComposeTagsForProject(ctx, &existing)
+}
+
+func (s *ProjectService) warnDuplicateComposeName(ctx context.Context, name, path, id string) {
+	if strings.TrimSpace(name) == "" {
+		return
+	}
+	var peers []Project
+	if err := s.db.WithContext(ctx).Select("id", "name", "compose_project_name").
+		Where("path <> ? AND id <> ?", path, id).Find(&peers).Error; err != nil {
+		slog.WarnContext(ctx, "failed to check duplicate compose project names during project sync", "composeProjectName", name, "path", path, "error", err)
+		return
+	}
+	duplicates := 0
+	for _, peer := range peers {
+		if observedComposeName(peer) == projects.NormalizeProjectName(name) {
+			duplicates++
+		}
+	}
+	if duplicates > 0 {
+		slog.WarnContext(ctx, "multiple project directories resolve to the same compose project name", "composeProjectName", name, "path", path, "duplicates", duplicates)
+	}
 }
 
 // evaluateProjectCleanup decides whether a project missing from the current

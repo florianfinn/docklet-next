@@ -15,8 +15,9 @@ describe("free-only building blocks", () => {
   });
 
   it("routes every shared building block statically to its free implementation", () => {
+    expect(sources["/src/features/activity/ActivityCenter.tsx"]?.includes('from "./RuntimeProgressList"')).toBe(true);
     const sites: [string, string][] = [
-      ["/src/features/activity/ActivityCenter.tsx", "progress-list"],
+      ["/src/features/activity/RuntimeProgressList.tsx", "progress-list"],
       ["/src/features/containers/ContainersPage.tsx", "bulk-action-bar"],
       ["/src/features/containers/ContainersPage.tsx", "stat-strip"],
       ["/src/features/containers/OriginBadge.tsx", "info-hover-card"],

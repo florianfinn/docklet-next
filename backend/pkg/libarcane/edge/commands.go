@@ -15,6 +15,11 @@ import (
 )
 
 var commandRoutes = []commandRoute{
+	{Method: http.MethodPost, PathPattern: "/api/environments/0/runtime-registration", CommandName: "runtime.register"},
+	{Method: http.MethodPost, PathPattern: "/api/environments/0/runtime-target", CommandName: "runtime.resolve"},
+	{Method: http.MethodPost, PathPattern: "/api/environments/0/runtime-runs", CommandName: "runtime.execute"},
+	{Method: http.MethodGet, PathPattern: "/api/environments/0/runtime-runs/{runId}", CommandName: "runtime.query"},
+	{Method: http.MethodPost, PathPattern: "/api/environments/0/runtime-runs/{runId}/cancel", CommandName: "runtime.cancel"},
 	{Method: http.MethodGet, PathPattern: "/api/health", CommandName: "system.health"},
 	{Method: http.MethodHead, PathPattern: "/api/health", CommandName: "system.health"},
 	{Method: http.MethodGet, PathPattern: "/api/app-version", CommandName: "system.version"},
@@ -301,19 +306,26 @@ func (i commandRouteIndexInternal) resolveInternal(method, requestPath string, s
 		return mo.None[*commandRoute]()
 	}
 
-	current := root
-	for _, part := range splitCommandPathInternal(requestPath) {
-		if next := current.static[part]; next != nil {
-			current = next
-			continue
-		}
-		if current.param == nil || part == "" {
-			return mo.None[*commandRoute]()
-		}
-		current = current.param
-	}
-	if current.route == nil {
+	route := root.resolvePartsInternal(splitCommandPathInternal(requestPath))
+	if route == nil {
 		return mo.None[*commandRoute]()
 	}
-	return mo.Some(current.route)
+	return mo.Some(route)
+}
+
+// A literal branch wins only when the complete path matches. Runtime routes
+// under literal environment 0 must not hide existing wildcard environment routes.
+func (n *commandRouteNode) resolvePartsInternal(parts []string) *commandRoute {
+	if len(parts) == 0 {
+		return n.route
+	}
+	if next := n.static[parts[0]]; next != nil {
+		if route := next.resolvePartsInternal(parts[1:]); route != nil {
+			return route
+		}
+	}
+	if parts[0] != "" && n.param != nil {
+		return n.param.resolvePartsInternal(parts[1:])
+	}
+	return nil
 }
