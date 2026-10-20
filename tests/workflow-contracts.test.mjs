@@ -3,6 +3,38 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { assertWorkflow } from "./workflow-contracts.mjs";
 
+function gateAllows(workflow, job, statuses) {
+  const body = workflow.split(`  ${job}:\n`)[1]?.split(/^  [a-z][a-z-]*:\n/m)[0];
+  const script = body?.match(/^        run: \|\n((?:          .*\n)+)/m)?.[1];
+  assert.ok(script, `${job} gate script`);
+  const [prerequisites, cases] = script.split('case "$SCOPE" in\n');
+  const branch = cases?.match(new RegExp(`^            ${statuses.SCOPE}\\) (.+) ;;$`, "m"))?.[1];
+  if (!branch) return false;
+  const predicates = [...(prerequisites + branch).matchAll(/test "\$([A-Z_]+)" = (success|skipped)/g)];
+  assert.ok(predicates.length, `${job} gate predicates`);
+  return predicates.every(([, variable, expected]) => statuses[variable] === expected);
+}
+
+test("CI gates require the applicable results for full and text scopes", () => {
+  const workflow = readFileSync(new URL("../.github/workflows/checks.yml", import.meta.url), "utf8");
+  assertWorkflow("checks", workflow);
+  for (const [label, statuses, verifyAllowed, checksAllowed] of [
+    ["full success", { SCOPE: "full", SCOPE_RESULT: "success", FULL_RESULT: "success", VERIFY_RESULT: "success", IMAGE_RESULT: "success" }, true, true],
+    ["text success", { SCOPE: "text", SCOPE_RESULT: "success", FULL_RESULT: "skipped", VERIFY_RESULT: "success", IMAGE_RESULT: "skipped" }, true, true],
+    ["failed scope", { SCOPE: "full", SCOPE_RESULT: "failure", FULL_RESULT: "skipped", VERIFY_RESULT: "failure", IMAGE_RESULT: "skipped" }, false, false],
+    ["failed matrix", { SCOPE: "full", SCOPE_RESULT: "success", FULL_RESULT: "failure", VERIFY_RESULT: "failure", IMAGE_RESULT: "success" }, false, false],
+    ["cancelled matrix", { SCOPE: "full", SCOPE_RESULT: "success", FULL_RESULT: "cancelled", VERIFY_RESULT: "failure", IMAGE_RESULT: "success" }, false, false],
+    ["skipped matrix", { SCOPE: "full", SCOPE_RESULT: "success", FULL_RESULT: "skipped", VERIFY_RESULT: "failure", IMAGE_RESULT: "success" }, false, false],
+    ["failed image", { SCOPE: "full", SCOPE_RESULT: "success", FULL_RESULT: "success", VERIFY_RESULT: "success", IMAGE_RESULT: "failure" }, true, false],
+    ["skipped verify", { SCOPE: "full", SCOPE_RESULT: "success", FULL_RESULT: "success", VERIFY_RESULT: "skipped", IMAGE_RESULT: "success" }, true, false],
+    ["unexpected full check in text scope", { SCOPE: "text", SCOPE_RESULT: "success", FULL_RESULT: "success", VERIFY_RESULT: "success", IMAGE_RESULT: "skipped" }, false, false],
+    ["unexpected image in text scope", { SCOPE: "text", SCOPE_RESULT: "success", FULL_RESULT: "skipped", VERIFY_RESULT: "success", IMAGE_RESULT: "success" }, true, false],
+  ]) {
+    assert.equal(gateAllows(workflow, "verify", statuses), verifyAllowed, `${label}: verify`);
+    assert.equal(gateAllows(workflow, "checks", statuses), checksAllowed, `${label}: checks`);
+  }
+});
+
 for (const file of ["checks", "pr-text", "review-status"]) {
   const original = readFileSync(new URL(`../.github/workflows/${file}.yml`, import.meta.url), "utf8");
   test(`workflow contract ${file} accepts the tracked workflow`, () => assertWorkflow(file, original));
