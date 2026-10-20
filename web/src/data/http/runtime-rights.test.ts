@@ -21,8 +21,8 @@ it.each(["cancel", "release"] as const)("503 rights read is evicted and next %s 
   expect(first).toMatchObject({ runtime: { permissionsUnavailable: true, unknownReason: "transport" } });
   expect(first).not.toHaveProperty("runtime.canCancel", true);
   f.state.read = (_url, init) => init.method === "POST" ? envelope({ ...f.state.run, ...(action === "release" ? { status: "failed" } : { cancelRequested: true }) }) : envelope(runtimeDetail(f.state.run));
-  const result = action === "cancel" ? await f.adapter.cancelRuntimeRun!("edge", RUN_ID) : await f.adapter.releaseRuntimeRun!("edge", RUN_ID, { reason: "Executor stopped and inspected", acknowledgeRisk: true });
-  expect(result.id).toBe(RUN_ID); expect(reads).toBe(2);
+  const result = action === "cancel" ? f.adapter.cancelRuntimeRun!("edge", RUN_ID) : f.adapter.releaseRuntimeRun!("edge", RUN_ID, { reason: "Executor stopped and inspected", acknowledgeRisk: true });
+  await expect(result).resolves.toMatchObject({ id: RUN_ID }); expect(reads).toBe(2);
   expect(mutations(f).map(({ url }) => url.pathname)).toEqual([`/api/environments/edge/runtime-runs/${RUN_ID}/${action}`]);
 });
 it.each(["cancel", "release"] as const)("unavailable rights are explicit on %s, never fabricated as a server403", async (action) => {
@@ -76,9 +76,9 @@ it("rights401 suspends the actual adapter identity and clears published runs", a
   } finally { off(); }
 });
 
-it.each([null, [], "unavailable", { global: [42] }])("malformed permission data%j is unavailable and is not cached", async (permissionsByEnv) => {
+it.each([null, [], "unavailable", { global: [42] }].map((permissionsByEnv) => ({ permissionsByEnv })))("malformed permission data$permissionsByEnv is unavailable and is not cached", async ({ permissionsByEnv }) => {
   const f = runtimeFixture(); f.state.auth = () => envelope({ isGlobalAdmin: true, permissionsByEnv });
   await expect(f.helper.cancelRuntimeRun("0", RUN_ID)).rejects.toMatchObject({ outcome: { code: "runtime.permissions-unavailable", status: undefined } });
   expect(mutations(f)).toHaveLength(0); f.state.auth = undefined;
-  await f.helper.cancelRuntimeRun("0", RUN_ID); expect(authReads(f)).toHaveLength(2); expect(mutations(f)).toHaveLength(1);
+  await expect(f.helper.cancelRuntimeRun("0", RUN_ID)).resolves.toMatchObject({ id: RUN_ID }); expect(authReads(f)).toHaveLength(2); expect(mutations(f)).toHaveLength(1);
 });
