@@ -33,6 +33,12 @@ type runtimeResult struct {
 func provideRuntimeInternal(ctx context.Context, lc fx.Lifecycle, service *activity.ActivityService, projects *project.ProjectService, containers *container.ContainerService,
 	environments *environment.EnvironmentService, settings *settings.SettingsService, cfg *config.Config, client *http.Client, tunnels *edge.TunnelRegistry) (runtimeResult, error) {
 	runtimeCtx, cancelRuntime := context.WithCancel(ctx)
+	constructed := false
+	defer func() {
+		if !constructed {
+			cancelRuntime()
+		}
+	}()
 	adapter := activity.NewRuntimeServiceAdapter(projects, containers)
 	var runtime *activity.RuntimeService
 	newSender := func(ctx context.Context, id string) (*activity.RuntimeSender, error) {
@@ -145,5 +151,6 @@ func provideRuntimeInternal(ctx context.Context, lc fx.Lifecycle, service *activ
 		}
 		return errors.Join(maintenanceErr, remote.Close(stop), runtime.JoinLocal(stop))
 	}})
+	constructed = true
 	return runtimeResult{Service: runtime, HTTP: httpService, Receiver: receiver, Remote: remote}, nil
 }
