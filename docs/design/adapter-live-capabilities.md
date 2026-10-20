@@ -168,8 +168,8 @@ evidence lasts at least twenty-four hours independently of full output history.
 Supported delivery and receiver admission are bounded before acceptance; accepted
 work survives caller timeout. Only recent, continuous-generation negative proof
 may release a scope; old or uncertain absence stays unknown.
-Only complete scoped command and log mappings enable capabilities. Session
-closure remains owned by its separate step.
+Only complete scoped command and log mappings enable capabilities. Browser
+identity lifetime also governs every live consumer and query observation.
 
 ## Bounded runtime log mapping
 
@@ -201,7 +201,7 @@ it pauses offline and after identity rejection. A stream close alone triggers a
 bounded identity read rather than assuming logout. Last unsubscribe closes its
 socket and cancels its frame, identity read and reconnect timer. The existing
 adapter identity reset also clears this log owner's channels and paused-hook views;
-the shared session registry, metrics/actions and RunGate cleanup remain separate.
+the shared session registry supplies server closure, while adapter identity reset also clears metrics, actions and RunGate state.
 
 The complete browser resource budget is 2,000 entries and 1 MiB of serialized
 UTF-8 data. The published immutable snapshot and the mutable next-frame window
@@ -348,3 +348,30 @@ adapter session; a disconnect preserves the last sample with its time and host
 reason. A new browser session has no retained metric samples. Unreported disk
 capacity, growth, image metadata and volume sizes remain explicitly unavailable.
 All image, volume and network writes retain their unavailable mappings.
+
+
+## Browser session lifetime
+
+The local browser session ID binds viewer handles through the process-shared
+`backend/pkg/sessionlife` registry. SessionService supplies durable session and
+user validation independently of token caches. Authentication contexts carry
+that validator to SSE, local WebSockets and the Direct/Edge viewer bridges.
+Registration precedes validation. Explicit service revokes close matching handles
+after persistence; transactional password/recovery writes, deletion, expiry and
+mode changes are detected by the existing 15-second SSE or 54-second viewer
+cadence. Direct forwarding owns its one cancellable 54-second check. Viewer
+closure releases both proxy legs and source references, preserving the host
+Edge tunnel and application-owned runtime execution. API-key streams without a
+session and proxy/none requests retain their existing credential/host lifetime.
+
+The adapter's identity generation aborts old requests, rejects late responses
+and captured callbacks, closes SSE/log/metric sockets and their timers, and
+clears private runs, histories and buffers. RunGate entries and listeners are
+reset on identity loss/replacement, including durable unresolved runs and
+ambiguous intents without a known ID. Mounted live/query observers reattach for
+a fresh identity; paused log views clear through the accepted log lifetime.
+The provider cancels old queries and records `currentUser` as null on loss.
+A socket close alone starts a bounded durable identity read before reconnect;
+credential-check form failures remain inline. Known same-user renewal retains
+its existing observation/notification policy. Server execution remains durable
+and does not depend on any viewer lifetime.

@@ -26,8 +26,8 @@ export function SetupGate() {
   const savedLocale = currentUser.data?.locale;
   useEffect(() => { if (isLocale(savedLocale)) setAppLocale(savedLocale); }, [savedLocale]);
   if (mode.isPending || currentUser.isPending) return <main aria-busy="true" className="p-6">{t("loading")}</main>;
-  if (currentUser.isError) {
-    const rejected = currentUser.error instanceof AdapterOutcomeError && currentUser.error.outcome.kind === "error" && currentUser.error.outcome.status === 401;
+  if (currentUser.isError || (currentUser.isSuccess && !currentUser.data)) {
+    const rejected = (currentUser.isSuccess && !currentUser.data) || currentUser.error instanceof AdapterOutcomeError && currentUser.error.outcome.kind === "error" && currentUser.error.outcome.status === 401;
     if (rejected && mode.data === "local") return <Navigate to="/login" replace />;
     if (rejected && mode.data === "proxy") return <main role="alert" className="p-6">{t("proxyRejected")}</main>;
   }

@@ -6,6 +6,7 @@ import type { ContainerInfo } from "@/domain/model";
 import type { DockletAdapter, Topic } from "./adapter";
 import { runGateOf, withRunGate } from "./run-gate";
 import { AdapterContext } from "./use-adapter";
+import { identityLifetime } from "./identity-lifetime";
 import { queryKeys } from "./query-keys";
 import { useCurrentUser } from "./queries";
 
@@ -42,6 +43,23 @@ function ChangeBridge({ adapter }: { adapter: DockletAdapter }) {
   return null;
 }
 
+function IdentityBridge({ adapter }: { adapter: DockletAdapter }) {
+  const client = useQueryClient();
+  useEffect(() => {
+    const lifetime = identityLifetime(adapter);
+    return lifetime.listen(() => {
+      void client.cancelQueries({ predicate: (query) => query.queryKey[0] !== queryKeys.authMode[0] && (!lifetime.active() || query.queryKey[0] !== queryKeys.currentUser[0]) });
+      // Keep mounted query observers attached; reset their identity-owned data.
+      for (const query of client.getQueryCache().findAll()) {
+        if (query.queryKey[0] !== queryKeys.authMode[0] && query.queryKey[0] !== queryKeys.currentUser[0]) query.reset();
+      }
+      if (lifetime.active()) void client.invalidateQueries({ predicate: (query) => query.queryKey[0] !== queryKeys.currentUser[0] && query.queryKey[0] !== queryKeys.authMode[0] });
+      if (!lifetime.active()) client.setQueryData(queryKeys.currentUser, null);
+    });
+  }, [adapter, client]);
+  return null;
+}
+
 /** Tells the run gate which stack a container belongs to, from cached container data. */
 function GateParents({ adapter }: { adapter: DockletAdapter }) {
   const client = useQueryClient();
@@ -73,6 +91,7 @@ export function AdapterProvider({ adapter: inner, children }: { adapter: Docklet
   return (
     <AdapterContext.Provider value={adapter}>
       <QueryClientProvider client={client}>
+        <IdentityBridge adapter={adapter} />
         <ChangeBridge adapter={adapter} />
         <GateParents adapter={adapter} />
         {children}

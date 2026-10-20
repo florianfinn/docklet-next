@@ -1,5 +1,5 @@
 import { useQueryClient } from "@tanstack/react-query";
-import { useEffect, useLayoutEffect, useRef } from "react";
+import { useEffect, useLayoutEffect, useRef, useSyncExternalStore } from "react";
 import { toast } from "sonner";
 import { useLocale, useTranslations } from "use-intl";
 
@@ -10,6 +10,7 @@ import type { CurrentUser } from "@/data/api";
 import type { ActionReadHealth } from "@/data/adapter";
 import { queryKeys } from "@/data/query-keys";
 import { useAdapter } from "@/data/use-adapter";
+import { identityLifetime } from "@/data/identity-lifetime";
 import { runGateOf, type GateNotice } from "@/data/run-gate";
 import { effectivePresentation, toastDetail, uiStyleStore, useUiStyle } from "@/shared/preferences/ui-style-store";
 
@@ -19,7 +20,7 @@ import { openActivity } from "./activity-store";
 import { ActionToastView } from "./ActionToastView";
 import { useNow } from "./run-phase";
 import { runtimePresentation } from "./runtime-presentation";
-import { hasPresentationIntent, presentationStore, RunToastCoordinator } from "./run-presentation";
+import { hasPresentationIntent, presentationStore, resetActionIdentity, RunToastCoordinator } from "./run-presentation";
 
 function ActionToast({ id, toastId }: { id: string; toastId: string | number }) {
   const run = useActionRun(id);
@@ -50,6 +51,8 @@ function ActionToast({ id, toastId }: { id: string; toastId: string | number }) 
 export function ActionToasts() {
   const adapter = useAdapter();
   const client = useQueryClient();
+ const lifetime = identityLifetime(adapter);
+ const generation = useSyncExternalStore(lifetime.listen, lifetime.version, lifetime.version);
   const t = useTranslations("activity.gate");
   const locale = useLocale();
   const tRef = useRef(t);
@@ -90,6 +93,10 @@ export function ActionToasts() {
     let health: ActionReadHealth = { failures: [] };
     let initialSources: Set<string> | undefined;
     let seen = new Set<string>();
+    const offIdentity = lifetime.listen(() => {
+      clearOwned(); resetActionIdentity(); actionDialogStore.set({ waiting: [] });
+      coordinator = createCoordinator(); initialSources = undefined; seen = new Set(); observed = false;
+    });
     const offHealth = adapter.subscribeActionReadHealth?.((next) => { health = next; });
     const offRuns = adapter.subscribeActions((runs) => {
       // Identity replacement seeds new history; same-user renewal retains seen/dismissed runs.
@@ -138,6 +145,7 @@ export function ActionToasts() {
       }
     });
     return () => {
+      offIdentity();
       offRuns();
       offHealth?.();
       clearOwned();
@@ -145,7 +153,7 @@ export function ActionToasts() {
       offSurfaces();
       offGate?.();
     };
-  }, [adapter, client]);
+  }, [adapter, client, generation, lifetime]);
 
   return null;
 }

@@ -1,3 +1,5 @@
+import { CancelledError } from "@tanstack/react-query";
+import { identityLifetime } from "./identity-lifetime";
 import type { ActionRun } from "@/domain/model";
 import type { CodedActionRun, MessageCode } from "./message-code";
 
@@ -140,7 +142,8 @@ export type ParentResolver = (scope: string) => string | undefined;
  * are reported to `subscribe` listeners.
  */
 export class RunGate {
-  private readonly entries = new Map<string, Entry>();
+  private generation = 0;
+ private readonly entries = new Map<string, Entry>();
   private readonly runs = new Map<string, CodedActionRun>();
   private readonly listeners = new Set<(notice: GateNotice) => void>();
   private unwatch: (() => void) | undefined;
@@ -151,6 +154,13 @@ export class RunGate {
   constructor(inner: DockletAdapter, now: () => number = Date.now) {
     this.inner = inner;
     this.now = now;
+ identityLifetime(inner).listen(() => this.reset());
+  }
+
+  reset(): void {
+    ++this.generation;
+    this.entries.clear(); this.runs.clear(); this.listeners.clear();
+    const stop = this.unwatch; this.unwatch = undefined; stop?.();
   }
 
   subscribe(listener: (notice: GateNotice) => void): () => void {
@@ -173,7 +183,9 @@ export class RunGate {
 
   /** The run list is followed only while starts are remembered. */
   private watch(): void {
-    this.unwatch ??= this.inner.subscribeActions((runs) => {
+    const generation = this.generation;
+ this.unwatch ??= this.inner.subscribeActions((runs) => {
+ if (generation !== this.generation) return;
       this.runs.clear();
       for (const r of runs) this.runs.set(r.id, r);
       for (const entry of this.entries.values()) if (entry.runId) entry.hostId ??= this.runs.get(entry.runId)?.hostId;
@@ -216,11 +228,13 @@ export class RunGate {
 
   private answer(entry: Entry, reason: GateReason, retry?: () => Promise<unknown>): Promise<unknown> {
     const run = entry.runId ? this.runs.get(entry.runId) : undefined;
+ const generation = this.generation;
+ const guardedRetry = retry ? () => generation === this.generation ? retry() : Promise.reject(new CancelledError()) : undefined;
     if (entry.durable && entry.runId && entry.hostId && this.now() - (entry.settledAt ?? this.now()) >= 600_000 && this.now() - (entry.refreshedAt ?? 0) >= 2_000) {
       entry.refreshedAt = this.now();
       void this.inner.getRuntimeRun?.(entry.hostId, entry.runId).catch(() => undefined);
     }
-    this.notify({ reason, key: entry.rule.key, runId: entry.runId, title: run?.title, finishedAt: run?.finishedAt, retry });
+    this.notify({ reason, key: entry.rule.key, runId: entry.runId, title: run?.title, finishedAt: run?.finishedAt, retry: guardedRetry });
     if (entry.error) return Promise.reject(entry.error);
     return entry.settled ? Promise.resolve(entry.value) : entry.promise;
   }
@@ -246,7 +260,9 @@ export class RunGate {
 
   /** Starts through the gate; `fresh: false` skips the freshness answer (explicit recheck). */
   run(method: keyof DockletAdapter, args: Args, options: { fresh?: boolean } = {}): Promise<unknown> {
-    const ruleOf = GATE_RULES[method];
+    const generation = this.generation;
+ const check = () => { if (generation !== this.generation) throw new CancelledError(); };
+ const ruleOf = GATE_RULES[method];
     const start = () => (this.inner[method] as (...a: Args) => Promise<unknown>).apply(this.inner, args as unknown[]);
     if (this.inner.kind === "http" && !this.inner.mappedOperations?.has(method)) return start();
     if (!ruleOf) return start();
@@ -280,6 +296,7 @@ export class RunGate {
     this.entries.set(rule.key, entry);
     entry.promise = new Promise<unknown>((resolve) => resolve(start())).then(
       (value) => {
+ check();
         entry.settled = true;
         entry.settledAt = this.now();
         entry.value = value;
@@ -288,6 +305,7 @@ export class RunGate {
         return value;
       },
       (error: unknown) => {
+ check();
         if (entry.durable && error instanceof AdapterOutcomeError && error.outcome.kind === "error" && error.outcome.code === "runtime.admission-unknown") {
           entry.settled = true;
           entry.error = error;
