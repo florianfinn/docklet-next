@@ -265,9 +265,20 @@ func TestRuntimeRetentionHistoryAndOutputRemainIndependent(t *testing.T) {
 		} else {
 			require.Equal(t, []activitytypes.OutputLine{line}, detail.Output)
 		}
-		_, err = f.svc.CompleteActivity(ctx, request.Identity.RunID, activitytypes.StatusSuccess, "Done", nil)
-		require.NoError(t, err)
-		runtimeSettle(t, f, request)
+		// Runtime receipts settle through their atomic owner boundary, never the generic writer.
+		require.NoError(t, f.tx(func(tx *gorm.DB, now time.Time) error {
+			tx = tx.WithContext(ctx)
+			if _, err := runtimeLocalAcceptTxInternal(tx, now, request.Identity); err != nil {
+				return err
+			}
+			if _, err := runtimeLocalExecutingTxInternal(tx, now, request.Identity); err != nil {
+				return err
+			}
+			_, _, err := runtimeCompleteTxInternal(tx, now, request.Identity, runtimeLocalResultInternal{
+				state: "success", code: activitytypes.CodeActivitySuccess, message: "Done", startedAt: new(now), settledAt: now,
+			})
+			return err
+		}))
 		f.now = f.now.Add(time.Second)
 	}
 	count, err := f.svc.PruneHistory(t.Context(), 100)
