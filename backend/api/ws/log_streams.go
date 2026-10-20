@@ -9,14 +9,15 @@ package ws
 import (
 	"cmp"
 	"context"
+	"encoding/json/v2"
 	"errors"
-	"go.getarcane.app/docker"
 	"log/slog"
 	"net/http"
-	"strconv"
 	"strings"
 	"sync/atomic"
 	"time"
+
+	"go.getarcane.app/docker"
 
 	systemtypes "github.com/florianfinn/docklet-next/types/system"
 	"github.com/labstack/echo/v5"
@@ -40,17 +41,8 @@ type wsLogStream struct {
 }
 
 func buildLogStreamKeyInternal(envID, kind, resourceID, format string, batched, follow bool, tail, since string, timestamps bool) string {
-	return strings.Join([]string{
-		envID,
-		kind,
-		resourceID,
-		format,
-		strconv.FormatBool(batched),
-		strconv.FormatBool(follow),
-		tail,
-		since,
-		strconv.FormatBool(timestamps),
-	}, "|")
+	encoded, _ := json.Marshal([]any{envID, kind, resourceID, format, batched, follow, tail, since, timestamps})
+	return string(encoded)
 }
 
 func (h *WebSocketHandler) getOrCreateLogStreamInternal(key string, create func(onEmpty func(*wsLogStream)) *wsLogStream) *wsLogStream {

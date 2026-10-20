@@ -14,7 +14,7 @@ import (
 
 type LogMessage struct {
 	Stream      string `json:"stream,omitempty"`
-	Truncated   bool   `json:"truncated,omitempty"`
+	Truncated   bool   `json:"truncated,omitzero"`
 	Seq         uint64 `json:"seq"`
 	Level       string `json:"level,omitempty"`
 	Message     string `json:"message"`

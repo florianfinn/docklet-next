@@ -307,6 +307,9 @@ export interface ContainerInfo {
 export type LogLevel = "info" | "warn" | "error" | "debug";
 
 export interface LogLine {
+  seq?: number;
+  stream?: "stdout" | "stderr" | "combined" | "unknown";
+  truncated?: boolean;
   id: string;
   ts: string;
   service: string;

@@ -219,6 +219,12 @@ func TestRuntimeLogsAllSourceOptionsParticipateInKey(t *testing.T) {
 	require.NotEqual(t, original, key("0", "container", "example", base))
 	require.NotEqual(t, original, key("0", "project", "other", base))
 }
+func TestRuntimeLogsSourceKeySeparatesDelimitedOptions(t *testing.T) {
+	one := buildLogStreamKeyInternal("0", "project", "example", "json", false, true, "100|extra", "", true)
+	two := buildLogStreamKeyInternal("0", "project", "example", "json", false, true, "100", "extra|", true)
+	require.NotEqual(t, one, two)
+}
+
 func TestRuntimeLogsDeniedPermissionAndOriginStartNoSource(t *testing.T) {
 	for _, permission := range []bool{false, true} {
 		t.Run(map[bool]string{false: "permission", true: "origin"}[permission], func(t *testing.T) {

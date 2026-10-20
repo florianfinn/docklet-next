@@ -49,15 +49,16 @@ func streamLogRecords(ctx context.Context, reader io.Reader, lines chan<- string
 	}()
 	defer func() { close(done); <-joined }()
 	sink := LogSinkFromContext(ctx)
+	boundedPrefix, prefixCut := BoundLogText(prefix, MaxLogLineBytes-len(LogTruncatedMarker))
 	return readLogRecords(ctx, reader, tty, func(record LogRecord) error {
 		if sink != nil {
 			return sink(record)
 		}
 		text := LogText(record)
 		if prefix != "" {
-			bounded, cut := BoundLogText(prefix+text, MaxLogLineBytes-len(LogTruncatedMarker))
+			bounded, cut := BoundLogText(boundedPrefix+text, MaxLogLineBytes-len(LogTruncatedMarker))
 			text = bounded
-			if cut {
+			if cut || prefixCut {
 				text += LogTruncatedMarker
 			}
 		}

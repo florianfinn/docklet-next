@@ -7,10 +7,11 @@
 package ws
 
 import (
-	wshub "github.com/florianfinn/docklet-next/backend/pkg/libarcane/ws"
-	"go.getarcane.app/docker"
 	"strings"
 	"time"
+
+	wshub "github.com/florianfinn/docklet-next/backend/pkg/libarcane/ws"
+	"go.getarcane.app/docker"
 )
 
 type sourceLogLine struct {

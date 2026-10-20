@@ -36,7 +36,8 @@ adapter operation available: its mapping and server capability must both exist.
 | `listHosts`, `listStacks`, `getStack`, `listContainers` | `listEnvironments`, `list-projects`, `get-project`, `list-containers` | Read host identity and aggregate host-scoped projects and containers through the shared agent forwarding path. |
 | `getSecurity`, `listSchedule`, `getSettings` | `get-environment-vulnerability-overview`, `get-job-schedules`, `get-settings` | The first two calls remain unavailable until M11 and M10. `getSettings` stays unavailable for unconnected sections; M4 reads connected sections with `getConnectedSettings`. |
 | `runStackCommand`, `runContainerCommand` | `deploy-project`/`down-project`/`restart-project`/`redeploy-project`; `start-container`/`stop-container`/`restart-container` | Map the seven guarded operation routes with async admission, stable IDs and targeted hub detail. Enable only scoped stack/container descriptors with the complete operation family and activity-read grants; bulk hub controls remain unavailable. |
-| Other `DockletAdapter` reads, writes and subscriptions | Existing operation where listed, otherwise no matching operation | Expose unavailable until the owning milestone supplies the complete mapping. Existing log/stats WebSockets remain the later stream transport. |
+| `subscribeLogs`, `subscribeContainerLogs` | Echo project/container log WebSockets (outside OpenAPI) | Scoped log/read grants, JSON source mapping, bounded arrival buffers and reconnect tail replacement. |
+| Other `DockletAdapter` reads, writes and subscriptions | Existing operation where listed, otherwise no matching operation | Expose unavailable until the owning milestone supplies the complete mapping. Existing WebSockets carry connected logs and stats. |
 
 The HTTP boundary classifies an operation into these outcomes. Existing
 `Promise<T>` port methods return the `ok` value or reject with the typed
@@ -167,8 +168,55 @@ evidence lasts at least twenty-four hours independently of full output history.
 Supported delivery and receiver admission are bounded before acceptance; accepted
 work survives caller timeout. Only recent, continuous-generation negative proof
 may release a scope; old or uncertain absence stays unknown.
-Only complete scoped command mappings enable capabilities. Log and session
-consumers remain owned by their separate steps.
+Only complete scoped command and log mappings enable capabilities. Session
+closure remains owned by its separate step.
+
+## Bounded runtime log mapping
+
+The HTTP adapter subscribes to the existing hub-facing project/container Echo
+routes, with `format=json`, `follow=true`, `tail=100`, `timestamps=true` and
+`batched=false`. Direct and Edge selection remains behind the hub route. It sends
+no browser credential to an agent. Only the matching scoped log and resource-read
+grants enable each descriptor; the endpoint retains its existing log permission
+and Origin checks. Existing text/default clients and 50-entry JSON batches remain
+compatible. JSON arrays preserve received order; malformed mandatory fields stop
+mapping visibly. Optional stream/truncation omissions map to unknown/false.
+
+Docker frames are consumed in fixed chunks, with one bounded prefix per stream;
+excess is discarded through the newline. Follow and non-follow use the same
+incremental reader, without whole-output buffering. Completed lines serialize
+arrival, including non-follow stdout/stderr; neither timestamp nor stream implies
+chronology. Compose bounds both TTY and framed input before its own text writer.
+Its existing inspect metadata supplies service and TTY identity, without loading
+Compose/environment files. Structured viewers receive records before normalization;
+legacy text uses the existing stderr marker. Only recognized wire semantic levels
+become severity. Stderr alone stays informational and application text is retained.
+
+The browser shares one source per resource/options and identifies entries with
+resource, a monotonically increasing client connection attempt, and source seq.
+An observed seq gap produces a localized entry; reconnect replaces the requested
+tail and displays a boundary. Equal text is retained. The log owner makes at most
+five delayed reconnect attempts (1, 2, 5, 10, 30 seconds) before explicit retry;
+it pauses offline and after identity rejection. A stream close alone triggers a
+bounded identity read rather than assuming logout. Last unsubscribe closes its
+socket and cancels its frame, identity read and reconnect timer. The existing
+adapter identity reset also clears this log owner's channels and paused-hook views;
+the shared session registry, metrics/actions and RunGate cleanup remain separate.
+
+The complete browser resource budget is 2,000 entries and 1 MiB of serialized
+UTF-8 data. The published immutable snapshot and the mutable next-frame window
+each reserve half (1,000 entries / 512 KiB), so even a suspended animation frame
+cannot double that budget. Oldest complete entries are evicted visibly; each line
+is at most 64 KiB including JSON escaping. The source has no other pending array,
+and publishes at most once per animation frame. Pause retains only the current
+resource snapshot. Resource/adapter/identity changes clear it. Clear view records
+arrival IDs, so a later message with an older timestamp remains visible.
+
+Source queues remain raw/mapped 256, broadcast 1,024 and per-client 256. The shared
+hub keeps its drop and slow-client removal behavior. Seq is assigned before
+broadcast; a final dropped line without a later seq cannot be detected. Logs are
+ephemeral, with no durable cursor, content deduplication or lossless guarantee.
+The separate retained command-output cap remains unchanged.
 
 ## Capability descriptor
 

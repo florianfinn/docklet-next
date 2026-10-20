@@ -50,8 +50,7 @@ func wrapDockerCLIWithLogsDemuxInternal(cli command.Cli) command.Cli {
 // responses so stderr entries stay identifiable: stderr lines are prefixed
 // with Arcane's stderr marker and every entry is re-framed as a stdout
 // stdcopy frame, which Compose merges through its stdout consumer path. TTY
-// containers pass through untouched because their stream carries no stderr
-// metadata.
+// lines use the same bound and retain their combined-stream meaning.
 type logsDemuxDockerClientInternal struct {
 	client.APIClient
 

@@ -10,12 +10,13 @@ import (
 	"bytes"
 	"context"
 	"encoding/binary"
-	"github.com/stretchr/testify/require"
 	"io"
 	"runtime"
 	"strings"
 	"testing"
 	"unicode/utf8"
+
+	"github.com/stretchr/testify/require"
 )
 
 type repeatingLogByte struct{}
@@ -83,4 +84,18 @@ func TestLogProducerPreservesStreamAndApplicationText(t *testing.T) {
 func TestLogProducerSinkFailureStopsSource(t *testing.T) {
 	ctx := WithLogSink(t.Context(), func(LogRecord) error { return context.Canceled })
 	require.ErrorIs(t, StreamContainerLogs(ctx, io.NopCloser(strings.NewReader("line\nsecond\n")), nil, true, true), context.Canceled)
+}
+
+func TestLogProducerBoundsMultibytePrefixBeforeConcatenation(t *testing.T) {
+	prefix := strings.Repeat("界", 2<<20)
+	output := make(chan string, 1)
+	var before, after runtime.MemStats
+	runtime.ReadMemStats(&before)
+	require.NoError(t, ReadLogLines(t.Context(), strings.NewReader("message\n"), output, prefix))
+	runtime.ReadMemStats(&after)
+	line := <-output
+	require.LessOrEqual(t, len(line), MaxLogLineBytes)
+	require.True(t, utf8.ValidString(line))
+	require.True(t, strings.HasSuffix(line, LogTruncatedMarker))
+	require.Less(t, after.TotalAlloc-before.TotalAlloc, uint64(2<<20), "prefix concatenation must not copy the full prefix")
 }

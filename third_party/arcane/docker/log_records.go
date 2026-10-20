@@ -28,7 +28,7 @@ type LogRecord struct {
 	Message   string `json:"message"`
 	Stream    string `json:"stream"`
 	Service   string `json:"service,omitempty"`
-	Truncated bool   `json:"truncated,omitempty"`
+	Truncated bool   `json:"truncated,omitzero"`
 }
 type logSinkKey struct{}
 type LogSink func(LogRecord) error

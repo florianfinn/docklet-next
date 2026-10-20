@@ -4,6 +4,8 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "react-router";
 import { useTranslations } from "use-intl";
 
+import { logGap } from "@/data/log-buffer";
+import { LogDeliveryNotice, LogMessage, LogSource } from "./log-presentation";
 import { useStackLogs } from "@/data/live";
 import { formatTime } from "@/domain/format";
 import type { LogLevel, Stack } from "@/domain/model";
@@ -26,18 +28,22 @@ const LEVEL_CLASS: Record<LogLevel, string> = {
 
 /** Shared multiplexed log stream of all stack services with origin per line. */
 export function StackLogs({ stack }: { stack: Stack }) {
+  return <StackLogsView key={stack.id} stack={stack} />;
+}
+
+function StackLogsView({ stack }: { stack: Stack }) {
   const t = useTranslations("stacks.logs");
   const [params] = useSearchParams();
   const initial = params.get("service");
   const [paused, setPaused] = useState(false);
   const lines = useStackLogs(stack.id, paused);
-  const [services, setServices] = useState<string[]>(initial ? [initial] : []);
+  const [services, setServices] = useState<string[]>(initial && stack.services.some((service) => service.name === initial) ? [initial] : []);
   const [level, setLevel] = useState<LevelFilter>("all");
   const [query, setQuery] = useState("");
   const [follow, setFollow] = useState(true);
   const [stamps, setStamps] = useState(true);
   const [wrap, setWrap] = useState(false);
-  const [clearedAt, setClearedAt] = useState<string | null>(null);
+  const [clearedIds, setClearedIds] = useState<Set<string>>(() => new Set());
   const scroller = useRef<HTMLDivElement>(null);
 
   const tones = useMemo(() => new Map(stack.services.map((s, i) => [s.name, SERVICE_TONES[i % SERVICE_TONES.length] ?? "info"])), [stack.services]);
@@ -45,12 +51,12 @@ export function StackLogs({ stack }: { stack: Stack }) {
     const q = query.trim().toLowerCase();
     return lines.filter(
       (l) =>
-        (!clearedAt || l.ts > clearedAt) &&
+        !clearedIds.has(l.id) && (logGap(l) !== undefined || (
         (services.length === 0 || services.includes(l.service)) &&
         (level === "all" || l.level === level) &&
-        (!q || l.message.toLowerCase().includes(q) || l.service.includes(q)),
+        (!q || l.message.toLowerCase().includes(q) || l.service.toLowerCase().includes(q)))),
     );
-  }, [lines, services, level, query, clearedAt]);
+  }, [lines, services, level, query, clearedIds]);
 
   useEffect(() => {
     if (follow && scroller.current) scroller.current.scrollTop = scroller.current.scrollHeight;
@@ -79,7 +85,7 @@ export function StackLogs({ stack }: { stack: Stack }) {
         <Toggle size="sm" variant="outline" pressed={paused} onPressedChange={setPaused} aria-label={paused ? t("resume") : t("pause")}>
           {paused ? <Play /> : <Pause />}
         </Toggle>
-        <Toggle size="sm" variant="outline" pressed={false} onPressedChange={() => setClearedAt(new Date().toISOString())} aria-label={t("clear")}>
+        <Toggle size="sm" variant="outline" pressed={false} onPressedChange={() => setClearedIds(new Set(lines.map((line) => line.id)))} aria-label={t("clear")}>
           <Eraser />
         </Toggle>
       </div>
@@ -110,6 +116,7 @@ export function StackLogs({ stack }: { stack: Stack }) {
           <SimulationBadge />
         </span>
       </div>
+      <LogDeliveryNotice lines={lines} paused={paused} />
       <div ref={scroller} role="log" aria-live={paused ? "off" : "polite"} aria-label={t("title")} className="h-[max(24rem,calc(100dvh-24rem))] overflow-auto bg-code py-2 font-mono text-[12px] leading-relaxed">
         {shown.length === 0 && <p className="px-4 py-6 text-center text-muted-foreground">{t("empty")}</p>}
         {shown.map((l) => {
@@ -118,9 +125,9 @@ export function StackLogs({ stack }: { stack: Stack }) {
             <div key={l.id} className={cn("flex gap-3 px-3 hover:bg-muted/30", LEVEL_CLASS[l.level], wrap ? "whitespace-pre-wrap" : "whitespace-pre")}>
               {stamps && <span className="shrink-0 text-muted-foreground/70 select-none">{formatTime(l.ts, true)}</span>}
               <span data-tone={tone} className="w-28 shrink-0 truncate text-(--tone) select-none">
-                {l.service}
+                <LogSource line={l} />
               </span>
-              <span className="min-w-0">{l.message}</span>
+              <span className="min-w-0"><LogMessage line={l} /></span>
             </div>
           );
         })}
