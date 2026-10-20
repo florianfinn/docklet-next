@@ -14,6 +14,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/florianfinn/docklet-next/backend/internal/settings"
 	activitytypes "github.com/florianfinn/docklet-next/types/activity"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
@@ -40,6 +41,13 @@ func TestRuntimeActivationLegacyCompletionOwnershipFault(t *testing.T) {
 			ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
 			defer cancel()
 			f := runtimeFixture(t)
+			fault, inject := completionOwnershipFault(t, f.svc)
+			defer inject(false)
+			config, err := settings.NewSettingsService(ctx, f.svc.db)
+			require.NoError(t, err)
+			t.Cleanup(func() { require.NoError(t, config.Stop(context.WithoutCancel(ctx))) })
+			require.NoError(t, config.SetIntSetting(ctx, maxConcurrentActivitiesSettingKey, 1))
+			f.svc.limiter = newActivitySlotLimiterInternal(config)
 			req := StartActivityRequest{Type: activitytypes.TypeProjectDeploy, Queue: true, DeferSlot: mode == "tracked-queued"}
 			row, err := f.svc.StartActivity(ctx, req)
 			require.NoError(t, err)
@@ -47,15 +55,24 @@ func TestRuntimeActivationLegacyCompletionOwnershipFault(t *testing.T) {
 			if mode != "untracked-slot" {
 				work = f.svc.Track(ctx, row.ID)
 			}
-			fault, inject := completionOwnershipFault(t, f.svc)
+			heldCapacity := func() int {
+				f.svc.limiter.mu.Lock()
+				defer f.svc.limiter.mu.Unlock()
+				return f.svc.limiter.stateForLockedInternal(row.EnvironmentID).held
+			}
+			require.Equal(t, map[bool]int{false: 1, true: 0}[mode == "tracked-queued"], heldCapacity())
 			inject(true)
-			defer inject(false)
 			_, err = f.svc.CompleteActivity(ctx, row.ID, activitytypes.StatusSuccess, "Finished", nil)
+			inject(false)
 			require.ErrorIs(t, err, fault)
 			f.svc.slotMu.Lock()
 			_, held := f.svc.slotReleases[row.ID]
 			f.svc.slotMu.Unlock()
 			require.False(t, held, "known legacy completion must release capacity even when ownership cannot be read")
+			require.Zero(t, heldCapacity(), "the actual limiter must recover its capacity")
+			release, available := f.svc.limiter.tryAcquireInternal(ctx, row.EnvironmentID).Get()
+			require.True(t, available, "another legacy operation can acquire the freed slot")
+			release()
 			f.svc.runningMu.Lock()
 			_, tracked := f.svc.running[row.ID]
 			f.svc.runningMu.Unlock()
