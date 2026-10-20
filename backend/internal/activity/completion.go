@@ -45,6 +45,10 @@ func (
 	if activityID == "" {
 		return nil, errors.New("activity id is required")
 	}
+	workCtx := ctx
+	// Ownership and terminal persistence share the existing bounded write lifetime.
+	ctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), ownerWriteTimeout)
+	defer cancel()
 	s.runningMu.Lock()
 	if err := s.refuseRuntimeWriterInternal(ctx, activityID); err != nil {
 		s.runningMu.Unlock()
@@ -55,17 +59,11 @@ func (
 		s.releaseCancelInternal(activityID)
 		s.releaseSlotInternal(activityID)
 	}()
-	if s.cancelling[activityID] || errors.Is(context.Cause(ctx), activitylib.ErrCanceled) {
+	if s.cancelling[activityID] || errors.Is(context.Cause(workCtx), activitylib.ErrCanceled) {
 		status = activity.StatusCancelled
 		finalMessage = cancelledMessageInternal
 		errMessage = nil
 	}
-
-	workCtx := ctx
-	// Completion remains bounded when the worker returns on cancellation.
-	var cancel context.CancelFunc
-	ctx, cancel = context.WithTimeout(context.WithoutCancel(ctx), ownerWriteTimeout)
-	defer cancel()
 
 	var now time.Time
 	var model Activity

@@ -30,6 +30,9 @@ func (s *ActivityService) AwaitActivitySlot(ctx context.Context, activityID, env
 		return errors.New("activity id is required")
 	}
 	environmentID = cmp.Or(strings.TrimSpace(environmentID), "0")
+	if ctx.Err() != nil {
+		return context.Cause(ctx)
+	}
 	if err := s.refuseRuntimeWriterInternal(ctx, activityID); err != nil {
 		return err
 	}

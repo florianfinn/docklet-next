@@ -18,6 +18,7 @@ import (
 	"github.com/danielgtaylor/huma/v2/adapters/humago"
 	"github.com/florianfinn/docklet-next/backend/internal/middleware"
 	"github.com/florianfinn/docklet-next/backend/pkg/authz"
+	activitylib "github.com/florianfinn/docklet-next/backend/pkg/libarcane/activity"
 	activitytypes "github.com/florianfinn/docklet-next/types/activity"
 	usertypes "github.com/florianfinn/docklet-next/types/user"
 	"github.com/google/uuid"
@@ -49,6 +50,11 @@ func TestRuntimeActivationGenericOwnership(t *testing.T) {
 			_, err = f.store.svc.CompleteActivity(owner.ctx, admitted.ActivityID, activitytypes.StatusSuccess, "false terminal", nil)
 			require.ErrorIs(t, err, ErrRunNotOwned)
 			require.ErrorIs(t, f.store.svc.AwaitActivitySlot(t.Context(), admitted.ActivityID, "0"), ErrRunNotOwned)
+			cancelled, cancel := context.WithCancelCause(t.Context())
+			cancel(activitylib.ErrCanceled)
+			_, err = f.store.svc.CompleteActivity(cancelled, admitted.ActivityID, activitytypes.StatusCancelled, "false cancelled terminal", nil)
+			require.ErrorIs(t, err, ErrRunNotOwned)
+			require.ErrorIs(t, f.store.svc.AwaitActivitySlot(cancelled, admitted.ActivityID, "0"), activitylib.ErrCanceled)
 			_, err = f.store.svc.CancelActivity(t.Context(), "0", admitted.ActivityID, "untrusted name")
 			require.ErrorIs(t, err, ErrRunNotOwned)
 
