@@ -34,6 +34,9 @@ func (s *ActivityService) AwaitActivitySlot(ctx context.Context, activityID, env
 		return context.Cause(ctx)
 	}
 	if err := s.refuseRuntimeWriterInternal(ctx, activityID); err != nil {
+		if ctx.Err() != nil {
+			return context.Cause(ctx)
+		}
 		return err
 	}
 

@@ -45,7 +45,7 @@ func TestRuntimeProjectionReceiptCohorts(t *testing.T) {
 		wantKnowledge     activitytypes.RuntimeOutcomeState
 		cancel            bool
 	}{
-		{"admitted-pending", "pending", "run.started", activitytypes.StatusRunning, activitytypes.RuntimeOutcomeUnknown, false},
+		{"admitted-pending", "pending", "run.started", activitytypes.StatusRunning, activitytypes.RuntimeOutcomeKnown, false},
 		{"accepted", "accepted", "run.started", activitytypes.StatusRunning, activitytypes.RuntimeOutcomeKnown, false},
 		{"executing", "executing", "run.started", activitytypes.StatusRunning, activitytypes.RuntimeOutcomeKnown, false},
 		{"terminal-success", "success", "activity.success", activitytypes.StatusSuccess, activitytypes.RuntimeOutcomeKnown, false},

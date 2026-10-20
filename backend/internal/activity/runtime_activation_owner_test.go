@@ -23,9 +23,27 @@ import (
 	usertypes "github.com/florianfinn/docklet-next/types/user"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
+	"gorm.io/gorm"
 )
 
 func TestRuntimeActivationGenericOwnership(t *testing.T) {
+	t.Run("cancel-during-ownership-query", func(t *testing.T) {
+		f := runtimeFixture(t)
+		row, err := f.svc.StartActivity(t.Context(), StartActivityRequest{Type: activitytypes.TypeImagePull, Queue: true, DeferSlot: true})
+		require.NoError(t, err)
+		wait, cancel := context.WithCancelCause(t.Context())
+		defer cancel(nil)
+		const callback = "runtime-activation-cancel-ownership"
+		require.NoError(t, f.svc.db.Callback().Query().Before("gorm:query").Register(callback, func(tx *gorm.DB) {
+			if tx.Statement.Table == "runtime_receipts" {
+				cancel(activitylib.ErrCanceled)
+			}
+		}))
+		defer func() { require.NoError(t, f.svc.db.Callback().Query().Remove(callback)) }()
+		require.ErrorIs(t, f.svc.AwaitActivitySlot(wait, row.ID, "0"), activitylib.ErrCanceled)
+		require.Empty(t, f.svc.slotReleases)
+		require.Equal(t, activitytypes.StatusQueued, matrixRow(t, f.svc.db.DB, row.ID).Status)
+	})
 	for _, queued := range []bool{false, true} {
 		t.Run(map[bool]string{false: "executing", true: "queued"}[queued], func(t *testing.T) {
 			probe := slotsNewProbe(t)
