@@ -82,3 +82,14 @@ it.each([null, [], "unavailable", { global: [42] }].map((permissionsByEnv) => ({
   expect(mutations(f)).toHaveLength(0); f.state.auth = undefined;
   await expect(f.helper.cancelRuntimeRun("0", RUN_ID)).resolves.toMatchObject({ id: RUN_ID }); expect(authReads(f)).toHaveLength(2); expect(mutations(f)).toHaveLength(1);
 });
+
+it.each([false, true])("an empty environment permission slice preserves global grant=%s without changing policy", async (granted) => {
+  const f = runtimeFixture(); f.state.run = snapshot("edge");
+  f.state.auth = () => envelope({ isGlobalAdmin: true, permissionsByEnv: { edge: null, global: granted ? ["activities:read", "activities:cancel"] : [] } });
+  const run = await f.helper.getRuntimeRun("edge", RUN_ID);
+  expect(run.runtime).toMatchObject({ canCancel: granted, canRelease: granted });
+  expect(run.runtime?.permissionsUnavailable).toBeUndefined();
+  if (granted) await expect(f.helper.cancelRuntimeRun("edge", RUN_ID)).resolves.toMatchObject({ id: RUN_ID });
+  else await expect(f.helper.cancelRuntimeRun("edge", RUN_ID)).rejects.toMatchObject({ outcome: { status: 403 } });
+  expect(authReads(f)).toHaveLength(1); expect(mutations(f)).toHaveLength(granted ? 1 : 0);
+});

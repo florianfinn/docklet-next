@@ -99,8 +99,9 @@ export function createRuntimeCommands({ baseUrl, client, capability, publish, un
       const entry: NonNullable<typeof rights> = { task: request(`${baseUrl}/auth/me`).then((data) => {
         check(version);
         const user = object(data), permissions = object(user.permissionsByEnv);
+        // The hub serializes an empty environment permission slice as null.
         if (typeof user.isGlobalAdmin !== "boolean" || !user.permissionsByEnv || typeof user.permissionsByEnv !== "object" || Array.isArray(user.permissionsByEnv) ||
-            Object.values(permissions).some((list) => !Array.isArray(list) || list.some((item) => typeof item !== "string"))) {
+            Object.values(permissions).some((list) => list !== null && (!Array.isArray(list) || list.some((item) => typeof item !== "string")))) {
           throw runtimeError("runtime.permissions-unavailable");
         }
         if (rights === entry) entry.readAt = now();
