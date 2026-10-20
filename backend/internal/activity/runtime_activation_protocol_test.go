@@ -23,6 +23,7 @@ import (
 	"github.com/florianfinn/docklet-next/backend/pkg/remenv"
 	activitytypes "github.com/florianfinn/docklet-next/types/activity"
 	"github.com/florianfinn/docklet-next/types/contract"
+	usertypes "github.com/florianfinn/docklet-next/types/user"
 	versiontypes "github.com/florianfinn/docklet-next/types/version"
 	"github.com/google/uuid"
 	"github.com/labstack/echo/v5"
@@ -171,4 +172,50 @@ func TestRuntimeActivationRegisteredBindingCannotReplaceLiveExecutor(t *testing.
 	unblock()
 	activationJoinRun(t, hub, agent, env, run)
 	require.Len(t, runtimeEffectEvents(agent.services.http.snapshot()), 1)
+}
+
+// No live owner exists: only the durable held-receipt predicate protects this binding.
+func TestRuntimeActivationRegisteredBindingPreservesOwnerlessReceipt(t *testing.T) {
+	agent := activationApp(t, true, uuid.NewString())
+	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
+	defer cancel()
+	original := agent.services.runtime.LocalStore()
+	registration := activitytypes.RuntimeRegistration{ManagerID: original.ManagerID, RegistrationID: original.RegistrationID}
+	call := func(request activitytypes.RuntimeRegistration) (int, []byte) {
+		encoded, err := json.Marshal(request)
+		require.NoError(t, err)
+		return activationMetadataCall(t, agent, "/api/environments/0/runtime-registration", map[string]string{remenv.HeaderAgentToken: agent.cfg.AgentToken}, encoded)
+	}
+	status, response := call(registration)
+	require.Equal(t, 200, status, string(response))
+	var binding activity.RuntimeExecutorBinding
+	require.NoError(t, agent.services.db.WithContext(ctx).First(&binding, "id = 1").Error)
+	// A separate historical service writes a receipt without registering a worker.
+	previous := activity.NewRuntimeService(activity.NewActivityService(agent.services.db, agent.services.settings), activity.RuntimeResolverFunc(func(_ context.Context, target activity.RuntimeTarget) (activity.RuntimeResolvedTarget, error) {
+		return activity.RuntimeResolvedTarget{Target: target}, nil
+	}))
+	admitted, err := previous.Admit(ctx, activity.RuntimeCommand{Store: original, Key: uuid.NewString(), Actor: usertypes.Actor{ID: "historical-owner", Username: "Historical operator"}, Operation: activity.RuntimeStartContainer, Target: activity.RuntimeTarget{Kind: "container", ID: runtimeContainerID}})
+	require.NoError(t, err)
+	require.NoError(t, agent.services.db.WithContext(ctx).Model(&activity.RuntimeReceipt{}).Where("run_id = ?", admitted.ActivityID).UpdateColumn("executor_state", "accepted").Error)
+	for _, changed := range []bool{true, false} {
+		request := registration
+		if changed {
+			request.RegistrationID = "example-replacement"
+		}
+		status, response = call(request)
+		if changed {
+			require.Equal(t, 409, status, string(response))
+		} else {
+			require.Equal(t, 200, status, string(response))
+		}
+		var after activity.RuntimeExecutorBinding
+		require.NoError(t, agent.services.db.WithContext(ctx).First(&after, "id = 1").Error)
+		require.Equal(t, binding, after)
+		require.Equal(t, original, agent.services.runtime.LocalStore())
+		var receipt activity.RuntimeReceipt
+		require.NoError(t, agent.services.db.WithContext(ctx).First(&receipt, "run_id = ?", admitted.ActivityID).Error)
+		require.Nil(t, receipt.SettledAt)
+		require.Equal(t, new("accepted"), receipt.ExecutorState)
+	}
+	require.Empty(t, runtimeEffectEvents(agent.services.http.snapshot()))
 }

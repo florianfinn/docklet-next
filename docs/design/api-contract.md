@@ -118,7 +118,20 @@ ends with `done`; after flushing, non-success is an error frame with `code` and
 their HTTP status. Disconnect detaches the waiter and cannot cancel execution.
 
 Runtime snapshots require the paired `outcomeState` and `cancelRequested` fields.
-Generic historical or unrelated activities may omit both. Manual recovery
+Generic historical or unrelated activities may omit both.
+
+Remote admission also projects `outcomeState: unknown` while delivery is pending
+or in flight and no authoritative executor answer has arrived. This alone is not
+evidence of a lost outcome. Command consumers must read the existing targeted
+`RuntimeHubDetail.recovery.unknownReason`: absent means delivery remains
+unconfirmed without a recorded evidence-loss reason; present identifies actual
+uncertainty such as transport or executor continuity loss. Generic list/SSE
+knowledge alone must not trigger an outcome-loss warning on every remote Start.
+If targeted detail is unavailable, keep the outcome unconfirmed; do not infer
+success, progress, evidence loss or permission to replay. These semantics add no
+projection field or vocabulary and apply before command UI capabilities open.
+
+Manual recovery
 requires effective global administration plus activity read/cancel access,
 reason and acknowledgment that the executor stopped and Docker state was checked.
 Recovery details preserve executor evidence beside the immutable hub disposition;

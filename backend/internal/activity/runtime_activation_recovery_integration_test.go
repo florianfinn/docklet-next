@@ -132,3 +132,42 @@ func TestRuntimeActivationManualRecoveryRefusesLiveLocalOwner(t *testing.T) {
 	unblock()
 	activationJoinRun(t, hub, hub, "0", run)
 }
+
+func TestRuntimeActivationUnmatchedAcceptedAndExecutingStartup(t *testing.T) {
+	for _, phase := range []string{"accepted", "executing"} {
+		t.Run(phase, func(t *testing.T) {
+			ctx, cancel := context.WithTimeout(t.Context(), 15*time.Second)
+			defer cancel()
+			var run string
+			hub := activationApp(t, false, "", activationSetup{BeforeStart: func(f *runtimeServicesFixture, _ *activity.RuntimeHTTPService, _ *activity.RuntimeReceiver) {
+				previous := activity.NewRuntimeService(activity.NewActivityService(f.db, f.settings), activity.RuntimeResolverFunc(func(_ context.Context, target activity.RuntimeTarget) (activity.RuntimeResolvedTarget, error) {
+					return activity.RuntimeResolvedTarget{Target: target}, nil
+				}))
+				store := f.store
+				store.ExecutorGeneration = uuid.NewString()
+				admitted, err := previous.Admit(ctx, activity.RuntimeCommand{Store: store, Key: uuid.NewString(), Actor: usertypes.Actor{ID: "historical-owner", Username: "Historical operator"}, Operation: activity.RuntimeStartContainer, Target: activity.RuntimeTarget{Kind: "container", ID: runtimeContainerID}})
+				require.NoError(t, err)
+				run = admitted.ActivityID
+				require.NoError(t, f.db.WithContext(ctx).Model(&activity.RuntimeReceipt{}).Where("run_id = ?", run).Updates(map[string]any{"executor_state": phase, "dispatch_state": "accepted", "dispatched_at": time.Now().UTC()}).Error)
+			}})
+			ref, found, err := hub.services.runtime.Reference(ctx, "0", run)
+			require.NoError(t, err)
+			require.True(t, found)
+			detail, err := hub.services.runtime.GetRuntimeHubDetail(ctx, ref)
+			require.NoError(t, err)
+			require.Equal(t, activitytypes.RuntimeOutcomeUnknown, detail.Activity.OutcomeState)
+			require.Equal(t, new("executor-continuity"), detail.Recovery.UnknownReason)
+			require.Equal(t, "unknown", detail.Recovery.ExecutorState)
+			require.Nil(t, detail.Recovery.ExecutorSettledAt)
+			status, body := activationCall(t, hub, "/api/environments/0/runtime-runs/"+run+"/release", "", "", []byte(`{"reason":"Prior executor stopped and actual state inspected","acknowledged":true}`))
+			require.Equal(t, 200, status, string(body))
+			detail, err = hub.services.runtime.GetRuntimeHubDetail(ctx, ref)
+			require.NoError(t, err)
+			require.Equal(t, activitytypes.StatusFailed, detail.Activity.Status)
+			require.Equal(t, activitytypes.RuntimeOutcomeUnknown, detail.Activity.OutcomeState)
+			require.Equal(t, new("released"), detail.Recovery.Disposition)
+			require.True(t, detail.Recovery.ReleaseAcknowledged)
+			require.Empty(t, runtimeEffectEvents(hub.services.http.snapshot()), "ended historical executor is never replayed")
+		})
+	}
+}
