@@ -1,8 +1,8 @@
-// Source: docklet-next/docs/design/runtime-control.md
-// Revision: f0447218f504f481d9e941df04bb6a19716ed6d7203060744204c44c3cc7cda8
-// Retrieved: 2026-10-20
-// License: Apache-2.0
-// Deviations: In-process slot provenance preserves cleanup when ownership reads fail.
+// Source: getarcaneapp/arcane/backend/internal/activity/service.go
+// Revision: 095cb778daba1034e2a39961199e712a75d4ba29
+// Retrieved: 2026-10-13
+// License: BSD-3-Clause
+// Deviations: Extracted slot registration; in-process runtime ownership preserves legacy cleanup on read faults.
 
 package activity
 
