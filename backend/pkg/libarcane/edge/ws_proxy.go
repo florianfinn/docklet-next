@@ -14,6 +14,7 @@ import (
 	"uuid"
 
 	"github.com/coder/websocket"
+	"github.com/florianfinn/docklet-next/backend/pkg/sessionlife"
 	"github.com/labstack/echo/v5"
 
 	wshub "github.com/florianfinn/docklet-next/backend/pkg/libarcane/ws"
@@ -58,6 +59,11 @@ func ProxyWebSocketRequest(c *echo.Context, tunnel *AgentTunnel, targetPath stri
 	streamID := uuid.New().String()
 	streamCtx, cancel := context.WithCancel(ctx)
 	defer cancel()
+	lease, err := sessionlife.Register(streamCtx, func() { cancel(); _ = clientWS.CloseNow() })
+	if err != nil {
+		return nil
+	}
+	defer lease.Release()
 
 	// Register the stream before sending the start message so agent replies
 	// are never dropped when the routing goroutine is faster than this goroutine.
@@ -92,6 +98,9 @@ func ProxyWebSocketRequest(c *echo.Context, tunnel *AgentTunnel, targetPath stri
 	go forwardClientToAgent(ctx, streamCtx, clientWS, tunnel, streamID, clientDoneCh)
 
 	forwardAgentToClient(ctx, streamCtx, clientWS, tunnel, pending, streamID, clientDoneCh)
+	cancel()
+	_ = clientWS.CloseNow()
+	<-clientDoneCh
 	return nil
 }
 
@@ -129,7 +138,7 @@ func forwardClientToAgent(ctx, streamCtx context.Context, clientWS *websocket.Co
 }
 
 func forwardAgentToClient(ctx, streamCtx context.Context, clientWS *websocket.Conn, tunnel *AgentTunnel, pending *PendingRequest, streamID string, clientDoneCh <-chan struct{}) {
-	pingTicker := time.NewTicker(tunnelWSPingPeriod)
+	pingTicker := sessionlife.NewTicker(streamCtx, tunnelWSPingPeriod)
 	defer pingTicker.Stop()
 
 	for {
@@ -143,6 +152,10 @@ func forwardAgentToClient(ctx, streamCtx context.Context, clientWS *websocket.Co
 		case <-clientDoneCh:
 			return
 		case <-pingTicker.C:
+			if sessionlife.Check(streamCtx) != nil {
+				sendWebSocketClose(tunnel, streamID)
+				return
+			}
 			// Ping round-trips; the pong is serviced by forwardClientToAgent's read.
 			pctx, pcancel := context.WithTimeout(streamCtx, tunnelWSPingWait)
 			err := clientWS.Ping(pctx)

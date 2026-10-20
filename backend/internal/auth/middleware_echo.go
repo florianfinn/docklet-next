@@ -229,6 +229,7 @@ func (m *AuthMiddleware) managerAuth(ctx context.Context, c *echo.Context, next 
 	c.Set(string(middleware.ContextKeyUserID), authenticatedUser.ID)
 	c.Set(string(middleware.ContextKeyCurrentUser), authenticatedUser)
 	c.Set(string(middleware.ContextKeyCurrentSessionID), sessionID)
+	c.SetRequest(req.WithContext(m.authService.ViewerContext(req.Context(), sessionID, authenticatedUser.ID)))
 	c.Set(string(middleware.ContextKeyUserPermissions), ps)
 	return m.authorizeAndContinueInternal(c, next, ps)
 }

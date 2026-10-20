@@ -328,6 +328,7 @@ func SetupAPI(e *echo.Echo, apiGroup *echo.Group, appCtx handlerutil.ActivityApp
 
 	// Add authentication middleware
 	api.UseMiddleware(auth.NewHumaMiddleware(api, deps.Auth.Service(), deps.ApiKey.Service(), deps.Role.Service(), deps.Environment.Service(), cfg))
+	api.UseMiddleware(deps.Auth.Service().ViewerMiddleware(api))
 	api.UseMiddleware(middleware.NewActivityBatchID())
 	registerNormalizationInternal(api)
 	registerRuntimeSchemasInternal(api)

@@ -165,7 +165,10 @@ func verifyRouterRequestUserInternal(ctx context.Context, authService *auth.Auth
 		return requestUser.Actor(), err == nil && requestUser != nil
 	}
 	if token, ok := auth.BearerToken(req.Header.Get("Authorization")); ok {
-		user, _, err := authService.VerifyToken(ctx, token)
+		user, sessionID, err := authService.VerifyToken(ctx, token)
+		if err == nil && user != nil {
+			*req = *req.WithContext(authService.ViewerContext(ctx, sessionID, user.ID))
+		}
 		return user.Actor(), err == nil && user != nil
 	}
 
@@ -173,7 +176,10 @@ func verifyRouterRequestUserInternal(ctx context.Context, authService *auth.Auth
 	if err != nil || browserToken == "" {
 		return nil, false
 	}
-	user, _, err := authService.VerifyBrowserToken(ctx, browserToken)
+	user, sessionID, err := authService.VerifyBrowserToken(ctx, browserToken)
+	if err == nil && user != nil {
+		*req = *req.WithContext(authService.ViewerContext(ctx, sessionID, user.ID))
+	}
 	return user.Actor(), err == nil && user != nil
 }
 

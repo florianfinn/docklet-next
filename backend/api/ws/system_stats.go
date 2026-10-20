@@ -466,7 +466,7 @@ func (h *WebSocketHandler) SystemStats(c *echo.Context) error {
 
 	go h.readSystemStatsPumpInternal(ctx, cancel, conn)
 	// The pong is serviced by readSystemStatsPumpInternal.
-	go keepWSConnAliveInternal(ctx, cancel, conn, 54*time.Second)
+	defer startWSKeepaliveInternal(ctx, cancel, conn, 54*time.Second)()
 
 	send := func() error {
 		stats, _ := h.systemStatsSampler.latest.Load()

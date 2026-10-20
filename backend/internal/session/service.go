@@ -23,6 +23,7 @@ import (
 
 	"github.com/florianfinn/docklet-next/backend/internal/common"
 	"github.com/florianfinn/docklet-next/backend/internal/database"
+	"github.com/florianfinn/docklet-next/backend/pkg/sessionlife"
 	"github.com/florianfinn/docklet-next/backend/pkg/utils/dbutil"
 )
 
@@ -139,6 +140,7 @@ func (s *SessionService) RevokeSession(ctx context.Context, sessionID string) er
 		Updates(map[string]any{"revoked_at": now, "updated_at": now}).Error; err != nil {
 		return fmt.Errorf("failed to revoke user session: %w", err)
 	}
+	sessionlife.Revoke(sessionID, "", "")
 	return nil
 }
 
@@ -146,9 +148,13 @@ func (s *SessionService) RevokeSession(ctx context.Context, sessionID string) er
 // HTTP admission resumes, including the session that requested restore.
 func (s *SessionService) RevokeAllSessions(ctx context.Context) error {
 	now := time.Now().UTC()
-	return s.db.WithContext(ctx).Model(&UserSession{}).
+	err := s.db.WithContext(ctx).Model(&UserSession{}).
 		Where("revoked_at IS NULL").
 		Updates(map[string]any{"revoked_at": now, "updated_at": now}).Error
+	if err == nil {
+		sessionlife.Revoke("", "", "")
+	}
+	return err
 }
 
 func (s *SessionService) DeleteExpiredSessions(ctx context.Context, revokedRetention time.Duration) (int64, error) {
@@ -166,7 +172,11 @@ func (s *SessionService) DeleteExpiredSessions(ctx context.Context, revokedReten
 // RevokeAllUserSessionsExcept revokes every active session for userID, leaving
 // exceptSessionID active. Pass "" to revoke all sessions.
 func (s *SessionService) RevokeAllUserSessionsExcept(ctx context.Context, userID, exceptSessionID string) error {
-	return RevokeAllUserSessionsExceptInDB(ctx, s.db.DB, userID, exceptSessionID)
+	if err := RevokeAllUserSessionsExceptInDB(ctx, s.db.DB, userID, exceptSessionID); err != nil {
+		return err
+	}
+	sessionlife.Revoke("", userID, exceptSessionID)
+	return nil
 }
 
 // RevokeAllUserSessionsExceptInDB revokes sessions using the supplied transaction or database handle.

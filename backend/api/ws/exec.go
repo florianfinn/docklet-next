@@ -60,7 +60,7 @@ func (h *WebSocketHandler) ContainerExec(c *echo.Context) error {
 	defer cancel(nil)
 
 	// The pong is serviced by the concurrent stdin reader.
-	go keepWSConnAliveInternal(ctx, func() { cancel(errors.New("websocket ping failed")) }, conn, 54*time.Second)
+	defer startWSKeepaliveInternal(ctx, func() { cancel(errors.New("websocket ping failed")) }, conn, 54*time.Second)()
 
 	h.runContainerExecInternal(ctx, cancel, conn, containerID, shell)
 	return nil

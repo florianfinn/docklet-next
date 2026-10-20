@@ -16,6 +16,7 @@ import (
 
 	"github.com/danielgtaylor/huma/v2"
 	"github.com/danielgtaylor/huma/v2/sse"
+	"github.com/florianfinn/docklet-next/backend/pkg/sessionlife"
 	activitytypes "github.com/florianfinn/docklet-next/types/activity"
 	dashboardtypes "github.com/florianfinn/docklet-next/types/dashboard"
 	environmenttypes "github.com/florianfinn/docklet-next/types/environment"
@@ -110,6 +111,12 @@ func (h *StreamHandler) streamClientInternal(ctx context.Context, ps *authz.Perm
 	defer releaseDeadPeerTimeout()
 
 	streamCtx, cancel := context.WithCancel(ctx)
+	lease, err := sessionlife.Register(streamCtx, cancel)
+	if err != nil {
+		cancel()
+		return
+	}
+	defer lease.Release()
 	events := make(chan streamtypes.Event, clientStreamEventBuffer)
 	var producers sync.WaitGroup
 	for _, producer := range h.producersForInternal(ps, input) {
@@ -120,7 +127,7 @@ func (h *StreamHandler) streamClientInternal(ctx context.Context, ps *authz.Perm
 	defer producers.Wait()
 	defer cancel()
 
-	heartbeat := time.NewTicker(clientStreamHeartbeatInterval)
+	heartbeat := sessionlife.NewTicker(streamCtx, clientStreamHeartbeatInterval)
 	defer heartbeat.Stop()
 
 	for {
@@ -130,6 +137,9 @@ func (h *StreamHandler) streamClientInternal(ctx context.Context, ps *authz.Perm
 			return
 		case envelope = <-events:
 		case <-heartbeat.C:
+			if sessionlife.Check(streamCtx) != nil {
+				return
+			}
 			envelope = streamtypes.Event{Type: "heartbeat", Timestamp: time.Now()}
 		}
 		if streamCtx.Err() != nil {
