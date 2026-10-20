@@ -52,14 +52,14 @@ function IdentityBridge({ adapter }: { adapter: DockletAdapter }) {
     const lifetime = identityLifetime(adapter);
     return lifetime.listen(() => {
       const version = lifetime.version();
-      // The first /auth/me query establishes its own identity; do not cancel it.
-      const initialCheck = lifetime.active() && client.getQueryData(queryKeys.currentUser) === undefined;
-      const cancel = client.cancelQueries({ predicate: (query) => query.queryKey[0] !== queryKeys.authMode[0] && (!initialCheck || query.queryKey[0] !== queryKeys.currentUser[0]) }, { revert: false });
+      // Active notifications come from a confirmed identity; preserve its query and result.
+      const preserveCurrentUser = lifetime.active();
+      const cancel = client.cancelQueries({ predicate: (query) => query.queryKey[0] !== queryKeys.authMode[0] && (!preserveCurrentUser || query.queryKey[0] !== queryKeys.currentUser[0]) }, { revert: false });
       const clear = () => {
         for (const query of client.getQueryCache().findAll()) {
           if (query.queryKey[0] !== queryKeys.authMode[0] && query.queryKey[0] !== queryKeys.currentUser[0]) query.reset();
         }
-        if (!initialCheck) client.setQueryData(queryKeys.currentUser, null);
+        if (!preserveCurrentUser) client.setQueryData(queryKeys.currentUser, null);
       };
       resetActionIdentity(); actionDialogStore.set({ waiting: [] });
       clear();
@@ -67,7 +67,7 @@ function IdentityBridge({ adapter }: { adapter: DockletAdapter }) {
       void cancel.then(() => {
         if (version !== lifetime.version()) return;
         clear();
-        if (lifetime.active()) void client.invalidateQueries({ predicate: (query) => query.queryKey[0] !== queryKeys.authMode[0] && (!initialCheck || query.queryKey[0] !== queryKeys.currentUser[0]) });
+        if (lifetime.active()) void client.invalidateQueries({ predicate: (query) => query.queryKey[0] !== queryKeys.authMode[0] && (!preserveCurrentUser || query.queryKey[0] !== queryKeys.currentUser[0]) });
       });
     });
   }, [adapter, client]);

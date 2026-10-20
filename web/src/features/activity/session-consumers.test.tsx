@@ -136,16 +136,28 @@ it.each(["logout", "activity401", "replacement"] as const)("a held auth read acr
     await waitFor(() => expect(f.client().getQueryState(queryKeys.currentUser)?.status).toBe("success"));
     const client = f.client();
     f.state.hold = async (path, response) => path.endsWith("/auth/me") ? (reached.resolve(response), held.promise) : response;
-    const pending = client.fetchQuery({ queryKey: queryKeys.currentUser, staleTime: 0, queryFn: () => f.adapter.getCurrentUser() });
-    const rejection = expect(pending).rejects.toBeInstanceOf(CancelledError);
+    let oldRead!: ReturnType<typeof f.adapter.getCurrentUser>;
+    const pending = client.fetchQuery({ queryKey: queryKeys.currentUser, staleTime: 0, queryFn: () => {
+      const read = f.adapter.getCurrentUser();
+      oldRead ??= read;
+      return read;
+    } }).catch((error: unknown) => error);
     const captured = await reached.promise; f.state.hold = undefined;
+    const oldResult = oldRead.catch((error: unknown) => error);
     if (boundary === "logout") await f.adapter.logout();
     if (boundary === "activity401") { f.state.failure = "page401"; await expect(f.adapter.listActions()).rejects.toMatchObject({ outcome: { status: 401 } }); f.state.failure = ""; }
     if (boundary === "replacement") { f.state.user.id = "next-operator"; await f.adapter.getCurrentUser(); }
-    await f.adapter.login("operator", "Example-password1!");
+    await act(async () => {
+      // Match ProductLoginPage: publish the confirmed user, then revalidate explicitly.
+      const user = await f.adapter.login("operator", "Example-password1!");
+      client.setQueryData(queryKeys.currentUser, user);
+      await client.invalidateQueries({ queryKey: queryKeys.currentUser });
+    });
     await waitFor(() => expect(client.getQueryState(queryKeys.currentUser)).toMatchObject({ status: "success", fetchStatus: "idle", data: { id: boundary === "replacement" ? "next-operator" : "operator" } }));
     const requests = f.requests.length;
-    await act(async () => { held.resolve(captured); await rejection; });
+    await act(async () => { held.resolve(captured); await pending; });
+    // Query invalidation may join a fresh retryer; the original adapter read must cancel.
+    expect(await oldResult).toBeInstanceOf(CancelledError);
     expect(f.requests).toHaveLength(requests);
     expect(client.getQueryState(queryKeys.currentUser)?.data).toEqual(boundary === "replacement" ? expect.objectContaining({ id: "next-operator" }) : expect.objectContaining({ id: "operator" }));
     expect(client.getQueryState(queryKeys.currentUser)?.fetchStatus).toBe("idle");

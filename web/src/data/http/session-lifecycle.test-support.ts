@@ -10,7 +10,7 @@ import { ActivitySource, deferred } from "./activity-reader.test-support";
 import { LogSocket } from "./logs.test-support";
 import { envelope, response, runtimeDetail, snapshot } from "./runtime-commands.test-support";
 
-export function sessionFixture() {
+export function sessionFixture(respond?: (url: URL, init: RequestInit) => Response | Promise<Response> | undefined) {
   const state = { authenticated: true, credentialFailure: false, authHeld: undefined as undefined | ReturnType<typeof deferred<Response>>, ambiguous: false, blocked: undefined as undefined | ReturnType<typeof deferred<Response>>, commandHeld: undefined as undefined | ReturnType<typeof deferred<Response>> };
   const sources: ActivitySource[] = [], sockets: { url: string; socket: LogSocket }[] = [];
   const calls: { path: string; init: RequestInit }[] = [];
@@ -18,6 +18,8 @@ export function sessionFixture() {
   const fetcher = vi.fn(async (input: RequestInfo | URL, init: RequestInit = {}) => {
     const url = new URL(String(input), "https://hub.example.com"), path = url.pathname;
     calls.push({ path, init });
+    const overridden = respond?.(url, init);
+    if (overridden) return overridden;
     if (path.endsWith("/auth/mode")) return envelope({ mode: "local" });
     if (path.endsWith("/auth/logout")) { state.authenticated = false; return envelope({}); }
     if (path.endsWith("/auth/login")) { if (state.credentialFailure) return response({}, 401); state.authenticated = true; return envelope({ user }); }
