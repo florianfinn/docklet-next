@@ -349,8 +349,11 @@ export function createHttpAdapter(options: HttpAdapterOptions = {}): DockletAdap
     opened.onerror = () => {
       if (source !== opened || version !== identityGeneration) return;
       lastEventId = undefined;
-      opened.close(); source = undefined; sourceOpen = false;
-      void checkIdentity().then((valid) => { if (valid && version === identityGeneration) scheduleReconnect(); }, () => { if (version === identityGeneration) scheduleReconnect(); });
+      // A reconnecting EventSource keeps its native retry cadence. Only CLOSED
+      // sources need a replacement after the authoritative identity check.
+      const closed = opened.readyState === 2;
+      if (closed) { opened.close(); source = undefined; sourceOpen = false; }
+      void checkIdentity().then((valid) => { if (closed && valid && version === identityGeneration) scheduleReconnect(); }, () => { if (closed && version === identityGeneration) scheduleReconnect(); });
     };
   }
 

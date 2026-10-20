@@ -120,3 +120,13 @@ it("known same-user renewal replaces a held generic read once without accepting 
   expect((await pending).map(({ id }) => id)).toEqual(["0"]);
   expect(f.calls.filter(({ path }) => path.endsWith("/environments"))).toHaveLength(2);
 });
+
+
+it("a reconnecting EventSource retains its native transport retry while identity remains valid", async () => {
+  vi.useFakeTimers(); const f = sessionFixture(); await f.adapter.getCurrentUser();
+  const stop = f.adapter.subscribeChanges(vi.fn());
+  const source = f.sources[0]!; source.readyState = 0; source.onerror?.(new Event("error"));
+  await settle(); await vi.advanceTimersByTimeAsync(1000);
+  expect(source.close).not.toHaveBeenCalled(); expect(f.sources).toHaveLength(1);
+  await f.adapter.logout(); expect(source.close).toHaveBeenCalledTimes(1); stop();
+});
