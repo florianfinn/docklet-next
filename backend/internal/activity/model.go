@@ -17,6 +17,7 @@ import (
 
 type Activity struct {
 	database.BaseModel
+	runtimeKnowledge *activity.RuntimeKnowledge
 
 	EnvironmentID        string             `json:"environmentId" gorm:"column:environment_id;not null;index" sortable:"true"`
 	BatchID              *string            `json:"batchId,omitempty" gorm:"column:batch_id;index"`
@@ -92,5 +93,5 @@ func (ActivitySyncReceipt) TableName() string { return "activity_sync_receipts" 
 // Models returns the persistent activity schema for integration fixtures and the core registry.
 func Models() []any {
 	return []any{&Activity{}, &ActivityMessage{}, &ActivitySyncReceipt{},
-		&RuntimeReceipt{}, &RuntimeKeyBinding{}, &RuntimeStoreGeneration{}, &RuntimeRemovedTarget{}}
+		&RuntimeReceipt{}, &RuntimeKeyBinding{}, &RuntimeStoreGeneration{}, &RuntimeRemovedTarget{}, &RuntimeExecutorBinding{}}
 }

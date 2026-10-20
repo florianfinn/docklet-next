@@ -16,6 +16,7 @@ GET /api/app-version
 GET /api/diagnostics/actors/stream
 GET /api/diagnostics/logs/stream
 GET /api/diagnostics/stream
+GET /api/environments/0/runtime-runs/:runId
 GET /api/environments/:id/activities
 GET /api/environments/:id/activities/:activityId
 GET /api/environments/:id/containers
@@ -101,6 +102,10 @@ HEAD /api/environments/:id/system/health
 HEAD /api/health
 PATCH /api/environments/:id/projects/:projectId/tags
 POST /api/container-registries/sync
+POST /api/environments/0/runtime-registration
+POST /api/environments/0/runtime-runs
+POST /api/environments/0/runtime-runs/:runId/cancel
+POST /api/environments/0/runtime-target
 POST /api/environments/:id/activities/:activityId/cancel
 POST /api/environments/:id/containers
 POST /api/environments/:id/containers/:containerId/commit

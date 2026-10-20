@@ -79,6 +79,9 @@ func (s *RuntimeService) registerLocalInternal(request context.Context, command 
 	go s.runLocalInternal(owner)
 }
 
+// A panic terminates the process: an executor may have live children whose
+// completion is unknown. Recovering here cannot authorize settlement or release.
+// Startup interrupts local receipts only after the prior process has ended.
 func (s *RuntimeService) runLocalInternal(owner *runtimeOwnerInternal) {
 	defer close(owner.attemptDone)
 	s.activity.runningMu.Lock()

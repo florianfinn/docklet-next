@@ -119,14 +119,26 @@ func (s *Service) executeRestore(workCtx context.Context, actor usertypes.Actor,
 			s.exitUnready()
 		}
 	}
-	resume := func() {
+	resume := func(runtimePrepared bool) bool {
+		if runtimePrepared {
+			if err := s.activityService.ResumeRuntimeIntake(ctx); err != nil {
+				blocked()
+				return false
+			}
+		}
 		if s.coordinator != nil {
 			s.coordinator.Resume()
 		}
 		s.maintenance.End()
+		return true
 	}
-	if err := s.maintenance.Wait(ctx); err != nil {
-		resume()
+	waitCtx, cancelWait := context.WithCancel(ctx)
+	stopWait := context.AfterFunc(workCtx, cancelWait)
+	waitErr := s.maintenance.Wait(waitCtx)
+	stopWait()
+	cancelWait()
+	if waitErr != nil || workCtx.Err() != nil {
+		resume(false)
 		fail("backup.interrupted", activitytypes.StatusCancelled)
 		return
 	}
@@ -136,12 +148,18 @@ func (s *Service) executeRestore(workCtx context.Context, actor usertypes.Actor,
 			return
 		}
 	}
+	if err := s.activityService.PrepareRuntimeRestore(ctx); err != nil {
+		blocked()
+		return
+	}
 	if err := s.activityService.CancelAndDrain(ctx, started.ID); err != nil {
 		blocked()
 		return
 	}
 	if workCtx.Err() != nil || s.activityService.SealCancellation(started.ID) != nil {
-		resume()
+		if !resume(true) {
+			return
+		}
 		fail("backup.interrupted", activitytypes.StatusCancelled)
 		return
 	}
@@ -190,6 +208,10 @@ func (s *Service) executeRestore(workCtx context.Context, actor usertypes.Actor,
 		blocked()
 		return
 	}
+	if err := s.activityService.FinishRuntimeRestore(ctx); err != nil {
+		blocked()
+		return
+	}
 	if s.coordinator != nil {
 		s.coordinator.ResetAfterRestore()
 	}
@@ -228,7 +250,7 @@ func (s *Service) executeRestore(workCtx context.Context, actor usertypes.Actor,
 		blocked()
 		return
 	}
-	resume()
+	resume(true)
 }
 
 func restoreArchiveRecord(run *backuptypes.SystemBackupRun, info archiveInfo, activityID string) *backuptypes.SystemBackupRun {

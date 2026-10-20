@@ -1,5 +1,5 @@
 // Source: api/openapi.json
-// Revision: c061602d0b5502f4e229739ccf0353d3d473167ffeaa448fb98e6fa1fa7b7b0c
+// Revision: ca0a2884ff6576cc2864a1520596db7d17cda53b7d7c6395c6fcf558a91dd7e7
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
 // Deviations: Generated TypeScript declarations from the local Huma export.
@@ -879,6 +879,86 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/environments/0/runtime-registration": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["register-runtime-executor"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/environments/0/runtime-runs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["execute-runtime-run"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/environments/0/runtime-runs/{runId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["get-runtime-run-outcome"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/environments/0/runtime-runs/{runId}/cancel": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["cancel-runtime-run"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/environments/0/runtime-target": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["resolve-runtime-target"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/environments/pair": {
         parameters: {
             query?: never;
@@ -1289,7 +1369,10 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Restart container */
+        /**
+         * Restart container
+         * @description Runtime commands use durable admission; Prefer: respond-async returns 202 for a new run and 200 for a retained or joined run.
+         */
         post: operations["restart-container"];
         delete?: never;
         options?: never;
@@ -1306,7 +1389,10 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Start container */
+        /**
+         * Start container
+         * @description Runtime commands use durable admission; Prefer: respond-async returns 202 for a new run and 200 for a retained or joined run.
+         */
         post: operations["start-container"];
         delete?: never;
         options?: never;
@@ -1323,7 +1409,10 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Stop container */
+        /**
+         * Stop container
+         * @description Runtime commands use durable admission; Prefer: respond-async returns 202 for a new run and 200 for a retained or joined run.
+         */
         post: operations["stop-container"];
         delete?: never;
         options?: never;
@@ -2552,7 +2641,7 @@ export interface paths {
         put?: never;
         /**
          * Bring down a project
-         * @description Bring down a Docker Compose project (docker-compose down)
+         * @description Bring down a Docker Compose project (docker-compose down) Runtime commands use durable admission; Prefer: respond-async returns 202 for a new run and 200 for a retained or joined run.
          */
         post: operations["down-project"];
         delete?: never;
@@ -2592,7 +2681,7 @@ export interface paths {
         put?: never;
         /**
          * Redeploy a project
-         * @description Redeploy a Docker Compose project (down + up)
+         * @description Redeploy a Docker Compose project (down + up) Runtime commands use durable admission; Prefer: respond-async returns 202 for a new run and 200 for a retained or joined run.
          */
         post: operations["redeploy-project"];
         delete?: never;
@@ -2612,7 +2701,7 @@ export interface paths {
         put?: never;
         /**
          * Restart a project
-         * @description Restart all containers in a Docker Compose project
+         * @description Restart all containers in a Docker Compose project Runtime commands use durable admission; Prefer: respond-async returns 202 for a new run and 200 for a retained or joined run.
          */
         post: operations["restart-project"];
         delete?: never;
@@ -2692,7 +2781,7 @@ export interface paths {
         put?: never;
         /**
          * Deploy a project
-         * @description Deploy a Docker Compose project (docker-compose up)
+         * @description Deploy a Docker Compose project (docker-compose up) Runtime commands use durable admission; Prefer: respond-async returns 202 for a new run and 200 for a retained or joined run.
          */
         post: operations["deploy-project"];
         delete?: never;
@@ -2787,6 +2876,57 @@ export interface paths {
         get: operations["download-project-workspace-file"];
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/environments/{id}/runtime-runs/{runId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Read a durable runtime run */
+        get: operations["get-hub-runtime-run"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/environments/{id}/runtime-runs/{runId}/cancel": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Request runtime cancellation */
+        post: operations["cancel-hub-runtime-run"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/environments/{id}/runtime-runs/{runId}/release": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Acknowledge administrator runtime recovery */
+        post: operations["release-runtime-run"];
         delete?: never;
         options?: never;
         head?: never;
@@ -4288,9 +4428,23 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        APIError: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example /api/schemas/APIError.json
+             */
+            readonly $schema?: string;
+            code: string;
+            details?: unknown;
+            message: string;
+            /** Format: int64 */
+            statusCode: number;
+        };
         ActivityActivity: {
             affectedServices?: string[] | null;
             batchId?: string;
+            cancelRequested?: boolean;
             /** Format: date-time */
             createdAt: string;
             /** Format: int64 */
@@ -4302,10 +4456,12 @@ export interface components {
             id: string;
             latestMessage?: string;
             /** @enum {string} */
-            messageCode?: "run.started" | "run.joined" | "run.fresh" | "run.busy" | "run.cancelling" | "activity.queued" | "activity.running" | "activity.success" | "activity.failed" | "activity.cancelled" | "activity.message" | "deploy.pull" | "job.queued" | "job.waiting" | "job.running" | "job.retrying" | "job.succeeded" | "job.partial" | "job.skipped" | "job.failed" | "job.needs_attention" | "job.canceled" | "container.die" | "container.oom" | "container.rename" | "container.unhealthy" | "image.untag" | "image.import" | "image.prune" | "volume.prune" | "network.prune" | "container.start" | "container.stop" | "container.restart" | "container.delete" | "container.create" | "container.scan" | "container.update" | "container.deploy" | "container.kill" | "container.pause" | "container.unpause" | "container.error" | "image.pull" | "image.load" | "image.tag" | "image.commit" | "image.delete" | "image.scan" | "image.error" | "image.vulnerability_scan" | "project.deploy" | "project.delete" | "project.start" | "project.stop" | "project.create" | "project.update" | "project.error" | "volume.create" | "volume.rename" | "volume.delete" | "volume.error" | "volume.file.create" | "volume.file.delete" | "volume.file.upload" | "volume.file.update" | "volume.workspace.update" | "volume.backup.create" | "volume.backup.delete" | "volume.backup.restore" | "volume.backup.restore_files" | "volume.backup.download" | "network.create" | "network.delete" | "network.connect" | "network.disconnect" | "network.error" | "system.prune" | "user.login" | "user.logout" | "system.auto_update" | "system.upgrade" | "environment.create" | "environment.connect" | "environment.disconnect" | "environment.update" | "environment.delete" | "environment.api_key.regenerated" | "environment.mtls.ca_generated" | "environment.mtls.cert_issued" | "environment.mtls.enroll" | "environment.mtls.download" | "webhook.create" | "webhook.update" | "webhook.delete" | "webhook.trigger" | "notification.send";
+            messageCode?: "run.request-mismatch" | "runtime.outcome-unknown" | "runtime.interrupted" | "runtime.cancelled" | "runtime.failed" | "runtime.wait-timeout" | "runtime.waiter-disconnected" | "runtime.parent-unresolved" | "runtime.target-removed" | "runtime.target-changed" | "runtime.target-unavailable" | "run.started" | "run.joined" | "run.fresh" | "run.busy" | "run.cancelling" | "activity.queued" | "activity.running" | "activity.success" | "activity.failed" | "activity.cancelled" | "activity.message" | "deploy.pull" | "job.queued" | "job.waiting" | "job.running" | "job.retrying" | "job.succeeded" | "job.partial" | "job.skipped" | "job.failed" | "job.needs_attention" | "job.canceled" | "container.die" | "container.oom" | "container.rename" | "container.unhealthy" | "image.untag" | "image.import" | "image.prune" | "volume.prune" | "network.prune" | "container.start" | "container.stop" | "container.restart" | "container.delete" | "container.create" | "container.scan" | "container.update" | "container.deploy" | "container.kill" | "container.pause" | "container.unpause" | "container.error" | "image.pull" | "image.load" | "image.tag" | "image.commit" | "image.delete" | "image.scan" | "image.error" | "image.vulnerability_scan" | "project.deploy" | "project.delete" | "project.start" | "project.stop" | "project.create" | "project.update" | "project.error" | "volume.create" | "volume.rename" | "volume.delete" | "volume.error" | "volume.file.create" | "volume.file.delete" | "volume.file.upload" | "volume.file.update" | "volume.workspace.update" | "volume.backup.create" | "volume.backup.delete" | "volume.backup.restore" | "volume.backup.restore_files" | "volume.backup.download" | "network.create" | "network.delete" | "network.connect" | "network.disconnect" | "network.error" | "system.prune" | "user.login" | "user.logout" | "system.auto_update" | "system.upgrade" | "environment.create" | "environment.connect" | "environment.disconnect" | "environment.update" | "environment.delete" | "environment.api_key.regenerated" | "environment.mtls.ca_generated" | "environment.mtls.cert_issued" | "environment.mtls.enroll" | "environment.mtls.download" | "webhook.create" | "webhook.update" | "webhook.delete" | "webhook.trigger" | "notification.send";
             metadata?: {
                 [key: string]: unknown;
             };
+            /** @enum {string} */
+            outcomeState?: "known" | "unknown";
             /** Format: int64 */
             progress?: number;
             resourceId?: string;
@@ -4336,7 +4492,7 @@ export interface components {
         ActivityMessage: {
             activityId: string;
             /** @enum {string} */
-            code?: "run.started" | "run.joined" | "run.fresh" | "run.busy" | "run.cancelling" | "activity.queued" | "activity.running" | "activity.success" | "activity.failed" | "activity.cancelled" | "activity.message" | "deploy.pull" | "job.queued" | "job.waiting" | "job.running" | "job.retrying" | "job.succeeded" | "job.partial" | "job.skipped" | "job.failed" | "job.needs_attention" | "job.canceled" | "container.die" | "container.oom" | "container.rename" | "container.unhealthy" | "image.untag" | "image.import" | "image.prune" | "volume.prune" | "network.prune" | "container.start" | "container.stop" | "container.restart" | "container.delete" | "container.create" | "container.scan" | "container.update" | "container.deploy" | "container.kill" | "container.pause" | "container.unpause" | "container.error" | "image.pull" | "image.load" | "image.tag" | "image.commit" | "image.delete" | "image.scan" | "image.error" | "image.vulnerability_scan" | "project.deploy" | "project.delete" | "project.start" | "project.stop" | "project.create" | "project.update" | "project.error" | "volume.create" | "volume.rename" | "volume.delete" | "volume.error" | "volume.file.create" | "volume.file.delete" | "volume.file.upload" | "volume.file.update" | "volume.workspace.update" | "volume.backup.create" | "volume.backup.delete" | "volume.backup.restore" | "volume.backup.restore_files" | "volume.backup.download" | "network.create" | "network.delete" | "network.connect" | "network.disconnect" | "network.error" | "system.prune" | "user.login" | "user.logout" | "system.auto_update" | "system.upgrade" | "environment.create" | "environment.connect" | "environment.disconnect" | "environment.update" | "environment.delete" | "environment.api_key.regenerated" | "environment.mtls.ca_generated" | "environment.mtls.cert_issued" | "environment.mtls.enroll" | "environment.mtls.download" | "webhook.create" | "webhook.update" | "webhook.delete" | "webhook.trigger" | "notification.send";
+            code?: "run.request-mismatch" | "runtime.outcome-unknown" | "runtime.interrupted" | "runtime.cancelled" | "runtime.failed" | "runtime.wait-timeout" | "runtime.waiter-disconnected" | "runtime.parent-unresolved" | "runtime.target-removed" | "runtime.target-changed" | "runtime.target-unavailable" | "run.started" | "run.joined" | "run.fresh" | "run.busy" | "run.cancelling" | "activity.queued" | "activity.running" | "activity.success" | "activity.failed" | "activity.cancelled" | "activity.message" | "deploy.pull" | "job.queued" | "job.waiting" | "job.running" | "job.retrying" | "job.succeeded" | "job.partial" | "job.skipped" | "job.failed" | "job.needs_attention" | "job.canceled" | "container.die" | "container.oom" | "container.rename" | "container.unhealthy" | "image.untag" | "image.import" | "image.prune" | "volume.prune" | "network.prune" | "container.start" | "container.stop" | "container.restart" | "container.delete" | "container.create" | "container.scan" | "container.update" | "container.deploy" | "container.kill" | "container.pause" | "container.unpause" | "container.error" | "image.pull" | "image.load" | "image.tag" | "image.commit" | "image.delete" | "image.scan" | "image.error" | "image.vulnerability_scan" | "project.deploy" | "project.delete" | "project.start" | "project.stop" | "project.create" | "project.update" | "project.error" | "volume.create" | "volume.rename" | "volume.delete" | "volume.error" | "volume.file.create" | "volume.file.delete" | "volume.file.upload" | "volume.file.update" | "volume.workspace.update" | "volume.backup.create" | "volume.backup.delete" | "volume.backup.restore" | "volume.backup.restore_files" | "volume.backup.download" | "network.create" | "network.delete" | "network.connect" | "network.disconnect" | "network.error" | "system.prune" | "user.login" | "user.logout" | "system.auto_update" | "system.upgrade" | "environment.create" | "environment.connect" | "environment.disconnect" | "environment.update" | "environment.delete" | "environment.api_key.regenerated" | "environment.mtls.ca_generated" | "environment.mtls.cert_issued" | "environment.mtls.enroll" | "environment.mtls.download" | "webhook.create" | "webhook.update" | "webhook.delete" | "webhook.trigger" | "notification.send";
             /** Format: date-time */
             createdAt: string;
             id: string;
@@ -4355,6 +4511,211 @@ export interface components {
             /** Format: date-time */
             timestamp: string;
         };
+        ActivityRuntimeAdmission: {
+            activity: components["schemas"]["ActivityRuntimeSnapshot"];
+            activityId: string;
+            code: string;
+        };
+        ActivityRuntimeAttribution: {
+            displayName?: string;
+            id: string;
+            username: string;
+        };
+        ActivityRuntimeCancellation: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example /api/schemas/ActivityRuntimeCancellation.json
+             */
+            readonly $schema?: string;
+            attribution: components["schemas"]["ActivityRuntimeAttribution"];
+            identity: components["schemas"]["ActivityRuntimeRunIdentity"];
+        };
+        ActivityRuntimeConflict: {
+            activeRunId?: string;
+            code: string;
+        };
+        ActivityRuntimeConflictResponse: {
+            data: components["schemas"]["ActivityRuntimeConflict"];
+            success: boolean;
+        };
+        ActivityRuntimeExecutionDetail: {
+            activity: components["schemas"]["ActivityRuntimeSnapshot"];
+            messages: components["schemas"]["ActivityMessage"][] | null;
+            output: components["schemas"]["ActivityRuntimeExecutionOutputLine"][] | null;
+            outputTruncated: boolean;
+            /** Format: int64 */
+            retainedStartSeq: number;
+            stepTrace: components["schemas"]["ActivityStepTraceEntry"][] | null;
+        };
+        ActivityRuntimeExecutionEnvelope: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example /api/schemas/ActivityRuntimeExecutionEnvelope.json
+             */
+            readonly $schema?: string;
+            attribution: components["schemas"]["ActivityRuntimeAttribution"];
+            identity: components["schemas"]["ActivityRuntimeRunIdentity"];
+            operation: string;
+            options: components["schemas"]["ActivityRuntimeOptions"];
+            target: components["schemas"]["ActivityRuntimeTarget"];
+        };
+        ActivityRuntimeExecutionOutcome: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example /api/schemas/ActivityRuntimeExecutionOutcome.json
+             */
+            readonly $schema?: string;
+            detail?: components["schemas"]["ActivityRuntimeExecutionDetail"];
+            identity: components["schemas"]["ActivityRuntimeRunIdentity"];
+            state: string;
+        };
+        ActivityRuntimeExecutionOutputLine: {
+            level?: string;
+            /** Format: int64 */
+            outputSeq: number;
+            step?: string;
+            stream: string;
+            text: string;
+            /** Format: date-time */
+            timestamp: string;
+        };
+        ActivityRuntimeExecutionRefusal: {
+            code: string;
+        };
+        ActivityRuntimeExecutorIdentity: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example /api/schemas/ActivityRuntimeExecutorIdentity.json
+             */
+            readonly $schema?: string;
+            executorGeneration: string;
+            managerId: string;
+            registrationId: string;
+        };
+        ActivityRuntimeFailureResponse: {
+            data: components["schemas"]["ActivityRuntimeID"];
+            error: components["schemas"]["ActivityRuntimeHTTPError"];
+            success: boolean;
+        };
+        ActivityRuntimeHTTPError: {
+            code: string;
+            message: string;
+        };
+        ActivityRuntimeHubDetail: {
+            activity: components["schemas"]["ActivityRuntimeSnapshot"];
+            messages: components["schemas"]["ActivityMessage"][] | null;
+            output: components["schemas"]["ActivityRuntimeExecutionOutputLine"][] | null;
+            outputTruncated: boolean;
+            recovery: components["schemas"]["ActivityRuntimeRecoveryEvidence"];
+            /** Format: int64 */
+            retainedStartSeq: number;
+            stepTrace: components["schemas"]["ActivityStepTraceEntry"][] | null;
+        };
+        ActivityRuntimeID: {
+            activityId: string;
+        };
+        ActivityRuntimeOptions: {
+            deploy: components["schemas"]["ProjectDeployOptions"];
+            restartServices: string[] | null;
+        };
+        ActivityRuntimeRecoveryEvidence: {
+            disposition?: string;
+            /** Format: date-time */
+            dispositionAt?: string;
+            dispositionBy?: string;
+            dispositionReason?: string;
+            executorError?: string;
+            executorResultCode?: string;
+            /** Format: date-time */
+            executorSettledAt?: string;
+            executorState: string;
+            releaseAcknowledged: boolean;
+            unknownReason?: string;
+        };
+        ActivityRuntimeRegistration: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example /api/schemas/ActivityRuntimeRegistration.json
+             */
+            readonly $schema?: string;
+            managerId: string;
+            registrationId: string;
+        };
+        ActivityRuntimeRunIdentity: {
+            executorGeneration: string;
+            managerId: string;
+            registrationId: string;
+            requestDigest: string;
+            runId: string;
+        };
+        ActivityRuntimeSnapshot: {
+            affectedServices?: string[] | null;
+            batchId?: string;
+            cancelRequested: boolean;
+            /** Format: date-time */
+            createdAt: string;
+            /** Format: int64 */
+            durationMs?: number;
+            /** Format: date-time */
+            endedAt?: string;
+            environmentId: string;
+            error?: string;
+            id: string;
+            latestMessage?: string;
+            /** @enum {string} */
+            messageCode?: "run.request-mismatch" | "runtime.outcome-unknown" | "runtime.interrupted" | "runtime.cancelled" | "runtime.failed" | "runtime.wait-timeout" | "runtime.waiter-disconnected" | "runtime.parent-unresolved" | "runtime.target-removed" | "runtime.target-changed" | "runtime.target-unavailable" | "run.started" | "run.joined" | "run.fresh" | "run.busy" | "run.cancelling" | "activity.queued" | "activity.running" | "activity.success" | "activity.failed" | "activity.cancelled" | "activity.message" | "deploy.pull" | "job.queued" | "job.waiting" | "job.running" | "job.retrying" | "job.succeeded" | "job.partial" | "job.skipped" | "job.failed" | "job.needs_attention" | "job.canceled" | "container.die" | "container.oom" | "container.rename" | "container.unhealthy" | "image.untag" | "image.import" | "image.prune" | "volume.prune" | "network.prune" | "container.start" | "container.stop" | "container.restart" | "container.delete" | "container.create" | "container.scan" | "container.update" | "container.deploy" | "container.kill" | "container.pause" | "container.unpause" | "container.error" | "image.pull" | "image.load" | "image.tag" | "image.commit" | "image.delete" | "image.scan" | "image.error" | "image.vulnerability_scan" | "project.deploy" | "project.delete" | "project.start" | "project.stop" | "project.create" | "project.update" | "project.error" | "volume.create" | "volume.rename" | "volume.delete" | "volume.error" | "volume.file.create" | "volume.file.delete" | "volume.file.upload" | "volume.file.update" | "volume.workspace.update" | "volume.backup.create" | "volume.backup.delete" | "volume.backup.restore" | "volume.backup.restore_files" | "volume.backup.download" | "network.create" | "network.delete" | "network.connect" | "network.disconnect" | "network.error" | "system.prune" | "user.login" | "user.logout" | "system.auto_update" | "system.upgrade" | "environment.create" | "environment.connect" | "environment.disconnect" | "environment.update" | "environment.delete" | "environment.api_key.regenerated" | "environment.mtls.ca_generated" | "environment.mtls.cert_issued" | "environment.mtls.enroll" | "environment.mtls.download" | "webhook.create" | "webhook.update" | "webhook.delete" | "webhook.trigger" | "notification.send";
+            metadata?: {
+                [key: string]: unknown;
+            };
+            /** @enum {string} */
+            outcomeState: "known" | "unknown";
+            /** Format: int64 */
+            progress?: number;
+            resourceId?: string;
+            resourceName?: string;
+            resourceType?: string;
+            sourceEnvironmentId?: string;
+            sourceEnvironmentName?: string;
+            /** Format: date-time */
+            startedAt: string;
+            startedBy?: components["schemas"]["ActivityStartedBy"];
+            status: string;
+            step?: string;
+            type: string;
+            /** Format: date-time */
+            updatedAt?: string;
+        };
+        ActivityRuntimeTarget: {
+            id: string;
+            kind: string;
+            name?: string;
+            parentProjectId: string | null;
+        };
+        ActivityRuntimeTargetMetadata: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example /api/schemas/ActivityRuntimeTargetMetadata.json
+             */
+            readonly $schema?: string;
+            composeManaged: boolean;
+            target: components["schemas"]["ActivityRuntimeTarget"];
+        };
+        ActivityRuntimeTargetRequest: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example /api/schemas/ActivityRuntimeTargetRequest.json
+             */
+            readonly $schema?: string;
+            registration: components["schemas"]["ActivityRuntimeExecutorIdentity"];
+            target: components["schemas"]["ActivityRuntimeTarget"];
+        };
         ActivityStartedBy: {
             displayName?: string;
             userId?: string;
@@ -4362,7 +4723,7 @@ export interface components {
         };
         ActivityStepTraceEntry: {
             /** @enum {string} */
-            code?: "run.started" | "run.joined" | "run.fresh" | "run.busy" | "run.cancelling" | "activity.queued" | "activity.running" | "activity.success" | "activity.failed" | "activity.cancelled" | "activity.message" | "deploy.pull" | "job.queued" | "job.waiting" | "job.running" | "job.retrying" | "job.succeeded" | "job.partial" | "job.skipped" | "job.failed" | "job.needs_attention" | "job.canceled" | "container.die" | "container.oom" | "container.rename" | "container.unhealthy" | "image.untag" | "image.import" | "image.prune" | "volume.prune" | "network.prune" | "container.start" | "container.stop" | "container.restart" | "container.delete" | "container.create" | "container.scan" | "container.update" | "container.deploy" | "container.kill" | "container.pause" | "container.unpause" | "container.error" | "image.pull" | "image.load" | "image.tag" | "image.commit" | "image.delete" | "image.scan" | "image.error" | "image.vulnerability_scan" | "project.deploy" | "project.delete" | "project.start" | "project.stop" | "project.create" | "project.update" | "project.error" | "volume.create" | "volume.rename" | "volume.delete" | "volume.error" | "volume.file.create" | "volume.file.delete" | "volume.file.upload" | "volume.file.update" | "volume.workspace.update" | "volume.backup.create" | "volume.backup.delete" | "volume.backup.restore" | "volume.backup.restore_files" | "volume.backup.download" | "network.create" | "network.delete" | "network.connect" | "network.disconnect" | "network.error" | "system.prune" | "user.login" | "user.logout" | "system.auto_update" | "system.upgrade" | "environment.create" | "environment.connect" | "environment.disconnect" | "environment.update" | "environment.delete" | "environment.api_key.regenerated" | "environment.mtls.ca_generated" | "environment.mtls.cert_issued" | "environment.mtls.enroll" | "environment.mtls.download" | "webhook.create" | "webhook.update" | "webhook.delete" | "webhook.trigger" | "notification.send";
+            code?: "run.request-mismatch" | "runtime.outcome-unknown" | "runtime.interrupted" | "runtime.cancelled" | "runtime.failed" | "runtime.wait-timeout" | "runtime.waiter-disconnected" | "runtime.parent-unresolved" | "runtime.target-removed" | "runtime.target-changed" | "runtime.target-unavailable" | "run.started" | "run.joined" | "run.fresh" | "run.busy" | "run.cancelling" | "activity.queued" | "activity.running" | "activity.success" | "activity.failed" | "activity.cancelled" | "activity.message" | "deploy.pull" | "job.queued" | "job.waiting" | "job.running" | "job.retrying" | "job.succeeded" | "job.partial" | "job.skipped" | "job.failed" | "job.needs_attention" | "job.canceled" | "container.die" | "container.oom" | "container.rename" | "container.unhealthy" | "image.untag" | "image.import" | "image.prune" | "volume.prune" | "network.prune" | "container.start" | "container.stop" | "container.restart" | "container.delete" | "container.create" | "container.scan" | "container.update" | "container.deploy" | "container.kill" | "container.pause" | "container.unpause" | "container.error" | "image.pull" | "image.load" | "image.tag" | "image.commit" | "image.delete" | "image.scan" | "image.error" | "image.vulnerability_scan" | "project.deploy" | "project.delete" | "project.start" | "project.stop" | "project.create" | "project.update" | "project.error" | "volume.create" | "volume.rename" | "volume.delete" | "volume.error" | "volume.file.create" | "volume.file.delete" | "volume.file.upload" | "volume.file.update" | "volume.workspace.update" | "volume.backup.create" | "volume.backup.delete" | "volume.backup.restore" | "volume.backup.restore_files" | "volume.backup.download" | "network.create" | "network.delete" | "network.connect" | "network.disconnect" | "network.error" | "system.prune" | "user.login" | "user.logout" | "system.auto_update" | "system.upgrade" | "environment.create" | "environment.connect" | "environment.disconnect" | "environment.update" | "environment.delete" | "environment.api_key.regenerated" | "environment.mtls.ca_generated" | "environment.mtls.cert_issued" | "environment.mtls.enroll" | "environment.mtls.download" | "webhook.create" | "webhook.update" | "webhook.delete" | "webhook.trigger" | "notification.send";
             /** Format: date-time */
             endedAt?: string;
             id: string;
@@ -4920,6 +5281,42 @@ export interface components {
             readonly $schema?: string;
             /** @description Response data */
             data: components["schemas"]["ActivityDetail"];
+            /** @description Whether the request was successful */
+            success: boolean;
+        };
+        BaseApiResponseActivityRuntimeAdmission: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example /api/schemas/BaseApiResponseActivityRuntimeAdmission.json
+             */
+            readonly $schema?: string;
+            /** @description Response data */
+            data: components["schemas"]["ActivityRuntimeAdmission"];
+            /** @description Whether the request was successful */
+            success: boolean;
+        };
+        BaseApiResponseActivityRuntimeHubDetail: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example /api/schemas/BaseApiResponseActivityRuntimeHubDetail.json
+             */
+            readonly $schema?: string;
+            /** @description Response data */
+            data: components["schemas"]["ActivityRuntimeHubDetail"];
+            /** @description Whether the request was successful */
+            success: boolean;
+        };
+        BaseApiResponseActivityRuntimeSnapshot: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example /api/schemas/BaseApiResponseActivityRuntimeSnapshot.json
+             */
+            readonly $schema?: string;
+            /** @description Response data */
+            data: components["schemas"]["ActivityRuntimeSnapshot"];
             /** @description Whether the request was successful */
             success: boolean;
         };
@@ -8062,7 +8459,7 @@ export interface components {
             environmentId?: string;
             id: string;
             /** @enum {string} */
-            messageCode: "run.started" | "run.joined" | "run.fresh" | "run.busy" | "run.cancelling" | "activity.queued" | "activity.running" | "activity.success" | "activity.failed" | "activity.cancelled" | "activity.message" | "deploy.pull" | "job.queued" | "job.waiting" | "job.running" | "job.retrying" | "job.succeeded" | "job.partial" | "job.skipped" | "job.failed" | "job.needs_attention" | "job.canceled" | "container.die" | "container.oom" | "container.rename" | "container.unhealthy" | "image.untag" | "image.import" | "image.prune" | "volume.prune" | "network.prune" | "container.start" | "container.stop" | "container.restart" | "container.delete" | "container.create" | "container.scan" | "container.update" | "container.deploy" | "container.kill" | "container.pause" | "container.unpause" | "container.error" | "image.pull" | "image.load" | "image.tag" | "image.commit" | "image.delete" | "image.scan" | "image.error" | "image.vulnerability_scan" | "project.deploy" | "project.delete" | "project.start" | "project.stop" | "project.create" | "project.update" | "project.error" | "volume.create" | "volume.rename" | "volume.delete" | "volume.error" | "volume.file.create" | "volume.file.delete" | "volume.file.upload" | "volume.file.update" | "volume.workspace.update" | "volume.backup.create" | "volume.backup.delete" | "volume.backup.restore" | "volume.backup.restore_files" | "volume.backup.download" | "network.create" | "network.delete" | "network.connect" | "network.disconnect" | "network.error" | "system.prune" | "user.login" | "user.logout" | "system.auto_update" | "system.upgrade" | "environment.create" | "environment.connect" | "environment.disconnect" | "environment.update" | "environment.delete" | "environment.api_key.regenerated" | "environment.mtls.ca_generated" | "environment.mtls.cert_issued" | "environment.mtls.enroll" | "environment.mtls.download" | "webhook.create" | "webhook.update" | "webhook.delete" | "webhook.trigger" | "notification.send";
+            messageCode: "run.request-mismatch" | "runtime.outcome-unknown" | "runtime.interrupted" | "runtime.cancelled" | "runtime.failed" | "runtime.wait-timeout" | "runtime.waiter-disconnected" | "runtime.parent-unresolved" | "runtime.target-removed" | "runtime.target-changed" | "runtime.target-unavailable" | "run.started" | "run.joined" | "run.fresh" | "run.busy" | "run.cancelling" | "activity.queued" | "activity.running" | "activity.success" | "activity.failed" | "activity.cancelled" | "activity.message" | "deploy.pull" | "job.queued" | "job.waiting" | "job.running" | "job.retrying" | "job.succeeded" | "job.partial" | "job.skipped" | "job.failed" | "job.needs_attention" | "job.canceled" | "container.die" | "container.oom" | "container.rename" | "container.unhealthy" | "image.untag" | "image.import" | "image.prune" | "volume.prune" | "network.prune" | "container.start" | "container.stop" | "container.restart" | "container.delete" | "container.create" | "container.scan" | "container.update" | "container.deploy" | "container.kill" | "container.pause" | "container.unpause" | "container.error" | "image.pull" | "image.load" | "image.tag" | "image.commit" | "image.delete" | "image.scan" | "image.error" | "image.vulnerability_scan" | "project.deploy" | "project.delete" | "project.start" | "project.stop" | "project.create" | "project.update" | "project.error" | "volume.create" | "volume.rename" | "volume.delete" | "volume.error" | "volume.file.create" | "volume.file.delete" | "volume.file.upload" | "volume.file.update" | "volume.workspace.update" | "volume.backup.create" | "volume.backup.delete" | "volume.backup.restore" | "volume.backup.restore_files" | "volume.backup.download" | "network.create" | "network.delete" | "network.connect" | "network.disconnect" | "network.error" | "system.prune" | "user.login" | "user.logout" | "system.auto_update" | "system.upgrade" | "environment.create" | "environment.connect" | "environment.disconnect" | "environment.update" | "environment.delete" | "environment.api_key.regenerated" | "environment.mtls.ca_generated" | "environment.mtls.cert_issued" | "environment.mtls.enroll" | "environment.mtls.download" | "webhook.create" | "webhook.update" | "webhook.delete" | "webhook.trigger" | "notification.send";
             metadata?: {
                 [key: string]: unknown;
             };
@@ -8809,12 +9206,6 @@ export interface components {
             updatedAt: string;
         };
         ProjectDeployOptions: {
-            /**
-             * Format: uri
-             * @description A URL to the JSON Schema for this object.
-             * @example /api/schemas/ProjectDeployOptions.json
-             */
-            readonly $schema?: string;
             forceRecreate?: boolean;
             pullPolicy?: string;
             recreateVolumes?: boolean;
@@ -9223,6 +9614,16 @@ export interface components {
             environmentId?: string;
             /** @description ID of the role to grant */
             roleId: string;
+        };
+        RuntimeReleaseInputBody: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example /api/schemas/RuntimeReleaseInputBody.json
+             */
+            readonly $schema?: string;
+            acknowledged: boolean;
+            reason: string;
         };
         ScannerStatus: {
             available: boolean;
@@ -12664,6 +13065,446 @@ export interface operations {
             };
         };
     };
+    "register-runtime-executor": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ActivityRuntimeRegistration"];
+            };
+        };
+        responses: {
+            /** @description Authenticated runtime evidence */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ActivityRuntimeExecutorIdentity"];
+                };
+            };
+            /** @description Bounded authenticated runtime request refused; no execution authority */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["APIError"] | components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Bounded authenticated runtime request refused; no execution authority */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["APIError"] | components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Bounded authenticated runtime request refused; no execution authority */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["APIError"] | components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Bounded authenticated runtime request refused; no execution authority */
+            408: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["APIError"] | components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Identity conflict; only a minimal Execute busy/cancelling refusal is negative authority */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ActivityRuntimeExecutionRefusal"] | (components["schemas"]["APIError"] | components["schemas"]["ErrorModel"]);
+                };
+            };
+            /** @description Bounded authenticated runtime request refused; no execution authority */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["APIError"] | components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Bounded authenticated runtime request refused; no execution authority */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["APIError"] | components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "execute-runtime-run": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ActivityRuntimeExecutionEnvelope"];
+            };
+        };
+        responses: {
+            /** @description Authenticated runtime evidence */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ActivityRuntimeExecutionOutcome"];
+                };
+            };
+            /** @description Bounded authenticated runtime request refused; no execution authority */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["APIError"] | components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Bounded authenticated runtime request refused; no execution authority */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["APIError"] | components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Bounded authenticated runtime request refused; no execution authority */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["APIError"] | components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Bounded authenticated runtime request refused; no execution authority */
+            408: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["APIError"] | components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Identity conflict; only a minimal Execute busy/cancelling refusal is negative authority */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ActivityRuntimeExecutionRefusal"] | (components["schemas"]["APIError"] | components["schemas"]["ErrorModel"]);
+                };
+            };
+            /** @description Bounded authenticated runtime request refused; no execution authority */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["APIError"] | components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Bounded authenticated runtime request refused; no execution authority */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["APIError"] | components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "get-runtime-run-outcome": {
+        parameters: {
+            query: {
+                managerId: string;
+                registrationId: string;
+                executorGeneration: string;
+                requestDigest: string;
+            };
+            header?: never;
+            path: {
+                runId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Authenticated runtime evidence */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ActivityRuntimeExecutionOutcome"];
+                };
+            };
+            /** @description Bounded authenticated runtime request refused; no execution authority */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["APIError"] | components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Bounded authenticated runtime request refused; no execution authority */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["APIError"] | components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Bounded authenticated runtime request refused; no execution authority */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["APIError"] | components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Bounded authenticated runtime request refused; no execution authority */
+            408: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["APIError"] | components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Identity conflict; only a minimal Execute busy/cancelling refusal is negative authority */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ActivityRuntimeExecutionRefusal"] | (components["schemas"]["APIError"] | components["schemas"]["ErrorModel"]);
+                };
+            };
+            /** @description Bounded authenticated runtime request refused; no execution authority */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["APIError"] | components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Bounded authenticated runtime request refused; no execution authority */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["APIError"] | components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "cancel-runtime-run": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                runId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ActivityRuntimeCancellation"];
+            };
+        };
+        responses: {
+            /** @description Authenticated runtime evidence */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ActivityRuntimeExecutionOutcome"];
+                };
+            };
+            /** @description Bounded authenticated runtime request refused; no execution authority */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["APIError"] | components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Bounded authenticated runtime request refused; no execution authority */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["APIError"] | components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Bounded authenticated runtime request refused; no execution authority */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["APIError"] | components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Bounded authenticated runtime request refused; no execution authority */
+            408: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["APIError"] | components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Identity conflict; only a minimal Execute busy/cancelling refusal is negative authority */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ActivityRuntimeExecutionRefusal"] | (components["schemas"]["APIError"] | components["schemas"]["ErrorModel"]);
+                };
+            };
+            /** @description Bounded authenticated runtime request refused; no execution authority */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["APIError"] | components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Bounded authenticated runtime request refused; no execution authority */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["APIError"] | components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "resolve-runtime-target": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ActivityRuntimeTargetRequest"];
+            };
+        };
+        responses: {
+            /** @description Authenticated runtime evidence */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ActivityRuntimeTargetMetadata"];
+                };
+            };
+            /** @description Bounded authenticated runtime request refused; no execution authority */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["APIError"] | components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Bounded authenticated runtime request refused; no execution authority */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["APIError"] | components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Bounded authenticated runtime request refused; no execution authority */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["APIError"] | components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Bounded authenticated runtime request refused; no execution authority */
+            408: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["APIError"] | components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Identity conflict; only a minimal Execute busy/cancelling refusal is negative authority */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ActivityRuntimeExecutionRefusal"] | (components["schemas"]["APIError"] | components["schemas"]["ErrorModel"]);
+                };
+            };
+            /** @description Bounded authenticated runtime request refused; no execution authority */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["APIError"] | components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Bounded authenticated runtime request refused; no execution authority */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["APIError"] | components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
     pairEnvironment: {
         parameters: {
             query?: never;
@@ -13547,33 +14388,94 @@ export interface operations {
     "restart-container": {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description Opaque UUID for one deliberate runtime intent */
+                "Idempotency-Key"?: string;
+                /** @description respond-async returns admission only */
+                Prefer?: string;
+            };
             path: {
-                /** @description Environment ID */
                 id: string;
-                /** @description Container ID */
                 containerId: string;
             };
             cookie?: never;
         };
-        requestBody?: never;
+        requestBody?: {
+            content: {
+                "application/json": unknown;
+            };
+        };
         responses: {
-            /** @description OK */
+            /** @description Joined admission or confirmed legacy workflow success; NDJSON ends with done only after success */
             200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["BaseApiResponseMessageResponse"];
+                    "application/json": components["schemas"]["BaseApiResponseMessageResponse"] | components["schemas"]["BaseApiResponseActivityRuntimeAdmission"];
                 };
             };
-            /** @description Error */
-            default: {
+            /** @description New admission only; activityId equals activity.id */
+            202: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/problem+json": components["schemas"]["ErrorModel"];
+                    "application/json": components["schemas"]["BaseApiResponseActivityRuntimeAdmission"];
+                };
+            };
+            /** @description Admitted non-success carries stable activityId and runtime code; pre-admission unavailability carries no fabricated run */
+            408: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ActivityRuntimeFailureResponse"] | components["schemas"]["ErrorModel"] | components["schemas"]["APIError"];
+                };
+            };
+            /** @description Pre-admission minimal authorized conflict or request mismatch; admitted interrupted/cancelled legacy wait carries activityId */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ActivityRuntimeConflictResponse"] | components["schemas"]["ActivityRuntimeFailureResponse"];
+                };
+            };
+            /** @description Removed registration; runtime.target-removed never dispatches */
+            410: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["APIError"];
+                };
+            };
+            /** @description Admitted non-success carries stable activityId and runtime code; pre-admission unavailability carries no fabricated run */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ActivityRuntimeFailureResponse"] | components["schemas"]["ErrorModel"] | components["schemas"]["APIError"];
+                };
+            };
+            /** @description Admitted non-success carries stable activityId and runtime code; pre-admission unavailability carries no fabricated run */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ActivityRuntimeFailureResponse"] | components["schemas"]["ErrorModel"] | components["schemas"]["APIError"];
+                };
+            };
+            /** @description Admitted non-success carries stable activityId and runtime code; pre-admission unavailability carries no fabricated run */
+            504: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ActivityRuntimeFailureResponse"] | components["schemas"]["ErrorModel"] | components["schemas"]["APIError"];
                 };
             };
         };
@@ -13581,33 +14483,94 @@ export interface operations {
     "start-container": {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description Opaque UUID for one deliberate runtime intent */
+                "Idempotency-Key"?: string;
+                /** @description respond-async returns admission only */
+                Prefer?: string;
+            };
             path: {
-                /** @description Environment ID */
                 id: string;
-                /** @description Container ID */
                 containerId: string;
             };
             cookie?: never;
         };
-        requestBody?: never;
+        requestBody?: {
+            content: {
+                "application/json": unknown;
+            };
+        };
         responses: {
-            /** @description OK */
+            /** @description Joined admission or confirmed legacy workflow success; NDJSON ends with done only after success */
             200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["BaseApiResponseMessageResponse"];
+                    "application/json": components["schemas"]["BaseApiResponseMessageResponse"] | components["schemas"]["BaseApiResponseActivityRuntimeAdmission"];
                 };
             };
-            /** @description Error */
-            default: {
+            /** @description New admission only; activityId equals activity.id */
+            202: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/problem+json": components["schemas"]["ErrorModel"];
+                    "application/json": components["schemas"]["BaseApiResponseActivityRuntimeAdmission"];
+                };
+            };
+            /** @description Admitted non-success carries stable activityId and runtime code; pre-admission unavailability carries no fabricated run */
+            408: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ActivityRuntimeFailureResponse"] | components["schemas"]["ErrorModel"] | components["schemas"]["APIError"];
+                };
+            };
+            /** @description Pre-admission minimal authorized conflict or request mismatch; admitted interrupted/cancelled legacy wait carries activityId */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ActivityRuntimeConflictResponse"] | components["schemas"]["ActivityRuntimeFailureResponse"];
+                };
+            };
+            /** @description Removed registration; runtime.target-removed never dispatches */
+            410: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["APIError"];
+                };
+            };
+            /** @description Admitted non-success carries stable activityId and runtime code; pre-admission unavailability carries no fabricated run */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ActivityRuntimeFailureResponse"] | components["schemas"]["ErrorModel"] | components["schemas"]["APIError"];
+                };
+            };
+            /** @description Admitted non-success carries stable activityId and runtime code; pre-admission unavailability carries no fabricated run */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ActivityRuntimeFailureResponse"] | components["schemas"]["ErrorModel"] | components["schemas"]["APIError"];
+                };
+            };
+            /** @description Admitted non-success carries stable activityId and runtime code; pre-admission unavailability carries no fabricated run */
+            504: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ActivityRuntimeFailureResponse"] | components["schemas"]["ErrorModel"] | components["schemas"]["APIError"];
                 };
             };
         };
@@ -13615,33 +14578,94 @@ export interface operations {
     "stop-container": {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description Opaque UUID for one deliberate runtime intent */
+                "Idempotency-Key"?: string;
+                /** @description respond-async returns admission only */
+                Prefer?: string;
+            };
             path: {
-                /** @description Environment ID */
                 id: string;
-                /** @description Container ID */
                 containerId: string;
             };
             cookie?: never;
         };
-        requestBody?: never;
+        requestBody?: {
+            content: {
+                "application/json": unknown;
+            };
+        };
         responses: {
-            /** @description OK */
+            /** @description Joined admission or confirmed legacy workflow success; NDJSON ends with done only after success */
             200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["BaseApiResponseMessageResponse"];
+                    "application/json": components["schemas"]["BaseApiResponseMessageResponse"] | components["schemas"]["BaseApiResponseActivityRuntimeAdmission"];
                 };
             };
-            /** @description Error */
-            default: {
+            /** @description New admission only; activityId equals activity.id */
+            202: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/problem+json": components["schemas"]["ErrorModel"];
+                    "application/json": components["schemas"]["BaseApiResponseActivityRuntimeAdmission"];
+                };
+            };
+            /** @description Admitted non-success carries stable activityId and runtime code; pre-admission unavailability carries no fabricated run */
+            408: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ActivityRuntimeFailureResponse"] | components["schemas"]["ErrorModel"] | components["schemas"]["APIError"];
+                };
+            };
+            /** @description Pre-admission minimal authorized conflict or request mismatch; admitted interrupted/cancelled legacy wait carries activityId */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ActivityRuntimeConflictResponse"] | components["schemas"]["ActivityRuntimeFailureResponse"];
+                };
+            };
+            /** @description Removed registration; runtime.target-removed never dispatches */
+            410: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["APIError"];
+                };
+            };
+            /** @description Admitted non-success carries stable activityId and runtime code; pre-admission unavailability carries no fabricated run */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ActivityRuntimeFailureResponse"] | components["schemas"]["ErrorModel"] | components["schemas"]["APIError"];
+                };
+            };
+            /** @description Admitted non-success carries stable activityId and runtime code; pre-admission unavailability carries no fabricated run */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ActivityRuntimeFailureResponse"] | components["schemas"]["ErrorModel"] | components["schemas"]["APIError"];
+                };
+            };
+            /** @description Admitted non-success carries stable activityId and runtime code; pre-admission unavailability carries no fabricated run */
+            504: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ActivityRuntimeFailureResponse"] | components["schemas"]["ErrorModel"] | components["schemas"]["APIError"];
                 };
             };
         };
@@ -16236,34 +17260,98 @@ export interface operations {
     };
     "down-project": {
         parameters: {
-            query?: never;
-            header?: never;
+            query?: {
+                /** @description Legacy restart service selection */
+                services?: string[] | null;
+            };
+            header?: {
+                /** @description Opaque UUID for one deliberate runtime intent */
+                "Idempotency-Key"?: string;
+                /** @description respond-async returns admission only */
+                Prefer?: string;
+            };
             path: {
-                /** @description Environment ID */
                 id: string;
-                /** @description Project ID */
                 projectId: string;
             };
             cookie?: never;
         };
-        requestBody?: never;
+        requestBody?: {
+            content: {
+                "application/json": unknown;
+            };
+        };
         responses: {
-            /** @description OK */
+            /** @description Joined admission or confirmed legacy workflow success; NDJSON ends with done only after success */
             200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["BaseApiResponseMessageResponse"];
+                    "application/json": components["schemas"]["BaseApiResponseMessageResponse"] | components["schemas"]["BaseApiResponseActivityRuntimeAdmission"];
                 };
             };
-            /** @description Error */
-            default: {
+            /** @description New admission only; activityId equals activity.id */
+            202: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/problem+json": components["schemas"]["ErrorModel"];
+                    "application/json": components["schemas"]["BaseApiResponseActivityRuntimeAdmission"];
+                };
+            };
+            /** @description Admitted non-success carries stable activityId and runtime code; pre-admission unavailability carries no fabricated run */
+            408: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ActivityRuntimeFailureResponse"] | components["schemas"]["ErrorModel"] | components["schemas"]["APIError"];
+                };
+            };
+            /** @description Pre-admission minimal authorized conflict or request mismatch; admitted interrupted/cancelled legacy wait carries activityId */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ActivityRuntimeConflictResponse"] | components["schemas"]["ActivityRuntimeFailureResponse"];
+                };
+            };
+            /** @description Removed registration; runtime.target-removed never dispatches */
+            410: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["APIError"];
+                };
+            };
+            /** @description Admitted non-success carries stable activityId and runtime code; pre-admission unavailability carries no fabricated run */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ActivityRuntimeFailureResponse"] | components["schemas"]["ErrorModel"] | components["schemas"]["APIError"];
+                };
+            };
+            /** @description Admitted non-success carries stable activityId and runtime code; pre-admission unavailability carries no fabricated run */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ActivityRuntimeFailureResponse"] | components["schemas"]["ErrorModel"] | components["schemas"]["APIError"];
+                };
+            };
+            /** @description Admitted non-success carries stable activityId and runtime code; pre-admission unavailability carries no fabricated run */
+            504: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ActivityRuntimeFailureResponse"] | components["schemas"]["ErrorModel"] | components["schemas"]["APIError"];
                 };
             };
         };
@@ -16302,12 +17390,18 @@ export interface operations {
     };
     "redeploy-project": {
         parameters: {
-            query?: never;
-            header?: never;
+            query?: {
+                /** @description Legacy restart service selection */
+                services?: string[] | null;
+            };
+            header?: {
+                /** @description Opaque UUID for one deliberate runtime intent */
+                "Idempotency-Key"?: string;
+                /** @description respond-async returns admission only */
+                Prefer?: string;
+            };
             path: {
-                /** @description Environment ID */
                 id: string;
-                /** @description Project ID */
                 projectId: string;
             };
             cookie?: never;
@@ -16318,20 +17412,77 @@ export interface operations {
             };
         };
         responses: {
-            /** @description OK */
+            /** @description Joined admission or confirmed legacy workflow success; NDJSON ends with done only after success */
             200: {
                 headers: {
                     [name: string]: unknown;
                 };
-                content?: never;
+                content: {
+                    "application/json": components["schemas"]["BaseApiResponseActivityRuntimeAdmission"];
+                    "application/x-ndjson": string;
+                };
             };
-            /** @description Error */
-            default: {
+            /** @description New admission only; activityId equals activity.id */
+            202: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/problem+json": components["schemas"]["ErrorModel"];
+                    "application/json": components["schemas"]["BaseApiResponseActivityRuntimeAdmission"];
+                };
+            };
+            /** @description Admitted non-success carries stable activityId and runtime code; pre-admission unavailability carries no fabricated run */
+            408: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ActivityRuntimeFailureResponse"] | components["schemas"]["ErrorModel"] | components["schemas"]["APIError"];
+                };
+            };
+            /** @description Pre-admission minimal authorized conflict or request mismatch; admitted interrupted/cancelled legacy wait carries activityId */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ActivityRuntimeConflictResponse"] | components["schemas"]["ActivityRuntimeFailureResponse"];
+                };
+            };
+            /** @description Removed registration; runtime.target-removed never dispatches */
+            410: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["APIError"];
+                };
+            };
+            /** @description Admitted non-success carries stable activityId and runtime code; pre-admission unavailability carries no fabricated run */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ActivityRuntimeFailureResponse"] | components["schemas"]["ErrorModel"] | components["schemas"]["APIError"];
+                };
+            };
+            /** @description Admitted non-success carries stable activityId and runtime code; pre-admission unavailability carries no fabricated run */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ActivityRuntimeFailureResponse"] | components["schemas"]["ErrorModel"] | components["schemas"]["APIError"];
+                };
+            };
+            /** @description Admitted non-success carries stable activityId and runtime code; pre-admission unavailability carries no fabricated run */
+            504: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ActivityRuntimeFailureResponse"] | components["schemas"]["ErrorModel"] | components["schemas"]["APIError"];
                 };
             };
         };
@@ -16339,36 +17490,97 @@ export interface operations {
     "restart-project": {
         parameters: {
             query?: {
-                /** @description Service names to restart; empty restarts all services */
+                /** @description Legacy restart service selection */
                 services?: string[] | null;
             };
-            header?: never;
+            header?: {
+                /** @description Opaque UUID for one deliberate runtime intent */
+                "Idempotency-Key"?: string;
+                /** @description respond-async returns admission only */
+                Prefer?: string;
+            };
             path: {
-                /** @description Environment ID */
                 id: string;
-                /** @description Project ID */
                 projectId: string;
             };
             cookie?: never;
         };
-        requestBody?: never;
+        requestBody?: {
+            content: {
+                "application/json": unknown;
+            };
+        };
         responses: {
-            /** @description OK */
+            /** @description Joined admission or confirmed legacy workflow success; NDJSON ends with done only after success */
             200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["BaseApiResponseMessageResponse"];
+                    "application/json": components["schemas"]["BaseApiResponseMessageResponse"] | components["schemas"]["BaseApiResponseActivityRuntimeAdmission"];
                 };
             };
-            /** @description Error */
-            default: {
+            /** @description New admission only; activityId equals activity.id */
+            202: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/problem+json": components["schemas"]["ErrorModel"];
+                    "application/json": components["schemas"]["BaseApiResponseActivityRuntimeAdmission"];
+                };
+            };
+            /** @description Admitted non-success carries stable activityId and runtime code; pre-admission unavailability carries no fabricated run */
+            408: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ActivityRuntimeFailureResponse"] | components["schemas"]["ErrorModel"] | components["schemas"]["APIError"];
+                };
+            };
+            /** @description Pre-admission minimal authorized conflict or request mismatch; admitted interrupted/cancelled legacy wait carries activityId */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ActivityRuntimeConflictResponse"] | components["schemas"]["ActivityRuntimeFailureResponse"];
+                };
+            };
+            /** @description Removed registration; runtime.target-removed never dispatches */
+            410: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["APIError"];
+                };
+            };
+            /** @description Admitted non-success carries stable activityId and runtime code; pre-admission unavailability carries no fabricated run */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ActivityRuntimeFailureResponse"] | components["schemas"]["ErrorModel"] | components["schemas"]["APIError"];
+                };
+            };
+            /** @description Admitted non-success carries stable activityId and runtime code; pre-admission unavailability carries no fabricated run */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ActivityRuntimeFailureResponse"] | components["schemas"]["ErrorModel"] | components["schemas"]["APIError"];
+                };
+            };
+            /** @description Admitted non-success carries stable activityId and runtime code; pre-admission unavailability carries no fabricated run */
+            504: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ActivityRuntimeFailureResponse"] | components["schemas"]["ErrorModel"] | components["schemas"]["APIError"];
                 };
             };
         };
@@ -16481,12 +17693,18 @@ export interface operations {
     };
     "deploy-project": {
         parameters: {
-            query?: never;
-            header?: never;
+            query?: {
+                /** @description Legacy restart service selection */
+                services?: string[] | null;
+            };
+            header?: {
+                /** @description Opaque UUID for one deliberate runtime intent */
+                "Idempotency-Key"?: string;
+                /** @description respond-async returns admission only */
+                Prefer?: string;
+            };
             path: {
-                /** @description Environment ID */
                 id: string;
-                /** @description Project ID */
                 projectId: string;
             };
             cookie?: never;
@@ -16497,20 +17715,77 @@ export interface operations {
             };
         };
         responses: {
-            /** @description OK */
+            /** @description Joined admission or confirmed legacy workflow success; NDJSON ends with done only after success */
             200: {
                 headers: {
                     [name: string]: unknown;
                 };
-                content?: never;
+                content: {
+                    "application/json": components["schemas"]["BaseApiResponseActivityRuntimeAdmission"];
+                    "application/x-ndjson": string;
+                };
             };
-            /** @description Error */
-            default: {
+            /** @description New admission only; activityId equals activity.id */
+            202: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/problem+json": components["schemas"]["ErrorModel"];
+                    "application/json": components["schemas"]["BaseApiResponseActivityRuntimeAdmission"];
+                };
+            };
+            /** @description Admitted non-success carries stable activityId and runtime code; pre-admission unavailability carries no fabricated run */
+            408: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ActivityRuntimeFailureResponse"] | components["schemas"]["ErrorModel"] | components["schemas"]["APIError"];
+                };
+            };
+            /** @description Pre-admission minimal authorized conflict or request mismatch; admitted interrupted/cancelled legacy wait carries activityId */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ActivityRuntimeConflictResponse"] | components["schemas"]["ActivityRuntimeFailureResponse"];
+                };
+            };
+            /** @description Removed registration; runtime.target-removed never dispatches */
+            410: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["APIError"];
+                };
+            };
+            /** @description Admitted non-success carries stable activityId and runtime code; pre-admission unavailability carries no fabricated run */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ActivityRuntimeFailureResponse"] | components["schemas"]["ErrorModel"] | components["schemas"]["APIError"];
+                };
+            };
+            /** @description Admitted non-success carries stable activityId and runtime code; pre-admission unavailability carries no fabricated run */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ActivityRuntimeFailureResponse"] | components["schemas"]["ErrorModel"] | components["schemas"]["APIError"];
+                };
+            };
+            /** @description Admitted non-success carries stable activityId and runtime code; pre-admission unavailability carries no fabricated run */
+            504: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ActivityRuntimeFailureResponse"] | components["schemas"]["ErrorModel"] | components["schemas"]["APIError"];
                 };
             };
         };
@@ -16723,6 +17998,110 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "get-hub-runtime-run": {
+        parameters: {
+            query?: {
+                refresh?: boolean;
+            };
+            header?: never;
+            path: {
+                id: string;
+                runId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BaseApiResponseActivityRuntimeHubDetail"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "cancel-hub-runtime-run": {
+        parameters: {
+            query?: {
+                refresh?: boolean;
+            };
+            header?: never;
+            path: {
+                id: string;
+                runId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BaseApiResponseActivityRuntimeSnapshot"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "release-runtime-run": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+                runId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RuntimeReleaseInputBody"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BaseApiResponseActivityRuntimeSnapshot"];
+                };
             };
             /** @description Error */
             default: {

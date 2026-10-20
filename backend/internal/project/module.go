@@ -102,7 +102,7 @@ func RegisterProjects(api huma.API, projectService *ProjectService, activityServ
 		Security:    handlerutil.DefaultOperationSecurity(),
 	}, authz.PermProjectsUpdate, h.UpdateProjectTag)
 
-	middleware.RegisterWithPermission(api, huma.Operation{
+	activity.RegisterRuntimeLifecycle(api, activityService, activity.RuntimeDeployProject, huma.Operation{
 		OperationID: "deploy-project",
 		Method:      http.MethodPost,
 		Path:        "/environments/{id}/projects/{projectId}/up",
@@ -110,9 +110,9 @@ func RegisterProjects(api huma.API, projectService *ProjectService, activityServ
 		Description: "Deploy a Docker Compose project (docker-compose up)",
 		Tags:        []string{"Projects"},
 		Security:    handlerutil.DefaultOperationSecurity(),
-	}, authz.PermProjectsDeploy, h.DeployProject)
+	})
 
-	middleware.RegisterWithPermission(api, huma.Operation{
+	activity.RegisterRuntimeLifecycle(api, activityService, activity.RuntimeDownProject, huma.Operation{
 		OperationID: "down-project",
 		Method:      http.MethodPost,
 		Path:        "/environments/{id}/projects/{projectId}/down",
@@ -120,7 +120,7 @@ func RegisterProjects(api huma.API, projectService *ProjectService, activityServ
 		Description: "Bring down a Docker Compose project (docker-compose down)",
 		Tags:        []string{"Projects"},
 		Security:    handlerutil.DefaultOperationSecurity(),
-	}, authz.PermProjectsDown, h.DownProject)
+	})
 
 	middleware.RegisterWithPermission(api, huma.Operation{
 		OperationID: "create-project",
@@ -187,7 +187,7 @@ func RegisterProjects(api huma.API, projectService *ProjectService, activityServ
 		Security:    handlerutil.DefaultOperationSecurity(),
 	}, authz.PermProjectsRead, h.GetProjectUpdates)
 
-	middleware.RegisterWithPermission(api, huma.Operation{
+	activity.RegisterRuntimeLifecycle(api, activityService, activity.RuntimeRedeployProject, huma.Operation{
 		OperationID: "redeploy-project",
 		Method:      http.MethodPost,
 		Path:        "/environments/{id}/projects/{projectId}/redeploy",
@@ -195,7 +195,7 @@ func RegisterProjects(api huma.API, projectService *ProjectService, activityServ
 		Description: "Redeploy a Docker Compose project (down + up)",
 		Tags:        []string{"Projects"},
 		Security:    handlerutil.DefaultOperationSecurity(),
-	}, authz.PermProjectsDeploy, h.RedeployProject)
+	})
 
 	middleware.RegisterWithPermission(api, huma.Operation{
 		OperationID: "destroy-project",
@@ -217,7 +217,7 @@ func RegisterProjects(api huma.API, projectService *ProjectService, activityServ
 		Security:    handlerutil.DefaultOperationSecurity(),
 	}, authz.PermProjectsUpdate, h.UpdateProject)
 
-	middleware.RegisterWithPermission(api, huma.Operation{
+	activity.RegisterRuntimeLifecycle(api, activityService, activity.RuntimeRestartProject, huma.Operation{
 		OperationID: "restart-project",
 		Method:      http.MethodPost,
 		Path:        "/environments/{id}/projects/{projectId}/restart",
@@ -225,7 +225,7 @@ func RegisterProjects(api huma.API, projectService *ProjectService, activityServ
 		Description: "Restart all containers in a Docker Compose project",
 		Tags:        []string{"Projects"},
 		Security:    handlerutil.DefaultOperationSecurity(),
-	}, authz.PermProjectsRestart, h.RestartProject)
+	})
 
 	middleware.RegisterWithPermission(api, huma.Operation{
 		OperationID: "update-project-services",

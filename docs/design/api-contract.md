@@ -1,6 +1,6 @@
 # API contract and UI mapping
 
-The registered Huma hub routes are the source of `api/openapi.json`. Run
+The registered Huma hub and agent routes produce `api/openapi.json`. Run
 `pnpm install --dir web` and `pnpm run contract:generate` at the repository root
 after changing a route or wire DTO. The command uses the Go `openapi` subcommand
 without starting a service, then runs pinned `openapi-typescript` 7.13.0 to write
@@ -37,8 +37,9 @@ Only typed transport-unavailable errors (Direct dial/timeout or disconnected
 Edge transport) permit this fallback. Credential rejection, authorization,
 upstream HTTP errors, decode/mapping failures and caller cancellation keep their
 existing error behavior and do not become partial HTTP 200 responses. This
-endpoint-specific hub read metadata does not change the agent v3/minimum-v3
-contract, its fingerprint, `tunnel/v1`, inventory reads or runtime receipts.
+endpoint-specific hub read metadata grants no runtime execution or negative
+authority. Agent compatibility is governed by the lifecycle contract below;
+`tunnel/v1` and inventory-read behavior are unchanged.
 
 ## DTO to view-model gaps
 
@@ -60,8 +61,8 @@ the mapping and its contract tests before that feature claims live data.
 | `JobscheduleConfig`, `JobscheduleJobStatus`, `JobscheduleJobRunResponse` | `ScheduledJob`, `DockletAdapter` | Job state and next-run time need a common schedule projection using the M4 hub time zone. | Planned M10 Images and updates |
 | `StreamEvent`, `ActivityStreamEvent`, `EventStreamEvent` | `subscribeActions`, `subscribeChanges` | SSE channel envelopes need parsing, reconnect and query invalidation. | #38 |
 | `ProjectDeployOptions`, `ProjectCreateReponse`, `SystemConvertDockerRunResponse` | `DeployInput`, `ImportResult` | UI drafts and imports need lossless Compose fields and action identity. | Planned M7 Stack authoring and deployment |
-| Single-container `MessageResponse`; bulk `ContainerActionResult` remains separate | `ActionRun`, `runContainerCommand` | Single start/stop/restart need durable admission IDs; bulk partial results do not prove a single run succeeded. Edit/health/recreation are outside this mapping. | [M6 runtime control](runtime-control.md) |
-| Project lifecycle NDJSON and message responses | `runStackCommand`, `StackCommand` | Start→deploy/up, stop→down, restart and redeploy need guarded admission; preserve legacy stream/message callers. | [M6 runtime control](runtime-control.md) |
+| Single-container `MessageResponse`; bulk `ContainerActionResult` remains separate | `ActionRun`, `runContainerCommand` | Map single start/stop/restart admission IDs and outcome knowledge; bulk partial results do not prove a single run succeeded. Edit/health/recreation are outside this mapping. | [M6 runtime control](runtime-control.md) |
+| Project lifecycle NDJSON and message responses | `runStackCommand`, `StackCommand` | Map start→deploy/up, stop→down, restart and redeploy admission and outcomes; preserve legacy stream/message callers. | [M6 runtime control](runtime-control.md) |
 | Echo WS JSON `LogMessage` (outside OpenAPI) | `LogLine`, `subscribeLogs`, `subscribeContainerLogs` | Use subscription-attempt/seq identity and optional stream/truncation metadata; seq is arrival order, without cross-service chronology or durable replay. | [M6 runtime control](runtime-control.md) |
 | `WorkspaceFileEntry`, `WorkspaceFileContent` | `DirListing`, `FileContent`, `VolumesApi` | Wire file entries need tree, path and editable-content projections. | Planned M8 Storage and file workspace |
 | `VolumeVolume` | `Volume`, `VolumeDetail` | Storage kind and consumers need a host-aware projection. | Planned M8 Storage and file workspace |
@@ -90,27 +91,67 @@ operation is ready for production use. Some schema types are nested Docker
 structures rather than separately callable operations. The owning milestone
 resolves each mapping when its endpoint and UI slice are implemented.
 
-## Runtime contract target
+## Runtime lifecycle contract
 
-[Runtime control](runtime-control.md) specifies proposed async admission on the
-existing seven lifecycle paths, legacy response compatibility, durable outcome
-query/cancel/recovery routes, bounded retry/receipt retention and explicit
-mismatch/interruption/unknown handling. These do not exist
-merely because the current route or a bulk DTO is registered. One foundation
-owner supplies wire types, v4/minimum-v4 agent fixture/hash, current exports,
-route snapshots, adapter shared fields and forward SQLite migration under one
-owning issue. The same owner merges sequential F-a/b/c step PRs into the M6
-feature branch, each with self-checks and CI; an independent risk review after
-F-c precedes final F-d activation review. All runtime route wiring, v4 advertising,
-exports and capability activation wait for complete F-d behavior. Command, log
-and session consumers start only after F-d merges; no later consumer becomes a
-second runtime contract editor.
-Synchronous non-success uses the typed non-2xx activity-ID envelope defined in
-the runtime record. Optional log metadata and the narrow CLI EOF fix belong to
-the log and executor-compatibility subpackages respectively.
-The fingerprint hashes the versioned agent fixture bytes, not this OpenAPI file;
-`tunnel/v1`, historical OpenAPI and shipped migrations remain unchanged.
-Runtime JSON logs reuse Echo WS and remain outside the Huma export.
+[Runtime control](runtime-control.md) defines the seven lifecycle operations:
+project deploy/down/restart/redeploy and container start/stop/restart. They share
+one application-owned runtime with receipt-backed admission, exclusion,
+cancellation and settlement. Existing operation and activity-read permissions
+apply before admission, joins or conflict details. Generic activity writers
+cannot complete a runtime-owned run or release its execution slot.
+
+`Prefer: respond-async` returns HTTP 202 for a new admission and HTTP 200 for a
+retained or joined admission. Both carry `activityId`, `code` and `activity`;
+`activityId` equals `activity.id` and the executor's run UUID. Acceptance never
+proves successful execution. A retained `Idempotency-Key` resolves to its original
+run after ten minutes and without fresh Docker access. Another caller or changed
+digest receives `run.request-mismatch` without the bound ID. Removal retains a
+registration tombstone and returns HTTP 410 `runtime.target-removed`.
+
+Legacy project down/restart and container start/stop/restart return HTTP 200
+`MessageResponse` with the run ID only after confirmed workflow success. Admitted
+unknown, interrupted, cancelled, failed, waiter timeout and writable waiter
+cancellation return their coded non-2xx envelopes and the same ID. Project
+up/redeploy retain NDJSON activity-started and output frames. A successful stream
+ends with `done`; after flushing, non-success is an error frame with `code` and
+`activityId` on the existing HTTP 200 stream. Pre-flush admission failures retain
+their HTTP status. Disconnect detaches the waiter and cannot cancel execution.
+
+Runtime snapshots require the paired `outcomeState` and `cancelRequested` fields.
+Generic historical or unrelated activities may omit both.
+
+Remote admission also projects `outcomeState: unknown` while delivery is pending
+or in flight and no authoritative executor answer has arrived. This alone is not
+evidence of a lost outcome. Command consumers must read the existing targeted
+`RuntimeHubDetail.recovery.unknownReason`: absent means delivery remains
+unconfirmed without a recorded evidence-loss reason; present identifies actual
+uncertainty such as transport or executor continuity loss. Generic list/SSE
+knowledge alone must not trigger an outcome-loss warning on every remote Start.
+If targeted detail is unavailable, keep the outcome unconfirmed; do not infer
+success, progress, evidence loss or permission to replay. These semantics add no
+projection field or vocabulary and apply before command UI capabilities open.
+
+Manual recovery
+requires effective global administration plus activity read/cancel access,
+reason and acknowledgment that the executor stopped and Docker state was checked.
+Recovery details preserve executor evidence beside the immutable hub disposition;
+release cannot fabricate successful effects or replay execution.
+
+The trusted agent receiver registers execute/query/cancel and registration/target
+metadata routes with the existing manager credential. Ordinary bearer,
+administrator and bootstrap credentials cannot grant receiver authority. Direct
+and Edge requests recheck agent access and compatibility; Edge has no Direct
+fallback. Numeric agent contract version and minimum are both 4. The fingerprint
+hashes the exact `types/contract/testdata/agent-hub-v4.json` bytes, with the v3
+fixture preserved. Runtime queries have no compatibility exception. Existing
+health/version/self-upgrade exceptions, `tunnel/v1`, historical OpenAPI and
+shipped migrations remain unchanged.
+
+The shared foundation owns runtime wire types, current exports and route
+snapshots. Command, log and session mappings retain their own consumer boundaries;
+UI capabilities stay unavailable until their complete mappings pass. Runtime JSON
+logs reuse Echo WS outside the Huma export. The CLI treats EOF before explicit
+`done` as interruption while preserving progress and terminal errors.
 
 ## Stable message codes
 
@@ -121,7 +162,8 @@ callers creating events must send a listed code. A run status transition uses
 
 | Family | Codes |
 | --- | --- |
-| `run` | `run.started`, `run.joined`, `run.fresh`, `run.busy`, `run.cancelling` |
+| `run` | `run.started`, `run.joined`, `run.fresh`, `run.busy`, `run.cancelling`, `run.request-mismatch` |
+| `runtime` | `runtime.outcome-unknown`, `runtime.interrupted`, `runtime.cancelled`, `runtime.failed`, `runtime.wait-timeout`, `runtime.waiter-disconnected`, `runtime.parent-unresolved`, `runtime.target-removed`, `runtime.target-changed`, `runtime.target-unavailable` |
 | `activity` | `activity.queued`, `activity.running`, `activity.success`, `activity.failed`, `activity.cancelled`, `activity.message` |
 | `deploy` | `deploy.pull` |
 | `job` | `job.queued`, `job.waiting`, `job.running`, `job.retrying`, `job.succeeded`, `job.partial`, `job.skipped`, `job.failed`, `job.needs_attention`, `job.canceled` |
@@ -150,7 +192,7 @@ status. Clients should use message levels for per-step warnings and errors.
 
 Event history is capped at 500 entries. Completed activity history is capped
 at 100 entries per environment. Environment overrides follow Arcane settings
-initialization and do not fail startup on invalid values. Generic cancellation is a
-local worker signal; the current activity DTO has no cancellation-request
-timestamp. The runtime target adds receipt-backed cancellation/unknown knowledge
-fields without treating either as a new terminal activity status.
+initialization and do not fail startup on invalid values. Generic cancellation
+resolves runtime receipt ownership before falling back to a legacy worker signal.
+Receipt-backed cancellation and outcome knowledge do not introduce new terminal
+activity statuses.

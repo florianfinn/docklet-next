@@ -107,18 +107,44 @@ func (s *RuntimeSender) request(ctx context.Context, method, path, query string,
 	if s == nil || !activitytypes.RuntimeIdentityValid(id) || len(body) > activitytypes.RuntimeMaxBodyBytes {
 		return empty, ErrRuntimeTransport
 	}
+	status, response, err := s.roundTrip(ctx, method, path, query, body)
+	if err != nil {
+		return empty, err
+	}
+	if execute && status == 409 {
+		var refusal activitytypes.RuntimeExecutionRefusal
+		if activitytypes.DecodeRuntimeJSON(response, &refusal) == nil && refusal.Safe() {
+			return empty, &RuntimeExecutionRefused{Code: refusal.Code}
+		}
+	}
+	if status != 200 {
+		return empty, ErrRuntimeTransport
+	}
+	var result activitytypes.RuntimeExecutionOutcome
+	if activitytypes.DecodeRuntimeJSON(response, &result) != nil || activitytypes.ValidateRuntimeOutcome(result, id) != nil {
+		return empty, ErrRuntimeTransport
+	}
+	return result, nil
+}
+
+// Metadata requests use the identical authenticated one-shot transport and Edge
+// ingress bounds, without granting an Execute refusal any broader authority.
+func (s *RuntimeSender) roundTrip(ctx context.Context, method, path, query string, body []byte) (int, []byte, error) {
+	if s == nil || len(body) > activitytypes.RuntimeMaxBodyBytes {
+		return 0, nil, ErrRuntimeTransport
+	}
 	ctx, cancelBudget := context.WithTimeout(ctx, 30*time.Minute)
 	defer cancelBudget()
 	accessCtx, cleanup, err := s.access(ctx, s.target.EnvironmentID, &s.target.Token, method, path)
 	if err != nil {
-		return empty, err
+		return 0, nil, err
 	}
 	if cleanup == nil || accessCtx == nil {
-		return empty, ErrRuntimeTransport
+		return 0, nil, ErrRuntimeTransport
 	}
 	defer cleanup()
 	if accessCtx.Err() != nil {
-		return empty, ErrRuntimeTransport
+		return 0, nil, ErrRuntimeTransport
 	}
 	headers := map[string]string{"Content-Type": "application/json", "Accept": "application/json", remenv.HeaderAgentToken: s.target.Token}
 	var status int
@@ -126,19 +152,19 @@ func (s *RuntimeSender) request(ctx context.Context, method, path, query string,
 	var response []byte
 	if s.target.Edge {
 		if s.tunnels == nil {
-			return empty, ErrRuntimeTransport
+			return 0, nil, ErrRuntimeTransport
 		}
 		tunnel, ok := s.tunnels.Get(s.target.EnvironmentID).Get()
 		if !ok || edge.RequireSessionKey(accessCtx, tunnel) != nil {
-			return empty, ErrRuntimeTransport
+			return 0, nil, ErrRuntimeTransport
 		}
 		command, ok := edge.RuntimeCommandName(method, path)
 		if !ok {
-			return empty, ErrRuntimeTransport
+			return 0, nil, ErrRuntimeTransport
 		}
 		result, err := edge.NewCommandClient().Execute(accessCtx, tunnel, &edge.CommandRequest{Command: command, Method: method, Path: path, Query: query, Headers: headers, Body: body})
 		if err != nil || result == nil {
-			return empty, ErrRuntimeTransport
+			return 0, nil, ErrRuntimeTransport
 		}
 		status, response = result.Status, result.Body
 		for key, value := range result.Headers {
@@ -161,7 +187,7 @@ func (s *RuntimeSender) request(ctx context.Context, method, path, query string,
 		}
 		req, err := http.NewRequestWithContext(accessCtx, method, endpoint, reader)
 		if err != nil {
-			return empty, ErrRuntimeTransport
+			return 0, nil, ErrRuntimeTransport
 		}
 		req.GetBody = nil
 		req.ContentLength = int64(len(body))
@@ -170,35 +196,54 @@ func (s *RuntimeSender) request(ctx context.Context, method, path, query string,
 		}
 		resp, err := s.client.Do(req)
 		if err != nil {
-			return empty, ErrRuntimeTransport
+			return 0, nil, ErrRuntimeTransport
 		}
 		defer resp.Body.Close()
 		response, err = io.ReadAll(io.LimitReader(resp.Body, activitytypes.RuntimeMaxBodyBytes+1))
 		if err != nil {
-			return empty, ErrRuntimeTransport
+			return 0, nil, ErrRuntimeTransport
 		}
 		status = resp.StatusCode
 		contentType = resp.Header.Get("Content-Type")
 	}
 	media, _, mediaErr := mime.ParseMediaType(contentType)
 	if mediaErr != nil || media != "application/json" {
-		return empty, ErrRuntimeTransport
+		return 0, nil, ErrRuntimeTransport
 	}
 	if len(response) > activitytypes.RuntimeMaxBodyBytes {
-		return empty, ErrRuntimeTransport
+		return 0, nil, ErrRuntimeTransport
 	}
-	if execute && status == 409 {
-		var refusal activitytypes.RuntimeExecutionRefusal
-		if activitytypes.DecodeRuntimeJSON(response, &refusal) == nil && refusal.Safe() {
-			return empty, &RuntimeExecutionRefused{Code: refusal.Code}
-		}
+	return status, response, nil
+}
+
+func (s *RuntimeSender) Register(ctx context.Context, registration activitytypes.RuntimeRegistration) (activitytypes.RuntimeExecutorIdentity, error) {
+	var result activitytypes.RuntimeExecutorIdentity
+	err := s.metadata(ctx, "/api/environments/0/runtime-registration", registration, &result)
+	if err == nil && (result.ManagerID != registration.ManagerID || result.RegistrationID != registration.RegistrationID || result.ExecutorGeneration == "") {
+		err = ErrRuntimeTransport
 	}
-	if status != 200 {
-		return empty, ErrRuntimeTransport
+	return result, err
+}
+func (s *RuntimeSender) Resolve(ctx context.Context, request activitytypes.RuntimeTargetRequest) (activitytypes.RuntimeTargetMetadata, error) {
+	var result activitytypes.RuntimeTargetMetadata
+	err := s.metadata(ctx, "/api/environments/0/runtime-target", request, &result)
+	if err == nil && (result.Target.Kind != request.Target.Kind || !runtimeTargetValidInternal(result.Target) ||
+		(result.Target.ID != request.Target.ID && (request.Target.Kind != "container" || runtimeFullContainerID(request.Target.ID) || !runtimeFullContainerID(result.Target.ID)))) {
+		err = ErrRuntimeTransport
 	}
-	var result activitytypes.RuntimeExecutionOutcome
-	if activitytypes.DecodeRuntimeJSON(response, &result) != nil || activitytypes.ValidateRuntimeOutcome(result, id) != nil {
-		return empty, ErrRuntimeTransport
+	return result, err
+}
+func (s *RuntimeSender) metadata(ctx context.Context, path string, value, result any) error {
+	body, err := json.Marshal(value)
+	if err != nil {
+		return ErrRuntimeTransport
 	}
-	return result, nil
+	status, response, err := s.roundTrip(ctx, http.MethodPost, path, "", body)
+	if err != nil {
+		return err
+	}
+	if status != 200 || activitytypes.DecodeRuntimeJSON(response, result) != nil {
+		return ErrRuntimeTransport
+	}
+	return nil
 }

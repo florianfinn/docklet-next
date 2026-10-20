@@ -3,6 +3,38 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { assertWorkflow } from "./workflow-contracts.mjs";
 
+function gateAllows(workflow, job, statuses) {
+  const body = workflow.split(`  ${job}:\n`)[1]?.split(/^  [a-z][a-z-]*:\n/m)[0];
+  const script = body?.match(/^        run: \|\n((?:          .*\n)+)/m)?.[1];
+  assert.ok(script, `${job} gate script`);
+  const [prerequisites, cases] = script.split('case "$SCOPE" in\n');
+  const branch = cases?.match(new RegExp(`^            ${statuses.SCOPE}\\) (.+) ;;$`, "m"))?.[1];
+  if (!branch) return false;
+  const predicates = [...(prerequisites + branch).matchAll(/test "\$([A-Z_]+)" = (success|skipped)/g)];
+  assert.ok(predicates.length, `${job} gate predicates`);
+  return predicates.every(([, variable, expected]) => statuses[variable] === expected);
+}
+
+test("CI gates require the applicable results for full and text scopes", () => {
+  const workflow = readFileSync(new URL("../.github/workflows/checks.yml", import.meta.url), "utf8");
+  assertWorkflow("checks", workflow);
+  for (const [label, statuses, verifyAllowed, checksAllowed] of [
+    ["full success", { SCOPE: "full", SCOPE_RESULT: "success", FULL_RESULT: "success", VERIFY_RESULT: "success", IMAGE_RESULT: "success" }, true, true],
+    ["text success", { SCOPE: "text", SCOPE_RESULT: "success", FULL_RESULT: "skipped", VERIFY_RESULT: "success", IMAGE_RESULT: "skipped" }, true, true],
+    ["failed scope", { SCOPE: "full", SCOPE_RESULT: "failure", FULL_RESULT: "skipped", VERIFY_RESULT: "failure", IMAGE_RESULT: "skipped" }, false, false],
+    ["failed matrix", { SCOPE: "full", SCOPE_RESULT: "success", FULL_RESULT: "failure", VERIFY_RESULT: "failure", IMAGE_RESULT: "success" }, false, false],
+    ["cancelled matrix", { SCOPE: "full", SCOPE_RESULT: "success", FULL_RESULT: "cancelled", VERIFY_RESULT: "failure", IMAGE_RESULT: "success" }, false, false],
+    ["skipped matrix", { SCOPE: "full", SCOPE_RESULT: "success", FULL_RESULT: "skipped", VERIFY_RESULT: "failure", IMAGE_RESULT: "success" }, false, false],
+    ["failed image", { SCOPE: "full", SCOPE_RESULT: "success", FULL_RESULT: "success", VERIFY_RESULT: "success", IMAGE_RESULT: "failure" }, true, false],
+    ["skipped verify", { SCOPE: "full", SCOPE_RESULT: "success", FULL_RESULT: "success", VERIFY_RESULT: "skipped", IMAGE_RESULT: "success" }, true, false],
+    ["unexpected full check in text scope", { SCOPE: "text", SCOPE_RESULT: "success", FULL_RESULT: "success", VERIFY_RESULT: "success", IMAGE_RESULT: "skipped" }, false, false],
+    ["unexpected image in text scope", { SCOPE: "text", SCOPE_RESULT: "success", FULL_RESULT: "skipped", VERIFY_RESULT: "success", IMAGE_RESULT: "success" }, true, false],
+  ]) {
+    assert.equal(gateAllows(workflow, "verify", statuses), verifyAllowed, `${label}: verify`);
+    assert.equal(gateAllows(workflow, "checks", statuses), checksAllowed, `${label}: checks`);
+  }
+});
+
 for (const file of ["checks", "pr-text", "review-status"]) {
   const original = readFileSync(new URL(`../.github/workflows/${file}.yml`, import.meta.url), "utf8");
   test(`workflow contract ${file} accepts the tracked workflow`, () => assertWorkflow(file, original));
@@ -65,6 +97,35 @@ for (const file of ["checks", "pr-text", "review-status"]) {
     );
   } else {
     mutations.push(["PR trigger", (text) => text.replace("pull_request:", "pull_request_target:")]);
+  }
+  if (file === "checks") {
+    mutations.push(
+      ["missing lint stage", (text) => text.replace("[lint, test, build]", "[test, build]")],
+      ["missing test stage", (text) => text.replace("[lint, test, build]", "[lint, build]")],
+      ["missing build stage", (text) => text.replace("[lint, test, build]", "[lint, test]")],
+      ["full stage timeout removed", (text) => text.replace(/(  full-checks:[\s\S]*?)    timeout-minutes: 15/, "$1")],
+      ["full stage timeout raised", (text) => text.replace(/(  full-checks:[\s\S]*?)    timeout-minutes: 15/, "$1    timeout-minutes: 30")],
+      ["matrix stage command omitted", (text) => text.replace("run: pnpm run ${{ matrix.stage }}", "run: pnpm run lint")],
+      ["matrix skipped for full scope", (text) => text.replace("if: needs.scope.outputs.value == 'full'", "if: needs.scope.outputs.value == 'text'")],
+      ["verify skipped after matrix failure", (text) => text.replace("    if: always()", "    if: success()")],
+      ["checks skipped after verify failure", (text) => text.replace(/(  checks:[\s\S]*?)    if: always\(\)/, "$1    if: success()")],
+      ["verify accepts failed scope", (text) => text.replace('test "$SCOPE_RESULT" = success', 'test "$SCOPE_RESULT" != cancelled')],
+      ["verify accepts skipped full stage", (text) => text.replace('full) test "$FULL_RESULT" = success', 'full) test "$FULL_RESULT" != cancelled')],
+      ["verify accepts running full stage in text scope", (text) => text.replace('text) test "$FULL_RESULT" = skipped', 'text) true')],
+      ["checks accepts failed full stage", (text) => text.replace('full) test "$FULL_RESULT" = success &&', 'full) test "$FULL_RESULT" != cancelled &&')],
+      ["checks accepts failed image stage", (text) => text.replace('test "$IMAGE_RESULT" = success', 'test "$IMAGE_RESULT" != cancelled')],
+      ["checks accepts skipped verify", (text) => text.replace('test "$VERIFY_RESULT" = success', 'test "$VERIFY_RESULT" != cancelled')],
+      ["checks accepts image on text scope", (text) => text.replace('test "$IMAGE_RESULT" = skipped', 'test "$IMAGE_RESULT" != cancelled')],
+      ["full stage omitted from verify needs", (text) => text.replace("needs: [scope, full-checks]", "needs: [scope]")],
+      ["full stage omitted from checks needs", (text) => text.replace("needs: [scope, verify, full-checks, package-image]", "needs: [scope, verify, package-image]")],
+      ["Docker isolation removed", (text) => text.replace("sudo systemctl stop docker.service docker.socket containerd.service", "true")],
+      ["Docker socket check removed", (text) => text.replace("test ! -S /run/docker.sock", "true")],
+      ["frozen install removed", (text) => text.replace("pnpm --dir web install --frozen-lockfile", "pnpm --dir web install")],
+      ["base SHA removed", (text) => text.replace("CHECK_BASE_SHA: ${{ github.event.pull_request.base.sha }}", "CHECK_BASE_SHA: ''")],
+      ["continue on error", (text) => text.replace("    strategy:", "    continue-on-error: true\n    strategy:")],
+      ["publication history removed", (text) => text.replace("node scripts/check-publication.mjs --history", "true")],
+      ["reduced text checks removed", (text) => text.replace("node scripts/change-scope.mjs --run-text-tests", "true")],
+    );
   }
   for (const [label, mutate] of mutations) {
     test(`workflow contract ${file} rejects ${label}`, () => {

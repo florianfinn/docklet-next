@@ -2,7 +2,7 @@
 // Revision: d4229b124f079376c959142b63235f6a739be2a9711e0228ec5a63ab552f8cf0
 // Retrieved: 2026-10-19
 // License: Apache-2.0
-// Deviations: Dormant internal service and fresh identity port; no production construction.
+// Deviations: Runtime service and fresh identity port with single-owner production construction.
 
 package activity
 
@@ -10,6 +10,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"sync"
 	"time"
 
 	activitylib "github.com/florianfinn/docklet-next/backend/pkg/libarcane/activity"
@@ -29,10 +30,14 @@ type RuntimeTargetResolver interface {
 }
 
 // RuntimeService shares the existing ActivityService mutex, pool and clock.
-// Only tests construct it until compatibility activation. Optional local owners
-// register inside the final admission mutex/commit boundary.
+// DI constructs one owner per ActivityService. Local workers register inside
+// the final admission mutex/commit boundary.
 type RuntimeService struct {
+	restoreMu      sync.Mutex
+	intakePaused   bool
+	storagePaused  bool
 	remote         *RuntimeRemoteCoordinator
+	receiver       *RuntimeReceiver
 	activity       *ActivityService
 	resolver       RuntimeTargetResolver
 	localExecution *RuntimeLocalConfig
@@ -107,7 +112,7 @@ func (s *RuntimeService) checkInternal() error {
 }
 
 // InitializeGeneration is explicit fresh-store setup, never an Admit fallback.
-// Production readiness and restore/continuity policy remain activation duties.
+// Application startup and restore finish generation/continuity repair before readiness.
 func (s *RuntimeService) InitializeGeneration(ctx context.Context) (string, error) {
 	if err := s.checkInternal(); err != nil {
 		return "", err
@@ -147,4 +152,45 @@ func (s *RuntimeService) transactionInternal(ctx context.Context, fn func(*gorm.
 
 type RuntimeAdmissionResult struct {
 	activitytypes.RuntimeAdmission
+}
+
+// ConfigureLocal completes the single production instance before readiness.
+// Generation initialization must not create a temporary second RuntimeService.
+func (s *RuntimeService) ConfigureLocal(config RuntimeLocalConfig) error {
+	if err := s.checkInternal(); err != nil {
+		return err
+	}
+	if config.ApplicationContext == nil || config.Executor == nil || config.Store.EnvironmentID != "0" || config.Store.StoreGeneration == "" || config.Store.ExecutorGeneration != config.Store.StoreGeneration || config.Store.ManagerID == "" || config.Store.RegistrationID == "" {
+		return errRuntimeInvalidInternal
+	}
+	s.activity.runningMu.Lock()
+	defer s.activity.runningMu.Unlock()
+	if s.localExecution != nil || len(s.owners) != 0 {
+		return errRuntimeInvalidInternal
+	}
+	s.localExecution = &config
+	return nil
+}
+
+type runtimeEnvironmentContextKey struct{}
+type RuntimeResolverFunc func(context.Context, RuntimeTarget) (RuntimeResolvedTarget, error)
+
+func (fn RuntimeResolverFunc) ResolveRuntimeTarget(ctx context.Context, target RuntimeTarget) (RuntimeResolvedTarget, error) {
+	return fn(ctx, target)
+}
+func RuntimeEnvironmentFromContext(ctx context.Context) string {
+	environment, _ := ctx.Value(runtimeEnvironmentContextKey{}).(string)
+	if environment == "" {
+		return "0"
+	}
+	return environment
+}
+
+func (s *RuntimeService) LocalStore() RuntimeStoreBinding {
+	s.activity.runningMu.Lock()
+	defer s.activity.runningMu.Unlock()
+	if s.localExecution == nil {
+		return RuntimeStoreBinding{}
+	}
+	return s.localExecution.Store
 }

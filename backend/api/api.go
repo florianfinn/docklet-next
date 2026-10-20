@@ -236,6 +236,9 @@ func qualifyGenericArcaneArgumentsInternal(pkgPath, typeName, schemaName string)
 type HandlerDeps struct {
 	fx.In
 
+	Runtime           *activity.RuntimeService
+	RuntimeHTTP       *activity.RuntimeHTTPService
+	RuntimeReceiver   *activity.RuntimeReceiver
 	AppImages         *appimages.ApplicationImagesService
 	User              *user.Module
 	Project           *project.Module
@@ -327,6 +330,7 @@ func SetupAPI(e *echo.Echo, apiGroup *echo.Group, appCtx handlerutil.ActivityApp
 	api.UseMiddleware(auth.NewHumaMiddleware(api, deps.Auth.Service(), deps.ApiKey.Service(), deps.Role.Service(), deps.Environment.Service(), cfg))
 	api.UseMiddleware(middleware.NewActivityBatchID())
 	registerNormalizationInternal(api)
+	registerRuntimeSchemasInternal(api)
 
 	// Register all Huma handlers
 	registerHandlersInternal(api, deps, appCtx, cfg)
@@ -349,7 +353,9 @@ func registerScalarDocs(apiGroup *echo.Group) {
 // SetupAPIForSpec creates a Huma API instance for OpenAPI spec generation only.
 // No services are required - this is purely for schema generation.
 func SetupAPIForSpec() huma.API {
-	return setupAPIForSpecMode(nil)
+	spec := setupAPIForSpecMode(nil)
+	activity.RegisterRuntimeReceiverRoutes(spec, nil, "")
+	return spec
 }
 
 func setupAPIForSpecMode(cfg *config.Config) huma.API {
@@ -395,6 +401,7 @@ func setupAPIForSpecMode(cfg *config.Config) huma.API {
 
 	// Register handlers with zero-value dependencies for schema discovery only.
 	registerNormalizationInternal(api)
+	registerRuntimeSchemasInternal(api)
 	registerHandlersInternal(api, HandlerDeps{}, handlerutil.NewActivityAppContext(context.Background()), cfg) //nolint:forbidigo // Schema discovery has no running request or application lifecycle.
 
 	return api
@@ -409,6 +416,13 @@ type routeModule struct {
 }
 
 var routeModules = []routeModule{
+	{"runtime", true, func(api huma.API, d HandlerDeps, _ handlerutil.ActivityAppContext, cfg *config.Config) {
+		if cfg != nil && (cfg.AgentMode || cfg.EdgeAgent) {
+			activity.RegisterRuntimeReceiverRoutes(api, d.RuntimeReceiver, "")
+		} else {
+			activity.RegisterRuntimeHubRoutes(api, d.Runtime)
+		}
+	}},
 	{"health", true, func(api huma.API, _ HandlerDeps, _ handlerutil.ActivityAppContext, _ *config.Config) {
 		health.RegisterRoutes(api)
 	}},

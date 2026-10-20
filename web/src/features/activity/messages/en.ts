@@ -77,6 +77,7 @@ export const enActivity = {
   },
   openDialog: "Open in progress window",
   gate: {
+    requestMismatch: "This request key belongs to another intent. Start a new deliberate action.",
     busy: "{title} is still running. Nothing new started – please wait until the action is finished.",
     busyUnknown: "An action is still running for this target. Nothing new started.",
     fresh: "{title}: just checked ({seconds, plural, one {# second ago} other {# seconds ago}}). The result is current.",

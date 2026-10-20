@@ -112,6 +112,18 @@ const (
 // Values is the complete wire catalogue used by the API contract.
 func Values() []Code {
 	return []Code{
+		CodeRunRequestMismatch,
+		CodeRuntimeOutcomeUnknown,
+		CodeRuntimeInterrupted,
+		CodeRuntimeCancelled,
+		CodeRuntimeFailed,
+		CodeRuntimeWaitTimeout,
+		CodeRuntimeWaiterDisconnected,
+		CodeRuntimeParentUnresolved,
+		CodeRuntimeTargetRemoved,
+		CodeRuntimeTargetChanged,
+		CodeRuntimeTargetUnavailable,
+
 		CodeRunStarted,
 		CodeRunJoined,
 		CodeRunFresh,

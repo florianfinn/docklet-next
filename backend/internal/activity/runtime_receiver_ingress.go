@@ -8,7 +8,9 @@ package activity
 
 import (
 	"context"
+	"github.com/labstack/echo/v5"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/florianfinn/docklet-next/backend/pkg/libarcane/edge"
@@ -61,4 +63,20 @@ func RuntimeReceiverIngress(next http.Handler, budget time.Duration) http.Handle
 		req.Body = http.MaxBytesReader(w, req.Body, activitytypes.RuntimeMaxBodyBytes)
 		next.ServeHTTP(w, req)
 	})
+}
+
+// RuntimeReceiverMiddleware is shared by production Direct/Edge routers and
+// integration tests. Ordinary health/version routes keep their normal path.
+func RuntimeReceiverMiddleware(agent bool, budget time.Duration) echo.MiddlewareFunc {
+	return func(next echo.HandlerFunc) echo.HandlerFunc {
+		return func(c *echo.Context) error {
+			path := c.Request().URL.Path
+			if !agent || !(strings.HasPrefix(path, "/api/environments/0/runtime-runs") || path == "/api/environments/0/runtime-registration" || path == "/api/environments/0/runtime-target") {
+				return next(c)
+			}
+			var result error
+			RuntimeReceiverIngress(http.HandlerFunc(func(_ http.ResponseWriter, request *http.Request) { c.SetRequest(request); result = next(c) }), budget).ServeHTTP(c.Response(), c.Request())
+			return result
+		}
+	}
 }

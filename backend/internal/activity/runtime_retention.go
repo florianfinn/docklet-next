@@ -55,6 +55,9 @@ func runtimePruneTxInternal(tx *gorm.DB, now time.Time, limit int) (int64, error
 func (s *ActivityService) pruneRuntimeInternal(ctx context.Context, limit int) (int64, error) {
 	s.runningMu.Lock()
 	defer s.runningMu.Unlock()
+	if s.runtime != nil && s.runtime.storagePaused {
+		return 0, nil
+	}
 	var count int64
 	err := s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		var err error

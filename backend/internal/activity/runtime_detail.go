@@ -77,7 +77,7 @@ func runtimeDetailSnapshotTxInternal(tx *gorm.DB, row *RuntimeReceipt, executorW
 		return nil, err
 	}
 	slices.Reverse(steps)
-	detail.StepTrace = stepTraceInternal(steps, &model)
+	detail.StepTrace = append([]activitytypes.StepTraceEntry{}, stepTraceInternal(steps, &model)...)
 	if row.EnvironmentID != "0" {
 		detail.StepTrace = append([]activitytypes.StepTraceEntry{}, model.RuntimeStepTrace...)
 	}

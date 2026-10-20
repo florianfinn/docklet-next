@@ -28,7 +28,7 @@ func (s *RuntimeService) acquireLocalSlotInternal(owner *runtimeOwnerInternal) (
 		// Even a grant racing with cancellation belongs to terminal settlement.
 		// Generic AwaitActivitySlot releases on write/cancel failure; runtime must
 		// retain capacity with its frozen result until terminal COMMIT succeeds.
-		s.activity.registerSlotReleaseInternal(owner.id.RunID, release)
+		s.activity.registerOwnedSlotReleaseInternal(owner.id.RunID, release, true)
 	}
 	// The limiter can grant an already cancelled context when capacity is free.
 	// Never use a grant as the effect decision: recheck durable intent/context.

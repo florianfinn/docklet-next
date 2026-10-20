@@ -84,13 +84,26 @@ func TestRuntimeAdmissionRetainsAcceptedIdentityAndUnknownKnowledge(t *testing.T
 	require.Equal(t, admission, restored)
 	require.Equal(t, restored.ActivityID, restored.Activity.ID)
 	require.Equal(t, activity.RuntimeOutcomeUnknown, restored.Activity.OutcomeState)
-	// Declaring runtime codes must not expand the current public catalogue.
+	// Activated v4 runtime codes belong to the public catalogue.
 	for _, code := range []activity.Code{
 		activity.CodeRunRequestMismatch, activity.CodeRuntimeOutcomeUnknown,
 		activity.CodeRuntimeInterrupted, activity.CodeRuntimeCancelled, activity.CodeRuntimeFailed,
 		activity.CodeRuntimeWaitTimeout, activity.CodeRuntimeWaiterDisconnected,
 		activity.CodeRuntimeParentUnresolved, activity.CodeRuntimeTargetRemoved,
 	} {
-		require.False(t, activity.Valid(string(code)), string(code))
+		require.True(t, activity.Valid(string(code)), string(code))
+	}
+}
+
+func TestRuntimeGenericActivityKnowledgePair(t *testing.T) {
+	for _, outcome := range []activity.RuntimeOutcomeState{activity.RuntimeOutcomeKnown, activity.RuntimeOutcomeUnknown} {
+		value := activity.Activity{ID: "example-run", RuntimeKnowledge: &activity.RuntimeKnowledge{OutcomeState: outcome, CancelRequested: false}}
+		body, err := json.Marshal(value)
+		require.NoError(t, err)
+		var fields map[string]json.RawMessage
+		require.NoError(t, json.Unmarshal(body, &fields))
+		require.JSONEq(t, `"`+string(outcome)+`"`, string(fields["outcomeState"]))
+		require.Equal(t, "false", string(fields["cancelRequested"]))
+		require.NotContains(t, fields, "RuntimeKnowledge")
 	}
 }

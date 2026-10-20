@@ -181,7 +181,9 @@ func TestRuntimeAdmissionFaultResolver(t *testing.T) {
 			case "cancelled-after-io":
 				require.ErrorIs(t, err, context.Canceled)
 			default:
-				b1Mismatch(t, result, err, "unassigned")
+				var targetError *RuntimeTargetError
+				require.ErrorAs(t, err, &targetError)
+				require.Equal(t, "runtime.target-changed", targetError.Code)
 			}
 			require.Equal(t, before, runtimeBoundarySnapshot(t, f.store))
 		})

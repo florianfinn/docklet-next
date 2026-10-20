@@ -28,7 +28,7 @@ func TestRuntimeAdmissionRetainedRetryAndJoin(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, activitytypes.CodeRunStarted, first.Code)
 	require.Equal(t, first.ActivityID, first.Activity.ID)
-	require.Equal(t, activitytypes.RuntimeOutcomeUnknown, first.Activity.OutcomeState)
+	require.Equal(t, activitytypes.RuntimeOutcomeKnown, first.Activity.OutcomeState)
 	require.Equal(t, "Original operator", first.Activity.StartedBy.DisplayName)
 	before := runtimeBoundarySnapshot(t, f.store)
 	require.Len(t, before.Messages, 1)

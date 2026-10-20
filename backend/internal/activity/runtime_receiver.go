@@ -24,16 +24,23 @@ import (
 )
 
 // RuntimeReceiver shares the sole local RuntimeService and its lifetime owner.
-// Every entry requires an authenticated manager bound to this immutable trusted
-// construction. Wire identity and attribution never authenticate a caller.
+// Every entry requires the authenticated manager and persisted registration.
+// Wire identity and attribution never authenticate a caller.
 type RuntimeReceiver struct {
+	binding runtimeReceiverBindingInternal
 	service *RuntimeService
 	store   RuntimeStoreBinding
+	prepare RuntimeTargetResolver
 }
 
-func NewRuntimeReceiver(service *RuntimeService) (*RuntimeReceiver, error) {
+func NewRuntimeReceiver(service *RuntimeService, preparer ...RuntimeTargetResolver) (*RuntimeReceiver, error) {
 	if err := service.checkInternal(); err != nil {
 		return nil, err
+	}
+	service.activity.runningMu.Lock()
+	defer service.activity.runningMu.Unlock()
+	if service.receiver != nil {
+		return nil, errRuntimeInvalidInternal
 	}
 	local := service.localExecution
 	if local == nil || local.ApplicationContext == nil || local.Executor == nil {
@@ -46,7 +53,19 @@ func NewRuntimeReceiver(service *RuntimeService) (*RuntimeReceiver, error) {
 		!runtimeTextInternal(store.ManagerID, 256) || !runtimeTextInternal(store.RegistrationID, 256) {
 		return nil, errRuntimeInvalidInternal
 	}
-	return &RuntimeReceiver{service: service, store: store}, nil
+	if len(preparer) > 1 {
+		return nil, errRuntimeInvalidInternal
+	}
+	prepare := service.resolver
+	if len(preparer) == 1 {
+		prepare = preparer[0]
+	}
+	if prepare == nil {
+		return nil, errRuntimeInvalidInternal
+	}
+	receiver := &RuntimeReceiver{service: service, store: store, prepare: prepare}
+	service.receiver = receiver
+	return receiver, nil
 }
 
 // RuntimeReceiverResult captures receipt and bounded detail in one storage transaction.
@@ -64,6 +83,9 @@ func (r *RuntimeReceiver) identityInternal(wire activitytypes.RuntimeRunIdentity
 	}
 	if err := r.service.checkInternal(); err != nil {
 		return runtimeIdentityInternal{}, err
+	}
+	if h := r.service.activity.runtimeHTTP; h != nil && !h.ready.Load() {
+		return runtimeIdentityInternal{}, ErrRuntimeNotReady
 	}
 	// Authenticated tuple comparison precedes all command conversion/normalization.
 	if wire.ManagerID != r.store.ManagerID || wire.RegistrationID != r.store.RegistrationID ||
@@ -101,6 +123,8 @@ func runtimeReceiverResultTxInternal(tx *gorm.DB, row *RuntimeReceipt) (RuntimeR
 // It preserves the request context through acceptance; only a successful commit
 // hands work to the existing application lifetime, even after caller disconnect.
 func (r *RuntimeReceiver) Execute(ctx context.Context, envelope activitytypes.RuntimeExecutionEnvelope) (RuntimeReceiverResult, error) {
+	r.binding.RLock()
+	defer r.binding.RUnlock()
 	id, err := r.identityInternal(envelope.Identity)
 	if err != nil {
 		return RuntimeReceiverResult{}, err
@@ -185,6 +209,8 @@ func (r *RuntimeReceiver) receivePassInternal(ctx context.Context, c runtimeCano
 // Query requires authenticated manager binding. Absence is returned only after
 // runtimeQueryTxInternal's matching tombstone commits in the receipt transaction.
 func (r *RuntimeReceiver) Query(ctx context.Context, wire activitytypes.RuntimeRunIdentity) (RuntimeReceiverResult, error) {
+	r.binding.RLock()
+	defer r.binding.RUnlock()
 	id, err := r.identityInternal(wire)
 	if err != nil {
 		return RuntimeReceiverResult{}, err
@@ -220,6 +246,8 @@ func (r *RuntimeReceiver) Query(ctx context.Context, wire activitytypes.RuntimeR
 // matching the full digest inside its intent transaction. No unchecked reference
 // or nested runningMu acquisition can introduce a validation/cancellation race.
 func (r *RuntimeReceiver) Cancel(ctx context.Context, wire activitytypes.RuntimeRunIdentity, attribution activitytypes.RuntimeAttribution) (RuntimeReceiverResult, error) {
+	r.binding.RLock()
+	defer r.binding.RUnlock()
 	id, err := r.identityInternal(wire)
 	if err != nil {
 		return RuntimeReceiverResult{}, err
@@ -279,6 +307,8 @@ func (r *RuntimeReceiver) Cancel(ctx context.Context, wire activitytypes.Runtime
 // HTTP owner must require the manager credential before exposing it. A stale or
 // unreadable local store never advertises continuity from construction alone.
 func (r *RuntimeReceiver) ExecutorIdentity(ctx context.Context) (activitytypes.RuntimeExecutorIdentity, error) {
+	r.binding.RLock()
+	defer r.binding.RUnlock()
 	if r == nil || r.service == nil {
 		return activitytypes.RuntimeExecutorIdentity{}, errRuntimeInvalidInternal
 	}

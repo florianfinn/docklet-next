@@ -2,7 +2,7 @@
 # Revision: a4484c910bb5d6a8f8df97b4f23f4ee5e6359081
 # Retrieved: 2026-10-13
 # License: Apache-2.0
-# Deviations: Root, Go and web checks, pinned toolchains, baseline comparison, Docker-isolated default SQLite checks and a separate package-image smoke gate.
+# Deviations: Separate root check budgets, pinned toolchains, baseline comparison, Docker-isolated default SQLite checks and a separate package-image smoke gate.
 name: Repository checks
 on:
   pull_request:
@@ -29,18 +29,23 @@ jobs:
         run: echo "scope=$(node scripts/change-scope.mjs --ci)" >> "$GITHUB_OUTPUT"
   verify:
     name: verify
-    needs: [scope]
+    needs: [scope, full-checks]
     if: always()
     timeout-minutes: 15
     runs-on: ubuntu-24.04
-    env:
-      CGO_ENABLED: "0"
-      CHECK_BASE_SHA: ${{ github.event.pull_request.base.sha }}
-      GOFLAGS: -p=2
-      VITEST_MAX_WORKERS: 2
     steps:
-      - name: Require successful scope detection
-        run: test '${{ needs.scope.result }}' = success
+      - name: Require successful applicable checks
+        env:
+          SCOPE: ${{ needs.scope.outputs.value }}
+          SCOPE_RESULT: ${{ needs.scope.result }}
+          FULL_RESULT: ${{ needs.full-checks.result }}
+        run: |
+          test "$SCOPE_RESULT" = success
+          case "$SCOPE" in
+            text) test "$FULL_RESULT" = skipped ;;
+            full) test "$FULL_RESULT" = success ;;
+            *) exit 1 ;;
+          esac
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
@@ -52,16 +57,37 @@ jobs:
       - run: node scripts/check-publication.mjs --history
       - if: needs.scope.outputs.value == 'text'
         run: node scripts/change-scope.mjs --run-text-tests
+  full-checks:
+    name: full-${{ matrix.stage }}
+    needs: scope
+    if: needs.scope.outputs.value == 'full'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        stage: [lint, test, build]
+    env:
+      CGO_ENABLED: "0"
+      CHECK_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+      GOFLAGS: -p=2
+      VITEST_MAX_WORKERS: 2
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 24
+      - run: node scripts/setup-git-hooks.mjs
       - name: Enable pinned pnpm
-        if: needs.scope.outputs.value != 'text'
         run: |
           corepack enable
           corepack prepare pnpm@11.21.0 --activate
       - name: Install frozen web dependencies
-        if: needs.scope.outputs.value != 'text'
         run: pnpm --dir web install --frozen-lockfile
-      - if: needs.scope.outputs.value != 'text'
-        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version-file: backend/go.mod
           cache-dependency-path: |
@@ -70,20 +96,14 @@ jobs:
             types/go.sum
             third_party/arcane/**/go.sum
             third_party/francis/go.sum
-      - if: needs.scope.outputs.value != 'text'
-        name: Isolate checks from Docker daemons
+      - name: Isolate checks from Docker daemons
         run: |
           sudo systemctl stop docker.service docker.socket containerd.service
           sudo rm -f /var/run/docker.sock /run/docker.sock
           unset DOCKER_HOST
           test ! -S /var/run/docker.sock
           test ! -S /run/docker.sock
-      - if: needs.scope.outputs.value != 'text'
-        run: pnpm run lint
-      - if: needs.scope.outputs.value != 'text'
-        run: pnpm run test
-      - if: needs.scope.outputs.value != 'text'
-        run: pnpm run build
+      - run: pnpm run ${{ matrix.stage }}
   package-image:
     needs: scope
     if: needs.scope.outputs.value != 'text'
@@ -102,7 +122,7 @@ jobs:
       - run: node scripts/smoke-agent-image.mjs docklet-next-agent:0.0.0
   checks:
     name: checks
-    needs: [scope, verify, package-image]
+    needs: [scope, verify, full-checks, package-image]
     if: always()
     runs-on: ubuntu-24.04
     timeout-minutes: 5
@@ -112,12 +132,13 @@ jobs:
           SCOPE: ${{ needs.scope.outputs.value }}
           SCOPE_RESULT: ${{ needs.scope.result }}
           VERIFY_RESULT: ${{ needs.verify.result }}
+          FULL_RESULT: ${{ needs.full-checks.result }}
           IMAGE_RESULT: ${{ needs.package-image.result }}
         run: |
           test "$SCOPE_RESULT" = success
           test "$VERIFY_RESULT" = success
           case "$SCOPE" in
-            text) test "$IMAGE_RESULT" = skipped ;;
-            full) test "$IMAGE_RESULT" = success ;;
+            text) test "$FULL_RESULT" = skipped && test "$IMAGE_RESULT" = skipped ;;
+            full) test "$FULL_RESULT" = success && test "$IMAGE_RESULT" = success ;;
             *) exit 1 ;;
           esac

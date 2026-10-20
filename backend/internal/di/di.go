@@ -56,8 +56,12 @@ var ActorOptions = fx.Options(
 	fx.Provide(provideTunnelRegistryInternal),
 )
 
+// RuntimeOptions constructs the sole process-owned runtime graph.
+var RuntimeOptions = fx.Options(fx.Provide(provideRuntimeInternal))
+
 // ServiceOptions constructs services once and injects them into route modules.
 var ServiceOptions = fx.Options(
+	RuntimeOptions,
 	fx.Supply(
 		resources.FS,
 	),

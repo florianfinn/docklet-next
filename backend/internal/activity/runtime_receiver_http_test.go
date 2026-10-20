@@ -58,7 +58,8 @@ func TestRuntimeHTTPAuthenticationShapeAndAuthority(t *testing.T) {
 	require.NoError(t, activitytypes.DecodeRuntimeJSON(body, &decoded), string(body))
 	for _, token := range []string{"", "invalid-token"} {
 		status, b := receiverHTTPCall(t, server, "POST", "/api/environments/0/runtime-runs", token, body)
-		require.Equal(t, 401, status)
+		// The shared AgentCredential route rejects absent machine authority itself.
+		require.Equal(t, 403, status)
 		require.NotContains(t, string(b), e.Identity.RunID)
 	}
 	for _, bad := range []string{`null`, string(body) + ` {}`, strings.Replace(string(body), `"operation":`, `"extra":true,"operation":`, 1), strings.Replace(string(body), `"username":"Operator"`, `"username":null`, 1), strings.Replace(string(body), `"options":{`, `"options":{"forged":true,`, 1)} {

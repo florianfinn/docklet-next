@@ -590,7 +590,7 @@ func StartTunnelClient(ctx context.Context, cfg *Config, handler http.Handler) (
 		return nil, err
 	}
 
-	client := NewTunnelClient(cfg, handler)
+	client := NewRuntimeTunnelClient(cfg, handler)
 	return concurrency.StartSupervised(ctx, "Edge tunnel client", func(runCtx context.Context) error {
 		client.StartWithErrorChan(runCtx, nil)
 		return nil

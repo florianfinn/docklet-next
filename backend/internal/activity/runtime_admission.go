@@ -27,14 +27,14 @@ func (s *RuntimeService) Admit(ctx context.Context, command RuntimeCommand) (Run
 	if err != nil {
 		return RuntimeAdmissionResult{}, err
 	}
-	if s.localExecution != nil && canonical.command.Store != s.localExecution.Store {
-		return RuntimeAdmissionResult{}, &runtimeConflictInternal{}
-	}
 	// Known keys and held-scope answers are durable, including while identity I/O
 	// is unavailable. New effects alone require a fresh read outside runningMu/TX.
 	result, found, err := s.admissionPassInternal(ctx, canonical, false)
 	if err != nil || found {
 		return result, err
+	}
+	if s.localExecution != nil && canonical.command.Store.EnvironmentID == "0" && canonical.command.Store != s.localExecution.Store {
+		return RuntimeAdmissionResult{}, &runtimeConflictInternal{}
 	}
 	if s.resolver == nil {
 		return RuntimeAdmissionResult{}, &RuntimeTargetError{Code: "runtime.target-unavailable"}
@@ -42,7 +42,7 @@ func (s *RuntimeService) Admit(ctx context.Context, command RuntimeCommand) (Run
 	target := canonical.command.Target
 	// Give the resolver a separate copy of nullable fields as well.
 	target.ParentProjectID, target.Name = copyPtrInternal(target.ParentProjectID), copyPtrInternal(target.Name)
-	resolved, err := s.resolver.ResolveRuntimeTarget(ctx, target)
+	resolved, err := s.resolver.ResolveRuntimeTarget(context.WithValue(ctx, runtimeEnvironmentContextKey{}, command.Store.EnvironmentID), target)
 	if err != nil {
 		return RuntimeAdmissionResult{}, &RuntimeTargetError{Code: "runtime.target-unavailable", Cause: err}
 	}
@@ -54,7 +54,7 @@ func (s *RuntimeService) Admit(ctx context.Context, command RuntimeCommand) (Run
 	}
 	if !runtimeTargetValidInternal(resolved.Target) || resolved.Target.Kind != target.Kind || resolved.Target.ID != target.ID ||
 		!runtimeEqualInternal(resolved.Target.ParentProjectID, canonical.command.Target.ParentProjectID) {
-		return RuntimeAdmissionResult{}, &runtimeConflictInternal{}
+		return RuntimeAdmissionResult{}, &RuntimeTargetError{Code: "runtime.target-changed"}
 	}
 	canonical.command.Target.Name = copyPtrInternal(resolved.Target.Name)
 	result, _, err = s.admissionPassInternal(ctx, canonical, true)
@@ -66,6 +66,9 @@ func (s *RuntimeService) Admit(ctx context.Context, command RuntimeCommand) (Run
 func (s *RuntimeService) admissionPassInternal(ctx context.Context, c runtimeCanonicalCommandInternal, fresh bool) (RuntimeAdmissionResult, bool, error) {
 	s.activity.runningMu.Lock()
 	defer s.activity.runningMu.Unlock()
+	if s.intakePaused {
+		return RuntimeAdmissionResult{}, false, ErrRuntimeNotReady
+	}
 	var result RuntimeAdmissionResult
 	var found bool
 	err := s.transactionInternal(ctx, func(tx *gorm.DB, now time.Time) error {
@@ -109,7 +112,7 @@ func (s *RuntimeService) admissionPassInternal(ctx context.Context, c runtimeCan
 				if err != nil {
 					return err
 				}
-				if s.localExecution != nil && runtimeQueuesInternal(c.command.Operation) {
+				if s.localExecution != nil && c.command.Store == s.localExecution.Store && runtimeQueuesInternal(c.command.Operation) {
 					changed := tx.Model(&Activity{}).Where("id = ? AND environment_id = ?", row.RunID, row.EnvironmentID).
 						UpdateColumns(map[string]any{"status": activitytypes.StatusQueued, "updated_at": now})
 					if changed.Error != nil {
@@ -145,7 +148,7 @@ func (s *RuntimeService) admissionPassInternal(ctx context.Context, c runtimeCan
 	if err != nil {
 		return RuntimeAdmissionResult{}, false, err
 	}
-	if found && result.Code == activitytypes.CodeRunStarted && s.localExecution != nil {
+	if found && result.Code == activitytypes.CodeRunStarted && s.localExecution != nil && c.command.Store == s.localExecution.Store {
 		if runtimeQueuesInternal(c.command.Operation) {
 			lock := s.activity.publishLockInternal(result.ActivityID)
 			lock.Lock()

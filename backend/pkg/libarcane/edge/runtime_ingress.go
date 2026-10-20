@@ -24,17 +24,23 @@ func RuntimeIngressBodyBounded(ctx context.Context) bool {
 	return v
 }
 
-// NewRuntimeTunnelClient enables only the dormant runtime request vocabulary on
-// this instance. The ordinary command registry and production client are unchanged.
+// NewRuntimeTunnelClient enables the bounded runtime command vocabulary used
+// by the production agent alongside its existing ordinary commands.
 func NewRuntimeTunnelClient(cfg *Config, handler http.Handler) *TunnelClient {
 	c := NewTunnelClient(cfg, handler)
 	c.runtimeCommands = true
 	return c
 }
 func runtimeRequestPathInternal(path string) bool {
-	return path == "/api/environments/0/runtime-runs" || strings.HasPrefix(path, "/api/environments/0/runtime-runs/")
+	return path == "/api/environments/0/runtime-registration" || path == "/api/environments/0/runtime-target" || path == "/api/environments/0/runtime-runs" || strings.HasPrefix(path, "/api/environments/0/runtime-runs/")
 }
 func RuntimeCommandName(method, path string) (string, bool) {
+	if method == http.MethodPost && path == "/api/environments/0/runtime-registration" {
+		return "runtime.register", true
+	}
+	if method == http.MethodPost && path == "/api/environments/0/runtime-target" {
+		return "runtime.resolve", true
+	}
 	base := "/api/environments/0/runtime-runs"
 	if path == base && method == http.MethodPost {
 		return "runtime.execute", true

@@ -54,7 +54,11 @@ function refFor(operationId: string, args: readonly unknown[]): ResourceRef {
 
 function classifiedError(error: unknown, status?: number): AdapterOutcomeError {
   if (error instanceof AdapterOutcomeError) return error;
-  const object = error && typeof error === "object" ? error as Record<string, unknown> : {};
+  const envelope = error && typeof error === "object" ? error as Record<string, unknown> : {};
+  const object = envelope.data && typeof envelope.data === "object" ? envelope.data as Record<string, unknown> : envelope;
+  if (status === 409 && object.code === "run.request-mismatch") {
+    return new AdapterOutcomeError({ kind: "conflict", code: "run.request-mismatch" });
+  }
   if ((object.code === "run.busy" || object.code === "run.cancelling") && typeof object.activeRunId === "string" && object.activeRunId) {
     return new AdapterOutcomeError({ kind: "conflict", code: object.code, activeRunId: object.activeRunId });
   }

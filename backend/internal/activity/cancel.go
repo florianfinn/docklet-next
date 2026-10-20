@@ -27,6 +27,10 @@ func (s *ActivityService) CancelActivity(ctx context.Context, environmentID, act
 	}
 	environmentID = cmp.Or(strings.TrimSpace(environmentID), "0")
 	s.runningMu.Lock()
+	if err := s.refuseRuntimeWriterInternal(ctx, activityID); err != nil {
+		s.runningMu.Unlock()
+		return nil, err
+	}
 	if s.sealed[activityID] {
 		s.runningMu.Unlock()
 		return nil, ErrActivityNotCancelable

@@ -29,23 +29,25 @@ type runtimeRemoteTaskInternal struct {
 type runtimeDispatchStampInternal struct{ mono, wall time.Time }
 
 type RuntimeRemoteCoordinator struct {
-	service    *RuntimeService
-	lifetime   context.Context
-	transport  RuntimeTransportFactory
-	schedule   RuntimeReconcileSchedule
-	mu         sync.Mutex
-	dispatch   map[string]*runtimeRemoteTaskInternal
-	queries    map[string]*runtimeRemoteTaskInternal
-	stamps     map[string]runtimeDispatchStampInternal
-	lastQuery  map[string]time.Time
-	recovering map[string]bool
+	lifecycleMu sync.Mutex
+	paused      bool
+	service     *RuntimeService
+	lifetime    context.Context
+	transport   RuntimeTransportFactory
+	schedule    RuntimeReconcileSchedule
+	mu          sync.Mutex
+	dispatch    map[string]*runtimeRemoteTaskInternal
+	queries     map[string]*runtimeRemoteTaskInternal
+	stamps      map[string]runtimeDispatchStampInternal
+	lastQuery   map[string]time.Time
+	recovering  map[string]bool
 }
 
 func NewRuntimeRemoteCoordinator(service *RuntimeService, lifetime context.Context, transport RuntimeTransportFactory, schedule RuntimeReconcileSchedule) (*RuntimeRemoteCoordinator, error) {
 	if err := service.checkInternal(); err != nil {
 		return nil, err
 	}
-	if lifetime == nil || transport == nil || service.localExecution != nil {
+	if lifetime == nil || transport == nil {
 		return nil, errRuntimeInvalidInternal
 	}
 	if schedule.Now == nil {
@@ -86,8 +88,20 @@ func (c *RuntimeRemoteCoordinator) Start(ctx context.Context, ref RuntimeRunRefe
 	stamp := runtimeDispatchStampInternal{mono: c.schedule.Now()}
 	lock := s.activity.publishLockInternal(ref.RunID)
 	lock.Lock()
+	// Keep pause/recovery and dispatch COMMIT/task registration in one order.
+	// No holder of mu waits for runningMu or for a task while holding mu.
+	c.mu.Lock()
+	if c.paused || c.recovering[ref.RunID] || c.lifetime.Err() != nil {
+		c.mu.Unlock()
+		lock.Unlock()
+		s.activity.runningMu.Unlock()
+		return activitytypes.RuntimeSnapshot{}, ErrRuntimeRecoveryInProgress
+	}
 	err := s.transactionInternal(ctx, func(tx *gorm.DB, now time.Time) error {
 		stamp.wall = now
+		if s.intakePaused {
+			return ErrRuntimeNotReady
+		}
 		row, err := runtimeReferenceRowTxInternal(tx, ref)
 		if err != nil {
 			return err
@@ -136,19 +150,11 @@ func (c *RuntimeRemoteCoordinator) Start(ctx context.Context, ref RuntimeRunRefe
 	if err == nil && send {
 		taskCtx, cancel := context.WithTimeout(c.lifetime, 30*time.Minute)
 		task := &runtimeRemoteTaskInternal{cancel: cancel, done: make(chan struct{})}
-		c.mu.Lock()
-		if c.recovering[ref.RunID] {
-			c.mu.Unlock()
-			cancel()
-			lock.Unlock()
-			s.activity.runningMu.Unlock()
-			return snapshot, ErrRuntimeRecoveryInProgress
-		}
 		c.dispatch[ref.RunID] = task
 		c.stamps[ref.RunID] = stamp
-		c.mu.Unlock()
 		go c.dispatchInternal(taskCtx, ref, envelope, task)
 	}
+	c.mu.Unlock()
 	lock.Unlock()
 	s.activity.runningMu.Unlock()
 	if err != nil {
@@ -225,7 +231,14 @@ func (c *RuntimeRemoteCoordinator) InvalidateNegativeContinuity() {
 	c.mu.Unlock()
 }
 func (c *RuntimeRemoteCoordinator) Close(ctx context.Context) error {
+	c.lifecycleMu.Lock()
+	defer c.lifecycleMu.Unlock()
+	return c.closeInternal(ctx)
+}
+
+func (c *RuntimeRemoteCoordinator) closeInternal(ctx context.Context) error {
 	c.mu.Lock()
+	c.paused = true
 	var tasks []*runtimeRemoteTaskInternal
 	for _, task := range c.dispatch {
 		task.cancel()

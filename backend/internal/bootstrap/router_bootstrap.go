@@ -26,6 +26,7 @@ import (
 	"github.com/florianfinn/docklet-next/backend/api"
 	"github.com/florianfinn/docklet-next/backend/api/ws"
 	"github.com/florianfinn/docklet-next/backend/frontend"
+	"github.com/florianfinn/docklet-next/backend/internal/activity"
 	"github.com/florianfinn/docklet-next/backend/internal/apikey"
 	"github.com/florianfinn/docklet-next/backend/internal/auth"
 	"github.com/florianfinn/docklet-next/backend/internal/config"
@@ -224,6 +225,7 @@ func newRouter(p RouterParams) (*echo.Echo, *edge.TunnelServer) {
 
 	e.Use(echomiddleware.Recover())
 	e.Use(echomiddleware.RequestID())
+	e.Use(activity.RuntimeReceiverMiddleware(cfg.AgentMode || cfg.EdgeAgent, activity.RuntimeAdmissionLimit))
 	e.Use(requestLoggerMiddlewareInternal())
 	e.Use(secureCookieContextMiddlewareInternal(trustedProxyNets))
 	if hubMode && deps.System != nil {

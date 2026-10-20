@@ -78,6 +78,7 @@ export const deActivity: typeof enActivity = {
   },
   openDialog: "Im Ablauffenster öffnen",
   gate: {
+    requestMismatch: "Dieser Anfrageschlüssel gehört zu einer anderen Absicht. Starte eine neue bewusste Aktion.",
     busy: "{title} läuft noch. Nichts Neues gestartet – bitte warten, bis die Aktion fertig ist.",
     busyUnknown: "Für dieses Ziel läuft noch eine Aktion. Nichts Neues gestartet.",
     fresh: "{title}: gerade geprüft ({seconds, plural, one {vor # Sekunde} other {vor # Sekunden}}). Das Ergebnis ist aktuell.",
