@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; coded step, service-effect and raw output requests.
+// Deviations: Local module namespace; coded steps, service effects, raw output and explicit runtime capture loss.
 
 package activity
 
@@ -85,11 +85,12 @@ type UpdateRequest struct {
 }
 
 type AppendMessageRequest struct {
-	Level    activitytypes.MessageLevel
-	Message  string
-	Code     string
-	Payload  database.JSON
-	Progress *int
-	Step     string
-	Output   *activitytypes.OutputLine
+	Level           activitytypes.MessageLevel
+	Message         string
+	Code            string
+	Payload         database.JSON
+	Progress        *int
+	Step            string
+	OutputTruncated bool
+	Output          *activitytypes.OutputLine
 }

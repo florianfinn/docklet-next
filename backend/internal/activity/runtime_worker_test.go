@@ -262,10 +262,10 @@ func TestRuntimeWorkerInterruptionHoldsUntilKnownChildJoins(t *testing.T) {
 		t.Run(mode, func(t *testing.T) {
 			app, stop := context.WithCancel(t.Context())
 			defer stop()
-			var endDeadline context.CancelFunc
+			var appDeadline *runtimeDeadlineFixture
 			if mode == "deadline" {
-				app, endDeadline = context.WithTimeout(t.Context(), time.Second)
-				defer endDeadline()
+				appDeadline = newRuntimeDeadlineFixture(t)
+				app = appDeadline
 			}
 			entered, childStopped, release := make(chan struct{}), make(chan struct{}), make(chan struct{})
 			var once sync.Once
@@ -296,6 +296,8 @@ func TestRuntimeWorkerInterruptionHoldsUntilKnownChildJoins(t *testing.T) {
 				require.NoError(t, err)
 			} else if mode == "application" {
 				stop()
+			} else if appDeadline != nil {
+				appDeadline.expire(t, b2Owner(t, f, admitted.ActivityID).ctx)
 			}
 			b1Await(t, childStopped)
 			b2Held(t, f, c, admitted.ActivityID)

@@ -18,6 +18,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 )
@@ -57,7 +58,25 @@ type matrixLockProcess struct {
 	cmd    *exec.Cmd
 	stdin  *os.File
 	cancel context.CancelFunc
-	stderr bytes.Buffer
+	stderr matrixLockOutput
+}
+
+// os/exec can still copy stderr when the parent reads startup diagnostics.
+type matrixLockOutput struct {
+	mu     sync.Mutex
+	buffer bytes.Buffer
+}
+
+func (b *matrixLockOutput) Write(data []byte) (int, error) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return b.buffer.Write(data)
+}
+
+func (b *matrixLockOutput) String() string {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return b.buffer.String()
 }
 
 func matrixStartLockProcess(t *testing.T, path string, extraEnv ...string) *matrixLockProcess {

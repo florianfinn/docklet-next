@@ -69,6 +69,9 @@ func (s *RuntimeService) admissionPassInternal(ctx context.Context, c runtimeCan
 	var result RuntimeAdmissionResult
 	var found bool
 	err := s.transactionInternal(ctx, func(tx *gorm.DB, now time.Time) error {
+		if err := runtimeTargetPresentTxInternal(tx, c.command.Store); err != nil {
+			return err
+		}
 		row, err := runtimeLookupBindingTxInternal(tx, c.identity(""), c.binding())
 		code := activitytypes.CodeRunJoined
 		if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {

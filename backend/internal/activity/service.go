@@ -635,7 +635,7 @@ func buildAppendBatchInternal(activityID string, reqs []AppendActivityMessageReq
 
 // appendBatchWithRetryInternal retries transient write contention because the
 // Writer drain cannot replay a failed message and output batch.
-func (s *ActivityService) appendBatchWithRetryInternal(ctx context.Context, activityID string, messages []*ActivityMessage, updates map[string]any, output []activity.OutputLine) (*Activity, error) {
+func (s *ActivityService) appendBatchWithRetryInternal(ctx context.Context, activityID string, messages []*ActivityMessage, updates map[string]any, output []activity.OutputLine, retainOutput bool) (*Activity, error) {
 	var current Activity
 	const appendWriteAttempts = 3
 	var writeErr error
@@ -658,10 +658,8 @@ func (s *ActivityService) appendBatchWithRetryInternal(ctx context.Context, acti
 			for i := range messages {
 				messages[i].CreatedAt = now.Add(time.Duration(i) * time.Microsecond)
 			}
-			if len(output) > 0 {
-				lines, truncated := appendOutputLinesInternal(current.Output, output)
-				updates["output"] = lines
-				updates["output_truncated"] = current.OutputTruncated || truncated
+			if err := runtimeAppendOutputTxInternal(tx, &current, updates, output, retainOutput); err != nil {
+				return err
 			}
 
 			query := tx.Model(&Activity{}).Where("id = ? AND status IN ?", activityID, []activity.Status{activity.StatusQueued, activity.StatusRunning})

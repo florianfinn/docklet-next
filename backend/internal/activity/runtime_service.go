@@ -32,6 +32,7 @@ type RuntimeTargetResolver interface {
 // Only tests construct it until compatibility activation. Optional local owners
 // register inside the final admission mutex/commit boundary.
 type RuntimeService struct {
+	remote         *RuntimeRemoteCoordinator
 	activity       *ActivityService
 	resolver       RuntimeTargetResolver
 	localExecution *RuntimeLocalConfig
@@ -85,7 +86,7 @@ func runtimeClassifyStoreInternal(ctx context.Context, err error) error {
 	}
 	var mismatch *runtimeConflictInternal
 	var gate *GateConflict
-	if errors.As(err, &mismatch) || errors.As(err, &gate) || errors.Is(err, errRuntimeInvalidInternal) ||
+	if errors.As(err, &mismatch) || errors.As(err, &gate) || errors.Is(err, errRuntimeInvalidInternal) || errors.Is(err, ErrRuntimeTargetRemoved) ||
 		errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
 		return err
 	}

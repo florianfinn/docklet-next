@@ -68,6 +68,8 @@ func catalog(t *testing.T, db *sql.DB) []string {
 	objects := sqlRows(t, db, "SELECT type,name,tbl_name,sql FROM sqlite_master WHERE name NOT LIKE 'sqlite_%' AND name <> 'goose_db_version' AND tbl_name <> 'goose_db_version' ORDER BY type,name")
 	var result []string
 	for _, o := range objects {
+		// SQLite ALTER inserts comma whitespace; it is not a schema property.
+		o[3] = migrationCommaWhitespace(o[3])
 		result = append(result, strings.Join(o, ":"))
 		if o[0] != "table" {
 			continue
@@ -539,4 +541,39 @@ func TestRuntimeSchemaAdmitsRequiredStates(t *testing.T) {
 			require.NoError(t, db.Table("runtime_receipts").Create(maps.Clone(row)).Error)
 		}
 	}
+}
+
+// ALTER's separator whitespace is insignificant; quoted values remain exact.
+func migrationCommaWhitespace(sql string) string {
+	var out strings.Builder
+	var quote byte
+	for i := 0; i < len(sql); i++ {
+		b := sql[i]
+		out.WriteByte(b)
+		if quote != 0 {
+			if b == quote {
+				if i+1 < len(sql) && sql[i+1] == quote {
+					i++
+					out.WriteByte(sql[i])
+				} else {
+					quote = 0
+				}
+			}
+			continue
+		}
+		if b == '\'' || b == '"' || b == '`' {
+			quote = b
+			continue
+		}
+		if b == ',' {
+			for i+1 < len(sql) && (sql[i+1] == ' ' || sql[i+1] == '\t' || sql[i+1] == '\n') {
+				i++
+			}
+		}
+	}
+	return out.String()
+}
+func TestForwardMigrationCatalogWhitespacePreservesLiterals(t *testing.T) {
+	require.Equal(t, `CHECK (value IN ('a, b','c'))`, migrationCommaWhitespace(`CHECK (value IN ('a, b', 'c'))`))
+	require.NotEqual(t, migrationCommaWhitespace(`DEFAULT 'a, b'`), migrationCommaWhitespace(`DEFAULT 'a,b'`))
 }
