@@ -135,3 +135,31 @@ func TestCollectCommandResponse(t *testing.T) {
 	require.Equal(t, "text/plain", headers["Content-Type"])
 	require.Equal(t, "hello world", string(body))
 }
+
+func TestCommandRouteLiteralPrecedenceAndParameterFallback(t *testing.T) {
+	index := buildCommandRouteIndexInternal([]commandRoute{
+		{Method: "GET", PathPattern: "/items/{id}/detail", CommandName: "item.detail"},
+		{Method: "GET", PathPattern: "/items/{id}/runtime", CommandName: "item.runtime"},
+		{Method: "GET", PathPattern: "/items/0/runtime", CommandName: "local.runtime"},
+		{Method: "GET", PathPattern: "/items/{id}/blocked", CommandName: "item.blocked"},
+		{Method: "GET", PathPattern: "/items/0/blocked", CommandName: "local.blocked", LocalOnly: true},
+	})
+	for _, tc := range []struct {
+		path, name string
+		localOnly  bool
+	}{
+		{"/items/0/detail", "item.detail", false},
+		{"/items/0/runtime", "local.runtime", false},
+		{"/items/example/runtime", "item.runtime", false},
+		{"/items/0/blocked", "local.blocked", true},
+	} {
+		t.Run(tc.path, func(t *testing.T) {
+			route, ok := index.resolveInternal("GET", tc.path, false).Get()
+			require.True(t, ok)
+			require.Equal(t, tc.name, route.CommandName)
+			require.Equal(t, tc.localOnly, route.LocalOnly)
+		})
+	}
+	require.False(t, index.resolveInternal("GET", "/items/0/missing", false).IsPresent())
+	require.False(t, index.resolveInternal("GET", "/items//detail", false).IsPresent())
+}
