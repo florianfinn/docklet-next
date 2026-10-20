@@ -45,7 +45,7 @@ func NewRuntimeRemoteCoordinator(service *RuntimeService, lifetime context.Conte
 	if err := service.checkInternal(); err != nil {
 		return nil, err
 	}
-	if lifetime == nil || transport == nil || service.localExecution != nil {
+	if lifetime == nil || transport == nil {
 		return nil, errRuntimeInvalidInternal
 	}
 	if schedule.Now == nil {
@@ -88,6 +88,9 @@ func (c *RuntimeRemoteCoordinator) Start(ctx context.Context, ref RuntimeRunRefe
 	lock.Lock()
 	err := s.transactionInternal(ctx, func(tx *gorm.DB, now time.Time) error {
 		stamp.wall = now
+		if s.intakePaused {
+			return ErrRuntimeNotReady
+		}
 		row, err := runtimeReferenceRowTxInternal(tx, ref)
 		if err != nil {
 			return err

@@ -20,7 +20,9 @@ func runtimeKnowledgeInternal(row *RuntimeReceipt) activitytypes.RuntimeKnowledg
 	case "accepted", "executing", "success", "failed", "cancelled":
 		outcome = activitytypes.RuntimeOutcomeKnown
 	case "pending":
-		if row.HubDisposition != nil && *row.HubDisposition != "released" {
+		if (row.HubDisposition != nil && *row.HubDisposition != "released") ||
+			(row.EnvironmentID == "0" && row.ExecutorGeneration == row.StoreGeneration &&
+				*row.DispatchState == "pending" && row.UnknownReason == nil) {
 			outcome = activitytypes.RuntimeOutcomeKnown
 		}
 	}
@@ -76,5 +78,8 @@ func runtimeSnapshotTxInternal(tx *gorm.DB, row *RuntimeReceipt) (activitytypes.
 	} else if row.ExecutorResultCode != nil {
 		model.MessageCode = *row.ExecutorResultCode
 	}
-	return activitytypes.RuntimeSnapshot{Activity: activityToDTOInternal(&model), RuntimeKnowledge: runtimeKnowledgeInternal(row)}, nil
+	knowledge := runtimeKnowledgeInternal(row)
+	dto := activityToDTOInternal(&model)
+	dto.RuntimeKnowledge = &knowledge
+	return activitytypes.RuntimeSnapshot{Activity: dto, RuntimeKnowledge: knowledge}, nil
 }

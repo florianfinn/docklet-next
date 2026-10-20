@@ -236,6 +236,9 @@ func qualifyGenericArcaneArgumentsInternal(pkgPath, typeName, schemaName string)
 type HandlerDeps struct {
 	fx.In
 
+	Runtime           *activity.RuntimeService
+	RuntimeHTTP       *activity.RuntimeHTTPService
+	RuntimeReceiver   *activity.RuntimeReceiver
 	AppImages         *appimages.ApplicationImagesService
 	User              *user.Module
 	Project           *project.Module
@@ -409,6 +412,13 @@ type routeModule struct {
 }
 
 var routeModules = []routeModule{
+	{"runtime", true, func(api huma.API, d HandlerDeps, _ handlerutil.ActivityAppContext, cfg *config.Config) {
+		if cfg != nil && (cfg.AgentMode || cfg.EdgeAgent) {
+			activity.RegisterRuntimeReceiverRoutes(api, d.RuntimeReceiver, "")
+		} else {
+			activity.RegisterRuntimeHubRoutes(api, d.Runtime)
+		}
+	}},
 	{"health", true, func(api huma.API, _ HandlerDeps, _ handlerutil.ActivityAppContext, _ *config.Config) {
 		health.RegisterRoutes(api)
 	}},

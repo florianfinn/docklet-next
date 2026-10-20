@@ -1,6 +1,6 @@
 {
   "adopted": {
-    "backend/internal/activity/service.go": 1838,
+    "backend/internal/activity/service.go": 680,
     "backend/internal/activity/service_test.go": 1058,
     "backend/internal/apikey/service.go": 1087,
     "backend/internal/apikey/service_test.go": 999,

@@ -53,6 +53,7 @@ type Type string
 type MessageLevel string
 
 type Activity struct {
+	*RuntimeKnowledge     `json:",omitempty"`
 	ID                    string         `json:"id"`
 	EnvironmentID         string         `json:"environmentId"`
 	BatchID               *string        `json:"batchId,omitempty"`

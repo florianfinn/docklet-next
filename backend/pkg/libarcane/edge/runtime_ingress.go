@@ -32,9 +32,15 @@ func NewRuntimeTunnelClient(cfg *Config, handler http.Handler) *TunnelClient {
 	return c
 }
 func runtimeRequestPathInternal(path string) bool {
-	return path == "/api/environments/0/runtime-runs" || strings.HasPrefix(path, "/api/environments/0/runtime-runs/")
+	return path == "/api/environments/0/runtime-registration" || path == "/api/environments/0/runtime-target" || path == "/api/environments/0/runtime-runs" || strings.HasPrefix(path, "/api/environments/0/runtime-runs/")
 }
 func RuntimeCommandName(method, path string) (string, bool) {
+	if method == http.MethodPost && path == "/api/environments/0/runtime-registration" {
+		return "runtime.register", true
+	}
+	if method == http.MethodPost && path == "/api/environments/0/runtime-target" {
+		return "runtime.resolve", true
+	}
 	base := "/api/environments/0/runtime-runs"
 	if path == base && method == http.MethodPost {
 		return "runtime.execute", true

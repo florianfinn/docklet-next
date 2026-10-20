@@ -26,6 +26,7 @@ import (
 	"github.com/florianfinn/docklet-next/backend/api"
 	"github.com/florianfinn/docklet-next/backend/api/ws"
 	"github.com/florianfinn/docklet-next/backend/frontend"
+	"github.com/florianfinn/docklet-next/backend/internal/activity"
 	"github.com/florianfinn/docklet-next/backend/internal/apikey"
 	"github.com/florianfinn/docklet-next/backend/internal/auth"
 	"github.com/florianfinn/docklet-next/backend/internal/config"
@@ -224,6 +225,20 @@ func newRouter(p RouterParams) (*echo.Echo, *edge.TunnelServer) {
 
 	e.Use(echomiddleware.Recover())
 	e.Use(echomiddleware.RequestID())
+	e.Use(func(next echo.HandlerFunc) echo.HandlerFunc {
+		return func(c *echo.Context) error {
+			path := c.Request().URL.Path
+			if cfg.AgentMode && (strings.HasPrefix(path, "/api/environments/0/runtime-runs") || path == "/api/environments/0/runtime-registration" || path == "/api/environments/0/runtime-target") {
+				var result error
+				activity.RuntimeReceiverIngress(http.HandlerFunc(func(w http.ResponseWriter, request *http.Request) {
+					c.SetRequest(request)
+					result = next(c)
+				}), activity.RuntimeAdmissionLimit).ServeHTTP(c.Response(), c.Request())
+				return result
+			}
+			return next(c)
+		}
+	})
 	e.Use(requestLoggerMiddlewareInternal())
 	e.Use(secureCookieContextMiddlewareInternal(trustedProxyNets))
 	if hubMode && deps.System != nil {

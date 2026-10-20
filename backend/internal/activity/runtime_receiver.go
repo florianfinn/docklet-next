@@ -27,6 +27,7 @@ import (
 // Every entry requires an authenticated manager bound to this immutable trusted
 // construction. Wire identity and attribution never authenticate a caller.
 type RuntimeReceiver struct {
+	binding runtimeReceiverBindingInternal
 	service *RuntimeService
 	store   RuntimeStoreBinding
 }
@@ -101,6 +102,8 @@ func runtimeReceiverResultTxInternal(tx *gorm.DB, row *RuntimeReceipt) (RuntimeR
 // It preserves the request context through acceptance; only a successful commit
 // hands work to the existing application lifetime, even after caller disconnect.
 func (r *RuntimeReceiver) Execute(ctx context.Context, envelope activitytypes.RuntimeExecutionEnvelope) (RuntimeReceiverResult, error) {
+	r.binding.RLock()
+	defer r.binding.RUnlock()
 	id, err := r.identityInternal(envelope.Identity)
 	if err != nil {
 		return RuntimeReceiverResult{}, err
@@ -185,6 +188,8 @@ func (r *RuntimeReceiver) receivePassInternal(ctx context.Context, c runtimeCano
 // Query requires authenticated manager binding. Absence is returned only after
 // runtimeQueryTxInternal's matching tombstone commits in the receipt transaction.
 func (r *RuntimeReceiver) Query(ctx context.Context, wire activitytypes.RuntimeRunIdentity) (RuntimeReceiverResult, error) {
+	r.binding.RLock()
+	defer r.binding.RUnlock()
 	id, err := r.identityInternal(wire)
 	if err != nil {
 		return RuntimeReceiverResult{}, err
@@ -220,6 +225,8 @@ func (r *RuntimeReceiver) Query(ctx context.Context, wire activitytypes.RuntimeR
 // matching the full digest inside its intent transaction. No unchecked reference
 // or nested runningMu acquisition can introduce a validation/cancellation race.
 func (r *RuntimeReceiver) Cancel(ctx context.Context, wire activitytypes.RuntimeRunIdentity, attribution activitytypes.RuntimeAttribution) (RuntimeReceiverResult, error) {
+	r.binding.RLock()
+	defer r.binding.RUnlock()
 	id, err := r.identityInternal(wire)
 	if err != nil {
 		return RuntimeReceiverResult{}, err
@@ -279,6 +286,8 @@ func (r *RuntimeReceiver) Cancel(ctx context.Context, wire activitytypes.Runtime
 // HTTP owner must require the manager credential before exposing it. A stale or
 // unreadable local store never advertises continuity from construction alone.
 func (r *RuntimeReceiver) ExecutorIdentity(ctx context.Context) (activitytypes.RuntimeExecutorIdentity, error) {
+	r.binding.RLock()
+	defer r.binding.RUnlock()
 	if r == nil || r.service == nil {
 		return activitytypes.RuntimeExecutorIdentity{}, errRuntimeInvalidInternal
 	}

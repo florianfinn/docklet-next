@@ -136,6 +136,10 @@ func (s *Service) executeRestore(workCtx context.Context, actor usertypes.Actor,
 			return
 		}
 	}
+	if err := s.activityService.PrepareRuntimeRestore(ctx); err != nil {
+		blocked()
+		return
+	}
 	if err := s.activityService.CancelAndDrain(ctx, started.ID); err != nil {
 		blocked()
 		return
@@ -190,6 +194,10 @@ func (s *Service) executeRestore(workCtx context.Context, actor usertypes.Actor,
 		blocked()
 		return
 	}
+	if err := s.activityService.FinishRuntimeRestore(ctx); err != nil {
+		blocked()
+		return
+	}
 	if s.coordinator != nil {
 		s.coordinator.ResetAfterRestore()
 	}
@@ -228,6 +236,7 @@ func (s *Service) executeRestore(workCtx context.Context, actor usertypes.Actor,
 		blocked()
 		return
 	}
+	s.activityService.ResumeRuntimeIntake()
 	resume()
 }
 

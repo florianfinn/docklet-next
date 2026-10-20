@@ -109,6 +109,7 @@ var ServiceOptions = fx.Options(
 		provideContainerRegistryServiceInternal,
 		provideUpdaterServiceInternal,
 		provideAuthMiddlewareInternal,
+		provideRuntimeInternal,
 	),
 	fx.Provide(
 		event.New,

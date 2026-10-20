@@ -32,6 +32,8 @@ type RuntimeTargetResolver interface {
 // Only tests construct it until compatibility activation. Optional local owners
 // register inside the final admission mutex/commit boundary.
 type RuntimeService struct {
+	intakePaused   bool
+	storagePaused  bool
 	remote         *RuntimeRemoteCoordinator
 	activity       *ActivityService
 	resolver       RuntimeTargetResolver
@@ -147,4 +149,45 @@ func (s *RuntimeService) transactionInternal(ctx context.Context, fn func(*gorm.
 
 type RuntimeAdmissionResult struct {
 	activitytypes.RuntimeAdmission
+}
+
+// ConfigureLocal completes the single production instance before readiness.
+// Generation initialization must not create a temporary second RuntimeService.
+func (s *RuntimeService) ConfigureLocal(config RuntimeLocalConfig) error {
+	if err := s.checkInternal(); err != nil {
+		return err
+	}
+	if config.ApplicationContext == nil || config.Executor == nil || config.Store.EnvironmentID != "0" || config.Store.StoreGeneration == "" || config.Store.ExecutorGeneration != config.Store.StoreGeneration || config.Store.ManagerID == "" || config.Store.RegistrationID == "" {
+		return errRuntimeInvalidInternal
+	}
+	s.activity.runningMu.Lock()
+	defer s.activity.runningMu.Unlock()
+	if s.localExecution != nil || len(s.owners) != 0 {
+		return errRuntimeInvalidInternal
+	}
+	s.localExecution = &config
+	return nil
+}
+
+type runtimeEnvironmentContextKey struct{}
+type RuntimeResolverFunc func(context.Context, RuntimeTarget) (RuntimeResolvedTarget, error)
+
+func (fn RuntimeResolverFunc) ResolveRuntimeTarget(ctx context.Context, target RuntimeTarget) (RuntimeResolvedTarget, error) {
+	return fn(ctx, target)
+}
+func RuntimeEnvironmentFromContext(ctx context.Context) string {
+	environment, _ := ctx.Value(runtimeEnvironmentContextKey{}).(string)
+	if environment == "" {
+		return "0"
+	}
+	return environment
+}
+
+func (s *RuntimeService) LocalStore() RuntimeStoreBinding {
+	s.activity.runningMu.Lock()
+	defer s.activity.runningMu.Unlock()
+	if s.localExecution == nil {
+		return RuntimeStoreBinding{}
+	}
+	return s.localExecution.Store
 }

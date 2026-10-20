@@ -45,10 +45,16 @@ func (
 	if activityID == "" {
 		return nil, errors.New("activity id is required")
 	}
-	defer s.releaseCancelInternal(activityID)
-	defer s.releaseSlotInternal(activityID)
 	s.runningMu.Lock()
-	defer s.runningMu.Unlock()
+	if err := s.refuseRuntimeWriterInternal(ctx, activityID); err != nil {
+		s.runningMu.Unlock()
+		return nil, err
+	}
+	defer func() {
+		s.runningMu.Unlock()
+		s.releaseCancelInternal(activityID)
+		s.releaseSlotInternal(activityID)
+	}()
 	if s.cancelling[activityID] || errors.Is(context.Cause(ctx), activitylib.ErrCanceled) {
 		status = activity.StatusCancelled
 		finalMessage = cancelledMessageInternal
