@@ -66,6 +66,35 @@ for (const file of ["checks", "pr-text", "review-status"]) {
   } else {
     mutations.push(["PR trigger", (text) => text.replace("pull_request:", "pull_request_target:")]);
   }
+  if (file === "checks") {
+    mutations.push(
+      ["missing lint stage", (text) => text.replace("[lint, test, build]", "[test, build]")],
+      ["missing test stage", (text) => text.replace("[lint, test, build]", "[lint, build]")],
+      ["missing build stage", (text) => text.replace("[lint, test, build]", "[lint, test]")],
+      ["full stage timeout removed", (text) => text.replace(/(  full-checks:[\s\S]*?)    timeout-minutes: 15/, "$1")],
+      ["full stage timeout raised", (text) => text.replace(/(  full-checks:[\s\S]*?)    timeout-minutes: 15/, "$1    timeout-minutes: 30")],
+      ["matrix stage command omitted", (text) => text.replace("run: pnpm run ${{ matrix.stage }}", "run: pnpm run lint")],
+      ["matrix skipped for full scope", (text) => text.replace("if: needs.scope.outputs.value == 'full'", "if: needs.scope.outputs.value == 'text'")],
+      ["verify skipped after matrix failure", (text) => text.replace("    if: always()", "    if: success()")],
+      ["checks skipped after verify failure", (text) => text.replace(/(  checks:[\s\S]*?)    if: always\(\)/, "$1    if: success()")],
+      ["verify accepts failed scope", (text) => text.replace('test "$SCOPE_RESULT" = success', 'test "$SCOPE_RESULT" != cancelled')],
+      ["verify accepts skipped full stage", (text) => text.replace('full) test "$FULL_RESULT" = success', 'full) test "$FULL_RESULT" != cancelled')],
+      ["verify accepts running full stage in text scope", (text) => text.replace('text) test "$FULL_RESULT" = skipped', 'text) true')],
+      ["checks accepts failed full stage", (text) => text.replace('full) test "$FULL_RESULT" = success &&', 'full) test "$FULL_RESULT" != cancelled &&')],
+      ["checks accepts failed image stage", (text) => text.replace('test "$IMAGE_RESULT" = success', 'test "$IMAGE_RESULT" != cancelled')],
+      ["checks accepts skipped verify", (text) => text.replace('test "$VERIFY_RESULT" = success', 'test "$VERIFY_RESULT" != cancelled')],
+      ["checks accepts image on text scope", (text) => text.replace('test "$IMAGE_RESULT" = skipped', 'test "$IMAGE_RESULT" != cancelled')],
+      ["full stage omitted from verify needs", (text) => text.replace("needs: [scope, full-checks]", "needs: [scope]")],
+      ["full stage omitted from checks needs", (text) => text.replace("needs: [scope, verify, full-checks, package-image]", "needs: [scope, verify, package-image]")],
+      ["Docker isolation removed", (text) => text.replace("sudo systemctl stop docker.service docker.socket containerd.service", "true")],
+      ["Docker socket check removed", (text) => text.replace("test ! -S /run/docker.sock", "true")],
+      ["frozen install removed", (text) => text.replace("pnpm --dir web install --frozen-lockfile", "pnpm --dir web install")],
+      ["base SHA removed", (text) => text.replace("CHECK_BASE_SHA: ${{ github.event.pull_request.base.sha }}", "CHECK_BASE_SHA: ''")],
+      ["continue on error", (text) => text.replace("    strategy:", "    continue-on-error: true\n    strategy:")],
+      ["publication history removed", (text) => text.replace("node scripts/check-publication.mjs --history", "true")],
+      ["reduced text checks removed", (text) => text.replace("node scripts/change-scope.mjs --run-text-tests", "true")],
+    );
+  }
   for (const [label, mutate] of mutations) {
     test(`workflow contract ${file} rejects ${label}`, () => {
       const changed = mutate(original);
