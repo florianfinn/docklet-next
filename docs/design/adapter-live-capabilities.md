@@ -35,7 +35,7 @@ adapter operation available: its mapping and server capability must both exist.
 | `subscribeActions`, `subscribeChanges` | `streamClient` (`activities`, `events`) | Parse envelopes and re-read changed snapshots/queries. |
 | `listHosts`, `listStacks`, `getStack`, `listContainers` | `listEnvironments`, `list-projects`, `get-project`, `list-containers` | Read host identity and aggregate host-scoped projects and containers through the shared agent forwarding path. |
 | `getSecurity`, `listSchedule`, `getSettings` | `get-environment-vulnerability-overview`, `get-job-schedules`, `get-settings` | The first two calls remain unavailable until M11 and M10. `getSettings` stays unavailable for unconnected sections; M4 reads connected sections with `getConnectedSettings`. |
-| `runStackCommand`, `runContainerCommand` | `deploy-project`/`down-project`/`restart-project`/`redeploy-project`; `start-container`/`stop-container`/`restart-container` | Expose unavailable until M6 supplies guarded run identities and mappings. |
+| `runStackCommand`, `runContainerCommand` | `deploy-project`/`down-project`/`restart-project`/`redeploy-project`; `start-container`/`stop-container`/`restart-container` | Map the seven guarded operation routes with async admission, stable IDs and targeted hub detail. Enable only scoped stack/container descriptors with the complete operation family and activity-read grants; bulk hub controls remain unavailable. |
 | Other `DockletAdapter` reads, writes and subscriptions | Existing operation where listed, otherwise no matching operation | Expose unavailable until the owning milestone supplies the complete mapping. Existing log/stats WebSockets remain the later stream transport. |
 
 The HTTP boundary classifies an operation into these outcomes. Existing
@@ -89,12 +89,54 @@ The web run states map directly from the wire, except `success`:
 The activity feature catalogues supply these labels; queued and cancelled
 render as distinct states throughout run surfaces, including the result view.
 
-## Runtime mapping target
+## Runtime command mapping
 
 The [runtime-control record](runtime-control.md) defines the M6 specialization,
-including requirements that are not current adapter support: command calls opt
+including the command specialization: command calls opt
 into admission JSON and resolve the same durable hub/agent ID, preserve coded
 conflicts (including request mismatch), and refresh targeted hub runtime detail.
+A command keeps one opaque UUID across CSRF and at most one network retry, bounded
+by ten minutes of local elapsed time. A final response discards that key. A lost
+or malformed final admission remains explicitly ambiguous and prevents automatic
+replacement, including after the browser gate's ordinary missing-run timeout.
+Known IDs are refreshed through hub detail; list absence cannot settle them.
+Detail reads while observed share in-flight work and a two-second cadence. Three
+unconfirmed or failed reads stop automatic observation until explicit refresh or
+an activity notification; confirmed active work stays observed until terminal.
+Identity changes abort this consumer's requests and reject late callbacks.
+
+Token preflight failures are pre-admission errors and allow a later deliberate
+intent. The consumer identifies raw token-read transport failures at their source;
+the existing CSRF client retains its header and retry policy. A definitive CSRF
+refusal followed by a failed token refresh also leaves no admission hold, unless
+an earlier command send already had an uncertain response. Such earlier uncertainty
+remains held with the original key; a later denial cannot prove it never ran.
+
+Remote unknown knowledge with no targeted recovery reason is unconfirmed delivery,
+not outcome loss. A present `recovery.unknownReason` shows blocked uncertainty;
+missing detail never manufactures either loss or completion. Cancel intent remains
+nonterminal. Administrator release uses existing effective global-admin and
+activity read/cancel permissions, explicit acknowledgment and a nonempty reason;
+its failed/unknown disposition and later executor evidence remain separate.
+Failed targeted detail during aggregate or single-run projection retains the
+same host/run's cached recovery evidence, cancellation knowledge and current-intent
+marker. A newer successful targeted answer replaces that observation under the
+existing sequence guard. Identity reset clears this consumer cache. A terminal
+unknown run without recovery detail says its outcome is not confirmed, without
+claiming confirmation is pending or that an already released target is blocked.
+
+Permission reads share in-flight work and cache validated successes for at most
+thirty seconds of local elapsed time. Failed reads are evicted for the next access;
+unknown grants are shown as unavailable rather than a fabricated server denial.
+A failed rights read does not discard readable run evidence. Cancellation and
+release still require the existing grants, and actual server denials remain
+authoritative. No grant or authentication policy changes at this boundary.
+
+Notification history seeds unseen rows of initially incomplete sources silently,
+while already observed transitions and identifiable current claims/admissions
+notify normally. The first complete recovery still seeds unseen history. No
+cross-device clock comparison is used: indistinguishable unseen history and new
+remote actions during initial incompleteness cannot reliably be separated.
 Unanswered/lost-continuity executor knowledge stays visibly blocked; settled
 local interruption fails with effect unverified and releases. Accepted admin
 recovery is a separate hub disposition, never inferred success. Legacy CLI
@@ -118,14 +160,15 @@ source may become an empty successful read. Its owner controls shared partial-re
 fields before runtime consumers adopt them; this does not redesign inventory.
 The runtime foundation owns the other shared port/domain/capability additions
 and required v4 execution/outcome contract changes; optional additive log metadata
-belongs to the log owner. Opaque UUID retries use ten minutes from the hub's
-first-seen binding, without client/agent clock validation; compact outcome
+belongs to the log owner. Opaque UUID retries use ten minutes of client-local elapsed time only. Hub
+first-seen time is audit attribution, never an age rejection or replacement rule;
+retained server bindings still return their original run. Compact outcome
 evidence lasts at least twenty-four hours independently of full output history.
 Supported delivery and receiver admission are bounded before acceptance; accepted
 work survives caller timeout. Only recent, continuous-generation negative proof
 may release a scope; old or uncertain absence stays unknown.
-Keep controls/log capabilities disabled until complete mappings and execution
-paths are verified.
+Only complete scoped command mappings enable capabilities. Log and session
+consumers remain owned by their separate steps.
 
 ## Capability descriptor
 
@@ -240,7 +283,8 @@ manager leaves origin unclear. Containers without these labels map to Run.
 Recreation restrictions include Compose ownership, unclear origin and the
 server's protected-container flag. Agent-labeled workloads are excluded from
 both lists; the backend excludes their tracked Compose projects before pagination.
-All write operations keep their unavailable adapter mapping.
+Only the seven guarded lifecycle commands have connected write mappings; other
+inventory mutations remain unavailable.
 
 Images, volumes, network details/topology, published ports and dashboard reads
 use the same retained-response store and observation headers. Dedicated agent

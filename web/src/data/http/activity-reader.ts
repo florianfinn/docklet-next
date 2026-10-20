@@ -6,6 +6,7 @@
 
 import { CancelledError, isCancelledError } from "@tanstack/react-query";
 
+import type { RuntimeView } from "@/features/activity/runtime-presentation";
 import type { components } from "@/api/generated/schema";
 import type { ActionReadFailure, ActionReadHealth } from "../adapter";
 import { AdapterOutcomeError } from "../capability";
@@ -25,6 +26,8 @@ interface Reads {
   detail: (hostId: string, id: string) => Promise<Detail>;
   publish: (runs: CodedActionRun[] | undefined, health: ActionReadHealth) => void;
   unauthorized: () => void;
+  project?: (run: CodedActionRun) => Promise<CodedActionRun>;
+  retained?: () => CodedActionRun[];
 }
 
 function invalid(): never {
@@ -78,7 +81,8 @@ export function createActivityReader(reads: Reads) {
     const results = await Promise.all(page.items.map(async (item) => {
       try {
         if (!item || typeof item.id !== "string" || !item.id || item.environmentId !== hostId) invalid();
-        return { run: mapped(await reads.detail(hostId, item.id), hostId, item.id) };
+        const run = mapped(await reads.detail(hostId, item.id), hostId, item.id);
+        return { run: reads.project ? await reads.project(run) : run };
       } catch (error) {
         if (isUnauthorized(error)) throw error;
         return { failure: failure(error, hostId) };
@@ -134,8 +138,13 @@ export function createActivityReader(reads: Reads) {
           if (batch.failure) failures.set(batch.hostId, batch.failure); else failures.delete(batch.hostId);
         }
       }
+      for (const run of reads.retained?.() ?? []) {
+        if (!merged.has(run.id) && (run.status === "running" || run.status === "queued")) merged.set(run.id, run);
+        if (!observed.has(run.id) && (run.status === "running" || run.status === "queued")) observed.set(run.id, run);
+      }
       initialized = true;
-      current = sorted(merged.values());
+      current = sorted(merged.values()).map((run) => run.outcomeState === undefined ? run :
+        { ...run, runtime: { ...(run as RuntimeView<CodedActionRun>).runtime, sourceObserved: true } });
       if (started > globalHealthSequence) { globalHealthSequence = started; globalFailure = undefined; }
       publishHealth();
       return sorted(observed.values());
@@ -158,13 +167,14 @@ export function createActivityReader(reads: Reads) {
     const started = ++sequence;
     const version = generation;
     try {
-      const run = mapped(await reads.detail(hostId, id), hostId, id);
+      const mappedRun = mapped(await reads.detail(hostId, id), hostId, id);
+      const run = reads.project ? await reads.project(mappedRun) : mappedRun;
       if (version !== generation) throw new CancelledError();
       if (started <= Math.max(runSequences.get(id) ?? 0, fullSequences.get(hostId) ?? 0) || !current.some((r) => r.id === id && r.hostId === hostId)) return;
       current = current.map((r) => r.id === id ? run : r);
       runSequences.set(id, started);
       publish();
-      if (run.status !== "queued" && run.status !== "running") await load();
+      if (run.outcomeState === undefined && run.status !== "queued" && run.status !== "running") await load();
     } catch (error) {
       if (version !== generation) throw new CancelledError();
       if (isCancelledError(error)) throw error;
@@ -180,6 +190,14 @@ export function createActivityReader(reads: Reads) {
   }
   return {
     load, refreshOne,
+    upsert(run: CodedActionRun) {
+      const existing = current.find((row) => row.id === run.id);
+      if (existing && existing.hostId !== run.hostId) return;
+      runSequences.set(run.id, ++sequence);
+      current = sorted([...current.filter((row) => row.id !== run.id), run]);
+      initialized = true;
+      publish();
+    },
     runs: () => current,
     hasSnapshot: () => initialized,
     health: () => health,

@@ -1,4 +1,4 @@
-import { useQueryClient } from "@tanstack/react-query";
+import { isCancelledError, useQueryClient } from "@tanstack/react-query";
 import { useCallback } from "react";
 import { toast } from "sonner";
 
@@ -8,6 +8,7 @@ import { useAdapter } from "@/data/use-adapter";
 import { queryKeys } from "@/data/query-keys";
 import { queueDemoFailure, type DemoFailure } from "@/runtime";
 import type { AutoUpdatePolicy, Stack, StackDetail } from "@/domain/model";
+import { useRuntimeError } from "@/features/activity/use-runtime-error";
 import { useAdapterText } from "@/data/use-adapter-text";
 
 /** Stack commands; progress is reported by action toasts, errors here. */
@@ -15,17 +16,18 @@ export function useStackCommands() {
   const adapter = useAdapter();
   const client = useQueryClient();
   const dt = useAdapterText();
+  const runtimeError = useRuntimeError();
 
   const guard = useCallback(async <T,>(fn: () => Promise<T>): Promise<T | undefined> => {
     try {
       return await fn();
     } catch (e) {
       // The gate already reported the busy target once (see ActionToasts).
-      if (isRunBusy(e)) return undefined;
+      if (isCancelledError(e) || isRunBusy(e) || runtimeError(e)) return undefined;
       toast.error(dt(e instanceof Error ? e.message : String(e)));
       return undefined;
     }
-  }, [dt]);
+  }, [dt, runtimeError]);
 
   /**
    * Optimistic write of a small stack setting: the cached stack and list show

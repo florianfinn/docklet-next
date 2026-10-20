@@ -18,7 +18,8 @@ import { isMajorAction } from "./action-policy";
 import { openActivity } from "./activity-store";
 import { ActionToastView } from "./ActionToastView";
 import { useNow } from "./run-phase";
-import { presentationStore, RunToastCoordinator } from "./run-presentation";
+import { runtimePresentation } from "./runtime-presentation";
+import { hasPresentationIntent, presentationStore, RunToastCoordinator } from "./run-presentation";
 
 function ActionToast({ id, toastId }: { id: string; toastId: string | number }) {
   const run = useActionRun(id);
@@ -88,6 +89,7 @@ export function ActionToasts() {
     let observed = false;
     let health: ActionReadHealth = { failures: [] };
     let initialSources: Set<string> | undefined;
+    let seen = new Set<string>();
     const offHealth = adapter.subscribeActionReadHealth?.((next) => { health = next; });
     const offRuns = adapter.subscribeActions((runs) => {
       // Identity replacement seeds new history; same-user renewal retains seen/dismissed runs.
@@ -97,17 +99,22 @@ export function ActionToasts() {
         coordinator = createCoordinator();
         identityId = nextIdentity;
         initialSources = undefined;
+        seen = new Set();
       }
       const failed = new Set(health.failures.flatMap((failure) => failure.hostId === undefined ? [] : [failure.hostId]));
       // Only initially incomplete sources await history; later outages keep ordinary notifications.
-      const pending = initialSources ??= new Set(failed);
-      const history = new Set(runs.filter((run) => run.hostId !== undefined && pending.has(run.hostId)).map((run) => run.id));
+      const targetedOnly = runs.length > 0 && runs.every((run) => runtimePresentation(renderRun(run, localeRef.current))?.sourceObserved === false);
+      const firstSourceObservation = initialSources === undefined && !targetedOnly;
+      const pending = initialSources ?? (targetedOnly ? new Set<string>() : (initialSources = new Set(failed)));
+      const rendered = runs.map((run) => renderRun(run, localeRef.current));
+      const history = new Set(rendered.filter((run) => (firstSourceObservation || (run.hostId !== undefined && pending.has(run.hostId))) && !seen.has(run.id) && !hasPresentationIntent(run, presentationStore.get())).map((run) => run.id));
+      seen = new Set(runs.map((run) => run.id));
       // Health clears before its array: seed this last history first, then retire the source.
       if (!health.failures.some((failure) => failure.hostId === undefined)) {
         for (const hostId of pending) if (!failed.has(hostId)) pending.delete(hostId);
       }
       observed = true;
-      coordinator.sync(runs.map((run) => renderRun(run, localeRef.current)), history);
+      coordinator.sync(rendered, history);
     });
     // Presentation changes are not action observations and cannot seed initial history.
     const syncPresentation = () => { if (observed) coordinator.sync(); };

@@ -8,6 +8,7 @@ import { cn } from "@/shared/lib/utils";
 import type { ToastDesign, ToastDetail } from "@/shared/preferences/ui-style-store";
 import { Button } from "@/shared/ui/button";
 
+import { runtimeState } from "./runtime-presentation";
 import { RunIconTile, StepTrack } from "./ActionSteps";
 import { elapsedSeconds, RUN_ICON, RUN_TONE, runPhase, TOAST_LIFETIME } from "./run-phase";
 
@@ -31,13 +32,14 @@ function useToastFacts(run: ActionRun, now: number) {
   const { index, step } = runPhase(run);
   const seconds = elapsedSeconds(run, now);
   const done = run.steps.filter((s) => s.state === "done").length;
-  const status =
+  const state = runtimeState(run);
+  const status = state ? t(`runtime.${state}`) :
     run.status === "running" && step
       ? t("phase", { current: index + 1, total: run.steps.length, label: step.label })
       : run.status === "failed"
         ? t("failedAt", { label: step?.label ?? "" })
         : run.status === "succeeded" ? t("done", { seconds }) : t(`status.${run.status}`);
-  const line = run.status === "failed" ? (run.error ?? t("toast.unknownError")) : run.status === "running" ? (step?.detail ?? run.target) : run.target;
+  const line = state ? t(`runtime.${state}Body`) : run.status === "failed" ? (run.error ?? t("toast.unknownError")) : run.status === "running" ? (step?.detail ?? run.target) : run.target;
   return { status, line, seconds, done, total: run.steps.length };
 }
 
@@ -130,7 +132,7 @@ function Meta({ run, facts }: { run: ActionRun; facts: Facts }) {
       </div>
       <div className="flex shrink-0 gap-1">
         <dt>{t("progress")}</dt>
-        <dd className="tabular-nums">{t("stepsDone", { done: facts.done, total: facts.total })}</dd>
+        <dd className="tabular-nums">{run.outcomeState === "unknown" ? "–" : t("stepsDone", { done: facts.done, total: facts.total })}</dd>
       </div>
       <div className="flex shrink-0 gap-1">
         <dt>{t("duration")}</dt>
@@ -179,7 +181,7 @@ function BarDesign(props: DesignProps) {
       </div>
       {detail !== "compact" && <Meta run={run} facts={facts} />}
       <div data-slot="toast-track">
-        <StepTrack steps={run.steps} status={run.status} labels={detail === "full"} />
+        <StepTrack steps={run.outcomeState === "unknown" ? [] : run.steps} status={run.status} labels={detail === "full"} />
       </div>
       <DetailRow run={run} facts={facts} onClose={onClose} />
       <LifeBar run={run} onEnd={onClose} />
@@ -204,11 +206,11 @@ function CompactDesign(props: DesignProps) {
             {run.status === "failed" ? facts.line : facts.status}
           </div>
         </div>
-        <span className="w-10 shrink-0 text-right text-xs font-medium text-(--tone) tabular-nums">{t("toast.percent", { value: run.progress })}</span>
+        <span className="w-10 shrink-0 text-right text-xs font-medium text-(--tone) tabular-nums">{run.outcomeState === "unknown" ? "–" : t("toast.percent", { value: run.progress })}</span>
         <CloseButton onClose={onClose} />
       </div>
       <div className="px-3 pb-2" data-slot="toast-track">
-        <StepTrack steps={run.steps} status={run.status} thin />
+        <StepTrack steps={run.outcomeState === "unknown" ? [] : run.steps} status={run.status} thin />
       </div>
       <LifeBar run={run} onEnd={onClose} />
     </div>
@@ -226,7 +228,7 @@ function EdgeDesign(props: DesignProps) {
           <div className="flex items-center gap-2 text-[11px] font-semibold tracking-wide text-(--tone) uppercase">
             <span className={cn("size-1.5 shrink-0 rounded-full bg-(--tone)", run.status === "running" && "animate-breathe")} aria-hidden />
             <span className="truncate">
-              {t(`runKind.${run.kind}`)} · {t(`status.${run.status}`)}
+              {t(`runKind.${run.kind}`)} · {runtimeState(run) ? t(`runtime.${runtimeState(run)!}`) : t(`status.${run.status}`)}
             </span>
           </div>
           <OpenTitle {...props} className="mt-0.5 text-[15px] leading-snug" />
@@ -236,7 +238,7 @@ function EdgeDesign(props: DesignProps) {
         <CloseButton onClose={onClose} className="-mt-1" />
       </div>
       <div data-slot="toast-track">
-        <StepTrack steps={run.steps} status={run.status} labels={detail !== "compact"} />
+        <StepTrack steps={run.outcomeState === "unknown" ? [] : run.steps} status={run.status} labels={detail !== "compact"} />
       </div>
       <DetailRow run={run} facts={facts} onClose={onClose} />
       <LifeBar run={run} onEnd={onClose} />

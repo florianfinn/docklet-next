@@ -24,6 +24,8 @@ import { createCsrfClient } from "./csrf-client";
 import { createHttpAuth, type SessionChange } from "./auth";
 import { createSettingsCore } from "./settings-core";
 import { createSharedReads } from "./shared-reads";
+import { runtimeTokenReads } from "./runtime-token-read";
+import { createRuntimeCommands } from "./runtime-commands";
 import { createActivityReader } from "./activity-reader";
 
 type ReadOperation = "get-capabilities" | "listEnvironments" | "list-activities" | "get-activity" | "listEvents";
@@ -31,7 +33,7 @@ type Body<I extends ReadOperation> = operations[I]["responses"][200]["content"][
 type StreamPayload = operations["streamClient"]["responses"][200]["content"]["text/event-stream"][number]["data"];
 type Source = Pick<EventSource, "close" | "onopen" | "onmessage" | "onerror"> & Partial<Pick<EventSource, "readyState">>;
 
-const IMPLEMENTED = new Set(["registerHost", "issueAgentToken", "removeHost", "discoverHub", "listStacks", "getStack", "listContainers", "listHosts", "listActions", "listEvents", "subscribeActions", "subscribeChanges", "getAuthMode", "getCurrentUser", "login", "logout", "changePassword", "updateMyLocale", "getSetupStatus", "completeSetup", "getConnectedSettings", "saveSettings", "listImages", "listVolumes", "getVolume", "getTopology", "subscribeMetrics"]);
+const IMPLEMENTED = new Set(["runStackCommand", "runContainerCommand", "registerHost", "issueAgentToken", "removeHost", "discoverHub", "listStacks", "getStack", "listContainers", "listHosts", "listActions", "listEvents", "subscribeActions", "subscribeChanges", "getAuthMode", "getCurrentUser", "login", "logout", "changePassword", "updateMyLocale", "getSetupStatus", "completeSetup", "getConnectedSettings", "saveSettings", "listImages", "listVolumes", "getVolume", "getTopology", "subscribeMetrics"]);
 const RECONNECT_MS = 250;
 
 export interface HttpAdapterOptions {
@@ -68,7 +70,7 @@ function classifiedError(error: unknown, status?: number): AdapterOutcomeError {
 /** A small typed caller; response shape is checked before a DTO reaches the mapper. */
 export function createHttpAdapter(options: HttpAdapterOptions = {}): DockletAdapter {
   const baseUrl = (options.baseUrl ?? "/api").replace(/\/$/, "");
-  const client = createCsrfClient(baseUrl, options.fetch ?? globalThis.fetch);
+  const client = createCsrfClient(baseUrl, runtimeTokenReads(baseUrl, options.fetch ?? globalThis.fetch));
   const sharedReads = createSharedReads(client.fetch);
   const fetcher = sharedReads.fetch;
   const sourceFactory = options.eventSource ?? ((url: string) => new EventSource(url, { withCredentials: true }));
@@ -111,6 +113,7 @@ export function createHttpAdapter(options: HttpAdapterOptions = {}): DockletAdap
   function suspendIdentity() {
     ++identityGeneration;
     authenticated = false;
+    runtime.reset();
     sharedReads.clear(); invalidateCapabilities(); environmentCache.clear(); observations.clear();
     source?.close(); source = undefined; sourceOpen = false;
     if (reconnectTimer) clearTimeout(reconnectTimer);
@@ -174,7 +177,10 @@ export function createHttpAdapter(options: HttpAdapterOptions = {}): DockletAdap
     }
   }
 
+  const runtime = createRuntimeCommands({ baseUrl, client, capability: getCapability, unauthorized: () => { suspendIdentity(); actions.reset(true); }, publish: (run) => actions.upsert(run) });
   const actions = createActivityReader({
+    retained: runtime.retained,
+    project: runtime.project,
     hosts: async () => {
       await requireCapability("listActions");
       return [...new Set(["0", ...(await environments()).map((item) => item.id)])];
@@ -206,6 +212,10 @@ export function createHttpAdapter(options: HttpAdapterOptions = {}): DockletAdap
   }
 
   function refreshRun(activityId: string, environmentId?: string): void {
+    if (environmentId && runtime.retained().some((run) => run.id === activityId && run.hostId === environmentId)) {
+      void runtime.detail(environmentId, activityId).catch(() => undefined);
+      return;
+    }
     const previous = actions.runs().find((run) => run.id === activityId && run.hostId === environmentId);
     if (!previous || !environmentId) { refreshRuns(); return; }
     void actions.refreshOne(activityId, environmentId).catch((error) => { if (!isCancelledError(error)) window.dispatchEvent(new CustomEvent("docklet:adapter-error", { detail: error })); });
@@ -301,6 +311,7 @@ export function createHttpAdapter(options: HttpAdapterOptions = {}): DockletAdap
     source = undefined;
     sourceOpen = false;
     actions.invalidate();
+    runtime.observe(false);
   }
 
   const observations = new Map<string, InventoryObservation>();
@@ -326,6 +337,11 @@ export function createHttpAdapter(options: HttpAdapterOptions = {}): DockletAdap
     ...methods,
     ...createHttpAuth(baseUrl, client, invalidateIdentity, () => identityGeneration),
     ...createHostCommands(baseUrl, client, requireCapability, () => { invalidateCapabilities(); invalidateEnvironments(); changeListeners.forEach((listener) => listener(["hosts", ...inventoryTopics])); }),
+    runStackCommand: runtime.runStackCommand,
+    runContainerCommand: runtime.runContainerCommand,
+    getRuntimeRun: runtime.getRuntimeRun,
+    cancelRuntimeRun: runtime.cancelRuntimeRun,
+    releaseRuntimeRun: runtime.releaseRuntimeRun,
     ...createSettingsCore(baseUrl, client),
     ...createHttpHubBackups(baseUrl, client, options.uploadFactory),
     kind: "http",
@@ -343,6 +359,7 @@ export function createHttpAdapter(options: HttpAdapterOptions = {}): DockletAdap
     listEvents: loadEvents,
     subscribeActions(listener) {
       actionListeners.add(listener);
+      runtime.observe(true);
       connect();
       if (actionListeners.size === 1 && sourceOpen) refreshRuns();
       else if (actions.hasSnapshot()) listener(actions.runs());

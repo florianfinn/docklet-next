@@ -1,6 +1,7 @@
 import type { ActionRun } from "@/domain/model";
 import type { CodedActionRun, MessageCode } from "./message-code";
 
+import { AdapterOutcomeError } from "./capability";
 import type { DockletAdapter } from "./adapter";
 
 /**
@@ -111,6 +112,10 @@ interface Entry {
   settledAt?: number;
   value?: unknown;
   runId?: string;
+  durable?: boolean;
+  hostId?: string;
+  refreshedAt?: number;
+  error?: unknown;
 }
 
 /** A run id that never shows up in the run list stops blocking after this. */
@@ -171,6 +176,7 @@ export class RunGate {
     this.unwatch ??= this.inner.subscribeActions((runs) => {
       this.runs.clear();
       for (const r of runs) this.runs.set(r.id, r);
+      for (const entry of this.entries.values()) if (entry.runId) entry.hostId ??= this.runs.get(entry.runId)?.hostId;
       this.prune();
     });
   }
@@ -193,6 +199,7 @@ export class RunGate {
     if (!entry.settled) return "pending";
     const run = entry.runId ? this.runs.get(entry.runId) : undefined;
     if (run) return run.status;
+    if (entry.durable) return "pending";
     return entry.runId && this.now() - (entry.settledAt ?? 0) < LOST_RUN_MS ? "running" : "succeeded";
   }
 
@@ -209,7 +216,12 @@ export class RunGate {
 
   private answer(entry: Entry, reason: GateReason, retry?: () => Promise<unknown>): Promise<unknown> {
     const run = entry.runId ? this.runs.get(entry.runId) : undefined;
+    if (entry.durable && entry.runId && entry.hostId && this.now() - (entry.settledAt ?? this.now()) >= 600_000 && this.now() - (entry.refreshedAt ?? 0) >= 2_000) {
+      entry.refreshedAt = this.now();
+      void this.inner.getRuntimeRun?.(entry.hostId, entry.runId).catch(() => undefined);
+    }
     this.notify({ reason, key: entry.rule.key, runId: entry.runId, title: run?.title, finishedAt: run?.finishedAt, retry });
+    if (entry.error) return Promise.reject(entry.error);
     return entry.settled ? Promise.resolve(entry.value) : entry.promise;
   }
 
@@ -264,7 +276,7 @@ export class RunGate {
     }
 
     // Registered before the start: a run list update during the start must not prune it.
-    const entry: Entry = { rule, parent, settled: false, promise: Promise.resolve() };
+    const entry: Entry = { rule, parent, settled: false, promise: Promise.resolve(), durable: this.inner.kind === "http" && (method === "runStackCommand" || method === "runContainerCommand") };
     this.entries.set(rule.key, entry);
     entry.promise = new Promise<unknown>((resolve) => resolve(start())).then(
       (value) => {
@@ -272,10 +284,14 @@ export class RunGate {
         entry.settledAt = this.now();
         entry.value = value;
         entry.runId = runIdOf(value);
+        entry.hostId = entry.runId ? this.runs.get(entry.runId)?.hostId : undefined;
         return value;
       },
       (error: unknown) => {
-        if (this.entries.get(rule.key) === entry) this.entries.delete(rule.key);
+        if (entry.durable && error instanceof AdapterOutcomeError && error.outcome.kind === "error" && error.outcome.code === "runtime.admission-unknown") {
+          entry.settled = true;
+          entry.error = error;
+        } else if (this.entries.get(rule.key) === entry) this.entries.delete(rule.key);
         this.prune();
         throw error;
       },
