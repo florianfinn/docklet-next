@@ -51,7 +51,14 @@ func (
 	defer cancel()
 	s.runningMu.Lock()
 	if err := s.refuseRuntimeWriterInternal(ctx, activityID); err != nil {
+		// A failed read grants no runtime authority. Only positively known legacy
+		// registrations retain their unconditional cleanup on terminal write errors.
+		legacy := !errors.Is(err, ErrRunNotOwned) && s.knownLegacyOwnerInternal(activityID)
 		s.runningMu.Unlock()
+		if legacy {
+			s.releaseCancelInternal(activityID)
+			s.releaseSlotInternal(activityID)
+		}
 		return nil, err
 	}
 	defer func() {

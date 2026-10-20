@@ -25,6 +25,8 @@ func (a *ActivityService) PrepareRuntimeRestore(ctx context.Context) error {
 	if s == nil {
 		return nil
 	}
+	s.restoreMu.Lock()
+	defer s.restoreMu.Unlock()
 	if a.runtimeHTTP != nil {
 		a.runtimeHTTP.SetReady(false)
 	}
@@ -56,6 +58,8 @@ func (a *ActivityService) FinishRuntimeRestore(ctx context.Context) error {
 	if s == nil {
 		return nil
 	}
+	s.restoreMu.Lock()
+	defer s.restoreMu.Unlock()
 	if s.receiver != nil {
 		s.receiver.binding.Lock()
 		defer s.receiver.binding.Unlock()
@@ -121,7 +125,6 @@ func (a *ActivityService) FinishRuntimeRestore(ctx context.Context) error {
 		if s.receiver != nil {
 			s.receiver.store = binding
 		}
-		s.storagePaused = false
 	}
 	a.runningMu.Unlock()
 	if err != nil {
@@ -132,19 +135,47 @@ func (a *ActivityService) FinishRuntimeRestore(ctx context.Context) error {
 			return err
 		}
 	}
+	a.runningMu.Lock()
+	s.storagePaused = false
+	a.runningMu.Unlock()
 	return nil
 }
 
-// ResumeRuntimeIntake is called only when the existing restore flow has fully
-// succeeded. Failed restore keeps maintenance and runtime intake closed.
-func (a *ActivityService) ResumeRuntimeIntake() {
-	if a.runtime == nil {
-		return
+// ResumeRuntimeIntake restores an aborted pre-replacement lifetime before
+// opening readiness. Successful replacement already recovered in Finish.
+// Any recovery failure leaves both storage maintenance and intake closed.
+func (a *ActivityService) ResumeRuntimeIntake(ctx context.Context) error {
+	s := a.runtime
+	if s == nil {
+		return nil
+	}
+	s.restoreMu.Lock()
+	defer s.restoreMu.Unlock()
+	a.runningMu.Lock()
+	paused, storagePaused := s.intakePaused, s.storagePaused
+	a.runningMu.Unlock()
+	if !paused {
+		return nil
+	}
+	if s.localExecution != nil {
+		if err := s.localExecution.ApplicationContext.Err(); err != nil {
+			return err
+		}
+	}
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	if storagePaused && s.remote != nil {
+		if err := s.remote.Startup(ctx); err != nil {
+			return err
+		}
 	}
 	a.runningMu.Lock()
-	a.runtime.intakePaused = false
+	s.storagePaused = false
+	s.intakePaused = false
 	a.runningMu.Unlock()
 	if a.runtimeHTTP != nil {
 		a.runtimeHTTP.SetReady(true)
 	}
+	return nil
 }

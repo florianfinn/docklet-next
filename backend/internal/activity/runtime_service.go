@@ -10,6 +10,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"sync"
 	"time"
 
 	activitylib "github.com/florianfinn/docklet-next/backend/pkg/libarcane/activity"
@@ -32,6 +33,7 @@ type RuntimeTargetResolver interface {
 // DI constructs one owner per ActivityService. Local workers register inside
 // the final admission mutex/commit boundary.
 type RuntimeService struct {
+	restoreMu      sync.Mutex
 	intakePaused   bool
 	storagePaused  bool
 	remote         *RuntimeRemoteCoordinator

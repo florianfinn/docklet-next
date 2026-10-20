@@ -105,7 +105,7 @@ type ActivityService struct {
 	// holds; the slot is freed when the activity completes.
 	limiter      *activitySlotLimiter
 	slotMu       sync.Mutex
-	slotReleases map[string]func()
+	slotReleases map[string]activitySlotReleaseInternal
 
 	// terminalPublished suppresses stale snapshots after a terminal publish.
 	// Old entries expire after terminalPublishRetention.
@@ -254,7 +254,7 @@ func NewActivityService(db *database.DB, settingsService *settings.SettingsServi
 		subscribers:       map[int]*activitySubscriber{},
 		running:           map[string]context.CancelCauseFunc{},
 		limiter:           newActivitySlotLimiterInternal(settingsService),
-		slotReleases:      map[string]func(){},
+		slotReleases:      map[string]activitySlotReleaseInternal{},
 		terminalPublished: map[string]time.Time{},
 	}
 }
@@ -393,12 +393,7 @@ func (s *ActivityService) StartTrackedActivity(ctx context.Context, req StartAct
 }
 
 func (s *ActivityService) registerSlotReleaseInternal(activityID string, release func()) {
-	s.slotMu.Lock()
-	if existing, ok := s.slotReleases[activityID]; ok {
-		existing()
-	}
-	s.slotReleases[activityID] = release
-	s.slotMu.Unlock()
+	s.registerOwnedSlotReleaseInternal(activityID, release, false)
 }
 
 func (s *ActivityService) releaseSlotInternal(activityID string) {
@@ -412,7 +407,7 @@ func (s *ActivityService) releaseSlotInternal(activityID string) {
 	}
 	s.slotMu.Unlock()
 	if ok {
-		release()
+		release.release()
 	}
 }
 

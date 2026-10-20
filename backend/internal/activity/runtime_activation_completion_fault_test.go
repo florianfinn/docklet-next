@@ -1,0 +1,125 @@
+// Source: docklet-next/docs/design/runtime-control.md
+// Revision: f0447218f504f481d9e941df04bb6a19716ed6d7203060744204c44c3cc7cda8
+// Retrieved: 2026-10-20
+// License: Apache-2.0
+// Deviations: Ownership-read faults clean legacy registrations without releasing runtime work.
+
+package activity
+
+import (
+	"context"
+	"errors"
+	"io"
+	"testing"
+	"time"
+
+	activitytypes "github.com/florianfinn/docklet-next/types/activity"
+	"github.com/google/uuid"
+	"github.com/stretchr/testify/require"
+	"gorm.io/gorm"
+)
+
+func completionOwnershipFault(t *testing.T, s *ActivityService) (error, func()) {
+	t.Helper()
+	fault := errors.New("synthetic ownership read failure")
+	const name = "fixture-completion-ownership"
+	require.NoError(t, s.db.Callback().Query().Before("gorm:query").Register(name, func(tx *gorm.DB) {
+		if _, count := tx.Statement.Dest.(*int64); tx.Statement.Table == "runtime_receipts" && count {
+			tx.AddError(fault)
+		}
+	}))
+	return fault, func() { require.NoError(t, s.db.Callback().Query().Remove(name)) }
+}
+
+func TestRuntimeActivationLegacyCompletionOwnershipFault(t *testing.T) {
+	for _, mode := range []string{"tracked-slot", "untracked-slot", "tracked-queued"} {
+		t.Run(mode, func(t *testing.T) {
+			ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
+			defer cancel()
+			f := runtimeFixture(t)
+			req := StartActivityRequest{Type: activitytypes.TypeProjectDeploy, Queue: true, DeferSlot: mode == "tracked-queued"}
+			row, err := f.svc.StartActivity(ctx, req)
+			require.NoError(t, err)
+			var work context.Context
+			if mode != "untracked-slot" {
+				work = f.svc.Track(ctx, row.ID)
+			}
+			fault, restore := completionOwnershipFault(t, f.svc)
+			defer restore()
+			_, err = f.svc.CompleteActivity(ctx, row.ID, activitytypes.StatusSuccess, "Finished", nil)
+			require.ErrorIs(t, err, fault)
+			f.svc.slotMu.Lock()
+			_, held := f.svc.slotReleases[row.ID]
+			f.svc.slotMu.Unlock()
+			require.False(t, held, "known legacy completion must release capacity even when ownership cannot be read")
+			f.svc.runningMu.Lock()
+			_, tracked := f.svc.running[row.ID]
+			f.svc.runningMu.Unlock()
+			require.False(t, tracked, "known legacy cancellation registration must not leak")
+			if work != nil {
+				require.ErrorIs(t, work.Err(), context.Canceled)
+			}
+			require.Equal(t, row.Status, matrixRow(t, f.svc.db.DB, row.ID).Status, "failed lookup never fabricates terminal persistence")
+		})
+	}
+}
+
+func TestRuntimeActivationRuntimeCompletionOwnershipFault(t *testing.T) {
+	for _, mode := range []struct{ queued, bound bool }{{false, true}, {true, true}, {false, false}, {true, false}} {
+		queued := mode.queued
+		t.Run(map[bool]string{false: "executing", true: "queued"}[queued]+map[bool]string{false: "-unbound", true: "-bound"}[mode.bound], func(t *testing.T) {
+			ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
+			defer cancel()
+			probe := slotsNewProbe(t)
+			f := slotsFixture(t, ctx, new(1), func(ctx context.Context, _ RuntimeCommand, _ io.Writer) error { return probe.run(ctx) })
+			slotsCleanup(t, f, probe)
+			if mode.bound {
+				require.NoError(t, f.service.BindActivityOwner())
+			}
+			var unblock func()
+			if queued {
+				var err error
+				unblock, err = f.store.svc.limiter.acquireInternal(ctx, "0")
+				require.NoError(t, err)
+				defer unblock()
+			}
+			c := f.command()
+			admitted, err := f.service.Admit(ctx, c)
+			require.NoError(t, err)
+			if !queued {
+				b1Await(t, probe.entered)
+			}
+			owner := b2Owner(t, f, admitted.ActivityID)
+			before := matrixRow(t, f.store.svc.db.DB, admitted.ActivityID)
+			fault, restore := completionOwnershipFault(t, f.store.svc)
+			_, err = f.store.svc.CompleteActivity(ctx, admitted.ActivityID, activitytypes.StatusSuccess, "False completion", nil)
+			restore()
+			require.ErrorIs(t, err, fault)
+			require.NoError(t, owner.ctx.Err(), "generic completion cannot cancel the runtime owner")
+			require.Equal(t, before, matrixRow(t, f.store.svc.db.DB, admitted.ActivityID))
+			f.store.svc.slotMu.Lock()
+			slot, held := f.store.svc.slotReleases[admitted.ActivityID]
+			f.store.svc.slotMu.Unlock()
+			require.Equal(t, !queued, held, "runtime capacity remains held until joined terminal persistence")
+			if held {
+				require.True(t, slot.runtime)
+			}
+			conflicting := c
+			conflicting.Key, conflicting.Operation, conflicting.Options = uuid.NewString(), RuntimeDownProject, RuntimeOptions{}
+			_, err = f.service.Admit(ctx, conflicting)
+			var busy *GateConflict
+			require.ErrorAs(t, err, &busy)
+			if queued {
+				unblock()
+				b1Await(t, probe.entered)
+			}
+			probe.unblock()
+			snapshot, err := b2Wait(t, f, c, admitted.ActivityID)
+			require.NoError(t, err)
+			require.Equal(t, activitytypes.StatusSuccess, snapshot.Status)
+			require.EqualValues(t, 1, probe.calls.Load())
+			require.False(t, slotsRegistered(f, admitted.ActivityID))
+			slotsHeld(t, f, 0)
+		})
+	}
+}

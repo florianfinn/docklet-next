@@ -17,12 +17,22 @@ import (
 // Startup runs before readiness in the new lifetime. Persisted admission alone
 // cannot prove that a restored row was never dispatched. No Execute is replayed.
 func (c *RuntimeRemoteCoordinator) Startup(ctx context.Context) error {
+	c.lifecycleMu.Lock()
+	defer c.lifecycleMu.Unlock()
+	if err := c.lifetime.Err(); err != nil {
+		return errors.Join(err, c.closeInternal(ctx))
+	}
+	// Join even after an earlier Close timed out; an old task must never write
+	// into a resumed lifetime or remove its replacement's registration.
+	if err := c.closeInternal(ctx); err != nil {
+		return err
+	}
 	c.InvalidateNegativeContinuity()
 	c.mu.Lock()
 	c.paused = false
 	c.mu.Unlock()
 	if err := c.recoverInternal(ctx, nil, true); err != nil {
-		return errors.Join(err, c.Close(ctx))
+		return errors.Join(err, c.closeInternal(ctx))
 	}
 	return nil
 }
