@@ -34,6 +34,9 @@ func (c *RuntimeRemoteCoordinator) Startup(ctx context.Context) error {
 	if err := c.recoverInternal(ctx, nil, true); err != nil {
 		return errors.Join(err, c.closeInternal(ctx))
 	}
+	if err := errors.Join(ctx.Err(), c.lifetime.Err()); err != nil {
+		return errors.Join(err, c.closeInternal(ctx))
+	}
 	return nil
 }
 func (c *RuntimeRemoteCoordinator) RecoverTarget(ctx context.Context, store RuntimeStoreBinding) error {

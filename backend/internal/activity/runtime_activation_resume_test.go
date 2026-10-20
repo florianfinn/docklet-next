@@ -125,3 +125,36 @@ func TestRuntimeActivationResumeFailureAndRetry(t *testing.T) {
 	require.Zero(t, f.probe.executes.Load())
 	require.Equal(t, activitytypes.StatusFailed, matrixRow(t, f.store.svc.db.DB, f.ref.RunID).Status)
 }
+
+func TestRuntimeActivationShutdownDuringResumeStaysClosed(t *testing.T) {
+	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
+	defer cancel()
+	f := remoteFixture(t, &remoteTransportProbe{}, RuntimeReconcileSchedule{})
+	life, stop := context.WithCancel(ctx)
+	defer stop()
+	f.control.lifetime = life
+	h, err := NewRuntimeHTTPService(f.service, RuntimeHTTPPorts{ApplicationContext: life,
+		Store: func(context.Context, string) (RuntimeStoreBinding, error) { return f.commandValue.Store, nil },
+		PrepareTarget: func(_ context.Context, _ string, target RuntimeTarget) (RuntimeResolvedTarget, error) {
+			return RuntimeResolvedTarget{Target: target}, nil
+		}})
+	require.NoError(t, err)
+	h.SetReady(true)
+	require.NoError(t, f.store.svc.PrepareRuntimeRestore(ctx))
+	const name = "fixture-shutdown-during-resume"
+	require.NoError(t, f.store.svc.db.Callback().Query().Before("gorm:query").Register(name, func(tx *gorm.DB) {
+		if tx.Statement.Table == "runtime_receipts" {
+			stop()
+		}
+	}))
+	defer func() { require.NoError(t, f.store.svc.db.Callback().Query().Remove(name)) }()
+	err = f.store.svc.ResumeRuntimeIntake(ctx)
+	require.ErrorIs(t, err, context.Canceled, "application shutdown during recovery cannot reopen readiness")
+	require.False(t, h.ready.Load())
+	require.True(t, f.service.intakePaused)
+	require.True(t, f.service.storagePaused)
+	require.True(t, f.control.paused)
+	require.ErrorIs(t, f.store.svc.ResumeRuntimeIntake(ctx), context.Canceled)
+	require.False(t, h.ready.Load())
+	require.Zero(t, f.probe.executes.Load())
+}
