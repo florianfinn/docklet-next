@@ -7,6 +7,7 @@ import type { ActionReadHealth, DockletAdapter } from "./adapter";
 import { renderRun, type CodedActionRun } from "./message-code";
 import { useAdapter } from "./use-adapter";
 import { useActionsQuery } from "./queries";
+import { identityLifetime } from "./identity-lifetime";
 import { logLifetime } from "./log-buffer";
 
 interface Channel<T> {
@@ -35,10 +36,20 @@ function createChannel<T>(connect: Connect<T>, clearOnDisconnect = false) {
       useCallback((notify: () => void) => {
         ch.listeners.add(notify);
         if (!ch.stop) {
-          ch.stop = connect(adapter, (v) => {
-            ch.value = v;
-            ch.listeners.forEach((l) => l());
-          });
+          let stopValue: (() => void) | undefined;
+          const lifetime = identityLifetime(adapter);
+          const start = () => {
+            stopValue?.(); stopValue = undefined;
+            ch.value = undefined; ch.listeners.forEach((l) => l());
+            const generation = lifetime.version();
+            if (lifetime.active()) stopValue = connect(adapter, (v) => {
+              if (generation !== lifetime.version()) return;
+              ch.value = v; ch.listeners.forEach((l) => l());
+            });
+          };
+          const off = lifetime.listen(start);
+          start();
+          ch.stop = () => { off(); stopValue?.(); };
         }
         return () => {
           ch.listeners.delete(notify);

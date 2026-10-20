@@ -4,7 +4,7 @@
 // License: Apache-2.0
 // Deviations: Original HTTP and SSE adapter for issue 38.
 
-import { isCancelledError, QueryClient } from "@tanstack/react-query";
+import { CancelledError, isCancelledError, QueryClient } from "@tanstack/react-query";
 
 import type { components, operations, paths } from "@/api/generated/schema";
 
@@ -27,6 +27,8 @@ import { createSharedReads } from "./shared-reads";
 import { runtimeTokenReads } from "./runtime-token-read";
 import { createRuntimeCommands } from "./runtime-commands";
 import { createRuntimeLogs } from "./logs";
+import { registerIdentityLifetime } from "../identity-lifetime";
+import { createIdentityReads } from "./identity-reads";
 import { createActivityReader } from "./activity-reader";
 
 type ReadOperation = "get-capabilities" | "listEnvironments" | "list-activities" | "get-activity" | "listEvents";
@@ -71,7 +73,21 @@ function classifiedError(error: unknown, status?: number): AdapterOutcomeError {
 /** A small typed caller; response shape is checked before a DTO reaches the mapper. */
 export function createHttpAdapter(options: HttpAdapterOptions = {}): DockletAdapter {
   const baseUrl = (options.baseUrl ?? "/api").replace(/\/$/, "");
-  const client = createCsrfClient(baseUrl, runtimeTokenReads(baseUrl, options.fetch ?? globalThis.fetch));
+  const identityReads = createIdentityReads(options.fetch ?? globalThis.fetch);
+  const rawClient = createCsrfClient(baseUrl, runtimeTokenReads(baseUrl, identityReads.fetch));
+  const client = { token: rawClient.token, fetch: (async (input, init) => {
+    const version = identityGeneration;
+    const response = await rawClient.fetch(input, init);
+    const path = new URL(input instanceof Request ? input.url : String(input), (typeof window === "undefined" ? "https://hub.example.com" : window.location.href)).pathname;
+    // Auth and activity/runtime consumers already own their authoritative 401 path.
+    const ownedRejection = ["/auth/login", "/auth/password", "/auth/me"].some((suffix) => path.endsWith(suffix)) || /\/(activities|runtime-runs)(\/|$)|\/(capabilities|environments)$/.test(path);
+    if (version === identityGeneration && response.status === 401 && !ownedRejection) {
+      const body = await response.arrayBuffer();
+      if (version === identityGeneration) suspendIdentity();
+      return new Response(body, { status: response.status, headers: response.headers });
+    }
+    return response;
+  }) as typeof fetch };
   const sharedReads = createSharedReads(client.fetch);
   const fetcher = sharedReads.fetch;
   const sourceFactory = options.eventSource ?? ((url: string) => new EventSource(url, { withCredentials: true }));
@@ -83,6 +99,10 @@ export function createHttpAdapter(options: HttpAdapterOptions = {}): DockletAdap
   let sourceOpen = false;
   let authenticated = true;
   let identityGeneration = 0;
+  let lifetimeGeneration = 0;
+  const identityListeners = new Set<() => void>();
+  let identityCheck: Promise<boolean> | undefined;
+  let stopIdentityCheck: (() => void) | undefined;
   let reconnectTimer: ReturnType<typeof setTimeout> | undefined;
 
   async function read<I extends ReadOperation>(operationId: I, route: keyof paths | string, query?: Record<string, string | number>, observeResponse?: (response: Response) => void): Promise<Body<I>> {
@@ -111,23 +131,28 @@ export function createHttpAdapter(options: HttpAdapterOptions = {}): DockletAdap
   const environments = () => environmentCache.fetchQuery({ queryKey: environmentsKey, queryFn: () => page("listEnvironments", "/environments", 100) });
   function invalidateCapabilities() { capabilityReads.clear(); }
   function invalidateEnvironments() { sharedReads.clear(); void environmentCache.invalidateQueries({ queryKey: environmentsKey }); }
-  function suspendIdentity() {
+  function suspendIdentity(retain = false, nextActive = false) {
     ++identityGeneration;
-    authenticated = false;
+    authenticated = nextActive;
+    stopIdentityCheck?.(); stopIdentityCheck = undefined;
+    identityCheck = undefined;
     runtime.reset();
     logs.reset();
+    metrics.reset(false, retain);
+    identityReads.reset();
     sharedReads.clear(); invalidateCapabilities(); environmentCache.clear(); observations.clear();
     source?.close(); source = undefined; sourceOpen = false;
     if (reconnectTimer) clearTimeout(reconnectTimer);
     reconnectTimer = undefined;
+    if (!retain) { actions.reset(true); ++lifetimeGeneration; identityListeners.forEach((notify) => notify()); }
   }
   function invalidateIdentity(change: SessionChange) {
     if (change === "confirmed" && authenticated) return;
     const retain = change === "renewed" && authenticated;
-    suspendIdentity();
+    suspendIdentity(retain, change !== "lost");
     if (retain) actions.invalidate(true); else actions.reset(change === "lost");
     authenticated = change !== "lost";
-    if (authenticated) connect();
+    if (authenticated) { metrics.reset(true, retain); connect(); }
   }
   function environmentKey(rows: components["schemas"]["EnvironmentEnvironment"][]) {
     return JSON.stringify(rows.map((row) => [row.id, row.status, row.enabled, row.apiUrl, row.isEdge, row.agentReport?.version.currentVersion, row.agentReport?.version.agentContractVersion, row.agentReport?.version.agentContractFingerprint]).sort((a, b) => String(a[0]).localeCompare(String(b[0]))));
@@ -179,12 +204,35 @@ export function createHttpAdapter(options: HttpAdapterOptions = {}): DockletAdap
     }
   }
 
+  async function checkIdentity(): Promise<boolean> {
+    if (identityCheck) return identityCheck;
+    const version = identityGeneration;
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 10_000);
+    const stop = () => { clearTimeout(timeout); controller.abort(); };
+    stopIdentityCheck = stop;
+    const pending = (async () => {
+      try {
+        const response = await client.fetch(`${baseUrl}/auth/me`, { signal: controller.signal, credentials: "same-origin" });
+        await response.arrayBuffer();
+        if (version !== identityGeneration) return false;
+        if (response.status === 401) { suspendIdentity(); return false; }
+        if (!response.ok) throw classifiedError(null, response.status);
+        return authenticated;
+      } finally { clearTimeout(timeout); if (stopIdentityCheck === stop) stopIdentityCheck = undefined; }
+    })();
+    identityCheck = pending;
+    void pending.finally(() => { if (identityCheck === pending) identityCheck = undefined; }).catch(() => undefined);
+    return pending;
+  }
+  const metrics = createMetricsReader(baseUrl, fetcher, listHosts, requireCapability, options.webSocket ?? ((url) => new WebSocket(url)), observeHost, checkIdentity);
   const logs = createRuntimeLogs({
     baseUrl, socket: options.webSocket ?? ((url) => new WebSocket(url)), capability: getCapability,
     authenticated: () => authenticated,
     checkIdentity: async (signal) => {
       const version = identityGeneration;
       const response = await client.fetch(`${baseUrl}/auth/me`, { signal, credentials: "same-origin" });
+      await response.arrayBuffer();
       if (version !== identityGeneration) return false;
       if (response.status === 401) { suspendIdentity(); return false; }
       if (!response.ok) throw classifiedError(null, response.status);
@@ -290,22 +338,22 @@ export function createHttpAdapter(options: HttpAdapterOptions = {}): DockletAdap
       return;
     }
     source = opened;
+    const version = identityGeneration;
     opened.onopen = () => {
-      if (source !== opened) return;
+      if (source !== opened || version !== identityGeneration) return;
       sourceOpen = true;
       lastEventId = undefined;
       refreshSubscribed();
     };
-    opened.onmessage = (event: MessageEvent) => { if (source === opened) handleStream(event.data, event.lastEventId); };
+    opened.onmessage = (event: MessageEvent) => { if (source === opened && version === identityGeneration) handleStream(event.data, event.lastEventId); };
     opened.onerror = () => {
-      if (source !== opened) return;
+      if (source !== opened || version !== identityGeneration) return;
       lastEventId = undefined;
-      if (opened.readyState === 2) {
-        opened.close();
-        source = undefined;
-        sourceOpen = false;
-        scheduleReconnect();
-      }
+      // A reconnecting EventSource keeps its native retry cadence. Only CLOSED
+      // sources need a replacement after the authoritative identity check.
+      const closed = opened.readyState === 2;
+      if (closed) { opened.close(); source = undefined; sourceOpen = false; }
+      void checkIdentity().then((valid) => { if (closed && valid && version === identityGeneration) scheduleReconnect(); }, () => { if (closed && version === identityGeneration) scheduleReconnect(); });
     };
   }
 
@@ -321,6 +369,7 @@ export function createHttpAdapter(options: HttpAdapterOptions = {}): DockletAdap
     if (actionListeners.size || changeListeners.size) return;
     if (reconnectTimer) clearTimeout(reconnectTimer);
     reconnectTimer = undefined;
+    stopIdentityCheck?.(); stopIdentityCheck = undefined; identityCheck = undefined;
     source?.close();
     source = undefined;
     sourceOpen = false;
@@ -330,8 +379,10 @@ export function createHttpAdapter(options: HttpAdapterOptions = {}): DockletAdap
 
   const observations = new Map<string, InventoryObservation>();
   async function listHosts() {
+    const version = identityGeneration;
     await requireCapability("listHosts");
     const rows = await environments();
+    if (version !== identityGeneration) throw new CancelledError();
     try {
       const hosts = rows.map((row) => ({ ...mapHost(row), inventory: observations.get(row.id) }));
       environmentState = environmentKey(rows);
@@ -344,10 +395,21 @@ export function createHttpAdapter(options: HttpAdapterOptions = {}): DockletAdap
     observations.set(hostId, state);
     if (JSON.stringify(old) !== JSON.stringify(state)) changeListeners.forEach((listener) => listener(["hosts"]));
   }
-  const inventory = createInventoryReader(baseUrl, fetcher, listHosts, requireCapability, observeHost);
+  function scopedObservations<T extends object>(make: (observe: typeof observeHost) => T): T {
+    return new Proxy(make(() => {}), { get(_target, key) {
+      return (...args: unknown[]) => {
+        const version = identityGeneration;
+        const reader = make((hostId, state) => { if (version === identityGeneration) observeHost(hostId, state); });
+        const method = Reflect.get(reader, key) as (...values: unknown[]) => unknown;
+        return method(...args);
+      };
+    } });
+  }
+  const inventory = scopedObservations((observe) => createInventoryReader(baseUrl, fetcher, listHosts, requireCapability, observe));
+  const resourceReads = scopedObservations((observe) => createResourceReader(baseUrl, fetcher, listHosts, requireCapability, observe));
   const unsupported = createDisconnectedAdapter();
   const methods = Object.fromEntries(Object.keys(unsupported).filter((key) => key !== "kind").map((operationId) => [operationId, (...args: unknown[]) => Promise.reject(unavailable(operationId, refFor(operationId, args), "capability.mapping-unavailable"))])) as unknown as DockletAdapter;
-  return {
+  const adapter: DockletAdapter = {
     ...methods,
     ...createHttpAuth(baseUrl, client, invalidateIdentity, () => identityGeneration),
     ...createHostCommands(baseUrl, client, requireCapability, () => { invalidateCapabilities(); invalidateEnvironments(); changeListeners.forEach((listener) => listener(["hosts", ...inventoryTopics])); }),
@@ -363,7 +425,7 @@ export function createHttpAdapter(options: HttpAdapterOptions = {}): DockletAdap
     getCapability,
     listHosts,
     ...inventory,
-    ...createResourceReader(baseUrl, fetcher, listHosts, requireCapability, observeHost),
+    ...resourceReads,
     listActions: actions.load,
     subscribeActionReadHealth(listener) {
       healthListeners.add(listener);
@@ -384,8 +446,38 @@ export function createHttpAdapter(options: HttpAdapterOptions = {}): DockletAdap
       connect();
       return () => { changeListeners.delete(listener); disconnectIfUnused(); };
     },
-    subscribeMetrics: createMetricsReader(baseUrl, fetcher, listHosts, requireCapability, options.webSocket ?? ((url) => new WebSocket(url)), observeHost),
+    subscribeMetrics: metrics,
     subscribeLogs: logs.subscribeLogs,
     subscribeContainerLogs: logs.subscribeContainerLogs,
   };
+  registerIdentityLifetime(adapter.subscribeChanges, {
+    version: () => lifetimeGeneration,
+    active: () => authenticated,
+    listen: (notify) => { identityListeners.add(notify); return () => { identityListeners.delete(notify); }; },
+  });
+  // Guard public reads and partial publishers in addition to transport bodies.
+  return new Proxy(adapter, { get(target, key, receiver) {
+    const method: unknown = Reflect.get(target, key, receiver);
+    if (typeof method !== "function" || !/^(list|get|discover)/.test(String(key))) return method;
+    return (...args: unknown[]) => {
+      // Auth and activities already implement their specialized renewal re-read.
+      if (key === "getCurrentUser" || key === "getAuthMode" || key === "listActions") return method(...args);
+      const owner = lifetimeGeneration;
+      const invoke = async (retryRenewal = true): Promise<unknown> => {
+        const version = identityGeneration;
+        const check = () => { if (owner !== lifetimeGeneration || version !== identityGeneration) throw new CancelledError(); };
+        const wrapped = args.map((arg) => typeof arg === "function" ? (...values: unknown[]) => { check(); return arg(...values); } : arg);
+        try {
+          const value: unknown = await method(...wrapped);
+          check();
+          return value;
+        } catch (error) {
+          if (owner !== lifetimeGeneration) throw new CancelledError();
+          if (retryRenewal && authenticated && version !== identityGeneration) return invoke(false);
+          throw error;
+        }
+      };
+      return invoke();
+    };
+  } });
 }

@@ -74,7 +74,7 @@ func directLogViewer(t *testing.T, target string) string {
 	t.Cleanup(server.Close)
 	return "ws" + strings.TrimPrefix(server.URL, "http")
 }
-func edgeLogViewer(t *testing.T, target string) string {
+func edgeLogViewer(t *testing.T, target string, decorate ...func(*http.Request) *http.Request) string {
 	t.Helper()
 	ctx, cancel := context.WithCancel(t.Context())
 	targetURL, err := url.Parse(target)
@@ -89,9 +89,9 @@ func edgeLogViewer(t *testing.T, target string) string {
 		}
 		tunnel := edge.NewTunnelConn(socket)
 		defer tunnel.Close()
-		var upstream *websocket.Conn
+		upstreams := make(map[string]*websocket.Conn)
 		defer func() {
-			if upstream != nil {
+			for _, upstream := range upstreams {
 				_ = upstream.CloseNow()
 			}
 			workers.Wait()
@@ -114,11 +114,12 @@ func edgeLogViewer(t *testing.T, target string) string {
 						return
 					}
 				}
-				upstream, _, err = websocket.Dial(ctx, target, nil)
+				upstream, _, err := websocket.Dial(ctx, target, nil)
 				if err != nil {
 					t.Error(err)
 					return
 				}
+				upstreams[message.ID] = upstream
 				connection := upstream
 				id := message.ID
 				workers.Go(func() {
@@ -133,8 +134,9 @@ func edgeLogViewer(t *testing.T, target string) string {
 					}
 				})
 			case edge.MessageTypeStreamClose, edge.MessageTypeWebSocketClose:
-				if upstream != nil {
+				if upstream := upstreams[message.ID]; upstream != nil {
 					_ = upstream.CloseNow()
+					delete(upstreams, message.ID)
 				}
 			}
 		}
@@ -161,6 +163,9 @@ func edgeLogViewer(t *testing.T, target string) string {
 	}()
 	router := echo.New()
 	router.GET("/logs", func(c *echo.Context) error {
+		for _, bind := range decorate {
+			c.SetRequest(bind(c.Request()))
+		}
 		return edge.ProxyWebSocketRequest(c, tunnel, targetURL.Path, func(*http.Request) bool { return true })
 	})
 	proxy := httptest.NewServer(router)

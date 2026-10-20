@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace
+// Deviations: Local module namespace; session-bound viewer lifetime and durable validation.
 
 package ws
 
@@ -466,7 +466,7 @@ func (h *WebSocketHandler) SystemStats(c *echo.Context) error {
 
 	go h.readSystemStatsPumpInternal(ctx, cancel, conn)
 	// The pong is serviced by readSystemStatsPumpInternal.
-	go keepWSConnAliveInternal(ctx, cancel, conn, 54*time.Second)
+	defer startWSKeepaliveInternal(ctx, cancel, conn, 54*time.Second)()
 
 	send := func() error {
 		stats, _ := h.systemStatsSampler.latest.Load()

@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Split Echo middleware; local module namespace; removed OIDC/passkeys; startup sign-in modes and shared reserved synthetic agent identity.
+// Deviations: Split Echo middleware; local module namespace; removed OIDC/passkeys; startup sign-in modes and shared reserved synthetic agent identity; session-bound viewer lifetime and durable validation.
 
 package auth
 
@@ -229,6 +229,7 @@ func (m *AuthMiddleware) managerAuth(ctx context.Context, c *echo.Context, next 
 	c.Set(string(middleware.ContextKeyUserID), authenticatedUser.ID)
 	c.Set(string(middleware.ContextKeyCurrentUser), authenticatedUser)
 	c.Set(string(middleware.ContextKeyCurrentSessionID), sessionID)
+	c.SetRequest(req.WithContext(m.authService.ViewerContext(req.Context(), sessionID, authenticatedUser.ID)))
 	c.Set(string(middleware.ContextKeyUserPermissions), ps)
 	return m.authorizeAndContinueInternal(c, next, ps)
 }

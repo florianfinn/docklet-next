@@ -31,7 +31,7 @@ type logSourceOptions struct {
 	follow, timestamps    bool
 }
 
-func logServer(t *testing.T, h *WebSocketHandler, allow bool) string {
+func logServer(t *testing.T, h *WebSocketHandler, allow bool, decorate ...func(*http.Request) *http.Request) string {
 	t.Helper()
 	h.logStreams = make(map[string]*wsLogStream)
 	h.wsMetrics = wshub.NewWebSocketMetrics()
@@ -44,6 +44,9 @@ func logServer(t *testing.T, h *WebSocketHandler, allow bool) string {
 				p = authz.SudoPermissionSet()
 			}
 			c.Set(string(middleware.ContextKeyUserPermissions), p)
+			for _, bind := range decorate {
+				c.SetRequest(bind(c.Request()))
+			}
 			return next(c)
 		}
 	})

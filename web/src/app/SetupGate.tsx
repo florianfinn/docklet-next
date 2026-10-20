@@ -22,16 +22,16 @@ export function SetupGate() {
   const t = useTranslations("login");
   const mode = useAuthMode();
   const currentUser = useCurrentUser();
-  const setup = useSetupStatus(currentUser.isSuccess);
+  const setup = useSetupStatus(currentUser.isSuccess && !!currentUser.data);
   const savedLocale = currentUser.data?.locale;
   useEffect(() => { if (isLocale(savedLocale)) setAppLocale(savedLocale); }, [savedLocale]);
   if (mode.isPending || currentUser.isPending) return <main aria-busy="true" className="p-6">{t("loading")}</main>;
-  if (currentUser.isError) {
-    const rejected = currentUser.error instanceof AdapterOutcomeError && currentUser.error.outcome.kind === "error" && currentUser.error.outcome.status === 401;
+  if (currentUser.isError || (currentUser.isSuccess && !currentUser.data)) {
+    const rejected = (currentUser.isSuccess && !currentUser.data) || currentUser.error instanceof AdapterOutcomeError && currentUser.error.outcome.kind === "error" && currentUser.error.outcome.status === 401;
     if (rejected && mode.data === "local") return <Navigate to="/login" replace />;
     if (rejected && mode.data === "proxy") return <main role="alert" className="p-6">{t("proxyRejected")}</main>;
   }
-  if (mode.isError || currentUser.isError || setup.isError) return <main className="p-6"><p>{t("setupStatusError")}</p><Button onClick={() => { void mode.refetch(); void currentUser.refetch(); void setup.refetch(); }}>{t("retry")}</Button></main>;
+  if (mode.isError || currentUser.isError || currentUser.data === null || setup.isError) return <main className="p-6"><p>{t("setupStatusError")}</p><Button onClick={() => { void mode.refetch(); void currentUser.refetch(); void setup.refetch(); }}>{t("retry")}</Button></main>;
   if (setup.isPending) return <main aria-busy="true" className="p-6">{t("loading")}</main>;
   if (setup.data && mode.data === "local" && currentUser.data?.requiresPasswordChange) return <InitialPasswordPage />;
   return <SetupSession completed={setup.data} />;

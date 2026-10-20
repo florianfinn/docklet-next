@@ -1,11 +1,15 @@
 import { QueryClient, QueryClientProvider, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 
+import { resetActionIdentity } from "@/features/activity/run-presentation";
+import { actionDialogStore } from "@/features/activity/action-dialog-store";
+
 import type { ContainerInfo } from "@/domain/model";
 
 import type { DockletAdapter, Topic } from "./adapter";
 import { runGateOf, withRunGate } from "./run-gate";
 import { AdapterContext } from "./use-adapter";
+import { identityLifetime } from "./identity-lifetime";
 import { queryKeys } from "./query-keys";
 import { useCurrentUser } from "./queries";
 
@@ -42,6 +46,34 @@ function ChangeBridge({ adapter }: { adapter: DockletAdapter }) {
   return null;
 }
 
+function IdentityBridge({ adapter }: { adapter: DockletAdapter }) {
+  const client = useQueryClient();
+  useEffect(() => {
+    const lifetime = identityLifetime(adapter);
+    return lifetime.listen(() => {
+      const version = lifetime.version();
+      // Active notifications come from a confirmed identity; preserve its query and result.
+      const preserveCurrentUser = lifetime.active();
+      const cancel = client.cancelQueries({ predicate: (query) => query.queryKey[0] !== queryKeys.authMode[0] && (!preserveCurrentUser || query.queryKey[0] !== queryKeys.currentUser[0]) }, { revert: false });
+      const clear = () => {
+        for (const query of client.getQueryCache().findAll()) {
+          if (query.queryKey[0] !== queryKeys.authMode[0] && query.queryKey[0] !== queryKeys.currentUser[0]) query.reset();
+        }
+        if (!preserveCurrentUser) client.setQueryData(queryKeys.currentUser, null);
+      };
+      resetActionIdentity(); actionDialogStore.set({ waiting: [] });
+      clear();
+      // Cancellation must settle before fresh observers reuse the same query objects.
+      void cancel.then(() => {
+        if (version !== lifetime.version()) return;
+        clear();
+        if (lifetime.active()) void client.invalidateQueries({ predicate: (query) => query.queryKey[0] !== queryKeys.authMode[0] && (!preserveCurrentUser || query.queryKey[0] !== queryKeys.currentUser[0]) });
+      });
+    });
+  }, [adapter, client]);
+  return null;
+}
+
 /** Tells the run gate which stack a container belongs to, from cached container data. */
 function GateParents({ adapter }: { adapter: DockletAdapter }) {
   const client = useQueryClient();
@@ -73,6 +105,7 @@ export function AdapterProvider({ adapter: inner, children }: { adapter: Docklet
   return (
     <AdapterContext.Provider value={adapter}>
       <QueryClientProvider client={client}>
+        <IdentityBridge adapter={adapter} />
         <ChangeBridge adapter={adapter} />
         <GateParents adapter={adapter} />
         {children}

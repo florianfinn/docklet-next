@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Log only sorted forwarded header names.
+// Deviations: Log only sorted forwarded header names; session-bound viewer lifetime and durable validation.
 
 package ws
 
@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/coder/websocket"
+	"github.com/florianfinn/docklet-next/backend/pkg/sessionlife"
 )
 
 // ProxyHTTP upgrades the incoming client connection and bridges it to remoteWS.
@@ -35,6 +36,13 @@ func ProxyHTTP(w http.ResponseWriter, r *http.Request, remoteWS string, header h
 		return err
 	}
 	defer func() { _ = clientConn.CloseNow() }()
+	viewerCtx, viewerCancel := context.WithCancel(r.Context())
+	defer viewerCancel()
+	lease, err := sessionlife.Register(viewerCtx, func() { viewerCancel(); _ = clientConn.CloseNow() })
+	if err != nil {
+		return err
+	}
+	defer lease.Release()
 	// This is a pure bridge; frame-size policing is the remote endpoint's job.
 	clientConn.SetReadLimit(-1)
 
@@ -44,7 +52,7 @@ func ProxyHTTP(w http.ResponseWriter, r *http.Request, remoteWS string, header h
 	}
 	sort.Strings(headerNames)
 	slog.DebugContext(r.Context(), "attempting websocket dial", "remoteWs", remoteWS, "headerNames", headerNames)
-	dialCtx, dialCancel := context.WithTimeout(r.Context(), 45*time.Second)
+	dialCtx, dialCancel := context.WithTimeout(viewerCtx, 45*time.Second)
 	remoteConn, resp, err := websocket.Dial(dialCtx, remoteWS, &websocket.DialOptions{
 		HTTPHeader: header,
 		HTTPClient: &http.Client{Transport: &http.Transport{Proxy: http.ProxyFromEnvironment}},
@@ -70,9 +78,9 @@ func ProxyHTTP(w http.ResponseWriter, r *http.Request, remoteWS string, header h
 
 	slog.DebugContext(dialCtx, "websocket proxy established", "remoteWs", remoteWS)
 
-	// When either pump ends, the handler returns and the deferred CloseNow
-	// calls unblock the other pump.
-	pumpCtx, pumpCancel := context.WithCancel(r.Context())
+	// When either pump ends, close both legs and join the pumps and durable
+	// cadence before returning from this viewer lifetime.
+	pumpCtx, pumpCancel := context.WithCancel(viewerCtx)
 	defer pumpCancel()
 
 	errc := make(chan struct{}, 2)
@@ -107,7 +115,31 @@ func ProxyHTTP(w http.ResponseWriter, r *http.Request, remoteWS string, header h
 		}
 	}()
 
+	checkDone := make(chan struct{})
+	go func() {
+		defer close(checkDone)
+		ticker := sessionlife.NewTicker(pumpCtx, 54*time.Second)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-pumpCtx.Done():
+				return
+			case <-ticker.C:
+				if sessionlife.Check(pumpCtx) != nil {
+					viewerCancel()
+					_ = clientConn.CloseNow()
+					_ = remoteConn.CloseNow()
+					return
+				}
+			}
+		}
+	}()
 	<-errc
+	pumpCancel()
+	_ = clientConn.CloseNow()
+	_ = remoteConn.CloseNow()
+	<-errc
+	<-checkDone
 	return nil
 }
 

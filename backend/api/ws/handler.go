@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; functional cut: removed Swarm; shared exact hub-origin and validated stream-credential policy.
+// Deviations: Local module namespace; functional cut: removed Swarm; shared exact hub-origin and validated stream-credential policy; session-bound viewer lifetime and durable validation.
 
 package ws
 
@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/coder/websocket"
+	"github.com/florianfinn/docklet-next/backend/pkg/sessionlife"
 	systemtypes "github.com/florianfinn/docklet-next/types/system"
 	"github.com/labstack/echo/v5"
 	"github.com/samber/hot"
@@ -131,16 +132,22 @@ func (h *WebSocketHandler) acceptWSInternal(c *echo.Context, kind, resourceID st
 		slog.DebugContext(c.Request().Context(), "websocket accept failed", "kind", kind, "resourceId", resourceID, "error", err)
 		return nil, nil, false
 	}
+	lease, err := sessionlife.Register(c.Request().Context(), func() { _ = conn.CloseNow() })
+	if err != nil {
+		_ = conn.CloseNow()
+		return nil, nil, false
+	}
 	release := func() {}
 	if h.maintenance != nil {
 		release, err = h.maintenance.AdmitConnection(func() { _ = conn.CloseNow() })
 		if err != nil {
+			lease.Release()
 			_ = conn.CloseNow()
 			return nil, nil, false
 		}
 	}
 	connID := h.wsMetrics.RegisterConnection(buildWSConnectionInfoInternal(c, kind, resourceID))
-	return conn, func() { h.wsMetrics.UnregisterConnection(connID); release() }, true
+	return conn, func() { h.wsMetrics.UnregisterConnection(connID); release(); lease.Release() }, true
 }
 
 // keepWSConnAliveInternal pings the peer every period. Ping round-trips (the
@@ -149,13 +156,18 @@ func (h *WebSocketHandler) acceptWSInternal(c *echo.Context, kind, resourceID st
 // it cancels the connection's context — a silently-dead client would
 // otherwise keep the session open until a write fails.
 func keepWSConnAliveInternal(ctx context.Context, cancel context.CancelFunc, conn *websocket.Conn, period time.Duration) {
-	ticker := time.NewTicker(period)
+	ticker := sessionlife.NewTicker(ctx, period)
 	defer ticker.Stop()
 	for {
 		select {
 		case <-ctx.Done():
 			return
 		case <-ticker.C:
+			if sessionlife.Check(ctx) != nil {
+				cancel()
+				_ = conn.CloseNow()
+				return
+			}
 			pctx, pcancel := context.WithTimeout(ctx, 10*time.Second)
 			err := conn.Ping(pctx)
 			pcancel()
@@ -165,4 +177,12 @@ func keepWSConnAliveInternal(ctx context.Context, cancel context.CancelFunc, con
 			}
 		}
 	}
+}
+
+// startWSKeepaliveInternal joins the connection-owned cadence on every handler exit.
+func startWSKeepaliveInternal(ctx context.Context, cancel context.CancelFunc, conn *websocket.Conn, period time.Duration) func() {
+	owned, stop := context.WithCancel(ctx)
+	done := make(chan struct{})
+	go func() { defer close(done); keepWSConnAliveInternal(owned, cancel, conn, period) }()
+	return func() { stop(); <-done }
 }

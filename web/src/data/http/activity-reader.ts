@@ -157,7 +157,7 @@ export function createActivityReader(reads: Reads) {
       if (isCancelledError(error)) throw error;
       if (started > globalHealthSequence) {
         globalHealthSequence = started; globalFailure = failure(error);
-        if (isUnauthorized(error)) { ++generation; ++cancellationEpoch; initialized = true; current = []; failures.clear(); reads.unauthorized(); }
+        if (isUnauthorized(error)) { ++generation; ++cancellationEpoch; initialized = true; current = []; failures.clear(); reads.unauthorized(); globalHealthSequence = started; globalFailure = failure(error); }
         publishHealth();
       }
       throw error;
