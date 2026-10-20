@@ -163,7 +163,15 @@ func runtimeLegacyResponse(ctx context.Context, service *ActivityService, enviro
 				flush.Flush()
 			}
 			emit = func(line activitytypes.OutputLine) error {
-				_, err := io.WriteString(writer, line.Text+"\n")
+				// Existing output objects keep their exact payload. Relay loss markers
+				// and plain text use the legacy log frame, never invalid NDJSON.
+				text := bytes.TrimSpace([]byte(line.Text))
+				var err error
+				if len(text) == 0 || text[0] != '{' || !json.Valid(text) {
+					err = json.NewEncoder(writer).Encode(map[string]string{"log": line.Text})
+				} else {
+					_, err = io.WriteString(writer, line.Text+"\n")
+				}
 				if flush, ok := writer.(http.Flusher); ok {
 					flush.Flush()
 				}
