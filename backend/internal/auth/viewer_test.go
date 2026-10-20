@@ -110,3 +110,8 @@ func TestSessionAuthPasswordRecoveryModeAndCleanupBypasses(t *testing.T) {
 		})
 	}
 }
+
+func TestSessionNilAuthViewerContext(t *testing.T) {
+	var service *AuthService
+	require.NoError(t, sessionlife.Check(service.ViewerContext(t.Context(), "", "")))
+}

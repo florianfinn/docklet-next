@@ -13,7 +13,7 @@ export function createIdentityReads(fetcher: typeof fetch) {
   const check = (version: number) => { if (version !== generation) throw new CancelledError(); };
   const fetch: typeof globalThis.fetch = async (input, init) => {
     // The public startup policy and CSRF bootstrap contain no session data.
-    if (new URL(input instanceof Request ? input.url : String(input), window.location.href).pathname.endsWith("/auth/mode")) return fetcher(input, init);
+    if (new URL(input instanceof Request ? input.url : String(input), (typeof window === "undefined" ? "https://hub.example.com" : window.location.href)).pathname.endsWith("/auth/mode")) return fetcher(input, init);
     const version = generation;
     const controller = new AbortController();
     const signal = init?.signal ?? (input instanceof Request ? input.signal : undefined);

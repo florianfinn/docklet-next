@@ -11,7 +11,7 @@ import { LogSocket } from "./logs.test-support";
 import { envelope, response, runtimeDetail, snapshot } from "./runtime-commands.test-support";
 
 export function sessionFixture() {
-  const state = { authenticated: true, credentialFailure: false, ambiguous: false, blocked: undefined as undefined | ReturnType<typeof deferred<Response>>, commandHeld: undefined as undefined | ReturnType<typeof deferred<Response>> };
+  const state = { authenticated: true, credentialFailure: false, authHeld: undefined as undefined | ReturnType<typeof deferred<Response>>, ambiguous: false, blocked: undefined as undefined | ReturnType<typeof deferred<Response>>, commandHeld: undefined as undefined | ReturnType<typeof deferred<Response>> };
   const sources: ActivitySource[] = [], sockets: { url: string; socket: LogSocket }[] = [];
   const calls: { path: string; init: RequestInit }[] = [];
   const user = { id: "example-user", username: "operator", requiresPasswordChange: false };
@@ -22,6 +22,7 @@ export function sessionFixture() {
     if (path.endsWith("/auth/logout")) { state.authenticated = false; return envelope({}); }
     if (path.endsWith("/auth/login")) { if (state.credentialFailure) return response({}, 401); state.authenticated = true; return envelope({ user }); }
     if (path.endsWith("/auth/password")) return state.credentialFailure ? response({}, 401) : envelope({});
+    if (path.endsWith("/auth/me") && state.authHeld) return state.authHeld.promise;
     if (path.endsWith("/auth/me")) return state.authenticated ? envelope(user) : response({}, 401);
     if (path.endsWith("/capabilities")) return envelope(["listHosts", "listActions", "subscribeMetrics", "subscribeLogs", "subscribeContainerLogs", "runContainerCommand", "runStackCommand", "listEvents"].map((operationId) => ({ operationId, available: true, resourceRef: { kind: url.searchParams.get("kind") ?? "hub", id: url.searchParams.get("id") ?? "0" } })));
     if (path.endsWith("/environments")) return state.blocked ? state.blocked.promise : response({ success: true, data: [{ id: "0", name: "Example", apiUrl: "https://agent.example.com", enabled: true, status: "online", isEdge: false }], pagination: { totalItems: 1 } });

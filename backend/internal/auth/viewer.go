@@ -17,7 +17,7 @@ import (
 )
 
 func (s *AuthService) ViewerContext(ctx context.Context, sessionID, userID string) context.Context {
-	if s.SignInMode() != "local" || s.sessionService == nil || sessionID == "" {
+	if s == nil || s.SignInMode() != "local" || s.sessionService == nil || sessionID == "" {
 		return ctx
 	}
 	return s.sessionService.ViewerContext(ctx, sessionID, userID)

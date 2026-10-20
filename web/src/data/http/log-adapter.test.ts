@@ -41,18 +41,22 @@ it.each(["0", "direct", "edge"])("maps both real adapter subscriptions through c
 });
 it("capability denial creates no websocket", async () => {
   const f = setup(); f.state.allowed = false; let lines: LogLine[] = [];
-  const stop = f.adapter.subscribeLogs("0~example", (value) => { lines = value; }); await settleLogs(); f.flush();
+  const stop = f.adapter.subscribeLogs("0~example", (value) => { lines = value; });
+  await f.adapter.getCapability("subscribeLogs", { kind: "stack", id: "0~example" }); await settleLogs(); f.flush();
   expect(f.sockets).toHaveLength(0); expect(logDelivery(lines)?.status).toBe("unavailable"); stop();
 });
-it("identity replacement and authoritative reconnect rejection reset only the owned log lifetime", async () => {
+it("identity replacement and authoritative reconnect rejection reset the log lifetime", async () => {
   const f = setup(); await f.adapter.getCurrentUser(); const lifetime = logLifetime(f.adapter.subscribeLogs);
-  let lines: LogLine[] = []; let stop = f.adapter.subscribeLogs("0~example", (value) => { lines = value; }); await settleLogs();
+  let lines: LogLine[] = []; let stop = f.adapter.subscribeLogs("0~example", (value) => { lines = value; });
+  await f.adapter.getCapability("subscribeLogs", { kind: "stack", id: "0~example" }); await settleLogs();
   f.sockets[0]!.send(wireLog(1)); f.flush(); expect(lines).toHaveLength(1);
   const old = f.sockets[0]!.onmessage!, version = lifetime.version(); f.state.user = "replacement"; await f.adapter.getCurrentUser();
   expect(lifetime.version()).toBeGreaterThan(version); expect(lines).toEqual([]); expect(f.sockets[0]!.close).toHaveBeenCalledTimes(1);
   old(new MessageEvent("message", { data: JSON.stringify(wireLog(2)) })); f.flush(); expect(lines).toEqual([]); stop();
-  stop = f.adapter.subscribeLogs("0~example", (value) => { lines = value; }); await settleLogs();
-  f.state.rejected = true; f.sockets[1]!.disconnect(); await settleLogs(); f.flush();
+  stop = f.adapter.subscribeLogs("0~example", (value) => { lines = value; });
+  await f.adapter.getCapability("subscribeLogs", { kind: "stack", id: "0~example" }); await settleLogs();
+  const rejected = new Promise<void>((resolve) => { const off = lifetime.listen(() => { off(); resolve(); }); });
+  f.state.rejected = true; f.sockets[1]!.disconnect(); await rejected; f.flush();
   expect(lines).toEqual([]); expect(logDelivery(lines)?.status).toBe("unauthenticated");
   expect(f.fetcher.mock.calls.some(([input]) => String(input).endsWith("/auth/me"))).toBe(true); stop();
 });

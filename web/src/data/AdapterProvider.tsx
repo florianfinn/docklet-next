@@ -1,6 +1,9 @@
 import { QueryClient, QueryClientProvider, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 
+import { resetActionIdentity } from "@/features/activity/run-presentation";
+import { actionDialogStore } from "@/features/activity/action-dialog-store";
+
 import type { ContainerInfo } from "@/domain/model";
 
 import type { DockletAdapter, Topic } from "./adapter";
@@ -48,13 +51,24 @@ function IdentityBridge({ adapter }: { adapter: DockletAdapter }) {
   useEffect(() => {
     const lifetime = identityLifetime(adapter);
     return lifetime.listen(() => {
-      void client.cancelQueries({ predicate: (query) => query.queryKey[0] !== queryKeys.authMode[0] && (!lifetime.active() || query.queryKey[0] !== queryKeys.currentUser[0]) });
-      // Keep mounted query observers attached; reset their identity-owned data.
-      for (const query of client.getQueryCache().findAll()) {
-        if (query.queryKey[0] !== queryKeys.authMode[0] && query.queryKey[0] !== queryKeys.currentUser[0]) query.reset();
-      }
-      if (lifetime.active()) void client.invalidateQueries({ predicate: (query) => query.queryKey[0] !== queryKeys.currentUser[0] && query.queryKey[0] !== queryKeys.authMode[0] });
-      if (!lifetime.active()) client.setQueryData(queryKeys.currentUser, null);
+      const version = lifetime.version();
+      // The first /auth/me query establishes its own identity; do not cancel it.
+      const initialCheck = lifetime.active() && client.getQueryData(queryKeys.currentUser) === undefined;
+      const cancel = client.cancelQueries({ predicate: (query) => query.queryKey[0] !== queryKeys.authMode[0] && (!initialCheck || query.queryKey[0] !== queryKeys.currentUser[0]) }, { revert: false });
+      const clear = () => {
+        for (const query of client.getQueryCache().findAll()) {
+          if (query.queryKey[0] !== queryKeys.authMode[0] && query.queryKey[0] !== queryKeys.currentUser[0]) query.reset();
+        }
+        if (!initialCheck) client.setQueryData(queryKeys.currentUser, null);
+      };
+      resetActionIdentity(); actionDialogStore.set({ waiting: [] });
+      clear();
+      // Cancellation must settle before fresh observers reuse the same query objects.
+      void cancel.then(() => {
+        if (version !== lifetime.version()) return;
+        clear();
+        if (lifetime.active()) void client.invalidateQueries({ predicate: (query) => query.queryKey[0] !== queryKeys.authMode[0] && (!initialCheck || query.queryKey[0] !== queryKeys.currentUser[0]) });
+      });
     });
   }, [adapter, client]);
   return null;

@@ -96,3 +96,27 @@ it("credential form rejection stays inline and a valid password renewal keeps me
   const before = identityLifetime(f.adapter).version(); await f.adapter.changePassword("example-password", "example-password-two");
   expect(identityLifetime(f.adapter).version()).toBe(before); stop();
 });
+
+
+it("logout cancels an in-flight identity verification timer and its old 401 cannot revoke a replacement", async () => {
+  vi.useFakeTimers(); const f = sessionFixture(); await f.adapter.getCurrentUser();
+  const stop = f.adapter.subscribeChanges(vi.fn());
+  const held = deferred<Response>(); f.state.authHeld = held;
+  f.sources[0]!.failClosed(); await settle();
+  await f.adapter.logout(); expect(vi.getTimerCount()).toBe(0);
+  f.state.authHeld = undefined;
+  await f.adapter.login("operator", "example-password");
+  held.resolve(new Response("{}", { status: 401 })); await settle();
+  expect(identityLifetime(f.adapter).active()).toBe(true); stop();
+});
+
+
+it("known same-user renewal replaces a held generic read once without accepting its old observation", async () => {
+  vi.useFakeTimers(); const f = sessionFixture(); await f.adapter.getCurrentUser();
+  const held = deferred<Response>(); f.state.blocked = held;
+  const pending = f.adapter.listHosts(); await settle();
+  await f.adapter.changePassword("example-password", "example-password-two");
+  f.state.blocked = undefined; held.resolve(envelope([{ id: "old-identity-observation" }]));
+  expect((await pending).map(({ id }) => id)).toEqual(["0"]);
+  expect(f.calls.filter(({ path }) => path.endsWith("/environments"))).toHaveLength(2);
+});

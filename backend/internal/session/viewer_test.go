@@ -69,7 +69,10 @@ func TestSessionViewerSeparateServicesAndDurableBypasses(t *testing.T) {
 			case "session-delete":
 				require.NoError(t, db.Delete(record).Error)
 			case "user-delete":
+				require.NoError(t, db.Exec("PRAGMA foreign_keys = OFF").Error)
 				require.NoError(t, db.Delete(u).Error)
+				_, err := owner.GetSessionByID(t.Context(), record.ID)
+				require.NoError(t, err, "orphan session must not stand in for durable user existence")
 			case "expiry":
 				require.NoError(t, db.Model(record).Update("expires_at", time.Now().Add(-time.Hour)).Error)
 			case "unreadable":

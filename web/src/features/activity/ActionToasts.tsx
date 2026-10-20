@@ -20,7 +20,7 @@ import { openActivity } from "./activity-store";
 import { ActionToastView } from "./ActionToastView";
 import { useNow } from "./run-phase";
 import { runtimePresentation } from "./runtime-presentation";
-import { hasPresentationIntent, presentationStore, resetActionIdentity, RunToastCoordinator } from "./run-presentation";
+import { hasPresentationIntent, presentationStore, RunToastCoordinator } from "./run-presentation";
 
 function ActionToast({ id, toastId }: { id: string; toastId: string | number }) {
   const run = useActionRun(id);
@@ -94,7 +94,7 @@ export function ActionToasts() {
     let initialSources: Set<string> | undefined;
     let seen = new Set<string>();
     const offIdentity = lifetime.listen(() => {
-      clearOwned(); resetActionIdentity(); actionDialogStore.set({ waiting: [] });
+      clearOwned();
       coordinator = createCoordinator(); initialSources = undefined; seen = new Set(); observed = false;
     });
     const offHealth = adapter.subscribeActionReadHealth?.((next) => { health = next; });

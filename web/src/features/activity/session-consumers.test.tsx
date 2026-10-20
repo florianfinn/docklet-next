@@ -121,7 +121,7 @@ it.each([500, 401])("a genuine %s on renewal revalidation remains visible and se
     await act(async () => { await f.adapter.changePassword("Example-password1!", "New-example-password2!"); });
     f.state.authStatus = status;
     await act(async () => { held.resolve(captured); await pending.catch(() => undefined); });
-    expect(client.getQueryState(queryKeys.currentUser)).toMatchObject({ status: "error", fetchStatus: "idle" });
+    await waitFor(() => expect(client.getQueryState(queryKeys.currentUser)).toMatchObject(status === 401 ? { status: "success", fetchStatus: "idle", data: null } : { status: "error", fetchStatus: "idle" }));
     if (status === 401) await screen.findByText("Login page");
     else await screen.findByText("The session could not be checked.");
     expect(screen.queryByText("Shell content") === null).toBe(true);
@@ -143,9 +143,11 @@ it.each(["logout", "activity401", "replacement"] as const)("a held auth read acr
     if (boundary === "activity401") { f.state.failure = "page401"; await expect(f.adapter.listActions()).rejects.toMatchObject({ outcome: { status: 401 } }); f.state.failure = ""; }
     if (boundary === "replacement") { f.state.user.id = "next-operator"; await f.adapter.getCurrentUser(); }
     await f.adapter.login("operator", "Example-password1!");
+    await waitFor(() => expect(client.getQueryState(queryKeys.currentUser)).toMatchObject({ status: "success", fetchStatus: "idle", data: { id: boundary === "replacement" ? "next-operator" : "operator" } }));
     const requests = f.requests.length;
     await act(async () => { held.resolve(captured); await rejection; });
     expect(f.requests).toHaveLength(requests);
-    expect(client.getQueryState(queryKeys.currentUser)).toMatchObject({ status: "error", fetchStatus: "idle" });
+    expect(client.getQueryState(queryKeys.currentUser)?.data).toEqual(boundary === "replacement" ? expect.objectContaining({ id: "next-operator" }) : expect.objectContaining({ id: "operator" }));
+    expect(client.getQueryState(queryKeys.currentUser)?.fetchStatus).toBe("idle");
   } finally { f.state.hold = undefined; held.resolve(new Response()); view.unmount(); f.client().clear(); }
 });
