@@ -24,6 +24,7 @@ import { createCsrfClient } from "./csrf-client";
 import { createHttpAuth, type SessionChange } from "./auth";
 import { createSettingsCore } from "./settings-core";
 import { createSharedReads } from "./shared-reads";
+import { runtimeTokenReads } from "./runtime-token-read";
 import { createRuntimeCommands } from "./runtime-commands";
 import { createActivityReader } from "./activity-reader";
 
@@ -69,7 +70,7 @@ function classifiedError(error: unknown, status?: number): AdapterOutcomeError {
 /** A small typed caller; response shape is checked before a DTO reaches the mapper. */
 export function createHttpAdapter(options: HttpAdapterOptions = {}): DockletAdapter {
   const baseUrl = (options.baseUrl ?? "/api").replace(/\/$/, "");
-  const client = createCsrfClient(baseUrl, options.fetch ?? globalThis.fetch);
+  const client = createCsrfClient(baseUrl, runtimeTokenReads(baseUrl, options.fetch ?? globalThis.fetch));
   const sharedReads = createSharedReads(client.fetch);
   const fetcher = sharedReads.fetch;
   const sourceFactory = options.eventSource ?? ((url: string) => new EventSource(url, { withCredentials: true }));
@@ -179,14 +180,7 @@ export function createHttpAdapter(options: HttpAdapterOptions = {}): DockletAdap
   const runtime = createRuntimeCommands({ baseUrl, client, capability: getCapability, unauthorized: () => { suspendIdentity(); actions.reset(true); }, publish: (run) => actions.upsert(run) });
   const actions = createActivityReader({
     retained: runtime.retained,
-    project: async (run) => {
-      if (run.outcomeState === undefined) return run;
-      try { return await runtime.detail(run.hostId!, run.id, false, false); }
-      catch (error) {
-        if (isCancelledError(error) || (error instanceof AdapterOutcomeError && error.outcome.kind === "error" && error.outcome.status === 401)) throw error;
-        return run;
-      }
-    },
+    project: runtime.project,
     hosts: async () => {
       await requireCapability("listActions");
       return [...new Set(["0", ...(await environments()).map((item) => item.id)])];

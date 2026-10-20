@@ -18,7 +18,7 @@ import { useActionRuns } from "@/data/live";
 import { renderRun } from "@/data/message-code";
 import { withRunGate } from "@/data/run-gate";
 import { createDemoAdapter } from "@/data/demo/demo-adapter";
-import { envelope, RUN_ID, runtimeDetail, runtimeFixture, snapshot } from "@/data/http/runtime-commands.test-support";
+import { envelope, response, RUN_ID, runtimeDetail, runtimeFixture, snapshot } from "@/data/http/runtime-commands.test-support";
 import { StackHeader } from "@/features/stacks/detail/StackHeader";
 import { useContainerMenu } from "@/features/containers/container-menu";
 import type { ContainerInfo } from "@/domain/model";
@@ -28,7 +28,8 @@ import { RuntimeControls } from "./RuntimeControls";
 import { RunStatusLine } from "./RunFocus";
 import { ActionToastView } from "./ActionToastView";
 import { toast } from "sonner";
-import { actionDialogStore } from "./action-dialog-store";
+import { ActionDialog } from "./ActionDialog";
+import { actionDialogStore, openActionDialog } from "./action-dialog-store";
 import { presentationStore } from "./run-presentation";
 import { useStackCommands } from "@/shared/hooks/use-stack-commands";
 import { useContainerCommands } from "@/shared/hooks/use-container-commands";
@@ -144,5 +145,72 @@ it("remote unconfirmed cancellation shows intent separately without claiming com
     expect(view.container.textContent).not.toContain("Authoritative executor evidence is unavailable");
     expect(screen.getByRole("button", { name: "Request cancellation" }).hasAttribute("disabled")).toBe(true);
     expect(f.commands()).toHaveLength(0);
+  } finally { view.unmount(); }
+});
+
+it.each([false, true])("actual ActionDialog runtime=%s has distinct sibling keys", async (runtime) => {
+  const errors = vi.spyOn(console, "error").mockImplementation(() => {});
+  const f = runtimeFixture();
+  f.state.run = snapshot("edge", { ...(runtime ? {} : { outcomeState: undefined, cancelRequested: undefined }) });
+  f.state.activity = (url) => url.pathname.endsWith("/activities")
+    ? response({ success: true, data: url.pathname.includes("/edge/") ? [f.state.run] : [], pagination: { totalItems: url.pathname.includes("/edge/") ? 1 : 0 } })
+    : envelope(runtimeDetail(f.state.run));
+  if (runtime) await f.adapter.getRuntimeRun!("edge", RUN_ID); else await f.adapter.listActions();
+  const view = mount(<ActionDialog />, f.adapter);
+  try {
+    await act(async () => { openActionDialog(RUN_ID); });
+    await screen.findByRole("dialog");
+    expect(errors.mock.calls.filter((args) => args.some((value) => String(value).includes("same key")))).toEqual([]);
+  } finally { view.unmount(); }
+});
+it("actual ActionDialog run switch resets reason acknowledgment and pending while ignoring the old callback", async () => {
+  const f = runtimeFixture(); f.state.run = snapshot("edge"); f.state.recovery.unknownReason = "transport";
+  await f.adapter.getRuntimeRun!("edge", RUN_ID);
+  const other = "2dd08eac-6846-4ba1-bbea-a3e5112cc860"; f.state.run = snapshot("edge", { id: other }); await f.adapter.getRuntimeRun!("edge", other);
+  f.state.read = (url) => envelope(runtimeDetail(snapshot("edge", { id: url.pathname.split("/").at(-1)! }), { recovery: f.state.recovery }));
+  const pending = deferred<never>(); const release = vi.fn(() => pending.promise); const errors = vi.spyOn(console, "error").mockImplementation(() => {}); const notices = vi.spyOn(toast, "error");
+  const view = mount(<ActionDialog />, { ...f.adapter, releaseRuntimeRun: release });
+  try {
+    await act(async () => { openActionDialog(RUN_ID); }); await screen.findByRole("dialog");
+    await userEvent.type(screen.getByRole("textbox"), "Example inspected state"); await userEvent.click(screen.getByRole("checkbox"));
+    await userEvent.click(screen.getByRole("button", { name: "Release blocked target" }));
+    expect(release).toHaveBeenCalledTimes(1); expect(screen.getByRole("button", { name: "Refresh run" }).hasAttribute("disabled")).toBe(true);
+    await act(async () => { openActionDialog(other); });
+    expect((screen.getByRole("textbox") as HTMLInputElement).value).toBe(""); expect(screen.getByRole("checkbox").getAttribute("aria-checked")).toBe("false");
+    expect(screen.getByRole("button", { name: "Refresh run" }).hasAttribute("disabled")).toBe(false);
+    expect(screen.getByRole("button", { name: "Release blocked target" }).hasAttribute("disabled")).toBe(true);
+    await act(async () => { pending.reject(new Error("Example old failure")); await pending.promise.catch(() => undefined); });
+    expect(notices).not.toHaveBeenCalled(); expect(errors.mock.calls.filter((args) => args.some((value) => String(value).includes("same key")))).toEqual([]);
+  } finally { view.unmount(); }
+});
+it.each(["en-US", "de"] as const)("%s terminal unknown without recovery detail uses neutral wording", async (locale) => {
+  const f = runtimeFixture(); f.state.run = snapshot("edge", { status: "failed" });
+  const run = renderRun(await f.adapter.getRuntimeRun!("edge", RUN_ID), locale);
+  const view = mount(<RuntimeControls run={run} />, f.adapter, locale);
+  try {
+    const text = view.container.textContent;
+    expect(text).toContain(locale === "de" ? "sein Ausführungsergebnis ist nicht bestätigt" : "its execution outcome is not confirmed");
+    expect(text).not.toContain(locale === "de" ? "steht aus" : "confirmation is pending");
+    expect(text).not.toContain(locale === "de" ? "nicht wiederholen" : "Do not repeat");
+    expect(screen.queryByRole("button", { name: locale === "de" ? "Gesperrtes Ziel freigeben" : "Release blocked target" })).toBeNull();
+  } finally { view.unmount(); }
+});
+
+it.each(["en-US", "de"] as const)("%s actual dialog keeps the administrator recovery form after targeted reload failure", async (locale) => {
+  const f = runtimeFixture(); f.state.run = snapshot("edge"); f.state.recovery.unknownReason = "transport";
+  await f.adapter.getRuntimeRun!("edge", RUN_ID);
+  f.state.activity = (url) => url.pathname.endsWith("/activities")
+    ? response({ success: true, data: url.pathname.includes("/edge/") ? [f.state.run] : [], pagination: { totalItems: url.pathname.includes("/edge/") ? 1 : 0 } })
+    : envelope(runtimeDetail(f.state.run));
+  const view = mount(<ActionDialog />, f.adapter, locale);
+  try {
+    await act(async () => { openActionDialog(RUN_ID); }); await screen.findByRole("dialog");
+    await userEvent.type(screen.getByRole("textbox"), "Executor inspected"); await userEvent.click(screen.getByRole("checkbox"));
+    f.state.detailStatus = 503;
+    await act(async () => { await f.adapter.listActions(); });
+    expect((screen.getByRole("textbox") as HTMLInputElement).value).toBe("Executor inspected");
+    expect(screen.getByRole("checkbox").getAttribute("aria-checked")).toBe("true");
+    expect(screen.getByRole("button", { name: locale === "de" ? "Gesperrtes Ziel freigeben" : "Release blocked target" }).hasAttribute("disabled")).toBe(false);
+    expect(screen.queryByText(locale === "de" ? "Ausführung unbestätigt" : "Execution unconfirmed")).toBeNull(); expect(f.commands()).toHaveLength(0);
   } finally { view.unmount(); }
 });

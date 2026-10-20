@@ -44,6 +44,7 @@ export function RuntimeControls({ run }: { run: ActionRun }) {
     finally { if (epoch.current === version) setPending(false); }
   };
   return <section className="flex min-w-0 flex-col gap-2 rounded-lg border p-3 text-xs" aria-label={t("controls")}>
+    {evidence?.permissionsUnavailable && <p>{t("permissionsUnavailable")}</p>}
     {state && <p role="status">{t(`${state}Body`)}</p>}
     {active && run.cancelRequested && state !== "cancelling" && <p>{t("cancellingBody")}</p>}
     {run.status === "cancelled" && <p>{t("cancelledBody")}</p>}

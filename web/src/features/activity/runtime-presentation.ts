@@ -13,6 +13,7 @@ export interface RuntimePresentation {
   released?: boolean;
   releaseReason?: string;
   lateResult?: string;
+  permissionsUnavailable?: boolean;
   canCancel?: boolean;
   canRelease?: boolean;
   currentIntent?: boolean;
@@ -22,10 +23,13 @@ export interface RuntimePresentation {
 export type RuntimeView<T> = T & { runtime?: RuntimePresentation };
 export const runtimePresentation = (run: ActionRun): RuntimePresentation | undefined => (run as RuntimeView<ActionRun>).runtime;
 
-export function runtimeState(run: ActionRun): "unconfirmed" | "unknown" | "released" | "interrupted" | "cancelling" | undefined {
+export function runtimeState(run: ActionRun): "unconfirmed" | "unverified" | "unknown" | "released" | "interrupted" | "cancelling" | undefined {
   const evidence = runtimePresentation(run);
   if (evidence?.released) return "released";
-  if (run.outcomeState === "unknown") return evidence?.unknownReason ? "unknown" : "unconfirmed";
+  if (run.outcomeState === "unknown") {
+    if (run.status !== "running" && run.status !== "queued") return "unverified";
+    return evidence?.unknownReason ? "unknown" : "unconfirmed";
+  }
   if (evidence?.resultCode === "runtime.interrupted") return "interrupted";
   if (run.cancelRequested && (run.status === "queued" || run.status === "running")) return "cancelling";
   return undefined;

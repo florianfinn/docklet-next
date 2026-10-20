@@ -19,6 +19,7 @@ export function useRuntimeError() {
     const key = code === "run.busy" ? "busy" : code === "run.cancelling" ? "cancellingConflict" : code === "run.request-mismatch" ? "mismatch" :
       code === "runtime.admission-unknown" ? "ambiguous" : code === "runtime.parent-unresolved" ? "parentUnresolved" :
       code === "runtime.target-removed" ? "targetRemoved" : code === "runtime.target-changed" ? "targetChanged" :
+      code === "runtime.permissions-unavailable" ? "permissionsUnavailable" : code === "runtime.pre-admission" ? "preAdmission" :
       code === "runtime.release-invalid" ? "releaseInvalid" : outcome.kind === "error" && outcome.status === 401 ? "signIn" :
       outcome.kind === "error" && outcome.status === 403 ? "denied" : "requestFailed";
     const id = outcome.kind === "conflict" ? outcome.activeRunId : undefined;

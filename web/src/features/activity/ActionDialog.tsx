@@ -163,8 +163,8 @@ function ActionDialogContent({ run, waiting }: { run: ActionRun; waiting: string
       </header>
       <WaitingOffer waiting={waiting} />
       <div className="flex min-h-0 flex-1 flex-col overflow-y-auto p-4 sm:p-5" data-slot="dialog-body">
-        <RuntimeControls key={run.id} run={run} />
-        <Body key={run.id} run={run.outcomeState === "unknown" ? { ...run, steps: [], progress: 0 } : run} now={now} />
+        <RuntimeControls key={`controls-${run.id}`} run={run} />
+        <Body key={`body-${run.id}`} run={run.outcomeState === "unknown" ? { ...run, steps: [], progress: 0 } : run} now={now} />
       </div>
       <footer className="flex shrink-0 flex-wrap items-center gap-x-3 gap-y-2 border-t px-4 py-3">
         <p className="min-w-48 flex-1 text-[11px] text-muted-foreground">{t("dialog.closeHint")}</p>

@@ -78,6 +78,9 @@ export const enActivity = {
   openDialog: "Open in progress window",
   runtime: {
     controls: "Runtime action", unconfirmed: "Execution unconfirmed", unknown: "Outcome unknown", released: "Released with unknown effects", interrupted: "Interrupted · effects unverified", cancelling: "Cancellation requested",
+    unverified: "Outcome not confirmed", unverifiedBody: "This run has ended, but its execution outcome is not confirmed. Refresh the run to read the available evidence.",
+    permissionsUnavailable: "Permissions could not be read. Refresh the run to try again.",
+    preAdmission: "The command was not admitted because request protection was unavailable. Try again when the connection is restored.",
     unconfirmedBody: "The command was accepted. Executor confirmation is pending; completion is not confirmed. Do not repeat the command.",
     unknownBody: "Authoritative executor evidence is unavailable. This target remains blocked. Refresh the run or use administrator recovery after stopping the executor and checking Docker.",
     releasedBody: "An administrator released the exclusion. Effects remain unknown; no command was replayed and no success is claimed.",

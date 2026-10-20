@@ -4,15 +4,18 @@
 // License: Apache-2.0
 // Deviations: Original guarded command and notification consumer for issues #126 and #110.
 
-import { CancelledError } from "@tanstack/react-query";
+import { CancelledError, isCancelledError } from "@tanstack/react-query";
 import type { ContainerCommand, RuntimeReleaseInput, StackCommand } from "../adapter";
 import { AdapterOutcomeError, unavailable } from "../capability";
 import type { CapabilityDescriptor, ResourceRef } from "../capability";
+import type { CodedActionRun } from "../message-code";
 import type { CsrfClient } from "./csrf-client";
 import { splitInventoryId } from "./inventory-mapping";
+import { RuntimeTokenReadError } from "./runtime-token-read";
 import { mapRuntime, object, runtimeError, runtimeResponseError, type RuntimeDetail, type RuntimeRun } from "./runtime-mapping";
 
 export const COMMAND_RETRY_MS = 10 * 60_000;
+export const RIGHTS_MAX_AGE_MS = 30_000;
 const LIMIT = 256;
 const stackRoutes: Record<StackCommand, string> = { start: "up", stop: "down", restart: "restart", redeploy: "redeploy" };
 const active = (run: RuntimeRun) => run.status === "running" || run.status === "queued";
@@ -43,7 +46,7 @@ export function createRuntimeCommands({ baseUrl, client, capability, publish, un
   let generation = 0;
   let observed = false;
   let timer: ReturnType<typeof setTimeout> | undefined;
-  let rights: Promise<Record<string, unknown>> | undefined;
+  let rights: { task: Promise<Record<string, unknown>>; readAt?: number } | undefined;
   const controllers = new Set<AbortController>();
   const pending = new Map<string, Promise<string>>();
   const ambiguous = new Set<string>();
@@ -56,6 +59,10 @@ export function createRuntimeCommands({ baseUrl, client, capability, publish, un
   const route = (host: string, id: string) => `${baseUrl}/environments/${encodeURIComponent(host)}/runtime-runs/${encodeURIComponent(id)}`;
 
   function remember(run: RuntimeRun, notify = true) {
+    const prior = runs.get(run.id);
+    if (prior && prior.hostId !== run.hostId) throw runtimeError("runtime.invalid-response");
+    run.runtime = { ...run.runtime, currentIntent: prior?.runtime?.currentIntent || run.runtime?.currentIntent,
+      sourceObserved: prior?.runtime?.sourceObserved || run.runtime?.sourceObserved };
     if (!runs.has(run.id) && runs.size >= LIMIT) {
       const finished = [...runs.values()].find((row) => !active(row));
       if (finished) { runs.delete(finished.id); attempts.delete(finished.id); sequences.delete(finished.id); }
@@ -80,15 +87,36 @@ export function createRuntimeCommands({ baseUrl, client, capability, publish, un
       if (response.status !== 200 || object(body).success !== true || !object(body).data) throw runtimeError("runtime.invalid-response", response.status);
       return object(body).data;
     } catch (error) {
-      if (error instanceof AdapterOutcomeError && error.outcome.kind === "error" && error.outcome.status === 401) { unauthorized(); throw error; }
       check(version);
+      if (error instanceof AdapterOutcomeError && error.outcome.kind === "error" && error.outcome.status === 401) { unauthorized(); throw error; }
       throw error instanceof AdapterOutcomeError ? error : runtimeError("http.error");
     }
     finally { clearTimeout(timeout); controllers.delete(controller); }
   }
   async function access(host: string) {
-    rights ??= request(`${baseUrl}/auth/me`).then(object).catch(() => ({}));
-    const user = await rights;
+    const version = generation;
+    if (!rights || (rights.readAt !== undefined && now() - rights.readAt >= RIGHTS_MAX_AGE_MS)) {
+      const entry: NonNullable<typeof rights> = { task: request(`${baseUrl}/auth/me`).then((data) => {
+        check(version);
+        const user = object(data), permissions = object(user.permissionsByEnv);
+        if (typeof user.isGlobalAdmin !== "boolean" || !user.permissionsByEnv || typeof user.permissionsByEnv !== "object" || Array.isArray(user.permissionsByEnv) ||
+            Object.values(permissions).some((list) => !Array.isArray(list) || list.some((item) => typeof item !== "string"))) {
+          throw runtimeError("runtime.permissions-unavailable");
+        }
+        if (rights === entry) entry.readAt = now();
+        return user;
+      }) };
+      rights = entry;
+      void entry.task.catch(() => { if (rights === entry) rights = undefined; });
+    }
+    let user: Record<string, unknown>;
+    try { user = await rights.task; }
+    catch (error) {
+      check(version);
+      if (error instanceof AdapterOutcomeError && error.outcome.kind === "error" && error.outcome.status === 401) throw error;
+      throw runtimeError("runtime.permissions-unavailable");
+    }
+    check(version);
     const permissions = object(user.permissionsByEnv);
     const allowed = (permission: string) => [permissions.global, permissions[host]].some((list) => Array.isArray(list) && list.includes(permission));
     const canCancel = allowed("activities:read") && allowed("activities:cancel");
@@ -99,16 +127,31 @@ export function createRuntimeCommands({ baseUrl, client, capability, publish, un
     const existing = reads.get(key); if (existing) return existing;
     const version = generation, started = ++sequence;
     const task = (async () => {
-      const [data, grants] = await Promise.all([request(`${route(host, id)}${refresh ? "?refresh=true" : ""}`), access(host)]);
+      const [data, grants] = await Promise.all([request(`${route(host, id)}${refresh ? "?refresh=true" : ""}`), access(host).catch((error: unknown) => {
+        if (error instanceof AdapterOutcomeError && error.outcome.kind === "error" && error.outcome.code === "runtime.permissions-unavailable") return { permissionsUnavailable: true };
+        throw error;
+      })]);
       check(version);
       const dto = data as RuntimeDetail;
       const run = mapRuntime(dto?.activity, host, id, dto, grants);
+      if (runs.has(id) && runs.get(id)!.hostId !== host) throw runtimeError("runtime.invalid-response");
       if (started < (sequences.get(id) ?? 0)) return runs.get(id) ?? run;
       sequences.set(id, started);
       return remember(run, notify);
     })();
     reads.set(key, task);
     try { return await task; } finally { if (reads.get(key) === task) reads.delete(key); }
+  }
+  async function project(run: CodedActionRun): Promise<CodedActionRun> {
+    if (run.outcomeState === undefined) return run;
+    const version = generation;
+    try { return await detail(run.hostId!, run.id, false, false); }
+    catch (error) {
+      check(version);
+      if (isCancelledError(error) || (error instanceof AdapterOutcomeError && error.outcome.kind === "error" && error.outcome.status === 401)) throw error;
+      const retained = runs.get(run.id);
+      return retained && retained.hostId === run.hostId ? retained : run;
+    }
   }
   function schedule() {
     if (!observed || timer) return;
@@ -144,9 +187,22 @@ export function createRuntimeCommands({ baseUrl, client, capability, publish, un
       let idempotencyKey: string;
       try { idempotencyKey = uuid(); } catch { throw runtimeError("runtime.key-unavailable"); }
       const began = now();
+      let uncertainSend = false;
       const controller = new AbortController(); controllers.add(controller);
       const timeout = setTimeout(() => controller.abort(), COMMAND_RETRY_MS);
       try {
+        // Token bootstrap can throw a raw transport error before any command is sent.
+        try { await client.token(); }
+        catch (error) {
+          check(version);
+          if (error instanceof AdapterOutcomeError) {
+            if (error.outcome.kind === "error" && error.outcome.status === 401) unauthorized();
+            throw error;
+          }
+          throw runtimeError("runtime.pre-admission");
+        }
+        check(version);
+        if (controller.signal.aborted || now() - began >= COMMAND_RETRY_MS) throw runtimeError("runtime.pre-admission");
         for (let attempt = 0; attempt < 2; attempt++) {
           let response: Response;
           try {
@@ -155,14 +211,26 @@ export function createRuntimeCommands({ baseUrl, client, capability, publish, un
               method: "POST", signal: controller.signal,
               headers: { Accept: "application/json", Prefer: "respond-async", "Idempotency-Key": idempotencyKey },
             });
-          } catch { check(version); if (controller.signal.aborted) break; continue; }
+          } catch (error) {
+            check(version);
+            // CSRF bootstrap errors prove this attempt never passed request protection.
+            if (error instanceof AdapterOutcomeError || error instanceof RuntimeTokenReadError) {
+              if (error instanceof AdapterOutcomeError && error.outcome.kind === "error" && error.outcome.status === 401) { unauthorized(); throw error; }
+              if (uncertainSend) break;
+              throw error instanceof AdapterOutcomeError ? error : runtimeError("runtime.pre-admission");
+            }
+            uncertainSend = true;
+            if (controller.signal.aborted) break;
+            continue;
+          }
           check(version);
           let body: unknown;
-          try { body = await response.json(); } catch { ambiguous.add(scope); throw runtimeError("runtime.admission-unknown"); }
+          try { body = await response.json(); } catch { check(version); ambiguous.add(scope); throw runtimeError("runtime.admission-unknown"); }
           check(version);
           if (!response.ok) {
             const error = runtimeResponseError(body, response.status);
-            if (response.status === 401) unauthorized();
+            if (response.status === 401) { unauthorized(); throw error; }
+            if (uncertainSend) { ambiguous.add(scope); throw runtimeError("runtime.admission-unknown"); }
             if (error.outcome.kind === "conflict" && error.outcome.activeRunId) void detail(host, error.outcome.activeRunId).catch(() => undefined);
             throw error;
           }
@@ -209,7 +277,7 @@ export function createRuntimeCommands({ baseUrl, client, capability, publish, un
     getRuntimeRun: (host: string, id: string) => { attempts.delete(id); return detail(host, id, true); },
     cancelRuntimeRun: (host: string, id: string) => mutate(host, id, "cancel"),
     releaseRuntimeRun: (host: string, id: string, input: RuntimeReleaseInput) => mutate(host, id, "release", input),
-    detail,
+    detail, project,
     retained: () => [...runs.values()],
     observe(value: boolean) { observed = value; if (!value && timer) { clearTimeout(timer); timer = undefined; } if (value) schedule(); },
     reset() {

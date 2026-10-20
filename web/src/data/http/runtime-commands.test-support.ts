@@ -9,6 +9,7 @@ import type { components } from "@/api/generated/schema";
 import { createHttpAdapter } from "./http-adapter";
 import { ActivitySource, at } from "./activity-reader.test-support";
 import { createCsrfClient } from "./csrf-client";
+import { runtimeTokenReads } from "./runtime-token-read";
 import { createRuntimeCommands } from "./runtime-commands";
 import type { RuntimeDetail, RuntimeRun, RuntimeSnapshot } from "./runtime-mapping";
 
@@ -25,6 +26,8 @@ export function runtimeFixture() {
     run: snapshot(), detailStatus: 200, admin: true,
     permissions: ["activities:read", "activities:cancel"],
     recovery: { executorState: "pending", releaseAcknowledged: false } as RuntimeDetail["recovery"],
+    auth: undefined as undefined | ((url: URL, init: RequestInit) => Promise<Response> | Response),
+    activity: undefined as undefined | ((url: URL, init: RequestInit) => Promise<Response> | Response),
     command: undefined as undefined | ((url: URL, init: RequestInit) => Promise<Response> | Response),
     read: undefined as undefined | ((url: URL, init: RequestInit) => Promise<Response> | Response),
   };
@@ -32,6 +35,8 @@ export function runtimeFixture() {
   const fetcher = vi.fn(async (input: RequestInfo | URL, init: RequestInit = {}) => {
     const url = new URL(String(input), "https://hub.example.com"); calls.push({ url, init });
     if (url.pathname.endsWith("/capabilities")) return envelope(["runStackCommand", "runContainerCommand", "listActions", "listHosts"].map((operationId) => ({ operationId, available: true, resourceRef: { kind: url.searchParams.get("kind") ?? "hub", id: url.searchParams.get("id") ?? "0" } })));
+    if (url.pathname.includes("/auth/") && state.auth) return state.auth(url, init);
+    if (url.pathname.includes("/activities") && state.activity) return state.activity(url, init);
     if (url.pathname.endsWith("/auth/mode")) return envelope({ mode: "local" });
     if (url.pathname.endsWith("/auth/me")) return envelope({ id: "example-user", username: "operator", requiresPasswordChange: false, isGlobalAdmin: state.admin, permissionsByEnv: { global: state.permissions } });
     if (url.pathname.includes("/auth/")) return envelope({});
@@ -49,8 +54,9 @@ export function runtimeFixture() {
   const adapter = createHttpAdapter({ fetch: fetcher as typeof fetch, eventSource: () => source as unknown as EventSource });
   const published: RuntimeRun[] = [];
   const clock = { elapsed: 0 };
-  const helper = createRuntimeCommands({ baseUrl: "/api", client: createCsrfClient("/api", fetcher as typeof fetch), capability: async (operationId, resourceRef) => ({ operationId, resourceRef, available: true }), publish: (run) => published.push(run), now: () => clock.elapsed });
+  const unauthorized = vi.fn();
+  const helper = createRuntimeCommands({ baseUrl: "/api", unauthorized, client: createCsrfClient("/api", runtimeTokenReads("/api", fetcher as typeof fetch)), capability: async (operationId, resourceRef) => ({ operationId, resourceRef, available: true }), publish: (run) => published.push(run), now: () => clock.elapsed });
   const commands = () => calls.filter(({ url }) => /\/(projects|containers)\//.test(url.pathname));
-  return { adapter, helper, state, calls, commands, published, clock, source, fetcher };
+  return { adapter, helper, state, calls, commands, published, clock, source, fetcher, unauthorized };
 }
 export type UserDTO = components["schemas"]["UserUser"];

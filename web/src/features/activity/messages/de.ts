@@ -79,6 +79,9 @@ export const deActivity: typeof enActivity = {
   openDialog: "Im Ablauffenster öffnen",
   runtime: {
     controls: "Laufzeitaktion", unconfirmed: "Ausführung unbestätigt", unknown: "Ergebnis unbekannt", released: "Mit unbekannten Auswirkungen freigegeben", interrupted: "Unterbrochen · Auswirkungen ungeprüft", cancelling: "Abbruch angefordert",
+    unverified: "Ergebnis nicht bestätigt", unverifiedBody: "Dieser Lauf ist beendet, aber sein Ausführungsergebnis ist nicht bestätigt. Den Lauf aktualisieren, um die verfügbaren Nachweise zu lesen.",
+    permissionsUnavailable: "Die Berechtigungen konnten nicht gelesen werden. Den Lauf aktualisieren, um es erneut zu versuchen.",
+    preAdmission: "Der Befehl wurde nicht angenommen, weil der Anfrageschutz nicht verfügbar war. Nach Wiederherstellung der Verbindung erneut versuchen.",
     unconfirmedBody: "Der Befehl wurde angenommen. Die Bestätigung des Executors steht aus; der Abschluss ist nicht bestätigt. Den Befehl nicht wiederholen.",
     unknownBody: "Verlässliche Executor-Nachweise fehlen. Dieses Ziel bleibt gesperrt. Den Lauf aktualisieren oder nach dem Stoppen des Executors und Prüfen von Docker administrativ freigeben.",
     releasedBody: "Ein Administrator hat die Sperre freigegeben. Die Auswirkungen bleiben unbekannt; kein Befehl wurde wiederholt und kein Erfolg bestätigt.",
