@@ -241,8 +241,9 @@ func TestRuntimeActivationActualRestoreAbort(t *testing.T) {
 }
 
 func TestRuntimeActivationRestoreWaitCancellationPreservesReadiness(t *testing.T) {
-	for _, ready := range []bool{false, true} {
-		t.Run(map[bool]string{false: "already-unready", true: "ready"}[ready], func(t *testing.T) {
+	for _, state := range []struct{ ready, busy bool }{{false, false}, {true, false}, {false, true}, {true, true}} {
+		ready := state.ready
+		t.Run(map[bool]string{false: "already-unready", true: "ready"}[ready]+map[bool]string{false: "-idle", true: "-draining"}[state.busy], func(t *testing.T) {
 			ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
 			defer cancel()
 			source := restoreArchiveNew(t)
@@ -260,9 +261,11 @@ func TestRuntimeActivationRestoreWaitCancellationPreservesReadiness(t *testing.T
 			h.SetReady(ready)
 			s := NewService(Dependencies{DB: target.db, Config: target.cfg, Activity: target.activities, Store: Store{Run: func(context.Context, string) (*backuptypes.SystemBackupRun, error) { return record, nil }}})
 			work, started := restoreArchiveStart(t, s, target, record)
-			leave, err := s.maintenance.Admit()
-			require.NoError(t, err)
-			defer leave()
+			if state.busy {
+				leave, err := s.maintenance.Admit()
+				require.NoError(t, err)
+				defer leave()
+			}
 			s.maintenance.OnBegin(func() { target.activities.RequestCancel(started.ID) })
 			done := make(chan struct{})
 			go func() {

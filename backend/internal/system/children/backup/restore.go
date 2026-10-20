@@ -137,7 +137,7 @@ func (s *Service) executeRestore(workCtx context.Context, actor usertypes.Actor,
 	waitErr := s.maintenance.Wait(waitCtx)
 	stopWait()
 	cancelWait()
-	if waitErr != nil {
+	if waitErr != nil || workCtx.Err() != nil {
 		resume(false)
 		fail("backup.interrupted", activitytypes.StatusCancelled)
 		return
