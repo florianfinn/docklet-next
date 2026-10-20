@@ -10,6 +10,7 @@ import (
 	"context"
 	"errors"
 	"io"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -19,16 +20,18 @@ import (
 	"gorm.io/gorm"
 )
 
-func completionOwnershipFault(t *testing.T, s *ActivityService) (error, func()) {
+func completionOwnershipFault(t *testing.T, s *ActivityService) (error, func(bool)) {
 	t.Helper()
 	fault := errors.New("synthetic ownership read failure")
+	var active atomic.Bool
 	const name = "fixture-completion-ownership"
 	require.NoError(t, s.db.Callback().Query().Before("gorm:query").Register(name, func(tx *gorm.DB) {
-		if _, count := tx.Statement.Dest.(*int64); tx.Statement.Table == "runtime_receipts" && count {
+		if _, count := tx.Statement.Dest.(*int64); tx.Statement.Table == "runtime_receipts" && count && active.Load() {
 			tx.AddError(fault)
 		}
 	}))
-	return fault, func() { require.NoError(t, s.db.Callback().Query().Remove(name)) }
+	// Keep the callback list fixed while queued workers may query this fixture.
+	return fault, active.Store
 }
 
 func TestRuntimeActivationLegacyCompletionOwnershipFault(t *testing.T) {
@@ -44,8 +47,9 @@ func TestRuntimeActivationLegacyCompletionOwnershipFault(t *testing.T) {
 			if mode != "untracked-slot" {
 				work = f.svc.Track(ctx, row.ID)
 			}
-			fault, restore := completionOwnershipFault(t, f.svc)
-			defer restore()
+			fault, inject := completionOwnershipFault(t, f.svc)
+			inject(true)
+			defer inject(false)
 			_, err = f.svc.CompleteActivity(ctx, row.ID, activitytypes.StatusSuccess, "Finished", nil)
 			require.ErrorIs(t, err, fault)
 			f.svc.slotMu.Lock()
@@ -83,6 +87,8 @@ func TestRuntimeActivationRuntimeCompletionOwnershipFault(t *testing.T) {
 				require.NoError(t, err)
 				defer unblock()
 			}
+			fault, inject := completionOwnershipFault(t, f.store.svc)
+			defer inject(false)
 			c := f.command()
 			admitted, err := f.service.Admit(ctx, c)
 			require.NoError(t, err)
@@ -91,9 +97,9 @@ func TestRuntimeActivationRuntimeCompletionOwnershipFault(t *testing.T) {
 			}
 			owner := b2Owner(t, f, admitted.ActivityID)
 			before := matrixRow(t, f.store.svc.db.DB, admitted.ActivityID)
-			fault, restore := completionOwnershipFault(t, f.store.svc)
+			inject(true)
 			_, err = f.store.svc.CompleteActivity(ctx, admitted.ActivityID, activitytypes.StatusSuccess, "False completion", nil)
-			restore()
+			inject(false)
 			require.ErrorIs(t, err, fault)
 			require.NoError(t, owner.ctx.Err(), "generic completion cannot cancel the runtime owner")
 			require.Equal(t, before, matrixRow(t, f.store.svc.db.DB, admitted.ActivityID))
