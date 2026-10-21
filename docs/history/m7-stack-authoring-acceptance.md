@@ -28,9 +28,10 @@ Docker daemon of each host:
 
 1. Create a stack in the editor and deploy it; the run settles successfully
    without an explicit refresh, and the container runs.
-2. Edit compose and `.env`, add a label, and Save & redeploy; the new
-   environment reaches the container and the label persists.
-3. Reopen the stack; the editor shows the stored files.
+2. Edit `compose.yaml` (an inline environment value plus a variable taken from
+   `.env`), edit `.env`, add a label, and Save & redeploy; both values reach
+   the container and the label persists.
+3. Reopen the stack; the editor shows the stored `compose.yaml` and `.env`.
 4. Convert a `docker run` command with a named volume on the hub, add it and
    save; the stored compose keeps the existing service and gains the external
    volume declaration.
@@ -39,8 +40,15 @@ Docker daemon of each host:
 7. Invalid compose disables deploy.
 8. The temporary project is destroyed.
 
-All 26 checks per run passed in both runs (exit 0). The only console error was
-the expected initial unauthenticated identity read. No layout overflow occurred.
+Each run made 38 checks, including a horizontal-overflow check of the document
+after each of four captured states per host (deployed, conversion dialog,
+failed run, invalid compose). All 38 passed in both final runs (exit 0). The
+only console error was the expected initial unauthenticated identity read. A
+first German attempt right after restarting the test hosts created its Direct
+stack on the Edge host, because the Direct host was not yet online and the
+editor fell back to the first online host; the repeated run passed. Overflow
+was checked horizontally at those states only, not for every dialog or for
+vertical layout.
 
 ## Limits and follow-ups
 
