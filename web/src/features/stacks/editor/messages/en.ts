@@ -10,6 +10,7 @@ export const enEditor = {
   save: "Save",
   saved: "compose.yaml and .env saved – effective after the next deploy",
   createdNotDeployed: "Stack created, but the deploy was not started. Open the stack to retry.",
+  createdDeployUnknown: "Stack created. The hub did not confirm whether its deploy started; check Activity before deploying again.",
   hostImmutable: "The host of an existing stack cannot be changed.",
   writeUnknown: "The hub did not confirm the change. Reload the stack before trying again.",
   discard: "Discard changes",
@@ -187,6 +188,7 @@ export const enEditor = {
   errors: {
     "invalid-yaml": "YAML is invalid – changes in the form are not possible.",
     "duplicate-service": "Service “{name}” already exists.",
+    "declaration-conflict": "The stack already declares “{name}” differently; the converted service was not added.",
     "root-not-map": "The top level must be a mapping (key: value).",
     "services-not-map": "“services” must be a mapping of service names.",
   },

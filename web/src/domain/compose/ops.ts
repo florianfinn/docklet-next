@@ -13,7 +13,7 @@ type Obj = Record<string, unknown>;
 export type Mutator = (doc: Document.Parsed) => void;
 
 export class ComposeEditError extends Error {
-  readonly code: "invalid-yaml" | "duplicate-service";
+  readonly code: "invalid-yaml" | "duplicate-service" | "declaration-conflict";
   readonly detail?: string;
   constructor(code: ComposeEditError["code"], detail?: string) {
     super(code);
@@ -77,6 +77,26 @@ export const ops = {
   addService: (key: string, body: Obj): Mutator => (doc) => {
     if (!isMap(doc.get("services", true))) doc.set("services", doc.createNode({}));
     doc.setIn(["services", key], doc.createNode(body));
+  },
+
+  /** Adds a service with its top-level networks/volumes; a differing existing declaration refuses the whole edit. */
+  importService: (key: string, body: Obj, declarations: Partial<Record<"networks" | "volumes", Obj>>): Mutator => (doc) => {
+    const pending: [string[], unknown][] = [];
+    for (const [section, entries] of Object.entries(declarations)) {
+      for (const [name, value] of Object.entries(entries ?? {})) {
+        const current = doc.getIn([section, name]);
+        const plain = current && typeof current === "object" && "toJSON" in current ? (current as { toJSON(): unknown }).toJSON() : current;
+        if (doc.hasIn([section, name])) {
+          if (JSON.stringify(plain ?? null) !== JSON.stringify(value ?? null)) throw new ComposeEditError("declaration-conflict", name);
+        } else pending.push([[section, name], value]);
+      }
+    }
+    if (!isMap(doc.get("services", true))) doc.set("services", doc.createNode({}));
+    doc.setIn(["services", key], doc.createNode(body));
+    for (const [path, value] of pending) {
+      if (!isMap(doc.get(path[0]!, true))) doc.set(path[0]!, doc.createNode({}));
+      doc.setIn(path, value === null || value === undefined ? null : doc.createNode(value));
+    }
   },
 
   removeService: (key: string): Mutator => (doc) => {

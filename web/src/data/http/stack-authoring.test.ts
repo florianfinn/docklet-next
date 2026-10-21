@@ -59,6 +59,14 @@ describe("new stack", () => {
     expect(error).toBeInstanceOf(StackCreatedError);
     expect((error as StackCreatedError).stackId).toBe("h1~p1");
     expect((error as StackCreatedError).cause).toBe(refusal);
+    expect((error as StackCreatedError).admission).toBe("refused");
+  });
+
+  it("keeps admission uncertainty of the first deploy", async () => {
+    const f = fixture([ok({ id: "p1" })], { up: async () => { throw new AdapterOutcomeError({ kind: "error", code: "runtime.admission-unknown" }); } });
+    const error = await f.authoring.deployStack(input).catch((e: unknown) => e) as StackCreatedError;
+    expect(error).toBeInstanceOf(StackCreatedError);
+    expect(error.admission).toBe("unknown");
   });
 
   it("rejects a malformed create response before any deploy", async () => {

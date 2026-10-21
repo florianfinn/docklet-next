@@ -64,7 +64,7 @@ func getCapabilities(ctx context.Context, input *GetCapabilitiesInput) (*handler
 		case "runStackCommand", "runContainerCommand":
 			ref := descriptors[i].ResourceRef
 			kind := "stack"
-			required := []string{authz.PermActivitiesRead, authz.PermProjectsDeploy, authz.PermProjectsDown, authz.PermProjectsRestart}
+			required := deployRuntimeGrantsInternal
 			if descriptors[i].OperationID == "runContainerCommand" {
 				kind = "container"
 				required = []string{authz.PermActivitiesRead, authz.PermContainersStart, authz.PermContainersStop, authz.PermContainersRestart}
@@ -116,20 +116,33 @@ func getCapabilities(ctx context.Context, input *GetCapabilitiesInput) (*handler
 	}}, nil
 }
 
+// deployRuntimeGrantsInternal matches the runStackCommand descriptor, because a
+// deploy is admitted through that guarded command after the writes.
+var deployRuntimeGrantsInternal = []string{authz.PermActivitiesRead, authz.PermProjectsDeploy, authz.PermProjectsDown, authz.PermProjectsRestart}
+
 // authoringAllowedInternal scopes stack authoring to a host ref for new stacks
-// and a host~project stack ref for existing ones; deploy also needs run reads.
+// and a host~project stack ref for existing ones. The hub ref only gates the
+// entry point and is available when some environment allows a new deploy.
 func authoringAllowedInternal(operationID string, ref capability.ResourceRef, permissions *authz.PermissionSet) bool {
+	if operationID == "deployStack" && ref.Kind == "hub" {
+		for _, permission := range append([]string{authz.PermProjectsCreate}, deployRuntimeGrantsInternal...) {
+			if !permissions.AllowsAny(permission) {
+				return false
+			}
+		}
+		return true
+	}
 	env, raw, scoped := strings.Cut(ref.ID, "~")
 	var required []string
 	switch {
 	case operationID == "convertDockerRun" && ref.Kind == "host" && ref.ID != "" && !strings.Contains(ref.ID, "~"):
 		env, required = ref.ID, []string{authz.PermContainersCreate}
 	case operationID == "deployStack" && ref.Kind == "host" && ref.ID != "" && !strings.Contains(ref.ID, "~"):
-		env, required = ref.ID, []string{authz.PermProjectsCreate, authz.PermProjectsDeploy, authz.PermActivitiesRead}
+		env, required = ref.ID, append([]string{authz.PermProjectsCreate}, deployRuntimeGrantsInternal...)
 	case ref.Kind == "stack" && scoped && env != "" && raw != "" && !strings.Contains(raw, "~") && operationID != "convertDockerRun":
 		required = []string{authz.PermProjectsUpdate}
 		if operationID == "deployStack" {
-			required = append(required, authz.PermProjectsDeploy, authz.PermActivitiesRead)
+			required = append(required, deployRuntimeGrantsInternal...)
 		}
 	default:
 		return false

@@ -36,14 +36,17 @@ export interface DockerRunConversion {
   serviceName: string;
 }
 
-/** The stack exists on its host, but its first deploy was not admitted. */
+/** The stack exists on its host; its first deploy was refused or its admission is unknown. */
 export class StackCreatedError extends Error {
   readonly stackId: string;
+  /** Unknown means the hub may have started the deploy; it must not be presented as not started. */
+  readonly admission: "refused" | "unknown";
   override readonly cause: unknown;
-  constructor(stackId: string, cause: unknown) {
-    super("stack.created-not-deployed");
+  constructor(stackId: string, cause: unknown, admission: "refused" | "unknown") {
+    super(admission === "unknown" ? "stack.created-deploy-unknown" : "stack.created-not-deployed");
     this.name = "StackCreatedError";
     this.stackId = stackId;
+    this.admission = admission;
     this.cause = cause;
   }
 }

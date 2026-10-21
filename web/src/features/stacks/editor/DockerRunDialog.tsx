@@ -1,12 +1,13 @@
 import { Terminal, Wand2 } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { stringify } from "yaml";
 import { useTranslations } from "use-intl";
 
 import { AdapterOutcomeError } from "@/data/capability";
 import { useAdapter } from "@/data/use-adapter";
+import { useCapability } from "@/data/use-capability";
 import { convertDockerRun, DockerRunError } from "@/domain/compose/docker-run";
-import { hubConversion, type HubResult } from "./hub-conversion";
+import { hubConversion, type Declarations, type HubResult } from "./hub-conversion";
 import { Spinner } from "@/shared/ui/spinner";
 import { Button } from "@/shared/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/shared/ui/dialog";
@@ -22,7 +23,7 @@ interface DockerRunDialogProps {
   onOpenChange: (open: boolean) => void;
   existing: string[];
   hostId: string;
-  onAdd: (key: string, body: Record<string, unknown>, env: string) => void;
+  onAdd: (key: string, body: Record<string, unknown>, env: string, declarations: Declarations) => void;
 }
 
 /** Converts a docker run command into a Compose service; lists unsupported flags. */
@@ -33,8 +34,13 @@ export function DockerRunDialog({ open, onOpenChange, existing, hostId, onAdd }:
   // Production converts on the hub; the demo keeps the local converter with its notes.
   const viaHub = adapter.kind !== "demo";
   const [input, setInput] = useState("");
-  const [hub, setHub] = useState<HubResult | null>(null);
-  const [converting, setConverting] = useState(false);
+  // A hub result belongs to the exact host and command it was requested for.
+  const [hub, setHub] = useState<{ hostId: string; input: string; result: HubResult } | null>(null);
+  const [pending, setPending] = useState<{ hostId: string; input: string } | null>(null);
+  const capability = useCapability("convertDockerRun", { kind: "host", id: hostId });
+  // Each request supersedes earlier responses; only the latest may settle.
+  const request = useRef(0);
+  const converting = pending?.hostId === hostId && pending.input === input;
   const local = useMemo(() => {
     if (viaHub || !input.trim()) return null;
     try {
@@ -44,18 +50,23 @@ export function DockerRunDialog({ open, onOpenChange, existing, hostId, onAdd }:
       throw e;
     }
   }, [input, existing, viaHub]);
-  const result = viaHub ? hub : local;
-  const change = (value: string) => { setInput(value); setHub(null); };
+  const result = viaHub ? (hub && hub.hostId === hostId && hub.input === input ? hub.result : null) : local;
+  const change = (value: string) => { setInput(value); };
   const convert = async () => {
-    setConverting(true);
+    const id = ++request.current;
+    const target = { hostId, input };
+    setHub(null);
+    setPending(target);
+    let next: HubResult;
     try {
-      const out = await adapter.convertDockerRun(hostId, input);
-      setHub(hubConversion(out.compose, out.env, out.serviceName, existing));
+      const out = await adapter.convertDockerRun(target.hostId, target.input);
+      next = hubConversion(out.compose, out.env, out.serviceName, existing);
     } catch (e) {
-      setHub({ ok: false, reason: e instanceof AdapterOutcomeError && e.outcome.kind === "error" && e.outcome.code === "stack.convert-invalid" ? "invalid" : "failed" });
-    } finally {
-      setConverting(false);
+      next = { ok: false, reason: e instanceof AdapterOutcomeError && e.outcome.kind === "error" && e.outcome.code === "stack.convert-invalid" ? "invalid" : "failed" };
     }
+    if (id !== request.current) return;
+    setHub({ ...target, result: next });
+    setPending(null);
   };
 
   return (
@@ -100,15 +111,15 @@ export function DockerRunDialog({ open, onOpenChange, existing, hostId, onAdd }:
             {tc("cancel")}
           </Button>
           {viaHub && (
-            <Button variant="outline" disabled={!input.trim() || converting} onClick={() => void convert()}>
+            <Button variant="outline" disabled={!input.trim() || converting || !capability.available} title={capability.reason} onClick={() => void convert()}>
               {converting && <Spinner data-icon="inline-start" />} {t("convert")}
             </Button>
           )}
           <Button
-            disabled={!result?.ok}
+            disabled={!result?.ok || converting}
             onClick={() => {
-              if (!result?.ok) return;
-              onAdd(result.conv.key, result.conv.body, "env" in result && typeof result.env === "string" ? result.env : "");
+              if (!result?.ok || converting) return;
+              onAdd(result.conv.key, result.conv.body, "env" in result && typeof result.env === "string" ? result.env : "", "declarations" in result ? result.declarations as Declarations : {});
               change("");
               onOpenChange(false);
             }}

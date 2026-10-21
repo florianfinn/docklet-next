@@ -91,7 +91,10 @@ export function createStackAuthoring({ baseUrl, client, capability, up, labels, 
       if (typeof created.id !== "string" || !created.id || created.id.includes("~")) throw failure("stack.create-unknown");
       const stackId = inventoryId(input.hostId, created.id);
       try { return { actionId: await up(stackId), stackId }; }
-      catch (error) { throw new StackCreatedError(stackId, error); }
+      catch (error) {
+        const unknown = error instanceof AdapterOutcomeError && error.outcome.kind === "error" && error.outcome.code === "runtime.admission-unknown";
+        throw new StackCreatedError(stackId, error, unknown ? "unknown" : "refused");
+      }
     },
     async saveStackFiles(stackId, compose, env) {
       await require("saveStackFiles", { kind: "stack", id: stackId });

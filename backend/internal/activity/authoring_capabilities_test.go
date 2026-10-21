@@ -30,6 +30,17 @@ func authoringDescriptorInternal(t *testing.T, permissions *authz.PermissionSet,
 	return false
 }
 
+func TestDeployCapabilityMatchesRuntimeAdmission(t *testing.T) {
+	partial := &authz.PermissionSet{PerEnv: map[string]map[string]struct{}{"example": {
+		authz.PermProjectsCreate: {}, authz.PermProjectsUpdate: {}, authz.PermProjectsDeploy: {}, authz.PermActivitiesRead: {},
+	}}}
+	// Without down/restart the guarded up admission is refused, so deploy must not be advertised.
+	require.False(t, authoringDescriptorInternal(t, partial, "host", "example", "deployStack"))
+	require.False(t, authoringDescriptorInternal(t, partial, "stack", "example~p1", "deployStack"))
+	require.False(t, authoringDescriptorInternal(t, partial, "stack", "example~p1", "runStackCommand"))
+	require.True(t, authoringDescriptorInternal(t, partial, "stack", "example~p1", "saveStackFiles"))
+}
+
 func TestAuthoringCapabilitiesScopeAndPermissions(t *testing.T) {
 	full := authz.EnvironmentPermissionSet("example")
 	cases := []struct {
@@ -45,7 +56,10 @@ func TestAuthoringCapabilitiesScopeAndPermissions(t *testing.T) {
 		{"save needs stack ref", "host", "example", "saveStackFiles", full, false},
 		{"convert needs host ref", "stack", "example~p1", "convertDockerRun", full, false},
 		{"other environment", "stack", "other~p1", "deployStack", full, false},
-		{"hub ref", "hub", "0", "deployStack", full, false},
+		{"hub entry point", "hub", "0", "deployStack", full, true},
+		{"hub entry point with rights elsewhere", "hub", "0", "deployStack", authz.EnvironmentPermissionSet("other"), true},
+		{"hub entry point without rights", "hub", "0", "deployStack", &authz.PermissionSet{}, false},
+		{"hub save", "hub", "0", "saveStackFiles", full, false},
 		{"malformed stack ref", "stack", "example~p~1", "saveStackFiles", full, false},
 		{"no permissions", "host", "example", "deployStack", authz.EnvironmentPermissionSet("other"), false},
 		{"admin", "host", "example", "deployStack", authz.SudoPermissionSet(), true},

@@ -36,7 +36,7 @@ describe("stack authoring in production mode", () => {
   });
 
   it("opens the created stack when its first deploy was not admitted", async () => {
-    const deployStack = vi.fn(async () => { throw new StackCreatedError("atlas~p1", new AdapterOutcomeError({ kind: "conflict", code: "run.busy", activeRunId: "r1" })); });
+    const deployStack = vi.fn(async () => { throw new StackCreatedError("atlas~p1", new AdapterOutcomeError({ kind: "conflict", code: "run.busy", activeRunId: "r1" }), "refused"); });
     const { router } = renderRoutes(routes, ["/stacks/new"], asHttp({ deployStack }));
     await userEvent.click(await screen.findByRole("button", { name: "Deploy" }));
     await waitFor(() => expect(router.state.location.pathname).toBe("/stacks/atlas~p1"));
@@ -49,5 +49,23 @@ describe("stack authoring in production mode", () => {
     await userEvent.click(await screen.findByRole("button", { name: "Deploy" }));
     await waitFor(() => expect(toastError).toHaveBeenCalledWith(expect.stringContaining("Der Hub hat die Änderung nicht bestätigt")));
     expect(router.state.location.pathname).toBe("/stacks/new");
+  });
+
+  it("never claims a not-started deploy when the first admission is unknown", async () => {
+    const deployStack = vi.fn(async () => { throw new StackCreatedError("atlas~p1", new AdapterOutcomeError({ kind: "error", code: "runtime.admission-unknown" }), "unknown"); });
+    const { router } = renderRoutes(routes, ["/stacks/new"], asHttp({ deployStack }));
+    await userEvent.click(await screen.findByRole("button", { name: "Deploy" }));
+    await waitFor(() => expect(router.state.location.pathname).toBe("/stacks/atlas~p1"));
+    expect(toastError).toHaveBeenCalledWith(expect.stringContaining("Der Hub hat nicht bestätigt, ob der Deploy gestartet wurde"));
+    expect(toastError.mock.calls.some(([m]) => String(m).includes("nicht gestartet"))).toBe(false);
+  });
+
+  it("disables deploy with a reason when the host descriptor refuses it", async () => {
+    const getCapability = vi.fn(async (operationId: string, resourceRef = { kind: "hub", id: "0" }) => ({ operationId, resourceRef, available: operationId !== "deployStack", disabledReasonCode: "capability.unavailable" }));
+    renderRoutes(routes, ["/stacks/new"], asHttp({ getCapability }));
+    const deploy = await screen.findByRole("button", { name: "Deploy" });
+    await waitFor(() => expect((deploy as HTMLButtonElement).disabled).toBe(true));
+    expect(deploy.getAttribute("title") !== null).toBe(true);
+    expect(getCapability.mock.calls.some(([op, ref]) => op === "deployStack" && ref?.kind === "host")).toBe(true);
   });
 });
