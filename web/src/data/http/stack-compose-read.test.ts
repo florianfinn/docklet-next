@@ -15,3 +15,13 @@ it("loads compose.yaml and .env of an existing stack from the compose read", asy
   const paths = f.fetcher.mock.calls.map(([url]) => new URL(String(url), "https://hub.example.com").pathname);
   expect(paths.includes("/api/environments/first/projects/project/compose")).toBe(true);
 });
+
+it("keeps the retained stack detail but marks files unavailable when the compose read fails", async () => {
+  const f = resourceFixture();
+  f.state.filesDown = true;
+  f.state.reason = "agent.unavailable";
+  const stack = await f.adapter.getStack("first~project");
+  expect(stack.filesUnavailable).toBe(true);
+  expect(stack.compose).toBe("");
+  expect(stack.inventory?.stale).toBe(true);
+});

@@ -36,7 +36,7 @@ export type EditorMode = "easy" | "advanced";
 
 interface StackWorkspaceProps {
   draft: ComposeDraft;
-  stack: Stack | null;
+  stack: (Stack & { filesUnavailable?: boolean }) | null;
   hosts: Host[];
   labelSuggestions: string[];
   mode: EditorMode;
@@ -65,7 +65,9 @@ export function StackWorkspace({ draft, stack, hosts, labelSuggestions, mode, on
   const labelCapability = useCapability("setStackLabels", { kind: "stack", id: stack?.id ?? "" });
   // Save writes labels too when they differ; both descriptors must allow it.
   const labelsChanged = !!stack && !sameStackLabels(draft.labels, stack.labels);
-  const saveBlocked = !saveCapability.available ? saveCapability.reason : labelsChanged && !labelCapability.available ? labelCapability.reason : undefined;
+  const filesBlocked = stack?.filesUnavailable ? t("filesUnavailable") : undefined;
+  const saveBlocked = filesBlocked ?? (!saveCapability.available ? saveCapability.reason : labelsChanged && !labelCapability.available ? labelCapability.reason : undefined);
+  const deployBlocked = filesBlocked ?? (!deployCapability.available ? deployCapability.reason : undefined);
   const [file, setFile] = useState<WorkspaceFile>("compose");
   const [wizard, setWizard] = useState<WizardState>({ step: stack ? 2 : 1, service: null, section: "general" });
   const aside = usePreference("workspaceAside");
@@ -130,7 +132,7 @@ export function StackWorkspace({ draft, stack, hosts, labelSuggestions, mode, on
   };
 
   const deploy = async (failAt?: DemoFailure["at"]) => {
-    if (!model) return;
+    if (!model || deployBlocked) return;
     let stackId: string;
     try {
       if (failAt) queueDemoFailure(adapter, { operation: "deployStack", at: failAt });
@@ -156,14 +158,14 @@ export function StackWorkspace({ draft, stack, hosts, labelSuggestions, mode, on
   const deployButton = (
     <div className="flex">
       <HelpTarget topic={isNew ? "action.deploy" : "action.saveDeploy"}>
-        <Button size="sm" className="rounded-r-none" disabled={!model || errors > 0 || !deployCapability.available} title={deployCapability.reason} onClick={() => void deploy()}>
+        <Button size="sm" className="rounded-r-none" disabled={!model || errors > 0 || !!deployBlocked} title={deployBlocked} onClick={() => void deploy()}>
           <Play data-icon="inline-start" />
           {isNew ? t("deploy") : t("saveDeploy")}
         </Button>
       </HelpTarget>
       {import.meta.env.DEV && <DropdownMenu>
         <DropdownMenuTrigger asChild>
-          <Button size="sm" className="rounded-l-none border-l border-primary-foreground/20 px-2" disabled={!model || errors > 0 || !deployCapability.available} title={deployCapability.reason} aria-label={t("deployMenu")}>
+          <Button size="sm" className="rounded-l-none border-l border-primary-foreground/20 px-2" disabled={!model || errors > 0 || !!deployBlocked} title={deployBlocked} aria-label={t("deployMenu")}>
             <ChevronDown />
           </Button>
         </DropdownMenuTrigger>
@@ -180,6 +182,7 @@ export function StackWorkspace({ draft, stack, hosts, labelSuggestions, mode, on
 
   return (
     <WorkspaceFrame>
+      {filesBlocked && <p role="alert" className="rounded-lg border border-warning/30 bg-warning/8 px-3 py-2 text-sm text-warning">{filesBlocked}</p>}
       <div className="flex flex-wrap items-center gap-2">
         <SegmentedToggle
           value={mode}

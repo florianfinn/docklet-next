@@ -77,3 +77,21 @@ describe("keyboard save", () => {
     });
   }
 });
+
+describe("unreadable stack files", () => {
+  it("blocks save and deploy with a notice instead of writing an empty draft", async () => {
+    const saveStackFiles = vi.fn(async () => {}), deployStack = vi.fn(async () => ({ actionId: "r", stackId: "media" }));
+    const base = asHttp({ saveStackFiles, deployStack });
+    const getStack: DockletAdapter["getStack"] = async (id) => ({ ...(await base.getStack(id)), compose: "", env: "", filesUnavailable: true });
+    renderRoutes(routes, ["/stacks/media?tab=editor"], { ...base, getStack });
+    expect((await screen.findByRole("alert")).textContent).toContain("compose.yaml und .env konnten nicht vom Host gelesen werden");
+    const editor = await screen.findByRole("textbox", { name: "Inhalt von compose.yaml" });
+    const view = EditorView.findFromDOM(editor)!;
+    await act(async () => { view.dispatch({ changes: { from: 0, insert: "services: {}\n" } }); });
+    expect((screen.getByRole("button", { name: "Speichern" }) as HTMLButtonElement).disabled).toBe(true);
+    expect((screen.getByRole("button", { name: "Speichern & Redeploy" }) as HTMLButtonElement).disabled).toBe(true);
+    await act(async () => { fireEvent.keyDown(editor, { key: "s", code: "KeyS", ctrlKey: true }); });
+    expect(saveStackFiles).toHaveBeenCalledTimes(0);
+    expect(deployStack).toHaveBeenCalledTimes(0);
+  });
+});
