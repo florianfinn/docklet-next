@@ -15,14 +15,22 @@ import remains a demo function and is not offered by the production adapter.
 
 | UI operation | Capability ref | Hub requests | Required rights |
 | --- | --- | --- | --- |
-| `deployStack`, new stack | `host:<env>` | `create-project` (multipart `project` JSON with name, compose, env, tags and empty `manifest`), then guarded `up` | `projects:create`, `projects:deploy`, `activities:read` |
-| `deployStack`, existing stack | `stack:<env>~<project>` | `update-project` (compose, env), label diff via `update-project-tag`, then guarded `up` | `projects:update`, `projects:deploy`, `activities:read` |
+| `deployStack`, entry point | `hub:0` | none; enables the New stack action | the new-stack rights below in at least one environment |
+| `deployStack`, new stack | `host:<env>` | `create-project` (multipart `project` JSON with name, compose, env, tags and empty `manifest`), then guarded `up` | `projects:create` plus the runtime command rights |
+| `deployStack`, existing stack | `stack:<env>~<project>` | `update-project` (compose, env), label diff via `update-project-tag`, then guarded `up` | `projects:update` plus the runtime command rights |
 | `saveStackFiles` | `stack:<env>~<project>` | `update-project` | `projects:update` |
 | `setStackLabels` | `stack:<env>~<project>` | one `update-project-tag` per added or removed normalized label | `projects:update` |
 | `convertDockerRun` | `host:<env>` | `convert-docker-run` | `containers:create` |
 
+The runtime command rights are those of the M6 `runStackCommand` descriptor
+(`activities:read`, `projects:deploy`, `projects:down`, `projects:restart`),
+because the deploy is admitted through that guarded command after the writes.
+Advertising deploy with fewer rights would write files and then refuse `up`.
+Narrower deploy-only scopes belong to the later user-policy milestone.
+
 The hub capability descriptor states availability per resource ref from these
-rights; the browser check is advisory and every route still authorizes itself.
+rights. Editor controls read the descriptor for the current host or stack and
+stay disabled with a localized reason; every route still authorizes itself.
 Deploy is `up`, so it inherits the M6 opaque idempotency key, single admission
 retry, busy/cancelling conflicts and unknown-admission handling. The browser run
 gate treats a production deploy like other durable runtime commands.
@@ -37,20 +45,27 @@ gate treats a production deploy like other durable runtime commands.
   reloads the stack list before trying again.
 - When create succeeds but the first `up` is not admitted, the adapter raises
   `StackCreatedError` with the new stack ID. The editor opens that stack instead
-  of keeping a new-stack draft, so a retry deploys the existing project.
+  of keeping a new-stack draft, so a retry deploys the existing project. A
+  confirmed refusal says the deploy did not start; an unknown admission keeps
+  the M6 uncertainty and asks the operator to check Activity before retrying.
 - The host of an existing stack is immutable; a draft naming another host is
   refused before any request (`stack.host-immutable`).
 - Labels are diffed against the current server tags after normalization
   (trimmed, lowercase, de-duplicated). Compose-sourced tags are read-only on the
-  hub and surface as a refused change.
+  hub and surface as a refused change. Browser lowercasing matches the hub for
+  ASCII labels; uncommon Unicode case mappings differ and are tracked separately.
 
 ## docker run conversion
 
 Production converts on the hub for the draft host after an explicit request; it
-does not send every keystroke. A 400 response means the hub could not parse the
-command; other failures are shown as conversion failures. The dialog takes the
-named service from the returned Compose document and appends returned
-environment lines to the draft `.env`. The hub reports no per-flag notes, so the
+does not send every keystroke. Editing the command, changing the host or closing
+the dialog supersedes an outstanding response, and nothing can be added while a
+conversion runs. A 400 response means the hub could not parse the command;
+other failures are shown as conversion failures. The dialog imports the named
+service together with the returned top-level `networks` and `volumes` in one
+edit. Equal existing declarations are kept; a differing one refuses the whole
+edit. Documents with other top-level sections are refused. Returned environment
+lines are appended to the draft `.env`. The hub reports no per-flag notes, so the
 production dialog shows none; the demo keeps the local converter and its notes.
 
 ## Acceptance focus
