@@ -13,7 +13,7 @@ type Obj = Record<string, unknown>;
 export type Mutator = (doc: Document.Parsed) => void;
 
 export class ComposeEditError extends Error {
-  readonly code: "invalid-yaml" | "duplicate-service";
+  readonly code: "invalid-yaml" | "duplicate-service" | "declaration-conflict";
   readonly detail?: string;
   constructor(code: ComposeEditError["code"], detail?: string) {
     super(code);
@@ -49,6 +49,17 @@ function dropIfEmpty(doc: Document.Parsed, path: (string | number)[]): void {
   if ((isSeq(node) || isMap(node)) && node.items.length === 0) doc.deleteIn(path);
 }
 
+/** Structural equality: mapping key order is irrelevant, sequence order is not. */
+function sameValue(a: unknown, b: unknown): boolean {
+  if (Array.isArray(a) || Array.isArray(b)) return Array.isArray(a) && Array.isArray(b) && a.length === b.length && a.every((v, i) => sameValue(v, b[i]));
+  if (a && b && typeof a === "object" && typeof b === "object") {
+    const x = a as Record<string, unknown>, y = b as Record<string, unknown>;
+    const keys = Object.keys(x);
+    return keys.length === Object.keys(y).length && keys.every((k) => Object.hasOwn(y, k) && sameValue(x[k], y[k]));
+  }
+  return a === b;
+}
+
 export const ops = {
   setName: (v: string): Mutator => (doc) => {
     doc.set("name", v);
@@ -77,6 +88,26 @@ export const ops = {
   addService: (key: string, body: Obj): Mutator => (doc) => {
     if (!isMap(doc.get("services", true))) doc.set("services", doc.createNode({}));
     doc.setIn(["services", key], doc.createNode(body));
+  },
+
+  /** Adds a service with its top-level networks/volumes; a differing existing declaration refuses the whole edit. */
+  importService: (key: string, body: Obj, declarations: Partial<Record<"networks" | "volumes", Obj>>): Mutator => (doc) => {
+    const pending: [string[], unknown][] = [];
+    for (const [section, entries] of Object.entries(declarations)) {
+      for (const [name, value] of Object.entries(entries ?? {})) {
+        const current = doc.getIn([section, name]);
+        const plain = current && typeof current === "object" && "toJSON" in current ? (current as { toJSON(): unknown }).toJSON() : current;
+        if (doc.hasIn([section, name])) {
+          if (!sameValue(plain ?? null, value ?? null)) throw new ComposeEditError("declaration-conflict", name);
+        } else pending.push([[section, name], value]);
+      }
+    }
+    if (!isMap(doc.get("services", true))) doc.set("services", doc.createNode({}));
+    doc.setIn(["services", key], doc.createNode(body));
+    for (const [path, value] of pending) {
+      if (!isMap(doc.get(path[0]!, true))) doc.set(path[0]!, doc.createNode({}));
+      doc.setIn(path, value === null || value === undefined ? null : doc.createNode(value));
+    }
   },
 
   removeService: (key: string): Mutator => (doc) => {

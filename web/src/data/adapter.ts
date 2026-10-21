@@ -29,6 +29,28 @@ export interface DeployInput {
   labels: string[];
 }
 
+/** Hub conversion of one docker run command into a Compose document. */
+export interface DockerRunConversion {
+  compose: string;
+  env: string;
+  serviceName: string;
+}
+
+/** The stack exists on its host; its first deploy was refused or its admission is unknown. */
+export class StackCreatedError extends Error {
+  readonly stackId: string;
+  /** Unknown means the hub may have started the deploy; it must not be presented as not started. */
+  readonly admission: "refused" | "unknown";
+  override readonly cause: unknown;
+  constructor(stackId: string, cause: unknown, admission: "refused" | "unknown") {
+    super(admission === "unknown" ? "stack.created-deploy-unknown" : "stack.created-not-deployed");
+    this.name = "StackCreatedError";
+    this.stackId = stackId;
+    this.admission = admission;
+    this.cause = cause;
+  }
+}
+
 export interface RecreateInput {
   image: string;
   ports: PortMapping[];
@@ -104,6 +126,7 @@ export interface DockletAdapter extends AuthApi, HostsApi, VolumesApi, SettingsA
   setAutoUpdate(stackId: string, policy: AutoUpdatePolicy): Promise<void>;
   restartService(stackId: string, service: string): Promise<string>;
   importSource(request: ImportRequest): Promise<ImportResult>;
+  convertDockerRun(hostId: string, command: string): Promise<DockerRunConversion>;
 
   runContainerCommand(containerId: string, command: ContainerCommand): Promise<string>;
   recreateContainer(containerId: string, input: RecreateInput): Promise<string>;

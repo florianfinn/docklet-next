@@ -10,6 +10,10 @@ export const deEditor: typeof enEditor = {
   issues: "{errors, plural, one {# Fehler} other {# Fehler}} · {warns, plural, one {# Hinweis} other {# Hinweise}}",
   save: "Speichern",
   saved: "compose.yaml und .env gespeichert – wirksam nach dem nächsten Deploy",
+  createdNotDeployed: "Stack angelegt, aber der Deploy wurde nicht gestartet. Stack öffnen und erneut versuchen.",
+  createdDeployUnknown: "Stack angelegt. Der Hub hat nicht bestätigt, ob der Deploy gestartet wurde; vor einem erneuten Deploy die Aktivität prüfen.",
+  hostImmutable: "Der Host eines bestehenden Stacks lässt sich nicht ändern.",
+  writeUnknown: "Der Hub hat die Änderung nicht bestätigt. Stack neu laden, bevor du es erneut versuchst.",
   discard: "Änderungen verwerfen",
   download: "Datei herunterladen",
   deploy: "Deploy",
@@ -185,6 +189,7 @@ export const deEditor: typeof enEditor = {
   errors: {
     "invalid-yaml": "YAML ist ungültig – Änderung im Formular nicht möglich.",
     "duplicate-service": "Service „{name}“ existiert bereits.",
+    "declaration-conflict": "Der Stack deklariert „{name}“ bereits anders; der umgewandelte Service wurde nicht hinzugefügt.",
     "root-not-map": "Die oberste Ebene muss eine Zuordnung (key: value) sein.",
     "services-not-map": "„services“ muss eine Zuordnung von Servicenamen sein.",
   },
@@ -198,6 +203,8 @@ export const deEditor: typeof enEditor = {
     hints: "Hinweise",
     add: "Als Service hinzufügen",
     notRun: "Befehl muss mit „docker run“ beginnen.",
+    convert: "Auf dem Hub umwandeln",
+    hubFailed: "Der Hub konnte den Befehl nicht umwandeln. Erneut versuchen oder den Dienst manuell anlegen.",
     hint: {
       "not-docker-run": "Befehl muss mit „docker run“ beginnen.",
       "env-no-value": "Variable {value} ohne Wert – bitte ergänzen",

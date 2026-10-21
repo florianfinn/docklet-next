@@ -1,11 +1,15 @@
 import { AlertTriangle, CheckCircle2, ChevronDown, Code2, FlaskConical, Import, Play, Save, Terminal, Wand2 } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router";
 import { toast } from "sonner";
 import { useTranslations } from "use-intl";
 
 import { queueDemoFailure, type DemoFailure } from "@/runtime";
 import { isRunBusy } from "@/data/run-gate";
+import { StackCreatedError } from "@/data/adapter";
+import { AdapterOutcomeError } from "@/data/capability";
+import { useRuntimeError } from "@/features/activity/use-runtime-error";
+import { useCapability } from "@/data/use-capability";
 import { useAdapter } from "@/data/use-adapter";
 import { ops, uniqueKey, type Mutator } from "@/domain/compose/ops";
 import type { Host, Stack } from "@/domain/model";
@@ -26,6 +30,7 @@ import { useEditorText } from "./editor-text";
 import { ImportSourceDialog } from "./ImportSourceDialog";
 import type { ComposeDraft } from "./use-compose-draft";
 import { ComposeFileTree, type WorkspaceFile } from "./ComposeFileTree";
+import type { Declarations } from "./hub-conversion";
 
 export type EditorMode = "easy" | "advanced";
 
@@ -48,6 +53,19 @@ export function StackWorkspace({ draft, stack, hosts, labelSuggestions, mode, on
   const adapter = useAdapter();
   const navigate = useNavigate();
   const text = useEditorText();
+  const runtimeError = useRuntimeError();
+  // Local completion effects (navigation) belong to this workspace; the hub work continues regardless.
+  const mounted = useRef(true);
+  useEffect(() => {
+    mounted.current = true;
+    return () => { mounted.current = false; };
+  }, []);
+  const deployCapability = useCapability("deployStack", stack ? { kind: "stack", id: stack.id } : { kind: "host", id: draft.hostId });
+  const saveCapability = useCapability("saveStackFiles", { kind: "stack", id: stack?.id ?? "" });
+  const labelCapability = useCapability("setStackLabels", { kind: "stack", id: stack?.id ?? "" });
+  // Save writes labels too when they differ; both descriptors must allow it.
+  const labelsChanged = !!stack && !sameStackLabels(draft.labels, stack.labels);
+  const saveBlocked = !saveCapability.available ? saveCapability.reason : labelsChanged && !labelCapability.available ? labelCapability.reason : undefined;
   const [file, setFile] = useState<WorkspaceFile>("compose");
   const [wizard, setWizard] = useState<WizardState>({ step: stack ? 2 : 1, service: null, section: "general" });
   const aside = usePreference("workspaceAside");
@@ -77,14 +95,35 @@ export function StackWorkspace({ draft, stack, hosts, labelSuggestions, mode, on
     setWizard({ step: 2, service: last || null, section: "general" });
   };
 
+  /** Shows authoring failures; the draft always stays for a later retry. */
+  const report = (e: unknown) => {
+    const code = e instanceof AdapterOutcomeError && e.outcome.kind === "error" ? e.outcome.code : "";
+    if (code === "stack.host-immutable") toast.error(t("hostImmutable"));
+    else if (code.startsWith("stack.") && code.endsWith("-unknown")) toast.error(t("writeUnknown"));
+    else if (!runtimeError(e)) throw e;
+  };
+
+  /** docker run results arrive as one atomic edit including their top-level declarations. */
+  const importRun = (base: string, body: Record<string, unknown>, env: string, declarations: Declarations) => {
+    const key = uniqueKey(model?.services.map((s) => s.key) ?? [], base);
+    const err = draft.edit(ops.importService(key, body, declarations));
+    if (err) { toast.error(text.editError(err)); return; }
+    if (env.trim()) draft.setEnv(`${draft.env.trimEnd() ? `${draft.env.trimEnd()}\n` : ""}${env.trim()}\n`);
+    toast.success(t("added", { name: key }));
+    setWizard({ step: 2, service: key, section: "general" });
+  };
+
   const save = async () => {
-    if (!stack) return;
+    // Keyboard saves use the same descriptor gate as the Save button.
+    if (!stack || saveBlocked || !draft.dirty) return;
     setSaving(true);
     try {
       await adapter.saveStackFiles(stack.id, draft.compose, draft.env);
       if (!sameStackLabels(draft.labels, stack.labels)) await adapter.setStackLabels(stack.id, draft.labels);
       draft.markSaved();
       toast.success(t("saved"));
+    } catch (e) {
+      report(e);
     } finally {
       setSaving(false);
     }
@@ -99,23 +138,32 @@ export function StackWorkspace({ draft, stack, hosts, labelSuggestions, mode, on
     } catch (e) {
       // A busy stack keeps the draft; the gate notice names the running action.
       if (isRunBusy(e)) return;
-      throw e;
+      if (e instanceof StackCreatedError) {
+        // The files are on the hub; retrying from the new-stack draft would collide by name.
+        draft.markSaved();
+        if (e.admission === "unknown") toast.error(t("createdDeployUnknown"));
+        else toast.error(t("createdNotDeployed"));
+        if (mounted.current) navigate(`/stacks/${e.stackId}?tab=editor`, { replace: true });
+        return;
+      }
+      report(e);
+      return;
     }
     draft.markSaved();
-    if (isNew) navigate(`/stacks/${stackId}?tab=deployments`, { replace: true });
+    if (isNew && mounted.current) navigate(`/stacks/${stackId}?tab=deployments`, { replace: true });
   };
 
   const deployButton = (
     <div className="flex">
       <HelpTarget topic={isNew ? "action.deploy" : "action.saveDeploy"}>
-        <Button size="sm" className="rounded-r-none" disabled={!model || errors > 0} onClick={() => void deploy()}>
+        <Button size="sm" className="rounded-r-none" disabled={!model || errors > 0 || !deployCapability.available} title={deployCapability.reason} onClick={() => void deploy()}>
           <Play data-icon="inline-start" />
           {isNew ? t("deploy") : t("saveDeploy")}
         </Button>
       </HelpTarget>
       {import.meta.env.DEV && <DropdownMenu>
         <DropdownMenuTrigger asChild>
-          <Button size="sm" className="rounded-l-none border-l border-primary-foreground/20 px-2" disabled={!model || errors > 0} aria-label={t("deployMenu")}>
+          <Button size="sm" className="rounded-l-none border-l border-primary-foreground/20 px-2" disabled={!model || errors > 0 || !deployCapability.available} title={deployCapability.reason} aria-label={t("deployMenu")}>
             <ChevronDown />
           </Button>
         </DropdownMenuTrigger>
@@ -150,11 +198,13 @@ export function StackWorkspace({ draft, stack, hosts, labelSuggestions, mode, on
                 <Terminal data-icon="inline-start" /> {t("importRun")}
               </Button>
             </HelpTarget>
-            <HelpTarget topic="stack.importSource">
-              <Button size="sm" variant="outline" disabled={!model} onClick={() => setDialog("import")}>
-                <Import data-icon="inline-start" /> {t("importSource")}
-              </Button>
-            </HelpTarget>
+            {adapter.kind === "demo" && (
+              <HelpTarget topic="stack.importSource">
+                <Button size="sm" variant="outline" disabled={!model} onClick={() => setDialog("import")}>
+                  <Import data-icon="inline-start" /> {t("importSource")}
+                </Button>
+              </HelpTarget>
+            )}
           </>
         )}
         <span className="flex-1" />
@@ -164,7 +214,7 @@ export function StackWorkspace({ draft, stack, hosts, labelSuggestions, mode, on
           {model && <span className="text-(--tone)/80">· {t("issues", { errors, warns })}</span>}
         </ToneBadge>
         {!isNew && (
-          <Button size="sm" variant="outline" disabled={!draft.dirty || saving} onClick={() => void save()}>
+          <Button size="sm" variant="outline" disabled={!draft.dirty || saving || !!saveBlocked} title={saveBlocked} onClick={() => void save()}>
             <Save data-icon="inline-start" /> {t("save")}
           </Button>
         )}
@@ -222,7 +272,8 @@ export function StackWorkspace({ draft, stack, hosts, labelSuggestions, mode, on
         </p>
       )}
 
-      <DockerRunDialog open={dialog === "run"} onOpenChange={(o) => setDialog(o ? "run" : null)} existing={model?.services.map((s) => s.key) ?? []} onAdd={(key, body) => addServices([{ key, body }])} />
+      <DockerRunDialog open={dialog === "run"} onOpenChange={(o) => setDialog(o ? "run" : null)} existing={model?.services.map((s) => s.key) ?? []} hostId={draft.hostId}
+        onAdd={(key, body, env, declarations) => importRun(key, body, env, declarations)} />
       <ImportSourceDialog open={dialog === "import"} onOpenChange={(o) => setDialog(o ? "import" : null)} onApply={(r) => addServices(r.services)} />
     </WorkspaceFrame>
   );
