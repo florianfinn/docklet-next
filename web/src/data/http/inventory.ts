@@ -47,7 +47,8 @@ export function createInventoryReader(baseUrl: string, fetcher: typeof fetch, ho
       const [hostId, projectId] = splitInventoryId(id);
       const host = (await hosts()).find((item) => item.id === hostId);
       if (!host) return fail("get-project.host-not-found");
-      const [detail, batch] = await Promise.all([read("get-project", hostId, `projects/${encodeURIComponent(projectId)}`), hostInventory(host)]);
+      // Plain project details omit file content; the compose read includes compose.yaml and .env.
+      const [detail, batch] = await Promise.all([read("get-project-compose", hostId, `projects/${encodeURIComponent(projectId)}/compose`), hostInventory(host)]);
       if (!detail.body.data || detail.body.data.id !== projectId) return fail("get-project.invalid-detail");
       if (!batch.stacks.some((item) => item.id === inventoryId(hostId, projectId))) return fail("get-project.not-found");
       return { ...mapStack(detail.body.data, hostId, batch.containers, detail.observation), compose: detail.body.data.composeContent ?? "", env: detail.body.data.envContent ?? "", deployments: [], restorePoints: [] };

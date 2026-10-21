@@ -35,6 +35,13 @@ Deploy is `up`, so it inherits the M6 opaque idempotency key, single admission
 retry, busy/cancelling conflicts and unknown-admission handling. The browser run
 gate treats a production deploy like other durable runtime commands.
 
+## Reading an existing stack
+
+Plain project details (`get-project`) omit file content. The editor therefore
+reads an existing stack through `get-project-compose`, which includes
+`compose.yaml`, `.env` and the service configuration; otherwise the editor would
+start empty and a save would overwrite the files.
+
 ## Sequencing and partial state
 
 - Writes precede deploy. A failed save or label change stops before `up`; the
