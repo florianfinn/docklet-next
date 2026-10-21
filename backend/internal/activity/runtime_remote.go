@@ -38,6 +38,9 @@ type RuntimeRemoteCoordinator struct {
 	mu          sync.Mutex
 	dispatch    map[string]*runtimeRemoteTaskInternal
 	queries     map[string]*runtimeRemoteTaskInternal
+	follows     map[string]*runtimeRemoteTaskInternal
+	// followEvery spaces reader-independent follow queries in real time.
+	followEvery time.Duration
 	stamps      map[string]runtimeDispatchStampInternal
 	lastQuery   map[string]time.Time
 	recovering  map[string]bool
@@ -61,7 +64,7 @@ func NewRuntimeRemoteCoordinator(service *RuntimeService, lifetime context.Conte
 	if service.remote != nil {
 		return nil, errRuntimeInvalidInternal
 	}
-	c := &RuntimeRemoteCoordinator{service: service, lifetime: lifetime, transport: transport, schedule: schedule, dispatch: make(map[string]*runtimeRemoteTaskInternal), queries: make(map[string]*runtimeRemoteTaskInternal), stamps: make(map[string]runtimeDispatchStampInternal), lastQuery: make(map[string]time.Time), recovering: make(map[string]bool)}
+	c := &RuntimeRemoteCoordinator{service: service, lifetime: lifetime, transport: transport, schedule: schedule, dispatch: make(map[string]*runtimeRemoteTaskInternal), queries: make(map[string]*runtimeRemoteTaskInternal), follows: make(map[string]*runtimeRemoteTaskInternal), followEvery: 2 * time.Second, stamps: make(map[string]runtimeDispatchStampInternal), lastQuery: make(map[string]time.Time), recovering: make(map[string]bool)}
 	service.remote = c
 	return c, nil
 }
@@ -174,8 +177,12 @@ func (c *RuntimeRemoteCoordinator) dispatchInternal(ctx context.Context, ref Run
 			delete(c.stamps, ref.RunID)
 			delete(c.lastQuery, ref.RunID)
 		}
+		// Register the follower before this owned task ends, so Close always
+		// either joins it or prevents it.
+		follow := c.registerFollowLockedInternal(ref, snapshot, err)
 		close(task.done)
 		c.mu.Unlock()
+		c.startFollowInternal(ref, follow)
 	}()
 	transport, err := c.transport(ctx, ref.Store)
 	var outcome activitytypes.RuntimeExecutionOutcome
@@ -205,6 +212,67 @@ func (c *RuntimeRemoteCoordinator) dispatchInternal(ctx context.Context, ref Run
 		_, _ = c.Refresh(ctx, ref)
 	}
 }
+func runtimeFollowableInternal(snapshot activitytypes.RuntimeSnapshot) bool {
+	return snapshot.OutcomeState == activitytypes.RuntimeOutcomeKnown && !isTerminalActivityStatusInternal(snapshot.Status)
+}
+
+type runtimeFollowInternal struct {
+	task *runtimeRemoteTaskInternal
+	ctx  context.Context
+}
+
+// registerFollowLockedInternal claims reader-independent following for a known
+// active run. Callers hold c.mu inside an owned dispatch or query task.
+func (c *RuntimeRemoteCoordinator) registerFollowLockedInternal(ref RuntimeRunReference, snapshot activitytypes.RuntimeSnapshot, err error) *runtimeFollowInternal {
+	if err != nil || !runtimeFollowableInternal(snapshot) || c.paused || c.lifetime.Err() != nil || c.follows[ref.RunID] != nil {
+		return nil
+	}
+	ctx, cancel := context.WithTimeout(c.lifetime, 30*time.Minute)
+	task := &runtimeRemoteTaskInternal{cancel: cancel, done: make(chan struct{})}
+	c.follows[ref.RunID] = task
+	return &runtimeFollowInternal{task: task, ctx: ctx}
+}
+
+// startFollowInternal settles a claimed run without any reader. It only uses
+// the bounded Refresh path (one query in flight, real-time spacing), stops when
+// the run is terminal or unknown, and never resends the effect.
+func (c *RuntimeRemoteCoordinator) startFollowInternal(ref RuntimeRunReference, follow *runtimeFollowInternal) {
+	if follow == nil {
+		return
+	}
+	go func() {
+		defer func() {
+			follow.task.cancel()
+			c.mu.Lock()
+			if c.follows[ref.RunID] == follow.task {
+				delete(c.follows, ref.RunID)
+			}
+			close(follow.task.done)
+			c.mu.Unlock()
+		}()
+		timer := time.NewTimer(c.followEvery)
+		defer timer.Stop()
+		for {
+			select {
+			case <-follow.ctx.Done():
+				return
+			case <-timer.C:
+			}
+			snapshot, err := c.Refresh(follow.ctx, ref)
+			// Administrator recovery holds the run only transiently; a rejected
+			// release leaves it known active, so keep following afterwards.
+			if errors.Is(err, ErrRuntimeRecoveryInProgress) {
+				timer.Reset(c.followEvery)
+				continue
+			}
+			if err != nil || !runtimeFollowableInternal(snapshot) {
+				return
+			}
+			timer.Reset(c.followEvery)
+		}
+	}()
+}
+
 func (c *RuntimeRemoteCoordinator) WaitDispatch(ctx context.Context, runID string) error {
 	c.mu.Lock()
 	task := c.dispatch[runID]
@@ -248,8 +316,18 @@ func (c *RuntimeRemoteCoordinator) closeInternal(ctx context.Context) error {
 		task.cancel()
 		tasks = append(tasks, task)
 	}
+	for _, task := range c.follows {
+		task.cancel()
+		tasks = append(tasks, task)
+	}
 	c.mu.Unlock()
 	for _, task := range tasks {
+		// A task that already ended never turns an expired budget into an error.
+		select {
+		case <-task.done:
+			continue
+		default:
+		}
 		select {
 		case <-ctx.Done():
 			return ctx.Err()

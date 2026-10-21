@@ -128,8 +128,12 @@ func (c *RuntimeRemoteCoordinator) prepareRefreshInternal(ctx context.Context, r
 					delete(c.stamps, ref.RunID)
 					delete(c.lastQuery, ref.RunID)
 				}
+				// Any query that leaves a known active run (startup, transport
+				// recovery or an explicit refresh) hands it to one follower.
+				follow := c.registerFollowLockedInternal(ref, snapshot, err)
 				close(task.done)
 				c.mu.Unlock()
+				c.startFollowInternal(ref, follow)
 			}()
 			c.reconcileInternal(taskCtx, ref)
 		}()
