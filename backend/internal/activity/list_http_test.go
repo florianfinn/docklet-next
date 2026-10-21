@@ -14,6 +14,7 @@ import (
 	"github.com/danielgtaylor/huma/v2/adapters/humago"
 	"net/http"
 	"net/http/httptest"
+	"sync"
 	"testing"
 	"time"
 
@@ -178,10 +179,14 @@ func TestActivityListDeniedCallerDoesNotReadSource(t *testing.T) {
 func TestActivityListLaterPageFailures(t *testing.T) {
 	for _, mode := range []string{"timeout", "authorization", "invalid pagination"} {
 		t.Run(mode, func(t *testing.T) {
+			var startsMu sync.Mutex
 			var starts []string
 			server := serveActivityAgent(t, func(w http.ResponseWriter, r *http.Request) {
+				startsMu.Lock()
 				starts = append(starts, r.URL.Query().Get("start"))
-				if len(starts) == 1 {
+				firstPage := len(starts) == 1
+				startsMu.Unlock()
+				if firstPage {
 					rows := make([]activity.Activity, remoteActivityPageCeiling)
 					for i := range rows {
 						rows[i] = remoteActivityListRow()
@@ -205,7 +210,11 @@ func TestActivityListLaterPageFailures(t *testing.T) {
 			older := f.seed(t, activityListHost)
 			f.seed(t, activityListHost)
 			rec := f.request(t, activityListHost, "?start=1&limit=100")
-			require.Equal(t, []string{"0", "100"}, starts)
+			// A client timeout does not join the agent handler.
+			startsMu.Lock()
+			actualStarts := append([]string(nil), starts...)
+			startsMu.Unlock()
+			require.Equal(t, []string{"0", "100"}, actualStarts)
 			if mode == "timeout" {
 				page := assertActivityListPage(t, rec, "agent.unavailable", []activity.Activity{older})
 				require.Equal(t, int64(2), page.Pagination.TotalItems)
