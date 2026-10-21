@@ -15,7 +15,7 @@ import remains a demo function and is not offered by the production adapter.
 
 | UI operation | Capability ref | Hub requests | Required rights |
 | --- | --- | --- | --- |
-| `deployStack`, entry point | `hub:0` | none; enables the New stack action | the new-stack rights below in at least one environment |
+| `deployStack`, entry point | `hub:0` | none; enables the New stack action | all new-stack rights below together in one environment (global grants count for each) |
 | `deployStack`, new stack | `host:<env>` | `create-project` (multipart `project` JSON with name, compose, env, tags and empty `manifest`), then guarded `up` | `projects:create` plus the runtime command rights |
 | `deployStack`, existing stack | `stack:<env>~<project>` | `update-project` (compose, env), label diff via `update-project-tag`, then guarded `up` | `projects:update` plus the runtime command rights |
 | `saveStackFiles` | `stack:<env>~<project>` | `update-project` | `projects:update` |
@@ -48,6 +48,8 @@ gate treats a production deploy like other durable runtime commands.
   of keeping a new-stack draft, so a retry deploys the existing project. A
   confirmed refusal says the deploy did not start; an unknown admission keeps
   the M6 uncertainty and asks the operator to check Activity before retrying.
+- Save also writes labels when they differ, so it needs the label descriptor
+  in that case.
 - The host of an existing stack is immutable; a draft naming another host is
   refused before any request (`stack.host-immutable`).
 - Labels are diffed against the current server tags after normalization
@@ -58,13 +60,14 @@ gate treats a production deploy like other durable runtime commands.
 ## docker run conversion
 
 Production converts on the hub for the draft host after an explicit request; it
-does not send every keystroke. Editing the command, changing the host or closing
-the dialog supersedes an outstanding response, and nothing can be added while a
-conversion runs. A 400 response means the hub could not parse the command;
+does not send every keystroke. A conversion lives only while the dialog stays
+open on the same host and command: closing, editing the command, changing the
+host or replacing the adapter ends it, and only the latest request can settle.
+Nothing can be added while a conversion runs. A 400 response means the hub could not parse the command;
 other failures are shown as conversion failures. The dialog imports the named
 service together with the returned top-level `networks` and `volumes` in one
-edit. Equal existing declarations are kept; a differing one refuses the whole
-edit. Documents with other top-level sections are refused. Returned environment
+edit. Structurally equal existing declarations are kept regardless of key
+order; a differing one refuses the whole edit. Documents with other top-level sections are refused. Returned environment
 lines are appended to the draft `.env`. The hub reports no per-flag notes, so the
 production dialog shows none; the demo keeps the local converter and its notes.
 

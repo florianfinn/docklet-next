@@ -49,6 +49,17 @@ function dropIfEmpty(doc: Document.Parsed, path: (string | number)[]): void {
   if ((isSeq(node) || isMap(node)) && node.items.length === 0) doc.deleteIn(path);
 }
 
+/** Structural equality: mapping key order is irrelevant, sequence order is not. */
+function sameValue(a: unknown, b: unknown): boolean {
+  if (Array.isArray(a) || Array.isArray(b)) return Array.isArray(a) && Array.isArray(b) && a.length === b.length && a.every((v, i) => sameValue(v, b[i]));
+  if (a && b && typeof a === "object" && typeof b === "object") {
+    const x = a as Record<string, unknown>, y = b as Record<string, unknown>;
+    const keys = Object.keys(x);
+    return keys.length === Object.keys(y).length && keys.every((k) => Object.hasOwn(y, k) && sameValue(x[k], y[k]));
+  }
+  return a === b;
+}
+
 export const ops = {
   setName: (v: string): Mutator => (doc) => {
     doc.set("name", v);
@@ -87,7 +98,7 @@ export const ops = {
         const current = doc.getIn([section, name]);
         const plain = current && typeof current === "object" && "toJSON" in current ? (current as { toJSON(): unknown }).toJSON() : current;
         if (doc.hasIn([section, name])) {
-          if (JSON.stringify(plain ?? null) !== JSON.stringify(value ?? null)) throw new ComposeEditError("declaration-conflict", name);
+          if (!sameValue(plain ?? null, value ?? null)) throw new ComposeEditError("declaration-conflict", name);
         } else pending.push([[section, name], value]);
       }
     }

@@ -4,7 +4,7 @@
 // License: Apache-2.0
 // Deviations: Original stack authoring workspace tests for issues #138 and #139.
 
-import { screen, waitFor } from "@testing-library/react";
+import { screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -67,5 +67,18 @@ describe("stack authoring in production mode", () => {
     await waitFor(() => expect((deploy as HTMLButtonElement).disabled).toBe(true));
     expect(deploy.getAttribute("title") !== null).toBe(true);
     expect(getCapability.mock.calls.some(([op, ref]) => op === "deployStack" && ref?.kind === "host")).toBe(true);
+  });
+
+  it("blocks Save of changed labels when label writes are refused", async () => {
+    const getCapability = vi.fn(async (operationId: string, resourceRef = { kind: "hub", id: "0" }) => ({ operationId, resourceRef, available: operationId !== "setStackLabels", disabledReasonCode: "capability.unavailable" }));
+    renderRoutes(routes, ["/stacks/media?tab=editor"], asHttp({ getCapability }));
+    await screen.findByRole("textbox", { name: "Inhalt von compose.yaml" });
+    await userEvent.click(within(screen.getByRole("radiogroup", { name: "Bearbeitungsmodus" })).getByRole("radio", { name: "Easy" }));
+    await userEvent.click(within(screen.getByRole("list", { name: "Schritte des Entwurfs" })).getByRole("button", { name: /Stack/ }));
+    await userEvent.type(await screen.findByPlaceholderText("z. B. produktiv"), "NeuesLabel");
+    await userEvent.click(screen.getByRole("button", { name: "Label hinzufügen" }));
+    const save = screen.getByRole("button", { name: "Speichern" });
+    await waitFor(() => expect((save as HTMLButtonElement).disabled).toBe(true));
+    expect(save.getAttribute("title") !== null).toBe(true);
   });
 });

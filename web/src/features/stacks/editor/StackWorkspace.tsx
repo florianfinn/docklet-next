@@ -56,6 +56,10 @@ export function StackWorkspace({ draft, stack, hosts, labelSuggestions, mode, on
   const runtimeError = useRuntimeError();
   const deployCapability = useCapability("deployStack", stack ? { kind: "stack", id: stack.id } : { kind: "host", id: draft.hostId });
   const saveCapability = useCapability("saveStackFiles", { kind: "stack", id: stack?.id ?? "" });
+  const labelCapability = useCapability("setStackLabels", { kind: "stack", id: stack?.id ?? "" });
+  // Save writes labels too when they differ; both descriptors must allow it.
+  const labelsChanged = !!stack && !sameStackLabels(draft.labels, stack.labels);
+  const saveBlocked = !saveCapability.available ? saveCapability.reason : labelsChanged && !labelCapability.available ? labelCapability.reason : undefined;
   const [file, setFile] = useState<WorkspaceFile>("compose");
   const [wizard, setWizard] = useState<WizardState>({ step: stack ? 2 : 1, service: null, section: "general" });
   const aside = usePreference("workspaceAside");
@@ -203,7 +207,7 @@ export function StackWorkspace({ draft, stack, hosts, labelSuggestions, mode, on
           {model && <span className="text-(--tone)/80">· {t("issues", { errors, warns })}</span>}
         </ToneBadge>
         {!isNew && (
-          <Button size="sm" variant="outline" disabled={!draft.dirty || saving || !saveCapability.available} title={saveCapability.reason} onClick={() => void save()}>
+          <Button size="sm" variant="outline" disabled={!draft.dirty || saving || !!saveBlocked} title={saveBlocked} onClick={() => void save()}>
             <Save data-icon="inline-start" /> {t("save")}
           </Button>
         )}
