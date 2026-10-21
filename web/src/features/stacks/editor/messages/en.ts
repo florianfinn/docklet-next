@@ -13,6 +13,7 @@ export const enEditor = {
   createdDeployUnknown: "Stack created. The hub did not confirm whether its deploy started; check Activity before deploying again.",
   hostImmutable: "The host of an existing stack cannot be changed.",
   filesUnavailable: "compose.yaml and .env could not be read from the host. The editor opens once they load.",
+  filesStale: "compose.yaml and .env could not be read again. Your draft is kept; saving and deploying stay disabled until they load.",
   writeUnknown: "The hub did not confirm the change. Reload the stack before trying again.",
   discard: "Discard changes",
   download: "Download file",

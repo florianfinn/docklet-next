@@ -62,7 +62,11 @@ function ExistingStack({ stack, onRetry }: { stack: StackDetail; onRetry: () => 
   const [params, setParams] = useSearchParams();
   const tab = (TABS.some((x) => x.id === params.get("tab")) ? params.get("tab") : "overview") as Tab;
   const [mode, setMode] = useState<EditorMode>("advanced");
-  const draft = useComposeDraft({ compose: stack.compose, env: stack.env, hostId: stack.hostId, labels: stack.labels });
+  // The draft only ever starts from files that were actually read. A later read
+  // failure keeps the last loaded files as its base; writes stay gated meanwhile.
+  const [files, setFiles] = useState(stack.filesUnavailable ? undefined : { compose: stack.compose, env: stack.env });
+  if (!stack.filesUnavailable && (files?.compose !== stack.compose || files?.env !== stack.env)) setFiles({ compose: stack.compose, env: stack.env });
+  const draft = useComposeDraft({ compose: files?.compose ?? "", env: files?.env ?? "", hostId: stack.hostId, labels: stack.labels });
   const host = byId.get(stack.hostId);
 
   return (
@@ -82,7 +86,7 @@ function ExistingStack({ stack, onRetry }: { stack: StackDetail; onRetry: () => 
           <OverviewTab stack={stack} host={host} />
         </TabsContent>
         <TabsContent value="editor">
-          {stack.filesUnavailable ? (
+          {!files ? (
             <FilesUnavailable onRetry={onRetry} />
           ) : (
             <StackWorkspace draft={draft} stack={stack} hosts={all} labelSuggestions={allLabels(stacks.data ?? [])} mode={mode} onMode={setMode} />
@@ -159,8 +163,7 @@ export default function StackPage() {
           <QueryError onRetry={() => void stack.refetch()} />
         )
       ) : (
-        // A draft only exists once the stored files are known; loading them later starts a fresh draft.
-        <ExistingStack key={`${stack.data.id}:${stack.data.filesUnavailable ? "files-unavailable" : "files"}`} stack={stack.data} onRetry={() => void stack.refetch()} />
+        <ExistingStack key={stack.data.id} stack={stack.data} onRetry={() => void stack.refetch()} />
       )}
     </>
   );

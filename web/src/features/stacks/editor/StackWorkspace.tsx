@@ -65,7 +65,7 @@ export function StackWorkspace({ draft, stack, hosts, labelSuggestions, mode, on
   const labelCapability = useCapability("setStackLabels", { kind: "stack", id: stack?.id ?? "" });
   // Save writes labels too when they differ; both descriptors must allow it.
   const labelsChanged = !!stack && !sameStackLabels(draft.labels, stack.labels);
-  const filesBlocked = stack?.filesUnavailable ? t("filesUnavailable") : undefined;
+  const filesBlocked = stack?.filesUnavailable ? t("filesStale") : undefined;
   const saveBlocked = filesBlocked ?? (!saveCapability.available ? saveCapability.reason : labelsChanged && !labelCapability.available ? labelCapability.reason : undefined);
   const deployBlocked = filesBlocked ?? (!deployCapability.available ? deployCapability.reason : undefined);
   const [file, setFile] = useState<WorkspaceFile>("compose");
