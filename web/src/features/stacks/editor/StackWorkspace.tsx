@@ -1,5 +1,5 @@
 import { AlertTriangle, CheckCircle2, ChevronDown, Code2, FlaskConical, Import, Play, Save, Terminal, Wand2 } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router";
 import { toast } from "sonner";
 import { useTranslations } from "use-intl";
@@ -54,6 +54,12 @@ export function StackWorkspace({ draft, stack, hosts, labelSuggestions, mode, on
   const navigate = useNavigate();
   const text = useEditorText();
   const runtimeError = useRuntimeError();
+  // Local completion effects (navigation) belong to this workspace; the hub work continues regardless.
+  const mounted = useRef(true);
+  useEffect(() => {
+    mounted.current = true;
+    return () => { mounted.current = false; };
+  }, []);
   const deployCapability = useCapability("deployStack", stack ? { kind: "stack", id: stack.id } : { kind: "host", id: draft.hostId });
   const saveCapability = useCapability("saveStackFiles", { kind: "stack", id: stack?.id ?? "" });
   const labelCapability = useCapability("setStackLabels", { kind: "stack", id: stack?.id ?? "" });
@@ -108,7 +114,8 @@ export function StackWorkspace({ draft, stack, hosts, labelSuggestions, mode, on
   };
 
   const save = async () => {
-    if (!stack) return;
+    // Keyboard saves use the same descriptor gate as the Save button.
+    if (!stack || saveBlocked || !draft.dirty) return;
     setSaving(true);
     try {
       await adapter.saveStackFiles(stack.id, draft.compose, draft.env);
@@ -136,14 +143,14 @@ export function StackWorkspace({ draft, stack, hosts, labelSuggestions, mode, on
         draft.markSaved();
         if (e.admission === "unknown") toast.error(t("createdDeployUnknown"));
         else toast.error(t("createdNotDeployed"));
-        navigate(`/stacks/${e.stackId}?tab=editor`, { replace: true });
+        if (mounted.current) navigate(`/stacks/${e.stackId}?tab=editor`, { replace: true });
         return;
       }
       report(e);
       return;
     }
     draft.markSaved();
-    if (isNew) navigate(`/stacks/${stackId}?tab=deployments`, { replace: true });
+    if (isNew && mounted.current) navigate(`/stacks/${stackId}?tab=deployments`, { replace: true });
   };
 
   const deployButton = (
