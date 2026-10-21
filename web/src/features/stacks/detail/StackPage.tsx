@@ -42,15 +42,31 @@ function BackLink() {
   );
 }
 
+/** Shown instead of the editor while compose.yaml and .env cannot be read. */
+function FilesUnavailable({ onRetry }: { onRetry: () => void }) {
+  const t = useTranslations("editor");
+  const tc = useTranslations("common.actions");
+  return (
+    <div role="alert" className="flex flex-wrap items-center gap-3 rounded-lg border border-warning/30 bg-warning/8 px-3 py-2 text-sm text-warning">
+      <span className="flex-1">{t("filesUnavailable")}</span>
+      <Button size="sm" variant="outline" onClick={onRetry}>{tc("retry")}</Button>
+    </div>
+  );
+}
+
 /** Existing stack: header, tabs and the shared draft kept across tab switches. */
-function ExistingStack({ stack }: { stack: StackDetail }) {
+function ExistingStack({ stack, onRetry }: { stack: StackDetail; onRetry: () => void }) {
   const t = useTranslations("stacks.detail");
   const { byId, all } = useHostScope();
   const stacks = useStacks();
   const [params, setParams] = useSearchParams();
   const tab = (TABS.some((x) => x.id === params.get("tab")) ? params.get("tab") : "overview") as Tab;
   const [mode, setMode] = useState<EditorMode>("advanced");
-  const draft = useComposeDraft({ compose: stack.compose, env: stack.env, hostId: stack.hostId, labels: stack.labels });
+  // The draft only ever starts from files that were actually read. A later read
+  // failure keeps the last loaded files as its base; writes stay gated meanwhile.
+  const [files, setFiles] = useState(stack.filesUnavailable ? undefined : { compose: stack.compose, env: stack.env });
+  if (!stack.filesUnavailable && (files?.compose !== stack.compose || files?.env !== stack.env)) setFiles({ compose: stack.compose, env: stack.env });
+  const draft = useComposeDraft({ compose: files?.compose ?? "", env: files?.env ?? "", hostId: stack.hostId, labels: stack.labels });
   const host = byId.get(stack.hostId);
 
   return (
@@ -70,7 +86,11 @@ function ExistingStack({ stack }: { stack: StackDetail }) {
           <OverviewTab stack={stack} host={host} />
         </TabsContent>
         <TabsContent value="editor">
-          <StackWorkspace draft={draft} stack={stack} hosts={all} labelSuggestions={allLabels(stacks.data ?? [])} mode={mode} onMode={setMode} />
+          {!files ? (
+            <FilesUnavailable onRetry={onRetry} />
+          ) : (
+            <StackWorkspace draft={draft} stack={stack} hosts={all} labelSuggestions={allLabels(stacks.data ?? [])} mode={mode} onMode={setMode} />
+          )}
         </TabsContent>
         <TabsContent value="logs">
           <StackLogs stack={stack} />
@@ -143,7 +163,7 @@ export default function StackPage() {
           <QueryError onRetry={() => void stack.refetch()} />
         )
       ) : (
-        <ExistingStack key={stack.data.id} stack={stack.data} />
+        <ExistingStack key={stack.data.id} stack={stack.data} onRetry={() => void stack.refetch()} />
       )}
     </>
   );

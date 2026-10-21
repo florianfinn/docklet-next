@@ -35,6 +35,19 @@ Deploy is `up`, so it inherits the M6 opaque idempotency key, single admission
 retry, busy/cancelling conflicts and unknown-admission handling. The browser run
 gate treats a production deploy like other durable runtime commands.
 
+## Reading an existing stack
+
+Plain project details (`get-project`) carry the inventory observation and the
+hub's retained snapshot, but no file content. The editor reads `compose.yaml`
+and `.env` separately through `get-project-compose`, which is not cached.
+
+- Until the files have been read once, the editor tab shows a notice with a
+  retry instead of an editor.
+- The draft only starts from files that were actually read. A later read
+  failure keeps the last loaded files as its base and keeps local edits; the
+  editor shows a notice, and Save, keyboard save and Deploy stay disabled until
+  the files load again.
+
 ## Sequencing and partial state
 
 - Writes precede deploy. A failed save or label change stops before `up`; the

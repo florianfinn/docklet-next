@@ -268,6 +268,8 @@ export interface RestorePoint {
 export interface StackDetail extends Stack {
   compose: string;
   env: string;
+  /** compose.yaml and .env could not be read; the empty draft must not be written. */
+  filesUnavailable?: boolean;
   deployments: ActionRun[];
   restorePoints: RestorePoint[];
 }

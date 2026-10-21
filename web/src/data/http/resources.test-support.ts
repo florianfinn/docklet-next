@@ -18,7 +18,7 @@ const volume: components["schemas"]["VolumeVolume"] = { id: "data", name: "data"
 const network: components["schemas"]["NetworkInspect"] = { id: "net", name: "front", driver: "bridge", scope: "local", created: at, ipam: { driver: "default", options: {}, config: [{ subnet: "192.0.2.0/24", gateway: "192.0.2.1" }] }, configFrom: { Network: "" }, containers: {}, options: {}, labels: { "com.docker.compose.project": "app" }, containersList: [], enableIPv4: true, enableIPv6: true, internal: true, attachable: false, ingress: false, configOnly: false };
 
 export function resourceFixture() {
-  const state = { reason: "", observedAt: at, status: "online", malformed: false, noSnapshot: false, bind: false, networks: [network], dynamicObservation: false, failureHost: "second", failure: "", hostIds: ["first", "second"] };
+  const state = { filesDown: false, reason: "", observedAt: at, status: "online", malformed: false, noSnapshot: false, bind: false, networks: [network], dynamicObservation: false, failureHost: "second", failure: "", hostIds: ["first", "second"] };
   const sockets = new Map<string, MetricsSocket>();
   const webSocket = vi.fn((url: string): MetricsSocket => {
     const socket: MetricsSocket = { onmessage: null, onclose: null, onerror: null, close: vi.fn() };
@@ -28,7 +28,7 @@ export function resourceFixture() {
   const json = (data: unknown, paginated = false, observed = false, status = 200) => new Response(JSON.stringify(status === 200 ? { success: true, data, ...(paginated ? { pagination: { totalItems: Array.isArray(data) ? data.length : 0 } } : {}) } : { success: false, code: data }), { status, headers: { "Content-Type": "application/json", "X-CSRF-Token": "example".padEnd(43, "x"), ...(observed ? { "X-Docklet-Observed-At": state.dynamicObservation ? new Date().toISOString() : state.observedAt, ...(state.reason ? { "X-Docklet-Host-Reason": state.reason } : {}) } : {}) } });
   const fetcher = vi.fn(async (input: string | URL | Request) => {
     const url = new URL(String(input), "https://hub.example.com");
-    if (url.pathname === "/api/capabilities") return json(["listHosts", "listStacks", "listContainers", "listImages", "listVolumes", "getVolume", "getTopology", "subscribeMetrics"].map((operationId) => ({ operationId, available: true, resourceRef: { kind: url.searchParams.get("kind") ?? "hub", id: url.searchParams.get("id") ?? "0" } })));
+    if (url.pathname === "/api/capabilities") return json(["listHosts", "listStacks", "getStack", "listContainers", "listImages", "listVolumes", "getVolume", "getTopology", "subscribeMetrics"].map((operationId) => ({ operationId, available: true, resourceRef: { kind: url.searchParams.get("kind") ?? "hub", id: url.searchParams.get("id") ?? "0" } })));
     if (url.pathname === "/api/environments") return json(state.hostIds.map((id) => ({ id, name: id, apiUrl: "http://agent.example.com", enabled: true, status: state.status, isEdge: false })), true);
     if (url.pathname.endsWith("/settings")) return json({ effectiveTimeZone: "UTC", settings: [] });
     if (state.noSnapshot && url.pathname.includes("/environments/")) return json(state.reason || "agent.unavailable", false, false, 502);
@@ -37,6 +37,10 @@ export function resourceFixture() {
       if (state.failure === "mapping") return json([{ id: "malformed" }], true, true);
     }
     if (url.pathname.endsWith("/projects")) return json([project], true, true);
+    // Like the hub, plain details omit file content; the compose read includes it.
+    if (url.pathname.endsWith("/projects/project")) return json(project, false, true);
+    // The hub classifies only plain details as inventory; the compose read has no observation headers.
+    if (url.pathname.endsWith("/projects/project/compose")) return state.filesDown ? json("agent.unavailable", false, false, 502) : json({ ...project, composeContent: "services:\n  web:\n    image: example:1.0.0\n", envContent: "TZ=UTC\n" });
     if (url.pathname.endsWith("/containers")) return json([{ ...container, mounts: state.bind ? [{ type: "bind", name: "", source: "/srv/example~data", destination: "/data", rw: true }] : container.mounts }, { ...container, id: "db", names: ["/db"], state: "exited", labels: { "com.docker.compose.project": "app", "com.docker.compose.service": "db" }, ports: [], mounts: [] }], true, true);
     if (url.pathname.endsWith("/images")) return json(state.malformed ? [{ id: "bad" }] : [image, { ...image, id: "unused", repoTags: ["unused:1"], usedBy: [], inUse: false }, { ...image, id: "dangling", repoTags: [], usedBy: [], inUse: false }], true, true);
     if (url.pathname.endsWith("/volumes")) return json([volume], true, true);

@@ -9,7 +9,7 @@ import { AdapterOutcomeError } from "@/data/capability";
 import type { InventoryObservation } from "@/domain/model";
 
 type ListOperation = "list-projects" | "list-containers" | "list-images" | "list-volumes" | "list-networks";
-type ReadOperation = ListOperation | "get-project" | "get-network" | "get-dashboard";
+type ReadOperation = ListOperation | "get-project" | "get-project-compose" | "get-network" | "get-dashboard";
 type Body<I extends ReadOperation> = operations[I]["responses"][200]["content"]["application/json"];
 const reasons = new Set(["agent.unavailable", "agent.invalid-token", "agent.update-required"]);
 
