@@ -50,6 +50,11 @@ gate treats a production deploy like other durable runtime commands.
   the M6 uncertainty and asks the operator to check Activity before retrying.
 - Save also writes labels when they differ, so it needs the label descriptor
   in that case.
+- Navigation after a deploy belongs to the editor that started it. When the
+  operator has left that editor, a late result only reports through its toast
+  and Activity; it never moves away from or discards a later draft. The hub work
+  itself is not cancelled.
+- Keyboard save follows the same descriptor gate as the Save button.
 - The host of an existing stack is immutable; a draft naming another host is
   refused before any request (`stack.host-immutable`).
 - Labels are diffed against the current server tags after normalization
