@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: functional cut: removed GitOps and saved Git repositories; functional cut: removed Swarm; functional cut: removed S3 backup destinations; functional cut: removed standalone build workshop.
+// Deviations: functional cut: removed GitOps and saved Git repositories; functional cut: removed Swarm; functional cut: removed S3 backup destinations; functional cut: removed standalone build workshop; added the project tag update command used by the stack editor (#152).
 
 package edge
 
@@ -98,6 +98,7 @@ var commandRoutes = []commandRoute{
 	{Method: http.MethodPost, PathPattern: "/api/environments/{id}/projects/{projectId}/redeploy", CommandName: "project.redeploy"},
 	{Method: http.MethodDelete, PathPattern: "/api/environments/{id}/projects/{projectId}/destroy", CommandName: "project.destroy"},
 	{Method: http.MethodPut, PathPattern: "/api/environments/{id}/projects/{projectId}", CommandName: "project.update"},
+	{Method: http.MethodPatch, PathPattern: "/api/environments/{id}/projects/{projectId}/tags", CommandName: "project.tags.update"},
 	{Method: http.MethodPost, PathPattern: "/api/environments/{id}/projects/{projectId}/restart", CommandName: "project.restart"},
 	{Method: http.MethodPost, PathPattern: "/api/environments/{id}/projects/{projectId}/update-services", CommandName: "project.update_services"},
 	{Method: http.MethodPost, PathPattern: "/api/environments/{id}/projects/{projectId}/pull", CommandName: "project.pull"},
