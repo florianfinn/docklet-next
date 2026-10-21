@@ -13,7 +13,7 @@ export const deEditor: typeof enEditor = {
   createdNotDeployed: "Stack angelegt, aber der Deploy wurde nicht gestartet. Stack öffnen und erneut versuchen.",
   createdDeployUnknown: "Stack angelegt. Der Hub hat nicht bestätigt, ob der Deploy gestartet wurde; vor einem erneuten Deploy die Aktivität prüfen.",
   hostImmutable: "Der Host eines bestehenden Stacks lässt sich nicht ändern.",
-  filesUnavailable: "compose.yaml und .env konnten nicht vom Host gelesen werden. Speichern und Deploy bleiben gesperrt, bis sie geladen sind.",
+  filesUnavailable: "compose.yaml und .env konnten nicht vom Host gelesen werden. Der Editor öffnet sich, sobald sie geladen sind.",
   writeUnknown: "Der Hub hat die Änderung nicht bestätigt. Stack neu laden, bevor du es erneut versuchst.",
   discard: "Änderungen verwerfen",
   download: "Datei herunterladen",

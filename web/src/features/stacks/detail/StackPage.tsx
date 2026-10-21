@@ -42,8 +42,20 @@ function BackLink() {
   );
 }
 
+/** Shown instead of the editor while compose.yaml and .env cannot be read. */
+function FilesUnavailable({ onRetry }: { onRetry: () => void }) {
+  const t = useTranslations("editor");
+  const tc = useTranslations("common.actions");
+  return (
+    <div role="alert" className="flex flex-wrap items-center gap-3 rounded-lg border border-warning/30 bg-warning/8 px-3 py-2 text-sm text-warning">
+      <span className="flex-1">{t("filesUnavailable")}</span>
+      <Button size="sm" variant="outline" onClick={onRetry}>{tc("retry")}</Button>
+    </div>
+  );
+}
+
 /** Existing stack: header, tabs and the shared draft kept across tab switches. */
-function ExistingStack({ stack }: { stack: StackDetail }) {
+function ExistingStack({ stack, onRetry }: { stack: StackDetail; onRetry: () => void }) {
   const t = useTranslations("stacks.detail");
   const { byId, all } = useHostScope();
   const stacks = useStacks();
@@ -70,7 +82,11 @@ function ExistingStack({ stack }: { stack: StackDetail }) {
           <OverviewTab stack={stack} host={host} />
         </TabsContent>
         <TabsContent value="editor">
-          <StackWorkspace draft={draft} stack={stack} hosts={all} labelSuggestions={allLabels(stacks.data ?? [])} mode={mode} onMode={setMode} />
+          {stack.filesUnavailable ? (
+            <FilesUnavailable onRetry={onRetry} />
+          ) : (
+            <StackWorkspace draft={draft} stack={stack} hosts={all} labelSuggestions={allLabels(stacks.data ?? [])} mode={mode} onMode={setMode} />
+          )}
         </TabsContent>
         <TabsContent value="logs">
           <StackLogs stack={stack} />
@@ -143,7 +159,8 @@ export default function StackPage() {
           <QueryError onRetry={() => void stack.refetch()} />
         )
       ) : (
-        <ExistingStack key={stack.data.id} stack={stack.data} />
+        // A draft only exists once the stored files are known; loading them later starts a fresh draft.
+        <ExistingStack key={`${stack.data.id}:${stack.data.filesUnavailable ? "files-unavailable" : "files"}`} stack={stack.data} onRetry={() => void stack.refetch()} />
       )}
     </>
   );

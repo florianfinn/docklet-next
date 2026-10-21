@@ -40,9 +40,9 @@ gate treats a production deploy like other durable runtime commands.
 Plain project details (`get-project`) carry the inventory observation and the
 hub's retained snapshot, but no file content. The editor reads `compose.yaml`
 and `.env` separately through `get-project-compose`, which is not cached. When
-that read fails, the stack page keeps the retained detail, the editor shows a
-notice, and Save, keyboard save and Deploy stay disabled, so an empty draft is
-never written.
+that read fails, the stack page keeps the retained detail and the editor tab
+shows a notice with a retry instead of an editor, so no draft exists that could
+be written. Once the files load, the editor starts from them.
 
 ## Sequencing and partial state
 
