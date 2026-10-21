@@ -67,6 +67,56 @@ in GitHub issues and milestones; rationale belongs in docs/design/ and its index
 - docs/design/ describes decisions and rationale, not task status. Dated measurements
   are evidence. Historical plans belong in the docs/history/ index.
 
+## Agent coordination
+
+- When work requires cooperation between agents, read and use the centrally
+  maintained `subagent-orchestration` skill before delegating. The skill is a
+  separate, reusable resource for other projects; these project rules and explicit
+  maintainer instructions take precedence. Locate it through the skill catalogue
+  or local `.claude/subagent-profile.md`. If unavailable, report that before
+  delegating and continue independent work within the approved scope.
+- Resolve open product, scope and interface decisions before the affected work.
+  Read accepted decisions first; handle routine implementation choices autonomously.
+  Raise genuine decisions early with a recommendation. Keep the accepted plan
+  stable and obtain required decisions on material deviations before proceeding.
+- Give each agent a self-contained brief: goal and acceptance, full base/head SHA,
+  target branch, accepted decisions, prerequisites and contract owner, owned paths
+  and read-only boundaries, known traps, checks and accessible evidence/report paths.
+  Never rely on access to the parent conversation. Review rounds receive prior
+  findings, responses and unresolved objections alongside the current exact SHA.
+  Put the current context first and link complete relevant reports once through
+  verified accessible paths; avoid recursively copying earlier briefs. Preserve
+  critical decisions and objections when working within tool input limits.
+- Use parallel work only with independent scope, disjoint ownership, isolated
+  implementation worktrees and adequate resources. Group work into coherent,
+  usable deliveries; local checkpoints and file-count heuristics do not require
+  additional PRs, scouts or review rounds. Retain the required foundation, risk
+  and closing reviews. Use focused construction checks and required integrated
+  checks; repeat successful full suites only when changes or failures justify it.
+- For a correctness fix, map the affected producer, transport/DTO and actual
+  consumer before implementation. Cover initial failure, partial state, latency,
+  identity changes and restart where relevant. Synchronise asynchronous assertions
+  with the actual effect. Compiler errors, timeouts and equivalent mutations do
+  not demonstrate that a behavioural guard works.
+- Check dependency graphs, fixtures, metadata and policy guards early. Record
+  flaky failures and reruns honestly and track their repair. Evidence reuse never
+  permits bypassing required hooks or checks without an explicit policy change.
+- After each review, disposition findings once: blockers, selected related fixes
+  grouped into one correction, and tracked deferrals with rationale. After PASS,
+  accepted nonblocking improvements do not trigger additional review loops.
+  Signal new product questions promptly through the active coordination channel.
+- Default new implementation agents to GPT-6.1 Sol. Start Astra agents only when
+  strictly necessary and state the concrete reason. Preserve independent review
+  by a different provider; generic skill model heuristics do not override this rule.
+- Continue through the authorised completion boundary. Worker reports and green
+  local checks are intermediate results. After interruptions, inspect actual task,
+  Git and command results before retrying; preserve the next allowed step in
+  handovers. Keep required review, checks, acceptance and external-action approvals.
+  Verify the actual mounted worktree, toolchain and environment before execution.
+  Retain real exit codes. Before ending a turn with pending work, establish an
+  app-owned continuation or PR watch and record its ID and next action. After an
+  interrupted push, inspect the remote ref before retrying; do not duplicate work.
+
 ## Branches, review and completion
 
 - Read docs/design/review-workflow.md before push, PR creation, review and merge.
@@ -78,6 +128,8 @@ in GitHub issues and milestones; rationale belongs in docs/design/ and its index
   author and committer use public human noreply identities.
 - Squash into main; PR title/body become commit subject/body. Revert titles also
   use Conventional Commits. On base changes, push again to rerun checks.
+  Before merge, check the actual proposed squash subject/body, required issue
+  reference in the subject, public human identities and publication suitability.
 - One independent review per milestone closing PR, plus risk interim reviews;
   implementation and review use different providers. Step PRs use self-checks and
   CI; standalone PRs and foundation follow-ups receive independent review.

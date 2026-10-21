@@ -16,6 +16,21 @@ Start with [CONTRIBUTING.md](CONTRIBUTING.md), the binding [AGENTS.md](AGENTS.md
 and the [design index](docs/design/README.md). Report vulnerabilities privately
 as described in [SECURITY.md](SECURITY.md).
 
+The live runtime connects stack start/stop/restart/redeploy and container
+start/stop/restart to durable action runs, with caller-scoped retry keys, resource
+exclusion and explicit handling of unknown outcomes. Stack and container logs are
+live streams with bounded buffering and visible gaps, rather than durable replay.
+See the [runtime contract](docs/design/runtime-control.md),
+[API mapping](docs/design/api-contract.md) and
+[M6 acceptance record](docs/history/m6-runtime-acceptance.md) for boundaries and evidence.
+
+For agent collaboration, follow [Agent coordination](AGENTS.md#agent-coordination)
+and use the separately maintained
+[subagent-orchestration skill](https://github.com/florianfinn/claude-skills/tree/master/plugins/subagent-orchestration).
+Project instructions contain binding local requirements; the skill supplies the
+reusable workflow. Current work belongs in [GitHub issues](https://github.com/florianfinn/docklet-next/issues)
+and [milestones](https://github.com/florianfinn/docklet-next/milestones).
+
 The hub uses `TZ` for schedules and date display, defaulting to `UTC`. Configure
 an IANA zone in the deployment environment and restart the hub after changes;
 General settings show the effective zone read-only.
