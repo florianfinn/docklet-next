@@ -3,7 +3,11 @@ import { useMemo, useState } from "react";
 import { stringify } from "yaml";
 import { useTranslations } from "use-intl";
 
+import { AdapterOutcomeError } from "@/data/capability";
+import { useAdapter } from "@/data/use-adapter";
 import { convertDockerRun, DockerRunError } from "@/domain/compose/docker-run";
+import { hubConversion, type HubResult } from "./hub-conversion";
+import { Spinner } from "@/shared/ui/spinner";
 import { Button } from "@/shared/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/shared/ui/dialog";
 import { Field, FieldLabel } from "@/shared/ui/field";
@@ -17,23 +21,42 @@ interface DockerRunDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   existing: string[];
-  onAdd: (key: string, body: Record<string, unknown>) => void;
+  hostId: string;
+  onAdd: (key: string, body: Record<string, unknown>, env: string) => void;
 }
 
 /** Converts a docker run command into a Compose service; lists unsupported flags. */
-export function DockerRunDialog({ open, onOpenChange, existing, onAdd }: DockerRunDialogProps) {
+export function DockerRunDialog({ open, onOpenChange, existing, hostId, onAdd }: DockerRunDialogProps) {
   const t = useTranslations("editor.run");
   const tc = useTranslations("common.actions");
+  const adapter = useAdapter();
+  // Production converts on the hub; the demo keeps the local converter with its notes.
+  const viaHub = adapter.kind !== "demo";
   const [input, setInput] = useState("");
-  const result = useMemo(() => {
-    if (!input.trim()) return null;
+  const [hub, setHub] = useState<HubResult | null>(null);
+  const [converting, setConverting] = useState(false);
+  const local = useMemo(() => {
+    if (viaHub || !input.trim()) return null;
     try {
       return { ok: true as const, conv: convertDockerRun(input, existing) };
     } catch (e) {
       if (e instanceof DockerRunError) return { ok: false as const };
       throw e;
     }
-  }, [input, existing]);
+  }, [input, existing, viaHub]);
+  const result = viaHub ? hub : local;
+  const change = (value: string) => { setInput(value); setHub(null); };
+  const convert = async () => {
+    setConverting(true);
+    try {
+      const out = await adapter.convertDockerRun(hostId, input);
+      setHub(hubConversion(out.compose, out.env, out.serviceName, existing));
+    } catch (e) {
+      setHub({ ok: false, reason: e instanceof AdapterOutcomeError && e.outcome.kind === "error" && e.outcome.code === "stack.convert-invalid" ? "invalid" : "failed" });
+    } finally {
+      setConverting(false);
+    }
+  };
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -47,13 +70,13 @@ export function DockerRunDialog({ open, onOpenChange, existing, onAdd }: DockerR
         <Field>
           <div className="flex items-center justify-between">
             <FieldLabel htmlFor="run-input">{t("input")}</FieldLabel>
-            <Button variant="link" size="sm" className="h-auto p-0 text-xs" onClick={() => setInput(EXAMPLE)}>
+            <Button variant="link" size="sm" className="h-auto p-0 text-xs" onClick={() => change(EXAMPLE)}>
               <Wand2 data-icon="inline-start" /> {t("example")}
             </Button>
           </div>
-          <Textarea id="run-input" rows={4} spellCheck={false} className="font-mono text-xs" placeholder={t("placeholder")} value={input} onChange={(e) => setInput(e.target.value)} />
+          <Textarea id="run-input" rows={4} spellCheck={false} className="font-mono text-xs" placeholder={t("placeholder")} value={input} onChange={(e) => change(e.target.value)} />
         </Field>
-        {result && !result.ok && <p className="text-sm text-destructive">{t("notRun")}</p>}
+        {result && !result.ok && <p role="alert" className="text-sm text-destructive">{"reason" in result && result.reason === "failed" ? t("hubFailed") : t("notRun")}</p>}
         {result?.ok && (
           <div className="grid gap-3 md:grid-cols-2">
             <div>
@@ -76,12 +99,17 @@ export function DockerRunDialog({ open, onOpenChange, existing, onAdd }: DockerR
           <Button variant="ghost" onClick={() => onOpenChange(false)}>
             {tc("cancel")}
           </Button>
+          {viaHub && (
+            <Button variant="outline" disabled={!input.trim() || converting} onClick={() => void convert()}>
+              {converting && <Spinner data-icon="inline-start" />} {t("convert")}
+            </Button>
+          )}
           <Button
             disabled={!result?.ok}
             onClick={() => {
               if (!result?.ok) return;
-              onAdd(result.conv.key, result.conv.body);
-              setInput("");
+              onAdd(result.conv.key, result.conv.body, "env" in result && typeof result.env === "string" ? result.env : "");
+              change("");
               onOpenChange(false);
             }}
           >

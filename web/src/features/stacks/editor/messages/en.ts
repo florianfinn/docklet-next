@@ -9,6 +9,9 @@ export const enEditor = {
   issues: "{errors, plural, one {# error} other {# errors}} · {warns, plural, one {# note} other {# notes}}",
   save: "Save",
   saved: "compose.yaml and .env saved – effective after the next deploy",
+  createdNotDeployed: "Stack created, but the deploy was not started. Open the stack to retry.",
+  hostImmutable: "The host of an existing stack cannot be changed.",
+  writeUnknown: "The hub did not confirm the change. Reload the stack before trying again.",
   discard: "Discard changes",
   download: "Download file",
   deploy: "Deploy",
@@ -197,6 +200,8 @@ export const enEditor = {
     hints: "Notes",
     add: "Add as service",
     notRun: "Command must start with “docker run”.",
+    convert: "Convert on hub",
+    hubFailed: "The hub could not convert this command. Try again or add the service manually.",
     hint: {
       "not-docker-run": "Command must start with “docker run”.",
       "env-no-value": "Variable {value} without a value – please add one",

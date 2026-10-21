@@ -46,6 +46,7 @@ export function createDisconnectedAdapter(): DockletAdapter {
     setAutoUpdate: unavailable,
     restartService: unavailable,
     importSource: unavailable,
+    convertDockerRun: unavailable,
     runContainerCommand: unavailable,
     recreateContainer: unavailable,
     setContainerOrigin: unavailable,

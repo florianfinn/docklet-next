@@ -1,5 +1,7 @@
 import type { ActionKind, ContainerInfo, DeployStepKey, Service, Stack } from "@/domain/model";
 import { parseCompose } from "@/domain/compose/model";
+import { convertDockerRun } from "@/domain/compose/docker-run";
+import { stringify } from "yaml";
 import { withoutSystem } from "@/domain/system";
 import { normalizeStackLabels } from "@/domain/stack-labels";
 import { hasUpdate, imageRef } from "@/domain/updates";
@@ -415,6 +417,11 @@ export function createDemoAdapter(options: DemoAdapterOptions = {}): DockletAdap
           onFailure: () => logs.append(stackId, service, "error", "healthcheck: exit 1 nach Neustart"),
         },
       );
+    },
+
+    async convertDockerRun(_hostId, command) {
+      const conv = convertDockerRun(command, []);
+      return { compose: stringify({ services: { [conv.key]: conv.body } }, { lineWidth: 0 }), env: "", serviceName: conv.key };
     },
 
     async importSource(request) {

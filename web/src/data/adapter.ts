@@ -29,6 +29,25 @@ export interface DeployInput {
   labels: string[];
 }
 
+/** Hub conversion of one docker run command into a Compose document. */
+export interface DockerRunConversion {
+  compose: string;
+  env: string;
+  serviceName: string;
+}
+
+/** The stack exists on its host, but its first deploy was not admitted. */
+export class StackCreatedError extends Error {
+  readonly stackId: string;
+  override readonly cause: unknown;
+  constructor(stackId: string, cause: unknown) {
+    super("stack.created-not-deployed");
+    this.name = "StackCreatedError";
+    this.stackId = stackId;
+    this.cause = cause;
+  }
+}
+
 export interface RecreateInput {
   image: string;
   ports: PortMapping[];
@@ -104,6 +123,7 @@ export interface DockletAdapter extends AuthApi, HostsApi, VolumesApi, SettingsA
   setAutoUpdate(stackId: string, policy: AutoUpdatePolicy): Promise<void>;
   restartService(stackId: string, service: string): Promise<string>;
   importSource(request: ImportRequest): Promise<ImportResult>;
+  convertDockerRun(hostId: string, command: string): Promise<DockerRunConversion>;
 
   runContainerCommand(containerId: string, command: ContainerCommand): Promise<string>;
   recreateContainer(containerId: string, input: RecreateInput): Promise<string>;
