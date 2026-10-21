@@ -13,7 +13,7 @@ export function RunStatusLine({ run, className }: { run: ActionRun; className?: 
   const t = useTranslations("activity");
   const { index, step } = runPhase(run);
   const state = runtimeState(run);
-  const text = state ? t(`runtime.${state}`) : run.status === "running" && step ? t("phase", { current: index + 1, total: run.steps.length, label: step.label }) : run.status === "failed" ? t("failedAt", { label: step?.label ?? "" }) : run.status === "succeeded" ? t("dialog.result.succeeded") : t(`status.${run.status}`);
+  const text = state ? t(`runtime.${state}`) : run.status === "running" && step ? t("phase", { current: index + 1, total: run.steps.length, label: step.label }) : run.status === "failed" && step?.label.trim() ? t("failedAt", { label: step.label }) : run.status === "succeeded" ? t("dialog.result.succeeded") : t(`status.${run.status}`);
   return (
     <p role="status" aria-live="polite" data-tone={RUN_TONE[run.status]} className={cn("truncate font-medium text-(--tone)", className)}>
       {text}

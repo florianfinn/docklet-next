@@ -99,7 +99,8 @@ func (s *RuntimeService) runLocalInternal(owner *runtimeOwnerInternal) {
 		} else {
 			// The executor's return is its child/producer barrier, never a timer.
 			phaseErr = s.localExecution.Executor.ExecuteRuntime(owner.ctx, owner.command.command, output)
-			outputErr = runtimeFinishOutputInternal(owner.ctx, output)
+			outputErr = runtimeCaptureFailureInternal(output, phaseErr)
+			outputErr = errors.Join(outputErr, runtimeFinishOutputInternal(owner.ctx, output))
 		}
 	}
 	s.activity.runningMu.Lock()

@@ -8,7 +8,9 @@ package activity
 
 import (
 	"context"
+	"encoding/json/v2"
 	"errors"
+	"io"
 	"time"
 
 	activitylib "github.com/florianfinn/docklet-next/backend/pkg/libarcane/activity"
@@ -21,6 +23,20 @@ const runtimeOutputDrainWait = 60 * time.Second
 
 func (s *RuntimeService) captureInternal(ctx context.Context, id string) (*activitylib.Writer, error) {
 	return activitylib.NewRuntimeWriter(ctx, s.outputAppender, id, "")
+}
+
+// SDKs can return their only diagnostic as an error without writing progress.
+// Keep that diagnostic in the same bounded capture, separate from coded reasons.
+func runtimeCaptureFailureInternal(output *activitylib.Writer, workflowErr error) error {
+	if workflowErr == nil {
+		return nil
+	}
+	output.Flush() // Seal any unterminated progress line before the error frame.
+	if err := json.MarshalWrite(output, map[string]string{"error": workflowErr.Error()}); err != nil {
+		return err
+	}
+	_, err := io.WriteString(output, "\n")
+	return err
 }
 
 func runtimeFinishOutputInternal(ctx context.Context, output *activitylib.Writer) error {

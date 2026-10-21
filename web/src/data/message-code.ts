@@ -30,6 +30,11 @@ const translators = {
 
 /** The adapter sends codes; display text is resolved at the UI boundary. */
 export function renderMessage(message: MessageCode, locale: AppLocale): string {
+  const runtimeReasons: Record<string, string> = { "runtime.failed": "failedBody", "runtime.interrupted": "interruptedBody", "runtime.cancelled": "cancelledBody" };
+  if (runtimeReasons[message.code]) {
+    const translateReason = translators[locale] as unknown as (key: string) => string;
+    return translateReason(`activity.runtime.${runtimeReasons[message.code]}`);
+  }
   const wireStatus: Record<string, string> = { "activity.queued": "queued", "activity.running": "running", "activity.success": "succeeded", "activity.failed": "failed", "activity.cancelled": "cancelled" };
   if (wireStatus[message.code]) {
     const translateStatus = translators[locale] as unknown as (key: string) => string;

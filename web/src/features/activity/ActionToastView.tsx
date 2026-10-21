@@ -36,8 +36,8 @@ function useToastFacts(run: ActionRun, now: number) {
   const status = state ? t(`runtime.${state}`) :
     run.status === "running" && step
       ? t("phase", { current: index + 1, total: run.steps.length, label: step.label })
-      : run.status === "failed"
-        ? t("failedAt", { label: step?.label ?? "" })
+      : run.status === "failed" && step?.label.trim()
+        ? t("failedAt", { label: step.label })
         : run.status === "succeeded" ? t("done", { seconds }) : t(`status.${run.status}`);
   const line = state ? t(`runtime.${state}Body`) : run.status === "failed" ? (run.error ?? t("toast.unknownError")) : run.status === "running" ? (step?.detail ?? run.target) : run.target;
   return { status, line, seconds, done, total: run.steps.length };

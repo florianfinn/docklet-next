@@ -84,6 +84,7 @@ export const enActivity = {
     unconfirmedBody: "The command was accepted. Executor confirmation is pending; completion is not confirmed. Do not repeat the command.",
     unknownBody: "Authoritative executor evidence is unavailable. This target remains blocked. Refresh the run or use administrator recovery after stopping the executor and checking Docker.",
     releasedBody: "An administrator released the exclusion. Effects remain unknown; no command was replayed and no success is claimed.",
+    failedBody: "The workflow or its output failed. Docker effects are unverified. Inspect the output and actual state before another action.",
     interruptedBody: "The workflow ended after interruption. Docker effects are unverified. Inspect actual state before another action.",
     cancellingBody: "Cancellation was requested. The workflow may still be stopping and the target stays blocked until its actual outcome is recorded.",
     cancelledBody: "The workflow has stopped after cancellation. This does not roll back effects already accepted by Docker.",
