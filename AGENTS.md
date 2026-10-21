@@ -133,6 +133,9 @@ in GitHub issues and milestones; rationale belongs in docs/design/ and its index
 - One independent review per milestone closing PR, plus risk interim reviews;
   implementation and review use different providers. Step PRs use self-checks and
   CI; standalone PRs and foundation follow-ups receive independent review.
+- Before the closing review, run the candidate package once in the approved
+  sandbox against real hub and agent paths (Direct and Edge where relevant).
+  Check fixtures for hub or agent responses against the real producer.
 - Completion requires merge to the target branch, green checks and the applicable
   review. Record PR, merge SHA, review and check results in the issue. The milestone
   closing issue stays open until its closing PR merges to main. Practical and release
