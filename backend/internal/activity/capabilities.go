@@ -19,7 +19,7 @@ import (
 )
 
 var adapterOperationIDs = []string{
-	"checkUpdates", "completeSetup", "connectHost", "connectNetwork", "createEntry",
+	"checkUpdates", "completeSetup", "connectHost", "connectNetwork", "convertDockerRun", "createEntry",
 	"createNetwork", "createVolume", "deleteEntry", "deleteVolume", "deployStack",
 	"disconnectNetwork", "discoverHub", "getSecurity", "getSettings", "getStack",
 	"getTopology", "getVolume", "importSource", "installContainerUpdate", "installStackUpdates",
@@ -94,6 +94,13 @@ func getCapabilities(ctx context.Context, input *GetCapabilitiesInput) (*handler
 			} else {
 				descriptors[i].DisabledReasonCode = "capability.unavailable"
 			}
+		case "deployStack", "saveStackFiles", "setStackLabels", "convertDockerRun":
+			descriptors[i].Available = authoringAllowedInternal(descriptors[i].OperationID, descriptors[i].ResourceRef, permissions)
+			if descriptors[i].Available {
+				descriptors[i].DisabledReasonCode = ""
+			} else {
+				descriptors[i].DisabledReasonCode = "capability.unavailable"
+			}
 		case "registerHost", "issueAgentToken", "removeHost", "discoverHub":
 			descriptors[i].Available = permissions.IsGlobalAdmin()
 			if descriptors[i].Available {
@@ -107,6 +114,32 @@ func getCapabilities(ctx context.Context, input *GetCapabilitiesInput) (*handler
 		Success: true,
 		Data:    descriptors,
 	}}, nil
+}
+
+// authoringAllowedInternal scopes stack authoring to a host ref for new stacks
+// and a host~project stack ref for existing ones; deploy also needs run reads.
+func authoringAllowedInternal(operationID string, ref capability.ResourceRef, permissions *authz.PermissionSet) bool {
+	env, raw, scoped := strings.Cut(ref.ID, "~")
+	var required []string
+	switch {
+	case operationID == "convertDockerRun" && ref.Kind == "host" && ref.ID != "" && !strings.Contains(ref.ID, "~"):
+		env, required = ref.ID, []string{authz.PermContainersCreate}
+	case operationID == "deployStack" && ref.Kind == "host" && ref.ID != "" && !strings.Contains(ref.ID, "~"):
+		env, required = ref.ID, []string{authz.PermProjectsCreate, authz.PermProjectsDeploy, authz.PermActivitiesRead}
+	case ref.Kind == "stack" && scoped && env != "" && raw != "" && !strings.Contains(raw, "~") && operationID != "convertDockerRun":
+		required = []string{authz.PermProjectsUpdate}
+		if operationID == "deployStack" {
+			required = append(required, authz.PermProjectsDeploy, authz.PermActivitiesRead)
+		}
+	default:
+		return false
+	}
+	for _, permission := range required {
+		if !permissions.Allows(permission, env) {
+			return false
+		}
+	}
+	return true
 }
 
 func RegisterCapabilities(api huma.API) {

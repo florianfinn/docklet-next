@@ -6,6 +6,9 @@ import { useTranslations } from "use-intl";
 
 import { queueDemoFailure, type DemoFailure } from "@/runtime";
 import { isRunBusy } from "@/data/run-gate";
+import { StackCreatedError } from "@/data/adapter";
+import { AdapterOutcomeError } from "@/data/capability";
+import { useRuntimeError } from "@/features/activity/use-runtime-error";
 import { useAdapter } from "@/data/use-adapter";
 import { ops, uniqueKey, type Mutator } from "@/domain/compose/ops";
 import type { Host, Stack } from "@/domain/model";
@@ -48,6 +51,7 @@ export function StackWorkspace({ draft, stack, hosts, labelSuggestions, mode, on
   const adapter = useAdapter();
   const navigate = useNavigate();
   const text = useEditorText();
+  const runtimeError = useRuntimeError();
   const [file, setFile] = useState<WorkspaceFile>("compose");
   const [wizard, setWizard] = useState<WizardState>({ step: stack ? 2 : 1, service: null, section: "general" });
   const aside = usePreference("workspaceAside");
@@ -77,6 +81,14 @@ export function StackWorkspace({ draft, stack, hosts, labelSuggestions, mode, on
     setWizard({ step: 2, service: last || null, section: "general" });
   };
 
+  /** Shows authoring failures; the draft always stays for a later retry. */
+  const report = (e: unknown) => {
+    const code = e instanceof AdapterOutcomeError && e.outcome.kind === "error" ? e.outcome.code : "";
+    if (code === "stack.host-immutable") toast.error(t("hostImmutable"));
+    else if (code.startsWith("stack.") && code.endsWith("-unknown")) toast.error(t("writeUnknown"));
+    else if (!runtimeError(e)) throw e;
+  };
+
   const save = async () => {
     if (!stack) return;
     setSaving(true);
@@ -85,6 +97,8 @@ export function StackWorkspace({ draft, stack, hosts, labelSuggestions, mode, on
       if (!sameStackLabels(draft.labels, stack.labels)) await adapter.setStackLabels(stack.id, draft.labels);
       draft.markSaved();
       toast.success(t("saved"));
+    } catch (e) {
+      report(e);
     } finally {
       setSaving(false);
     }
@@ -99,7 +113,15 @@ export function StackWorkspace({ draft, stack, hosts, labelSuggestions, mode, on
     } catch (e) {
       // A busy stack keeps the draft; the gate notice names the running action.
       if (isRunBusy(e)) return;
-      throw e;
+      if (e instanceof StackCreatedError) {
+        // The files are on the hub; retrying from the new-stack draft would collide by name.
+        draft.markSaved();
+        toast.error(t("createdNotDeployed"));
+        navigate(`/stacks/${e.stackId}?tab=editor`, { replace: true });
+        return;
+      }
+      report(e);
+      return;
     }
     draft.markSaved();
     if (isNew) navigate(`/stacks/${stackId}?tab=deployments`, { replace: true });
@@ -150,11 +172,13 @@ export function StackWorkspace({ draft, stack, hosts, labelSuggestions, mode, on
                 <Terminal data-icon="inline-start" /> {t("importRun")}
               </Button>
             </HelpTarget>
-            <HelpTarget topic="stack.importSource">
-              <Button size="sm" variant="outline" disabled={!model} onClick={() => setDialog("import")}>
-                <Import data-icon="inline-start" /> {t("importSource")}
-              </Button>
-            </HelpTarget>
+            {adapter.kind === "demo" && (
+              <HelpTarget topic="stack.importSource">
+                <Button size="sm" variant="outline" disabled={!model} onClick={() => setDialog("import")}>
+                  <Import data-icon="inline-start" /> {t("importSource")}
+                </Button>
+              </HelpTarget>
+            )}
           </>
         )}
         <span className="flex-1" />
@@ -222,7 +246,8 @@ export function StackWorkspace({ draft, stack, hosts, labelSuggestions, mode, on
         </p>
       )}
 
-      <DockerRunDialog open={dialog === "run"} onOpenChange={(o) => setDialog(o ? "run" : null)} existing={model?.services.map((s) => s.key) ?? []} onAdd={(key, body) => addServices([{ key, body }])} />
+      <DockerRunDialog open={dialog === "run"} onOpenChange={(o) => setDialog(o ? "run" : null)} existing={model?.services.map((s) => s.key) ?? []} hostId={draft.hostId}
+        onAdd={(key, body, env) => { addServices([{ key, body }]); if (env.trim()) draft.setEnv(`${draft.env.trimEnd() ? `${draft.env.trimEnd()}\n` : ""}${env.trim()}\n`); }} />
       <ImportSourceDialog open={dialog === "import"} onOpenChange={(o) => setDialog(o ? "import" : null)} onApply={(r) => addServices(r.services)} />
     </WorkspaceFrame>
   );

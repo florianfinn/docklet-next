@@ -30,13 +30,14 @@ import { createRuntimeLogs } from "./logs";
 import { registerIdentityLifetime } from "../identity-lifetime";
 import { createIdentityReads } from "./identity-reads";
 import { createActivityReader } from "./activity-reader";
+import { createStackAuthoring } from "./stack-authoring";
 
 type ReadOperation = "get-capabilities" | "listEnvironments" | "list-activities" | "get-activity" | "listEvents";
 type Body<I extends ReadOperation> = operations[I]["responses"][200]["content"]["application/json"];
 type StreamPayload = operations["streamClient"]["responses"][200]["content"]["text/event-stream"][number]["data"];
 type Source = Pick<EventSource, "close" | "onopen" | "onmessage" | "onerror"> & Partial<Pick<EventSource, "readyState">>;
 
-const IMPLEMENTED = new Set(["subscribeLogs", "subscribeContainerLogs", "runStackCommand", "runContainerCommand", "registerHost", "issueAgentToken", "removeHost", "discoverHub", "listStacks", "getStack", "listContainers", "listHosts", "listActions", "listEvents", "subscribeActions", "subscribeChanges", "getAuthMode", "getCurrentUser", "login", "logout", "changePassword", "updateMyLocale", "getSetupStatus", "completeSetup", "getConnectedSettings", "saveSettings", "listImages", "listVolumes", "getVolume", "getTopology", "subscribeMetrics"]);
+const IMPLEMENTED = new Set(["subscribeLogs", "subscribeContainerLogs", "runStackCommand", "runContainerCommand", "deployStack", "saveStackFiles", "setStackLabels", "convertDockerRun", "registerHost", "issueAgentToken", "removeHost", "discoverHub", "listStacks", "getStack", "listContainers", "listHosts", "listActions", "listEvents", "subscribeActions", "subscribeChanges", "getAuthMode", "getCurrentUser", "login", "logout", "changePassword", "updateMyLocale", "getSetupStatus", "completeSetup", "getConnectedSettings", "saveSettings", "listImages", "listVolumes", "getVolume", "getTopology", "subscribeMetrics"]);
 const RECONNECT_MS = 250;
 
 export interface HttpAdapterOptions {
@@ -407,6 +408,13 @@ export function createHttpAdapter(options: HttpAdapterOptions = {}): DockletAdap
   }
   const inventory = scopedObservations((observe) => createInventoryReader(baseUrl, fetcher, listHosts, requireCapability, observe));
   const resourceReads = scopedObservations((observe) => createResourceReader(baseUrl, fetcher, listHosts, requireCapability, observe));
+  const authoring = createStackAuthoring({
+    baseUrl, client, capability: getCapability,
+    up: (stackId) => runtime.runStackCommand(stackId, "start"),
+    labels: async (stackId) => (await inventory.getStack(stackId)).labels,
+    changed: () => changeListeners.forEach((listener) => listener(["stacks"])),
+    unauthorized: () => { suspendIdentity(); actions.reset(true); },
+  });
   const unsupported = createDisconnectedAdapter();
   const methods = Object.fromEntries(Object.keys(unsupported).filter((key) => key !== "kind").map((operationId) => [operationId, (...args: unknown[]) => Promise.reject(unavailable(operationId, refFor(operationId, args), "capability.mapping-unavailable"))])) as unknown as DockletAdapter;
   const adapter: DockletAdapter = {
@@ -418,6 +426,7 @@ export function createHttpAdapter(options: HttpAdapterOptions = {}): DockletAdap
     getRuntimeRun: runtime.getRuntimeRun,
     cancelRuntimeRun: runtime.cancelRuntimeRun,
     releaseRuntimeRun: runtime.releaseRuntimeRun,
+    ...authoring,
     ...createSettingsCore(baseUrl, client),
     ...createHttpHubBackups(baseUrl, client, options.uploadFactory),
     kind: "http",
