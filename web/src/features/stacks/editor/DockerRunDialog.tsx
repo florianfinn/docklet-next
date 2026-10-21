@@ -26,6 +26,8 @@ interface DockerRunDialogProps {
   onAdd: (key: string, body: Record<string, unknown>, env: string, declarations: Declarations) => void;
 }
 
+type Conversion = { id: number; hostId: string; input: string; adapter: unknown } & ({ phase: "pending" } | { phase: "done"; result: HubResult });
+
 /** Converts a docker run command into a Compose service; lists unsupported flags. */
 export function DockerRunDialog({ open, onOpenChange, existing, hostId, onAdd }: DockerRunDialogProps) {
   const t = useTranslations("editor.run");
@@ -34,13 +36,13 @@ export function DockerRunDialog({ open, onOpenChange, existing, hostId, onAdd }:
   // Production converts on the hub; the demo keeps the local converter with its notes.
   const viaHub = adapter.kind !== "demo";
   const [input, setInput] = useState("");
-  // A hub result belongs to the exact host and command it was requested for.
-  const [hub, setHub] = useState<{ hostId: string; input: string; result: HubResult } | null>(null);
-  const [pending, setPending] = useState<{ hostId: string; input: string } | null>(null);
   const capability = useCapability("convertDockerRun", { kind: "host", id: hostId });
-  // Each request supersedes earlier responses; only the latest may settle.
-  const request = useRef(0);
-  const converting = pending?.hostId === hostId && pending.input === input;
+  // One conversion lifetime: a request settles only while it is still the current one.
+  // Closing, editing the command and changing host or adapter end the lifetime.
+  const [conversion, setConversion] = useState<Conversion | null>(null);
+  const sequence = useRef(0);
+  if (conversion && (!open || conversion.hostId !== hostId || conversion.adapter !== adapter)) setConversion(null);
+  const converting = conversion?.phase === "pending";
   const local = useMemo(() => {
     if (viaHub || !input.trim()) return null;
     try {
@@ -50,13 +52,12 @@ export function DockerRunDialog({ open, onOpenChange, existing, hostId, onAdd }:
       throw e;
     }
   }, [input, existing, viaHub]);
-  const result = viaHub ? (hub && hub.hostId === hostId && hub.input === input ? hub.result : null) : local;
-  const change = (value: string) => { setInput(value); };
+  const result = viaHub ? (conversion?.phase === "done" ? conversion.result : null) : local;
+  const change = (value: string) => { setInput(value); setConversion(null); };
   const convert = async () => {
-    const id = ++request.current;
-    const target = { hostId, input };
-    setHub(null);
-    setPending(target);
+    const id = ++sequence.current;
+    const target = { id, hostId, input, adapter };
+    setConversion({ ...target, phase: "pending" });
     let next: HubResult;
     try {
       const out = await adapter.convertDockerRun(target.hostId, target.input);
@@ -64,13 +65,11 @@ export function DockerRunDialog({ open, onOpenChange, existing, hostId, onAdd }:
     } catch (e) {
       next = { ok: false, reason: e instanceof AdapterOutcomeError && e.outcome.kind === "error" && e.outcome.code === "stack.convert-invalid" ? "invalid" : "failed" };
     }
-    if (id !== request.current) return;
-    setHub({ ...target, result: next });
-    setPending(null);
+    setConversion((current) => current?.phase === "pending" && current.id === id ? { ...current, phase: "done", result: next } : current);
   };
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+    <Dialog open={open} onOpenChange={(next) => { if (!next) setConversion(null); onOpenChange(next); }}>
       <DialogContent className="sm:max-w-2xl">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
@@ -107,7 +106,7 @@ export function DockerRunDialog({ open, onOpenChange, existing, hostId, onAdd }:
           </div>
         )}
         <DialogFooter>
-          <Button variant="ghost" onClick={() => onOpenChange(false)}>
+          <Button variant="ghost" onClick={() => { setConversion(null); onOpenChange(false); }}>
             {tc("cancel")}
           </Button>
           {viaHub && (
@@ -121,6 +120,7 @@ export function DockerRunDialog({ open, onOpenChange, existing, hostId, onAdd }:
               if (!result?.ok || converting) return;
               onAdd(result.conv.key, result.conv.body, "env" in result && typeof result.env === "string" ? result.env : "", "declarations" in result ? result.declarations as Declarations : {});
               change("");
+              setConversion(null);
               onOpenChange(false);
             }}
           >

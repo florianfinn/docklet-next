@@ -125,12 +125,24 @@ var deployRuntimeGrantsInternal = []string{authz.PermActivitiesRead, authz.PermP
 // entry point and is available when some environment allows a new deploy.
 func authoringAllowedInternal(operationID string, ref capability.ResourceRef, permissions *authz.PermissionSet) bool {
 	if operationID == "deployStack" && ref.Kind == "hub" {
-		for _, permission := range append([]string{authz.PermProjectsCreate}, deployRuntimeGrantsInternal...) {
-			if !permissions.AllowsAny(permission) {
-				return false
+		// One environment must hold every grant; global grants apply to each.
+		required := append([]string{authz.PermProjectsCreate}, deployRuntimeGrantsInternal...)
+		candidates := []string{"*"}
+		if permissions != nil {
+			for envID := range permissions.PerEnv {
+				candidates = append(candidates, envID)
 			}
 		}
-		return true
+		for _, envID := range candidates {
+			usable := true
+			for _, permission := range required {
+				usable = usable && permissions.Allows(permission, envID)
+			}
+			if usable {
+				return true
+			}
+		}
+		return false
 	}
 	env, raw, scoped := strings.Cut(ref.ID, "~")
 	var required []string

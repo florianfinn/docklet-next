@@ -24,4 +24,10 @@ describe("importService", () => {
     try { mutate(base, ops.importService("web", { image: "x" }, { volumes: { data: { external: true } } })); } catch (e) { error = e; }
     expect(error instanceof ComposeEditError && error.code === "declaration-conflict" && error.detail === "data").toBe(true);
   });
+
+  it("treats mappings with different key order as equal", () => {
+    const text = "services: {}\nnetworks:\n  net:\n    name: example-net\n    external: true\n";
+    const out = parse(mutate(text, ops.importService("web", { image: "x" }, { networks: { net: { external: true, name: "example-net" } } })));
+    expect(out.services.web).toEqual({ image: "x" });
+  });
 });

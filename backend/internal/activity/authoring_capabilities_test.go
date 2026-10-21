@@ -41,6 +41,16 @@ func TestDeployCapabilityMatchesRuntimeAdmission(t *testing.T) {
 	require.True(t, authoringDescriptorInternal(t, partial, "stack", "example~p1", "saveStackFiles"))
 }
 
+func TestHubDeployEntryNeedsOneUsableEnvironment(t *testing.T) {
+	all := map[string]struct{}{authz.PermProjectsCreate: {}, authz.PermActivitiesRead: {}, authz.PermProjectsDeploy: {}, authz.PermProjectsDown: {}, authz.PermProjectsRestart: {}}
+	runtime := map[string]struct{}{authz.PermActivitiesRead: {}, authz.PermProjectsDeploy: {}, authz.PermProjectsDown: {}, authz.PermProjectsRestart: {}}
+	split := &authz.PermissionSet{PerEnv: map[string]map[string]struct{}{"h1": {authz.PermProjectsCreate: {}}, "h2": runtime}}
+	require.False(t, authoringDescriptorInternal(t, split, "hub", "0", "deployStack"))
+	mixed := &authz.PermissionSet{Global: map[string]struct{}{authz.PermProjectsCreate: {}}, PerEnv: map[string]map[string]struct{}{"h2": runtime}}
+	require.True(t, authoringDescriptorInternal(t, mixed, "hub", "0", "deployStack"))
+	require.True(t, authoringDescriptorInternal(t, &authz.PermissionSet{Global: all}, "hub", "0", "deployStack"))
+}
+
 func TestAuthoringCapabilitiesScopeAndPermissions(t *testing.T) {
 	full := authz.EnvironmentPermissionSet("example")
 	cases := []struct {
