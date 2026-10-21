@@ -73,8 +73,6 @@ func (c *RuntimeRemoteCoordinator) recoverInternal(ctx context.Context, only *Ru
 		if err := c.scheduleRefreshInternal(ctx, ref); err != nil {
 			return err
 		}
-		// The restored run keeps being followed once its query answers active.
-		c.followInternal(ref)
 	}
 	return nil
 }

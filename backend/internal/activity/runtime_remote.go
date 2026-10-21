@@ -177,11 +177,12 @@ func (c *RuntimeRemoteCoordinator) dispatchInternal(ctx context.Context, ref Run
 			delete(c.stamps, ref.RunID)
 			delete(c.lastQuery, ref.RunID)
 		}
+		// Register the follower before this owned task ends, so Close always
+		// either joins it or prevents it.
+		follow := c.registerFollowLockedInternal(ref, snapshot, err)
 		close(task.done)
 		c.mu.Unlock()
-		if err == nil && runtimeFollowableInternal(snapshot) {
-			c.followInternal(ref)
-		}
+		c.startFollowInternal(ref, follow)
 	}()
 	transport, err := c.transport(ctx, ref.Store)
 	var outcome activitytypes.RuntimeExecutionOutcome
@@ -215,38 +216,49 @@ func runtimeFollowableInternal(snapshot activitytypes.RuntimeSnapshot) bool {
 	return snapshot.OutcomeState == activitytypes.RuntimeOutcomeKnown && !isTerminalActivityStatusInternal(snapshot.Status)
 }
 
-// followInternal settles an accepted active remote run without any reader. It
-// only uses the bounded Refresh path (one query in flight, 2-second spacing),
-// stops when the run is terminal or unknown, and never resends the effect.
-func (c *RuntimeRemoteCoordinator) followInternal(ref RuntimeRunReference) {
-	c.mu.Lock()
-	if c.paused || c.lifetime.Err() != nil || c.follows[ref.RunID] != nil {
-		c.mu.Unlock()
-		return
+type runtimeFollowInternal struct {
+	task *runtimeRemoteTaskInternal
+	ctx  context.Context
+}
+
+// registerFollowLockedInternal claims reader-independent following for a known
+// active run. Callers hold c.mu inside an owned dispatch or query task.
+func (c *RuntimeRemoteCoordinator) registerFollowLockedInternal(ref RuntimeRunReference, snapshot activitytypes.RuntimeSnapshot, err error) *runtimeFollowInternal {
+	if err != nil || !runtimeFollowableInternal(snapshot) || c.paused || c.lifetime.Err() != nil || c.follows[ref.RunID] != nil {
+		return nil
 	}
 	ctx, cancel := context.WithTimeout(c.lifetime, 30*time.Minute)
 	task := &runtimeRemoteTaskInternal{cancel: cancel, done: make(chan struct{})}
 	c.follows[ref.RunID] = task
-	c.mu.Unlock()
+	return &runtimeFollowInternal{task: task, ctx: ctx}
+}
+
+// startFollowInternal settles a claimed run without any reader. It only uses
+// the bounded Refresh path (one query in flight, real-time spacing), stops when
+// the run is terminal or unknown, and never resends the effect.
+func (c *RuntimeRemoteCoordinator) startFollowInternal(ref RuntimeRunReference, follow *runtimeFollowInternal) {
+	if follow == nil {
+		return
+	}
 	go func() {
 		defer func() {
-			cancel()
+			follow.task.cancel()
 			c.mu.Lock()
-			if c.follows[ref.RunID] == task {
+			if c.follows[ref.RunID] == follow.task {
 				delete(c.follows, ref.RunID)
 			}
-			close(task.done)
+			close(follow.task.done)
 			c.mu.Unlock()
 		}()
 		timer := time.NewTimer(c.followEvery)
 		defer timer.Stop()
 		for {
 			select {
-			case <-ctx.Done():
+			case <-follow.ctx.Done():
 				return
 			case <-timer.C:
 			}
-			snapshot, err := c.Refresh(ctx, ref)
+			snapshot, err := c.Refresh(follow.ctx, ref)
 			if err != nil || !runtimeFollowableInternal(snapshot) {
 				return
 			}
@@ -298,17 +310,18 @@ func (c *RuntimeRemoteCoordinator) closeInternal(ctx context.Context) error {
 		task.cancel()
 		tasks = append(tasks, task)
 	}
-	var follows []*runtimeRemoteTaskInternal
 	for _, task := range c.follows {
 		task.cancel()
-		follows = append(follows, task)
+		tasks = append(tasks, task)
 	}
 	c.mu.Unlock()
-	// A cancelled follower only leaves its timer or joined Refresh, so it ends promptly.
-	for _, task := range follows {
-		<-task.done
-	}
 	for _, task := range tasks {
+		// A task that already ended never turns an expired budget into an error.
+		select {
+		case <-task.done:
+			continue
+		default:
+		}
 		select {
 		case <-ctx.Done():
 			return ctx.Err()

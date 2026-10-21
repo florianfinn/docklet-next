@@ -158,3 +158,99 @@ func TestRuntimeRemoteFollowResumesAfterStartup(t *testing.T) {
 	require.Eventually(t, func() bool { return currentReceipt(f).SettledAt != nil }, 5*time.Second, 5*time.Millisecond)
 	require.EqualValues(t, 1, p.executes.Load())
 }
+
+func TestRuntimeRemoteFollowCloseKeepsItsBudget(t *testing.T) {
+	schedule, _ := followSchedule()
+	p := &remoteTransportProbe{}
+	var f *remoteFixtureInternal
+	p.execute = activeAcceptance(&f)
+	p.query = func(_ context.Context, id activitytypes.RuntimeRunIdentity) (activitytypes.RuntimeExecutionOutcome, error) {
+		return remoteAnswer(id, f.store.now, activitytypes.StatusRunning), nil
+	}
+	f = fastFollow(remoteFixture(t, p, schedule))
+	f.start(t)
+	require.Eventually(t, func() bool { return p.queries.Load() >= 1 }, 5*time.Second, 5*time.Millisecond)
+	// Park the follower inside Refresh's non-cancellable snapshot read.
+	f.service.activity.runningMu.Lock()
+	time.Sleep(50 * time.Millisecond)
+	ctx, cancel := context.WithTimeout(t.Context(), 100*time.Millisecond)
+	defer cancel()
+	closed := make(chan error, 1)
+	go func() { closed <- f.control.Close(ctx) }()
+	var err error
+	returned := false
+	select {
+	case err = <-closed:
+		returned = true
+	case <-time.After(time.Second):
+	}
+	f.service.activity.runningMu.Unlock()
+	if !returned {
+		<-closed
+	}
+	require.True(t, returned, "Close returns within its own budget")
+	require.ErrorIs(t, err, context.DeadlineExceeded)
+}
+
+func TestRuntimeRemoteFollowRestartsAfterExplicitRefresh(t *testing.T) {
+	schedule, _ := followSchedule()
+	p := &remoteTransportProbe{}
+	var f *remoteFixtureInternal
+	var reachable, finished atomic.Bool
+	p.execute = activeAcceptance(&f)
+	p.query = func(_ context.Context, id activitytypes.RuntimeRunIdentity) (activitytypes.RuntimeExecutionOutcome, error) {
+		if !reachable.Load() {
+			return activitytypes.RuntimeExecutionOutcome{}, ErrRuntimeTransport
+		}
+		if finished.Load() {
+			return remoteAnswer(id, f.store.now, activitytypes.StatusSuccess), nil
+		}
+		return remoteAnswer(id, f.store.now, activitytypes.StatusRunning), nil
+	}
+	f = fastFollow(remoteFixture(t, p, schedule))
+	f.start(t)
+	require.Eventually(t, func() bool {
+		row := currentReceipt(f)
+		return row.ExecutorState != nil && *row.ExecutorState == "unknown"
+	}, 5*time.Second, 5*time.Millisecond)
+	require.Eventually(t, func() bool {
+		f.control.mu.Lock()
+		defer f.control.mu.Unlock()
+		return f.control.follows[f.ref.RunID] == nil
+	}, 5*time.Second, 5*time.Millisecond)
+	reachable.Store(true)
+	snapshot, err := f.control.Refresh(t.Context(), f.ref)
+	require.NoError(t, err)
+	require.Equal(t, activitytypes.RuntimeOutcomeKnown, snapshot.OutcomeState)
+	// Without another reader, the explicit refresh hands the run back to a follower.
+	finished.Store(true)
+	require.Eventually(t, func() bool { return currentReceipt(f).SettledAt != nil }, 5*time.Second, 5*time.Millisecond)
+	require.EqualValues(t, 1, p.executes.Load())
+}
+
+func TestRuntimeRemoteStartupDoesNotQueryAfterUnknown(t *testing.T) {
+	schedule, _ := followSchedule()
+	p := &remoteTransportProbe{}
+	var f *remoteFixtureInternal
+	var restarted atomic.Bool
+	var afterRestart atomic.Int32
+	p.execute = activeAcceptance(&f)
+	p.query = func(_ context.Context, id activitytypes.RuntimeRunIdentity) (activitytypes.RuntimeExecutionOutcome, error) {
+		if restarted.Load() {
+			afterRestart.Add(1)
+			return activitytypes.RuntimeExecutionOutcome{Identity: id, State: activitytypes.RuntimeAnswerNotReceived}, nil
+		}
+		return remoteAnswer(id, f.store.now, activitytypes.StatusRunning), nil
+	}
+	f = fastFollow(remoteFixture(t, p, schedule))
+	f.start(t)
+	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
+	defer cancel()
+	require.NoError(t, f.control.Close(ctx))
+	restarted.Store(true)
+	require.NoError(t, f.control.Startup(ctx))
+	require.Eventually(t, func() bool { return afterRestart.Load() >= 1 }, 5*time.Second, 5*time.Millisecond)
+	time.Sleep(100 * time.Millisecond)
+	require.EqualValues(t, 1, afterRestart.Load(), "an unknown startup answer is not followed")
+	require.Nil(t, currentReceipt(f).SettledAt)
+}
