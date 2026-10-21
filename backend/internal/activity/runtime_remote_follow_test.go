@@ -254,3 +254,33 @@ func TestRuntimeRemoteStartupDoesNotQueryAfterUnknown(t *testing.T) {
 	require.EqualValues(t, 1, afterRestart.Load(), "an unknown startup answer is not followed")
 	require.Nil(t, currentReceipt(f).SettledAt)
 }
+
+func TestRuntimeRemoteFollowSurvivesTransientRecovery(t *testing.T) {
+	schedule, _ := followSchedule()
+	p := &remoteTransportProbe{}
+	var f *remoteFixtureInternal
+	var finished atomic.Bool
+	p.execute = activeAcceptance(&f)
+	p.query = func(_ context.Context, id activitytypes.RuntimeRunIdentity) (activitytypes.RuntimeExecutionOutcome, error) {
+		if finished.Load() {
+			return remoteAnswer(id, f.store.now, activitytypes.StatusSuccess), nil
+		}
+		return remoteAnswer(id, f.store.now, activitytypes.StatusRunning), nil
+	}
+	f = fastFollow(remoteFixture(t, p, schedule))
+	f.start(t)
+	require.Eventually(t, func() bool { return p.queries.Load() >= 1 }, 5*time.Second, 5*time.Millisecond)
+	// Hold the run as an administrator release does before it rejects a known active receipt.
+	f.control.mu.Lock()
+	f.control.recovering[f.ref.RunID] = true
+	f.control.mu.Unlock()
+	time.Sleep(50 * time.Millisecond)
+	f.control.mu.Lock()
+	following := f.control.follows[f.ref.RunID] != nil
+	delete(f.control.recovering, f.ref.RunID)
+	f.control.mu.Unlock()
+	require.True(t, following, "recovery in progress does not end following")
+	finished.Store(true)
+	require.Eventually(t, func() bool { return currentReceipt(f).SettledAt != nil }, 5*time.Second, 5*time.Millisecond)
+	require.EqualValues(t, 1, p.executes.Load())
+}

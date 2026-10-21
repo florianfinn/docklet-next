@@ -259,6 +259,12 @@ func (c *RuntimeRemoteCoordinator) startFollowInternal(ref RuntimeRunReference, 
 			case <-timer.C:
 			}
 			snapshot, err := c.Refresh(follow.ctx, ref)
+			// Administrator recovery holds the run only transiently; a rejected
+			// release leaves it known active, so keep following afterwards.
+			if errors.Is(err, ErrRuntimeRecoveryInProgress) {
+				timer.Reset(c.followEvery)
+				continue
+			}
 			if err != nil || !runtimeFollowableInternal(snapshot) {
 				return
 			}
