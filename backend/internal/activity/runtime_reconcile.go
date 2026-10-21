@@ -70,11 +70,13 @@ func (s *RuntimeService) remoteUnknownInternal(ctx context.Context, ref RuntimeR
 
 // Refresh shares one application-owned bounded query cycle per run. Viewer
 // cancellation detaches only its wait. A failed host has no recurring poll loop.
+// Refresh joins an in-flight dispatch instead of querying: a query that reaches
+// the executor before Execute would fence a run that is still being sent.
 func (c *RuntimeRemoteCoordinator) Refresh(ctx context.Context, ref RuntimeRunReference) (activitytypes.RuntimeSnapshot, error) {
-	return c.refreshInternal(ctx, ref, false)
+	return c.refreshInternal(ctx, ref, false, true)
 }
-func (c *RuntimeRemoteCoordinator) refreshInternal(ctx context.Context, ref RuntimeRunReference, force bool) (activitytypes.RuntimeSnapshot, error) {
-	snapshot, task, err := c.prepareRefreshInternal(ctx, ref, force)
+func (c *RuntimeRemoteCoordinator) refreshInternal(ctx context.Context, ref RuntimeRunReference, force, joinDispatch bool) (activitytypes.RuntimeSnapshot, error) {
+	snapshot, task, err := c.prepareRefreshInternal(ctx, ref, force, joinDispatch)
 	if err != nil || task == nil {
 		return snapshot, err
 	}
@@ -87,11 +89,11 @@ func (c *RuntimeRemoteCoordinator) refreshInternal(ctx context.Context, ref Runt
 }
 
 func (c *RuntimeRemoteCoordinator) scheduleRefreshInternal(ctx context.Context, ref RuntimeRunReference) error {
-	_, _, err := c.prepareRefreshInternal(ctx, ref, false)
+	_, _, err := c.prepareRefreshInternal(ctx, ref, false, false)
 	return err
 }
 
-func (c *RuntimeRemoteCoordinator) prepareRefreshInternal(ctx context.Context, ref RuntimeRunReference, force bool) (activitytypes.RuntimeSnapshot, *runtimeRemoteTaskInternal, error) {
+func (c *RuntimeRemoteCoordinator) prepareRefreshInternal(ctx context.Context, ref RuntimeRunReference, force, joinDispatch bool) (activitytypes.RuntimeSnapshot, *runtimeRemoteTaskInternal, error) {
 	snapshot, err := c.Snapshot(ctx, ref)
 	if err != nil {
 		return activitytypes.RuntimeSnapshot{}, nil, err
@@ -105,6 +107,10 @@ func (c *RuntimeRemoteCoordinator) prepareRefreshInternal(ctx context.Context, r
 	if c.recovering[ref.RunID] {
 		c.mu.Unlock()
 		return snapshot, nil, ErrRuntimeRecoveryInProgress
+	}
+	if dispatch := c.dispatch[ref.RunID]; joinDispatch && dispatch != nil {
+		c.mu.Unlock()
+		return snapshot, dispatch, nil
 	}
 	task := c.queries[ref.RunID]
 	if task == nil {
@@ -279,5 +285,6 @@ func (c *RuntimeRemoteCoordinator) Cancel(ctx context.Context, ref RuntimeRunRef
 	if pending {
 		return snapshot, nil
 	}
-	return c.refreshInternal(ctx, ref, true)
+	// Cancellation keeps querying at once: a fence before Execute is the cancellation.
+	return c.refreshInternal(ctx, ref, true, false)
 }

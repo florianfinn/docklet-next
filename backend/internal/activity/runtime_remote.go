@@ -209,7 +209,8 @@ func (c *RuntimeRemoteCoordinator) dispatchInternal(ctx context.Context, ref Run
 	}
 	_, _ = c.service.remoteUnknownInternal(ctx, ref, "transport")
 	if ctx.Err() == nil {
-		_, _ = c.Refresh(ctx, ref)
+		// The dispatch itself queries after its own transport failure; it must not join itself.
+		_, _ = c.refreshInternal(ctx, ref, false, false)
 	}
 }
 func runtimeFollowableInternal(snapshot activitytypes.RuntimeSnapshot) bool {
