@@ -474,7 +474,7 @@ export function createHttpAdapter(options: HttpAdapterOptions = {}): DockletAdap
   // Guard public reads and partial publishers in addition to transport bodies.
   return new Proxy(adapter, { get(target, key, receiver) {
     const method: unknown = Reflect.get(target, key, receiver);
-    if (typeof method !== "function" || !/^(list|get|discover)/.test(String(key))) return method;
+    if (typeof method !== "function" || !/^(list|get|discover|planVolumePrune)/.test(String(key))) return method;
     return (...args: unknown[]) => {
       // Auth and activities already implement their specialized renewal re-read.
       if (key === "getCurrentUser" || key === "getAuthMode" || key === "listActions") return method(...args);

@@ -111,3 +111,12 @@ it("discards the old volume's pending rename when the detail identity changes", 
   expect(view.router.state.location.pathname).toBe("/volumes/other");
   expect(screen.queryByRole("dialog") === null).toBe(true);
 });
+
+it("recovers a transient volume detail failure on retry", async () => {
+  const adapter = createDemoAdapter();
+  adapter.getVolume = vi.fn().mockRejectedValueOnce(new Error("http.error")).mockResolvedValue({ ...volume, backups: [] });
+  renderRoutes([{ path: "/volumes/:volumeId", element: <VolumePage /> }], ["/volumes/old"], adapter);
+  await userEvent.click(await screen.findByRole("button", { name: "Erneut versuchen" }));
+  await screen.findByRole("heading", { name: "old" });
+  expect(adapter.getVolume).toHaveBeenCalledTimes(2);
+});

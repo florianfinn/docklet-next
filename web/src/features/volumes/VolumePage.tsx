@@ -82,7 +82,7 @@ function OverviewTab({ volume: v, host }: { volume: VolumeDetail & { scope?: str
                         {c.stackId ? <Layers className="size-3.5 text-muted-foreground" aria-hidden /> : <Box className="size-3.5 text-muted-foreground" aria-hidden />}
                         {c.containerName}
                       </span>
-                      {!c.running && <span className="text-[11px] text-muted-foreground">{t("stopped")}</span>}
+                      {!c.running && <span className="text-[11px] text-muted-foreground">{"runningUnavailable" in c && c.runningUnavailable ? t("unknownState") : t("stopped")}</span>}
                     </TableCell>
                     <TableCell className="font-mono text-xs">
                       {c.target || t("none")}
@@ -232,7 +232,7 @@ export default function VolumePage() {
                 <div className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
                   <HostChip host={host} />
                   <span className="font-mono">{v.kind === "volume" ? v.name : v.source}</span>
-                  <span>{formatBytes(v.sizeBytes)}</span>
+                  <span>{v.sizeUnavailable ? t("sizeUnknown") : formatBytes(v.sizeBytes)}</span>
                 </div>
               </div>
             </header>

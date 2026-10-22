@@ -17,6 +17,7 @@ import { BackupBadge, KindBadge } from "./storage-visuals";
 export function StorageCard({ stackId }: { stackId: string }) {
   const t = useTranslations("volumes.storageCard");
   const volumes = useVolumes();
+  const tv = useTranslations("volumes");
   const used = (volumes.data ?? []).filter((v) => v.consumers.some((c) => c.stackId === stackId));
   return (
     <Card className="gap-3 py-4">
@@ -44,7 +45,7 @@ export function StorageCard({ stackId }: { stackId: string }) {
                   </Link>
                   <div className="mt-1 flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground">
                     <KindBadge volume={v} className="h-5 px-1.5 text-[10.5px]" />
-                    <span className="font-mono">{formatBytes(v.sizeBytes)}</span>
+                    <span className="font-mono">{v.sizeUnavailable ? tv("unknown") : formatBytes(v.sizeBytes)}</span>
                     <span className="truncate font-mono">
                       → {v.consumers.filter((c) => c.stackId === stackId).map((c) => `${c.service}:${c.target}`).join(", ")}
                     </span>

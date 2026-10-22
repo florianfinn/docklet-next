@@ -4,6 +4,7 @@ import { useTranslations } from "use-intl";
 
 import { errorCode, type CreateVolumeInput } from "@/data/api";
 import { isRunBusy } from "@/data/run-gate";
+import { AdapterOutcomeError } from "@/data/capability";
 import { useAdapter } from "@/data/use-adapter";
 import type { BackupPolicy } from "@/domain/volumes";
 import { useAdapterText } from "@/data/use-adapter-text";
@@ -27,6 +28,13 @@ export function useVolumeCommands() {
         if (!mounted.current) return undefined;
         // The gate already reported the busy target once (see ActionToasts).
         if (isRunBusy(e)) return undefined;
+        if (e instanceof AdapterOutcomeError && e.outcome.kind === "error") {
+          const code = e.outcome.code;
+          if (code === "volume.outcome-unknown" || code === "volume.helper-incompatible" || code === "volume.helper-unavailable") {
+            toast.error(t(code.slice("volume.".length) as "outcome-unknown" | "helper-incompatible" | "helper-unavailable"));
+            return undefined;
+          }
+        }
         const code = errorCode(e);
         toast.error(code && KNOWN.has(code) ? t(code as Known) : dt(e instanceof Error ? e.message : String(e)));
         return undefined;

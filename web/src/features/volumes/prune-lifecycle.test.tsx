@@ -94,3 +94,21 @@ it("recovers a transient preview failure through retry", async () => {
   await screen.findByText("excluded");
   expect(f.adapter.planVolumePrune).toHaveBeenCalledTimes(2);
 });
+
+it("discards a pending preview when the host scope changes", async () => {
+  const f = await setup(); const hosts = await f.adapter.listHosts(); const done = deferred<VolumePrunePlan>();
+  f.adapter.planVolumePrune = vi.fn().mockReturnValueOnce(done.promise).mockResolvedValue({ ...snapshot, candidates: [{ ...snapshot.candidates[0]!, id: "boreal~fresh", hostId: "boreal", name: "fresh" }] });
+  let changeScope!: () => void;
+  function Page() {
+    const [scope, setScope] = useState(hosts.filter((h) => h.id === "atlas"));
+    changeScope = () => setScope(hosts.filter((h) => h.id === "boreal"));
+    return <PruneVolumesDialog open onOpenChange={() => {}} hosts={scope} />;
+  }
+  renderWithApp(<Page />, f.adapter);
+  await waitFor(() => expect(f.adapter.planVolumePrune).toHaveBeenCalledOnce());
+  act(() => changeScope());
+  await screen.findByText("fresh");
+  await act(async () => { done.resolve(snapshot); await done.promise; });
+  expect(screen.queryByText("excluded") === null).toBe(true);
+  expect(screen.getByText("fresh") !== null).toBe(true);
+});

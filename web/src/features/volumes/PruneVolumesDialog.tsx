@@ -73,11 +73,11 @@ function PruneVolumesForm({ open, onOpenChange, hosts }: Props) {
           <DialogDescription>{t("description")}</DialogDescription>
         </DialogHeader>
         {result ? (
-          <div className="flex flex-col gap-3 text-sm" role="status">
+          <div className="flex max-h-[65vh] flex-col gap-3 overflow-auto text-sm" role="status">
             <p>{t("reclaimedLowerBound", { size: formatBytes(result.spaceReclaimed ?? 0) })}</p>
             <section aria-label={t("removed")}><h3 className="font-medium">{t("removed")} ({result.removed.length})</h3><ul>{result.removed.map((v) => <li key={v.id}>{v.name} · {hostName(v.hostId)}</li>)}</ul></section>
-            <section aria-label={t("skipped")}><h3 className="font-medium">{t("skipped")} ({result.skipped.length})</h3><ul>{result.skipped.map((v) => <li key={v.id}>{candidates.find((c) => c.id === v.id)?.name ?? v.id} · {t(`skipReasons.${v.reason}`)}</li>)}</ul></section>
-            <section aria-label={t("failed")}><h3 className="font-medium">{t("failed")} ({result.failed?.length ?? 0})</h3><ul>{result.failed?.map((v) => <li key={v.id}>{v.name} · {hostName(v.hostId)} · {t("operationFailed")}</li>)}</ul></section>
+            <section aria-label={t("skipped")}><h3 className="font-medium">{t("skipped")} ({result.skipped.length})</h3><ul>{result.skipped.map((v) => <li key={v.id}>{candidates.find((c) => c.id === v.id)?.name ?? v.id} · {hostName(candidates.find((c) => c.id === v.id)?.hostId ?? v.id.split("~")[0]!)} · {t(`skipReasons.${v.reason}`)}</li>)}</ul></section>
+            <section aria-label={t("failed")}><h3 className="font-medium">{t("failed")} ({result.failed?.length ?? 0})</h3><ul>{result.failed?.map((v) => <li key={v.id}>{v.name} · {hostName(v.hostId)} · {["volume.inspect-failed", "volume.usage-failed", "volume.remove-failed", "volume.protected"].includes(v.code) ? t(`failedReasons.${v.code.slice("volume.".length) as "inspect-failed" | "usage-failed" | "remove-failed" | "protected"}`) : t("operationFailed")}</li>)}</ul></section>
           </div>
         ) : plan.isPending ? (
           <div aria-busy="true" className="flex flex-col gap-2">

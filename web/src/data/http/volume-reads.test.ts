@@ -21,6 +21,23 @@ describe.each([false, true])("volume reads (Edge=%s)", (edge) => {
     }
   });
 
+  it("keeps stopped stack consumers and omits an absent Edge mountpoint", async () => {
+    const f = resourceFixture(); f.state.isEdge = edge;
+    const original = f.fetcher.getMockImplementation()!;
+    f.fetcher.mockImplementation(async (input) => {
+      const response = await original(input);
+      const url = new URL(String(input), "https://hub.example.com");
+      if (!url.pathname.endsWith("/containers") && !url.pathname.endsWith("/volumes/data")) return response;
+      const body = await response.json();
+      if (url.pathname.endsWith("/containers")) body.data[0].state = "exited";
+      else body.data.mountpoint = "";
+      return new Response(JSON.stringify(body), { headers: response.headers });
+    });
+    const detail = await f.adapter.getVolume("first~data");
+    expect(detail.source).toBe("");
+    expect(detail.consumers).toMatchObject([{ containerId: "first~web", stackId: "first~project", running: false, target: "/data" }]);
+  });
+
   it("retains rows when one host fails and recovers on retry", async () => {
     const f = resourceFixture(); f.state.isEdge = edge;
     expect((await f.adapter.listVolumes()).length).toBe(2);

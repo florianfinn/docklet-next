@@ -7,6 +7,7 @@
 import { CancelledError } from "@tanstack/react-query";
 
 import type { components, operations } from "@/api/generated/schema";
+import { AdapterError } from "@/data/api";
 import type { DockletAdapter } from "@/data/adapter";
 import { AdapterOutcomeError } from "@/data/capability";
 import type { Host, InventoryObservation } from "@/domain/model";
@@ -32,6 +33,7 @@ export function createVolumeReads(baseUrl: string, fetcher: typeof fetch, hosts:
     const response = await fetcher(`${baseUrl}/environments/${encodeURIComponent(hostId)}/volumes/${suffix}`, { credentials: "same-origin", headers: { Accept: "application/json" } });
     let body: Body<I> & { code?: string };
     try { body = await response.json(); } catch { throw new AdapterOutcomeError({ kind: "error", code: "http.error", status: response.status }); }
+    if (response.status === 404 && !body.code) throw new AdapterError("not-found");
     if (!response.ok) throw new AdapterOutcomeError({ kind: "error", code: body.code ?? "http.error", status: response.status });
     if (!body.success || !("data" in body)) throw new Error(`${operation}.invalid-response`);
     const reason = response.headers.get("X-Docklet-Host-Reason") as InventoryObservation["reason"];
@@ -42,13 +44,15 @@ export function createVolumeReads(baseUrl: string, fetcher: typeof fetch, hosts:
     const [containers, projects] = await Promise.allSettled([transport.list("list-containers", hostId, "containers"), transport.list("list-projects", hostId, "projects")]);
     return { containers: containers.status === "fulfilled" ? containers.value.rows : [], projects: projects.status === "fulfilled" ? projects.value.rows : [] };
   }
-  function map(row: Schema["VolumeVolume"], hostId: string, ctx: Awaited<ReturnType<typeof context>>, inventory: InventoryObservation): Volume {
-    const volume = mapVolumes([row], hostId, ctx.containers, ctx.projects, inventory)[0]!;
+  function supplement(volume: Volume, row: Schema["VolumeVolume"], hostId: string): Volume {
     for (const raw of row.containers ?? []) {
       const id = inventoryId(hostId, raw);
-      if (!volume.consumers.some((c) => c.containerId === id)) volume.consumers.push({ containerId: id, containerName: raw, target: "", readOnly: false, running: false });
+      if (!volume.consumers.some((c) => c.containerId === id)) volume.consumers.push(Object.assign({ containerId: id, containerName: raw, target: "", readOnly: false, running: false }, { runningUnavailable: true }));
     }
     return volume;
+  }
+  function map(row: Schema["VolumeVolume"], hostId: string, ctx: Awaited<ReturnType<typeof context>>, inventory: InventoryObservation): Volume {
+    return supplement(mapVolumes([row], hostId, ctx.containers, ctx.projects, inventory)[0]!, row, hostId);
   }
   const api: Pick<DockletAdapter, "listVolumes" | "getVolume"> = {
     async listVolumes(onPartial) {
@@ -62,8 +66,8 @@ export function createVolumeReads(baseUrl: string, fetcher: typeof fetch, hosts:
           const [volumes, ctx] = await Promise.all([transport.list("list-volumes", host.id, "volumes"), context(host.id)]);
           check();
           const rows = mapVolumes(volumes.rows, host.id, ctx.containers, ctx.projects, volumes.observation);
-          const actual = volumes.rows.map((row) => map(row, host.id, ctx, volumes.observation));
-          const combined = [...actual, ...rows.filter((v) => v.kind === "bind")];
+          const byName = new Map(volumes.rows.map((row) => [row.name, row]));
+          const combined = rows.map((v) => v.kind === "volume" ? supplement(v, byName.get(v.name)!, host.id) : v);
           retained.set(host.id, combined); batches.set(host.id, combined);
           onState(host.id, volumes.observation);
         } catch (error) {
