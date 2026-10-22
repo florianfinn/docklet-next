@@ -152,8 +152,8 @@ export function createRuntimeCommands({ baseUrl, client, capability, publish, un
       if (isCancelledError(error) || (error instanceof AdapterOutcomeError && error.outcome.kind === "error" && error.outcome.status === 401)) throw error;
       const retained = runs.get(run.id);
       if (!retained || retained.hostId !== run.hostId) return run;
-      // Only a settled generic row can supersede retained recovery after a failed read.
-      if (active(run) || (sequences.get(run.id) ?? 0) > started ||
+      // A settled generic row can supersede only active retained recovery after a failed read.
+      if (active(run) || !active(retained) || (sequences.get(run.id) ?? 0) > started ||
           (retained.status === run.status && retained.outcomeState === run.outcomeState)) return retained;
       sequences.set(run.id, started);
       return remember({ ...run, runtime: undefined } as RuntimeRun, false);
@@ -209,8 +209,8 @@ export function createRuntimeCommands({ baseUrl, client, capability, publish, un
         }
         check(version);
         if (controller.signal.aborted || now() - began >= COMMAND_RETRY_MS) throw runtimeError("runtime.pre-admission");
-        const started = ++sequence;
         for (let attempt = 0; attempt < 2; attempt++) {
+          const started = ++sequence;
           let response: Response;
           try {
             if (now() - began >= COMMAND_RETRY_MS) break;

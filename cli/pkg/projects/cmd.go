@@ -254,6 +254,7 @@ var upCmd = &cobra.Command{
 	RunE: func(cmd *cobra.Command, args []string) error {
 		return runProjectStreamAction(cmd, args[0], projectStreamActionConfig{
 			endpoint:       types.ProjectUp,
+			streamKind:     runtimeOperationStream,
 			failureMessage: "failed to start project",
 			successMessage: "Project %s started successfully",
 		})
