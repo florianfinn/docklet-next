@@ -1,3 +1,5 @@
+import { useCapability } from "@/data/use-capability";
+import { CapabilityGate } from "@/shared/components/capability-gate";
 import { Archive, CalendarClock, Play } from "lucide-react";
 import { useState } from "react";
 import { Link } from "react-router";
@@ -24,11 +26,16 @@ import { useVolumeCommands } from "../use-volume-commands";
 const PLAN_MODES = ["manual", "daily", "weekly", "once"] as const;
 
 /** Per-volume backup plan with its own save/cancel; the run button uses the saved plan. */
-export function BackupPolicyCard({ volume, targets, defaultRetention, hostOnline }: { volume: Volume; targets: BackupTarget[]; defaultRetention: Retention; hostOnline: boolean }) {
+export function BackupPolicyCard(props: { volume: Volume; targets: BackupTarget[]; defaultRetention: Retention; hostOnline: boolean }) {
+  return <CapabilityGate operation="setBackupPolicy"><ConnectedBackupPolicyCard {...props} /></CapabilityGate>;
+}
+
+function ConnectedBackupPolicyCard({ volume, targets, defaultRetention, hostOnline }: { volume: Volume; targets: BackupTarget[]; defaultRetention: Retention; hostOnline: boolean }) {
   const t = useTranslations("volumes.backups");
   const tc = useTranslations("common.actions");
   const ts = useTranslations("common.schedule");
   const cmd = useVolumeCommands();
+  const backup = useCapability("runBackup");
   const timeZone = useHubTimeZone();
   const text = useScheduleText();
   const [now] = useState(() => new Date());
@@ -61,7 +68,7 @@ export function BackupPolicyCard({ volume, targets, defaultRetention, hostOnline
           {next ? ts("next", { when: next.when, relative: next.relative, zone: next.zone }) : saved ? `${t("next")}: ${t("nextManual")}` : t("noPolicy")}
         </CardDescription>
         <CardAction>
-          <Button size="sm" disabled={!saved || !hostOnline || busy} onClick={() => void cmd.backup(volume.id)}>
+          <Button size="sm" disabled={!backup.available || !saved || !hostOnline || busy} title={backup.reason} onClick={() => void cmd.backup(volume.id)}>
             <Play data-icon="inline-start" />
             {t("runNow")}
           </Button>

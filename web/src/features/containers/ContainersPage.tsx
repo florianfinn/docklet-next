@@ -201,7 +201,7 @@ export default function ContainersPage() {
         {containers.isPending ? (
           <OverviewSkeleton mode={mode} rows={9} />
         ) : containers.isError ? (
-          <QueryError onRetry={() => void containers.refetch()} />
+          <QueryError error={containers.error} onRetry={() => void containers.refetch()} />
         ) : containers.visible.length === 0 ? (
           <EmptyState icon={<Boxes />} title={t("emptyAll.title")} description={t("emptyAll.description")} />
         ) : rows.length === 0 && hidden.length > 0 && layout !== "hosts" ? (

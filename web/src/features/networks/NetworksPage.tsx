@@ -31,7 +31,6 @@ import { ConnectNetworkDialog, type ConnectRequest } from "./ConnectNetworkDialo
 import { CreateNetworkDialog } from "./CreateNetworkDialog";
 import { NetworkTable } from "./NetworkTable";
 import { EDGE_TYPES, NODE_TYPES } from "./node-types";
-import { benchTopology } from "./topology-bench";
 import { focusFromChanges } from "./topology-focus";
 import { canvasHeight, FIT_PAD, FIT_ZOOM, fitViewport, layoutBudget, type Size } from "./topology-geometry";
 import { decorate, layoutHost } from "./topology-layout";
@@ -385,19 +384,14 @@ function Canvas({ source }: { source: Source }) {
   );
 }
 
-/** Real data from the adapter, or an enlarged synthetic set for ?bench=<containers per host>. */
-function useSource(): (Source & { isPending: boolean; isError: boolean; refetch: () => void }) | null {
+/** The topology always reflects the selected HTTP or development adapter. */
+function useSource(): (Source & { isPending: boolean; isError: boolean; error?: unknown; refetch: () => void }) | null {
   const topology = useTopology();
   const containers = useVisibleContainers();
   const hosts = useHostScope();
-  const [params] = useSearchParams();
-  const benchSize = Number(params.get("bench") ?? 0);
-  const template = hosts.all[0] && containers.visible[0] ? { host: hosts.all[0], container: containers.visible[0] } : null;
-  const bench = useMemo(() => (benchSize > 0 && template ? benchTopology(template, 3, Math.min(benchSize, 2000)) : null), [benchSize, template?.host, template?.container]); // eslint-disable-line react-hooks/exhaustive-deps -- template identity follows its two fields
   const none: Topology = { networks: [], attachments: [], dependencies: [] };
   if (topology.isPending || containers.isPending || hosts.isPending) return { topology: none, containers: [], hosts: [], bench: false, isPending: true, isError: false, refetch: () => {} };
-  if (topology.isError) return { topology: none, containers: [], hosts: [], bench: false, isPending: false, isError: true, refetch: () => void topology.refetch() };
-  if (bench) return { ...bench, bench: true, isPending: false, isError: false, refetch: () => {} };
+  if (topology.isError) return { topology: none, containers: [], hosts: [], bench: false, isPending: false, isError: true, error: topology.error, refetch: () => void topology.refetch() };
   if (!topology.data) return null;
   return { topology: topology.data, containers: containers.visible, hosts: hosts.visible, bench: false, isPending: false, isError: false, refetch: () => void topology.refetch() };
 }
@@ -413,7 +407,7 @@ function TopologySection() {
       </div>
     );
   }
-  if (source.isError) return <QueryError onRetry={source.refetch} />;
+  if (source.isError) return <QueryError error={source.error} onRetry={source.refetch} />;
   if (!source.topology.networks.some((n) => source.hosts.some((h) => h.id === n.hostId))) return <><InventoryNotice hosts={source.hosts} items={[]} /><EmptyState icon={<Network />} title={t("empty.title")} description={t("empty.body")} /></>;
   return <><InventoryNotice hosts={source.hosts} items={source.topology.networks} /><Canvas source={source} /></>;
 }

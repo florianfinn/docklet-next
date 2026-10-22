@@ -1,3 +1,4 @@
+import { useCapability } from "@/data/use-capability";
 import { ArrowRight, Box, KeyRound, RefreshCw } from "lucide-react";
 import type { ReactNode } from "react";
 import { useTranslations } from "use-intl";
@@ -15,6 +16,7 @@ import { latestOf, UPDATE_ICON, UPDATE_TONE, useUpdateCopy } from "./update-visu
 
 export interface UpdateActions {
   onUpdate?: () => void;
+  updateOperation?: "installStackUpdates" | "installContainerUpdate";
   onRecheck?: () => void;
   updateLabel?: string;
   /** Explains why updating is not possible here (e.g. Unraid-managed). */
@@ -112,19 +114,21 @@ function VersionRow({ label, image, tone, latest }: { label: string; image: Imag
 }
 
 function Footer({ actions, pending }: { actions: UpdateActions; pending: boolean }) {
+  const install = useCapability(actions.updateOperation ?? "installContainerUpdate");
+  const check = useCapability("checkUpdates");
   const t = useTranslations("common.updates");
   if (!actions.onUpdate && !actions.onRecheck && !actions.blockedReason) return null;
   return (
     <div className="flex flex-col gap-2 border-t border-border/50 bg-muted/40 p-3">
       {pending && actions.onUpdate && !actions.blockedReason && (
-        <Button size="sm" className="group w-full" onClick={actions.onUpdate} disabled={actions.busy}>
+        <Button size="sm" className="group w-full" onClick={actions.onUpdate} disabled={actions.busy || !install.available} title={install.reason}>
           {actions.busy ? <Spinner data-icon="inline-start" /> : <UPDATE_ICON.minor data-icon="inline-start" className="transition-transform group-hover:-translate-y-0.5" />}
           {actions.updateLabel ?? t("actionUpdateContainer")}
         </Button>
       )}
       {actions.blockedReason && <p className="text-center text-xs text-muted-foreground">{actions.blockedReason}</p>}
       {actions.onRecheck && (
-        <Button size="sm" variant={pending ? "ghost" : "secondary"} className="group w-full" onClick={actions.onRecheck} disabled={actions.busy}>
+        <Button size="sm" variant={pending ? "ghost" : "secondary"} className="group w-full" onClick={actions.onRecheck} disabled={actions.busy || !check.available} title={check.reason}>
           <RefreshCw data-icon="inline-start" className="spin-on-hover" />
           {t("actionRecheck")}
         </Button>
@@ -229,7 +233,7 @@ export function StackUpdatePanel({ services, actions = {}, times }: { services: 
         <p className="px-4 pb-3 text-[11px] leading-relaxed text-muted-foreground">{t("noteManual")}</p>
       )}
       <TimesList times={times ?? checkTimes(services.map((s) => s.update))} showUpdated={!!times} />
-      <Footer actions={{ updateLabel: t("actionUpdateStack"), ...actions }} pending={pending} />
+      <Footer actions={{ updateLabel: t("actionUpdateStack"), ...actions, updateOperation: "installStackUpdates" }} pending={pending} />
     </div>
   );
 }

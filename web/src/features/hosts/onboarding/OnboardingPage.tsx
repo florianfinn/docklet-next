@@ -5,7 +5,7 @@ import { useTranslations } from "use-intl";
 
 import { useQuery } from "@tanstack/react-query";
 import { useAdapter } from "@/data/use-adapter";
-import { useCapability } from "@/data/use-capability";
+import { CapabilityGate } from "@/shared/components/capability-gate";
 import { useConnectedSettings } from "@/data/queries";
 import { agentHubUrl } from "@/domain/settings";
 import { ConfirmDialog } from "@/shared/components/confirm-dialog";
@@ -26,8 +26,7 @@ import { draftFileOwner, freshDraft, ONBOARDING_STEPS, onboardingStore, patchDra
 
 /** Four-step host onboarding; credentials are discarded when the page closes. */
 export default function OnboardingPage() {
-  const capability = useCapability("registerHost");
-  return capability.available ? <OnboardingFlow /> : <QueryError />;
+  return <CapabilityGate operation="registerHost"><OnboardingFlow /></CapabilityGate>;
 }
 
 function OnboardingFlow() {
@@ -115,7 +114,7 @@ function OnboardingFlow() {
         }
       />
       {settings.isError || discovery.isError || hosts.isError ? (
-        <QueryError onRetry={() => void Promise.allSettled([settings.refetch(), discovery.refetch(), hosts.refetch()])} />
+        <QueryError error={settings.error ?? discovery.error ?? hosts.error} onRetry={() => void Promise.allSettled([settings.refetch(), discovery.refetch(), hosts.refetch()])} />
       ) : !draft || !plan || (adapter.kind === "http" && !discovery.data) ? (
         <div className="grid gap-5 lg:grid-cols-[15rem_1fr]">
           <Skeleton className="h-56 rounded-2xl" />

@@ -224,8 +224,8 @@ export const deCommon: typeof enCommon = {
     ram: "RAM",
     off: "aus",
     unavailable: "nicht verfügbar – Container gestoppt oder Host getrennt",
-    cpuValue: (import.meta.env.DEV ? "{value} % CPU (simuliert)" : ""),
-    ramValue: (import.meta.env.DEV ? "{used} von {limit} ({percent} % des Limits, simuliert)" : ""),
+    cpuValue: (import.meta.env.DEV ? "{value} % CPU (simuliert)" : "{value} % CPU"),
+    ramValue: (import.meta.env.DEV ? "{used} von {limit} ({percent} % des Limits, simuliert)" : "{used} von {limit} ({percent} % des Limits)"),
   },
   demo: {
     inMemory: (import.meta.env.DEV ? "Demo im Arbeitsspeicher – nichts wird auf einem Host ausgeführt; Neuladen setzt zurück." : ""),

@@ -72,7 +72,7 @@ export function ConnectedProfilePage() {
 
   return <>
     <PageHeader title={t("title")} description={t("description")} />
-    {user.isError || mode.isError ? <QueryError onRetry={() => { void user.refetch(); void mode.refetch(); }} /> : !user.data || !mode.data ? <Skeleton className="h-80 rounded-2xl" /> : <div className="grid max-w-6xl gap-4 lg:grid-cols-2">
+    {user.isError || mode.isError ? <QueryError error={user.error ?? mode.error} onRetry={() => { void user.refetch(); void mode.refetch(); }} /> : !user.data || !mode.data ? <Skeleton className="h-80 rounded-2xl" /> : <div className="grid max-w-6xl gap-4 lg:grid-cols-2">
       <Card className="gap-4 py-5">
         <CardHeader className="px-5"><CardTitle>{t("account")}</CardTitle></CardHeader>
         <CardContent className="flex flex-col gap-4 px-5">

@@ -1,3 +1,4 @@
+import { CapabilityGate } from "@/shared/components/capability-gate";
 import { InventoryNotice } from "@/features/stacks/InventoryNotice";
 import { Archive, ArrowLeft, Box, Database, FolderOpen, Info, Layers, LayoutGrid, Trash2, Unplug } from "lucide-react";
 import { useState } from "react";
@@ -183,7 +184,8 @@ export default function VolumePage() {
   const t = useTranslations("volumes.detail");
   const tf = useTranslations("volumes.files");
   const volume = useVolume(volumeId);
-  const settings = useSettings();
+  const backup = useVolumeCapability("setBackupPolicy", volumeId ?? "");
+  const settings = useSettings(backup.available);
   const containers = useContainers();
   const hosts = useHostScope();
   const [params, setParams] = useSearchParams();
@@ -213,7 +215,7 @@ export default function VolumePage() {
         volume.error.message === "not-found" ? (
           <EmptyState icon={<Database />} title={t("notFound")} description={t("notFoundBody")} />
         ) : (
-          <QueryError onRetry={() => void volume.refetch()} />
+          <QueryError error={volume.error} onRetry={() => void volume.refetch()} />
         )
       ) : (
         v && (
@@ -261,14 +263,18 @@ export default function VolumePage() {
                 {online ? <FileWorkspace volume={v} warning={warning} /> : <EmptyState icon={<Unplug />} title={tf("offline")} />}
               </TabsContent>
               <TabsContent value="backups" className="flex flex-col gap-4">
+                <CapabilityGate operation="setBackupPolicy">
                 {settings.data ? (
                   <>
                     <BackupPolicyCard key={JSON.stringify(v.backup ?? null)} volume={v} targets={settings.data.backups.targets} defaultRetention={settings.data.backups.defaultRetention} hostOnline={online} />
                     <BackupHistory volume={v} targets={settings.data.backups.targets} hostOnline={online} />
                   </>
+                ) : settings.isError ? (
+                  <QueryError error={settings.error} onRetry={() => void settings.refetch()} />
                 ) : (
                   <Skeleton className="h-72 rounded-2xl" />
                 )}
+                </CapabilityGate>
               </TabsContent>
             </Tabs>
           </>

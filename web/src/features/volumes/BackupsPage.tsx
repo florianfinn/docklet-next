@@ -1,3 +1,4 @@
+import { CapabilityGate } from "@/shared/components/capability-gate";
 import { Archive, CircleAlert, HardDrive, Play, ServerCog, ShieldCheck, ShieldOff } from "lucide-react";
 import { useMemo, useState } from "react";
 import { Link } from "react-router";
@@ -28,6 +29,10 @@ import { useVolumeCommands } from "./use-volume-commands";
 
 /** All backup plans of the filtered hosts plus the configured targets. */
 export default function BackupsPage() {
+  return <CapabilityGate operation="runBackup"><BackupOverview /></CapabilityGate>;
+}
+
+function BackupOverview() {
   const t = useTranslations("volumes.backups");
   const dt = useAdapterText();
   const volumes = useVolumes();
@@ -91,7 +96,7 @@ export default function BackupsPage() {
           {volumes.isPending ? (
             <Skeleton className="h-72 rounded-xl" />
           ) : volumes.isError ? (
-            <QueryError onRetry={() => void volumes.refetch()} />
+            <QueryError error={volumes.error} onRetry={() => void volumes.refetch()} />
           ) : planned.length === 0 ? (
             <EmptyState icon={<Archive />} title={t("overviewEmpty")} />
           ) : (

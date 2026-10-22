@@ -1,5 +1,5 @@
-// Enlarged synthetic topology for performance checks (?bench=<containers> on the
-// Networks page and the layout test). Generated, deterministic, never real.
+// Enlarged synthetic topology for isolated layout performance tests.
+// Generated and deterministic; never imported by product routes.
 
 import type { ContainerInfo, Host, Topology } from "@/domain/model";
 

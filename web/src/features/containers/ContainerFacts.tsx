@@ -1,3 +1,4 @@
+import { useCapability } from "@/data/use-capability";
 import { Lock } from "lucide-react";
 import { Link } from "react-router";
 import { useTranslations } from "use-intl";
@@ -87,6 +88,7 @@ export function ContainerProvenance({ c }: { c: ContainerInfo }) {
   const t = useTranslations("containers.inspector");
   const to = useTranslations("containers.origin");
   const cmd = useContainerCommands();
+  const origin = useCapability("setContainerOrigin");
   if (c.origin === "unraid")
     return (
       <Alert className="border-orange/30 bg-orange/8">
@@ -103,10 +105,10 @@ export function ContainerProvenance({ c }: { c: ContainerInfo }) {
         <AlertDescription className="flex flex-col items-start gap-2">
           {t("assignHint")}
           <div className="flex gap-2">
-            <Button size="sm" variant="outline" onClick={() => void cmd.setOrigin(c.id, "unraid")}>
+            <Button size="sm" variant="outline" disabled={!origin.available} title={origin.reason} onClick={() => void cmd.setOrigin(c.id, "unraid")}>
               {t("assignUnraid")}
             </Button>
-            <Button size="sm" variant="outline" onClick={() => void cmd.setOrigin(c.id, "standalone")}>
+            <Button size="sm" variant="outline" disabled={!origin.available} title={origin.reason} onClick={() => void cmd.setOrigin(c.id, "standalone")}>
               {t("assignStandalone")}
             </Button>
           </div>

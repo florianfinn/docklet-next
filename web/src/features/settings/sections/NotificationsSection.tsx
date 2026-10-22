@@ -1,3 +1,4 @@
+import { useCapability } from "@/data/use-capability";
 import { ArrowLeft, BellRing, Link2, Mail, MessageCircle, Pencil, Plus, Send, Trash2, Webhook } from "lucide-react";
 import { useState } from "react";
 import { Link } from "react-router";
@@ -126,6 +127,7 @@ export function NotificationsSection({ settings }: { settings: HubSettings }) {
   const tn = useTranslations("settings.notifications");
   const dt = useAdapterText();
   const adapter = useAdapter();
+  const capability = useCapability("testNotification");
   const save = useSaveSettings();
   const { draft, setDraft, dirty, reset, commit } = useSectionDraft(settings.notifications);
   const [editing, setEditing] = useState<NotificationChannel | "new" | null>(null);
@@ -191,7 +193,7 @@ export function NotificationsSection({ settings }: { settings: HubSettings }) {
                       type="button"
                       size="sm"
                       variant="ghost"
-                      disabled={testing === c.id}
+                      disabled={!capability.available || testing === c.id} title={capability.reason}
                       onClick={async () => {
                         setTesting(c.id);
                         const r = await adapter.testNotification(c);

@@ -223,8 +223,8 @@ export const enCommon = {
     ram: "RAM",
     off: "off",
     unavailable: "not available – container stopped or host disconnected",
-    cpuValue: (import.meta.env.DEV ? "{value}% CPU (simulated)" : ""),
-    ramValue: (import.meta.env.DEV ? "{used} of {limit} ({percent}% of the limit, simulated)" : ""),
+    cpuValue: (import.meta.env.DEV ? "{value}% CPU (simulated)" : "{value}% CPU"),
+    ramValue: (import.meta.env.DEV ? "{used} of {limit} ({percent}% of the limit, simulated)" : "{used} of {limit} ({percent}% of the limit)"),
   },
   demo: {
     inMemory: (import.meta.env.DEV ? "In-memory demo – nothing runs on a host; reloading resets it." : ""),

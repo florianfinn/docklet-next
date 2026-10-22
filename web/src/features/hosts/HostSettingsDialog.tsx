@@ -1,3 +1,4 @@
+import { useCapability } from "@/data/use-capability";
 import { Bot, Cable, Check, RotateCw } from "lucide-react";
 import { useState, type ReactNode } from "react";
 import { toast } from "sonner";
@@ -35,6 +36,8 @@ function AgentPanel({ host, component }: { host: Host; component: SystemComponen
   const t = useTranslations("hosts.settings");
   const ts = useTranslations("common.status");
   const cmd = useHostCommands();
+  const restartCapability = useCapability("restartAgent");
+  const reconnect = useCapability("reconnectHost");
   const restart = useHostAction(host.id, "agent-restart", () => cmd.restartAgent(host.id));
   const check = useHostAction(host.id, "reconnect", () => cmd.reconnect(host.id));
   if (!component) return <p className="text-sm text-muted-foreground">{t("agentNone")}</p>;
@@ -100,10 +103,10 @@ function AgentPanel({ host, component }: { host: Host; component: SystemComponen
         </ol>
       </section>
       <div className="flex flex-wrap items-center gap-2">
-        <BusyButton type="button" size="sm" variant="outline" disabled={!online} busy={restart.busy} busyLabel={t("restarting")} icon={<RotateCw data-icon="inline-start" />} onClick={() => void restart.run()}>
+        <BusyButton type="button" size="sm" variant="outline" disabled={!online || !restartCapability.available} title={restartCapability.reason} busy={restart.busy} busyLabel={t("restarting")} icon={<RotateCw data-icon="inline-start" />} onClick={() => void restart.run()}>
           {t("restart")}
         </BusyButton>
-        <BusyButton type="button" size="sm" variant="ghost" busy={check.busy} busyLabel={t("checking")} icon={<Cable data-icon="inline-start" />} onClick={() => void check.run()}>
+        <BusyButton type="button" size="sm" variant="ghost" disabled={!reconnect.available} title={reconnect.reason} busy={check.busy} busyLabel={t("checking")} icon={<Cable data-icon="inline-start" />} onClick={() => void check.run()}>
           {t("check")}
         </BusyButton>
         <span className="text-xs text-muted-foreground">{online ? t("restartHint") : t("restartBlocked")}</span>
@@ -122,6 +125,7 @@ export function HostSettingsDialog({ host, component, open, onOpenChange }: { ho
   const errorText = useHostError();
   const adapter = useAdapter();
   const [name, setName] = useState(host.name);
+  const update = useCapability("updateHost");
   const [color, setColor] = useState(host.color);
   const [hex, setHex] = useState(host.color);
   const [tab, setTab] = useState("general");
@@ -144,6 +148,7 @@ export function HostSettingsDialog({ host, component, open, onOpenChange }: { ho
   const dirty = name.trim() !== host.name || color.toLowerCase() !== host.color.toLowerCase();
 
   const save = async () => {
+    if (!update.available) return;
     setTouched(true);
     if (error || !dirty) return;
     setServerError(null);
@@ -250,7 +255,7 @@ export function HostSettingsDialog({ host, component, open, onOpenChange }: { ho
             {tab === "general" ? t("cancel") : t("close")}
           </Button>
           {tab === "general" && (
-            <Button type="submit" form={`host-settings-${host.id}`} disabled={!dirty || !!error || saving}>
+            <Button type="submit" form={`host-settings-${host.id}`} disabled={!update.available || !dirty || !!error || saving} title={update.reason}>
               {t("save")}
             </Button>
           )}

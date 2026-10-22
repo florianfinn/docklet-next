@@ -157,7 +157,7 @@ export default function VolumesPage() {
         {pending ? (
           <OverviewSkeleton mode="compact" rows={8} />
         ) : volumes.isError ? (
-          <QueryError onRetry={() => void volumes.refetch()} />
+          <QueryError error={volumes.error} onRetry={() => void volumes.refetch()} />
         ) : visible.length === 0 ? (
           <EmptyState icon={<Database />} title={t("emptyAll.title")} description={t("emptyAll.description")} />
         ) : rows.length === 0 ? (

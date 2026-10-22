@@ -76,6 +76,7 @@ export function HostCard({ host, system, stacks, containers, allIds, onFiles }: 
   const tc = useTranslations("common.host");
   const dt = useAdapterText();
   const cmd = useHostCommands();
+  const reconnect = useCapability("reconnectHost");
   const selection = useHostSelection();
   const [confirm, setConfirm] = useState(false);
   const [settings, setSettings] = useState(false);
@@ -156,7 +157,7 @@ export function HostCard({ host, system, stacks, containers, allIds, onFiles }: 
             size="sm"
             variant="outline"
             className="group"
-            busy={check.busy}
+            disabled={!reconnect.available} title={reconnect.reason} busy={check.busy}
             busyLabel={t("card.checking")}
             icon={host.status === "offline" ? <Unplug data-icon="inline-start" /> : <Cable data-icon="inline-start" />}
             onClick={() => void check.run()}

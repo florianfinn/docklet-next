@@ -48,6 +48,7 @@ export default function StacksPage() {
   const cmd = useStackCommands();
   const deployCapability = useCapability("deployStack");
   const commandCapability = useCapability("runStackCommand");
+  const update = useCapability("installStackUpdates");
   const [query, setQuery] = useState("");
   const [status, setStatus] = useState<StatusFilter>("all");
   const [sort, setSort] = useState<StackSort>(DEFAULT_STACK_SORT);
@@ -183,7 +184,7 @@ export default function StacksPage() {
         {stacks.isPending ? (
           <OverviewSkeleton mode={mode} />
         ) : stacks.isError ? (
-          <QueryError onRetry={() => void stacks.refetch()} />
+          <QueryError error={stacks.error} onRetry={() => void stacks.refetch()} />
         ) : stacks.visible.length === 0 ? (
           <EmptyState
             icon={<Layers />}
@@ -276,7 +277,7 @@ export default function StacksPage() {
           <RefreshCw data-icon="inline-start" />
           {t("bulk.redeploy")}
         </Button>
-        <Button size="sm" className="h-8" onClick={() => bulk((id) => cmd.installUpdates(id))}>
+        <Button size="sm" className="h-8" disabled={!update.available} title={update.reason} onClick={() => bulk((id) => cmd.installUpdates(id))}>
           <Download data-icon="inline-start" />
           {t("bulk.update")}
         </Button>

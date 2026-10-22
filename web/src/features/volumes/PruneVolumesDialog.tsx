@@ -85,7 +85,7 @@ function PruneVolumesForm({ open, onOpenChange, hosts }: Props) {
             <Skeleton className="h-24" />
           </div>
         ) : plan.isError ? (
-          <QueryError onRetry={() => void plan.refetch()} />
+          <QueryError error={plan.error} onRetry={() => void plan.refetch()} />
         ) : (
           <div className="flex flex-col gap-3 text-sm">
             <label className="flex items-center gap-2"><Checkbox checked={all} disabled={busy} onCheckedChange={(checked) => { setAll(checked === true); setExcluded(new Set()); }} />{t("includeNamed")}</label>

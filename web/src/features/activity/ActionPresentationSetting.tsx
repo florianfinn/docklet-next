@@ -14,7 +14,7 @@ import { Field, FieldContent, FieldDescription } from "@/shared/ui/field";
 function OverrideNote() {
   const t = useTranslations("activity.presentation");
   const override = useUiStyle("actionPresentationOverride");
-  if (override === "hub") return null;
+  if (!import.meta.env.DEV || override === "hub") return null;
   return (
     <p className="text-xs text-warning" data-slot="presentation-override">
       {t("overridden", { mode: t(override) })}

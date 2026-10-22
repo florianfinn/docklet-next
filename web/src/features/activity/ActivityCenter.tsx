@@ -94,7 +94,7 @@ function ActionsTab({ focusRunId }: { focusRunId?: string }) {
     if (focusRunId) requestAnimationFrame(() => document.getElementById(`run-${focusRunId}`)?.scrollIntoView({ block: "nearest" }));
   }, [focusRunId]);
 
-  if (query.isError && !runs.length && !health.failures.length) return <QueryError onRetry={() => void query.refetch()} compact />;
+  if (query.isError && !runs.length && !health.failures.length) return <QueryError error={query.error} onRetry={() => void query.refetch()} compact />;
   if (query.isPending && !runs.length && !health.failures.length) return <Skeleton className="h-24 rounded-xl" />;
   if (!runs.length && !health.failures.length) return <EmptyState icon={<History />} title={t("emptyActions")} />;
   return (
@@ -182,7 +182,7 @@ function EventsTab() {
           ))}
         </div>
       ) : events.isError ? (
-        <QueryError onRetry={() => void events.refetch()} compact />
+        <QueryError error={events.error} onRetry={() => void events.refetch()} compact />
       ) : shown.length === 0 ? (
         <EmptyState icon={<History />} title={t("emptyEvents")} />
       ) : (

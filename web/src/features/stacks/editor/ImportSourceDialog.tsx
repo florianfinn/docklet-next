@@ -1,3 +1,4 @@
+import { useCapability } from "@/data/use-capability";
 import { CheckCircle2, CircleAlert, Container, GitBranch, Import } from "lucide-react";
 import { useState } from "react";
 import { useTranslations } from "use-intl";
@@ -30,6 +31,7 @@ export function ImportSourceDialog({ open, onOpenChange, onApply }: ImportSource
   const tc = useTranslations("common.actions");
   const dt = useAdapterText();
   const adapter = useAdapter();
+  const capability = useCapability("importSource");
   const [kind, setKind] = useState<ImportRequest["kind"]>("github");
   const [ref, setRef] = useState("");
   const [loading, setLoading] = useState(false);
@@ -37,6 +39,7 @@ export function ImportSourceDialog({ open, onOpenChange, onApply }: ImportSource
   const [error, setError] = useState<"missing" | "unavailable" | null>(null);
 
   const fetchSource = async (value = ref) => {
+    if (!capability.available) return;
     if (!value.trim()) {
       setError("missing");
       return;
@@ -68,6 +71,7 @@ export function ImportSourceDialog({ open, onOpenChange, onApply }: ImportSource
           </DialogTitle>
           <DialogDescription>{t("description")}</DialogDescription>
         </DialogHeader>
+        {!capability.available && <p role="status" className="text-sm text-muted-foreground">{capability.reason}</p>}
         <Tabs
           value={kind}
           onValueChange={(v) => {
@@ -96,7 +100,7 @@ export function ImportSourceDialog({ open, onOpenChange, onApply }: ImportSource
             <FieldLabel htmlFor="import-ref">{t("ref")}</FieldLabel>
             <div className="flex gap-2">
               <Input id="import-ref" className="font-mono" aria-invalid={Boolean(error) || undefined} placeholder={kind === "github" ? t("githubPlaceholder") : t("dockerhubPlaceholder")} value={ref} onChange={(e) => setRef(e.target.value)} />
-              <Button type="submit" disabled={loading}>
+              <Button type="submit" disabled={loading || !capability.available} title={capability.reason}>
                 {loading && <Spinner data-icon="inline-start" />}
                 {t("fetch")}
               </Button>
@@ -108,6 +112,8 @@ export function ImportSourceDialog({ open, onOpenChange, onApply }: ImportSource
             {EXAMPLES[kind].map((ex) => (
               <button
                 key={ex}
+                disabled={!capability.available}
+                title={capability.reason}
                 type="button"
                 className="rounded-md border border-dashed px-2 py-0.5 font-mono hover:border-primary/50 hover:text-foreground"
                 onClick={() => {

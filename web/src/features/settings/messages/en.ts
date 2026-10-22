@@ -196,7 +196,7 @@ export const enSettings = {
     retention: "Default retention for new plans",
     retentionScope: "Applies as the default for newly created backup plans; existing plans keep their own retention.",
     dialogDescription: "Local directory, existing host mount, SMB share or NFS export. Credentials stay in the hub; the test checks reachability and write access.",
-    permissionsNote: (import.meta.env.DEV ? "The exact permission and mount implementation is still being evaluated; the prototype simulates tests." : ""),
+    permissionsNote: (import.meta.env.DEV ? "The exact permission and mount implementation is still being evaluated; the prototype simulates tests." : "The host needs write access to the backup target."),
     targetInUse: "At least one backup plan uses a removed target. Switch the plans over first.",
   },
   notifications: {
