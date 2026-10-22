@@ -2,7 +2,7 @@
 
 export const enSettings = {
   title: "Hub settings",
-  description: (import.meta.env.DEV ? "Apply to the whole hub, regardless of the host filter. Saving affects this tab's demo data." : "Applies to the whole hub, regardless of the host filter."),
+  description: (import.meta.env.DEV ? "Apply to the whole hub, regardless of the host filter. Saving affects this tab''s demo data." : "Applies to the whole hub, regardless of the host filter."),
   navLabel: "Hub settings sections",
   groups: { hub: "Hub", operations: "Operations", system: "System" },
   sections: {
@@ -131,7 +131,7 @@ export const enSettings = {
     projectDir: "Default project directory",
     projectDirHint: "Suggested during host onboarding. Stack folders are created here.",
     installDir: "Default agent install directory",
-    installDirHint: "Separate folder only for the agent's compose.yaml, .env and data/, e.g. /home/docker/docklet-agent. A subfolder of the project directory is allowed; Docklet recognizes the agent by its label and does not list it as a stack.",
+    installDirHint: "Separate folder only for the agent''s compose.yaml, .env and data/, e.g. /home/docker/docklet-agent. A subfolder of the project directory is allowed; Docklet recognizes the agent by its label and does not list it as a stack.",
     connection: "Default connection mode",
     direct: "Direct",
     edge: "Edge",
@@ -263,13 +263,13 @@ export const enSettings = {
     scanHint: "Separate from update detection. Results appear under Security.",
     schedule: "Schedule",
     schedules: { manual: "Manual only", daily: "Daily", weekly: "Weekly" },
-    scheduleHint: "Time and weekday apply in the hub's time zone ({zone}), not your browser's.",
+    scheduleHint: "Time and weekday apply in the hub''s time zone ({zone}), not your browser''s.",
     scheduleZoneEdit: "View the process time zone under General",
     scheduleOff: "The schedule only takes effect once scans are enabled.",
     scheduleManual: "Scans only run when you choose “Scan now” under Security.",
     healTitle: "Auto Heal",
     healEnabled: "Automatically restart unhealthy containers",
-    healHint: "Only containers with a failing healthcheck. Unexpected stops are handled by Docker's restart policies.",
+    healHint: "Only containers with a failing healthcheck. Unexpected stops are handled by Docker''s restart policies.",
     maxRestarts: "At most",
     maxRestartsValue: "{count, plural, one {# restart} other {# restarts}} per time window",
     window: "Time window",

@@ -106,7 +106,7 @@ export const enHelp = {
       },
       installDir: {
         title: "Agent install directory",
-        short: "Separate folder for the agent's compose.yaml, .env and data.",
+        short: "Separate folder for the agent''s compose.yaml, .env and data.",
         full: "Separate from the project directory, but may sit directly inside it. Docklet recognizes the agent by its label and never shows it as a stack.",
         impact: "Applies as a suggestion for new hosts.",
       },
@@ -178,7 +178,7 @@ export const enHelp = {
       },
       secret: {
         title: "Token or password",
-        short: "The channel's credentials; they stay in the hub.",
+        short: "The channel''s credentials; they stay in the hub.",
         full: (import.meta.env.DEV ? "Never shown again after saving. Leaving it empty keeps the stored value. In the prototype nothing is saved." : "The stored value is never shown again after saving. Leaving this empty keeps the stored value."),
         impact: "Without valid credentials sending fails.",
       },
@@ -193,7 +193,7 @@ export const enHelp = {
       enabled: {
         title: "Vulnerability scans",
         short: "Checks images for known vulnerabilities, separately from updates.",
-        full: "Docklet compares the images' packages with a vulnerability database. The results are under Security. An update notice does not mean a vulnerability is fixed.",
+        full: "Docklet compares the images'' packages with a vulnerability database. The results are under Security. An update notice does not mean a vulnerability is fixed.",
         impact: "When off, neither scheduled nor automatic scans run; manual scans remain possible.",
       },
       schedule: {
@@ -207,7 +207,7 @@ export const enHelp = {
       enabled: {
         title: "Auto Heal",
         short: "Restarts containers with a failing healthcheck.",
-        full: "Only applies to containers with a healthcheck that become unhealthy. Unexpected stops are still handled by Docker's restart policy.",
+        full: "Only applies to containers with a healthcheck that become unhealthy. Unexpected stops are still handled by Docker''s restart policy.",
         impact: "Once the limit is reached, the container stays unhealthy and is reported.",
       },
       maxRestarts: {
@@ -279,7 +279,7 @@ export const enHelp = {
       name: {
         title: "Stack name",
         short: "Name of the Compose project; matches “name:” in compose.yaml.",
-        full: "Lowercase letters, digits, - and _. Docker names the stack's containers, networks and volumes after this name.",
+        full: "Lowercase letters, digits, - and _. Docker names the stack''s containers, networks and volumes after this name.",
         impact: "Renaming after the deploy creates new containers and networks.",
       },
       host: {
@@ -296,8 +296,8 @@ export const enHelp = {
       },
       projectDir: {
         title: "Project directory",
-        short: "The stack's folder with compose.yaml and .env.",
-        full: "Located in the host's project directory. Relative paths in compose.yaml refer to this folder. Not to be confused with the agent's install directory.",
+        short: "The stack''s folder with compose.yaml and .env.",
+        full: "Located in the host''s project directory. Relative paths in compose.yaml refer to this folder. Not to be confused with the agent''s install directory.",
         impact: "Bind mounts with relative paths end up here.",
       },
       env: {
@@ -346,7 +346,7 @@ export const enHelp = {
       },
       command: {
         title: "Command",
-        short: "Overrides the image's default command.",
+        short: "Overrides the image''s default command.",
         full: "Only needed if the image should start differently. Leaving it empty uses the command defined in the image.",
         impact: "A wrong command makes the container exit immediately.",
       },
@@ -383,7 +383,7 @@ export const enHelp = {
       networks: {
         title: "Networks",
         short: "Networks the service joins.",
-        full: "Without a value, the service uses the stack's default network. Custom networks are defined under “networks:”, external ones are marked as external.",
+        full: "Without a value, the service uses the stack''s default network. Custom networks are defined under “networks:”, external ones are marked as external.",
         impact: "Services only reach each other through shared networks.",
       },
     },
@@ -391,7 +391,7 @@ export const enHelp = {
       driver: {
         title: "Network driver",
         short: "Bridge for a network on the host, macvlan or ipvlan for LAN addresses.",
-        full: "Bridge connects containers on this host; outward only through published ports. macvlan gives each container its own LAN address and MAC. ipvlan uses the host's MAC if the network allows only one MAC per port.",
+        full: "Bridge connects containers on this host; outward only through published ports. macvlan gives each container its own LAN address and MAC. ipvlan uses the host''s MAC if the network allows only one MAC per port.",
         impact: "The driver cannot be changed later.",
       },
       name: {
@@ -415,12 +415,12 @@ export const enHelp = {
       ipRange: {
         title: "Range for automatic assignment",
         short: "Part of the subnet from which Docker assigns addresses.",
-        full: "For macvlan and ipvlan, choose a range the router's DHCP server does not assign so no address is used twice.",
+        full: "For macvlan and ipvlan, choose a range the router''s DHCP server does not assign so no address is used twice.",
         impact: "Overlaps with DHCP cause address conflicts on the LAN.",
       },
       parent: {
         title: "Parent interface",
-        short: "The host's network interface on the LAN, e.g. br0.",
+        short: "The host''s network interface on the LAN, e.g. br0.",
         full: "Containers leave the host through this interface. Only one macvlan network is possible per interface.",
         impact: "The host itself cannot reach macvlan containers directly.",
       },
@@ -491,7 +491,7 @@ export const enHelp = {
       ports: {
         title: "Ports",
         short: "One host:container mapping per line.",
-        full: "E.g. 8080:80 publishes the container's port 80 on the host's port 8080. Each host port can only be used once.",
+        full: "E.g. 8080:80 publishes the container''s port 80 on the host''s port 8080. Each host port can only be used once.",
         impact: "Takes effect only after recreating.",
       },
       env: {
