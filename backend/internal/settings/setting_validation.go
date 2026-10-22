@@ -11,11 +11,17 @@ import (
 	"fmt"
 	"strconv"
 
+	"github.com/distribution/reference"
 	"github.com/florianfinn/docklet-next/backend/internal/common"
 	"github.com/florianfinn/docklet-next/types/features"
 )
 
 func validateSettingValueInternal(key, value string) error {
+	if key == "toolsImage" && value != "" {
+		if _, err := reference.ParseNormalizedNamed(value); err != nil {
+			return common.Classify(common.ErrValidation, errors.New("toolsImage must be a valid Docker image reference or empty for the release default"))
+		}
+	}
 	if key == "setupCompleted" || key == "detectSocketGroup" || key == "keepActionOutput" {
 		if value != "true" && value != "false" {
 			return common.Classify(common.ErrValidation, fmt.Errorf("%s must be true or false", key))

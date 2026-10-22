@@ -161,6 +161,9 @@ func (s *SettingsService) LoadDatabaseSettings(ctx context.Context) (err error) 
 		return err
 	}
 
+	if err := validateSettingValueInternal("toolsImage", dst.ToolsImage.Value); err != nil {
+		return err
+	}
 	s.config.Store(dst)
 
 	effective := dst.Clone()

@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace
+// Deviations: Local module namespace; Prune preview registration.
 
 // Package volume owns Docker volumes: CRUD and pruning, the helper-container
 // file browser, backup and restore, and the HTTP surface for all of it.
@@ -147,11 +147,18 @@ func RegisterVolumes(
 	}, authz.PermVolumesRename, h.RenameVolume)
 
 	middleware.RegisterWithPermission(api, huma.Operation{
+		OperationID: "plan-volume-prune", Method: http.MethodGet,
+		Path: "/environments/{id}/volumes/prune", Summary: "Plan unused volume removal",
+		Description: "Preview unused local volumes without mount options; anonymous only unless all=true. Running and stopped container references exclude candidates.",
+		Tags:        []string{"Volumes"}, Security: handlerutil.DefaultOperationSecurity(),
+	}, authz.PermVolumesPrune, h.PlanVolumePrune)
+
+	middleware.RegisterWithPermission(api, huma.Operation{
 		OperationID: "prune-volumes",
 		Method:      http.MethodPost,
 		Path:        "/environments/{id}/volumes/prune",
 		Summary:     "Prune unused volumes",
-		Description: "Remove all unused Docker volumes",
+		Description: "Re-check and remove only submitted name/createdAt candidates. Report skipped and failed candidates independently.",
 		Tags:        []string{"Volumes"},
 		Security:    handlerutil.DefaultOperationSecurity(),
 	}, authz.PermVolumesPrune, h.PruneVolumes)

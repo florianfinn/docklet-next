@@ -284,8 +284,10 @@ reason. Reconnection replaces the values on the next successful read. Source:
 
 ## Runtime read contract
 
-The agent contract and minimum are version 3. The version fixture in
-`types/contract/testdata/agent-hub-v3.json` owns the fingerprint. The hub checks
+The agent contract and minimum are version 5. The version fixture in
+`types/contract/testdata/agent-hub-v5.json` owns the fingerprint. It inherits the
+v4 runtime contract and adds the [M8 storage contract](storage-workspace.md);
+the v3 and v4 fixtures remain historical. The hub checks
 `/api/app-version` and, for direct hosts, the token-protected
 `HEAD /api/environments/0/system/health` before ordinary requests and registry or configuration
 synchronisation. The credential session (token, endpoint and key ID) is revoked

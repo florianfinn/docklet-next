@@ -22,6 +22,7 @@ import (
 	"github.com/florianfinn/docklet-next/backend/internal/config"
 	"github.com/florianfinn/docklet-next/backend/pkg/libarcane/edge"
 	activitytypes "github.com/florianfinn/docklet-next/types/activity"
+	"github.com/florianfinn/docklet-next/types/contract"
 	"github.com/google/uuid"
 	"github.com/labstack/echo/v5"
 	"github.com/stretchr/testify/require"
@@ -151,7 +152,7 @@ func restoreAbortTransport(t *testing.T, ctx context.Context, hub *restoreArchiv
 		bound, cancel := context.WithCancel(bound)
 		return bound, cancel, nil
 	}
-	f.sender, err = activity.NewRuntimeSender(activity.RuntimeRemoteTarget{EnvironmentID: f.store.EnvironmentID, Endpoint: direct.URL, Token: token, Edge: transport == "edge", AgentContractVersion: 4}, access, direct.Client(), registry)
+	f.sender, err = activity.NewRuntimeSender(activity.RuntimeRemoteTarget{EnvironmentID: f.store.EnvironmentID, Endpoint: direct.URL, Token: token, Edge: transport == "edge", AgentContractVersion: contract.AgentHubVersion}, access, direct.Client(), registry)
 	require.NoError(t, err)
 	return f
 }

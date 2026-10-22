@@ -2,17 +2,18 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace
+// Deviations: Local module namespace; Helper incompatibility response schema.
 
 package workspace
 
 import (
 	"net/http"
+	"reflect"
 
 	"github.com/danielgtaylor/huma/v2"
-
 	"github.com/florianfinn/docklet-next/backend/pkg/authz"
 	"github.com/florianfinn/docklet-next/backend/pkg/utils/handlerutil"
+	"github.com/florianfinn/docklet-next/types/volume"
 )
 
 // RegisterRoutes registers the volume workspace endpoints.
@@ -49,4 +50,16 @@ func RegisterRoutes(api huma.API, h *Handler) {
 	updateOperation := handlerutil.Operation("update-volume-workspace", http.MethodPut, basePath, "Update volume workspace", "", tag)
 	updateOperation.RequestBody = handlerutil.WorkspaceMultipartRequestBody("JSON encoded volume workspace manifest")
 	handlerutil.RegisterSecured(api, updateOperation, authz.PermVolumesRead, h.UpdateVolumeWorkspace)
+	for _, route := range []struct{ path, method string }{{basePath, "GET"}, {basePath, "PUT"}, {basePath + "/file", "GET"}, {basePath + "/file/download", "GET"}} {
+		item := api.OpenAPI().Paths[route.path]
+		operation := item.Get
+		if route.method == "PUT" {
+			operation = item.Put
+		}
+		operation.Responses["503"] = &huma.Response{Description: "Helper incompatible or temporarily unavailable; no file access occurred", Content: map[string]*huma.MediaType{"application/problem+json": {Schema: &huma.Schema{OneOf: []*huma.Schema{
+			api.OpenAPI().Components.Schemas.Schema(reflect.TypeFor[volume.HelperIncompatibleError](), true, ""),
+			api.OpenAPI().Components.Schemas.Schema(reflect.TypeFor[volume.HelperUnavailableError](), true, ""),
+		}}}}}
+	}
+
 }

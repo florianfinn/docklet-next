@@ -21,13 +21,14 @@ import (
 	"github.com/florianfinn/docklet-next/backend/pkg/libarcane/edge"
 	"github.com/florianfinn/docklet-next/backend/pkg/remenv"
 	activitytypes "github.com/florianfinn/docklet-next/types/activity"
+	"github.com/florianfinn/docklet-next/types/contract"
 )
 
 var ErrRuntimeTransport = errors.New("runtime outcome unavailable")
 
 // RuntimeRemoteTarget is trusted registration/metadata, never dispatch JSON.
 // AgentAccess still validates the current credential/compatibility/session on
-// every request. Version 4 is required even while production advertising is v3.
+// every request. Targets must meet the shared minimum agent contract.
 type RuntimeRemoteTarget struct {
 	EnvironmentID        string
 	Endpoint             string
@@ -53,7 +54,7 @@ type RuntimeSender struct {
 }
 
 func NewRuntimeSender(target RuntimeRemoteTarget, access remenv.AgentAccessCheck, client *http.Client, tunnels *edge.TunnelRegistry) (*RuntimeSender, error) {
-	if target.EnvironmentID == "" || target.EnvironmentID == "0" || target.Token == "" || access == nil || target.AgentContractVersion != 4 {
+	if target.EnvironmentID == "" || target.EnvironmentID == "0" || target.Token == "" || access == nil || target.AgentContractVersion < contract.MinimumAgentVersion {
 		return nil, remenv.ErrAgentUpdateRequired
 	}
 	if client == nil {

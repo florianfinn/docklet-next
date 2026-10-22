@@ -137,22 +137,6 @@ func TestRenameVolumeMetadataInternalPreservesPoliciesAndHistory(t *testing.T) {
 	require.Equal(t, "renamed-data", backupEntry.VolumeName)
 }
 
-func TestBuildVolumePruneOptionsInternal_PreservesInternalVolumes(t *testing.T) {
-	options := buildVolumePruneOptionsInternal(true)
-
-	require.True(t, options.All)
-	require.NotNil(t, options.Filters)
-	require.True(t, options.Filters["label!"][internalVolumePruneFilterValue])
-}
-
-func TestBuildVolumePruneOptionsInternal_PreservesInternalVolumesForAnonymousVolumes(t *testing.T) {
-	options := buildVolumePruneOptionsInternal(false)
-
-	require.False(t, options.All)
-	require.NotNil(t, options.Filters)
-	require.True(t, options.Filters["label!"][internalVolumePruneFilterValue])
-}
-
 func TestBuildVolumePruneMetadataInternal(t *testing.T) {
 	metadata := buildVolumePruneMetadataInternal(true, 2, 4096)
 

@@ -82,6 +82,7 @@ GET /api/environments/:id/volumes/backups/:backupId/files
 GET /api/environments/:id/volumes/backups/:backupId/files/browse
 GET /api/environments/:id/volumes/backups/:backupId/has-path
 GET /api/environments/:id/volumes/counts
+GET /api/environments/:id/volumes/prune
 GET /api/environments/:id/volumes/sizes
 GET /api/environments/:id/vulnerabilities/all
 GET /api/environments/:id/vulnerabilities/export
