@@ -92,7 +92,7 @@ export function mapActivityDetail(detail: Detail): CodedActionRun {
     progress: run.progress ?? 0,
     startedAt: run.startedAt,
     finishedAt: run.endedAt,
-    error: run.error ? message(undefined, run.error) : undefined,
+    error: run.error ? message(run.messageCode?.startsWith("runtime.") ? run.messageCode : undefined, run.error) : undefined,
     steps: (detail.stepTrace ?? []).map((step) => ({
       key: stepKey(step.name), label: message(step.code, step.name), state: stepState(step.status),
       startedAt: step.startedAt, finishedAt: step.endedAt,

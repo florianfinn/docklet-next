@@ -51,8 +51,8 @@ function ActionToast({ id, toastId }: { id: string; toastId: string | number }) 
 export function ActionToasts() {
   const adapter = useAdapter();
   const client = useQueryClient();
- const lifetime = identityLifetime(adapter);
- const generation = useSyncExternalStore(lifetime.listen, lifetime.version, lifetime.version);
+  const lifetime = identityLifetime(adapter);
+  const generation = useSyncExternalStore(lifetime.listen, lifetime.version, lifetime.version);
   const t = useTranslations("activity.gate");
   const locale = useLocale();
   const tRef = useRef(t);

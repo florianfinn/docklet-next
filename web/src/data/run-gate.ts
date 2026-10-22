@@ -143,7 +143,7 @@ export type ParentResolver = (scope: string) => string | undefined;
  */
 export class RunGate {
   private generation = 0;
- private readonly entries = new Map<string, Entry>();
+  private readonly entries = new Map<string, Entry>();
   private readonly runs = new Map<string, CodedActionRun>();
   private readonly listeners = new Set<(notice: GateNotice) => void>();
   private unwatch: (() => void) | undefined;
@@ -154,7 +154,7 @@ export class RunGate {
   constructor(inner: DockletAdapter, now: () => number = Date.now) {
     this.inner = inner;
     this.now = now;
- identityLifetime(inner).listen(() => this.reset());
+    identityLifetime(inner).listen(() => this.reset());
   }
 
   reset(): void {
@@ -184,8 +184,8 @@ export class RunGate {
   /** The run list is followed only while starts are remembered. */
   private watch(): void {
     const generation = this.generation;
- this.unwatch ??= this.inner.subscribeActions((runs) => {
- if (generation !== this.generation) return;
+    this.unwatch ??= this.inner.subscribeActions((runs) => {
+      if (generation !== this.generation) return;
       this.runs.clear();
       for (const r of runs) this.runs.set(r.id, r);
       for (const entry of this.entries.values()) if (entry.runId) entry.hostId ??= this.runs.get(entry.runId)?.hostId;
@@ -228,8 +228,8 @@ export class RunGate {
 
   private answer(entry: Entry, reason: GateReason, retry?: () => Promise<unknown>): Promise<unknown> {
     const run = entry.runId ? this.runs.get(entry.runId) : undefined;
- const generation = this.generation;
- const guardedRetry = retry ? () => generation === this.generation ? retry() : Promise.reject(new CancelledError()) : undefined;
+    const generation = this.generation;
+    const guardedRetry = retry ? () => generation === this.generation ? retry() : Promise.reject(new CancelledError()) : undefined;
     if (entry.durable && entry.runId && entry.hostId && this.now() - (entry.settledAt ?? this.now()) >= 600_000 && this.now() - (entry.refreshedAt ?? 0) >= 2_000) {
       entry.refreshedAt = this.now();
       void this.inner.getRuntimeRun?.(entry.hostId, entry.runId).catch(() => undefined);
@@ -261,8 +261,8 @@ export class RunGate {
   /** Starts through the gate; `fresh: false` skips the freshness answer (explicit recheck). */
   run(method: keyof DockletAdapter, args: Args, options: { fresh?: boolean } = {}): Promise<unknown> {
     const generation = this.generation;
- const check = () => { if (generation !== this.generation) throw new CancelledError(); };
- const ruleOf = GATE_RULES[method];
+    const check = () => { if (generation !== this.generation) throw new CancelledError(); };
+    const ruleOf = GATE_RULES[method];
     const start = () => (this.inner[method] as (...a: Args) => Promise<unknown>).apply(this.inner, args as unknown[]);
     if (this.inner.kind === "http" && !this.inner.mappedOperations?.has(method)) return start();
     if (!ruleOf) return start();
@@ -296,7 +296,7 @@ export class RunGate {
     this.entries.set(rule.key, entry);
     entry.promise = new Promise<unknown>((resolve) => resolve(start())).then(
       (value) => {
- check();
+        check();
         entry.settled = true;
         entry.settledAt = this.now();
         entry.value = value;
@@ -305,7 +305,7 @@ export class RunGate {
         return value;
       },
       (error: unknown) => {
- check();
+        check();
         if (entry.durable && error instanceof AdapterOutcomeError && error.outcome.kind === "error" && error.outcome.code === "runtime.admission-unknown") {
           entry.settled = true;
           entry.error = error;

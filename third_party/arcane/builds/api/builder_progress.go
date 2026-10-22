@@ -2,7 +2,7 @@
 // Revision: 83d91f19f60b2967cc85c46161c98203e80e4989
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: None
+// Deviations: Drain statuses after renderer cancellation until the producer closes.
 
 package api
 
@@ -52,6 +52,10 @@ func streamSolveStatusInternal(ctx context.Context, ch chan *buildkit.SolveStatu
 		return err
 	}
 	_, err = display.UpdateFrom(ctx, ch)
+	// BuildKit sends without a cancellation select and closes ch only after
+	// Solve joins. Retain the consumer even when the display stops on cancellation.
+	for range ch {
+	}
 	return err
 }
 

@@ -2,7 +2,7 @@
 // Revision: c641dc24b3f364ac5e4ec03bc9c5dfe2a10d5f61a6bcba825785f9dc351a9e50
 // Retrieved: 2026-10-19
 // License: Apache-2.0
-// Deviations: Dormant transaction-taking compact storage primitives; no runtime wiring.
+// Deviations: Transaction-taking compact storage primitives.
 
 package activity
 

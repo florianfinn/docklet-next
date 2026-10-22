@@ -252,17 +252,17 @@ func TestRuntimeActivationRestoreWaitCancellationPreservesReadiness(t *testing.T
 	for _, state := range []struct{ ready, busy bool }{{false, false}, {true, false}, {false, true}, {true, true}} {
 		ready := state.ready
 		t.Run(map[bool]string{false: "already-unready", true: "ready"}[ready]+map[bool]string{false: "-idle", true: "-draining"}[state.busy], func(t *testing.T) {
-			ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
-			defer cancel()
+			applicationCtx, stopApplication := context.WithCancel(t.Context())
+			defer stopApplication()
 			source := restoreArchiveNew(t)
 			record := restoreArchiveMetadata(t, source)
 			target := restoreArchiveNew(t)
 			target.cfg.BackupDir = source.cfg.BackupDir
 			executor := &restoreActivationExecutor{}
-			require.NoError(t, target.runtime.ConfigureLocal(activity.RuntimeLocalConfig{ApplicationContext: ctx, Store: target.binding, Executor: executor}))
+			require.NoError(t, target.runtime.ConfigureLocal(activity.RuntimeLocalConfig{ApplicationContext: applicationCtx, Store: target.binding, Executor: executor}))
 			receiver, err := activity.NewRuntimeReceiver(target.runtime)
 			require.NoError(t, err)
-			h, err := activity.NewRuntimeHTTPService(target.runtime, activity.RuntimeHTTPPorts{ApplicationContext: ctx, Store: func(context.Context, string) (activity.RuntimeStoreBinding, error) { return target.binding, nil }, PrepareTarget: func(_ context.Context, _ string, target activity.RuntimeTarget) (activity.RuntimeResolvedTarget, error) {
+			h, err := activity.NewRuntimeHTTPService(target.runtime, activity.RuntimeHTTPPorts{ApplicationContext: applicationCtx, Store: func(context.Context, string) (activity.RuntimeStoreBinding, error) { return target.binding, nil }, PrepareTarget: func(_ context.Context, _ string, target activity.RuntimeTarget) (activity.RuntimeResolvedTarget, error) {
 				return activity.RuntimeResolvedTarget{Target: target}, nil
 			}})
 			require.NoError(t, err)
@@ -275,6 +275,9 @@ func TestRuntimeActivationRestoreWaitCancellationPreservesReadiness(t *testing.T
 				defer leave()
 			}
 			s.maintenance.OnBegin(func() { target.activities.RequestCancel(started.ID) })
+			// Fixture setup must not consume the cancellation join budget.
+			ctx, cancel := context.WithTimeout(applicationCtx, 5*time.Second)
+			defer cancel()
 			done := make(chan struct{})
 			go func() {
 				defer close(done)

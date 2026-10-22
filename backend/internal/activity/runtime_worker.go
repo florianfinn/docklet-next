@@ -2,7 +2,7 @@
 // Revision: d4229b124f079376c959142b63235f6a739be2a9711e0228ec5a63ab552f8cf0
 // Retrieved: 2026-10-19
 // License: Apache-2.0
-// Deviations: One dormant local owner, application lifetime, and joined settlement.
+// Deviations: One local owner, application lifetime, and joined settlement.
 
 package activity
 
@@ -99,7 +99,8 @@ func (s *RuntimeService) runLocalInternal(owner *runtimeOwnerInternal) {
 		} else {
 			// The executor's return is its child/producer barrier, never a timer.
 			phaseErr = s.localExecution.Executor.ExecuteRuntime(owner.ctx, owner.command.command, output)
-			outputErr = runtimeFinishOutputInternal(owner.ctx, output)
+			outputErr = runtimeCaptureFailureInternal(output, phaseErr)
+			outputErr = errors.Join(outputErr, runtimeFinishOutputInternal(owner.ctx, output))
 		}
 	}
 	s.activity.runningMu.Lock()

@@ -35,20 +35,24 @@ const lifetimeTestDeadline = 10 * time.Second
 
 type lifetimeControlServer struct {
 	controlapi.UnimplementedControlServer
-	solveRelease chan struct{}
-	solveDone    chan struct{}
-	statusSent   chan struct{}
-	statusDone   chan struct{}
-	sessionDone  chan struct{}
-	solveErr     error
-	requestMu    sync.Mutex
-	request      *controlapi.SolveRequest
+	solveEntered   chan struct{}
+	solveRelease   chan struct{}
+	solveDone      chan struct{}
+	statusSent     chan struct{}
+	statusDone     chan struct{}
+	statusTraffic  func(grpc.ServerStreamingServer[controlapi.StatusResponse]) error
+	sessionEntered chan struct{}
+	sessionDone    chan struct{}
+	solveErr       error
+	requestMu      sync.Mutex
+	request        *controlapi.SolveRequest
 }
 
 func (s *lifetimeControlServer) Solve(ctx context.Context, req *controlapi.SolveRequest) (*controlapi.SolveResponse, error) {
 	s.requestMu.Lock()
 	s.request = req
 	s.requestMu.Unlock()
+	close(s.solveEntered)
 	defer close(s.solveDone)
 	select {
 	case <-s.solveRelease:
@@ -63,6 +67,9 @@ func (s *lifetimeControlServer) Solve(ctx context.Context, req *controlapi.Solve
 
 func (s *lifetimeControlServer) Status(_ *controlapi.StatusRequest, stream grpc.ServerStreamingServer[controlapi.StatusResponse]) error {
 	defer close(s.statusDone)
+	if s.statusTraffic != nil {
+		return s.statusTraffic(stream)
+	}
 	now := timestamppb.Now()
 	err := stream.Send(&controlapi.StatusResponse{Vertexes: []*controlapi.Vertex{{
 		Digest: "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
@@ -81,6 +88,7 @@ func (s *lifetimeControlServer) Status(_ *controlapi.StatusRequest, stream grpc.
 }
 
 func (s *lifetimeControlServer) Session(stream grpc.BidiStreamingServer[controlapi.BytesMessage, controlapi.BytesMessage]) error {
+	close(s.sessionEntered)
 	defer close(s.sessionDone)
 	for {
 		if _, err := stream.Recv(); err != nil {
@@ -122,8 +130,8 @@ type lifetimeWriter struct {
 }
 
 func (w *lifetimeWriter) Write(p []byte) (int, error) {
-	w.once.Do(func() { close(w.entered) })
 	w.active.Store(true)
+	w.once.Do(func() { close(w.entered) })
 	defer w.active.Store(false)
 	<-w.release
 	if w.failed != nil {
@@ -157,22 +165,23 @@ func awaitLifetime[T any](t *testing.T, ch <-chan T, label string) T {
 	}
 }
 
-func newLifetimeBuild(t *testing.T, solveErr error, writerErr error) (*lifetimeControlServer, *lifetimeProvider, *lifetimeWriter, types.BuildRequest, *Service) {
+func newLifetimeBuild(t *testing.T, solveErr error, writerErr error, clientOpts ...buildkit.ClientOpt) (*lifetimeControlServer, *lifetimeProvider, *lifetimeWriter, types.BuildRequest, *Service) {
 	t.Helper()
 	listener := bufconn.Listen(1024 * 1024)
 	grpcServer := grpc.NewServer()
 	control := &lifetimeControlServer{
-		solveRelease: make(chan struct{}), solveDone: make(chan struct{}),
+		solveEntered: make(chan struct{}), solveRelease: make(chan struct{}), solveDone: make(chan struct{}),
 		statusSent: make(chan struct{}), statusDone: make(chan struct{}),
-		sessionDone: make(chan struct{}), solveErr: solveErr,
+		sessionEntered: make(chan struct{}), sessionDone: make(chan struct{}), solveErr: solveErr,
 	}
 	controlapi.RegisterControlServer(grpcServer, control)
 	go func() { _ = grpcServer.Serve(listener) }()
 	t.Cleanup(func() { grpcServer.Stop(); _ = listener.Close() })
 
-	client, err := buildkit.New(t.Context(), "bufnet", buildkit.WithContextDialer(func(context.Context, string) (net.Conn, error) {
+	clientOpts = append(clientOpts, buildkit.WithContextDialer(func(context.Context, string) (net.Conn, error) {
 		return listener.Dial()
 	}))
+	client, err := buildkit.New(t.Context(), "bufnet", clientOpts...)
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = client.Close() })
 
@@ -228,6 +237,9 @@ func TestBuildImageJoinsBuildkitStatusRenderer(t *testing.T) {
 
 			awaitLifetime(t, control.statusSent, "real Status RPC send")
 			awaitLifetime(t, writer.entered, "actual progress writer entry")
+			// Status delivery can precede Solve dispatch; cancellation must reach an entered RPC.
+			awaitLifetime(t, control.solveEntered, "real Solve RPC entry")
+			awaitLifetime(t, control.sessionEntered, "real Session RPC entry")
 			if tc.cancel {
 				cancel()
 			} else {

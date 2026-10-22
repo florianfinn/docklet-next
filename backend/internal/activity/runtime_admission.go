@@ -2,7 +2,7 @@
 // Revision: d4229b124f079376c959142b63235f6a739be2a9711e0228ec5a63ab552f8cf0
 // Retrieved: 2026-10-19
 // License: Apache-2.0
-// Deviations: Dormant durable-first admission, parent arbitration and atomic coded evidence.
+// Deviations: Durable-first admission, parent arbitration and atomic coded evidence.
 
 package activity
 

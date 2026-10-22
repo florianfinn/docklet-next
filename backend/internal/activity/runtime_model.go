@@ -2,7 +2,7 @@
 // Revision: c641dc24b3f364ac5e4ec03bc9c5dfe2a10d5f61a6bcba825785f9dc351a9e50
 // Retrieved: 2026-10-19
 // License: Apache-2.0
-// Deviations: Dormant compact receipt, key-binding and local-generation models.
+// Deviations: Compact receipt, key-binding and local-generation models.
 
 package activity
 
