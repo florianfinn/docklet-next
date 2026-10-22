@@ -1,5 +1,5 @@
 // Source: api/openapi.json
-// Revision: ca0a2884ff6576cc2864a1520596db7d17cda53b7d7c6395c6fcf558a91dd7e7
+// Revision: cdce9108b00df848f8f03485995e8b6802dceba1ec92167d416d7d13cde4ca64
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
 // Deviations: Generated TypeScript declarations from the local Huma export.
@@ -3534,11 +3534,15 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        get?: never;
+        /**
+         * Plan unused volume removal
+         * @description Preview unused local volumes without mount options; anonymous only unless all=true. Running and stopped container references exclude candidates.
+         */
+        get: operations["plan-volume-prune"];
         put?: never;
         /**
          * Prune unused volumes
-         * @description Remove all unused Docker volumes
+         * @description Re-check and remove only submitted name/createdAt candidates. Report skipped and failed candidates independently.
          */
         post: operations["prune-volumes"];
         delete?: never;
@@ -6236,15 +6240,27 @@ export interface components {
             /** @description Whether the request was successful */
             success: boolean;
         };
-        BaseApiResponseVolumePruneReportData: {
+        BaseApiResponseVolumePrunePlan: {
             /**
              * Format: uri
              * @description A URL to the JSON Schema for this object.
-             * @example /api/schemas/BaseApiResponseVolumePruneReportData.json
+             * @example /api/schemas/BaseApiResponseVolumePrunePlan.json
              */
             readonly $schema?: string;
             /** @description Response data */
-            data: components["schemas"]["DockerVolumeVolumePruneReportData"];
+            data: components["schemas"]["VolumePrunePlan"];
+            /** @description Whether the request was successful */
+            success: boolean;
+        };
+        BaseApiResponseVolumePruneResult: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example /api/schemas/BaseApiResponseVolumePruneResult.json
+             */
+            readonly $schema?: string;
+            /** @description Response data */
+            data: components["schemas"]["VolumePruneResult"];
             /** @description Whether the request was successful */
             success: boolean;
         };
@@ -8122,12 +8138,6 @@ export interface components {
             /** Format: date-time */
             updatedAt?: string;
             volumeName: string;
-        };
-        DockerVolumeVolumePruneReportData: {
-            activityId?: string;
-            /** Format: int64 */
-            spaceReclaimed: number;
-            volumesDeleted?: string[] | null;
         };
         DockerVolumeVolumeSizeInfo: {
             name: string;
@@ -10710,6 +10720,49 @@ export interface components {
             destination?: string;
             /** @description Optional backup policy whose settings should be used */
             policyId?: string;
+        };
+        VolumePruneCandidate: {
+            createdAt: string;
+            name: string;
+        };
+        VolumePruneFailed: {
+            /** @enum {string} */
+            code: "volume.inspect-failed" | "volume.usage-failed" | "volume.remove-failed" | "volume.protected";
+            name: string;
+        };
+        VolumePrunePlan: {
+            candidates: components["schemas"]["VolumePrunePlanCandidate"][] | null;
+        };
+        VolumePrunePlanCandidate: {
+            createdAt: string;
+            driver: string;
+            name: string;
+            /** @enum {string} */
+            reason: "unused" | "unused-anonymous";
+            /** Format: int64 */
+            sizeBytes?: number;
+        };
+        VolumePruneRequest: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example /api/schemas/VolumePruneRequest.json
+             */
+            readonly $schema?: string;
+            candidates: components["schemas"]["VolumePruneCandidate"][] | null;
+        };
+        VolumePruneResult: {
+            activityId?: string;
+            failed: components["schemas"]["VolumePruneFailed"][] | null;
+            removed: string[] | null;
+            skipped: components["schemas"]["VolumePruneSkipped"][] | null;
+            /** Format: int64 */
+            spaceReclaimed: number;
+        };
+        VolumePruneSkipped: {
+            name: string;
+            /** @enum {string} */
+            reason: "in-use" | "not-found" | "changed";
         };
         VolumeRename: {
             /**
@@ -19251,9 +19304,12 @@ export interface operations {
             };
         };
     };
-    "prune-volumes": {
+    "plan-volume-prune": {
         parameters: {
-            query?: never;
+            query?: {
+                /** @description Include named volumes as well as anonymous volumes */
+                all?: boolean;
+            };
             header?: never;
             path: {
                 /** @description Environment ID */
@@ -19269,7 +19325,43 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["BaseApiResponseVolumePruneReportData"];
+                    "application/json": components["schemas"]["BaseApiResponseVolumePrunePlan"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "prune-volumes": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Environment ID */
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["VolumePruneRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BaseApiResponseVolumePruneResult"];
                 };
             };
             /** @description Error */

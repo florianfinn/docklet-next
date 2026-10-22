@@ -10,7 +10,9 @@ remain outside this contract.
 `GET /environments/{id}/volumes/prune` (`plan-volume-prune`) requires
 `volumes:prune`. `all=false` selects only anonymous local volumes, identified by
 Docker's `com.docker.volume.anonymous` label; `all=true` also selects named local
-volumes. This follows Docker Engine API 1.42+ prune selection. Internal-labelled
+volumes. Volumes with mount options are excluded, as in
+[Docker Engine prune](https://github.com/moby/moby/blob/v28.5.1/volume/service/service.go).
+This follows Docker Engine API 1.42+ prune selection. Internal-labelled
 volumes are excluded. Any reference from a running or stopped container excludes
 a volume, including a workspace helper. Planning is read-only and does not stop
 helpers. Candidates contain `name`, `driver`, `createdAt`, `reason` (`unused` for

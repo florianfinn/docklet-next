@@ -111,6 +111,7 @@ var commandRoutes = []commandRoute{
 	{Method: http.MethodGet, PathPattern: "/api/environments/{id}/volumes/{volumeName}", CommandName: "volume.inspect"},
 	{Method: http.MethodPost, PathPattern: "/api/environments/{id}/volumes", CommandName: "volume.create"},
 	{Method: http.MethodDelete, PathPattern: "/api/environments/{id}/volumes/{volumeName}", CommandName: "volume.delete"},
+	{Method: http.MethodGet, PathPattern: "/api/environments/{id}/volumes/prune", CommandName: "volume.prune.plan"},
 	{Method: http.MethodPost, PathPattern: "/api/environments/{id}/volumes/prune", CommandName: "volume.prune"},
 	{Method: http.MethodGet, PathPattern: "/api/environments/{id}/volumes/{volumeName}/usage", CommandName: "volume.usage"},
 	{Method: http.MethodGet, PathPattern: "/api/environments/{id}/volumes/sizes", CommandName: "volume.sizes"},
