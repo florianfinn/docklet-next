@@ -72,6 +72,7 @@ GET /environments/{id}/volumes/backups/{backupId}/files
 GET /environments/{id}/volumes/backups/{backupId}/files/browse
 GET /environments/{id}/volumes/backups/{backupId}/has-path
 GET /environments/{id}/volumes/counts
+GET /environments/{id}/volumes/prune
 GET /environments/{id}/volumes/sizes
 GET /environments/{id}/volumes/{volumeName}
 GET /environments/{id}/volumes/{volumeName}/backup-policy

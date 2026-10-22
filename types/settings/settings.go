@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Functional cut: removed APNS mobile push; functional cut: removed template catalogue; functional cut: removed GitOps and saved Git repositories; functional cut: removed Swarm; functional cut: removed standalone build workshop; functional cut: removed OIDC and passkeys. #69 first-run setup and hub settings persistence.
+// Deviations: Functional cut: removed APNS mobile push; functional cut: removed template catalogue; functional cut: removed GitOps and saved Git repositories; functional cut: removed Swarm; functional cut: removed standalone build workshop; functional cut: removed OIDC and passkeys. #69 first-run setup and hub settings persistence; Complete tools image reference setting.
 
 package settings
 
@@ -127,10 +127,10 @@ type Update struct {
 	// Required: false
 	DefaultDeployPullPolicy *string `json:"defaultDeployPullPolicy,omitzero" binding:"omitempty,oneof=missing always never"`
 
-	// ToolsImageRegistry is the container registry used to pull the Arcane tools helper image.
+	// ToolsImage is the complete image reference for the Docklet tools helper.
 	//
 	// Required: false
-	ToolsImageRegistry *string `json:"toolsImageRegistry,omitzero" binding:"omitempty,oneof=ghcr.io docker.io"`
+	ToolsImage *string `json:"toolsImage,omitzero" doc:"Docker image reference; empty uses this environment's release default"`
 
 	// UpdateCheckRegistry is the registry queried when checking whether the
 	// running Arcane image has a newer digest. "auto" follows the registry the

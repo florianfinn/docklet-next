@@ -25,6 +25,7 @@ import (
 	"github.com/florianfinn/docklet-next/backend/pkg/libarcane/edge"
 	"github.com/florianfinn/docklet-next/backend/pkg/utils/sqlitestore"
 	activitytypes "github.com/florianfinn/docklet-next/types/activity"
+	"github.com/florianfinn/docklet-next/types/contract"
 	projecttypes "github.com/florianfinn/docklet-next/types/project"
 	"github.com/google/uuid"
 	"github.com/labstack/echo/v5"
@@ -159,7 +160,7 @@ func newRemoteIntegration(t *testing.T, isEdge bool) *remoteIntegration {
 		}
 		return result, cancel, nil
 	}
-	f.sender, err = activity.NewRuntimeSender(activity.RuntimeRemoteTarget{EnvironmentID: f.store.EnvironmentID, Endpoint: direct.URL, Token: f.token, Edge: isEdge, AgentContractVersion: 4}, access, direct.Client(), registry)
+	f.sender, err = activity.NewRuntimeSender(activity.RuntimeRemoteTarget{EnvironmentID: f.store.EnvironmentID, Endpoint: direct.URL, Token: f.token, Edge: isEdge, AgentContractVersion: contract.AgentHubVersion}, access, direct.Client(), registry)
 	require.NoError(t, err)
 	var elapsed atomic.Int64
 	f.control, err = activity.NewRuntimeRemoteCoordinator(f.hub, t.Context(), func(context.Context, activity.RuntimeStoreBinding) (activity.RuntimeRemoteTransport, error) {

@@ -18,6 +18,7 @@ import (
 
 	"github.com/florianfinn/docklet-next/backend/pkg/remenv"
 	activitytypes "github.com/florianfinn/docklet-next/types/activity"
+	"github.com/florianfinn/docklet-next/types/contract"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 )
@@ -70,7 +71,7 @@ func TestRuntimeSenderActualHTTPStrictRefusalAndNoRedirect(t *testing.T) {
 				_, _ = io.WriteString(w, body)
 			}))
 			defer server.Close()
-			sender, err := NewRuntimeSender(RuntimeRemoteTarget{EnvironmentID: "example-remote", Endpoint: server.URL, Token: credential, AgentContractVersion: 4}, func(ctx context.Context, _ string, _ *string, _ string, _ string) (context.Context, context.CancelFunc, error) {
+			sender, err := NewRuntimeSender(RuntimeRemoteTarget{EnvironmentID: "example-remote", Endpoint: server.URL, Token: credential, AgentContractVersion: contract.AgentHubVersion}, func(ctx context.Context, _ string, _ *string, _ string, _ string) (context.Context, context.CancelFunc, error) {
 				return ctx, func() { cleanups.Add(1) }, nil
 			}, server.Client(), nil)
 			require.NoError(t, err)
@@ -96,13 +97,13 @@ func TestRuntimeSenderAccessAndOldContractRefuseBeforeTransport(t *testing.T) {
 			var calls atomic.Int32
 			server := httptest.NewServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) { calls.Add(1) }))
 			defer server.Close()
-			target := RuntimeRemoteTarget{EnvironmentID: "example-remote", Endpoint: server.URL, Token: uuid.NewString(), Edge: isEdge, AgentContractVersion: 3}
+			target := RuntimeRemoteTarget{EnvironmentID: "example-remote", Endpoint: server.URL, Token: uuid.NewString(), Edge: isEdge, AgentContractVersion: contract.MinimumAgentVersion - 1}
 			access := func(ctx context.Context, _ string, _ *string, _ string, _ string) (context.Context, context.CancelFunc, error) {
 				return nil, nil, remenv.ErrAgentUpdateRequired
 			}
 			_, err := NewRuntimeSender(target, access, server.Client(), nil)
 			require.ErrorIs(t, err, remenv.ErrAgentUpdateRequired)
-			target.AgentContractVersion = 4
+			target.AgentContractVersion = contract.AgentHubVersion
 			sender, err := NewRuntimeSender(target, access, server.Client(), nil)
 			require.NoError(t, err)
 			id := activitytypes.RuntimeRunIdentity{RuntimeExecutorIdentity: activitytypes.RuntimeExecutorIdentity{ManagerID: "example-manager", RegistrationID: "example-registration", ExecutorGeneration: uuid.NewString()}, RunID: uuid.NewString(), RequestDigest: strings.Repeat("a", 64)}

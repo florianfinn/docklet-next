@@ -219,18 +219,16 @@ func (s *Service) runSystemPruneInternal(ctx context.Context, req system.PruneAl
 			s.appendSystemPruneActivityMessageInternal(groupCtx, activityID, "Pruning volumes", 55)
 			slog.InfoContext(groupCtx, "Pruning volumes...", "mode", req.Volumes.Mode)
 			localResult := &system.PruneAllResult{}
-			if err := s.pruneVolumesInternal(groupCtx, *req.Volumes, localResult); err != nil {
-				mu.Lock()
+			err := s.pruneVolumesInternal(groupCtx, *req.Volumes, localResult)
+			mu.Lock()
+			result.VolumesDeleted = append(result.VolumesDeleted, localResult.VolumesDeleted...)
+			result.SpaceReclaimed += localResult.SpaceReclaimed
+			result.VolumeSpaceReclaimed += localResult.VolumeSpaceReclaimed
+			if err != nil {
 				result.Errors = append(result.Errors, fmt.Sprintf("Volume pruning failed: %v", err))
 				result.Success = false
-				mu.Unlock()
-			} else {
-				mu.Lock()
-				result.VolumesDeleted = append(result.VolumesDeleted, localResult.VolumesDeleted...)
-				result.SpaceReclaimed += localResult.SpaceReclaimed
-				result.VolumeSpaceReclaimed += localResult.VolumeSpaceReclaimed
-				mu.Unlock()
 			}
+			mu.Unlock()
 			return nil
 		})
 	}
@@ -467,16 +465,13 @@ func (s *Service) pruneBuildCacheInternal(ctx context.Context, options system.Pr
 func (s *Service) pruneVolumesInternal(ctx context.Context, options system.PruneVolumesOptions, result *system.PruneAllResult) error {
 	allVolumes := options.Mode == system.PruneVolumeModeAll
 	report, err := s.volumeService.PruneVolumesWithOptions(ctx, allVolumes)
-	if err != nil {
-		return err
+	if report != nil {
+		result.VolumesDeleted = append(result.VolumesDeleted, report.VolumesDeleted...)
+		result.SpaceReclaimed += report.SpaceReclaimed
+		result.VolumeSpaceReclaimed += report.SpaceReclaimed
+		slog.InfoContext(ctx, "Volume prune completed", "volumesDeleted", len(report.VolumesDeleted), "spaceReclaimed", report.SpaceReclaimed, "partialFailure", err != nil)
 	}
-
-	slog.InfoContext(ctx, "Volume prune completed", "volumesDeleted", len(report.VolumesDeleted), "spaceReclaimed", report.SpaceReclaimed)
-
-	result.VolumesDeleted = report.VolumesDeleted
-	result.SpaceReclaimed += report.SpaceReclaimed
-	result.VolumeSpaceReclaimed += report.SpaceReclaimed
-	return nil
+	return err
 }
 
 func (s *Service) pruneNetworksInternal(ctx context.Context, options system.PruneNetworksOptions, result *system.PruneAllResult) error {

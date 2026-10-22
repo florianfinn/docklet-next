@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; functional cut: removed template catalogue; functional cut: removed GitOps and saved Git repositories; functional cut: removed Swarm; functional cut: removed OIDC and passkeys; SQLite temp-file persistence fixture.
+// Deviations: Local module namespace; functional cut: removed template catalogue; functional cut: removed GitOps and saved Git repositories; functional cut: removed Swarm; functional cut: removed OIDC and passkeys; SQLite temp-file persistence fixture; Complete helper image default assertions.
 
 package settings
 
@@ -104,7 +104,7 @@ func TestSettingsService_EnsureDefaultSettings_Idempotent(t *testing.T) {
 		"imageEventWatcherEnabled",
 		"vulnerabilityScanEnabled",
 		"vulnerabilityScanInterval",
-		"toolsImageRegistry",
+		"toolsImage",
 		"updateCheckRegistry",
 		"trivyDbRegistry",
 		"trivyNetwork",
@@ -130,8 +130,8 @@ func TestSettingsService_EnsureDefaultSettings_Idempotent(t *testing.T) {
 			require.Equal(t, "false", sv.Value)
 		case "vulnerabilityScanInterval":
 			require.Equal(t, "0 0 0 * * *", sv.Value)
-		case "toolsImageRegistry":
-			require.Equal(t, "ghcr.io", sv.Value)
+		case "toolsImage":
+			require.Empty(t, sv.Value)
 		case "updateCheckRegistry":
 			require.Equal(t, "auto", sv.Value)
 		case "trivyDbRegistry":

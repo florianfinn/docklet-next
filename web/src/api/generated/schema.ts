@@ -1,5 +1,5 @@
 // Source: api/openapi.json
-// Revision: ca0a2884ff6576cc2864a1520596db7d17cda53b7d7c6395c6fcf558a91dd7e7
+// Revision: 0d315b21aa0692dcbdbed81c6a693d48cc64283ccb1b50f95b9a39a3c6f7c317
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
 // Deviations: Generated TypeScript declarations from the local Huma export.
@@ -3534,11 +3534,15 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        get?: never;
+        /**
+         * Plan unused volume removal
+         * @description Preview unused local volumes without mount options; anonymous only unless all=true. Running and stopped container references exclude candidates.
+         */
+        get: operations["plan-volume-prune"];
         put?: never;
         /**
          * Prune unused volumes
-         * @description Remove all unused Docker volumes
+         * @description Re-check and remove only submitted name/createdAt candidates. Report skipped and failed candidates independently.
          */
         post: operations["prune-volumes"];
         delete?: never;
@@ -6236,15 +6240,27 @@ export interface components {
             /** @description Whether the request was successful */
             success: boolean;
         };
-        BaseApiResponseVolumePruneReportData: {
+        BaseApiResponseVolumePrunePlan: {
             /**
              * Format: uri
              * @description A URL to the JSON Schema for this object.
-             * @example /api/schemas/BaseApiResponseVolumePruneReportData.json
+             * @example /api/schemas/BaseApiResponseVolumePrunePlan.json
              */
             readonly $schema?: string;
             /** @description Response data */
-            data: components["schemas"]["DockerVolumeVolumePruneReportData"];
+            data: components["schemas"]["VolumePrunePlan"];
+            /** @description Whether the request was successful */
+            success: boolean;
+        };
+        BaseApiResponseVolumePruneResult: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example /api/schemas/BaseApiResponseVolumePruneResult.json
+             */
+            readonly $schema?: string;
+            /** @description Response data */
+            data: components["schemas"]["VolumePruneResult"];
             /** @description Whether the request was successful */
             success: boolean;
         };
@@ -8122,12 +8138,6 @@ export interface components {
             /** Format: date-time */
             updatedAt?: string;
             volumeName: string;
-        };
-        DockerVolumeVolumePruneReportData: {
-            activityId?: string;
-            /** Format: int64 */
-            spaceReclaimed: number;
-            volumesDeleted?: string[] | null;
         };
         DockerVolumeVolumeSizeInfo: {
             name: string;
@@ -10034,7 +10044,8 @@ export interface components {
             scheduledPruneEnabled?: string | null;
             scheduledPruneInterval?: string | null;
             setupCompleted?: string | null;
-            toolsImageRegistry?: string | null;
+            /** @description Docker image reference; empty uses this environment's release default */
+            toolsImage?: string | null;
             trivyConcurrentScanContainers?: string | null;
             trivyConfig?: string | null;
             trivyCpuLimit?: string | null;
@@ -10710,6 +10721,69 @@ export interface components {
             destination?: string;
             /** @description Optional backup policy whose settings should be used */
             policyId?: string;
+        };
+        VolumeHelperIncompatibleError: {
+            /** @enum {string} */
+            code: "volume.helper-incompatible";
+            detail: string;
+            /** Format: int64 */
+            status: number;
+            title: string;
+        };
+        VolumeHelperUnavailableError: {
+            /** @enum {string} */
+            code: "volume.helper-unavailable";
+            detail: string;
+            /** Format: int64 */
+            status: number;
+            title: string;
+        };
+        VolumePruneCandidate: {
+            createdAt: string;
+            name: string;
+        };
+        VolumePruneFailed: {
+            /** @enum {string} */
+            code: "volume.inspect-failed" | "volume.usage-failed" | "volume.remove-failed" | "volume.protected";
+            name: string;
+        };
+        VolumePrunePlan: {
+            candidates: components["schemas"]["VolumePrunePlanCandidate"][] | null;
+        };
+        VolumePrunePlanCandidate: {
+            createdAt: string;
+            driver: string;
+            name: string;
+            /** @enum {string} */
+            reason: "unused" | "unused-anonymous";
+            /**
+             * Format: int64
+             * @description Optional estimate; currently omitted to avoid host-wide disk usage scans
+             */
+            sizeBytes?: number;
+        };
+        VolumePruneRequest: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example /api/schemas/VolumePruneRequest.json
+             */
+            readonly $schema?: string;
+            all?: boolean;
+            candidates: components["schemas"]["VolumePruneCandidate"][] | null;
+        };
+        VolumePruneResult: {
+            activityId?: string;
+            failed: components["schemas"]["VolumePruneFailed"][] | null;
+            removed: string[] | null;
+            skipped: components["schemas"]["VolumePruneSkipped"][] | null;
+            /** Format: int64 */
+            spaceReclaimed: number;
+        };
+        VolumePruneSkipped: {
+            name: string;
+            /** @enum {string} */
+            reason: "in-use" | "not-found" | "changed";
         };
         VolumeRename: {
             /**
@@ -19251,9 +19325,12 @@ export interface operations {
             };
         };
     };
-    "prune-volumes": {
+    "plan-volume-prune": {
         parameters: {
-            query?: never;
+            query?: {
+                /** @description Include named volumes as well as anonymous volumes */
+                all?: boolean;
+            };
             header?: never;
             path: {
                 /** @description Environment ID */
@@ -19269,7 +19346,43 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["BaseApiResponseVolumePruneReportData"];
+                    "application/json": components["schemas"]["BaseApiResponseVolumePrunePlan"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "prune-volumes": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Environment ID */
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["VolumePruneRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BaseApiResponseVolumePruneResult"];
                 };
             };
             /** @description Error */
@@ -19752,6 +19865,15 @@ export interface operations {
                     "application/json": components["schemas"]["BaseApiResponseWorkspaceWorkspace"];
                 };
             };
+            /** @description Helper incompatible or temporarily unavailable; no file access occurred */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["VolumeHelperIncompatibleError"] | components["schemas"]["VolumeHelperUnavailableError"];
+                };
+            };
             /** @description Error */
             default: {
                 headers: {
@@ -19794,6 +19916,15 @@ export interface operations {
                     "application/json": components["schemas"]["BaseApiResponseWorkspaceWorkspace"];
                 };
             };
+            /** @description Helper incompatible or temporarily unavailable; no file access occurred */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["VolumeHelperIncompatibleError"] | components["schemas"]["VolumeHelperUnavailableError"];
+                };
+            };
             /** @description Error */
             default: {
                 headers: {
@@ -19831,6 +19962,15 @@ export interface operations {
                     "application/json": components["schemas"]["BaseApiResponseWorkspaceFileContent"];
                 };
             };
+            /** @description Helper incompatible or temporarily unavailable; no file access occurred */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["VolumeHelperIncompatibleError"] | components["schemas"]["VolumeHelperUnavailableError"];
+                };
+            };
             /** @description Error */
             default: {
                 headers: {
@@ -19865,6 +20005,15 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+            /** @description Helper incompatible or temporarily unavailable; no file access occurred */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["VolumeHelperIncompatibleError"] | components["schemas"]["VolumeHelperUnavailableError"];
+                };
             };
             /** @description Error */
             default: {
