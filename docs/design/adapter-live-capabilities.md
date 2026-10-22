@@ -269,6 +269,12 @@ multi-hub fan-out protocol is needed.
 
 ## Identity, settings and production routes (#27)
 
+The 2026-10-22 whole-app audit measured 262 `import.meta.env.DEV` matching
+lines across 47 non-test files, 59 empty production catalogue values per locale,
+and 32 `QueryError` call sites (30 without the source error). The production
+bundle guard already rejects demo, design-lab and test modules across the full
+module graph, including modules removed by tree shaking.
+
 M3 provides the HTTP adapter for events and activities. M4 connects `/auth/mode`,
 `/auth/me`, local login/logout, password changes, profile language and setup status
 through that adapter. Only `/auth/mode` selects the active policy; the legacy
