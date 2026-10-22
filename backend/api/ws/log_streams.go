@@ -19,6 +19,7 @@ import (
 
 	"go.getarcane.app/docker"
 
+	"github.com/containerd/errdefs"
 	systemtypes "github.com/florianfinn/docklet-next/types/system"
 	"github.com/labstack/echo/v5"
 
@@ -321,6 +322,11 @@ func (h *WebSocketHandler) startLogSourceInternal(
 				return
 			}
 
+			kind, _ := docker.BoundLogText(label, 64)
+			resource, _ := docker.BoundLogText(resourceID, 256)
+			// Server logs retain only a fixed error class; authorized viewers below
+			// receive the bounded upstream diagnostic, which may contain sensitive text.
+			slog.WarnContext(ctx, "log source failed", "kind", kind, "resourceId", resource, "errorCategory", errdefs.Resolve(err).Error())
 			h.markLogStreamDoneInternal(key, ls)
 			text, cut := docker.BoundLogText("Failed to stream "+label+" logs: "+err.Error(), docker.MaxLogLineBytes)
 			select {

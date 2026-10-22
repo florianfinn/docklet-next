@@ -20,6 +20,7 @@ import (
 
 const MaxLogLineBytes = 64 * 1024
 const LogTruncatedMarker = " [log line truncated]"
+const daemonDiagnosticTruncatedMarker = " [daemon diagnostic truncated]"
 const stderrPrefix = "[STDERR] "
 const logContentLimit = MaxLogLineBytes - len(LogTruncatedMarker) - len(stderrPrefix)
 
@@ -125,6 +126,9 @@ func (r *LogReader) Next(ctx context.Context) (LogRecord, error) {
 				r.terminal = err
 				continue
 			}
+			if header[0] == 3 {
+				return LogRecord{}, r.daemonError(ctx, binary.BigEndian.Uint32(header[4:]))
+			}
 			if header[0] != 1 && header[0] != 2 {
 				return LogRecord{}, fmt.Errorf("invalid Docker log stream %d", header[0])
 			}
@@ -166,6 +170,30 @@ func (r *LogReader) Next(ctx context.Context) (LogRecord, error) {
 		}
 	}
 }
+
+// System-error frames are terminal diagnostics, never application log records.
+// Read only a fixed prefix, even when the daemon advertises a huge payload.
+func (r *LogReader) daemonError(ctx context.Context, size uint32) error {
+	const limit = 1024
+	prefix := make([]byte, min(size, limit))
+	n, err := io.ReadFull(r.reader, prefix)
+	if errors.Is(err, io.EOF) {
+		err = io.ErrUnexpectedEOF
+	}
+	if ctx.Err() != nil {
+		return ctx.Err()
+	}
+	text, cut := BoundLogText(string(prefix[:n]), limit-len(daemonDiagnosticTruncatedMarker))
+	if cut || size > limit {
+		text += daemonDiagnosticTruncatedMarker
+	}
+	diagnostic := "Docker daemon log error: " + text
+	if err != nil {
+		return fmt.Errorf("%s: %w", diagnostic, err)
+	}
+	return errors.New(diagnostic)
+}
+
 func (r *LogReader) name(stream int) string {
 	if r.tty {
 		return "combined"

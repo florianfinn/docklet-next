@@ -57,12 +57,12 @@ function ContainerLogs({ c }: { c: ContainerInfo }) {
         )}
       </CardHeader>
       <LogDeliveryNotice lines={lines} paused={paused} />
-      <div role="log" aria-label={t("logs")} aria-live={paused ? "off" : "polite"} className="h-80 overflow-auto bg-code py-2 font-mono text-[12px] leading-relaxed">
+      <div role="log" tabIndex={0} aria-label={t("logs")} aria-live={paused ? "off" : "polite"} className="h-80 overflow-auto bg-code py-2 font-mono text-[12px] leading-relaxed">
         {shown.length === 0 && <p className="px-4 py-6 text-center text-muted-foreground">{t("logsEmpty")}</p>}
         {shown.map((l) => (
           <div key={l.id} className={cn("flex gap-3 px-3 whitespace-pre-wrap", LEVEL_CLASS[l.level])}>
             <span className="shrink-0 text-muted-foreground/70 select-none">{formatTime(l.ts, true)}</span>
-            <span className="w-28 shrink-0 truncate text-muted-foreground"><LogSource line={l} /></span>
+            <span className="w-28 shrink-0 truncate text-muted-foreground select-none"><LogSource line={l} /></span>
             <span className="min-w-0 break-words"><LogMessage line={l} /></span>
           </div>
         ))}

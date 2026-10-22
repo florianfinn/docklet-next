@@ -4,7 +4,7 @@
 // License: Apache-2.0
 // Deviations: Original log mapping, byte bounds and arrival-order regressions.
 
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { boundLogLine, LogBuffer, logBytes, LOG_LINE_BYTES, LOG_MAX_BYTES, LOG_MAX_LINES } from "../log-buffer";
 import { logAddress, mapLog } from "./log-mapping";
 import { wireLog } from "./logs.test-support";
@@ -32,7 +32,7 @@ describe("runtime log mapping", () => {
   it.each([null, {}, { seq: 0, message: "x" }, { seq: 1.1, message: "x" }, { seq: 1, message: 0 }, { seq: 1, message: "x", timestamp: "wrong" }, { seq: 1, message: "x", stream: "invented" }, { seq: 1, message: "x", truncated: "true" }, { seq: 1, message: "x", service: 4 }])("refuses malformed mandatory or present optional fields %#", (value) => {
     expect(() => map(value)).toThrow();
   });
-  it.each(["1", "2026-01-02", "2026-02-30T03:04:05Z", "2026-01-02T24:00:00Z"])("rejects non-RFC3339 or impossible timestamps %s", (timestamp) => {
+  it.each(["1", "2026-01-02", "2026-02-30T03:04:05Z", "2026-01-02T24:00:00Z", "2026-02-29T03:04:05Z", "1900-02-29T03:04:05Z", "2026-01-02T03:04:60Z", "2026-01-02T03:04:05+24:00"])("rejects non-RFC3339 or impossible timestamps %s", (timestamp) => {
     expect(() => map({ ...wireLog(1), timestamp })).toThrow();
   });
   it("uses attempt and full resource scope instead of timestamp or text as identity", () => {
@@ -57,4 +57,17 @@ describe("runtime log mapping", () => {
     expect(published.reduce((sum, row) => sum + logBytes(row), 0) + buffer.bytes).toBeLessThanOrEqual(LOG_MAX_BYTES);
     expect(next.at(-1)?.seq).toBe(6000);
   });
+});
+
+it.each([
+  ["2026-01-02T03:04:05.123456789Z", "2026-01-02T03:04:05.123Z"],
+  ["2026-01-02T03:04:05.1234567890Z", "2026-01-02T03:04:05.123Z"],
+  ["2026-01-02T03:04:05.000000001+02:30", "2026-01-02T03:04:05.000+02:30"],
+  ["2000-02-29T23:59:59.9-03:00", "2000-02-29T23:59:59.900-03:00"],
+  ["0000-02-29T00:00:00Z", "0000-02-29T00:00:00.000Z"],
+])("normalizes RFC3339 nanosecond timestamps without engine-specific parsing: %s", (timestamp, expected) => {
+  const parse = vi.spyOn(Date, "parse").mockImplementation(() => { throw new Error("engine-specific parse"); });
+  try { expect(map({ ...wireLog(1), timestamp }).ts).toBe(expected); }
+  finally { parse.mockRestore(); }
+  expect(Number.isFinite(new Date(expected).getTime())).toBe(true);
 });
