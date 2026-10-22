@@ -13,7 +13,7 @@ import type { TreeNode } from "@/shared/workspace/file-tree";
 
 interface Draft { text: string; saved: string; revision: string; conflict?: boolean }
 const fileKey = (id: string, path: string) => ["project-workspace-file", id, path];
-export function useProjectWorkspace(id: string | null) {
+export function useProjectWorkspace(id: string | null, rawFile: "compose" | "env") {
   const adapter = useAdapter();
   const client = useQueryClient();
   const key = ["project-workspace", id];
@@ -21,9 +21,10 @@ export function useProjectWorkspace(id: string | null) {
   const tree = useQuery({ queryKey: key, queryFn: () => adapter.getProjectWorkspace!(id!), enabled: supported, retry: false });
   const [paths, setPaths] = useState<string[]>([]);
   const [selected, setSelected] = useState<string | null>(null);
-  const [active, setActive] = useState<string | null>(null);
-  const activeView = useRef(active);
-  useLayoutEffect(() => { activeView.current = active; }, [active]);
+  const [active, setActiveState] = useState<string | null>(null);
+  function setActive(path: string | null) { setActiveState(path); if (path !== null) setSelected(path); }
+  const activeView = useRef(`${active ?? rawFile}:${selected ?? ""}`);
+  useLayoutEffect(() => { activeView.current = `${active ?? rawFile}:${selected ?? ""}`; }, [active, rawFile, selected]);
   const [drafts, setDrafts] = useState<Record<string, Draft>>({});
   const latestDrafts = useRef(drafts);
   useLayoutEffect(() => { latestDrafts.current = drafts; }, [drafts]);

@@ -3,6 +3,7 @@ import { useTranslations } from "use-intl";
 
 import { baseName } from "@/domain/files";
 import { formatBytes } from "@/domain/format";
+import { Alert, AlertDescription } from "@/shared/ui/alert";
 import { Button } from "@/shared/ui/button";
 import { Spinner } from "@/shared/ui/spinner";
 import { CodeEditor } from "@/shared/workspace/code-editor";
@@ -47,7 +48,7 @@ export function FileBody({ file, onEdit, onSave, onDownload, readOnly = false }:
         }
       />
     );
-  return <>{file.conflict && <p role="alert" className="p-3 text-warning">{t("workspaceErrors.conflict")}</p>}<CodeEditor key={`${file.path}:${readOnly}`} readOnly={readOnly} value={file.text} onChange={onEdit} language={languageFor(name)} label={t("editorLabel", { name })} describedBy="file-editor-help" onSave={file.conflict || readOnly ? undefined : onSave} /></>;
+  return <>{file.conflict && <Alert><AlertDescription>{t("workspaceErrors.conflict")}</AlertDescription></Alert>}<CodeEditor key={`${file.path}:${readOnly}`} readOnly={readOnly} value={file.text} onChange={onEdit} language={languageFor(name)} label={t("editorLabel", { name })} describedBy="file-editor-help" onSave={file.conflict || readOnly ? undefined : onSave} /></>;
 }
 
 /** Status line of the active file tab. */

@@ -20,6 +20,7 @@ import { useAdapter } from "@/data/use-adapter";
 import { ops, uniqueKey, type Mutator } from "@/domain/compose/ops";
 import type { Host, Stack } from "@/domain/model";
 import { sameStackLabels } from "@/domain/stack-labels";
+import { Alert, AlertDescription } from "@/shared/ui/alert";
 import { ToneBadge } from "@/shared/components/tone";
 import { setPreference, usePreference } from "@/shared/preferences/preferences-store";
 import { AsideToggle, Workspace, WorkspaceFrame } from "@/shared/workspace/workspace";
@@ -61,7 +62,8 @@ export function StackWorkspace(props: StackWorkspaceProps) {
 function StackWorkspaceBody({ draft, stack, hosts, labelSuggestions, mode, onMode }: StackWorkspaceProps) {
   const t = useTranslations("editor");
   const tv = useTranslations("volumes.files");
-  const extra = useProjectWorkspace(stack?.id ?? null);
+  const [file, setFile] = useState<WorkspaceFile>("compose");
+  const extra = useProjectWorkspace(stack?.id ?? null, file);
   const extraCapability = useCapability("updateProjectWorkspace", { kind: "stack", id: stack?.id ?? "" });
   const extraDownload = useCapability("downloadProjectFile", { kind: "stack", id: stack?.id ?? "" });
   const actionLock = useRef(false);
@@ -88,7 +90,6 @@ function StackWorkspaceBody({ draft, stack, hosts, labelSuggestions, mode, onMod
   const extraBlocked = extra.dirty && (extra.conflicted || extra.tree.isError || !extraCapability.available) ? extraCapability.reason ?? tv("workspaceErrors.conflict") : undefined;
   const saveBlocked = filesBlocked ?? extraBlocked ?? (!saveCapability.available ? saveCapability.reason : labelsChanged && !labelCapability.available ? labelCapability.reason : undefined);
   const deployBlocked = filesBlocked ?? extraBlocked ?? (!deployCapability.available ? deployCapability.reason : undefined);
-  const [file, setFile] = useState<WorkspaceFile>("compose");
   const [wizard, setWizard] = useState<WizardState>({ step: stack ? 2 : 1, service: null, section: "general" });
   const aside = usePreference("workspaceAside");
   const [dialog, setDialog] = useState<"run" | "import" | null>(null);
@@ -142,7 +143,7 @@ function StackWorkspaceBody({ draft, stack, hosts, labelSuggestions, mode, onMod
     if (!stack) return;
     let wroteCompose = false;
     try {
-      if (draft.composeDirty || draft.envDirty) {
+      if (draft.dirty) {
         await adapter.saveStackFiles(stack.id, draft.compose, draft.env);
         wroteCompose = true;
       }
@@ -224,7 +225,7 @@ function StackWorkspaceBody({ draft, stack, hosts, labelSuggestions, mode, onMod
 
   return (
     <WorkspaceFrame>
-      {partialSave && <p role="alert" className="rounded-lg border border-warning/30 p-3">{t("extraFiles.partialSave")}</p>}
+      {partialSave && <Alert><AlertTriangle /><AlertDescription>{t("extraFiles.partialSave")}</AlertDescription></Alert>}
       {filesBlocked && <p role="alert" className="rounded-lg border border-warning/30 bg-warning/8 px-3 py-2 text-sm text-warning">{filesBlocked}</p>}
       <div className="flex flex-wrap items-center gap-2">
         <SegmentedToggle
@@ -287,6 +288,8 @@ function StackWorkspaceBody({ draft, stack, hosts, labelSuggestions, mode, onMod
             edit={edit}
             onEditError={(m) => toast.error(m)}
             onOpenRaw={() => {
+              extra.setActive(null);
+              extra.setSelected(null);
               setFile("compose");
               onMode("advanced");
             }}
@@ -307,7 +310,7 @@ function StackWorkspaceBody({ draft, stack, hosts, labelSuggestions, mode, onMod
               hostId={draft.hostId}
               stackId={stack?.id ?? null}
               active={extra.active ? null : file}
-              activeExtra={extra.active ?? extra.selected}
+              activeExtra={extra.selected ?? extra.active}
               extraFiles={extra.nodes}
               onOpenExtra={(path, directory) => { extra.setSelected(path); if (!directory) extra.open(path); }}
               composeDirty={draft.composeDirty}

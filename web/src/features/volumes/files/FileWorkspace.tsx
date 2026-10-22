@@ -193,15 +193,15 @@ function VolumeFileWorkspace({ volume, warning }: { volume: Volume; warning?: st
         </Button>
         {!singleFile && (
           <>
-            <Button variant="outline" size="sm" disabled={!createCapability.available || cmd.busy || listing.isPlaceholderData || listing.isError} title={createCapability.reason} onClick={() => setPending({ kind: "create", type: "dir" })}>
+            <Button variant="outline" size="sm" disabled={!createCapability.available || cmd.busy || listing.isPending || listing.isPlaceholderData || listing.isError} title={createCapability.reason} onClick={() => setPending({ kind: "create", type: "dir" })}>
               <FolderPlus data-icon="inline-start" />
               {t("newFolder")}
             </Button>
-            <Button variant="outline" size="sm" disabled={!createCapability.available || cmd.busy || listing.isPlaceholderData || listing.isError} title={createCapability.reason} onClick={() => setPending({ kind: "create", type: "file" })}>
+            <Button variant="outline" size="sm" disabled={!createCapability.available || cmd.busy || listing.isPending || listing.isPlaceholderData || listing.isError} title={createCapability.reason} onClick={() => setPending({ kind: "create", type: "file" })}>
               <FilePlus2 data-icon="inline-start" />
               {t("newFile")}
             </Button>
-            <Button size="sm" disabled={!uploadCapability.available || cmd.busy || listing.isPlaceholderData || listing.isError} title={uploadCapability.reason} onClick={() => upload.current?.click()}>
+            <Button size="sm" disabled={!uploadCapability.available || cmd.busy || listing.isPending || listing.isPlaceholderData || listing.isError} title={uploadCapability.reason} onClick={() => upload.current?.click()}>
               <Upload data-icon="inline-start" />
               {t("upload")}
             </Button>

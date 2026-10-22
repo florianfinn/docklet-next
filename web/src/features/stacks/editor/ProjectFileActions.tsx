@@ -10,9 +10,9 @@ import { baseName, parentPath } from "@/domain/files";
 import { useCapability } from "@/data/use-capability";
 import { ConfirmDialog } from "@/shared/components/confirm-dialog";
 import { Button } from "@/shared/ui/button";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/shared/ui/dialog";
-import { Input } from "@/shared/ui/input";
-import { Label } from "@/shared/ui/label";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/shared/ui/dialog";
+import { TextField } from "@/shared/components/form-field";
+import { FieldGroup } from "@/shared/ui/field";
 import type { ProjectWorkspace } from "./use-project-workspace";
 
 export function ProjectFileActions({ workspace, id, busy, report }: { workspace: ProjectWorkspace; id: string; busy: boolean; report: (error: unknown) => void }) {
@@ -46,9 +46,9 @@ export function ProjectFileActions({ workspace, id, busy, report }: { workspace:
     }} />
     {workspace.tree.isError && <Button size="sm" onClick={() => void workspace.tree.refetch()}>{t("retry")}</Button>}
     <Dialog open={dialog !== null && dialog !== "delete"} onOpenChange={(on) => !on && setDialog(null)}>
-      <DialogContent><DialogHeader><DialogTitle>{dialog === "rename" ? t("rename") : dialog === "folder" ? t("folder") : t("create")}</DialogTitle></DialogHeader>
-        <form onSubmit={(event) => { event.preventDefault(); void apply(); }} className="grid gap-3">
-          <Label htmlFor="project-file-path">{dialog === "rename" ? t("name") : t("path")}</Label><Input id="project-file-path" value={value} onChange={(event) => setValue(event.target.value)} aria-invalid={error} />
+      <DialogContent><DialogHeader><DialogTitle>{dialog === "rename" ? t("rename") : dialog === "folder" ? t("folder") : t("create")}</DialogTitle><DialogDescription>{t("pathHint")}</DialogDescription></DialogHeader>
+        <form onSubmit={(event) => { event.preventDefault(); void apply(); }} className="flex flex-col gap-3">
+          <FieldGroup><TextField id="project-file-path" label={dialog === "rename" ? t("name") : t("path")} value={value} onChange={setValue} error={error ? t("pathInvalid") : undefined} mono /></FieldGroup>
           <Button type="submit" disabled={workspace.saving || !value.trim()}>{t("apply")}</Button>
         </form>
       </DialogContent>

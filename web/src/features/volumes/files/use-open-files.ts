@@ -56,12 +56,12 @@ export function useOpenFiles(volumeId: string, fileParam: string | null) {
   const files: OpenFile[] = paths.map((path, i) => {
     const q = results[i];
     const data = q?.data as VolumeFileContent | undefined;
-    const saved = data?.content ?? "";
-    const editable = !!data?.editable;
     const draft = drafts[path];
+    const saved = draft?.baseline?.content ?? data?.content ?? "";
+    const editable = !!data?.editable || !!draft;
     return {
       path,
-      status: q?.isError ? "error" : data ? "ready" : "loading",
+      status: draft ? "ready" : q?.isError ? "error" : data ? "ready" : "loading",
       errorCode: q?.isError ? (errorCode(q.error) ?? workspaceErrorKey(q.error)) : undefined,
       saved,
       text: draft?.text ?? saved,
@@ -69,7 +69,7 @@ export function useOpenFiles(volumeId: string, fileParam: string | null) {
       conflict: draft?.conflict,
       editable,
       size: data?.size ?? 0,
-      dirty: editable && draft !== undefined && draft.text !== saved,
+      dirty: draft !== undefined && (draft.text !== saved || !!draft.conflict),
       retry: () => void q?.refetch(),
     };
   });

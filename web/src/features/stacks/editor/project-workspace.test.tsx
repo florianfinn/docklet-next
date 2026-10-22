@@ -9,8 +9,43 @@ import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { simulationStore } from "@/data/demo/simulation";
 import { WorkspaceConflictError, WorkspaceError } from "@/data/http/workspace";
-import type { WorkspaceContent } from "@/data/api";
-import { content, deferred, projectFixture, replaceText, tree } from "./project-workspace.test-support";
+import type { WorkspaceContent, WorkspaceTree } from "@/data/api";
+import { EditorView } from "@codemirror/view";
+import { useIsFetching } from "@tanstack/react-query";
+import { useState } from "react";
+import { useParams } from "react-router";
+import type { DockletAdapter } from "@/data/adapter";
+import { createDemoAdapter } from "@/data/demo/demo-adapter";
+import type { Stack } from "@/domain/model";
+import { renderRoutes } from "@/test/render";
+import { StackWorkspace } from "./StackWorkspace";
+import { useComposeDraft } from "./use-compose-draft";
+
+const tree: WorkspaceTree = {
+  files: ["a.txt", "b.txt"].map((name) => ({ name, relativePath: name, path: `/projects/example/${name}`, editable: true, isDirectory: false, isSymlink: false, modTime: "2026-10-22T12:00:00Z", size: 3 })),
+  fileTreeRevision: "r1", fileTreeTruncated: false,
+};
+const content = (path: string, value = "old"): WorkspaceContent => ({ name: path, path: `/projects/example/${path}`, relativePath: path, content: value, editable: true, mimeType: "text/plain", size: value.length });
+function deferred<T>() { let resolve!: (value: T) => void; let reject!: (cause: unknown) => void; const promise = new Promise<T>((a, b) => { resolve = a; reject = b; }); return { promise, resolve, reject }; }
+function replaceText(label: string, value: string) { const view = EditorView.findFromDOM(screen.getByRole("textbox", { name: label }))!; act(() => view.dispatch({ changes: { from: 0, to: view.state.doc.length, insert: value } })); }
+const compose = "name: example\nservices:\n  app:\n    image: nginx:1.29-alpine\n";
+function Page() { const { id = "edge~example" } = useParams(); const fetching = useIsFetching({ queryKey: ["project-workspace-file"] }); return <><output data-testid="file-reads">{fetching}</output><EditorPage key={id} id={id} /></>; }
+function EditorPage({ id }: { id: string }) {
+  const [mode, setMode] = useState<"easy" | "advanced">("advanced");
+  const draft = useComposeDraft({ compose, env: "", hostId: id.split("~")[0]!, labels: [] });
+  const stack = { id, hostId: draft.hostId, name: "example", labels: [] } as unknown as Stack;
+  return <StackWorkspace draft={draft} stack={stack} hosts={[]} labelSuggestions={[]} mode={mode} onMode={setMode} />;
+}
+function projectFixture(overrides: Partial<DockletAdapter> = {}) {
+  const order: string[] = [];
+  const getProjectWorkspace = vi.fn(async () => tree);
+  const updateProjectWorkspace = vi.fn(async () => { order.push("extra"); return { ...tree, fileTreeRevision: "r2" }; });
+  const saveStackFiles = vi.fn(async () => { order.push("compose"); });
+  const deployStack = vi.fn(async () => { order.push("deploy"); return { stackId: "edge~example", actionId: "run" }; });
+  const adapter: DockletAdapter = { ...createDemoAdapter(), kind: "http", getProjectWorkspace, readProjectFile: vi.fn(async (_id, path) => content(path)), updateProjectWorkspace, saveStackFiles, deployStack, getCapability: async (operationId, resourceRef = { kind: "hub", id: "0" }) => ({ operationId, resourceRef, available: true }), ...overrides };
+  const rendered = renderRoutes([{ path: "/stacks/:id", element: <Page /> }, { path: "/elsewhere", element: <p>Elsewhere</p> }], ["/stacks/edge~example?tab=editor"], adapter);
+  return { ...rendered, adapter, order, getProjectWorkspace, updateProjectWorkspace, saveStackFiles, deployStack };
+}
 
 beforeEach(() => simulationStore.set((s) => ({ ...s, latency: "instant", live: false })));
 afterEach(() => { simulationStore.reset(); localStorage.clear(); });
@@ -75,6 +110,7 @@ describe("project workspace lifecycle", () => {
     await waitFor(() => expect(readProjectFile).toHaveBeenCalledWith("edge~example", "a.txt"));
     await openFile("b.txt");
     await act(async () => { late.resolve(content("a.txt", "late A")); await late.promise; });
+    await waitFor(() => expect(screen.getByTestId("file-reads").textContent).toBe("0"));
     expect(screen.getByRole("textbox", { name: "Inhalt von b.txt" }).textContent).toBe("current B");
   });
   it("ignores late responses after changing stack and host", async () => {
@@ -86,6 +122,7 @@ describe("project workspace lifecycle", () => {
     await act(async () => { await router.navigate("/stacks/direct~other?tab=editor"); });
     await openFile("b.txt");
     await act(async () => { late.resolve(content("a.txt", "old host")); await late.promise; });
+    await waitFor(() => expect(screen.getByTestId("file-reads").textContent).toBe("0"));
     expect(screen.queryByRole("tab", { name: "a.txt" }) === null).toBe(true);
     expect(screen.getByRole("textbox", { name: "Inhalt von b.txt" }).textContent).toBe("new host");
   });
@@ -173,5 +210,82 @@ describe("project tree gestures and read-only states", () => {
     await waitFor(() => expect((screen.getByRole("button", { name: "Dateien hochladen" }) as HTMLButtonElement).disabled).toBe(false));
     expect(screen.queryByRole("tab", { name: "one.bin" }) === null).toBe(true);
     expect(screen.queryByRole("tab", { name: "two.txt" }) === null).toBe(true);
+  });
+});
+
+describe("save and deploy snapshot ownership", () => {
+  it("keeps newer text and defers deploy when it was typed during save", async () => {
+    const pending = deferred<typeof tree>(); const updateProjectWorkspace = vi.fn(() => pending.promise);
+    const { deployStack } = projectFixture({ updateProjectWorkspace });
+    await openFile(); replaceText("Inhalt von a.txt", "submitted");
+    await userEvent.click(screen.getByRole("button", { name: "Speichern & Redeploy" }));
+    await waitFor(() => expect(updateProjectWorkspace).toHaveBeenCalledTimes(1));
+    replaceText("Inhalt von a.txt", "typed meanwhile");
+    await act(async () => { pending.resolve({ ...tree, fileTreeRevision: "r2" }); await pending.promise; });
+    await waitFor(() => expect((screen.getByRole("button", { name: "Speichern" }) as HTMLButtonElement).disabled).toBe(false));
+    expect(deployStack).toHaveBeenCalledTimes(0);
+    expect(screen.getByRole("textbox", { name: "Inhalt von a.txt" }).textContent).toBe("typed meanwhile");
+  });
+});
+
+describe("late tree gesture completion", () => {
+  it("keeps the current env tab when a dismissed create dialog completes", async () => {
+    const pending = deferred<typeof tree>(); const updateProjectWorkspace = vi.fn(() => pending.promise);
+    projectFixture({ updateProjectWorkspace });
+    const create = await screen.findByRole("button", { name: "Neue Datei" });
+    await waitFor(() => expect((create as HTMLButtonElement).disabled).toBe(false));
+    await userEvent.click(create);
+    await userEvent.type(within(await screen.findByRole("dialog")).getByRole("textbox", { name: "Relativer Pfad" }), "new.txt");
+    await userEvent.click(screen.getByRole("button", { name: "Anwenden" }));
+    await waitFor(() => expect(updateProjectWorkspace).toHaveBeenCalledTimes(1));
+    await userEvent.keyboard("{Escape}");
+    await userEvent.click(within(screen.getByRole("navigation", { name: "Dateien" })).getByRole("button", { name: ".env" }));
+    await screen.findByRole("textbox", { name: "Inhalt von .env" });
+    await act(async () => { pending.resolve({ ...tree, fileTreeRevision: "r2" }); await pending.promise; });
+    await waitFor(() => expect((screen.getByRole("button", { name: "Neue Datei" }) as HTMLButtonElement).disabled).toBe(false));
+    expect(screen.getByRole("textbox", { name: "Inhalt von .env" }) !== null).toBe(true);
+    expect(screen.queryByRole("tab", { name: "new.txt" }) === null).toBe(true);
+  });
+});
+
+describe("project conflict replacement states", () => {
+  for (const replacement of ["binary", "missing"] as const) {
+    it(`keeps the draft visible after a ${replacement} replacement on the server`, async () => {
+      let reads = 0;
+      projectFixture({ updateProjectWorkspace: async () => { throw new WorkspaceConflictError(); }, readProjectFile: async (_id, path) => {
+        if (++reads === 1) return content(path);
+        if (replacement === "missing") throw new WorkspaceError("not-found");
+        return { ...content(path), content: undefined, editable: false, readOnlyReason: "binary" };
+      } });
+      await openFile(); replaceText("Inhalt von a.txt", "my draft");
+      await userEvent.click(screen.getByRole("button", { name: "Speichern" }));
+      await screen.findByRole("alert");
+      await waitFor(() => expect(screen.getByTestId("file-reads").textContent).toBe("0"));
+      expect(screen.getByRole("textbox", { name: "Inhalt von a.txt" }).textContent).toBe("my draft");
+    });
+  }
+});
+
+describe("file command target ownership", () => {
+  it("targets the active project file after switching between open tabs", async () => {
+    projectFixture();
+    await openFile("a.txt");
+    await openFile("b.txt");
+    await userEvent.click(screen.getByRole("tab", { name: "a.txt" }));
+    await userEvent.click(screen.getByRole("button", { name: "Umbenennen" }));
+    const input = within(await screen.findByRole("dialog")).getByRole("textbox", { name: "Neuer Name" }) as HTMLInputElement;
+    expect(input.value).toBe("a.txt");
+  });
+});
+
+describe("returning to the Compose editor", () => {
+  it("opens Compose when fixing invalid YAML from Easy after an extra file", async () => {
+    projectFixture();
+    await screen.findByRole("textbox", { name: "Inhalt von compose.yaml" });
+    replaceText("Inhalt von compose.yaml", "services: [");
+    await openFile("a.txt");
+    await userEvent.click(within(screen.getByRole("radiogroup", { name: "Bearbeitungsmodus" })).getByRole("radio", { name: "Easy" }));
+    await userEvent.click(screen.getByRole("button", { name: "In Advanced beheben" }));
+    expect((await screen.findByRole("textbox", { name: "Inhalt von compose.yaml" })).textContent).toBe("services: [");
   });
 });

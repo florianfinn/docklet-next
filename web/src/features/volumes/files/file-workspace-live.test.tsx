@@ -4,6 +4,7 @@
 // License: Apache-2.0
 // Deviations: Original live workspace lifecycle regressions for issue #182.
 
+import { useIsFetching } from "@tanstack/react-query";
 import { EditorView } from "@codemirror/view";
 import { act, fireEvent, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
@@ -25,8 +26,9 @@ function deferred<T>() { let resolve!: (value: T) => void; let reject!: (error: 
 function edit(text: string) { const view = EditorView.findFromDOM(screen.getByRole("textbox", { name: /^Inhalt von/ }))!; act(() => view.dispatch({ changes: { from: 0, to: view.state.doc.length, insert: text } })); }
 function Page() {
   const { id = "edge~data" } = useParams();
+  const fetching = useIsFetching({ queryKey: ["files"] });
   const volume: Volume = { id, hostId: id.split("~")[0]!, name: "data", createdAt: "2026-10-22T12:00:00Z", kind: "volume", sizeBytes: 0, consumers: [], source: "", labels: {} };
-  return <FileWorkspace volume={volume} />;
+  return <><output data-testid="file-reads">{fetching}</output><FileWorkspace volume={volume} /></>;
 }
 function fixture(overrides: Partial<DockletAdapter> = {}) {
   const listFiles = vi.fn(async (volumeId: string, path: string) => ({ volumeId, path, revision: "r1", entries: ["a.txt", "b.txt"].map((name) => ({ name, path: `/${name}`, editable: true, type: "file" as const, size: 3, modifiedAt: "2026-10-22T12:00:00Z" })) }));
@@ -44,6 +46,7 @@ describe("workspace lifecycle: late responses, unsaved navigation, conflicts and
     await act(async () => { await router.navigate("/volumes/edge~data?tab=files&file=%2Fb.txt"); });
     await screen.findByRole("textbox", { name: "Inhalt von b.txt" });
     await act(async () => { late.resolve(file("/a.txt", "late A")); await late.promise; });
+    await waitFor(() => expect(screen.getByTestId("file-reads").textContent).toBe("0"));
     expect(screen.getByRole("textbox", { name: "Inhalt von b.txt" }).textContent).toBe("current B");
   });
   it("isolates files and drafts when the volume and host change", async () => {
@@ -54,6 +57,7 @@ describe("workspace lifecycle: late responses, unsaved navigation, conflicts and
     await act(async () => { await router.navigate("/volumes/direct~other?tab=files&file=%2Fb.txt"); });
     await screen.findByRole("textbox", { name: "Inhalt von b.txt" });
     await act(async () => { late.resolve(file("/a.txt", "late old host")); await late.promise; });
+    await waitFor(() => expect(screen.getByTestId("file-reads").textContent).toBe("0"));
     expect(screen.queryByRole("tab", { name: /^a.txt/ }) === null).toBe(true);
     expect(screen.getByRole("textbox", { name: "Inhalt von b.txt" }).textContent).toBe("new host");
   });
@@ -112,4 +116,71 @@ describe("workspace lifecycle: late responses, unsaved navigation, conflicts and
     await waitFor(() => expect(input.value).toBe(""));
     expect(uploadFile).toHaveBeenCalledTimes(2);
   });
+});
+
+describe("live volume file gestures", () => {
+  it("creates a file and folder, renames the file and deletes it", async () => {
+    let names = ["a.txt", "b.txt"];
+    const entries = () => names.map((name) => ({ name, path: `/${name}`, editable: true, type: name === "folder" ? "dir" as const : "file" as const, size: 3, modifiedAt: "2026-10-22T12:00:00Z" }));
+    const createEntry = vi.fn(async (_id, _dir, name) => { names.push(name); });
+    const renameEntry = vi.fn(async (_id, path, name) => { names = names.map((old) => `/${old}` === path ? name : old); });
+    const deleteEntry = vi.fn(async (_id, path) => { names = names.filter((name) => `/${name}` !== path); });
+    fixture({ createEntry, renameEntry, deleteEntry, listFiles: async (volumeId, path) => ({ volumeId, path, revision: "r1", entries: entries() }) });
+    await screen.findByRole("textbox", { name: "Inhalt von a.txt" });
+    await userEvent.click(screen.getByRole("button", { name: "Neue Datei" }));
+    await userEvent.type(within(await screen.findByRole("dialog")).getByRole("textbox", { name: "Name" }), "new.txt");
+    await userEvent.click(screen.getByRole("button", { name: "Anlegen" }));
+    await screen.findByRole("textbox", { name: "Inhalt von new.txt" });
+    expect(createEntry).toHaveBeenCalledWith("edge~data", "/", "new.txt", "file", "r1");
+    await userEvent.click(screen.getByRole("button", { name: "Neuer Ordner" }));
+    await userEvent.type(within(await screen.findByRole("dialog")).getByRole("textbox", { name: "Name" }), "folder");
+    await userEvent.click(screen.getByRole("button", { name: "Anlegen" }));
+    await waitFor(() => expect(screen.queryByRole("dialog") === null).toBe(true));
+    await userEvent.click(screen.getByRole("tab", { name: /^Wurzel/ }));
+    await userEvent.click(await screen.findByRole("button", { name: "Aktionen für new.txt" }));
+    await userEvent.click(screen.getByRole("menuitem", { name: "Umbenennen" }));
+    const input = within(await screen.findByRole("dialog")).getByRole("textbox", { name: "Name" });
+    await userEvent.clear(input); await userEvent.type(input, "renamed.txt");
+    await userEvent.click(screen.getByRole("button", { name: "Umbenennen" }));
+    await userEvent.click(await screen.findByRole("button", { name: "Aktionen für renamed.txt" }));
+    await userEvent.click(screen.getByRole("menuitem", { name: "Löschen" }));
+    await userEvent.click(within(await screen.findByRole("alertdialog")).getByRole("button", { name: "Löschen" }));
+    await waitFor(() => expect(screen.queryByRole("button", { name: "Aktionen für renamed.txt" }) === null).toBe(true));
+    expect(renameEntry).toHaveBeenCalledWith("edge~data", "/new.txt", "renamed.txt", "r1");
+    expect(deleteEntry).toHaveBeenCalledWith("edge~data", "/renamed.txt", "r1");
+  });
+  it("downloads binary content through the download port without opening it as text", async () => {
+    const blob = new Blob([new Uint8Array([0, 255])]); const downloadFile = vi.fn(async () => blob);
+    const objectUrl = vi.spyOn(URL, "createObjectURL").mockReturnValue("blob:example");
+    const click = vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(() => {});
+    fixture({ downloadFile, readFile: async (_id, path) => ({ ...file(path), editable: false, readOnlyReason: "binary", content: "" }) });
+    await screen.findByText("Nicht als Text bearbeitbar");
+    await userEvent.click(screen.getAllByRole("button", { name: "Herunterladen" })[0]!);
+    await waitFor(() => expect(click).toHaveBeenCalledTimes(1));
+    expect(downloadFile).toHaveBeenCalledWith("edge~data", "/a.txt");
+    expect(objectUrl).toHaveBeenCalledWith(blob);
+    expect(screen.queryByRole("textbox", { name: "Inhalt von a.txt" }) === null).toBe(true);
+  });
+});
+
+describe("conflict recovery retains the user's draft", () => {
+  for (const replacement of ["binary", "missing"] as const) {
+    it(`keeps text visible when the server replacement is ${replacement}`, async () => {
+      let reads = 0;
+      fixture({
+        writeFile: async () => { throw new WorkspaceConflictError(); },
+        readFile: async (_id, path) => {
+          if (++reads === 1) return file(path, "old");
+          if (replacement === "missing") throw new WorkspaceError("not-found");
+          return { ...file(path, ""), editable: false, readOnlyReason: "binary" };
+        },
+      });
+      await screen.findByRole("textbox", { name: "Inhalt von a.txt" }); edit("my draft");
+      await userEvent.click(screen.getByRole("button", { name: "Speichern" }));
+      await screen.findByRole("alert");
+      await waitFor(() => expect(screen.getByTestId("file-reads").textContent).toBe("0"));
+      expect(screen.getByRole("textbox", { name: "Inhalt von a.txt" }).textContent).toBe("my draft");
+      expect(screen.getByText("Ungespeicherte Änderungen", { selector: "[aria-live]" }) !== null).toBe(true);
+    });
+  }
 });

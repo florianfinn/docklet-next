@@ -7,6 +7,7 @@
 import { describe, expect, it, vi } from "vitest";
 import type { WorkspaceGesture } from "@/data/api";
 import { AdapterOutcomeError } from "@/data/capability";
+import { missingWorkspaceFile, staleWorkspace } from "./workspace-smoke.test-support";
 import { createWorkspaceTransport, workspaceManifest, WorkspaceConflictError, WorkspaceError } from "./workspace";
 
 // Compared with Get*Workspace/File handlers, types/workspace and
@@ -24,7 +25,7 @@ const gestures: WorkspaceGesture[] = [
 
 export function workspaceFixture() {
   const response = { status: 200, code: "", data: workspaceTree as unknown, allowed: true };
-  const fetcher = vi.fn(async () => new Response(JSON.stringify(response.status < 300 ? { success: true, data: response.data } : { code: response.code || undefined, detail: "Workspace request failed" }), { status: response.status }));
+  const fetcher = vi.fn(async () => new Response(JSON.stringify(response.status < 300 ? { success: true, data: response.data } : { ...(response.status === 404 ? missingWorkspaceFile : response.status === 409 ? staleWorkspace : { detail: "Workspace request failed" }), code: response.code || undefined }), { status: response.status }));
   const capability = vi.fn(async (operationId: string, resourceRef: { kind: string; id: string }) => ({ operationId, resourceRef, available: response.allowed }));
   const transport = createWorkspaceTransport({ baseUrl: "/api", client: { fetch: fetcher as typeof fetch, token: async () => "example" }, capability });
   return { response, fetcher, capability, transport };
