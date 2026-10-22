@@ -84,7 +84,7 @@ export function bindPresentation(runId: string, presentation: ActionPresentation
  */
 export async function startPresented<T extends string | undefined>(scope: { stackId: string; kinds?: ReadonlySet<ActionKind> }, presentation: ActionPresentation, start: () => Promise<T>): Promise<T> {
   const generation = presentationGeneration;
- const claim: PresentationClaim = { id: claimSeq++, stackId: scope.stackId, kinds: scope.kinds ?? DEPLOY_KINDS, presentation };
+  const claim: PresentationClaim = { id: claimSeq++, stackId: scope.stackId, kinds: scope.kinds ?? DEPLOY_KINDS, presentation };
   presentationStore.set((s) => ({ ...s, claims: [...s.claims, claim] }));
   pendingStarts++;
   try {
