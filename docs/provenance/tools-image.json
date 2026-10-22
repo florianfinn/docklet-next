@@ -44,6 +44,12 @@
       "modifications": "Per-file deviations in deploy/tools headers.",
       "legalFiles": [
         {
+          "path": "third_party/arcane/kit/LICENSE",
+          "imagePath": "/usr/share/licenses/docklet-tools/Arcane-Tools-BSD-3-Clause.txt",
+          "sha256": "9d371b9f228795be4e033d01901dd42822f8e5ce82a0710fcec2769b99d81027",
+          "evidence": "Byte-identical to getarcaneapp/tools/LICENSE at the selected recipe commit; both credit Arcane, 2026. The additional legacy Arcane notice is retained independently."
+        },
+        {
           "path": "LICENSES/BSD-3-Clause-Arcane.txt",
           "imagePath": "/usr/share/licenses/docklet-tools/Arcane-BSD-3-Clause.txt",
           "sha256": "9618cc2d4716242ffc576d177e3c325da67c27cd973d449b1bdb31ecefde57c5"

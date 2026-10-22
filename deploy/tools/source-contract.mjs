@@ -31,9 +31,11 @@ try {
   assert.match(generated.toString(), /^CONFIG_STATIC=y$/m);
   const runtimeConfig = command("docker", ["run", "--rm", "--network", "none", "--label", "t3.project=docklet-next",
     runtime, "head", "-c", "1000000", "/usr/share/licenses/docklet-tools/busybox.config"]);
-  assert.deepEqual(generated, runtimeConfig, "source configuration is the binary's build configuration");
+  assert.equal(generated.equals(runtimeConfig), true, "source configuration is the binary's build configuration");
   for (const file of ["Dockerfile", "build.mjs", "inputs.env", "busybox.config", "applets.txt"])
-    assert.deepEqual(extract(file), readFileSync(`deploy/tools/${file}`), `source recipe ${file}`);
+    assert.equal(extract(file).equals(readFileSync(`deploy/tools/${file}`)), true, `source recipe ${file}`);
+  assert.equal(extract("Arcane-Tools-BSD-3-Clause.txt").equals(readFileSync("third_party/arcane/kit/LICENSE")), true, "tools recipe source copyright");
+  assert.equal(extract("Apache-2.0.txt").equals(readFileSync("LICENSE")), true, "own build scripts source licence");
   assert.match(extract("toolchain-packages.txt").toString(), /^musl-/m);
   console.log(`tools source contract passed: exact tarball, generated static config, applets, recipe and toolchain manifest (${architecture(runtime)})`);
 } finally {

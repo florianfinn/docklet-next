@@ -82,6 +82,7 @@ LABEL t3.project=docklet-next org.opencontainers.image.source=https://github.com
 COPY --from=busybox /source/ /
 COPY LICENSE /Apache-2.0.txt
 COPY LICENSES/BSD-3-Clause-Arcane.txt /Arcane-BSD-3-Clause.txt
+COPY third_party/arcane/kit/LICENSE /Arcane-Tools-BSD-3-Clause.txt
 
 FROM scratch AS runtime
 LABEL t3.project=docklet-next org.opencontainers.image.source=https://github.com/florianfinn/docklet-next
@@ -90,6 +91,7 @@ COPY --from=busybox /out/ /
 COPY --from=downloads /out/ /
 COPY --from=acfs /out/ /
 COPY LICENSES/BSD-3-Clause-Arcane.txt /usr/share/licenses/docklet-tools/Arcane-BSD-3-Clause.txt
+COPY third_party/arcane/kit/LICENSE /usr/share/licenses/docklet-tools/Arcane-Tools-BSD-3-Clause.txt
 COPY LICENSES/NOTICE-Trivy.txt /usr/share/licenses/docklet-tools/Trivy-NOTICE.txt
 COPY LICENSES/MPL-2.0-Mozilla.txt /usr/share/licenses/docklet-tools/CA-MPL-2.0.txt
 COPY LICENSES/MIT-musl.txt /usr/share/licenses/docklet-tools/musl-COPYRIGHT.txt
