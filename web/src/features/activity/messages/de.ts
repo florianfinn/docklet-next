@@ -85,6 +85,7 @@ export const deActivity: typeof enActivity = {
     unconfirmedBody: "Der Befehl wurde angenommen. Die Bestätigung des Executors steht aus; der Abschluss ist nicht bestätigt. Den Befehl nicht wiederholen.",
     unknownBody: "Verlässliche Executor-Nachweise fehlen. Dieses Ziel bleibt gesperrt. Den Lauf aktualisieren oder nach dem Stoppen des Executors und Prüfen von Docker administrativ freigeben.",
     releasedBody: "Ein Administrator hat die Sperre freigegeben. Die Auswirkungen bleiben unbekannt; kein Befehl wurde wiederholt und kein Erfolg bestätigt.",
+    failedBody: "Der Ablauf oder seine Ausgabe ist fehlgeschlagen. Die Docker-Auswirkungen sind ungeprüft. Vor einer weiteren Aktion die Ausgabe und den tatsächlichen Zustand prüfen.",
     interruptedBody: "Der Ablauf wurde nach einer Unterbrechung beendet. Die Docker-Auswirkungen sind ungeprüft. Vor einer weiteren Aktion den tatsächlichen Zustand prüfen.",
     cancellingBody: "Der Abbruch wurde angefordert. Der Ablauf kann noch auslaufen; das Ziel bleibt bis zur Aufzeichnung des tatsächlichen Ergebnisses gesperrt.",
     cancelledBody: "Der Ablauf wurde nach dem Abbruch beendet. Bereits von Docker angenommene Auswirkungen werden dadurch nicht rückgängig gemacht.",
