@@ -53,16 +53,16 @@ func (s *VolumeService) requireVolumeHelperACFSInternal(ctx context.Context, vol
 	}
 	s.helperMu.Unlock()
 
-	stdout, stderr, err := s.execInContainerInternal(ctx, containerID, "", []string{"acfs", "version"})
+	stdout, _, err := s.execInContainerInternal(ctx, containerID, "", []string{"acfs", "version"})
 	if err != nil {
-		return fmt.Errorf("%s: %w", "volume workspace requires an ACFS-capable tools image: "+strings.TrimSpace(stderr), err)
+		return volumehelper.IncompatibleHelper(fmt.Errorf("ACFS version failed: %w", err))
 	}
 	var response types.VersionResponse
 	if unmarshalErr := json.Unmarshal([]byte(stdout), &response); unmarshalErr != nil {
-		return fmt.Errorf("parse ACFS tools-image capability: %w", unmarshalErr)
+		return volumehelper.IncompatibleHelper(unmarshalErr)
 	}
 	if response.Protocol < types.ProtocolVersion {
-		return fmt.Errorf("volume workspace requires ACFS protocol %d, tools image provides protocol %d", types.ProtocolVersion, response.Protocol)
+		return volumehelper.IncompatibleHelper(fmt.Errorf("require ACFS protocol %d, received %d", types.ProtocolVersion, response.Protocol))
 	}
 
 	s.helperMu.Lock()
@@ -76,7 +76,7 @@ func (s *VolumeService) requireVolumeHelperACFSInternal(ctx context.Context, vol
 func (s *VolumeService) toolsImageInternal() string {
 	registry := ""
 	if s.settingsService != nil {
-		registry = s.settingsService.GetSettingsConfig().ToolsImageRegistry.Value
+		registry = s.settingsService.GetSettingsConfig().ToolsImage.Value
 	}
 	return volumehelper.ToolsImage(registry)
 }
@@ -139,18 +139,12 @@ func (s *VolumeService) getVolumeHelperImageInternal(ctx context.Context, docker
 			return toolsImage, nil
 		}
 		pullErr = pullImageErr
-		slog.WarnContext(ctx, "volume service: failed to pull tools helper image, attempting arcane fallback", "error", pullImageErr.Error())
+		slog.WarnContext(ctx, "volume service: failed to pull configured tools helper image", "error", pullImageErr.Error())
 	} else {
-		pullErr = errors.New("image service unavailable")
-		slog.WarnContext(ctx, "volume service: image service unavailable, attempting arcane fallback")
+		return volumehelper.ResolveHelperImage(ctx, dockerClient, toolsImage)
 	}
 
-	if fallback, ok := volumehelper.ResolveArcaneRuntimeImage(ctx, dockerClient).Get(); ok {
-		slog.InfoContext(ctx, "volume service: helper image strategy selected", "strategy", "arcane-fallback", "source", fallback.Source, "image", fallback.Image)
-		return fallback.Image, nil
-	}
-
-	return "", fmt.Errorf("failed to resolve helper image: tools image unavailable and arcane fallback not found: %w", pullErr)
+	return "", fmt.Errorf("failed to resolve helper image: configured tools image unavailable: %w", pullErr)
 }
 
 func (s *VolumeService) acquireVolumeHelperInternal(ctx context.Context, volumeName string) (string, func(), error) {

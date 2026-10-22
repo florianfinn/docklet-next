@@ -7,7 +7,9 @@
 package workspace
 
 import (
+	"github.com/florianfinn/docklet-next/types/volume"
 	"net/http"
+	"reflect"
 
 	"github.com/danielgtaylor/huma/v2"
 
@@ -49,4 +51,13 @@ func RegisterRoutes(api huma.API, h *Handler) {
 	updateOperation := handlerutil.Operation("update-volume-workspace", http.MethodPut, basePath, "Update volume workspace", "", tag)
 	updateOperation.RequestBody = handlerutil.WorkspaceMultipartRequestBody("JSON encoded volume workspace manifest")
 	handlerutil.RegisterSecured(api, updateOperation, authz.PermVolumesRead, h.UpdateVolumeWorkspace)
+	for _, route := range []struct{ path, method string }{{basePath, "GET"}, {basePath, "PUT"}, {basePath + "/file", "GET"}, {basePath + "/file/download", "GET"}} {
+		item := api.OpenAPI().Paths[route.path]
+		operation := item.Get
+		if route.method == "PUT" {
+			operation = item.Put
+		}
+		operation.Responses["503"] = &huma.Response{Description: "Configured helper is incompatible; no file access occurred", Content: map[string]*huma.MediaType{"application/problem+json": {Schema: api.OpenAPI().Components.Schemas.Schema(reflect.TypeFor[volume.HelperIncompatibleError](), true, "")}}}
+	}
+
 }

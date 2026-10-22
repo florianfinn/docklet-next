@@ -20,6 +20,7 @@ import (
 	"gorm.io/gorm"
 
 	"github.com/florianfinn/docklet-next/backend/internal/config"
+	"github.com/florianfinn/docklet-next/backend/pkg/libarcane/volumehelper"
 	"github.com/florianfinn/docklet-next/backend/pkg/utils"
 )
 
@@ -44,7 +45,7 @@ func DefaultSettingsConfig() *Settings {
 		ActionPresentation:                    SettingVariable{Value: "dialog"},
 		AutoInjectEnv:                         SettingVariable{Value: "false"},
 		DefaultDeployPullPolicy:               SettingVariable{Value: "missing"},
-		ToolsImageRegistry:                    SettingVariable{Value: "ghcr.io"},
+		ToolsImage:                            SettingVariable{Value: volumehelper.DefaultToolsImage},
 		UpdateCheckRegistry:                   SettingVariable{Value: "auto"},
 		ScheduledPruneEnabled:                 SettingVariable{Value: "false"},
 		ScheduledPruneInterval:                SettingVariable{Value: "0 0 0 * * *"},

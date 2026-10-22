@@ -59,6 +59,10 @@ func NewHandler(service *Service, activityService *activity.ActivityService, app
 }
 
 func volumeWorkspaceHTTPErrorInternal(err error) error {
+	var incompatible *volume.HelperIncompatibleError
+	if errors.As(err, &incompatible) {
+		return incompatible
+	}
 	switch {
 	case errors.Is(err, common.ErrVolumeWorkspaceConflict):
 		return huma.Error409Conflict(err.Error())

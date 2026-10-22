@@ -85,49 +85,18 @@ func TestEnsureProjectRenameSourceVolumeDetachedInternal_ReturnsConflictWhenCont
 	require.Equal(t, []string{"stopped-container"}, inUseErr.ContainerIDs)
 }
 
-func TestGetProjectVolumeCopyRuntimeInternal_UsesArcaneAgentLabel(t *testing.T) {
-	var listCalls atomic.Int32
-
+func TestGetProjectVolumeCopyRuntimeInternalFailsWhenToolsCannotBePulled(t *testing.T) {
+	var runtimeLookups atomic.Int32
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		switch {
-		case strings.HasSuffix(r.URL.Path, "/containers/json"):
-			w.Header().Set("Content-Type", "application/json")
-			if listCalls.Add(1) == 1 {
-				if !assert.NoError(t, json.NewEncoder(w).Encode([]container.Summary{})) {
-					return
-				}
-				return
-			}
-			if !assert.NoError(t, json.NewEncoder(w).Encode([]container.Summary{
-				{
-					ID:    "agent-container",
-					Image: "arcane-agent:local",
-					State: container.StateRunning,
-				},
-			})) {
-				return
-			}
-		case strings.Contains(r.URL.Path, "/containers/agent-container/") && strings.HasSuffix(r.URL.Path, "/json"):
-			w.Header().Set("Content-Type", "application/json")
-			if !assert.NoError(t, json.NewEncoder(w).Encode(container.InspectResponse{
-				ID: "agent-container",
-				Config: &container.Config{
-					Image: "arcane-agent:local",
-					Cmd:   []string{"./arcane-agent"},
-				},
-			})) {
-				return
-			}
-		default:
-			http.NotFound(w, r)
+		if strings.Contains(r.URL.Path, "/containers/") {
+			runtimeLookups.Add(1)
 		}
+		w.WriteHeader(http.StatusNotFound)
 	}))
 	t.Cleanup(server.Close)
-
-	copyRuntime, err := getProjectVolumeCopyRuntimeInternal(t.Context(), newTestDockerClientInternal(t, server), volumehelper.ToolsImage(""))
-
-	require.NoError(t, err)
-	require.Equal(t, "arcane-agent:local", copyRuntime.Image)
+	_, err := getProjectVolumeCopyRuntimeInternal(t.Context(), newTestDockerClientInternal(t, server), volumehelper.ToolsImage(""))
+	require.ErrorContains(t, err, "failed to resolve helper image")
+	require.Zero(t, runtimeLookups.Load(), "rename cannot substitute the runtime image")
 }
 
 func TestDockerProjectVolumeRenameMigrationInternal_RollbackPreservesTargetWhenSourceMissing(t *testing.T) {

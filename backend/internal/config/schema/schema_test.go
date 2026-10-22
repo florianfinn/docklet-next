@@ -334,7 +334,7 @@ var expectedSettingOverrideKeys = []string{
 	"scheduledPruneEnabled",
 	"scheduledPruneInterval",
 	"setupCompleted",
-	"toolsImageRegistry",
+	"toolsImage",
 	"trivyConcurrentScanContainers",
 	"trivyConfig",
 	"trivyCpuLimit",

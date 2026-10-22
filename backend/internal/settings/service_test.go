@@ -104,7 +104,7 @@ func TestSettingsService_EnsureDefaultSettings_Idempotent(t *testing.T) {
 		"imageEventWatcherEnabled",
 		"vulnerabilityScanEnabled",
 		"vulnerabilityScanInterval",
-		"toolsImageRegistry",
+		"toolsImage",
 		"updateCheckRegistry",
 		"trivyDbRegistry",
 		"trivyNetwork",
@@ -130,8 +130,8 @@ func TestSettingsService_EnsureDefaultSettings_Idempotent(t *testing.T) {
 			require.Equal(t, "false", sv.Value)
 		case "vulnerabilityScanInterval":
 			require.Equal(t, "0 0 0 * * *", sv.Value)
-		case "toolsImageRegistry":
-			require.Equal(t, "ghcr.io", sv.Value)
+		case "toolsImage":
+			require.Equal(t, "ghcr.io/florianfinn/docklet-tools:0.1.0", sv.Value)
 		case "updateCheckRegistry":
 			require.Equal(t, "auto", sv.Value)
 		case "trivyDbRegistry":

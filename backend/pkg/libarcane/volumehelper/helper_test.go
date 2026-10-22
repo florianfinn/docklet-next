@@ -14,7 +14,6 @@ import (
 	"sync/atomic"
 	"testing"
 
-	"github.com/moby/moby/api/types/container"
 	"github.com/moby/moby/client"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -63,10 +62,10 @@ func TestResolveHelperImage_PullsToolsImageWhenMissing(t *testing.T) {
 			http.NotFound(w, r)
 		case r.Method == http.MethodPost && strings.HasSuffix(r.URL.Path, "/images/create"):
 			pullCalls.Add(1)
-			if !assert.Equal(t, "ghcr.io/getarcaneapp/tools", r.URL.Query().Get("fromImage")) {
+			if !assert.Equal(t, "ghcr.io/florianfinn/docklet-tools", r.URL.Query().Get("fromImage")) {
 				return
 			}
-			if !assert.Equal(t, "latest", r.URL.Query().Get("tag")) {
+			if !assert.Equal(t, "0.1.0", r.URL.Query().Get("tag")) {
 				return
 			}
 			w.Header().Set("Content-Type", "application/json")
@@ -87,54 +86,16 @@ func TestResolveHelperImage_PullsToolsImageWhenMissing(t *testing.T) {
 	require.EqualValues(t, 1, pullCalls.Load())
 }
 
-func TestResolveHelperImage_FallsBackToArcaneRuntimeWhenToolsPullFails(t *testing.T) {
+func TestResolveHelperImage_ReturnsPullErrorWithoutRuntimeFallback(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch {
 		case r.Method == http.MethodGet && strings.Contains(r.URL.Path, "/images/") && strings.HasSuffix(r.URL.Path, "/json"):
 			http.NotFound(w, r)
 		case r.Method == http.MethodPost && strings.HasSuffix(r.URL.Path, "/images/create"):
 			http.Error(w, "pull failed", http.StatusInternalServerError)
-		case r.Method == http.MethodGet && strings.HasSuffix(r.URL.Path, "/containers/json"):
-			w.Header().Set("Content-Type", "application/json")
-			if !assert.NoError(t, json.NewEncoder(w).Encode([]container.Summary{
-				{ID: "arcane-container", Image: "arcane:local", State: container.StateRunning},
-			})) {
-				return
-			}
-		case r.Method == http.MethodGet && strings.Contains(r.URL.Path, "/containers/arcane-container/") && strings.HasSuffix(r.URL.Path, "/json"):
-			w.Header().Set("Content-Type", "application/json")
-			if !assert.NoError(t, json.NewEncoder(w).Encode(container.InspectResponse{
-				ID: "arcane-container",
-				Config: &container.Config{
-					Image: "arcane:local",
-				},
-			})) {
-				return
-			}
-		default:
-			http.NotFound(w, r)
-		}
-	}))
-	t.Cleanup(server.Close)
-
-	image, err := ResolveHelperImage(t.Context(), newTestDockerClientInternal(t, server), ToolsImage(""))
-
-	require.NoError(t, err)
-	require.Equal(t, "arcane:local", image)
-}
-
-func TestResolveHelperImage_ReturnsPullErrorWhenNoFallbackExists(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		switch {
-		case r.Method == http.MethodGet && strings.Contains(r.URL.Path, "/images/") && strings.HasSuffix(r.URL.Path, "/json"):
-			http.NotFound(w, r)
-		case r.Method == http.MethodPost && strings.HasSuffix(r.URL.Path, "/images/create"):
-			http.Error(w, "pull failed", http.StatusInternalServerError)
-		case r.Method == http.MethodGet && strings.HasSuffix(r.URL.Path, "/containers/json"):
-			w.Header().Set("Content-Type", "application/json")
-			if !assert.NoError(t, json.NewEncoder(w).Encode([]container.Summary{})) {
-				return
-			}
+		case strings.Contains(r.URL.Path, "/containers/"):
+			t.Error("helper resolution must never inspect runtime containers")
+			w.WriteHeader(500)
 		default:
 			http.NotFound(w, r)
 		}
@@ -158,4 +119,27 @@ func newTestDockerClientInternal(t *testing.T, server *httptest.Server) *client.
 	)
 	require.NoError(t, err)
 	return dockerClient
+}
+
+func TestToolsImageUsesCompleteOverride(t *testing.T) {
+	require.Equal(t, DefaultToolsImage, ToolsImage("  "))
+	require.Equal(t, "registry.example.com/tools:latest", ToolsImage(" registry.example.com/tools:latest "))
+	config := HostConfig("registry.example.com/tools:latest", []string{"data:/volume"}, nil)
+	require.Empty(t, config.Tmpfs)
+	require.Equal(t, []string{"data:/volume"}, config.Binds)
+}
+
+func TestResolveHelperImageRejectsPullStreamFailure(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if strings.Contains(r.URL.Path, "/images/create") {
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(`{"errorDetail":{"message":"synthetic pull failure"}}`))
+			return
+		}
+		w.WriteHeader(404)
+	}))
+	t.Cleanup(server.Close)
+	image, err := ResolveHelperImage(t.Context(), newTestDockerClientInternal(t, server), "registry.example.com/tools:latest")
+	require.ErrorContains(t, err, "helper image pull failed")
+	require.Empty(t, image)
 }

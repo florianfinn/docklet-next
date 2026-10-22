@@ -127,10 +127,10 @@ type Update struct {
 	// Required: false
 	DefaultDeployPullPolicy *string `json:"defaultDeployPullPolicy,omitzero" binding:"omitempty,oneof=missing always never"`
 
-	// ToolsImageRegistry is the container registry used to pull the Arcane tools helper image.
+	// ToolsImage is the complete image reference for the Docklet tools helper.
 	//
 	// Required: false
-	ToolsImageRegistry *string `json:"toolsImageRegistry,omitzero" binding:"omitempty,oneof=ghcr.io docker.io"`
+	ToolsImage *string `json:"toolsImage,omitzero"`
 
 	// UpdateCheckRegistry is the registry queried when checking whether the
 	// running Arcane image has a newer digest. "auto" follows the registry the

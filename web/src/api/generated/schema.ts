@@ -1,5 +1,5 @@
 // Source: api/openapi.json
-// Revision: cdce9108b00df848f8f03485995e8b6802dceba1ec92167d416d7d13cde4ca64
+// Revision: 0579889319fe78dff6fde733c3552952e1e300d296dd465c0ef4b424926a0ea1
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
 // Deviations: Generated TypeScript declarations from the local Huma export.
@@ -10044,7 +10044,7 @@ export interface components {
             scheduledPruneEnabled?: string | null;
             scheduledPruneInterval?: string | null;
             setupCompleted?: string | null;
-            toolsImageRegistry?: string | null;
+            toolsImage?: string | null;
             trivyConcurrentScanContainers?: string | null;
             trivyConfig?: string | null;
             trivyCpuLimit?: string | null;
@@ -10720,6 +10720,14 @@ export interface components {
             destination?: string;
             /** @description Optional backup policy whose settings should be used */
             policyId?: string;
+        };
+        VolumeHelperIncompatibleError: {
+            /** @enum {string} */
+            code: "volume.helper-incompatible";
+            detail: string;
+            /** Format: int64 */
+            status: number;
+            title: string;
         };
         VolumePruneCandidate: {
             createdAt: string;
@@ -19844,6 +19852,15 @@ export interface operations {
                     "application/json": components["schemas"]["BaseApiResponseWorkspaceWorkspace"];
                 };
             };
+            /** @description Configured helper is incompatible; no file access occurred */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["VolumeHelperIncompatibleError"];
+                };
+            };
             /** @description Error */
             default: {
                 headers: {
@@ -19886,6 +19903,15 @@ export interface operations {
                     "application/json": components["schemas"]["BaseApiResponseWorkspaceWorkspace"];
                 };
             };
+            /** @description Configured helper is incompatible; no file access occurred */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["VolumeHelperIncompatibleError"];
+                };
+            };
             /** @description Error */
             default: {
                 headers: {
@@ -19923,6 +19949,15 @@ export interface operations {
                     "application/json": components["schemas"]["BaseApiResponseWorkspaceFileContent"];
                 };
             };
+            /** @description Configured helper is incompatible; no file access occurred */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["VolumeHelperIncompatibleError"];
+                };
+            };
             /** @description Error */
             default: {
                 headers: {
@@ -19957,6 +19992,15 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+            /** @description Configured helper is incompatible; no file access occurred */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["VolumeHelperIncompatibleError"];
+                };
             };
             /** @description Error */
             default: {

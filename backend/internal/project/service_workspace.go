@@ -314,12 +314,12 @@ func (s *ProjectService) prepareProjectRenameVolumeMigration(
 		return nil, fmt.Errorf("failed to connect to Docker for volume rename: %w", err)
 	}
 
-	toolsRegistry := ""
+	toolsReference := ""
 	if s.settingsService != nil {
-		toolsRegistry = s.settingsService.GetSettingsConfig().ToolsImageRegistry.Value
+		toolsReference = s.settingsService.GetSettingsConfig().ToolsImage.Value
 	}
 
-	return projects.PlanVolumeMigration(ctx, dockerClient, composeProject, oldComposeName, newComposeName, volumehelper.ToolsImage(toolsRegistry))
+	return projects.PlanVolumeMigration(ctx, dockerClient, composeProject, oldComposeName, newComposeName, volumehelper.ToolsImage(toolsReference))
 }
 
 // persistUpdatedProjectFiles validates and writes submitted compose, override,
