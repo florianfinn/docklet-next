@@ -35,6 +35,7 @@ const lifetimeTestDeadline = 10 * time.Second
 
 type lifetimeControlServer struct {
 	controlapi.UnimplementedControlServer
+	solveEntered chan struct{}
 	solveRelease chan struct{}
 	solveDone    chan struct{}
 	statusSent   chan struct{}
@@ -49,6 +50,7 @@ func (s *lifetimeControlServer) Solve(ctx context.Context, req *controlapi.Solve
 	s.requestMu.Lock()
 	s.request = req
 	s.requestMu.Unlock()
+	close(s.solveEntered)
 	defer close(s.solveDone)
 	select {
 	case <-s.solveRelease:
@@ -162,7 +164,7 @@ func newLifetimeBuild(t *testing.T, solveErr error, writerErr error) (*lifetimeC
 	listener := bufconn.Listen(1024 * 1024)
 	grpcServer := grpc.NewServer()
 	control := &lifetimeControlServer{
-		solveRelease: make(chan struct{}), solveDone: make(chan struct{}),
+		solveEntered: make(chan struct{}), solveRelease: make(chan struct{}), solveDone: make(chan struct{}),
 		statusSent: make(chan struct{}), statusDone: make(chan struct{}),
 		sessionDone: make(chan struct{}), solveErr: solveErr,
 	}
@@ -228,6 +230,8 @@ func TestBuildImageJoinsBuildkitStatusRenderer(t *testing.T) {
 
 			awaitLifetime(t, control.statusSent, "real Status RPC send")
 			awaitLifetime(t, writer.entered, "actual progress writer entry")
+			// Status delivery can precede Solve dispatch; cancellation must reach an entered RPC.
+			awaitLifetime(t, control.solveEntered, "real Solve RPC entry")
 			if tc.cancel {
 				cancel()
 			} else {
