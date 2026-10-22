@@ -4,6 +4,7 @@
 // License: Apache-2.0
 // Deviations: Original executable helper-image contract; invoked explicitly, outside default tests.
 import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
 import { spawnSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { inputs } from "./build.mjs";
@@ -52,4 +53,12 @@ run("sh", "-ec", `
 const listing = JSON.parse(run("acfs", "list", "--root", "/tmp", "--path", "/"));
 assert.equal(listing.version, Number(pins.ACFS_PROTOCOL), "actual list response protocol");
 run("test", "-s", "/etc/ssl/certs/ca-certificates.crt");
+const inventory = JSON.parse(readFileSync("docs/provenance/tools-image.json", "utf8"));
+for (const file of inventory.components.flatMap((component) => component.legalFiles)) {
+  const result = spawnSync("docker", ["run", "--rm", "--network", "none", "--label", "t3.project=docklet-next",
+    image, "head", "-c", "1000000", file.imagePath]);
+  assert.equal(result.status, 0, `missing packaged licence: ${file.imagePath}`);
+  assert.equal(createHash("sha256").update(result.stdout).digest("hex"), file.sha256, `packaged licence hash: ${file.imagePath}`);
+}
+
 console.log(`tools contract passed: ${config.Architecture}, acfs ${version.version}/protocol ${version.protocol}, ${applets.length} applets, Trivy, tar/gzip roundtrip, UID/GID ${pins.RUNTIME_USER}`);

@@ -1,0 +1,150 @@
+{
+  "schemaVersion": 1,
+  "date": "2026-10-22",
+  "platforms": [
+    "linux/amd64",
+    "linux/arm64"
+  ],
+  "input": "deploy/tools/inputs.env",
+  "sourceDistribution": "Companion OCI source image; MAJOR.MINOR.PATCH-source manifest with one platform image per binary.",
+  "components": [
+    {
+      "name": "acfs",
+      "version": "v0.6.2",
+      "source": "https://github.com/getarcaneapp/kit/tree/3da7cfd43c4da62bc06fd384b7da5f109ce010fb/acfs",
+      "license": "BSD-3-Clause",
+      "modifications": "Vendored local source with module replacements; version/revision ldflags.",
+      "legalFiles": [
+        {
+          "path": "third_party/arcane/acfs/LICENSE",
+          "imagePath": "/usr/share/licenses/docklet-tools/acfs-BSD-3-Clause.txt",
+          "sha256": "a59e647da475c8fb084f571521350d623f47bd3221d696e111f8730a6e1f7de8"
+        }
+      ]
+    },
+    {
+      "name": "kit/pkg and kit/pkg/fs",
+      "version": "9c61043fc52d1977d644f075d9c168335c3a6df7",
+      "source": "https://github.com/getarcaneapp/kit/tree/9c61043fc52d1977d644f075d9c168335c3a6df7",
+      "license": "BSD-3-Clause",
+      "modifications": "Local module replacement; only these stdlib-only packages enter acfs.",
+      "legalFiles": [
+        {
+          "path": "third_party/arcane/kit/LICENSE",
+          "imagePath": "/usr/share/licenses/docklet-tools/kit-BSD-3-Clause.txt",
+          "sha256": "9d371b9f228795be4e033d01901dd42822f8e5ce82a0710fcec2769b99d81027"
+        }
+      ]
+    },
+    {
+      "name": "Arcane tools recipe",
+      "version": "01903271fa1297cc3f61e95a19d0becb5ac535fa",
+      "source": "https://github.com/getarcaneapp/tools/tree/01903271fa1297cc3f61e95a19d0becb5ac535fa",
+      "license": "BSD-3-Clause",
+      "modifications": "Per-file deviations in deploy/tools headers.",
+      "legalFiles": [
+        {
+          "path": "LICENSES/BSD-3-Clause-Arcane.txt",
+          "imagePath": "/usr/share/licenses/docklet-tools/Arcane-BSD-3-Clause.txt",
+          "sha256": "9618cc2d4716242ffc576d177e3c325da67c27cd973d449b1bdb31ecefde57c5"
+        }
+      ]
+    },
+    {
+      "name": "Go standard library",
+      "version": "1.27.2",
+      "source": "https://go.googlesource.com/go/+/refs/tags/go1.27.2/LICENSE",
+      "license": "BSD-3-Clause",
+      "modifications": "None.",
+      "legalFiles": [
+        {
+          "imagePath": "/usr/share/licenses/docklet-tools/Go-BSD-3-Clause.txt",
+          "sha256": "911f8f5782931320f5b8d1160a76365b83aea6447ee6c04fa6d5591467db9dad"
+        }
+      ]
+    },
+    {
+      "name": "BusyBox",
+      "version": "1.38.0",
+      "source": "https://busybox.net/downloads/busybox-1.38.0.tar.bz2",
+      "license": "GPL-2.0-only",
+      "modifications": "Unmodified source; selected static applets/configuration.",
+      "obligations": "Distribute exact source tarball, generated per-platform .config, applet list and recipe in companion source OCI image before binary publication. Keep source accessible with binaries.",
+      "legalFiles": [
+        {
+          "path": "LICENSES/GPL-2.0-only-BusyBox.txt",
+          "imagePath": "/usr/share/licenses/docklet-tools/BusyBox-GPL-2.0.txt",
+          "sha256": "4cda70b4b121da4473b4fec52de4e779f11ae2616d3b27538946898d4e78e374",
+          "formatting": "Form-feed page separators normalized to LF; source tarball retains original bytes."
+        }
+      ]
+    },
+    {
+      "name": "Trivy",
+      "version": "0.75.0",
+      "source": "https://github.com/aquasecurity/trivy/releases/tag/v0.75.0",
+      "license": "Apache-2.0",
+      "modifications": "Unmodified checksum-verified release binary.",
+      "legalFiles": [
+        {
+          "path": "LICENSES/Apache-2.0-Trivy.txt",
+          "imagePath": "/usr/share/licenses/docklet-tools/Trivy-Apache-2.0.txt",
+          "sha256": "c71d239df91726fc519c6eb72d318ec65820627232b2f796219e87dcf35d0ab4"
+        },
+        {
+          "path": "LICENSES/NOTICE-Trivy.txt",
+          "imagePath": "/usr/share/licenses/docklet-tools/Trivy-NOTICE.txt",
+          "sha256": "aed9bc6dab87c6f6567d20bf0f5c0433a8ccd3ad7873322cf79b9244eb720a1f"
+        }
+      ]
+    },
+    {
+      "name": "Mozilla CA bundle",
+      "version": "2026-10-20",
+      "source": "https://curl.se/ca/cacert-2026-10-20.pem",
+      "license": "MPL-2.0",
+      "modifications": "None; exact dated PEM.",
+      "obligations": "Retain extraction/source notices and MPL text; corresponding covered source is the installed unmodified PEM itself.",
+      "legalFiles": [
+        {
+          "path": "LICENSES/MPL-2.0-Mozilla.txt",
+          "imagePath": "/usr/share/licenses/docklet-tools/CA-MPL-2.0.txt",
+          "sha256": "66a3107d5ad6a058aab753eaac2047ccb2ed0e39465dd0fe5844da3e300d5172"
+        },
+        {
+          "path": "deploy/tools/CA-NOTICE.txt",
+          "imagePath": "/usr/share/licenses/docklet-tools/CA-NOTICE.txt",
+          "sha256": "b5ab0e4592043a5bb9a007a26958f2134d5c1455f644f71e9fd86ff42014da59"
+        }
+      ]
+    },
+    {
+      "name": "musl",
+      "version": "1.2.5",
+      "source": "https://git.musl-libc.org/cgit/musl/tree/COPYRIGHT?h=v1.2.5",
+      "license": "MIT AND BSD-2-Clause",
+      "modifications": "Alpine packaged static C library used by BusyBox.",
+      "legalFiles": [
+        {
+          "path": "LICENSES/MIT-musl.txt",
+          "imagePath": "/usr/share/licenses/docklet-tools/musl-COPYRIGHT.txt",
+          "sha256": "f9bc4423732350eb0b3f7ed7e91d530298476f8fec0c6c427a1c04ade22655af"
+        }
+      ]
+    },
+    {
+      "name": "Docklet build scripts",
+      "version": "issue-180",
+      "source": "https://github.com/florianfinn/docklet-next",
+      "license": "Apache-2.0",
+      "modifications": "Original code.",
+      "legalFiles": [
+        {
+          "path": "LICENSE",
+          "imagePath": "/usr/share/licenses/docklet-tools/Docklet-Apache-2.0.txt",
+          "sha256": "db2e964d7cd1028bfdfb23319ac6cfdbbd427da56c28447c0bf156ea8fd03d61"
+        }
+      ]
+    }
+  ]
+}

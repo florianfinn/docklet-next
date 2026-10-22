@@ -6,6 +6,7 @@
 ARG GO_IMAGE
 ARG BUILD_IMAGE
 FROM --platform=$BUILDPLATFORM ${GO_IMAGE} AS acfs
+LABEL t3.project=docklet-next
 ARG TARGETARCH
 ARG ACFS_VERSION
 ARG ACFS_REVISION
@@ -23,11 +24,12 @@ RUN --network=none case "$TARGETARCH" in amd64|arm64) ;; *) exit 1 ;; esac && \
     cp /src/kit/LICENSE /out/usr/share/licenses/docklet-tools/kit-BSD-3-Clause.txt
 
 FROM ${BUILD_IMAGE} AS busybox
+LABEL t3.project=docklet-next
 ARG BUSYBOX_VERSION
 ARG BUSYBOX_SHA256
 RUN apk add --no-cache build-base bzip2 curl linux-headers perl
 WORKDIR /work
-COPY deploy/tools /recipe
+COPY deploy/tools/Dockerfile deploy/tools/build.mjs deploy/tools/inputs.env deploy/tools/busybox.config deploy/tools/applets.txt /recipe/
 RUN curl -fsSL "https://busybox.net/downloads/busybox-$BUSYBOX_VERSION.tar.bz2" -o busybox.tar.bz2 && \
     echo "$BUSYBOX_SHA256  busybox.tar.bz2" | sha256sum -c - && \
     mkdir source && tar -xjf busybox.tar.bz2 -C source --strip-components=1
@@ -45,11 +47,14 @@ RUN make allnoconfig && \
       case "$applet" in ''|'#'*) continue ;; esac; \
       ln -s /bin/busybox "/out/bin/$applet"; \
     done < /recipe/applets.txt && chmod 1777 /out/tmp && \
-    cp LICENSE /out/usr/share/licenses/docklet-tools/BusyBox-GPL-2.0.txt && \
+    tr '\f' '\n' < LICENSE > /out/usr/share/licenses/docklet-tools/BusyBox-GPL-2.0.txt && \
+    cp .config /out/usr/share/licenses/docklet-tools/busybox.config && \
+    cp /recipe/applets.txt /out/usr/share/licenses/docklet-tools/applets.txt && \
     cp /work/busybox.tar.bz2 /source/busybox-$BUSYBOX_VERSION.tar.bz2 && \
-    cp .config /source/.config && cp /recipe/* /source/
+    cp .config /source/.config && cp /recipe/* /source/ && apk info -v > /source/toolchain-packages.txt
 
 FROM --platform=$BUILDPLATFORM ${BUILD_IMAGE} AS downloads
+LABEL t3.project=docklet-next
 ARG TARGETARCH
 ARG TRIVY_VERSION
 ARG TRIVY_AMD64_SHA256
@@ -73,14 +78,24 @@ RUN case "$TARGETARCH" in \
     install -Dm644 cacert.pem /out/etc/ssl/certs/ca-certificates.crt
 
 FROM scratch AS corresponding-source
+LABEL t3.project=docklet-next org.opencontainers.image.source=https://github.com/florianfinn/docklet-next
 COPY --from=busybox /source/ /
+COPY LICENSE /Apache-2.0.txt
+COPY LICENSES/BSD-3-Clause-Arcane.txt /Arcane-BSD-3-Clause.txt
 
 FROM scratch AS runtime
+LABEL t3.project=docklet-next org.opencontainers.image.source=https://github.com/florianfinn/docklet-next
 ARG RUNTIME_USER
 COPY --from=busybox /out/ /
 COPY --from=downloads /out/ /
 COPY --from=acfs /out/ /
 COPY LICENSES/BSD-3-Clause-Arcane.txt /usr/share/licenses/docklet-tools/Arcane-BSD-3-Clause.txt
+COPY LICENSES/NOTICE-Trivy.txt /usr/share/licenses/docklet-tools/Trivy-NOTICE.txt
+COPY LICENSES/MPL-2.0-Mozilla.txt /usr/share/licenses/docklet-tools/CA-MPL-2.0.txt
+COPY LICENSES/MIT-musl.txt /usr/share/licenses/docklet-tools/musl-COPYRIGHT.txt
+COPY LICENSE /usr/share/licenses/docklet-tools/Docklet-Apache-2.0.txt
+COPY deploy/tools/CA-NOTICE.txt /usr/share/licenses/docklet-tools/CA-NOTICE.txt
+COPY deploy/tools/inputs.env /usr/share/licenses/docklet-tools/inputs.env
 ENV PATH=/usr/local/bin:/bin SSL_CERT_FILE=/etc/ssl/certs/ca-certificates.crt TMPDIR=/tmp XDG_CACHE_HOME=/var/cache/docklet-tools
 USER ${RUNTIME_USER}
 ENTRYPOINT []

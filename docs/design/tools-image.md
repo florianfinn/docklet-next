@@ -40,6 +40,14 @@ full `.config` and applet list for both architectures. Do not commit downloaded
 source tarballs or built images. Root Node tests check pin and protocol drift
 without Docker. CI builds and exercises each architecture on its native runner.
 
+The source-image contract also compares the exported generated configuration
+against the runtime copy, verifies the exact tarball hash and checks all build
+recipe files. Run it after loading a `corresponding-source` image:
+
+```sh
+node deploy/tools/source-contract.mjs docklet-tools:0.0.0 docklet-tools-source:0.0.0
+```
+
 ## Publication gate
 
 PRs and pushes to main build and test both platforms without registry write
@@ -58,7 +66,9 @@ corresponding source is available.
 
 `/usr/share/licenses/docklet-tools` carries the acfs/Kit/Arcane BSD notices,
 Go standard library BSD text, Trivy Apache-2.0 and NOTICE, BusyBox GPL-2.0,
-Mozilla CA MPL-2.0 notice, and the musl copyright/licence text. The provenance
+Mozilla CA MPL-2.0 notice, and the musl copyright/licence text. BusyBox licence page separators are
+normalized from form feeds to line feeds; its source tarball retains the
+original bytes. The provenance
 inventory identifies the exact sources and licence hashes. The embedded CA bundle
 also retains its upstream extraction and source notices.
 
@@ -67,7 +77,7 @@ with tag `MAJOR.MINOR.PATCH-source` and platform tags ending in
 `-source-amd64` / `-source-arm64`. This is complete corresponding source delivery,
 not a written source offer. It contains the exact BusyBox source tarball,
 platform-generated `.config`, seed flags, applet list, Dockerfile and build
-scripts/inputs. Both platforms' source images are pushed before any runtime
+scripts/inputs and the exact installed build-package manifest. Both platforms' source images are pushed before any runtime
 image. Keep the source tags available for as long as the associated binaries
 are distributed, and mirror source images together with runtime images.
 

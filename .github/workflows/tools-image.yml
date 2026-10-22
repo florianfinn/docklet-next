@@ -42,6 +42,7 @@ jobs:
       - name: Build the matching complete corresponding source image
         run: |
           node deploy/tools/build.mjs --platform "linux/$ARCH" --target corresponding-source --load --tag "docklet-tools-source:ci-$ARCH"
+          node deploy/tools/source-contract.mjs "docklet-tools:ci-$ARCH" "docklet-tools-source:ci-$ARCH"
           mkdir -p bundle
           docker image save "docklet-tools:ci-$ARCH" "docklet-tools-source:ci-$ARCH" --output bundle/images.tar
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2

@@ -43,6 +43,7 @@ test("tools CI verifies both native platforms and gates source-first publication
   assert.match(workflow, /arch: amd64\n            runner: ubuntu-24.04\n/);
   assert.match(workflow, /arch: arm64\n            runner: ubuntu-24.04-arm\n/);
   assert.match(workflow, /node deploy\/tools\/contract.mjs/);
+  assert.match(workflow, /node deploy\/tools\/source-contract.mjs/);
   const [verify, publish] = workflow.split("  publish:\n");
   assert.doesNotMatch(verify, /packages: write|docker push|docker login/);
   assert.match(publish, /needs: verify/);
@@ -50,7 +51,21 @@ test("tools CI verifies both native platforms and gates source-first publication
   assert.match(publish, /git merge-base --is-ancestor "\$GITHUB_SHA" origin\/main/);
   assert.match(publish, /packages: write/);
   assert.equal((workflow.match(/packages: write/g) ?? []).length, 1);
+  assert.match(publish, /docker push "\$IMAGE:\$VERSION-source-\$arch"/);
+  assert.match(publish, /docker push "\$IMAGE:\$VERSION-\$arch"/);
   assert.ok(publish.indexOf('docker push "$IMAGE:$VERSION-source-$arch"') < publish.indexOf('docker push "$IMAGE:$VERSION-$arch"'));
   for (const match of workflow.matchAll(/uses: (\S+)/g)) assert.match(match[1], /@[a-f0-9]{40}$/);
   assert.doesNotMatch(workflow, /pull_request_target|workflow_run|secrets\.|contents: write|:latest/);
+});
+
+test("tools legal inventory matches the committed notices and pinned components", async () => {
+  const { createHash } = await import("node:crypto");
+  const inventory = JSON.parse(readFileSync("docs/provenance/tools-image.json", "utf8"));
+  assert.deepEqual(inventory.platforms, pins.PLATFORMS.split(","));
+  for (const [name, pin] of [["acfs", "ACFS_VERSION"], ["BusyBox", "BUSYBOX_VERSION"], ["Trivy", "TRIVY_VERSION"], ["Mozilla CA bundle", "CA_VERSION"]])
+    assert.equal(inventory.components.find((entry) => entry.name === name).version, pins[pin]);
+  for (const file of inventory.components.flatMap((entry) => entry.legalFiles)) {
+    assert.match(file.sha256, /^[a-f0-9]{64}$/);
+    if (file.path) assert.equal(createHash("sha256").update(readFileSync(file.path)).digest("hex"), file.sha256, file.path);
+  }
 });
