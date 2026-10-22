@@ -113,7 +113,8 @@ func TestLogProducerDaemonSystemError(t *testing.T) {
 		require.True(t, utf8.ValidString(err.Error()))
 		require.LessOrEqual(t, len(err.Error()), 1024+len("Docker daemon log error: "))
 		if len(text) > 1024 {
-			require.Contains(t, err.Error(), LogTruncatedMarker)
+			require.Contains(t, err.Error(), daemonDiagnosticTruncatedMarker)
+			require.NotContains(t, err.Error(), LogTruncatedMarker)
 		} else {
 			require.ErrorContains(t, err, text)
 		}
@@ -130,7 +131,7 @@ func TestLogProducerDaemonSystemErrorHugeFrameIsNotDrained(t *testing.T) {
 	_, err := NewLogReader(reader, false).Next(t.Context())
 	runtime.ReadMemStats(&after)
 	require.ErrorContains(t, err, "Docker daemon log error: ")
-	require.Contains(t, err.Error(), LogTruncatedMarker)
+	require.Contains(t, err.Error(), daemonDiagnosticTruncatedMarker)
 	require.LessOrEqual(t, reader.read, 4096+8, "must stop after the diagnostic prefix, including bounded read-ahead")
 	require.Less(t, after.TotalAlloc-before.TotalAlloc, uint64(64<<10))
 }

@@ -26,7 +26,7 @@ export function LogSource({ line }: { line: LogLine }) {
   if (logGap(line) !== undefined) return null;
   const stream = t(`stream.${line.stream ?? "unknown"}`);
   return <Tooltip>
-    <TooltipTrigger asChild><span tabIndex={0}>{line.service || t("unknownSource")}<span className="sr-only">{` · ${stream}`}</span></span></TooltipTrigger>
+    <TooltipTrigger asChild><span>{line.service || t("unknownSource")}<span className="sr-only">{` · ${stream}`}</span></span></TooltipTrigger>
     <TooltipContent>{stream}</TooltipContent>
   </Tooltip>;
 }

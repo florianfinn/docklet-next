@@ -23,6 +23,7 @@ import (
 	"time"
 
 	"github.com/coder/websocket"
+	"github.com/containerd/errdefs"
 	wshub "github.com/florianfinn/docklet-next/backend/pkg/libarcane/ws"
 	"github.com/florianfinn/docklet-next/backend/pkg/projects"
 	"github.com/stretchr/testify/require"
@@ -204,7 +205,7 @@ func TestRuntimeLogSourceWarningBoundedAndCancellationQuiet(t *testing.T) {
 	previous := slog.Default()
 	slog.SetDefault(slog.New(capture))
 	t.Cleanup(func() { slog.SetDefault(previous) })
-	for _, sourceErr := range []error{errors.New("private upstream body with credential=example"), context.Canceled, context.DeadlineExceeded} {
+	for _, sourceErr := range []error{errors.New("private upstream body with credential=example"), errdefs.ErrUnavailable.WithMessage("private upstream body with credential=example"), context.Canceled, context.DeadlineExceeded} {
 		h := &WebSocketHandler{logStreams: make(map[string]*wsLogStream)}
 		ls, ctx := newWSLogStreamInternal("example", "json")
 		ls.refs = 1 // Model the viewer that owns this source until forwarding completes.
@@ -223,13 +224,18 @@ func TestRuntimeLogSourceWarningBoundedAndCancellationQuiet(t *testing.T) {
 		}
 		require.Equal(t, 1, failures)
 	}
-	require.Len(t, capture.records, 1)
-	record := <-capture.records
-	require.Equal(t, "log source failed", record.Message)
-	attrs := make(map[string]string)
-	record.Attrs(func(a slog.Attr) bool { attrs[a.Key] = a.Value.String(); return true })
-	require.Len(t, attrs, 2)
-	require.Equal(t, "container", attrs["kind"])
-	require.LessOrEqual(t, len(attrs["resourceId"]), 256)
-	require.NotContains(t, attrs["resourceId"], "credential")
+	require.Len(t, capture.records, 2)
+	for _, category := range []string{"unknown", "unavailable"} {
+		record := <-capture.records
+		require.Equal(t, "log source failed", record.Message)
+		attrs := make(map[string]string)
+		record.Attrs(func(a slog.Attr) bool { attrs[a.Key] = a.Value.String(); return true })
+		require.Len(t, attrs, 3)
+		require.Equal(t, "container", attrs["kind"])
+		require.Equal(t, category, attrs["errorCategory"])
+		require.LessOrEqual(t, len(attrs["resourceId"]), 256)
+		for _, value := range attrs {
+			require.NotContains(t, value, "credential")
+		}
+	}
 }

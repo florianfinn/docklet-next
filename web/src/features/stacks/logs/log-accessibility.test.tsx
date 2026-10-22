@@ -33,16 +33,24 @@ it.each(["en-US", "de"] as const)("%s source streams are readable and keyboard d
       { path: "/containers/:containerId", element: <ContainerPage /> },
     ], [kind === "stack" ? "/stack" : `/containers/${container.id}`], adapter);
     await screen.findByRole("log"); await act(settleLogs);
-    act(() => { f.sockets[0]!.send({ ...wireLog(1, "visible application text"), service: "example-source", stream: "stderr" }); f.flush(); });
-    const source = within(screen.getByRole("log")).getByText("example-source");
+    act(() => {
+      f.sockets[0]!.send(Array.from({ length: 100 }, (_, i) => ({ ...wireLog(i + 1, i === 0 ? "visible application text" : `line ${i}`), service: "example-source", stream: "stderr" })));
+      f.flush();
+    });
+    const region = screen.getByRole("log");
+    const sources = within(region).getAllByText("example-source");
     const label = locale === "de" ? "Standardfehlerkanal (kein Schweregrad)" : "Standard error stream (not a severity)";
-    expect(source.textContent?.includes(label)).toBe(true);
-    expect(source.getAttribute("tabindex")).toBe("0");
-    // Start immediately before this actual source element, then use a real tab gesture.
-    const before = document.createElement("button"); source.before(before); before.focus();
-    await user.tab(); expect(document.activeElement === source).toBe(true);
+    expect(sources.length === 100).toBe(true);
+    expect(sources.every((source) => source.querySelector(".sr-only")?.textContent?.includes(label) && !source.closest('[aria-hidden="true"]'))).toBe(true);
+    expect(sources.every((source) => source.closest(".select-none") !== null)).toBe(true);
+    const before = document.createElement("button"), after = document.createElement("button");
+    region.before(before); region.after(after); before.focus();
+    await user.tab(); expect(document.activeElement === region).toBe(true);
+    await user.tab(); expect(document.activeElement === after).toBe(true);
+    await user.hover(sources[0]!);
     expect((await screen.findByRole("tooltip")).textContent?.includes(label)).toBe(true);
-    before.remove();
+    await user.unhover(sources[0]!);
+    before.remove(); after.remove();
     expect(screen.queryByText("visible application text") !== null).toBe(true);
     await user.click(screen.getByRole("button", { name: kind === "stack" ? (locale === "de" ? "Pausieren" : "Pause") : (locale === "de" ? "Logs anhalten" : "Pause logs") }));
     const hasConditionalNotice = () => screen.getAllByRole("status").some((notice) => notice.textContent?.includes(locale === "de" ? "nur neue Zeilen" : "only new lines"));

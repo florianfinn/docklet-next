@@ -212,9 +212,10 @@ buffer. Local listeners sharing the browser channel receive its bounded snapshot
 Equal text is retained. The log owner makes at most five delayed reconnect attempts
 (1, 2, 5, 10, 30 seconds) before explicit retry. Valid delivery followed by thirty
 seconds of continuous connection replenishes this budget; brief deliveries,
-open-only connections and empty batches do not. It pauses offline and after identity rejection. A stream close alone triggers a
-bounded identity read rather than assuming logout. Last unsubscribe closes its
-socket and cancels its frame, identity read and reconnect timer. The existing
+open-only connections and empty batches do not. It pauses offline and after identity
+rejection. A stream close alone triggers a bounded identity read rather than
+assuming logout. Last unsubscribe closes its socket and cancels its frame,
+identity read and reconnect timer. The existing
 adapter identity reset also clears this log owner's channels and paused-hook views;
 the shared session registry supplies server closure, while adapter identity reset also clears metrics, actions and RunGate state.
 

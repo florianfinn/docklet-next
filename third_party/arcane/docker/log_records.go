@@ -20,6 +20,7 @@ import (
 
 const MaxLogLineBytes = 64 * 1024
 const LogTruncatedMarker = " [log line truncated]"
+const daemonDiagnosticTruncatedMarker = " [daemon diagnostic truncated]"
 const stderrPrefix = "[STDERR] "
 const logContentLimit = MaxLogLineBytes - len(LogTruncatedMarker) - len(stderrPrefix)
 
@@ -182,9 +183,9 @@ func (r *LogReader) daemonError(ctx context.Context, size uint32) error {
 	if ctx.Err() != nil {
 		return ctx.Err()
 	}
-	text, cut := BoundLogText(string(prefix[:n]), limit-len(LogTruncatedMarker))
+	text, cut := BoundLogText(string(prefix[:n]), limit-len(daemonDiagnosticTruncatedMarker))
 	if cut || size > limit {
-		text += LogTruncatedMarker
+		text += daemonDiagnosticTruncatedMarker
 	}
 	diagnostic := "Docker daemon log error: " + text
 	if err != nil {

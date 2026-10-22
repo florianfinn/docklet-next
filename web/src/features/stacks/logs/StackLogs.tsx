@@ -117,7 +117,7 @@ function StackLogsView({ stack }: { stack: Stack }) {
         </span>
       </div>
       <LogDeliveryNotice lines={lines} paused={paused} />
-      <div ref={scroller} role="log" aria-live={paused ? "off" : "polite"} aria-label={t("title")} className="h-[max(24rem,calc(100dvh-24rem))] overflow-auto bg-code py-2 font-mono text-[12px] leading-relaxed">
+      <div ref={scroller} role="log" tabIndex={0} aria-live={paused ? "off" : "polite"} aria-label={t("title")} className="h-[max(24rem,calc(100dvh-24rem))] overflow-auto bg-code py-2 font-mono text-[12px] leading-relaxed">
         {shown.length === 0 && <p className="px-4 py-6 text-center text-muted-foreground">{t("empty")}</p>}
         {shown.map((l) => {
           const tone = tones.get(l.service) ?? "info";

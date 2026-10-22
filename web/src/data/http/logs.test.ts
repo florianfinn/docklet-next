@@ -105,6 +105,24 @@ it("replenishes retries after valid delivery and a sustained healthy connection"
   }
   stop();
 });
+it("replenishes retries after periodic deliveries spanning more than thirty seconds", async () => {
+  const f = logFixture(); const stop = f.owner.subscribeLogs("0~busy", f.push); await settleLogs();
+  // Spend the entire initial budget, then prove a busy connection earns another retry.
+  for (let i = 0; i < 5; ++i) {
+    f.sockets.at(-1)!.disconnect(); await settleLogs();
+    await vi.runAllTimersAsync(); await settleLogs();
+  }
+  expect(f.sockets).toHaveLength(6);
+  for (let seq = 1; seq <= 5; ++seq) {
+    f.sockets.at(-1)!.send(wireLog(seq)); f.flush();
+    await vi.advanceTimersByTimeAsync(10000);
+  }
+  // First delivery: 50 s ago; last delivery: 10 s ago.
+  f.sockets.at(-1)!.disconnect(); await settleLogs(); f.flush();
+  expect(logDelivery(f.lines())?.status).toBe("retrying");
+  await vi.advanceTimersByTimeAsync(1000); await settleLogs();
+  expect(f.sockets).toHaveLength(7); stop();
+});
 it.each(["brief delivery", "open only", "empty batch"])("keeps a finite flapping budget for %s", async (kind) => {
   const f = logFixture(); const stop = f.owner.subscribeLogs("0~flapping", f.push); await settleLogs();
   for (let i = 0; i < 6; ++i) {
