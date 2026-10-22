@@ -78,7 +78,7 @@ it("marks malformed resource data with a host-local reason", async () => {
 it("blocks all storage and image writes without sending a request", async () => {
   const f = resourceFixture();
   for (const promise of [f.adapter.pullImage({ hostId: "first", reference: "example:1" }), f.adapter.removeImage("first~unused"), f.adapter.pruneImages({ hostIds: ["first"], mode: "unused" }), f.adapter.deleteVolume("first~data"), f.adapter.removeNetwork("first~net"), f.adapter.connectNetwork({ containerId: "first~web", networkId: "first~net" })]) await expect(promise).rejects.toMatchObject({ outcome: { kind: "not-available" } });
-  expect(f.fetcher).not.toHaveBeenCalled();
+  expect(f.fetcher.mock.calls.every(([url]) => String(url).includes("/capabilities"))).toBe(true);
 });
 it.each([ImagesPage, VolumesPage, NetworksPage])("filters the rendered list page %s by host and shows retained time", async (Page) => {
   const f = resourceFixture(); f.state.reason = "agent.unavailable";

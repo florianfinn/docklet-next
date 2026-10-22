@@ -69,6 +69,7 @@ export const deVolumes: typeof enVolumes = {
     submit: "Anlegen",
     created: (import.meta.env.DEV ? "Volume {name} angelegt (Demo)" : ""),
   },
+  renameDialog: {"title": "Volume umbenennen", "description": "{name} wird in ein neues Volume kopiert und anschließend entfernt. Das Volume darf nicht verwendet werden.", "name": "Neuer Name", "hint": "Buchstaben, Ziffern, _ . - · Beginnt mit Buchstabe oder Ziffer.", "cancel": "Abbrechen", "submit": "Umbenennen", "done": "In {name} umbenannt"},
   detail: {
     back: "Volumes",
     tabs: { overview: "Übersicht", files: "Dateien", backups: "Backups" },
@@ -98,6 +99,7 @@ export const deVolumes: typeof enVolumes = {
     bindNote: "Bind-Mount: ein Verzeichnis des Hosts. Docklet zeigt es mit demselben Dateibrowser; Löschen und Anlegen bleiben beim Host.",
     fileBindNote: "Einzelne Datei als Bind-Mount – der Dateibrowser zeigt nur diese Datei.",
     dbWarning: "Enthält Datenbankdateien ({images}). Nicht einzeln bearbeiten; für Backups Container stoppen oder einen Datenbank-Dump verwenden.",
+    rename: "Volume umbenennen",
     delete: "Volume löschen",
     deleteBlocked: "In Benutzung – erst die Container entfernen oder umstellen.",
     deleteBind: "Bind-Mounts gehören dem Host und werden hier nicht gelöscht.",

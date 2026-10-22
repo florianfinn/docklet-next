@@ -143,6 +143,19 @@ export function createVolumesApi(ctx: DemoContext): VolumesApi {
       return structuredClone(find(id));
     },
 
+    async renameVolume(id, name) {
+      const v = online(find(id));
+      if (v.kind !== "volume" || v.consumers.length) throw new DemoError("in-use");
+      if (volumeName(name, all().filter((row) => row.hostId === v.hostId).map((row) => row.name))) throw new DemoError("invalid-name");
+      const nextId = volumeId(v.hostId, "volume", name);
+      db.files.clone(id, nextId);
+      db.createdVolumes.set(nextId, { name, hostId: v.hostId, createdAt: new Date().toISOString(), labels: v.labels });
+      db.createdVolumes.delete(id);
+      db.files.drop(id);
+      db.changed("volumes");
+      return structuredClone(find(nextId));
+    },
+
     async deleteVolume(id) {
       await wait(300);
       const v = find(id);

@@ -120,6 +120,7 @@ export interface VolumesApi {
   getVolume(id: string): Promise<VolumeDetail & { scope?: string }>;
   createVolume(input: CreateVolumeInput): Promise<Volume>;
   deleteVolume(id: string): Promise<void>;
+  renameVolume(id: string, name: string): Promise<Volume>;
   /** Preview of a prune for the given hosts; computed by the adapter, not the browser. */
   planVolumePrune(input: { hostIds: string[] }): Promise<VolumePrunePlan>;
   /**

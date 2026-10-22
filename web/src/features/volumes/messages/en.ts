@@ -68,6 +68,7 @@ export const enVolumes = {
     submit: "Create",
     created: (import.meta.env.DEV ? "Volume {name} created (demo)" : ""),
   },
+  renameDialog: {"title": "Rename volume", "description": "{name} is copied to a new volume and then removed. The volume must be unused.", "name": "New name", "hint": "Letters, digits, _ . - · Starts with a letter or digit.", "cancel": "Cancel", "submit": "Rename", "done": "Renamed to {name}"},
   detail: {
     back: "Volumes",
     tabs: { overview: "Overview", files: "Files", backups: "Backups" },
@@ -97,6 +98,7 @@ export const enVolumes = {
     bindNote: "Bind mount: a directory on the host. Docklet shows it with the same file browser; deleting and creating stay with the host.",
     fileBindNote: "Single file as bind mount – the file browser shows only this file.",
     dbWarning: "Contains database files ({images}). Do not edit them individually; for backups, stop the container or use a database dump.",
+    rename: "Rename volume",
     delete: "Delete volume",
     deleteBlocked: "In use – remove or reassign the containers first.",
     deleteBind: "Bind mounts belong to the host and are not deleted here.",

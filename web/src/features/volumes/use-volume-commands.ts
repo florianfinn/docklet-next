@@ -1,4 +1,4 @@
-import { useCallback, useMemo } from "react";
+import { useCallback, useEffect, useMemo, useRef } from "react";
 import { toast } from "sonner";
 import { useTranslations } from "use-intl";
 
@@ -14,13 +14,17 @@ const KNOWN = new Set<string>(["not-found", "exists", "invalid-name", "in-use", 
 /** Volume, file and backup commands; contract error codes become translated toasts. */
 export function useVolumeCommands() {
   const adapter = useAdapter();
+  const mounted = useRef(true);
+  useEffect(() => { mounted.current = true; return () => { mounted.current = false; }; }, []);
   const t = useTranslations("volumes.errors");
   const dt = useAdapterText();
   const guard = useCallback(
     async <T,>(fn: () => Promise<T>): Promise<T | undefined> => {
       try {
-        return await fn();
+        const result = await fn();
+        return mounted.current ? result : undefined;
       } catch (e) {
+        if (!mounted.current) return undefined;
         // The gate already reported the busy target once (see ActionToasts).
         if (isRunBusy(e)) return undefined;
         const code = errorCode(e);
@@ -33,6 +37,7 @@ export function useVolumeCommands() {
   return useMemo(
     () => ({
       create: (input: CreateVolumeInput) => guard(() => adapter.createVolume(input)),
+      renameVolume: (id: string, name: string) => guard(() => adapter.renameVolume(id, name)),
       remove: (id: string) => guard(async () => (await adapter.deleteVolume(id), true)),
       prune: (hostIds: string[], volumeIds: string[]) => guard(() => adapter.pruneVolumes({ hostIds, volumeIds })),
       read: (id: string, path: string) => guard(() => adapter.readFile(id, path)),

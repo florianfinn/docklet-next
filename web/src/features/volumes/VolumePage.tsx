@@ -1,5 +1,4 @@
 import { InventoryNotice } from "@/features/stacks/InventoryNotice";
-import { useCapability } from "@/data/use-capability";
 import { Archive, ArrowLeft, Box, Database, FolderOpen, Info, Layers, LayoutGrid, Trash2, Unplug } from "lucide-react";
 import { useState } from "react";
 import { Link, useNavigate, useParams, useSearchParams } from "react-router";
@@ -29,7 +28,9 @@ import { BackupHistory } from "./backups/BackupHistory";
 import { BackupPolicyCard } from "./backups/BackupPolicyCard";
 import { FileWorkspace } from "./files/FileWorkspace";
 import { BackupBadge, KindBadge } from "./storage-visuals";
+import { useVolumeCapability } from "./use-volume-capability";
 import { useVolumeCommands } from "./use-volume-commands";
+import { RenameVolumeDialog } from "./RenameVolumeDialog";
 import { deleteBlock } from "./volume-menu";
 
 type Tab = "overview" | "files" | "backups";
@@ -37,9 +38,11 @@ type Tab = "overview" | "files" | "backups";
 function OverviewTab({ volume: v, host }: { volume: VolumeDetail & { scope?: string }; host: Host | undefined }) {
   const t = useTranslations("volumes.detail");
   const tv = useTranslations("volumes");
-  const remove = useCapability("deleteVolume");
+  const remove = useVolumeCapability("deleteVolume", v.id);
+  const rename = useVolumeCapability("renameVolume", v.id);
   const cmd = useVolumeCommands();
   const navigate = useNavigate();
+  const [renaming, setRenaming] = useState(false);
   const [confirm, setConfirm] = useState(false);
   const share = !v.sizeUnavailable && host && host.diskTotalGb > 0 ? (v.sizeBytes / (host.diskTotalGb * 1024 ** 3)) * 100 : undefined;
   const block = deleteBlock(v, host);
@@ -142,6 +145,7 @@ function OverviewTab({ volume: v, host }: { volume: VolumeDetail & { scope?: str
           </dl>
           {v.kind === "bind" && <p className="text-xs text-muted-foreground">{v.fileBind ? t("fileBindNote") : t("bindNote")}</p>}
           <div className="flex border-t pt-3">
+            <Button variant="outline" disabled={!rename.available || !!v.inventory?.stale || !!block} title={rename.reason} onClick={() => setRenaming(true)}>{t("rename")}</Button>
             <Tooltip>
               <TooltipTrigger asChild>
                 <span>
@@ -156,6 +160,7 @@ function OverviewTab({ volume: v, host }: { volume: VolumeDetail & { scope?: str
           </div>
         </CardContent>
       </Card>
+      {renaming && <RenameVolumeDialog volume={v} onClose={() => setRenaming(false)} />}
       <ConfirmDialog
         open={confirm}
         onOpenChange={setConfirm}
@@ -250,7 +255,7 @@ export default function VolumePage() {
                 </TabsTrigger>
               </TabsList>
               <TabsContent value="overview">
-                <OverviewTab volume={v} host={host} />
+                <OverviewTab key={v.id} volume={v} host={host} />
               </TabsContent>
               <TabsContent value="files">
                 {online ? <FileWorkspace volume={v} warning={warning} /> : <EmptyState icon={<Unplug />} title={tf("offline")} />}

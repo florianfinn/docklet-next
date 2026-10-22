@@ -1,3 +1,4 @@
+import { useVolumeCapability } from "./use-volume-capability";
 import { useCapability } from "@/data/use-capability";
 import { Archive, Eye, FolderOpen, Layers, Play, Trash2 } from "lucide-react";
 import { useNavigate } from "react-router";
@@ -21,7 +22,7 @@ export function deleteBlock(v: Pick<Volume, "kind" | "consumers">, host: Pick<Ho
 export function useVolumeMenu(v: Volume, host: Host | undefined, on: { remove: (v: Volume) => void; backup: (v: Volume) => void }): MenuGroups {
   const t = useTranslations("volumes.menu");
   const navigate = useNavigate();
-  const remove = useCapability("deleteVolume");
+  const remove = useVolumeCapability("deleteVolume", v.id);
   const backup = useCapability("runBackup");
   const files = useCapability("listFiles");
   const online = host?.status === "online";

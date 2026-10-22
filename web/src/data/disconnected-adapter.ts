@@ -70,6 +70,7 @@ export function createDisconnectedAdapter(): DockletAdapter {
     getVolume: unavailable,
     createVolume: unavailable,
     deleteVolume: unavailable,
+    renameVolume: unavailable,
     planVolumePrune: unavailable,
     pruneVolumes: unavailable,
     listFiles: unavailable,
