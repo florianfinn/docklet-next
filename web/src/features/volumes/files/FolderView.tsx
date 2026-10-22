@@ -1,6 +1,7 @@
 import { Download, File, FileText, Folder, MoreHorizontal, Pencil, TextCursorInput, Trash2 } from "lucide-react";
 import { useTranslations } from "use-intl";
 
+import { workspaceErrorKey } from "./workspace-error";
 import type { DirListing, FileEntry } from "@/domain/files";
 import { formatBytes, formatDateTime } from "@/domain/format";
 import { EmptyState, QueryError } from "@/shared/components/page";
@@ -11,8 +12,11 @@ import { Skeleton } from "@/shared/ui/skeleton";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/shared/ui/table";
 
 interface FolderViewProps {
-  listing: { data?: DirListing; isPending: boolean; isError: boolean; isPlaceholderData: boolean; refetch: () => unknown };
+  listing: { data?: DirListing; isPending: boolean; isError: boolean; isPlaceholderData: boolean; error?: unknown; refetch: () => unknown };
   singleFile: boolean;
+  canRename?: boolean;
+  canDelete?: boolean;
+  canDownload?: boolean;
   onOpen: (entry: FileEntry) => void;
   onDownload: (entry: FileEntry) => void;
   onRename: (entry: FileEntry) => void;
@@ -20,7 +24,7 @@ interface FolderViewProps {
 }
 
 /** Folder tab of the volume workspace: entries of the current folder with size, date and actions. */
-export function FolderView({ listing, singleFile, onOpen, onDownload, onRename, onDelete }: FolderViewProps) {
+export function FolderView({ listing, singleFile, canRename = true, canDelete = true, canDownload = true, onOpen, onDownload, onRename, onDelete }: FolderViewProps) {
   const t = useTranslations("volumes.files");
   const entries = listing.data?.entries ?? [];
   if (listing.isPending)
@@ -34,6 +38,7 @@ export function FolderView({ listing, singleFile, onOpen, onDownload, onRename, 
   if (listing.isError)
     return (
       <div className="p-3">
+        <p role="alert">{t(`workspaceErrors.${workspaceErrorKey(listing.error)}`)}</p>
         <QueryError onRetry={() => void listing.refetch()} compact />
       </div>
     );
@@ -79,12 +84,12 @@ export function FolderView({ listing, singleFile, onOpen, onDownload, onRename, 
                           </DropdownMenuItem>
                         )}
                         {e.type === "file" && (
-                          <DropdownMenuItem onSelect={() => onDownload(e)}>
+                          <DropdownMenuItem disabled={!canDownload} onSelect={() => onDownload(e)}>
                             <Download /> {t("download")}
                           </DropdownMenuItem>
                         )}
                         {!singleFile && (
-                          <DropdownMenuItem onSelect={() => onRename(e)}>
+                          <DropdownMenuItem disabled={!canRename || listing.isPlaceholderData} onSelect={() => onRename(e)}>
                             <TextCursorInput /> {t("rename")}
                           </DropdownMenuItem>
                         )}
@@ -92,7 +97,7 @@ export function FolderView({ listing, singleFile, onOpen, onDownload, onRename, 
                       {!singleFile && (
                         <>
                           <DropdownMenuSeparator />
-                          <DropdownMenuItem variant="destructive" onSelect={() => onDelete(e)}>
+                          <DropdownMenuItem variant="destructive" disabled={!canDelete || listing.isPlaceholderData} onSelect={() => onDelete(e)}>
                             <Trash2 /> {t("delete")}
                           </DropdownMenuItem>
                         </>

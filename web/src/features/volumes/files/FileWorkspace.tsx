@@ -1,12 +1,11 @@
 import { ArrowUp, ChevronRight, Download, FilePlus2, FileText, FolderOpen, FolderPlus, HardDrive, RotateCcw, Save, Upload } from "lucide-react";
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useBlocker, useSearchParams } from "react-router";
 import { toast } from "sonner";
 import { useTranslations } from "use-intl";
 
 import { useFiles } from "@/data/queries";
 import { baseName, parentPath, pathSegments, type FileEntry } from "@/domain/files";
-import { formatBytes } from "@/domain/format";
 import { volumeLabel, type Volume } from "@/domain/volumes";
 import { ConfirmDialog } from "@/shared/components/confirm-dialog";
 import { downloadBlob } from "@/shared/lib/tar";
@@ -16,7 +15,9 @@ import { setPreference, usePreference } from "@/shared/preferences/preferences-s
 import { FileTree, type TreeNode } from "@/shared/workspace/file-tree";
 import { AsideToggle, EditorAction, EditorPane, Workspace, WorkspaceFrame } from "@/shared/workspace/workspace";
 
-import { useVolumeCommands } from "../use-volume-commands";
+import { useVolumeCapability } from "../use-volume-capability";
+import { useFileCommands } from "./use-file-commands";
+import { workspaceErrorKey } from "./workspace-error";
 import { FileAside } from "./FileAside";
 import { FileBody, FileStatus } from "./FileBody";
 import { NameDialog } from "./FileDialogs";
@@ -24,7 +25,6 @@ import { FolderView } from "./FolderView";
 import { isUnder, movedPath, useOpenFiles, type OpenFile } from "./use-open-files";
 import { useVolumeTree } from "./use-volume-tree";
 
-const MAX_TEXT_UPLOAD = 256 * 1024;
 const FOLDER_TAB = "@folder";
 
 type Pending = { kind: "create"; type: "dir" | "file" } | { kind: "rename"; entry: FileEntry } | { kind: "delete"; entry: FileEntry } | { kind: "close"; path: string } | null;
@@ -37,12 +37,25 @@ const ancestors = (path: string) => ["/", ...pathSegments(path).map((s) => s.pat
  * (?file=) live in the URL; open tabs and unsaved edits live in memory.
  */
 export function FileWorkspace({ volume, warning }: { volume: Volume; warning?: string }) {
+  return <VolumeFileWorkspace key={volume.id} volume={volume} warning={warning} />;
+}
+
+function VolumeFileWorkspace({ volume, warning }: { volume: Volume; warning?: string }) {
   const t = useTranslations("volumes.files");
-  const cmd = useVolumeCommands();
   const [params, setParams] = useSearchParams();
   const path = params.get("path") ?? "/";
   const fileParam = params.get("file");
   const listing = useFiles(volume.id, path);
+  const cmd = useFileCommands(volume.id, listing.data?.revision);
+  const createCapability = useVolumeCapability("createEntry", volume.id);
+  const uploadCapability = useVolumeCapability("uploadFile", volume.id);
+  const writeCapability = useVolumeCapability("writeFile", volume.id);
+  const renameCapability = useVolumeCapability("renameEntry", volume.id);
+  const deleteCapability = useVolumeCapability("deleteEntry", volume.id);
+  const downloadCapability = useVolumeCapability("downloadFile", volume.id);
+  const mounted = useRef(true);
+  const saveLock = useRef(false);
+  useEffect(() => { mounted.current = true; return () => { mounted.current = false; }; }, []);
   const open = useOpenFiles(volume.id, fileParam);
   const [pending, setPending] = useState<Pending>(null);
   const [saving, setSaving] = useState(false);
@@ -105,25 +118,24 @@ export function FileWorkspace({ volume, warning }: { volume: Volume; warning?: s
 
   const downloadEntry = async (entry: { path: string; name: string; size: number }, buffer?: string) => {
     if (buffer !== undefined) return downloadBlob(entry.name, buffer, "text/plain");
-    const file = await cmd.read(volume.id, entry.path);
-    if (!file) return;
-    if (file.editable) downloadBlob(entry.name, file.content, "text/plain");
-    else {
-      downloadBlob(`${entry.name}.demo.txt`, t("binaryPlaceholder", { name: entry.name, size: formatBytes(entry.size) }), "text/plain");
-      toast.info(t("downloadBinary"));
-    }
+    const blob = await cmd.download(entry.path);
+    if (!blob || !mounted.current) return;
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a"); link.href = url; link.download = entry.name; link.click(); URL.revokeObjectURL(url);
   };
   const downloadOpen = (file: OpenFile) => void downloadEntry({ path: file.path, name: baseName(file.path), size: file.size }, file.editable ? file.text : undefined);
 
   const save = async (file: OpenFile) => {
-    if (!file.dirty || saving) return;
+    if (!file.dirty || file.conflict || !writeCapability.available || saveLock.current) return;
+    saveLock.current = true;
     setSaving(true);
     try {
-      if (await open.save(file.path)) toast.success(t("editorSaved", { name: baseName(file.path) }));
-    } catch {
-      toast.error(t("saveFailed", { name: baseName(file.path) }));
+      if (await open.save(file.path) && mounted.current) toast.success(t("editorSaved", { name: baseName(file.path) }));
+    } catch (error) {
+      if (mounted.current) toast.error(t(`workspaceErrors.${workspaceErrorKey(error)}`));
     } finally {
-      setSaving(false);
+      saveLock.current = false;
+      if (mounted.current) setSaving(false);
     }
   };
 
@@ -142,11 +154,12 @@ export function FileWorkspace({ volume, warning }: { volume: Volume; warning?: s
     if (!list?.length) return;
     let n = 0;
     for (const f of [...list]) {
-      const text = f.size <= MAX_TEXT_UPLOAD && (f.type.startsWith("text/") || /\.(ya?ml|json|conf|env|txt|md|ini|toml|xml|sh)$/i.test(f.name)) ? await f.text() : undefined;
-      if (await cmd.upload(volume.id, path, { name: f.name, size: f.size, content: text })) n++;
+      if (!mounted.current) break;
+      if (await cmd.upload(volume.id, path, { name: f.name, size: f.size, blob: f })) n++;
+      else break;
     }
     if (upload.current) upload.current.value = "";
-    if (n) toast.success(t("uploaded", { count: n }));
+    if (n && mounted.current) toast.success(t("uploaded", { count: n }));
   };
 
   const folderName = path === "/" ? t("root") : baseName(path);
@@ -177,15 +190,15 @@ export function FileWorkspace({ volume, warning }: { volume: Volume; warning?: s
         </Button>
         {!singleFile && (
           <>
-            <Button variant="outline" size="sm" onClick={() => setPending({ kind: "create", type: "dir" })}>
+            <Button variant="outline" size="sm" disabled={!createCapability.available || cmd.busy || listing.isPlaceholderData || listing.isError} title={createCapability.reason} onClick={() => setPending({ kind: "create", type: "dir" })}>
               <FolderPlus data-icon="inline-start" />
               {t("newFolder")}
             </Button>
-            <Button variant="outline" size="sm" onClick={() => setPending({ kind: "create", type: "file" })}>
+            <Button variant="outline" size="sm" disabled={!createCapability.available || cmd.busy || listing.isPlaceholderData || listing.isError} title={createCapability.reason} onClick={() => setPending({ kind: "create", type: "file" })}>
               <FilePlus2 data-icon="inline-start" />
               {t("newFile")}
             </Button>
-            <Button size="sm" onClick={() => upload.current?.click()}>
+            <Button size="sm" disabled={!uploadCapability.available || cmd.busy || listing.isPlaceholderData || listing.isError} title={uploadCapability.reason} onClick={() => upload.current?.click()}>
               <Upload data-icon="inline-start" />
               {t("upload")}
             </Button>
@@ -194,6 +207,7 @@ export function FileWorkspace({ volume, warning }: { volume: Volume; warning?: s
         )}
         <AsideToggle value={aside} onChange={(m) => setPreference("workspaceAside", m)} splitDisabled={singleFile} />
       </div>
+      {listing.data?.truncated && <p role="status">{t("truncated")}</p>}
       {warning && <p className="rounded-lg border border-warning/30 bg-warning/8 p-2.5 text-xs text-warning">{warning}</p>}
 
       <Workspace
@@ -203,6 +217,7 @@ export function FileWorkspace({ volume, warning }: { volume: Volume; warning?: s
         aside={
           aside === "off" ? undefined : (
             <FileAside
+              readOnly={!writeCapability.available}
               mode={singleFile && aside === "split" ? "details" : aside}
               volume={volume}
               warning={warning}
@@ -233,9 +248,9 @@ export function FileWorkspace({ volume, warning }: { volume: Volume; warning?: s
             activeFile?.status === "ready" && (
               <>
                 {activeFile.editable && <EditorAction label={t("discardChanges")} icon={<RotateCcw />} onClick={() => open.discard(activeFile.path)} disabled={!activeFile.dirty} />}
-                <EditorAction label={t("download")} icon={<Download />} onClick={() => downloadOpen(activeFile)} />
+                <EditorAction label={t("download")} icon={<Download />} disabled={!downloadCapability.available} onClick={() => downloadOpen(activeFile)} />
                 {activeFile.editable && (
-                  <Button size="sm" className="ml-1 h-7" disabled={!activeFile.dirty || saving} onClick={() => void save(activeFile)}>
+                  <Button size="sm" className="ml-1 h-7" disabled={!activeFile.dirty || activeFile.conflict || saving || !writeCapability.available} title={writeCapability.reason} onClick={() => void save(activeFile)}>
                     <Save data-icon="inline-start" />
                     {t("save")}
                   </Button>
@@ -246,11 +261,14 @@ export function FileWorkspace({ volume, warning }: { volume: Volume; warning?: s
           status={activeFile ? <FileStatus file={activeFile} /> : <span>{t("folderStatus", { count: listing.data?.entries.length ?? 0, path })}</span>}
         >
           {activeFile ? (
-            <FileBody file={activeFile} onEdit={(text) => open.edit(activeFile.path, text)} onSave={() => void save(activeFile)} onDownload={() => downloadOpen(activeFile)} />
+            <FileBody file={activeFile} readOnly={!writeCapability.available} onEdit={(text) => open.edit(activeFile.path, text)} onSave={() => void save(activeFile)} onDownload={() => downloadOpen(activeFile)} />
           ) : (
             <FolderView
               listing={listing}
               singleFile={singleFile}
+              canRename={renameCapability.available && !cmd.busy}
+              canDelete={deleteCapability.available && !cmd.busy}
+              canDownload={downloadCapability.available}
               onOpen={openEntry}
               onDownload={(e) => void downloadEntry(e)}
               onRename={(entry) => setPending({ kind: "rename", entry })}

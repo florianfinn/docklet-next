@@ -125,6 +125,20 @@ export const enVolumes = {
     offline: "{host} is not connected – files and backups are available once it is connected.",
   },
   files: {
+    truncated: "The file tree reached the server limit; some entries are omitted.",
+    readOnlyReasons: { binary: "Binary content. Download the file to open it.", too_large: "This file exceeds the text editor limit. Download it instead.", symlink: "Symbolic links are read-only and cannot be followed here.", special: "This entry is not a regular file." },
+    workspaceErrors: {
+      conflict: "The workspace changed on the server. The tree was reloaded and your text was kept. Copy your draft, then discard changes to load the current version before editing again.",
+      forbidden: "Your permissions or this path do not allow this file operation.",
+      "not-found": "The file or workspace no longer exists.",
+      "too-large": "The upload exceeds the server file size limit.",
+      invalid: "The server rejected the file operation. Check the path and file name.",
+      "helper-incompatible": "The helper image is incompatible. Check the configured image.",
+      "helper-unavailable": "The file helper is unavailable. Check the connection and image, then retry.",
+      "agent-update": "Update the agent before opening this workspace.",
+      unavailable: "The workspace could not be reached. Retry to load it again.",
+      unknown: "The hub did not confirm the file change. Reload and check the files before retrying.",
+    },
     aside: {
       title: "Details",
       file: "Open file",

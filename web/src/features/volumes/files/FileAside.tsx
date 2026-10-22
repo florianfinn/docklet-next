@@ -14,6 +14,7 @@ import type { OpenFile } from "./use-open-files";
 
 interface FileAsideProps {
   mode: Exclude<AsideMode, "off">;
+  readOnly?: boolean;
   volume: Volume;
   /** Same warning the page shows above the workspace (running consumers, databases). */
   warning?: string;
@@ -108,7 +109,7 @@ function Details({ volume, path, active, warning }: Pick<FileAsideProps, "volume
 }
 
 /** A second open file beside the editor; edits share the drafts of the tabs. */
-function SecondFile({ files, active, secondary, onSecondary, onEdit, onSave, onDownload }: Omit<FileAsideProps, "mode" | "volume" | "path" | "warning">) {
+function SecondFile({ readOnly, files, active, secondary, onSecondary, onEdit, onSave, onDownload }: Omit<FileAsideProps, "mode" | "volume" | "path" | "warning">) {
   const t = useTranslations("workspace.aside");
   const candidates = files.filter((f) => f.path !== active?.path);
   const file = candidates.find((f) => f.path === secondary) ?? candidates[0];
@@ -120,7 +121,7 @@ function SecondFile({ files, active, secondary, onSecondary, onEdit, onSave, onD
       activeId={file.path}
       onSelect={onSecondary}
     >
-      <FileBody file={file} onEdit={(text) => onEdit(file.path, text)} onSave={() => onSave(file)} onDownload={() => onDownload(file)} />
+      <FileBody file={file} readOnly={readOnly} onEdit={(text) => onEdit(file.path, text)} onSave={() => onSave(file)} onDownload={() => onDownload(file)} />
     </EditorPane>
   );
 }

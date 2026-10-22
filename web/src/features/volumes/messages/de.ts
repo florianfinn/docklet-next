@@ -126,6 +126,20 @@ export const deVolumes: typeof enVolumes = {
     offline: "{host} ist nicht verbunden – Dateien und Backups sind erst nach der Verbindung verfügbar.",
   },
   files: {
+    truncated: "Der Dateibaum hat die Servergrenze erreicht; einige Einträge fehlen.",
+    readOnlyReasons: { binary: "Binärinhalt. Lade die Datei herunter, um sie zu öffnen.", too_large: "Diese Datei überschreitet die Grenze des Texteditors. Lade sie stattdessen herunter.", symlink: "Symbolische Links sind schreibgeschützt und werden hier nicht verfolgt.", special: "Dieser Eintrag ist keine reguläre Datei." },
+    workspaceErrors: {
+      conflict: "Der Arbeitsbereich wurde auf dem Server geändert. Der Baum wurde neu geladen und dein Text bleibt erhalten. Kopiere deinen Entwurf und verwirf dann die Änderungen, um vor der weiteren Bearbeitung die aktuelle Version zu laden.",
+      forbidden: "Deine Berechtigungen oder dieser Pfad erlauben diesen Dateivorgang nicht.",
+      "not-found": "Die Datei oder der Arbeitsbereich existiert nicht mehr.",
+      "too-large": "Der Upload überschreitet die Dateigröße des Servers.",
+      invalid: "Der Server hat den Dateivorgang abgelehnt. Prüfe Pfad und Dateiname.",
+      "helper-incompatible": "Das Hilfsimage ist inkompatibel. Prüfe das konfigurierte Image.",
+      "helper-unavailable": "Der Dateihelfer ist nicht verfügbar. Prüfe Verbindung und Image und versuche es erneut.",
+      "agent-update": "Aktualisiere den Agenten, bevor du diesen Arbeitsbereich öffnest.",
+      unavailable: "Der Arbeitsbereich ist nicht erreichbar. Versuche erneut, ihn zu laden.",
+      unknown: "Der Hub hat die Dateiänderung nicht bestätigt. Lade die Dateien neu und prüfe sie vor einem erneuten Versuch.",
+    },
     aside: {
       title: "Details",
       file: "Geöffnete Datei",

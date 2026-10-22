@@ -219,7 +219,15 @@ export function createVolumesApi(ctx: DemoContext): VolumesApi {
     createEntry: (id, dir, name, type) => fileOp(id, () => db.files.create(id, dir, name.trim(), type)),
     renameEntry: (id, path, name) => fileOp(id, () => db.files.rename(id, path, name.trim())),
     deleteEntry: (id, path) => fileOp(id, () => db.files.remove(id, path)),
-    uploadFile: (id, dir, file) => fileOp(id, () => db.files.create(id, dir, file.name, "file", file.content ?? "", file.content === undefined ? file.size : undefined)),
+    async uploadFile(id, dir, file) {
+      const text = file.content ?? (file.blob && file.size <= 256 * 1024 ? await file.blob.text() : undefined);
+      await fileOp(id, () => db.files.create(id, dir, file.name, "file", text ?? "", text === undefined ? file.size : undefined));
+    },
+    async downloadFile(id, path) {
+      const file = await fileOp(id, () => db.files.read(id, path), false);
+      if (!file.editable) throw new DemoError("not-editable");
+      return new Blob([file.content], { type: "text/plain" });
+    },
 
     async setBackupPolicy(id, policy) {
       await wait(300);
