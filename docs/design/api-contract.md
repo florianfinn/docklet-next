@@ -141,10 +141,11 @@ The trusted agent receiver registers execute/query/cancel and registration/targe
 metadata routes with the existing manager credential. Ordinary bearer,
 administrator and bootstrap credentials cannot grant receiver authority. Direct
 and Edge requests recheck agent access and compatibility; Edge has no Direct
-fallback. Numeric agent contract version and minimum are both 4. The fingerprint
-hashes the exact `types/contract/testdata/agent-hub-v4.json` bytes, with the v3
-fixture preserved. Runtime queries have no compatibility exception. Existing
-health/version/self-upgrade exceptions, `tunnel/v1`, historical OpenAPI and
+fallback. Numeric agent contract version and minimum are both 5. The fingerprint
+hashes the exact `types/contract/testdata/agent-hub-v5.json` bytes, inheriting the
+v4 runtime contract and adding the [storage contract](storage-workspace.md).
+The v3 and v4 fixtures are preserved. Runtime queries have no compatibility
+exception. Existing health/version/self-upgrade exceptions, `tunnel/v1`, historical OpenAPI and
 shipped migrations remain unchanged.
 
 The shared foundation owns runtime wire types, current exports and route

@@ -24,6 +24,7 @@ import (
 	"github.com/florianfinn/docklet-next/backend/internal/database"
 	"github.com/florianfinn/docklet-next/backend/pkg/utils/sqlitestore"
 	activitytypes "github.com/florianfinn/docklet-next/types/activity"
+	"github.com/florianfinn/docklet-next/types/contract"
 	usertypes "github.com/florianfinn/docklet-next/types/user"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
@@ -57,7 +58,7 @@ func TestRuntimeRemoteHubProcessChild(t *testing.T) {
 	if state.Phase == "admitted" {
 		remoteProcessExit()
 	}
-	sender, err := activity.NewRuntimeSender(activity.RuntimeRemoteTarget{EnvironmentID: store.EnvironmentID, Endpoint: state.Endpoint, Token: state.Token, AgentContractVersion: 4}, func(ctx context.Context, _ string, _ *string, _ string, _ string) (context.Context, context.CancelFunc, error) {
+	sender, err := activity.NewRuntimeSender(activity.RuntimeRemoteTarget{EnvironmentID: store.EnvironmentID, Endpoint: state.Endpoint, Token: state.Token, AgentContractVersion: contract.AgentHubVersion}, func(ctx context.Context, _ string, _ *string, _ string, _ string) (context.Context, context.CancelFunc, error) {
 		c, cancel := context.WithCancel(ctx)
 		return c, cancel, nil
 	}, nil, nil)

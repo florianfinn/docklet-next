@@ -155,7 +155,7 @@ func TestPrunePlanSelection(t *testing.T) {
 func TestExecutePruneRechecksCandidateIdentityAndUsage(t *testing.T) {
 	for _, state := range []container.ContainerState{container.StateRunning, container.StateExited} {
 		t.Run(string(state), func(t *testing.T) {
-			f := &pruneDockerFixture{volumes: []volume.Volume{pruneVolume("ok"), pruneVolume("used"), pruneVolume("changed"), pruneVolume("failure"), pruneVolume("untouched")}, removeErrors: map[string]int{"failure": 500}}
+			f := &pruneDockerFixture{volumes: []volume.Volume{pruneVolume("ok"), pruneVolume("used"), pruneVolume("changed"), pruneVolume("failure"), pruneVolume("untouched"), pruneVolume("gone")}, removeErrors: map[string]int{"failure": 500}}
 			svc := f.service(t)
 			plan, err := svc.PlanVolumePrune(t.Context(), true)
 			require.NoError(t, err)
@@ -165,10 +165,11 @@ func TestExecutePruneRechecksCandidateIdentityAndUsage(t *testing.T) {
 					candidates = append(candidates, volumetypes.PruneCandidate{Name: c.Name, CreatedAt: c.CreatedAt})
 				}
 			}
-			candidates = append(candidates, volumetypes.PruneCandidate{Name: "gone", CreatedAt: pruneCreated}, volumetypes.PruneCandidate{Name: "ok", CreatedAt: pruneCreated})
+			candidates = append(candidates, volumetypes.PruneCandidate{Name: "ok", CreatedAt: pruneCreated})
 			// These changes occur after the real plan producer returned.
 			f.containers = []container.Summary{pruneConsumer("used", state)}
 			f.volumes[2].CreatedAt = "2026-10-22T01:00:00Z"
+			f.volumes = f.volumes[:len(f.volumes)-1] // The planned gone volume was deleted meanwhile.
 			result, err := svc.ExecuteVolumePrune(t.Context(), candidates)
 			require.NoError(t, err)
 			require.Equal(t, []string{"ok"}, result.Removed)

@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace
+// Deviations: Local module namespace; Stateless prune HTTP contract.
 
 package volume
 
@@ -340,7 +340,7 @@ func (h *VolumeHandler) PruneVolumes(ctx context.Context, input *PruneVolumesInp
 		ResourceType:   "volume",
 		Step:           "Pruning unused volumes",
 		Message:        "Pruning unused volumes",
-		SuccessMessage: "Volumes pruned successfully",
+		SuccessMessage: "Volume prune completed",
 		Metadata:       database.JSON{"action": "prune_volumes"},
 	}, func(runtimeCtx context.Context) error {
 		var pruneErr error

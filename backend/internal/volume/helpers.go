@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace
+// Deviations: Local module namespace; Complete helper image references and typed ACFS compatibility.
 
 package volume
 
@@ -74,11 +74,11 @@ func (s *VolumeService) requireVolumeHelperACFSInternal(ctx context.Context, vol
 }
 
 func (s *VolumeService) toolsImageInternal() string {
-	registry := ""
+	configured := ""
 	if s.settingsService != nil {
-		registry = s.settingsService.GetSettingsConfig().ToolsImage.Value
+		configured = s.settingsService.GetSettingsConfig().ToolsImage.Value
 	}
-	return volumehelper.ToolsImage(registry)
+	return volumehelper.ToolsImage(configured)
 }
 
 func isUnlabeledVolumeHelperContainerInternal(c container.Summary) bool {
