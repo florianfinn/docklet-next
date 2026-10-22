@@ -35,7 +35,9 @@ Internal and non-local volumes are protected even for crafted requests. Duplicat
 names are processed once. Docker remains the final usage guard against a
 container created between re-check and remove. Each candidate holds the same
 per-volume workspace lock as rename, backup and file mutations through inspect,
-usage re-check and removal. Different-name candidates remain independent.
+usage re-check and removal. A candidate whose lock is already held is skipped
+as `in-use`, without waiting for the workspace operation. Different-name
+candidates remain independent.
 Same-name replacement with a different `CreatedAt` is detected at re-check.
 Docker reports `CreatedAt` with second precision: same-second recreation cannot
 be distinguished. Docker also offers no atomic compare-and-remove identity
@@ -45,8 +47,13 @@ Execution returns `removed`, `skipped` (`in-use`, `not-found`, `changed`), `fail
 (name and stable code) and `spaceReclaimed`; one candidate failure does not abort
 others. Reclaimed bytes are currently unknown and reported as `0`, a lower bound;
 execution does not measure volume data before removal. No Docker-wide prune
-call executes a submitted plan. Internal scheduled/system prune callers retain
-their existing API but obtain a fresh plan and execute that exact candidate list.
+call executes a submitted plan. Manual system prune retains its existing API
+but obtains a fresh plan and executes that exact candidate list.
+Scheduled prune keeps its separate recoverable plan: it selects volumes from
+Docker disk-usage reference counts and the internal/anonymous labels, without
+excluding non-local drivers or mount options. It does not re-check `createdAt`
+or hold the workspace lock, and stops helpers before removal. Alignment with
+the manual volume contract remains follow-up work for the scheduled-prune owner.
 If some candidates fail, manual and scheduled system prune retain successful
 removals in their result and completion log while reporting the failure.
 
@@ -97,8 +104,12 @@ explicit override, so an agent uses its own release default; its local
 synchronised explicit override. First start persists empty. Startup replaces
 previously persisted shipped defaults (`ghcr.io/getarcaneapp/tools:latest` and
 `ghcr.io/florianfinn/docklet-tools:0.1.0`) with empty, including values that were
-explicitly set to those exact defaults. Keep the shipped-default migration list
-when bumping the release image. Other explicit references survive startup.
+explicitly set to those exact defaults. This migration list is closed: it holds
+only values persisted before override-only storage. Release image bump PRs must
+not extend it, so explicit rollback pins remain durable. A test fixes the list
+to those two values; the digest-pin PR must add a guard excluding
+`DefaultToolsImage`, once it differs from the accepted legacy `0.1.0` value.
+Other explicit references survive startup.
 Image overrides must pass Docker reference syntax validation; empty resets the
 override. The shared default is
 `ghcr.io/florianfinn/docklet-tools:0.1.0`; #180 adds the digest after first

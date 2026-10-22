@@ -20,6 +20,7 @@ import (
 	"github.com/florianfinn/docklet-next/backend/internal/testsqlite"
 	"github.com/florianfinn/docklet-next/types/user"
 	volumetypes "github.com/florianfinn/docklet-next/types/volume"
+	"github.com/moby/moby/api/types/volume"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"gorm.io/gorm"
@@ -87,4 +88,47 @@ func TestPruneSerializesWithRename(t *testing.T) {
 	require.NoError(t, <-pruneDone)
 	require.ErrorContains(t, <-renameDone, "inspect source volume", "rename observes the removal after acquiring the shared lock")
 	require.True(t, removed.Load())
+}
+
+func TestPruneSkipsHeldWorkspaceLockAndContinues(t *testing.T) {
+	for _, readLock := range []bool{false, true} {
+		name := "mutation"
+		if readLock {
+			name = "download"
+		}
+		t.Run(name, func(t *testing.T) {
+			f := &pruneDockerFixture{volumes: []volume.Volume{pruneVolume("busy"), pruneVolume("free")}}
+			svc := f.service(t)
+			lock := svc.workspaceLocks.Lock
+			if readLock {
+				lock = svc.workspaceLocks.RLock
+			}
+			release := lock("busy")
+			defer func() { release() }()
+			type outcome struct {
+				result *volumetypes.PruneResult
+				err    error
+			}
+			done := make(chan outcome, 1)
+			go func() {
+				result, err := svc.ExecuteVolumePrune(t.Context(), []volumetypes.PruneCandidate{{Name: "busy", CreatedAt: pruneCreated}, {Name: "free", CreatedAt: pruneCreated}})
+				done <- outcome{result, err}
+			}()
+			var got outcome
+			select {
+			case got = <-done:
+			case <-time.After(5 * time.Second):
+				// Release a broken blocking implementation for cleanup, then assert
+				// its actual result rather than treating a timeout as regression proof.
+				release()
+				release = func() {}
+				got = <-done
+			}
+			require.NoError(t, got.err)
+			require.Equal(t, []volumetypes.PruneSkipped{{Name: "busy", Reason: "in-use"}}, got.result.Skipped, "a held workspace lock must skip the candidate instead of deleting it after release")
+			require.Equal(t, []string{"free"}, got.result.Removed)
+			require.Empty(t, got.result.Failed)
+			require.Equal(t, []string{"free"}, f.removed, "later independent candidates still execute")
+		})
+	}
 }

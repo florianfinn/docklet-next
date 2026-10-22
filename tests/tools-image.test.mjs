@@ -61,6 +61,7 @@ test("tools recipe builds local acfs offline, verifies downloads and exports mat
 
 test("tools CI verifies both native platforms and gates source-first publication on main SemVer tags", () => {
   const workflow = readFileSync(".github/workflows/tools-image.yml", "utf8");
+  assert.equal(workflow.match(/^      IMAGE: (\S+)$/m)?.[1], pins.IMAGE_REPOSITORY, "published image repository must match source metadata repository");
   assert.match(workflow, /^permissions: \{\}$/m);
   assert.match(workflow, /arch: amd64\n            runner: ubuntu-24.04\n/);
   assert.match(workflow, /arch: arm64\n            runner: ubuntu-24.04-arm\n/);
