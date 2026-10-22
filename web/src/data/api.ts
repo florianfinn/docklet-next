@@ -117,7 +117,7 @@ export interface VolumePruneResult {
 
 export interface VolumesApi {
   listVolumes(onPartial?: (rows: Volume[]) => void): Promise<Volume[]>;
-  getVolume(id: string): Promise<VolumeDetail>;
+  getVolume(id: string): Promise<VolumeDetail & { scope?: string }>;
   createVolume(input: CreateVolumeInput): Promise<Volume>;
   deleteVolume(id: string): Promise<void>;
   /** Preview of a prune for the given hosts; computed by the adapter, not the browser. */

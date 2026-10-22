@@ -34,7 +34,7 @@ import { deleteBlock } from "./volume-menu";
 
 type Tab = "overview" | "files" | "backups";
 
-function OverviewTab({ volume: v, host }: { volume: VolumeDetail; host: Host | undefined }) {
+function OverviewTab({ volume: v, host }: { volume: VolumeDetail & { scope?: string }; host: Host | undefined }) {
   const t = useTranslations("volumes.detail");
   const tv = useTranslations("volumes");
   const remove = useCapability("deleteVolume");
@@ -46,7 +46,8 @@ function OverviewTab({ volume: v, host }: { volume: VolumeDetail; host: Host | u
   const blocked = block === "bind" ? t("deleteBind") : block === "in-use" ? t("deleteBlocked") : block === "offline" ? t("deleteOffline") : undefined;
   const rows: [string, string][] = [
     [t("driver"), v.driver ?? t("none")],
-    [v.kind === "volume" ? t("mountpoint") : t("source"), v.source],
+    ...(v.source ? [[v.kind === "volume" ? t("mountpoint") : t("source"), v.source] as [string, string]] : []),
+    ...(v.scope ? [[t("scope"), v.scope] as [string, string]] : []),
     [t("compose"), v.composeName ? `${v.stackName ?? v.stackId}/${v.composeName}` : t("none")],
     [t("created"), v.createdAt ? formatDate(v.createdAt) : t("none")],
   ];
@@ -72,7 +73,7 @@ function OverviewTab({ volume: v, host }: { volume: VolumeDetail; host: Host | u
               </TableHeader>
               <TableBody>
                 {v.consumers.map((c) => (
-                  <TableRow key={`${c.containerId}-${c.target}`}>
+                  <TableRow key={`${c.containerId}-${c.target || t("none")}`}>
                     <TableCell>
                       <span className="flex items-center gap-2 font-medium">
                         {c.stackId ? <Layers className="size-3.5 text-muted-foreground" aria-hidden /> : <Box className="size-3.5 text-muted-foreground" aria-hidden />}
@@ -81,7 +82,7 @@ function OverviewTab({ volume: v, host }: { volume: VolumeDetail; host: Host | u
                       {!c.running && <span className="text-[11px] text-muted-foreground">{t("stopped")}</span>}
                     </TableCell>
                     <TableCell className="font-mono text-xs">
-                      {c.target}
+                      {c.target || t("none")}
                       {c.readOnly && <span className="ml-1.5 rounded border px-1 text-[10px] text-muted-foreground">ro</span>}
                     </TableCell>
                     <TableCell className="text-right">

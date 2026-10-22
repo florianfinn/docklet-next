@@ -88,6 +88,7 @@ export const deVolumes: typeof enVolumes = {
     openContainer: "Container öffnen",
     properties: "Eigenschaften",
     driver: "Treiber",
+    scope: "Geltungsbereich",
     mountpoint: "Mountpoint",
     source: "Quellpfad",
     compose: "Compose-Name",

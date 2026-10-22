@@ -87,6 +87,7 @@ export const enVolumes = {
     openContainer: "Open container",
     properties: "Properties",
     driver: "Driver",
+    scope: "Scope",
     mountpoint: "Mountpoint",
     source: "Source path",
     compose: "Compose name",

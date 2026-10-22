@@ -30,6 +30,7 @@ import { createRuntimeLogs } from "./logs";
 import { registerIdentityLifetime } from "../identity-lifetime";
 import { createIdentityReads } from "./identity-reads";
 import { createActivityReader } from "./activity-reader";
+import { createVolumeReads } from "./volumes";
 import { createStackAuthoring } from "./stack-authoring";
 
 type ReadOperation = "get-capabilities" | "listEnvironments" | "list-activities" | "get-activity" | "listEvents";
@@ -408,6 +409,7 @@ export function createHttpAdapter(options: HttpAdapterOptions = {}): DockletAdap
   }
   const inventory = scopedObservations((observe) => createInventoryReader(baseUrl, fetcher, listHosts, requireCapability, observe));
   const resourceReads = scopedObservations((observe) => createResourceReader(baseUrl, fetcher, listHosts, requireCapability, observe));
+  const volumeReads = createVolumeReads(baseUrl, fetcher, listHosts, requireCapability, observeHost, () => identityGeneration);
   const authoring = createStackAuthoring({
     baseUrl, client, capability: getCapability,
     up: (stackId) => runtime.runStackCommand(stackId, "start"),
@@ -435,6 +437,7 @@ export function createHttpAdapter(options: HttpAdapterOptions = {}): DockletAdap
     listHosts,
     ...inventory,
     ...resourceReads,
+    ...volumeReads,
     listActions: actions.load,
     subscribeActionReadHealth(listener) {
       healthListeners.add(listener);

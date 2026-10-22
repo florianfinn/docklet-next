@@ -43,6 +43,9 @@ export function resourceFixture() {
     if (url.pathname.endsWith("/projects/project/compose")) return state.filesDown ? json("agent.unavailable", false, false, 502) : json({ ...project, composeContent: "services:\n  web:\n    image: example:1.0.0\n", envContent: "TZ=UTC\n" });
     if (url.pathname.endsWith("/containers")) return json([{ ...container, mounts: state.bind ? [{ type: "bind", name: "", source: "/srv/example~data", destination: "/data", rw: true }] : container.mounts }, { ...container, id: "db", names: ["/db"], state: "exited", labels: { "com.docker.compose.project": "app", "com.docker.compose.service": "db" }, ports: [], mounts: [] }], true, true);
     if (url.pathname.endsWith("/images")) return json(state.malformed ? [{ id: "bad" }] : [image, { ...image, id: "unused", repoTags: ["unused:1"], usedBy: [], inUse: false }, { ...image, id: "dangling", repoTags: [], usedBy: [], inUse: false }], true, true);
+    if (url.pathname.endsWith("/volumes/data/usage")) return json({ inUse: true, containers: ["web"] });
+    if (url.pathname.endsWith("/volumes/sizes")) return json([{ name: "data", size: 512, refCount: 1 }]);
+    if (url.pathname.endsWith("/volumes/data")) return json(volume, false, true);
     if (url.pathname.endsWith("/volumes")) return json([volume], true, true);
     if (url.pathname.endsWith("/networks")) return json(state.networks, true, true);
     const detail = state.networks.find((n) => url.pathname.endsWith(`/networks/${n.id}`));
