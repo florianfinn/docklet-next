@@ -25,7 +25,7 @@ export const enCommon = {
     start: "Start",
     stop: "Stop",
     more: "More actions",
-    confirmFailed: "That didn't work. The message gives the reason; you can try again or cancel.",
+    confirmFailed: "That didn''t work. The message gives the reason; you can try again or cancel.",
   },
   hidden: {
     title: "Hidden",
