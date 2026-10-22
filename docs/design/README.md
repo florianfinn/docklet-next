@@ -28,6 +28,7 @@ GitHub issues and milestones hold implementation and acceptance evidence.
 | [Publication policy](publication-policy.md) | Public data checks and local denylist |
 | [Provenance](provenance.md) | Source headers, inventories, size ratchet and assets |
 | [Licensing](licensing.md) | Six adoption and distribution duties |
+| [Tools helper image](tools-image.md) | Pinned two-platform helper, offline acfs, gated publication and corresponding BusyBox source |
 | [Hub database backup](hub-backup.md) | Coordinated SQLite archives, paired restore and interruption recovery |
 | [Practical acceptance](practical-acceptance.md) | Approved sandbox procedure |
 

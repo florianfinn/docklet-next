@@ -40,7 +40,7 @@ const PRODUCT_NOTICES = new Set([
   "LICENSES/MIT-victory-vendor.txt",
 ]);
 function foundationPath(path) {
-  if (PRODUCT_NOTICES.has(path)) return false;
+  if (PRODUCT_NOTICES.has(path) || path.startsWith("LICENSES/tools/")) return false;
   return FOUNDATION_FILES.has(path) ||
     ["scripts/", ".githooks/", ".github/", "LICENSES/"].some((prefix) => path.startsWith(prefix));
 }
