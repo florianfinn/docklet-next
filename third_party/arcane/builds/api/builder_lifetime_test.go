@@ -122,8 +122,8 @@ type lifetimeWriter struct {
 }
 
 func (w *lifetimeWriter) Write(p []byte) (int, error) {
-	w.once.Do(func() { close(w.entered) })
 	w.active.Store(true)
+	w.once.Do(func() { close(w.entered) })
 	defer w.active.Store(false)
 	<-w.release
 	if w.failed != nil {
