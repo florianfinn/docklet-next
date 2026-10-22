@@ -1,0 +1,19 @@
+# Source: getarcaneapp/tools/build.yaml
+# Revision: 01903271fa1297cc3f61e95a19d0becb5ac535fa
+# Retrieved: 2026-10-22
+# License: BSD-3-Clause
+# Deviations: Materialized original runtime applet list; comment lines ignored.
+sh
+sleep
+find
+gzip
+stat
+readlink
+head
+rm
+mkdir
+mv
+rmdir
+mktemp
+tar
+test
