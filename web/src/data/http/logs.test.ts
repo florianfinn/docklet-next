@@ -92,3 +92,40 @@ it("marks an open quiet source live and ignores a late open callback after reset
   expect(logDelivery(f.lines())?.status).toBe("live"); expect(f.lines()).toEqual([]);
   f.owner.reset(); opened(new Event("open")); f.flush(); expect(logDelivery(f.lines())?.status).toBe("unauthenticated"); stop();
 });
+
+it("replenishes retries after valid delivery and a sustained healthy connection", async () => {
+  const f = logFixture(); const stop = f.owner.subscribeLogs("0~healthy", f.push); await settleLogs();
+  for (let i = 0; i < 7; ++i) {
+    expect(f.sockets).toHaveLength(i + 1);
+    f.sockets.at(-1)!.send(wireLog(1)); f.flush();
+    await vi.advanceTimersByTimeAsync(30000);
+    f.sockets.at(-1)!.disconnect(); await settleLogs();
+    await vi.advanceTimersByTimeAsync(1000); await settleLogs();
+    expect(f.sockets).toHaveLength(i + 2);
+  }
+  stop();
+});
+it.each(["brief delivery", "open only", "empty batch"])("keeps a finite flapping budget for %s", async (kind) => {
+  const f = logFixture(); const stop = f.owner.subscribeLogs("0~flapping", f.push); await settleLogs();
+  for (let i = 0; i < 6; ++i) {
+    const socket = f.sockets.at(-1)!;
+    socket.onopen?.(new Event("open"));
+    if (kind === "brief delivery") socket.send(wireLog(1));
+    if (kind === "empty batch") socket.send([]);
+    await vi.advanceTimersByTimeAsync(kind === "brief delivery" ? 29999 : 30000);
+    socket.disconnect(); await settleLogs(); await vi.runAllTimersAsync(); await settleLogs();
+  }
+  f.flush(); expect(f.sockets).toHaveLength(6); expect(logDelivery(f.lines())?.status).toBe("error");
+  expect(vi.getTimerCount()).toBe(0);
+  logDelivery(f.lines())!.retry!(); await settleLogs(); expect(f.sockets).toHaveLength(7);
+  stop();
+});
+it.each([5, 4])("rejects non-increasing sequence %s visibly without appending the offending row", async (seq) => {
+  const f = logFixture(); const stop = f.owner.subscribeLogs("0~sequence", f.push); await settleLogs();
+  f.sockets[0]!.send(wireLog(5, "accepted")); f.flush();
+  f.sockets[0]!.send(wireLog(seq, "offending")); f.flush();
+  expect(logDelivery(f.lines())?.status).toBe("error");
+  expect(f.lines().map((line) => line.message)).toEqual(["accepted"]);
+  expect(f.sockets[0]!.close).toHaveBeenCalledTimes(1);
+  expect(vi.getTimerCount()).toBe(0); stop();
+});

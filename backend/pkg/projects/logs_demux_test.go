@@ -15,6 +15,7 @@ import (
 	"testing"
 
 	"github.com/moby/moby/api/pkg/stdcopy"
+	containertypes "github.com/moby/moby/api/types/container"
 	"github.com/moby/moby/client"
 	"github.com/stretchr/testify/require"
 	"go.getarcane.app/docker"
@@ -72,11 +73,18 @@ func (b *fakeResponseBodyInternal) Close() error {
 type stubLogAPIClientInternal struct {
 	client.APIClient
 
-	resp io.ReadCloser
+	resp      io.ReadCloser
+	logsCalls int
+	inspect   client.ContainerInspectResult
 }
 
 func (s *stubLogAPIClientInternal) ContainerLogs(ctx context.Context, containerID string, options client.ContainerLogsOptions) (client.ContainerLogsResult, error) {
+	s.logsCalls++
 	return s.resp, nil
+}
+
+func (s *stubLogAPIClientInternal) ContainerInspect(context.Context, string, client.ContainerInspectOptions) (client.ContainerInspectResult, error) {
+	return s.inspect, nil
 }
 
 func TestLogsDemuxClientContainerLogsDecisionInternal(t *testing.T) {
@@ -95,8 +103,8 @@ func TestLogsDemuxClientContainerLogsDecisionInternal(t *testing.T) {
 	}{
 		{name: "non-tty streams are transformed", containerKnown: true, showStdout: true, showStderr: true, wantWrapped: true},
 		{name: "tty bounded", ttyRecorded: true, containerKnown: true, showStdout: true, showStderr: true, wantWrapped: true},
-		{name: "unknown container passthrough", containerKnown: false, showStdout: true, showStderr: true, wantWrapped: false},
-		{name: "single-stream request passthrough", containerKnown: true, showStdout: true, showStderr: false, wantWrapped: true},
+		{name: "unknown container fails before opening logs", containerKnown: false, showStdout: true, showStderr: true, wantWrapped: false},
+		{name: "single-stream request bounded", containerKnown: true, showStdout: true, showStderr: false, wantWrapped: true},
 	}
 
 	for _, tt := range tests {
@@ -106,19 +114,21 @@ func TestLogsDemuxClientContainerLogsDecisionInternal(t *testing.T) {
 				source = []byte("combined\n")
 			}
 			body := &fakeResponseBodyInternal{Reader: bytes.NewReader(source)}
-			inner := &logsDemuxDockerClientInternal{APIClient: &stubLogAPIClientInternal{resp: body}}
+			api := &stubLogAPIClientInternal{resp: body}
+			inner := &logsDemuxDockerClientInternal{APIClient: api}
 			if tt.containerKnown {
 				inner.recordContainerTTYInternal(" CTR-1 ", tt.ttyRecorded)
 			}
 
 			got, err := inner.ContainerLogs(t.Context(), "ctr-1", client.ContainerLogsOptions{ShowStdout: tt.showStdout, ShowStderr: tt.showStderr})
-			require.NoError(t, err)
-
 			if !tt.wantWrapped {
-				require.Same(t, body, got)
+				require.ErrorContains(t, err, "inspect required")
+				require.Nil(t, got)
+				require.Zero(t, api.logsCalls)
 				return
 			}
 
+			require.NoError(t, err)
 			if tt.ttyRecorded {
 				b, err := io.ReadAll(got)
 				require.NoError(t, err)
@@ -130,4 +140,23 @@ func TestLogsDemuxClientContainerLogsDecisionInternal(t *testing.T) {
 			require.True(t, body.closed, "closing the wrapped stream must close the upstream response")
 		})
 	}
+}
+
+func TestLogsDemuxNilInspectConfigInvalidatesMetadata(t *testing.T) {
+	api := &stubLogAPIClientInternal{}
+	inner := &logsDemuxDockerClientInternal{APIClient: api}
+	api.inspect.Container.Config = &containertypes.Config{Tty: true}
+	_, err := inner.ContainerInspect(t.Context(), "example", client.ContainerInspectOptions{})
+	require.NoError(t, err)
+	_, known := inner.containerTTYInternal("example")
+	require.True(t, known)
+	api.inspect.Container.Config = nil
+	_, err = inner.ContainerInspect(t.Context(), "example", client.ContainerInspectOptions{})
+	require.ErrorContains(t, err, "missing inspect config")
+	_, known = inner.containerTTYInternal("example")
+	require.False(t, known)
+	got, err := inner.ContainerLogs(t.Context(), "example", client.ContainerLogsOptions{})
+	require.ErrorContains(t, err, "inspect required")
+	require.Nil(t, got)
+	require.Zero(t, api.logsCalls)
 }

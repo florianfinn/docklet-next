@@ -3,7 +3,7 @@
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
 // Deviations: Bound source frames and lines before Compose buffering; preserve
-// producer metadata through the optional in-process log sink.
+// producer metadata through the optional in-process log sink; fail on missing inspect metadata.
 
 package projects
 
@@ -11,6 +11,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/binary"
+	"errors"
 	"io"
 	"strings"
 	"sync"
@@ -61,34 +62,44 @@ type logsDemuxDockerClientInternal struct {
 
 func (c *logsDemuxDockerClientInternal) ContainerInspect(ctx context.Context, containerID string, options client.ContainerInspectOptions) (client.ContainerInspectResult, error) {
 	result, err := c.APIClient.ContainerInspect(ctx, containerID, options)
-	if err == nil && result.Container.Config != nil {
-		c.recordContainerTTYInternal(containerID, result.Container.Config.Tty)
-		source := result.Container.Config.Labels["com.docker.compose.service"]
-		if source == "" {
-			source = strings.TrimPrefix(result.Container.Name, "/")
-		}
-		if source == "" {
-			source = containerID
-		}
+	if err != nil || result.Container.Config == nil {
+		key := strings.ToLower(strings.TrimSpace(containerID))
 		c.ttyMu.Lock()
-		if c.containerSources == nil {
-			c.containerSources = make(map[string]string)
-		}
-		c.containerSources[strings.ToLower(strings.TrimSpace(containerID))] = source
+		delete(c.containerTty, key)
+		delete(c.containerSources, key)
 		c.ttyMu.Unlock()
+		if err == nil {
+			err = errors.New("container log metadata unavailable: missing inspect config")
+		}
+		return result, err
 	}
+	c.recordContainerTTYInternal(containerID, result.Container.Config.Tty)
+	source := result.Container.Config.Labels["com.docker.compose.service"]
+	if source == "" {
+		source = strings.TrimPrefix(result.Container.Name, "/")
+	}
+	if source == "" {
+		source = containerID
+	}
+	c.ttyMu.Lock()
+	if c.containerSources == nil {
+		c.containerSources = make(map[string]string)
+	}
+	c.containerSources[strings.ToLower(strings.TrimSpace(containerID))] = source
+	c.ttyMu.Unlock()
 	return result, err
 }
 
 func (c *logsDemuxDockerClientInternal) ContainerLogs(ctx context.Context, containerID string, options client.ContainerLogsOptions) (client.ContainerLogsResult, error) {
+	tty, known := c.containerTTYInternal(containerID)
+	if !known {
+		// Compose inspects the same full ID before opening logs. Never guess TTY or
+		// pass an unbounded body to its text consumer when that metadata is absent.
+		return nil, errors.New("container log metadata unavailable: inspect required")
+	}
 	resp, err := c.APIClient.ContainerLogs(ctx, containerID, options)
 	if err != nil {
 		return resp, err
-	}
-
-	tty, known := c.containerTTYInternal(containerID)
-	if !known {
-		return resp, nil
 	}
 	c.ttyMu.RLock()
 	service := c.containerSources[strings.ToLower(strings.TrimSpace(containerID))]

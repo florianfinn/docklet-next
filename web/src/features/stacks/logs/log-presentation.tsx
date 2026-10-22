@@ -7,6 +7,7 @@
 import { useTranslations } from "use-intl";
 import type { LogLine } from "@/domain/model";
 import { logDelivery, logGap } from "@/data/log-buffer";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/shared/ui/tooltip";
 import { Button } from "@/shared/ui/button";
 
 export function LogDeliveryNotice({ lines, paused }: { lines: LogLine[]; paused: boolean }) {
@@ -23,7 +24,11 @@ export function LogDeliveryNotice({ lines, paused }: { lines: LogLine[]; paused:
 export function LogSource({ line }: { line: LogLine }) {
   const t = useTranslations("stacks.logs.delivery");
   if (logGap(line) !== undefined) return null;
-  return <span title={t(`stream.${line.stream ?? "unknown"}`)}>{line.service || t("unknownSource")}</span>;
+  const stream = t(`stream.${line.stream ?? "unknown"}`);
+  return <Tooltip>
+    <TooltipTrigger asChild><span tabIndex={0}>{line.service || t("unknownSource")}<span className="sr-only">{` · ${stream}`}</span></span></TooltipTrigger>
+    <TooltipContent>{stream}</TooltipContent>
+  </Tooltip>;
 }
 export function LogMessage({ line }: { line: LogLine }) {
   const t = useTranslations("stacks.logs.delivery");

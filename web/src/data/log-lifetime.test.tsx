@@ -45,3 +45,24 @@ it("adapter replacement rejects a captured callback and discards pending frames"
   act(() => { b.sockets[0]!.send(wireLog(1, "current")); b.flush(); });
   expect(view.result.current[0]?.message).toBe("current"); view.unmount();
 });
+
+it.each(["stack", "container"] as const)("%s viewers share bounded rows across one viewer's pause and resume", async (kind) => {
+  const f = logFixture();
+  const adapter = { ...createDisconnectedAdapter(), subscribeLogs: f.owner.subscribeLogs, subscribeContainerLogs: f.owner.subscribeContainerLogs };
+  const wrapper = ({ children }: { children: ReactNode }) => <AdapterContext.Provider value={adapter}>{children}</AdapterContext.Provider>;
+  const useLogs = kind === "stack" ? useStackLogs : useContainerLogs;
+  const one = renderHook(({ paused }) => useLogs("0~shared", paused), { wrapper, initialProps: { paused: false } });
+  await act(settleLogs);
+  act(() => { f.sockets[0]!.send(wireLog(1, "initial")); f.flush(); });
+  const two = renderHook(() => useLogs("0~shared", false), { wrapper });
+  await act(settleLogs);
+  expect(f.sockets).toHaveLength(1); expect(two.result.current[0]?.message).toBe("initial");
+  one.rerender({ paused: true });
+  act(() => { f.sockets[0]!.send(wireLog(2, "while paused")); f.flush(); });
+  expect(one.result.current.map((l) => l.message)).toEqual(["initial"]);
+  expect(two.result.current.at(-1)?.message).toBe("while paused");
+  one.rerender({ paused: false }); await act(settleLogs);
+  expect(f.sockets).toHaveLength(1); expect(one.result.current.at(-1)?.message).toBe("while paused");
+  one.unmount(); expect(f.sockets[0]!.close).not.toHaveBeenCalled();
+  two.unmount(); expect(f.sockets[0]!.close).toHaveBeenCalledTimes(1);
+});

@@ -14,6 +14,7 @@ import (
 	"runtime"
 	"strings"
 	"testing"
+	"time"
 	"unicode/utf8"
 
 	"github.com/stretchr/testify/require"
@@ -98,4 +99,78 @@ func TestLogProducerBoundsMultibytePrefixBeforeConcatenation(t *testing.T) {
 	require.True(t, utf8.ValidString(line))
 	require.True(t, strings.HasSuffix(line, LogTruncatedMarker))
 	require.Less(t, after.TotalAlloc-before.TotalAlloc, uint64(2<<20), "prefix concatenation must not copy the full prefix")
+}
+
+func TestLogProducerDaemonSystemError(t *testing.T) {
+	for _, text := range []string{"daemon cannot read logs", strings.Repeat("界", MaxLogLineBytes)} {
+		var frame bytes.Buffer
+		writeDockerLogFrameInternal(t, &frame, 3, text)
+		emitted := 0
+		ctx := WithLogSink(t.Context(), func(LogRecord) error { emitted++; return nil })
+		err := StreamContainerLogs(ctx, io.NopCloser(&frame), nil, true, false)
+		require.ErrorContains(t, err, "Docker daemon log error: ")
+		require.Zero(t, emitted)
+		require.True(t, utf8.ValidString(err.Error()))
+		require.LessOrEqual(t, len(err.Error()), 1024+len("Docker daemon log error: "))
+		if len(text) > 1024 {
+			require.Contains(t, err.Error(), LogTruncatedMarker)
+		} else {
+			require.ErrorContains(t, err, text)
+		}
+	}
+}
+
+func TestLogProducerDaemonSystemErrorHugeFrameIsNotDrained(t *testing.T) {
+	var header [8]byte
+	header[0] = 3
+	binary.BigEndian.PutUint32(header[4:], 1<<30)
+	reader := &limitedDiagnosticReader{reader: io.MultiReader(bytes.NewReader(header[:]), repeatingLogByte{})}
+	var before, after runtime.MemStats
+	runtime.ReadMemStats(&before)
+	_, err := NewLogReader(reader, false).Next(t.Context())
+	runtime.ReadMemStats(&after)
+	require.ErrorContains(t, err, "Docker daemon log error: ")
+	require.Contains(t, err.Error(), LogTruncatedMarker)
+	require.LessOrEqual(t, reader.read, 4096+8, "must stop after the diagnostic prefix, including bounded read-ahead")
+	require.Less(t, after.TotalAlloc-before.TotalAlloc, uint64(64<<10))
+}
+
+type limitedDiagnosticReader struct {
+	reader io.Reader
+	read   int
+}
+
+func (r *limitedDiagnosticReader) Read(p []byte) (int, error) {
+	n, err := r.reader.Read(p)
+	r.read += n
+	return n, err
+}
+
+func TestLogProducerDaemonSystemErrorTruncatedAndCancelled(t *testing.T) {
+	var header [8]byte
+	header[0] = 3
+	binary.BigEndian.PutUint32(header[4:], 20)
+	for _, payload := range []string{"partial", ""} {
+		reader := io.MultiReader(bytes.NewReader(header[:]), strings.NewReader(payload))
+		err := StreamContainerLogs(t.Context(), io.NopCloser(reader), nil, true, false)
+		require.ErrorIs(t, err, io.ErrUnexpectedEOF)
+		require.ErrorContains(t, err, payload)
+	}
+
+	input, writer := io.Pipe()
+	defer writer.Close()
+	ctx, cancel := context.WithCancel(t.Context())
+	result := make(chan error, 1)
+	go func() { result <- StreamContainerLogs(ctx, input, nil, true, false) }()
+	// Pipe.Write returns after the decoder consumes the header; cancellation now
+	// interrupts the blocked system diagnostic read through the reader closer.
+	_, err := writer.Write(header[:])
+	require.NoError(t, err)
+	cancel()
+	select {
+	case err = <-result:
+		require.ErrorIs(t, err, context.Canceled)
+	case <-time.After(5 * time.Second):
+		t.Fatal("cancelled diagnostic read did not stop")
+	}
 }

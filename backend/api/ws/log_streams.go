@@ -321,6 +321,10 @@ func (h *WebSocketHandler) startLogSourceInternal(
 				return
 			}
 
+			kind, _ := docker.BoundLogText(label, 64)
+			resource, _ := docker.BoundLogText(resourceID, 256)
+			// One warning per failed source; errors may contain credentials or bodies.
+			slog.WarnContext(ctx, "log source failed", "kind", kind, "resourceId", resource)
 			h.markLogStreamDoneInternal(key, ls)
 			text, cut := docker.BoundLogText("Failed to stream "+label+" logs: "+err.Error(), docker.MaxLogLineBytes)
 			select {

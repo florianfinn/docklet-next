@@ -33,11 +33,13 @@ interface Channel {
   attempt: number;
   lastSeq?: number;
   failures: number;
+  healthySince?: number;
   frame?: number;
   timer?: ReturnType<typeof setTimeout>;
   socket?: LogSocket;
   check?: AbortController;
 }
+const HEALTHY_CONNECTION_MS = 30000;
 const DELAYS = [1000, 2000, 5000, 10000, 30000];
 
 export function createRuntimeLogs(options: Options) {
@@ -82,6 +84,9 @@ export function createRuntimeLogs(options: Options) {
   }
   async function disconnected(ch: Channel, socket: MetricsSocket) {
     if (!current(ch) || ch.socket !== socket) return;
+    // Valid delivery must survive a continuous interval before replenishing retries.
+    // A single frame followed by a quick close is still a flapping connection.
+    if (ch.healthySince !== undefined && performance.now() - ch.healthySince >= HEALTHY_CONNECTION_MS) ch.failures = 0;
     close(ch);
     if (!online()) { state(ch, "offline"); return; }
     const epoch = ch.epoch, controller = new AbortController();
@@ -118,6 +123,7 @@ export function createRuntimeLogs(options: Options) {
     history.delete(ch.address.key); history.set(ch.address.key, true);
     if (history.size > 256) history.delete(history.keys().next().value!);
     ch.lastSeq = undefined;
+    ch.healthySince = undefined;
     ch.buffer.clear();
     state(ch, "connecting");
     let socket: LogSocket;
@@ -140,6 +146,7 @@ export function createRuntimeLogs(options: Options) {
           ch.lastSeq = line.seq;
           ch.buffer.append(line);
         }
+        if (values.length > 0) ch.healthySince ??= performance.now();
         state(ch, "live");
       } catch { close(ch); state(ch, "error"); }
     };

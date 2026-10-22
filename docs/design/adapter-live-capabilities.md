@@ -36,7 +36,7 @@ adapter operation available: its mapping and server capability must both exist.
 | `listHosts`, `listStacks`, `getStack`, `listContainers` | `listEnvironments`, `list-projects`, `get-project`, `list-containers` | Read host identity and aggregate host-scoped projects and containers through the shared agent forwarding path. |
 | `getSecurity`, `listSchedule`, `getSettings` | `get-environment-vulnerability-overview`, `get-job-schedules`, `get-settings` | The first two calls remain unavailable until M11 and M10. `getSettings` stays unavailable for unconnected sections; M4 reads connected sections with `getConnectedSettings`. |
 | `runStackCommand`, `runContainerCommand` | `deploy-project`/`down-project`/`restart-project`/`redeploy-project`; `start-container`/`stop-container`/`restart-container` | Map the seven guarded operation routes with async admission, stable IDs and targeted hub detail. Enable only scoped stack/container descriptors with the complete operation family and activity-read grants; bulk hub controls remain unavailable. |
-| `subscribeLogs`, `subscribeContainerLogs` | Echo project/container log WebSockets (outside OpenAPI) | Scoped log/read grants, JSON source mapping, bounded arrival buffers and reconnect tail replacement. |
+| `subscribeLogs`, `subscribeContainerLogs` | Echo project/container log WebSockets (outside OpenAPI) | Scoped log/read grants, JSON source mapping, bounded arrival buffers and conditional reconnect tail replacement. |
 | Other `DockletAdapter` reads, writes and subscriptions | Existing operation where listed, otherwise no matching operation | Expose unavailable until the owning milestone supplies the complete mapping. Existing WebSockets carry connected logs and stats. |
 
 The HTTP boundary classifies an operation into these outcomes. Existing
@@ -191,13 +191,28 @@ Its existing inspect metadata supplies service and TTY identity, without loading
 Compose/environment files. Structured viewers receive records before normalization;
 legacy text uses the existing stderr marker. Only recognized wire semantic levels
 become severity. Stderr alone stays informational and application text is retained.
+This changes older structured stderr severity to `info`; optional `stream` identifies stderr.
+Older agents remain accepted with unknown stream metadata and their recognized
+semantic levels. No in-repository external consumer requires the former levels.
+Compose v5.6.0 inspects the same full container ID before opening logs. Missing
+inspect Config or unknown TTY metadata now fails visibly before opening a log
+response, rather than passing an unbounded body into Compose. Recheck that ordering
+when upgrading Compose. Docker system-error frames retain at most 1,024 bytes of
+daemon diagnostic, stop without draining oversized frames, and never become
+application rows. A failed shared source emits one server warning with bounded
+kind/resource identity, omitting raw errors, credentials and request bodies.
 
 The browser shares one source per resource/options and identifies entries with
 resource, a monotonically increasing client connection attempt, and source seq.
-An observed seq gap produces a localized entry; reconnect replaces the requested
-tail and displays a boundary. Equal text is retained. The log owner makes at most
-five delayed reconnect attempts (1, 2, 5, 10, 30 seconds) before explicit retry;
-it pauses offline and after identity rejection. A stream close alone triggers a
+An observed seq gap produces a localized entry. Reconnect clears old rows,
+requests a tail and displays a boundary. The tail is supplied only when creating
+a new server source: a source already held by another tab/user sends future lines
+only, including on pause/resume or reconnect. The server does not retain a replay
+buffer. Local listeners sharing the browser channel receive its bounded snapshot.
+Equal text is retained. The log owner makes at most five delayed reconnect attempts
+(1, 2, 5, 10, 30 seconds) before explicit retry. Valid delivery followed by thirty
+seconds of continuous connection replenishes this budget; brief deliveries,
+open-only connections and empty batches do not. It pauses offline and after identity rejection. A stream close alone triggers a
 bounded identity read rather than assuming logout. Last unsubscribe closes its
 socket and cancels its frame, identity read and reconnect timer. The existing
 adapter identity reset also clears this log owner's channels and paused-hook views;

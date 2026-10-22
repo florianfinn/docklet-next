@@ -599,8 +599,10 @@ Use `(subscription attempt, seq)` for line identity, scoped by host/kind/raw
 resource. Increment the client attempt on every connect/reconnect, including
 reopening a surviving shared source; no wire sourceId or timestamp-origin field
 is required. Seq orders source arrival, never timestamp chronology. A gap emits
-a localized loss marker. Reconnect displays a boundary and replaces the bounded
-tail; repeated text is not content-deduplicated or claimed as exactly-once replay.
+a localized loss marker. Reconnect clears rows and displays a boundary. A new
+server source supplies the requested bounded tail; a surviving source shared by
+another viewer supplies future lines only. Pause/resume has the same limit.
+Repeated text is not content-deduplicated or claimed as exactly-once replay.
 
 | `LogLine` target field | Source and rule |
 | --- | --- |
