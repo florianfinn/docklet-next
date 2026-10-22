@@ -223,7 +223,7 @@ type runtimeFollowInternal struct {
 }
 
 // registerFollowLockedInternal claims reader-independent following for a known
-// active run. Callers hold c.mu inside an owned dispatch or query task.
+// active run. Callers hold c.mu inside an owned dispatch, query or follower task.
 func (c *RuntimeRemoteCoordinator) registerFollowLockedInternal(ref RuntimeRunReference, snapshot activitytypes.RuntimeSnapshot, err error) *runtimeFollowInternal {
 	if err != nil || !runtimeFollowableInternal(snapshot) || c.paused || c.lifetime.Err() != nil || c.follows[ref.RunID] != nil {
 		return nil
@@ -242,15 +242,8 @@ func (c *RuntimeRemoteCoordinator) startFollowInternal(ref RuntimeRunReference, 
 		return
 	}
 	go func() {
-		defer func() {
-			follow.task.cancel()
-			c.mu.Lock()
-			if c.follows[ref.RunID] == follow.task {
-				delete(c.follows, ref.RunID)
-			}
-			close(follow.task.done)
-			c.mu.Unlock()
-		}()
+		recheck := false
+		defer func() { c.finishFollowInternal(ref, follow, recheck) }()
 		timer := time.NewTimer(c.followEvery)
 		defer timer.Stop()
 		for {
@@ -267,11 +260,36 @@ func (c *RuntimeRemoteCoordinator) startFollowInternal(ref RuntimeRunReference, 
 				continue
 			}
 			if err != nil || !runtimeFollowableInternal(snapshot) {
+				recheck = err == nil
 				return
 			}
 			timer.Reset(c.followEvery)
 		}
 	}()
+}
+
+// A recovered active answer may have handed off to this departing registration.
+// Serialize a fresh snapshot and replacement with query application/handoff.
+func (c *RuntimeRemoteCoordinator) finishFollowInternal(ref RuntimeRunReference, follow *runtimeFollowInternal, recheck bool) {
+	var snapshot activitytypes.RuntimeSnapshot
+	var err error
+	if recheck {
+		c.service.activity.runningMu.Lock()
+		defer c.service.activity.runningMu.Unlock()
+		snapshot, err = c.service.boundSnapshotInternal(context.WithoutCancel(follow.ctx), ref)
+	}
+	c.mu.Lock()
+	var next *runtimeFollowInternal
+	if c.follows[ref.RunID] == follow.task {
+		delete(c.follows, ref.RunID)
+		if recheck && follow.ctx.Err() == nil {
+			next = c.registerFollowLockedInternal(ref, snapshot, err)
+		}
+	}
+	follow.task.cancel()
+	close(follow.task.done)
+	c.mu.Unlock()
+	c.startFollowInternal(ref, next)
 }
 
 func (c *RuntimeRemoteCoordinator) WaitDispatch(ctx context.Context, runID string) error {

@@ -94,7 +94,22 @@ func (c *RuntimeRemoteCoordinator) scheduleRefreshInternal(ctx context.Context, 
 }
 
 func (c *RuntimeRemoteCoordinator) prepareRefreshInternal(ctx context.Context, ref RuntimeRunReference, force, joinDispatch bool) (activitytypes.RuntimeSnapshot, *runtimeRemoteTaskInternal, error) {
-	snapshot, err := c.Snapshot(ctx, ref)
+	// Serialize the durable dispatch state and task choice with Start. A pending
+	// admission must not query an executor that would fence its future Execute.
+	s := c.service
+	s.activity.runningMu.Lock()
+	defer s.activity.runningMu.Unlock()
+	var snapshot activitytypes.RuntimeSnapshot
+	var pending bool
+	err := s.transactionInternal(ctx, func(tx *gorm.DB, _ time.Time) error {
+		row, err := runtimeReferenceRowTxInternal(tx, ref)
+		if err != nil {
+			return err
+		}
+		pending = *row.DispatchState == "pending" && row.SettledAt == nil
+		snapshot, err = runtimeSnapshotTxInternal(tx, row)
+		return err
+	})
 	if err != nil {
 		return activitytypes.RuntimeSnapshot{}, nil, err
 	}
@@ -111,6 +126,10 @@ func (c *RuntimeRemoteCoordinator) prepareRefreshInternal(ctx context.Context, r
 	if dispatch := c.dispatch[ref.RunID]; joinDispatch && dispatch != nil {
 		c.mu.Unlock()
 		return snapshot, dispatch, nil
+	}
+	if pending {
+		c.mu.Unlock()
+		return snapshot, nil, nil
 	}
 	task := c.queries[ref.RunID]
 	if task == nil {

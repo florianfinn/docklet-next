@@ -25,6 +25,7 @@ import (
 	backuptypes "github.com/florianfinn/docklet-next/types/backup"
 	usertypes "github.com/florianfinn/docklet-next/types/user"
 	"github.com/google/uuid"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"gorm.io/gorm"
 )
@@ -150,6 +151,13 @@ func TestRuntimeActivationActualRestoreAbort(t *testing.T) {
 				_, err = target.runtime.WaitLocal(ctx, activity.RuntimeRunReference{Store: local.Store, RunID: localID})
 				require.NoError(t, err)
 				if fault == "resume-read" {
+					var restore activity.Activity
+					require.NoError(t, target.db.First(&restore, "id = ?", started.ID).Error)
+					assert.Equal(t, activitytypes.StatusRunning, restore.Status, "failed recovery leaves restore unresolved")
+					assert.Nil(t, restore.EndedAt)
+					var finals int64
+					require.NoError(t, target.db.Model(&activity.ActivityMessage{}).Where("activity_id = ? AND code IN ?", started.ID, []string{"activity.success", "activity.failed", "activity.cancelled"}).Count(&finals).Error)
+					require.Zero(t, finals, "failed recovery must not publish a final restore message")
 					require.EqualValues(t, 1, unready.Load())
 					require.True(t, s.maintenance.Status().Active)
 					require.Equal(t, "blocked", s.maintenance.Status().Phase)
