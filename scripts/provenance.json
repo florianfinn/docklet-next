@@ -36,7 +36,8 @@
     "backend/",
     "types/",
     "third_party/arcane/",
-    "third_party/francis/"
+    "third_party/francis/",
+    "deploy/tools/"
   ],
   "migrationHeaderOverrides": {
   },
