@@ -114,10 +114,14 @@ function VersionRow({ label, image, tone, latest }: { label: string; image: Imag
 }
 
 function Footer({ actions, pending }: { actions: UpdateActions; pending: boolean }) {
+  if (!actions.onUpdate && !actions.onRecheck && !actions.blockedReason) return null;
+  return <ActionFooter actions={actions} pending={pending} />;
+}
+
+function ActionFooter({ actions, pending }: { actions: UpdateActions; pending: boolean }) {
   const install = useCapability(actions.updateOperation ?? "installContainerUpdate");
   const check = useCapability("checkUpdates");
   const t = useTranslations("common.updates");
-  if (!actions.onUpdate && !actions.onRecheck && !actions.blockedReason) return null;
   return (
     <div className="flex flex-col gap-2 border-t border-border/50 bg-muted/40 p-3">
       {pending && actions.onUpdate && !actions.blockedReason && (
@@ -194,13 +198,14 @@ export function StackUpdatePanel({ services, actions = {}, times }: { services: 
   const Icon = UPDATE_ICON[summary.visual];
   const pending = summary.pending > 0;
   const affected = services.filter((s) => hasUpdate(s.update)).length;
+  const unchecked = services.filter((s) => s.update.state === "unchecked").length;
   return (
     <div className="text-xs">
       <Header
         tone={summary.errors && !pending ? "err" : tone}
         icon={<Icon />}
-        title={pending ? t("titleStackPending", { count: summary.pending }) : summary.errors ? t("titleError") : t("titleStackCurrent")}
-        desc={pending ? t("descStackPending", { services: affected }) : t("descStackCurrent", { count: services.length })}
+        title={pending ? t("titleStackPending", { count: summary.pending }) : summary.errors ? t("titleError") : unchecked ? t("titleStackUnchecked") : t("titleStackCurrent")}
+        desc={pending ? t("descStackPending", { services: affected }) : unchecked ? t("descStackUnchecked", { count: unchecked }) : t("descStackCurrent", { count: services.length })}
       />
       <ul className="flex flex-col divide-y divide-border/50 px-4 py-1">
         {services.map((s) => {

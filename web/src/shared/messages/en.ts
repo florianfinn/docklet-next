@@ -89,6 +89,8 @@ export const enCommon = {
     descUnchecked: "Update check pending",
     titleStackPending: "{count, plural, one {# update available} other {# updates available}}",
     descStackPending: "{services, plural, one {# service affected} other {# services affected}}",
+    titleStackUnchecked: "Update status incomplete",
+    descStackUnchecked: "{count, plural, one {# service not checked} other {# services not checked}}",
     titleStackCurrent: "All images up to date",
     descStackCurrent: "{count, plural, one {# service checked} other {# services checked}}",
     current: "Current",

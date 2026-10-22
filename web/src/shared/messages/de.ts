@@ -90,6 +90,8 @@ export const deCommon: typeof enCommon = {
     descUnchecked: "Update-Prüfung ausstehend",
     titleStackPending: "{count, plural, one {# Update verfügbar} other {# Updates verfügbar}}",
     descStackPending: "{services, plural, one {# Service betroffen} other {# Services betroffen}}",
+    titleStackUnchecked: "Update-Status unvollständig",
+    descStackUnchecked: "{count, plural, one {# Service nicht geprüft} other {# Services nicht geprüft}}",
     titleStackCurrent: "Alle Images aktuell",
     descStackCurrent: "{count, plural, one {# Service geprüft} other {# Services geprüft}}",
     current: "Aktuell",

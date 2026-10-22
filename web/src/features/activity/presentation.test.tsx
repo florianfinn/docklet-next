@@ -285,6 +285,17 @@ describe("update panel times", () => {
       </IntlProvider>,
     );
 
+  it.each([0, 1])("keeps incomplete checks neutral when %s services are current", (checked) => {
+    const services = [
+      { name: "web", update: { state: "unchecked", current: img } satisfies UpdateInfo },
+      { name: "worker", update: checked ? { state: "current", current: img, checkedAt: new Date().toISOString(), registry: "ghcr.io" } satisfies UpdateInfo : { state: "unchecked", current: img } satisfies UpdateInfo },
+    ];
+    wrap(<StackUpdatePanel services={services} />);
+    expect(screen.queryByText("Alle Images aktuell")).toBeNull();
+    expect(screen.getByText("Update-Status unvollständig") !== null).toBe(true);
+    expect(screen.getByText(checked ? "1 Service nicht geprüft" : "2 Services nicht geprüft") !== null).toBe(true);
+  });
+
   it("shows the last check and the last recorded update, and names what is unknown", () => {
     const checked = new Date(Date.now() - 2 * 3_600_000).toISOString();
     const updated = new Date(Date.now() - 26 * 3_600_000).toISOString();
