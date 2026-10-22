@@ -137,3 +137,7 @@ func TestToolsImageInvalidEnvironmentReferenceFailsInitialization(t *testing.T) 
 	_, err := newSettingsServiceForTestInternal(t, t.Context(), setupSettingsTestDB(t))
 	require.ErrorContains(t, err, "valid Docker image reference")
 }
+
+func TestToolsImageRetirementListIsClosed(t *testing.T) {
+	require.Equal(t, []string{"ghcr.io/getarcaneapp/tools:latest", "ghcr.io/florianfinn/docklet-tools:0.1.0"}, retiredSettingValuesInternal["toolsImage"], "the pre-override-only retirement list is closed: release image bump PRs must not extend it or explicit rollback pins would reset on restart")
+}
