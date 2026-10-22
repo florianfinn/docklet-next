@@ -392,18 +392,30 @@ func TestImageUpdateWatcher_RunNowReturnsCompletedResultInternal(t *testing.T) {
 }
 
 func TestImageUpdateWatcher_RunNowReturnsContainedScanPanicInternal(t *testing.T) {
-	scanner := &imageUpdateScannerFakeInternal{panics: []bool{false, true}}
-	settings := &pollingSettingReaderFakeInternal{enabled: true}
+	scanner := &imageUpdateScannerFakeInternal{panics: []bool{false, true}, startedCh: make(chan int, 2)}
+	settings := &pollingSettingReaderFakeInternal{enabled: true, schedule: "@every 24h"}
 	watcher := newImageUpdateWatcherForTestInternal(t, scanner, settings, bus.NewDockerEventBus(), nil)
 	startImageUpdateWatcherForTestInternal(t, watcher)
-	// Wait for durable startup admission to finish, not just for the scanner to start.
+	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
+	defer cancel()
+	select {
+	case call := <-scanner.startedCh:
+		require.Equal(t, 1, call)
+	case <-ctx.Done():
+		t.Fatal("startup scan did not start")
+	}
+	// Durable admission can finish before the startup scan releases its guard.
 	require.Eventually(t, func() bool {
-		return scanner.countInternal() == 1 && watcher.triggerGeneration.Load() == watcher.acknowledgedGeneration.Load()
+		return !watcher.scanRunning.Load() && watcher.triggerGeneration.Load() == watcher.acknowledgedGeneration.Load()
 	}, time.Second, time.Millisecond)
 
-	ctx, cancel := context.WithTimeout(t.Context(), time.Second)
-	defer cancel()
 	require.ErrorContains(t, watcher.RunNow(ctx), "image update scan worker panicked")
+	select {
+	case call := <-scanner.startedCh:
+		require.Equal(t, 2, call, "the manual request must reach the panicking scan")
+	case <-ctx.Done():
+		t.Fatal("manual scan did not start")
+	}
 	require.Equal(t, 2, scanner.countInternal())
 }
 

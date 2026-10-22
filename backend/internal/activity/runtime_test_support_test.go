@@ -19,6 +19,24 @@ import (
 	"gorm.io/gorm"
 )
 
+// UseImmediateRuntimeReconcileScheduleForTest advances both local clocks instead
+// of sleeping. Call before starting the fixture's application workers.
+func UseImmediateRuntimeReconcileScheduleForTest(c *RuntimeRemoteCoordinator) {
+	var elapsed atomic.Int64
+	now := func() time.Time { return time.Now().Add(time.Duration(elapsed.Load())) }
+	c.service.activity.clock = now
+	c.schedule = RuntimeReconcileSchedule{
+		Now: now,
+		Wait: func(ctx context.Context, d time.Duration) error {
+			if err := ctx.Err(); err != nil {
+				return err
+			}
+			elapsed.Add(int64(d))
+			return nil
+		},
+	}
+}
+
 type b1ResolverInternal struct {
 	calls   atomic.Int64
 	resolve func(context.Context, RuntimeTarget) (RuntimeResolvedTarget, error)

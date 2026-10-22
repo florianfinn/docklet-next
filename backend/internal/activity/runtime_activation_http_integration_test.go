@@ -95,6 +95,7 @@ func activationApp(t *testing.T, agent bool, token string, setup ...activationSe
 	app := fx.New(fx.NopLogger, fx.Supply(local, f.projects, f.containers, environments, f.settings, cfg, client, registry),
 		fx.Provide(func() context.Context { return t.Context() }), di.RuntimeOptions, fx.Populate(&runtime, &httpService, &receiver, &remote))
 	require.NoError(t, app.Err())
+	activity.UseImmediateRuntimeReconcileScheduleForTest(remote)
 	t.Cleanup(func() {
 		ctx, cancel := context.WithTimeout(context.WithoutCancel(t.Context()), 10*time.Second)
 		defer cancel()
