@@ -33,7 +33,7 @@ var adapterOperationIDs = []string{
 	"setContainerAutoUpdate", "setContainerOrigin", "setScanEnabled", "setStackLabels",
 	"subscribeActions", "subscribeChanges", "subscribeContainerLogs", "subscribeLogs",
 	"subscribeMetrics", "testBackupTarget", "testNotification", "updateHost", "uploadFile",
-	"writeFile",
+	"writeFile", "downloadFile",
 }
 
 type GetCapabilitiesInput struct {
@@ -111,6 +111,24 @@ func getCapabilities(ctx context.Context, input *GetCapabilitiesInput) (*handler
 			}
 			if ref.Kind == "hub" {
 				valid = permissions.AllowsAny(grant)
+			}
+			descriptors[i].Available = valid
+			if valid {
+				descriptors[i].DisabledReasonCode = ""
+			} else {
+				descriptors[i].DisabledReasonCode = "capability.unavailable"
+			}
+		case "listFiles", "readFile", "downloadFile", "writeFile", "createEntry", "uploadFile", "renameEntry", "deleteEntry":
+			ref := descriptors[i].ResourceRef
+			env, raw, scoped := strings.Cut(ref.ID, "~")
+			valid := ref.Kind == "volume" && scoped && env != "" && raw != "" && !strings.Contains(raw, "~") && !strings.HasPrefix(raw, "bind:") && permissions.Allows(authz.PermVolumesRead, env)
+			switch descriptors[i].OperationID {
+			case "writeFile", "createEntry", "uploadFile":
+				valid = valid && permissions.Allows(authz.PermVolumesUpload, env)
+			case "renameEntry":
+				valid = valid && permissions.Allows(authz.PermVolumesUpload, env) && permissions.Allows(authz.PermVolumesDelete, env)
+			case "deleteEntry":
+				valid = valid && permissions.Allows(authz.PermVolumesDelete, env)
 			}
 			descriptors[i].Available = valid
 			if valid {
