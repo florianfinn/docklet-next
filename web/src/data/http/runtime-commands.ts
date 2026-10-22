@@ -18,7 +18,7 @@ export const COMMAND_RETRY_MS = 10 * 60_000;
 export const RIGHTS_MAX_AGE_MS = 30_000;
 const LIMIT = 256;
 const stackRoutes: Record<StackCommand, string> = { start: "up", stop: "down", restart: "restart", redeploy: "redeploy" };
-const active = (run: RuntimeRun) => run.status === "running" || run.status === "queued";
+const active = (run: Pick<CodedActionRun, "status">) => run.status === "running" || run.status === "queued";
 
 /** HTTP contexts still have secure random bytes even without Crypto.randomUUID. */
 function commandUUID(): string {
@@ -152,8 +152,8 @@ export function createRuntimeCommands({ baseUrl, client, capability, publish, un
       if (isCancelledError(error) || (error instanceof AdapterOutcomeError && error.outcome.kind === "error" && error.outcome.status === 401)) throw error;
       const retained = runs.get(run.id);
       if (!retained || retained.hostId !== run.hostId) return run;
-      // A later targeted answer wins; otherwise retain only compatible recovery evidence.
-      if ((sequences.get(run.id) ?? 0) > started ||
+      // Only a settled generic row can supersede retained recovery after a failed read.
+      if (active(run) || (sequences.get(run.id) ?? 0) > started ||
           (retained.status === run.status && retained.outcomeState === run.outcomeState)) return retained;
       sequences.set(run.id, started);
       return remember({ ...run, runtime: undefined } as RuntimeRun, false);
@@ -209,6 +209,7 @@ export function createRuntimeCommands({ baseUrl, client, capability, publish, un
         }
         check(version);
         if (controller.signal.aborted || now() - began >= COMMAND_RETRY_MS) throw runtimeError("runtime.pre-admission");
+        const started = ++sequence;
         for (let attempt = 0; attempt < 2; attempt++) {
           let response: Response;
           try {
@@ -243,9 +244,12 @@ export function createRuntimeCommands({ baseUrl, client, capability, publish, un
           const data = object(object(body).data);
           try {
             if (object(body).success !== true || (response.status === 202 ? data.code !== "run.started" : response.status !== 200 || data.code !== "run.joined") || typeof data.activityId !== "string" || !data.activityId.trim()) throw runtimeError("runtime.invalid-response");
-            const run = mapRuntime(data.activity, host, data.activityId);
+            let run = mapRuntime(data.activity, host, data.activityId);
+            const retained = runs.get(run.id);
+            // The admission snapshot can arrive after a newer targeted observation.
+            if (retained?.hostId === host && started < (sequences.get(run.id) ?? 0)) run = retained;
             run.runtime = { ...run.runtime, currentIntent: true };
-            sequences.set(run.id, ++sequence);
+            sequences.set(run.id, Math.max(started, sequences.get(run.id) ?? 0));
             remember(run);
             // A final admission response ends key retention. Future work is query-only.
             void detail(host, run.id).catch(() => undefined);

@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-20
 // License: BSD-3-Clause
-// Deviations: Extracted stream reader; require terminal completion and preserve uncoded diagnostics.
+// Deviations: Extracted stream reader; select runtime or legacy terminal semantics; preserve runtime diagnostics.
 
 package projects
 
@@ -17,10 +17,18 @@ import (
 	"github.com/florianfinn/docklet-next/cli/internal/output"
 )
 
+type operationStreamKind uint8
+
+const (
+	runtimeOperationStream operationStreamKind = iota
+	legacyOperationStream
+)
+
 // printOperationStreamInternal consumes an NDJSON operation stream, printing
 // raw docker CLI log lines to stdout. A terminal error frame is returned as an
-// error. EOF before done is an interrupted operation; unknown frames (e.g. the activity envelope) are skipped.
-func printOperationStreamInternal(body io.Reader) error {
+// error. Runtime errors require code/done; legacy pull/build errors are terminal
+// without either field. EOF before completion is interrupted; unknown frames are skipped.
+func printOperationStreamInternal(body io.Reader, kind operationStreamKind) error {
 	scanner := bufio.NewScanner(body)
 	scanner.Buffer(make([]byte, 0, 64*1024), 4*1024*1024)
 
@@ -40,7 +48,7 @@ func printOperationStreamInternal(body io.Reader) error {
 			continue
 		}
 		if frame.Error != "" {
-			if frame.Code != "" || frame.Done {
+			if kind == legacyOperationStream || frame.Code != "" || frame.Done {
 				return errors.New(frame.Error)
 			}
 			_, _ = fmt.Fprintln(output.Stderr(), frame.Error)

@@ -101,3 +101,52 @@ it.each(["503", "malformed"])("newer generic settled observation wins through re
     expect(f.helper.retained()[0]).toMatchObject({ status: "succeeded", outcomeState: "known" });
   }
 });
+
+it.each(["running", "queued"] as const)("stale %s generic snapshot cannot replace a newer retained terminal answer", async (status) => {
+  const f = runtimeFixture(); f.state.run = snapshot("edge", { status });
+  await f.helper.runContainerCommand("edge~target", "start");
+  await f.helper.getRuntimeRun("edge", RUN_ID);
+  const reached = deferred<void>(), release = deferred<void>();
+  const stale = f.state.run;
+  const reader = createActivityReader({ hosts: async () => ["edge"], page: async () => ({ items: [stale], incomplete: false }),
+    detail: async () => { reached.resolve(); await release.promise; return runtimeDetail(stale); },
+    project: f.helper.project, retained: f.helper.retained, publish() {}, unauthorized() {} });
+  const older = reader.load(); await reached.promise;
+  f.state.run = snapshot("edge", { status: "success", outcomeState: "known" });
+  await f.helper.getRuntimeRun("edge", RUN_ID);
+  f.state.detailStatus = 503; release.resolve(); await older;
+  expect(reader.runs()[0], "stale active generic row must preserve retained terminal status").toMatchObject({ status: "succeeded", outcomeState: "known" });
+  expect(f.helper.retained()[0]).toMatchObject({ status: "succeeded", outcomeState: "known", runtime: { currentIntent: true } });
+  expect(f.commands()).toHaveLength(1);
+});
+
+it.each([200, 202])("delayed admission %s cannot overwrite a newer targeted terminal observation", async (status) => {
+  const f = runtimeFixture(); f.state.run = snapshot("edge");
+  const reached = deferred<void>(), release = deferred<void>(); const admission = f.state.run;
+  f.state.command = async () => { reached.resolve(); await release.promise; return envelope({ code: status === 202 ? "run.started" : "run.joined", activityId: RUN_ID, activity: admission }, status); };
+  const command = f.helper.runContainerCommand("edge~target", "start"); await reached.promise;
+  f.state.run = snapshot("edge", { status: "success", outcomeState: "known" });
+  await f.helper.getRuntimeRun("edge", RUN_ID);
+  f.state.detailStatus = 503; release.resolve(); expect(await command).toBe(RUN_ID);
+  expect(f.helper.retained()[0], "admission must preserve newer targeted terminal status").toMatchObject({ status: "succeeded", outcomeState: "known", runtime: { currentIntent: true } });
+  expect(f.published.at(-1)?.status).toBe("succeeded"); expect(f.commands()).toHaveLength(1);
+});
+
+it.each(["cancel", "release"] as const)("older %s response cannot overwrite a newer targeted terminal observation", async (action) => {
+  const f = runtimeFixture(); f.state.run = snapshot("edge");
+  await f.helper.getRuntimeRun("edge", RUN_ID);
+  const reached = deferred<void>(), release = deferred<void>();
+  f.state.read = async (_url, init) => {
+    if (init.method !== "POST") return envelope(runtimeDetail(f.state.run));
+    reached.resolve(); await release.promise;
+    return envelope(snapshot("edge", { status: action === "release" ? "failed" : "running", cancelRequested: true }));
+  };
+  const older = action === "cancel" ? f.helper.cancelRuntimeRun("edge", RUN_ID)
+    : f.helper.releaseRuntimeRun("edge", RUN_ID, { reason: "Executor stopped and inspected", acknowledgeRisk: true });
+  await reached.promise;
+  f.state.run = snapshot("edge", { status: "success", outcomeState: "known" });
+  await f.helper.getRuntimeRun("edge", RUN_ID);
+  f.state.read = () => response({}, 503); release.resolve();
+  expect(await older).toMatchObject({ status: "succeeded", outcomeState: "known" });
+  expect(f.helper.retained()[0]).toMatchObject({ status: "succeeded", outcomeState: "known" });
+});

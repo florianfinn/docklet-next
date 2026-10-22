@@ -72,8 +72,9 @@ and `.env` separately through `get-project-compose`, which is not cached.
   refused before any request (`stack.host-immutable`).
 - Labels are diffed against the current server tags after normalization
   (trimmed, lowercase, de-duplicated). Compose-sourced tags are read-only on the
-  hub and surface as a refused change. Browser normalization follows the hub’s whitespace trimming and Unicode
-  simple lowercase, including dotted capital I and non-contextual Greek sigma.
+  hub and surface as a refused change. Browser normalization follows the hub’s
+  whitespace trimming and Unicode simple lowercase, including dotted capital I
+  and non-contextual Greek sigma.
 
 ## docker run conversion
 

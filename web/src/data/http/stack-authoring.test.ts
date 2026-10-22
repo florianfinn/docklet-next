@@ -153,7 +153,7 @@ describe("docker run conversion", () => {
   });
 });
 
-it.each([["İ", "i"], ["ΟΣ", "οσ"]])("diffs %s using hub simple lowercase %s without replacing the server tag", async (entered, server) => {
+it.each([["İ", "i"], ["ΟΣ", "οσ"], ["\u0085Example\u0085", "example"], ["\ufeffExample\ufeff", "\ufeffexample\ufeff"]])("diffs %s using hub simple lowercase %s without replacing the server tag", async (entered, server) => {
   const f = fixture([ok({}), ok({})], { labels: [server!] });
   await f.authoring.setStackLabels("h1~p1", [entered!]);
   expect(f.fetch).not.toHaveBeenCalled();

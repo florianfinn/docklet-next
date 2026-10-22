@@ -267,3 +267,36 @@ it.each(["password", "login"])("same-user %s renewal cancels the old consumer in
     expect(errors).not.toHaveBeenCalled(); expect(successes).not.toHaveBeenCalled();
   } finally { release.resolve(); view.unmount(); }
 });
+
+it("stale active generic snapshot cannot reopen a retained terminal run or replay its toast", async () => {
+  const f = runtimeFixture(); f.state.run = snapshot("edge");
+  let stale: ReturnType<typeof snapshot> | undefined;
+  const reached = deferred<void>(), release = deferred<void>();
+  f.state.activity = async (url) => {
+    if (url.pathname.endsWith("/activities")) return response({ success: true, data: url.pathname.includes("/edge/") ? [f.state.run] : [], pagination: { totalItems: url.pathname.includes("/edge/") ? 1 : 0 } });
+    if (stale) { const captured = stale; reached.resolve(); await release.promise; return envelope(runtimeDetail(captured)); }
+    return envelope(runtimeDetail(f.state.run));
+  };
+  const adapter = withRunGate({ ...f.adapter, getConnectedSettings: async () => ({ activity: { actionPresentation: "toast" } }) as never });
+  const shows = vi.spyOn(toast, "custom"); const view = mount(<ActionToasts />, adapter);
+  try {
+    await act(async () => { await adapter.runContainerCommand("edge~target", "start"); await f.adapter.getRuntimeRun!("edge", RUN_ID); });
+    expect(runGateOf(adapter)!.size).toBe(1);
+    stale = f.state.run;
+    f.state.run = snapshot("edge", { status: "failed", outcomeState: "known" });
+    await act(async () => { await f.adapter.getRuntimeRun!("edge", RUN_ID); });
+    expect(runGateOf(adapter)!.size).toBe(0);
+    const count = shows.mock.calls.filter(([, options]) => options?.id === RUN_ID).length;
+    expect(count).toBeGreaterThan(0);
+    const older = adapter.listActions(); await reached.promise;
+    f.state.detailStatus = 503;
+    let observed: Awaited<ReturnType<typeof adapter.listActions>> = [];
+    await act(async () => { release.resolve(); observed = await older; });
+    // Keep checking notification replay even when the stale-status assertion fails.
+    expect.soft(observed[0], "stale generic row must keep the terminal run").toMatchObject({ status: "failed", outcomeState: "known" });
+    stale = undefined; f.state.detailStatus = 200;
+    await act(async () => { await adapter.listActions(); });
+    expect(shows.mock.calls.filter(([, options]) => options?.id === RUN_ID), "stale generic row must not replay the terminal toast").toHaveLength(count);
+    expect(runGateOf(adapter)!.size).toBe(0); expect(f.commands()).toHaveLength(1);
+  } finally { release.resolve(); view.unmount(); }
+});
