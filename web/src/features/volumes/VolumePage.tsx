@@ -252,7 +252,7 @@ export default function VolumePage() {
                 <TabsTrigger value="files" className="gap-1.5 px-3">
                   <FolderOpen /> {t("tabs.files")}
                 </TabsTrigger>
-                <TabsTrigger value="backups" className="gap-1.5 px-3">
+                <TabsTrigger value="backups" disabled={!backup.available} title={backup.reason} aria-description={backup.reason} className="gap-1.5 px-3">
                   <Archive /> {t("tabs.backups")}
                 </TabsTrigger>
               </TabsList>

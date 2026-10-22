@@ -1,3 +1,4 @@
+import { QueryError } from "@/shared/components/page";
 import { Database, FolderOpen } from "lucide-react";
 import { Link } from "react-router";
 import { useTranslations } from "use-intl";
@@ -33,6 +34,8 @@ export function StorageCard({ stackId }: { stackId: string }) {
       <CardContent className="px-4">
         {volumes.isPending ? (
           <Skeleton className="h-24 rounded-xl" />
+        ) : volumes.isError ? (
+          <QueryError error={volumes.error} onRetry={() => void volumes.refetch()} />
         ) : used.length === 0 ? (
           <p className="text-sm text-muted-foreground">{t("empty")}</p>
         ) : (

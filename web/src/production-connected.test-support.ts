@@ -9,14 +9,14 @@ import { vi } from "vitest";
 import { resourceFixture } from "@/data/http/resources.test-support";
 import { directWsCreate } from "@/data/http/workspace-smoke.test-support";
 
-/** Reuse recorded inventory DTO shapes and the sanitised real workspace envelope. */
+/** Reuse inventory contract fixtures and the sanitised real workspace envelope. */
 export function connectedFixture() {
   const inventory = resourceFixture();
   inventory.state.hostIds = ["first"];
   const state = { signedIn: false, failed: "", calls: [] as string[] };
   const json = (data: unknown) => Response.json({ success: true, data }, { headers: { "X-CSRF-Token": "example".padEnd(43, "x") } });
   const user = { id: "admin", username: "operator", requiresPasswordChange: false, locale: "de" };
-  const fetcher = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+  const fetcher = vi.fn(async (input: RequestInfo | URL, _init?: RequestInit) => {
     const url = new URL(String(input), "https://hub.example.com");
     const path = url.pathname;
     state.calls.push(path);
@@ -32,7 +32,7 @@ export function connectedFixture() {
     if (state.failed && path.includes(state.failed)) return Response.json({ code: "http.error" }, { status: 500 });
     if (path.endsWith("/workspace")) return json(directWsCreate);
     if (path.endsWith("/workspace/file")) return json({ relativePath: "hello.txt", path: "/hello.txt", name: "hello.txt", content: "hello.txt", editable: true, size: 9, mimeType: "text/plain" });
-    return inventory.fetcher(input, init);
+    return inventory.fetcher(input);
   });
   return { state, fetcher, webSocket: inventory.webSocket, source: inventory.source };
 }

@@ -1,3 +1,4 @@
+import { CapabilityGate } from "@/shared/components/capability-gate";
 import { useCapability } from "@/data/use-capability";
 import { Bot, Cable, Check, RotateCw } from "lucide-react";
 import { useState, type ReactNode } from "react";
@@ -40,7 +41,7 @@ function AgentPanel({ host, component }: { host: Host; component: SystemComponen
   const reconnect = useCapability("reconnectHost");
   const restart = useHostAction(host.id, "agent-restart", () => cmd.restartAgent(host.id));
   const check = useHostAction(host.id, "reconnect", () => cmd.reconnect(host.id));
-  if (!component) return <p className="text-sm text-muted-foreground">{t("agentNone")}</p>;
+  if (!component) return <CapabilityGate operation="listSystemComponents"><p className="text-sm text-muted-foreground">{t("agentNone")}</p></CapabilityGate>;
   const online = host.status === "online";
   return (
     <div className="flex flex-col gap-4" data-slot="agent-container">

@@ -30,7 +30,7 @@ export function useVolumeMenu(v: Volume, host: Host | undefined, on: { remove: (
     [
       { id: "open", label: t("open"), icon: <Eye />, onSelect: () => navigate(`/volumes/${v.id}`) },
       { id: "files", label: t("files"), icon: <FolderOpen />, disabled: !files.available || !online, title: files.reason, onSelect: () => navigate(filesHref(v)) },
-      { id: "backups", label: t("backups"), icon: <Archive />, onSelect: () => navigate(`/volumes/${v.id}?tab=backups`) },
+      { id: "backups", label: t("backups"), icon: <Archive />, disabled: !backup.available, title: backup.reason, onSelect: () => navigate(`/volumes/${v.id}?tab=backups`) },
     ],
     [
       ...(v.stackId ? [{ id: "stack", label: t("stack"), icon: <Layers />, onSelect: () => navigate(`/stacks/${v.stackId}`) }] : []),

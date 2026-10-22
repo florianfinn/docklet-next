@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, screen } from "@testing-library/react";
 import { Profiler } from "react";
 import { matchRoutes, type RouteObject } from "react-router";
 import { afterAll, afterEach, beforeAll, expect, it, vi } from "vitest";
@@ -52,8 +52,7 @@ it.each(paths)("settles with the product HTTP adapter when the backend is unavai
   });
   try {
     renderProductRoutes(bounded(routes), [path], productAdapter());
-    if (path !== "/setup" && path !== "/login") await waitFor(() => expect(document.body.textContent?.trim().length).toBeGreaterThan(20));
-    await new Promise((resolve) => setTimeout(resolve, path === "/stacks/new" ? 5000 : 750));
+    await screen.findByText(path === "/setup" ? "Der Status der Ersteinrichtung konnte nicht geprüft werden." : "Die Anmeldeart konnte nicht geladen werden. Bitte erneut versuchen.");
     expect(commits).toBeLessThanOrEqual(40);
     expect(timers.mock.calls.length).toBeLessThan(200);
     expect(errors).toEqual([]);
@@ -79,13 +78,15 @@ it("keeps protected navigation hidden while the sign-in policy is unavailable", 
   }
 });
 
-it("handles a rejected source import with the product HTTP adapter", async () => {
+it("keeps unmapped source imports unavailable with the product HTTP adapter", async () => {
   const errors: string[] = [];
   const error = vi.spyOn(console, "error").mockImplementation((...args) => errors.push(args.map(String).join(" ")));
   try {
     renderProductComponent(<ProductImportSourceDialog open onOpenChange={() => undefined} onApply={() => undefined} />, productAdapter());
-    fireEvent.click(await screen.findByRole("button", { name: "github.com/example/notes-app" }));
-    expect(await screen.findByText("Quelle nicht verfügbar. Später erneut versuchen.")).toBeTruthy();
+    const example = await screen.findByRole("button", { name: "github.com/example/notes-app" });
+    expect(example.hasAttribute("disabled")).toBe(true);
+    fireEvent.click(example);
+    expect(await screen.findByRole("status")).toBeTruthy();
     expect(errors).toEqual([]);
   } finally {
     error.mockRestore();

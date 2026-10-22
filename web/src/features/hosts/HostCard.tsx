@@ -1,3 +1,4 @@
+import { CapabilityGate } from "@/shared/components/capability-gate";
 import { Bot, Cable, Eye, FileArchive, Filter, PlugZap, Settings2, Trash2, Unplug } from "lucide-react";
 import { useState, type ReactNode } from "react";
 import { useTranslations } from "use-intl";
@@ -145,7 +146,7 @@ export function HostCard({ host, system, stacks, containers, allIds, onFiles }: 
       </dl>
       {host.status === "token-rejected" && <p role="status" className="text-sm text-destructive">{t("tokenRejected")}</p>}
       <AgentReportSection host={host} />
-      {(system || !host.agentVersion && !host.agentReport) && <SystemSection component={system} />}
+      {(system || !host.agentVersion && !host.agentReport) && <CapabilityGate operation="listSystemComponents"><SystemSection component={system} /></CapabilityGate>}
       <p className="text-xs text-muted-foreground">{t("card.usage", { stacks, containers })}</p>
       <footer className="flex flex-wrap gap-2 border-t pt-3">
         {pending ? (import.meta.env.DEV ? (
