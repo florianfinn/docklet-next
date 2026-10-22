@@ -7,14 +7,13 @@
 package workspace
 
 import (
-	"github.com/florianfinn/docklet-next/types/volume"
 	"net/http"
 	"reflect"
 
 	"github.com/danielgtaylor/huma/v2"
-
 	"github.com/florianfinn/docklet-next/backend/pkg/authz"
 	"github.com/florianfinn/docklet-next/backend/pkg/utils/handlerutil"
+	"github.com/florianfinn/docklet-next/types/volume"
 )
 
 // RegisterRoutes registers the volume workspace endpoints.
@@ -57,7 +56,10 @@ func RegisterRoutes(api huma.API, h *Handler) {
 		if route.method == "PUT" {
 			operation = item.Put
 		}
-		operation.Responses["503"] = &huma.Response{Description: "Configured helper is incompatible; no file access occurred", Content: map[string]*huma.MediaType{"application/problem+json": {Schema: api.OpenAPI().Components.Schemas.Schema(reflect.TypeFor[volume.HelperIncompatibleError](), true, "")}}}
+		operation.Responses["503"] = &huma.Response{Description: "Helper incompatible or temporarily unavailable; no file access occurred", Content: map[string]*huma.MediaType{"application/problem+json": {Schema: &huma.Schema{OneOf: []*huma.Schema{
+			api.OpenAPI().Components.Schemas.Schema(reflect.TypeFor[volume.HelperIncompatibleError](), true, ""),
+			api.OpenAPI().Components.Schemas.Schema(reflect.TypeFor[volume.HelperUnavailableError](), true, ""),
+		}}}}}
 	}
 
 }

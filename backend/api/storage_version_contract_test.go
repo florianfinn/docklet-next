@@ -23,10 +23,11 @@ func TestStorageV5FixtureMatchesRegisteredProducer(t *testing.T) {
 	require.NoError(t, err)
 	var fixture struct {
 		Storage struct {
-			Routes             []struct{ Method, Path, OperationID string }
-			RequiredFields     map[string][]string `json:"requiredFields"`
-			HelperErrorCode    string              `json:"helperErrorCode"`
-			HelperImageSetting string              `json:"helperImageSetting"`
+			Routes                []struct{ Method, Path, OperationID string }
+			RequiredFields        map[string][]string `json:"requiredFields"`
+			HelperUnavailableCode string              `json:"helperUnavailableCode"`
+			HelperErrorCode       string              `json:"helperErrorCode"`
+			HelperImageSetting    string              `json:"helperImageSetting"`
 		} `json:"storage"`
 	}
 	require.NoError(t, json.Unmarshal(body, &fixture))
@@ -48,6 +49,7 @@ func TestStorageV5FixtureMatchesRegisteredProducer(t *testing.T) {
 	}
 	problem := volumehelper.IncompatibleHelper(nil)
 	require.Equal(t, fixture.Storage.HelperErrorCode, problem.Code)
+	require.Equal(t, fixture.Storage.HelperUnavailableCode, volumehelper.UnavailableHelper(nil).Code)
 	require.Equal(t, "toolsImage", fixture.Storage.HelperImageSetting)
 	for _, op := range storageOperations(api.OpenAPI().Paths["/environments/{id}/volumes/prune"]) {
 		if op != nil {
@@ -61,8 +63,10 @@ func TestStorageV5FixtureMatchesRegisteredProducer(t *testing.T) {
 			}
 			response := op.Responses["503"]
 			require.NotNil(t, response)
-			ref := response.Content["application/problem+json"].Schema.Ref
-			require.Equal(t, reflect.TypeFor[volume.HelperIncompatibleError](), api.OpenAPI().Components.Schemas.TypeFromRef(ref))
+			schemas := response.Content["application/problem+json"].Schema.OneOf
+			require.Len(t, schemas, 2)
+			require.Equal(t, reflect.TypeFor[volume.HelperIncompatibleError](), api.OpenAPI().Components.Schemas.TypeFromRef(schemas[0].Ref))
+			require.Equal(t, reflect.TypeFor[volume.HelperUnavailableError](), api.OpenAPI().Components.Schemas.TypeFromRef(schemas[1].Ref))
 		}
 	}
 }

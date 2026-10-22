@@ -34,7 +34,7 @@ func TestWorkspaceRejectsIncompatibleHelperBeforeFileAccess(t *testing.T) {
 		name, output string
 		exit         int
 	}{
-		{"missing", "", 127}, {"older", `{"protocol":1}`, 0}, {"invalid", "invalid version", 0},
+		{"transient", "", -1}, {"missing", "", 127}, {"older", `{"protocol":1}`, 0}, {"invalid", "invalid version", 0},
 	} {
 		for _, operation := range []string{"list", "read", "download", "update"} {
 			t.Run(protocol.name+"/"+operation, func(t *testing.T) {
@@ -56,6 +56,10 @@ func TestWorkspaceRejectsIncompatibleHelperBeforeFileAccess(t *testing.T) {
 					case strings.HasSuffix(r.URL.Path, "/containers/helper/start"), r.Method == "DELETE":
 						w.WriteHeader(204)
 					case strings.HasSuffix(r.URL.Path, "/containers/helper/exec"):
+						if protocol.exit == -1 {
+							http.Error(w, `{"message":"temporary engine failure"}`, 503)
+							return
+						}
 						var request struct{ Cmd []string }
 						require.NoError(t, json.NewDecoder(r.Body).Decode(&request))
 						commands = append(commands, request.Cmd)
@@ -86,11 +90,23 @@ func TestWorkspaceRejectsIncompatibleHelperBeforeFileAccess(t *testing.T) {
 				case "update":
 					_, err = svc.workspace.UpdateVolumeWorkspace(t.Context(), "workspace-volume", volumetypes.WorkspaceUpdateManifest{FileTreeRevision: "revision", FileChanges: []volumetypes.WorkspaceFileChange{{Operation: volumetypes.FileOpDelete, RelativePath: "file.txt"}}}, nil, user.Actor{})
 				}
-				var incompatible *volumetypes.HelperIncompatibleError
-				require.ErrorAs(t, err, &incompatible)
-				require.Equal(t, "volume.helper-incompatible", incompatible.Code)
-				require.Equal(t, 503, incompatible.GetStatus())
-				require.Equal(t, [][]string{{"acfs", "version"}}, commands, "no workspace command may precede compatibility")
+				expectedCode := "volume.helper-incompatible"
+				if protocol.exit == -1 {
+					expectedCode = "volume.helper-unavailable"
+				}
+				require.Error(t, err)
+				problemJSON, marshalErr := json.Marshal(err)
+				require.NoError(t, marshalErr)
+				var problem struct {
+					Code   string
+					Status int
+				}
+				require.NoError(t, json.Unmarshal(problemJSON, &problem))
+				require.Equal(t, expectedCode, problem.Code)
+				require.Equal(t, 503, problem.Status)
+				if protocol.exit != -1 {
+					require.Equal(t, [][]string{{"acfs", "version"}}, commands, "no workspace command may precede compatibility")
+				}
 				if operation == "list" {
 					router := echo.New()
 					router.Use(func(next echo.HandlerFunc) echo.HandlerFunc {
@@ -109,7 +125,7 @@ func TestWorkspaceRejectsIncompatibleHelperBeforeFileAccess(t *testing.T) {
 						require.Equal(t, 503, status, string(body))
 						var problem volumetypes.HelperIncompatibleError
 						require.NoError(t, json.Unmarshal(body, &problem))
-						require.Equal(t, "volume.helper-incompatible", problem.Code)
+						require.Equal(t, expectedCode, problem.Code)
 					}
 				}
 

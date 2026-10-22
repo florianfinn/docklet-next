@@ -130,7 +130,7 @@ type Update struct {
 	// ToolsImage is the complete image reference for the Docklet tools helper.
 	//
 	// Required: false
-	ToolsImage *string `json:"toolsImage,omitzero"`
+	ToolsImage *string `json:"toolsImage,omitzero" doc:"Docker image reference; empty uses this environment's release default"`
 
 	// UpdateCheckRegistry is the registry queried when checking whether the
 	// running Arcane image has a newer digest. "auto" follows the registry the

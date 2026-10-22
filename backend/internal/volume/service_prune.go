@@ -68,9 +68,6 @@ func (s *VolumeService) PlanVolumePrune(ctx context.Context, all bool) (*volumet
 			reason = "unused-anonymous"
 		}
 		candidate := volumetypes.PrunePlanCandidate{Name: v.Name, Driver: v.Driver, CreatedAt: v.CreatedAt, Reason: reason}
-		if v.UsageData != nil && v.UsageData.Size >= 0 {
-			candidate.SizeBytes = &v.UsageData.Size
-		}
 		plan.Candidates = append(plan.Candidates, candidate)
 	}
 	slices.SortFunc(plan.Candidates, func(a, b volumetypes.PrunePlanCandidate) int { return strings.Compare(a.Name, b.Name) })
@@ -78,6 +75,10 @@ func (s *VolumeService) PlanVolumePrune(ctx context.Context, all bool) (*volumet
 }
 
 func (s *VolumeService) ExecuteVolumePrune(ctx context.Context, candidates []volumetypes.PruneCandidate) (*volumetypes.PruneResult, error) {
+	return s.executeVolumePrune(ctx, candidates, false)
+}
+
+func (s *VolumeService) executeVolumePrune(ctx context.Context, candidates []volumetypes.PruneCandidate, all bool) (*volumetypes.PruneResult, error) {
 	result := &volumetypes.PruneResult{Removed: []string{}, Skipped: []volumetypes.PruneSkipped{}, Failed: []volumetypes.PruneFailed{}}
 	if len(candidates) == 0 {
 		return result, nil
@@ -86,28 +87,20 @@ func (s *VolumeService) ExecuteVolumePrune(ctx context.Context, candidates []vol
 	if err != nil {
 		return nil, err
 	}
-	// Sizes are advisory only; fresh inspect and container references below are
-	// the removal authority. A failed size lookup cannot widen the candidate set.
-	sizes := map[string]int64{}
-	if usage, usageErr := cli.DiskUsage(ctx, client.DiskUsageOptions{Volumes: true}); usageErr == nil {
-		for _, v := range usage.Volumes.Items {
-			if v.UsageData != nil && v.UsageData.Size >= 0 {
-				sizes[v.Name] = v.UsageData.Size
-			}
-		}
-	}
+	// Docker VolumeList/Inspect omit UsageData. Prune deliberately avoids
+	// host-wide DiskUsage scans, so advisory reclaimed bytes remain unknown (0).
 	seen := map[string]bool{}
 	for _, candidate := range candidates {
 		if seen[candidate.Name] {
 			continue
 		}
 		seen[candidate.Name] = true
-		s.executePruneCandidate(ctx, cli, candidate, sizes, result)
+		s.executePruneCandidate(ctx, cli, candidate, result)
 	}
 	if len(result.Removed) > 0 {
 		docker.InvalidateVolumeUsageCache(cli)
 		if s.eventService != nil {
-			metadata := buildVolumePruneMetadataInternal(true, len(result.Removed), result.SpaceReclaimed)
+			metadata := buildVolumePruneMetadataInternal(all, len(result.Removed), result.SpaceReclaimed)
 			if logErr := s.eventService.LogVolumeEvent(ctx, event.EventTypeVolumePrune, "", "bulk_prune", usertypes.SystemUser.ID, usertypes.SystemUser.Username, "0", metadata); logErr != nil {
 				slog.WarnContext(ctx, "could not log volume prune", "error", logErr)
 			}
@@ -116,7 +109,8 @@ func (s *VolumeService) ExecuteVolumePrune(ctx context.Context, candidates []vol
 	return result, nil
 }
 
-func (s *VolumeService) executePruneCandidate(ctx context.Context, cli *client.Client, candidate volumetypes.PruneCandidate, sizes map[string]int64, result *volumetypes.PruneResult) {
+func (s *VolumeService) executePruneCandidate(ctx context.Context, cli *client.Client, candidate volumetypes.PruneCandidate, result *volumetypes.PruneResult) {
+	defer s.workspaceLocks.Lock(candidate.Name)()
 	skip := func(reason string) {
 		result.Skipped = append(result.Skipped, volumetypes.PruneSkipped{Name: candidate.Name, Reason: reason})
 	}
@@ -160,7 +154,6 @@ func (s *VolumeService) executePruneCandidate(ctx context.Context, cli *client.C
 		fail("volume.remove-failed")
 	default:
 		result.Removed = append(result.Removed, candidate.Name)
-		result.SpaceReclaimed += uint64(sizes[candidate.Name])
 		s.removeHelperEntry(candidate.Name)
 		if s.backup != nil {
 			s.backup.RemovePolicies(ctx, candidate.Name)

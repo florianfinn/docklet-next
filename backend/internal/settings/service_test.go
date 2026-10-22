@@ -131,7 +131,7 @@ func TestSettingsService_EnsureDefaultSettings_Idempotent(t *testing.T) {
 		case "vulnerabilityScanInterval":
 			require.Equal(t, "0 0 0 * * *", sv.Value)
 		case "toolsImage":
-			require.Equal(t, "ghcr.io/florianfinn/docklet-tools:0.1.0", sv.Value)
+			require.Empty(t, sv.Value)
 		case "updateCheckRegistry":
 			require.Equal(t, "auto", sv.Value)
 		case "trivyDbRegistry":

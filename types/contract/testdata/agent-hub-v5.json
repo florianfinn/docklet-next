@@ -369,11 +369,20 @@
       "VolumePruneSkipped": [
         "name",
         "reason"
+      ],
+      "VolumeHelperUnavailableError": [
+        "code",
+        "detail",
+        "status",
+        "title"
       ]
     },
     "helperErrorCode": "volume.helper-incompatible",
     "helperImageSetting": "toolsImage",
     "pruneSelection": "anonymous-local-without-options-by-default; all-includes-named; no-running-or-stopped-container-references",
-    "pruneExecution": "explicit-name-createdAt-list; fresh-identity-and-all-container-recheck; non-forced-remove; independent-results"
+    "pruneExecution": "explicit-name-createdAt-list; fresh-identity-and-all-container-recheck; non-forced-remove; independent-results",
+    "helperUnavailableCode": "volume.helper-unavailable",
+    "helperImageDefault": "empty-override; resolve-running-release-default; migrate-shipped-defaults-to-empty; local-env-wins",
+    "pruneSizes": "sizeBytes-omitted; no-host-wide-disk-usage-scan; reclaimed-bytes-unknown-zero"
   }
 }

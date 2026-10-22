@@ -16,11 +16,16 @@ This follows Docker Engine API 1.42+ prune selection. Internal-labelled
 volumes are excluded. Any reference from a running or stopped container excludes
 a volume, including a workspace helper. Planning is read-only and does not stop
 helpers. Candidates contain `name`, `driver`, `createdAt`, `reason` (`unused` for
-named or `unused-anonymous`) and optionally `sizeBytes` when Docker knows it.
-Unknown sizes are omitted, never represented as zero estimates.
+named or `unused-anonymous`) and optional `sizeBytes`. This implementation omits `sizeBytes`: Docker's
+`VolumeList` and `VolumeInspect` omit `UsageData`; obtaining it requires a
+host-wide `DiskUsage` scan. Neither preview nor execution triggers that scan.
+Use the separate volume-sizes operation when space estimates are needed;
+unknown candidate sizes are omitted, never represented as zero estimates.
 
 `POST` on the same path retains operation ID `prune-volumes` and activity code
-`volume.prune`, but now requires `{candidates: [{name, createdAt}]}`. The old
+`volume.prune`, but now requires `{candidates: [{name, createdAt}], all?: boolean}`. The optional
+`all` records the preview selection in event metadata (default `false`); only the
+explicit candidates determine the removal scope. The old
 bodyless HTTP call is rejected; there are no live web callers to preserve. Plans
 are stateless snapshots, not stored approvals or tokens. A submitted list may be
 edited, but cannot broaden deletion beyond the submitted names. Every candidate
@@ -28,16 +33,22 @@ is inspected again, must have exactly the submitted creation timestamp and be
 unused by **all** containers immediately before a non-forced Docker remove.
 Internal and non-local volumes are protected even for crafted requests. Duplicate
 names are processed once. Docker remains the final usage guard against a
-container created between re-check and remove. Same-name replacement is detected
-at re-check; Docker offers no atomic compare-and-remove identity primitive, so
-external removal/recreation after that check is an unavoidable race.
+container created between re-check and remove. Each candidate holds the same
+per-volume workspace lock as rename, backup and file mutations through inspect,
+usage re-check and removal. Different-name candidates remain independent.
+Same-name replacement with a different `CreatedAt` is detected at re-check.
+Docker reports `CreatedAt` with second precision: same-second recreation cannot
+be distinguished. Docker also offers no atomic compare-and-remove identity
+primitive, so external removal/recreation after that check is an unavoidable race.
 
 Execution returns `removed`, `skipped` (`in-use`, `not-found`, `changed`), `failed`
 (name and stable code) and `spaceReclaimed`; one candidate failure does not abort
-others. Reclaimed bytes sum known pre-removal Docker sizes of successful removes;
-unknown contributions are zero, so this is a lower bound. No Docker-wide prune
+others. Reclaimed bytes are currently unknown and reported as `0`, a lower bound;
+execution does not measure volume data before removal. No Docker-wide prune
 call executes a submitted plan. Internal scheduled/system prune callers retain
 their existing API but obtain a fresh plan and execute that exact candidate list.
+If some candidates fail, manual and scheduled system prune retain successful
+removals in their result and completion log while reporting the failure.
 
 ## Workspace mapping and rights
 
@@ -66,7 +77,10 @@ first verify `acfs version`; incompatible helpers fail before accessing files.
 The hub enforces host-scoped rights before forwarding; the agent enforces the
 same workspace manifest contract. Direct uses authenticated HTTP, Edge the
 explicit command map with no Direct fallback. Hub and both agent modes register
-the same volume/workspace routes. Route coverage tests include actual tunnel
+the same volume/workspace routes. This intentionally includes
+`volume.backup.import` (`POST /volumes/{volumeName}/backups/upload`) on Edge:
+all registered storage routes are reachable; backup/import functionality remains
+owned by M12. Route coverage tests include actual tunnel
 forwarding, not merely matching command names.
 
 ## One helper image per environment
@@ -75,7 +89,18 @@ forwarding, not merely matching command names.
 with `TOOLS_IMAGE`, `TOOLS_IMAGE_FILE` and `TOOLS_IMAGE__FILE` overrides like other
 settings. An agent's local override wins over hub-synchronised values. All volume
 workspace, rename, migration, backup, restore and Trivy helper callers use this
-same resolver. The shared default is
+same resolver. Settings persist and transport only explicit overrides; empty
+means resolve `DefaultToolsImage` from the running hub or agent release when a
+helper image is read. Hub settings forwarding sends that empty value or the
+explicit override, so an agent uses its own release default; its local
+`TOOLS_IMAGE*` override still wins. Empty environment variables do not mask a
+synchronised explicit override. First start persists empty. Startup replaces
+previously persisted shipped defaults (`ghcr.io/getarcaneapp/tools:latest` and
+`ghcr.io/florianfinn/docklet-tools:0.1.0`) with empty, including values that were
+explicitly set to those exact defaults. Keep the shipped-default migration list
+when bumping the release image. Other explicit references survive startup.
+Image overrides must pass Docker reference syntax validation; empty resets the
+override. The shared default is
 `ghcr.io/florianfinn/docklet-tools:0.1.0`; #180 adds the digest after first
 publication. Release defaults must then include SemVer and digest. An operator
 may choose another complete reference, including a mutable `latest` tag.
@@ -84,7 +109,10 @@ Updates require a reviewed default-bump PR and explicit operator rollout; no
 watcher silently replaces the image. Pull a configured image when absent; pull
 failure fails the operation. The running hub/agent image is never a helper
 fallback. Workspace helpers require the current ACFS protocol and return typed
-code `volume.helper-incompatible` if ACFS is absent, invalid or too old. The
+code `volume.helper-incompatible` if `acfs version` exits unsuccessfully or
+returns an invalid/old protocol. Docker transport, cancellation and other exec
+failures instead return typed `volume.helper-unavailable`; they do not establish
+image incompatibility. Both use HTTP 503 and occur before file access. The
 legacy helper-container label is retained so cleanup recognises existing helpers;
 it carries no image-selection policy.
 

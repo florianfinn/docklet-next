@@ -344,7 +344,7 @@ func (h *VolumeHandler) PruneVolumes(ctx context.Context, input *PruneVolumesInp
 		Metadata:       database.JSON{"action": "prune_volumes"},
 	}, func(runtimeCtx context.Context) error {
 		var pruneErr error
-		report, pruneErr = h.volumeService.ExecuteVolumePrune(runtimeCtx, input.Body.Candidates)
+		report, pruneErr = h.volumeService.executeVolumePrune(runtimeCtx, input.Body.Candidates, input.Body.All)
 		return pruneErr
 	})
 	if err != nil {

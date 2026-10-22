@@ -477,7 +477,7 @@ func (s *VolumeService) PruneVolumesWithOptions(ctx context.Context, all bool) (
 	for _, candidate := range plan.Candidates {
 		candidates = append(candidates, volumetypes.PruneCandidate{Name: candidate.Name, CreatedAt: candidate.CreatedAt})
 	}
-	result, err := s.ExecuteVolumePrune(ctx, candidates)
+	result, err := s.executeVolumePrune(ctx, candidates, all)
 	if err != nil {
 		return nil, err
 	}

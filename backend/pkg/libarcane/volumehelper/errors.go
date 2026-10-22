@@ -6,10 +6,15 @@
 package volumehelper
 
 import (
-	"github.com/florianfinn/docklet-next/types/volume"
 	"net/http"
+
+	"github.com/florianfinn/docklet-next/types/volume"
 )
 
 func IncompatibleHelper(cause error) *volume.HelperIncompatibleError {
 	return &volume.HelperIncompatibleError{Status: http.StatusServiceUnavailable, Title: http.StatusText(http.StatusServiceUnavailable), Detail: "The volume helper does not support the required ACFS protocol", Code: "volume.helper-incompatible", Cause: cause}
+}
+
+func UnavailableHelper(cause error) *volume.HelperUnavailableError {
+	return &volume.HelperUnavailableError{Status: http.StatusServiceUnavailable, Title: http.StatusText(http.StatusServiceUnavailable), Detail: "The volume helper is temporarily unavailable", Code: "volume.helper-unavailable", Cause: cause}
 }

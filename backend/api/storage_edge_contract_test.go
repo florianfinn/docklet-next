@@ -16,6 +16,38 @@ import (
 )
 
 func TestStorageOperationsHaveEdgeCommandsAndAgentRoutes(t *testing.T) {
+	expectedCommands := map[string]string{
+		"get-project-workspace":           "project.workspace.list",
+		"update-project-workspace":        "project.workspace.update",
+		"get-project-workspace-file":      "project.workspace.read_file",
+		"download-project-workspace-file": "project.workspace.download",
+		"list-volumes":                    "volume.list",
+		"create-volume":                   "volume.create",
+		"delete-volume-backup":            "volume.backup.delete",
+		"download-volume-backup":          "volume.backup.download",
+		"list-backup-files":               "volume.backup.files",
+		"browse-volume-backup-files":      "volume.backup.files_browse",
+		"backup-has-path":                 "volume.backup.has_path",
+		"get-volume-usage-counts":         "volume.counts",
+		"plan-volume-prune":               "volume.prune.plan",
+		"prune-volumes":                   "volume.prune",
+		"get-volume-sizes":                "volume.sizes",
+		"remove-volume":                   "volume.delete",
+		"get-volume":                      "volume.inspect",
+		"get-volume-backup-policy":        "volume.backup_policy.get",
+		"update-volume-backup-policy":     "volume.backup_policy.update",
+		"list-volume-backups":             "volume.backup.list",
+		"create-volume-backup":            "volume.backup.create",
+		"upload-volume-backup":            "volume.backup.import",
+		"restore-volume-backup":           "volume.backup.restore",
+		"restore-volume-backup-files":     "volume.backup.restore_files",
+		"rename-volume":                   "volume.rename",
+		"get-volume-usage":                "volume.usage",
+		"get-volume-workspace":            "volume.workspace.list",
+		"update-volume-workspace":         "volume.workspace.update",
+		"get-volume-workspace-file":       "volume.workspace.read_file",
+		"download-volume-workspace-file":  "volume.workspace.download",
+	}
 	hub := SetupAPIForSpec()
 	for _, cfg := range []*config.Config{{AgentMode: true}, {EdgeAgent: true}} {
 		agent := setupAPIForSpecMode(cfg)
@@ -35,6 +67,8 @@ func TestStorageOperationsHaveEdgeCommandsAndAgentRoutes(t *testing.T) {
 				}
 				command, ok := edge.ResolveEdgeCommandName(method, actual, false).Get()
 				require.True(t, ok, "%s %s (%s)", method, path, op.OperationID)
+				require.Contains(t, expectedCommands, op.OperationID)
+				require.Equal(t, expectedCommands[op.OperationID], command, "%s %s (%s)", method, path, op.OperationID)
 				require.True(t, edge.ValidateEdgeCommand(command, method, actual, false), op.OperationID)
 				agentItem := agent.OpenAPI().Paths[path]
 				require.NotNil(t, agentItem, op.OperationID)

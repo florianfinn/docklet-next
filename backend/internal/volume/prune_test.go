@@ -68,7 +68,8 @@ func (f *pruneDockerFixture) service(t *testing.T) *VolumeService {
 			}
 			_ = json.NewEncoder(w).Encode(list)
 		case r.Method == "GET" && strings.HasSuffix(r.URL.Path, "/system/df"):
-			_ = json.NewEncoder(w).Encode(map[string]any{"Volumes": f.volumes})
+			t.Error("prune must not compute disk usage of every volume")
+			w.WriteHeader(500)
 		case strings.Contains(r.URL.Path, "/volumes/"):
 			name := r.URL.Path[strings.LastIndex(r.URL.Path, "/")+1:]
 			if r.Method == "DELETE" {
@@ -105,7 +106,7 @@ func (f *pruneDockerFixture) service(t *testing.T) *VolumeService {
 }
 
 func pruneVolume(name string) volume.Volume {
-	return volume.Volume{Name: name, Driver: "local", CreatedAt: pruneCreated, UsageData: &volume.UsageData{Size: 12}}
+	return volume.Volume{Name: name, Driver: "local", CreatedAt: pruneCreated}
 }
 func pruneConsumer(name string, state container.ContainerState) container.Summary {
 	return container.Summary{State: state, Mounts: []container.MountPoint{{Type: mount.TypeVolume, Name: name}}}
@@ -142,7 +143,7 @@ func TestPrunePlanSelection(t *testing.T) {
 			f.volumes = []volume.Volume{named, anonymous, running, stopped, protected, remote, bind}
 			f.containers = []container.Summary{pruneConsumer("running", container.StateRunning), pruneConsumer("stopped", container.StateExited)}
 			plan := get(false)
-			require.Equal(t, []volumetypes.PrunePlanCandidate{{Name: "anonymous", Driver: "local", CreatedAt: pruneCreated, Reason: "unused-anonymous", SizeBytes: &anonymous.UsageData.Size}}, plan.Candidates)
+			require.Equal(t, []volumetypes.PrunePlanCandidate{{Name: "anonymous", Driver: "local", CreatedAt: pruneCreated, Reason: "unused-anonymous"}}, plan.Candidates)
 			plan = get(true)
 			require.Len(t, plan.Candidates, 2)
 			require.Equal(t, "named", plan.Candidates[1].Name)
@@ -175,7 +176,7 @@ func TestExecutePruneRechecksCandidateIdentityAndUsage(t *testing.T) {
 			require.Equal(t, []string{"ok"}, result.Removed)
 			require.ElementsMatch(t, []volumetypes.PruneSkipped{{Name: "used", Reason: "in-use"}, {Name: "changed", Reason: "changed"}, {Name: "gone", Reason: "not-found"}}, result.Skipped)
 			require.Equal(t, []volumetypes.PruneFailed{{Name: "failure", Code: "volume.remove-failed"}}, result.Failed)
-			require.EqualValues(t, 12, result.SpaceReclaimed)
+			require.Zero(t, result.SpaceReclaimed)
 			require.Equal(t, []string{"ok"}, f.removed, "only selected and re-checked candidates may be removed")
 		})
 	}
@@ -202,7 +203,7 @@ func TestExecutePruneAllEmptyAndDockerFailures(t *testing.T) {
 			require.Equal(t, []string{"one", "two"}, response.Data.Removed)
 			require.Empty(t, response.Data.Skipped)
 			require.Empty(t, response.Data.Failed)
-			require.EqualValues(t, 24, response.Data.SpaceReclaimed)
+			require.Zero(t, response.Data.SpaceReclaimed)
 			require.Equal(t, response.Data.Removed, f.removed)
 		})
 	}

@@ -27,3 +27,20 @@ func (e *HelperIncompatibleError) ContentType(contentType string) string {
 	}
 	return contentType
 }
+
+// HelperUnavailableError reports a transient Docker/exec failure without making
+// a compatibility verdict about the configured image. Cause stays server-side.
+type HelperUnavailableError struct {
+	Status int    `json:"status"`
+	Title  string `json:"title"`
+	Detail string `json:"detail"`
+	Code   string `json:"code" enum:"volume.helper-unavailable"`
+	Cause  error  `json:"-"`
+}
+
+func (e *HelperUnavailableError) Error() string  { return e.Detail }
+func (e *HelperUnavailableError) Unwrap() error  { return e.Cause }
+func (e *HelperUnavailableError) GetStatus() int { return e.Status }
+func (e *HelperUnavailableError) ContentType(contentType string) string {
+	return (&HelperIncompatibleError{}).ContentType(contentType)
+}

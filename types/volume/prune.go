@@ -16,7 +16,7 @@ type PrunePlanCandidate struct {
 	Driver    string `json:"driver"`
 	CreatedAt string `json:"createdAt"`
 	Reason    string `json:"reason" enum:"unused,unused-anonymous"`
-	SizeBytes *int64 `json:"sizeBytes,omitempty" minimum:"0"`
+	SizeBytes *int64 `json:"sizeBytes,omitempty" minimum:"0" doc:"Optional estimate; currently omitted to avoid host-wide disk usage scans"`
 }
 
 type PrunePlan struct {
@@ -24,6 +24,9 @@ type PrunePlan struct {
 }
 
 type PruneRequest struct {
+	// All records the preview selection in event metadata; candidates alone
+	// determine which volumes execution may remove.
+	All        bool             `json:"all,omitempty"`
 	Candidates []PruneCandidate `json:"candidates" maxItems:"10000"`
 }
 
@@ -38,7 +41,7 @@ type PruneFailed struct {
 }
 
 // PruneResult reports each candidate independently. SpaceReclaimed is a lower
-// bound when Docker could not provide sizes for successful removals.
+// bound; currently zero because prune does not scan host-wide disk usage.
 type PruneResult struct {
 	Removed        []string       `json:"removed"`
 	Skipped        []PruneSkipped `json:"skipped"`

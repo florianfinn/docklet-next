@@ -1,5 +1,5 @@
 // Source: api/openapi.json
-// Revision: 0579889319fe78dff6fde733c3552952e1e300d296dd465c0ef4b424926a0ea1
+// Revision: 0d315b21aa0692dcbdbed81c6a693d48cc64283ccb1b50f95b9a39a3c6f7c317
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
 // Deviations: Generated TypeScript declarations from the local Huma export.
@@ -10044,6 +10044,7 @@ export interface components {
             scheduledPruneEnabled?: string | null;
             scheduledPruneInterval?: string | null;
             setupCompleted?: string | null;
+            /** @description Docker image reference; empty uses this environment's release default */
             toolsImage?: string | null;
             trivyConcurrentScanContainers?: string | null;
             trivyConfig?: string | null;
@@ -10729,6 +10730,14 @@ export interface components {
             status: number;
             title: string;
         };
+        VolumeHelperUnavailableError: {
+            /** @enum {string} */
+            code: "volume.helper-unavailable";
+            detail: string;
+            /** Format: int64 */
+            status: number;
+            title: string;
+        };
         VolumePruneCandidate: {
             createdAt: string;
             name: string;
@@ -10747,7 +10756,10 @@ export interface components {
             name: string;
             /** @enum {string} */
             reason: "unused" | "unused-anonymous";
-            /** Format: int64 */
+            /**
+             * Format: int64
+             * @description Optional estimate; currently omitted to avoid host-wide disk usage scans
+             */
             sizeBytes?: number;
         };
         VolumePruneRequest: {
@@ -10757,6 +10769,7 @@ export interface components {
              * @example /api/schemas/VolumePruneRequest.json
              */
             readonly $schema?: string;
+            all?: boolean;
             candidates: components["schemas"]["VolumePruneCandidate"][] | null;
         };
         VolumePruneResult: {
@@ -19852,13 +19865,13 @@ export interface operations {
                     "application/json": components["schemas"]["BaseApiResponseWorkspaceWorkspace"];
                 };
             };
-            /** @description Configured helper is incompatible; no file access occurred */
+            /** @description Helper incompatible or temporarily unavailable; no file access occurred */
             503: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/problem+json": components["schemas"]["VolumeHelperIncompatibleError"];
+                    "application/problem+json": components["schemas"]["VolumeHelperIncompatibleError"] | components["schemas"]["VolumeHelperUnavailableError"];
                 };
             };
             /** @description Error */
@@ -19903,13 +19916,13 @@ export interface operations {
                     "application/json": components["schemas"]["BaseApiResponseWorkspaceWorkspace"];
                 };
             };
-            /** @description Configured helper is incompatible; no file access occurred */
+            /** @description Helper incompatible or temporarily unavailable; no file access occurred */
             503: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/problem+json": components["schemas"]["VolumeHelperIncompatibleError"];
+                    "application/problem+json": components["schemas"]["VolumeHelperIncompatibleError"] | components["schemas"]["VolumeHelperUnavailableError"];
                 };
             };
             /** @description Error */
@@ -19949,13 +19962,13 @@ export interface operations {
                     "application/json": components["schemas"]["BaseApiResponseWorkspaceFileContent"];
                 };
             };
-            /** @description Configured helper is incompatible; no file access occurred */
+            /** @description Helper incompatible or temporarily unavailable; no file access occurred */
             503: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/problem+json": components["schemas"]["VolumeHelperIncompatibleError"];
+                    "application/problem+json": components["schemas"]["VolumeHelperIncompatibleError"] | components["schemas"]["VolumeHelperUnavailableError"];
                 };
             };
             /** @description Error */
@@ -19993,13 +20006,13 @@ export interface operations {
                 };
                 content?: never;
             };
-            /** @description Configured helper is incompatible; no file access occurred */
+            /** @description Helper incompatible or temporarily unavailable; no file access occurred */
             503: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/problem+json": components["schemas"]["VolumeHelperIncompatibleError"];
+                    "application/problem+json": components["schemas"]["VolumeHelperIncompatibleError"] | components["schemas"]["VolumeHelperUnavailableError"];
                 };
             };
             /** @description Error */

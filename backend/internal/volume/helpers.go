@@ -55,7 +55,11 @@ func (s *VolumeService) requireVolumeHelperACFSInternal(ctx context.Context, vol
 
 	stdout, _, err := s.execInContainerInternal(ctx, containerID, "", []string{"acfs", "version"})
 	if err != nil {
-		return volumehelper.IncompatibleHelper(fmt.Errorf("ACFS version failed: %w", err))
+		var commandExit *helperCommandExitError
+		if errors.As(err, &commandExit) {
+			return volumehelper.IncompatibleHelper(err)
+		}
+		return volumehelper.UnavailableHelper(err)
 	}
 	var response types.VersionResponse
 	if unmarshalErr := json.Unmarshal([]byte(stdout), &response); unmarshalErr != nil {
@@ -523,11 +527,7 @@ func (s *VolumeService) execInContainerInternal(ctx context.Context, containerID
 	}
 
 	if exitCode != 0 {
-		execErr := cmp.Or(strings.TrimSpace(stderr.String()), strings.TrimSpace(stdout.String()))
-		if execErr != "" {
-			return stdout.String(), stderr.String(), fmt.Errorf("command exited with code %d: %s", exitCode, execErr)
-		}
-		return stdout.String(), stderr.String(), fmt.Errorf("command exited with code %d", exitCode)
+		return stdout.String(), stderr.String(), &helperCommandExitError{code: exitCode, output: cmp.Or(strings.TrimSpace(stderr.String()), strings.TrimSpace(stdout.String()))}
 	}
 
 	return stdout.String(), stderr.String(), nil
