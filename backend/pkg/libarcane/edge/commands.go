@@ -111,6 +111,7 @@ var commandRoutes = []commandRoute{
 	{Method: http.MethodGet, PathPattern: "/api/environments/{id}/volumes/{volumeName}", CommandName: "volume.inspect"},
 	{Method: http.MethodPost, PathPattern: "/api/environments/{id}/volumes", CommandName: "volume.create"},
 	{Method: http.MethodDelete, PathPattern: "/api/environments/{id}/volumes/{volumeName}", CommandName: "volume.delete"},
+	{Method: http.MethodPost, PathPattern: "/api/environments/{id}/volumes/{volumeName}/rename", CommandName: "volume.rename"},
 	{Method: http.MethodGet, PathPattern: "/api/environments/{id}/volumes/prune", CommandName: "volume.prune.plan"},
 	{Method: http.MethodPost, PathPattern: "/api/environments/{id}/volumes/prune", CommandName: "volume.prune"},
 	{Method: http.MethodGet, PathPattern: "/api/environments/{id}/volumes/{volumeName}/usage", CommandName: "volume.usage"},
@@ -130,7 +131,7 @@ var commandRoutes = []commandRoute{
 	{Method: http.MethodGet, PathPattern: "/api/environments/{id}/volumes/backups/{backupId}/has-path", CommandName: "volume.backup.has_path"},
 	{Method: http.MethodGet, PathPattern: "/api/environments/{id}/volumes/backups/{backupId}/files", CommandName: "volume.backup.files"},
 	{Method: http.MethodGet, PathPattern: "/api/environments/{id}/volumes/backups/{backupId}/files/browse", CommandName: "volume.backup.files_browse"},
-	{Method: http.MethodPost, PathPattern: "/api/environments/{id}/volumes/backups/{backupId}/upload", CommandName: "volume.backup.upload"},
+	{Method: http.MethodPost, PathPattern: "/api/environments/{id}/volumes/{volumeName}/backups/upload", CommandName: "volume.backup.import"},
 
 	{Method: http.MethodGet, PathPattern: "/api/environments/{id}/networks", CommandName: "network.list"},
 	{Method: http.MethodGet, PathPattern: "/api/environments/{id}/networks/counts", CommandName: "network.counts"},

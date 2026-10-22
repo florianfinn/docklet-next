@@ -27,6 +27,7 @@ import (
 	"github.com/florianfinn/docklet-next/backend/pkg/libarcane/edge"
 	"github.com/florianfinn/docklet-next/backend/pkg/utils/handlerutil"
 	"github.com/florianfinn/docklet-next/types/base"
+	"github.com/florianfinn/docklet-next/types/user"
 	volumetypes "github.com/florianfinn/docklet-next/types/volume"
 	"github.com/labstack/echo/v5"
 	"github.com/moby/moby/api/types/container"
@@ -260,8 +261,10 @@ func pruneRouter(t *testing.T, svc *VolumeService) http.Handler {
 	router.Use(func(next echo.HandlerFunc) echo.HandlerFunc {
 		return func(c *echo.Context) error {
 			grants := authz.NewPermissionSet()
-			grants.AddEnv("0", authz.PermVolumesPrune)
-			c.SetRequest(c.Request().WithContext(context.WithValue(c.Request().Context(), middleware.ContextKeyUserPermissions, grants)))
+			grants.AddEnv("0", authz.PermVolumesPrune, authz.PermVolumesRename)
+			ctx := context.WithValue(c.Request().Context(), middleware.ContextKeyUserPermissions, grants)
+			ctx = context.WithValue(ctx, user.CurrentUserContextKey{}, &user.Actor{ID: "example-user", Username: "example-user"})
+			c.SetRequest(c.Request().WithContext(ctx))
 			return next(c)
 		}
 	})
@@ -325,4 +328,13 @@ func pruneTransport(t *testing.T, mode string, handler http.Handler) pruneCall {
 		require.NoError(t, err)
 		return status, response
 	}
+}
+
+func TestRenameVolumeThroughActualEdgeTunnel(t *testing.T) {
+	call := pruneTransport(t, "edge", pruneRouter(t, &VolumeService{}))
+	status, body := call("POST", "/api/environments/0/volumes/data/rename", "", []byte(`{"name":"data"}`))
+	require.Equal(t, 400, status, string(body))
+	var problem huma.ErrorModel
+	require.NoError(t, json.Unmarshal(body, &problem))
+	require.Contains(t, problem.Detail, "source and target volume names must be non-empty and different")
 }
