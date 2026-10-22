@@ -158,6 +158,146 @@
       "path": "site/themes/learn/layouts/shortcodes/notice.html",
       "sha256": "1c596cf7e90a78a88ebbf8a795a967c2cd40c76e64e37c50efb328db2ca8dc62",
       "reason": "Non-code logo/trademark/documentation terms; these assets are absent from the helper binary/image."
+    },
+    {
+      "module": "github.com/ProtonMail/go-crypto",
+      "version": "v1.4.1",
+      "path": "PATENTS",
+      "sha256": "96f408bfae65bf137fc2525d3ecb030271c50c1e90799f87abf8846d8dd505cc",
+      "reason": "additional patent grant, not a redistribution condition"
+    },
+    {
+      "module": "golang.org/x/crypto",
+      "version": "v0.57.0",
+      "path": "PATENTS",
+      "sha256": "96f408bfae65bf137fc2525d3ecb030271c50c1e90799f87abf8846d8dd505cc",
+      "reason": "additional patent grant, not a redistribution condition"
+    },
+    {
+      "module": "golang.org/x/exp",
+      "version": "v0.0.0-20260603202125-055de637280b",
+      "path": "PATENTS",
+      "sha256": "96f408bfae65bf137fc2525d3ecb030271c50c1e90799f87abf8846d8dd505cc",
+      "reason": "additional patent grant, not a redistribution condition"
+    },
+    {
+      "module": "golang.org/x/mod",
+      "version": "v0.41.0",
+      "path": "PATENTS",
+      "sha256": "96f408bfae65bf137fc2525d3ecb030271c50c1e90799f87abf8846d8dd505cc",
+      "reason": "additional patent grant, not a redistribution condition"
+    },
+    {
+      "module": "golang.org/x/net",
+      "version": "v0.59.0",
+      "path": "PATENTS",
+      "sha256": "96f408bfae65bf137fc2525d3ecb030271c50c1e90799f87abf8846d8dd505cc",
+      "reason": "additional patent grant, not a redistribution condition"
+    },
+    {
+      "module": "golang.org/x/sync",
+      "version": "v0.23.0",
+      "path": "PATENTS",
+      "sha256": "96f408bfae65bf137fc2525d3ecb030271c50c1e90799f87abf8846d8dd505cc",
+      "reason": "additional patent grant, not a redistribution condition"
+    },
+    {
+      "module": "golang.org/x/sys",
+      "version": "v0.48.0",
+      "path": "PATENTS",
+      "sha256": "96f408bfae65bf137fc2525d3ecb030271c50c1e90799f87abf8846d8dd505cc",
+      "reason": "additional patent grant, not a redistribution condition"
+    },
+    {
+      "module": "golang.org/x/telemetry",
+      "version": "v0.0.0-20260908163034-4bcc4b2ee518",
+      "path": "PATENTS",
+      "sha256": "96f408bfae65bf137fc2525d3ecb030271c50c1e90799f87abf8846d8dd505cc",
+      "reason": "additional patent grant, not a redistribution condition"
+    },
+    {
+      "module": "golang.org/x/term",
+      "version": "v0.46.0",
+      "path": "PATENTS",
+      "sha256": "96f408bfae65bf137fc2525d3ecb030271c50c1e90799f87abf8846d8dd505cc",
+      "reason": "additional patent grant, not a redistribution condition"
+    },
+    {
+      "module": "golang.org/x/text",
+      "version": "v0.42.0",
+      "path": "PATENTS",
+      "sha256": "96f408bfae65bf137fc2525d3ecb030271c50c1e90799f87abf8846d8dd505cc",
+      "reason": "additional patent grant, not a redistribution condition"
+    },
+    {
+      "module": "golang.org/x/time",
+      "version": "v0.16.0",
+      "path": "PATENTS",
+      "sha256": "96f408bfae65bf137fc2525d3ecb030271c50c1e90799f87abf8846d8dd505cc",
+      "reason": "additional patent grant, not a redistribution condition"
+    },
+    {
+      "module": "golang.org/x/tools",
+      "version": "v0.50.0",
+      "path": "PATENTS",
+      "sha256": "96f408bfae65bf137fc2525d3ecb030271c50c1e90799f87abf8846d8dd505cc",
+      "reason": "additional patent grant, not a redistribution condition"
+    },
+    {
+      "module": "golang.org/x/vuln",
+      "version": "v1.8.0",
+      "path": "PATENTS",
+      "sha256": "96f408bfae65bf137fc2525d3ecb030271c50c1e90799f87abf8846d8dd505cc",
+      "reason": "additional patent grant, not a redistribution condition"
+    },
+    {
+      "module": "golang.org/x/xerrors",
+      "version": "v0.0.0-20240903120638-7835f813f4da",
+      "path": "PATENTS",
+      "sha256": "96f408bfae65bf137fc2525d3ecb030271c50c1e90799f87abf8846d8dd505cc",
+      "reason": "additional patent grant, not a redistribution condition"
+    },
+    {
+      "module": "google.golang.org/protobuf",
+      "version": "v1.36.12",
+      "path": "PATENTS",
+      "sha256": "96f408bfae65bf137fc2525d3ecb030271c50c1e90799f87abf8846d8dd505cc",
+      "reason": "additional patent grant, not a redistribution condition"
+    },
+    {
+      "module": "k8s.io/apimachinery",
+      "version": "v0.37.0",
+      "path": "third_party/forked/golang/PATENTS",
+      "sha256": "96f408bfae65bf137fc2525d3ecb030271c50c1e90799f87abf8846d8dd505cc",
+      "reason": "additional patent grant, not a redistribution condition"
+    },
+    {
+      "module": "k8s.io/client-go",
+      "version": "v0.37.0",
+      "path": "third_party/forked/golang/PATENTS",
+      "sha256": "96f408bfae65bf137fc2525d3ecb030271c50c1e90799f87abf8846d8dd505cc",
+      "reason": "additional patent grant, not a redistribution condition"
+    },
+    {
+      "module": "k8s.io/utils",
+      "version": "v0.0.0-20260626114624-be93311217bd",
+      "path": "inotify/PATENTS",
+      "sha256": "96f408bfae65bf137fc2525d3ecb030271c50c1e90799f87abf8846d8dd505cc",
+      "reason": "additional patent grant, not a redistribution condition"
+    },
+    {
+      "module": "k8s.io/utils",
+      "version": "v0.0.0-20260626114624-be93311217bd",
+      "path": "internal/third_party/forked/golang/PATENTS",
+      "sha256": "96f408bfae65bf137fc2525d3ecb030271c50c1e90799f87abf8846d8dd505cc",
+      "reason": "additional patent grant, not a redistribution condition"
+    },
+    {
+      "module": "k8s.io/utils",
+      "version": "v0.0.0-20260626114624-be93311217bd",
+      "path": "third_party/forked/golang/PATENTS",
+      "sha256": "96f408bfae65bf137fc2525d3ecb030271c50c1e90799f87abf8846d8dd505cc",
+      "reason": "additional patent grant, not a redistribution condition"
     }
   ],
   "packages": [

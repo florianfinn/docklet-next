@@ -105,7 +105,7 @@
       ],
       "dependencyInventory": {
         "path": "docs/provenance/tools-trivy.json",
-        "sha256": "35cc98f4dba73ac3948324c6068809a78c53eee5048215c0bcdb80c69a17fc34",
+        "sha256": "d73def1ab83a9bd1b7dd235b5ac16042d912e89ea57243c177b4c5e6c56801cf",
         "moduleCount": 462,
         "binaryModulesPerPlatform": 377,
         "imagePath": "/usr/share/licenses/docklet-tools/trivy/inventory.json"
