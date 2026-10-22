@@ -1,10 +1,10 @@
 import { collectMountUsage, holdsDatabase, volumeId, type BackupRun, type MountUsage, type Volume, type VolumeDetail } from "@/domain/volumes";
 import { applyRetention, validateRetention } from "@/domain/retention";
 import { validateSchedule } from "@/domain/schedule";
-import { planVolumePrune, pruneBlock, type PruneSkipReason } from "@/domain/volume-prune";
+import { planVolumePrune, pruneBlock } from "@/domain/volume-prune";
 import { volumeName } from "@/domain/validation";
 
-import type { VolumesApi } from "../api";
+import type { VolumePruneResult, VolumesApi } from "../api";
 import type { StepPlan } from "./action-runner";
 import { DemoError, failMessage, wait, type DemoContext } from "./demo-context";
 import { FileStoreError } from "./file-store";
@@ -169,17 +169,22 @@ export function createVolumesApi(ctx: DemoContext): VolumesApi {
       db.changed("volumes");
     },
 
-    planVolumePrune: ({ hostIds }) => simulateRead("volumes", () => structuredClone(planVolumePrune(all(), db.hosts, hostIds))),
+    planVolumePrune: ({ hostIds, all: includeNamed = true }) => simulateRead("volumes", () => {
+      const plan = planVolumePrune(all(), db.hosts, hostIds);
+      if (!includeNamed) plan.candidates = plan.candidates.filter((v) => v.labels["com.docker.volume.anonymous"] !== undefined);
+      return structuredClone({ ...plan, all: includeNamed });
+    }),
 
-    async pruneVolumes({ hostIds, volumeIds }) {
+    async pruneVolumes({ hostIds, volumeIds, candidates }) {
       await wait(400);
       // One synchronous pass after the wait: each confirmed volume is checked against the current state.
       const current = new Map(all().map((v) => [v.id, v]));
       const removed: { id: string; name: string; hostId: string; sizeBytes: number }[] = [];
-      const skipped: { id: string; reason: PruneSkipReason }[] = [];
+      const skipped: VolumePruneResult["skipped"] = [];
       for (const id of volumeIds) {
         const v = current.get(id);
-        const reason = !v || !hostIds.includes(v.hostId) ? "not-found" : pruneBlock(v, db.host(v.hostId));
+        const preview = candidates?.find((c) => c.id === id);
+        const reason = !v || !hostIds.includes(v.hostId) ? "not-found" : preview && preview.createdAt !== v.createdAt ? "changed" : pruneBlock(v, db.host(v.hostId));
         if (reason || !v) {
           skipped.push({ id, reason: reason ?? "not-found" });
           continue;
@@ -194,7 +199,7 @@ export function createVolumesApi(ctx: DemoContext): VolumesApi {
         db.pushEvent({ kind: "config", level: "ok", title: `${removed.length} ungenutzte Volumes entfernt (${hosts.map((h) => db.host(h)?.name ?? h).join(", ")})`, hostId: hosts.length === 1 ? hosts[0] : undefined });
         db.changed("volumes", "schedule");
       }
-      return { removed, skipped };
+      return { removed, skipped, failed: [], spaceReclaimed: removed.reduce((total, v) => total + v.sizeBytes, 0) };
     },
 
     listFiles: async (id, path) => {

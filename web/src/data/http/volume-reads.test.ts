@@ -9,9 +9,9 @@ import { resourceFixture } from "./resources.test-support";
 
 // DTOs follow VolumeHandler.GetVolume/GetVolumeUsage/GetVolumeSizes and
 // volume.NewSummary: usage contains container IDs, sizes use `size`.
-describe("volume reads", () => {
+describe.each([false, true])("volume reads (Edge=%s)", (edge) => {
   it("loads detail, usage, sizes and stack consumers for Direct and Edge IDs", async () => {
-    const f = resourceFixture();
+    const f = resourceFixture(); f.state.isEdge = edge;
     for (const host of ["first", "second"]) {
       const detail = await f.adapter.getVolume(`${host}~data`);
       expect(detail.scope).toBe("local");
@@ -22,7 +22,7 @@ describe("volume reads", () => {
   });
 
   it("retains rows when one host fails and recovers on retry", async () => {
-    const f = resourceFixture();
+    const f = resourceFixture(); f.state.isEdge = edge;
     expect((await f.adapter.listVolumes()).length).toBe(2);
     f.state.failure = "http";
     const partial: string[][] = [];

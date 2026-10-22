@@ -8,7 +8,7 @@ import type { AutoUpdatePolicy, FileOwner, Host, HostConnection, NetworkAttachme
 import type { NetworkDraft } from "@/domain/networks";
 import type { BackupTarget, HubSettings, NotificationChannel, SettingsSection } from "@/domain/settings";
 import type { SystemComponent } from "@/domain/system";
-import type { PruneSkipReason, VolumePrunePlan } from "@/domain/volume-prune";
+import type { PruneSkipReason, VolumePrunePlan as DomainVolumePrunePlan } from "@/domain/volume-prune";
 import type { BackupPolicy, Volume, VolumeDetail } from "@/domain/volumes";
 import type { AuthMode } from "@/domain/settings";
 
@@ -107,12 +107,23 @@ export interface CreateVolumeInput {
   labels: Record<string, string>;
 }
 
-export type { PruneSkipReason, VolumePrunePlan };
+export type { PruneSkipReason };
+
+export interface VolumePrunePlan extends DomainVolumePrunePlan {
+  all?: boolean;
+  candidateReasons?: Record<string, "unused" | "unused-anonymous">;
+  failedHosts?: { hostId: string; code: string }[];
+}
+
+export type VolumePruneCandidate = Pick<Volume, "id" | "hostId" | "name" | "createdAt">;
 
 export interface VolumePruneResult {
   removed: { id: string; name: string; hostId: string; sizeBytes: number }[];
   /** Confirmed candidates that changed since the preview and therefore stayed. */
-  skipped: { id: string; reason: PruneSkipReason }[];
+  skipped: { id: string; reason: PruneSkipReason | "changed" }[];
+  failed?: { id: string; name: string; hostId: string; code: string }[];
+  /** Advisory lower bound; zero does not establish that no space was freed. */
+  spaceReclaimed?: number;
 }
 
 export interface VolumesApi {
@@ -122,13 +133,13 @@ export interface VolumesApi {
   deleteVolume(id: string): Promise<void>;
   renameVolume(id: string, name: string): Promise<Volume>;
   /** Preview of a prune for the given hosts; computed by the adapter, not the browser. */
-  planVolumePrune(input: { hostIds: string[] }): Promise<VolumePrunePlan>;
+  planVolumePrune(input: { hostIds: string[]; all?: boolean }): Promise<VolumePrunePlan>;
   /**
    * Removes the confirmed volumes. Each one is checked again at execution
    * time: consumers that appeared since the preview, bind mounts and
    * disconnected hosts keep their volume.
    */
-  pruneVolumes(input: { hostIds: string[]; volumeIds: string[] }): Promise<VolumePruneResult>;
+  pruneVolumes(input: { hostIds: string[]; volumeIds: string[]; candidates?: VolumePruneCandidate[]; all?: boolean }): Promise<VolumePruneResult>;
   listFiles(volumeId: string, path: string): Promise<DirListing>;
   readFile(volumeId: string, path: string): Promise<FileContent>;
   writeFile(volumeId: string, path: string, content: string): Promise<void>;

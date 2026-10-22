@@ -35,6 +35,18 @@ export const enVolumes = {
     delete: "Delete",
   },
   prune: {
+    sizeUnknown: "Size unknown",
+    includeNamed: "Include named volumes",
+    removed: "Removed",
+    skipped: "Skipped",
+    failed: "Failed",
+    close: "Close",
+    operationFailed: "Removal failed. Check the current state before retrying.",
+    reclaimedLowerBound: "Reclaimed space is unknown; at least {size} confirmed.",
+    hostFailed: "{host}: preview failed. Other hosts can still be cleaned up.",
+    candidateReasons: {"unused": "Unused", "unused-anonymous": "Anonymous and unused"},
+    skipReasons: {"in-use": "Now in use", "not-found": "No longer exists", "changed": "Identity changed since preview", "bind": "Bind mount retained", "host-offline": "Host disconnected"},
+
     open: "Clean up",
     title: "Clean up unused volumes",
     description: "Deletes Docker volumes that no container mounts – not even a stopped one. Bind mounts are always left untouched. Nothing is deleted until you confirm.",

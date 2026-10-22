@@ -81,3 +81,33 @@ it("keeps an in-use delete visible and navigates only after a successful retry",
   await userEvent.click(within(dialog).getByRole("button", { name: "Löschen" }));
   await screen.findByTestId("location");
 });
+
+it("does not navigate after leaving while a rename is pending", async () => {
+  const adapter = createDemoAdapter(); const done = deferred<Volume>();
+  adapter.renameVolume = vi.fn(() => done.promise);
+  const view = renderRoutes([{ path: "/volumes/old", element: <RenameVolumeDialog volume={volume} onClose={() => {}} /> }, { path: "/elsewhere", element: <Location /> }], ["/volumes/old"], adapter);
+  await userEvent.type(screen.getByRole("textbox", { name: "Neuer Name" }), "-new");
+  await userEvent.click(screen.getByRole("button", { name: "Umbenennen" }));
+  await waitFor(() => expect(adapter.renameVolume).toHaveBeenCalledOnce());
+  await act(() => view.router.navigate("/elsewhere"));
+  await act(async () => { done.resolve({ ...volume, id: "atlas~new" }); await done.promise; });
+  expect(view.router.state.location.pathname).toBe("/elsewhere");
+});
+
+it("discards the old volume's pending rename when the detail identity changes", async () => {
+  const adapter = createDemoAdapter(); const done = deferred<Volume>();
+  adapter.renameVolume = vi.fn(() => done.promise);
+  adapter.getVolume = vi.fn(async (id: string) => ({ ...volume, id, name: id === "old" ? "old" : "other", backups: [] }));
+  const view = renderRoutes([{ path: "/volumes/:volumeId", element: <VolumePage /> }], ["/volumes/old"], adapter);
+  const rename = await screen.findByRole("button", { name: "Volume umbenennen" });
+  await waitFor(() => expect(rename.hasAttribute("disabled")).toBe(false));
+  await userEvent.click(rename);
+  await userEvent.type(screen.getByRole("textbox", { name: "Neuer Name" }), "-new");
+  await userEvent.click(screen.getByRole("button", { name: "Umbenennen" }));
+  await waitFor(() => expect(adapter.renameVolume).toHaveBeenCalledOnce());
+  await act(() => view.router.navigate("/volumes/other"));
+  await screen.findByRole("heading", { name: "other" });
+  await act(async () => { done.resolve({ ...volume, id: "atlas~renamed" }); await done.promise; });
+  expect(view.router.state.location.pathname).toBe("/volumes/other");
+  expect(screen.queryByRole("dialog") === null).toBe(true);
+});

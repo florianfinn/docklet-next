@@ -36,6 +36,18 @@ export const deVolumes: typeof enVolumes = {
     delete: "Löschen",
   },
   prune: {
+    sizeUnknown: "Größe unbekannt",
+    includeNamed: "Benannte Volumes einbeziehen",
+    removed: "Entfernt",
+    skipped: "Übersprungen",
+    failed: "Fehlgeschlagen",
+    close: "Schließen",
+    operationFailed: "Entfernen fehlgeschlagen. Zustand vor erneutem Versuch prüfen.",
+    reclaimedLowerBound: "Freigegebener Speicher unbekannt; mindestens {size} bestätigt.",
+    hostFailed: "{host}: Vorschau fehlgeschlagen. Andere Hosts können weiter aufgeräumt werden.",
+    candidateReasons: {"unused": "Unbenutzt", "unused-anonymous": "Anonym und unbenutzt"},
+    skipReasons: {"in-use": "Wird inzwischen verwendet", "not-found": "Nicht mehr vorhanden", "changed": "Identität seit der Vorschau geändert", "bind": "Bind-Mount bleibt erhalten", "host-offline": "Host nicht verbunden"},
+
     open: "Aufräumen",
     title: "Ungenutzte Volumes aufräumen",
     description: "Löscht Docker-Volumes, die kein Container einbindet – auch kein gestoppter. Bind-Mounts bleiben immer unberührt. Erst die Bestätigung löscht.",

@@ -39,7 +39,7 @@ export function useVolumeCommands() {
       create: (input: CreateVolumeInput) => guard(() => adapter.createVolume(input)),
       renameVolume: (id: string, name: string) => guard(() => adapter.renameVolume(id, name)),
       remove: (id: string) => guard(async () => (await adapter.deleteVolume(id), true)),
-      prune: (hostIds: string[], volumeIds: string[]) => guard(() => adapter.pruneVolumes({ hostIds, volumeIds })),
+      prune: (input: Parameters<typeof adapter.pruneVolumes>[0]) => guard(() => adapter.pruneVolumes(input)),
       read: (id: string, path: string) => guard(() => adapter.readFile(id, path)),
       write: (id: string, path: string, content: string) => guard(async () => (await adapter.writeFile(id, path, content), true)),
       createEntry: (id: string, dir: string, name: string, type: "dir" | "file") => guard(async () => (await adapter.createEntry(id, dir, name, type), true)),
