@@ -85,3 +85,19 @@ it("a late failed projection after reset cannot import recovery evidence into a 
   const old = reader.load().catch((error: unknown) => error); await reached.promise; f.helper.reset(); reader.reset(); release.resolve(); await old;
   expect(reader.runs()).toEqual([]); expect(f.helper.retained()).toEqual([]);
 });
+
+it.each(["503", "malformed"])("newer generic settled observation wins through repeated %s targeted failures", async (fault) => {
+  const f = runtimeFixture(); f.state.run = snapshot("edge"); f.state.recovery.unknownReason = "transport";
+  await f.helper.runContainerCommand("edge~target", "start");
+  await f.helper.getRuntimeRun("edge", RUN_ID);
+  const reader = createActivityReader({ hosts: async () => ["edge"], page: async () => ({ items: [f.state.run], incomplete: false }), detail: async () => runtimeDetail(f.state.run), project: f.helper.project, retained: f.helper.retained, publish() {}, unauthorized() {} });
+  f.state.read = () => fault === "503" ? response({}, 503) : envelope(runtimeDetail(f.state.run, { recovery: undefined }));
+  f.state.run = snapshot("edge", { status: "success", outcomeState: "known" });
+  for (let read = 0; read < 2; read++) {
+    await reader.load();
+    expect(reader.runs()[0]).toMatchObject({ status: "succeeded", outcomeState: "known", runtime: { currentIntent: true } });
+    expect(reader.runs()[0]).not.toHaveProperty("runtime.unknownReason");
+    expect(reader.runs()[0]).not.toHaveProperty("runtime.canRelease");
+    expect(f.helper.retained()[0]).toMatchObject({ status: "succeeded", outcomeState: "known" });
+  }
+});

@@ -16,7 +16,7 @@ import type { DockletAdapter } from "@/data/adapter";
 import { AdapterContext } from "@/data/use-adapter";
 import { useActionRuns } from "@/data/live";
 import { renderRun } from "@/data/message-code";
-import { withRunGate } from "@/data/run-gate";
+import { runGateOf, withRunGate } from "@/data/run-gate";
 import { createDemoAdapter } from "@/data/demo/demo-adapter";
 import { envelope, response, RUN_ID, runtimeDetail, runtimeFixture, snapshot } from "@/data/http/runtime-commands.test-support";
 import { StackHeader } from "@/features/stacks/detail/StackHeader";
@@ -213,4 +213,57 @@ it.each(["en-US", "de"] as const)("%s actual dialog keeps the administrator reco
     expect(screen.getByRole("button", { name: locale === "de" ? "Gesperrtes Ziel freigeben" : "Release blocked target" }).hasAttribute("disabled")).toBe(false);
     expect(screen.queryByText(locale === "de" ? "Ausführung unbestätigt" : "Execution unconfirmed")).toBeNull(); expect(f.commands()).toHaveLength(0);
   } finally { view.unmount(); }
+});
+
+it.each(["503", "malformed"])("newer terminal list observation through %s releases the real gate and notifies once", async (fault) => {
+  const f = runtimeFixture(); f.state.run = snapshot("edge"); f.state.recovery.unknownReason = "transport";
+  f.state.activity = (url) => url.pathname.endsWith("/activities")
+    ? response({ success: true, data: url.pathname.includes("/edge/") ? [f.state.run] : [], pagination: { totalItems: url.pathname.includes("/edge/") ? 1 : 0 } })
+    : envelope(runtimeDetail(f.state.run));
+  const adapter = withRunGate({ ...f.adapter, getConnectedSettings: async () => ({ activity: { actionPresentation: "toast" } }) as never });
+  const shows = vi.spyOn(toast, "custom");
+  const view = mount(<ActionToasts />, adapter);
+  try {
+    await act(async () => { await adapter.runContainerCommand("edge~target", "start"); await f.adapter.getRuntimeRun!("edge", RUN_ID); });
+    expect(runGateOf(adapter)!.size).toBe(1);
+    toast.dismiss(RUN_ID); shows.mockClear();
+    f.state.read = () => fault === "503" ? response({}, 503) : envelope(runtimeDetail(f.state.run, { recovery: undefined }));
+    f.state.run = snapshot("edge", { status: "failed", outcomeState: "known" });
+    await act(async () => { await adapter.listActions(); });
+    expect(runGateOf(adapter)!.size).toBe(0);
+    expect(shows.mock.calls.filter(([, options]) => options?.id === RUN_ID)).toHaveLength(1);
+    await act(async () => { await adapter.listActions(); });
+    expect(shows.mock.calls.filter(([, options]) => options?.id === RUN_ID)).toHaveLength(1);
+    expect(f.commands()).toHaveLength(1);
+  } finally { view.unmount(); }
+});
+
+it.each(["password", "login"])("same-user %s renewal cancels the old consumer intent and only a deliberate click rejoins work", async (renewal) => {
+  const f = runtimeFixture(); const reached = deferred<void>(), release = deferred<void>();
+  const errors = vi.spyOn(toast, "error"), successes = vi.spyOn(toast, "success");
+  await f.adapter.getCurrentUser();
+  let settled: Promise<unknown> | undefined;
+  f.state.command = async () => { reached.resolve(); await release.promise; return envelope({ code: "run.started", activityId: RUN_ID, activity: f.state.run }, 202); };
+  function Command() {
+    const command = useContainerCommands();
+    return <button onClick={() => { settled = command.run("0~target", "start"); }}>Start example</button>;
+  }
+  const view = mount(<Command />, f.adapter);
+  try {
+    await userEvent.click(screen.getByRole("button", { name: "Start example" })); await reached.promise;
+    f.state.auth = (url) => url.pathname.endsWith("/auth/login")
+      ? envelope({ user: { id: "example-user", username: "operator", requiresPasswordChange: false } }) : envelope({});
+    await act(async () => {
+      if (renewal === "password") await f.adapter.changePassword("example-password", "new-example-password");
+      else await f.adapter.login("operator", "example-password");
+      release.resolve(); await settled;
+    });
+    expect(errors).not.toHaveBeenCalled(); expect(successes).not.toHaveBeenCalled();
+    expect(f.commands()).toHaveLength(1);
+    expect(f.commands()[0]!.init.signal?.aborted).toBe(true);
+    f.state.command = () => envelope({ code: "run.joined", activityId: RUN_ID, activity: f.state.run }, 200);
+    await userEvent.click(screen.getByRole("button", { name: "Start example" })); await settled;
+    expect(f.commands()).toHaveLength(2);
+    expect(errors).not.toHaveBeenCalled(); expect(successes).not.toHaveBeenCalled();
+  } finally { release.resolve(); view.unmount(); }
 });

@@ -4,6 +4,7 @@
 // License: Apache-2.0
 // Deviations: Original CSRF bootstrap and HTTP adapter header handling.
 
+import { discardResponse } from "./identity-reads";
 import { AdapterOutcomeError } from "../capability";
 
 const CSRF_HEADER = "X-CSRF-Token";
@@ -48,6 +49,7 @@ export function createCsrfClient(baseUrl: string, fetcher: typeof fetch): CsrfCl
     if (bootstrap) await bootstrap;
     if (token) return token;
     const response = await safeFetch(`${baseUrl}/auth/mode`, { credentials: "same-origin", headers: { Accept: "application/json" } });
+    discardResponse(response);
     if (!response.ok) throw new AdapterOutcomeError({ kind: "error", code: "http.error", status: response.status });
     if (!token) throw new AdapterOutcomeError({ kind: "error", code: "http.csrf-token-missing", status: response.status });
     return token;
@@ -68,6 +70,7 @@ export function createCsrfClient(baseUrl: string, fetcher: typeof fetch): CsrfCl
         headers.set(CSRF_HEADER, await requireToken());
         response = await attempt();
         if (await isCsrfFailure(response)) {
+          discardResponse(response);
           token = undefined;
           headers.set(CSRF_HEADER, await requireToken());
           response = await attempt();

@@ -11,7 +11,7 @@ import type { CapabilityDescriptor, ResourceRef } from "../capability";
 import type { CodedActionRun } from "../message-code";
 import type { CsrfClient } from "./csrf-client";
 import { splitInventoryId } from "./inventory-mapping";
-import { RuntimeTokenReadError } from "./runtime-token-read";
+import { isRuntimeTokenReadError } from "./runtime-token-read";
 import { mapRuntime, object, runtimeError, runtimeResponseError, type RuntimeDetail, type RuntimeRun } from "./runtime-mapping";
 
 export const COMMAND_RETRY_MS = 10 * 60_000;
@@ -145,13 +145,18 @@ export function createRuntimeCommands({ baseUrl, client, capability, publish, un
   }
   async function project(run: CodedActionRun): Promise<CodedActionRun> {
     if (run.outcomeState === undefined) return run;
-    const version = generation;
+    const version = generation, started = ++sequence;
     try { return await detail(run.hostId!, run.id, false, false); }
     catch (error) {
       check(version);
       if (isCancelledError(error) || (error instanceof AdapterOutcomeError && error.outcome.kind === "error" && error.outcome.status === 401)) throw error;
       const retained = runs.get(run.id);
-      return retained && retained.hostId === run.hostId ? retained : run;
+      if (!retained || retained.hostId !== run.hostId) return run;
+      // A later targeted answer wins; otherwise retain only compatible recovery evidence.
+      if ((sequences.get(run.id) ?? 0) > started ||
+          (retained.status === run.status && retained.outcomeState === run.outcomeState)) return retained;
+      sequences.set(run.id, started);
+      return remember({ ...run, runtime: undefined } as RuntimeRun, false);
     }
   }
   function schedule() {
@@ -215,7 +220,7 @@ export function createRuntimeCommands({ baseUrl, client, capability, publish, un
           } catch (error) {
             check(version);
             // CSRF bootstrap errors prove this attempt never passed request protection.
-            if (error instanceof AdapterOutcomeError || error instanceof RuntimeTokenReadError) {
+            if (error instanceof AdapterOutcomeError || isRuntimeTokenReadError(error)) {
               if (error instanceof AdapterOutcomeError && error.outcome.kind === "error" && error.outcome.status === 401) { unauthorized(); throw error; }
               if (uncertainSend) break;
               throw error instanceof AdapterOutcomeError ? error : runtimeError("runtime.pre-admission");

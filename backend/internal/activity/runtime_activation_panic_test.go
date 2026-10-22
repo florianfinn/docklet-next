@@ -46,6 +46,9 @@ func TestRuntimeActivationPanicChild(t *testing.T) {
 	require.NoError(t, err)
 	_, err = runtime.WaitLocal(ctx, b2Ref(command, command.ProposedRunID))
 	require.NoError(t, err, "a panic must not fabricate a settled result")
+	// attemptDone closes while the worker panic unwinds. Only process exit proves
+	// its lifetime ended; do not race the runtime's fatal panic with test failure.
+	<-ctx.Done()
 	t.Fatal("worker panic did not terminate process")
 }
 

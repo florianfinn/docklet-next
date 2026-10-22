@@ -48,3 +48,18 @@ func (runtimeFailedStream) Read([]byte) (int, error) { return 0, errors.New("syn
 func TestRuntimeOperationStreamPreservesReadError(t *testing.T) {
 	require.ErrorContains(t, printOperationStreamInternal(io.MultiReader(strings.NewReader("{\"log\":\"progress\"}\n"), runtimeFailedStream{})), "synthetic read failure")
 }
+
+func TestRuntimeOperationStreamReadsDiagnosticBeforeCodedOutcome(t *testing.T) {
+	for _, code := range []string{"runtime.failed", "runtime.cancelled", "runtime.interrupted"} {
+		t.Run(code, func(t *testing.T) {
+			var stdout, stderr bytes.Buffer
+			output.Configure(&stdout, &stderr, true, true, "runtime")
+			defer output.Configure(nil, nil, false, true, "")
+			stream := "{\"error\":\"executor diagnostic\"}\n{\"log\":\"worker joined\"}\n{\"error\":\"" + code + "\",\"code\":\"" + code + "\",\"activityId\":\"example-run\"}\n"
+			require.EqualError(t, printOperationStreamInternal(strings.NewReader(stream)), code)
+			require.Equal(t, "executor diagnostic\n", stderr.String())
+			require.Equal(t, "worker joined\n", stdout.String())
+		})
+	}
+	require.ErrorContains(t, printOperationStreamInternal(strings.NewReader("{\"error\":\"diagnostic only\"}\n")), "interrupted before completion")
+}

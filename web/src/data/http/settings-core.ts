@@ -4,6 +4,7 @@
 // License: Apache-2.0
 // Deviations: Original core settings mapping for setup and connected hub sections.
 
+import { discardResponse } from "./identity-reads";
 import type { SettingsApi } from "@/data/api";
 import { HISTORY_LIMITS } from "@/domain/activity-history";
 import type { HubSettings, SettingsSection } from "@/domain/settings";
@@ -27,7 +28,7 @@ function boolean(values: CoreSettings, key: string): boolean {
 export function createSettingsCore(baseUrl: string, client: CsrfClient): Pick<SettingsApi, "getSetupStatus" | "completeSetup" | "getConnectedSettings" | "saveSettings"> {
   async function read(): Promise<CoreSettings> {
     const response = await client.fetch(`${baseUrl}/environments/0/settings`, { credentials: "same-origin", headers: { Accept: "application/json" } });
-    if (!response.ok) throw new Error(`settings.read.${response.status}`);
+    if (!response.ok) { discardResponse(response); throw new Error(`settings.read.${response.status}`); }
     const items = await response.json() as { key?: unknown; value?: unknown }[];
     if (!Array.isArray(items) || !items.every((item) => typeof item.key === "string" && typeof item.value === "string")) throw new Error("settings.invalid-response");
     return Object.fromEntries(items.map((item) => [item.key, item.value])) as CoreSettings;
@@ -37,6 +38,7 @@ export function createSettingsCore(baseUrl: string, client: CsrfClient): Pick<Se
     const response = await client.fetch(`${baseUrl}/environments/0/settings`, {
       method: "PUT", credentials: "same-origin", headers: { Accept: "application/json", "Content-Type": "application/json" }, body: JSON.stringify(values),
     });
+    discardResponse(response);
     if (!response.ok) throw new Error(`settings.write.${response.status}`);
   }
 

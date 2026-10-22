@@ -4,6 +4,7 @@
 // License: Apache-2.0
 // Deviations: Original live host credential lifecycle and discovery mapping.
 
+import { discardResponse } from "./identity-reads";
 import type { components } from "@/api/generated/schema";
 import type { HostsApi, HubApi } from "@/data/api";
 import { AdapterOutcomeError } from "@/data/capability";
@@ -21,7 +22,7 @@ export function createHostCommands(baseUrl: string, client: CsrfClient, requireC
       headers: { Accept: "application/json", ...(body ? { "Content-Type": "application/json" } : {}) },
       ...(body ? { body: JSON.stringify(body) } : {}),
     });
-    if (!response.ok) throw new AdapterOutcomeError({ kind: "error", code: "http.error", status: response.status });
+    if (!response.ok) { discardResponse(response); throw new AdapterOutcomeError({ kind: "error", code: "http.error", status: response.status }); }
     const payload = await response.json() as { success?: boolean; data?: T };
     if (payload.success !== true || !payload.data) throw new Error("hosts.invalid-response");
     return payload.data;

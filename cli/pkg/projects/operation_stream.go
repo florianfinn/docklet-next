@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-20
 // License: BSD-3-Clause
-// Deviations: Extracted stream reader; require explicit terminal completion after progress.
+// Deviations: Extracted stream reader; require terminal completion and preserve uncoded diagnostics.
 
 package projects
 
@@ -34,12 +34,16 @@ func printOperationStreamInternal(body io.Reader) error {
 			Log   string `json:"log"`
 			Error string `json:"error"`
 			Done  bool   `json:"done"`
+			Code  string `json:"code"`
 		}
 		if err := json.Unmarshal([]byte(line), &frame); err != nil {
 			continue
 		}
 		if frame.Error != "" {
-			return errors.New(frame.Error)
+			if frame.Code != "" || frame.Done {
+				return errors.New(frame.Error)
+			}
+			_, _ = fmt.Fprintln(output.Stderr(), frame.Error)
 		}
 		if frame.Done {
 			return nil

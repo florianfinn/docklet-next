@@ -152,3 +152,12 @@ describe("docker run conversion", () => {
     expect(code(await f.authoring.convertDockerRun("h1", "x").catch((e: unknown) => e))).toBe("stack.convert-failed");
   });
 });
+
+it.each([["İ", "i"], ["ΟΣ", "οσ"]])("diffs %s using hub simple lowercase %s without replacing the server tag", async (entered, server) => {
+  const f = fixture([ok({}), ok({})], { labels: [server!] });
+  await f.authoring.setStackLabels("h1~p1", [entered!]);
+  expect(f.fetch).not.toHaveBeenCalled();
+  const remove = fixture([ok({})], { labels: [server!] });
+  await remove.authoring.setStackLabels("h1~p1", []);
+  expect(JSON.parse(remove.call(0).init.body as string)).toEqual({ name: server, attached: false });
+});

@@ -2,7 +2,7 @@
 // Revision: d4229b124f079376c959142b63235f6a739be2a9711e0228ec5a63ab552f8cf0
 // Retrieved: 2026-10-19
 // License: Apache-2.0
-// Deviations: Trusted internal command normalization; no HTTP or executor activation.
+// Deviations: Trusted command normalization shared by active HTTP admission and executor intake.
 
 package activity
 
@@ -20,7 +20,7 @@ import (
 	usertypes "github.com/florianfinn/docklet-next/types/user"
 )
 
-// Aliases keep the trusted internal port names while sharing dormant wire vocabulary.
+// Aliases keep the trusted internal port names while sharing active runtime wire vocabulary.
 type RuntimeOperation = activitytypes.RuntimeOperation
 
 const (
