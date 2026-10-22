@@ -30,7 +30,7 @@ func TestRuntimeOperationStreamRequiresDone(t *testing.T) {
 			var stdout, stderr bytes.Buffer
 			output.Configure(&stdout, &stderr, true, true, "runtime")
 			defer output.Configure(nil, nil, false, true, "")
-			err := printOperationStreamInternal(strings.NewReader(tc.stream))
+			err := printOperationStreamInternal(strings.NewReader(tc.stream), runtimeOperationStream)
 			if tc.message == "" {
 				require.NoError(t, err)
 			} else {
@@ -46,5 +46,47 @@ type runtimeFailedStream struct{}
 func (runtimeFailedStream) Read([]byte) (int, error) { return 0, errors.New("synthetic read failure") }
 
 func TestRuntimeOperationStreamPreservesReadError(t *testing.T) {
-	require.ErrorContains(t, printOperationStreamInternal(io.MultiReader(strings.NewReader("{\"log\":\"progress\"}\n"), runtimeFailedStream{})), "synthetic read failure")
+	require.ErrorContains(t, printOperationStreamInternal(io.MultiReader(strings.NewReader("{\"log\":\"progress\"}\n"), runtimeFailedStream{}), runtimeOperationStream), "synthetic read failure")
+}
+
+func TestRuntimeOperationStreamReadsDiagnosticBeforeCodedOutcome(t *testing.T) {
+	for _, code := range []string{"runtime.failed", "runtime.cancelled", "runtime.interrupted"} {
+		t.Run(code, func(t *testing.T) {
+			var stdout, stderr bytes.Buffer
+			output.Configure(&stdout, &stderr, true, true, "runtime")
+			defer output.Configure(nil, nil, false, true, "")
+			stream := "{\"error\":\"executor diagnostic\"}\n{\"log\":\"worker joined\"}\n{\"error\":\"" + code + "\",\"code\":\"" + code + "\",\"activityId\":\"example-run\"}\n"
+			require.EqualError(t, printOperationStreamInternal(strings.NewReader(stream), runtimeOperationStream), code)
+			require.Equal(t, "executor diagnostic\n", stderr.String())
+			require.Equal(t, "worker joined\n", stdout.String())
+		})
+	}
+	require.ErrorContains(t, printOperationStreamInternal(strings.NewReader("{\"error\":\"diagnostic only\"}\n"), runtimeOperationStream), "interrupted before completion")
+}
+
+func TestLegacyOperationStreamReturnsProducerFailure(t *testing.T) {
+	for _, operation := range []string{"pull", "build"} {
+		t.Run(operation, func(t *testing.T) {
+			var stdout, stderr bytes.Buffer
+			output.Configure(&stdout, &stderr, true, true, "legacy")
+			defer output.Configure(nil, nil, false, true, "")
+			// streamProjectOperationInternal emits one uncoded error and returns
+			// without a done frame after the activity envelope and Docker output.
+			message := operation + " access denied for example"
+			stream := "{\"type\":\"activity\",\"activityId\":\"example-run\"}\n{\"log\":\"working\"}\n{\"error\":\"" + message + "\"}\n"
+			require.EqualError(t, printOperationStreamInternal(strings.NewReader(stream), legacyOperationStream), message)
+			require.Equal(t, "working\n", stdout.String())
+			require.Empty(t, stderr.String())
+		})
+	}
+}
+
+func TestRuntimeOperationStreamDiagnosticDoesNotOverrideSuccess(t *testing.T) {
+	var stdout, stderr bytes.Buffer
+	output.Configure(&stdout, &stderr, true, true, "runtime")
+	defer output.Configure(nil, nil, false, true, "")
+	stream := "{\"error\":\"executor diagnostic\"}\n{\"log\":\"recovered\"}\n{\"done\":true}\n"
+	require.NoError(t, printOperationStreamInternal(strings.NewReader(stream), runtimeOperationStream))
+	require.Equal(t, "executor diagnostic\n", stderr.String())
+	require.Equal(t, "recovered\n", stdout.String())
 }

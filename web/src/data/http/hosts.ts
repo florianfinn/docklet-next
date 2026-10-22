@@ -46,7 +46,7 @@ export function mapHost(row: Environment): Host {
   const report = mapReport(row);
   const checks = row.agentReport?.version.onboardingChecks;
   return {
-    id: row.id, name: row.name || row.id, color: "var(--muted-foreground)",
+    id: row.id, name: row.name || row.id, color: "#737373",
     status: row.enabled ? status : "offline",
     connection: row.isEdge ? "edge" : "direct", address: row.isEdge ? "" : row.apiUrl,
     agentVersion: row.agentReport?.version.currentVersion ?? "",

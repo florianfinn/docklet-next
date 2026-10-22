@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace
+// Deviations: Local module namespace; select runtime versus legacy stream completion.
 
 package projects
 
@@ -254,6 +254,7 @@ var upCmd = &cobra.Command{
 	RunE: func(cmd *cobra.Command, args []string) error {
 		return runProjectStreamAction(cmd, args[0], projectStreamActionConfig{
 			endpoint:       types.ProjectUp,
+			streamKind:     runtimeOperationStream,
 			failureMessage: "failed to start project",
 			successMessage: "Project %s started successfully",
 		})
@@ -316,6 +317,7 @@ var redeployCmd = &cobra.Command{
 	RunE: func(cmd *cobra.Command, args []string) error {
 		return runProjectStreamAction(cmd, args[0], projectStreamActionConfig{
 			endpoint:       types.ProjectRedeploy,
+			streamKind:     runtimeOperationStream,
 			failureMessage: "failed to redeploy project",
 			successMessage: "Project %s redeployed successfully",
 		})
@@ -330,6 +332,7 @@ var pullCmd = &cobra.Command{
 	RunE: func(cmd *cobra.Command, args []string) error {
 		return runProjectStreamAction(cmd, args[0], projectStreamActionConfig{
 			endpoint:       types.ProjectPull,
+			streamKind:     legacyOperationStream,
 			failureMessage: "failed to pull images",
 			successMessage: "Images pulled successfully for project %s",
 		})
@@ -341,6 +344,7 @@ var pullCmd = &cobra.Command{
 // printed as-is and a terminal {"error":"..."} frame fails the command.
 type projectStreamActionConfig struct {
 	endpoint       func(string, string) string
+	streamKind     operationStreamKind
 	failureMessage string
 	successMessage string
 }
@@ -368,7 +372,7 @@ func runProjectStreamAction(cmd *cobra.Command, identifier string, cfg projectSt
 		return fmt.Errorf("%s: %w", cfg.failureMessage, ensureSuccessStatusErr)
 	}
 
-	if printOperationStreamErr := printOperationStreamInternal(resp.Body); printOperationStreamErr != nil {
+	if printOperationStreamErr := printOperationStreamInternal(resp.Body, cfg.streamKind); printOperationStreamErr != nil {
 		return fmt.Errorf("%s: %w", cfg.failureMessage, printOperationStreamErr)
 	}
 

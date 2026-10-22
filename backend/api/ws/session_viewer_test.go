@@ -140,7 +140,7 @@ func TestSessionViewerTwoTabsOtherSessionAndSharedTunnelSurvive(t *testing.T) {
 				}
 				return r.WithContext(sessionlife.WithCadence(r.Context(), cadence(r.Context())))
 			}
-			produce, joined := make(chan string), make(chan struct{})
+			produce, joined := make(chan string, 1), make(chan struct{})
 			h := &WebSocketHandler{containerLogStreamer: func(ctx context.Context, _ string, out chan<- string, _ bool, _, _ string, _ bool) error {
 				defer close(joined)
 				for {
@@ -184,7 +184,11 @@ func TestSessionViewerTwoTabsOtherSessionAndSharedTunnelSurvive(t *testing.T) {
 					t.Fatal("viewer pumps not ready")
 				}
 			}
-			produce <- "before revoke"
+			select {
+			case produce <- "before revoke":
+			case <-ctx.Done():
+				t.Fatal("shared producer stopped before revocation")
+			}
 			for _, conn := range []*websocket.Conn{first, second, other} {
 				require.Contains(t, string(readLog(t, conn)), "before revoke")
 			}
@@ -194,7 +198,11 @@ func TestSessionViewerTwoTabsOtherSessionAndSharedTunnelSurvive(t *testing.T) {
 				require.Error(t, err)
 				require.NoError(t, ctx.Err())
 			}
-			produce <- "other session still live"
+			select {
+			case produce <- "other session still live":
+			case <-ctx.Done():
+				t.Fatal("revoking one session stopped the other session producer")
+			}
 			require.Contains(t, string(readLog(t, other)), "other session still live")
 			select {
 			case <-joined:

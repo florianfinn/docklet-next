@@ -589,28 +589,31 @@ func TestImageUpdateWatcher_CancellationStopsBackfillWithoutScanning(t *testing.
 }
 
 func TestImageUpdateWatcher_ScheduledPollTriggersScanWithoutEvents(t *testing.T) {
-	scanner := &imageUpdateScannerFakeInternal{}
+	scanner := &imageUpdateScannerFakeInternal{startedCh: make(chan int, 16)}
 	settings := &pollingSettingReaderFakeInternal{enabled: true, schedule: "* * * * * *"}
 	watcher := newImageUpdateWatcherForTestInternal(t, scanner, settings, bus.NewDockerEventBus(), nil)
 	jobScheduler, err := NewJobScheduler(t.Context(), watcher.coordinator, time.UTC)
 	require.NoError(t, err)
 	t.Cleanup(func() { require.NoError(t, jobScheduler.Stop(context.WithoutCancel(t.Context()))) })
 	require.NoError(t, jobScheduler.RegisterBusWatcher(watcher, true))
-
-	require.Eventually(t, func() bool { return scanner.countInternal() == 1 }, time.Second, 5*time.Millisecond)
+	ctx, cancel := context.WithTimeout(t.Context(), 15*time.Second)
+	defer cancel()
+	select {
+	case call := <-scanner.startedCh:
+		require.Equal(t, 1, call, "startup must reach the actual scanner")
+	case <-ctx.Done():
+		t.Fatal("startup scan did not start")
+	}
+	// Registration launches startup work asynchronously. Wait for its durable
+	// schedule and scan guard before starting scheduled work.
 	require.Eventually(t, func() bool {
-		record, scheduleStateErr := watcher.coordinator.ScheduleState(t.Context(), watcher.Name())
-		return scheduleStateErr == nil && record.Schedule == settings.schedule && !record.NextRun.IsZero()
-	}, time.Second, 5*time.Millisecond)
-	require.NoError(t, jobScheduler.StartScheduler(t.Context()))
-	record, err := watcher.coordinator.ScheduleState(t.Context(), watcher.Name())
-	require.NoError(t, err)
-	require.Equal(t, settings.schedule, record.Schedule)
-	require.False(t, record.NextRun.IsZero())
-	require.Eventually(t, func() bool { return scanner.countInternal() >= 3 }, 5*time.Second, 10*time.Millisecond)
+		record, err := watcher.coordinator.ScheduleState(ctx, watcher.Name())
+		return err == nil && record.Schedule == settings.schedule && !record.NextRun.IsZero() && !watcher.scanRunning.Load()
+	}, 10*time.Second, time.Millisecond)
+	require.NoError(t, jobScheduler.StartScheduler(ctx))
 	require.Eventually(t, func() bool {
-		history, listErr := watcher.coordinator.List(t.Context(), "0", watcher.Name(), 1, 10)
-		if listErr != nil {
+		history, err := watcher.coordinator.List(ctx, "0", watcher.Name(), 1, 10)
+		if err != nil {
 			return false
 		}
 		for _, run := range history.Runs {
@@ -619,7 +622,13 @@ func TestImageUpdateWatcher_ScheduledPollTriggersScanWithoutEvents(t *testing.T)
 			}
 		}
 		return false
-	}, time.Second, 5*time.Millisecond)
+	}, 10*time.Second, time.Millisecond)
+	select {
+	case call := <-scanner.startedCh:
+		require.GreaterOrEqual(t, call, 2, "the completed scheduled run must reach the scanner")
+	default:
+		t.Fatal("scheduled run completed without reaching the scanner")
+	}
 }
 
 func TestImageUpdateWatcher_ClosedEventSubscriptionKeepsWatcherRunning(t *testing.T) {

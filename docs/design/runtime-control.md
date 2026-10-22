@@ -715,6 +715,13 @@ A successful login creates a fresh generation; an old close/error
 callback cannot invalidate it. Identity rejection during a credential-check
 form remains inline under the existing identity policy.
 
+Accepted limit (M6-R1-05): same-user session renewal silently cancels in-flight
+browser command intent. Already admitted runs still appear in refreshed Activity;
+cancellation neither reports success nor automatically replays a command. The
+current generation-cancellation signal also covers logout and identity replacement.
+A renewal notice needs to distinguish those cases and pre-send, unknown-admission
+and known-run states before it can give accurate feedback to the same user.
+
 Proxy/none mode has no local browser session to revoke. Continue request/Origin
 checks and existing effective administrator identity; do not invent local logout
 or claim proxy sign-out. Proxy authentication lifetime remains the proxy's

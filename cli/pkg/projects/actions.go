@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace
+// Deviations: Local module namespace; preserve legacy build-stream errors.
 
 package projects
 
@@ -203,7 +203,7 @@ var buildCmd = &cobra.Command{
 			return fmt.Errorf("failed to build project images: %w", ensureSuccessStatusErr)
 		}
 
-		if printOperationStreamErr := printOperationStreamInternal(resp.Body); printOperationStreamErr != nil {
+		if printOperationStreamErr := printOperationStreamInternal(resp.Body, legacyOperationStream); printOperationStreamErr != nil {
 			return fmt.Errorf("failed to build project images: %w", printOperationStreamErr)
 		}
 

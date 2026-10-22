@@ -6,6 +6,15 @@
 
 import { CancelledError } from "@tanstack/react-query";
 
+const releases = new WeakMap<Response, () => void>();
+
+/** Status-only callers discard unread data and release request ownership immediately. */
+export function discardResponse(response: Response): void {
+  releases.get(response)?.();
+  releases.delete(response);
+  void response.body?.cancel().catch(() => undefined);
+}
+
 /** Abort owned requests and guard bodies even when a fetch implementation ignores abort. */
 export function createIdentityReads(fetcher: typeof fetch) {
   let generation = 0;
@@ -25,16 +34,20 @@ export function createIdentityReads(fetcher: typeof fetch) {
       const response = await fetcher(input, { ...init, signal: controller.signal });
       check(version);
       // Keep cancellation ownership through body consumption; streams are owned separately.
-      const wrap = (value: Response): Response => new Proxy(value, {
-        get(target, prop) {
-          if (prop === "clone") return () => wrap(target.clone());
-          const member: unknown = Reflect.get(target, prop, target);
-          if (["json", "text", "arrayBuffer", "blob", "formData", "bytes"].includes(String(prop)) && typeof member === "function") return async () => {
-            try { const body: unknown = await member.call(target); check(version); return body; } finally { release(); }
-          };
-          return typeof member === "function" ? member.bind(target) : member;
-        },
-      });
+      const wrap = (value: Response): Response => {
+        const wrapped = new Proxy(value, {
+          get(target, prop) {
+            if (prop === "clone") return () => wrap(target.clone());
+            const member: unknown = Reflect.get(target, prop, target);
+            if (["json", "text", "arrayBuffer", "blob", "formData", "bytes"].includes(String(prop)) && typeof member === "function") return async () => {
+              try { const body: unknown = await member.call(target); check(version); return body; } finally { release(); }
+            };
+            return typeof member === "function" ? member.bind(target) : member;
+          },
+        });
+        releases.set(wrapped, release);
+        return wrapped;
+      };
       return wrap(response);
     } catch (error) { release(); check(version); throw error; }
   };

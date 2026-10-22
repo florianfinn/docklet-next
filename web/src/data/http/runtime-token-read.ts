@@ -4,8 +4,12 @@
 // License: Apache-2.0
 // Deviations: Original consumer classification of token-bootstrap transport failures.
 
-/** The CSRF client reads auth/mode only before a write or after a CSRF refusal. */
-export class RuntimeTokenReadError extends Error {}
+const tokenErrors = new WeakSet<object>();
+
+/** Classification retains the caller's original constructor, identity and message. */
+export function isRuntimeTokenReadError(error: unknown): boolean {
+  return error !== null && (typeof error === "object" || typeof error === "function") && tokenErrors.has(error);
+}
 
 /** Preserve CSRF policy while identifying raw bootstrap failures at their source. */
 export function runtimeTokenReads(baseUrl: string, fetcher: typeof fetch): typeof fetch {
@@ -14,7 +18,10 @@ export function runtimeTokenReads(baseUrl: string, fetcher: typeof fetch): typeo
     try { return await fetcher(input, init); }
     catch (error) {
       const path = new URL(input instanceof Request ? input.url : String(input), "https://hub.example.com").pathname;
-      if (path === tokenPath) throw new RuntimeTokenReadError("runtime.token-read-unavailable", { cause: error });
+      if (error !== null && (typeof error === "object" || typeof error === "function")) {
+        if (path === tokenPath) tokenErrors.add(error);
+        else tokenErrors.delete(error);
+      }
       throw error;
     }
   };

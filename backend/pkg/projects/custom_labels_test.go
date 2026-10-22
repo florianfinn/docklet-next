@@ -254,3 +254,13 @@ services:
 	require.Equal(t, "=3.20.1", project.Services["child"].Labels[updaterlabels.LabelUpdateConstraint])
 	require.Equal(t, "true", project.Services["child"].Labels[updaterlabels.LabelUpdater])
 }
+
+func TestNormalizeProjectTagUnicodeSimpleLowercase(t *testing.T) {
+	for _, tc := range []struct{ input, want string }{{"İ", "i"}, {"ΟΣ", "οσ"}, {" Web ", "web"}} {
+		t.Run(tc.input, func(t *testing.T) {
+			got, err := NormalizeProjectTag(tc.input)
+			require.NoError(t, err)
+			require.Equal(t, tc.want, got)
+		})
+	}
+}

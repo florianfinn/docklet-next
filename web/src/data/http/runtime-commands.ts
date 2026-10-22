@@ -11,14 +11,14 @@ import type { CapabilityDescriptor, ResourceRef } from "../capability";
 import type { CodedActionRun } from "../message-code";
 import type { CsrfClient } from "./csrf-client";
 import { splitInventoryId } from "./inventory-mapping";
-import { RuntimeTokenReadError } from "./runtime-token-read";
+import { isRuntimeTokenReadError } from "./runtime-token-read";
 import { mapRuntime, object, runtimeError, runtimeResponseError, type RuntimeDetail, type RuntimeRun } from "./runtime-mapping";
 
 export const COMMAND_RETRY_MS = 10 * 60_000;
 export const RIGHTS_MAX_AGE_MS = 30_000;
 const LIMIT = 256;
 const stackRoutes: Record<StackCommand, string> = { start: "up", stop: "down", restart: "restart", redeploy: "redeploy" };
-const active = (run: RuntimeRun) => run.status === "running" || run.status === "queued";
+const active = (run: Pick<CodedActionRun, "status">) => run.status === "running" || run.status === "queued";
 
 /** HTTP contexts still have secure random bytes even without Crypto.randomUUID. */
 function commandUUID(): string {
@@ -145,13 +145,18 @@ export function createRuntimeCommands({ baseUrl, client, capability, publish, un
   }
   async function project(run: CodedActionRun): Promise<CodedActionRun> {
     if (run.outcomeState === undefined) return run;
-    const version = generation;
+    const version = generation, started = ++sequence;
     try { return await detail(run.hostId!, run.id, false, false); }
     catch (error) {
       check(version);
       if (isCancelledError(error) || (error instanceof AdapterOutcomeError && error.outcome.kind === "error" && error.outcome.status === 401)) throw error;
       const retained = runs.get(run.id);
-      return retained && retained.hostId === run.hostId ? retained : run;
+      if (!retained || retained.hostId !== run.hostId) return run;
+      // A settled generic row can supersede only active retained recovery after a failed read.
+      if (active(run) || !active(retained) || (sequences.get(run.id) ?? 0) > started ||
+          (retained.status === run.status && retained.outcomeState === run.outcomeState)) return retained;
+      sequences.set(run.id, started);
+      return remember({ ...run, runtime: undefined } as RuntimeRun, false);
     }
   }
   function schedule() {
@@ -205,6 +210,7 @@ export function createRuntimeCommands({ baseUrl, client, capability, publish, un
         check(version);
         if (controller.signal.aborted || now() - began >= COMMAND_RETRY_MS) throw runtimeError("runtime.pre-admission");
         for (let attempt = 0; attempt < 2; attempt++) {
+          const started = ++sequence;
           let response: Response;
           try {
             if (now() - began >= COMMAND_RETRY_MS) break;
@@ -215,7 +221,7 @@ export function createRuntimeCommands({ baseUrl, client, capability, publish, un
           } catch (error) {
             check(version);
             // CSRF bootstrap errors prove this attempt never passed request protection.
-            if (error instanceof AdapterOutcomeError || error instanceof RuntimeTokenReadError) {
+            if (error instanceof AdapterOutcomeError || isRuntimeTokenReadError(error)) {
               if (error instanceof AdapterOutcomeError && error.outcome.kind === "error" && error.outcome.status === 401) { unauthorized(); throw error; }
               if (uncertainSend) break;
               throw error instanceof AdapterOutcomeError ? error : runtimeError("runtime.pre-admission");
@@ -238,9 +244,12 @@ export function createRuntimeCommands({ baseUrl, client, capability, publish, un
           const data = object(object(body).data);
           try {
             if (object(body).success !== true || (response.status === 202 ? data.code !== "run.started" : response.status !== 200 || data.code !== "run.joined") || typeof data.activityId !== "string" || !data.activityId.trim()) throw runtimeError("runtime.invalid-response");
-            const run = mapRuntime(data.activity, host, data.activityId);
+            let run = mapRuntime(data.activity, host, data.activityId);
+            const retained = runs.get(run.id);
+            // The admission snapshot can arrive after a newer targeted observation.
+            if (retained?.hostId === host && started < (sequences.get(run.id) ?? 0)) run = retained;
             run.runtime = { ...run.runtime, currentIntent: true };
-            sequences.set(run.id, ++sequence);
+            sequences.set(run.id, Math.max(started, sequences.get(run.id) ?? 0));
             remember(run);
             // A final admission response ends key retention. Future work is query-only.
             void detail(host, run.id).catch(() => undefined);

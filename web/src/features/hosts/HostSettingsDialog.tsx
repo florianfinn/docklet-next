@@ -114,7 +114,7 @@ function AgentPanel({ host, component }: { host: Host; component: SystemComponen
 
 /**
  * Per-host settings: display name and colour through the typed adapter
- * mutation, plus the host's own agent container with simulated actions. The
+ * mutation, plus the host's own agent container. The
  * draft starts from the saved host each time the dialog opens; Cancel drops it.
  */
 export function HostSettingsDialog({ host, component, open, onOpenChange }: { host: Host; component: SystemComponent | undefined; open: boolean; onOpenChange: (open: boolean) => void }) {
@@ -146,6 +146,7 @@ export function HostSettingsDialog({ host, component, open, onOpenChange }: { ho
   const save = async () => {
     setTouched(true);
     if (error || !dirty) return;
+    setServerError(null);
     setSaving(true);
     try {
       const saved = await adapter.updateHost(host.id, { name: name.trim(), color });
@@ -191,8 +192,9 @@ export function HostSettingsDialog({ host, component, open, onOpenChange }: { ho
                   setServerError(null);
                 }}
                 description={t("nameHint")}
-                error={(touched || name !== host.name) && (error === "nameEmpty" || error === "nameLong") ? t(error) : (serverError ?? undefined)}
+                error={(touched || name !== host.name) && (error === "nameEmpty" || error === "nameLong") ? t(error) : undefined}
               />
+              {serverError && <p role="alert" className="text-sm text-destructive">{serverError}</p>}
               <fieldset className="flex flex-col gap-2">
                 <legend className="mb-1.5 text-sm font-medium">{t("color")}</legend>
                 <div className="flex flex-wrap items-center gap-3">

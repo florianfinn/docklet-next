@@ -4,6 +4,7 @@
 // License: Apache-2.0
 // Deviations: Connected sign-in and profile HTTP calls.
 
+import { discardResponse } from "./identity-reads";
 import { CancelledError } from "@tanstack/react-query";
 
 import type { AuthApi, CurrentUser } from "@/data/api";
@@ -51,7 +52,7 @@ export function createHttpAuth(baseUrl: string, client: CsrfClient, onSessionCha
     } catch {
       throw new AdapterOutcomeError({ kind: "error", code: "http.error" });
     }
-    if (!response.ok) throw new AdapterOutcomeError({ kind: "error", code: "http.error", status: response.status });
+    if (!response.ok) { discardResponse(response); throw new AdapterOutcomeError({ kind: "error", code: "http.error", status: response.status }); }
     const payload = await response.json() as { success?: boolean; data?: unknown; mode?: unknown };
     if (payload.success !== true) throw new Error("auth.invalid-response");
     return payload.data;

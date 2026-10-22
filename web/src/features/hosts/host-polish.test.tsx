@@ -4,7 +4,7 @@
 // License: Apache-2.0
 // Deviations: Original host error and connected onboarding regressions.
 
-import { screen, within } from "@testing-library/react";
+import { screen, within, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { toast } from "sonner";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -62,7 +62,8 @@ describe.each(["de", "en-US"] as const)("host polish (%s)", (locale) => {
     expect(shown).toHaveBeenCalledWith(message);
   });
 
-  it("localizes typed settings-save errors after editing the host name", async () => {
+  it.each([1280, 390])("shows form-level settings-save errors at width %s without invalidating the name", async (width) => {
+    window.innerWidth = width;
     setAppLocale(locale);
     const adapter = createDemoAdapter();
     vi.spyOn(adapter, "updateHost").mockRejectedValue(unavailable("updateHost", undefined, "capability.mapping-unavailable"));
@@ -71,7 +72,9 @@ describe.each(["de", "en-US"] as const)("host polish (%s)", (locale) => {
     const input = within(dialog).getByRole("textbox", { name: locale === "de" ? "Anzeigename" : "Display name" });
     await userEvent.clear(input); await userEvent.type(input, "Renamed");
     await userEvent.click(within(dialog).getByRole("button", { name: locale === "de" ? "Speichern" : "Save" }));
-    expect(await within(dialog).findByText(messages.mapping) !== null).toBe(true);
+    expect((await within(dialog).findByRole("alert")).textContent).toBe(messages.mapping);
+    expect(input.getAttribute("aria-invalid")).not.toBe("true");
+    expect(input.getAttribute("aria-describedby") ?? "").not.toContain("error");
   });
 
   it("does not claim connected hosts have no workloads or need their first stack", () => {
@@ -100,4 +103,22 @@ describe.each(["de", "en-US"] as const)("host polish (%s)", (locale) => {
     expect(fields.every((field) => !!field.textContent?.trim())).toBe(true);
     expect(screen.getAllByText(locale === "de" ? "Vom Agent nicht gemeldet" : "Not reported by the agent").length).toBeGreaterThanOrEqual(4);
   });
+});
+
+it.each(["fallback", "explicit", "swatch"])("opens a valid host colour and preserves it on an unchanged %s save", async (mode) => {
+  const adapter = createDemoAdapter();
+  const base = { ...host, ...(mode === "explicit" ? { color: "#22c55e" } : {}) };
+  const save = vi.spyOn(adapter, "updateHost").mockImplementation(async (_id, input) => ({ ...base, ...input }));
+  renderWithApp(<HostSettingsDialog host={base} component={undefined} open onOpenChange={() => {}} />, adapter);
+  const dialog = await screen.findByRole("dialog");
+  const hex = within(dialog).getByRole("textbox", { name: /Hex/ });
+  expect(hex.getAttribute("aria-invalid")).not.toBe("true");
+  expect((within(dialog).getByRole("button", { name: "Speichern" }) as HTMLButtonElement).disabled).toBe(true);
+  if (mode === "swatch") await userEvent.click(within(dialog).getByRole("radio", { name: "Farbe #ec4899" }));
+  else {
+    const name = within(dialog).getByRole("textbox", { name: "Anzeigename" });
+    await userEvent.clear(name); await userEvent.type(name, "Renamed");
+  }
+  await userEvent.click(within(dialog).getByRole("button", { name: "Speichern" }));
+  await waitFor(() => expect(save).toHaveBeenCalledWith(base.id, { name: mode === "swatch" ? base.name : "Renamed", color: mode === "swatch" ? "#ec4899" : base.color }));
 });
