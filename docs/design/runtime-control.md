@@ -481,6 +481,17 @@ A live worker still unwinding retains its exclusion. Unanswered/unreachable
 remote executors and lost storage/host continuity remain unknown, not settled
 failure merely because the hub waiter or transport returned.
 
+Local settlement classifies cancellation after output has actually joined, not
+at executor return. A durable cancel arriving during drain therefore remains
+cancelled; an expired workflow/application context remains interrupted, even if
+the executor returned without error first. Output drain has a 60-second wait
+budget, followed by an actual join before settlement. Exceeding that budget
+retains failed/output-incomplete reporting even if a late appender subsequently
+persists every line. These are conservative workflow and capture dispositions;
+neither a successful executor return nor a later drain proves external effects
+or justifies releasing an owner before its output joins.
+
+
 For a permanently unknown result, the accepted recovery is administrator-only
 `POST .../runtime-runs/{runId}/release` (`release-runtime-run`) with explicit
 risk acknowledgment and nonempty reason. Cancel/join any hub dispatch task and
