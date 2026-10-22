@@ -36,3 +36,21 @@ test("tools recipe builds local acfs offline, verifies downloads and exports mat
   assert.match(dockerfile, /FROM scratch AS corresponding-source/);
   assert.match(dockerfile, /FROM scratch AS runtime/);
 });
+
+test("tools CI verifies both native platforms and gates source-first publication on main SemVer tags", () => {
+  const workflow = readFileSync(".github/workflows/tools-image.yml", "utf8");
+  assert.match(workflow, /^permissions: \{\}$/m);
+  assert.match(workflow, /arch: amd64\n            runner: ubuntu-24.04\n/);
+  assert.match(workflow, /arch: arm64\n            runner: ubuntu-24.04-arm\n/);
+  assert.match(workflow, /node deploy\/tools\/contract.mjs/);
+  const [verify, publish] = workflow.split("  publish:\n");
+  assert.doesNotMatch(verify, /packages: write|docker push|docker login/);
+  assert.match(publish, /needs: verify/);
+  assert.match(publish, /if: github.event_name == 'push' && startsWith\(github.ref, 'refs\/tags\/tools-v'\)/);
+  assert.match(publish, /git merge-base --is-ancestor "\$GITHUB_SHA" origin\/main/);
+  assert.match(publish, /packages: write/);
+  assert.equal((workflow.match(/packages: write/g) ?? []).length, 1);
+  assert.ok(publish.indexOf('docker push "$IMAGE:$VERSION-source-$arch"') < publish.indexOf('docker push "$IMAGE:$VERSION-$arch"'));
+  for (const match of workflow.matchAll(/uses: (\S+)/g)) assert.match(match[1], /@[a-f0-9]{40}$/);
+  assert.doesNotMatch(workflow, /pull_request_target|workflow_run|secrets\.|contents: write|:latest/);
+});

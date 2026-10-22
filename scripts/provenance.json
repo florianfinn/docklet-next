@@ -25,6 +25,7 @@
     ".githooks/commit-msg",
     ".githooks/pre-push",
     ".github/workflows/checks.yml",
+    ".github/workflows/tools-image.yml",
     ".github/workflows/pr-text.yml",
     ".github/workflows/review-status.yml",
     "scripts/publication-assignments.mjs",
