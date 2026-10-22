@@ -70,6 +70,26 @@
     {
       "path": "LICENSES/MIT-react-remove-scroll-bar.txt",
       "sha256": "a79aae0c0f21990d9d963bb3c5a79cdcea9a46f8523ba55c58d7fe776b6ebc84"
+    },
+    {
+      "path": "LICENSES/Apache-2.0-Trivy.txt",
+      "sha256": "c71d239df91726fc519c6eb72d318ec65820627232b2f796219e87dcf35d0ab4"
+    },
+    {
+      "path": "LICENSES/NOTICE-Trivy.txt",
+      "sha256": "aed9bc6dab87c6f6567d20bf0f5c0433a8ccd3ad7873322cf79b9244eb720a1f"
+    },
+    {
+      "path": "LICENSES/MPL-2.0-Mozilla.txt",
+      "sha256": "66a3107d5ad6a058aab753eaac2047ccb2ed0e39465dd0fe5844da3e300d5172"
+    },
+    {
+      "path": "LICENSES/MIT-musl.txt",
+      "sha256": "f9bc4423732350eb0b3f7ed7e91d530298476f8fec0c6c427a1c04ade22655af"
+    },
+    {
+      "path": "LICENSES/GPL-2.0-only-BusyBox.txt",
+      "sha256": "4cda70b4b121da4473b4fec52de4e779f11ae2616d3b27538946898d4e78e374"
     }
   ]
 }
