@@ -15,7 +15,14 @@ export function inputs() {
     }));
 }
 if (process.argv[1] && import.meta.url === new URL(process.argv[1], "file:").href) {
-  const args = Object.entries(inputs()).flatMap(([key, value]) => ["--build-arg", `${key}=${value}`]);
+  const head = spawnSync("git", ["rev-parse", "HEAD"], { encoding: "utf8" });
+  if (head.status !== 0) throw new Error("missing source revision");
+  const dirty = spawnSync("git", ["status", "--porcelain"], { encoding: "utf8" });
+  if (dirty.status !== 0) throw new Error("source state unavailable");
+  const revision = head.stdout.trim() + (dirty.stdout.trim() ? "-dirty" : "");
+  const tag = process.env.GITHUB_REF_NAME ?? "";
+  const version = /^tools-v(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)$/.test(tag) ? tag.slice(7) : "development";
+  const args = Object.entries({ ...inputs(), SOURCE_REVISION: revision, TOOLS_VERSION: version }).flatMap(([key, value]) => ["--build-arg", `${key}=${value}`]);
   const result = spawnSync("docker", ["buildx", "build", "--file", "deploy/tools/Dockerfile",
     ...args, ...process.argv.slice(2), "."], { stdio: "inherit" });
   process.exit(result.status ?? 1);

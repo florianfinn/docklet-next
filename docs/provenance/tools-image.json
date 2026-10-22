@@ -78,10 +78,10 @@
       "obligations": "Distribute exact source tarball, generated per-platform .config, applet list and recipe in companion source OCI image before binary publication. Keep source accessible with binaries.",
       "legalFiles": [
         {
-          "path": "LICENSES/GPL-2.0-only-BusyBox.txt",
           "imagePath": "/usr/share/licenses/docklet-tools/BusyBox-GPL-2.0.txt",
-          "sha256": "4cda70b4b121da4473b4fec52de4e779f11ae2616d3b27538946898d4e78e374",
-          "formatting": "Form-feed page separators normalized to LF; source tarball retains original bytes."
+          "sha256": "bbfc9843646d483c334664f651c208b9839626891d8f17604db2146962f43548",
+          "source": "https://busybox.net/downloads/busybox-1.38.0.tar.bz2#LICENSE",
+          "formatting": "Verbatim upstream bytes, including page separators; normalized Git reference remains in LICENSES/GPL-2.0-only-BusyBox.txt."
         }
       ]
     },
@@ -102,7 +102,14 @@
           "imagePath": "/usr/share/licenses/docklet-tools/Trivy-NOTICE.txt",
           "sha256": "aed9bc6dab87c6f6567d20bf0f5c0433a8ccd3ad7873322cf79b9244eb720a1f"
         }
-      ]
+      ],
+      "dependencyInventory": {
+        "path": "docs/provenance/tools-trivy.json",
+        "sha256": "35cc98f4dba73ac3948324c6068809a78c53eee5048215c0bcdb80c69a17fc34",
+        "moduleCount": 462,
+        "binaryModulesPerPlatform": 377,
+        "imagePath": "/usr/share/licenses/docklet-tools/trivy/inventory.json"
+      }
     },
     {
       "name": "Mozilla CA bundle",
@@ -152,5 +159,10 @@
         }
       ]
     }
-  ]
+  ],
+  "embeddedInventory": {
+    "path": "docs/provenance/tools-embedded.json",
+    "sha256": "3ad8687af3fef92587e04c6ce813cf6dca30d0cd428074df5e1da4b2b30f7539"
+  },
+  "dependencyAssessment": "Trivy: exact amd64/arm64 release binary build metadata and 460-module release SBOM plus two actual linked module versions absent from that SBOM; exact legal texts and source forms in dependencyInventory. acfs and BusyBox: source/compiled package graph, static C link map and embedded libc/compiler notices in embeddedInventory."
 }

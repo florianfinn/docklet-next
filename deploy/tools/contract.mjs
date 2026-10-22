@@ -4,9 +4,11 @@
 // License: Apache-2.0
 // Deviations: Original executable helper-image contract; invoked explicitly, outside default tests.
 import assert from "node:assert/strict";
-import { createHash } from "node:crypto";
 import { spawnSync } from "node:child_process";
-import { readFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync, mkdirSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { dependencies, checkBuildEvidence, digest } from "./license-contract.mjs";
 import { inputs } from "./build.mjs";
 
 const pins = inputs();
@@ -21,7 +23,12 @@ function run(...args) {
   return docker(["run", "--rm", "--network", "none", "--label", "t3.project=docklet-next", image, ...args]);
 }
 const config = JSON.parse(docker(["image", "inspect", image]))[0];
-assert.equal(config.Config.User, pins.RUNTIME_USER, "configured runtime user");
+assert.equal(pins.RUNTIME_USER, "0:0", "helper volume operations require root");
+assert.equal(config.Config.User, "0:0", "explicit root-run image contract");
+const labels = config.Config.Labels;
+assert.equal(Object.keys(labels).some((name) => name.startsWith("t3.")), false, "published images contain no sandbox labels");
+assert.equal(labels["org.opencontainers.image.source"], "https://github.com/florianfinn/docklet-next");
+assert.match(labels["org.opencontainers.image.revision"], /^[a-f0-9]{40}(?:-dirty)?$/);
 assert.equal(config.Os, "linux");
 assert.ok(pins.PLATFORMS.split(",").includes(`linux/${config.Architecture}`));
 const version = JSON.parse(run("acfs", "version"));
@@ -32,7 +39,7 @@ assert.match(run("trivy", "--version"), new RegExp(`^Version: ${pins.TRIVY_VERSI
 const applets = readFileSync(new URL("applets.txt", import.meta.url), "utf8")
   .split("\n").filter((line) => line && !line.startsWith("#"));
 for (const applet of applets) run("test", "-x", `/bin/${applet}`);
-const [uid, gid] = pins.RUNTIME_USER.split(":");
+const [uid, gid] = ["0", "0"];
 run("sh", "-ec", `
   while read -r key real effective saved fs; do
     case "$key" in
@@ -49,16 +56,41 @@ run("sh", "-ec", `
   tar -xzf "$work/data.tar.gz" -C "$work/out"
   read -r content < "$work/out/payload"
   test "$content" = 'archive roundtrip'
+  test "$(stat -c '%u:%g' "$work/in/payload")" = '0:0'
+  mkdir /var/cache/docklet-tools/root-contract
+  rmdir /var/cache/docklet-tools/root-contract
 `);
 const listing = JSON.parse(run("acfs", "list", "--root", "/tmp", "--path", "/"));
 assert.equal(listing.version, Number(pins.ACFS_PROTOCOL), "actual list response protocol");
 run("test", "-s", "/etc/ssl/certs/ca-certificates.crt");
-const inventory = JSON.parse(readFileSync("docs/provenance/tools-image.json", "utf8"));
-for (const file of inventory.components.flatMap((component) => component.legalFiles)) {
-  const result = spawnSync("docker", ["run", "--rm", "--network", "none", "--label", "t3.project=docklet-next",
-    image, "head", "-c", "1000000", file.imagePath]);
-  assert.equal(result.status, 0, `missing packaged licence: ${file.imagePath}`);
-  assert.equal(createHash("sha256").update(result.stdout).digest("hex"), file.sha256, `packaged licence hash: ${file.imagePath}`);
+const data = dependencies();
+const directory = mkdtempSync(join(tmpdir(), "docklet-tools-contract-"));
+const container = docker(["create", "--network", "none", "--label", "t3.project=docklet-next", image]);
+try {
+  mkdirSync(join(directory, "licenses"));
+  docker(["cp", `${container}:/usr/share/licenses/docklet-tools/.`, join(directory, "licenses")]);
+  const evidence = (name) => readFileSync(join(directory, "licenses", name), "utf8");
+  for (const file of data.inventory.components.flatMap((component) => component.legalFiles)) {
+    const name = file.imagePath.split("/").at(-1);
+    assert.equal(digest(readFileSync(join(directory, "licenses", name))), file.sha256, `packaged licence hash: ${file.imagePath}`);
+  }
+  for (const file of data.files)
+    assert.equal(digest(readFileSync(join(directory, "licenses", file.imagePath))), file.sha256, `packaged dependency notice: ${file.sha256}`);
+  assert.deepEqual(JSON.parse(evidence("trivy/inventory.json")), data.trivy, "packaged Trivy dependency/source inventory");
+  checkBuildEvidence(data, evidence, config.Architecture);
+  for (const [path, name, hash] of [
+    ["/usr/local/bin/trivy", "trivy", data.release.platforms[config.Architecture].binarySha256],
+    ["/etc/ssl/certs/ca-certificates.crt", "ca.pem", pins.CA_SHA256],
+    ["/bin/busybox", "busybox", evidence("busybox.sha256").split(/\s+/)[0]],
+  ]) {
+    docker(["cp", `${container}:${path}`, join(directory, name)]);
+    assert.equal(digest(readFileSync(join(directory, name))), hash, `packaged executable/source pin: ${name}`);
+  }
+  const source = evidence("SOURCE.txt");
+  assert.ok(source.includes(`${pins.IMAGE_REPOSITORY}:${labels["org.opencontainers.image.version"]}-source-${config.Architecture}`), "discoverable exact corresponding source tag");
+  assert.ok(source.includes(labels["org.opencontainers.image.revision"]), "source pointer matches OCI revision");
+} finally {
+  docker(["rm", container]);
+  rmSync(directory, { recursive: true, force: true });
 }
-
-console.log(`tools contract passed: ${config.Architecture}, acfs ${version.version}/protocol ${version.protocol}, ${applets.length} applets, Trivy, tar/gzip roundtrip, UID/GID ${pins.RUNTIME_USER}`);
+console.log(`tools root-run contract passed: ${config.Architecture}, acfs ${version.version}/protocol ${version.protocol}, ${applets.length} applets, Trivy/dependency notices, tar/gzip roundtrip, UID/GID 0:0`);

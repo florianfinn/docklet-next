@@ -12,12 +12,15 @@ and a build step with networking disabled. No external Go packages are compiled.
 `deploy/tools/inputs.env` is the single version, base-image digest and download
 checksum input. `busybox.config` is the seed configuration; the complete generated
 `.config` is produced by each platform build. BusyBox uses the native Alpine
-musl toolchain. Build packages are resolved from the pinned Alpine release's APK
+musl toolchain. Its musl-dev/GCC package revisions are explicitly pinned and
+checked against the source inventory. Other build packages are resolved from the pinned Alpine release's APK
 repositories; those repository contents are not snapshotted, so this is not a
 claim of bit-for-bit reproducibility across future rebuilds.
 
-The explicit runtime identity is UID/GID `0:0`, needed for the helper's volume
-operations. The caller controls mounts, network, capabilities and lifecycle;
+The helper runs as root by design: UID/GID `0:0` is required to access volume
+contents owned by root. The contract asserts the configured and effective root
+identity, root-owned created files and writable scanner cache. Non-root operation
+is outside the supported contract. The caller controls mounts, network, capabilities and lifecycle;
 this image grants no Docker socket access itself. Temporary files use `/tmp`
 and Trivy's default cache uses `/var/cache/docklet-tools`.
 
@@ -37,12 +40,14 @@ release evidence, refreshes affected legal files/provenance and tests both
 platforms. Changes to acfs first follow its owning source adoption procedure;
 then update the helper metadata. BusyBox updates must regenerate and inspect the
 full `.config` and applet list for both architectures. Do not commit downloaded
-source tarballs or built images. Root Node tests check pin and protocol drift
-without Docker. CI builds and exercises each architecture on its native runner.
+source tarballs or built images. Root Node tests check pin and protocol drift, exact dependency coverage and
+required notices without Docker. CI builds and exercises each architecture on its native runner.
 
 The source-image contract also compares the exported generated configuration
-against the runtime copy, verifies the exact tarball hash and checks all build
-recipe files. Run it after loading a `corresponding-source` image:
+against the runtime copy, verifies the exact tarball and BusyBox executable
+hashes, and checks the build recipe and toolchain package versions. The source
+image records the built executable digest; correspondence is verified independently
+of BuildKit cache reuse across the two invocations. Run it after loading a `corresponding-source` image:
 
 ```sh
 node deploy/tools/source-contract.mjs docklet-tools:0.0.0 docklet-tools-source:0.0.0
@@ -55,7 +60,14 @@ permission. Only an explicitly pushed `tools-vMAJOR.MINOR.PATCH` tag enables the
 publish job, after both platform contracts pass. The tag must point into main
 history. The coordinator triggers the first publication only after maintainer
 approval. Merging this workflow or an input bump does not publish an image.
-Tags use stable SemVer without prerelease/build suffixes; no moving tag is pushed.
+Tags use stable SemVer without prerelease/build suffixes. Before any push, a
+fail-closed preflight refuses an existing runtime/source/platform tag, a matching
+tools release, or a `docklet-tools-VERSION*` / `tools-VERSION*` release asset.
+Authentication/network errors also refuse publication. A per-tag concurrency
+lock serializes publisher runs. Failed partial publication reserves that version;
+use a fresh version after investigating it. Re-running a release cannot overwrite
+its source or binaries. Registry administration outside this workflow remains an
+operator responsibility.
 The publish job alone has `packages: write`, using only `GITHUB_TOKEN`; repository
 contents remain read-only. The tested image archives pass directly to this job,
 so publication does not rebuild the binaries. Failed publication can leave
@@ -66,11 +78,48 @@ corresponding source is available.
 
 `/usr/share/licenses/docklet-tools` carries the acfs/Kit/Arcane BSD notices,
 Go standard library BSD text, Trivy Apache-2.0 and NOTICE, BusyBox GPL-2.0,
-Mozilla CA MPL-2.0 notice, and the musl copyright/licence text. BusyBox licence page separators are
-normalized from form feeds to line feeds; its source tarball retains the
-original bytes. The provenance
-inventory identifies the exact sources and licence hashes. The embedded CA bundle
+Mozilla CA MPL-2.0 notice, musl copyright/grants and GCC runtime exception texts.
+The image ships the verbatim BusyBox GPL text, including page separators; the
+Git reference normalizes those separators for repository publication guards.
+The provenance inventory identifies exact sources, copyright/NOTICE bytes and
+hashes. Legal text payloads use JSON strings to preserve original CRLF/form-feed
+bytes without altering the licence; image assembly restores and hashes them. The embedded CA bundle
 also retains its upstream extraction and source notices.
+
+Trivy's exact release archives are checked for both architectures. Their Go
+build metadata identifies 377 linked dependencies each; the upstream SBOM lists
+460 modules and differs from the actual binaries in two module versions. The
+inventory covers the complete union: 462 exact module/version records. All root
+and nested runtime licences/NOTICES travel under `trivy/`, with immutable source
+references and MPL Source Code Form pointers in `trivy/inventory.json`. SBOM
+licence labels are retained as evidence, but actual licence texts determine the
+selected grants. Documentation, branding and separate container-image notices
+are excluded with hash-bound reasons. Generated libc header notices are retained
+for both architectures with the exact-file LGPL header-use/GCC runtime exception
+assessment; no linked glibc implementation is asserted.
+
+The acfs assessment freezes its seven non-stdlib package paths and compiled
+source/manifests; new imports require a refreshed inventory. BusyBox records a
+static link map and the exact musl/GCC versions. Unknown external archives fail
+assembly. All musl copyright/grant blocks are conservatively included alongside
+the compiler runtime GPL text and GCC Runtime Library Exception 3.1. Both the
+build and runtime contracts verify the dependency evidence and packaged hashes.
+
+A Trivy bump must replace `tools-release.json` (exact release SBOM identity,
+per-architecture binary/archive hashes, Go build-info module lists), retrieve the
+corresponding legal evidence, refresh `tools-trivy.json` and the text payloads,
+and update their hash references in `tools-image.json`. Do not infer copyright
+from an SPDX label. Obtain legal files from immutable VCS revisions or the
+existing module cache; generated SDKs can use HTTP Range reads of only the ZIP
+metadata/legal entries. Go build module downloads remain disabled. Changes to
+BusyBox, musl, GCC or local acfs likewise require refreshed `tools-embedded.json`
+evidence and corresponding legal text payloads. Root tests reject incomplete
+updates, and image assembly performs the same checks without networking.
+
+The runtime's OCI source/revision/version labels and `SOURCE.txt` identify the
+corresponding source tag and extraction procedure. Release builds record the
+exact Git revision; local modified trees are explicitly labelled `-dirty` with
+an unpublished `development` version.
 
 Each version publishes a companion OCI source image at the same repository,
 with tag `MAJOR.MINOR.PATCH-source` and platform tags ending in
@@ -85,7 +134,7 @@ Extract source without running the source image:
 
 ```sh
 docker pull ghcr.io/florianfinn/docklet-tools:1.0.0-source-amd64
-source_id=$(docker create --label t3.project=docklet-next \
+source_id=$(docker create \
   ghcr.io/florianfinn/docklet-tools:1.0.0-source-amd64 /unused)
 docker cp "$source_id:/." ./tools-source
 docker rm "$source_id"
