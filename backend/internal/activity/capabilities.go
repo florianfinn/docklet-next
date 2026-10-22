@@ -33,7 +33,7 @@ var adapterOperationIDs = []string{
 	"setContainerAutoUpdate", "setContainerOrigin", "setScanEnabled", "setStackLabels",
 	"subscribeActions", "subscribeChanges", "subscribeContainerLogs", "subscribeLogs",
 	"subscribeMetrics", "testBackupTarget", "testNotification", "updateHost", "uploadFile",
-	"writeFile", "downloadFile",
+	"writeFile", "downloadFile", "getProjectWorkspace", "readProjectFile", "downloadProjectFile", "updateProjectWorkspace",
 }
 
 type GetCapabilitiesInput struct {
@@ -112,6 +112,20 @@ func getCapabilities(ctx context.Context, input *GetCapabilitiesInput) (*handler
 			if ref.Kind == "hub" {
 				valid = permissions.AllowsAny(grant)
 			}
+			descriptors[i].Available = valid
+			if valid {
+				descriptors[i].DisabledReasonCode = ""
+			} else {
+				descriptors[i].DisabledReasonCode = "capability.unavailable"
+			}
+		case "getProjectWorkspace", "readProjectFile", "downloadProjectFile", "updateProjectWorkspace":
+			ref := descriptors[i].ResourceRef
+			env, raw, scoped := strings.Cut(ref.ID, "~")
+			grant := authz.PermProjectsRead
+			if descriptors[i].OperationID == "updateProjectWorkspace" {
+				grant = authz.PermProjectsUpdate
+			}
+			valid := ref.Kind == "stack" && scoped && env != "" && raw != "" && !strings.Contains(raw, "~") && permissions.Allows(grant, env)
 			descriptors[i].Available = valid
 			if valid {
 				descriptors[i].DisabledReasonCode = ""

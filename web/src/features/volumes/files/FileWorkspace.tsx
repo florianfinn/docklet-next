@@ -1,5 +1,5 @@
 import { ArrowUp, ChevronRight, Download, FilePlus2, FileText, FolderOpen, FolderPlus, HardDrive, RotateCcw, Save, Upload } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { useBlocker, useSearchParams } from "react-router";
 import { toast } from "sonner";
 import { useTranslations } from "use-intl";
@@ -45,6 +45,8 @@ function VolumeFileWorkspace({ volume, warning }: { volume: Volume; warning?: st
   const [params, setParams] = useSearchParams();
   const path = params.get("path") ?? "/";
   const fileParam = params.get("file");
+  const currentView = useRef(`${path}:${fileParam}`);
+  useLayoutEffect(() => { currentView.current = `${path}:${fileParam}`; }, [path, fileParam]);
   const listing = useFiles(volume.id, path);
   const cmd = useFileCommands(volume.id, listing.data?.revision);
   const createCapability = useVolumeCapability("createEntry", volume.id);
@@ -152,9 +154,10 @@ function VolumeFileWorkspace({ volume, warning }: { volume: Volume; warning?: st
 
   const onUpload = async (list: FileList | null) => {
     if (!list?.length) return;
+    const owner = currentView.current;
     let n = 0;
     for (const f of [...list]) {
-      if (!mounted.current) break;
+      if (!mounted.current || owner !== currentView.current) break;
       if (await cmd.upload(volume.id, path, { name: f.name, size: f.size, blob: f })) n++;
       else break;
     }
@@ -289,8 +292,9 @@ function VolumeFileWorkspace({ volume, warning }: { volume: Volume; warning?: st
         siblings={siblings}
         onSubmit={async (name) => {
           if (pending?.kind !== "create") return false;
+          const owner = currentView.current;
           const ok = await cmd.createEntry(volume.id, path, name, pending.type);
-          if (ok) {
+          if (ok && owner === currentView.current) {
             toast.success(t("created", { name }));
             if (pending.type === "file") openFile(`${path === "/" ? "" : path}/${name}`);
           }
@@ -308,8 +312,9 @@ function VolumeFileWorkspace({ volume, warning }: { volume: Volume; warning?: st
           if (pending?.kind !== "rename") return false;
           const from = pending.entry.path;
           const to = `${parentPath(from) === "/" ? "" : parentPath(from)}/${name}`;
+          const owner = currentView.current;
           const ok = await cmd.rename(volume.id, from, name);
-          if (ok) {
+          if (ok && owner === currentView.current) {
             open.renamed(from, to);
             setExpanded((s) => new Set([...s].map((p) => movedPath(p, from, to))));
             if (fileParam && isUnder(fileParam, from)) setUrl({ file: movedPath(fileParam, from, to) });
@@ -332,7 +337,8 @@ function VolumeFileWorkspace({ volume, warning }: { volume: Volume; warning?: st
         onConfirm={async () => {
           if (pending?.kind !== "delete") return;
           const entry = pending.entry;
-          if (await cmd.removeEntry(volume.id, entry.path)) {
+          const owner = currentView.current;
+          if (await cmd.removeEntry(volume.id, entry.path) && owner === currentView.current) {
             open.removed(entry.path);
             setExpanded((s) => new Set([...s].filter((p) => !isUnder(p, entry.path))));
             if (fileParam && isUnder(fileParam, entry.path)) setUrl({ file: null });

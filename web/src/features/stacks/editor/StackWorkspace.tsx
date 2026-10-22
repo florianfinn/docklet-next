@@ -1,12 +1,18 @@
 import { AlertTriangle, CheckCircle2, ChevronDown, Code2, FlaskConical, Import, Play, Save, Terminal, Wand2 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
-import { useNavigate } from "react-router";
+import { useBlocker, useNavigate } from "react-router";
 import { toast } from "sonner";
 import { useTranslations } from "use-intl";
 
 import { queueDemoFailure, type DemoFailure } from "@/runtime";
 import { isRunBusy } from "@/data/run-gate";
 import { StackCreatedError } from "@/data/adapter";
+import { WorkspaceConflictError, WorkspaceError } from "@/data/http/workspace";
+import { workspaceErrorKey } from "@/features/volumes/files/workspace-error";
+import { ConfirmDialog } from "@/shared/components/confirm-dialog";
+import { ProjectFileActions } from "./ProjectFileActions";
+import { ProjectFileEditor } from "./ProjectFileEditor";
+import { useProjectWorkspace } from "./use-project-workspace";
 import { AdapterOutcomeError } from "@/data/capability";
 import { useRuntimeError } from "@/features/activity/use-runtime-error";
 import { useCapability } from "@/data/use-capability";
@@ -48,8 +54,21 @@ interface StackWorkspaceProps {
  * full-width wizard (no file tree, no raw preview); Advanced is the shared
  * file workspace with tree, CodeMirror and an optional aside on wide screens.
  */
-export function StackWorkspace({ draft, stack, hosts, labelSuggestions, mode, onMode }: StackWorkspaceProps) {
+export function StackWorkspace(props: StackWorkspaceProps) {
+  return <StackWorkspaceBody key={props.stack?.id ?? `new:${props.draft.hostId}`} {...props} />;
+}
+
+function StackWorkspaceBody({ draft, stack, hosts, labelSuggestions, mode, onMode }: StackWorkspaceProps) {
   const t = useTranslations("editor");
+  const tv = useTranslations("volumes.files");
+  const extra = useProjectWorkspace(stack?.id ?? null);
+  const extraCapability = useCapability("updateProjectWorkspace", { kind: "stack", id: stack?.id ?? "" });
+  const extraDownload = useCapability("downloadProjectFile", { kind: "stack", id: stack?.id ?? "" });
+  const actionLock = useRef(false);
+  const proceeding = useRef(false);
+  const [partialSave, setPartialSave] = useState(false);
+  const dirty = draft.dirty || extra.dirty;
+  const blocker = useBlocker(({ currentLocation, nextLocation }) => !proceeding.current && dirty && (currentLocation.pathname !== nextLocation.pathname || new URLSearchParams(nextLocation.search).get("tab") !== "editor"));
   const adapter = useAdapter();
   const navigate = useNavigate();
   const text = useEditorText();
@@ -66,8 +85,9 @@ export function StackWorkspace({ draft, stack, hosts, labelSuggestions, mode, on
   // Save writes labels too when they differ; both descriptors must allow it.
   const labelsChanged = !!stack && !sameStackLabels(draft.labels, stack.labels);
   const filesBlocked = stack?.filesUnavailable ? t("filesStale") : undefined;
-  const saveBlocked = filesBlocked ?? (!saveCapability.available ? saveCapability.reason : labelsChanged && !labelCapability.available ? labelCapability.reason : undefined);
-  const deployBlocked = filesBlocked ?? (!deployCapability.available ? deployCapability.reason : undefined);
+  const extraBlocked = extra.dirty && (extra.conflicted || extra.tree.isError || !extraCapability.available) ? extraCapability.reason ?? tv("workspaceErrors.conflict") : undefined;
+  const saveBlocked = filesBlocked ?? extraBlocked ?? (!saveCapability.available ? saveCapability.reason : labelsChanged && !labelCapability.available ? labelCapability.reason : undefined);
+  const deployBlocked = filesBlocked ?? extraBlocked ?? (!deployCapability.available ? deployCapability.reason : undefined);
   const [file, setFile] = useState<WorkspaceFile>("compose");
   const [wizard, setWizard] = useState<WizardState>({ step: stack ? 2 : 1, service: null, section: "general" });
   const aside = usePreference("workspaceAside");
@@ -99,6 +119,8 @@ export function StackWorkspace({ draft, stack, hosts, labelSuggestions, mode, on
 
   /** Shows authoring failures; the draft always stays for a later retry. */
   const report = (e: unknown) => {
+    if (!mounted.current) return;
+    if (e instanceof WorkspaceConflictError || e instanceof WorkspaceError) { toast.error(tv(`workspaceErrors.${workspaceErrorKey(e)}`)); return; }
     const code = e instanceof AdapterOutcomeError && e.outcome.kind === "error" ? e.outcome.code : "";
     if (code === "stack.host-immutable") toast.error(t("hostImmutable"));
     else if (code.startsWith("stack.") && code.endsWith("-unknown")) toast.error(t("writeUnknown"));
@@ -115,29 +137,48 @@ export function StackWorkspace({ draft, stack, hosts, labelSuggestions, mode, on
     setWizard({ step: 2, service: key, section: "general" });
   };
 
-  const save = async () => {
-    // Keyboard saves use the same descriptor gate as the Save button.
-    if (!stack || saveBlocked || !draft.dirty) return;
-    setSaving(true);
+  /** Compose/Env first, extra files second, labels last; stop on any failure. */
+  const persist = async () => {
+    if (!stack) return;
+    let wroteCompose = false;
     try {
-      await adapter.saveStackFiles(stack.id, draft.compose, draft.env);
+      if (draft.composeDirty || draft.envDirty) {
+        await adapter.saveStackFiles(stack.id, draft.compose, draft.env);
+        wroteCompose = true;
+      }
+      const extraSaved = await extra.save();
       if (!sameStackLabels(draft.labels, stack.labels)) await adapter.setStackLabels(stack.id, draft.labels);
+      if (!mounted.current) return;
       draft.markSaved();
-      toast.success(t("saved"));
-    } catch (e) {
-      report(e);
-    } finally {
-      setSaving(false);
+      setPartialSave(false);
+      return extraSaved;
+    } catch (error) {
+      if (mounted.current) setPartialSave(wroteCompose);
+      throw error;
     }
   };
 
+  const save = async () => {
+    if (!stack || saveBlocked || !dirty || actionLock.current) return;
+    actionLock.current = true; setSaving(true);
+    try {
+      const complete = await persist();
+      if (mounted.current) toast.success(t(complete === false ? "extraFiles.newerDraft" : "saved"));
+    } catch (error) { if (mounted.current) report(error); }
+    finally { actionLock.current = false; if (mounted.current) setSaving(false); }
+  };
+
   const deploy = async (failAt?: DemoFailure["at"]) => {
-    if (!model || deployBlocked) return;
+    if (!model || deployBlocked || actionLock.current) return;
+    actionLock.current = true; setSaving(true);
     let stackId: string;
     try {
+      if (extra.dirty && await persist() === false) { toast.info(t("extraFiles.newerDraft")); return; }
+      if (!mounted.current) return;
       if (failAt) queueDemoFailure(adapter, { operation: "deployStack", at: failAt });
       ({ stackId } = await adapter.deployStack({ stackId: stack?.id ?? null, hostId: draft.hostId, name: model.name, compose: draft.compose, env: draft.env, labels: draft.labels }));
     } catch (e) {
+      if (!mounted.current) return;
       // A busy stack keeps the draft; the gate notice names the running action.
       if (isRunBusy(e)) return;
       if (e instanceof StackCreatedError) {
@@ -145,27 +186,28 @@ export function StackWorkspace({ draft, stack, hosts, labelSuggestions, mode, on
         draft.markSaved();
         if (e.admission === "unknown") toast.error(t("createdDeployUnknown"));
         else toast.error(t("createdNotDeployed"));
-        if (mounted.current) navigate(`/stacks/${e.stackId}?tab=editor`, { replace: true });
+        if (mounted.current) { proceeding.current = true; navigate(`/stacks/${e.stackId}?tab=editor`, { replace: true }); }
         return;
       }
-      report(e);
+      if (mounted.current) report(e);
       return;
-    }
+    } finally { actionLock.current = false; if (mounted.current) setSaving(false); }
+    if (!mounted.current) return;
     draft.markSaved();
-    if (isNew && mounted.current) navigate(`/stacks/${stackId}?tab=deployments`, { replace: true });
+    if (isNew && mounted.current) { proceeding.current = true; navigate(`/stacks/${stackId}?tab=deployments`, { replace: true }); }
   };
 
   const deployButton = (
     <div className="flex">
       <HelpTarget topic={isNew ? "action.deploy" : "action.saveDeploy"}>
-        <Button size="sm" className="rounded-r-none" disabled={!model || errors > 0 || !!deployBlocked} title={deployBlocked} onClick={() => void deploy()}>
+        <Button size="sm" className="rounded-r-none" disabled={!model || errors > 0 || saving || extra.saving || !!deployBlocked} title={deployBlocked} onClick={() => void deploy()}>
           <Play data-icon="inline-start" />
           {isNew ? t("deploy") : t("saveDeploy")}
         </Button>
       </HelpTarget>
       {import.meta.env.DEV && <DropdownMenu>
         <DropdownMenuTrigger asChild>
-          <Button size="sm" className="rounded-l-none border-l border-primary-foreground/20 px-2" disabled={!model || errors > 0 || !!deployBlocked} title={deployBlocked} aria-label={t("deployMenu")}>
+          <Button size="sm" className="rounded-l-none border-l border-primary-foreground/20 px-2" disabled={!model || errors > 0 || saving || extra.saving || !!deployBlocked} title={deployBlocked} aria-label={t("deployMenu")}>
             <ChevronDown />
           </Button>
         </DropdownMenuTrigger>
@@ -182,6 +224,7 @@ export function StackWorkspace({ draft, stack, hosts, labelSuggestions, mode, on
 
   return (
     <WorkspaceFrame>
+      {partialSave && <p role="alert" className="rounded-lg border border-warning/30 p-3">{t("extraFiles.partialSave")}</p>}
       {filesBlocked && <p role="alert" className="rounded-lg border border-warning/30 bg-warning/8 px-3 py-2 text-sm text-warning">{filesBlocked}</p>}
       <div className="flex flex-wrap items-center gap-2">
         <SegmentedToggle
@@ -217,7 +260,7 @@ export function StackWorkspace({ draft, stack, hosts, labelSuggestions, mode, on
           {model && <span className="text-(--tone)/80">· {t("issues", { errors, warns })}</span>}
         </ToneBadge>
         {!isNew && (
-          <Button size="sm" variant="outline" disabled={!draft.dirty || saving || !!saveBlocked} title={saveBlocked} onClick={() => void save()}>
+          <Button size="sm" variant="outline" disabled={!dirty || saving || extra.saving || !!saveBlocked} title={saveBlocked} onClick={() => void save()}>
             <Save data-icon="inline-start" /> {t("save")}
           </Button>
         )}
@@ -225,6 +268,11 @@ export function StackWorkspace({ draft, stack, hosts, labelSuggestions, mode, on
         {mode === "advanced" && <AsideToggle value={aside} onChange={(m) => setPreference("workspaceAside", m)} />}
       </div>
 
+      {mode === "advanced" && extra.supported && stack && <>
+        <ProjectFileActions workspace={extra} id={stack.id} busy={saving} report={report} />
+        {extra.tree.isError && <p role="alert">{tv(`workspaceErrors.${workspaceErrorKey(extra.tree.error)}`)}</p>}
+        {extra.tree.data?.fileTreeTruncated && <p role="status">{t("extraFiles.truncated")}</p>}
+      </>}
       {mode === "easy" ? (
         // The form keeps a readable width, also on 21:9 screens; the editor toolbar above stays full width.
         <section aria-label={t("wizard")} data-slot="easy-wizard" data-glow className="w-full max-w-[100rem] rounded-2xl border border-primary/20 bg-card p-4 md:p-6">
@@ -250,7 +298,7 @@ export function StackWorkspace({ draft, stack, hosts, labelSuggestions, mode, on
           label={t("workspace")}
           asideLabel={t("aside.title")}
           asideKind={aside === "split" ? "split" : "details"}
-          aside={aside === "off" ? undefined : <ComposeAside mode={aside} draft={draft} file={file} hostId={draft.hostId} stackId={stack?.id ?? null} hostProjectDir={host?.projectDir} onFile={setFile} />}
+          aside={aside === "off" || extra.active ? undefined : <ComposeAside mode={aside} draft={draft} file={file} hostId={draft.hostId} stackId={stack?.id ?? null} hostProjectDir={host?.projectDir} onFile={setFile} />}
           sidebar={
             <ComposeFileTree
               projectName={model?.name ?? stack?.id ?? ""}
@@ -258,15 +306,25 @@ export function StackWorkspace({ draft, stack, hosts, labelSuggestions, mode, on
               hostProjectDir={host?.projectDir}
               hostId={draft.hostId}
               stackId={stack?.id ?? null}
-              active={file}
+              active={extra.active ? null : file}
+              activeExtra={extra.active ?? extra.selected}
+              extraFiles={extra.nodes}
+              onOpenExtra={(path, directory) => { extra.setSelected(path); if (!directory) extra.open(path); }}
               composeDirty={draft.composeDirty}
               envDirty={draft.envDirty}
               model={model}
-              onOpen={setFile}
+              onOpen={(next) => { extra.setActive(null); extra.setSelected(null); setFile(next); }}
             />
           }
         >
-          <AdvancedEditor draft={draft} file={file} onFile={setFile} canReset={!isNew} onSave={!isNew && draft.dirty && !saving ? () => void save() : undefined} />
+          {extra.active ? <ProjectFileEditor workspace={extra} canDownload={extraDownload.available} readOnly={!extraCapability.available} onSave={() => void save()} onDownload={() => {
+            if (!stack || !adapter.downloadProjectFile) return;
+            const path = extra.active!;
+            void adapter.downloadProjectFile(stack.id, path).then((blob) => {
+              if (!mounted.current) return;
+              const url = URL.createObjectURL(blob); const link = document.createElement("a"); link.href = url; link.download = path.split("/").at(-1)!; link.click(); URL.revokeObjectURL(url);
+            }).catch(report);
+          }} /> : <AdvancedEditor draft={draft} file={file} onFile={setFile} canReset={!isNew} onSave={!isNew && dirty && !saving ? () => void save() : undefined} />}
         </Workspace>
       )}
       {mode === "advanced" && (
@@ -275,6 +333,7 @@ export function StackWorkspace({ draft, stack, hosts, labelSuggestions, mode, on
         </p>
       )}
 
+      <ConfirmDialog open={blocker.state === "blocked"} onOpenChange={(on) => { if (!on && blocker.state === "blocked" && !proceeding.current) blocker.reset(); }} title={t("extraFiles.leaveTitle")} description={t("extraFiles.leaveBody")} confirmLabel={t("extraFiles.leave")} destructive onConfirm={() => { if (blocker.state === "blocked") { proceeding.current = true; blocker.proceed(); } }} />
       <DockerRunDialog open={dialog === "run"} onOpenChange={(o) => setDialog(o ? "run" : null)} existing={model?.services.map((s) => s.key) ?? []} hostId={draft.hostId}
         onAdd={(key, body, env, declarations) => importRun(key, body, env, declarations)} />
       <ImportSourceDialog open={dialog === "import"} onOpenChange={(o) => setDialog(o ? "import" : null)} onApply={(r) => addServices(r.services)} />

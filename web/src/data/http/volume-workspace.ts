@@ -6,7 +6,7 @@
 
 import type { DockletAdapter } from "@/data/adapter";
 import type { WorkspaceBaseline, WorkspaceGesture, WorkspaceTree } from "@/data/api";
-import { baseName, joinPath, parentPath } from "@/domain/files";
+import { joinPath, parentPath } from "@/domain/files";
 import { createWorkspaceTransport, WorkspaceError, workspacePath, type WorkspaceOptions } from "./workspace";
 
 type VolumeWorkspace = Pick<DockletAdapter, "listFiles" | "readFile" | "writeFile" | "createEntry" | "renameEntry" | "deleteEntry" | "uploadFile" | "downloadFile">;
@@ -64,5 +64,3 @@ export function createVolumeWorkspace(options: WorkspaceOptions): VolumeWorkspac
     async downloadFile(id, path) { await transport.require("downloadFile", "volume", id); return transport.download("volume", id, path); },
   };
 }
-
-export { baseName };
