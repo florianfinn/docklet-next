@@ -110,13 +110,18 @@ func (s *VolumeService) executeVolumePrune(ctx context.Context, candidates []vol
 }
 
 func (s *VolumeService) executePruneCandidate(ctx context.Context, cli *client.Client, candidate volumetypes.PruneCandidate, result *volumetypes.PruneResult) {
-	defer s.workspaceLocks.Lock(candidate.Name)()
 	skip := func(reason string) {
 		result.Skipped = append(result.Skipped, volumetypes.PruneSkipped{Name: candidate.Name, Reason: reason})
 	}
 	fail := func(code string) {
 		result.Failed = append(result.Failed, volumetypes.PruneFailed{Name: candidate.Name, Code: code})
 	}
+	unlock, acquired := s.workspaceLocks.TryLock(candidate.Name)
+	if !acquired {
+		skip("in-use")
+		return
+	}
+	defer unlock()
 	inspected, err := cli.VolumeInspect(ctx, candidate.Name, client.VolumeInspectOptions{})
 	if errdefs.IsNotFound(err) {
 		skip("not-found")
