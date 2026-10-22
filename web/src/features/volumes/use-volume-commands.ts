@@ -1,9 +1,10 @@
-import { useCallback, useMemo } from "react";
+import { useCallback, useEffect, useMemo, useRef } from "react";
 import { toast } from "sonner";
 import { useTranslations } from "use-intl";
 
 import { errorCode, type CreateVolumeInput } from "@/data/api";
 import { isRunBusy } from "@/data/run-gate";
+import { AdapterOutcomeError } from "@/data/capability";
 import { useAdapter } from "@/data/use-adapter";
 import type { BackupPolicy } from "@/domain/volumes";
 import { useAdapterText } from "@/data/use-adapter-text";
@@ -14,15 +15,26 @@ const KNOWN = new Set<string>(["not-found", "exists", "invalid-name", "in-use", 
 /** Volume, file and backup commands; contract error codes become translated toasts. */
 export function useVolumeCommands() {
   const adapter = useAdapter();
+  const mounted = useRef(true);
+  useEffect(() => { mounted.current = true; return () => { mounted.current = false; }; }, []);
   const t = useTranslations("volumes.errors");
   const dt = useAdapterText();
   const guard = useCallback(
     async <T,>(fn: () => Promise<T>): Promise<T | undefined> => {
       try {
-        return await fn();
+        const result = await fn();
+        return mounted.current ? result : undefined;
       } catch (e) {
+        if (!mounted.current) return undefined;
         // The gate already reported the busy target once (see ActionToasts).
         if (isRunBusy(e)) return undefined;
+        if (e instanceof AdapterOutcomeError && e.outcome.kind === "error") {
+          const code = e.outcome.code;
+          if (code === "volume.outcome-unknown" || code === "volume.helper-incompatible" || code === "volume.helper-unavailable") {
+            toast.error(t(code.slice("volume.".length) as "outcome-unknown" | "helper-incompatible" | "helper-unavailable"));
+            return undefined;
+          }
+        }
         const code = errorCode(e);
         toast.error(code && KNOWN.has(code) ? t(code as Known) : dt(e instanceof Error ? e.message : String(e)));
         return undefined;
@@ -33,8 +45,9 @@ export function useVolumeCommands() {
   return useMemo(
     () => ({
       create: (input: CreateVolumeInput) => guard(() => adapter.createVolume(input)),
+      renameVolume: (id: string, name: string) => guard(() => adapter.renameVolume(id, name)),
       remove: (id: string) => guard(async () => (await adapter.deleteVolume(id), true)),
-      prune: (hostIds: string[], volumeIds: string[]) => guard(() => adapter.pruneVolumes({ hostIds, volumeIds })),
+      prune: (input: Parameters<typeof adapter.pruneVolumes>[0]) => guard(() => adapter.pruneVolumes(input)),
       read: (id: string, path: string) => guard(() => adapter.readFile(id, path)),
       write: (id: string, path: string, content: string) => guard(async () => (await adapter.writeFile(id, path, content), true)),
       createEntry: (id: string, dir: string, name: string, type: "dir" | "file") => guard(async () => (await adapter.createEntry(id, dir, name, type), true)),

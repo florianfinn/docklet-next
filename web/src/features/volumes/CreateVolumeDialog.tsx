@@ -3,6 +3,7 @@ import { useNavigate } from "react-router";
 import { toast } from "sonner";
 import { useTranslations } from "use-intl";
 
+import { useCapability } from "@/data/use-capability";
 import type { Host } from "@/domain/model";
 import { volumeName } from "@/domain/validation";
 import type { Volume } from "@/domain/volumes";
@@ -25,7 +26,7 @@ function parseLabels(text: string): Record<string, string> {
   return out;
 }
 
-export function CreateVolumeDialog({ open, onOpenChange, hosts, volumes, defaultHostId }: { open: boolean; onOpenChange: (o: boolean) => void; hosts: Host[]; volumes: Volume[]; defaultHostId?: string }) {
+function CreateVolumeForm({ open, onOpenChange, hosts, volumes, defaultHostId }: { open: boolean; onOpenChange: (o: boolean) => void; hosts: Host[]; volumes: Volume[]; defaultHostId?: string }) {
   const t = useTranslations("volumes.createDialog");
   const tv = useTranslations("hosts.validation");
   const cmd = useVolumeCommands();
@@ -33,6 +34,7 @@ export function CreateVolumeDialog({ open, onOpenChange, hosts, volumes, default
   const online = hosts.filter((h) => h.status === "online");
   const [name, setName] = useState("");
   const [hostId, setHostId] = useState(defaultHostId ?? online[0]?.id ?? "");
+  const capability = useCapability("createVolume", { kind: "host", id: hostId });
   const [labels, setLabels] = useState("");
   const [tried, setTried] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -60,7 +62,7 @@ export function CreateVolumeDialog({ open, onOpenChange, hosts, volumes, default
           onSubmit={async (e) => {
             e.preventDefault();
             setTried(true);
-            if (error || !hostId) return;
+            if (busy || error || !hostId || !capability.available) return;
             setBusy(true);
             const created = await cmd.create({ name: name.trim(), hostId, labels: parseLabels(labels) });
             setBusy(false);
@@ -78,7 +80,7 @@ export function CreateVolumeDialog({ open, onOpenChange, hosts, volumes, default
           <TextField id="vol-name" label={t("name")} value={name} onChange={setName} description={t("nameHint")} error={tried ? message : undefined} mono placeholder="werkstatt_daten" />
           <Field>
             <FieldLabel htmlFor="vol-host">{t("host")}</FieldLabel>
-            <Select value={hostId} onValueChange={setHostId}>
+            <Select value={hostId} onValueChange={setHostId} disabled={busy}>
               <SelectTrigger id="vol-host" className="w-full">
                 <SelectValue />
               </SelectTrigger>
@@ -104,7 +106,7 @@ export function CreateVolumeDialog({ open, onOpenChange, hosts, volumes, default
             <FieldDescription>{t("labelsHint")}</FieldDescription>
           </Field>
           <DialogFooter>
-            <Button type="submit" disabled={busy || !online.length}>
+            <Button type="submit" disabled={busy || !online.length || !capability.available} title={capability.reason}>
               {busy && <Spinner data-icon="inline-start" />}
               {t("submit")}
             </Button>
@@ -113,4 +115,8 @@ export function CreateVolumeDialog({ open, onOpenChange, hosts, volumes, default
       </DialogContent>
     </Dialog>
   );
+}
+
+export function CreateVolumeDialog(props: Parameters<typeof CreateVolumeForm>[0]) {
+  return props.open ? <CreateVolumeForm key={props.hosts.map((h) => `${h.id}:${h.status}`).join("|")} {...props} /> : null;
 }

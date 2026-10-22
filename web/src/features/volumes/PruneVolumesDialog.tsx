@@ -1,10 +1,10 @@
 import { useQuery } from "@tanstack/react-query";
 import { Eraser, ShieldCheck, Unplug } from "lucide-react";
-import { useState } from "react";
-import { toast } from "sonner";
+import { useId, useState } from "react";
 import { useTranslations } from "use-intl";
 
-import { queryKeys } from "@/data/query-keys";
+import type { VolumePruneResult } from "@/data/api";
+import { useCapability } from "@/data/use-capability";
 import { useAdapter } from "@/data/use-adapter";
 import { formatBytes } from "@/domain/format";
 import type { Host } from "@/domain/model";
@@ -27,22 +27,26 @@ interface Props {
 
 /**
  * Prune preview: candidates with size and a choice per volume, what stays and
- * why, and which hosts are skipped. The plan comes from the adapter and
- * refreshes with every volume change; the prune checks each volume again.
+ * why, and which hosts are skipped. The snapshot stays stable while the user
+ * confirms; execution rechecks identity and usage and reports every deviation.
  */
-export function PruneVolumesDialog({ open, onOpenChange, hosts }: Props) {
+function PruneVolumesForm({ open, onOpenChange, hosts }: Props) {
   const t = useTranslations("volumes.prune");
   const adapter = useAdapter();
   const cmd = useVolumeCommands();
   const hostIds = hosts.map((h) => h.id);
-  const plan = useQuery({ queryKey: [...queryKeys.volumes, "prune-plan", ...hostIds], queryFn: () => adapter.planVolumePrune({ hostIds }), enabled: open, staleTime: 0 });
+  const session = useId();
+  const [all, setAll] = useState(true);
+  const capability = useCapability("pruneVolumes");
+  const plan = useQuery({ queryKey: ["volume-prune-plan", session, all, ...hostIds], queryFn: () => adapter.planVolumePrune({ hostIds, all }), staleTime: Infinity, gcTime: 0 });
+  const [result, setResult] = useState<VolumePruneResult>();
   const [excluded, setExcluded] = useState<ReadonlySet<string>>(new Set());
   const [busy, setBusy] = useState(false);
   const hostName = (id: string) => hosts.find((h) => h.id === id)?.name ?? id;
 
   const candidates = plan.data?.candidates ?? [];
   const chosen = candidates.filter((v) => !excluded.has(v.id));
-  const size = chosen.reduce((n, v) => n + v.sizeBytes, 0);
+  const size = chosen.some((v) => v.sizeUnavailable) ? t("sizeUnknown") : formatBytes(chosen.reduce((n, v) => n + v.sizeBytes, 0));
   const inUse = plan.data?.kept.filter((k) => k.reason === "in-use") ?? [];
   const binds = plan.data?.kept.filter((k) => k.reason === "bind").length ?? 0;
   const skipped = plan.data?.skippedHosts ?? [];
@@ -53,13 +57,12 @@ export function PruneVolumesDialog({ open, onOpenChange, hosts }: Props) {
   };
 
   const confirm = async () => {
+    if (busy || plan.isFetching || !capability.available) return;
     setBusy(true);
-    const result = await cmd.prune(hostIds, chosen.map((v) => v.id));
+    const result = await cmd.prune({ hostIds, volumeIds: chosen.map((v) => v.id), candidates: chosen.map(({ id, hostId, name, createdAt }) => ({ id, hostId, name, createdAt })), all: plan.data?.all ?? all });
     setBusy(false);
     if (!result) return;
-    if (result.removed.length) toast.success(t("done", { count: result.removed.length, size: formatBytes(result.removed.reduce((n, r) => n + r.sizeBytes, 0)) }));
-    if (result.skipped.length) toast.warning(t("changed", { count: result.skipped.length }));
-    close(false);
+    setResult(result);
   };
 
   return (
@@ -69,7 +72,14 @@ export function PruneVolumesDialog({ open, onOpenChange, hosts }: Props) {
           <DialogTitle>{t("title")}</DialogTitle>
           <DialogDescription>{t("description")}</DialogDescription>
         </DialogHeader>
-        {plan.isPending ? (
+        {result ? (
+          <div className="flex max-h-[65vh] flex-col gap-3 overflow-auto text-sm" role="status">
+            <p>{t("reclaimedLowerBound", { size: formatBytes(result.spaceReclaimed ?? 0) })}</p>
+            <section aria-label={t("removed")}><h3 className="font-medium">{t("removed")} ({result.removed.length})</h3><ul>{result.removed.map((v) => <li key={v.id}>{v.name} · {hostName(v.hostId)}</li>)}</ul></section>
+            <section aria-label={t("skipped")}><h3 className="font-medium">{t("skipped")} ({result.skipped.length})</h3><ul>{result.skipped.map((v) => <li key={v.id}>{candidates.find((c) => c.id === v.id)?.name ?? v.id} · {hostName(candidates.find((c) => c.id === v.id)?.hostId ?? v.id.split("~")[0]!)} · {t(`skipReasons.${v.reason}`)}</li>)}</ul></section>
+            <section aria-label={t("failed")}><h3 className="font-medium">{t("failed")} ({result.failed?.length ?? 0})</h3><ul>{result.failed?.map((v) => <li key={v.id}>{v.name} · {hostName(v.hostId)} · {["volume.inspect-failed", "volume.usage-failed", "volume.remove-failed", "volume.protected"].includes(v.code) ? t(`failedReasons.${v.code.slice("volume.".length) as "inspect-failed" | "usage-failed" | "remove-failed" | "protected"}`) : t("operationFailed")}</li>)}</ul></section>
+          </div>
+        ) : plan.isPending ? (
           <div aria-busy="true" className="flex flex-col gap-2">
             <Skeleton className="h-6 w-2/3" />
             <Skeleton className="h-24" />
@@ -78,7 +88,9 @@ export function PruneVolumesDialog({ open, onOpenChange, hosts }: Props) {
           <QueryError onRetry={() => void plan.refetch()} />
         ) : (
           <div className="flex flex-col gap-3 text-sm">
-            <p className="text-xs text-muted-foreground">{t("scope", { hosts: hosts.filter((h) => !skipped.includes(h.id)).map((h) => h.name).join(", ") || "–" })}</p>
+            <label className="flex items-center gap-2"><Checkbox checked={all} disabled={busy} onCheckedChange={(checked) => { setAll(checked === true); setExcluded(new Set()); }} />{t("includeNamed")}</label>
+            <p className="text-xs text-muted-foreground">{t("scope", { hosts: hosts.filter((h) => !skipped.includes(h.id) && !plan.data?.failedHosts?.some((f) => f.hostId === h.id)).map((h) => h.name).join(", ") || "–" })}</p>
+            {plan.data?.failedHosts?.map((failure) => <p role="alert" key={failure.hostId}>{t("hostFailed", { host: hostName(failure.hostId) })}</p>)}
             {skipped.length > 0 && (
               <p className="flex gap-1.5 text-xs text-warning">
                 <Unplug className="mt-0.5 size-3.5 shrink-0" aria-hidden />
@@ -86,15 +98,17 @@ export function PruneVolumesDialog({ open, onOpenChange, hosts }: Props) {
               </p>
             )}
             <section className="rounded-xl border bg-muted/15 p-3" aria-label={t("candidates")}>
-              <p className="font-medium">{candidates.length ? t("summary", { count: chosen.length, total: candidates.length, size: formatBytes(size) }) : t("nothing")}</p>
+              <p className="font-medium">{candidates.length ? t("summary", { count: chosen.length, total: candidates.length, size }) : t("nothing")}</p>
               {candidates.length > 0 && (
                 <ul className="mt-2 flex max-h-56 flex-col overflow-auto">
                   {candidates.map((v) => {
                     const id = `prune-${v.id}`;
+                    const reason = plan.data?.candidateReasons?.[v.id];
                     return (
                       <li key={v.id} className="flex items-center gap-2.5 border-t border-border/50 py-1.5 first:border-0">
                         <Checkbox
                           id={id}
+                          disabled={busy}
                           checked={!excluded.has(v.id)}
                           onCheckedChange={(on) =>
                             setExcluded((s) => {
@@ -107,9 +121,9 @@ export function PruneVolumesDialog({ open, onOpenChange, hosts }: Props) {
                         />
                         <label htmlFor={id} className="min-w-0 flex-1 cursor-pointer">
                           <span className="block font-mono text-xs [overflow-wrap:anywhere]">{volumeLabel(v)}</span>
-                          <span className="text-[11px] text-muted-foreground">{hostName(v.hostId)}</span>
+                          <span className="text-[11px] text-muted-foreground">{hostName(v.hostId)}{reason ? ` · ${t(`candidateReasons.${reason}`)}` : ""}</span>
                         </label>
-                        <span className="shrink-0 font-mono text-xs text-muted-foreground tabular-nums">{formatBytes(v.sizeBytes)}</span>
+                        <span className="shrink-0 font-mono text-xs text-muted-foreground tabular-nums">{v.sizeUnavailable ? t("sizeUnknown") : formatBytes(v.sizeBytes)}</span>
                       </li>
                     );
                   })}
@@ -129,14 +143,18 @@ export function PruneVolumesDialog({ open, onOpenChange, hosts }: Props) {
         )}
         <DialogFooter>
           <Button type="button" variant="outline" onClick={() => close(false)}>
-            {t("cancel")}
+            {result ? t("close") : t("cancel")}
           </Button>
-          <Button type="button" variant="destructive" disabled={!chosen.length || busy || plan.isPending} onClick={() => void confirm()}>
+          {!result && <Button type="button" variant="destructive" disabled={!chosen.length || busy || plan.isFetching || plan.isError || !capability.available} title={capability.reason} onClick={() => void confirm()}>
             {busy ? <Spinner data-icon="inline-start" /> : <Eraser data-icon="inline-start" />}
             {t("confirm", { count: chosen.length })}
-          </Button>
+          </Button>}
         </DialogFooter>
       </DialogContent>
     </Dialog>
   );
+}
+
+export function PruneVolumesDialog(props: Props) {
+  return props.open ? <PruneVolumesForm key={props.hosts.map((h) => `${h.id}:${h.status}`).join("|")} {...props} /> : null;
 }
