@@ -40,7 +40,7 @@ export function createMetricsReader(baseUrl: string, fetcher: typeof fetch, list
   const { list } = createInventoryTransport(baseUrl, fetcher, (hostId, state) => { if (state.stale) { stale(hostId, state.reason); emit(); } });
   let timer: ReturnType<typeof setTimeout> | undefined;
   let generation = 0;
- let authenticated = true;
+  let authenticated = true;
   function emit() {
     const snapshot: MetricsSnapshot = { at: new Date().toISOString(), simulated: false, hosts: { ...retained }, containers: { ...containers } };
     listeners.forEach((push) => push(snapshot));
@@ -53,7 +53,7 @@ export function createMetricsReader(baseUrl: string, fetcher: typeof fetch, list
   async function refresh(current: number) {
     try {
       await requireCapability("subscribeMetrics");
- if (current !== generation || !authenticated) return;
+      if (current !== generation || !authenticated) return;
       const hosts = await listHosts();
       if (current !== generation) return;
       const ids = new Set(hosts.map((h) => h.id));
@@ -79,7 +79,7 @@ export function createMetricsReader(baseUrl: string, fetcher: typeof fetch, list
           socket.onclose = socket.onerror = () => {
             if (current !== generation || sockets.get(h.id) !== socket) return;
             sockets.delete(h.id); socket.close(); stale(h.id); emit();
- void checkIdentity().catch(() => undefined);
+            void checkIdentity().catch(() => undefined);
           };
         }
       }
@@ -124,12 +124,12 @@ export function createMetricsReader(baseUrl: string, fetcher: typeof fetch, list
       for (const id of Object.keys(retained)) stale(id);
     };
   };
- return Object.assign(subscribe, { reset(active: boolean, retain = false) {
+  return Object.assign(subscribe, { reset(active: boolean, retain = false) {
   ++generation; authenticated = active;
   if (timer) clearTimeout(timer); timer = undefined;
   for (const socket of sockets.values()) socket.close(); sockets.clear();
   if (!retain) { for (const id of Object.keys(retained)) delete retained[id]; for (const id of Object.keys(containers)) delete containers[id]; }
   emit();
   if (active && listeners.size) void refresh(generation);
- } });
+  } });
 }

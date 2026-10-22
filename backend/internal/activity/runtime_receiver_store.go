@@ -2,7 +2,7 @@
 // Revision: 230a4a3cb92c59cc15e1f6767abd18f017e05ca4b83835524aa8c20e50a89e46
 // Retrieved: 2026-10-19
 // License: Apache-2.0
-// Deviations: Dormant keyless executor acceptance; no hub admission or transport activation.
+// Deviations: Keyless executor acceptance.
 
 package activity
 
