@@ -1,10 +1,11 @@
 import { useQueries, useQueryClient } from "@tanstack/react-query";
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
-import { errorCode } from "@/data/api";
+import { errorCode, type VolumeFileContent, type WorkspaceBaseline, type WorkspaceReadOnlyReason } from "@/data/api";
+import { WorkspaceConflictError } from "@/data/http/workspace";
+import { workspaceErrorKey } from "./workspace-error";
 import { queryKeys } from "@/data/query-keys";
 import { useAdapter } from "@/data/use-adapter";
-import type { FileContent } from "@/domain/files";
 
 export interface OpenFile {
   path: string;
@@ -15,6 +16,8 @@ export interface OpenFile {
   /** Text shown in the editor, including unsaved edits. */
   text: string;
   editable: boolean;
+  readOnlyReason?: WorkspaceReadOnlyReason;
+  conflict?: boolean;
   size: number;
   dirty: boolean;
   retry: () => void;
@@ -31,7 +34,10 @@ export function useOpenFiles(volumeId: string, fileParam: string | null) {
   const adapter = useAdapter();
   const client = useQueryClient();
   const [paths, setPaths] = useState<string[]>(() => (fileParam ? [fileParam] : []));
-  const [drafts, setDrafts] = useState<Record<string, string>>({});
+  const [drafts, setDrafts] = useState<Record<string, { text: string; baseline?: WorkspaceBaseline; conflict?: boolean }>>({});
+  const pending = useRef(new Set<string>());
+  const mounted = useRef(true);
+  useEffect(() => { mounted.current = true; return () => { mounted.current = false; }; }, []);
   // Tabs closed since the last URL change: a navigation that was still pending when
   // its tab got closed (fast click on the close mark) must not reopen it.
   const [closed, setClosed] = useState<string[]>([]);
@@ -49,19 +55,21 @@ export function useOpenFiles(volumeId: string, fileParam: string | null) {
 
   const files: OpenFile[] = paths.map((path, i) => {
     const q = results[i];
-    const data = q?.data as FileContent | undefined;
-    const saved = data?.content ?? "";
-    const editable = !!data?.editable;
+    const data = q?.data as VolumeFileContent | undefined;
     const draft = drafts[path];
+    const saved = draft?.baseline?.content ?? data?.content ?? "";
+    const editable = !!data?.editable || !!draft;
     return {
       path,
-      status: q?.isError ? "error" : data ? "ready" : "loading",
-      errorCode: q?.isError ? (errorCode(q.error) ?? undefined) : undefined,
+      status: draft ? "ready" : q?.isError ? "error" : data ? "ready" : "loading",
+      errorCode: q?.isError ? (errorCode(q.error) ?? workspaceErrorKey(q.error)) : undefined,
       saved,
-      text: draft ?? saved,
+      text: draft?.text ?? saved,
+      readOnlyReason: data?.readOnlyReason,
+      conflict: draft?.conflict,
       editable,
       size: data?.size ?? 0,
-      dirty: editable && draft !== undefined && draft !== saved,
+      dirty: draft !== undefined && (draft.text !== saved || !!draft.conflict),
       retry: () => void q?.refetch(),
     };
   });
@@ -70,7 +78,13 @@ export function useOpenFiles(volumeId: string, fileParam: string | null) {
     setPaths((p) => (p.includes(path) ? p : [...p, path]));
     setClosed((c) => c.filter((x) => x !== path));
   }, []);
-  const edit = useCallback((path: string, text: string) => setDrafts((d) => ({ ...d, [path]: text })), []);
+  const edit = useCallback((path: string, text: string) => {
+    const data = client.getQueryData<VolumeFileContent>(queryKeys.fileContent(volumeId, path));
+    setDrafts((d) => {
+      const next = { ...d, [path]: { ...d[path], text, baseline: d[path]?.baseline ?? (data?.revision ? { content: data.content, revision: data.revision } : undefined) } };
+      return next;
+    });
+  }, [client, volumeId]);
   const discard = useCallback(
     (path: string) =>
       setDrafts((d) => {
@@ -91,11 +105,27 @@ export function useOpenFiles(volumeId: string, fileParam: string | null) {
   /** Writes the draft; the saved text then equals it. */
   const save = async (path: string) => {
     const file = files.find((f) => f.path === path);
-    if (!file?.dirty) return false;
-    await adapter.writeFile(volumeId, path, file.text);
-    client.setQueryData<FileContent>(queryKeys.fileContent(volumeId, path), (prev) => (prev ? { ...prev, content: file.text, size: new TextEncoder().encode(file.text).length } : prev));
-    discard(path);
-    return true;
+    if (!file?.dirty || file.conflict || pending.current.has(path)) return false;
+    pending.current.add(path);
+    try {
+      const result = await adapter.writeFile(volumeId, path, file.text, drafts[path]?.baseline);
+      if (!mounted.current) return false;
+      client.setQueryData<VolumeFileContent>(queryKeys.fileContent(volumeId, path), (prev) => (prev ? { ...prev, content: file.text, revision: result?.revision ?? prev.revision, size: new TextEncoder().encode(file.text).length } : prev));
+      setDrafts((d) => {
+        const next = { ...d };
+        if (next[path]?.text === file.text) delete next[path];
+        else if (next[path]) next[path] = { ...next[path], baseline: result?.revision ? { content: file.text, revision: result.revision } : undefined };
+        return next;
+      });
+      await client.invalidateQueries({ queryKey: ["files", volumeId], predicate: (q) => q.queryKey[2] !== "content" });
+      return true;
+    } catch (error) {
+      if (error instanceof WorkspaceConflictError && mounted.current) {
+        setDrafts((d) => ({ ...d, [path]: { ...d[path]!, conflict: true } }));
+        await Promise.all([client.invalidateQueries({ queryKey: ["files", volumeId], predicate: (q) => q.queryKey[2] !== "content" }), client.refetchQueries({ queryKey: queryKeys.fileContent(volumeId, path), exact: true })]);
+      }
+      throw error;
+    } finally { pending.current.delete(path); }
   };
 
   /** Keeps tabs and drafts attached after a rename of the file or one of its folders. */

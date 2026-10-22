@@ -1,6 +1,7 @@
 // Adapter contracts for hosts, storage and hub settings. Split from adapter.ts
 // so each area can move to its own HTTP client later.
 
+import type { components } from "@/api/generated/schema";
 import type { DirListing, FileContent } from "@/domain/files";
 import type { DockerImage, PruneMode } from "@/domain/images";
 import type { HubDiscovery } from "@/domain/hub-discovery";
@@ -126,7 +127,31 @@ export interface VolumePruneResult {
   spaceReclaimed?: number;
 }
 
-export interface VolumesApi {
+export type WorkspaceTree = components["schemas"]["WorkspaceWorkspace"];
+export type WorkspaceContent = components["schemas"]["WorkspaceFileContent"];
+export type WorkspaceReadOnlyReason = WorkspaceContent["readOnlyReason"];
+export interface WorkspaceUpload { name: string; size: number; content?: string; blob?: Blob }
+export type WorkspaceGesture =
+  | { kind: "create-file"; path: string; content: string }
+  | { kind: "create-folder"; path: string }
+  | { kind: "update"; path: string; content: string; baseline: string }
+  | { kind: "upload"; path: string; file: WorkspaceUpload }
+  | { kind: "rename"; path: string; name: string }
+  | { kind: "move"; path: string; parent: string }
+  | { kind: "delete"; path: string };
+export interface WorkspaceBaseline { revision: string; content: string }
+export type VolumeFileContent = FileContent & { revision?: string; readOnlyReason?: WorkspaceReadOnlyReason };
+export type VolumeDirListing = DirListing & { revision?: string; truncated?: boolean };
+
+/** Optional while adapters without workspace support remain disconnected. */
+export interface ProjectWorkspaceApi {
+  getProjectWorkspace?(stackId: string): Promise<WorkspaceTree>;
+  readProjectFile?(stackId: string, path: string): Promise<WorkspaceContent>;
+  downloadProjectFile?(stackId: string, path: string): Promise<Blob>;
+  updateProjectWorkspace?(stackId: string, revision: string, changes: WorkspaceGesture[]): Promise<WorkspaceTree>;
+}
+
+export interface VolumesApi extends ProjectWorkspaceApi {
   listVolumes(onPartial?: (rows: Volume[]) => void): Promise<Volume[]>;
   getVolume(id: string): Promise<VolumeDetail & { scope?: string }>;
   createVolume(input: CreateVolumeInput): Promise<Volume>;
@@ -140,14 +165,14 @@ export interface VolumesApi {
    * disconnected hosts keep their volume.
    */
   pruneVolumes(input: { hostIds: string[]; volumeIds: string[]; candidates?: VolumePruneCandidate[]; all?: boolean }): Promise<VolumePruneResult>;
-  listFiles(volumeId: string, path: string): Promise<DirListing>;
-  readFile(volumeId: string, path: string): Promise<FileContent>;
-  writeFile(volumeId: string, path: string, content: string): Promise<void>;
-  createEntry(volumeId: string, dir: string, name: string, type: "dir" | "file"): Promise<void>;
-  renameEntry(volumeId: string, path: string, name: string): Promise<void>;
-  deleteEntry(volumeId: string, path: string): Promise<void>;
-  /** Text content is kept; other files are stored as size only. */
-  uploadFile(volumeId: string, dir: string, file: { name: string; size: number; content?: string }): Promise<void>;
+  listFiles(volumeId: string, path: string): Promise<VolumeDirListing>;
+  readFile(volumeId: string, path: string): Promise<VolumeFileContent>;
+  writeFile(volumeId: string, path: string, content: string, baseline?: WorkspaceBaseline): Promise<void | { revision: string }>;
+  createEntry(volumeId: string, dir: string, name: string, type: "dir" | "file", revision?: string): Promise<void>;
+  renameEntry(volumeId: string, path: string, name: string, revision?: string): Promise<void>;
+  deleteEntry(volumeId: string, path: string, revision?: string): Promise<void>;
+  uploadFile(volumeId: string, dir: string, file: WorkspaceUpload, revision?: string): Promise<void>;
+  downloadFile?(volumeId: string, path: string): Promise<Blob>;
   setBackupPolicy(volumeId: string, policy: BackupPolicy | null): Promise<void>;
   runBackup(volumeId: string): Promise<string>;
   restoreBackup(volumeId: string, runId: string, mode: "replace" | "new"): Promise<string>;
