@@ -1,6 +1,17 @@
 // American English texts of the networks page, topology and network wizards.
 
 export const enNetworks = {
+  usage: {
+    label: "{name}: {state}, {count, plural, one {# container} other {# containers}}",
+    used: "In use",
+    unused: "Unused",
+    builtin: "Built-in",
+    builtinDetail: "Docker default network; cannot be deleted.",
+    stack: "Owned by Compose stack {name}",
+    member: "{name} · {state}",
+    noAttachments: "No attached containers",
+    states: { running: "running", stopped: "stopped", restarting: "restarting", unknown: "unknown" },
+  },
   title: "Networks",
   description: "Docker networks of one host at a time: LAN networks, custom and stack networks, then the Docker default networks, each with their containers. Click a node or focus it with the keyboard (Tab, Enter); Escape or a click on empty space clears the focus.",
   hostPicker: "Topology host",

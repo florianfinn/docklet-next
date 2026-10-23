@@ -13,7 +13,7 @@ import { useTranslations } from "use-intl";
 import { useTopology } from "@/data/queries";
 import { hostTone } from "@/domain/hosts";
 import type { ContainerInfo, Host, Topology, TopologyNetwork } from "@/domain/model";
-import { sortNetworks } from "@/domain/networks";
+import { removeBlock, sortNetworks } from "@/domain/networks";
 import { useMotionEnabled, useTokens } from "@/shared/theme/use-design-tokens";
 import { ConfirmDialog } from "@/shared/components/confirm-dialog";
 import { EmptyState, PageHeader, QueryError } from "@/shared/components/page";
@@ -217,6 +217,9 @@ function Canvas({ source }: { source: Source }) {
 
   if (!host) return <><InventoryNotice hosts={source.hosts} items={[]} /><EmptyState icon={<Network />} title={t("empty.title")} description={t("empty.body")} /></>;
   const online = host.status === "online";
+  const removingNetwork = removing ? source.topology.networks.find((n) => n.id === removing.id) ?? removing : undefined;
+  const removalBlock = removingNetwork ? removeBlock(source.topology, removingNetwork) : undefined;
+  const removalReason = removalBlock ? t(`removeBlocked.${removalBlock}`, { stack: removingNetwork?.stackName ?? removingNetwork?.stackId ?? "", count: source.topology.attachments.filter((a) => a.networkId === removingNetwork?.id).length }) : undefined;
   const focusName = focus ? (hostNets.find((n) => n.id === focus)?.name ?? hostContainers.find((c) => c.id === focus)?.name) : undefined;
 
   return (
@@ -370,12 +373,12 @@ function Canvas({ source }: { source: Source }) {
         open={!!removing}
         onOpenChange={(o) => !o && setRemoving(null)}
         title={t("removeDialog.title", { name: removing?.name ?? "" })}
-        description={t("removeDialog.body", { host: host.name })}
+        description={removalReason ?? t("removeDialog.body", { host: host.name })}
         confirmLabel={t("removeDialog.confirm")}
         destructive
         onConfirm={async () => {
           const n = removing;
-          if (!n || !(await cmd.remove(n.id))) return false;
+          if (!n || removalBlock || !(await cmd.remove(n.id))) return false;
           toast.success(t("removed", { name: n.name }));
           if (focus === n.id) navigate({ node: null });
         }}

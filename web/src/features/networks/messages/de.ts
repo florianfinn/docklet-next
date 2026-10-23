@@ -2,6 +2,17 @@
 import type { enNetworks } from "./en";
 
 export const deNetworks: typeof enNetworks = {
+  usage: {
+    label: "{name}: {state}, {count, plural, one {# Container} other {# Container}}",
+    used: "In Verwendung",
+    unused: "Unbenutzt",
+    builtin: "Docker-Standard",
+    builtinDetail: "Docker-Standardnetzwerk; kann nicht gelöscht werden.",
+    stack: "Gehört zum Compose-Stack {name}",
+    member: "{name} · {state}",
+    noAttachments: "Keine verbundenen Container",
+    states: { running: "läuft", stopped: "gestoppt", restarting: "startet neu", unknown: "unbekannt" },
+  },
   title: "Netzwerke",
   description: "Docker-Netzwerke eines Hosts zur Zeit: LAN-Netze, eigene und Stack-Netze, dann die Docker-Standardnetze, jeweils mit ihren Containern. Knoten anklicken oder per Tastatur (Tab, Eingabe) fokussieren; Escape oder ein Klick ins Leere hebt den Fokus auf.",
   hostPicker: "Host der Topologie",
