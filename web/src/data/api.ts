@@ -31,6 +31,7 @@ export interface AuthApi {
 
 /** Error codes of the hosts, storage and settings contracts; UIs translate them. */
 export type AdapterErrorCode =
+  | "overlap"
   | "not-found"
   | "exists"
   | "invalid-name"

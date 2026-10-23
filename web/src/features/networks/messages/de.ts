@@ -301,6 +301,8 @@ export const deNetworks: typeof enNetworks = {
     },
   },
   errors: {
+    overlap: "Das Subnetz überschneidet sich mit einem anderen Netzwerk auf diesem Host.",
+    "outcome-unknown": "Das Netzwerkergebnis ist unbekannt. Zustand vor erneutem Versuch prüfen.",
     "not-found": "Nicht gefunden – die Ansicht wird aktualisiert.",
     exists: "Ein Netzwerk mit diesem Namen existiert auf dem Host bereits.",
     "invalid-network": "Die Netzwerkeinstellungen sind ungültig.",

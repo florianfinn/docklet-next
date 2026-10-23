@@ -300,6 +300,8 @@ export const enNetworks = {
     },
   },
   errors: {
+    overlap: "The subnet overlaps another network on this host.",
+    "outcome-unknown": "The network outcome is unknown. Check the current state before retrying.",
     "not-found": "Not found – the view is being refreshed.",
     exists: "A network with this name already exists on the host.",
     "invalid-network": "The network settings are invalid.",
