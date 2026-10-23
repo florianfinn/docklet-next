@@ -10,6 +10,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net/netip"
 
 	"github.com/containerd/errdefs"
 	"github.com/danielgtaylor/huma/v2"
@@ -66,4 +67,59 @@ func inspectAllWriteContainers(ctx context.Context, cli *client.Client) ([]conta
 		result = append(result, c)
 	}
 	return result, nil
+}
+
+// Parse the wire strings explicitly so malformed values fail with a stable code
+// before any Docker operation. Preserve IPAM order and omitted IPv4 defaults.
+func createOptions(req networktypes.CreateOptions) (client.NetworkCreateOptions, error) {
+	opts := client.NetworkCreateOptions{Driver: req.Driver, Options: req.Options, Labels: req.Labels, Internal: req.Internal, EnableIPv4: req.EnableIPv4, EnableIPv6: new(req.EnableIPv6)}
+	if req.IPAM == nil {
+		return opts, nil
+	}
+	opts.IPAM = &network.IPAM{Driver: req.IPAM.Driver, Options: req.IPAM.Options}
+	for _, raw := range req.IPAM.Config {
+		var pool network.IPAMConfig
+		var err error
+		if raw.Subnet != "" {
+			pool.Subnet, err = netip.ParsePrefix(raw.Subnet)
+			if err != nil {
+				return opts, invalidNetwork("Invalid IPAM subnet")
+			}
+		}
+		if raw.Gateway != "" {
+			pool.Gateway, err = netip.ParseAddr(raw.Gateway)
+			if err != nil {
+				return opts, invalidNetwork("Invalid IPAM gateway")
+			}
+		}
+		if raw.IPRange != "" {
+			pool.IPRange, err = netip.ParsePrefix(raw.IPRange)
+			if err != nil {
+				return opts, invalidNetwork("Invalid IPAM range")
+			}
+		}
+		pool.AuxAddress = make(map[string]netip.Addr, len(raw.AuxAddress))
+		for name, value := range raw.AuxAddress {
+			addr, err := netip.ParseAddr(value)
+			if err != nil {
+				return opts, invalidNetwork("Invalid IPAM auxiliary address")
+			}
+			pool.AuxAddress[name] = addr
+		}
+		opts.IPAM.Config = append(opts.IPAM.Config, pool)
+	}
+	return opts, nil
+}
+
+func daemonWriteError(err error, conflictCode, invalidCode string) error {
+	if errdefs.IsNotFound(err) {
+		return rejection(404, "not-found", "Network or container not found")
+	}
+	if errdefs.IsConflict(err) {
+		return rejection(409, conflictCode, "Network write conflicts with the current Docker state")
+	}
+	if errdefs.IsInvalidArgument(err) {
+		return rejection(400, invalidCode, "Docker rejected the network write")
+	}
+	return err
 }

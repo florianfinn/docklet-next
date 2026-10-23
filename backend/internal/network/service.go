@@ -211,7 +211,7 @@ func (s *NetworkService) CreateNetwork(ctx context.Context, name string, options
 	response, err := dockerClient.NetworkCreate(ctx, name, options)
 	if err != nil {
 		s.eventService.LogErrorEvent(ctx, event.EventTypeNetworkError, "network", "", name, user.ID, user.Username, "0", err, database.JSON{"action": "create", "driver": options.Driver})
-		return nil, fmt.Errorf("failed to create network: %w", err)
+		return nil, daemonWriteError(err, "exists", "invalid-network")
 	}
 
 	metadata := database.JSON{
@@ -262,7 +262,7 @@ func (s *NetworkService) RemoveNetwork(ctx context.Context, id string, user user
 	defer s.eventService.BeginDockerResourceSuppressionWindow("network", id, networkName)()
 	if _, networkRemoveErr := dockerClient.NetworkRemove(ctx, id, client.NetworkRemoveOptions{}); networkRemoveErr != nil {
 		s.eventService.LogErrorEvent(ctx, event.EventTypeNetworkError, "network", id, networkName, user.ID, user.Username, "0", networkRemoveErr, database.JSON{"action": "delete"})
-		return fmt.Errorf("failed to remove network: %w", networkRemoveErr)
+		return daemonWriteError(networkRemoveErr, "in-use", "invalid-network")
 	}
 
 	metadata := database.JSON{
@@ -320,7 +320,7 @@ func (s *NetworkService) ConnectContainer(ctx context.Context, networkID string,
 				"containerId": req.ContainerID,
 			},
 		)
-		return fmt.Errorf("failed to connect container to network: %w", networkConnectErr)
+		return daemonWriteError(networkConnectErr, "already-connected", "invalid-ip")
 	}
 
 	metadata := database.JSON{
@@ -374,7 +374,7 @@ func (s *NetworkService) DisconnectContainer(ctx context.Context, networkID stri
 				"containerId": req.ContainerID,
 			},
 		)
-		return fmt.Errorf("failed to disconnect container from network: %w", networkDisconnectErr)
+		return daemonWriteError(networkDisconnectErr, "not-connected", "invalid-network")
 	}
 
 	metadata := database.JSON{

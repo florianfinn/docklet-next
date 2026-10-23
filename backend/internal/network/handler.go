@@ -17,7 +17,6 @@ import (
 	"github.com/florianfinn/docklet-next/types/base"
 	networktypes "github.com/florianfinn/docklet-next/types/network"
 	"github.com/moby/moby/api/types/network"
-	"github.com/moby/moby/client"
 	"github.com/samber/mo"
 	"go.getarcane.app/kit/pkg"
 	"go.getarcane.app/kit/pkg/mapping"
@@ -137,9 +136,9 @@ func (h *NetworkHandler) CreateNetwork(ctx context.Context, input *CreateNetwork
 		return nil, err
 	}
 
-	dockerOptions, err := mapping.MapOne[networktypes.CreateOptions, client.NetworkCreateOptions](input.Body.Options)
+	dockerOptions, err := createOptions(input.Body.Options)
 	if err != nil {
-		return nil, invalidNetwork("Invalid network options")
+		return nil, err
 	}
 	if !input.Body.Options.EnableIPv6 {
 		dockerOptions.EnableIPv6 = nil
