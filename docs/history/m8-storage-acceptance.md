@@ -6,8 +6,9 @@ review rounds (R1 and R2 fail, R3 pass). The accepted package is that main
 commit, with green main CI. This records sandbox acceptance, not a product
 release or production deployment.
 
-Sandbox runs of candidate packages before the closing review found two defects
-that synthetic tests had missed:
+Sandbox runs of candidate packages before and during the closing review found
+two defects that synthetic tests had missed (the closing review rounds found two
+further blockers, listed in PR #195):
 
 | Issue | PR | Defect found in the sandbox |
 | --- | --- | --- |
@@ -18,8 +19,9 @@ that synthetic tests had missed:
 
 Hub and agent images were built from `deploy/hub/Dockerfile` at the exact main
 commit and deployed to the disposable sandbox hub, one Direct agent and one Edge
-agent, after consistent data backups. The helper image was a local build of
-`deploy/tools` from the same tree under the default reference; it is not yet
+agent, after consistent data backups. The helper image was a local build from an
+earlier commit whose `deploy/tools` is identical to main, under the default
+reference; it is not yet
 published (#196). A Playwright Chromium script drove the production UI on both
 hosts, in German at 1440 px and in English at 390 px, and checked results
 through the API:
@@ -30,30 +32,35 @@ through the API:
    the tree reloads, the external entry is kept and a retry succeeds.
 4. Save a clean open file after that reload, and a second file after an own
    save; both succeed without a conflict.
-5. Replace an open file outside the tab by delete and upload, then edit and
-   save in the tab; the new content is kept and the edit applies to it.
+5. Replace a file outside the UI by delete and upload, reopen it, then edit and
+   save; the new content is kept and the edit applies to it. A tab that stays
+   open during such a replacement is covered by tests, not by this run.
 6. Swap two files by renaming while one is open in a tab, then save the tab;
    the save is refused and the real content is kept.
 7. Rename the volume (the page follows the new name) and delete it.
-8. Open the prune dialog (named volumes are excluded by default), include named
-   volumes, select exactly one prepared volume and delete; only that volume is
+8. Open the prune dialog, include named volumes (excluded by default; covered
+   by tests and the earlier candidate run), select exactly one prepared volume and delete; only that volume is
    removed and the result lists it.
 9. Edit an additional stack file in the editor and Save & redeploy; the file is
    stored and the deploy run completes successfully.
 10. The Backups page shows the neutral unavailable state (backups belong to M12).
 
-All steps passed on both hosts in both locales. Steps 8 and 9 were rerun with
-corrected script selectors after the first acceptance run failed on script
-errors (a case-sensitive button name and a host-specific file name); the
-product behaviour was unchanged between runs. HTTP errors observed were the
+All steps passed on both hosts in both locales. Steps 8 and 9 failed in the
+first acceptance run and in two rerun rounds on script errors (a button name
+that did not match, case sensitivity and a host-specific file name); the third
+rerun passed everywhere. The prune step gained a guard for that rerun: it
+deletes only when exactly one volume is selected and checks that the volume
+count drops by one. The product package was the same in all runs. HTTP errors observed were the
 intended 409 conflicts of steps 3 and 6 and 404 reads after rename and delete.
 
 ## Limits and follow-ups
 
 - The Docklet tools image is not yet published; its first publication and the
   digest pin need maintainer approval (#196).
-- Browser consoles logged aborted activity reads during navigation; direct reads
-  of the same resources succeed.
+- Browser consoles logged several hundred cancelled activity reads per run on
+  Direct and Edge (`ERR_FAILED`, one `ERR_ABORTED` settings read) during
+  navigation; direct reads of those resources returned 200 in the earlier
+  candidate runs, not rechecked in this run.
 - The stack Deployments tab listed no deploy history after the successful
   redeploy; outside M8 scope, tracked in #198.
 - Accepted follow-ups: #193 (a detached helper create can recreate a removed
