@@ -66,16 +66,7 @@ func (s *VolumeService) buildVolumeContainerMapInternal(ctx context.Context) (ma
 		return nil, nil, fmt.Errorf("failed to list containers: %w", err)
 	}
 
-	volumeContainerMap := make(map[string][]string)
-	for _, c := range containers {
-		for _, m := range c.Mounts {
-			if m.Type == mount.TypeVolume && m.Name != "" {
-				volumeContainerMap[m.Name] = append(volumeContainerMap[m.Name], c.ID)
-			}
-		}
-	}
-
-	return volumeContainerMap, containers, nil
+	return volumeConsumersInternal(containers), containers, nil
 }
 
 func (s *VolumeService) buildVolumePaginationConfigInternal() pagination.Config[volumetypes.Volume] {
@@ -202,20 +193,10 @@ func calculateVolumeUsageCountsInternal(items []volumetypes.Volume) volumetypes.
 	return counts
 }
 
-// CountUsageFromSnapshot derives volume usage counts from an
-// already-fetched volume and container listing. It mirrors the semantics of
-// ListVolumesPaginated — internal volumes are excluded and a volume counts as
-// in use when any container mounts it — so dashboard tile numbers agree with
-// the volumes page.
+// CountUsageFromSnapshot mirrors the inventory usage semantics: internal
+// volumes are hidden and workspace helpers never count as consumers.
 func (s *VolumeService) CountUsageFromSnapshot(dockerVolumes []volume.Volume, containers []container.Summary) volumetypes.UsageCounts {
-	inUse := make(map[string]struct{})
-	for _, c := range containers {
-		for _, m := range c.Mounts {
-			if m.Type == mount.TypeVolume && m.Name != "" {
-				inUse[m.Name] = struct{}{}
-			}
-		}
-	}
+	consumers := volumeConsumersInternal(containers)
 
 	counts := volumetypes.UsageCounts{}
 	for _, v := range inventory.Volumes(dockerVolumes, containers) {
@@ -223,7 +204,7 @@ func (s *VolumeService) CountUsageFromSnapshot(dockerVolumes []volume.Volume, co
 			continue
 		}
 		counts.Total++
-		if _, ok := inUse[v.Name]; ok {
+		if len(consumers[v.Name]) > 0 {
 			counts.Inuse++
 		} else {
 			counts.Unused++
@@ -382,15 +363,9 @@ func (s *VolumeService) ListVolumesPaginated(ctx context.Context, params paginat
 
 	items := make([]volumetypes.Volume, 0, len(enrichedVolumes))
 	for _, v := range enrichedVolumes {
-		volDto := volumetypes.NewSummary(v)
+		volDto := volumeSummaryWithConsumersInternal(v, volumeContainerMap[v.Name])
 		if !includeInternal && s.isInternalVolumeInternal(volDto) {
 			continue
-		}
-		if containerIDs, ok := volumeContainerMap[v.Name]; ok {
-			volDto.Containers = containerIDs
-			if len(containerIDs) > 0 {
-				volDto.InUse = true
-			}
 		}
 		items = append(items, volDto)
 	}
@@ -422,6 +397,14 @@ func (s *VolumeService) ListVolumesPaginated(ctx context.Context, params paginat
 	return result.Items, paginationResp, counts, nil
 }
 
+type volumeWorkspaceBusyError struct {
+	name string
+}
+
+func (e *volumeWorkspaceBusyError) Error() string {
+	return "volume workspace is busy; close active operations and retry rename: " + e.name
+}
+
 // RenameVolume copies an unused volume to a new name and removes the source.
 func (s *VolumeService) RenameVolume(ctx context.Context, oldName, newName string, user usertypes.Actor) (*volumetypes.Volume, error) {
 	oldName = strings.TrimSpace(oldName)
@@ -433,7 +416,11 @@ func (s *VolumeService) RenameVolume(ctx context.Context, oldName, newName strin
 		return nil, common.ErrVolumeRenameProtected
 	}
 
-	defer s.workspaceLocks.Lock(oldName)()
+	unlock, acquired := s.workspaceLocks.TryLock(oldName)
+	if !acquired {
+		return nil, &volumeWorkspaceBusyError{name: oldName}
+	}
+	defer unlock()
 
 	dockerClient, err := s.dockerService.GetClient(ctx)
 	if err != nil {
@@ -456,7 +443,7 @@ func (s *VolumeService) RenameVolume(ctx context.Context, oldName, newName strin
 	// Stop any read-only browse helper first; a helper mounting the volume would
 	// otherwise fail the detached-source check with "in use".
 	if stopErr := s.StopHelper(ctx, oldName); stopErr != nil {
-		slog.WarnContext(ctx, "could not stop volume browse helper before rename", "volume", oldName, "error", stopErr.Error())
+		return nil, fmt.Errorf("stop volume workspace helper before rename: %w", stopErr)
 	}
 
 	migration, err := volumes.PlanRename(ctx, dockerClient, oldName, newName, s.toolsImageInternal())

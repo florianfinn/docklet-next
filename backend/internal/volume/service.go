@@ -364,18 +364,11 @@ func (s *VolumeService) GetVolumeByName(ctx context.Context, name string) (*volu
 		}
 	}
 
-	v := volumetypes.NewSummary(vol)
-
-	containerIDs, err := docker.GetContainersUsingVolume(ctx, dockerClient, name)
+	consumers, err := listVolumeConsumersInternal(ctx, dockerClient)
 	if err != nil {
-		slog.WarnContext(ctx, "failed to get containers using volume", "volume", name, "error", err.Error())
-	} else {
-		v.Containers = containerIDs
-		if len(containerIDs) > 0 {
-			v.InUse = true
-		}
+		return nil, fmt.Errorf("failed to get containers using volume: %w", err)
 	}
-
+	v := volumeSummaryWithConsumersInternal(vol, consumers[name])
 	return &v, nil
 }
 
@@ -510,13 +503,13 @@ func (s *VolumeService) GetVolumeUsage(ctx context.Context, name string) (bool, 
 		return false, nil, fmt.Errorf("volume not found: %w", err)
 	}
 
-	containerIDs, err := docker.GetContainersUsingVolume(ctx, dockerClient, vol.Volume.Name)
+	consumers, err := listVolumeConsumersInternal(ctx, dockerClient)
 	if err != nil {
 		return false, nil, fmt.Errorf("failed to get containers using volume: %w", err)
 	}
 
-	inUse := len(containerIDs) > 0
-	return inUse, containerIDs, nil
+	containerIDs := consumers[vol.Volume.Name]
+	return len(containerIDs) > 0, containerIDs, nil
 }
 
 // VolumeSizeData holds size information for a volume.
@@ -543,12 +536,16 @@ func (s *VolumeService) GetVolumeSizes(ctx context.Context) (map[string]VolumeSi
 		return nil, fmt.Errorf("failed to get volume usage data: %w", err)
 	}
 
+	consumers, err := listVolumeConsumersInternal(apiCtx, dockerClient)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get containers using volumes: %w", err)
+	}
 	result := make(map[string]VolumeSizeData, len(usageVolumes))
 	for _, v := range usageVolumes {
 		if v.UsageData != nil {
 			result[v.Name] = VolumeSizeData{
 				Size:     v.UsageData.Size,
-				RefCount: v.UsageData.RefCount,
+				RefCount: int64(len(consumers[v.Name])),
 			}
 		}
 	}

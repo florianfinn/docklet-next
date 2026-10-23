@@ -27,23 +27,6 @@ func pruneEligible(v volume.Volume) bool {
 	return v.Driver == "local" && len(v.Options) == 0 && v.Labels[libarcane.InternalResourceLabel] != "true" && strings.TrimSpace(v.CreatedAt) != ""
 }
 
-// volumeReferences always queries all containers, bypassing inventory caches.
-func volumeReferences(ctx context.Context, cli *client.Client) (map[string]bool, error) {
-	containers, err := cli.ContainerList(ctx, client.ContainerListOptions{All: true})
-	if err != nil {
-		return nil, err
-	}
-	refs := make(map[string]bool)
-	for _, c := range containers.Items {
-		for _, m := range c.Mounts {
-			if m.Type == "volume" {
-				refs[m.Name] = true
-			}
-		}
-	}
-	return refs, nil
-}
-
 func (s *VolumeService) PlanVolumePrune(ctx context.Context, all bool) (*volumetypes.PrunePlan, error) {
 	cli, err := s.dockerService.GetClient(ctx)
 	if err != nil {
@@ -53,14 +36,14 @@ func (s *VolumeService) PlanVolumePrune(ctx context.Context, all bool) (*volumet
 	if err != nil {
 		return nil, err
 	}
-	refs, err := volumeReferences(ctx, cli)
+	refs, err := listVolumeConsumersInternal(ctx, cli)
 	if err != nil {
 		return nil, err
 	}
 	plan := &volumetypes.PrunePlan{Candidates: []volumetypes.PrunePlanCandidate{}}
 	for _, v := range listed.Items {
 		_, anonymous := v.Labels[anonymousVolumeLabel]
-		if !pruneEligible(v) || refs[v.Name] || (!all && !anonymous) {
+		if !pruneEligible(v) || len(refs[v.Name]) > 0 || (!all && !anonymous) {
 			continue
 		}
 		reason := "unused"
@@ -139,12 +122,16 @@ func (s *VolumeService) executePruneCandidate(ctx context.Context, cli *client.C
 		fail("volume.protected")
 		return
 	}
-	refs, err := volumeReferences(ctx, cli)
+	if err := s.StopHelper(ctx, candidate.Name); err != nil {
+		fail("volume.usage-failed")
+		return
+	}
+	refs, err := listVolumeConsumersInternal(ctx, cli)
 	if err != nil {
 		fail("volume.usage-failed")
 		return
 	}
-	if refs[candidate.Name] {
+	if len(refs[candidate.Name]) > 0 {
 		skip("in-use")
 		return
 	}

@@ -263,7 +263,7 @@ func pruneRouter(t *testing.T, svc *VolumeService) http.Handler {
 	router.Use(func(next echo.HandlerFunc) echo.HandlerFunc {
 		return func(c *echo.Context) error {
 			grants := authz.NewPermissionSet()
-			grants.AddEnv("0", authz.PermVolumesPrune, authz.PermVolumesRename)
+			grants.AddEnv("0", authz.PermVolumesPrune, authz.PermVolumesRename, authz.PermVolumesRead, authz.PermVolumesList)
 			ctx := context.WithValue(c.Request().Context(), middleware.ContextKeyUserPermissions, grants)
 			ctx = context.WithValue(ctx, user.CurrentUserContextKey{}, &user.Actor{ID: "example-user", Username: "example-user"})
 			c.SetRequest(c.Request().WithContext(ctx))

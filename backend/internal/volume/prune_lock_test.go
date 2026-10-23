@@ -82,11 +82,12 @@ func TestPruneSerializesWithRename(t *testing.T) {
 		require.NoError(t, <-pruneDone)
 		return
 	}
-	renameDone := make(chan error, 1)
-	go func() { _, err := svc.RenameVolume(t.Context(), "source", "target", user.Actor{}); renameDone <- err }()
+	_, renameErr := svc.RenameVolume(t.Context(), "source", "target", user.Actor{})
+	var busy *volumeWorkspaceBusyError
+	require.ErrorAs(t, renameErr, &busy, "rename refuses a candidate currently owned by prune")
 	close(proceed)
 	require.NoError(t, <-pruneDone)
-	require.ErrorContains(t, <-renameDone, "inspect source volume", "rename observes the removal after acquiring the shared lock")
+
 	require.True(t, removed.Load())
 }
 

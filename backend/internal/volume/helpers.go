@@ -426,8 +426,8 @@ func (s *VolumeService) collectStaleHelperIDsInternal(now time.Time, idleTimeout
 }
 
 // StopHelper removes the reused helper for a single volume, if
-// one exists. It is idempotent: stopping a volume with no active helper returns
-// nil.
+// one exists. Callers hold the workspace lock; failed removals retain the entry
+// for retry. A missing helper is already stopped.
 func (s *VolumeService) StopHelper(ctx context.Context, volumeName string) error {
 	if strings.TrimSpace(volumeName) == "" {
 		return nil
@@ -438,15 +438,22 @@ func (s *VolumeService) StopHelper(ctx context.Context, volumeName string) error
 		return fmt.Errorf("failed to get docker client for helper stop: %w", err)
 	}
 
-	containerID := s.takeHelperIDInternal(volumeName)
-	if containerID == "" {
+	s.helperMu.Lock()
+	helper := s.helperByVolume[volumeName]
+	s.helperMu.Unlock()
+	if helper == nil {
 		return nil
 	}
 
-	if _, containerRemoveErr := dockerClient.ContainerRemove(ctx, containerID, volumehelper.RemoveOptions()); containerRemoveErr != nil {
+	if _, containerRemoveErr := dockerClient.ContainerRemove(ctx, helper.id, volumehelper.RemoveOptions()); containerRemoveErr != nil && !errdefs.IsNotFound(containerRemoveErr) {
 		return fmt.Errorf("failed to remove helper container: %w", containerRemoveErr)
 	}
 
+	s.helperMu.Lock()
+	if s.helperByVolume[volumeName] == helper {
+		delete(s.helperByVolume, volumeName)
+	}
+	s.helperMu.Unlock()
 	return nil
 }
 
