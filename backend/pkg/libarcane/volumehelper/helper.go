@@ -21,9 +21,8 @@ import (
 	"github.com/moby/moby/client"
 )
 
-// DefaultToolsImage is pinned with the hub release. Issue #180 adds the digest
-// after the first publication of this tools image.
-const DefaultToolsImage = "ghcr.io/florianfinn/docklet-tools:0.1.0"
+// DefaultToolsImage pins the multi-platform tools image index for this release.
+const DefaultToolsImage = "ghcr.io/florianfinn/docklet-tools:0.1.0@sha256:d387beb35707c5634dba1630b4153c5bfe0bd4529025297ce7c024c2f2fe9602"
 
 // ContainerLabel is retained so existing helper containers remain discoverable
 // for cleanup across upgrades. Image selection never depends on this label.

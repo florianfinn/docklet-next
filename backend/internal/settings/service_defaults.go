@@ -130,8 +130,7 @@ func DefaultSettingsConfig() *Settings {
 // with the current default when an install still holds them verbatim.
 var retiredSettingValuesInternal = map[string][]string{
 	// Closed list: only values persisted before override-only storage. Bump PRs
-	// must not extend it. Add a DefaultToolsImage exclusion test with the digest pin;
-	// until then the release default equals the accepted legacy 0.1.0 value.
+	// must not extend it or include the current release default.
 	"toolsImage":                  {"ghcr.io/getarcaneapp/tools:latest", "ghcr.io/florianfinn/docklet-tools:0.1.0"},
 	"dockerClientRefreshInterval": {"*/30 * * * * *"},
 	"autoHealInterval":            {"*/30 * * * * *"},
