@@ -289,3 +289,36 @@ describe("returning to the Compose editor", () => {
     expect((await screen.findByRole("textbox", { name: "Inhalt von compose.yaml" })).textContent).toBe("services: [");
   });
 });
+
+
+describe("project baselines after own manifests", () => {
+  for (const action of ["save", "gesture"] as const) {
+    it(`rebases a non-dirty draft after another ${action}`, async () => {
+      let revision = "r1";
+      const conflicts: string[] = [];
+      const updateProjectWorkspace = vi.fn(async (_id, expected, changes) => {
+        if (expected !== revision) { conflicts.push(expected); throw new WorkspaceConflictError(); }
+        revision = revision === "r1" ? "r2" : "r3";
+        return { ...tree, fileTreeRevision: revision, files: changes[0]?.kind === "create-folder" ? [...tree.files!, { ...tree.files![0]!, name: "folder", relativePath: "folder", isDirectory: true }] : tree.files };
+      });
+      projectFixture({ getProjectWorkspace: async () => ({ ...tree, fileTreeRevision: revision }), updateProjectWorkspace });
+      await openFile();
+      replaceText("Inhalt von a.txt", "temporary");
+      replaceText("Inhalt von a.txt", "old");
+      if (action === "save") {
+        await openFile("b.txt"); replaceText("Inhalt von b.txt", "B edited");
+        await userEvent.click(screen.getByRole("button", { name: "Speichern" }));
+      } else {
+        await userEvent.click(screen.getByRole("button", { name: "Neuer Ordner" }));
+        await userEvent.type(within(await screen.findByRole("dialog")).getByRole("textbox", { name: "Relativer Pfad" }), "folder");
+        await userEvent.click(screen.getByRole("button", { name: "Anwenden" }));
+      }
+      await waitFor(() => expect(revision).toBe("r2"));
+      await openFile(); replaceText("Inhalt von a.txt", "A edited");
+      await userEvent.click(screen.getByRole("button", { name: "Speichern" }));
+      await waitFor(() => expect(updateProjectWorkspace).toHaveBeenCalledTimes(2));
+      expect(conflicts).toEqual([]);
+      expect(revision).toBe("r3");
+    });
+  }
+});
