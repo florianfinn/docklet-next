@@ -60,6 +60,13 @@ export function mapVolumes(rows: Schema["VolumeVolume"][], hostId: string, conta
   }), ...binds.values()];
 }
 
+/** Moby's EndpointIPAMConfig is passed through the DTO's unknown ipamConfig field. */
+function fixedAddress(config: unknown, key: "IPv4Address" | "IPv6Address"): string | undefined {
+  if (!config || typeof config !== "object" || !(key in config)) return undefined;
+  const value = (config as Record<string, unknown>)[key];
+  return typeof value === "string" && value ? value : undefined;
+}
+
 export function mapTopology(rows: Schema["NetworkInspect"][], hostId: string, containers: ContainerRow[], projects: ProjectRow[], inventory: InventoryObservation): Topology {
   const networks: TopologyNetwork[] = rows.filter((r) => r.labels?.["io.docklet.system"] !== "agent").map((r) => {
     if (!r?.id || !r.name || typeof r.driver !== "string" || !r.driver) throw new Error("inventory.invalid-network");
@@ -77,7 +84,9 @@ export function mapTopology(rows: Schema["NetworkInspect"][], hostId: string, co
       const endpoint = c.networkSettings?.networks?.[n.name];
       const raw = rows.find((r) => inventoryId(hostId, r.id) === n.id)?.containers?.[c.id];
       if (!endpoint && !raw) continue;
-      attachments.push({ containerId, networkId: n.id, ip: endpoint?.ipAddress || raw?.IPv4Address?.split("/")[0] || undefined, ip6: endpoint?.globalIPv6Address || raw?.IPv6Address?.split("/")[0] || undefined });
+      const fixed4 = fixedAddress(endpoint?.ipamConfig, "IPv4Address");
+      const fixed6 = fixedAddress(endpoint?.ipamConfig, "IPv6Address");
+      attachments.push({ containerId, networkId: n.id, ip: endpoint?.ipAddress || raw?.IPv4Address?.split("/")[0] || fixed4, ip6: endpoint?.globalIPv6Address || raw?.IPv6Address?.split("/")[0] || fixed6, staticIp: fixed4 ? true : undefined, staticIp6: fixed6 ? true : undefined, aliases: endpoint?.aliases ?? undefined });
     }
     if (!c.labels?.["com.docker.compose.project"]) continue;
     for (const entry of (c.labels?.["com.docker.compose.depends_on"] ?? "").split(",").filter(Boolean)) {
