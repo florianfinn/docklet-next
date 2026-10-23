@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; hide dedicated agent networks and agent topology endpoints.
+// Deviations: Local module namespace; hidden agent inventory; authoritative network write validation.
 
 package network
 
@@ -12,7 +12,6 @@ import (
 	"fmt"
 	"github.com/florianfinn/docklet-next/backend/pkg/inventory"
 	"log/slog"
-	"net/netip"
 	"slices"
 	"sort"
 	"strings"
@@ -28,7 +27,6 @@ import (
 	"go.getarcane.app/kit/pkg/mapping"
 	"golang.org/x/sync/errgroup"
 
-	"github.com/florianfinn/docklet-next/backend/internal/common"
 	"github.com/florianfinn/docklet-next/backend/internal/database"
 	dockerInternal "github.com/florianfinn/docklet-next/backend/internal/docker"
 	"github.com/florianfinn/docklet-next/backend/internal/event"
@@ -201,6 +199,14 @@ func (s *NetworkService) CreateNetwork(ctx context.Context, name string, options
 		return nil, fmt.Errorf("failed to connect to Docker: %w", err)
 	}
 
+	existing, err := compat.NetworkListWithCompatibility(ctx, dockerClient, client.NetworkListOptions{})
+	if err != nil {
+		return nil, fmt.Errorf("list networks for validation: %w", err)
+	}
+	if err := validateCreate(name, options, existing.Items); err != nil {
+		return nil, err
+	}
+
 	defer s.eventService.BeginDockerResourceSuppressionWindow("network", "", name)()
 	response, err := dockerClient.NetworkCreate(ctx, name, options)
 	if err != nil {
@@ -265,26 +271,21 @@ func (s *NetworkService) ConnectContainer(ctx context.Context, networkID string,
 		return fmt.Errorf("failed to connect to Docker: %w", err)
 	}
 
-	endpoint := &network.EndpointSettings{Aliases: req.Aliases}
-	ipv4 := strings.TrimSpace(req.IPv4Address)
-	ipv6 := strings.TrimSpace(req.IPv6Address)
-	if ipv4 != "" || ipv6 != "" {
-		ipam := &network.EndpointIPAMConfig{}
-		if ipv4 != "" {
-			addr, parseErr := netip.ParseAddr(ipv4)
-			if parseErr != nil {
-				return common.Classify(common.ErrValidation, fmt.Errorf("invalid IPv4 address %s: %w", ipv4, parseErr))
-			}
-			ipam.IPv4Address = addr
-		}
-		if ipv6 != "" {
-			addr, parseErr := netip.ParseAddr(ipv6)
-			if parseErr != nil {
-				return common.Classify(common.ErrValidation, fmt.Errorf("invalid IPv6 address %s: %w", ipv6, parseErr))
-			}
-			ipam.IPv6Address = addr
-		}
-		endpoint.IPAMConfig = ipam
+	n, err := inspectWriteNetwork(ctx, dockerClient, networkID)
+	if err != nil {
+		return err
+	}
+	c, err := inspectWriteContainer(ctx, dockerClient, req.ContainerID)
+	if err != nil {
+		return err
+	}
+	all, err := inspectAllWriteContainers(ctx, dockerClient)
+	if err != nil {
+		return err
+	}
+	endpoint, err := validateConnect(n, c, all, req)
+	if err != nil {
+		return err
 	}
 
 	if _, networkConnectErr := dockerClient.NetworkConnect(ctx, networkID, client.NetworkConnectOptions{
@@ -327,6 +328,18 @@ func (s *NetworkService) DisconnectContainer(ctx context.Context, networkID stri
 	if err != nil {
 		s.eventService.LogErrorEvent(ctx, event.EventTypeNetworkError, "network", networkID, "", user.ID, user.Username, "0", err, database.JSON{"action": "disconnect", "containerId": req.ContainerID})
 		return fmt.Errorf("failed to connect to Docker: %w", err)
+	}
+
+	n, err := inspectWriteNetwork(ctx, dockerClient, networkID)
+	if err != nil {
+		return err
+	}
+	c, err := inspectWriteContainer(ctx, dockerClient, req.ContainerID)
+	if err != nil {
+		return err
+	}
+	if err := validateDisconnect(n, c); err != nil {
+		return err
 	}
 
 	if _, networkDisconnectErr := dockerClient.NetworkDisconnect(ctx, networkID, client.NetworkDisconnectOptions{
