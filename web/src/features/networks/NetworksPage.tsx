@@ -269,7 +269,7 @@ function Canvas({ source }: { source: Source }) {
             <TooltipContent>{t("overviewHint")}</TooltipContent>
           </Tooltip>
           <span className="flex-1" />
-          <Button variant="outline" size="sm" disabled={!connectAvailable || !online || source.bench} onClick={() => setConnectRequest({ mode: "connect" })}>
+          <Button variant="outline" size="sm" disabled={!connectAvailable || !online || source.bench} title={[...connectCapabilities.values()].find((c) => c.reason)?.reason} onClick={() => setConnectRequest({ mode: "connect" })}>
             <Link2 data-icon="inline-start" /> {t("connect")}
           </Button>
           <Button size="sm" disabled={!createCapability.available || !source.hosts.some((h) => h.status === "online") || source.bench} title={createCapability.reason} onClick={() => setCreating(true)}>
@@ -362,9 +362,9 @@ function Canvas({ source }: { source: Source }) {
           <NetworkTable host={host} networks={hostNets} topology={source.topology} containers={hostContainers} focus={focus} query={query} onClearQuery={() => setQuery("")} onFocus={focusNode} onConnect={setConnectRequest} onRemove={setRemoving} />
         </div>
       </div>
-      {connectRequest && <ConnectNetworkDialog key={host.id} request={connectRequest} onClose={() => setConnectRequest(null)} host={host} topology={source.topology} containers={source.containers} />}
+      {connectRequest && <ConnectNetworkDialog key={`connect:${host.id}`} request={connectRequest} onClose={() => setConnectRequest(null)} host={host} topology={source.topology} containers={source.containers} />}
       <CreateNetworkDialog
-        key={host.id}
+        key={`create:${host.id}`}
         open={creating}
         onOpenChange={setCreating}
         hosts={source.hosts}

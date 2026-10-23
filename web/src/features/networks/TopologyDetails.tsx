@@ -234,13 +234,13 @@ export function TopologyDetails({ selected, topology, containers, hosts, onSelec
       )}
       <div className="flex flex-wrap gap-2 border-t pt-3">
         {net && net.driver !== "host" && net.driver !== "none" && (
-          <Button size="sm" variant="outline" disabled={!connectAvailable || !!net?.inventory?.stale || !online} onClick={() => onConnect({ mode: "connect", networkId: net.id })}>
+          <Button size="sm" variant="outline" disabled={!connectAvailable || !!net?.inventory?.stale || !online} title={[...connect.values()].find((c) => c.reason)?.reason} onClick={() => onConnect({ mode: "connect", networkId: net.id })}>
             <Link2 data-icon="inline-start" />
             {t("connectHere")}
           </Button>
         )}
         {container && (
-          <Button size="sm" variant="outline" disabled={!connectAvailable || !!net?.inventory?.stale || !online} onClick={() => onConnect({ mode: "connect", containerId: container.id })}>
+          <Button size="sm" variant="outline" disabled={!connectAvailable || !!net?.inventory?.stale || !online} title={[...connect.values()].find((c) => c.reason)?.reason} onClick={() => onConnect({ mode: "connect", containerId: container.id })}>
             <Link2 data-icon="inline-start" />
             {t("connect")}
           </Button>

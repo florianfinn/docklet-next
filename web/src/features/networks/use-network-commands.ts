@@ -15,19 +15,20 @@ type Known = (typeof KNOWN)[number];
 /** Network commands; contract error codes become translated toasts, results refresh through change topics. */
 export function useNetworkCommands(owner?: string, active = true) {
   const adapter = useAdapter();
-  const generation = useRef(0);
+  const generation = useRef({ version: 0 });
   useLayoutEffect(() => {
-    generation.current++;
-    return () => { generation.current++; };
+    const scope = generation.current;
+    scope.version++;
+    return () => { scope.version++; };
   }, [adapter, owner, active]);
   const t = useTranslations("networks.errors");
   const dt = useAdapterText();
   const guard = useCallback(
     async <T,>(fn: () => Promise<T>): Promise<T | undefined> => {
-      const started = generation.current;
+      const started = generation.current.version;
       const lifetime = identityLifetime(adapter);
       const version = lifetime.version();
-      const current = () => active && generation.current === started && lifetime.active() && lifetime.version() === version;
+      const current = () => active && generation.current.version === started && lifetime.active() && lifetime.version() === version;
       try {
         const result = await fn();
         return current() ? result : undefined;

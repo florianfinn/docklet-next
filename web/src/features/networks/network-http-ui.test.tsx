@@ -15,6 +15,7 @@ import { renderWithApp } from "@/test/render";
 import { CreateNetworkDialog } from "./CreateNetworkDialog";
 import { NetworkTable } from "./NetworkTable";
 import { TopologyDetails } from "./TopologyDetails";
+import NetworksPage from "./NetworksPage";
 import { useNetworkCommands } from "./use-network-commands";
 
 afterEach(() => vi.restoreAllMocks());
@@ -31,6 +32,19 @@ describe.each([false, true])("HTTP network UI (Edge=%s)", (edge) => {
     await userEvent.click(await screen.findByRole("button", { name: "Aktionen für example_net" }));
     await waitFor(() => expect(screen.getByRole("menuitem", { name: "Entfernen" }).getAttribute("aria-disabled") === "true").toBe(false));
     expect(screen.getByRole("menuitem", { name: /verbinden/i }).getAttribute("aria-disabled") === "true").toBe(false);
+  });
+  it("gates the page toolbar by the selected host and its network descriptors", async () => {
+    const f = networkFixture(edge); f.state.deniedHosts.add("host");
+    renderWithApp(<NetworksPage />, f.adapter);
+    const create = await screen.findByRole("button", { name: "Netzwerk anlegen" });
+    expect((create as HTMLButtonElement).disabled).toBe(true);
+    expect((screen.getByRole("button", { name: "Container verbinden" }) as HTMLButtonElement).disabled).toBe(true);
+    await userEvent.click(screen.getByRole("radio", { name: "other" }));
+    await waitFor(() => expect((screen.getByRole("button", { name: "Netzwerk anlegen" }) as HTMLButtonElement).disabled).toBe(false));
+    await waitFor(() => expect((screen.getByRole("button", { name: "Container verbinden" }) as HTMLButtonElement).disabled).toBe(false));
+    const refs = f.fetcher.mock.calls.map(([url]) => new URL(String(url), "https://hub.example.com")).filter((url) => url.pathname.endsWith("/capabilities")).map((url) => [url.searchParams.get("kind"), url.searchParams.get("id")]);
+    expect(refs).toContainEqual(["host", "other"]);
+    expect(refs).toContainEqual(["network", "other~net1"]);
   });
   it("gates detail remove, connect and disconnect with the network ref", async () => {
     const f = networkFixture(edge); const hosts = await f.adapter.listHosts(); const topology = await f.adapter.getTopology();
