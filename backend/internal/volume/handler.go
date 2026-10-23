@@ -15,6 +15,7 @@ import (
 	"net/url"
 	"strings"
 
+	"github.com/containerd/errdefs"
 	"github.com/danielgtaylor/huma/v2"
 	activitytypes "github.com/florianfinn/docklet-next/types/activity"
 	"github.com/florianfinn/docklet-next/types/base"
@@ -364,6 +365,9 @@ func (h *VolumeHandler) PruneVolumes(ctx context.Context, input *PruneVolumesInp
 func (h *VolumeHandler) GetVolumeUsage(ctx context.Context, input *GetVolumeUsageInput) (*handlerutil.Out[VolumeUsageResponse], error) {
 	inUse, containers, err := h.volumeService.GetVolumeUsage(ctx, input.VolumeName)
 	if err != nil {
+		if errdefs.IsNotFound(err) {
+			return nil, huma.Error404NotFound("Volume not found: " + err.Error())
+		}
 		return nil, huma.Error500InternalServerError("Failed to get volume usage: " + err.Error())
 	}
 
