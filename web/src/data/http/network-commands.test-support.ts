@@ -27,7 +27,9 @@ export function networkFixture(edge = false) {
     if (url.pathname.endsWith("/capabilities")) {
       const id = url.searchParams.get("id") ?? "0";
       const host = id.split("~")[0] ?? "";
-      return data(operations.map((operationId) => ({ operationId, available: !state.deniedHosts.has(host), disabledReasonCode: "capability.unavailable", resourceRef: { kind: url.searchParams.get("kind"), id } })));
+      const kind = url.searchParams.get("kind");
+      const allowedScope = (operation: string) => kind === "hub" || (operation === "createNetwork" ? kind === "host" : ["removeNetwork", "connectNetwork", "disconnectNetwork"].includes(operation) ? kind === "network" : true);
+      return data(operations.map((operationId) => ({ operationId, available: allowedScope(operationId) && !state.deniedHosts.has(host), disabledReasonCode: "capability.unavailable", resourceRef: { kind: url.searchParams.get("kind"), id } })));
     }
     if (url.pathname.endsWith("/environments")) return data(state.hosts.map((id) => ({ id, name: id, apiUrl: "https://agent.example.com", isEdge: edge, status: "online", enabled: true })), true);
     if (url.pathname.endsWith("/settings")) return data({ effectiveTimeZone: "UTC", settings: [] });

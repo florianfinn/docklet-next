@@ -73,6 +73,25 @@ describe.each([false, true])("network writes through the hub (Edge=%s)", (edge) 
     expect(f.state.calls).toEqual([]);
     expect((await f.adapter.createNetwork(networkDraft({ hostId: "other" }))).hostId).toBe("other");
   });
+  it("checks create at host scope and the other writes at network scope, independently of a host query", async () => {
+    const f = networkFixture(edge);
+    expect((await f.adapter.getCapability("removeNetwork", { kind: "host", id: "host" })).available).toBe(false);
+    await f.adapter.createNetwork(networkDraft());
+    await f.adapter.removeNetwork("host~net1");
+    await f.adapter.connectNetwork({ networkId: "host~net1", containerId: "host~container1" });
+    await f.adapter.disconnectNetwork({ networkId: "host~net1", containerId: "host~container1" });
+    const refs = f.fetcher.mock.calls.map(([url]) => new URL(String(url), "https://hub.example.com")).filter((url) => url.pathname.endsWith("/capabilities")).map((url) => [url.searchParams.get("kind"), url.searchParams.get("id")]);
+    expect(refs).toContainEqual(["host", "host"]);
+    expect(refs).toContainEqual(["network", "host~net1"]);
+    expect(wireCalls(f)).toHaveLength(4);
+    for (const operation of ["removeNetwork", "connectNetwork", "disconnectNetwork"]) {
+      expect((await f.adapter.getCapability(operation, { kind: "network", id: "host~net1" })).available).toBe(true);
+      expect((await f.adapter.getCapability(operation, { kind: "host", id: "host" })).available).toBe(false);
+    }
+    expect((await f.adapter.getCapability("createNetwork", { kind: "host", id: "host" })).available).toBe(true);
+    expect((await f.adapter.getCapability("createNetwork", { kind: "network", id: "host~net1" })).available).toBe(false);
+    for (const operation of ["createNetwork", "removeNetwork", "connectNetwork", "disconnectNetwork"]) expect((await f.adapter.getCapability(operation, { kind: "hub", id: "0" })).available).toBe(true);
+  });
   it("refuses cross-host membership without sending a network write", async () => {
     const f = networkFixture(edge);
     await expect(f.adapter.connectNetwork({ networkId: "host~net1", containerId: "other~container1" })).rejects.toMatchObject({ code: "host-mismatch" });

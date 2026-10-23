@@ -35,6 +35,7 @@ import { focusFromChanges } from "./topology-focus";
 import { canvasHeight, FIT_PAD, FIT_ZOOM, fitViewport, layoutBudget, type Size } from "./topology-geometry";
 import { decorate, layoutHost } from "./topology-layout";
 import { TopologyDetails } from "./TopologyDetails";
+import { useNetworkCapabilities } from "./use-network-capabilities";
 import { useNetworkCommands } from "./use-network-commands";
 
 /** Hosts with this many containers or fewer start with every network expanded. */
@@ -114,9 +115,6 @@ function Canvas({ source }: { source: Source }) {
   const motion = useMotionEnabled();
   const flow = useReactFlow();
   const [canvasSize, setCanvas, canvasEl] = useElementSize();
-  const cmd = useNetworkCommands();
-  const createCapability = useCapability("createNetwork");
-  const connectCapability = useCapability("connectNetwork");
   const [params, setParams] = useSearchParams();
   const [query, setQuery] = useState("");
   const [dependencies, setDependencies] = useState(true);
@@ -153,6 +151,10 @@ function Canvas({ source }: { source: Source }) {
 
   const hostContainers = useMemo(() => (host ? source.containers.filter((c) => c.hostId === host.id) : []), [source.containers, host]);
   const hostNets = useMemo(() => (host ? sortNetworks(source.topology.networks.filter((n) => n.hostId === host.id)) : []), [source.topology, host]);
+  const cmd = useNetworkCommands(host?.id);
+  const createCapability = useCapability("createNetwork", { kind: "host", id: host?.id ?? "" });
+  const connectCapabilities = useNetworkCapabilities("connectNetwork", hostNets.map((n) => n.id));
+  const connectAvailable = [...connectCapabilities.values()].some((c) => c.available);
   const expandedList = host ? expandedByHost[host.id] : undefined;
   const expanded = useMemo<ReadonlySet<string>>(() => (expandedList ? new Set(expandedList) : hostContainers.length <= EXPAND_ALL_UP_TO ? new Set(hostNets.map((n) => n.id)) : EMPTY), [expandedList, hostContainers.length, hostNets]);
   const setExpanded = useCallback((ids: string[]) => host && setExpandedByHost((s) => ({ ...s, [host.id]: ids })), [host]);
@@ -267,7 +269,7 @@ function Canvas({ source }: { source: Source }) {
             <TooltipContent>{t("overviewHint")}</TooltipContent>
           </Tooltip>
           <span className="flex-1" />
-          <Button variant="outline" size="sm" disabled={!connectCapability.available || !online || source.bench} title={connectCapability.reason} onClick={() => setConnectRequest({ mode: "connect" })}>
+          <Button variant="outline" size="sm" disabled={!connectAvailable || !online || source.bench} onClick={() => setConnectRequest({ mode: "connect" })}>
             <Link2 data-icon="inline-start" /> {t("connect")}
           </Button>
           <Button size="sm" disabled={!createCapability.available || !source.hosts.some((h) => h.status === "online") || source.bench} title={createCapability.reason} onClick={() => setCreating(true)}>
@@ -360,8 +362,9 @@ function Canvas({ source }: { source: Source }) {
           <NetworkTable host={host} networks={hostNets} topology={source.topology} containers={hostContainers} focus={focus} query={query} onClearQuery={() => setQuery("")} onFocus={focusNode} onConnect={setConnectRequest} onRemove={setRemoving} />
         </div>
       </div>
-      {connectRequest && <ConnectNetworkDialog request={connectRequest} onClose={() => setConnectRequest(null)} host={host} topology={source.topology} containers={source.containers} />}
+      {connectRequest && <ConnectNetworkDialog key={host.id} request={connectRequest} onClose={() => setConnectRequest(null)} host={host} topology={source.topology} containers={source.containers} />}
       <CreateNetworkDialog
+        key={host.id}
         open={creating}
         onOpenChange={setCreating}
         hosts={source.hosts}

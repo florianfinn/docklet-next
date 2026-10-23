@@ -1,3 +1,4 @@
+import { useCapability } from "@/data/use-capability";
 import { ArrowLeft, ArrowRight, Cable, Network, Plus, Router } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
@@ -67,10 +68,11 @@ interface Props {
 export function CreateNetworkDialog({ open, onOpenChange, hosts, networks, defaultHostId, onCreated }: Props) {
   const t = useTranslations("networks.createDialog");
   const ts = useTranslations("networks.scope");
-  const cmd = useNetworkCommands();
   const online = hosts.filter((h) => h.status === "online");
   const initialHost = online.find((h) => h.id === defaultHostId)?.id ?? online[0]?.id ?? "";
   const [draft, setDraft] = useState<NetworkDraft>(() => blank(initialHost));
+  const cmd = useNetworkCommands(draft.hostId, open);
+  const capability = useCapability("createNetwork", { kind: "host", id: draft.hostId });
   const [labels, setLabels] = useState<NetworkEntry[]>([]);
   const [options, setOptions] = useState<NetworkEntry[]>([]);
   const [advancedOpen, setAdvancedOpen] = useState(false);
@@ -279,13 +281,13 @@ export function CreateNetworkDialog({ open, onOpenChange, hosts, networks, defau
           </Button>
           {step === "review" ? (
             <HelpTarget topic="network.review">
-              <Button type="button" disabled={busy || hasErrors(errors)} onClick={() => void submit()}>
+              <Button type="button" disabled={busy || !capability.available || hasErrors(errors)} title={capability.reason} onClick={() => void submit()}>
                 {busy ? <Spinner data-icon="inline-start" /> : <Plus data-icon="inline-start" />}
                 {t("submit")}
               </Button>
             </HelpTarget>
           ) : (
-            <Button type="button" disabled={!draft.hostId} onClick={next}>
+            <Button type="button" disabled={!draft.hostId || !capability.available} title={capability.reason} onClick={next}>
               {t("next")}
               <ArrowRight data-icon="inline-end" />
             </Button>

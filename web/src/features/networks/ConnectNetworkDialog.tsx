@@ -1,3 +1,4 @@
+import { useNetworkCapabilities } from "./use-network-capabilities";
 import { AlertTriangle, ArrowLeft, Ban, Link2, Unlink } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
@@ -44,7 +45,7 @@ const label = (c: Pick<ContainerInfo, "name" | "serviceName" | "stackId" | "stac
 export function ConnectNetworkDialog({ request, onClose, host, topology, containers }: Props) {
   const t = useTranslations("networks.connectDialog");
   const ts = useTranslations("networks.scope");
-  const cmd = useNetworkCommands();
+  const cmd = useNetworkCommands(host.id);
   const [mode, setMode] = useState<ConnectMode>(request.mode);
   const [containerId, setContainerId] = useState(request.containerId ?? "");
   const [networkId, setNetworkId] = useState(request.networkId ?? "");
@@ -57,6 +58,7 @@ export function ConnectNetworkDialog({ request, onClose, host, topology, contain
 
   const own = containers.filter((c) => c.hostId === host.id).toSorted((a, b) => label(a).localeCompare(label(b)));
   const nets = sortNetworks(topology.networks.filter((n) => n.hostId === host.id));
+  const capabilities = useNetworkCapabilities(mode === "connect" ? "connectNetwork" : "disconnectNetwork", nets.map((n) => n.id));
   const container = own.find((c) => c.id === containerId);
   const network = nets.find((n) => n.id === networkId);
   const attached = new Set(container ? attachmentsOf(topology, container.id).map((a) => a.networkId) : []);
@@ -73,14 +75,14 @@ export function ConnectNetworkDialog({ request, onClose, host, topology, contain
   const staticPossible = !!network?.subnetConfigured && !!network.subnet;
   const static6Possible = !!network?.ipv6 && !!network.subnet6Configured && !!network.subnet6;
   // Both sides must belong to the shown host; the identity colour is no substitute for this id check.
-  const ready = !!container && !!network && container.hostId === host.id && network.hostId === host.id && !block && !ipError && !ip6Error && !connect?.aliasError;
+  const ready = !!capabilities.get(networkId)?.available && !!container && !!network && container.hostId === host.id && network.hostId === host.id && !block && !ipError && !ip6Error && !connect?.aliasError;
   const nameOf = (id: string) => {
     const c = containers.find((x) => x.id === id);
     return c ? label(c) : id;
   };
 
   const confirm = async () => {
-    if (!container || !network) return;
+    if (!container || !network || !ready) return;
     setBusy(true);
     const ok = mode === "connect" ? await cmd.connect({ networkId: network.id, containerId: container.id, ip: ip.trim() || undefined, ip6: ip6.trim() || undefined, aliases: connect?.aliases ?? [] }) : await cmd.disconnect(network.id, container.id);
     setBusy(false);
@@ -150,7 +152,7 @@ export function ConnectNetworkDialog({ request, onClose, host, topology, contain
                     {choices.map((n) => {
                       const blocked = container && mode === "connect" ? checkConnect(topology, container, n).block : undefined;
                       return (
-                        <SelectItem key={n.id} value={n.id} disabled={!!blocked}>
+                        <SelectItem key={n.id} value={n.id} disabled={!!blocked || !capabilities.get(n.id)?.available}>
                           <span className="font-medium">{n.name}</span>
                           <span className="font-mono text-xs text-muted-foreground">
                             {n.driver}
