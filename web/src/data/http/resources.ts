@@ -58,7 +58,7 @@ export function createResourceReader(baseUrl: string, fetcher: typeof fetch, hos
         const [networks, ctx] = await Promise.all([list("list-networks", h.id, "networks"), context(h.id)]);
         const details = await Promise.all(networks.rows.map((n) => read("get-network", h.id, `networks/${encodeURIComponent(n.id)}`)));
         const inventory = observe(h.id, [...ctx.observations, networks.observation, ...details.map((d) => d.observation)]);
-        return [mapTopology(details.map((d) => d.body.data), h.id, ctx.containers, ctx.projects, inventory)];
+        return [mapTopology(details.map((d) => d.body.data), h.id, ctx.containers, ctx.projects, inventory, networks.rows)];
       }, (graphs) => onPartial?.(merge(graphs)));
       return merge(graphs);
     },

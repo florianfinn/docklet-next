@@ -177,7 +177,7 @@ export const enNetworks = {
     },
     notCreatable: "host, none and the default bridge exist exactly once on every Docker host; overlay requires Swarm. Docklet does not create these.",
     name: "Name",
-    nameHint: "Letters, digits, _ . - · not bridge, host, none or default.",
+    nameHint: "Letters, digits, _ . - · not bridge, host, none, default or ingress.",
     subnet: "IPv4 subnet (CIDR)",
     subnetHintBridge: "Leave empty: Docker picks a free block. Static container addresses are only possible with your own subnet.",
     subnetHintLan: "The LAN in which the containers get addresses, e.g. 192.0.2.0/24.",

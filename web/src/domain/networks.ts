@@ -10,7 +10,7 @@ export const CREATABLE_DRIVERS = ["bridge", "macvlan", "ipvlan"] as const;
 export type CreatableDriver = (typeof CREATABLE_DRIVERS)[number];
 
 /** Names of Docker's own networks; user networks may not take them. */
-export const RESERVED_NETWORK_NAMES: ReadonlySet<string> = new Set(["bridge", "host", "none", "default"]);
+export const RESERVED_NETWORK_NAMES: ReadonlySet<string> = new Set(["bridge", "host", "none", "default", "ingress"]);
 
 const NAME = /^[a-zA-Z0-9][a-zA-Z0-9_.-]{0,62}$/;
 const INTERFACE = /^[a-zA-Z0-9][a-zA-Z0-9_.:-]{0,14}$/;
@@ -128,15 +128,13 @@ export const draftFamilies = (d: Pick<NetworkDraft, "ipv4" | "ipv6">) => ({ ipv4
 /** IPv4 is on unless the network says otherwise. */
 export const hasIpv4 = (n: Pick<TopologyNetwork, "ipv4">) => n.ipv4 !== false;
 
-/** Several LAN networks may share one LAN block only on different parents. */
-const sharesLan = (d: NetworkDraft, n: TopologyNetwork) => d.driver !== "bridge" && !!n.parent && n.parent !== d.parent.trim();
-
 /**
  * Field errors of a network draft against the networks already on its host.
  * macvlan and ipvlan join a LAN, so they need parent, subnet and gateway of
  * every enabled address family. IPv4 and IPv6 are checked independently.
  */
-export function validateNetworkDraft(d: NetworkDraft, onHost: readonly TopologyNetwork[]): NetworkDraftErrors {
+export function validateNetworkDraft(d: NetworkDraft, networks: readonly TopologyNetwork[]): NetworkDraftErrors {
+  const onHost = networks.filter((n) => n.hostId === d.hostId);
   const e: NetworkDraftErrors = {};
   const name = d.name.trim();
   if (!name) e.name = "required";
@@ -211,7 +209,7 @@ function validateIpv4(d: NetworkDraft, onHost: readonly TopologyNetwork[], e: Ne
   else {
     const clash = onHost.find((n) => {
       const other = n.subnet ? parseCidr(n.subnet) : undefined;
-      return !!other && cidrOverlap(subnet, other) && !sharesLan(d, n);
+      return !!other && cidrOverlap(subnet, other);
     });
     if (clash) e.subnet = "overlap";
   }
@@ -253,7 +251,7 @@ function validateIpv6(d: NetworkDraft, onHost: readonly TopologyNetwork[], e: Ne
       subnet = r.cidr;
       const clash = onHost.find((n) => {
         const other = n.subnet6 ? parseCidr6(n.subnet6) : undefined;
-        return !!other && cidr6Overlap(r.cidr, other) && !sharesLan(d, n);
+        return !!other && cidr6Overlap(r.cidr, other);
       });
       if (clash) e.subnet6 = "overlap";
     }
