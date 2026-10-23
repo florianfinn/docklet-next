@@ -404,10 +404,15 @@ export function checkDisconnect(topology: Topology, container: NetworkContainer,
   return { warnings, dependents };
 }
 
+/** A known hub stack keeps its identity; external Compose ownership comes from either Docker label. */
+export function networkComposeOwner(network: TopologyNetwork): string | undefined {
+  return network.stackName || network.stackId || network.labels?.["com.docker.compose.project"]?.trim() || network.labels?.["com.docker.compose.network"]?.trim() || undefined;
+}
+
 /** Removal is refused for Docker's own networks, Compose-owned ones and while any container (also stopped) is attached. */
 export function removeBlock(topology: Pick<Topology, "attachments">, network: TopologyNetwork): "builtin-network" | "compose-managed" | "in-use" | undefined {
   if (network.builtIn) return "builtin-network";
-  if (network.stackId) return "compose-managed";
+  if (networkComposeOwner(network)) return "compose-managed";
   if (topology.attachments.some((a) => a.networkId === network.id)) return "in-use";
   return undefined;
 }

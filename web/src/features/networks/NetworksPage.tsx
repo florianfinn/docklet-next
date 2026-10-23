@@ -1,5 +1,4 @@
 import { InventoryNotice } from "@/features/stacks/InventoryNotice";
-import { useCapability } from "@/data/use-capability";
 import "@xyflow/react/dist/style.css";
 import "./topology.css";
 
@@ -13,7 +12,7 @@ import { useTranslations } from "use-intl";
 import { useTopology } from "@/data/queries";
 import { hostTone } from "@/domain/hosts";
 import type { ContainerInfo, Host, Topology, TopologyNetwork } from "@/domain/model";
-import { removeBlock, sortNetworks } from "@/domain/networks";
+import { networkComposeOwner, removeBlock, sortNetworks } from "@/domain/networks";
 import { useMotionEnabled, useTokens } from "@/shared/theme/use-design-tokens";
 import { ConfirmDialog } from "@/shared/components/confirm-dialog";
 import { EmptyState, PageHeader, QueryError } from "@/shared/components/page";
@@ -35,7 +34,7 @@ import { focusFromChanges } from "./topology-focus";
 import { canvasHeight, FIT_PAD, FIT_ZOOM, fitViewport, layoutBudget, type Size } from "./topology-geometry";
 import { decorate, layoutHost } from "./topology-layout";
 import { TopologyDetails } from "./TopologyDetails";
-import { useNetworkCapabilities } from "./use-network-capabilities";
+import { useHostCreateCapabilities, useNetworkCapabilities } from "./use-network-capabilities";
 import { useNetworkCommands } from "./use-network-commands";
 
 /** Hosts with this many containers or fewer start with every network expanded. */
@@ -152,7 +151,10 @@ function Canvas({ source }: { source: Source }) {
   const hostContainers = useMemo(() => (host ? source.containers.filter((c) => c.hostId === host.id) : []), [source.containers, host]);
   const hostNets = useMemo(() => (host ? sortNetworks(source.topology.networks.filter((n) => n.hostId === host.id)) : []), [source.topology, host]);
   const cmd = useNetworkCommands(host?.id);
-  const createCapability = useCapability("createNetwork", { kind: "host", id: host?.id ?? "" });
+  const onlineHosts = source.hosts.filter((h) => h.status === "online");
+  const createCapabilities = useHostCreateCapabilities(onlineHosts.map((h) => h.id));
+  const createHosts = onlineHosts.filter((h) => createCapabilities.get(h.id)?.available);
+  const createHost = createHosts.find((h) => h.id === host?.id) ?? createHosts[0];
   const connectCapabilities = useNetworkCapabilities("connectNetwork", hostNets.map((n) => n.id));
   const connectAvailable = [...connectCapabilities.values()].some((c) => c.available);
   const expandedList = host ? expandedByHost[host.id] : undefined;
@@ -221,7 +223,7 @@ function Canvas({ source }: { source: Source }) {
   const online = host.status === "online";
   const removingNetwork = removing ? source.topology.networks.find((n) => n.id === removing.id) ?? removing : undefined;
   const removalBlock = removingNetwork ? removeBlock(source.topology, removingNetwork) : undefined;
-  const removalReason = removalBlock ? t(`removeBlocked.${removalBlock}`, { stack: removingNetwork?.stackName ?? removingNetwork?.stackId ?? "", count: source.topology.attachments.filter((a) => a.networkId === removingNetwork?.id).length }) : undefined;
+  const removalReason = removalBlock ? t(`removeBlocked.${removalBlock}`, { stack: removingNetwork ? networkComposeOwner(removingNetwork) ?? "" : "", count: source.topology.attachments.filter((a) => a.networkId === removingNetwork?.id).length }) : undefined;
   const focusName = focus ? (hostNets.find((n) => n.id === focus)?.name ?? hostContainers.find((c) => c.id === focus)?.name) : undefined;
 
   return (
@@ -272,7 +274,7 @@ function Canvas({ source }: { source: Source }) {
           <Button variant="outline" size="sm" disabled={!connectAvailable || !online || source.bench} title={[...connectCapabilities.values()].find((c) => c.reason)?.reason} onClick={() => setConnectRequest({ mode: "connect" })}>
             <Link2 data-icon="inline-start" /> {t("connect")}
           </Button>
-          <Button size="sm" disabled={!createCapability.available || !source.hosts.some((h) => h.status === "online") || source.bench} title={createCapability.reason} onClick={() => setCreating(true)}>
+          <Button size="sm" disabled={!createHost || source.bench} title={!createHost ? [...createCapabilities.values()].find((c) => c.reason)?.reason : undefined} onClick={() => setCreating(true)}>
             <Plus data-icon="inline-start" /> {t("create")}
           </Button>
         </div>
@@ -363,15 +365,15 @@ function Canvas({ source }: { source: Source }) {
         </div>
       </div>
       {connectRequest && <ConnectNetworkDialog key={`connect:${host.id}`} request={connectRequest} onClose={() => setConnectRequest(null)} host={host} topology={source.topology} containers={source.containers} />}
-      <CreateNetworkDialog
-        key={`create:${host.id}`}
+      {createHost && <CreateNetworkDialog
+        key={`create:${host.id}:${createHost.id}`}
         open={creating}
         onOpenChange={setCreating}
-        hosts={source.hosts}
+        hosts={createHosts}
         networks={source.topology.networks}
-        defaultHostId={host.id}
+        defaultHostId={createHost.id}
         onCreated={(n) => navigate({ host: n.hostId, node: n.id })}
-      />
+      />}
       <ConfirmDialog
         open={!!removing}
         onOpenChange={(o) => !o && setRemoving(null)}

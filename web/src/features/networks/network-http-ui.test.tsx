@@ -4,6 +4,7 @@
 // License: Apache-2.0
 // Deviations: Original resource-scoped UI and late network response tests for #204.
 
+import { useQueryClient, type QueryClient } from "@tanstack/react-query";
 import { act, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { useState } from "react";
@@ -33,11 +34,21 @@ describe.each([false, true])("HTTP network UI (Edge=%s)", (edge) => {
     await waitFor(() => expect(screen.getByRole("menuitem", { name: "Entfernen" }).getAttribute("aria-disabled") === "true").toBe(false));
     expect(screen.getByRole("menuitem", { name: /verbinden/i }).getAttribute("aria-disabled") === "true").toBe(false);
   });
-  it("gates the page toolbar by the selected host and its network descriptors", async () => {
+  it("allows create on the second permitted host while the displayed host cannot create", async () => {
     const f = networkFixture(edge); f.state.deniedHosts.add("host");
-    renderWithApp(<NetworksPage />, f.adapter);
+    let client: QueryClient | undefined;
+    function QueryObserver() { client = useQueryClient(); return null; }
+    renderWithApp(<><NetworksPage /><QueryObserver /></>, f.adapter);
     const create = await screen.findByRole("button", { name: "Netzwerk anlegen" });
-    expect((create as HTMLButtonElement).disabled).toBe(true);
+    await waitFor(() => expect(client?.isFetching()).toBe(0));
+    expect((create as HTMLButtonElement).disabled).toBe(false);
+    await userEvent.click(create);
+    const dialog = await screen.findByRole("dialog");
+    expect(dialog.textContent?.includes("other")).toBe(true);
+    const picker = within(dialog).getByRole("combobox", { name: "Host" });
+    picker.focus(); await userEvent.keyboard(" ");
+    expect(screen.getAllByRole("option").map((option) => option.textContent)).toEqual(["other"]);
+    await userEvent.keyboard("{Escape}{Escape}");
     expect((screen.getByRole("button", { name: "Container verbinden" }) as HTMLButtonElement).disabled).toBe(true);
     await userEvent.click(screen.getByRole("radio", { name: "other" }));
     await waitFor(() => expect((screen.getByRole("button", { name: "Netzwerk anlegen" }) as HTMLButtonElement).disabled).toBe(false));
