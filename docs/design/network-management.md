@@ -13,15 +13,15 @@ body through the named command; the agent executes the same service validation.
 
 | Operation ID | Method and suffix | Required right | Edge command |
 | --- | --- | --- | --- |
-| list-networks | GET (root) | networks.list | network.list |
-| network-counts | GET /counts | networks.list | network.counts |
-| create-network | POST (root) | networks.create | network.create |
-| get-network-topology | GET /topology | networks.read | network.topology |
-| get-network | GET /{networkId} | networks.read | network.inspect |
-| delete-network | DELETE /{networkId} | networks.delete | network.delete |
-| prune-networks | POST /prune | networks.prune | network.prune |
-| connect-network-container | POST /{networkId}/connect | networks.connect | network.connect |
-| disconnect-network-container | POST /{networkId}/disconnect | networks.disconnect | network.disconnect |
+| list-networks | GET (root) | networks:list | network.list |
+| network-counts | GET /counts | networks:list | network.counts |
+| create-network | POST (root) | networks:create | network.create |
+| get-network-topology | GET /topology | networks:read | network.topology |
+| get-network | GET /{networkId} | networks:read | network.inspect |
+| delete-network | DELETE /{networkId} | networks:delete | network.delete |
+| prune-networks | POST /prune | networks:prune | network.prune |
+| connect-network-container | POST /{networkId}/connect | networks:connect | network.connect |
+| disconnect-network-container | POST /{networkId}/disconnect | networks:disconnect | network.disconnect |
 
 ## Create validation
 

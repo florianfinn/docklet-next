@@ -1,5 +1,5 @@
 // Source: docklet-next/docs/design/network-management.md
-// Revision: 09d1e632cb3a14bd48b87232acaf991b9d12145e
+// Revision: 81b69b33c80a454465f54a1f7289c1bc5b5a3381
 // Retrieved: 2026-10-23
 // License: Apache-2.0
 // Deviations: Original host-side network contract implementation for issue #203.
@@ -186,4 +186,18 @@ func TestPruneNetworkAuditActor(t *testing.T) {
 	require.NoError(t, svc.db.Where("resource_name = ?", "bulk_prune").First(&row).Error)
 	require.Equal(t, actor.ID, *row.UserID)
 	require.Equal(t, actor.Username, *row.Username)
+}
+
+func TestCreateNetworkValidationIsHostScoped(t *testing.T) {
+	occupied := &networkDockerFixture{networks: []network.Inspect{inspectNetwork()}}
+	otherHost := &networkDockerFixture{}
+	occupiedService, otherService := occupied.service(t), otherHost.service(t)
+	_, err := occupiedService.CreateNetwork(t.Context(), "new-example", options4(), actor)
+	requireCode(t, err, "overlap")
+	require.Empty(t, occupied.writes)
+	_, err = otherService.CreateNetwork(t.Context(), "new-example", options4(), actor)
+	require.NoError(t, err, "another host's overlapping pool must not block this daemon")
+	require.Equal(t, []string{"create"}, otherHost.writes)
+	_, err = occupiedService.CreateNetwork(t.Context(), "example", client.NetworkCreateOptions{}, actor)
+	requireCode(t, err, "exists")
 }

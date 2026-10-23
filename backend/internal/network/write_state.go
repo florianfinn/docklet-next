@@ -1,5 +1,5 @@
 // Source: docklet-next/docs/design/network-management.md
-// Revision: 09d1e632cb3a14bd48b87232acaf991b9d12145e
+// Revision: 81b69b33c80a454465f54a1f7289c1bc5b5a3381
 // Retrieved: 2026-10-23
 // License: Apache-2.0
 // Deviations: Original host-side network contract implementation for issue #203.
