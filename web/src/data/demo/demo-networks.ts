@@ -170,6 +170,10 @@ export function createNetworksApi(ctx: DemoContext): NetworksApi & HubApi {
       const prefix6 = families.ipv6 && input.subnet6?.trim() ? parseCidr6(input.subnet6) : undefined;
       const auto6 = families.ipv6 && !prefix6 ? autoSubnet6(db.topology.networks.map((n) => n.subnet6 ?? "")) : undefined;
       const created: TopologyNetwork = {
+        labels: Object.fromEntries(Object.entries(input.labels ?? {}).map(([key, value]) => [key.trim(), value])),
+        options: Object.fromEntries(Object.entries(input.options ?? {}).map(([key, value]) => [key.trim(), value])),
+        auxAddresses: families.ipv4 ? (input.auxAddresses ?? []).map((a) => ({ name: a.name.trim(), ip: a.ip.trim() })) : [],
+        auxAddresses6: families.ipv6 ? (input.auxAddresses6 ?? []).map((a) => ({ name: a.name.trim(), ip: canonicalIp6(a.ip)! })) : [],
         id: db.nextId(`n-${input.hostId}`),
         name,
         hostId: input.hostId,
@@ -212,10 +216,11 @@ export function createNetworksApi(ctx: DemoContext): NetworksApi & HubApi {
       const n = network(input.networkId);
       const c = container(input.containerId);
       online(n.hostId);
-      const check = checkConnect(db.topology, c, n, input.ip ?? "", input.ip6 ?? "");
+      const check = checkConnect(db.topology, c, n, input.ip ?? "", input.ip6 ?? "", input.aliases);
       if (check.block) throw new DemoError(check.block);
+      if (check.aliasError) throw new DemoError("invalid-network");
       if (check.ipError || check.ip6Error) throw new DemoError("invalid-ip");
-      const attachment: NetworkAttachment = { containerId: c.id, networkId: n.id, ip: check.ip, staticIp: input.ip?.trim() ? true : undefined, ip6: check.ip6, staticIp6: input.ip6?.trim() ? true : undefined };
+      const attachment: NetworkAttachment = { aliases: check.aliases ?? [], containerId: c.id, networkId: n.id, ip: check.ip, staticIp: input.ip?.trim() ? true : undefined, ip6: check.ip6, staticIp6: input.ip6?.trim() ? true : undefined };
       db.topology = { ...db.topology, attachments: [...db.topology.attachments, attachment] };
       db.isolated.delete(c.id);
       const addresses = [check.ip, check.ip6].filter(Boolean).join(", ");

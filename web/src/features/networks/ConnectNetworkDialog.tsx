@@ -93,7 +93,7 @@ export function ConnectNetworkDialog({ request, onClose, host, topology, contain
 
   return (
     <Dialog open onOpenChange={(o) => !o && onClose()}>
-      <DialogContent className="max-h-[calc(100dvh-2rem)] overflow-y-auto sm:max-w-xl" data-surface="connect-network-dialog">
+      <DialogContent className="max-h-[calc(100dvh-2rem)] grid-cols-[minmax(0,1fr)] overflow-y-auto sm:max-w-xl" data-surface="connect-network-dialog">
         <DialogHeader>
           <DialogTitle>{mode === "connect" ? t("titleConnect") : t("titleDisconnect")}</DialogTitle>
           <DialogDescription>{t("description")}</DialogDescription>
@@ -125,7 +125,7 @@ export function ConnectNetworkDialog({ request, onClose, host, topology, contain
                   if (mode === "disconnect") setNetworkId("");
                 }}
               >
-                <SelectTrigger id="cn-container" className="w-full">
+                <SelectTrigger id="cn-container" className="w-full min-w-0">
                   <SelectValue placeholder={t("containerPlaceholder")} />
                 </SelectTrigger>
                 <SelectContent>
@@ -142,8 +142,8 @@ export function ConnectNetworkDialog({ request, onClose, host, topology, contain
             <Field>
               <FieldLabel htmlFor="cn-network">{t("network")}</FieldLabel>
               <Select value={networkId} onValueChange={setNetworkId} disabled={!container}>
-                <SelectTrigger id="cn-network" className="w-full">
-                  <SelectValue placeholder={choices.length ? t("networkPlaceholder") : t("noOptions")} />
+                <SelectTrigger id="cn-network" className="w-full min-w-0">
+                  <SelectValue placeholder={choices.length ? t("networkPlaceholder") : t("noOptions")}><span className="truncate">{network?.name}</span></SelectValue>
                 </SelectTrigger>
                 <SelectContent>
                   <SelectGroup>
