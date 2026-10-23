@@ -7,7 +7,6 @@
 package network
 
 import (
-	networktypes "github.com/florianfinn/docklet-next/types/network"
 	"net/http"
 	"reflect"
 
@@ -18,6 +17,7 @@ import (
 	"github.com/florianfinn/docklet-next/backend/internal/middleware"
 	"github.com/florianfinn/docklet-next/backend/pkg/authz"
 	"github.com/florianfinn/docklet-next/backend/pkg/utils/handlerutil"
+	networktypes "github.com/florianfinn/docklet-next/types/network"
 )
 
 // RegisterNetworks registers network endpoints.

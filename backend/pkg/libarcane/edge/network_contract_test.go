@@ -8,14 +8,16 @@ package edge_test
 
 import (
 	"encoding/json"
-	"github.com/danielgtaylor/huma/v2"
-	"github.com/florianfinn/docklet-next/backend/api"
-	"github.com/florianfinn/docklet-next/backend/pkg/libarcane/edge"
-	"github.com/stretchr/testify/require"
 	"os"
 	"slices"
 	"strings"
 	"testing"
+
+	"github.com/danielgtaylor/huma/v2"
+	"github.com/stretchr/testify/require"
+
+	"github.com/florianfinn/docklet-next/backend/api"
+	"github.com/florianfinn/docklet-next/backend/pkg/libarcane/edge"
 )
 
 func TestNetworkOperationsHaveEdgeCommands(t *testing.T) {

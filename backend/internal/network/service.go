@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; hidden agent inventory; authoritative network write validation.
+// Deviations: Local module namespace; hidden agent inventory; authoritative network write validation; separate scheduled-prune removal.
 
 package network
 
@@ -10,14 +10,11 @@ import (
 	"cmp"
 	"context"
 	"fmt"
-	"github.com/florianfinn/docklet-next/backend/pkg/inventory"
 	"log/slog"
 	"slices"
 	"sort"
 	"strings"
 
-	networktypes "github.com/florianfinn/docklet-next/types/network"
-	usertypes "github.com/florianfinn/docklet-next/types/user"
 	"github.com/moby/moby/api/types/container"
 	"github.com/moby/moby/api/types/network"
 	"github.com/moby/moby/client"
@@ -30,8 +27,11 @@ import (
 	"github.com/florianfinn/docklet-next/backend/internal/database"
 	dockerInternal "github.com/florianfinn/docklet-next/backend/internal/docker"
 	"github.com/florianfinn/docklet-next/backend/internal/event"
+	"github.com/florianfinn/docklet-next/backend/pkg/inventory"
 	"github.com/florianfinn/docklet-next/backend/pkg/pagination"
 	"github.com/florianfinn/docklet-next/backend/pkg/utils"
+	networktypes "github.com/florianfinn/docklet-next/types/network"
+	usertypes "github.com/florianfinn/docklet-next/types/user"
 )
 
 type NetworkService struct {
@@ -236,33 +236,52 @@ func (s *NetworkService) CreateNetwork(ctx context.Context, name string, options
 	return &out, nil
 }
 
+// RemoveNetwork protects individual user-requested deletion, including stopped references.
 func (s *NetworkService) RemoveNetwork(ctx context.Context, id string, user usertypes.Actor) error {
+	return s.removeNetwork(ctx, id, user, true)
+}
+
+// RemoveNetworkForPrune preserves daemon-prune semantics after system prune has
+// selected and rechecked the target. It intentionally bypasses user delete guards.
+func (s *NetworkService) RemoveNetworkForPrune(ctx context.Context, id string, user usertypes.Actor) error {
+	return s.removeNetwork(ctx, id, user, false)
+}
+
+func (s *NetworkService) removeNetwork(ctx context.Context, id string, user usertypes.Actor, protected bool) error {
 	dockerClient, err := s.dockerService.GetClient(ctx)
 	if err != nil {
 		s.eventService.LogErrorEvent(ctx, event.EventTypeNetworkError, "network", id, "", user.ID, user.Username, "0", err, database.JSON{"action": "delete"})
 		return fmt.Errorf("failed to connect to Docker: %w", err)
 	}
 
-	n, err := inspectWriteNetwork(ctx, dockerClient, id)
-	if err != nil {
-		return err
+	networkName := id
+	if protected {
+		n, err := inspectWriteNetwork(ctx, dockerClient, id)
+		if err != nil {
+			return err
+		}
+		if err := validateRemove(n, nil); err != nil {
+			return err
+		}
+		all, err := inspectAllWriteContainers(ctx, dockerClient)
+		if err != nil {
+			return err
+		}
+		if err := validateRemove(n, all); err != nil {
+			return err
+		}
+		networkName = n.Name
+	} else if inspected, inspectErr := compat.NetworkInspectWithCompatibility(ctx, dockerClient, id, client.NetworkInspectOptions{}); inspectErr == nil {
+		networkName = inspected.Network.Name
 	}
-	if err := validateRemove(n, nil); err != nil {
-		return err
-	}
-	all, err := inspectAllWriteContainers(ctx, dockerClient)
-	if err != nil {
-		return err
-	}
-	if err := validateRemove(n, all); err != nil {
-		return err
-	}
-	networkName := n.Name
 
 	defer s.eventService.BeginDockerResourceSuppressionWindow("network", id, networkName)()
 	if _, networkRemoveErr := dockerClient.NetworkRemove(ctx, id, client.NetworkRemoveOptions{}); networkRemoveErr != nil {
 		s.eventService.LogErrorEvent(ctx, event.EventTypeNetworkError, "network", id, networkName, user.ID, user.Username, "0", networkRemoveErr, database.JSON{"action": "delete"})
-		return daemonWriteError(networkRemoveErr, "in-use", "invalid-network")
+		if protected {
+			return daemonWriteError(networkRemoveErr, "in-use", "invalid-network")
+		}
+		return fmt.Errorf("failed to remove pruned network: %w", networkRemoveErr)
 	}
 
 	metadata := database.JSON{
@@ -292,9 +311,12 @@ func (s *NetworkService) ConnectContainer(ctx context.Context, networkID string,
 	if err != nil {
 		return err
 	}
-	all, err := inspectAllWriteContainers(ctx, dockerClient)
-	if err != nil {
-		return err
+	var all []container.InspectResponse
+	if strings.TrimSpace(req.IPv4Address) != "" || strings.TrimSpace(req.IPv6Address) != "" {
+		all, err = inspectAllWriteContainers(ctx, dockerClient)
+		if err != nil {
+			return err
+		}
 	}
 	endpoint, err := validateConnect(n, c, all, req)
 	if err != nil {
@@ -320,7 +342,7 @@ func (s *NetworkService) ConnectContainer(ctx context.Context, networkID string,
 				"containerId": req.ContainerID,
 			},
 		)
-		return daemonWriteError(networkConnectErr, "already-connected", "invalid-ip")
+		return daemonWriteError(networkConnectErr, "invalid-ip", "invalid-ip")
 	}
 
 	metadata := database.JSON{

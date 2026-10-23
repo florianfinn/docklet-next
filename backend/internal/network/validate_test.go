@@ -93,9 +93,7 @@ func TestCreateValidation(t *testing.T) {
 		{"IPv6 pool while disabled", func(o *client.NetworkCreateOptions) { o.IPAM.Config = []network.IPAMConfig{pool6()} }, "invalid-network"},
 		{"duplicate pool family", func(o *client.NetworkCreateOptions) { o.IPAM.Config = append(o.IPAM.Config, pool4()) }, "invalid-network"},
 		{"internal LAN", func(o *client.NetworkCreateOptions) {
-			o.Driver = "macvlan"
-			o.Internal = true
-			o.Options = map[string]string{"parent": "eth0"}
+			*o = client.NetworkCreateOptions{Driver: "macvlan", Internal: true, Options: map[string]string{"parent": "eth0"}, IPAM: o.IPAM}
 		}, "invalid-network"},
 		{"no family", func(o *client.NetworkCreateOptions) { o.EnableIPv4 = new(false) }, "invalid-network"},
 		{"empty label", func(o *client.NetworkCreateOptions) { o.Labels = map[string]string{" ": "value"} }, "invalid-network"},

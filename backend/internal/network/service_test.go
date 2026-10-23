@@ -27,12 +27,14 @@ import (
 )
 
 type networkDockerFixture struct {
-	networks   []network.Inspect
-	containers []container.InspectResponse
-	writes     []string
-	created    network.CreateRequest
-	connected  client.NetworkConnectOptions
-	failList   bool
+	networks    []network.Inspect
+	containers  []container.InspectResponse
+	writes      []string
+	created     network.CreateRequest
+	connected   client.NetworkConnectOptions
+	failList    bool
+	vanishing   bool
+	writeStatus int
 }
 
 func (f *networkDockerFixture) service(t *testing.T) *NetworkService {
@@ -40,6 +42,11 @@ func (f *networkDockerFixture) service(t *testing.T) *NetworkService {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		path := r.URL.Path
+		if r.Method != "GET" && f.writeStatus != 0 {
+			w.WriteHeader(f.writeStatus)
+			_, _ = w.Write([]byte(`{"message":"synthetic Docker conflict"}`))
+			return
+		}
 		switch {
 		case r.Method == "GET" && strings.HasSuffix(path, "/networks"):
 			var nets []network.Network
@@ -54,6 +61,9 @@ func (f *networkDockerFixture) service(t *testing.T) *NetworkService {
 				return
 			}
 			list := []container.Summary{}
+			if f.vanishing {
+				list = append(list, container.Summary{ID: "gone"})
+			}
 			for _, c := range f.containers {
 				if r.URL.Query().Get("all") == "1" || (c.State != nil && c.State.Running) {
 					list = append(list, container.Summary{ID: c.ID})

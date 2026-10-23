@@ -74,6 +74,9 @@ func validateCreate(name string, opts client.NetworkCreateOptions, existing []ne
 				return invalidNetwork("Subnet must be a canonical CIDR")
 			}
 			is4 := prefix.Addr().Is4()
+			if (is4 && prefix.Bits() > 30) || (!is4 && prefix.Bits() == 128) {
+				return invalidNetwork("Subnet has no usable gateway or endpoint address")
+			}
 			if seen[is4] || (is4 && !v4) || (!is4 && !v6) {
 				return invalidNetwork("Only one pool per enabled family is allowed")
 			}
@@ -183,20 +186,20 @@ func validateConnect(n network.Inspect, c container.InspectResponse, all []conta
 func validateFixedAddress(n network.Inspect, all []container.InspectResponse, addr netip.Addr) error {
 	valid := false
 	for _, pool := range n.IPAM.Config {
-		if pool.Subnet.IsValid() && pool.Subnet.Addr().Is4() == addr.Is4() {
-			if !usableAddress(pool.Subnet, addr) || addr == pool.Gateway {
-				return rejection(400, "invalid-ip", "Fixed address must be usable inside the configured subnet")
-			}
-			for _, reserved := range pool.AuxAddress {
-				if addr == reserved {
-					return rejection(400, "invalid-ip", "Fixed address is reserved")
-				}
-			}
+		if !pool.Subnet.IsValid() || pool.Subnet.Addr().Is4() != addr.Is4() || !usableAddress(pool.Subnet, addr) || addr == pool.Gateway {
+			continue
+		}
+		reserved := false
+		for _, value := range pool.AuxAddress {
+			reserved = reserved || addr == value
+		}
+		if !reserved {
 			valid = true
+			break
 		}
 	}
 	if !valid {
-		return rejection(400, "invalid-ip", "Fixed addresses require a configured subnet of the same family")
+		return rejection(400, "invalid-ip", "Fixed address must be usable and unreserved in a configured subnet of the same family")
 	}
 	for _, endpoint := range n.Containers {
 		if (endpoint.IPv4Address.IsValid() && endpoint.IPv4Address.Addr() == addr) || (endpoint.IPv6Address.IsValid() && endpoint.IPv6Address.Addr() == addr) {

@@ -11,6 +11,7 @@ import (
 	"errors"
 	"fmt"
 	"net/netip"
+	"strings"
 
 	"github.com/containerd/errdefs"
 	"github.com/danielgtaylor/huma/v2"
@@ -30,6 +31,9 @@ func writeHTTPError(err error, detail string) error {
 }
 
 func inspectWriteNetwork(ctx context.Context, cli *client.Client, id string) (network.Inspect, error) {
+	if strings.TrimSpace(id) == "" {
+		return network.Inspect{}, invalidNetwork("Network ID must be nonempty")
+	}
 	result, err := compat.NetworkInspectWithCompatibility(ctx, cli, id, client.NetworkInspectOptions{})
 	if err != nil {
 		if errdefs.IsNotFound(err) {
@@ -41,6 +45,9 @@ func inspectWriteNetwork(ctx context.Context, cli *client.Client, id string) (ne
 }
 
 func inspectWriteContainer(ctx context.Context, cli *client.Client, id string) (container.InspectResponse, error) {
+	if strings.TrimSpace(id) == "" {
+		return container.InspectResponse{}, invalidNetwork("Container ID must be nonempty")
+	}
 	result, err := cli.ContainerInspect(ctx, id, client.ContainerInspectOptions{})
 	if err != nil {
 		if errdefs.IsNotFound(err) {
@@ -60,11 +67,14 @@ func inspectAllWriteContainers(ctx context.Context, cli *client.Client) ([]conta
 	}
 	result := make([]container.InspectResponse, 0, len(list.Items))
 	for _, summary := range list.Items {
-		c, err := inspectWriteContainer(ctx, cli, summary.ID)
-		if err != nil {
-			return nil, err
+		inspected, err := cli.ContainerInspect(ctx, summary.ID, client.ContainerInspectOptions{})
+		if errdefs.IsNotFound(err) {
+			continue
 		}
-		result = append(result, c)
+		if err != nil {
+			return nil, fmt.Errorf("inspect container reference: %w", err)
+		}
+		result = append(result, inspected.Container)
 	}
 	return result, nil
 }
@@ -115,8 +125,13 @@ func daemonWriteError(err error, conflictCode, invalidCode string) error {
 	if errdefs.IsNotFound(err) {
 		return rejection(404, "not-found", "Network or container not found")
 	}
-	if errdefs.IsConflict(err) {
-		return rejection(409, conflictCode, "Network write conflicts with the current Docker state")
+	conflict := errdefs.IsConflict(err) || (errdefs.IsPermissionDenied(err) && (conflictCode == "in-use" || conflictCode == "invalid-ip"))
+	if conflict {
+		status := 409
+		if conflictCode == "invalid-ip" {
+			status = 400
+		}
+		return rejection(status, conflictCode, "Network write conflicts with the current Docker state")
 	}
 	if errdefs.IsInvalidArgument(err) {
 		return rejection(400, invalidCode, "Docker rejected the network write")

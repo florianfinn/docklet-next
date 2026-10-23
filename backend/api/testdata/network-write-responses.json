@@ -49,7 +49,7 @@
   },
   "outside": {
     "code": "network.invalid-ip",
-    "detail": "Fixed address must be usable inside the configured subnet",
+    "detail": "Fixed address must be usable and unreserved in a configured subnet of the same family",
     "status": 400,
     "title": "Bad Request"
   },

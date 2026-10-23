@@ -8,11 +8,13 @@ package activity
 
 import (
 	"context"
+	"testing"
+
+	"github.com/stretchr/testify/require"
+
 	"github.com/florianfinn/docklet-next/backend/internal/middleware"
 	"github.com/florianfinn/docklet-next/backend/pkg/authz"
 	"github.com/florianfinn/docklet-next/types/capability"
-	"github.com/stretchr/testify/require"
-	"testing"
 )
 
 func networkDescriptor(t *testing.T, permissions *authz.PermissionSet, ref capability.ResourceRef, operation string) capability.Descriptor {

@@ -52,17 +52,23 @@ This includes LAN networks on different parents. Other hosts are independent.
 
 ## Membership validation
 
-Missing networks or containers return `network.not-found` (404). Connect rejects
+Empty or whitespace-only network/container IDs return `network.invalid-network`
+(400). A container that disappears during the unrelated reference scan is skipped.
+A target container must still exist. Missing networks or containers return `network.not-found` (404). Connect rejects
 host/none networks with `network.builtin-network` (409), and containers in host,
 none or container-sharing mode with `network.network-mode` (409). Existing
 membership returns `network.already-connected` (409). Membership is read from
 container NetworkSettings, including stopped containers.
 
-Fixed addresses must match their field family and a user-configured IPAM subnet
-of that family. They must lie inside that subnet and cannot be its network
+Fixed addresses must match their field family and be usable in any configured
+IPAM subnet of that family, including Docker-assigned pools. Inspect does not
+distinguish the origin of these pools; Docker may refuse static addresses on an
+auto-assigned pool. On existing networks, every pool of the family is considered;
+network creation remains limited to one per family. An address cannot be the containing subnet's network
 address, IPv4 broadcast, gateway or auxiliary reservation. An address used by any
 other endpoint, including a stopped container's IPAMConfig reservation, is
-rejected. These failures return `network.invalid-ip` (400). IPv6 has no broadcast.
+rejected. These failures return `network.invalid-ip` (400). IPv6 has no broadcast. Docker 403/409 removal conflicts map to `network.in-use`
+(409), and connect conflicts map to `network.invalid-ip` (400).
 Aliases must be nonempty DNS labels (ASCII letters, digits and internal hyphens,
 1–63 characters); duplicates are removed. Invalid aliases return
 `network.invalid-network` (400). Disconnect requires membership, otherwise
@@ -83,7 +89,15 @@ protects deletion with `network.compose-managed` (409). References from any
 container, including stopped containers, return `network.in-use` (409).
 External-network references from stack files are not detected.
 
-Prune retains daemon behaviour and the scheduled job. Interactive prune requires
+Scheduled prune keeps its existing selection and removal semantics: it selects
+local, non-built-in, non-ingress networks whose running endpoints are prune
+targets, then removes networks with no running endpoints after the targets have
+been processed. Compose labels and stopped-container references do not protect
+these networks from scheduled prune. It can therefore remove a network used by a
+stopped container; individual delete remains protected. Its internal removal
+entry bypasses the user-facing guards after selection/recheck, while retaining
+Docker's final checks and audit events. Recovery uses the same removal entry.
+Interactive network prune and system prune retain native Docker prune semantics. Interactive prune requires
 an acting user and attributes the activity and audit event to that user. M9 has
 no prune UI; unused networks are removed individually. Per-network usage details
 are exposed in the table by an icon with hover and focus detail.
@@ -96,5 +110,11 @@ older agents are unsupported. The Edge tunnel protocol remains tunnel/v1.
 
 IPAM driver choice, multiple pools per family, attachable, Swarm/overlay and a
 network prune UI are out of scope. Validation is a snapshot before the daemon
-write; concurrent external changes remain subject to daemon checks. The daemon
+write; concurrent external changes remain subject to daemon checks. IPv4 /31 and /32 and IPv6 /128 have no usable gateway or fixed address under
+this policy and are rejected on create, even without an explicit gateway. IPv6
+/127 has one usable address (the last); reserving it as gateway or auxiliary
+address leaves no fixed endpoint address. Existing small pools return a clear
+`network.invalid-ip` if no usable unreserved address matches. Auxiliary names are
+unique by the map-shaped wire contract; auxiliary values may repeat and may
+reserve network or IPv4 broadcast addresses. The daemon
 chooses unspecified bridge pools and validates platform-specific driver options.
