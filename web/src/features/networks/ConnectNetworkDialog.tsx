@@ -206,7 +206,7 @@ export function ConnectNetworkDialog({ request, onClose, host, topology, contain
           network && (
             <div className="flex flex-col gap-3">
               <section className="rounded-xl border bg-muted/15 p-3" aria-label={t("summary")}>
-                <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1 text-sm">
+                <dl className="grid grid-cols-1 gap-x-4 gap-y-1 text-sm sm:grid-cols-[auto_minmax(0,1fr)]">
                   <dt className="text-muted-foreground">{t("mode")}</dt>
                   <dd>{t(`modes.${mode}`)}</dd>
                   <dt className="text-muted-foreground">{t("container")}</dt>

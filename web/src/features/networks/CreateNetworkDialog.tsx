@@ -252,7 +252,7 @@ export function CreateNetworkDialog({ open, onOpenChange, hosts, networks, defau
         {step === "review" && (
           <div className="flex flex-col gap-3">
             <section className="rounded-xl border bg-muted/15 p-3" aria-label={t("review")}>
-              <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1 text-sm">
+              <dl className="grid grid-cols-1 gap-x-4 gap-y-1 text-sm sm:grid-cols-[auto_minmax(0,1fr)]">
                 {rows.map(([k, v]) => (
                   <div key={k} className="contents">
                     <dt className="text-muted-foreground">{k}</dt>
