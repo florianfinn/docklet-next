@@ -109,6 +109,18 @@ all registered storage routes are reachable; backup/import functionality remains
 owned by M12. Route coverage tests include actual tunnel
 forwarding, not merely matching command names.
 
+## File baselines and freshness
+
+Volume updates retain the whole-tree revision guard. An `update_file` with an
+optional `baselineIndex` also compares the uploaded original bytes with the
+current file, like project updates. A mismatch uses the existing HTTP 409
+workspace conflict problem. Omitted baselines retain revision-only semantics.
+Comparison happens at each ordered update boundary, after preceding manifest
+changes, under the volume lock; failure uses the existing manifest rollback.
+Reads are bounded to baseline length plus one. External processes do not share
+this lock, so comparison and replacement have the same intervening-write limit
+as project workspaces. The API schema, DTOs and ACFS protocol are unchanged.
+
 ## One helper image per environment
 
 `toolsImage` replaces `toolsImageRegistry`. It is a complete image reference,
