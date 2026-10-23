@@ -443,17 +443,12 @@ func (s *VolumeService) DeleteVolume(ctx context.Context, name string, force boo
 	}
 
 	defer s.eventService.BeginDockerResourceSuppressionWindow("volume", name, name)()
-	if _, volumeRemoveErr := dockerClient.VolumeRemove(ctx, name, client.VolumeRemoveOptions{
-		Force: force,
-	}); volumeRemoveErr != nil {
+	if _, volumeRemoveErr := dockerClient.VolumeRemove(ctx, name, client.VolumeRemoveOptions{Force: force}); volumeRemoveErr != nil {
 		s.eventService.LogErrorEvent(ctx, event.EventTypeVolumeError, "volume", name, name, user.ID, user.Username, "0", volumeRemoveErr, database.JSON{"action": "delete", "force": force})
 		return fmt.Errorf("failed to remove volume: %w", volumeRemoveErr)
 	}
 
-	metadata := database.JSON{
-		"action": "delete",
-		"name":   name,
-	}
+	metadata := database.JSON{"action": "delete", "name": name}
 	if logErr := s.eventService.LogVolumeEvent(ctx, event.EventTypeVolumeDelete, name, name, user.ID, user.Username, "0", metadata); logErr != nil {
 		slog.WarnContext(ctx, "could not log volume deletion action", "volume", name, "error", logErr.Error())
 	}

@@ -140,11 +140,22 @@ Every tree reload, including conflict recovery, compares cached entries by size,
 mtime, mode and directory/symlink type. Unchanged entries adopt the current tree
 revision without extending content freshness. Changed clean entries are read
 again, and changed closed entries are evicted; changed dirty entries retain their original bytes and revision until
-conflict resolution. A subsequent read can advance a dirty baseline only when
-its original bytes still match. Thus unrelated external changes stop causing
+conflict resolution. When a conflict reload finds the dirty tab's own entry
+unchanged, it also clears that tab's conflict flag and permits saving the retained
+draft with the refreshed revision and original content baseline. A subsequent
+read can advance a dirty baseline only when its original bytes still match. Thus unrelated external changes stop causing
 stale-revision conflicts after reload, while same-path edits remain protected
-by both revision and baseline guards. Project drafts follow the same freshness
-rule with their existing structural revision and content comparison contract;
+by revision and baseline guards. Entry identity is a metadata heuristic: an
+external write that preserves size and mtime can evade both tree revision and
+path identity. The producer's content baseline comparison remains the data guard
+for those writes, including retries after conflict recovery.
+
+A truncated tree (`fileTreeTruncated`) gives entries outside its listing no
+identity. Tree reconciliation cannot prove those dirty entries unchanged, so a
+conflicted tab may retain its old revision after unrelated external changes.
+Clean tabs re-read their content; unconflicted dirty baselines can still advance
+after a byte-equal read.
+Project drafts follow the same freshness rule with their existing structural revision and content comparison contract;
 an older changed draft never inherits a later own manifest's revision.
 
 ## One helper image per environment
