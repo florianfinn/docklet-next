@@ -230,3 +230,21 @@ func validateDisconnect(n network.Inspect, c container.InspectResponse) error {
 	}
 	return nil
 }
+
+func validateRemove(n network.Inspect, all []container.InspectResponse) error {
+	if docker.IsDefaultNetwork(n.Name) {
+		return rejection(409, "builtin-network", "Built-in networks cannot be removed")
+	}
+	if strings.TrimSpace(n.Labels["com.docker.compose.project"]) != "" || strings.TrimSpace(n.Labels["com.docker.compose.network"]) != "" {
+		return rejection(409, "compose-managed", "Compose-managed networks cannot be removed")
+	}
+	if len(n.Containers) != 0 {
+		return rejection(409, "in-use", "Network is referenced by a container")
+	}
+	for _, c := range all {
+		if c.NetworkSettings != nil && attached(n, c.NetworkSettings.Networks) {
+			return rejection(409, "in-use", "Network is referenced by a container")
+		}
+	}
+	return nil
+}

@@ -243,8 +243,21 @@ func (s *NetworkService) RemoveNetwork(ctx context.Context, id string, user user
 		return fmt.Errorf("failed to connect to Docker: %w", err)
 	}
 
-	networkInfo, err := compat.NetworkInspectWithCompatibility(ctx, dockerClient, id, client.NetworkInspectOptions{})
-	networkName := kit.Ternary(err == nil, networkInfo.Network.Name, id)
+	n, err := inspectWriteNetwork(ctx, dockerClient, id)
+	if err != nil {
+		return err
+	}
+	if err := validateRemove(n, nil); err != nil {
+		return err
+	}
+	all, err := inspectAllWriteContainers(ctx, dockerClient)
+	if err != nil {
+		return err
+	}
+	if err := validateRemove(n, all); err != nil {
+		return err
+	}
+	networkName := n.Name
 
 	defer s.eventService.BeginDockerResourceSuppressionWindow("network", id, networkName)()
 	if _, networkRemoveErr := dockerClient.NetworkRemove(ctx, id, client.NetworkRemoveOptions{}); networkRemoveErr != nil {
@@ -377,7 +390,7 @@ func (s *NetworkService) DisconnectContainer(ctx context.Context, networkID stri
 	return nil
 }
 
-func (s *NetworkService) PruneNetworks(ctx context.Context) (*network.PruneReport, error) {
+func (s *NetworkService) PruneNetworks(ctx context.Context, user usertypes.Actor) (*network.PruneReport, error) {
 	dockerClient, err := s.dockerService.GetClient(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("failed to connect to Docker: %w", err)
@@ -395,7 +408,7 @@ func (s *NetworkService) PruneNetworks(ctx context.Context) (*network.PruneRepor
 		"action":          "prune",
 		"networksDeleted": len(pruneReport.NetworksDeleted),
 	}
-	if logErr := s.eventService.LogNetworkEvent(ctx, event.EventTypeNetworkDelete, "", "bulk_prune", usertypes.SystemUser.ID, usertypes.SystemUser.Username, "0", metadata); logErr != nil {
+	if logErr := s.eventService.LogNetworkEvent(ctx, event.EventTypeNetworkDelete, "", "bulk_prune", user.ID, user.Username, "0", metadata); logErr != nil {
 		slog.WarnContext(ctx, "could not log network prune action", "error", logErr)
 	}
 

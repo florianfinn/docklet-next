@@ -371,19 +371,24 @@ func (h *NetworkHandler) DisconnectContainer(ctx context.Context, input *Disconn
 }
 
 func (h *NetworkHandler) PruneNetworks(ctx context.Context, input *PruneNetworksInput) (*handlerutil.Out[networktypes.PruneReport], error) {
+	user, err := handlerutil.RequireUser(ctx)
+	if err != nil {
+		return nil, err
+	}
 	var report *network.PruneReport
 	runtimeCtx := utils.ActivityRuntimeContext(ctx, h.appCtx)
 	activityID, err := activitylib.RunHandlerActivity(runtimeCtx, h.activityService, activitylib.HandlerOptions{
 		EnvironmentID:  input.EnvironmentID,
 		Type:           activitytypes.TypeResourceAction,
 		ResourceType:   "network",
+		User:           user,
 		Step:           "Pruning unused networks",
 		Message:        "Pruning unused networks",
 		SuccessMessage: "Networks pruned successfully",
 		Metadata:       database.JSON{"action": "prune_networks"},
 	}, func(runtimeCtx context.Context) error {
 		var pruneErr error
-		report, pruneErr = h.networkService.PruneNetworks(runtimeCtx)
+		report, pruneErr = h.networkService.PruneNetworks(runtimeCtx, *user)
 		return pruneErr
 	})
 	if err != nil {
