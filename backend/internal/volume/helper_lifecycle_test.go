@@ -39,6 +39,7 @@ type helperLifecycleFixture struct {
 	removed      []string
 	stopped      int
 	stopStatus   int
+	startStatus  int
 	copies       int
 	imageStarted chan struct{}
 	imageProceed chan struct{}
@@ -90,6 +91,11 @@ func (f *helperLifecycleFixture) service(t *testing.T) *VolumeService {
 		case r.Method == "DELETE" && strings.Contains(r.URL.Path, "/containers/holder-"):
 			w.WriteHeader(204)
 		case strings.HasSuffix(r.URL.Path, "/containers/workspace-helper/start"):
+			if f.startStatus != 0 {
+				w.WriteHeader(f.startStatus)
+				_, _ = io.WriteString(w, `{"message":"helper start failed"}`)
+				return
+			}
 			w.WriteHeader(204)
 		case strings.HasSuffix(r.URL.Path, "/archive"):
 			if r.Method == "GET" {
