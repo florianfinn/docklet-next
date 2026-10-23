@@ -2,7 +2,7 @@
 // Revision: dfdfa084478d327818d8c57b0973d638f80861f6
 // Retrieved: 2026-10-15
 // License: Apache-2.0
-// Deviations: Original implementation for issue 38.
+// Deviations: Original implementation for issue 38; scoped network write capabilities for #203.
 package activity
 
 import (
@@ -97,6 +97,23 @@ func getCapabilities(ctx context.Context, input *GetCapabilitiesInput) (*handler
 		case "deployStack", "saveStackFiles", "setStackLabels", "convertDockerRun":
 			descriptors[i].Available = authoringAllowedInternal(descriptors[i].OperationID, descriptors[i].ResourceRef, permissions)
 			if descriptors[i].Available {
+				descriptors[i].DisabledReasonCode = ""
+			} else {
+				descriptors[i].DisabledReasonCode = "capability.unavailable"
+			}
+		case "createNetwork", "removeNetwork", "connectNetwork", "disconnectNetwork":
+			grant := map[string]string{"createNetwork": authz.PermNetworksCreate, "removeNetwork": authz.PermNetworksDelete, "connectNetwork": authz.PermNetworksConnect, "disconnectNetwork": authz.PermNetworksDisconnect}[descriptors[i].OperationID]
+			ref := descriptors[i].ResourceRef
+			env, raw, scoped := strings.Cut(ref.ID, "~")
+			valid := descriptors[i].OperationID == "createNetwork" && ref.Kind == "host" && ref.ID != "" && !scoped && permissions.Allows(grant, ref.ID)
+			if descriptors[i].OperationID != "createNetwork" && ref.Kind == "network" && scoped && env != "" && raw != "" && !strings.Contains(raw, "~") {
+				valid = permissions.Allows(grant, env)
+			}
+			if ref.Kind == "hub" {
+				valid = permissions.AllowsAny(grant)
+			}
+			descriptors[i].Available = valid
+			if valid {
 				descriptors[i].DisabledReasonCode = ""
 			} else {
 				descriptors[i].DisabledReasonCode = "capability.unavailable"
