@@ -148,6 +148,21 @@ export const enNetworks = {
   removed: "Network {name} removed",
   empty: { title: "No networks", body: "There are no networks on the filtered hosts." },
   createDialog: {
+    advanced: {
+      title: "Advanced",
+      hint: "Labels and driver options use unique keys. Set the parent interface above. Auxiliary addresses reserve named IPs within each configured subnet.",
+      labels: "Labels",
+      options: "Driver options",
+      auxAddresses: "IPv4 auxiliary addresses",
+      auxAddresses6: "IPv6 auxiliary addresses",
+      key: "Key",
+      value: "Value",
+      name: "Reservation name",
+      address: "Reserved IP address",
+      add: "Add: {section}",
+      remove: "Remove {section} entry {index}",
+    },
+
     title: "Create network",
     description: "In three steps: type, settings, review. Only “Create” changes the host.",
     steps: { kind: "Type", settings: "Settings", review: "Review" },
@@ -220,6 +235,10 @@ export const enNetworks = {
     },
   },
   connectDialog: {
+    aliases: "DNS aliases (optional)",
+    aliasesHint: "Comma-separated DNS labels: letters, digits and internal hyphens, at most 63 characters each. Duplicates are removed.",
+    aliasesInvalid: "Enter non-empty DNS labels separated by commas; no spaces, underscores or dots within a label.",
+
     titleConnect: "Connect container to network",
     titleDisconnect: "Disconnect container from network",
     description: "Choose container and network, then review. Only the confirmation changes the container.",

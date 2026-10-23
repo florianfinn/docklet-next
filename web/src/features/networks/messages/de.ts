@@ -149,6 +149,21 @@ export const deNetworks: typeof enNetworks = {
   removed: "Netzwerk {name} entfernt",
   empty: { title: "Keine Netzwerke", body: "Auf den gefilterten Hosts gibt es keine Netzwerke." },
   createDialog: {
+    advanced: {
+      title: "Erweitert",
+      hint: "Labels und Treiberoptionen brauchen eindeutige Schlüssel. Das Eltern-Interface wird oben eingestellt. Hilfsadressen reservieren benannte IPs im jeweiligen konfigurierten Subnetz.",
+      labels: "Labels",
+      options: "Treiberoptionen",
+      auxAddresses: "IPv4-Hilfsadressen",
+      auxAddresses6: "IPv6-Hilfsadressen",
+      key: "Schlüssel",
+      value: "Wert",
+      name: "Reservierungsname",
+      address: "Reservierte IP-Adresse",
+      add: "Hinzufügen: {section}",
+      remove: "Eintrag {index} in {section} entfernen",
+    },
+
     title: "Netzwerk anlegen",
     description: "In drei Schritten: Art, Einstellungen, Prüfung. Erst „Anlegen“ ändert den Host.",
     steps: { kind: "Art", settings: "Einstellungen", review: "Prüfen" },
@@ -221,6 +236,10 @@ export const deNetworks: typeof enNetworks = {
     },
   },
   connectDialog: {
+    aliases: "DNS-Aliasse (optional)",
+    aliasesHint: "DNS-Namen mit Komma trennen: Buchstaben, Ziffern und Bindestriche im Inneren, jeweils höchstens 63 Zeichen. Duplikate werden entfernt.",
+    aliasesInvalid: "Nichtleere DNS-Namen mit Komma trennen; keine Leerzeichen, Unterstriche oder Punkte im Namen.",
+
     titleConnect: "Container mit Netzwerk verbinden",
     titleDisconnect: "Container von Netzwerk trennen",
     description: "Container und Netzwerk wählen, dann prüfen. Erst die Bestätigung ändert den Container.",
