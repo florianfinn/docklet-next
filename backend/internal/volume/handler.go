@@ -309,6 +309,10 @@ func (h *VolumeHandler) RemoveVolume(ctx context.Context, input *RemoveVolumeInp
 		return h.volumeService.DeleteVolume(runtimeCtx, input.VolumeName, input.Force, *user)
 	})
 	if err != nil {
+		var busyErr *volumeWorkspaceBusyError
+		if errors.As(err, &busyErr) {
+			return nil, huma.Error409Conflict(err.Error())
+		}
 		return nil, huma.Error500InternalServerError("Failed to delete volume: " + err.Error())
 	}
 

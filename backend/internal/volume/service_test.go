@@ -337,6 +337,7 @@ func TestDownloadVolumeWorkspaceFileHoldsReadLockUntilClosed(t *testing.T) {
 
 	dockerService := docker.NewDockerClientService(t.Context(), nil, nil, nil).WithClient(newVolumeWorkspaceTestDockerClientInternal(t, server))
 	service := NewVolumeService(nil, dockerService, nil, nil, nil, nil, nil, nil, nil, nil)
+	service.eventService = (&helperLifecycleFixture{}).service(t).eventService
 	service.helperByVolume["workspace-volume"] = &volumeHelper{id: "helper", lastUsedAt: time.Now(), protocol: types.ProtocolVersion}
 	reader, size, err := service.workspace.DownloadVolumeWorkspaceFile(t.Context(), "workspace-volume", "file.txt")
 	require.NoError(t, err)
@@ -346,6 +347,9 @@ func TestDownloadVolumeWorkspaceFileHoldsReadLockUntilClosed(t *testing.T) {
 	for _, transport := range []string{"direct", "edge"} {
 		call := pruneTransport(t, transport, pruneRouter(t, service))
 		status, body := call("POST", "/api/environments/0/volumes/workspace-volume/rename", "", []byte(`{"name":"renamed"}`))
+		require.Equal(t, 409, status, string(body))
+		require.Contains(t, string(body), "volume workspace is busy")
+		status, body = call("DELETE", "/api/environments/0/volumes/workspace-volume", "", nil)
 		require.Equal(t, 409, status, string(body))
 		require.Contains(t, string(body), "volume workspace is busy")
 		result, err := service.ExecuteVolumePrune(t.Context(), []volumetypes.PruneCandidate{{Name: "workspace-volume", CreatedAt: pruneCreated}})

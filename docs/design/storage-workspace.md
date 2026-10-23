@@ -64,14 +64,21 @@ the manual volume contract remains follow-up work for the scheduled-prune owner.
 If some candidates fail, manual and scheduled system prune retain successful
 removals in their result and completion log while reporting the failure.
 
-## Rename and active workspace requests
+## Rename, delete and active workspace requests
 
-Rename acquires the per-volume workspace lock without waiting. A held lock,
+Rename and delete acquire the per-volume workspace lock without waiting. A held lock,
 including a download stream's read lock, returns a typed workspace-busy conflict
 (HTTP 409) before touching the helper or source volume. After a download closes,
-rename can be retried. With the lock held, rename stops the idle helper before
+rename or delete can be retried. With the lock held, rename stops the idle helper before
 validating the detached source and copying data. A failed helper removal aborts
 rename. Real consumers, including stopped containers, still prevent rename.
+Detached singleflight helper creation retains the initiating operation's existing
+read or write lock until creation and helper registration finish. Cancellation
+releases the request immediately; it cannot let prune, rename or delete remove
+the volume before the late bind mount is created. Each waiter retains its own
+lock reference; the final release unlocks the original lock without reacquiring
+it. Image-pull deadlines still bound detached creation. Failed creation also
+releases its references.
 A helper left by a previous process is recognised by usage reads; startup's
 orphan cleanup owns its removal. Docker's detached-source and non-forced removal
 guards still protect volumes if an orphan remains.

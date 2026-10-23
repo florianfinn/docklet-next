@@ -15,6 +15,7 @@ import (
 	"encoding/json/v2"
 	"errors"
 	"fmt"
+	"github.com/florianfinn/docklet-next/backend/internal/volume/operationlock"
 	"io"
 	"log/slog"
 	"net/http"
@@ -63,9 +64,7 @@ type Dependencies struct {
 }
 
 // Service browses and edits the files inside a volume through its helper container.
-type Service struct {
-	deps Dependencies
-}
+type Service struct{ deps Dependencies }
 
 func NewService(deps Dependencies) *Service {
 	return &Service{deps: deps}
@@ -77,8 +76,8 @@ func (s *Service) MaxFileSizeBytes() int64 {
 }
 
 func (s *Service) GetVolumeWorkspace(ctx context.Context, volumeName string) (*workspace.Workspace, error) {
-	defer s.deps.Locks.RLock(volumeName)()
-
+	ctx, unlock := operationlock.WithContext(ctx, volumeName, s.deps.Locks.RLock(volumeName))
+	defer unlock()
 	totalStartedAt := time.Now()
 	defer func() {
 		slog.DebugContext(ctx, "volume workspace load completed", "volume", volumeName, "totalDuration", time.Since(totalStartedAt))
@@ -189,8 +188,8 @@ func (s *Service) volumeWorkspaceMaxFileSizeBytesInternal() int64 {
 }
 
 func (s *Service) GetVolumeWorkspaceFile(ctx context.Context, volumeName, relativePath string) (*workspace.FileContent, error) {
-	defer s.deps.Locks.RLock(volumeName)()
-
+	ctx, unlock := operationlock.WithContext(ctx, volumeName, s.deps.Locks.RLock(volumeName))
+	defer unlock()
 	if err := s.validateVolumeHelperSupportInternal(ctx, volumeName); err != nil {
 		return nil, classifyVolumeWorkspaceHelperSupportErrorInternal(err)
 	}
@@ -257,7 +256,7 @@ func (s *Service) GetVolumeWorkspaceFile(ctx context.Context, volumeName, relati
 }
 
 func (s *Service) DownloadVolumeWorkspaceFile(ctx context.Context, volumeName, relativePath string) (io.ReadCloser, int64, error) {
-	unlock := s.deps.Locks.RLock(volumeName)
+	ctx, unlock := operationlock.WithContext(ctx, volumeName, s.deps.Locks.RLock(volumeName))
 	if err := s.validateVolumeHelperSupportInternal(ctx, volumeName); err != nil {
 		unlock()
 		return nil, 0, classifyVolumeWorkspaceHelperSupportErrorInternal(err)
@@ -518,8 +517,8 @@ func (
 		return nil, classifyVolumeWorkspaceHelperSupportErrorInternal(err)
 	}
 	slog.DebugContext(ctx, "volume workspace inspection completed", "volume", volumeName, "duration", time.Since(inspectionStartedAt))
-	defer s.deps.Locks.Lock(volumeName)()
-
+	ctx, unlock := operationlock.WithContext(ctx, volumeName, s.deps.Locks.Lock(volumeName))
+	defer unlock()
 	needsBackups := slices.ContainsFunc(manifest.FileChanges, func(change volume.WorkspaceFileChange) bool {
 		return change.Operation == volume.FileOpRestoreFile
 	})

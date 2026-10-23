@@ -425,6 +425,11 @@ func (s *VolumeService) CreateVolume(ctx context.Context, options client.VolumeC
 
 func (s *VolumeService) DeleteVolume(ctx context.Context, name string, force bool, user usertypes.Actor) error {
 	slog.DebugContext(ctx, "volume service: delete volume", "volume", name, "force", force, "user", user.ID)
+	unlock, acquired := s.workspaceLocks.TryLock(name)
+	if !acquired {
+		return &volumeWorkspaceBusyError{name: name}
+	}
+	defer unlock()
 	dockerClient, err := s.dockerService.GetClient(ctx)
 	if err != nil {
 		s.eventService.LogErrorEvent(ctx, event.EventTypeVolumeError, "volume", name, name, user.ID, user.Username, "0", err, database.JSON{"action": "delete", "force": force})
