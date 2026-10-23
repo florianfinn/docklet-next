@@ -261,13 +261,14 @@ func (h *VolumeHandler) RenameVolume(ctx context.Context, input *RenameVolumeInp
 		return renameErr
 	})
 	if err != nil {
+		var busyErr *volumeWorkspaceBusyError
 		var conflictErr *volume.ProjectVolumeRenameConflictError
 		var inUseErr *volume.ProjectVolumeRenameInUseError
 		var spaceErr *volume.ProjectVolumeRenameInsufficientSpaceError
 		switch {
 		case errors.Is(err, common.ErrBadRequest):
 			return nil, huma.Error400BadRequest(err.Error())
-		case errors.As(err, &conflictErr), errors.As(err, &inUseErr):
+		case errors.As(err, &busyErr), errors.As(err, &conflictErr), errors.As(err, &inUseErr):
 			return nil, huma.Error409Conflict(err.Error())
 		case errors.As(err, &spaceErr):
 			return nil, huma.NewError(http.StatusInsufficientStorage, err.Error())

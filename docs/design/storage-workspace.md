@@ -13,9 +13,13 @@ Docker's `com.docker.volume.anonymous` label; `all=true` also selects named loca
 volumes. Volumes with mount options are excluded, as in
 [Docker Engine prune](https://github.com/moby/moby/blob/v28.5.1/volume/service/service.go).
 This follows Docker Engine API 1.42+ prune selection. Internal-labelled
-volumes are excluded. Any reference from a running or stopped container excludes
-a volume, including a workspace helper. Planning is read-only and does not stop
-helpers. Candidates contain `name`, `driver`, `createdAt`, `reason` (`unused` for
+volumes are excluded. Any reference from a running or stopped workload container
+excludes a volume. Internal volume workspace helpers never count as consumers:
+usage IDs, in-use flags, reference counts and dashboard counts all exclude them.
+Other internal containers still count. Legacy helpers use the same recognition
+rules as helper cleanup. Planning is read-only and does not stop helpers; a
+helper-only volume can appear in the plan even during an active workspace request.
+Candidates contain `name`, `driver`, `createdAt`, `reason` (`unused` for
 named or `unused-anonymous`) and optional `sizeBytes`. This implementation omits `sizeBytes`: Docker's
 `VolumeList` and `VolumeInspect` omit `UsageData`; obtaining it requires a
 host-wide `DiskUsage` scan. Neither preview nor execution triggers that scan.
@@ -30,13 +34,16 @@ bodyless HTTP call is rejected; there are no live web callers to preserve. Plans
 are stateless snapshots, not stored approvals or tokens. A submitted list may be
 edited, but cannot broaden deletion beyond the submitted names. Every candidate
 is inspected again, must have exactly the submitted creation timestamp and be
-unused by **all** containers immediately before a non-forced Docker remove.
+unused by all workload containers immediately before a non-forced Docker remove.
 Internal and non-local volumes are protected even for crafted requests. Duplicate
 names are processed once. Docker remains the final usage guard against a
 container created between re-check and remove. Each candidate holds the same
 per-volume workspace lock as rename, backup and file mutations through inspect,
-usage re-check and removal. A candidate whose lock is already held is skipped
-as `in-use`, without waiting for the workspace operation. Different-name
+helper cleanup, usage re-check and removal. After identity and protection checks,
+execution stops the idle workspace helper under that lock before querying usage
+again. Helper removal failure reports `volume.usage-failed` and leaves the volume
+untouched; another candidate can still proceed. A candidate whose lock is already
+held is skipped as `in-use`, without waiting for the workspace operation. Different-name
 candidates remain independent.
 Same-name replacement with a different `CreatedAt` is detected at re-check.
 Docker reports `CreatedAt` with second precision: same-second recreation cannot
@@ -56,6 +63,18 @@ or hold the workspace lock, and stops helpers before removal. Alignment with
 the manual volume contract remains follow-up work for the scheduled-prune owner.
 If some candidates fail, manual and scheduled system prune retain successful
 removals in their result and completion log while reporting the failure.
+
+## Rename and active workspace requests
+
+Rename acquires the per-volume workspace lock without waiting. A held lock,
+including a download stream's read lock, returns a typed workspace-busy conflict
+(HTTP 409) before touching the helper or source volume. After a download closes,
+rename can be retried. With the lock held, rename stops the idle helper before
+validating the detached source and copying data. A failed helper removal aborts
+rename. Real consumers, including stopped containers, still prevent rename.
+A helper left by a previous process is recognised by usage reads; startup's
+orphan cleanup owns its removal. Docker's detached-source and non-forced removal
+guards still protect volumes if an orphan remains.
 
 ## Workspace mapping and rights
 
