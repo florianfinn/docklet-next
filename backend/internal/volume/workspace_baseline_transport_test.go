@@ -40,8 +40,8 @@ import (
 // The same workspace handler/service is registered on hub and both agent modes.
 // Only Docker is replaced: tree scans, multipart parsing, content comparison,
 // root-confined ACFS apply and (for Edge) the real command tunnel remain active.
-func TestVolumeBaselineGuardThroughHubDirectAndEdge(t *testing.T) {
-	for _, mode := range []string{"hub", "direct", "edge"} {
+func TestVolumeBaselineGuardThroughLocalHTTPAndEdge(t *testing.T) {
+	for _, mode := range []string{"direct", "edge"} {
 		for _, tc := range []struct {
 			name, actual, baseline string
 			conflict               bool
@@ -170,11 +170,7 @@ func TestVolumeBaselineGuardThroughHubDirectAndEdge(t *testing.T) {
 					require.NoError(t, err)
 				}
 				require.NoError(t, form.Close())
-				transport := mode
-				if mode == "hub" {
-					transport = "direct"
-				}
-				call := pruneTransport(t, transport, router, form.FormDataContentType())
+				call := pruneTransport(t, mode, router, form.FormDataContentType())
 				status, response := call("PUT", "/api/environments/0/volumes/data/workspace", "", body.Bytes())
 				data, err := os.ReadFile(filepath.Join(root, "a.txt"))
 				require.NoError(t, err)

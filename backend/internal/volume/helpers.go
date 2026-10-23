@@ -13,6 +13,8 @@ import (
 	"encoding/json/v2"
 	"errors"
 	"fmt"
+	"github.com/florianfinn/docklet-next/backend/internal/volume/operationlock"
+	"golang.org/x/sync/singleflight"
 	"io"
 	"log/slog"
 	"strings"
@@ -180,7 +182,8 @@ func (s *VolumeService) acquireVolumeHelperInternal(ctx context.Context, volumeN
 // holding the volume mount with no cleanup path until Arcane restarts. The
 // creation itself can pull an image, so it must not run under helperMu.
 func (s *VolumeService) resolveHelperInternal(ctx context.Context, dockerClient *client.Client, volumeName string) (string, error) {
-	resultCh := s.helperGroup.DoChan(volumeName, func() (any, error) {
+	releaseLock := operationlock.Retain(ctx, volumeName)
+	sharedCh := s.helperGroup.DoChan(volumeName, func() (any, error) {
 		helper, err := s.getReusableHelperInternal(ctx, dockerClient, volumeName)
 		if err != nil {
 			return nil, err
@@ -207,6 +210,16 @@ func (s *VolumeService) resolveHelperInternal(ctx context.Context, dockerClient 
 		s.helperMu.Unlock()
 		return containerID, nil
 	})
+
+	// Each waiter retains its original operation lock until creation and tracking
+	// finish. A cancelled request can return without allowing a late bind mount
+	// to recreate a volume removed by prune, rename or delete.
+	resultCh := make(chan singleflight.Result, 1)
+	go func() {
+		result := <-sharedCh
+		releaseLock()
+		resultCh <- result
+	}()
 
 	// DoChan instead of Do so a caller whose request is canceled unblocks
 	// immediately; the shared create keeps running for the remaining waiters

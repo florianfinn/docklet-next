@@ -15,6 +15,7 @@ import (
 	"net/http/httptest"
 	"slices"
 	"strings"
+	"sync/atomic"
 	"testing"
 
 	"github.com/florianfinn/docklet-next/backend/internal/database"
@@ -33,13 +34,16 @@ import (
 )
 
 type helperLifecycleFixture struct {
-	containers []container.Summary
-	volumes    map[string]volume.Volume
-	removed    []string
-	stopped    int
-	stopStatus int
-	copies     int
-	svc        *VolumeService
+	containers   []container.Summary
+	volumes      map[string]volume.Volume
+	removed      []string
+	stopped      int
+	stopStatus   int
+	startStatus  int
+	copies       int
+	imageStarted chan struct{}
+	imageProceed chan struct{}
+	svc          *VolumeService
 }
 
 func (f *helperLifecycleFixture) service(t *testing.T) *VolumeService {
@@ -47,6 +51,7 @@ func (f *helperLifecycleFixture) service(t *testing.T) *VolumeService {
 	f.volumes = map[string]volume.Volume{"data": pruneVolume("data")}
 	f.containers = append([]container.Summary{usageHelper("data")}, f.containers...)
 	holders := 0
+	var imageBlocked atomic.Bool
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		switch {
@@ -68,9 +73,29 @@ func (f *helperLifecycleFixture) service(t *testing.T) *VolumeService {
 			f.containers = slices.DeleteFunc(f.containers, func(c container.Summary) bool { return c.ID == "workspace-helper" })
 			w.WriteHeader(204)
 		case r.Method == "POST" && strings.HasSuffix(r.URL.Path, "/containers/create"):
+			var request struct {
+				Cmd        []string
+				HostConfig container.HostConfig
+			}
+			require.NoError(t, json.NewDecoder(r.Body).Decode(&request))
+			if f.imageStarted != nil && slices.Equal(request.Cmd, []string{"sleep", "infinity"}) && slices.Equal(request.HostConfig.Binds, []string{"data:/volume"}) {
+				if _, exists := f.volumes["data"]; !exists {
+					f.volumes["data"] = pruneVolume("data")
+				}
+				f.containers = append(f.containers, usageHelper("data"))
+				_ = json.NewEncoder(w).Encode(map[string]string{"Id": "workspace-helper"})
+				return
+			}
 			holders++
 			_ = json.NewEncoder(w).Encode(map[string]string{"Id": fmt.Sprintf("holder-%d", holders)})
 		case r.Method == "DELETE" && strings.Contains(r.URL.Path, "/containers/holder-"):
+			w.WriteHeader(204)
+		case strings.HasSuffix(r.URL.Path, "/containers/workspace-helper/start"):
+			if f.startStatus != 0 {
+				w.WriteHeader(f.startStatus)
+				_, _ = io.WriteString(w, `{"message":"helper start failed"}`)
+				return
+			}
 			w.WriteHeader(204)
 		case strings.HasSuffix(r.URL.Path, "/archive"):
 			if r.Method == "GET" {
@@ -86,6 +111,10 @@ func (f *helperLifecycleFixture) service(t *testing.T) *VolumeService {
 				w.WriteHeader(200)
 			}
 		case strings.Contains(r.URL.Path, "/images/"):
+			if f.imageStarted != nil && imageBlocked.CompareAndSwap(false, true) {
+				close(f.imageStarted)
+				<-f.imageProceed
+			}
 			_, _ = io.WriteString(w, `{}`)
 		case strings.HasSuffix(r.URL.Path, "/system/df"):
 			_, _ = io.WriteString(w, `{"Volumes":[]}`)

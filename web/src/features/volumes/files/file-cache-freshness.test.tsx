@@ -110,3 +110,43 @@ it.each([false, true])("reopening an unchanged closed tab after own gestures use
   await act(async () => { await open.save("/a.txt").catch(() => {}); });
   expect(p.conflicts).toEqual([]); expect(p.contents.get("a.txt")).toBe("reopened edit");
 });
+
+it("clears a dirty tab conflict after reload proves its entry unchanged, preserving the draft for retry", async () => {
+  const p = fixture(true); p.render(); act(() => open.open("/a.txt"));
+  await waitFor(() => expect(open.files[0]?.saved).toBe("old A"));
+  act(() => open.edit("/a.txt", "my draft"));
+  p.externalFolder("unrelated");
+  await act(async () => { await expect(open.save("/a.txt")).rejects.toThrow(); });
+  await waitFor(() => expect(client.isFetching()).toBe(0));
+  expect(open.files[0]?.conflict).toBe(false);
+  expect(open.files[0]?.text).toBe("my draft");
+  expect(open.files[0]?.saved).toBe("old A");
+  await act(async () => { expect(await open.save("/a.txt")).toBe(true); });
+  expect(p.contents.get("a.txt")).toBe("my draft");
+  expect(p.conflicts).toEqual(["r1"]);
+});
+
+it("keeps a dirty tab conflicted when the reload finds its entry changed", async () => {
+  const p = fixture(true); p.render(); act(() => open.open("/a.txt"));
+  await waitFor(() => expect(open.files[0]?.saved).toBe("old A"));
+  act(() => open.edit("/a.txt", "my draft"));
+  p.externalWrite();
+  await act(async () => { await expect(open.save("/a.txt")).rejects.toThrow(); });
+  expect(open.files[0]?.conflict).toBe(true);
+  expect(open.files[0]?.text).toBe("my draft");
+  await act(async () => { expect(await open.save("/a.txt")).toBe(false); });
+  expect(p.contents.get("a.txt")).toBe("external");
+});
+
+it("the producer baseline still rejects a retry after an identity-preserving external write", async () => {
+  const p = fixture(true); p.render(); act(() => open.open("/a.txt"));
+  await waitFor(() => expect(open.files[0]?.saved).toBe("old A"));
+  act(() => open.edit("/a.txt", "my draft"));
+  // Same length and mtime: the tree heuristic cannot see these changed bytes.
+  p.contents.set("a.txt", "new A"); p.externalFolder("unrelated");
+  await act(async () => { await expect(open.save("/a.txt")).rejects.toThrow(); });
+  expect(open.files[0]?.conflict).toBe(false);
+  await act(async () => { await expect(open.save("/a.txt")).rejects.toThrow(); });
+  expect(p.contents.get("a.txt")).toBe("new A");
+  expect(p.conflicts).toEqual(["r1", "r2"]);
+});

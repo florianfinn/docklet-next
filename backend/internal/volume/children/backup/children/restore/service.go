@@ -12,6 +12,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/florianfinn/docklet-next/backend/internal/volume/operationlock"
 	"io"
 	"log/slog"
 	"path"
@@ -84,7 +85,7 @@ func (s *Service) RestoreBackup(ctx context.Context, volumeName, backupID string
 	if entry.VolumeName != volumeName {
 		return errors.New("backup does not belong to volume")
 	}
-	unlock := s.deps.Locks.Lock(volumeName)
+	ctx, unlock := operationlock.WithContext(ctx, volumeName, s.deps.Locks.Lock(volumeName))
 	defer unlock()
 	dockerClient, err := s.deps.Docker.GetClient(ctx)
 	if err != nil {
@@ -291,7 +292,7 @@ func (s *Service) RestoreBackupFiles(ctx context.Context, volumeName, backupID s
 	if entry.VolumeName != volumeName {
 		return errors.New("backup does not belong to volume")
 	}
-	unlock := s.deps.Locks.Lock(volumeName)
+	ctx, unlock := operationlock.WithContext(ctx, volumeName, s.deps.Locks.Lock(volumeName))
 	defer unlock()
 	dockerClient, err := s.deps.Docker.GetClient(ctx)
 	if err != nil {
@@ -491,7 +492,7 @@ func (s *Service) UploadAndRestore(ctx context.Context, volumeName string, archi
 	}
 	_ = gzr.Close()
 
-	unlock := s.deps.Locks.Lock(volumeName)
+	ctx, unlock := operationlock.WithContext(ctx, volumeName, s.deps.Locks.Lock(volumeName))
 	defer unlock()
 	preBackupID, err := s.deps.SafetyBackup(ctx, volumeName, user)
 	if err != nil {

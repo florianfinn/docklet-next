@@ -67,7 +67,7 @@ export function useOpenFiles(volumeId: string, fileParam: string | null) {
       setDrafts((current) => {
         const draft = current[path];
         if (!draft?.baseline) return current;
-        if (identity !== undefined && draft.entryIdentity === identity) return { ...current, [path]: { ...draft, baseline: { ...draft.baseline, revision: tree.fileTreeRevision } } };
+        if (identity !== undefined && draft.entryIdentity === identity) return { ...current, [path]: { ...draft, conflict: false, baseline: { ...draft.baseline, revision: tree.fileTreeRevision } } };
         if (draft.text === draft.baseline.content && !draft.conflict) { const next = { ...current }; delete next[path]; return next; }
         return current;
       });

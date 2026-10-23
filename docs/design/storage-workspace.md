@@ -64,14 +64,21 @@ the manual volume contract remains follow-up work for the scheduled-prune owner.
 If some candidates fail, manual and scheduled system prune retain successful
 removals in their result and completion log while reporting the failure.
 
-## Rename and active workspace requests
+## Rename, delete and active workspace requests
 
-Rename acquires the per-volume workspace lock without waiting. A held lock,
+Rename and delete acquire the per-volume workspace lock without waiting. A held lock,
 including a download stream's read lock, returns a typed workspace-busy conflict
 (HTTP 409) before touching the helper or source volume. After a download closes,
-rename can be retried. With the lock held, rename stops the idle helper before
+rename or delete can be retried. With the lock held, rename stops the idle helper before
 validating the detached source and copying data. A failed helper removal aborts
 rename. Real consumers, including stopped containers, still prevent rename.
+Detached singleflight helper creation retains the initiating operation's existing
+read or write lock until creation and helper registration finish. Cancellation
+releases the request immediately; it cannot let prune, rename or delete remove
+the volume before the late bind mount is created. Each waiter retains its own
+lock reference; the final release unlocks the original lock without reacquiring
+it. Image-pull deadlines still bound detached creation. Failed creation also
+releases its references.
 A helper left by a previous process is recognised by usage reads; startup's
 orphan cleanup owns its removal. Docker's detached-source and non-forced removal
 guards still protect volumes if an orphan remains.
@@ -133,11 +140,22 @@ Every tree reload, including conflict recovery, compares cached entries by size,
 mtime, mode and directory/symlink type. Unchanged entries adopt the current tree
 revision without extending content freshness. Changed clean entries are read
 again, and changed closed entries are evicted; changed dirty entries retain their original bytes and revision until
-conflict resolution. A subsequent read can advance a dirty baseline only when
-its original bytes still match. Thus unrelated external changes stop causing
+conflict resolution. When a conflict reload finds the dirty tab's own entry
+unchanged, it also clears that tab's conflict flag and permits saving the retained
+draft with the refreshed revision and original content baseline. A subsequent
+read can advance a dirty baseline only when its original bytes still match. Thus unrelated external changes stop causing
 stale-revision conflicts after reload, while same-path edits remain protected
-by both revision and baseline guards. Project drafts follow the same freshness
-rule with their existing structural revision and content comparison contract;
+by revision and baseline guards. Entry identity is a metadata heuristic: an
+external write that preserves size and mtime can evade both tree revision and
+path identity. The producer's content baseline comparison remains the data guard
+for those writes, including retries after conflict recovery.
+
+A truncated tree (`fileTreeTruncated`) gives entries outside its listing no
+identity. Tree reconciliation cannot prove those dirty entries unchanged, so a
+conflicted tab may retain its old revision after unrelated external changes.
+Clean tabs re-read their content; unconflicted dirty baselines can still advance
+after a byte-equal read.
+Project drafts follow the same freshness rule with their existing structural revision and content comparison contract;
 an older changed draft never inherits a later own manifest's revision.
 
 ## One helper image per environment

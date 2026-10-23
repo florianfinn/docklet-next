@@ -263,7 +263,7 @@ func pruneRouter(t *testing.T, svc *VolumeService) http.Handler {
 	router.Use(func(next echo.HandlerFunc) echo.HandlerFunc {
 		return func(c *echo.Context) error {
 			grants := authz.NewPermissionSet()
-			grants.AddEnv("0", authz.PermVolumesPrune, authz.PermVolumesRename, authz.PermVolumesRead, authz.PermVolumesList)
+			grants.AddEnv("0", authz.PermVolumesPrune, authz.PermVolumesDelete, authz.PermVolumesRename, authz.PermVolumesRead, authz.PermVolumesList)
 			ctx := context.WithValue(c.Request().Context(), middleware.ContextKeyUserPermissions, grants)
 			ctx = context.WithValue(ctx, user.CurrentUserContextKey{}, &user.Actor{ID: "example-user", Username: "example-user"})
 			c.SetRequest(c.Request().WithContext(ctx))
@@ -297,6 +297,18 @@ func pruneTransport(t *testing.T, mode string, handler http.Handler, contentType
 			return response.Code, response.Body.Bytes()
 		}
 	}
+	registry := pruneTunnelRegistry(t, handler)
+	tunnel, ok := registry.Get("example-storage").Get()
+	require.True(t, ok)
+	return func(method, path, query string, body []byte) (int, []byte) {
+		status, _, response, err := edge.ProxyRequest(t.Context(), tunnel, method, path, query, map[string]string{"Content-Type": contentType}, body)
+		require.NoError(t, err)
+		return status, response
+	}
+}
+
+func pruneTunnelRegistry(t *testing.T, handler http.Handler) *edge.TunnelRegistry {
+	t.Helper()
 	registry := edge.NewTunnelRegistry()
 	connected := make(chan struct{})
 	var once sync.Once
@@ -327,13 +339,7 @@ func pruneTransport(t *testing.T, mode string, handler http.Handler, contentType
 	case <-time.After(5 * time.Second):
 		t.Fatal("tunnel registration barrier failed")
 	}
-	tunnel, ok := registry.Get("example-storage").Get()
-	require.True(t, ok)
-	return func(method, path, query string, body []byte) (int, []byte) {
-		status, _, response, err := edge.ProxyRequest(t.Context(), tunnel, method, path, query, map[string]string{"Content-Type": contentType}, body)
-		require.NoError(t, err)
-		return status, response
-	}
+	return registry
 }
 
 func TestRenameVolumeThroughActualEdgeTunnel(t *testing.T) {
