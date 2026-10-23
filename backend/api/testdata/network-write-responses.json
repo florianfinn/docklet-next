@@ -1,0 +1,62 @@
+{
+  "already-stopped": {
+    "code": "network.already-connected",
+    "detail": "Container is already connected",
+    "status": 409,
+    "title": "Conflict"
+  },
+  "connect": {
+    "data": {
+      "message": "Container connected successfully"
+    },
+    "success": true
+  },
+  "create-invalid": {
+    "code": "network.invalid-network",
+    "detail": "Unsupported network driver",
+    "status": 400,
+    "title": "Bad Request"
+  },
+  "delete-stopped": {
+    "code": "network.in-use",
+    "detail": "Network is referenced by a container",
+    "status": 409,
+    "title": "Conflict"
+  },
+  "disconnect": {
+    "data": {
+      "message": "Container disconnected successfully"
+    },
+    "success": true
+  },
+  "missing-container": {
+    "code": "network.not-found",
+    "detail": "Container not found",
+    "status": 404,
+    "title": "Not Found"
+  },
+  "missing-network": {
+    "code": "network.not-found",
+    "detail": "Network not found",
+    "status": 404,
+    "title": "Not Found"
+  },
+  "not-connected": {
+    "code": "network.not-connected",
+    "detail": "Container is not connected",
+    "status": 409,
+    "title": "Conflict"
+  },
+  "outside": {
+    "code": "network.invalid-ip",
+    "detail": "Fixed address must be usable and unreserved in a configured subnet of the same family",
+    "status": 400,
+    "title": "Bad Request"
+  },
+  "taken-stopped": {
+    "code": "network.invalid-ip",
+    "detail": "Fixed address is already taken",
+    "status": 400,
+    "title": "Bad Request"
+  }
+}

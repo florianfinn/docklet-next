@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: functional cut: removed Swarm.
+// Deviations: Removed Swarm; optional IPv4 creation flag and server-side validation.
 
 package network
 
@@ -220,7 +220,7 @@ type CreateRequest struct {
 	// Name is the name of the network to create.
 	//
 	// Required: true
-	Name string `json:"name" minLength:"1" doc:"Name of the network"`
+	Name string `json:"name" doc:"Name of the network"`
 
 	// Options contains network creation options.
 	//
@@ -254,14 +254,17 @@ type CreateOptions struct {
 	// Labels are user-defined metadata.
 	Labels map[string]string `json:"labels,omitempty" doc:"User-defined labels"`
 
-	// Driver is the network driver to use (e.g., bridge, overlay).
-	Driver string `json:"driver,omitempty" doc:"Network driver (e.g., bridge, overlay)"`
+	// Driver is the network driver to use (bridge, macvlan or ipvlan).
+	Driver string `json:"driver,omitempty" doc:"Network driver (bridge, macvlan or ipvlan)"`
 
 	// CheckDuplicate requests daemon to check for networks with same name.
 	CheckDuplicate bool `json:"checkDuplicate,omitempty" doc:"Check for duplicate network names"`
 
 	// Internal restricts external access to the network.
 	Internal bool `json:"internal,omitempty" doc:"Restrict external access to the network"`
+
+	// EnableIPv4 preserves the daemon default when omitted.
+	EnableIPv4 *bool `json:"enableIPv4,omitempty" doc:"Enable IPv4 networking; omitted uses the daemon default"`
 
 	// EnableIPv6 enables IPv6 networking.
 	EnableIPv6 bool `json:"enableIPv6,omitempty" doc:"Enable IPv6 networking"`
@@ -273,7 +276,7 @@ type ConnectContainerRequest struct {
 	// ContainerID is the container to connect.
 	//
 	// Required: true
-	ContainerID string `json:"containerId" minLength:"1" doc:"Container ID or name"`
+	ContainerID string `json:"containerId" doc:"Container ID or name"`
 
 	// Aliases for the container on this network.
 	//
@@ -297,7 +300,7 @@ type DisconnectContainerRequest struct {
 	// ContainerID is the container to disconnect.
 	//
 	// Required: true
-	ContainerID string `json:"containerId" minLength:"1" doc:"Container ID or name"`
+	ContainerID string `json:"containerId" doc:"Container ID or name"`
 
 	// Force disconnects even if the container is running.
 	//
