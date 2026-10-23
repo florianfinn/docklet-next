@@ -70,8 +70,7 @@ it("the volume row menu enables Files with producer-shaped descriptors", async (
   function Probe() { const files = useVolumeMenu(volume, host, { remove: () => {}, backup: () => {} }).flat().find((a) => a.id === "files"); return <output data-testid="files">{String(files?.disabled)}</output>; }
   renderWithApp(<Probe />, adapter);
   await waitFor(() => expect(descriptors).toContain("listFiles"));
-  await act(async () => {});
-  expect(screen.getByTestId("files").textContent).toBe("false");
+  await waitFor(() => expect(screen.getByTestId("files").textContent).toBe("false"));
 });
 
 it.each([false, true])("creating a folder preserves the open file baseline (already drafted=%s)", async (drafted) => {
@@ -135,7 +134,7 @@ it("recovers an external conflict through the real adapter and saves the next ed
   expect(producer.conflicts).toEqual(["r1"]);
 });
 
-it("does not rebase past an external edit after an own manifest", async () => {
+it("refreshes a clean tab after an external edit following an own manifest", async () => {
   const producer = revisionProducer();
   const adapter = { ...createDemoAdapter(), ...producer.workspace, kind: "http" as const, getCapability: async (operationId: string, resourceRef = { kind: "hub", id: "0" }) => ({ operationId, resourceRef, available: true }) };
   const { router } = renderRoutes([{ path: "/volumes/:id", element: <Page /> }], ["/volumes/edge~data?tab=files&file=%2Fa.txt"], adapter);
@@ -143,17 +142,16 @@ it("does not rebase past an external edit after an own manifest", async () => {
   await act(async () => { await router.navigate("/volumes/edge~data?tab=files&file=%2Fb.txt"); });
   await screen.findByRole("textbox", { name: "Inhalt von b.txt" });
   edit("b.txt", "submitted B");
-  producer.hooks.updated = () => producer.externalWrite("a.txt", "external A");
+  producer.hooks.updated = () => { producer.hooks.updated = undefined; producer.externalWrite("a.txt", "external A"); };
   await userEvent.click(screen.getByRole("button", { name: "Speichern" }));
   await waitFor(() => expect(producer.revision()).toBe("r3"));
   await act(async () => { await router.navigate("/volumes/edge~data?tab=files&file=%2Fa.txt"); });
   await screen.findByRole("textbox", { name: "Inhalt von a.txt" });
+  await waitFor(() => expect(screen.getByRole("textbox", { name: "Inhalt von a.txt" }).textContent).toBe("external A"));
   edit("a.txt", "my A");
   await userEvent.click(screen.getByRole("button", { name: "Speichern" }));
-  await screen.findByRole("alert");
-  expect(producer.conflicts).toHaveLength(1);
-  expect(producer.contents.get("a.txt")).toBe("external A");
-  expect(screen.getByRole("textbox", { name: "Inhalt von a.txt" }).textContent).toBe("my A");
+  await waitFor(() => expect(producer.contents.get("a.txt")).toBe("my A"));
+  expect(producer.conflicts).toEqual([]);
 });
 
 

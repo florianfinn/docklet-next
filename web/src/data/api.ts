@@ -139,10 +139,10 @@ export type WorkspaceGesture =
   | { kind: "rename"; path: string; name: string }
   | { kind: "move"; path: string; parent: string }
   | { kind: "delete"; path: string };
-export type WorkspaceWriteResult = void | { revision: string };
+export type WorkspaceWriteResult = void | { revision: string; entryIdentity?: string };
 export interface WorkspaceBaseline { revision: string; content: string }
-export type VolumeFileContent = FileContent & { revision?: string; readOnlyReason?: WorkspaceReadOnlyReason };
-export type VolumeDirListing = DirListing & { revision?: string; truncated?: boolean };
+export type VolumeFileContent = FileContent & { revision?: string; entryIdentity?: string; readOnlyReason?: WorkspaceReadOnlyReason };
+export type VolumeDirListing = DirListing & { revision?: string; truncated?: boolean; workspaceTree?: WorkspaceTree };
 
 /** Optional while adapters without workspace support remain disconnected. */
 export interface ProjectWorkspaceApi {

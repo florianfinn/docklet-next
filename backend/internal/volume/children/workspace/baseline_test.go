@@ -104,7 +104,7 @@ func TestVolumeUpdateBaselineContentGuard(t *testing.T) {
 				require.ErrorIs(t, err, common.ErrVolumeWorkspaceConflict, "stale baseline must reject a current-revision update")
 				require.Equal(t, tc.actual, string(data), "conflict must preserve producer content")
 				require.Zero(t, applies)
-				require.Equal(t, 1, rollbacks)
+				require.Zero(t, rollbacks, "a failed guard before any apply must leave external content untouched")
 				problem := volumeWorkspaceHTTPErrorInternal(err).(*huma.ErrorModel)
 				require.Equal(t, 409, problem.Status)
 				require.Equal(t, "Conflict", problem.Title)
@@ -114,6 +114,81 @@ func TestVolumeUpdateBaselineContentGuard(t *testing.T) {
 				require.Equal(t, "my edit", string(data))
 				require.Equal(t, 1, applies)
 				require.Zero(t, rollbacks)
+			}
+		})
+	}
+}
+
+func TestVolumeBaselineAfterOrderedRename(t *testing.T) {
+	for _, baseline := range []string{"old B", "old A"} {
+		t.Run(baseline, func(t *testing.T) {
+			root, staging := t.TempDir(), t.TempDir()
+			require.NoError(t, os.WriteFile(filepath.Join(root, "b.txt"), []byte("old B"), 0600))
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				archive := tar.NewReader(r.Body)
+				for {
+					header, err := archive.Next()
+					if err == io.EOF {
+						break
+					}
+					require.NoError(t, err)
+					data, err := io.ReadAll(archive)
+					require.NoError(t, err)
+					require.NoError(t, os.WriteFile(filepath.Join(staging, filepath.Base(header.Name)), data, 0600))
+				}
+			}))
+			defer server.Close()
+			cli := newVolumeWorkspaceTestDockerClientInternal(t, server)
+			applies, rollbacks := 0, 0
+			service := &Service{deps: Dependencies{Exec: func(ctx context.Context, _ string, _ string, cmd []string) (string, string, error) {
+				if cmd[0] != "acfs" {
+					return "", "", nil
+				}
+				if cmd[1] == "read" {
+					// The earlier rename must have materialised the target before comparison.
+					require.Equal(t, 1, applies)
+					require.Equal(t, "/a.txt", cmd[5])
+					data, err := os.ReadFile(filepath.Join(root, "a.txt"))
+					require.NoError(t, err)
+					var out bytes.Buffer
+					require.NoError(t, acfs.WriteStreamHeader(&out, uint64(len(data))))
+					out.Write(data)
+					return out.String(), "", nil
+				}
+				data, err := os.ReadFile(filepath.Join(staging, cmd[len(cmd)-1]))
+				require.NoError(t, err)
+				var manifest types.ApplyManifest
+				require.NoError(t, json.Unmarshal(data, &manifest))
+				count, err := acfs.Apply(ctx, root, staging, manifest)
+				require.NoError(t, err)
+				applies++
+				response, err := json.Marshal(types.ApplyResponse{Version: types.ProtocolVersion, Applied: count})
+				return string(response), "", err
+			}}}
+			upload, original := 0, 1
+			changes := []volume.WorkspaceFileChange{{Operation: volume.FileOpRename, RelativePath: "b.txt", NewName: "a.txt"}, {Operation: volume.FileOpUpdateFile, RelativePath: "a.txt", UploadIndex: &upload, BaselineIndex: &original}}
+			staged, err := service.stageVolumeWorkspaceChangesInternal(t.Context(), cli, "helper", changes, map[int][]byte{0: []byte("my edit"), 1: []byte(baseline)}, volumeWorkspaceWriteIdentityInternal{})
+			require.NoError(t, err)
+			err = service.applyVolumeWorkspaceChangesInternal(t.Context(), cli, "helper", "data", changes, staged, volumeWorkspaceWriteIdentityInternal{}, func() error {
+				rollbacks++
+				return os.Rename(filepath.Join(root, "a.txt"), filepath.Join(root, "b.txt"))
+			})
+			if baseline == "old B" {
+				require.NoError(t, err)
+				require.Equal(t, 2, applies)
+				require.Zero(t, rollbacks)
+				data, err := os.ReadFile(filepath.Join(root, "a.txt"))
+				require.NoError(t, err)
+				require.Equal(t, "my edit", string(data))
+			} else {
+				require.ErrorIs(t, err, common.ErrVolumeWorkspaceConflict)
+				require.Equal(t, 1, applies)
+				require.Equal(t, 1, rollbacks)
+				data, err := os.ReadFile(filepath.Join(root, "b.txt"))
+				require.NoError(t, err)
+				require.Equal(t, "old B", string(data))
+				_, err = os.Stat(filepath.Join(root, "a.txt"))
+				require.True(t, os.IsNotExist(err))
 			}
 		})
 	}

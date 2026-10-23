@@ -31,7 +31,7 @@ function producer(compare = false) {
 }
 
 // P5: replace a file by delete + upload (create_file cannot overwrite), then reopen it.
-it.each([false, true])("P5 reopening a file replaced by own delete+upload shows the uploaded content or conflicts (baseline guard=%s)", async (guard) => {
+it.each([false, true].flatMap((guard) => ["upload", "empty"].map((replacement) => [guard, replacement] as const)))("P5 reopening a file replaced by own delete+create shows current content (baseline guard=%s, replacement=%s)", async (guard, replacement) => {
   const p = producer(guard);
   const { router, container } = renderRoutes([{ path: "/volumes/:id", element: <Page /> }], ["/volumes/edge~data?tab=files&file=%2Fa.txt"], p.adapter);
   await screen.findByRole("textbox", { name: "Inhalt von a.txt" });
@@ -43,10 +43,17 @@ it.each([false, true])("P5 reopening a file replaced by own delete+upload shows 
   await userEvent.click(within(await screen.findByRole("alertdialog")).getByRole("button", { name: "Löschen" }));
   await waitFor(() => expect(p.rev()).toBe(2));
   await waitFor(() => expect(screen.queryByRole("button", { name: "Aktionen für a.txt" }) === null).toBe(true));
-  const input = container.querySelector('input[type="file"]') as HTMLInputElement;
-  fireEvent.change(input, { target: { files: [new File(["uploaded A"], "a.txt")] } });
+  const replacementContent = replacement === "upload" ? "uploaded A" : "";
+  if (replacement === "upload") {
+    const input = container.querySelector('input[type="file"]') as HTMLInputElement;
+    fireEvent.change(input, { target: { files: [new File([replacementContent], "a.txt")] } });
+  } else {
+    await userEvent.click(screen.getByRole("button", { name: "Neue Datei" }));
+    await userEvent.type(await screen.findByRole("textbox", { name: "Name" }), "a.txt");
+    await userEvent.click(screen.getByRole("button", { name: "Anlegen" }));
+  }
   await waitFor(() => expect(p.rev()).toBe(3));
-  await waitFor(() => expect(p.contents.get("a.txt")).toBe("uploaded A"));
+  await waitFor(() => expect(p.contents.get("a.txt")).toBe(replacementContent));
   await act(async () => { await router.navigate("/volumes/edge~data?tab=files&file=%2Fa.txt"); });
   await screen.findByRole("textbox", { name: "Inhalt von a.txt" });
   await settled();
@@ -57,8 +64,9 @@ it.each([false, true])("P5 reopening a file replaced by own delete+upload shows 
   // Either the tab showed the uploaded content, or the stale baseline conflicted.
   // Data guard: a stale tab must never overwrite the uploaded content silently.
   expect({ stored: p.contents.get("a.txt"), conflicted: p.conflicts.length > 0 }).toEqual(
-    shown === "uploaded A" ? { stored: "my edit", conflicted: false } : { stored: "uploaded A", conflicted: true },
+    shown === replacementContent ? { stored: "my edit", conflicted: false } : { stored: replacementContent, conflicted: true },
   );
+  expect(shown).toBe(replacementContent);
 });
 
 // P6: swap names by two own renames while both tabs stay open.
@@ -78,6 +86,7 @@ it.each([false, true])("P6 a tab moved onto a path that previously held another 
     await userEvent.clear(name); await userEvent.type(name, to);
     await userEvent.click(screen.getByRole("button", { name: "Umbenennen" }));
     await screen.findByRole("button", { name: `Aktionen für ${to}` });
+    await waitFor(() => expect(screen.queryByRole("dialog") === null).toBe(true));
   }
   expect(p.contents.get("a.txt")).toBe("old B");
   await act(async () => { await router.navigate("/volumes/edge~data?tab=files&file=%2Fa.txt"); });
@@ -91,6 +100,7 @@ it.each([false, true])("P6 a tab moved onto a path that previously held another 
   expect({ stored: p.contents.get("a.txt"), conflicted: p.conflicts.length > 0 }).toEqual(
     shown === "old B" ? { stored: "edited from shown", conflicted: false } : { stored: "old B", conflicted: true },
   );
+  expect(shown).toBe("old B");
 });
 
 it("S3-01 refreshes an unchanged clean tab through gesture conflict and retry", async () => {

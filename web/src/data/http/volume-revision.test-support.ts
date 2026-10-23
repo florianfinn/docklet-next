@@ -5,6 +5,8 @@
 // Deviations: Original whole-tree revision regression coverage for issue #183.
 
 import { vi } from "vitest";
+import type { WorkspaceGesture } from "@/data/api";
+import { createWorkspaceTransport } from "./workspace";
 import { createVolumeWorkspace } from "./volume-workspace";
 
 /** Producer-shaped multipart transport, with an optional baseline content guard. */
@@ -66,6 +68,8 @@ export function revisionProducer(compareBaseline = true) {
     await hooks.tree?.();
     return ok(tree());
   });
-  const workspace = createVolumeWorkspace({ baseUrl: "/api", client: { fetch: fetcher as typeof fetch, token: async () => "example" }, capability: async (operationId, resourceRef) => ({ operationId, resourceRef, available: true }) });
-  return { workspace, contents, folders, events, conflicts, hooks, revision, tree, externalFolder(path: string) { folders.add(path); version++; }, externalWrite(path = "a.txt", text = "external") { contents.set(path, text); version++; stamps.set(path, version); } };
+  const options = { baseUrl: "/api", client: { fetch: fetcher as typeof fetch, token: async () => "example" }, capability: async (operationId: string, resourceRef: import("@/data/capability").ResourceRef) => ({ operationId, resourceRef, available: true }) };
+  const workspace = createVolumeWorkspace(options);
+  const transport = createWorkspaceTransport(options);
+  return { workspace, apply: (changes: WorkspaceGesture[]) => transport.update("volume", "edge~data", revision(), changes), contents, folders, events, conflicts, hooks, revision, tree, externalFolder(path: string) { folders.add(path); version++; }, externalWrite(path = "a.txt", text = "external") { contents.set(path, text); version++; stamps.set(path, version); } };
 }

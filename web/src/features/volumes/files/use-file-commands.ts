@@ -10,9 +10,10 @@ import { useTranslations } from "use-intl";
 import { toast } from "sonner";
 import { useAdapter } from "@/data/use-adapter";
 import type { WorkspaceUpload, WorkspaceWriteResult, VolumeDirListing } from "@/data/api";
+import { joinPath, parentPath } from "@/domain/files";
 import { workspaceErrorKey } from "./workspace-error";
 
-export function useFileCommands(id: string, revision: string | undefined, rebase: (from: string, to: string) => void, writeLockRef: RefObject<boolean>) {
+export function useFileCommands(id: string, revision: string | undefined, rebase: (from: string | undefined, to: string, touched: string[]) => void, writeLockRef: RefObject<boolean>) {
   const adapter = useAdapter();
   const client = useQueryClient();
   const t = useTranslations("volumes.files.workspaceErrors");
@@ -20,12 +21,12 @@ export function useFileCommands(id: string, revision: string | undefined, rebase
   const [busy, setBusy] = useState(false);
   useEffect(() => { mounted.current = true; return () => { mounted.current = false; }; }, []);
   async function refresh() { await client.invalidateQueries({ queryKey: ["files", id], predicate: (query) => query.queryKey[2] !== "content" }); }
-  async function run(fn: () => Promise<WorkspaceWriteResult>, expected = revision) {
+  async function run(fn: () => Promise<WorkspaceWriteResult>, touched: string[], expected = revision) {
     if (writeLockRef.current) return false;
     writeLockRef.current = true; setBusy(true);
     try {
       const result = await fn();
-      if (mounted.current && expected && result?.revision) rebase(expected, result.revision);
+      if (mounted.current && result?.revision) rebase(expected, result.revision, touched);
       await refresh();
       return mounted.current;
     } catch (error) {
@@ -35,12 +36,12 @@ export function useFileCommands(id: string, revision: string | undefined, rebase
   }
   return {
     busy,
-    createEntry: (_id: string, dir: string, name: string, type: "dir" | "file") => run(() => adapter.createEntry(id, dir, name, type, revision)),
-    rename: (_id: string, path: string, name: string) => run(() => adapter.renameEntry(id, path, name, revision)),
-    removeEntry: (_id: string, path: string) => run(() => adapter.deleteEntry(id, path, revision)),
+    createEntry: (_id: string, dir: string, name: string, type: "dir" | "file") => run(() => adapter.createEntry(id, dir, name, type, revision), [joinPath(dir, name)]),
+    rename: (_id: string, path: string, name: string) => run(() => adapter.renameEntry(id, path, name, revision), [path, joinPath(parentPath(path), name)]),
+    removeEntry: (_id: string, path: string) => run(() => adapter.deleteEntry(id, path, revision), [path]),
     upload: (_id: string, dir: string, file: WorkspaceUpload) => {
       const expected = client.getQueryData<VolumeDirListing>(["files", id, dir])?.revision ?? revision;
-      return run(() => adapter.uploadFile(id, dir, file, expected), expected);
+      return run(() => adapter.uploadFile(id, dir, file, expected), [joinPath(dir, file.name)], expected);
     },
     async download(path: string) {
       try {

@@ -213,6 +213,9 @@ func (s *Service) applyVolumeWorkspaceChangesInternal(
 		// move or create has been applied. Any failure rolls back the manifest.
 		if staged := stagedFiles[index]; changes[index].Operation == volume.FileOpUpdateFile && staged.baselineSet {
 			if err := s.checkVolumeWorkspaceBaselineInternal(ctx, containerID, changes[index].RelativePath, staged.baseline); err != nil {
+				if index == 0 {
+					return err
+				}
 				return rollbackFailureInternal(err)
 			}
 		}

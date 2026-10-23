@@ -9,9 +9,11 @@ import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import type { WorkspaceContent, WorkspaceGesture, WorkspaceTree } from "@/data/api";
 import { WorkspaceConflictError, WorkspaceError } from "@/data/http/workspace";
 import { useAdapter } from "@/data/use-adapter";
+import { entryIdentity, touchedPaths, underPath } from "@/data/workspace-freshness";
 import type { TreeNode } from "@/shared/workspace/file-tree";
 
-interface Draft { text: string; saved: string; revision: string; conflict?: boolean }
+interface Draft { text: string; saved: string; revision: string; entryIdentity?: string; conflict?: boolean }
+type FileSnapshot = WorkspaceContent & { entryIdentity?: string; revision: string };
 const fileKey = (id: string, path: string) => ["project-workspace-file", id, path];
 export function useProjectWorkspace(id: string | null, rawFile: "compose" | "env") {
   const adapter = useAdapter();
@@ -28,25 +30,76 @@ export function useProjectWorkspace(id: string | null, rawFile: "compose" | "env
   const [drafts, setDrafts] = useState<Record<string, Draft>>({});
   const latestDrafts = useRef(drafts);
   useLayoutEffect(() => { latestDrafts.current = drafts; }, [drafts]);
+  const latestPaths = useRef(paths);
+  useLayoutEffect(() => { latestPaths.current = paths; }, [paths]);
+  useEffect(() => client.getQueryCache().subscribe((event) => {
+    if (event.type !== "updated" || event.action.type !== "success" || event.query.queryKey[1] !== id) return;
+    if (event.query.queryKey[0] === "project-workspace-file") {
+      const path = String(event.query.queryKey[2]);
+      const data = event.query.state.data as FileSnapshot | undefined;
+      if (data) setDrafts((current) => {
+        const draft = current[path];
+        if (!draft || draft.conflict) return current;
+        if (draft.text === draft.saved && draft.saved !== data.content) { const next = { ...current }; delete next[path]; return next; }
+        if (draft.saved !== data.content || (draft.revision === data.revision && draft.entryIdentity === data.entryIdentity)) return current;
+        return { ...current, [path]: { ...draft, revision: data.revision, entryIdentity: data.entryIdentity } };
+      });
+      return;
+    }
+    if (event.query.queryKey[0] !== "project-workspace") return;
+    const nextTree = event.query.state.data as WorkspaceTree | undefined;
+    if (!nextTree) return;
+    for (const query of client.getQueryCache().findAll({ queryKey: ["project-workspace-file", id] })) {
+      const path = String(query.queryKey[2]);
+      const key = fileKey(id!, path);
+      const state = client.getQueryState<FileSnapshot>(key);
+      const data = state?.data;
+      if (!data) continue;
+      const identity = entryIdentity(nextTree, path);
+      const unchanged = identity !== undefined && identity === data.entryIdentity;
+      if (unchanged) client.setQueryData(key, { ...data, revision: nextTree.fileTreeRevision }, { updatedAt: state.dataUpdatedAt });
+      setDrafts((current) => {
+        const draft = current[path];
+        if (!draft) return current;
+        if (identity !== undefined && draft.entryIdentity === identity) return { ...current, [path]: { ...draft, revision: nextTree.fileTreeRevision } };
+        if (draft.text === draft.saved && !draft.conflict) { const next = { ...current }; delete next[path]; return next; }
+        return current;
+      });
+      if (!unchanged) {
+        if (latestPaths.current.includes(path)) void client.refetchQueries({ queryKey: key, exact: true });
+        else client.removeQueries({ queryKey: key, exact: true });
+      }
+    }
+  }), [client, id]);
   const [saving, setSaving] = useState(false);
   const lock = useRef(false);
   const mounted = useRef(true);
   useEffect(() => { mounted.current = true; return () => { mounted.current = false; }; }, []);
-  const results = useQueries({ queries: paths.map((path) => ({ queryKey: fileKey(id!, path), queryFn: () => adapter.readProjectFile!(id!, path), retry: false })) });
+  const results = useQueries({ queries: paths.map((path) => ({ queryKey: fileKey(id!, path), queryFn: async (): Promise<FileSnapshot> => {
+    for (let attempt = 0; attempt < 3; attempt++) {
+      const before = client.getQueryData<WorkspaceTree>(["project-workspace", id])!;
+      const data = await adapter.readProjectFile!(id!, path);
+      const after = client.getQueryData<WorkspaceTree>(["project-workspace", id])!;
+      if (before.fileTreeRevision !== after.fileTreeRevision || entryIdentity(before, path) !== entryIdentity(after, path)) continue;
+      return { ...data, revision: after.fileTreeRevision, entryIdentity: entryIdentity(after, path) };
+    }
+    throw new WorkspaceConflictError();
+  }, retry: false })) });
   const files = paths.map((path, index) => ({ path, data: results[index]?.data, error: results[index]?.error, pending: results[index]?.isPending, retry: () => results[index]?.refetch(), draft: drafts[path] }));
   const dirty = Object.entries(drafts).some(([, draft]) => draft.text !== draft.saved);
   function open(path: string) { setSelected(path); setPaths((current) => current.includes(path) ? current : [...current, path]); setActive(path); }
   function edit(path: string, text: string) {
-    const data = client.getQueryData<WorkspaceContent>(fileKey(id!, path));
-    setDrafts((current) => ({ ...current, [path]: current[path] ? { ...current[path], text } : { text, saved: data?.content ?? "", revision: tree.data!.fileTreeRevision } }));
+    const data = client.getQueryData<FileSnapshot>(fileKey(id!, path));
+    setDrafts((current) => ({ ...current, [path]: current[path] ? { ...current[path], text } : { text, saved: data?.content ?? "", revision: data?.revision ?? tree.data!.fileTreeRevision, entryIdentity: data?.entryIdentity } }));
   }
   function discard(path: string) { setDrafts((current) => { const next = { ...current }; delete next[path]; return next; }); }
   async function update(changes: WorkspaceGesture[], revision: string) {
     try {
       const next = await adapter.updateProjectWorkspace!(id!, revision, changes);
       if (mounted.current) {
+        const touched = changes.filter((change) => change.kind !== "update").flatMap(touchedPaths);
+        client.removeQueries({ queryKey: ["project-workspace-file", id], predicate: (query) => touched.some((root) => underPath(`/${String(query.queryKey[2]).replace(/^\/+/, "")}`, root)) });
         client.setQueryData<WorkspaceTree>(key, next);
-        setDrafts((current) => Object.fromEntries(Object.entries(current).map(([path, draft]) => [path, draft.revision === revision ? { ...draft, revision: next.fileTreeRevision } : draft])));
       }
       return next;
     } catch (error) {
@@ -62,20 +115,20 @@ export function useProjectWorkspace(id: string | null, rawFile: "compose" | "env
     const changed = Object.entries(drafts).filter(([, draft]) => draft.text !== draft.saved);
     if (!changed.length) return true;
     if (lock.current || changed.some(([, draft]) => draft.conflict)) throw new WorkspaceError("invalid");
-    // Every update carries both its opened tree revision and original text. A
-    // structural change after drafting requires an explicit conflict resolution.
+    // Keep original bytes for the content guard; tree refreshes may only advance
+    // an unchanged entry. Changed drafts retain their conflict baseline.
     const revision = changed[0]![1].revision;
     lock.current = true; setSaving(true);
     try {
       const next = await update(changed.map(([path, draft]) => ({ kind: "update", path, content: draft.text, baseline: draft.saved })), revision);
       if (!mounted.current) return false;
       const complete = changed.every(([path, draft]) => latestDrafts.current[path]?.text === draft.text);
-      for (const [path, draft] of changed) client.setQueryData<WorkspaceContent>(fileKey(id!, path), (value) => value ? { ...value, content: draft.text, size: new TextEncoder().encode(draft.text).length } : value);
+      for (const [path, draft] of changed) client.setQueryData<FileSnapshot>(fileKey(id!, path), (value) => value ? { ...value, content: draft.text, revision: next.fileTreeRevision, entryIdentity: entryIdentity(next, path), size: new TextEncoder().encode(draft.text).length } : value);
       setDrafts((current) => {
         const remaining = { ...current };
         for (const [path, submitted] of changed) {
           if (remaining[path]?.text === submitted.text) delete remaining[path];
-          else if (remaining[path]) remaining[path] = { text: remaining[path].text, saved: submitted.text, revision: next.fileTreeRevision };
+          else if (remaining[path]) remaining[path] = { text: remaining[path].text, saved: submitted.text, revision: next.fileTreeRevision, entryIdentity: entryIdentity(next, path) };
         }
         return remaining;
       });

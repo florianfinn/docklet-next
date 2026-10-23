@@ -55,13 +55,24 @@ it("refuses a baseline when the tree never stabilises", async () => {
   expect(producer.events.filter((event) => event.startsWith("file:"))).toHaveLength(3);
 });
 
-it("keeps implicit baselines current after own writes but conflicts on external changes", async () => {
+it("requires a fresh read for implicit baselines after other writes", async () => {
   const producer = revisionProducer();
   await producer.workspace.readFile("edge~data", "/a.txt");
   await producer.workspace.readFile("edge~data", "/b.txt");
   await producer.workspace.writeFile("edge~data", "/a.txt", "mine A");
+  await expect(producer.workspace.writeFile("edge~data", "/b.txt", "mine B")).rejects.toBeInstanceOf(WorkspaceConflictError);
+  await producer.workspace.readFile("edge~data", "/b.txt");
   await producer.workspace.writeFile("edge~data", "/b.txt", "mine B");
   producer.externalWrite();
   await expect(producer.workspace.writeFile("edge~data", "/a.txt", "again")).rejects.toBeInstanceOf(WorkspaceConflictError);
   expect(producer.contents.get("a.txt")).toBe("external");
+});
+
+it("MU10 removes implicit baselines for touched paths instead of stamping old content current", async () => {
+  const producer = revisionProducer(false);
+  await producer.workspace.readFile("edge~data", "/a.txt");
+  await producer.workspace.deleteEntry("edge~data", "/a.txt", "r1");
+  await producer.workspace.uploadFile("edge~data", "/", { name: "a.txt", content: "replacement", size: 11 }, "r2");
+  await expect(producer.workspace.writeFile("edge~data", "/a.txt", "stale edit")).rejects.toThrow("workspace.invalid");
+  expect(producer.contents.get("a.txt")).toBe("replacement");
 });

@@ -279,15 +279,19 @@ type pruneCall func(method, path, query string, body []byte) (int, []byte)
 
 // This fixture exercises the real command client, WebSocket tunnel, command
 // validation and local Huma handler, with no fabricated producer JSON.
-func pruneTransport(t *testing.T, mode string, handler http.Handler) pruneCall {
+func pruneTransport(t *testing.T, mode string, handler http.Handler, contentTypes ...string) pruneCall {
 	t.Helper()
+	contentType := "application/json"
+	if len(contentTypes) > 0 {
+		contentType = contentTypes[0]
+	}
 	if mode == "direct" {
 		return func(method, path, query string, body []byte) (int, []byte) {
 			if query != "" {
 				path += "?" + query
 			}
 			req := httptest.NewRequest(method, path, bytes.NewReader(body))
-			req.Header.Set("Content-Type", "application/json")
+			req.Header.Set("Content-Type", contentType)
 			response := httptest.NewRecorder()
 			handler.ServeHTTP(response, req)
 			return response.Code, response.Body.Bytes()
@@ -326,7 +330,7 @@ func pruneTransport(t *testing.T, mode string, handler http.Handler) pruneCall {
 	tunnel, ok := registry.Get("example-storage").Get()
 	require.True(t, ok)
 	return func(method, path, query string, body []byte) (int, []byte) {
-		status, _, response, err := edge.ProxyRequest(t.Context(), tunnel, method, path, query, map[string]string{"Content-Type": "application/json"}, body)
+		status, _, response, err := edge.ProxyRequest(t.Context(), tunnel, method, path, query, map[string]string{"Content-Type": contentType}, body)
 		require.NoError(t, err)
 		return status, response
 	}

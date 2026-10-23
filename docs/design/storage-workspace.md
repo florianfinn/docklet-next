@@ -116,10 +116,29 @@ optional `baselineIndex` also compares the uploaded original bytes with the
 current file, like project updates. A mismatch uses the existing HTTP 409
 workspace conflict problem. Omitted baselines retain revision-only semantics.
 Comparison happens at each ordered update boundary, after preceding manifest
-changes, under the volume lock; failure uses the existing manifest rollback.
+changes, under the volume lock. A failed guard before the first mutation leaves
+files untouched; a failure after earlier mutations uses the existing manifest rollback.
 Reads are bounded to baseline length plus one. External processes do not share
 this lock, so comparison and replacement have the same intervening-write limit
 as project workspaces. The API schema, DTOs and ACFS protocol are unchanged.
+
+After own gestures, the web consumer removes cached content and implicit adapter
+baselines for touched paths and subtrees, including both sides of a rename or
+move. A moved tab reads its new path; it cannot inherit a former occupant's
+content. Untouched cached entries can advance after an own manifest without changing
+query freshness timestamps. The adapter never advances implicit baselines; a
+caller without an explicit baseline must read again after other writes.
+
+Every tree reload, including conflict recovery, compares cached entries by size,
+mtime, mode and directory/symlink type. Unchanged entries adopt the current tree
+revision without extending content freshness. Changed clean entries are read
+again, and changed closed entries are evicted; changed dirty entries retain their original bytes and revision until
+conflict resolution. A subsequent read can advance a dirty baseline only when
+its original bytes still match. Thus unrelated external changes stop causing
+stale-revision conflicts after reload, while same-path edits remain protected
+by both revision and baseline guards. Project drafts follow the same freshness
+rule with their existing structural revision and content comparison contract;
+an older changed draft never inherits a later own manifest's revision.
 
 ## One helper image per environment
 
