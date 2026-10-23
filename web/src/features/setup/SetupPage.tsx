@@ -8,7 +8,6 @@ import { useTranslations } from "use-intl";
 import { useHubTimeZone } from "@/shared/hooks/use-hub-time-zone";
 
 import { LanguageSwitch } from "@/app/i18n/LanguageSwitch";
-import { errorCode } from "@/data/api";
 import { useAdapter } from "@/data/use-adapter";
 import { useAuthMode, useCurrentUser } from "@/data/queries";
 import { queryKeys } from "@/data/query-keys";
@@ -22,7 +21,7 @@ import { HostDefaultsFields } from "@/features/settings/sections/SimpleSections"
 import { BrandLogo } from "@/shared/brand/BrandLogo";
 import { TextField } from "@/shared/components/form-field";
 import { StepRail } from "@/shared/components/step-rail";
-import { useAdapterText } from "@/data/use-adapter-text";
+import { useCommandError } from "@/data/use-command-error";
 import { cn } from "@/shared/lib/utils";
 import { ToneBadge } from "@/shared/components/tone";
 import { Button } from "@/shared/ui/button";
@@ -62,7 +61,7 @@ function ReviewBlock({ title, onEdit, rows }: { title: string; onEdit: () => voi
 export default function SetupPage() {
   const t = useTranslations("setup");
   const tr = useTranslations("setup.review");
-  const dt = useAdapterText();
+  const commandError = useCommandError();
   const adapter = useAdapter();
   const mode = useAuthMode();
   const timeZone = useHubTimeZone();
@@ -116,7 +115,7 @@ export default function SetupPage() {
         go("done");
       } catch (e) {
         const message = e instanceof Error ? e.message : String(e);
-        toast.error(message.startsWith("settings.write.") ? t("saveError") : errorCode(e) ?? dt(message));
+        toast.error(message.startsWith("settings.write.") ? t("saveError") : commandError(e));
       } finally {
         setBusy(false);
       }

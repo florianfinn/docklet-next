@@ -7,7 +7,7 @@ import { isRunBusy } from "@/data/run-gate";
 import { useAdapter } from "@/data/use-adapter";
 import { queueDemoFailure } from "@/runtime";
 import type { PruneMode } from "@/domain/images";
-import { useAdapterText } from "@/data/use-adapter-text";
+import { useCommandError } from "@/data/use-command-error";
 
 const KNOWN = ["in-use", "host-offline", "invalid-name", "not-found"] as const;
 
@@ -15,7 +15,7 @@ const KNOWN = ["in-use", "host-offline", "invalid-name", "not-found"] as const;
 export function useImageCommands() {
   const adapter = useAdapter();
   const t = useTranslations("images");
-  const dt = useAdapterText();
+  const commandError = useCommandError();
   const guard = useCallback(
     async <T,>(fn: () => Promise<T>): Promise<T | undefined> => {
       try {
@@ -24,11 +24,11 @@ export function useImageCommands() {
         // The gate already reported the busy target once (see ActionToasts).
         if (isRunBusy(e)) return undefined;
         const code = errorCode(e);
-        toast.error(code && (KNOWN as readonly string[]).includes(code) ? t(`errors.${code as (typeof KNOWN)[number]}`) : dt(e instanceof Error ? e.message : String(e)));
+        toast.error(code && (KNOWN as readonly string[]).includes(code) ? t(`errors.${code as (typeof KNOWN)[number]}`) : commandError(e));
         return undefined;
       }
     },
-    [t, dt],
+    [t, commandError],
   );
   return {
     pull: (input: PullImageInput, fail = false) => guard(() => {

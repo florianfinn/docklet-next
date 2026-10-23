@@ -7,7 +7,7 @@ import { useTranslations } from "use-intl";
 import { AdapterOutcomeError } from "@/data/capability";
 import { errorCode, type ConnectNetworkInput, type CreateNetworkInput } from "@/data/api";
 import { useAdapter } from "@/data/use-adapter";
-import { useAdapterText } from "@/data/use-adapter-text";
+import { useCommandError } from "@/data/use-command-error";
 
 const KNOWN = ["not-found", "exists", "invalid-network", "builtin-network", "compose-managed", "in-use", "host-offline", "host-mismatch", "network-mode", "already-connected", "not-connected", "invalid-ip", "overlap"] as const;
 type Known = (typeof KNOWN)[number];
@@ -22,7 +22,7 @@ export function useNetworkCommands(owner?: string, active = true) {
     return () => { scope.version++; };
   }, [adapter, owner, active]);
   const t = useTranslations("networks.errors");
-  const dt = useAdapterText();
+  const commandError = useCommandError();
   const guard = useCallback(
     async <T,>(fn: () => Promise<T>): Promise<T | undefined> => {
       const started = generation.current.version;
@@ -36,11 +36,11 @@ export function useNetworkCommands(owner?: string, active = true) {
         if (!current() || isCancelledError(e)) return undefined;
         if (e instanceof AdapterOutcomeError && e.outcome.kind === "error" && e.outcome.code === "network.outcome-unknown") { toast.error(t("outcome-unknown")); return undefined; }
         const code = errorCode(e);
-        toast.error(code && (KNOWN as readonly string[]).includes(code) ? t(code as Known) : dt(e instanceof Error ? e.message : String(e)));
+        toast.error(code && (KNOWN as readonly string[]).includes(code) ? t(code as Known) : commandError(e));
         return undefined;
       }
     },
-    [t, dt, adapter, active],
+    [t, commandError, adapter, active],
   );
   return {
     create: (input: CreateNetworkInput) => guard(() => adapter.createNetwork(input)),

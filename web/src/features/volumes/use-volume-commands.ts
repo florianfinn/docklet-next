@@ -7,7 +7,7 @@ import { isRunBusy } from "@/data/run-gate";
 import { AdapterOutcomeError } from "@/data/capability";
 import { useAdapter } from "@/data/use-adapter";
 import type { BackupPolicy } from "@/domain/volumes";
-import { useAdapterText } from "@/data/use-adapter-text";
+import { useCommandError } from "@/data/use-command-error";
 
 type Known = "not-found" | "exists" | "invalid-name" | "in-use" | "host-offline" | "bind-not-deletable" | "not-editable" | "no-policy" | "target-missing" | "invalid-plan";
 const KNOWN = new Set<string>(["not-found", "exists", "invalid-name", "in-use", "host-offline", "bind-not-deletable", "not-editable", "no-policy", "target-missing", "invalid-plan"]);
@@ -18,7 +18,7 @@ export function useVolumeCommands() {
   const mounted = useRef(true);
   useEffect(() => { mounted.current = true; return () => { mounted.current = false; }; }, []);
   const t = useTranslations("volumes.errors");
-  const dt = useAdapterText();
+  const commandError = useCommandError();
   const guard = useCallback(
     async <T,>(fn: () => Promise<T>): Promise<T | undefined> => {
       try {
@@ -36,11 +36,11 @@ export function useVolumeCommands() {
           }
         }
         const code = errorCode(e);
-        toast.error(code && KNOWN.has(code) ? t(code as Known) : dt(e instanceof Error ? e.message : String(e)));
+        toast.error(code && KNOWN.has(code) ? t(code as Known) : commandError(e));
         return undefined;
       }
     },
-    [t, dt],
+    [t, commandError],
   );
   return useMemo(
     () => ({

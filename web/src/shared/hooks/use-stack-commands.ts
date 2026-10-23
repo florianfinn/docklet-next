@@ -9,13 +9,13 @@ import { queryKeys } from "@/data/query-keys";
 import { queueDemoFailure, type DemoFailure } from "@/runtime";
 import type { AutoUpdatePolicy, Stack, StackDetail } from "@/domain/model";
 import { useRuntimeError } from "@/features/activity/use-runtime-error";
-import { useAdapterText } from "@/data/use-adapter-text";
+import { useCommandError } from "@/data/use-command-error";
 
 /** Stack commands; progress is reported by action toasts, errors here. */
 export function useStackCommands() {
   const adapter = useAdapter();
   const client = useQueryClient();
-  const dt = useAdapterText();
+  const commandError = useCommandError();
   const runtimeError = useRuntimeError();
 
   const guard = useCallback(async <T,>(fn: () => Promise<T>): Promise<T | undefined> => {
@@ -24,10 +24,10 @@ export function useStackCommands() {
     } catch (e) {
       // The gate already reported the busy target once (see ActionToasts).
       if (isCancelledError(e) || isRunBusy(e) || runtimeError(e)) return undefined;
-      toast.error(dt(e instanceof Error ? e.message : String(e)));
+      toast.error(commandError(e));
       return undefined;
     }
-  }, [dt, runtimeError]);
+  }, [commandError, runtimeError]);
 
   /**
    * Optimistic write of a small stack setting: the cached stack and list show
