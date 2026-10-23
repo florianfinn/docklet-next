@@ -14,6 +14,7 @@ import (
 	"sync/atomic"
 	"testing"
 
+	"github.com/distribution/reference"
 	"github.com/moby/moby/client"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -65,7 +66,7 @@ func TestResolveHelperImage_PullsToolsImageWhenMissing(t *testing.T) {
 			if !assert.Equal(t, "ghcr.io/florianfinn/docklet-tools", r.URL.Query().Get("fromImage")) {
 				return
 			}
-			if !assert.Equal(t, "0.1.0", r.URL.Query().Get("tag")) {
+			if !assert.Equal(t, "sha256:d387beb35707c5634dba1630b4153c5bfe0bd4529025297ce7c024c2f2fe9602", r.URL.Query().Get("tag")) {
 				return
 			}
 			w.Header().Set("Content-Type", "application/json")
@@ -142,4 +143,15 @@ func TestResolveHelperImageRejectsPullStreamFailure(t *testing.T) {
 	image, err := ResolveHelperImage(t.Context(), newTestDockerClientInternal(t, server), "registry.example.com/tools:latest")
 	require.ErrorContains(t, err, "helper image pull failed")
 	require.Empty(t, image)
+}
+
+func TestDefaultToolsImageIsPinnedReference(t *testing.T) {
+	named, err := reference.ParseNormalizedNamed(DefaultToolsImage)
+	require.NoError(t, err)
+	tagged, ok := named.(reference.NamedTagged)
+	require.True(t, ok, "release default must include a SemVer tag")
+	require.Equal(t, "0.1.0", tagged.Tag())
+	digested, ok := named.(reference.Digested)
+	require.True(t, ok, "release default must include the multi-platform index digest")
+	require.Equal(t, "sha256:d387beb35707c5634dba1630b4153c5bfe0bd4529025297ce7c024c2f2fe9602", digested.Digest().String())
 }

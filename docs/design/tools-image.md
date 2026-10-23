@@ -74,6 +74,36 @@ so publication does not rebuild the binaries. Failed publication can leave
 platform tags or a source image; it cannot expose runtime images before their
 corresponding source is available.
 
+## First publication and release default
+
+Release tag `tools-v0.1.0` publishes revision
+`ee89b810ab4775dba5415b35a44ddc21c26b5cf1`, with acfs v0.6.2,
+ACFS protocol 2 and Trivy 0.75.0. The published references are:
+
+- Runtime index (the hub/agent release default):
+  `ghcr.io/florianfinn/docklet-tools:0.1.0@sha256:d387beb35707c5634dba1630b4153c5bfe0bd4529025297ce7c024c2f2fe9602`.
+- `linux/amd64` runtime digest:
+  `sha256:c69b8fa23b4cae0bd1d9f247977e8f0fa7ad9b00df4961f6bf8f735073954a64`.
+- `linux/arm64` runtime digest:
+  `sha256:b18283f0c9a0eb343585d3cc7007175fb5501815c8aa11f932183c1f0b754d59`.
+- Corresponding-source index:
+  `ghcr.io/florianfinn/docklet-tools:0.1.0-source@sha256:35f88495598cbbc7dfdf4f82c44de7a9499379f24909051d386880aa93986903`.
+
+For the next version, merge the reviewed input/version bump PR first, then
+publish its `tools-vMAJOR.MINOR.PATCH` tag with explicit maintainer approval.
+Verify both platform contracts and the source-first publication, record their
+registry digests, then merge a separate pin PR updating `DefaultToolsImage`,
+its tests and default documentation to the new SemVer plus index digest.
+Do not extend the closed settings retirement list: explicit rollback pins must
+survive startup. Publication and pinning each precede explicit operator rollout.
+
+`toolsImage` stores a complete per-environment override; empty follows the
+running hub or agent release default. `TOOLS_IMAGE`, `TOOLS_IMAGE_FILE` or
+`TOOLS_IMAGE__FILE` can override it locally, and an agent-local value wins over
+hub sync. To mirror images, preserve both runtime platforms and corresponding
+source, then configure the mirror's complete reference. Overrides can also pin
+an older release and are retained across restart.
+
 ## Licences and corresponding source
 
 `/usr/share/licenses/docklet-tools` carries the acfs/Kit/Arcane BSD notices,

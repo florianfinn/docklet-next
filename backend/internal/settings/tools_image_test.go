@@ -95,7 +95,7 @@ func TestToolsImageSyncPreservesEmptyAndExplicitOverride(t *testing.T) {
 	agent, err := newSettingsServiceForTestInternal(t, t.Context(), setupSettingsTestDB(t))
 	require.NoError(t, err)
 	require.NoError(t, agent.EnsureDefaultSettings(t.Context()))
-	for _, override := range []string{"", "registry.example.com/tools:latest", ""} {
+	for _, override := range []string{"", "registry.example.com/tools:latest", volumehelper.DefaultToolsImage, ""} {
 		require.NoError(t, hub.UpdateSetting(t.Context(), "toolsImage", override))
 		// The settings transport carries the configured value, never a resolved default.
 		wire, err := json.Marshal(settingstypes.Update{ToolsImage: new(hub.GetSettingsConfig().ToolsImage.Value)})
@@ -109,7 +109,13 @@ func TestToolsImageSyncPreservesEmptyAndExplicitOverride(t *testing.T) {
 		agentConfig, err := agent.loadDatabaseConfigFromEnv(t.Context(), agent.db)
 		require.NoError(t, err)
 		require.Equal(t, override, agentConfig.ToolsImage.Value, "agent-mode loading retains only the synced override")
-		require.Equal(t, volumehelper.ToolsImage(override), volumehelper.ToolsImage(agent.GetSettingsConfig().ToolsImage.Value))
+		expected := override
+		if expected == "" {
+			expected = "ghcr.io/florianfinn/docklet-tools:0.1.0@sha256:d387beb35707c5634dba1630b4153c5bfe0bd4529025297ce7c024c2f2fe9602"
+		}
+		require.Equal(t, expected, volumehelper.ToolsImage(hub.GetSettingsConfig().ToolsImage.Value), "hub resolves its release default only at read time")
+		require.Equal(t, expected, volumehelper.ToolsImage(agentConfig.ToolsImage.Value), "agent-mode loading resolves the pinned release default")
+		require.Equal(t, expected, volumehelper.ToolsImage(agent.GetSettingsConfig().ToolsImage.Value))
 		require.NoError(t, agent.EnsureDefaultSettings(t.Context()))
 		require.NoError(t, agent.LoadDatabaseSettings(t.Context()))
 		require.Equal(t, override, agent.GetSettingsConfig().ToolsImage.Value)
@@ -140,4 +146,8 @@ func TestToolsImageInvalidEnvironmentReferenceFailsInitialization(t *testing.T) 
 
 func TestToolsImageRetirementListIsClosed(t *testing.T) {
 	require.Equal(t, []string{"ghcr.io/getarcaneapp/tools:latest", "ghcr.io/florianfinn/docklet-tools:0.1.0"}, retiredSettingValuesInternal["toolsImage"], "the pre-override-only retirement list is closed: release image bump PRs must not extend it or explicit rollback pins would reset on restart")
+}
+
+func TestToolsImageRetirementListExcludesReleaseDefault(t *testing.T) {
+	require.NotContains(t, retiredSettingValuesInternal["toolsImage"], volumehelper.DefaultToolsImage, "the current release default must survive as an explicit operator pin")
 }

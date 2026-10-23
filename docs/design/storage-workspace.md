@@ -156,14 +156,13 @@ previously persisted shipped defaults (`ghcr.io/getarcaneapp/tools:latest` and
 `ghcr.io/florianfinn/docklet-tools:0.1.0`) with empty, including values that were
 explicitly set to those exact defaults. This migration list is closed: it holds
 only values persisted before override-only storage. Release image bump PRs must
-not extend it, so explicit rollback pins remain durable. A test fixes the list
-to those two values; the digest-pin PR must add a guard excluding
-`DefaultToolsImage`, once it differs from the accepted legacy `0.1.0` value.
+not extend it, so explicit rollback pins remain durable. Tests fix the list
+to those two values and exclude `DefaultToolsImage` from retirement.
 Other explicit references survive startup.
 Image overrides must pass Docker reference syntax validation; empty resets the
 override. The shared default is
-`ghcr.io/florianfinn/docklet-tools:0.1.0`; #180 adds the digest after first
-publication. Release defaults must then include SemVer and digest. An operator
+`ghcr.io/florianfinn/docklet-tools:0.1.0@sha256:d387beb35707c5634dba1630b4153c5bfe0bd4529025297ce7c024c2f2fe9602`.
+Release defaults include SemVer and the multi-platform index digest. An operator
 may choose another complete reference, including a mutable `latest` tag.
 
 Updates require a reviewed default-bump PR and explicit operator rollout; no
