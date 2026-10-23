@@ -4,7 +4,7 @@
 // License: Apache-2.0
 // Deviations: Original production boundary and regression coverage for issue #27.
 
-import { act, cleanup, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterAll, afterEach, beforeAll, expect, it, vi } from "vitest";
 
@@ -64,12 +64,21 @@ it("connects login, dashboard, hosts, containers, stacks, volumes and files with
   await userEvent.click(screen.getByRole("tab", { name: /Deployments/ }));
   expect(await screen.findByText("Noch keine Deployments aufgezeichnet.")).toBeTruthy();
   await userEvent.click(screen.getByRole("link", { name: "Volumes" }));
-  await userEvent.click(await screen.findByRole("link", { name: "data öffnen" }));
+  await screen.findByRole("link", { name: "data öffnen" });
+  await userEvent.click(screen.getByRole("button", { name: "Aktionen für data" }));
+  const files = await screen.findByRole("menuitem", { name: "Dateien öffnen" });
+  await waitFor(() => expect(files.getAttribute("aria-disabled")).not.toBe("true"));
+  await userEvent.click(files);
   await screen.findByRole("heading", { name: "data", level: 1 });
-  await userEvent.click(screen.getByRole("tab", { name: "Dateien" }));
+  expect(screen.getByRole("tab", { name: "Dateien" }).getAttribute("aria-selected")).toBe("true");
   await userEvent.click(await screen.findByRole("button", { name: "hello.txt öffnen" }));
   await waitFor(() => expect(document.querySelector(".cm-content")?.textContent).toBe("hello.txt"));
   expect(f.state.calls).toContain("/api/environments/first/volumes/data/workspace/file");
+  await userEvent.click(screen.getByRole("tab", { name: "Übersicht" }));
+  const consumer = await screen.findByRole("row", { name: /web/ });
+  expect(consumer.textContent).toContain("/data");
+  expect(within(consumer).getByRole("link", { name: "Container öffnen" }).getAttribute("href")).toContain("first~web");
+  expect(f.state.calls.some((path) => path.endsWith("/volumes/data/usage"))).toBe(false);
   expect(screen.getByRole("tab", { name: "Backups" }).hasAttribute("disabled")).toBe(true);
   expect(screen.queryByText("Kein Backup") === null).toBe(true);
   expect(screen.getByText("Backup-Status nicht verfügbar") !== null).toBe(true);
@@ -89,7 +98,7 @@ it("connects login, dashboard, hosts, containers, stacks, volumes and files with
 });
 
 it.each(["policy", "history"] as const)("keeps unsupported backup %s controls unmounted despite an advertised server capability", async (kind) => {
-  const f = fixture();
+  const f = fixture(); f.state.signedIn = true;
   const adapter = createAdapter({ fetch: f.fetcher as typeof fetch });
   const volume = await adapter.getVolume("first~data");
   const write = vi.spyOn(adapter, "setBackupPolicy");

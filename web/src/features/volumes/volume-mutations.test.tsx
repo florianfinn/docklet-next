@@ -36,7 +36,7 @@ it("renames a volume and navigates to its returned identity", async () => {
   expect(adapter.renameVolume).toHaveBeenCalledWith(volume.id, "new");
 });
 
-it("ignores a rename response after the dialog closes", async () => {
+it("keeps a pending rename open through cancel, escape, close and outside clicks", async () => {
   const adapter = createDemoAdapter(); const done = deferred<Volume>();
   adapter.renameVolume = vi.fn(() => done.promise);
   function Page() { const [open, setOpen] = useState(true); return <><Location />{open && <RenameVolumeDialog volume={volume} onClose={() => setOpen(false)} />}</>; }
@@ -45,8 +45,16 @@ it("ignores a rename response after the dialog closes", async () => {
   await userEvent.click(screen.getByRole("button", { name: "Umbenennen" }));
   await waitFor(() => expect(adapter.renameVolume).toHaveBeenCalledOnce());
   await userEvent.click(screen.getByRole("button", { name: "Abbrechen" }));
-  await act(async () => { done.resolve({ ...volume, id: "atlas~new" }); await done.promise; });
-  expect(screen.getByTestId("location").textContent).toBe("/volumes/old");
+  expect(screen.queryByRole("dialog") !== null).toBe(true);
+  expect((screen.getByRole("button", { name: "Abbrechen" }) as HTMLButtonElement).disabled).toBe(true);
+  await userEvent.keyboard("{Escape}");
+  expect(screen.queryByRole("dialog") !== null).toBe(true);
+  const close = screen.queryByRole("button", { name: "Close" });
+  if (close) await userEvent.click(close);
+  await userEvent.click(document.querySelector('[data-slot="dialog-overlay"]')!);
+  expect(screen.queryByRole("dialog") !== null).toBe(true);
+  await act(async () => { done.resolve({ ...volume, id: "atlas~new", name: "new" }); await done.promise; });
+  await waitFor(() => expect(screen.getByTestId("location").textContent).toBe("/volumes/atlas~new"));
 });
 
 it("ignores create completion after closing, and creates normally on a fresh dialog", async () => {

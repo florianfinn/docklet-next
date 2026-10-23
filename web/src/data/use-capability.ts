@@ -21,5 +21,5 @@ export function useCapability(operationId: string, resourceRef: ResourceRef = HU
   const available = adapter.kind === "demo" ? query.data?.available !== false : query.data?.available === true;
   const code = query.data?.disabledReasonCode ?? GENERIC_REASON;
   const reason = code === "capability.mapping-unavailable" ? t("mappingUnavailable") : t("unavailable");
-  return { available, reason: available ? undefined : reason };
+  return { available, pending: query.isPending, reason: available ? undefined : reason };
 }

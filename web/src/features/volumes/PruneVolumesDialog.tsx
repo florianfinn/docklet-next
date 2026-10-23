@@ -36,7 +36,7 @@ function PruneVolumesForm({ open, onOpenChange, hosts }: Props) {
   const cmd = useVolumeCommands();
   const hostIds = hosts.map((h) => h.id);
   const session = useId();
-  const [all, setAll] = useState(true);
+  const [all, setAll] = useState(false);
   const capability = useCapability("pruneVolumes");
   const plan = useQuery({ queryKey: ["volume-prune-plan", session, all, ...hostIds], queryFn: () => adapter.planVolumePrune({ hostIds, all }), staleTime: Infinity, gcTime: 0 });
   const [result, setResult] = useState<VolumePruneResult>();

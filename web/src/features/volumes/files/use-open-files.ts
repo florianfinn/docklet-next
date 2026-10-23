@@ -102,6 +102,12 @@ export function useOpenFiles(volumeId: string, fileParam: string | null) {
     [discard],
   );
 
+  // A successful manifest proves that only our change separates these revisions.
+  const rebase = useCallback((from: string, to: string) => {
+    client.setQueriesData<VolumeFileContent>({ queryKey: ["files", volumeId, "content"] }, (data) => data?.revision === from ? { ...data, revision: to } : data);
+    setDrafts((current) => Object.fromEntries(Object.entries(current).map(([path, draft]) => [path, draft.baseline?.revision === from ? { ...draft, baseline: { ...draft.baseline, revision: to } } : draft])));
+  }, [client, volumeId]);
+
   /** Writes the draft; the saved text then equals it. */
   const save = async (path: string) => {
     const file = files.find((f) => f.path === path);
@@ -110,6 +116,7 @@ export function useOpenFiles(volumeId: string, fileParam: string | null) {
     try {
       const result = await adapter.writeFile(volumeId, path, file.text, drafts[path]?.baseline);
       if (!mounted.current) return false;
+      if (result?.revision && drafts[path]?.baseline) rebase(drafts[path].baseline.revision, result.revision);
       client.setQueryData<VolumeFileContent>(queryKeys.fileContent(volumeId, path), (prev) => (prev ? { ...prev, content: file.text, revision: result?.revision ?? prev.revision, size: new TextEncoder().encode(file.text).length } : prev));
       setDrafts((d) => {
         const next = { ...d };
@@ -122,7 +129,8 @@ export function useOpenFiles(volumeId: string, fileParam: string | null) {
     } catch (error) {
       if (error instanceof WorkspaceConflictError && mounted.current) {
         setDrafts((d) => ({ ...d, [path]: { ...d[path]!, conflict: true } }));
-        await Promise.all([client.invalidateQueries({ queryKey: ["files", volumeId], predicate: (q) => q.queryKey[2] !== "content" }), client.refetchQueries({ queryKey: queryKeys.fileContent(volumeId, path), exact: true })]);
+        await client.invalidateQueries({ queryKey: ["files", volumeId], predicate: (q) => q.queryKey[2] !== "content" });
+        await client.refetchQueries({ queryKey: queryKeys.fileContent(volumeId, path), exact: true });
       }
       throw error;
     } finally { pending.current.delete(path); }
@@ -139,7 +147,7 @@ export function useOpenFiles(volumeId: string, fileParam: string | null) {
     setDrafts((d) => Object.fromEntries(Object.entries(d).filter(([k]) => !under(k, path))));
   }, []);
 
-  return { files, open, edit, discard, close, save, renamed, removed, dirty: files.some((f) => f.dirty) };
+  return { files, open, edit, discard, close, save, rebase, renamed, removed, dirty: files.some((f) => f.dirty) };
 }
 
 export { moved as movedPath, under as isUnder };

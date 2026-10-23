@@ -7,7 +7,7 @@
 import type { DockletAdapter } from "@/data/adapter";
 import type { WorkspaceBaseline, WorkspaceGesture, WorkspaceTree } from "@/data/api";
 import { joinPath, parentPath } from "@/domain/files";
-import { createWorkspaceTransport, WorkspaceError, workspacePath, type WorkspaceOptions } from "./workspace";
+import { createWorkspaceTransport, WorkspaceConflictError, WorkspaceError, workspacePath, type WorkspaceOptions } from "./workspace";
 
 type VolumeWorkspace = Pick<DockletAdapter, "listFiles" | "readFile" | "writeFile" | "createEntry" | "renameEntry" | "deleteEntry" | "uploadFile" | "downloadFile">;
 
@@ -32,6 +32,9 @@ export function createVolumeWorkspace(options: WorkspaceOptions): VolumeWorkspac
     if (!expected) throw new WorkspaceError("invalid");
     const result = await transport.update("volume", id, expected, [change]);
     trees.set(id, result);
+    for (const [key, baseline] of baselines) {
+      if (key.startsWith(`${id}:`) && baseline.revision === expected) baselines.set(key, { ...baseline, revision: result.fileTreeRevision });
+    }
     return result;
   }
   return {
@@ -44,23 +47,31 @@ export function createVolumeWorkspace(options: WorkspaceOptions): VolumeWorkspac
     async readFile(id, path) {
       current();
       await transport.require("readFile", "volume", id);
-      const snapshot = trees.get(id) ?? await tree(id);
-      const file = await transport.read("volume", id, path);
-      const baseline = { content: file.content ?? "", revision: snapshot.fileTreeRevision };
-      baselines.set(`${id}:${workspacePath(path)}`, baseline);
-      return { path: `/${file.relativePath}`, content: file.content ?? "", editable: file.editable, size: file.size, readOnlyReason: file.readOnlyReason, revision: baseline.revision };
+      // Volumes only compare the tree revision on write. Pair the content with
+      // a stable fresh tree so a change during the read cannot escape that guard.
+      for (let attempt = 0; attempt < 3; attempt++) {
+        const before = await tree(id);
+        const file = await transport.read("volume", id, path);
+        const after = await tree(id);
+        if (before.fileTreeRevision !== after.fileTreeRevision) continue;
+        const baseline = { content: file.content ?? "", revision: after.fileTreeRevision };
+        baselines.set(`${id}:${workspacePath(path)}`, baseline);
+        return { path: `/${file.relativePath}`, content: file.content ?? "", editable: file.editable, size: file.size, readOnlyReason: file.readOnlyReason, revision: baseline.revision };
+      }
+      throw new WorkspaceConflictError();
     },
     async writeFile(id, path, content, baseline) {
       current();
       const saved = baseline ?? baselines.get(`${id}:${workspacePath(path)}`);
       if (!saved) throw new WorkspaceError("invalid");
       const result = await mutate(id, "writeFile", { kind: "update", path, content, baseline: saved.content }, saved.revision);
+      baselines.set(`${id}:${workspacePath(path)}`, { content, revision: result.fileTreeRevision });
       return { revision: result.fileTreeRevision };
     },
-    async createEntry(id, dir, name, type, revision) { await mutate(id, "createEntry", type === "dir" ? { kind: "create-folder", path: joinPath(dir, name) } : { kind: "create-file", path: joinPath(dir, name), content: "" }, revision); },
-    async renameEntry(id, path, name, revision) { await mutate(id, "renameEntry", { kind: "rename", path, name }, revision); },
-    async deleteEntry(id, path, revision) { await mutate(id, "deleteEntry", { kind: "delete", path }, revision); },
-    async uploadFile(id, dir, file, revision) { await mutate(id, "uploadFile", { kind: "upload", path: joinPath(dir, file.name), file }, revision); },
+    async createEntry(id, dir, name, type, revision) { const result = await mutate(id, "createEntry", type === "dir" ? { kind: "create-folder", path: joinPath(dir, name) } : { kind: "create-file", path: joinPath(dir, name), content: "" }, revision); return { revision: result.fileTreeRevision }; },
+    async renameEntry(id, path, name, revision) { const result = await mutate(id, "renameEntry", { kind: "rename", path, name }, revision); return { revision: result.fileTreeRevision }; },
+    async deleteEntry(id, path, revision) { const result = await mutate(id, "deleteEntry", { kind: "delete", path }, revision); return { revision: result.fileTreeRevision }; },
+    async uploadFile(id, dir, file, revision) { const result = await mutate(id, "uploadFile", { kind: "upload", path: joinPath(dir, file.name), file }, revision); return { revision: result.fileTreeRevision }; },
     async downloadFile(id, path) { await transport.require("downloadFile", "volume", id); return transport.download("volume", id, path); },
   };
 }

@@ -32,11 +32,13 @@ type Pending = { kind: "create"; type: "dir" | "file" } | { kind: "rename"; entr
 const ancestors = (path: string) => ["/", ...pathSegments(path).map((s) => s.path)];
 
 /**
- * File workspace of a volume or bind mount, built from the same tree, tabs and
+ * File workspace of a volume, built from the same tree, tabs and
  * editor as the Compose workspace. The folder (?path=) and the active file
  * (?file=) live in the URL; open tabs and unsaved edits live in memory.
  */
 export function FileWorkspace({ volume, warning }: { volume: Volume; warning?: string }) {
+  const t = useTranslations("volumes.files");
+  if (volume.kind === "bind") return <div role="status" className="text-sm text-muted-foreground">{t("bindUnavailable")}</div>;
   return <VolumeFileWorkspace key={volume.id} volume={volume} warning={warning} />;
 }
 
@@ -48,7 +50,7 @@ function VolumeFileWorkspace({ volume, warning }: { volume: Volume; warning?: st
   const currentView = useRef(`${path}:${fileParam}`);
   useLayoutEffect(() => { currentView.current = `${path}:${fileParam}`; }, [path, fileParam]);
   const listing = useFiles(volume.id, path);
-  const cmd = useFileCommands(volume.id, listing.data?.revision);
+
   const createCapability = useVolumeCapability("createEntry", volume.id);
   const uploadCapability = useVolumeCapability("uploadFile", volume.id);
   const writeCapability = useVolumeCapability("writeFile", volume.id);
@@ -56,11 +58,13 @@ function VolumeFileWorkspace({ volume, warning }: { volume: Volume; warning?: st
   const deleteCapability = useVolumeCapability("deleteEntry", volume.id);
   const downloadCapability = useVolumeCapability("downloadFile", volume.id);
   const mounted = useRef(true);
-  const saveLock = useRef(false);
+  const writeLockRef = useRef(false);
   useEffect(() => { mounted.current = true; return () => { mounted.current = false; }; }, []);
   const open = useOpenFiles(volume.id, fileParam);
+  const cmd = useFileCommands(volume.id, listing.data?.revision, open.rebase, writeLockRef);
   const [pending, setPending] = useState<Pending>(null);
   const [saving, setSaving] = useState(false);
+  const busy = saving || cmd.busy;
   const aside = usePreference("workspaceAside");
   const [secondary, setSecondary] = useState<string | null>(null);
   const upload = useRef<HTMLInputElement>(null);
@@ -128,15 +132,15 @@ function VolumeFileWorkspace({ volume, warning }: { volume: Volume; warning?: st
   const downloadOpen = (file: OpenFile) => void downloadEntry({ path: file.path, name: baseName(file.path), size: file.size }, file.editable ? file.text : undefined);
 
   const save = async (file: OpenFile) => {
-    if (!file.dirty || file.conflict || !writeCapability.available || saveLock.current) return;
-    saveLock.current = true;
+    if (!file.dirty || file.conflict || !writeCapability.available || writeLockRef.current) return;
+    writeLockRef.current = true;
     setSaving(true);
     try {
       if (await open.save(file.path) && mounted.current) toast.success(t("editorSaved", { name: baseName(file.path) }));
     } catch (error) {
       if (mounted.current) toast.error(t(`workspaceErrors.${workspaceErrorKey(error)}`));
     } finally {
-      saveLock.current = false;
+      writeLockRef.current = false;
       if (mounted.current) setSaving(false);
     }
   };
@@ -193,15 +197,15 @@ function VolumeFileWorkspace({ volume, warning }: { volume: Volume; warning?: st
         </Button>
         {!singleFile && (
           <>
-            <Button variant="outline" size="sm" disabled={!createCapability.available || cmd.busy || listing.isPending || listing.isPlaceholderData || listing.isError} title={createCapability.reason} onClick={() => setPending({ kind: "create", type: "dir" })}>
+            <Button variant="outline" size="sm" disabled={!createCapability.available || busy || listing.isPending || listing.isPlaceholderData || listing.isError} title={createCapability.reason} onClick={() => setPending({ kind: "create", type: "dir" })}>
               <FolderPlus data-icon="inline-start" />
               {t("newFolder")}
             </Button>
-            <Button variant="outline" size="sm" disabled={!createCapability.available || cmd.busy || listing.isPending || listing.isPlaceholderData || listing.isError} title={createCapability.reason} onClick={() => setPending({ kind: "create", type: "file" })}>
+            <Button variant="outline" size="sm" disabled={!createCapability.available || busy || listing.isPending || listing.isPlaceholderData || listing.isError} title={createCapability.reason} onClick={() => setPending({ kind: "create", type: "file" })}>
               <FilePlus2 data-icon="inline-start" />
               {t("newFile")}
             </Button>
-            <Button size="sm" disabled={!uploadCapability.available || cmd.busy || listing.isPending || listing.isPlaceholderData || listing.isError} title={uploadCapability.reason} onClick={() => upload.current?.click()}>
+            <Button size="sm" disabled={!uploadCapability.available || busy || listing.isPending || listing.isPlaceholderData || listing.isError} title={uploadCapability.reason} onClick={() => upload.current?.click()}>
               <Upload data-icon="inline-start" />
               {t("upload")}
             </Button>
@@ -250,10 +254,10 @@ function VolumeFileWorkspace({ volume, warning }: { volume: Volume; warning?: st
           actions={
             activeFile?.status === "ready" && (
               <>
-                {activeFile.editable && <EditorAction label={t("discardChanges")} icon={<RotateCcw />} onClick={() => open.discard(activeFile.path)} disabled={!activeFile.dirty} />}
+                {activeFile.editable && <EditorAction label={t("discardChanges")} icon={<RotateCcw />} onClick={() => open.discard(activeFile.path)} disabled={!activeFile.dirty || busy} />}
                 <EditorAction label={t("download")} icon={<Download />} disabled={!downloadCapability.available} onClick={() => downloadOpen(activeFile)} />
                 {activeFile.editable && (
-                  <Button size="sm" className="ml-1 h-7" disabled={!activeFile.dirty || activeFile.conflict || saving || !writeCapability.available} title={writeCapability.reason} onClick={() => void save(activeFile)}>
+                  <Button size="sm" className="ml-1 h-7" disabled={!activeFile.dirty || activeFile.conflict || busy || !writeCapability.available} title={writeCapability.reason} onClick={() => void save(activeFile)}>
                     <Save data-icon="inline-start" />
                     {t("save")}
                   </Button>
@@ -269,8 +273,8 @@ function VolumeFileWorkspace({ volume, warning }: { volume: Volume; warning?: st
             <FolderView
               listing={listing}
               singleFile={singleFile}
-              canRename={renameCapability.available && !cmd.busy}
-              canDelete={deleteCapability.available && !cmd.busy}
+              canRename={renameCapability.available && !busy}
+              canDelete={deleteCapability.available && !busy}
               canDownload={downloadCapability.available}
               onOpen={openEntry}
               onDownload={(e) => void downloadEntry(e)}

@@ -5,6 +5,7 @@
 // Deviations: Original whole-tree revision regression coverage for issue #183.
 
 import { expect, it } from "vitest";
+import { revisionProducer } from "./volume-revision.test-support";
 import { createVolumeWorkspace } from "./volume-workspace";
 import { WorkspaceConflictError } from "./workspace";
 
@@ -36,4 +37,31 @@ it("a file read after a tree change carries the tree revision current at read ti
   let conflict = false;
   try { await ws.writeFile("edge~data", "/a.txt", "mine", { content: reread.content, revision: reread.revision! }); } catch (e) { conflict = e instanceof WorkspaceConflictError; }
   expect({ revision: reread.revision, conflict }).toEqual({ revision: "r2", conflict: false });
+});
+
+it("re-reads content when an external write happens during the read", async () => {
+  const producer = revisionProducer();
+  producer.hooks.file = () => { producer.hooks.file = undefined; producer.externalWrite(); };
+  const file = await producer.workspace.readFile("edge~data", "/a.txt");
+  expect({ content: file.content, revision: file.revision }).toEqual({ content: "external", revision: "r2" });
+  await producer.workspace.writeFile("edge~data", "/a.txt", "mine", { content: file.content, revision: file.revision! });
+  expect(producer.conflicts).toEqual([]);
+});
+
+it("refuses a baseline when the tree never stabilises", async () => {
+  const producer = revisionProducer();
+  producer.hooks.file = () => producer.externalWrite();
+  await expect(producer.workspace.readFile("edge~data", "/a.txt")).rejects.toBeInstanceOf(WorkspaceConflictError);
+  expect(producer.events.filter((event) => event.startsWith("file:"))).toHaveLength(3);
+});
+
+it("keeps implicit baselines current after own writes but conflicts on external changes", async () => {
+  const producer = revisionProducer();
+  await producer.workspace.readFile("edge~data", "/a.txt");
+  await producer.workspace.readFile("edge~data", "/b.txt");
+  await producer.workspace.writeFile("edge~data", "/a.txt", "mine A");
+  await producer.workspace.writeFile("edge~data", "/b.txt", "mine B");
+  producer.externalWrite();
+  await expect(producer.workspace.writeFile("edge~data", "/a.txt", "again")).rejects.toBeInstanceOf(WorkspaceConflictError);
+  expect(producer.contents.get("a.txt")).toBe("external");
 });

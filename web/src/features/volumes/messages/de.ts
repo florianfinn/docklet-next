@@ -112,8 +112,8 @@ export const deVolumes: typeof enVolumes = {
     created: "Angelegt",
     labels: "Labels",
     none: "–",
-    bindNote: "Bind-Mount: ein Verzeichnis des Hosts. Docklet zeigt es mit demselben Dateibrowser; Löschen und Anlegen bleiben beim Host.",
-    fileBindNote: "Einzelne Datei als Bind-Mount – der Dateibrowser zeigt nur diese Datei.",
+    bindNote: "Bind-Mount: ein Verzeichnis des Hosts. Dateizugriff ist hier nicht verfügbar.",
+    fileBindNote: "Einzelne Datei als Bind-Mount. Dateizugriff ist hier nicht verfügbar.",
     dbWarning: "Enthält Datenbankdateien ({images}). Nicht einzeln bearbeiten; für Backups Container stoppen oder einen Datenbank-Dump verwenden.",
     rename: "Volume umbenennen",
     delete: "Volume löschen",
@@ -127,6 +127,7 @@ export const deVolumes: typeof enVolumes = {
     offline: "{host} ist nicht verbunden – Dateien und Backups sind erst nach der Verbindung verfügbar.",
   },
   files: {
+    bindUnavailable: "Dateizugriff ist für Bind-Mounts nicht verfügbar.",
     truncated: "Der Dateibaum hat die Servergrenze erreicht; einige Einträge fehlen.",
     readOnlyReasons: { binary: "Binärinhalt. Lade die Datei herunter, um sie zu öffnen.", too_large: "Diese Datei überschreitet die Grenze des Texteditors. Lade sie stattdessen herunter.", symlink: "Symbolische Links sind schreibgeschützt und werden hier nicht verfolgt.", special: "Dieser Eintrag ist keine reguläre Datei." },
     workspaceErrors: {

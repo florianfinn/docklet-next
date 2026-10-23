@@ -26,7 +26,7 @@ export function PageHeader({ title, description, actions, eyebrow }: { title: Re
   );
 }
 
-export function QueryError({ onRetry, className, compact, error }: { onRetry?: () => void; className?: string; compact?: boolean; error?: unknown }) {
+export function QueryError({ onRetry, className, compact, error, message }: { onRetry?: () => void; className?: string; compact?: boolean; error?: unknown; message?: string }) {
   const t = useTranslations("common");
   const capability = useTranslations("activity.capability");
   if (error instanceof AdapterOutcomeError && error.outcome.kind === "not-available") {
@@ -35,7 +35,7 @@ export function QueryError({ onRetry, className, compact, error }: { onRetry?: (
   return (
     <Alert variant="destructive" className={cn("border-destructive/30 bg-destructive/5", className)}>
       <AlertTriangle />
-      <AlertTitle>{t("query.errorTitle")}</AlertTitle>
+      <AlertTitle>{message ?? t("query.errorTitle")}</AlertTitle>
       <AlertDescription className="flex flex-wrap items-center gap-3">
         {!compact && <span>{t("query.errorHint")}</span>}
         {onRetry && (

@@ -139,6 +139,7 @@ export type WorkspaceGesture =
   | { kind: "rename"; path: string; name: string }
   | { kind: "move"; path: string; parent: string }
   | { kind: "delete"; path: string };
+export type WorkspaceWriteResult = void | { revision: string };
 export interface WorkspaceBaseline { revision: string; content: string }
 export type VolumeFileContent = FileContent & { revision?: string; readOnlyReason?: WorkspaceReadOnlyReason };
 export type VolumeDirListing = DirListing & { revision?: string; truncated?: boolean };
@@ -167,11 +168,11 @@ export interface VolumesApi extends ProjectWorkspaceApi {
   pruneVolumes(input: { hostIds: string[]; volumeIds: string[]; candidates?: VolumePruneCandidate[]; all?: boolean }): Promise<VolumePruneResult>;
   listFiles(volumeId: string, path: string): Promise<VolumeDirListing>;
   readFile(volumeId: string, path: string): Promise<VolumeFileContent>;
-  writeFile(volumeId: string, path: string, content: string, baseline?: WorkspaceBaseline): Promise<void | { revision: string }>;
-  createEntry(volumeId: string, dir: string, name: string, type: "dir" | "file", revision?: string): Promise<void>;
-  renameEntry(volumeId: string, path: string, name: string, revision?: string): Promise<void>;
-  deleteEntry(volumeId: string, path: string, revision?: string): Promise<void>;
-  uploadFile(volumeId: string, dir: string, file: WorkspaceUpload, revision?: string): Promise<void>;
+  writeFile(volumeId: string, path: string, content: string, baseline?: WorkspaceBaseline): Promise<WorkspaceWriteResult>;
+  createEntry(volumeId: string, dir: string, name: string, type: "dir" | "file", revision?: string): Promise<WorkspaceWriteResult>;
+  renameEntry(volumeId: string, path: string, name: string, revision?: string): Promise<WorkspaceWriteResult>;
+  deleteEntry(volumeId: string, path: string, revision?: string): Promise<WorkspaceWriteResult>;
+  uploadFile(volumeId: string, dir: string, file: WorkspaceUpload, revision?: string): Promise<WorkspaceWriteResult>;
   downloadFile?(volumeId: string, path: string): Promise<Blob>;
   setBackupPolicy(volumeId: string, policy: BackupPolicy | null): Promise<void>;
   runBackup(volumeId: string): Promise<string>;

@@ -41,10 +41,11 @@ function projectFixture(overrides: Partial<DockletAdapter> = {}) {
   const getProjectWorkspace = vi.fn(async () => tree);
   const updateProjectWorkspace = vi.fn(async () => { order.push("extra"); return { ...tree, fileTreeRevision: "r2" }; });
   const saveStackFiles = vi.fn(async () => { order.push("compose"); });
+  const setStackLabels = vi.fn(async () => { order.push("labels"); });
   const deployStack = vi.fn(async () => { order.push("deploy"); return { stackId: "edge~example", actionId: "run" }; });
-  const adapter: DockletAdapter = { ...createDemoAdapter(), kind: "http", getProjectWorkspace, readProjectFile: vi.fn(async (_id, path) => content(path)), updateProjectWorkspace, saveStackFiles, deployStack, getCapability: async (operationId, resourceRef = { kind: "hub", id: "0" }) => ({ operationId, resourceRef, available: true }), ...overrides };
+  const adapter: DockletAdapter = { ...createDemoAdapter(), kind: "http", getProjectWorkspace, readProjectFile: vi.fn(async (_id, path) => content(path)), updateProjectWorkspace, saveStackFiles, setStackLabels, deployStack, getCapability: async (operationId, resourceRef = { kind: "hub", id: "0" }) => ({ operationId, resourceRef, available: true }), ...overrides };
   const rendered = renderRoutes([{ path: "/stacks/:id", element: <Page /> }, { path: "/elsewhere", element: <p>Elsewhere</p> }], ["/stacks/edge~example?tab=editor"], adapter);
-  return { ...rendered, adapter, order, getProjectWorkspace, updateProjectWorkspace, saveStackFiles, deployStack };
+  return { ...rendered, adapter, order, getProjectWorkspace, updateProjectWorkspace, saveStackFiles, setStackLabels, deployStack };
 }
 
 beforeEach(() => simulationStore.set((s) => ({ ...s, latency: "instant", live: false })));
@@ -54,6 +55,13 @@ async function openFile(name = "a.txt") {
   await userEvent.click(await within(nav).findByRole("button", { name }));
   return screen.findByRole("textbox", { name: `Inhalt von ${name}` });
 }
+async function changeLabels() {
+  const mode = screen.getByRole("radiogroup", { name: "Bearbeitungsmodus" });
+  await userEvent.click(within(mode).getByRole("radio", { name: "Easy" }));
+  await userEvent.click(screen.getByRole("button", { name: /1 Stack Name, Host, Labels/ }));
+  await userEvent.type(screen.getByRole("textbox", { name: "Label hinzufügen" }), "example-label{Enter}");
+  await userEvent.click(within(mode).getByRole("radio", { name: "Advanced" }));
+}
 async function dirtyBoth() {
   const compose = await screen.findByRole("textbox", { name: "Inhalt von compose.yaml" });
   replaceText(compose.getAttribute("aria-label")!, "name: example\nservices:\n  app:\n    image: nginx:1.29-alpine\n# changed\n");
@@ -61,31 +69,33 @@ async function dirtyBoth() {
 }
 
 describe("project multi-file save ordering", () => {
-  it("saves dirty Compose before extra files, then deploys through the existing port", async () => {
+  it("saves Compose, extra files and changed labels before deploy", async () => {
     const { order, updateProjectWorkspace, deployStack } = projectFixture();
-    await dirtyBoth();
+    await dirtyBoth(); await changeLabels();
     await userEvent.click(screen.getByRole("button", { name: "Speichern & Redeploy" }));
     await waitFor(() => expect(deployStack).toHaveBeenCalledTimes(1));
-    expect(order).toEqual(["compose", "extra", "deploy"]);
+    expect(order).toEqual(["compose", "extra", "labels", "deploy"]);
     expect(updateProjectWorkspace).toHaveBeenCalledWith("edge~example", "r1", [{ kind: "update", path: "a.txt", content: "extra draft", baseline: "old" }]);
   });
   it("does not send extra files after a failed Compose save", async () => {
     const saveStackFiles = vi.fn(async () => { throw new WorkspaceError("unavailable"); });
-    const { updateProjectWorkspace, deployStack } = projectFixture({ saveStackFiles });
-    await dirtyBoth(); await userEvent.click(screen.getByRole("button", { name: "Speichern" }));
+    const { updateProjectWorkspace, setStackLabels, deployStack } = projectFixture({ saveStackFiles });
+    await dirtyBoth(); await changeLabels(); await userEvent.click(screen.getByRole("button", { name: "Speichern" }));
     await waitFor(() => expect((screen.getByRole("button", { name: "Speichern" }) as HTMLButtonElement).disabled).toBe(false));
     expect(saveStackFiles).toHaveBeenCalledTimes(1);
     expect(updateProjectWorkspace).toHaveBeenCalledTimes(0);
+    expect(setStackLabels).toHaveBeenCalledTimes(0);
     expect(deployStack).toHaveBeenCalledTimes(0);
     expect(screen.getByRole("textbox", { name: "Inhalt von a.txt" }).textContent).toBe("extra draft");
   });
   it("shows partial save and keeps drafts when extra files fail after Compose", async () => {
     const updateProjectWorkspace = vi.fn(async () => { throw new WorkspaceError("unavailable"); });
-    const { saveStackFiles, deployStack } = projectFixture({ updateProjectWorkspace });
-    await dirtyBoth(); await userEvent.click(screen.getByRole("button", { name: "Speichern & Redeploy" }));
+    const { saveStackFiles, setStackLabels, deployStack } = projectFixture({ updateProjectWorkspace });
+    await dirtyBoth(); await changeLabels(); await userEvent.click(screen.getByRole("button", { name: "Speichern & Redeploy" }));
     expect((await screen.findByRole("alert")).textContent).toContain("Compose und .env wurden gespeichert");
     expect(saveStackFiles).toHaveBeenCalledTimes(1);
     expect(updateProjectWorkspace).toHaveBeenCalledTimes(1);
+    expect(setStackLabels).toHaveBeenCalledTimes(0);
     expect(deployStack).toHaveBeenCalledTimes(0);
     expect(screen.getByRole("textbox", { name: "Inhalt von a.txt" }).textContent).toBe("extra draft");
     await userEvent.click(within(screen.getByRole("navigation", { name: "Dateien" })).getByRole("button", { name: /^compose.yaml/ }));

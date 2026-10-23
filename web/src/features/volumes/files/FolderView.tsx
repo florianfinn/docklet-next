@@ -38,8 +38,7 @@ export function FolderView({ listing, singleFile, canRename = true, canDelete = 
   if (listing.isError)
     return (
       <div className="p-3">
-        <p role="alert">{t(`workspaceErrors.${workspaceErrorKey(listing.error)}`)}</p>
-        <QueryError error={listing.error} onRetry={() => void listing.refetch()} compact />
+        <QueryError error={listing.error} message={t(`workspaceErrors.${workspaceErrorKey(listing.error)}`)} onRetry={() => void listing.refetch()} compact />
       </div>
     );
   if (entries.length === 0) return <EmptyState icon={<Folder />} title={t("empty")} className="m-3 border-0" />;

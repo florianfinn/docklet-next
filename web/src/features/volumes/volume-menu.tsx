@@ -24,7 +24,7 @@ export function useVolumeMenu(v: Volume, host: Host | undefined, on: { remove: (
   const navigate = useNavigate();
   const remove = useVolumeCapability("deleteVolume", v.id);
   const backup = useCapability("runBackup");
-  const files = useCapability("listFiles");
+  const files = useVolumeCapability("listFiles", v.id);
   const online = host?.status === "online";
   return [
     [

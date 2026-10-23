@@ -44,12 +44,16 @@ export function useProjectWorkspace(id: string | null, rawFile: "compose" | "env
   async function update(changes: WorkspaceGesture[], revision: string) {
     try {
       const next = await adapter.updateProjectWorkspace!(id!, revision, changes);
-      if (mounted.current) client.setQueryData<WorkspaceTree>(key, next);
+      if (mounted.current) {
+        client.setQueryData<WorkspaceTree>(key, next);
+        setDrafts((current) => Object.fromEntries(Object.entries(current).map(([path, draft]) => [path, draft.revision === revision ? { ...draft, revision: next.fileTreeRevision } : draft])));
+      }
       return next;
     } catch (error) {
       if (error instanceof WorkspaceConflictError && mounted.current) {
           setDrafts((current) => Object.fromEntries(Object.entries(current).map(([path, draft]) => [path, { ...draft, conflict: true }])));
-        await Promise.all([tree.refetch(), ...paths.map((path) => client.refetchQueries({ queryKey: fileKey(id!, path), exact: true }))]);
+        await tree.refetch();
+        await Promise.all(paths.map((path) => client.refetchQueries({ queryKey: fileKey(id!, path), exact: true })));
       }
       throw error;
     }

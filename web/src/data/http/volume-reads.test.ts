@@ -7,17 +7,16 @@
 import { describe, expect, it } from "vitest";
 import { resourceFixture } from "./resources.test-support";
 
-// DTOs follow VolumeHandler.GetVolume/GetVolumeUsage/GetVolumeSizes and
-// volume.NewSummary: usage contains container IDs, sizes use `size`.
+// GetVolume includes the shared consumer projection; sizes use `size`.
 describe.each([false, true])("volume reads (Edge=%s)", (edge) => {
-  it("loads detail, usage, sizes and stack consumers for Direct and Edge IDs", async () => {
+  it("loads detail, sizes and stack consumers without a separate usage request for Direct and Edge IDs", async () => {
     const f = resourceFixture(); f.state.isEdge = edge;
     for (const host of ["first", "second"]) {
       const detail = await f.adapter.getVolume(`${host}~data`);
       expect(detail.scope).toBe("local");
       expect(detail.sizeBytes).toBe(512);
       expect(detail.consumers.map((c) => [c.containerId, c.stackId, c.running])).toEqual([[`${host}~web`, `${host}~project`, true]]);
-      expect(f.fetcher.mock.calls.some(([url]) => String(url).endsWith(`/environments/${host}/volumes/data/usage`))).toBe(true);
+      expect(f.fetcher.mock.calls.some(([url]) => String(url).endsWith(`/environments/${host}/volumes/data/usage`))).toBe(false);
     }
   });
 

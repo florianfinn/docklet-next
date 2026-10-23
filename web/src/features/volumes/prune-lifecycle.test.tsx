@@ -9,6 +9,7 @@ import userEvent from "@testing-library/user-event";
 import { useState } from "react";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import type { VolumePrunePlan, VolumePruneResult } from "@/data/api";
+import { volumeFixture } from "@/data/http/volume-commands.test-support";
 import { createDemoAdapter } from "@/data/demo/demo-adapter";
 import { simulationStore } from "@/data/demo/simulation";
 import { renderWithApp } from "@/test/render";
@@ -19,7 +20,7 @@ afterEach(() => { simulationStore.reset(); localStorage.clear(); });
 function deferred<T>() { let resolve!: (value: T) => void; const promise = new Promise<T>((done) => { resolve = done; }); return { promise, resolve }; }
 const snapshot: VolumePrunePlan = {
   candidates: ["removed", "held", "gone", "replaced", "failed", "excluded"].map((name) => ({ id: `atlas~${name}`, name, hostId: "atlas", kind: "volume", driver: "local", source: "", sizeBytes: 0, sizeUnavailable: true, createdAt: "2026-10-22T12:00:00Z", consumers: [], labels: {} })),
-  all: true, kept: [], skippedHosts: ["cedar"], failedHosts: [{ hostId: "delta", code: "agent.unavailable" }], candidateReasons: { "atlas~removed": "unused" },
+  all: false, kept: [], skippedHosts: ["cedar"], failedHosts: [{ hostId: "delta", code: "agent.unavailable" }], candidateReasons: { "atlas~removed": "unused-anonymous" },
 };
 const result: VolumePruneResult = { removed: [{ id: "atlas~removed", name: "removed", hostId: "atlas", sizeBytes: 0 }], skipped: [{ id: "atlas~held", reason: "in-use" }, { id: "atlas~gone", reason: "not-found" }, { id: "atlas~replaced", reason: "changed" }], failed: [{ id: "atlas~failed", name: "failed", hostId: "atlas", code: "volume.remove-failed" }], spaceReclaimed: 0 };
 async function setup() {
@@ -42,7 +43,7 @@ it("executes the selected snapshot and renders removed, skipped deviations and f
   await userEvent.click(within(dialog).getByRole("button", { name: "5 Volumes löschen" }));
   await waitFor(() => expect(f.adapter.pruneVolumes).toHaveBeenCalledOnce());
   const selected = snapshot.candidates.filter((v) => v.name !== "excluded");
-  expect(f.adapter.pruneVolumes).toHaveBeenCalledWith({ hostIds: ["atlas", "boreal", "delta", "cedar"], volumeIds: selected.map((v) => v.id), candidates: selected.map(({ id, hostId, name, createdAt }) => ({ id, hostId, name, createdAt })), all: true });
+  expect(f.adapter.pruneVolumes).toHaveBeenCalledWith({ hostIds: ["atlas", "boreal", "delta", "cedar"], volumeIds: selected.map((v) => v.id), candidates: selected.map(({ id, hostId, name, createdAt }) => ({ id, hostId, name, createdAt })), all: false });
   // Waiting does not refresh the plan; the execution deviation is authoritative.
   await act(async () => { done.resolve(result); await done.promise; });
   const skipped = await within(dialog).findByRole("region", { name: "Übersprungen" });
@@ -112,3 +113,44 @@ it("discards a pending preview when the host scope changes", async () => {
   expect(screen.queryByText("excluded") === null).toBe(true);
   expect(screen.getByText("fresh") !== null).toBe(true);
 });
+
+
+for (const includeNamed of [false, true]) {
+  it(`previews anonymous volumes by default and includes named only on request (${includeNamed})`, async () => {
+    const f = volumeFixture();
+    const original = f.fetcher.getMockImplementation()!;
+    const requests: string[] = [];
+    let submitted: unknown;
+    f.fetcher.mockImplementation(async (input, init) => {
+      const url = new URL(String(input), "https://hub.example.com");
+      if (url.pathname.endsWith("/volumes/prune")) {
+        if (init?.method === "POST") {
+          submitted = JSON.parse(String(init.body));
+          return f.json({ removed: ["anonymous"], skipped: [], failed: [], spaceReclaimed: 0 });
+        }
+        requests.push(url.search);
+        const candidate = { name: "anonymous", driver: "local", createdAt: "2026-10-22T12:00:00Z", reason: "unused-anonymous" };
+        return f.json({ candidates: url.searchParams.get("all") === "true" ? [candidate, { ...candidate, name: "named", reason: "unused" }] : [candidate] });
+      }
+      return original(input, init);
+    });
+    const hosts = await f.adapter.listHosts();
+    renderWithApp(<PruneVolumesDialog open hosts={hosts} onOpenChange={() => {}} />, f.adapter);
+    await screen.findByRole("checkbox", { name: /anonymous/ });
+    expect(requests).toEqual(["?all=false"]);
+    const toggle = screen.getByRole("checkbox", { name: "Benannte Volumes einbeziehen" });
+    expect(toggle.getAttribute("aria-checked")).toBe("false");
+    expect(screen.getByRole("checkbox", { name: /anonymous/ }).getAttribute("aria-checked")).toBe("true");
+    expect(screen.queryByRole("checkbox", { name: /^named/ }) === null).toBe(true);
+    if (includeNamed) {
+      await userEvent.click(toggle);
+      const named = await screen.findByRole("checkbox", { name: /^named/ });
+      expect(requests).toEqual(["?all=false", "?all=true"]);
+      expect(named.getAttribute("aria-checked")).toBe("true");
+      await userEvent.click(named);
+    }
+    await userEvent.click(screen.getByRole("button", { name: "1 Volume löschen" }));
+    await screen.findByRole("region", { name: "Entfernt" });
+    expect(submitted).toEqual({ all: includeNamed, candidates: [{ name: "anonymous", createdAt: "2026-10-22T12:00:00Z" }] });
+  });
+}

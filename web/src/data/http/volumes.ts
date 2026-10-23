@@ -16,7 +16,7 @@ import { inventoryId, splitInventoryId } from "./inventory-mapping";
 import { createInventoryTransport, inventoryFailure } from "./inventory-transport";
 import { mapVolumes } from "./resource-mapping";
 
-type Read = "get-volume" | "get-volume-usage" | "get-volume-sizes";
+type Read = "get-volume" | "get-volume-sizes";
 type Body<I extends Read> = operations[I]["responses"][200]["content"]["application/json"];
 type Schema = components["schemas"];
 
@@ -92,14 +92,13 @@ export function createVolumeReads(baseUrl: string, fetcher: typeof fetch, hosts:
         return { ...volume, backups: [] };
       }
       let inventory: InventoryObservation = { stale: false };
-      const [row, usage, ctx, sizes] = await Promise.all([
+      const [row, ctx, sizes] = await Promise.all([
         read("get-volume", hostId, encodeURIComponent(name), (state) => { inventory = state; }),
-        read("get-volume-usage", hostId, `${encodeURIComponent(name)}/usage`),
         context(hostId),
         read("get-volume-sizes", hostId, "sizes").catch(() => null),
       ]);
       check();
-      const volume = map({ ...row, containers: [...new Set([...(row.containers ?? []), ...(usage.containers ?? [])])] }, hostId, ctx, inventory);
+      const volume = map(row, hostId, ctx, inventory);
       onState(hostId, inventory);
       const size = sizes?.find((s) => s.name === name)?.size;
       if (typeof size === "number" && size >= 0) { volume.sizeBytes = size; volume.sizeUnavailable = false; }

@@ -4,10 +4,21 @@
 // License: Apache-2.0
 // Deviations: Original production boundary and regression coverage for issue #27.
 
+import type { ResourceRef } from "@/data/capability";
 import { vi } from "vitest";
 
 import { resourceFixture } from "@/data/http/resources.test-support";
 import { directWsCreate } from "@/data/http/workspace-smoke.test-support";
+
+// Scoped storage descriptors match the producer's resource-kind admission.
+function availableForRef(operation: string, ref: ResourceRef) {
+  const [host, raw, extra] = ref.id.split("~");
+  const scoped = !!host && !!raw && extra === undefined;
+  if (["listFiles", "readFile", "writeFile", "createEntry", "renameEntry", "deleteEntry", "uploadFile", "downloadFile"].includes(operation)) return ref.kind === "volume" && scoped && !raw!.startsWith("bind:");
+  if (["listVolumes", "getVolume"].includes(operation)) return ref.kind === "hub" || ref.kind === "host" && !!host && raw === undefined;
+  if (["getProjectWorkspace", "readProjectFile", "downloadProjectFile", "updateProjectWorkspace"].includes(operation)) return ref.kind === "stack" && scoped;
+  return true;
+}
 
 /** Reuse inventory contract fixtures and the sanitised real workspace envelope. */
 export function connectedFixture() {
@@ -28,7 +39,11 @@ export function connectedFixture() {
       "listHosts", "listStacks", "getStack", "listContainers", "listImages", "listVolumes", "getVolume", "getTopology", "subscribeMetrics", "listFiles", "readFile", "writeFile", "createEntry", "renameEntry", "deleteEntry", "uploadFile", "downloadFile",
       // A server descriptor cannot enable an adapter mapping that does not exist.
       "runBackup", "setBackupPolicy", "restoreBackup", "checkUpdates", "installStackUpdates", "installContainerUpdate", "reconnectHost", "restartAgent", "restartService", "setContainerOrigin", "importSource", "updateHost", "restoreRestorePoint",
-    ].map((operationId) => ({ operationId, available: true, resourceRef: { kind: url.searchParams.get("kind"), id: url.searchParams.get("id") } })));
+    ].map((operationId) => {
+      const resourceRef = { kind: url.searchParams.get("kind") ?? "hub", id: url.searchParams.get("id") ?? "0" };
+      const available = availableForRef(operationId, resourceRef);
+      return { operationId, available, resourceRef, disabledReasonCode: available ? undefined : "capability.unavailable" };
+    }));
     if (state.failed && path.includes(state.failed)) return Response.json({ code: "http.error" }, { status: 500 });
     if (path.endsWith("/workspace")) return json(directWsCreate);
     if (path.endsWith("/workspace/file")) return json({ relativePath: "hello.txt", path: "/hello.txt", name: "hello.txt", content: "hello.txt", editable: true, size: 9, mimeType: "text/plain" });

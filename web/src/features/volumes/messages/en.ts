@@ -111,8 +111,8 @@ export const enVolumes = {
     created: "Created",
     labels: "Labels",
     none: "–",
-    bindNote: "Bind mount: a directory on the host. Docklet shows it with the same file browser; deleting and creating stay with the host.",
-    fileBindNote: "Single file as bind mount – the file browser shows only this file.",
+    bindNote: "Bind mount: a directory on the host. File access is not available here.",
+    fileBindNote: "Single file as bind mount. File access is not available here.",
     dbWarning: "Contains database files ({images}). Do not edit them individually; for backups, stop the container or use a database dump.",
     rename: "Rename volume",
     delete: "Delete volume",
@@ -126,6 +126,7 @@ export const enVolumes = {
     offline: "{host} is not connected – files and backups are available once it is connected.",
   },
   files: {
+    bindUnavailable: "File access is not available for bind mounts.",
     truncated: "The file tree reached the server limit; some entries are omitted.",
     readOnlyReasons: { binary: "Binary content. Download the file to open it.", too_large: "This file exceeds the text editor limit. Download it instead.", symlink: "Symbolic links are read-only and cannot be followed here.", special: "This entry is not a regular file." },
     workspaceErrors: {

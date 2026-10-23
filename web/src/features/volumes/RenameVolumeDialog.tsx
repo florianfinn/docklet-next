@@ -24,8 +24,8 @@ export function RenameVolumeDialog({ volume, onClose }: { volume: Volume; onClos
   const [name, setName] = useState(volume.name);
   const [busy, setBusy] = useState(false);
   const invalid = !!volumeName(name, [volume.name]);
-  return <Dialog open onOpenChange={(open) => { if (!open) onClose(); }}>
-    <DialogContent>
+  return <Dialog open onOpenChange={(open) => { if (!open && !busy) onClose(); }}>
+    <DialogContent showCloseButton={!busy} onEscapeKeyDown={(event) => { if (busy) event.preventDefault(); }} onPointerDownOutside={(event) => { if (busy) event.preventDefault(); }}>
       <form className="flex flex-col gap-4" onSubmit={async (event) => {
         event.preventDefault();
         if (busy || invalid || !capability.available) return;
@@ -40,7 +40,7 @@ export function RenameVolumeDialog({ volume, onClose }: { volume: Volume; onClos
         <DialogHeader><DialogTitle>{t("title")}</DialogTitle><DialogDescription>{t("description", { name: volume.name })}</DialogDescription></DialogHeader>
         <TextField id="rename-volume-name" label={t("name")} value={name} onChange={setName} description={t("hint")} mono />
         <DialogFooter>
-          <Button type="button" variant="outline" onClick={onClose}>{t("cancel")}</Button>
+          <Button type="button" variant="outline" disabled={busy} onClick={onClose}>{t("cancel")}</Button>
           <Button type="submit" disabled={busy || invalid || !capability.available} title={capability.reason}>{t("submit")}</Button>
         </DialogFooter>
       </form>

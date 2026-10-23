@@ -14,5 +14,7 @@ import { useCapability } from "@/data/use-capability";
 export function CapabilityGate({ operation, resourceRef, children }: { operation: string; resourceRef?: ResourceRef; children: ReactNode }) {
   const capability = useCapability(operation, resourceRef);
   const t = useTranslations("common.query");
+  const ui = useTranslations("locale.ui");
+  if (!capability.available && capability.pending) return <div role="status" aria-busy="true" className="text-sm text-muted-foreground">{ui("loading")}</div>;
   return capability.available ? children : <div role="status" className="space-y-2 text-sm text-muted-foreground"><p>{t("unavailableTitle")}</p><p>{capability.reason}</p></div>;
 }
