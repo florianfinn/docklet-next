@@ -64,9 +64,9 @@ the mapping and its contract tests before that feature claims live data.
 | Single-container `MessageResponse`; bulk `ContainerActionResult` remains separate | `ActionRun`, `runContainerCommand` | Map single start/stop/restart admission IDs and outcome knowledge; bulk partial results do not prove a single run succeeded. Edit/health/recreation are outside this mapping. | [M6 runtime control](runtime-control.md) |
 | Project lifecycle NDJSON and message responses | `runStackCommand`, `StackCommand` | Map start→deploy/up, stop→down, restart and redeploy admission and outcomes; preserve legacy stream/message callers. | [M6 runtime control](runtime-control.md) |
 | Echo WS JSON `LogMessage` (outside OpenAPI) | `LogLine`, `subscribeLogs`, `subscribeContainerLogs` | Use subscription-attempt/seq identity and optional stream/truncation metadata; seq is arrival order, without cross-service chronology or durable replay. | [M6 runtime control](runtime-control.md) |
-| `WorkspaceFileEntry`, `WorkspaceFileContent` | `DirListing`, `FileContent`, `VolumesApi` | Wire file entries need tree, path and editable-content projections. | Planned M8 Storage and file workspace |
-| `VolumeVolume` | `Volume`, `VolumeDetail` | Storage kind and consumers need a host-aware projection. | Planned M8 Storage and file workspace |
-| No volume-prune preview DTO | `VolumePrunePlan`, `VolumesApi` | Candidate reasons and execution re-check results need a server contract. | Planned M8 Storage and file workspace |
+| `WorkspaceFileEntry`, `WorkspaceFileContent` | `DirListing`, `FileContent`, `VolumesApi` | Wire file entries need tree, path and editable-content projections. | [M8 storage contract](storage-workspace.md) |
+| `VolumeVolume` | `Volume`, `VolumeDetail` | Storage kind and consumers need a host-aware projection. | [M8 storage contract](storage-workspace.md) |
+| `VolumePrunePlan`, `VolumePruneResult` | `VolumePrunePlan`, `VolumesApi` | Candidate reasons and execution re-check results need a server contract. | [M8 storage contract](storage-workspace.md) |
 | `NetworkInspect`, `NetworkTopology` | `Topology`, `TopologyNetwork` | Docker topology needs a graph projection across hosts. | Planned M5 Hosts, transport and read inventory |
 | `NetworkCreateRequest` | `NetworkDraft` | IPAM and validation fields need a writable form projection. | Planned M9 Network management |
 | `NetworkConnectContainerRequest`, `NetworkDisconnectContainerRequest`, `NetworkContainerEndpoint` | `ConnectNetworkInput`, `NetworkAttachment`, `connectNetwork`, `disconnectNetwork` | Container attachments need host-aware validation and fixed IPv4/IPv6 address mapping. | Planned M9 Network management |
@@ -141,10 +141,11 @@ The trusted agent receiver registers execute/query/cancel and registration/targe
 metadata routes with the existing manager credential. Ordinary bearer,
 administrator and bootstrap credentials cannot grant receiver authority. Direct
 and Edge requests recheck agent access and compatibility; Edge has no Direct
-fallback. Numeric agent contract version and minimum are both 4. The fingerprint
-hashes the exact `types/contract/testdata/agent-hub-v4.json` bytes, with the v3
-fixture preserved. Runtime queries have no compatibility exception. Existing
-health/version/self-upgrade exceptions, `tunnel/v1`, historical OpenAPI and
+fallback. Numeric agent contract version and minimum are both 5. The fingerprint
+hashes the exact `types/contract/testdata/agent-hub-v5.json` bytes, inheriting the
+v4 runtime contract and adding the [storage contract](storage-workspace.md).
+The v3 and v4 fixtures are preserved. Runtime queries have no compatibility
+exception. Existing health/version/self-upgrade exceptions, `tunnel/v1`, historical OpenAPI and
 shipped migrations remain unchanged.
 
 The shared foundation owns runtime wire types, current exports and route

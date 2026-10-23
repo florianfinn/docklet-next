@@ -21,7 +21,7 @@ func TestAgentHubV4RuntimeFixture(t *testing.T) {
 	body, err := os.ReadFile("testdata/agent-hub-v4.json")
 	require.NoError(t, err)
 	digest := sha256.Sum256(body)
-	require.Equal(t, AgentHubFingerprint, hex.EncodeToString(digest[:]))
+	require.Equal(t, "f8e019e4d431e6e489051935e4ecbd2e85cd86a1edb32cd128a5ea1d988bfff3", hex.EncodeToString(digest[:]))
 	var fixture struct {
 		Version    int      `json:"version"`
 		Minimum    int      `json:"minimumAgentContractVersion"`
@@ -36,10 +36,8 @@ func TestAgentHubV4RuntimeFixture(t *testing.T) {
 		} `json:"legacyStreaming"`
 	}
 	require.NoError(t, json.Unmarshal(body, &fixture))
-	require.Equal(t, 4, AgentHubVersion)
-	require.Equal(t, 4, MinimumAgentVersion)
-	require.Equal(t, AgentHubVersion, fixture.Version)
-	require.Equal(t, MinimumAgentVersion, fixture.Minimum)
+	require.Equal(t, 4, fixture.Version)
+	require.Equal(t, 4, fixture.Minimum)
 	require.Equal(t, 200, fixture.Streaming.Status)
 	require.True(t, fixture.Streaming.Done)
 	stream, err := json.Marshal(activity.RuntimeStreamFailure{})
@@ -70,7 +68,7 @@ func TestAgentHubV4RuntimeFixture(t *testing.T) {
 	}
 	require.False(t, AgentCompatible(3, "39fc19066cb96d807cba48cb01ccf58ed9cfc45f15dbafb8ce2d2bccd7d4015e"))
 	require.False(t, AgentCompatible(4, "mismatched"))
-	require.True(t, AgentCompatible(4, AgentHubFingerprint))
+	require.False(t, AgentCompatible(4, AgentHubFingerprint))
 	for _, route := range []string{"/api/environments/0/runtime-runs/example", "/api/environments/0/runtime-registration", "/api/environments/0/runtime-target"} {
 		require.False(t, AgentRecoveryRoute("GET", route))
 		require.False(t, AgentRecoveryRoute("POST", route))

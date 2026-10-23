@@ -220,7 +220,7 @@ export default function ContainerPage() {
         <Skeleton className="h-64 w-full rounded-2xl" />
       </div>
     );
-  if (containers.isError) return <QueryError onRetry={() => void containers.refetch()} />;
+  if (containers.isError) return <QueryError error={containers.error} onRetry={() => void containers.refetch()} />;
   if (!c)
     return (
       <EmptyState

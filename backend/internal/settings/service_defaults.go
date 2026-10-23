@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; functional cut: removed APNS mobile push, template catalogue, GitOps, Swarm, standalone build workshop, OIDC and passkeys. #69 first-run setup and hub settings persistence.
+// Deviations: Local module namespace; functional cut: removed APNS mobile push, template catalogue, GitOps, Swarm, standalone build workshop, OIDC and passkeys. #69 first-run setup and hub settings persistence; Explicit tools image overrides and shipped-default retirement.
 
 package settings
 
@@ -44,7 +44,7 @@ func DefaultSettingsConfig() *Settings {
 		ActionPresentation:                    SettingVariable{Value: "dialog"},
 		AutoInjectEnv:                         SettingVariable{Value: "false"},
 		DefaultDeployPullPolicy:               SettingVariable{Value: "missing"},
-		ToolsImageRegistry:                    SettingVariable{Value: "ghcr.io"},
+		ToolsImage:                            SettingVariable{Value: ""},
 		UpdateCheckRegistry:                   SettingVariable{Value: "auto"},
 		ScheduledPruneEnabled:                 SettingVariable{Value: "false"},
 		ScheduledPruneInterval:                SettingVariable{Value: "0 0 0 * * *"},
@@ -129,6 +129,10 @@ func DefaultSettingsConfig() *Settings {
 // retiredSettingValuesInternal lists former defaults that startup replaces
 // with the current default when an install still holds them verbatim.
 var retiredSettingValuesInternal = map[string][]string{
+	// Closed list: only values persisted before override-only storage. Bump PRs
+	// must not extend it. Add a DefaultToolsImage exclusion test with the digest pin;
+	// until then the release default equals the accepted legacy 0.1.0 value.
+	"toolsImage":                  {"ghcr.io/getarcaneapp/tools:latest", "ghcr.io/florianfinn/docklet-tools:0.1.0"},
 	"dockerClientRefreshInterval": {"*/30 * * * * *"},
 	"autoHealInterval":            {"*/30 * * * * *"},
 }

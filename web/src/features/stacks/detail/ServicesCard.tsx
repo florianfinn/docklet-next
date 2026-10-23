@@ -1,3 +1,4 @@
+import { useCapability } from "@/data/use-capability";
 import { Boxes, FileText, RotateCw } from "lucide-react";
 import { useNavigate } from "react-router";
 import { useTranslations } from "use-intl";
@@ -23,6 +24,7 @@ export function ServicesCard({ stack, host }: { stack: StackDetail; host: Host |
   const ts = useTranslations("common.status");
   const navigate = useNavigate();
   const cmd = useStackCommands();
+  const restart = useCapability("restartService");
   const rowFor = (svc: Service) => {
     const rt = serviceRuntime(svc, host);
     const tone = RUNTIME_TONE[rt];
@@ -49,7 +51,7 @@ export function ServicesCard({ stack, host }: { stack: StackDetail; host: Host |
           <UpdateIndicator
             name={svc.name}
             update={svc.update}
-            actions={{ onUpdate: () => void cmd.installUpdates(stack.id, [svc.name]), onRecheck: () => void cmd.checkUpdates(stack.id), updateLabel: undefined, busy: !!stack.busyActionId }}
+            actions={{ updateOperation: "installStackUpdates", onUpdate: () => void cmd.installUpdates(stack.id, [svc.name]), onRecheck: () => void cmd.checkUpdates(stack.id), updateLabel: undefined, busy: !!stack.busyActionId }}
           />
         </TableCell>
         <TableCell className="text-right">
@@ -63,7 +65,7 @@ export function ServicesCard({ stack, host }: { stack: StackDetail; host: Host |
           </Tooltip>
           <Tooltip>
             <TooltipTrigger asChild>
-              <Button variant="ghost" size="icon" className="group/btn size-8" disabled={!!stack.busyActionId} onClick={() => requestServiceRestart([{ stackId: stack.id, stackName: stack.name, service: svc.name }], () => cmd.restartService(stack.id, svc.name))} aria-label={t("restart", { name: svc.name })}>
+              <Button variant="ghost" size="icon" className="group/btn size-8" disabled={!restart.available || !!stack.busyActionId} title={restart.reason} onClick={() => requestServiceRestart([{ stackId: stack.id, stackName: stack.name, service: svc.name }], () => cmd.restartService(stack.id, svc.name))} aria-label={t("restart", { name: svc.name })}>
                 <RotateCw className="transition-transform duration-(--dur-slow) group-hover/btn:rotate-90" />
               </Button>
             </TooltipTrigger>

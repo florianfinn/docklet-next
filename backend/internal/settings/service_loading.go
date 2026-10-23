@@ -95,7 +95,9 @@ func (s *SettingsService) loadDatabaseConfigFromEnv(ctx context.Context, db *dat
 		envVarName := strings.ToUpper(kit.SnakeCase(key))
 
 		// debug: log each env name checked and whether a value exists
-		if val, ok, _ := utils.LookupEnvOrFile(envVarName); ok {
+		// Match nonempty envOverride semantics: an empty tools image variable
+		// must not mask an explicit value synchronised from the hub.
+		if val, ok, _ := utils.LookupEnvOrFile(envVarName); ok && (key != "toolsImage" || val != "") {
 			val = kit.TrimQuotes(val)
 			mask := "<empty>"
 			if val != "" {

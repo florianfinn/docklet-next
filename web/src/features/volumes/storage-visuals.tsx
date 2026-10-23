@@ -1,3 +1,4 @@
+import { useCapability } from "@/data/use-capability";
 import { Archive, Box, Database, File, FolderInput, Layers, Loader2 } from "lucide-react";
 import { Link } from "react-router";
 import { useTranslations } from "use-intl";
@@ -27,6 +28,8 @@ export function KindBadge({ volume, className }: { volume: Pick<Volume, "kind" |
 
 export function BackupBadge({ volume }: { volume: Pick<Volume, "backup" | "lastBackup"> }) {
   const t = useTranslations("volumes.backupState");
+  const backup = useCapability("setBackupPolicy");
+  if (!backup.available) return <span className="text-xs text-muted-foreground" title={backup.reason}>{t("unavailable")}</span>;
   if (!volume.backup) return <span className="text-xs text-muted-foreground">{t("none")}</span>;
   if (!volume.backup.enabled) return <ToneBadge tone="gray">{t("disabled")}</ToneBadge>;
   const last = volume.lastBackup;

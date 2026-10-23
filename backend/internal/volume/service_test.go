@@ -137,22 +137,6 @@ func TestRenameVolumeMetadataInternalPreservesPoliciesAndHistory(t *testing.T) {
 	require.Equal(t, "renamed-data", backupEntry.VolumeName)
 }
 
-func TestBuildVolumePruneOptionsInternal_PreservesInternalVolumes(t *testing.T) {
-	options := buildVolumePruneOptionsInternal(true)
-
-	require.True(t, options.All)
-	require.NotNil(t, options.Filters)
-	require.True(t, options.Filters["label!"][internalVolumePruneFilterValue])
-}
-
-func TestBuildVolumePruneOptionsInternal_PreservesInternalVolumesForAnonymousVolumes(t *testing.T) {
-	options := buildVolumePruneOptionsInternal(false)
-
-	require.False(t, options.All)
-	require.NotNil(t, options.Filters)
-	require.True(t, options.Filters["label!"][internalVolumePruneFilterValue])
-}
-
 func TestBuildVolumePruneMetadataInternal(t *testing.T) {
 	metadata := buildVolumePruneMetadataInternal(true, 2, 4096)
 
@@ -357,6 +341,18 @@ func TestDownloadVolumeWorkspaceFileHoldsReadLockUntilClosed(t *testing.T) {
 	reader, size, err := service.workspace.DownloadVolumeWorkspaceFile(t.Context(), "workspace-volume", "file.txt")
 	require.NoError(t, err)
 	require.EqualValues(t, 7, size)
+	t.Cleanup(func() { _ = reader.Close() })
+	// The actual open download stream holds the read lock and helper lease.
+	for _, transport := range []string{"direct", "edge"} {
+		call := pruneTransport(t, transport, pruneRouter(t, service))
+		status, body := call("POST", "/api/environments/0/volumes/workspace-volume/rename", "", []byte(`{"name":"renamed"}`))
+		require.Equal(t, 409, status, string(body))
+		require.Contains(t, string(body), "volume workspace is busy")
+		result, err := service.ExecuteVolumePrune(t.Context(), []volumetypes.PruneCandidate{{Name: "workspace-volume", CreatedAt: pruneCreated}})
+		require.NoError(t, err)
+		require.Equal(t, []volumetypes.PruneSkipped{{Name: "workspace-volume", Reason: "in-use"}}, result.Skipped)
+		require.Equal(t, "helper", service.helperByVolume["workspace-volume"].id)
+	}
 
 	_, acquired := service.workspaceLocks.TryLock("workspace-volume")
 	require.False(t, acquired, "mutation lock acquired before download stream closed")

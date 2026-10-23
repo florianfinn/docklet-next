@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace
+// Deviations: Local module namespace; Typed helper incompatibility responses.
 
 package workspace
 
@@ -59,6 +59,14 @@ func NewHandler(service *Service, activityService *activity.ActivityService, app
 }
 
 func volumeWorkspaceHTTPErrorInternal(err error) error {
+	var unavailable *volume.HelperUnavailableError
+	if errors.As(err, &unavailable) {
+		return unavailable
+	}
+	var incompatible *volume.HelperIncompatibleError
+	if errors.As(err, &incompatible) {
+		return incompatible
+	}
 	switch {
 	case errors.Is(err, common.ErrVolumeWorkspaceConflict):
 		return huma.Error409Conflict(err.Error())

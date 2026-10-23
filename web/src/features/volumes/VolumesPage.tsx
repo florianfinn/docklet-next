@@ -37,6 +37,7 @@ export default function VolumesPage() {
   const tc = useTranslations("common.host");
   const volumes = useVolumes();
   const createCapability = useCapability("createVolume");
+  const backup = useCapability("setBackupPolicy");
   const pruneCapability = useCapability("planVolumePrune");
   const layout = usePreference("volumesLayout");
   const [sort, setSort] = useState<VolumeSort>(DEFAULT_VOLUME_SORT);
@@ -93,7 +94,7 @@ export default function VolumesPage() {
             { id: "name", label: t("columns.name"), sorts: [key("name"), key("kind"), ...(inBlock ? [] : [key("host")])], className: "min-w-52" },
             { id: "consumers", label: t("columns.consumers"), sorts: [key("consumers")], className: "max-w-72", wide: true },
             { id: "size", label: t("columns.size"), sorts: [key("size")] },
-            { id: "backup", label: t("columns.backup"), sorts: [key("backup")] },
+            { id: "backup", label: t("columns.backup"), sorts: backup.available ? [key("backup")] : [] },
           ]
         : [
             { id: "name", label: t("columns.name"), sorts: [key("name")], className: "min-w-52" },
@@ -101,7 +102,7 @@ export default function VolumesPage() {
             ...(inBlock ? [] : [{ id: "host", label: t("columns.host"), sorts: [key("host")] }]),
             { id: "consumers", label: t("columns.consumers"), sorts: [key("consumers")], className: "max-w-72", wide: true },
             { id: "size", label: t("columns.size"), sorts: [key("size")] },
-            { id: "backup", label: t("columns.backup"), sorts: [key("backup")] },
+            { id: "backup", label: t("columns.backup"), sorts: backup.available ? [key("backup")] : [] },
           ];
   const headProps = { sort, onSort, sortLabel: (column: string) => ts("sortBy", { column }), selecting: false, actionsLabel: t("columns.actions"), dense: false };
   const filtersActive = !!query.trim() || kind !== "all" || usage !== "all";
@@ -138,7 +139,7 @@ export default function VolumesPage() {
           { label: t("strip.binds"), value: pending ? "–" : stats.binds, icon: <FolderInput /> },
           { label: t("strip.unused"), value: pending ? "–" : stats.unused, icon: <PackageOpen />, tone: stats.unused ? "warn" : undefined },
           { label: t("strip.size"), value: pending ? "–" : visible.some((v) => v.sizeUnavailable) ? t("unknown") : formatBytes(stats.size), icon: <HardDrive /> },
-          { label: t("strip.backup"), value: pending ? "–" : `${stats.backup}/${visible.length}`, icon: <Archive />, tone: "ok" },
+          { label: t("strip.backup"), value: pending ? "–" : backup.available ? `${stats.backup}/${visible.length}` : t("unknown"), icon: <Archive />, tone: backup.available ? "ok" : undefined },
         ]}
       />
       <Card className="gap-3 p-4">
@@ -157,7 +158,7 @@ export default function VolumesPage() {
         {pending ? (
           <OverviewSkeleton mode="compact" rows={8} />
         ) : volumes.isError ? (
-          <QueryError onRetry={() => void volumes.refetch()} />
+          <QueryError error={volumes.error} onRetry={() => void volumes.refetch()} />
         ) : visible.length === 0 ? (
           <EmptyState icon={<Database />} title={t("emptyAll.title")} description={t("emptyAll.description")} />
         ) : rows.length === 0 ? (

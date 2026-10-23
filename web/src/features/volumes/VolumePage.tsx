@@ -1,5 +1,5 @@
+import { CapabilityGate } from "@/shared/components/capability-gate";
 import { InventoryNotice } from "@/features/stacks/InventoryNotice";
-import { useCapability } from "@/data/use-capability";
 import { Archive, ArrowLeft, Box, Database, FolderOpen, Info, Layers, LayoutGrid, Trash2, Unplug } from "lucide-react";
 import { useState } from "react";
 import { Link, useNavigate, useParams, useSearchParams } from "react-router";
@@ -29,24 +29,29 @@ import { BackupHistory } from "./backups/BackupHistory";
 import { BackupPolicyCard } from "./backups/BackupPolicyCard";
 import { FileWorkspace } from "./files/FileWorkspace";
 import { BackupBadge, KindBadge } from "./storage-visuals";
+import { useVolumeCapability } from "./use-volume-capability";
 import { useVolumeCommands } from "./use-volume-commands";
+import { RenameVolumeDialog } from "./RenameVolumeDialog";
 import { deleteBlock } from "./volume-menu";
 
 type Tab = "overview" | "files" | "backups";
 
-function OverviewTab({ volume: v, host }: { volume: VolumeDetail; host: Host | undefined }) {
+function OverviewTab({ volume: v, host }: { volume: VolumeDetail & { scope?: string }; host: Host | undefined }) {
   const t = useTranslations("volumes.detail");
   const tv = useTranslations("volumes");
-  const remove = useCapability("deleteVolume");
+  const remove = useVolumeCapability("deleteVolume", v.id);
+  const rename = useVolumeCapability("renameVolume", v.id);
   const cmd = useVolumeCommands();
   const navigate = useNavigate();
+  const [renaming, setRenaming] = useState(false);
   const [confirm, setConfirm] = useState(false);
   const share = !v.sizeUnavailable && host && host.diskTotalGb > 0 ? (v.sizeBytes / (host.diskTotalGb * 1024 ** 3)) * 100 : undefined;
   const block = deleteBlock(v, host);
   const blocked = block === "bind" ? t("deleteBind") : block === "in-use" ? t("deleteBlocked") : block === "offline" ? t("deleteOffline") : undefined;
   const rows: [string, string][] = [
     [t("driver"), v.driver ?? t("none")],
-    [v.kind === "volume" ? t("mountpoint") : t("source"), v.source],
+    ...(v.source ? [[v.kind === "volume" ? t("mountpoint") : t("source"), v.source] as [string, string]] : []),
+    ...(v.scope ? [[t("scope"), v.scope] as [string, string]] : []),
     [t("compose"), v.composeName ? `${v.stackName ?? v.stackId}/${v.composeName}` : t("none")],
     [t("created"), v.createdAt ? formatDate(v.createdAt) : t("none")],
   ];
@@ -72,16 +77,16 @@ function OverviewTab({ volume: v, host }: { volume: VolumeDetail; host: Host | u
               </TableHeader>
               <TableBody>
                 {v.consumers.map((c) => (
-                  <TableRow key={`${c.containerId}-${c.target}`}>
+                  <TableRow key={`${c.containerId}-${c.target || t("none")}`}>
                     <TableCell>
                       <span className="flex items-center gap-2 font-medium">
                         {c.stackId ? <Layers className="size-3.5 text-muted-foreground" aria-hidden /> : <Box className="size-3.5 text-muted-foreground" aria-hidden />}
                         {c.containerName}
                       </span>
-                      {!c.running && <span className="text-[11px] text-muted-foreground">{t("stopped")}</span>}
+                      {!c.running && <span className="text-[11px] text-muted-foreground">{"runningUnavailable" in c && c.runningUnavailable ? t("unknownState") : t("stopped")}</span>}
                     </TableCell>
                     <TableCell className="font-mono text-xs">
-                      {c.target}
+                      {c.target || t("none")}
                       {c.readOnly && <span className="ml-1.5 rounded border px-1 text-[10px] text-muted-foreground">ro</span>}
                     </TableCell>
                     <TableCell className="text-right">
@@ -141,6 +146,7 @@ function OverviewTab({ volume: v, host }: { volume: VolumeDetail; host: Host | u
           </dl>
           {v.kind === "bind" && <p className="text-xs text-muted-foreground">{v.fileBind ? t("fileBindNote") : t("bindNote")}</p>}
           <div className="flex border-t pt-3">
+            <Button variant="outline" disabled={!rename.available || !!v.inventory?.stale || !!block} title={rename.reason} onClick={() => setRenaming(true)}>{t("rename")}</Button>
             <Tooltip>
               <TooltipTrigger asChild>
                 <span>
@@ -155,6 +161,7 @@ function OverviewTab({ volume: v, host }: { volume: VolumeDetail; host: Host | u
           </div>
         </CardContent>
       </Card>
+      {renaming && <RenameVolumeDialog volume={v} onClose={() => setRenaming(false)} />}
       <ConfirmDialog
         open={confirm}
         onOpenChange={setConfirm}
@@ -177,7 +184,8 @@ export default function VolumePage() {
   const t = useTranslations("volumes.detail");
   const tf = useTranslations("volumes.files");
   const volume = useVolume(volumeId);
-  const settings = useSettings();
+  const backup = useVolumeCapability("setBackupPolicy", volumeId ?? "");
+  const settings = useSettings(backup.available);
   const containers = useContainers();
   const hosts = useHostScope();
   const [params, setParams] = useSearchParams();
@@ -207,7 +215,7 @@ export default function VolumePage() {
         volume.error.message === "not-found" ? (
           <EmptyState icon={<Database />} title={t("notFound")} description={t("notFoundBody")} />
         ) : (
-          <QueryError onRetry={() => void volume.refetch()} />
+          <QueryError error={volume.error} onRetry={() => void volume.refetch()} />
         )
       ) : (
         v && (
@@ -226,7 +234,7 @@ export default function VolumePage() {
                 <div className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
                   <HostChip host={host} />
                   <span className="font-mono">{v.kind === "volume" ? v.name : v.source}</span>
-                  <span>{formatBytes(v.sizeBytes)}</span>
+                  <span>{v.sizeUnavailable ? t("sizeUnknown") : formatBytes(v.sizeBytes)}</span>
                 </div>
               </div>
             </header>
@@ -244,25 +252,29 @@ export default function VolumePage() {
                 <TabsTrigger value="files" className="gap-1.5 px-3">
                   <FolderOpen /> {t("tabs.files")}
                 </TabsTrigger>
-                <TabsTrigger value="backups" className="gap-1.5 px-3">
+                <TabsTrigger value="backups" disabled={!backup.available} title={backup.reason} aria-description={backup.reason} className="gap-1.5 px-3">
                   <Archive /> {t("tabs.backups")}
                 </TabsTrigger>
               </TabsList>
               <TabsContent value="overview">
-                <OverviewTab volume={v} host={host} />
+                <OverviewTab key={v.id} volume={v} host={host} />
               </TabsContent>
               <TabsContent value="files">
                 {online ? <FileWorkspace volume={v} warning={warning} /> : <EmptyState icon={<Unplug />} title={tf("offline")} />}
               </TabsContent>
               <TabsContent value="backups" className="flex flex-col gap-4">
+                <CapabilityGate operation="setBackupPolicy">
                 {settings.data ? (
                   <>
                     <BackupPolicyCard key={JSON.stringify(v.backup ?? null)} volume={v} targets={settings.data.backups.targets} defaultRetention={settings.data.backups.defaultRetention} hostOnline={online} />
                     <BackupHistory volume={v} targets={settings.data.backups.targets} hostOnline={online} />
                   </>
+                ) : settings.isError ? (
+                  <QueryError error={settings.error} onRetry={() => void settings.refetch()} />
                 ) : (
                   <Skeleton className="h-72 rounded-2xl" />
                 )}
+                </CapabilityGate>
               </TabsContent>
             </Tabs>
           </>

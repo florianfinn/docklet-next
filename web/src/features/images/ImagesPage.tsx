@@ -164,7 +164,7 @@ export default function ImagesPage() {
         {pending ? (
           <OverviewSkeleton mode="compact" rows={8} />
         ) : images.isError ? (
-          <QueryError onRetry={() => void images.refetch()} />
+          <QueryError error={images.error} onRetry={() => void images.refetch()} />
         ) : visible.length === 0 ? (
           <EmptyState icon={<Package />} title={t("emptyAll.title")} description={t("emptyAll.description")} />
         ) : rows.length === 0 ? (

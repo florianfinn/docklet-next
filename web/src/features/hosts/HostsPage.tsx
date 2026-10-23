@@ -58,7 +58,7 @@ export default function HostsPage() {
           ))}
         </div>
       ) : hosts.isError ? (
-        <QueryError onRetry={() => void hosts.refetch()} />
+        <QueryError error={hosts.error} onRetry={() => void hosts.refetch()} />
       ) : hosts.all.length === 0 ? (
         <EmptyState
           icon={<Server />}

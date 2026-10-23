@@ -5,6 +5,7 @@ import { readFileSync } from "node:fs";
 const read = (name) => JSON.parse(readFileSync(new URL(`../api/${name}`, import.meta.url), "utf8"));
 const methods = new Set(["get", "post", "put", "patch", "delete", "head", "options", "trace"]);
 const laterOperations = new Map([
+  ["GET /environments/{id}/volumes/prune", "plan-volume-prune"],
   ["GET /hub/discovery", "discoverHub"],
 	["GET /auth/mode", "get-sign-in-mode"],
   ["GET /capabilities", "get-capabilities"],

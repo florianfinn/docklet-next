@@ -1,7 +1,7 @@
 import ts from "typescript";
 
 const TEXT_FIELDS = /^(?:aria-label|aria-description|aria-valuetext|title|alt|placeholder|label|description|caption|heading|subtitle|text|message|emptyText|helpText|tooltip|ariaLabel)$/;
-const TECHNICAL_FIELDS = /^(?:className|class|style|d|points|viewBox|path|pattern|accept|src|href|id|key|name|type|role|value|variant|size|data-.*|aria-(?!label$|description$|valuetext$).*)$/;
+const TECHNICAL_FIELDS = /^(?:className|class|style|d|points|viewBox|path|pattern|accept|src|href|rel|target|id|key|name|type|role|value|variant|size|data-.*|aria-(?!label$|description$|valuetext$).*)$/;
 const TECHNICAL_CALLS = /^(?:cn|clsx|cva|useTranslations|t|\w+\.t|\w+\.raw|\w+\.rich|\w+\.has|querySelector|querySelectorAll|.*\.querySelector|.*\.querySelectorAll|.*\.matches|.*\.closest)$/;
 
 export interface UiLiteral { text: string; line: number }

@@ -197,7 +197,7 @@ export const deSettings: typeof enSettings = {
     retention: "Standard-Aufbewahrung für neue Pläne",
     retentionScope: "Gilt als Vorgabe für neu angelegte Backup-Pläne; bestehende Pläne behalten ihre eigene Aufbewahrung.",
     dialogDescription: "Lokales Verzeichnis, vorhandener Host-Mount, SMB-Freigabe oder NFS-Export. Zugangsdaten bleiben im Hub; der Test prüft Erreichbarkeit und Schreibrecht.",
-    permissionsNote: (import.meta.env.DEV ? "Genaue Rechte- und Mount-Umsetzung wird noch evaluiert; der Prototyp simuliert Tests." : ""),
+    permissionsNote: (import.meta.env.DEV ? "Genaue Rechte- und Mount-Umsetzung wird noch evaluiert; der Prototyp simuliert Tests." : "Der Host benötigt Schreibzugriff auf das Backup-Ziel."),
     targetInUse: "Mindestens ein Backup-Plan nutzt ein entferntes Ziel. Erst die Pläne umstellen.",
   },
   notifications: {

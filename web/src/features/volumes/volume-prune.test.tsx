@@ -88,12 +88,17 @@ describe("volumes page actions", () => {
     await screen.findByRole("link", { name: "plex_old_config öffnen" });
     await userEvent.click(screen.getByRole("button", { name: "Aufräumen" }));
     const dialog = await screen.findByRole("dialog");
+    const includeNamed = await within(dialog).findByRole("checkbox", { name: "Benannte Volumes einbeziehen" });
+    expect(includeNamed.getAttribute("aria-checked")).toBe("false");
+    await userEvent.click(includeNamed);
     await within(dialog).findByText("2 von 2 Volumes ausgewählt · 1,5 GB");
     expect(within(dialog).getByText(/Nicht verbunden und deshalb nicht geprüft: Cedar/) !== null).toBe(true);
     expect(within(dialog).queryByText("wiki_uploads_old") === null).toBe(true);
 
     await userEvent.click(within(dialog).getByRole("checkbox", { name: /paperless_export_tmp/ }));
     await userEvent.click(within(dialog).getByRole("button", { name: "1 Volume löschen" }));
+    await within(dialog).findByRole("region", { name: "Entfernt" });
+    await userEvent.click(within(dialog).getByRole("button", { name: "Schließen" }));
     await waitFor(() => expect(screen.queryByRole("dialog") === null).toBe(true));
     await waitFor(() => expect(screen.queryByRole("link", { name: "plex_old_config öffnen" }) === null).toBe(true));
     expect(screen.getByRole("link", { name: "paperless_export_tmp öffnen" }) !== null).toBe(true);

@@ -1,7 +1,6 @@
 import { Archive, CalendarClock, ExternalLink, RefreshCw, ScanSearch, ShieldCheck } from "lucide-react";
 import type { ReactNode } from "react";
 import { Link, useNavigate } from "react-router";
-import { toast } from "sonner";
 import { useTranslations } from "use-intl";
 
 import { useAdapter } from "@/data/use-adapter";
@@ -149,17 +148,20 @@ export function SecurityWidget({ security, visibleHostIds }: { security: Securit
 
 export function AppsWidget({ stacks, hosts }: { stacks: Stack[]; hosts: Map<string, Host> }) {
   const t = useTranslations("dashboard.apps");
-  const withUrl = stacks.filter((s) => s.url);
+  const withUrl = stacks.filter((s) => {
+    try { return ["https:", "http:"].includes(new URL(s.url ?? "").protocol); } catch { return false; }
+  });
   if (!withUrl.length) return <p className="text-sm text-muted-foreground">{t("none")}</p>;
   return (
     <div className="grid grid-cols-2 gap-2">
       {withUrl.map((s) => {
         const host = hosts.get(s.hostId);
         return (
-          <button
+          <a
             key={s.id}
-            type="button"
-            onClick={() => toast.info(t("demo", { url: s.url ?? "" }))}
+            href={s.url}
+            target="_blank"
+            rel="noopener noreferrer"
             className="lift group flex min-w-0 items-center gap-2.5 rounded-xl border bg-background/40 p-2.5 text-left"
           >
             <IconTile color={host?.color} size="sm" className="tilt">
@@ -172,7 +174,7 @@ export function AppsWidget({ stacks, hosts }: { stacks: Stack[]; hosts: Map<stri
               </span>
               <span className="block truncate text-[11px] text-muted-foreground">{s.url?.replace(/^https?:\/\//, "")}</span>
             </span>
-          </button>
+          </a>
         );
       })}
     </div>

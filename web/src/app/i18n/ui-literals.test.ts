@@ -69,6 +69,10 @@ describe("interface source", () => {
     expect(uiLiterals("probe.tsx", 'const a = <p className="flex items-center" title={t("title")}>{kind === "ready" && t("ready")}{`${t("label")}: ${name}`}</p>;')).toEqual([]);
   });
 
+  it("keeps link relations technical while checking accessible link text", () => {
+    expect(uiLiterals("probe.tsx", '<a href="https://app.example.com" target="_blank" rel="noopener noreferrer" aria-label="Open app" />')).toEqual([{ text: "Open app", line: 1 }]);
+  });
+
   it("rejects stale exceptions and additional literals on an excepted line", () => {
     const source = '<p>Close</p>;', file = "src/probe.tsx";
     const exceptions = [{ file, lineSha256: sha256(source), count: 1, reason: "Existing imported component text." }];

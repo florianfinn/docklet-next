@@ -81,8 +81,11 @@ it.each(["direct", "edge"] as const)("creates a live %s host before rendering in
 it("rejects non-admin navigation before reading installation metadata", async () => {
   const f = server(false);
   const discover = vi.spyOn(f.adapter, "discoverHub");
+  const capability = vi.spyOn(f.adapter, "getCapability");
   renderRoutes([{ path: "/hosts/new", element: <OnboardingPage /> }], ["/hosts/new"], f.adapter);
-  await screen.findByText("Daten konnten nicht geladen werden");
+  await waitFor(() => expect(capability).toHaveResolvedWith(expect.objectContaining({ operationId: "registerHost", available: false })));
+  await screen.findByText("Diese Funktion ist nicht verfügbar");
+  expect(screen.queryByRole("alert") === null).toBe(true);
   expect(screen.queryByLabelText("Hostname in Docklet") === null).toBe(true);
   expect(discover).not.toHaveBeenCalled();
   expect(f.requests.includes("/api/hub/discovery")).toBe(false);

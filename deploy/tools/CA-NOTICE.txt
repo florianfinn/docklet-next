@@ -1,0 +1,13 @@
+# Source: curl.se/ca/cacert-2026-10-20.pem
+# Revision: 796f1389bfea13c0ed78f663b765baaff54a508e5483786bd6ece73c5e3e3cbe
+# Retrieved: 2026-10-22
+# License: MPL-2.0
+# Deviations: Original redistribution notice for the exact checksum-pinned Mozilla CA bundle.
+
+This image redistributes Mozilla CA certificate data extracted by the curl
+project. The certificate data remains subject to Mozilla Public License 2.0;
+the complete licence text is provided as CA-MPL-2.0.txt in this directory.
+The unmodified corresponding PEM source, including extraction/source notices,
+is available at the dated curl.se/ca/cacert-YYYY-MM-DD.pem URL recorded by
+CA_VERSION in inputs.env. The exact source is also installed in this image as
+/etc/ssl/certs/ca-certificates.crt. Its SHA-256 is CA_SHA256 in inputs.env.

@@ -27,13 +27,13 @@ var adapterOperationIDs = []string{
 	"listHosts", "listImages", "listSchedule", "listStacks", "listSystemComponents",
 	"listVolumes", "planVolumePrune", "pruneImages", "pruneVolumes", "pullImage",
 	"readFile", "reconnectHost", "recreateContainer", "registerHost", "removeHost",
-	"removeImage", "removeNetwork", "renameEntry", "restartAgent", "restartService",
+	"removeImage", "removeNetwork", "renameEntry", "renameVolume", "restartAgent", "restartService",
 	"restoreBackup", "restoreRestorePoint", "runBackup", "runContainerCommand", "runScan",
 	"runStackCommand", "saveSettings", "saveStackFiles", "setAutoUpdate", "setBackupPolicy",
 	"setContainerAutoUpdate", "setContainerOrigin", "setScanEnabled", "setStackLabels",
 	"subscribeActions", "subscribeChanges", "subscribeContainerLogs", "subscribeLogs",
 	"subscribeMetrics", "testBackupTarget", "testNotification", "updateHost", "uploadFile",
-	"writeFile",
+	"writeFile", "downloadFile", "getProjectWorkspace", "readProjectFile", "downloadProjectFile", "updateProjectWorkspace",
 }
 
 type GetCapabilitiesInput struct {
@@ -97,6 +97,55 @@ func getCapabilities(ctx context.Context, input *GetCapabilitiesInput) (*handler
 		case "deployStack", "saveStackFiles", "setStackLabels", "convertDockerRun":
 			descriptors[i].Available = authoringAllowedInternal(descriptors[i].OperationID, descriptors[i].ResourceRef, permissions)
 			if descriptors[i].Available {
+				descriptors[i].DisabledReasonCode = ""
+			} else {
+				descriptors[i].DisabledReasonCode = "capability.unavailable"
+			}
+		case "listVolumes", "getVolume", "createVolume", "deleteVolume", "renameVolume", "planVolumePrune", "pruneVolumes":
+			grant := map[string]string{"listVolumes": authz.PermVolumesList, "getVolume": authz.PermVolumesRead, "createVolume": authz.PermVolumesCreate, "deleteVolume": authz.PermVolumesDelete, "renameVolume": authz.PermVolumesRename, "planVolumePrune": authz.PermVolumesPrune, "pruneVolumes": authz.PermVolumesPrune}[descriptors[i].OperationID]
+			ref := descriptors[i].ResourceRef
+			env, raw, scoped := strings.Cut(ref.ID, "~")
+			valid := descriptors[i].OperationID != "deleteVolume" && descriptors[i].OperationID != "renameVolume" && ref.Kind == "host" && ref.ID != "" && !scoped && permissions.Allows(grant, ref.ID)
+			if (descriptors[i].OperationID == "deleteVolume" || descriptors[i].OperationID == "renameVolume") && ref.Kind == "volume" && scoped && env != "" && raw != "" && !strings.Contains(raw, "~") {
+				valid = permissions.Allows(grant, env)
+			}
+			if ref.Kind == "hub" {
+				valid = permissions.AllowsAny(grant)
+			}
+			descriptors[i].Available = valid
+			if valid {
+				descriptors[i].DisabledReasonCode = ""
+			} else {
+				descriptors[i].DisabledReasonCode = "capability.unavailable"
+			}
+		case "getProjectWorkspace", "readProjectFile", "downloadProjectFile", "updateProjectWorkspace":
+			ref := descriptors[i].ResourceRef
+			env, raw, scoped := strings.Cut(ref.ID, "~")
+			grant := authz.PermProjectsRead
+			if descriptors[i].OperationID == "updateProjectWorkspace" {
+				grant = authz.PermProjectsUpdate
+			}
+			valid := ref.Kind == "stack" && scoped && env != "" && raw != "" && !strings.Contains(raw, "~") && permissions.Allows(grant, env)
+			descriptors[i].Available = valid
+			if valid {
+				descriptors[i].DisabledReasonCode = ""
+			} else {
+				descriptors[i].DisabledReasonCode = "capability.unavailable"
+			}
+		case "listFiles", "readFile", "downloadFile", "writeFile", "createEntry", "uploadFile", "renameEntry", "deleteEntry":
+			ref := descriptors[i].ResourceRef
+			env, raw, scoped := strings.Cut(ref.ID, "~")
+			valid := ref.Kind == "volume" && scoped && env != "" && raw != "" && !strings.Contains(raw, "~") && !strings.HasPrefix(raw, "bind:") && permissions.Allows(authz.PermVolumesRead, env)
+			switch descriptors[i].OperationID {
+			case "writeFile", "createEntry", "uploadFile":
+				valid = valid && permissions.Allows(authz.PermVolumesUpload, env)
+			case "renameEntry":
+				valid = valid && permissions.Allows(authz.PermVolumesUpload, env) && permissions.Allows(authz.PermVolumesDelete, env)
+			case "deleteEntry":
+				valid = valid && permissions.Allows(authz.PermVolumesDelete, env)
+			}
+			descriptors[i].Available = valid
+			if valid {
 				descriptors[i].DisabledReasonCode = ""
 			} else {
 				descriptors[i].DisabledReasonCode = "capability.unavailable"

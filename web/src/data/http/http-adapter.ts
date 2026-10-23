@@ -30,6 +30,11 @@ import { createRuntimeLogs } from "./logs";
 import { registerIdentityLifetime } from "../identity-lifetime";
 import { createIdentityReads } from "./identity-reads";
 import { createActivityReader } from "./activity-reader";
+import { createVolumePrune } from "./volume-prune";
+import { createVolumeCommands } from "./volume-commands";
+import { createProjectWorkspace } from "./project-workspace";
+import { createVolumeWorkspace } from "./volume-workspace";
+import { createVolumeReads } from "./volumes";
 import { createStackAuthoring } from "./stack-authoring";
 
 type ReadOperation = "get-capabilities" | "listEnvironments" | "list-activities" | "get-activity" | "listEvents";
@@ -37,7 +42,7 @@ type Body<I extends ReadOperation> = operations[I]["responses"][200]["content"][
 type StreamPayload = operations["streamClient"]["responses"][200]["content"]["text/event-stream"][number]["data"];
 type Source = Pick<EventSource, "close" | "onopen" | "onmessage" | "onerror"> & Partial<Pick<EventSource, "readyState">>;
 
-const IMPLEMENTED = new Set(["subscribeLogs", "subscribeContainerLogs", "runStackCommand", "runContainerCommand", "deployStack", "saveStackFiles", "setStackLabels", "convertDockerRun", "registerHost", "issueAgentToken", "removeHost", "discoverHub", "listStacks", "getStack", "listContainers", "listHosts", "listActions", "listEvents", "subscribeActions", "subscribeChanges", "getAuthMode", "getCurrentUser", "login", "logout", "changePassword", "updateMyLocale", "getSetupStatus", "completeSetup", "getConnectedSettings", "saveSettings", "listImages", "listVolumes", "getVolume", "getTopology", "subscribeMetrics"]);
+const IMPLEMENTED = new Set(["getProjectWorkspace", "readProjectFile", "downloadProjectFile", "updateProjectWorkspace", "listFiles", "readFile", "writeFile", "createEntry", "renameEntry", "deleteEntry", "uploadFile", "downloadFile", "planVolumePrune", "pruneVolumes", "createVolume", "deleteVolume", "renameVolume", "subscribeLogs", "subscribeContainerLogs", "runStackCommand", "runContainerCommand", "deployStack", "saveStackFiles", "setStackLabels", "convertDockerRun", "registerHost", "issueAgentToken", "removeHost", "discoverHub", "listStacks", "getStack", "listContainers", "listHosts", "listActions", "listEvents", "subscribeActions", "subscribeChanges", "getAuthMode", "getCurrentUser", "login", "logout", "changePassword", "updateMyLocale", "getSetupStatus", "completeSetup", "getConnectedSettings", "saveSettings", "listImages", "listVolumes", "getVolume", "getTopology", "subscribeMetrics"]);
 const RECONNECT_MS = 250;
 
 export interface HttpAdapterOptions {
@@ -408,6 +413,7 @@ export function createHttpAdapter(options: HttpAdapterOptions = {}): DockletAdap
   }
   const inventory = scopedObservations((observe) => createInventoryReader(baseUrl, fetcher, listHosts, requireCapability, observe));
   const resourceReads = scopedObservations((observe) => createResourceReader(baseUrl, fetcher, listHosts, requireCapability, observe));
+  const volumeReads = createVolumeReads(baseUrl, fetcher, listHosts, requireCapability, observeHost, () => identityGeneration);
   const authoring = createStackAuthoring({
     baseUrl, client, capability: getCapability,
     up: (stackId) => runtime.runStackCommand(stackId, "start"),
@@ -435,6 +441,11 @@ export function createHttpAdapter(options: HttpAdapterOptions = {}): DockletAdap
     listHosts,
     ...inventory,
     ...resourceReads,
+    ...volumeReads,
+    ...createProjectWorkspace({ baseUrl, client, capability: getCapability, generation: () => identityGeneration }),
+    ...createVolumeWorkspace({ baseUrl, client, capability: getCapability, generation: () => identityGeneration }),
+    ...createVolumePrune({ baseUrl, client, capability: getCapability, changed: () => { sharedReads.clear(); changeListeners.forEach((listener) => listener(["volumes"])); } }, listHosts),
+    ...createVolumeCommands({ baseUrl, client, capability: getCapability, changed: () => { sharedReads.clear(); changeListeners.forEach((listener) => listener(["volumes"])); } }),
     listActions: actions.load,
     subscribeActionReadHealth(listener) {
       healthListeners.add(listener);
@@ -467,7 +478,7 @@ export function createHttpAdapter(options: HttpAdapterOptions = {}): DockletAdap
   // Guard public reads and partial publishers in addition to transport bodies.
   return new Proxy(adapter, { get(target, key, receiver) {
     const method: unknown = Reflect.get(target, key, receiver);
-    if (typeof method !== "function" || !/^(list|get|discover)/.test(String(key))) return method;
+    if (typeof method !== "function" || !/^(list|get|discover|planVolumePrune)/.test(String(key))) return method;
     return (...args: unknown[]) => {
       // Auth and activities already implement their specialized renewal re-read.
       if (key === "getCurrentUser" || key === "getAuthMode" || key === "listActions") return method(...args);

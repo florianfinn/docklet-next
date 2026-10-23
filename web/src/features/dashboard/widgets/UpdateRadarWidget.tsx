@@ -56,7 +56,7 @@ export function UpdateRadarWidget({ stacks, hosts }: { stacks: Stack[]; hosts: M
                 name={`${stack.name} / ${svc.name}`}
                 update={svc.update}
                 side="left"
-                actions={{ onUpdate: () => void cmd.installUpdates(stack.id, [svc.name]), onRecheck: () => void cmd.checkUpdates(stack.id), busy: !!stack.busyActionId, updateLabel: undefined }}
+                actions={{ updateOperation: "installStackUpdates", onUpdate: () => void cmd.installUpdates(stack.id, [svc.name]), onRecheck: () => void cmd.checkUpdates(stack.id), busy: !!stack.busyActionId, updateLabel: undefined }}
               />
             </li>
           ))}

@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace
+// Deviations: Local module namespace; describe enforced optional content baselines.
 
 package volume
 
@@ -24,10 +24,8 @@ type WorkspaceFileChange struct {
 	NewName       string `json:"newName,omitempty"`
 	NewParentPath string `json:"newParentPath,omitempty"`
 	UploadIndex   *int   `json:"uploadIndex,omitempty" minimum:"0"`
-	// BaselineIndex references an uploaded copy of the content an update_file
-	// change was drafted against. The volume workspace revision is already
-	// content-aware, so the baseline is accepted for API symmetry with
-	// project workspaces but not separately compared.
+	// BaselineIndex references the content an update_file was drafted against.
+	// When set, apply conflicts if the current file content no longer matches.
 	BaselineIndex *int   `json:"baselineIndex,omitempty" minimum:"0"`
 	BackupID      string `json:"backupId,omitempty"`
 	Recursive     bool   `json:"recursive,omitempty"`

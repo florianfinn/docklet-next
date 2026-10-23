@@ -14,6 +14,7 @@ GitHub issues and milestones hold implementation and acceptance evidence.
 | [HTTP adapter, live channel and capabilities](adapter-live-capabilities.md) | M3 adapter outcomes, server capabilities, run/event refresh and contract matrix |
 | [Run gate and single-hub operation](run-gate.md) | Activity states, gated admission, cancellation, restart recovery and one hub per database |
 | [Runtime control and log lifecycle](runtime-control.md) | Opaque-key retries, bounded outcome evidence and unknown recovery, logs/session closure and staged v4 foundation activation |
+| [Storage and file workspace](storage-workspace.md) | Stateless prune selection and re-checks, helper image policy, workspace mapping and agent compatibility |
 | [Stack authoring and deployment](stack-authoring.md) | M7 create/save/label/deploy mapping, non-idempotent create, partial state and hub docker run conversion |
 | [Database baseline](database-baseline.md) | SQLite baseline contract, forward-only policy and historical integrity reference |
 | [Agent surface](agent-surface.md) | Agent and Edge agent module allowlist and host exposure |
@@ -27,6 +28,7 @@ GitHub issues and milestones hold implementation and acceptance evidence.
 | [Publication policy](publication-policy.md) | Public data checks and local denylist |
 | [Provenance](provenance.md) | Source headers, inventories, size ratchet and assets |
 | [Licensing](licensing.md) | Six adoption and distribution duties |
+| [Tools helper image](tools-image.md) | Pinned two-platform helper, offline acfs, gated publication and corresponding BusyBox source |
 | [Hub database backup](hub-backup.md) | Coordinated SQLite archives, paired restore and interruption recovery |
 | [Practical acceptance](practical-acceptance.md) | Approved sandbox procedure |
 

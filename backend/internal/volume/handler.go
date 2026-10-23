@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace
+// Deviations: Local module namespace; Stateless prune HTTP contract.
 
 package volume
 
@@ -87,16 +87,14 @@ type RemoveVolumeInput struct {
 	Force         bool   `query:"force" doc:"Force removal"`
 }
 
-type PruneVolumesInput struct {
+type PlanVolumePruneInput struct {
 	EnvironmentID string `path:"id" doc:"Environment ID"`
+	All           bool   `query:"all" default:"false" doc:"Include named volumes as well as anonymous volumes"`
 }
 
-// VolumePruneReportData represents the result of a volume prune operation.
-// This is a local type to avoid schema naming conflicts with image.PruneReport.
-type VolumePruneReportData struct {
-	VolumesDeleted []string `json:"volumesDeleted,omitempty"`
-	SpaceReclaimed uint64   `json:"spaceReclaimed"`
-	ActivityID     *string  `json:"activityId,omitempty"`
+type PruneVolumesInput struct {
+	EnvironmentID string `path:"id" doc:"Environment ID"`
+	Body          volume.PruneRequest
 }
 
 type GetVolumeUsageInput struct {
@@ -263,13 +261,14 @@ func (h *VolumeHandler) RenameVolume(ctx context.Context, input *RenameVolumeInp
 		return renameErr
 	})
 	if err != nil {
+		var busyErr *volumeWorkspaceBusyError
 		var conflictErr *volume.ProjectVolumeRenameConflictError
 		var inUseErr *volume.ProjectVolumeRenameInUseError
 		var spaceErr *volume.ProjectVolumeRenameInsufficientSpaceError
 		switch {
 		case errors.Is(err, common.ErrBadRequest):
 			return nil, huma.Error400BadRequest(err.Error())
-		case errors.As(err, &conflictErr), errors.As(err, &inUseErr):
+		case errors.As(err, &busyErr), errors.As(err, &conflictErr), errors.As(err, &inUseErr):
 			return nil, huma.Error409Conflict(err.Error())
 		case errors.As(err, &spaceErr):
 			return nil, huma.NewError(http.StatusInsufficientStorage, err.Error())
@@ -324,9 +323,17 @@ func (h *VolumeHandler) RemoveVolume(ctx context.Context, input *RemoveVolumeInp
 	}, nil
 }
 
-// PruneVolumes removes all unused Docker volumes.
-func (h *VolumeHandler) PruneVolumes(ctx context.Context, input *PruneVolumesInput) (*handlerutil.Out[VolumePruneReportData], error) {
-	var report *volume.PruneReport
+func (h *VolumeHandler) PlanVolumePrune(ctx context.Context, input *PlanVolumePruneInput) (*handlerutil.Out[volume.PrunePlan], error) {
+	plan, err := h.volumeService.PlanVolumePrune(ctx, input.All)
+	if err != nil {
+		return nil, huma.Error500InternalServerError("Failed to plan volume prune")
+	}
+	return &handlerutil.Out[volume.PrunePlan]{Body: base.ApiResponse[volume.PrunePlan]{Success: true, Data: *plan}}, nil
+}
+
+// PruneVolumes re-checks and removes only the submitted candidates.
+func (h *VolumeHandler) PruneVolumes(ctx context.Context, input *PruneVolumesInput) (*handlerutil.Out[volume.PruneResult], error) {
+	var report *volume.PruneResult
 	runtimeCtx := utils.ActivityRuntimeContext(ctx, h.appCtx)
 	activityID, err := activitylib.RunHandlerActivity(runtimeCtx, h.activityService, activitylib.HandlerOptions{
 		EnvironmentID:  input.EnvironmentID,
@@ -334,27 +341,19 @@ func (h *VolumeHandler) PruneVolumes(ctx context.Context, input *PruneVolumesInp
 		ResourceType:   "volume",
 		Step:           "Pruning unused volumes",
 		Message:        "Pruning unused volumes",
-		SuccessMessage: "Volumes pruned successfully",
+		SuccessMessage: "Volume prune completed",
 		Metadata:       database.JSON{"action": "prune_volumes"},
 	}, func(runtimeCtx context.Context) error {
 		var pruneErr error
-		report, pruneErr = h.volumeService.PruneVolumes(runtimeCtx)
+		report, pruneErr = h.volumeService.executeVolumePrune(runtimeCtx, input.Body.Candidates, input.Body.All)
 		return pruneErr
 	})
 	if err != nil {
 		return nil, huma.Error500InternalServerError("Failed to prune volumes: " + err.Error())
 	}
 
-	return &handlerutil.Out[VolumePruneReportData]{
-		Body: base.ApiResponse[VolumePruneReportData]{
-			Success: true,
-			Data: VolumePruneReportData{
-				VolumesDeleted: report.VolumesDeleted,
-				SpaceReclaimed: report.SpaceReclaimed,
-				ActivityID:     mo.EmptyableToOption(strings.TrimSpace(activityID)).ToPointer(),
-			},
-		},
-	}, nil
+	report.ActivityID = mo.EmptyableToOption(strings.TrimSpace(activityID)).ToPointer()
+	return &handlerutil.Out[volume.PruneResult]{Body: base.ApiResponse[volume.PruneResult]{Success: true, Data: *report}}, nil
 }
 
 // GetVolumeUsage returns containers using a specific volume.

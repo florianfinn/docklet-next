@@ -102,7 +102,7 @@ export const enStacks = {
   },
   deployments: {
     title: "Deploy history",
-    empty: (import.meta.env.DEV ? "No deployments in this demo history yet." : ""),
+    empty: (import.meta.env.DEV ? "No deployments in this demo history yet." : "No deployments recorded yet."),
     running: "Running now",
     duration: "{seconds} s",
     restoreTitle: "Restore points",

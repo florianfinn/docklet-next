@@ -3,6 +3,7 @@ import { useTranslations } from "use-intl";
 
 import { baseName } from "@/domain/files";
 import { formatBytes } from "@/domain/format";
+import { Alert, AlertDescription } from "@/shared/ui/alert";
 import { Button } from "@/shared/ui/button";
 import { Spinner } from "@/shared/ui/spinner";
 import { CodeEditor } from "@/shared/workspace/code-editor";
@@ -15,7 +16,7 @@ type ErrorKey = "not-found" | "host-offline" | "not-editable";
 const KNOWN_ERRORS = new Set<string>(["not-found", "host-offline", "not-editable"]);
 
 /** Editor body of one open file: loading, error, read-only placeholder or the shared CodeMirror editor. */
-export function FileBody({ file, onEdit, onSave, onDownload }: { file: OpenFile; onEdit: (text: string) => void; onSave: () => void; onDownload: () => void }) {
+export function FileBody({ file, onEdit, onSave, onDownload, readOnly = false }: { file: OpenFile; readOnly?: boolean; onEdit: (text: string) => void; onSave: () => void; onDownload: () => void }) {
   const t = useTranslations("volumes.files");
   const te = useTranslations("volumes.errors");
   const name = baseName(file.path);
@@ -25,7 +26,7 @@ export function FileBody({ file, onEdit, onSave, onDownload }: { file: OpenFile;
       <EditorPlaceholder
         icon={<AlertTriangle className="text-destructive" />}
         title={t("loadFailed", { name })}
-        description={file.errorCode && KNOWN_ERRORS.has(file.errorCode) ? te(file.errorCode as ErrorKey) : undefined}
+        description={file.errorCode && KNOWN_ERRORS.has(file.errorCode) ? te(file.errorCode as ErrorKey) : t(`workspaceErrors.${file.errorCode === "helper-incompatible" || file.errorCode === "helper-unavailable" || file.errorCode === "forbidden" || file.errorCode === "agent-update" ? file.errorCode : "unavailable"}`)}
         action={
           <Button size="sm" variant="outline" onClick={file.retry}>
             {t("retry")}
@@ -38,7 +39,7 @@ export function FileBody({ file, onEdit, onSave, onDownload }: { file: OpenFile;
       <EditorPlaceholder
         icon={<FileLock2 />}
         title={t("notEditable")}
-        description={t("binaryBody", { size: formatBytes(file.size) })}
+        description={file.readOnlyReason ? t(`readOnlyReasons.${file.readOnlyReason}`) : t("binaryBody", { size: formatBytes(file.size) })}
         action={
           <Button size="sm" variant="outline" onClick={onDownload}>
             <Download data-icon="inline-start" />
@@ -47,7 +48,7 @@ export function FileBody({ file, onEdit, onSave, onDownload }: { file: OpenFile;
         }
       />
     );
-  return <CodeEditor key={file.path} value={file.text} onChange={onEdit} language={languageFor(name)} label={t("editorLabel", { name })} describedBy="file-editor-help" onSave={onSave} />;
+  return <>{file.conflict && <Alert><AlertDescription>{t("workspaceErrors.conflict")}</AlertDescription></Alert>}<CodeEditor key={`${file.path}:${readOnly}`} readOnly={readOnly} value={file.text} onChange={onEdit} language={languageFor(name)} label={t("editorLabel", { name })} describedBy="file-editor-help" onSave={file.conflict || readOnly ? undefined : onSave} /></>;
 }
 
 /** Status line of the active file tab. */

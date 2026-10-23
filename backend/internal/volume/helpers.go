@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace
+// Deviations: Local module namespace; Complete helper image references and typed ACFS compatibility.
 
 package volume
 
@@ -53,16 +53,20 @@ func (s *VolumeService) requireVolumeHelperACFSInternal(ctx context.Context, vol
 	}
 	s.helperMu.Unlock()
 
-	stdout, stderr, err := s.execInContainerInternal(ctx, containerID, "", []string{"acfs", "version"})
+	stdout, _, err := s.execInContainerInternal(ctx, containerID, "", []string{"acfs", "version"})
 	if err != nil {
-		return fmt.Errorf("%s: %w", "volume workspace requires an ACFS-capable tools image: "+strings.TrimSpace(stderr), err)
+		var commandExit *helperCommandExitError
+		if errors.As(err, &commandExit) {
+			return volumehelper.IncompatibleHelper(err)
+		}
+		return volumehelper.UnavailableHelper(err)
 	}
 	var response types.VersionResponse
 	if unmarshalErr := json.Unmarshal([]byte(stdout), &response); unmarshalErr != nil {
-		return fmt.Errorf("parse ACFS tools-image capability: %w", unmarshalErr)
+		return volumehelper.IncompatibleHelper(unmarshalErr)
 	}
 	if response.Protocol < types.ProtocolVersion {
-		return fmt.Errorf("volume workspace requires ACFS protocol %d, tools image provides protocol %d", types.ProtocolVersion, response.Protocol)
+		return volumehelper.IncompatibleHelper(fmt.Errorf("require ACFS protocol %d, received %d", types.ProtocolVersion, response.Protocol))
 	}
 
 	s.helperMu.Lock()
@@ -74,11 +78,11 @@ func (s *VolumeService) requireVolumeHelperACFSInternal(ctx context.Context, vol
 }
 
 func (s *VolumeService) toolsImageInternal() string {
-	registry := ""
+	configured := ""
 	if s.settingsService != nil {
-		registry = s.settingsService.GetSettingsConfig().ToolsImageRegistry.Value
+		configured = s.settingsService.GetSettingsConfig().ToolsImage.Value
 	}
-	return volumehelper.ToolsImage(registry)
+	return volumehelper.ToolsImage(configured)
 }
 
 func isUnlabeledVolumeHelperContainerInternal(c container.Summary) bool {
@@ -139,18 +143,12 @@ func (s *VolumeService) getVolumeHelperImageInternal(ctx context.Context, docker
 			return toolsImage, nil
 		}
 		pullErr = pullImageErr
-		slog.WarnContext(ctx, "volume service: failed to pull tools helper image, attempting arcane fallback", "error", pullImageErr.Error())
+		slog.WarnContext(ctx, "volume service: failed to pull configured tools helper image", "error", pullImageErr.Error())
 	} else {
-		pullErr = errors.New("image service unavailable")
-		slog.WarnContext(ctx, "volume service: image service unavailable, attempting arcane fallback")
+		return volumehelper.ResolveHelperImage(ctx, dockerClient, toolsImage)
 	}
 
-	if fallback, ok := volumehelper.ResolveArcaneRuntimeImage(ctx, dockerClient).Get(); ok {
-		slog.InfoContext(ctx, "volume service: helper image strategy selected", "strategy", "arcane-fallback", "source", fallback.Source, "image", fallback.Image)
-		return fallback.Image, nil
-	}
-
-	return "", fmt.Errorf("failed to resolve helper image: tools image unavailable and arcane fallback not found: %w", pullErr)
+	return "", fmt.Errorf("failed to resolve helper image: configured tools image unavailable: %w", pullErr)
 }
 
 func (s *VolumeService) acquireVolumeHelperInternal(ctx context.Context, volumeName string) (string, func(), error) {
@@ -428,8 +426,8 @@ func (s *VolumeService) collectStaleHelperIDsInternal(now time.Time, idleTimeout
 }
 
 // StopHelper removes the reused helper for a single volume, if
-// one exists. It is idempotent: stopping a volume with no active helper returns
-// nil.
+// one exists. Callers hold the workspace lock; failed removals retain the entry
+// for retry. A missing helper is already stopped.
 func (s *VolumeService) StopHelper(ctx context.Context, volumeName string) error {
 	if strings.TrimSpace(volumeName) == "" {
 		return nil
@@ -440,15 +438,22 @@ func (s *VolumeService) StopHelper(ctx context.Context, volumeName string) error
 		return fmt.Errorf("failed to get docker client for helper stop: %w", err)
 	}
 
-	containerID := s.takeHelperIDInternal(volumeName)
-	if containerID == "" {
+	s.helperMu.Lock()
+	helper := s.helperByVolume[volumeName]
+	s.helperMu.Unlock()
+	if helper == nil {
 		return nil
 	}
 
-	if _, containerRemoveErr := dockerClient.ContainerRemove(ctx, containerID, volumehelper.RemoveOptions()); containerRemoveErr != nil {
+	if _, containerRemoveErr := dockerClient.ContainerRemove(ctx, helper.id, volumehelper.RemoveOptions()); containerRemoveErr != nil && !errdefs.IsNotFound(containerRemoveErr) {
 		return fmt.Errorf("failed to remove helper container: %w", containerRemoveErr)
 	}
 
+	s.helperMu.Lock()
+	if s.helperByVolume[volumeName] == helper {
+		delete(s.helperByVolume, volumeName)
+	}
+	s.helperMu.Unlock()
 	return nil
 }
 
@@ -529,11 +534,7 @@ func (s *VolumeService) execInContainerInternal(ctx context.Context, containerID
 	}
 
 	if exitCode != 0 {
-		execErr := cmp.Or(strings.TrimSpace(stderr.String()), strings.TrimSpace(stdout.String()))
-		if execErr != "" {
-			return stdout.String(), stderr.String(), fmt.Errorf("command exited with code %d: %s", exitCode, execErr)
-		}
-		return stdout.String(), stderr.String(), fmt.Errorf("command exited with code %d", exitCode)
+		return stdout.String(), stderr.String(), &helperCommandExitError{code: exitCode, output: cmp.Or(strings.TrimSpace(stderr.String()), strings.TrimSpace(stdout.String()))}
 	}
 
 	return stdout.String(), stderr.String(), nil

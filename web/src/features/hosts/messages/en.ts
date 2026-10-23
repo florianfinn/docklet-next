@@ -65,7 +65,7 @@ export const enHosts = {
     removeTitle: "Remove {name}?",
     removeBody: "Containers and stacks keep running on the host. Only the hub registration and its credential are removed. Stop the agent container on the host yourself.",
     removeConfirm: "Remove host",
-    removed: (import.meta.env.DEV ? "{name} removed (demo)" : ""),
+    removed: (import.meta.env.DEV ? "{name} removed (demo)" : "{name} removed"),
     demoAdded: "Added in this session",
   },
   mode: {
@@ -250,7 +250,7 @@ export const enHosts = {
     log: "Latest agent messages (synthetic)",
     restart: "Restart agent",
     restarting: "Restarting …",
-    restartHint: (import.meta.env.DEV ? "Simulated: stops and starts the agent container; the host is briefly unreachable meanwhile." : ""),
+    restartHint: (import.meta.env.DEV ? "Simulated: stops and starts the agent container; the host is briefly unreachable meanwhile." : "Stops and starts the agent container; the host is briefly unreachable."),
     restartBlocked: "Only possible while the host is connected.",
     check: "Check connection",
     checking: "Checking …",

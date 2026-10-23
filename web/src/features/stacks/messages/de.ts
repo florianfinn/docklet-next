@@ -103,7 +103,7 @@ export const deStacks: typeof enStacks = {
   },
   deployments: {
     title: "Deploy-Verlauf",
-    empty: (import.meta.env.DEV ? "Noch keine Deployments in diesem Demo-Verlauf." : ""),
+    empty: (import.meta.env.DEV ? "Noch keine Deployments in diesem Demo-Verlauf." : "Noch keine Deployments aufgezeichnet."),
     running: "Läuft gerade",
     duration: "{seconds} s",
     restoreTitle: "Wiederherstellungspunkte",

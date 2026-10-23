@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; functional cut: removed S3 backup destinations; split inventory reads.
+// Deviations: Local module namespace; functional cut: removed S3 backup destinations; split inventory reads; Explicit candidate prune execution.
 
 package volume
 
@@ -364,18 +364,11 @@ func (s *VolumeService) GetVolumeByName(ctx context.Context, name string) (*volu
 		}
 	}
 
-	v := volumetypes.NewSummary(vol)
-
-	containerIDs, err := docker.GetContainersUsingVolume(ctx, dockerClient, name)
+	consumers, err := listVolumeConsumersInternal(ctx, dockerClient)
 	if err != nil {
-		slog.WarnContext(ctx, "failed to get containers using volume", "volume", name, "error", err.Error())
-	} else {
-		v.Containers = containerIDs
-		if len(containerIDs) > 0 {
-			v.InUse = true
-		}
+		return nil, fmt.Errorf("failed to get containers using volume: %w", err)
 	}
-
+	v := volumeSummaryWithConsumersInternal(vol, consumers[name])
 	return &v, nil
 }
 
@@ -466,54 +459,26 @@ func (s *VolumeService) DeleteVolume(ctx context.Context, name string, force boo
 	return nil
 }
 
-func (s *VolumeService) PruneVolumes(ctx context.Context) (*volumetypes.PruneReport, error) {
-	slog.DebugContext(ctx, "volume service: prune volumes")
-	return s.PruneVolumesWithOptions(ctx, false)
-}
-
+// PruneVolumesWithOptions preserves the internal system/scheduler API while
+// executing only a freshly observed, explicitly re-checked candidate list.
 func (s *VolumeService) PruneVolumesWithOptions(ctx context.Context, all bool) (*volumetypes.PruneReport, error) {
-	slog.DebugContext(ctx, "volume service: prune volumes with options", "all", all)
-	dockerClient, err := s.dockerService.GetClient(ctx)
+	plan, err := s.PlanVolumePrune(ctx, all)
 	if err != nil {
-		return nil, fmt.Errorf("failed to connect to Docker: %w", err)
+		return nil, err
 	}
-
-	// Stop all read-only browse helpers first; a helper mounting a volume marks it
-	// "in use" and would prevent VolumePrune from reclaiming an otherwise-unused
-	// volumetypes. Helpers are re-created on demand on the next browse request.
-	s.CleanupHelperContainers(ctx)
-
-	// Docker's VolumesPrune behavior (API v1.42+):
-	// - Without 'all' flag: Only removes anonymous (unnamed) volumes that are not in use
-	// - With 'all=true' flag: Removes ALL unused volumes (both named and anonymous)
-	// Note: Volumes are considered "in use" if referenced by any container (running or stopped)
-	volumePruneResult, err := dockerClient.VolumePrune(ctx, buildVolumePruneOptionsInternal(all))
+	candidates := make([]volumetypes.PruneCandidate, 0, len(plan.Candidates))
+	for _, candidate := range plan.Candidates {
+		candidates = append(candidates, volumetypes.PruneCandidate{Name: candidate.Name, CreatedAt: candidate.CreatedAt})
+	}
+	result, err := s.executeVolumePrune(ctx, candidates, all)
 	if err != nil {
-		return nil, fmt.Errorf("failed to prune volumes: %w", err)
+		return nil, err
 	}
-
-	metadata := buildVolumePruneMetadataInternal(all, len(volumePruneResult.Report.VolumesDeleted), volumePruneResult.Report.SpaceReclaimed)
-	if logErr := s.eventService.LogVolumeEvent(ctx, event.EventTypeVolumeDelete, "", "bulk_prune", usertypes.SystemUser.ID, usertypes.SystemUser.Username, "0", metadata); logErr != nil {
-		slog.WarnContext(ctx, "could not log volume prune action", "error", logErr.Error())
+	report := &volumetypes.PruneReport{VolumesDeleted: result.Removed, SpaceReclaimed: result.SpaceReclaimed}
+	if len(result.Failed) > 0 {
+		return report, fmt.Errorf("volume prune failed for %d candidates", len(result.Failed))
 	}
-
-	for _, volumeName := range volumePruneResult.Report.VolumesDeleted {
-		s.removeHelperEntry(volumeName)
-		s.backup.RemovePolicies(ctx, volumeName)
-	}
-
-	docker.InvalidateVolumeUsageCache(dockerClient)
-
-	return &volumetypes.PruneReport{
-		VolumesDeleted: volumePruneResult.Report.VolumesDeleted,
-		SpaceReclaimed: volumePruneResult.Report.SpaceReclaimed,
-	}, nil
-}
-
-func buildVolumePruneOptionsInternal(all bool) client.VolumePruneOptions {
-	filters := make(client.Filters)
-	filters = filters.Add("label!", internalVolumePruneFilterValue)
-	return client.VolumePruneOptions{All: all, Filters: filters}
+	return report, nil
 }
 
 func buildVolumePruneMetadataInternal(all bool, volumesDeleted int, spaceReclaimed uint64) database.JSON {
@@ -538,13 +503,13 @@ func (s *VolumeService) GetVolumeUsage(ctx context.Context, name string) (bool, 
 		return false, nil, fmt.Errorf("volume not found: %w", err)
 	}
 
-	containerIDs, err := docker.GetContainersUsingVolume(ctx, dockerClient, vol.Volume.Name)
+	consumers, err := listVolumeConsumersInternal(ctx, dockerClient)
 	if err != nil {
 		return false, nil, fmt.Errorf("failed to get containers using volume: %w", err)
 	}
 
-	inUse := len(containerIDs) > 0
-	return inUse, containerIDs, nil
+	containerIDs := consumers[vol.Volume.Name]
+	return len(containerIDs) > 0, containerIDs, nil
 }
 
 // VolumeSizeData holds size information for a volume.
@@ -571,12 +536,16 @@ func (s *VolumeService) GetVolumeSizes(ctx context.Context) (map[string]VolumeSi
 		return nil, fmt.Errorf("failed to get volume usage data: %w", err)
 	}
 
+	consumers, err := listVolumeConsumersInternal(apiCtx, dockerClient)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get containers using volumes: %w", err)
+	}
 	result := make(map[string]VolumeSizeData, len(usageVolumes))
 	for _, v := range usageVolumes {
 		if v.UsageData != nil {
 			result[v.Name] = VolumeSizeData{
 				Size:     v.UsageData.Size,
-				RefCount: v.UsageData.RefCount,
+				RefCount: int64(len(consumers[v.Name])),
 			}
 		}
 	}
