@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: functional cut: removed GitOps and saved Git repositories; functional cut: removed Swarm; functional cut: removed S3 backup destinations; functional cut: removed standalone build workshop; added the project tag update command used by the stack editor (#152); Storage preview, rename and backup import coverage; removed retained S3 upload.
+// Deviations: functional cut: removed GitOps and saved Git repositories; functional cut: removed Swarm; functional cut: removed S3 backup destinations; functional cut: removed standalone build workshop; added the project tag update command used by the stack editor (#152); Storage preview, rename and backup import coverage; removed retained S3 upload; network membership commands.
 
 package edge
 
@@ -139,6 +139,8 @@ var commandRoutes = []commandRoute{
 	{Method: http.MethodGet, PathPattern: "/api/environments/{id}/networks/{networkId}", CommandName: "network.inspect"},
 	{Method: http.MethodDelete, PathPattern: "/api/environments/{id}/networks/{networkId}", CommandName: "network.delete"},
 	{Method: http.MethodPost, PathPattern: "/api/environments/{id}/networks/prune", CommandName: "network.prune"},
+	{Method: http.MethodPost, PathPattern: "/api/environments/{id}/networks/{networkId}/connect", CommandName: "network.connect"},
+	{Method: http.MethodPost, PathPattern: "/api/environments/{id}/networks/{networkId}/disconnect", CommandName: "network.disconnect"},
 	{Method: http.MethodGet, PathPattern: "/api/environments/{id}/networks/topology", CommandName: "network.topology"},
 
 	{Method: http.MethodGet, PathPattern: "/api/environments/{id}/templates/variables", CommandName: "template.variables.get"},
