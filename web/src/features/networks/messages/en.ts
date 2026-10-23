@@ -200,6 +200,8 @@ export const enNetworks = {
     submit: "Create",
     created: "Network {name} created",
     errors: {
+      duplicate: "Keys, names and addresses must be unique",
+      gateway: "That is the gateway",
       required: "Required",
       invalid: "Invalid format",
       reserved: "Name reserved by Docker",

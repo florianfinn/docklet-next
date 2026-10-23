@@ -201,6 +201,8 @@ export const deNetworks: typeof enNetworks = {
     submit: "Anlegen",
     created: "Netzwerk {name} angelegt",
     errors: {
+      duplicate: "Schlüssel, Namen und Adressen müssen eindeutig sein",
+      gateway: "Das ist das Gateway",
       required: "Pflichtfeld",
       invalid: "Ungültiges Format",
       reserved: "Reservierter Name von Docker",

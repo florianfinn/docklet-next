@@ -156,11 +156,11 @@ export function poolFullyScanned6(network: { subnet6?: string; ipRange6?: string
 }
 
 /** First free address of the range (or prefix), skipping gateway and taken addresses in any notation. */
-export function nextFreeIp6(network: { subnet6?: string; gateway6?: string; ipRange6?: string }, taken: readonly string[]): string | undefined {
+export function nextFreeIp6(network: { subnet6?: string; gateway6?: string; ipRange6?: string; auxAddresses6?: readonly { ip: string }[] }, taken: readonly string[]): string | undefined {
   const subnet = network.subnet6 ? parseCidr6(network.subnet6) : undefined;
   if (!subnet) return undefined;
   const range = (network.ipRange6 && parseCidr6(network.ipRange6)) || subnet;
-  const used = new Set([...taken, network.gateway6 ?? ""].map((x) => parseIp6(x)).filter((x): x is bigint => x !== undefined));
+  const used = new Set([...taken, ...(network.auxAddresses6 ?? []).map((a) => a.ip), network.gateway6 ?? ""].map((x) => parseIp6(x)).filter((x): x is bigint => x !== undefined));
   const end = range.network + range.size;
   for (let ip = range.network, n = 0; ip < end && n < SCAN_LIMIT; ip++, n++) if (usableIn6(ip, subnet) && !used.has(ip)) return formatIp6(ip);
   return undefined;
