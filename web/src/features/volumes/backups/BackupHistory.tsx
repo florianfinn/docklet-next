@@ -1,3 +1,4 @@
+import { CapabilityGate } from "@/shared/components/capability-gate";
 import { History, Loader2, RotateCcw } from "lucide-react";
 import { useState } from "react";
 import { useTranslations } from "use-intl";
@@ -17,7 +18,11 @@ import { useVolumeCommands } from "../use-volume-commands";
 
 const STATUS_TONE = { running: "accent", succeeded: "ok", failed: "err" } as const;
 
-export function BackupHistory({ volume, targets, hostOnline }: { volume: VolumeDetail; targets: BackupTarget[]; hostOnline: boolean }) {
+export function BackupHistory(props: { volume: VolumeDetail; targets: BackupTarget[]; hostOnline: boolean }) {
+  return <CapabilityGate operation="restoreBackup"><ConnectedBackupHistory {...props} /></CapabilityGate>;
+}
+
+function ConnectedBackupHistory({ volume, targets, hostOnline }: { volume: VolumeDetail; targets: BackupTarget[]; hostOnline: boolean }) {
   const t = useTranslations("volumes.backups");
   const dt = useAdapterText();
   const cmd = useVolumeCommands();

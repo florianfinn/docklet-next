@@ -14,6 +14,8 @@ export function useStackMenu(stack: Stack, hidden: boolean): MenuGroups {
   const t = useTranslations("stacks.menu");
   const navigate = useNavigate();
   const cmd = useStackCommands();
+  const update = useCapability("installStackUpdates");
+  const check = useCapability("checkUpdates");
   const command = useCapability("runStackCommand", { kind: "stack", id: stack.id });
   const hide = useHideAction("stacks");
   const allStopped = stack.services.every((s) => s.state === "stopped");
@@ -35,8 +37,8 @@ export function useStackMenu(stack: Stack, hidden: boolean): MenuGroups {
     [
       ...run,
       { id: "redeploy", label: t("redeploy"), icon: <RefreshCw />, disabled: busy || !command.available || !!stack.inventory?.stale, title: command.reason, onSelect: () => void cmd.run(stack.id, "redeploy") },
-      ...(pending > 0 ? [{ id: "update", label: t("update"), icon: <Download />, disabled: busy, onSelect: () => void cmd.installUpdates(stack.id) }] : []),
-      { id: "check", label: t("check"), icon: <ScanSearch />, disabled: busy, onSelect: () => void cmd.checkUpdates(stack.id) },
+      ...(pending > 0 ? [{ id: "update", label: t("update"), icon: <Download />, disabled: busy || !update.available, title: update.reason, onSelect: () => void cmd.installUpdates(stack.id) }] : []),
+      { id: "check", label: t("check"), icon: <ScanSearch />, disabled: busy || !check.available, title: check.reason, onSelect: () => void cmd.checkUpdates(stack.id) },
     ],
     [hide(stack.id, stack.name, hidden)],
     ...(import.meta.env.DEV ? [[{ id: "fail-demo", label: t("failDemo"), icon: <FlaskConical />, disabled: busy, muted: true, onSelect: () => void cmd.run(stack.id, "redeploy", "pull") }]] : []),

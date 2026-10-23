@@ -65,7 +65,7 @@ export const enImages = {
   },
   pullDialog: {
     title: "Pull image",
-    description: (import.meta.env.DEV ? "Downloads an image to a connected host (simulation: no registry is contacted). Containers only use a new image after a deploy or recreate." : ""),
+    description: (import.meta.env.DEV ? "Downloads an image to a connected host (simulation: no registry is contacted). Containers only use a new image after a deploy or recreate." : "Downloads an image to a connected host. Containers use a new image after a deploy or recreate."),
     host: "Host",
     hostOffline: "{name} (disconnected)",
     reference: "Image reference",
@@ -94,7 +94,7 @@ export const enImages = {
   },
   removeDialog: {
     title: "Remove {name}?",
-    body: (import.meta.env.DEV ? "The image is deleted on {host}. A later deploy downloads it again if needed (demo: in memory only)." : ""),
+    body: (import.meta.env.DEV ? "The image is deleted on {host}. A later deploy downloads it again if needed (demo: in memory only)." : "The image is deleted on {host}. A later deploy downloads it again if needed."),
     confirm: "Remove image",
   },
   toast: { removed: "{name} removed", nothing: "No images to clean up" },

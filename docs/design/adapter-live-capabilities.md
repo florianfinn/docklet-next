@@ -269,6 +269,12 @@ multi-hub fan-out protocol is needed.
 
 ## Identity, settings and production routes (#27)
 
+The 2026-10-22 whole-app audit measured 262 `import.meta.env.DEV` matching
+lines across 47 non-test files, 59 empty production catalogue values per locale,
+and 32 `QueryError` call sites (30 without the source error). The production
+bundle guard already rejects demo, design-lab and test modules across the full
+module graph, including modules removed by tree shaking.
+
 M3 provides the HTTP adapter for events and activities. M4 connects `/auth/mode`,
 `/auth/me`, local login/logout, password changes, profile language and setup status
 through that adapter. Only `/auth/mode` selects the active policy; the legacy
@@ -289,9 +295,61 @@ uses the stored Activity value. Profile language is stored per administrator via
 existing boundaries.
 
 The UI exposes no editable history limits. Retention stays at 500 events and
-100 finished runs per environment; active runs remain. M5 owns onboarding,
-host installation and their text fallbacks. Preview and the design lab remain
-development routes.
+100 finished runs per environment; active runs remain. Host onboarding and its
+installer use the connected M5 routes and catalogues.
+
+Unsupported reads preserve their typed error through `QueryError`: missing
+adapter mappings render a neutral unavailable state, while transport/mapping
+failures remain load errors. This includes the dashboard schedule (M10), security
+(M11) and unconnected settings sections. Volume backup plans, history and actions
+remain owned by M12. Their gates prevent unsupported reads and actions from
+mounting; list/detail/storage-card badges say that backup status is unavailable,
+counts stay unknown and backup navigation is disabled with a reason. A direct
+backup URL also renders that reason. Missing backup DTO fields never establish
+that a volume has no backup. Stack restore points retain the same M12 boundary.
+
+The host-management owner supplies the remaining host edit, reconnect and agent
+restart mappings; the runtime owner supplies per-service restarts. Until then,
+these controls stay disabled with capability reasons. Update installs/checks and
+automatic policies (M10), container origin assignment (inventory owner), source
+imports (stack-authoring owner), backup target tests (M12) and notification tests
+(notification owner) follow the same rule. Hub database backups keep their own
+implemented access/maintenance contract; they are separate from volume backups.
+
+Unchecked image results retain an incomplete update status instead of claiming
+that every image is current. Product CPU/RAM accessible values, deployment empty
+states, image confirmations
+and host messages have complete English and German production text. Dashboard
+app entries open HTTP/HTTPS links. Network query parameters cannot replace live
+inventory with benchmark data; enlarged topology fixtures belong only to isolated
+performance tests and the production graph guard rejects their module.
+
+The production catalogue test evaluates both catalogues with `DEV=false` before
+importing them. It rejects every empty string except the exact, reasoned list in
+`production-empty-exceptions.test-support.ts`, and rejects stale exceptions.
+The 2026-10-22 final audit has 51 such keys per locale, zero empty product values,
+and 33 `QueryError` call sites all carrying their source error. The 263 `DEV`
+matching lines in 48 non-test files retain these development-only categories:
+
+- Preview and design-lab routes/catalogues, shell live/lab controls and fixture
+  user identity; the production runtime removes those controls and uses sign-in.
+- Simulation badges, failure-injection buttons, simulated onboarding connection
+  controls and the development-only host installer sheet. Connected installation
+  remains available through onboarding.
+- Synthetic dashboard service widgets and their configuration. Product app links
+  and personal dashboard layout preferences remain available.
+- Demo run-text encoder messages and fixture-only report labels. HTTP activity
+  mappers use wire codes and raw output, and never synthesize simulation markers.
+- Explicit alternate development wording whose production branch is complete.
+  The lab override note itself cannot render outside development.
+
+The full production module graph guard rejects demo adapters, design-lab/dev/test
+modules and benchmark generators even when later tree shaking removes them.
+Its negative builds inject the demo adapter and design-lab modules to prove the
+boundary. Production runtime route tests cover login to dashboard, hosts,
+containers, stacks, volumes and file reads using HTTP DTO fixtures and the
+sanitised recorded workspace envelope. They also cover unavailable capabilities,
+backup deep links, blocked preview routes and ignored benchmark parameters.
 
 ## Contract test matrix for #38
 

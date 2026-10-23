@@ -66,7 +66,7 @@ export const deImages: typeof enImages = {
   },
   pullDialog: {
     title: "Image ziehen",
-    description: (import.meta.env.DEV ? "Lädt ein Image auf einen verbundenen Host (Simulation: keine Registry wird kontaktiert). Container nutzen ein neues Image erst nach Deploy oder Neu-Erstellen." : ""),
+    description: (import.meta.env.DEV ? "Lädt ein Image auf einen verbundenen Host (Simulation: keine Registry wird kontaktiert). Container nutzen ein neues Image erst nach Deploy oder Neu-Erstellen." : "Lädt ein Image auf einen verbundenen Host. Container nutzen das neue Image nach Deploy oder Neu-Erstellen."),
     host: "Host",
     hostOffline: "{name} (getrennt)",
     reference: "Image-Referenz",
@@ -95,7 +95,7 @@ export const deImages: typeof enImages = {
   },
   removeDialog: {
     title: "{name} entfernen?",
-    body: (import.meta.env.DEV ? "Das Image wird auf {host} gelöscht. Ein späterer Deploy lädt es bei Bedarf neu (Demo: nur im Arbeitsspeicher)." : ""),
+    body: (import.meta.env.DEV ? "Das Image wird auf {host} gelöscht. Ein späterer Deploy lädt es bei Bedarf neu (Demo: nur im Arbeitsspeicher)." : "Das Image wird auf {host} gelöscht. Ein späterer Deploy lädt es bei Bedarf erneut."),
     confirm: "Image entfernen",
   },
   toast: { removed: "{name} entfernt", nothing: "Keine Images zum Aufräumen" },

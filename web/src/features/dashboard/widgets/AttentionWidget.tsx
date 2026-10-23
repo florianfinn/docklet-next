@@ -1,3 +1,4 @@
+import { useCapability } from "@/data/use-capability";
 import { Boxes, HardDrive, History, PartyPopper, ShieldAlert, Siren, Sparkles, Unplug } from "lucide-react";
 import type { ReactNode } from "react";
 import { useNavigate } from "react-router";
@@ -33,6 +34,8 @@ export function AttentionWidget({ items, hosts }: { items: AttentionItem[]; host
   const navigate = useNavigate();
   const adapter = useAdapter();
   const cmd = useStackCommands();
+  const reconnect = useCapability("reconnectHost");
+  const restart = useCapability("restartService");
 
   const sub = (item: AttentionItem) => {
     const v = item.values;
@@ -62,7 +65,7 @@ export function AttentionWidget({ items, hosts }: { items: AttentionItem[]; host
             <Button size="sm" variant="ghost" className="h-7 px-2 text-xs" onClick={() => navigate(`/stacks/${item.stackId}?tab=logs&service=${item.service}`)}>
               {t("actions.logs")}
             </Button>
-            <Button size="sm" variant="outline" className="h-7 px-2 text-xs" onClick={() => {
+            <Button size="sm" variant="outline" className="h-7 px-2 text-xs" disabled={!restart.available} title={restart.reason} onClick={() => {
                 const { stackId, service } = item;
                 if (stackId && service) requestServiceRestart([{ stackId, stackName: String(item.values.stack ?? stackId), service, containerId: item.containerId }], () => cmd.restartService(stackId, service));
               }}>
@@ -72,7 +75,7 @@ export function AttentionWidget({ items, hosts }: { items: AttentionItem[]; host
         );
       case "offline":
         return (
-          <Button size="sm" variant="outline" className="h-7 px-2 text-xs" onClick={() => item.hostId && void adapter.reconnectHost(item.hostId)}>
+          <Button size="sm" variant="outline" className="h-7 px-2 text-xs" disabled={!reconnect.available} title={reconnect.reason} onClick={() => item.hostId && void adapter.reconnectHost(item.hostId)}>
             {t("actions.check")}
           </Button>
         );

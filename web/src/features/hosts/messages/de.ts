@@ -66,7 +66,7 @@ export const deHosts: typeof enHosts = {
     removeTitle: "{name} entfernen?",
     removeBody: "Container und Stacks laufen auf dem Host weiter. Nur die Hub-Registrierung und ihr Zugang werden entfernt. Den Agent-Container auf dem Host selbst stoppen.",
     removeConfirm: "Host entfernen",
-    removed: (import.meta.env.DEV ? "{name} entfernt (Demo)" : ""),
+    removed: (import.meta.env.DEV ? "{name} entfernt (Demo)" : "{name} entfernt"),
     demoAdded: "In dieser Sitzung hinzugefügt",
   },
   mode: {
@@ -251,7 +251,7 @@ export const deHosts: typeof enHosts = {
     log: "Letzte Agent-Meldungen (synthetisch)",
     restart: "Agent neu starten",
     restarting: "Startet neu …",
-    restartHint: (import.meta.env.DEV ? "Simuliert: stoppt und startet den Agent-Container; der Host ist währenddessen kurz nicht erreichbar." : ""),
+    restartHint: (import.meta.env.DEV ? "Simuliert: stoppt und startet den Agent-Container; der Host ist währenddessen kurz nicht erreichbar." : "Stoppt und startet den Agent-Container; der Host ist kurz nicht erreichbar."),
     restartBlocked: "Nur bei verbundenem Host möglich.",
     check: "Verbindung prüfen",
     checking: "Wird geprüft …",

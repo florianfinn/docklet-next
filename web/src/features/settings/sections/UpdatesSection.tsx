@@ -1,3 +1,4 @@
+import { useCapability } from "@/data/use-capability";
 import { useQueryClient } from "@tanstack/react-query";
 import { Box, Layers, RefreshCw } from "lucide-react";
 import { useMemo, useRef } from "react";
@@ -41,6 +42,7 @@ export function UpdatesSection({ settings }: { settings: HubSettings }) {
   const t = useTranslations("settings");
   const tu = useTranslations("settings.updates");
   const adapter = useAdapter();
+  const capability = useCapability("checkUpdates");
   const client = useQueryClient();
   const save = useSaveSettings();
   const stacks = useStacks();
@@ -116,7 +118,7 @@ export function UpdatesSection({ settings }: { settings: HubSettings }) {
                 </SelectContent>
               </Select>
             </Field>
-            <Button type="button" variant="outline" className="group" onClick={() => void adapter.checkUpdates({})}>
+            <Button type="button" variant="outline" className="group" disabled={!capability.available} title={capability.reason} onClick={() => void adapter.checkUpdates({})}>
               <RefreshCw data-icon="inline-start" className="spin-on-hover" />
               {tu("checkNow")}
             </Button>

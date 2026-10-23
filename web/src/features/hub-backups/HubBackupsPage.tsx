@@ -277,10 +277,10 @@ export default function HubBackupsPage() {
     </section>;
   }
   if (access.isPending) return <Skeleton className="h-80 w-full" />;
-  if (access.isError) return <QueryError onRetry={() => void access.refetch()} />;
+  if (access.isError) return <QueryError error={access.error} onRetry={() => void access.refetch()} />;
   if (!canRead) return <p role="alert" className="rounded-lg border p-6">{t("accessDenied")}</p>;
   if (maintenance.isPending) return <Skeleton className="h-80 w-full" />;
-  if (maintenance.isError) return <QueryError onRetry={() => void maintenance.refetch()} />;
+  if (maintenance.isError) return <QueryError error={maintenance.error} onRetry={() => void maintenance.refetch()} />;
   return <>
     <PageHeader title={t("title")} description={t("description")} actions={<><Button variant="outline" disabled={!canRestore} onClick={() => setUploadOpen(true)}><Upload data-icon="inline-start" />{t("upload")}</Button><Button disabled={!canManage || creating} onClick={() => void create()}><Archive data-icon="inline-start" />{creating ? t("creating") : t("create")}</Button></>} />
     <div className="mb-5 grid gap-3 rounded-lg border bg-card/50 p-4 text-sm text-muted-foreground"><p>{t("scope")}</p><p>{t("sensitive")}</p></div>
@@ -288,14 +288,14 @@ export default function HubBackupsPage() {
     {(actionError || restoreFailed) && <p role="alert" className="mb-5 rounded-lg border border-destructive/40 bg-destructive/5 p-4 text-sm text-destructive">{actionError || t("errors.generic")}</p>}
     <Card className="mb-5"><CardHeader><CardTitle className="flex items-center gap-2"><HardDrive className="size-4" />{t("storage")}</CardTitle><CardDescription>{storage.data ? t("storageUsage", { used: formatBytes(storage.data.usedBytes, locale), free: formatBytes(storage.data.freeBytes, locale) }) : "–"}</CardDescription></CardHeader></Card>
     <Card className="mb-5"><CardHeader className="flex flex-row items-center justify-between"><CardTitle>{t("archives")}</CardTitle><Button size="sm" variant="ghost" onClick={refresh} aria-label={t("retry")}><RotateCw /></Button></CardHeader><CardContent>
-      {runs.isError ? <QueryError onRetry={() => void runs.refetch()} /> : runs.isPending ? <Skeleton className="h-48 w-full" /> : !runs.data?.length ? <EmptyState icon={<Archive />} title={t("emptyTitle")} description={t("emptyHint")} /> :
+      {runs.isError ? <QueryError error={runs.error} onRetry={() => void runs.refetch()} /> : runs.isPending ? <Skeleton className="h-48 w-full" /> : !runs.data?.length ? <EmptyState icon={<Archive />} title={t("emptyTitle")} description={t("emptyHint")} /> :
         <div className="overflow-x-auto"><Table><TableHeader><TableRow><TableHead>{t("name")}</TableHead><TableHead>{t("created")}</TableHead><TableHead>{t("size")}</TableHead><TableHead>{t("trigger")}</TableHead><TableHead>{t("status")}</TableHead><TableHead>{t("actions")}</TableHead></TableRow></TableHeader><TableBody>{runs.data.map((run) => {
           const state = run.activityId ? activity.data?.[run.activityId] : "";
           const status = state === "queued" ? "queued" : state === "cancelled" || state === "canceled" ? "cancelled" : run.status;
           return <TableRow key={run.id}><TableCell className="font-mono text-xs">{run.id}</TableCell><TableCell>{new Date(run.createdAt).toLocaleString(locale)}</TableCell><TableCell>{run.size ? formatBytes(run.size, locale) : "–"}</TableCell><TableCell>{t(`triggerValues.${run.trigger}`)}</TableCell><TableCell><ToneBadge tone={status === "succeeded" ? "ok" : status === "failed" ? "err" : "gray"}>{t(`statusValues.${status}`)}</ToneBadge></TableCell><TableCell><div className="flex gap-2"><Button size="sm" variant="outline" disabled={status !== "succeeded"} onClick={() => void download(run.id)}><Download data-icon="inline-start" />{t("download")}</Button><Button size="sm" variant="outline" disabled={status !== "succeeded" || !canRestore} onClick={() => setRestoreRun(run)}>{t("restore")}</Button><Button size="sm" variant="outline" disabled={status === "running" || status === "queued" || !canManage} onClick={() => setDeleteRun(run)}><Trash2 data-icon="inline-start" />{t("delete")}</Button></div></TableCell></TableRow>;
         })}</TableBody></Table></div>}
     </CardContent></Card>
-    {policies.isError ? <QueryError onRetry={() => void policies.refetch()} /> : policies.isPending ? <Skeleton className="h-52 w-full" /> : (policies.data?.length ? policies.data : [{ id: "", enabled: false, schedule: "0 0 3 * * *", retentionCount: 7 }]).map((policy) => <PolicyEditor key={`${policy.id}-${policy.schedule}-${policy.retentionCount}-${policy.enabled}`} policy={policy} disabled={!canManage} onSave={savePolicy} />)}
+    {policies.isError ? <QueryError error={policies.error} onRetry={() => void policies.refetch()} /> : policies.isPending ? <Skeleton className="h-52 w-full" /> : (policies.data?.length ? policies.data : [{ id: "", enabled: false, schedule: "0 0 3 * * *", retentionCount: 7 }]).map((policy) => <PolicyEditor key={`${policy.id}-${policy.schedule}-${policy.retentionCount}-${policy.enabled}`} policy={policy} disabled={!canManage} onSave={savePolicy} />)}
     <UploadDialog open={uploadOpen} onOpenChange={setUploadOpen} disabled={!canRestore} onUploaded={refresh} />
     <RestoreDialog key={`restore-${restoreRun?.id ?? "none"}`} run={restoreRun} onClose={() => setRestoreRun(null)} onStarted={(activityId) => { setRestoreActivityId(activityId); setRestoreStarted(true); void maintenance.refetch(); }} />
     <DeleteDialog key={`delete-${deleteRun?.id ?? "none"}`} run={deleteRun} onClose={() => setDeleteRun(null)} onDeleted={refresh} />

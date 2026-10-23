@@ -32,6 +32,8 @@ console.log(`Production boundary passed: ${graph.graph.length} source modules ch
 if (process.argv.includes("--prove")) {
   for (const [injected, mode] of [
     ["@/data/demo/simulation", "production"],
+    ["@/data/demo/demo-adapter", "production"],
+    ["@/features/networks/topology-bench", "production"],
     ["@/features/design-lab/DesignLabPanel", "production"],
     ["@/data/demo/simulation", "development"],
   ]) {

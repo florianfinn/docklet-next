@@ -1,3 +1,4 @@
+import { useCapability } from "@/data/use-capability";
 import { CircleCheck, CircleX, FolderInput, HardDrive, Network, Pencil, Plus, Server, Trash2 } from "lucide-react";
 import { useState } from "react";
 import { useTranslations } from "use-intl";
@@ -42,6 +43,7 @@ function TargetDialog({ target, onClose, onApply }: { target: BackupTarget | nul
   const t = useTranslations("settings.backups");
   const tv = useTranslations("hosts.validation");
   const adapter = useAdapter();
+  const capability = useCapability("testBackupTarget");
   const hosts = useHostScope();
   const [draft, setDraft] = useState<BackupTarget>(() => target ?? { id: draftId("t"), name: "", kind: "smb", path: "/docklet", server: "", share: "", username: "" });
   const [password, setPassword] = useState("");
@@ -114,7 +116,7 @@ function TargetDialog({ target, onClose, onApply }: { target: BackupTarget | nul
                 type="button"
                 variant="outline"
                 size="sm"
-                disabled={test === "running" || Object.keys(e).length > 0}
+                disabled={!capability.available || test === "running" || Object.keys(e).length > 0} title={capability.reason}
                 onClick={async () => {
                   setTest("running");
                   setTest(await adapter.testBackupTarget({ ...draft, secretSet: draft.secretSet || password.length > 0 }));

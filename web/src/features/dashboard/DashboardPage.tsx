@@ -148,7 +148,7 @@ export default function DashboardPage() {
       case "updates":
         return <UpdateRadarWidget stacks={stacks.visible} hosts={hosts.byId} />;
       case "timeline":
-        return events.isPending ? <WidgetBodySkeleton /> : events.isError ? <QueryError compact onRetry={() => void events.refetch()} /> : <TimelineWidget events={events.data} hosts={hosts.visible} now={now} />;
+        return events.isPending ? <WidgetBodySkeleton /> : events.isError ? <QueryError error={events.error} compact onRetry={() => void events.refetch()} /> : <TimelineWidget events={events.data} hosts={hosts.visible} now={now} />;
       case "load":
         return <LoadWidget hosts={hosts.visible} />;
       case "capacity":
@@ -157,7 +157,7 @@ export default function DashboardPage() {
         return schedule.isPending ? (
           <WidgetBodySkeleton />
         ) : schedule.isError ? (
-          <QueryError compact onRetry={() => void schedule.refetch()} />
+          <QueryError error={schedule.error} compact onRetry={() => void schedule.refetch()} />
         ) : (
           <ScheduleWidget jobs={schedule.data.filter((j) => !j.hostId || visibleIds.has(j.hostId))} hosts={hosts.byId} now={now} />
         );
@@ -169,7 +169,7 @@ export default function DashboardPage() {
         return events.isPending ? (
           <WidgetBodySkeleton />
         ) : events.isError ? (
-          <QueryError compact onRetry={() => void events.refetch()} />
+          <QueryError error={events.error} compact onRetry={() => void events.refetch()} />
         ) : (
           <EventsWidget events={events.data.filter((e) => !e.hostId || visibleIds.has(e.hostId))} hosts={hosts.byId} />
         );
@@ -199,7 +199,7 @@ export default function DashboardPage() {
       {coreLoading ? (
         <DashboardSkeleton sizes={visible.map((id) => widgetSize(layout, id))} />
       ) : stacks.isError || containers.isError ? (
-        <QueryError onRetry={() => void Promise.all([stacks.refetch(), containers.refetch()])} />
+        <QueryError error={stacks.error ?? containers.error} onRetry={() => void Promise.all([stacks.refetch(), containers.refetch()])} />
       ) : (
         <>
           <OpsSummary

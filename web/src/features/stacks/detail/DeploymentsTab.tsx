@@ -1,3 +1,4 @@
+import { CapabilityGate } from "@/shared/components/capability-gate";
 import { ChevronRight, History, RotateCcw } from "lucide-react";
 import { useRef, useState } from "react";
 import { useTranslations } from "use-intl";
@@ -196,6 +197,7 @@ export function DeploymentsTab({ stack }: { stack: StackDetail }) {
           <CardDescription>{t("restoreHint")}</CardDescription>
         </CardHeader>
         <CardContent className="px-4">
+          <CapabilityGate operation="restoreRestorePoint">
           {points.length ? (
             <ul className="flex flex-col gap-2">
               {points.map((p) => (
@@ -205,6 +207,7 @@ export function DeploymentsTab({ stack }: { stack: StackDetail }) {
           ) : (
             <p className="text-sm text-muted-foreground">{t("restoreNone")}</p>
           )}
+          </CapabilityGate>
         </CardContent>
       </Card>
       <AlertDialog open={!!confirm} onOpenChange={(o) => !o && setConfirm(null)}>

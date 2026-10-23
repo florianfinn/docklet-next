@@ -67,7 +67,8 @@ export const deVolumes: typeof enVolumes = {
   },
   empty: { title: "Keine Einträge für diese Filter", reset: "Filter zurücksetzen" },
   emptyAll: { title: "Keine Volumes", description: "Auf den gefilterten Hosts gibt es keine Volumes oder Bind-Mounts." },
-  backupState: { none: "Kein Backup", disabled: "Pausiert", ok: "OK · {time}", failed: "Fehlgeschlagen", running: "Läuft …" },
+  backupState: {
+    unavailable: "Backup-Status nicht verfügbar", none: "Kein Backup", disabled: "Pausiert", ok: "OK · {time}", failed: "Fehlgeschlagen", running: "Läuft …" },
   createDialog: {
     title: "Volume anlegen",
     description: "Leeres lokales Docker-Volume. Ein Stack nutzt es, sobald compose.yaml es einbindet.",

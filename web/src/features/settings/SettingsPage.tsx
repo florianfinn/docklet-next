@@ -77,11 +77,11 @@ export default function SettingsPage() {
           ) : id === "help" ? (
             <HelpSection />
           ) : connected ? (
-            id === "auth" ? <ConnectedAuthSection /> : hub.isError ? <QueryError onRetry={() => void hub.refetch()} /> : !hub.data ? (
+            id === "auth" ? <ConnectedAuthSection /> : hub.isError ? <QueryError error={hub.error} onRetry={() => void hub.refetch()} /> : !hub.data ? (
               <div className="flex flex-col gap-3" aria-busy="true"><Skeleton className="h-16 rounded-2xl" /><Skeleton className="h-80 rounded-2xl" /></div>
             ) : id === "general" ? <GeneralSection settings={hub.data} /> : <ActivitySection settings={hub.data} />
           ) : settings.isError ? (
-            <QueryError onRetry={() => void settings.refetch()} />
+            <QueryError error={settings.error} onRetry={() => void settings.refetch()} />
           ) : !s ? (
             <div className="flex flex-col gap-3" aria-busy="true">
               <Skeleton className="h-16 rounded-2xl" />

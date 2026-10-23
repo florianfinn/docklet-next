@@ -43,7 +43,7 @@ function DemoProfilePage() {
     <>
       <PageHeader title={t("title")} description={t("description")} />
       {settings.isError ? (
-        <QueryError onRetry={() => void settings.refetch()} />
+        <QueryError error={settings.error} onRetry={() => void settings.refetch()} />
       ) : !auth ? (
         <Skeleton className="h-80 rounded-2xl" />
       ) : (

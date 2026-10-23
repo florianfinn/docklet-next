@@ -66,7 +66,8 @@ export const enVolumes = {
   },
   empty: { title: "No entries for these filters", reset: "Reset filters" },
   emptyAll: { title: "No volumes", description: "There are no volumes or bind mounts on the filtered hosts." },
-  backupState: { none: "No backup", disabled: "Paused", ok: "OK · {time}", failed: "Failed", running: "Running …" },
+  backupState: {
+    unavailable: "Backup status unavailable", none: "No backup", disabled: "Paused", ok: "OK · {time}", failed: "Failed", running: "Running …" },
   createDialog: {
     title: "Create volume",
     description: "Empty local Docker volume. A stack uses it as soon as compose.yaml mounts it.",

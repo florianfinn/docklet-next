@@ -1,3 +1,4 @@
+import { CapabilityGate } from "@/shared/components/capability-gate";
 import { SegmentedToggle } from "@/shared/components/segmented-toggle";
 import { CalendarClock, HeartPulse, History, Info } from "lucide-react";
 import { useRef } from "react";
@@ -80,6 +81,7 @@ export function OverviewTab({ stack, host }: { stack: StackDetail; host: Host | 
               <CalendarClock className="size-4 text-muted-foreground" aria-hidden />
               {t("autoTitle")}
             </div>
+            <CapabilityGate operation="setAutoUpdate">
             <SegmentedToggle
               value={stack.autoUpdate.mode}
               onChange={(v) => void cmd.setAutoUpdate(stack.id, v === "check" ? { mode: "check" } : { mode: "scheduled", schedule: DEFAULT_UPDATE_SCHEDULE })}
@@ -97,6 +99,7 @@ export function OverviewTab({ stack, host }: { stack: StackDetail; host: Host | 
               </div>
             )}
             <p className="text-xs text-muted-foreground">{t("autoHint")}</p>
+            </CapabilityGate>
           </div>
         </Card>
 

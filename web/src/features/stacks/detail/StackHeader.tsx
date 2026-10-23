@@ -30,6 +30,7 @@ export function StackHeader({ stack, host, inline = false }: { stack: StackDetai
   const dt = useAdapterText();
   const cmd = useStackCommands();
   const command = useCapability("runStackCommand", { kind: "stack", id: stack.id });
+  const check = useCapability("checkUpdates");
   const present = (start: () => Promise<string | undefined>) => void (inline ? startPresented({ stackId: stack.id }, "inline", start) : start());
   const busy = !!stack.busyActionId;
   const updateTimes = useStackUpdateTimes(stack);
@@ -93,7 +94,7 @@ export function StackHeader({ stack, host, inline = false }: { stack: StackDetai
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end">
                 <DropdownMenuGroup>
-                  <DropdownMenuItem onSelect={() => void cmd.checkUpdates(stack.id)}>
+                  <DropdownMenuItem disabled={!check.available} title={check.reason} onSelect={() => void cmd.checkUpdates(stack.id)}>
                     <ScanSearch /> {t("actions.check")}
                   </DropdownMenuItem>
                 </DropdownMenuGroup>
