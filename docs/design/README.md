@@ -14,6 +14,7 @@ GitHub issues and milestones hold implementation and acceptance evidence.
 | [HTTP adapter, live channel and capabilities](adapter-live-capabilities.md) | M3 adapter outcomes, server capabilities, run/event refresh and contract matrix |
 | [Run gate and single-hub operation](run-gate.md) | Activity states, gated admission, cancellation, restart recovery and one hub per database |
 | [Runtime control and log lifecycle](runtime-control.md) | Opaque-key retries, bounded outcome evidence and unknown recovery, logs/session closure and staged v4 foundation activation |
+| [Network management](network-management.md) | Host-side validation, protected deletion, Direct/Edge writes and agent v6 |
 | [Storage and file workspace](storage-workspace.md) | Stateless prune selection and re-checks, helper image policy, workspace mapping and agent compatibility |
 | [Stack authoring and deployment](stack-authoring.md) | M7 create/save/label/deploy mapping, non-idempotent create, partial state and hub docker run conversion |
 | [Database baseline](database-baseline.md) | SQLite baseline contract, forward-only policy and historical integrity reference |

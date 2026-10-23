@@ -1,5 +1,5 @@
 // Source: api/openapi.json
-// Revision: 0d315b21aa0692dcbdbed81c6a693d48cc64283ccb1b50f95b9a39a3c6f7c317
+// Revision: 3ecf85788f5791afc93b4bdb315e21dde438dde6abd3e838c1de3c11cb03ba09
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
 // Deviations: Generated TypeScript declarations from the local Huma export.
@@ -8941,8 +8941,10 @@ export interface components {
         NetworkCreateOptions: {
             /** @description Check for duplicate network names */
             checkDuplicate?: boolean;
-            /** @description Network driver (e.g., bridge, overlay) */
+            /** @description Network driver (bridge, macvlan or ipvlan) */
             driver?: string;
+            /** @description Enable IPv4 networking; omitted uses the daemon default */
+            enableIPv4?: boolean;
             /** @description Enable IPv6 networking */
             enableIPv6?: boolean;
             /** @description Restrict external access to the network */
@@ -8986,6 +8988,14 @@ export interface components {
             containerId: string;
             /** @description Force the disconnect */
             force?: boolean;
+        };
+        NetworkError: {
+            /** @enum {string} */
+            code: "network.not-found" | "network.exists" | "network.invalid-network" | "network.builtin-network" | "network.compose-managed" | "network.in-use" | "network.network-mode" | "network.already-connected" | "network.not-connected" | "network.invalid-ip" | "network.overlap";
+            detail: string;
+            /** Format: int64 */
+            status: number;
+            title: string;
         };
         NetworkIPAM: {
             config?: components["schemas"]["NetworkIPAMConfig"][] | null;
@@ -16458,6 +16468,33 @@ export interface operations {
                     "application/json": components["schemas"]["BaseApiResponseNetworkCreateResponse"];
                 };
             };
+            /** @description Network write rejected */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["NetworkError"];
+                };
+            };
+            /** @description Network write rejected */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["NetworkError"];
+                };
+            };
+            /** @description Network write rejected */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["NetworkError"];
+                };
+            };
             /** @description Error */
             default: {
                 headers: {
@@ -16625,6 +16662,33 @@ export interface operations {
                     "application/json": components["schemas"]["BaseApiResponseMessageResponse"];
                 };
             };
+            /** @description Network write rejected */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["NetworkError"];
+                };
+            };
+            /** @description Network write rejected */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["NetworkError"];
+                };
+            };
+            /** @description Network write rejected */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["NetworkError"];
+                };
+            };
             /** @description Error */
             default: {
                 headers: {
@@ -16663,6 +16727,33 @@ export interface operations {
                     "application/json": components["schemas"]["BaseApiResponseMessageResponse"];
                 };
             };
+            /** @description Network write rejected */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["NetworkError"];
+                };
+            };
+            /** @description Network write rejected */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["NetworkError"];
+                };
+            };
+            /** @description Network write rejected */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["NetworkError"];
+                };
+            };
             /** @description Error */
             default: {
                 headers: {
@@ -16699,6 +16790,33 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["BaseApiResponseMessageResponse"];
+                };
+            };
+            /** @description Network write rejected */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["NetworkError"];
+                };
+            };
+            /** @description Network write rejected */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["NetworkError"];
+                };
+            };
+            /** @description Network write rejected */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["NetworkError"];
                 };
             };
             /** @description Error */

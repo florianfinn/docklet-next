@@ -1,0 +1,493 @@
+{
+  "version": 6,
+  "minimumAgentContractVersion": 6,
+  "edgeProtocol": "tunnel/v1 (unchanged)",
+  "lifecycleOperations": [
+    "deploy-project",
+    "down-project",
+    "restart-project",
+    "redeploy-project",
+    "start-container",
+    "stop-container",
+    "restart-container"
+  ],
+  "runtimeRoutes": [
+    "POST /api/environments/0/runtime-registration",
+    "POST /api/environments/0/runtime-target",
+    "POST /api/environments/0/runtime-runs",
+    "GET /api/environments/0/runtime-runs/{runId}",
+    "POST /api/environments/0/runtime-runs/{runId}/cancel"
+  ],
+  "identityFields": [
+    "managerId",
+    "registrationId",
+    "executorGeneration",
+    "runId",
+    "requestDigest"
+  ],
+  "registrationFields": [
+    "managerId",
+    "registrationId"
+  ],
+  "attributionFields": [
+    "id",
+    "username",
+    "displayName?"
+  ],
+  "outcomeStates": [
+    "active",
+    "terminal",
+    "not-received"
+  ],
+  "knowledgeFields": [
+    "outcomeState",
+    "cancelRequested"
+  ],
+  "detailFields": [
+    "activity",
+    "messages",
+    "stepTrace",
+    "output",
+    "outputTruncated",
+    "retainedStartSeq"
+  ],
+  "runtimeOutputFields": [
+    "timestamp",
+    "stream",
+    "text",
+    "step?",
+    "level?",
+    "outputSeq"
+  ],
+  "legacyOutputFields": [
+    "timestamp",
+    "stream",
+    "text",
+    "step?",
+    "level?"
+  ],
+  "admission": {
+    "preference": "respond-async",
+    "key": "Idempotency-Key",
+    "newStatus": 202,
+    "retainedStatus": 200,
+    "fields": [
+      "activityId",
+      "code",
+      "activity"
+    ],
+    "completion": false
+  },
+  "conflicts": [
+    "run.busy",
+    "run.cancelling",
+    "run.request-mismatch"
+  ],
+  "limits": {
+    "deliveryMinutes": 30,
+    "admissionMinutes": 5,
+    "clientRetryMinutes": 10,
+    "compactRetentionHours": 24,
+    "negativeEvidenceMinutes": 60,
+    "querySeconds": 5,
+    "bodyBytes": 1048576,
+    "outputBytes": 262144
+  },
+  "recovery": {
+    "globalAdministrator": true,
+    "activityReadAndCancel": true,
+    "reasonAndAcknowledgment": true,
+    "stoppedExecutorAndCheckedDocker": true,
+    "effectReplay": false
+  },
+  "restrictedRoutes": [
+    "GET /api/health",
+    "HEAD /api/health",
+    "GET /api/app-version",
+    "GET /api/version",
+    "HEAD /api/environments/0/system/health",
+    "GET /api/environments/0/system/upgrade/check",
+    "POST /api/environments/0/system/upgrade"
+  ],
+  "hubRuntimeRoutes": [
+    "GET /api/environments/{id}/runtime-runs/{runId}",
+    "POST /api/environments/{id}/runtime-runs/{runId}/cancel",
+    "POST /api/environments/{id}/runtime-runs/{runId}/release"
+  ],
+  "executorIdentityFields": [
+    "managerId",
+    "registrationId",
+    "executorGeneration"
+  ],
+  "recoveryFields": [
+    "unknownReason?",
+    "executorState",
+    "executorResultCode?",
+    "executorError?",
+    "executorSettledAt?",
+    "disposition?",
+    "dispositionBy?",
+    "dispositionReason?",
+    "dispositionAt?",
+    "releaseAcknowledged"
+  ],
+  "preAdmissionCodes": [
+    "run.busy",
+    "run.cancelling",
+    "run.request-mismatch",
+    "runtime.target-changed",
+    "runtime.target-unavailable",
+    "runtime.parent-unresolved",
+    "runtime.target-removed",
+    "agent.update-required"
+  ],
+  "authentication": {
+    "receiver": "AgentCredential",
+    "requestHeader": "X-Arcane-Agent-Token",
+    "ordinaryBearer": false,
+    "bootstrap": false,
+    "wireAttributionGrantsAuthority": false
+  },
+  "capabilities": {
+    "runStack": "unavailable until consumer mapping",
+    "runContainer": "unavailable until consumer mapping",
+    "deployStack": "unavailable until consumer mapping"
+  },
+  "legacyNonStreamingFailureStatuses": {
+    "runtime.outcome-unknown": 503,
+    "runtime.interrupted": 409,
+    "runtime.cancelled": 409,
+    "runtime.failed": 500,
+    "runtime.wait-timeout": 504,
+    "runtime.waiter-disconnected": 408
+  },
+  "legacyStreaming": {
+    "operations": [
+      "deploy-project",
+      "redeploy-project"
+    ],
+    "contentType": "application/x-ndjson",
+    "startedFields": [
+      "type",
+      "activityId"
+    ],
+    "doneOnConfirmedSuccessOnly": true,
+    "postFlushFailureStatus": 200,
+    "postFlushFailureFields": [
+      "error",
+      "code",
+      "activityId"
+    ],
+    "preFlushAdmissionUsesErrorStatus": true
+  },
+  "storage": {
+    "routes": [
+      {
+        "method": "GET",
+        "path": "/environments/{id}/projects/{projectId}/workspace",
+        "operationId": "get-project-workspace"
+      },
+      {
+        "method": "PUT",
+        "path": "/environments/{id}/projects/{projectId}/workspace",
+        "operationId": "update-project-workspace"
+      },
+      {
+        "method": "GET",
+        "path": "/environments/{id}/projects/{projectId}/workspace/file",
+        "operationId": "get-project-workspace-file"
+      },
+      {
+        "method": "GET",
+        "path": "/environments/{id}/projects/{projectId}/workspace/file/download",
+        "operationId": "download-project-workspace-file"
+      },
+      {
+        "method": "GET",
+        "path": "/environments/{id}/volumes",
+        "operationId": "list-volumes"
+      },
+      {
+        "method": "POST",
+        "path": "/environments/{id}/volumes",
+        "operationId": "create-volume"
+      },
+      {
+        "method": "DELETE",
+        "path": "/environments/{id}/volumes/backups/{backupId}",
+        "operationId": "delete-volume-backup"
+      },
+      {
+        "method": "GET",
+        "path": "/environments/{id}/volumes/backups/{backupId}/download",
+        "operationId": "download-volume-backup"
+      },
+      {
+        "method": "GET",
+        "path": "/environments/{id}/volumes/backups/{backupId}/files",
+        "operationId": "list-backup-files"
+      },
+      {
+        "method": "GET",
+        "path": "/environments/{id}/volumes/backups/{backupId}/files/browse",
+        "operationId": "browse-volume-backup-files"
+      },
+      {
+        "method": "GET",
+        "path": "/environments/{id}/volumes/backups/{backupId}/has-path",
+        "operationId": "backup-has-path"
+      },
+      {
+        "method": "GET",
+        "path": "/environments/{id}/volumes/counts",
+        "operationId": "get-volume-usage-counts"
+      },
+      {
+        "method": "GET",
+        "path": "/environments/{id}/volumes/prune",
+        "operationId": "plan-volume-prune"
+      },
+      {
+        "method": "POST",
+        "path": "/environments/{id}/volumes/prune",
+        "operationId": "prune-volumes"
+      },
+      {
+        "method": "GET",
+        "path": "/environments/{id}/volumes/sizes",
+        "operationId": "get-volume-sizes"
+      },
+      {
+        "method": "DELETE",
+        "path": "/environments/{id}/volumes/{volumeName}",
+        "operationId": "remove-volume"
+      },
+      {
+        "method": "GET",
+        "path": "/environments/{id}/volumes/{volumeName}",
+        "operationId": "get-volume"
+      },
+      {
+        "method": "GET",
+        "path": "/environments/{id}/volumes/{volumeName}/backup-policy",
+        "operationId": "get-volume-backup-policy"
+      },
+      {
+        "method": "PUT",
+        "path": "/environments/{id}/volumes/{volumeName}/backup-policy",
+        "operationId": "update-volume-backup-policy"
+      },
+      {
+        "method": "GET",
+        "path": "/environments/{id}/volumes/{volumeName}/backups",
+        "operationId": "list-volume-backups"
+      },
+      {
+        "method": "POST",
+        "path": "/environments/{id}/volumes/{volumeName}/backups",
+        "operationId": "create-volume-backup"
+      },
+      {
+        "method": "POST",
+        "path": "/environments/{id}/volumes/{volumeName}/backups/upload",
+        "operationId": "upload-volume-backup"
+      },
+      {
+        "method": "POST",
+        "path": "/environments/{id}/volumes/{volumeName}/backups/{backupId}/restore",
+        "operationId": "restore-volume-backup"
+      },
+      {
+        "method": "POST",
+        "path": "/environments/{id}/volumes/{volumeName}/backups/{backupId}/restore-files",
+        "operationId": "restore-volume-backup-files"
+      },
+      {
+        "method": "POST",
+        "path": "/environments/{id}/volumes/{volumeName}/rename",
+        "operationId": "rename-volume"
+      },
+      {
+        "method": "GET",
+        "path": "/environments/{id}/volumes/{volumeName}/usage",
+        "operationId": "get-volume-usage"
+      },
+      {
+        "method": "GET",
+        "path": "/environments/{id}/volumes/{volumeName}/workspace",
+        "operationId": "get-volume-workspace"
+      },
+      {
+        "method": "PUT",
+        "path": "/environments/{id}/volumes/{volumeName}/workspace",
+        "operationId": "update-volume-workspace"
+      },
+      {
+        "method": "GET",
+        "path": "/environments/{id}/volumes/{volumeName}/workspace/file",
+        "operationId": "get-volume-workspace-file"
+      },
+      {
+        "method": "GET",
+        "path": "/environments/{id}/volumes/{volumeName}/workspace/file/download",
+        "operationId": "download-volume-workspace-file"
+      }
+    ],
+    "requiredFields": {
+      "VolumeHelperIncompatibleError": [
+        "code",
+        "detail",
+        "status",
+        "title"
+      ],
+      "VolumePruneCandidate": [
+        "createdAt",
+        "name"
+      ],
+      "VolumePruneFailed": [
+        "code",
+        "name"
+      ],
+      "VolumePrunePlan": [
+        "candidates"
+      ],
+      "VolumePrunePlanCandidate": [
+        "createdAt",
+        "driver",
+        "name",
+        "reason"
+      ],
+      "VolumePruneRequest": [
+        "candidates"
+      ],
+      "VolumePruneResult": [
+        "failed",
+        "removed",
+        "skipped",
+        "spaceReclaimed"
+      ],
+      "VolumePruneSkipped": [
+        "name",
+        "reason"
+      ],
+      "VolumeHelperUnavailableError": [
+        "code",
+        "detail",
+        "status",
+        "title"
+      ]
+    },
+    "helperErrorCode": "volume.helper-incompatible",
+    "helperImageSetting": "toolsImage",
+    "pruneSelection": "anonymous-local-without-options-by-default; all-includes-named; no-running-or-stopped-container-references",
+    "pruneExecution": "explicit-name-createdAt-list; fresh-identity-and-all-container-recheck; non-forced-remove; independent-results",
+    "helperUnavailableCode": "volume.helper-unavailable",
+    "helperImageDefault": "empty-override; resolve-running-release-default; migrate-shipped-defaults-to-empty; local-env-wins",
+    "pruneSizes": "sizeBytes-omitted; no-host-wide-disk-usage-scan; reclaimed-bytes-unknown-zero"
+  },
+  "network": {
+    "routes": [
+      {
+        "method": "GET",
+        "path": "/environments/{id}/networks",
+        "operationId": "list-networks"
+      },
+      {
+        "method": "POST",
+        "path": "/environments/{id}/networks",
+        "operationId": "create-network"
+      },
+      {
+        "method": "GET",
+        "path": "/environments/{id}/networks/counts",
+        "operationId": "network-counts"
+      },
+      {
+        "method": "POST",
+        "path": "/environments/{id}/networks/prune",
+        "operationId": "prune-networks"
+      },
+      {
+        "method": "GET",
+        "path": "/environments/{id}/networks/topology",
+        "operationId": "get-network-topology"
+      },
+      {
+        "method": "DELETE",
+        "path": "/environments/{id}/networks/{networkId}",
+        "operationId": "delete-network"
+      },
+      {
+        "method": "GET",
+        "path": "/environments/{id}/networks/{networkId}",
+        "operationId": "get-network"
+      },
+      {
+        "method": "POST",
+        "path": "/environments/{id}/networks/{networkId}/connect",
+        "operationId": "connect-network-container"
+      },
+      {
+        "method": "POST",
+        "path": "/environments/{id}/networks/{networkId}/disconnect",
+        "operationId": "disconnect-network-container"
+      }
+    ],
+    "fields": {
+      "NetworkCreateRequest": [
+        "name",
+        "options"
+      ],
+      "NetworkCreateOptions": [
+        "checkDuplicate",
+        "driver",
+        "enableIPv4",
+        "enableIPv6",
+        "internal",
+        "ipam",
+        "labels",
+        "options"
+      ],
+      "NetworkIPAM": [
+        "config",
+        "driver",
+        "options"
+      ],
+      "NetworkIPAMConfig": [
+        "auxAddress",
+        "gateway",
+        "ipRange",
+        "subnet"
+      ],
+      "NetworkConnectContainerRequest": [
+        "aliases",
+        "containerId",
+        "ipv4Address",
+        "ipv6Address"
+      ],
+      "NetworkDisconnectContainerRequest": [
+        "containerId",
+        "force"
+      ],
+      "NetworkError": [
+        "code",
+        "detail",
+        "status",
+        "title"
+      ]
+    },
+    "errorCodes": [
+      "network.already-connected",
+      "network.builtin-network",
+      "network.compose-managed",
+      "network.exists",
+      "network.in-use",
+      "network.invalid-ip",
+      "network.invalid-network",
+      "network.network-mode",
+      "network.not-connected",
+      "network.not-found",
+      "network.overlap"
+    ]
+  }
+}
