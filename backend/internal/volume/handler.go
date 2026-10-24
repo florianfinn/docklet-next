@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; Stateless prune HTTP contract.
+// Deviations: Local module namespace; stateless prune HTTP contract; typed rename name conflicts.
 
 package volume
 
@@ -269,7 +269,9 @@ func (h *VolumeHandler) RenameVolume(ctx context.Context, input *RenameVolumeInp
 		switch {
 		case errors.Is(err, common.ErrBadRequest):
 			return nil, huma.Error400BadRequest(err.Error())
-		case errors.As(err, &busyErr), errors.As(err, &conflictErr), errors.As(err, &inUseErr):
+		case errors.As(err, &conflictErr):
+			return nil, &volume.ExistsError{Status: http.StatusConflict, Title: "Conflict", Detail: "A volume with this name already exists", Code: "volume.exists"}
+		case errors.As(err, &busyErr), errors.As(err, &inUseErr):
 			return nil, huma.Error409Conflict(err.Error())
 		case errors.As(err, &spaceErr):
 			return nil, huma.NewError(http.StatusInsufficientStorage, err.Error())

@@ -1,5 +1,5 @@
 // Source: api/openapi.json
-// Revision: 3ecf85788f5791afc93b4bdb315e21dde438dde6abd3e838c1de3c11cb03ba09
+// Revision: e5252f5a2412574d31c3031e7cbe0e190d2f4904410a8e6eef3edc38eb3b8cce
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
 // Deviations: Generated TypeScript declarations from the local Huma export.
@@ -10732,6 +10732,14 @@ export interface components {
             /** @description Optional backup policy whose settings should be used */
             policyId?: string;
         };
+        VolumeExistsError: {
+            /** @enum {string} */
+            code: "volume.exists";
+            detail: string;
+            /** Format: int64 */
+            status: number;
+            title: string;
+        };
         VolumeHelperIncompatibleError: {
             /** @enum {string} */
             code: "volume.helper-incompatible";
@@ -19913,6 +19921,15 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["BaseApiResponseVolumeVolume"];
+                };
+            };
+            /** @description Volume name exists or volume is in use */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["VolumeExistsError"] | components["schemas"]["ErrorModel"];
                 };
             };
             /** @description Error */
