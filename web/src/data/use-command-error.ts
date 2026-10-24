@@ -17,13 +17,13 @@ export function useCommandError() {
       const outcome = error.outcome;
       if (outcome.kind === "not-available") return capability(outcome.reasonCode === "capability.mapping-unavailable" ? "mappingUnavailable" : "unavailable");
       if (outcome.kind === "error") {
-        if (outcome.status === 401) return t("signIn");
-        if (outcome.status === 403) return t("denied");
         switch (outcome.code) {
           case "agent.unavailable": return t("unreachable");
           case "agent.invalid-token": return t("credentialRejected");
           case "agent.update-required": return t("updateRequired");
         }
+        if (outcome.status === 401) return t("signIn");
+        if (outcome.status === 403) return t("denied");
       }
     }
     return t("failed");

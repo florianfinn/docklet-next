@@ -116,7 +116,8 @@ describe("effective Compose label across actual HTTP mappings", () => {
    expect(mapVolumes([{ ...volume, labels: ownLabels }], "h1", [], [project()], inventory)[0]?.stackId).toBeUndefined();
    const topology = mapTopology([{ ...network, labels: ownLabels }], "h1", [], [project()], inventory);
    expect(topology.networks[0]?.stackId).toBeUndefined();
-   expect(removeBlock(topology, topology.networks[0]!)).toBeUndefined();
+   // An external Compose label protects deletion without inventing a hub stack link.
+   expect(removeBlock(topology, topology.networks[0]!)).toBe(ownLabels["com.docker.compose.project"] ? "compose-managed" : undefined);
   }
  });
 });
