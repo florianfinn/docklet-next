@@ -261,12 +261,18 @@ func newRouter(p RouterParams) (*echo.Echo, *edge.TunnelServer) {
 	apiGroup.Use(middleware.PerTokenRateLimitForPaths(
 		[]string{"/api/webhooks/trigger/:token"}, 60, 10, deps.Webhook.Service().IsKnownToken,
 	))
-	// Agent event ingestion authenticates on the agent token alone and sits
-	// outside the auth middleware, so it needs its own brute-force ceiling.
-	// The allowance is generous because busy agents legitimately batch events.
-	apiGroup.Use(middleware.PerIPRateLimitForPaths(
-		[]string{"/api/events"}, 60, 30,
-	))
+	// Only POST agent ingestion needs this brute-force ceiling outside session auth.
+	// Authenticated GET event pagination does not consume the ingestion budget.
+	eventIngestionLimit := middleware.PerIPRateLimitForPaths([]string{"/api/events"}, 60, 30)
+	apiGroup.Use(func(next echo.HandlerFunc) echo.HandlerFunc {
+		limited := eventIngestionLimit(next)
+		return func(c *echo.Context) error {
+			if c.Request().Method != http.MethodPost {
+				return next(c)
+			}
+			return limited(c)
+		}
+	})
 	handlerAppCtx := handlerutil.NewActivityAppContext(ctx)
 
 	envResolver := func(ctx context.Context, id string) (string, *string, bool, error) {
