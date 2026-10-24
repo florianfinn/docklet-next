@@ -134,6 +134,7 @@ it.each(["replacement", "logout", "auth401", "activity401"])("%s clears old iden
         held.resolve(captured);
         await expect(f.adapter.listActions()).rejects.toMatchObject({ outcome: { status: 401 } });
       });
+      await rejected;
       expect(observed.mock.lastCall?.[0]).toEqual([]);
     }
     f.state.lists.good = [{ ...activity("good", "new-history"), status: "failed" }]; f.state.details["new-history"] = { ...detail("good", "new-history"), activity: { ...activity("good", "new-history"), status: "failed" } };
