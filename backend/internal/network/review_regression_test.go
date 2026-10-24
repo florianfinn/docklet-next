@@ -51,8 +51,6 @@ func TestDaemonWriteErrorClassification(t *testing.T) {
 	}{
 		{"remove forbidden", errdefs.ErrPermissionDenied, "in-use", "invalid-network", "in-use", 409},
 		{"remove conflict", errdefs.ErrConflict, "in-use", "invalid-network", "in-use", 409},
-		{"connect forbidden", errdefs.ErrPermissionDenied, "invalid-ip", "invalid-ip", "invalid-ip", 400},
-		{"connect conflict", errdefs.ErrConflict, "invalid-ip", "invalid-ip", "invalid-ip", 400},
 		{"create conflict", errdefs.ErrConflict, "exists", "invalid-network", "exists", 409},
 		{"disconnect conflict", errdefs.ErrConflict, "not-connected", "invalid-network", "not-connected", 409},
 		{"invalid network", errdefs.ErrInvalidArgument, "in-use", "invalid-network", "invalid-network", 400},
@@ -72,7 +70,7 @@ func TestDaemonConflictsThroughNetworkHandlers(t *testing.T) {
 	for _, status := range []int{403, 409} {
 		for _, operation := range []string{"remove", "connect"} {
 			t.Run(operation+"/"+strconv.Itoa(status), func(t *testing.T) {
-				f := &networkDockerFixture{networks: []network.Inspect{inspectNetwork()}, containers: []container.InspectResponse{disconnectedContainer()}, writeStatus: status}
+				f := &networkDockerFixture{networks: []network.Inspect{inspectNetwork()}, containers: []container.InspectResponse{disconnectedContainer()}, writeStatus: status, writeMessage: "Address already in use"}
 				method, path, body, code, want := "DELETE", "/api/environments/0/networks/net1", "", "network.in-use", 409
 				if operation == "connect" {
 					method, path, body, code, want = "POST", path+"/connect", `{"containerId":"container1","ipv4Address":"192.0.2.8"}`, "network.invalid-ip", 400
@@ -160,4 +158,64 @@ func TestPruneRemovalPreservesNotFoundClassification(t *testing.T) {
 	f := &networkDockerFixture{writeStatus: 404}
 	err := f.service(t).RemoveNetworkForPrune(t.Context(), "gone", actor)
 	require.True(t, errdefs.IsNotFound(err), "scheduled prune must recognize a concurrently removed target: %v", err)
+}
+
+func TestReferenceInspectFailureBlocksWrites(t *testing.T) {
+	for _, operation := range []string{"delete", "connect"} {
+		t.Run(operation, func(t *testing.T) {
+			f := &networkDockerFixture{networks: []network.Inspect{inspectNetwork()}, containers: []container.InspectResponse{disconnectedContainer()}, inspectStatus: 500}
+			method, path, body := "DELETE", "/api/environments/0/networks/net1", ""
+			if operation == "connect" {
+				method, path, body = "POST", path+"/connect", `{"containerId":"container1","ipv4Address":"192.0.2.8"}`
+			}
+			rec := networkRequest(networkRouter(t, f.service(t), true), method, path, body)
+			require.Equal(t, 500, rec.Code, rec.Body.String())
+			require.Empty(t, f.writes)
+			require.NotContains(t, rec.Body.String(), "inspect failed")
+		})
+	}
+}
+
+func TestConcurrentConnectConflictsThroughHandler(t *testing.T) {
+	for _, status := range []int{403, 409} {
+		for _, tc := range []struct {
+			name, message, code string
+			want                int
+		}{
+			{"duplicate", "endpoint with name example already exists in network example", "network.already-connected", 409},
+			{"attached", "example is already attached to network example", "network.already-connected", 409},
+			{"address", "Address already in use", "network.invalid-ip", 400},
+			{"unknown", "synthetic unknown conflict", "", 500},
+		} {
+			t.Run(tc.name+"/"+strconv.Itoa(status), func(t *testing.T) {
+				f := &networkDockerFixture{networks: []network.Inspect{inspectNetwork()}, containers: []container.InspectResponse{disconnectedContainer()}, writeStatus: status, writeMessage: tc.message}
+				rec := networkRequest(networkRouter(t, f.service(t), true), "POST", "/api/environments/0/networks/net1/connect", `{"containerId":"container1"}`)
+				require.Equal(t, tc.want, rec.Code, rec.Body.String())
+				if tc.code != "" {
+					require.Contains(t, rec.Body.String(), `"code":"`+tc.code+`"`)
+				}
+				require.NotContains(t, rec.Body.String(), tc.message)
+			})
+		}
+	}
+}
+
+func TestProtectedDeleteThroughHandler(t *testing.T) {
+	for _, tc := range []struct{ name, label, code string }{
+		{"bridge", "", "builtin-network"}, {"host", "", "builtin-network"}, {"none", "", "builtin-network"}, {"ingress", "", "builtin-network"},
+		{"example", "com.docker.compose.project", "compose-managed"}, {"example", "com.docker.compose.network", "compose-managed"},
+	} {
+		t.Run(tc.name+tc.label, func(t *testing.T) {
+			n := inspectNetwork()
+			n.Name = tc.name
+			if tc.label != "" {
+				n.Labels = map[string]string{tc.label: "example"}
+			}
+			f := &networkDockerFixture{networks: []network.Inspect{n}}
+			rec := networkRequest(networkRouter(t, f.service(t), true), "DELETE", "/api/environments/0/networks/net1", "")
+			require.Equal(t, 409, rec.Code, rec.Body.String())
+			require.Contains(t, rec.Body.String(), `"code":"network.`+tc.code+`"`)
+			require.Empty(t, f.writes)
+		})
+	}
 }
