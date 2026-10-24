@@ -59,17 +59,83 @@ describe.each([{ transport: "Direct", isEdge: false }, { transport: "Edge", isEd
     expect(view.container.querySelector('[aria-label="unavailable"]')?.textContent?.includes(partial)).toBe(true);
   });
 
-  it("keeps an explicitly requested empty host after its initial list fails", async () => {
-    setAppLocale("en-US");
+  it.each(["en-US", "de"] as const)("keeps an explicitly requested empty host after its initial list fails in %s", async (locale) => {
+    setAppLocale(locale);
     const f = topologyFixture(isEdge);
     f.failures.add("/api/environments/second/networks");
     const view = page(f);
     await settled(2);
     expect(selected()).toBe("true");
     expect(screen.queryByRole("radio", { name: "first" }) !== null).toBe(true);
-    expect(screen.queryByRole("heading", { name: "Networks on second" }) !== null).toBe(true);
-    expect(view.container.textContent?.includes("second: Some network reads failed")).toBe(true);
+    expect(screen.queryByRole("heading", { name: locale === "de" ? "Netzwerke auf second" : "Networks on second" }) !== null).toBe(true);
+    expect(view.container.textContent?.includes(locale === "de" ? "Noch keine gespeicherten Werte vorhanden" : "No retained values available yet")).toBe(true);
+    expect(view.container.querySelectorAll("p[aria-live=polite]")).toHaveLength(0);
     expect(view.router.state.location.search).toBe("?host=second");
+  });
+
+  it.each(["en-US", "de"] as const)("announces a non-selected provably partial host with one or all detail failures in %s", async (locale) => {
+    setAppLocale(locale);
+    const f = topologyFixture(isEdge);
+    f.failures.add("/api/environments/second/networks/missing");
+    const view = page(f, "first");
+    await settled(4);
+    const partial = locale === "de" ? "Bei second sind Netzwerklesevorgänge fehlgeschlagen" : "second: Some network reads failed";
+    expect(view.container.querySelector("p[aria-live=polite]")?.textContent?.startsWith(partial)).toBe(true);
+    expect(selected()).toBe("false");
+    f.failures.add("/api/environments/second/networks/good");
+    await userEvent.click(screen.getByRole("button", { name: "Refresh topology" }));
+    await waitFor(() => expect(screen.getByTestId("completed").textContent).toBe("1"));
+    expect(view.container.querySelector("p[aria-live=polite]")?.textContent?.startsWith(partial)).toBe(true);
+    expect(view.container.querySelectorAll("p[aria-live=polite]")).toHaveLength(1);
+    f.failures.clear();
+    await userEvent.click(screen.getByRole("button", { name: "Refresh topology" }));
+    await waitFor(() => expect(screen.getByTestId("completed").textContent).toBe("2"));
+    expect(view.container.querySelectorAll("p[aria-live=polite]")).toHaveLength(0);
+  });
+
+  it.each(["en-US", "de"] as const)("uses the conservative notice for ambiguous timestamp-free all-detail failures in %s", async (locale) => {
+    setAppLocale(locale);
+    const f = topologyFixture(isEdge);
+    // Model local responses, which bypass the hub inventory timestamp middleware.
+    const original = f.fetcher.getMockImplementation()!;
+    f.fetcher.mockImplementation(async (input) => {
+      const response = await original(input);
+      const headers = new Headers(response.headers);
+      headers.delete("X-Docklet-Observed-At");
+      return new Response(await response.arrayBuffer(), { status: response.status, headers });
+    });
+    f.failures.add("/api/environments/second/networks/missing");
+    const view = page(f);
+    await settled(4);
+    // A fresh sibling row proves a partial read even without a timestamp.
+    expect(view.container.querySelectorAll("p[aria-live=polite]")).toHaveLength(1);
+    f.failures.add("/api/environments/second/networks/good");
+    await userEvent.click(screen.getByRole("button", { name: "Refresh topology" }));
+    await waitFor(() => expect(screen.getByTestId("completed").textContent).toBe("1"));
+    expect(view.container.querySelectorAll("p[aria-live=polite]")).toHaveLength(0);
+    expect(view.container.textContent?.includes(locale === "de" ? "Noch keine gespeicherten Werte vorhanden" : "No retained values available yet")).toBe(true);
+    expect(screen.queryByRole("button", { name: locale === "de" ? "unavailable: Verwendung unbekannt" : "unavailable: Usage unknown" }) !== null).toBe(true);
+    // An equally ambiguous failed list must use the same conservative wording.
+    f.failures.clear();
+    f.failures.add("/api/environments/second/networks");
+    await userEvent.click(screen.getByRole("button", { name: "Refresh topology" }));
+    await waitFor(() => expect(screen.getByTestId("completed").textContent).toBe("2"));
+    expect(view.container.querySelectorAll("p[aria-live=polite]")).toHaveLength(0);
+    expect(view.container.textContent?.includes(locale === "de" ? "Noch keine gespeicherten Werte vorhanden" : "No retained values available yet")).toBe(true);
+  });
+
+  it.each(["en-US", "de"] as const)("keeps ordinary inventory wording for an ambiguous local host in %s", async (locale) => {
+    setAppLocale(locale);
+    const f = topologyFixture(isEdge);
+    f.state.hostIds = ["first", "0"];
+    f.state.observedAt = "";
+    f.failures.add("/api/environments/0/networks/missing");
+    f.failures.add("/api/environments/0/networks/good");
+    const view = page(f, "0");
+    await settled(4);
+    expect(view.container.querySelectorAll("p[aria-live=polite]")).toHaveLength(0);
+    expect(view.container.textContent?.includes(locale === "de" ? "Noch keine gespeicherten Werte vorhanden" : "No retained values available yet")).toBe(true);
+    expect(view.container.querySelectorAll('[role="status"] p')).toHaveLength(1);
   });
 
   it("keeps an empty online host selectable even without a requested host", async () => {
@@ -84,8 +150,8 @@ describe.each([{ transport: "Direct", isEdge: false }, { transport: "Edge", isEd
     expect(view.router.state.location.search).toBe("?host=second");
   });
 
-  it("uses the existing query snapshot across delayed refetch, list failure and recovery", async () => {
-    setAppLocale("en-US");
+  it.each(["en-US", "de"] as const)("keeps the retained snapshot time when the whole network list of a remote host fails in %s", async (locale) => {
+    setAppLocale(locale);
     const f = topologyFixture(isEdge);
     const view = page(f);
     await settled(4);
@@ -93,19 +159,20 @@ describe.each([{ transport: "Direct", isEdge: false }, { transport: "Edge", isEd
     f.failures.add("/api/environments/second/networks");
     await userEvent.click(screen.getByRole("button", { name: "Refresh topology" }));
     await hold.entered.promise;
-    expect(screen.queryByRole("button", { name: "Focus unavailable in the topology" }) !== null).toBe(true);
+    expect(screen.queryByRole("button", { name: locale === "de" ? "unavailable in der Topologie fokussieren" : "Focus unavailable in the topology" }) !== null).toBe(true);
     expect(selected()).toBe("true");
     await act(async () => { hold.done.release(); });
     await waitFor(() => expect(screen.getByTestId("completed").textContent).toBe("1"));
     await settled(4);
-    expect(view.container.textContent?.includes("second: Some network reads failed")).toBe(true);
-    expect(screen.queryByRole("button", { name: "unavailable: Usage unknown" }) !== null).toBe(true);
+    expect(view.container.textContent?.includes(locale === "de" ? "Stand " : "as of ")).toBe(true);
+    expect(view.container.querySelectorAll("p[aria-live=polite]")).toHaveLength(0);
+    expect(screen.queryByRole("button", { name: locale === "de" ? "unavailable: Verwendung unbekannt" : "unavailable: Usage unknown" }) !== null).toBe(true);
     f.failures.clear();
     await userEvent.click(screen.getByRole("button", { name: "Refresh topology" }));
     await waitFor(() => expect(screen.getByTestId("completed").textContent).toBe("2"));
     expect(view.container.textContent?.includes("Some network reads failed")).toBe(false);
     expect(view.container.textContent?.includes("Network details unavailable")).toBe(false);
-    expect(screen.queryByRole("button", { name: "unavailable: Unused, 0 containers" }) !== null).toBe(true);
+    expect(screen.queryByRole("button", { name: locale === "de" ? "unavailable: Unbenutzt, 0 Container" : "unavailable: Unused, 0 containers" }) !== null).toBe(true);
     expect(selected()).toBe("true");
   });
 

@@ -117,8 +117,22 @@ and Compose ownership. Topology/detail reads enrich those rows; their failure
 cannot erase a listed network or invent an unused network. A failing list keeps
 previously observed rows for that host, while hosts with successful lists keep
 their fresh rows. Without a prior successful list there are no retained rows.
-The selected partial online host shows one network-specific notice; other host
-failures keep the ordinary inventory notice.
+An online host reporting an inventory read or mapping failure with provably fresh
+list data and failed detail reads shows one network-specific partial notice,
+including hosts not selected in the picker. Agent availability, credential and
+version failures keep the ordinary inventory reason and snapshot wording.
+Freshness evidence is a host observation timestamp or a row whose details and
+inventory are fresh. All details may fail while a remote list still supplies a
+host timestamp. A failed list keeps the ordinary inventory notice: retained
+rows keep their “as of” timestamp; without a snapshot it says no retained values
+are available yet. The picker never labels such a list failure as partial.
+
+Local responses can lack observation timestamps. When all details fail without
+a host timestamp or fresh row, the current domain observations cannot distinguish
+a fresh list from a failed list with retained rows. This ambiguous case uses the
+ordinary inventory notice conservatively, including its existing timestamp when
+available, otherwise the no-snapshot wording. It never claims a partial read.
+This presentation limit does not relax any unknown-usage write guard.
 
 Unavailable details or stale rows make membership and address use unknown.
 Delete, connect, disconnect and address hints remain blocked until usage can be

@@ -20,7 +20,7 @@ export function NetworkUsage({ network, members }: { network: TopologyNetwork; m
   const unknown = network.detailUnavailable || network.inventory?.stale;
   const protection = network.builtIn ? t("builtin") : owner ? t("stack", { name: owner }) : undefined;
   const state = network.builtIn ? "builtin" : unknown ? "unknown" : members.length ? "used" : "unused";
-  const Icon = network.builtIn || owner ? Shield : unknown ? CircleHelp : members.length ? Link2 : CircleDashed;
+  const Icon = network.builtIn || (unknown && owner) ? Shield : unknown ? CircleHelp : members.length ? Link2 : CircleDashed;
   return (
     <Tooltip>
       <TooltipTrigger asChild>

@@ -69,3 +69,14 @@ it.each([
   expect(remove.getAttribute("aria-disabled")).toBe("true");
   expect(remove.title.includes("Verwendung kann nicht geprüft")).toBe(false);
 });
+
+// Fresh Compose usage retains the ordinary attachment icon and count.
+it.each([
+  [undefined, "circle-dashed", "Unbenutzt, 0 Container"],
+  ["running", "link-2", "In Verwendung, 1 Container"],
+] as const)("keeps the readable Compose usage icon for %s", (state, icon, label) => {
+  renderTable({ stackId: "stack", stackName: "example-stack" }, state);
+  const usage = screen.getByRole("button", { name: `example_net: ${label}` });
+  expect(usage.querySelector(`svg.lucide-${icon}`) !== null).toBe(true);
+  expect(usage.querySelector("svg.lucide-shield") !== null).toBe(false);
+});

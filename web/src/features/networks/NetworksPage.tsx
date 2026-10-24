@@ -11,7 +11,7 @@ import { useTranslations } from "use-intl";
 
 import { useTopology } from "@/data/queries";
 import { hostTone } from "@/domain/hosts";
-import type { ContainerInfo, Host, InventoryObservation, Topology, TopologyNetwork } from "@/domain/model";
+import type { ContainerInfo, Host, Topology, TopologyNetwork } from "@/domain/model";
 import { networkComposeOwner, removeBlock, sortNetworks } from "@/domain/networks";
 import { useMotionEnabled, useTokens } from "@/shared/theme/use-design-tokens";
 import { ConfirmDialog } from "@/shared/components/confirm-dialog";
@@ -43,7 +43,15 @@ const EMPTY: ReadonlySet<string> = new Set();
 /** The canvas' own fit button shows everything, however small. */
 const FIT_ALL = { padding: { top: `${FIT_PAD.top}px`, bottom: `${FIT_PAD.bottom}px`, x: `${FIT_PAD.x}px` }, maxZoom: FIT_ZOOM.max } as const satisfies FitViewOptions;
 const NO_SIZE: Size = { width: 0, height: 0 };
-const partialNetworkRead = (state?: InventoryObservation) => state?.stale === true && (state.reason === "inventory.read-error" || state.reason === "inventory.mapping-error");
+// A failed list drops its host timestamp but retains stale rows. Timestamp-free
+// all-detail failures are indistinguishable: keep the ordinary inventory notice.
+function partialNetworkRead(topology: Topology, hostId: string) {
+  const state = topology.inventory?.[hostId];
+  const rows = topology.networks.filter((network) => network.hostId === hostId);
+  return state?.stale === true && (state.reason === "inventory.read-error" || state.reason === "inventory.mapping-error")
+    && rows.some((network) => network.detailUnavailable)
+    && (!!state.observedAt || rows.some((network) => !network.detailUnavailable && !network.inventory?.stale));
+}
 
 /**
  * Client size of an element via ResizeObserver, with window resizes as a
@@ -77,7 +85,7 @@ interface Source {
 }
 
 /** Explicit host choice of the topology; only hosts inside the global filter are offered. */
-function HostPicker({ hosts, inventory, value, onChange }: { hosts: Host[]; inventory?: Topology["inventory"]; value: string; onChange: (id: string) => void }) {
+function HostPicker({ hosts, topology, value, onChange }: { hosts: Host[]; topology: Topology; value: string; onChange: (id: string) => void }) {
   const t = useTranslations("networks");
   const tc = useTranslations("common.host");
   return (
@@ -90,7 +98,7 @@ function HostPicker({ hosts, inventory, value, onChange }: { hosts: Host[]; inve
             type="button"
             role="radio"
             aria-checked={on}
-            title={inventory?.[h.id]?.stale ? t("partial.host", { name: h.name }) : undefined}
+            title={partialNetworkRead(topology, h.id) ? t("partial.host", { name: h.name }) : undefined}
             onClick={() => onChange(h.id)}
             data-glow="row"
             style={{ "--host": h.color } as React.CSSProperties}
@@ -102,7 +110,7 @@ function HostPicker({ hosts, inventory, value, onChange }: { hosts: Host[]; inve
           >
             <span className="size-2.5 rounded-[3px] bg-(--host)" aria-hidden />
             {h.name}
-            {inventory?.[h.id]?.stale && <AlertTriangle className="size-3 text-warning" aria-hidden />}
+            {topology.inventory?.[h.id]?.stale && <AlertTriangle className="size-3 text-warning" aria-hidden />}
             {h.status !== "online" && <ToneDot tone={hostTone(h)} label={tc(h.status)} className="size-1.5" />}
           </button>
         );
@@ -232,7 +240,7 @@ function Canvas({ source, onCreate }: { source: Source; onCreate: (hostId: strin
     <div className="@container/net">
       <div className="mb-3 flex flex-col gap-3">
         <div className="flex flex-wrap items-center gap-3">
-          <HostPicker hosts={availableHosts} inventory={source.topology.inventory} value={host.id} onChange={(id) => navigate({ host: id })} />
+          <HostPicker hosts={availableHosts} topology={source.topology} value={host.id} onChange={(id) => navigate({ host: id })} />
           {source.bench && (
             <ToneBadge tone="violet">
               <FlaskConical /> {t("bench", { count: source.containers.length })}
@@ -281,7 +289,6 @@ function Canvas({ source, onCreate }: { source: Source; onCreate: (hostId: strin
           </Button>
         </div>
       </div>
-      {host.status === "online" && partialNetworkRead(source.topology.inventory?.[host.id]) && <p aria-live="polite" className="mb-3 text-sm text-warning">{t("partial.host", { name: host.name })}</p>}
       {/* The page's own width decides (the sidebar counts): graph and info column about 70/30 after the gap, or stacked. */}
       <div
         className="grid items-start gap-4 @min-[72rem]/net:grid-cols-[minmax(0,7fr)_minmax(20rem,3fr)]"
@@ -419,7 +426,12 @@ function TopologySection() {
     );
   } else if (source.isError) content = <QueryError error={source.error} onRetry={source.refetch} />;
   else if (!hosts.length) content = <><InventoryNotice hosts={hosts} items={[]} /><EmptyState icon={<Network />} title={t("empty.title")} description={t("empty.body")} /></>;
-  else content = <><InventoryNotice hosts={hosts.filter((h) => h.status !== "online" || !partialNetworkRead(source.topology.inventory?.[h.id]))} items={source.topology.networks} /><Canvas source={source} onCreate={setCreating} /></>;
+  else {
+    const partialHosts = hosts.filter((host) => host.status === "online" && partialNetworkRead(source.topology, host.id));
+    const partialIds = new Set(partialHosts.map((host) => host.id));
+    const inventoryHosts = hosts.filter((host) => !partialIds.has(host.id)).map((host) => ({ ...host, inventory: source.topology.inventory?.[host.id] ?? host.inventory }));
+    content = <><InventoryNotice hosts={inventoryHosts} items={source.topology.networks} />{partialHosts.map((host) => <p key={host.id} aria-live="polite" className="mb-3 text-sm text-warning">{t("partial.host", { name: host.name })}</p>)}<Canvas source={source} onCreate={setCreating} /></>;
+  }
   return <>{content}{creating && <CreateNetworkDialog
     open
     onOpenChange={(open) => !open && setCreating(null)}

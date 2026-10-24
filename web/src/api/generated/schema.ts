@@ -1,5 +1,5 @@
 // Source: api/openapi.json
-// Revision: e5252f5a2412574d31c3031e7cbe0e190d2f4904410a8e6eef3edc38eb3b8cce
+// Revision: 20b649694a0c099493d2085a77de814e61537791240e7dafe4f3638cb7ed201e
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
 // Deviations: Generated TypeScript declarations from the local Huma export.
@@ -17303,6 +17303,15 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["BaseApiResponseProjectDetails"];
+                };
+            };
+            /** @description Volume name exists, volume is in use, or project workspace conflicts */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["VolumeExistsError"] | components["schemas"]["ErrorModel"];
                 };
             };
             /** @description Error */
