@@ -1,3 +1,4 @@
+import { captureCommandFailure } from "@/shared/components/command-failure";
 import { useCallback } from "react";
 import { toast } from "sonner";
 import { useTranslations } from "use-intl";
@@ -18,17 +19,18 @@ export function useImageCommands() {
   const commandError = useCommandError();
   const guard = useCallback(
     async <T,>(fn: () => Promise<T>): Promise<T | undefined> => {
+      const failure = captureCommandFailure(adapter);
       try {
         return await fn();
       } catch (e) {
         // The gate already reported the busy target once (see ActionToasts).
         if (isRunBusy(e)) return undefined;
         const code = errorCode(e);
-        toast.error(code && (KNOWN as readonly string[]).includes(code) ? t(`errors.${code as (typeof KNOWN)[number]}`) : commandError(e));
+        failure.error(code && (KNOWN as readonly string[]).includes(code) ? t(`errors.${code as (typeof KNOWN)[number]}`) : commandError(e));
         return undefined;
       }
     },
-    [t, commandError],
+    [t, commandError, adapter],
   );
   return {
     pull: (input: PullImageInput, fail = false) => guard(() => {

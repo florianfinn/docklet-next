@@ -8,11 +8,12 @@ import { useCallback } from "react";
 import { toast } from "sonner";
 import { useTranslations } from "use-intl";
 import { AdapterOutcomeError } from "@/data/capability";
+import type { CommandFailure } from "@/shared/components/command-failure";
 import { openActivity } from "./activity-store";
 
 export function useRuntimeError() {
   const t = useTranslations("activity.runtime");
-  return useCallback((error: unknown): boolean => {
+  return useCallback((error: unknown, report: CommandFailure["error"] = toast.error): boolean => {
     if (!(error instanceof AdapterOutcomeError)) return false;
     const outcome = error.outcome;
     const code = outcome.kind === "conflict" || outcome.kind === "error" ? outcome.code : "unavailable";
@@ -23,7 +24,7 @@ export function useRuntimeError() {
       code === "runtime.release-invalid" ? "releaseInvalid" : outcome.kind === "error" && outcome.status === 401 ? "signIn" :
       outcome.kind === "error" && outcome.status === 403 ? "denied" : "requestFailed";
     const id = outcome.kind === "conflict" ? outcome.activeRunId : undefined;
-    toast.error(t(key), { action: id ? { label: t("openRun"), onClick: () => openActivity(id) } : undefined });
+    report(t(key), { action: id ? { label: t("openRun"), onClick: () => openActivity(id) } : undefined });
     return true;
   }, [t]);
 }

@@ -1,4 +1,4 @@
-import { CircleAlert, Loader2Icon } from "lucide-react";
+import { Loader2Icon } from "lucide-react";
 import { useRef, useState, type MouseEvent, type ReactNode } from "react";
 import { useTranslations } from "use-intl";
 
@@ -12,7 +12,8 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/shared/ui/alert-dialog";
-import { useCommandError } from "@/data/use-command-error";
+import { DialogError } from "./dialog-command";
+import { useDialogCommand } from "./use-dialog-command";
 import { buttonVariants } from "@/shared/ui/button";
 import { cn } from "@/shared/lib/utils";
 
@@ -37,15 +38,14 @@ const isPromise = (v: unknown): v is Promise<unknown> => !!v && typeof (v as Pro
 /** Confirmation for destructive or draft-discarding actions; Escape and Cancel keep everything. */
 export function ConfirmDialog({ open, onOpenChange, title, description, confirmLabel, onConfirm, destructive, children }: ConfirmDialogProps) {
   const t = useTranslations("common.actions");
-  const commandError = useCommandError();
+  const feedback = useDialogCommand(open, title);
   const [pending, setPending] = useState(false);
-  const [error, setError] = useState<string | null>(null);
   const inFlight = useRef(false);
 
   const change = (next: boolean) => {
     if (inFlight.current) return;
-    setError(null);
-    onOpenChange(next);
+    feedback.clear();
+    feedback.change(next, onOpenChange);
   };
 
   const confirm = (e: MouseEvent<HTMLButtonElement>) => {
@@ -53,22 +53,20 @@ export function ConfirmDialog({ open, onOpenChange, title, description, confirmL
       e.preventDefault();
       return;
     }
-    const result = onConfirm();
-    if (!isPromise(result)) return;
+    const result = feedback.run(onConfirm);
+    if (!isPromise(result)) { if (feedback.failed()) e.preventDefault(); return; }
     e.preventDefault();
     inFlight.current = true;
     setPending(true);
-    setError(null);
     result
       .then(
         (value) => {
-          if (value === false) setError(t("confirmFailed"));
-          else {
+          if (value === false && !feedback.failed()) feedback.reject(t("confirmFailed"));
+          if (!feedback.failed()) {
             inFlight.current = false;
-            onOpenChange(false);
+            feedback.change(false, onOpenChange);
           }
         },
-        (err: unknown) => setError(commandError(err)),
       )
       .finally(() => {
         inFlight.current = false;
@@ -78,7 +76,7 @@ export function ConfirmDialog({ open, onOpenChange, title, description, confirmL
 
   return (
     <AlertDialog open={open} onOpenChange={change}>
-      <AlertDialogContent onEscapeKeyDown={(e) => inFlight.current && e.preventDefault()} aria-busy={pending || undefined}>
+      <AlertDialogContent {...feedback.bindings} onEscapeKeyDown={(e) => inFlight.current && e.preventDefault()} aria-busy={pending || undefined}>
         <AlertDialogHeader>
           <AlertDialogTitle>{title}</AlertDialogTitle>
           <AlertDialogDescription asChild>
@@ -86,12 +84,7 @@ export function ConfirmDialog({ open, onOpenChange, title, description, confirmL
           </AlertDialogDescription>
         </AlertDialogHeader>
         {children}
-        {error && (
-          <p role="alert" data-slot="confirm-error" className="flex items-start gap-2 rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-sm text-destructive">
-            <CircleAlert className="mt-0.5 size-4 shrink-0" aria-hidden />
-            {error}
-          </p>
-        )}
+        <DialogError feedback={feedback} />
         <AlertDialogFooter>
           <AlertDialogCancel disabled={pending}>{t("cancel")}</AlertDialogCancel>
           <AlertDialogAction

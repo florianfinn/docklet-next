@@ -1,6 +1,6 @@
+import { captureCommandFailure } from "@/shared/components/command-failure";
 import { isCancelledError, useQueryClient } from "@tanstack/react-query";
 import { useCallback } from "react";
-import { toast } from "sonner";
 
 import type { StackCommand } from "@/data/adapter";
 import { isRunBusy } from "@/data/run-gate";
@@ -19,15 +19,16 @@ export function useStackCommands() {
   const runtimeError = useRuntimeError();
 
   const guard = useCallback(async <T,>(fn: () => Promise<T>): Promise<T | undefined> => {
+      const failure = captureCommandFailure(adapter);
     try {
       return await fn();
     } catch (e) {
       // The gate already reported the busy target once (see ActionToasts).
-      if (isCancelledError(e) || isRunBusy(e) || runtimeError(e)) return undefined;
-      toast.error(commandError(e));
+      if (isCancelledError(e) || isRunBusy(e) || runtimeError(e, failure.error)) return undefined;
+      failure.error(commandError(e));
       return undefined;
     }
-  }, [commandError, runtimeError]);
+  }, [commandError, runtimeError, adapter]);
 
   /**
    * Optimistic write of a small stack setting: the cached stack and list show
