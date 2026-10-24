@@ -24,6 +24,7 @@ export function createActivityTargets({ read, hasConsumer, terminal: terminalMem
     let state: ActionDetailState = { status: "loading" };
     let nextStart = 0;
     let terminal: string | undefined;
+    let terminalNotification = 0;
     let membership = false;
     let lastMembership: string | undefined;
     let notificationEpoch = 0;
@@ -51,7 +52,7 @@ export function createActivityTargets({ read, hasConsumer, terminal: terminalMem
       const notification = notificationEpoch;
       try {
         const run = await read(host, id, signal, listeners.size > 0);
-        if (run.status === "running" || run.status === "queued") lastMembership = undefined;
+        if (run.status === "running" || run.status === "queued") { lastMembership = undefined; if (notification >= terminalNotification) terminal = undefined; }
         else if (discover) {
           const stamp = `${run.status}:${run.finishedAt ?? ""}`;
           if (stamp !== lastMembership) { lastMembership = stamp; terminalMembership(host); }
@@ -69,8 +70,8 @@ export function createActivityTargets({ read, hasConsumer, terminal: terminalMem
       state = { status: "ready", run }; listeners.forEach((listener) => listener(state));
     } });
     return { listeners, flight, notification() { notificationEpoch++; }, pendingNotification: () => notificationEpoch > consumedNotification, unavailable() { state = { status: "error", error: new Error("activity.source-unavailable") }; listeners.forEach((listener) => listener(state)); }, membership() { membership = true; }, accept(run: CodedActionRun) { if (listeners.size) { state = { status: "ready", run }; listeners.forEach((listener) => listener(state)); } }, state: () => state, terminal(value?: string) {
-      if (value && value !== terminal) { terminal = value; bypass = true; if (wake) { wake(); return true; } }
-      else if (!value) terminal = undefined;
+      if (value && value !== terminal) { terminal = value; terminalNotification = notificationEpoch; bypass = true; if (wake) { wake(); return true; } }
+
     } };
   }
   const entries = new Map<string, ReturnType<typeof create>>();

@@ -86,5 +86,6 @@ it("an explicit pending aggregate waiter expires 90 seconds after joining, witho
     await vi.advanceTimersByTimeAsync(21_999); let settled = false; void later.catch(() => { settled = true; });
     await vi.advanceTimersByTimeAsync(0); expect(settled).toBe(false);
     await vi.advanceTimersByTimeAsync(1); expect(settled).toBe(true); expect(await failed).toMatchObject({ outcome: { code: "activity.read-timeout" } });
+    const retry = reader.load(); expect(retry).not.toBe(later); membership[1]!.resolve(["good"]); expect(await retry).toHaveLength(1);
   } finally { reader.invalidate(); vi.useRealTimers(); }
 });

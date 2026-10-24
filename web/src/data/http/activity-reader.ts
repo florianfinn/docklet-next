@@ -206,7 +206,11 @@ export function createActivityReader(reads: Reads) {
   const load = () => {
     const shared = flight.request();
     let bounded = explicitWaiters.get(shared);
-    if (!bounded) { bounded = activityDeadline(() => shared, undefined, 90_000); explicitWaiters.set(shared, bounded); }
+    if (!bounded) {
+      const owned = activityDeadline(() => shared, undefined, 90_000); explicitWaiters.set(shared, owned);
+      void owned.finally(() => { if (explicitWaiters.get(shared) === owned) explicitWaiters.delete(shared); }).catch(() => undefined);
+      bounded = owned;
+    }
     return bounded;
   };
   const scopedReads = new WeakMap<Promise<SourceRead | undefined>, Promise<unknown>>();
