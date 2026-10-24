@@ -2,7 +2,7 @@
 // Revision: 1e03c054f5d2c355759cb79cbedfaf97706d4be1
 // Retrieved: 2026-10-22
 // License: Apache-2.0
-// Deviations: Ambiguous Direct/Edge proxy write failures for #209; Original volume mutation transport for issue #181.
+// Deviations: Typed name conflicts (#217) and ambiguous Direct/Edge proxy write failures (#209); Original volume mutation transport for issue #181.
 
 import type { components } from "@/api/generated/schema";
 import type { DockletAdapter } from "@/data/adapter";
@@ -35,6 +35,7 @@ export function createVolumeTransport({ baseUrl, client, capability }: VolumeTra
       if (method !== "GET" && (response.status === 502 || response.status === 504) && body?.code === "agent.unavailable") {
         throw new AdapterOutcomeError({ kind: "error", code: "volume.outcome-unknown", status: response.status });
       }
+      if (response.status === 409 && body.code === "volume.exists") throw new AdapterError("exists");
       // The current remove handler wraps Docker's conflict in a Huma 500 detail.
       if (body.code === "volume.in-use" || (response.status === 409 || response.status === 500) && /\bvolume (?:is )?in use\b/i.test(body.detail ?? "")) throw new AdapterError("in-use");
       if (response.status === 404 && !body.code) throw new AdapterError("not-found");
