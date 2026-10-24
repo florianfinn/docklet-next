@@ -2,13 +2,14 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace
+// Deviations: Local module namespace; typed volume name conflicts on project update.
 
 // Package project owns compose project persistence, lifecycle, discovery, and routes.
 package project
 
 import (
 	"net/http"
+	"reflect"
 
 	"github.com/danielgtaylor/huma/v2"
 
@@ -16,6 +17,7 @@ import (
 	"github.com/florianfinn/docklet-next/backend/internal/middleware"
 	"github.com/florianfinn/docklet-next/backend/pkg/authz"
 	"github.com/florianfinn/docklet-next/backend/pkg/utils/handlerutil"
+	"github.com/florianfinn/docklet-next/types/volume"
 )
 
 type Module struct {
@@ -216,6 +218,11 @@ func RegisterProjects(api huma.API, projectService *ProjectService, activityServ
 		Tags:        []string{"Projects"},
 		Security:    handlerutil.DefaultOperationSecurity(),
 	}, authz.PermProjectsUpdate, h.UpdateProject)
+	problem := api.OpenAPI().Components.Schemas.Schema(reflect.TypeFor[volume.ExistsError](), true, "")
+	generic := api.OpenAPI().Components.Schemas.Schema(reflect.TypeFor[huma.ErrorModel](), true, "")
+	api.OpenAPI().Paths["/environments/{id}/projects/{projectId}"].Put.Responses["409"] = &huma.Response{
+		Description: "Volume name exists, volume is in use, or project workspace conflicts", Content: map[string]*huma.MediaType{"application/problem+json": {Schema: &huma.Schema{OneOf: []*huma.Schema{problem, generic}}}},
+	}
 
 	activity.RegisterRuntimeLifecycle(api, activityService, activity.RuntimeRestartProject, huma.Operation{
 		OperationID: "restart-project",

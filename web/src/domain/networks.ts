@@ -413,9 +413,9 @@ export function networkComposeOwner(network: TopologyNetwork): string | undefine
 
 /** Removal is refused for Docker's own networks, Compose-owned ones and while any container (also stopped) is attached. */
 export function removeBlock(topology: Pick<Topology, "attachments">, network: TopologyNetwork): "builtin-network" | "compose-managed" | "in-use" | "detail-unavailable" | undefined {
-  if (network.detailUnavailable || network.inventory?.stale) return "detail-unavailable";
   if (network.builtIn) return "builtin-network";
   if (networkComposeOwner(network)) return "compose-managed";
+  if (network.detailUnavailable || network.inventory?.stale) return "detail-unavailable";
   if (topology.attachments.some((a) => a.networkId === network.id)) return "in-use";
   return undefined;
 }

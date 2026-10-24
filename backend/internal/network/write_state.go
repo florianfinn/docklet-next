@@ -2,7 +2,7 @@
 // Revision: 81b69b33c80a454465f54a1f7289c1bc5b5a3381
 // Retrieved: 2026-10-23
 // License: Apache-2.0
-// Deviations: Original host-side network contract implementation for issue #203.
+// Deviations: Original host-side network contract; classify recognized concurrent connect conflicts.
 
 package network
 
@@ -125,6 +125,19 @@ func daemonWriteError(err error, conflictCode, invalidCode string) error {
 	if errdefs.IsNotFound(err) {
 		return rejection(404, "not-found", "Network or container not found")
 	}
+	// Docker shares 403/409 across endpoint and address conflicts. Only recognized
+	// daemon conditions receive a specific code; unknown messages stay generic.
+	if conflictCode == "invalid-ip" && (errdefs.IsConflict(err) || errdefs.IsPermissionDenied(err)) {
+		message := strings.ToLower(err.Error())
+		if (strings.Contains(message, "endpoint with name ") && strings.Contains(message, " already exists in network ")) || strings.Contains(message, " is already attached to network ") {
+			return rejection(409, "already-connected", "Container is already connected to this network")
+		}
+		if strings.Contains(message, "address already in use") || strings.Contains(message, "address already allocated") {
+			return rejection(400, "invalid-ip", "Address conflicts with the current Docker state")
+		}
+		return err
+	}
+
 	conflict := errdefs.IsConflict(err) || (errdefs.IsPermissionDenied(err) && (conflictCode == "in-use" || conflictCode == "invalid-ip"))
 	if conflict {
 		status := 409

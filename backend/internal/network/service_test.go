@@ -27,14 +27,16 @@ import (
 )
 
 type networkDockerFixture struct {
-	networks    []network.Inspect
-	containers  []container.InspectResponse
-	writes      []string
-	created     network.CreateRequest
-	connected   client.NetworkConnectOptions
-	failList    bool
-	vanishing   bool
-	writeStatus int
+	networks      []network.Inspect
+	containers    []container.InspectResponse
+	writes        []string
+	created       network.CreateRequest
+	connected     client.NetworkConnectOptions
+	failList      bool
+	vanishing     bool
+	writeStatus   int
+	writeMessage  string
+	inspectStatus int
 }
 
 func (f *networkDockerFixture) service(t *testing.T) *NetworkService {
@@ -44,7 +46,11 @@ func (f *networkDockerFixture) service(t *testing.T) *NetworkService {
 		path := r.URL.Path
 		if r.Method != "GET" && f.writeStatus != 0 {
 			w.WriteHeader(f.writeStatus)
-			_, _ = w.Write([]byte(`{"message":"synthetic Docker conflict"}`))
+			message := f.writeMessage
+			if message == "" {
+				message = "synthetic Docker conflict"
+			}
+			_ = json.NewEncoder(w).Encode(map[string]string{"message": message})
 			return
 		}
 		switch {
@@ -61,6 +67,9 @@ func (f *networkDockerFixture) service(t *testing.T) *NetworkService {
 				return
 			}
 			list := []container.Summary{}
+			if f.inspectStatus != 0 {
+				list = append(list, container.Summary{ID: "unreadable"})
+			}
 			if f.vanishing {
 				list = append(list, container.Summary{ID: "gone"})
 			}
@@ -73,6 +82,11 @@ func (f *networkDockerFixture) service(t *testing.T) *NetworkService {
 		case r.Method == "GET" && strings.Contains(path, "/containers/"):
 			parts := strings.Split(path, "/")
 			id := parts[len(parts)-2]
+			if id == "unreadable" {
+				w.WriteHeader(f.inspectStatus)
+				_, _ = w.Write([]byte(`{"message":"inspect failed"}`))
+				return
+			}
 			for _, c := range f.containers {
 				if c.ID == id || c.Name == "/"+id {
 					_ = json.NewEncoder(w).Encode(c)

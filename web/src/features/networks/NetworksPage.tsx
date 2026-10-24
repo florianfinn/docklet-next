@@ -43,6 +43,15 @@ const EMPTY: ReadonlySet<string> = new Set();
 /** The canvas' own fit button shows everything, however small. */
 const FIT_ALL = { padding: { top: `${FIT_PAD.top}px`, bottom: `${FIT_PAD.bottom}px`, x: `${FIT_PAD.x}px` }, maxZoom: FIT_ZOOM.max } as const satisfies FitViewOptions;
 const NO_SIZE: Size = { width: 0, height: 0 };
+// A failed list drops its host timestamp but retains stale rows. Timestamp-free
+// all-detail failures are indistinguishable: keep the ordinary inventory notice.
+function partialNetworkRead(topology: Topology, hostId: string) {
+  const state = topology.inventory?.[hostId];
+  const rows = topology.networks.filter((network) => network.hostId === hostId);
+  return state?.stale === true && (state.reason === "inventory.read-error" || state.reason === "inventory.mapping-error")
+    && rows.some((network) => network.detailUnavailable)
+    && (!!state.observedAt || rows.some((network) => !network.detailUnavailable && !network.inventory?.stale));
+}
 
 /**
  * Client size of an element via ResizeObserver, with window resizes as a
@@ -76,7 +85,7 @@ interface Source {
 }
 
 /** Explicit host choice of the topology; only hosts inside the global filter are offered. */
-function HostPicker({ hosts, inventory, value, onChange }: { hosts: Host[]; inventory?: Topology["inventory"]; value: string; onChange: (id: string) => void }) {
+function HostPicker({ hosts, topology, value, onChange }: { hosts: Host[]; topology: Topology; value: string; onChange: (id: string) => void }) {
   const t = useTranslations("networks");
   const tc = useTranslations("common.host");
   return (
@@ -89,7 +98,7 @@ function HostPicker({ hosts, inventory, value, onChange }: { hosts: Host[]; inve
             type="button"
             role="radio"
             aria-checked={on}
-            title={inventory?.[h.id]?.stale ? t("partial.host", { name: h.name }) : undefined}
+            title={partialNetworkRead(topology, h.id) ? t("partial.host", { name: h.name }) : undefined}
             onClick={() => onChange(h.id)}
             data-glow="row"
             style={{ "--host": h.color } as React.CSSProperties}
@@ -101,7 +110,7 @@ function HostPicker({ hosts, inventory, value, onChange }: { hosts: Host[]; inve
           >
             <span className="size-2.5 rounded-[3px] bg-(--host)" aria-hidden />
             {h.name}
-            {inventory?.[h.id]?.stale && <AlertTriangle className="size-3 text-warning" aria-hidden />}
+            {topology.inventory?.[h.id]?.stale && <AlertTriangle className="size-3 text-warning" aria-hidden />}
             {h.status !== "online" && <ToneDot tone={hostTone(h)} label={tc(h.status)} className="size-1.5" />}
           </button>
         );
@@ -110,7 +119,7 @@ function HostPicker({ hosts, inventory, value, onChange }: { hosts: Host[]; inve
   );
 }
 
-function Canvas({ source }: { source: Source }) {
+function Canvas({ source, onCreate }: { source: Source; onCreate: (hostId: string) => void }) {
   const t = useTranslations("networks");
   const tokens = useTokens();
   const motion = useMotionEnabled();
@@ -121,7 +130,6 @@ function Canvas({ source }: { source: Source }) {
   const [dependencies, setDependencies] = useState(true);
   const [problems, setProblems] = useState(false);
   const [expandedByHost, setExpandedByHost] = useState<Record<string, string[]>>({});
-  const [creating, setCreating] = useState(false);
   const [connectRequest, setConnectRequest] = useState<ConnectRequest | null>(null);
   const [removing, setRemoving] = useState<TopologyNetwork | null>(null);
 
@@ -232,7 +240,7 @@ function Canvas({ source }: { source: Source }) {
     <div className="@container/net">
       <div className="mb-3 flex flex-col gap-3">
         <div className="flex flex-wrap items-center gap-3">
-          <HostPicker hosts={availableHosts} inventory={source.topology.inventory} value={host.id} onChange={(id) => navigate({ host: id })} />
+          <HostPicker hosts={availableHosts} topology={source.topology} value={host.id} onChange={(id) => navigate({ host: id })} />
           {source.bench && (
             <ToneBadge tone="violet">
               <FlaskConical /> {t("bench", { count: source.containers.length })}
@@ -276,12 +284,11 @@ function Canvas({ source }: { source: Source }) {
           <Button variant="outline" size="sm" disabled={!connectAvailable || !online || source.bench} title={[...connectCapabilities.values()].find((c) => c.reason)?.reason} onClick={() => setConnectRequest({ mode: "connect" })}>
             <Link2 data-icon="inline-start" /> {t("connect")}
           </Button>
-          <Button size="sm" disabled={!createHost || source.bench} title={!createHost ? [...createCapabilities.values()].find((c) => c.reason)?.reason : undefined} onClick={() => setCreating(true)}>
+          <Button size="sm" disabled={!createHost || source.bench} title={!createHost ? [...createCapabilities.values()].find((c) => c.reason)?.reason : undefined} onClick={() => createHost && onCreate(createHost.id)}>
             <Plus data-icon="inline-start" /> {t("create")}
           </Button>
         </div>
       </div>
-      {source.topology.inventory?.[host.id]?.stale && <p aria-live="polite" className="mb-3 text-sm text-warning">{t("partial.host", { name: host.name })}</p>}
       {/* The page's own width decides (the sidebar counts): graph and info column about 70/30 after the gap, or stacked. */}
       <div
         className="grid items-start gap-4 @min-[72rem]/net:grid-cols-[minmax(0,7fr)_minmax(20rem,3fr)]"
@@ -368,15 +375,6 @@ function Canvas({ source }: { source: Source }) {
         </div>
       </div>
       {connectRequest && <ConnectNetworkDialog key={`connect:${host.id}`} request={connectRequest} onClose={() => setConnectRequest(null)} host={host} topology={source.topology} containers={source.containers} />}
-      {createHost && <CreateNetworkDialog
-        key={`create:${host.id}:${createHost.id}`}
-        open={creating}
-        onOpenChange={setCreating}
-        hosts={createHosts}
-        networks={source.topology.networks}
-        defaultHostId={createHost.id}
-        onCreated={(n) => navigate({ host: n.hostId, node: n.id })}
-      />}
       <ConfirmDialog
         open={!!removing}
         onOpenChange={(o) => !o && setRemoving(null)}
@@ -410,17 +408,44 @@ function useSource(): (Source & { isPending: boolean; isError: boolean; error?: 
 function TopologySection() {
   const t = useTranslations("networks");
   const source = useSource();
+  const [creating, setCreating] = useState<string | null>(null);
+  const [, setParams] = useSearchParams();
+  const ready = source && !source.isPending && !source.isError;
+  const hosts = ready ? source.hosts : [];
+  const createCapabilities = useHostCreateCapabilities(hosts.filter((h) => h.status === "online").map((h) => h.id));
+  const createHostIds = hosts.filter((h) => h.status === "online" && createCapabilities.get(h.id)?.available).map((h) => h.id);
+  // Query resets temporarily remove inventory; only a confirmed empty scope closes the wizard.
+  if (creating && ready && (!hosts.length || source.bench)) setCreating(null);
+  let content: React.ReactNode;
   if (!source || source.isPending) {
-    return (
+    content = (
       <div aria-busy="true" className="grid gap-4 xl:grid-cols-[minmax(0,7fr)_minmax(20rem,3fr)]">
         <Skeleton className="h-[480px] rounded-3xl" />
         <Skeleton className="h-72 rounded-xl" />
       </div>
     );
+  } else if (source.isError) content = <QueryError error={source.error} onRetry={source.refetch} />;
+  else if (!hosts.length) content = <><InventoryNotice hosts={hosts} items={[]} /><EmptyState icon={<Network />} title={t("empty.title")} description={t("empty.body")} /></>;
+  else {
+    const partialHosts = hosts.filter((host) => host.status === "online" && partialNetworkRead(source.topology, host.id));
+    const partialIds = new Set(partialHosts.map((host) => host.id));
+    const inventoryHosts = hosts.filter((host) => !partialIds.has(host.id)).map((host) => ({ ...host, inventory: source.topology.inventory?.[host.id] ?? host.inventory }));
+    content = <><InventoryNotice hosts={inventoryHosts} items={source.topology.networks} />{partialHosts.map((host) => <p key={host.id} aria-live="polite" className="mb-3 text-sm text-warning">{t("partial.host", { name: host.name })}</p>)}<Canvas source={source} onCreate={setCreating} /></>;
   }
-  if (source.isError) return <QueryError error={source.error} onRetry={source.refetch} />;
-  if (!source.hosts.length) return <><InventoryNotice hosts={source.hosts} items={[]} /><EmptyState icon={<Network />} title={t("empty.title")} description={t("empty.body")} /></>;
-  return <><InventoryNotice hosts={source.hosts} items={source.topology.networks} /><Canvas source={source} /></>;
+  return <>{content}{creating && <CreateNetworkDialog
+    open
+    onOpenChange={(open) => !open && setCreating(null)}
+    hosts={hosts}
+    availableHostIds={createHostIds}
+    networks={ready ? source.topology.networks : []}
+    defaultHostId={creating}
+    onCreated={(network) => setParams((params) => {
+      const next = new URLSearchParams(params);
+      next.set("host", network.hostId);
+      next.set("node", network.id);
+      return next;
+    }, { replace: true })}
+  />}</>;
 }
 
 export default function NetworksPage() {

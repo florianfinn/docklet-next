@@ -62,20 +62,25 @@ interface Props {
   onOpenChange: (open: boolean) => void;
   hosts: Host[];
   networks: TopologyNetwork[];
+  availableHostIds?: readonly string[];
   defaultHostId?: string;
   onCreated: (network: TopologyNetwork) => void;
 }
 
 /** Network wizard: kind, settings, review. Validation is the shared domain rule; the adapter repeats it. */
-export function CreateNetworkDialog({ open, onOpenChange, hosts, networks, defaultHostId, onCreated }: Props) {
+export function CreateNetworkDialog({ open, onOpenChange, hosts, networks, availableHostIds, defaultHostId, onCreated }: Props) {
   const t = useTranslations("networks.createDialog");
   const ts = useTranslations("networks.scope");
+  const tc = useTranslations("activity.capability");
   const online = hosts.filter((h) => h.status === "online");
   const initialHost = online.find((h) => h.id === defaultHostId)?.id ?? online[0]?.id ?? "";
   const [draft, setDraft] = useState<NetworkDraft>(() => blank(initialHost));
   const feedback = useDialogCommand(open, draft.hostId);
   const cmd = useNetworkCommands(draft.hostId, open);
   const capability = useCapability("createNetwork", { kind: "host", id: draft.hostId });
+  const selectedHost = hosts.find((h) => h.id === draft.hostId);
+  const available = selectedHost?.status === "online" && capability.available && (!availableHostIds || availableHostIds.includes(draft.hostId));
+  const unavailableReason = available ? undefined : selectedHost && selectedHost.status !== "online" ? t("hostOffline", { name: selectedHost.name }) : capability.reason ?? tc("unavailable");
   const [labels, setLabels] = useState<NetworkEntry[]>([]);
   const [options, setOptions] = useState<NetworkEntry[]>([]);
   const [advancedOpen, setAdvancedOpen] = useState(false);
@@ -111,6 +116,7 @@ export function CreateNetworkDialog({ open, onOpenChange, hosts, networks, defau
   };
 
   const submit = async () => {
+    if (!available || hasErrors(errors)) return;
     setBusy(true);
     const created = await feedback.run(() => cmd.create({ ...draft, name: draft.name.trim() }));
     setBusy(false);
@@ -178,6 +184,7 @@ export function CreateNetworkDialog({ open, onOpenChange, hosts, networks, defau
         </ol>
 
         <div className="-mx-1 min-h-0 overflow-y-auto px-1 pb-1" data-slot="wizard-body">
+        {!available && <Alert className="mb-3"><AlertDescription>{unavailableReason}</AlertDescription></Alert>}
         {step === "kind" && (
           <div className="flex flex-col gap-4">
             <Field>
@@ -188,8 +195,8 @@ export function CreateNetworkDialog({ open, onOpenChange, hosts, networks, defau
                 </SelectTrigger>
                 <SelectContent>
                   <SelectGroup>
-                    {hosts.map((h) => (
-                      <SelectItem key={h.id} value={h.id} disabled={h.status !== "online"}>
+                    {hosts.filter((h) => h.id === draft.hostId || !availableHostIds || availableHostIds.includes(h.id)).map((h) => (
+                      <SelectItem key={h.id} value={h.id} disabled={h.status !== "online" || (!!availableHostIds && !availableHostIds.includes(h.id))}>
                         <i className="size-2.5 rounded-[3px]" style={{ background: h.color }} aria-hidden />
                         {h.status === "online" ? h.name : t("hostOffline", { name: h.name })}
                       </SelectItem>
@@ -284,13 +291,13 @@ export function CreateNetworkDialog({ open, onOpenChange, hosts, networks, defau
           </Button>
           {step === "review" ? (
             <HelpTarget topic="network.review">
-              <Button type="button" disabled={busy || !capability.available || hasErrors(errors)} title={capability.reason} onClick={() => void submit()}>
+              <Button type="button" disabled={busy || !available || hasErrors(errors)} title={unavailableReason} onClick={() => void submit()}>
                 {busy ? <Spinner data-icon="inline-start" /> : <Plus data-icon="inline-start" />}
                 {t("submit")}
               </Button>
             </HelpTarget>
           ) : (
-            <Button type="button" disabled={!draft.hostId || !capability.available} title={capability.reason} onClick={next}>
+            <Button type="button" disabled={!draft.hostId || !available} title={unavailableReason} onClick={next}>
               {t("next")}
               <ArrowRight data-icon="inline-end" />
             </Button>

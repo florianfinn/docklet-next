@@ -55,6 +55,11 @@ func TestNetworkCapabilitiesRequireScopedRights(t *testing.T) {
 			} {
 				require.Equal(t, tc.want, networkDescriptor(t, permissions, tc.ref, operation).Available, "%+v", tc.ref)
 			}
+			if operation != "createNetwork" {
+				host := capability.ResourceRef{Kind: "host", ID: "example"}
+				require.False(t, networkDescriptor(t, permissions, host, operation).Available)
+				require.False(t, networkDescriptor(t, authz.SudoPermissionSet(), host, operation).Available)
+			}
 			ref := capability.ResourceRef{Kind: kind, ID: id}
 			require.False(t, networkDescriptor(t, authz.NewPermissionSet(), ref, operation).Available)
 			global := &authz.PermissionSet{Global: map[string]struct{}{grant: {}}}

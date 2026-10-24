@@ -2,7 +2,7 @@
 // Revision: 09d1e632cb3a14bd48b87232acaf991b9d12145e
 // Retrieved: 2026-10-24
 // License: Apache-2.0
-// Deviations: Original method-specific event ingestion rate-limit regression tests.
+// Deviations: Method-specific event ingestion tests include fake token headers on authenticated reads.
 
 package bootstrap
 
@@ -102,6 +102,7 @@ func TestEventIngestionLimitSeparatesAuthenticatedReads(t *testing.T) {
 				req := httptest.NewRequest(method, "/api/events?limit=100", http.NoBody)
 				req.RemoteAddr = peer
 				if authenticated {
+					req.Header.Set(middleware.HeaderAgentToken, "fake-agent-token")
 					req.AddCookie(sessionCookie)
 				}
 				if method == http.MethodPost {
