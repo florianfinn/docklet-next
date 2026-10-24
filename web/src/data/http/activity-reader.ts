@@ -114,10 +114,11 @@ export function createActivityReader(reads: Reads) {
     return entry;
   }
 
-  async function performLoad(signal: AbortSignal, scope?: string, prefetched?: SourceRead): Promise<CodedActionRun[]> {
+  async function performLoad(signal: AbortSignal, scope?: string, prefetched: SourceRead[] = []): Promise<CodedActionRun[]> {
     const started = ++sequence;
     const version = generation;
     const credentials = renewal;
+    let completed = prefetched;
     try {
       const hosts = scope ? new Set(knownHosts) : new Set(await activityDeadline(() => reads.hosts(), signal));
       if (scope && !hosts.has(scope)) return current;
@@ -126,12 +127,13 @@ export function createActivityReader(reads: Reads) {
         discoverySequence = started; knownHosts = hosts;
         for (const [host, entry] of sourceFlights) if (!hosts.has(host)) { entry.cancel(); sourceFlights.delete(host); }
       }
-      const batches = await Promise.all([...(scope ? [scope] : hosts)].map(async (host): Promise<SourceRead> => {
-        try { return prefetched ?? await sourceFlight(host).request(); }
+      const fresh = new Map(prefetched.filter((batch) => batch.credentials === credentials).map((batch) => [batch.hostId, batch]));
+      const batches = completed = await Promise.all([...(scope ? [scope] : hosts)].map(async (host): Promise<SourceRead> => {
+        try { return fresh.get(host) ?? await sourceFlight(host).request(); }
         catch (error) { if (version !== generation || signal.aborted) throw new CancelledError(); if (isUnauthorized(error)) { ++generation; cancelAll(error); initialized = true; current = []; failures.clear(); reads.unauthorized(); globalHealthSequence = ++sequence; globalFailure = failure(error); publishHealth(); throw error; } if (isCancelledError(error)) throw error; return { hostId: host, started, credentials, runs: [], failure: failure(error, host), error }; }
       }));
       if (version !== generation || credentials !== renewal || signal.aborted) throw new CancelledError();
-      if (batches.some((batch) => batch.credentials !== renewal)) return performLoad(signal, scope);
+      if (batches.some((batch) => batch.credentials !== renewal)) return performLoad(signal, scope, batches);
       // A raw run UUID belongs to one source. Reject conflicting claims without changing IDs.
       const owners = new Map(current.map((run) => [run.id, run.hostId]));
       const claims = new Map<string, Set<string>>();
@@ -190,8 +192,8 @@ export function createActivityReader(reads: Reads) {
       return sorted(observed.values()).map((run) => summaryOnly(reads.mergeSummary?.(run) ?? run));
     } catch (error) {
       if (version !== generation || signal.aborted) throw new CancelledError();
-      // Credential renewal preserves identity; replay inside this single flight.
-      if (credentials !== renewal) return performLoad(signal, scope);
+      // Replay membership and superseded sources; keep source results already read after renewal.
+      if (credentials !== renewal) return performLoad(signal, scope, completed);
       if (isCancelledError(error)) throw error;
       if (started > globalHealthSequence) {
         globalHealthSequence = started; globalFailure = failure(error);
@@ -226,7 +228,7 @@ export function createActivityReader(reads: Reads) {
       if (!batch) return current;
       if (!initialized) await flight.request();
       if (version !== generation) throw new CancelledError();
-      return performLoad(new AbortController().signal, host, batch);
+      return performLoad(new AbortController().signal, host, [batch]);
     })();
     scopedReads.set(sourceRead, task); return task;
   }
