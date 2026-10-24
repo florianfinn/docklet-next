@@ -2,6 +2,24 @@
 import type { enNetworks } from "./en";
 
 export const deNetworks: typeof enNetworks = {
+  partial: {
+    host: "Bei {name} sind Netzwerklesevorgänge fehlgeschlagen. Verfügbare und zuvor erfasste Netzwerke werden angezeigt.",
+    detail: "Netzwerkdetails nicht verfügbar. Verwendung unbekannt; Verbinden und Löschen sind gesperrt.",
+    unknown: "Unbekannt",
+  },
+  usage: {
+    unknown: "Verwendung unbekannt",
+    unknownLabel: "{name}: Verwendung unbekannt",
+    label: "{name}: {state}, {count, plural, one {# Container} other {# Container}}",
+    used: "In Verwendung",
+    unused: "Unbenutzt",
+    builtin: "Docker-Standard",
+    builtinDetail: "Docker-Standardnetzwerk; kann nicht gelöscht werden.",
+    stack: "Gehört zum Compose-Stack {name}",
+    member: "{name} · {state}",
+    noAttachments: "Keine verbundenen Container",
+    states: { running: "läuft", stopped: "gestoppt", restarting: "startet neu", unknown: "unbekannt" },
+  },
   title: "Netzwerke",
   description: "Docker-Netzwerke eines Hosts zur Zeit: LAN-Netze, eigene und Stack-Netze, dann die Docker-Standardnetze, jeweils mit ihren Containern. Knoten anklicken oder per Tastatur (Tab, Eingabe) fokussieren; Escape oder ein Klick ins Leere hebt den Fokus auf.",
   hostPicker: "Host der Topologie",
@@ -126,6 +144,7 @@ export const deNetworks: typeof enNetworks = {
   },
   menu: { focus: "In Topologie fokussieren", connect: "Container verbinden", remove: "Entfernen" },
   removeBlocked: {
+    "detail-unavailable": "Netzwerkdetails sind nicht verfügbar; die Verwendung kann nicht geprüft werden.",
     "builtin-network": "Docker-Standardnetz – wird nie entfernt.",
     "compose-managed": "Gehört zu Stack {stack} – Compose entfernt es mit dem Stack.",
     "in-use": "Noch {count, plural, one {# Container} other {# Container}} verbunden (auch gestoppte zählen).",
@@ -138,6 +157,21 @@ export const deNetworks: typeof enNetworks = {
   removed: "Netzwerk {name} entfernt",
   empty: { title: "Keine Netzwerke", body: "Auf den gefilterten Hosts gibt es keine Netzwerke." },
   createDialog: {
+    advanced: {
+      title: "Erweitert",
+      hint: "Labels und Treiberoptionen brauchen eindeutige Schlüssel. Das Eltern-Interface wird oben eingestellt. Hilfsadressen reservieren benannte IPs im jeweiligen konfigurierten Subnetz.",
+      labels: "Labels",
+      options: "Treiberoptionen",
+      auxAddresses: "IPv4-Hilfsadressen",
+      auxAddresses6: "IPv6-Hilfsadressen",
+      key: "Schlüssel",
+      value: "Wert",
+      name: "Reservierungsname",
+      address: "Reservierte IP-Adresse",
+      add: "Hinzufügen: {section}",
+      remove: "Eintrag {index} in {section} entfernen",
+    },
+
     title: "Netzwerk anlegen",
     description: "In drei Schritten: Art, Einstellungen, Prüfung. Erst „Anlegen“ ändert den Host.",
     steps: { kind: "Art", settings: "Einstellungen", review: "Prüfen" },
@@ -152,7 +186,7 @@ export const deNetworks: typeof enNetworks = {
     },
     notCreatable: "host, none und das Standard-bridge gibt es auf jedem Docker-Host genau einmal; overlay braucht Swarm. Diese legt Docklet nicht an.",
     name: "Name",
-    nameHint: "Buchstaben, Ziffern, _ . - · nicht bridge, host, none oder default.",
+    nameHint: "Buchstaben, Ziffern, _ . - · nicht bridge, host, none, default oder ingress.",
     subnet: "IPv4-Subnetz (CIDR)",
     subnetHintBridge: "Leer lassen: Docker wählt einen freien Block. Nur mit eigenem Subnetz sind feste Container-Adressen möglich.",
     subnetHintLan: "Das LAN, in dem die Container Adressen bekommen, z. B. 192.0.2.0/24.",
@@ -190,6 +224,8 @@ export const deNetworks: typeof enNetworks = {
     submit: "Anlegen",
     created: "Netzwerk {name} angelegt",
     errors: {
+      duplicate: "Schlüssel, Namen und Adressen müssen eindeutig sein",
+      gateway: "Das ist das Gateway",
       required: "Pflichtfeld",
       invalid: "Ungültiges Format",
       reserved: "Reservierter Name von Docker",
@@ -208,6 +244,10 @@ export const deNetworks: typeof enNetworks = {
     },
   },
   connectDialog: {
+    aliases: "DNS-Aliasse (optional)",
+    aliasesHint: "DNS-Namen mit Komma trennen: Buchstaben, Ziffern und Bindestriche im Inneren, jeweils höchstens 63 Zeichen. Duplikate werden entfernt.",
+    aliasesInvalid: "Nichtleere DNS-Namen mit Komma trennen; keine Leerzeichen, Unterstriche oder Punkte im Namen.",
+
     titleConnect: "Container mit Netzwerk verbinden",
     titleDisconnect: "Container von Netzwerk trennen",
     description: "Container und Netzwerk wählen, dann prüfen. Erst die Bestätigung ändert den Container.",
@@ -236,6 +276,7 @@ export const deNetworks: typeof enNetworks = {
     connected: "{container} mit {network} verbunden",
     disconnected: "{container} von {network} getrennt",
     blocks: {
+      "detail-unavailable": "Netzwerkdetails sind nicht verfügbar; die Verwendung kann nicht geprüft werden.",
       "host-mismatch": "Container und Netzwerk liegen auf verschiedenen Hosts.",
       "builtin-network": "In host und none wird kein Container nachträglich verbunden; das legt der Netzwerkmodus beim Erstellen fest.",
       "network-mode": "Der Container nutzt den Netzwerkmodus host oder none und kann keinen weiteren Netzen beitreten oder sie verlassen.",
@@ -269,6 +310,8 @@ export const deNetworks: typeof enNetworks = {
     },
   },
   errors: {
+    overlap: "Das Subnetz überschneidet sich mit einem anderen Netzwerk auf diesem Host.",
+    "outcome-unknown": "Das Netzwerkergebnis ist unbekannt. Zustand vor erneutem Versuch prüfen.",
     "not-found": "Nicht gefunden – die Ansicht wird aktualisiert.",
     exists: "Ein Netzwerk mit diesem Namen existiert auf dem Host bereits.",
     "invalid-network": "Die Netzwerkeinstellungen sind ungültig.",

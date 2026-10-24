@@ -32,9 +32,19 @@ describe("network drafts", () => {
   it("requires parent, subnet and gateway for LAN drivers and one macvlan per parent", () => {
     expect(validateNetworkDraft(draft({ driver: "macvlan" }), atlas)).toEqual({ subnet: "required", gateway: "required", parent: "required" });
     expect(validateNetworkDraft(draft({ driver: "macvlan", parent: "br0", subnet: "192.0.2.0/24", gateway: "192.0.2.1" }), atlas).parent).toBe("parent-in-use");
-    // ipvlan on another parent may reuse the LAN block of br0.
-    expect(validateNetworkDraft(draft({ driver: "ipvlan", parent: "eth1", subnet: "192.0.2.0/24", gateway: "192.0.2.1" }), atlas)).toEqual({});
+    // Overlapping LAN pools conflict on this host even on different parents.
+    expect(validateNetworkDraft(draft({ driver: "ipvlan", parent: "eth1", subnet: "192.0.2.0/24", gateway: "192.0.2.1" }), atlas).subnet).toBe("overlap");
   });
+});
+
+it("checks each address family on the same host, including LAN pools on other parents", () => {
+  const existing = { id: "existing", hostId: "atlas", name: "existing", driver: "macvlan", internal: false, parent: "eth0", subnet: "192.0.2.0/24", subnet6: "2001:db8:204::/64", ipv6: true };
+  const dual = draft({ driver: "ipvlan", parent: "eth1", subnet: "192.0.2.0/24", gateway: "192.0.2.1", ipv6: true, subnet6: "2001:db8:204::/64", gateway6: "2001:db8:204::1" });
+  expect(validateNetworkDraft(dual, [existing])).toEqual({ subnet: "overlap", subnet6: "overlap" });
+  expect(validateNetworkDraft(dual, [{ ...existing, hostId: "other" }])).toEqual({});
+  expect(validateNetworkDraft({ ...dual, ipv4: false }, [existing])).toEqual({ subnet6: "overlap" });
+  expect(validateNetworkDraft({ ...dual, ipv6: false }, [existing])).toEqual({ subnet: "overlap" });
+  expect(validateNetworkDraft(draft({ name: "INGRESS" }), []).name).toBe("reserved");
 });
 
 describe("connect and disconnect checks", () => {

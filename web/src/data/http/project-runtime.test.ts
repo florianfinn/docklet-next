@@ -73,7 +73,8 @@ describe("explicit backend runtime membership", () => {
         expect(v.stackId).toBe(label === "beta_stack" ? "h1~example-project" : undefined);
         const topology = mapTopology([{ ...network, labels: resourceLabels }], "h1", [], [p], inventory);
         expect(topology.networks[0]?.stackId).toBe(label === "beta_stack" ? "h1~example-project" : undefined);
-        expect(removeBlock(topology, topology.networks[0]!)).toBe(label === "beta_stack" ? "compose-managed" : undefined);
+        // Any Compose label protects deletion; only the matching owner supplies a stack link.
+        expect(removeBlock(topology, topology.networks[0]!)).toBe(label ? "compose-managed" : undefined);
       }
     }
   });

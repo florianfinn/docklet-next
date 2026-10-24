@@ -180,7 +180,16 @@ it("renders a bind detail route without fabricated size or non-finite host usage
 it("displays Docker built-in and plugin drivers without rejecting a healthy host", async () => {
   const f = resourceFixture();
   const base = f.state.networks[0]!;
-  f.state.networks = [["bridge", "bridge"], ["host", "host"], ["none", "null"], ["custom", "vendor/plugin"]].map(([name, driver]) => ({ ...base, id: name!, name: name!, driver: driver! }));
+  f.state.networks = [["bridge", "bridge"], ["host", "host"], ["none", "null"], ["ingress", "overlay"], ["custom", "vendor/plugin"]].map(([name, driver]) => ({ ...base, id: name!, name: name!, driver: driver! }));
+  f.state.defaultNetworks = ["bridge", "host", "none", "ingress"];
   const graph = await f.adapter.getTopology();
-  expect(graph.networks.filter((n) => n.hostId === "first").map((n) => [n.name, n.driver, n.builtIn])).toEqual([["bridge", "bridge", true], ["host", "host", true], ["none", "null", true], ["custom", "vendor/plugin", false]]);
+  expect(graph.networks.filter((n) => n.hostId === "first").map((n) => [n.name, n.driver, n.builtIn])).toEqual([["bridge", "bridge", true], ["host", "host", true], ["none", "null", true], ["ingress", "overlay", true], ["custom", "vendor/plugin", false]]);
+});
+
+it("uses the server isDefault flag rather than inferring built-in state from a network name", async () => {
+  const f = resourceFixture(); const base = f.state.networks[0]!;
+  f.state.networks = [{ ...base, id: "builtin", name: "server_default", labels: {} }, { ...base, id: "ordinary", name: "bridge", labels: {} }, { ...base, id: "reserved", name: "default", labels: {} }];
+  f.state.defaultNetworks = ["builtin"];
+  const graph = await f.adapter.getTopology();
+  expect(graph.networks.filter((n) => n.hostId === "first").map((n) => [n.name, n.builtIn])).toEqual([["server_default", true], ["bridge", false], ["default", false]]);
 });

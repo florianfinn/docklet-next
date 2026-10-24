@@ -31,6 +31,7 @@ export interface AuthApi {
 
 /** Error codes of the hosts, storage and settings contracts; UIs translate them. */
 export type AdapterErrorCode =
+  | "overlap"
   | "not-found"
   | "exists"
   | "invalid-name"
@@ -47,6 +48,7 @@ export type AdapterErrorCode =
   | "target-in-use"
   | "last-admin"
   | "invalid-network"
+  | "detail-unavailable"
   | "builtin-network"
   | "compose-managed"
   | "host-mismatch"
@@ -182,6 +184,8 @@ export interface VolumesApi extends ProjectWorkspaceApi {
 export type CreateNetworkInput = NetworkDraft;
 
 export interface ConnectNetworkInput {
+  /** DNS labels; whitespace trimmed, case normalized and duplicates removed. */
+  aliases?: string[];
   networkId: string;
   containerId: string;
   /** Static address; empty takes the next free pool address. Needs a configured subnet. */
@@ -195,7 +199,8 @@ export interface ConnectNetworkInput {
  * "containers" topics; every call is checked again on the adapter side.
  */
 export interface NetworksApi {
-  getTopology(onPartial?: (rows: Topology) => void): Promise<Topology>;
+  /** The caller supplies its existing query snapshot for host-local read fallback. */
+  getTopology(onPartial?: (rows: Topology) => void, retained?: Topology): Promise<Topology>;
   /** Field errors throw "invalid-network"; disconnected hosts "host-offline". */
   createNetwork(input: CreateNetworkInput): Promise<TopologyNetwork>;
   /** Refused for Docker's own networks, Compose-owned networks and while containers are attached. */

@@ -416,7 +416,19 @@ export interface SecurityOverview {
 /** Built-in Docker drivers; plugins remain displayable as arbitrary strings. */
 export type NetworkDriver = "bridge" | "host" | "none" | "null" | "macvlan" | "ipvlan" | "overlay";
 
+/** Named IPAM reservation, scoped to one address family. */
+export interface NetworkAuxAddress {
+  name: string;
+  ip: string;
+}
+
 export interface TopologyNetwork {
+  /** The list identifies this network, but its detail or membership read failed. */
+  detailUnavailable?: boolean;
+  labels?: Record<string, string>;
+  options?: Record<string, string>;
+  auxAddresses?: NetworkAuxAddress[];
+  auxAddresses6?: NetworkAuxAddress[];
   inventory?: InventoryObservation;
   id: string;
   name: string;
@@ -450,6 +462,7 @@ export interface TopologyNetwork {
 }
 
 export interface NetworkAttachment {
+  aliases?: string[];
   containerId: string;
   networkId: string;
   /** Absent on host and none networks, which have no own container address. */
@@ -469,6 +482,8 @@ export interface TopologyDependency {
 }
 
 export interface Topology {
+  /** Host-local partial reads, including hosts with no available network rows. */
+  inventory?: Record<string, InventoryObservation>;
   networks: TopologyNetwork[];
   attachments: NetworkAttachment[];
   dependencies: TopologyDependency[];

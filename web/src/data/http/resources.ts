@@ -6,7 +6,7 @@
 
 import type { DockletAdapter } from "@/data/adapter";
 import { AdapterOutcomeError } from "@/data/capability";
-import type { Host, InventoryObservation } from "@/domain/model";
+import type { Host, InventoryObservation, Topology } from "@/domain/model";
 import { splitInventoryId } from "./inventory-mapping";
 import { createInventoryTransport, inventoryFailure } from "./inventory-transport";
 import { mapImage, mapTopology, mapVolumes } from "./resource-mapping";
@@ -17,8 +17,11 @@ export function createResourceReader(baseUrl: string, fetcher: typeof fetch, hos
     const [projects, containers] = await Promise.all([list("list-projects", hostId, "projects"), list("list-containers", hostId, "containers")]);
     return { projects: projects.rows, containers: containers.rows, observations: [projects.observation, containers.observation] };
   }
+  function combine(observations: InventoryObservation[]): InventoryObservation {
+    return { observedAt: observations.flatMap((o) => o.observedAt ? [o.observedAt] : []).sort()[0], stale: observations.some((o) => o.stale), reason: observations.find((o) => o.reason)?.reason };
+  }
   function observe(hostId: string, observations: InventoryObservation[]): InventoryObservation {
-    const inventory = { observedAt: observations.flatMap((o) => o.observedAt ? [o.observedAt] : []).sort()[0], stale: observations.some((o) => o.stale), reason: observations.find((o) => o.reason)?.reason };
+    const inventory = combine(observations);
     onState(hostId, inventory);
     return inventory;
   }
@@ -52,15 +55,52 @@ export function createResourceReader(baseUrl: string, fetcher: typeof fetch, hos
       const inventory = observe(h.id, [...ctx.observations, images.observation]);
       return images.rows.filter((i) => i.labels?.["io.docklet.system"] !== "agent").map((i) => mapImage(i, h.id, ctx.containers, ctx.projects, inventory));
     }, onPartial),
-    async getTopology(onPartial) {
-      const merge = (graphs: Awaited<ReturnType<typeof mapTopology>>[]) => ({ networks: graphs.flatMap((g) => g.networks), attachments: graphs.flatMap((g) => g.attachments), dependencies: graphs.flatMap((g) => g.dependencies) });
-      const graphs = await aggregate("getTopology", async (h) => {
-        const [networks, ctx] = await Promise.all([list("list-networks", h.id, "networks"), context(h.id)]);
-        const details = await Promise.all(networks.rows.map((n) => read("get-network", h.id, `networks/${encodeURIComponent(n.id)}`)));
-        const inventory = observe(h.id, [...ctx.observations, networks.observation, ...details.map((d) => d.observation)]);
-        return [mapTopology(details.map((d) => d.body.data), h.id, ctx.containers, ctx.projects, inventory)];
-      }, (graphs) => onPartial?.(merge(graphs)));
-      return merge(graphs);
+    async getTopology(onPartial, retained) {
+      await requireCapability("getTopology");
+      const scope = await hosts();
+      // Query owns the retained snapshot; each host replaces only its own batch.
+      const batches = new Map<string, Topology>(scope.map((h) => {
+        const networks = retained?.networks.filter((n) => n.hostId === h.id) ?? [];
+        const ids = new Set(networks.map((n) => n.id));
+        const state = retained?.inventory?.[h.id];
+        return [h.id, { networks, attachments: retained?.attachments.filter((a) => ids.has(a.networkId)) ?? [], dependencies: retained?.dependencies.filter((d) => d.from.startsWith(`${h.id}~`)) ?? [], ...(state ? { inventory: { [h.id]: state } } : {}) }];
+      }));
+      const merge = (): Topology => {
+        const graphs = [...batches.values()];
+        const inventory = Object.assign({}, ...graphs.map((g) => g.inventory));
+        return { networks: graphs.flatMap((g) => g.networks), attachments: graphs.flatMap((g) => g.attachments), dependencies: graphs.flatMap((g) => g.dependencies), ...(Object.keys(inventory).length ? { inventory } : {}) };
+      };
+      await Promise.all(scope.map(async (h) => {
+        try {
+          const [listed, contextual] = await Promise.allSettled([list("list-networks", h.id, "networks"), context(h.id)]);
+          if (listed.status === "rejected") throw listed.reason;
+          const networks = listed.value;
+          const ctx = contextual.status === "fulfilled" ? contextual.value : { containers: [], projects: [], observations: [inventoryFailure(h.id, contextual.reason)] };
+          const details = await Promise.all(networks.rows.map(async (summary) => {
+            try {
+              const detail = await read("get-network", h.id, `networks/${encodeURIComponent(summary.id)}`);
+              if (detail.body.data.id !== summary.id) throw new Error("inventory.invalid-network");
+              // Invalid detail projections are local to this listed identity, too.
+              mapTopology([detail.body.data], h.id, [], ctx.projects, detail.observation, [summary]);
+              return { row: detail.body.data, observation: detail.observation, unavailable: false };
+            } catch (error) {
+              return { row: summary, observation: inventoryFailure(h.id, error), unavailable: true };
+            }
+          }));
+          const base = combine([...ctx.observations, networks.observation, ...details.filter((d) => !d.unavailable).map((d) => d.observation)]);
+          const unavailable = new Map(details.filter((d) => d.unavailable || contextual.status === "rejected").map((d) => [d.row.id, { ...base, ...d.observation, stale: true, reason: d.observation.reason ?? base.reason ?? "inventory.read-error" as const }]));
+          const inventory = observe(h.id, [...ctx.observations, networks.observation, ...details.map((d) => d.observation)]);
+          const graph = mapTopology(details.map((d) => d.row), h.id, ctx.containers, ctx.projects, base, networks.rows, unavailable);
+          batches.set(h.id, { ...graph, ...(inventory.stale ? { inventory: { [h.id]: inventory } } : {}) });
+        } catch (error) {
+          const state = inventoryFailure(h.id, error);
+          const previous = batches.get(h.id)!;
+          onState(h.id, state);
+          batches.set(h.id, { ...previous, inventory: { [h.id]: state }, networks: previous.networks.map((n) => ({ ...n, detailUnavailable: true, inventory: { ...n.inventory, ...state } })) });
+        }
+        onPartial?.(merge());
+      }));
+      return merge();
     },
   };
 }

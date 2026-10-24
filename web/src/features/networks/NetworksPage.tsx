@@ -1,5 +1,4 @@
 import { InventoryNotice } from "@/features/stacks/InventoryNotice";
-import { useCapability } from "@/data/use-capability";
 import "@xyflow/react/dist/style.css";
 import "./topology.css";
 
@@ -13,7 +12,7 @@ import { useTranslations } from "use-intl";
 import { useTopology } from "@/data/queries";
 import { hostTone } from "@/domain/hosts";
 import type { ContainerInfo, Host, Topology, TopologyNetwork } from "@/domain/model";
-import { sortNetworks } from "@/domain/networks";
+import { networkComposeOwner, removeBlock, sortNetworks } from "@/domain/networks";
 import { useMotionEnabled, useTokens } from "@/shared/theme/use-design-tokens";
 import { ConfirmDialog } from "@/shared/components/confirm-dialog";
 import { EmptyState, PageHeader, QueryError } from "@/shared/components/page";
@@ -35,6 +34,7 @@ import { focusFromChanges } from "./topology-focus";
 import { canvasHeight, FIT_PAD, FIT_ZOOM, fitViewport, layoutBudget, type Size } from "./topology-geometry";
 import { decorate, layoutHost } from "./topology-layout";
 import { TopologyDetails } from "./TopologyDetails";
+import { useHostCreateCapabilities, useNetworkCapabilities } from "./use-network-capabilities";
 import { useNetworkCommands } from "./use-network-commands";
 
 /** Hosts with this many containers or fewer start with every network expanded. */
@@ -76,7 +76,7 @@ interface Source {
 }
 
 /** Explicit host choice of the topology; only hosts inside the global filter are offered. */
-function HostPicker({ hosts, value, onChange }: { hosts: Host[]; value: string; onChange: (id: string) => void }) {
+function HostPicker({ hosts, inventory, value, onChange }: { hosts: Host[]; inventory?: Topology["inventory"]; value: string; onChange: (id: string) => void }) {
   const t = useTranslations("networks");
   const tc = useTranslations("common.host");
   return (
@@ -89,6 +89,7 @@ function HostPicker({ hosts, value, onChange }: { hosts: Host[]; value: string; 
             type="button"
             role="radio"
             aria-checked={on}
+            title={inventory?.[h.id]?.stale ? t("partial.host", { name: h.name }) : undefined}
             onClick={() => onChange(h.id)}
             data-glow="row"
             style={{ "--host": h.color } as React.CSSProperties}
@@ -100,6 +101,7 @@ function HostPicker({ hosts, value, onChange }: { hosts: Host[]; value: string; 
           >
             <span className="size-2.5 rounded-[3px] bg-(--host)" aria-hidden />
             {h.name}
+            {inventory?.[h.id]?.stale && <AlertTriangle className="size-3 text-warning" aria-hidden />}
             {h.status !== "online" && <ToneDot tone={hostTone(h)} label={tc(h.status)} className="size-1.5" />}
           </button>
         );
@@ -114,9 +116,6 @@ function Canvas({ source }: { source: Source }) {
   const motion = useMotionEnabled();
   const flow = useReactFlow();
   const [canvasSize, setCanvas, canvasEl] = useElementSize();
-  const cmd = useNetworkCommands();
-  const createCapability = useCapability("createNetwork");
-  const connectCapability = useCapability("connectNetwork");
   const [params, setParams] = useSearchParams();
   const [query, setQuery] = useState("");
   const [dependencies, setDependencies] = useState(true);
@@ -126,9 +125,9 @@ function Canvas({ source }: { source: Source }) {
   const [connectRequest, setConnectRequest] = useState<ConnectRequest | null>(null);
   const [removing, setRemoving] = useState<TopologyNetwork | null>(null);
 
-  const withNets = source.hosts.filter((h) => source.topology.networks.some((n) => n.hostId === h.id));
   const requested = params.get("host");
-  const host = withNets.find((h) => h.id === requested) ?? withNets[0];
+  const availableHosts = source.hosts.filter((h) => h.status === "online" || h.id === requested || source.topology.networks.some((n) => n.hostId === h.id));
+  const host = availableHosts.find((h) => h.id === requested) ?? availableHosts[0];
 
   // Focus lives in the URL; the host and node params change together so a host switch never keeps a foreign focus.
   const navigate = useCallback(
@@ -153,6 +152,13 @@ function Canvas({ source }: { source: Source }) {
 
   const hostContainers = useMemo(() => (host ? source.containers.filter((c) => c.hostId === host.id) : []), [source.containers, host]);
   const hostNets = useMemo(() => (host ? sortNetworks(source.topology.networks.filter((n) => n.hostId === host.id)) : []), [source.topology, host]);
+  const cmd = useNetworkCommands(host?.id);
+  const onlineHosts = source.hosts.filter((h) => h.status === "online");
+  const createCapabilities = useHostCreateCapabilities(onlineHosts.map((h) => h.id));
+  const createHosts = onlineHosts.filter((h) => createCapabilities.get(h.id)?.available);
+  const createHost = createHosts.find((h) => h.id === host?.id) ?? createHosts[0];
+  const connectCapabilities = useNetworkCapabilities("connectNetwork", hostNets.map((n) => n.id));
+  const connectAvailable = hostNets.some((n) => !n.detailUnavailable && !n.inventory?.stale && connectCapabilities.get(n.id)?.available);
   const expandedList = host ? expandedByHost[host.id] : undefined;
   const expanded = useMemo<ReadonlySet<string>>(() => (expandedList ? new Set(expandedList) : hostContainers.length <= EXPAND_ALL_UP_TO ? new Set(hostNets.map((n) => n.id)) : EMPTY), [expandedList, hostContainers.length, hostNets]);
   const setExpanded = useCallback((ids: string[]) => host && setExpandedByHost((s) => ({ ...s, [host.id]: ids })), [host]);
@@ -217,13 +223,16 @@ function Canvas({ source }: { source: Source }) {
 
   if (!host) return <><InventoryNotice hosts={source.hosts} items={[]} /><EmptyState icon={<Network />} title={t("empty.title")} description={t("empty.body")} /></>;
   const online = host.status === "online";
+  const removingNetwork = removing ? source.topology.networks.find((n) => n.id === removing.id) ?? removing : undefined;
+  const removalBlock = removingNetwork ? removeBlock(source.topology, removingNetwork) : undefined;
+  const removalReason = removalBlock ? t(`removeBlocked.${removalBlock}`, { stack: removingNetwork ? networkComposeOwner(removingNetwork) ?? "" : "", count: source.topology.attachments.filter((a) => a.networkId === removingNetwork?.id).length }) : undefined;
   const focusName = focus ? (hostNets.find((n) => n.id === focus)?.name ?? hostContainers.find((c) => c.id === focus)?.name) : undefined;
 
   return (
     <div className="@container/net">
       <div className="mb-3 flex flex-col gap-3">
         <div className="flex flex-wrap items-center gap-3">
-          <HostPicker hosts={withNets} value={host.id} onChange={(id) => navigate({ host: id })} />
+          <HostPicker hosts={availableHosts} inventory={source.topology.inventory} value={host.id} onChange={(id) => navigate({ host: id })} />
           {source.bench && (
             <ToneBadge tone="violet">
               <FlaskConical /> {t("bench", { count: source.containers.length })}
@@ -264,14 +273,15 @@ function Canvas({ source }: { source: Source }) {
             <TooltipContent>{t("overviewHint")}</TooltipContent>
           </Tooltip>
           <span className="flex-1" />
-          <Button variant="outline" size="sm" disabled={!connectCapability.available || !online || source.bench} title={connectCapability.reason} onClick={() => setConnectRequest({ mode: "connect" })}>
+          <Button variant="outline" size="sm" disabled={!connectAvailable || !online || source.bench} title={[...connectCapabilities.values()].find((c) => c.reason)?.reason} onClick={() => setConnectRequest({ mode: "connect" })}>
             <Link2 data-icon="inline-start" /> {t("connect")}
           </Button>
-          <Button size="sm" disabled={!createCapability.available || !source.hosts.some((h) => h.status === "online") || source.bench} title={createCapability.reason} onClick={() => setCreating(true)}>
+          <Button size="sm" disabled={!createHost || source.bench} title={!createHost ? [...createCapabilities.values()].find((c) => c.reason)?.reason : undefined} onClick={() => setCreating(true)}>
             <Plus data-icon="inline-start" /> {t("create")}
           </Button>
         </div>
       </div>
+      {source.topology.inventory?.[host.id]?.stale && <p aria-live="polite" className="mb-3 text-sm text-warning">{t("partial.host", { name: host.name })}</p>}
       {/* The page's own width decides (the sidebar counts): graph and info column about 70/30 after the gap, or stacked. */}
       <div
         className="grid items-start gap-4 @min-[72rem]/net:grid-cols-[minmax(0,7fr)_minmax(20rem,3fr)]"
@@ -357,25 +367,26 @@ function Canvas({ source }: { source: Source }) {
           <NetworkTable host={host} networks={hostNets} topology={source.topology} containers={hostContainers} focus={focus} query={query} onClearQuery={() => setQuery("")} onFocus={focusNode} onConnect={setConnectRequest} onRemove={setRemoving} />
         </div>
       </div>
-      {connectRequest && <ConnectNetworkDialog request={connectRequest} onClose={() => setConnectRequest(null)} host={host} topology={source.topology} containers={source.containers} />}
-      <CreateNetworkDialog
+      {connectRequest && <ConnectNetworkDialog key={`connect:${host.id}`} request={connectRequest} onClose={() => setConnectRequest(null)} host={host} topology={source.topology} containers={source.containers} />}
+      {createHost && <CreateNetworkDialog
+        key={`create:${host.id}:${createHost.id}`}
         open={creating}
         onOpenChange={setCreating}
-        hosts={source.hosts}
+        hosts={createHosts}
         networks={source.topology.networks}
-        defaultHostId={host.id}
+        defaultHostId={createHost.id}
         onCreated={(n) => navigate({ host: n.hostId, node: n.id })}
-      />
+      />}
       <ConfirmDialog
         open={!!removing}
         onOpenChange={(o) => !o && setRemoving(null)}
         title={t("removeDialog.title", { name: removing?.name ?? "" })}
-        description={t("removeDialog.body", { host: host.name })}
+        description={removalReason ?? t("removeDialog.body", { host: host.name })}
         confirmLabel={t("removeDialog.confirm")}
         destructive
         onConfirm={async () => {
           const n = removing;
-          if (!n || !(await cmd.remove(n.id))) return false;
+          if (!n || removalBlock || !(await cmd.remove(n.id))) return false;
           toast.success(t("removed", { name: n.name }));
           if (focus === n.id) navigate({ node: null });
         }}
@@ -408,7 +419,7 @@ function TopologySection() {
     );
   }
   if (source.isError) return <QueryError error={source.error} onRetry={source.refetch} />;
-  if (!source.topology.networks.some((n) => source.hosts.some((h) => h.id === n.hostId))) return <><InventoryNotice hosts={source.hosts} items={[]} /><EmptyState icon={<Network />} title={t("empty.title")} description={t("empty.body")} /></>;
+  if (!source.hosts.length) return <><InventoryNotice hosts={source.hosts} items={[]} /><EmptyState icon={<Network />} title={t("empty.title")} description={t("empty.body")} /></>;
   return <><InventoryNotice hosts={source.hosts} items={source.topology.networks} /><Canvas source={source} /></>;
 }
 

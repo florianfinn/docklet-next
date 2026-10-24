@@ -6,7 +6,7 @@ import { useTranslations } from "use-intl";
 
 import { errorCode } from "@/data/api";
 import { ConfirmDialog } from "@/shared/components/confirm-dialog";
-import { useAdapterText } from "@/data/use-adapter-text";
+import { useCommandError } from "@/data/use-command-error";
 import { cn } from "@/shared/lib/utils";
 import { Button } from "@/shared/ui/button";
 import { Card } from "@/shared/ui/card";
@@ -31,7 +31,7 @@ interface SettingsFormProps {
 export function SettingsForm({ title, description, dirty, valid = true, onSave, onDiscard, children, note }: SettingsFormProps) {
   const t = useTranslations("settings.form");
   const te = useTranslations("settings.errors");
-  const dt = useAdapterText();
+  const commandError = useCommandError();
   const [busy, setBusy] = useState(false);
   const [tried, setTried] = useState(false);
   const blocker = useBlocker(({ currentLocation, nextLocation }) => dirty && currentLocation.pathname !== nextLocation.pathname);
@@ -48,7 +48,7 @@ export function SettingsForm({ title, description, dirty, valid = true, onSave, 
       // The save bar's status ("Alles gespeichert") confirms it beside the button; a toast would cover page controls.
     } catch (e) {
       const code = errorCode(e);
-      toast.error(code === "last-admin" || code === "target-in-use" || code === "invalid-plan" || code === "invalid-history" ? te(code) : dt(e instanceof Error ? e.message : String(e)));
+      toast.error(code === "last-admin" || code === "target-in-use" || code === "invalid-plan" || code === "invalid-history" ? te(code) : commandError(e));
     } finally {
       setBusy(false);
     }

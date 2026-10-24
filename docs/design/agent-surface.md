@@ -16,7 +16,7 @@ invoke the host operations below, so additions require an explicit review.
 | image | Pulls, removes, exports, patches and scans images; needed for image management. |
 | image-update | Checks and records available container image updates. |
 | volume | Reads, writes, backs up and restores Docker volumes and workspace files. |
-| network | Reads topology and changes Docker network membership. |
+| network | Reads topology; validates create, protected deletion and membership changes on the Docker host (agent contract v6). |
 | port | Reports host port use for deployment decisions. |
 | upload | Accepts bounded uploads used by image and restore operations. |
 | settings | Reads and updates environment settings, including host operational configuration. |

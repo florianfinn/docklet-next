@@ -2,14 +2,13 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace
+// Deviations: Local module namespace; typed network validation errors and acting-user prune.
 
 package network
 
 import (
 	"cmp"
 	"context"
-	"errors"
 	"sort"
 	"strings"
 
@@ -18,13 +17,11 @@ import (
 	"github.com/florianfinn/docklet-next/types/base"
 	networktypes "github.com/florianfinn/docklet-next/types/network"
 	"github.com/moby/moby/api/types/network"
-	"github.com/moby/moby/client"
 	"github.com/samber/mo"
 	"go.getarcane.app/kit/pkg"
 	"go.getarcane.app/kit/pkg/mapping"
 
 	"github.com/florianfinn/docklet-next/backend/internal/activity"
-	"github.com/florianfinn/docklet-next/backend/internal/common"
 	"github.com/florianfinn/docklet-next/backend/internal/database"
 	"github.com/florianfinn/docklet-next/backend/internal/docker"
 	activitylib "github.com/florianfinn/docklet-next/backend/pkg/libarcane/activity"
@@ -139,9 +136,9 @@ func (h *NetworkHandler) CreateNetwork(ctx context.Context, input *CreateNetwork
 		return nil, err
 	}
 
-	dockerOptions, err := mapping.MapOne[networktypes.CreateOptions, client.NetworkCreateOptions](input.Body.Options)
+	dockerOptions, err := createOptions(input.Body.Options)
 	if err != nil {
-		return nil, huma.Error400BadRequest("Invalid network options: " + err.Error())
+		return nil, err
 	}
 	if !input.Body.Options.EnableIPv6 {
 		dockerOptions.EnableIPv6 = nil
@@ -169,7 +166,7 @@ func (h *NetworkHandler) CreateNetwork(ctx context.Context, input *CreateNetwork
 		return createErr
 	})
 	if err != nil {
-		return nil, huma.Error500InternalServerError("Failed to create network: " + err.Error())
+		return nil, writeHTTPError(err, "Failed to create network")
 	}
 
 	out, err := mapping.MapOne[network.CreateResponse, networktypes.CreateResponse](*response)
@@ -288,7 +285,7 @@ func (h *NetworkHandler) DeleteNetwork(ctx context.Context, input *DeleteNetwork
 		return h.networkService.RemoveNetwork(runtimeCtx, input.NetworkID, *user)
 	})
 	if err != nil {
-		return nil, huma.Error500InternalServerError("Failed to remove network: " + err.Error())
+		return nil, writeHTTPError(err, "Failed to remove network")
 	}
 
 	return &handlerutil.Out[base.MessageResponse]{
@@ -324,10 +321,7 @@ func (h *NetworkHandler) ConnectContainer(ctx context.Context, input *ConnectCon
 		return h.networkService.ConnectContainer(runtimeCtx, input.NetworkID, input.Body, *user)
 	})
 	if err != nil {
-		if errors.Is(err, common.ErrValidation) {
-			return nil, huma.Error400BadRequest(err.Error())
-		}
-		return nil, huma.Error500InternalServerError("Failed to connect container to network: " + err.Error())
+		return nil, writeHTTPError(err, "Failed to connect container to network")
 	}
 
 	return &handlerutil.Out[base.MessageResponse]{
@@ -364,7 +358,7 @@ func (h *NetworkHandler) DisconnectContainer(ctx context.Context, input *Disconn
 		return h.networkService.DisconnectContainer(runtimeCtx, input.NetworkID, input.Body, *user)
 	})
 	if err != nil {
-		return nil, huma.Error500InternalServerError("Failed to disconnect container from network: " + err.Error())
+		return nil, writeHTTPError(err, "Failed to disconnect container from network")
 	}
 
 	return &handlerutil.Out[base.MessageResponse]{
@@ -376,19 +370,24 @@ func (h *NetworkHandler) DisconnectContainer(ctx context.Context, input *Disconn
 }
 
 func (h *NetworkHandler) PruneNetworks(ctx context.Context, input *PruneNetworksInput) (*handlerutil.Out[networktypes.PruneReport], error) {
+	user, err := handlerutil.RequireUser(ctx)
+	if err != nil {
+		return nil, err
+	}
 	var report *network.PruneReport
 	runtimeCtx := utils.ActivityRuntimeContext(ctx, h.appCtx)
 	activityID, err := activitylib.RunHandlerActivity(runtimeCtx, h.activityService, activitylib.HandlerOptions{
 		EnvironmentID:  input.EnvironmentID,
 		Type:           activitytypes.TypeResourceAction,
 		ResourceType:   "network",
+		User:           user,
 		Step:           "Pruning unused networks",
 		Message:        "Pruning unused networks",
 		SuccessMessage: "Networks pruned successfully",
 		Metadata:       database.JSON{"action": "prune_networks"},
 	}, func(runtimeCtx context.Context) error {
 		var pruneErr error
-		report, pruneErr = h.networkService.PruneNetworks(runtimeCtx)
+		report, pruneErr = h.networkService.PruneNetworks(runtimeCtx, *user)
 		return pruneErr
 	})
 	if err != nil {

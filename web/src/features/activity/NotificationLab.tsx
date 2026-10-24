@@ -6,7 +6,7 @@ import { isRunBusy } from "@/data/run-gate";
 import { useAdapter } from "@/data/use-adapter";
 import { withPercent } from "@/domain/locale";
 import { SegmentedToggle } from "@/shared/components/segmented-toggle";
-import { useAdapterText } from "@/data/use-adapter-text";
+import { useCommandError } from "@/data/use-command-error";
 import { queueDemoFailure } from "@/runtime";
 import { cn } from "@/shared/lib/utils";
 import { ACTION_DIALOG_DESIGNS, ACTION_PRESENTATION_OVERRIDES, RUN_MOTIONS, setUiStyle, TOAST_DESIGNS, TOAST_SCALE, toastDetail, useUiStyle, type ActionPresentationOverride } from "@/shared/preferences/ui-style-store";
@@ -38,7 +38,7 @@ function Choice({ active, onSelect, title, description, children }: { active: bo
 /** Design-lab controls for notices, action toasts and the action dialog, with live samples. */
 export function NotificationLabSection() {
   const t = useTranslations("lab.notifications");
-  const dt = useAdapterText();
+  const commandError = useCommandError();
   const adapter = useAdapter();
   const design = useUiStyle("toastDesign");
   const dialogDesign = useUiStyle("actionDialogDesign");
@@ -50,7 +50,7 @@ export function NotificationLabSection() {
     const now = Date.now();
     return { run: sampleRun(new Date(now - 7000).toISOString()), now };
   });
-  const run = (start: () => Promise<unknown>) => void start().catch((e: unknown) => isRunBusy(e) || toast.error(dt(e instanceof Error ? e.message : String(e))));
+  const run = (start: () => Promise<unknown>) => void start().catch((e: unknown) => isRunBusy(e) || toast.error(commandError(e)));
 
   return (
     <>

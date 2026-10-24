@@ -3,14 +3,14 @@
 // checks and the display order.
 
 import { checkCidr6, checkSubnet6, cidr6Overlap, cidr6Within, formatIp6, inCidr6, nextFreeIp6, parseCidr6, poolFullyScanned6, parseIp6, usableIn6, type Cidr6, type Cidr6Error, type Subnet6Error } from "./ipv6";
-import type { ContainerOrigin, NetworkAttachment, NetworkDriver, Topology, TopologyNetwork } from "./model";
+import type { ContainerOrigin, NetworkAuxAddress, NetworkAttachment, NetworkDriver, Topology, TopologyNetwork } from "./model";
 
 /** Drivers the hub creates; host and none exist once per Docker host, overlay needs Swarm. */
 export const CREATABLE_DRIVERS = ["bridge", "macvlan", "ipvlan"] as const;
 export type CreatableDriver = (typeof CREATABLE_DRIVERS)[number];
 
 /** Names of Docker's own networks; user networks may not take them. */
-export const RESERVED_NETWORK_NAMES: ReadonlySet<string> = new Set(["bridge", "host", "none", "default"]);
+export const RESERVED_NETWORK_NAMES: ReadonlySet<string> = new Set(["bridge", "host", "none", "default", "ingress"]);
 
 const NAME = /^[a-zA-Z0-9][a-zA-Z0-9_.-]{0,62}$/;
 const INTERFACE = /^[a-zA-Z0-9][a-zA-Z0-9_.:-]{0,14}$/;
@@ -67,11 +67,11 @@ export function usableIn(ip: number, c: Cidr): boolean {
 }
 
 /** First free address of the IP range (or subnet), skipping gateway and taken addresses. */
-export function nextFreeIp(network: Pick<TopologyNetwork, "subnet" | "gateway" | "ipRange">, taken: readonly string[]): string | undefined {
+export function nextFreeIp(network: Pick<TopologyNetwork, "subnet" | "gateway" | "ipRange" | "auxAddresses">, taken: readonly string[]): string | undefined {
   const subnet = network.subnet ? parseCidr(network.subnet) : undefined;
   if (!subnet) return undefined;
   const range = (network.ipRange && parseCidr(network.ipRange)) || subnet;
-  const used = new Set([...taken, network.gateway ?? ""].map((x) => parseIp(x)).filter((x): x is number => x !== undefined));
+  const used = new Set([...taken, ...(network.auxAddresses ?? []).map((a) => a.ip), network.gateway ?? ""].map((x) => parseIp(x)).filter((x): x is number => x !== undefined));
   for (let ip = range.network; ip < range.network + range.size; ip++) if (usableIn(ip, subnet) && !used.has(ip)) return formatIp(ip);
   return undefined;
 }
@@ -79,6 +79,12 @@ export function nextFreeIp(network: Pick<TopologyNetwork, "subnet" | "gateway" |
 // --- Create ----------------------------------------------------------------
 
 export interface NetworkDraft {
+  /** Omitted collections are empty for existing callers. Parent remains a separate field. */
+  labels?: Record<string, string>;
+  options?: Record<string, string>;
+  /** One list per family; reservation names are unique within that family. */
+  auxAddresses?: NetworkAuxAddress[];
+  auxAddresses6?: NetworkAuxAddress[];
   hostId: string;
   name: string;
   driver: CreatableDriver;
@@ -99,6 +105,8 @@ export interface NetworkDraft {
 }
 
 export type NetworkFieldError =
+  | "duplicate"
+  | "gateway"
   | "required"
   | "invalid"
   | "reserved"
@@ -112,7 +120,7 @@ export type NetworkFieldError =
   | Exclude<Cidr6Error, "invalid">
   | Subnet6Error;
 
-export type NetworkDraftErrors = Partial<Record<"name" | "family" | "subnet" | "gateway" | "ipRange" | "subnet6" | "gateway6" | "ipRange6" | "parent", NetworkFieldError>>;
+export type NetworkDraftErrors = Partial<Record<"labels" | "options" | "auxAddresses" | "auxAddresses6" | "name" | "family" | "subnet" | "gateway" | "ipRange" | "subnet6" | "gateway6" | "ipRange6" | "parent", NetworkFieldError>>;
 
 /** Address families of a draft; older callers without the fields create IPv4-only networks. */
 export const draftFamilies = (d: Pick<NetworkDraft, "ipv4" | "ipv6">) => ({ ipv4: d.ipv4 !== false, ipv6: d.ipv6 === true });
@@ -120,21 +128,24 @@ export const draftFamilies = (d: Pick<NetworkDraft, "ipv4" | "ipv6">) => ({ ipv4
 /** IPv4 is on unless the network says otherwise. */
 export const hasIpv4 = (n: Pick<TopologyNetwork, "ipv4">) => n.ipv4 !== false;
 
-/** Several LAN networks may share one LAN block only on different parents. */
-const sharesLan = (d: NetworkDraft, n: TopologyNetwork) => d.driver !== "bridge" && !!n.parent && n.parent !== d.parent.trim();
-
 /**
  * Field errors of a network draft against the networks already on its host.
  * macvlan and ipvlan join a LAN, so they need parent, subnet and gateway of
  * every enabled address family. IPv4 and IPv6 are checked independently.
  */
-export function validateNetworkDraft(d: NetworkDraft, onHost: readonly TopologyNetwork[]): NetworkDraftErrors {
+export function validateNetworkDraft(d: NetworkDraft, networks: readonly TopologyNetwork[]): NetworkDraftErrors {
+  const onHost = networks.filter((n) => n.hostId === d.hostId);
   const e: NetworkDraftErrors = {};
   const name = d.name.trim();
   if (!name) e.name = "required";
   else if (!NAME.test(name)) e.name = "invalid";
   else if (RESERVED_NETWORK_NAMES.has(name.toLowerCase())) e.name = "reserved";
   else if (onHost.some((n) => n.name === name)) e.name = "exists";
+
+  e.labels = validateNetworkEntries(Object.entries(d.labels ?? {}).map(([key, value]) => ({ key, value })));
+  e.options = validateNetworkEntries(Object.entries(d.options ?? {}).map(([key, value]) => ({ key, value })));
+  if (draftFamilies(d).ipv4) e.auxAddresses = validateAuxAddresses(d.auxAddresses ?? [], d.subnet, d.gateway, false);
+  if (draftFamilies(d).ipv6) e.auxAddresses6 = validateAuxAddresses(d.auxAddresses6 ?? [], d.subnet6 ?? "", d.gateway6 ?? "", true);
 
   const lan = d.driver !== "bridge";
   if (!draftFamilies(d).ipv4 && !draftFamilies(d).ipv6) e.family = "no-family";
@@ -148,7 +159,45 @@ export function validateNetworkDraft(d: NetworkDraft, onHost: readonly TopologyN
     // One macvlan network per parent interface; a second one would need an 802.1q sub-interface.
     else if (d.driver === "macvlan" && onHost.some((n) => n.driver === "macvlan" && n.parent === parent)) e.parent = "parent-in-use";
   }
-  return e;
+  return Object.fromEntries(Object.entries(e).filter(([, error]) => error));
+}
+
+/** Validate editor rows before converting to a record, which would discard duplicate keys. */
+export function validateNetworkEntries(entries: readonly { key: string; value: string }[]): NetworkFieldError | undefined {
+  const keys = entries.map((entry) => entry.key.trim());
+  if (keys.some((key) => !key)) return "required";
+  if (new Set(keys).size !== keys.length) return "duplicate";
+}
+
+function validateAuxAddresses(entries: readonly NetworkAuxAddress[], subnetText: string, gatewayText: string, ipv6: boolean): NetworkFieldError | undefined {
+  if (!entries.length) return;
+  const names = entries.map((a) => a.name.trim());
+  if (names.some((name) => !name)) return "required";
+  if (new Set(names).size !== names.length) return "duplicate";
+  const subnet = ipv6 ? parseCidr6(subnetText) : parseCidr(subnetText);
+  if (!subnet) return "needs-subnet";
+  const addresses = new Set<number | bigint>();
+  for (const entry of entries) {
+    const ip = ipv6 ? parseIp6(entry.ip) : parseIp(entry.ip);
+    if (ip === undefined) return "invalid";
+    const inside = ipv6 ? inCidr6(ip as bigint, subnet as Cidr6) : inCidr(ip as number, subnet as Cidr);
+    if (!inside) return "outside";
+    const reserved = ip === subnet.network || (!ipv6 && ip === (subnet as Cidr).network + (subnet as Cidr).size - 1);
+    if (reserved) return "network-address";
+    const gateway = ipv6 ? parseIp6(gatewayText) : parseIp(gatewayText);
+    if (ip === gateway) return "gateway";
+    if (addresses.has(ip)) return "duplicate";
+    addresses.add(ip);
+  }
+}
+
+const DNS_LABEL = /^[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?$/;
+
+/** DNS aliases are single labels; invalid/empty entries are refused before deduplication. */
+export function validateNetworkAliases(aliases: readonly string[]): { aliases: string[]; aliasError?: "invalid" } {
+  const normalized = aliases.map((a) => a.trim().toLowerCase());
+  if (normalized.some((a) => !DNS_LABEL.test(a))) return { aliases: [], aliasError: "invalid" };
+  return { aliases: [...new Set(normalized)] };
 }
 
 function validateIpv4(d: NetworkDraft, onHost: readonly TopologyNetwork[], e: NetworkDraftErrors): void {
@@ -160,7 +209,7 @@ function validateIpv4(d: NetworkDraft, onHost: readonly TopologyNetwork[], e: Ne
   else {
     const clash = onHost.find((n) => {
       const other = n.subnet ? parseCidr(n.subnet) : undefined;
-      return !!other && cidrOverlap(subnet, other) && !sharesLan(d, n);
+      return !!other && cidrOverlap(subnet, other);
     });
     if (clash) e.subnet = "overlap";
   }
@@ -202,7 +251,7 @@ function validateIpv6(d: NetworkDraft, onHost: readonly TopologyNetwork[], e: Ne
       subnet = r.cidr;
       const clash = onHost.find((n) => {
         const other = n.subnet6 ? parseCidr6(n.subnet6) : undefined;
-        return !!other && cidr6Overlap(r.cidr, other) && !sharesLan(d, n);
+        return !!other && cidr6Overlap(r.cidr, other);
       });
       if (clash) e.subnet6 = "overlap";
     }
@@ -244,7 +293,7 @@ export interface NetworkContainer {
 }
 
 /** Hard reasons Docker or Docklet refuse a connect; the UI offers no confirm button then. */
-export type ConnectBlock = "host-mismatch" | "builtin-network" | "network-mode" | "already-connected";
+export type ConnectBlock = "detail-unavailable" | "host-mismatch" | "builtin-network" | "network-mode" | "already-connected";
 export type IpError = "invalid" | "outside" | "network-address" | "gateway" | "taken" | "static-unsupported" | "family-disabled" | "pool-exhausted";
 /** Effects shown in the review step; they do not block. */
 export type NetworkWarning = "compose-runtime" | "unraid-template" | "last-network" | "dependents" | "internal";
@@ -263,6 +312,8 @@ function originWarning(c: NetworkContainer): NetworkWarning[] {
 }
 
 export interface ConnectCheck {
+  aliases?: string[];
+  aliasError?: "invalid";
   block?: ConnectBlock;
   ipError?: IpError;
   ip6Error?: IpError;
@@ -291,7 +342,8 @@ function checkIp6(network: TopologyNetwork, taken: readonly string[], wanted: st
   return { ip6: formatIp6(value) };
 }
 
-export function checkConnect(topology: Pick<Topology, "networks" | "attachments">, container: NetworkContainer, network: TopologyNetwork, requestedIp = "", requestedIp6 = ""): ConnectCheck {
+export function checkConnect(topology: Pick<Topology, "networks" | "attachments">, container: NetworkContainer, network: TopologyNetwork, requestedIp = "", requestedIp6 = "", aliases: readonly string[] = []): ConnectCheck {
+  if (network.detailUnavailable || network.inventory?.stale) return { block: "detail-unavailable", warnings: [] };
   const own = attachmentsOf(topology, container.id);
   const netOf = (id: string) => topology.networks.find((n) => n.id === id);
   let block: ConnectBlock | undefined;
@@ -300,7 +352,7 @@ export function checkConnect(topology: Pick<Topology, "networks" | "attachments"
   else if (own.some((a) => { const n = netOf(a.networkId); return !!n && isModeNetwork(n); })) block = "network-mode";
   else if (own.some((a) => a.networkId === network.id)) block = "already-connected";
 
-  const taken = topology.attachments.filter((a) => a.networkId === network.id && a.ip).map((a) => a.ip as string);
+  const taken = [...topology.attachments.filter((a) => a.networkId === network.id && a.ip).map((a) => a.ip as string), ...(network.auxAddresses ?? []).map((a) => a.ip)];
   let ipError: IpError | undefined;
   let ip: string | undefined;
   const wanted = requestedIp.trim();
@@ -321,21 +373,22 @@ export function checkConnect(topology: Pick<Topology, "networks" | "attachments"
     if (!ip && network.subnet && parseCidr(network.subnet)) ipError = "pool-exhausted";
   }
 
-  const taken6 = topology.attachments.filter((a) => a.networkId === network.id && a.ip6).map((a) => a.ip6 as string);
+  const taken6 = [...topology.attachments.filter((a) => a.networkId === network.id && a.ip6).map((a) => a.ip6 as string), ...(network.auxAddresses6 ?? []).map((a) => a.ip)];
   const { ip6, ip6Error } = checkIp6(network, taken6, requestedIp6.trim());
 
   const warnings = [...originWarning(container), ...(network.internal ? (["internal"] as const) : [])];
-  return { block, ipError, ip6Error, warnings, ip, ip6 };
+  return { block, ipError, ip6Error, warnings, ip, ip6, ...(aliases.length ? validateNetworkAliases(aliases) : {}) };
 }
 
 export interface DisconnectCheck {
-  block?: "not-connected" | "network-mode";
+  block?: "not-connected" | "network-mode" | "detail-unavailable";
   warnings: NetworkWarning[];
   /** Containers that depend on this one and reach it only through this network. */
   dependents: string[];
 }
 
 export function checkDisconnect(topology: Topology, container: NetworkContainer, network: TopologyNetwork): DisconnectCheck {
+  if (network.detailUnavailable || network.inventory?.stale) return { block: "detail-unavailable", warnings: [], dependents: [] };
   const own = attachmentsOf(topology, container.id);
   if (!own.some((a) => a.networkId === network.id)) return { block: "not-connected", warnings: [], dependents: [] };
   if (isModeNetwork(network)) return { block: "network-mode", warnings: [], dependents: [] };
@@ -353,10 +406,16 @@ export function checkDisconnect(topology: Topology, container: NetworkContainer,
   return { warnings, dependents };
 }
 
+/** A known hub stack keeps its identity; external Compose ownership comes from either Docker label. */
+export function networkComposeOwner(network: TopologyNetwork): string | undefined {
+  return network.stackName || network.stackId || network.labels?.["com.docker.compose.project"]?.trim() || network.labels?.["com.docker.compose.network"]?.trim() || undefined;
+}
+
 /** Removal is refused for Docker's own networks, Compose-owned ones and while any container (also stopped) is attached. */
-export function removeBlock(topology: Pick<Topology, "attachments">, network: TopologyNetwork): "builtin-network" | "compose-managed" | "in-use" | undefined {
+export function removeBlock(topology: Pick<Topology, "attachments">, network: TopologyNetwork): "builtin-network" | "compose-managed" | "in-use" | "detail-unavailable" | undefined {
+  if (network.detailUnavailable || network.inventory?.stale) return "detail-unavailable";
   if (network.builtIn) return "builtin-network";
-  if (network.stackId) return "compose-managed";
+  if (networkComposeOwner(network)) return "compose-managed";
   if (topology.attachments.some((a) => a.networkId === network.id)) return "in-use";
   return undefined;
 }

@@ -2,9 +2,9 @@
 // Revision: dfdfa084478d327818d8c57b0973d638f80861f6
 // Retrieved: 2026-10-15
 // License: Apache-2.0
-// Deviations: Original implementation for issue 38.
+// Deviations: Original implementation for issue 38; network contract v6 boundary for #203.
 package contract
 
-const AgentHubVersion = 5
-const MinimumAgentVersion = 5
-const AgentHubFingerprint = "eed087ecf9125541a6dbb3208322578ce83c8c59bf864e97603fd632cca0fe65"
+const AgentHubVersion = 6
+const MinimumAgentVersion = 6
+const AgentHubFingerprint = "be97c8565af13b50db70f2447a1aa47cddb38fff918ddf03c04a3670aa046e25"

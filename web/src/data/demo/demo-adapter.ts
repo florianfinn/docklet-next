@@ -134,7 +134,8 @@ export function createDemoAdapter(options: DemoAdapterOptions = {}): DockletAdap
       const knownResource = resourceRef.kind === "hub" ||
         (resourceRef.kind === "host" && !!db.host(resourceRef.id)) ||
         (resourceRef.kind === "stack" && !!db.stack(resourceRef.id)) ||
-        (resourceRef.kind === "container" && db.containers().some((item) => item.id === resourceRef.id));
+        (resourceRef.kind === "container" && db.containers().some((item) => item.id === resourceRef.id)) ||
+        (resourceRef.kind === "network" && db.topology.networks.some((item) => item.id === resourceRef.id));
       const available = knownResource && supportedOperations.has(operationId);
       return { operationId, resourceRef, available, ...(available ? {} : { disabledReasonCode: GENERIC_REASON }) };
     },

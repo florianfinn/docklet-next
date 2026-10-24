@@ -2,12 +2,13 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace
+// Deviations: Local module namespace; typed network write problem schemas.
 
 package network
 
 import (
 	"net/http"
+	"reflect"
 
 	"github.com/danielgtaylor/huma/v2"
 
@@ -16,6 +17,7 @@ import (
 	"github.com/florianfinn/docklet-next/backend/internal/middleware"
 	"github.com/florianfinn/docklet-next/backend/pkg/authz"
 	"github.com/florianfinn/docklet-next/backend/pkg/utils/handlerutil"
+	networktypes "github.com/florianfinn/docklet-next/types/network"
 )
 
 // RegisterNetworks registers network endpoints.
@@ -107,4 +109,19 @@ func RegisterNetworks(api huma.API, networkSvc *NetworkService, dockerSvc *docke
 		Tags:        []string{"Networks"},
 		Security:    handlerutil.DefaultOperationSecurity(),
 	}, authz.PermNetworksDisconnect, h.DisconnectContainer)
+
+	problem := api.OpenAPI().Components.Schemas.Schema(reflect.TypeFor[networktypes.Error](), true, "")
+	for _, item := range api.OpenAPI().Paths {
+		for _, op := range []*huma.Operation{item.Post, item.Delete} {
+			if op == nil {
+				continue
+			}
+			switch op.OperationID {
+			case "create-network", "delete-network", "connect-network-container", "disconnect-network-container":
+				for _, status := range []string{"400", "404", "409"} {
+					op.Responses[status] = &huma.Response{Description: "Network write rejected", Content: map[string]*huma.MediaType{"application/problem+json": {Schema: problem}}}
+				}
+			}
+		}
+	}
 }

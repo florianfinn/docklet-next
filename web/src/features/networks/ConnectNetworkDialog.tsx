@@ -1,3 +1,4 @@
+import { useNetworkCapabilities } from "./use-network-capabilities";
 import { AlertTriangle, ArrowLeft, Ban, Link2, Unlink } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
@@ -44,43 +45,46 @@ const label = (c: Pick<ContainerInfo, "name" | "serviceName" | "stackId" | "stac
 export function ConnectNetworkDialog({ request, onClose, host, topology, containers }: Props) {
   const t = useTranslations("networks.connectDialog");
   const ts = useTranslations("networks.scope");
-  const cmd = useNetworkCommands();
+  const cmd = useNetworkCommands(host.id);
   const [mode, setMode] = useState<ConnectMode>(request.mode);
   const [containerId, setContainerId] = useState(request.containerId ?? "");
   const [networkId, setNetworkId] = useState(request.networkId ?? "");
   const [ip, setIp] = useState("");
   const [ip6, setIp6] = useState("");
+  const [aliasesText, setAliasesText] = useState("");
+  const aliases = aliasesText.trim() ? aliasesText.split(",").map((a) => a.trim()) : [];
   const [reviewing, setReviewing] = useState(false);
   const [busy, setBusy] = useState(false);
 
   const own = containers.filter((c) => c.hostId === host.id).toSorted((a, b) => label(a).localeCompare(label(b)));
   const nets = sortNetworks(topology.networks.filter((n) => n.hostId === host.id));
+  const capabilities = useNetworkCapabilities(mode === "connect" ? "connectNetwork" : "disconnectNetwork", nets.map((n) => n.id));
   const container = own.find((c) => c.id === containerId);
   const network = nets.find((n) => n.id === networkId);
   const attached = new Set(container ? attachmentsOf(topology, container.id).map((a) => a.networkId) : []);
   const choices = mode === "connect" ? nets : nets.filter((n) => attached.has(n.id));
   const pickable = mode === "connect" ? own : own.filter((c) => attachmentsOf(topology, c.id).length > 0);
 
-  const connect: ConnectCheck | undefined = mode === "connect" && container && network ? checkConnect(topology, container, network, ip, ip6) : undefined;
+  const connect: ConnectCheck | undefined = mode === "connect" && container && network ? checkConnect(topology, container, network, ip, ip6, aliases) : undefined;
   const disconnect: DisconnectCheck | undefined = mode === "disconnect" && container && network ? checkDisconnect(topology, container, network) : undefined;
   const block = connect?.block ?? disconnect?.block;
   const ipError = connect?.ipError;
   const ip6Error = connect?.ip6Error;
   const pool = container && network && mode === "connect" ? checkConnect(topology, container, network) : undefined;
   const poolIp = pool?.ip;
-  const staticPossible = !!network?.subnetConfigured && !!network.subnet;
-  const static6Possible = !!network?.ipv6 && !!network.subnet6Configured && !!network.subnet6;
+  const staticPossible = !block && !!network?.subnetConfigured && !!network.subnet;
+  const static6Possible = !block && !!network?.ipv6 && !!network.subnet6Configured && !!network.subnet6;
   // Both sides must belong to the shown host; the identity colour is no substitute for this id check.
-  const ready = !!container && !!network && container.hostId === host.id && network.hostId === host.id && !block && !ipError && !ip6Error;
+  const ready = host.status === "online" && !!capabilities.get(networkId)?.available && !!container && !!network && container.hostId === host.id && network.hostId === host.id && !block && !ipError && !ip6Error && !connect?.aliasError;
   const nameOf = (id: string) => {
     const c = containers.find((x) => x.id === id);
     return c ? label(c) : id;
   };
 
   const confirm = async () => {
-    if (!container || !network) return;
+    if (!container || !network || !ready) return;
     setBusy(true);
-    const ok = mode === "connect" ? await cmd.connect({ networkId: network.id, containerId: container.id, ip: ip.trim() || undefined, ip6: ip6.trim() || undefined }) : await cmd.disconnect(network.id, container.id);
+    const ok = mode === "connect" ? await cmd.connect({ networkId: network.id, containerId: container.id, ip: ip.trim() || undefined, ip6: ip6.trim() || undefined, aliases: connect?.aliases ?? [] }) : await cmd.disconnect(network.id, container.id);
     setBusy(false);
     if (!ok) return;
     toast.success(t(mode === "connect" ? "connected" : "disconnected", { container: label(container), network: network.name }));
@@ -91,7 +95,7 @@ export function ConnectNetworkDialog({ request, onClose, host, topology, contain
 
   return (
     <Dialog open onOpenChange={(o) => !o && onClose()}>
-      <DialogContent className="sm:max-w-xl" data-surface="connect-network-dialog">
+      <DialogContent className="max-h-[calc(100dvh-2rem)] grid-cols-[minmax(0,1fr)] overflow-y-auto sm:max-w-xl" data-surface="connect-network-dialog">
         <DialogHeader>
           <DialogTitle>{mode === "connect" ? t("titleConnect") : t("titleDisconnect")}</DialogTitle>
           <DialogDescription>{t("description")}</DialogDescription>
@@ -106,6 +110,7 @@ export function ConnectNetworkDialog({ request, onClose, host, topology, contain
                 setNetworkId("");
                 setIp("");
                 setIp6("");
+                setAliasesText("");
               }}
               label={t("mode")}
               options={(["connect", "disconnect"] as const).map((m) => ({ value: m, label: t(`modes.${m}`), icon: m === "connect" ? <Link2 /> : <Unlink /> }))}
@@ -122,7 +127,7 @@ export function ConnectNetworkDialog({ request, onClose, host, topology, contain
                   if (mode === "disconnect") setNetworkId("");
                 }}
               >
-                <SelectTrigger id="cn-container" className="w-full">
+                <SelectTrigger id="cn-container" className="w-full min-w-0">
                   <SelectValue placeholder={t("containerPlaceholder")} />
                 </SelectTrigger>
                 <SelectContent>
@@ -139,15 +144,15 @@ export function ConnectNetworkDialog({ request, onClose, host, topology, contain
             <Field>
               <FieldLabel htmlFor="cn-network">{t("network")}</FieldLabel>
               <Select value={networkId} onValueChange={setNetworkId} disabled={!container}>
-                <SelectTrigger id="cn-network" className="w-full">
-                  <SelectValue placeholder={choices.length ? t("networkPlaceholder") : t("noOptions")} />
+                <SelectTrigger id="cn-network" className="w-full min-w-0">
+                  <SelectValue placeholder={choices.length ? t("networkPlaceholder") : t("noOptions")}><span className="truncate">{network?.name}</span></SelectValue>
                 </SelectTrigger>
                 <SelectContent>
                   <SelectGroup>
                     {choices.map((n) => {
                       const blocked = container && mode === "connect" ? checkConnect(topology, container, n).block : undefined;
                       return (
-                        <SelectItem key={n.id} value={n.id} disabled={!!blocked}>
+                        <SelectItem key={n.id} value={n.id} disabled={!!n.detailUnavailable || !!n.inventory?.stale || !!blocked || !capabilities.get(n.id)?.available}>
                           <span className="font-medium">{n.name}</span>
                           <span className="font-mono text-xs text-muted-foreground">
                             {n.driver}
@@ -188,11 +193,8 @@ export function ConnectNetworkDialog({ request, onClose, host, topology, contain
                 error={ip6Error ? t(`ip6Errors.${ip6Error}`, { subnet: network.subnet6 ?? "" }) : undefined}
               />
             )}
-            {block && (
-              <Alert variant="destructive">
-                <Ban />
-                <AlertDescription>{t(`blocks.${block}`)}</AlertDescription>
-              </Alert>
+            {mode === "connect" && (
+              <TextField id="cn-aliases" label={t("aliases")} description={t("aliasesHint")} value={aliasesText} onChange={setAliasesText} error={connect?.aliasError ? t("aliasesInvalid") : undefined} mono />
             )}
           </div>
         ) : (
@@ -200,7 +202,7 @@ export function ConnectNetworkDialog({ request, onClose, host, topology, contain
           network && (
             <div className="flex flex-col gap-3">
               <section className="rounded-xl border bg-muted/15 p-3" aria-label={t("summary")}>
-                <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1 text-sm">
+                <dl className="grid grid-cols-1 gap-x-4 gap-y-1 text-sm sm:grid-cols-[auto_minmax(0,1fr)]">
                   <dt className="text-muted-foreground">{t("mode")}</dt>
                   <dd>{t(`modes.${mode}`)}</dd>
                   <dt className="text-muted-foreground">{t("container")}</dt>
@@ -213,6 +215,12 @@ export function ConnectNetworkDialog({ request, onClose, host, topology, contain
                     <>
                       <dt className="text-muted-foreground">{t("address")}</dt>
                       <dd className="font-mono text-[13px]">{!hasIpv4(network) ? t("noIpv4") : ip.trim() || (connect?.ip ? `${connect.ip} (${t("addressPool")})` : t("addressPool"))}</dd>
+                    </>
+                  )}
+                  {mode === "connect" && !!connect?.aliases?.length && (
+                    <>
+                      <dt className="text-muted-foreground">{t("aliases")}</dt>
+                      <dd className="min-w-0 font-mono text-[13px] break-all">{connect.aliases.join(", ")}</dd>
                     </>
                   )}
                   {mode === "connect" && network.ipv6 && (
@@ -236,6 +244,7 @@ export function ConnectNetworkDialog({ request, onClose, host, topology, contain
             </div>
           )
         )}
+        {block && <Alert variant="destructive"><Ban /><AlertDescription>{t(`blocks.${block}`)}</AlertDescription></Alert>}
         <DialogFooter className="sm:justify-between">
           {reviewing ? (
             <Button type="button" variant="outline" disabled={busy} onClick={() => setReviewing(false)}>

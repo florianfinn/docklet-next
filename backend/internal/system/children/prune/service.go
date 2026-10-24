@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace
+// Deviations: Local module namespace; preserve scheduled network-prune removal semantics.
 
 package prune
 
@@ -828,7 +828,7 @@ func (s *Service) removePruneResourceInternal(ctx context.Context, dockerClient 
 	case "volume":
 		err = s.volumeService.DeleteVolume(ctx, resource.ID, false, user.SystemUser)
 	case "network":
-		err = s.networkService.RemoveNetwork(ctx, resource.ID, user.SystemUser)
+		err = s.networkService.RemoveNetworkForPrune(ctx, resource.ID, user.SystemUser)
 	default:
 		return fmt.Errorf("unknown prune target %q", resource.Kind)
 	}

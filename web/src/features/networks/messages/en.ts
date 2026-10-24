@@ -1,6 +1,24 @@
 // American English texts of the networks page, topology and network wizards.
 
 export const enNetworks = {
+  partial: {
+    host: "{name}: Some network reads failed. Available and previously observed networks are shown.",
+    detail: "Network details unavailable. Usage is unknown; connection and deletion are disabled.",
+    unknown: "Unknown",
+  },
+  usage: {
+    unknown: "Usage unknown",
+    unknownLabel: "{name}: Usage unknown",
+    label: "{name}: {state}, {count, plural, one {# container} other {# containers}}",
+    used: "In use",
+    unused: "Unused",
+    builtin: "Built-in",
+    builtinDetail: "Docker default network; cannot be deleted.",
+    stack: "Owned by Compose stack {name}",
+    member: "{name} · {state}",
+    noAttachments: "No attached containers",
+    states: { running: "running", stopped: "stopped", restarting: "restarting", unknown: "unknown" },
+  },
   title: "Networks",
   description: "Docker networks of one host at a time: LAN networks, custom and stack networks, then the Docker default networks, each with their containers. Click a node or focus it with the keyboard (Tab, Enter); Escape or a click on empty space clears the focus.",
   hostPicker: "Topology host",
@@ -125,6 +143,7 @@ export const enNetworks = {
   },
   menu: { focus: "Focus in topology", connect: "Connect container", remove: "Remove" },
   removeBlocked: {
+    "detail-unavailable": "Network details are unavailable; usage cannot be verified.",
     "builtin-network": "Docker default network – never removed.",
     "compose-managed": "Belongs to stack {stack} – Compose removes it with the stack.",
     "in-use": "Still {count, plural, one {# container} other {# containers}} connected (stopped ones count too).",
@@ -137,6 +156,21 @@ export const enNetworks = {
   removed: "Network {name} removed",
   empty: { title: "No networks", body: "There are no networks on the filtered hosts." },
   createDialog: {
+    advanced: {
+      title: "Advanced",
+      hint: "Labels and driver options use unique keys. Set the parent interface above. Auxiliary addresses reserve named IPs within each configured subnet.",
+      labels: "Labels",
+      options: "Driver options",
+      auxAddresses: "IPv4 auxiliary addresses",
+      auxAddresses6: "IPv6 auxiliary addresses",
+      key: "Key",
+      value: "Value",
+      name: "Reservation name",
+      address: "Reserved IP address",
+      add: "Add: {section}",
+      remove: "Remove {section} entry {index}",
+    },
+
     title: "Create network",
     description: "In three steps: type, settings, review. Only “Create” changes the host.",
     steps: { kind: "Type", settings: "Settings", review: "Review" },
@@ -151,7 +185,7 @@ export const enNetworks = {
     },
     notCreatable: "host, none and the default bridge exist exactly once on every Docker host; overlay requires Swarm. Docklet does not create these.",
     name: "Name",
-    nameHint: "Letters, digits, _ . - · not bridge, host, none or default.",
+    nameHint: "Letters, digits, _ . - · not bridge, host, none, default or ingress.",
     subnet: "IPv4 subnet (CIDR)",
     subnetHintBridge: "Leave empty: Docker picks a free block. Static container addresses are only possible with your own subnet.",
     subnetHintLan: "The LAN in which the containers get addresses, e.g. 192.0.2.0/24.",
@@ -189,6 +223,8 @@ export const enNetworks = {
     submit: "Create",
     created: "Network {name} created",
     errors: {
+      duplicate: "Keys, names and addresses must be unique",
+      gateway: "That is the gateway",
       required: "Required",
       invalid: "Invalid format",
       reserved: "Name reserved by Docker",
@@ -207,6 +243,10 @@ export const enNetworks = {
     },
   },
   connectDialog: {
+    aliases: "DNS aliases (optional)",
+    aliasesHint: "Comma-separated DNS labels: letters, digits and internal hyphens, at most 63 characters each. Duplicates are removed.",
+    aliasesInvalid: "Enter non-empty DNS labels separated by commas; no spaces, underscores or dots within a label.",
+
     titleConnect: "Connect container to network",
     titleDisconnect: "Disconnect container from network",
     description: "Choose container and network, then review. Only the confirmation changes the container.",
@@ -235,6 +275,7 @@ export const enNetworks = {
     connected: "{container} connected to {network}",
     disconnected: "{container} disconnected from {network}",
     blocks: {
+      "detail-unavailable": "Network details are unavailable; usage cannot be verified.",
       "host-mismatch": "Container and network are on different hosts.",
       "builtin-network": "No container is connected to host or none afterwards; the network mode sets that at creation.",
       "network-mode": "The container uses network mode host or none and cannot join or leave other networks.",
@@ -268,6 +309,8 @@ export const enNetworks = {
     },
   },
   errors: {
+    overlap: "The subnet overlaps another network on this host.",
+    "outcome-unknown": "The network outcome is unknown. Check the current state before retrying.",
     "not-found": "Not found – the view is being refreshed.",
     exists: "A network with this name already exists on the host.",
     "invalid-network": "The network settings are invalid.",

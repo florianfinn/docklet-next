@@ -40,3 +40,47 @@ describe("network wizard layout", () => {
     expect([order(), dialog.querySelector('[data-slot="family-error"]')?.textContent]).toEqual([before, "Mindestens IPv4 oder IPv6 einschalten"]);
   });
 });
+
+  it("keeps advanced fields collapsed, validates duplicate keys before conversion and preserves the family anchors", async () => {
+    renderWithApp(<CreateNetworkDialog open onOpenChange={() => undefined} hosts={HOSTS} networks={[]} defaultHostId="atlas" onCreated={() => undefined} />);
+    const dialog = await screen.findByRole("dialog");
+    await userEvent.click(within(dialog).getByRole("button", { name: "Weiter" }));
+    await userEvent.type(within(dialog).getByLabelText("Name"), "example_net");
+    const advanced = within(dialog).getByRole("button", { name: "Erweitert" });
+    expect(advanced.getAttribute("aria-expanded")).toBe("false");
+    expect(within(dialog).queryByRole("button", { name: "Hinzufügen: Labels" }) === null).toBe(true);
+    await userEvent.click(advanced);
+    await userEvent.click(within(dialog).getByRole("button", { name: "Hinzufügen: Labels" }));
+    let labels = within(dialog).getByRole("group", { name: "Labels" });
+    await userEvent.type(within(labels).getByLabelText("Schlüssel"), "example.com/team");
+    await userEvent.type(within(labels).getByLabelText("Wert"), "web");
+    await userEvent.click(within(labels).getByRole("button", { name: "Hinzufügen: Labels" }));
+    await userEvent.type(within(labels).getAllByLabelText("Schlüssel")[1]!, "example.com/team");
+    await userEvent.click(advanced);
+    await userEvent.click(within(dialog).getByRole("button", { name: "Weiter" }));
+    // A failed submit reopens Advanced, so errors cannot remain hidden.
+    labels = within(dialog).getByRole("group", { name: "Labels" });
+    expect(advanced.getAttribute("aria-expanded")).toBe("true");
+    expect(within(labels).getAllByText("Schlüssel, Namen und Adressen müssen eindeutig sein").length > 0).toBe(true);
+    await userEvent.click(within(labels).getByRole("button", { name: "Eintrag 2 in Labels entfernen" }));
+    await userEvent.click(within(dialog).getByRole("button", { name: "Hinzufügen: Treiberoptionen" }));
+    const options = within(dialog).getByRole("group", { name: "Treiberoptionen" });
+    await userEvent.type(within(options).getByLabelText("Schlüssel"), "com.docker.network.driver.mtu");
+    await userEvent.type(within(options).getByLabelText("Wert"), "1400");
+    await userEvent.type(within(dialog).getByLabelText("IPv4-Subnetz (CIDR)"), "192.0.2.0/24");
+    await userEvent.click(within(dialog).getByRole("button", { name: "Hinzufügen: IPv4-Hilfsadressen" }));
+    const aux = within(dialog).getByRole("group", { name: "IPv4-Hilfsadressen" });
+    await userEvent.type(within(aux).getByLabelText("Reservierungsname"), "reserved");
+    await userEvent.type(within(aux).getByLabelText("Reservierte IP-Adresse"), "192.0.2.2");
+    await userEvent.click(within(dialog).getByRole("switch", { name: "IPv6" }));
+    expect(within(dialog).getByRole("button", { name: "Hinzufügen: IPv6-Hilfsadressen" }) !== null).toBe(true);
+    await userEvent.click(within(dialog).getByRole("switch", { name: "IPv4" }));
+    expect(within(dialog).queryByRole("button", { name: "Hinzufügen: IPv4-Hilfsadressen" }) === null).toBe(true);
+    await userEvent.click(within(dialog).getByRole("switch", { name: "IPv4" }));
+    expect((within(within(dialog).getByRole("group", { name: "IPv4-Hilfsadressen" })).getByLabelText("Reservierte IP-Adresse") as HTMLInputElement).value).toBe("192.0.2.2");
+    expect([fields("ipv4"), fields("ipv6")]).toEqual([["net-subnet", "net-gateway", "net-range"], ["net-subnet6", "net-gateway6", "net-range6"]]);
+    await userEvent.click(within(dialog).getByRole("button", { name: "Weiter" }));
+    expect(within(dialog).getByText("example.com/team=web") !== null).toBe(true);
+    expect(within(dialog).getByText("com.docker.network.driver.mtu=1400") !== null).toBe(true);
+    expect(within(dialog).getByText("reserved=192.0.2.2") !== null).toBe(true);
+  });
