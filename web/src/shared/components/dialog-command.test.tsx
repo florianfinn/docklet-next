@@ -9,6 +9,8 @@ import { useState } from "react";
 import { afterEach, expect, it, vi } from "vitest";
 import { toast } from "sonner";
 import { renderWithApp } from "@/test/render";
+import { createDemoAdapter } from "@/data/demo/demo-adapter";
+import { registerIdentityLifetime } from "@/data/identity-lifetime";
 import { useAdapter } from "@/data/use-adapter";
 import { captureCommandFailure } from "./command-failure";
 import { DialogError } from "./dialog-command";
@@ -24,7 +26,7 @@ function deferred() {
 }
 function Harness({ settle }: { settle: Promise<void> }) {
   const [open, setOpen] = useState(true);
-  const feedback = useDialogCommand(open);
+  const feedback = useDialogCommand(open, open ? "example-resource" : undefined);
   const adapter = useAdapter();
   const submit = () => feedback.run(async () => {
     const failure = captureCommandFailure(adapter);
@@ -77,5 +79,24 @@ it("keeps confirmations open with the specific swallowed command failure", async
   await userEvent.click(screen.getByText("Confirm"));
   await waitFor(() => expect(screen.getByRole("alert").textContent).toBe("Specific translated rejection"));
   expect(screen.queryByRole("alertdialog") !== null).toBe(true);
+  expect(toast.error).not.toHaveBeenCalled();
+});
+
+it("suppresses a late closed-dialog rejection after browser identity changes", async () => {
+  const done = deferred(); const adapter = createDemoAdapter(); let version = 1;
+  registerIdentityLifetime(adapter.subscribeChanges, { version: () => version, active: () => true, listen: () => () => {} });
+  renderWithApp(<Harness settle={done.promise} />, adapter);
+  await userEvent.click(screen.getByText("Submit"));
+  await userEvent.click(screen.getByText("Close"));
+  version++;
+  await act(async () => done.resolve());
+  expect(toast.error).not.toHaveBeenCalled();
+});
+it("suppresses an unrelated unmount without treating navigation as a deliberate dialog close", async () => {
+  const done = deferred();
+  const view = renderWithApp(<Harness settle={done.promise} />);
+  await userEvent.click(screen.getByText("Submit"));
+  view.unmount();
+  await act(async () => done.resolve());
   expect(toast.error).not.toHaveBeenCalled();
 });

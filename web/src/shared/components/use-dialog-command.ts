@@ -48,13 +48,13 @@ function controller() {
       const startedOwner = owner;
       const lifetime = identityLifetime(adapter);
       const version = lifetime.version();
-      const sameOwner = () => owner === startedOwner && lifetime.active() && lifetime.version() === version;
-      const current = () => sameOwner() && mounted && session === started && started.active && started.revision === revision;
+      const sameIdentity = () => lifetime.active() && lifetime.version() === version;
+      const current = () => sameIdentity() && owner === startedOwner && mounted && session === started && started.active && started.revision === revision;
       const receipt: CommandFailure = {
         current,
-        closed: () => sameOwner() && started.closed,
+        closed: () => sameIdentity() && started.closed,
         error: (message, options) => {
-          if (!sameOwner()) return;
+          if (!sameIdentity()) return;
           if (current()) { attempt.failed = true; publish({ message, options }); }
           else if (started.closed) toast.error(message, options);
         },

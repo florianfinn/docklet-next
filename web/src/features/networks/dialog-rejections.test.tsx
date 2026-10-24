@@ -43,7 +43,7 @@ describe.each([false, true])("dialog rejections (Edge=%s)", (edge) => {
     f.state.response = { body: { ...recordedNetworkResponses["create-invalid"], code: "network.overlap" }, status: 409 };
     const submit = within(f.dialog).getByRole("button", { name: f.t.submit }) as HTMLButtonElement;
     await userEvent.click(submit);
-    await waitFor(() => expect(submit.disabled).toBe(false));
+    await waitFor(() => expect(submit.querySelector('[role="status"]') === null).toBe(true));
     const alert = within(f.dialog).getByRole("alert");
     expect(alert.textContent).toBe(text(locale).errors.overlap);
     expect(document.activeElement === alert).toBe(true);

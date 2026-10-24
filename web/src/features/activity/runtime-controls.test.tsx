@@ -13,6 +13,7 @@ import { IntlProvider } from "use-intl";
 import { afterEach, expect, it, vi } from "vitest";
 import { catalogs } from "@/app/i18n/catalog";
 import type { DockletAdapter } from "@/data/adapter";
+import { AdapterOutcomeError } from "@/data/capability";
 import { AdapterContext } from "@/data/use-adapter";
 import { useActionRuns } from "@/data/live";
 import { renderRun } from "@/data/message-code";
@@ -299,4 +300,29 @@ it("stale active generic snapshot cannot reopen a retained terminal run or repla
     expect(shows.mock.calls.filter(([, options]) => options?.id === RUN_ID), "stale generic row must not replay the terminal toast").toHaveLength(count);
     expect(runGateOf(adapter)!.size).toBe(0); expect(f.commands()).toHaveLength(1);
   } finally { release.resolve(); view.unmount(); }
+});
+
+it.each([false, true])("runtime release rejection preserves toast outside a modal and uses inline feedback inside modal=%s", async (modal) => {
+  const f = runtimeFixture(); f.state.run = snapshot("edge"); f.state.recovery.unknownReason = "transport";
+  const run = renderRun(await f.adapter.getRuntimeRun!("edge", RUN_ID), "en-US");
+  const release = vi.fn().mockRejectedValue(new AdapterOutcomeError({ kind: "error", code: "runtime.release-invalid", status: 409 }));
+  const notices = vi.spyOn(toast, "error");
+  const view = mount(modal ? <ActionDialog /> : <RuntimeControls run={run} />, { ...f.adapter, releaseRuntimeRun: release });
+  try {
+    if (modal) { await act(async () => { openActionDialog(RUN_ID); }); await screen.findByRole("dialog"); }
+    await userEvent.type(screen.getByRole("textbox"), "Executor inspected");
+    await userEvent.click(screen.getByRole("checkbox"));
+    const button = screen.getByRole("button", { name: "Release blocked target" });
+    await userEvent.click(button);
+    await waitFor(() => expect(button.hasAttribute("disabled")).toBe(false));
+    const message = catalogs["en-US"].activity.runtime.releaseInvalid;
+    if (modal) {
+      expect(screen.getByRole("alert").textContent).toBe(message);
+      expect(notices).not.toHaveBeenCalled();
+      expect((screen.getByRole("textbox") as HTMLInputElement).value).toBe("Executor inspected");
+    } else {
+      expect(notices).toHaveBeenCalledWith(message, { action: undefined });
+      expect(screen.queryByRole("alert") === null).toBe(true);
+    }
+  } finally { view.unmount(); }
 });
