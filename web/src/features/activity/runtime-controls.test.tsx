@@ -326,3 +326,42 @@ it.each([false, true])("runtime release rejection preserves toast outside a moda
     }
   } finally { view.unmount(); }
 });
+
+it("ActionDialog ticks preserve user focus and scroll after an inline runtime rejection", async () => {
+  const f = runtimeFixture(); f.state.run = snapshot("edge"); f.state.recovery.unknownReason = "transport";
+  await f.adapter.getRuntimeRun!("edge", RUN_ID);
+  let now = new Date(f.state.run.startedAt).getTime() + 1000;
+  vi.spyOn(Date, "now").mockImplementation(() => now);
+  const ticks: (() => void)[] = [];
+  const interval = globalThis.setInterval;
+  vi.spyOn(globalThis, "setInterval").mockImplementation((callback, delay, ...args) => {
+    if (delay === 1000 && typeof callback === "function") {
+      ticks.push(callback as () => void);
+      return interval(() => {}, 1000000);
+    }
+    return interval(callback, delay, ...args);
+  });
+  const release = vi.fn().mockRejectedValue(new AdapterOutcomeError({ kind: "error", code: "runtime.release-invalid", status: 409 }));
+  const notices = vi.spyOn(toast, "error");
+  const scroll = vi.spyOn(HTMLElement.prototype, "scrollIntoView").mockImplementation(() => {});
+  const view = mount(<ActionDialog />, { ...f.adapter, releaseRuntimeRun: release });
+  try {
+    await act(async () => { openActionDialog(RUN_ID); });
+    const dialog = await screen.findByRole("dialog");
+    await userEvent.type(screen.getByRole("textbox"), "Executor inspected");
+    await userEvent.click(screen.getByRole("checkbox"));
+    await userEvent.click(screen.getByRole("button", { name: "Release blocked target" }));
+    const alert = await screen.findByRole("alert");
+    expect(document.activeElement === alert).toBe(true);
+    const scrollCount = scroll.mock.calls.length;
+    const target = screen.getByRole("button", { name: catalogs["en-US"].activity.dialog.close });
+    act(() => target.focus());
+    const text = dialog.textContent;
+    expect(ticks.length).toBeGreaterThan(0);
+    await act(async () => { now += 3000; ticks.forEach((tick) => tick()); });
+    expect(dialog.textContent === text).toBe(false);
+    expect(document.activeElement === target).toBe(true);
+    expect(scroll.mock.calls.length).toBe(scrollCount);
+    expect(notices).not.toHaveBeenCalled();
+  } finally { view.unmount(); }
+});

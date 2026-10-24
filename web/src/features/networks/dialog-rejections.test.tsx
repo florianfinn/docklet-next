@@ -25,7 +25,7 @@ async function setup(edge: boolean, locale: "de" | "en-US") {
   const created = vi.fn();
   function Harness() {
     const [open, setOpen] = useState(true);
-    return <CreateNetworkDialog open={open} onOpenChange={setOpen} hosts={hosts} networks={[]} defaultHostId="host" onCreated={created} />;
+    return <><button onClick={() => setOpen(true)}>Reopen</button><CreateNetworkDialog open={open} onOpenChange={setOpen} hosts={hosts} networks={[]} defaultHostId="host" onCreated={created} /></>;
   }
   renderWithApp(<Harness />, f.adapter);
   const t = text(locale).createDialog;
@@ -92,6 +92,32 @@ describe.each([false, true])("dialog rejections (Edge=%s)", (edge) => {
     expect(screen.queryByRole("dialog") === null).toBe(true);
     await act(async () => done.release());
     await waitFor(() => expect(error).toHaveBeenCalledWith(text("de").errors.overlap, undefined));
+  });
+  it("keeps a previous session's late failure out of a reopened dialog", async () => {
+    const error = vi.spyOn(toast, "error");
+    const f = await setup(edge, "de");
+    const entered = barrier(), done = barrier(); const fetcher = f.fetcher.getMockImplementation()!;
+    f.fetcher.mockImplementation(async (input, init) => {
+      if (init?.method === "POST") { entered.release(); await done.promise; }
+      return fetcher(input, init);
+    });
+    f.state.response = { body: { ...recordedNetworkResponses["create-invalid"], code: "network.overlap" }, status: 409 };
+    await userEvent.click(within(f.dialog).getByRole("button", { name: f.t.submit }));
+    await entered.promise;
+    await userEvent.keyboard("{Escape}");
+    await userEvent.click(screen.getByText("Reopen"));
+    const reopened = screen.getByRole("dialog");
+    await userEvent.click(within(reopened).getByRole("button", { name: f.t.next }));
+    await userEvent.type(within(reopened).getByLabelText(f.t.name), "new_session_draft");
+    await userEvent.click(within(reopened).getByRole("button", { name: f.t.next }));
+    expect(within(reopened).queryByRole("status") !== null).toBe(true);
+    await act(async () => done.release());
+    // Busy removal is the old submit handler's actual settlement effect.
+    await waitFor(() => expect(within(reopened).queryByRole("status") === null).toBe(true));
+    expect(error).toHaveBeenCalledExactlyOnceWith(text("de").errors.overlap, undefined);
+    expect(within(reopened).queryByRole("alert") === null).toBe(true);
+    expect(within(reopened).getByText("new_session_draft") !== null).toBe(true);
+    expect(f.created).not.toHaveBeenCalled();
   });
   it("shows a server invalid-ip rejection inline in connect review", async () => {
     const error = vi.spyOn(toast, "error");

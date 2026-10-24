@@ -17,26 +17,27 @@ function controller() {
   let state: Failure = null;
   let mounted = false;
   let owner: unknown;
-  let session = { active: false, closed: false, revision: 0 };
+  let session = { active: false, closed: false };
   let operation: { failed: boolean } | undefined;
   const listeners = new Set<() => void>();
   const publish = (next: Failure) => { state = next; listeners.forEach((notify) => notify()); };
-  const clear = () => { ++session.revision; operation = undefined; if (state) publish(null); };
+  // Editing clears presentation, never ownership or settlement of a pending attempt.
+  const clear = () => { if (state) publish(null); };
   return {
     subscribe: (notify: () => void) => { listeners.add(notify); return () => { listeners.delete(notify); }; },
     snapshot: () => state,
     mount: () => { mounted = true; },
     unmount: () => { mounted = false; session.active = false; },
     activate: (active: boolean, nextOwner: unknown) => {
-      if (owner !== nextOwner) { session.active = false; owner = nextOwner; session = { active, closed: false, revision: 0 }; publish(null); }
-      else if (active && !session.active) { session = { active: true, closed: false, revision: 0 }; publish(null); }
+      if (owner !== nextOwner) { session.active = false; owner = nextOwner; session = { active, closed: false }; publish(null); }
+      else if (active && !session.active) { session = { active: true, closed: false }; publish(null); }
       else if (!active && session.active) { session.active = false; session.closed = true; publish(null); }
     },
     dismiss: () => { session.closed = true; session.active = false; publish(null); },
     clear,
     checkpoint: () => {
-      const started = session, revision = session.revision;
-      return () => mounted && session === started && started.active && started.revision === revision;
+      const started = session;
+      return () => mounted && session === started && started.active;
     },
     failed: () => operation?.failed ?? false,
     invoke<T>(fn: () => T, adapter: ReturnType<typeof useAdapter>, errorText: (error: unknown) => string): T | undefined {
@@ -44,12 +45,11 @@ function controller() {
       const attempt = { failed: false };
       operation = attempt;
       const started = session;
-      const revision = started.revision;
       const startedOwner = owner;
       const lifetime = identityLifetime(adapter);
       const version = lifetime.version();
       const sameIdentity = () => lifetime.active() && lifetime.version() === version;
-      const current = () => sameIdentity() && owner === startedOwner && mounted && session === started && started.active && started.revision === revision;
+      const current = () => sameIdentity() && owner === startedOwner && mounted && session === started && started.active;
       const receipt: CommandFailure = {
         current,
         closed: () => sameIdentity() && started.closed,
