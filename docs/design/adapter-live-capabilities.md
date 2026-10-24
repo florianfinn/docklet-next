@@ -28,7 +28,7 @@ HTTP caller in the adapter uses generated `paths`/`operations` types, then maps
 wire DTOs to the existing view models. Route presence alone does not make an
 adapter operation available: its mapping and server capability must both exist.
 
-| Adapter call or family | Current OpenAPI operation | M3 handling |
+| Adapter call or family | Current OpenAPI operation | Current handling |
 | --- | --- | --- |
 | `listActions`, run refresh | `list-activities`, `get-activity` per environment | Map recorded activity, message, step and output DTOs; enable the full `CodedActionRun` projection only where required fields have wire sources. |
 | `listEvents` | `listEvents` or `getEventsByEnvironment` for the selected scope | Map `EventEvent` to `CodedEvent`; use recorded DTOs. |
@@ -37,6 +37,8 @@ adapter operation available: its mapping and server capability must both exist.
 | `getSecurity`, `listSchedule`, `getSettings` | `get-environment-vulnerability-overview`, `get-job-schedules`, `get-settings` | The first two calls remain unavailable until M11 and M10. `getSettings` stays unavailable for unconnected sections; M4 reads connected sections with `getConnectedSettings`. |
 | `runStackCommand`, `runContainerCommand` | `deploy-project`/`down-project`/`restart-project`/`redeploy-project`; `start-container`/`stop-container`/`restart-container` | Map the seven guarded operation routes with async admission, stable IDs and targeted hub detail. Enable only scoped stack/container descriptors with the complete operation family and activity-read grants; bulk hub controls remain unavailable. |
 | `subscribeLogs`, `subscribeContainerLogs` | Echo project/container log WebSockets (outside OpenAPI) | Scoped log/read grants, JSON source mapping, bounded arrival buffers and conditional reconnect tail replacement. |
+| `createVolume`, `deleteVolume`, `renameVolume`, `planVolumePrune`, `pruneVolumes` | Environment volume create/delete/rename and plan/prune operations | Connected mappings with host or volume descriptors; prune retains server planning and confirmation. |
+| `createNetwork`, `removeNetwork`, `connectNetwork`, `disconnectNetwork` | `create-network`, `delete-network`, `connect-network-container`, `disconnect-network-container` | Connected hub routes for Direct and Edge, generated DTOs, scoped descriptors and topology/container refresh. |
 | Other `DockletAdapter` reads, writes and subscriptions | Existing operation where listed, otherwise no matching operation | Expose unavailable until the owning milestone supplies the complete mapping. Existing WebSockets carry connected logs and stats. |
 
 The HTTP boundary classifies an operation into these outcomes. Existing
@@ -242,9 +244,9 @@ The demo adapter synthesizes the same descriptor from its in-memory supported
 operations and `DemoDb` fixture resources in `web/src/data/demo/demo-adapter.ts`.
 `operationId` names the adapter operation, and `resourceRef` identifies its hub
 or target resource without defining rights. An unavailable descriptor requires
-a reason code; an available one has no disabled reason. The current OpenAPI has no descriptor operation,
-so #38 must add it and regenerate the contract. The HTTP adapter exposes the
-descriptor to the UI, merges it with its implemented mapping, and treats missing
+a reason code; an available one has no disabled reason. The checked-in
+`get-capabilities` operation serves descriptors for the requested resource ref.
+The HTTP adapter exposes the descriptor to the UI, merges it with its implemented mapping, and treats missing
 or unreadable entries as unavailable with a generic reason code. UI action controls read that result to set
 `disabled` and show a translated reason; direct calls still return
 `not-available`. Resource-right evaluation and policy remain M15's decision.
@@ -405,8 +407,9 @@ manager leaves origin unclear. Containers without these labels map to Run.
 Recreation restrictions include Compose ownership, unclear origin and the
 server's protected-container flag. Agent-labeled workloads are excluded from
 both lists; the backend excludes their tracked Compose projects before pagination.
-Only the seven guarded lifecycle commands have connected write mappings; other
-inventory mutations remain unavailable.
+The seven guarded lifecycle commands, stack authoring, volume workspace writes
+and network writes have connected mappings. Each write family checks its own
+scoped capability before dispatch.
 
 Images, volumes, network details/topology, published ports and dashboard reads
 use the same retained-response store and observation headers. Dedicated agent
@@ -421,7 +424,35 @@ are mapped explicitly. Host histories retain up to 60 observed samples in the
 adapter session; a disconnect preserves the last sample with its time and host
 reason. A new browser session has no retained metric samples. Unreported disk
 capacity, growth, image metadata and volume sizes remain explicitly unavailable.
-All image, volume and network writes retain their unavailable mappings.
+Image writes retain their unavailable mappings. Volume create, delete, rename,
+planned prune and file workspace writes are connected; volume backup and restore
+remain outside these mappings.
+
+Network writes use `/api/environments/{hostId}/networks` for both Direct and Edge.
+Create checks `createNetwork` at `{ kind: "host", id: hostId }`; remove, connect
+and disconnect check their operation at `{ kind: "network", id: inventoryId }`.
+The inventory ID contains the host and Docker network ID; transport restores the
+raw network/container IDs. A host-scoped descriptor does not grant those three
+network operations. Hub descriptors aggregate availability and do not authorize
+a specific target. Toolbar controls aggregate the displayed host's network
+descriptors; row, detail and dialog controls use their target network refs.
+
+Create maps enabled families, labels, driver options and auxiliary reservations
+with generated DTOs, including explicit `enableIPv4=false` for IPv6-only networks
+and the LAN parent under `options.parent`. The backend remains authoritative for
+validation and delete protection. Topology takes built-in state from the network
+summary's `isDefault` flag and keeps stopped endpoint IPAM reservations visible
+and unavailable to pool hints. Individual deletion includes unused networks;
+there is no network prune UI. See [network management](network-management.md).
+
+Network commands report the existing `topology` and `containers` change topics,
+which clear shared inventory reads and invalidate subscribed queries without
+polling. Known `network.*` errors become translated domain errors, including
+`network.overlap`; unknown codes retain the generic error path. A lost or
+malformed write response reports `network.outcome-unknown`, instructing the user
+to inspect state before retrying, without implying rollback or retrying the write
+automatically. Results and toasts from a closed dialog, a previous host or an
+expired browser identity are discarded.
 
 
 ## Browser session lifetime

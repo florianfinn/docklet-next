@@ -60,13 +60,21 @@ export function mapVolumes(rows: Schema["VolumeVolume"][], hostId: string, conta
   }), ...binds.values()];
 }
 
-export function mapTopology(rows: Schema["NetworkInspect"][], hostId: string, containers: ContainerRow[], projects: ProjectRow[], inventory: InventoryObservation): Topology {
+/** Moby's EndpointIPAMConfig is passed through the DTO's unknown ipamConfig field. */
+function fixedAddress(config: unknown, key: "IPv4Address" | "IPv6Address"): string | undefined {
+  if (!config || typeof config !== "object" || !(key in config)) return undefined;
+  const value = (config as Record<string, unknown>)[key];
+  return typeof value === "string" && value ? value : undefined;
+}
+
+export function mapTopology(rows: Schema["NetworkInspect"][], hostId: string, containers: ContainerRow[], projects: ProjectRow[], inventory: InventoryObservation, summaries: Pick<Schema["NetworkSummary"], "id" | "isDefault">[] = []): Topology {
+  const defaults = new Map(summaries.map((n) => [n.id, n.isDefault]));
   const networks: TopologyNetwork[] = rows.filter((r) => r.labels?.["io.docklet.system"] !== "agent").map((r) => {
     if (!r?.id || !r.name || typeof r.driver !== "string" || !r.driver) throw new Error("inventory.invalid-network");
     const { internal } = r;
     const ip4 = r.ipam.config?.find((c) => c.subnet && !c.subnet.includes(":"));
     const ip6 = r.ipam.config?.find((c) => c.subnet?.includes(":"));
-    return { id: inventoryId(hostId, r.id), hostId, name: r.name, driver: r.driver, internal, builtIn: ["bridge", "host", "none"].includes(r.name), ipv4: r.enableIPv4, ipv6: r.enableIPv6, subnet: ip4?.subnet, gateway: ip4?.gateway, ipRange: ip4?.ipRange, subnetConfigured: !!ip4?.subnet, subnet6: ip6?.subnet, gateway6: ip6?.gateway, ipRange6: ip6?.ipRange, subnet6Configured: !!ip6?.subnet, parent: r.options?.parent, ...owner(r.labels, hostId, projects), inventory };
+    return { id: inventoryId(hostId, r.id), hostId, name: r.name, driver: r.driver, internal, labels: r.labels ?? {}, options: r.options ?? {}, auxAddresses: Object.entries(ip4?.auxAddress ?? {}).map(([name, ip]) => ({ name, ip })), auxAddresses6: Object.entries(ip6?.auxAddress ?? {}).map(([name, ip]) => ({ name, ip })), builtIn: defaults.get(r.id) === true, ipv4: r.enableIPv4, ipv6: r.enableIPv6, subnet: ip4?.subnet, gateway: ip4?.gateway, ipRange: ip4?.ipRange, subnetConfigured: !!ip4?.subnet, subnet6: ip6?.subnet, gateway6: ip6?.gateway, ipRange6: ip6?.ipRange, subnet6Configured: !!ip6?.subnet, parent: r.options?.parent, ...owner(r.labels, hostId, projects), inventory };
   });
   const users = containers.filter((c) => c.labels?.["io.docklet.system"] !== "agent");
   const attachments: Topology["attachments"] = [];
@@ -77,7 +85,9 @@ export function mapTopology(rows: Schema["NetworkInspect"][], hostId: string, co
       const endpoint = c.networkSettings?.networks?.[n.name];
       const raw = rows.find((r) => inventoryId(hostId, r.id) === n.id)?.containers?.[c.id];
       if (!endpoint && !raw) continue;
-      attachments.push({ containerId, networkId: n.id, ip: endpoint?.ipAddress || raw?.IPv4Address?.split("/")[0] || undefined, ip6: endpoint?.globalIPv6Address || raw?.IPv6Address?.split("/")[0] || undefined });
+      const fixed4 = fixedAddress(endpoint?.ipamConfig, "IPv4Address");
+      const fixed6 = fixedAddress(endpoint?.ipamConfig, "IPv6Address");
+      attachments.push({ containerId, networkId: n.id, ip: endpoint?.ipAddress || raw?.IPv4Address?.split("/")[0] || fixed4, ip6: endpoint?.globalIPv6Address || raw?.IPv6Address?.split("/")[0] || fixed6, staticIp: fixed4 ? true : undefined, staticIp6: fixed6 ? true : undefined, aliases: endpoint?.aliases ?? undefined });
     }
     if (!c.labels?.["com.docker.compose.project"]) continue;
     for (const entry of (c.labels?.["com.docker.compose.depends_on"] ?? "").split(",").filter(Boolean)) {

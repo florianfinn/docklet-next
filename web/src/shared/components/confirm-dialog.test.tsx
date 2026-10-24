@@ -66,7 +66,7 @@ describe("ConfirmDialog", () => {
     expect([state(), confirmButton().hasAttribute("aria-busy")]).toEqual(["open", false]);
 
     await userEvent.click(confirmButton());
-    await waitFor(() => expect(screen.getByRole("alert").textContent).toBe("Host wird noch verwendet"));
+    await waitFor(() => expect(screen.getByRole("alert").textContent).toBe("Die Anfrage konnte nicht abgeschlossen werden."));
 
     await userEvent.click(confirmButton());
     await waitFor(() => expect(state()).toBe("closed"));

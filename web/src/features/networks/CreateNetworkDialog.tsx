@@ -1,3 +1,4 @@
+import { useCapability } from "@/data/use-capability";
 import { ArrowLeft, ArrowRight, Cable, Network, Plus, Router } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
@@ -5,7 +6,7 @@ import { useTranslations } from "use-intl";
 
 import type { Host, TopologyNetwork } from "@/domain/model";
 import { canonicalIp6, formatCidr6, parseCidr6 } from "@/domain/ipv6";
-import { CREATABLE_DRIVERS, hasErrors, validateNetworkDraft, type CreatableDriver, type NetworkDraft, type NetworkDraftErrors } from "@/domain/networks";
+import { CREATABLE_DRIVERS, hasErrors, validateNetworkDraft, validateNetworkEntries, type CreatableDriver, type NetworkDraft, type NetworkDraftErrors } from "@/domain/networks";
 import { ChoiceCards, TextField } from "@/shared/components/form-field";
 import { cn } from "@/shared/lib/utils";
 import { Alert, AlertDescription } from "@/shared/ui/alert";
@@ -17,6 +18,7 @@ import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectVa
 import { Spinner } from "@/shared/ui/spinner";
 import { Switch } from "@/shared/ui/switch";
 
+import { AdvancedNetworkFields, type NetworkEntry } from "./AdvancedNetworkFields";
 import { HostScope } from "./HostScope";
 import { useNetworkCommands } from "./use-network-commands";
 
@@ -28,7 +30,7 @@ const canonicalCidr6 = (text: string) => {
 type Step = (typeof STEPS)[number];
 const DRIVER_ICON: Record<CreatableDriver, React.ReactNode> = { bridge: <Network />, macvlan: <Router />, ipvlan: <Cable /> };
 
-const blank = (hostId: string): NetworkDraft => ({ hostId, name: "", driver: "bridge", ipv4: true, ipv6: false, subnet: "", gateway: "", ipRange: "", subnet6: "", gateway6: "", ipRange6: "", parent: "", internal: false });
+const blank = (hostId: string): NetworkDraft => ({ hostId, name: "", driver: "bridge", ipv4: true, ipv6: false, subnet: "", gateway: "", ipRange: "", subnet6: "", gateway6: "", ipRange6: "", parent: "", internal: false, labels: {}, options: {}, auxAddresses: [], auxAddresses6: [] });
 
 /** Switch of one address family; both sit in one row above every expandable field, so toggling never moves them. */
 function FamilySwitch({ family, label, on, onToggle }: { family: "ipv4" | "ipv6"; label: string; on: boolean; onToggle: (on: boolean) => void }) {
@@ -66,16 +68,21 @@ interface Props {
 export function CreateNetworkDialog({ open, onOpenChange, hosts, networks, defaultHostId, onCreated }: Props) {
   const t = useTranslations("networks.createDialog");
   const ts = useTranslations("networks.scope");
-  const cmd = useNetworkCommands();
   const online = hosts.filter((h) => h.status === "online");
   const initialHost = online.find((h) => h.id === defaultHostId)?.id ?? online[0]?.id ?? "";
   const [draft, setDraft] = useState<NetworkDraft>(() => blank(initialHost));
+  const cmd = useNetworkCommands(draft.hostId, open);
+  const capability = useCapability("createNetwork", { kind: "host", id: draft.hostId });
+  const [labels, setLabels] = useState<NetworkEntry[]>([]);
+  const [options, setOptions] = useState<NetworkEntry[]>([]);
+  const [advancedOpen, setAdvancedOpen] = useState(false);
   const [step, setStep] = useState<Step>("kind");
   const [tried, setTried] = useState(false);
   const [busy, setBusy] = useState(false);
   const patch = (p: Partial<NetworkDraft>) => setDraft((d) => ({ ...d, ...p }));
-  const errors: NetworkDraftErrors = validateNetworkDraft(draft, networks.filter((n) => n.hostId === draft.hostId));
+  const errors: NetworkDraftErrors = { ...validateNetworkDraft(draft, networks.filter((n) => n.hostId === draft.hostId)), labels: validateNetworkEntries(labels), options: validateNetworkEntries(options) };
   const lan = draft.driver !== "bridge";
+  const { internal: bridgeInternal } = draft;
   const err = (k: keyof NetworkDraftErrors) => (tried && errors[k] ? t(`errors.${errors[k]}`) : undefined);
   const index = STEPS.indexOf(step);
 
@@ -83,6 +90,9 @@ export function CreateNetworkDialog({ open, onOpenChange, hosts, networks, defau
     onOpenChange(o);
     if (!o) {
       setDraft(blank(initialHost));
+      setLabels([]);
+      setOptions([]);
+      setAdvancedOpen(false);
       setStep("kind");
       setTried(false);
     }
@@ -91,6 +101,7 @@ export function CreateNetworkDialog({ open, onOpenChange, hosts, networks, defau
   const next = () => {
     if (step === "settings" && hasErrors(errors)) {
       setTried(true);
+      if (errors.labels || errors.options || errors.auxAddresses || errors.auxAddresses6) setAdvancedOpen(true);
       return;
     }
     setStep(STEPS[index + 1] ?? "review");
@@ -129,6 +140,8 @@ export function CreateNetworkDialog({ open, onOpenChange, hosts, networks, defau
           [t("ipRange6"), draft.ipRange6?.trim() || t("none")],
         ] as [string, string][])
       : []),
+    ...([["labels", draft.labels], ["options", draft.options]] as const).filter(([, value]) => Object.keys(value ?? {}).length).map(([key, value]): [string, string] => [t(`advanced.${key}`), Object.entries(value ?? {}).map(([k, v]) => `${k}=${v}`).join(", ")]),
+    ...([["auxAddresses", v4 ? draft.auxAddresses : []], ["auxAddresses6", v6 ? draft.auxAddresses6 : []]] as const).filter(([, value]) => value?.length).map(([key, value]): [string, string] => [t(`advanced.${key}`), (value ?? []).map((a) => `${a.name.trim()}=${a.ip.trim()}`).join(", ")]),
     [t("internal"), draft.internal ? "✓" : "–"],
   ];
 
@@ -189,7 +202,7 @@ export function CreateNetworkDialog({ open, onOpenChange, hosts, networks, defau
             <ChoiceCards<CreatableDriver>
               label={t("driver")}
               value={draft.driver}
-              onChange={(driver) => patch({ driver })}
+              onChange={(driver) => patch({ driver, internal: driver === "bridge" && bridgeInternal })}
               columns={3}
               options={CREATABLE_DRIVERS.map((d) => ({ value: d, title: t(`drivers.${d}.title`), description: t(`drivers.${d}.body`), icon: DRIVER_ICON[d] }))}
             />
@@ -203,7 +216,6 @@ export function CreateNetworkDialog({ open, onOpenChange, hosts, networks, defau
             <div className="grid gap-4 sm:grid-cols-2">
               <TextField id="net-name" label={t("name")} help="network.name" value={draft.name} onChange={(name) => patch({ name })} description={t("nameHint")} error={err("name")} mono placeholder={lan ? "lan_iot" : "proxy_net"} />
               {lan ? <TextField id="net-parent" label={t("parent")} help="network.parent" value={draft.parent} onChange={(parent) => patch({ parent })} description={t("parentHint")} error={err("parent")} mono placeholder="br0" /> : internalField}
-              {lan && <div className="sm:col-span-2">{internalField}</div>}
             </div>
             <fieldset className="flex flex-col gap-3" aria-describedby="net-families-hint">
               <legend className="mb-1 flex items-center gap-1 text-sm font-medium">
@@ -235,13 +247,14 @@ export function CreateNetworkDialog({ open, onOpenChange, hosts, networks, defau
                 </FamilySection>
               </div>
             </fieldset>
+            <AdvancedNetworkFields open={advancedOpen} onOpenChange={setAdvancedOpen} draft={draft} patch={patch} labels={labels} options={options} onLabelsChange={(entries) => { setLabels(entries); patch({ labels: Object.fromEntries(entries.map((e) => [e.key.trim(), e.value])) }); }} onOptionsChange={(entries) => { setOptions(entries); patch({ options: Object.fromEntries(entries.map((e) => [e.key.trim(), e.value])) }); }} error={err} />
           </div>
         )}
 
         {step === "review" && (
           <div className="flex flex-col gap-3">
             <section className="rounded-xl border bg-muted/15 p-3" aria-label={t("review")}>
-              <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1 text-sm">
+              <dl className="grid grid-cols-1 gap-x-4 gap-y-1 text-sm sm:grid-cols-[auto_minmax(0,1fr)]">
                 {rows.map(([k, v]) => (
                   <div key={k} className="contents">
                     <dt className="text-muted-foreground">{k}</dt>
@@ -268,13 +281,13 @@ export function CreateNetworkDialog({ open, onOpenChange, hosts, networks, defau
           </Button>
           {step === "review" ? (
             <HelpTarget topic="network.review">
-              <Button type="button" disabled={busy || hasErrors(errors)} onClick={() => void submit()}>
+              <Button type="button" disabled={busy || !capability.available || hasErrors(errors)} title={capability.reason} onClick={() => void submit()}>
                 {busy ? <Spinner data-icon="inline-start" /> : <Plus data-icon="inline-start" />}
                 {t("submit")}
               </Button>
             </HelpTarget>
           ) : (
-            <Button type="button" disabled={!draft.hostId} onClick={next}>
+            <Button type="button" disabled={!draft.hostId || !capability.available} title={capability.reason} onClick={next}>
               {t("next")}
               <ArrowRight data-icon="inline-end" />
             </Button>

@@ -1,4 +1,5 @@
 import { useCapability } from "@/data/use-capability";
+import { useNetworkCapabilities } from "./use-network-capabilities";
 import { ArrowRight, Box, ChevronsDownUp, ChevronsUpDown, Link2, Network, Trash2, Unlink, X } from "lucide-react";
 import { Link } from "react-router";
 import { useTranslations } from "use-intl";
@@ -7,7 +8,7 @@ import { useMetrics } from "@/data/live";
 import { formatMem, formatPorts } from "@/domain/format";
 import { formatPercentNumber } from "@/domain/locale";
 import type { ContainerInfo, Host, Topology, TopologyNetwork } from "@/domain/model";
-import { removeBlock } from "@/domain/networks";
+import { networkComposeOwner, removeBlock } from "@/domain/networks";
 import { containerRuntime, RUNTIME_TONE } from "@/domain/status";
 import { versionLabel } from "@/domain/updates";
 import { HostChip } from "@/shared/components/host-chip";
@@ -43,15 +44,18 @@ function Kv({ label, children }: { label: string; children: React.ReactNode }) {
 
 /** Selection details: identity, addresses, memberships and configured dependencies, with network actions. */
 export function TopologyDetails({ selected, topology, containers, hosts, onSelect, expanded, onToggleExpand, onConnect, onRemove }: DetailsProps) {
-  const connect = useCapability("connectNetwork");
-  const disconnect = useCapability("disconnectNetwork");
-  const remove = useCapability("removeNetwork");
   const t = useTranslations("networks.detail");
   const tn = useTranslations("networks");
   const ts = useTranslations("common.status");
   const metrics = useMetrics((s) => (selected ? s?.containers[selected] : undefined));
   const net = topology.networks.find((n) => n.id === selected);
   const container = containers.find((c) => c.id === selected);
+
+  const selectedNetworks = topology.networks.filter((n) => net ? n.id === net.id : n.hostId === container?.hostId).map((n) => n.id);
+  const connect = useNetworkCapabilities("connectNetwork", selectedNetworks);
+  const disconnect = useNetworkCapabilities("disconnectNetwork", selectedNetworks);
+  const remove = useCapability("removeNetwork", { kind: "network", id: net?.id ?? "" });
+  const connectAvailable = [...connect.values()].some((c) => c.available);
 
   if (!net && !container) {
     return (
@@ -143,7 +147,7 @@ export function TopologyDetails({ selected, topology, containers, hosts, onSelec
             )}
             {net.subnet6 && <Kv label={t("staticIp6")}>{net.subnet6Configured ? t("staticYes") : t("staticNo")}</Kv>}
             <Kv label={t("internal")}>{net.internal ? t("internalYes") : t("internalNo")}</Kv>
-            <Kv label={t("origin")}>{net.stackId ? t("stack", { name: net.stackName ?? net.stackId }) : net.builtIn ? t("standard") : t("own")}</Kv>
+            <Kv label={t("origin")}>{networkComposeOwner(net) ? t("stack", { name: networkComposeOwner(net)! }) : net.builtIn ? t("standard") : t("own")}</Kv>
           </>
         ) : (
           container && (
@@ -173,7 +177,7 @@ export function TopologyDetails({ selected, topology, containers, hosts, onSelec
             const id = net ? p.containerId : p.networkId;
             const pair = { container: containerName(p.containerId), network: name(p.networkId) };
             const modeNet = topology.networks.find((n) => n.id === p.networkId);
-            const canDisconnect = disconnect.available && !net?.inventory?.stale && online && modeNet?.driver !== "host" && modeNet?.driver !== "none";
+            const canDisconnect = disconnect.get(p.networkId)?.available && !net?.inventory?.stale && online && modeNet?.driver !== "host" && modeNet?.driver !== "none";
             return (
               <li key={id} className="flex items-start gap-2 border-t border-border/50 py-1.5 text-sm first:border-0">
                 {net ? <Box className="mt-0.5 size-3.5 shrink-0 text-muted-foreground" /> : <Network className="mt-0.5 size-3.5 shrink-0 text-muted-foreground" />}
@@ -230,13 +234,13 @@ export function TopologyDetails({ selected, topology, containers, hosts, onSelec
       )}
       <div className="flex flex-wrap gap-2 border-t pt-3">
         {net && net.driver !== "host" && net.driver !== "none" && (
-          <Button size="sm" variant="outline" disabled={!connect.available || !!net?.inventory?.stale || !online} title={connect.reason} onClick={() => onConnect({ mode: "connect", networkId: net.id })}>
+          <Button size="sm" variant="outline" disabled={!connectAvailable || !!net?.inventory?.stale || !online} title={[...connect.values()].find((c) => c.reason)?.reason} onClick={() => onConnect({ mode: "connect", networkId: net.id })}>
             <Link2 data-icon="inline-start" />
             {t("connectHere")}
           </Button>
         )}
         {container && (
-          <Button size="sm" variant="outline" disabled={!connect.available || !!net?.inventory?.stale || !online} title={connect.reason} onClick={() => onConnect({ mode: "connect", containerId: container.id })}>
+          <Button size="sm" variant="outline" disabled={!connectAvailable || !!net?.inventory?.stale || !online} title={[...connect.values()].find((c) => c.reason)?.reason} onClick={() => onConnect({ mode: "connect", containerId: container.id })}>
             <Link2 data-icon="inline-start" />
             {t("connect")}
           </Button>
@@ -262,7 +266,7 @@ export function TopologyDetails({ selected, topology, containers, hosts, onSelec
               <TooltipTrigger asChild>
                 <span tabIndex={0}>{removeButton}</span>
               </TooltipTrigger>
-              <TooltipContent className="max-w-64">{tn(`removeBlocked.${blocked}`, { stack: net.stackName ?? net.stackId ?? "", count: peers.length })}</TooltipContent>
+              <TooltipContent className="max-w-64">{tn(`removeBlocked.${blocked}`, { stack: networkComposeOwner(net) ?? "", count: peers.length })}</TooltipContent>
             </Tooltip>
           ) : (
             removeButton

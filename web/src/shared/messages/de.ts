@@ -2,6 +2,14 @@
 import type { enCommon } from "./en";
 
 export const deCommon: typeof enCommon = {
+  commandErrors: {
+    failed: "Die Anfrage konnte nicht abgeschlossen werden.",
+    unreachable: "Der Host ist nicht erreichbar. Prüfe die Verbindung.",
+    credentialRejected: "Der Host hat die Zugangsdaten abgelehnt.",
+    updateRequired: "Der Host muss vor dieser Aktion aktualisiert werden.",
+    signIn: "Für diese Aktion erneut anmelden.",
+    denied: "Für diese Aktion fehlt die Berechtigung.",
+  },
   status: {
     running: "Läuft",
     partial: "Teilweise",

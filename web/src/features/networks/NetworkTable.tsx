@@ -1,4 +1,4 @@
-import { useCapability } from "@/data/use-capability";
+import { useNetworkCapabilities } from "./use-network-capabilities";
 import { Boxes, Crosshair, Link2, RotateCcw, Trash2 } from "lucide-react";
 import { useMemo, useState } from "react";
 import { useTranslations } from "use-intl";
@@ -13,6 +13,8 @@ import { cn } from "@/shared/lib/utils";
 import { Button } from "@/shared/ui/button";
 import { Card } from "@/shared/ui/card";
 import { BareTable, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/shared/ui/table";
+
+import { NetworkUsage, type NetworkMember } from "./NetworkUsage";
 
 import type { ConnectRequest } from "./ConnectNetworkDialog";
 
@@ -59,14 +61,20 @@ export function NetworkTable({ host, networks, topology, containers, focus, quer
   const t = useTranslations("networks");
   const [group, setGroup] = useState<GroupFilter>("all");
   const [sort, setSort] = useState<SortState<SortKey>>({ key: "order", dir: "asc" });
-  const connect = useCapability("connectNetwork");
-  const remove = useCapability("removeNetwork");
+  const connect = useNetworkCapabilities("connectNetwork", networks.map((n) => n.id));
+  const remove = useNetworkCapabilities("removeNetwork", networks.map((n) => n.id));
   const online = host.status === "online";
   const members = useMemo(() => {
-    const out = new Map<string, number>();
-    for (const a of topology.attachments) out.set(a.networkId, (out.get(a.networkId) ?? 0) + 1);
+    const byId = new Map(containers.map((c) => [c.id, c]));
+    const out = new Map<string, NetworkMember[]>();
+    for (const a of topology.attachments) {
+      const member = byId.get(a.containerId) ?? { id: a.containerId, name: a.containerId, state: "unknown" as const };
+      const group = out.get(a.networkId) ?? [];
+      if (!group.some((c) => c.id === member.id)) group.push(member);
+      out.set(a.networkId, group);
+    }
     return out;
-  }, [topology.attachments]);
+  }, [containers, topology.attachments]);
   const memberNames = useMemo(() => {
     const names = new Map(containers.map((c) => [c.id, [c.name, c.serviceName ?? "", c.stackName ?? c.stackId ?? ""]]));
     const out = new Map<string, string[]>();
@@ -81,7 +89,7 @@ export function NetworkTable({ host, networks, topology, containers, focus, quer
     return sortRows(
       filtered,
       sort,
-      (n, key) => (key === "order" ? (order.get(n.id) ?? 0) : key === "name" ? n.name : key === "subnet" ? (n.subnet ?? n.subnet6 ?? null) : (members.get(n.id) ?? 0)),
+      (n, key) => (key === "order" ? (order.get(n.id) ?? 0) : key === "name" ? n.name : key === "subnet" ? (n.subnet ?? n.subnet6 ?? null) : (members.get(n.id)?.length ?? 0)),
       (n) => ({ id: n.id, name: n.name, hostName: host.name }),
     );
   }, [networks, group, query, sort, members, memberNames, host.name]);
@@ -95,8 +103,8 @@ export function NetworkTable({ host, networks, topology, containers, focus, quer
 
   const menu = (n: TopologyNetwork): MenuGroups => [
     [{ id: "focus", label: t("menu.focus"), icon: <Crosshair />, onSelect: () => onFocus(n.id) }],
-    [{ id: "connect", label: t("menu.connect"), icon: <Link2 />, disabled: !connect.available || !!n.inventory?.stale || !online || n.driver === "host" || n.driver === "none", onSelect: () => onConnect({ mode: "connect", networkId: n.id }) }],
-    [{ id: "remove", label: t("menu.remove"), icon: <Trash2 />, disabled: !remove.available || !!n.inventory?.stale || !online || !!removeBlock(topology, n), title: remove.reason, onSelect: () => onRemove(n) }],
+    [{ id: "connect", label: t("menu.connect"), icon: <Link2 />, disabled: !connect.get(n.id)?.available || !!n.inventory?.stale || !online || n.driver === "host" || n.driver === "none", onSelect: () => onConnect({ mode: "connect", networkId: n.id }) }],
+    [{ id: "remove", label: t("menu.remove"), icon: <Trash2 />, disabled: !remove.get(n.id)?.available || !!n.inventory?.stale || !online || !!removeBlock(topology, n), title: remove.get(n.id)?.reason, onSelect: () => onRemove(n) }],
   ];
 
   return (
@@ -180,7 +188,7 @@ export function NetworkTable({ host, networks, topology, containers, focus, quer
                         <span className="text-muted-foreground">–</span>
                       )}
                     </TableCell>
-                    <TableCell className="text-right tabular">{members.get(n.id) ?? 0}</TableCell>
+                    <TableCell className="text-right tabular"><NetworkUsage network={n} members={members.get(n.id) ?? []} /></TableCell>
                     <TableCell className="pr-2 text-right">
                       <ActionsMenu groups={groups} label={t("table.more", { name: n.name })} />
                     </TableCell>

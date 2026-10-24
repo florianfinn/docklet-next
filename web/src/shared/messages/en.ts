@@ -1,6 +1,14 @@
 // American English texts of shared components (status, updates, query states).
 
 export const enCommon = {
+  commandErrors: {
+    failed: "The request could not be completed.",
+    unreachable: "The host cannot be reached. Check the connection.",
+    credentialRejected: "The host rejected the credentials.",
+    updateRequired: "The host must be updated before this action.",
+    signIn: "Sign in again to access this action.",
+    denied: "You do not have permission for this action.",
+  },
   status: {
     running: "Running",
     partial: "Partial",

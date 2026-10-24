@@ -31,6 +31,7 @@ export interface AuthApi {
 
 /** Error codes of the hosts, storage and settings contracts; UIs translate them. */
 export type AdapterErrorCode =
+  | "overlap"
   | "not-found"
   | "exists"
   | "invalid-name"
@@ -182,6 +183,8 @@ export interface VolumesApi extends ProjectWorkspaceApi {
 export type CreateNetworkInput = NetworkDraft;
 
 export interface ConnectNetworkInput {
+  /** DNS labels; whitespace trimmed, case normalized and duplicates removed. */
+  aliases?: string[];
   networkId: string;
   containerId: string;
   /** Static address; empty takes the next free pool address. Needs a configured subnet. */

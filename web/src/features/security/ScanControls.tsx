@@ -14,7 +14,7 @@ import { nextScan, SCAN_SCHEDULE_ANCHOR, type ScanSchedule } from "@/domain/scan
 import { DEFAULT_TIME_ZONE } from "@/domain/schedule";
 import { useScheduleText } from "@/shared/components/schedule/use-schedule-text";
 import { HelpTarget } from "@/shared/help/help-tooltip";
-import { useAdapterText } from "@/data/use-adapter-text";
+import { useCommandError } from "@/data/use-command-error";
 import { Button } from "@/shared/ui/button";
 import { Label } from "@/shared/ui/label";
 import { Spinner } from "@/shared/ui/spinner";
@@ -27,7 +27,7 @@ import { Switch } from "@/shared/ui/switch";
  */
 export function ScanToggle({ enabled }: { enabled: boolean }) {
   const t = useTranslations("security");
-  const dt = useAdapterText();
+  const commandError = useCommandError();
   const adapter = useAdapter();
   const capability = useCapability("setScanEnabled");
   const client = useQueryClient();
@@ -45,7 +45,7 @@ export function ScanToggle({ enabled }: { enabled: boolean }) {
       void client.invalidateQueries({ queryKey: queryKeys.settings });
     } catch (e) {
       client.setQueryData(queryKeys.security, previous);
-      toast.error(t("toggle.failed"), { description: `${dt(e instanceof Error ? e.message : String(e))} · ${t("toggle.restored")}` });
+      toast.error(t("toggle.failed"), { description: `${commandError(e)} · ${t("toggle.restored")}` });
     } finally {
       setPending(false);
     }
