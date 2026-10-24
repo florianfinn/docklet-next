@@ -8,6 +8,7 @@ export const deNetworks: typeof enNetworks = {
     unknown: "Unbekannt",
   },
   usage: {
+    protectedLabel: "{name}: {reason}; Verwendung unbekannt",
     unknown: "Verwendung unbekannt",
     unknownLabel: "{name}: Verwendung unbekannt",
     label: "{name}: {state}, {count, plural, one {# Container} other {# Container}}",

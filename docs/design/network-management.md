@@ -43,8 +43,10 @@ option keys and invalid IPAM return `network.invalid-network` (400).
 There is at most one IPAM pool per enabled family. Each subnet must be a
 canonical CIDR network address. Gateway and auxiliary addresses must have the
 same family and lie inside it; gateways cannot be the subnet address or IPv4
-broadcast. Auxiliary names must be nonempty and unique, and their values cannot
-equal the gateway. IP ranges must be canonical CIDRs wholly inside the subnet.
+broadcast. Auxiliary names must be nonempty and unique. Their values must be
+unique within each family, usable inside the subnet and different from the
+gateway. Network addresses and IPv4 broadcast addresses cannot be reserved.
+IP ranges must be canonical CIDRs wholly inside the subnet.
 A pool for a disabled family is rejected. IPAM driver selection and IPAM options
 are excluded; the default IPAM driver is used. Overlap with any IPAM subnet on
 this host, comparing each family separately, returns `network.overlap` (409).
@@ -68,9 +70,15 @@ network creation remains limited to one per family. An address cannot be the con
 address, IPv4 broadcast, gateway or auxiliary reservation. An address used by any
 other endpoint, including a stopped container's IPAMConfig reservation, is
 rejected. These failures return `network.invalid-ip` (400). IPv6 has no broadcast. Docker 403/409 removal conflicts map to `network.in-use`
-(409), and connect conflicts map to `network.invalid-ip` (400).
+(409), and recognized connect address conflicts map to `network.invalid-ip` (400).
+Recognized duplicate-endpoint or already-attached connect conflicts return
+`network.already-connected` (409). Docker shares status codes across these
+conditions; unknown connect 403/409 errors remain generic server errors without
+raw daemon text.
 Aliases must be nonempty DNS labels (ASCII letters, digits and internal hyphens,
-1–63 characters); duplicates are removed. Invalid aliases return
+1–63 characters); the web trims and lowercases aliases before sending and
+removes duplicates case insensitively. The server also removes case-insensitive
+duplicates during validation. Invalid aliases return
 `network.invalid-network` (400). Disconnect requires membership, otherwise
 `network.not-connected` (409), and rejects host/none with `network.network-mode`.
 
@@ -102,6 +110,37 @@ an acting user and attributes the activity and audit event to that user. M9 has
 no prune UI; unused networks are removed individually. Per-network usage details
 are exposed in the table by an icon with hover and focus detail.
 
+## Read identity and incomplete usage
+
+The network list supplies row identities and list metadata, including built-in
+and Compose ownership. Topology/detail reads enrich those rows; their failure
+cannot erase a listed network or invent an unused network. A failing list keeps
+previously observed rows for that host, while hosts with successful lists keep
+their fresh rows. Without a prior successful list there are no retained rows.
+An online host reporting an inventory read or mapping failure with provably fresh
+list data and failed detail reads shows one network-specific partial notice,
+including hosts not selected in the picker. Agent availability, credential and
+version failures keep the ordinary inventory reason and snapshot wording.
+Freshness evidence is a host observation timestamp or a row whose details and
+inventory are fresh. All details may fail while a remote list still supplies a
+host timestamp. A failed list keeps the ordinary inventory notice: retained
+rows keep their “as of” timestamp; without a snapshot it says no retained values
+are available yet. The picker never labels such a list failure as partial.
+
+Local responses can lack observation timestamps. When all details fail without
+a host timestamp or fresh row, the current domain observations cannot distinguish
+a fresh list from a failed list with retained rows. This ambiguous case uses the
+ordinary inventory notice conservatively, including its existing timestamp when
+available, otherwise the no-snapshot wording. It never claims a partial read.
+This presentation limit does not relax any unknown-usage write guard.
+
+Unavailable details or stale rows make membership and address use unknown.
+Delete, connect, disconnect and address hints remain blocked until usage can be
+read again. Known built-in and Compose deletion protections take precedence over
+the weaker detail-unavailable explanation, and their usage indicators preserve
+that ownership without claiming zero attachments. Stopped containers remain part
+of membership and taken-address checks.
+
 ## Compatibility and limits
 
 Agent contract v6 and minimum agent version 6 cover the network write surface,
@@ -115,6 +154,13 @@ this policy and are rejected on create, even without an explicit gateway. IPv6
 /127 has one usable address (the last); reserving it as gateway or auxiliary
 address leaves no fixed endpoint address. Existing small pools return a clear
 `network.invalid-ip` if no usable unreserved address matches. Auxiliary names are
-unique by the map-shaped wire contract; auxiliary values may repeat and may
-reserve network or IPv4 broadcast addresses. The daemon
-chooses unspecified bridge pools and validates platform-specific driver options.
+unique by the map-shaped wire contract. Web and server both reject duplicate
+auxiliary values, subnet addresses and IPv4 broadcast addresses. IPv6 has no
+broadcast address; its last address may be reserved when otherwise usable.
+The default Docker IPAM driver reserves subnet addresses (and IPv4 broadcast)
+and allocates each auxiliary address separately, rejecting an already allocated
+value. These rules are verified against the
+[Moby allocator](https://github.com/moby/moby/blob/b711d21792db6db488de976eb3c4a653c92c3bc3/daemon/libnetwork/ipams/defaultipam/allocator.go)
+and [auxiliary allocation](https://github.com/moby/moby/blob/b711d21792db6db488de976eb3c4a653c92c3bc3/daemon/libnetwork/network.go)
+on 2026-10-24. The daemon chooses unspecified bridge pools and validates
+platform-specific driver options.

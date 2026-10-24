@@ -7,6 +7,7 @@ export const enNetworks = {
     unknown: "Unknown",
   },
   usage: {
+    protectedLabel: "{name}: {reason}; usage unknown",
     unknown: "Usage unknown",
     unknownLabel: "{name}: Usage unknown",
     label: "{name}: {state}, {count, plural, one {# container} other {# containers}}",

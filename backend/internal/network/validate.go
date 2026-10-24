@@ -2,7 +2,7 @@
 // Revision: 81b69b33c80a454465f54a1f7289c1bc5b5a3381
 // Retrieved: 2026-10-23
 // License: Apache-2.0
-// Deviations: Original host-side network contract implementation for issue #203.
+// Deviations: Original network validation; auxiliary reservation policy matches the web and default Docker IPAM.
 
 package network
 
@@ -87,10 +87,12 @@ func validateCreate(name string, opts client.NetworkCreateOptions, existing []ne
 			if pool.IPRange.IsValid() && (pool.IPRange != pool.IPRange.Masked() || !prefix.Contains(pool.IPRange.Addr()) || pool.IPRange.Bits() < prefix.Bits() || pool.IPRange.Addr().BitLen() != prefix.Addr().BitLen()) {
 				return invalidNetwork("IP range must be inside its subnet")
 			}
+			auxValues := map[netip.Addr]bool{}
 			for key, addr := range pool.AuxAddress {
-				if strings.TrimSpace(key) == "" || !prefix.Contains(addr) || addr == pool.Gateway {
+				if strings.TrimSpace(key) == "" || !usableAddress(prefix, addr) || addr == pool.Gateway || auxValues[addr] {
 					return invalidNetwork("Invalid auxiliary address reservation")
 				}
+				auxValues[addr] = true
 			}
 			if driver != "bridge" && !pool.Gateway.IsValid() {
 				return invalidNetwork("LAN networks require a gateway for each pool")

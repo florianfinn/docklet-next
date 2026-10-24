@@ -262,7 +262,9 @@ func newRouter(p RouterParams) (*echo.Echo, *edge.TunnelServer) {
 		[]string{"/api/webhooks/trigger/:token"}, 60, 10, deps.Webhook.Service().IsKnownToken,
 	))
 	// Only POST agent ingestion needs this brute-force ceiling outside session auth.
-	// Authenticated GET event pagination does not consume the ingestion budget.
+	// Authenticated GET pagination consumes no ingestion budget. Other registrations:
+	// login/refresh per IP, webhook per token/IP, and edge_bootstrap.go per-route
+	// enroll POST and connect GET, each with separate IP and agent-token limits.
 	eventIngestionLimit := middleware.PerIPRateLimitForPaths([]string{"/api/events"}, 60, 30)
 	apiGroup.Use(func(next echo.HandlerFunc) echo.HandlerFunc {
 		limited := eventIngestionLimit(next)
