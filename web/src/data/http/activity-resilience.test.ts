@@ -2,7 +2,7 @@
 // Revision: 3cba55fd10c311e4a5b3361afabb8c93fca706a0
 // Retrieved: 2026-10-24
 // License: Apache-2.0
-// Deviations: Original controlled discovery concurrency, coalescing and freshness regressions.
+// Deviations: Original controlled discovery concurrency, bounded trailing refreshes and deterministic identity guards.
 
 import { CancelledError } from "@tanstack/react-query";
 import { expect, it, vi } from "vitest";
@@ -63,10 +63,13 @@ it("coalesces notifications during a load into one trailing refresh of post-even
   const fresh = detail("good"); fresh.activity.status = "queued";
   f.reads.detail.mockResolvedValue(fresh);
   const first = f.reader.load(); await reached.promise;
-  expect(f.reader.refresh()).toBe(first); expect(f.reader.refresh()).toBe(first);
+  const trailing = f.reader.refresh();
+  expect(f.reader.refresh()).toBe(trailing);
+  expect(trailing).not.toBe(first);
   expect(f.reads.hosts).toHaveBeenCalledTimes(1);
   gate.resolve();
-  expect((await first)[0]?.status).toBe("queued");
+  expect((await first)[0]?.status).toBe("running");
+  expect((await trailing)[0]?.status).toBe("queued");
   expect(f.reads.hosts).toHaveBeenCalledTimes(2);
   expect(f.reads.detail).toHaveBeenCalledTimes(2);
 });
@@ -103,11 +106,48 @@ it("shares failures and evicts failed full work for explicit retry", async () =>
 it("new identity work does not join an old full read or publish its late result", async () => {
   const f = fixture(); const gate = deferred<string[]>();
   f.reads.hosts.mockReturnValueOnce(gate.promise);
-  const old = f.reader.load(); const rejection = expect(old).rejects.toBeInstanceOf(CancelledError);
+  const old = f.reader.load(); const rejection = old.catch((error: unknown) => error);
   f.reader.reset();
-  expect(await f.reader.load()).toHaveLength(24);
+  const fresh = f.reader.load();
+  expect(fresh).not.toBe(old);
+  expect(await fresh).toHaveLength(24);
   const publications = f.reads.publish.mock.calls.length;
-  gate.resolve([]); await rejection;
+  gate.resolve([]); expect(await rejection).toBeInstanceOf(CancelledError);
   expect(f.reader.runs()).toHaveLength(24);
   expect(f.reads.publish).toHaveBeenCalledTimes(publications);
+});
+
+it("fresh recovery checks authentication and blocks old success before its held detail finishes", async () => {
+  const f = fixture(); await f.reader.load();
+  const gate = deferred<ReturnType<typeof detail>>(); const reached = deferred<void>();
+  f.reads.detail.mockImplementationOnce(async () => { reached.resolve(); return gate.promise; });
+  const old = f.reader.load(); const rejected = old.catch((error: unknown) => error);
+  await reached.promise;
+  const { AdapterOutcomeError } = await import("../capability");
+  f.reads.hosts.mockRejectedValueOnce(new AdapterOutcomeError({ kind: "error", code: "http.error", status: 401 }));
+  const fresh = f.reader.refresh(true);
+  expect(fresh).not.toBe(old);
+  expect(f.reads.hosts).toHaveBeenCalledTimes(3);
+  await expect(fresh).rejects.toMatchObject({ outcome: { status: 401 } });
+  expect(f.reader.runs()).toEqual([]);
+  const publications = f.reads.publish.mock.calls.length;
+  gate.resolve(detail("good", "good-0")); expect(await rejected).toBeInstanceOf(CancelledError);
+  expect(f.reads.publish).toHaveBeenCalledTimes(publications);
+});
+
+it("repeated recovery notifications share one fresh discovery and one trailing read", async () => {
+  const f = fixture();
+  const oldGate = deferred<string[]>(); const freshGate = deferred<string[]>(); const trailingGate = deferred<string[]>();
+  f.reads.hosts.mockReturnValueOnce(oldGate.promise).mockReturnValueOnce(freshGate.promise).mockReturnValueOnce(trailingGate.promise);
+  const old = f.reader.load();
+  const fresh = f.reader.refresh(true);
+  const trailing = f.reader.refresh(true);
+  for (let i = 0; i < 10; i++) expect(f.reader.refresh(true)).toBe(trailing);
+  expect(f.reads.hosts).toHaveBeenCalledTimes(2);
+  freshGate.resolve([]); await fresh;
+  const current = f.reader.load();
+  for (let i = 0; i < 10; i++) expect(f.reader.refresh(true)).toBe(current);
+  trailingGate.resolve([]); await current;
+  expect(f.reads.hosts).toHaveBeenCalledTimes(3);
+  oldGate.resolve([]); await old;
 });

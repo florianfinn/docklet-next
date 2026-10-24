@@ -2,7 +2,7 @@
 // Revision: dd403606fbbf763798d43f4ee854adcb105e01b1
 // Retrieved: 2026-10-18
 // License: Apache-2.0
-// Deviations: Coalesced full refresh rejection timing for #211; Original activity isolation, recovery and ordering regressions.
+// Deviations: Immediate authentication recovery across held full reads for #211; Original activity isolation, recovery and ordering regressions.
 
 import { CancelledError } from "@tanstack/react-query";
 import { expect, it, vi } from "vitest";
@@ -178,9 +178,11 @@ it("authentication rejection clears observations and blocks an older successful 
     f.state.hold = async (path, response) => path.endsWith("/bad/activities/run-bad") ? (captured = response, held.promise) : response;
     const pending = f.adapter.listActions(); await vi.waitFor(() => expect(captured !== undefined).toBe(true));
     f.state.hold = undefined; f.state.failure = "page401"; f.sources[0]!.open();
-    // Full discovery coalesces until the held read settles, then observes the rejection.
-    const rejection = expect(pending).rejects.toMatchObject({ outcome: { status: 401 } });
+    const rejection = expect(pending).rejects.toBeInstanceOf(CancelledError);
+    await vi.waitFor(() => expect(runs.mock.lastCall?.[0]).toEqual([]));
+    const publications = runs.mock.calls.length;
     held.resolve(captured!); await rejection;
+    expect(runs).toHaveBeenCalledTimes(publications);
     expect(runs.mock.lastCall?.[0]).toEqual([]);
   } finally { stop(); }
 });

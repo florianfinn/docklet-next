@@ -122,19 +122,17 @@ it.each(["replacement", "logout", "auth401", "activity401"])("%s clears old iden
     const held = deferred<Response>(); const reached = deferred<Response>();
     f.state.hold = async (path, response) => path.endsWith("/good/activities/history-failed") ? (reached.resolve(response), held.promise) : response;
     const pending = f.adapter.listActions();
-    const rejected = expect(pending).rejects.toMatchObject(boundary === "activity401" ? { outcome: { status: 401 } } : { name: "Error" });
+    const rejected = expect(pending).rejects.toMatchObject({ name: "Error" });
     const captured = await reached.promise; f.state.hold = undefined;
     if (boundary === "logout") await act(async () => { await f.adapter.logout(); });
     if (boundary === "auth401") { f.state.authStatus = 401; await act(async () => { await expect(f.discover()).rejects.toMatchObject({ outcome: { status: 401 } }); }); }
     if (boundary === "activity401") {
       f.state.failure = "page401";
       await act(async () => {
-        // Signal a trailing read before releasing the shared pre-notification snapshot.
+        // Recovery observes 401 before the older snapshot may finish.
         f.sources[0]!.open();
-        held.resolve(captured);
         await expect(f.adapter.listActions()).rejects.toMatchObject({ outcome: { status: 401 } });
       });
-      await rejected;
       expect(observed.mock.lastCall?.[0]).toEqual([]);
     }
     f.state.lists.good = [{ ...activity("good", "new-history"), status: "failed" }]; f.state.details["new-history"] = { ...detail("good", "new-history"), activity: { ...activity("good", "new-history"), status: "failed" } };

@@ -2,7 +2,7 @@
 // Revision: dd403606fbbf763798d43f4ee854adcb105e01b1
 // Retrieved: 2026-10-18
 // License: Apache-2.0
-// Deviations: Original focused activity source isolation and read-health projection; bounded discovery and coalesced full refreshes (#211).
+// Deviations: Original focused activity source isolation and read-health projection; bounded discovery, one trailing refresh per group and fresh identity recovery (#211).
 
 import { CancelledError, isCancelledError } from "@tanstack/react-query";
 
@@ -51,7 +51,7 @@ const sorted = (runs: Iterable<CodedActionRun>) => [...runs].sort((a, b) => Date
 
 /** Source-local authority and sequence guards, shared by query and stream reads. */
 export function createActivityReader(reads: Reads) {
-  let pending: { generation: number; dirty: boolean; promise: Promise<CodedActionRun[]> } | undefined;
+  let pending: { generation: number; allowTrailing: boolean; recovery: boolean; promise: Promise<CodedActionRun[]>; next?: Promise<CodedActionRun[]> } | undefined;
   let current: CodedActionRun[] = [];
   let initialized = false;
   let health: ActionReadHealth = { failures: [] };
@@ -175,28 +175,34 @@ export function createActivityReader(reads: Reads) {
       throw error;
     }
   }
-  function load(): Promise<CodedActionRun[]> {
-    if (pending?.generation === generation) return pending.promise;
-    const work = { generation, dirty: false, promise: undefined as unknown as Promise<CodedActionRun[]> };
-    work.promise = (async () => {
-      let result: CodedActionRun[];
-      do {
-        work.dirty = false;
-        result = await performLoad();
-      } while (work.dirty && work.generation === generation);
-      return result;
-    })();
+  function startLoad(allowTrailing = true, recovery = false): Promise<CodedActionRun[]> {
+    const work: NonNullable<typeof pending> = { generation, allowTrailing, recovery, promise: performLoad() };
     pending = work;
     const clear = () => { if (pending === work) pending = undefined; };
     void work.promise.then(clear, clear);
     return work.promise;
   }
-  function refresh(): Promise<CodedActionRun[]> {
-    // A notification during discovery needs one trailing read of post-event state.
-    if (pending?.generation === generation) pending.dirty = true;
-    return load();
+  function load(): Promise<CodedActionRun[]> {
+    if (pending?.generation === generation) return pending.next ?? pending.promise;
+    return startLoad();
   }
-  async function refreshOne(id: string, hostId: string): Promise<void> {
+  function refresh(fresh = false): Promise<CodedActionRun[]> {
+    // Recovery must observe authentication even while an older detail is held.
+    if (pending?.generation !== generation) return startLoad(true, fresh);
+    if (fresh && !pending.recovery) return startLoad(true, true);
+    const work = pending;
+    if (!work.allowTrailing) return work.promise;
+    if (!work.next) {
+      work.next = work.promise.then(() => {
+        if (work.generation !== generation) throw new CancelledError();
+        if (pending && pending !== work) return pending.next ?? pending.promise;
+        return startLoad(false, work.recovery);
+      });
+      void work.next.catch(() => undefined);
+    }
+    return work.next;
+  }
+  async function refreshOne(id: string, hostId: string, discoverOnTerminal = true): Promise<void> {
     const started = ++sequence;
     const version = generation;
     try {
@@ -207,7 +213,7 @@ export function createActivityReader(reads: Reads) {
       current = current.map((r) => r.id === id ? run : r);
       runSequences.set(id, started);
       publish();
-      if (run.outcomeState === undefined && run.status !== "queued" && run.status !== "running") await refresh();
+      if (discoverOnTerminal && run.outcomeState === undefined && run.status !== "queued" && run.status !== "running") await refresh();
     } catch (error) {
       if (version !== generation) throw new CancelledError();
       if (isCancelledError(error)) throw error;
@@ -223,7 +229,6 @@ export function createActivityReader(reads: Reads) {
   }
   return {
     load, refresh, refreshOne,
-    changed() { if (pending?.generation === generation) pending.dirty = true; },
     upsert(run: CodedActionRun) {
       const existing = current.find((row) => row.id === run.id);
       if (existing && existing.hostId !== run.hostId) return;

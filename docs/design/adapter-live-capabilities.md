@@ -100,19 +100,25 @@ attempts use the same abort lifetime. An aborted request, an HTTP status, a body
 or mapping failure, and POST/PUT/PATCH/DELETE never enter this read retry. The
 runtime command admission policy below remains owned by its command transport.
 
-Activity discovery uses at most four concurrent detail reads per host; each
+Each activity discovery uses at most four concurrent detail reads per host; each
 host advances independently. Known activity notifications read their targeted
 detail without waiting for discovery workers. Concurrent full activity reads
-share work. A notification during discovery marks one trailing full observation
-so pre-notification results cannot settle the refresh as fresh. Identity changes
-cancel the old generation and keep its late results out of the new observation.
+share work. Known-run log/progress messages refresh only their targeted detail;
+they never invalidate discovery or event history. Unknown activities and terminal
+state changes can request one trailing discovery per load group. Notifications
+during that trailing read cannot queue another. Current callers settle with their
+current read; refresh callers may await the trailing read. Reconnect or detected
+loss starts fresh discovery so authentication rejection clears old runs without
+waiting for an older detail. Identity changes reject old-generation results;
+renewal recovery and fresh callers retain full-read sequence guards.
 
 Event history retains the complete history used by Dashboard and Activity Center.
 Pages request the effective size of 100 and run strictly sequentially. Concurrent
 full-history consumers share one load. Event stream messages carry invalidation
-only, so they cannot supply incremental event rows. Invalidations during a load
-coalesce into a trailing full observation, with at most one full-history load in
-flight. HTTP and mapping failures remain visible and a deliberate retry can
+only, so they cannot supply incremental event rows. Only events-channel messages
+and stream recovery invalidate history. Each load group permits at most one
+trailing full observation, even when more notifications arrive during it; pages
+remain sequential. HTTP and mapping failures remain visible and a deliberate retry can
 start a new load.
 
 ## Runtime command mapping

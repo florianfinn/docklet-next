@@ -2,7 +2,7 @@
 // Revision: dfdfa084478d327818d8c57b0973d638f80861f6
 // Retrieved: 2026-10-15
 // License: Apache-2.0
-// Deviations: Original HTTP and SSE adapter for issue 38; coalesced activity/event refreshes and effective sequential event pages (#211).
+// Deviations: Original HTTP and SSE adapter for issue 38; notification-scoped activity/event refreshes and effective sequential event pages (#211).
 
 import { CancelledError, isCancelledError, QueryClient } from "@tanstack/react-query";
 
@@ -30,6 +30,7 @@ import { createRuntimeLogs } from "./logs";
 import { registerIdentityLifetime } from "../identity-lifetime";
 import { createIdentityReads } from "./identity-reads";
 import { createActivityReader } from "./activity-reader";
+import { createEventReader } from "./event-reader";
 import { createVolumePrune } from "./volume-prune";
 import { createNetworkCommands } from "./network-commands";
 import { createVolumeCommands } from "./volume-commands";
@@ -269,50 +270,32 @@ export function createHttpAdapter(options: HttpAdapterOptions = {}): DockletAdap
     },
   });
 
-  let eventRead: { generation: number; dirty: boolean; promise: Promise<ReturnType<typeof mapEvent>[]> } | undefined;
-  function eventsChanged() {
-    if (eventRead?.generation === identityGeneration) eventRead.dirty = true;
-  }
-  function loadEvents(): Promise<ReturnType<typeof mapEvent>[]> {
-    if (eventRead?.generation === identityGeneration) return eventRead.promise;
-    const work = { generation: identityGeneration, dirty: false, promise: undefined as unknown as Promise<ReturnType<typeof mapEvent>[]> };
-    work.promise = (async () => {
-      let result: ReturnType<typeof mapEvent>[];
-      do {
-        work.dirty = false;
-        await requireCapability("listEvents");
-        const events = await page("listEvents", "/events", 100);
-        if (work.generation !== identityGeneration) throw new CancelledError();
-        try { result = events.map(mapEvent); } catch (error) { throw classifiedError({ code: "listEvents.mapping-error", cause: error }); }
-      } while (work.dirty);
-      return result;
-    })();
-    eventRead = work;
-    const clear = () => { if (eventRead === work) eventRead = undefined; };
-    void work.promise.then(clear, clear);
-    return work.promise;
-  }
+  const events = createEventReader(async () => {
+    await requireCapability("listEvents");
+    const rows = await page("listEvents", "/events", 100);
+    try { return rows.map(mapEvent); } catch (error) { throw classifiedError({ code: "listEvents.mapping-error", cause: error }); }
+  }, () => identityGeneration);
+  const loadEvents = events.load;
 
-  function refreshRuns(): void {
+  function refreshRuns(fresh = false): void {
     if (actionListeners.size === 0) return;
-    void actions.refresh().catch((error) => { if (isCancelledError(error)) return; window.dispatchEvent(new CustomEvent("docklet:adapter-error", { detail: error })); });
+    void actions.refresh(fresh).catch((error) => { if (isCancelledError(error)) return; window.dispatchEvent(new CustomEvent("docklet:adapter-error", { detail: error })); });
   }
 
-  function refreshRun(activityId: string, environmentId?: string): void {
+  function refreshRun(activityId: string, environmentId?: string, discoverOnTerminal = true): void {
     if (environmentId && runtime.retained().some((run) => run.id === activityId && run.hostId === environmentId)) {
       void runtime.detail(environmentId, activityId).catch(() => undefined);
       return;
     }
     const previous = actions.runs().find((run) => run.id === activityId && run.hostId === environmentId);
     if (!previous || !environmentId) { refreshRuns(); return; }
-    void actions.refreshOne(activityId, environmentId).catch((error) => { if (!isCancelledError(error)) window.dispatchEvent(new CustomEvent("docklet:adapter-error", { detail: error })); });
+    void actions.refreshOne(activityId, environmentId, discoverOnTerminal).catch((error) => { if (!isCancelledError(error)) window.dispatchEvent(new CustomEvent("docklet:adapter-error", { detail: error })); });
   }
 
   function refreshSubscribed(): void {
     invalidateEnvironments();
-    actions.changed();
-    eventsChanged();
-    refreshRuns();
+    events.changed();
+    refreshRuns(true);
     if (changeListeners.size) changeListeners.forEach((listener) => listener(["events", "hosts", "stacks", "containers", "images", "volumes", "topology"]));
   }
 
@@ -328,16 +311,14 @@ export function createHttpAdapter(options: HttpAdapterOptions = {}): DockletAdap
     if (envelope.type === "heartbeat") return;
     // Post-notification reads must not join snapshots started before the change.
     sharedReads.clear();
-    actions.changed();
-    eventsChanged();
     if (envelope.channel === "activities" && envelope.activity && typeof envelope.activity.type === "string") {
       const activityId = envelope.activity.activityId ?? envelope.activity.activity?.id;
-      if (activityId) refreshRun(activityId, envelope.activity.environmentId ?? envelope.activity.activity?.environmentId);
+      if (activityId) refreshRun(activityId, envelope.activity.environmentId ?? envelope.activity.activity?.environmentId, envelope.activity.type !== "message");
       else refreshRuns();
-      changeListeners.forEach((listener) => listener(["events"]));
       return;
     }
     if (envelope.channel === "events" && envelope.eventLog && typeof envelope.eventLog.type === "string") {
+      events.changed();
       changeListeners.forEach((listener) => listener(["events"]));
       return;
     }

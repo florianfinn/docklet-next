@@ -2,7 +2,7 @@
 // Revision: 7c7f33079a07692cfb6dbe0506205c3e6a4bfe74
 // Retrieved: 2026-10-18
 // License: Apache-2.0
-// Deviations: Original stream notification and recovery read freshness regressions; coalesced activity and event discovery waits for a trailing post-event read (#211).
+// Deviations: Original stream notification and recovery read freshness regressions; notification-scoped event history and bounded activity refresh freshness (#211).
 
 import { expect, it, vi } from "vitest";
 import { createHttpAdapter } from "./http-adapter";
@@ -87,7 +87,7 @@ function fixture(kind: "events" | "activities") {
 }
 
 for (const kind of ["events", "activities"] as const) {
-  it.each(cases)(`${kind}: %s separates post-notification reads from held pre-notification snapshots`, async (_name, notify) => {
+  it.each(cases)(`${kind}: %s separates post-notification reads from held pre-notification snapshots`, async (name, notify) => {
     const f = fixture(kind);
     const pending: Promise<unknown>[] = [];
     try {
@@ -97,10 +97,12 @@ for (const kind of ["events", "activities"] as const) {
       f.update();
       await notify(f.sources[0]!, f.sources);
       const newer = f.read(); pending.push(newer);
-      // Full reads coalesce; a notification marks one trailing post-event observation.
       f.held[0]!();
-      expect(await newer).toBe("queued");
-      expect(await older).toBe("queued");
+      const recovery = !["events", "activity ID", "activity without ID", "environments"].includes(name);
+      const historyChange = kind === "events" && (name === "events" || recovery);
+      const discovery = kind === "activities" && (recovery || name === "activity without ID" || name === "environments");
+      expect(await newer).toBe(historyChange || discovery ? "queued" : "running");
+      expect(await older).toBe(historyChange ? "queued" : "running");
     } finally {
       f.cleanup();
       await Promise.allSettled(pending);

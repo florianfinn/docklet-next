@@ -75,7 +75,7 @@ it.each((["password", "login"] as const).flatMap((renewal) => (["shell", "setup"
     else expect(screen.queryByRole("heading", { name: "New administrator password" }) !== null).toBe(true);
     expect(old.close).toHaveBeenCalledTimes(1);
     client.setQueryData(queryKeys.events, []);
-    await act(async () => { f.sources.at(-1)!.send(); });
+    await act(async () => { f.sources.at(-1)!.onmessage?.({ data: JSON.stringify({ channel: "events", timestamp: "2026-10-24T00:00:00Z", eventLog: { type: "changed", timestamp: "2026-10-24T00:00:00Z" } }), lastEventId: "" } as MessageEvent); });
     expect(client.getQueryState(queryKeys.events)?.isInvalidated).toBe(true);
   } finally { f.state.hold = undefined; held.resolve(new Response()); view.unmount(); f.client().clear(); }
 });

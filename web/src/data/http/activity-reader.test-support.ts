@@ -2,7 +2,7 @@
 // Revision: dd403606fbbf763798d43f4ee854adcb105e01b1
 // Retrieved: 2026-10-18
 // License: Apache-2.0
-// Deviations: Controlled activity fetch and stream fixtures; transport labels are synthetic.
+// Deviations: Controlled activity fetch and stream fixtures with explicit message kinds; transport labels are synthetic.
 
 import { vi } from "vitest";
 import type { components } from "@/api/generated/schema";
@@ -21,7 +21,7 @@ export class ActivitySource {
   onerror: ((event: Event) => void) | null = null;
   close = vi.fn();
   open() { this.readyState = 1; this.onopen?.({} as Event); }
-  send(id?: string, hostId?: string) { this.onmessage?.({ data: JSON.stringify({ channel: "activities", timestamp: at, activity: { type: "updated", activityId: id, environmentId: hostId } }), lastEventId: "" } as MessageEvent); }
+  send(id?: string, hostId?: string, type = "updated") { this.onmessage?.({ data: JSON.stringify({ channel: "activities", timestamp: at, activity: { type, activityId: id, environmentId: hostId } }), lastEventId: "" } as MessageEvent); }
   environments() { this.onmessage?.({ data: JSON.stringify({ channel: "environments", timestamp: at }), lastEventId: "" } as MessageEvent); }
   failClosed() { this.readyState = 2; this.onerror?.({} as Event); }
 }
