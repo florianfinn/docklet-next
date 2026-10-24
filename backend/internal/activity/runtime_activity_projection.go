@@ -61,8 +61,12 @@ func (s *ActivityService) projectRuntimeListInternal(ctx context.Context, items 
 	}
 	return s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		var rows []RuntimeReceipt
-		if err := tx.Where("run_id IN ? AND kind = 'receipt'", ids).Find(&rows).Error; err != nil {
-			return err
+		for start := 0; start < len(ids); start += activityProjectionChunk {
+			var chunk []RuntimeReceipt
+			if err := tx.Where("run_id IN ? AND kind = 'receipt'", ids[start:min(start+activityProjectionChunk, len(ids))]).Find(&chunk).Error; err != nil {
+				return err
+			}
+			rows = append(rows, chunk...)
 		}
 		byID := make(map[string]*RuntimeReceipt, len(rows))
 		for i := range rows {
