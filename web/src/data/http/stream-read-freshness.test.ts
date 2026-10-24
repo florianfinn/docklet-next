@@ -2,7 +2,7 @@
 // Revision: 7c7f33079a07692cfb6dbe0506205c3e6a4bfe74
 // Retrieved: 2026-10-18
 // License: Apache-2.0
-// Deviations: Original stream notification and recovery read freshness regressions; coalesced activity discovery waits for a trailing post-event read (#211).
+// Deviations: Original stream notification and recovery read freshness regressions; coalesced activity and event discovery waits for a trailing post-event read (#211).
 
 import { expect, it, vi } from "vitest";
 import { createHttpAdapter } from "./http-adapter";
@@ -97,17 +97,10 @@ for (const kind of ["events", "activities"] as const) {
       f.update();
       await notify(f.sources[0]!, f.sources);
       const newer = f.read(); pending.push(newer);
-      if (kind === "activities") {
-        // Coalesced discovery waits for the old snapshot and then re-reads post-event state.
-        f.held[0]!();
-        expect(await newer).toBe("queued");
-        expect(await older).toBe("queued");
-      } else {
-        await vi.waitFor(() => expect(f.reads()).toBeGreaterThan(1));
-        expect(await newer).toBe("queued");
-        f.held[0]!();
-        expect(await older).toBe("running");
-      }
+      // Full reads coalesce; a notification marks one trailing post-event observation.
+      f.held[0]!();
+      expect(await newer).toBe("queued");
+      expect(await older).toBe("queued");
     } finally {
       f.cleanup();
       await Promise.allSettled(pending);

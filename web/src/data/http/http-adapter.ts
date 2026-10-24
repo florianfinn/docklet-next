@@ -2,7 +2,7 @@
 // Revision: dfdfa084478d327818d8c57b0973d638f80861f6
 // Retrieved: 2026-10-15
 // License: Apache-2.0
-// Deviations: Original HTTP and SSE adapter for issue 38.
+// Deviations: Original HTTP and SSE adapter for issue 38; coalesced activity/event refreshes and effective sequential event pages (#211).
 
 import { CancelledError, isCancelledError, QueryClient } from "@tanstack/react-query";
 
@@ -269,10 +269,28 @@ export function createHttpAdapter(options: HttpAdapterOptions = {}): DockletAdap
     },
   });
 
-  async function loadEvents() {
-    await requireCapability("listEvents");
-    const events = await page("listEvents", "/events", 500);
-    try { return events.map(mapEvent); } catch (error) { throw classifiedError({ code: "listEvents.mapping-error", cause: error }); }
+  let eventRead: { generation: number; dirty: boolean; promise: Promise<ReturnType<typeof mapEvent>[]> } | undefined;
+  function eventsChanged() {
+    if (eventRead?.generation === identityGeneration) eventRead.dirty = true;
+  }
+  function loadEvents(): Promise<ReturnType<typeof mapEvent>[]> {
+    if (eventRead?.generation === identityGeneration) return eventRead.promise;
+    const work = { generation: identityGeneration, dirty: false, promise: undefined as unknown as Promise<ReturnType<typeof mapEvent>[]> };
+    work.promise = (async () => {
+      let result: ReturnType<typeof mapEvent>[];
+      do {
+        work.dirty = false;
+        await requireCapability("listEvents");
+        const events = await page("listEvents", "/events", 100);
+        if (work.generation !== identityGeneration) throw new CancelledError();
+        try { result = events.map(mapEvent); } catch (error) { throw classifiedError({ code: "listEvents.mapping-error", cause: error }); }
+      } while (work.dirty);
+      return result;
+    })();
+    eventRead = work;
+    const clear = () => { if (eventRead === work) eventRead = undefined; };
+    void work.promise.then(clear, clear);
+    return work.promise;
   }
 
   function refreshRuns(): void {
@@ -293,6 +311,7 @@ export function createHttpAdapter(options: HttpAdapterOptions = {}): DockletAdap
   function refreshSubscribed(): void {
     invalidateEnvironments();
     actions.changed();
+    eventsChanged();
     refreshRuns();
     if (changeListeners.size) changeListeners.forEach((listener) => listener(["events", "hosts", "stacks", "containers", "images", "volumes", "topology"]));
   }
@@ -310,6 +329,7 @@ export function createHttpAdapter(options: HttpAdapterOptions = {}): DockletAdap
     // Post-notification reads must not join snapshots started before the change.
     sharedReads.clear();
     actions.changed();
+    eventsChanged();
     if (envelope.channel === "activities" && envelope.activity && typeof envelope.activity.type === "string") {
       const activityId = envelope.activity.activityId ?? envelope.activity.activity?.id;
       if (activityId) refreshRun(activityId, envelope.activity.environmentId ?? envelope.activity.activity?.environmentId);
