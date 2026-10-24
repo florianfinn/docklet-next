@@ -13,6 +13,8 @@ import (
 	"encoding/json/v2"
 	"errors"
 	"fmt"
+	"github.com/florianfinn/docklet-next/backend/internal/image/guard"
+	v1 "github.com/opencontainers/image-spec/specs-go/v1"
 	"log/slog"
 	"maps"
 	"os"
@@ -31,7 +33,7 @@ import (
 	"github.com/google/go-containerregistry/pkg/v1/remote"
 	"github.com/moby/buildkit/util/progress/progressui"
 	"github.com/moby/moby/client"
-	"github.com/opencontainers/image-spec/specs-go/v1"
+
 	copacommon "github.com/project-copacetic/copacetic/pkg/common"
 	"github.com/project-copacetic/copacetic/pkg/patch"
 	"github.com/project-copacetic/copacetic/pkg/types"
@@ -55,6 +57,7 @@ import (
 // Service patches image OS packages in place using the Copacetic
 // library and records each run in the image_patches table.
 type Service struct {
+	safety               *guard.Service
 	db                   *database.DB
 	dockerService        *docker.DockerClientService
 	settingsService      *settings.SettingsService
@@ -161,6 +164,19 @@ func (s *Service) PatchImage(ctx context.Context, envID, imageID string, opts im
 		return nil, err
 	}
 
+	if err := guard.ValidateReference(patchedRef); err != nil {
+		return nil, err
+	}
+	release, err := s.safety.Acquire(runCtx)
+	if err != nil {
+		return nil, err
+	}
+	handedOff := false
+	defer func() {
+		if !handedOff {
+			release()
+		}
+	}()
 	// Copa reads registry credentials from the docker config; refresh it before
 	// any registry lookups below.
 	s.writeRegistryAuthConfigInternal(runCtx)
@@ -205,7 +221,11 @@ func (s *Service) PatchImage(ctx context.Context, envID, imageID string, opts im
 		"patchTarget", copaImageRef,
 	)
 
-	go s.patchInBackgroundInternal(runCtx, record, opts, reportData, copaImageRef, activityID)
+	handedOff = true
+	go func() {
+		defer release()
+		s.patchInBackgroundInternal(runCtx, record, opts, reportData, copaImageRef, activityID)
+	}()
 
 	dto := record.ToDto()
 	return &dto, nil
@@ -851,3 +871,5 @@ func (s *Service) completePatchActivityInternal(ctx context.Context, activityID 
 		slog.DebugContext(ctx, "failed to complete image patch activity", "activityId", activityID, "error", err)
 	}
 }
+
+func (s *Service) SetImageGuard(g *guard.Service) { s.safety = g }

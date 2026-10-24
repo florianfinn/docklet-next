@@ -13,9 +13,12 @@ import (
 	"encoding/json/v2"
 	"errors"
 	"fmt"
+	"github.com/florianfinn/docklet-next/backend/internal/config"
+	imageDTO "github.com/florianfinn/docklet-next/types/image"
 	"log/slog"
 	"maps"
 	"net/http"
+	"net/url"
 	"strings"
 	"time"
 
@@ -146,6 +149,21 @@ func (s *Service) Execute(
 		defer cancel()
 		ctx = checkedCtx
 	}
+	parsed, e := url.Parse(path)
+	if e != nil {
+		return nil, imageDTO.Failure("update.invalid-target", 400)
+	}
+	if method == http.MethodPost && strings.HasSuffix(parsed.Path, "/system/upgrade") {
+		var request struct {
+			TargetVersion string `json:"targetVersion"`
+		}
+		if json.Unmarshal(body, &request) != nil {
+			return nil, imageDTO.Failure("update.invalid-target", 400)
+		}
+		if err := imageDTO.ValidateAgentUpgradeTarget(request.TargetVersion, config.Version); err != nil {
+			return nil, err
+		}
+	}
 	// Forward the activity batch ID so bulk actions proxied to a remote
 	// environment group the same way they do locally.
 	var headers map[string]string
@@ -195,6 +213,9 @@ func (s *Service) JSON(
 
 // SyncRegistries syncs all registries from this manager to a remote environment
 func (s *Service) SyncRegistries(ctx context.Context, target *Target) error {
+	if err := settings.ValidateCredentialEncryption(); err != nil {
+		return err
+	}
 	return s.fanOutSyncToEnvironment(ctx, target, "registries", "/api/container-registries/sync",
 		func(reg registry.ContainerRegistry) (containerregistry.Sync, bool, error) {
 			registryType, typeErr := registry.NormalizeRegistryType(reg.RegistryType)

@@ -71,9 +71,9 @@ the mapping and its contract tests before that feature claims live data.
 | `NetworkCreateRequest` | `NetworkDraft` | IPAM and validation fields need a writable form projection. | M9 host-side validation and IPv4/IPv6 wire mapping; see [network management](network-management.md) |
 | `NetworkConnectContainerRequest`, `NetworkDisconnectContainerRequest`, `NetworkContainerEndpoint` | `ConnectNetworkInput`, `NetworkAttachment`, `connectNetwork`, `disconnectNetwork` | Container attachments need host-aware validation and fixed IPv4/IPv6 address mapping. | M9 host-side validation and IPv4/IPv6 wire mapping; see [network management](network-management.md) |
 | `ImageSummary`, `ImageListResponse` | `DockerImage`, `ImagesApi` | Image records need consumers and UI usage state. | Planned M5 Hosts, transport and read inventory |
-| `ImagePullOptions`, `PruneImagesInputBody`, `ImagePruneReport` | `PullImageInput`, `pullImage`, `removeImage`, `pruneImages` | Pull and removal inputs and prune results need host-scoped, guarded action mapping. | Planned M10 Images and updates |
-| `ContainerregistryContainerRegistry` | `ImagesApi` | Registry credentials and image source metadata need a safe management projection. | Planned M10 Images and updates |
-| `ImageUpdateInfo`, `ImageupdateResponse`, `ProjectServiceUpdateInfo` | `UpdateInfo`, `AutoUpdatePolicy` | Version versus rebuild and scheduling need explicit UI states. | Planned M10 Images and updates |
+| `ImagePullOptions`, `PruneImagesInputBody`, `ImagePruneReport` | `PullImageInput`, `pullImage`, `removeImage`, `pruneImages` | PR1 supplies host guards, typed partial reports and the v7 base; dependent action UI mapping follows. | M10 PR1 backend safety; see [images and updates](images-updates.md) |
+| `ContainerregistryContainerRegistry` | `ImagesApi` | PR1 supplies explicit write-only credentials and safe public metadata; management UI follows. | M10 PR1 backend projection |
+| `ImageUpdateInfo`, `ImageupdateResponse`, `ProjectServiceUpdateInfo` | `UpdateInfo`, `AutoUpdatePolicy` | PR1 supplies read-only comparable-platform states; policies/schedules require PR2b. | M10 PR1 reads; lifecycle PR2a and policy PR2b remain gated |
 | No restore-point DTO | `restoreRestorePoint` | A saved pre-update image and configuration need a selectable restore point and action identity. | Planned M10 Images and updates |
 | `VulnerabilityRiskOverview`, `VulnerabilityRiskFinding`, `VulnerabilityScanResult` | `SecurityOverview`, `Finding`, `ScanRun` | Scan risk and finding DTOs need host/image grouping and severity presentation. | Planned M11 Vulnerability scanning |
 | `BackupSystemBackupRun`, `BackupSystemBackupPolicy`, `BackupBackupFileEntry` | `BackupRun`, `BackupSettings` | Restore targets, history and file selection need one UI backup model. | Planned M12 Backups and restore |
@@ -141,9 +141,11 @@ The trusted agent receiver registers execute/query/cancel and registration/targe
 metadata routes with the existing manager credential. Ordinary bearer,
 administrator and bootstrap credentials cannot grant receiver authority. Direct
 and Edge requests recheck agent access and compatibility; Edge has no Direct
-fallback. Numeric agent contract version and minimum are both 5. The fingerprint
-hashes the exact `types/contract/testdata/agent-hub-v5.json` bytes, inheriting the
-v4 runtime contract and adding the [storage contract](storage-workspace.md).
+fallback. Numeric agent contract version and minimum are both 7. The fingerprint
+hashes the exact `types/contract/testdata/agent-hub-v7.json` bytes, retaining the
+v3–v6 fixtures and adding PR1 image/registry safety and read-only update states.
+Runtime update/restore activation remains gated on PR2a; policy/schedule/notify
+activation remains gated on PR2b. See [images and updates](images-updates.md).
 The v3 and v4 fixtures are preserved. Runtime queries have no compatibility
 exception. Existing health/version/self-upgrade exceptions, `tunnel/v1`, historical OpenAPI and
 shipped migrations remain unchanged.

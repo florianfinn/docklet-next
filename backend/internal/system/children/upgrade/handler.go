@@ -9,11 +9,13 @@ package upgrade
 import (
 	"context"
 	"errors"
+	imageDTO "github.com/florianfinn/docklet-next/types/image"
+	"go.getarcane.app/kit/pkg"
 	"log/slog"
+	"strings"
 
 	"github.com/danielgtaylor/huma/v2"
 	"github.com/florianfinn/docklet-next/types/base"
-	"go.getarcane.app/kit/pkg"
 
 	"github.com/florianfinn/docklet-next/backend/internal/common"
 	"github.com/florianfinn/docklet-next/backend/internal/config"
@@ -123,6 +125,9 @@ func (h *Handler) TriggerUpgrade(ctx context.Context, input *TriggerUpgradeInput
 		targetVersion = input.Body.TargetVersion
 	}
 
+	if h.cfg != nil && (h.cfg.AgentMode || h.cfg.EdgeAgent) && strings.TrimSpace(targetVersion) == "" {
+		return nil, imageDTO.Failure("update.invalid-target", 400)
+	}
 	err = h.service.TriggerUpgradeAsync(utils.ActivityRuntimeContext(ctx, h.appCtx), *user, targetVersion)
 	if err != nil {
 		slog.ErrorContext(ctx, "System upgrade failed", "error", err, "user", user.Username)
@@ -131,7 +136,7 @@ func (h *Handler) TriggerUpgrade(ctx context.Context, input *TriggerUpgradeInput
 			return nil, huma.Error409Conflict("Failed to initiate upgrade: " + err.Error())
 		}
 
-		return nil, huma.Error500InternalServerError("Failed to initiate upgrade: " + err.Error())
+		return nil, imageDTO.Neutral(err, "update.deploy-failed", 500)
 	}
 
 	message := kit.Ternary(
@@ -174,7 +179,7 @@ func (h *Handler) TriggerUpdateAll(ctx context.Context, input *TriggerUpdateAllI
 		if errors.Is(err, common.ErrUpdateAllInProgress) {
 			return nil, huma.Error409Conflict(err.Error())
 		}
-		return nil, huma.Error500InternalServerError("Failed to initiate upgrade: " + err.Error())
+		return nil, imageDTO.Neutral(err, "update.deploy-failed", 500)
 	}
 
 	return &handlerutil.Out[EnvironmentUpdateJob]{

@@ -9,6 +9,7 @@ package environment
 import (
 	"context"
 	"encoding/json"
+	"github.com/florianfinn/docklet-next/backend/internal/config"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -145,6 +146,9 @@ func (f *agentFixture) count(path string) int {
 }
 
 func TestHostAgentVersionMatrix(t *testing.T) {
+	previousVersion := config.Version
+	config.Version = "2.0.0"
+	defer func() { config.Version = previousVersion }()
 	for _, mode := range []string{"direct", "edge"} {
 		for _, state := range []string{"ok", "below-minimum", "fingerprint-mismatch"} {
 			t.Run(mode+"/"+state, func(t *testing.T) {
@@ -172,7 +176,11 @@ func TestHostAgentVersionMatrix(t *testing.T) {
 				for _, route := range []struct{ method, path string }{
 					{"GET", "/api/health"}, {"GET", "/api/app-version"}, {"HEAD", "/api/environments/0/system/health"}, {"POST", "/api/environments/0/system/upgrade"}, {"GET", "/api/environments/0/containers"}, {"POST", "/api/container-registries/sync"}, {"PUT", "/api/environments/0/settings"},
 				} {
-					_, err := f.service.ExecuteRemoteRequest(ctx, f.id, route.method, route.path, nil)
+					var body []byte
+					if route.method == "POST" && strings.HasSuffix(route.path, "/system/upgrade") {
+						body = []byte(`{"targetVersion":"1.0.0"}`)
+					}
+					_, err := f.service.ExecuteRemoteRequest(ctx, f.id, route.method, route.path, body)
 					allowed := state == "ok" || contract.AgentRecoveryRoute(route.method, route.path)
 					if allowed {
 						require.NoError(t, err)

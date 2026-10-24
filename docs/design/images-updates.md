@@ -191,7 +191,7 @@ Docker/registry text is not an alternative public message path.
 | 404 | `image.not-found`, `registry.not-found`, `update.target-not-found`, `restore.not-found` |
 | 409 | `image.in-use`, `image.system-protected`, `image.restore-point-protected`, `image.active-update-protected`, `image.changed`, `image.busy`, `registry.exists`, `update.policy-changed`, `update.target-changed`, `update.snapshot-unavailable`, `update.baseline-unavailable`, `update.path-retired`, `restore.in-use`, `restore.unavailable`, `update.config-drift`, `update.image-binding-unsupported`, `restore.shared-reference`, `restore.image-mismatch`, `update.schedule-hub-owned`, `update.agent-local-job-disabled`, `update.requires-hub-update` plus runtime conflicts |
 | 429 | `registry.rate-limited`; bounded retry metadata only |
-| 502/503 | `image.pull-failed`, `image.remove-failed`, `image.prune-failed`, `image.usage-unavailable`, `registry.unavailable`, `registry.sync-failed`, `registry.credential-unavailable`, `update.check-unavailable`, `update.system-version-unknown` |
+| 502/503 | `image.pull-failed`, `image.remove-failed`, `image.tag-failed`, `image.load-failed`, `image.prune-failed`, `image.usage-unavailable`, `registry.unavailable`, `registry.sync-failed`, `registry.credential-unavailable`, `update.check-unavailable`, `update.system-version-unknown` |
 | 500 | `update.deploy-failed`, `restore.deploy-failed`, `update.persistence-failed`, `registry.persistence-failed`; message describes the operation without underlying text |
 
 Reuse runtime unknown/interrupted/cancelled/target-removed/target-unavailable codes

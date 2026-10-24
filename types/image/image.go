@@ -8,6 +8,7 @@ package image
 
 import (
 	"encoding/json"
+	"github.com/distribution/reference"
 	"math"
 	"strings"
 	"time"
@@ -33,6 +34,13 @@ type ListResponse struct {
 }
 
 type UpdateInfo struct {
+	State     string    `json:"state" enum:"unchecked,current,version,rebuild,local,unknown,error"`
+	CheckedAt time.Time `json:"checkedAt"`
+	ImageRef  string    `json:"imageRef"`
+	Platform  string    `json:"platform,omitempty"`
+	AuthState string    `json:"authState" enum:"anonymous,credential,authentication-required,authentication-failed,unknown"`
+	Code      string    `json:"code,omitempty"`
+
 	// CheckTime is the time when the update check was performed.
 	//
 	// Required: true
@@ -76,7 +84,7 @@ type UpdateInfo struct {
 	// AuthUsername is the username used for authentication.
 	//
 	// Required: false
-	AuthUsername string `json:"authUsername,omitempty"`
+	AuthUsername string `json:"-"`
 
 	// AuthRegistry is the registry used for authentication.
 	//
@@ -117,6 +125,8 @@ type UsedBy struct {
 }
 
 type Summary struct {
+	ProtectionReasons []Protection `json:"protectionReasons" required:"false"`
+	UsageState        string       `json:"usageState" enum:"known,unknown" required:"false"`
 	// ID is the unique identifier of the image.
 	//
 	// Required: true
@@ -213,6 +223,9 @@ type AttestationSubject struct {
 }
 
 type PruneReport struct {
+	Skipped             []PruneItem `json:"skipped"`
+	Failed              []PruneItem `json:"failed"`
+	SpaceReclaimedKnown bool        `json:"spaceReclaimedKnown"`
 	// ImagesDeleted is a list of image IDs that were deleted.
 	//
 	// Required: true
@@ -312,6 +325,8 @@ type LoadResult struct {
 }
 
 type DetailSummary struct {
+	ProtectionReasons []Protection `json:"protectionReasons" required:"false"`
+	UsageState        string       `json:"usageState" enum:"known,unknown" required:"false"`
 	// ID is the unique identifier of the image.
 	//
 	// Required: true
@@ -423,6 +438,7 @@ type DetailSummary struct {
 
 // PullOptions contains options for pulling an image.
 type PullOptions struct {
+	InlineCredentialsProvided bool `json:"-"`
 	// ImageName is the name of the image to pull.
 	//
 	// Required: true
@@ -433,26 +449,30 @@ type PullOptions struct {
 	// Required: false
 	Tag string `json:"tag,omitempty" doc:"Tag of the image to pull (e.g., latest)"`
 
-	// Auth for authenticating with private registries (legacy field name).
+	// Auth is rejected legacy input; use saved registry credentials or anonymous access.
 	//
 	// Required: false
-	Auth *containerregistry.Credential `json:"auth,omitempty"`
+	Auth *containerregistry.Credential `json:"auth,omitempty" deprecated:"true" writeOnly:"true"`
 
-	// Credentials for authenticating with private registries.
+	// Credentials is rejected legacy input; use saved registry credentials.
 	//
 	// Required: false
-	Credentials []containerregistry.Credential `json:"credentials,omitempty"`
+	Credentials []containerregistry.Credential `json:"credentials,omitempty" deprecated:"true" writeOnly:"true"`
 }
 
 // GetFullImageName returns the image name with tag.
 func (p PullOptions) GetFullImageName() string {
-	if p.Tag != "" && p.Tag != "latest" {
-		return p.ImageName + ":" + p.Tag
+	if p.Tag == "" {
+		return p.ImageName
 	}
-	if p.Tag == "latest" && !strings.Contains(p.ImageName, ":") {
-		return p.ImageName + ":latest"
+	named, err := reference.ParseNormalizedNamed(p.ImageName)
+	if err != nil {
+		return p.ImageName
 	}
-	return p.ImageName
+	if _, ok := named.(reference.Tagged); ok {
+		return p.ImageName
+	}
+	return p.ImageName + ":" + p.Tag
 }
 
 // GetCredentials returns credentials from either the Auth or Credentials field.

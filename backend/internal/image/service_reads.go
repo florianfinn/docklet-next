@@ -11,6 +11,7 @@ import (
 	"context"
 	"fmt"
 	"github.com/distribution/reference"
+	"github.com/florianfinn/docklet-next/backend/internal/image/guard"
 	"github.com/florianfinn/docklet-next/backend/internal/imageupdate"
 	"github.com/florianfinn/docklet-next/backend/pkg/inventory"
 	"github.com/florianfinn/docklet-next/backend/pkg/pagination"
@@ -25,6 +26,7 @@ import (
 	"github.com/samber/mo"
 	"go.getarcane.app/docker"
 	"go.getarcane.app/kit/pkg"
+
 	"golang.org/x/sync/errgroup"
 	"log/slog"
 	"maps"
@@ -99,6 +101,13 @@ func (s *ImageService) ListImagesPaginated(ctx context.Context, params paginatio
 	updateMap := buildUpdateMapInternal(updateRecords)
 
 	items := MapDockerImagesToDTOs(dockerImages, containers, usageMap, updateMap, vulnerabilityMap)
+	for i := range items {
+		if pins, err := s.safety.Reasons(ctx, items[i].ID); err == nil {
+			items[i].ProtectionReasons = append(items[i].ProtectionReasons, pins...)
+		} else {
+			items[i].UsageState = "unknown"
+		}
+	}
 
 	config := s.getImagePaginationConfig()
 
@@ -425,11 +434,13 @@ func MapDockerImagesToDTOs(
 	pinnedRefsByImageID := collectPinnedReferencesByImageIDInternal(containers)
 	items := make([]imagetypes.Summary, 0, len(dockerImages))
 	for _, di := range dockerImages {
+		di.RepoTags = guard.PublicTags(di.RepoTags)
 		repo, tag := determineRepoAndTag(di)
 
 		usedBy := usageMap[di.ID]
 		imageDto := imagetypes.Summary{
-			ID:               di.ID,
+			ID:         di.ID,
+			UsageState: "known", ProtectionReasons: []imagetypes.Protection{},
 			Repo:             repo,
 			Tag:              tag,
 			RepoTags:         di.RepoTags,
@@ -453,6 +464,9 @@ func MapDockerImagesToDTOs(
 			}
 		}
 
+		if len(usedBy) > 0 {
+			imageDto.ProtectionReasons = append(imageDto.ProtectionReasons, imagetypes.Protection{Reason: "in-use"})
+		}
 		items = append(items, imageDto)
 	}
 	return items

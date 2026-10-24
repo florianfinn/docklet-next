@@ -275,6 +275,7 @@ func SetupAPI(e *echo.Echo, apiGroup *echo.Group, appCtx handlerutil.ActivityApp
 	e.JSONSerializer = jsonV2Serializer{}
 
 	humaConfig := huma.DefaultConfig("Arcane API", config.Version)
+	humaConfig.Transformers = append(humaConfig.Transformers, imageErrorTransformer)
 	humaConfig.Formats = maps.Clone(humaConfig.Formats)
 	humaConfig.Formats["application/json"] = jsonV2Format
 	humaConfig.Formats["json"] = jsonV2Format
@@ -330,6 +331,7 @@ func SetupAPI(e *echo.Echo, apiGroup *echo.Group, appCtx handlerutil.ActivityApp
 	api.UseMiddleware(auth.NewHumaMiddleware(api, deps.Auth.Service(), deps.ApiKey.Service(), deps.Role.Service(), deps.Environment.Service(), cfg))
 	api.UseMiddleware(deps.Auth.Service().ViewerMiddleware(api))
 	api.UseMiddleware(middleware.NewActivityBatchID())
+	api.UseMiddleware(middleware.RejectInlineImageCredentials(api))
 	registerNormalizationInternal(api)
 	registerRuntimeSchemasInternal(api)
 
@@ -341,6 +343,7 @@ func SetupAPI(e *echo.Echo, apiGroup *echo.Group, appCtx handlerutil.ActivityApp
 		registerScalarDocs(apiGroup)
 	}
 
+	registerImageSafetyErrors(api)
 	return api
 }
 
@@ -364,6 +367,7 @@ func setupAPIForSpecMode(cfg *config.Config) huma.API {
 	apiGroup := e.Group("/api")
 
 	humaConfig := huma.DefaultConfig("Arcane API", config.Version)
+	humaConfig.Transformers = append(humaConfig.Transformers, imageErrorTransformer)
 	humaConfig.Formats = maps.Clone(humaConfig.Formats)
 	humaConfig.Formats["application/json"] = jsonV2Format
 	humaConfig.Formats["json"] = jsonV2Format
@@ -405,6 +409,7 @@ func setupAPIForSpecMode(cfg *config.Config) huma.API {
 	registerRuntimeSchemasInternal(api)
 	registerHandlersInternal(api, HandlerDeps{}, handlerutil.NewActivityAppContext(context.Background()), cfg) //nolint:forbidigo // Schema discovery has no running request or application lifecycle.
 
+	registerImageSafetyErrors(api)
 	return api
 }
 
