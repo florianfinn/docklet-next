@@ -189,7 +189,7 @@ Docker/registry text is not an alternative public message path.
 | 400 | `image.invalid-reference`, `image.invalid-prune`, `image.reserved-reference`, `image.invalid-archive`, `registry.invalid-config`, `registry.inline-credentials-not-allowed`, `update.invalid-policy`, `update.invalid-target` |
 | 401/403 | Existing authentication/permission codes; `registry.authentication-required` / `registry.authentication-failed` for registry probe failures (not hub sign-out evidence) |
 | 404 | `image.not-found`, `registry.not-found`, `update.target-not-found`, `restore.not-found` |
-| 409 | `image.in-use`, `image.system-protected`, `image.restore-point-protected`, `image.active-update-protected`, `image.changed`, `image.busy`, `registry.exists`, `update.policy-changed`, `update.target-changed`, `update.snapshot-unavailable`, `restore.in-use`, `restore.unavailable`, `update.config-drift`, `update.image-binding-unsupported`, `restore.shared-reference`, `restore.image-mismatch`, `update.schedule-hub-owned`, `update.agent-local-job-disabled`, `update.requires-hub-update` plus runtime conflicts |
+| 409 | `image.in-use`, `image.system-protected`, `image.restore-point-protected`, `image.active-update-protected`, `image.changed`, `image.busy`, `registry.exists`, `update.policy-changed`, `update.target-changed`, `update.snapshot-unavailable`, `update.baseline-unavailable`, `update.path-retired`, `restore.in-use`, `restore.unavailable`, `update.config-drift`, `update.image-binding-unsupported`, `restore.shared-reference`, `restore.image-mismatch`, `update.schedule-hub-owned`, `update.agent-local-job-disabled`, `update.requires-hub-update` plus runtime conflicts |
 | 429 | `registry.rate-limited`; bounded retry metadata only |
 | 502/503 | `image.pull-failed`, `image.remove-failed`, `image.prune-failed`, `image.usage-unavailable`, `registry.unavailable`, `registry.sync-failed`, `registry.credential-unavailable`, `update.check-unavailable`, `update.system-version-unknown` |
 | 500 | `update.deploy-failed`, `restore.deploy-failed`, `update.persistence-failed`, `registry.persistence-failed`; message describes the operation without underlying text |
@@ -817,15 +817,16 @@ open from D1–D4 after M1–M5; new material deviations still require a decisio
 
 ## Delivery
 
-Two sequential PRs under #229 target `feature/m10-images-updates`; PR1 merges
-before PR2 and its dependent consumers. The coordinator records the complete path
+Three sequential PRs under #229 target `feature/m10-images-updates`; PR1 merges
+before PR2a, then PR2b and their dependent consumers. The coordinator records the complete path
 ownership and shared-file ordering before implementation; no neighbour becomes
-implicitly writable. Split PR2 further only if it is not reviewable.
+implicitly writable. PR2a owns lifecycle and migrations (G1/G3); PR2b owns
+policies, hub schedules, agent job neutralisation and notify (G2/M3).
 
 | Delivery | Owned paths within the approved integration scope | Tests and independent risk review |
 | --- | --- | --- |
 | PR1 — image/registry safety and contract v7 base | `backend/internal/{image,imageupdate,registry,settings}` and matching DTOs; generic protection model/new migration/schema registry; narrow `system/children/{prune,upgrade}`, scheduler prune and authenticated forwarding; `types/contract`, Edge table, OpenAPI/generated DTOs and EN/DE catalogues | Image/lease/prune/reserved-tag/archive guard mutations, credential redaction/key/sync transport, UpdateInfo, upgrade cap and compatibility fixtures. Risk review: agent surface/allowlist and credential storage; review any new protection-table migration |
-| PR2 — lifecycle, migration, policies, schedules and notify | `backend/internal/{updater,project,activity,job,notification}`, `backend/pkg/{projects,scheduler}`, `third_party/arcane/updater`; narrow container ingress/bootstrap guards; baseline/point/policy/schedule/dedup models/new migrations/schema registry; runtime/updater/job DTOs, contract/Edge/OpenAPI/generated DTO/catalogue extensions | Full lifecycle/state-table barrier and red proofs, actual file/actor/revision edits, failed-run restore, SQLite migration/reopen, schedule ownership/serial execution, notification dedup, orphan cleanup and stack-only boundaries. Risk review: restore lifecycle and database migration, plus changed agent commands |
+| PR2a/PR2b — sequential lifecycle and scheduling deliveries | `backend/internal/{updater,project,activity,job,notification}`, `backend/pkg/{projects,scheduler}`, `third_party/arcane/updater`; narrow container ingress/bootstrap guards; baseline/point/policy/schedule/dedup models/new migrations/schema registry; runtime/updater/job DTOs, contract/Edge/OpenAPI/generated DTO/catalogue extensions | Full lifecycle/state-table barrier and red proofs, actual file/actor/revision edits, failed-run restore, SQLite migration/reopen, schedule ownership/serial execution, notification dedup, orphan cleanup and stack-only boundaries. Risk review: restore lifecycle and database migration, plus changed agent commands |
 
 PR1 introduces 7/minimum 7 and the v7 fixture/fingerprint; PR2 extends this
 **unreleased** contract and regenerates its fingerprint in the same owning step.
@@ -835,6 +836,33 @@ contracts, guards, migrations and risk review pass. Preserve v3–v6 fixtures;
 no intermediate v7 package is a product release. PR1 may unblock image/registry/
 update-info consumers; lifecycle consumers wait for PR2. Closing review and exact-
 package Direct/Edge acceptance still cover the complete integrated milestone.
+
+### R3 implementation dispositions
+
+At lifecycle activation, retire tag-discovering `POST E/projects/{projectId}/update-services`,
+webhook container/project `update` and updater `run`, the legacy single-container
+updater and `/updater/run` with typed, translated `update.path-retired`. Only the
+new stack-update admission may update images. Discovery-free workspace calls
+remain ordinary deploy operations. Webhook runtime start/stop/restart/redeploy/
+up/down remain; webhook update authority awaits its separate actor-model review.
+PR2a owns narrow webhook/legacy-ingress changes and tests zero file/pull/recreate
+effects on refused hub/agent paths; PR1 introduces no workload-update capability.
+
+For PR2a restore, refuse `restore.shared-reference` only if a tag must move and
+another running/stopped workload uses that reference with a different saved ID,
+or usage is unknown. No move needs no shared refusal. Preflight refuses points
+mapping one reference to several IDs (`restore.unavailable`), and divergent update
+baselines (`update.baseline-unavailable`). Partial-source restore creates only
+recorded-present services, then stops recorded-stopped services; never creates
+recorded-absent services. Missing/unprovable baseline and post-deploy capture
+failure use `update.baseline-unavailable` (409/scheduled skip; deploy once first);
+key/pin/point failures retain `update.snapshot-unavailable`.
+
+Under one image lease hold, check sharing, assign tags and persist protection;
+release, then perform expected-revision file writes, then deploy. Busy cannot
+leave a file write. Record any file refusal after tag assignment. Drop/reuse a
+point at settlement if the run had no workload, file or tag effect; retain failed
+points with any effect. PR2a/PR2b extend the unreleased v7 fingerprint sequentially.
 
 ## Test matrix and practical acceptance
 
@@ -856,6 +884,7 @@ Compiler failures, timeouts and equivalent mutations are not evidence.
 | Missing/development keys and inline auth (B-D1-10/12) | Hub and agent credential writes/sync and baseline/point writes refuse missing/default keys; no plaintext/public-key fallback, prior set preserved. Inline auth/credentials refuse without echo over Direct/Edge. Remove each validation independently and assert zero writes/effects |
 | Compatibility/revocation/sync failure | v6/fingerprint mismatch, removed/rotated registration and offline Edge send no secrets; failed sync preserves old complete set; mutation permits old-session sync and fails transport assertion |
 | UpdateInfo fixtures from producer | Version major/minor/patch, same-tag rebuild, equal digest, platform/index mismatch, local/pinned, missing digest, private denial/rate limit; mutate digest comparison or unknown→current mapping and fail |
+| Retired update ingress (PR2a, B-D3-01) | Tag-discovering update-services, webhook update/run, legacy single-container updater and /updater/run refuse update.path-retired on hub/agent with zero file writes/pulls/recreates; remove each ingress guard and fail the actual effect assertion |
 | Admission state-table barriers | Schedule/manual collisions, stack/child both ways, distinct-host independence, restore during update, same-key retry and policy revision races; remove conflict/admission-revision recheck and assert extra effect |
 | Snapshot/restore persistence | Supported complete Compose/env evidence, encrypted payload, update-without-baseline refusal, pre-effect pin commit, retained failed point, exact digest/config restore, five-point retention and shared pin holds; skip snapshot commit or use mutable tag and fail |
 | Baseline, drift and admitted actor (B-D1-02/04) | Successful editor/update/restore captures actual complete inputs/IDs; capture failure leaves truthful deploy success plus unavailable baseline. Saved-but-undeployed edits block manual/auto; restore captures drift with replacement acknowledgment and racing edits refuse; update-without-baseline or mutation-without-point cannot bypass by force/confirmation. Assert expected revisions, admitted actor and no SystemUser substitution; remove drift/point/actor guard and fail zero-write or ownership assertion |
