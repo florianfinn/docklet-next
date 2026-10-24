@@ -13,7 +13,7 @@ it.each([new TypeError("Failed to fetch"), new DOMException("Network failure", "
   const reads = createIdentityReads(fetcher);
   expect(await (await reads.fetch("/api/events")).json()).toEqual({ value: 42 });
   expect(fetcher).toHaveBeenCalledTimes(2);
-  expect(fetcher.mock.calls[0][1].signal).toBe(fetcher.mock.calls[1][1].signal);
+  expect(fetcher.mock.calls[0]![1].signal).toBe(fetcher.mock.calls[1]![1].signal);
 });
 
 it("keeps the existing adapter error path after two transport failures", async () => {

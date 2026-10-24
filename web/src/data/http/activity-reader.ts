@@ -2,7 +2,7 @@
 // Revision: dd403606fbbf763798d43f4ee854adcb105e01b1
 // Retrieved: 2026-10-18
 // License: Apache-2.0
-// Deviations: Original focused activity source isolation and read-health projection.
+// Deviations: Original focused activity source isolation and read-health projection; bounded discovery and coalesced full refreshes (#211).
 
 import { CancelledError, isCancelledError } from "@tanstack/react-query";
 
@@ -51,6 +51,7 @@ const sorted = (runs: Iterable<CodedActionRun>) => [...runs].sort((a, b) => Date
 
 /** Source-local authority and sequence guards, shared by query and stream reads. */
 export function createActivityReader(reads: Reads) {
+  let pending: { generation: number; dirty: boolean; promise: Promise<CodedActionRun[]> } | undefined;
   let current: CodedActionRun[] = [];
   let initialized = false;
   let health: ActionReadHealth = { failures: [] };
@@ -78,7 +79,10 @@ export function createActivityReader(reads: Reads) {
       if (isUnauthorized(error)) throw error;
       return { hostId, runs: [], failure: failure(error, hostId) };
     }
-    const results = await Promise.all(page.items.map(async (item) => {
+    const version = generation;
+    const results: { run?: CodedActionRun; failure?: ActionReadFailure }[] = [];
+    let next = 0;
+    async function readItem(item: Activity) {
       try {
         if (!item || typeof item.id !== "string" || !item.id || item.environmentId !== hostId) invalid();
         const run = mapped(await reads.detail(hostId, item.id), hostId, item.id);
@@ -87,10 +91,18 @@ export function createActivityReader(reads: Reads) {
         if (isUnauthorized(error)) throw error;
         return { failure: failure(error, hostId) };
       }
+    }
+    // Each host advances independently; targeted notifications bypass discovery workers.
+    await Promise.all(Array.from({ length: Math.min(4, page.items.length) }, async () => {
+      while (next < page.items.length) {
+        if (version !== generation) throw new CancelledError();
+        const index = next++;
+        results[index] = await readItem(page.items[index]!);
+      }
     }));
     return { hostId, runs: results.flatMap((r) => r.run ? [r.run] : []), failure: results.find((r) => r.failure)?.failure ?? (page.incomplete ? { hostId, reason: "unavailable" } : undefined) };
   }
-  async function load(rereadRenewal = true): Promise<CodedActionRun[]> {
+  async function performLoad(rereadRenewal = true): Promise<CodedActionRun[]> {
     const started = ++sequence;
     const version = generation;
     const epoch = cancellationEpoch;
@@ -151,7 +163,7 @@ export function createActivityReader(reads: Reads) {
     } catch (error) {
       if (version !== generation) {
         // One fresh read may replace work invalidated only by a valid renewal.
-        if (rereadRenewal && epoch === cancellationEpoch) return load(false);
+        if (rereadRenewal && epoch === cancellationEpoch) return performLoad(false);
         throw new CancelledError();
       }
       if (isCancelledError(error)) throw error;
@@ -162,6 +174,27 @@ export function createActivityReader(reads: Reads) {
       }
       throw error;
     }
+  }
+  function load(): Promise<CodedActionRun[]> {
+    if (pending?.generation === generation) return pending.promise;
+    const work = { generation, dirty: false, promise: undefined as unknown as Promise<CodedActionRun[]> };
+    work.promise = (async () => {
+      let result: CodedActionRun[];
+      do {
+        work.dirty = false;
+        result = await performLoad();
+      } while (work.dirty && work.generation === generation);
+      return result;
+    })();
+    pending = work;
+    const clear = () => { if (pending === work) pending = undefined; };
+    void work.promise.then(clear, clear);
+    return work.promise;
+  }
+  function refresh(): Promise<CodedActionRun[]> {
+    // A notification during discovery needs one trailing read of post-event state.
+    if (pending?.generation === generation) pending.dirty = true;
+    return load();
   }
   async function refreshOne(id: string, hostId: string): Promise<void> {
     const started = ++sequence;
@@ -174,7 +207,7 @@ export function createActivityReader(reads: Reads) {
       current = current.map((r) => r.id === id ? run : r);
       runSequences.set(id, started);
       publish();
-      if (run.outcomeState === undefined && run.status !== "queued" && run.status !== "running") await load();
+      if (run.outcomeState === undefined && run.status !== "queued" && run.status !== "running") await refresh();
     } catch (error) {
       if (version !== generation) throw new CancelledError();
       if (isCancelledError(error)) throw error;
@@ -189,7 +222,8 @@ export function createActivityReader(reads: Reads) {
     }
   }
   return {
-    load, refreshOne,
+    load, refresh, refreshOne,
+    changed() { if (pending?.generation === generation) pending.dirty = true; },
     upsert(run: CodedActionRun) {
       const existing = current.find((row) => row.id === run.id);
       if (existing && existing.hostId !== run.hostId) return;

@@ -277,7 +277,7 @@ export function createHttpAdapter(options: HttpAdapterOptions = {}): DockletAdap
 
   function refreshRuns(): void {
     if (actionListeners.size === 0) return;
-    void actions.load().catch((error) => { if (isCancelledError(error)) return; window.dispatchEvent(new CustomEvent("docklet:adapter-error", { detail: error })); });
+    void actions.refresh().catch((error) => { if (isCancelledError(error)) return; window.dispatchEvent(new CustomEvent("docklet:adapter-error", { detail: error })); });
   }
 
   function refreshRun(activityId: string, environmentId?: string): void {
@@ -292,6 +292,7 @@ export function createHttpAdapter(options: HttpAdapterOptions = {}): DockletAdap
 
   function refreshSubscribed(): void {
     invalidateEnvironments();
+    actions.changed();
     refreshRuns();
     if (changeListeners.size) changeListeners.forEach((listener) => listener(["events", "hosts", "stacks", "containers", "images", "volumes", "topology"]));
   }
@@ -308,6 +309,7 @@ export function createHttpAdapter(options: HttpAdapterOptions = {}): DockletAdap
     if (envelope.type === "heartbeat") return;
     // Post-notification reads must not join snapshots started before the change.
     sharedReads.clear();
+    actions.changed();
     if (envelope.channel === "activities" && envelope.activity && typeof envelope.activity.type === "string") {
       const activityId = envelope.activity.activityId ?? envelope.activity.activity?.id;
       if (activityId) refreshRun(activityId, envelope.activity.environmentId ?? envelope.activity.activity?.environmentId);
