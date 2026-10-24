@@ -12,7 +12,7 @@ GitHub issues and milestones hold implementation and acceptance evidence.
 | [Core adoption](core-adoption.md) | One-time Go adoption, scope boundaries and evaluation gates |
 | [API contract and UI mapping](api-contract.md) | Reproducible OpenAPI export, generated types and owned DTO/UI gaps |
 | [HTTP adapter, live channel and capabilities](adapter-live-capabilities.md) | M3 adapter outcomes, server capabilities, run/event refresh and contract matrix |
-| [Activity discovery and bounded recovery](activity-discovery.md) | Proposed list projection, lazy detail demand, recovery state table and behavioural guards for #225 and #223 |
+| [Activity discovery and bounded recovery](activity-discovery.md) | List projection, lazy detail demand, recovery state table and behavioural guards for #225 and #223 |
 | [Run gate and single-hub operation](run-gate.md) | Activity states, gated admission, cancellation, restart recovery and one hub per database |
 | [Runtime control and log lifecycle](runtime-control.md) | Opaque-key retries, bounded outcome evidence and unknown recovery, logs/session closure and staged v4 foundation activation |
 | [Network management](network-management.md) | Host-side validation, protected deletion, Direct/Edge writes and agent v6 |
