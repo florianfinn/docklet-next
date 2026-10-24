@@ -32,7 +32,7 @@ function fixture() {
   for (const status of ["failed", "running", "queued"] as const) {
     const id = `history-${status}`;
     f.state.lists.good.push({ ...activity("good", id), status });
-    f.state.details[id] = { ...detail("good", id), activity: { ...activity("good", id), status } };
+    f.state.details[id] = { ...detail("good", id), activity: f.state.lists.good.at(-1)! };
   }
   const client = appClient();
   const discover = () => client.fetchQuery({ queryKey: queryKeys.currentUser, staleTime: 0, queryFn: () => f.adapter.getCurrentUser() });

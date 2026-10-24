@@ -9,7 +9,7 @@ import type { components } from "@/api/generated/schema";
 import { createHttpAdapter } from "./http-adapter";
 
 export const at = "2026-10-18T10:00:00Z";
-export type Activity = components["schemas"]["ActivityActivity"];
+export type Activity = components["schemas"]["ActivityActivitySummary"];
 export type Detail = components["schemas"]["ActivityDetail"];
 export const json = (data: unknown, status = 200, total?: number) => new Response(JSON.stringify(status === 200 ? { success: true, data, pagination: { totalItems: total ?? (Array.isArray(data) ? data.length : 0) } } : { code: "http.error" }), { status, headers: { "content-type": "application/json", "X-CSRF-Token": "example".padEnd(43, "x") } });
 export const activity = (hostId: string, id = `run-${hostId}`): Activity => ({ id, environmentId: hostId, status: "running", type: "project_redeploy", startedAt: at, createdAt: at, resourceName: `Example ${hostId}` });
@@ -30,15 +30,16 @@ export function activityFixture(isEdge = false, reverse = false) {
     hosts: reverse ? ["bad", "good"] : ["good", "bad"],
     lists: { "0": [] as Activity[], good: [activity("good")], bad: [activity("bad")] } as Record<string, Activity[]>,
     details: { "run-good": detail("good"), "run-bad": detail("bad") } as Record<string, Detail>,
-    failure: "" as "" | "network" | "page500" | "page502" | "page403" | "page401" | "detail404" | "missing" | "mapping" | "wrong-host" | "pagination",
+    failure: "" as "" | "network" | "page500" | "page502" | "page403" | "page401" | "detail404" | "missing" | "mapping" | "wrong-host" | "pagination" | "summary-missing" | "summary-mapping" | "summary-wrong-host",
     hubStatus: 200,
     user: { id: "operator", username: "operator", requiresPasswordChange: false, locale: "en-US" },
     authStatus: 200,
     hold: undefined as undefined | ((path: string, response: Response, url: URL) => Promise<Response>),
   };
+  for (const row of Object.values(state.lists).flat()) if (state.details[row.id]) state.details[row.id]!.activity = row;
   const sources: ActivitySource[] = [];
   const requests: string[] = [];
-  const fetcher = vi.fn(async (input: RequestInfo | URL) => {
+  const fetcher = vi.fn(async (input: RequestInfo | URL, _init?: RequestInit) => {
     const url = new URL(String(input), "https://hub.example.com");
     const path = url.pathname;
     requests.push(url.pathname + url.search);
@@ -54,6 +55,7 @@ export function activityFixture(isEdge = false, reverse = false) {
       if (hostId === "bad" && !id && state.failure === "network") throw new TypeError("network unavailable");
       const status = hostId === "bad" && !id && state.failure.startsWith("page") ? Number(state.failure.slice(4)) : 200;
       if (status !== 200) response = json(null, status);
+      else if (!id && hostId === "bad" && state.failure.startsWith("summary-")) response = json(state.failure === "summary-missing" ? [{}] : state.lists.bad!.map((row) => ({ ...row, ...(state.failure === "summary-mapping" ? { status: "invalid" } : { environmentId: "good" }) })));
       else if (!id) response = hostId === "bad" && state.failure === "pagination" ? (url.searchParams.get("start") === "0" ? json(state.lists[hostId], 200, 2) : json(null, 502)) : json(state.lists[hostId!] ?? []);
       else if (hostId === "bad" && state.failure === "detail404") response = json(null, 404);
       else if (hostId === "bad" && state.failure === "missing") response = json({});

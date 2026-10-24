@@ -58,8 +58,7 @@ it.each(["discovery", "recovery"])("%s notification after trailing page discover
   const first = deferred<void>(); const second = deferred<void>(); const reached = [deferred<void>(), deferred<void>()];
   let round = 0; const before = discoveries(f.requests); vi.useFakeTimers();
   f.state.hold = async (path, response) => {
-    if (path.endsWith("/good/activities")) { round++; if (round === 1) { reached[0]!.resolve(); await first.promise; } }
-    if (round === 2 && path.endsWith("/good/activities/run-good")) { reached[1]!.resolve(); await second.promise; }
+    if (path.endsWith("/good/activities")) { round++; if (round === 1) { reached[0]!.resolve(); await first.promise; } else if (round === 2) { reached[1]!.resolve(); await second.promise; } }
     return response;
   };
   const notify = () => kind === "recovery" ? f.sources[0]!.open() : f.sources[0]!.send("unknown", "good");
@@ -82,7 +81,7 @@ it("held old discovery cannot start a read after logout and subsequent renewal",
   const f = activityFixture(); await f.adapter.getCurrentUser(); await f.adapter.listActions();
   const stop = f.adapter.subscribeActions(vi.fn());
   const held = deferred<Response>(); const reached = deferred<Response>(); vi.useFakeTimers();
-  f.state.hold = async (path, response) => path.endsWith("/good/activities/run-good") ? (reached.resolve(response), held.promise) : response;
+  f.state.hold = async (path, response) => path.endsWith("/good/activities") ? (reached.resolve(response), held.promise) : response;
   try {
     const old = f.adapter.listActions(); const rejected = old.catch((e: unknown) => e);
     const response = await reached.promise; f.state.hold = undefined;

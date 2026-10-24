@@ -7,7 +7,7 @@
 import { expect, it, vi } from "vitest";
 import { AdapterOutcomeError } from "../capability";
 import { createActivityReader } from "./activity-reader";
-import { activity, deferred, detail, type Detail } from "./activity-reader.test-support";
+import { activity, deferred, detail } from "./activity-reader.test-support";
 
 const unavailable = () => new AdapterOutcomeError({ kind: "error", code: "http.error", status: 502 });
 async function fixture() {
@@ -26,19 +26,19 @@ async function publishOtherFailure(f: Awaited<ReturnType<typeof fixture>>) {
 }
 
 it.each([true, false])("renewal newer full health ignores superseded credential observation (old failure=%s)", async (oldFailure) => {
-  const f = await fixture(); const held = deferred<Detail>(); const reached = deferred<void>();
-  f.reads.detail.mockImplementation(async (host, id) => {
+  const f = await fixture(); const held = deferred<{ items: ReturnType<typeof activity>[]; incomplete: boolean }>(); const reached = deferred<void>();
+  f.reads.page.mockImplementation(async (host) => {
     if (host === "bad") { reached.resolve(); return held.promise; }
-    return detail(host, id);
+    return { items: [activity(host)], incomplete: false };
   });
   const older = f.reader.load().catch((e: unknown) => e); await reached.promise;
   f.reader.invalidate(true);
-  f.reads.detail.mockImplementation(async (host, id) => {
+  f.reads.page.mockImplementation(async (host) => {
     if (host === "bad" && !oldFailure) throw unavailable();
-    return detail(host, id);
+    return { items: [activity(host)], incomplete: false };
   });
   const fresh = f.reader.load();
-  held.resolve(oldFailure ? {} as Detail : detail("bad"));
+  held.resolve({ items: oldFailure ? [{} as ReturnType<typeof activity>] : [activity("bad")], incomplete: false });
   expect(await fresh).toHaveLength(2);
   expect(await older).toHaveLength(2);
   expect(f.reads.hosts).toHaveBeenCalledTimes(3);
@@ -49,16 +49,16 @@ it.each([true, false])("renewal newer full health ignores superseded credential 
 });
 
 it.each(["empty source", "removed host"])("renewal %s blocks unseen runs in superseded credential work", async (change) => {
-  const f = await fixture(); const held = deferred<Detail>(); const reached = deferred<void>();
+  const f = await fixture(); const held = deferred<{ items: ReturnType<typeof activity>[]; incomplete: boolean }>(); const reached = deferred<void>();
   f.reads.page.mockImplementation(async (host) => ({ items: [activity(host, host === "bad" ? "unseen" : "run-good")], incomplete: false }));
-  f.reads.detail.mockImplementation(async (host, id) => {
+  f.reads.page.mockImplementation(async (host) => {
     if (host === "bad") { reached.resolve(); return held.promise; }
-    return detail(host, id);
+    return { items: [activity(host)], incomplete: false };
   });
   const older = f.reader.load().catch((e: unknown) => e); await reached.promise; f.reader.invalidate(true);
   if (change === "removed host") f.reads.hosts.mockResolvedValue(["good"]);
   f.reads.page.mockImplementation(async (host) => ({ items: host === "bad" ? [] : [activity(host)], incomplete: false }));
-  const fresh = f.reader.load(); held.resolve(detail("bad", "unseen"));
+  const fresh = f.reader.load(); held.resolve({ items: [activity("bad", "unseen")], incomplete: false });
   expect((await fresh).map((run) => run.id)).toEqual(["run-good"]);
   expect((await older as { id: string }[]).map((run) => run.id)).toEqual(["run-good"]);
   await publishOtherFailure(f);
@@ -84,10 +84,10 @@ it.each([true, false])("renewal global health ignores superseded credential obse
 });
 
 it("renewal superseded source health preserves a newer global failure", async () => {
-  const f = await fixture(); const held = deferred<Detail>(); const reached = deferred<void>();
-  f.reads.detail.mockImplementation(async (host, id) => {
+  const f = await fixture(); const held = deferred<{ items: ReturnType<typeof activity>[]; incomplete: boolean }>(); const reached = deferred<void>();
+  f.reads.page.mockImplementation(async (host) => {
     if (host === "bad") { reached.resolve(); return held.promise; }
-    return detail(host, id);
+    return { items: [activity(host)], incomplete: false };
   });
   const older = f.reader.load().catch((e: unknown) => e); await reached.promise; f.reader.invalidate(true);
   f.reads.hosts.mockRejectedValueOnce(unavailable());
@@ -97,4 +97,21 @@ it("renewal superseded source health preserves a newer global failure", async ()
   expect(await older).toBeInstanceOf(AdapterOutcomeError);
   expect(f.reader.health().failures).toEqual([{ hostId: undefined, reason: "unavailable" }]);
   expect(f.reads.publish.mock.lastCall?.[1]).toEqual(f.reader.health());
+});
+
+it("a source401 from superseded credentials cannot clear the renewed identity", async () => {
+  const f = await fixture(); const held = deferred<{ items: ReturnType<typeof activity>[]; incomplete: boolean }>(); const reached = deferred<void>();
+  f.reads.page.mockImplementationOnce(async () => { reached.resolve(); return held.promise; });
+  const old = f.reader.load().catch((error: unknown) => error); await reached.promise; f.reader.invalidate(true);
+  const current = f.reader.load(); held.reject(new AdapterOutcomeError({ kind: "error", code: "http.error", status: 401 }));
+  expect(await old).toHaveLength(2); expect(await current).toHaveLength(2);
+  expect(f.reads.unauthorized).not.toHaveBeenCalled(); expect(f.reader.health().failures).toEqual([]);
+});
+
+it("a targeted401 from superseded credentials replays without clearing identity", async () => {
+  const f = await fixture(); const held = deferred<ReturnType<typeof detail>>();
+  f.reads.detail.mockReturnValueOnce(held.promise);
+  const pending = f.reader.refreshOne("run-good", "good"); f.reader.invalidate(true);
+  held.reject(new AdapterOutcomeError({ kind: "error", code: "http.error", status: 401 })); await pending;
+  expect(f.reads.unauthorized).not.toHaveBeenCalled(); expect(f.reader.runs()).toHaveLength(2); expect(f.reader.health().failures).toEqual([]);
 });

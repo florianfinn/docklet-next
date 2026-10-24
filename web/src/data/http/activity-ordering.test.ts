@@ -26,15 +26,15 @@ async function publishOtherFailure(f: ReturnType<typeof fixture>) {
 }
 it("newer targeted failure survives an older full success and another health publication", async () => {
   const f = fixture(); await f.reader.load();
-  const held = deferred<Detail>(); const reached = deferred<void>();
-  f.reads.detail.mockImplementation(async (hostId, id) => {
+  const held = deferred<{ items: ReturnType<typeof activity>[]; incomplete: boolean }>(); const reached = deferred<void>();
+  f.reads.page.mockImplementation(async (hostId) => {
     if (hostId === "bad") { reached.resolve(); return held.promise; }
-    return detail(hostId, id);
+    return { items: [activity(hostId)], incomplete: false };
   });
   const older = f.reader.load(); await reached.promise;
   f.reads.detail.mockRejectedValueOnce(unavailable());
   await f.reader.refreshOne("run-bad", "bad");
-  held.resolve(detail("bad")); await older;
+  held.resolve({ items: [activity("bad")], incomplete: false }); await older;
   await publishOtherFailure(f);
   expect(f.reader.health().failures).toEqual([
     { hostId: "bad", reason: "unavailable" }, { hostId: "good", reason: "unavailable" },
@@ -65,4 +65,13 @@ it.each([true, false])("newer full completion suppresses an older targeted resul
   await publishOtherFailure(f);
   expect(f.reader.runs().map((r) => r.id)).toEqual(["run-good"]);
   expect(f.reader.health().failures).toEqual([{ hostId: "good", reason: "unavailable" }]);
+});
+
+it("an opened detail keeps newer list status while preserving separately loaded output", async () => {
+  const f = fixture(); await f.reader.load(); const held = deferred<Detail>(); f.reads.detail.mockReturnValueOnce(held.promise);
+  const pending = f.reader.readDetail("run-good", "good", undefined, true);
+  f.reads.page.mockImplementation(async (host) => ({ items: [{ ...activity(host), status: "queued" }], incomplete: false }));
+  await f.reader.load(); const stale = detail("good"); stale.output = [{ timestamp: stale.activity.startedAt, stream: "stdout", text: "retained output" }]; held.resolve(stale);
+  expect(await pending).toMatchObject({ status: "queued", output: [{ text: "retained output" }] });
+  expect(f.reader.runs().find((run) => run.id === "run-good")).toMatchObject({ status: "queued", output: [] });
 });

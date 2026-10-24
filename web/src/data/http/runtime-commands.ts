@@ -35,7 +35,7 @@ interface Options {
   baseUrl: string;
   client: CsrfClient;
   capability: (operation: string, ref: ResourceRef) => Promise<CapabilityDescriptor>;
-  publish: (run: RuntimeRun) => void;
+  publish: (run: RuntimeRun, detailed?: boolean) => void;
   unauthorized?: () => void;
   now?: () => number;
   uuid?: () => string;
@@ -53,12 +53,16 @@ export function createRuntimeCommands({ baseUrl, client, capability, publish, un
   const runs = new Map<string, RuntimeRun>();
   const attempts = new Map<string, number>();
   const reads = new Map<string, Promise<RuntimeRun>>();
+  const signalKeys = new WeakMap<AbortSignal, number>();
+  const detailOwners = new Map<string, number>();
+  const explicitFollows = new Set<string>();
+  let signalKey = 0;
   const sequences = new Map<string, number>();
   let sequence = 0;
   const check = (version: number) => { if (version !== generation) throw new CancelledError(); };
   const route = (host: string, id: string) => `${baseUrl}/environments/${encodeURIComponent(host)}/runtime-runs/${encodeURIComponent(id)}`;
 
-  function remember(run: RuntimeRun, notify = true) {
+  function remember(run: RuntimeRun, notify = true, detailed = false) {
     const prior = runs.get(run.id);
     if (prior && prior.hostId !== run.hostId) throw runtimeError("runtime.invalid-response");
     run.runtime = { ...run.runtime, currentIntent: prior?.runtime?.currentIntent || run.runtime?.currentIntent,
@@ -66,17 +70,20 @@ export function createRuntimeCommands({ baseUrl, client, capability, publish, un
     if (!runs.has(run.id) && runs.size >= LIMIT) {
       const finished = [...runs.values()].find((row) => !active(row));
       if (finished) { runs.delete(finished.id); attempts.delete(finished.id); sequences.delete(finished.id); }
-      else { sequences.delete(run.id); attempts.delete(run.id); if (notify) publish(run); return run; }
+      else { sequences.delete(run.id); attempts.delete(run.id); if (notify) publish(run, detailed); return run; }
     }
     runs.set(run.id, run);
-    if (notify) publish(run);
+    if (notify) publish(run, detailed);
     schedule();
     return run;
   }
   async function request(url: string, init: RequestInit = {}): Promise<unknown> {
     const version = generation;
     const controller = new AbortController(); controllers.add(controller);
-    const timeout = setTimeout(() => controller.abort(), 15_000);
+    const abort = () => controller.abort();
+    init.signal?.addEventListener("abort", abort, { once: true });
+    if (init.signal?.aborted) abort();
+    const timeout = setTimeout(() => controller.abort(), url.includes("/runtime-runs/") && !init.method ? 40_000 : 15_000);
     try {
       const response = await client.fetch(url, { ...init, signal: controller.signal, headers: { Accept: "application/json", ...(init.body ? { "Content-Type": "application/json" } : {}), ...init.headers } });
       check(version);
@@ -91,7 +98,7 @@ export function createRuntimeCommands({ baseUrl, client, capability, publish, un
       if (error instanceof AdapterOutcomeError && error.outcome.kind === "error" && error.outcome.status === 401) { unauthorized(); throw error; }
       throw error instanceof AdapterOutcomeError ? error : runtimeError("http.error");
     }
-    finally { clearTimeout(timeout); controllers.delete(controller); }
+    finally { clearTimeout(timeout); init.signal?.removeEventListener("abort", abort); controllers.delete(controller); }
   }
   async function access(host: string) {
     const version = generation;
@@ -123,22 +130,24 @@ export function createRuntimeCommands({ baseUrl, client, capability, publish, un
     const canCancel = allowed("activities:read") && allowed("activities:cancel");
     return { canCancel, canRelease: canCancel && user.isGlobalAdmin === true };
   }
-  async function detail(host: string, id: string, refresh = false, notify = true): Promise<RuntimeRun> {
-    const key = `${host}~${id}:${refresh}:${notify}`;
+  async function detail(host: string, id: string, refresh = false, notify = true, signal?: AbortSignal): Promise<RuntimeRun> {
+    if (signal && !signalKeys.has(signal)) signalKeys.set(signal, ++signalKey);
+    const key = `${host}~${id}:${refresh}:${notify}:${signal ? signalKeys.get(signal) : "shared"}`;
     const existing = reads.get(key); if (existing) return existing;
     const version = generation, started = ++sequence;
     const task = (async () => {
-      const [data, grants] = await Promise.all([request(`${route(host, id)}${refresh ? "?refresh=true" : ""}`), access(host).catch((error: unknown) => {
+      const [data, grants] = await Promise.all([request(`${route(host, id)}${refresh ? "?refresh=true" : ""}`, { signal }), access(host).catch((error: unknown) => {
         if (error instanceof AdapterOutcomeError && error.outcome.kind === "error" && error.outcome.code === "runtime.permissions-unavailable") return { permissionsUnavailable: true };
         throw error;
       })]);
       check(version);
+      if (signal?.aborted) throw new CancelledError();
       const dto = data as RuntimeDetail;
       const run = mapRuntime(dto?.activity, host, id, dto, grants);
       if (runs.has(id) && runs.get(id)!.hostId !== host) throw runtimeError("runtime.invalid-response");
       if (started < (sequences.get(id) ?? 0)) return runs.get(id) ?? run;
       sequences.set(id, started);
-      return remember(run, notify);
+      return remember(run, notify, true);
     })();
     reads.set(key, task);
     try { return await task; } finally { if (reads.get(key) === task) reads.delete(key); }
@@ -159,14 +168,26 @@ export function createRuntimeCommands({ baseUrl, client, capability, publish, un
       return remember({ ...run, runtime: undefined } as RuntimeRun, false);
     }
   }
+  function mergeSummary(run: CodedActionRun): CodedActionRun {
+    const prior = runs.get(run.id);
+    if (!prior || prior.hostId !== run.hostId) return run;
+    if ((!active(prior) && active(run)) || (prior.outcomeState === "known" && run.outcomeState === "unknown")) return prior;
+    const incoming = run as RuntimeRun;
+    const same = prior.status === run.status && prior.outcomeState === run.outcomeState;
+    const merged = { ...prior, ...incoming, cancelRequested: run.cancelRequested || prior.cancelRequested,
+      runtime: { ...(same ? prior.runtime : {}), ...incoming.runtime, currentIntent: prior.runtime?.currentIntent } } as RuntimeRun;
+    if (same && !incoming.runtime?.unknownReason && prior.runtime?.unknownReason) merged.runtime!.unknownReason = prior.runtime.unknownReason;
+    runs.set(run.id, merged);
+    return merged;
+  }
   function schedule() {
     if (!observed || timer) return;
-    const watched = [...runs.values()].filter((run) => active(run) && !run.runtime?.unknownReason && (attempts.get(run.id) ?? 0) < 3);
+    const watched = [...runs.values()].filter((run) => active(run) && (run.runtime?.currentIntent || detailOwners.has(run.id) || explicitFollows.has(run.id)) && !run.runtime?.unknownReason && (attempts.get(run.id) ?? 0) < 3);
     if (!watched.length) return;
     const version = generation;
     timer = setTimeout(() => {
       timer = undefined;
-      void Promise.all(watched.map(async (run) => {
+      void Promise.all(watched.filter((run) => run.runtime?.currentIntent || detailOwners.has(run.id) || explicitFollows.has(run.id)).map(async (run) => {
         attempts.set(run.id, (attempts.get(run.id) ?? 0) + 1);
         try {
           const next = await detail(run.hostId!, run.id);
@@ -284,16 +305,24 @@ export function createRuntimeCommands({ baseUrl, client, capability, publish, un
   return {
     runStackCommand: (id: string, action: StackCommand) => command("stack", id, action),
     runContainerCommand: (id: string, action: ContainerCommand) => command("container", id, action),
-    getRuntimeRun: (host: string, id: string) => { attempts.delete(id); return detail(host, id, true); },
+    getRuntimeRun: (host: string, id: string) => { explicitFollows.add(id); attempts.delete(id); return detail(host, id, true); },
     cancelRuntimeRun: (host: string, id: string) => mutate(host, id, "cancel"),
     releaseRuntimeRun: (host: string, id: string, input: RuntimeReleaseInput) => mutate(host, id, "release", input),
-    detail, project,
+    detail, project, mergeSummary,
+    observeDetail(id: string, value: boolean) {
+      const count = (detailOwners.get(id) ?? 0) + (value ? 1 : -1);
+      if (count > 0) detailOwners.set(id, count); else detailOwners.delete(id);
+      if (!value && ![...runs.values()].some((run) => active(run) && (run.runtime?.currentIntent || detailOwners.has(run.id) || explicitFollows.has(run.id)))) {
+        if (timer) clearTimeout(timer); timer = undefined;
+      }
+      schedule();
+    },
     retained: () => [...runs.values()],
     observe(value: boolean) { observed = value; if (!value && timer) { clearTimeout(timer); timer = undefined; } if (value) schedule(); },
-    reset() {
+    reset(retainOwners = false) {
       ++generation; for (const controller of controllers) controller.abort(); controllers.clear();
       if (timer) clearTimeout(timer); timer = undefined; rights = undefined;
-      runs.clear(); pending.clear(); ambiguous.clear(); reads.clear(); attempts.clear(); sequences.clear();
+      runs.clear(); pending.clear(); ambiguous.clear(); reads.clear(); attempts.clear(); sequences.clear(); if (!retainOwners) detailOwners.clear(); explicitFollows.clear();
     },
   };
 }
