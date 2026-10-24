@@ -82,4 +82,37 @@ describe.each([{ transport: "Direct", isEdge: false }, { transport: "Edge", isEd
     expect(graph.networks.map((n) => n.id)).toEqual(ids);
     expect(graph.networks.filter((n) => n.hostId === "second").every((n) => n.detailUnavailable && n.inventory?.stale)).toBe(true);
   });
+  it("keeps successful inspect observations when another detail read fails", async () => {
+    const f = topologyFixture(isEdge);
+    f.failures.add("/api/environments/second/networks/missing");
+    const original = f.fetcher.getMockImplementation()!;
+    f.fetcher.mockImplementation(async (input) => {
+      const response = await original(input);
+      if (String(input).endsWith("/second/networks/good")) {
+        response.headers.set("X-Docklet-Observed-At", "2026-10-16T12:00:00Z");
+        response.headers.set("X-Docklet-Host-Reason", "agent.unavailable");
+      }
+      return response;
+    });
+    const graph = await f.adapter.getTopology();
+    expect(graph.networks.find((n) => n.id === "second~good")?.inventory).toMatchObject({ observedAt: "2026-10-16T12:00:00Z", stale: true, reason: "agent.unavailable" });
+    expect(graph.networks.find((n) => n.id === "first~good")?.inventory?.stale).toBe(false);
+  });
+
+  it("keeps list identities when one inspect detail cannot be mapped", async () => {
+    const f = topologyFixture(isEdge);
+    const original = f.fetcher.getMockImplementation()!;
+    f.fetcher.mockImplementation(async (input) => {
+      const response = await original(input);
+      if (!String(input).endsWith("/second/networks/missing")) return response;
+      const body = await response.json();
+      body.data.driver = "";
+      return new Response(JSON.stringify(body), { headers: response.headers });
+    });
+    const graph = await f.adapter.getTopology();
+    expect(graph.networks.map((n) => n.id)).toEqual(ids);
+    expect(graph.networks.find((n) => n.id === "second~missing")).toMatchObject({ detailUnavailable: true, inventory: { reason: "inventory.mapping-error", stale: true } });
+    expect(graph.networks.find((n) => n.id === "second~good")?.inventory?.stale).toBe(false);
+  });
+
 });

@@ -17,8 +17,11 @@ export function createResourceReader(baseUrl: string, fetcher: typeof fetch, hos
     const [projects, containers] = await Promise.all([list("list-projects", hostId, "projects"), list("list-containers", hostId, "containers")]);
     return { projects: projects.rows, containers: containers.rows, observations: [projects.observation, containers.observation] };
   }
+  function combine(observations: InventoryObservation[]): InventoryObservation {
+    return { observedAt: observations.flatMap((o) => o.observedAt ? [o.observedAt] : []).sort()[0], stale: observations.some((o) => o.stale), reason: observations.find((o) => o.reason)?.reason };
+  }
   function observe(hostId: string, observations: InventoryObservation[]): InventoryObservation {
-    const inventory = { observedAt: observations.flatMap((o) => o.observedAt ? [o.observedAt] : []).sort()[0], stale: observations.some((o) => o.stale), reason: observations.find((o) => o.reason)?.reason };
+    const inventory = combine(observations);
     onState(hostId, inventory);
     return inventory;
   }
@@ -77,12 +80,14 @@ export function createResourceReader(baseUrl: string, fetcher: typeof fetch, hos
             try {
               const detail = await read("get-network", h.id, `networks/${encodeURIComponent(summary.id)}`);
               if (detail.body.data.id !== summary.id) throw new Error("inventory.invalid-network");
+              // Invalid detail projections are local to this listed identity, too.
+              mapTopology([detail.body.data], h.id, [], ctx.projects, detail.observation, [summary]);
               return { row: detail.body.data, observation: detail.observation, unavailable: false };
             } catch (error) {
               return { row: summary, observation: inventoryFailure(h.id, error), unavailable: true };
             }
           }));
-          const base = observe(h.id, [...ctx.observations, networks.observation]);
+          const base = combine([...ctx.observations, networks.observation, ...details.filter((d) => !d.unavailable).map((d) => d.observation)]);
           const unavailable = new Map(details.filter((d) => d.unavailable || contextual.status === "rejected").map((d) => [d.row.id, { ...base, ...d.observation, stale: true, reason: d.observation.reason ?? base.reason ?? "inventory.read-error" as const }]));
           const inventory = observe(h.id, [...ctx.observations, networks.observation, ...details.map((d) => d.observation)]);
           const graph = mapTopology(details.map((d) => d.row), h.id, ctx.containers, ctx.projects, base, networks.rows, unavailable);

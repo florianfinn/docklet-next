@@ -6,7 +6,7 @@
 
 import { act, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { afterEach, describe, expect, it } from "vitest";
 import { setAppLocale } from "@/app/i18n/locale-store";
 import { useTopology } from "@/data/queries";
@@ -119,7 +119,7 @@ describe.each([{ transport: "Direct", isEdge: false }, { transport: "Edge", isEd
     let loseDetail!: () => void;
     function Wizard() {
       const [unavailable, setUnavailable] = useState(false);
-      loseDetail = () => setUnavailable(true);
+      useEffect(() => { loseDetail = () => setUnavailable(true); }, []);
       const current = { ...topology, networks: topology.networks.map((n) => n.id === network.id ? { ...n, detailUnavailable: unavailable } : n) };
       return <ConnectNetworkDialog request={{ mode: "connect", networkId: network.id, containerId: "second~web" }} onClose={() => {}} host={host} topology={current} containers={containers} />;
     }
