@@ -4,7 +4,7 @@
 // License: Apache-2.0
 // Deviations: Original accessible usage indicator for issue #204.
 
-import { CircleDashed, Link2, Shield } from "lucide-react";
+import { CircleDashed, CircleHelp, Link2, Shield } from "lucide-react";
 import { useTranslations } from "use-intl";
 
 import { networkComposeOwner } from "@/domain/networks";
@@ -17,14 +17,15 @@ export type NetworkMember = Pick<ContainerInfo, "id" | "name" | "state">;
 export function NetworkUsage({ network, members }: { network: TopologyNetwork; members: NetworkMember[] }) {
   const t = useTranslations("networks.usage");
   const owner = networkComposeOwner(network);
-  const state = network.builtIn ? "builtin" : members.length ? "used" : "unused";
-  const Icon = network.builtIn ? Shield : members.length ? Link2 : CircleDashed;
+  const unknown = network.detailUnavailable || network.inventory?.stale;
+  const state = unknown ? "unknown" : network.builtIn ? "builtin" : members.length ? "used" : "unused";
+  const Icon = unknown ? CircleHelp : network.builtIn ? Shield : members.length ? Link2 : CircleDashed;
   return (
     <Tooltip>
       <TooltipTrigger asChild>
-        <button type="button" aria-label={t("label", { name: network.name, state: t(state), count: members.length })} className="inline-flex items-center gap-1 rounded-sm p-1 outline-none focus-visible:ring-2 focus-visible:ring-ring">
+        <button type="button" aria-label={unknown ? t("unknownLabel", { name: network.name }) : t("label", { name: network.name, state: t(state), count: members.length })} className="inline-flex items-center gap-1 rounded-sm p-1 outline-none focus-visible:ring-2 focus-visible:ring-ring">
           <Icon className="size-3.5" aria-hidden />
-          <span>{members.length}</span>
+          <span>{unknown ? "?" : members.length}</span>
         </button>
       </TooltipTrigger>
       <TooltipContent className="max-w-72 break-words">
@@ -35,7 +36,7 @@ export function NetworkUsage({ network, members }: { network: TopologyNetwork; m
           <ul>
             {members.map((c) => <li key={c.id}>{t("member", { name: c.name, state: t(`states.${c.state}`) })}</li>)}
           </ul>
-        ) : <p>{t("noAttachments")}</p>}
+        ) : !unknown && <p>{t("noAttachments")}</p>}
       </TooltipContent>
     </Tooltip>
   );

@@ -4,7 +4,7 @@ import { useMemo, useState } from "react";
 import { useTranslations } from "use-intl";
 
 import type { ContainerInfo, Host, Topology, TopologyNetwork } from "@/domain/model";
-import { NETWORK_GROUPS, networkGroup, removeBlock, type NetworkGroup } from "@/domain/networks";
+import { NETWORK_GROUPS, networkComposeOwner, networkGroup, removeBlock, type NetworkGroup } from "@/domain/networks";
 import { ActionsContextMenu, ActionsMenu, type MenuGroups } from "@/shared/components/action-menu";
 import { SegmentedToggle } from "@/shared/components/segmented-toggle";
 import { SortableHead } from "@/shared/components/sortable-head";
@@ -103,8 +103,8 @@ export function NetworkTable({ host, networks, topology, containers, focus, quer
 
   const menu = (n: TopologyNetwork): MenuGroups => [
     [{ id: "focus", label: t("menu.focus"), icon: <Crosshair />, onSelect: () => onFocus(n.id) }],
-    [{ id: "connect", label: t("menu.connect"), icon: <Link2 />, disabled: !connect.get(n.id)?.available || !!n.inventory?.stale || !online || n.driver === "host" || n.driver === "none", onSelect: () => onConnect({ mode: "connect", networkId: n.id }) }],
-    [{ id: "remove", label: t("menu.remove"), icon: <Trash2 />, disabled: !remove.get(n.id)?.available || !!n.inventory?.stale || !online || !!removeBlock(topology, n), title: remove.get(n.id)?.reason, onSelect: () => onRemove(n) }],
+    [{ id: "connect", label: t("menu.connect"), icon: <Link2 />, disabled: !connect.get(n.id)?.available || !!n.detailUnavailable || !!n.inventory?.stale || !online || n.driver === "host" || n.driver === "none", title: n.detailUnavailable || n.inventory?.stale ? t("partial.detail") : connect.get(n.id)?.reason, onSelect: () => onConnect({ mode: "connect", networkId: n.id }) }],
+    [{ id: "remove", label: t("menu.remove"), icon: <Trash2 />, disabled: !remove.get(n.id)?.available || !!n.detailUnavailable || !!n.inventory?.stale || !online || !!removeBlock(topology, n), title: removeBlock(topology, n) ? t(`removeBlocked.${removeBlock(topology, n)!}`, { stack: networkComposeOwner(n) ?? "", count: members.get(n.id)?.length ?? 0 }) : remove.get(n.id)?.reason, onSelect: () => onRemove(n) }],
   ];
 
   return (
@@ -177,6 +177,7 @@ export function NetworkTable({ host, networks, topology, containers, focus, quer
                         {n.internal && <span>· {t("internal")}</span>}
                         {n.builtIn && <span className="rounded bg-muted px-1 text-[10px]">{t("standardShort")}</span>}
                       </span>
+                      {n.detailUnavailable && <p className="mt-1 text-xs text-warning">{t("partial.detail")}</p>}
                     </TableCell>
                     <TableCell className="font-mono text-[11.5px] leading-snug">
                       {n.subnet || n.subnet6 ? (

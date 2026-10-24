@@ -1,7 +1,14 @@
 // American English texts of the networks page, topology and network wizards.
 
 export const enNetworks = {
+  partial: {
+    host: "{name}: Some network reads failed. Available and previously observed networks are shown.",
+    detail: "Network details unavailable. Usage is unknown; connection and deletion are disabled.",
+    unknown: "Unknown",
+  },
   usage: {
+    unknown: "Usage unknown",
+    unknownLabel: "{name}: Usage unknown",
     label: "{name}: {state}, {count, plural, one {# container} other {# containers}}",
     used: "In use",
     unused: "Unused",
@@ -136,6 +143,7 @@ export const enNetworks = {
   },
   menu: { focus: "Focus in topology", connect: "Connect container", remove: "Remove" },
   removeBlocked: {
+    "detail-unavailable": "Network details are unavailable; usage cannot be verified.",
     "builtin-network": "Docker default network – never removed.",
     "compose-managed": "Belongs to stack {stack} – Compose removes it with the stack.",
     "in-use": "Still {count, plural, one {# container} other {# containers}} connected (stopped ones count too).",
@@ -267,6 +275,7 @@ export const enNetworks = {
     connected: "{container} connected to {network}",
     disconnected: "{container} disconnected from {network}",
     blocks: {
+      "detail-unavailable": "Network details are unavailable; usage cannot be verified.",
       "host-mismatch": "Container and network are on different hosts.",
       "builtin-network": "No container is connected to host or none afterwards; the network mode sets that at creation.",
       "network-mode": "The container uses network mode host or none and cannot join or leave other networks.",

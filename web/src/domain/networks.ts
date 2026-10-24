@@ -293,7 +293,7 @@ export interface NetworkContainer {
 }
 
 /** Hard reasons Docker or Docklet refuse a connect; the UI offers no confirm button then. */
-export type ConnectBlock = "host-mismatch" | "builtin-network" | "network-mode" | "already-connected";
+export type ConnectBlock = "detail-unavailable" | "host-mismatch" | "builtin-network" | "network-mode" | "already-connected";
 export type IpError = "invalid" | "outside" | "network-address" | "gateway" | "taken" | "static-unsupported" | "family-disabled" | "pool-exhausted";
 /** Effects shown in the review step; they do not block. */
 export type NetworkWarning = "compose-runtime" | "unraid-template" | "last-network" | "dependents" | "internal";
@@ -343,6 +343,7 @@ function checkIp6(network: TopologyNetwork, taken: readonly string[], wanted: st
 }
 
 export function checkConnect(topology: Pick<Topology, "networks" | "attachments">, container: NetworkContainer, network: TopologyNetwork, requestedIp = "", requestedIp6 = "", aliases: readonly string[] = []): ConnectCheck {
+  if (network.detailUnavailable || network.inventory?.stale) return { block: "detail-unavailable", warnings: [] };
   const own = attachmentsOf(topology, container.id);
   const netOf = (id: string) => topology.networks.find((n) => n.id === id);
   let block: ConnectBlock | undefined;
@@ -380,13 +381,14 @@ export function checkConnect(topology: Pick<Topology, "networks" | "attachments"
 }
 
 export interface DisconnectCheck {
-  block?: "not-connected" | "network-mode";
+  block?: "not-connected" | "network-mode" | "detail-unavailable";
   warnings: NetworkWarning[];
   /** Containers that depend on this one and reach it only through this network. */
   dependents: string[];
 }
 
 export function checkDisconnect(topology: Topology, container: NetworkContainer, network: TopologyNetwork): DisconnectCheck {
+  if (network.detailUnavailable || network.inventory?.stale) return { block: "detail-unavailable", warnings: [], dependents: [] };
   const own = attachmentsOf(topology, container.id);
   if (!own.some((a) => a.networkId === network.id)) return { block: "not-connected", warnings: [], dependents: [] };
   if (isModeNetwork(network)) return { block: "network-mode", warnings: [], dependents: [] };
@@ -410,7 +412,8 @@ export function networkComposeOwner(network: TopologyNetwork): string | undefine
 }
 
 /** Removal is refused for Docker's own networks, Compose-owned ones and while any container (also stopped) is attached. */
-export function removeBlock(topology: Pick<Topology, "attachments">, network: TopologyNetwork): "builtin-network" | "compose-managed" | "in-use" | undefined {
+export function removeBlock(topology: Pick<Topology, "attachments">, network: TopologyNetwork): "builtin-network" | "compose-managed" | "in-use" | "detail-unavailable" | undefined {
+  if (network.detailUnavailable || network.inventory?.stale) return "detail-unavailable";
   if (network.builtIn) return "builtin-network";
   if (networkComposeOwner(network)) return "compose-managed";
   if (topology.attachments.some((a) => a.networkId === network.id)) return "in-use";

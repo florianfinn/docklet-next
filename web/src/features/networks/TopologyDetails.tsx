@@ -55,7 +55,7 @@ export function TopologyDetails({ selected, topology, containers, hosts, onSelec
   const connect = useNetworkCapabilities("connectNetwork", selectedNetworks);
   const disconnect = useNetworkCapabilities("disconnectNetwork", selectedNetworks);
   const remove = useCapability("removeNetwork", { kind: "network", id: net?.id ?? "" });
-  const connectAvailable = [...connect.values()].some((c) => c.available);
+  const connectAvailable = topology.networks.some((n) => selectedNetworks.includes(n.id) && !n.detailUnavailable && !n.inventory?.stale && connect.get(n.id)?.available);
 
   if (!net && !container) {
     return (
@@ -84,7 +84,7 @@ export function TopologyDetails({ selected, topology, containers, hosts, onSelec
   const lan = net?.driver === "macvlan" || net?.driver === "ipvlan";
 
   const removeButton = net && (
-    <Button size="sm" variant="ghost" className="text-destructive hover:text-destructive" disabled={!remove.available || !!net?.inventory?.stale || !!blocked || !online} title={remove.reason} onClick={() => onRemove(net)}>
+    <Button size="sm" variant="ghost" className="text-destructive hover:text-destructive" disabled={!remove.available || !!net?.inventory?.stale || !!blocked || !online} title={blocked ? tn(`removeBlocked.${blocked}`, { stack: net ? networkComposeOwner(net) ?? "" : "", count: peers.length }) : remove.reason} onClick={() => onRemove(net)}>
       <Trash2 data-icon="inline-start" />
       {t("remove")}
     </Button>
@@ -104,6 +104,7 @@ export function TopologyDetails({ selected, topology, containers, hosts, onSelec
           <X />
         </Button>
       </div>
+      {net?.detailUnavailable && <p className="text-sm text-warning">{tn("partial.detail")}</p>}
       <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1.5 text-sm">
         {net ? (
           <>
@@ -128,8 +129,8 @@ export function TopologyDetails({ selected, topology, containers, hosts, onSelec
                 <span className="font-mono text-xs">{net.ipRange}</span>
               </Kv>
             )}
-            {net.subnet && <Kv label={t("staticIp")}>{net.subnetConfigured ? t("staticYes") : t("staticNo")}</Kv>}
-            <Kv label={t("families")}>{net.ipv6 ? (net.ipv4 === false ? t("familyV6") : t("familyDual")) : t("familyV4")}</Kv>
+            {net.subnet && <Kv label={t("staticIp")}>{net.detailUnavailable ? tn("partial.unknown") : net.subnetConfigured ? t("staticYes") : t("staticNo")}</Kv>}
+            <Kv label={t("families")}>{net.detailUnavailable ? tn("partial.unknown") : net.ipv6 ? (net.ipv4 === false ? t("familyV6") : t("familyDual")) : t("familyV4")}</Kv>
             {net.subnet6 && (
               <Kv label={t("subnet6")}>
                 <span className="font-mono text-xs break-all">{net.subnet6}</span>
@@ -145,8 +146,10 @@ export function TopologyDetails({ selected, topology, containers, hosts, onSelec
                 <span className="font-mono text-xs break-all">{net.ipRange6}</span>
               </Kv>
             )}
-            {net.subnet6 && <Kv label={t("staticIp6")}>{net.subnet6Configured ? t("staticYes") : t("staticNo")}</Kv>}
+            {net.subnet6 && <Kv label={t("staticIp6")}>{net.detailUnavailable ? tn("partial.unknown") : net.subnet6Configured ? t("staticYes") : t("staticNo")}</Kv>}
+            {net.detailUnavailable ? <Kv label={t("internal")}>{tn("partial.unknown")}</Kv> : (
             <Kv label={t("internal")}>{net.internal ? t("internalYes") : t("internalNo")}</Kv>
+            )}
             <Kv label={t("origin")}>{networkComposeOwner(net) ? t("stack", { name: networkComposeOwner(net)! }) : net.builtIn ? t("standard") : t("own")}</Kv>
           </>
         ) : (
@@ -172,12 +175,12 @@ export function TopologyDetails({ selected, topology, containers, hosts, onSelec
       <section>
         <h4 className="mb-1.5 text-xs font-medium text-muted-foreground">{net ? t("attached") : t("memberships")}</h4>
         <ul className="flex flex-col">
-          {peers.length === 0 && <li className="text-xs text-muted-foreground">{t("noPeers")}</li>}
+          {peers.length === 0 && <li className="text-xs text-muted-foreground">{net?.detailUnavailable ? tn("usage.unknown") : t("noPeers")}</li>}
           {peers.map((p) => {
             const id = net ? p.containerId : p.networkId;
             const pair = { container: containerName(p.containerId), network: name(p.networkId) };
             const modeNet = topology.networks.find((n) => n.id === p.networkId);
-            const canDisconnect = disconnect.get(p.networkId)?.available && !net?.inventory?.stale && online && modeNet?.driver !== "host" && modeNet?.driver !== "none";
+            const canDisconnect = disconnect.get(p.networkId)?.available && !modeNet?.detailUnavailable && !modeNet?.inventory?.stale && online && modeNet?.driver !== "host" && modeNet?.driver !== "none";
             return (
               <li key={id} className="flex items-start gap-2 border-t border-border/50 py-1.5 text-sm first:border-0">
                 {net ? <Box className="mt-0.5 size-3.5 shrink-0 text-muted-foreground" /> : <Network className="mt-0.5 size-3.5 shrink-0 text-muted-foreground" />}
@@ -234,13 +237,13 @@ export function TopologyDetails({ selected, topology, containers, hosts, onSelec
       )}
       <div className="flex flex-wrap gap-2 border-t pt-3">
         {net && net.driver !== "host" && net.driver !== "none" && (
-          <Button size="sm" variant="outline" disabled={!connectAvailable || !!net?.inventory?.stale || !online} title={[...connect.values()].find((c) => c.reason)?.reason} onClick={() => onConnect({ mode: "connect", networkId: net.id })}>
+          <Button size="sm" variant="outline" disabled={!connectAvailable || !!net?.detailUnavailable || !!net?.inventory?.stale || !online} title={net?.detailUnavailable ? tn("partial.detail") : [...connect.values()].find((c) => c.reason)?.reason} onClick={() => onConnect({ mode: "connect", networkId: net.id })}>
             <Link2 data-icon="inline-start" />
             {t("connectHere")}
           </Button>
         )}
         {container && (
-          <Button size="sm" variant="outline" disabled={!connectAvailable || !!net?.inventory?.stale || !online} title={[...connect.values()].find((c) => c.reason)?.reason} onClick={() => onConnect({ mode: "connect", containerId: container.id })}>
+          <Button size="sm" variant="outline" disabled={!connectAvailable || !!net?.detailUnavailable || !!net?.inventory?.stale || !online} title={net?.detailUnavailable ? tn("partial.detail") : [...connect.values()].find((c) => c.reason)?.reason} onClick={() => onConnect({ mode: "connect", containerId: container.id })}>
             <Link2 data-icon="inline-start" />
             {t("connect")}
           </Button>

@@ -72,10 +72,10 @@ export function ConnectNetworkDialog({ request, onClose, host, topology, contain
   const ip6Error = connect?.ip6Error;
   const pool = container && network && mode === "connect" ? checkConnect(topology, container, network) : undefined;
   const poolIp = pool?.ip;
-  const staticPossible = !!network?.subnetConfigured && !!network.subnet;
-  const static6Possible = !!network?.ipv6 && !!network.subnet6Configured && !!network.subnet6;
+  const staticPossible = !block && !!network?.subnetConfigured && !!network.subnet;
+  const static6Possible = !block && !!network?.ipv6 && !!network.subnet6Configured && !!network.subnet6;
   // Both sides must belong to the shown host; the identity colour is no substitute for this id check.
-  const ready = !!capabilities.get(networkId)?.available && !!container && !!network && container.hostId === host.id && network.hostId === host.id && !block && !ipError && !ip6Error && !connect?.aliasError;
+  const ready = host.status === "online" && !!capabilities.get(networkId)?.available && !!container && !!network && container.hostId === host.id && network.hostId === host.id && !block && !ipError && !ip6Error && !connect?.aliasError;
   const nameOf = (id: string) => {
     const c = containers.find((x) => x.id === id);
     return c ? label(c) : id;
@@ -152,7 +152,7 @@ export function ConnectNetworkDialog({ request, onClose, host, topology, contain
                     {choices.map((n) => {
                       const blocked = container && mode === "connect" ? checkConnect(topology, container, n).block : undefined;
                       return (
-                        <SelectItem key={n.id} value={n.id} disabled={!!blocked || !capabilities.get(n.id)?.available}>
+                        <SelectItem key={n.id} value={n.id} disabled={!!n.detailUnavailable || !!n.inventory?.stale || !!blocked || !capabilities.get(n.id)?.available}>
                           <span className="font-medium">{n.name}</span>
                           <span className="font-mono text-xs text-muted-foreground">
                             {n.driver}
@@ -195,12 +195,6 @@ export function ConnectNetworkDialog({ request, onClose, host, topology, contain
             )}
             {mode === "connect" && (
               <TextField id="cn-aliases" label={t("aliases")} description={t("aliasesHint")} value={aliasesText} onChange={setAliasesText} error={connect?.aliasError ? t("aliasesInvalid") : undefined} mono />
-            )}
-            {block && (
-              <Alert variant="destructive">
-                <Ban />
-                <AlertDescription>{t(`blocks.${block}`)}</AlertDescription>
-              </Alert>
             )}
           </div>
         ) : (
@@ -250,6 +244,7 @@ export function ConnectNetworkDialog({ request, onClose, host, topology, contain
             </div>
           )
         )}
+        {block && <Alert variant="destructive"><Ban /><AlertDescription>{t(`blocks.${block}`)}</AlertDescription></Alert>}
         <DialogFooter className="sm:justify-between">
           {reviewing ? (
             <Button type="button" variant="outline" disabled={busy} onClick={() => setReviewing(false)}>

@@ -48,6 +48,7 @@ export type AdapterErrorCode =
   | "target-in-use"
   | "last-admin"
   | "invalid-network"
+  | "detail-unavailable"
   | "builtin-network"
   | "compose-managed"
   | "host-mismatch"
