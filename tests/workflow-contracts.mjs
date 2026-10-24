@@ -31,7 +31,7 @@ export function assertWorkflow(file, text) {
     assert.match(full, /^    name: full-\$\{\{ matrix\.stage \}\}$/m);
     assert.match(full, /^    needs: scope$/m);
     assert.match(full, /^    if: needs\.scope\.outputs\.value == 'full'$/m);
-    assert.match(full, /^    timeout-minutes: 25$/m);
+    assert.match(full, /^    timeout-minutes: \$\{\{ matrix\.stage == 'test' && 30 \|\| 25 \}\}$/m);
     assert.match(full, /strategy:\n      fail-fast: false\n      matrix:\n        stage: \[lint, test, build\]/);
     for (const entry of [
       'CGO_ENABLED: "0"',

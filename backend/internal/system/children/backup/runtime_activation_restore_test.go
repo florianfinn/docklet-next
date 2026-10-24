@@ -83,11 +83,14 @@ func TestRuntimeActivationActualPairedRestore(t *testing.T) {
 				return transport, nil
 			}, activity.RuntimeReconcileSchedule{Wait: func(ctx context.Context, _ time.Duration) error { return ctx.Err() }})
 			require.NoError(t, err)
-			t.Cleanup(func() {
-				ctx, cancel := context.WithTimeout(context.WithoutCancel(t.Context()), 5*time.Second)
+			// Restore completion cancels work; each coordinator join needs an independent context.
+			closeCoordinator := func() {
+				t.Helper()
+				closeCtx, cancel := context.WithTimeout(context.WithoutCancel(t.Context()), time.Minute)
 				defer cancel()
-				require.NoError(t, coordinator.Close(ctx))
-			})
+				require.NoError(t, coordinator.Close(closeCtx))
+			}
+			t.Cleanup(closeCoordinator)
 			h, err := activity.NewRuntimeHTTPService(target.runtime, activity.RuntimeHTTPPorts{ApplicationContext: t.Context(),
 				Store: func(context.Context, string) (activity.RuntimeStoreBinding, error) {
 					t.Fatal("retained restore retry consulted current executor")
@@ -164,7 +167,7 @@ func TestRuntimeActivationActualPairedRestore(t *testing.T) {
 				require.NotNil(t, restored.SettledAt)
 				require.Equal(t, new("runtime.interrupted"), restored.ExecutorResultCode)
 				require.Equal(t, target.runtime.LocalStore().StoreGeneration, restored.StoreGeneration)
-				require.NoError(t, coordinator.Close(ctx))
+				closeCoordinator()
 				restored = activity.RuntimeReceipt{}
 				require.NoError(t, target.db.First(&restored, "run_id = ?", remoteID).Error)
 				require.Nil(t, restored.SettledAt)
@@ -178,7 +181,7 @@ func TestRuntimeActivationActualPairedRestore(t *testing.T) {
 				_, err := receiver.Query(ctx, identity)
 				require.ErrorIs(t, err, activity.ErrRuntimeNotReady)
 			}
-			require.NoError(t, coordinator.Close(ctx))
+			closeCoordinator()
 			require.Zero(t, executor.calls.Load(), "restored local work is never replayed")
 			require.Zero(t, transport.calls.Load(), "restored remote work is queried, never executed")
 			var fences int64

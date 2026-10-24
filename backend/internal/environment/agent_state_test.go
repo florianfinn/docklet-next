@@ -20,9 +20,10 @@ import (
 )
 
 func TestHostDisconnectReconnectAndRestartState(t *testing.T) {
-	ctx, cancel := context.WithTimeout(t.Context(), time.Second)
-	defer cancel()
 	f := newAgentFixture(t, "edge", version.Info{AgentContractVersion: contract.AgentHubVersion, AgentContractFingerprint: contract.AgentHubFingerprint})
+	// Compatibility waits for agentCheck.done; the timeout only bounds a hang.
+	ctx, cancel := context.WithTimeout(t.Context(), time.Minute)
+	defer cancel()
 	_, err := f.service.CheckAgentCompatibility(ctx, f.id)
 	require.NoError(t, err)
 	connected, err := f.service.GetEnvironmentByID(ctx, f.id)
