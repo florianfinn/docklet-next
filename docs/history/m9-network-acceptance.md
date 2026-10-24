@@ -20,7 +20,7 @@ Sandbox runs found three product defects:
 | --- | --- | --- |
 | #204 | #212 | A host vanished from the Networks page when network inspect reads failed (F1) |
 | — | #213 | Event list GETs shared the agent ingestion rate limit and returned 429 after two tabs and a few reloads |
-| #205 | #216 | Server rejections in open dialogs appeared only as toasts hidden under the modal (D1) |
+| #205 | #216 | Server rejections in open dialogs appeared only as toasts that the modal covered fully or partly in three of four combinations (D1) |
 
 ## Accepted scope and method
 
@@ -68,19 +68,24 @@ between draft and submit produced 409 `network.overlap`; occupying a selected
 fixed address with another container produced 400 `network.invalid-ip`. Both
 errors were translated, visible and uncovered inside the still-open dialog in
 all four combinations. The drafts were retained; correcting them succeeded and
-closed the dialogs, with producer state verified. One volume rename conflict
-also appeared inline and retained its draft, using the translated generic
-message rather than a specific conflict reason (#217).
+closed the dialogs, with producer state verified. One volume rename conflict,
+checked only in Direct German at 1440 px, also appeared inline and retained its
+draft, using the translated generic message rather than a specific conflict
+reason (#217).
 
 ## Limits and follow-ups
 
-- The gating browser ran with HTTP/2 disabled. Diagnosis reproduced Chromium
-  surfacing a request-creation race as generic `ERR_FAILED` when the shared
-  front proxy retired an HTTP/2 connection after about 1,000 requests. The
-  corresponding HTTP/1.1 probe passed. R2 did not repeat the non-gating HTTP/2
-  observation; safe-read recovery and excessive read fan-out remain in #211.
-- Stack files referencing a network as `external` are not detected. The daemon
-  checks macvlan/ipvlan parent existence. Topology shows the first pool per family.
+- The gating browser ran with HTTP/2 disabled. A native Fetch client reproduced
+  Chromium surfacing a request-creation race as generic `ERR_FAILED` when the
+  shared front proxy retired an HTTP/2 connection after about 1,000 requests.
+  The failure was intermittent: one of three focused HTTP/2 repetitions failed.
+  The corresponding HTTP/1.1 probe passed. The original matrix net-logs were not
+  captured, so the diagnosis does not prove the cause of every original failure.
+  R2 did not repeat the non-gating HTTP/2 observation; safe-read recovery and
+  excessive read fan-out remain in #211.
+- Stack files referencing a network as `external` are not detected. Docklet does
+  not check whether a macvlan/ipvlan parent interface exists; the daemon checks
+  that. Topology shows the first pool per family.
 - The volume rename conflict has a generic translated message (#217).
 - Open follow-ups: #207 (contract review findings), #209 (write outcome on proxy
   timeouts), #210 (network UI states and review findings), #211 (transport and
