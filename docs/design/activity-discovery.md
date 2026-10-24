@@ -74,7 +74,11 @@ only by `list-activities`; generated DTOs follow it in the same contract change.
 The summary projection runs on the HTTP list-handler path, after authorization
 and runtime ownership replacement. `ListActivitiesPaginated` remains the base
 activity source for stream snapshots and poller fingerprints. Those producers do
-not acquire traces or recovery fields. Remote HTTP listing decodes agent summaries
+not acquire traces or recovery fields. The HTTP list requests the optional
+`includeSummary=true` query flag, forwarding it to the agent only for UI listing.
+Without that opt-in the agent returns base rows without trace/recovery queries,
+including remote stream-poller requests. Older agents ignore the unknown flag and
+omit the projection. Remote HTTP listing decodes agent summaries
 and merges them with projected hub-owned rows; its base stream-poller path keeps
 decoding base activities. Preserve source labels, filtering, duplicate ownership,
 resource IDs and `X-Docklet-Host-Reason` through both paths.
@@ -117,6 +121,8 @@ The summary mapper sets `runtime.released` from `disposition == "released"` and
 preserves `unknownReason`; `runtime.resultCode` comes from the base `messageCode`.
 Thus a cold list renders released, unknown, unconfirmed, interrupted and cancelling
 labels exactly as before, without retained browser evidence or detail reads.
+`ActivitySummary` is also the extension point for later list-only fields; those
+fields follow the same optional `omitzero` and older-agent compatibility rules.
 Recovery permissions, disposition rationale, executor late-result evidence and
 release controls remain detail-only. The projection never manufactures grants.
 
@@ -177,7 +183,9 @@ Known-run stream progress/messages follow these rules:
 
 Both targeted routes return detail today, but the C-only path discards their
 output/messages immediately and imports only status, progress, error, steps and
-minimal runtime presentation. It does not register an explicit runtime follower.
+minimal runtime presentation. Targeted results update only fields their contract
+authoritatively carries; list-only fields absent from that contract remain from
+the newest list observation. It does not register an explicit runtime follower.
 Known progress does not invalidate full discovery or event history. Unknown runs
 and actual membership/terminal activity changes invalidate only their known host;
 an unknown host requires a fresh authorized membership read before host requests.
@@ -308,12 +316,25 @@ them to enforce a universal two-read limit would lose updates from #220.
 
 Every activity list, targeted detail and membership HTTP read has a **40-second
 deadline**, including response-body consumption and both safe-GET attempts. This
-exceeds the hub's 30-second proxy timeout. A host read lineage, including its one
+is greater than the dedicated **30-second hub-to-agent activity budget plus a
+five-second required merge/transport margin**. The hub bounds agent sub-requests for HTTP
+activity list and targeted remote detail with that activity-specific budget,
+independent of the configurable general proxy timeout (60 seconds by default).
+After expiry, listing still merges hub-owned receipt rows and returns
+`X-Docklet-Host-Reason: agent.unavailable` within the browser deadline. The stream
+poller retains its separate 15-second budget. The invariant is
+`browser deadline > activity agent budget + required merge/transport margin`;
+40 seconds exceeds 30 + 5 seconds and leaves a further five seconds of headroom. A host read lineage, including its one
 replacement, has an absolute **80-second** bound from its first start; an explicit
 aggregate `listActions` waiter has a **90-second** bound including membership.
 Deadline expiry aborts owned work and rejects affected waiters with typed
 `activity.read-timeout` / unavailable health, retaining observations. It is not
 identity loss or a silent cancellation and does not automatically retry forever.
+A pending notification-only slot armed by a genuine signal starts once after the
+current timeout, with a fresh read/lineage deadline while C remains positive.
+The expired read itself never arms a retry. Pending explicit work follows the
+same start rule with its own aggregate-waiter deadline; dropping all demand drops
+notification-only pending work.
 Caller/lifetime cancellation remains `CancelledError` without false unavailable
 health. Apply these limits to activity owners, not to the entire multi-page event
 history loader. Inject clocks in deadline/throttle tests; do not wait real seconds.
@@ -347,7 +368,7 @@ history loader. Inject clocks in deadline/throttle tests; do not wait real secon
 | Any, current I/R | Observed 401, logout or identity replacement | Inactive or fresh Idle | Immediately increment I/L, clear runs/detail/output/health and RunGate state, reject all old waiters and abort; do not await aggregate settlement |
 | Reading or Dirty | Host set changes | Dirty if demand, otherwise Idle after retirement | Advance E; reject obsolete membership writes, remove departed hosts and demand owners; queue one fresh host discovery, retain unaffected observations |
 | Any | Old list/detail fulfills or rejects late | Unchanged | Check I/L/R/E, owner, abort and S before state/health publication; no removed run or newer health can be overwritten |
-| Reading or Dirty | Read or lineage deadline | Idle or explicitly queued work within its own deadline | Abort and reject with typed timeout/unavailable; no automatic recovery loop or identity clear |
+| Reading or Dirty | Read or lineage deadline | Idle, or Reading once for a genuinely armed pending slot | Abort and reject current callers with typed timeout/unavailable; genuine pending notification starts once with fresh deadline while C>0, or explicit pending W starts within its own deadline; expiry alone never retries or clears identity |
 | Any explicit aggregate waiter | Its 90-second deadline | Waiter rejected | Do not await a drain of future signals; shared work needed by other owners retains its own deadline |
 | Reading or Dirty | Explicit abort/cancel | Idle or Inactive | Abort current, reject current/pending explicit waiters, clear pending; cancellation never means host unavailable |
 
@@ -393,7 +414,8 @@ not compilation, timeout, hanging promise or an equivalent mutation.
 | C-only targeted rate | Fifty activity/message envelopes for one known running run, under fake clock and read-start barriers: at most 15 regular starts plus one terminal flush in 15 seconds on its applicable route, one trailing timer, no output retained; D follows the separate detail owner | Remove throttle, bypass once per duplicate terminal envelope, or create runtime follow demand from a list row |
 | Notification routing | Known progress/message remains targeted and coalesced; unknown/member/terminal triggers list; no event history read without an event consumer | Restore full discovery per known progress or read event history without a consumer |
 | Recovery storms (#223) | Malformed/gap storm during one held read: zero aborts, one pending. Separate error/open storm over an abort-honouring held body: one eligible abort, at most two started reads, waiters transferred once, replacement completes; a read begun after error is not interrupted | Restore unrestricted recover aborts; remove start-before-error or consumed-token guard; assert abort/start/publication counts |
-| Stranded read and deadline | Reopen unsticks pre-error held body; fake-clock 40-second expiry aborts response/body and rejects with timeout health, no stale publish; 80-second lineage and 90-second aggregate bounds reject existing waiters without another signal | Remove deadline timer or body abort, or swallow timeout as cancellation; use an assertion at the injected clock boundary |
+| Agent forwarding deadline | Hold the agent past its dedicated 30-second budget with the general proxy timeout at 60 seconds: hub returns receipt rows and `agent.unavailable` before the 40-second browser boundary; cold web load shows these rows with partial health and no timeout, for Direct and Edge | Remove the activity-specific forwarding budget: the held agent outlives the browser deadline and the cold receipt-row assertion fails |
+| Stranded read and deadline | Reopen unsticks pre-error held body; fake-clock 40-second expiry aborts response/body and rejects with timeout health, no stale publish; 80-second lineage and 90-second aggregate bounds reject existing waiters without another signal; a genuine pending notification starts exactly once after expiry with fresh deadline, expiry alone starts zero reads | Remove deadline timer or body abort, or swallow timeout as cancellation; use an assertion at the injected clock boundary |
 | Trailing notification | After trailing-start barrier, another signal queues exactly one third read and reveals newly committed state | Clear pending at completion, reuse consumed pending, or cap total reads at two |
 | No consumers | Cached history plus event-only/health-only listeners produces zero activity reads on open/reconnect/messages; re-mount reads fresh | Count cache/event listeners as demand or auto-start idle recovery |
 | Lifetime versus identity | Last action/change listener leaving increments L, rejects both current/pending W and prevents late callbacks; leaving only C while change listeners remain preserves I/L and permits explicitly joined pending W, but drops notification-only pending work | Treat teardown as identity loss, omit L guard, or omit pending explicitJoiner flag (test both flag values) |
