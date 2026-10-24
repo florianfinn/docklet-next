@@ -67,14 +67,14 @@ function fixedAddress(config: unknown, key: "IPv4Address" | "IPv6Address"): stri
   return typeof value === "string" && value ? value : undefined;
 }
 
-export function mapTopology(rows: Schema["NetworkInspect"][], hostId: string, containers: ContainerRow[], projects: ProjectRow[], inventory: InventoryObservation, summaries: Pick<Schema["NetworkSummary"], "id" | "isDefault">[] = []): Topology {
+export function mapTopology(rows: (Schema["NetworkInspect"] | Schema["NetworkSummary"])[], hostId: string, containers: ContainerRow[], projects: ProjectRow[], inventory: InventoryObservation, summaries: Pick<Schema["NetworkSummary"], "id" | "isDefault">[] = [], unavailable = new Map<string, InventoryObservation>()): Topology {
   const defaults = new Map(summaries.map((n) => [n.id, n.isDefault]));
   const networks: TopologyNetwork[] = rows.filter((r) => r.labels?.["io.docklet.system"] !== "agent").map((r) => {
     if (!r?.id || !r.name || typeof r.driver !== "string" || !r.driver) throw new Error("inventory.invalid-network");
-    const { internal } = r;
+    const { internal } = "internal" in r ? r : { internal: false };
     const ip4 = r.ipam.config?.find((c) => c.subnet && !c.subnet.includes(":"));
     const ip6 = r.ipam.config?.find((c) => c.subnet?.includes(":"));
-    return { id: inventoryId(hostId, r.id), hostId, name: r.name, driver: r.driver, internal, labels: r.labels ?? {}, options: r.options ?? {}, auxAddresses: Object.entries(ip4?.auxAddress ?? {}).map(([name, ip]) => ({ name, ip })), auxAddresses6: Object.entries(ip6?.auxAddress ?? {}).map(([name, ip]) => ({ name, ip })), builtIn: defaults.get(r.id) === true, ipv4: r.enableIPv4, ipv6: r.enableIPv6, subnet: ip4?.subnet, gateway: ip4?.gateway, ipRange: ip4?.ipRange, subnetConfigured: !!ip4?.subnet, subnet6: ip6?.subnet, gateway6: ip6?.gateway, ipRange6: ip6?.ipRange, subnet6Configured: !!ip6?.subnet, parent: r.options?.parent, ...owner(r.labels, hostId, projects), inventory };
+    return { id: inventoryId(hostId, r.id), hostId, name: r.name, driver: r.driver, internal, labels: r.labels ?? {}, options: r.options ?? {}, auxAddresses: Object.entries(ip4?.auxAddress ?? {}).map(([name, ip]) => ({ name, ip })), auxAddresses6: Object.entries(ip6?.auxAddress ?? {}).map(([name, ip]) => ({ name, ip })), builtIn: defaults.get(r.id) === true, ipv4: "enableIPv4" in r ? r.enableIPv4 : undefined, ipv6: "enableIPv6" in r ? r.enableIPv6 : undefined, subnet: ip4?.subnet, gateway: ip4?.gateway, ipRange: ip4?.ipRange, subnetConfigured: !!ip4?.subnet, subnet6: ip6?.subnet, gateway6: ip6?.gateway, ipRange6: ip6?.ipRange, subnet6Configured: !!ip6?.subnet, parent: r.options?.parent, ...owner(r.labels, hostId, projects), inventory: unavailable.get(r.id) ?? inventory, ...(unavailable.has(r.id) ? { detailUnavailable: true } : {}) };
   });
   const users = containers.filter((c) => c.labels?.["io.docklet.system"] !== "agent");
   const attachments: Topology["attachments"] = [];
@@ -83,7 +83,8 @@ export function mapTopology(rows: Schema["NetworkInspect"][], hostId: string, co
     const containerId = inventoryId(hostId, c.id);
     for (const n of networks) {
       const endpoint = c.networkSettings?.networks?.[n.name];
-      const raw = rows.find((r) => inventoryId(hostId, r.id) === n.id)?.containers?.[c.id];
+      const detail = rows.find((r) => inventoryId(hostId, r.id) === n.id);
+      const raw = detail && "containers" in detail ? detail.containers?.[c.id] : undefined;
       if (!endpoint && !raw) continue;
       const fixed4 = fixedAddress(endpoint?.ipamConfig, "IPv4Address");
       const fixed6 = fixedAddress(endpoint?.ipamConfig, "IPv6Address");

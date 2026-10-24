@@ -48,6 +48,7 @@ export type AdapterErrorCode =
   | "target-in-use"
   | "last-admin"
   | "invalid-network"
+  | "detail-unavailable"
   | "builtin-network"
   | "compose-managed"
   | "host-mismatch"
@@ -198,7 +199,8 @@ export interface ConnectNetworkInput {
  * "containers" topics; every call is checked again on the adapter side.
  */
 export interface NetworksApi {
-  getTopology(onPartial?: (rows: Topology) => void): Promise<Topology>;
+  /** The caller supplies its existing query snapshot for host-local read fallback. */
+  getTopology(onPartial?: (rows: Topology) => void, retained?: Topology): Promise<Topology>;
   /** Field errors throw "invalid-network"; disconnected hosts "host-offline". */
   createNetwork(input: CreateNetworkInput): Promise<TopologyNetwork>;
   /** Refused for Docker's own networks, Compose-owned networks and while containers are attached. */

@@ -2,7 +2,14 @@
 import type { enNetworks } from "./en";
 
 export const deNetworks: typeof enNetworks = {
+  partial: {
+    host: "Bei {name} sind Netzwerklesevorgänge fehlgeschlagen. Verfügbare und zuvor erfasste Netzwerke werden angezeigt.",
+    detail: "Netzwerkdetails nicht verfügbar. Verwendung unbekannt; Verbinden und Löschen sind gesperrt.",
+    unknown: "Unbekannt",
+  },
   usage: {
+    unknown: "Verwendung unbekannt",
+    unknownLabel: "{name}: Verwendung unbekannt",
     label: "{name}: {state}, {count, plural, one {# Container} other {# Container}}",
     used: "In Verwendung",
     unused: "Unbenutzt",
@@ -137,6 +144,7 @@ export const deNetworks: typeof enNetworks = {
   },
   menu: { focus: "In Topologie fokussieren", connect: "Container verbinden", remove: "Entfernen" },
   removeBlocked: {
+    "detail-unavailable": "Netzwerkdetails sind nicht verfügbar; die Verwendung kann nicht geprüft werden.",
     "builtin-network": "Docker-Standardnetz – wird nie entfernt.",
     "compose-managed": "Gehört zu Stack {stack} – Compose entfernt es mit dem Stack.",
     "in-use": "Noch {count, plural, one {# Container} other {# Container}} verbunden (auch gestoppte zählen).",
@@ -268,6 +276,7 @@ export const deNetworks: typeof enNetworks = {
     connected: "{container} mit {network} verbunden",
     disconnected: "{container} von {network} getrennt",
     blocks: {
+      "detail-unavailable": "Netzwerkdetails sind nicht verfügbar; die Verwendung kann nicht geprüft werden.",
       "host-mismatch": "Container und Netzwerk liegen auf verschiedenen Hosts.",
       "builtin-network": "In host und none wird kein Container nachträglich verbunden; das legt der Netzwerkmodus beim Erstellen fest.",
       "network-mode": "Der Container nutzt den Netzwerkmodus host oder none und kann keinen weiteren Netzen beitreten oder sie verlassen.",

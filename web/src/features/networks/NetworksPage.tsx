@@ -76,7 +76,7 @@ interface Source {
 }
 
 /** Explicit host choice of the topology; only hosts inside the global filter are offered. */
-function HostPicker({ hosts, value, onChange }: { hosts: Host[]; value: string; onChange: (id: string) => void }) {
+function HostPicker({ hosts, inventory, value, onChange }: { hosts: Host[]; inventory?: Topology["inventory"]; value: string; onChange: (id: string) => void }) {
   const t = useTranslations("networks");
   const tc = useTranslations("common.host");
   return (
@@ -89,6 +89,7 @@ function HostPicker({ hosts, value, onChange }: { hosts: Host[]; value: string; 
             type="button"
             role="radio"
             aria-checked={on}
+            title={inventory?.[h.id]?.stale ? t("partial.host", { name: h.name }) : undefined}
             onClick={() => onChange(h.id)}
             data-glow="row"
             style={{ "--host": h.color } as React.CSSProperties}
@@ -100,6 +101,7 @@ function HostPicker({ hosts, value, onChange }: { hosts: Host[]; value: string; 
           >
             <span className="size-2.5 rounded-[3px] bg-(--host)" aria-hidden />
             {h.name}
+            {inventory?.[h.id]?.stale && <AlertTriangle className="size-3 text-warning" aria-hidden />}
             {h.status !== "online" && <ToneDot tone={hostTone(h)} label={tc(h.status)} className="size-1.5" />}
           </button>
         );
@@ -123,9 +125,9 @@ function Canvas({ source }: { source: Source }) {
   const [connectRequest, setConnectRequest] = useState<ConnectRequest | null>(null);
   const [removing, setRemoving] = useState<TopologyNetwork | null>(null);
 
-  const withNets = source.hosts.filter((h) => source.topology.networks.some((n) => n.hostId === h.id));
   const requested = params.get("host");
-  const host = withNets.find((h) => h.id === requested) ?? withNets[0];
+  const availableHosts = source.hosts.filter((h) => h.status === "online" || h.id === requested || source.topology.networks.some((n) => n.hostId === h.id));
+  const host = availableHosts.find((h) => h.id === requested) ?? availableHosts[0];
 
   // Focus lives in the URL; the host and node params change together so a host switch never keeps a foreign focus.
   const navigate = useCallback(
@@ -156,7 +158,7 @@ function Canvas({ source }: { source: Source }) {
   const createHosts = onlineHosts.filter((h) => createCapabilities.get(h.id)?.available);
   const createHost = createHosts.find((h) => h.id === host?.id) ?? createHosts[0];
   const connectCapabilities = useNetworkCapabilities("connectNetwork", hostNets.map((n) => n.id));
-  const connectAvailable = [...connectCapabilities.values()].some((c) => c.available);
+  const connectAvailable = hostNets.some((n) => !n.detailUnavailable && !n.inventory?.stale && connectCapabilities.get(n.id)?.available);
   const expandedList = host ? expandedByHost[host.id] : undefined;
   const expanded = useMemo<ReadonlySet<string>>(() => (expandedList ? new Set(expandedList) : hostContainers.length <= EXPAND_ALL_UP_TO ? new Set(hostNets.map((n) => n.id)) : EMPTY), [expandedList, hostContainers.length, hostNets]);
   const setExpanded = useCallback((ids: string[]) => host && setExpandedByHost((s) => ({ ...s, [host.id]: ids })), [host]);
@@ -230,7 +232,7 @@ function Canvas({ source }: { source: Source }) {
     <div className="@container/net">
       <div className="mb-3 flex flex-col gap-3">
         <div className="flex flex-wrap items-center gap-3">
-          <HostPicker hosts={withNets} value={host.id} onChange={(id) => navigate({ host: id })} />
+          <HostPicker hosts={availableHosts} inventory={source.topology.inventory} value={host.id} onChange={(id) => navigate({ host: id })} />
           {source.bench && (
             <ToneBadge tone="violet">
               <FlaskConical /> {t("bench", { count: source.containers.length })}
@@ -279,6 +281,7 @@ function Canvas({ source }: { source: Source }) {
           </Button>
         </div>
       </div>
+      {source.topology.inventory?.[host.id]?.stale && <p aria-live="polite" className="mb-3 text-sm text-warning">{t("partial.host", { name: host.name })}</p>}
       {/* The page's own width decides (the sidebar counts): graph and info column about 70/30 after the gap, or stacked. */}
       <div
         className="grid items-start gap-4 @min-[72rem]/net:grid-cols-[minmax(0,7fr)_minmax(20rem,3fr)]"
@@ -416,7 +419,7 @@ function TopologySection() {
     );
   }
   if (source.isError) return <QueryError error={source.error} onRetry={source.refetch} />;
-  if (!source.topology.networks.some((n) => source.hosts.some((h) => h.id === n.hostId))) return <><InventoryNotice hosts={source.hosts} items={[]} /><EmptyState icon={<Network />} title={t("empty.title")} description={t("empty.body")} /></>;
+  if (!source.hosts.length) return <><InventoryNotice hosts={source.hosts} items={[]} /><EmptyState icon={<Network />} title={t("empty.title")} description={t("empty.body")} /></>;
   return <><InventoryNotice hosts={source.hosts} items={source.topology.networks} /><Canvas source={source} /></>;
 }
 
