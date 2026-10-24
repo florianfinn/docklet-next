@@ -1,5 +1,5 @@
 // Source: api/openapi.json
-// Revision: 7eb2ebc77ad1779c99bad90b197bc01f771ce578a31d2ecae9e920ada45973bd
+// Revision: 07d462c7072978dfc65cda87edd95a70ed07d75ddc02483fc3af0c727f99b0b6
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
 // Deviations: Generated TypeScript declarations from the local Huma export.
@@ -5528,6 +5528,18 @@ export interface components {
             /** @description Whether the request was successful */
             success: boolean;
         };
+        BaseApiResponseContainerregistryRegistryTestResult: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example /api/schemas/BaseApiResponseContainerregistryRegistryTestResult.json
+             */
+            readonly $schema?: string;
+            /** @description Response data */
+            data: components["schemas"]["ContainerregistryRegistryTestResult"];
+            /** @description Whether the request was successful */
+            success: boolean;
+        };
         BaseApiResponseDashboardSnapshot: {
             /**
              * Format: uri
@@ -7269,12 +7281,12 @@ export interface components {
             items: components["schemas"]["ContainerSummary"][] | null;
         };
         ContainerregistryContainerRegistry: {
-            awsAccessKeyId?: string;
             awsRegion?: string;
             /** Format: date-time */
             createdAt: string;
             description?: string;
             enabled: boolean;
+            hasCredential: boolean;
             id: string;
             insecure: boolean;
             registryType: string;
@@ -7282,7 +7294,6 @@ export interface components {
             /** Format: date-time */
             updatedAt: string;
             url: string;
-            username: string;
         };
         ContainerregistryCreateContainerRegistryRequest: {
             /**
@@ -7291,17 +7302,17 @@ export interface components {
              * @example /api/schemas/ContainerregistryCreateContainerRegistryRequest.json
              */
             readonly $schema?: string;
-            awsAccessKeyId: string;
-            awsRegion: string;
-            awsSecretAccessKey: string;
-            description: string | null;
-            enabled: boolean | null;
-            insecure: boolean | null;
-            registryType: string;
-            repositoryNames: string[] | null;
-            token: string;
+            awsAccessKeyId?: string;
+            awsRegion?: string;
+            awsSecretAccessKey?: string;
+            description?: string | null;
+            enabled?: boolean | null;
+            insecure?: boolean | null;
+            registryType?: string;
+            repositoryNames?: string[] | null;
+            token?: string;
             url: string;
-            username: string;
+            username?: string;
         };
         ContainerregistryCredential: {
             enabled: boolean;
@@ -7314,9 +7325,9 @@ export interface components {
         };
         ContainerregistryPullUsage: {
             authMethod: string;
-            authUsername?: string;
             /** Format: date-time */
             checkedAt: string;
+            code?: string;
             displayName: string;
             error?: string;
             /** Format: int64 */
@@ -7337,6 +7348,12 @@ export interface components {
         };
         ContainerregistryPullUsageResponse: {
             registries: components["schemas"]["ContainerregistryPullUsage"][] | null;
+        };
+        ContainerregistryRegistryTestResult: {
+            /** Format: date-time */
+            checkedAt: string;
+            code?: string;
+            ok: boolean;
         };
         ContainerregistryRepository: {
             name: string;
@@ -7394,17 +7411,18 @@ export interface components {
              * @example /api/schemas/ContainerregistryUpdateContainerRegistryRequest.json
              */
             readonly $schema?: string;
-            awsAccessKeyId: string | null;
-            awsRegion: string | null;
-            awsSecretAccessKey: string | null;
-            description: string | null;
-            enabled: boolean | null;
-            insecure: boolean | null;
-            registryType: string | null;
-            repositoryNames: string[] | null;
-            token: string | null;
-            url: string | null;
-            username: string | null;
+            awsAccessKeyId?: string | null;
+            awsRegion?: string | null;
+            awsSecretAccessKey?: string | null;
+            clearCredential?: boolean;
+            description?: string | null;
+            enabled?: boolean | null;
+            insecure?: boolean | null;
+            registryType?: string | null;
+            repositoryNames?: string[] | null;
+            token?: string | null;
+            url?: string | null;
+            username?: string | null;
         };
         CredentialSpecConfig: {
             config?: string;
@@ -8557,11 +8575,14 @@ export interface components {
             metadata: components["schemas"]["DetailSummaryMetadataStruct"];
             os: string;
             pinnedReferences?: string[] | null;
+            protectionReasons?: components["schemas"]["ImageProtection"][] | null;
             repoDigests: string[] | null;
             repoTags: string[] | null;
             rootFs: components["schemas"]["DetailSummaryRootFsStruct"];
             /** Format: int64 */
             size: number;
+            /** @enum {string} */
+            usageState?: "known" | "unknown";
         };
         ImageHistoryItem: {
             comment: string;
@@ -8595,10 +8616,31 @@ export interface components {
         ImageLoadResult: {
             stream: string;
         };
+        ImageOperationError: {
+            error: components["schemas"]["ImageProblem"];
+            success: boolean;
+        };
+        ImageProblem: {
+            /** @enum {string} */
+            code: "image.active-update-protected" | "image.busy" | "image.changed" | "image.in-use" | "image.invalid-archive" | "image.invalid-prune" | "image.invalid-reference" | "image.load-failed" | "image.not-found" | "image.prune-failed" | "image.pull-failed" | "image.remove-failed" | "image.reserved-reference" | "image.restore-point-protected" | "image.system-protected" | "image.tag-failed" | "image.usage-unavailable" | "registry.authentication-failed" | "registry.authentication-required" | "registry.credential-unavailable" | "registry.exists" | "registry.inline-credentials-not-allowed" | "registry.invalid-config" | "registry.not-found" | "registry.persistence-failed" | "registry.rate-limited" | "registry.sync-failed" | "registry.unavailable" | "update.check-unavailable" | "update.deploy-failed" | "update.invalid-target" | "update.persistence-failed" | "update.requires-hub-update" | "update.system-version-unknown";
+            message: string;
+        };
+        ImageProtection: {
+            ownerId?: string;
+            reason: string;
+        };
+        ImagePruneItem: {
+            /** @enum {string} */
+            code: "image.active-update-protected" | "image.busy" | "image.changed" | "image.in-use" | "image.invalid-archive" | "image.invalid-prune" | "image.invalid-reference" | "image.load-failed" | "image.not-found" | "image.prune-failed" | "image.pull-failed" | "image.remove-failed" | "image.reserved-reference" | "image.restore-point-protected" | "image.system-protected" | "image.tag-failed" | "image.usage-unavailable" | "registry.authentication-failed" | "registry.authentication-required" | "registry.credential-unavailable" | "registry.inline-credentials-not-allowed" | "registry.invalid-config" | "registry.persistence-failed" | "registry.rate-limited" | "registry.sync-failed" | "registry.unavailable" | "update.check-unavailable" | "update.deploy-failed" | "update.invalid-target" | "update.persistence-failed" | "update.requires-hub-update" | "update.system-version-unknown";
+            id: string;
+        };
         ImagePruneReport: {
+            failed: components["schemas"]["ImagePruneItem"][] | null;
             imagesDeleted: string[] | null;
+            skipped: components["schemas"]["ImagePruneItem"][] | null;
             /** Format: int64 */
             spaceReclaimed: number;
+            spaceReclaimedKnown: boolean;
         };
         ImagePullOptions: {
             /**
@@ -8607,7 +8649,9 @@ export interface components {
              * @example /api/schemas/ImagePullOptions.json
              */
             readonly $schema?: string;
+            /** @deprecated */
             auth?: components["schemas"]["ContainerregistryCredential"];
+            /** @deprecated */
             credentials?: components["schemas"]["ContainerregistryCredential"][] | null;
             /** @description Name of the image to pull (e.g., nginx) */
             imageName: string;
@@ -8631,6 +8675,7 @@ export interface components {
                 [key: string]: unknown;
             };
             pinnedReferences?: string[] | null;
+            protectionReasons?: components["schemas"]["ImageProtection"][] | null;
             repo: string;
             repoDigests: string[] | null;
             repoTags: string[] | null;
@@ -8638,6 +8683,8 @@ export interface components {
             size: number;
             tag: string;
             updateInfo?: components["schemas"]["ImageUpdateInfo"];
+            /** @enum {string} */
+            usageState?: "known" | "unknown";
             usedBy?: components["schemas"]["ImageUsedBy"][] | null;
             /** Format: int64 */
             virtualSize: number;
@@ -8658,17 +8705,25 @@ export interface components {
         ImageUpdateInfo: {
             authMethod?: string;
             authRegistry?: string;
-            authUsername?: string;
+            /** @enum {string} */
+            authState: "anonymous" | "credential" | "authentication-required" | "authentication-failed" | "unknown";
             /** Format: date-time */
             checkTime: string;
+            /** Format: date-time */
+            checkedAt: string;
+            code?: string;
             currentDigest: string;
             currentVersion: string;
             error: string;
             hasUpdate: boolean;
+            imageRef: string;
             latestDigest: string;
             latestVersion: string;
+            platform?: string;
             /** Format: int64 */
             responseTimeMs: number;
+            /** @enum {string} */
+            state: "unchecked" | "current" | "version" | "rebuild" | "local" | "unknown" | "error";
             updateType: string;
             usedCredential?: boolean;
         };
@@ -8757,6 +8812,7 @@ export interface components {
              * @example /api/schemas/ImageupdateBatchImageUpdateRequest.json
              */
             readonly $schema?: string;
+            /** @deprecated */
             credentials?: components["schemas"]["ContainerregistryCredential"][] | null;
             imageRefs: string[] | null;
         };
@@ -8767,15 +8823,20 @@ export interface components {
              * @example /api/schemas/ImageupdateCheckAllImagesRequest.json
              */
             readonly $schema?: string;
+            /** @deprecated */
             credentials?: components["schemas"]["ContainerregistryCredential"][] | null;
         };
         ImageupdateResponse: {
             activityId?: string;
             authMethod?: string;
             authRegistry?: string;
-            authUsername?: string;
+            /** @enum {string} */
+            authState: "anonymous" | "credential" | "authentication-required" | "authentication-failed" | "unknown";
             /** Format: date-time */
             checkTime: string;
+            /** Format: date-time */
+            checkedAt: string;
+            code?: string;
             containerUpdates?: {
                 [key: string]: components["schemas"]["ImageupdateResponse"];
             };
@@ -8787,8 +8848,11 @@ export interface components {
             imageUpdate?: components["schemas"]["ImageupdateResponse"];
             latestDigest?: string;
             latestVersion?: string;
+            platform?: string;
             /** Format: int64 */
             responseTimeMs: number;
+            /** @enum {string} */
+            state: "unchecked" | "current" | "version" | "rebuild" | "local" | "unknown" | "error";
             updateType: string;
             usedCredential?: boolean;
         };
@@ -10206,8 +10270,10 @@ export interface components {
             containerSpaceReclaimed?: number;
             containersPruned?: string[] | null;
             errors?: string[] | null;
+            imageSkipped?: components["schemas"]["ImagePruneItem"][] | null;
             /** Format: int64 */
             imageSpaceReclaimed?: number;
+            imageSpaceReclaimedKnown?: boolean;
             imagesDeleted?: string[] | null;
             networksDeleted?: string[] | null;
             /** Format: int64 */
@@ -12630,6 +12696,69 @@ export interface operations {
                     "application/json": components["schemas"]["BasePaginatedContainerregistryContainerRegistry"];
                 };
             };
+            /** @description Typed neutral image or registry failure */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ImageOperationError"];
+                };
+            };
+            /** @description Typed neutral image or registry failure */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ImageOperationError"];
+                };
+            };
+            /** @description Typed neutral image or registry failure */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ImageOperationError"];
+                };
+            };
+            /** @description Typed neutral image or registry failure */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ImageOperationError"];
+                };
+            };
+            /** @description Typed neutral image or registry failure */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ImageOperationError"];
+                };
+            };
+            /** @description Typed neutral image or registry failure */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ImageOperationError"];
+                };
+            };
+            /** @description Typed neutral image or registry failure */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ImageOperationError"];
+                };
+            };
             /** @description Error */
             default: {
                 headers: {
@@ -12663,6 +12792,69 @@ export interface operations {
                     "application/json": components["schemas"]["BaseApiResponseContainerregistryContainerRegistry"];
                 };
             };
+            /** @description Typed neutral image or registry failure */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ImageOperationError"];
+                };
+            };
+            /** @description Typed neutral image or registry failure */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ImageOperationError"];
+                };
+            };
+            /** @description Typed neutral image or registry failure */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ImageOperationError"];
+                };
+            };
+            /** @description Typed neutral image or registry failure */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ImageOperationError"];
+                };
+            };
+            /** @description Typed neutral image or registry failure */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ImageOperationError"];
+                };
+            };
+            /** @description Typed neutral image or registry failure */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ImageOperationError"];
+                };
+            };
+            /** @description Typed neutral image or registry failure */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ImageOperationError"];
+                };
+            };
             /** @description Error */
             default: {
                 headers: {
@@ -12690,6 +12882,69 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["BaseApiResponseContainerregistryPullUsageResponse"];
+                };
+            };
+            /** @description Typed neutral image or registry failure */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ImageOperationError"];
+                };
+            };
+            /** @description Typed neutral image or registry failure */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ImageOperationError"];
+                };
+            };
+            /** @description Typed neutral image or registry failure */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ImageOperationError"];
+                };
+            };
+            /** @description Typed neutral image or registry failure */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ImageOperationError"];
+                };
+            };
+            /** @description Typed neutral image or registry failure */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ImageOperationError"];
+                };
+            };
+            /** @description Typed neutral image or registry failure */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ImageOperationError"];
+                };
+            };
+            /** @description Typed neutral image or registry failure */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ImageOperationError"];
                 };
             };
             /** @description Error */
@@ -12725,6 +12980,69 @@ export interface operations {
                     "application/json": components["schemas"]["BaseApiResponseMessageResponse"];
                 };
             };
+            /** @description Typed neutral image or registry failure */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ImageOperationError"];
+                };
+            };
+            /** @description Typed neutral image or registry failure */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ImageOperationError"];
+                };
+            };
+            /** @description Typed neutral image or registry failure */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ImageOperationError"];
+                };
+            };
+            /** @description Typed neutral image or registry failure */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ImageOperationError"];
+                };
+            };
+            /** @description Typed neutral image or registry failure */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ImageOperationError"];
+                };
+            };
+            /** @description Typed neutral image or registry failure */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ImageOperationError"];
+                };
+            };
+            /** @description Typed neutral image or registry failure */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ImageOperationError"];
+                };
+            };
             /** @description Error */
             default: {
                 headers: {
@@ -12755,6 +13073,69 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["BaseApiResponseContainerregistryContainerRegistry"];
+                };
+            };
+            /** @description Typed neutral image or registry failure */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ImageOperationError"];
+                };
+            };
+            /** @description Typed neutral image or registry failure */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ImageOperationError"];
+                };
+            };
+            /** @description Typed neutral image or registry failure */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ImageOperationError"];
+                };
+            };
+            /** @description Typed neutral image or registry failure */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ImageOperationError"];
+                };
+            };
+            /** @description Typed neutral image or registry failure */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ImageOperationError"];
+                };
+            };
+            /** @description Typed neutral image or registry failure */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ImageOperationError"];
+                };
+            };
+            /** @description Typed neutral image or registry failure */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ImageOperationError"];
                 };
             };
             /** @description Error */
@@ -12793,6 +13174,69 @@ export interface operations {
                     "application/json": components["schemas"]["BaseApiResponseContainerregistryContainerRegistry"];
                 };
             };
+            /** @description Typed neutral image or registry failure */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ImageOperationError"];
+                };
+            };
+            /** @description Typed neutral image or registry failure */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ImageOperationError"];
+                };
+            };
+            /** @description Typed neutral image or registry failure */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ImageOperationError"];
+                };
+            };
+            /** @description Typed neutral image or registry failure */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ImageOperationError"];
+                };
+            };
+            /** @description Typed neutral image or registry failure */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ImageOperationError"];
+                };
+            };
+            /** @description Typed neutral image or registry failure */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ImageOperationError"];
+                };
+            };
+            /** @description Typed neutral image or registry failure */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ImageOperationError"];
+                };
+            };
             /** @description Error */
             default: {
                 headers: {
@@ -12823,6 +13267,69 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["BaseApiResponseMessageResponse"];
+                };
+            };
+            /** @description Typed neutral image or registry failure */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ImageOperationError"];
+                };
+            };
+            /** @description Typed neutral image or registry failure */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ImageOperationError"];
+                };
+            };
+            /** @description Typed neutral image or registry failure */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ImageOperationError"];
+                };
+            };
+            /** @description Typed neutral image or registry failure */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ImageOperationError"];
+                };
+            };
+            /** @description Typed neutral image or registry failure */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ImageOperationError"];
+                };
+            };
+            /** @description Typed neutral image or registry failure */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ImageOperationError"];
+                };
+            };
+            /** @description Typed neutral image or registry failure */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ImageOperationError"];
                 };
             };
             /** @description Error */
@@ -12866,6 +13373,69 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["BasePaginatedContainerregistryRepository"];
+                };
+            };
+            /** @description Typed neutral image or registry failure */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ImageOperationError"];
+                };
+            };
+            /** @description Typed neutral image or registry failure */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ImageOperationError"];
+                };
+            };
+            /** @description Typed neutral image or registry failure */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ImageOperationError"];
+                };
+            };
+            /** @description Typed neutral image or registry failure */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ImageOperationError"];
+                };
+            };
+            /** @description Typed neutral image or registry failure */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ImageOperationError"];
+                };
+            };
+            /** @description Typed neutral image or registry failure */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ImageOperationError"];
+                };
+            };
+            /** @description Typed neutral image or registry failure */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ImageOperationError"];
                 };
             };
             /** @description Error */
@@ -12913,6 +13483,69 @@ export interface operations {
                     "application/json": components["schemas"]["BasePaginatedContainerregistryRepositoryTag"];
                 };
             };
+            /** @description Typed neutral image or registry failure */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ImageOperationError"];
+                };
+            };
+            /** @description Typed neutral image or registry failure */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ImageOperationError"];
+                };
+            };
+            /** @description Typed neutral image or registry failure */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ImageOperationError"];
+                };
+            };
+            /** @description Typed neutral image or registry failure */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ImageOperationError"];
+                };
+            };
+            /** @description Typed neutral image or registry failure */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ImageOperationError"];
+                };
+            };
+            /** @description Typed neutral image or registry failure */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ImageOperationError"];
+                };
+            };
+            /** @description Typed neutral image or registry failure */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ImageOperationError"];
+                };
+            };
             /** @description Error */
             default: {
                 headers: {
@@ -12950,6 +13583,69 @@ export interface operations {
                     "application/json": components["schemas"]["BaseApiResponseContainerregistryDeleteTagResponse"];
                 };
             };
+            /** @description Typed neutral image or registry failure */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ImageOperationError"];
+                };
+            };
+            /** @description Typed neutral image or registry failure */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ImageOperationError"];
+                };
+            };
+            /** @description Typed neutral image or registry failure */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ImageOperationError"];
+                };
+            };
+            /** @description Typed neutral image or registry failure */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ImageOperationError"];
+                };
+            };
+            /** @description Typed neutral image or registry failure */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ImageOperationError"];
+                };
+            };
+            /** @description Typed neutral image or registry failure */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ImageOperationError"];
+                };
+            };
+            /** @description Typed neutral image or registry failure */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ImageOperationError"];
+                };
+            };
             /** @description Error */
             default: {
                 headers: {
@@ -12979,7 +13675,79 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["BaseApiResponseMessageResponse"];
+                    "application/json": components["schemas"]["BaseApiResponseContainerregistryRegistryTestResult"];
+                };
+            };
+            /** @description Typed neutral image or registry failure */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ContainerregistryRegistryTestResult"];
+                };
+            };
+            /** @description Typed neutral image or registry failure */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ContainerregistryRegistryTestResult"] | components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Typed neutral image or registry failure */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ContainerregistryRegistryTestResult"];
+                };
+            };
+            /** @description Typed neutral image or registry failure */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ContainerregistryRegistryTestResult"];
+                };
+            };
+            /** @description Typed neutral image or registry failure */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ContainerregistryRegistryTestResult"];
+                };
+            };
+            /** @description Typed neutral image or registry failure */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ContainerregistryRegistryTestResult"];
+                };
+            };
+            /** @description Typed neutral image or registry failure */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ContainerregistryRegistryTestResult"];
+                };
+            };
+            /** @description Typed neutral image or registry failure */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ContainerregistryRegistryTestResult"];
                 };
             };
             /** @description Error */
@@ -15062,6 +15830,69 @@ export interface operations {
                     "application/json": components["schemas"]["BaseApiResponseMapStringImageUpdateInfo"];
                 };
             };
+            /** @description Typed neutral image or registry failure */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ImageOperationError"];
+                };
+            };
+            /** @description Typed neutral image or registry failure */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ImageOperationError"];
+                };
+            };
+            /** @description Typed neutral image or registry failure */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ImageOperationError"];
+                };
+            };
+            /** @description Typed neutral image or registry failure */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ImageOperationError"];
+                };
+            };
+            /** @description Typed neutral image or registry failure */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ImageOperationError"];
+                };
+            };
+            /** @description Typed neutral image or registry failure */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ImageOperationError"];
+                };
+            };
+            /** @description Typed neutral image or registry failure */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ImageOperationError"];
+                };
+            };
             /** @description Error */
             default: {
                 headers: {
@@ -15095,6 +15926,69 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["BaseApiResponseImageupdateResponse"];
+                };
+            };
+            /** @description Typed neutral image or registry failure */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ImageOperationError"];
+                };
+            };
+            /** @description Typed neutral image or registry failure */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ImageOperationError"];
+                };
+            };
+            /** @description Typed neutral image or registry failure */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ImageOperationError"];
+                };
+            };
+            /** @description Typed neutral image or registry failure */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ImageOperationError"];
+                };
+            };
+            /** @description Typed neutral image or registry failure */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ImageOperationError"];
+                };
+            };
+            /** @description Typed neutral image or registry failure */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ImageOperationError"];
+                };
+            };
+            /** @description Typed neutral image or registry failure */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ImageOperationError"];
                 };
             };
             /** @description Error */
@@ -15133,6 +16027,69 @@ export interface operations {
                     "application/json": components["schemas"]["BaseApiResponseImageupdateBatchResponse"];
                 };
             };
+            /** @description Typed neutral image or registry failure */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ImageOperationError"];
+                };
+            };
+            /** @description Typed neutral image or registry failure */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ImageOperationError"];
+                };
+            };
+            /** @description Typed neutral image or registry failure */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ImageOperationError"];
+                };
+            };
+            /** @description Typed neutral image or registry failure */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ImageOperationError"];
+                };
+            };
+            /** @description Typed neutral image or registry failure */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ImageOperationError"];
+                };
+            };
+            /** @description Typed neutral image or registry failure */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ImageOperationError"];
+                };
+            };
+            /** @description Typed neutral image or registry failure */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ImageOperationError"];
+                };
+            };
             /** @description Error */
             default: {
                 headers: {
@@ -15169,6 +16126,69 @@ export interface operations {
                     "application/json": components["schemas"]["BaseApiResponseImageupdateBatchResponse"];
                 };
             };
+            /** @description Typed neutral image or registry failure */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ImageOperationError"];
+                };
+            };
+            /** @description Typed neutral image or registry failure */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ImageOperationError"];
+                };
+            };
+            /** @description Typed neutral image or registry failure */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ImageOperationError"];
+                };
+            };
+            /** @description Typed neutral image or registry failure */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ImageOperationError"];
+                };
+            };
+            /** @description Typed neutral image or registry failure */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ImageOperationError"];
+                };
+            };
+            /** @description Typed neutral image or registry failure */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ImageOperationError"];
+                };
+            };
+            /** @description Typed neutral image or registry failure */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ImageOperationError"];
+                };
+            };
             /** @description Error */
             default: {
                 headers: {
@@ -15201,6 +16221,69 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["BaseApiResponseImageupdateResponse"];
+                };
+            };
+            /** @description Typed neutral image or registry failure */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ImageOperationError"];
+                };
+            };
+            /** @description Typed neutral image or registry failure */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ImageOperationError"];
+                };
+            };
+            /** @description Typed neutral image or registry failure */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ImageOperationError"];
+                };
+            };
+            /** @description Typed neutral image or registry failure */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ImageOperationError"];
+                };
+            };
+            /** @description Typed neutral image or registry failure */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ImageOperationError"];
+                };
+            };
+            /** @description Typed neutral image or registry failure */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ImageOperationError"];
+                };
+            };
+            /** @description Typed neutral image or registry failure */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ImageOperationError"];
                 };
             };
             /** @description Error */
@@ -15237,6 +16320,69 @@ export interface operations {
                     "application/json": components["schemas"]["BaseApiResponseImageupdateResponse"];
                 };
             };
+            /** @description Typed neutral image or registry failure */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ImageOperationError"];
+                };
+            };
+            /** @description Typed neutral image or registry failure */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ImageOperationError"];
+                };
+            };
+            /** @description Typed neutral image or registry failure */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ImageOperationError"];
+                };
+            };
+            /** @description Typed neutral image or registry failure */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ImageOperationError"];
+                };
+            };
+            /** @description Typed neutral image or registry failure */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ImageOperationError"];
+                };
+            };
+            /** @description Typed neutral image or registry failure */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ImageOperationError"];
+                };
+            };
+            /** @description Typed neutral image or registry failure */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ImageOperationError"];
+                };
+            };
             /** @description Error */
             default: {
                 headers: {
@@ -15267,6 +16413,69 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["BaseApiResponseImageupdateSummary"];
+                };
+            };
+            /** @description Typed neutral image or registry failure */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ImageOperationError"];
+                };
+            };
+            /** @description Typed neutral image or registry failure */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ImageOperationError"];
+                };
+            };
+            /** @description Typed neutral image or registry failure */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ImageOperationError"];
+                };
+            };
+            /** @description Typed neutral image or registry failure */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ImageOperationError"];
+                };
+            };
+            /** @description Typed neutral image or registry failure */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ImageOperationError"];
+                };
+            };
+            /** @description Typed neutral image or registry failure */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ImageOperationError"];
+                };
+            };
+            /** @description Typed neutral image or registry failure */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ImageOperationError"];
                 };
             };
             /** @description Error */
@@ -15316,6 +16525,69 @@ export interface operations {
                     "application/json": components["schemas"]["ImageListResponse"];
                 };
             };
+            /** @description Typed neutral image or registry failure */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ImageOperationError"];
+                };
+            };
+            /** @description Typed neutral image or registry failure */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ImageOperationError"];
+                };
+            };
+            /** @description Typed neutral image or registry failure */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ImageOperationError"];
+                };
+            };
+            /** @description Typed neutral image or registry failure */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ImageOperationError"];
+                };
+            };
+            /** @description Typed neutral image or registry failure */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ImageOperationError"];
+                };
+            };
+            /** @description Typed neutral image or registry failure */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ImageOperationError"];
+                };
+            };
+            /** @description Typed neutral image or registry failure */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ImageOperationError"];
+                };
+            };
             /** @description Error */
             default: {
                 headers: {
@@ -15346,6 +16618,69 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["BaseApiResponseImageUsageCounts"];
+                };
+            };
+            /** @description Typed neutral image or registry failure */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ImageOperationError"];
+                };
+            };
+            /** @description Typed neutral image or registry failure */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ImageOperationError"];
+                };
+            };
+            /** @description Typed neutral image or registry failure */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ImageOperationError"];
+                };
+            };
+            /** @description Typed neutral image or registry failure */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ImageOperationError"];
+                };
+            };
+            /** @description Typed neutral image or registry failure */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ImageOperationError"];
+                };
+            };
+            /** @description Typed neutral image or registry failure */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ImageOperationError"];
+                };
+            };
+            /** @description Typed neutral image or registry failure */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ImageOperationError"];
                 };
             };
             /** @description Error */
@@ -15389,6 +16724,69 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["BasePaginatedImagepatchPatchTarget"];
+                };
+            };
+            /** @description Typed neutral image or registry failure */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ImageOperationError"];
+                };
+            };
+            /** @description Typed neutral image or registry failure */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ImageOperationError"];
+                };
+            };
+            /** @description Typed neutral image or registry failure */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ImageOperationError"];
+                };
+            };
+            /** @description Typed neutral image or registry failure */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ImageOperationError"];
+                };
+            };
+            /** @description Typed neutral image or registry failure */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ImageOperationError"];
+                };
+            };
+            /** @description Typed neutral image or registry failure */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ImageOperationError"];
+                };
+            };
+            /** @description Typed neutral image or registry failure */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ImageOperationError"];
                 };
             };
             /** @description Error */
@@ -15436,6 +16834,69 @@ export interface operations {
                     "application/json": components["schemas"]["BasePaginatedImagepatchPatchRecord"];
                 };
             };
+            /** @description Typed neutral image or registry failure */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ImageOperationError"];
+                };
+            };
+            /** @description Typed neutral image or registry failure */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ImageOperationError"];
+                };
+            };
+            /** @description Typed neutral image or registry failure */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ImageOperationError"];
+                };
+            };
+            /** @description Typed neutral image or registry failure */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ImageOperationError"];
+                };
+            };
+            /** @description Typed neutral image or registry failure */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ImageOperationError"];
+                };
+            };
+            /** @description Typed neutral image or registry failure */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ImageOperationError"];
+                };
+            };
+            /** @description Typed neutral image or registry failure */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ImageOperationError"];
+                };
+            };
             /** @description Error */
             default: {
                 headers: {
@@ -15475,6 +16936,69 @@ export interface operations {
                     "application/json": components["schemas"]["BaseApiResponseImagePruneReport"];
                 };
             };
+            /** @description Typed neutral image or registry failure */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ImageOperationError"];
+                };
+            };
+            /** @description Typed neutral image or registry failure */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ImageOperationError"];
+                };
+            };
+            /** @description Typed neutral image or registry failure */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ImageOperationError"];
+                };
+            };
+            /** @description Typed neutral image or registry failure */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ImageOperationError"];
+                };
+            };
+            /** @description Typed neutral image or registry failure */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ImageOperationError"];
+                };
+            };
+            /** @description Typed neutral image or registry failure */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ImageOperationError"];
+                };
+            };
+            /** @description Typed neutral image or registry failure */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ImageOperationError"];
+                };
+            };
             /** @description Error */
             default: {
                 headers: {
@@ -15489,7 +17013,9 @@ export interface operations {
     "pull-image": {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                "X-Registry-Auth"?: string;
+            };
             path: {
                 /** @description Environment ID */
                 id: string;
@@ -15508,6 +17034,69 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+            /** @description Typed neutral image or registry failure */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ImageOperationError"];
+                };
+            };
+            /** @description Typed neutral image or registry failure */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ImageOperationError"];
+                };
+            };
+            /** @description Typed neutral image or registry failure */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ImageOperationError"];
+                };
+            };
+            /** @description Typed neutral image or registry failure */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ImageOperationError"];
+                };
+            };
+            /** @description Typed neutral image or registry failure */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ImageOperationError"];
+                };
+            };
+            /** @description Typed neutral image or registry failure */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ImageOperationError"];
+                };
+            };
+            /** @description Typed neutral image or registry failure */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ImageOperationError"];
+                };
             };
             /** @description Error */
             default: {
@@ -15544,6 +17133,69 @@ export interface operations {
                     "application/json": components["schemas"]["BaseApiResponseListImageSearchResult"];
                 };
             };
+            /** @description Typed neutral image or registry failure */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ImageOperationError"];
+                };
+            };
+            /** @description Typed neutral image or registry failure */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ImageOperationError"];
+                };
+            };
+            /** @description Typed neutral image or registry failure */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ImageOperationError"];
+                };
+            };
+            /** @description Typed neutral image or registry failure */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ImageOperationError"];
+                };
+            };
+            /** @description Typed neutral image or registry failure */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ImageOperationError"];
+                };
+            };
+            /** @description Typed neutral image or registry failure */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ImageOperationError"];
+                };
+            };
+            /** @description Typed neutral image or registry failure */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ImageOperationError"];
+                };
+            };
             /** @description Error */
             default: {
                 headers: {
@@ -15578,6 +17230,69 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["BaseApiResponseImageLoadResult"];
+                };
+            };
+            /** @description Typed neutral image or registry failure */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ImageOperationError"];
+                };
+            };
+            /** @description Typed neutral image or registry failure */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ImageOperationError"];
+                };
+            };
+            /** @description Typed neutral image or registry failure */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ImageOperationError"];
+                };
+            };
+            /** @description Typed neutral image or registry failure */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ImageOperationError"];
+                };
+            };
+            /** @description Typed neutral image or registry failure */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ImageOperationError"];
+                };
+            };
+            /** @description Typed neutral image or registry failure */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ImageOperationError"];
+                };
+            };
+            /** @description Typed neutral image or registry failure */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ImageOperationError"];
                 };
             };
             /** @description Error */
@@ -15650,6 +17365,69 @@ export interface operations {
                     "application/json": components["schemas"]["BaseApiResponseImageDetailSummary"];
                 };
             };
+            /** @description Typed neutral image or registry failure */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ImageOperationError"];
+                };
+            };
+            /** @description Typed neutral image or registry failure */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ImageOperationError"];
+                };
+            };
+            /** @description Typed neutral image or registry failure */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ImageOperationError"];
+                };
+            };
+            /** @description Typed neutral image or registry failure */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ImageOperationError"];
+                };
+            };
+            /** @description Typed neutral image or registry failure */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ImageOperationError"];
+                };
+            };
+            /** @description Typed neutral image or registry failure */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ImageOperationError"];
+                };
+            };
+            /** @description Typed neutral image or registry failure */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ImageOperationError"];
+                };
+            };
             /** @description Error */
             default: {
                 headers: {
@@ -15664,7 +17442,7 @@ export interface operations {
     "remove-image": {
         parameters: {
             query?: {
-                /** @description Force removal */
+                /** @description Legacy flag; protected and in-use images are never force-removed */
                 force?: boolean;
             };
             header?: never;
@@ -15685,6 +17463,69 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["BaseApiResponseMessageResponse"];
+                };
+            };
+            /** @description Typed neutral image or registry failure */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ImageOperationError"];
+                };
+            };
+            /** @description Typed neutral image or registry failure */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ImageOperationError"];
+                };
+            };
+            /** @description Typed neutral image or registry failure */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ImageOperationError"];
+                };
+            };
+            /** @description Typed neutral image or registry failure */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ImageOperationError"];
+                };
+            };
+            /** @description Typed neutral image or registry failure */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ImageOperationError"];
+                };
+            };
+            /** @description Typed neutral image or registry failure */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ImageOperationError"];
+                };
+            };
+            /** @description Typed neutral image or registry failure */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ImageOperationError"];
                 };
             };
             /** @description Error */
@@ -15723,6 +17564,69 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["BaseApiResponseImagepatchPatchRecord"];
+                };
+            };
+            /** @description Typed neutral image or registry failure */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ImageOperationError"];
+                };
+            };
+            /** @description Typed neutral image or registry failure */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ImageOperationError"];
+                };
+            };
+            /** @description Typed neutral image or registry failure */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ImageOperationError"];
+                };
+            };
+            /** @description Typed neutral image or registry failure */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ImageOperationError"];
+                };
+            };
+            /** @description Typed neutral image or registry failure */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ImageOperationError"];
+                };
+            };
+            /** @description Typed neutral image or registry failure */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ImageOperationError"];
+                };
+            };
+            /** @description Typed neutral image or registry failure */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ImageOperationError"];
                 };
             };
             /** @description Error */
@@ -15915,6 +17819,69 @@ export interface operations {
                     "application/json": components["schemas"]["BaseApiResponseImageAttestationList"];
                 };
             };
+            /** @description Typed neutral image or registry failure */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ImageOperationError"];
+                };
+            };
+            /** @description Typed neutral image or registry failure */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ImageOperationError"];
+                };
+            };
+            /** @description Typed neutral image or registry failure */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ImageOperationError"];
+                };
+            };
+            /** @description Typed neutral image or registry failure */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ImageOperationError"];
+                };
+            };
+            /** @description Typed neutral image or registry failure */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ImageOperationError"];
+                };
+            };
+            /** @description Typed neutral image or registry failure */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ImageOperationError"];
+                };
+            };
+            /** @description Typed neutral image or registry failure */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ImageOperationError"];
+                };
+            };
             /** @description Error */
             default: {
                 headers: {
@@ -15946,6 +17913,69 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+            /** @description Typed neutral image or registry failure */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ImageOperationError"];
+                };
+            };
+            /** @description Typed neutral image or registry failure */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ImageOperationError"];
+                };
+            };
+            /** @description Typed neutral image or registry failure */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ImageOperationError"];
+                };
+            };
+            /** @description Typed neutral image or registry failure */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ImageOperationError"];
+                };
+            };
+            /** @description Typed neutral image or registry failure */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ImageOperationError"];
+                };
+            };
+            /** @description Typed neutral image or registry failure */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ImageOperationError"];
+                };
+            };
+            /** @description Typed neutral image or registry failure */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ImageOperationError"];
+                };
             };
             /** @description Error */
             default: {
@@ -15979,6 +18009,69 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["BaseApiResponseListImageHistoryItem"];
+                };
+            };
+            /** @description Typed neutral image or registry failure */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ImageOperationError"];
+                };
+            };
+            /** @description Typed neutral image or registry failure */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ImageOperationError"];
+                };
+            };
+            /** @description Typed neutral image or registry failure */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ImageOperationError"];
+                };
+            };
+            /** @description Typed neutral image or registry failure */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ImageOperationError"];
+                };
+            };
+            /** @description Typed neutral image or registry failure */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ImageOperationError"];
+                };
+            };
+            /** @description Typed neutral image or registry failure */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ImageOperationError"];
+                };
+            };
+            /** @description Typed neutral image or registry failure */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ImageOperationError"];
                 };
             };
             /** @description Error */
@@ -16017,6 +18110,69 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["BaseApiResponseMessageResponse"];
+                };
+            };
+            /** @description Typed neutral image or registry failure */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ImageOperationError"];
+                };
+            };
+            /** @description Typed neutral image or registry failure */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ImageOperationError"];
+                };
+            };
+            /** @description Typed neutral image or registry failure */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ImageOperationError"];
+                };
+            };
+            /** @description Typed neutral image or registry failure */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ImageOperationError"];
+                };
+            };
+            /** @description Typed neutral image or registry failure */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ImageOperationError"];
+                };
+            };
+            /** @description Typed neutral image or registry failure */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ImageOperationError"];
+                };
+            };
+            /** @description Typed neutral image or registry failure */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ImageOperationError"];
                 };
             };
             /** @description Error */
@@ -18708,6 +20864,33 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["BaseApiResponseTriggerUpgradeData"];
+                };
+            };
+            /** @description Typed neutral image or registry failure */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ImageOperationError"] | components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Typed neutral image or registry failure */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ImageOperationError"] | components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Typed neutral image or registry failure */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ImageOperationError"] | components["schemas"]["ErrorModel"];
                 };
             };
             /** @description Error */
