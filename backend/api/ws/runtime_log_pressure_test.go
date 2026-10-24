@@ -33,7 +33,7 @@ func TestRuntimeLogsRealWSSlowReaderReleasesProducer(t *testing.T) {
 	conn := dialLog(t, logServer(t, h, true)+"containers/pressure/logs?format=json")
 	// No browser reads: the actual 256-entry client queue must remove this viewer.
 	waitLogSignal(t, joined)
-	require.Eventually(t, func() bool { h.logStreamsMu.Lock(); defer h.logStreamsMu.Unlock(); return len(h.logStreams) == 0 }, 5*time.Second, time.Millisecond)
+	require.Eventually(t, func() bool { h.logStreamsMu.Lock(); defer h.logStreamsMu.Unlock(); return len(h.logStreams) == 0 }, logTestTimeout, time.Millisecond)
 	_ = conn.CloseNow()
 }
 func TestRuntimeLogsRawAndMappedQueuesCancelWhenFull(t *testing.T) {
@@ -60,7 +60,7 @@ func TestRuntimeLogsRawAndMappedQueuesCancelWhenFull(t *testing.T) {
 		return normalizeSourceLogLine(line, normalizeContainerLogMessageInternal)
 	})
 	require.Equal(t, 256, cap(mapped))
-	require.Eventually(t, func() bool { return len(lines) == 256 && len(mapped) == 256 }, 5*time.Second, time.Millisecond)
+	require.Eventually(t, func() bool { return len(lines) == 256 && len(mapped) == 256 }, logTestTimeout, time.Millisecond)
 	cancel()
 	waitLogSignal(t, joined)
 	for range mapped {

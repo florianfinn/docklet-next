@@ -22,7 +22,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/coder/websocket"
 	"github.com/containerd/errdefs"
 	wshub "github.com/florianfinn/docklet-next/backend/pkg/libarcane/ws"
 	"github.com/florianfinn/docklet-next/backend/pkg/projects"
@@ -126,7 +125,7 @@ func TestRuntimeLogsRealWSLateViewerReceivesOnlyFutureLines(t *testing.T) {
 		t.Helper()
 		select {
 		case next <- text:
-		case <-time.After(5 * time.Second):
+		case <-time.After(logTestTimeout):
 			t.Fatal("source not consuming")
 		}
 	}
@@ -134,23 +133,8 @@ func TestRuntimeLogsRealWSLateViewerReceivesOnlyFutureLines(t *testing.T) {
 	var initial wshub.LogMessage
 	require.NoError(t, json.Unmarshal(readLog(t, one), &initial))
 	require.Equal(t, uint64(1), initial.Seq)
-	// A pong proves ServeClient's registration send completed. The hub finishes
-	// that registration before it can process the next broadcast. Refcounts alone
-	// advance earlier and cannot synchronize a late viewer's first delivery.
-	readyRead := func(conn *websocket.Conn) func() []byte {
-		ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
-		t.Cleanup(cancel)
-		type result struct {
-			body []byte
-			err  error
-		}
-		read := make(chan result, 1)
-		go func() { _, body, err := conn.Read(ctx); read <- result{body, err} }()
-		require.NoError(t, conn.Ping(ctx))
-		return func() []byte { t.Helper(); got := <-read; cancel(); require.NoError(t, got.err); return got.body }
-	}
 	two := dialLog(t, url)
-	nextTwo := readyRead(two)
+	nextTwo := readyLogRead(t, two)
 	waitRefs := func(want int) {
 		t.Helper()
 		require.Eventually(t, func() bool {
@@ -162,7 +146,7 @@ func TestRuntimeLogsRealWSLateViewerReceivesOnlyFutureLines(t *testing.T) {
 				}
 			}
 			return false
-		}, 5*time.Second, time.Millisecond)
+		}, logTestTimeout, time.Millisecond)
 	}
 	waitRefs(2)
 	send("future line")
@@ -175,7 +159,7 @@ func TestRuntimeLogsRealWSLateViewerReceivesOnlyFutureLines(t *testing.T) {
 	_ = two.CloseNow()
 	waitRefs(1)
 	two = dialLog(t, url)
-	nextTwo = readyRead(two)
+	nextTwo = readyLogRead(t, two)
 	waitRefs(2)
 	send("after reconnect")
 	var got wshub.LogMessage

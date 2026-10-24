@@ -57,9 +57,13 @@ func logServer(t *testing.T, h *WebSocketHandler, allow bool, decorate ...func(*
 	t.Cleanup(server.Close)
 	return "ws" + strings.TrimPrefix(server.URL, "http") + "/api/environments/0/ws/"
 }
+
+// logTestTimeout only bounds hangs; readiness is established by events or state.
+const logTestTimeout = time.Minute
+
 func dialLog(t *testing.T, url string) *websocket.Conn {
 	t.Helper()
-	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
+	ctx, cancel := context.WithTimeout(t.Context(), logTestTimeout)
 	defer cancel()
 	conn, _, err := websocket.Dial(ctx, url, nil)
 	require.NoError(t, err)
@@ -69,17 +73,40 @@ func dialLog(t *testing.T, url string) *websocket.Conn {
 }
 func readLog(t *testing.T, conn *websocket.Conn) []byte {
 	t.Helper()
-	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
+	ctx, cancel := context.WithTimeout(t.Context(), logTestTimeout)
 	defer cancel()
 	_, data, err := conn.Read(ctx)
 	require.NoError(t, err)
 	return data
 }
+
+// readyLogRead processes pong frames to prove ServeClient sent its registration.
+// The hub finishes registration before its next broadcast; refcounts advance earlier.
+func readyLogRead(t *testing.T, conn *websocket.Conn) func() []byte {
+	t.Helper()
+	ctx, cancel := context.WithTimeout(t.Context(), logTestTimeout)
+	t.Cleanup(cancel)
+	type result struct {
+		body []byte
+		err  error
+	}
+	read := make(chan result, 1)
+	go func() { _, body, err := conn.Read(ctx); read <- result{body, err} }()
+	require.NoError(t, conn.Ping(ctx))
+	return func() []byte {
+		t.Helper()
+		got := <-read
+		cancel()
+		require.NoError(t, got.err)
+		return got.body
+	}
+}
+
 func waitLogSignal(t *testing.T, done <-chan struct{}) {
 	t.Helper()
 	select {
 	case <-done:
-	case <-time.After(5 * time.Second):
+	case <-time.After(logTestTimeout):
 		t.Fatal("source did not settle")
 	}
 }
@@ -108,10 +135,12 @@ func TestRuntimeLogsRealWSSharedSourceOptionsAndLastRef(t *testing.T) {
 	url := logServer(t, h, true) + "containers/example%20container/logs?format=json&follow=true&tail=100&timestamps=true&batched=false"
 	one := dialLog(t, url)
 	two := dialLog(t, url)
+	nextOne := readyLogRead(t, one)
+	nextTwo := readyLogRead(t, two)
 	var opts logSourceOptions
 	select {
 	case opts = <-observed:
-	case <-time.After(5 * time.Second):
+	case <-time.After(logTestTimeout):
 		t.Fatal("source not started")
 	}
 	require.Equal(t, logSourceOptions{"example container", "100", "", true, true}, opts)
@@ -124,11 +153,11 @@ func TestRuntimeLogsRealWSSharedSourceOptionsAndLastRef(t *testing.T) {
 			}
 		}
 		return false
-	}, 5*time.Second, time.Millisecond)
+	}, logTestTimeout, time.Millisecond)
 	close(trigger)
-	for _, conn := range []*websocket.Conn{one, two} {
+	for _, read := range []func() []byte{nextOne, nextTwo} {
 		var msg wshub.LogMessage
-		require.NoError(t, json.Unmarshal(readLog(t, conn), &msg))
+		require.NoError(t, json.Unmarshal(read(), &msg))
 		require.Equal(t, uint64(1), msg.Seq)
 		require.Equal(t, "combined", msg.Stream)
 		require.Equal(t, "info", msg.Level)
@@ -147,7 +176,7 @@ func TestRuntimeLogsRealWSSharedSourceOptionsAndLastRef(t *testing.T) {
 			}
 		}
 		return false
-	}, 5*time.Second, time.Millisecond)
+	}, logTestTimeout, time.Millisecond)
 	select {
 	case <-joined:
 		t.Fatal("first unsubscribe cancelled the shared producer")
@@ -155,7 +184,7 @@ func TestRuntimeLogsRealWSSharedSourceOptionsAndLastRef(t *testing.T) {
 	}
 	_ = two.CloseNow()
 	waitLogSignal(t, joined)
-	require.Eventually(t, func() bool { h.logStreamsMu.Lock(); defer h.logStreamsMu.Unlock(); return len(h.logStreams) == 0 }, 5*time.Second, time.Millisecond)
+	require.Eventually(t, func() bool { h.logStreamsMu.Lock(); defer h.logStreamsMu.Unlock(); return len(h.logStreams) == 0 }, logTestTimeout, time.Millisecond)
 }
 
 func TestRuntimeLogsRealWSFormatsAndSourceMetadata(t *testing.T) {
