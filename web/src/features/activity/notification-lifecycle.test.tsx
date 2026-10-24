@@ -122,7 +122,7 @@ it.each(["replacement", "logout", "auth401", "activity401"])("%s clears old iden
     const held = deferred<Response>(); const reached = deferred<Response>();
     f.state.hold = async (path, response) => path.endsWith("/good/activities/history-failed") ? (reached.resolve(response), held.promise) : response;
     const pending = f.adapter.listActions();
-    const rejected = boundary === "activity401" ? pending.then(() => undefined) : expect(pending).rejects.toMatchObject({ name: "Error" });
+    const rejected = boundary === "activity401" ? expect(pending).rejects.toMatchObject({ outcome: { status: 401 } }) : expect(pending).rejects.toMatchObject({ name: "Error" });
     const captured = await reached.promise; f.state.hold = undefined;
     if (boundary === "logout") await act(async () => { await f.adapter.logout(); });
     if (boundary === "auth401") { f.state.authStatus = 401; await act(async () => { await expect(f.discover()).rejects.toMatchObject({ outcome: { status: 401 } }); }); }
@@ -131,8 +131,8 @@ it.each(["replacement", "logout", "auth401", "activity401"])("%s clears old iden
       await act(async () => {
         f.sources[0]!.open();
         const failure = f.adapter.listActions();
-        held.resolve(captured);
         await expect(failure).rejects.toMatchObject({ outcome: { status: 401 } });
+        await rejected;
       });
       expect(observed.mock.lastCall?.[0]).toEqual([]);
     }

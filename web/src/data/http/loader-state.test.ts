@@ -25,7 +25,10 @@ function fixture(kind: Kind) {
   });
   return {
     gates, reached, read, publish,
-    load: () => kind === "history" ? events.load() : actions.load().then((rows) => rows[0]!.status),
+    load: () => {
+      if (kind === "recovery" && read.mock.calls.length === 0) void actions.refresh(true).catch(() => undefined);
+      return kind === "history" ? events.load() : actions.load().then((rows) => rows[0]!.status);
+    },
     notify: () => { if (kind === "history") events.changed(); else void actions.refresh().catch(() => undefined); },
     replace: () => { generation++; actions.reset(); },
   };

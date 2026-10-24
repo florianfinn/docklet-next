@@ -69,7 +69,7 @@ it("coalesces notifications during a load into one trailing refresh of post-even
   expect(f.reads.hosts).toHaveBeenCalledTimes(1);
   gate.resolve();
   expect((await first)[0]?.status).toBe("running");
-  expect((await trailing)[0]?.status).toBe("queued");
+  expect((await trailing)?.[0]?.status).toBe("queued");
   expect(f.reads.hosts).toHaveBeenCalledTimes(2);
   expect(f.reads.detail).toHaveBeenCalledTimes(2);
 });
@@ -117,18 +117,19 @@ it("new identity work does not join an old full read or publish its late result"
   expect(f.reads.publish).toHaveBeenCalledTimes(publications);
 });
 
-it("recovery queues authentication validation behind held discovery and clears its observations", async () => {
+it("recovery clears a 401 before held discovery finishes and blocks its later success", async () => {
   const f = fixture(); await f.reader.load();
   const gate = deferred<ReturnType<typeof detail>>(); const reached = deferred<void>();
   f.reads.detail.mockImplementationOnce(async () => { reached.resolve(); return gate.promise; });
-  const old = f.reader.load(); await reached.promise;
+  const old = f.reader.load(); const rejected = old.catch((e: unknown) => e); await reached.promise;
   const { AdapterOutcomeError } = await import("../capability");
   f.reads.hosts.mockRejectedValueOnce(new AdapterOutcomeError({ kind: "error", code: "http.error", status: 401 }));
-  const fresh = f.reader.refresh();
-  expect(fresh).not.toBe(old);
-  expect(f.reads.hosts).toHaveBeenCalledTimes(2);
-  gate.resolve(detail("good", "good-0")); await old;
+  const fresh = f.reader.refresh(true);
+  expect(fresh).not.toBe(old); await Promise.resolve(); expect(f.reads.hosts).toHaveBeenCalledTimes(3);
   await expect(fresh).rejects.toMatchObject({ outcome: { status: 401 } });
   expect(f.reader.runs()).toEqual([]);
-  expect(f.reads.hosts).toHaveBeenCalledTimes(3);
+  expect(await rejected).toMatchObject({ outcome: { status: 401 } });
+  const publications = f.reads.publish.mock.calls.length;
+  gate.resolve(detail("good", "good-0")); await Promise.resolve();
+  expect(f.reads.publish).toHaveBeenCalledTimes(publications);
 });

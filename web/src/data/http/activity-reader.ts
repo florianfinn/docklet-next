@@ -23,8 +23,9 @@ interface SourceRead {
 }
 interface Reads {
   hosts: () => Promise<string[]>;
-  page: (hostId: string) => Promise<{ items: Activity[]; incomplete: boolean }>;
-  detail: (hostId: string, id: string) => Promise<Detail>;
+  hasConsumer?: () => boolean;
+  page: (hostId: string, signal?: AbortSignal) => Promise<{ items: Activity[]; incomplete: boolean }>;
+  detail: (hostId: string, id: string, signal?: AbortSignal) => Promise<Detail>;
   publish: (runs: CodedActionRun[] | undefined, health: ActionReadHealth) => void;
   unauthorized: () => void;
   project?: (run: CodedActionRun) => Promise<CodedActionRun>;
@@ -72,22 +73,23 @@ export function createActivityReader(reads: Reads) {
     // Health before the first observation must not initialize action history.
     reads.publish(initialized ? current : undefined, health);
   }
-  async function source(hostId: string): Promise<SourceRead> {
+  async function source(hostId: string, signal: AbortSignal): Promise<SourceRead> {
     const version = generation;
     const credentials = renewal;
     let page: { items: Activity[]; incomplete: boolean };
-    try { page = await reads.page(hostId); }
+    try { page = await reads.page(hostId, signal); }
     catch (error) {
       if (isUnauthorized(error) || isCancelledError(error)) throw error;
       return { hostId, runs: [], failure: failure(error, hostId) };
     }
-    if (version !== generation || credentials !== renewal) throw new CancelledError();
+    if (version !== generation || credentials !== renewal || signal.aborted) throw new CancelledError();
     const results: { run?: CodedActionRun; failure?: ActionReadFailure }[] = [];
     let next = 0;
     async function readItem(item: Activity) {
       try {
         if (!item || typeof item.id !== "string" || !item.id || item.environmentId !== hostId) invalid();
-        const run = mapped(await reads.detail(hostId, item.id), hostId, item.id);
+        const run = mapped(await reads.detail(hostId, item.id, signal), hostId, item.id);
+        if (signal.aborted) throw new CancelledError();
         return { run: reads.project ? await reads.project(run) : run };
       } catch (error) {
         if (isUnauthorized(error) || isCancelledError(error)) throw error;
@@ -97,22 +99,22 @@ export function createActivityReader(reads: Reads) {
     // Each host advances independently; targeted notifications bypass discovery workers.
     await Promise.all(Array.from({ length: Math.min(4, page.items.length) }, async () => {
       while (next < page.items.length) {
-        if (version !== generation || credentials !== renewal) throw new CancelledError();
+        if (version !== generation || credentials !== renewal || signal.aborted) throw new CancelledError();
         const index = next++;
         results[index] = await readItem(page.items[index]!);
       }
     }));
     return { hostId, runs: results.flatMap((r) => r.run ? [r.run] : []), failure: results.find((r) => r.failure)?.failure ?? (page.incomplete ? { hostId, reason: "unavailable" } : undefined) };
   }
-  async function performLoad(): Promise<CodedActionRun[]> {
+  async function performLoad(signal: AbortSignal): Promise<CodedActionRun[]> {
     const started = ++sequence;
     const version = generation;
     const credentials = renewal;
     try {
       const hosts = new Set(await reads.hosts());
-      if (version !== generation || credentials !== renewal) throw new CancelledError();
-      const batches = await Promise.all([...hosts].map(source));
-      if (version !== generation || credentials !== renewal) throw new CancelledError();
+      if (version !== generation || credentials !== renewal || signal.aborted) throw new CancelledError();
+      const batches = await Promise.all([...hosts].map((host) => source(host, signal)));
+      if (version !== generation || credentials !== renewal || signal.aborted) throw new CancelledError();
       // A raw run UUID belongs to one source. Reject conflicting claims without changing IDs.
       const owners = new Map(current.map((run) => [run.id, run.hostId]));
       const claims = new Map<string, Set<string>>();
@@ -164,9 +166,9 @@ export function createActivityReader(reads: Reads) {
       publishHealth();
       return sorted(observed.values());
     } catch (error) {
-      if (version !== generation) throw new CancelledError();
+      if (version !== generation || signal.aborted) throw new CancelledError();
       // Credential renewal preserves identity; replay inside this single flight.
-      if (credentials !== renewal) return performLoad();
+      if (credentials !== renewal) return performLoad(signal);
       if (isCancelledError(error)) throw error;
       if (started > globalHealthSequence) {
         globalHealthSequence = started; globalFailure = failure(error);
@@ -176,9 +178,9 @@ export function createActivityReader(reads: Reads) {
       throw error;
     }
   }
-  const flight = createSingleFlight(performLoad, () => generation);
+  const flight = createSingleFlight(performLoad, () => generation, { hasConsumer: reads.hasConsumer ?? (() => true) });
   const load = flight.request;
-  const refresh = flight.notify;
+  const refresh = (recovery = false) => recovery ? flight.recover() : flight.notify();
   async function refreshOne(id: string, hostId: string, discoverOnTerminal = true): Promise<void> {
     const started = ++sequence;
     const version = generation;

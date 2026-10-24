@@ -93,12 +93,6 @@ it.each(["logout", "unsubscribe", "activity401", "replacement"] as const)("held 
   const held = deferred<Response>(); const reached = deferred<Response>();
   try {
     f.state.hold = async (path, response) => path.endsWith("/good/activities/run-good") ? (reached.resolve(response), held.promise) : response;
-    if (boundary === "activity401") {
-      // The held observation predates the signal; the query waits for the fresh read.
-      void f.adapter.listActions();
-      await reached.promise;
-      f.sources[0]!.open();
-    }
     const pending = client.fetchQuery({ queryKey: ["actions"], queryFn: () => f.adapter.listActions() });
     const rejected = boundary === "activity401" ? expect(pending).rejects.toMatchObject({ outcome: { status: 401 } }) : expect(pending).rejects.toBeInstanceOf(CancelledError);
     const response = await reached.promise; f.state.hold = undefined;
@@ -109,7 +103,6 @@ it.each(["logout", "unsubscribe", "activity401", "replacement"] as const)("held 
       f.state.failure = "page401";
       f.sources[0]!.open();
       const failure = f.adapter.listActions();
-      held.resolve(response);
       await expect(failure).rejects.toMatchObject({ outcome: { status: 401 } });
       await rejected;
       f.state.failure = "";

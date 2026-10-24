@@ -22,17 +22,17 @@ class FakeSource {
 }
 const notification = (channel: string, extra = {}) => ({ channel, timestamp: at, ...extra });
 const cases = [
-  ["events", { history: true, discovery: false }, (source: FakeSource) => source.send(notification("events", { eventLog: { type: "created" } }))],
-  ["activity ID", { history: false, discovery: false }, (source: FakeSource) => source.send(notification("activities", { activity: { type: "updated", activityId: "run", environmentId: "0" } }))],
-  ["activity without ID", { history: false, discovery: true }, (source: FakeSource) => source.send(notification("activities", { activity: { type: "updated" } }))],
-  ["environments", { history: false, discovery: true }, (source: FakeSource) => source.send(notification("environments"))],
-  ["malformed JSON", { history: true, discovery: true }, (source: FakeSource) => source.raw("{")],
-  ["invalid envelope", { history: true, discovery: true }, (source: FakeSource) => source.send({})],
-  ["unknown channel", { history: true, discovery: true }, (source: FakeSource) => source.send(notification("unknown"))],
+  ["events", { history: true, discovery: false, recovery: false }, (source: FakeSource) => source.send(notification("events", { eventLog: { type: "created" } }))],
+  ["activity ID", { history: false, discovery: false, recovery: false }, (source: FakeSource) => source.send(notification("activities", { activity: { type: "updated", activityId: "run", environmentId: "0" } }))],
+  ["activity without ID", { history: false, discovery: true, recovery: false }, (source: FakeSource) => source.send(notification("activities", { activity: { type: "updated" } }))],
+  ["environments", { history: false, discovery: true, recovery: false }, (source: FakeSource) => source.send(notification("environments"))],
+  ["malformed JSON", { history: true, discovery: true, recovery: true }, (source: FakeSource) => source.raw("{")],
+  ["invalid envelope", { history: true, discovery: true, recovery: true }, (source: FakeSource) => source.send({})],
+  ["unknown channel", { history: true, discovery: true, recovery: true }, (source: FakeSource) => source.send(notification("unknown"))],
   // A heartbeat with a gap exercises recovery independently of channel invalidation.
-  ["sequence gap", { history: true, discovery: true }, (source: FakeSource) => source.send({ type: "heartbeat", timestamp: at }, "3")],
-  ["reopened source", { history: true, discovery: true }, (source: FakeSource) => source.open()],
-  ["CLOSED reconnect", { history: true, discovery: true }, async (source: FakeSource, sources: FakeSource[]) => {
+  ["sequence gap", { history: true, discovery: true, recovery: true }, (source: FakeSource) => source.send({ type: "heartbeat", timestamp: at }, "3")],
+  ["reopened source", { history: true, discovery: true, recovery: true }, (source: FakeSource) => source.open()],
+  ["CLOSED reconnect", { history: true, discovery: true, recovery: true }, async (source: FakeSource, sources: FakeSource[]) => {
     vi.useFakeTimers();
     source.failClosed();
     await vi.advanceTimersByTimeAsync(350);
@@ -99,7 +99,7 @@ for (const kind of ["events", "activities"] as const) {
       const newer = f.read(); pending.push(newer);
       f.held[0]!();
       expect(await newer).toBe((kind === "events" ? expected.history : expected.discovery) ? "queued" : "running");
-      expect(await older).toBe("running");
+      expect(await older).toBe(kind === "activities" && expected.recovery ? "queued" : "running");
     } finally {
       f.cleanup();
       await Promise.allSettled(pending);

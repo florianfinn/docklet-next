@@ -7,7 +7,7 @@
 import { createSingleFlight } from "./single-flight";
 
 /** Complete histories use the same notification and generation policy as discovery. */
-export function createEventReader<T>(read: () => Promise<T>, generation: () => number) {
-  const flight = createSingleFlight(read, generation);
-  return { load: flight.request, changed() { void flight.notify().catch(() => undefined); } };
+export function createEventReader<T>(read: () => Promise<T>, generation: () => number, hasConsumer: () => boolean = () => false) {
+  const flight = createSingleFlight(read, generation, { hasConsumer });
+  return { load: flight.request, identityChanged: flight.identityChanged, changed() { void flight.notify().catch(() => undefined); } };
 }

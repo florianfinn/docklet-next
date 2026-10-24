@@ -106,7 +106,7 @@ detail without waiting for discovery workers. Concurrent full activity reads
 share work. Known-run log/progress messages refresh only their targeted detail;
 they never invalidate discovery or event history. Unknown activities and terminal
 state changes notify discovery; terminal `message` envelopes remain targeted.
-Reconnect or detected loss notifies the same discovery loader.
+Reconnect or detected loss aborts obsolete discovery and transfers its waiters to a fresh read. A burst shares one scheduled restart; recovery during that fresh read can restart it too.
 
 Event history retains the complete history used by Dashboard and Activity Center.
 Pages request the effective size of 100 and run strictly sequentially. Event stream
@@ -114,9 +114,9 @@ messages carry invalidation only, so they cannot supply incremental event rows.
 Only events-channel messages and stream recovery invalidate history. HTTP and
 mapping failures remain visible and a deliberate retry can start a new load.
 
-Discovery, recovery and history share a generation-scoped single-flight policy: idle requests or notifications start a read; concurrent requests join it until a notification marks one pending read.
-Each start clears pending, so bursts queue one read and notifications during any trailing read can queue one more; callers after a notification await the next result, earlier callers receive the current result.
-Every start and publication checks the identity generation; replacement or logout cancels old waiters, rejects old results and prevents old trailing work from starting.
+Discovery, recovery and history share a generation-scoped single-flight policy: idle notifications start a read only with a mounted subscriber; cached rows are not demand, and the next explicit request always reads fresh.
+Each start clears pending, so bursts queue one read and notifications during any trailing read can queue one more; callers after a notification await the next result, earlier callers receive the current result unless recovery replaces it.
+Every start and publication checks the identity generation; replacement, logout or 401 immediately clears old published runs and cancels old waiters and requests, preventing late publication and old trailing work.
 
 ## Runtime command mapping
 
