@@ -1,3 +1,5 @@
+import { DialogCommandFooter } from "@/shared/components/dialog-command";
+import { useDialogCommand, type DialogCommand } from "@/shared/components/use-dialog-command";
 import { CapabilityGate } from "@/shared/components/capability-gate";
 import { useCapability } from "@/data/use-capability";
 import { Bot, Cable, Check, RotateCw } from "lucide-react";
@@ -16,7 +18,7 @@ import { TextField } from "@/shared/components/form-field";
 import { ToneBadge } from "@/shared/components/tone";
 import { cn } from "@/shared/lib/utils";
 import { Button } from "@/shared/ui/button";
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/shared/ui/dialog";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/shared/ui/dialog";
 import { Input } from "@/shared/ui/input";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/shared/ui/tabs";
 
@@ -33,14 +35,14 @@ function Row({ label, children, mono }: { label: string; children: ReactNode; mo
   );
 }
 
-function AgentPanel({ host, component }: { host: Host; component: SystemComponent | undefined }) {
+function AgentPanel({ host, component, feedback }: { host: Host; component: SystemComponent | undefined; feedback: DialogCommand }) {
   const t = useTranslations("hosts.settings");
   const ts = useTranslations("common.status");
   const cmd = useHostCommands();
   const restartCapability = useCapability("restartAgent");
   const reconnect = useCapability("reconnectHost");
-  const restart = useHostAction(host.id, "agent-restart", () => cmd.restartAgent(host.id));
-  const check = useHostAction(host.id, "reconnect", () => cmd.reconnect(host.id));
+  const restart = useHostAction(host.id, "agent-restart", async () => await feedback.run(() => cmd.restartAgent(host.id)));
+  const check = useHostAction(host.id, "reconnect", async () => await feedback.run(() => cmd.reconnect(host.id)));
   if (!component) return <CapabilityGate operation="listSystemComponents"><p className="text-sm text-muted-foreground">{t("agentNone")}</p></CapabilityGate>;
   const online = host.status === "online";
   return (
@@ -124,6 +126,8 @@ function AgentPanel({ host, component }: { host: Host; component: SystemComponen
 export function HostSettingsDialog({ host, component, open, onOpenChange }: { host: Host; component: SystemComponent | undefined; open: boolean; onOpenChange: (open: boolean) => void }) {
   const t = useTranslations("hosts.settings");
   const errorText = useHostError();
+  const feedback = useDialogCommand(open, host.id, errorText);
+  const change = (next: boolean) => feedback.change(next, onOpenChange);
   const adapter = useAdapter();
   const [name, setName] = useState(host.name);
   const update = useCapability("updateHost");
@@ -157,7 +161,7 @@ export function HostSettingsDialog({ host, component, open, onOpenChange }: { ho
     try {
       const saved = await adapter.updateHost(host.id, { name: name.trim(), color });
       toast.success(t("saved", { name: saved.name }));
-      onOpenChange(false);
+      change(false);
     } catch (e) {
       setServerError(errorText(e));
     } finally {
@@ -166,8 +170,8 @@ export function HostSettingsDialog({ host, component, open, onOpenChange }: { ho
   };
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-h-[calc(100dvh-2rem)] overflow-y-auto sm:max-w-2xl" data-surface="host-settings">
+    <Dialog open={open} onOpenChange={change}>
+      <DialogContent {...feedback.bindings} className="max-h-[calc(100dvh-2rem)] overflow-y-auto sm:max-w-2xl" data-surface="host-settings">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <span className="size-3 rounded-[4px]" style={{ background: HEX.test(color) ? color : host.color }} aria-hidden />
@@ -247,12 +251,12 @@ export function HostSettingsDialog({ host, component, open, onOpenChange }: { ho
             </form>
           </TabsContent>
           <TabsContent value="agent" className="mt-3">
-            <AgentPanel host={host} component={component} />
+            <AgentPanel host={host} component={component} feedback={feedback} />
           </TabsContent>
         </Tabs>
-        <DialogFooter className="items-center">
+        <DialogCommandFooter feedback={feedback} className="items-center">
           {tab === "general" && !dirty && <span className="mr-auto text-xs text-muted-foreground">{t("unchanged")}</span>}
-          <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
+          <Button type="button" variant="outline" onClick={() => change(false)}>
             {tab === "general" ? t("cancel") : t("close")}
           </Button>
           {tab === "general" && (
@@ -260,7 +264,7 @@ export function HostSettingsDialog({ host, component, open, onOpenChange }: { ho
               {t("save")}
             </Button>
           )}
-        </DialogFooter>
+        </DialogCommandFooter>
       </DialogContent>
     </Dialog>
   );

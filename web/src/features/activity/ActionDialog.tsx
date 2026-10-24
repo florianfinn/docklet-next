@@ -1,3 +1,4 @@
+import { useDialogCommand, type DialogCommand } from "@/shared/components/use-dialog-command";
 import { History, Layers, ListTree, X } from "lucide-react";
 import { useState } from "react";
 import { Link } from "react-router";
@@ -113,14 +114,16 @@ function restoreFocus(event: Event, opener: Element | null): void {
 export function ActionDialog() {
   const { runId, waiting } = useStore(actionDialogStore, (s) => s);
   const run = useActionRun(runId);
+  const feedback = useDialogCommand(!!run, run?.id);
   return (
-    <Dialog open={!!run} onOpenChange={(open) => !open && closeActionDialog()}>
-      {run && <ActionDialogContent run={run} waiting={waiting} />}
+    <Dialog open={!!run} onOpenChange={(open) => !open && feedback.change(false, closeActionDialog)}>
+      {run && <ActionDialogContent run={run} waiting={waiting} feedback={feedback} />}
     </Dialog>
   );
 }
 
-function ActionDialogContent({ run, waiting }: { run: ActionRun; waiting: string[] }) {
+function ActionDialogContent({ run, waiting, feedback }: { run: ActionRun; waiting: string[]; feedback: DialogCommand }) {
+  const close = () => { feedback.dismiss(); closeActionDialog(); };
   const t = useTranslations("activity");
   const design = useUiStyle("actionDialogDesign");
   const now = useNow(run.status === "running");
@@ -157,13 +160,13 @@ function ActionDialogContent({ run, waiting }: { run: ActionRun; waiting: string
         <RunBadge status={run.status} className="mt-1 shrink-0">
           {runtimeState(run) ? t(`runtime.${runtimeState(run)!}`) : t(`status.${run.status}`)}
         </RunBadge>
-        <Button size="icon" variant="ghost" className="size-8 shrink-0" onClick={closeActionDialog} aria-label={t("dialog.close")}>
+        <Button size="icon" variant="ghost" className="size-8 shrink-0" onClick={close} aria-label={t("dialog.close")}>
           <X />
         </Button>
       </header>
       <WaitingOffer waiting={waiting} />
       <div className="flex min-h-0 flex-1 flex-col overflow-y-auto p-4 sm:p-5" data-slot="dialog-body">
-        <RuntimeControls key={`controls-${run.id}`} run={run} />
+        <RuntimeControls key={`controls-${run.id}`} run={run} feedback={feedback} />
         <Body key={`body-${run.id}`} run={run.outcomeState === "unknown" ? { ...run, steps: [], progress: 0 } : run} now={now} />
       </div>
       <footer className="flex shrink-0 flex-wrap items-center gap-x-3 gap-y-2 border-t px-4 py-3">
@@ -171,7 +174,7 @@ function ActionDialogContent({ run, waiting }: { run: ActionRun; waiting: string
         <div className="ml-auto flex flex-wrap items-center justify-end gap-2">
           {run.status === "failed" && run.restorePointId && run.stackId && (
             <Button asChild size="sm" variant="outline">
-              <Link to={`/stacks/${run.stackId}?tab=deployments`} onClick={closeActionDialog}>
+              <Link to={`/stacks/${run.stackId}?tab=deployments`} onClick={close}>
                 <History data-icon="inline-start" />
                 {t("openRestore")}
               </Link>
@@ -181,14 +184,14 @@ function ActionDialogContent({ run, waiting }: { run: ActionRun; waiting: string
             size="sm"
             variant="ghost"
             onClick={() => {
-              closeActionDialog();
+              close();
               openActivity(run.id);
             }}
           >
             <ListTree data-icon="inline-start" />
             {t("dialog.openCentre")}
           </Button>
-          <Button size="sm" variant="secondary" onClick={closeActionDialog}>
+          <Button size="sm" variant="secondary" onClick={close}>
             {t("dialog.closeShort")}
           </Button>
         </div>

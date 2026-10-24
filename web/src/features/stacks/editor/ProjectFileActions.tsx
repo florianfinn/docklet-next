@@ -4,6 +4,9 @@
 // License: Apache-2.0
 // Deviations: Original project tree gestures for issue #182.
 
+import { DialogError } from "@/shared/components/dialog-command";
+import { useDialogCommand } from "@/shared/components/use-dialog-command";
+import { workspaceErrorKey } from "@/features/volumes/files/workspace-error";
 import { useRef, useState } from "react";
 import { useTranslations } from "use-intl";
 import { baseName, parentPath } from "@/domain/files";
@@ -20,6 +23,9 @@ export function ProjectFileActions({ workspace, id, busy, report }: { workspace:
   const capability = useCapability("updateProjectWorkspace", { kind: "stack", id });
   const upload = useRef<HTMLInputElement>(null);
   const [dialog, setDialog] = useState<"file" | "folder" | "rename" | "delete" | null>(null);
+  const errors = useTranslations("volumes.files.workspaceErrors");
+  const feedback = useDialogCommand(dialog !== null && dialog !== "delete", id, (cause) => errors(workspaceErrorKey(cause)));
+  const change = (on: boolean) => feedback.change(on, (next) => { if (!next) setDialog(null); });
   const [value, setValue] = useState("");
   const [error, setError] = useState(false);
   const selected = workspace.tree.data?.files?.find((entry) => entry.relativePath === workspace.selected);
@@ -27,11 +33,12 @@ export function ProjectFileActions({ workspace, id, busy, report }: { workspace:
   const disabled = busy || workspace.saving || workspace.dirty || !workspace.tree.data || workspace.tree.isError || !capability.available;
   const open = (kind: typeof dialog) => { setError(false); setValue(kind === "rename" ? baseName(workspace.selected ?? "") : directory ? `${directory}/` : ""); setDialog(kind); };
   async function apply() {
-    try {
-      if (!value.trim()) { setError(true); return; }
+    if (!value.trim()) { setError(true); return; }
+    const ok = await feedback.run(async () => {
       await workspace.gesture(dialog === "rename" ? { kind: "rename", path: workspace.selected!, name: value } : dialog === "folder" ? { kind: "create-folder", path: value } : { kind: "create-file", path: value, content: "" });
-      setDialog(null);
-    } catch (cause) { setError(true); report(cause); }
+      return true;
+    });
+    if (ok) change(false);
   }
   return <div className="flex flex-wrap items-center gap-2" aria-label={t("title")}>
     <Button size="sm" variant="outline" disabled={disabled} title={workspace.dirty ? t("saveFirst") : capability.reason} onClick={() => open("file")}>{t("create")}</Button>
@@ -45,10 +52,11 @@ export function ProjectFileActions({ workspace, id, busy, report }: { workspace:
       void workspace.gesture(files.map((file) => ({ kind: "upload" as const, path: `${directory ? `${directory}/` : ""}${file.name}`, file: { name: file.name, size: file.size, blob: file } }))).catch(report);
     }} />
     {workspace.tree.isError && <Button size="sm" onClick={() => void workspace.tree.refetch()}>{t("retry")}</Button>}
-    <Dialog open={dialog !== null && dialog !== "delete"} onOpenChange={(on) => !on && setDialog(null)}>
-      <DialogContent><DialogHeader><DialogTitle>{dialog === "rename" ? t("rename") : dialog === "folder" ? t("folder") : t("create")}</DialogTitle><DialogDescription>{t("pathHint")}</DialogDescription></DialogHeader>
+    <Dialog open={dialog !== null && dialog !== "delete"} onOpenChange={change}>
+      <DialogContent {...feedback.bindings} className="max-h-[calc(100dvh-2rem)] overflow-y-auto"><DialogHeader><DialogTitle>{dialog === "rename" ? t("rename") : dialog === "folder" ? t("folder") : t("create")}</DialogTitle><DialogDescription>{t("pathHint")}</DialogDescription></DialogHeader>
         <form onSubmit={(event) => { event.preventDefault(); void apply(); }} className="flex flex-col gap-3">
           <FieldGroup><TextField id="project-file-path" label={dialog === "rename" ? t("name") : t("path")} value={value} onChange={setValue} error={error ? t("pathInvalid") : undefined} mono /></FieldGroup>
+          <DialogError feedback={feedback} />
           <Button type="submit" disabled={workspace.saving || !value.trim()}>{t("apply")}</Button>
         </form>
       </DialogContent>

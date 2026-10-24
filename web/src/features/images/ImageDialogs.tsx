@@ -1,3 +1,5 @@
+import { DialogCommandFooter } from "@/shared/components/dialog-command";
+import { useDialogCommand } from "@/shared/components/use-dialog-command";
 import { Download, Eraser } from "lucide-react";
 import { useState } from "react";
 import { useTranslations } from "use-intl";
@@ -25,6 +27,8 @@ export function PullDialog({ open, onOpenChange, hosts, images, initial }: { ope
   const cmd = useImageCommands();
   const firstOnline = hosts.find((h) => h.status === "online")?.id ?? "";
   const [hostId, setHostId] = useState(initial?.hostId ?? firstOnline);
+  const feedback = useDialogCommand(open, hostId);
+  const change = (next: boolean) => feedback.change(next, onOpenChange);
   const [reference, setReference] = useState(initial?.reference ?? "");
   const [fail, setFail] = useState(false);
   const [touched, setTouched] = useState(false);
@@ -45,8 +49,8 @@ export function PullDialog({ open, onOpenChange, hosts, images, initial }: { ope
 
   // Busy only for the request; the pull itself continues as an action toast after the dialog closes.
   const pull = useBusyAction(async () => {
-    const id = await cmd.pull({ hostId, reference: reference.trim() }, fail);
-    if (id) onOpenChange(false);
+    const id = await feedback.run(() => cmd.pull({ hostId, reference: reference.trim() }, fail));
+    if (id) change(false);
   });
   const submit = async () => {
     setTouched(true);
@@ -55,8 +59,8 @@ export function PullDialog({ open, onOpenChange, hosts, images, initial }: { ope
   };
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-lg" data-surface="pull-dialog">
+    <Dialog open={open} onOpenChange={change}>
+      <DialogContent {...feedback.bindings} className="max-h-[calc(100dvh-2rem)] overflow-y-auto sm:max-w-lg" data-surface="pull-dialog">
         <DialogHeader>
           <DialogTitle>{t("title")}</DialogTitle>
           <DialogDescription>{t("description")}</DialogDescription>
@@ -102,14 +106,14 @@ export function PullDialog({ open, onOpenChange, hosts, images, initial }: { ope
             </Label>
           </div>}
         </form>
-        <DialogFooter>
-          <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
+        <DialogCommandFooter feedback={feedback}>
+          <Button type="button" variant="outline" onClick={() => change(false)}>
             {t("cancel")}
           </Button>
           <BusyButton type="submit" form="pull-image" disabled={!valid} busy={pull.busy} icon={<Download data-icon="inline-start" />}>
             {t("submit")}
           </BusyButton>
-        </DialogFooter>
+        </DialogCommandFooter>
       </DialogContent>
     </Dialog>
   );

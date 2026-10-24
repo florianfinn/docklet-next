@@ -1,3 +1,5 @@
+import { DialogCommandFooter } from "@/shared/components/dialog-command";
+import { useDialogCommand } from "@/shared/components/use-dialog-command";
 import { useNetworkCapabilities } from "./use-network-capabilities";
 import { AlertTriangle, ArrowLeft, Ban, Link2, Unlink } from "lucide-react";
 import { useState } from "react";
@@ -10,7 +12,7 @@ import { SegmentedToggle } from "@/shared/components/segmented-toggle";
 import { TextField } from "@/shared/components/form-field";
 import { Alert, AlertDescription } from "@/shared/ui/alert";
 import { Button } from "@/shared/ui/button";
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/shared/ui/dialog";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/shared/ui/dialog";
 import { HelpLabel } from "@/shared/help/help-tooltip";
 import { Field, FieldLabel } from "@/shared/ui/field";
 import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from "@/shared/ui/select";
@@ -45,6 +47,8 @@ const label = (c: Pick<ContainerInfo, "name" | "serviceName" | "stackId" | "stac
 export function ConnectNetworkDialog({ request, onClose, host, topology, containers }: Props) {
   const t = useTranslations("networks.connectDialog");
   const ts = useTranslations("networks.scope");
+  const feedback = useDialogCommand(true, host.id);
+  const close = () => { feedback.dismiss(); onClose(); };
   const cmd = useNetworkCommands(host.id);
   const [mode, setMode] = useState<ConnectMode>(request.mode);
   const [containerId, setContainerId] = useState(request.containerId ?? "");
@@ -84,18 +88,18 @@ export function ConnectNetworkDialog({ request, onClose, host, topology, contain
   const confirm = async () => {
     if (!container || !network || !ready) return;
     setBusy(true);
-    const ok = mode === "connect" ? await cmd.connect({ networkId: network.id, containerId: container.id, ip: ip.trim() || undefined, ip6: ip6.trim() || undefined, aliases: connect?.aliases ?? [] }) : await cmd.disconnect(network.id, container.id);
+    const ok = await feedback.run(() => mode === "connect" ? cmd.connect({ networkId: network.id, containerId: container.id, ip: ip.trim() || undefined, ip6: ip6.trim() || undefined, aliases: connect?.aliases ?? [] }) : cmd.disconnect(network.id, container.id));
     setBusy(false);
     if (!ok) return;
     toast.success(t(mode === "connect" ? "connected" : "disconnected", { container: label(container), network: network.name }));
-    onClose();
+    close();
   };
 
   const warnings = connect?.warnings ?? disconnect?.warnings ?? [];
 
   return (
-    <Dialog open onOpenChange={(o) => !o && onClose()}>
-      <DialogContent className="max-h-[calc(100dvh-2rem)] grid-cols-[minmax(0,1fr)] overflow-y-auto sm:max-w-xl" data-surface="connect-network-dialog">
+    <Dialog open onOpenChange={(o) => !o && close()}>
+      <DialogContent {...feedback.bindings} className="max-h-[calc(100dvh-2rem)] grid-cols-[minmax(0,1fr)] overflow-y-auto sm:max-w-xl" data-surface="connect-network-dialog">
         <DialogHeader>
           <DialogTitle>{mode === "connect" ? t("titleConnect") : t("titleDisconnect")}</DialogTitle>
           <DialogDescription>{t("description")}</DialogDescription>
@@ -245,7 +249,7 @@ export function ConnectNetworkDialog({ request, onClose, host, topology, contain
           )
         )}
         {block && <Alert variant="destructive"><Ban /><AlertDescription>{t(`blocks.${block}`)}</AlertDescription></Alert>}
-        <DialogFooter className="sm:justify-between">
+        <DialogCommandFooter feedback={feedback} className="sm:justify-between">
           {reviewing ? (
             <Button type="button" variant="outline" disabled={busy} onClick={() => setReviewing(false)}>
               <ArrowLeft data-icon="inline-start" />
@@ -264,7 +268,7 @@ export function ConnectNetworkDialog({ request, onClose, host, topology, contain
               {t("check")}
             </Button>
           )}
-        </DialogFooter>
+        </DialogCommandFooter>
       </DialogContent>
     </Dialog>
   );

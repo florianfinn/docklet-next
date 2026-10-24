@@ -34,6 +34,10 @@ function controller() {
     },
     dismiss: () => { session.closed = true; session.active = false; publish(null); },
     clear,
+    checkpoint: () => {
+      const started = session, revision = session.revision;
+      return () => mounted && session === started && started.active && started.revision === revision;
+    },
     failed: () => operation?.failed ?? false,
     invoke<T>(fn: () => T, adapter: ReturnType<typeof useAdapter>, errorText: (error: unknown) => string): T | undefined {
       clear();
@@ -79,13 +83,20 @@ export function useDialogCommand(open = true, owner?: unknown, formatError?: (er
   useLayoutEffect(() => { feedback.activate(open, owner); }, [feedback, open, owner]);
   return {
     ...feedback,
+    checkpoint: () => {
+      const current = feedback.checkpoint();
+      const lifetime = identityLifetime(adapter), version = lifetime.version();
+      return () => current() && lifetime.active() && lifetime.version() === version;
+    },
     run: <T,>(fn: () => T) => feedback.invoke(fn, adapter, formatError ?? errorText),
     change: (next: boolean, notify: (open: boolean) => void) => { if (!next) feedback.dismiss(); notify(next); },
     bindings: {
       onChangeCapture: feedback.clear,
       onInputCapture: feedback.clear,
       onClickCapture: (event: React.MouseEvent<HTMLElement>) => {
-        if ((event.target as HTMLElement).closest('[role="checkbox"], [role="switch"], [role="radio"], [role="option"], [role="combobox"]')) feedback.clear();
+        const target = event.target as HTMLElement;
+        if (target.closest('[disabled], [aria-busy="true"]')) return;
+        if (target.closest('button, [role="checkbox"], [role="switch"], [role="radio"], [role="option"], [role="combobox"]')) feedback.clear();
       },
     },
   };

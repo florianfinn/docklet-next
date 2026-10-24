@@ -54,6 +54,7 @@ export function ConfirmDialog({ open, onOpenChange, title, description, confirmL
       return;
     }
     const result = feedback.run(onConfirm);
+    const current = feedback.checkpoint();
     if (!isPromise(result)) { if (feedback.failed()) e.preventDefault(); return; }
     e.preventDefault();
     inFlight.current = true;
@@ -61,6 +62,7 @@ export function ConfirmDialog({ open, onOpenChange, title, description, confirmL
     result
       .then(
         (value) => {
+          if (!current()) return;
           if (value === false && !feedback.failed()) feedback.reject(t("confirmFailed"));
           if (!feedback.failed()) {
             inFlight.current = false;
@@ -76,7 +78,7 @@ export function ConfirmDialog({ open, onOpenChange, title, description, confirmL
 
   return (
     <AlertDialog open={open} onOpenChange={change}>
-      <AlertDialogContent {...feedback.bindings} onEscapeKeyDown={(e) => inFlight.current && e.preventDefault()} aria-busy={pending || undefined}>
+      <AlertDialogContent {...feedback.bindings} className="max-h-[calc(100dvh-2rem)] overflow-y-auto" onEscapeKeyDown={(e) => inFlight.current && e.preventDefault()} aria-busy={pending || undefined}>
         <AlertDialogHeader>
           <AlertDialogTitle>{title}</AlertDialogTitle>
           <AlertDialogDescription asChild>

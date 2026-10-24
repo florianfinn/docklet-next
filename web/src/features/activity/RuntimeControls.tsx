@@ -4,6 +4,9 @@
 // License: Apache-2.0
 // Deviations: Original guarded command and notification consumer for issues #126 and #110.
 
+import { DialogError } from "@/shared/components/dialog-command";
+import { useDialogCommand, type DialogCommand } from "@/shared/components/use-dialog-command";
+import { captureCommandFailure } from "@/shared/components/command-failure";
 import { useEffect, useRef, useState } from "react";
 import { isCancelledError } from "@tanstack/react-query";
 import { useTranslations } from "use-intl";
@@ -17,7 +20,9 @@ import { runtimePresentation, runtimeState } from "./runtime-presentation";
 import { useRuntimeError } from "./use-runtime-error";
 
 /** The acknowledgment records operator-controlled facts; the server rechecks authority. */
-export function RuntimeControls({ run }: { run: ActionRun }) {
+export function RuntimeControls({ run, feedback: modalFeedback }: { run: ActionRun; feedback?: DialogCommand }) {
+  const localFeedback = useDialogCommand(true, run.id);
+  const feedback = modalFeedback ?? localFeedback;
   const adapter = useAdapter();
   const t = useTranslations("activity.runtime");
   const reportError = useRuntimeError();
@@ -39,11 +44,14 @@ export function RuntimeControls({ run }: { run: ActionRun }) {
     if (pending) return;
     const version = epoch.current;
     setPending(true);
-    try { await action(); }
-    catch (error) { if (epoch.current === version && !isCancelledError(error)) reportError(error); }
-    finally { if (epoch.current === version) setPending(false); }
+    await feedback.run(async () => {
+      const failure = captureCommandFailure(adapter);
+      try { await action(); }
+      catch (error) { if ((epoch.current === version || failure.closed()) && !isCancelledError(error)) { if (!reportError(error, failure.error)) throw error; } }
+      finally { if (epoch.current === version) setPending(false); }
+    });
   };
-  return <section className="flex min-w-0 flex-col gap-2 rounded-lg border p-3 text-xs" aria-label={t("controls")}>
+  return <section {...feedback.bindings} className="flex min-w-0 flex-col gap-2 rounded-lg border p-3 text-xs" aria-label={t("controls")}>
     {evidence?.permissionsUnavailable && <p>{t("permissionsUnavailable")}</p>}
     {state && <p role="status">{t(`${state}Body`)}</p>}
     {active && run.cancelRequested && state !== "cancelling" && <p>{t("cancellingBody")}</p>}
@@ -60,5 +68,6 @@ export function RuntimeControls({ run }: { run: ActionRun }) {
       <Label className="items-start leading-relaxed"><Checkbox checked={acknowledged} onCheckedChange={(value) => setAcknowledged(value === true)} disabled={pending} />{t("acknowledge")}</Label>
       <Button size="sm" variant="outline" disabled={pending || !acknowledged || !reason.trim()} onClick={() => void execute(() => adapter.releaseRuntimeRun?.(host, id, { acknowledgeRisk: true, reason }))}>{t("release")}</Button>
     </div>}
+    <DialogError feedback={feedback} />
   </section>;
 }

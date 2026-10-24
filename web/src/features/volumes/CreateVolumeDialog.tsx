@@ -1,3 +1,5 @@
+import { DialogCommandFooter } from "@/shared/components/dialog-command";
+import { useDialogCommand } from "@/shared/components/use-dialog-command";
 import { useState } from "react";
 import { useNavigate } from "react-router";
 import { toast } from "sonner";
@@ -9,7 +11,7 @@ import { volumeName } from "@/domain/validation";
 import type { Volume } from "@/domain/volumes";
 import { TextField } from "@/shared/components/form-field";
 import { Button } from "@/shared/ui/button";
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/shared/ui/dialog";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/shared/ui/dialog";
 import { Field, FieldDescription, FieldLabel } from "@/shared/ui/field";
 import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from "@/shared/ui/select";
 import { Spinner } from "@/shared/ui/spinner";
@@ -34,6 +36,7 @@ function CreateVolumeForm({ open, onOpenChange, hosts, volumes, defaultHostId }:
   const online = hosts.filter((h) => h.status === "online");
   const [name, setName] = useState("");
   const [hostId, setHostId] = useState(defaultHostId ?? online[0]?.id ?? "");
+  const feedback = useDialogCommand(open, hostId);
   const capability = useCapability("createVolume", { kind: "host", id: hostId });
   const [labels, setLabels] = useState("");
   const [tried, setTried] = useState(false);
@@ -52,11 +55,11 @@ function CreateVolumeForm({ open, onOpenChange, hosts, volumes, defaultHostId }:
     <Dialog
       open={open}
       onOpenChange={(o) => {
-        onOpenChange(o);
+        feedback.change(o, onOpenChange);
         if (!o) reset();
       }}
     >
-      <DialogContent>
+      <DialogContent {...feedback.bindings} className="max-h-[calc(100dvh-2rem)] overflow-y-auto">
         <form
           className="flex flex-col gap-4"
           onSubmit={async (e) => {
@@ -64,11 +67,11 @@ function CreateVolumeForm({ open, onOpenChange, hosts, volumes, defaultHostId }:
             setTried(true);
             if (busy || error || !hostId || !capability.available) return;
             setBusy(true);
-            const created = await cmd.create({ name: name.trim(), hostId, labels: parseLabels(labels) });
+            const created = await feedback.run(() => cmd.create({ name: name.trim(), hostId, labels: parseLabels(labels) }));
             setBusy(false);
             if (!created) return;
             toast.success(t("created", { name: created.name }));
-            onOpenChange(false);
+            feedback.change(false, onOpenChange);
             reset();
             navigate(`/volumes/${created.id}`);
           }}
@@ -105,12 +108,12 @@ function CreateVolumeForm({ open, onOpenChange, hosts, volumes, defaultHostId }:
             <Textarea id="vol-labels" value={labels} onChange={(e) => setLabels(e.target.value)} className="min-h-16 font-mono text-[13px]" placeholder="docklet.owner=werkstatt" />
             <FieldDescription>{t("labelsHint")}</FieldDescription>
           </Field>
-          <DialogFooter>
+          <DialogCommandFooter feedback={feedback}>
             <Button type="submit" disabled={busy || !online.length || !capability.available} title={capability.reason}>
               {busy && <Spinner data-icon="inline-start" />}
               {t("submit")}
             </Button>
-          </DialogFooter>
+          </DialogCommandFooter>
         </form>
       </DialogContent>
     </Dialog>
