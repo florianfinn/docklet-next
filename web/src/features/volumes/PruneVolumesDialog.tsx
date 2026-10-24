@@ -1,3 +1,5 @@
+import { DialogCommandFooter } from "@/shared/components/dialog-command";
+import { useDialogCommand } from "@/shared/components/use-dialog-command";
 import { useQuery } from "@tanstack/react-query";
 import { Eraser, ShieldCheck, Unplug } from "lucide-react";
 import { useId, useState } from "react";
@@ -12,7 +14,7 @@ import { volumeLabel } from "@/domain/volumes";
 import { QueryError } from "@/shared/components/page";
 import { Button } from "@/shared/ui/button";
 import { Checkbox } from "@/shared/ui/checkbox";
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/shared/ui/dialog";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/shared/ui/dialog";
 import { Skeleton } from "@/shared/ui/skeleton";
 import { Spinner } from "@/shared/ui/spinner";
 
@@ -36,6 +38,7 @@ function PruneVolumesForm({ open, onOpenChange, hosts }: Props) {
   const cmd = useVolumeCommands();
   const hostIds = hosts.map((h) => h.id);
   const session = useId();
+  const feedback = useDialogCommand(open, session);
   const [all, setAll] = useState(false);
   const capability = useCapability("pruneVolumes");
   const plan = useQuery({ queryKey: ["volume-prune-plan", session, all, ...hostIds], queryFn: () => adapter.planVolumePrune({ hostIds, all }), staleTime: Infinity, gcTime: 0 });
@@ -52,14 +55,14 @@ function PruneVolumesForm({ open, onOpenChange, hosts }: Props) {
   const skipped = plan.data?.skippedHosts ?? [];
 
   const close = (o: boolean) => {
-    onOpenChange(o);
+    feedback.change(o, onOpenChange);
     if (!o) setExcluded(new Set());
   };
 
   const confirm = async () => {
     if (busy || plan.isFetching || !capability.available) return;
     setBusy(true);
-    const result = await cmd.prune({ hostIds, volumeIds: chosen.map((v) => v.id), candidates: chosen.map(({ id, hostId, name, createdAt }) => ({ id, hostId, name, createdAt })), all: plan.data?.all ?? all });
+    const result = await feedback.run(() => cmd.prune({ hostIds, volumeIds: chosen.map((v) => v.id), candidates: chosen.map(({ id, hostId, name, createdAt }) => ({ id, hostId, name, createdAt })), all: plan.data?.all ?? all }));
     setBusy(false);
     if (!result) return;
     setResult(result);
@@ -67,7 +70,7 @@ function PruneVolumesForm({ open, onOpenChange, hosts }: Props) {
 
   return (
     <Dialog open={open} onOpenChange={close}>
-      <DialogContent className="sm:max-w-xl" data-surface="volume-prune-dialog">
+      <DialogContent {...feedback.bindings} className="max-h-[calc(100dvh-2rem)] overflow-y-auto sm:max-w-xl" data-surface="volume-prune-dialog">
         <DialogHeader>
           <DialogTitle>{t("title")}</DialogTitle>
           <DialogDescription>{t("description")}</DialogDescription>
@@ -141,7 +144,7 @@ function PruneVolumesForm({ open, onOpenChange, hosts }: Props) {
             )}
           </div>
         )}
-        <DialogFooter>
+        <DialogCommandFooter feedback={feedback}>
           <Button type="button" variant="outline" onClick={() => close(false)}>
             {result ? t("close") : t("cancel")}
           </Button>
@@ -149,7 +152,7 @@ function PruneVolumesForm({ open, onOpenChange, hosts }: Props) {
             {busy ? <Spinner data-icon="inline-start" /> : <Eraser data-icon="inline-start" />}
             {t("confirm", { count: chosen.length })}
           </Button>}
-        </DialogFooter>
+        </DialogCommandFooter>
       </DialogContent>
     </Dialog>
   );

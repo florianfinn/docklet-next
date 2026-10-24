@@ -1,3 +1,5 @@
+import { DialogCommandFooter } from "@/shared/components/dialog-command";
+import { useDialogCommand } from "@/shared/components/use-dialog-command";
 import { useCapability } from "@/data/use-capability";
 import { ArrowLeft, ArrowRight, Cable, Network, Plus, Router } from "lucide-react";
 import { useState } from "react";
@@ -11,7 +13,7 @@ import { ChoiceCards, TextField } from "@/shared/components/form-field";
 import { cn } from "@/shared/lib/utils";
 import { Alert, AlertDescription } from "@/shared/ui/alert";
 import { Button } from "@/shared/ui/button";
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/shared/ui/dialog";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/shared/ui/dialog";
 import { HelpLabel, HelpTarget, HelpTooltip } from "@/shared/help/help-tooltip";
 import { Field, FieldContent, FieldDescription, FieldLabel } from "@/shared/ui/field";
 import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from "@/shared/ui/select";
@@ -71,6 +73,7 @@ export function CreateNetworkDialog({ open, onOpenChange, hosts, networks, defau
   const online = hosts.filter((h) => h.status === "online");
   const initialHost = online.find((h) => h.id === defaultHostId)?.id ?? online[0]?.id ?? "";
   const [draft, setDraft] = useState<NetworkDraft>(() => blank(initialHost));
+  const feedback = useDialogCommand(open, draft.hostId);
   const cmd = useNetworkCommands(draft.hostId, open);
   const capability = useCapability("createNetwork", { kind: "host", id: draft.hostId });
   const [labels, setLabels] = useState<NetworkEntry[]>([]);
@@ -87,7 +90,7 @@ export function CreateNetworkDialog({ open, onOpenChange, hosts, networks, defau
   const index = STEPS.indexOf(step);
 
   const close = (o: boolean) => {
-    onOpenChange(o);
+    feedback.change(o, onOpenChange);
     if (!o) {
       setDraft(blank(initialHost));
       setLabels([]);
@@ -109,7 +112,7 @@ export function CreateNetworkDialog({ open, onOpenChange, hosts, networks, defau
 
   const submit = async () => {
     setBusy(true);
-    const created = await cmd.create({ ...draft, name: draft.name.trim() });
+    const created = await feedback.run(() => cmd.create({ ...draft, name: draft.name.trim() }));
     setBusy(false);
     if (!created) return;
     toast.success(t("created", { name: created.name }));
@@ -160,7 +163,7 @@ export function CreateNetworkDialog({ open, onOpenChange, hosts, networks, defau
   return (
     <Dialog open={open} onOpenChange={close}>
       {/* Width and height are fixed from the start, so switching IPv4/IPv6 or steps never re-centres the dialog; only the body scrolls when the screen is short. */}
-      <DialogContent className="grid h-[min(56rem,calc(100dvh-2rem))] grid-rows-[auto_auto_minmax(0,1fr)_auto] sm:max-w-[60rem]" data-surface="create-network-dialog">
+      <DialogContent {...feedback.bindings} className="grid h-[min(56rem,calc(100dvh-2rem))] grid-rows-[auto_auto_minmax(0,1fr)_auto] sm:max-w-[60rem]" data-surface="create-network-dialog">
         <DialogHeader>
           <DialogTitle>{t("title")}</DialogTitle>
           <DialogDescription>{t("description")}</DialogDescription>
@@ -274,7 +277,7 @@ export function CreateNetworkDialog({ open, onOpenChange, hosts, networks, defau
 
         </div>
 
-        <DialogFooter className="sm:justify-between">
+        <DialogCommandFooter feedback={feedback} className="sm:justify-between">
           <Button type="button" variant="outline" disabled={index === 0 || busy} onClick={() => setStep(STEPS[index - 1] ?? "kind")}>
             <ArrowLeft data-icon="inline-start" />
             {t("back")}
@@ -292,7 +295,7 @@ export function CreateNetworkDialog({ open, onOpenChange, hosts, networks, defau
               <ArrowRight data-icon="inline-end" />
             </Button>
           )}
-        </DialogFooter>
+        </DialogCommandFooter>
       </DialogContent>
     </Dialog>
   );

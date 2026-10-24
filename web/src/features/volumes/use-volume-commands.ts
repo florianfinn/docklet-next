@@ -1,5 +1,5 @@
+import { captureCommandFailure } from "@/shared/components/command-failure";
 import { useCallback, useEffect, useMemo, useRef } from "react";
-import { toast } from "sonner";
 import { useTranslations } from "use-intl";
 
 import { errorCode, type CreateVolumeInput } from "@/data/api";
@@ -12,7 +12,7 @@ import { useCommandError } from "@/data/use-command-error";
 type Known = "not-found" | "exists" | "invalid-name" | "in-use" | "host-offline" | "bind-not-deletable" | "not-editable" | "no-policy" | "target-missing" | "invalid-plan";
 const KNOWN = new Set<string>(["not-found", "exists", "invalid-name", "in-use", "host-offline", "bind-not-deletable", "not-editable", "no-policy", "target-missing", "invalid-plan"]);
 
-/** Volume, file and backup commands; contract error codes become translated toasts. */
+/** Volume, file and backup commands; contract error codes become translated command feedback. */
 export function useVolumeCommands() {
   const adapter = useAdapter();
   const mounted = useRef(true);
@@ -21,26 +21,27 @@ export function useVolumeCommands() {
   const commandError = useCommandError();
   const guard = useCallback(
     async <T,>(fn: () => Promise<T>): Promise<T | undefined> => {
+      const failure = captureCommandFailure(adapter);
       try {
         const result = await fn();
         return mounted.current ? result : undefined;
       } catch (e) {
-        if (!mounted.current) return undefined;
+        if (!mounted.current && !failure.closed()) return undefined;
         // The gate already reported the busy target once (see ActionToasts).
         if (isRunBusy(e)) return undefined;
         if (e instanceof AdapterOutcomeError && e.outcome.kind === "error") {
           const code = e.outcome.code;
           if (code === "volume.outcome-unknown" || code === "volume.helper-incompatible" || code === "volume.helper-unavailable") {
-            toast.error(t(code.slice("volume.".length) as "outcome-unknown" | "helper-incompatible" | "helper-unavailable"));
+            failure.error(t(code.slice("volume.".length) as "outcome-unknown" | "helper-incompatible" | "helper-unavailable"));
             return undefined;
           }
         }
         const code = errorCode(e);
-        toast.error(code && KNOWN.has(code) ? t(code as Known) : commandError(e));
+        failure.error(code && KNOWN.has(code) ? t(code as Known) : commandError(e));
         return undefined;
       }
     },
-    [t, commandError],
+    [t, commandError, adapter],
   );
   return useMemo(
     () => ({

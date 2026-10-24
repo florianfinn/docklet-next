@@ -7,7 +7,7 @@
 import { useQueryClient } from "@tanstack/react-query";
 import { useEffect, useRef, useState, type RefObject } from "react";
 import { useTranslations } from "use-intl";
-import { toast } from "sonner";
+import { captureCommandFailure } from "@/shared/components/command-failure";
 import { useAdapter } from "@/data/use-adapter";
 import type { WorkspaceUpload, WorkspaceWriteResult, VolumeDirListing } from "@/data/api";
 import { joinPath, parentPath } from "@/domain/files";
@@ -22,6 +22,7 @@ export function useFileCommands(id: string, revision: string | undefined, rebase
   useEffect(() => { mounted.current = true; return () => { mounted.current = false; }; }, []);
   async function refresh() { await client.invalidateQueries({ queryKey: ["files", id], predicate: (query) => query.queryKey[2] !== "content" }); }
   async function run(fn: () => Promise<WorkspaceWriteResult>, touched: string[], expected = revision) {
+    const failure = captureCommandFailure(adapter);
     if (writeLockRef.current) return false;
     writeLockRef.current = true; setBusy(true);
     try {
@@ -30,7 +31,7 @@ export function useFileCommands(id: string, revision: string | undefined, rebase
       await refresh();
       return mounted.current;
     } catch (error) {
-      if (mounted.current) { toast.error(t(workspaceErrorKey(error))); await refresh(); }
+      if (mounted.current || failure.closed()) { failure.error(t(workspaceErrorKey(error))); await refresh(); }
       return false;
     } finally { writeLockRef.current = false; if (mounted.current) setBusy(false); }
   }
@@ -44,11 +45,12 @@ export function useFileCommands(id: string, revision: string | undefined, rebase
       return run(() => adapter.uploadFile(id, dir, file, expected), [joinPath(dir, file.name)], expected);
     },
     async download(path: string) {
+      const failure = captureCommandFailure(adapter);
       try {
         if (adapter.downloadFile) { const blob = await adapter.downloadFile(id, path); return mounted.current ? blob : undefined; }
         const file = await adapter.readFile(id, path);
         return mounted.current && file.editable ? new Blob([file.content], { type: "text/plain" }) : undefined;
-      } catch (error) { if (mounted.current) toast.error(t(workspaceErrorKey(error))); }
+      } catch (error) { if (mounted.current || failure.closed()) failure.error(t(workspaceErrorKey(error))); }
     },
   };
 }

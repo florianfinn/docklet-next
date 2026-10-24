@@ -1,6 +1,6 @@
+import { captureCommandFailure } from "@/shared/components/command-failure";
 import { isCancelledError } from "@tanstack/react-query";
 import { useCallback } from "react";
-import { toast } from "sonner";
 import { useTranslations } from "use-intl";
 
 import type { ContainerCommand, RecreateInput } from "@/data/adapter";
@@ -13,7 +13,7 @@ import { useAdapterText } from "@/data/use-adapter-text";
 
 const KNOWN = new Set(["recreate-not-allowed", "managed-by-unraid", "not-found"]);
 
-/** Container commands; adapter error codes become translated toasts. */
+/** Container commands; adapter error codes become translated command feedback. */
 export function useContainerCommands() {
   const adapter = useAdapter();
   const t = useTranslations("containers.errors");
@@ -21,17 +21,18 @@ export function useContainerCommands() {
   const runtimeError = useRuntimeError();
   const guard = useCallback(
     async <T,>(fn: () => Promise<T>): Promise<T | undefined> => {
+      const failure = captureCommandFailure(adapter);
       try {
         return await fn();
       } catch (e) {
         // The gate already reported the busy target once (see ActionToasts).
-        if (isCancelledError(e) || isRunBusy(e) || runtimeError(e)) return undefined;
+        if (isCancelledError(e) || isRunBusy(e) || runtimeError(e, failure.error)) return undefined;
         const code = e instanceof Error ? e.message : String(e);
-        toast.error(KNOWN.has(code) ? t(code as "not-found") : dt(code));
+        failure.error(KNOWN.has(code) ? t(code as "not-found") : dt(code));
         return undefined;
       }
     },
-    [t, dt, runtimeError],
+    [t, dt, runtimeError, adapter],
   );
   return {
     run: (id: string, command: ContainerCommand) => guard(() => adapter.runContainerCommand(id, command)),

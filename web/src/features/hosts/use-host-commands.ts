@@ -1,5 +1,5 @@
+import { captureCommandFailure } from "@/shared/components/command-failure";
 import { useCallback } from "react";
-import { toast } from "sonner";
 
 import { type RegisterHostInput } from "@/data/api";
 import { useActionRuns } from "@/data/live";
@@ -17,16 +17,17 @@ export function useHostCommands() {
   const errorText = useHostError();
   const guard = useCallback(
     async <T,>(fn: () => Promise<T>): Promise<T | undefined> => {
+      const failure = captureCommandFailure(adapter);
       try {
         return await fn();
       } catch (e) {
         // The gate already reported the busy target once (see ActionToasts).
         if (isRunBusy(e)) return undefined;
-        toast.error(errorText(e));
+        failure.error(errorText(e));
         return undefined;
       }
     },
-    [errorText],
+    [errorText, adapter],
   );
   return {
     register: (input: RegisterHostInput) => guard(() => adapter.registerHost(input)),

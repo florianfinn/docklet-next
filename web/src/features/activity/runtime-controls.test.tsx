@@ -13,6 +13,7 @@ import { IntlProvider } from "use-intl";
 import { afterEach, expect, it, vi } from "vitest";
 import { catalogs } from "@/app/i18n/catalog";
 import type { DockletAdapter } from "@/data/adapter";
+import { AdapterOutcomeError } from "@/data/capability";
 import { AdapterContext } from "@/data/use-adapter";
 import { useActionRuns } from "@/data/live";
 import { renderRun } from "@/data/message-code";
@@ -299,4 +300,68 @@ it("stale active generic snapshot cannot reopen a retained terminal run or repla
     expect(shows.mock.calls.filter(([, options]) => options?.id === RUN_ID), "stale generic row must not replay the terminal toast").toHaveLength(count);
     expect(runGateOf(adapter)!.size).toBe(0); expect(f.commands()).toHaveLength(1);
   } finally { release.resolve(); view.unmount(); }
+});
+
+it.each([false, true])("runtime release rejection preserves toast outside a modal and uses inline feedback inside modal=%s", async (modal) => {
+  const f = runtimeFixture(); f.state.run = snapshot("edge"); f.state.recovery.unknownReason = "transport";
+  const run = renderRun(await f.adapter.getRuntimeRun!("edge", RUN_ID), "en-US");
+  const release = vi.fn().mockRejectedValue(new AdapterOutcomeError({ kind: "error", code: "runtime.release-invalid", status: 409 }));
+  const notices = vi.spyOn(toast, "error");
+  const view = mount(modal ? <ActionDialog /> : <RuntimeControls run={run} />, { ...f.adapter, releaseRuntimeRun: release });
+  try {
+    if (modal) { await act(async () => { openActionDialog(RUN_ID); }); await screen.findByRole("dialog"); }
+    await userEvent.type(screen.getByRole("textbox"), "Executor inspected");
+    await userEvent.click(screen.getByRole("checkbox"));
+    const button = screen.getByRole("button", { name: "Release blocked target" });
+    await userEvent.click(button);
+    await waitFor(() => expect(button.hasAttribute("disabled")).toBe(false));
+    const message = catalogs["en-US"].activity.runtime.releaseInvalid;
+    if (modal) {
+      expect(screen.getByRole("alert").textContent).toBe(message);
+      expect(notices).not.toHaveBeenCalled();
+      expect((screen.getByRole("textbox") as HTMLInputElement).value).toBe("Executor inspected");
+    } else {
+      expect(notices).toHaveBeenCalledWith(message, { action: undefined });
+      expect(screen.queryByRole("alert") === null).toBe(true);
+    }
+  } finally { view.unmount(); }
+});
+
+it("ActionDialog ticks preserve user focus and scroll after an inline runtime rejection", async () => {
+  const f = runtimeFixture(); f.state.run = snapshot("edge"); f.state.recovery.unknownReason = "transport";
+  await f.adapter.getRuntimeRun!("edge", RUN_ID);
+  let now = new Date(f.state.run.startedAt).getTime() + 1000;
+  vi.spyOn(Date, "now").mockImplementation(() => now);
+  const ticks: (() => void)[] = [];
+  const interval = globalThis.setInterval;
+  vi.spyOn(globalThis, "setInterval").mockImplementation((callback, delay, ...args) => {
+    if (delay === 1000 && typeof callback === "function") {
+      ticks.push(callback as () => void);
+      return interval(() => {}, 1000000);
+    }
+    return interval(callback, delay, ...args);
+  });
+  const release = vi.fn().mockRejectedValue(new AdapterOutcomeError({ kind: "error", code: "runtime.release-invalid", status: 409 }));
+  const notices = vi.spyOn(toast, "error");
+  const scroll = vi.spyOn(HTMLElement.prototype, "scrollIntoView").mockImplementation(() => {});
+  const view = mount(<ActionDialog />, { ...f.adapter, releaseRuntimeRun: release });
+  try {
+    await act(async () => { openActionDialog(RUN_ID); });
+    const dialog = await screen.findByRole("dialog");
+    await userEvent.type(screen.getByRole("textbox"), "Executor inspected");
+    await userEvent.click(screen.getByRole("checkbox"));
+    await userEvent.click(screen.getByRole("button", { name: "Release blocked target" }));
+    const alert = await screen.findByRole("alert");
+    expect(document.activeElement === alert).toBe(true);
+    const scrollCount = scroll.mock.calls.length;
+    const target = screen.getByRole("button", { name: catalogs["en-US"].activity.dialog.close });
+    act(() => target.focus());
+    const text = dialog.textContent;
+    expect(ticks.length).toBeGreaterThan(0);
+    await act(async () => { now += 3000; ticks.forEach((tick) => tick()); });
+    expect(dialog.textContent === text).toBe(false);
+    expect(document.activeElement === target).toBe(true);
+    expect(scroll.mock.calls.length).toBe(scrollCount);
+    expect(notices).not.toHaveBeenCalled();
+  } finally { view.unmount(); }
 });

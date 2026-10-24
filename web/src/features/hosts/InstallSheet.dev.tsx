@@ -1,3 +1,5 @@
+import { DialogError } from "@/shared/components/dialog-command";
+import { useDialogCommand } from "@/shared/components/use-dialog-command";
 import { useEffect, useState } from "react";
 import { useTranslations } from "use-intl";
 
@@ -37,13 +39,15 @@ function draftOf(host: Host, token: string): HostDraft {
 export default function InstallSheet({ host, onClose }: { host: Host | null; onClose: () => void }) {
   const t = useTranslations("hosts.install");
   const settings = useSettings();
+  const feedback = useDialogCommand(!!host, host?.id);
+  const close = () => { feedback.dismiss(); onClose(); };
   const cmd = useHostCommands();
   const [token, setToken] = useState<string | null>(null);
   const hostName = host?.name;
   useEffect(() => {
     if (!hostName) return;
     let live = true;
-    void cmd.token(host?.id ?? "").then((tk) => live && setToken(tk ?? null));
+    void Promise.resolve(feedback.run(() => cmd.token(host?.id ?? ""))).then((tk) => live && setToken(tk ?? null));
     return () => {
       live = false;
       setToken(null);
@@ -52,8 +56,8 @@ export default function InstallSheet({ host, onClose }: { host: Host | null; onC
   }, [hostName]);
   const general = settings.data?.general;
   return (
-    <Sheet open={!!host} onOpenChange={(o) => !o && onClose()}>
-      <SheetContent className="w-full gap-0 p-0 sm:max-w-2xl">
+    <Sheet open={!!host} onOpenChange={(o) => !o && close()}>
+      <SheetContent {...feedback.bindings} className="w-full gap-0 p-0 sm:max-w-2xl">
         {host && (
           <>
             <SheetHeader className="border-b">
@@ -61,9 +65,10 @@ export default function InstallSheet({ host, onClose }: { host: Host | null; onC
               <SheetDescription>{t("sheetDescription")}</SheetDescription>
             </SheetHeader>
             <ScrollArea className="min-h-0 flex-1">
-              <div className="p-4">
+              <div className="flex flex-col gap-3 p-4">
+                <DialogError feedback={feedback} />
                 {token && general ? (
-                  <InstallArtifacts plan={planFromDraft(draftOf(host, token), agentHubUrl(general), general.timeZone)} onRegenerateToken={() => void cmd.token(host.id).then((tk) => tk && setToken(tk))} />
+                  <InstallArtifacts plan={planFromDraft(draftOf(host, token), agentHubUrl(general), general.timeZone)} onRegenerateToken={() => void Promise.resolve(feedback.run(() => cmd.token(host.id))).then((tk) => tk && setToken(tk))} />
                 ) : (
                   <Skeleton className="h-80 rounded-xl" />
                 )}
