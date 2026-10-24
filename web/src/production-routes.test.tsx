@@ -25,6 +25,7 @@ let renderProductComponent: typeof renderWithApp;
 let ProductImportSourceDialog: typeof ImportSourceDialog;
 let productAdapter: typeof createAdapter;
 
+// Cold router imports use a generous hang timeout so shared CI load does not fail setup.
 beforeAll(async () => {
   vi.stubGlobal("fetch", vi.fn(async () => new Response(JSON.stringify({ code: "offline" }), { status: 503 })));
   vi.stubEnv("DEV", false);
@@ -33,7 +34,7 @@ beforeAll(async () => {
   ({ renderRoutes: renderProductRoutes, renderWithApp: renderProductComponent } = await import("@/test/render"));
   ({ ImportSourceDialog: ProductImportSourceDialog } = await import("@/features/stacks/editor/ImportSourceDialog"));
   ({ createAdapter: productAdapter } = await import("./runtime"));
-});
+}, 60_000);
 
 afterAll(() => { vi.unstubAllEnvs(); vi.unstubAllGlobals(); });
 afterEach(() => cleanup());

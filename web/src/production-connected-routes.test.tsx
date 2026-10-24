@@ -21,6 +21,7 @@ let AppsWidget: typeof import("@/features/dashboard/widgets/SmallWidgets").AppsW
 let QueryError: typeof import("@/shared/components/page").QueryError;
 let unavailable: typeof import("@/data/capability").unavailable;
 
+// Cold router imports use a generous hang timeout so shared CI load does not fail setup.
 beforeAll(async () => {
   vi.stubEnv("DEV", false);
   vi.resetModules();
@@ -33,7 +34,7 @@ beforeAll(async () => {
   ({ AppsWidget } = await import("@/features/dashboard/widgets/SmallWidgets"));
   ({ QueryError } = await import("@/shared/components/page"));
   ({ unavailable } = await import("@/data/capability"));
-});
+}, 60_000);
 afterEach(() => { cleanup(); localStorage.clear(); });
 afterAll(() => vi.unstubAllEnvs());
 

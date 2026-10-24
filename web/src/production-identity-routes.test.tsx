@@ -18,13 +18,14 @@ let routes: RouteObject[];
 let renderProductRoutes: typeof renderRoutes;
 let productAdapter: typeof createAdapter;
 
+// Cold router imports use a generous hang timeout so shared CI load does not fail setup.
 beforeAll(async () => {
   vi.stubEnv("DEV", false);
   vi.resetModules();
   ({ routes } = await import("@/app/router"));
   ({ renderRoutes: renderProductRoutes } = await import("@/test/render"));
   ({ createAdapter: productAdapter } = await import("./runtime"));
-}, 30_000);
+}, 60_000);
 
 afterAll(() => vi.unstubAllEnvs());
 afterEach(() => { cleanup(); localStorage.clear(); });
