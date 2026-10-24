@@ -13,10 +13,20 @@ describe.each([
   { edge: false, status: 502, error: "failed to forward request" },
   { edge: true, status: 504, error: "request timed out" },
 ])("proxy write uncertainty (Edge=$edge, status=$status)", ({ edge, status, error }) => {
+  const envelope = edge ? { success: false, code: "agent.unavailable", error }
+    : { success: false, code: "agent.unavailable", data: { error } };
+  function volumeProxy() {
+    const f = volumeFixture(edge); const original = f.fetcher.getMockImplementation()!;
+    f.fetcher.mockImplementation(async (input, init) => {
+      const response = await original(input, init);
+      return init?.method && init.method !== "GET" ? f.json(envelope, status) : response;
+    });
+    return f;
+  }
   it.each(["create", "delete", "connect", "disconnect"])("network %s refreshes inventory and reports outcome unknown without retry", async (operation) => {
     const f = networkFixture(edge);
     expect((await f.adapter.listHosts())[0]?.connection).toBe(edge ? "edge" : "direct");
-    f.state.response = { status, body: { success: false, code: "agent.unavailable", error } };
+    f.state.response = { status, body: envelope };
     const changed = vi.fn(); const stop = f.adapter.subscribeChanges(changed);
     try {
       const result = operation === "create" ? f.adapter.createNetwork(networkDraft())
@@ -30,7 +40,7 @@ describe.each([
   });
 
   it.each(["create", "delete", "rename"])("volume %s refreshes inventory and reports outcome unknown without retry", async (operation) => {
-    const f = volumeFixture(edge);
+    const f = volumeProxy();
     expect((await f.adapter.listHosts())[0]?.connection).toBe(edge ? "edge" : "direct");
     f.state.status = status; f.state.code = "agent.unavailable";
     const changed = vi.fn(); const stop = f.adapter.subscribeChanges(changed);
@@ -44,7 +54,7 @@ describe.each([
   });
 
   it("volume prune refreshes inventory and marks every submitted candidate outcome unknown", async () => {
-    const f = volumeFixture(edge); f.state.status = status; f.state.code = "agent.unavailable";
+    const f = volumeProxy(); f.state.status = status; f.state.code = "agent.unavailable";
     const changed = vi.fn(); const stop = f.adapter.subscribeChanges(changed);
     try {
       const candidates = ["one", "two"].map((name) => ({ id: `host~${name}`, hostId: "host", name, createdAt: "2026-10-24T00:00:00Z" }));

@@ -92,6 +92,29 @@ The web run states map directly from the wire, except `success`:
 The activity feature catalogues supply these labels; queued and cancelled
 render as distinct states throughout run surfaces, including the result view.
 
+## Read resilience and request bounds
+
+The shared identity-owned HTTP caller retries a GET exactly once when fetch
+rejects before receiving a response with a TypeError or NetworkError. Both
+attempts use the same abort lifetime. An aborted request, an HTTP status, a body
+or mapping failure, and POST/PUT/PATCH/DELETE never enter this read retry. The
+runtime command admission policy below remains owned by its command transport.
+
+Activity discovery uses at most four concurrent detail reads per host; each
+host advances independently. Known activity notifications read their targeted
+detail without waiting for discovery workers. Concurrent full activity reads
+share work. A notification during discovery marks one trailing full observation
+so pre-notification results cannot settle the refresh as fresh. Identity changes
+cancel the old generation and keep its late results out of the new observation.
+
+Event history retains the complete history used by Dashboard and Activity Center.
+Pages request the effective size of 100 and run strictly sequentially. Concurrent
+full-history consumers share one load. Event stream messages carry invalidation
+only, so they cannot supply incremental event rows. Invalidations during a load
+coalesce into a trailing full observation, with at most one full-history load in
+flight. HTTP and mapping failures remain visible and a deliberate retry can
+start a new load.
+
 ## Runtime command mapping
 
 The [runtime-control record](runtime-control.md) defines the M6 specialization,
@@ -434,8 +457,9 @@ and disconnect check their operation at `{ kind: "network", id: inventoryId }`.
 The inventory ID contains the host and Docker network ID; transport restores the
 raw network/container IDs. A host-scoped descriptor does not grant those three
 network operations. Hub descriptors aggregate availability and do not authorize
-a specific target. Toolbar controls aggregate the displayed host's network
-descriptors; row, detail and dialog controls use their target network refs.
+a specific target. The Create toolbar control is enabled when any online host
+permits create. It prefers the displayed host when permitted, otherwise another
+permitted online host. Row, detail and dialog controls use their target refs.
 
 Create maps enabled families, labels, driver options and auxiliary reservations
 with generated DTOs, including explicit `enableIPv4=false` for IPv6-only networks
@@ -451,8 +475,14 @@ polling. Known `network.*` errors become translated domain errors, including
 `network.overlap`; unknown codes retain the generic error path. A lost or
 malformed write response reports `network.outcome-unknown`, instructing the user
 to inspect state before retrying, without implying rollback or retrying the write
-automatically. Results and toasts from a closed dialog, a previous host or an
-expired browser identity are discarded.
+automatically. Network and volume writes also classify HTTP 502/504 with
+`agent.unavailable` as outcome unknown and invalidate their inventories; these
+proxy responses cannot establish that the agent did not apply the write.
+Read failures keep their existing classification. Volume prune reports unknown
+outcomes per submitted candidate. HTTP 409 `volume.exists` maps to the existing
+translated volume name-conflict message for create and rename; unknown codes
+retain generic handling. Results and toasts from a closed dialog, a previous host
+or an expired browser identity are discarded.
 
 
 ## Browser session lifetime

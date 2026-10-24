@@ -122,7 +122,7 @@ export function createActivityReader(reads: Reads) {
         batch.failure = { hostId: batch.hostId, reason: "invalid-data" };
         return false;
       });
-      // Each caller still receives its own successful snapshot; failed sources retain observations.
+      // Failed sources retain their observations in the shared full snapshot.
       const observed = new Map(current.map((run) => [run.id, run]));
       for (const batch of batches) {
         if (!batch.failure) for (const [id, run] of observed) if (run.hostId === batch.hostId) observed.delete(id);
