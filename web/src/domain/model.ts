@@ -423,6 +423,8 @@ export interface NetworkAuxAddress {
 }
 
 export interface TopologyNetwork {
+  /** The list identifies this network, but its detail or membership read failed. */
+  detailUnavailable?: boolean;
   labels?: Record<string, string>;
   options?: Record<string, string>;
   auxAddresses?: NetworkAuxAddress[];
@@ -480,6 +482,8 @@ export interface TopologyDependency {
 }
 
 export interface Topology {
+  /** Host-local partial reads, including hosts with no available network rows. */
+  inventory?: Record<string, InventoryObservation>;
   networks: TopologyNetwork[];
   attachments: NetworkAttachment[];
   dependencies: TopologyDependency[];

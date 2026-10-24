@@ -58,7 +58,7 @@ export function useSecurity() {
 export function useTopology() {
   const adapter = useAdapter();
   const client = useQueryClient();
-  return useQuery({ queryKey: queryKeys.topology, queryFn: ({ signal }) => adapter.getTopology(initialBatches(client, queryKeys.topology, signal)) });
+  return useQuery({ queryKey: queryKeys.topology, queryFn: ({ signal }) => adapter.getTopology(initialBatches(client, queryKeys.topology, signal), client.getQueryData(queryKeys.topology)) });
 }
 
 export function useEvents() {
