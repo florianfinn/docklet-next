@@ -2,7 +2,7 @@
 // Revision: 09d1e632cb3a14bd48b87232acaf991b9d12145e
 // Retrieved: 2026-10-23
 // License: Apache-2.0
-// Deviations: Original usage indicator gesture tests for issue #204.
+// Deviations: Usage indicator gesture tests and protection precedence with unavailable details.
 
 import { screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
@@ -11,6 +11,7 @@ import { describe, expect, it } from "vitest";
 import { STANDALONE } from "@/data/demo/fixtures/containers";
 import { HOSTS } from "@/data/demo/fixtures/hosts";
 import type { Topology, TopologyNetwork } from "@/domain/model";
+import { removeBlock } from "@/domain/networks";
 import { renderWithApp } from "@/test/render";
 
 import { NetworkTable } from "./NetworkTable";
@@ -46,4 +47,25 @@ describe("network usage indicator", () => {
     await userEvent.hover(screen.getByRole("button", { name: `example_net: ${state}, 0 Container` }));
     expect(within(await screen.findByRole("tooltip")).getByText(expected) !== null).toBe(true);
   });
+});
+
+
+it.each([
+  [{ builtIn: true }, "Docker-Standard", "builtin-network"],
+  [{ stackId: "stack", stackName: "example-stack" }, "Gehört zum Compose-Stack example-stack", "compose-managed"],
+] as const)("keeps protection precedence when details fail for %j", async (patch, reason, block) => {
+  const protectedNetwork = { ...network, ...patch, detailUnavailable: true };
+  expect(removeBlock({ attachments: [] }, protectedNetwork)).toBe(block);
+  renderTable({ ...patch, detailUnavailable: true });
+  const usage = screen.getByRole("button", { name: `example_net: ${reason}; Verwendung unbekannt` });
+  expect(usage.textContent?.includes("?")).toBe(false);
+  expect(usage.querySelector("svg.lucide-shield") !== null).toBe(true);
+  await userEvent.hover(usage);
+  expect((await screen.findByRole("tooltip")).textContent?.includes(reason)).toBe(true);
+  expect(screen.getByRole("tooltip").textContent?.includes("Keine verbundenen Container")).toBe(false);
+  await userEvent.unhover(usage);
+  await userEvent.click(screen.getByRole("button", { name: "Aktionen für example_net" }));
+  const remove = screen.getByRole("menuitem", { name: "Entfernen" });
+  expect(remove.getAttribute("aria-disabled")).toBe("true");
+  expect(remove.title.includes("Verwendung kann nicht geprüft")).toBe(false);
 });

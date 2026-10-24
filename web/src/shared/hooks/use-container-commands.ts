@@ -9,7 +9,7 @@ import { isRunBusy } from "@/data/run-gate";
 import { useAdapter } from "@/data/use-adapter";
 import type { ContainerOrigin } from "@/domain/model";
 import { useRuntimeError } from "@/features/activity/use-runtime-error";
-import { useAdapterText } from "@/data/use-adapter-text";
+import { useCommandError } from "@/data/use-command-error";
 
 const KNOWN = new Set(["recreate-not-allowed", "managed-by-unraid", "not-found"]);
 
@@ -17,7 +17,7 @@ const KNOWN = new Set(["recreate-not-allowed", "managed-by-unraid", "not-found"]
 export function useContainerCommands() {
   const adapter = useAdapter();
   const t = useTranslations("containers.errors");
-  const dt = useAdapterText();
+  const commandError = useCommandError();
   const runtimeError = useRuntimeError();
   const guard = useCallback(
     async <T,>(fn: () => Promise<T>): Promise<T | undefined> => {
@@ -28,11 +28,11 @@ export function useContainerCommands() {
         // The gate already reported the busy target once (see ActionToasts).
         if (isCancelledError(e) || isRunBusy(e) || runtimeError(e, failure.error)) return undefined;
         const code = e instanceof Error ? e.message : String(e);
-        failure.error(KNOWN.has(code) ? t(code as "not-found") : dt(code));
+        failure.error(KNOWN.has(code) ? t(code as "not-found") : commandError(e));
         return undefined;
       }
     },
-    [t, dt, runtimeError, adapter],
+    [t, commandError, runtimeError, adapter],
   );
   return {
     run: (id: string, command: ContainerCommand) => guard(() => adapter.runContainerCommand(id, command)),
