@@ -117,37 +117,18 @@ it("new identity work does not join an old full read or publish its late result"
   expect(f.reads.publish).toHaveBeenCalledTimes(publications);
 });
 
-it("fresh recovery checks authentication and blocks old success before its held detail finishes", async () => {
+it("recovery queues authentication validation behind held discovery and clears its observations", async () => {
   const f = fixture(); await f.reader.load();
   const gate = deferred<ReturnType<typeof detail>>(); const reached = deferred<void>();
   f.reads.detail.mockImplementationOnce(async () => { reached.resolve(); return gate.promise; });
-  const old = f.reader.load(); const rejected = old.catch((error: unknown) => error);
-  await reached.promise;
+  const old = f.reader.load(); await reached.promise;
   const { AdapterOutcomeError } = await import("../capability");
   f.reads.hosts.mockRejectedValueOnce(new AdapterOutcomeError({ kind: "error", code: "http.error", status: 401 }));
-  const fresh = f.reader.refresh(true);
+  const fresh = f.reader.refresh();
   expect(fresh).not.toBe(old);
-  expect(f.reads.hosts).toHaveBeenCalledTimes(3);
+  expect(f.reads.hosts).toHaveBeenCalledTimes(2);
+  gate.resolve(detail("good", "good-0")); await old;
   await expect(fresh).rejects.toMatchObject({ outcome: { status: 401 } });
   expect(f.reader.runs()).toEqual([]);
-  const publications = f.reads.publish.mock.calls.length;
-  gate.resolve(detail("good", "good-0")); expect(await rejected).toBeInstanceOf(CancelledError);
-  expect(f.reads.publish).toHaveBeenCalledTimes(publications);
-});
-
-it("repeated recovery notifications share one fresh discovery and one trailing read", async () => {
-  const f = fixture();
-  const oldGate = deferred<string[]>(); const freshGate = deferred<string[]>(); const trailingGate = deferred<string[]>();
-  f.reads.hosts.mockReturnValueOnce(oldGate.promise).mockReturnValueOnce(freshGate.promise).mockReturnValueOnce(trailingGate.promise);
-  const old = f.reader.load();
-  const fresh = f.reader.refresh(true);
-  const trailing = f.reader.refresh(true);
-  for (let i = 0; i < 10; i++) expect(f.reader.refresh(true)).toBe(trailing);
-  expect(f.reads.hosts).toHaveBeenCalledTimes(2);
-  freshGate.resolve([]); await fresh;
-  const current = f.reader.load();
-  for (let i = 0; i < 10; i++) expect(f.reader.refresh(true)).toBe(current);
-  trailingGate.resolve([]); await current;
   expect(f.reads.hosts).toHaveBeenCalledTimes(3);
-  oldGate.resolve([]); await old;
 });

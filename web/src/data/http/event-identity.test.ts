@@ -27,8 +27,9 @@ it.each([false, true])("rejects old event rows after the initial or trailing pag
   if (trailing) read.mockResolvedValueOnce(["initial"]);
   read.mockReturnValueOnce(gate.promise);
   const reader = createEventReader(read, () => generation);
-  const old = reader.load(); const result = old.then((rows) => ({ rows }), (error: unknown) => ({ error }));
-  if (trailing) { reader.changed(); await vi.waitFor(() => expect(read).toHaveBeenCalledTimes(2)); }
+  let old = reader.load();
+  if (trailing) { reader.changed(); const next = reader.load(); await old; old = next; await vi.waitFor(() => expect(read).toHaveBeenCalledTimes(2)); }
+  const result = old.then((rows) => ({ rows }), (error: unknown) => ({ error }));
   generation++; gate.resolve(["private old rows"]);
   expect(await result).toMatchObject({ error: expect.any(CancelledError) });
 });

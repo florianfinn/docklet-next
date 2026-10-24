@@ -33,10 +33,11 @@ it.each(["initial discovery", "different identity", "login", "password change"])
     await f.adapter.getCurrentUser();
     expect(current.close).not.toHaveBeenCalled(); expect(f.sources).toHaveLength(2);
     const targetedBefore = f.requests.length;
+    changes.mockClear();
     f.state.details["run-good"]!.activity.status = "running"; current.send("run-good", "good");
     await vi.waitFor(() => expect(runs.mock.lastCall?.[0].find((r: { id: string }) => r.id === "run-good")?.status).toBe("running"));
     expect(f.requests.length - targetedBefore).toBe(1);
-    expect(changes.mock.lastCall?.[0]).not.toEqual(["events"]);
+    expect(changes.mock.calls).toEqual([]);
   } finally { stops.forEach((stop) => stop()); }
 });
 it.each(["logout", "rejected identity", "activity 401"])("%s suspends persistent listeners without unauthorized reconnect and login resumes", async (boundary) => {

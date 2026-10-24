@@ -277,9 +277,9 @@ export function createHttpAdapter(options: HttpAdapterOptions = {}): DockletAdap
   }, () => identityGeneration);
   const loadEvents = events.load;
 
-  function refreshRuns(fresh = false): void {
+  function refreshRuns(): void {
     if (actionListeners.size === 0) return;
-    void actions.refresh(fresh).catch((error) => { if (isCancelledError(error)) return; window.dispatchEvent(new CustomEvent("docklet:adapter-error", { detail: error })); });
+    void actions.refresh().catch((error) => { if (isCancelledError(error)) return; window.dispatchEvent(new CustomEvent("docklet:adapter-error", { detail: error })); });
   }
 
   function refreshRun(activityId: string, environmentId?: string, discoverOnTerminal = true): void {
@@ -295,7 +295,7 @@ export function createHttpAdapter(options: HttpAdapterOptions = {}): DockletAdap
   function refreshSubscribed(): void {
     invalidateEnvironments();
     events.changed();
-    refreshRuns(true);
+    refreshRuns();
     if (changeListeners.size) changeListeners.forEach((listener) => listener(["events", "hosts", "stacks", "containers", "images", "volumes", "topology"]));
   }
 

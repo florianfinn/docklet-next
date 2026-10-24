@@ -22,17 +22,17 @@ class FakeSource {
 }
 const notification = (channel: string, extra = {}) => ({ channel, timestamp: at, ...extra });
 const cases = [
-  ["events", (source: FakeSource) => source.send(notification("events", { eventLog: { type: "created" } }))],
-  ["activity ID", (source: FakeSource) => source.send(notification("activities", { activity: { type: "updated", activityId: "run", environmentId: "0" } }))],
-  ["activity without ID", (source: FakeSource) => source.send(notification("activities", { activity: { type: "updated" } }))],
-  ["environments", (source: FakeSource) => source.send(notification("environments"))],
-  ["malformed JSON", (source: FakeSource) => source.raw("{")],
-  ["invalid envelope", (source: FakeSource) => source.send({})],
-  ["unknown channel", (source: FakeSource) => source.send(notification("unknown"))],
+  ["events", { history: true, discovery: false }, (source: FakeSource) => source.send(notification("events", { eventLog: { type: "created" } }))],
+  ["activity ID", { history: false, discovery: false }, (source: FakeSource) => source.send(notification("activities", { activity: { type: "updated", activityId: "run", environmentId: "0" } }))],
+  ["activity without ID", { history: false, discovery: true }, (source: FakeSource) => source.send(notification("activities", { activity: { type: "updated" } }))],
+  ["environments", { history: false, discovery: true }, (source: FakeSource) => source.send(notification("environments"))],
+  ["malformed JSON", { history: true, discovery: true }, (source: FakeSource) => source.raw("{")],
+  ["invalid envelope", { history: true, discovery: true }, (source: FakeSource) => source.send({})],
+  ["unknown channel", { history: true, discovery: true }, (source: FakeSource) => source.send(notification("unknown"))],
   // A heartbeat with a gap exercises recovery independently of channel invalidation.
-  ["sequence gap", (source: FakeSource) => source.send({ type: "heartbeat", timestamp: at }, "3")],
-  ["reopened source", (source: FakeSource) => source.open()],
-  ["CLOSED reconnect", async (source: FakeSource, sources: FakeSource[]) => {
+  ["sequence gap", { history: true, discovery: true }, (source: FakeSource) => source.send({ type: "heartbeat", timestamp: at }, "3")],
+  ["reopened source", { history: true, discovery: true }, (source: FakeSource) => source.open()],
+  ["CLOSED reconnect", { history: true, discovery: true }, async (source: FakeSource, sources: FakeSource[]) => {
     vi.useFakeTimers();
     source.failClosed();
     await vi.advanceTimersByTimeAsync(350);
@@ -87,7 +87,7 @@ function fixture(kind: "events" | "activities") {
 }
 
 for (const kind of ["events", "activities"] as const) {
-  it.each(cases)(`${kind}: %s separates post-notification reads from held pre-notification snapshots`, async (name, notify) => {
+  it.each(cases)(`${kind}: %s separates post-notification reads from held pre-notification snapshots`, async (_name, expected, notify) => {
     const f = fixture(kind);
     const pending: Promise<unknown>[] = [];
     try {
@@ -98,11 +98,8 @@ for (const kind of ["events", "activities"] as const) {
       await notify(f.sources[0]!, f.sources);
       const newer = f.read(); pending.push(newer);
       f.held[0]!();
-      const recovery = !["events", "activity ID", "activity without ID", "environments"].includes(name);
-      const historyChange = kind === "events" && (name === "events" || recovery);
-      const discovery = kind === "activities" && (recovery || name === "activity without ID" || name === "environments");
-      expect(await newer).toBe(historyChange || discovery ? "queued" : "running");
-      expect(await older).toBe(historyChange ? "queued" : "running");
+      expect(await newer).toBe((kind === "events" ? expected.history : expected.discovery) ? "queued" : "running");
+      expect(await older).toBe("running");
     } finally {
       f.cleanup();
       await Promise.allSettled(pending);

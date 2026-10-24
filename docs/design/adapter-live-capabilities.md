@@ -105,21 +105,18 @@ host advances independently. Known activity notifications read their targeted
 detail without waiting for discovery workers. Concurrent full activity reads
 share work. Known-run log/progress messages refresh only their targeted detail;
 they never invalidate discovery or event history. Unknown activities and terminal
-state changes can request one trailing discovery per load group. Notifications
-during that trailing read cannot queue another. Current callers settle with their
-current read; refresh callers may await the trailing read. Reconnect or detected
-loss starts fresh discovery so authentication rejection clears old runs without
-waiting for an older detail. Identity changes reject old-generation results;
-renewal recovery and fresh callers retain full-read sequence guards.
+state changes notify discovery; terminal `message` envelopes remain targeted.
+Reconnect or detected loss notifies the same discovery loader.
 
 Event history retains the complete history used by Dashboard and Activity Center.
-Pages request the effective size of 100 and run strictly sequentially. Concurrent
-full-history consumers share one load. Event stream messages carry invalidation
-only, so they cannot supply incremental event rows. Only events-channel messages
-and stream recovery invalidate history. Each load group permits at most one
-trailing full observation, even when more notifications arrive during it; pages
-remain sequential. HTTP and mapping failures remain visible and a deliberate retry can
-start a new load.
+Pages request the effective size of 100 and run strictly sequentially. Event stream
+messages carry invalidation only, so they cannot supply incremental event rows.
+Only events-channel messages and stream recovery invalidate history. HTTP and
+mapping failures remain visible and a deliberate retry can start a new load.
+
+Discovery, recovery and history share a generation-scoped single-flight policy: idle requests or notifications start a read; concurrent requests join it until a notification marks one pending read.
+Each start clears pending, so bursts queue one read and notifications during any trailing read can queue one more; callers after a notification await the next result, earlier callers receive the current result.
+Every start and publication checks the identity generation; replacement or logout cancels old waiters, rejects old results and prevents old trailing work from starting.
 
 ## Runtime command mapping
 

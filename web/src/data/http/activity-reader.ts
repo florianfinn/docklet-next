@@ -2,7 +2,7 @@
 // Revision: dd403606fbbf763798d43f4ee854adcb105e01b1
 // Retrieved: 2026-10-18
 // License: Apache-2.0
-// Deviations: Original focused activity source isolation and read-health projection; bounded discovery, one trailing refresh per group and fresh identity recovery (#211).
+// Deviations: Original focused activity source isolation and read-health projection; bounded discovery and shared generation-scoped notification coalescing (#211).
 
 import { CancelledError, isCancelledError } from "@tanstack/react-query";
 
@@ -11,6 +11,7 @@ import type { components } from "@/api/generated/schema";
 import type { ActionReadFailure, ActionReadHealth } from "../adapter";
 import { AdapterOutcomeError } from "../capability";
 import type { CodedActionRun } from "../message-code";
+import { createSingleFlight } from "./single-flight";
 import { mapActivityDetail } from "./map-dto";
 
 type Activity = components["schemas"]["ActivityActivity"];
@@ -51,13 +52,12 @@ const sorted = (runs: Iterable<CodedActionRun>) => [...runs].sort((a, b) => Date
 
 /** Source-local authority and sequence guards, shared by query and stream reads. */
 export function createActivityReader(reads: Reads) {
-  let pending: { generation: number; allowTrailing: boolean; recovery: boolean; promise: Promise<CodedActionRun[]>; next?: Promise<CodedActionRun[]> } | undefined;
   let current: CodedActionRun[] = [];
   let initialized = false;
   let health: ActionReadHealth = { failures: [] };
   let sequence = 0;
   let generation = 0;
-  let cancellationEpoch = 0;
+  let renewal = 0;
   let globalHealthSequence = 0;
   let globalFailure: ActionReadFailure | undefined;
   let discoverySequence = 0;
@@ -73,13 +73,15 @@ export function createActivityReader(reads: Reads) {
     reads.publish(initialized ? current : undefined, health);
   }
   async function source(hostId: string): Promise<SourceRead> {
+    const version = generation;
+    const credentials = renewal;
     let page: { items: Activity[]; incomplete: boolean };
     try { page = await reads.page(hostId); }
     catch (error) {
-      if (isUnauthorized(error)) throw error;
+      if (isUnauthorized(error) || isCancelledError(error)) throw error;
       return { hostId, runs: [], failure: failure(error, hostId) };
     }
-    const version = generation;
+    if (version !== generation || credentials !== renewal) throw new CancelledError();
     const results: { run?: CodedActionRun; failure?: ActionReadFailure }[] = [];
     let next = 0;
     async function readItem(item: Activity) {
@@ -88,28 +90,29 @@ export function createActivityReader(reads: Reads) {
         const run = mapped(await reads.detail(hostId, item.id), hostId, item.id);
         return { run: reads.project ? await reads.project(run) : run };
       } catch (error) {
-        if (isUnauthorized(error)) throw error;
+        if (isUnauthorized(error) || isCancelledError(error)) throw error;
         return { failure: failure(error, hostId) };
       }
     }
     // Each host advances independently; targeted notifications bypass discovery workers.
     await Promise.all(Array.from({ length: Math.min(4, page.items.length) }, async () => {
       while (next < page.items.length) {
-        if (version !== generation) throw new CancelledError();
+        if (version !== generation || credentials !== renewal) throw new CancelledError();
         const index = next++;
         results[index] = await readItem(page.items[index]!);
       }
     }));
     return { hostId, runs: results.flatMap((r) => r.run ? [r.run] : []), failure: results.find((r) => r.failure)?.failure ?? (page.incomplete ? { hostId, reason: "unavailable" } : undefined) };
   }
-  async function performLoad(rereadRenewal = true): Promise<CodedActionRun[]> {
+  async function performLoad(): Promise<CodedActionRun[]> {
     const started = ++sequence;
     const version = generation;
-    const epoch = cancellationEpoch;
+    const credentials = renewal;
     try {
       const hosts = new Set(await reads.hosts());
+      if (version !== generation || credentials !== renewal) throw new CancelledError();
       const batches = await Promise.all([...hosts].map(source));
-      if (version !== generation) throw new CancelledError();
+      if (version !== generation || credentials !== renewal) throw new CancelledError();
       // A raw run UUID belongs to one source. Reject conflicting claims without changing IDs.
       const owners = new Map(current.map((run) => [run.id, run.hostId]));
       const claims = new Map<string, Set<string>>();
@@ -161,47 +164,21 @@ export function createActivityReader(reads: Reads) {
       publishHealth();
       return sorted(observed.values());
     } catch (error) {
-      if (version !== generation) {
-        // One fresh read may replace work invalidated only by a valid renewal.
-        if (rereadRenewal && epoch === cancellationEpoch) return performLoad(false);
-        throw new CancelledError();
-      }
+      if (version !== generation) throw new CancelledError();
+      // Credential renewal preserves identity; replay inside this single flight.
+      if (credentials !== renewal) return performLoad();
       if (isCancelledError(error)) throw error;
       if (started > globalHealthSequence) {
         globalHealthSequence = started; globalFailure = failure(error);
-        if (isUnauthorized(error)) { ++generation; ++cancellationEpoch; initialized = true; current = []; failures.clear(); reads.unauthorized(); globalHealthSequence = started; globalFailure = failure(error); }
+        if (isUnauthorized(error)) { ++generation; flight.cancel(error); initialized = true; current = []; failures.clear(); reads.unauthorized(); globalHealthSequence = started; globalFailure = failure(error); }
         publishHealth();
       }
       throw error;
     }
   }
-  function startLoad(allowTrailing = true, recovery = false): Promise<CodedActionRun[]> {
-    const work: NonNullable<typeof pending> = { generation, allowTrailing, recovery, promise: performLoad() };
-    pending = work;
-    const clear = () => { if (pending === work) pending = undefined; };
-    void work.promise.then(clear, clear);
-    return work.promise;
-  }
-  function load(): Promise<CodedActionRun[]> {
-    if (pending?.generation === generation) return pending.next ?? pending.promise;
-    return startLoad();
-  }
-  function refresh(fresh = false): Promise<CodedActionRun[]> {
-    // Recovery must observe authentication even while an older detail is held.
-    if (pending?.generation !== generation) return startLoad(true, fresh);
-    if (fresh && !pending.recovery) return startLoad(true, true);
-    const work = pending;
-    if (!work.allowTrailing) return work.promise;
-    if (!work.next) {
-      work.next = work.promise.then(() => {
-        if (work.generation !== generation) throw new CancelledError();
-        if (pending && pending !== work) return pending.next ?? pending.promise;
-        return startLoad(false, work.recovery);
-      });
-      void work.next.catch(() => undefined);
-    }
-    return work.next;
-  }
+  const flight = createSingleFlight(performLoad, () => generation);
+  const load = flight.request;
+  const refresh = flight.notify;
   async function refreshOne(id: string, hostId: string, discoverOnTerminal = true): Promise<void> {
     const started = ++sequence;
     const version = generation;
@@ -221,7 +198,7 @@ export function createActivityReader(reads: Reads) {
       healthSequences.set(hostId, started);
       runSequences.set(id, started);
       if (isUnauthorized(error)) {
-        ++generation; ++cancellationEpoch; initialized = true; current = []; failures.clear(); reads.unauthorized();
+        ++generation; flight.cancel(error); initialized = true; current = []; failures.clear(); reads.unauthorized();
         globalHealthSequence = started; globalFailure = failure(error); publishHealth();
       }
       else { failures.set(hostId, failure(error, hostId)); publishHealth(); }
@@ -240,11 +217,14 @@ export function createActivityReader(reads: Reads) {
     runs: () => current,
     hasSnapshot: () => initialized,
     health: () => health,
-    invalidate(renewed = false) { ++generation; if (!renewed) ++cancellationEpoch; },
+    invalidate(renewed = false) {
+      if (renewed) ++renewal;
+      else { ++generation; flight.cancel(); }
+    },
     // Loss clears current consumers; a new identity waits for its first real observation.
     reset(hasSnapshot = true) {
       const wasInitialized = initialized;
-      ++generation; ++cancellationEpoch; initialized = hasSnapshot; current = []; health = { failures: [] }; globalFailure = undefined; knownHosts.clear();
+      ++generation; flight.cancel(); initialized = hasSnapshot; current = []; health = { failures: [] }; globalFailure = undefined; knownHosts.clear();
       failures.clear(); fullSequences.clear(); runSequences.clear(); healthSequences.clear();
       if (wasInitialized || hasSnapshot) publish();
     },

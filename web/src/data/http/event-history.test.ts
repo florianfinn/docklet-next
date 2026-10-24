@@ -54,18 +54,19 @@ it("loads all 792 events in eight strictly sequential effective pages shared by 
 
 it("coalesces a burst of event invalidations into one trailing complete reload", async () => {
   const f = fixture(); const reached = deferred<void>(); const gate = deferred<void>();
-  const stop = f.adapter.subscribeChanges(() => {}); f.source.open();
+  const stop = f.adapter.subscribeChanges(() => {});
   f.state.hold = async (response, index) => { if (index === 0) { reached.resolve(); await gate.promise; } return response; };
   try {
     const first = f.adapter.listEvents(); await reached.promise;
     f.state.rows[0] = { ...f.state.rows[0]!, id: "new-event" };
-    const pending = [first];
+    const pending = [];
     for (let i = 0; i < 20; i++) {
       f.source.onmessage?.({ data: JSON.stringify({ channel: "events", timestamp: at, eventLog: { type: "changed", timestamp: at } }), lastEventId: "" } as MessageEvent);
       pending.push(f.adapter.listEvents());
     }
     expect(f.calls).toHaveLength(1);
     gate.resolve();
+    expect((await first)[0]?.id).toBe("event-0");
     for (const result of await Promise.all(pending)) {
       expect(result).toHaveLength(792); expect(result[0]?.id).toBe("new-event");
     }
@@ -80,4 +81,29 @@ it("does not cache a failed full history as success or prevent a deliberate retr
   f.state.status = 200;
   expect(await f.adapter.listEvents()).toHaveLength(792);
   expect(f.calls).toHaveLength(9);
+});
+
+it("event arriving during trailing history queues one more sequential 792-row observation", async () => {
+  const f = fixture(); const firstGate = deferred<void>(); const secondGate = deferred<void>();
+  const firstReached = deferred<void>(); const secondReached = deferred<void>();
+  const stop = f.adapter.subscribeChanges(() => {});
+  f.state.hold = async (response, index) => {
+    if (index === 0) { firstReached.resolve(); await firstGate.promise; }
+    if (index === 8) { secondReached.resolve(); await secondGate.promise; }
+    return response;
+  };
+  const notify = () => f.source.onmessage?.({ data: JSON.stringify({ channel: "events", timestamp: at, eventLog: { type: "changed", timestamp: at } }), lastEventId: "" } as MessageEvent);
+  try {
+    const first = f.adapter.listEvents(); await firstReached.promise;
+    f.state.rows[0] = { ...f.state.rows[0]!, id: "second" }; notify();
+    const second = f.adapter.listEvents();
+    firstGate.resolve(); expect((await first)[0]?.id).toBe("event-0"); await secondReached.promise;
+    f.state.rows[0] = { ...f.state.rows[0]!, id: "third" };
+    for (let i = 0; i < 30; i++) notify();
+    const third = f.adapter.listEvents(); secondGate.resolve();
+    expect((await second)[0]?.id).toBe("second");
+    const rows = await third;
+    expect(rows).toHaveLength(792); expect(rows[0]?.id).toBe("third");
+    expect(f.calls).toHaveLength(24); expect(f.max()).toBe(1);
+  } finally { firstGate.resolve(); secondGate.resolve(); stop(); }
 });

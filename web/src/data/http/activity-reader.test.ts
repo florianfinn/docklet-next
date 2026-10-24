@@ -2,7 +2,7 @@
 // Revision: dd403606fbbf763798d43f4ee854adcb105e01b1
 // Retrieved: 2026-10-18
 // License: Apache-2.0
-// Deviations: Immediate authentication recovery across held full reads for #211; Original activity isolation, recovery and ordering regressions.
+// Deviations: Queued authentication recovery across held full reads for #211; Original activity isolation, recovery and ordering regressions.
 
 import { CancelledError } from "@tanstack/react-query";
 import { expect, it, vi } from "vitest";
@@ -170,20 +170,21 @@ it("a capability identity rejection stays an authentication failure", async () =
   f.fetcher.mockImplementation(async (input) => String(input).includes("/capabilities") ? json(null, 401) : original(input));
   await expect(f.adapter.listActions()).rejects.toMatchObject({ outcome: { status: 401 } });
 });
-it("authentication rejection clears observations and blocks an older successful read", async () => {
+it("authentication rejection clears observations after queued recovery and blocks late results", async () => {
   const f = activityFixture(); const runs = vi.fn(); const stop = f.adapter.subscribeActions(runs);
   try {
-    f.sources[0]!.open(); await vi.waitFor(() => expect(runs).toHaveBeenCalled());
-    const held = deferred<Response>(); let captured: Response | undefined;
-    f.state.hold = async (path, response) => path.endsWith("/bad/activities/run-bad") ? (captured = response, held.promise) : response;
-    const pending = f.adapter.listActions(); await vi.waitFor(() => expect(captured !== undefined).toBe(true));
+    await f.adapter.listActions();
+    const held = deferred<Response>(); const reached = deferred<Response>();
+    f.state.hold = async (path, response) => path.endsWith("/bad/activities/run-bad") ? (reached.resolve(response), held.promise) : response;
+    const pending = f.adapter.listActions(); const captured = await reached.promise;
     f.state.hold = undefined; f.state.failure = "page401"; f.sources[0]!.open();
-    const rejection = expect(pending).rejects.toBeInstanceOf(CancelledError);
-    await vi.waitFor(() => expect(runs.mock.lastCall?.[0]).toEqual([]));
-    const publications = runs.mock.calls.length;
-    held.resolve(captured!); await rejection;
-    expect(runs).toHaveBeenCalledTimes(publications);
+    const failure = f.adapter.listActions();
+    held.resolve(captured); await pending;
+    await expect(failure).rejects.toMatchObject({ outcome: { status: 401 } });
     expect(runs.mock.lastCall?.[0]).toEqual([]);
+    const publications = runs.mock.calls.length;
+    await Promise.resolve();
+    expect(runs).toHaveBeenCalledTimes(publications);
   } finally { stop(); }
 });
 it.each(["logout", "unsubscribe"])("ignores a held targeted completion after %s", async (boundary) => {

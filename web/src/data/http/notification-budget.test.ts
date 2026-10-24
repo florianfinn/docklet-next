@@ -6,9 +6,6 @@
 
 import { expect, it, vi } from "vitest";
 import { activityFixture, deferred } from "./activity-reader.test-support";
-import { createActivityReader } from "./activity-reader";
-import { activity, detail } from "./activity-reader.test-support";
-import { createEventReader } from "./event-reader";
 
 it("ten known-run progress messages remain targeted during one discovery and do not invalidate events", async () => {
   const f = activityFixture(); await f.adapter.listActions();
@@ -37,39 +34,6 @@ it("ten known-run progress messages remain targeted during one discovery and do 
     expect(requests.filter((p) => /\/activities\/[^?]+/.test(p))).toHaveLength(12);
     expect(changes.mock.calls.some(([topics]) => topics.includes("events"))).toBe(false);
   } finally { gate.resolve(); stops.forEach((stop) => stop()); vi.useRealTimers(); }
-});
-
-it("unknown activity bursts queue only one trailing discovery and current callers settle before it", async () => {
-  const first = deferred<void>(); const second = deferred<void>(); const reached = deferred<void>(); let count = 0;
-  const reads = { hosts: vi.fn(async () => ["good"]), page: vi.fn(async () => {
-    const n = ++count;
-    if (n === 1) await first.promise;
-    if (n === 2) { reached.resolve(); await second.promise; }
-    return { items: [activity("good")], incomplete: false };
-  }), detail: vi.fn(async () => detail("good")), publish: vi.fn(), unauthorized: vi.fn() };
-  const reader = createActivityReader(reads);
-  const current = reader.load();
-  const trailing = reader.refresh();
-  for (let i = 0; i < 10; i++) expect(reader.refresh()).toBe(trailing);
-  first.resolve();
-  expect(await current).toHaveLength(1);
-  await reached.promise;
-  const following = reader.load(); expect(following).not.toBe(current);
-  for (let i = 0; i < 10; i++) expect(reader.refresh()).toBe(following);
-  second.resolve(); await following;
-  expect(reads.hosts).toHaveBeenCalledTimes(2);
-});
-
-it("event notifications during the trailing history cannot queue a third history", async () => {
-  const gates = [deferred<string[]>(), deferred<string[]>()];
-  const read = vi.fn().mockReturnValueOnce(gates[0]!.promise).mockReturnValueOnce(gates[1]!.promise).mockResolvedValue(["unwanted"]);
-  const reader = createEventReader<string[]>(read, () => 0);
-  const current = reader.load(); reader.changed(); gates[0]!.resolve(["old"]);
-  await vi.waitFor(() => expect(read).toHaveBeenCalledTimes(2));
-  for (let i = 0; i < 10; i++) reader.changed();
-  gates[1]!.resolve(["fresh"]);
-  expect(await current).toEqual(["fresh"]);
-  expect(read).toHaveBeenCalledTimes(2);
 });
 
 it.each(["password", "login"])("activity after %s renewal does not invalidate event history, while an events message does", async (renewal) => {

@@ -42,10 +42,10 @@ it.each([false, true])("renewed ActivityCenter read (prior data=%s) revalidates,
     expect(query.state.fetchStatus).toBe("fetching");
     f.state.hold = undefined;
     await act(async () => { await f.adapter.changePassword("Example-password1!", "New-example-password2!"); f.sources.at(-1)!.open(); });
-    await screen.findByRole("alert");
     await act(async () => { held.resolve(captured); await pending.catch(() => undefined); });
     expect(query.state.fetchStatus).toBe("idle");
     expect(query.state.status).toBe("success");
+    await screen.findByRole("alert");
     expect(client.getQueryData(["actions"])).toEqual(await f.adapter.listActions());
     await waitFor(() => expect(retry().disabled).toBe(false));
     expect(screen.queryByText(/Example good/) !== null).toBe(true);
@@ -93,8 +93,14 @@ it.each(["logout", "unsubscribe", "activity401", "replacement"] as const)("held 
   const held = deferred<Response>(); const reached = deferred<Response>();
   try {
     f.state.hold = async (path, response) => path.endsWith("/good/activities/run-good") ? (reached.resolve(response), held.promise) : response;
+    if (boundary === "activity401") {
+      // The held observation predates the signal; the query waits for the fresh read.
+      void f.adapter.listActions();
+      await reached.promise;
+      f.sources[0]!.open();
+    }
     const pending = client.fetchQuery({ queryKey: ["actions"], queryFn: () => f.adapter.listActions() });
-    const rejected = expect(pending).rejects.toBeInstanceOf(CancelledError);
+    const rejected = boundary === "activity401" ? expect(pending).rejects.toMatchObject({ outcome: { status: 401 } }) : expect(pending).rejects.toBeInstanceOf(CancelledError);
     const response = await reached.promise; f.state.hold = undefined;
     if (boundary === "logout") await f.adapter.logout();
     if (boundary === "unsubscribe") { stop(); stop = () => {}; }
@@ -102,7 +108,10 @@ it.each(["logout", "unsubscribe", "activity401", "replacement"] as const)("held 
       vi.useFakeTimers();
       f.state.failure = "page401";
       f.sources[0]!.open();
-      await expect(f.adapter.listActions()).rejects.toMatchObject({ outcome: { status: 401 } });
+      const failure = f.adapter.listActions();
+      held.resolve(response);
+      await expect(failure).rejects.toMatchObject({ outcome: { status: 401 } });
+      await rejected;
       f.state.failure = "";
     }
     if (boundary === "replacement") { f.state.user.id = "next-operator"; await f.adapter.getCurrentUser(); }
