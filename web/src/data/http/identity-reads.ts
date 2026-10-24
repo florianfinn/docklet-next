@@ -2,11 +2,22 @@
 // Revision: f0447218f504f481d9e941df04bb6a19716ed6d7203060744204c44c3cc7cda8
 // Retrieved: 2026-10-20
 // License: Apache-2.0
-// Deviations: Original session-bound viewer and browser identity lifecycle implementation.
+// Deviations: Original session-bound viewer and browser identity lifecycle implementation; one safe GET transport retry within the abort lifetime (#211).
 
 import { CancelledError } from "@tanstack/react-query";
 
 const releases = new WeakMap<Response, () => void>();
+
+/** Retry only a GET rejected by fetch before any response, within its abort lifetime. */
+async function safeRead(fetcher: typeof fetch, input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
+  try { return await fetcher(input, init); }
+  catch (error) {
+    const method = (init?.method ?? (input instanceof Request ? input.method : "GET")).toUpperCase();
+    const signal = init?.signal ?? (input instanceof Request ? input.signal : undefined);
+    if (method !== "GET" || signal?.aborted || !(error instanceof TypeError || error instanceof DOMException && error.name === "NetworkError")) throw error;
+    return fetcher(input, init);
+  }
+}
 
 /** Status-only callers discard unread data and release request ownership immediately. */
 export function discardResponse(response: Response): void {
@@ -22,7 +33,7 @@ export function createIdentityReads(fetcher: typeof fetch) {
   const check = (version: number) => { if (version !== generation) throw new CancelledError(); };
   const fetch: typeof globalThis.fetch = async (input, init) => {
     // The public startup policy and CSRF bootstrap contain no session data.
-    if (new URL(input instanceof Request ? input.url : String(input), (typeof window === "undefined" ? "https://hub.example.com" : window.location.href)).pathname.endsWith("/auth/mode")) return fetcher(input, init);
+    if (new URL(input instanceof Request ? input.url : String(input), (typeof window === "undefined" ? "https://hub.example.com" : window.location.href)).pathname.endsWith("/auth/mode")) return safeRead(fetcher, input, init);
     const version = generation;
     const controller = new AbortController();
     const signal = init?.signal ?? (input instanceof Request ? input.signal : undefined);
@@ -31,7 +42,7 @@ export function createIdentityReads(fetcher: typeof fetch) {
     owned.add(controller);
     const release = () => { owned.delete(controller); signal?.removeEventListener("abort", abort); };
     try {
-      const response = await fetcher(input, { ...init, signal: controller.signal });
+      const response = await safeRead(fetcher, input, { ...init, signal: controller.signal });
       check(version);
       // Keep cancellation ownership through body consumption; streams are owned separately.
       const wrap = (value: Response): Response => {

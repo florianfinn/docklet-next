@@ -2,7 +2,7 @@
 // Revision: 2e2b3e5996afd98ee8edca0a8899947b62a2a339
 // Retrieved: 2026-10-24
 // License: Apache-2.0
-// Deviations: Original capability-gated network command transport for issue #204.
+// Deviations: Ambiguous Direct/Edge proxy write failures for #209; Original capability-gated network command transport for issue #204.
 
 import { isCancelledError } from "@tanstack/react-query";
 import type { components } from "@/api/generated/schema";
@@ -54,6 +54,9 @@ export function createNetworkCommands(options: NetworkTransportOptions): Pick<Do
     let body: { success?: boolean; data: T; code?: string };
     try { body = await response.json(); } catch (error) { if (isCancelledError(error)) throw error; throw uncertain(); }
     if (!response.ok) {
+      if (method !== "GET" && (response.status === 502 || response.status === 504) && body?.code === "agent.unavailable") {
+        throw new AdapterOutcomeError({ kind: "error", code: "network.outcome-unknown", status: response.status });
+      }
       const code = typeof body?.code === "string" ? body.code : "http.error";
       const key = code.startsWith("network.") ? code.slice("network.".length) : "";
       if (ERRORS.has(key)) throw new AdapterError(key as AdapterErrorCode);

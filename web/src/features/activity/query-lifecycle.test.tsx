@@ -42,10 +42,10 @@ it.each([false, true])("renewed ActivityCenter read (prior data=%s) revalidates,
     expect(query.state.fetchStatus).toBe("fetching");
     f.state.hold = undefined;
     await act(async () => { await f.adapter.changePassword("Example-password1!", "New-example-password2!"); f.sources.at(-1)!.open(); });
-    await screen.findByRole("alert");
     await act(async () => { held.resolve(captured); await pending.catch(() => undefined); });
     expect(query.state.fetchStatus).toBe("idle");
     expect(query.state.status).toBe("success");
+    await screen.findByRole("alert");
     expect(client.getQueryData(["actions"])).toEqual(await f.adapter.listActions());
     await waitFor(() => expect(retry().disabled).toBe(false));
     expect(screen.queryByText(/Example good/) !== null).toBe(true);
@@ -94,16 +94,25 @@ it.each(["logout", "unsubscribe", "activity401", "replacement"] as const)("held 
   try {
     f.state.hold = async (path, response) => path.endsWith("/good/activities/run-good") ? (reached.resolve(response), held.promise) : response;
     const pending = client.fetchQuery({ queryKey: ["actions"], queryFn: () => f.adapter.listActions() });
-    const rejected = expect(pending).rejects.toBeInstanceOf(CancelledError);
+    const rejected = boundary === "activity401" ? expect(pending).rejects.toMatchObject({ outcome: { status: 401 } }) : expect(pending).rejects.toBeInstanceOf(CancelledError);
     const response = await reached.promise; f.state.hold = undefined;
     if (boundary === "logout") await f.adapter.logout();
     if (boundary === "unsubscribe") { stop(); stop = () => {}; }
-    if (boundary === "activity401") { f.state.failure = "page401"; await expect(f.adapter.listActions()).rejects.toMatchObject({ outcome: { status: 401 } }); f.state.failure = ""; }
+    if (boundary === "activity401") {
+      vi.useFakeTimers();
+      f.state.failure = "page401";
+      f.sources[0]!.open();
+      const failure = f.adapter.listActions();
+      await expect(failure).rejects.toMatchObject({ outcome: { status: 401 } });
+      await rejected;
+      f.state.failure = "";
+    }
     if (boundary === "replacement") { f.state.user.id = "next-operator"; await f.adapter.getCurrentUser(); }
     await f.adapter.login("operator", "Example-password1!");
     const requests = f.requests.length;
     held.resolve(response); await rejected;
+    if (boundary === "activity401") await vi.advanceTimersByTimeAsync(0);
     expect(f.requests).toHaveLength(requests);
     expect(client.getQueryState(["actions"])).toMatchObject({ status: "error", fetchStatus: "idle", data: undefined });
-  } finally { f.state.hold = undefined; held.resolve(new Response()); stop(); client.clear(); }
+  } finally { if (boundary === "activity401") vi.useRealTimers(); f.state.hold = undefined; held.resolve(new Response()); stop(); client.clear(); }
 });

@@ -2,7 +2,7 @@
 // Revision: 28f968e594b730c4960f57296abf7c44158c28c5
 // Retrieved: 2026-10-18
 // License: Apache-2.0
-// Deviations: Original valid-session stream and query cancellation regressions.
+// Deviations: Original valid-session stream and query cancellation regressions; activity messages do not invalidate event history.
 
 import { CancelledError, QueryCache, QueryClient } from "@tanstack/react-query";
 import { expect, it, vi } from "vitest";
@@ -33,10 +33,11 @@ it.each(["initial discovery", "different identity", "login", "password change"])
     await f.adapter.getCurrentUser();
     expect(current.close).not.toHaveBeenCalled(); expect(f.sources).toHaveLength(2);
     const targetedBefore = f.requests.length;
+    changes.mockClear();
     f.state.details["run-good"]!.activity.status = "running"; current.send("run-good", "good");
     await vi.waitFor(() => expect(runs.mock.lastCall?.[0].find((r: { id: string }) => r.id === "run-good")?.status).toBe("running"));
     expect(f.requests.length - targetedBefore).toBe(1);
-    expect(changes.mock.lastCall?.[0]).toEqual(["events"]);
+    expect(changes.mock.calls).toEqual([]);
   } finally { stops.forEach((stop) => stop()); }
 });
 it.each(["logout", "rejected identity", "activity 401"])("%s suspends persistent listeners without unauthorized reconnect and login resumes", async (boundary) => {

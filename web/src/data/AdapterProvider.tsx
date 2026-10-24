@@ -10,6 +10,7 @@ import type { DockletAdapter, Topic } from "./adapter";
 import { runGateOf, withRunGate } from "./run-gate";
 import { AdapterContext } from "./use-adapter";
 import { identityLifetime } from "./identity-lifetime";
+import { registerReadConsumer } from "./read-consumers";
 import { queryKeys } from "./query-keys";
 import { useCurrentUser } from "./queries";
 
@@ -35,11 +36,13 @@ function ChangeBridge({ adapter }: { adapter: DockletAdapter }) {
   useEffect(
     () => {
       if (!enabled) return;
-      return adapter.subscribeChanges((topics) => {
+      const offDemand = registerReadConsumer(adapter.subscribeChanges, "events", () => client.getQueryCache().find({ queryKey: queryKeys.events, exact: true })?.isActive() ?? false);
+      const offChanges = adapter.subscribeChanges((topics) => {
         for (const topic of new Set(topics)) {
           for (const key of TOPIC_KEYS[topic]) void client.invalidateQueries({ queryKey: key });
         }
       });
+      return () => { offDemand(); offChanges(); };
     },
     [adapter, client, enabled],
   );

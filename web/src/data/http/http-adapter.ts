@@ -2,8 +2,9 @@
 // Revision: dfdfa084478d327818d8c57b0973d638f80861f6
 // Retrieved: 2026-10-15
 // License: Apache-2.0
-// Deviations: Original HTTP and SSE adapter for issue 38.
+// Deviations: Original HTTP and SSE adapter for issue 38; notification-scoped activity/event refreshes and effective sequential event pages (#211).
 
+import { hasReadConsumer } from "../read-consumers";
 import { CancelledError, isCancelledError, QueryClient } from "@tanstack/react-query";
 
 import type { components, operations, paths } from "@/api/generated/schema";
@@ -30,6 +31,7 @@ import { createRuntimeLogs } from "./logs";
 import { registerIdentityLifetime } from "../identity-lifetime";
 import { createIdentityReads } from "./identity-reads";
 import { createActivityReader } from "./activity-reader";
+import { createEventReader } from "./event-reader";
 import { createVolumePrune } from "./volume-prune";
 import { createNetworkCommands } from "./network-commands";
 import { createVolumeCommands } from "./volume-commands";
@@ -112,13 +114,13 @@ export function createHttpAdapter(options: HttpAdapterOptions = {}): DockletAdap
   let stopIdentityCheck: (() => void) | undefined;
   let reconnectTimer: ReturnType<typeof setTimeout> | undefined;
 
-  async function read<I extends ReadOperation>(operationId: I, route: keyof paths | string, query?: Record<string, string | number>, observeResponse?: (response: Response) => void): Promise<Body<I>> {
+  async function read<I extends ReadOperation>(operationId: I, route: keyof paths | string, query?: Record<string, string | number>, observeResponse?: (response: Response) => void, signal?: AbortSignal): Promise<Body<I>> {
     const params = new URLSearchParams();
     for (const [key, value] of Object.entries(query ?? {})) params.set(key, String(value));
     const url = `${baseUrl}${route}${params.size ? `?${params}` : ""}`;
     let response: Response;
     try {
-      response = await fetcher(url, { credentials: "same-origin", headers: { Accept: "application/json" } });
+      response = await fetcher(url, { credentials: "same-origin", headers: { Accept: "application/json" }, signal });
     } catch (error) { throw classifiedError(error); }
     let body: unknown;
     try { body = await response.json(); } catch (error) { throw classifiedError(error, response.status); }
@@ -140,6 +142,7 @@ export function createHttpAdapter(options: HttpAdapterOptions = {}): DockletAdap
   function invalidateEnvironments() { sharedReads.clear(); void environmentCache.invalidateQueries({ queryKey: environmentsKey }); }
   function suspendIdentity(retain = false, nextActive = false) {
     ++identityGeneration;
+    events.identityChanged();
     authenticated = nextActive;
     stopIdentityCheck?.(); stopIdentityCheck = undefined;
     identityCheck = undefined;
@@ -198,11 +201,12 @@ export function createHttpAdapter(options: HttpAdapterOptions = {}): DockletAdap
     if (!descriptor.available) throw unavailable(operationId, descriptor.resourceRef, descriptor.disabledReasonCode);
   }
 
-  async function page<I extends "listEnvironments" | "list-activities" | "listEvents">(operationId: I, route: string, limit: number, observeResponse?: (response: Response) => void): Promise<NonNullable<Body<I>["data"]>> {
+  async function page<I extends "listEnvironments" | "list-activities" | "listEvents">(operationId: I, route: string, limit: number, observeResponse?: (response: Response) => void, signal?: AbortSignal): Promise<NonNullable<Body<I>["data"]>> {
     const result: NonNullable<Body<I>["data"]> = [] as unknown as NonNullable<Body<I>["data"]>;
     let start = 0;
     for (;;) {
-      const body = await read(operationId, route, { start, limit, order: "desc" }, observeResponse);
+      if (signal?.aborted) throw new CancelledError();
+      const body = await read(operationId, route, { start, limit, order: "desc" }, observeResponse, signal);
       if (!Array.isArray(body.data) || !body.pagination || !Number.isInteger(body.pagination.totalItems)) throw classifiedError({ code: `${operationId}.invalid-page` });
       result.push(...body.data as never[]);
       start += body.data.length;
@@ -248,51 +252,54 @@ export function createHttpAdapter(options: HttpAdapterOptions = {}): DockletAdap
   });
   const runtime = createRuntimeCommands({ baseUrl, client, capability: getCapability, unauthorized: () => { suspendIdentity(); actions.reset(true); }, publish: (run) => actions.upsert(run) });
   const actions = createActivityReader({
+    hasConsumer: () => actionListeners.size > 0,
     retained: runtime.retained,
     project: runtime.project,
     hosts: async () => {
       await requireCapability("listActions");
       return [...new Set(["0", ...(await environments()).map((item) => item.id)])];
     },
-    page: async (hostId) => {
+    page: async (hostId, signal) => {
       let incomplete = false;
       const items = await page("list-activities", `/environments/${encodeURIComponent(hostId)}/activities`, 100, (response) => {
         if (response.headers.get("X-Docklet-Host-Reason") === "agent.unavailable") incomplete = true;
-      });
+      }, signal);
       return { items, incomplete };
     },
     unauthorized: suspendIdentity,
-    detail: async (hostId, id) => (await read("get-activity", `/environments/${encodeURIComponent(hostId)}/activities/${encodeURIComponent(id)}`, { limit: 500 })).data!,
+    detail: async (hostId, id, signal) => (await read("get-activity", `/environments/${encodeURIComponent(hostId)}/activities/${encodeURIComponent(id)}`, { limit: 500 }, undefined, signal)).data!,
     publish: (runs, health) => {
       healthListeners.forEach((listener) => listener(health));
       if (runs) actionListeners.forEach((listener) => listener(runs));
     },
   });
 
-  async function loadEvents() {
+  const events = createEventReader(async () => {
     await requireCapability("listEvents");
-    const events = await page("listEvents", "/events", 500);
-    try { return events.map(mapEvent); } catch (error) { throw classifiedError({ code: "listEvents.mapping-error", cause: error }); }
-  }
+    const rows = await page("listEvents", "/events", 100);
+    try { return rows.map(mapEvent); } catch (error) { throw classifiedError({ code: "listEvents.mapping-error", cause: error }); }
+  }, () => identityGeneration, () => hasReadConsumer(adapter.subscribeChanges, "events"));
+  const loadEvents = events.load;
 
-  function refreshRuns(): void {
+  function refreshRuns(recovery = false): void {
     if (actionListeners.size === 0) return;
-    void actions.load().catch((error) => { if (isCancelledError(error)) return; window.dispatchEvent(new CustomEvent("docklet:adapter-error", { detail: error })); });
+    void actions.refresh(recovery).catch((error) => { if (isCancelledError(error)) return; window.dispatchEvent(new CustomEvent("docklet:adapter-error", { detail: error })); });
   }
 
-  function refreshRun(activityId: string, environmentId?: string): void {
+  function refreshRun(activityId: string, environmentId?: string, discoverOnTerminal = true): void {
     if (environmentId && runtime.retained().some((run) => run.id === activityId && run.hostId === environmentId)) {
       void runtime.detail(environmentId, activityId).catch(() => undefined);
       return;
     }
     const previous = actions.runs().find((run) => run.id === activityId && run.hostId === environmentId);
     if (!previous || !environmentId) { refreshRuns(); return; }
-    void actions.refreshOne(activityId, environmentId).catch((error) => { if (!isCancelledError(error)) window.dispatchEvent(new CustomEvent("docklet:adapter-error", { detail: error })); });
+    void actions.refreshOne(activityId, environmentId, discoverOnTerminal).catch((error) => { if (!isCancelledError(error)) window.dispatchEvent(new CustomEvent("docklet:adapter-error", { detail: error })); });
   }
 
   function refreshSubscribed(): void {
     invalidateEnvironments();
-    refreshRuns();
+    events.changed();
+    refreshRuns(true);
     if (changeListeners.size) changeListeners.forEach((listener) => listener(["events", "hosts", "stacks", "containers", "images", "volumes", "topology"]));
   }
 
@@ -310,12 +317,12 @@ export function createHttpAdapter(options: HttpAdapterOptions = {}): DockletAdap
     sharedReads.clear();
     if (envelope.channel === "activities" && envelope.activity && typeof envelope.activity.type === "string") {
       const activityId = envelope.activity.activityId ?? envelope.activity.activity?.id;
-      if (activityId) refreshRun(activityId, envelope.activity.environmentId ?? envelope.activity.activity?.environmentId);
+      if (activityId) refreshRun(activityId, envelope.activity.environmentId ?? envelope.activity.activity?.environmentId, envelope.activity.type !== "message");
       else refreshRuns();
-      changeListeners.forEach((listener) => listener(["events"]));
       return;
     }
     if (envelope.channel === "events" && envelope.eventLog && typeof envelope.eventLog.type === "string") {
+      events.changed();
       changeListeners.forEach((listener) => listener(["events"]));
       return;
     }

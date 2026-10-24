@@ -2,7 +2,7 @@
 // Revision: 1e03c054f5d2c355759cb79cbedfaf97706d4be1
 // Retrieved: 2026-10-22
 // License: Apache-2.0
-// Deviations: Producer-shaped mutation fixtures and scoped admission tests for #181.
+// Deviations: Proxy failures preserve uncertain write outcomes (#209); Producer-shaped mutation fixtures and scoped admission tests for #181.
 
 import { describe, expect, it } from "vitest";
 import { volumeFixture } from "./volume-commands.test-support";
@@ -30,7 +30,7 @@ describe.each([false, true])("volume mutations (Edge=%s)", (edge) => {
     const f = volumeFixture(edge); f.state.status = Number(status); f.state.code = String(code);
     const failure = f.adapter.deleteVolume("host~data");
     if (status === 404) await expect(failure).rejects.toMatchObject({ code: "not-found" });
-    else await expect(failure).rejects.toMatchObject({ outcome: { status, code: code || "http.error" } });
+    else await expect(failure).rejects.toMatchObject({ outcome: { status, code: status === 502 || status === 504 ? "volume.outcome-unknown" : code || "http.error" } });
   });
   it.each([409, 500])("maps in-use conflicts, including the current producer's wrapped %s", async (status) => {
     const f = volumeFixture(edge); f.state.status = status; f.state.detail = "Failed to delete volume: failed to remove volume: volume is in use";
