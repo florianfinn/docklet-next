@@ -95,6 +95,7 @@ export const enActivity = {
     mismatch: "The request key does not match this caller or intent. No replacement command was sent.",
     ambiguous: "The command response was lost or invalid. Execution may have started. This target remains blocked in this browser; inspect activities and actual state. No replacement command will be sent.",
     parentUnresolved: "The server could not confirm the Compose parent. No command was admitted.", targetRemoved: "The target registration was removed. No command was sent.", targetChanged: "The target identity changed. Refresh its state before another deliberate action.",
+    volumeExists: "A volume with this name already exists on this host.",
     releaseInvalid: "Enter a recovery reason and confirm that the executor is stopped and Docker state was checked.", signIn: "Sign in again to access this action.", denied: "You do not have permission for this action.", requestFailed: "The request could not be completed. No successful execution is claimed.", openRun: "Open run",
   },
   gate: {
