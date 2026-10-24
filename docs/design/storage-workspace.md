@@ -5,6 +5,8 @@ web adapter. Volume CRUD and workspace access retain their existing permissions;
 backup/restore product features (M12), scanning (M11) and update watchers (M10)
 remain outside this contract.
 
+Explicit UI/API volume creation refuses an existing name on the target host with HTTP 409 `volume.exists`, while Compose deployments reuse existing volumes.
+
 ## Prune preview and execution
 
 `GET /environments/{id}/volumes/prune` (`plan-volume-prune`) requires

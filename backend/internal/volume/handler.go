@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; stateless prune HTTP contract; typed rename name conflicts.
+// Deviations: Local module namespace; stateless prune HTTP contract; typed API create and rename name conflicts.
 
 package volume
 
@@ -204,10 +204,14 @@ func (h *VolumeHandler) CreateVolume(ctx context.Context, input *CreateVolumeInp
 		},
 	}, func(runtimeCtx context.Context) error {
 		var createErr error
-		response, createErr = h.volumeService.CreateVolume(runtimeCtx, options, *user)
+		response, createErr = h.volumeService.createVolumeForAPI(runtimeCtx, options, *user)
 		return createErr
 	})
 	if err != nil {
+		var conflictErr *volume.ProjectVolumeRenameConflictError
+		if errors.As(err, &conflictErr) {
+			return nil, &volume.ExistsError{Status: http.StatusConflict, Title: "Conflict", Detail: "A volume with this name already exists", Code: "volume.exists"}
+		}
 		return nil, huma.Error500InternalServerError("Failed to create volume: " + err.Error())
 	}
 	response.ActivityID = mo.EmptyableToOption(strings.TrimSpace(activityID)).ToPointer()

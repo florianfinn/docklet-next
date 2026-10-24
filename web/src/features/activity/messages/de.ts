@@ -96,6 +96,7 @@ export const deActivity: typeof enActivity = {
     mismatch: "Der Anfrageschlüssel passt nicht zu diesem Aufrufer oder Vorhaben. Es wurde kein Ersatzbefehl gesendet.",
     ambiguous: "Die Befehlsantwort ging verloren oder war ungültig. Die Ausführung kann begonnen haben. Dieses Ziel bleibt in diesem Browser gesperrt; Aktivitäten und tatsächlichen Zustand prüfen. Es wird kein Ersatzbefehl gesendet.",
     parentUnresolved: "Der Server konnte den übergeordneten Compose-Stack nicht bestätigen. Kein Befehl wurde angenommen.", targetRemoved: "Die Zielregistrierung wurde entfernt. Kein Befehl wurde gesendet.", targetChanged: "Die Zielidentität hat sich geändert. Vor einer weiteren bewussten Aktion den Zustand aktualisieren.",
+    volumeExists: "Ein Volume mit diesem Namen existiert bereits auf diesem Host.",
     releaseInvalid: "Einen Grund eingeben und bestätigen, dass der Executor gestoppt und der Docker-Zustand geprüft wurde.", signIn: "Für diese Aktion erneut anmelden.", denied: "Für diese Aktion fehlt die Berechtigung.", requestFailed: "Die Anfrage konnte nicht abgeschlossen werden. Eine erfolgreiche Ausführung wird nicht bestätigt.", openRun: "Lauf öffnen",
   },
   gate: {

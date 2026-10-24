@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; prune preview registration; typed rename conflict schema.
+// Deviations: Local module namespace; prune preview registration; typed API create and rename conflict schemas.
 
 // Package volume owns Docker volumes: CRUD and pruning, the helper-container
 // file browser, backup and restore, and the HTTP surface for all of it.
@@ -150,6 +150,9 @@ func RegisterVolumes(
 	}, authz.PermVolumesRename, h.RenameVolume)
 	problem := api.OpenAPI().Components.Schemas.Schema(reflect.TypeFor[volume.ExistsError](), true, "")
 	generic := api.OpenAPI().Components.Schemas.Schema(reflect.TypeFor[huma.ErrorModel](), true, "")
+	api.OpenAPI().Paths["/environments/{id}/volumes"].Post.Responses["409"] = &huma.Response{
+		Description: "Volume name already exists", Content: map[string]*huma.MediaType{"application/problem+json": {Schema: &huma.Schema{OneOf: []*huma.Schema{problem, generic}}}},
+	}
 	api.OpenAPI().Paths["/environments/{id}/volumes/{volumeName}/rename"].Post.Responses["409"] = &huma.Response{
 		Description: "Volume name exists or volume is in use", Content: map[string]*huma.MediaType{"application/problem+json": {Schema: &huma.Schema{OneOf: []*huma.Schema{problem, generic}}}},
 	}
