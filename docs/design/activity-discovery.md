@@ -23,10 +23,11 @@ Generic detail and the specialized runtime detail route are different contracts.
 
 OpenAPI operations `list-activities` and `get-activity` expose these DTOs through
 `api/openapi.json` and generated `web/src/api/generated/schema.ts`. In the web,
-`http-adapter.ts` fetches every list page and supplies the reader. Currently
-`activity-reader.ts` calls `mapActivityDetail` once per listed row, then calls
-`runtime.project()`. The latter can fetch specialized runtime detail again. The
-four-worker limit bounds concurrency, but neither source of total request growth.
+`http-adapter.ts` requests one complete summary window per authorized host and
+supplies the reader. `activity-reader.ts` maps these list summaries directly.
+Opened detail views and explicit runtime follows own their separate targeted
+reads; discovery never calls the effectful `runtime.project()` or either detail
+route. Per-host flights and per-run demand bound overlapping reads.
 
 The actual consumers receive `CodedActionRun` through `listActions` and
 `subscribeActions`; `data/live.ts` shares the subscription and renders codes into

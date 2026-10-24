@@ -307,3 +307,61 @@ func TestActivitySummaryFullWindowLocalDirectEdge(t *testing.T) {
 		})
 	}
 }
+
+func TestActivitySummaryReceiptProjectionChunks(t *testing.T) {
+	f := b1Fixture(t)
+	require.NoError(t, f.service.BindActivityOwner())
+	items := make([]activitytypes.Activity, 1101)
+	for i := range items {
+		items[i] = activitytypes.Activity{ID: fmt.Sprintf("receipt-query-%d", i), EnvironmentID: "0"}
+	}
+	queries := 0
+	require.NoError(t, f.store.svc.db.Callback().Query().After("gorm:query").Register("receipt-chunk-proof", func(tx *gorm.DB) {
+		if strings.Contains(tx.Statement.SQL.String(), "runtime_receipts") {
+			queries++
+			require.LessOrEqual(t, len(tx.Statement.Vars), 100)
+		}
+	}))
+	require.NoError(t, f.store.svc.projectRuntimeListInternal(t.Context(), items))
+	require.Equal(t, 12, queries)
+}
+
+func TestActivitySummaryRetainsCommonTraceBeforeDetailBodyPressureTrim(t *testing.T) {
+	f := b1Fixture(t)
+	require.NoError(t, f.service.BindActivityOwner())
+	c := f.command()
+	id := b3Admit(t, f, c)
+	b3Phase(t, f, c, id, "executing")
+	services := make([]string, 14000)
+	for i := range services {
+		services[i] = fmt.Sprintf("service-%05d-%040d", i, i)
+	}
+	output := RuntimeOutputLines{{OutputLine: activitytypes.OutputLine{Timestamp: f.store.now, Stream: "stdout", Text: strings.Repeat("x", 235000)}, OutputSeq: 1}}
+	require.NoError(t, f.store.svc.db.Model(&Activity{}).Where("id = ?", id).Updates(map[string]any{"affected_services": servicesJSONInternal(services), "runtime_output": output}).Error)
+	require.NoError(t, f.store.svc.db.Model(&RuntimeReceipt{}).Where("run_id = ?", id).Update("output_next_seq", 2).Error)
+	messages := make([]ActivityMessage, 256)
+	for i := range messages {
+		messages[i] = ActivityMessage{ActivityID: id, Step: fmt.Sprintf("phase-%03d-%s", i, strings.Repeat("x", 512)), Code: "activity.message", Level: activitytypes.MessageLevelInfo, Message: "phase"}
+		messages[i].ID = fmt.Sprintf("body-step-%03d", i)
+		messages[i].CreatedAt = f.store.now.Add(time.Duration(i) * time.Second)
+	}
+	require.NoError(t, f.store.svc.db.CreateInBatches(messages, 100).Error)
+	items, _, err := f.store.svc.ListActivitiesPaginated(t.Context(), "0", pagination.QueryParams{Limit: -1})
+	require.NoError(t, err)
+	summaries, err := f.store.svc.listSummariesInternal(t.Context(), items, true, nil)
+	require.NoError(t, err)
+	require.Len(t, summaries, 1)
+	var row RuntimeReceipt
+	require.NoError(t, f.store.svc.db.First(&row, "run_id = ?", id).Error)
+	detail, err := runtimeDetailSnapshotTxInternal(f.store.svc.db.DB, &row, false)
+	require.NoError(t, err)
+	require.NotEmpty(t, detail.StepTrace)
+	require.Less(t, len(detail.StepTrace), len(summaries[0].StepTrace))
+	require.Empty(t, detail.Messages)
+	require.Equal(t, summaries[0].StepTrace[len(summaries[0].StepTrace)-1], detail.StepTrace[len(detail.StepTrace)-1])
+	encoded, err := json.Marshal(detail)
+	require.NoError(t, err)
+	require.LessOrEqual(t, len(encoded), activitytypes.RuntimeMaxBodyBytes-1024)
+	require.Len(t, detail.Output, 1)
+	require.Equal(t, output[0].Text, detail.Output[0].Text)
+}

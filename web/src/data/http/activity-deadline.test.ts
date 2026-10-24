@@ -9,7 +9,7 @@ import { expect, it, vi } from "vitest";
 import { activityDeadline, activityTimeout } from "./activity-deadline";
 import { createSingleFlight } from "./single-flight";
 import { createActivityReader } from "./activity-reader";
-import { activity, detail, deferred } from "./activity-reader.test-support";
+import { activity, detail, deferred, activityFixture } from "./activity-reader.test-support";
 
 it("aborts a held response body at 40 seconds with a typed timeout rather than cancellation", async () => {
   vi.useFakeTimers(); const reached = deferred<void>(); let signal: AbortSignal | undefined;
@@ -88,4 +88,26 @@ it("an explicit pending aggregate waiter expires 90 seconds after joining, witho
     await vi.advanceTimersByTimeAsync(1); expect(settled).toBe(true); expect(await failed).toMatchObject({ outcome: { code: "activity.read-timeout" } });
     const retry = reader.load(); expect(retry).not.toBe(later); membership[1]!.resolve(["good"]); expect(await retry).toHaveLength(1);
   } finally { reader.invalidate(); vi.useRealTimers(); }
+});
+
+it("membership prerequisites abort held capability reads and permit a later caller", async () => {
+  const f = activityFixture(); const original = f.fetcher.getMockImplementation()!;
+  const held = deferred<void>(), reached = deferred<void>(); let first = true; let signal: AbortSignal | undefined;
+  f.fetcher.mockImplementation(async (input, init) => {
+    const response = await original(input, init);
+    if (first && String(input).includes("/capabilities")) { first = false; signal = init?.signal ?? undefined; reached.resolve();
+      await Promise.race([held.promise, new Promise<never>((_, reject) => {
+        const abort = () => reject(new CancelledError()); signal?.addEventListener("abort", abort, { once: true });
+        if (signal?.aborted) abort();
+      })]); }
+    return response;
+  });
+  vi.useFakeTimers();
+  try {
+    const pending = f.adapter.listActions(); const failed = pending.catch((error: unknown) => error); await reached.promise;
+    await vi.advanceTimersByTimeAsync(40_000); expect(await failed).toMatchObject({ outcome: { code: "activity.read-timeout" } });
+    expect(signal?.aborted).toBe(true);
+    expect(await f.adapter.listActions()).toHaveLength(2);
+    expect(f.requests.filter((path) => path.includes("/capabilities"))).toHaveLength(2);
+  } finally { held.resolve(); vi.useRealTimers(); }
 });

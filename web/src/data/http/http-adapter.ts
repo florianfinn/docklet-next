@@ -137,7 +137,7 @@ export function createHttpAdapter(options: HttpAdapterOptions = {}): DockletAdap
   }
 
   function read<I extends ReadOperation>(operationId: I, route: keyof paths | string, query?: Record<string, string | number>, observeResponse?: (response: Response) => void, signal?: AbortSignal): Promise<Body<I>> {
-    return operationId === "listEvents" || operationId === "get-capabilities"
+    return operationId === "listEvents"
       ? readBody(operationId, route, query, observeResponse, signal)
       : activityDeadline((owned) => readBody(operationId, route, query, observeResponse, owned), signal);
   }
