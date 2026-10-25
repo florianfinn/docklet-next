@@ -839,22 +839,22 @@ func TestResolveRemoteRunConfirmsOwnerAfterLostResponse(t *testing.T) {
 func TestResolveRunChecksCurrentOperatorPermission(t *testing.T) {
 	db := setupSettingsTestDBInternal(t)
 	svc := &JobService{runs: newJobCoordinatorForTestInternal(t, db)}
-	run, err := svc.runs.Submit(t.Context(), scheduler.Request{JobID: "auto-update", Trigger: "scheduled"})
+	run, err := svc.runs.Submit(t.Context(), scheduler.Request{JobID: "scheduled-prune", Trigger: "scheduled"})
 	require.NoError(t, err)
 	require.NoError(t, svc.runs.UpdateRun(t.Context(), run, func(current *scheduler.Run) error {
 		current.Status = scheduler.NeedsAttention
 		current.Outcome = scheduler.Outcome{Status: scheduler.NeedsAttention, Message: "interrupted"}
 		return nil
 	}))
-	_, err = svc.ResolveRun(t.Context(), "0", "auto-update", run.ID, "operator")
+	_, err = svc.ResolveRun(t.Context(), "0", "scheduled-prune", run.ID, "operator")
 	require.ErrorContains(t, err, "permission denied")
 	otherEnvironment := context.WithValue(t.Context(), middleware.ContextKeyUserPermissions, authz.EnvironmentPermissionSet("different"))
-	_, err = svc.ResolveRun(otherEnvironment, "0", "auto-update", run.ID, "operator")
+	_, err = svc.ResolveRun(otherEnvironment, "0", "scheduled-prune", run.ID, "operator")
 	require.ErrorContains(t, err, "permission denied")
 	authorized := context.WithValue(t.Context(), middleware.ContextKeyUserPermissions, authz.EnvironmentPermissionSet("0"))
-	_, err = svc.ResolveRun(authorized, "0", "auto-update", run.ID, "")
+	_, err = svc.ResolveRun(authorized, "0", "scheduled-prune", run.ID, "")
 	require.ErrorContains(t, err, "identity")
-	resolved, err := svc.ResolveRun(authorized, "0", "auto-update", run.ID, "operator")
+	resolved, err := svc.ResolveRun(authorized, "0", "scheduled-prune", run.ID, "operator")
 	require.NoError(t, err)
 	require.Equal(t, scheduler.Canceled, resolved.Status)
 	require.Equal(t, "interrupted", resolved.Outcome.Message)
