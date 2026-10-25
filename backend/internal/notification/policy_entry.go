@@ -22,8 +22,7 @@ func (s *NotificationService) NotifyImagePolicyCandidate(ctx context.Context, en
 	return response.Delivered, err
 }
 func policyDeliveryError(ctx context.Context, err error) error {
-	if _, ok := ctx.Value(imagePolicyEntryKey{}).(string)
- ok && err != nil {
+	if _, ok := ctx.Value(imagePolicyEntryKey{}).(string); ok && err != nil {
 		return errors.New("Notification delivery failed")
 	}
 	return err

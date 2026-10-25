@@ -40,8 +40,7 @@ func (s *JobService) imagePolicyJob(env, job string) (string, bool, error) {
 	return updater.ImagePolicyJobKey(env, job), true, nil
 }
 func projectImagePolicyRun(run st.Run) st.Run {
-	if env, kind, owned := updater.ParseImagePolicyJob(run.JobID)
- owned {
+	if env, kind, owned := updater.ParseImagePolicyJob(run.JobID); owned {
 		run.JobID = kind
 		run.EnvironmentID = env
 		if run.ActivityID != "" {
@@ -65,8 +64,7 @@ func (s *JobService) Submit(ctx context.Context, request st.Request) (st.Run, er
 	if e != nil || !grants.Allows(authz.PermJobsManage, request.EnvironmentID) {
 		return st.Run{}, huma.Error403Forbidden("Job grants required")
 	}
-	if _, e = s.imagePolicies.ImagePolicySchedule(ctx, request.EnvironmentID)
- e != nil {
+	if _, e = s.imagePolicies.ImagePolicySchedule(ctx, request.EnvironmentID); e != nil {
 		return st.Run{}, e
 	}
 	request.JobID = id

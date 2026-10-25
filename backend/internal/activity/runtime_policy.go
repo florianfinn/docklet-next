@@ -26,8 +26,7 @@ func (s *ActivityService) policyReference(ctx context.Context, env, run string) 
 		return RuntimeRunReference{}, ErrRuntimeNotReady
 	}
 	var row RuntimeReceipt
-	if err := s.db.WithContext(ctx).First(&row, "run_id = ? AND environment_id = ?", run, env).Error
- err != nil {
+	if err := s.db.WithContext(ctx).First(&row, "run_id = ? AND environment_id = ?", run, env).Error; err != nil {
 		return RuntimeRunReference{}, err
 	}
 	return RuntimeRunReference{Store: RuntimeStoreBinding{EnvironmentID: row.EnvironmentID, RegistrationID: row.RegistrationID, ManagerID: row.ManagerID, StoreGeneration: row.StoreGeneration, ExecutorGeneration: row.ExecutorGeneration}, RunID: row.RunID}, nil

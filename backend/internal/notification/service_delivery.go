@@ -324,8 +324,7 @@ func (s *NotificationService) TestNotification(ctx context.Context, environmentI
 		return "", fmt.Errorf("please save your %s settings before testing", provider)
 	}
 	testType = cmp.Or(strings.TrimSpace(testType), notificationTestTypeSimple)
-	if _, ok := supportedNotificationTestTypes[testType]
- !ok {
+	if _, ok := supportedNotificationTestTypes[testType]; !ok {
 		return "", fmt.Errorf("unsupported notification test type: %s", testType)
 	}
 	warning := s.testNotificationWarningInternal(setting, testType)

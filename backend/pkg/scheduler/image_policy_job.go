@@ -53,15 +53,13 @@ func RefreshImagePolicyJobs(ctx context.Context, controller st.JobScheduler, own
 		for _, kind := range []string{"image-polling", "auto-update"} {
 			job := &ImagePolicyJob{Owner: owner, EnvironmentID: host, Kind: kind}
 			wanted[job.Name()] = true
-			if err = controller.AddJob(ctx, job)
- err != nil {
+			if err = controller.AddJob(ctx, job); err != nil {
 				return err
 			}
 		}
 	}
 	for _, job := range controller.ListRegisteredJobs() {
-		if _, _, owned := updater.ParseImagePolicyJob(job.Name())
- owned && !wanted[job.Name()] {
+		if _, _, owned := updater.ParseImagePolicyJob(job.Name()); owned && !wanted[job.Name()] {
 			controller.RemoveJob(ctx, job.Name())
 		}
 	}

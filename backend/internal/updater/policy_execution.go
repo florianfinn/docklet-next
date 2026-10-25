@@ -79,8 +79,7 @@ func (s *UpdaterService) RunImagePolicyHost(ctx context.Context, env, job string
 		return st.Outcome{Status: st.Failed, Code: "FORBIDDEN"}, nil
 	}
 	var policies []policy.Policy
-	if err = p.store.DB.WithContext(ctx).Where("environment_id = ? AND registration_id = ?", env, row.RegistrationID).Order("target_id").Find(&policies).Error
- err != nil {
+	if err = p.store.DB.WithContext(ctx).Where("environment_id = ? AND registration_id = ?", env, row.RegistrationID).Order("target_id").Find(&policies).Error; err != nil {
 		return st.Outcome{Status: st.Failed, Code: "update.persistence-failed"}, nil
 	}
 	out := st.Outcome{Status: st.Succeeded}
@@ -94,8 +93,7 @@ func (s *UpdaterService) RunImagePolicyHost(ctx context.Context, env, job string
 		}
 		target, uncertain := s.runImagePolicyTarget(ctx, p, one, previous.ID, job)
 		out.Targets = append(out.Targets, target)
-		if err = jobcontext.Progress(ctx, target)
- err != nil {
+		if err = jobcontext.Progress(ctx, target); err != nil {
 			return policyResult(out), err
 		}
 		if uncertain {
@@ -108,8 +106,7 @@ func (s *UpdaterService) RunImagePolicyHost(ctx context.Context, env, job string
 }
 func (s *UpdaterService) runImagePolicyTarget(ctx context.Context, p *imagePolicyService, one policy.Policy, jobRun, job string) (st.TargetOutcome, bool) {
 	skip := func(code string) (st.TargetOutcome, bool) {
-		if err := p.store.DB.WithContext(ctx).Model(&policy.Policy{}).Where("id = ? AND revision = ?", one.ID, one.Revision).Update("code", code).Error
- err != nil {
+		if err := p.store.DB.WithContext(ctx).Model(&policy.Policy{}).Where("id = ? AND revision = ?", one.ID, one.Revision).Update("code", code).Error; err != nil {
 			return policyTarget(one.TargetID, st.Failed, "update.persistence-failed"), false
 		}
 		return policyTarget(one.TargetID, st.Skipped, code), false
@@ -202,8 +199,7 @@ func (s *UpdaterService) runImagePolicyTarget(ctx context.Context, p *imagePolic
 	}
 	target, uncertain := imagePolicySnapshotTarget(one.TargetID, accepted.ActivityID, snapshot)
 	if !uncertain {
-		if err := p.store.DB.WithContext(ctx).Model(&policy.Child{}).Where("id = ? AND status = ?", child.ID, "admitted").Update("status", "settled").Error
- err != nil {
+		if err := p.store.DB.WithContext(ctx).Model(&policy.Child{}).Where("id = ? AND status = ?", child.ID, "admitted").Update("status", "settled").Error; err != nil {
 			return policyTargetWithActivity(one.TargetID, accepted.ActivityID, st.Failed, "update.persistence-failed"), true
 		}
 	}
@@ -226,8 +222,7 @@ func (s *UpdaterService) imagePolicyHostHold(ctx context.Context, p *imagePolicy
 		if unknown {
 			return &target, nil
 		}
-		if err := p.store.DB.WithContext(ctx).Model(&policy.Child{}).Where("id = ? AND status = ?", child.ID, "admitted").Update("status", "settled").Error
- err != nil {
+		if err := p.store.DB.WithContext(ctx).Model(&policy.Child{}).Where("id = ? AND status = ?", child.ID, "admitted").Update("status", "settled").Error; err != nil {
 			return nil, err
 		}
 	}
@@ -284,8 +279,7 @@ func (s *UpdaterService) ReconcileImagePolicyHost(ctx context.Context, env strin
 		return st.Outcome{Status: st.Skipped, Code: "update.agent-local-job-disabled"}, nil
 	}
 	var children []policy.Child
-	if err = p.store.DB.WithContext(ctx).Where("job_run_id = ?", previous.ID).Order("id").Find(&children).Error
- err != nil {
+	if err = p.store.DB.WithContext(ctx).Where("job_run_id = ?", previous.ID).Order("id").Find(&children).Error; err != nil {
 		return st.Outcome{Status: st.Failed, Code: "update.persistence-failed"}, nil
 	}
 	out := st.Outcome{Status: st.Failed, Code: "runtime.interrupted", Targets: previous.Outcome.Targets}
@@ -294,8 +288,7 @@ func (s *UpdaterService) ReconcileImagePolicyHost(ctx context.Context, env strin
 	}
 	for _, child := range children {
 		var one policy.Policy
-		if err = p.store.DB.WithContext(ctx).First(&one, "id = ?", child.PolicyID).Error
- err != nil {
+		if err = p.store.DB.WithContext(ctx).First(&one, "id = ?", child.PolicyID).Error; err != nil {
 			continue
 		}
 		target, _ := s.reconcileImagePolicyChild(ctx, p, env, one.TargetID, child)
@@ -332,13 +325,11 @@ func (s *UpdaterService) observeImagePolicy(ctx context.Context, p *imagePolicyS
 			return nil, imageDTO.Failure("update.check-unavailable", 503)
 		}
 		version := info.LatestVersion
-		if parsed, e := semver.NewVersion(version)
- e == nil {
+		if parsed, e := semver.NewVersion(version); e == nil {
 			version = parsed.String()
 		}
 		if version == "" {
-			if tagged, ok := named.(reference.Tagged)
- ok {
+			if tagged, ok := named.(reference.Tagged); ok {
 				version = tagged.Tag()
 			}
 		}
@@ -369,8 +360,7 @@ func (s *UpdaterService) deliverImagePolicyEntry(ctx context.Context, p *imagePo
 		if changed.Error != nil {
 			return changed.Error
 		}
-		if err := tx.First(&notice, "id = ?", c.EntryID).Error
- err != nil {
+		if err := tx.First(&notice, "id = ?", c.EntryID).Error; err != nil {
 			return err
 		}
 		if changed.RowsAffected == 0 {

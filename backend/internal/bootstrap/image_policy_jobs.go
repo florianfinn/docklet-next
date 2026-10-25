@@ -24,8 +24,7 @@ func registerImagePolicyJobs(params registerJobsParams) error {
 	}
 	params.Updater.ConfigureImagePolicies(params.Environment, refresh)
 	params.Updater.ConfigureSystemImageHints(params.Environment, params.Version)
-	if err := refresh(params.AppCtx)
- err != nil {
+	if err := refresh(params.AppCtx); err != nil {
 		cancel()
 		return err
 	}
@@ -44,8 +43,7 @@ func registerImagePolicyJobs(params registerJobsParams) error {
 					}
 					// A failed refresh leaves existing jobs guarded by current registration;
 					// the next environment change or schedule write retries registration.
-					if err := refresh(lifetime)
- err != nil {
+					if err := refresh(lifetime); err != nil {
 						slog.WarnContext(lifetime, "Failed to refresh hub image policy schedules")
 					}
 				}

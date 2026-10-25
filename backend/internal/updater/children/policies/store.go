@@ -148,8 +148,7 @@ func (s Store) RecordCandidate(ctx context.Context, policy Policy, c dto.UpdateC
 		return c, nil
 	}
 	repository := c.ImageRef
-	if named, err := reference.ParseNormalizedNamed(repository)
- err == nil {
+	if named, err := reference.ParseNormalizedNamed(repository); err == nil {
 		repository = reference.TrimNamed(named).String()
 	}
 	id := Key(policy.EnvironmentID, policy.RegistrationID, policy.TargetIdentity, repository, c.Platform, c.Version, c.Digest)
