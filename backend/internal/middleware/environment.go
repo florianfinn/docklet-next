@@ -182,6 +182,25 @@ func (m *EnvironmentMiddleware) Handle(c *echo.Context, next echo.HandlerFunc) e
 	// of their own, so authorization for proxied requests must happen here,
 	// mirroring the per-operation RequirePermission checks used for the local
 	// environment.
+	suffix := m.buildResourceSuffix(c.Request().URL.Path, envID)
+	if strings.HasPrefix(suffix, "/updater/") && (strings.Contains(suffix, "/restore-points") || strings.HasSuffix(suffix, "/baseline")) {
+		host := strings.HasPrefix(suffix, "/updater/restore-points")
+		grants := []string{authz.PermProjectsRead, authz.PermImageUpdatesRead}
+		if c.Request().Method == http.MethodDelete {
+			grants = []string{authz.PermImageUpdatesCheck, authz.PermImagesPull, authz.PermActivitiesRead, authz.PermProjectsDeploy, authz.PermProjectsUpdate}
+		}
+		if host {
+			if perms == nil || !perms.IsGlobalAdmin() {
+				return echo.NewHTTPError(http.StatusForbidden, "Host administrator required")
+			}
+			grants = []string{authz.PermImageUpdatesRead}
+		}
+		for _, grant := range grants {
+			if perms == nil || !perms.Allows(grant, envID) {
+				return echo.NewHTTPError(http.StatusForbidden, "Restore point grants required")
+			}
+		}
+	}
 	if m.proxyPermissionDenied(c, perms, envID) {
 		return c.JSON(http.StatusForbidden, map[string]any{
 			"success": false,
@@ -535,6 +554,9 @@ func (m *EnvironmentMiddleware) hasResourcePath(c *echo.Context, envID string) b
 }
 
 func isManagementPathInternal(method, suffix string) bool {
+	if method == http.MethodPost && strings.HasPrefix(suffix, "/updater/") && (strings.HasSuffix(suffix, "/update") || strings.HasSuffix(suffix, "/restore")) {
+		return true
+	}
 	if suffix == "/runtime-runs" || strings.HasPrefix(suffix, "/runtime-runs/") || suffix == "/runtime-registration" || suffix == "/runtime-target" {
 		return true
 	}

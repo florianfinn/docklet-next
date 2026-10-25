@@ -11,6 +11,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	imageDTO "github.com/florianfinn/docklet-next/types/image"
 
 	"strings"
 
@@ -42,13 +43,9 @@ import (
 	"github.com/florianfinn/docklet-next/backend/pkg/utils/imageref"
 )
 
-// UpdateServiceImages persists and redeploys the selected Compose service images.
+// UpdateServiceImages refuses the retired engine-owned Compose update path.
 func (s *UpdaterService) UpdateServiceImages(ctx context.Context, projectID string, changes map[string]updatertypes.ServiceImageChange) error {
-	if s.deps.Projects == nil {
-		return errors.New("project service unavailable")
-	}
-	s.appendAutoUpdateActivityMessageInternal(ctx, activityIDFromContextInternal(ctx), "Updating Compose image references", "Persisting image updates", 50)
-	return s.deps.Projects.UpdateProjectServiceImages(ctx, projectID, changes, s.deps.SystemUser)
+	return imageDTO.Failure("update.path-retired", 409)
 }
 
 func (s *UpdaterService) scopedPendingRecordsInternal(ctx context.Context, records []imageupdate.ImageUpdateRecord) ([]updater.ImageUpdateRecord, error) {

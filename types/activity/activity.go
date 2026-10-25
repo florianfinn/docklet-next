@@ -6,7 +6,10 @@
 
 package activity
 
-import "time"
+import (
+	"github.com/florianfinn/docklet-next/types/updater"
+	"time"
+)
 
 type Status string
 
@@ -22,6 +25,8 @@ const (
 	TypeImageUpdateCheck  Type = "image_update_check"
 	TypeProjectPull       Type = "project_pull"
 	TypeProjectBuild      Type = "project_build"
+	TypeProjectUpdate     Type = "project_update"
+	TypeProjectRestore    Type = "project_restore"
 	TypeProjectDeploy     Type = "project_deploy"
 	TypeProjectRedeploy   Type = "project_redeploy"
 	TypeProjectDown       Type = "project_down"
@@ -53,6 +58,7 @@ type Type string
 type MessageLevel string
 
 type Activity struct {
+	ImageLifecycle *updater.LifecycleResult `json:"imageLifecycle,omitempty"`
 	*RuntimeKnowledge
 	ID                    string         `json:"id"`
 	EnvironmentID         string         `json:"environmentId"`

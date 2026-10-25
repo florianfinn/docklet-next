@@ -680,7 +680,7 @@ func TestTriggerByToken_AcceptsImmediatelyAndRecordsTriggerTime(t *testing.T) {
 	svc := newTestWebhookService(db) // action services are nil; the async action fails, acceptance must not
 
 	rawToken := "arc_wh_ccddeeff01020304aabbccdd0102030405060708090a0b0c0d0e0f1011121314"
-	wh := insertWebhookDirect(t, ctx, db, rawToken, WebhookTargetTypeContainer, WebhookActionTypeUpdate, "container-id", types.LocalDockerEnvironmentID)
+	wh := insertWebhookDirect(t, ctx, db, rawToken, WebhookTargetTypeContainer, WebhookActionTypeStart, "container-id", types.LocalDockerEnvironmentID)
 
 	// Valid token is accepted synchronously; the action itself runs (and here
 	// fails against nil services) in the background without surfacing.

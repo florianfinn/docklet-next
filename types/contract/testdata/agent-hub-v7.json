@@ -9,7 +9,9 @@
     "redeploy-project",
     "start-container",
     "stop-container",
-    "restart-container"
+    "restart-container",
+    "update-project",
+    "restore-project"
   ],
   "runtimeRoutes": [
     "POST /api/environments/0/runtime-registration",
@@ -495,11 +497,11 @@
       "guarded-images",
       "write-only-registries",
       "read-only-update-info",
-      "hub-agent-upgrade-cap"
+      "hub-agent-upgrade-cap",
+      "stack-update",
+      "restore"
     ],
     "inactiveCapabilities": [
-      "stack-update",
-      "restore",
       "auto-apply",
       "policies",
       "hub-image-schedules"
@@ -742,6 +744,7 @@
       "environmentId",
       "error",
       "id",
+      "imageLifecycle",
       "latestMessage",
       "messageCode",
       "metadata",
@@ -768,6 +771,7 @@
       "durationMs",
       "endedAt",
       "error",
+      "imageLifecycle",
       "latestMessage",
       "messageCode",
       "metadata",
@@ -818,5 +822,145 @@
         ]
       }
     }
+  },
+  "imageLifecycle": {
+    "targetKinds": [
+      "project"
+    ],
+    "routes": [
+      {
+        "method": "GET",
+        "path": "/environments/{id}/updater/projects/{projectId}/baseline",
+        "operationId": "get-update-baseline",
+        "sha256": "272a23db153b9a580ea95c0e47611421104bec1ed6f2f5a2e5b28bc5691594a4"
+      },
+      {
+        "method": "POST",
+        "path": "/environments/{id}/updater/projects/{projectId}/update",
+        "operationId": "update-project-images",
+        "sha256": "48da79944df3ba2ebf28a46a9fea8e458a75e6c97ead8e6a127e9f5fd10c1e3c"
+      },
+      {
+        "method": "GET",
+        "path": "/environments/{id}/updater/restore-points",
+        "operationId": "list-host-restore-points",
+        "sha256": "860a516a25b0d8f2abecce3c5c7e5ef37425a546b92f9100f67281787953b1fe"
+      },
+      {
+        "method": "DELETE",
+        "path": "/environments/{id}/updater/restore-points/{pointId}",
+        "operationId": "delete-host-restore-point",
+        "sha256": "ec2d3e4860c53f9c3d9c301fdb3f14b908dd401fc031d63aa9e82782ce490737"
+      },
+      {
+        "method": "GET",
+        "path": "/environments/{id}/updater/{kind}/{targetId}/restore-points",
+        "operationId": "list-restore-points",
+        "sha256": "e7aa68e1badc68c3cbb648f9b11c2dc3b441245df30c111280ccb6c6c35a9a25"
+      },
+      {
+        "method": "DELETE",
+        "path": "/environments/{id}/updater/{kind}/{targetId}/restore-points/{pointId}",
+        "operationId": "delete-restore-point",
+        "sha256": "e3f4344764505b264695905321b482fb37eeebf37b16144496087b2a58f84200"
+      },
+      {
+        "method": "POST",
+        "path": "/environments/{id}/updater/{kind}/{targetId}/restore-points/{pointId}/restore",
+        "operationId": "restore-update",
+        "sha256": "92d5f6dd0245a3a3441c086a28a3c7f531415c94d11d4baa2c3f19d6c7df3239"
+      }
+    ],
+    "schemas": {
+      "UpdaterLifecycleRequest": {
+        "sha256": "b4d8a19a85ffe9b3007138541f73aeae4663a616e873966ef66d3d9c10035d48"
+      },
+      "UpdaterLifecycleIntent": {
+        "sha256": "95b3ad522a90dad33ce7fce766698a967da467cfc014e20b46156b224fba7e17"
+      },
+      "UpdaterImageSelection": {
+        "sha256": "bafcb6906dff24c4e7ad9df5bc930991979ee412d335c9eb6869102d920f52df"
+      },
+      "UpdaterLifecycleResult": {
+        "sha256": "9f1349f2122ae2c06414394edf7e30bf9f5743453a9e23d6a4ba2f9c7dfc35a0"
+      },
+      "UpdaterRestorePoint": {
+        "sha256": "8bd6f69c9f5ecd4029da2c0064adb949174de6c0848a88c8ef9ea382273cb99b"
+      },
+      "UpdaterPointImage": {
+        "sha256": "d6b87f8a92b5310b7860c3706ea4ea9298249c4e70760122be31079509d44d2c"
+      },
+      "UpdaterBaselineStatus": {
+        "sha256": "0f40a739261f7c2543471d138a62fcb585fca52f5a372eb9810a6f88752d728f"
+      },
+      "ActivityRuntimeOptions": {
+        "sha256": "3936ce01fd00c25c8ee9aa3a320dba75e60aa1b546ce46c4d5327d9ba6ab1951"
+      },
+      "ActivityRuntimeTargetRequest": {
+        "sha256": "712c5ed295d4baed3976e93f520786bd5fd4b3387f2a69abe22428a4bfd6355b"
+      },
+      "ActivityRuntimeTargetMetadata": {
+        "sha256": "5ce176d5300f3f1bd0a8cc94afeae2ad44deff1d6878db90d538a046faa2899b"
+      }
+    },
+    "edgeRoutes": [
+      {
+        "method": "POST",
+        "path": "/api/environments/{id}/updater/projects/{projectId}/check",
+        "command": "updater.project.check"
+      },
+      {
+        "method": "GET",
+        "path": "/api/environments/{id}/updater/projects/{projectId}/baseline",
+        "command": "updater.project.baseline"
+      },
+      {
+        "method": "GET",
+        "path": "/api/environments/{id}/updater/{kind}/{targetId}/restore-points",
+        "command": "updater.restore.list"
+      },
+      {
+        "method": "DELETE",
+        "path": "/api/environments/{id}/updater/{kind}/{targetId}/restore-points/{pointId}",
+        "command": "updater.restore.delete"
+      },
+      {
+        "method": "GET",
+        "path": "/api/environments/{id}/updater/restore-points",
+        "command": "updater.restore.host-list"
+      },
+      {
+        "method": "DELETE",
+        "path": "/api/environments/{id}/updater/restore-points/{pointId}",
+        "command": "updater.restore.host-delete"
+      }
+    ],
+    "retiredRoutes": [
+      {
+        "method": "POST",
+        "path": "/environments/{id}/containers/{containerId}/update",
+        "operationId": "update-container",
+        "sha256": "1626f1f9bac335057bd44221d3e7618c18fe637b3b6d2f0fffc50ab090683ccb"
+      },
+      {
+        "method": "POST",
+        "path": "/environments/{id}/projects/{projectId}/update-services",
+        "operationId": "update-project-services",
+        "sha256": "852b6d3cdadf4857496a0d1463c263f1b94587ca927fb364312ea3df5e17aa30"
+      },
+      {
+        "method": "POST",
+        "path": "/environments/{id}/updater/run",
+        "operationId": "run-updater",
+        "sha256": "63e508da7ecec75439a19b7ef20f710b4a31c822a6d23750858438e1fc34d4aa"
+      }
+    ],
+    "runtimePreflightSha256": "63841bcfb8378c57a25010ca34631269f84503e90c64c7de77ad172ee8481561",
+    "retainedPoints": 5,
+    "volumeDataIncluded": false,
+    "normalComposePullsTakeLease": false,
+    "retiredUpdateCode": "update.path-retired",
+    "observedIdentity": "target identity, container IDs/names, image IDs, service presence and running state",
+    "resultSettlement": "atomic with terminal receipt; failed persistence never replays Docker"
   }
 }

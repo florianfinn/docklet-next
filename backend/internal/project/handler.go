@@ -734,19 +734,7 @@ func (h *ProjectHandler) RestartProject(ctx context.Context, input *RestartProje
 
 // UpdateProjectServices pulls the latest images for the given services and recreates them.
 func (h *ProjectHandler) UpdateProjectServices(ctx context.Context, input *UpdateProjectServicesInput) (*handlerutil.Out[base.MessageResponse], error) {
-	var serviceNames []string
-	if input.Body != nil {
-		serviceNames = input.Body.Services
-	}
-
-	response, err := h.runProjectActivityActionResponseInternal(ctx, input.EnvironmentID, input.ProjectID, h.updateProjectServicesActivityConfigInternal(serviceNames))
-	if err != nil {
-		return nil, err
-	}
-
-	return &handlerutil.Out[base.MessageResponse]{
-		Body: response,
-	}, nil
+	return nil, lifecycleFailure("update.path-retired")
 }
 
 type projectActivityActionConfigInternal struct {

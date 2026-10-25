@@ -15,11 +15,12 @@ import (
 	activitylib "github.com/florianfinn/docklet-next/backend/pkg/libarcane/activity"
 	"github.com/florianfinn/docklet-next/backend/pkg/utils"
 	activitytypes "github.com/florianfinn/docklet-next/types/activity"
+	updaterDTO "github.com/florianfinn/docklet-next/types/updater"
 	"gorm.io/gorm"
 )
 
 // RuntimeExecutor must return only after its workflow and all known producers
-// and children have joined. The fixed seven-service adapter supplies this port;
+// and children have joined. The runtime service adapter supplies this port;
 // returning an error does not imply rollback or verified daemon state.
 type RuntimeExecutor interface {
 	ExecuteRuntime(context.Context, RuntimeCommand, io.Writer) error
@@ -92,21 +93,50 @@ func (s *RuntimeService) runLocalInternal(owner *runtimeOwnerInternal) {
 		execute, phaseErr = s.acquireLocalSlotInternal(owner)
 	}
 	var outputErr error
+	var imageResult *updaterDTO.LifecycleResult
 	if execute && phaseErr == nil && owner.ctx.Err() == nil {
 		output, err := s.captureInternal(owner.ctx, owner.id.RunID)
 		if err != nil {
 			phaseErr = err
 		} else {
 			// The executor's return is its child/producer barrier, never a timer.
-			phaseErr = s.localExecution.Executor.ExecuteRuntime(owner.ctx, owner.command.command, output)
+			command := owner.command.command
+			command.ProposedRunID = owner.id.RunID
+			execution := updaterDTO.WithResultSink(owner.ctx, func(result updaterDTO.LifecycleResult) { owned := result; imageResult = &owned })
+			phaseErr = s.localExecution.Executor.ExecuteRuntime(execution, command, output)
 			outputErr = runtimeCaptureFailureInternal(output, phaseErr)
 			outputErr = errors.Join(outputErr, runtimeFinishOutputInternal(owner.ctx, output))
 		}
 	}
 	s.activity.runningMu.Lock()
 	defer s.activity.runningMu.Unlock()
+	var uncertain interface{ RuntimeUncertain() bool }
+	if errors.As(phaseErr, &uncertain) && uncertain.RuntimeUncertain() {
+		owner.err = s.ownerTransactionInternal(owner.ctx, func(tx *gorm.DB, now time.Time) error {
+			if imageResult != nil {
+				if err := runtimeImageResultTx(tx, owner.id.RunID, imageResult); err != nil {
+					return err
+				}
+			}
+			_, err := runtimeEvidenceTxInternal(tx, now, owner.id, runtimeEvidenceInternal{State: "unknown", UnknownReason: new("runtime.outcome-unknown"), StartedAt: owner.startedAt})
+			return err
+		})
+		if owner.err == nil {
+			delete(s.owners, owner.id.RunID)
+			owner.cancel(nil)
+			owner.deadlineCancel()
+			s.activity.releaseSlotInternal(owner.id.RunID)
+		}
+		return
+	}
 	owner.result = runtimeResultInternal(owner, phaseErr, outputErr, runtimeTimeInternal(s.activity.nowInternal()))
+	owner.result.imageLifecycle = imageResult
 	_, owner.err = s.settleOwnerInternal(owner)
+	if owner.err == nil {
+		if settled, ok := s.localExecution.Executor.(interface{ RuntimeSettled(context.Context) }); ok {
+			settled.RuntimeSettled(context.WithoutCancel(owner.ctx))
+		}
+	}
 }
 
 // Every phase rereads durable cancellation under the same serialization used by

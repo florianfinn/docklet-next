@@ -302,6 +302,7 @@ type runtimeServicesFixture struct {
 	docker     *docker.DockerClientService
 	activity   *activity.ActivityService
 	projects   *project.ProjectService
+	images     *image.ImageService
 	containers *container.ContainerService
 	adapter    *activity.RuntimeServiceAdapter
 	runtime    *activity.RuntimeService
@@ -346,7 +347,7 @@ func newRuntimeServicesFixture(t *testing.T, constructRuntime ...bool) *runtimeS
 	containers := container.NewContainerService(events, dockerService, images, settingsService, projects)
 	adapter := activity.NewRuntimeServiceAdapter(projects, containers)
 
-	fixture := &runtimeServicesFixture{t: t, db: db, settings: settingsService, activity: activityService, projects: projects, containers: containers, adapter: adapter, docker: dockerService, http: httpFixture, dbPath: dbPath, root: root}
+	fixture := &runtimeServicesFixture{t: t, db: db, settings: settingsService, activity: activityService, projects: projects, images: images, containers: containers, adapter: adapter, docker: dockerService, http: httpFixture, dbPath: dbPath, root: root}
 	if len(constructRuntime) > 0 && !constructRuntime[0] {
 		return fixture
 	}

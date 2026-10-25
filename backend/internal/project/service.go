@@ -21,6 +21,7 @@ import (
 	"github.com/florianfinn/docklet-next/backend/internal/kv"
 	"github.com/florianfinn/docklet-next/backend/internal/project/children/deployment"
 	projectdetails "github.com/florianfinn/docklet-next/backend/internal/project/children/details"
+	"github.com/florianfinn/docklet-next/backend/internal/project/children/lifecycle"
 	"github.com/florianfinn/docklet-next/backend/internal/project/children/listing"
 	projectsync "github.com/florianfinn/docklet-next/backend/internal/project/children/sync"
 	"github.com/florianfinn/docklet-next/backend/internal/project/children/update"
@@ -78,7 +79,9 @@ type ProjectService struct {
 
 	// syncMu serializes SyncProjectsFromFileSystem: its discovery walk and its
 	// cleanup pass must not interleave with another run's.
-	syncMu sync.Mutex
+	syncMu         sync.Mutex
+	contentMu      sync.Mutex
+	lifecycleCheck func(context.Context, string) (*projecttypes.UpdateInfo, error)
 
 	composeNames  composeNameCache
 	parsedCompose projecttypes.ComposeCache[*types.Project]
@@ -549,6 +552,9 @@ func (s *ProjectService) refreshComposeProjectName(ctx context.Context, proj *Pr
 }
 
 func (s *ProjectService) UpdateProjectServices(ctx context.Context, projectID string, servicesToUpdate []string, user usertypes.Actor, discoverTags bool) error {
+	if discoverTags {
+		return lifecycleFailure("update.path-retired")
+	}
 	proj, err := s.getMutableProject(ctx, projectID)
 	if err != nil {
 		return err
@@ -720,6 +726,10 @@ func (s *ProjectService) UnarchiveProject(ctx context.Context, projectID string,
 }
 
 func (s *ProjectService) DeployProject(ctx context.Context, projectID string, user usertypes.Actor, options *projecttypes.DeployOptions) error {
+	var deployedEvidence *lifecycle.Snapshot
+	if s.db.Migrator().HasTable(&lifecycle.Baseline{}) {
+		_ = s.lifecycleStore().Invalidate(ctx, projectID)
+	}
 	projectFromDb, err := s.getMutableProject(ctx, projectID)
 	switch {
 	case errors.Is(err, common.ErrProjectArchived):
@@ -756,6 +766,12 @@ func (s *ProjectService) DeployProject(ctx context.Context, projectID string, us
 			model, _, loadComposeProjectForProjectErr := s.loadComposeProjectForProject(ctx, projectFromDb, deployment.PrepareProjectBindDirectories(projectFromDb.Path))
 			if loadComposeProjectForProjectErr == nil {
 				closeSuppression = s.eventService.BeginComposeSuppressionWindow(model.Name)
+				if s.db.Migrator().HasTable(&lifecycle.Baseline{}) {
+					deployedEvidence, _ = s.lifecycleInputs(ctx, projectFromDb)
+					if deployedEvidence != nil && lifecycle.Hash(deployedEvidence.Model) != lifecycle.Hash(model) {
+						deployedEvidence = nil
+					}
+				}
 			}
 			return model, loadComposeProjectForProjectErr
 		},
@@ -792,6 +808,7 @@ func (s *ProjectService) DeployProject(ctx context.Context, projectID string, us
 		return err
 	}
 
+	s.captureDeployedBaseline(ctx, projectID, deployedEvidence)
 	metadata := database.JSON{"action": "deploy", "projectID": projectID, "projectName": projectModel.Name}
 	s.logProjectEvent(ctx, event.EventTypeProjectDeploy, projectID, projectModel.Name, user, metadata, "could not log project deployment action")
 

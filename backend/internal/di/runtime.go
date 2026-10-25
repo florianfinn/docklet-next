@@ -19,6 +19,7 @@ import (
 	"github.com/florianfinn/docklet-next/backend/internal/settings"
 	"github.com/florianfinn/docklet-next/backend/pkg/libarcane/edge"
 	activitytypes "github.com/florianfinn/docklet-next/types/activity"
+	updaterDTO "github.com/florianfinn/docklet-next/types/updater"
 	"go.uber.org/fx"
 )
 
@@ -99,7 +100,17 @@ func provideRuntimeInternal(ctx context.Context, lc fx.Lifecycle, service *activ
 		return runtimeResult{}, err
 	}
 	httpService, err := activity.NewRuntimeHTTPService(runtime, activity.RuntimeHTTPPorts{ApplicationContext: runtimeCtx, Agent: cfg.AgentMode,
-		Store: func(ctx context.Context, id string) (activity.RuntimeStoreBinding, error) {
+		PrepareLifecycle: func(ctx context.Context, id string, target activity.RuntimeTarget, store activity.RuntimeStoreBinding, request updaterDTO.LifecycleRequest) (*updaterDTO.LifecycleIntent, error) {
+			if id == "0" {
+				return adapter.PrepareImageLifecycle(ctx, target.ID, store.RegistrationID, request)
+			}
+			sender, identity, err := remoteIdentity(ctx, id)
+			if err != nil {
+				return nil, err
+			}
+			metadata, err := sender.Resolve(ctx, activitytypes.RuntimeTargetRequest{Registration: identity, Target: target, Lifecycle: &request})
+			return metadata.Lifecycle, err
+		}, Store: func(ctx context.Context, id string) (activity.RuntimeStoreBinding, error) {
 			if id == "0" {
 				return runtime.LocalStore(), nil
 			}

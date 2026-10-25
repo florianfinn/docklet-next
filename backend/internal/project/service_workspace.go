@@ -42,6 +42,8 @@ import (
 )
 
 func (s *ProjectService) UpdateProject(ctx context.Context, projectID string, name, composeContent, envContent, overrideContent *string, user usertypes.Actor) (*Project, error) {
+	s.contentMu.Lock()
+	defer s.contentMu.Unlock()
 	proj, projectsDirectory, err := s.getProjectForUpdate(ctx, projectID)
 	if err != nil {
 		return nil, err
@@ -495,6 +497,8 @@ func (s *ProjectService) UpdateProjectWorkspace(
 	uploads map[int][]byte,
 	user usertypes.Actor,
 ) (*workspacetypes.Workspace, error) {
+	s.contentMu.Lock()
+	defer s.contentMu.Unlock()
 	if err := workspacepkg.ValidateUpdateManifest(manifest.FileTreeRevision, len(manifest.FileChanges), 500); err != nil {
 		return nil, common.Classify(common.ErrProjectWorkspaceBadRequest, err)
 	}

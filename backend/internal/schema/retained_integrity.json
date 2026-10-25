@@ -1,5 +1,30 @@
 {
   "columns": [
+    {"table":"image_lifecycle_runs","column":"settled","notNull":true},
+    {"table": "deployment_baselines", "column": "target_id", "notNull": true},
+    {"table": "deployment_baselines", "column": "target_identity", "notNull": true},
+    {"table": "deployment_baselines", "column": "registration_id", "notNull": true},
+    {"table": "deployment_baselines", "column": "source_run_id", "notNull": true},
+    {"table": "deployment_baselines", "column": "revision", "notNull": true},
+    {"table": "deployment_baselines", "column": "payload", "notNull": true},
+    {"table": "deployment_baselines", "column": "available", "notNull": true},
+    {"table": "restore_points", "column": "id", "notNull": true},
+    {"table": "restore_points", "column": "target_id", "notNull": true},
+    {"table": "restore_points", "column": "target_identity", "notNull": true},
+    {"table": "restore_points", "column": "registration_id", "notNull": true},
+    {"table": "restore_points", "column": "source_run_id", "notNull": true},
+    {"table": "restore_points", "column": "created_at", "notNull": true},
+    {"table": "restore_points", "column": "source_state", "notNull": true},
+    {"table": "restore_points", "column": "revision", "notNull": true},
+    {"table": "restore_points", "column": "payload", "notNull": true},
+    {"table": "restore_points", "column": "available", "notNull": true},
+    {"table": "image_lifecycle_runs", "column": "id", "notNull": true},
+    {"table": "image_lifecycle_runs", "column": "point_id", "notNull": true},
+    {"table": "image_lifecycle_runs", "column": "selected_point_id", "notNull": true},
+    {"table": "image_lifecycle_runs", "column": "had_effect", "notNull": true},
+    {"table": "runtime_image_intents", "column": "run_id", "notNull": true},
+    {"table": "runtime_image_intents", "column": "payload", "notNull": true},
+
     {"table": "api_key_permissions", "column": "created_at", "default": "(CAST((julianday('now') - 2440587.5) * 86400000000 AS INTEGER))", "notNull": true},
     {"table": "api_keys", "column": "created_at", "default": "(CAST((julianday('now') - 2440587.5) * 86400000000 AS INTEGER))", "notNull": true},
     {"table": "api_keys", "column": "kind", "default": "'scoped'", "notNull": true},
@@ -228,9 +253,14 @@
     {"table": "webhooks", "column": "token_prefix", "notNull": true}
   ],
   "constraints": {
+    "deployment_baselines": ["CHECK (available IN (0,1))"],
+    "restore_points": ["CHECK (available IN (0,1))", "CHECK (source_state IN ('settled','partial-source'))"],
+    "image_lifecycle_runs": ["CHECK (had_effect IN (0,1))", "CHECK (settled IN (0,1))"],
+    "runtime_image_intents": [],
+
     "image_protections": ["CHECK (reason IN ('system', 'restore-point', 'active-update'))", "CHECK (length(image_id) > 0)", "CHECK (length(owner_id) > 0)"],
     "runtime_executor_binding": ["CHECK (id = 1)", "CHECK (length(manager_id) > 0)", "CHECK (length(registration_id) > 0)"],
-    "runtime_receipts": ["CHECK (length(run_id) > 0 AND length(store_generation) > 0 AND length(manager_id) > 0 AND length(registration_id) > 0 AND length(environment_id) > 0 AND length(executor_generation) > 0 AND length(request_digest) > 0)", "CHECK (kind IN ('receipt','not_received'))", "CHECK (cancel_requested IN (0,1) AND (cancel_requested = 1) = (cancel_requested_at IS NOT NULL))", "CHECK ((kind = 'receipt' AND caller_id IS NOT NULL AND length(caller_id) > 0 AND operation_id IS NOT NULL AND target_kind IS NOT NULL AND target_id IS NOT NULL AND length(target_id) > 0 AND gate_scope IS NOT NULL AND length(gate_scope) > 0 AND gate_key IS NOT NULL AND length(gate_key) > 0 AND admitted_at IS NOT NULL AND dispatch_state IS NOT NULL AND executor_state IS NOT NULL) OR (kind = 'not_received' AND caller_id IS NULL AND caller_name IS NULL AND operation_id IS NULL AND target_kind IS NULL AND target_id IS NULL AND target_name IS NULL AND parent_project_id IS NULL AND gate_scope IS NULL AND gate_key IS NULL AND admitted_at IS NULL AND dispatch_state IS NULL AND dispatched_at IS NULL AND executor_state IS NULL AND unknown_reason IS NULL AND executor_result_code IS NULL AND executor_error IS NULL AND executor_started_at IS NULL AND executor_settled_at IS NULL AND cancel_requested = 0 AND last_reconciled_at IS NULL AND hub_disposition IS NULL AND settled_at IS NOT NULL))", "CHECK (operation_id IS NULL OR (target_kind = 'stack' AND operation_id IN ('deploy-project','down-project','restart-project','redeploy-project')) OR (target_kind = 'container' AND operation_id IN ('start-container','stop-container','restart-container')))", "CHECK (parent_project_id IS NULL OR (target_kind = 'container' AND length(parent_project_id) > 0))", "CHECK (dispatch_state IS NULL OR dispatch_state IN ('pending','dispatching','accepted'))", "CHECK ((dispatch_state IS NOT NULL AND dispatch_state IN ('dispatching','accepted')) = (dispatched_at IS NOT NULL))", "CHECK (executor_state IS NULL OR executor_state IN ('pending','accepted','executing','unknown','success','failed','cancelled'))", "CHECK ((executor_state IS NOT NULL AND executor_state = 'unknown') = (unknown_reason IS NOT NULL) AND (unknown_reason IS NULL OR length(unknown_reason) > 0))", "CHECK ((executor_state IS NOT NULL AND executor_state IN ('success','failed','cancelled')) = (executor_settled_at IS NOT NULL))", "CHECK ((executor_result_code IS NULL AND executor_error IS NULL) OR executor_settled_at IS NOT NULL)", "CHECK (hub_disposition IS NULL OR hub_disposition IN ('cancelled','interrupted','released','refused','not_received'))", "CHECK ((hub_disposition IS NULL AND hub_disposition_by IS NULL AND hub_disposition_reason IS NULL AND hub_disposition_at IS NULL) OR (hub_disposition IS NOT NULL AND hub_disposition_by IS NOT NULL AND length(hub_disposition_by) > 0 AND hub_disposition_reason IS NOT NULL AND length(hub_disposition_reason) > 0 AND hub_disposition_at IS NOT NULL))", "CHECK (release_acknowledged IN (0,1) AND (release_acknowledged = 1) = (hub_disposition IS NOT NULL AND hub_disposition = 'released'))", "CHECK ((settled_at IS NOT NULL) = (kind = 'not_received' OR executor_settled_at IS NOT NULL OR hub_disposition IS NOT NULL))"],
+    "runtime_receipts": ["CHECK (length(run_id) > 0 AND length(store_generation) > 0 AND length(manager_id) > 0 AND length(registration_id) > 0 AND length(environment_id) > 0 AND length(executor_generation) > 0 AND length(request_digest) > 0)", "CHECK (kind IN ('receipt','not_received'))", "CHECK (cancel_requested IN (0,1) AND (cancel_requested = 1) = (cancel_requested_at IS NOT NULL))", "CHECK ((kind = 'receipt' AND caller_id IS NOT NULL AND length(caller_id) > 0 AND operation_id IS NOT NULL AND target_kind IS NOT NULL AND target_id IS NOT NULL AND length(target_id) > 0 AND gate_scope IS NOT NULL AND length(gate_scope) > 0 AND gate_key IS NOT NULL AND length(gate_key) > 0 AND admitted_at IS NOT NULL AND dispatch_state IS NOT NULL AND executor_state IS NOT NULL) OR (kind = 'not_received' AND caller_id IS NULL AND caller_name IS NULL AND operation_id IS NULL AND target_kind IS NULL AND target_id IS NULL AND target_name IS NULL AND parent_project_id IS NULL AND gate_scope IS NULL AND gate_key IS NULL AND admitted_at IS NULL AND dispatch_state IS NULL AND dispatched_at IS NULL AND executor_state IS NULL AND unknown_reason IS NULL AND executor_result_code IS NULL AND executor_error IS NULL AND executor_started_at IS NULL AND executor_settled_at IS NULL AND cancel_requested = 0 AND last_reconciled_at IS NULL AND hub_disposition IS NULL AND settled_at IS NOT NULL))", "CHECK (operation_id IS NULL OR (target_kind = 'stack' AND operation_id IN ('deploy-project','down-project','restart-project','redeploy-project','update-project','restore-project')) OR (target_kind = 'container' AND operation_id IN ('start-container','stop-container','restart-container')))", "CHECK (parent_project_id IS NULL OR (target_kind = 'container' AND length(parent_project_id) > 0))", "CHECK (dispatch_state IS NULL OR dispatch_state IN ('pending','dispatching','accepted'))", "CHECK ((dispatch_state IS NOT NULL AND dispatch_state IN ('dispatching','accepted')) = (dispatched_at IS NOT NULL))", "CHECK (executor_state IS NULL OR executor_state IN ('pending','accepted','executing','unknown','success','failed','cancelled'))", "CHECK ((executor_state IS NOT NULL AND executor_state = 'unknown') = (unknown_reason IS NOT NULL) AND (unknown_reason IS NULL OR length(unknown_reason) > 0))", "CHECK ((executor_state IS NOT NULL AND executor_state IN ('success','failed','cancelled')) = (executor_settled_at IS NOT NULL))", "CHECK ((executor_result_code IS NULL AND executor_error IS NULL) OR executor_settled_at IS NOT NULL)", "CHECK (hub_disposition IS NULL OR hub_disposition IN ('cancelled','interrupted','released','refused','not_received'))", "CHECK ((hub_disposition IS NULL AND hub_disposition_by IS NULL AND hub_disposition_reason IS NULL AND hub_disposition_at IS NULL) OR (hub_disposition IS NOT NULL AND hub_disposition_by IS NOT NULL AND length(hub_disposition_by) > 0 AND hub_disposition_reason IS NOT NULL AND length(hub_disposition_reason) > 0 AND hub_disposition_at IS NOT NULL))", "CHECK (release_acknowledged IN (0,1) AND (release_acknowledged = 1) = (hub_disposition IS NOT NULL AND hub_disposition = 'released'))", "CHECK ((settled_at IS NOT NULL) = (kind = 'not_received' OR executor_settled_at IS NOT NULL OR hub_disposition IS NOT NULL))"],
     "runtime_key_bindings": ["CHECK (length(environment_id) > 0 AND length(idempotency_key) > 0 AND length(run_id) > 0 AND length(caller_id) > 0 AND length(request_digest) > 0)", "FOREIGN KEY (environment_id,run_id) REFERENCES runtime_receipts(environment_id,run_id) ON DELETE RESTRICT"],
     "runtime_store_generation": ["CHECK (id = 1)", "CHECK (length(generation) > 0)"],
 
@@ -253,6 +283,7 @@
     "system_backup_policies": ["CHECK (retention_count >= 1)"]
   },
   "indexes": [
+    "CREATE INDEX idx_restore_points_target_created ON restore_points (target_id, created_at);",
     "CREATE UNIQUE INDEX idx_runtime_receipts_environment_run ON runtime_receipts (environment_id,run_id);",
     "CREATE UNIQUE INDEX idx_runtime_receipts_active_scope ON runtime_receipts (environment_id,gate_scope) WHERE kind = 'receipt' AND settled_at IS NULL;",
     "CREATE INDEX idx_runtime_receipts_active_parent ON runtime_receipts (environment_id,parent_project_id) WHERE kind = 'receipt' AND settled_at IS NULL AND parent_project_id IS NOT NULL;",

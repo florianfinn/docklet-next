@@ -29,6 +29,47 @@ export function agentFixture(spec, fixture) {
     recovery: summary.properties.recovery,
     recoveryProperties: recovery.properties,
   };
+  const update = document.paths["/environments/{id}/updater/projects/{projectId}/update"]?.post;
+  if (update) {
+    const schema = (suffix) => {
+      const name = [suffix, `Updater${suffix}`, `Activity${suffix}`].find((name) => schemas[name]);
+      if (!name) throw new Error(`missing lifecycle schema ${suffix}`);
+      return [name, schemas[name]];
+    };
+    const envelope = schema("RuntimeExecutionEnvelope")[1];
+    const operations = envelope.properties.operation.enum;
+    if (!operations?.includes("update-project") || !operations.includes("restore-project"))
+      throw new Error("missing lifecycle execution producer");
+    manifest.lifecycleOperations = operations;
+    const schemaNames = ["LifecycleRequest", "LifecycleIntent", "ImageSelection", "LifecycleResult", "RestorePoint", "PointImage", "BaselineStatus", "RuntimeOptions", "RuntimeTargetRequest", "RuntimeTargetMetadata"];
+    const source = readFileSync(new URL("../backend/pkg/libarcane/edge/commands.go", import.meta.url), "utf8");
+    const edgeRoutes = [...source.matchAll(/Method:\s*http.Method(\w+),\s*PathPattern:\s*"([^"]+)",\s*CommandName:\s*"([^"]+)"/g)]
+      .filter((match) => /^(updater\.restore\.|updater\.project\.)/.test(match[3]))
+      .map((match) => ({ method: match[1].toUpperCase(), path: match[2], command: match[3] }));
+    manifest.imageLifecycle = {
+      targetKinds: ["project"],
+      routes: Object.entries(document.paths).flatMap(([path, item]) => Object.entries(item)
+        .filter(([, op]) => ["update-project-images", "restore-update", "get-update-baseline", "list-restore-points", "delete-restore-point", "list-host-restore-points", "delete-host-restore-point"].includes(op?.operationId))
+        .map(([method, op]) => ({ method: method.toUpperCase(), path, operationId: op.operationId, sha256: createHash("sha256").update(JSON.stringify(op)).digest("hex") }))),
+      schemas: Object.fromEntries(schemaNames.map((name) => {
+        const [key, value] = schema(name);
+        return [key, { sha256: createHash("sha256").update(JSON.stringify(value)).digest("hex") }];
+      })),
+      edgeRoutes,
+      retiredRoutes: Object.entries(document.paths).flatMap(([path, item]) => Object.entries(item)
+        .filter(([, op]) => ["update-project-services", "update-container", "run-updater"].includes(op?.operationId))
+        .map(([method, op]) => ({ method: method.toUpperCase(), path, operationId: op.operationId, sha256: createHash("sha256").update(JSON.stringify(op)).digest("hex") }))),
+      runtimePreflightSha256: createHash("sha256").update(JSON.stringify(document.paths["/environments/0/runtime-target"].post)).digest("hex"),
+      retainedPoints: 5,
+      volumeDataIncluded: false,
+      normalComposePullsTakeLease: false,
+      retiredUpdateCode: "update.path-retired",
+      observedIdentity: "target identity, container IDs/names, image IDs, service presence and running state",
+      resultSettlement: "atomic with terminal receipt; failed persistence never replays Docker",
+    };
+    manifest.imageSafety.inactiveCapabilities = manifest.imageSafety.inactiveCapabilities.filter((name) => !["stack-update", "restore"].includes(name));
+    manifest.imageSafety.capabilities = [...new Set([...manifest.imageSafety.capabilities, "stack-update", "restore"])];
+  }
   return Buffer.from(`${JSON.stringify(manifest, null, 2)}\n`);
 }
 

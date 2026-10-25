@@ -15,6 +15,8 @@ import (
 	"mime"
 	"net/http"
 	"net/url"
+	"reflect"
+	"slices"
 	"strings"
 	"time"
 
@@ -22,6 +24,7 @@ import (
 	"github.com/florianfinn/docklet-next/backend/pkg/remenv"
 	activitytypes "github.com/florianfinn/docklet-next/types/activity"
 	"github.com/florianfinn/docklet-next/types/contract"
+	imageDTO "github.com/florianfinn/docklet-next/types/image"
 )
 
 var ErrRuntimeTransport = errors.New("runtime outcome unavailable")
@@ -243,7 +246,17 @@ func (s *RuntimeSender) metadata(ctx context.Context, path string, value, result
 	if err != nil {
 		return err
 	}
-	if status != 200 || activitytypes.DecodeRuntimeJSON(response, result) != nil {
+	if status != 200 {
+		var problem imageDTO.OperationError
+		if status >= 400 && status <= 599 && activitytypes.DecodeRuntimeJSON(response, &problem) == nil && !problem.Success {
+			field, _ := reflect.TypeFor[imageDTO.Problem]().FieldByName("Code")
+			if slices.Contains(strings.Split(field.Tag.Get("enum"), ","), problem.Problem.Code) {
+				return imageDTO.Failure(problem.Problem.Code, status)
+			}
+		}
+		return ErrRuntimeTransport
+	}
+	if activitytypes.DecodeRuntimeJSON(response, result) != nil {
 		return ErrRuntimeTransport
 	}
 	return nil

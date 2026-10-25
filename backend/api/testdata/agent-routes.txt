@@ -8,6 +8,8 @@ DELETE /environments/{id}/containers/{containerId}
 DELETE /environments/{id}/images/{imageId}
 DELETE /environments/{id}/networks/{networkId}
 DELETE /environments/{id}/projects/{projectId}/destroy
+DELETE /environments/{id}/updater/restore-points/{pointId}
+DELETE /environments/{id}/updater/{kind}/{targetId}/restore-points/{pointId}
 DELETE /environments/{id}/uploads/{kind}/{uploadId}
 DELETE /environments/{id}/volumes/backups/{backupId}
 DELETE /environments/{id}/volumes/{volumeName}
@@ -64,7 +66,10 @@ GET /environments/{id}/settings/public
 GET /environments/{id}/system/docker/info
 GET /environments/{id}/system/upgrade/check
 GET /environments/{id}/updater/history
+GET /environments/{id}/updater/projects/{projectId}/baseline
+GET /environments/{id}/updater/restore-points
 GET /environments/{id}/updater/status
+GET /environments/{id}/updater/{kind}/{targetId}/restore-points
 GET /environments/{id}/uploads/{kind}/{uploadId}
 GET /environments/{id}/volumes
 GET /environments/{id}/volumes/backups/{backupId}/download
@@ -149,7 +154,9 @@ POST /environments/{id}/system/convert
 POST /environments/{id}/system/prune
 POST /environments/{id}/system/upgrade
 POST /environments/{id}/updater/projects/{projectId}/check
+POST /environments/{id}/updater/projects/{projectId}/update
 POST /environments/{id}/updater/run
+POST /environments/{id}/updater/{kind}/{targetId}/restore-points/{pointId}/restore
 POST /environments/{id}/uploads/{kind}
 POST /environments/{id}/volumes
 POST /environments/{id}/volumes/prune

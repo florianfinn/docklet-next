@@ -11,6 +11,7 @@ import (
 	"context"
 	"encoding/json/v2"
 	"errors"
+	imageDTO "github.com/florianfinn/docklet-next/types/image"
 
 	"io"
 	"maps"
@@ -19,7 +20,6 @@ import (
 	"net/url"
 	"slices"
 	"strings"
-	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -36,7 +36,6 @@ import (
 	"github.com/moby/moby/client"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"go.getarcane.app/kit/pkg"
 	"go.getarcane.app/sys/crypto"
 	"go.getarcane.app/updater"
 	"go.getarcane.app/updater/labels"
@@ -60,7 +59,6 @@ import (
 
 	"github.com/florianfinn/docklet-next/backend/pkg/scheduler/jobcontext"
 	"github.com/florianfinn/docklet-next/backend/pkg/scheduler/runs"
-	"github.com/florianfinn/docklet-next/backend/pkg/utils"
 	francistest "github.com/florianfinn/docklet-next/backend/pkg/utils/francis/testing"
 	"github.com/florianfinn/docklet-next/backend/pkg/utils/notifications"
 )
@@ -249,39 +247,14 @@ func TestUpdaterService_ApplyPendingNoRecordsInternal(t *testing.T) {
 	var checkpoints []scheduler.TargetOutcome
 	ctx = jobcontext.WithExecution(ctx, scheduler.Run{AttemptCount: 1}, func(target scheduler.TargetOutcome) error { checkpoints = append(checkpoints, target); return nil })
 	result, err := svc.ApplyPending(ctx, arcaneupdater.Options{DryRun: true})
-	require.Len(t, checkpoints, 2)
-	assert.Equal(t, scheduler.Running, checkpoints[0].Status)
-	assert.Equal(t, scheduler.Succeeded, checkpoints[1].Status)
-
-	require.NoError(t, err)
-	require.NotNil(t, result)
-	assert.Zero(t, result.Checked)
-	assert.Zero(t, result.Updated)
-	assert.Zero(t, result.Skipped)
-	assert.Zero(t, result.Failed)
-	assert.Empty(t, result.Items)
-	ctx = jobcontext.WithExecution(t.Context(), scheduler.Run{AttemptCount: 1}, func(scheduler.TargetOutcome) error { return errors.New("checkpoint unavailable") })
-	_, err = svc.ApplyPending(ctx, arcaneupdater.Options{DryRun: true})
-	require.ErrorContains(t, err, "checkpoint unavailable")
-	var outcomeErr *scheduler.OutcomeError
-	require.ErrorAs(t, err, &outcomeErr)
-	assert.Equal(t, scheduler.NeedsAttention, outcomeErr.Outcome.Status)
-	checkpoints = nil
-	ctx = jobcontext.WithExecution(
-		t.Context(),
-		scheduler.Run{AttemptCount: 1},
-		func(target scheduler.TargetOutcome) error {
-			checkpoints = append(
-				checkpoints,
-				target,
-			)
-			return nil
-		},
-	)
+	require.Equal(t, "update.path-retired", imageDTO.Neutral(err, "unexpected", 500).Problem.Code)
+	require.Nil(t, result)
+	require.Empty(t, checkpoints)
 	svc.engine = nil
-	require.Panics(t, func() { _, _ = svc.ApplyPending(ctx, arcaneupdater.Options{}) })
-	require.NotEmpty(t, checkpoints)
-	assert.Equal(t, scheduler.NeedsAttention, checkpoints[len(checkpoints)-1].Status)
+	result, err = svc.ApplyPending(ctx, arcaneupdater.Options{})
+	require.Equal(t, "update.path-retired", imageDTO.Neutral(err, "unexpected", 500).Problem.Code)
+	require.Nil(t, result)
+	require.Empty(t, checkpoints)
 }
 
 // Type and ResourceIds are Arcane-side scoping the engine never acted on;
@@ -838,64 +811,14 @@ func TestUpdaterService_RecordUpdateRunAppendsActivityMessageInternal(t *testing
 }
 
 func TestUpdaterService_AcceptSingleContainerUpdateUsesQueuedActivityInternal(t *testing.T) {
-	for _, cancelActivity := range []bool{false, true} {
-		name := kit.Ternary(cancelActivity, "activity cancellation while queued", "request disconnect")
-		t.Run(name, func(t *testing.T) {
-			db := setupProjectTestDBInternal(t)
-			require.NoError(t, db.AutoMigrate(activity.Models()...))
-			sqlDB, err := db.DB.DB()
-			require.NoError(t, err)
-			sqlDB.SetMaxOpenConns(1)
-			activityService := activity.NewActivityService(db, nil)
-			runtime := francistest.New(t)
-			admission := runs.NewAdmission(runtime.Service(), t.Name())
-			require.NoError(t, admission.Register(runtime))
-			svc, err := NewUpdaterService(db, nil, nil, nil, nil, nil, nil, nil, nil, nil, activityService, nil, nil, admission, nil)
-			require.NoError(t, err)
-			require.NoError(t, svc.RegisterActors(runtime))
-			francistest.Start(t, runtime)
-
-			// Holding the update admission makes the executor decline the
-			// dispatched job until the lease is released.
-			held, admitted, err := admission.TryAcquire(t.Context(), scheduler.AdmissionKey{Scope: "updater"})
-			require.NoError(t, err)
-			require.True(t, admitted)
-			var releaseOnce sync.Once
-			release := func() { releaseOnce.Do(func() { held.Release(t.Context()) }) }
-			defer release()
-
-			requestCtx, cancelRequest := context.WithCancel(t.Context())
-			workCtx := utils.ActivityRuntimeContext(requestCtx, t.Context())
-			type acceptedInternal struct {
-				activity *activitytypes.Activity
-				err      error
-			}
-			accepted := make(chan acceptedInternal, 1)
-			go func() {
-				item, acceptErr := svc.AcceptSingleContainerUpdate(workCtx, "missing-container")
-				accepted <- acceptedInternal{activity: item, err: acceptErr}
-			}()
-			var item *activitytypes.Activity
-			select {
-			case result := <-accepted:
-				require.NoError(t, result.err)
-				item = result.activity
-			case <-time.After(time.Second):
-				require.FailNow(t, "acceptance waited for executor work")
-			}
-			require.Equal(t, activitytypes.StatusQueued, item.Status)
-			cancelRequest()
-			if cancelActivity {
-				_, err = activityService.CancelActivity(t.Context(), "0", item.ID, "test")
-				require.NoError(t, err)
-			}
-			release()
-
-			wantStatus := kit.Ternary(cancelActivity, activitytypes.StatusCancelled, activitytypes.StatusFailed)
-			require.Eventually(t, func() bool {
-				var saved activity.Activity
-				return db.First(&saved, "id = ?", item.ID).Error == nil && saved.Status == wantStatus
-			}, 5*time.Second, 10*time.Millisecond)
-		})
-	}
+	db := setupProjectTestDBInternal(t)
+	require.NoError(t, db.AutoMigrate(activity.Models()...))
+	svc, err := NewUpdaterService(db, nil, nil, nil, nil, nil, nil, nil, nil, nil, activity.NewActivityService(db, nil), nil, nil, nil, nil)
+	require.NoError(t, err)
+	item, err := svc.AcceptSingleContainerUpdate(t.Context(), "missing-container")
+	require.Equal(t, "update.path-retired", imageDTO.Neutral(err, "unexpected", 500).Problem.Code)
+	require.Nil(t, item)
+	var count int64
+	require.NoError(t, db.Model(&activity.Activity{}).Count(&count).Error)
+	require.Zero(t, count)
 }

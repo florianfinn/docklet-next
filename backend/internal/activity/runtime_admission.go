@@ -112,6 +112,9 @@ func (s *RuntimeService) admissionPassInternal(ctx context.Context, c runtimeCan
 				if err != nil {
 					return err
 				}
+				if err := runtimeSaveImageIntent(tx, row.RunID, c.command); err != nil {
+					return err
+				}
 				if s.localExecution != nil && c.command.Store == s.localExecution.Store && runtimeQueuesInternal(c.command.Operation) {
 					changed := tx.Model(&Activity{}).Where("id = ? AND environment_id = ?", row.RunID, row.EnvironmentID).
 						UpdateColumns(map[string]any{"status": activitytypes.StatusQueued, "updated_at": now})

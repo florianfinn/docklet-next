@@ -11,12 +11,13 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	imageDTO "github.com/florianfinn/docklet-next/types/image"
+	"go.getarcane.app/kit/pkg"
 	"io"
 	"log/slog"
 
 	"strings"
 	"sync"
-	"time"
 
 	activitytypes "github.com/florianfinn/docklet-next/types/activity"
 
@@ -28,7 +29,6 @@ import (
 	"github.com/samber/mo"
 	"go.getarcane.app/docker"
 
-	"go.getarcane.app/kit/pkg"
 	"go.getarcane.app/sys/cgroup"
 	"go.getarcane.app/updater"
 	"go.getarcane.app/updater/labels"
@@ -55,7 +55,6 @@ import (
 
 	"github.com/florianfinn/docklet-next/backend/pkg/scheduler/jobcontext"
 	"github.com/florianfinn/docklet-next/backend/pkg/scheduler/runs"
-	"github.com/florianfinn/docklet-next/backend/pkg/utils"
 
 	"github.com/florianfinn/docklet-next/backend/pkg/utils/notifications"
 )
@@ -162,6 +161,9 @@ func NewUpdaterService(
 		return nil, fmt.Errorf("configure updater engine: %w", err)
 	}
 	service.engine = engine
+	if projectService != nil {
+		projectService.SetLifecycleChecker(service.CheckProjectUpdates)
+	}
 	events.SetDockerUpdatingContainers(func() []string { return engine.Status().ContainerIDs })
 	return service, nil
 }
@@ -212,111 +214,9 @@ func (s *UpdaterService) registryDigestResolverInternal() updater.RegistryDigest
 	return s.deps.RegistryDigestResolver
 }
 
-// ApplyPending executes pending image updates. When the options carry
-// resource IDs the run is scoped: the engine's ApplyPending has no resource
-// filtering (it would apply every pending update), so scoped requests resolve
-// to concrete containers and go through the engine's single-container path
-// instead — same activity, events, and cleanup either way.
+// ApplyPending refuses the retired engine apply path before checks or effects.
 func (s *UpdaterService) ApplyPending(ctx context.Context, options arcaneupdater.Options) (out *arcaneupdater.Result, err error) {
-	var release func()
-	ctx, release, err = s.acquireUpdateInternal(ctx)
-	if err != nil {
-		return nil, err
-	}
-	defer release()
-	start := time.Now()
-	batchCompleted := false
-	activityID := s.startAutoUpdateActivityInternal(ctx, options.DryRun)
-	out = &arcaneupdater.Result{Items: []arcaneupdater.ResourceResult{}, ActivityID: mo.EmptyableToOption(strings.TrimSpace(activityID)).ToPointer()}
-	ctx = s.trackActivityInternal(ctx, activityID)
-	ctx = contextWithActivityIDInternal(ctx, activityID)
-	progress := &updateProgressInternal{}
-	ctx = context.WithValue(ctx, updateProgressKeyInternal{}, progress)
-	notifyBatch := &containerUpdateBatchInternal{}
-	ctx = context.WithValue(ctx, containerUpdateBatchContextKeyInternal{}, notifyBatch)
-
-	defer func() {
-		s.flushBatchedContainerUpdatesInternal(ctx, notifyBatch)
-		if out == nil {
-			out = &arcaneupdater.Result{Items: []arcaneupdater.ResourceResult{}}
-		}
-		if out.Duration == "" {
-			out.Duration = time.Since(start).String()
-		}
-		out.ActivityID = mo.EmptyableToOption(strings.TrimSpace(activityID)).ToPointer()
-		err = progress.completeBatchInternal(ctx, options, out, batchCompleted, err)
-		s.completeAutoUpdateActivityInternal(ctx, activityID, out, err)
-	}()
-
-	ctx, err = s.recovery.FreezePending(ctx)
-	if err != nil {
-		return out, err
-	}
-
-	if activityID != "" && s.deps.Activity != nil {
-		// Bounded slot wait: an unbounded wait behind other long-running runs
-		// would strand the queued activity row (the completion defer above
-		// flips it to failed on timeout instead).
-		if slotErr := s.deps.Activity.AwaitActivitySlotBounded(ctx, activityID, "0"); slotErr != nil {
-			return out, slotErr
-		}
-	}
-
-	// The engine's per-container docker operations carry no timeouts, so cap
-	// the whole run; the Track ctx stays unbounded for the deferred completion
-	// so user cancellation is still detected there.
-	runCtx, cancelRun := context.WithTimeout(ctx, timeouts.DefaultAutoUpdateApply)
-	defer cancelRun()
-
-	s.recordAutoUpdateEventInternal(ctx, event.EventSeverityInfo, database.JSON{
-		"phase":       "start",
-		"dryRun":      options.DryRun,
-		"forceUpdate": options.ForceUpdate,
-		"scopedType":  options.Type,
-		"scopedCount": len(options.ResourceIds),
-		"time":        time.Now().UTC().Format(time.RFC3339),
-	})
-	s.appendAutoUpdateActivityMessageInternal(ctx, activityID, "Planning pending updates", "Planning updates", 5)
-
-	if len(options.ResourceIds) > 0 {
-		if applyErr := s.applyScopedUpdatesInternal(runCtx, options, out); applyErr != nil {
-			return out, applyErr
-		}
-	} else {
-		moduleResult, engineErr := s.engineInternal().ApplyPending(runCtx, moduleOptionsFromUpdaterOptionsInternal(options))
-		if moduleResult != nil {
-			out = resultFromModuleInternal(moduleResult)
-			out.ActivityID = mo.EmptyableToOption(strings.TrimSpace(activityID)).ToPointer()
-			s.logResultItemsInternal(ctx, out)
-		}
-		if moduleResult == nil && engineErr == nil {
-			engineErr = errors.New("updater returned no batch result")
-		}
-		if engineErr != nil {
-			err = engineErr
-			return out, err
-		}
-	}
-
-	if !options.DryRun && s.deps.ImageUpdates != nil {
-		s.appendAutoUpdateActivityMessageInternal(ctx, activityID, "Cleaning up update records", "Cleaning up", 95)
-		if cleanupErr := s.deps.ImageUpdates.CleanupOrphanedRecords(runCtx); cleanupErr != nil {
-			s.loggerInternal().WarnContext(ctx, "cleanup orphaned update records failed", "error", cleanupErr)
-		}
-	}
-
-	s.recordAutoUpdateEventInternal(ctx, event.EventSeverityInfo, database.JSON{
-		"phase":     "complete",
-		"checked":   out.Checked,
-		"updated":   out.Updated,
-		"restarted": out.Restarted,
-		"skipped":   out.Skipped,
-		"failed":    out.Failed,
-		"duration":  out.Duration,
-		"time":      time.Now().UTC().Format(time.RFC3339),
-	})
-	batchCompleted = true
-	return out, nil
+	return nil, imageDTO.Failure("update.path-retired", 409)
 }
 
 // applyScopedUpdatesInternal runs a scoped update into the caller's result:
@@ -483,84 +383,18 @@ func (s *UpdaterService) containerIDsForImagesInternal(ctx context.Context, imag
 	return ids, nil
 }
 
-// UpdateSingleContainer updates a single container by ID to the latest available image.
+// UpdateSingleContainer refuses the retired standalone update path.
 func (s *UpdaterService) UpdateSingleContainer(ctx context.Context, containerID string) (out *arcaneupdater.Result, err error) {
-	localActivity, workCtx, err := s.startSingleContainerUpdateActivityInternal(ctx, containerID, true)
-	if err != nil {
-		return nil, err
-	}
-	activityID := ""
-	if localActivity != nil {
-		activityID = localActivity.ID
-	}
-	defer func() {
-		s.finishSingleContainerUpdateInternal(workCtx, activityID, out, err)
-	}()
-	defer utils.RecoverToError(&err, "single container update")
-	return s.runSingleContainerUpdateInternal(workCtx, containerID, activityID)
+	return nil, imageDTO.Failure("update.path-retired", 409)
 }
 
-// AcceptSingleContainerUpdate persists and submits a cancellable update activity.
+// AcceptSingleContainerUpdate refuses before persisting or dispatching work.
 func (s *UpdaterService) AcceptSingleContainerUpdate(ctx context.Context, containerID string) (*activitytypes.Activity, error) {
-	if s.deps.Activity == nil || !s.execution.Ready() {
-		return nil, errors.New("asynchronous container updates unavailable")
-	}
-	localActivity, workCtx, err := s.startSingleContainerUpdateActivityInternal(ctx, containerID, false)
-	if err != nil {
-		return nil, err
-	}
-	if submitErr := s.execution.Submit(ctx, workCtx, containerID, localActivity.ID); submitErr != nil {
-		return nil, submitErr
-	}
-	return localActivity, nil
+	return nil, imageDTO.Failure("update.path-retired", 409)
 }
 
 func (s *UpdaterService) runSingleContainerUpdateInternal(ctx context.Context, containerID, activityID string) (out *arcaneupdater.Result, err error) {
-	var release func()
-	ctx, release, err = s.acquireUpdateInternal(ctx)
-	if err != nil {
-		return nil, err
-	}
-	defer release()
-	start := time.Now()
-	out = &arcaneupdater.Result{Items: []arcaneupdater.ResourceResult{}, ActivityID: mo.EmptyableToOption(strings.TrimSpace(activityID)).ToPointer()}
-	ctx = contextWithActivityIDInternal(ctx, activityID)
-	if s.deps.Activity != nil && activityID != "" {
-		if awaitActivitySlotBoundedErr := s.deps.Activity.AwaitActivitySlotBounded(ctx, activityID, "0"); awaitActivitySlotBoundedErr != nil {
-			return out, awaitActivitySlotBoundedErr
-		}
-	}
-
-	defer func() {
-		if out == nil {
-			out = &arcaneupdater.Result{Items: []arcaneupdater.ResourceResult{}}
-		}
-		if out.Duration == "" {
-			out.Duration = time.Since(start).String()
-		}
-		out.ActivityID = mo.EmptyableToOption(strings.TrimSpace(activityID)).ToPointer()
-	}()
-
-	s.updateMu.Lock()
-	defer s.updateMu.Unlock()
-	if errErr := ctx.Err(); errErr != nil {
-		return out, errErr
-	}
-
-	// The caller picked this container, so the autoUpdateExcludedContainers
-	// setting does not apply: it only governs automatic and pending runs, which
-	// keep skipping the container. Labels and immutable references still do.
-	moduleResult, engineErr := s.engineInternal().UpdateContainer(ctx, containerID, updater.Options{IgnoreSettingsExclusions: true})
-	if moduleResult != nil {
-		out = resultFromModuleInternal(moduleResult)
-		out.ActivityID = mo.EmptyableToOption(strings.TrimSpace(activityID)).ToPointer()
-		s.logResultItemsInternal(ctx, out)
-	}
-	if engineErr != nil {
-		err = engineErr
-		return out, err
-	}
-	return out, nil
+	return nil, imageDTO.Failure("update.path-retired", 409)
 }
 
 // GetStatus returns the current in-memory update activity snapshot.

@@ -15,11 +15,15 @@ import (
 	"strings"
 )
 
+func retiredImageUpdatePath(path string) bool {
+	return strings.HasSuffix(path, "/update-services") || strings.HasSuffix(path, "/updater/run") || strings.Contains(path, "/containers/") && strings.HasSuffix(path, "/update")
+}
+
 func imageSafetyPath(path string) bool {
 	if strings.Contains(path, "/vulnerabilities") {
 		return false
 	}
-	return strings.Contains(path, "/images") || strings.Contains(path, "/image-updates") || strings.HasPrefix(path, "/container-registries") || strings.HasPrefix(path, "/api/container-registries")
+	return retiredImageUpdatePath(path) || strings.Contains(path, "/updater/") || strings.Contains(path, "/images") || strings.Contains(path, "/image-updates") || strings.HasPrefix(path, "/container-registries") || strings.HasPrefix(path, "/api/container-registries")
 }
 
 // Huma validation failures can otherwise echo a write-only credential value.
@@ -54,6 +58,9 @@ func imageErrorTransformer(ctx huma.Context, status string, value any) (any, err
 			ctx.SetStatus(code)
 		}
 	}
+	if strings.Contains(ctx.URL().Path, "/updater/") || retiredImageUpdatePath(ctx.URL().Path) {
+		problem = "update.invalid-target"
+	}
 	if code == 401 || code == 403 {
 		return value, nil
 	}
@@ -70,6 +77,10 @@ func registerImageSafetyErrors(api huma.API) {
 			if op == nil {
 				continue
 			}
+			if retiredImageUpdatePath(path) {
+				op.Deprecated = true
+				op.Description = "Retired update entry point; requests refuse update.path-retired before workload effects."
+			}
 			statuses := []string{"400", "404", "409", "429", "500", "502", "503"}
 			registryTest := strings.Contains(path, "container-registries") && strings.HasSuffix(path, "/test")
 			if registryTest {
@@ -83,7 +94,7 @@ func registerImageSafetyErrors(api huma.API) {
 				if strings.Contains(path, "container-registries") && strings.HasSuffix(path, "/test") {
 					errorSchema = api.OpenAPI().Components.Schemas.Schema(reflect.TypeFor[containerregistry.RegistryTestResult](), true, "")
 				}
-				if upgrade || (registryTest && status == "401") {
+				if upgrade || retiredImageUpdatePath(path) || strings.Contains(path, "/updater/") || (registryTest && status == "401") {
 					errorSchema = &huma.Schema{OneOf: []*huma.Schema{errorSchema, api.OpenAPI().Components.Schemas.Schema(reflect.TypeFor[huma.ErrorModel](), true, "")}}
 				}
 				op.Responses[status] = &huma.Response{Description: "Typed neutral image or registry failure", Content: map[string]*huma.MediaType{"application/json": {Schema: errorSchema}}}

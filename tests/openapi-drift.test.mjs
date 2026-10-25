@@ -36,3 +36,30 @@ test("the contract guard rejects a changed Huma operation", () => {
     /API contract drift: web\/src\/api\/generated\/schema\.ts/,
   );
 });
+
+test("v7 lifecycle manifest changes with executable DTOs and admission operations", () => {
+  const spec = readFileSync(new URL("../api/openapi.json", import.meta.url));
+  const fixture = readFileSync(new URL("../types/contract/testdata/agent-hub-v7.json", import.meta.url));
+  const manifest = JSON.parse(fixture);
+  assert.equal(manifest.imageLifecycle.routes.length, 7);
+  assert.equal(manifest.imageLifecycle.edgeRoutes.length, 6);
+  assert.equal(manifest.imageLifecycle.retiredRoutes.length, 3);
+  for (const route of manifest.imageLifecycle.retiredRoutes) {
+    const operation = JSON.parse(spec).paths[route.path][route.method.toLowerCase()];
+    assert.equal(operation.deprecated, true);
+    assert.ok(JSON.stringify(operation.responses["409"]).includes("ImageOperationError"));
+  }
+  assert.ok(manifest.lifecycleOperations.includes("update-project"));
+  assert.ok(manifest.lifecycleOperations.includes("restore-project"));
+  assert.ok(manifest.imageSafety.capabilities.includes("restore"));
+  for (const path of ["/environments/{id}/updater/projects/{projectId}/update", "/environments/{id}/updater/{kind}/{targetId}/restore-points/{pointId}/restore"]) {
+    assert.equal(JSON.parse(spec).paths[path].post.parameters.find((parameter) => parameter.name.toLowerCase() === "idempotency-key").required, true);
+  }
+  for (const suffix of ["LifecycleIntent", "LifecycleResult", "RestorePoint", "RuntimeOptions"]) {
+    const changed = JSON.parse(spec);
+    const producer = Object.keys(manifest.imageLifecycle.schemas).find((key) => key.endsWith(suffix));
+    const schema = changed.components.schemas[producer];
+    delete schema.properties[Object.keys(schema.properties)[0]];
+    assert.notDeepEqual(agentFixture(Buffer.from(JSON.stringify(changed)), fixture), fixture);
+  }
+});

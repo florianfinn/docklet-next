@@ -13,6 +13,7 @@ import (
 	"github.com/florianfinn/docklet-next/backend/internal/database"
 	"github.com/florianfinn/docklet-next/backend/pkg/utils/dbutil"
 	activitytypes "github.com/florianfinn/docklet-next/types/activity"
+	updaterDTO "github.com/florianfinn/docklet-next/types/updater"
 	"github.com/google/uuid"
 	"gorm.io/gorm"
 )
@@ -20,13 +21,14 @@ import (
 // Frozen only after the executor and capture have actually joined. Settlement
 // retries reuse these executor times and codes; they never rerun work or drain.
 type runtimeLocalResultInternal struct {
-	outputLost bool
-	state      string
-	code       activitytypes.Code
-	message    string
-	errorText  *string
-	startedAt  *time.Time
-	settledAt  time.Time
+	imageLifecycle *updaterDTO.LifecycleResult
+	outputLost     bool
+	state          string
+	code           activitytypes.Code
+	message        string
+	errorText      *string
+	startedAt      *time.Time
+	settledAt      time.Time
 }
 
 // Caller holds runningMu. Only accepted owners use this detached write budget.
@@ -77,6 +79,11 @@ func runtimeCompleteTxInternal(tx *gorm.DB, now time.Time, id runtimeIdentityInt
 		Error: result.errorText, StartedAt: result.startedAt, SettledAt: new(result.settledAt)})
 	if err != nil {
 		return empty, nil, err
+	}
+	if result.imageLifecycle != nil {
+		if err := runtimeImageResultTx(tx, row.RunID, result.imageLifecycle); err != nil {
+			return empty, nil, err
+		}
 	}
 	if wasTerminal {
 		snapshot, err := runtimeSnapshotTxInternal(tx, row)

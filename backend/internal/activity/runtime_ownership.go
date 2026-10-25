@@ -86,6 +86,10 @@ func (s *RuntimeService) RetainedCommand(ctx context.Context, command RuntimeCom
 	}
 	command.Store = runtimeStoreFromRowInternal(&row)
 	command.Target = RuntimeTarget{Kind: *row.TargetKind, ID: *row.TargetID, Name: copyPtrInternal(row.TargetName), ParentProjectID: copyPtrInternal(row.ParentProjectID)}
+	command, err = s.retainedImageIntent(ctx, row.RunID, command)
+	if err != nil {
+		return RuntimeCommand{}, false, err
+	}
 	canonical, err := runtimeCanonicalizeInternal(command)
 	if err != nil {
 		return RuntimeCommand{}, false, err

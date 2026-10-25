@@ -223,6 +223,7 @@ func activityToDTOInternal(model *Activity) activity.Activity {
 		return activity.Activity{}
 	}
 	return activity.Activity{
+		ImageLifecycle:      runtimeImageResult(model),
 		RuntimeKnowledge:    copyPtrInternal(model.runtimeKnowledge),
 		ID:                  model.ID,
 		EnvironmentID:       model.EnvironmentID,

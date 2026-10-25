@@ -178,7 +178,7 @@ func TestProjectService_UpdateProjectServicesHardFailsWhenPullFails(t *testing.T
 	svc := NewProjectService(db, settingsService, nil, imageService, dockerService, nil, nil, config.Load(), nil, nil)
 	err = svc.UpdateProjectServices(ctx, projectRecord.ID, []string{"app"}, usertypes.SystemUser, true)
 	require.Error(t, err)
-	require.ErrorContains(t, err, "pull updated service images")
+	lifecycleCode(t, err, "update.path-retired")
 	assert.False(t, upCalled, "compose up must not run after a pull failure")
 
 	var persistedProject Project
@@ -297,11 +297,10 @@ func TestProjectService_UpdateProjectServicesForcesRecreate(t *testing.T) {
 	svc := NewProjectService(db, settingsService, eventService, imageService, dockerService, nil, nil, config.Load(), nil, nil)
 	err = svc.UpdateProjectServices(ctx, projectRecord.ID, []string{"app"}, usertypes.SystemUser, true)
 	require.Error(t, err)
-	assert.True(t, eventService.ShouldSuppressDaemonEvent("container", "replacement", "app", "compose-update-force"), "failed updates retain correlation through rollback grace")
-	assert.False(t, eventService.ShouldSuppressDaemonEvent("container", "unrelated", "unrelated", "other-project"))
-	assert.True(t, upCalled)
-	assert.Equal(t, []string{"app", "sidecar"}, stopped)
-	assert.True(t, forceRecreate, "service updates must force recreate after pulling the updated image")
+	lifecycleCode(t, err, "update.path-retired")
+	assert.False(t, upCalled)
+	assert.Empty(t, stopped)
+	assert.False(t, forceRecreate)
 }
 
 type fakeProjectVolumeRenameMigration struct {
