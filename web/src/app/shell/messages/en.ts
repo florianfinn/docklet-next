@@ -13,6 +13,7 @@ export const enShell = {
     containers: "Containers",
     security: "Security",
     networks: "Networks",
+    registries: "Registries",
     images: "Images",
     volumes: "Volumes",
     hosts: "Hosts",

@@ -1,3 +1,4 @@
+import { ImageUpdate } from "./ImageUpdate";
 import { useCapability } from "@/data/use-capability";
 import { ArrowRight, Download, Package, ShieldAlert, Trash2 } from "lucide-react";
 import type { ReactNode } from "react";
@@ -5,7 +6,7 @@ import { Link } from "react-router";
 import { useTranslations } from "use-intl";
 
 import { formatDateTime, formatMem, formatRelative } from "@/domain/format";
-import { imageReference, imageUsage, shortDigest, type DockerImage } from "@/domain/images";
+import { imageReference, imageUsage, shortDigest, imageRemovalBlocked, type DockerImage } from "@/domain/images";
 import type { Host } from "@/domain/model";
 import { hasUpdate } from "@/domain/updates";
 import { CopyButton } from "@/shared/components/code-block";
@@ -52,8 +53,8 @@ interface ImageDetailsProps {
 export function ImageDetails({ id, image, host, onClose, onPull, onRemove }: ImageDetailsProps) {
   const t = useTranslations("images");
   const td = useTranslations("images.details");
-  const pull = useCapability("pullImage");
-  const remove = useCapability("removeImage");
+  const pull = useCapability("pullImage", { kind: "host", id: image?.hostId ?? "" });
+  const remove = useCapability("removeImage", { kind: "image", id: image?.id ?? "" });
   const online = host?.status === "online";
   // Where an update is installed: the first user workload of this image (never the agent).
   const user = image?.consumers.find((c) => !c.system);
@@ -142,7 +143,7 @@ export function ImageDetails({ id, image, host, onClose, onPull, onRemove }: Ima
                 </Section>
                 <Separator />
                 <Section title={td("update")}>
-                  {image.update ? (
+                  {image.updateObservation ? <ImageUpdate image={image} detail /> : image.update ? (
                     <div className="overflow-hidden rounded-xl border">
                       <UpdatePanel update={image.update} />
                       {hasUpdate(image.update) && user && (
@@ -187,11 +188,12 @@ export function ImageDetails({ id, image, host, onClose, onPull, onRemove }: Ima
                       <Download data-icon="inline-start" />
                       {t("menu.pullAgain")}
                     </Button>
-                    <Button size="sm" variant="outline" className="text-destructive hover:text-destructive" disabled={!remove.available || !!image.inventory?.stale || !online || image.consumers.length > 0} title={remove.reason} onClick={() => onRemove(image)}>
+                    <Button size="sm" variant="outline" className="text-destructive hover:text-destructive" disabled={!remove.available || !!image.inventory?.stale || !online || imageRemovalBlocked(image)} title={remove.reason} onClick={() => onRemove(image)}>
                       <Trash2 data-icon="inline-start" />
                       {t("menu.remove")}
                     </Button>
                   </div>
+                  {imageRemovalBlocked(image) && <p className="text-xs text-muted-foreground">{t("protection")}</p>}
                   {image.consumers.length > 0 && <p className="text-xs text-muted-foreground">{td("removeBlocked", { count: image.consumers.length })}</p>}
                 </Section>
               </div>

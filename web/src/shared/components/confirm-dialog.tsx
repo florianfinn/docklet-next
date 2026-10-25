@@ -29,6 +29,8 @@ interface ConfirmDialogProps {
    * with an error so the user can retry or cancel; any other value closes it.
    */
   onConfirm: () => unknown;
+  /** Report long-running results after navigation or an external target change. */
+  onDetached?: (result: unknown) => void;
   destructive?: boolean;
   children?: ReactNode;
 }
@@ -36,7 +38,7 @@ interface ConfirmDialogProps {
 const isPromise = (v: unknown): v is Promise<unknown> => !!v && typeof (v as Promise<unknown>).then === "function";
 
 /** Confirmation for destructive or draft-discarding actions; Escape and Cancel keep everything. */
-export function ConfirmDialog({ open, onOpenChange, title, description, confirmLabel, onConfirm, destructive, children }: ConfirmDialogProps) {
+export function ConfirmDialog({ open, onOpenChange, title, description, confirmLabel, onConfirm, onDetached, destructive, children }: ConfirmDialogProps) {
   const t = useTranslations("common.actions");
   const feedback = useDialogCommand(open, title);
   const [pending, setPending] = useState(false);
@@ -53,7 +55,7 @@ export function ConfirmDialog({ open, onOpenChange, title, description, confirmL
       e.preventDefault();
       return;
     }
-    const result = feedback.run(onConfirm);
+    const result = feedback.run(onConfirm, onDetached);
     const current = feedback.checkpoint();
     if (!isPromise(result)) { if (feedback.failed()) e.preventDefault(); return; }
     e.preventDefault();

@@ -1,3 +1,4 @@
+import { deRegistries } from "@/features/registries/messages/de";
 // German interface texts follow the English base. Feature files own their texts.
 import { deActivity, deUserEvents } from "@/features/activity/messages/de";
 import { deLogin } from "@/features/auth/login/messages/de";
@@ -56,6 +57,7 @@ export const messages: typeof enMessages = {
   },
   hosts: deHosts,
   hubBackups: deHubBackups,
+  registries: deRegistries,
   images: deImages,
   volumes: deVolumes,
   settings: deSettings,

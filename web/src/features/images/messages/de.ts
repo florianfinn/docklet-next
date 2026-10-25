@@ -1,7 +1,10 @@
+import { deImageErrors } from "./errors-de";
 // German texts of the image management (list, details, pull and cleanup).
 import type { enImages } from "./en";
 
 export const deImages: typeof enImages = {
+  observation: { unchecked: "Nicht geprüft", current: "Aktuell", version: "Neue Version", rebuild: "Neubau desselben Tags", local: "Lokales Image", unknown: "Update unbekannt", error: "Prüfung fehlgeschlagen", currentVersion: "Aktuell: {version}", candidateVersion: "Kandidat: {version}", checkedAt: "Geprüft: {time}" },
+  protection: "Entfernen ist geschützt oder die Nutzung ist unbekannt.",
   title: "Images",
   description: (import.meta.env.DEV ? "{scope} · Images je Host mit Nutzung durch Stacks und Container. Ziehen, Entfernen und Aufräumen sind simuliert." : "{scope} · Images je Host mit Nutzung durch Stacks und Container."),
   pull: "Image ziehen",
@@ -9,9 +12,10 @@ export const deImages: typeof enImages = {
   strip: { images: "Images", size: "Belegt", unused: "Ungenutzt", dangling: "Dangling", updates: "Mit Update" },
   search: "Repository, Tag, Version oder Container suchen …",
   searchLabel: "Images durchsuchen",
-  usageFilter: { label: "Nutzung", all: "Alle", "in-use": "In Nutzung", unused: "Ungenutzt", dangling: "Dangling" },
-  usage: { "in-use": "In Nutzung", unused: "Ungenutzt", dangling: "Dangling" },
+  usageFilter: { unknown: "Nutzung unbekannt", label: "Nutzung", all: "Alle", "in-use": "In Nutzung", unused: "Ungenutzt", dangling: "Dangling" },
+  usage: { unknown: "Nutzung unbekannt", "in-use": "In Nutzung", unused: "Ungenutzt", dangling: "Dangling" },
   usageHint: {
+    unknown: "Die Nutzung konnte nicht geprüft werden; Entfernen ist nicht verfügbar.",
     "in-use": "Mindestens ein Container verwendet dieses Image; Entfernen ist gesperrt.",
     unused: "Kein Container verwendet dieses Image. Aufräumen entfernt es nur auf Wunsch.",
     dangling: "Ohne Tag – ein neuerer Pull hat den Tag übernommen. Sicher entfernbar.",
@@ -65,6 +69,14 @@ export const deImages: typeof enImages = {
     notFound: "Dieses Image ist nicht mehr vorhanden (entfernt oder aufgeräumt).",
   },
   pullDialog: {
+    progress: { pulling: "Image-Layer werden gezogen", waiting: "Warten auf einen Layer", downloading: "Layer wird heruntergeladen", verifying: "Layer wird geprüft", extracting: "Layer wird entpackt", complete: "Layer vollständig" },
+    progressBytes: "{current} / {total}",
+    effectiveReference: "Gezogen wird: {reference}",
+    completed: "{reference} auf {host} gezogen",
+
+    registry: "Registry",
+    automaticRegistry: "Registry aus der Image-Referenz (gespeicherte Zugangsdaten)",
+
     title: "Image ziehen",
     description: (import.meta.env.DEV ? "Lädt ein Image auf einen verbundenen Host (Simulation: keine Registry wird kontaktiert). Container nutzen ein neues Image erst nach Deploy oder Neu-Erstellen." : "Lädt ein Image auf einen verbundenen Host. Container nutzen das neue Image nach Deploy oder Neu-Erstellen."),
     host: "Host",
@@ -88,18 +100,24 @@ export const deImages: typeof enImages = {
     modeHint: { dangling: "Images ohne Tag – sicher, typischer Standard.", unused: "Zusätzlich getaggte Images ohne Container, z. B. ältere Versionen nach Updates. Ein späteres Zurückwechseln lädt sie neu." },
     remove: "{count, plural, =0 {Nichts zu entfernen} one {# Image wird entfernt} other {# Images werden entfernt}} · {size}",
     keep: "{count, plural, one {# Image bleibt} other {# Images bleiben}} erhalten (in Nutzung)",
+    skippedUnavailable: "Hosts ohne Aufräum-Fähigkeit werden übersprungen: {hosts}",
     skippedOffline: "Getrennte Hosts werden übersprungen: {hosts}",
     confirm: "Entfernen",
     cancel: "Abbrechen",
+    previewHint: "Nur Vorschau. Der Host prüft Nutzung und Schutz erneut; der Bericht zeigt die tatsächlichen Ergebnisse.",
+    report: "Aufräumbericht", removed: "Entfernt: {count}", skipped: "Übersprungen: {count}", failed: "Fehlgeschlagen: {count}", space: "Freigegeben: {size}", spaceUnknown: "Freigegebener Speicher unbekannt", close: "Schließen",
     nothing: "Nichts zu entfernen.",
   },
   removeDialog: {
     title: "{name} entfernen?",
     body: (import.meta.env.DEV ? "Das Image wird auf {host} gelöscht. Ein späterer Deploy lädt es bei Bedarf neu (Demo: nur im Arbeitsspeicher)." : "Das Image wird auf {host} gelöscht. Ein späterer Deploy lädt es bei Bedarf erneut."),
+    force: "Force anfordern (umgeht weder Nutzung noch Schutz)",
     confirm: "Image entfernen",
   },
+  followActivity: "Aktivität öffnen",
   toast: { removed: "{name} entfernt", nothing: "Keine Images zum Aufräumen" },
   errors: {
+    ...deImageErrors,
     "in-use": "Das Image wird noch verwendet und bleibt erhalten.",
     "host-offline": "Der Host ist nicht verbunden.",
     "invalid-name": "Ungültige Image-Referenz.",

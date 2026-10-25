@@ -14,6 +14,7 @@ export const deShell: typeof enShell = {
     containers: "Container",
     security: "Sicherheit",
     networks: "Netzwerke",
+    registries: "Registries",
     images: "Images",
     volumes: "Volumes",
     hosts: "Hosts",
