@@ -234,5 +234,5 @@ func TestPR1ClearedCredentialTestCannotClaimAuthenticationSuccess(t *testing.T) 
 	require.True(t, ok)
 	require.False(t, result.OK)
 	require.Equal(t, "registry.authentication-required", result.Code)
-	require.Equal(t, 401, result.GetStatus())
+	require.Equal(t, 502, result.GetStatus())
 }

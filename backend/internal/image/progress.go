@@ -19,15 +19,8 @@ var pullStatuses = map[string]bool{
 	"Download complete": true, "Extracting": true, "Pull complete": true, "Already exists": true,
 }
 
-type safePullMessage struct {
-	Status         string              `json:"status"`
-	ID             string              `json:"id,omitempty"`
-	ProgressDetail *pullProgressCounts `json:"progressDetail,omitempty"`
-}
-type pullProgressCounts struct {
-	Current int64 `json:"current"`
-	Total   int64 `json:"total"`
-}
+type safePullMessage = imageDTO.PullProgressFrame
+type pullProgressCounts = imageDTO.PullProgressCounts
 
 func writeSafePullProgress(reader io.Reader, writer io.Writer) error {
 	decoder := json.NewDecoder(reader)

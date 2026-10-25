@@ -204,7 +204,7 @@ func (s *Service) RemoveLocked(ctx context.Context, c *client.Client, ref string
 		if errdefs.IsConflict(err) {
 			return 0, imageDTO.Failure("image.in-use", 409)
 		}
-		return 0, imageDTO.Failure("image.remove-failed", 502)
+		return 0, DaemonError(err, "image.remove-failed")
 	}
 	if s.Removed != nil {
 		s.Removed(context.WithoutCancel(ctx), inspect.ID)
@@ -244,7 +244,7 @@ func (s *Service) Prune(ctx context.Context, options system.PruneImagesOptions) 
 	defer release()
 	c, err := s.Docker(ctx)
 	if err != nil {
-		return nil, imageDTO.Failure("image.prune-failed", 502)
+		return nil, imageDTO.Failure("image.usage-unavailable", 503)
 	}
 	opts := client.ImageListOptions{All: false}
 	if options.Mode == system.PruneImageModeDangling {
@@ -252,7 +252,7 @@ func (s *Service) Prune(ctx context.Context, options system.PruneImagesOptions) 
 	}
 	list, err := c.ImageList(ctx, opts)
 	if err != nil {
-		return nil, imageDTO.Failure("image.prune-failed", 502)
+		return nil, imageDTO.Failure("image.usage-unavailable", 503)
 	}
 	out := &imageDTO.PruneReport{ImagesDeleted: []string{}, Skipped: []imageDTO.PruneItem{}, Failed: []imageDTO.PruneItem{}, SpaceReclaimedKnown: false}
 	seen := map[string]bool{}
