@@ -30,6 +30,9 @@ import { createRuntimeCommands } from "./runtime-commands";
 import { createRuntimeLogs } from "./logs";
 import { registerIdentityLifetime } from "../identity-lifetime";
 import { createIdentityReads } from "./identity-reads";
+import { activityDeadline } from "./activity-deadline";
+import { createActivityTargets } from "./activity-targets";
+import { mapActivityDetail } from "./map-dto";
 import { createActivityReader } from "./activity-reader";
 import { createEventReader } from "./event-reader";
 import { createVolumePrune } from "./volume-prune";
@@ -114,7 +117,7 @@ export function createHttpAdapter(options: HttpAdapterOptions = {}): DockletAdap
   let stopIdentityCheck: (() => void) | undefined;
   let reconnectTimer: ReturnType<typeof setTimeout> | undefined;
 
-  async function read<I extends ReadOperation>(operationId: I, route: keyof paths | string, query?: Record<string, string | number>, observeResponse?: (response: Response) => void, signal?: AbortSignal): Promise<Body<I>> {
+  async function readBody<I extends ReadOperation>(operationId: I, route: keyof paths | string, query?: Record<string, string | number>, observeResponse?: (response: Response) => void, signal?: AbortSignal): Promise<Body<I>> {
     const params = new URLSearchParams();
     for (const [key, value] of Object.entries(query ?? {})) params.set(key, String(value));
     const url = `${baseUrl}${route}${params.size ? `?${params}` : ""}`;
@@ -122,6 +125,7 @@ export function createHttpAdapter(options: HttpAdapterOptions = {}): DockletAdap
     try {
       response = await fetcher(url, { credentials: "same-origin", headers: { Accept: "application/json" }, signal });
     } catch (error) { throw classifiedError(error); }
+    if (response.status === 401) throw classifiedError(null, 401);
     let body: unknown;
     try { body = await response.json(); } catch (error) { throw classifiedError(error, response.status); }
     if (!response.ok) throw classifiedError(body, response.status);
@@ -130,6 +134,12 @@ export function createHttpAdapter(options: HttpAdapterOptions = {}): DockletAdap
     }
     observeResponse?.(response);
     return body as Body<I>;
+  }
+
+  function read<I extends ReadOperation>(operationId: I, route: keyof paths | string, query?: Record<string, string | number>, observeResponse?: (response: Response) => void, signal?: AbortSignal): Promise<Body<I>> {
+    return operationId === "listEvents"
+      ? readBody(operationId, route, query, observeResponse, signal)
+      : activityDeadline((owned) => readBody(operationId, route, query, observeResponse, owned), signal);
   }
 
   const capabilityReads = new Map<string, Promise<Body<"get-capabilities">["data"]>>();
@@ -146,7 +156,8 @@ export function createHttpAdapter(options: HttpAdapterOptions = {}): DockletAdap
     authenticated = nextActive;
     stopIdentityCheck?.(); stopIdentityCheck = undefined;
     identityCheck = undefined;
-    runtime.reset();
+    runtime.reset(retain);
+    targets.reset(retain);
     logs.reset();
     metrics.reset(false, retain);
     identityReads.reset();
@@ -206,11 +217,13 @@ export function createHttpAdapter(options: HttpAdapterOptions = {}): DockletAdap
     let start = 0;
     for (;;) {
       if (signal?.aborted) throw new CancelledError();
-      const body = await read(operationId, route, { start, limit, order: "desc" }, observeResponse, signal);
+      let responseIncomplete = false;
+      const body = await read(operationId, route, { start, limit, order: "desc", ...(operationId === "list-activities" ? { includeSummary: "true" } : {}) }, (response) => { responseIncomplete = response.headers.get("X-Docklet-Host-Reason") === "agent.unavailable"; observeResponse?.(response); }, signal);
       if (!Array.isArray(body.data) || !body.pagination || !Number.isInteger(body.pagination.totalItems)) throw classifiedError({ code: `${operationId}.invalid-page` });
       result.push(...body.data as never[]);
       start += body.data.length;
-      if (start >= body.pagination.totalItems) return result;
+      if (limit === -1 && start < body.pagination.totalItems && responseIncomplete === false) throw classifiedError({ code: `${operationId}.short-page` });
+      if (limit === -1 || start >= body.pagination.totalItems) return result;
       if (body.data.length === 0) throw classifiedError({ code: `${operationId}.short-page` });
     }
   }
@@ -250,18 +263,24 @@ export function createHttpAdapter(options: HttpAdapterOptions = {}): DockletAdap
       return authenticated;
     },
   });
-  const runtime = createRuntimeCommands({ baseUrl, client, capability: getCapability, unauthorized: () => { suspendIdentity(); actions.reset(true); }, publish: (run) => actions.upsert(run) });
+  const runtime = createRuntimeCommands({ baseUrl, client, capability: getCapability, unauthorized: () => { suspendIdentity(); actions.reset(true); }, publish: (run, detailed) => { actions.upsert(run); if (detailed) targets.accept(run); } });
   const actions = createActivityReader({
     hasConsumer: () => actionListeners.size > 0,
     retained: runtime.retained,
-    project: runtime.project,
+    mergeSummary: runtime.mergeSummary,
+    changed: (previous, current, recovered) => targets.changed(previous, current, recovered),
+    detailRun: async (host, id, signal, expanded) => {
+      if (expanded && actions.runs().some((run) => run.id === id && run.hostId === host && run.outcomeState !== undefined)) return runtime.detail(host, id, false, false, signal);
+      const dto = (await read("get-activity", `/environments/${encodeURIComponent(host)}/activities/${encodeURIComponent(id)}`, { limit: 500 }, undefined, signal)).data!;
+      try { return mapActivityDetail(dto); } catch { throw classifiedError({ code: "activity.invalid-data" }); }
+    },
     hosts: async () => {
       await requireCapability("listActions");
       return [...new Set(["0", ...(await environments()).map((item) => item.id)])];
     },
     page: async (hostId, signal) => {
       let incomplete = false;
-      const items = await page("list-activities", `/environments/${encodeURIComponent(hostId)}/activities`, 100, (response) => {
+      const items = await page("list-activities", `/environments/${encodeURIComponent(hostId)}/activities`, -1, (response) => {
         if (response.headers.get("X-Docklet-Host-Reason") === "agent.unavailable") incomplete = true;
       }, signal);
       return { items, incomplete };
@@ -273,6 +292,8 @@ export function createHttpAdapter(options: HttpAdapterOptions = {}): DockletAdap
       if (runs) actionListeners.forEach((listener) => listener(runs));
     },
   });
+
+  const targets = createActivityTargets({ terminal: (host) => refreshHost(host), hasConsumer: () => actionListeners.size > 0, read: (host, id, signal, expanded) => actions.readDetail(id, host, signal, expanded) });
 
   const events = createEventReader(async () => {
     await requireCapability("listEvents");
@@ -286,20 +307,23 @@ export function createHttpAdapter(options: HttpAdapterOptions = {}): DockletAdap
     void actions.refresh(recovery).catch((error) => { if (isCancelledError(error)) return; window.dispatchEvent(new CustomEvent("docklet:adapter-error", { detail: error })); });
   }
 
-  function refreshRun(activityId: string, environmentId?: string, discoverOnTerminal = true): void {
-    if (environmentId && runtime.retained().some((run) => run.id === activityId && run.hostId === environmentId)) {
-      void runtime.detail(environmentId, activityId).catch(() => undefined);
-      return;
-    }
-    const previous = actions.runs().find((run) => run.id === activityId && run.hostId === environmentId);
-    if (!previous || !environmentId) { refreshRuns(); return; }
-    void actions.refreshOne(activityId, environmentId, discoverOnTerminal).catch((error) => { if (!isCancelledError(error)) window.dispatchEvent(new CustomEvent("docklet:adapter-error", { detail: error })); });
+  function refreshHost(host: string): void {
+    if (actionListeners.size === 0) return;
+    if (!actions.hasHost(host)) invalidateEnvironments();
+    void actions.refreshHost(host).catch(() => undefined);
   }
 
-  function refreshSubscribed(): void {
+  function refreshRun(activityId: string, environmentId?: string, terminal?: string, discoverOnTerminal = false): void {
+    if (actionListeners.size === 0) return;
+    const previous = actions.runs().find((run) => run.id === activityId && run.hostId === environmentId);
+    if (!previous || !environmentId) { if (environmentId) refreshHost(environmentId); else refreshRuns(); return; }
+    targets.notify(environmentId, activityId, terminal, discoverOnTerminal);
+  }
+
+  function refreshSubscribed(reopen = false): void {
     invalidateEnvironments();
     events.changed();
-    refreshRuns(true);
+    refreshRuns(reopen);
     if (changeListeners.size) changeListeners.forEach((listener) => listener(["events", "hosts", "stacks", "containers", "images", "volumes", "topology"]));
   }
 
@@ -316,9 +340,21 @@ export function createHttpAdapter(options: HttpAdapterOptions = {}): DockletAdap
     // Post-notification reads must not join snapshots started before the change.
     sharedReads.clear();
     if (envelope.channel === "activities" && envelope.activity && typeof envelope.activity.type === "string") {
-      const activityId = envelope.activity.activityId ?? envelope.activity.activity?.id;
-      if (activityId) refreshRun(activityId, envelope.activity.environmentId ?? envelope.activity.activity?.environmentId, envelope.activity.type !== "message");
-      else refreshRuns();
+      const notification = envelope.activity;
+      const host = notification.environmentId ?? notification.activity?.environmentId;
+      if (notification.type === "snapshot" || notification.type === "error") {
+        if (host) {
+          if (notification.type === "error") actions.hostError(host);
+          refreshHost(host);
+        } else refreshRuns();
+      } else {
+        const activityId = notification.activityId ?? notification.activity?.id;
+        const status = notification.activity?.status;
+        const terminal = status && status !== "queued" && status !== "running" ? `${status}:${notification.activity?.endedAt ?? ""}` : undefined;
+        if (activityId) refreshRun(activityId, host, terminal, notification.type !== "message");
+        else if (host) refreshHost(host);
+        else refreshRuns();
+      }
       return;
     }
     if (envelope.channel === "events" && envelope.eventLog && typeof envelope.eventLog.type === "string") {
@@ -357,12 +393,13 @@ export function createHttpAdapter(options: HttpAdapterOptions = {}): DockletAdap
       if (source !== opened || version !== identityGeneration) return;
       sourceOpen = true;
       lastEventId = undefined;
-      refreshSubscribed();
+      refreshSubscribed(true);
     };
     opened.onmessage = (event: MessageEvent) => { if (source === opened && version === identityGeneration) handleStream(event.data, event.lastEventId); };
     opened.onerror = () => {
       if (source !== opened || version !== identityGeneration) return;
       lastEventId = undefined;
+      actions.markError();
       // A reconnecting EventSource keeps its native retry cadence. Only CLOSED
       // sources need a replacement after the authoritative identity check.
       const closed = opened.readyState === 2;
@@ -388,6 +425,7 @@ export function createHttpAdapter(options: HttpAdapterOptions = {}): DockletAdap
     source = undefined;
     sourceOpen = false;
     actions.invalidate();
+    targets.reset();
     runtime.observe(false);
   }
 
@@ -456,6 +494,14 @@ export function createHttpAdapter(options: HttpAdapterOptions = {}): DockletAdap
     ...createNetworkCommands({ baseUrl, client, capability: getCapability, changed: () => { sharedReads.clear(); changeListeners.forEach((listener) => listener(["topology", "containers"])); } }),
     ...createVolumeCommands({ baseUrl, client, capability: getCapability, changed: () => { sharedReads.clear(); changeListeners.forEach((listener) => listener(["volumes"])); } }),
     listActions: actions.load,
+    observeActionDetail(host, id, listener) {
+      const offActions = adapter.subscribeActions(() => {});
+      const owner = lifetimeGeneration;
+      let active = true;
+      runtime.observeDetail(id, true);
+      const off = targets.observe(host, id, listener);
+      return () => { if (!active) return; active = false; off(); if (owner === lifetimeGeneration) runtime.observeDetail(id, false); offActions(); };
+    },
     subscribeActionReadHealth(listener) {
       healthListeners.add(listener);
       listener(actions.health());
@@ -468,7 +514,7 @@ export function createHttpAdapter(options: HttpAdapterOptions = {}): DockletAdap
       connect();
       if (actionListeners.size === 1 && sourceOpen) refreshRuns();
       else if (actions.hasSnapshot()) listener(actions.runs());
-      return () => { actionListeners.delete(listener); disconnectIfUnused(); };
+      return () => { if (!actionListeners.delete(listener)) return; if (!actionListeners.size) { targets.dropIdle(); runtime.observe(false); } disconnectIfUnused(); };
     },
     subscribeChanges(listener) {
       changeListeners.add(listener);

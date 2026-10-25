@@ -8,6 +8,7 @@ import type { components } from "@/api/generated/schema";
 import type { ActionKind, ActionStatus, DeployStepKey, EventKind, EventLevel, OutputStream, StepState } from "@/domain/model";
 
 import type { CodedActionRun, CodedEvent, MessageCode } from "../message-code";
+import type { RuntimeView } from "@/features/activity/runtime-presentation";
 import { inventoryId } from "./inventory-mapping";
 
 type Activity = components["schemas"]["ActivityActivity"];
@@ -78,7 +79,7 @@ export function mapActivityDetail(detail: Detail): CodedActionRun {
       ...(line.level === "error" ? { level: "error" as const } : line.level === "warning" ? { level: "warn" as const } : {}),
     };
   });
-  return {
+  return Object.assign({
     id: run.id,
     kind,
     title: { code: `activity.runKind.${kind}`, params: {} },
@@ -100,7 +101,35 @@ export function mapActivityDetail(detail: Detail): CodedActionRun {
     log: detail.messages?.length ? detail.messages.map((item) => message(item.code, item.message)) : run.latestMessage ? [message(run.messageCode, run.latestMessage)] : [],
     output,
     outputTruncated: detail.outputTruncated,
+  }, { summary: { stepsAvailable: true } });
+}
+
+/** Summary mapping shares validation without retaining detail histories. */
+export function mapActivitySummary(item: components["schemas"]["ActivityActivitySummary"]): CodedActionRun {
+  const run: RuntimeView<CodedActionRun> = mapActivityDetail({ activity: item, stepTrace: item.stepTrace ?? [], messages: [], output: [], outputTruncated: false });
+  Object.assign(run, { summary: { stepsAvailable: item.stepTrace !== undefined && item.stepTrace !== null } });
+  run.log = [];
+  if (run.outcomeState !== undefined) run.runtime = {
+    released: item.recovery?.disposition === "released",
+    ...(item.recovery?.unknownReason ? { unknownReason: item.recovery.unknownReason } : {}),
+    resultCode: item.messageCode,
+    sourceObserved: true,
   };
+  return run;
+}
+
+export function summaryOnly(run: CodedActionRun): CodedActionRun {
+  const presentation = (run as RuntimeView<CodedActionRun>).runtime;
+  const minimal = presentation ? Object.fromEntries(Object.entries({ released: presentation.released,
+    unknownReason: presentation.unknownReason, resultCode: presentation.resultCode,
+    currentIntent: presentation.currentIntent, sourceObserved: presentation.sourceObserved }).filter(([, value]) => value !== undefined)) : undefined;
+  return { ...run, log: [], output: [], outputTruncated: false, ...(minimal ? { runtime: minimal } : {}) };
+}
+
+/** A later summary owns status; the selected detail retains its separate history. */
+export function detailWithSummary(summary: CodedActionRun, detail: CodedActionRun): RuntimeView<CodedActionRun> {
+  return { ...detail, ...summary, output: detail.output, log: detail.log, outputTruncated: detail.outputTruncated,
+    runtime: { ...(detail as RuntimeView<CodedActionRun>).runtime, ...(summary as RuntimeView<CodedActionRun>).runtime } };
 }
 
 function eventKind(event: Event): EventKind {

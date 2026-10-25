@@ -31,7 +31,7 @@ for (const edge of [false, true]) for (const reverse of [false, true]) {
       expect(health.mock.lastCall?.[0].failures).toEqual([]);
       const retained = runs.mock.lastCall![0].find((r) => r.id === "run-bad")!;
       f.state.lists.bad = [activity("bad", "hub-summary")];
-      f.state.details["hub-summary"]!.activity.status = "queued";
+      f.state.lists.bad![0]!.status = "queued";
       f.state.hold = async (path, response) => path.endsWith("/bad/activities") ? partial(response) : response;
       const result = await f.adapter.listActions();
       expect(result.find((r) => r.id === "run-bad")).toEqual(retained);
@@ -44,7 +44,7 @@ for (const edge of [false, true]) for (const reverse of [false, true]) {
     } finally { stops.forEach((stop) => stop()); }
   });
 }
-it.each([0, 1])("any marked page makes the whole source incomplete (marked page %s)", async (marked) => {
+it.each([false, true])("one full window preserves partial rows and rejects short complete responses (partial=%s)", async (marked) => {
   const f = activityFixture();
   await f.adapter.listActions();
   const health = vi.fn(); const off = f.adapter.subscribeActionReadHealth!(health);
@@ -55,12 +55,12 @@ it.each([0, 1])("any marked page makes the whole source incomplete (marked page 
     const row = activity("bad", `summary-${start}`);
     f.state.details[row.id] = detail("bad", row.id);
     const page = json([row], 200, 2);
-    return start === marked ? partial(page) : page;
+    return marked ? partial(page) : page;
   };
   try {
-    expect((await f.adapter.listActions()).map((r) => r.id).sort()).toEqual(["run-bad", "run-good", "summary-0", "summary-1"]);
-    expect(starts).toEqual(["0", "1"]);
-    expect(health.mock.lastCall?.[0].failures).toEqual([{ hostId: "bad", reason: "unavailable" }]);
+    expect((await f.adapter.listActions()).map((r) => r.id).sort()).toEqual(marked ? ["run-bad", "run-good", "summary-0"] : ["run-bad", "run-good"]);
+    expect(starts).toEqual(["0"]);
+    expect(health.mock.lastCall?.[0].failures).toEqual([{ hostId: "bad", reason: marked ? "unavailable" : "invalid-data" }]);
     f.state.hold = undefined; f.state.lists.bad = [];
     expect((await f.adapter.listActions()).map((r) => r.id)).toEqual(["run-good"]);
     expect(health.mock.lastCall?.[0].failures).toEqual([]);
@@ -85,7 +85,7 @@ it("concurrent hosts keep response metadata scoped while a healthy response comp
   const held = deferred<Response>(); const reached = deferred<Response>(); const partialRead = deferred<void>();
   f.state.hold = async (path, response) => {
     if (path.endsWith("/good/activities")) { reached.resolve(response); return held.promise; }
-    if (path.endsWith("/bad/activities/run-bad")) partialRead.resolve();
+    if (path.endsWith("/bad/activities")) partialRead.resolve();
     return path.endsWith("/bad/activities") ? partial(response) : response;
   };
   const health = vi.fn(); const off = f.adapter.subscribeActionReadHealth!(health);

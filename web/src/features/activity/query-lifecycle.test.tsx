@@ -25,7 +25,7 @@ it.each([false, true])("renewed ActivityCenter read (prior data=%s) revalidates,
   await f.adapter.getCurrentUser();
   const client = clientFor();
   const held = deferred<Response>(); const reached = deferred<Response>();
-  const hold = () => { f.state.hold = async (path, response) => path.endsWith("/good/activities/run-good") ? (reached.resolve(response), held.promise) : response; };
+  const hold = () => { f.state.hold = async (path, response) => path.endsWith("/good/activities") ? (reached.resolve(response), held.promise) : response; };
   if (!prior) hold();
   act(() => activityStore.set((s) => ({ ...s, open: true, tab: "actions" })));
   const errors = vi.fn(); window.addEventListener("docklet:adapter-error", errors);
@@ -92,7 +92,7 @@ it.each(["logout", "unsubscribe", "activity401", "replacement"] as const)("held 
   let stop = f.adapter.subscribeActions(vi.fn()); const client = clientFor();
   const held = deferred<Response>(); const reached = deferred<Response>();
   try {
-    f.state.hold = async (path, response) => path.endsWith("/good/activities/run-good") ? (reached.resolve(response), held.promise) : response;
+    f.state.hold = async (path, response) => path.endsWith("/good/activities") ? (reached.resolve(response), held.promise) : response;
     const pending = client.fetchQuery({ queryKey: ["actions"], queryFn: () => f.adapter.listActions() });
     const rejected = boundary === "activity401" ? expect(pending).rejects.toMatchObject({ outcome: { status: 401 } }) : expect(pending).rejects.toBeInstanceOf(CancelledError);
     const response = await reached.promise; f.state.hold = undefined;
@@ -101,7 +101,7 @@ it.each(["logout", "unsubscribe", "activity401", "replacement"] as const)("held 
     if (boundary === "activity401") {
       vi.useFakeTimers();
       f.state.failure = "page401";
-      f.sources[0]!.open();
+      f.sources[0]!.onerror?.({} as Event); f.sources[0]!.open();
       const failure = f.adapter.listActions();
       await expect(failure).rejects.toMatchObject({ outcome: { status: 401 } });
       await rejected;

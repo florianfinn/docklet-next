@@ -100,13 +100,22 @@ attempts use the same abort lifetime. An aborted request, an HTTP status, a body
 or mapping failure, and POST/PUT/PATCH/DELETE never enter this read retry. The
 runtime command admission policy below remains owned by its command transport.
 
-Each activity discovery uses at most four concurrent detail reads per host; each
-host advances independently. Known activity notifications read their targeted
-detail without waiting for discovery workers. Concurrent full activity reads
-share work. Known-run log/progress messages refresh only their targeted detail;
-they never invalidate discovery or event history. Unknown activities and terminal
-state changes notify discovery; terminal `message` envelopes remain targeted.
-Reconnect or detected loss aborts obsolete discovery and transfers its waiters to a fresh read. A burst shares one scheduled restart; recovery during that fresh read can restart it too.
+Activity discovery maps the opt-in list-only summary projection, using one
+full-window (`limit=-1`) list read per host and zero generic or runtime detail
+reads. Snapshot/error envelopes invalidate only their host. Known progress and
+messages share a targeted per-run read, with a one-second trailing throttle when
+no detail view is open. Opened views share separately owned detail/history reads;
+summary rows never retain fetched output or message history.
+
+Malformed/gap recovery queues one trailing read without aborting. A stream reopen
+may interrupt a read that started before its preceding error exactly once per
+lineage, transferring unresolved callers to a protected replacement. Further
+reopen-only signals reuse it; genuine new signals can queue another sequential
+read. Activity HTTP reads have a 40-second deadline, above the dedicated
+30-second hub-to-agent forwarding budget and required merge margin; host lineages
+and aggregate callers have 80/90-second bounds. See
+[activity discovery](activity-discovery.md) for the state table, consumer/lifetime
+rules, partial evidence, precise request budgets and mutation matrix.
 
 Event history retains the complete history used by Dashboard and Activity Center.
 Pages request the effective size of 100 and run strictly sequentially. Event stream
@@ -115,7 +124,8 @@ Only events-channel messages and stream recovery invalidate history. HTTP and
 mapping failures remain visible and a deliberate retry can start a new load.
 
 Discovery, recovery and history share a generation-scoped single-flight policy: idle notifications start a read only with a mounted subscriber; cached rows are not demand, and the next explicit request always reads fresh.
-Each start clears pending, so bursts queue one read and notifications during any trailing read can queue one more; callers after a notification await the next result, earlier callers receive the current result unless recovery replaces it.
+Each start clears pending, so bursts queue one read and notifications during any trailing read can queue one more; callers after a notification await the next result, earlier callers receive the current result unless an eligible pre-error reopen
+transfers their unresolved waiters once.
 Every start and publication checks the identity generation; replacement, logout or 401 immediately clears old published runs and cancels old waiters and requests, preventing late publication and old trailing work.
 
 ## Runtime command mapping

@@ -8,6 +8,7 @@ import { cn } from "@/shared/lib/utils";
 import type { ToastDesign, ToastDetail } from "@/shared/preferences/ui-style-store";
 import { Button } from "@/shared/ui/button";
 
+import { summaryStepsAvailable } from "./summary-presentation";
 import { runtimeState } from "./runtime-presentation";
 import { RunIconTile, StepTrack } from "./ActionSteps";
 import { elapsedSeconds, RUN_ICON, RUN_TONE, runPhase, TOAST_LIFETIME } from "./run-phase";
@@ -132,7 +133,7 @@ function Meta({ run, facts }: { run: ActionRun; facts: Facts }) {
       </div>
       <div className="flex shrink-0 gap-1">
         <dt>{t("progress")}</dt>
-        <dd className="tabular-nums">{run.outcomeState === "unknown" ? "–" : t("stepsDone", { done: facts.done, total: facts.total })}</dd>
+        <dd className="tabular-nums">{run.outcomeState === "unknown" || !summaryStepsAvailable(run) ? "–" : t("stepsDone", { done: facts.done, total: facts.total })}</dd>
       </div>
       <div className="flex shrink-0 gap-1">
         <dt>{t("duration")}</dt>

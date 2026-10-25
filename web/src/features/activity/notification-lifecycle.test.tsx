@@ -66,7 +66,7 @@ it.each([false, true])("real initial history (empty=%s) still allows genuine new
     f.state.lists.good!.push(activity("good", "new-major")); f.state.details["new-major"] = detail("good", "new-major");
     await f.load();
     await waitFor(() => expect(actionDialogStore.get().runId).toBe("new-major"));
-    f.state.lists.good!.push(activity("good", "next-major")); f.state.details["next-major"] = detail("good", "next-major");
+    f.state.details["next-major"] = detail("good", "next-major"); f.state.lists.good!.push(f.state.details["next-major"]!.activity);
     await f.load();
     expect(actionDialogStore.get()).toEqual({ runId: "new-major", waiting: ["next-major"] });
     await waitFor(() => expect(count()).toBe(1));
@@ -120,7 +120,7 @@ it.each(["replacement", "logout", "auth401", "activity401"])("%s clears old iden
     f.state.lists.good!.push(activity("good", "old-notice")); f.state.details["old-notice"] = detail("good", "old-notice");
     await f.load(); await waitFor(() => expect(count()).toBe(1));
     const held = deferred<Response>(); const reached = deferred<Response>();
-    f.state.hold = async (path, response) => path.endsWith("/good/activities/history-failed") ? (reached.resolve(response), held.promise) : response;
+    f.state.hold = async (path, response) => path.endsWith("/good/activities") ? (reached.resolve(response), held.promise) : response;
     const pending = f.adapter.listActions();
     const rejected = boundary === "activity401" ? expect(pending).rejects.toMatchObject({ outcome: { status: 401 } }) : expect(pending).rejects.toMatchObject({ name: "Error" });
     const captured = await reached.promise; f.state.hold = undefined;
@@ -129,7 +129,7 @@ it.each(["replacement", "logout", "auth401", "activity401"])("%s clears old iden
     if (boundary === "activity401") {
       f.state.failure = "page401";
       await act(async () => {
-        f.sources[0]!.open();
+        f.sources[0]!.onerror?.({} as Event); f.sources[0]!.open();
         const failure = f.adapter.listActions();
         await expect(failure).rejects.toMatchObject({ outcome: { status: 401 } });
         await rejected;
@@ -209,7 +209,7 @@ it("identity replacement dismisses the prior owned toast even when the same UUID
   const view = f.mount();
   try {
     await f.load();
-    f.state.lists.good!.push(activity("good", "same-run")); f.state.details["same-run"] = detail("good", "same-run");
+    f.state.details["same-run"] = detail("good", "same-run"); f.state.lists.good!.push(f.state.details["same-run"]!.activity);
     await f.load(); await waitFor(() => expect(count()).toBe(1));
     f.state.user.id = "next-operator";
     await act(async () => { await f.discover(); });

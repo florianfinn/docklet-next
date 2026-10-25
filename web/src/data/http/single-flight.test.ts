@@ -113,36 +113,39 @@ it("recovery bursts share a restart and transfer waiters even when recovery itse
   const publish = vi.fn(); const flight = createSingleFlight(read, () => 0, { publish, hasConsumer: () => true });
   const current = flight.request(); let currentResult: string | undefined;
   void current.then((value) => { currentResult = value; });
-  const queued = flight.notify(); const recovery = flight.recover();
+  const queued = flight.notify(); flight.markError(); const recovery = flight.recover();
   for (let i = 0; i < 30; i++) expect(flight.recover()).toBe(recovery);
   expect(signals[0]!.aborted).toBe(true); expect(read).toHaveBeenCalledTimes(1);
   expect(recovery).toBe(queued);
   await Promise.resolve(); expect(read).toHaveBeenCalledTimes(2);
   gates[0]!.resolve("obsolete"); await Promise.resolve(); expect(publish).not.toHaveBeenCalled();
-  const next = flight.recover(); expect(next).not.toBe(recovery);
-  for (let i = 0; i < 30; i++) expect(flight.recover()).toBe(next);
-  await Promise.resolve(); expect(read).toHaveBeenCalledTimes(3); expect(signals[1]!.aborted).toBe(true);
-  gates[1]!.resolve("superseded"); await Promise.resolve(); expect(publish).not.toHaveBeenCalled();
-  gates[2]!.resolve("latest"); expect(await queued).toBe("latest");
-  expect(currentResult).toBe("latest"); expect(await current).toBe("latest"); expect(await next).toBe("latest");
-  expect(publish.mock.calls).toEqual([["latest"]]);
+  flight.markError();
+  for (let i = 0; i < 30; i++) expect(flight.recover()).toBe(recovery);
+  expect(read).toHaveBeenCalledTimes(2); expect(signals[1]!.aborted).toBe(false);
+  const next = flight.notify(); // A genuine invalidation still gets a third read.
+  gates[1]!.resolve("replacement"); expect(await queued).toBe("replacement");
+  expect(currentResult).toBe("replacement"); expect(await current).toBe("replacement");
+  expect(read).toHaveBeenCalledTimes(3);
+  gates[2]!.resolve("latest"); expect(await next).toBe("latest");
+  expect(publish.mock.calls).toEqual([["replacement"], ["latest"]]);
 });
 
 it("recovery suppresses an already resolved obsolete read before its continuation publishes", async () => {
   const read = vi.fn().mockResolvedValueOnce("obsolete").mockResolvedValue("fresh");
   const publish = vi.fn();
   const flight = createSingleFlight<string>(read, () => 0, { publish, hasConsumer: () => true });
-  const first = flight.request(); const fresh = flight.recover();
+  const first = flight.request(); flight.markError(); const fresh = flight.recover();
   expect(await fresh).toBe("fresh"); expect(await first).toBe("fresh");
   expect(publish.mock.calls).toEqual([["fresh"]]); expect(read).toHaveBeenCalledTimes(2);
 });
 
-it("recovery requested during publication transfers unresolved callers to the fresh read", async () => {
+it("notification during publication preserves current callers and queues a fresh read", async () => {
   const read = vi.fn().mockResolvedValueOnce("old").mockResolvedValue("fresh");
   const published: string[] = [];
   const flight = createSingleFlight<string>(read, () => 0, { hasConsumer: () => true, publish: (value) => {
-    published.push(value); if (value === "old") void flight.recover();
+    published.push(value); if (value === "old") void flight.notify();
   } });
-  expect(await flight.request()).toBe("fresh");
+  expect(await flight.request()).toBe("old");
+  await Promise.resolve();
   expect(published).toEqual(["old", "fresh"]); expect(read).toHaveBeenCalledTimes(2);
 });

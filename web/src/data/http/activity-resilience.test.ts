@@ -19,29 +19,24 @@ function fixture() {
   return { reads, reader: createActivityReader(reads) };
 }
 
-it("bounds discovery details to four per host and advances every host independently", async () => {
+it("discovers summaries with zero details and starts every host independently", async () => {
   const f = fixture();
   const gates = { good: deferred<void>(), other: deferred<void>() };
   const reached = { good: deferred<void>(), other: deferred<void>() };
-  const active: Record<string, number> = { good: 0, other: 0 };
-  const max: Record<string, number> = { good: 0, other: 0 };
-  f.reads.detail.mockImplementation(async (host, id) => {
-    active[host] = active[host]! + 1; max[host] = Math.max(max[host]!, active[host]!);
-    if (active[host] === 4) reached[host as keyof typeof reached].resolve();
+  const completed = deferred<void>();
+  f.reads.page.mockImplementation(async (host) => {
+    reached[host as keyof typeof reached].resolve();
     await gates[host as keyof typeof gates].promise;
-    active[host] = active[host]! - 1;
-    return detail(host, id);
+    if (host === "other") completed.resolve();
+    return { items: Array.from({ length: 12 }, (_, i) => activity(host, `${host}-${i}`)), incomplete: false };
   });
   const pending = f.reader.load();
   await Promise.all([reached.good.promise, reached.other.promise]);
-  expect(f.reads.detail).toHaveBeenCalledTimes(8);
-  gates.other.resolve();
-  // Completion of the other host is observable while the first remains held.
-  await vi.waitFor(() => expect(f.reads.detail.mock.calls.filter(([host]) => host === "other")).toHaveLength(12));
-  expect(active.good).toBe(4);
-  gates.good.resolve();
-  expect(await pending).toHaveLength(24);
-  expect(max).toEqual({ good: 4, other: 4 });
+  expect(f.reads.detail).not.toHaveBeenCalled(); expect(f.reads.page).toHaveBeenCalledTimes(2);
+  gates.other.resolve(); await completed.promise;
+  expect(f.reads.publish).not.toHaveBeenCalled(); // Initial claims still need the held source.
+  gates.good.resolve(); expect(await pending).toHaveLength(24);
+  expect(f.reads.detail).not.toHaveBeenCalled();
 });
 
 it("coalesces concurrent full loads without a second discovery", async () => {
@@ -59,9 +54,8 @@ it("coalesces notifications during a load into one trailing refresh of post-even
   const f = fixture(); const gate = deferred<void>(); const reached = deferred<void>();
   f.reads.hosts.mockResolvedValue(["good"]);
   f.reads.page.mockResolvedValue({ items: [activity("good")], incomplete: false });
-  f.reads.detail.mockImplementationOnce(async () => { reached.resolve(); await gate.promise; return detail("good"); });
-  const fresh = detail("good"); fresh.activity.status = "queued";
-  f.reads.detail.mockResolvedValue(fresh);
+  f.reads.page.mockImplementationOnce(async () => { reached.resolve(); await gate.promise; return { items: [activity("good")], incomplete: false }; });
+  f.reads.page.mockResolvedValue({ items: [{ ...activity("good"), status: "queued" }], incomplete: false });
   const first = f.reader.load(); await reached.promise;
   const trailing = f.reader.refresh();
   expect(f.reader.refresh()).toBe(trailing);
@@ -71,19 +65,14 @@ it("coalesces notifications during a load into one trailing refresh of post-even
   expect((await first)[0]?.status).toBe("running");
   expect((await trailing)?.[0]?.status).toBe("queued");
   expect(f.reads.hosts).toHaveBeenCalledTimes(2);
-  expect(f.reads.detail).toHaveBeenCalledTimes(2);
+  expect(f.reads.page).toHaveBeenCalledTimes(2); expect(f.reads.detail).not.toHaveBeenCalled();
 });
 
-it("keeps a known run fresh without waiting behind discovery details", async () => {
-  const f = fixture();
-  f.reads.hosts.mockResolvedValue(["good"]);
-  await f.reader.load();
-  const gate = deferred<void>(); const reached = deferred<void>(); let started = 0;
-  f.reads.detail.mockImplementation(async (host, id) => {
-    const old = detail(host, id);
-    if (++started <= 4) { if (started === 4) reached.resolve(); await gate.promise; return old; }
-    const fresh = detail(host, id); fresh.activity.status = "queued"; return fresh;
-  });
+it("keeps a known run fresh while an older discovery list is held", async () => {
+  const f = fixture(); f.reads.hosts.mockResolvedValue(["good"]); await f.reader.load();
+  const gate = deferred<void>(); const reached = deferred<void>();
+  f.reads.page.mockImplementationOnce(async () => { reached.resolve(); await gate.promise; return { items: [activity("good", "good-0")], incomplete: false }; });
+  f.reads.detail.mockResolvedValue({ ...detail("good", "good-0"), activity: { ...activity("good", "good-0"), status: "queued" } });
   const full = f.reader.load(); await reached.promise;
   await f.reader.refreshOne("good-0", "good");
   expect(f.reader.runs().find((run) => run.id === "good-0")?.status).toBe("queued");
@@ -119,17 +108,18 @@ it("new identity work does not join an old full read or publish its late result"
 
 it("recovery clears a 401 before held discovery finishes and blocks its later success", async () => {
   const f = fixture(); await f.reader.load();
-  const gate = deferred<ReturnType<typeof detail>>(); const reached = deferred<void>();
-  f.reads.detail.mockImplementationOnce(async () => { reached.resolve(); return gate.promise; });
+  const gate = deferred<{ items: ReturnType<typeof activity>[]; incomplete: boolean }>(); const reached = deferred<void>();
+  f.reads.page.mockImplementationOnce(async () => { reached.resolve(); return gate.promise; });
   const old = f.reader.load(); const rejected = old.catch((e: unknown) => e); await reached.promise;
   const { AdapterOutcomeError } = await import("../capability");
   f.reads.hosts.mockRejectedValueOnce(new AdapterOutcomeError({ kind: "error", code: "http.error", status: 401 }));
+  f.reader.markError();
   const fresh = f.reader.refresh(true);
   expect(fresh).not.toBe(old); await Promise.resolve(); expect(f.reads.hosts).toHaveBeenCalledTimes(3);
   await expect(fresh).rejects.toMatchObject({ outcome: { status: 401 } });
   expect(f.reader.runs()).toEqual([]);
   expect(await rejected).toMatchObject({ outcome: { status: 401 } });
   const publications = f.reads.publish.mock.calls.length;
-  gate.resolve(detail("good", "good-0")); await Promise.resolve();
+  gate.resolve({ items: [activity("good", "good-0")], incomplete: false }); await Promise.resolve();
   expect(f.reads.publish).toHaveBeenCalledTimes(publications);
 });
