@@ -183,7 +183,7 @@ func (h *ImageHandler) TagImage(ctx context.Context, input *TagImageInput) (*han
 	}
 
 	if tagImageErr := h.imageService.TagImage(ctx, imageName, input.Body, *user); tagImageErr != nil {
-		return nil, image.Neutral(tagImageErr, "image.tag-failed", 500)
+		return nil, image.Neutral(tagImageErr, "image.tag-failed", 502)
 	}
 
 	return &handlerutil.Out[base.MessageResponse]{
@@ -281,7 +281,7 @@ func (h *ImageHandler) RemoveImage(ctx context.Context, input *RemoveImageInput)
 	}
 
 	if removeImageErr := h.imageService.RemoveImage(ctx, input.ImageID, input.Force, *user); removeImageErr != nil {
-		return nil, image.Neutral(removeImageErr, "image.remove-failed", 500)
+		return nil, image.Neutral(removeImageErr, "image.remove-failed", 502)
 	}
 
 	return &handlerutil.Out[base.MessageResponse]{
@@ -335,6 +335,12 @@ func (h *ImageHandler) PullImage(ctx context.Context, input *PullImageInput) (*h
 				database.JSON{"imageName": fullImageName},
 				true,
 			)
+			if activityID == "" {
+				problem := image.Failure("image.pull-failed", http.StatusBadGateway)
+				_ = json.NewEncoder(rawWriter).Encode(image.PullErrorFrame{Error: problem.Problem})
+				activitylib.FlushWriter(rawWriter)
+				return
+			}
 			activitylib.WriteStartedLine(rawWriter, activityID)
 			if f, ok := rawWriter.(http.Flusher); ok {
 				f.Flush()
@@ -343,7 +349,7 @@ func (h *ImageHandler) PullImage(ctx context.Context, input *PullImageInput) (*h
 
 			writer := activitylib.NewWriter(runtimeCtx, h.activityService, activityID, rawWriter, "Pulling image")
 			if pullImageErr := h.imageService.PullImage(runtimeCtx, fullImageName, writer, *user, credentials); pullImageErr != nil {
-				problem := image.Neutral(pullImageErr, "image.pull-failed", 500)
+				problem := image.Neutral(pullImageErr, "image.pull-failed", 502)
 				_ = json.NewEncoder(writer).Encode(image.PullErrorFrame{Error: problem.Problem})
 				activitylib.FlushWriter(writer)
 				activitylib.CompleteHandlerActivity(runtimeCtx, h.activityService, activityID, "Image pull failed", pullImageErr)
@@ -366,7 +372,7 @@ func (h *ImageHandler) PruneImages(ctx context.Context, input *PruneImagesInput)
 		Until: until,
 	})
 	if err != nil {
-		return nil, image.Neutral(err, "image.prune-failed", 500)
+		return nil, image.Neutral(err, "image.prune-failed", 502)
 	}
 
 	out := *report
@@ -444,14 +450,10 @@ func (h *ImageHandler) UploadImage(ctx context.Context, input *UploadImageInput)
 
 	file, session, cleanup, err := h.uploadService.Consume(ctx, uploadtypes.KindImage, input.Body.UploadID)
 	if err != nil {
-		if httpErr := upload.SessionHTTPError(err); httpErr != nil {
-			status := httpErr.(huma.StatusError).GetStatus()
-			if status == http.StatusUnprocessableEntity {
-				status = http.StatusBadRequest
-			}
-			return nil, image.Failure("image.invalid-archive", status)
+		if upload.SessionHTTPError(err) != nil {
+			return nil, image.Failure("image.invalid-archive", http.StatusBadRequest)
 		}
-		return nil, image.Neutral(err, "image.load-failed", 500)
+		return nil, image.Neutral(err, "image.load-failed", 502)
 	}
 	defer cleanup()
 
@@ -460,7 +462,7 @@ func (h *ImageHandler) UploadImage(ctx context.Context, input *UploadImageInput)
 
 	result, err := h.imageService.LoadImageFromReader(ctx, file, session.Filename, *user, maxSizeBytes)
 	if err != nil {
-		return nil, image.Neutral(err, "image.load-failed", 500)
+		return nil, image.Neutral(err, "image.load-failed", 502)
 	}
 
 	return &handlerutil.Out[image.LoadResult]{

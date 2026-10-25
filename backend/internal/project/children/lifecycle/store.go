@@ -70,14 +70,15 @@ type File struct {
 	Present bool
 }
 type ServiceImage struct {
-	Reference, ImageID, Digest, Platform, ContainerID, ContainerName string
-	Present, Running                                                 bool
+	Reference, ImageID, Digest, Platform, ContainerID, ContainerName, Service, ConfigHash string
+	Present, Running, OneOff                                                              bool
 }
 type Snapshot struct {
 	TargetID, TargetIdentity, RegistrationID, RunID, SavedRevision string
 	Files                                                          []File
 	Model                                                          *compose.Project
 	Services                                                       map[string]ServiceImage
+	Containers                                                     map[string]ServiceImage
 }
 type Store struct{ DB *database.DB }
 
@@ -176,7 +177,7 @@ func (s Store) Prepare(ctx context.Context, snapshot *Snapshot, run, selected, s
 		if err := tx.Create(&point).Error; err != nil {
 			return err
 		}
-		for _, img := range snapshot.Services {
+		for _, img := range snapshot.Images() {
 			if !img.Present {
 				continue
 			}

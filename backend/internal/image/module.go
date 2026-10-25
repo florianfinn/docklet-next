@@ -185,7 +185,7 @@ func RegisterImages(
 		Method:      http.MethodPost,
 		Path:        "/environments/{id}/images/pull",
 		Summary:     "Pull an image",
-		Description: "Pull an image as newline-delimited JSON: activity identity, progress, then typed error or done=true. EOF alone is not success.",
+		Description: "Pull an image as newline-delimited JSON: activity identity, progress, then typed error or done=true. If the activity cannot be created, emit only a typed error and stop before pulling. EOF alone is not success.",
 		Responses: map[string]*huma.Response{"200": {
 			Description: "Newline-delimited pull frames",
 			Content:     map[string]*huma.MediaType{"application/x-json-stream": {Schema: api.OpenAPI().Components.Schemas.Schema(reflect.TypeFor[PullFrame](), true, "")}},

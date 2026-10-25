@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { readFileSync, readdirSync } from "node:fs";
 import test from "node:test";
 import { assertNoDrift } from "../scripts/openapi-contract.mjs";
 import { agentFixture } from "../scripts/agent-contract.mjs";
@@ -61,5 +61,20 @@ test("v7 lifecycle manifest changes with executable DTOs and admission operation
     const schema = changed.components.schemas[producer];
     delete schema.properties[Object.keys(schema.properties)[0]];
     assert.notDeepEqual(agentFixture(Buffer.from(JSON.stringify(changed)), fixture), fixture);
+  }
+});
+
+test("every lifecycle producer code is declared on the public error DTO", () => {
+  const spec = JSON.parse(readFileSync(new URL("../api/openapi.json", import.meta.url)));
+  const declared = new Set(spec.components.schemas.ImageProblem.properties.code.enum);
+  const directories = ["../backend/internal/project/", "../backend/internal/project/children/lifecycle/"];
+  for (const directory of directories) {
+    for (const name of readdirSync(new URL(directory, import.meta.url))) {
+      if (!name.endsWith(".go") || name.endsWith("_test.go") ||
+          (directory.endsWith("project/") && !name.startsWith("lifecycle_"))) continue;
+      const source = readFileSync(new URL(directory + name, import.meta.url), "utf8");
+      for (const [, code] of source.matchAll(/"((?:update|restore)\.[a-z-]+)"/g))
+        assert.ok(declared.has(code), `${name}: undeclared lifecycle code ${code}`);
+    }
   }
 });

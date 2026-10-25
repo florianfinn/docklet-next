@@ -93,3 +93,16 @@ func fitsRestoreIntent(snapshot *Snapshot) bool {
 	body, err := json.Marshal(intent)
 	return err == nil && len(body) <= dto.MaxLifecycleIntentBytes
 }
+
+// Containers are partial-source evidence, not additional Compose services.
+// Preserve their images even when a replica, one-off or orphan is not a target.
+func (s *Snapshot) Images() map[string]ServiceImage {
+	out := map[string]ServiceImage{}
+	for key, image := range s.Services {
+		out[key] = image
+	}
+	for id, image := range s.Containers {
+		out["container/"+id] = image
+	}
+	return out
+}

@@ -109,7 +109,9 @@ func TestLifecycleRestoreSharingRequiresAnActualConflictingMove(t *testing.T) {
 	f.establishBaseline()
 	updated := f.wait(f.admit(f.intent("rebuild")))
 	require.Equal(t, activityDTO.StatusSuccess, updated.Status)
-	point := lifecyclePoints(t, f)[0]
+	points := lifecyclePoints(t, f)
+	require.NotEmpty(t, points, "failed runs with effects retain a restore point")
+	point := points[0]
 	f.mu.Lock()
 	f.workloads["peer"] = lifecycleWorkload{ID: strings.Repeat("e", 64), Project: "other-stack", Service: "app", Reference: "registry.example.com/app:1.0.0", ImageID: lifecycleNewID, Running: false}
 	f.mu.Unlock()
@@ -294,7 +296,9 @@ func TestLifecycleRestorePartialSourcePreservesAbsentAndStoppedServices(t *testi
 	f := newLifecycleFixture(t)
 	f.establishBaseline()
 	require.Equal(t, activityDTO.StatusSuccess, f.wait(f.admit(f.intent("version"))).Status)
-	original := lifecyclePoints(t, f)[0]
+	initial := lifecyclePoints(t, f)
+	require.NotEmpty(t, initial, "failed runs with effects retain a restore point")
+	original := initial[0]
 	partial := lifecycleFile(t, f, "compose.yaml") + "  worker:\n    image: registry.example.com/app:1.0.0\n"
 	require.NoError(t, os.WriteFile(filepath.Join(f.project.Path, "compose.yaml"), []byte(partial), 0600))
 	f.mu.Lock()
@@ -414,7 +418,9 @@ func TestLifecycleOptionalEnvAbsenceIsCapturedAndRestored(t *testing.T) {
 	f.establishBaseline()
 	out := f.wait(f.admit(f.intent("version")))
 	require.Equal(t, activityDTO.StatusSuccess, out.Status)
-	point := lifecyclePoints(t, f)[0]
+	points := lifecyclePoints(t, f)
+	require.NotEmpty(t, points, "failed runs with effects retain a restore point")
+	point := points[0]
 	require.NoError(t, os.WriteFile(filepath.Join(f.project.Path, ".env"), []byte("SYNTHETIC_INPUT=newer\n"), 0600))
 	_, current, err := f.service.lifecycleCurrent(t.Context(), f.project.ID, f.registration)
 	require.NoError(t, err)
@@ -481,7 +487,7 @@ func TestLifecycleSnapshotMustFitAllServiceRestoreLimit(t *testing.T) {
 }
 
 func TestLifecycleErrorsPreserveHTTPClassification(t *testing.T) {
-	for code, status := range map[string]int{"update.invalid-target": 400, "update.target-not-found": 404, "restore.not-found": 404, "update.persistence-failed": 500, "image.tag-failed": 500, "update.deploy-failed": 500, "restore.deploy-failed": 500, "image.pull-failed": 502, "update.check-unavailable": 503, "update.config-drift": 409, "restore.shared-reference": 409, "update.snapshot-unavailable": 409, "update.path-retired": 409} {
+	for code, status := range map[string]int{"update.invalid-target": 400, "update.target-not-found": 404, "restore.not-found": 404, "update.persistence-failed": 500, "image.tag-failed": 502, "update.deploy-failed": 500, "restore.deploy-failed": 500, "image.pull-failed": 502, "update.check-unavailable": 503, "update.config-drift": 409, "restore.shared-reference": 409, "update.snapshot-unavailable": 409, "update.path-retired": 409} {
 		require.Equal(t, status, imageDTO.Neutral(lifecycleFailure(code), "unexpected", 500).Status, code)
 	}
 }

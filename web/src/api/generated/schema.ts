@@ -1,5 +1,5 @@
 // Source: api/openapi.json
-// Revision: 5f2d410df6af942d1a0585211f054bbc7c89353c60220d25a03f4a0c44810ec6
+// Revision: 9d239847ead643508edf312c924ac272b4105886ad8f78d66e1fca1af44970ee
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
 // Deviations: Generated TypeScript declarations from the local Huma export.
@@ -1792,7 +1792,7 @@ export interface paths {
         put?: never;
         /**
          * Pull an image
-         * @description Pull an image as newline-delimited JSON: activity identity, progress, then typed error or done=true. EOF alone is not success.
+         * @description Pull an image as newline-delimited JSON: activity identity, progress, then typed error or done=true. If the activity cannot be created, emit only a typed error and stop before pulling. EOF alone is not success.
          */
         post: operations["pull-image"];
         delete?: never;
@@ -8818,7 +8818,7 @@ export interface components {
         };
         ImageProblem: {
             /** @enum {string} */
-            code: "image.active-update-protected" | "image.busy" | "image.changed" | "image.in-use" | "image.invalid-archive" | "image.invalid-prune" | "image.invalid-reference" | "image.load-failed" | "image.not-found" | "image.prune-failed" | "image.pull-failed" | "image.remove-failed" | "image.reserved-reference" | "image.restore-point-protected" | "image.system-protected" | "image.tag-failed" | "image.usage-unavailable" | "registry.authentication-failed" | "registry.authentication-required" | "registry.credential-unavailable" | "registry.exists" | "registry.inline-credentials-not-allowed" | "registry.invalid-config" | "registry.not-found" | "registry.persistence-failed" | "registry.rate-limited" | "registry.sync-failed" | "registry.unavailable" | "update.check-unavailable" | "update.deploy-failed" | "update.invalid-target" | "update.persistence-failed" | "update.requires-hub-update" | "update.system-version-unknown";
+            code: "image.active-update-protected" | "image.busy" | "image.changed" | "image.in-use" | "image.invalid-archive" | "image.invalid-prune" | "image.invalid-reference" | "image.load-failed" | "image.not-found" | "image.prune-failed" | "image.pull-failed" | "image.remove-failed" | "image.reserved-reference" | "image.restore-point-protected" | "image.system-protected" | "image.tag-failed" | "image.usage-unavailable" | "registry.authentication-failed" | "registry.authentication-required" | "registry.credential-unavailable" | "registry.exists" | "registry.inline-credentials-not-allowed" | "registry.invalid-config" | "registry.not-found" | "registry.persistence-failed" | "registry.rate-limited" | "registry.sync-failed" | "registry.unavailable" | "restore.deploy-failed" | "restore.image-mismatch" | "restore.in-use" | "restore.not-found" | "restore.shared-reference" | "restore.unavailable" | "update.baseline-unavailable" | "update.check-unavailable" | "update.config-drift" | "update.deploy-failed" | "update.image-binding-unsupported" | "update.invalid-target" | "update.path-retired" | "update.persistence-failed" | "update.requires-hub-update" | "update.snapshot-unavailable" | "update.system-version-unknown" | "update.target-changed" | "update.target-not-found";
             message: string;
         };
         ImageProtection: {
@@ -8827,7 +8827,7 @@ export interface components {
         };
         ImagePruneItem: {
             /** @enum {string} */
-            code: "image.active-update-protected" | "image.busy" | "image.changed" | "image.in-use" | "image.invalid-archive" | "image.invalid-prune" | "image.invalid-reference" | "image.load-failed" | "image.not-found" | "image.prune-failed" | "image.pull-failed" | "image.remove-failed" | "image.reserved-reference" | "image.restore-point-protected" | "image.system-protected" | "image.tag-failed" | "image.usage-unavailable" | "registry.authentication-failed" | "registry.authentication-required" | "registry.credential-unavailable" | "registry.inline-credentials-not-allowed" | "registry.invalid-config" | "registry.persistence-failed" | "registry.rate-limited" | "registry.sync-failed" | "registry.unavailable" | "update.check-unavailable" | "update.deploy-failed" | "update.invalid-target" | "update.persistence-failed" | "update.requires-hub-update" | "update.system-version-unknown";
+            code: "image.active-update-protected" | "image.busy" | "image.changed" | "image.in-use" | "image.invalid-archive" | "image.invalid-prune" | "image.invalid-reference" | "image.load-failed" | "image.not-found" | "image.prune-failed" | "image.pull-failed" | "image.remove-failed" | "image.reserved-reference" | "image.restore-point-protected" | "image.system-protected" | "image.tag-failed" | "image.usage-unavailable" | "registry.authentication-failed" | "registry.authentication-required" | "registry.credential-unavailable" | "registry.inline-credentials-not-allowed" | "registry.invalid-config" | "registry.persistence-failed" | "registry.rate-limited" | "registry.sync-failed" | "registry.unavailable" | "restore.deploy-failed" | "restore.image-mismatch" | "restore.in-use" | "restore.not-found" | "restore.shared-reference" | "restore.unavailable" | "update.baseline-unavailable" | "update.check-unavailable" | "update.config-drift" | "update.deploy-failed" | "update.image-binding-unsupported" | "update.invalid-target" | "update.path-retired" | "update.persistence-failed" | "update.requires-hub-update" | "update.snapshot-unavailable" | "update.system-version-unknown" | "update.target-changed" | "update.target-not-found";
             id: string;
         };
         ImagePruneReport: {

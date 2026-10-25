@@ -11,9 +11,6 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"github.com/containerd/errdefs"
-	"github.com/florianfinn/docklet-next/backend/pkg/libarcane"
-	"go.getarcane.app/sys/cgroup"
 	"os"
 	"path/filepath"
 	"slices"
@@ -23,7 +20,6 @@ import (
 	compose "github.com/compose-spec/compose-go/v2/types"
 	"github.com/florianfinn/docklet-next/backend/internal/database"
 	"github.com/florianfinn/docklet-next/backend/internal/event"
-	"github.com/florianfinn/docklet-next/backend/internal/image/guard"
 	life "github.com/florianfinn/docklet-next/backend/internal/project/children/lifecycle"
 	edits "github.com/florianfinn/docklet-next/backend/internal/project/children/update"
 	"github.com/florianfinn/docklet-next/backend/pkg/projects"
@@ -31,7 +27,6 @@ import (
 	projectDTO "github.com/florianfinn/docklet-next/types/project"
 	dto "github.com/florianfinn/docklet-next/types/updater"
 	"github.com/florianfinn/docklet-next/types/user"
-	"github.com/moby/moby/client"
 	"go.getarcane.app/acfs"
 	updatertypes "go.getarcane.app/updater/types"
 	"go.yaml.in/yaml/v4"
@@ -45,9 +40,9 @@ func lifecycleFailure(code string) error {
 		status = 400
 	case "update.target-not-found", "restore.not-found":
 		status = 404
-	case "update.persistence-failed", "image.tag-failed", "update.deploy-failed", "restore.deploy-failed":
+	case "update.persistence-failed", "update.deploy-failed", "restore.deploy-failed":
 		status = 500
-	case "image.pull-failed":
+	case "image.pull-failed", "image.tag-failed":
 		status = 502
 	case "update.check-unavailable":
 		status = 503
@@ -160,85 +155,6 @@ func lifecycleYAMLHas(n *yaml.Node, key string) bool {
 		}
 	}
 	return false
-}
-func (s *ProjectService) lifecycleObserve(ctx context.Context, snap *life.Snapshot) error {
-	c, err := s.dockerService.GetClient(ctx)
-	if err != nil {
-		return lifecycleFailure("update.snapshot-unavailable")
-	}
-	protected := map[string]bool{}
-	if refs := s.imageService.ImageGuard().SystemReferences; refs != nil {
-		for _, ref := range refs() {
-			if ref == "" {
-				continue
-			}
-			img, e := c.ImageInspect(ctx, ref)
-			if errdefs.IsNotFound(e) {
-				continue
-			}
-			if e != nil {
-				return lifecycleFailure("update.snapshot-unavailable")
-			}
-			protected[img.InspectResponse.ID] = true
-		}
-	}
-	self, _ := libarcane.CurrentContainerInspectTarget(cgroup.CurrentContainerID, os.Hostname)
-	listed, err := c.ContainerList(ctx, client.ContainerListOptions{All: true})
-	if err != nil {
-		return lifecycleFailure("update.snapshot-unavailable")
-	}
-	snap.Services = make(map[string]life.ServiceImage, len(snap.Model.Services))
-	for key, svc := range snap.Model.Services {
-		snap.Services[key] = life.ServiceImage{Reference: svc.Image}
-	}
-	for _, item := range listed.Items {
-		if item.Labels["com.docker.compose.project"] != snap.Model.Name {
-			continue
-		}
-		key := item.Labels["com.docker.compose.service"]
-		old, ok := snap.Services[key]
-		if !ok || old.Present {
-			return lifecycleFailure("update.baseline-unavailable")
-		}
-		inspected, e := c.ContainerInspect(ctx, item.ID, client.ContainerInspectOptions{})
-		if e != nil || inspected.Container.ID != item.ID || inspected.Container.Config == nil {
-			return lifecycleFailure("update.snapshot-unavailable")
-		}
-		id := inspected.Container.Image
-		if lifecycleSystemLabels(inspected.Container.Config.Labels) || protected[id] || (len(self) >= 12 && strings.HasPrefix(item.ID, self)) {
-			return lifecycleFailure("update.invalid-target")
-		}
-
-		img, e := c.ImageInspect(ctx, id)
-		if e != nil || img.InspectResponse.ID != id {
-			return lifecycleFailure("update.snapshot-unavailable")
-		}
-		digest := ""
-		if len(img.InspectResponse.RepoDigests) > 0 {
-			digest = img.InspectResponse.RepoDigests[0]
-		}
-		if old.Reference == "" {
-			old.Reference = inspected.Container.Config.Image
-		}
-		if err = guard.ValidateReference(old.Reference); err != nil {
-			return err
-		}
-		if img.InspectResponse.Os == "" || img.InspectResponse.Architecture == "" {
-			return lifecycleFailure("update.snapshot-unavailable")
-		}
-		old.ContainerID = inspected.Container.ID
-		old.ContainerName = strings.TrimPrefix(inspected.Container.Name, "/")
-		old.ImageID = id
-		old.Digest = digest
-		old.Platform = img.InspectResponse.Os + "/" + img.InspectResponse.Architecture
-		if img.InspectResponse.Variant != "" {
-			old.Platform += "/" + img.InspectResponse.Variant
-		}
-		old.Present = true
-		old.Running = inspected.Container.State != nil && inspected.Container.State.Running
-		snap.Services[key] = old
-	}
-	return nil
 }
 func (s *ProjectService) lifecycleWrite(ctx context.Context, p *Project, current, desired *life.Snapshot, actor user.Actor) error {
 	s.contentMu.Lock()

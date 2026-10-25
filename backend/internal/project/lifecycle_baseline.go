@@ -40,7 +40,7 @@ func (s *ProjectService) ImageBaselineStatus(ctx context.Context, id, registrati
 		status.Code = "update.baseline-unavailable"
 		return status, nil
 	}
-	status.Available = baseline.SavedRevision == current.SavedRevision && lifecycleObserved(baseline) == lifecycleObserved(current)
+	status.Available = baseline.SavedRevision == current.SavedRevision && lifecycleConfiguration(baseline) == lifecycleConfiguration(current)
 	status.SourceRunID = baseline.RunID
 	if !status.Available {
 		status.Code = "update.baseline-unavailable"

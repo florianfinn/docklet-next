@@ -8,12 +8,12 @@ package project
 
 import (
 	"context"
-	"encoding/json"
-	"errors"
 	"github.com/containerd/errdefs"
 	"github.com/distribution/reference"
+	imageService "github.com/florianfinn/docklet-next/backend/internal/image"
 	"github.com/florianfinn/docklet-next/backend/internal/image/guard"
 	life "github.com/florianfinn/docklet-next/backend/internal/project/children/lifecycle"
+	imageDTO "github.com/florianfinn/docklet-next/types/image"
 	dto "github.com/florianfinn/docklet-next/types/updater"
 	"github.com/moby/moby/client"
 	"io"
@@ -25,7 +25,7 @@ func (s *ProjectService) verifyLifecyclePoint(ctx context.Context, point life.Po
 	if err != nil {
 		return lifecycleFailure("restore.unavailable")
 	}
-	for key, img := range snap.Services {
+	for key, img := range snap.Images() {
 		if !img.Present {
 			continue
 		}
@@ -84,7 +84,7 @@ func (s *ProjectService) lifecyclePinPoint(ctx context.Context, point life.Point
 	if err != nil {
 		return lifecycleFailure("update.snapshot-unavailable")
 	}
-	for key, img := range snapshot.Services {
+	for key, img := range snapshot.Images() {
 		if !img.Present {
 			continue
 		}
@@ -115,34 +115,31 @@ func (s *ProjectService) lifecycleSelectImages(ctx context.Context, run string, 
 			}
 			opts, err := s.imageService.PullOptionsWithAuth(ctx, immutable, nil)
 			if err != nil {
-				return err
+				return imageDTO.Neutral(err, "registry.credential-unavailable", 503)
 			}
 			reader, err := c.ImagePull(ctx, immutable, opts)
 			if err != nil {
-				return lifecycleFailure("image.pull-failed")
+				return imageService.PullError(err, opts.RegistryAuth != "")
 			}
-			decoder := json.NewDecoder(reader)
-			for {
-				var frame struct {
-					Error       string `json:"error"`
-					ErrorDetail *struct {
-						Message string `json:"message"`
-					} `json:"errorDetail"`
-				}
-				e := decoder.Decode(&frame)
-				if errors.Is(e, io.EOF) {
-					break
-				}
-				if e != nil || frame.Error != "" || frame.ErrorDetail != nil {
-					_ = reader.Close()
-					return lifecycleFailure("image.pull-failed")
-				}
+			progressErr := imageService.WriteSafePullProgress(reader, io.Discard, opts.RegistryAuth != "")
+			closeErr := reader.Close()
+			if progressErr != nil {
+				return progressErr
 			}
-			if err = reader.Close(); err != nil {
-				return lifecycleFailure("image.pull-failed")
+			if closeErr != nil {
+				return imageService.PullError(closeErr, opts.RegistryAuth != "")
 			}
+
 			pulled, err := c.ImageInspect(ctx, immutable)
-			if err != nil || pulled.InspectResponse.ID != sel.ImageID || lifecyclePlatform(pulled.InspectResponse.Os, pulled.InspectResponse.Architecture, pulled.InspectResponse.Variant) != sel.Platform {
+			if err != nil {
+				return lifecycleFailure("update.target-changed")
+			}
+			if pulled.InspectResponse.ID == sel.Digest && pulled.InspectResponse.ID != sel.ImageID {
+				// Manifest-ID image stores need exact-package acceptance before
+				// their identity can replace the frozen config-ID comparison.
+				return lifecycleFailure("update.image-binding-unsupported")
+			}
+			if pulled.InspectResponse.ID != sel.ImageID || lifecyclePlatform(pulled.InspectResponse.Os, pulled.InspectResponse.Architecture, pulled.InspectResponse.Variant) != sel.Platform {
 				return lifecycleFailure("update.target-changed")
 			}
 		}
@@ -161,6 +158,7 @@ func (s *ProjectService) lifecycleSelectImages(ctx context.Context, run string, 
 	if err != nil || current.SavedRevision != expectedRevision {
 		return lifecycleFailure("update.target-changed")
 	}
+	current.RegistrationID = desired.RegistrationID
 	if err = s.lifecycleObserve(ctx, current); err != nil || lifecycleObserved(current) != expectedObserved {
 		return lifecycleFailure("update.target-changed")
 	}
@@ -221,6 +219,13 @@ func (s *ProjectService) ReconcileImageLifecycle(ctx context.Context) error {
 		if err = s.db.WithContext(ctx).Delete(&life.Run{}, "id = ?", run.ID).Error; err != nil {
 			return err
 		}
+	}
+	var targets []string
+	if err = s.db.WithContext(ctx).Model(&life.Point{}).Distinct("target_id").Pluck("target_id", &targets).Error; err != nil {
+		return err
+	}
+	for _, target := range targets {
+		s.trimLifecyclePoints(ctx, target)
 	}
 	// Metadata-free pins are durable cleanup work, including interrupted preparing
 	// points. Never infer run settlement from process or lease age.

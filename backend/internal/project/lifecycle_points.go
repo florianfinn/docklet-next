@@ -22,7 +22,6 @@ func (s *ProjectService) LifecycleRegistration(ctx context.Context) string {
 	return s.settingsService.GetSettingsConfig().InstanceID.Value
 }
 func (s *ProjectService) ListImageRestorePoints(ctx context.Context, target string, admin bool) ([]dto.RestorePoint, error) {
-	_ = s.ReconcileImageLifecycle(ctx)
 	var rows []life.Point
 	q := s.db.WithContext(ctx).Order("created_at DESC, id DESC")
 	if target != "" {

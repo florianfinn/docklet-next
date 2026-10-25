@@ -18,7 +18,6 @@ import (
 	projectDTO "github.com/florianfinn/docklet-next/types/project"
 	dto "github.com/florianfinn/docklet-next/types/updater"
 	v1 "github.com/google/go-containerregistry/pkg/v1"
-	"go.getarcane.app/updater/refs"
 )
 
 func (s *ProjectService) SetLifecycleChecker(check func(context.Context, string) (*projectDTO.UpdateInfo, error)) {
@@ -27,10 +26,25 @@ func (s *ProjectService) SetLifecycleChecker(check func(context.Context, string)
 func lifecycleObserved(snap *life.Snapshot) string {
 	images := map[string]any{}
 	for key, img := range snap.Services {
-		images[key] = []any{img.ContainerID, img.ContainerName, img.ImageID, img.Present, img.Running}
+		images[key] = []any{img.ContainerID, img.ImageID, img.Present}
 	}
-	return life.Hash([]any{snap.TargetIdentity, images})
+	containers := map[string]any{}
+	for id, img := range snap.Containers {
+		containers[id] = []any{img.Service, img.ImageID, img.ConfigHash, img.OneOff}
+	}
+	return life.Hash([]any{snap.TargetIdentity, images, containers})
 }
+
+// Drift is deployed configuration evidence. Runtime identity remains a separate
+// per-admission barrier and cannot make a stopped/exited service undeployed.
+func lifecycleConfiguration(snap *life.Snapshot) string {
+	bindings := map[string]any{}
+	for key, img := range snap.Services {
+		bindings[key] = []string{img.Reference, img.ImageID, img.ConfigHash}
+	}
+	return life.Hash([]any{snap.TargetIdentity, snap.SavedRevision, bindings})
+}
+
 func (s *ProjectService) lifecycleCurrent(ctx context.Context, id, registration string) (*Project, *life.Snapshot, error) {
 	p, err := s.getMutableProject(ctx, id)
 	if err != nil {
@@ -111,7 +125,7 @@ func (s *ProjectService) PrepareImageLifecycle(ctx context.Context, id, registra
 	if baseline.SavedRevision != current.SavedRevision {
 		return nil, lifecycleFailure("update.config-drift")
 	}
-	if lifecycleObserved(baseline) != lifecycleObserved(current) {
+	if lifecycleConfiguration(baseline) != lifecycleConfiguration(current) {
 		return nil, lifecycleFailure("update.baseline-unavailable")
 	}
 	if uniqueLifecycleReferences(baseline) != nil {
@@ -138,17 +152,16 @@ func (s *ProjectService) PrepareImageLifecycle(ctx context.Context, id, registra
 			}
 			continue
 		}
-		if !img.Present || current.Model.Services[key].Build != nil {
+		if current.Model.Services[key].Build != nil {
 			return nil, lifecycleFailure("update.image-binding-unsupported")
 		}
 		selected := img.Reference
 		kind := "rebuild"
 		if info.LatestVersion != "" && info.LatestVersion != info.CurrentVersion {
-			normalized, e := refs.NormalizeReference(img.Reference)
-			if e != nil {
-				return nil, lifecycleFailure("update.image-binding-unsupported")
+			selected, err = lifecycleVersionReference(img.Reference, info.LatestVersion)
+			if err != nil {
+				return nil, err
 			}
-			selected = normalized.RegistryHost + "/" + normalized.Repository + ":" + info.LatestVersion
 			kind = "version"
 		}
 		if err = guard.ValidateReference(selected); err != nil {
@@ -178,4 +191,19 @@ func immutableLifecycleReference(sel dto.ImageSelection) (string, error) {
 		return "", lifecycleFailure("update.target-changed")
 	}
 	return reference.TrimNamed(named).String() + "@" + sel.Digest, nil
+}
+
+func lifecycleVersionReference(source, version string) (string, error) {
+	if strings.ContainsAny(source, "$@") {
+		return "", lifecycleFailure("update.image-binding-unsupported")
+	}
+	base := source
+	if colon := strings.LastIndex(source, ":"); colon > strings.LastIndex(source, "/") {
+		base = source[:colon]
+	}
+	selected := base + ":" + version
+	if guard.ValidateReference(selected) != nil {
+		return "", lifecycleFailure("update.image-binding-unsupported")
+	}
+	return selected, nil
 }

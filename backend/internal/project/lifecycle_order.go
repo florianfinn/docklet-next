@@ -14,6 +14,7 @@ import (
 	"github.com/florianfinn/docklet-next/backend/pkg/libarcane"
 	"github.com/moby/moby/client"
 	"go.getarcane.app/updater/labels"
+	"maps"
 	"slices"
 	"strings"
 )
@@ -119,14 +120,31 @@ func (s *ProjectService) lifecycleStopSignals(ctx context.Context, source *life.
 	}
 	slices.Reverse(ordered)
 	for _, key := range ordered {
-		img := source.Services[key]
 		signal := labels.StopSignal(model.Services[key].Labels)
-		if !img.Present || !img.Running || signal == "" {
+		if signal == "" {
 			continue
 		}
-		if _, err = c.ContainerStop(ctx, img.ContainerID, client.ContainerStopOptions{Signal: signal}); err != nil {
-			return lifecycleFailure("update.deploy-failed")
+		candidates := source.Containers
+		if len(candidates) == 0 {
+			candidates = map[string]life.ServiceImage{key: source.Services[key]}
 		}
+		for _, id := range slices.Sorted(maps.Keys(candidates)) {
+			img := candidates[id]
+			if len(source.Containers) > 0 && (img.Service != key || img.OneOff) {
+				continue
+			}
+			if !img.Present || !img.Running {
+				continue
+			}
+			if _, err = c.ContainerStop(ctx, img.ContainerID, client.ContainerStopOptions{Signal: signal}); err != nil {
+				return lifecycleFailure("update.deploy-failed")
+			}
+			img.Running = false
+			if len(source.Containers) > 0 {
+				source.Containers[id] = img
+			}
+		}
+		img := source.Services[key]
 		img.Running = false
 		source.Services[key] = img
 	}
@@ -135,4 +153,12 @@ func (s *ProjectService) lifecycleStopSignals(ctx context.Context, source *life.
 
 func lifecycleSystemLabels(values map[string]string) bool {
 	return labels.IsArcaneContainer(values) || values[inventory.SystemLabel] != "" || strings.EqualFold(values[libarcane.InternalResourceLabel], "true")
+}
+
+func lifecycleSourceStopSignal(source *life.Snapshot, key string) string {
+	service := source.Model.Services[key]
+	if signal := labels.StopSignal(service.Labels); signal != "" {
+		return signal
+	}
+	return service.StopSignal
 }

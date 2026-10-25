@@ -351,12 +351,7 @@ func newRuntimeServicesFixture(t *testing.T, constructRuntime ...bool) *runtimeS
 	if len(constructRuntime) > 0 && !constructRuntime[0] {
 		return fixture
 	}
-	runtime := activity.NewRuntimeService(activityService, adapter)
-	generation, err := runtime.InitializeGeneration(ctx)
-	require.NoError(t, err)
-	store := activity.RuntimeStoreBinding{StoreGeneration: generation, ExecutorGeneration: generation, ManagerID: "example-manager", RegistrationID: "example-registration", EnvironmentID: "0"}
-	require.NoError(t, runtime.ConfigureLocal(activity.RuntimeLocalConfig{ApplicationContext: context.Background(), Store: store, Executor: adapter}))
-	fixture.runtime, fixture.store = runtime, store
+	configureRuntimeServicesFixture(t, fixture)
 	return fixture
 }
 
@@ -405,4 +400,14 @@ func (f *runtimeServicesFixture) waitLocal(runID string) (activitytypes.RuntimeS
 
 func (f *runtimeServicesFixture) debugEvents() string {
 	return fmt.Sprint(f.http.snapshot())
+}
+
+func configureRuntimeServicesFixture(t *testing.T, fixture *runtimeServicesFixture) {
+	t.Helper()
+	runtime := activity.NewRuntimeService(fixture.activity, fixture.adapter)
+	generation, err := runtime.InitializeGeneration(t.Context())
+	require.NoError(t, err)
+	store := activity.RuntimeStoreBinding{StoreGeneration: generation, ExecutorGeneration: generation, ManagerID: "example-manager", RegistrationID: "example-registration", EnvironmentID: "0"}
+	require.NoError(t, runtime.ConfigureLocal(activity.RuntimeLocalConfig{ApplicationContext: context.Background(), Store: store, Executor: fixture.adapter}))
+	fixture.runtime, fixture.store = runtime, store
 }

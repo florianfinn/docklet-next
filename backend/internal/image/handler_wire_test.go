@@ -155,8 +155,8 @@ func TestImageWriteHandlerWireFailures(t *testing.T) {
 		{"pull-reserved", "POST", "/pull", `{"imageName":"docklet-retention.invalid/points/p:saved"}`, "image.reserved-reference", 400},
 		{"prune-invalid", "POST", "/prune", `{"mode":"invalid"}`, "image.invalid-prune", 400},
 		{"prune-unavailable", "POST", "/prune", `{"mode":"all"}`, "image.usage-unavailable", 503},
-		{"upload-invalid-session", "POST", "/upload", `{"uploadId":"invalid"}`, "image.invalid-archive", 404},
-		{"upload-session", "POST", "/upload", `{"uploadId":"0000000000000000"}`, "image.invalid-archive", 404},
+		{"upload-invalid-session", "POST", "/upload", `{"uploadId":"invalid"}`, "image.invalid-archive", 400},
+		{"upload-session", "POST", "/upload", `{"uploadId":"0000000000000000"}`, "image.invalid-archive", 400},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			_, _, router, _ := imageWireFixture(t, func(w http.ResponseWriter, _ *http.Request) {

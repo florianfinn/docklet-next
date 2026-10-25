@@ -29,6 +29,7 @@ export function agentFixture(spec, fixture) {
     recovery: summary.properties.recovery,
     recoveryProperties: recovery.properties,
   };
+  manifest.imageSafety.errorCodes = schemas.ImageProblem.properties.code.enum;
   const update = document.paths["/environments/{id}/updater/projects/{projectId}/update"]?.post;
   if (update) {
     const schema = (suffix) => {
@@ -64,7 +65,9 @@ export function agentFixture(spec, fixture) {
       volumeDataIncluded: false,
       normalComposePullsTakeLease: false,
       retiredUpdateCode: "update.path-retired",
-      observedIdentity: "target identity, container IDs/names, image IDs, service presence and running state",
+      observedIdentity: "target identity and modeled/extra container/image IDs and labels; running state is recorded only",
+      configurationProof: "saved Compose/env bytes, rendered model, config-hash labels and image bindings; no runtime state",
+      runtimeEvidence: "replicas, one-off and orphan containers are captured and pinned separately from configuration targets",
       resultSettlement: "atomic with terminal receipt; failed persistence never replays Docker",
     };
     manifest.imageSafety.inactiveCapabilities = manifest.imageSafety.inactiveCapabilities.filter((name) => !["stack-update", "restore"].includes(name));

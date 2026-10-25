@@ -11,6 +11,7 @@ import (
 	"errors"
 	compose "github.com/compose-spec/compose-go/v2/types"
 	"slices"
+	"strings"
 	"time"
 
 	life "github.com/florianfinn/docklet-next/backend/internal/project/children/lifecycle"
@@ -75,7 +76,7 @@ func (s *ProjectService) ExecuteImageLifecycle(ctx context.Context, id, run, reg
 			return result, err
 		}
 		desired = saved
-		if baseline, _, e := store.Baseline(ctx, current); e == nil && baseline.SavedRevision == current.SavedRevision && lifecycleObserved(baseline) == lifecycleObserved(current) {
+		if baseline, _, e := store.Baseline(ctx, current); e == nil && baseline.SavedRevision == current.SavedRevision && lifecycleConfiguration(baseline) == lifecycleConfiguration(current) {
 			state = "settled"
 		}
 	} else {
@@ -86,17 +87,22 @@ func (s *ProjectService) ExecuteImageLifecycle(ctx context.Context, id, run, reg
 		if revision != intent.BaselineRevision || baseline.SavedRevision != current.SavedRevision {
 			return result, lifecycleFailure("update.config-drift")
 		}
-		if lifecycleObserved(baseline) != lifecycleObserved(current) {
+		if lifecycleConfiguration(baseline) != lifecycleConfiguration(current) {
 			return result, lifecycleFailure("update.baseline-unavailable")
 		}
 		if len(intent.Selections) == 0 {
 			return result, nil
 		}
-		source = baseline
 		state = "settled"
 		desired, err = lifecycleVersionFiles(current, intent.Selections)
 		if err != nil {
 			return result, err
+		}
+		// Apply the active configuration even if an init service has exited or
+		// its container was removed. The pre-point retains actual source state.
+		for key, img := range desired.Services {
+			img.Present = true
+			desired.Services[key] = img
 		}
 	}
 	if _, err = lifecycleOrderedModel(desired); err != nil {
@@ -190,7 +196,20 @@ func (s *ProjectService) ExecuteImageLifecycle(ctx context.Context, id, run, reg
 	}
 	for key, expected := range desired.Services {
 		actual := observed.Services[key]
-		if actual.Present != expected.Present || expected.Present && (actual.ImageID != expected.ImageID || intent.Request.PointID != "" && actual.Running != expected.Running) {
+		if expected.Present && actual.Present && actual.ImageID != expected.ImageID {
+			code := "update.target-changed"
+			if intent.Request.PointID != "" {
+				code = "restore.image-mismatch"
+			}
+			return result, lifecycleFailure(code)
+		}
+	}
+	for _, actual := range observed.Containers {
+		expected, modeled := desired.Services[actual.Service]
+		if !modeled || !expected.Present || actual.OneOff {
+			continue
+		}
+		if actual.ImageID != expected.ImageID {
 			code := "update.target-changed"
 			if intent.Request.PointID != "" {
 				code = "restore.image-mismatch"
@@ -205,7 +224,6 @@ func (s *ProjectService) ExecuteImageLifecycle(ctx context.Context, id, run, reg
 		_ = store.Invalidate(context.WithoutCancel(ctx), id)
 	}
 	result.Verified = true
-	s.trimLifecyclePoints(ctx, id)
 	return result, nil
 }
 func (s *ProjectService) preflightLifecycleWrites(ctx context.Context, p *Project, snap *life.Snapshot) error {
@@ -327,17 +345,26 @@ func (s *ProjectService) deployLifecycle(ctx context.Context, snap *life.Snapsho
 			if item.Labels["com.docker.compose.project"] != model.Name {
 				continue
 			}
+			if strings.EqualFold(item.Labels["com.docker.compose.oneoff"], "true") {
+				continue
+			}
 			key := item.Labels["com.docker.compose.service"]
-			expected, ok := snap.Services[key]
-			if !ok {
-				prior, owned := source.Services[key]
-				if !owned || !prior.Present || prior.ContainerID != item.ID {
+			expected := snap.Services[key]
+			if !expected.Present {
+				if _, owned := source.Model.Services[key]; !owned {
+					continue
+				}
+				prior, captured := source.Containers[item.ID]
+				if !captured || prior.OneOff || prior.Service != key || prior.ImageID != item.ImageID {
 					return lifecycleFailure("restore.image-mismatch")
 				}
-				expected.Present = false
 			}
 			if !expected.Present || slices.Contains(stopped, key) {
-				if _, e = c.ContainerStop(ctx, item.ID, client.ContainerStopOptions{Signal: model.Services[key].StopSignal}); e != nil {
+				signal := model.Services[key].StopSignal
+				if signal == "" {
+					signal = lifecycleSourceStopSignal(source, key)
+				}
+				if _, e = c.ContainerStop(ctx, item.ID, client.ContainerStopOptions{Signal: signal}); e != nil {
 					return e
 				}
 			}

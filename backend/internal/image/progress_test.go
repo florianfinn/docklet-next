@@ -22,7 +22,7 @@ func TestPullProgressRetainsSafeLayerEffects(t *testing.T) {
 {"status":"Extracting","id":"aabbccddeeff","progressDetail":{"current":20,"total":20}}
 {"status":"synthetic-private-status","id":"synthetic-private-id","progressDetail":{"current":-1,"total":20}}`, secretValue)
 	var output bytes.Buffer
-	require.NoError(t, writeSafePullProgress(strings.NewReader(input), &output))
+	require.NoError(t, WriteSafePullProgress(strings.NewReader(input), &output, false))
 	require.NotContains(t, output.String(), "synthetic-private")
 	require.NotContains(t, output.String(), secretValue)
 	decoder := json.NewDecoder(&output)

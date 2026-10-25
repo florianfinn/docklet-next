@@ -22,6 +22,7 @@ import (
 	"time"
 
 	compose "github.com/compose-spec/compose-go/v2/types"
+	"github.com/distribution/reference"
 	"github.com/florianfinn/docklet-next/backend/internal/activity"
 	"github.com/florianfinn/docklet-next/backend/internal/config"
 	"github.com/florianfinn/docklet-next/backend/internal/database"
@@ -53,8 +54,8 @@ const lifecycleContainerID = "dddddddddddddddddddddddddddddddddddddddddddddddddd
 const lifecycleOriginal = "# operator comment\nservices:\n  app:\n    image: registry.example.com/app:1.0.0 # preserve comment\n    env_file: service.env\n"
 
 type lifecycleWorkload struct {
-	ID, Service, Project, Reference, ImageID string
-	Running                                  bool
+	ID, Service, Project, Reference, ImageID, ConfigHash string
+	Running, OneOff                                      bool
 }
 type lifecycleFixture struct {
 	t                         *testing.T
@@ -72,6 +73,7 @@ type lifecycleFixture struct {
 	pulls, tagWrites, deploys int
 	up                        func(context.Context, *compose.Project) error
 	onPull                    func()
+	onList                    func()
 	onInspect                 func(string)
 	normalDeploy              bool
 }
@@ -134,7 +136,17 @@ func newLifecycleFixture(t *testing.T) *lifecycleFixture {
 			if key != "app" {
 				id = fmt.Sprintf("%x", sha256.Sum256([]byte(key)))
 			}
-			f.workloads[key] = lifecycleWorkload{ID: id, Service: key, Project: model.Name, Reference: svc.Image, ImageID: f.tags[svc.Image], Running: true}
+			resolvedID, _ := f.imageID(svc.Image)
+			for replicaKey, replica := range f.workloads {
+				if replicaKey == key || replica.Project != model.Name || replica.Service != key || replica.OneOff {
+					continue
+				}
+				replica.Reference = svc.Image
+				replica.ImageID = resolvedID
+				replica.Running = true
+				f.workloads[replicaKey] = replica
+			}
+			f.workloads[key] = lifecycleWorkload{ID: id, Service: key, Project: model.Name, Reference: svc.Image, ImageID: resolvedID, Running: true}
 		}
 		return nil
 	}})
@@ -162,20 +174,26 @@ func (f *lifecycleFixture) serve(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("API-Version", "1.48")
 		_, _ = fmt.Fprint(w, "OK")
 	case path == "/containers/json":
+		if f.onList != nil {
+			hook := f.onList
+			f.mu.Unlock()
+			hook()
+			f.mu.Lock()
+		}
 		rows := []map[string]any{}
 		for _, c := range f.workloads {
 			state := "exited"
 			if c.Running {
 				state = "running"
 			}
-			rows = append(rows, map[string]any{"Id": c.ID, "Image": c.Reference, "ImageID": c.ImageID, "State": state, "Labels": map[string]string{"com.docker.compose.project": c.Project, "com.docker.compose.service": c.Service}})
+			rows = append(rows, map[string]any{"Id": c.ID, "Image": c.Reference, "ImageID": c.ImageID, "State": state, "Labels": c.labels()})
 		}
 		_ = json.NewEncoder(w).Encode(rows)
 	case strings.HasPrefix(path, "/containers/") && strings.HasSuffix(path, "/json"):
 		id := strings.TrimSuffix(strings.TrimPrefix(path, "/containers/"), "/json")
 		for _, c := range f.workloads {
 			if c.ID == id {
-				_ = json.NewEncoder(w).Encode(map[string]any{"Id": c.ID, "Image": c.ImageID, "State": map[string]any{"Running": c.Running}, "Config": map[string]any{"Image": c.Reference, "Labels": map[string]string{"com.docker.compose.project": c.Project, "com.docker.compose.service": c.Service}}})
+				_ = json.NewEncoder(w).Encode(map[string]any{"Id": c.ID, "Image": c.ImageID, "State": map[string]any{"Running": c.Running}, "Config": map[string]any{"Image": c.Reference, "Labels": c.labels()}})
 				return
 			}
 		}
@@ -188,7 +206,7 @@ func (f *lifecycleFixture) serve(w http.ResponseWriter, r *http.Request) {
 			hook(ref)
 			f.mu.Lock()
 		}
-		id, ok := f.tags[ref]
+		id, ok := f.imageID(ref)
 		if !ok {
 			w.WriteHeader(404)
 			_, _ = fmt.Fprint(w, `{"message":"not found"}`)
@@ -304,4 +322,20 @@ func clearLifecycleKeyForTest(t *testing.T) {
 	t.Cleanup(func() {
 		crypto.InitEncryption(&crypto.Config{Environment: "test", EncryptionKey: "synthetic-lifecycle-encryption-key-32bytes"})
 	})
+}
+
+func (c lifecycleWorkload) labels() map[string]string {
+	return map[string]string{"com.docker.compose.project": c.Project, "com.docker.compose.service": c.Service, "com.docker.compose.config-hash": c.ConfigHash, "com.docker.compose.oneoff": fmt.Sprint(c.OneOff)}
+}
+
+func (f *lifecycleFixture) imageID(ref string) (string, bool) {
+	if id, ok := f.tags[ref]; ok {
+		return id, true
+	}
+	named, err := reference.ParseNormalizedNamed(ref)
+	if err != nil {
+		return "", false
+	}
+	id, ok := f.tags[reference.TagNameOnly(named).String()]
+	return id, ok
 }
