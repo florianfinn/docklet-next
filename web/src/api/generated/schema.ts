@@ -1,5 +1,5 @@
 // Source: api/openapi.json
-// Revision: 07d462c7072978dfc65cda87edd95a70ed07d75ddc02483fc3af0c727f99b0b6
+// Revision: d9069f41efbce7c29edf1218b30f3101c2280c39f932471544791bf20b178701
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
 // Deviations: Generated TypeScript declarations from the local Huma export.
@@ -4482,6 +4482,49 @@ export interface components {
             /** Format: date-time */
             updatedAt?: string;
         };
+        ActivityActivitySummary: {
+            affectedServices?: string[] | null;
+            batchId?: string;
+            cancelRequested?: boolean;
+            /** Format: date-time */
+            createdAt: string;
+            /** Format: int64 */
+            durationMs?: number;
+            /** Format: date-time */
+            endedAt?: string;
+            environmentId: string;
+            error?: string;
+            id: string;
+            latestMessage?: string;
+            /** @enum {string} */
+            messageCode?: "run.request-mismatch" | "runtime.outcome-unknown" | "runtime.interrupted" | "runtime.cancelled" | "runtime.failed" | "runtime.wait-timeout" | "runtime.waiter-disconnected" | "runtime.parent-unresolved" | "runtime.target-removed" | "runtime.target-changed" | "runtime.target-unavailable" | "run.started" | "run.joined" | "run.fresh" | "run.busy" | "run.cancelling" | "activity.queued" | "activity.running" | "activity.success" | "activity.failed" | "activity.cancelled" | "activity.message" | "deploy.pull" | "job.queued" | "job.waiting" | "job.running" | "job.retrying" | "job.succeeded" | "job.partial" | "job.skipped" | "job.failed" | "job.needs_attention" | "job.canceled" | "container.die" | "container.oom" | "container.rename" | "container.unhealthy" | "image.untag" | "image.import" | "image.prune" | "volume.prune" | "network.prune" | "container.start" | "container.stop" | "container.restart" | "container.delete" | "container.create" | "container.scan" | "container.update" | "container.deploy" | "container.kill" | "container.pause" | "container.unpause" | "container.error" | "image.pull" | "image.load" | "image.tag" | "image.commit" | "image.delete" | "image.scan" | "image.error" | "image.vulnerability_scan" | "project.deploy" | "project.delete" | "project.start" | "project.stop" | "project.create" | "project.update" | "project.error" | "volume.create" | "volume.rename" | "volume.delete" | "volume.error" | "volume.file.create" | "volume.file.delete" | "volume.file.upload" | "volume.file.update" | "volume.workspace.update" | "volume.backup.create" | "volume.backup.delete" | "volume.backup.restore" | "volume.backup.restore_files" | "volume.backup.download" | "network.create" | "network.delete" | "network.connect" | "network.disconnect" | "network.error" | "system.prune" | "user.login" | "user.logout" | "system.auto_update" | "system.upgrade" | "environment.create" | "environment.connect" | "environment.disconnect" | "environment.update" | "environment.delete" | "environment.api_key.regenerated" | "environment.mtls.ca_generated" | "environment.mtls.cert_issued" | "environment.mtls.enroll" | "environment.mtls.download" | "webhook.create" | "webhook.update" | "webhook.delete" | "webhook.trigger" | "notification.send";
+            metadata?: {
+                [key: string]: unknown;
+            };
+            /** @enum {string} */
+            outcomeState?: "known" | "unknown";
+            /** Format: int64 */
+            progress?: number;
+            recovery?: components["schemas"]["ActivityActivitySummaryRecovery"];
+            resourceId?: string;
+            resourceName?: string;
+            resourceType?: string;
+            sourceEnvironmentId?: string;
+            sourceEnvironmentName?: string;
+            /** Format: date-time */
+            startedAt: string;
+            startedBy?: components["schemas"]["ActivityStartedBy"];
+            status: string;
+            step?: string;
+            stepTrace?: components["schemas"]["ActivityStepTraceEntry"][] | null;
+            type: string;
+            /** Format: date-time */
+            updatedAt?: string;
+        };
+        ActivityActivitySummaryRecovery: {
+            disposition?: string | null;
+            unknownReason?: string | null;
+        };
         ActivityClearHistoryResult: {
             /** Format: int64 */
             deleted: number;
@@ -6438,15 +6481,15 @@ export interface components {
             /** @description Response message */
             message: string;
         };
-        BasePaginatedActivityActivity: {
+        BasePaginatedActivityActivitySummary: {
             /**
              * Format: uri
              * @description A URL to the JSON Schema for this object.
-             * @example /api/schemas/BasePaginatedActivityActivity.json
+             * @example /api/schemas/BasePaginatedActivityActivitySummary.json
              */
             readonly $schema?: string;
             /** @description Array of items for the current page */
-            data: components["schemas"]["ActivityActivity"][] | null;
+            data: components["schemas"]["ActivityActivitySummary"][] | null;
             /** @description Pagination metadata */
             pagination: components["schemas"]["BasePaginationResponse"];
             /** @description Whether the request was successful */
@@ -14516,6 +14559,8 @@ export interface operations {
                 type?: string;
                 /** @description Filter by resource type */
                 resourceType?: string;
+                /** @description Include bounded steps and runtime presentation in list rows */
+                includeSummary?: boolean;
             };
             header?: never;
             path: {
@@ -14533,7 +14578,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["BasePaginatedActivityActivity"];
+                    "application/json": components["schemas"]["BasePaginatedActivityActivitySummary"];
                 };
             };
             /** @description Error */

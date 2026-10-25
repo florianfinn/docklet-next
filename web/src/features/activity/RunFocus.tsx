@@ -7,6 +7,7 @@ import { cn } from "@/shared/lib/utils";
 import { RunIconTile, StepTrack } from "./ActionSteps";
 import { elapsedSeconds, RUN_ICON, RUN_TONE, runPhase } from "./run-phase";
 import { runtimeState } from "./runtime-presentation";
+import { ActionDetail } from "./ActionDetail";
 import { RunOutput } from "./RunOutput";
 
 export function RunStatusLine({ run, className }: { run: ActionRun; className?: string }) {
@@ -62,7 +63,7 @@ export function RunErrorBox({ run }: { run: ActionRun }) {
  * the stack's Deployments tab. With `fill` the open output takes the remaining
  * height and is the only scroll area.
  */
-export function RunFocusView({ run, now, fill = false, outputOpen = false, className }: { run: ActionRun; now: number; fill?: boolean; outputOpen?: boolean; className?: string }) {
+export function RunFocusBody({ run, now, fill = false, outputOpen = false, className }: { run: ActionRun; now: number; fill?: boolean; outputOpen?: boolean; className?: string }) {
   const t = useTranslations("activity");
   const { step } = runPhase(run);
   const Icon = RUN_ICON[run.status];
@@ -86,4 +87,8 @@ export function RunFocusView({ run, now, fill = false, outputOpen = false, class
       <RunOutput run={run} defaultOpen={outputOpen} fill={fill} className={cn(fill && "min-h-0")} />
     </div>
   );
+}
+
+export function RunFocusView(props: Parameters<typeof RunFocusBody>[0]) {
+  return <ActionDetail run={props.run}>{(run) => <RunFocusBody {...props} run={run} />}</ActionDetail>;
 }

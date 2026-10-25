@@ -716,5 +716,107 @@
         "command": "system.upgrade.run"
       }
     ]
+  },
+  "activityDiscovery": {
+    "route": "GET /environments/{id}/activities",
+    "includeParameter": {
+      "description": "Include bounded steps and runtime presentation in list rows",
+      "explode": false,
+      "in": "query",
+      "name": "includeSummary",
+      "schema": {
+        "description": "Include bounded steps and runtime presentation in list rows",
+        "type": "boolean"
+      }
+    },
+    "responseSchema": {
+      "$ref": "#/components/schemas/BasePaginatedActivityActivitySummary"
+    },
+    "fields": [
+      "affectedServices",
+      "batchId",
+      "cancelRequested",
+      "createdAt",
+      "durationMs",
+      "endedAt",
+      "environmentId",
+      "error",
+      "id",
+      "latestMessage",
+      "messageCode",
+      "metadata",
+      "outcomeState",
+      "progress",
+      "recovery",
+      "resourceId",
+      "resourceName",
+      "resourceType",
+      "sourceEnvironmentId",
+      "sourceEnvironmentName",
+      "startedAt",
+      "startedBy",
+      "status",
+      "step",
+      "stepTrace",
+      "type",
+      "updatedAt"
+    ],
+    "optionalFields": [
+      "affectedServices",
+      "batchId",
+      "cancelRequested",
+      "durationMs",
+      "endedAt",
+      "error",
+      "latestMessage",
+      "messageCode",
+      "metadata",
+      "outcomeState",
+      "progress",
+      "recovery",
+      "resourceId",
+      "resourceName",
+      "resourceType",
+      "sourceEnvironmentId",
+      "sourceEnvironmentName",
+      "startedBy",
+      "step",
+      "stepTrace",
+      "updatedAt"
+    ],
+    "knowledgeDependencies": {
+      "cancelRequested": [
+        "outcomeState"
+      ],
+      "outcomeState": [
+        "cancelRequested"
+      ]
+    },
+    "stepTrace": {
+      "items": {
+        "$ref": "#/components/schemas/ActivityStepTraceEntry"
+      },
+      "type": [
+        "array",
+        "null"
+      ]
+    },
+    "recovery": {
+      "$ref": "#/components/schemas/ActivityActivitySummaryRecovery"
+    },
+    "recoveryProperties": {
+      "disposition": {
+        "type": [
+          "string",
+          "null"
+        ]
+      },
+      "unknownReason": {
+        "type": [
+          "string",
+          "null"
+        ]
+      }
+    }
   }
 }

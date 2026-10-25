@@ -24,7 +24,7 @@ import { activityStore } from "./activity-store";
 
 export const waitFor = (assertion: () => void) => testingWaitFor(assertion, { timeout: 750 });
 export const toastCount = () => document.querySelectorAll('[data-slot="action-toast"]').length;
-export type Fault = "network" | "page502" | "page500" | "page403" | "page401" | "detail404" | "mapping" | "partial" | "marked-first" | "marked-later";
+export type Fault = "network" | "page502" | "page500" | "page403" | "page401" | "summary-missing" | "summary-mapping" | "partial" | "marked-first" | "marked-later";
 export function sourceFixture(reverse = false) {
   const f = activityFixture(false, reverse);
   f.state.hosts = reverse ? ["edge", "bad", "good"] : ["good", "bad", "edge"];
@@ -40,15 +40,15 @@ export function sourceFixture(reverse = false) {
     const [, host, id] = match; const fault = faults.get(host!);
     if (!id && fault === "network") throw new TypeError("Example source unavailable");
     if (!id && fault?.startsWith("page")) return json(null, Number(fault.slice(4)));
-    if (id && fault === "detail404") return json(null, 404);
-    if (id && fault === "mapping") return json({ ...f.state.details[id], outputTruncated: undefined });
+    if (!id && fault === "summary-missing") return json((f.state.lists[host!] ?? []).map(() => ({})));
+    if (!id && fault === "summary-mapping") return json((f.state.lists[host!] ?? []).map((row) => ({ ...row, status: "invalid" })));
     if (!id && (fault === "partial" || fault?.startsWith("marked-"))) {
       const items = f.state.lists[host!] ?? [];
       const later = url.searchParams.get("start") !== "0";
       const paged = fault !== "partial";
       const page = paged ? items.slice(later ? 1 : 0, later ? 2 : 1) : items.slice(0, 1);
       const result = json(page, 200, paged ? Math.min(items.length, 2) : page.length);
-      if (fault === "partial" || later === (fault === "marked-later")) result.headers.set("X-Docklet-Host-Reason", "agent.unavailable");
+      if (url.searchParams.get("limit") === "-1" || fault === "partial" || later === (fault === "marked-later")) result.headers.set("X-Docklet-Host-Reason", "agent.unavailable");
       return result;
     }
     return response;

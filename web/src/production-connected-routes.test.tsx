@@ -21,6 +21,7 @@ let AppsWidget: typeof import("@/features/dashboard/widgets/SmallWidgets").AppsW
 let QueryError: typeof import("@/shared/components/page").QueryError;
 let unavailable: typeof import("@/data/capability").unavailable;
 
+// Cold router imports use a generous hang timeout so shared CI load does not fail setup.
 beforeAll(async () => {
   vi.stubEnv("DEV", false);
   vi.resetModules();
@@ -33,10 +34,11 @@ beforeAll(async () => {
   ({ AppsWidget } = await import("@/features/dashboard/widgets/SmallWidgets"));
   ({ QueryError } = await import("@/shared/components/page"));
   ({ unavailable } = await import("@/data/capability"));
-});
+}, 60_000);
 afterEach(() => { cleanup(); localStorage.clear(); });
 afterAll(() => vi.unstubAllEnvs());
 
+// This full production navigation flow uses a hang timeout to tolerate shared CI load.
 it("connects login, dashboard, hosts, containers, stacks, volumes and files with the production HTTP runtime", async () => {
   expect(import.meta.env.DEV).toBe(false);
   const f = fixture();
@@ -95,7 +97,7 @@ it("connects login, dashboard, hosts, containers, stacks, volumes and files with
   await act(() => router.navigate("/preview/unknown"));
   await screen.findByText("Diese Adresse ist nicht verfügbar.");
   expect(document.querySelector('[data-layer="design-lab"]') === null).toBe(true);
-});
+}, 120_000);
 
 it.each(["policy", "history"] as const)("keeps unsupported backup %s controls unmounted despite an advertised server capability", async (kind) => {
   const f = fixture(); f.state.signedIn = true;

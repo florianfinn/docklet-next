@@ -81,6 +81,7 @@ export interface ActionReadFailure {
   hostId?: string;
   reason: "unavailable" | "permission" | "authentication" | "invalid-data";
 }
+export type ActionDetailState = { status: "loading" } | { status: "ready"; run: CodedActionRun; refreshing?: boolean } | { status: "error"; error: unknown; run?: CodedActionRun };
 export interface ActionReadHealth { failures: readonly ActionReadFailure[] }
 
 export type CodedRuntimeActionRun = CodedActionRun & RuntimeKnowledge;
@@ -138,6 +139,7 @@ export interface DockletAdapter extends AuthApi, HostsApi, VolumesApi, SettingsA
   setScanEnabled(enabled: boolean): Promise<void>;
 
   subscribeActionReadHealth?(listener: (health: ActionReadHealth) => void): Unsubscribe;
+  observeActionDetail?(hostId: string, runId: string, listener: (state: ActionDetailState) => void): Unsubscribe;
   subscribeActions(listener: (runs: CodedActionRun[]) => void): Unsubscribe;
   subscribeMetrics(listener: (snapshot: MetricsSnapshot) => void): Unsubscribe;
   subscribeLogs(stackId: string, listener: (lines: LogLine[]) => void): Unsubscribe;

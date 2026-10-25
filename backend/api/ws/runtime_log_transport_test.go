@@ -50,7 +50,7 @@ func TestRuntimeLogsRealDirectAndEdgeViewerBridges(t *testing.T) {
 				} else {
 					viewer = directLogViewer(t, target)
 				}
-				ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
+				ctx, cancel := context.WithTimeout(t.Context(), logTestTimeout)
 				defer cancel()
 				conn, _, err := websocket.Dial(ctx, viewer, &websocket.DialOptions{HTTPHeader: http.Header{"Cookie": []string{"session=example"}, "Authorization": []string{"Bearer example"}, "X-Api-Key": []string{"example"}}})
 				require.NoError(t, err)
@@ -176,7 +176,7 @@ func edgeLogViewer(t *testing.T, target string, decorate ...func(*http.Request) 
 		agent.Close()
 		select {
 		case <-receiverDone:
-		case <-time.After(5 * time.Second):
+		case <-time.After(logTestTimeout):
 			t.Error("Edge receiver did not join")
 		}
 		waitLogSignal(t, agentDone)

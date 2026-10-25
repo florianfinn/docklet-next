@@ -87,7 +87,7 @@ it.each(["logout", "unsubscribe"])("%s rejects an invalidated actions query with
     await f.adapter.listActions();
     const held = deferred<Response>(); const reached = deferred<Response>();
     f.state.hold = async (path, response) => {
-      if (path.endsWith("/bad/activities/run-bad")) { reached.resolve(response); return held.promise; }
+      if (path.endsWith("/bad/activities")) { reached.resolve(response); return held.promise; }
       return response;
     };
     const queryKey = ["actions"];
@@ -125,7 +125,7 @@ it.each(["full", "targeted"])("%s subscription work silently discards cancellati
     f.sources[0]!.open(); await vi.waitFor(() => expect(runs.mock.lastCall?.[0]).toHaveLength(2));
     const held = deferred<Response>(); const reached = deferred<Response>();
     f.state.hold = async (path, response) => {
-      if (path.endsWith("/good/activities/run-good")) { reached.resolve(response); return held.promise; }
+      if (path.endsWith(kind === "full" ? "/good/activities" : "/good/activities/run-good")) { reached.resolve(response); return held.promise; }
       return response;
     };
     if (kind === "full") f.sources[0]!.open(); else f.sources[0]!.send("run-good", "good");

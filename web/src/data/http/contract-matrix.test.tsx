@@ -16,6 +16,8 @@ import { simulationStore } from "@/data/demo/simulation";
 import { isRunBusy, withRunGate } from "@/data/run-gate";
 import { pruneRuns } from "@/domain/activity-history";
 import { renderWithApp } from "@/test/render";
+import { ActionDetail } from "@/features/activity/ActionDetail";
+import { deferred } from "./activity-reader.test-support";
 import { RunFocusView } from "@/features/activity/RunFocus";
 import { RunOutput } from "@/features/activity/RunOutput";
 import { deActivity } from "@/features/activity/messages/de";
@@ -30,7 +32,7 @@ import { inventoryId } from "./inventory-mapping";
 import { mapActivityDetail, mapEvent } from "./map-dto";
 import type { HubBackupRun } from "@/domain/hub-backup";
 
-type Activity = components["schemas"]["ActivityActivity"];
+type Activity = components["schemas"]["ActivityActivitySummary"];
 type Detail = components["schemas"]["ActivityDetail"];
 type Event = components["schemas"]["EventEvent"];
 const at = "2026-10-15T10:00:00Z";
@@ -69,7 +71,7 @@ function backend() {
     requests.push(url.pathname);
     if (url.pathname === "/api/capabilities") return ok(state.descriptors);
     if (url.pathname === "/api/environments") return page([{ id: "0" }]);
-    if (url.pathname === "/api/environments/0/activities") return page(state.list);
+    if (url.pathname === "/api/environments/0/activities") return page(state.list.map((row) => { const dto = row.id === activity.id ? state.detail : state.extraDetails[row.id]; return { ...row, ...dto?.activity, stepTrace: dto?.stepTrace }; }));
     if (url.pathname === "/api/environments/0/activities/run-dns-1") return ok(state.detail);
     if (url.pathname.startsWith("/api/environments/0/activities/")) {
       const found = state.extraDetails[url.pathname.split("/").at(-1)!];
@@ -78,7 +80,7 @@ function backend() {
     if (url.pathname === "/api/events") return page(state.events);
     return json({ code: "not-found" }, 404);
   });
-  const http = createHttpAdapter({ fetch: fetcher as typeof fetch });
+  const http = createHttpAdapter({ fetch: fetcher as typeof fetch, eventSource: () => new FakeSource() as unknown as EventSource });
   return { http, state, fetcher, requests };
 }
 
@@ -88,9 +90,10 @@ it("shares concurrent activity history reads without caching later refreshes", a
   expect(query).toEqual(subscription);
   expect(query).toHaveLength(1);
   expect(b.requests.filter((path) => path.endsWith("/activities"))).toHaveLength(1);
-  expect(b.requests.filter((path) => path.endsWith("/activities/run-dns-1"))).toHaveLength(1);
+  expect(b.requests.filter((path) => path.endsWith("/activities/run-dns-1"))).toHaveLength(0);
   await b.http.listActions();
-  expect(b.requests.filter((path) => path.endsWith("/activities/run-dns-1"))).toHaveLength(2);
+  expect(b.requests.filter((path) => path.endsWith("/activities"))).toHaveLength(2);
+  expect(b.requests.filter((path) => path.endsWith("/activities/run-dns-1"))).toHaveLength(0);
 });
 
 class FakeSource {
@@ -109,8 +112,10 @@ function heldRunBackend() {
   const held: Array<() => void> = [];
   let hold = false;
   const fetcher = vi.fn(async (input: string | URL | Request) => {
-    if (hold && new URL(String(input), "https://example.test").pathname.endsWith(`/activities/${activity.id}`)) {
-      const response = ok(structuredClone(b.state.detail));
+    const path = new URL(String(input), "https://example.test").pathname;
+    if (hold && (path.endsWith(`/activities/${activity.id}`) || (path.endsWith("/activities") && b.state.list.length > 0))) {
+      const captured = structuredClone(b.state.detail);
+      const response = path.endsWith("/activities") ? page(b.state.list.length ? [{ ...captured.activity, stepTrace: captured.stepTrace }] : []) : ok(captured);
       await new Promise<void>((resolve) => { held.push(resolve); });
       return response;
     }
@@ -139,7 +144,7 @@ afterEach(() => { vi.restoreAllMocks(); simulationStore.reset(); localStorage.cl
 function RecordedOutputList({ initial, onChange }: { initial: CodedActionRun[]; onChange: (update: (runs: CodedActionRun[]) => void) => void }) {
   const [runs, setRuns] = useState(initial);
   onChange(setRuns);
-  return <>{runs.map((run) => <RunOutput key={run.id} run={renderRun(run, "de")} defaultOpen />)}</>;
+  return <>{runs.map((run) => <ActionDetail key={run.id} run={renderRun(run, "de")}>{(detail) => <RunOutput run={detail} defaultOpen />}</ActionDetail>)}</>;
 }
 
 describe.each(["demo", "http"] as const)("%s shared adapter cases", (kind) => {
@@ -213,7 +218,7 @@ describe.each(["demo", "http"] as const)("%s shared adapter cases", (kind) => {
       if (status === "queued") expect(pruneRuns([rendered], 0)).toHaveLength(1);
       else expect([TOAST_LIFETIME.cancelled, pruneRuns([rendered], 0).length]).toEqual([8000, 0]);
       renderWithApp(<RunFocusView run={rendered} now={Date.parse(later)} />, adapter);
-      expect(screen.getAllByText(de).length).toBeGreaterThan(0);
+      return screen.findAllByText(de).then((labels) => expect(labels.length).toBeGreaterThan(0));
     });
   });
 });
@@ -226,7 +231,8 @@ describe("#38 adapter contract matrix", () => {
     const wireRun = (await http.listActions())[0]!;
     expect([wireRun.id, wireRun.kind, wireRun.status, wireRun.stackId, wireRun.services]).toEqual([demoRun.id, demoRun.kind, demoRun.status, demoRun.stackId ? inventoryId(activity.environmentId, demoRun.stackId) : undefined, demoRun.services]);
     expect(wireRun.steps.map((step) => [step.key, step.state, step.label.code])).toEqual([["start", "done", "activity.success"]]);
-    expect(wireRun.log.map((entry) => entry.code)).toEqual(["activity.success"]);
+    expect(wireRun.log).toEqual([]);
+    expect((await demanded(http, wireRun.id)).log.map((entry) => entry.code)).toEqual(["activity.success"]);
     expect(demoRun.steps.length > 0 && demoRun.log.every((entry) => !!entry.code)).toBe(true);
     const demoEvent = (await demo.listEvents()).find((item) => item.id === event.id)!;
     const wireEvent = (await http.listEvents())[0]!;
@@ -256,7 +262,7 @@ describe("#38 adapter contract matrix", () => {
       source.send({ channel: "activities", activity: { type: "updated", activityId: activity.id, activity: { ...activity, status: "queued" } }, timestamp: later });
       await waitFor(() => expect(runs.mock.lastCall?.[0][0].status).toBe(status === "success" ? "succeeded" : status));
     }
-    source.send({ channel: "activities", activity: { type: "message", activityId: activity.id, message: detail.messages?.[0] }, timestamp: later });
+    source.send({ channel: "activities", activity: { type: "message", activityId: activity.id, environmentId: "0", message: detail.messages?.[0] }, timestamp: later });
     await waitFor(() => expect(b.requests.filter((path) => path.endsWith("/run-dns-1")).length).toBeGreaterThan(3));
     changes.mockClear();
     source.send({ channel: "events", eventLog: { type: "changed", timestamp: later }, timestamp: later });
@@ -275,10 +281,10 @@ describe("#38 adapter contract matrix", () => {
     b.state.detail.activity.status = "success";
     source.open();
     await waitFor(() => expect(runs.mock.lastCall?.[0][0].status).toBe("succeeded"));
-    const reads = b.requests.filter((path) => path.endsWith("/run-dns-1")).length;
+    const reads = b.requests.filter((path) => path.endsWith("/activities")).length;
     source.send({ channel: "events", eventLog: { type: "changed", timestamp: later }, timestamp: later }, "1");
     source.send({ channel: "events", eventLog: { type: "changed", timestamp: later }, timestamp: later }, "3");
-    await waitFor(() => expect(b.requests.filter((path) => path.endsWith("/run-dns-1")).length).toBeGreaterThan(reads));
+    await waitFor(() => expect(b.requests.filter((path) => path.endsWith("/activities")).length).toBeGreaterThan(reads));
     expect(changes).toHaveBeenCalledWith(["events"]);
     stopRuns(); stopChanges();
   });
@@ -290,17 +296,15 @@ describe("#38 adapter contract matrix", () => {
     const second: Activity = { ...activity, id: "run-other-2", status: "running", resourceName: "Other" };
     const secondDetail: Detail = { ...structuredClone(detail), activity: second };
     b.state.list.push(second);
+    b.state.extraDetails[second.id] = secondDetail;
     let releaseSecond: (() => void) | undefined;
     let holdSecond = false;
     const fetcher = vi.fn(async (input: string | URL | Request) => {
-      if (String(input).includes("/activities/run-other-2")) {
-        if (holdSecond) {
-          holdSecond = false;
-          await new Promise<void>((resolve) => { releaseSecond = resolve; });
-        }
-        return ok(secondDetail);
+      const response = await b.fetcher(input);
+      if (holdSecond && new URL(String(input), "https://example.test").pathname.endsWith("/activities")) {
+        holdSecond = false; await new Promise<void>((resolve) => { releaseSecond = resolve; });
       }
-      return b.fetcher(input);
+      return response;
     });
     const source = new FakeSource();
     const http = createHttpAdapter({ fetch: fetcher as typeof fetch, eventSource: () => source as unknown as EventSource });
@@ -313,7 +317,7 @@ describe("#38 adapter contract matrix", () => {
     source.open();
     await waitFor(() => expect(releaseSecond).toBeTypeOf("function"));
     source.send({ channel: "activities", activity: { type: "updated", activityId: activity.id, environmentId: "0" }, timestamp: later });
-    await waitFor(() => expect(fetcher.mock.calls.filter((call) => String(call[0]).includes("/activities/run-dns-1")).length).toBeGreaterThan(1));
+    await waitFor(() => expect(fetcher.mock.calls.filter((call) => String(call[0]).includes("/activities/run-dns-1")).length).toBe(1));
     releaseSecond!();
     await waitFor(() => expect(runs.mock.lastCall?.[0].find((run: { id: string }) => run.id === second.id)?.status).toBe("succeeded"));
     stop();
@@ -368,14 +372,14 @@ describe("#38 adapter contract matrix", () => {
     const stop = http.subscribeActions(runs);
     sources[0]!.open();
     await waitFor(() => expect(runs).toHaveBeenCalledTimes(1));
-    expect(b.requests.filter((path) => path.endsWith("/run-dns-1"))).toHaveLength(1);
+    expect(b.requests.filter((path) => path.endsWith("/activities"))).toHaveLength(1);
     b.state.detail.activity.status = "running";
     sources[0]!.failClosed();
     await waitFor(() => expect(sources).toHaveLength(2));
     expect(sources[0]!.close).toHaveBeenCalledTimes(1);
     sources[1]!.open();
     await waitFor(() => expect(runs.mock.lastCall?.[0][0].status).toBe("running"));
-    expect(b.requests.filter((path) => path.endsWith("/run-dns-1"))).toHaveLength(2);
+    expect(b.requests.filter((path) => path.endsWith("/activities"))).toHaveLength(2);
     vi.useFakeTimers();
     try {
       sources[1]!.failClosed();
@@ -408,7 +412,9 @@ describe("#38 adapter contract matrix", () => {
 
   it("10 maps raw lines after a detail read", async () => {
     const { http } = backend();
-    const run = (await http.listActions())[0]!;
+    const summary = (await http.listActions())[0]!;
+    expect(summary.output).toEqual([]);
+    const run = await demanded(http, summary.id);
     expect(run.output).toEqual([{ at, stream: "stdout", text: "ready", step: "start" }]);
   });
 
@@ -440,6 +446,12 @@ describe("#38 adapter contract matrix", () => {
   });
 
 });
+
+async function demanded(http: ReturnType<typeof createHttpAdapter>, id: string) {
+  const ready = deferred<CodedActionRun>();
+  const off = http.observeActionDetail!("0", id, (state) => { if (state.status === "ready") ready.resolve(state.run); else if (state.status === "error") ready.reject(state.error); });
+  try { return await ready.promise; } finally { off(); }
+}
 
 function backendResponse(input: string): Response {
   const url = new URL(input, "https://example.test");

@@ -50,6 +50,7 @@ func (m *Module) RegisterRoutes(api huma.API) {
 }
 
 func RegisterActivities(api huma.API, h *ActivityHandler) {
+	registerActivityListSchemaInternal(api)
 	middleware.RegisterWithPermission(api, huma.Operation{
 		OperationID: "list-activities",
 		Method:      http.MethodGet,
