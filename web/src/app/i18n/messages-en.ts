@@ -1,3 +1,4 @@
+import { enRegistries } from "@/features/registries/messages/en";
 // American English interface texts define the catalogue shape for every locale.
 import { enActivity, enUserEvents } from "@/features/activity/messages/en";
 import { enLogin } from "@/features/auth/login/messages/en";
@@ -54,6 +55,7 @@ export const enMessages = {
   },
   hosts: enHosts,
   hubBackups: enHubBackups,
+  registries: enRegistries,
   images: enImages,
   volumes: enVolumes,
   settings: enSettings,

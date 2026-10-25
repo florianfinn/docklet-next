@@ -17,6 +17,9 @@ export interface ImageConsumer {
 
 export interface DockerImage {
   inventory?: InventoryObservation;
+  usageState?: "known" | "unknown";
+  protectionReasons?: { reason: string; ownerId?: string }[];
+  updateObservation?: ImageUpdateObservation;
   metadataUnavailable?: boolean;
   id: string;
   hostId: string;
@@ -42,10 +45,11 @@ export interface DockerImage {
   vulnerabilities?: Record<Severity, number>;
 }
 
-export type ImageUsage = "in-use" | "unused" | "dangling";
+export type ImageUsage = "in-use" | "unused" | "dangling" | "unknown";
 
-export function imageUsage(image: Pick<DockerImage, "tag" | "consumers">): ImageUsage {
-  if (image.consumers.length) return "in-use";
+export function imageUsage(image: Pick<DockerImage, "tag" | "consumers" | "usageState" | "protectionReasons">): ImageUsage {
+  if (image.consumers.length || image.protectionReasons?.some((item) => item.reason === "in-use")) return "in-use";
+  if (image.usageState === "unknown") return "unknown";
   return image.tag === null ? "dangling" : "unused";
 }
 
@@ -75,6 +79,7 @@ export type PruneMode = "dangling" | "unused";
 /** Images a prune would remove: never one with a consumer, running or stopped. */
 export function pruneCandidates(images: readonly DockerImage[], mode: PruneMode): DockerImage[] {
   return images.filter((i) => {
+    if (imageRemovalBlocked(i)) return false;
     const usage = imageUsage(i);
     return usage === "dangling" || (mode === "unused" && usage === "unused");
   });
@@ -88,4 +93,34 @@ export function totalSizeMb(images: readonly Pick<DockerImage, "sizeMb">[]): num
 export function shortDigest(digest: string): string {
   const [algo = "", hex = ""] = digest.split(":");
   return hex ? `${algo}:${hex.slice(0, 12)}` : digest;
+}
+
+export interface ImagePullProgress {
+  phase: "pulling" | "waiting" | "downloading" | "verifying" | "extracting" | "complete";
+  current?: number;
+  total?: number;
+}
+export interface ImagePullResult { actionId?: string }
+export interface ImagePruneItem { id: string; code: string }
+export interface ImagePruneHostReport {
+  hostId: string;
+  removed: string[];
+  skipped: ImagePruneItem[];
+  failed: ImagePruneItem[];
+  /** Missing when the executor cannot establish reclaimed bytes. */
+  spaceReclaimed?: number;
+  errorCode?: string;
+}
+export interface ImagePruneResult { hosts: ImagePruneHostReport[] }
+export interface ImageUpdateObservation {
+  state: "unchecked" | "current" | "version" | "rebuild" | "local" | "unknown" | "error";
+  checkedAt?: string;
+  currentVersion?: string;
+  candidateVersion?: string;
+  code?: string;
+}
+
+/** A missing usage scan or any executor protection prevents local destructive controls. */
+export function imageRemovalBlocked(image: DockerImage): boolean {
+  return image.usageState === "unknown" || !!image.protectionReasons?.length || image.consumers.length > 0 || !!image.inventory?.stale;
 }

@@ -1,3 +1,4 @@
+import { useImageHostCapabilities } from "./use-image-capabilities";
 import { InventoryNotice } from "@/features/stacks/InventoryNotice";
 import { useCapability } from "@/data/use-capability";
 import { Download, Eraser, HardDrive, Package, PackageOpen, Search, Unlink } from "lucide-react";
@@ -8,10 +9,10 @@ import { useTranslations } from "use-intl";
 import { useImages } from "@/data/queries";
 import { formatMem } from "@/domain/format";
 import { filterByHosts } from "@/domain/hosts";
-import { imageReference, imageUsage, totalSizeMb, type DockerImage } from "@/domain/images";
+import { imageUsage, totalSizeMb, type DockerImage } from "@/domain/images";
 import { hasUpdate } from "@/domain/updates";
 import { StatStrip } from "@/shared/component-set/stat-strip";
-import { ConfirmDialog } from "@/shared/components/confirm-dialog";
+import { RemoveImageDialog } from "./RemoveImageDialog";
 import { HostBlocks } from "@/shared/components/host-blocks";
 import { OverviewViewControls } from "@/shared/components/overview-mode-toggle";
 import { OverviewSkeleton } from "@/shared/components/overview-skeleton";
@@ -29,9 +30,8 @@ import { PruneDialog, PullDialog } from "./ImageDialogs";
 import { ImageDetails } from "./ImageDetails";
 import { DEFAULT_IMAGE_SORT, filterImages, imageSortDefaultDir, sortImages, type ImageSort, type ImageSortKey, type UsageFilter } from "./image-filters";
 import { ImageRow } from "./ImageRow";
-import { useImageCommands } from "./use-image-commands";
 
-const USAGES = ["all", "in-use", "unused", "dangling"] as const;
+const USAGES = ["all", "in-use", "unused", "dangling", "unknown"] as const;
 
 /**
  * Images per host from the adapter, with consumers derived from containers.
@@ -48,7 +48,6 @@ export default function ImagesPage() {
   const hosts = useHostScope();
   const selection = useHostSelection();
   const layout = usePreference("imagesLayout");
-  const cmd = useImageCommands();
   const [params, setParams] = useSearchParams();
   const [query, setQuery] = useState("");
   const [sort, setSort] = useState<ImageSort>(DEFAULT_IMAGE_SORT);
@@ -85,7 +84,7 @@ export default function ImagesPage() {
       unusedSize: totalSizeMb(unused),
       dangling: dangling.length,
       danglingSize: totalSizeMb(dangling),
-      updates: visible.filter((i) => i.update && hasUpdate(i.update)).length,
+      updates: visible.filter((i) => i.updateObservation ? ["version", "rebuild"].includes(i.updateObservation.state) : i.update && hasUpdate(i.update)).length,
     };
   }, [visible]);
   const current = (images.data ?? []).find((i) => i.id === openId);
@@ -119,6 +118,8 @@ export default function ImagesPage() {
     if (img.tag !== null) setPulling({ hostId: img.hostId, reference: `${img.repository}:${img.tag}` });
   };
   const scopeHosts = hosts.visible.length ? hosts.visible : hosts.all;
+  const scopedPull = useImageHostCapabilities("pullImage", scopeHosts.map((h) => h.id));
+  const initialPullHost = scopeHosts.find((h) => h.status === "online" && scopedPull.get(h.id));
 
   return (
     <>
@@ -131,7 +132,7 @@ export default function ImagesPage() {
               <Eraser data-icon="inline-start" />
               {t("prune")}
             </Button>
-            <Button disabled={!createCapability.available} title={createCapability.reason} onClick={() => setPulling({ hostId: scopeHosts.find((h) => h.status === "online")?.id ?? "", reference: "" })}>
+            <Button disabled={!createCapability.available || !initialPullHost} title={createCapability.reason} onClick={() => setPulling({ hostId: initialPullHost?.id ?? "", reference: "" })}>
               <Download data-icon="inline-start" />
               {t("pull")}
             </Button>
@@ -210,20 +211,8 @@ export default function ImagesPage() {
       </Card>
       <ImageDetails id={openId} image={current} host={current ? hosts.byId.get(current.hostId) : undefined} onClose={() => setParam("image", null)} onPull={pull} onRemove={setRemoving} />
       <PullDialog open={!!pulling} onOpenChange={(o) => !o && setPulling(null)} hosts={scopeHosts} images={images.data ?? []} initial={pulling ?? undefined} />
-      <PruneDialog open={pruning} onOpenChange={setPruning} hosts={scopeHosts} images={images.data ?? []} />
-      <ConfirmDialog
-        open={!!removing}
-        onOpenChange={(o) => !o && setRemoving(null)}
-        title={t("removeDialog.title", { name: removing ? imageReference(removing) : "" })}
-        description={t("removeDialog.body", { host: removing ? (hosts.byId.get(removing.hostId)?.name ?? "") : "" })}
-        confirmLabel={t("removeDialog.confirm")}
-        destructive
-        onConfirm={async () => {
-          const image = removing;
-          if (!image || !(await cmd.remove(image.id, imageReference(image)))) return false;
-          if (image.id === openId) setParam("image", null);
-        }}
-      />
+      <PruneDialog key={scopeHosts.map((h) => h.id).sort().join("|")} open={pruning} onOpenChange={setPruning} hosts={scopeHosts} images={images.data ?? []} />
+      {removing && <RemoveImageDialog key={removing.id} image={removing} host={hosts.byId.get(removing.hostId)?.name ?? ""} onClose={() => setRemoving(null)} onRemoved={() => { if (removing.id === openId) setParam("image", null); }} />}
     </>
   );
 }

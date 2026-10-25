@@ -39,6 +39,8 @@ adapter operation available: its mapping and server capability must both exist.
 | `subscribeLogs`, `subscribeContainerLogs` | Echo project/container log WebSockets (outside OpenAPI) | Scoped log/read grants, JSON source mapping, bounded arrival buffers and conditional reconnect tail replacement. |
 | `createVolume`, `deleteVolume`, `renameVolume`, `planVolumePrune`, `pruneVolumes` | Environment volume create/delete/rename and plan/prune operations | Connected mappings with host or volume descriptors; prune retains server planning and confirmation. |
 | `createNetwork`, `removeNetwork`, `connectNetwork`, `disconnectNetwork` | `create-network`, `delete-network`, `connect-network-container`, `disconnect-network-container` | Connected hub routes for Direct and Edge, generated DTOs, scoped descriptors and topology/container refresh. |
+| `pullImage`, `removeImage`, `pruneImages` | `pull-image`, `remove-image`, `prune-images` | Connected host/image descriptors; typed stream frames, optional activity identity and synchronous per-host prune reports. Upload remains unavailable. |
+| Registry list/create/update/delete/test | `listContainerRegistries`, `createContainerRegistry`, `updateContainerRegistry`, `deleteContainerRegistry`, `testContainerRegistry` | Hub-owned configuration with global registry grants; explicit public projection and write-only credentials. Clear checks its separate descriptor. |
 | Other `DockletAdapter` reads, writes and subscriptions | Existing operation where listed, otherwise no matching operation | Expose unavailable until the owning milestone supplies the complete mapping. Existing WebSockets carry connected logs and stats. |
 
 The HTTP boundary classifies an operation into these outcomes. Existing
@@ -460,7 +462,7 @@ are mapped explicitly. Host histories retain up to 60 observed samples in the
 adapter session; a disconnect preserves the last sample with its time and host
 reason. A new browser session has no retained metric samples. Unreported disk
 capacity, growth, image metadata and volume sizes remain explicitly unavailable.
-Image writes retain their unavailable mappings. Volume create, delete, rename,
+Image pull/remove/prune use scoped live mappings. Volume create, delete, rename,
 planned prune and file workspace writes are connected; volume backup and restore
 remain outside these mappings.
 
@@ -523,3 +525,29 @@ A socket close alone starts a bounded durable identity read before reconnect;
 credential-check form failures remain inline. Known same-user renewal retains
 its existing observation/notification policy. Server execution remains durable
 and does not depend on any viewer lifetime.
+
+## Images and registries (#230)
+
+Pull accepts only an image reference; selecting a saved enabled registry changes
+the reference host so the executor applies its saved-credential lookup. No inline
+credentials or registry ID are sent. The optional activity frame preserves its
+real identity; EOF without an error or done frame is an unknown outcome, with
+that activity available for inspection. Proxy 502/504 `agent.unavailable` writes
+are unknown outcomes too. Image/registry CRUD failures read `error.code`, while
+registry tests read the flat `ok`, `checkedAt`, `code` result. Message text never
+supplies a code or UI fallback.
+
+Prune returns the executor's synchronous report per host, retaining removed,
+skipped and failed IDs and explicitly unknown reclaimed bytes. Partial host
+failures do not erase successful reports. Force requests never bypass server
+protection. Missing usage proof and protected images cannot be removed locally.
+Image list/detail update badges preserve the supplied version/rebuild/unknown
+observation without starting an update or check.
+
+Registry reads whitelist public configuration and `hasCredential`; identities
+and secrets never enter the query cache or edit defaults. Blank replacement
+fields are omitted; explicit clear removes the complete credential. Saved tests
+report authentication failure, unreachable and rate-limited separately, without
+treating a registry failure as a hub identity rejection. Saves and deletions
+invalidate registry queries. Identity changes discard late read/write results;
+dialog ownership additionally discards results after close or target changes.

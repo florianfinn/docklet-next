@@ -15,6 +15,7 @@ import type {
 import type { AuthApi, HostsApi, HubApi, ImagesApi, NetworksApi, SettingsApi, VolumesApi } from "./api";
 import type { CodedActionRun, CodedEvent, CodedStackDetail } from "./message-code";
 import type { CapabilityDescriptor, ResourceRef } from "./capability";
+import type { RegistriesApi } from "@/domain/registries";
 import type { HubBackupApi } from "@/domain/hub-backup";
 
 export type StackCommand = "start" | "stop" | "restart" | "redeploy";
@@ -72,7 +73,7 @@ export interface ImportResult {
 }
 
 /** Query topics used to invalidate cached reads after server-side changes. */
-export type Topic = "hosts" | "stacks" | "containers" | "security" | "topology" | "events" | "schedule" | "volumes" | "settings" | "images";
+export type Topic = "hosts" | "stacks" | "containers" | "security" | "topology" | "events" | "schedule" | "volumes" | "settings" | "images" | "registries";
 
 export type Unsubscribe = () => void;
 
@@ -96,7 +97,7 @@ export interface RuntimeReleaseInput {
 /**
  * Transport-neutral boundary of the UI. Adapters implement this interface.
  */
-export interface DockletAdapter extends AuthApi, HostsApi, VolumesApi, SettingsApi, ImagesApi, NetworksApi, HubApi, HubBackupApi {
+export interface DockletAdapter extends AuthApi, HostsApi, VolumesApi, SettingsApi, ImagesApi, NetworksApi, HubApi, HubBackupApi, RegistriesApi {
   readonly kind: "demo" | "http" | "disconnected";
   readonly mappedOperations?: ReadonlySet<string>;
 
