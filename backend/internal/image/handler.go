@@ -182,7 +182,7 @@ func (h *ImageHandler) TagImage(ctx context.Context, input *TagImageInput) (*han
 	}
 
 	if tagImageErr := h.imageService.TagImage(ctx, imageName, input.Body, *user); tagImageErr != nil {
-		return nil, huma.Error500InternalServerError(fmt.Sprintf("failed to tag image: %v", tagImageErr))
+		return nil, image.Neutral(tagImageErr, "image.tag-failed", 502)
 	}
 
 	return &handlerutil.Out[base.MessageResponse]{
@@ -202,7 +202,7 @@ func (h *ImageHandler) GetImageHistory(ctx context.Context, input *GetImageHisto
 
 	history, err := h.imageService.GetImageHistory(ctx, imageName)
 	if err != nil {
-		return nil, huma.Error500InternalServerError(fmt.Sprintf("failed to get image history: %v", err))
+		return nil, image.Neutral(err, "image.usage-unavailable", 503)
 	}
 	if history == nil {
 		history = []image.HistoryItem{}
@@ -220,10 +220,7 @@ func (h *ImageHandler) GetImageHistory(ctx context.Context, input *GetImageHisto
 func (h *ImageHandler) SearchImages(ctx context.Context, input *SearchImagesInput) (*handlerutil.Out[[]image.SearchResult], error) {
 	results, err := h.imageService.SearchImages(ctx, input.Term)
 	if err != nil {
-		if strings.Contains(err.Error(), "term is required") {
-			return nil, image.Neutral(err, "image.usage-unavailable", 503)
-		}
-		return nil, huma.Error500InternalServerError(fmt.Sprintf("failed to search images: %v", err))
+		return nil, image.Neutral(err, "image.usage-unavailable", 503)
 	}
 	if results == nil {
 		results = []image.SearchResult{}
@@ -246,7 +243,7 @@ func (h *ImageHandler) ExportImage(ctx context.Context, input *ExportImageInput)
 
 	reader, err := h.imageService.ExportImage(ctx, imageName)
 	if err != nil {
-		return nil, huma.Error500InternalServerError(fmt.Sprintf("failed to export image: %v", err))
+		return nil, image.Neutral(err, "image.usage-unavailable", 503)
 	}
 
 	return &huma.StreamResponse{

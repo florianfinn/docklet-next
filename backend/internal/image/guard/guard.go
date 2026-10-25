@@ -9,6 +9,8 @@ package guard
 
 import (
 	"context"
+	"math"
+	"strconv"
 	"strings"
 	"time"
 
@@ -39,6 +41,8 @@ type Service struct {
 	Docker           func(context.Context) (*client.Client, error)
 	Admission        *runs.Admission
 	SystemReferences func() []string
+	Removed          func(context.Context, string)
+	Audit            func(context.Context, string, string, string, error)
 }
 
 func (s *Service) Acquire(ctx context.Context) (func(), error) {
@@ -167,7 +171,17 @@ func (s *Service) Check(ctx context.Context, c *client.Client, id string) error 
 }
 
 // RemoveLocked resolves aliases to the full ID and rechecks before non-recursive removal.
-func (s *Service) RemoveLocked(ctx context.Context, c *client.Client, ref string) (int64, error) {
+func (s *Service) RemoveLocked(ctx context.Context, c *client.Client, ref string, actions ...string) (_ int64, resultErr error) {
+	id := ""
+	action := "delete"
+	if len(actions) > 0 {
+		action = actions[0]
+	}
+	defer func() {
+		if s.Audit != nil {
+			s.Audit(ctx, action, id, ref, resultErr)
+		}
+	}()
 	inspect, err := c.ImageInspect(ctx, ref)
 	if err != nil {
 		if errdefs.IsNotFound(err) {
@@ -175,6 +189,7 @@ func (s *Service) RemoveLocked(ctx context.Context, c *client.Client, ref string
 		}
 		return 0, imageDTO.Failure("image.usage-unavailable", 503)
 	}
+	id = inspect.ID
 	if inspect.ID == "" {
 		return 0, imageDTO.Failure("image.usage-unavailable", 503)
 	}
@@ -186,11 +201,22 @@ func (s *Service) RemoveLocked(ctx context.Context, c *client.Client, ref string
 		return 0, imageDTO.Failure("image.changed", 409)
 	}
 	if _, err = c.ImageRemove(ctx, inspect.ID, client.ImageRemoveOptions{Force: false, PruneChildren: false}); err != nil {
+		if errdefs.IsConflict(err) {
+			return 0, imageDTO.Failure("image.in-use", 409)
+		}
 		return 0, imageDTO.Failure("image.remove-failed", 502)
+	}
+	if s.Removed != nil {
+		s.Removed(context.WithoutCancel(ctx), inspect.ID)
 	}
 	return inspect.Size, nil
 }
-func (s *Service) Prune(ctx context.Context, options system.PruneImagesOptions) (*imageDTO.PruneReport, error) {
+func (s *Service) Prune(ctx context.Context, options system.PruneImagesOptions) (_ *imageDTO.PruneReport, resultErr error) {
+	defer func() {
+		if resultErr != nil && s.Audit != nil {
+			s.Audit(ctx, "bulk_prune", "", "", resultErr)
+		}
+	}()
 	cutoff := time.Time{}
 	switch options.Mode {
 	case system.PruneImageModeAll, system.PruneImageModeDangling:
@@ -202,6 +228,9 @@ func (s *Service) Prune(ctx context.Context, options system.PruneImagesOptions) 
 			cutoff = time.Now().Add(-d)
 		} else if t, e := time.Parse(time.RFC3339, options.Until); e == nil {
 			cutoff = t
+		} else if seconds, e := strconv.ParseFloat(options.Until, 64); e == nil && seconds >= 0 && !math.IsNaN(seconds) && !math.IsInf(seconds, 0) && seconds < 1<<63 {
+			whole, fraction := math.Modf(seconds)
+			cutoff = time.Unix(int64(whole), int64(fraction*1e9))
 		} else {
 			return nil, imageDTO.Failure("image.invalid-prune", 400)
 		}
@@ -217,7 +246,7 @@ func (s *Service) Prune(ctx context.Context, options system.PruneImagesOptions) 
 	if err != nil {
 		return nil, imageDTO.Failure("image.prune-failed", 502)
 	}
-	opts := client.ImageListOptions{All: true}
+	opts := client.ImageListOptions{All: false}
 	if options.Mode == system.PruneImageModeDangling {
 		opts.Filters = make(client.Filters).Add("dangling", "true")
 	}
@@ -232,7 +261,7 @@ func (s *Service) Prune(ctx context.Context, options system.PruneImagesOptions) 
 			continue
 		}
 		seen[item.ID] = true
-		_, err = s.RemoveLocked(ctx, c, item.ID)
+		_, err = s.RemoveLocked(ctx, c, item.ID, "bulk_prune")
 		if err != nil {
 			p := imageDTO.Neutral(err, "image.remove-failed", 502)
 			entry := imageDTO.PruneItem{ID: item.ID, Code: p.Problem.Code}
@@ -246,4 +275,14 @@ func (s *Service) Prune(ctx context.Context, options system.PruneImagesOptions) 
 		out.ImagesDeleted = append(out.ImagesDeleted, item.ID)
 	}
 	return out, nil
+}
+
+// Search terms have Docker's free-text grammar; only the private host is reserved.
+func ValidateSearchTerm(term string) error {
+	for _, word := range strings.Fields(term) {
+		if strings.EqualFold(strings.SplitN(word, "/", 2)[0], ReservedHost) {
+			return imageDTO.Failure("image.reserved-reference", 400)
+		}
+	}
+	return nil
 }

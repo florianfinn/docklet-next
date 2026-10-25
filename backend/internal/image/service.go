@@ -11,6 +11,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/containerd/errdefs"
 	"github.com/florianfinn/docklet-next/backend/internal/activity"
 	"github.com/florianfinn/docklet-next/backend/internal/database"
 	dockerInternal "github.com/florianfinn/docklet-next/backend/internal/docker"
@@ -68,7 +69,7 @@ func NewImageService(
 	settingsService *settings.SettingsService,
 	activityService *activity.ActivityService,
 ) *ImageService {
-	return &ImageService{
+	service := &ImageService{
 		safety:               newImageGuard(db, dockerService),
 		db:                   db,
 		dockerService:        dockerService,
@@ -81,6 +82,9 @@ func NewImageService(
 			WithTTL(projectIDCacheTTL).
 			Build(),
 	}
+	service.safety.Removed = service.removedImage
+	service.safety.Audit = service.auditImageMutation
+	return service
 }
 
 // PatchFlaggedImages patches eligible images for the scheduled patch job.
@@ -125,7 +129,10 @@ func (s *ImageService) GetImageDetail(ctx context.Context, id string) (*imagetyp
 		var inspectImageErr error
 		inspectResult, inspectImageErr := dockerClient.ImageInspect(gctx, id)
 		if inspectImageErr != nil {
-			return fmt.Errorf("inspect not found: %w", inspectImageErr)
+			if errdefs.IsNotFound(inspectImageErr) {
+				return imagetypes.Failure("image.not-found", 404)
+			}
+			return imagetypes.Failure("image.usage-unavailable", 503)
 		}
 		inspect = inspectResult.InspectResponse
 		return nil
@@ -199,23 +206,28 @@ func newImageGuard(db *database.DB, d *dockerInternal.DockerClientService) *guar
 }
 func (s *ImageService) ImageGuard() *guard.Service { return s.safety }
 func (s *ImageService) RemoveImage(ctx context.Context, id string, force bool, user usertypes.Actor) error {
+	ctx = context.WithValue(ctx, usertypes.CurrentUserContextKey{}, &user)
 	release, err := s.safety.Acquire(ctx)
 	if err != nil {
+		s.auditImageMutation(ctx, "delete", "", id, err)
 		return err
 	}
 	defer release()
 	c, err := s.dockerService.GetClient(ctx)
 	if err != nil {
-		return imagetypes.Failure("image.remove-failed", 502)
+		err = imagetypes.Failure("image.remove-failed", 502)
+		s.auditImageMutation(ctx, "delete", "", id, err)
+		return err
 	}
 	_, err = s.safety.RemoveLocked(ctx, c, id)
 	if err != nil {
 		return err
 	}
-	s.cleanupImageUpdateRecordsInternal(ctx, []string{id})
 	return nil
 }
-func (s *ImageService) PullImage(ctx context.Context, ref string, writer io.Writer, user usertypes.Actor, external []containerregistry.Credential) error {
+func (s *ImageService) PullImage(ctx context.Context, ref string, writer io.Writer, user usertypes.Actor, external []containerregistry.Credential) (resultErr error) {
+	ctx = context.WithValue(ctx, usertypes.CurrentUserContextKey{}, &user)
+	defer func() { s.auditImageMutation(ctx, "pull", "", ref, resultErr) }()
 	if len(external) > 0 {
 		return imagetypes.Failure("registry.inline-credentials-not-allowed", 400)
 	}
@@ -243,28 +255,10 @@ func (s *ImageService) PullImage(ctx context.Context, ref string, writer io.Writ
 		return imagetypes.Failure("image.pull-failed", 502)
 	}
 	defer reader.Close()
-	decoder := json.NewDecoder(reader)
-	for {
-		var message struct {
-			Status      string `json:"status"`
-			Error       string `json:"error"`
-			ErrorDetail *struct {
-				Message string `json:"message"`
-			} `json:"errorDetail"`
-		}
-		err = decoder.Decode(&message)
-		if err == io.EOF {
-			break
-		}
-		if err != nil || message.Error != "" || message.ErrorDetail != nil {
-			return imagetypes.Failure("image.pull-failed", 502)
-		}
-		if writer != nil {
-			if _, err = io.WriteString(writer, "{\"status\":\"Pulling image\"}\n"); err != nil {
-				return imagetypes.Failure("image.pull-failed", 502)
-			}
-		}
+	if err := writeSafePullProgress(reader, writer); err != nil {
+		return err
 	}
+
 	if s.registryService != nil {
 		_ = s.registryService.RecordImagePull(ctx, ref)
 	}
@@ -296,11 +290,13 @@ func (s *ImageService) ReconcilePulledImageUpdate(ctx context.Context, imageName
 }
 
 // TagImage adds a repository tag to an existing image.
-func (s *ImageService) TagImage(ctx context.Context, source string, req imagetypes.TagRequest, user usertypes.Actor) error {
+func (s *ImageService) TagImage(ctx context.Context, source string, req imagetypes.TagRequest, user usertypes.Actor) (resultErr error) {
+	ctx = context.WithValue(ctx, usertypes.CurrentUserContextKey{}, &user)
 	target := strings.TrimSpace(req.Repository)
 	if req.Tag != "" {
 		target += ":" + strings.TrimSpace(req.Tag)
 	}
+	defer func() { s.auditImageMutation(ctx, "tag", "", target, resultErr) }()
 	if err := guard.ValidateReference(target); err != nil {
 		return err
 	}
@@ -355,22 +351,22 @@ func (s *ImageService) GetImageHistory(ctx context.Context, imageName string) ([
 
 // SearchImages searches the configured Docker registry for images.
 func (s *ImageService) SearchImages(ctx context.Context, term string) ([]imagetypes.SearchResult, error) {
-	if err := guard.ValidateReference(term); err != nil {
+	if err := guard.ValidateSearchTerm(term); err != nil {
 		return nil, err
 	}
 	term = strings.TrimSpace(term)
 	if term == "" {
-		return nil, errors.New("search term is required")
+		return nil, imagetypes.Failure("image.invalid-reference", 400)
 	}
 
 	dockerClient, err := s.dockerService.GetClient(ctx)
 	if err != nil {
-		return nil, fmt.Errorf("failed to connect to Docker: %w", err)
+		return nil, imagetypes.Failure("image.usage-unavailable", 503)
 	}
 
 	result, err := dockerClient.ImageSearch(ctx, term, client.ImageSearchOptions{})
 	if err != nil {
-		return nil, fmt.Errorf("failed to search images: %w", err)
+		return nil, imagetypes.Failure("image.usage-unavailable", 503)
 	}
 
 	items := make([]imagetypes.SearchResult, 0, len(result.Items))
@@ -404,7 +400,9 @@ func (s *ImageService) ExportImage(ctx context.Context, imageName string) (io.Re
 	return reader, nil
 }
 
-func (s *ImageService) LoadImageFromReader(ctx context.Context, reader io.Reader, fileName string, user usertypes.Actor, maxSizeBytes int64) (*imagetypes.LoadResult, error) {
+func (s *ImageService) LoadImageFromReader(ctx context.Context, reader io.Reader, fileName string, user usertypes.Actor, maxSizeBytes int64) (_ *imagetypes.LoadResult, resultErr error) {
+	ctx = context.WithValue(ctx, usertypes.CurrentUserContextKey{}, &user)
+	defer func() { s.auditImageMutation(ctx, "load", "", "", resultErr) }()
 	validated, cleanup, err := guard.ValidateArchive(reader, maxSizeBytes)
 	if err != nil {
 		return nil, err
@@ -427,13 +425,14 @@ func (s *ImageService) LoadImageFromReader(ctx context.Context, reader io.Reader
 	decoder := json.NewDecoder(resp)
 	for {
 		var item struct {
-			Error string `json:"error"`
+			Error       string          `json:"error"`
+			ErrorDetail json.RawMessage `json:"errorDetail"`
 		}
 		err = decoder.Decode(&item)
 		if err == io.EOF {
 			break
 		}
-		if err != nil || item.Error != "" {
+		if err != nil || item.Error != "" || (len(item.ErrorDetail) > 0 && string(item.ErrorDetail) != "null") {
 			return nil, imagetypes.Failure("image.load-failed", 502)
 		}
 	}
@@ -538,7 +537,7 @@ func (s *ImageService) cleanupVulnerabilityRecordsAfterPruneInternal(ctx context
 	}
 
 	if err := s.vulnerabilityService.DeleteScanResultsByImageIDs(ctx, idsToDelete); err != nil {
-		slog.WarnContext(ctx, "failed to delete vulnerability scan records after prune", "count", len(idsToDelete), "error", err)
+		slog.WarnContext(ctx, "failed to delete vulnerability scan records after prune", "count", len(idsToDelete), "code", "update.persistence-failed")
 	}
 }
 
@@ -548,11 +547,9 @@ func (s *ImageService) cleanupImageUpdateRecordsInternal(ctx context.Context, id
 	}
 
 	if err := s.imageUpdateService.DeleteRecordsForImages(ctx, idsToDelete); err != nil {
-		slog.WarnContext(ctx, "failed to clean up image update records", "error", err)
+		slog.WarnContext(ctx, "failed to clean up image update records", "code", "update.persistence-failed")
 	}
-	if err := s.imageUpdateService.CleanupOrphanedRecords(ctx); err != nil {
-		slog.WarnContext(ctx, "failed to clean up orphaned image update records", "error", err)
-	}
+
 }
 
 // GetUpdateInfoByImageIDs returns a map of image ID to UpdateInfo for the given image IDs.

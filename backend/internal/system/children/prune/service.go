@@ -385,23 +385,6 @@ func (s *Service) pruneContainersInternal(ctx context.Context, options system.Pr
 	return nil
 }
 
-func (s *Service) SetImageGuard(g *guard.Service) { s.imageGuard = g }
-
-func (s *Service) pruneImagesInternal(ctx context.Context, options system.PruneImagesOptions, result *system.PruneAllResult) error {
-	report, err := s.imageGuard.Prune(ctx, options)
-	if err != nil {
-		return err
-	}
-	result.ImagesDeleted = report.ImagesDeleted
-	result.ImageSkipped = report.Skipped
-	result.ImageSpaceReclaimedKnown = new(false)
-	result.ImageSpaceReclaimed = 0
-	if len(report.Failed) > 0 {
-		return errors.New("image.prune-failed")
-	}
-	return nil
-}
-
 func (s *Service) pruneBuildCacheInternal(ctx context.Context, options system.PruneBuildCacheOptions, result *system.PruneAllResult) error {
 	dockerClient, err := s.dockerClient(ctx)
 	if err != nil {
@@ -548,6 +531,12 @@ func (s *Service) preparePrunePlanInternal(ctx context.Context, req system.Prune
 	if selectPruneContainersErr := s.selectPruneContainersInternal(&plan, usage); selectPruneContainersErr != nil {
 		return plan, selectPruneContainersErr
 	}
+	if req.Images != nil && req.Images.Mode != system.PruneImageModeNone {
+		if err := restrictPruneHeadImages(ctx, dockerClient, &usage); err != nil {
+			return plan, err
+		}
+	}
+
 	selectedContainers, imageRefs, volumeRefs := pruneSelectedReferencesInternal(plan.Resources, usage)
 	if selectPruneImagesErr := s.selectPruneImagesInternal(&plan, usage, imageRefs); selectPruneImagesErr != nil {
 		return plan, selectPruneImagesErr
@@ -812,7 +801,7 @@ func (s *Service) removePruneResourceInternal(ctx context.Context, dockerClient 
 			return acquireErr
 		}
 		defer release()
-		_, err = s.imageGuard.RemoveLocked(ctx, dockerClient, resource.ID)
+		_, err = s.imageGuard.RemoveLocked(ctx, dockerClient, resource.ID, "bulk_prune")
 	case "volume":
 		err = s.volumeService.DeleteVolume(ctx, resource.ID, false, user.SystemUser)
 	case "network":

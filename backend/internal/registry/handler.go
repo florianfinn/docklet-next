@@ -181,12 +181,14 @@ func (h *ContainerRegistryHandler) TestRegistry(ctx context.Context, input *Test
 	} else {
 		var plaintext string
 		plaintext, err = crypto.Decrypt(reg.Token)
-		if err == nil {
+		if err != nil {
+			err = imageDTO.Failure("registry.credential-unavailable", 503)
+		} else {
 			err = h.registryService.TestRegistry(ctx, reg.URL, reg.Username, plaintext)
 		}
 	}
 	if err != nil {
-		return failure(imageDTO.Neutral(err, "registry.authentication-failed", 401))
+		return failure(registryProbeError(err, false))
 	}
 	return &handlerutil.Out[containerregistry.RegistryTestResult]{Body: base.ApiResponse[containerregistry.RegistryTestResult]{Success: true, Data: containerregistry.RegistryTestResult{OK: true, CheckedAt: checkedAt}}}, nil
 }

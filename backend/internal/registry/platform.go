@@ -8,7 +8,6 @@ package registry
 
 import (
 	"context"
-	"errors"
 	"github.com/florianfinn/docklet-next/backend/internal/image/guard"
 	"github.com/florianfinn/docklet-next/backend/internal/settings"
 	"github.com/florianfinn/docklet-next/backend/pkg/libarcane/registryauth"
@@ -17,7 +16,6 @@ import (
 	"github.com/google/go-containerregistry/pkg/name"
 	v1 "github.com/google/go-containerregistry/pkg/v1"
 	"github.com/google/go-containerregistry/pkg/v1/remote"
-	"github.com/google/go-containerregistry/pkg/v1/remote/transport"
 	"strings"
 )
 
@@ -77,25 +75,14 @@ func (s *ContainerRegistryService) PlatformImage(ctx context.Context, raw string
 	}
 	img, err := remote.Image(parsed, opts...)
 	if err != nil {
-		code := "registry.unavailable"
-		status := 503
-		var transportErr *transport.Error
-		if errors.As(err, &transportErr) {
-			if transportErr.StatusCode == 401 || transportErr.StatusCode == 403 {
-				if out.AuthState == "anonymous" {
-					out.AuthState = "authentication-required"
-				} else {
-					out.AuthState = "authentication-failed"
-				}
-				code = "registry.authentication-failed"
-				status = 401
-			}
-			if transportErr.StatusCode == 429 {
-				code = "registry.rate-limited"
-				status = 429
-			}
+		problem := registryProbeError(err, out.AuthState == "anonymous")
+		if problem.Problem.Code == "registry.authentication-required" {
+			out.AuthState = "authentication-required"
 		}
-		return out, imageDTO.Failure(code, status)
+		if problem.Problem.Code == "registry.authentication-failed" {
+			out.AuthState = "authentication-failed"
+		}
+		return out, problem
 	}
 	digest, err := img.Digest()
 	if err != nil {

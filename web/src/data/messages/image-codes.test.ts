@@ -13,3 +13,12 @@ describe("v7 image and registry code catalogue", () => {
     expect(get(deBackend.errors, code)).not.toBe("");
   });
 });
+
+describe("actionable image and registry outcomes", () => {
+  it.each([enBackend, deBackend])("keeps different recovery actions distinct", (catalogue) => {
+    const messages = fixture.imageSafety.errorCodes.map((code) => get(catalogue.errors, code));
+    expect(new Set(messages).size).toBe(messages.length);
+    expect(catalogue.errors.registry["authentication-required"]).not.toBe(catalogue.errors.registry["authentication-failed"]);
+    expect(catalogue.errors.update["deploy-failed"]).not.toBe(catalogue.errors.image["pull-failed"]);
+  });
+});

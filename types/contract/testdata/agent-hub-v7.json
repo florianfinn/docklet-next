@@ -555,6 +555,7 @@
     ],
     "edgeCommands": [
       "image.list",
+      "image.counts",
       "image.inspect",
       "image.pull",
       "image.delete",
@@ -565,6 +566,7 @@
       "image_update.check_one",
       "image_update.check_batch",
       "image_update.check_all",
+      "image_update.summary",
       "image_update.by_refs",
       "container_registry.sync",
       "system.upgrade.run"
@@ -626,6 +628,93 @@
       "ok",
       "checkedAt",
       "code?"
+    ],
+    "edgeRoutes": [
+      {
+        "method": "POST",
+        "path": "/api/container-registries/sync",
+        "command": "container_registry.sync"
+      },
+      {
+        "method": "GET",
+        "path": "/api/environments/{id}/images",
+        "command": "image.list"
+      },
+      {
+        "method": "GET",
+        "path": "/api/environments/{id}/images/counts",
+        "command": "image.counts"
+      },
+      {
+        "method": "GET",
+        "path": "/api/environments/{id}/images/{imageId}",
+        "command": "image.inspect"
+      },
+      {
+        "method": "DELETE",
+        "path": "/api/environments/{id}/images/{imageId}",
+        "command": "image.delete"
+      },
+      {
+        "method": "POST",
+        "path": "/api/environments/{id}/images/pull",
+        "command": "image.pull"
+      },
+      {
+        "method": "POST",
+        "path": "/api/environments/{id}/images/prune",
+        "command": "image.prune"
+      },
+      {
+        "method": "POST",
+        "path": "/api/environments/{id}/images/upload",
+        "command": "image.upload"
+      },
+      {
+        "method": "POST",
+        "path": "/api/environments/{id}/images/{name}/tag",
+        "command": "image.tag"
+      },
+      {
+        "method": "GET",
+        "path": "/api/environments/{id}/image-updates/check",
+        "command": "image_update.check"
+      },
+      {
+        "method": "GET",
+        "path": "/api/environments/{id}/image-updates/check/{imageId}",
+        "command": "image_update.check_one"
+      },
+      {
+        "method": "POST",
+        "path": "/api/environments/{id}/image-updates/check/{imageId}",
+        "command": "image_update.check_one"
+      },
+      {
+        "method": "POST",
+        "path": "/api/environments/{id}/image-updates/check-batch",
+        "command": "image_update.check_batch"
+      },
+      {
+        "method": "POST",
+        "path": "/api/environments/{id}/image-updates/check-all",
+        "command": "image_update.check_all"
+      },
+      {
+        "method": "GET",
+        "path": "/api/environments/{id}/image-updates/summary",
+        "command": "image_update.summary"
+      },
+      {
+        "method": "GET",
+        "path": "/api/environments/{id}/image-updates/by-refs",
+        "command": "image_update.by_refs"
+      },
+      {
+        "method": "POST",
+        "path": "/api/environments/{id}/system/upgrade",
+        "command": "system.upgrade.run"
+      }
     ]
   }
 }

@@ -252,14 +252,30 @@ func (s *Service) upgradeAgentInternal(ctx context.Context, env *environment.Env
 		result.Error = truncateUpdateAllErrorInternal(err)
 		return
 	}
-	// Only an observed published candidate at or below the actual running hub
-	// may be sent; do not invent an unpublished capped artifact.
-	if err := imageDTO.ValidateAgentUpgradeTarget(info.NewestVersion, config.Version); err != nil {
+	// Validate the agent observation first; then resolve an observed published
+	// release under the actual hub ceiling when latest is too new.
+	target := info.NewestVersion
+	targetErr := imageDTO.ValidateAgentUpgradeTarget(target, config.Version)
+	if targetErr != nil && imageDTO.Neutral(targetErr, "update.system-version-unknown", 503).Problem.Code == "update.requires-hub-update" {
+		target, targetErr = s.versionService.PublishedReleaseAtMost(ctx, config.Version)
+	}
+	if targetErr != nil {
 		result.Status = EnvironmentUpdateResultStatusFailed
-		result.Error = imageDTO.Neutral(err, "update.system-version-unknown", 503).Problem.Code
+		result.Error = imageDTO.Neutral(targetErr, "update.system-version-unknown", 503).Problem.Code
 		return
 	}
-	triggerBody, err := json.Marshal(TriggerUpgradeBody{TargetVersion: info.NewestVersion})
+
+	if compared, ok := imageDTO.CompareRelease(target, info.CurrentVersion); !ok || compared < 0 {
+		result.Status = EnvironmentUpdateResultStatusFailed
+		result.Error = "update.invalid-target"
+		return
+	}
+	if target != info.NewestVersion {
+		info.NewestVersion = target
+		info.NewestDigest = ""
+		info.UpdateAvailable = strings.TrimPrefix(target, "v") != strings.TrimPrefix(info.CurrentVersion, "v")
+	}
+	triggerBody, err := json.Marshal(TriggerUpgradeBody{TargetVersion: target})
 	if err != nil {
 		result.Status = EnvironmentUpdateResultStatusFailed
 		result.Error = "update.invalid-target"

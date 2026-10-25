@@ -17,7 +17,9 @@ import (
 
 // PullComposeImage is the existing deployment port, outside M10 image admission.
 // Compose runtime owns its diagnostics; credentials come from this executor's store.
-func (s *ImageService) PullComposeImage(ctx context.Context, ref string, writer io.Writer, actor usertypes.Actor, _ []containerregistry.Credential) error {
+func (s *ImageService) PullComposeImage(ctx context.Context, ref string, writer io.Writer, actor usertypes.Actor, _ []containerregistry.Credential) (resultErr error) {
+	ctx = context.WithValue(ctx, usertypes.CurrentUserContextKey{}, &actor)
+	defer func() { s.auditImageMutation(ctx, "pull", "", ref, resultErr) }()
 	if err := guard.ValidateReference(ref); err != nil {
 		return err
 	}

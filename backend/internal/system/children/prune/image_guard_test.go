@@ -38,6 +38,10 @@ func TestPR1ScheduledAndInteractivePruneShareImageGuard(t *testing.T) {
 			_, _ = fmt.Fprint(w, `[]`)
 			return
 		}
+		if strings.HasSuffix(r.URL.Path, "/containers/json") {
+			_, _ = fmt.Fprint(w, `[]`)
+			return
+		}
 		if strings.HasSuffix(r.URL.Path, "/images/json") {
 			_, _ = fmt.Fprintf(w, `[{"Id":%q}]`, id)
 			return
@@ -67,4 +71,22 @@ func TestPR1ScheduledAndInteractivePruneShareImageGuard(t *testing.T) {
 	require.NoError(t, s.pruneImagesInternal(t.Context(), system.PruneImagesOptions{Mode: system.PruneImageModeAll}, result))
 	require.Equal(t, []imageDTO.PruneItem{{ID: id, Code: "image.restore-point-protected"}}, result.ImageSkipped)
 	require.Zero(t, deletes.Load())
+	// Positive controls exercise the actual manual and scheduled consumers of
+	// the shared guard, including canonical cleanup and audit action metadata.
+	require.NoError(t, g.Release(t.Context(), guard.Protection{ImageID: id, Reason: "restore-point", OwnerID: "point"}))
+	removed := []string{}
+	audited := []string{}
+	g.Removed = func(_ context.Context, imageID string) { removed = append(removed, imageID) }
+	g.Audit = func(_ context.Context, action, imageID, ref string, err error) {
+		require.NoError(t, err)
+		require.Equal(t, id, imageID)
+		audited = append(audited, action)
+	}
+	// The original fixture's container list is only needed once protections clear.
+	err = s.removePruneResourceInternal(t.Context(), c, pruneResourceInternal{Kind: "image", ID: id})
+	require.NoError(t, err)
+	require.NoError(t, s.pruneImagesInternal(t.Context(), system.PruneImagesOptions{Mode: system.PruneImageModeAll}, &system.PruneAllResult{}))
+	require.Equal(t, []string{id, id}, removed)
+	require.Equal(t, []string{"bulk_prune", "bulk_prune"}, audited)
+
 }

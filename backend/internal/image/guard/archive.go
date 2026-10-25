@@ -14,12 +14,13 @@ import (
 	imageDTO "github.com/florianfinn/docklet-next/types/image"
 	"io"
 	"os"
+	"path"
 	"strings"
 )
 
 // ValidateArchive spools bounded input before Docker can interpret any tag.
-// Only completely understood Docker save manifests are admitted; OCI/unknown
-// archive variants fail closed until their full tag grammar is supported.
+// Docker-save manifests and the combined OCI layout emitted by current Engines
+// are understood. Unknown reference-bearing metadata fails closed.
 func ValidateArchive(input io.Reader, limit int64) (*os.File, func(), error) {
 	fail := func() error { return imageDTO.Failure("image.invalid-archive", 400) }
 	if limit <= 0 {
@@ -53,6 +54,9 @@ func ValidateArchive(input io.Reader, limit int64) (*os.File, func(), error) {
 	}
 	tr := tar.NewReader(f)
 	found := false
+	entriesByName := map[string]archiveEntry{}
+	var index []byte
+	layout := false
 	for {
 		h, e := tr.Next()
 		if e == io.EOF {
@@ -63,29 +67,50 @@ func ValidateArchive(input io.Reader, limit int64) (*os.File, func(), error) {
 			return nil, nil, fail()
 		}
 		name := strings.TrimPrefix(h.Name, "./")
-		if strings.HasPrefix(name, "/") || strings.Contains(name, "..") || h.Typeflag == tar.TypeSymlink || h.Typeflag == tar.TypeLink {
+		if _, duplicate := entriesByName[name]; duplicate {
+			cleanup()
+			return nil, nil, fail()
+		}
+		offset, _ := f.Seek(0, io.SeekCurrent)
+		entriesByName[name] = archiveEntry{offset, h.Size}
+		if strings.HasPrefix(name, "/") || path.Clean(name) != strings.TrimSuffix(name, "/") || strings.HasPrefix(name, "../") || h.Typeflag == tar.TypeSymlink || h.Typeflag == tar.TypeLink {
 			cleanup()
 			return nil, nil, fail()
 		}
 		if name == "index.json" || name == "oci-layout" || name == "repositories" {
-			if name != "repositories" {
-				cleanup()
-				return nil, nil, fail()
-			}
 			if h.Size > 4<<20 {
 				cleanup()
 				return nil, nil, fail()
 			}
-			var repos map[string]map[string]string
-			if json.NewDecoder(io.LimitReader(tr, 4<<20)).Decode(&repos) != nil {
+			data, e := io.ReadAll(tr)
+			if e != nil {
 				cleanup()
 				return nil, nil, fail()
 			}
-			for repo, tags := range repos {
-				for tag := range tags {
-					if e = ValidateReference(repo + ":" + tag); e != nil {
-						cleanup()
-						return nil, nil, e
+			switch name {
+			case "index.json":
+				index = data
+			case "oci-layout":
+				var value struct {
+					Version string `json:"imageLayoutVersion"`
+				}
+				if strictArchiveJSON(data, &value) != nil || value.Version != "1.0.0" {
+					cleanup()
+					return nil, nil, fail()
+				}
+				layout = true
+			case "repositories":
+				var repos map[string]map[string]string
+				if strictArchiveJSON(data, &repos) != nil {
+					cleanup()
+					return nil, nil, fail()
+				}
+				for repo, tags := range repos {
+					for tag := range tags {
+						if e = ValidateReference(repo + ":" + tag); e != nil {
+							cleanup()
+							return nil, nil, e
+						}
 					}
 				}
 			}
@@ -137,6 +162,16 @@ func ValidateArchive(input io.Reader, limit int64) (*os.File, func(), error) {
 		if e != nil {
 			cleanup()
 			return nil, nil, fail()
+		}
+	}
+	if (index != nil) != layout {
+		cleanup()
+		return nil, nil, fail()
+	}
+	if index != nil {
+		if e := validateOCIArchive(f, entriesByName, index); e != nil {
+			cleanup()
+			return nil, nil, e
 		}
 	}
 	if !found {
