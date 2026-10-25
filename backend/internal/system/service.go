@@ -11,6 +11,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/florianfinn/docklet-next/backend/internal/image/guard"
 	"log/slog"
 	"runtime"
 	"strings"
@@ -672,3 +673,5 @@ func (s *SystemService) backupPoliciesInternal(ctx context.Context) ([]SystemBac
 	}
 	return policies, nil
 }
+
+func (s *SystemService) SetImageGuard(g *guard.Service) { s.prune.SetImageGuard(g) }

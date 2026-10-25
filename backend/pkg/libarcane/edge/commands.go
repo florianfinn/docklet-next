@@ -48,6 +48,7 @@ var commandRoutes = []commandRoute{
 	{Method: http.MethodPost, PathPattern: "/api/environments/{id}/images/pull", CommandName: "image.pull"},
 	{Method: http.MethodPost, PathPattern: "/api/environments/{id}/images/prune", CommandName: "image.prune"},
 	{Method: http.MethodPost, PathPattern: "/api/environments/{id}/images/upload", CommandName: "image.upload"},
+	{Method: http.MethodPost, PathPattern: "/api/environments/{id}/images/{name}/tag", CommandName: "image.tag"},
 
 	{Method: http.MethodPost, PathPattern: "/api/environments/{id}/uploads/{kind}", CommandName: "upload.session.create"},
 	{Method: http.MethodGet, PathPattern: "/api/environments/{id}/uploads/{kind}/{uploadId}", CommandName: "upload.session.get"},

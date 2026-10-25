@@ -10,6 +10,7 @@ import "time"
 
 // ContainerRegistry represents a container registry in API responses.
 type ContainerRegistry struct {
+	HasCredential bool `json:"hasCredential"`
 	// ID of the container registry.
 	//
 	// Required: true
@@ -23,7 +24,7 @@ type ContainerRegistry struct {
 	// Username for authentication with the container registry.
 	//
 	// Required: true
-	Username string `json:"username"`
+	Username string `json:"-"`
 
 	// Description of the container registry.
 	//
@@ -54,7 +55,7 @@ type ContainerRegistry struct {
 	// AWSAccessKeyID is the AWS Access Key ID for ECR registries.
 	//
 	// Required: false
-	AWSAccessKeyID string `json:"awsAccessKeyId,omitempty"`
+	AWSAccessKeyID string `json:"-"`
 
 	// AWSRegion is the AWS region for ECR registries.
 	//
@@ -80,6 +81,7 @@ type PullUsageResponse struct {
 }
 
 type PullUsage struct {
+	Code string `json:"code,omitempty"`
 	// RegistryID is the configured registry row ID.
 	//
 	// Required: true
@@ -138,7 +140,7 @@ type PullUsage struct {
 	// AuthUsername is the username used when probing with credentials.
 	//
 	// Required: false
-	AuthUsername string `json:"authUsername,omitempty"`
+	AuthUsername string `json:"-"`
 
 	// Source is the registry-reported source for the rate limit bucket.
 	//
@@ -272,28 +274,40 @@ type SyncRequest struct {
 // CreateContainerRegistryRequest configures a registry with a normalized description.
 type CreateContainerRegistryRequest struct {
 	URL                string   `json:"url" binding:"required"`
-	Username           string   `json:"username"`
-	Token              string   `json:"token"`
-	Description        *string  `json:"description" unorm:"nfc" trim:"true"`
-	Insecure           *bool    `json:"insecure"`
-	Enabled            *bool    `json:"enabled"`
-	RegistryType       string   `json:"registryType"`
-	RepositoryNames    []string `json:"repositoryNames"`
-	AWSAccessKeyID     string   `json:"awsAccessKeyId"`
-	AWSSecretAccessKey string   `json:"awsSecretAccessKey"`
-	AWSRegion          string   `json:"awsRegion"`
+	Username           string   `json:"username" writeOnly:"true" required:"false"`
+	Token              string   `json:"token" writeOnly:"true" required:"false"`
+	Description        *string  `json:"description" unorm:"nfc" trim:"true" required:"false"`
+	Insecure           *bool    `json:"insecure" required:"false"`
+	Enabled            *bool    `json:"enabled" required:"false"`
+	RegistryType       string   `json:"registryType" required:"false"`
+	RepositoryNames    []string `json:"repositoryNames" required:"false"`
+	AWSAccessKeyID     string   `json:"awsAccessKeyId" writeOnly:"true" required:"false"`
+	AWSSecretAccessKey string   `json:"awsSecretAccessKey" writeOnly:"true" required:"false"`
+	AWSRegion          string   `json:"awsRegion" required:"false"`
 }
 
 type UpdateContainerRegistryRequest struct {
-	URL                *string   `json:"url"`
-	Username           *string   `json:"username"`
-	Token              *string   `json:"token"`
-	Description        *string   `json:"description" unorm:"nfc" trim:"true"`
-	Insecure           *bool     `json:"insecure"`
-	Enabled            *bool     `json:"enabled"`
-	RegistryType       *string   `json:"registryType"`
-	RepositoryNames    *[]string `json:"repositoryNames"`
-	AWSAccessKeyID     *string   `json:"awsAccessKeyId"`
-	AWSSecretAccessKey *string   `json:"awsSecretAccessKey"`
-	AWSRegion          *string   `json:"awsRegion"`
+	ClearCredential    bool      `json:"clearCredential,omitempty" required:"false"`
+	URL                *string   `json:"url" required:"false"`
+	Username           *string   `json:"username" writeOnly:"true" required:"false"`
+	Token              *string   `json:"token" writeOnly:"true" required:"false"`
+	Description        *string   `json:"description" unorm:"nfc" trim:"true" required:"false"`
+	Insecure           *bool     `json:"insecure" required:"false"`
+	Enabled            *bool     `json:"enabled" required:"false"`
+	RegistryType       *string   `json:"registryType" required:"false"`
+	RepositoryNames    *[]string `json:"repositoryNames" required:"false"`
+	AWSAccessKeyID     *string   `json:"awsAccessKeyId" writeOnly:"true" required:"false"`
+	AWSSecretAccessKey *string   `json:"awsSecretAccessKey" writeOnly:"true" required:"false"`
+	AWSRegion          *string   `json:"awsRegion" required:"false"`
 }
+
+// RegistryTestResult contains only local outcome metadata, never remote diagnostics.
+type RegistryTestResult struct {
+	Status    int       `json:"-"`
+	OK        bool      `json:"ok"`
+	CheckedAt time.Time `json:"checkedAt"`
+	Code      string    `json:"code,omitempty"`
+}
+
+func (r *RegistryTestResult) Error() string  { return "Registry connectivity check failed." }
+func (r *RegistryTestResult) GetStatus() int { return r.Status }

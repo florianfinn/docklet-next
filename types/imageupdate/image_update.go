@@ -7,12 +7,20 @@
 package imageupdate
 
 import (
+	"encoding/json"
+	imageDTO "github.com/florianfinn/docklet-next/types/image"
 	"time"
 
 	"github.com/florianfinn/docklet-next/types/containerregistry"
 )
 
 type Response struct {
+	State     string    `json:"state" enum:"unchecked,current,version,rebuild,local,unknown,error"`
+	CheckedAt time.Time `json:"checkedAt"`
+	Platform  string    `json:"platform,omitempty"`
+	AuthState string    `json:"authState" enum:"anonymous,credential,authentication-required,authentication-failed,unknown"`
+	Code      string    `json:"code,omitempty"`
+
 	// ImageUpdate preserves the image-scoped result before container-policy aggregation.
 	ImageUpdate *Response `json:"imageUpdate,omitempty"`
 	// ImageRef identifies the configured reference for a container-specific check.
@@ -68,7 +76,7 @@ type Response struct {
 	// AuthUsername is the username used for authentication (for credential method).
 	//
 	// Required: false
-	AuthUsername string `json:"authUsername,omitempty"`
+	AuthUsername string `json:"-"`
 
 	// AuthRegistry is the registry host used for authentication.
 	//
@@ -114,22 +122,57 @@ type Summary struct {
 }
 
 type BatchImageUpdateRequest struct {
+	InlineCredentialsProvided bool `json:"-"`
 	// ImageRefs is a list of image references to check for updates.
 	//
 	// Required: true
 	ImageRefs []string `json:"imageRefs" binding:"required"`
 
-	// Credentials is a list of container registry credentials for authentication.
+	// Credentials is rejected legacy input; use saved registry credentials.
 	//
 	// Required: false
-	Credentials []containerregistry.Credential `json:"credentials,omitempty"`
+	Credentials []containerregistry.Credential `json:"credentials,omitempty" deprecated:"true" writeOnly:"true"`
 }
 
 type CheckAllImagesRequest struct {
-	// Credentials is a list of container registry credentials for authentication.
+	InlineCredentialsProvided bool `json:"-"`
+	// Credentials is rejected legacy input; use saved registry credentials.
 	//
 	// Required: false
-	Credentials []containerregistry.Credential `json:"credentials,omitempty"`
+	Credentials []containerregistry.Credential `json:"credentials,omitempty" deprecated:"true" writeOnly:"true"`
 }
 
 type BatchResponse map[string]*Response
+
+func FromInfo(i *imageDTO.UpdateInfo) *Response {
+	return &Response{State: i.State, CheckedAt: i.CheckedAt, ImageRef: i.ImageRef, Platform: i.Platform, AuthState: i.AuthState, Code: i.Code, CheckTime: i.CheckTime, HasUpdate: i.HasUpdate, UpdateType: i.UpdateType, CurrentVersion: i.CurrentVersion, LatestVersion: i.LatestVersion, CurrentDigest: i.CurrentDigest, LatestDigest: i.LatestDigest, Error: i.Error, AuthMethod: i.AuthMethod, UsedCredential: i.UsedCredential}
+}
+
+func (p *BatchImageUpdateRequest) UnmarshalJSON(data []byte) error {
+	type plain BatchImageUpdateRequest
+	var value plain
+	if json.Unmarshal(data, &value) != nil {
+		return imageDTO.Failure("update.invalid-target", 400)
+	}
+	var fields map[string]json.RawMessage
+	_ = json.Unmarshal(data, &fields)
+	*p = BatchImageUpdateRequest(value)
+	for key := range fields {
+		p.InlineCredentialsProvided = p.InlineCredentialsProvided || imageDTO.InlineCredentialKey(key)
+	}
+	return nil
+}
+func (p *CheckAllImagesRequest) UnmarshalJSON(data []byte) error {
+	type plain CheckAllImagesRequest
+	var value plain
+	if json.Unmarshal(data, &value) != nil {
+		return imageDTO.Failure("update.invalid-target", 400)
+	}
+	var fields map[string]json.RawMessage
+	_ = json.Unmarshal(data, &fields)
+	*p = CheckAllImagesRequest(value)
+	for key := range fields {
+		p.InlineCredentialsProvided = p.InlineCredentialsProvided || imageDTO.InlineCredentialKey(key)
+	}
+	return nil
+}

@@ -11,6 +11,7 @@ import (
 	"encoding/json/v2"
 	"errors"
 	"fmt"
+	imageDTO "github.com/florianfinn/docklet-next/types/image"
 	"io"
 	"log/slog"
 	"mime"
@@ -188,6 +189,14 @@ func (m *EnvironmentMiddleware) Handle(c *echo.Context, next echo.HandlerFunc) e
 		})
 	}
 
+	if err := InlineImageCredentials(c.Request().URL.Path, c.Request().Header, c.QueryParams()); err != nil {
+		problem := imageDTO.Neutral(err, "registry.inline-credentials-not-allowed", 400)
+		return c.JSON(problem.Status, problem)
+	}
+	if err := checkImageUpgrade(c); err != nil {
+		problem := imageDTO.Neutral(err, "update.invalid-target", 400)
+		return c.JSON(problem.Status, problem)
+	}
 	return m.inventoryRead(c, envID, func() error {
 		if !enabled {
 			return c.JSON(http.StatusBadRequest, map[string]any{"success": false, "code": "agent.unavailable"})

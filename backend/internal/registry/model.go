@@ -16,18 +16,18 @@ type ContainerRegistry struct {
 	database.BaseModel
 
 	URL                 string               `json:"url" sortable:"true"`
-	Username            string               `json:"username" sortable:"true"`
-	Token               string               `json:"token"`
+	Username            string               `json:"-" sortable:"true"`
+	Token               string               `json:"-"`
 	Description         *string              `json:"description,omitempty" sortable:"true"`
 	Insecure            bool                 `json:"insecure" sortable:"true"`
 	Enabled             bool                 `json:"enabled" sortable:"true"`
 	RegistryType        string               `json:"registryType" sortable:"true"`
 	RepositoryNames     database.StringSlice `json:"repositoryNames" gorm:"column:repository_names;type:text;not null;default:'[]'"`
-	AWSAccessKeyID      string               `json:"awsAccessKeyId"`
-	AWSSecretAccessKey  string               `json:"awsSecretAccessKey"`
+	AWSAccessKeyID      string               `json:"-"`
+	AWSSecretAccessKey  string               `json:"-"`
 	AWSRegion           string               `json:"awsRegion"`
-	ECRToken            string               `json:"ecrToken"`
-	ECRTokenGeneratedAt *time.Time           `json:"ecrTokenGeneratedAt"`
+	ECRToken            string               `json:"-"`
+	ECRTokenGeneratedAt *time.Time           `json:"-"`
 	CreatedAt           time.Time            `json:"createdAt" sortable:"true"`
 	UpdatedAt           time.Time            `json:"updatedAt" sortable:"true"`
 }

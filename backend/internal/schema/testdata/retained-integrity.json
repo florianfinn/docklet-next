@@ -37,4 +37,4 @@
 ["notnull","runtime_store_generation","generation"],
 ["notnull","runtime_store_generation","created_at"],
 ["notnull","runtime_receipts","release_acknowledged"],
-["constraint","runtime_receipts","CHECK (release_acknowledged IN (0,1) AND (release_acknowledged = 1) = (hub_disposition IS NOT NULL AND hub_disposition = 'released'))"]]
+["constraint","runtime_receipts","CHECK (release_acknowledged IN (0,1) AND (release_acknowledged = 1) = (hub_disposition IS NOT NULL AND hub_disposition = 'released'))"],["notnull", "image_protections", "image_id"],["notnull", "image_protections", "reason"],["notnull", "image_protections", "owner_id"],["constraint", "image_protections", "CHECK (reason IN ('system', 'restore-point', 'active-update'))"],["constraint", "image_protections", "CHECK (length(image_id) > 0)"],["constraint", "image_protections", "CHECK (length(owner_id) > 0)"],["constraint", "image_protections", "PRIMARY KEY (image_id, reason, owner_id)"]]

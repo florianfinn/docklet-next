@@ -13,6 +13,7 @@ import (
 	"github.com/florianfinn/docklet-next/backend/internal/environment"
 	"github.com/florianfinn/docklet-next/backend/internal/event"
 	"github.com/florianfinn/docklet-next/backend/internal/image/children/patch"
+	"github.com/florianfinn/docklet-next/backend/internal/image/guard"
 	"github.com/florianfinn/docklet-next/backend/internal/imageupdate"
 	"github.com/florianfinn/docklet-next/backend/internal/kv"
 	"github.com/florianfinn/docklet-next/backend/internal/notification"
@@ -40,7 +41,7 @@ func Models() []any {
 		&patch.ImagePatchRecord{}, &imageupdate.ImageUpdateRecord{},
 		&kv.KVEntry{}, &notification.NotificationSettings{},
 		&project.Project{}, &project.ProjectTag{},
-		&registry.ContainerRegistry{},
+		&registry.ContainerRegistry{}, &guard.Protection{},
 		&role.Role{}, &role.UserRoleAssignment{}, &role.ApiKeyPermission{},
 		&session.UserSession{}, &settings.SettingVariable{},
 		&system.SystemBackupRun{}, &system.SystemBackupPolicy{},

@@ -9,6 +9,7 @@ package system
 import (
 	stdjson "encoding/json"
 	"encoding/json/v2"
+	imageDTO "github.com/florianfinn/docklet-next/types/image"
 )
 
 type PruneContainerMode string
@@ -242,6 +243,8 @@ func decodePruneBuildCacheOptionsInternal(raw stdjson.RawMessage, dangling *bool
 
 // PruneAllResult is the result of a prune operation on Docker system resources.
 type PruneAllResult struct {
+	ImageSkipped             []imageDTO.PruneItem `json:"imageSkipped,omitempty"`
+	ImageSpaceReclaimedKnown *bool                `json:"imageSpaceReclaimedKnown,omitempty"`
 	// ContainersPruned is a list of container IDs that were pruned.
 	//
 	// Required: false

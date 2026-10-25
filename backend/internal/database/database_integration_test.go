@@ -160,14 +160,15 @@ func TestRuntimeMigrationUpgradesRealSQLiteHistory(t *testing.T) {
 		require.Equal(t, 1, strings.Count(expected004Catalog, addition.before))
 		expected004Catalog = strings.Replace(expected004Catalog, addition.before, addition.after, 1)
 	}
+	require.NoError(t, migrateDatabaseToVersionInternal(t.Context(), pool, dbProviderSQLite, MigrationOptions{}, 4))
+	require.NoError(t, db.Raw(historicalCatalogQuery).Scan(&actual).Error)
+	require.Equal(t, expected004Catalog, actual, "004 must add only the declared columns to historical schema objects")
 	require.NoError(t, db.Close())
 
 	var upgradedCatalog string
 	for attempt := 0; attempt < 3; attempt++ {
 		db, err = Initialize(t.Context(), url, MigrationOptions{})
 		require.NoError(t, err)
-		require.NoError(t, db.Raw(historicalCatalogQuery).Scan(&actual).Error)
-		require.Equal(t, expected004Catalog, actual, "004 must add only the declared columns to historical schema objects")
 		require.NoError(t, db.Raw("SELECT group_concat(sql,';') FROM (SELECT sql FROM sqlite_master ORDER BY type,name)").Scan(&actual).Error)
 		if attempt == 0 {
 			upgradedCatalog = actual

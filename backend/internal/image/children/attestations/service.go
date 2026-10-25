@@ -14,6 +14,7 @@ import (
 	"encoding/json/v2"
 	"errors"
 	"fmt"
+	"github.com/florianfinn/docklet-next/backend/internal/image/guard"
 	"io"
 	"log/slog"
 	"net/http"
@@ -67,6 +68,9 @@ type subjectInternal struct {
 
 // GetImageAttestations returns in-toto attestations attached to a local image or registry reference.
 func (s *Service) GetImageAttestations(ctx context.Context, imageName string, query Query) (*image.AttestationList, error) {
+	if err := guard.ValidateReference(imageName); err != nil {
+		return nil, err
+	}
 	resolution, err := s.resolveImageAttestationReferenceInternal(ctx, imageName)
 	if err != nil {
 		return nil, err
@@ -143,7 +147,7 @@ func (s *Service) resolveImageAttestationReferenceInternal(ctx context.Context, 
 		if err == nil {
 			inspect, inspectErr := dockerClient.ImageInspect(ctx, imageName)
 			if inspectErr == nil {
-				imageRef := firstUsableImageReferenceInternal(inspect.RepoDigests, inspect.RepoTags)
+				imageRef := firstUsableImageReferenceInternal(inspect.RepoDigests, guard.PublicTags(inspect.RepoTags))
 				if imageRef == "" {
 					return referenceInternal{ImageRef: imageName, Empty: true}, nil
 				}

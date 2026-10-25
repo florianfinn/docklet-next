@@ -8,19 +8,23 @@ package image
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/containerd/errdefs"
 	"github.com/florianfinn/docklet-next/backend/internal/activity"
 	"github.com/florianfinn/docklet-next/backend/internal/database"
 	dockerInternal "github.com/florianfinn/docklet-next/backend/internal/docker"
 	"github.com/florianfinn/docklet-next/backend/internal/event"
 	"github.com/florianfinn/docklet-next/backend/internal/image/children/attestations"
 	"github.com/florianfinn/docklet-next/backend/internal/image/children/patch"
+	"github.com/florianfinn/docklet-next/backend/internal/image/guard"
 	"github.com/florianfinn/docklet-next/backend/internal/imageupdate"
 	"github.com/florianfinn/docklet-next/backend/internal/registry"
 	"github.com/florianfinn/docklet-next/backend/internal/settings"
 	"github.com/florianfinn/docklet-next/backend/internal/vulnerability"
 	"github.com/florianfinn/docklet-next/backend/pkg/libarcane/registryauth"
+	"github.com/florianfinn/docklet-next/backend/pkg/scheduler/runs"
 	"github.com/florianfinn/docklet-next/backend/pkg/utils"
 	"github.com/florianfinn/docklet-next/backend/pkg/utils/imageref"
 	"github.com/florianfinn/docklet-next/types/containerregistry"
@@ -31,19 +35,19 @@ import (
 	"github.com/moby/moby/api/types/image"
 	"github.com/moby/moby/client"
 	"github.com/samber/hot"
-	"go.getarcane.app/docker"
-	"go.getarcane.app/kit/pkg"
+
 	"go.getarcane.app/updater"
 	"go.getarcane.app/updater/pkg/utils/tagpolicy"
 	"golang.org/x/sync/errgroup"
 	"io"
 	"log/slog"
-	"slices"
+
 	"strings"
 	"time"
 )
 
 type ImageService struct {
+	safety               *guard.Service
 	db                   *database.DB
 	dockerService        *dockerInternal.DockerClientService
 	imageUpdateService   *imageupdate.ImageUpdateService
@@ -65,7 +69,8 @@ func NewImageService(
 	settingsService *settings.SettingsService,
 	activityService *activity.ActivityService,
 ) *ImageService {
-	return &ImageService{
+	service := &ImageService{
+		safety:               newImageGuard(db, dockerService),
 		db:                   db,
 		dockerService:        dockerService,
 		registryService:      registryService,
@@ -77,6 +82,9 @@ func NewImageService(
 			WithTTL(projectIDCacheTTL).
 			Build(),
 	}
+	service.safety.Removed = service.removedImage
+	service.safety.Audit = service.auditImageMutation
+	return service
 }
 
 // PatchFlaggedImages patches eligible images for the scheduled patch job.
@@ -121,7 +129,10 @@ func (s *ImageService) GetImageDetail(ctx context.Context, id string) (*imagetyp
 		var inspectImageErr error
 		inspectResult, inspectImageErr := dockerClient.ImageInspect(gctx, id)
 		if inspectImageErr != nil {
-			return fmt.Errorf("inspect not found: %w", inspectImageErr)
+			if errdefs.IsNotFound(inspectImageErr) {
+				return imagetypes.Failure("image.not-found", 404)
+			}
+			return imagetypes.Failure("image.usage-unavailable", 503)
 		}
 		inspect = inspectResult.InspectResponse
 		return nil
@@ -160,6 +171,14 @@ func (s *ImageService) GetImageDetail(ctx context.Context, id string) (*imagetyp
 	}
 
 	out := imagetypes.NewDetailSummary(&inspect)
+	out.RepoTags = guard.PublicTags(out.RepoTags)
+	out.UsageState = "known"
+	out.ProtectionReasons = []imagetypes.Protection{}
+	if pins, e := s.safety.Reasons(ctx, inspect.ID); e == nil {
+		out.ProtectionReasons = append(out.ProtectionReasons, pins...)
+	} else {
+		out.UsageState = "unknown"
+	}
 	if listSize > 0 {
 		out.Size = listSize
 		out.Descriptor.Size = listSize
@@ -171,141 +190,78 @@ func (s *ImageService) GetImageDetail(ctx context.Context, id string) (*imagetyp
 	return &out, nil
 }
 
+func (s *ImageService) SetImageAdmission(gate *runs.Admission, refs func() []string) {
+	s.safety.Admission = gate
+	s.safety.SystemReferences = refs
+	if s.patch != nil {
+		s.patch.SetImageGuard(s.safety)
+	}
+}
+func newImageGuard(db *database.DB, d *dockerInternal.DockerClientService) *guard.Service {
+	g := &guard.Service{DB: db}
+	if d != nil {
+		g.Docker = d.GetClient
+	}
+	return g
+}
+func (s *ImageService) ImageGuard() *guard.Service { return s.safety }
 func (s *ImageService) RemoveImage(ctx context.Context, id string, force bool, user usertypes.Actor) error {
-	dockerClient, err := s.dockerService.GetClient(ctx)
+	ctx = context.WithValue(ctx, usertypes.CurrentUserContextKey{}, &user)
+	release, err := s.safety.Acquire(ctx)
 	if err != nil {
-		s.eventService.LogErrorEvent(ctx, event.EventTypeImageError, "image", id, "", user.ID, user.Username, "0", err, database.JSON{"action": "delete", "force": force})
-		return fmt.Errorf("failed to connect to Docker: %w", err)
+		s.auditImageMutation(ctx, "delete", "", id, err)
+		return err
 	}
-
-	imageDetails, inspectErr := dockerClient.ImageInspect(ctx, id)
-	var imageName string
-	if inspectErr == nil && len(imageDetails.RepoTags) > 0 {
-		imageName = imageDetails.RepoTags[0]
-	} else {
-		imageName = id
-	}
-
-	options := client.ImageRemoveOptions{
-		Force:         force,
-		PruneChildren: true,
-	}
-
-	defer s.eventService.BeginDockerResourceSuppressionWindow("image", id, imageName)()
-	if inspectErr == nil {
-		defer s.eventService.BeginDockerResourceSuppressionWindow("image", imageDetails.ID, "")()
-		tagReleases := make([]func(), 0, len(imageDetails.RepoTags))
-		defer func() {
-			for _, release := range slices.Backward(tagReleases) {
-				release()
-			}
-		}()
-		for _, tag := range imageDetails.RepoTags {
-			tagReleases = append(tagReleases, s.eventService.BeginDockerResourceSuppressionWindow("image", "", tag))
-		}
-	}
-	removed, err := dockerClient.ImageRemove(ctx, id, options)
+	defer release()
+	c, err := s.dockerService.GetClient(ctx)
 	if err != nil {
-		s.eventService.LogErrorEvent(ctx, event.EventTypeImageError, "image", id, imageName, user.ID, user.Username, "0", err, database.JSON{"action": "delete", "force": force})
-		return fmt.Errorf("failed to remove image: %w", err)
+		err = imagetypes.Failure("image.remove-failed", 502)
+		s.auditImageMutation(ctx, "delete", "", id, err)
+		return err
 	}
-
-	idsToDelete := append(getDeletedImageIDsInternal(removed.Items), id)
-	s.cleanupImageUpdateRecordsInternal(ctx, idsToDelete)
-
-	// Clean up vulnerability scan records for the deleted image
-	if s.vulnerabilityService != nil {
-		if deleteScanResultErr := s.vulnerabilityService.DeleteScanResult(ctx, id); deleteScanResultErr != nil {
-			slog.WarnContext(ctx, "failed to delete vulnerability scan record", "id", id, "error", deleteScanResultErr)
-		}
+	_, err = s.safety.RemoveLocked(ctx, c, id)
+	if err != nil {
+		return err
 	}
-
-	metadata := database.JSON{
-		"action":  "delete",
-		"imageId": id,
-		"force":   force,
-	}
-	if logErr := s.eventService.LogImageEvent(ctx, event.EventTypeImageDelete, id, imageName, user.ID, user.Username, "0", metadata); logErr != nil {
-		slog.WarnContext(ctx, "could not log image deletion action", "err", logErr, "image", imageName, "imageId", id)
-	}
-
 	return nil
 }
-
-func (s *ImageService) PullImage(ctx context.Context, imageName string, progressWriter io.Writer, user usertypes.Actor, externalCreds []containerregistry.Credential) error {
-	dockerClient, err := s.dockerService.GetClient(ctx)
+func (s *ImageService) PullImage(ctx context.Context, ref string, writer io.Writer, user usertypes.Actor, external []containerregistry.Credential) (resultErr error) {
+	ctx = context.WithValue(ctx, usertypes.CurrentUserContextKey{}, &user)
+	defer func() { s.auditImageMutation(ctx, "pull", "", ref, resultErr) }()
+	if len(external) > 0 {
+		return imagetypes.Failure("registry.inline-credentials-not-allowed", 400)
+	}
+	if err := guard.ValidateReference(ref); err != nil {
+		return err
+	}
+	release, err := s.safety.Acquire(ctx)
 	if err != nil {
-		s.eventService.LogErrorEvent(ctx, event.EventTypeImageError, "image", "", imageName, user.ID, user.Username, "0", err, database.JSON{"action": "pull"})
-		return fmt.Errorf("failed to connect to Docker: %w", err)
+		return err
 	}
-
-	slog.DebugContext(ctx, "Attempting to pull image", "image", imageName, "externalCredCount", len(externalCreds))
-
-	pullOptions, err := s.PullOptionsWithAuth(ctx, imageName, externalCreds)
+	defer release()
+	opts, err := s.PullOptionsWithAuth(ctx, ref, nil)
 	if err != nil {
-		slog.WarnContext(ctx, "Failed to get registry authentication for image; proceeding without auth", "image", imageName, "error", err.Error())
-		pullOptions = client.ImagePullOptions{}
+		return imagetypes.Neutral(err, "registry.credential-unavailable", 503)
 	}
-
-	initialHasAuth := pullOptions.RegistryAuth != ""
-	retriedWithoutAuth := false
-
-	defer s.eventService.BeginDockerResourceSuppressionWindow("image", "", imageName)()
-	reader, err := dockerClient.ImagePull(ctx, imageName, pullOptions)
-	if err != nil && ShouldRetryAnonymousPull(pullOptions, err) {
-		retriedWithoutAuth = true
-		slog.WarnContext(ctx, "Docker ImagePull failed with registry auth; retrying anonymously", "image", imageName, "error", err.Error())
-		pullOptions = client.ImagePullOptions{}
-		reader, err = dockerClient.ImagePull(ctx, imageName, pullOptions)
-	}
+	c, err := s.dockerService.GetClient(ctx)
 	if err != nil {
-		slog.ErrorContext(
-			ctx,
-			"Docker ImagePull failed",
-			"image",
-			imageName,
-			"hasAuth",
-			pullOptions.RegistryAuth != "",
-			"initialHasAuth",
-			initialHasAuth,
-			"retriedWithoutAuth",
-			retriedWithoutAuth,
-			"error",
-			err.Error(),
-		)
-		s.eventService.LogErrorEvent(ctx, event.EventTypeImageError, "image", "", imageName, user.ID, user.Username, "0", err, database.JSON{"action": "pull"})
-		return fmt.Errorf("failed to initiate image pull for %s: %w", imageName, err)
+		return imagetypes.Failure("image.pull-failed", 502)
 	}
-	defer func() { _ = reader.Close() }()
-
-	logWriter := docker.NewLogLineWriter(progressWriter)
-	streamErr := docker.RenderJSONMessageStream(reader, logWriter)
-	_ = logWriter.Close()
-	if streamErr != nil {
-		if errors.Is(streamErr, context.Canceled) || strings.Contains(streamErr.Error(), "context canceled") {
-			slog.DebugContext(ctx, "image pull stream canceled", "image", imageName, "err", streamErr)
-			s.eventService.LogErrorEvent(ctx, event.EventTypeImageError, "image", "", imageName, user.ID, user.Username, "0", streamErr, database.JSON{"action": "pull", "step": "canceled"})
-			return fmt.Errorf("image pull stream canceled for %s: %w", imageName, streamErr)
-		}
-		s.eventService.LogErrorEvent(ctx, event.EventTypeImageError, "image", "", imageName, user.ID, user.Username, "0", streamErr, database.JSON{"action": "pull", "step": "read_stream"})
-		return fmt.Errorf("error reading image pull stream for %s: %w", imageName, streamErr)
+	if s.eventService != nil {
+		defer s.eventService.BeginDockerResourceSuppressionWindow("image", "", ref)()
+	}
+	reader, err := c.ImagePull(ctx, ref, opts)
+	if err != nil {
+		return imagetypes.Failure("image.pull-failed", 502)
+	}
+	defer reader.Close()
+	if err := writeSafePullProgress(reader, writer); err != nil {
+		return err
 	}
 
-	slog.DebugContext(ctx, "image pull stream completed", "image", imageName)
-
-	metadata := database.JSON{
-		"action":    "pull",
-		"imageName": imageName,
-	}
-	if logErr := s.eventService.LogImageEvent(ctx, event.EventTypeImagePull, "", imageName, user.ID, user.Username, "0", metadata); logErr != nil {
-		slog.WarnContext(ctx, "could not log image pull action", "err", logErr, "image", imageName)
-	}
 	if s.registryService != nil {
-		if recordImagePullErr := s.registryService.RecordImagePull(ctx, imageName); recordImagePullErr != nil {
-			slog.WarnContext(ctx, "failed to record registry pull count", "image", imageName, "error", recordImagePullErr)
-		}
+		_ = s.registryService.RecordImagePull(ctx, ref)
 	}
-
 	return nil
 }
 
@@ -334,43 +290,31 @@ func (s *ImageService) ReconcilePulledImageUpdate(ctx context.Context, imageName
 }
 
 // TagImage adds a repository tag to an existing image.
-func (s *ImageService) TagImage(ctx context.Context, source string, req imagetypes.TagRequest, user usertypes.Actor) error {
-	source = strings.TrimSpace(source)
-	repository := strings.TrimSpace(req.Repository)
-	tag := strings.TrimSpace(req.Tag)
-	if source == "" {
-		return errors.New("image name is required")
+func (s *ImageService) TagImage(ctx context.Context, source string, req imagetypes.TagRequest, user usertypes.Actor) (resultErr error) {
+	ctx = context.WithValue(ctx, usertypes.CurrentUserContextKey{}, &user)
+	target := strings.TrimSpace(req.Repository)
+	if req.Tag != "" {
+		target += ":" + strings.TrimSpace(req.Tag)
 	}
-	if repository == "" {
-		return errors.New("repository is required")
+	defer func() { s.auditImageMutation(ctx, "tag", "", target, resultErr) }()
+	if err := guard.ValidateReference(target); err != nil {
+		return err
 	}
-
-	target := kit.Ternary(tag != "", repository+":"+tag, repository)
-
-	dockerClient, err := s.dockerService.GetClient(ctx)
+	release, err := s.safety.Acquire(ctx)
 	if err != nil {
-		s.eventService.LogErrorEvent(ctx, event.EventTypeImageError, "image", "", source, user.ID, user.Username, "0", err, database.JSON{"action": "tag", "target": target})
-		return fmt.Errorf("failed to connect to Docker: %w", err)
+		return err
 	}
-
-	defer s.eventService.BeginDockerResourceSuppressionWindow("image", "", target)()
-	_, err = dockerClient.ImageTag(ctx, client.ImageTagOptions{Source: source, Target: target})
+	defer release()
+	c, err := s.dockerService.GetClient(ctx)
 	if err != nil {
-		s.eventService.LogErrorEvent(ctx, event.EventTypeImageError, "image", "", source, user.ID, user.Username, "0", err, database.JSON{"action": "tag", "target": target})
-		return fmt.Errorf("failed to tag image: %w", err)
+		return imagetypes.Failure("image.tag-failed", 502)
 	}
-
-	metadata := database.JSON{
-		"action":     "tag",
-		"imageName":  source,
-		"repository": repository,
-		"tag":        tag,
-		"target":     target,
+	if s.eventService != nil {
+		defer s.eventService.BeginDockerResourceSuppressionWindow("image", "", target)()
 	}
-	if logErr := s.eventService.LogImageEvent(ctx, event.EventTypeImageTag, "", source, user.ID, user.Username, "0", metadata); logErr != nil {
-		slog.WarnContext(ctx, "could not log image tag action", "err", logErr, "image", source, "target", target)
+	if _, err = c.ImageTag(ctx, client.ImageTagOptions{Source: source, Target: target}); err != nil {
+		return imagetypes.Failure("image.tag-failed", 502)
 	}
-
 	return nil
 }
 
@@ -407,19 +351,22 @@ func (s *ImageService) GetImageHistory(ctx context.Context, imageName string) ([
 
 // SearchImages searches the configured Docker registry for images.
 func (s *ImageService) SearchImages(ctx context.Context, term string) ([]imagetypes.SearchResult, error) {
+	if err := guard.ValidateSearchTerm(term); err != nil {
+		return nil, err
+	}
 	term = strings.TrimSpace(term)
 	if term == "" {
-		return nil, errors.New("search term is required")
+		return nil, imagetypes.Failure("image.invalid-reference", 400)
 	}
 
 	dockerClient, err := s.dockerService.GetClient(ctx)
 	if err != nil {
-		return nil, fmt.Errorf("failed to connect to Docker: %w", err)
+		return nil, imagetypes.Failure("image.usage-unavailable", 503)
 	}
 
 	result, err := dockerClient.ImageSearch(ctx, term, client.ImageSearchOptions{})
 	if err != nil {
-		return nil, fmt.Errorf("failed to search images: %w", err)
+		return nil, imagetypes.Failure("image.usage-unavailable", 503)
 	}
 
 	items := make([]imagetypes.SearchResult, 0, len(result.Items))
@@ -453,62 +400,43 @@ func (s *ImageService) ExportImage(ctx context.Context, imageName string) (io.Re
 	return reader, nil
 }
 
-func (s *ImageService) LoadImageFromReader(ctx context.Context, reader io.Reader, fileName string, user usertypes.Actor, maxSizeBytes int64) (*imagetypes.LoadResult, error) {
-	// Wrap reader with size limit enforcement
-	limitedReader := io.LimitReader(reader, maxSizeBytes+1)
-
-	dockerClient, err := s.dockerService.GetClient(ctx)
+func (s *ImageService) LoadImageFromReader(ctx context.Context, reader io.Reader, fileName string, user usertypes.Actor, maxSizeBytes int64) (_ *imagetypes.LoadResult, resultErr error) {
+	ctx = context.WithValue(ctx, usertypes.CurrentUserContextKey{}, &user)
+	defer func() { s.auditImageMutation(ctx, "load", "", "", resultErr) }()
+	validated, cleanup, err := guard.ValidateArchive(reader, maxSizeBytes)
 	if err != nil {
-		s.eventService.LogErrorEvent(ctx, event.EventTypeImageError, "image", "", fileName, user.ID, user.Username, "0", err, database.JSON{"action": "load"})
-		return nil, fmt.Errorf("failed to connect to Docker: %w", err)
+		return nil, err
 	}
-
-	// ImageLoad accepts a tar archive reader and optional load options
-	loadResp, err := dockerClient.ImageLoad(ctx, limitedReader)
+	defer cleanup()
+	release, err := s.safety.Acquire(ctx)
 	if err != nil {
-		// Check if error is due to size limit being exceeded
-		if err.Error() == "unexpected EOF" || strings.Contains(err.Error(), "unexpected EOF") {
-			return nil, fmt.Errorf("file size exceeds maximum allowed size of %d MB", maxSizeBytes/(1024*1024))
+		return nil, err
+	}
+	defer release()
+	c, err := s.dockerService.GetClient(ctx)
+	if err != nil {
+		return nil, imagetypes.Failure("image.load-failed", 502)
+	}
+	resp, err := c.ImageLoad(ctx, validated)
+	if err != nil {
+		return nil, imagetypes.Failure("image.load-failed", 502)
+	}
+	defer resp.Close()
+	decoder := json.NewDecoder(resp)
+	for {
+		var item struct {
+			Error       string          `json:"error"`
+			ErrorDetail json.RawMessage `json:"errorDetail"`
 		}
-		s.eventService.LogErrorEvent(ctx, event.EventTypeImageError, "image", "", fileName, user.ID, user.Username, "0", err, database.JSON{"action": "load", "file": fileName})
-		return nil, fmt.Errorf("failed to load image from tar: %w", err)
+		err = decoder.Decode(&item)
+		if err == io.EOF {
+			break
+		}
+		if err != nil || item.Error != "" || (len(item.ErrorDetail) > 0 && string(item.ErrorDetail) != "null") {
+			return nil, imagetypes.Failure("image.load-failed", 502)
+		}
 	}
-	defer func() { _ = loadResp.Close() }()
-
-	var result imagetypes.LoadResult
-	var responseBuilder strings.Builder
-	streamErr := docker.RenderJSONMessageStream(loadResp, &responseBuilder)
-	if streamErr != nil {
-		s.eventService.LogErrorEvent(
-			ctx,
-			event.EventTypeImageError,
-			"image",
-			"",
-			fileName,
-			user.ID,
-			user.Username,
-			"0",
-			streamErr,
-			database.JSON{
-				"action": "load",
-				"file":   fileName,
-				"step":   "read_response",
-			},
-		)
-		return nil, fmt.Errorf("failed to read load response: %w", streamErr)
-	}
-
-	result.Stream = responseBuilder.String()
-
-	metadata := database.JSON{
-		"action":   "load",
-		"fileName": fileName,
-	}
-	if logErr := s.eventService.LogImageEvent(ctx, event.EventTypeImageLoad, "", fileName, user.ID, user.Username, "0", metadata); logErr != nil {
-		slog.WarnContext(ctx, "could not log image load action", "err", logErr, "file", fileName)
-	}
-
-	return &result, nil
+	return &imagetypes.LoadResult{Stream: "Image archive loaded."}, nil
 }
 
 func (s *ImageService) ImageExistsLocally(ctx context.Context, imageName string) (bool, error) {
@@ -534,23 +462,7 @@ func (s *ImageService) PullOptionsWithAuth(ctx context.Context, imageRef string,
 
 	registryHost := registryauth.ExtractRegistryHost(imageRef)
 
-	// Check external credentials first
-	for _, cred := range externalCreds {
-		if !cred.Enabled || cred.Username == "" || cred.Token == "" {
-			continue
-		}
-
-		if registryauth.IsRegistryMatch(cred.URL, registryHost) {
-			authStr, err := registryauth.EncodeAuthHeader(cred.Username, cred.Token, registryauth.NormalizeRegistryURL(cred.URL))
-			if err != nil {
-				return pullOptions, fmt.Errorf("failed to create auth header: %w", err)
-			}
-			pullOptions.RegistryAuth = authStr
-
-			slog.DebugContext(ctx, "Using external credentials for image pull", "registry", registryHost, "username", cred.Username)
-			return pullOptions, nil
-		}
-	}
+	// Legacy internal credential arguments never override saved host auth.
 
 	if s.registryService == nil {
 		return pullOptions, nil
@@ -597,51 +509,8 @@ func isUnauthorizedPullErrorInternal(err error) bool {
 	return false
 }
 
-func (s *ImageService) PruneImages(ctx context.Context, options system.PruneImagesOptions) (*image.PruneReport, error) {
-	dockerClient, err := s.dockerService.GetClient(ctx)
-	if err != nil {
-		return nil, fmt.Errorf("failed to connect to Docker: %w", err)
-	}
-
-	filterArgs := make(client.Filters)
-	switch options.Mode {
-	case system.PruneImageModeNone:
-		return nil, errors.New("image prune mode none is not allowed")
-	case system.PruneImageModeDangling:
-		filterArgs = filterArgs.Add("dangling", "true")
-	case system.PruneImageModeAll:
-		filterArgs = filterArgs.Add("dangling", "false")
-	case system.PruneImageModeOlderThan:
-		if strings.TrimSpace(options.Until) == "" {
-			return nil, errors.New("image prune mode olderThan requires until")
-		}
-		filterArgs = filterArgs.Add("until", options.Until)
-	default:
-		return nil, fmt.Errorf("unsupported image prune mode: %s", options.Mode)
-	}
-
-	report, err := dockerClient.ImagePrune(ctx, client.ImagePruneOptions{Filters: filterArgs})
-	if err != nil {
-		return nil, fmt.Errorf("failed to prune images: %w", err)
-	}
-	pruneReport := report.Report
-
-	idsToDelete := getDeletedImageIDsInternal(pruneReport.ImagesDeleted)
-	s.cleanupImageUpdateRecordsInternal(ctx, idsToDelete)
-	s.cleanupVulnerabilityRecordsAfterPruneInternal(ctx, idsToDelete)
-
-	metadata := database.JSON{
-		"action":         "prune",
-		"mode":           options.Mode,
-		"until":          options.Until,
-		"imagesDeleted":  len(pruneReport.ImagesDeleted),
-		"spaceReclaimed": pruneReport.SpaceReclaimed,
-	}
-	if logErr := s.eventService.LogImageEvent(ctx, event.EventTypeImageDelete, "", "bulk_prune", usertypes.SystemUser.ID, usertypes.SystemUser.Username, "0", metadata); logErr != nil {
-		slog.WarnContext(ctx, "could not log image prune action", "err", logErr)
-	}
-
-	return &pruneReport, nil
+func (s *ImageService) PruneImages(ctx context.Context, options system.PruneImagesOptions) (*imagetypes.PruneReport, error) {
+	return s.safety.Prune(ctx, options)
 }
 
 func getDeletedImageIDsInternal(deletedImages []image.DeleteResponse) []string {
@@ -668,7 +537,7 @@ func (s *ImageService) cleanupVulnerabilityRecordsAfterPruneInternal(ctx context
 	}
 
 	if err := s.vulnerabilityService.DeleteScanResultsByImageIDs(ctx, idsToDelete); err != nil {
-		slog.WarnContext(ctx, "failed to delete vulnerability scan records after prune", "count", len(idsToDelete), "error", err)
+		slog.WarnContext(ctx, "failed to delete vulnerability scan records after prune", "count", len(idsToDelete), "code", "update.persistence-failed")
 	}
 }
 
@@ -678,11 +547,9 @@ func (s *ImageService) cleanupImageUpdateRecordsInternal(ctx context.Context, id
 	}
 
 	if err := s.imageUpdateService.DeleteRecordsForImages(ctx, idsToDelete); err != nil {
-		slog.WarnContext(ctx, "failed to clean up image update records", "error", err)
+		slog.WarnContext(ctx, "failed to clean up image update records", "code", "update.persistence-failed")
 	}
-	if err := s.imageUpdateService.CleanupOrphanedRecords(ctx); err != nil {
-		slog.WarnContext(ctx, "failed to clean up orphaned image update records", "error", err)
-	}
+
 }
 
 // GetUpdateInfoByImageIDs returns a map of image ID to UpdateInfo for the given image IDs.
