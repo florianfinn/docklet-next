@@ -22,7 +22,7 @@ func (s *VersionService) PublishedReleaseAtMost(ctx context.Context, hub string)
 	if _, ok := imageDTO.CompareRelease(hub, hub); !ok {
 		return "", imageDTO.Failure("update.system-version-unknown", 503)
 	}
-	if s == nil || s.httpClient == nil {
+	if s == nil || s.disabled || s.httpClient == nil {
 		return "", imageDTO.Failure("update.requires-hub-update", 409)
 	}
 	best := ""

@@ -35,18 +35,10 @@ func strictArchiveJSON(data []byte, value any) error {
 	return nil
 }
 
-func nameAnnotation(key string) bool {
-	key = strings.ToLower(key)
-	if key == "vnd.docker.reference.digest" || key == "vnd.docker.reference.type" {
-		return false
-	}
-	return strings.Contains(key, "name") || strings.Contains(key, "ref")
-}
-
 func validateOCIArchive(file *os.File, entries map[string]archiveEntry, index []byte) error {
 	invalid := func() error { return imageDTO.Failure("image.invalid-archive", 400) }
-	// Every top-level descriptor may declare a Docker name plus a tag. Names in
-	// nested manifests/indices are not a supported importer contract.
+	// Docker imports names only from the exact top-level descriptor carriers.
+	// Nested annotations describe provenance and do not assign imported tags.
 	var root struct {
 		SchemaVersion int                 `json:"schemaVersion"`
 		Manifests     []archiveDescriptor `json:"manifests"`
@@ -54,11 +46,6 @@ func validateOCIArchive(file *os.File, entries map[string]archiveEntry, index []
 	}
 	if strictArchiveJSON(index, &root) != nil || root.SchemaVersion != 2 || len(root.Manifests) == 0 {
 		return invalid()
-	}
-	for key := range root.Annotations {
-		if nameAnnotation(key) {
-			return invalid()
-		}
 	}
 	seen := map[string]bool{}
 	var walk func(archiveDescriptor, int) error
@@ -81,7 +68,7 @@ func validateOCIArchive(file *os.File, entries map[string]archiveEntry, index []
 		entry, ok := entries["blobs/sha256/"+d.Digest[7:]]
 		if !ok {
 			// Engine exports retain the multi-platform index while skipping unpulled
-			// platform manifests. Their parent descriptors were already name-checked.
+			// platform manifests; nested annotations cannot assign imported names.
 			if depth > 0 && (d.MediaType == "application/vnd.oci.image.manifest.v1+json" || d.MediaType == "application/vnd.docker.distribution.manifest.v2+json") {
 				return nil
 			}
@@ -97,34 +84,6 @@ func validateOCIArchive(file *os.File, entries map[string]archiveEntry, index []
 		var metadata map[string]any
 		if strictArchiveJSON(data, &metadata) != nil {
 			return invalid()
-		}
-		var check func(any) error
-		check = func(value any) error {
-			switch node := value.(type) {
-			case map[string]any:
-				if annotations, ok := node["annotations"].(map[string]any); ok {
-					for key := range annotations {
-						if nameAnnotation(key) {
-							return invalid()
-						}
-					}
-				}
-				for _, child := range node {
-					if err := check(child); err != nil {
-						return err
-					}
-				}
-			case []any:
-				for _, child := range node {
-					if err := check(child); err != nil {
-						return err
-					}
-				}
-			}
-			return nil
-		}
-		if err := check(metadata); err != nil {
-			return err
 		}
 		if strings.Contains(d.MediaType, "index") || strings.Contains(d.MediaType, "list") {
 			var nested struct {
@@ -143,11 +102,6 @@ func validateOCIArchive(file *os.File, entries map[string]archiveEntry, index []
 		return nil
 	}
 	for _, d := range root.Manifests {
-		for key := range d.Annotations {
-			if nameAnnotation(key) && key != "io.containerd.image.name" && key != "org.opencontainers.image.ref.name" {
-				return invalid()
-			}
-		}
 		imageName := d.Annotations["io.containerd.image.name"]
 		refName := d.Annotations["org.opencontainers.image.ref.name"]
 		if imageName != "" {

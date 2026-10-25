@@ -45,6 +45,12 @@ func (s *ImageService) auditImageMutation(ctx context.Context, action, id, ref s
 			fallback = "image.prune-failed"
 		}
 		problem := imageDTO.Neutral(operationErr, fallback, 502)
+		if action == "bulk_prune" && (problem.Status == 404 || problem.Status == 409) {
+			switch problem.Problem.Code {
+			case "image.in-use", "image.restore-point-protected", "image.active-update-protected", "image.system-protected", "image.not-found", "image.changed":
+				return // Expected per-image skips must not inflate error counters.
+			}
+		}
 		metadata["code"] = problem.Problem.Code
 		s.eventService.LogErrorEvent(ctx, kind, "image", id, ref, actor.ID, actor.Username, "0", problem, metadata)
 		return

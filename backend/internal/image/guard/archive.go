@@ -20,7 +20,8 @@ import (
 
 // ValidateArchive spools bounded input before Docker can interpret any tag.
 // Docker-save manifests and the combined OCI layout emitted by current Engines
-// are understood. Unknown reference-bearing metadata fails closed.
+// are understood. Only importer reference carriers assign names; provenance
+// annotations do not. Unsupported archive layouts fail closed.
 func ValidateArchive(input io.Reader, limit int64) (*os.File, func(), error) {
 	fail := func() error { return imageDTO.Failure("image.invalid-archive", 400) }
 	if limit <= 0 {

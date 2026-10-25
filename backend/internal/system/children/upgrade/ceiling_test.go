@@ -48,15 +48,19 @@ func TestUpdateAllAgentCeilingAndPublishedCandidate(t *testing.T) {
 	defer func() { config.Version = saved }()
 	for _, mode := range []string{"direct", "edge"} {
 		t.Run(mode, func(t *testing.T) {
-			for _, test := range []struct{ name, hub, newest, feed, code, target string }{
-				{"above without published candidate", "2.0.0", "2.1.0", `[]`, "update.requires-hub-update", ""},
-				{"blank", "2.0.0", "", `[]`, "update.invalid-target", ""},
-				{"unknown hub", "custom", "1.9.0", `[]`, "update.system-version-unknown", ""},
-				{"unknown target", "2.0.0", "custom", `[]`, "update.system-version-unknown", ""},
-				{"published cap", "2.0.0", "2.1.0", `[{"tag_name":"2.1.0","published_at":"2026-10-25T00:00:00Z"},{"tag_name":"1.9.1","published_at":"2026-10-24T00:00:00Z"},{"tag_name":"2.0.0","published_at":"2026-10-24T00:00:00Z"}]`, "", "2.0.0"},
-				{"no invented hub tag", "2.0.0", "2.1.0", `[{"tag_name":"2.1.0","published_at":"2026-10-25T00:00:00Z"},{"tag_name":"1.9.1","published_at":"2026-10-24T00:00:00Z"}]`, "", "1.9.1"},
-				{"under cap", "2.0.0", "1.9.1", `[]`, "", "1.9.1"},
-				{"no downgrade", "2.0.0", "1.8.0", `[]`, "update.invalid-target", ""},
+			for _, test := range []struct {
+				name, hub, newest, feed, code, target string
+				disabled                              bool
+			}{
+				{"above without published candidate", "2.0.0", "2.1.0", `[]`, "update.requires-hub-update", "", false},
+				{"disabled", "2.0.0", "2.1.0", `[{"tag_name":"2.0.0","published_at":"2026-10-24T00:00:00Z"}]`, "update.requires-hub-update", "", true},
+				{"blank", "2.0.0", "", `[]`, "update.invalid-target", "", false},
+				{"unknown hub", "custom", "1.9.0", `[]`, "update.system-version-unknown", "", false},
+				{"unknown target", "2.0.0", "custom", `[]`, "update.system-version-unknown", "", false},
+				{"published cap", "2.0.0", "2.1.0", `[{"tag_name":"2.1.0","published_at":"2026-10-25T00:00:00Z"},{"tag_name":"1.9.1","published_at":"2026-10-24T00:00:00Z"},{"tag_name":"2.0.0","published_at":"2026-10-24T00:00:00Z"}]`, "", "2.0.0", false},
+				{"no invented hub tag", "2.0.0", "2.1.0", `[{"tag_name":"2.1.0","published_at":"2026-10-25T00:00:00Z"},{"tag_name":"1.9.1","published_at":"2026-10-24T00:00:00Z"}]`, "", "1.9.1", false},
+				{"under cap", "2.0.0", "1.9.1", `[]`, "", "1.9.1", false},
+				{"no downgrade", "2.0.0", "1.8.0", `[]`, "update.invalid-target", "", false},
 			} {
 				t.Run(test.name, func(t *testing.T) {
 					config.Version = test.hub
@@ -119,15 +123,20 @@ func TestUpdateAllAgentCeilingAndPublishedCandidate(t *testing.T) {
 						defer edge.GetRegistry().Unregister(id)
 						defer edge.ForgetPollState(id)
 					}
+					feedCalls := 0
 					releaseClient := &http.Client{Transport: capRoundTrip(func(r *http.Request) (*http.Response, error) {
+						feedCalls++
 						require.Contains(t, r.URL.Path, "/releases")
 						return &http.Response{StatusCode: 200, Body: io.NopCloser(strings.NewReader(test.feed)), Header: http.Header{}, Request: r}, nil
 					})}
-					service := NewService(db, nil, version.NewVersionService(releaseClient, true, test.hub, "", nil, nil, nil, nil), nil, nil, nil, nil)
+					service := NewService(db, nil, version.NewVersionService(releaseClient, test.disabled, test.hub, "", nil, nil, nil, nil), nil, nil, nil, nil)
 					job := &EnvironmentUpdateJob{UserID: "operator", Username: "operator"}
 					require.NoError(t, db.Create(job).Error)
 					result := &EnvironmentUpdateResult{EnvironmentID: id}
 					service.upgradeAgentInternal(context.Background(), env, id, job, result)
+					if test.disabled {
+						require.Zero(t, feedCalls, "disabled checks must not access the release feed")
+					}
 					mu.Lock()
 					defer mu.Unlock()
 					if test.code != "" {

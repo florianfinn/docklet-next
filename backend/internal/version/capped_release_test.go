@@ -8,6 +8,7 @@ package version
 
 import (
 	"encoding/json"
+	"fmt"
 	imageDTO "github.com/florianfinn/docklet-next/types/image"
 	"github.com/stretchr/testify/require"
 	"io"
@@ -41,7 +42,7 @@ func TestPublishedReleaseSelectionUsesAllPagesAndStableEvidence(t *testing.T) {
 		require.NoError(t, err)
 		return &http.Response{StatusCode: 200, Body: io.NopCloser(strings.NewReader(string(body))), Header: http.Header{}}, nil
 	})}
-	service := NewVersionService(client, true, "2.0.9", "", nil, nil, nil, nil)
+	service := NewVersionService(client, false, "2.0.9", "", nil, nil, nil, nil)
 	selected, err := service.PublishedReleaseAtMost(t.Context(), "2.0.9")
 	require.NoError(t, err)
 	require.Equal(t, "2.0.0", selected)
@@ -58,9 +59,32 @@ func TestPublishedReleaseSelectionRefusesPartialFeed(t *testing.T) {
 			body = `{}`
 		}
 		return &http.Response{StatusCode: status, Body: io.NopCloser(strings.NewReader(body)), Header: http.Header{}}, nil
-	})}, true, "2.0.0", "", nil, nil, nil, nil)
+	})}, false, "2.0.0", "", nil, nil, nil, nil)
 	selected, err := service.PublishedReleaseAtMost(t.Context(), "2.0.0")
 	require.Empty(t, selected)
 	require.Equal(t, "update.check-unavailable", imageDTO.Neutral(err, "unexpected", 500).Problem.Code)
 	require.Equal(t, 2, calls)
+}
+
+func TestPublishedReleaseSelectionHonoursDisabledPreference(t *testing.T) {
+	for _, disabled := range []bool{false, true} {
+		t.Run(fmt.Sprint(disabled), func(t *testing.T) {
+			calls := 0
+			client := &http.Client{Transport: cappedTransport(func(r *http.Request) (*http.Response, error) {
+				calls++
+				return &http.Response{StatusCode: 200, Body: io.NopCloser(strings.NewReader(`[{"tag_name":"1.9.1","published_at":"2026-10-24T00:00:00Z"}]`)), Header: http.Header{}}, nil
+			})}
+			service := NewVersionService(client, disabled, "2.0.0", "", nil, nil, nil, nil)
+			selected, err := service.PublishedReleaseAtMost(t.Context(), "2.0.0")
+			if disabled {
+				require.Empty(t, selected)
+				require.Equal(t, "update.requires-hub-update", imageDTO.Neutral(err, "unexpected", 500).Problem.Code)
+				require.Zero(t, calls)
+			} else {
+				require.NoError(t, err)
+				require.Equal(t, "1.9.1", selected)
+				require.Equal(t, 1, calls)
+			}
+		})
+	}
 }

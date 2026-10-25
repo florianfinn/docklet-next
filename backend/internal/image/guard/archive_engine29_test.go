@@ -81,15 +81,21 @@ func TestEngine29DockerSaveLayoutAndReferenceAnnotations(t *testing.T) {
 		})
 	}
 }
-func TestEngine29ArchiveRefusesUnknownAndNestedNames(t *testing.T) {
+func TestEngine29ArchiveIgnoresNonCarrierAnnotations(t *testing.T) {
 	for _, test := range []struct{ top, nested map[string]string }{
 		{map[string]string{"example.image.name": "registry.example.com/app:1.0.0"}, nil},
 		{nil, map[string]string{"io.containerd.image.name": "docklet-retention.invalid/points/p/s:saved"}},
-		{map[string]string{"org.opencontainers.image.ref.name": "1.0.0"}, nil},
+		{map[string]string{"org.opencontainers.image.base.name": "docklet-retention.invalid/points/p/s:saved"}, nil},
 	} {
-		_, _, err := ValidateArchive(bytes.NewReader(engine29Save(t, test.top, test.nested, false)), 1<<20)
-		require.Error(t, err)
+		_, cleanup, err := ValidateArchive(bytes.NewReader(engine29Save(t, test.top, test.nested, false)), 1<<20)
+		require.NoError(t, err)
+		cleanup()
 	}
+}
+
+func TestEngine29ArchiveRequiresImageNameForTagOnlyCarrier(t *testing.T) {
+	_, _, err := ValidateArchive(bytes.NewReader(engine29Save(t, map[string]string{"org.opencontainers.image.ref.name": "1.0.0"}, nil, false)), 1<<20)
+	require.Error(t, err)
 }
 
 func TestEngine29ArchiveRequiresTopLevelContent(t *testing.T) {
