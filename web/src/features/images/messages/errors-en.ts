@@ -4,7 +4,22 @@
 // License: Apache-2.0
 // Deviations: Original production image and registry UI implementation for issue #230.
 
+import { enBackend } from "@/data/messages/en";
+
 export const enImageErrors = {
+  "restore_deploy-failed": enBackend.errors.restore["deploy-failed"],
+  "restore_image-mismatch": enBackend.errors.restore["image-mismatch"],
+  "restore_in-use": enBackend.errors.restore["in-use"],
+  "restore_not-found": enBackend.errors.restore["not-found"],
+  "restore_shared-reference": enBackend.errors.restore["shared-reference"],
+  "restore_unavailable": enBackend.errors.restore["unavailable"],
+  "update_baseline-unavailable": enBackend.errors.update["baseline-unavailable"],
+  "update_config-drift": enBackend.errors.update["config-drift"],
+  "update_image-binding-unsupported": enBackend.errors.update["image-binding-unsupported"],
+  "update_path-retired": enBackend.errors.update["path-retired"],
+  "update_snapshot-unavailable": enBackend.errors.update["snapshot-unavailable"],
+  "update_target-changed": enBackend.errors.update["target-changed"],
+  "update_target-not-found": enBackend.errors.update["target-not-found"],
   "image_active-update-protected": "An active update protects this image.",
   "image_busy": "Another image operation is running. Wait and try again.",
   "image_changed": "The image changed. Refresh the list before trying again.",
