@@ -28,7 +28,7 @@ func TestAgentHubV7ImageSafetyFixture(t *testing.T) {
 	var fixture struct {
 		Version     int
 		Minimum     int `json:"minimumAgentContractVersion"`
-		ImageSafety struct{ RegistryTestFields, RegistryPublicFields, UpdateInfoFields, PruneFields, ProtectionFields, ErrorCodes, InactiveCapabilities, UpdateStates []string }
+		ImageSafety struct{ RegistryTestFields, RegistryPublicFields, UpdateInfoFields, PruneFields, ProtectionFields, ErrorCodes, InactiveCapabilities, Capabilities, UpdateStates []string }
 	}
 	require.NoError(t, json.Unmarshal(body, &fixture))
 	require.Equal(t, 7, AgentHubVersion)
@@ -64,5 +64,8 @@ func TestAgentHubV7ImageSafetyFixture(t *testing.T) {
 	field, _ := reflect.TypeFor[imageDTO.Problem]().FieldByName("Code")
 	require.Equal(t, fixture.ImageSafety.ErrorCodes, strings.Split(field.Tag.Get("enum"), ","))
 	require.NotContains(t, fixture.ImageSafety.InactiveCapabilities, "restore")
-	require.Contains(t, fixture.ImageSafety.InactiveCapabilities, "auto-apply")
+	require.NotContains(t, fixture.ImageSafety.InactiveCapabilities, "auto-apply")
+	for _, capability := range []string{"auto-apply", "policies", "hub-image-schedules", "candidate-notifications", "system-image-hints"} {
+		require.Contains(t, fixture.ImageSafety.Capabilities, capability)
+	}
 }

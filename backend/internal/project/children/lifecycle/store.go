@@ -76,6 +76,7 @@ type ServiceImage struct {
 	Present, Running, OneOff                                                              bool
 }
 type Snapshot struct {
+	AutoExcluded                                                   bool `json:"-"`
 	TargetID, TargetIdentity, RegistrationID, RunID, SavedRevision string
 	Files                                                          []File
 	Model                                                          *compose.Project

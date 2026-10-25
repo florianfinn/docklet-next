@@ -141,8 +141,8 @@ func TestJobService_ListJobs_UsesRuntimeScheduleAndNextRun(t *testing.T) {
 	require.NoError(t, err)
 
 	nextRun := time.Date(2026, time.July, 10, 8, 0, 0, 0, time.UTC)
-	fakeScheduler := newFakeJobSchedulerInternal("auto-update")
-	fakeScheduler.runtimeStates["auto-update"] = scheduler.JobRuntimeState{
+	fakeScheduler := newFakeJobSchedulerInternal("docker-client-refresh")
+	fakeScheduler.runtimeStates["docker-client-refresh"] = scheduler.JobRuntimeState{
 		Schedule:  "0 0 8 * * *",
 		NextRun:   &nextRun,
 		Scheduled: true,
@@ -153,9 +153,9 @@ func TestJobService_ListJobs_UsesRuntimeScheduleAndNextRun(t *testing.T) {
 	jobs, err := jobSvc.ListJobs(ctx)
 	require.NoError(t, err)
 
-	autoUpdateJob := findJobStatusByIDInternal(t, jobs.Jobs, "auto-update")
-	require.Equal(t, "0 0 8 * * *", autoUpdateJob.Schedule)
-	require.Equal(t, nextRun, *autoUpdateJob.NextRun)
+	refreshJob := findJobStatusByIDInternal(t, jobs.Jobs, "docker-client-refresh")
+	require.Equal(t, "0 0 8 * * *", refreshJob.Schedule)
+	require.Equal(t, nextRun, *refreshJob.NextRun)
 
 	now := time.Now().UTC()
 	failed := scheduler.Run{
@@ -230,31 +230,22 @@ func TestJobService_ListJobs_UsesRuntimeScheduleAndNextRun(t *testing.T) {
 	outcome, runErr = classifyOutcomeInternal("environment-health:0", scheduler.Outcome{}, context.DeadlineExceeded)
 	require.ErrorIs(t, runErr, context.DeadlineExceeded)
 	require.Equal(t, scheduler.Retrying, outcome.Status)
-	outcome, runErr = classifyOutcomeInternal("auto-update", scheduler.Outcome{Status: scheduler.Partial}, cloneErr)
+	outcome, runErr = classifyOutcomeInternal("docker-client-refresh", scheduler.Outcome{Status: scheduler.Partial}, cloneErr)
 	require.ErrorIs(t, runErr, cloneErr)
 	require.Equal(t, scheduler.Partial, outcome.Status)
 }
 
-func TestJobService_ListJobs_ImageUpdateWatcherIsContinuousAndRespectsEnabled(t *testing.T) {
-	ctx := t.Context()
+func TestJobService_ListJobs_OmitsUnconfiguredLegacyImageWatcher(t *testing.T) {
 	db := setupSettingsTestDBInternal(t)
-
-	settingsSvc, err := newSettingsServiceForTestInternal(t, ctx, db)
+	settingsSvc, err := newSettingsServiceForTestInternal(t, t.Context(), db)
 	require.NoError(t, err)
-	require.NoError(t, settingsSvc.SetBoolSetting(ctx, "pollingEnabled", false))
-
-	jobSvc := newJobServiceForTestInternal(t, db, settingsSvc, &config.Config{})
-	jobs, err := jobSvc.ListJobs(ctx)
+	svc := newJobServiceForTestInternal(t, db, settingsSvc, &config.Config{})
+	jobs, err := svc.ListJobs(t.Context())
 	require.NoError(t, err)
-
-	watcher := findJobStatusByIDInternal(t, jobs.Jobs, "image-polling")
-	require.Equal(t, "Image Update Watcher", watcher.Name)
-	require.Equal(t, "0 0 * * * *", watcher.Schedule)
-	require.Equal(t, "pollingInterval", watcher.SettingsKey)
-	require.NotNil(t, watcher.NextRun)
-	require.True(t, watcher.IsContinuous)
-	require.True(t, watcher.CanRunManually)
-	require.False(t, watcher.Enabled)
+	for _, job := range jobs.Jobs {
+		require.NotEqual(t, "image-polling", job.ID)
+		require.NotEqual(t, "auto-update", job.ID)
+	}
 }
 
 func TestJobService_UpdateJobSchedules_ReschedulesChangedJob(t *testing.T) {
@@ -265,34 +256,15 @@ func TestJobService_UpdateJobSchedules_ReschedulesChangedJob(t *testing.T) {
 	require.NoError(t, err)
 
 	jobSvc := newJobServiceForTestInternal(t, db, settingsSvc, &config.Config{})
-	fakeScheduler := newFakeJobSchedulerInternal("auto-update")
+	fakeScheduler := newFakeJobSchedulerInternal("docker-client-refresh")
 	jobSvc.SetScheduler(ctx, fakeScheduler)
 
 	_, err = jobSvc.UpdateJobSchedules(ctx, jobschedule.Update{
-		AutoUpdateInterval: new("0 */10 * * * *"),
+		DockerClientRefreshInterval: new("0 */10 * * * *"),
 	})
 	require.NoError(t, err)
 
-	require.Equal(t, []string{"auto-update"}, fakeScheduler.rescheduled)
-}
-
-func TestJobService_UpdateJobSchedules_DeprecatedPollingIntervalDoesNotReschedule(t *testing.T) {
-	ctx := t.Context()
-	db := setupSettingsTestDBInternal(t)
-
-	settingsSvc, err := newSettingsServiceForTestInternal(t, ctx, db)
-	require.NoError(t, err)
-
-	jobSvc := newJobServiceForTestInternal(t, db, settingsSvc, &config.Config{})
-	fakeScheduler := newFakeJobSchedulerInternal("auto-update")
-	jobSvc.SetScheduler(ctx, fakeScheduler)
-
-	updated, err := jobSvc.UpdateJobSchedules(ctx, jobschedule.Update{
-		PollingInterval: new("0 */10 * * * *"),
-	})
-	require.NoError(t, err)
-	require.Equal(t, "0 */10 * * * *", updated.PollingInterval)
-	require.Empty(t, fakeScheduler.rescheduled)
+	require.Equal(t, []string{"docker-client-refresh"}, fakeScheduler.rescheduled)
 }
 
 func TestJobService_UpdateJobSchedules_UsesLifecycleContextForReschedule(t *testing.T) {
@@ -307,11 +279,11 @@ func TestJobService_UpdateJobSchedules_UsesLifecycleContextForReschedule(t *test
 	requestCtx, cancelRequest := context.WithCancel(t.Context())
 
 	jobSvc := newJobServiceForTestInternal(t, db, settingsSvc, &config.Config{})
-	fakeScheduler := newFakeJobSchedulerInternal("auto-update")
+	fakeScheduler := newFakeJobSchedulerInternal("docker-client-refresh")
 	jobSvc.SetScheduler(lifecycleCtx, fakeScheduler)
 
 	_, err = jobSvc.UpdateJobSchedules(requestCtx, jobschedule.Update{
-		AutoUpdateInterval: new("0 */10 * * * *"),
+		DockerClientRefreshInterval: new("0 */10 * * * *"),
 	})
 	require.NoError(t, err)
 
@@ -336,10 +308,10 @@ func TestJobService_UpdateJobSchedules_RejectsInvalidCronWithoutChangingSetting(
 	jobSvc.SetScheduler(ctx, fakeScheduler)
 
 	_, err = jobSvc.UpdateJobSchedules(ctx, jobschedule.Update{
-		PollingInterval: new("not a cron expression"),
+		DockerClientRefreshInterval: new("not a cron expression"),
 	})
-	require.ErrorContains(t, err, "invalid cron expression for pollingInterval")
-	require.Equal(t, "0 0 * * * *", settingsSvc.GetStringSetting(ctx, "pollingInterval", ""))
+	require.ErrorContains(t, err, "invalid cron expression for dockerClientRefreshInterval")
+	require.Equal(t, "0 */5 * * * *", settingsSvc.GetStringSetting(ctx, "dockerClientRefreshInterval", ""))
 	require.Empty(t, fakeScheduler.rescheduled)
 }
 
@@ -352,10 +324,10 @@ func TestJobService_UpdateJobSchedules_UnchangedScheduleDoesNotReschedule(t *tes
 
 	jobSvc := newJobServiceForTestInternal(t, db, settingsSvc, &config.Config{})
 	updated, err := jobSvc.UpdateJobSchedules(ctx, jobschedule.Update{
-		PollingInterval: new("0 0 * * * *"),
+		DockerClientRefreshInterval: new("0 */5 * * * *"),
 	})
 	require.NoError(t, err)
-	require.Equal(t, "0 0 * * * *", updated.PollingInterval)
+	require.Equal(t, "0 */5 * * * *", updated.DockerClientRefreshInterval)
 }
 
 func TestJobService_UpdateJobSchedules_RestoresPreviousScheduleWhenRescheduleFails(t *testing.T) {
@@ -368,19 +340,19 @@ func TestJobService_UpdateJobSchedules_RestoresPreviousScheduleWhenRescheduleFai
 	require.NoError(t, settingsSvc.LoadDatabaseSettings(ctx))
 
 	jobSvc := newJobServiceForTestInternal(t, db, settingsSvc, &config.Config{})
-	fakeScheduler := newFakeJobSchedulerInternal("auto-update")
+	fakeScheduler := newFakeJobSchedulerInternal("docker-client-refresh")
 	fakeScheduler.rescheduleErr = errors.New("scheduler unavailable")
 	jobSvc.SetScheduler(ctx, fakeScheduler)
 
 	_, err = jobSvc.UpdateJobSchedules(ctx, jobschedule.Update{
-		AutoUpdateInterval: new("0 0 8 * * *"),
+		DockerClientRefreshInterval: new("0 0 8 * * *"),
 	})
 	require.ErrorContains(t, err, "scheduler unavailable")
-	require.Equal(t, "0 0 0 * * *", settingsSvc.GetStringSetting(ctx, "autoUpdateInterval", ""))
+	require.Equal(t, "0 */5 * * * *", settingsSvc.GetStringSetting(ctx, "dockerClientRefreshInterval", ""))
 
 	var persisted settings.SettingVariable
-	require.NoError(t, db.WithContext(ctx).First(&persisted, "key = ?", "autoUpdateInterval").Error)
-	require.Equal(t, "0 0 0 * * *", persisted.Value)
+	require.NoError(t, db.WithContext(ctx).First(&persisted, "key = ?", "dockerClientRefreshInterval").Error)
+	require.Equal(t, "0 */5 * * * *", persisted.Value)
 }
 
 func TestJobService_UpdateJobSchedules_SkipsManagerOnlyJobsInAgentMode(t *testing.T) {
@@ -426,12 +398,12 @@ func TestJobService_UpdateJobSchedules_DelegatesEnvironmentHealthReschedule(t *t
 	require.Empty(t, fakeScheduler.rescheduled)
 }
 
-func TestJobService_Submit_PersistsImageUpdateWatcherRun(t *testing.T) {
+func TestJobService_Submit_PersistsOtherJobRun(t *testing.T) {
 	ctx := t.Context()
 	db := setupSettingsTestDBInternal(t)
 	settingsSvc, err := newSettingsServiceForTestInternal(t, ctx, db)
 	require.NoError(t, err)
-	fakeScheduler := newFakeJobSchedulerInternal()
+	fakeScheduler := newFakeJobSchedulerInternal("docker-client-refresh")
 	jobSvc := newJobServiceForTestInternal(t, db, settingsSvc, &config.Config{})
 	jobSvc.SetScheduler(ctx, fakeScheduler)
 	require.NoError(t, db.AutoMigrate(&userdomain.User{}, &role.Role{}, &role.UserRoleAssignment{}))
@@ -439,10 +411,10 @@ func TestJobService_Submit_PersistsImageUpdateWatcherRun(t *testing.T) {
 	require.NoError(t, db.Create(&role.Role{ID: "jobs-manager", Name: "Jobs manager", Permissions: database.StringSlice{authz.PermJobsManage}}).Error)
 	require.NoError(t, db.Create(&role.UserRoleAssignment{UserID: "operator", RoleID: "jobs-manager"}).Error)
 	jobSvc.roles = role.NewRoleService(db)
-	run, err := jobSvc.Submit(ctx, scheduler.Request{JobID: "image-polling", EnvironmentID: "0", Trigger: "manual", RequestedBy: "operator"})
+	run, err := jobSvc.Submit(ctx, scheduler.Request{JobID: "docker-client-refresh", EnvironmentID: "0", Trigger: "manual", RequestedBy: "operator"})
 	require.NoError(t, err)
 	require.Equal(t, scheduler.Queued, run.Status)
-	persisted, err := jobSvc.runs.Get(ctx, "0", "image-polling", run.ID)
+	persisted, err := jobSvc.runs.Get(ctx, "0", "docker-client-refresh", run.ID)
 	require.NoError(t, err)
 	require.Equal(t, run.ID, persisted.ID)
 	require.Empty(t, fakeScheduler.busWatcherRuns)

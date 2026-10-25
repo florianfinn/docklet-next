@@ -43,6 +43,12 @@ export const deBackend: typeof enBackend = {
       "deploy-failed": "Die Bereitstellung zur Wiederherstellung ist fehlgeschlagen. Das Teilergebnis vor einem weiteren Wiederherstellungsversuch prüfen."
     },
     "update": {
+      "agent-local-job-disabled": "Update-Jobs werden vom Hub verwaltet und können auf einem Agent nicht eigenständig laufen.",
+      "auto-excluded": "Dieser Stack enthält einen Dienst, der von automatischen Updates ausgeschlossen ist.",
+      "invalid-policy": "Eine gültige Stack-Richtlinie oder einen Update-Zeitplan mit sechs Feldern wählen.",
+      "policy-changed": "Die Update-Richtlinie oder der Zeitplan wurde geändert. Vor einem neuen Versuch aktualisieren.",
+      "schedule-hub-owned": "Update-Prüfungen und automatische Updates auf dem Hub planen.",
+
       "config-drift": "Die gespeicherten Stack-Änderungen vor dem Update bereitstellen oder verwerfen.",
       "baseline-unavailable": "Den Stack einmal bereitstellen, um eine geprüfte Konfigurationsbasis zu erfassen.",
       "snapshot-unavailable": "Ein vollständiger Wiederherstellungspunkt konnte nicht erfasst werden. Stack-Eingaben und verfügbare Images prüfen.",

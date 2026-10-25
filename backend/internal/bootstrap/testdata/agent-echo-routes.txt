@@ -70,9 +70,12 @@ GET /api/environments/:id/system/docker/info
 GET /api/environments/:id/system/upgrade/check
 GET /api/environments/:id/updater/:kind/:targetId/restore-points
 GET /api/environments/:id/updater/history
+GET /api/environments/:id/updater/policies/:kind/:targetId
 GET /api/environments/:id/updater/projects/:projectId/baseline
 GET /api/environments/:id/updater/restore-points
+GET /api/environments/:id/updater/schedules
 GET /api/environments/:id/updater/status
+GET /api/environments/:id/updater/system-image-hints
 GET /api/environments/:id/uploads/:kind/:uploadId
 GET /api/environments/:id/volumes
 GET /api/environments/:id/volumes/:volumeName
@@ -182,6 +185,8 @@ PUT /api/environments/:id/job-schedules
 PUT /api/environments/:id/projects/:projectId
 PUT /api/environments/:id/projects/:projectId/workspace
 PUT /api/environments/:id/settings
+PUT /api/environments/:id/updater/policies/:kind/:targetId
+PUT /api/environments/:id/updater/schedules
 PUT /api/environments/:id/uploads/:kind/:uploadId/chunks/:index
 PUT /api/environments/:id/volumes/:volumeName/backup-policy
 PUT /api/environments/:id/volumes/:volumeName/workspace

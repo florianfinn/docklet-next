@@ -34,6 +34,7 @@ func (s RunStatus) Terminal() bool {
 }
 
 type TargetOutcome struct {
+	Code         string         `json:"code,omitempty"`
 	RecoveryData jsontext.Value `json:"-" msgpack:"recoveryData,omitempty"`
 	ResourceType string         `json:"resourceType,omitempty"`
 	ID           string         `json:"id"`
@@ -43,6 +44,7 @@ type TargetOutcome struct {
 }
 
 type Outcome struct {
+	Code       string          `json:"code,omitempty"`
 	Status     RunStatus       `json:"status"`
 	Message    string          `json:"message,omitempty"`
 	ActivityID string          `json:"activityId,omitempty"`

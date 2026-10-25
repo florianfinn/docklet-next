@@ -37,6 +37,7 @@ import (
 	"github.com/florianfinn/docklet-next/backend/internal/registry"
 	"github.com/florianfinn/docklet-next/backend/internal/settings"
 	"github.com/florianfinn/docklet-next/backend/pkg/libarcane"
+	"github.com/florianfinn/docklet-next/backend/pkg/libarcane/volumehelper"
 )
 
 const (
@@ -331,6 +332,8 @@ func (s *VersionService) GetAppVersionInfo(ctx context.Context) *version.Info {
 
 	// Build base info struct (always populated)
 	info := &version.Info{
+		CurrentImageRef:             currentImageRef,
+		ToolsImage:                  volumehelper.DefaultToolsImage,
 		AgentContractVersion:        contract.AgentHubVersion,
 		AgentContractFingerprint:    contract.AgentHubFingerprint,
 		MinimumAgentContractVersion: contract.MinimumAgentVersion,
@@ -349,6 +352,11 @@ func (s *VersionService) GetAppVersionInfo(ctx context.Context) *version.Info {
 	}
 
 	// If update checks disabled, return base info
+	if s.settingsService != nil {
+		configured := s.settingsService.GetSettingsConfig().ToolsImage.Value
+		info.ToolsImage = volumehelper.ToolsImage(configured)
+		info.ToolsImageOverride = strings.TrimSpace(configured) != ""
+	}
 	if s.disabled {
 		return info
 	}
@@ -572,7 +580,7 @@ func (s *VersionService) RunStreamProducer(ctx context.Context, events chan<- ve
 					}
 				}
 				last = info
-				publish(version.StreamEvent{Type: "snapshot", Info: info, Timestamp: time.Now()})
+				publish(version.StreamEvent{Type: "snapshot", Info: publicVersionInfo(info), Timestamp: time.Now()})
 			}
 
 			poll()

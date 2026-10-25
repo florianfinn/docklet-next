@@ -20,6 +20,7 @@ import (
 	"github.com/florianfinn/docklet-next/backend/internal/middleware"
 	"github.com/florianfinn/docklet-next/backend/pkg/scheduler/runs"
 	"github.com/florianfinn/docklet-next/backend/pkg/utils/handlerutil"
+	imageDTO "github.com/florianfinn/docklet-next/types/image"
 )
 
 type GetJobSchedulesInput struct {
@@ -109,6 +110,9 @@ func (h *JobSchedulesHandler) Get(ctx context.Context, input *GetJobSchedulesInp
 }
 
 func (h *JobSchedulesHandler) Update(ctx context.Context, input *UpdateJobSchedulesInput) (*handlerutil.Out[jobschedule.Config], error) {
+	if input.Body.HasHubOwnedFields() {
+		return nil, imageDTO.Failure("update.schedule-hub-owned", 409)
+	}
 	if input.ID != "0" {
 		apiResp, err := h.proxyRemoteJSON.JSON[base.ApiResponse[jobschedule.Config]](ctx, input.ID, http.MethodPut, "/api/environments/0/job-schedules", input.Body)
 		if err != nil {
@@ -138,6 +142,9 @@ func (h *JobSchedulesHandler) ListRuns(ctx context.Context, input *jobschedule.L
 	if err != nil {
 		return nil, jobHTTPErrorInternal(err)
 	}
+	for i := range result.Runs {
+		result.Runs[i] = projectImagePolicyRun(result.Runs[i])
+	}
 	return &jobschedule.ListRunsOutput{Body: result}, nil
 }
 
@@ -148,7 +155,7 @@ func (h *JobSchedulesHandler) GetRun(ctx context.Context, input *jobschedule.Run
 	if err != nil {
 		return nil, jobHTTPErrorInternal(err)
 	}
-	return &jobschedule.RunOutput{Body: result}, nil
+	return &jobschedule.RunOutput{Body: projectImagePolicyRun(result)}, nil
 }
 
 // RetryRun requests an explicit retry while preserving the run ID and target
@@ -158,7 +165,7 @@ func (h *JobSchedulesHandler) RetryRun(ctx context.Context, input *jobschedule.R
 	if err != nil {
 		return nil, jobHTTPErrorInternal(err)
 	}
-	return &jobschedule.RunOutput{Body: result}, nil
+	return &jobschedule.RunOutput{Body: projectImagePolicyRun(result)}, nil
 }
 
 // CancelRun cancels queued work only when it has never been attempted or sent
@@ -168,7 +175,7 @@ func (h *JobSchedulesHandler) CancelRun(ctx context.Context, input *jobschedule.
 	if err != nil {
 		return nil, jobHTTPErrorInternal(err)
 	}
-	return &jobschedule.RunOutput{Body: result}, nil
+	return &jobschedule.RunOutput{Body: projectImagePolicyRun(result)}, nil
 }
 
 // AcknowledgeRun marks a terminal run's remote delivery settled so retention can
@@ -190,12 +197,21 @@ func (h *JobSchedulesHandler) AcknowledgeRun(ctx context.Context, input *jobsche
 	if err != nil {
 		return nil, jobHTTPErrorInternal(err)
 	}
-	return &jobschedule.RunOutput{Body: result}, nil
+	return &jobschedule.RunOutput{Body: projectImagePolicyRun(result)}, nil
 }
 
 // RestartWorker requests a continuous watcher's restart on the owning runtime,
 // forwarding remote requests to the agent. It does not enqueue a scheduled run.
 func (h *JobSchedulesHandler) RestartWorker(ctx context.Context, input *jobschedule.JobInput) (*RunJobOutput, error) {
+	if _, owned, err := h.jobService.imagePolicyJob(input.ID, input.JobID); owned {
+		if err != nil {
+			return nil, jobHTTPErrorInternal(err)
+		}
+		if err = h.jobService.imagePolicies.RefreshImagePolicySchedules(ctx); err != nil {
+			return nil, jobHTTPErrorInternal(err)
+		}
+		return &RunJobOutput{Body: jobschedule.JobRunResponse{Success: true, Message: "Hub schedule refreshed"}}, nil
+	}
 	if input.ID != "0" {
 		result, err := h.proxyRemoteJSON.JSON[jobschedule.JobRunResponse](ctx, input.ID, http.MethodPost, "/api/environments/0/jobs/"+input.JobID+"/restart", nil)
 		if err != nil {
@@ -241,5 +257,5 @@ func (h *JobSchedulesHandler) ResolveRun(ctx context.Context, input *jobschedule
 	if err != nil {
 		return nil, jobHTTPErrorInternal(err)
 	}
-	return &jobschedule.RunOutput{Body: run}, nil
+	return &jobschedule.RunOutput{Body: projectImagePolicyRun(run)}, nil
 }

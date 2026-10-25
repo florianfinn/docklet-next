@@ -7,6 +7,12 @@
 import { enBackend } from "@/data/messages/en";
 
 export const enImageErrors = {
+  "update_agent-local-job-disabled": enBackend.errors.update["agent-local-job-disabled"],
+  "update_auto-excluded": enBackend.errors.update["auto-excluded"],
+  "update_invalid-policy": enBackend.errors.update["invalid-policy"],
+  "update_policy-changed": enBackend.errors.update["policy-changed"],
+  "update_schedule-hub-owned": enBackend.errors.update["schedule-hub-owned"],
+
   "restore_deploy-failed": enBackend.errors.restore["deploy-failed"],
   "restore_image-mismatch": enBackend.errors.restore["image-mismatch"],
   "restore_in-use": enBackend.errors.restore["in-use"],

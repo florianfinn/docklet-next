@@ -7,6 +7,12 @@
 import { deBackend } from "@/data/messages/de";
 
 export const deImageErrors = {
+  "update_agent-local-job-disabled": deBackend.errors.update["agent-local-job-disabled"],
+  "update_auto-excluded": deBackend.errors.update["auto-excluded"],
+  "update_invalid-policy": deBackend.errors.update["invalid-policy"],
+  "update_policy-changed": deBackend.errors.update["policy-changed"],
+  "update_schedule-hub-owned": deBackend.errors.update["schedule-hub-owned"],
+
   "restore_deploy-failed": deBackend.errors.restore["deploy-failed"],
   "restore_image-mismatch": deBackend.errors.restore["image-mismatch"],
   "restore_in-use": deBackend.errors.restore["in-use"],

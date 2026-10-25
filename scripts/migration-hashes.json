@@ -6,5 +6,6 @@
   "sqlite/005_runtime_registration.sql": "8007eedd540421ded14d14d6d63162cae941a379b90e0dab85c7cbdd61844d50",
   "sqlite/006_image_protection.sql": "6dde1831c62671066954b88c86e1ad5a000c318637dc151c15548fe994c18c5f",
   "sqlite/007_image_lifecycle.sql": "1d1274ec1007d56fb8699e721b1e2935fbe835d1270e35ce452c48b8629f16fe",
-  "sqlite/008_restore_retention.sql": "d727135fbd5e6419f195dcd8cd6ddbef486d0ac01afd0f584e1440d1334dcb1e"
+  "sqlite/008_restore_retention.sql": "d727135fbd5e6419f195dcd8cd6ddbef486d0ac01afd0f584e1440d1334dcb1e",
+  "sqlite/009_update_policies.sql": "dbdb3bc9502b2bd65deffbe69de51b70a8b68908c516bc2c31bdd5068f9541c2"
 }

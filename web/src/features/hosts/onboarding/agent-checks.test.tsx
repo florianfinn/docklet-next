@@ -18,7 +18,7 @@ import { freshDraft, planFromDraft } from "./onboarding-draft";
 
 const draft = freshDraft({ projectDir: "/srv/projects", installDir: "/srv/projects/agent", connection: "edge", puid: "", pgid: "", detectSocketGroup: true }, []);
 const report: components["schemas"]["VersionInfo"] = {
-  agentContractVersion: 3, minimumAgentContractVersion: 3, agentContractFingerprint: "example",
+  agentContractVersion: 3, minimumAgentContractVersion: 3, agentContractFingerprint: "example", toolsImageOverride: false,
   currentVersion: "0.1.0", displayVersion: "0.1.0", goVersion: "go1.27.2", nodeVersion: "24",
   revision: "example", shortRevision: "example", isSemverVersion: true, updateAvailable: false,
   onboardingChecks: { projectDirectory: "/srv/projects", ownerUid: 123, ownerGid: 456, writable: false, socketGroup: 998 },

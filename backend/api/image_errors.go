@@ -60,6 +60,9 @@ func imageErrorTransformer(ctx huma.Context, status string, value any) (any, err
 	}
 	if strings.Contains(ctx.URL().Path, "/updater/") || retiredImageUpdatePath(ctx.URL().Path) {
 		problem = "update.invalid-target"
+		if (code == 400 || code == 422) && (strings.Contains(ctx.URL().Path, "/updater/policies/") || strings.HasSuffix(ctx.URL().Path, "/updater/schedules")) {
+			problem = "update.invalid-policy"
+		}
 	}
 	if code == 401 || code == 403 {
 		return value, nil
@@ -69,8 +72,9 @@ func imageErrorTransformer(ctx huma.Context, status string, value any) (any, err
 func registerImageSafetyErrors(api huma.API) {
 	schema := api.OpenAPI().Components.Schemas.Schema(reflect.TypeFor[imageDTO.OperationError](), true, "")
 	for path, item := range api.OpenAPI().Paths {
+		jobs := strings.HasSuffix(path, "/job-schedules") || strings.Contains(path, "/jobs/")
 		upgrade := strings.HasSuffix(path, "/system/upgrade")
-		if !imageSafetyPath(path) && !upgrade {
+		if !imageSafetyPath(path) && !upgrade && !jobs {
 			continue
 		}
 		for _, op := range []*huma.Operation{item.Get, item.Post, item.Put, item.Delete} {
@@ -90,7 +94,7 @@ func registerImageSafetyErrors(api huma.API) {
 				if strings.Contains(path, "container-registries") && strings.HasSuffix(path, "/test") {
 					errorSchema = api.OpenAPI().Components.Schemas.Schema(reflect.TypeFor[containerregistry.RegistryTestResult](), true, "")
 				}
-				if upgrade || retiredImageUpdatePath(path) || strings.Contains(path, "/updater/") {
+				if upgrade || jobs || retiredImageUpdatePath(path) || strings.Contains(path, "/updater/") {
 					errorSchema = &huma.Schema{OneOf: []*huma.Schema{errorSchema, api.OpenAPI().Components.Schemas.Schema(reflect.TypeFor[huma.ErrorModel](), true, "")}}
 				}
 				op.Responses[status] = &huma.Response{Description: "Typed neutral image or registry failure", Content: map[string]*huma.MediaType{"application/json": {Schema: errorSchema}}}

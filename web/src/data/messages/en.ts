@@ -41,6 +41,12 @@ export const enBackend = {
       "deploy-failed": "The restore deployment failed. Inspect its partial result before another recovery attempt."
     },
     "update": {
+      "agent-local-job-disabled": "Update jobs are owned by the hub and cannot run independently on an agent.",
+      "auto-excluded": "This stack contains a service excluded from automatic updates.",
+      "invalid-policy": "Choose a valid stack policy or six-field update schedule.",
+      "policy-changed": "The update policy or schedule changed. Refresh before trying again.",
+      "schedule-hub-owned": "Manage update polling and automatic update schedules on the hub.",
+
       "config-drift": "Deploy or discard the saved stack changes before updating.",
       "baseline-unavailable": "Deploy the stack once to record a verified configuration baseline.",
       "snapshot-unavailable": "A complete restore point could not be captured. Check the stack inputs and image availability.",

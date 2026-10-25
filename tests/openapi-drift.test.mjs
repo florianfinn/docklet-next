@@ -78,3 +78,34 @@ test("every lifecycle producer code is declared on the public error DTO", () => 
     }
   }
 });
+
+test("v7 policy manifest binds hub schedules, frozen revisions and notification producers", () => {
+  const spec = readFileSync(new URL("../api/openapi.json", import.meta.url));
+  const fixture = readFileSync(new URL("../types/contract/testdata/agent-hub-v7.json", import.meta.url));
+  const manifest = JSON.parse(fixture);
+  assert.equal(manifest.imagePolicies.owner, "hub");
+  assert.equal(manifest.imagePolicies.defaultMode, "off");
+  assert.deepEqual(manifest.imagePolicies.targetKinds, ["project"]);
+  assert.equal(manifest.imagePolicies.routes.length, 5);
+  const document = JSON.parse(spec);
+  for (const schema of ["JobscheduleConfig", "JobscheduleUpdate"]) {
+    assert.equal(document.components.schemas[schema].properties.pollingInterval, undefined);
+    assert.equal(document.components.schemas[schema].properties.autoUpdateInterval, undefined);
+  }
+  for (const suffix of ["AutoUpdatePolicy", "UpdateScheduleConfig", "UpdateCandidate", "SystemImageHints"]) {
+    const changed = JSON.parse(spec);
+    const name = Object.keys(manifest.imagePolicies.schemas).find((key) => key.endsWith(suffix));
+    delete changed.components.schemas[name].properties[Object.keys(changed.components.schemas[name].properties)[0]];
+    assert.notDeepEqual(agentFixture(Buffer.from(JSON.stringify(changed)), fixture), fixture);
+  }
+  assert.equal(manifest.imageSafety.inactiveCapabilities.includes("policies"), false);
+  for (const [path, item] of Object.entries(document.paths)) {
+    if (!path.includes("/updater/")) continue;
+    const expected = [...path.matchAll(/\{([^}]+)\}/g)].map((match) => match[1]).sort();
+    for (const operation of Object.values(item)) {
+      if (!operation?.operationId) continue;
+      const actual = (operation.parameters ?? []).filter((parameter) => parameter.in === "path").map((parameter) => parameter.name).sort();
+      assert.deepEqual(actual, expected, operation.operationId);
+    }
+  }
+});

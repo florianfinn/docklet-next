@@ -7,6 +7,7 @@
 package jobschedule
 
 import (
+	"encoding/json"
 	"time"
 
 	"github.com/florianfinn/docklet-next/types/scheduler"
@@ -17,9 +18,9 @@ type Config struct {
 	EnvironmentHealthInterval      string `json:"environmentHealthInterval"`
 	EventCleanupInterval           string `json:"eventCleanupInterval"`
 	ExpiredSessionsCleanupInterval string `json:"expiredSessionsCleanupInterval"`
-	AutoUpdateInterval             string `json:"autoUpdateInterval"`
+	AutoUpdateInterval             string `json:"-"`
 	DockerClientRefreshInterval    string `json:"dockerClientRefreshInterval"`
-	PollingInterval                string `json:"pollingInterval"`
+	PollingInterval                string `json:"-"`
 	ScheduledPruneInterval         string `json:"scheduledPruneInterval"`
 	VulnerabilityScanInterval      string `json:"vulnerabilityScanInterval"`
 	ImageAutoPatchInterval         string `json:"imageAutoPatchInterval"`
@@ -30,12 +31,13 @@ type Config struct {
 //
 // Any nil field is ignored.
 type Update struct {
+	HubOwnedFields                 bool    `json:"-"`
 	EnvironmentHealthInterval      *string `json:"environmentHealthInterval,omitzero"`
 	EventCleanupInterval           *string `json:"eventCleanupInterval,omitzero"`
 	ExpiredSessionsCleanupInterval *string `json:"expiredSessionsCleanupInterval,omitzero"`
-	AutoUpdateInterval             *string `json:"autoUpdateInterval,omitzero"`
+	AutoUpdateInterval             any     `json:"autoUpdateInterval,omitzero" hidden:"true"`
 	DockerClientRefreshInterval    *string `json:"dockerClientRefreshInterval,omitzero"`
-	PollingInterval                *string `json:"pollingInterval,omitzero"`
+	PollingInterval                any     `json:"pollingInterval,omitzero" hidden:"true"`
 	ScheduledPruneInterval         *string `json:"scheduledPruneInterval,omitzero"`
 	VulnerabilityScanInterval      *string `json:"vulnerabilityScanInterval,omitzero"`
 	ImageAutoPatchInterval         *string `json:"imageAutoPatchInterval,omitzero"`
@@ -44,6 +46,10 @@ type Update struct {
 
 // JobStatus represents the current status and metadata for a background job.
 type JobStatus struct {
+	HostID         string                  `json:"hostId,omitempty"`
+	Kind           string                  `json:"kind,omitempty"`
+	TimeZone       string                  `json:"timeZone,omitempty"`
+	Code           string                  `json:"code,omitempty"`
 	CurrentRun     *scheduler.Run          `json:"currentRun,omitempty"`
 	LastRun        *scheduler.Run          `json:"lastRun,omitempty"`
 	LastSuccess    *time.Time              `json:"lastSuccess,omitempty"`
@@ -97,4 +103,24 @@ type JobRunResponse struct {
 // SubmitRunInput preserves identity across manager-to-agent delivery retries.
 type SubmitRunInput struct {
 	RunID string `json:"runId"`
+}
+
+func (u *Update) UnmarshalJSON(body []byte) error {
+	type plain Update
+	var raw map[string]json.RawMessage
+	if err := json.Unmarshal(body, &raw); err != nil {
+		return err
+	}
+	var decoded plain
+	if err := json.Unmarshal(body, &decoded); err != nil {
+		return err
+	}
+	*u = Update(decoded)
+	_, auto := raw["autoUpdateInterval"]
+	_, polling := raw["pollingInterval"]
+	u.HubOwnedFields = auto || polling
+	return nil
+}
+func (u Update) HasHubOwnedFields() bool {
+	return u.HubOwnedFields || u.AutoUpdateInterval != nil || u.PollingInterval != nil
 }

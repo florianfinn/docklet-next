@@ -11,6 +11,7 @@ import (
 	"encoding/json"
 	"github.com/florianfinn/docklet-next/backend/internal/activity"
 	life "github.com/florianfinn/docklet-next/backend/internal/project/children/lifecycle"
+	policy "github.com/florianfinn/docklet-next/backend/internal/updater/children/policies"
 	"github.com/florianfinn/docklet-next/backend/pkg/scheduler/runs"
 	francistest "github.com/florianfinn/docklet-next/backend/pkg/utils/francis/testing"
 	activityDTO "github.com/florianfinn/docklet-next/types/activity"
@@ -145,8 +146,24 @@ func TestRuntimeImageActualDirectEdgeUpdateRestoreAndLostAck(t *testing.T) {
 			run := func(op activity.RuntimeOperation, intent *dto.LifecycleIntent) activityDTO.RuntimeSnapshot {
 				command := f.command(op, target)
 				command.Options.Lifecycle = intent
+				if op == activity.RuntimeUpdateProject {
+					store := policy.Store{DB: f.db.DB}
+					one, err := store.Policy(t.Context(), command.Store.EnvironmentID, command.Store.RegistrationID, target.ID)
+					require.NoError(t, err)
+					one.Mode, one.ActorID, one.TargetIdentity = "apply", command.Actor.ID, intent.TargetIdentity
+					require.NoError(t, store.SavePolicy(t.Context(), one, 0))
+					one.Revision = 1
+					child, fresh, err := store.PrepareChild(t.Context(), one, "example-policy-job")
+					require.NoError(t, err)
+					require.True(t, fresh)
+					intent.Policy = &dto.PolicyBinding{PolicyID: one.ID, Revision: 1, JobRunID: child.JobRunID, ChildID: child.ID}
+					command.ProposedRunID, command.Key = child.ID, child.ID
+				}
 				admitted, err := f.hub.Admit(t.Context(), command)
 				require.NoError(t, err)
+				if intent.Policy != nil {
+					require.NoError(t, f.db.Model(&policy.Policy{}).Where("id = ?", intent.Policy.PolicyID).Updates(map[string]any{"mode": "off", "revision": 2}).Error)
+				}
 				ref := activity.RuntimeRunReference{Store: f.store, RunID: admitted.ActivityID}
 				_, err = f.control.Start(t.Context(), ref, command.Options)
 				require.NoError(t, err)

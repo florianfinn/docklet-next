@@ -37,12 +37,14 @@ import (
 	"github.com/florianfinn/docklet-next/backend/internal/middleware"
 	"github.com/florianfinn/docklet-next/backend/internal/role"
 	"github.com/florianfinn/docklet-next/backend/internal/settings"
+	"github.com/florianfinn/docklet-next/backend/internal/updater"
 	"github.com/florianfinn/docklet-next/backend/pkg/authz"
 	"github.com/florianfinn/docklet-next/backend/pkg/libarcane"
 	"github.com/florianfinn/docklet-next/backend/pkg/scheduler/jobcontext"
 	"github.com/florianfinn/docklet-next/backend/pkg/scheduler/runs"
 	scheduleutil "github.com/florianfinn/docklet-next/backend/pkg/scheduler/schedule"
 	"github.com/florianfinn/docklet-next/backend/pkg/utils"
+	imageDTO "github.com/florianfinn/docklet-next/types/image"
 )
 
 // JobService manages configuration for background job schedules.
@@ -54,18 +56,19 @@ import (
 // NOTE: This is intentionally separate from settings.SettingsService to keep the API
 // surface job-focused and to centralize schedule validation/rescheduling.
 type JobService struct {
-	activity     *activity.ActivityService
-	activityMu   sync.Mutex
-	runs         *runs.Coordinator
-	remote       *remote.Service
-	environment  *environment.EnvironmentService
-	roles        *role.RoleService
-	db           *database.DB
-	settings     *settings.SettingsService
-	cfg          *config.Config
-	scheduler    scheduler.JobController
-	lifecycleCtx context.Context
-	location     *time.Location // Timezone for cron schedule calculations
+	imagePolicies *updater.UpdaterService
+	activity      *activity.ActivityService
+	activityMu    sync.Mutex
+	runs          *runs.Coordinator
+	remote        *remote.Service
+	environment   *environment.EnvironmentService
+	roles         *role.RoleService
+	db            *database.DB
+	settings      *settings.SettingsService
+	cfg           *config.Config
+	scheduler     scheduler.JobController
+	lifecycleCtx  context.Context
+	location      *time.Location // Timezone for cron schedule calculations
 
 	// environment-health is no longer a single scheduler job — it fans out to one
 	// dynamic job per environment owned by environment.EnvironmentService. These bridge the Jobs
@@ -140,6 +143,9 @@ func (s *JobService) GetJobSchedules(ctx context.Context) jobschedule.Config {
 }
 
 func (s *JobService) UpdateJobSchedules(ctx context.Context, updates jobschedule.Update) (jobschedule.Config, error) {
+	if updates.HasHubOwnedFields() {
+		return jobschedule.Config{}, imageDTO.Failure("update.schedule-hub-owned", 409)
+	}
 	if s == nil || s.db == nil || s.settings == nil {
 		return jobschedule.Config{}, errors.New("job service not initialized")
 	}
@@ -157,9 +163,7 @@ func (s *JobService) UpdateJobSchedules(ctx context.Context, updates jobschedule
 		{key: "environmentHealthInterval", current: current.EnvironmentHealthInterval, update: updates.EnvironmentHealthInterval},
 		{key: "eventCleanupInterval", current: current.EventCleanupInterval, update: updates.EventCleanupInterval},
 		{key: "expiredSessionsCleanupInterval", current: current.ExpiredSessionsCleanupInterval, update: updates.ExpiredSessionsCleanupInterval},
-		{key: "autoUpdateInterval", current: current.AutoUpdateInterval, update: updates.AutoUpdateInterval},
 		{key: "dockerClientRefreshInterval", current: current.DockerClientRefreshInterval, update: updates.DockerClientRefreshInterval},
-		{key: "pollingInterval", current: current.PollingInterval, update: updates.PollingInterval},
 		{key: "scheduledPruneInterval", current: current.ScheduledPruneInterval, update: updates.ScheduledPruneInterval},
 		{key: "vulnerabilityScanInterval", current: current.VulnerabilityScanInterval, update: updates.VulnerabilityScanInterval},
 		{key: "imageAutoPatchInterval", current: current.ImageAutoPatchInterval, update: updates.ImageAutoPatchInterval},
@@ -222,6 +226,9 @@ func (s *JobService) RescheduleJobsForSettingKeys(ctx context.Context, changedKe
 
 	var rescheduleErrors []error
 	for jobID, jobMeta := range meta.GetAllJobMetadata() {
+		if updater.IsImagePolicyJob(jobID) {
+			continue
+		}
 		if !jobMetadataAffectedBySettingInternal(jobMeta, changed) {
 			continue
 		}
@@ -326,7 +333,7 @@ func jobMetadataAffectedBySettingInternal(jobMeta meta.JobMetadata, changed map[
 	return false
 }
 
-func (s *JobService) ListJobs(ctx context.Context) (*jobschedule.JobListResponse, error) {
+func (s *JobService) legacyListJobs(ctx context.Context) (*jobschedule.JobListResponse, error) {
 	if s == nil || s.settings == nil {
 		return nil, errors.New("job service not initialized")
 	}
@@ -335,6 +342,9 @@ func (s *JobService) ListJobs(ctx context.Context) (*jobschedule.JobListResponse
 	jobs := make([]jobschedule.JobStatus, 0, len(allMetadata))
 
 	for _, jobMeta := range allMetadata {
+		if updater.IsImagePolicyJob(jobMeta.ID) {
+			continue
+		}
 		schedule := s.getJobScheduleInternal(ctx, jobMeta)
 		nextRun := s.calculateNextRunInternal(schedule)
 		enabled := s.isJobEnabledInternal(ctx, jobMeta)
@@ -446,6 +456,9 @@ func (s *JobService) Coordinator() *runs.Coordinator { return s.runs }
 
 // ActivityID assigns a summary identity before a visible run is persisted.
 func (s *JobService) ActivityID(run scheduler.Run) string {
+	if _, kind, owned := updater.ParseImagePolicyJob(run.JobID); owned && (kind == "auto-update" || run.Trigger == "manual") {
+		return uuid.New().String()
+	}
 	// A remotely delivered run already has a summary on its accepting manager.
 	if run.Trigger == "remote" {
 		return ""
@@ -483,6 +496,14 @@ func (s *JobService) SyncRunActivity(ctx context.Context, run scheduler.Run) err
 	name := current.JobID
 	if metadata, found := meta.GetJobMetadata(current.JobID); found {
 		name = metadata.Name
+	}
+	if env, kind, owned := updater.ParseImagePolicyJob(current.JobID); owned {
+		current.EnvironmentID = env
+		current.ActivityEnvironmentID = env
+		current.JobID = kind
+		if metadata, found := meta.GetJobMetadata(kind); found {
+			name = metadata.Name
+		}
 	}
 	return s.activity.SyncJobRun(ctx, runtime.ProjectRunOutcome(current), name)
 }
@@ -527,7 +548,7 @@ func (s *JobService) ReconcileStartupActivities(ctx context.Context, extraProtec
 // Submit validates job eligibility and persists acceptance before execution.
 // Managers may accept requests for offline environments. Reusing a run ID
 // deduplicates admission within the same job and environment.
-func (s *JobService) Submit(ctx context.Context, request scheduler.Request) (scheduler.Run, error) {
+func (s *JobService) legacySubmit(ctx context.Context, request scheduler.Request) (scheduler.Run, error) {
 	request.EnvironmentID = cmp.Or(request.EnvironmentID, "0")
 	if request.EnvironmentID != "0" {
 		if s.cfg.AgentMode {
@@ -596,6 +617,9 @@ func (s *JobService) validateLocalJobInternal(ctx context.Context, jobID string)
 }
 
 func (s *JobService) authorizeRunInternal(ctx context.Context, run scheduler.Run) error {
+	if env, _, owned := updater.ParseImagePolicyJob(run.JobID); owned {
+		run.EnvironmentID = env
+	}
 	if run.RequestedBy == "" {
 		if run.Trigger == "manual" && !s.cfg.AgentMode {
 			return errors.New("requesting user unavailable")
@@ -616,6 +640,15 @@ func (s *JobService) authorizeRunInternal(ctx context.Context, run scheduler.Run
 }
 
 func (s *JobService) executeRunInternal(ctx context.Context, run scheduler.Run) (scheduler.Outcome, error) {
+	if updater.IsImagePolicyJob(run.JobID) || (s.cfg.AgentMode || s.cfg.EdgeAgent) && strings.HasPrefix(run.JobID, "image-policy:") {
+		return scheduler.Outcome{Status: scheduler.Skipped, Code: "update.agent-local-job-disabled"}, nil
+	}
+	if env, kind, owned := updater.ParseImagePolicyJob(run.JobID); owned {
+		if s.imagePolicies == nil {
+			return scheduler.Outcome{Status: scheduler.Failed, Code: "update.persistence-failed"}, nil
+		}
+		return s.imagePolicies.RunImagePolicyHost(s.runContextInternal(ctx, run), env, kind)
+	}
 	if err := s.authorizeRunInternal(ctx, run); err != nil {
 		return scheduler.Outcome{Status: scheduler.Failed}, err
 	}
@@ -688,6 +721,15 @@ func safeJobInternal(jobID string) bool {
 }
 
 func (s *JobService) reconcileRunInternal(ctx context.Context, run scheduler.Run) (scheduler.Outcome, error) {
+	if updater.IsImagePolicyJob(run.JobID) || (s.cfg.AgentMode || s.cfg.EdgeAgent) && strings.HasPrefix(run.JobID, "image-policy:") {
+		return scheduler.Outcome{Status: scheduler.Skipped, Code: "update.agent-local-job-disabled"}, nil
+	}
+	if env, _, owned := updater.ParseImagePolicyJob(run.JobID); owned {
+		if s.imagePolicies == nil {
+			return scheduler.Outcome{Status: scheduler.Failed, Code: "update.persistence-failed"}, nil
+		}
+		return s.imagePolicies.ReconcileImagePolicyHost(ctx, env, run)
+	}
 	if err := s.authorizeRunInternal(ctx, run); err != nil {
 		return scheduler.Outcome{Status: scheduler.Failed}, err
 	}
@@ -769,7 +811,7 @@ func requiresDockerInternal(jobID string) bool {
 
 // ResolveRun authorizes the current operator independently of the original requester.
 // TODO(v3): remove this deprecated mixed-version compatibility contract.
-func (s *JobService) ResolveRun(ctx context.Context, environmentID, jobID, runID, actor string) (scheduler.Run, error) {
+func (s *JobService) legacyResolveRun(ctx context.Context, environmentID, jobID, runID, actor string) (scheduler.Run, error) {
 	permissions, _ := middleware.PermissionsFromContext(ctx)
 	if !permissions.Allows(authz.PermJobsManage, environmentID) {
 		return scheduler.Run{}, huma.Error403Forbidden("permission denied: " + authz.PermJobsManage)
@@ -785,7 +827,7 @@ func (s *JobService) ResolveRun(ctx context.Context, environmentID, jobID, runID
 
 // RetryRun revalidates local job eligibility before requeuing the existing run.
 // Remote retries follow the delivery protocol and retain confirmed target progress.
-func (s *JobService) RetryRun(ctx context.Context, environmentID, jobID, runID string) (scheduler.Run, error) {
+func (s *JobService) legacyRetryRun(ctx context.Context, environmentID, jobID, runID string) (scheduler.Run, error) {
 	if environmentID != "0" {
 		return s.retryRemoteRunInternal(ctx, environmentID, jobID, runID)
 	}
@@ -811,7 +853,7 @@ func (s *JobService) RetryRun(ctx context.Context, environmentID, jobID, runID s
 }
 
 // ListRemoteJobs returns an agent's catalog with manager-side run status.
-func (s *JobService) ListRemoteJobs(ctx context.Context, environmentID string) (*jobschedule.JobListResponse, error) {
+func (s *JobService) legacyListRemoteJobs(ctx context.Context, environmentID string) (*jobschedule.JobListResponse, error) {
 	catalog, err := s.remote.Catalog(ctx, environmentID)
 	if err != nil {
 		return nil, err
@@ -839,7 +881,7 @@ func (s *JobService) retryRemoteRunInternal(ctx context.Context, environmentID, 
 }
 
 // ListRuns merges agent history with requests accepted by this manager.
-func (s *JobService) ListRuns(ctx context.Context, environmentID, jobID string, page, limit int) (scheduler.RunList, error) {
+func (s *JobService) legacyListRuns(ctx context.Context, environmentID, jobID string, page, limit int) (scheduler.RunList, error) {
 	if environmentID == "0" {
 		return s.runs.List(ctx, environmentID, jobID, page, limit)
 	}
@@ -867,7 +909,7 @@ func (s *JobService) ListRuns(ctx context.Context, environmentID, jobID string, 
 }
 
 // GetRun prefers the manager's durable delivery record, then queries agent-owned history.
-func (s *JobService) GetRun(ctx context.Context, environmentID, jobID, runID string) (scheduler.Run, error) {
+func (s *JobService) legacyGetRun(ctx context.Context, environmentID, jobID, runID string) (scheduler.Run, error) {
 	run, err := s.runs.Get(ctx, environmentID, jobID, runID)
 	if environmentID == "0" || !errors.Is(err, runs.ErrRunNotFound) {
 		return runtime.ProjectRunOutcome(run), err
@@ -880,7 +922,7 @@ func (s *JobService) GetRun(ctx context.Context, environmentID, jobID, runID str
 }
 
 // CancelRun cancels manager admission or explicitly forwards an agent-owned cancellation.
-func (s *JobService) CancelRun(ctx context.Context, environmentID, jobID, runID string) (scheduler.Run, error) {
+func (s *JobService) legacyCancelRun(ctx context.Context, environmentID, jobID, runID string) (scheduler.Run, error) {
 	_, err := s.runs.Get(ctx, environmentID, jobID, runID)
 	if environmentID != "0" && errors.Is(err, runs.ErrRunNotFound) {
 		return s.remote.MutateAgentRun(ctx, environmentID, jobID, runID, "cancel")
