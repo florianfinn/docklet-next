@@ -9,6 +9,7 @@ package image
 
 import (
 	"net/http"
+	"reflect"
 
 	"github.com/danielgtaylor/huma/v2"
 	uploadtypes "github.com/florianfinn/docklet-next/types/upload"
@@ -184,9 +185,13 @@ func RegisterImages(
 		Method:      http.MethodPost,
 		Path:        "/environments/{id}/images/pull",
 		Summary:     "Pull an image",
-		Description: "Pull a Docker image from a registry with streaming progress output",
-		Tags:        []string{"Images"},
-		Security:    handlerutil.DefaultOperationSecurity(),
+		Description: "Pull an image as newline-delimited JSON: activity identity, progress, then typed error or done=true. EOF alone is not success.",
+		Responses: map[string]*huma.Response{"200": {
+			Description: "Newline-delimited pull frames",
+			Content:     map[string]*huma.MediaType{"application/x-json-stream": {Schema: api.OpenAPI().Components.Schemas.Schema(reflect.TypeFor[PullFrame](), true, "")}},
+		}},
+		Tags:     []string{"Images"},
+		Security: handlerutil.DefaultOperationSecurity(),
 	}, authz.PermImagesPull, h.PullImage)
 
 	middleware.RegisterWithPermission(api, huma.Operation{
