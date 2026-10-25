@@ -114,3 +114,15 @@ it("keeps truncated pulls open and links the optional real activity for inspecti
   expect(activityStore.get().focusRunId).toBe("pull-action"); expect(close).not.toHaveBeenCalled();
   activityStore.reset();
 });
+it("shows unknown host cleanup outcomes without claiming zero removed or failed images", async () => {
+  const f = imageRegistryFixture(); f.state.failTransport = true;
+  renderWithApp(<PruneDialog open onOpenChange={() => {}} hosts={[host]} images={[image]} />, f.adapter);
+  const dialog = await screen.findByRole("dialog");
+  await waitFor(() => expect((within(dialog).getByRole("button", { name: t.pruneDialog.confirm }) as HTMLButtonElement).disabled).toBe(false));
+  await userEvent.click(within(dialog).getByRole("button", { name: t.pruneDialog.confirm }));
+  await within(dialog).findByText(t.pruneDialog.report);
+  expect(within(dialog).queryByRole("alert") !== null).toBe(true);
+  expect(within(dialog).getByRole("alert").textContent).toBe(t.errors["image_outcome-unknown"]);
+  expect(within(dialog).queryByText("Entfernt: 0") === null).toBe(true);
+  expect(within(dialog).queryByText("Fehlgeschlagen: 0") === null).toBe(true);
+});

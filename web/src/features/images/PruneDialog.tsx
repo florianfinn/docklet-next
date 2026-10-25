@@ -39,11 +39,12 @@ export function PruneDialog({ open, onOpenChange, hosts, images }: { open: boole
   return <Dialog open={open} onOpenChange={change}><DialogContent {...feedback.bindings} className="max-h-[calc(100dvh-2rem)] overflow-auto sm:max-w-xl" data-surface="prune-dialog">
     <DialogHeader><DialogTitle>{t(report ? "report" : "title")}</DialogTitle><DialogDescription>{t("description")}</DialogDescription></DialogHeader>
     {report ? <div className="flex flex-col gap-4" role="status">{report.hosts.map((result) => <section key={result.hostId} className="rounded-lg border p-3 text-sm"><h3 className="font-medium">{hosts.find((h) => h.id === result.hostId)?.name ?? result.hostId}</h3>
+      {result.errorCode ? <p role="alert">{error(result.errorCode)}</p> : <>
       <p>{t("removed", { count: result.removed.length })}</p><p>{t("skipped", { count: result.skipped.length })}</p><p>{t("failed", { count: result.failed.length })}</p>
       <p>{result.spaceReclaimed === undefined ? t("spaceUnknown") : t("space", { size: formatMem(result.spaceReclaimed / 1024 ** 2) })}</p>
-      {result.errorCode && <p role="alert">{error(result.errorCode)}</p>}
       <ul>{result.removed.map((id) => <li key={id} className="break-all">{id}</li>)}</ul>
       <ul>{[...result.skipped, ...result.failed].map((item) => <li key={`${item.id}-${item.code}`} className="break-all">{item.id}: {error(item.code)}</li>)}</ul>
+      </>}
     </section>)}</div> : <div className="flex flex-col gap-4 text-sm">
       <p>{connected.length ? t("hosts", { hosts: connected.map((h) => h.name).join(", ") }) : t("hostsNone")}</p>
       {offline.length > 0 && <p>{t("skippedOffline", { hosts: offline.map((h) => h.name).join(", ") })}</p>}
