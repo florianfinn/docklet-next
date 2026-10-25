@@ -20,6 +20,7 @@ const NetworksPage = lazy(() => import("@/features/networks/NetworksPage"));
 const HostsPage = lazy(() => import("@/features/hosts/HostsPage"));
 const OnboardingPage = lazy(() => import("@/features/hosts/onboarding/OnboardingPage"));
 const VolumesPage = lazy(() => import("@/features/volumes/VolumesPage"));
+const RegistriesPage = lazy(() => import("@/features/registries/RegistriesPage"));
 const ImagesPage = lazy(() => import("@/features/images/ImagesPage"));
 const VolumePage = lazy(() => import("@/features/volumes/VolumePage"));
 const BackupsPage = lazy(() => import("@/features/volumes/BackupsPage"));
@@ -59,6 +60,7 @@ const shellRoutes: RouteObject[] = [
       { path: "hosts/new", element: <OnboardingPage /> },
       { path: "volumes", element: <VolumesPage /> },
       { path: "images", element: <ImagesPage /> },
+      { path: "registries", element: <RegistriesPage /> },
       { path: "volumes/:volumeId", element: <VolumePage /> },
       { path: "backups", element: <BackupsPage /> },
       { path: "hub-backups", element: <HubBackupsPage /> },

@@ -1,0 +1,45 @@
+// Source: docklet-next/docs/design/images-updates.md
+// Revision: 4b115b750db13ed0934695adb071d6d4eb374310
+// Retrieved: 2026-10-25
+// License: Apache-2.0
+// Deviations: Original production image and registry UI implementation for issue #230.
+
+export const deImageErrors = {
+  "image_active-update-protected": "Ein aktives Update schützt dieses Image.",
+  "image_busy": "Ein anderer Image-Vorgang läuft. Bitte danach erneut versuchen.",
+  "image_changed": "Das Image hat sich geändert. Vor einem neuen Versuch die Liste aktualisieren.",
+  "image_in-use": "Das Image wird verwendet, auch von gestoppten Containern, und bleibt erhalten.",
+  "image_invalid-archive": "Das Image-Archiv konnte nicht validiert werden.",
+  "image_invalid-prune": "Die Optionen zum Aufräumen sind ungültig.",
+  "image_invalid-reference": "Die Image-Referenz ist ungültig.",
+  "image_load-failed": "Das Image konnte nicht geladen werden.",
+  "image_not-found": "Das Image existiert nicht mehr.",
+  "image_prune-failed": "Das Image konnte nicht aufgeräumt werden.",
+  "image_pull-failed": "Das Image konnte nicht gezogen werden. Referenz und gespeicherte Registry-Konfiguration prüfen.",
+  "image_remove-failed": "Das Image konnte nicht entfernt werden.",
+  "image_reserved-reference": "Diese Referenz ist für die interne Image-Aufbewahrung reserviert.",
+  "image_restore-point-protected": "Ein Wiederherstellungspunkt schützt dieses Image.",
+  "image_system-protected": "Dieses Image ist geschützt, weil Docklet es verwendet.",
+  "image_tag-failed": "Der Image-Tag konnte nicht geändert werden.",
+  "image_usage-unavailable": "Die Image-Nutzung konnte nicht geprüft werden. Kein Image gilt deshalb als ungenutzt.",
+  "registry_authentication-failed": "Die Registry hat die gespeicherten Zugangsdaten abgelehnt.",
+  "registry_authentication-required": "Die Registry benötigt gespeicherte Zugangsdaten.",
+  "registry_credential-unavailable": "Die gespeicherten Registry-Zugangsdaten sind nicht verfügbar.",
+  "registry_exists": "Eine Registry mit dieser Adresse existiert bereits.",
+  "registry_inline-credentials-not-allowed": "Zugangsdaten vor dem Ziehen in der Registry-Verwaltung speichern.",
+  "registry_invalid-config": "Die Registry-Konfiguration ist ungültig.",
+  "registry_not-found": "Die Registry existiert nicht mehr.",
+  "registry_persistence-failed": "Die Registry-Konfiguration konnte nicht gespeichert werden.",
+  "registry_rate-limited": "Das Anfragelimit der Registry ist erreicht. Bitte später erneut versuchen.",
+  "registry_sync-failed": "Die Registry-Konfiguration konnte nicht mit einem Host synchronisiert werden.",
+  "registry_unavailable": "Die Registry konnte nicht erreicht werden.",
+  "update_check-unavailable": "Update-Informationen sind nicht verfügbar.",
+  "update_deploy-failed": "Das Update konnte nicht bereitgestellt werden.",
+  "update_invalid-target": "Dieses Ziel unterstützt den angeforderten Update-Vorgang nicht.",
+  "update_persistence-failed": "Der Update-Status konnte nicht gespeichert werden.",
+  "update_requires-hub-update": "Vor Auswahl dieser Agent-Version muss der Hub aktualisiert werden.",
+  "update_system-version-unknown": "Die Version des System-Images konnte nicht geprüft werden.",
+  "image_outcome-unknown": "Der Vorgang könnte abgeschlossen sein. Vor einem neuen Versuch Images und Aktivitäten prüfen.",
+  "registry_outcome-unknown": "Speichern oder Löschen könnte abgeschlossen sein. Vor einem neuen Versuch die Registries aktualisieren.",
+  "registry_invalid-response": "Die Registry-Antwort konnte nicht gelesen werden."
+};

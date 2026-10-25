@@ -60,7 +60,7 @@ describe("German catalogue", () => {
   it("renders the German catalogue with the language switch, Hub backup and environment event namespaces", () => {
     expect(catalogs.de).toBe(messages);
     const { locale, ...older } = messages;
-    expect(Object.keys(older)).toHaveLength(25);
+    expect(Object.keys(older)).toHaveLength(26);
     expect(older.environment.connect).toBe("Host verbunden");
     expect(catalogs["en-US"].environment.connect).toBe("Host connected");
     expect(older.user).toEqual({ login: "Benutzer angemeldet.", logout: "Benutzer abgemeldet." });
@@ -75,8 +75,8 @@ const catalogueModules = import.meta.glob<Record<string, Tree>>("/src/**/message
 describe("catalogue contracts", () => {
   it("validates every catalogue pair, including pool and disconnected backend messages", () => {
     const englishFiles = Object.keys(catalogueModules).filter((path) => path.endsWith("en.ts"));
-    expect(englishFiles).toHaveLength(26);
-    expect(Object.keys(catalogueModules)).toHaveLength(52);
+    expect(englishFiles).toHaveLength(28);
+    expect(Object.keys(catalogueModules)).toHaveLength(56);
     const used = new Set<string>();
     const errors = englishFiles.flatMap((path) => {
       const english = Object.values(catalogueModules[path]!)[0]!;

@@ -202,3 +202,32 @@ it("a second distinct failure focuses and scrolls once again even with the same 
     expect(scroll.mock.calls.length).toBe(firstCount + 1);
   } finally { scroll.mockRestore(); }
 });
+
+function DetachedAttempt({ settle, owner, notify }: { settle: Promise<boolean>; owner: string; notify: (value: boolean) => void }) {
+  const feedback = useDialogCommand(true, owner), adapter = useAdapter();
+  return <><button onClick={() => feedback.run(async () => {
+    const failure = captureCommandFailure(adapter);
+    const ok = await settle;
+    if (!ok) failure.error("Detached rejection");
+    return ok;
+  }, notify)}>Detached start</button><DialogError feedback={feedback} /></>;
+}
+it.each([true, false])("reports detached success=%s after the owner changes", async (ok) => {
+  const done = resultBarrier<boolean>(), notify = vi.fn();
+  function Switching() { const [owner, setOwner] = useState("first"); return <><button onClick={() => setOwner("second")}>Switch owner</button><DetachedAttempt settle={done.promise} owner={owner} notify={notify} /></>; }
+  renderWithApp(<Switching />);
+  await userEvent.click(screen.getByText("Detached start"));
+  await userEvent.click(screen.getByText("Switch owner"));
+  await act(async () => { done.resolve(ok); await done.promise; });
+  expect(notify).toHaveBeenCalledExactlyOnceWith(ok);
+  expect(vi.mocked(toast.error).mock.calls).toEqual(ok ? [] : [["Detached rejection", undefined]]);
+  expect(screen.queryByRole("alert") === null).toBe(true);
+});
+it.each([true, false])("suppresses detached success=%s across identity replacement", async (ok) => {
+  const done = resultBarrier<boolean>(), notify = vi.fn(), adapter = createDemoAdapter(); let version = 1;
+  registerIdentityLifetime(adapter.subscribeChanges, { version: () => version, active: () => true, listen: () => () => {} });
+  const view = renderWithApp(<DetachedAttempt settle={done.promise} owner="first" notify={notify} />, adapter);
+  await userEvent.click(screen.getByText("Detached start")); view.unmount(); version++;
+  await act(async () => { done.resolve(ok); await done.promise; });
+  expect(notify).not.toHaveBeenCalled(); expect(toast.error).not.toHaveBeenCalled();
+});

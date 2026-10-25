@@ -26,6 +26,7 @@ const TOPIC_KEYS: Record<Topic, readonly (readonly unknown[])[]> = {
   volumes: [queryKeys.volumes, queryKeys.volumeRoot, queryKeys.fileRoot],
   settings: [queryKeys.settings, queryKeys.connectedSettings],
   images: [queryKeys.images],
+  registries: [["registries"]],
 };
 
 /** Invalidates cached reads when the adapter reports changes (SSE-like). */

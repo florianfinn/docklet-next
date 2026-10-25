@@ -21,6 +21,7 @@ export type NavKey =
   | "containers"
   | "security"
   | "networks"
+  | "registries"
   | "images"
   | "volumes"
   | "hosts"
@@ -59,6 +60,7 @@ export const NAV: NavGroup[] = [
       { key: "networks", to: "/networks", icon: Network },
       { key: "volumes", to: "/volumes", icon: Database },
       { key: "images", to: "/images", icon: Package },
+      { key: "registries", to: "/registries", icon: Package },
     ],
   },
   {

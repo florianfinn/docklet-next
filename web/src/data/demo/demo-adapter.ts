@@ -1,3 +1,4 @@
+import { createDemoRegistries } from "./demo-registries";
 import type { ActionKind, ContainerInfo, DeployStepKey, Service, Stack } from "@/domain/model";
 import { parseCompose } from "@/domain/compose/model";
 import { convertDockerRun } from "@/domain/compose/docker-run";
@@ -123,6 +124,7 @@ export function createDemoAdapter(options: DemoAdapterOptions = {}): DockletAdap
 
   const adapter: DockletAdapter = {
     kind: "demo",
+    ...createDemoRegistries(() => db.changed("registries")),
     getAuthMode: async () => db.settings.auth.mode,
     getCurrentUser: async () => ({ id: "demo-admin", username: db.settings.auth.local.username, requiresPasswordChange: false }),
     login: async (username) => ({ id: "demo-admin", username, requiresPasswordChange: false }),
@@ -135,7 +137,9 @@ export function createDemoAdapter(options: DemoAdapterOptions = {}): DockletAdap
         (resourceRef.kind === "host" && !!db.host(resourceRef.id)) ||
         (resourceRef.kind === "stack" && !!db.stack(resourceRef.id)) ||
         (resourceRef.kind === "container" && db.containers().some((item) => item.id === resourceRef.id)) ||
-        (resourceRef.kind === "network" && db.topology.networks.some((item) => item.id === resourceRef.id));
+        (resourceRef.kind === "network" && db.topology.networks.some((item) => item.id === resourceRef.id)) ||
+        (resourceRef.kind === "image" && (await adapter.listImages()).some((item) => item.id === resourceRef.id)) ||
+        (resourceRef.kind === "registry" && (await adapter.listContainerRegistries()).some((item) => item.id === resourceRef.id));
       const available = knownResource && supportedOperations.has(operationId);
       return { operationId, resourceRef, available, ...(available ? {} : { disabledReasonCode: GENERIC_REASON }) };
     },
@@ -581,6 +585,7 @@ export function createDemoAdapter(options: DemoAdapterOptions = {}): DockletAdap
   for (const [operationId, value] of Object.entries(adapter)) {
     if (operationId !== "getCapability" && typeof value === "function") supportedOperations.add(operationId);
   }
+  supportedOperations.add("clearContainerRegistryCredential");
   for (const operationId of options.missingCapabilities ?? []) supportedOperations.delete(operationId);
   registerDemoOptions(adapter, options);
   return adapter;

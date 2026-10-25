@@ -1,3 +1,4 @@
+import { ImageUpdate } from "./ImageUpdate";
 import { Layers, Package, ShieldAlert } from "lucide-react";
 import { memo, type ReactNode } from "react";
 import { Link } from "react-router";
@@ -131,7 +132,7 @@ export const ImageRow = memo(function ImageRow({ image, host, view, columns, inB
     consumers: <ConsumerLinks image={image} />,
     size: <span className="font-mono text-xs tabular-nums">{formatMem(image.sizeMb)}</span>,
     created: <span className="text-xs text-muted-foreground">{formatRelative(image.createdAt)}</span>,
-    update: image.update ? <UpdateIndicator name={imageReference(image)} update={image.update} /> : <span className="text-xs text-muted-foreground">–</span>,
+    update: image.updateObservation ? <ImageUpdate image={image} /> : image.update ? <UpdateIndicator name={imageReference(image)} update={image.update} /> : <span className="text-xs text-muted-foreground">–</span>,
     security: <SecurityChip image={image} />,
     meta: (
       <span className="flex flex-col gap-0.5 text-xs">

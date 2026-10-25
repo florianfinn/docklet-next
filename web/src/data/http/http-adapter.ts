@@ -1,3 +1,5 @@
+import { createImageCommands } from "./image-commands";
+import { createRegistryCommands } from "./registry-commands";
 // Source: docklet-next/docs/design/adapter-live-capabilities.md
 // Revision: dfdfa084478d327818d8c57b0973d638f80861f6
 // Retrieved: 2026-10-15
@@ -48,7 +50,7 @@ type Body<I extends ReadOperation> = operations[I]["responses"][200]["content"][
 type StreamPayload = operations["streamClient"]["responses"][200]["content"]["text/event-stream"][number]["data"];
 type Source = Pick<EventSource, "close" | "onopen" | "onmessage" | "onerror"> & Partial<Pick<EventSource, "readyState">>;
 
-const IMPLEMENTED = new Set(["createNetwork", "removeNetwork", "connectNetwork", "disconnectNetwork", "getProjectWorkspace", "readProjectFile", "downloadProjectFile", "updateProjectWorkspace", "listFiles", "readFile", "writeFile", "createEntry", "renameEntry", "deleteEntry", "uploadFile", "downloadFile", "planVolumePrune", "pruneVolumes", "createVolume", "deleteVolume", "renameVolume", "subscribeLogs", "subscribeContainerLogs", "runStackCommand", "runContainerCommand", "deployStack", "saveStackFiles", "setStackLabels", "convertDockerRun", "registerHost", "issueAgentToken", "removeHost", "discoverHub", "listStacks", "getStack", "listContainers", "listHosts", "listActions", "listEvents", "subscribeActions", "subscribeChanges", "getAuthMode", "getCurrentUser", "login", "logout", "changePassword", "updateMyLocale", "getSetupStatus", "completeSetup", "getConnectedSettings", "saveSettings", "listImages", "listVolumes", "getVolume", "getTopology", "subscribeMetrics"]);
+const IMPLEMENTED = new Set(["clearContainerRegistryCredential", "pullImage", "removeImage", "pruneImages", "listContainerRegistries", "createContainerRegistry", "updateContainerRegistry", "deleteContainerRegistry", "testContainerRegistry", "createNetwork", "removeNetwork", "connectNetwork", "disconnectNetwork", "getProjectWorkspace", "readProjectFile", "downloadProjectFile", "updateProjectWorkspace", "listFiles", "readFile", "writeFile", "createEntry", "renameEntry", "deleteEntry", "uploadFile", "downloadFile", "planVolumePrune", "pruneVolumes", "createVolume", "deleteVolume", "renameVolume", "subscribeLogs", "subscribeContainerLogs", "runStackCommand", "runContainerCommand", "deployStack", "saveStackFiles", "setStackLabels", "convertDockerRun", "registerHost", "issueAgentToken", "removeHost", "discoverHub", "listStacks", "getStack", "listContainers", "listHosts", "listActions", "listEvents", "subscribeActions", "subscribeChanges", "getAuthMode", "getCurrentUser", "login", "logout", "changePassword", "updateMyLocale", "getSetupStatus", "completeSetup", "getConnectedSettings", "saveSettings", "listImages", "listVolumes", "getVolume", "getTopology", "subscribeMetrics"]);
 const RECONNECT_MS = 250;
 
 export interface HttpAdapterOptions {
@@ -488,6 +490,8 @@ export function createHttpAdapter(options: HttpAdapterOptions = {}): DockletAdap
     ...inventory,
     ...resourceReads,
     ...volumeReads,
+    ...createImageCommands({ baseUrl, client, capability: getCapability, generation: () => lifetimeGeneration, changed: () => { sharedReads.clear(); changeListeners.forEach((listener) => listener(["images"])); } }),
+    ...createRegistryCommands({ baseUrl, client, capability: getCapability, generation: () => lifetimeGeneration, changed: () => { sharedReads.clear(); changeListeners.forEach((listener) => listener(["registries"])); } }),
     ...createProjectWorkspace({ baseUrl, client, capability: getCapability, generation: () => identityGeneration }),
     ...createVolumeWorkspace({ baseUrl, client, capability: getCapability, generation: () => identityGeneration }),
     ...createVolumePrune({ baseUrl, client, capability: getCapability, changed: () => { sharedReads.clear(); changeListeners.forEach((listener) => listener(["volumes"])); } }, listHosts),
