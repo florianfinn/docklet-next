@@ -155,25 +155,12 @@ func (
 
 	pullOptions, authErr := s.imageService.PullOptionsWithAuth(ctx, imageName, credentials)
 	if authErr != nil {
-		slog.WarnContext(
-			ctx, "failed to get registry authentication for container recreate pull; proceeding without auth",
-			"image", imageName,
-			"error", authErr.Error(),
-		)
-		pullOptions = client.ImagePullOptions{}
+		return authErr
 	}
 
 	defer s.eventService.BeginDockerResourceSuppressionWindow("image", "", imageName)()
 	reader, pullErr := dockerClient.ImagePull(pullCtx, imageName, pullOptions)
-	if pullErr != nil && image.ShouldRetryAnonymousPull(pullOptions, pullErr) {
-		slog.WarnContext(
-			ctx, "container recreate image pull failed with registry auth; retrying anonymously",
-			"image", imageName,
-			"error", pullErr.Error(),
-		)
-		pullOptions = client.ImagePullOptions{}
-		reader, pullErr = dockerClient.ImagePull(pullCtx, imageName, pullOptions)
-	}
+
 	if pullErr != nil {
 		if errors.Is(pullCtx.Err(), context.DeadlineExceeded) {
 			s.eventService.LogErrorEvent(ctx, event.EventTypeContainerError, "container", containerID, containerName, user.ID, user.Username, "0", pullErr, database.JSON{

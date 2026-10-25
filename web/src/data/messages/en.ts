@@ -32,7 +32,23 @@ export const enBackend = {
       "sync-failed": "Registry settings could not be synced to the agent. Check its connection and retry.",
       "unavailable": "The registry could not be reached. Check its address and network connection."
     },
+    "restore": {
+      "unavailable": "This restore point is incomplete or its retained images are unavailable.",
+      "shared-reference": "Another workload prevents moving a shared image reference. Resolve the conflict before restoring.",
+      "image-mismatch": "The restored image bindings could not be verified. Inspect the run before retrying.",
+      "in-use": "An active or unresolved run still holds this restore point.",
+      "not-found": "The restore point was not found. Refresh the point list.",
+      "deploy-failed": "The restore deployment failed. Inspect its partial result before another recovery attempt."
+    },
     "update": {
+      "config-drift": "Deploy or discard the saved stack changes before updating.",
+      "baseline-unavailable": "Deploy the stack once to record a verified configuration baseline.",
+      "snapshot-unavailable": "A complete restore point could not be captured. Check the stack inputs and image availability.",
+      "target-changed": "The admitted stack or image binding changed. Refresh before retrying.",
+      "image-binding-unsupported": "This image binding or daemon image store cannot support the selected update safely.",
+      "path-retired": "Use the stack image update action instead of this retired update entry point.",
+      "target-not-found": "The stack update target no longer exists. Refresh the stack list.",
+
       "check-unavailable": "The update check could not be completed.",
       "deploy-failed": "The update could not be deployed. Check its result and the host connection.",
       "invalid-target": "Select an explicit valid update target.",

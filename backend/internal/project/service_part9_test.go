@@ -198,6 +198,15 @@ func TestProjectServiceManualUpdateDiscoversTags(t *testing.T) {
 			service := &ProjectService{db: db, settingsService: settingsService, eventService: event.NewEventService(db, nil, nil), composeCoordinator: coordinator, containerRegistryService: registryService}
 			service.initChildren(nil, nil)
 			err = service.UpdateProjectServices(ctx, proj.ID, []string{"app", "selected-digest"}, usertypes.SystemUser, !tt.skipDiscovery)
+			if !tt.skipDiscovery {
+				lifecycleCode(t, err, "update.path-retired")
+				require.Empty(t, coordinator.requests)
+				require.Zero(t, transport.calls)
+				content, readErr := os.ReadFile(filepath.Join(path, "compose.yaml"))
+				require.NoError(t, readErr)
+				require.Equal(t, source, string(content))
+				return
+			}
 			require.ErrorIs(t, err, deploymentError)
 			require.Equal(t, tt.wantCalls, transport.calls)
 			require.Len(t, coordinator.requests, 1)

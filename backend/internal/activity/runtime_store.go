@@ -232,7 +232,7 @@ func runtimeActivityTypeInternal(operation, target string) (activitytypes.Type, 
 	if target == "stack" {
 		kind = map[string]activitytypes.Type{"deploy-project": activitytypes.TypeProjectDeploy,
 			"down-project": activitytypes.TypeProjectDown, "restart-project": activitytypes.TypeProjectRestart,
-			"redeploy-project": activitytypes.TypeProjectRedeploy}[operation]
+			"redeploy-project": activitytypes.TypeProjectRedeploy, "update-project": activitytypes.TypeProjectUpdate, "restore-project": activitytypes.TypeProjectRestore}[operation]
 	} else if target == "container" {
 		kind = map[string]activitytypes.Type{"start-container": activitytypes.TypeContainerStart,
 			"stop-container": activitytypes.TypeContainerStop, "restart-container": activitytypes.TypeContainerRestart}[operation]
@@ -421,5 +421,11 @@ func runtimeUpdateTxInternal(tx *gorm.DB, now time.Time, row *RuntimeReceipt, up
 	if err := tx.Model(&RuntimeReceipt{}).Where("run_id = ?", row.RunID).Updates(updates).Error; err != nil {
 		return runtimeWriteErrorInternal(err)
 	}
-	return tx.First(row, "run_id = ?", row.RunID).Error
+	if err := tx.First(row, "run_id = ?", row.RunID).Error; err != nil {
+		return err
+	}
+	if row.OperationID != nil && runtimeImageOperation(RuntimeOperation(*row.OperationID)) && row.SettledAt != nil {
+		return tx.Table("image_lifecycle_runs").Where("id = ?", row.RunID).Update("settled", true).Error
+	}
+	return nil
 }

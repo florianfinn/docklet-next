@@ -11,6 +11,7 @@ import (
 	"encoding/json/v2"
 	"errors"
 	"fmt"
+	imageDTO "github.com/florianfinn/docklet-next/types/image"
 
 	"net/http"
 	"net/http/httptest"
@@ -40,7 +41,6 @@ import (
 	"go.getarcane.app/updater"
 	"go.getarcane.app/updater/labels"
 	"go.getarcane.app/updater/refs"
-	updatertypes "go.getarcane.app/updater/types"
 	"gorm.io/gorm"
 
 	"github.com/florianfinn/docklet-next/backend/internal/activity"
@@ -55,7 +55,6 @@ import (
 	"github.com/florianfinn/docklet-next/backend/internal/project"
 	"github.com/florianfinn/docklet-next/backend/internal/registry"
 	"github.com/florianfinn/docklet-next/backend/internal/settings"
-	"github.com/florianfinn/docklet-next/backend/internal/updater/children/execution"
 	activitylib "github.com/florianfinn/docklet-next/backend/pkg/libarcane/activity"
 	"github.com/florianfinn/docklet-next/backend/pkg/projects"
 	"github.com/florianfinn/docklet-next/backend/pkg/scheduler/jobcontext"
@@ -74,17 +73,11 @@ func TestUpdaterService_AcceptSingleContainerUpdateFailureFinalizesInternal(t *t
 	// A service whose host has not started rejects durable dispatch.
 
 	accepted, err := svc.AcceptSingleContainerUpdate(t.Context(), "container-1")
+	require.Equal(t, "update.path-retired", imageDTO.Neutral(err, "unexpected", 500).Problem.Code)
 	require.Nil(t, accepted)
-	require.ErrorContains(t, err, "persist container update")
-	var saved activity.Activity
-	require.NoError(t, db.First(&saved, "resource_id = ?", "container-1").Error)
-	require.Equal(t, activitytypes.StatusFailed, saved.Status)
-
-	unmigrated := setupProjectTestDBInternal(t)
-	svc.deps.Activity = activity.NewActivityService(unmigrated, nil)
-	accepted, err = svc.AcceptSingleContainerUpdate(t.Context(), "container-2")
-	require.Nil(t, accepted)
-	require.ErrorContains(t, err, "start container update activity")
+	var count int64
+	require.NoError(t, db.Model(&activity.Activity{}).Count(&count).Error)
+	require.Zero(t, count)
 }
 
 func TestUpdaterService_SingleContainerActivityResultMessagesInternal(t *testing.T) {
@@ -326,32 +319,11 @@ func TestUpdaterService_ApplyPending_ProjectFailureDoesNotBlockOtherProjectsInte
 	svc.engine = engine
 
 	result, err := svc.ApplyPending(ctx, arcaneupdater.Options{})
-	require.NoError(t, err)
-	require.NotNil(t, result)
-	assert.Equal(t, 1, result.Updated, "tag updates report successfully recreated containers")
-	assert.Equal(t, 1, result.Failed, "the failed project should be recorded as failed")
-	assert.Len(t, result.Items, 2)
-	assert.ElementsMatch(t, []string{newRefFailed, newRefUpdated}, puller.pulled)
-	assert.ElementsMatch(t, []string{"project-fail:app", "project-success:app"}, projectUpdater.calls)
-
-	assert.Equal(t, updatertypes.ServiceImageChange{ExpectedRef: oldRefUpdated, TargetRef: newRefUpdated}, projectUpdater.imageChanges["project-success"]["app"])
-	statusByResource := map[string]string{}
-	errorByResource := map[string]string{}
-	for _, item := range result.Items {
-		statusByResource[item.ResourceID] = item.Status
-		errorByResource[item.ResourceID] = item.Error
-	}
-
-	assert.Equal(t, string(updater.StatusFailed), statusByResource["container-fail"])
-	assert.Contains(t, errorByResource["container-fail"], "pull updated service images: unauthorized")
-	assert.Equal(t, string(updater.StatusUpdated), statusByResource["container-success"])
-
-	var recordedStatuses []updater.ResourceStatus
-	for _, recorded := range recorder.results {
-		recordedStatuses = append(recordedStatuses, recorded.Status)
-	}
-	assert.Contains(t, recordedStatuses, updater.StatusFailed)
-	assert.Contains(t, recordedStatuses, updater.StatusUpdated)
+	require.Empty(t, puller.pulled)
+	require.Empty(t, projectUpdater.calls)
+	require.Empty(t, recorder.results)
+	require.Equal(t, "update.path-retired", imageDTO.Neutral(err, "unexpected", 500).Problem.Code)
+	require.Nil(t, result)
 }
 
 func TestUpdaterService_ApplyPending_RoutesLegacyArcaneServerThroughSelfUpgradeInternal(t *testing.T) {
@@ -456,10 +428,10 @@ func TestUpdaterService_ApplyPending_RoutesLegacyArcaneServerThroughSelfUpgradeI
 	require.NoError(t, planErr)
 	ctx = jobcontext.WithExecution(ctx, scheduler.Run{AttemptCount: 1, Outcome: scheduler.Outcome{Targets: []scheduler.TargetOutcome{{ID: "auto-update", RecoveryData: frozenPlan}}}}, nil)
 	result, err := svc.ApplyPending(ctx, arcaneupdater.Options{})
-	require.ErrorContains(t, err, "self-update was triggered")
-	require.NotNil(t, result)
-	assert.True(t, mockUpgrade.triggerCalled, "scheduled auto-update should use CLI self-upgrade for legacy Arcane server labels")
-	assert.Empty(t, projectUpdater.calls, "legacy Arcane server should not be updated through project services")
+	require.Equal(t, "update.path-retired", imageDTO.Neutral(err, "unexpected", 500).Problem.Code)
+	require.Nil(t, result)
+	require.False(t, mockUpgrade.triggerCalled)
+	require.Empty(t, projectUpdater.calls)
 }
 
 // The engine picks the reference Arcane's updates are applied to, so its choice
@@ -865,16 +837,9 @@ func TestSingleUpdatePersistsSuccessfulActivity(t *testing.T) {
 		require.NoError(t, svc.Stop(ctx))
 	})
 	accepted, err := svc.AcceptSingleContainerUpdate(t.Context(), "app")
-	require.NoError(t, err)
-	require.Eventually(t, func() bool {
-		var state arcaneupdater.SingleUpdateState
-		if runtime.Service().GetState(t.Context(), execution.StateType, accepted.ID, &state) != nil || state.Status != "completed" {
-			return false
-		}
-		detail, getActivityDetailErr := activityService.GetActivityDetail(t.Context(), "0", accepted.ID, 1)
-		return getActivityDetailErr == nil && detail.Activity.Status == activitytypes.StatusSuccess
-	}, 3*time.Second, 10*time.Millisecond)
-	detail, err := activityService.GetActivityDetail(t.Context(), "0", accepted.ID, 1)
-	require.NoError(t, err)
-	require.Equal(t, activitytypes.StatusSuccess, detail.Activity.Status)
+	require.Equal(t, "update.path-retired", imageDTO.Neutral(err, "unexpected", 500).Problem.Code)
+	require.Nil(t, accepted)
+	var count int64
+	require.NoError(t, db.Model(&activity.Activity{}).Count(&count).Error)
+	require.Zero(t, count)
 }

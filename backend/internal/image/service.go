@@ -252,10 +252,10 @@ func (s *ImageService) PullImage(ctx context.Context, ref string, writer io.Writ
 	}
 	reader, err := c.ImagePull(ctx, ref, opts)
 	if err != nil {
-		return guard.DaemonError(err, "image.pull-failed")
+		return PullError(err, opts.RegistryAuth != "")
 	}
 	defer reader.Close()
-	if err := writeSafePullProgress(reader, writer); err != nil {
+	if err := WriteSafePullProgress(reader, writer, opts.RegistryAuth != ""); err != nil {
 		return err
 	}
 

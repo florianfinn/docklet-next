@@ -8,9 +8,11 @@ package image
 
 import (
 	"encoding/json"
+	"errors"
 	imageDTO "github.com/florianfinn/docklet-next/types/image"
 	"io"
 	"regexp"
+	"strings"
 )
 
 var pullLayerID = regexp.MustCompile(`^[a-f0-9]{12,64}$`)
@@ -22,7 +24,8 @@ var pullStatuses = map[string]bool{
 type safePullMessage = imageDTO.PullProgressFrame
 type pullProgressCounts = imageDTO.PullProgressCounts
 
-func writeSafePullProgress(reader io.Reader, writer io.Writer) error {
+// WriteSafePullProgress copies only declared frames and returns neutral typed failures.
+func WriteSafePullProgress(reader io.Reader, writer io.Writer, authenticated bool) error {
 	decoder := json.NewDecoder(reader)
 	for {
 		var message struct {
@@ -36,8 +39,19 @@ func writeSafePullProgress(reader io.Reader, writer io.Writer) error {
 		if err == io.EOF {
 			return nil
 		}
-		if err != nil || message.Error != "" || (len(message.ErrorDetail) > 0 && string(message.ErrorDetail) != "null") {
-			return imageDTO.Failure("image.pull-failed", 502)
+		if err != nil {
+			return PullError(err, authenticated)
+		}
+		if message.Error != "" || (len(message.ErrorDetail) > 0 && string(message.ErrorDetail) != "null") {
+			var detail struct {
+				Code    int    `json:"code"`
+				Message string `json:"message"`
+			}
+			_ = json.Unmarshal(message.ErrorDetail, &detail)
+			if detail.Code == 401 || detail.Code == 403 {
+				return pullAuthenticationFailure(authenticated)
+			}
+			return PullError(errors.New(strings.Join([]string{message.Error, detail.Message}, " ")), authenticated)
 		}
 		safe := safePullMessage{Status: "Pulling image"}
 		if pullStatuses[message.Status] {

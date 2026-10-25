@@ -34,7 +34,23 @@ export const deBackend: typeof enBackend = {
       "sync-failed": "Registry-Einstellungen konnten nicht mit dem Agent synchronisiert werden. Verbindung prüfen und erneut versuchen.",
       "unavailable": "Die Registry konnte nicht erreicht werden. Adresse und Netzwerkverbindung prüfen."
     },
+    "restore": {
+      "unavailable": "Dieser Wiederherstellungspunkt ist unvollständig oder seine aufbewahrten Images sind nicht verfügbar.",
+      "shared-reference": "Ein anderer Workload verhindert das Verschieben einer gemeinsamen Image-Referenz. Den Konflikt vor der Wiederherstellung beheben.",
+      "image-mismatch": "Die wiederhergestellten Image-Zuordnungen konnten nicht geprüft werden. Den Lauf vor einem erneuten Versuch prüfen.",
+      "in-use": "Ein aktiver oder ungeklärter Lauf hält diesen Wiederherstellungspunkt noch fest.",
+      "not-found": "Der Wiederherstellungspunkt wurde nicht gefunden. Die Liste der Punkte aktualisieren.",
+      "deploy-failed": "Die Bereitstellung zur Wiederherstellung ist fehlgeschlagen. Das Teilergebnis vor einem weiteren Wiederherstellungsversuch prüfen."
+    },
     "update": {
+      "config-drift": "Die gespeicherten Stack-Änderungen vor dem Update bereitstellen oder verwerfen.",
+      "baseline-unavailable": "Den Stack einmal bereitstellen, um eine geprüfte Konfigurationsbasis zu erfassen.",
+      "snapshot-unavailable": "Ein vollständiger Wiederherstellungspunkt konnte nicht erfasst werden. Stack-Eingaben und verfügbare Images prüfen.",
+      "target-changed": "Der zugelassene Stack oder seine Image-Zuordnung hat sich geändert. Vor einem erneuten Versuch aktualisieren.",
+      "image-binding-unsupported": "Diese Image-Zuordnung oder der Image-Speicher des Daemons unterstützt das gewählte Update nicht sicher.",
+      "path-retired": "Die Stack-Image-Update-Aktion statt dieses stillgelegten Update-Einstiegs verwenden.",
+      "target-not-found": "Das Stack-Update-Ziel ist nicht mehr vorhanden. Die Stack-Liste aktualisieren.",
+
       "check-unavailable": "Die Update-Prüfung konnte nicht abgeschlossen werden.",
       "deploy-failed": "Das Update konnte nicht bereitgestellt werden. Ergebnis und Host-Verbindung prüfen.",
       "invalid-target": "Ein gültiges ausdrückliches Update-Ziel auswählen.",

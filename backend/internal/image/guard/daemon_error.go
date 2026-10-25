@@ -7,6 +7,7 @@
 package guard
 
 import (
+	"context"
 	"errors"
 	"net"
 
@@ -24,6 +25,11 @@ func DaemonError(err error, code string) *imageDTO.OperationError {
 	}
 	if errdefs.IsNotFound(err) {
 		return imageDTO.Failure("image.not-found", 404)
+	}
+	// A workflow deadline is an operation failure, not proof that the daemon
+	// is unavailable. Check it before net.Error (which the deadline implements).
+	if errors.Is(err, context.DeadlineExceeded) {
+		return imageDTO.Failure(code, 502)
 	}
 	var transport net.Error
 	if errdefs.IsUnavailable(err) || client.IsErrConnectionFailed(err) || errors.As(err, &transport) {

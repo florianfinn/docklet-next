@@ -4,7 +4,22 @@
 // License: Apache-2.0
 // Deviations: Original production image and registry UI implementation for issue #230.
 
+import { deBackend } from "@/data/messages/de";
+
 export const deImageErrors = {
+  "restore_deploy-failed": deBackend.errors.restore["deploy-failed"],
+  "restore_image-mismatch": deBackend.errors.restore["image-mismatch"],
+  "restore_in-use": deBackend.errors.restore["in-use"],
+  "restore_not-found": deBackend.errors.restore["not-found"],
+  "restore_shared-reference": deBackend.errors.restore["shared-reference"],
+  "restore_unavailable": deBackend.errors.restore["unavailable"],
+  "update_baseline-unavailable": deBackend.errors.update["baseline-unavailable"],
+  "update_config-drift": deBackend.errors.update["config-drift"],
+  "update_image-binding-unsupported": deBackend.errors.update["image-binding-unsupported"],
+  "update_path-retired": deBackend.errors.update["path-retired"],
+  "update_snapshot-unavailable": deBackend.errors.update["snapshot-unavailable"],
+  "update_target-changed": deBackend.errors.update["target-changed"],
+  "update_target-not-found": deBackend.errors.update["target-not-found"],
   "image_active-update-protected": "Ein aktives Update schützt dieses Image.",
   "image_busy": "Ein anderer Image-Vorgang läuft. Bitte danach erneut versuchen.",
   "image_changed": "Das Image hat sich geändert. Vor einem neuen Versuch die Liste aktualisieren.",

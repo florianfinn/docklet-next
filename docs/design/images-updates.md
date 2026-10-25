@@ -202,8 +202,17 @@ Docker/registry text is not an alternative public message path.
 | 404 | `image.not-found`, `registry.not-found`, `update.target-not-found`, `restore.not-found` |
 | 409 | `image.in-use`, `image.system-protected`, `image.restore-point-protected`, `image.active-update-protected`, `image.changed`, `image.busy`, `registry.exists`, `update.policy-changed`, `update.target-changed`, `update.snapshot-unavailable`, `update.baseline-unavailable`, `update.path-retired`, `restore.in-use`, `restore.unavailable`, `update.config-drift`, `update.image-binding-unsupported`, `restore.shared-reference`, `restore.image-mismatch`, `update.schedule-hub-owned`, `update.agent-local-job-disabled`, `update.requires-hub-update` plus runtime conflicts |
 | 429 | `registry.rate-limited`; bounded retry metadata only |
-| 502/503 | Registry probes use 502 for `registry.authentication-required` / `registry.authentication-failed`, distinct from hub identity/permission loss; `image.pull-failed`, `image.remove-failed`, `image.tag-failed`, `image.load-failed`, `image.prune-failed`, `image.usage-unavailable`, `registry.unavailable`, `registry.sync-failed`, `registry.credential-unavailable`, `update.check-unavailable`, `update.system-version-unknown` |
+| 502/503 | Registry rejections use 502 for `registry.authentication-required` / `registry.authentication-failed`, distinct from hub identity/permission loss; `image.pull-failed`, `image.remove-failed`, `image.tag-failed`, `image.load-failed`, `image.prune-failed`, `image.usage-unavailable`, `registry.unavailable`, `registry.sync-failed`, `registry.credential-unavailable`, `update.check-unavailable`, `update.system-version-unknown` |
 | 500 | `update.deploy-failed`, `restore.deploy-failed`, `update.persistence-failed`, `registry.persistence-failed`; message describes the operation without underlying text |
+
+Missing, incomplete and wrong-kind image upload sessions use
+`image.invalid-archive` with 400. Image operation deadlines use the operation's
+failure code with 502; an unavailable daemon transport uses
+`image.usage-unavailable` with 503. Registry rejection during pull is
+`registry.authentication-failed` when saved credentials were sent, otherwise
+`registry.authentication-required`; both use 502 and never trigger an anonymous
+retry. Pull progress requires a persisted activity: if creation fails, emit one
+flushed `image.pull-failed` error frame and stop before any Docker request.
 
 Reuse runtime unknown/interrupted/cancelled/target-removed/target-unavailable codes
 for those outcomes. An upstream registry 401/403 becomes a typed 502 probe
@@ -318,9 +327,17 @@ image fallbacks cannot pull/build after selection. No generated override or
 persistent hidden binding is used. Re-inspect each selected reference immediately
 before create; a concurrent mapping change refuses rather than retagging blindly.
 After deploy inspect every affected container and require its image ID to equal
-the frozen expected ID. Missing/different IDs yield
+the frozen expected ID. A one-shot exit or removal is not a binding mismatch;
+verify its frozen local reference too. Different observed IDs yield
 `update.target-changed` or `restore.image-mismatch`, failed/partial evidence and
 retained point/run protections. Compose exit alone never proves success.
+
+PR2a verifies candidates against the frozen platform config ID. A daemon returning
+that platform manifest digest as its image ID refuses
+`update.image-binding-unsupported` before candidate/user tags, files or deployment;
+other mismatches remain `update.target-changed`. Containerd manifest/index-ID
+support is an explicit exact-package acceptance item: record the image store and
+verify identity semantics before claiming support for that store.
 
 Restore verifies the selected point's saved ID/digest and retention tag, then
 maps the restored literal source reference to that saved ID under the lease.
@@ -523,14 +540,18 @@ uses durable cancel; no new per-Docker-call authorization protocol is introduced
 
 ## Restore points and deployment identity
 
-Retain the latest **five available points per logical target**, with explicit
-deletion and no time-based expiry. Failed updates keep their point subject to
-normal retention. Active/unknown update/restore runs hold their source and
-pre-change points outside trimming, so the limit can be exceeded temporarily.
-Create and verify a new point before trimming older ones. Cleanup failure never
-invalidates it. Release a pin only after durable point deletion and when no
-other point/run references its ID. Reconcile interrupted orphan
-tags conservatively under the host image lease; never bulk-prune them.
+Retain **five available points per logical target** without time-based expiry.
+M6 exempts the most recently selected restore target and latest healthy-source
+baseline point from automatic eviction; delete the oldest other points instead.
+Keep one failed-attempt `partial-source` point, replacing older failed attempts;
+a healthy pre-attempt snapshot remains baseline evidence even if its run fails.
+A failed-state restore target owns that single slot. Active/unknown runs hold
+additional points, so limits can be exceeded until settlement. Record restore use
+and failed outcome on the point, independently of deletable activity history. Deletion
+still checks active holds. GETs never remove metadata or tags; cleanup runs on
+settlement, deletion and startup. Verify a new point before trimming; cleanup
+failure never invalidates it. Release pins only after durable point deletion and
+when no other point/run owns them; reconcile orphan tags under the host image lease.
 
 ### Recorded deployed baseline and drift refusal
 
@@ -543,17 +564,20 @@ reads expose availability/code only. No standalone baseline or logical-ID scheme
 
 Freeze actual inputs before deploy and capture those inputs/observed IDs after
 success; never substitute newer saved bytes. Capture/encryption failure leaves
-truthful deploy success plus `update.snapshot-unavailable` status, and cannot
+truthful deploy success plus `update.baseline-unavailable` status, and cannot
 claim an older baseline proves the new state. Failed/partial effects likewise
 invalidate current baseline proof without deleting the last successful evidence
 or existing points. A normal successful deploy can repair the baseline; it is
 **not required before restore**.
 
 Update preflight and the last boundary before workload mutation compare all saved
-inputs/revisions and current effective workload IDs with the baseline. Saved but
+inputs/revisions, rendered configuration/config-hash labels and image bindings
+with the baseline. Container IDs, presence, running/exited state, replica count,
+profile-disabled services, one-offs and orphans are runtime evidence, not drift.
+A live identity replacement after admission still fences that run. Saved but
 undeployed changes yield `update.config-drift`: manual refusal and visible auto-
 apply skip, translated as “undeployed changes — deploy or discard first”. Missing/
-unprovable baseline yields `update.snapshot-unavailable` until normal deploy.
+unprovable baseline yields `update.baseline-unavailable` until normal deploy.
 No force/confirmation bypass, legacy bootstrap or config-hash substitution.
 The version edit is a planned admitted change: check the pre-edit baseline hash
 and then the exact committed post-edit revision/hash before Docker; do not treat
@@ -564,7 +588,8 @@ These update eligibility rules do not disable recovery through restore.
 
 M4 version update rewrites only the affected literal `image:` reference in the
 stack's defining Compose file, to the frozen candidate reference. Require a
-uniquely provable source location in supported primary-file composition; refuse
+uniquely provable source location in supported primary-file composition; preserve
+the literal registry/repository spelling and replace only its tag. Refuse
 `${VAR}`, non-literal, ambiguous/include/override-defined or build-only selection
 with `update.image-binding-unsupported` before mutation. Do not guess a primary
 field, rewrite env variables or add a generated override. Unrelated bytes/env
@@ -595,7 +620,8 @@ There is no automatic workload rollback and no persistent baseline-owned tag.
 ### Snapshot, restore and orphan cleanup
 
 Before update workload mutation, commit an encrypted point of the verified
-baseline's complete saved/effective inputs and old inspected image IDs with pins.
+deployed configuration's complete saved/effective inputs and current inspected
+image IDs with pins, retaining actual absent/stopped source evidence.
 Missing capture inputs, key or pins refuse before mutation. **Volume/bind data and
 external resources are not saved or restored.** Executor-local payloads are not a
 second remote backup; hub metadata is explicitly stale when offline.
@@ -611,6 +637,9 @@ unknown relative to the last baseline or has no current baseline. Record absent/
 stopped services explicitly; if inspection/capture/pins cannot be completed, fail
 safely with `update.snapshot-unavailable` without consuming the selected point.
 This point preserves observed recovery inputs, not a claim of healthy deployment.
+Record extra containers as runtime evidence. Pin configured service replicas;
+unrelated orphans, disabled-profile services and one-offs require no image inspect
+or pin, remain untouched, and cannot block recovery when their images are gone.
 Restoring a `partial-source` point uses its recorded service presence/stopped state
 and inspected images with its saved inputs; it cannot claim to restore a healthy
 stack or substitute missing services with registry images.
@@ -803,7 +832,7 @@ recommendations; implementation still waits for independent design review PASS.
 
 | ID | Accepted decision / owned foundation requirement |
 | --- | --- |
-| D1 | Latest five points per logical target, explicit deletion, active/unknown holds and a mandatory point before restore; host orphan cleanup keeps protection actionable |
+| D1 | Five-point target with M6 restore/baseline exemptions, one failed-state slot, explicit deletion and active/unknown holds; every restore captures a point |
 | D2 | Stack policy wins for managed children; M5 standalone containers have information only. Two hub-owned jobs per registered host, existing master gates, serial apply children and policy revision frozen at admission |
 | D3 → M1/M2 | Recorded deployed baseline after successful normal deploy/update/restore. Refuse saved-but-undeployed drift for manual and automatic update. Every update/restore needs a point; no legacy/bootstrap path or manual bypass. Baseline capture failure is visible and never rewrites a successful deploy as failed |
 | D4 | Username/access-key identity and secrets are write-only; actual DTO homes types/containerregistry and types/jobschedule; generic/ECR baseline, no registry browser UI; production pull/check rejects inline credentials |

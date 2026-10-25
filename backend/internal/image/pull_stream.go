@@ -13,7 +13,8 @@ import (
 )
 
 // PullFrame describes one JSON line, not an array or an HTTP response envelope.
-// An activity frame precedes progress; error and done are exclusive terminals.
+// An activity frame precedes progress; creation failure emits only an error.
+// Error and done are exclusive terminals.
 type PullFrame struct{}
 
 func (PullFrame) Schema(r huma.Registry) *huma.Schema {

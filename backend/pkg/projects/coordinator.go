@@ -70,6 +70,11 @@ func (c *composeCoordinatorInternal) Deploy(ctx context.Context, request project
 	if prepareImagesForDeployErr := c.PrepareImagesForDeploy(ctx, request.ProjectID, model, request.Progress, operations, pullPolicy); prepareImagesForDeployErr != nil {
 		return nil, fmt.Errorf("failed to prepare project images for deploy: %w", prepareImagesForDeployErr)
 	}
+	if request.BeforeCreate != nil {
+		if err := request.BeforeCreate(ctx); err != nil {
+			return nil, err
+		}
+	}
 	removeOrphans := ResolveRemoveOrphans(request.Options)
 	slog.InfoContext(ctx, "starting compose up with health check support", "projectId", request.ProjectID, "projectName", model.Name, "services", len(model.Services), "removeOrphans", removeOrphans)
 	if upErr := c.commands.Up(ctx, model, nil, removeOrphans, forceRecreate, recreateVolumes, request.AuthConfigs, request.WaitTimeout); upErr != nil {

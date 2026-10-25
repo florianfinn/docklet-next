@@ -23,6 +23,7 @@ import (
 	"github.com/florianfinn/docklet-next/backend/pkg/remenv"
 	activitytypes "github.com/florianfinn/docklet-next/types/activity"
 	"github.com/florianfinn/docklet-next/types/base"
+	imageDTO "github.com/florianfinn/docklet-next/types/image"
 	projecttypes "github.com/florianfinn/docklet-next/types/project"
 )
 
@@ -113,10 +114,13 @@ func runtimeLegacyResponse(ctx context.Context, service *ActivityService, enviro
 	h := service.runtimeHTTP
 	admitted, ref, err := h.admit(ctx, environmentID, key, operation, target, options)
 	if err != nil {
+		var imageErr *imageDTO.OperationError
 		var gate *GateConflict
 		var mismatch *runtimeConflictInternal
 		var targetErr *RuntimeTargetError
 		switch {
+		case errors.As(err, &imageErr):
+			return runtimeJSONResponse(imageErr.Status, imageErr), nil
 		case errors.As(err, &gate):
 			return runtimeJSONResponse(409, activitytypes.RuntimeConflictResponse{Data: activitytypes.RuntimeConflict{Code: activitytypes.Code(gate.Code), ActiveRunID: gate.RunID}}), nil
 		case errors.As(err, &mismatch):

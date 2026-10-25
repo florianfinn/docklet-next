@@ -8,6 +8,7 @@ package api
 
 import (
 	"errors"
+	imageDTO "github.com/florianfinn/docklet-next/types/image"
 	"net/http"
 
 	"github.com/labstack/echo/v5"
@@ -30,6 +31,10 @@ func RegisterWebhookTrigger(g *echo.Group, webhookService *webhook.WebhookServic
 		token := c.Param("token")
 		err := webhookService.TriggerByToken(utils.ActivityRuntimeContext(c.Request().Context(), appCtx.Context()), token)
 		if err != nil {
+			var problem *imageDTO.OperationError
+			if errors.As(err, &problem) {
+				return c.JSON(problem.Status, problem)
+			}
 			status := http.StatusInternalServerError
 			if errors.Is(err, webhook.ErrWebhookNotFound) || errors.Is(err, webhook.ErrWebhookInvalid) {
 				status = http.StatusNotFound

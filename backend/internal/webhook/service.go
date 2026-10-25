@@ -14,6 +14,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	imageDTO "github.com/florianfinn/docklet-next/types/image"
 	"log/slog"
 	"net/http"
 	"net/url"
@@ -542,6 +543,10 @@ func (s *WebhookService) TriggerByToken(ctx context.Context, rawToken string) er
 		return err
 	}
 
+	if actionType == WebhookActionTypeUpdate || wh.TargetType == WebhookTargetTypeUpdater && actionType == WebhookActionTypeRun {
+		return imageDTO.Failure("update.path-retired", 409)
+	}
+
 	// Record trigger time on accept — best-effort, do not fail the request if this update fails.
 	now := time.Now()
 	_ = s.db.WithContext(ctx).Model(wh).Update("last_triggered_at", now).Error
@@ -571,6 +576,9 @@ func (s *WebhookService) DrainActions(ctx context.Context) error {
 }
 
 func (s *WebhookService) executeWebhookActionInternal(ctx context.Context, wh *Webhook, actionType string) (*updatertypes.Result, error) {
+	if actionType == WebhookActionTypeUpdate || wh.TargetType == WebhookTargetTypeUpdater && actionType == WebhookActionTypeRun {
+		return nil, imageDTO.Failure("update.path-retired", 409)
+	}
 	// Webhooks are stored and triggered on the manager; actions against remote
 	// environments are forwarded through the environment proxy.
 	if isRemoteWebhookEnvironmentInternal(wh.EnvironmentID) {

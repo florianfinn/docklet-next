@@ -93,5 +93,5 @@ func (ActivitySyncReceipt) TableName() string { return "activity_sync_receipts" 
 // Models returns the persistent activity schema for integration fixtures and the core registry.
 func Models() []any {
 	return []any{&Activity{}, &ActivityMessage{}, &ActivitySyncReceipt{},
-		&RuntimeReceipt{}, &RuntimeKeyBinding{}, &RuntimeStoreGeneration{}, &RuntimeRemovedTarget{}, &RuntimeExecutorBinding{}}
+		&RuntimeReceipt{}, &RuntimeKeyBinding{}, &RuntimeStoreGeneration{}, &RuntimeRemovedTarget{}, &RuntimeExecutorBinding{}, &RuntimeImageIntent{}}
 }

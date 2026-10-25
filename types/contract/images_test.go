@@ -63,6 +63,6 @@ func TestAgentHubV7ImageSafetyFixture(t *testing.T) {
 	}
 	field, _ := reflect.TypeFor[imageDTO.Problem]().FieldByName("Code")
 	require.Equal(t, fixture.ImageSafety.ErrorCodes, strings.Split(field.Tag.Get("enum"), ","))
-	require.Contains(t, fixture.ImageSafety.InactiveCapabilities, "restore")
+	require.NotContains(t, fixture.ImageSafety.InactiveCapabilities, "restore")
 	require.Contains(t, fixture.ImageSafety.InactiveCapabilities, "auto-apply")
 }

@@ -66,6 +66,15 @@ func (s *RuntimeService) HeldCommand(ctx context.Context, command RuntimeCommand
 			continue
 		}
 		command.Store = runtimeStoreFromRowInternal(row)
+		if exact && runtimeImageOperation(command.Operation) && row.OperationID != nil && string(command.Operation) == *row.OperationID {
+			var err error
+			command, err = s.retainedImageIntent(ctx, row.RunID, command)
+			if err != nil {
+				return RuntimeCommand{}, false, &GateConflict{RunID: row.RunID, Code: "run.busy"}
+			}
+		} else if runtimeImageOperation(command.Operation) {
+			return RuntimeCommand{}, false, &GateConflict{RunID: row.RunID, Code: "run.busy"}
+		}
 		if exact {
 			command.Target = RuntimeTarget{Kind: *row.TargetKind, ID: *row.TargetID, Name: copyPtrInternal(row.TargetName), ParentProjectID: copyPtrInternal(row.ParentProjectID)}
 		}
