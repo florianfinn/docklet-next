@@ -5,6 +5,7 @@
 // Deviations: Original production image and registry UI implementation for issue #230.
 
 import { useTranslations } from "use-intl";
+import { formatDateTime } from "@/domain/format";
 import type { DockerImage } from "@/domain/images";
 import { ToneBadge } from "@/shared/components/tone";
 import { useImageError } from "./use-image-error";
@@ -19,7 +20,7 @@ export function ImageUpdate({ image, detail = false }: { image: DockerImage; det
     {detail && <>
       {update.currentVersion && <span>{t("currentVersion", { version: update.currentVersion })}</span>}
       {update.candidateVersion && <span>{t("candidateVersion", { version: update.candidateVersion })}</span>}
-      {update.checkedAt && <span>{t("checkedAt", { time: update.checkedAt })}</span>}
+      {update.checkedAt && <span>{t("checkedAt", { time: formatDateTime(update.checkedAt) })}</span>}
       {update.code && <span>{error(update.code)}</span>}
     </>}
   </div>;

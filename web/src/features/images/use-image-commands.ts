@@ -43,8 +43,7 @@ export function useImageCommands() {
       guard(async () => {
         const failureCurrent = captureCommandFailure(adapter).current;
         await adapter.removeImage(id, force);
-        if (!failureCurrent()) return false;
-        toast.success(t("toast.removed", { name }));
+        if (failureCurrent()) toast.success(t("toast.removed", { name }));
         return true;
       }),
     prune: (hostIds: string[], mode: PruneMode) =>

@@ -11,6 +11,8 @@ export const deRegistries = {
   disabled: "Deaktiviert",
   enabled: "Aktiviert", insecure: "Unsichere Registry erlauben", stored: "Zugangsdaten gespeichert", noCredential: "Keine Zugangsdaten gespeichert",
   username: "Neuer Benutzername", valueLabel: "Neues Passwort oder Token", keyIdentityLabel: "Neue Zugangsschlüssel-ID", keyValueLabel: "Neuer geheimer Zugangsschlüssel", region: "AWS-Region", repositories: "Repository-Namen (einer pro Zeile)",
+  genericRequired: "Eine neue generische Registry benötigt Benutzername und Passwort oder Token.",
+  saved: "Registry {url} gespeichert", deleted: "Registry {url} gelöscht",
   credentialsHint: "Leere Zugangsdatenfelder erhalten die gespeicherten Zugangsdaten. Bestehende Werte werden weder angezeigt noch vorausgefüllt.",
   clear: "Alle gespeicherten Zugangsdaten entfernen", invalid: "Eine gültige Registry-Adresse ohne Zugangsdaten eingeben.",
   editTitle: "Registry bearbeiten", createTitle: "Registry hinzufügen", deleteTitle: "Registry löschen?", deleteBody: "{url} und die gespeicherten Zugangsdaten löschen? Dies ändert auch die mit Hosts synchronisierte Zugangsdaten-Konfiguration.",

@@ -6,6 +6,7 @@
 
 import { Package } from "lucide-react";
 import { useState } from "react";
+import { toast } from "sonner";
 import { useTranslations } from "use-intl";
 import { useAdapter } from "@/data/use-adapter";
 import { useCapability } from "@/data/use-capability";
@@ -34,7 +35,7 @@ export default function RegistriesPage() {
     {!rows.capability.available ? <p role="status">{rows.capability.reason}</p> : rows.isError ? <QueryError error={rows.error} onRetry={() => void rows.refetch()} /> : rows.isPending ? <p aria-busy="true">{t("title")}</p> : !rows.data?.length ? <EmptyState icon={<Package />} title={t("empty")} /> : <div className="grid gap-4 lg:grid-cols-2">{rows.data.map((registry) => <RegistryRow key={registry.id} registry={registry} onEdit={() => setEditing(registry)} onTest={() => setTesting(registry)} onDelete={() => setRemoving(registry)} />)}</div>}
     {editing && <RegistryDialog key={editing === "new" ? "new" : editing.id} registry={editing === "new" ? undefined : editing} onClose={() => setEditing(null)} />}
     {testing && <RegistryTestDialog key={testing.id} registry={testing} onClose={() => setTesting(null)} />}
-    <ConfirmDialog open={!!removing} onOpenChange={(open) => { if (!open) setRemoving(null); }} title={t("deleteTitle")} description={t("deleteBody", { url: removing?.url ?? "" })} confirmLabel={t("remove")} destructive onConfirm={async () => {
+    <ConfirmDialog open={!!removing} onOpenChange={(open) => { if (!open) setRemoving(null); }} title={t("deleteTitle")} description={t("deleteBody", { url: removing?.url ?? "" })} confirmLabel={t("remove")} destructive onDetached={(result) => { if (result === true) toast.success(t("deleted", { url: removing?.url ?? "" })); }} onConfirm={async () => {
       if (!removing) return false;
       const failure = captureCommandFailure(adapter);
       try { await adapter.deleteContainerRegistry(removing.id); return true; }

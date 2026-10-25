@@ -91,3 +91,23 @@ it("maps only safe generated progress phases and counts, never raw status prose"
   expect(await f.adapter.pullImage({ hostId: "host", reference: "example:1", onProgress: progress }).catch(code)).toBe("image.outcome-unknown");
   expect(progress).toHaveBeenCalledTimes(1);
 });
+
+it("accepts a single large network chunk containing many complete valid frames", async () => {
+  const f = imageRegistryFixture(), progress = vi.fn();
+  const line = JSON.stringify({ status: "Downloading", id: "abcdef123456", progressDetail: { current: 5, total: 10 } });
+  f.state.stream = `${line}\n`.repeat(1000) + '{"done":true}\n';
+  expect(new TextEncoder().encode(f.state.stream).length).toBeGreaterThan(65536);
+  await expect(f.adapter.pullImage({ hostId: "host", reference: "example:1", onProgress: progress })).resolves.toEqual({ actionId: undefined });
+  expect(progress).toHaveBeenCalledTimes(1000);
+});
+it("rejects an oversized unfinished line before a later chunk can complete it", async () => {
+  const f = imageRegistryFixture(), progress = vi.fn(), cancel = vi.fn();
+  const original = f.fetcher.getMockImplementation()!;
+  const chunks = ['{"status":"Waiting"}\n' + " ".repeat(65537) + '{"status":"Waiting"', '}\n{"done":true}\n'];
+  f.fetcher.mockImplementation(async (input, init) => String(input).endsWith("/pull") ? new Response(new ReadableStream({
+    start(controller) { for (const chunk of chunks) controller.enqueue(new TextEncoder().encode(chunk)); controller.close(); }, cancel,
+  })) : original(input, init));
+  expect(await f.adapter.pullImage({ hostId: "host", reference: "example:1", onProgress: progress }).catch(code)).toBe("image.outcome-unknown");
+  expect(progress).toHaveBeenCalledExactlyOnceWith({ phase: "waiting" });
+  expect(cancel).toHaveBeenCalledOnce();
+});

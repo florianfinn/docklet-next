@@ -28,7 +28,8 @@ it("pulls via a saved registry host, with no inline credentials or registryId", 
   await waitFor(() => expect(f.state.calls.some((c) => c.path.endsWith("container-registries"))).toBe(true));
   within(dialog).getByRole("combobox", { name: t.pullDialog.registry }).focus(); await userEvent.keyboard("{ArrowDown}");
   await userEvent.click(await screen.findByRole("option", { name: "https://registry.example.com" }));
-  await userEvent.type(within(dialog).getByLabelText(t.pullDialog.reference), "team/app:1");
+  await userEvent.type(within(dialog).getByLabelText(t.pullDialog.reference), "other.example.com/team/app:1");
+  expect(within(dialog).getByText("Gezogen wird: registry.example.com/team/app:1") !== null).toBe(true);
   await userEvent.click(within(dialog).getByRole("button", { name: t.pullDialog.submit }));
   await waitFor(() => expect(close).toHaveBeenCalledWith(false));
   expect(mutations(f)[0]?.body).toEqual({ imageName: "registry.example.com/team/app:1" });

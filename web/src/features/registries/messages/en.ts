@@ -11,6 +11,8 @@ export const enRegistries = {
   disabled: "Disabled",
   enabled: "Enabled", insecure: "Allow insecure registry", stored: "Credential stored", noCredential: "No credential stored",
   username: "New username", valueLabel: "New password or token", keyIdentityLabel: "New access key ID", keyValueLabel: "New secret access key", region: "AWS region", repositories: "Repository names (one per line)",
+  genericRequired: "A new generic registry requires both a username and a password or token.",
+  saved: "Registry {url} saved", deleted: "Registry {url} deleted",
   credentialsHint: "Leave credential fields empty to preserve the stored credential. Existing values are never shown or prefilled.",
   clear: "Clear the complete saved credential", invalid: "Enter a valid registry address without credentials.",
   editTitle: "Edit registry", createTitle: "Add registry", deleteTitle: "Delete registry?", deleteBody: "Delete {url} and its saved credential? This also changes the credential configuration synchronized to hosts.",

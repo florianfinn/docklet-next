@@ -113,3 +113,38 @@ it("accepts fresh generic credentials as masked inputs without echoing them afte
   await waitFor(() => expect(screen.queryByRole("dialog") === null).toBe(true));
   expect(document.body.textContent).not.toContain(value); expect(document.body.textContent).not.toContain(identity);
 });
+
+it("retains typed newlines and submits trimmed repository names", async () => {
+  const f = imageRegistryFixture(); renderWithApp(<RegistriesPage />, f.adapter); const dialog = await edit();
+  const names = within(dialog).getByLabelText(t.repositories);
+  await userEvent.type(names, "team/a{Enter}team/b{Enter}  team/c  {Enter}");
+  expect((names as HTMLTextAreaElement).value).toBe("team/a\nteam/b\n  team/c  \n");
+  await userEvent.click(within(dialog).getByRole("button", { name: t.save }));
+  await waitFor(() => expect(mutations(f)).toHaveLength(1));
+  expect(mutations(f)[0]?.body).toMatchObject({ repositoryNames: ["team/a", "team/b", "team/c"] });
+});
+it("requires both nonblank generic credential fields on create and retains typed backend validation", async () => {
+  const f = imageRegistryFixture(); renderWithApp(<RegistriesPage />, f.adapter);
+  await userEvent.click(await screen.findByRole("button", { name: t.create }));
+  const dialog = await screen.findByRole("dialog"), save = within(dialog).getByRole("button", { name: t.save }) as HTMLButtonElement;
+  await userEvent.type(within(dialog).getByLabelText(t.url), "https://registry.example.com");
+  expect(save.disabled).toBe(true); expect(within(dialog).getByText(t.genericRequired) !== null).toBe(true);
+  await userEvent.type(within(dialog).getByLabelText(t.valueLabel), crypto.randomUUID()); expect(save.disabled).toBe(true);
+  await userEvent.type(within(dialog).getByLabelText(t.username), "   "); expect(save.disabled).toBe(true);
+  await userEvent.clear(within(dialog).getByLabelText(t.valueLabel)); await userEvent.clear(within(dialog).getByLabelText(t.username));
+  await userEvent.type(within(dialog).getByLabelText(t.username), crypto.randomUUID()); expect(save.disabled).toBe(true);
+  await userEvent.type(within(dialog).getByLabelText(t.valueLabel), "   "); expect(save.disabled).toBe(true);
+  await userEvent.clear(within(dialog).getByLabelText(t.valueLabel));
+  await userEvent.type(within(dialog).getByLabelText(t.valueLabel), crypto.randomUUID()); expect(save.disabled).toBe(false);
+  f.state.response = { status: 400, body: { success: false, error: { code: "registry.invalid-config", message: "never expose" } } };
+  await userEvent.click(save);
+  expect((await within(dialog).findByRole("alert")).textContent).toBe(catalogs.de.images.errors["registry_invalid-config"]);
+  expect((within(dialog).getByLabelText(t.url) as HTMLInputElement).value).toBe("https://registry.example.com");
+});
+it("marks every write-only credential input as a new password", async () => {
+  const f = imageRegistryFixture(); renderWithApp(<RegistriesPage />, f.adapter); const dialog = await edit();
+  for (const label of [t.username, t.valueLabel]) expect((within(dialog).getByLabelText(label) as HTMLInputElement).autocomplete).toBe("new-password");
+  within(dialog).getByRole("combobox", { name: t.type }).focus(); await userEvent.keyboard("{ArrowDown}");
+  await userEvent.click(await screen.findByRole("option", { name: t.ecr }));
+  for (const label of [t.keyIdentityLabel, t.keyValueLabel]) expect((within(dialog).getByLabelText(label) as HTMLInputElement).autocomplete).toBe("new-password");
+});

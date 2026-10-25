@@ -76,10 +76,10 @@ export function createImageCommands({ baseUrl, client, capability, generation, c
           for (;;) {
             const chunk = await reader.read(); check(owner);
             pending += decoder.decode(chunk.value, { stream: !chunk.done });
-            // Bound a single frame even when a peer never terminates it.
-            if (pending.length > 65536) throw imageUnknown();
             let newline: number;
             while ((newline = pending.indexOf("\n")) >= 0) { frame(pending.slice(0, newline)); pending = pending.slice(newline + 1); }
+            // Complete frames may arrive together in a large network chunk. Bound only the unfinished line.
+            if (pending.length > 65536) throw imageUnknown();
             if (chunk.done) break;
           }
           if (pending.trim()) frame(pending);

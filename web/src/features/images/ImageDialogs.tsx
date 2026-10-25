@@ -7,6 +7,8 @@ import { DialogCommandFooter } from "@/shared/components/dialog-command";
 import { useDialogCommand } from "@/shared/components/use-dialog-command";
 import { Download } from "lucide-react";
 import { useState } from "react";
+import { toast } from "sonner";
+import { formatBytes } from "@/domain/format";
 import { useTranslations } from "use-intl";
 
 import { parseImageReference, type DockerImage, type ImagePullProgress } from "@/domain/images";
@@ -31,7 +33,8 @@ export function PullDialog({ open, onOpenChange, hosts, images, initial }: { ope
   const firstOnline = hosts.find((h) => h.status === "online")?.id ?? "";
   const [hostId, setHostId] = useState(initial?.hostId ?? firstOnline);
   const [registryId, setRegistryId] = useState("auto");
-  const feedback = useDialogCommand(open, `${hostId}|${registryId}`);
+  const owner = `${hosts.map((host) => host.id).sort().join("|")}|${hostId}|${registryId}`;
+  const feedback = useDialogCommand(open, owner);
   const change = (next: boolean) => feedback.change(next, onOpenChange);
   const [reference, setReference] = useState(initial?.reference ?? "");
   const [fail, setFail] = useState(false);
@@ -59,10 +62,10 @@ export function PullDialog({ open, onOpenChange, hosts, images, initial }: { ope
   const host = hosts.find((h) => h.id === hostId);
   const valid = !!parsed && host?.status === "online" && capability.available && (registryId === "auto" || !!selectedRegistry);
 
-  // Busy only for the request; the pull itself continues as an action toast after the dialog closes.
+  // The request stays busy until the stream settles; detached attempts report their outcome by toast.
   const pull = useBusyAction(async () => {
     const current = feedback.checkpoint();
-    const id = await feedback.run(() => cmd.pull({ hostId, reference: effectiveReference, onProgress: (value) => { if (current()) setProgress({ owner: `${hostId}|${registryId}`, value }); } }, fail));
+    const id = await feedback.run(() => cmd.pull({ hostId, reference: effectiveReference, onProgress: (value) => { if (current()) setProgress({ owner, value }); } }, fail), (result) => { if (result) toast.success(t("completed", { reference: effectiveReference, host: host?.name ?? hostId })); });
     if (id) change(false);
   });
   const submit = async () => {
@@ -86,9 +89,10 @@ export function PullDialog({ open, onOpenChange, hosts, images, initial }: { ope
             void submit();
           }}
         >
+          <fieldset disabled={pull.busy} className="contents">
           <div className="flex flex-col gap-2">
             <Label htmlFor="pull-host">{t("host")}</Label>
-            <Select value={hostId} onValueChange={setHostId}>
+            <Select disabled={pull.busy} value={hostId} onValueChange={setHostId}>
               <SelectTrigger id="pull-host" className="w-full">
                 <SelectValue />
               </SelectTrigger>
@@ -103,8 +107,9 @@ export function PullDialog({ open, onOpenChange, hosts, images, initial }: { ope
               </SelectContent>
             </Select>
           </div>
-          <div className="flex flex-col gap-2"><Label htmlFor="pull-registry">{t("registry")}</Label><Select value={registryId} onValueChange={setRegistryId}><SelectTrigger id="pull-registry"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="auto">{t("automaticRegistry")}</SelectItem>{registries.data?.filter((r) => r.enabled).map((r) => <SelectItem key={r.id} value={r.id}>{r.url}</SelectItem>)}</SelectContent></Select></div>
+          <div className="flex flex-col gap-2"><Label htmlFor="pull-registry">{t("registry")}</Label><Select disabled={pull.busy} value={registryId} onValueChange={setRegistryId}><SelectTrigger id="pull-registry"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="auto">{t("automaticRegistry")}</SelectItem>{registries.data?.filter((r) => r.enabled).map((r) => <SelectItem key={r.id} value={r.id}>{r.url}</SelectItem>)}</SelectContent></Select></div>
           <TextField id="pull-ref" label={t("reference")} value={reference} onChange={setReference} mono placeholder="redis:7.4-alpine" description={known ? t("known") : t("referenceHint")} error={(touched || reference.length > 2) && !parsed ? t("referenceInvalid") : undefined} />
+          {parsed && <p className="break-all text-sm" data-slot="effective-reference">{t("effectiveReference", { reference: `${parsed.repository}:${parsed.tag}` })}</p>}
           <div className="flex flex-wrap items-center gap-1.5 text-xs">
             <span className="text-muted-foreground">{t("suggestions")}</span>
             {SUGGESTIONS.map((s) => (
@@ -119,8 +124,9 @@ export function PullDialog({ open, onOpenChange, hosts, images, initial }: { ope
               {t("fail")}
             </Label>
           </div>}
+          </fieldset>
         </form>
-        {progress?.owner === `${hostId}|${registryId}` && <p role="status" className="text-sm">{t(`progress.${progress.value.phase}`)}{progress.value.total ? ` · ${t("progressBytes", { current: progress.value.current ?? 0, total: progress.value.total })}` : ""}</p>}
+        {progress?.owner === owner && <p role="status" className="text-sm">{t(`progress.${progress.value.phase}`)}{progress.value.total ? ` · ${t("progressBytes", { current: formatBytes(progress.value.current ?? 0), total: formatBytes(progress.value.total) })}` : ""}</p>}
         <DialogCommandFooter feedback={feedback}>
           <Button type="button" variant="outline" onClick={() => change(false)}>
             {t("cancel")}

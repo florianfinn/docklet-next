@@ -70,7 +70,9 @@ export const deImages: typeof enImages = {
   },
   pullDialog: {
     progress: { pulling: "Image-Layer werden gezogen", waiting: "Warten auf einen Layer", downloading: "Layer wird heruntergeladen", verifying: "Layer wird geprüft", extracting: "Layer wird entpackt", complete: "Layer vollständig" },
-    progressBytes: "{current} / {total} Bytes",
+    progressBytes: "{current} / {total}",
+    effectiveReference: "Gezogen wird: {reference}",
+    completed: "{reference} auf {host} gezogen",
 
     registry: "Registry",
     automaticRegistry: "Registry aus der Image-Referenz (gespeicherte Zugangsdaten)",

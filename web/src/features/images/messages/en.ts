@@ -69,7 +69,9 @@ export const enImages = {
   },
   pullDialog: {
     progress: { pulling: "Pulling image layers", waiting: "Waiting for a layer", downloading: "Downloading layer", verifying: "Verifying layer", extracting: "Extracting layer", complete: "Layer complete" },
-    progressBytes: "{current} / {total} bytes",
+    progressBytes: "{current} / {total}",
+    effectiveReference: "Will pull: {reference}",
+    completed: "Pulled {reference} on {host}",
 
     registry: "Registry",
     automaticRegistry: "Registry from image reference (saved credential lookup)",

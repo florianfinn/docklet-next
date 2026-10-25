@@ -5,6 +5,7 @@
 // Deviations: Original production image and registry UI implementation for issue #230.
 
 import { useState } from "react";
+import { toast } from "sonner";
 import { useTranslations } from "use-intl";
 import { useAdapter } from "@/data/use-adapter";
 import { useCapability } from "@/data/use-capability";
@@ -32,10 +33,13 @@ export function RegistryDialog({ registry, onClose }: { registry?: Registry; onC
   const [draft, setDraft] = useState<RegistryDraft>(() => ({ url: registry?.url ?? "", description: registry?.description ?? "", enabled: registry?.enabled ?? true, insecure: registry?.insecure ?? false,
     registryType: registry?.registryType === "ecr" ? "ecr" : "generic", awsRegion: registry?.awsRegion ?? "", repositoryNames: registry?.repositoryNames ?? [] }));
   const patch = <K extends keyof RegistryDraft>(key: K, value: RegistryDraft[K]) => setDraft((old) => ({ ...old, [key]: value }));
-  const valid = !!registryHost(draft.url) && (!registry || ["generic", "ecr"].includes(registry.registryType));
+  const [repositories, setRepositories] = useState(registry?.repositoryNames.join("\n") ?? "");
+  const credentialsMissing = !registry && draft.registryType === "generic" && (!draft.username?.trim() || !draft.token?.trim());
+  const valid = !credentialsMissing && !!registryHost(draft.url) && (!registry || ["generic", "ecr"].includes(registry.registryType));
   const save = useBusyAction(async () => {
     if (!valid || !capability.available) return;
-    const result = await feedback.run(() => registry ? adapter.updateContainerRegistry(registry.id, draft) : adapter.createContainerRegistry(draft));
+    const input = { ...draft, repositoryNames: repositories.split("\n").map((line) => line.trim()).filter(Boolean) };
+    const result = await feedback.run(() => registry ? adapter.updateContainerRegistry(registry.id, input) : adapter.createContainerRegistry(input), (result) => { if (result) toast.success(t("saved", { url: input.url })); });
     if (result) onClose();
   });
   const checkbox = (key: "enabled" | "insecure" | "clearCredential", label: string) => <div className="flex items-center gap-2"><Checkbox id={`registry-${key}`} disabled={key === "clearCredential" && !clear.available} checked={!!draft[key]} onCheckedChange={(value) => patch(key, value === true)} /><Label htmlFor={`registry-${key}`}>{label}</Label></div>;
@@ -47,20 +51,21 @@ export function RegistryDialog({ registry, onClose }: { registry?: Registry; onC
         <TextField id="registry-url" label={t("url")} value={draft.url} onChange={(value) => patch("url", value)} error={draft.url && !registryHost(draft.url) ? t("invalid") : undefined} />
         <TextField id="registry-description" label={t("descriptionLabel")} value={draft.description} onChange={(value) => patch("description", value)} />
         <div className="flex flex-col gap-2"><Label htmlFor="registry-type">{t("type")}</Label><Select value={draft.registryType} onValueChange={(value) => { if (value === "generic" || value === "ecr") setDraft((old) => ({ ...old, registryType: value, username: undefined, token: undefined, awsAccessKeyId: undefined, awsSecretAccessKey: undefined })); }}><SelectTrigger id="registry-type"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="generic">{t("generic")}</SelectItem><SelectItem value="ecr">{t("ecr")}</SelectItem></SelectContent></Select></div>
+        {credentialsMissing && <p className="text-sm">{t("genericRequired")}</p>}
         {registry && <p className="text-sm">{t(registry.hasCredential ? "stored" : "noCredential")}</p>}
         {checkbox("enabled", t("enabled"))}{checkbox("insecure", t("insecure"))}
         {registry && checkbox("clearCredential", t("clear"))}
         {draft.registryType === "ecr" && <TextField id="registry-region" label={t("region")} value={draft.awsRegion ?? ""} onChange={(value) => patch("awsRegion", value)} />}
         {!draft.clearCredential && <>
           {draft.registryType === "generic" ? <>
-            <TextField id="registry-username" label={t("username")} type="password" value={draft.username ?? ""} onChange={(value) => patch("username", value)} />
-            <TextField id="registry-token" label={t("valueLabel")} type="password" value={draft.token ?? ""} onChange={(value) => patch("token", value)} />
+            <TextField id="registry-username" label={t("username")} type="password" autoComplete="new-password" value={draft.username ?? ""} onChange={(value) => patch("username", value)} />
+            <TextField id="registry-token" label={t("valueLabel")} type="password" autoComplete="new-password" value={draft.token ?? ""} onChange={(value) => patch("token", value)} />
           </> : <>
-            <TextField id="registry-access" label={t("keyIdentityLabel")} type="password" value={draft.awsAccessKeyId ?? ""} onChange={(value) => patch("awsAccessKeyId", value)} />
-            <TextField id="registry-secret" label={t("keyValueLabel")} type="password" value={draft.awsSecretAccessKey ?? ""} onChange={(value) => patch("awsSecretAccessKey", value)} />
+            <TextField id="registry-access" label={t("keyIdentityLabel")} type="password" autoComplete="new-password" value={draft.awsAccessKeyId ?? ""} onChange={(value) => patch("awsAccessKeyId", value)} />
+            <TextField id="registry-secret" label={t("keyValueLabel")} type="password" autoComplete="new-password" value={draft.awsSecretAccessKey ?? ""} onChange={(value) => patch("awsSecretAccessKey", value)} />
           </>}
         </>}
-        <div className="flex flex-col gap-2"><Label htmlFor="registry-repositories">{t("repositories")}</Label><Textarea id="registry-repositories" value={draft.repositoryNames?.join("\n") ?? ""} onChange={(event) => patch("repositoryNames", event.target.value.split("\n").filter((line) => line.trim()).map((line) => line.trim()))} /></div>
+        <div className="flex flex-col gap-2"><Label htmlFor="registry-repositories">{t("repositories")}</Label><Textarea id="registry-repositories" value={repositories} onChange={(event) => setRepositories(event.target.value)} /></div>
         {!valid && registry && !["generic", "ecr"].includes(registry.registryType) && <p role="alert">{t("unsupported")}</p>}
         </fieldset>
       </form>
