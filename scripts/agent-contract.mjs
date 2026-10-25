@@ -70,7 +70,34 @@ export function agentFixture(spec, fixture) {
     manifest.imageSafety.inactiveCapabilities = manifest.imageSafety.inactiveCapabilities.filter((name) => !["stack-update", "restore"].includes(name));
     manifest.imageSafety.capabilities = [...new Set([...manifest.imageSafety.capabilities, "stack-update", "restore"])];
   }
-  return Buffer.from(`${JSON.stringify(manifest, null, 2)}\n`);
+  const pull = document.paths["/environments/{id}/images/pull"].post.responses["200"];
+  const frame = pull.content["application/x-json-stream"].schema;
+  const frameSchema = frame.$ref ? schemas[frame.$ref.split("/").at(-1)] : frame;
+  const definitions = {};
+  function collect(schema) {
+    if (!schema || typeof schema !== "object") return;
+    if (schema.$ref) {
+      const name = schema.$ref.split("/").at(-1);
+      if (!definitions[name]) {
+        definitions[name] = schemas[name];
+        collect(schemas[name]);
+      }
+    }
+    for (const child of Object.values(schema)) {
+      if (Array.isArray(child)) child.forEach(collect);
+      else collect(child);
+    }
+  }
+  if (!frameSchema?.oneOf?.length) throw new Error("missing pull stream frame producer");
+  collect(frame);
+  manifest.imageSafety.pullStream = {
+    route: "POST /environments/{id}/images/pull",
+    mediaType: "application/x-json-stream",
+    frame,
+    schemas: definitions,
+    registryAuthenticationStatus: 502,
+  };
+  return Buffer.from(`${formatFixture(manifest)}\n`);
 }
 
 export function updateAgentContract(spec, mode) {
@@ -85,4 +112,19 @@ export function updateAgentContract(spec, mode) {
   }
   writeFileSync(fixtureURL, fixture);
   writeFileSync(agentURL, updated);
+}
+
+// Scalar arrays stay on one line so the unreleased fixture remains reviewable
+// within the repository line ceiling without dropping any contract fields.
+function formatFixture(value, depth = 0) {
+  if (value === null || typeof value !== "object") return JSON.stringify(value);
+  const indent = "  ".repeat(depth);
+  const child = `${indent}  `;
+  if (Array.isArray(value)) {
+    if (value.every((item) => item === null || typeof item !== "object")) return JSON.stringify(value);
+    return `[\n${value.map((item) => child + formatFixture(item, depth + 1)).join(",\n")}\n${indent}]`;
+  }
+  const entries = Object.entries(value);
+  if (!entries.length) return "{}";
+  return `{\n${entries.map(([key, item]) => `${child}${JSON.stringify(key)}: ${formatFixture(item, depth + 1)}`).join(",\n")}\n${indent}}`;
 }

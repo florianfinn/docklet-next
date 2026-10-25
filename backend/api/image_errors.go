@@ -82,10 +82,6 @@ func registerImageSafetyErrors(api huma.API) {
 				op.Description = "Retired update entry point; requests refuse update.path-retired before workload effects."
 			}
 			statuses := []string{"400", "404", "409", "429", "500", "502", "503"}
-			registryTest := strings.Contains(path, "container-registries") && strings.HasSuffix(path, "/test")
-			if registryTest {
-				statuses = append(statuses, "401")
-			}
 			if upgrade {
 				statuses = []string{"400", "409", "503"}
 			}
@@ -94,7 +90,7 @@ func registerImageSafetyErrors(api huma.API) {
 				if strings.Contains(path, "container-registries") && strings.HasSuffix(path, "/test") {
 					errorSchema = api.OpenAPI().Components.Schemas.Schema(reflect.TypeFor[containerregistry.RegistryTestResult](), true, "")
 				}
-				if upgrade || retiredImageUpdatePath(path) || strings.Contains(path, "/updater/") || (registryTest && status == "401") {
+				if upgrade || retiredImageUpdatePath(path) || strings.Contains(path, "/updater/") {
 					errorSchema = &huma.Schema{OneOf: []*huma.Schema{errorSchema, api.OpenAPI().Components.Schemas.Schema(reflect.TypeFor[huma.ErrorModel](), true, "")}}
 				}
 				op.Responses[status] = &huma.Response{Description: "Typed neutral image or registry failure", Content: map[string]*huma.MediaType{"application/json": {Schema: errorSchema}}}

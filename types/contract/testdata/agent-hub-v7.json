@@ -2,89 +2,25 @@
   "version": 7,
   "minimumAgentContractVersion": 7,
   "edgeProtocol": "tunnel/v1 (unchanged)",
-  "lifecycleOperations": [
-    "deploy-project",
-    "down-project",
-    "restart-project",
-    "redeploy-project",
-    "start-container",
-    "stop-container",
-    "restart-container",
-    "update-project",
-    "restore-project"
-  ],
-  "runtimeRoutes": [
-    "POST /api/environments/0/runtime-registration",
-    "POST /api/environments/0/runtime-target",
-    "POST /api/environments/0/runtime-runs",
-    "GET /api/environments/0/runtime-runs/{runId}",
-    "POST /api/environments/0/runtime-runs/{runId}/cancel"
-  ],
-  "identityFields": [
-    "managerId",
-    "registrationId",
-    "executorGeneration",
-    "runId",
-    "requestDigest"
-  ],
-  "registrationFields": [
-    "managerId",
-    "registrationId"
-  ],
-  "attributionFields": [
-    "id",
-    "username",
-    "displayName?"
-  ],
-  "outcomeStates": [
-    "active",
-    "terminal",
-    "not-received"
-  ],
-  "knowledgeFields": [
-    "outcomeState",
-    "cancelRequested"
-  ],
-  "detailFields": [
-    "activity",
-    "messages",
-    "stepTrace",
-    "output",
-    "outputTruncated",
-    "retainedStartSeq"
-  ],
-  "runtimeOutputFields": [
-    "timestamp",
-    "stream",
-    "text",
-    "step?",
-    "level?",
-    "outputSeq"
-  ],
-  "legacyOutputFields": [
-    "timestamp",
-    "stream",
-    "text",
-    "step?",
-    "level?"
-  ],
+  "lifecycleOperations": ["deploy-project","down-project","restart-project","redeploy-project","start-container","stop-container","restart-container","update-project","restore-project"],
+  "runtimeRoutes": ["POST /api/environments/0/runtime-registration","POST /api/environments/0/runtime-target","POST /api/environments/0/runtime-runs","GET /api/environments/0/runtime-runs/{runId}","POST /api/environments/0/runtime-runs/{runId}/cancel"],
+  "identityFields": ["managerId","registrationId","executorGeneration","runId","requestDigest"],
+  "registrationFields": ["managerId","registrationId"],
+  "attributionFields": ["id","username","displayName?"],
+  "outcomeStates": ["active","terminal","not-received"],
+  "knowledgeFields": ["outcomeState","cancelRequested"],
+  "detailFields": ["activity","messages","stepTrace","output","outputTruncated","retainedStartSeq"],
+  "runtimeOutputFields": ["timestamp","stream","text","step?","level?","outputSeq"],
+  "legacyOutputFields": ["timestamp","stream","text","step?","level?"],
   "admission": {
     "preference": "respond-async",
     "key": "Idempotency-Key",
     "newStatus": 202,
     "retainedStatus": 200,
-    "fields": [
-      "activityId",
-      "code",
-      "activity"
-    ],
+    "fields": ["activityId","code","activity"],
     "completion": false
   },
-  "conflicts": [
-    "run.busy",
-    "run.cancelling",
-    "run.request-mismatch"
-  ],
+  "conflicts": ["run.busy","run.cancelling","run.request-mismatch"],
   "limits": {
     "deliveryMinutes": 30,
     "admissionMinutes": 5,
@@ -102,47 +38,11 @@
     "stoppedExecutorAndCheckedDocker": true,
     "effectReplay": false
   },
-  "restrictedRoutes": [
-    "GET /api/health",
-    "HEAD /api/health",
-    "GET /api/app-version",
-    "GET /api/version",
-    "HEAD /api/environments/0/system/health",
-    "GET /api/environments/0/system/upgrade/check",
-    "POST /api/environments/0/system/upgrade"
-  ],
-  "hubRuntimeRoutes": [
-    "GET /api/environments/{id}/runtime-runs/{runId}",
-    "POST /api/environments/{id}/runtime-runs/{runId}/cancel",
-    "POST /api/environments/{id}/runtime-runs/{runId}/release"
-  ],
-  "executorIdentityFields": [
-    "managerId",
-    "registrationId",
-    "executorGeneration"
-  ],
-  "recoveryFields": [
-    "unknownReason?",
-    "executorState",
-    "executorResultCode?",
-    "executorError?",
-    "executorSettledAt?",
-    "disposition?",
-    "dispositionBy?",
-    "dispositionReason?",
-    "dispositionAt?",
-    "releaseAcknowledged"
-  ],
-  "preAdmissionCodes": [
-    "run.busy",
-    "run.cancelling",
-    "run.request-mismatch",
-    "runtime.target-changed",
-    "runtime.target-unavailable",
-    "runtime.parent-unresolved",
-    "runtime.target-removed",
-    "agent.update-required"
-  ],
+  "restrictedRoutes": ["GET /api/health","HEAD /api/health","GET /api/app-version","GET /api/version","HEAD /api/environments/0/system/health","GET /api/environments/0/system/upgrade/check","POST /api/environments/0/system/upgrade"],
+  "hubRuntimeRoutes": ["GET /api/environments/{id}/runtime-runs/{runId}","POST /api/environments/{id}/runtime-runs/{runId}/cancel","POST /api/environments/{id}/runtime-runs/{runId}/release"],
+  "executorIdentityFields": ["managerId","registrationId","executorGeneration"],
+  "recoveryFields": ["unknownReason?","executorState","executorResultCode?","executorError?","executorSettledAt?","disposition?","dispositionBy?","dispositionReason?","dispositionAt?","releaseAcknowledged"],
+  "preAdmissionCodes": ["run.busy","run.cancelling","run.request-mismatch","runtime.target-changed","runtime.target-unavailable","runtime.parent-unresolved","runtime.target-removed","agent.update-required"],
   "authentication": {
     "receiver": "AgentCredential",
     "requestHeader": "X-Arcane-Agent-Token",
@@ -164,22 +64,12 @@
     "runtime.waiter-disconnected": 408
   },
   "legacyStreaming": {
-    "operations": [
-      "deploy-project",
-      "redeploy-project"
-    ],
+    "operations": ["deploy-project","redeploy-project"],
     "contentType": "application/x-ndjson",
-    "startedFields": [
-      "type",
-      "activityId"
-    ],
+    "startedFields": ["type","activityId"],
     "doneOnConfirmedSuccessOnly": true,
     "postFlushFailureStatus": 200,
-    "postFlushFailureFields": [
-      "error",
-      "code",
-      "activityId"
-    ],
+    "postFlushFailureFields": ["error","code","activityId"],
     "preFlushAdmissionUsesErrorStatus": true
   },
   "storage": {
@@ -336,48 +226,15 @@
       }
     ],
     "requiredFields": {
-      "VolumeHelperIncompatibleError": [
-        "code",
-        "detail",
-        "status",
-        "title"
-      ],
-      "VolumePruneCandidate": [
-        "createdAt",
-        "name"
-      ],
-      "VolumePruneFailed": [
-        "code",
-        "name"
-      ],
-      "VolumePrunePlan": [
-        "candidates"
-      ],
-      "VolumePrunePlanCandidate": [
-        "createdAt",
-        "driver",
-        "name",
-        "reason"
-      ],
-      "VolumePruneRequest": [
-        "candidates"
-      ],
-      "VolumePruneResult": [
-        "failed",
-        "removed",
-        "skipped",
-        "spaceReclaimed"
-      ],
-      "VolumePruneSkipped": [
-        "name",
-        "reason"
-      ],
-      "VolumeHelperUnavailableError": [
-        "code",
-        "detail",
-        "status",
-        "title"
-      ]
+      "VolumeHelperIncompatibleError": ["code","detail","status","title"],
+      "VolumePruneCandidate": ["createdAt","name"],
+      "VolumePruneFailed": ["code","name"],
+      "VolumePrunePlan": ["candidates"],
+      "VolumePrunePlanCandidate": ["createdAt","driver","name","reason"],
+      "VolumePruneRequest": ["candidates"],
+      "VolumePruneResult": ["failed","removed","skipped","spaceReclaimed"],
+      "VolumePruneSkipped": ["name","reason"],
+      "VolumeHelperUnavailableError": ["code","detail","status","title"]
     },
     "helperErrorCode": "volume.helper-incompatible",
     "helperImageSetting": "toolsImage",
@@ -436,201 +293,32 @@
       }
     ],
     "fields": {
-      "NetworkCreateRequest": [
-        "name",
-        "options"
-      ],
-      "NetworkCreateOptions": [
-        "checkDuplicate",
-        "driver",
-        "enableIPv4",
-        "enableIPv6",
-        "internal",
-        "ipam",
-        "labels",
-        "options"
-      ],
-      "NetworkIPAM": [
-        "config",
-        "driver",
-        "options"
-      ],
-      "NetworkIPAMConfig": [
-        "auxAddress",
-        "gateway",
-        "ipRange",
-        "subnet"
-      ],
-      "NetworkConnectContainerRequest": [
-        "aliases",
-        "containerId",
-        "ipv4Address",
-        "ipv6Address"
-      ],
-      "NetworkDisconnectContainerRequest": [
-        "containerId",
-        "force"
-      ],
-      "NetworkError": [
-        "code",
-        "detail",
-        "status",
-        "title"
-      ]
+      "NetworkCreateRequest": ["name","options"],
+      "NetworkCreateOptions": ["checkDuplicate","driver","enableIPv4","enableIPv6","internal","ipam","labels","options"],
+      "NetworkIPAM": ["config","driver","options"],
+      "NetworkIPAMConfig": ["auxAddress","gateway","ipRange","subnet"],
+      "NetworkConnectContainerRequest": ["aliases","containerId","ipv4Address","ipv6Address"],
+      "NetworkDisconnectContainerRequest": ["containerId","force"],
+      "NetworkError": ["code","detail","status","title"]
     },
-    "errorCodes": [
-      "network.already-connected",
-      "network.builtin-network",
-      "network.compose-managed",
-      "network.exists",
-      "network.in-use",
-      "network.invalid-ip",
-      "network.invalid-network",
-      "network.network-mode",
-      "network.not-connected",
-      "network.not-found",
-      "network.overlap"
-    ]
+    "errorCodes": ["network.already-connected","network.builtin-network","network.compose-managed","network.exists","network.in-use","network.invalid-ip","network.invalid-network","network.network-mode","network.not-connected","network.not-found","network.overlap"]
   },
   "imageSafety": {
-    "capabilities": [
-      "guarded-images",
-      "write-only-registries",
-      "read-only-update-info",
-      "hub-agent-upgrade-cap",
-      "stack-update",
-      "restore"
-    ],
-    "inactiveCapabilities": [
-      "auto-apply",
-      "policies",
-      "hub-image-schedules"
-    ],
-    "archiveFormats": [
-      "docker-save-tar",
-      "docker-save-tar-gzip"
-    ],
+    "capabilities": ["guarded-images","write-only-registries","read-only-update-info","hub-agent-upgrade-cap","stack-update","restore"],
+    "inactiveCapabilities": ["auto-apply","policies","hub-image-schedules"],
+    "archiveFormats": ["docker-save-tar","docker-save-tar-gzip"],
     "unsupportedArchiveCode": "image.invalid-archive",
     "leaseScope": "image-mutation",
     "normalComposePullsTakeLease": false,
-    "protectionReasons": [
-      "in-use",
-      "system",
-      "restore-point",
-      "active-update"
-    ],
-    "errorCodes": [
-      "image.active-update-protected",
-      "image.busy",
-      "image.changed",
-      "image.in-use",
-      "image.invalid-archive",
-      "image.invalid-prune",
-      "image.invalid-reference",
-      "image.load-failed",
-      "image.not-found",
-      "image.prune-failed",
-      "image.pull-failed",
-      "image.remove-failed",
-      "image.reserved-reference",
-      "image.restore-point-protected",
-      "image.system-protected",
-      "image.tag-failed",
-      "image.usage-unavailable",
-      "registry.authentication-failed",
-      "registry.authentication-required",
-      "registry.credential-unavailable",
-      "registry.exists",
-      "registry.inline-credentials-not-allowed",
-      "registry.invalid-config",
-      "registry.not-found",
-      "registry.persistence-failed",
-      "registry.rate-limited",
-      "registry.sync-failed",
-      "registry.unavailable",
-      "update.check-unavailable",
-      "update.deploy-failed",
-      "update.invalid-target",
-      "update.persistence-failed",
-      "update.requires-hub-update",
-      "update.system-version-unknown"
-    ],
-    "edgeCommands": [
-      "image.list",
-      "image.counts",
-      "image.inspect",
-      "image.pull",
-      "image.delete",
-      "image.prune",
-      "image.tag",
-      "image.upload",
-      "image_update.check",
-      "image_update.check_one",
-      "image_update.check_batch",
-      "image_update.check_all",
-      "image_update.summary",
-      "image_update.by_refs",
-      "container_registry.sync",
-      "system.upgrade.run"
-    ],
-    "registryPublicFields": [
-      "id",
-      "url",
-      "description?",
-      "insecure",
-      "enabled",
-      "registryType",
-      "repositoryNames",
-      "awsRegion?",
-      "createdAt",
-      "updatedAt",
-      "hasCredential"
-    ],
-    "updateStates": [
-      "unchecked",
-      "current",
-      "version",
-      "rebuild",
-      "local",
-      "unknown",
-      "error"
-    ],
-    "updateInfoFields": [
-      "state",
-      "checkedAt",
-      "imageRef",
-      "platform?",
-      "authState",
-      "code?",
-      "checkTime",
-      "updateType",
-      "currentVersion",
-      "latestVersion",
-      "currentDigest",
-      "latestDigest",
-      "error",
-      "authMethod?",
-      "authRegistry?",
-      "responseTimeMs",
-      "hasUpdate",
-      "usedCredential?"
-    ],
-    "pruneFields": [
-      "imagesDeleted",
-      "spaceReclaimed",
-      "spaceReclaimedKnown",
-      "skipped",
-      "failed"
-    ],
-    "protectionFields": [
-      "reason",
-      "ownerId?"
-    ],
-    "registryTestFields": [
-      "ok",
-      "checkedAt",
-      "code?"
-    ],
+    "protectionReasons": ["in-use","system","restore-point","active-update"],
+    "errorCodes": ["image.active-update-protected","image.busy","image.changed","image.in-use","image.invalid-archive","image.invalid-prune","image.invalid-reference","image.load-failed","image.not-found","image.prune-failed","image.pull-failed","image.remove-failed","image.reserved-reference","image.restore-point-protected","image.system-protected","image.tag-failed","image.usage-unavailable","registry.authentication-failed","registry.authentication-required","registry.credential-unavailable","registry.exists","registry.inline-credentials-not-allowed","registry.invalid-config","registry.not-found","registry.persistence-failed","registry.rate-limited","registry.sync-failed","registry.unavailable","update.check-unavailable","update.deploy-failed","update.invalid-target","update.persistence-failed","update.requires-hub-update","update.system-version-unknown"],
+    "edgeCommands": ["image.list","image.counts","image.inspect","image.pull","image.delete","image.prune","image.tag","image.upload","image_update.check","image_update.check_one","image_update.check_batch","image_update.check_all","image_update.summary","image_update.by_refs","container_registry.sync","system.upgrade.run"],
+    "registryPublicFields": ["id","url","description?","insecure","enabled","registryType","repositoryNames","awsRegion?","createdAt","updatedAt","hasCredential"],
+    "updateStates": ["unchecked","current","version","rebuild","local","unknown","error"],
+    "updateInfoFields": ["state","checkedAt","imageRef","platform?","authState","code?","checkTime","updateType","currentVersion","latestVersion","currentDigest","latestDigest","error","authMethod?","authRegistry?","responseTimeMs","hasUpdate","usedCredential?"],
+    "pruneFields": ["imagesDeleted","spaceReclaimed","spaceReclaimedKnown","skipped","failed"],
+    "protectionFields": ["reason","ownerId?"],
+    "registryTestFields": ["ok","checkedAt","code?"],
     "edgeRoutes": [
       {
         "method": "POST",
@@ -717,7 +405,115 @@
         "path": "/api/environments/{id}/system/upgrade",
         "command": "system.upgrade.run"
       }
-    ]
+    ],
+    "pullStream": {
+      "route": "POST /environments/{id}/images/pull",
+      "mediaType": "application/x-json-stream",
+      "frame": {
+        "oneOf": [
+          {
+            "$ref": "#/components/schemas/ImagePullStartedFrame"
+          },
+          {
+            "$ref": "#/components/schemas/ImagePullProgressFrame"
+          },
+          {
+            "$ref": "#/components/schemas/ImagePullErrorFrame"
+          },
+          {
+            "$ref": "#/components/schemas/ImagePullDoneFrame"
+          }
+        ]
+      },
+      "schemas": {
+        "ImagePullStartedFrame": {
+          "additionalProperties": false,
+          "properties": {
+            "activityId": {
+              "minLength": 1,
+              "type": "string"
+            },
+            "type": {
+              "enum": ["activity"],
+              "type": "string"
+            }
+          },
+          "required": ["type","activityId"],
+          "type": "object"
+        },
+        "ImagePullProgressFrame": {
+          "additionalProperties": false,
+          "properties": {
+            "id": {
+              "pattern": "^[a-f0-9]{12,64}$",
+              "type": "string"
+            },
+            "progressDetail": {
+              "$ref": "#/components/schemas/ImagePullProgressCounts"
+            },
+            "status": {
+              "enum": ["Pulling image","Pulling fs layer","Waiting","Downloading","Verifying Checksum","Download complete","Extracting","Pull complete","Already exists"],
+              "type": "string"
+            }
+          },
+          "required": ["status"],
+          "type": "object"
+        },
+        "ImagePullProgressCounts": {
+          "additionalProperties": false,
+          "properties": {
+            "current": {
+              "format": "int64",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "total": {
+              "format": "int64",
+              "minimum": 0,
+              "type": "integer"
+            }
+          },
+          "required": ["current","total"],
+          "type": "object"
+        },
+        "ImagePullErrorFrame": {
+          "additionalProperties": false,
+          "properties": {
+            "error": {
+              "$ref": "#/components/schemas/ImageProblem"
+            }
+          },
+          "required": ["error"],
+          "type": "object"
+        },
+        "ImageProblem": {
+          "additionalProperties": false,
+          "properties": {
+            "code": {
+              "enum": ["image.active-update-protected","image.busy","image.changed","image.in-use","image.invalid-archive","image.invalid-prune","image.invalid-reference","image.load-failed","image.not-found","image.prune-failed","image.pull-failed","image.remove-failed","image.reserved-reference","image.restore-point-protected","image.system-protected","image.tag-failed","image.usage-unavailable","registry.authentication-failed","registry.authentication-required","registry.credential-unavailable","registry.exists","registry.inline-credentials-not-allowed","registry.invalid-config","registry.not-found","registry.persistence-failed","registry.rate-limited","registry.sync-failed","registry.unavailable","update.check-unavailable","update.deploy-failed","update.invalid-target","update.persistence-failed","update.requires-hub-update","update.system-version-unknown"],
+              "type": "string"
+            },
+            "message": {
+              "type": "string"
+            }
+          },
+          "required": ["code","message"],
+          "type": "object"
+        },
+        "ImagePullDoneFrame": {
+          "additionalProperties": false,
+          "properties": {
+            "done": {
+              "enum": [true],
+              "type": "boolean"
+            }
+          },
+          "required": ["done"],
+          "type": "object"
+        }
+      },
+      "registryAuthenticationStatus": 502
+    }
   },
   "activityDiscovery": {
     "route": "GET /environments/{id}/activities",
@@ -734,99 +530,32 @@
     "responseSchema": {
       "$ref": "#/components/schemas/BasePaginatedActivityActivitySummary"
     },
-    "fields": [
-      "affectedServices",
-      "batchId",
-      "cancelRequested",
-      "createdAt",
-      "durationMs",
-      "endedAt",
-      "environmentId",
-      "error",
-      "id",
-      "imageLifecycle",
-      "latestMessage",
-      "messageCode",
-      "metadata",
-      "outcomeState",
-      "progress",
-      "recovery",
-      "resourceId",
-      "resourceName",
-      "resourceType",
-      "sourceEnvironmentId",
-      "sourceEnvironmentName",
-      "startedAt",
-      "startedBy",
-      "status",
-      "step",
-      "stepTrace",
-      "type",
-      "updatedAt"
-    ],
-    "optionalFields": [
-      "affectedServices",
-      "batchId",
-      "cancelRequested",
-      "durationMs",
-      "endedAt",
-      "error",
-      "imageLifecycle",
-      "latestMessage",
-      "messageCode",
-      "metadata",
-      "outcomeState",
-      "progress",
-      "recovery",
-      "resourceId",
-      "resourceName",
-      "resourceType",
-      "sourceEnvironmentId",
-      "sourceEnvironmentName",
-      "startedBy",
-      "step",
-      "stepTrace",
-      "updatedAt"
-    ],
+    "fields": ["affectedServices","batchId","cancelRequested","createdAt","durationMs","endedAt","environmentId","error","id","imageLifecycle","latestMessage","messageCode","metadata","outcomeState","progress","recovery","resourceId","resourceName","resourceType","sourceEnvironmentId","sourceEnvironmentName","startedAt","startedBy","status","step","stepTrace","type","updatedAt"],
+    "optionalFields": ["affectedServices","batchId","cancelRequested","durationMs","endedAt","error","imageLifecycle","latestMessage","messageCode","metadata","outcomeState","progress","recovery","resourceId","resourceName","resourceType","sourceEnvironmentId","sourceEnvironmentName","startedBy","step","stepTrace","updatedAt"],
     "knowledgeDependencies": {
-      "cancelRequested": [
-        "outcomeState"
-      ],
-      "outcomeState": [
-        "cancelRequested"
-      ]
+      "cancelRequested": ["outcomeState"],
+      "outcomeState": ["cancelRequested"]
     },
     "stepTrace": {
       "items": {
         "$ref": "#/components/schemas/ActivityStepTraceEntry"
       },
-      "type": [
-        "array",
-        "null"
-      ]
+      "type": ["array","null"]
     },
     "recovery": {
       "$ref": "#/components/schemas/ActivityActivitySummaryRecovery"
     },
     "recoveryProperties": {
       "disposition": {
-        "type": [
-          "string",
-          "null"
-        ]
+        "type": ["string","null"]
       },
       "unknownReason": {
-        "type": [
-          "string",
-          "null"
-        ]
+        "type": ["string","null"]
       }
     }
   },
   "imageLifecycle": {
-    "targetKinds": [
-      "project"
-    ],
+    "targetKinds": ["project"],
     "routes": [
       {
         "method": "GET",

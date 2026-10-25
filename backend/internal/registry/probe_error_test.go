@@ -28,12 +28,12 @@ func TestRegistryProbeClassifiesActualDaemonResponses(t *testing.T) {
 		message, code string
 		want          int
 	}{
-		{401, "synthetic rejected identity", "registry.authentication-failed", 401},
-		{403, "synthetic access denied", "registry.authentication-failed", 401},
+		{401, "synthetic rejected identity", "registry.authentication-failed", 502},
+		{403, "synthetic access denied", "registry.authentication-failed", 502},
 		{429, "synthetic limit", "registry.rate-limited", 429},
 		{500, "synthetic connection failure", "registry.unavailable", 503},
 		// Docker commonly wraps a registry's HTTP error in a daemon 500.
-		{500, "unauthorized: synthetic rejected credential", "registry.authentication-failed", 401},
+		{500, "unauthorized: synthetic rejected credential", "registry.authentication-failed", 502},
 		{500, "toomanyrequests: synthetic limit", "registry.rate-limited", 429},
 	} {
 		t.Run(fmt.Sprint(test.status, test.code), func(t *testing.T) {
