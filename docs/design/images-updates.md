@@ -149,6 +149,16 @@ freezes the complete grant conjunction; no new user-role model is implied. Hub g
 sync or dispatch; agents require their
 manager credential and compatible contract. Logout detaches viewers only.
 
+Image capability IDs use adapter names: `pullImage` and `pruneImages` accept
+`host` refs; `removeImage` accepts an `image` ref with `host~image` identity.
+Their `hub/0` descriptors gate aggregate entry points when some host grants the
+operation. These writes are supported through both Direct and Edge. Registry
+capabilities use the management operation IDs above: list/create use `hub/0`;
+get/update/test/delete also accept a `registry` ref with its unscoped registry ID.
+`clearContainerRegistryCredential` uses the same scope and `registries:update`
+grant as `updateContainerRegistry`, calling its existing `clearCredential` input.
+Registry management requires global grants; host grants cannot enable it.
+
 ## Wire vocabulary and neutral failures
 
 Keep wire DTOs in their actual current homes: `types/image`, `types/imageupdate`,
@@ -160,6 +170,7 @@ the contract owner freezes their exact JSON/schema in the approved implementatio
 | DTO | Required projection and invariants |
 | --- | --- |
 | Image Summary/detail | Retain ID, public tags, repo digests and consumers; add `protectionReasons` (`in-use`, `system`, `restore-point`, `active-update`), safe owning point/run IDs and `usageState=known\|unknown`. Include stopped containers; unknown never means unused |
+| Pull stream | `application/x-json-stream`, one JSON value per line: activity identity (`type=activity`, `activityId`), safe status/layer/count progress, then either typed `error` or `done=true`. No success on EOF alone. Failures before streaming use typed HTTP responses; later failures are stream error frames |
 | PullOptions | Reuse `imageName` and optional tag; reject conflicting tag/digest inputs, inline credentials and reserved references. Only saved registry credentials or anonymous access; no secret echo |
 | PruneImagesInputBody | Retain adopted `mode` (`dangling`, `all`, `olderThan`) and `until`, including documented legacy aliases; invalid/contradictory input is 400. Selection is local to the requested host |
 | ImagePruneReport | Retain `imagesDeleted`, `spaceReclaimed`; add per-ID `skipped` reason and `failed` code. Partial results preserve successful removals. Unknown reclaimed bytes are explicitly unknown, never invented |
@@ -187,16 +198,16 @@ Docker/registry text is not an alternative public message path.
 | HTTP | Codes and condition |
 | --- | --- |
 | 400 | `image.invalid-reference`, `image.invalid-prune`, `image.reserved-reference`, `image.invalid-archive`, `registry.invalid-config`, `registry.inline-credentials-not-allowed`, `update.invalid-policy`, `update.invalid-target` |
-| 401/403 | Existing authentication/permission codes; `registry.authentication-required` / `registry.authentication-failed` for registry probe failures (not hub sign-out evidence) |
+| 401/403 | Existing hub authentication/permission codes only |
 | 404 | `image.not-found`, `registry.not-found`, `update.target-not-found`, `restore.not-found` |
 | 409 | `image.in-use`, `image.system-protected`, `image.restore-point-protected`, `image.active-update-protected`, `image.changed`, `image.busy`, `registry.exists`, `update.policy-changed`, `update.target-changed`, `update.snapshot-unavailable`, `update.baseline-unavailable`, `update.path-retired`, `restore.in-use`, `restore.unavailable`, `update.config-drift`, `update.image-binding-unsupported`, `restore.shared-reference`, `restore.image-mismatch`, `update.schedule-hub-owned`, `update.agent-local-job-disabled`, `update.requires-hub-update` plus runtime conflicts |
 | 429 | `registry.rate-limited`; bounded retry metadata only |
-| 502/503 | `image.pull-failed`, `image.remove-failed`, `image.tag-failed`, `image.load-failed`, `image.prune-failed`, `image.usage-unavailable`, `registry.unavailable`, `registry.sync-failed`, `registry.credential-unavailable`, `update.check-unavailable`, `update.system-version-unknown` |
+| 502/503 | Registry probes use 502 for `registry.authentication-required` / `registry.authentication-failed`, distinct from hub identity/permission loss; `image.pull-failed`, `image.remove-failed`, `image.tag-failed`, `image.load-failed`, `image.prune-failed`, `image.usage-unavailable`, `registry.unavailable`, `registry.sync-failed`, `registry.credential-unavailable`, `update.check-unavailable`, `update.system-version-unknown` |
 | 500 | `update.deploy-failed`, `restore.deploy-failed`, `update.persistence-failed`, `registry.persistence-failed`; message describes the operation without underlying text |
 
 Reuse runtime unknown/interrupted/cancelled/target-removed/target-unavailable codes
-for those outcomes. A registry 401 is a failed registry check, not a hub identity
-rejection. New codes require EN/DE mappings and catalogue/schema checks in the
+for those outcomes. An upstream registry 401/403 becomes a typed 502 probe
+result; the public HTTP status never signals hub identity or permission loss. New codes require EN/DE mappings and catalogue/schema checks in the
 owning steps. The catalogue includes the non-HTTP skip code
 `update.auto-excluded`; `image.busy` and `update.config-drift` also serve as
 scheduled skip reasons. Runtime outcome/conflict codes retain their existing

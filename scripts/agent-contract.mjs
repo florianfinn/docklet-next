@@ -29,6 +29,33 @@ export function agentFixture(spec, fixture) {
     recovery: summary.properties.recovery,
     recoveryProperties: recovery.properties,
   };
+  const pull = document.paths["/environments/{id}/images/pull"].post.responses["200"];
+  const frame = pull.content["application/x-json-stream"].schema;
+  const frameSchema = frame.$ref ? schemas[frame.$ref.split("/").at(-1)] : frame;
+  const definitions = {};
+  function collect(schema) {
+    if (!schema || typeof schema !== "object") return;
+    if (schema.$ref) {
+      const name = schema.$ref.split("/").at(-1);
+      if (!definitions[name]) {
+        definitions[name] = schemas[name];
+        collect(schemas[name]);
+      }
+    }
+    for (const child of Object.values(schema)) {
+      if (Array.isArray(child)) child.forEach(collect);
+      else collect(child);
+    }
+  }
+  if (!frameSchema?.oneOf?.length) throw new Error("missing pull stream frame producer");
+  collect(frame);
+  manifest.imageSafety.pullStream = {
+    route: "POST /environments/{id}/images/pull",
+    mediaType: "application/x-json-stream",
+    frame,
+    schemas: definitions,
+    registryAuthenticationStatus: 502,
+  };
   return Buffer.from(`${JSON.stringify(manifest, null, 2)}\n`);
 }
 

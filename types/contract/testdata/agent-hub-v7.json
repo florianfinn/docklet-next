@@ -715,7 +715,179 @@
         "path": "/api/environments/{id}/system/upgrade",
         "command": "system.upgrade.run"
       }
-    ]
+    ],
+    "pullStream": {
+      "route": "POST /environments/{id}/images/pull",
+      "mediaType": "application/x-json-stream",
+      "frame": {
+        "oneOf": [
+          {
+            "$ref": "#/components/schemas/ImagePullStartedFrame"
+          },
+          {
+            "$ref": "#/components/schemas/ImagePullProgressFrame"
+          },
+          {
+            "$ref": "#/components/schemas/ImagePullErrorFrame"
+          },
+          {
+            "$ref": "#/components/schemas/ImagePullDoneFrame"
+          }
+        ]
+      },
+      "schemas": {
+        "ImagePullStartedFrame": {
+          "additionalProperties": false,
+          "properties": {
+            "activityId": {
+              "minLength": 1,
+              "type": "string"
+            },
+            "type": {
+              "enum": [
+                "activity"
+              ],
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "activityId"
+          ],
+          "type": "object"
+        },
+        "ImagePullProgressFrame": {
+          "additionalProperties": false,
+          "properties": {
+            "id": {
+              "pattern": "^[a-f0-9]{12,64}$",
+              "type": "string"
+            },
+            "progressDetail": {
+              "$ref": "#/components/schemas/ImagePullProgressCounts"
+            },
+            "status": {
+              "enum": [
+                "Pulling image",
+                "Pulling fs layer",
+                "Waiting",
+                "Downloading",
+                "Verifying Checksum",
+                "Download complete",
+                "Extracting",
+                "Pull complete",
+                "Already exists"
+              ],
+              "type": "string"
+            }
+          },
+          "required": [
+            "status"
+          ],
+          "type": "object"
+        },
+        "ImagePullProgressCounts": {
+          "additionalProperties": false,
+          "properties": {
+            "current": {
+              "format": "int64",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "total": {
+              "format": "int64",
+              "minimum": 0,
+              "type": "integer"
+            }
+          },
+          "required": [
+            "current",
+            "total"
+          ],
+          "type": "object"
+        },
+        "ImagePullErrorFrame": {
+          "additionalProperties": false,
+          "properties": {
+            "error": {
+              "$ref": "#/components/schemas/ImageProblem"
+            }
+          },
+          "required": [
+            "error"
+          ],
+          "type": "object"
+        },
+        "ImageProblem": {
+          "additionalProperties": false,
+          "properties": {
+            "code": {
+              "enum": [
+                "image.active-update-protected",
+                "image.busy",
+                "image.changed",
+                "image.in-use",
+                "image.invalid-archive",
+                "image.invalid-prune",
+                "image.invalid-reference",
+                "image.load-failed",
+                "image.not-found",
+                "image.prune-failed",
+                "image.pull-failed",
+                "image.remove-failed",
+                "image.reserved-reference",
+                "image.restore-point-protected",
+                "image.system-protected",
+                "image.tag-failed",
+                "image.usage-unavailable",
+                "registry.authentication-failed",
+                "registry.authentication-required",
+                "registry.credential-unavailable",
+                "registry.exists",
+                "registry.inline-credentials-not-allowed",
+                "registry.invalid-config",
+                "registry.not-found",
+                "registry.persistence-failed",
+                "registry.rate-limited",
+                "registry.sync-failed",
+                "registry.unavailable",
+                "update.check-unavailable",
+                "update.deploy-failed",
+                "update.invalid-target",
+                "update.persistence-failed",
+                "update.requires-hub-update",
+                "update.system-version-unknown"
+              ],
+              "type": "string"
+            },
+            "message": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "code",
+            "message"
+          ],
+          "type": "object"
+        },
+        "ImagePullDoneFrame": {
+          "additionalProperties": false,
+          "properties": {
+            "done": {
+              "enum": [
+                true
+              ],
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "done"
+          ],
+          "type": "object"
+        }
+      },
+      "registryAuthenticationStatus": 502
+    }
   },
   "activityDiscovery": {
     "route": "GET /environments/{id}/activities",

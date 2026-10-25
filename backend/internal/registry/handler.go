@@ -171,7 +171,7 @@ func (h *ContainerRegistryHandler) TestRegistry(ctx context.Context, input *Test
 		return failure(err)
 	}
 	if reg.Token == "" && reg.AWSSecretAccessKey == "" {
-		return failure(imageDTO.Failure("registry.authentication-required", 401))
+		return failure(imageDTO.Failure("registry.authentication-required", 502))
 	}
 	if err = settings.ValidateCredentialEncryption(); err != nil {
 		return failure(err)

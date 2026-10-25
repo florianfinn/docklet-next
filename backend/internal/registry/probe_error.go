@@ -41,9 +41,9 @@ func registryProbeError(err error, anonymous bool) *imageDTO.OperationError {
 	}
 	if status == 401 || status == 403 || errdefs.IsUnauthorized(err) || errdefs.IsPermissionDenied(err) || strings.Contains(apiCode, "unrecognizedclient") || strings.Contains(apiCode, "invalidsignature") || strings.Contains(apiCode, "accessdenied") || strings.Contains(text, "unauthorized") || strings.Contains(text, "authentication required") || strings.Contains(text, "incorrect username or password") || strings.Contains(text, "no basic auth credentials") || strings.Contains(text, "access denied") {
 		if anonymous {
-			return imageDTO.Failure("registry.authentication-required", 401)
+			return imageDTO.Failure("registry.authentication-required", 502)
 		}
-		return imageDTO.Failure("registry.authentication-failed", 401)
+		return imageDTO.Failure("registry.authentication-failed", 502)
 	}
 	return imageDTO.Failure("registry.unavailable", 503)
 }

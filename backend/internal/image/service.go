@@ -215,7 +215,7 @@ func (s *ImageService) RemoveImage(ctx context.Context, id string, force bool, u
 	defer release()
 	c, err := s.dockerService.GetClient(ctx)
 	if err != nil {
-		err = imagetypes.Failure("image.remove-failed", 502)
+		err = guard.DaemonError(err, "image.remove-failed")
 		s.auditImageMutation(ctx, "delete", "", id, err)
 		return err
 	}
@@ -245,14 +245,14 @@ func (s *ImageService) PullImage(ctx context.Context, ref string, writer io.Writ
 	}
 	c, err := s.dockerService.GetClient(ctx)
 	if err != nil {
-		return imagetypes.Failure("image.pull-failed", 502)
+		return guard.DaemonError(err, "image.pull-failed")
 	}
 	if s.eventService != nil {
 		defer s.eventService.BeginDockerResourceSuppressionWindow("image", "", ref)()
 	}
 	reader, err := c.ImagePull(ctx, ref, opts)
 	if err != nil {
-		return imagetypes.Failure("image.pull-failed", 502)
+		return guard.DaemonError(err, "image.pull-failed")
 	}
 	defer reader.Close()
 	if err := writeSafePullProgress(reader, writer); err != nil {
@@ -307,13 +307,13 @@ func (s *ImageService) TagImage(ctx context.Context, source string, req imagetyp
 	defer release()
 	c, err := s.dockerService.GetClient(ctx)
 	if err != nil {
-		return imagetypes.Failure("image.tag-failed", 502)
+		return guard.DaemonError(err, "image.tag-failed")
 	}
 	if s.eventService != nil {
 		defer s.eventService.BeginDockerResourceSuppressionWindow("image", "", target)()
 	}
 	if _, err = c.ImageTag(ctx, client.ImageTagOptions{Source: source, Target: target}); err != nil {
-		return imagetypes.Failure("image.tag-failed", 502)
+		return guard.DaemonError(err, "image.tag-failed")
 	}
 	return nil
 }
@@ -415,11 +415,11 @@ func (s *ImageService) LoadImageFromReader(ctx context.Context, reader io.Reader
 	defer release()
 	c, err := s.dockerService.GetClient(ctx)
 	if err != nil {
-		return nil, imagetypes.Failure("image.load-failed", 502)
+		return nil, guard.DaemonError(err, "image.load-failed")
 	}
 	resp, err := c.ImageLoad(ctx, validated)
 	if err != nil {
-		return nil, imagetypes.Failure("image.load-failed", 502)
+		return nil, guard.DaemonError(err, "image.load-failed")
 	}
 	defer resp.Close()
 	decoder := json.NewDecoder(resp)
@@ -433,7 +433,7 @@ func (s *ImageService) LoadImageFromReader(ctx context.Context, reader io.Reader
 			break
 		}
 		if err != nil || item.Error != "" || (len(item.ErrorDetail) > 0 && string(item.ErrorDetail) != "null") {
-			return nil, imagetypes.Failure("image.load-failed", 502)
+			return nil, guard.DaemonError(err, "image.load-failed")
 		}
 	}
 	return &imagetypes.LoadResult{Stream: "Image archive loaded."}, nil

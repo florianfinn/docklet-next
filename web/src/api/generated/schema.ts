@@ -1,5 +1,5 @@
 // Source: api/openapi.json
-// Revision: d9069f41efbce7c29edf1218b30f3101c2280c39f932471544791bf20b178701
+// Revision: 8c3e126d6baeec29e1a81517c56a7dfb8cee79a8f94ba55a1f97e168ca4ec298
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
 // Deviations: Generated TypeScript declarations from the local Huma export.
@@ -1791,7 +1791,7 @@ export interface paths {
         put?: never;
         /**
          * Pull an image
-         * @description Pull a Docker image from a registry with streaming progress output
+         * @description Pull an image as newline-delimited JSON: activity identity, progress, then typed error or done=true. EOF alone is not success.
          */
         post: operations["pull-image"];
         delete?: never;
@@ -8685,6 +8685,13 @@ export interface components {
             spaceReclaimed: number;
             spaceReclaimedKnown: boolean;
         };
+        ImagePullDoneFrame: {
+            /** @enum {boolean} */
+            done: true;
+        };
+        ImagePullErrorFrame: {
+            error: components["schemas"]["ImageProblem"];
+        };
         ImagePullOptions: {
             /**
              * Format: uri
@@ -8700,6 +8707,23 @@ export interface components {
             imageName: string;
             /** @description Tag of the image to pull (e.g., latest) */
             tag?: string;
+        };
+        ImagePullProgressCounts: {
+            /** Format: int64 */
+            current: number;
+            /** Format: int64 */
+            total: number;
+        };
+        ImagePullProgressFrame: {
+            id?: string;
+            progressDetail?: components["schemas"]["ImagePullProgressCounts"];
+            /** @enum {string} */
+            status: "Pulling image" | "Pulling fs layer" | "Waiting" | "Downloading" | "Verifying Checksum" | "Download complete" | "Extracting" | "Pull complete" | "Already exists";
+        };
+        ImagePullStartedFrame: {
+            activityId: string;
+            /** @enum {string} */
+            type: "activity";
         };
         ImageSearchResult: {
             automated: boolean;
@@ -13731,15 +13755,6 @@ export interface operations {
                 };
             };
             /** @description Typed neutral image or registry failure */
-            401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ContainerregistryRegistryTestResult"] | components["schemas"]["ErrorModel"];
-                };
-            };
-            /** @description Typed neutral image or registry failure */
             404: {
                 headers: {
                     [name: string]: unknown;
@@ -17073,12 +17088,14 @@ export interface operations {
             };
         };
         responses: {
-            /** @description OK */
+            /** @description Newline-delimited pull frames */
             200: {
                 headers: {
                     [name: string]: unknown;
                 };
-                content?: never;
+                content: {
+                    "application/x-json-stream": components["schemas"]["ImagePullStartedFrame"] | components["schemas"]["ImagePullProgressFrame"] | components["schemas"]["ImagePullErrorFrame"] | components["schemas"]["ImagePullDoneFrame"];
+                };
             };
             /** @description Typed neutral image or registry failure */
             400: {
