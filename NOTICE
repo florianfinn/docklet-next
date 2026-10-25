@@ -113,3 +113,11 @@ references and hash-checked extracted copies. Container base-image packages and
 platforms beyond Linux/amd64 still require their release assessments. Unknown/incompatible
 shipped licences block release. All identified legal evidence has a
 classification or an explicit hash-bound review.
+
+Docker-save test metadata
+The nginx config fixture retains build instructions from nginx/docker-nginx
+mainline/alpine-slim/Dockerfile and mainline/alpine/Dockerfile, revision
+71081b25390771f6b1275ddf7c73c965f304493f, under BSD-2-Clause.
+Copyright (C) 2011-2023 F5, Inc. All rights reserved.
+The full conditions and disclaimer are retained in
+LICENSES/BSD-2-Clause-docker-nginx.txt.

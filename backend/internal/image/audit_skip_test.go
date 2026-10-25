@@ -14,6 +14,8 @@ import (
 	"sync/atomic"
 	"testing"
 
+	"github.com/florianfinn/docklet-next/backend/internal/config"
+	"github.com/florianfinn/docklet-next/backend/internal/docker"
 	"github.com/florianfinn/docklet-next/backend/internal/event"
 	"github.com/florianfinn/docklet-next/backend/internal/image/guard"
 	imageDTO "github.com/florianfinn/docklet-next/types/image"
@@ -100,4 +102,25 @@ func TestDeleteLeaseBusyHasAttributedAuditBeforeDaemon(t *testing.T) {
 	require.Equal(t, actor.Username, *rows[0].Username)
 	require.Equal(t, "delete", rows[0].Metadata["action"])
 	require.Equal(t, "image.busy", rows[0].Metadata["code"])
+}
+
+func TestDeleteClientUnavailableHasAttributedAuditBeforeDaemon(t *testing.T) {
+	var daemonCalls atomic.Int32
+	s, db, _ := safetyFixture(t, func(http.ResponseWriter, *http.Request) { daemonCalls.Add(1) })
+	s.dockerService = docker.NewDockerClientService(t.Context(), db, &config.Config{DockerHost: "invalid-docker-host"}, nil)
+	actor := user.Actor{ID: "operator", Username: "operator"}
+	err := s.RemoveImage(t.Context(), "registry.example.com/app:1.0.0", false, actor)
+	require.Equal(t, "image.remove-failed", imageDTO.Neutral(err, "unexpected", 500).Problem.Code)
+	require.Zero(t, daemonCalls.Load())
+	var rows []event.Event
+	require.NoError(t, db.Find(&rows).Error)
+	require.Len(t, rows, 1)
+	require.Equal(t, event.EventSeverityError, rows[0].Severity)
+	require.Equal(t, actor.ID, *rows[0].UserID)
+	require.Equal(t, actor.Username, *rows[0].Username)
+	require.Equal(t, "delete", rows[0].Metadata["action"])
+	require.Equal(t, "image.remove-failed", rows[0].Metadata["code"])
+	release, err := s.ImageGuard().Acquire(t.Context())
+	require.NoError(t, err, "client failure must release the image lease")
+	release()
 }

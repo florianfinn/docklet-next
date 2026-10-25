@@ -50,5 +50,14 @@ manifest descriptors, so restoring substring-based annotation rejection fails
 the producer acceptance tests. Reserved references are changed independently in
 each actual carrier for each of the five acceptance cases.
 
-The Apache-2.0 notice covers these generated metadata fixtures and the member
-catalogue. No upstream image executable, layer or Dockerfile source is included.
+The member catalogues and extraction helper are Apache-2.0. Config history can
+contain upstream Dockerfile build instructions. The nginx config retains
+instructions matching docker-nginx's
+[`mainline/alpine-slim/Dockerfile`](https://github.com/nginx/docker-nginx/blob/71081b25390771f6b1275ddf7c73c965f304493f/mainline/alpine-slim/Dockerfile)
+and
+[`mainline/alpine/Dockerfile`](https://github.com/nginx/docker-nginx/blob/71081b25390771f6b1275ddf7c73c965f304493f/mainline/alpine/Dockerfile)
+at revision `71081b25390771f6b1275ddf7c73c965f304493f`, under BSD-2-Clause.
+The complete F5 copyright notice, conditions and disclaimer are preserved in
+[`LICENSES/BSD-2-Clause-docker-nginx.txt`](../../../../../../LICENSES/BSD-2-Clause-docker-nginx.txt).
+Metadata stays byte-identical to the saved archive. No image executable or
+layer payload is included.
