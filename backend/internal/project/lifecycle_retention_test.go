@@ -19,6 +19,7 @@ import (
 	compose "github.com/compose-spec/compose-go/v2/types"
 	life "github.com/florianfinn/docklet-next/backend/internal/project/children/lifecycle"
 	activityDTO "github.com/florianfinn/docklet-next/types/activity"
+	imageDTO "github.com/florianfinn/docklet-next/types/image"
 	dto "github.com/florianfinn/docklet-next/types/updater"
 	"github.com/stretchr/testify/require"
 )
@@ -226,6 +227,56 @@ func TestLifecycleUninspectableUnrelatedImagesDoNotBlockRecovery(t *testing.T) {
 			var pins int64
 			require.NoError(t, f.db.Table("image_protections").Where("image_id = ?", missing).Count(&pins).Error)
 			require.Zero(t, pins)
+		})
+	}
+}
+
+func TestLifecycleMissingConfiguredImageRefusesPreflight(t *testing.T) {
+	for _, operation := range []string{"update", "restore"} {
+		t.Run(operation, func(t *testing.T) {
+			f := newLifecycleFixture(t)
+			f.establishBaseline()
+			require.Equal(t, activityDTO.StatusSuccess, f.wait(f.admit(f.intent("rebuild"))).Status)
+			_, current, err := f.service.lifecycleCurrent(t.Context(), f.project.ID, f.registration)
+			require.NoError(t, err)
+			request := dto.LifecycleRequest{ExpectedRevision: current.SavedRevision}
+			if operation == "restore" {
+				points := lifecyclePoints(t, f)
+				require.NotEmpty(t, points)
+				request.PointID = points[0].ID
+				request.ReplaceConfiguration = true
+			}
+			lifecycleNoCandidate(f)
+			f.mu.Lock()
+			app := f.workloads["app"]
+			app.ImageID = "sha256:" + strings.Repeat("e", 64)
+			f.workloads["app"] = app
+			beforeTags := life.Hash(f.tags)
+			pulls, writes, deploys, stops := f.pulls, f.tagWrites, f.deploys, len(f.stopSignals)
+			f.mu.Unlock()
+			beforeFile := lifecycleFile(t, f, "compose.yaml")
+			beforePoints := lifecyclePoints(t, f)
+			var beforeRuns int64
+			require.NoError(t, f.db.Model(&life.Run{}).Count(&beforeRuns).Error)
+
+			intent, err := f.service.PrepareImageLifecycle(t.Context(), f.project.ID, f.registration, request)
+			lifecycleCode(t, err, "update.snapshot-unavailable")
+			require.Equal(t, 409, imageDTO.Neutral(err, "unexpected", 500).Status)
+			require.Nil(t, intent)
+			f.mu.Lock()
+			afterTags := life.Hash(f.tags)
+			afterPulls, afterWrites, afterDeploys, afterStops := f.pulls, f.tagWrites, f.deploys, len(f.stopSignals)
+			f.mu.Unlock()
+			require.Equal(t, beforeTags, afterTags)
+			require.Equal(t, pulls, afterPulls)
+			require.Equal(t, writes, afterWrites)
+			require.Equal(t, deploys, afterDeploys)
+			require.Equal(t, stops, afterStops)
+			require.Equal(t, beforeFile, lifecycleFile(t, f, "compose.yaml"))
+			require.Equal(t, beforePoints, lifecyclePoints(t, f))
+			var afterRuns int64
+			require.NoError(t, f.db.Model(&life.Run{}).Count(&afterRuns).Error)
+			require.Equal(t, beforeRuns, afterRuns)
 		})
 	}
 }
