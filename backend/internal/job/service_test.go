@@ -658,7 +658,7 @@ func TestResolveRemoteRunConfirmsOwnerAfterLostResponse(t *testing.T) {
 			db := setupSettingsTestDBInternal(t)
 			require.NoError(t, db.AutoMigrate(&environment.Environment{}))
 			q := newJobCoordinatorForTestInternal(t, db)
-			local, err := q.Submit(t.Context(), scheduler.Request{JobID: "auto-update", EnvironmentID: "remote", Trigger: "scheduled"})
+			local, err := q.Submit(t.Context(), scheduler.Request{JobID: "scheduled-prune", EnvironmentID: "remote", Trigger: "scheduled"})
 			require.NoError(t, err)
 			require.NoError(t, q.UpdateRun(t.Context(), local, func(run *scheduler.Run) error {
 				run.Status = scheduler.NeedsAttention
@@ -741,7 +741,7 @@ func TestResolveRemoteRunConfirmsOwnerAfterLostResponse(t *testing.T) {
 			environments := environment.NewEnvironmentService(db, server.Client(), nil, nil, nil, nil)
 			svc := &JobService{runs: q, environment: environments, remote: remote.New(q, nil, environments)}
 			ctx := context.WithValue(t.Context(), middleware.ContextKeyUserPermissions, authz.EnvironmentPermissionSet("remote"))
-			path := "/api/environments/0/jobs/auto-update/runs/" + local.ID
+			path := "/api/environments/0/jobs/scheduled-prune/runs/" + local.ID
 			if !automatic {
 				_, err = svc.ResolveRun(ctx, "remote", local.JobID, local.ID, "operator")
 				require.ErrorContains(t, err, "agent run must need attention")

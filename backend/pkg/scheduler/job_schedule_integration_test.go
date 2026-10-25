@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; SQLite temp-file persistence fixture.
+// Deviations: Local module namespace; SQLite temp-file persistence fixture; retired image schedules reject writes across restart.
 
 package scheduler
 
@@ -12,6 +12,7 @@ import (
 	"testing"
 
 	"github.com/florianfinn/docklet-next/backend/internal/testsqlite"
+	imageDTO "github.com/florianfinn/docklet-next/types/image"
 	"github.com/florianfinn/docklet-next/types/jobschedule"
 	"github.com/stretchr/testify/require"
 	"gorm.io/gorm"
@@ -24,86 +25,50 @@ import (
 	"github.com/florianfinn/docklet-next/backend/internal/settings"
 )
 
-func TestDeprecatedImagePollingSchedulePersistsWithoutRuntimeJob(t *testing.T) {
+func TestDeprecatedImagePollingScheduleRefusesWithoutRuntimeJob(t *testing.T) {
 	ctx := t.Context()
 	databasePath := filepath.Join(t.TempDir(), "arcane.db")
 	db, settingsService := openJobScheduleTestDatabaseInternal(t, ctx, databasePath)
-
+	baseline := settingsService.GetStringSetting(ctx, "pollingInterval", "")
 	appConfig := &config.Config{Timezone: "UTC"}
 	lifecycleCtx, cancelLifecycle := context.WithCancel(t.Context())
 	jobScheduler := newJobSchedulerForTestInternal(t, lifecycleCtx, appConfig.GetLocation())
-
 	jobService := job.NewJobService(db, settingsService, appConfig, jobScheduler.coordinator, nil, nil, nil)
 	jobService.SetScheduler(lifecycleCtx, jobScheduler)
 	require.NoError(t, jobScheduler.StartScheduler(t.Context()))
-
-	_, ok := jobScheduler.GetJobRuntimeState("image-polling")
-	require.False(t, ok)
-	require.Empty(t, jobScheduler.ListRegisteredJobs())
-
 	requestedSchedule := "0 0 8 * * *"
-	updatedSchedules, err := jobService.UpdateJobSchedules(ctx, jobschedule.Update{
-		PollingInterval: &requestedSchedule,
-	})
-	require.NoError(t, err)
-	require.Equal(t, requestedSchedule, updatedSchedules.PollingInterval)
-
-	var persisted settings.SettingVariable
-	require.NoError(t, db.WithContext(ctx).First(&persisted, "key = ?", "pollingInterval").Error)
-	require.Equal(t, requestedSchedule, persisted.Value)
-	require.Equal(t, requestedSchedule, settingsService.GetStringSetting(ctx, "pollingInterval", ""))
-
-	_, ok = jobScheduler.GetJobRuntimeState("image-polling")
-	require.False(t, ok)
+	_, err := jobService.UpdateJobSchedules(ctx, jobschedule.Update{PollingInterval: &requestedSchedule})
+	require.Equal(t, "update.schedule-hub-owned", imageDTO.Neutral(err, "unexpected", 500).Problem.Code)
+	require.Equal(t, baseline, settingsService.GetStringSetting(ctx, "pollingInterval", ""))
 	require.Empty(t, jobScheduler.ListRegisteredJobs())
-
-	jobs, err := jobService.ListJobs(ctx)
-	require.NoError(t, err)
-	imagePollingStatus := findJobStatusInternal(t, jobs, "image-polling")
-	require.Equal(t, requestedSchedule, imagePollingStatus.Schedule)
-	require.NotNil(t, imagePollingStatus.NextRun)
-	require.True(t, imagePollingStatus.IsContinuous)
-	require.Equal(t, "pollingInterval", imagePollingStatus.SettingsKey)
-
 	cancelLifecycle()
 	require.NoError(t, stopJobSchedulerForTestInternal(t.Context(), jobScheduler))
 	closeJobScheduleTestDatabaseInternal(t, db)
 
-	restartDB, restartSettingsService := openJobScheduleTestDatabaseInternal(t, ctx, databasePath)
-	restartLifecycleCtx, cancelRestartLifecycle := context.WithCancel(t.Context())
-	restartScheduler := newJobSchedulerForTestInternal(t, restartLifecycleCtx, appConfig.GetLocation())
-	restartJobService := job.NewJobService(restartDB, restartSettingsService, appConfig, restartScheduler.coordinator, nil, nil, nil)
-	restartJobService.SetScheduler(restartLifecycleCtx, restartScheduler)
-	require.NoError(t, restartScheduler.StartScheduler(t.Context()))
+	restartDB, restartSettings := openJobScheduleTestDatabaseInternal(t, ctx, databasePath)
+	restartCtx, cancelRestart := context.WithCancel(t.Context())
+	restartScheduler := newJobSchedulerForTestInternal(t, restartCtx, appConfig.GetLocation())
+	restartJobs := job.NewJobService(restartDB, restartSettings, appConfig, restartScheduler.coordinator, nil, nil, nil)
+	restartJobs.SetScheduler(restartCtx, restartScheduler)
+	require.NoError(t, restartScheduler.StartScheduler(ctx))
 	t.Cleanup(func() {
-		cancelRestartLifecycle()
+		cancelRestart()
 		require.NoError(t, stopJobSchedulerForTestInternal(context.WithoutCancel(t.Context()), restartScheduler))
 		closeJobScheduleTestDatabaseInternal(t, restartDB)
 	})
-
-	_, ok = restartScheduler.GetJobRuntimeState("image-polling")
-	require.False(t, ok)
+	require.Equal(t, baseline, restartSettings.GetStringSetting(ctx, "pollingInterval", ""))
 	require.Empty(t, restartScheduler.ListRegisteredJobs())
-	require.Equal(t, requestedSchedule, restartSettingsService.GetStringSetting(ctx, "pollingInterval", ""))
-
-	restartedJobs, err := restartJobService.ListJobs(ctx)
+	rows, err := restartJobs.ListJobs(ctx)
 	require.NoError(t, err)
-	require.Equal(t, requestedSchedule, findJobStatusInternal(t, restartedJobs, "image-polling").Schedule)
-
-	require.NoError(t, restartSettingsService.SetBoolSetting(ctx, "pollingEnabled", false))
-	disabledSchedule := "0 0 9 * * *"
-	_, err = restartJobService.UpdateJobSchedules(ctx, jobschedule.Update{PollingInterval: &disabledSchedule})
-	require.NoError(t, err)
-
-	_, ok = restartScheduler.GetJobRuntimeState("image-polling")
-	require.False(t, ok)
+	for _, row := range rows.Jobs {
+		require.NotEqual(t, "image-polling", row.ID)
+		require.NotEqual(t, "auto-update", row.ID)
+	}
+	require.NoError(t, restartSettings.SetBoolSetting(ctx, "pollingEnabled", false))
+	_, err = restartJobs.UpdateJobSchedules(ctx, jobschedule.Update{PollingInterval: &requestedSchedule})
+	require.Equal(t, "update.schedule-hub-owned", imageDTO.Neutral(err, "unexpected", 500).Problem.Code)
+	require.Equal(t, baseline, restartSettings.GetStringSetting(ctx, "pollingInterval", ""))
 	require.Empty(t, restartScheduler.ListRegisteredJobs())
-
-	disabledJobs, err := restartJobService.ListJobs(ctx)
-	require.NoError(t, err)
-	disabledStatus := findJobStatusInternal(t, disabledJobs, "image-polling")
-	require.False(t, disabledStatus.Enabled)
-	require.Equal(t, disabledSchedule, disabledStatus.Schedule)
 }
 
 func openJobScheduleTestDatabaseInternal(t *testing.T, ctx context.Context, databasePath string) (*database.DB, *settings.SettingsService) {
@@ -128,16 +93,4 @@ func closeJobScheduleTestDatabaseInternal(t *testing.T, db *database.DB) {
 	sqlDB, err := db.DB.DB()
 	require.NoError(t, err)
 	require.NoError(t, sqlDB.Close())
-}
-
-func findJobStatusInternal(t *testing.T, jobs *jobschedule.JobListResponse, jobID string) jobschedule.JobStatus {
-	t.Helper()
-
-	for _, job := range jobs.Jobs {
-		if job.ID == jobID {
-			return job
-		}
-	}
-	require.FailNowf(t, "unexpected failure", "job %q not found", jobID)
-	return jobschedule.JobStatus{}
 }
