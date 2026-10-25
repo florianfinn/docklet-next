@@ -187,7 +187,7 @@ func TestPR1ReadProjectionDeniedAndRateLimitedAreErrors(t *testing.T) {
 			require.Equal(t, "error", result.State)
 			require.False(t, result.HasUpdate)
 			if status == 401 {
-				require.Equal(t, "registry.authentication-failed", result.Code)
+				require.Equal(t, "registry.authentication-required", result.Code)
 				require.Equal(t, "authentication-required", result.AuthState)
 			} else {
 				require.Equal(t, "registry.rate-limited", result.Code)
