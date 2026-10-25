@@ -62,12 +62,15 @@ export function agentFixture(spec, fixture) {
         .map(([method, op]) => ({ method: method.toUpperCase(), path, operationId: op.operationId, sha256: createHash("sha256").update(JSON.stringify(op)).digest("hex") }))),
       runtimePreflightSha256: createHash("sha256").update(JSON.stringify(document.paths["/environments/0/runtime-target"].post)).digest("hex"),
       retainedPoints: 5,
+      retentionProtections: ["latest-restore-target", "latest-healthy-baseline", "active-or-unknown-run"],
+      failedAttemptPoints: 1,
+      failedAttemptScope: "partial-source from failed attempts; healthy baseline and successful pre-restore points exempt",
       volumeDataIncluded: false,
       normalComposePullsTakeLease: false,
       retiredUpdateCode: "update.path-retired",
       observedIdentity: "target identity and modeled/extra container/image IDs and labels; running state is recorded only",
       configurationProof: "saved Compose/env bytes, rendered model, config-hash labels and image bindings; no runtime state",
-      runtimeEvidence: "replicas, one-off and orphan containers are captured and pinned separately from configuration targets",
+      runtimeEvidence: "all containers are captured; only configured non-one-off service and replica images require inspection and pins",
       resultSettlement: "atomic with terminal receipt; failed persistence never replays Docker",
     };
     manifest.imageSafety.inactiveCapabilities = manifest.imageSafety.inactiveCapabilities.filter((name) => !["stack-update", "restore"].includes(name));

@@ -540,16 +540,18 @@ uses durable cancel; no new per-Docker-call authorization protocol is introduced
 
 ## Restore points and deployment identity
 
-Retain the latest **five available points per logical target**, with explicit
-deletion and no time-based expiry. Failed updates keep their point subject to
-normal retention after successful or failed settlement. Point-list GETs never
-remove metadata or tags; cleanup runs on settlement, deletion and startup.
-Active/unknown update/restore runs hold their source and
-pre-change points outside trimming, so the limit can be exceeded temporarily.
-Create and verify a new point before trimming older ones. Cleanup failure never
-invalidates it. Release a pin only after durable point deletion and when no
-other point/run references its ID. Reconcile interrupted orphan
-tags conservatively under the host image lease; never bulk-prune them.
+Retain **five available points per logical target** without time-based expiry.
+M6 exempts the most recently selected restore target and latest healthy-source
+baseline point from automatic eviction; delete the oldest other points instead.
+Keep one failed-attempt `partial-source` point, replacing older failed attempts;
+a healthy pre-attempt snapshot remains baseline evidence even if its run fails.
+A failed-state restore target owns that single slot. Active/unknown runs hold
+additional points, so limits can be exceeded until settlement. Record restore use
+and failed outcome on the point, independently of deletable activity history. Deletion
+still checks active holds. GETs never remove metadata or tags; cleanup runs on
+settlement, deletion and startup. Verify a new point before trimming; cleanup
+failure never invalidates it. Release pins only after durable point deletion and
+when no other point/run owns them; reconcile orphan tags under the host image lease.
 
 ### Recorded deployed baseline and drift refusal
 
@@ -635,9 +637,9 @@ unknown relative to the last baseline or has no current baseline. Record absent/
 stopped services explicitly; if inspection/capture/pins cannot be completed, fail
 safely with `update.snapshot-unavailable` without consuming the selected point.
 This point preserves observed recovery inputs, not a claim of healthy deployment.
-Record and pin extra replica/one-off/orphan images separately as runtime evidence;
-they are not additional Compose configuration targets. Restore leaves unrelated
-runtime orphans untouched and is independent of their presence or running state.
+Record extra containers as runtime evidence. Pin configured service replicas;
+unrelated orphans, disabled-profile services and one-offs require no image inspect
+or pin, remain untouched, and cannot block recovery when their images are gone.
 Restoring a `partial-source` point uses its recorded service presence/stopped state
 and inspected images with its saved inputs; it cannot claim to restore a healthy
 stack or substitute missing services with registry images.
@@ -830,7 +832,7 @@ recommendations; implementation still waits for independent design review PASS.
 
 | ID | Accepted decision / owned foundation requirement |
 | --- | --- |
-| D1 | Latest five points per logical target, explicit deletion, active/unknown holds and a mandatory point before restore; host orphan cleanup keeps protection actionable |
+| D1 | Five-point target with M6 restore/baseline exemptions, one failed-state slot, explicit deletion and active/unknown holds; every restore captures a point |
 | D2 | Stack policy wins for managed children; M5 standalone containers have information only. Two hub-owned jobs per registered host, existing master gates, serial apply children and policy revision frozen at admission |
 | D3 → M1/M2 | Recorded deployed baseline after successful normal deploy/update/restore. Refuse saved-but-undeployed drift for manual and automatic update. Every update/restore needs a point; no legacy/bootstrap path or manual bypass. Baseline capture failure is visible and never rewrites a successful deploy as failed |
 | D4 | Username/access-key identity and secrets are write-only; actual DTO homes types/containerregistry and types/jobschedule; generic/ECR baseline, no registry browser UI; production pull/check rejects inline credentials |

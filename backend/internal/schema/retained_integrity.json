@@ -18,6 +18,7 @@
     {"table": "restore_points", "column": "revision", "notNull": true},
     {"table": "restore_points", "column": "payload", "notNull": true},
     {"table": "restore_points", "column": "available", "notNull": true},
+    {"table": "restore_points", "column": "failed_attempt", "notNull": true, "default": "false"},
     {"table": "image_lifecycle_runs", "column": "id", "notNull": true},
     {"table": "image_lifecycle_runs", "column": "point_id", "notNull": true},
     {"table": "image_lifecycle_runs", "column": "selected_point_id", "notNull": true},
@@ -254,7 +255,7 @@
   ],
   "constraints": {
     "deployment_baselines": ["CHECK (available IN (0,1))"],
-    "restore_points": ["CHECK (available IN (0,1))", "CHECK (source_state IN ('settled','partial-source'))"],
+    "restore_points": ["CHECK (available IN (0,1))", "CHECK (source_state IN ('settled','partial-source'))", "CHECK (failed_attempt IN (0,1))"],
     "image_lifecycle_runs": ["CHECK (had_effect IN (0,1))", "CHECK (settled IN (0,1))"],
     "runtime_image_intents": [],
 

@@ -95,13 +95,17 @@ func fitsRestoreIntent(snapshot *Snapshot) bool {
 }
 
 // Containers are partial-source evidence, not additional Compose services.
-// Preserve their images even when a replica, one-off or orphan is not a target.
+// Only configured, non-one-off service images are required for recovery; an
+// unrelated runtime container remains evidence even when its image is gone.
 func (s *Snapshot) Images() map[string]ServiceImage {
 	out := map[string]ServiceImage{}
 	for key, image := range s.Services {
 		out[key] = image
 	}
 	for id, image := range s.Containers {
+		if _, configured := s.Services[image.Service]; !configured || image.OneOff {
+			continue
+		}
 		out["container/"+id] = image
 	}
 	return out

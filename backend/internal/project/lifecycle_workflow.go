@@ -35,6 +35,11 @@ func (s *ProjectService) ExecuteImageLifecycle(ctx context.Context, id, run, reg
 				resultErr = &dto.UncertainImageEffect{Cause: err}
 			}
 		}
+		if resultErr != nil && result.RestorePointID != "" {
+			if err := s.lifecycleStore().FailedAttempt(context.WithoutCancel(ctx), result.RestorePointID); err != nil {
+				resultErr = &dto.UncertainImageEffect{Cause: err}
+			}
+		}
 		if resultErr != nil {
 			result.HTTPStatus = imageDTO.Neutral(resultErr, "update.deploy-failed", 500).Status
 			result.Code = imageDTO.Neutral(resultErr, "update.deploy-failed", 500).Problem.Code

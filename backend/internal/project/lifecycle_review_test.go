@@ -8,8 +8,6 @@ package project
 
 import (
 	"context"
-	"errors"
-	compose "github.com/compose-spec/compose-go/v2/types"
 	life "github.com/florianfinn/docklet-next/backend/internal/project/children/lifecycle"
 	activityDTO "github.com/florianfinn/docklet-next/types/activity"
 	imageDTO "github.com/florianfinn/docklet-next/types/image"
@@ -88,6 +86,9 @@ func TestLifecycleConfigurationIgnoresRuntimeShape(t *testing.T) {
 			_, source, err := f.service.lifecycleStore().Point(t.Context(), points[0].ID)
 			require.NoError(t, err)
 			for id, img := range source.Containers {
+				if _, configured := source.Services[img.Service]; !configured || img.OneOff {
+					continue
+				}
 				var protected int64
 				require.NoError(t, f.db.Table("image_protections").Where("image_id = ? AND reason = ? AND owner_id = ?", img.ImageID, "restore-point", points[0].ID).Count(&protected).Error)
 				require.Positive(t, protected, "every observed source image must retain point protection")
@@ -163,27 +164,6 @@ func TestLifecycleConfigurationStillRefusesChangedImageBindingAndConfigHash(t *t
 			require.Zero(t, f.deploys)
 		})
 	}
-}
-
-func TestLifecycleFailedEffectRunsApplyFivePointRetention(t *testing.T) {
-	f := newLifecycleFixture(t)
-	f.establishBaseline()
-	require.Equal(t, activityDTO.StatusSuccess, f.wait(f.admit(f.intent("rebuild"))).Status)
-	f.up = func(context.Context, *compose.Project) error {
-		return errors.New("synthetic partial deployment failure")
-	}
-	for i := 0; i < 7; i++ {
-		points := lifecyclePoints(t, f)
-		require.NotEmpty(t, points)
-		out := f.wait(f.admit(lifecycleRestore(t, f, points[0].ID)))
-		require.Equal(t, activityDTO.StatusFailed, out.Status)
-		require.NoError(t, f.service.ReconcileImageLifecycle(t.Context()))
-		points = lifecyclePoints(t, f)
-		require.LessOrEqual(t, len(points), 5)
-		var point life.Point
-		require.NoError(t, f.db.First(&point, "id = ?", out.ImageLifecycle.RestorePointID).Error, "a failed run with effects retains its new point")
-	}
-	require.Len(t, lifecyclePoints(t, f), 5)
 }
 
 func TestLifecyclePointListDoesNotReconcileOrMutateTags(t *testing.T) {

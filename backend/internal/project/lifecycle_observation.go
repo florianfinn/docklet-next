@@ -85,21 +85,23 @@ func (s *ProjectService) lifecycleObserve(ctx context.Context, snap *life.Snapsh
 		if modeled && !oneOff && (lifecycleSystemLabels(inspected.Container.Config.Labels) || protected[id] || (len(self) >= 12 && strings.HasPrefix(item.ID, self))) {
 			return lifecycleFailure("update.invalid-target")
 		}
-		img, e := c.ImageInspect(ctx, id)
-		if e != nil || img.InspectResponse.ID != id || img.InspectResponse.Os == "" || img.InspectResponse.Architecture == "" {
-			return lifecycleFailure("update.snapshot-unavailable")
-		}
-		observed := life.ServiceImage{Reference: inspected.Container.Config.Image, ImageID: id, Platform: lifecyclePlatform(img.InspectResponse.Os, img.InspectResponse.Architecture, img.InspectResponse.Variant), ContainerID: item.ID, ContainerName: strings.TrimPrefix(inspected.Container.Name, "/"), Service: key, ConfigHash: inspected.Container.Config.Labels["com.docker.compose.config-hash"], OneOff: oneOff, Present: true, Running: inspected.Container.State != nil && inspected.Container.State.Running}
+		observed := life.ServiceImage{Reference: inspected.Container.Config.Image, ImageID: id, ContainerID: item.ID, ContainerName: strings.TrimPrefix(inspected.Container.Name, "/"), Service: key, ConfigHash: inspected.Container.Config.Labels["com.docker.compose.config-hash"], OneOff: oneOff, Present: true, Running: inspected.Container.State != nil && inspected.Container.State.Running}
 		if guard.ValidateReference(observed.Reference) != nil {
 			observed.Reference = id
-		}
-		if len(img.InspectResponse.RepoDigests) > 0 {
-			observed.Digest = img.InspectResponse.RepoDigests[0]
 		}
 		snap.Containers[item.ID] = observed
 		if !modeled || oneOff {
 			continue
 		}
+		img, e := c.ImageInspect(ctx, id)
+		if e != nil || img.InspectResponse.ID != id || img.InspectResponse.Os == "" || img.InspectResponse.Architecture == "" {
+			return lifecycleFailure("update.snapshot-unavailable")
+		}
+		observed.Platform = lifecyclePlatform(img.InspectResponse.Os, img.InspectResponse.Architecture, img.InspectResponse.Variant)
+		if len(img.InspectResponse.RepoDigests) > 0 {
+			observed.Digest = img.InspectResponse.RepoDigests[0]
+		}
+		snap.Containers[item.ID] = observed
 		if old.Present && (prior[key].ImageID == "" || old.ImageID == prior[key].ImageID || observed.ImageID != prior[key].ImageID) {
 			continue
 		}

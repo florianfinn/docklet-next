@@ -45,10 +45,12 @@ type Point struct {
 	RegistrationID string    `gorm:"not null"`
 	SourceRunID    string    `gorm:"not null"`
 	CreatedAt      time.Time `gorm:"not null;index:idx_restore_points_target_created,priority:2"`
-	SourceState    string    `gorm:"not null"`
-	Revision       string    `gorm:"not null"`
-	Payload        string    `gorm:"not null"`
-	Available      bool      `gorm:"not null"`
+	LastRestoredAt *time.Time
+	FailedAttempt  bool   `gorm:"not null;default:false"`
+	SourceState    string `gorm:"not null"`
+	Revision       string `gorm:"not null"`
+	Payload        string `gorm:"not null"`
+	Available      bool   `gorm:"not null"`
 }
 
 func (Point) TableName() string { return "restore_points" }
@@ -174,6 +176,20 @@ func (s Store) Prepare(ctx context.Context, snapshot *Snapshot, run, selected, s
 	}
 	point := Point{ID: uuid.NewString(), TargetID: snapshot.TargetID, TargetIdentity: snapshot.TargetIdentity, RegistrationID: snapshot.RegistrationID, SourceRunID: run, CreatedAt: time.Now().UTC(), SourceState: state, Revision: Hash(snapshot), Payload: payload}
 	err = s.DB.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		if selected != "" {
+			var recent []Point
+			if err := tx.Where("target_id = ? AND last_restored_at IS NOT NULL", snapshot.TargetID).Order("last_restored_at DESC").Limit(1).Find(&recent).Error; err != nil {
+				return err
+			}
+			used := point.CreatedAt
+			if len(recent) > 0 && !used.After(*recent[0].LastRestoredAt) {
+				used = recent[0].LastRestoredAt.Add(time.Microsecond)
+			}
+			updated := tx.Model(&Point{}).Where("id = ? AND target_id = ? AND target_identity = ? AND registration_id = ? AND available = ?", selected, snapshot.TargetID, snapshot.TargetIdentity, snapshot.RegistrationID, true).Update("last_restored_at", used)
+			if updated.Error != nil || updated.RowsAffected != 1 {
+				return imageDTO.Failure("restore.unavailable", 409)
+			}
+		}
 		if err := tx.Create(&point).Error; err != nil {
 			return err
 		}
@@ -199,6 +215,12 @@ func (s Store) Available(ctx context.Context, id string) error {
 		return imageDTO.Failure("update.persistence-failed", 500)
 	}
 	return nil
+}
+
+// A healthy pre-attempt snapshot remains baseline evidence even when its run
+// fails. Persist failed-state classification before the receipt can settle.
+func (s Store) FailedAttempt(ctx context.Context, id string) error {
+	return s.DB.WithContext(ctx).Model(&Point{}).Where("id = ? AND source_state = ?", id, "partial-source").Update("failed_attempt", true).Error
 }
 func (s Store) Effect(ctx context.Context, run string) error {
 	err := s.DB.WithContext(ctx).Transaction(func(tx *gorm.DB) error {

@@ -225,7 +225,9 @@ func (s *ProjectService) ReconcileImageLifecycle(ctx context.Context) error {
 		return err
 	}
 	for _, target := range targets {
-		s.trimLifecyclePoints(ctx, target)
+		if err = s.trimLifecyclePoints(ctx, target); err != nil {
+			return err
+		}
 	}
 	// Metadata-free pins are durable cleanup work, including interrupted preparing
 	// points. Never infer run settlement from process or lease age.
@@ -276,16 +278,25 @@ func (s *ProjectService) ReconcileImageLifecycle(ctx context.Context) error {
 	}
 	return nil
 }
-func (s *ProjectService) trimLifecyclePoints(ctx context.Context, target string) {
+func (s *ProjectService) trimLifecyclePoints(ctx context.Context, target string) error {
 	var points []life.Point
-	if s.db.WithContext(ctx).Where("target_id = ? AND available = ?", target, true).Order("created_at DESC, id DESC").Find(&points).Error != nil {
-		return
+	if err := s.db.WithContext(ctx).Where("target_id = ? AND available = ?", target, true).Order("created_at DESC, id DESC").Find(&points).Error; err != nil {
+		return err
 	}
-	for i, point := range points {
-		if i >= 5 {
-			_ = s.deleteLifecyclePoint(ctx, point.ID)
+	held := map[string]bool{}
+	for _, point := range points {
+		active, err := s.lifecycleStore().Held(ctx, point.ID)
+		if err != nil {
+			return err
+		}
+		held[point.ID] = active
+	}
+	for _, id := range life.RetentionDeletions(points, held) {
+		if err := s.deleteLifecyclePoint(ctx, id); err != nil {
+			return err
 		}
 	}
+	return nil
 }
 
 func lifecyclePlatform(os, arch, variant string) string {
