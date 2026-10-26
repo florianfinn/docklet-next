@@ -71,10 +71,10 @@ it("schedule current run and master-off survive owner claim; save clears owner-u
   expect(screen.queryByText(catalogs.de.images.errors["update_schedule-owner-unset"]) === null).toBe(true);
   expect(document.body.textContent).toContain(t.masterOff); expect(document.body.textContent).toContain("1dd08eac");
 });
-it("point list reads no pending protection fields and never offers delete", async () => {
+it("point list exposes confirmed delete with server projection", async () => {
   const f = await ready(); renderWithApp(<LiveRestorePoints stackId="direct~project" />, f.adapter);
   await screen.findByText(point.createdAt); expect(document.body.textContent).toContain(t.noData);
-  expect(screen.queryByRole("button", { name: /löschen/i }) === null).toBe(true); expect(f.writes()).toHaveLength(0);
+  expect(screen.getByRole("button", { name: t.deletePoint }).hasAttribute("disabled")).toBe(false); expect(document.body.textContent).toContain(catalogs.de.common.restorePoints.noRetentionAnchor); expect(f.writes()).toHaveLength(0);
 });
 it("closing before a delayed refusal prevents stale result publication", async () => {
   const f = await ready(), held = deferred<Response>(), started = deferred<void>();

@@ -9,7 +9,7 @@ import type { UpdatesApi, PolicyMode, ScheduleInput } from "@/domain/stack-updat
 import type { CsrfClient } from "./csrf-client";
 import { unavailable, AdapterOutcomeError, type CapabilityDescriptor, type ResourceRef } from "../capability";
 import { splitInventoryId } from "./inventory-mapping";
-import { record, reason, invalidUpdate } from "./update-validation";
+import { record, reason, id as requiredId, invalidUpdate } from "./update-validation";
 import { baseline, points, policy, schedules, hints, checkResult } from "./update-decoders";
 import { runtimeResponseError } from "./runtime-mapping";
 interface Options { baseUrl: string; client: CsrfClient; capability: (operation: string, ref: ResourceRef) => Promise<CapabilityDescriptor>; generation: () => number; changed: () => void }
@@ -27,7 +27,7 @@ export function createStackUpdates({ baseUrl, client, capability, generation, ch
     if (!response.ok) {
       const error = runtimeResponseError(raw, response.status);
       if (method !== "GET" && (response.status === 502 || response.status === 504) && error.outcome.kind === "error" && error.outcome.code === "agent.unavailable") throw new AdapterOutcomeError({ kind: "error", code: "runtime.admission-unknown" });
-      if (error.outcome.kind === "error") throw new AdapterOutcomeError({ ...error.outcome, code: reason(error.outcome.code) ?? "http.error" });
+      if (error.outcome.kind === "error") throw new AdapterOutcomeError({ ...error.outcome, code: ["agent.unavailable", "agent.invalid-token", "agent.update-required"].includes(error.outcome.code) ? error.outcome.code : reason(error.outcome.code) ?? "http.error" });
       throw error;
     }
     let envelope: Record<string, unknown>;
@@ -44,6 +44,8 @@ export function createStackUpdates({ baseUrl, client, capability, generation, ch
     async getUpdateBaseline(id) { const s = stack(id); return baseline(await request("getUpdateBaseline", s.ref, `projects/${s.path}/baseline`)); },
     async listHostRestorePoints(host) { return points(await request("listHostRestorePoints", { kind: "host", id: host }, "restore-points")); },
     async listRestorePoints(id) { const s = stack(id); return points(await request("listRestorePoints", s.ref, `project/${s.path}/restore-points`), s.raw); },
+    async deleteRestorePoint(id, pointId) { const s = stack(id); requiredId(pointId); return save(async () => { const data = record(await request("deleteRestorePoint", s.ref, `project/${s.path}/restore-points/${encodeURIComponent(pointId)}`, "DELETE", undefined, ["listRestorePoints"])); requiredId(data.message); }); },
+    async deleteHostRestorePoint(host, pointId) { requiredId(pointId); return save(async () => { const data = record(await request("deleteHostRestorePoint", { kind: "host", id: host }, `restore-points/${encodeURIComponent(pointId)}`, "DELETE", undefined, ["listHostRestorePoints"])); requiredId(data.message); }); },
     async getAutoUpdatePolicy(id) { const s = stack(id); return policy(await request("getAutoUpdatePolicy", s.ref, `policies/project/${s.path}`), s.host, s.raw); },
     async saveAutoUpdatePolicy(id, mode: PolicyMode, expectedRevision) { const s = stack(id); return save(async () => policy(await request(mode === "apply" ? "setAutoUpdateApply" : "setAutoUpdate", s.ref, `policies/project/${s.path}`, "PUT", { mode, expectedRevision }, ["getAutoUpdatePolicy"]), s.host, s.raw)); },
     async getUpdateSchedules(host) { return schedules(await request("listSchedule", { kind: "host", id: host }, "schedules"), host); },

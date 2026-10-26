@@ -30,7 +30,7 @@ export function StackUpdateDialog({ stackId, point, onClose }: { stackId: string
   const [ack, setAck] = useState<string>(), [receipt, setReceipt] = useState<{ id: string; identity: string }>();
   const data = baseline.data;
   const runId = receipt?.identity === data?.targetIdentity ? receipt?.id : undefined;
-  const validPoint = !point || (point.available && !point.orphaned && point.targetIdentity === data?.targetIdentity);
+  const validPoint = !point || (point.available && !point.orphaned && point.holdState === "none" && point.targetIdentity === data?.targetIdentity);
   const canSend = read.available && write.available && (!point || points.available) && !!data && validPoint && (!point || ack === data?.savedRevision) && !action.busy && !runId;
   const close = () => { action.reset(); onClose(); };
   useEffect(() => identityLifetime(adapter).listen(onClose), [adapter, onClose]);

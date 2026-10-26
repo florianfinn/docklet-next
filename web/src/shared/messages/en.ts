@@ -2,6 +2,13 @@
 
 export const enCommon = {
   stackUpdates: {
+    deletePoint: "Delete restore point",
+    deleteHelp: "Permanently release this point’s saved configuration and image references. A retention anchor can also be deleted. Volume and bind data are unchanged.",
+    deleted: "Restore point deleted.",
+    alreadyDeleted: "A fresh read or server response confirms that this point is already deleted.",
+    deleteUnknown: "Delete outcome unknown. Refresh the list before deciding whether to retry; the request may still complete.",
+    deleteStillPresent: "The point is still listed. Deletion remains unconfirmed; another delete requires your explicit choice.",
+    refreshPoints: "Refresh restore points",
     update: "Update stack",
     restore: "Restore stack",
     noData: "Restore points save configuration and images. Volume and bind data are not saved or restored.",

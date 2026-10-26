@@ -4,6 +4,7 @@
 // License: Apache-2.0
 // Deviations: Original phase 2a stack update consumer for issue #231.
 
+import { AdapterOutcomeError } from "../capability";
 import type { UpdateBaseline, UpdatePoint, StackUpdatePolicy, UpdateSchedules, SystemHints } from "@/domain/stack-updates";
 import { record, text, id, bool, revision, date, optionalDate, list, choice, reason, invalidUpdate } from "./update-validation";
 import { observation } from "./update-validation";
@@ -13,11 +14,12 @@ export function baseline(value: unknown): UpdateBaseline {
   return { targetIdentity: id(o.targetIdentity), savedRevision: text(o.savedRevision), observedRevision: text(o.observedRevision), available: bool(o.available), autoExcluded: bool(o.autoExcluded), code: reason(o.code), ...(o.sourceRunId === undefined ? {} : { sourceRunId: id(o.sourceRunId) }) };
 }
 export function points(value: unknown, target?: string): UpdatePoint[] {
-  return list(value).map((v) => {
+  try { return list(value).map((v) => {
     const o = record(v);
+    if (!Array.isArray(o.images)) throw invalidUpdate();
     if ((target !== undefined && id(o.targetId) !== target) || bool(o.volumeDataIncluded)) throw invalidUpdate();
-    return { id: id(o.id), registrationId: id(o.registrationId), targetId: id(o.targetId), targetIdentity: id(o.targetIdentity), sourceRunId: id(o.sourceRunId), createdAt: date(o.createdAt), sourceState: choice(o.sourceState, ["settled", "partial-source"]), available: bool(o.available), orphaned: bool(o.orphaned), volumeDataIncluded: false, code: reason(o.code), images: list(o.images).map((v) => { const i = record(v); return { service: id(i.service), reference: bool(i.present) ? id(i.reference) : text(i.reference), imageId: bool(i.present) ? id(i.imageId) : text(i.imageId), ...(i.digest === undefined ? {} : { digest: text(i.digest) }), present: bool(i.present), running: bool(i.running) }; }) };
-  });
+    return { id: id(o.id), registrationId: id(o.registrationId), targetId: id(o.targetId), targetIdentity: id(o.targetIdentity), sourceRunId: id(o.sourceRunId), createdAt: date(o.createdAt), sourceState: choice(o.sourceState, ["settled", "partial-source"]), available: bool(o.available), orphaned: bool(o.orphaned), volumeDataIncluded: false, code: reason(o.code), protectionReason: o.protectionReason === null ? null : choice(o.protectionReason, ["restore-target", "healthy-baseline"]), holdState: choice(o.holdState, ["none", "active", "unknown"]), failedAttempt: bool(o.failedAttempt), images: list(o.images).map((v) => { const i = record(v); return { service: id(i.service), reference: bool(i.present) ? id(i.reference) : text(i.reference), imageId: bool(i.present) ? id(i.imageId) : text(i.imageId), ...(i.digest === undefined ? {} : { digest: text(i.digest) }), present: bool(i.present), running: bool(i.running) }; }) };
+  }); } catch { throw new AdapterOutcomeError({ kind: "error", code: "update.check-unavailable" }); }
 }
 export function policy(value: unknown, host: string, target: string): StackUpdatePolicy {
   const o = record(value);

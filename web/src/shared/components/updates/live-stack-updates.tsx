@@ -19,6 +19,8 @@ import { Button } from "@/shared/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/shared/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/shared/ui/select";
 import { StackUpdateDialog } from "./stack-update-dialog";
+import { RestorePointState } from "./restore-point-state";
+import { DeletePointDialog } from "./delete-point-dialog";
 import { UpdateUnavailable } from "./live-state";
 
 function PolicyDialog({ stackId, policy, close, saved }: { stackId: string; policy: StackUpdatePolicy; close: () => void; saved: () => void }) {
@@ -57,10 +59,14 @@ export function LiveRestorePoints({ stackId }: { stackId: string }) {
   const adapter = useAdapter(), t = useTranslations("common.stackUpdates"), errorText = useImageError();
   const read = useCapability("listRestorePoints", { kind: "stack", id: stackId });
   const query = useQuery({ queryKey: ["stack", stackId, "update-points"], queryFn: () => adapter.listRestorePoints!(stackId), enabled: read.available && !!adapter.listRestorePoints });
-  const [selected, setSelected] = useState<UpdatePoint>();
+  const [selected, setSelected] = useState<{ stackId: string; point: UpdatePoint }>(), [deleting, setDeleting] = useState<{ stackId: string; point: UpdatePoint }>();
+  const remove = useCapability("deleteRestorePoint", { kind: "stack", id: stackId });
+  const refresh = async () => { const result = await query.refetch(); if (result.isError) throw result.error; return result.data!; };
   const restore = useCapability("restoreRestorePoint", { kind: "stack", id: stackId }), baselineRead = useCapability("getUpdateBaseline", { kind: "stack", id: stackId });
   return <section className="flex flex-col gap-3"><p>{t("noData")}</p>{!read.available ? <UpdateUnavailable reason={read.reason} /> : query.isError ? <p role="alert">{errorText(query.error)}</p> : !query.data ? <p>{t("loading")}</p> : !query.data.length ? <p>{t("noPoints")}</p> : query.data.map((point) => <article className="rounded-lg border p-3" key={point.id}>
-    <time>{point.createdAt}</time><p>{t(point.sourceState === "partial-source" ? "partial" : "snapshot")}</p>{point.images.map((i) => <p key={i.service}>{i.service}: {i.reference} · {t(i.present ? i.running ? "running" : "stopped" : "absent")}</p>)}
-    {point.code && <p>{errorText(point.code)}</p>}<Button variant="outline" disabled={!restore.available || !baselineRead.available || !point.available || point.orphaned} title={restore.reason ?? baselineRead.reason} onClick={() => setSelected(point)}>{t("restore")}</Button>
-  </article>)}{selected && <StackUpdateDialog key={`${stackId}:${selected.id}`} stackId={stackId} point={selected} onClose={() => setSelected(undefined)} />}</section>;
+    <time>{point.createdAt}</time><RestorePointState point={point} /><p>{t(point.sourceState === "partial-source" ? "partial" : "snapshot")}</p>{point.images.map((i) => <p key={i.service}>{i.service}: {i.reference} · {t(i.present ? i.running ? "running" : "stopped" : "absent")}</p>)}
+    {point.code && <p>{errorText(point.code)}</p>}<Button variant="outline" disabled={!read.available || !restore.available || !baselineRead.available || !point.available || point.orphaned || point.holdState !== "none"} title={restore.reason ?? baselineRead.reason} onClick={() => setSelected({ stackId, point })}>{t("restore")}</Button>
+    <Button variant="outline" disabled={!read.available || !remove.available || point.holdState !== "none"} title={remove.reason ?? read.reason} onClick={() => setDeleting({ stackId, point })}>{t("deletePoint")}</Button>
+  </article>)}{selected?.stackId === stackId && <StackUpdateDialog key={`${stackId}:${selected.point.id}`} stackId={stackId} point={selected.point} onClose={() => setSelected(undefined)} />}
+    {deleting?.stackId === stackId && <DeletePointDialog key={`${stackId}:${deleting.point.id}:${deleting.point.targetIdentity}`} scope={{ kind: "stack", id: stackId }} point={deleting.point} readError={query.isError ? query.error : undefined} latest={query.data?.find((p) => p.id === deleting.point.id)} refresh={refresh} close={() => setDeleting(undefined)} />}</section>;
 }

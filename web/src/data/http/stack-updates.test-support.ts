@@ -12,11 +12,11 @@ import { observation } from "./update-observation.test-support";
 import type { UpdateBaseline, StackUpdatePolicy, UpdatePoint, UpdateSchedules, SystemHints } from "@/domain/stack-updates";
 export const revision = "a".repeat(64), targetIdentity = "b".repeat(64);
 export const base: UpdateBaseline = { targetIdentity, savedRevision: revision, observedRevision: revision, available: true, autoExcluded: false };
-export const point: UpdatePoint = { id: "128c02a8-584c-44ac-9920-717ec18cfdfa", registrationId: "direct", targetId: "project", targetIdentity, sourceRunId: RUN_ID, createdAt: "2026-10-26T00:00:00Z", sourceState: "settled", available: true, orphaned: false, volumeDataIncluded: false, images: [{ service: "app", reference: "example:1.0.0", imageId: "sha256:example", present: true, running: true }] };
+export const point: UpdatePoint = { id: "128c02a8-584c-44ac-9920-717ec18cfdfa", registrationId: "direct", targetId: "project", targetIdentity, sourceRunId: RUN_ID, createdAt: "2026-10-26T00:00:00Z", sourceState: "settled", available: true, orphaned: false, volumeDataIncluded: false, protectionReason: null, holdState: "none", failedAttempt: false, images: [{ service: "app", reference: "example:1.0.0", imageId: "sha256:example", present: true, running: true }] };
 export const storedPolicy: StackUpdatePolicy = { mode: "notify", revision: 1, environmentId: "direct", registrationId: "direct", targetKind: "project", targetId: "project", targetIdentity, jobId: "image-polling", stale: true, checkedAt: point.createdAt, applyCheckedAt: point.createdAt, applyCode: "update.config-drift", candidates: [{ service: "app", imageRef: "example:1.0.0", version: "1.1.0", digest: "sha256:example", platform: "linux/amd64", entryId: "candidate", notificationState: "sending" }] };
 export const schedule: UpdateSchedules = { revision: 1, environmentId: "direct", registrationId: "direct", pollingInterval: "0 0 * * * *", autoUpdateInterval: "0 0 0 * * *", pollingEnabled: true, autoUpdateEnabled: false, masterPollingEnabled: true, masterAutoUpdateEnabled: false, timeZone: "Europe/Berlin", jobs: [{ id: "image-polling", kind: "update-check", schedule: "0 0 * * * *", enabled: false, code: "update.schedule-owner-unset", currentRun: { id: RUN_ID, status: "running" } }, { id: "auto-update", kind: "auto-update", schedule: "0 0 0 * * *", enabled: false }] };
 export const systemHints: SystemHints = { hubVersion: "2.0.0", images: [{ kind: "agent", reference: "example:1.9.0", currentVersion: "1.9.0", candidateVersion: "2.0.0", state: "available", requiresHubUpdate: true, manualOnly: true }, { kind: "tools", reference: "example:4.0.0", currentVersion: "4.0.0", state: "pinned", requiresHubUpdate: false, manualOnly: true }] };
-export const updateOperations = ["listHostRestorePoints", "getUpdateBaseline", "listRestorePoints", "getAutoUpdatePolicy", "setAutoUpdate", "setAutoUpdateApply", "listSchedule", "saveUpdateSchedule", "listSystemComponents", "checkUpdates", "installStackUpdates", "restoreRestorePoint", "listHosts", "listActions"];
+export const updateOperations = ["deleteRestorePoint", "deleteHostRestorePoint", "listHostRestorePoints", "getUpdateBaseline", "listRestorePoints", "getAutoUpdatePolicy", "setAutoUpdate", "setAutoUpdateApply", "listSchedule", "saveUpdateSchedule", "listSystemComponents", "checkUpdates", "installStackUpdates", "restoreRestorePoint", "listHosts", "listActions"];
 export function updateFixture() {
   const state = { isEdge: false, denied: new Set<string>(), baseline: structuredClone(base), policy: structuredClone(storedPolicy), points: [structuredClone(point)], schedule: structuredClone(schedule), hints: structuredClone(systemHints), code: "", status: 409, malformed: false, hold: undefined as undefined | ((path: string, init: RequestInit) => Promise<Response> | undefined), hostFailure: "", user: "operator" };
   const calls: { path: string; init: RequestInit }[] = [];
@@ -35,6 +35,11 @@ export function updateFixture() {
     if (path.endsWith("/activities")) return response({ success: true, data: [], pagination: { totalItems: 0 } });
     if (path.includes("/runtime-runs/")) return envelope(runtimeDetail(run));
     if (path.endsWith("/baseline")) return envelope(state.malformed ? { ...state.baseline, available: "yes" } : state.baseline);
+    if (init.method === "DELETE" && path.includes("/restore-points/")) {
+      if (state.code) return response({ success: false, error: { code: state.code, message: "raw diagnostic" } }, state.status);
+      state.points = state.points.filter((p) => p.id !== decodeURIComponent(path.split("/").at(-1)!));
+      return envelope({ message: "Restore point deleted" });
+    }
     if (path.endsWith("/restore-points")) return envelope(state.points);
     if (path.endsWith("/check")) return state.code ? response({ success: false, error: { code: state.code, message: "raw diagnostic" } }, state.status) : envelope({ status: "has_update", hasUpdate: true, imageCount: 1, checkedImageCount: 1, imagesWithUpdates: 1, imagesNotPulled: 0, errorCount: 0, serviceUpdates: { app: { imageRef: "example:1.0.0", updateInfo: observation("version") } } });
     if (path.endsWith("/restore")) run.type = "project_restore";
@@ -45,6 +50,6 @@ export function updateFixture() {
     return response({}, 404);
   });
   const adapter = createHttpAdapter({ fetch: fetcher as typeof fetch, eventSource: () => source as unknown as EventSource });
-  const writes = () => calls.filter((c) => c.init.method === "POST" || c.init.method === "PUT");
+  const writes = () => calls.filter((c) => c.init.method === "POST" || c.init.method === "PUT" || c.init.method === "DELETE");
   return { state, adapter, calls, source, writes, fetcher, run };
 }

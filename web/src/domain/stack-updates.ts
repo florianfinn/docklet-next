@@ -13,6 +13,8 @@ export interface UpdatePoint {
   id: string; registrationId: string; targetId: string; targetIdentity: string;
   sourceRunId: string; createdAt: string; sourceState: "settled" | "partial-source";
   available: boolean; orphaned: boolean; volumeDataIncluded: false; code?: string;
+  protectionReason: "restore-target" | "healthy-baseline" | null;
+  holdState: "none" | "active" | "unknown"; failedAttempt: boolean;
   images: { service: string; reference: string; imageId: string; digest?: string; present: boolean; running: boolean }[];
 }
 export type PolicyMode = "off" | "notify" | "apply";
@@ -45,6 +47,8 @@ export interface UpdatesApi {
   getUpdateBaseline?(stackId: string): Promise<UpdateBaseline>;
   listHostRestorePoints?(hostId: string): Promise<UpdatePoint[]>;
   listRestorePoints?(stackId: string): Promise<UpdatePoint[]>;
+  deleteRestorePoint?(stackId: string, pointId: string): Promise<void>;
+  deleteHostRestorePoint?(hostId: string, pointId: string): Promise<void>;
   getAutoUpdatePolicy?(stackId: string): Promise<StackUpdatePolicy>;
   saveAutoUpdatePolicy?(stackId: string, mode: PolicyMode, expectedRevision: number): Promise<StackUpdatePolicy>;
   getUpdateSchedules?(hostId: string): Promise<UpdateSchedules>;

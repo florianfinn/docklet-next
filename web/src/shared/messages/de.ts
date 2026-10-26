@@ -3,6 +3,13 @@ import type { enCommon } from "./en";
 
 export const deCommon: typeof enCommon = {
   stackUpdates: {
+    deletePoint: "Wiederherstellungspunkt löschen",
+    deleteHelp: "Gespeicherte Konfiguration und Image-Verweise dieses Punkts dauerhaft freigeben. Auch ein Aufbewahrungsanker kann gelöscht werden. Volume- und Bind-Daten bleiben unverändert.",
+    deleted: "Wiederherstellungspunkt gelöscht.",
+    alreadyDeleted: "Eine neue Abfrage oder Serverantwort bestätigt, dass dieser Punkt bereits gelöscht ist.",
+    deleteUnknown: "Ergebnis des Löschens unbekannt. Liste vor einem erneuten Versuch aktualisieren; die Anfrage kann noch abgeschlossen werden.",
+    deleteStillPresent: "Der Punkt wird weiterhin angezeigt. Das Löschen ist nicht bestätigt; ein weiterer Löschversuch erfordert deine ausdrückliche Wahl.",
+    refreshPoints: "Wiederherstellungspunkte aktualisieren",
     update: "Stack aktualisieren",
     restore: "Stack wiederherstellen",
     noData: "Wiederherstellungspunkte sichern Konfiguration und Images. Volume- und Bind-Daten werden nicht gesichert oder wiederhergestellt.",
