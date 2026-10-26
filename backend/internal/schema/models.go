@@ -26,6 +26,7 @@ import (
 	"github.com/florianfinn/docklet-next/backend/internal/system"
 	"github.com/florianfinn/docklet-next/backend/internal/system/children/upgrade"
 	"github.com/florianfinn/docklet-next/backend/internal/updater"
+	updatepolicies "github.com/florianfinn/docklet-next/backend/internal/updater/children/policies"
 	"github.com/florianfinn/docklet-next/backend/internal/user"
 	"github.com/florianfinn/docklet-next/backend/internal/volume"
 	"github.com/florianfinn/docklet-next/backend/internal/volume/children/backup/children/policies"
@@ -47,6 +48,7 @@ func Models() []any {
 		&session.UserSession{}, &settings.SettingVariable{},
 		&system.SystemBackupRun{}, &system.SystemBackupPolicy{},
 		&upgrade.EnvironmentUpdateJob{}, &updater.AutoUpdateRecord{},
+		&updatepolicies.Policy{}, &updatepolicies.HostSchedule{}, &updatepolicies.Child{}, &updatepolicies.Candidate{}, &updatepolicies.Notice{},
 		&user.User{}, &user.UserAvatar{},
 		&volume.VolumeBackup{}, &policies.VolumeBackupPolicy{},
 		&vulnerability.VulnerabilityScanRecord{}, &vulnerability.VulnerabilityReportRecord{},

@@ -14,6 +14,9 @@ import (
 
 // Info contains detailed version information about the application.
 type Info struct {
+	CurrentImageRef             string            `json:"currentImageRef,omitempty"`
+	ToolsImage                  string            `json:"toolsImage,omitempty"`
+	ToolsImageOverride          bool              `json:"toolsImageOverride,omitempty"`
 	OnboardingChecks            *OnboardingChecks `json:"onboardingChecks,omitempty"`
 	AgentContractVersion        int               `json:"agentContractVersion"`
 	AgentContractFingerprint    string            `json:"agentContractFingerprint"`

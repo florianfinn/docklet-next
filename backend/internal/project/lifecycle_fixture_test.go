@@ -193,7 +193,7 @@ func (f *lifecycleFixture) serve(w http.ResponseWriter, r *http.Request) {
 		id := strings.TrimSuffix(strings.TrimPrefix(path, "/containers/"), "/json")
 		for _, c := range f.workloads {
 			if c.ID == id {
-				_ = json.NewEncoder(w).Encode(map[string]any{"Id": c.ID, "Image": c.ImageID, "State": map[string]any{"Running": c.Running}, "Config": map[string]any{"Image": c.Reference, "Labels": c.labels()}})
+				_ = json.NewEncoder(w).Encode(map[string]any{"Id": c.ID, "Name": "/" + c.Service, "Image": c.ImageID, "State": map[string]any{"Running": c.Running}, "Config": map[string]any{"Image": c.Reference, "Labels": c.labels()}})
 				return
 			}
 		}

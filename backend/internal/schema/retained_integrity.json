@@ -1,5 +1,7 @@
 {
   "columns": [
+    {"table":"stack_update_policies","column":"apply_code","notNull":true},
+    {"table":"stack_update_policies","column":"bookkeeping_code","notNull":true},
     {"table":"image_lifecycle_runs","column":"settled","notNull":true},
     {"table": "deployment_baselines", "column": "target_id", "notNull": true},
     {"table": "deployment_baselines", "column": "target_identity", "notNull": true},
@@ -254,6 +256,10 @@
     {"table": "webhooks", "column": "token_prefix", "notNull": true}
   ],
   "constraints": {
+    "stack_update_policies": ["CHECK (mode IN ('off','notify','apply'))", "CHECK (revision > 0)"],
+    "image_update_schedules": ["CHECK (revision > 0)", "CHECK (polling_enabled IN (0,1))", "CHECK (auto_update_enabled IN (0,1))"],
+    "image_policy_children": ["CHECK (revision > 0)", "CHECK (status IN ('prepared','admitted','refused','settled'))"],
+    "image_update_notifications": ["CHECK (status IN ('pending','sending','sent','unconfigured','failed'))", "CHECK (delivered >= 0)"],
     "deployment_baselines": ["CHECK (available IN (0,1))"],
     "restore_points": ["CHECK (available IN (0,1))", "CHECK (source_state IN ('settled','partial-source'))", "CHECK (failed_attempt IN (0,1))"],
     "image_lifecycle_runs": ["CHECK (had_effect IN (0,1))", "CHECK (settled IN (0,1))"],

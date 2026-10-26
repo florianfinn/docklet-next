@@ -61,6 +61,7 @@ import (
 
 // UpdaterService is Arcane's handler-facing service for the standalone updater engine.
 type UpdaterService struct {
+	policies    *imagePolicyService
 	admission   *runs.Admission
 	config      *config.Config
 	coordinator *runs.Coordinator
@@ -661,8 +662,7 @@ func (s *UpdaterService) markSelfUpdateTriggeredInternal(ctx context.Context, im
 
 // Notify buffers Arcane's container update notification when called within an
 // auto-update run (see withBatchedNotificationsInternal); buffered entries are
-// flushed as one batched notification when the run completes. Outside a run it
-// sends the legacy per-container notification immediately.
+// flushed on completion. Outside a run it sends the per-container notification.
 func (s *UpdaterService) Notify(ctx context.Context, localNotification updater.Notification) error {
 	if s == nil || s.deps.Notifications == nil {
 		return nil

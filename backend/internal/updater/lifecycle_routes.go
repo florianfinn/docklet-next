@@ -18,20 +18,20 @@ import (
 	"net/http"
 )
 
-type pointInput struct {
+type PointInput struct {
 	EnvironmentID string `path:"id"`
 	Kind          string `path:"kind"`
 	TargetID      string `path:"targetId"`
 }
 type pointDeleteInput struct {
-	pointInput
+	PointInput
 	PointID string `path:"pointId"`
 }
-type hostPointsInput struct {
+type HostPointsInput struct {
 	EnvironmentID string `path:"id"`
 }
 type hostPointDeleteInput struct {
-	hostPointsInput
+	HostPointsInput
 	PointID string `path:"pointId"`
 }
 type baselineInput struct {
@@ -89,7 +89,7 @@ func registerRestorePointRoutes(api huma.API, s *UpdaterService) {
 		}
 		return &handlerutil.Out[base.MessageResponse]{Body: base.ApiResponse[base.MessageResponse]{Success: true, Data: base.MessageResponse{Message: "Restore point deleted"}}}, nil
 	}
-	middleware.RegisterWithPermission(api, huma.Operation{OperationID: "list-restore-points", Method: http.MethodGet, Path: "/environments/{id}/updater/{kind}/{targetId}/restore-points", Tags: []string{"Updater"}, Summary: "List stack restore-point metadata"}, authz.PermImageUpdatesRead, func(ctx context.Context, in *pointInput) (*handlerutil.Out[[]dto.RestorePoint], error) {
+	middleware.RegisterWithPermission(api, huma.Operation{OperationID: "list-restore-points", Method: http.MethodGet, Path: "/environments/{id}/updater/{kind}/{targetId}/restore-points", Tags: []string{"Updater"}, Summary: "List stack restore-point metadata"}, authz.PermImageUpdatesRead, func(ctx context.Context, in *PointInput) (*handlerutil.Out[[]dto.RestorePoint], error) {
 		if in.Kind != "project" {
 			return nil, imageDTO.Failure("update.invalid-target", 400)
 		}
@@ -101,7 +101,7 @@ func registerRestorePointRoutes(api huma.API, s *UpdaterService) {
 		}
 		return remove(ctx, in.EnvironmentID, in.TargetID, in.PointID, false)
 	})
-	middleware.RegisterWithPermission(api, huma.Operation{OperationID: "list-host-restore-points", Method: http.MethodGet, Path: "/environments/{id}/updater/restore-points", Tags: []string{"Updater"}, Summary: "List host restore points including orphaned targets"}, authz.PermImageUpdatesRead, func(ctx context.Context, in *hostPointsInput) (*handlerutil.Out[[]dto.RestorePoint], error) {
+	middleware.RegisterWithPermission(api, huma.Operation{OperationID: "list-host-restore-points", Method: http.MethodGet, Path: "/environments/{id}/updater/restore-points", Tags: []string{"Updater"}, Summary: "List host restore points including orphaned targets"}, authz.PermImageUpdatesRead, func(ctx context.Context, in *HostPointsInput) (*handlerutil.Out[[]dto.RestorePoint], error) {
 		return list(ctx, in.EnvironmentID, "", true)
 	})
 	middleware.RegisterWithPermission(api, huma.Operation{OperationID: "delete-host-restore-point", Method: http.MethodDelete, Path: "/environments/{id}/updater/restore-points/{pointId}", Tags: []string{"Updater"}, Summary: "Delete an unheld orphan or host restore point"}, authz.PermImageUpdatesRead, func(ctx context.Context, in *hostPointDeleteInput) (*handlerutil.Out[base.MessageResponse], error) {

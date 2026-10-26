@@ -149,6 +149,16 @@ func runtimeCanonicalizeSemanticInternal(command RuntimeCommand) (runtimeCanonic
 			return invalid()
 		}
 		var owned = *command.Options.Lifecycle
+		if owned.Policy != nil {
+			binding := *owned.Policy
+			if binding.Revision == 0 || !runtimeTextInternal(binding.PolicyID, 64) || !runtimeTextInternal(binding.JobRunID, 256) {
+				return invalid()
+			}
+			if _, e := runtimeUUIDInternal(binding.ChildID); e != nil {
+				return invalid()
+			}
+			owned.Policy = &binding
+		}
 		owned.Selections = slices.Clone(owned.Selections)
 		for _, hash := range []string{owned.TargetIdentity, owned.SavedRevision, owned.ObservedRevision} {
 			b, e := hex.DecodeString(hash)

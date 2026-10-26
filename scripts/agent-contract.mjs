@@ -33,7 +33,7 @@ export function agentFixture(spec, fixture) {
   const update = document.paths["/environments/{id}/updater/projects/{projectId}/update"]?.post;
   if (update) {
     const schema = (suffix) => {
-      const name = [suffix, `Updater${suffix}`, `Activity${suffix}`].find((name) => schemas[name]);
+      const name = [suffix, `Updater${suffix}`, `Activity${suffix}`, `Jobschedule${suffix}`, `Scheduler${suffix}`, `Version${suffix}`].find((name) => schemas[name]);
       if (!name) throw new Error(`missing lifecycle schema ${suffix}`);
       return [name, schemas[name]];
     };
@@ -42,7 +42,7 @@ export function agentFixture(spec, fixture) {
     if (!operations?.includes("update-project") || !operations.includes("restore-project"))
       throw new Error("missing lifecycle execution producer");
     manifest.lifecycleOperations = operations;
-    const schemaNames = ["LifecycleRequest", "LifecycleIntent", "ImageSelection", "LifecycleResult", "RestorePoint", "PointImage", "BaselineStatus", "RuntimeOptions", "RuntimeTargetRequest", "RuntimeTargetMetadata"];
+    const schemaNames = ["LifecycleRequest", "LifecycleIntent", "PolicyBinding", "ImageSelection", "LifecycleResult", "RestorePoint", "PointImage", "BaselineStatus", "RuntimeOptions", "RuntimeTargetRequest", "RuntimeTargetMetadata"];
     const source = readFileSync(new URL("../backend/pkg/libarcane/edge/commands.go", import.meta.url), "utf8");
     const edgeRoutes = [...source.matchAll(/Method:\s*http.Method(\w+),\s*PathPattern:\s*"([^"]+)",\s*CommandName:\s*"([^"]+)"/g)]
       .filter((match) => /^(updater\.restore\.|updater\.project\.)/.test(match[3]))
@@ -75,6 +75,28 @@ export function agentFixture(spec, fixture) {
     };
     manifest.imageSafety.inactiveCapabilities = manifest.imageSafety.inactiveCapabilities.filter((name) => !["stack-update", "restore"].includes(name));
     manifest.imageSafety.capabilities = [...new Set([...manifest.imageSafety.capabilities, "stack-update", "restore"])];
+    if (document.paths["/environments/{id}/updater/schedules"]) {
+      manifest.imagePolicies = {
+        targetKinds: ["project"], defaultMode: "off", modes: ["off", "notify", "apply"],
+        owner: "hub", jobs: ["image-polling", "auto-update"], timeZone: "hub IANA zone",
+        routes: Object.entries(document.paths).flatMap(([path, item]) => Object.entries(item)
+          .filter(([, op]) => ["get-auto-update-policy", "set-auto-update-policy", "get-update-schedules", "set-update-schedules", "get-system-image-hints"].includes(op?.operationId))
+          .map(([method, op]) => ({ method: method.toUpperCase(), path, operationId: op.operationId, sha256: createHash("sha256").update(JSON.stringify(op)).digest("hex") }))),
+        schemas: Object.fromEntries(["ProjectUpdateInfo", "AutoUpdatePolicy", "UpdatePolicyInput", "UpdateCandidate", "UpdateScheduleConfig", "UpdateScheduleInput", "JobscheduleConfig", "JobscheduleUpdate", "JobStatus", "Outcome", "TargetOutcome", "SystemImageHint", "SystemImageHints", "VersionInfo"].map((name) => {
+          const [key, value] = schema(name);
+          return [key, { sha256: createHash("sha256").update(JSON.stringify(value)).digest("hex") }];
+        })),
+        admission: "current actor/key, registration, baseline and revision; freeze revision in runtime receipt transaction",
+        execution: "existing update-project runtime; serial children per host; retry/restart queries original receipts only",
+        agentLocalCode: "update.agent-local-job-disabled", legacyScheduleWriteCode: "update.schedule-hub-owned",
+        legacyScheduleFields: "autoUpdateInterval and pollingInterval omitted from reads/schema; any write including null or mixed fields refuses before forwarding",
+        notificationIdentity: ["host", "registration", "stack identity", "repository", "platform", "normalized version/tag", "immutable digest"],
+        notificationCommit: "candidate dedup row and linked durable notification entry in one hub transaction",
+        notificationRecovery: "reuse entry across checks, restart and policy toggles; failed/unknown delivery never creates another entry",
+      };
+      manifest.imageSafety.inactiveCapabilities = manifest.imageSafety.inactiveCapabilities.filter((name) => !["policies", "auto-apply", "notifications", "hub-schedules", "hub-image-schedules"].includes(name));
+      manifest.imageSafety.capabilities = [...new Set([...manifest.imageSafety.capabilities.filter((name) => !["stack-policies", "hub-schedules"].includes(name)), "policies", "auto-apply", "hub-image-schedules", "candidate-notifications", "system-image-hints"])];
+    }
   }
   const pull = document.paths["/environments/{id}/images/pull"].post.responses["200"];
   const frame = pull.content["application/x-json-stream"].schema;

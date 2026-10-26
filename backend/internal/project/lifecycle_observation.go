@@ -14,7 +14,9 @@ import (
 	"github.com/florianfinn/docklet-next/backend/pkg/libarcane"
 	"github.com/moby/moby/api/types/container"
 	"github.com/moby/moby/client"
+	dockernames "go.getarcane.app/docker"
 	"go.getarcane.app/sys/cgroup"
+	"go.getarcane.app/updater/labels"
 	"os"
 	"slices"
 	"strings"
@@ -54,7 +56,12 @@ func (s *ProjectService) lifecycleObserve(ctx context.Context, snap *life.Snapsh
 	}
 	snap.Services = map[string]life.ServiceImage{}
 	snap.Containers = map[string]life.ServiceImage{}
+	snap.AutoExcluded = false
+	excluded := dockernames.ExcludedContainerNameSet(s.settingsService.GetStringSetting(ctx, "autoUpdateExcludedContainers", ""))
 	for key, svc := range snap.Model.Services {
+		if labels.IsUpdateDisabled(svc.Labels) {
+			snap.AutoExcluded = true
+		}
 		img := prior[key]
 		if img.Reference != svc.Image {
 			img = life.ServiceImage{Reference: svc.Image}
@@ -92,6 +99,9 @@ func (s *ProjectService) lifecycleObserve(ctx context.Context, snap *life.Snapsh
 		snap.Containers[item.ID] = observed
 		if !modeled || oneOff {
 			continue
+		}
+		if labels.IsUpdateDisabled(inspected.Container.Config.Labels) || dockernames.ContainerNameExcluded([]string{inspected.Container.Name}, excluded) {
+			snap.AutoExcluded = true
 		}
 		img, e := c.ImageInspect(ctx, id)
 		if e != nil || img.InspectResponse.ID != id || img.InspectResponse.Os == "" || img.InspectResponse.Architecture == "" {

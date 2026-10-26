@@ -48,6 +48,8 @@ func (h *VersionHandler) GetAppVersion(ctx context.Context, _ *GetAppVersionInpu
 	info := h.versionService.GetAppVersionInfo(ctx)
 	if middleware.HasAgentCredential(ctx) {
 		info.OnboardingChecks = h.versionService.cachedOnboardingChecks()
+	} else {
+		info = publicVersionInfo(info)
 	}
 
 	return &GetAppVersionOutput{

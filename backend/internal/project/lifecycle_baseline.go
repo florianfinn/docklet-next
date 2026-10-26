@@ -34,7 +34,7 @@ func (s *ProjectService) ImageBaselineStatus(ctx context.Context, id, registrati
 	if err != nil {
 		return dto.BaselineStatus{}, err
 	}
-	status := dto.BaselineStatus{SavedRevision: current.SavedRevision, ObservedRevision: lifecycleObserved(current)}
+	status := dto.BaselineStatus{TargetIdentity: current.TargetIdentity, AutoExcluded: current.AutoExcluded, SavedRevision: current.SavedRevision, ObservedRevision: lifecycleObserved(current)}
 	baseline, _, err := s.lifecycleStore().Baseline(ctx, current)
 	if err != nil {
 		status.Code = "update.baseline-unavailable"
@@ -44,6 +44,9 @@ func (s *ProjectService) ImageBaselineStatus(ctx context.Context, id, registrati
 	status.SourceRunID = baseline.RunID
 	if !status.Available {
 		status.Code = "update.baseline-unavailable"
+		if baseline.SavedRevision != current.SavedRevision {
+			status.Code = "update.config-drift"
+		}
 	}
 	return status, nil
 }

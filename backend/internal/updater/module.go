@@ -60,6 +60,8 @@ func RegisterUpdater(api huma.API, updaterService *UpdaterService, appCtx handle
 	}
 	runtimeActivity.RegisterImageLifecycle(api, activities)
 	registerRestorePointRoutes(api, updaterService)
+	registerImagePolicyRoutes(api, updaterService)
+	registerSystemImageHintRoutes(api, updaterService)
 	h := &UpdaterHandler{
 		updaterService: updaterService,
 		appCtx:         appCtx.Context(),

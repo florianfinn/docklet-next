@@ -204,6 +204,7 @@ func (s *UpdaterService) checkProjectServiceInternal(ctx context.Context, projec
 			record.LatestVersion = new(target.Tag)
 		}
 	}
+	s.enrichPolicyObservation(ctx, service.Image, check.TargetRef, &record)
 	return record
 }
 

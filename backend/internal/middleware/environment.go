@@ -554,6 +554,12 @@ func (m *EnvironmentMiddleware) hasResourcePath(c *echo.Context, envID string) b
 }
 
 func isManagementPathInternal(method, suffix string) bool {
+	if suffix == "/updater/schedules" || suffix == "/updater/system-image-hints" || strings.HasPrefix(suffix, "/updater/policies/") {
+		return true
+	}
+	if method == http.MethodPost && strings.HasPrefix(suffix, "/updater/projects/") && strings.HasSuffix(suffix, "/check") {
+		return true
+	}
 	if method == http.MethodPost && strings.HasPrefix(suffix, "/updater/") && (strings.HasSuffix(suffix, "/update") || strings.HasSuffix(suffix, "/restore")) {
 		return true
 	}

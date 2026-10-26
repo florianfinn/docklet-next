@@ -92,7 +92,7 @@ func (h *UpdaterHandler) updateContainerInternal(ctx context.Context, input *Upd
 
 // CheckProjectUpdates checks Compose policies through the updater service.
 func (h *UpdaterHandler) CheckProjectUpdates(ctx context.Context, input *updater.CheckProjectInput) (*handlerutil.Out[*project.UpdateInfo], error) {
-	result, err := h.updaterService.CheckProjectUpdates(ctx, input.ProjectID)
+	result, err := h.updaterService.CheckPolicyProject(ctx, input.EnvironmentID, input.ProjectID)
 	if err != nil {
 		return nil, err
 	}

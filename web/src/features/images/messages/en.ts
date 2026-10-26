@@ -3,6 +3,7 @@ import { enImageErrors } from "./errors-en";
 
 export const enImages = {
   observation: { unchecked: "Not checked", current: "Current", version: "New version", rebuild: "Same-tag rebuild", local: "Local image", unknown: "Update unknown", error: "Check failed", currentVersion: "Current: {version}", candidateVersion: "Candidate: {version}", checkedAt: "Checked: {time}" },
+  notification: { pending: "Notification pending", sending: "Delivery in progress or outcome unknown", sent: "Notification sent", unconfigured: "No delivery channel configured", failed: "Notification delivery failed", "not-requested": "Notification not requested" },
   protection: "Removal is protected or usage is unknown.",
   title: "Images",
   description: (import.meta.env.DEV ? "{scope} · Images per host with usage by stacks and containers. Pulling, removing and cleanup are simulated." : "{scope} · Images per host with usage by stacks and containers."),

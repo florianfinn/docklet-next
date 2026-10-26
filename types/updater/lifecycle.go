@@ -24,6 +24,7 @@ type LifecycleRequest struct {
 // LifecycleIntent is produced by executor preflight, then hashed into runtime
 // admission. It contains identities only, never Compose/environment contents.
 type LifecycleIntent struct {
+	Policy           *PolicyBinding   `json:"policy,omitempty"`
 	Request          LifecycleRequest `json:"request"`
 	TargetIdentity   string           `json:"targetIdentity"`
 	SavedRevision    string           `json:"savedRevision"`
@@ -67,6 +68,8 @@ type RestorePoint struct {
 }
 
 type BaselineStatus struct {
+	TargetIdentity   string `json:"targetIdentity"`
+	AutoExcluded     bool   `json:"autoExcluded"`
 	SavedRevision    string `json:"savedRevision"`
 	ObservedRevision string `json:"observedRevision"`
 	Available        bool   `json:"available"`

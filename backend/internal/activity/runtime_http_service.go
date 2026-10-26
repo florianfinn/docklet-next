@@ -110,6 +110,9 @@ func (h *RuntimeHTTPService) admit(ctx context.Context, environmentID, key strin
 	// tuple is used only by the pure validator and never persisted or dispatched.
 	command := RuntimeCommand{Store: RuntimeStoreBinding{EnvironmentID: environmentID, StoreGeneration: "validation", ExecutorGeneration: "validation", ManagerID: "validation", RegistrationID: "validation"},
 		Key: key, Actor: *actor, Operation: operation, Target: target, Options: options}
+	if options.Lifecycle != nil && options.Lifecycle.Policy != nil {
+		command.ProposedRunID = options.Lifecycle.Policy.ChildID
+	}
 	var err error
 	if runtimeImageOperation(operation) {
 		if target.Kind != "stack" || options.Lifecycle == nil || len(options.Lifecycle.Request.ExpectedRevision) != 64 || (operation == RuntimeRestoreProject) != (options.Lifecycle.Request.PointID != "") {
@@ -152,10 +155,12 @@ func (h *RuntimeHTTPService) admit(ctx context.Context, environmentID, key strin
 			if h.ports.PrepareLifecycle == nil {
 				return empty, noRef, huma.Error503ServiceUnavailable("Image lifecycle unavailable")
 			}
+			policy := command.Options.Lifecycle.Policy
 			command.Options.Lifecycle, err = h.ports.PrepareLifecycle(ctx, environmentID, command.Target, command.Store, command.Options.Lifecycle.Request)
 			if err != nil {
 				return empty, noRef, err
 			}
+			command.Options.Lifecycle.Policy = policy
 		}
 	}
 	result, err := h.service.Admit(ctx, command)

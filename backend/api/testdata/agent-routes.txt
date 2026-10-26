@@ -66,9 +66,12 @@ GET /environments/{id}/settings/public
 GET /environments/{id}/system/docker/info
 GET /environments/{id}/system/upgrade/check
 GET /environments/{id}/updater/history
+GET /environments/{id}/updater/policies/{kind}/{targetId}
 GET /environments/{id}/updater/projects/{projectId}/baseline
 GET /environments/{id}/updater/restore-points
+GET /environments/{id}/updater/schedules
 GET /environments/{id}/updater/status
+GET /environments/{id}/updater/system-image-hints
 GET /environments/{id}/updater/{kind}/{targetId}/restore-points
 GET /environments/{id}/uploads/{kind}/{uploadId}
 GET /environments/{id}/volumes
@@ -174,6 +177,8 @@ PUT /environments/{id}/job-schedules
 PUT /environments/{id}/projects/{projectId}
 PUT /environments/{id}/projects/{projectId}/workspace
 PUT /environments/{id}/settings
+PUT /environments/{id}/updater/policies/{kind}/{targetId}
+PUT /environments/{id}/updater/schedules
 PUT /environments/{id}/uploads/{kind}/{uploadId}/chunks/{index}
 PUT /environments/{id}/volumes/{volumeName}/backup-policy
 PUT /environments/{id}/volumes/{volumeName}/workspace

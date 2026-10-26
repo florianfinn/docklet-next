@@ -4,6 +4,7 @@ import type { enImages } from "./en";
 
 export const deImages: typeof enImages = {
   observation: { unchecked: "Nicht geprüft", current: "Aktuell", version: "Neue Version", rebuild: "Neubau desselben Tags", local: "Lokales Image", unknown: "Update unbekannt", error: "Prüfung fehlgeschlagen", currentVersion: "Aktuell: {version}", candidateVersion: "Kandidat: {version}", checkedAt: "Geprüft: {time}" },
+  notification: { pending: "Benachrichtigung ausstehend", sending: "Zustellung läuft oder Ergebnis unbekannt", sent: "Benachrichtigung gesendet", unconfigured: "Kein Zustellungskanal eingerichtet", failed: "Zustellung der Benachrichtigung fehlgeschlagen", "not-requested": "Benachrichtigung nicht angefordert" },
   protection: "Entfernen ist geschützt oder die Nutzung ist unbekannt.",
   title: "Images",
   description: (import.meta.env.DEV ? "{scope} · Images je Host mit Nutzung durch Stacks und Container. Ziehen, Entfernen und Aufräumen sind simuliert." : "{scope} · Images je Host mit Nutzung durch Stacks und Container."),
