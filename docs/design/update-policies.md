@@ -89,21 +89,17 @@ Permission refusals consistently fail the affected run/target with
 
 ## Scoped update capabilities and restore-point protection (#229 addendum)
 
-This additive design closes DG-01/DG-03 for the dependent update UI. Guard citations
-refer to base `5c1c4dd77cbeb7b5f702e50937bfc64de3c3f9d8`; paths below are relative
-to `backend/internal/`. M2 still requires a point for every update/restore and a
-baseline before update; M5 is stacks only, M6 protects restore targets and the
-healthy baseline with one failed slot, and D2 freezes policy revision at admission.
+This closes DG-01/DG-03. Guard citations use base `5c1c4dd77cbeb7b5f702e50937bfc64de3c3f9d8`;
+paths below are relative to `backend/internal/`. M2 requires points for update/restore and a baseline before update.
+M5 is stacks only; M6 protects restore targets/baseline with one failed slot; D2 freezes policy revision at admission.
 
 ### Descriptor contract
 
 Descriptor IDs are adapter camelCase IDs, distinct from HTTP operation IDs.
-`S` means `kind=stack,id=E~P`; `H` means `kind=host,id=E`. `E` is the actual
-environment ID (`0` locally), `P` a nonempty raw project ID; reject extra `~`,
-empty components and mismatched kinds. Every grant below uses `Allows(grant,E)`.
+`S` means `kind=stack,id=E~P`; `H` means `kind=host,id=E`. E is the environment ID (`0` locally),
+P a nonempty raw project ID; reject extra `~`, empty components and mismatched kinds. Grants use `Allows(grant,E)`.
 No hub-wide `AllowsAny` fallback or grants combined across environments apply.
-Point-specific calls use the owning stack descriptor; host-admin calls use H,
-including orphan points. Descriptors gate operations, not individual point holds.
+Point calls use the owning stack descriptor; host-admin calls use H, including orphan points. Holds are checked separately.
 
 Grant abbreviations (conjunction, never alternatives): `R` = `projects:read` AND
 `image-updates:read`; `W` = `projects:deploy` AND `projects:update` AND
@@ -127,74 +123,86 @@ Grant abbreviations (conjunction, never alternatives): `R` = `projects:read` AND
 | `saveUpdateSchedule` (new) | H | `set-update-schedules`: `jobs:manage`; `job/image_policy_routes.go:34`, actor revalidation at `updater/policy_service.go:250`. |
 | `listSystemComponents` | H | `get-system-image-hints`: `image-updates:read`; `updater/system_hints.go:124`. This is the protected agent/tools version-hint read, with no rollout action. |
 
-Use exactly the route's full grant conjunction, including nested admission guards;
-never a weaker set. `capability.unavailable` covers invalid/scoped-denied refs.
-Container update/apply and host-wide or unscoped check requests stay unavailable.
-Availability describes discovery; every call independently rechecks
-current rights, target identity/revision, point ownership/holds and runtime gates.
-The two policy descriptors preserve mode-specific rights without requiring apply
-authority to disable a policy. No route permission is changed by this addendum.
-
-Descriptor IDs/rights are identical for hub-local, Direct and Edge host refs.
-Capabilities are read from the hub for the caller's E, never from agent admin
-credentials. Existing executor commands are `updater.project.check`,
-`updater.project.baseline`, `updater.restore.{list,delete,host-list,host-delete}`
-(`backend/pkg/libarcane/edge/commands.go:18`). Update/restore admission and policy,
-schedule and hint reads remain hub-owned; executor work uses runtime commands.
-No new agent route or Edge fallback is introduced.
+Use the full route/nested grant conjunction, never weaker. `capability.unavailable` covers invalid/scoped-denied refs.
+Container update/apply and host-wide/unscoped check requests stay unavailable.
+Availability describes discovery; calls recheck rights, identity/revision and holds.
+Policy descriptors preserve off/notify rights. For remote baseline and point reads/deletes, hub guards are
+`middleware/environment.go:186` through :203, plus the matcher at :204 and :325.
+Agents have sudo rights (:180); revocation tests mutate the hub proxy conjunction.
+IDs/grants match local/Direct/Edge. Read capabilities from the hub for caller E.
+Existing commands are `updater.project.{check,baseline}` and
+`updater.restore.{list,delete,host-list,host-delete}` (`backend/pkg/libarcane/edge/commands.go:18`).
+Admission, policy, schedules and hints stay hub-owned (`middleware/environment.go:556`).
+No new agent route, Edge fallback or route grant is introduced.
 
 ### Authoritative point projection
 
-Add required `RestorePoint.protectionReason: RestorePointProtectionReason`, enum
-`none|restore-target|healthy-baseline|failed-slot`, and required
-`RestorePoint.holdState: RestorePointHoldState`, enum `none|active|unknown`, in
-`types/updater/`. Declare constants and schema enum tags; generate OpenAPI/DTO,
-agent v7 fingerprint/fixture and provenance through `pnpm run contract:generate`.
-Use EN/DE keys `updates.restorePoints.protection.{none,restore-target,healthy-baseline,failed-slot}`
-and `updates.restorePoints.hold.{none,active,unknown}` for every enum value.
+Declare `RestorePointProtectionReason` with only `restore-target|healthy-baseline`.
+Required nullable `RestorePoint.protectionReason` uses null for no anchor; missing is invalid. `holdState: RestorePointHoldState` has required enum
+`none|active|unknown`. Required `failedAttempt: bool` exposes the stored flag as
+a neutral point kind; failure alone never confers protection or a protected label.
+There is no failed-slot protection value; replacement/count eviction still apply.
 
-Extract one pure retention plan in `project/children/lifecycle/retention.go`;
-both `RetentionDeletions` and point-list projection consume its decisions. Inputs
-are the same available points, newest first (`created_at DESC,id DESC`), grouped
-by target ID exactly as `project/lifecycle_pins.go:281`, plus shared hold states.
-Host lists evaluate each target separately; unavailable points have reason none
-but retain their hold state. Do not classify from rendered list order or history.
-The plan preserves existing M6 selection: latest settled baseline, latest
-`LastRestoredAt` target, one failed partial-source slot, then oldest-other eviction.
-One field uses precedence restore-target, healthy-baseline, failed-slot, none;
-the planner retains all overlapping internal anchors. A failed-slot label means
-the retained replacement slot, not exemption from the five-point count limit.
-Holds always override eviction; limits may be exceeded when anchors/holds require.
+One pure planner in `project/children/lifecycle/retention.go` supplies reasons and
+deletion IDs to retention and projection. Both use stored `available = true` rows
+per target, ordered `created_at DESC,id DESC` (`project/lifecycle_pins.go:281`).
+Display `available`/`code` stay independent: registration mismatch or failed
+snapshot verification must not remove a planner input or erase its reason.
+Host lists plan each target separately. M6 keeps latest settled baseline, latest
+`LastRestoredAt` target, one failed-attempt slot, then evicts oldest other points.
+Reason precedence is restore-target then healthy-baseline; internal anchors may overlap. Holds override eviction, even above five. Unheld anchors remain explicitly
+deletable with the transactional recheck (`project/children/lifecycle/store.go:263`).
 
-Replace the store's boolean hold calculation with one shared state query, keeping
-`Held` as `state != none` for retention and transactional deletion. Inspect both
-unsettled lifecycle owners and selected-point intents/receipts currently read at
-`project/children/lifecycle/store.go:247`. Active means positively known live
-ownership; unknown means uncertain receipt outcome or missing/inconsistent owner
-evidence. Unknown dominates active when owners overlap; neither permits deletion.
-Database read failures fail the list/retention/delete operation, never imply none.
-Restart and pruned activity history cannot clear durable ownership. No migration.
-Retention reasons explain automatic eviction only; explicit deletion may remove
-an unheld anchor and still rechecks holds atomically (`store.go:263`).
-Agent-derived enum values must be runtime-validated before trusted consumption;
-missing/undeclared values cannot become none or enable delete. The dependent UI
-owns its HTTP decoder; it consumes generated DTOs and these declared enums.
+Executor evidence is `image_lifecycle_runs.settled = false` with matching `point_id`
+or `selected_point_id` (`project/children/lifecycle/store.go:247`): it means active.
+Hub evidence joins `runtime_image_intents.run_id` to `runtime_receipts.run_id`;
+match payload `request.pointId`, receipt `environment_id`/`registration_id`,
+`kind = receipt` and `settled_at IS NULL`. Executor states pending/accepted/executing
+mean active; unknown with non-null `unknown_reason` means an uncertain hub receipt.
+Dispatch pending/dispatching/accepted all hold; pending with null `dispatched_at`
+already holds before send. Unknown dominates active, then none when neither holds.
+Columns obey `backend/resources/migrations/sqlite/003_runtime_receipts.sql:8`; unsettled executor ownership still holds after hub settlement/release. Invalid
+evidence or DB reads fail closed; restart/history cleanup cannot release a hold.
+
+The hub overlays its evidence on successful forwarded target/host point lists for
+both Direct and Edge, merging executor active with hub active/unknown. The agent
+cannot infer hub uncertainty. Before forwarding either delete route, the hub
+refuses any non-terminal admission hold with existing declared `restore.in-use`
+(409, `types/image/reason.go:18`); agent-local transactional guards remain.
+Serialize point selection/intent commit with hub delete check/forward under the same environment/point admission fence, without a DB transaction across remote I/O. If delete
+wins, admission revalidates point existence; if admission wins, delete never sends.
+This closes the pre-dispatch race, rather than merely reflecting it in the list.
+
+Go constants/schema enum tags own the vocabulary. `scripts/agent-contract.mjs:65`
+derives `retentionProtections` from the protection enum and `holdStates` from the
+hold enum through OpenAPI; remove the old latest-/active-or-unknown aliases.
+`failedAttemptPoints`/`failedAttemptScope` describe replacement only. Generate OpenAPI/DTO/v7 fingerprint/fixture/provenance via `pnpm run contract:generate`;
+the drift check enforces Go, manifest and wire enum equality and nullability.
+Catalogue owner #229 uses `web/src/shared/messages/{en,de}.ts`, under
+`common.restorePoints`: `protection.{restore-target,healthy-baseline}`, `unprotected`,
+`hold.{none,active,unknown}`, `kind.{point,failedAttempt}`. #231 treats this subtree
+as read-only; no keys go into its updates/settings catalogues. Existing translated
+`images.errors.restore_in-use` supplies the hub delete refusal. Both hub overlay
+and #231's real web decoder validate agent fields; invalid/missing values fail
+loading, never default to null/none or enable delete. Keep the Go contract test.
 
 ### Break map, ownership and verification
 
 | Break boundary | Planned test | Red mutation (assertion failure required) |
 | --- | --- | --- |
 | Scoped deny per host/environment | `TestUpdateCapabilitiesScopedGrants`: every descriptor/grant removed in turn, cross-host split grants, explicit denies, malformed refs and non-admin host lists/deletes; off/notify versus apply. | Replace E with another allowed environment, omit each conjunct, or drop G; affected descriptor incorrectly becomes available. |
-| Grant removed after capability read | `TestUpdateCapabilityReadThenRevokedCall`: read available, revoke each route grant, invoke the real registered read/write route, assert 403 and zero executor/storage effects. | Bypass the corresponding route/admission grant check; call reaches an effect/read spy. |
-| Direct/Edge descriptor and agent parity | `TestUpdateCapabilitiesTransportParity`: identical IDs/results for local/Direct/Edge refs; exercise existing baseline/point commands through actual transport, hub-only routes never forwarded. | Remove one descriptor/Edge mapping or bypass one agent guard; ID/result/dispatch assertion fails. |
-| Enum contract and translations | `TestRestorePointProjectionContract`: Go enum sets equal OpenAPI, generated DTO and v7 fixture/fingerprint; all EN/DE keys present with equal placeholders; malformed/missing wire enums rejected at actual consumer. | Remove one schema enum, fixture entry or catalogue key, or accept unknown wire values; targeted assertion/contract drift check fails. |
-| Projection equals M6 retention | `TestRestorePointProjectionRetentionParity`: oldest restore target, baseline beyond five held points, one failed slot, five failed restores, failed target owns slot, active/unknown holds, overlaps, separate targets, unavailable points and restart. Assert plan reasons, holds, exact deletion IDs and explicit-delete semantics. | Remove each anchor/hold or retain all failed attempts; reason/deletion/effect assertions fail together. |
+| Grant removed after capability read | `TestUpdateCapabilityReadThenRevokedCall`: local and remote E; revoke every grant, call real route, assert 403 and zero reads/effects/forwarding. | Bypass local admission or the hub proxy conjunction/matcher; forbidden call reaches spy. |
+| Descriptor/transport parity | `TestUpdateCapabilitiesTransportParity`: identical IDs/grants local/Direct/Edge; actual baseline/point commands; hub-only routes never forwarded. | Remove descriptor/Edge mapping or bypass hub proxy grant; parity/dispatch assertion fails. |
+| Direct holds and pre-dispatch delete | `TestDirectPointHoldOverlay`: barrier after restore intent/receipt commit, before send; target/host lists show active, then unknown after receipt uncertainty; both deletes return 409 restore.in-use and send zero requests. | Skip Direct overlay or hub delete guard; hold/effect assertion fails. |
+| Edge holds and pre-dispatch delete | `TestEdgePointHoldOverlay`: same barrier/states/target and host routes through actual Edge tunnel; retain agent local guard and restart evidence. | Skip Edge overlay or delete guard; wrong hold or a delete command is observed. |
+| Enum contract and translations | `TestRestorePointProjectionContract`: Go/OpenAPI/DTO/manifest/v7 fixture/fingerprint equality, required nullable reason, every EN/DE key/placeholder. | Restore old manifest alias, add failed-slot, drop enum/nullability/key; drift/assertion fails. |
+| Real web consumer | #231 `point-shapes`: malformed/missing protectionReason/holdState and neutral failedAttempt through real HTTP decoder; load error, zero delete writes; valid null accepted. | Default invalid values or skip decoder validation; load/control assertion fails. |
+| Projection equals M6 retention | `TestRestorePointProjectionRetentionParity`: registration mismatch and failed snapshot check preserve reasons; target/baseline/overlaps/holds, five failed restores, failed slot evicted by count, separate targets/restart; assert exact deletion IDs and neutral failure kind. | Filter planner by display availability, remove anchor/hold, or protect failed slot; reason/deletion assertions fail. |
+| Concurrent actor delete/admission/trim | `TestPointDeleteAdmissionRace`: deferred barriers force both orderings of actor B delete versus actor A selection/intent commit, and trim after target reclassification; admitted held point gets restore.in-use, deletion winner prevents restore effects, anchors survive trim. | Drop hub admission fence or transactional hold/existence recheck; effect or deletion assertion fails. |
 
-Phase 2 owns `activity/capabilities*.go`, `project/lifecycle_{points,pins}*.go`,
-`project/children/lifecycle/{retention,store}*.go`, `types/updater/` enums/tests,
-generated contract/DTO/fingerprint/fixture/provenance, and EN/DE message keys only.
-New cross-route tests live in `activity/capabilities*_test.go`; existing updater,
-job, middleware and Edge code/tests are read-only references. Other web source
-belongs to #231; migrations stay untouched. Run focused Go/contract/catalogue
-checks and behavioural mutations, then full root lint/test under the load rule.
-Phase 1 changes this rationale only and uses the repository's text-only checks.
+Phase 2 owns `activity/capabilities*.go`, scoped `activity/runtime_image*.go`
+hold/fence helpers, `middleware/environment*.go` overlay/delete boundary and tests,
+`project/lifecycle_{points,pins}*.go`, `project/children/lifecycle/{retention,store}*.go`,
+`types/updater/` enums/tests, `scripts/agent-contract.mjs`, generated contracts and the named shared message subtree. Other web code/tests belong to #231; updater,
+job and Edge producers are read-only, migrations untouched. Focused checks and red
+mutations precede full lint/test under the load rule. Phase 1 uses text checks only.
