@@ -9,7 +9,7 @@ package middleware
 import (
 	"bytes"
 	"context"
-	"encoding/json"
+	"encoding/json/v2"
 	"io"
 	"net/http"
 	"strings"
@@ -71,9 +71,7 @@ func (m *EnvironmentMiddleware) writePointList(c *echo.Context, env string, stat
 		return c.JSON(http.StatusBadGateway, map[string]any{"success": false, "code": "agent.invalid-token"})
 	}
 	if status != http.StatusOK {
-		headers.Del("Content-Length")
-		edge.CopyResponseHeaders(headers, c.Response().Header(), edge.BuildHopByHopHeaders(headers))
-		return c.Blob(status, "application/json", body)
+		return pointFailure(c, "update.check-unavailable", 503)
 	}
 	var envelope struct {
 		Success bool               `json:"success"`
@@ -114,6 +112,9 @@ func (m *EnvironmentMiddleware) proxyPointList(c *echo.Context, tunnel *edge.Age
 	defer cancel()
 	headers := map[string]string{}
 	for key, values := range edge.AgentRequestHeaders(c.Request().Header) {
+		if _, skip := edge.GetSkipHeaders()[http.CanonicalHeaderKey(key)]; skip {
+			continue
+		}
 		if len(values) > 0 {
 			headers[key] = values[0]
 		}

@@ -35,6 +35,9 @@ func (p *pointTestConn) Send(msg *edge.TunnelMessage) error {
 	if msg.Type != edge.MessageTypeCommandRequest {
 		return nil
 	}
+	if msg.Headers["Accept-Encoding"] != "" || msg.Headers["Origin"] != "" {
+		return errors.New("browser header forwarded to point executor")
+	}
 	if !edge.ValidateEdgeCommand(msg.Command, msg.Method, msg.Path, false) {
 		return errors.New("invalid command")
 	}
@@ -58,7 +61,7 @@ func pointBody(t *testing.T) []byte {
 	return body
 }
 
-func pointProxy(t *testing.T, isEdge bool, body *[]byte, state *dto.RestorePointHoldState, dbErr *bool, deletes *int) *echo.Echo {
+func pointProxy(t *testing.T, isEdge bool, body *[]byte, state *dto.RestorePointHoldState, dbErr *bool, deletes *int, agentStatus ...int) *echo.Echo {
 	t.Helper()
 	mw := newTestEnvironmentMiddleware()
 	agent := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -68,6 +71,9 @@ func pointProxy(t *testing.T, isEdge bool, body *[]byte, state *dto.RestorePoint
 			return
 		}
 		w.Header().Set("Content-Type", "application/json")
+		if len(agentStatus) > 0 {
+			w.WriteHeader(agentStatus[0])
+		}
 		_, _ = w.Write(*body)
 	})
 	server := httptest.NewServer(agent)
@@ -143,7 +149,7 @@ func TestPointOverlayValidation(t *testing.T) {
 			dbErr := false
 			deletes := 0
 			router := pointProxy(t, isEdge, &body, &state, &dbErr, &deletes)
-			bad := [][]byte{bytes.Replace(good, []byte(`"sourceState"`), []byte(`"code":"undeclared","sourceState"`), 1), bytes.Replace(good, []byte(`"images":[]`), []byte(`"images":[{}]`), 1), bytes.Replace(good, []byte(`"sourceState":"settled"`), []byte(`"sourceState":"undeclared"`), 1), []byte(`{"success":true,"data":null}`), []byte(`{"success":true,"data":{}}`), []byte(`[]`), []byte(`{"success":true,"data":[null]}`), []byte(`{"success":false,"data":[]}`)}
+			bad := [][]byte{append([]byte(`{"success":false,`), good[1:]...), bytes.Replace(good, []byte(`"id":"point"`), []byte{'"', 'i', 'd', '"', ':', '"', 0xff, '"'}, 1), bytes.Replace(good, []byte(`"sourceState"`), []byte(`"code":"undeclared","sourceState"`), 1), bytes.Replace(good, []byte(`"images":[]`), []byte(`"images":[{}]`), 1), bytes.Replace(good, []byte(`"sourceState":"settled"`), []byte(`"sourceState":"undeclared"`), 1), []byte(`{"success":true,"data":null}`), []byte(`{"success":true,"data":{}}`), []byte(`[]`), []byte(`{"success":true,"data":[null]}`), []byte(`{"success":false,"data":[]}`)}
 			for _, field := range []string{"protectionReason", "holdState", "failedAttempt"} {
 				var envelope map[string]any
 				require.NoError(t, json.Unmarshal(good, &envelope))
@@ -244,4 +250,35 @@ func TestPointEvidenceMissingPort(t *testing.T) {
 	c = echo.New().NewContext(httptest.NewRequest(http.MethodGet, "/", http.NoBody), rec)
 	require.NoError(t, mw.writePointList(c, "example", 200, http.Header{}, bytes.NewReader(pointBody(t))))
 	require.Equal(t, 500, rec.Code)
+}
+
+func TestEdgePointListRequestHeaders(t *testing.T) {
+	body := pointBody(t)
+	state := dto.HoldNone
+	dbErr := false
+	deletes := 0
+	router := pointProxy(t, true, &body, &state, &dbErr, &deletes)
+	req := httptest.NewRequest(http.MethodGet, "/api/environments/example/updater/restore-points", http.NoBody)
+	req.Header.Set("Accept-Encoding", "gzip")
+	req.Header.Set("Origin", "https://example.com")
+	rec := httptest.NewRecorder()
+	router.ServeHTTP(rec, req)
+	require.Equal(t, 200, rec.Code, rec.Body.String())
+}
+
+func TestPointOverlayErrorStatus(t *testing.T) {
+	for _, isEdge := range []bool{false, true} {
+		for _, status := range []int{404, 500} {
+			body := []byte(`{"success":false,"code":"undeclared"}`)
+			state := dto.HoldNone
+			dbErr := false
+			deletes := 0
+			router := pointProxy(t, isEdge, &body, &state, &dbErr, &deletes, status)
+			rec := pointCall(router, http.MethodGet, "/updater/restore-points")
+			require.Equal(t, 503, rec.Code)
+			require.Contains(t, rec.Body.String(), "update.check-unavailable")
+			require.NotContains(t, rec.Body.String(), "undeclared")
+			require.Zero(t, deletes)
+		}
+	}
 }

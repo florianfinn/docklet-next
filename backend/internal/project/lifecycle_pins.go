@@ -292,7 +292,7 @@ func (s *ProjectService) trimLifecyclePoints(ctx context.Context, target string)
 		held[point.ID] = active
 	}
 	for _, id := range life.RetentionDeletions(points, held) {
-		if err := s.deleteLifecyclePoint(ctx, id); err != nil {
+		if err := s.lifecycleStore().TrimPoint(ctx, target, id); err != nil {
 			return err
 		}
 	}

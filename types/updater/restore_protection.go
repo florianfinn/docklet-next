@@ -8,6 +8,7 @@ package updater
 
 import (
 	"encoding/json"
+	jsonv2 "encoding/json/v2"
 	"errors"
 	"github.com/florianfinn/docklet-next/types/image"
 )
@@ -43,11 +44,11 @@ func MergePointHold(a, b RestorePointHoldState) RestorePointHoldState {
 func (p *RestorePoint) UnmarshalJSON(body []byte) error {
 	type plain RestorePoint
 	var value plain
-	if err := json.Unmarshal(body, &value); err != nil {
+	if err := jsonv2.Unmarshal(body, &value); err != nil {
 		return err
 	}
 	var fields map[string]json.RawMessage
-	if err := json.Unmarshal(body, &fields); err != nil {
+	if err := jsonv2.Unmarshal(body, &fields); err != nil {
 		return err
 	}
 	for _, key := range []string{"protectionReason", "holdState", "failedAttempt", "id", "registrationId", "targetId", "targetIdentity", "sourceRunId", "createdAt", "sourceState", "images", "volumeDataIncluded", "available", "orphaned"} {
@@ -72,11 +73,11 @@ func (p *RestorePoint) UnmarshalJSON(body []byte) error {
 func (p *PointImage) UnmarshalJSON(body []byte) error {
 	type plain PointImage
 	var value plain
-	if err := json.Unmarshal(body, &value); err != nil {
+	if err := jsonv2.Unmarshal(body, &value); err != nil {
 		return err
 	}
 	var fields map[string]json.RawMessage
-	if err := json.Unmarshal(body, &fields); err != nil {
+	if err := jsonv2.Unmarshal(body, &fields); err != nil {
 		return err
 	}
 	for _, key := range []string{"service", "reference", "imageId", "present", "running"} {

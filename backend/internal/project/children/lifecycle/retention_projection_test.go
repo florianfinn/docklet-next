@@ -33,3 +33,12 @@ func TestRetentionProjectionAnchorsAndFailedSlot(t *testing.T) {
 	}
 	require.Empty(t, PlanRetention(points, held).Deletions)
 }
+
+func TestRetentionProjectionOverlappingAnchors(t *testing.T) {
+	points := retentionPoints(1, "settled")
+	used := time.Unix(100, 0)
+	points[0].LastRestoredAt = &used
+	plan := PlanRetention(points, nil)
+	require.Equal(t, dto.RestoreTarget, plan.Reasons[points[0].ID])
+	require.Empty(t, plan.Deletions)
+}

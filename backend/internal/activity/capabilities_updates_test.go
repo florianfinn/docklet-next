@@ -11,6 +11,7 @@ import (
 	"github.com/danielgtaylor/huma/v2"
 	"github.com/florianfinn/docklet-next/backend/internal/middleware"
 	"github.com/florianfinn/docklet-next/backend/pkg/authz"
+	"github.com/florianfinn/docklet-next/backend/pkg/libarcane/edge"
 	"github.com/florianfinn/docklet-next/types/capability"
 	dto "github.com/florianfinn/docklet-next/types/updater"
 	"github.com/stretchr/testify/require"
@@ -102,4 +103,28 @@ func TestPointOverlayRegistrationChange(t *testing.T) {
 	holds, err = f.store.svc.ReadPointHolds(t.Context(), "foreign", []string{c.Options.Lifecycle.Request.PointID})
 	require.NoError(t, err)
 	require.Empty(t, holds)
+}
+
+func TestUpdateCapabilitiesTransportParity(t *testing.T) {
+	stack := []string{"checkUpdates", "installStackUpdates", "restoreRestorePoint", "getUpdateBaseline", "listRestorePoints", "deleteRestorePoint", "getAutoUpdatePolicy", "setAutoUpdate", "setAutoUpdateApply"}
+	host := []string{"listHostRestorePoints", "deleteHostRestorePoint", "listSchedule", "saveUpdateSchedule", "listSystemComponents"}
+	for _, env := range []string{"0", "direct-example", "edge-example"} {
+		for _, op := range stack {
+			require.True(t, networkDescriptor(t, authz.SudoPermissionSet(), capability.ResourceRef{Kind: "stack", ID: env + "~stack"}, op).Available, env+"/"+op)
+		}
+		for _, op := range host {
+			require.True(t, networkDescriptor(t, authz.SudoPermissionSet(), capability.ResourceRef{Kind: "host", ID: env}, op).Available, env+"/"+op)
+		}
+	}
+	for _, route := range []struct{ method, path, command string }{
+		{"GET", "/updater/projects/stack/baseline", "updater.project.baseline"},
+		{"GET", "/updater/project/stack/restore-points", "updater.restore.list"},
+		{"DELETE", "/updater/project/stack/restore-points/point", "updater.restore.delete"},
+		{"GET", "/updater/restore-points", "updater.restore.host-list"},
+		{"DELETE", "/updater/restore-points/point", "updater.restore.host-delete"},
+	} {
+		command, ok := edge.ResolveEdgeCommandName(route.method, "/api/environments/example"+route.path, false).Get()
+		require.True(t, ok, route.path)
+		require.Equal(t, route.command, command)
+	}
 }

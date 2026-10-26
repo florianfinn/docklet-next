@@ -34,7 +34,7 @@ func TestRestorePointProjectionContract(t *testing.T) {
 	schema := spec.Components.Schemas["UpdaterRestorePoint"]
 	require.NotEmpty(t, schema.Properties)
 	require.Contains(t, schema.Properties["protectionReason"].Type, "null")
-	require.Equal(t, []any{string(dto.RestoreTarget), string(dto.HealthyBaseline)}, schema.Properties["protectionReason"].Enum)
+	require.Equal(t, []any{string(dto.RestoreTarget), string(dto.HealthyBaseline), nil}, schema.Properties["protectionReason"].Enum)
 	require.Equal(t, []any{string(dto.HoldNone), string(dto.HoldActive), string(dto.HoldUnknown)}, schema.Properties["holdState"].Enum)
 	typ := reflect.TypeFor[dto.RestorePoint]()
 	for _, name := range []string{"ProtectionReason", "HoldState", "FailedAttempt"} {

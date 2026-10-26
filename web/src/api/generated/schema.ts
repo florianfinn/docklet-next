@@ -1,5 +1,5 @@
 // Source: api/openapi.json
-// Revision: bee4fec9c99a6b0fac652b5fb3b89612a137ca4f40abf9c829e98bb8f98a1091
+// Revision: 831b37b73d77997c28228d1128ec7ee0ceb3e43faac64d9f6c0b49420411411e
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
 // Deviations: Generated TypeScript declarations from the local Huma export.

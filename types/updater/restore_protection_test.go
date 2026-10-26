@@ -7,6 +7,7 @@
 package updater
 
 import (
+	"bytes"
 	"encoding/json"
 	"github.com/stretchr/testify/require"
 	"testing"
@@ -17,6 +18,9 @@ func TestRestorePointRequiredFieldsAndEnums(t *testing.T) {
 	point := RestorePoint{ID: "point", RegistrationID: "registration", TargetID: "stack", TargetIdentity: "identity", SourceRunID: "run", CreatedAt: time.Now().UTC(), SourceState: "settled", Images: []PointImage{}, HoldState: HoldNone}
 	body, err := json.Marshal(point)
 	require.NoError(t, err)
+	invalidUTF8 := bytes.Replace(body, []byte(`"id":"point"`), []byte{'"', 'i', 'd', '"', ':', '"', 0xff, '"'}, 1)
+	var invalid RestorePoint
+	require.Error(t, json.Unmarshal(invalidUTF8, &invalid))
 	var decoded RestorePoint
 	require.NoError(t, json.Unmarshal(body, &decoded))
 	var fields map[string]any

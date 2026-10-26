@@ -187,7 +187,10 @@ func (s Store) Prepare(ctx context.Context, snapshot *Snapshot, run, selected, s
 				used = recent[0].LastRestoredAt.Add(time.Microsecond)
 			}
 			updated := tx.Model(&Point{}).Where("id = ? AND target_id = ? AND target_identity = ? AND registration_id = ? AND available = ?", selected, snapshot.TargetID, snapshot.TargetIdentity, snapshot.RegistrationID, true).Update("last_restored_at", used)
-			if updated.Error != nil || updated.RowsAffected != 1 {
+			if updated.Error != nil {
+				return updated.Error
+			}
+			if updated.RowsAffected != 1 {
 				return imageDTO.Failure("restore.unavailable", 409)
 			}
 		}

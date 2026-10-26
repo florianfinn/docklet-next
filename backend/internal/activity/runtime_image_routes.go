@@ -35,6 +35,7 @@ type runtimeRestoreInput struct {
 }
 
 func RegisterImageLifecycle(api huma.API, service *ActivityService) {
+	registerRestorePointSchema(api)
 	middleware.RegisterWithPermission(api, imageAdmissionOperation(api, RuntimeUpdateProject, "update-project-images", "/environments/{id}/updater/projects/{projectId}/update"), authz.PermProjectsDeploy,
 		func(ctx context.Context, in *runtimeImageInput) (*huma.StreamResponse, error) {
 			if in.Body.PointID != "" {
