@@ -88,7 +88,7 @@ test("history rejects private author, private committer, AI identity and bad com
   git(root, "reset", "--soft", base);
   ok(node(root, "scripts/check-publication.mjs", "--history"));
 });
-test("pre-push checks the supplied outgoing head and runs the full clean chain", (t) => {
+test("pre-push checks the supplied outgoing head and runs the clean lint chain", (t) => {
   const root = scratch(t);
   const env = stubModuleChecks(root);
   const base = rawCommit(root);
@@ -99,7 +99,7 @@ test("pre-push checks the supplied outgoing head and runs the full clean chain",
   fails(invoke(root, "sh", [".githooks/pre-push"], { env, input: input(bad) }), "private-hostname");
   ok(invoke(root, "sh", [".githooks/pre-push"], { env, input: input(base) }));
 });
-test("pre-push propagates lint and test failures", (t) => {
+test("pre-push propagates lint failures and leaves the test suite to CI", (t) => {
   const root = scratch(t);
   const env = stubModuleChecks(root);
   stage(root, "broken.mjs", "export const = ;\n");
@@ -113,10 +113,9 @@ test("pre-push propagates lint and test failures", (t) => {
     'import test from "node:test"; test("synthetic failure", () => { throw new Error("fixture"); });\n',
   );
   head = rawCommit(root);
-  fails(invoke(root, "sh", [".githooks/pre-push"], { env, input: input(head) }), "check-error");
-  stage(root, "tests/smoke.test.mjs", 'import test from "node:test"; test("synthetic success", () => {});\n');
-  head = rawCommit(root);
+  // A failing test no longer blocks the push; CI runs the full suite on every pushed head.
   ok(invoke(root, "sh", [".githooks/pre-push"], { env, input: input(head) }));
+  fails(invoke(root, process.execPath, ["scripts/run-checks.mjs", "test"], { env }), "check-error");
 });
 test("text-only push still rejects altered licence text", (t) => {
   const root = scratch(t);
