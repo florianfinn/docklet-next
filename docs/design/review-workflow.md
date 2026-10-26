@@ -25,7 +25,9 @@ behaviour in code, catalogues, docs and comments, not only old identifiers. Veri
 new factual claims. Run focused tests; the pre-push hook runs publication,
 provenance and lint, and CI runs the full suite. Push and PR
 creation still require explicit instruction. Remove generated session-link
-footers immediately and wait for green pr-text before starting review.
+footers immediately. PR reviews start after green pr-text; commit-range reviews of
+feature-branch steps start after the step head's CI run is green and
+`node scripts/check-publication.mjs --history <base>..<head>` passes for the range.
 
 Implementation and independent review use different providers. The reviewer
 receives a fresh context: AGENTS.md, this procedure, task, issues, acceptance

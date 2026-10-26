@@ -157,7 +157,9 @@ in GitHub issues and milestones; rationale belongs in docs/design/ and its index
 - Stage new files before checks. core.hooksPath must be .githooks. Before push run
   focused tests of the touched modules; the pre-push hook runs pnpm run lint
   (publication, structure, migrations, Go vet, web lint and typechecks). CI runs the
-  full lint, test and build once per pushed head on PRs, main and feature/**.
+  full lint, test and build on every pushed head of main and feature/** (feature
+  pushes compare with their main merge base) and on PRs; while a closing PR is
+  open, a feature push also runs the PR merge-result check.
 - Text-only changes use scripts/change-scope.mjs: Markdown outside executable
   paths, root LICENSE/NOTICE and LICENSES. Reduced checks still cover publication,
   commit text, structural guards and Node tests. Pushes to main run the full CI chain.

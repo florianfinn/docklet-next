@@ -35,7 +35,11 @@ export function assertWorkflow(file, text) {
     assert.match(full, /strategy:\n      fail-fast: false\n      matrix:\n        stage: \[lint, test, build\]/);
     for (const entry of [
       'CGO_ENABLED: "0"',
-      "CHECK_BASE_SHA: ${{ github.event.pull_request.base.sha }}",
+      "PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}",
+      'base="$PR_BASE_SHA"',
+      'if [ -z "$base" ] && [ "$GITHUB_REF" != refs/heads/main ]; then',
+      "base=$(git merge-base origin/main HEAD)",
+      'echo "CHECK_BASE_SHA=$base" >> "$GITHUB_ENV"',
       "GOFLAGS: -p=2",
       "VITEST_MAX_WORKERS: 2",
       "fetch-depth: 0",
@@ -85,7 +89,8 @@ export function assertWorkflow(file, text) {
   assert.equal((text.match(/persist-credentials: false/g) ?? []).length, file === "checks" ? 4 : 1);
   if (file === "checks") {
     assert.match(text, /^    branches: \[main, "feature\/\*\*"\]$/m);
-    // Main pushes are never cancelled; superseded PR and feature runs are.
+    // Main runs use unique groups; superseded PR and feature runs are cancelled.
+    assert.ok(text.includes("  group: checks-${{ github.ref == 'refs/heads/main' && github.run_id || github.event.pull_request.number || github.ref }}\n"));
     assert.match(text, /^  cancel-in-progress: \$\{\{ github\.ref != 'refs\/heads\/main' \}\}$/m);
   } else assert.match(text, /branches: \[main\]/);
   // Expressions in run blocks must not interpolate attacker-controlled event text.

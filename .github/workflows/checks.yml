@@ -9,8 +9,10 @@ on:
     types: [opened, synchronize, reopened, ready_for_review]
   push:
     branches: [main, "feature/**"]
+# Main runs get unique groups (never cancelled or replaced while queued); PR and
+# feature-branch runs cancel their superseded runs.
 concurrency:
-  group: checks-${{ github.event.pull_request.number || github.ref }}
+  group: checks-${{ github.ref == 'refs/heads/main' && github.run_id || github.event.pull_request.number || github.ref }}
   cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
 permissions:
   contents: read
@@ -73,7 +75,7 @@ jobs:
         stage: [lint, test, build]
     env:
       CGO_ENABLED: "0"
-      CHECK_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+      PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
       GOFLAGS: -p=2
       VITEST_MAX_WORKERS: 2
     steps:
@@ -100,6 +102,14 @@ jobs:
             types/go.sum
             third_party/arcane/**/go.sum
             third_party/francis/go.sum
+      - name: Select the comparison base
+        # PRs compare with their base; feature pushes with their main merge base.
+        run: |
+          base="$PR_BASE_SHA"
+          if [ -z "$base" ] && [ "$GITHUB_REF" != refs/heads/main ]; then
+            base=$(git merge-base origin/main HEAD)
+          fi
+          echo "CHECK_BASE_SHA=$base" >> "$GITHUB_ENV"
       - name: Isolate checks from Docker daemons
         run: |
           sudo systemctl stop docker.service docker.socket containerd.service
