@@ -9,9 +9,10 @@ Deviations: English rewrite; milestone closing review, risk gates and different-
 # Push, review and completion
 
 Read this procedure before push, PR creation, review or merge. One independent
-review covers each milestone closing PR. Step PRs into the feature branch use
-implementer self-checks and CI. Independent interim reviews are required for high
-risk steps: licensing before the first Arcane-code commit; agent surface/allowlist;
+review covers each milestone closing PR. Milestone steps are commits pushed to the
+feature branch by its main thread, without step PRs; they use self-checks and the CI
+run on each pushed head. Independent interim reviews of the step's commit range
+are required for high risk steps: licensing before the first Arcane-code commit; agent surface/allowlist;
 database baseline; identity/authentication; restore; simple-user authorisation;
 and storage of widget credentials. Standalone maintenance PRs and foundation
 follow-ups also receive independent review. A root commit is reviewed as a complete
@@ -21,7 +22,8 @@ tree before first publication, with acceptance owned separately from implementat
 
 Self-check before the first push. Search for the meaning of removed/changed
 behaviour in code, catalogues, docs and comments, not only old identifiers. Verify
-new factual claims. Run publication, provenance, lint and tests. Push and PR
+new factual claims. Run focused tests; the pre-push hook runs publication,
+provenance and lint, and CI runs the full suite. Push and PR
 creation still require explicit instruction. Remove generated session-link
 footers immediately and wait for green pr-text before starting review.
 
@@ -42,8 +44,9 @@ Minor wording alone is not a blocker. Record each as fixed, rejected with reason
 or accepted follow-up. Fixed entries name commits; follow-ups name an issue and
 stable ID. An unresolved blocker keeps Result: fail; filing an issue cannot waive it.
 
-Fix a blocking error class across comparable paths in one batch. Supply a test
-matrix and red proof that regression tests fail without the correction. Include
+Fix a blocking error class across comparable paths in one batch, with a sweep
+showing no other instance remains and red proof that the regression tests fail
+without the correction. Include
 related optional fixes, self-check and push together. After pass, defer further
 optional improvements instead of rebuilding a reviewed result unnecessarily.
 
@@ -104,8 +107,10 @@ secrets. External contributor workflows require maintainer approval.
 
 The main ruleset must require PRs and checks, pr-text and review, without strict
 base freshness. Installing that ruleset and enabling private vulnerability reports
-are maintainer acceptance tasks; local files do not configure GitHub. Ordinary
-step PRs rely on self-checks/CI; closing and risk PRs also require review evidence.
+are maintainer acceptance tasks; local files do not configure GitHub. Feature-branch
+steps rely on self-checks/CI; closing and standalone PRs also require review evidence.
+Interim risk reviews record their result, commit range and finding decisions in the
+closing PR body.
 
 Squash the closing PR only when the current head is green, its independent result
 is pass and no blockers remain. The title/body become the commit subject/body;

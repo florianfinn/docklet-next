@@ -54,7 +54,7 @@ for (const file of ["checks", "pr-text", "review-status"]) {
       "checkout credentials",
       (text) => text.replace("persist-credentials: false", "persist-credentials: true"),
     ],
-    ["main trigger", (text) => text.replace("branches: [main]", "branches: [other]")],
+    ["main trigger", (text) => text.replace("branches: [main", "branches: [other")],
   ];
   for (const property of [
     "comment.body",

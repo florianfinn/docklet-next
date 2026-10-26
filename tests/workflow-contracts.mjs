@@ -83,7 +83,11 @@ export function assertWorkflow(file, text) {
   assert.equal(/actions\/cache\b/.test(text), false);
   assert.equal(text.includes("secrets."), false);
   assert.equal((text.match(/persist-credentials: false/g) ?? []).length, file === "checks" ? 4 : 1);
-  assert.match(text, /branches: \[main\]/);
+  if (file === "checks") {
+    assert.match(text, /^    branches: \[main, "feature\/\*\*"\]$/m);
+    // Main pushes are never cancelled; superseded PR and feature runs are.
+    assert.match(text, /^  cancel-in-progress: \$\{\{ github\.ref != 'refs\/heads\/main' \}\}$/m);
+  } else assert.match(text, /branches: \[main\]/);
   // Expressions in run blocks must not interpolate attacker-controlled event text.
   const runBlocks = [...text.matchAll(/^\s*(?:- )?run:([^\n]*(?:\n {10,}[^\n]*)*)/gm)];
   for (const block of runBlocks) {
