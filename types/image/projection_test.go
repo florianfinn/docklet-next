@@ -43,3 +43,12 @@ func TestAgentUpgradeRunningHubCap(t *testing.T) {
 		require.Equal(t, tc.code, Neutral(ValidateAgentUpgradeTarget(tc.target, tc.hub), "unexpected", 500).Problem.Code)
 	}
 }
+
+func TestUncheckedReadShapes(t *testing.T) {
+	info := UpdateInfo{ImageRef: "registry.example.com/app:stable", HasUpdate: true, CurrentDigest: "", LatestDigest: ""}
+	ProjectUpdate(&info)
+	require.Equal(t, "unchecked", info.State)
+	require.False(t, info.HasUpdate)
+	require.Equal(t, "unknown", info.AuthState)
+	require.True(t, info.CheckedAt.IsZero())
+}

@@ -30,150 +30,184 @@ import (
 )
 
 func TestLifecycleFinalCreateAndPostDeployIDBarriers(t *testing.T) {
-	for _, stage := range []string{"before-create", "after-create"} {
-		t.Run(stage, func(t *testing.T) {
+	for _, store := range []string{"classic", "containerd"} {
+		t.Run(store, func(t *testing.T) {
+			for _, stage := range []string{"before-create", "after-create"} {
+				t.Run(stage, func(t *testing.T) {
+					f := newLifecycleFixture(t)
+					f.containerd = store == "containerd"
+					f.establishBaseline()
+					intent := f.intent("version")
+					if stage == "before-create" {
+						f.service.composeCoordinator = lifecycleCreateBarrier{ComposeCoordinator: f.service.composeCoordinator, before: func() { f.mu.Lock(); f.tags["registry.example.com/app:1.1.0"] = lifecycleOldID; f.mu.Unlock() }}
+					} else {
+						f.up = func(context.Context, *compose.Project) error {
+							f.mu.Lock()
+							f.tags["registry.example.com/app:1.1.0"] = lifecycleOldID
+							f.mu.Unlock()
+							return nil
+						}
+					}
+					result := f.wait(f.admit(intent))
+					require.Equal(t, activityDTO.StatusFailed, result.Status)
+					require.NotNil(t, result.ImageLifecycle)
+					require.Equal(t, "update.target-changed", result.ImageLifecycle.Code)
+					require.False(t, result.ImageLifecycle.Verified)
+					f.mu.Lock()
+					defer f.mu.Unlock()
+					if stage == "before-create" {
+						require.Zero(t, f.deploys, "changed mapping must refuse before create")
+					} else {
+						require.Equal(t, 1, f.deploys)
+					}
+				})
+			}
+		})
+	}
+}
+
+func TestLifecyclePointFailurePrecedesPullAndKeepsBaseline(t *testing.T) {
+	for _, store := range []string{"classic", "containerd"} {
+		t.Run(store, func(t *testing.T) {
 			f := newLifecycleFixture(t)
+			f.containerd = store == "containerd"
 			f.establishBaseline()
 			intent := f.intent("version")
-			if stage == "before-create" {
-				f.service.composeCoordinator = lifecycleCreateBarrier{ComposeCoordinator: f.service.composeCoordinator, before: func() { f.mu.Lock(); f.tags["registry.example.com/app:1.1.0"] = lifecycleOldID; f.mu.Unlock() }}
-			} else {
-				f.up = func(context.Context, *compose.Project) error {
-					f.mu.Lock()
-					f.tags["registry.example.com/app:1.1.0"] = lifecycleOldID
-					f.mu.Unlock()
-					return nil
-				}
-			}
+			require.NoError(t, f.db.Exec(`CREATE TRIGGER fail_point BEFORE INSERT ON restore_points BEGIN SELECT RAISE(ABORT,'synthetic point persistence failure'); END`).Error)
 			result := f.wait(f.admit(intent))
 			require.Equal(t, activityDTO.StatusFailed, result.Status)
 			require.NotNil(t, result.ImageLifecycle)
-			require.Equal(t, "update.target-changed", result.ImageLifecycle.Code)
-			require.False(t, result.ImageLifecycle.Verified)
+			require.Equal(t, "update.persistence-failed", result.ImageLifecycle.Code)
 			f.mu.Lock()
-			defer f.mu.Unlock()
-			if stage == "before-create" {
-				require.Zero(t, f.deploys, "changed mapping must refuse before create")
-			} else {
-				require.Equal(t, 1, f.deploys)
-			}
-		})
-	}
-}
-func TestLifecyclePointFailurePrecedesPullAndKeepsBaseline(t *testing.T) {
-	f := newLifecycleFixture(t)
-	f.establishBaseline()
-	intent := f.intent("version")
-	require.NoError(t, f.db.Exec(`CREATE TRIGGER fail_point BEFORE INSERT ON restore_points BEGIN SELECT RAISE(ABORT,'synthetic point persistence failure'); END`).Error)
-	result := f.wait(f.admit(intent))
-	require.Equal(t, activityDTO.StatusFailed, result.Status)
-	require.NotNil(t, result.ImageLifecycle)
-	require.Equal(t, "update.persistence-failed", result.ImageLifecycle.Code)
-	f.mu.Lock()
-	require.Zero(t, f.pulls)
-	require.Zero(t, f.tagWrites)
-	require.Zero(t, f.deploys)
-	f.mu.Unlock()
-	require.Equal(t, lifecycleOriginal, lifecycleFile(t, f, "compose.yaml"))
-	require.Empty(t, lifecyclePoints(t, f))
-	var baseline life.Baseline
-	require.NoError(t, f.db.First(&baseline, "target_id = ?", f.project.ID).Error)
-	require.True(t, baseline.Available)
-}
-func TestLifecycleCandidateProtectionSpansPullToDeployment(t *testing.T) {
-	f := newLifecycleFixture(t)
-	f.establishBaseline()
-	entered, release := make(chan struct{}), make(chan struct{})
-	defer func() {
-		select {
-		case <-release:
-		default:
-			close(release)
-		}
-	}()
-	f.up = func(context.Context, *compose.Project) error { close(entered); <-release; return nil }
-	admitted := f.admit(f.intent("version"))
-	<-entered
-	var pins []guard.Protection
-	require.NoError(t, f.db.Where("image_id = ? AND reason = ?", lifecycleNewID, "active-update").Find(&pins).Error)
-	require.NotEmpty(t, pins)
-	err := f.service.imageService.RemoveImage(t.Context(), lifecycleNewID, true, user.Actor{ID: "operator", Username: "operator"})
-	lifecycleCode(t, err, "image.active-update-protected")
-	close(release)
-	require.Equal(t, activityDTO.StatusSuccess, f.wait(admitted).Status)
-	require.NoError(t, f.db.Where("image_id = ? AND reason = ?", lifecycleNewID, "active-update").Find(&pins).Error)
-	require.Empty(t, pins)
-}
-func TestLifecycleRestoreSharingRequiresAnActualConflictingMove(t *testing.T) {
-	f := newLifecycleFixture(t)
-	f.establishBaseline()
-	updated := f.wait(f.admit(f.intent("rebuild")))
-	require.Equal(t, activityDTO.StatusSuccess, updated.Status)
-	points := lifecyclePoints(t, f)
-	require.NotEmpty(t, points, "failed runs with effects retain a restore point")
-	point := points[0]
-	f.mu.Lock()
-	f.workloads["peer"] = lifecycleWorkload{ID: strings.Repeat("e", 64), Project: "other-stack", Service: "app", Reference: "registry.example.com/app:1.0.0", ImageID: lifecycleNewID, Running: false}
-	f.mu.Unlock()
-	_, current, err := f.service.lifecycleCurrent(t.Context(), f.project.ID, f.registration)
-	require.NoError(t, err)
-	request := dto.LifecycleRequest{PointID: point.ID, ExpectedRevision: current.SavedRevision, ReplaceConfiguration: true}
-	_, err = f.service.PrepareImageLifecycle(t.Context(), f.project.ID, f.registration, request)
-	assert.Error(t, err)
-	assert.Equal(t, "restore.shared-reference", imageDTO.Neutral(err, "unexpected", 500).Problem.Code)
-	require.Len(t, lifecyclePoints(t, f), 1)
-	f.mu.Lock()
-	f.tags["registry.example.com/app:1.0.0"] = lifecycleOldID
-	f.mu.Unlock()
-	intent, err := f.service.PrepareImageLifecycle(t.Context(), f.project.ID, f.registration, request)
-	require.NoError(t, err, "no tag move needs no shared-reference refusal")
-	f.mu.Lock()
-	f.tags["registry.example.com/app:1.0.0"] = lifecycleNewID
-	before := f.deploys
-	f.mu.Unlock()
-	out := f.wait(f.admit(intent))
-	f.mu.Lock()
-	deploys, tag := f.deploys, f.tags["registry.example.com/app:1.0.0"]
-	f.mu.Unlock()
-	require.Equal(t, before, deploys)
-	require.Equal(t, lifecycleNewID, tag)
-	require.Equal(t, "restore.shared-reference", out.ImageLifecycle.Code)
-	require.Len(t, lifecyclePoints(t, f), 1)
-}
-func TestLifecycleFailedRebuildReconcilesTagOrHoldsUnknown(t *testing.T) {
-	for _, external := range []bool{false, true} {
-		name := "reconciled"
-		if external {
-			name = "external-writer"
-		}
-		t.Run(name, func(t *testing.T) {
-			f := newLifecycleFixture(t)
-			f.establishBaseline()
-			f.up = func(context.Context, *compose.Project) error {
-				if external {
-					f.mu.Lock()
-					f.tags["registry.example.com/app:1.0.0"] = "sha256:" + strings.Repeat("e", 64)
-					f.mu.Unlock()
-				}
-				return errors.New("synthetic deployment failure")
-			}
-			result := f.wait(f.admit(f.intent("rebuild")))
-			f.mu.Lock()
-			tag := f.tags["registry.example.com/app:1.0.0"]
+			require.Zero(t, f.pulls)
+			require.Zero(t, f.tagWrites)
+			require.Zero(t, f.deploys)
 			f.mu.Unlock()
-			if external {
-				require.Equal(t, activityDTO.RuntimeOutcomeUnknown, result.OutcomeState)
-				require.Equal(t, "sha256:"+strings.Repeat("e", 64), tag)
-				var n int64
-				require.NoError(t, f.db.Model(&guard.Protection{}).Where("reason = ?", "active-update").Count(&n).Error)
-				require.Positive(t, n)
-			} else {
-				require.Equal(t, activityDTO.StatusFailed, result.Status)
-				require.Equal(t, lifecycleOldID, tag)
+			require.Equal(t, lifecycleOriginal, lifecycleFile(t, f, "compose.yaml"))
+			require.Empty(t, lifecyclePoints(t, f))
+			var baseline life.Baseline
+			require.NoError(t, f.db.First(&baseline, "target_id = ?", f.project.ID).Error)
+			require.True(t, baseline.Available)
+		})
+	}
+}
+
+func TestLifecycleCandidateProtectionSpansPullToDeployment(t *testing.T) {
+	for _, store := range []string{"classic", "containerd"} {
+		t.Run(store, func(t *testing.T) {
+			f := newLifecycleFixture(t)
+			f.containerd = store == "containerd"
+			f.establishBaseline()
+			candidateID := lifecycleNewID
+			if f.containerd {
+				candidateID = lifecycleDigest
+			}
+			entered, release := make(chan struct{}), make(chan struct{})
+			defer func() {
+				select {
+				case <-release:
+				default:
+					close(release)
+				}
+			}()
+			f.up = func(context.Context, *compose.Project) error { close(entered); <-release; return nil }
+			admitted := f.admit(f.intent("version"))
+			<-entered
+			var pins []guard.Protection
+			require.NoError(t, f.db.Where("image_id = ? AND reason = ?", candidateID, "active-update").Find(&pins).Error)
+			require.NotEmpty(t, pins)
+			err := f.service.imageService.RemoveImage(t.Context(), candidateID, true, user.Actor{ID: "operator", Username: "operator"})
+			lifecycleCode(t, err, "image.active-update-protected")
+			close(release)
+			require.Equal(t, activityDTO.StatusSuccess, f.wait(admitted).Status)
+			require.NoError(t, f.db.Where("image_id = ? AND reason = ?", candidateID, "active-update").Find(&pins).Error)
+			require.Empty(t, pins)
+		})
+	}
+}
+
+func TestLifecycleRestoreSharingRequiresAnActualConflictingMove(t *testing.T) {
+	for _, store := range []string{"classic", "containerd"} {
+		t.Run(store, func(t *testing.T) {
+			f := newLifecycleFixture(t)
+			f.containerd = store == "containerd"
+			f.establishBaseline()
+			updated := f.wait(f.admit(f.intent("rebuild")))
+			require.Equal(t, activityDTO.StatusSuccess, updated.Status)
+			points := lifecyclePoints(t, f)
+			require.NotEmpty(t, points, "failed runs with effects retain a restore point")
+			point := points[0]
+			f.mu.Lock()
+			f.workloads["peer"] = lifecycleWorkload{ID: strings.Repeat("e", 64), Project: "other-stack", Service: "app", Reference: "registry.example.com/app:1.0.0", ImageID: lifecycleNewID, Running: false}
+			f.mu.Unlock()
+			_, current, err := f.service.lifecycleCurrent(t.Context(), f.project.ID, f.registration)
+			require.NoError(t, err)
+			request := dto.LifecycleRequest{PointID: point.ID, ExpectedRevision: current.SavedRevision, ReplaceConfiguration: true}
+			_, err = f.service.PrepareImageLifecycle(t.Context(), f.project.ID, f.registration, request)
+			assert.Error(t, err)
+			assert.Equal(t, "restore.shared-reference", imageDTO.Neutral(err, "unexpected", 500).Problem.Code)
+			require.Len(t, lifecyclePoints(t, f), 1)
+			f.mu.Lock()
+			f.tags["registry.example.com/app:1.0.0"] = lifecycleOldID
+			f.mu.Unlock()
+			intent, err := f.service.PrepareImageLifecycle(t.Context(), f.project.ID, f.registration, request)
+			require.NoError(t, err, "no tag move needs no shared-reference refusal")
+			f.mu.Lock()
+			f.tags["registry.example.com/app:1.0.0"] = lifecycleNewID
+			before := f.deploys
+			f.mu.Unlock()
+			out := f.wait(f.admit(intent))
+			f.mu.Lock()
+			deploys, tag := f.deploys, f.tags["registry.example.com/app:1.0.0"]
+			f.mu.Unlock()
+			require.Equal(t, before, deploys)
+			require.Equal(t, lifecycleNewID, tag)
+			require.Equal(t, "restore.shared-reference", out.ImageLifecycle.Code)
+			require.Len(t, lifecyclePoints(t, f), 1)
+		})
+	}
+}
+
+func TestLifecycleFailedRebuildReconcilesTagOrHoldsUnknown(t *testing.T) {
+	for _, store := range []string{"classic", "containerd"} {
+		t.Run(store, func(t *testing.T) {
+			for _, external := range []bool{false, true} {
+				name := "reconciled"
+				if external {
+					name = "external-writer"
+				}
+				t.Run(name, func(t *testing.T) {
+					f := newLifecycleFixture(t)
+					f.containerd = store == "containerd"
+					f.establishBaseline()
+					f.up = func(context.Context, *compose.Project) error {
+						if external {
+							f.mu.Lock()
+							f.tags["registry.example.com/app:1.0.0"] = "sha256:" + strings.Repeat("e", 64)
+							f.mu.Unlock()
+						}
+						return errors.New("synthetic deployment failure")
+					}
+					result := f.wait(f.admit(f.intent("rebuild")))
+					f.mu.Lock()
+					tag := f.tags["registry.example.com/app:1.0.0"]
+					f.mu.Unlock()
+					if external {
+						require.Equal(t, activityDTO.RuntimeOutcomeUnknown, result.OutcomeState)
+						require.Equal(t, "sha256:"+strings.Repeat("e", 64), tag)
+						var n int64
+						require.NoError(t, f.db.Model(&guard.Protection{}).Where("reason = ?", "active-update").Count(&n).Error)
+						require.Positive(t, n)
+					} else {
+						require.Equal(t, activityDTO.StatusFailed, result.Status)
+						require.Equal(t, lifecycleOldID, tag)
+					}
+				})
 			}
 		})
 	}
 }
+
 func TestLifecycleNormalDeployCapturesActualInputsOutsideImageLease(t *testing.T) {
 	for _, capture := range []bool{true, false} {
 		name := "captured"
@@ -217,23 +251,28 @@ func TestLifecycleNormalDeployCapturesActualInputsOutsideImageLease(t *testing.T
 }
 
 func TestLifecycleObservedContainerReplacementBeforeTagHasZeroEffects(t *testing.T) {
-	f := newLifecycleFixture(t)
-	f.establishBaseline()
-	intent := f.intent("version")
-	f.onPull = func() {
-		f.mu.Lock()
-		defer f.mu.Unlock()
-		c := f.workloads["app"]
-		c.ID = strings.Repeat("e", 64)
-		f.workloads["app"] = c
+	for _, store := range []string{"classic", "containerd"} {
+		t.Run(store, func(t *testing.T) {
+			f := newLifecycleFixture(t)
+			f.containerd = store == "containerd"
+			f.establishBaseline()
+			intent := f.intent("version")
+			f.onPull = func() {
+				f.mu.Lock()
+				defer f.mu.Unlock()
+				c := f.workloads["app"]
+				c.ID = strings.Repeat("e", 64)
+				f.workloads["app"] = c
+			}
+			out := f.wait(f.admit(intent))
+			require.Equal(t, activityDTO.StatusFailed, out.Status)
+			require.Equal(t, lifecycleOriginal, lifecycleFile(t, f, "compose.yaml"))
+			f.mu.Lock()
+			defer f.mu.Unlock()
+			require.Zero(t, f.deploys)
+			require.Equal(t, "", f.tags["registry.example.com/app:1.1.0"])
+		})
 	}
-	out := f.wait(f.admit(intent))
-	require.Equal(t, activityDTO.StatusFailed, out.Status)
-	require.Equal(t, lifecycleOriginal, lifecycleFile(t, f, "compose.yaml"))
-	f.mu.Lock()
-	defer f.mu.Unlock()
-	require.Zero(t, f.deploys)
-	require.Equal(t, "", f.tags["registry.example.com/app:1.1.0"])
 }
 
 func TestLifecycleDependencyAndStopSignalModel(t *testing.T) {
@@ -293,45 +332,50 @@ func TestLifecycleDependencyAndStopSignalModel(t *testing.T) {
 }
 
 func TestLifecycleRestorePartialSourcePreservesAbsentAndStoppedServices(t *testing.T) {
-	f := newLifecycleFixture(t)
-	f.establishBaseline()
-	require.Equal(t, activityDTO.StatusSuccess, f.wait(f.admit(f.intent("version"))).Status)
-	initial := lifecyclePoints(t, f)
-	require.NotEmpty(t, initial, "failed runs with effects retain a restore point")
-	original := initial[0]
-	partial := lifecycleFile(t, f, "compose.yaml") + "  worker:\n    image: registry.example.com/app:1.0.0\n"
-	require.NoError(t, os.WriteFile(filepath.Join(f.project.Path, "compose.yaml"), []byte(partial), 0600))
-	f.mu.Lock()
-	c := f.workloads["app"]
-	c.Running = false
-	f.workloads["app"] = c
-	f.mu.Unlock()
-	restore := func(point string) {
-		_, cur, err := f.service.lifecycleCurrent(t.Context(), f.project.ID, f.registration)
-		require.NoError(t, err)
-		intent, err := f.service.PrepareImageLifecycle(t.Context(), f.project.ID, f.registration, dto.LifecycleRequest{PointID: point, ExpectedRevision: cur.SavedRevision, ReplaceConfiguration: true})
-		require.NoError(t, err)
-		out := f.wait(f.admit(intent))
-		require.Equal(t, activityDTO.StatusSuccess, out.Status)
-		require.True(t, out.ImageLifecycle.Verified)
+	for _, store := range []string{"classic", "containerd"} {
+		t.Run(store, func(t *testing.T) {
+			f := newLifecycleFixture(t)
+			f.containerd = store == "containerd"
+			f.establishBaseline()
+			require.Equal(t, activityDTO.StatusSuccess, f.wait(f.admit(f.intent("version"))).Status)
+			initial := lifecyclePoints(t, f)
+			require.NotEmpty(t, initial, "failed runs with effects retain a restore point")
+			original := initial[0]
+			partial := lifecycleFile(t, f, "compose.yaml") + "  worker:\n    image: registry.example.com/app:1.0.0\n"
+			require.NoError(t, os.WriteFile(filepath.Join(f.project.Path, "compose.yaml"), []byte(partial), 0600))
+			f.mu.Lock()
+			c := f.workloads["app"]
+			c.Running = false
+			f.workloads["app"] = c
+			f.mu.Unlock()
+			restore := func(point string) {
+				_, cur, err := f.service.lifecycleCurrent(t.Context(), f.project.ID, f.registration)
+				require.NoError(t, err)
+				intent, err := f.service.PrepareImageLifecycle(t.Context(), f.project.ID, f.registration, dto.LifecycleRequest{PointID: point, ExpectedRevision: cur.SavedRevision, ReplaceConfiguration: true})
+				require.NoError(t, err)
+				out := f.wait(f.admit(intent))
+				require.Equal(t, activityDTO.StatusSuccess, out.Status)
+				require.True(t, out.ImageLifecycle.Verified)
+			}
+			restore(original.ID)
+			points := lifecyclePoints(t, f)
+			require.Len(t, points, 2)
+			snap, err := life.Open(points[1].Payload)
+			require.NoError(t, err)
+			require.False(t, snap.Services["app"].Running)
+			require.False(t, snap.Services["worker"].Present)
+			f.up = func(_ context.Context, model *compose.Project) error {
+				assert.NotContains(t, model.Services, "worker")
+				return nil
+			}
+			restore(points[1].ID)
+			require.Equal(t, partial, lifecycleFile(t, f, "compose.yaml"))
+			f.mu.Lock()
+			defer f.mu.Unlock()
+			require.False(t, f.workloads["app"].Running)
+			require.NotContains(t, f.workloads, "worker")
+		})
 	}
-	restore(original.ID)
-	points := lifecyclePoints(t, f)
-	require.Len(t, points, 2)
-	snap, err := life.Open(points[1].Payload)
-	require.NoError(t, err)
-	require.False(t, snap.Services["app"].Running)
-	require.False(t, snap.Services["worker"].Present)
-	f.up = func(_ context.Context, model *compose.Project) error {
-		assert.NotContains(t, model.Services, "worker")
-		return nil
-	}
-	restore(points[1].ID)
-	require.Equal(t, partial, lifecycleFile(t, f, "compose.yaml"))
-	f.mu.Lock()
-	defer f.mu.Unlock()
-	require.False(t, f.workloads["app"].Running)
-	require.NotContains(t, f.workloads, "worker")
 }
 
 func TestLifecycleFileCASAndActorCannotOverwriteAnEditorChange(t *testing.T) {
@@ -359,32 +403,37 @@ func TestLifecycleFileCASAndActorCannotOverwriteAnEditorChange(t *testing.T) {
 	}
 }
 func TestLifecycleAmbiguousReferencePointRefusesBeforeAnyImageMovement(t *testing.T) {
-	f := newLifecycleFixture(t)
-	source := lifecycleOriginal + "  worker:\n    image: registry.example.com/app:1.0.0\n"
-	require.NoError(t, os.WriteFile(filepath.Join(f.project.Path, "compose.yaml"), []byte(source), 0600))
-	f.mu.Lock()
-	f.workloads["worker"] = lifecycleWorkload{ID: strings.Repeat("e", 64), Service: "worker", Project: "example-stack", Reference: "registry.example.com/app:1.0.0", ImageID: lifecycleNewID, Running: false}
-	f.mu.Unlock()
-	_, snap, err := f.service.lifecycleCurrent(t.Context(), f.project.ID, f.registration)
-	require.NoError(t, err)
-	snap.RunID = uuid.NewString()
-	point, err := f.service.lifecycleStore().Prepare(t.Context(), snap, snap.RunID, "", "partial-source")
-	require.NoError(t, err)
-	require.NoError(t, f.service.lifecyclePinPoint(t.Context(), point, snap))
-	f.mu.Lock()
-	beforeTags := f.tagWrites
-	f.mu.Unlock()
-	intent, err := f.service.PrepareImageLifecycle(t.Context(), f.project.ID, f.registration, dto.LifecycleRequest{PointID: point.ID, ExpectedRevision: snap.SavedRevision, ReplaceConfiguration: true})
-	if err == nil {
-		f.wait(f.admit(intent))
+	for _, store := range []string{"classic", "containerd"} {
+		t.Run(store, func(t *testing.T) {
+			f := newLifecycleFixture(t)
+			f.containerd = store == "containerd"
+			source := lifecycleOriginal + "  worker:\n    image: registry.example.com/app:1.0.0\n"
+			require.NoError(t, os.WriteFile(filepath.Join(f.project.Path, "compose.yaml"), []byte(source), 0600))
+			f.mu.Lock()
+			f.workloads["worker"] = lifecycleWorkload{ID: strings.Repeat("e", 64), Service: "worker", Project: "example-stack", Reference: "registry.example.com/app:1.0.0", ImageID: lifecycleNewID, Running: false}
+			f.mu.Unlock()
+			_, snap, err := f.service.lifecycleCurrent(t.Context(), f.project.ID, f.registration)
+			require.NoError(t, err)
+			snap.RunID = uuid.NewString()
+			point, err := f.service.lifecycleStore().Prepare(t.Context(), snap, snap.RunID, "", "partial-source")
+			require.NoError(t, err)
+			require.NoError(t, f.service.lifecyclePinPoint(t.Context(), point, snap))
+			f.mu.Lock()
+			beforeTags := f.tagWrites
+			f.mu.Unlock()
+			intent, err := f.service.PrepareImageLifecycle(t.Context(), f.project.ID, f.registration, dto.LifecycleRequest{PointID: point.ID, ExpectedRevision: snap.SavedRevision, ReplaceConfiguration: true})
+			if err == nil {
+				f.wait(f.admit(intent))
+			}
+			f.mu.Lock()
+			defer f.mu.Unlock()
+			require.Equal(t, beforeTags, f.tagWrites, "an impossible point must refuse before installing more pins or moving user tags")
+			require.Equal(t, lifecycleOldID, f.tags["registry.example.com/app:1.0.0"])
+			require.Zero(t, f.deploys)
+			require.Zero(t, f.pulls)
+			lifecycleCode(t, err, "restore.unavailable")
+		})
 	}
-	f.mu.Lock()
-	defer f.mu.Unlock()
-	require.Equal(t, beforeTags, f.tagWrites, "an impossible point must refuse before installing more pins or moving user tags")
-	require.Equal(t, lifecycleOldID, f.tags["registry.example.com/app:1.0.0"])
-	require.Zero(t, f.deploys)
-	require.Zero(t, f.pulls)
-	lifecycleCode(t, err, "restore.unavailable")
 }
 
 type lifecycleCreateBarrier struct {

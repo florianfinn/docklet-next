@@ -61,7 +61,7 @@ func (*pointTestConn) Transport() string                     { return "test" }
 
 func pointBody(t *testing.T) []byte {
 	t.Helper()
-	body, err := json.Marshal(map[string]any{"success": true, "data": []dto.RestorePoint{{ID: "point", RegistrationID: "registration", TargetID: "stack", TargetIdentity: "identity", SourceRunID: "run", CreatedAt: time.Unix(100, 0).UTC(), SourceState: "settled", HoldState: dto.HoldNone, Images: []dto.PointImage{}}}})
+	body, err := json.Marshal(map[string]any{"success": true, "data": []dto.RestorePoint{{ID: "point", RegistrationID: "registration", TargetID: "stack", TargetIdentity: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", SourceRunID: "run", CreatedAt: time.Unix(100, 0).UTC(), SourceState: "settled", HoldState: dto.HoldNone, Images: []dto.PointImage{}}}})
 	require.NoError(t, err)
 	return body
 }

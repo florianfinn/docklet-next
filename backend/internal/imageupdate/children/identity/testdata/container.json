@@ -1,0 +1,22 @@
+{
+  "Image": "sha256:5616878291a2eed594aee8db4dade5878cf7edcb475e59193904b198d9b830de",
+  "ImageManifestDescriptor": {
+    "mediaType": "application/vnd.oci.image.manifest.v1+json",
+    "digest": "sha256:3bcf852aed06467cf075c6105892e4d5a6ebbbafa0ce22d35062db9e90ddef4c",
+    "size": 2495,
+    "annotations": {
+      "com.docker.official-images.bashbrew.arch": "amd64",
+      "org.opencontainers.image.base.digest": "sha256:04a927892bd65fc7216be7a18bd379ab1987f2fab3ee269bd465d53b1c341b2c",
+      "org.opencontainers.image.base.name": "nginx:1.29.8-alpine-slim",
+      "org.opencontainers.image.created": "2026-04-15T21:18:47Z",
+      "org.opencontainers.image.revision": "71081b25390771f6b1275ddf7c73c965f304493f",
+      "org.opencontainers.image.source": "https://github.com/nginx/docker-nginx.git#71081b25390771f6b1275ddf7c73c965f304493f:mainline/alpine",
+      "org.opencontainers.image.url": "https://hub.docker.com/_/nginx",
+      "org.opencontainers.image.version": "1.29.8-alpine"
+    },
+    "platform": {
+      "architecture": "amd64",
+      "os": "linux"
+    }
+  }
+}

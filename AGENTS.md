@@ -69,16 +69,20 @@ in GitHub issues and milestones; rationale belongs in docs/design/ and its index
 
 ## Agent coordination
 
-- When work requires cooperation between agents, read and use the centrally
-  maintained `subagent-orchestration` skill before delegating. The skill is a
-  separate, reusable resource for other projects; these project rules and explicit
-  maintainer instructions take precedence. Locate it through the skill catalogue
-  or local `.claude/subagent-profile.md`. If unavailable, report that before
-  delegating and continue independent work within the approved scope.
-- Resolve open product, scope and interface decisions before the affected work.
-  Read accepted decisions first; handle routine implementation choices autonomously.
-  Raise genuine decisions early with a recommendation. Keep the accepted plan
-  stable and obtain required decisions on material deviations before proceeding.
+- One main thread runs a milestone: it plans, writes design notes, implements,
+  fixes and integrates, and is the only writer of the feature branch. Subagents are
+  tools with one brief and one structured result: independent review, sandbox and
+  acceptance runs, wide searches, and large bounded steps in their own worktree,
+  which the main thread checks and integrates. Tools never decide product, scope or
+  UX questions; they return them with options and a recommendation.
+- At milestone start, write the plan and the design notes of risky steps (with
+  their break map and design review), then ask the maintainer every open product,
+  scope and interface question at once, each with a recommendation. Read accepted
+  decisions first; handle routine implementation choices autonomously. A question
+  that appears later is decided by the main thread with the recommended, reversible
+  and narrower option, recorded with how to reverse it and reported to the
+  maintainer without pausing; such a decision never widens scope, publishes, weakens
+  security or deploys.
 - Give each agent a self-contained brief: goal and acceptance, full base/head SHA,
   target branch, accepted decisions, prerequisites and contract owner, owned paths
   and read-only boundaries, known traps, checks and accessible evidence/report paths.
@@ -87,8 +91,8 @@ in GitHub issues and milestones; rationale belongs in docs/design/ and its index
   Put the current context first and link complete relevant reports once through
   verified accessible paths; avoid recursively copying earlier briefs. Preserve
   critical decisions and objections when working within tool input limits.
-- Use parallel work only with independent scope, disjoint ownership, isolated
-  implementation worktrees and adequate resources. Group work into coherent,
+- Use parallel tools only with independent scope, disjoint ownership and isolated
+  worktrees. Group work into coherent,
   usable deliveries; local checkpoints and file-count heuristics do not require
   additional PRs, scouts or review rounds. Retain the required foundation, risk
   and closing reviews. Use focused construction checks and required integrated
@@ -96,8 +100,11 @@ in GitHub issues and milestones; rationale belongs in docs/design/ and its index
 - For a correctness fix, map the affected producer, transport/DTO and actual
   consumer before implementation. Cover initial failure, partial state, latency,
   identity changes and restart where relevant. Synchronise asynchronous assertions
-  with the actual effect. Compiler errors, timeouts and equivalent mutations do
-  not demonstrate that a behavioural guard works.
+  with the actual effect. Each break-map row (persisted transitional states,
+  external data entry points, identity changes, new codes, Direct/Edge parity,
+  migrations) and each blocker fix needs a test with red proof; other code gets
+  ordinary tests. Compiler errors, timeouts and equivalent mutations do not
+  demonstrate that a behavioural guard works.
 - Check dependency graphs, fixtures, metadata and policy guards early. Record
   flaky failures and reruns honestly and track their repair. Evidence reuse never
   permits bypassing required hooks or checks without an explicit policy change.
@@ -105,9 +112,9 @@ in GitHub issues and milestones; rationale belongs in docs/design/ and its index
   grouped into one correction, and tracked deferrals with rationale. After PASS,
   accepted nonblocking improvements do not trigger additional review loops.
   Signal new product questions promptly through the active coordination channel.
-- Default new implementation agents to GPT-6.1 Sol. Start Astra agents only when
-  strictly necessary and state the concrete reason. Preserve independent review
-  by a different provider; generic skill model heuristics do not override this rule.
+- Implementation tools default to GPT-6.1 Sol. Start Astra agents only when
+  strictly necessary and state the concrete reason. Review always comes from a
+  different provider than the implementation, including main-thread work.
 - Continue through the authorised completion boundary. Worker reports and green
   local checks are intermediate results. After interruptions, inspect actual task,
   Git and command results before retrying; preserve the next allowed step in
@@ -120,8 +127,10 @@ in GitHub issues and milestones; rationale belongs in docs/design/ and its index
 ## Branches, review and completion
 
 - Read docs/design/review-workflow.md before push, PR creation, review and merge.
-- One feature branch per milestone; steps arrive by PR. The closing PR integrates
-  the complete milestone into main and lists every completed issue with Closes.
+- One feature branch per milestone, written only by its main thread; steps arrive
+  as pushed commits without step PRs, and CI runs on every pushed head. The closing
+  PR integrates the complete milestone into main and lists every completed issue
+  with Closes.
 - Merge main into feature branches; never rebase or force-push shared history.
   No direct push to main. Push and PR creation require explicit instruction.
 - Conventional Commit subjects include (#number) when an issue exists. The
@@ -130,9 +139,10 @@ in GitHub issues and milestones; rationale belongs in docs/design/ and its index
   use Conventional Commits. On base changes, push again to rerun checks.
   Before merge, check the actual proposed squash subject/body, required issue
   reference in the subject, public human identities and publication suitability.
-- One independent review per milestone closing PR, plus risk interim reviews;
-  implementation and review use different providers. Step PRs use self-checks and
-  CI; standalone PRs and foundation follow-ups receive independent review.
+- One independent review per milestone closing PR, plus risk interim reviews of
+  the step's commit range; implementation and review use different providers.
+  Other steps use self-checks and CI. Standalone PRs and foundation follow-ups
+  receive independent review.
 - Before the closing review, run the candidate package once in the approved
   sandbox against real hub and agent paths (Direct and Edge where relevant).
   Check fixtures for hub or agent responses against the real producer.
@@ -145,8 +155,11 @@ in GitHub issues and milestones; rationale belongs in docs/design/ and its index
 
 - Pre-commit checks publication and structure against staged blobs and policies.
 - Stage new files before checks. core.hooksPath must be .githooks. Before push run
-  pnpm run lint and pnpm run test; CI also builds. The root commands integrate Go
-  vet/tests and web lint/typechecks/tests when those modules arrive in M1/M2.
+  focused tests of the touched modules; the pre-push hook runs pnpm run lint
+  (publication, structure, migrations, Go vet, web lint and typechecks). CI runs the
+  full lint, test and build on every pushed head of main and feature/** (feature
+  pushes compare with their main merge base) and on PRs; while a closing PR is
+  open, a feature push also runs the PR merge-result check.
 - Text-only changes use scripts/change-scope.mjs: Markdown outside executable
   paths, root LICENSE/NOTICE and LICENSES. Reduced checks still cover publication,
   commit text, structural guards and Node tests. Pushes to main run the full CI chain.

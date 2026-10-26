@@ -63,7 +63,7 @@ func (p *RestorePoint) UnmarshalJSON(body []byte) error {
 	if value.HoldState != HoldNone && value.HoldState != HoldActive && value.HoldState != HoldUnknown {
 		return errors.New("invalid restore point hold")
 	}
-	if value.ID == "" || value.RegistrationID == "" || value.TargetID == "" || value.TargetIdentity == "" || value.SourceRunID == "" || value.CreatedAt.IsZero() || (value.SourceState != "settled" && value.SourceState != "partial-source") || value.Images == nil || image.ValidateReason(value.Code) != nil {
+	if value.ID == "" || value.RegistrationID == "" || value.TargetID == "" || !ValidIdentity(value.TargetIdentity) || value.SourceRunID == "" || value.CreatedAt.IsZero() || (value.SourceState != "settled" && value.SourceState != "partial-source") || value.Images == nil || image.ValidateReason(value.Code) != nil {
 		return errors.New("invalid restore point metadata")
 	}
 	*p = RestorePoint(value)
@@ -85,6 +85,12 @@ func (p *PointImage) UnmarshalJSON(body []byte) error {
 		if !ok || string(raw) == "null" {
 			return errors.New("invalid restore point image")
 		}
+	}
+	if raw, ok := fields["digest"]; ok && string(raw) == "null" {
+		return errors.New("invalid restore point digest")
+	}
+	if !validPointImage(PointImage(value)) {
+		return errors.New("invalid restore point image identity")
 	}
 	*p = PointImage(value)
 	return nil

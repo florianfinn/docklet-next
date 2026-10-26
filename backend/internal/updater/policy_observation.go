@@ -10,46 +10,23 @@ import (
 	"context"
 	"github.com/florianfinn/docklet-next/backend/internal/imageupdate"
 	imageDTO "github.com/florianfinn/docklet-next/types/image"
-	v1 "github.com/google/go-containerregistry/pkg/v1"
 )
 
-func (s *UpdaterService) enrichPolicyObservation(ctx context.Context, ref, target string, record *imageupdate.ImageUpdateRecord) {
-	if s.deps.ImageUpdates == nil {
-		return
-	}
+func (s *UpdaterService) enrichPolicyObservation(ctx context.Context, ref, target, platform, project string, record *imageupdate.ImageUpdateRecord) {
 	fail := func() {
 		record.HasUpdate = false
+		record.Platform = nil
 		record.LastError = new(imageDTO.Failure("update.check-unavailable", 503).Error())
 	}
-	observed, err := s.deps.ImageUpdates.ReadUpdateInfo(ctx, ref)
-	if err != nil || observed == nil {
+	if s.deps.ImageUpdates == nil {
 		fail()
 		return
 	}
-	if observed.ImageUpdate != nil {
-		observed = observed.ImageUpdate
-	}
-	if observed.Platform == "" || observed.CurrentDigest == "" || observed.State == "error" || observed.State == "unknown" {
-		fail()
-		return
-	}
-	platform, err := v1.ParsePlatform(observed.Platform)
+	observed, err := s.deps.ImageUpdates.NativeServiceObservation(ctx, ref, target, platform, project, record.ServiceName)
 	if err != nil {
 		fail()
 		return
 	}
-	if target == "" {
-		target = ref
-	}
-	candidate, err := s.deps.RegistryDigestResolver.PlatformImage(ctx, target, *platform)
-	if err != nil {
-		fail()
-		return
-	}
-	record.Platform = new(observed.Platform)
-	record.CurrentDigest = new(observed.CurrentDigest)
-	record.LatestDigest = new(candidate.Digest)
-	record.AuthMethod = new(candidate.AuthState)
-	info := record.UpdateInfo()
-	record.HasUpdate = info.HasUpdate
+	record.SetNativeObservation(observed)
+	record.HasUpdate = record.UpdateInfo().HasUpdate
 }

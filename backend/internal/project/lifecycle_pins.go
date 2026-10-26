@@ -12,10 +12,12 @@ import (
 	"github.com/distribution/reference"
 	imageService "github.com/florianfinn/docklet-next/backend/internal/image"
 	"github.com/florianfinn/docklet-next/backend/internal/image/guard"
+	"github.com/florianfinn/docklet-next/backend/internal/imageupdate/children/identity"
 	life "github.com/florianfinn/docklet-next/backend/internal/project/children/lifecycle"
 	imageDTO "github.com/florianfinn/docklet-next/types/image"
 	dto "github.com/florianfinn/docklet-next/types/updater"
 	"github.com/moby/moby/client"
+	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
 	"io"
 	"strings"
 )
@@ -36,6 +38,18 @@ func (s *ProjectService) verifyLifecyclePoint(ctx context.Context, point life.Po
 		found, err := c.ImageInspect(ctx, img.ImageID)
 		if err != nil || found.InspectResponse.ID != img.ImageID {
 			return lifecycleFailure("restore.unavailable")
+		}
+		native, e := identity.Resolve(ctx, c, found.InspectResponse, img.Platform, nil)
+		if e != nil || native.Digest() != "" && native.Digest() != img.Digest {
+			return lifecycleFailure("restore.unavailable")
+		}
+		if native.Digest() == "" {
+			img.Digest = ""
+			if id, ok := strings.CutPrefix(key, "container/"); ok {
+				snap.Containers[id] = img
+			} else {
+				snap.Services[key] = img
+			}
 		}
 	}
 	return nil
@@ -117,6 +131,11 @@ func (s *ProjectService) lifecycleSelectImages(ctx context.Context, run string, 
 			if err != nil {
 				return imageDTO.Neutral(err, "registry.credential-unavailable", 503)
 			}
+			platform, e := identity.ParsePlatform(sel.Platform)
+			if e != nil {
+				return e
+			}
+			opts.Platforms = []ocispec.Platform{platform.OCI()}
 			reader, err := c.ImagePull(ctx, immutable, opts)
 			if err != nil {
 				return imageService.PullError(err, opts.RegistryAuth != "")
@@ -134,19 +153,24 @@ func (s *ProjectService) lifecycleSelectImages(ctx context.Context, run string, 
 			if err != nil {
 				return lifecycleFailure("update.target-changed")
 			}
-			if pulled.InspectResponse.ID == sel.Digest && pulled.InspectResponse.ID != sel.ImageID {
-				// Manifest-ID image stores need exact-package acceptance before
-				// their identity can replace the frozen config-ID comparison.
-				return lifecycleFailure("update.image-binding-unsupported")
-			}
-			if pulled.InspectResponse.ID != sel.ImageID || lifecyclePlatform(pulled.InspectResponse.Os, pulled.InspectResponse.Architecture, pulled.InspectResponse.Variant) != sel.Platform {
+			native, e := identity.Resolve(ctx, c, pulled.InspectResponse, sel.Platform, nil)
+			expected, f := identity.ParseExpected(sel.ImageID)
+			if e != nil || f != nil || !identity.MatchesExpected(native.ID, expected) {
 				return lifecycleFailure("update.target-changed")
 			}
+			if native.Digest() != "" && native.Digest() != sel.Digest {
+				return lifecycleFailure("update.target-changed")
+			}
+			img := desired.Services[sel.Service]
+			img.Digest = native.Digest()
+			desired.Services[sel.Service] = img
 		}
 		img := desired.Services[sel.Service]
 		img.ImageID = sel.ImageID
 		img.Reference = sel.Reference
-		img.Digest = sel.Digest
+		if sel.Kind == "restore" {
+			img.Digest = sel.Digest
+		}
 		img.Platform = sel.Platform
 		desired.Services[sel.Service] = img
 	}

@@ -67,7 +67,7 @@ func createDashboardTestAPIKey(t *testing.T, db *database.DB, key apikey.ApiKey)
 func createDashboardTestImageUpdateRecord(t *testing.T, db *database.DB, record imageupdate.ImageUpdateRecord) {
 	t.Helper()
 	if record.HasUpdate {
-		record.Platform = new("linux/amd64")
+		record.Platform = new("native-v1:classic:linux/amd64")
 		record.CurrentDigest = new("sha256:" + strings.Repeat("a", 64))
 		record.LatestDigest = new("sha256:" + strings.Repeat("b", 64))
 		if record.CheckTime.IsZero() {

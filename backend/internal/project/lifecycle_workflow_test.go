@@ -9,6 +9,7 @@ package project
 import (
 	"context"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -255,7 +256,17 @@ func TestLifecyclePointPinsStayUntilLastOwner(t *testing.T) {
 	f := newLifecycleFixture(t)
 	f.establishBaseline()
 	for i := 0; i < 6; i++ {
-		result := f.wait(f.admit(f.intent("rebuild")))
+		intent := f.intent("rebuild")
+		expected := "sha256:" + strings.Repeat(fmt.Sprint(i+1), 64)
+		intent.Selections[0].ImageID = expected
+		intent.Selections[0].Digest = expected
+		f.onPull = func() {
+			f.mu.Lock()
+			defer f.mu.Unlock()
+			f.tags["registry.example.com/app@"+expected] = expected
+			f.tags[expected] = expected
+		}
+		result := f.wait(f.admit(intent))
 		require.Equal(t, activityDTO.StatusSuccess, result.Status)
 	}
 	_ = f.service.ReconcileImageLifecycle(t.Context())

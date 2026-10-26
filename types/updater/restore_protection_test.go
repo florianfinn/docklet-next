@@ -15,7 +15,7 @@ import (
 )
 
 func TestRestorePointRequiredFieldsAndEnums(t *testing.T) {
-	point := RestorePoint{ID: "point", RegistrationID: "registration", TargetID: "stack", TargetIdentity: "identity", SourceRunID: "run", CreatedAt: time.Now().UTC(), SourceState: "settled", Images: []PointImage{}, HoldState: HoldNone}
+	point := RestorePoint{ID: "point", RegistrationID: "registration", TargetID: "stack", TargetIdentity: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", SourceRunID: "run", CreatedAt: time.Now().UTC(), SourceState: "settled", Images: []PointImage{}, HoldState: HoldNone}
 	body, err := json.Marshal(point)
 	require.NoError(t, err)
 	invalidUTF8 := bytes.Replace(body, []byte(`"id":"point"`), []byte{'"', 'i', 'd', '"', ':', '"', 0xff, '"'}, 1)

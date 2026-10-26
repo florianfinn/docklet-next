@@ -133,7 +133,7 @@ func (s *UpdaterService) CheckProjectUpdates(ctx context.Context, projectID stri
 		if strings.TrimSpace(service.Image) == "" {
 			continue
 		}
-		records = append(records, s.checkProjectServiceInternal(ctx, projectID, service))
+		records = append(records, s.checkProjectServiceInternal(ctx, projectID, service, details.Name))
 	}
 	if transactionErr := s.deps.DB.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		if deleteProjectUpdatesErr := tx.Where("project_id = ?", projectID).Delete(&imageupdate.ImageUpdateRecord{}).Error; deleteProjectUpdatesErr != nil {
@@ -149,7 +149,7 @@ func (s *UpdaterService) CheckProjectUpdates(ctx context.Context, projectID stri
 	return projectpkg.BuildConfiguredUpdateInfo(projectID, details.Services, nil, records), nil
 }
 
-func (s *UpdaterService) checkProjectServiceInternal(ctx context.Context, projectID string, service types.ServiceConfig) imageupdate.ImageUpdateRecord {
+func (s *UpdaterService) checkProjectServiceInternal(ctx context.Context, projectID string, service types.ServiceConfig, projectNames ...string) imageupdate.ImageUpdateRecord {
 	record := imageupdate.ImageUpdateRecord{
 		ID:          "project::" + projectID + "::" + service.Name,
 		ProjectID:   projectID,
@@ -204,7 +204,11 @@ func (s *UpdaterService) checkProjectServiceInternal(ctx context.Context, projec
 			record.LatestVersion = new(target.Tag)
 		}
 	}
-	s.enrichPolicyObservation(ctx, service.Image, check.TargetRef, &record)
+	name := ""
+	if len(projectNames) > 0 {
+		name = projectNames[0]
+	}
+	s.enrichPolicyObservation(ctx, service.Image, check.TargetRef, service.Platform, name, &record)
 	return record
 }
 

@@ -56,6 +56,14 @@ func (s *ProjectService) ExecuteImageLifecycle(ctx context.Context, id, run, reg
 	if intent == nil || current.TargetIdentity != intent.TargetIdentity || current.SavedRevision != intent.SavedRevision || lifecycleObserved(current) != intent.ObservedRevision {
 		return result, lifecycleFailure("update.target-changed")
 	}
+	selections, err := lifecycleExecutableSelections(current, intent.Selections, intent.Request.PointID != "")
+	if err != nil {
+		return result, err
+	}
+	owned := *intent
+	owned.Selections = selections
+	intent = &owned
+
 	if err = s.preflightLifecycleWrites(ctx, p, current); err != nil {
 		return result, err
 	}
@@ -201,7 +209,7 @@ func (s *ProjectService) ExecuteImageLifecycle(ctx context.Context, id, run, reg
 	}
 	for key, expected := range desired.Services {
 		actual := observed.Services[key]
-		if expected.Present && actual.Present && actual.ImageID != expected.ImageID {
+		if expected.Present && actual.Present && !lifecycleMatchesExpected(actual, expected) {
 			code := "update.target-changed"
 			if intent.Request.PointID != "" {
 				code = "restore.image-mismatch"
@@ -214,7 +222,7 @@ func (s *ProjectService) ExecuteImageLifecycle(ctx context.Context, id, run, reg
 		if !modeled || !expected.Present || actual.OneOff {
 			continue
 		}
-		if actual.ImageID != expected.ImageID {
+		if !lifecycleMatchesExpected(actual, expected) {
 			code := "update.target-changed"
 			if intent.Request.PointID != "" {
 				code = "restore.image-mismatch"
@@ -286,6 +294,7 @@ func (s *ProjectService) deployLifecycle(ctx context.Context, snap *life.Snapsho
 		if svc.Image == "" {
 			svc.Image = expected.Reference
 		}
+		svc.Platform = expected.Platform
 		svc.PullPolicy = "never"
 		svc.Build = nil
 		for dependency := range svc.DependsOn {

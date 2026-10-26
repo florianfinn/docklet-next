@@ -71,11 +71,14 @@ type lifecycleFixture struct {
 	tags                      map[string]string
 	workloads                 map[string]lifecycleWorkload
 	pulls, tagWrites, deploys int
+	pullPlatforms             []string
+	platform                  string
 	up                        func(context.Context, *compose.Project) error
 	onPull                    func()
 	onList                    func()
 	onInspect                 func(string)
 	normalDeploy              bool
+	containerd                bool
 }
 
 func newLifecycleFixture(t *testing.T) *lifecycleFixture {
@@ -173,6 +176,8 @@ func (f *lifecycleFixture) serve(w http.ResponseWriter, r *http.Request) {
 	case path == "/_ping":
 		w.Header().Set("API-Version", "1.48")
 		_, _ = fmt.Fprint(w, "OK")
+	case path == "/info":
+		_, _ = w.Write([]byte(`{"OSType":"linux","Architecture":"x86_64"}`))
 	case path == "/containers/json":
 		if f.onList != nil {
 			hook := f.onList
@@ -193,7 +198,11 @@ func (f *lifecycleFixture) serve(w http.ResponseWriter, r *http.Request) {
 		id := strings.TrimSuffix(strings.TrimPrefix(path, "/containers/"), "/json")
 		for _, c := range f.workloads {
 			if c.ID == id {
-				_ = json.NewEncoder(w).Encode(map[string]any{"Id": c.ID, "Name": "/" + c.Service, "Image": c.ImageID, "State": map[string]any{"Running": c.Running}, "Config": map[string]any{"Image": c.Reference, "Labels": c.labels()}})
+				row := map[string]any{"Id": c.ID, "Name": "/" + c.Service, "Image": c.ImageID, "State": map[string]any{"Running": c.Running}, "Config": map[string]any{"Image": c.Reference, "Labels": c.labels()}}
+				if f.containerd {
+					row["ImageManifestDescriptor"] = f.manifestDescriptor(c.ImageID)
+				}
+				_ = json.NewEncoder(w).Encode(row)
 				return
 			}
 		}
@@ -218,7 +227,16 @@ func (f *lifecycleFixture) serve(w http.ResponseWriter, r *http.Request) {
 				tags = append(tags, tag)
 			}
 		}
-		_ = json.NewEncoder(w).Encode(map[string]any{"Id": id, "Os": "linux", "Architecture": "amd64", "RepoTags": tags, "RepoDigests": []string{}})
+		platform := f.manifestDescriptor(id)["platform"].(map[string]any)
+		row := map[string]any{"Id": id, "Os": "linux", "Architecture": platform["architecture"], "RepoTags": tags, "RepoDigests": []string{}}
+		if variant, ok := platform["variant"]; ok {
+			row["Variant"] = variant
+		}
+		if f.containerd {
+			row["Descriptor"] = map[string]any{"digest": id, "mediaType": "application/vnd.oci.image.index.v1+json"}
+			row["Manifests"] = []any{map[string]any{"ID": f.manifestDescriptor(id)["digest"], "Descriptor": f.manifestDescriptor(id), "Available": true, "Kind": "image", "ImageData": map[string]any{"Platform": f.manifestDescriptor(id)["platform"]}}}
+		}
+		_ = json.NewEncoder(w).Encode(row)
 	case strings.HasPrefix(path, "/images/") && strings.HasSuffix(path, "/tag"):
 		source, _ := url.PathUnescape(strings.TrimSuffix(strings.TrimPrefix(path, "/images/"), "/tag"))
 		target := r.URL.Query().Get("repo")
@@ -234,6 +252,7 @@ func (f *lifecycleFixture) serve(w http.ResponseWriter, r *http.Request) {
 		f.tagWrites++
 		w.WriteHeader(201)
 	case path == "/images/create":
+		f.pullPlatforms = append(f.pullPlatforms, r.URL.Query().Get("platform"))
 		f.pulls++
 		ref := r.URL.Query().Get("fromImage")
 		tag := r.URL.Query().Get("tag")
@@ -245,6 +264,10 @@ func (f *lifecycleFixture) serve(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 		f.tags[ref] = lifecycleNewID
+		if f.containerd {
+			f.tags[ref] = lifecycleDigest
+			f.tags[lifecycleDigest] = lifecycleDigest
+		}
 		hook := f.onPull
 		if hook != nil {
 			f.mu.Unlock()
@@ -297,7 +320,15 @@ func (f *lifecycleFixture) intent(kind string) *dto.LifecycleIntent {
 	if kind == "version" {
 		ref = "registry.example.com/app:1.1.0"
 	}
-	return &dto.LifecycleIntent{Request: dto.LifecycleRequest{ExpectedRevision: current.SavedRevision}, TargetIdentity: current.TargetIdentity, SavedRevision: current.SavedRevision, ObservedRevision: lifecycleObserved(current), BaselineRevision: revision, Selections: []dto.ImageSelection{{Service: "app", SourceReference: "registry.example.com/app:1.0.0", Reference: ref, Digest: lifecycleDigest, ImageID: lifecycleNewID, Platform: "linux/amd64", Kind: kind}}}
+	platform := "linux/amd64"
+	if f.platform != "" {
+		platform = f.platform
+	}
+	expected := lifecycleNewID
+	if f.containerd {
+		expected = lifecycleDigest
+	}
+	return &dto.LifecycleIntent{Request: dto.LifecycleRequest{ExpectedRevision: current.SavedRevision}, TargetIdentity: current.TargetIdentity, SavedRevision: current.SavedRevision, ObservedRevision: lifecycleObserved(current), BaselineRevision: revision, Selections: []dto.ImageSelection{{Service: "app", SourceReference: "registry.example.com/app:1.0.0", Reference: ref, Digest: lifecycleDigest, ImageID: expected, Platform: platform, Kind: kind}}}
 }
 func (f *lifecycleFixture) admit(intent *dto.LifecycleIntent) activity.RuntimeAdmissionResult {
 	f.t.Helper()
@@ -338,4 +369,21 @@ func (f *lifecycleFixture) imageID(ref string) (string, bool) {
 	}
 	id, ok := f.tags[reference.TagNameOnly(named).String()]
 	return id, ok
+}
+
+func (f *lifecycleFixture) manifestDescriptor(id string) map[string]any {
+	native := id
+	if id == lifecycleOldID {
+		native = "sha256:eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
+	}
+	p := map[string]any{"os": "linux", "architecture": "amd64"}
+	if f.platform != "" {
+		parts := strings.Split(f.platform, "/")
+		p["os"] = parts[0]
+		p["architecture"] = parts[1]
+		if len(parts) > 2 {
+			p["variant"] = parts[2]
+		}
+	}
+	return map[string]any{"digest": native, "mediaType": "application/vnd.oci.image.manifest.v1+json", "platform": p}
 }

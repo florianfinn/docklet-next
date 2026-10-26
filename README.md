@@ -25,10 +25,10 @@ See the [runtime contract](docs/design/runtime-control.md),
 [M6 acceptance record](docs/history/m6-runtime-acceptance.md) for boundaries and evidence.
 
 For agent collaboration, follow [Agent coordination](AGENTS.md#agent-coordination)
-and use the separately maintained
-[subagent-orchestration skill](https://github.com/florianfinn/claude-skills/tree/master/plugins/subagent-orchestration).
-Project instructions contain binding local requirements; the skill supplies the
-reusable workflow. Current work belongs in [GitHub issues](https://github.com/florianfinn/docklet-next/issues)
+and [Branches, review and completion](AGENTS.md#branches-review-and-completion).
+The separately maintained
+[subagent-orchestration skill](https://github.com/florianfinn/claude-skills/tree/master/plugins/subagent-orchestration)
+is an optional general reference; project instructions take precedence. Current work belongs in [GitHub issues](https://github.com/florianfinn/docklet-next/issues)
 and [milestones](https://github.com/florianfinn/docklet-next/milestones).
 
 The hub uses `TZ` for schedules and date display, defaulting to `UTC`. Configure

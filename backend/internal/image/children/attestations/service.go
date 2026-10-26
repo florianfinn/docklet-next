@@ -21,6 +21,7 @@ import (
 	"strings"
 
 	"github.com/containerd/platforms"
+	"github.com/florianfinn/docklet-next/backend/pkg/utils/platformmatch"
 	"github.com/florianfinn/docklet-next/types/image"
 	"github.com/google/go-containerregistry/pkg/authn"
 	"github.com/google/go-containerregistry/pkg/name"
@@ -586,7 +587,7 @@ func platformDescriptorMatchesInternal(platform *v1.Platform, wanted ocispec.Pla
 		OSFeatures:   platform.OSFeatures,
 		Variant:      platform.Variant,
 	}
-	return platforms.Only(wanted).Match(candidate)
+	return platformmatch.Compatible(wanted, candidate)
 }
 
 func parseAttestationPlatformInternal(value string) (ocispec.Platform, bool, error) {

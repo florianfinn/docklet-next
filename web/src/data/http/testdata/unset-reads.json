@@ -1,0 +1,131 @@
+{
+  "policy": {
+    "mode": "off",
+    "revision": 0,
+    "environmentId": "0",
+    "registrationId": "example-registration",
+    "targetKind": "project",
+    "targetId": "example-stack",
+    "targetIdentity": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "jobId": "auto-update",
+    "stale": true,
+    "candidates": []
+  },
+  "schedule": {
+    "revision": 0,
+    "environmentId": "example-offline",
+    "registrationId": "example-registration",
+    "pollingInterval": "0 0 * * * *",
+    "autoUpdateInterval": "0 0 0 * * *",
+    "pollingEnabled": true,
+    "autoUpdateEnabled": true,
+    "masterPollingEnabled": true,
+    "masterAutoUpdateEnabled": false,
+    "timeZone": "Europe/Berlin",
+    "jobs": [
+      {
+        "hostId": "example-offline",
+        "kind": "update-check",
+        "timeZone": "Europe/Berlin",
+        "code": "update.schedule-owner-unset",
+        "id": "image-polling",
+        "name": "Image Update Watcher",
+        "description": "Checks container registries on a schedule and after Docker image changes",
+        "category": "updates",
+        "schedule": "0 0 * * * *",
+        "enabled": false,
+        "managerOnly": true,
+        "isContinuous": false,
+        "canRunManually": false,
+        "prerequisites": []
+      },
+      {
+        "hostId": "example-offline",
+        "kind": "auto-update",
+        "timeZone": "Europe/Berlin",
+        "code": "update.schedule-owner-unset",
+        "id": "auto-update",
+        "name": "Auto Update",
+        "description": "Automatically updates containers when new images are available",
+        "category": "updates",
+        "schedule": "0 0 0 * * *",
+        "enabled": false,
+        "managerOnly": true,
+        "isContinuous": false,
+        "canRunManually": false,
+        "prerequisites": []
+      }
+    ]
+  },
+  "configuredSchedule": {
+    "revision": 1,
+    "environmentId": "example-offline",
+    "registrationId": "example-registration",
+    "pollingInterval": "0 30 2 * * *",
+    "autoUpdateInterval": "0 0 0 * * *",
+    "pollingEnabled": true,
+    "autoUpdateEnabled": true,
+    "masterPollingEnabled": true,
+    "masterAutoUpdateEnabled": false,
+    "timeZone": "Europe/Berlin",
+    "jobs": [
+      {
+        "hostId": "example-offline",
+        "kind": "update-check",
+        "timeZone": "Europe/Berlin",
+        "id": "image-polling",
+        "name": "Image Update Watcher",
+        "description": "Checks container registries on a schedule and after Docker image changes",
+        "category": "updates",
+        "schedule": "0 30 2 * * *",
+        "enabled": true,
+        "managerOnly": true,
+        "isContinuous": false,
+        "canRunManually": true,
+        "prerequisites": []
+      },
+      {
+        "hostId": "example-offline",
+        "kind": "auto-update",
+        "timeZone": "Europe/Berlin",
+        "code": "job.skipped",
+        "id": "auto-update",
+        "name": "Auto Update",
+        "description": "Automatically updates containers when new images are available",
+        "category": "updates",
+        "schedule": "0 0 0 * * *",
+        "enabled": false,
+        "managerOnly": true,
+        "isContinuous": false,
+        "canRunManually": false,
+        "prerequisites": []
+      }
+    ]
+  },
+  "baseline": {
+    "targetIdentity": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "autoExcluded": false,
+    "savedRevision": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+    "observedRevision": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+    "available": false,
+    "code": "update.baseline-unavailable"
+  },
+  "points": [],
+  "unchecked": {
+    "registry.example.com/app:stable": {
+      "state": "unchecked",
+      "checkedAt": "0001-01-01T00:00:00Z",
+      "imageRef": "registry.example.com/app:stable",
+      "authState": "unknown",
+      "checkTime": "0001-01-01T00:00:00Z",
+      "updateType": "",
+      "currentVersion": "",
+      "latestVersion": "",
+      "currentDigest": "",
+      "latestDigest": "",
+      "error": "",
+      "responseTimeMs": 0,
+      "hasUpdate": false
+    }
+  }
+}

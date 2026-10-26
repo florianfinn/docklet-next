@@ -76,24 +76,24 @@ export function PullDialog({ open, onOpenChange, hosts, images, initial }: { ope
 
   return (
     <Dialog open={open} onOpenChange={change}>
-      <DialogContent {...feedback.bindings} className="max-h-[calc(100dvh-2rem)] overflow-y-auto sm:max-w-lg" data-surface="pull-dialog">
+      <DialogContent {...feedback.bindings} className="min-w-0 max-h-[calc(100dvh-2rem)] overflow-y-auto sm:max-w-lg [&>*]:min-w-0" data-surface="pull-dialog">
         <DialogHeader>
           <DialogTitle>{t("title")}</DialogTitle>
           <DialogDescription>{t("description")}</DialogDescription>
         </DialogHeader>
         <form
           id="pull-image"
-          className="flex flex-col gap-4"
+          className="flex min-w-0 flex-col gap-4"
           onSubmit={(e) => {
             e.preventDefault();
             void submit();
           }}
         >
           <fieldset disabled={pull.busy} className="contents">
-          <div className="flex flex-col gap-2">
+          <div className="flex min-w-0 flex-col gap-2">
             <Label htmlFor="pull-host">{t("host")}</Label>
             <Select disabled={pull.busy} value={hostId} onValueChange={setHostId}>
-              <SelectTrigger id="pull-host" className="w-full">
+              <SelectTrigger id="pull-host" className="w-full min-w-0 [&>span]:min-w-0 [&>span]:truncate">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
@@ -107,13 +107,13 @@ export function PullDialog({ open, onOpenChange, hosts, images, initial }: { ope
               </SelectContent>
             </Select>
           </div>
-          <div className="flex flex-col gap-2"><Label htmlFor="pull-registry">{t("registry")}</Label><Select disabled={pull.busy} value={registryId} onValueChange={setRegistryId}><SelectTrigger id="pull-registry"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="auto">{t("automaticRegistry")}</SelectItem>{registries.data?.filter((r) => r.enabled).map((r) => <SelectItem key={r.id} value={r.id}>{r.url}</SelectItem>)}</SelectContent></Select></div>
-          <TextField id="pull-ref" label={t("reference")} value={reference} onChange={setReference} mono placeholder="redis:7.4-alpine" description={known ? t("known") : t("referenceHint")} error={(touched || reference.length > 2) && !parsed ? t("referenceInvalid") : undefined} />
+          <div className="flex min-w-0 flex-col gap-2"><Label htmlFor="pull-registry">{t("registry")}</Label><Select disabled={pull.busy} value={registryId} onValueChange={setRegistryId}><SelectTrigger id="pull-registry" className="w-full min-w-0 [&>span]:min-w-0 [&>span]:truncate"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="auto">{t("automaticRegistry")}</SelectItem>{registries.data?.filter((r) => r.enabled).map((r) => <SelectItem key={r.id} value={r.id}>{r.url}</SelectItem>)}</SelectContent></Select></div>
+          <div className="min-w-0 [&_input]:min-w-0 [&_p]:break-words"><TextField id="pull-ref" label={t("reference")} value={reference} onChange={setReference} mono placeholder="redis:7.4-alpine" description={known ? t("known") : t("referenceHint")} error={(touched || reference.length > 2) && !parsed ? t("referenceInvalid") : undefined} /></div>
           {parsed && <p className="break-all text-sm" data-slot="effective-reference">{t("effectiveReference", { reference: `${parsed.repository}:${parsed.tag}` })}</p>}
-          <div className="flex flex-wrap items-center gap-1.5 text-xs">
+          <div className="flex min-w-0 flex-wrap items-center gap-1.5 text-xs">
             <span className="text-muted-foreground">{t("suggestions")}</span>
             {SUGGESTIONS.map((s) => (
-              <Button key={s} type="button" size="sm" variant="outline" className="h-6 px-2 font-mono text-[11px]" onClick={() => setReference(s)}>
+              <Button key={s} type="button" size="sm" variant="outline" className="h-auto min-h-6 min-w-0 max-w-full whitespace-normal break-all px-2 font-mono text-[11px]" onClick={() => setReference(s)}>
                 {s}
               </Button>
             ))}
@@ -126,7 +126,7 @@ export function PullDialog({ open, onOpenChange, hosts, images, initial }: { ope
           </div>}
           </fieldset>
         </form>
-        {progress?.owner === owner && <p role="status" className="text-sm">{t(`progress.${progress.value.phase}`)}{progress.value.total ? ` · ${t("progressBytes", { current: formatBytes(progress.value.current ?? 0), total: formatBytes(progress.value.total) })}` : ""}</p>}
+        {progress?.owner === owner && <p role="status" className="min-w-0 break-words text-sm">{t(`progress.${progress.value.phase}`)}{progress.value.total ? ` · ${t("progressBytes", { current: formatBytes(progress.value.current ?? 0), total: formatBytes(progress.value.total) })}` : ""}</p>}
         <DialogCommandFooter feedback={feedback}>
           <Button type="button" variant="outline" onClick={() => change(false)}>
             {t("cancel")}

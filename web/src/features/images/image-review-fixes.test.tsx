@@ -127,3 +127,14 @@ it.each([true, false])("notifies pull success=%s after the mounted host scope ch
   expect(close).not.toHaveBeenCalled(); expect(screen.queryByRole("alert") === null).toBe(true);
   await waitFor(() => expect(ok ? toast.success : toast.error).toHaveBeenCalledOnce());
 });
+
+it("keeps the mobile pull grid, fields and suggestions shrinkable", () => {
+  const f = imageRegistryFixture();
+  renderWithApp(<PullDialog open onOpenChange={vi.fn()} hosts={[host]} images={[]} initial={initial} />, f.adapter);
+  const dialog = screen.getByRole("dialog");
+  expect(dialog.classList.contains("min-w-0")).toBe(true);
+  expect(dialog.querySelector("form")?.classList.contains("min-w-0")).toBe(true);
+  for (const control of within(dialog).getAllByRole("combobox")) expect(control.classList.contains("min-w-0")).toBe(true);
+  const suggestion = screen.getByRole("button", { name: "ghcr.io/example/app:1.2.0" });
+  for (const name of ["min-w-0", "max-w-full", "whitespace-normal", "break-all"]) expect(suggestion.classList.contains(name)).toBe(true);
+});

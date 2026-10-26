@@ -10,7 +10,7 @@ import { record, text, id, bool, revision, date, optionalDate, list, choice, rea
 import { observation } from "./update-validation";
 export function baseline(value: unknown): UpdateBaseline {
   const o = record(value);
-  for (const key of ["savedRevision", "observedRevision"]) if (!/^[a-f0-9]{64}$/.test(text(o[key]))) throw invalidUpdate();
+  for (const key of ["targetIdentity", "savedRevision", "observedRevision"]) if (!/^[a-f0-9]{64}$/.test(text(o[key]))) throw invalidUpdate();
   return { targetIdentity: id(o.targetIdentity), savedRevision: text(o.savedRevision), observedRevision: text(o.observedRevision), available: bool(o.available), autoExcluded: bool(o.autoExcluded), code: reason(o.code), ...(o.sourceRunId === undefined ? {} : { sourceRunId: id(o.sourceRunId) }) };
 }
 export function points(value: unknown, target?: string): UpdatePoint[] {
@@ -18,11 +18,12 @@ export function points(value: unknown, target?: string): UpdatePoint[] {
     const o = record(v);
     if (!Array.isArray(o.images)) throw invalidUpdate();
     if ((target !== undefined && id(o.targetId) !== target) || bool(o.volumeDataIncluded)) throw invalidUpdate();
-    return { id: id(o.id), registrationId: id(o.registrationId), targetId: id(o.targetId), targetIdentity: id(o.targetIdentity), sourceRunId: id(o.sourceRunId), createdAt: date(o.createdAt), sourceState: choice(o.sourceState, ["settled", "partial-source"]), available: bool(o.available), orphaned: bool(o.orphaned), volumeDataIncluded: false, code: reason(o.code), protectionReason: o.protectionReason === null ? null : choice(o.protectionReason, ["restore-target", "healthy-baseline"]), holdState: choice(o.holdState, ["none", "active", "unknown"]), failedAttempt: bool(o.failedAttempt), images: list(o.images).map((v) => { const i = record(v); return { service: id(i.service), reference: bool(i.present) ? id(i.reference) : text(i.reference), imageId: bool(i.present) ? id(i.imageId) : text(i.imageId), ...(i.digest === undefined ? {} : { digest: text(i.digest) }), present: bool(i.present), running: bool(i.running) }; }) };
+    return { id: id(o.id), registrationId: id(o.registrationId), targetId: id(o.targetId), targetIdentity: id(o.targetIdentity), sourceRunId: id(o.sourceRunId), createdAt: date(o.createdAt), sourceState: choice(o.sourceState, ["settled", "partial-source"]), available: bool(o.available), orphaned: bool(o.orphaned), volumeDataIncluded: false, code: reason(o.code), protectionReason: o.protectionReason === null ? null : choice(o.protectionReason, ["restore-target", "healthy-baseline"]), holdState: choice(o.holdState, ["none", "active", "unknown"]), failedAttempt: bool(o.failedAttempt), images: list(o.images).map((v) => { const i = record(v); if ((bool(i.present) && !/^sha256:[a-f0-9]{64}$/.test(text(i.imageId))) || (i.digest !== undefined && text(i.digest) !== "" && !/^sha256:[a-f0-9]{64}$/.test(text(i.digest)))) throw invalidUpdate(); return { service: id(i.service), reference: bool(i.present) ? id(i.reference) : text(i.reference), imageId: bool(i.present) ? id(i.imageId) : text(i.imageId), ...(i.digest === undefined ? {} : { digest: text(i.digest) }), present: bool(i.present), running: bool(i.running) }; }) };
   }); } catch { throw new AdapterOutcomeError({ kind: "error", code: "update.check-unavailable" }); }
 }
 export function policy(value: unknown, host: string, target: string): StackUpdatePolicy {
   const o = record(value);
+  if (!/^[a-f0-9]{64}$/.test(text(o.targetIdentity))) throw invalidUpdate();
   if (o.environmentId !== host || o.targetId !== target || o.targetKind !== "project") throw invalidUpdate();
   return { mode: choice(o.mode, ["off", "notify", "apply"]), revision: revision(o.revision), environmentId: host, registrationId: id(o.registrationId), targetKind: "project", targetId: id(o.targetId), targetIdentity: id(o.targetIdentity), jobId: text(o.jobId), stale: bool(o.stale),
     checkedAt: optionalDate(o.checkedAt), code: reason(o.code), applyCheckedAt: optionalDate(o.applyCheckedAt), applyCode: reason(o.applyCode), bookkeepingAt: optionalDate(o.bookkeepingAt), bookkeepingCode: reason(o.bookkeepingCode),

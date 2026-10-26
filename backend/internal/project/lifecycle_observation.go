@@ -10,6 +10,7 @@ import (
 	"context"
 	"github.com/containerd/errdefs"
 	"github.com/florianfinn/docklet-next/backend/internal/image/guard"
+	"github.com/florianfinn/docklet-next/backend/internal/imageupdate/children/identity"
 	life "github.com/florianfinn/docklet-next/backend/internal/project/children/lifecycle"
 	"github.com/florianfinn/docklet-next/backend/pkg/libarcane"
 	"github.com/moby/moby/api/types/container"
@@ -107,10 +108,12 @@ func (s *ProjectService) lifecycleObserve(ctx context.Context, snap *life.Snapsh
 		if e != nil || img.InspectResponse.ID != id || img.InspectResponse.Os == "" || img.InspectResponse.Architecture == "" {
 			return lifecycleFailure("update.snapshot-unavailable")
 		}
-		observed.Platform = lifecyclePlatform(img.InspectResponse.Os, img.InspectResponse.Architecture, img.InspectResponse.Variant)
-		if len(img.InspectResponse.RepoDigests) > 0 {
-			observed.Digest = img.InspectResponse.RepoDigests[0]
+		native, e := identity.ResolveContainer(ctx, c, img.InspectResponse, snap.Model.Services[key].Platform, inspected.Container.ImageManifestDescriptor)
+		if e != nil {
+			return lifecycleFailure("update.snapshot-unavailable")
 		}
+		observed.Platform = native.Platform.String()
+		observed.Digest = native.Digest()
 		snap.Containers[item.ID] = observed
 		if old.Present && (prior[key].ImageID == "" || old.ImageID == prior[key].ImageID || observed.ImageID != prior[key].ImageID) {
 			continue
@@ -125,15 +128,28 @@ func (s *ProjectService) lifecycleObserve(ctx context.Context, snap *life.Snapsh
 		snap.Services[key] = observed
 	}
 	for key, binding := range snap.Services {
-		if binding.ImageID != "" || binding.Reference == "" {
+		if binding.Present || binding.Reference == "" {
 			continue
 		}
-		image, e := c.ImageInspect(ctx, binding.Reference)
+		lookup := binding.Reference
+		if binding.ImageID != "" {
+			lookup = binding.ImageID
+		}
+		image, e := c.ImageInspect(ctx, lookup)
 		if e != nil {
 			continue
 		}
-		binding.ImageID = image.InspectResponse.ID
-		binding.Platform = lifecyclePlatform(image.InspectResponse.Os, image.InspectResponse.Architecture, image.InspectResponse.Variant)
+		requested := snap.Model.Services[key].Platform
+		if requested == "" {
+			requested = binding.Platform
+		}
+		native, e := identity.Resolve(ctx, c, image.InspectResponse, requested, nil)
+		if e != nil {
+			return lifecycleFailure("update.snapshot-unavailable")
+		}
+		binding.ImageID = native.ID.String()
+		binding.Platform = native.Platform.String()
+		binding.Digest = native.Digest()
 		snap.Services[key] = binding
 	}
 	return nil

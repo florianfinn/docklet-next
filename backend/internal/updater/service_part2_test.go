@@ -757,8 +757,8 @@ func TestUpdaterProjectChecksWithoutContainersInternal(t *testing.T) {
 				localConfig = model.Services[tt.name]
 			}
 			record := service.checkProjectServiceInternal(t.Context(), "project", localConfig)
-			require.Nil(t, record.LastError)
-			require.Equal(t, tt.available, record.HasUpdate)
+			require.NotNil(t, record.LastError, "discovery without native provenance cannot authorize an update")
+			require.False(t, record.HasUpdate)
 			require.Equal(t, tt.target, *record.LatestVersion)
 			require.Equal(t, "project", record.ProjectID)
 			require.Empty(t, record.ContainerID)

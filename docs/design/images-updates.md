@@ -1,5 +1,7 @@
 # Images and updates
 
+The [image identity and initial reads supplement](images-updates-identity.md) specifies the candidate correction for classic/containerd identity, unset read DTOs and mobile pull geometry.
+
 ## Boundary and accepted decisions
 
 This is the M10 design contract for #229, based on the registered producers at

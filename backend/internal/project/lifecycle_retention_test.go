@@ -25,46 +25,51 @@ import (
 )
 
 func TestLifecycleFailedRestoresPreserveTargetAndBaseline(t *testing.T) {
-	f := newLifecycleFixture(t)
-	f.establishBaseline()
-	require.Equal(t, activityDTO.StatusSuccess, f.wait(f.admit(f.intent("rebuild"))).Status)
-	points := lifecyclePoints(t, f)
-	require.Len(t, points, 1)
-	target := points[0].ID
-	f.up = func(context.Context, *compose.Project) error { return errors.New("synthetic deploy failure") }
-	baselinePoint := ""
-	for attempt := 0; attempt < 5; attempt++ {
-		out := f.wait(f.admit(lifecycleRestore(t, f, target)))
-		require.Equal(t, activityDTO.StatusFailed, out.Status)
-		require.NoError(t, f.service.ReconcileImageLifecycle(t.Context()))
-		if attempt == 0 {
-			baselinePoint = out.ImageLifecycle.RestorePointID
-		}
-		var selected, baseline life.Point
-		require.NoError(t, f.db.First(&selected, "id = ?", target).Error, "restore target P must survive every failed retry")
-		require.NotNil(t, selected.LastRestoredAt)
-		require.NoError(t, f.db.First(&baseline, "id = ?", baselinePoint).Error, "the latest healthy source must survive failures")
-		require.Equal(t, "settled", baseline.SourceState)
-		points = lifecyclePoints(t, f)
-		failed := 0
-		for _, p := range points {
-			if p.SourceState == "partial-source" {
-				failed++
+	for _, store := range []string{"classic", "containerd"} {
+		t.Run(store, func(t *testing.T) {
+			f := newLifecycleFixture(t)
+			f.containerd = store == "containerd"
+			f.establishBaseline()
+			require.Equal(t, activityDTO.StatusSuccess, f.wait(f.admit(f.intent("rebuild"))).Status)
+			points := lifecyclePoints(t, f)
+			require.Len(t, points, 1)
+			target := points[0].ID
+			f.up = func(context.Context, *compose.Project) error { return errors.New("synthetic deploy failure") }
+			baselinePoint := ""
+			for attempt := 0; attempt < 5; attempt++ {
+				out := f.wait(f.admit(lifecycleRestore(t, f, target)))
+				require.Equal(t, activityDTO.StatusFailed, out.Status)
+				require.NoError(t, f.service.ReconcileImageLifecycle(t.Context()))
+				if attempt == 0 {
+					baselinePoint = out.ImageLifecycle.RestorePointID
+				}
+				var selected, baseline life.Point
+				require.NoError(t, f.db.First(&selected, "id = ?", target).Error, "restore target P must survive every failed retry")
+				require.NotNil(t, selected.LastRestoredAt)
+				require.NoError(t, f.db.First(&baseline, "id = ?", baselinePoint).Error, "the latest healthy source must survive failures")
+				require.Equal(t, "settled", baseline.SourceState)
+				points = lifecyclePoints(t, f)
+				failed := 0
+				for _, p := range points {
+					if p.SourceState == "partial-source" {
+						failed++
+					}
+				}
+				require.LessOrEqual(t, failed, 1, "failed-state attempts replace each other")
+				require.LessOrEqual(t, len(points), 3)
+				for _, id := range []string{target, baselinePoint} {
+					point, snapshot, err := f.service.lifecycleStore().Point(t.Context(), id)
+					require.NoError(t, err)
+					require.NoError(t, f.service.verifyLifecyclePoint(t.Context(), point, snapshot), "both recovery anchors retain verified pins")
+				}
 			}
-		}
-		require.LessOrEqual(t, failed, 1, "failed-state attempts replace each other")
-		require.LessOrEqual(t, len(points), 3)
-		for _, id := range []string{target, baselinePoint} {
-			point, snapshot, err := f.service.lifecycleStore().Point(t.Context(), id)
-			require.NoError(t, err)
-			require.NoError(t, f.service.verifyLifecyclePoint(t.Context(), point, snapshot), "both recovery anchors retain verified pins")
-		}
+			// The reviewer's sixth restore must still find P and actually recover.
+			f.up = nil
+			out := f.wait(f.admit(lifecycleRestore(t, f, target)))
+			require.Equal(t, activityDTO.StatusSuccess, out.Status)
+			require.True(t, out.ImageLifecycle.Verified)
+		})
 	}
-	// The reviewer's sixth restore must still find P and actually recover.
-	f.up = nil
-	out := f.wait(f.admit(lifecycleRestore(t, f, target)))
-	require.Equal(t, activityDTO.StatusSuccess, out.Status)
-	require.True(t, out.ImageLifecycle.Verified)
 }
 
 func TestLifecycleSixthRestoreStillFindsOriginalPoint(t *testing.T) {
@@ -86,45 +91,50 @@ func TestLifecycleSixthRestoreStillFindsOriginalPoint(t *testing.T) {
 }
 
 func TestLifecycleFailedSlotReplacementReleasesOnlySupersededPins(t *testing.T) {
-	f := newLifecycleFixture(t)
-	f.establishBaseline()
-	require.Equal(t, activityDTO.StatusSuccess, f.wait(f.admit(f.intent("rebuild"))).Status)
-	points := lifecyclePoints(t, f)
-	require.NotEmpty(t, points)
-	target := points[0].ID
-	f.up = func(context.Context, *compose.Project) error { return errors.New("synthetic deploy failure") }
-	previous := ""
-	for attempt := 0; attempt < 4; attempt++ {
-		out := f.wait(f.admit(lifecycleRestore(t, f, target)))
-		require.Equal(t, activityDTO.StatusFailed, out.Status)
-		require.NoError(t, f.service.ReconcileImageLifecycle(t.Context()))
-		var point life.Point
-		require.NoError(t, f.db.First(&point, "id = ?", out.ImageLifecycle.RestorePointID).Error)
-		if point.SourceState != "partial-source" {
-			continue
-		}
-		if previous != "" {
-			var n int64
-			require.NoError(t, f.db.Model(&life.Point{}).Where("id = ?", previous).Count(&n).Error)
-			require.Zero(t, n)
-			require.NoError(t, f.db.Table("image_protections").Where("reason = ? AND owner_id = ?", "restore-point", previous).Count(&n).Error)
-			require.Zero(t, n)
-			prefix := life.Pin("points", previous, "app")
-			prefix = prefix[:strings.LastIndex(prefix, "/")+1]
-			f.mu.Lock()
-			remaining := false
-			for tag := range f.tags {
-				remaining = remaining || strings.HasPrefix(tag, prefix)
+	for _, store := range []string{"classic", "containerd"} {
+		t.Run(store, func(t *testing.T) {
+			f := newLifecycleFixture(t)
+			f.containerd = store == "containerd"
+			f.establishBaseline()
+			require.Equal(t, activityDTO.StatusSuccess, f.wait(f.admit(f.intent("rebuild"))).Status)
+			points := lifecyclePoints(t, f)
+			require.NotEmpty(t, points)
+			target := points[0].ID
+			f.up = func(context.Context, *compose.Project) error { return errors.New("synthetic deploy failure") }
+			previous := ""
+			for attempt := 0; attempt < 4; attempt++ {
+				out := f.wait(f.admit(lifecycleRestore(t, f, target)))
+				require.Equal(t, activityDTO.StatusFailed, out.Status)
+				require.NoError(t, f.service.ReconcileImageLifecycle(t.Context()))
+				var point life.Point
+				require.NoError(t, f.db.First(&point, "id = ?", out.ImageLifecycle.RestorePointID).Error)
+				if point.SourceState != "partial-source" {
+					continue
+				}
+				if previous != "" {
+					var n int64
+					require.NoError(t, f.db.Model(&life.Point{}).Where("id = ?", previous).Count(&n).Error)
+					require.Zero(t, n)
+					require.NoError(t, f.db.Table("image_protections").Where("reason = ? AND owner_id = ?", "restore-point", previous).Count(&n).Error)
+					require.Zero(t, n)
+					prefix := life.Pin("points", previous, "app")
+					prefix = prefix[:strings.LastIndex(prefix, "/")+1]
+					f.mu.Lock()
+					remaining := false
+					for tag := range f.tags {
+						remaining = remaining || strings.HasPrefix(tag, prefix)
+					}
+					f.mu.Unlock()
+					require.False(t, remaining, "all superseded owner tags are removed")
+				}
+				previous = point.ID
 			}
-			f.mu.Unlock()
-			require.False(t, remaining, "all superseded owner tags are removed")
-		}
-		previous = point.ID
+			require.NotEmpty(t, previous)
+			point, snapshot, err := f.service.lifecycleStore().Point(t.Context(), previous)
+			require.NoError(t, err)
+			require.NoError(t, f.service.verifyLifecyclePoint(t.Context(), point, snapshot))
+		})
 	}
-	require.NotEmpty(t, previous)
-	point, snapshot, err := f.service.lifecycleStore().Point(t.Context(), previous)
-	require.NoError(t, err)
-	require.NoError(t, f.service.verifyLifecyclePoint(t.Context(), point, snapshot))
 }
 
 func TestLifecycleRestoreUseIsMonotonicAndSurvivesHistoryCleanup(t *testing.T) {
@@ -216,7 +226,8 @@ func TestLifecycleUninspectableUnrelatedImagesDoNotBlockRecovery(t *testing.T) {
 			_, err = f.service.PrepareImageLifecycle(t.Context(), f.project.ID, f.registration, dto.LifecycleRequest{ExpectedRevision: current.SavedRevision})
 			require.NoError(t, err)
 			updated := f.wait(f.admit(f.intent("rebuild")))
-			require.Equal(t, activityDTO.StatusSuccess, updated.Status)
+			require.Equal(t, activityDTO.StatusFailed, updated.Status)
+			require.Equal(t, "job.skipped", updated.ImageLifecycle.Code)
 			restored := f.wait(f.admit(lifecycleRestore(t, f, target)))
 			require.Equal(t, activityDTO.StatusSuccess, restored.Status)
 			require.Zero(t, inspected.Load(), "unrelated image metadata is not required at any phase")
@@ -282,51 +293,56 @@ func TestLifecycleMissingConfiguredImageRefusesPreflight(t *testing.T) {
 }
 
 func TestLifecycleRestorePreflightRejectsIncompletePointWithoutEffects(t *testing.T) {
-	f := newLifecycleFixture(t)
-	f.establishBaseline()
-	require.Equal(t, activityDTO.StatusSuccess, f.wait(f.admit(f.intent("rebuild"))).Status)
-	points := lifecyclePoints(t, f)
-	require.NotEmpty(t, points)
-	target := points[0].ID
-	point, snapshot, err := f.service.lifecycleStore().Point(t.Context(), target)
-	require.NoError(t, err)
-	f.mu.Lock()
-	removed := 0
-	for key, img := range snapshot.Images() {
-		if img.Present {
-			tag := life.Pin("points", point.ID, key)
-			if _, ok := f.tags[tag]; ok {
-				delete(f.tags, tag)
-				removed++
+	for _, store := range []string{"classic", "containerd"} {
+		t.Run(store, func(t *testing.T) {
+			f := newLifecycleFixture(t)
+			f.containerd = store == "containerd"
+			f.establishBaseline()
+			require.Equal(t, activityDTO.StatusSuccess, f.wait(f.admit(f.intent("rebuild"))).Status)
+			points := lifecyclePoints(t, f)
+			require.NotEmpty(t, points)
+			target := points[0].ID
+			point, snapshot, err := f.service.lifecycleStore().Point(t.Context(), target)
+			require.NoError(t, err)
+			f.mu.Lock()
+			removed := 0
+			for key, img := range snapshot.Images() {
+				if img.Present {
+					tag := life.Pin("points", point.ID, key)
+					if _, ok := f.tags[tag]; ok {
+						delete(f.tags, tag)
+						removed++
+					}
+				}
 			}
-		}
+			beforeTags := life.Hash(f.tags)
+			pulls, writes, deploys, stops := f.pulls, f.tagWrites, f.deploys, len(f.stopSignals)
+			f.mu.Unlock()
+			require.Positive(t, removed)
+			beforeFile := lifecycleFile(t, f, "compose.yaml")
+			var beforePoints, beforeRuns int64
+			require.NoError(t, f.db.Model(&life.Point{}).Count(&beforePoints).Error)
+			require.NoError(t, f.db.Model(&life.Run{}).Count(&beforeRuns).Error)
+			_, current, err := f.service.lifecycleCurrent(t.Context(), f.project.ID, f.registration)
+			require.NoError(t, err)
+			intent, err := f.service.PrepareImageLifecycle(t.Context(), f.project.ID, f.registration, dto.LifecycleRequest{PointID: target, ExpectedRevision: current.SavedRevision, ReplaceConfiguration: true})
+			lifecycleCode(t, err, "restore.unavailable")
+			require.Nil(t, intent)
+			f.mu.Lock()
+			afterTags := life.Hash(f.tags)
+			afterPulls, afterWrites, afterDeploys, afterStops := f.pulls, f.tagWrites, f.deploys, len(f.stopSignals)
+			f.mu.Unlock()
+			require.Equal(t, beforeTags, afterTags)
+			require.Equal(t, pulls, afterPulls)
+			require.Equal(t, writes, afterWrites)
+			require.Equal(t, deploys, afterDeploys)
+			require.Equal(t, stops, afterStops)
+			require.Equal(t, beforeFile, lifecycleFile(t, f, "compose.yaml"))
+			var afterPoints, afterRuns int64
+			require.NoError(t, f.db.Model(&life.Point{}).Count(&afterPoints).Error)
+			require.NoError(t, f.db.Model(&life.Run{}).Count(&afterRuns).Error)
+			require.Equal(t, beforePoints, afterPoints)
+			require.Equal(t, beforeRuns, afterRuns)
+		})
 	}
-	beforeTags := life.Hash(f.tags)
-	pulls, writes, deploys, stops := f.pulls, f.tagWrites, f.deploys, len(f.stopSignals)
-	f.mu.Unlock()
-	require.Positive(t, removed)
-	beforeFile := lifecycleFile(t, f, "compose.yaml")
-	var beforePoints, beforeRuns int64
-	require.NoError(t, f.db.Model(&life.Point{}).Count(&beforePoints).Error)
-	require.NoError(t, f.db.Model(&life.Run{}).Count(&beforeRuns).Error)
-	_, current, err := f.service.lifecycleCurrent(t.Context(), f.project.ID, f.registration)
-	require.NoError(t, err)
-	intent, err := f.service.PrepareImageLifecycle(t.Context(), f.project.ID, f.registration, dto.LifecycleRequest{PointID: target, ExpectedRevision: current.SavedRevision, ReplaceConfiguration: true})
-	lifecycleCode(t, err, "restore.unavailable")
-	require.Nil(t, intent)
-	f.mu.Lock()
-	afterTags := life.Hash(f.tags)
-	afterPulls, afterWrites, afterDeploys, afterStops := f.pulls, f.tagWrites, f.deploys, len(f.stopSignals)
-	f.mu.Unlock()
-	require.Equal(t, beforeTags, afterTags)
-	require.Equal(t, pulls, afterPulls)
-	require.Equal(t, writes, afterWrites)
-	require.Equal(t, deploys, afterDeploys)
-	require.Equal(t, stops, afterStops)
-	require.Equal(t, beforeFile, lifecycleFile(t, f, "compose.yaml"))
-	var afterPoints, afterRuns int64
-	require.NoError(t, f.db.Model(&life.Point{}).Count(&afterPoints).Error)
-	require.NoError(t, f.db.Model(&life.Run{}).Count(&afterRuns).Error)
-	require.Equal(t, beforePoints, afterPoints)
-	require.Equal(t, beforeRuns, afterRuns)
 }

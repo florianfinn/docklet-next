@@ -33,15 +33,23 @@ const expected = [
   { program: "pnpm", args: ["--dir", "web", "run", "test"], cwd: "" },
 ];
 
-test("real pre-push invokes Go and web lint and tests when synthetic modules exist", (t) => {
+const lintCalls = expected.slice(0, 3);
+
+test("real pre-push invokes Go and web lint but not the test suites", (t) => {
   const { root, env, input } = modules(t);
   ok(invoke(root, "sh", [".githooks/pre-push"], { env, input }));
+  assert.deepEqual(calls(root), lintCalls);
+});
+
+test("full test mode still invokes Go and web lint and tests", (t) => {
+  const { root, env } = modules(t);
+  ok(invoke(root, process.execPath, ["scripts/run-checks.mjs", "lint"], { env }));
+  ok(invoke(root, process.execPath, ["scripts/run-checks.mjs", "test"], { env }));
   assert.deepEqual(calls(root), expected);
 });
 
 for (const [index, command] of ["go run ./scripts/gofmt-check.go -- scripts/core-license-files.go scripts/go-command.go scripts/gofmt-check.go",
-  "go vet ./...", "pnpm --dir web run lint",
-  "go test ./...", "pnpm --dir web run test"].entries()) {
+  "go vet ./...", "pnpm --dir web run lint"].entries()) {
   test(`real pre-push propagates module failure: ${command}`, (t) => {
     const { root, env, input } = modules(t);
     fails(invoke(root, "sh", [".githooks/pre-push"], {

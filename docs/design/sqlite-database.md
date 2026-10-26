@@ -508,7 +508,8 @@ bundle. This docs step does not perform that deployment.
 
 ## Implementation step 2
 
-There is one large implementation step onto `feature/sqlite-hub`, followed by
+Historical delivery plan; current milestones follow the branch and check rules in
+AGENTS.md. There is one large implementation step onto `feature/sqlite-hub`, followed by
 the milestone closing PR to main. Keep it as one step PR with several logical
 commits; intermediate incompatible states remain local. Step 2 owns runtime,
 Francis, migrations, locks, tests, deploy, CI and documentation together. No

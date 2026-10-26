@@ -92,17 +92,7 @@ func (s *UpdaterService) ConfigureImagePolicies(envs *environment.EnvironmentSer
 		}
 		return nil
 	}
-	p.ports.baseline = func(ctx context.Context, env, target string) (dto.BaselineStatus, error) {
-		if env == "0" {
-			return s.deps.Projects.ImageBaselineStatus(ctx, target, s.deps.Projects.LifecycleRegistration(ctx))
-		}
-		var out base.ApiResponse[dto.BaselineStatus]
-		err := envs.ProxyJSONRequest(ctx, env, http.MethodGet, "/api/environments/0/updater/projects/"+url.PathEscape(target)+"/baseline", nil, &out)
-		if err != nil {
-			return dto.BaselineStatus{}, err
-		}
-		return out.Data, nil
-	}
+	p.ports.baseline = s.imagePolicyBaseline(envs)
 	p.ports.check = func(ctx context.Context, env, target string) (*projectDTO.UpdateInfo, error) {
 		if env == "0" {
 			return s.CheckProjectUpdates(ctx, target)
@@ -163,6 +153,13 @@ func (s *UpdaterService) GetImagePolicy(ctx context.Context, env, target string)
 	if err != nil {
 		return dto.AutoUpdatePolicy{}, err
 	}
+	if row.Revision == 0 {
+		live, e := p.ports.baseline(ctx, env, target)
+		if e != nil || !live.Valid() {
+			return dto.AutoUpdatePolicy{}, imageDTO.Failure("update.check-unavailable", 503)
+		}
+		row.TargetIdentity = live.TargetIdentity
+	}
 	out := dto.AutoUpdatePolicy{Mode: row.Mode, Revision: row.Revision, EnvironmentID: env, RegistrationID: reg, TargetKind: "project", TargetID: target, TargetIdentity: row.TargetIdentity, JobID: "auto-update", CheckedAt: row.CheckedAt, Code: row.Code, ApplyCheckedAt: row.ApplyCheckedAt, ApplyCode: row.ApplyCode, BookkeepingAt: row.BookkeepingAt, BookkeepingCode: row.BookkeepingCode, Candidates: []dto.UpdateCandidate{}}
 	if row.Mode == "notify" {
 		out.JobID = "image-polling"
@@ -208,8 +205,8 @@ func (s *UpdaterService) SaveImagePolicy(ctx context.Context, env, target string
 		if e != nil {
 			return dto.AutoUpdatePolicy{}, e
 		}
-		if len(baseline.TargetIdentity) != 64 {
-			return dto.AutoUpdatePolicy{}, imageDTO.Failure("update.target-not-found", 404)
+		if !baseline.Valid() {
+			return dto.AutoUpdatePolicy{}, imageDTO.Failure("update.check-unavailable", 503)
 		}
 		row.TargetIdentity = baseline.TargetIdentity
 	}
@@ -352,4 +349,22 @@ func imagePolicyGrants(apply bool) []string {
 		required = append(required, authz.PermJobsManage, authz.PermProjectsDeploy, authz.PermProjectsUpdate, authz.PermImagesPull, authz.PermActivitiesRead)
 	}
 	return required
+}
+
+type imagePolicyProxy interface {
+	ProxyJSONRequest(context.Context, string, string, string, []byte, any) error
+}
+
+func (s *UpdaterService) imagePolicyBaseline(envs imagePolicyProxy) func(context.Context, string, string) (dto.BaselineStatus, error) {
+	return func(ctx context.Context, env, target string) (dto.BaselineStatus, error) {
+		if env == "0" {
+			return s.deps.Projects.ImageBaselineStatus(ctx, target, s.deps.Projects.LifecycleRegistration(ctx))
+		}
+		var out base.ApiResponse[dto.BaselineStatus]
+		err := envs.ProxyJSONRequest(ctx, env, http.MethodGet, "/api/environments/0/updater/projects/"+url.PathEscape(target)+"/baseline", nil, &out)
+		if err != nil {
+			return dto.BaselineStatus{}, err
+		}
+		return checkedBaselineResponse(out)
+	}
 }
