@@ -1,0 +1,12 @@
+{
+  "mode": "off",
+  "revision": 0,
+  "environmentId": "0",
+  "registrationId": "example-registration",
+  "targetKind": "project",
+  "targetId": "example-stack",
+  "targetIdentity": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "jobId": "auto-update",
+  "stale": true,
+  "candidates": []
+}

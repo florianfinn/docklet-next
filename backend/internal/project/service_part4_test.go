@@ -355,7 +355,7 @@ func TestProjectService_GetProjectDetails_IncludesUpdateInfo(t *testing.T) {
 	}
 	require.NoError(t, db.Create(projectRecord).Error)
 
-	require.NoError(t, db.Create(&imageupdate.ImageUpdateRecord{Platform: new("linux/amd64"), CurrentDigest: new("sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"), LatestDigest: new("sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"),
+	require.NoError(t, db.Create(&imageupdate.ImageUpdateRecord{Platform: new("native-v1:classic:linux/amd64"), CurrentDigest: new("sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"), LatestDigest: new("sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"),
 		ID:             "sha256:update-demo",
 		Repository:     "docker.io/library/nginx",
 		Tag:            "latest",
@@ -589,7 +589,7 @@ func TestProjectService_ListProjects_FiltersByUpdateStatus(t *testing.T) {
 	}).Error)
 
 	now := time.Now().UTC()
-	require.NoError(t, db.Create(&imageupdate.ImageUpdateRecord{Platform: new("linux/amd64"), CurrentDigest: new("sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"), LatestDigest: new("sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"),
+	require.NoError(t, db.Create(&imageupdate.ImageUpdateRecord{Platform: new("native-v1:classic:linux/amd64"), CurrentDigest: new("sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"), LatestDigest: new("sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"),
 		ID:             "sha256:updated-image",
 		Repository:     "docker.io/library/nginx",
 		Tag:            "latest",
@@ -656,7 +656,7 @@ func TestBuildDiscoveredComposeProjectUpdateRows(t *testing.T) {
 	imageService := image.NewImageService(db, nil, nil, nil, nil, nil, nil, nil)
 	now := time.Now().UTC()
 
-	require.NoError(t, db.Create(&imageupdate.ImageUpdateRecord{Platform: new("linux/amd64"), CurrentDigest: new("sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"), LatestDigest: new("sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"),
+	require.NoError(t, db.Create(&imageupdate.ImageUpdateRecord{Platform: new("native-v1:classic:linux/amd64"), CurrentDigest: new("sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"), LatestDigest: new("sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"),
 		ID:             "sha256:media-image",
 		Repository:     "docker.io/library/nginx",
 		Tag:            "latest",
@@ -665,7 +665,7 @@ func TestBuildDiscoveredComposeProjectUpdateRows(t *testing.T) {
 		CurrentVersion: "latest",
 		CheckTime:      now,
 	}).Error)
-	require.NoError(t, db.Create(&imageupdate.ImageUpdateRecord{Platform: new("linux/amd64"), CurrentDigest: new("sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"), LatestDigest: new("sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"),
+	require.NoError(t, db.Create(&imageupdate.ImageUpdateRecord{Platform: new("native-v1:classic:linux/amd64"), CurrentDigest: new("sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"), LatestDigest: new("sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"),
 		ID:             "sha256:known-image",
 		Repository:     "docker.io/library/redis",
 		Tag:            "7",
@@ -723,7 +723,7 @@ func TestBuildDiscoveredComposeProjectUpdateRows_FallsBackToImageID(t *testing.T
 	ctx := t.Context()
 	imageService := image.NewImageService(db, nil, nil, nil, nil, nil, nil, nil)
 
-	require.NoError(t, db.Create(&imageupdate.ImageUpdateRecord{Platform: new("linux/amd64"), CurrentDigest: new("sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"), LatestDigest: new("sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"),
+	require.NoError(t, db.Create(&imageupdate.ImageUpdateRecord{Platform: new("native-v1:classic:linux/amd64"), CurrentDigest: new("sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"), LatestDigest: new("sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"),
 		ID:             "sha256:media-image",
 		Repository:     "registry.example.test/custom/media",
 		Tag:            "latest",

@@ -11,8 +11,8 @@ import (
 	"strings"
 )
 
-// ProjectUpdate never compares config IDs, index digests or different platforms.
-// Callers provide only comparable platform digests proven by the producer.
+// ProjectUpdate compares store-native keys at one verified platform: config
+// digests under classic, platform manifests under containerd. Callers prove roles.
 func ProjectUpdate(info *UpdateInfo) {
 	info.CheckedAt = info.CheckTime
 	if info.AuthState == "" {
@@ -67,7 +67,7 @@ func ProjectUpdate(info *UpdateInfo) {
 	}
 	current := "v" + strings.TrimPrefix(info.CurrentVersion, "v")
 	candidate := "v" + strings.TrimPrefix(info.LatestVersion, "v")
-	if compared, valid := CompareRelease(candidate, current); valid && compared > 0 {
+	if compared, valid := CompareRelease(candidate, current); valid && compared > 0 && info.CurrentDigest != info.LatestDigest {
 		info.State = "version"
 		info.HasUpdate = true
 		a := strings.Split(strings.TrimPrefix(info.CurrentVersion, "v"), ".")

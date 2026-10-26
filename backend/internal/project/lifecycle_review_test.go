@@ -222,9 +222,7 @@ func TestLifecyclePostPullImageIDMismatchHasNoBindingOrFileEffects(t *testing.T)
 			require.Equal(t, original, lifecycleFile(t, f, "compose.yaml"))
 			require.Equal(t, activityDTO.StatusFailed, out.Status)
 			code := "update.target-changed"
-			if identity == "manifest-id-store" {
-				code = "update.image-binding-unsupported"
-			}
+
 			require.Equal(t, code, out.ImageLifecycle.Code)
 			status, err := f.service.ImageBaselineStatus(t.Context(), f.project.ID, f.registration)
 			require.NoError(t, err)

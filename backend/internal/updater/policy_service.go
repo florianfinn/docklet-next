@@ -101,7 +101,7 @@ func (s *UpdaterService) ConfigureImagePolicies(envs *environment.EnvironmentSer
 		if err != nil {
 			return dto.BaselineStatus{}, err
 		}
-		return out.Data, nil
+		return checkedBaselineResponse(out)
 	}
 	p.ports.check = func(ctx context.Context, env, target string) (*projectDTO.UpdateInfo, error) {
 		if env == "0" {
@@ -163,6 +163,13 @@ func (s *UpdaterService) GetImagePolicy(ctx context.Context, env, target string)
 	if err != nil {
 		return dto.AutoUpdatePolicy{}, err
 	}
+	if row.Revision == 0 {
+		live, e := p.ports.baseline(ctx, env, target)
+		if e != nil || !live.Valid() {
+			return dto.AutoUpdatePolicy{}, imageDTO.Failure("update.check-unavailable", 503)
+		}
+		row.TargetIdentity = live.TargetIdentity
+	}
 	out := dto.AutoUpdatePolicy{Mode: row.Mode, Revision: row.Revision, EnvironmentID: env, RegistrationID: reg, TargetKind: "project", TargetID: target, TargetIdentity: row.TargetIdentity, JobID: "auto-update", CheckedAt: row.CheckedAt, Code: row.Code, ApplyCheckedAt: row.ApplyCheckedAt, ApplyCode: row.ApplyCode, BookkeepingAt: row.BookkeepingAt, BookkeepingCode: row.BookkeepingCode, Candidates: []dto.UpdateCandidate{}}
 	if row.Mode == "notify" {
 		out.JobID = "image-polling"
@@ -208,8 +215,8 @@ func (s *UpdaterService) SaveImagePolicy(ctx context.Context, env, target string
 		if e != nil {
 			return dto.AutoUpdatePolicy{}, e
 		}
-		if len(baseline.TargetIdentity) != 64 {
-			return dto.AutoUpdatePolicy{}, imageDTO.Failure("update.target-not-found", 404)
+		if !baseline.Valid() {
+			return dto.AutoUpdatePolicy{}, imageDTO.Failure("update.check-unavailable", 503)
 		}
 		row.TargetIdentity = baseline.TargetIdentity
 	}

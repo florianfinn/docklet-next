@@ -13,9 +13,9 @@ import (
 
 	"errors"
 	"github.com/distribution/reference"
+	"github.com/florianfinn/docklet-next/backend/internal/imageupdate/children/identity"
 	imageDTO "github.com/florianfinn/docklet-next/types/image"
 	checkDTO "github.com/florianfinn/docklet-next/types/imageupdate"
-	v1 "github.com/google/go-containerregistry/pkg/v1"
 	"github.com/moby/moby/api/types/container"
 	"github.com/moby/moby/client"
 	"go.getarcane.app/updater"
@@ -75,7 +75,20 @@ func (s *ImageUpdateService) ReadUpdateInfo(ctx context.Context, ref string) (*c
 		}
 		projected := snapshot
 		projected.ImageRef = discovered.ImageRef
-		if inspectErr != nil || consumers[id] == "" || consumers[id] != baseline.ID {
+		inspected, containerErr := c.ContainerInspect(ctx, id, client.ContainerInspectOptions{})
+		var local identity.LocalImage
+		if containerErr == nil {
+			local, containerErr = identity.ResolveContainer(ctx, c, baseline.InspectResponse, "", inspected.Container.ImageManifestDescriptor)
+		}
+		if containerErr == nil {
+			base, e := s.readImageObservationAt(ctx, ref, local.Platform.String(), inspected.Container.ImageManifestDescriptor)
+			if e == nil && base != nil {
+				projected = *base
+			} else {
+				containerErr = imageDTO.Failure("update.check-unavailable", 503)
+			}
+		}
+		if inspectErr != nil || containerErr != nil || inspected.Container.Image != consumers[id] || consumers[id] == "" || consumers[id] != baseline.ID {
 			projected.State = "unknown"
 			projected.HasUpdate = false
 			projected.Code = "update.check-unavailable"
@@ -90,13 +103,18 @@ func (s *ImageUpdateService) ReadUpdateInfo(ctx context.Context, ref string) (*c
 				var target reference.NamedTagged
 				target, e = reference.WithTag(reference.TrimNamed(named), discovered.LatestVersion)
 				if e == nil {
-					parts := strings.Split(snapshot.Platform, "/")
-					platform := v1.Platform{OS: parts[0], Architecture: parts[1]}
-					if len(parts) > 2 {
-						platform.Variant = parts[2]
+					candidate, lookupErr := s.registryService.PlatformImage(ctx, target.String(), local.Platform.Registry())
+					latest := ""
+					if lookupErr == nil {
+						r, e := identity.NewCandidate(candidate.Digest, candidate.ConfigDigest, local.Platform)
+						lookupErr = e
+						if e == nil {
+							k, e := local.CandidateKey(r)
+							lookupErr = e
+							latest = k.String()
+						}
 					}
-					candidate, lookupErr := s.registryService.PlatformImage(ctx, target.String(), platform)
-					info := &imageDTO.UpdateInfo{ImageRef: discovered.ImageRef, CheckTime: snapshot.CheckTime, Platform: snapshot.Platform, CurrentDigest: snapshot.CurrentDigest, LatestDigest: candidate.Digest, CurrentVersion: discovered.CurrentVersion, LatestVersion: candidateVersion, AuthState: candidate.AuthState}
+					info := &imageDTO.UpdateInfo{ImageRef: discovered.ImageRef, CheckTime: snapshot.CheckTime, Platform: local.Platform.String(), CurrentDigest: local.Key.String(), LatestDigest: latest, CurrentVersion: discovered.CurrentVersion, LatestVersion: candidateVersion, AuthState: candidate.AuthState}
 					if lookupErr != nil {
 						problem := imageDTO.Neutral(lookupErr, "update.check-unavailable", 503)
 						info.Error = problem.Error()

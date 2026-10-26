@@ -10,7 +10,6 @@ import (
 	"encoding/json"
 	"github.com/distribution/reference"
 	"math"
-	"strings"
 	"time"
 
 	"github.com/moby/moby/api/types/image"
@@ -546,14 +545,10 @@ func NewDetailSummary(src *image.InspectResponse) DetailSummary {
 		out.Metadata.LastTagTime = src.Metadata.LastTagTime.Format(time.RFC3339Nano)
 	}
 
-	// Best-effort descriptor from first digest
-	out.Descriptor.MediaType = "application/vnd.oci.image.index.v1+json"
-	out.Descriptor.Size = src.Size
-	if len(src.RepoDigests) > 0 {
-		parts := strings.SplitN(src.RepoDigests[0], "@", 2)
-		if len(parts) == 2 {
-			out.Descriptor.Digest = parts[1]
-		}
+	if src.Descriptor != nil {
+		out.Descriptor.MediaType = src.Descriptor.MediaType
+		out.Descriptor.Digest = src.Descriptor.Digest.String()
+		out.Descriptor.Size = src.Descriptor.Size
 	}
 
 	return out

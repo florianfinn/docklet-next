@@ -236,3 +236,18 @@ it("HTTP header check is enabled only by the stack-scoped descriptor", async () 
   await userEvent.click(item);
   await waitFor(() => expect(f.writes().some((write) => write.path === "/api/environments/direct/updater/projects/project/check")).toBe(true));
 });
+
+it("edits and saves the Go producer's never-configured policy at revision zero", async () => {
+  const initial = (await import("@/data/http/testdata/unset-policy.json")).default;
+  const f = await ready();
+  f.state.policy = { ...initial, mode: "off", targetKind: "project", environmentId: "direct", targetId: "project", candidates: [] };
+  renderWithApp(<LiveStackUpdates stackId="direct~project" />, f.adapter);
+  await userEvent.click(await screen.findByRole("button", { name: t.editPolicy }));
+  const dialog = screen.getByRole("dialog"), select = within(dialog).getByRole("combobox");
+  select.focus(); await userEvent.keyboard("{Enter}{ArrowDown}{Enter}");
+  await userEvent.click(within(dialog).getByRole("button", { name: t.save }));
+  await waitFor(() => expect(screen.queryByRole("dialog") === null).toBe(true));
+  expect(f.writes()).toHaveLength(1);
+  expect(JSON.parse(String(f.writes()[0]!.init.body))).toMatchObject({ mode: "notify", expectedRevision: 0 });
+  expect(f.state.policy.targetIdentity).toBe(initial.targetIdentity);
+});

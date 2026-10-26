@@ -14,10 +14,10 @@ import (
 
 	"github.com/distribution/reference"
 	"github.com/florianfinn/docklet-next/backend/internal/image/guard"
+	"github.com/florianfinn/docklet-next/backend/internal/imageupdate/children/identity"
 	life "github.com/florianfinn/docklet-next/backend/internal/project/children/lifecycle"
 	projectDTO "github.com/florianfinn/docklet-next/types/project"
 	dto "github.com/florianfinn/docklet-next/types/updater"
-	v1 "github.com/google/go-containerregistry/pkg/v1"
 )
 
 func (s *ProjectService) SetLifecycleChecker(check func(context.Context, string) (*projectDTO.UpdateInfo, error)) {
@@ -26,11 +26,11 @@ func (s *ProjectService) SetLifecycleChecker(check func(context.Context, string)
 func lifecycleObserved(snap *life.Snapshot) string {
 	images := map[string]any{}
 	for key, img := range snap.Services {
-		images[key] = []any{img.ContainerID, img.ImageID, img.Present}
+		images[key] = []any{img.ContainerID, img.ImageID, img.Present, img.Platform, img.Digest}
 	}
 	containers := map[string]any{}
 	for id, img := range snap.Containers {
-		containers[id] = []any{img.Service, img.ImageID, img.ConfigHash, img.OneOff}
+		containers[id] = []any{img.Service, img.ImageID, img.ConfigHash, img.OneOff, img.Platform, img.Digest}
 	}
 	return life.Hash([]any{snap.TargetIdentity, images, containers})
 }
@@ -139,6 +139,7 @@ func (s *ProjectService) PrepareImageLifecycle(ctx context.Context, id, registra
 	if err != nil || checked == nil {
 		return nil, lifecycleFailure("update.check-unavailable")
 	}
+	skipped := false
 	for _, key := range slices.Sorted(maps.Keys(current.Model.Services)) {
 		img := current.Services[key]
 		row, ok := checked.ServiceUpdates[key]
@@ -167,18 +168,46 @@ func (s *ProjectService) PrepareImageLifecycle(ctx context.Context, id, registra
 		if err = guard.ValidateReference(selected); err != nil {
 			return nil, err
 		}
-		platform, err := v1.ParsePlatform(img.Platform)
+		platform, err := identity.ParsePlatform(img.Platform)
 		if err != nil {
 			return nil, lifecycleFailure("update.check-unavailable")
 		}
-		observation, err := s.containerRegistryService.PlatformImage(ctx, selected, *platform)
+		observation, err := s.containerRegistryService.PlatformImage(ctx, selected, platform.Registry())
 		if err != nil {
 			return nil, err
 		}
 		if observation.Digest == "" || observation.ConfigDigest == "" {
 			return nil, lifecycleFailure("update.check-unavailable")
 		}
-		intent.Selections = append(intent.Selections, dto.ImageSelection{Service: key, SourceReference: img.Reference, Reference: selected, Digest: observation.Digest, ImageID: observation.ConfigDigest, Platform: img.Platform, Kind: kind})
+		c, e := s.dockerService.GetClient(ctx)
+		if e != nil {
+			return nil, lifecycleFailure("update.check-unavailable")
+		}
+		inspected, e := c.ImageInspect(ctx, img.ImageID)
+		if e != nil {
+			return nil, lifecycleFailure("update.check-unavailable")
+		}
+		local, e := identity.Resolve(ctx, c, inspected.InspectResponse, img.Platform, nil)
+		if e != nil {
+			return nil, e
+		}
+		candidate, e := identity.NewCandidate(observation.Digest, observation.ConfigDigest, platform)
+		if e != nil {
+			return nil, e
+		}
+		expected, e := local.Expected(candidate)
+		if e != nil {
+			return nil, e
+		}
+		selection := dto.ImageSelection{Service: key, SourceReference: img.Reference, Reference: selected, Digest: observation.Digest, ImageID: expected.String(), Platform: img.Platform, Kind: kind}
+		if lifecycleSelectionCurrent(current, selection) {
+			skipped = true
+			continue
+		}
+		intent.Selections = append(intent.Selections, selection)
+	}
+	if len(intent.Selections) == 0 && skipped {
+		return nil, lifecycleFailure("job.skipped")
 	}
 	if _, err = lifecycleVersionFiles(current, intent.Selections); err != nil {
 		return nil, err

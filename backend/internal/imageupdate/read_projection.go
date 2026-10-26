@@ -8,15 +8,17 @@ package imageupdate
 
 import (
 	"context"
+	"sort"
 	"strings"
 	"time"
 
 	"github.com/distribution/reference"
 	"github.com/florianfinn/docklet-next/backend/internal/image/guard"
+	"github.com/florianfinn/docklet-next/backend/internal/imageupdate/children/identity"
 	imageDTO "github.com/florianfinn/docklet-next/types/image"
 	checkDTO "github.com/florianfinn/docklet-next/types/imageupdate"
-	v1 "github.com/google/go-containerregistry/pkg/v1"
 	"github.com/moby/moby/client"
+	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
 )
 
 // ReadUpdateInfo is the PR1 producer: registry/Docker reads and an observation
@@ -25,7 +27,11 @@ func (s *ImageUpdateService) readImageObservation(ctx context.Context, ref strin
 	if err := guard.ValidateReference(ref); err != nil {
 		return nil, err
 	}
+	return s.readImageObservationAt(ctx, ref, "", nil)
+}
+func (s *ImageUpdateService) readImageObservationAt(ctx context.Context, ref, requested string, descriptor *ocispec.Descriptor) (*checkDTO.Response, error) {
 	observedID := ""
+	var native *identity.NativeObservation
 	info := &imageDTO.UpdateInfo{ImageRef: ref, CheckTime: time.Now().UTC(), AuthState: "unknown"}
 	finish := func() (*checkDTO.Response, error) {
 		imageDTO.ProjectUpdate(info)
@@ -35,6 +41,11 @@ func (s *ImageUpdateService) readImageObservation(ctx context.Context, ref strin
 				return nil, imageDTO.Failure("image.invalid-reference", 400)
 			}
 			record := ImageUpdateRecord{ID: observedID, ImageID: observedID, Repository: reference.TrimNamed(named).String(), Tag: "latest", CheckTime: info.CheckTime, CurrentVersion: info.CurrentVersion, LatestVersion: &info.LatestVersion, CurrentDigest: &info.CurrentDigest, LatestDigest: &info.LatestDigest, UpdateType: info.UpdateType, HasUpdate: info.HasUpdate, Platform: &info.Platform, AuthMethod: &info.AuthState, UsedCredential: info.UsedCredential}
+			if native != nil {
+				record.SetNativeObservation(*native)
+			} else {
+				record.Platform = nil
+			}
 			if info.Error != "" {
 				record.LastError = &info.Error
 			}
@@ -74,19 +85,16 @@ func (s *ImageUpdateService) readImageObservation(ctx context.Context, ref strin
 	if strings.Contains(ref, "@sha256:") {
 		return finish()
 	}
-	if len(local.RepoDigests) == 0 {
+	if len(local.RepoDigests) == 0 || !repositoryEvidence(ref, local.RepoDigests) {
 		info.UpdateType = UpdateTypeLocal
 		return finish()
 	}
-	platform := v1.Platform{OS: local.Os, Architecture: local.Architecture, Variant: local.Variant}
-	info.Platform = platform.OS + "/" + platform.Architecture
-	if platform.OS == "" || platform.Architecture == "" {
-		info.Platform = ""
+	resolved, err := identity.Resolve(ctx, c, local.InspectResponse, requested, descriptor)
+	if err != nil {
+		info.Code = "update.check-unavailable"
 		return finish()
 	}
-	if platform.Variant != "" {
-		info.Platform += "/" + platform.Variant
-	}
+	info.Platform = resolved.Platform.String()
 	if local.Config != nil {
 		info.CurrentVersion = local.Config.Labels["org.opencontainers.image.version"]
 	}
@@ -103,30 +111,7 @@ func (s *ImageUpdateService) readImageObservation(ctx context.Context, ref strin
 		info.Error = "unavailable"
 		return finish()
 	}
-	currentRef := ""
-	for _, saved := range local.RepoDigests {
-		candidate, e := reference.ParseNormalizedNamed(saved)
-		if e == nil && reference.TrimNamed(candidate).String() == reference.TrimNamed(named).String() {
-			currentRef = saved
-			break
-		}
-	}
-	if currentRef == "" {
-		return finish()
-	}
-	current, err := s.registryService.PlatformImage(ctx, currentRef, platform)
-	if err != nil {
-		problem := imageDTO.Neutral(err, "update.check-unavailable", 503)
-		info.AuthState = current.AuthState
-		info.Error = problem.Error()
-		info.Code = problem.Problem.Code
-		return finish()
-	}
-	if current.ConfigDigest != local.ID {
-		info.Code = "update.check-unavailable"
-		return finish()
-	}
-	next, err := s.registryService.PlatformImage(ctx, ref, platform)
+	next, err := s.registryService.PlatformImage(ctx, ref, resolved.Platform.Registry())
 	info.AuthState = next.AuthState
 	if err != nil {
 		problem := imageDTO.Neutral(err, "update.check-unavailable", 503)
@@ -134,8 +119,18 @@ func (s *ImageUpdateService) readImageObservation(ctx context.Context, ref strin
 		info.Code = problem.Problem.Code
 		return finish()
 	}
-	info.CurrentDigest = current.Digest
-	info.LatestDigest = next.Digest
+	candidate, e := identity.NewCandidate(next.Digest, next.ConfigDigest, resolved.Platform)
+	if e != nil {
+		info.Code = "update.check-unavailable"
+		return finish()
+	}
+	observation, e := resolved.Observe(candidate)
+	if e != nil {
+		info.Code = "update.check-unavailable"
+		return finish()
+	}
+	native = &observation
+	_, info.CurrentDigest, info.LatestDigest = observation.Storage()
 	info.LatestVersion = next.Version
 	if info.LatestVersion == "" {
 		info.LatestVersion = info.CurrentVersion
@@ -156,6 +151,7 @@ func (s *ImageUpdateService) ReadUpdateByID(ctx context.Context, id string) (*ch
 	if len(public) == 0 {
 		return checkDTO.FromInfo(&imageDTO.UpdateInfo{State: "local", CheckTime: time.Now().UTC(), CheckedAt: time.Now().UTC(), AuthState: "unknown", ImageRef: id}), nil
 	}
+	sort.Strings(public)
 	return s.ReadUpdateInfo(ctx, public[0])
 }
 func (s *ImageUpdateService) ReadMultiple(ctx context.Context, refs []string) (checkDTO.BatchResponse, error) {

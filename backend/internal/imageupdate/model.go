@@ -7,6 +7,8 @@
 package imageupdate
 
 import (
+	"github.com/florianfinn/docklet-next/backend/internal/imageupdate/children/identity"
+	"strings"
 	"time"
 
 	"github.com/florianfinn/docklet-next/types/image"
@@ -65,7 +67,7 @@ const (
 )
 
 func (i *ImageUpdateRecord) NeedsUpdate() bool {
-	return i.HasUpdate
+	return i.UpdateInfo().HasUpdate
 }
 
 func (i *ImageUpdateRecord) IsDigestUpdate() bool {
@@ -95,6 +97,28 @@ func (i *ImageUpdateRecord) UpdateInfo() *image.UpdateInfo {
 		AuthRegistry:   mo.PointerToOption(i.AuthRegistry).OrEmpty(),
 		UsedCredential: i.UsedCredential,
 	}
+	if n, err := identity.DecodeObservation(out.Platform, out.CurrentDigest, out.LatestDigest); err == nil {
+		out.Platform = n.Platform()
+	} else {
+		out.Platform = ""
+		current, _ := identity.ParseTopLevel(out.CurrentDigest)
+		latest, _ := identity.ParseTopLevel(out.LatestDigest)
+		out.CurrentDigest = current.String()
+		out.LatestDigest = latest.String()
+	}
 	image.ProjectUpdate(out)
 	return out
+}
+
+// LegacyPullDigest carries only validated T for informational version readers.
+// A native observation's key can be a config digest, so it is never a pull ref.
+func (i *ImageUpdateRecord) LegacyPullDigest() *string {
+	if i.LatestDigest == nil || i.Platform != nil && strings.HasPrefix(*i.Platform, "native-v1:") {
+		return nil
+	}
+	top, err := identity.ParseTopLevel(*i.LatestDigest)
+	if err != nil {
+		return nil
+	}
+	return new(top.String())
 }

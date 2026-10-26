@@ -68,7 +68,7 @@ func newPolicyFixture(t *testing.T) *policyFixture {
 	f.s = &UpdaterService{config: &config.Config{}, deps: updaterDependenciesInternal{DB: f.db, Settings: cfg}}
 	f.p = &imagePolicyService{store: policy.Store{DB: f.db.DB}}
 	f.s.policies = f.p
-	f.baseline = dto.BaselineStatus{Available: true, TargetIdentity: strings.Repeat("a", 64), SavedRevision: strings.Repeat("b", 64)}
+	f.baseline = dto.BaselineStatus{Available: true, TargetIdentity: strings.Repeat("a", 64), SavedRevision: strings.Repeat("b", 64), ObservedRevision: strings.Repeat("c", 64)}
 	f.check = &projectDTO.UpdateInfo{Status: "has_update", HasUpdate: true, ServiceUpdates: map[string]projectDTO.ServiceUpdateInfo{"app": {ImageRef: "registry.example.com/app:1.0.0", UpdateInfo: &imageDTO.UpdateInfo{HasUpdate: true, State: "version", LatestVersion: "v1.1.0", LatestDigest: "sha256:" + strings.Repeat("c", 64), Platform: "linux/amd64"}}}}
 	f.p.ports.host = func(context.Context, string) (string, error) { return "example-registration", nil }
 	f.p.ports.actor = func(ctx context.Context, env, actor, key string, apply bool) (context.Context, error) {

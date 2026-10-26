@@ -29,7 +29,7 @@ import (
 )
 
 func TestPR1ReadProjectionUsesRealPlatformProducer(t *testing.T) {
-	for _, scenario := range []struct{ version, want string }{{"1.0.0", "rebuild"}, {"1.0.1", "version"}, {"index-only", "current"}, {"tag-policy", "version"}, {"identity-mismatch", "unknown"}, {"variant-mismatch", "error"}, {"tag-pattern", "version"}} {
+	for _, scenario := range []struct{ version, want string }{{"1.0.0", "rebuild"}, {"1.0.1", "version"}, {"index-only", "current"}, {"tag-policy", "version"}, {"identity-mismatch", "rebuild"}, {"variant-mismatch", "error"}, {"tag-pattern", "version"}} {
 		t.Run(scenario.want, func(t *testing.T) {
 			server := httptest.NewServer(registryServer.New())
 			defer server.Close()
@@ -97,6 +97,10 @@ func TestPR1ReadProjectionUsesRealPlatformProducer(t *testing.T) {
 
 			daemon := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				require.Equal(t, http.MethodGet, r.Method)
+				if strings.HasSuffix(r.URL.Path, "/info") {
+					_, _ = fmt.Fprintf(w, `{"OSType":"linux","Architecture":%q}`, cfg.Architecture)
+					return
+				}
 				if strings.HasSuffix(r.URL.Path, "/containers/json") {
 					if scenario.version == "tag-policy" || scenario.version == "tag-pattern" {
 						_, _ = fmt.Fprintf(w, `[{"Id":"consumer","Image":%q,"ImageID":%q,"Labels":{"com.getarcaneapp.arcane.updater.strategy":"tag","com.getarcaneapp.arcane.updater.constraint":"~1.0","com.getarcaneapp.arcane.updater.tag-pattern":%q}}]`, ref, oldID.String(), func() string {
@@ -135,15 +139,18 @@ func TestPR1ReadProjectionUsesRealPlatformProducer(t *testing.T) {
 			result, err := svc.ReadUpdateInfo(t.Context(), ref)
 			require.NoError(t, err)
 			require.Equal(t, scenario.want, result.State)
-			if scenario.version == "identity-mismatch" || scenario.version == "variant-mismatch" {
+			if scenario.version == "variant-mismatch" {
 				require.False(t, result.HasUpdate)
 				require.Equal(t, "update.check-unavailable", result.Code)
 				return
 			}
 			require.Equal(t, scenario.want != "current", result.HasUpdate)
 			require.Equal(t, "linux/amd64", result.Platform)
-			require.Equal(t, oldDigest.String(), result.CurrentDigest)
-			require.NotEqual(t, oldID.String(), result.CurrentDigest, "config IDs must never be compared with registry manifest digests")
+			if scenario.version == "identity-mismatch" {
+				require.Equal(t, "sha256:"+strings.Repeat("a", 64), result.CurrentDigest)
+				return
+			}
+			require.Equal(t, oldID.String(), result.CurrentDigest, "classic compares config to config")
 			var record ImageUpdateRecord
 			require.NoError(t, db.First(&record, "id = ?", oldID.String()).Error)
 			if scenario.version == "tag-policy" || scenario.version == "tag-pattern" {
@@ -173,13 +180,17 @@ func TestPR1ReadProjectionDeniedAndRateLimitedAreErrors(t *testing.T) {
 			host := strings.TrimPrefix(server.URL, "http://")
 			daemon := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				w.Header().Set("Content-Type", "application/json")
+				if strings.HasSuffix(r.URL.Path, "/info") {
+					_, _ = w.Write([]byte(`{"OSType":"linux","Architecture":"amd64"}`))
+					return
+				}
 				_, _ = fmt.Fprintf(w, `{"Id":%q,"RepoDigests":[%q],"Os":"linux","Architecture":"amd64","Config":{"Labels":{"org.opencontainers.image.version":"1.0.0"}}}`, "sha256:"+strings.Repeat("a", 64), host+"/app@sha256:"+strings.Repeat("b", 64))
 			}))
 			defer daemon.Close()
 			db := setupImageUpdateRegistryTestDBInternal(t)
 			require.NoError(t, db.Create(&registryService.ContainerRegistry{URL: server.URL, Enabled: true, Insecure: true, RegistryType: "generic"}).Error)
 			svc := NewImageUpdateService(db, nil, registryService.NewContainerRegistryService(db, nil, nil, nil), &docker.DockerClientService{Client: newImageUpdateTestDockerClientInternal(t, daemon)}, nil, nil, nil)
-			prior := ImageUpdateRecord{ID: "sha256:" + strings.Repeat("a", 64), ImageID: "sha256:" + strings.Repeat("a", 64), Repository: host + "/app", Tag: "stable", CheckTime: time.Now().Add(-time.Hour), CurrentVersion: "1.0.0", CurrentDigest: new("sha256:" + strings.Repeat("b", 64)), LatestDigest: new("sha256:" + strings.Repeat("b", 64)), Platform: new("linux/amd64")}
+			prior := ImageUpdateRecord{ID: "sha256:" + strings.Repeat("a", 64), ImageID: "sha256:" + strings.Repeat("a", 64), Repository: host + "/app", Tag: "stable", CheckTime: time.Now().Add(-time.Hour), CurrentVersion: "1.0.0", CurrentDigest: new("sha256:" + strings.Repeat("b", 64)), LatestDigest: new("sha256:" + strings.Repeat("b", 64)), Platform: new("native-v1:classic:linux/amd64")}
 			require.NoError(t, db.Create(&prior).Error)
 			require.Equal(t, "current", prior.UpdateInfo().State)
 			result, err := svc.ReadUpdateInfo(t.Context(), host+"/app:stable")
@@ -208,7 +219,7 @@ func TestPR1ReadProjectionDeniedAndRateLimitedAreErrors(t *testing.T) {
 
 func TestPR1MissingLocalImageInvalidatesCachedSuccess(t *testing.T) {
 	db := setupImageUpdateRegistryTestDBInternal(t)
-	prior := ImageUpdateRecord{ID: "image", ImageID: "image", Repository: "registry.example.com/app", Tag: "stable", CheckTime: time.Now().Add(-time.Hour), CurrentDigest: new("digest"), LatestDigest: new("digest"), Platform: new("linux/amd64")}
+	prior := ImageUpdateRecord{ID: "image", ImageID: "image", Repository: "registry.example.com/app", Tag: "stable", CheckTime: time.Now().Add(-time.Hour), CurrentDigest: new("sha256:" + strings.Repeat("b", 64)), LatestDigest: new("sha256:" + strings.Repeat("b", 64)), Platform: new("native-v1:classic:linux/amd64")}
 	require.NoError(t, db.Create(&prior).Error)
 	require.Equal(t, "current", prior.UpdateInfo().State)
 	daemon := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { http.Error(w, "not found", 404) }))

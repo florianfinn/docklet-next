@@ -378,7 +378,7 @@ func (s *ImageUpdateService) getImageIDByRef(ctx context.Context, imageRef strin
 	return inspectResponse.ID, nil
 }
 
-func (s *ImageUpdateService) MarkImageRefUpToDateAfterPull(ctx context.Context, imageRef string) error {
+func (s *ImageUpdateService) markLegacyImageRefAfterPull(ctx context.Context, imageRef string) error {
 	if s.db == nil {
 		return nil
 	}
@@ -505,6 +505,10 @@ func (s *ImageUpdateService) StoredUpdateByImageID(ctx context.Context, imageID 
 		return nil, false, fmt.Errorf("get stored image update by image id: %w", err)
 	}
 
+	// This legacy version-reader port carries T only. Native keys (including
+	// classic config digests) must never escape as immutable pull references.
+	record.HasUpdate = false
+	record.LatestDigest = record.LegacyPullDigest()
 	return &record, true, nil
 }
 
