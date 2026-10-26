@@ -6,9 +6,21 @@
 
 package lifecycle
 
+import dto "github.com/florianfinn/docklet-next/types/updater"
+
 // RetentionDeletions receives newest-first available points. Holds take
 // precedence over limits; a failed-attempt restore target owns the failed slot.
 func RetentionDeletions(points []Point, held map[string]bool) []string {
+	return PlanRetention(points, held).Deletions
+}
+
+type RetentionPlan struct {
+	Deletions []string
+	Reasons   map[string]dto.RestorePointProtectionReason
+}
+
+func PlanRetention(points []Point, held map[string]bool) RetentionPlan {
+	reasons := map[string]dto.RestorePointProtectionReason{}
 	protected := map[string]bool{}
 	for id, active := range held {
 		if active {
@@ -20,6 +32,7 @@ func RetentionDeletions(points []Point, held map[string]bool) []string {
 		p := &points[i]
 		if baseline == nil && p.SourceState == "settled" {
 			baseline = p
+			reasons[p.ID] = dto.HealthyBaseline
 			protected[p.ID] = true
 		}
 		if p.LastRestoredAt != nil && (restored == nil || p.LastRestoredAt.After(*restored.LastRestoredAt)) {
@@ -28,6 +41,7 @@ func RetentionDeletions(points []Point, held map[string]bool) []string {
 	}
 	if restored != nil {
 		protected[restored.ID] = true
+		reasons[restored.ID] = dto.RestoreTarget
 	}
 	failed := ""
 	if restored != nil && restored.FailedAttempt && restored.SourceState == "partial-source" {
@@ -54,5 +68,5 @@ func RetentionDeletions(points []Point, held map[string]bool) []string {
 		deleted = append(deleted, retained[i].ID)
 		retained = append(retained[:i], retained[i+1:]...)
 	}
-	return deleted
+	return RetentionPlan{Deletions: deleted, Reasons: reasons}
 }

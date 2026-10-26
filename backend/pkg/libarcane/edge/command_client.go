@@ -10,6 +10,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	dto "github.com/florianfinn/docklet-next/types/updater"
 	"net/http"
 	"slices"
 	"time"
@@ -25,6 +26,9 @@ const (
 	tunnelCapabilityProtoParity = "proto-parity-v1"
 	bodyTransferMetadataKey     = "body_transfer_id"
 )
+
+// ErrCommandResponseTooLarge distinguishes invalid agent evidence from transport loss.
+var ErrCommandResponseTooLarge = errors.New("runtime response too large")
 
 func NewCommandClient() *CommandClient {
 	return &CommandClient{}
@@ -78,7 +82,7 @@ func (c *CommandClient) Execute(ctx context.Context, tunnel *AgentTunnel, req *C
 	}
 
 	pendingLimit := 0
-	if runtimeRequestPathInternal(req.Path) {
+	if runtimeRequestPathInternal(req.Path) || pointListRequest(req.Method, req.Path) {
 		pendingLimit = runtimePendingLimit
 	}
 	pending, err := registerBoundedPendingRequestInternal(tunnel, requestID, pendingLimit)
@@ -124,6 +128,9 @@ func (c *CommandClient) Execute(ctx context.Context, tunnel *AgentTunnel, req *C
 	}
 
 	limit := 0
+	if pointListRequest(req.Method, req.Path) {
+		limit = dto.MaxRestorePointResponseBytes
+	}
 	if runtimeRequestPathInternal(req.Path) {
 		limit = runtimeRequestBodyLimit
 	}
@@ -188,4 +195,14 @@ func validateConnectedTunnelInternal(tunnel *AgentTunnel) error {
 		return errors.New("edge tunnel is not connected")
 	}
 	return nil
+}
+
+// Point lists are finite responses; enforce bounds during assembly, including
+// close-drain and pending response queues, before the hub decodes any body.
+func pointListRequest(method, path string) bool {
+	if method != http.MethodGet {
+		return false
+	}
+	command, ok := ResolveEdgeCommandName(method, path, false).Get()
+	return ok && (command == "updater.restore.list" || command == "updater.restore.host-list")
 }

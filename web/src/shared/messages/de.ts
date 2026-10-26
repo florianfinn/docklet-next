@@ -72,6 +72,12 @@ export const deCommon: typeof enCommon = {
       unknown: "Unbekannt"
     }
   },
+  restorePoints: {
+    protection: { "restore-target": "Letztes Wiederherstellungsziel", "healthy-baseline": "Intakte Ausgangsbasis" },
+    noRetentionAnchor: "Kein Aufbewahrungsanker",
+    hold: { none: "Keine aktive Sperre", active: "Wird zur Wiederherstellung verwendet", unknown: "Ergebnis der Wiederherstellung unbekannt" },
+    kind: { point: "Wiederherstellungspunkt", failedAttempt: "Fehlgeschlagener Versuch" },
+  },
   commandErrors: {
     failed: "Die Anfrage konnte nicht abgeschlossen werden.",
     unreachable: "Der Host ist nicht erreichbar. Prüfe die Verbindung.",

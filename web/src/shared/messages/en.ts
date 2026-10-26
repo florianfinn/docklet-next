@@ -71,6 +71,12 @@ export const enCommon = {
       unknown: "Unknown"
     }
   },
+  restorePoints: {
+    protection: { "restore-target": "Latest restore target", "healthy-baseline": "Healthy baseline" },
+    noRetentionAnchor: "No retention anchor",
+    hold: { none: "No active hold", active: "In use by a restore", unknown: "Restore outcome unknown" },
+    kind: { point: "Restore point", failedAttempt: "Failed attempt" },
+  },
   commandErrors: {
     failed: "The request could not be completed.",
     unreachable: "The host cannot be reached. Check the connection.",

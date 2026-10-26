@@ -1,5 +1,5 @@
 // Source: api/openapi.json
-// Revision: 18efae1d42e94994b665577e10aac38361ffa5af07c390a2b31338630f7deb74
+// Revision: 56111f139be68ec78fbf95001e3e4f1473ca4fcc54f16ca95a9565666bd61ef9
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
 // Deviations: Generated TypeScript declarations from the local Huma export.
@@ -10807,9 +10807,14 @@ export interface components {
             code?: string;
             /** Format: date-time */
             createdAt: string;
+            failedAttempt: boolean;
+            /** @enum {string} */
+            holdState: "none" | "active" | "unknown";
             id: string;
-            images: components["schemas"]["UpdaterPointImage"][] | null;
+            images: components["schemas"]["UpdaterPointImage"][];
             orphaned: boolean;
+            /** @enum {string|null} */
+            protectionReason: "restore-target" | "healthy-baseline" | null;
             registrationId: string;
             sourceRunId: string;
             /** @enum {string} */
