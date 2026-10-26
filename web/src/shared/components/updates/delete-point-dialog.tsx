@@ -4,6 +4,7 @@
 // License: Apache-2.0
 // Deviations: Original confirmed deletion and uncertain-outcome reconciliation for issue #231.
 
+import { COMMAND_DIALOG_CONTENT } from "@/shared/components/dialog-layout";
 import { useEffect, useRef, useState } from "react";
 import { useLocation } from "react-router";
 import { useTranslations } from "use-intl";
@@ -68,7 +69,7 @@ export function DeletePointDialog({ scope, point, latest, readError, refresh, cl
       else if (code === "restore.in-use") reconcile(false);
     });
   }
-  return <Dialog open onOpenChange={(v) => { if (!v) close(); }}><DialogContent><DialogHeader>
+  return <Dialog open onOpenChange={(v) => { if (!v) close(); }}><DialogContent className={COMMAND_DIALOG_CONTENT}><DialogHeader>
     <DialogTitle>{t("deletePoint")}</DialogTitle><DialogDescription>{t("deleteHelp")}</DialogDescription>
   </DialogHeader>
     <p>{t("point", { at: formatDateTime(point.createdAt) })}</p><p className="break-all">{point.targetId} · {point.id}</p><RestorePointState point={displayed} />

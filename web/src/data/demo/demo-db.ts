@@ -1,3 +1,4 @@
+import { sameImageReference } from "@/domain/docker-reference";
 import { pruneEvents } from "@/domain/activity-history";
 import { parse } from "yaml";
 
@@ -162,7 +163,7 @@ export class DemoDb {
       const services = parsed.model.services.map((m): Service => {
         const prev = stack.services.find((s) => s.name === m.key);
         const { repository, tag } = splitImage(m.image);
-        const sameImage = prev && prev.image.repository === repository && prev.image.tag === tag;
+        const sameImage = prev && sameImageReference(`${prev.image.repository}:${prev.image.tag}`, m.image);
         const image: ImageVersion = sameImage ? prev.image : { repository, tag, version: /\d/.test(tag) ? tag.replace(/^v/, "").split("-")[0] : undefined, published: new Date().toISOString() };
         return {
           name: m.key,

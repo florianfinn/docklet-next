@@ -4,6 +4,7 @@
 // License: Apache-2.0
 // Deviations: Original live update UI for issue #231.
 
+import { COMMAND_DIALOG_CONTENT } from "@/shared/components/dialog-layout";
 import { formatDateTime } from "@/domain/format";
 
 import { useUpdateAction } from "@/shared/components/updates/use-update-action";
@@ -32,7 +33,7 @@ function ScheduleDialog({ hostId, value, close, saved }: { hostId: string; value
   const [pollingInterval, setPolling] = useState(value.pollingInterval), [autoUpdateInterval, setApply] = useState(value.autoUpdateInterval), [pollingEnabled, setPollingEnabled] = useState(value.pollingEnabled), [autoUpdateEnabled, setApplyEnabled] = useState(value.autoUpdateEnabled);
   useEffect(() => identityLifetime(adapter).listen(close), [adapter, close]);
   const read = useCapability("listSchedule", { kind: "host", id: hostId }), write = useCapability("saveUpdateSchedule", { kind: "host", id: hostId });
-  return <Dialog open onOpenChange={(v) => { if (!v) { action.reset(); close(); } }}><DialogContent><DialogHeader><DialogTitle>{t("schedules")}</DialogTitle><DialogDescription>{t("cron", { zone: value.timeZone })}</DialogDescription></DialogHeader>
+  return <Dialog open onOpenChange={(v) => { if (!v) { action.reset(); close(); } }}><DialogContent className={COMMAND_DIALOG_CONTENT}><DialogHeader><DialogTitle>{t("schedules")}</DialogTitle><DialogDescription>{t("cron", { zone: value.timeZone })}</DialogDescription></DialogHeader>
     <label>{t("polling")}<Input value={pollingInterval} onChange={(e) => setPolling(e.target.value)} /></label><label className="flex gap-2"><Checkbox checked={pollingEnabled} onCheckedChange={(v) => setPollingEnabled(v === true)} />{t("enabled")}</label>
     <label>{t("applySchedule")}<Input value={autoUpdateInterval} onChange={(e) => setApply(e.target.value)} /></label><label className="flex gap-2"><Checkbox checked={autoUpdateEnabled} onCheckedChange={(v) => setApplyEnabled(v === true)} />{t("enabled")}</label>
     <p>{t("cron", { zone: value.timeZone })}</p>{action.error && <p role="alert">{action.error}</p>}
