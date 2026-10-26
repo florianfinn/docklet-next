@@ -4,6 +4,7 @@
 // License: Apache-2.0
 // Deviations: Original guarded command and notification consumer for issues #126 and #110.
 
+import type { LifecycleInput } from "@/domain/stack-updates";
 import { CancelledError, isCancelledError } from "@tanstack/react-query";
 import type { ContainerCommand, RuntimeReleaseInput, StackCommand } from "../adapter";
 import { AdapterOutcomeError, unavailable } from "../capability";
@@ -197,18 +198,23 @@ export function createRuntimeCommands({ baseUrl, client, capability, publish, un
       })).then(() => { if (version === generation) schedule(); });
     }, 2_000);
   }
-  function command(kind: "stack" | "container", target: string, command: StackCommand | ContainerCommand): Promise<string> {
+  function command(kind: "stack" | "container", target: string, command: StackCommand | ContainerCommand | "update" | "restore", lifecycle?: LifecycleInput): Promise<string> {
     let host: string, raw: string;
     try { [host, raw] = splitInventoryId(target); } catch { return Promise.reject(runtimeError("runtime.invalid-target")); }
-    const suffix = kind === "stack" ? stackRoutes[command as StackCommand] : ["start", "stop", "restart"].includes(command) ? command : undefined;
+    const imageOperation = command === "update" || command === "restore";
+    const suffix = imageOperation ? command : kind === "stack" ? stackRoutes[command as StackCommand] : ["start", "stop", "restart"].includes(command) ? command : undefined;
     if (!suffix) return Promise.reject(runtimeError("runtime.invalid-command"));
-    const scope = `${kind}:${target}`, key = `${scope}:${command}`;
+    const scope = `${kind}:${target}`, key = `${scope}:${command}:${imageOperation ? JSON.stringify(lifecycle) : ""}`;
     if (ambiguous.has(scope)) return Promise.reject(runtimeError("runtime.admission-unknown"));
     const existing = pending.get(key); if (existing) return existing;
     if (ambiguous.size + pending.size + [...runs.values()].filter(active).length >= LIMIT) return Promise.reject(runtimeError("runtime.pending-limit"));
     const version = generation;
     const task = (async () => {
-      const operation = kind === "stack" ? "runStackCommand" : "runContainerCommand";
+      const operation = imageOperation ? command === "update" ? "installStackUpdates" : "restoreRestorePoint" : kind === "stack" ? "runStackCommand" : "runContainerCommand";
+      if (imageOperation) {
+        if (!lifecycle || !/^[a-f0-9]{64}$/.test(lifecycle.expectedRevision) || (command === "restore" && !lifecycle.pointId)) throw runtimeError("runtime.invalid-target");
+        for (const read of command === "restore" ? ["getUpdateBaseline", "listRestorePoints"] : ["getUpdateBaseline"]) { const cap = await capability(read, { kind: "stack", id: target }); check(version); if (!cap.available) throw unavailable(read, cap.resourceRef, cap.disabledReasonCode); }
+      }
       const descriptor = await capability(operation, { kind, id: target }); check(version);
       if (!descriptor.available) throw unavailable(operation, descriptor.resourceRef, descriptor.disabledReasonCode);
       let idempotencyKey: string;
@@ -235,9 +241,11 @@ export function createRuntimeCommands({ baseUrl, client, capability, publish, un
           let response: Response;
           try {
             if (now() - began >= COMMAND_RETRY_MS) break;
-            response = await client.fetch(`${baseUrl}/environments/${encodeURIComponent(host)}/${kind === "stack" ? "projects" : "containers"}/${encodeURIComponent(raw)}/${suffix}`, {
+            const path = imageOperation ? command === "update" ? `updater/projects/${encodeURIComponent(raw)}/update` : `updater/project/${encodeURIComponent(raw)}/restore-points/${encodeURIComponent(lifecycle!.pointId!)}/restore` : `${kind === "stack" ? "projects" : "containers"}/${encodeURIComponent(raw)}/${suffix}`;
+            response = await client.fetch(`${baseUrl}/environments/${encodeURIComponent(host)}/${path}`, {
               method: "POST", signal: controller.signal,
-              headers: { Accept: "application/json", Prefer: "respond-async", "Idempotency-Key": idempotencyKey },
+              headers: { Accept: "application/json", Prefer: "respond-async", "Idempotency-Key": idempotencyKey, ...(imageOperation ? { "Content-Type": "application/json" } : {}) },
+              ...(imageOperation ? { body: JSON.stringify(lifecycle) } : {}),
             });
           } catch (error) {
             check(version);
@@ -257,6 +265,8 @@ export function createRuntimeCommands({ baseUrl, client, capability, publish, un
           check(version);
           if (!response.ok) {
             const error = runtimeResponseError(body, response.status);
+            if (imageOperation && error.outcome.kind === "error" && error.outcome.code === "runtime.outcome-unknown") { ambiguous.add(scope); const runId = object(object(body).data).activityId; if (typeof runId === "string" && runId.trim()) void detail(host, runId).catch(() => undefined); }
+            if (imageOperation && (response.status === 502 || response.status === 504) && error.outcome.kind === "error" && error.outcome.code === "agent.unavailable") { ambiguous.add(scope); throw runtimeError("runtime.admission-unknown"); }
             if (response.status === 401) { unauthorized(); throw error; }
             if (uncertainSend) { ambiguous.add(scope); throw runtimeError("runtime.admission-unknown"); }
             if (error.outcome.kind === "conflict" && error.outcome.activeRunId) void detail(host, error.outcome.activeRunId).catch(() => undefined);
@@ -266,6 +276,7 @@ export function createRuntimeCommands({ baseUrl, client, capability, publish, un
           try {
             if (object(body).success !== true || (response.status === 202 ? data.code !== "run.started" : response.status !== 200 || data.code !== "run.joined") || typeof data.activityId !== "string" || !data.activityId.trim()) throw runtimeError("runtime.invalid-response");
             let run = mapRuntime(data.activity, host, data.activityId);
+            if (imageOperation && (run.stackId !== target || run.kind !== (command === "restore" ? "restore" : "update"))) throw runtimeError("runtime.invalid-response");
             const retained = runs.get(run.id);
             // The admission snapshot can arrive after a newer targeted observation.
             if (retained?.hostId === host && started < (sequences.get(run.id) ?? 0)) run = retained;
@@ -303,6 +314,8 @@ export function createRuntimeCommands({ baseUrl, client, capability, publish, un
     return runs.get(id) ?? run;
   }
   return {
+    installStackUpdates: (id: string, input?: LifecycleInput) => command("stack", id, "update", input),
+    restoreRestorePoint: (id: string, point: string, input?: LifecycleInput) => command("stack", id, "restore", input ? { ...input, pointId: point } : undefined),
     runStackCommand: (id: string, action: StackCommand) => command("stack", id, action),
     runContainerCommand: (id: string, action: ContainerCommand) => command("container", id, action),
     getRuntimeRun: (host: string, id: string) => { explicitFollows.add(id); attempts.delete(id); return detail(host, id, true); },

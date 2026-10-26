@@ -51,7 +51,7 @@ export function ServicesCard({ stack, host }: { stack: StackDetail; host: Host |
           <UpdateIndicator
             name={svc.name}
             update={svc.update}
-            actions={{ updateOperation: "installStackUpdates", onUpdate: () => void cmd.installUpdates(stack.id, [svc.name]), onRecheck: () => void cmd.checkUpdates(stack.id), updateLabel: undefined, busy: !!stack.busyActionId }}
+            actions={{ updateOperation: "installStackUpdates", onUpdate: () => void cmd.installUpdates(stack.id), onRecheck: () => void cmd.checkUpdates(stack.id), updateLabel: undefined, busy: !!stack.busyActionId }}
           />
         </TableCell>
         <TableCell className="text-right">

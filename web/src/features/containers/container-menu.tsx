@@ -5,7 +5,6 @@ import { useTranslations } from "use-intl";
 
 import { imageHref } from "@/features/images/image-links";
 import type { ContainerInfo } from "@/domain/model";
-import { hasUpdate } from "@/domain/updates";
 import type { MenuAction, MenuGroups } from "@/shared/components/action-menu";
 import { useHideAction } from "@/shared/components/hide-action";
 import { useContainerCommands } from "@/shared/hooks/use-container-commands";
@@ -18,7 +17,6 @@ export function useContainerMenu(c: ContainerInfo, open: { onOpen: (id: string) 
   const t = useTranslations("containers");
   const navigate = useNavigate();
   const cmd = useContainerCommands();
-  const update = useCapability("installContainerUpdate");
   const command = useCapability("runContainerCommand", { kind: "container", id: c.id });
   const edit = useCapability("recreateContainer");
   const hide = useHideAction("containers");
@@ -40,7 +38,7 @@ export function useContainerMenu(c: ContainerInfo, open: { onOpen: (id: string) 
     [
       ...run.map((action) => ({ ...action, disabled: !command.available || !!c.inventory?.stale, title: command.reason })),
       { id: "edit", label: t("menu.edit"), icon: <Pencil />, disabled: !edit.available || !!c.inventory?.stale || c.restrictions?.recreate || c.origin !== "standalone", onSelect: () => open.onEdit(c.id) },
-      ...(hasUpdate(c.update) && c.origin !== "unraid" && c.origin !== "unknown" ? [{ id: "update", label: t("menu.update"), icon: <RotateCw />, disabled: !update.available, title: update.reason, onSelect: () => void cmd.update(c.id) }] : []),
+
     ],
     [hide(c.id, c.name, hidden)],
   ];

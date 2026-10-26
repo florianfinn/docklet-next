@@ -1,3 +1,4 @@
+import { useAdapter } from "@/data/use-adapter";
 import { Globe, Layers } from "lucide-react";
 import { memo, type ReactNode } from "react";
 import { Link } from "react-router";
@@ -82,7 +83,9 @@ export const StackRow = memo(function StackRow({ stack, host, mode, view, column
   const status = <StackStatusBadge stack={stack} host={host} />;
   const services = <ServicesHover services={stack.services} host={host} name={stack.name} />;
   const ports = <span className="font-mono text-xs text-muted-foreground [overflow-wrap:anywhere]">{formatPorts(stack.services.flatMap((s) => s.ports)) || "–"}</span>;
-  const auto = <span className="text-xs">{stack.autoUpdate.mode === "check" ? t("auto.check") : t("auto.scheduled", { window: scheduleText.summary(stack.autoUpdate.schedule) })}</span>;
+  const live = useAdapter().kind === "http";
+  const policyText = useTranslations("common.stackUpdates");
+  const auto = live ? <span className="text-xs text-muted-foreground">{policyText("unknown")}</span> : <span className="text-xs">{stack.autoUpdate.mode === "check" ? t("auto.check") : t("auto.scheduled", { window: scheduleText.summary(stack.autoUpdate.schedule) })}</span>;
   const deploy = <span className="text-xs text-muted-foreground">{stack.lastDeployAt ? formatRelative(stack.lastDeployAt) : "–"}</span>;
   const showTile = compact && !inBlock && view !== "cards";
 

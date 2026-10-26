@@ -222,9 +222,9 @@ export function createDemoAdapter(options: DemoAdapterOptions = {}): DockletAdap
       });
     },
 
-    async installStackUpdates(stackId, services) {
+    async installStackUpdates(stackId) {
       const stack = requireStack(stackId);
-      const pending = stack.services.filter((s) => hasUpdate(s.update) && (!services || services.includes(s.name)));
+      const pending = stack.services.filter((s) => hasUpdate(s.update));
       const rp = db.saveRestorePoint(stack, `Vor Update · ${stack.name}`);
       const fail = failStep(takeDemoFailure(adapter, "installStackUpdates")?.at);
       const latest = (s: Service) => (s.update.state === "version" || s.update.state === "rebuild" ? s.update.latest : s.image);
@@ -500,7 +500,7 @@ export function createDemoAdapter(options: DemoAdapterOptions = {}): DockletAdap
 
     async installContainerUpdate(id) {
       const c = findContainer(id);
-      if (c.stackId && c.serviceName) return adapter.installStackUpdates(c.stackId, [c.serviceName]);
+      if (c.stackId && c.serviceName) return adapter.installStackUpdates(c.stackId);
       if (c.origin === "unraid") throw new DemoCommandError("managed-by-unraid");
       if (c.origin !== "standalone") throw new DemoCommandError("recreate-not-allowed");
       const next = c.update.state === "version" || c.update.state === "rebuild" ? c.update.latest : c.image;

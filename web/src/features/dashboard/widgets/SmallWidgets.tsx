@@ -59,13 +59,15 @@ const JOB_TONE = { backup: "ok", scan: "violet", "update-check": "info", "auto-u
 
 export function ScheduleWidget({ jobs, hosts, now }: { jobs: ScheduledJob[]; hosts: Map<string, Host>; now: number }) {
   const t = useTranslations("dashboard.schedule");
-  const sorted = [...jobs].sort((a, b) => a.nextRunAt.localeCompare(b.nextRunAt));
+  const tu = useTranslations("common.stackUpdates");
+  const sorted = [...jobs].sort((a, b) => (a.nextRunAt ?? "").localeCompare(b.nextRunAt ?? ""));
   if (!sorted.length) return <p className="text-sm text-muted-foreground">{t("empty")}</p>;
   return (
     <ScrollArea className="h-full">
       <ol className="relative flex flex-col gap-1 pr-2 before:absolute before:top-3 before:bottom-3 before:left-[13px] before:w-px before:bg-border">
         {sorted.map((j) => {
-          const when = formatCountdown(j.nextRunAt, now);
+          const when = j.unavailable ? tu("unavailable") : j.enabled === false ? tu("disabled") : j.nextRunAt ? formatCountdown(j.nextRunAt, now) : tu("unknown");
+          const title = j.title || t(`kinds.${j.kind}`);
           const target = j.kind === "backup" && !j.volumeId ? "backupList" : j.kind === "auto-update" && !j.stackId ? "autoPolicies" : j.kind;
           return (
             <li key={j.id} className="relative">
@@ -74,14 +76,14 @@ export function ScheduleWidget({ jobs, hosts, now }: { jobs: ScheduledJob[]; hos
                 to={jobHref(j)}
                 data-glow="row"
                 data-job={j.kind}
-                aria-label={t("open", { title: j.title, when, target: t(`targets.${target}`) })}
+                aria-label={t("open", { title, when, target: t(`targets.${target}`) })}
                 className="group/job flex items-center gap-3 rounded-lg py-1.5 pr-1 outline-none hover:bg-muted/40 focus-visible:ring-[3px] focus-visible:ring-ring/50"
               >
                 <IconTile tone={JOB_TONE[j.kind]} size="sm" className="z-10 ring-4 ring-card">
                   {JOB_ICON[j.kind]}
                 </IconTile>
                 <div className="min-w-0 flex-1">
-                  <div className="truncate text-sm group-hover/job:underline group-hover/job:underline-offset-4">{j.title}</div>
+                  <div className="truncate text-sm group-hover/job:underline group-hover/job:underline-offset-4">{title}</div>
                   <div className="flex items-center gap-2 text-xs text-muted-foreground">
                     {t(`kinds.${j.kind}`)} · {j.cadence}
                     <HostChip host={hosts.get(j.hostId ?? "")} />

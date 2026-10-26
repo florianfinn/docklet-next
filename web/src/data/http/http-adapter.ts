@@ -1,3 +1,4 @@
+import { createStackUpdates } from "./stack-updates";
 import { createImageCommands } from "./image-commands";
 import { createRegistryCommands } from "./registry-commands";
 // Source: docklet-next/docs/design/adapter-live-capabilities.md
@@ -50,7 +51,7 @@ type Body<I extends ReadOperation> = operations[I]["responses"][200]["content"][
 type StreamPayload = operations["streamClient"]["responses"][200]["content"]["text/event-stream"][number]["data"];
 type Source = Pick<EventSource, "close" | "onopen" | "onmessage" | "onerror"> & Partial<Pick<EventSource, "readyState">>;
 
-const IMPLEMENTED = new Set(["clearContainerRegistryCredential", "pullImage", "removeImage", "pruneImages", "listContainerRegistries", "createContainerRegistry", "updateContainerRegistry", "deleteContainerRegistry", "testContainerRegistry", "createNetwork", "removeNetwork", "connectNetwork", "disconnectNetwork", "getProjectWorkspace", "readProjectFile", "downloadProjectFile", "updateProjectWorkspace", "listFiles", "readFile", "writeFile", "createEntry", "renameEntry", "deleteEntry", "uploadFile", "downloadFile", "planVolumePrune", "pruneVolumes", "createVolume", "deleteVolume", "renameVolume", "subscribeLogs", "subscribeContainerLogs", "runStackCommand", "runContainerCommand", "deployStack", "saveStackFiles", "setStackLabels", "convertDockerRun", "registerHost", "issueAgentToken", "removeHost", "discoverHub", "listStacks", "getStack", "listContainers", "listHosts", "listActions", "listEvents", "subscribeActions", "subscribeChanges", "getAuthMode", "getCurrentUser", "login", "logout", "changePassword", "updateMyLocale", "getSetupStatus", "completeSetup", "getConnectedSettings", "saveSettings", "listImages", "listVolumes", "getVolume", "getTopology", "subscribeMetrics"]);
+const IMPLEMENTED = new Set(["deleteRestorePoint", "deleteHostRestorePoint", "listHostRestorePoints", "getUpdateBaseline", "listRestorePoints", "getAutoUpdatePolicy", "saveAutoUpdatePolicy", "setAutoUpdate", "setAutoUpdateApply", "getUpdateSchedules", "saveUpdateSchedule", "listSchedule", "getSystemImageHints", "listSystemComponents", "checkStackUpdates", "checkUpdates", "installStackUpdates", "restoreRestorePoint", "clearContainerRegistryCredential", "pullImage", "removeImage", "pruneImages", "listContainerRegistries", "createContainerRegistry", "updateContainerRegistry", "deleteContainerRegistry", "testContainerRegistry", "createNetwork", "removeNetwork", "connectNetwork", "disconnectNetwork", "getProjectWorkspace", "readProjectFile", "downloadProjectFile", "updateProjectWorkspace", "listFiles", "readFile", "writeFile", "createEntry", "renameEntry", "deleteEntry", "uploadFile", "downloadFile", "planVolumePrune", "pruneVolumes", "createVolume", "deleteVolume", "renameVolume", "subscribeLogs", "subscribeContainerLogs", "runStackCommand", "runContainerCommand", "deployStack", "saveStackFiles", "setStackLabels", "convertDockerRun", "registerHost", "issueAgentToken", "removeHost", "discoverHub", "listStacks", "getStack", "listContainers", "listHosts", "listActions", "listEvents", "subscribeActions", "subscribeChanges", "getAuthMode", "getCurrentUser", "login", "logout", "changePassword", "updateMyLocale", "getSetupStatus", "completeSetup", "getConnectedSettings", "saveSettings", "listImages", "listVolumes", "getVolume", "getTopology", "subscribeMetrics"]);
 const RECONNECT_MS = 250;
 
 export interface HttpAdapterOptions {
@@ -475,6 +476,9 @@ export function createHttpAdapter(options: HttpAdapterOptions = {}): DockletAdap
     ...methods,
     ...createHttpAuth(baseUrl, client, invalidateIdentity, () => identityGeneration),
     ...createHostCommands(baseUrl, client, requireCapability, () => { invalidateCapabilities(); invalidateEnvironments(); changeListeners.forEach((listener) => listener(["hosts", ...inventoryTopics])); }),
+    ...createStackUpdates({ baseUrl, client, capability: getCapability, generation: () => identityGeneration, changed: () => { sharedReads.clear(); changeListeners.forEach((listener) => listener(["stacks", "containers", "images", "schedule"])); } }),
+    installStackUpdates: runtime.installStackUpdates,
+    restoreRestorePoint: runtime.restoreRestorePoint,
     runStackCommand: runtime.runStackCommand,
     runContainerCommand: runtime.runContainerCommand,
     getRuntimeRun: runtime.getRuntimeRun,
@@ -497,6 +501,18 @@ export function createHttpAdapter(options: HttpAdapterOptions = {}): DockletAdap
     ...createVolumePrune({ baseUrl, client, capability: getCapability, changed: () => { sharedReads.clear(); changeListeners.forEach((listener) => listener(["volumes"])); } }, listHosts),
     ...createNetworkCommands({ baseUrl, client, capability: getCapability, changed: () => { sharedReads.clear(); changeListeners.forEach((listener) => listener(["topology", "containers"])); } }),
     ...createVolumeCommands({ baseUrl, client, capability: getCapability, changed: () => { sharedReads.clear(); changeListeners.forEach((listener) => listener(["volumes"])); } }),
+    async listSchedule(hostIds) {
+      const selected = hostIds ?? (await listHosts()).map((h) => h.id);
+      return (await Promise.all(selected.map(async (hostId) => {
+        try {
+          const config = await adapter.getUpdateSchedules!(hostId);
+          return config.jobs.filter((j) => j.kind === "auto-update" || j.kind === "update-check").map((j) => ({ id: `${hostId}~${j.id}`, hostId, kind: j.kind as "auto-update" | "update-check", title: "", cadence: j.schedule, nextRunAt: j.nextRun, enabled: j.enabled, code: j.code }));
+        } catch (error) {
+          if (isCancelledError(error)) throw error;
+          return [{ id: `${hostId}~schedule-unavailable`, hostId, kind: "update-check" as const, title: "", cadence: "", unavailable: true }];
+        }
+      }))).flat();
+    },
     listActions: actions.load,
     observeActionDetail(host, id, listener) {
       const offActions = adapter.subscribeActions(() => {});

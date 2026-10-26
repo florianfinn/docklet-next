@@ -1,6 +1,7 @@
 import { BadgeCheck, Box, CircleArrowUp, CircleDashed, CircleFadingArrowUp, TriangleAlert, type LucideIcon } from "lucide-react";
 import { useTranslations } from "use-intl";
 
+import { useImageError } from "@/features/images/use-image-error";
 import type { ImageVersion, UpdateInfo } from "@/domain/model";
 import { UPDATE_TONE, updateVisual, type UpdateVisual } from "@/domain/updates";
 import { useAdapterText } from "@/data/use-adapter-text";
@@ -14,6 +15,7 @@ export const UPDATE_ICON: Record<UpdateVisual, LucideIcon> = {
   error: TriangleAlert,
   local: Box,
   unchecked: CircleDashed,
+  unknown: CircleDashed,
 };
 
 export function latestOf(update: UpdateInfo): ImageVersion | undefined {
@@ -24,9 +26,11 @@ export function latestOf(update: UpdateInfo): ImageVersion | undefined {
 export function useUpdateCopy() {
   const t = useTranslations("common.updates");
   const dt = useAdapterText();
+  const errorText = useImageError();
   return (update: UpdateInfo) => {
     const visual = updateVisual(update);
     const version = latestOf(update)?.version ?? "";
+    const reason = errorText(update.code);
     switch (visual) {
       case "current":
         return { visual, title: t("titleCurrent"), desc: t("descCurrent"), note: t("noteCurrent") };
@@ -44,7 +48,9 @@ export function useUpdateCopy() {
           note: version ? t("noteRebuildVersion", { version }) : t("noteRebuild"),
         };
       case "error":
-        return { visual, title: t("titleError"), desc: update.state === "error" ? dt(update.message) : t("descError"), note: "" };
+        return { visual, title: t("titleError"), desc: update.code ? reason : update.state === "error" && update.message ? dt(update.message) : t("descError"), note: "" };
+      case "unknown":
+        return { visual, title: t("titleUnknown"), desc: update.code ? reason : t("descUnknown"), note: "" };
       case "local":
         return { visual, title: t("titleLocal"), desc: t("descLocal"), note: "" };
       default:

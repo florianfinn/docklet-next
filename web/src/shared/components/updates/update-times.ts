@@ -19,10 +19,11 @@ export function checkTimes(updates: UpdateInfo[]): Pick<UpdateTimes, "checkedAt"
   let checkedAt: string | undefined;
   let unchecked = 0;
   for (const u of updates) {
-    if (!("checkedAt" in u)) {
+    if (!("checkedAt" in u) || !u.checkedAt) {
       unchecked++;
       continue;
     }
+    if (u.incomplete) unchecked++;
     if (!checkedAt || u.checkedAt > checkedAt) checkedAt = u.checkedAt;
   }
   return { checkedAt, unchecked };

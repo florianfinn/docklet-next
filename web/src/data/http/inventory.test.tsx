@@ -113,7 +113,7 @@ describe("host inventory HTTP reads", () => {
     await expect(f.adapter.runContainerCommand("first~web", "restart")).rejects.toMatchObject({ outcome: { kind: "not-available" } });
     await expect(f.adapter.runStackCommand("first~project", "start")).rejects.toMatchObject({ outcome: { kind: "not-available" } });
     await expect(f.adapter.installContainerUpdate("first~web")).rejects.toMatchObject({ outcome: { kind: "not-available" } });
-    await expect(f.adapter.installStackUpdates("first~project")).rejects.toMatchObject({ outcome: { kind: "not-available" } });
+    await expect(f.adapter.installStackUpdates("first~project", { expectedRevision: "a".repeat(64) })).rejects.toMatchObject({ outcome: { kind: "not-available" } });
     expect(f.fetcher.mock.calls.map(([input]) => String(input))).toEqual([
       "/api/capabilities?kind=container&id=first%7Eweb",
       "/api/capabilities?kind=stack&id=first%7Eproject",

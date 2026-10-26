@@ -9,6 +9,7 @@ import type { ActionKind, ActionStatus, DeployStepKey, EventKind, EventLevel, Ou
 
 import type { CodedActionRun, CodedEvent, MessageCode } from "../message-code";
 import type { RuntimeView } from "@/features/activity/runtime-presentation";
+import { reason, record, bool, id, date, optionalDate } from "./update-validation";
 import { inventoryId } from "./inventory-mapping";
 
 type Activity = components["schemas"]["ActivityActivity"];
@@ -19,6 +20,7 @@ const STEP_KEYS = new Set<DeployStepKey>(["validate", "pull", "build", "create",
 const STREAMS = new Set<OutputStream>(["cmd", "stdout", "stderr", "note"]);
 const KINDS: Record<string, ActionKind> = {
   image_pull: "pull", image_update_check: "check-updates", image_patch: "update",
+  project_update: "update", project_restore: "restore",
   project_deploy: "deploy", project_redeploy: "redeploy", project_down: "stop",
   project_restart: "restart", container_start: "start", container_stop: "stop",
   container_restart: "restart", container_redeploy: "redeploy", container_edit: "recreate",
@@ -67,6 +69,19 @@ export function mapActivityDetail(detail: Detail): CodedActionRun {
   if ((run.outcomeState !== undefined || run.cancelRequested !== undefined) &&
       ((run.outcomeState !== "known" && run.outcomeState !== "unknown") || typeof run.cancelRequested !== "boolean")) throw new Error("dto.invalid-runtime-knowledge");
   const kind = KINDS[run.type] ?? "activity";
+  const lifecycle = run.imageLifecycle;
+  const m10 = run.type === "project_update" || run.type === "project_restore" || !!lifecycle;
+  if (m10) { date(run.startedAt); optionalDate(run.endedAt); }
+  const coded = (code: string | undefined, source: string, field: "progress" | "error" = "progress"): MessageCode => {
+    if (!m10) return message(code, source);
+    const safe = reason(code);
+    if (safe && safe !== "http.error") return { code: `images.errors.${safe.replaceAll(".", "_")}`, params: {} };
+    const keys: Record<string, string> = { "run.started": "activity.status.running", "run.joined": "activity.status.running", "runtime.cancelled": "activity.runtime.cancelledBody", "runtime.failed": "activity.runtime.failedBody" };
+    const key = keys[code ?? ""];
+    if (key) return { code: key, params: {} };
+    return field === "error" ? { code: "common.commandErrors.failed", params: {} } : message(code, source);
+  };
+  if (lifecycle) { const l = record(lifecycle); id(l.runId); bool(l.verified); if (bool(l.volumeDataIncluded)) throw new Error("dto.invalid-lifecycle"); }
   const target = run.resourceName || run.resourceId || run.sourceEnvironmentName || run.type;
   const output = (detail.output ?? []).map((line) => {
     required(line.timestamp, "output-timestamp");
@@ -81,11 +96,12 @@ export function mapActivityDetail(detail: Detail): CodedActionRun {
   });
   return Object.assign({
     id: run.id,
+    ...(lifecycle ? { baselineCode: reason(lifecycle.baselineCode), lifecycleCode: reason(lifecycle.code), effectVerified: lifecycle.verified, restorePointId: lifecycle.restorePointId } : {}),
     kind,
     title: { code: `activity.runKind.${kind}`, params: {} },
     target: { code: "runMessages.value", params: { value: target } },
     hostId: run.environmentId,
-    ...(run.resourceType === "project" && run.resourceId ? { stackId: inventoryId(run.environmentId, run.resourceId) } : {}),
+    ...((run.resourceType === "project" || run.resourceType === "stack") && run.resourceId ? { stackId: inventoryId(run.environmentId, run.resourceId) } : {}),
     ...(run.resourceType === "container" && run.resourceId ? { containerId: inventoryId(run.environmentId, run.resourceId) } : {}),
     services: run.affectedServices ?? [],
     status: mapStatus(run.status),
@@ -93,12 +109,12 @@ export function mapActivityDetail(detail: Detail): CodedActionRun {
     progress: run.progress ?? 0,
     startedAt: run.startedAt,
     finishedAt: run.endedAt,
-    error: run.error ? message(run.messageCode?.startsWith("runtime.") ? run.messageCode : undefined, run.error) : undefined,
+    error: run.error ? coded(lifecycle?.code ?? (run.messageCode?.startsWith("runtime.") ? run.messageCode : undefined), run.error, "error") : undefined,
     steps: (detail.stepTrace ?? []).map((step) => ({
-      key: stepKey(step.name), label: message(step.code, step.name), state: stepState(step.status),
+      key: stepKey(step.name), label: coded(step.code, step.name), state: stepState(step.status),
       startedAt: step.startedAt, finishedAt: step.endedAt,
     })),
-    log: detail.messages?.length ? detail.messages.map((item) => message(item.code, item.message)) : run.latestMessage ? [message(run.messageCode, run.latestMessage)] : [],
+    log: detail.messages?.length ? detail.messages.map((item) => coded(item.code, item.message)) : run.latestMessage ? [coded(run.messageCode, run.latestMessage)] : [],
     output,
     outputTruncated: detail.outputTruncated,
   }, { summary: { stepsAvailable: true } });

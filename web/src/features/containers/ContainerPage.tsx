@@ -1,3 +1,4 @@
+import { useContainerCommands } from "@/shared/hooks/use-container-commands";
 import { useCapability } from "@/data/use-capability";
 import { LogDeliveryNotice, LogMessage, LogSource } from "@/features/stacks/logs/log-presentation";
 import { InventoryNotice } from "@/features/stacks/InventoryNotice";
@@ -20,7 +21,6 @@ import { SimulationBadge } from "@/shared/components/simulation-badge";
 import { ToneBadge } from "@/shared/components/tone";
 import { UpdatePanel } from "@/shared/components/updates/update-panel";
 import { HelpTarget } from "@/shared/help/help-tooltip";
-import { useContainerCommands } from "@/shared/hooks/use-container-commands";
 import { useHostScope } from "@/shared/hooks/use-host-scope";
 import { cn } from "@/shared/lib/utils";
 import { Button } from "@/shared/ui/button";
@@ -73,10 +73,10 @@ function ContainerLogs({ c }: { c: ContainerInfo }) {
 
 /** Start/stop/restart in context; edit follows the origin: stack editor, recreate dialog or locked. */
 function ContainerActions({ c, onEdit }: { c: ContainerInfo; onEdit: () => void }) {
+  const cmd = useContainerCommands();
   const t = useTranslations("containers.inspector");
   const tm = useTranslations("containers.menu");
   const to = useTranslations("containers.origin");
-  const cmd = useContainerCommands();
   const command = useCapability("runContainerCommand", { kind: "container", id: c.id });
   const edit = useCapability("recreateContainer");
   const restart = useContainerRestart();
@@ -127,9 +127,6 @@ function Body({ c, host }: { c: ContainerInfo; host: Host | undefined }) {
   const t = useTranslations("containers.page");
   const ti = useTranslations("containers.inspector");
   const ts = useTranslations("common.status");
-  const to = useTranslations("containers.origin");
-  const te = useTranslations("containers.errors");
-  const cmd = useContainerCommands();
   const [editing, setEditing] = useState(false);
   const m = useMetrics((s) => s?.containers[c.id]);
   const rt = containerRuntime(c, host);
@@ -173,11 +170,7 @@ function Body({ c, host }: { c: ContainerInfo; host: Host | undefined }) {
             <UpdatePanel
               update={c.update}
               actions={
-                c.origin === "unraid"
-                  ? { onRecheck: () => void cmd.check(c.id), blockedReason: te("managed-by-unraid") }
-                  : c.origin === "unknown"
-                    ? { onRecheck: () => void cmd.check(c.id), blockedReason: to("unknownBody") }
-                    : { onUpdate: () => void cmd.update(c.id), onRecheck: () => void cmd.check(c.id) }
+                {}
               }
             />
           </Card>

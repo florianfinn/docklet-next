@@ -12,7 +12,6 @@ import { HostChip } from "@/shared/components/host-chip";
 import { OverviewRowView, type OverviewColumn } from "@/shared/components/overview/overview-table";
 import { IconTile, ToneBadge, ToneDot } from "@/shared/components/tone";
 import { UpdateIndicator } from "@/shared/components/updates/update-indicator";
-import { useContainerCommands } from "@/shared/hooks/use-container-commands";
 import type { FitView } from "@/shared/lib/fit-view";
 import { isNestedInteractive } from "@/shared/lib/row-navigation";
 import { cn } from "@/shared/lib/utils";
@@ -42,17 +41,12 @@ export const ContainerRow = memo(function ContainerRow({ container: c, host, mod
   const t = useTranslations("containers");
   const ts = useTranslations("common.status");
   const tc = useTranslations("common.actions");
-  const cmd = useContainerCommands();
   const rt = containerRuntime(c, host);
   const compact = mode === "compact";
   const condensed = view === "condensed";
   const pad = inBlock ? (compact ? "py-2.5" : "py-1") : compact ? "py-3" : "py-1.5";
   const updateActions =
-    c.origin === "unraid"
-      ? { onRecheck: () => void cmd.check(c.id), blockedReason: t("errors.managed-by-unraid") }
-      : c.origin === "unknown"
-        ? { onRecheck: () => void cmd.check(c.id), blockedReason: t("origin.unknownBody") }
-        : { onUpdate: () => void cmd.update(c.id), onRecheck: () => void cmd.check(c.id) };
+    {};
   const status = (
     <ToneBadge tone={RUNTIME_TONE[rt]} className="min-w-24 justify-start">
       <ToneDot tone={RUNTIME_TONE[rt]} pulse={rt === "unhealthy"} className="size-1.5" />
