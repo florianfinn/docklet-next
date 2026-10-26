@@ -348,13 +348,13 @@ func (s *UpdaterService) observeImagePolicy(ctx context.Context, p *imagePolicyS
 			return nil, imageDTO.Failure("update.check-unavailable", 503)
 		}
 		version := info.LatestVersion
-		if parsed, e := semver.NewVersion(version); e == nil {
-			version = parsed.String()
-		}
 		if version == "" {
 			if tagged, ok := named.(reference.Tagged); ok {
 				version = tagged.Tag()
 			}
+		}
+		if parsed, e := semver.NewVersion(version); e == nil {
+			version = parsed.String()
 		}
 		c := dto.UpdateCandidate{Service: service, ImageRef: reference.TagNameOnly(named).String(), Version: version, Digest: candidateDigest.String(), Platform: platform.String()}
 		c, err = p.store.RecordCandidate(ctx, one, c, one.Mode == "notify")

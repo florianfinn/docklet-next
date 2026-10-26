@@ -179,6 +179,10 @@ func TestPolicyReadAndWriteFailuresAreVisible(t *testing.T) {
 				require.Equal(t, 1, f.notifications)
 				f.run(t, job, st.Run{})
 				require.Equal(t, 1, f.notifications, "an interrupted sending claim cannot resend")
+				row, err := f.s.GetImagePolicy(t.Context(), "0", "stack")
+				require.NoError(t, err)
+				require.Len(t, row.Candidates, 1)
+				require.Equal(t, "failed", row.Candidates[0].NotificationState)
 			}
 		})
 	}
@@ -285,4 +289,52 @@ func TestPolicyApplyStatusCannotOverwriteNewRevision(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, "off", row.Mode)
 	require.Nil(t, row.ApplyCheckedAt)
+}
+
+func TestPolicyCandidateRequiresPositiveComparableState(t *testing.T) {
+	for _, state := range []string{"current", "unknown", "error", "missing"} {
+		t.Run(state, func(t *testing.T) {
+			f := newPolicyFixture(t)
+			f.save(t, "stack", "apply")
+			row := f.check.ServiceUpdates["app"]
+			if state == "missing" {
+				row.UpdateInfo = nil
+			} else {
+				row.UpdateInfo.State = state
+			}
+			f.check.ServiceUpdates["app"] = row
+			out := f.run(t, "auto-update", st.Run{})
+			require.Equal(t, st.Succeeded, out.Targets[0].Status)
+			require.Zero(t, f.admissions)
+		})
+	}
+}
+
+func TestPolicyCandidateVersionNormalizationDeduplicates(t *testing.T) {
+	for _, source := range []string{"explicit", "tag-fallback"} {
+		t.Run(source, func(t *testing.T) {
+			f := newPolicyFixture(t)
+			f.save(t, "stack", "notify")
+			row := f.check.ServiceUpdates["app"]
+			row.ImageRef = "registry.example.com/app:v1.0.0"
+			row.UpdateInfo.State = "rebuild"
+			row.UpdateInfo.LatestVersion = "v1.0.0"
+			if source == "tag-fallback" {
+				row.UpdateInfo.LatestVersion = ""
+			}
+			f.check.ServiceUpdates["app"] = row
+			f.run(t, "image-polling", st.Run{})
+			require.Equal(t, 1, f.notifications)
+			first, err := f.s.GetImagePolicy(t.Context(), "0", "stack")
+			require.NoError(t, err)
+			require.Len(t, first.Candidates, 1)
+			require.Equal(t, "1.0.0", first.Candidates[0].Version)
+			row.UpdateInfo.LatestVersion = "1.0.0"
+			f.run(t, "image-polling", st.Run{})
+			require.Equal(t, 1, f.notifications)
+			second, err := f.s.GetImagePolicy(t.Context(), "0", "stack")
+			require.NoError(t, err)
+			require.Equal(t, first.Candidates[0].EntryID, second.Candidates[0].EntryID)
+		})
+	}
 }

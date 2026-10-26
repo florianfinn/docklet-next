@@ -82,7 +82,7 @@ export function agentFixture(spec, fixture) {
         routes: Object.entries(document.paths).flatMap(([path, item]) => Object.entries(item)
           .filter(([, op]) => ["get-auto-update-policy", "set-auto-update-policy", "get-update-schedules", "set-update-schedules", "get-system-image-hints"].includes(op?.operationId))
           .map(([method, op]) => ({ method: method.toUpperCase(), path, operationId: op.operationId, sha256: createHash("sha256").update(JSON.stringify(op)).digest("hex") }))),
-        schemas: Object.fromEntries(["AutoUpdatePolicy", "UpdatePolicyInput", "UpdateCandidate", "UpdateScheduleConfig", "UpdateScheduleInput", "JobscheduleConfig", "JobscheduleUpdate", "JobStatus", "Outcome", "TargetOutcome", "SystemImageHint", "SystemImageHints", "VersionInfo"].map((name) => {
+        schemas: Object.fromEntries(["ProjectUpdateInfo", "AutoUpdatePolicy", "UpdatePolicyInput", "UpdateCandidate", "UpdateScheduleConfig", "UpdateScheduleInput", "JobscheduleConfig", "JobscheduleUpdate", "JobStatus", "Outcome", "TargetOutcome", "SystemImageHint", "SystemImageHints", "VersionInfo"].map((name) => {
           const [key, value] = schema(name);
           return [key, { sha256: createHash("sha256").update(JSON.stringify(value)).digest("hex") }];
         })),

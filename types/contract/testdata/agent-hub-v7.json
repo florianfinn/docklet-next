@@ -740,6 +740,9 @@
       }
     ],
     "schemas": {
+      "ProjectUpdateInfo": {
+        "sha256": "b8753729f26e471096d2490d3ab99b9f60644045b36d8a408796ed3004c47318"
+      },
       "UpdaterAutoUpdatePolicy": {
         "sha256": "3a048abedd3c9d6ae7401df929719d84464f24ebe5fe051e40386a2c829fe057"
       },

@@ -156,3 +156,15 @@ func TestChildCheckpointIsIdempotentAndPolicyRevisionIsAdmissionBound(t *testing
 	require.Error(t, AdmitChild(f.db.DB, &binding, first.ID), "the prepared checkpoint is consumed exactly once")
 	require.Error(t, ValidateAdmission(f.db.DB, &binding, p.EnvironmentID, p.RegistrationID, p.TargetID, p.TargetIdentity, p.ActorID))
 }
+
+func TestCandidateIdentityUsesRepositoryWithoutSourceTag(t *testing.T) {
+	f := newStoreFixture(t)
+	p := f.policy(t, "notify")
+	candidate := dto.UpdateCandidate{ImageRef: "registry.example.com/app:1.0.0", Version: "1.1.0", Digest: "sha256:" + strings.Repeat("a", 64), Platform: "linux/amd64"}
+	first, err := f.RecordCandidate(t.Context(), p, candidate, true)
+	require.NoError(t, err)
+	candidate.ImageRef = "registry.example.com/app:1.1.0"
+	second, err := f.RecordCandidate(t.Context(), p, candidate, true)
+	require.NoError(t, err)
+	require.Equal(t, first.EntryID, second.EntryID)
+}

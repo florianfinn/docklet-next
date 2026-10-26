@@ -81,9 +81,10 @@ test("every lifecycle and policy producer reason is declared and translated", ()
     for (const code of declared) assert.ok(catalogue.includes(`"${code.replaceAll(".", "_")}"`), `${locale}: missing reason ${code}`);
   }
   const directories = ["../backend/internal/project/", "../backend/internal/project/children/lifecycle/",
-    "../backend/internal/updater/", "../backend/internal/updater/children/policies/", "../backend/internal/job/"];
+    "../backend/internal/updater/", "../backend/internal/job/"];
   for (const directory of directories) {
-    for (const name of readdirSync(new URL(directory, import.meta.url))) {
+    const recursive = directory.endsWith("updater/") || directory.endsWith("job/");
+    for (const name of readdirSync(new URL(directory, import.meta.url), { recursive })) {
       if (!name.endsWith(".go") || name.endsWith("_test.go") ||
           (directory.endsWith("project/") && !name.startsWith("lifecycle_"))) continue;
       const source = readFileSync(new URL(directory + name, import.meta.url), "utf8");
@@ -109,7 +110,7 @@ test("v7 policy manifest binds hub schedules, frozen revisions and notification 
     assert.equal(document.components.schemas[schema].properties.pollingInterval, undefined);
     assert.equal(document.components.schemas[schema].properties.autoUpdateInterval, undefined);
   }
-  for (const suffix of ["AutoUpdatePolicy", "UpdateScheduleConfig", "UpdateCandidate", "SystemImageHints"]) {
+  for (const suffix of ["AutoUpdatePolicy", "UpdateScheduleConfig", "UpdateCandidate", "SystemImageHints", "ProjectUpdateInfo"]) {
     const changed = JSON.parse(spec);
     const name = Object.keys(manifest.imagePolicies.schemas).find((key) => key.endsWith(suffix));
     delete changed.components.schemas[name].properties[Object.keys(changed.components.schemas[name].properties)[0]];

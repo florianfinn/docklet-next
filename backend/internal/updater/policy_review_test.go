@@ -8,8 +8,10 @@ package updater
 
 import (
 	"context"
+	"crypto/sha512"
+	"encoding/hex"
 	"errors"
-	"strings"
+	digest "github.com/opencontainers/go-digest"
 	"testing"
 
 	"github.com/florianfinn/docklet-next/backend/internal/activity"
@@ -248,7 +250,7 @@ func TestPolicyEmptyScheduleOwnerHasDedicatedReason(t *testing.T) {
 }
 
 func TestPolicyRejectsUncomparableObservationParts(t *testing.T) {
-	for _, part := range []string{"reference", "platform", "digest"} {
+	for _, part := range []string{"reference", "platform", "platform-os", "platform-arch", "digest"} {
 		t.Run(part, func(t *testing.T) {
 			f := newPolicyFixture(t)
 			f.save(t, "stack", "apply")
@@ -258,8 +260,15 @@ func TestPolicyRejectsUncomparableObservationParts(t *testing.T) {
 				one.ImageRef = "invalid ref"
 			case "platform":
 				one.UpdateInfo.Platform = ""
+			case "platform-os":
+				one.UpdateInfo.Platform = "/amd64"
+			case "platform-arch":
+				one.UpdateInfo.Platform = "linux"
 			case "digest":
-				one.UpdateInfo.LatestDigest = "sha512:" + strings.Repeat("a", 128)
+				hash := sha512.Sum512([]byte("synthetic alternate digest"))
+				one.UpdateInfo.LatestDigest = "sha512:" + hex.EncodeToString(hash[:])
+				_, err := digest.Parse(one.UpdateInfo.LatestDigest)
+				require.NoError(t, err)
 			}
 			f.check.ServiceUpdates["app"] = one
 			out := f.run(t, "auto-update", st.Run{})
