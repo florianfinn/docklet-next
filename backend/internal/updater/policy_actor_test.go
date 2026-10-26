@@ -14,6 +14,7 @@ import (
 	userdomain "github.com/florianfinn/docklet-next/backend/internal/user"
 	"github.com/florianfinn/docklet-next/backend/pkg/authz"
 	"github.com/florianfinn/docklet-next/backend/pkg/utils/userctx"
+	dto "github.com/florianfinn/docklet-next/types/updater"
 	"github.com/florianfinn/docklet-next/types/user"
 	"github.com/stretchr/testify/require"
 	"testing"
@@ -48,4 +49,30 @@ func TestPolicyActorResolvesCurrentKeyAndCompleteGrants(t *testing.T) {
 	_, err = f.s.imagePolicyActor(t.Context(), "0", owner, key.ID, true)
 	require.Error(t, err)
 	require.Zero(t, f.admissions)
+}
+
+func TestPolicySaveRightsMatchMode(t *testing.T) {
+	for _, mode := range []string{"off", "notify", "apply"} {
+		for _, full := range []bool{false, true} {
+			t.Run(mode+map[bool]string{false: "/read-check", true: "/apply-grants"}[full], func(t *testing.T) {
+				f := newPolicyFixture(t)
+				f.s.roles = role.NewRoleService(f.db)
+				require.NoError(t, f.db.Create(&userdomain.User{BaseModel: database.BaseModel{ID: "example-actor"}, Username: "operator"}).Error)
+				grants := database.StringSlice{authz.PermProjectsRead, authz.PermImageUpdatesCheck, authz.PermImageUpdatesRead}
+				if full {
+					grants = append(grants, authz.PermJobsManage, authz.PermProjectsDeploy, authz.PermProjectsUpdate, authz.PermImagesPull, authz.PermActivitiesRead)
+				}
+				require.NoError(t, f.db.Create(&role.Role{ID: "example-role", Name: "Policy reader", Permissions: grants}).Error)
+				require.NoError(t, f.db.Create(&role.UserRoleAssignment{UserID: "example-actor", RoleID: "example-role"}).Error)
+				f.p.ports.actor = f.s.imagePolicyActor
+				result, err := f.s.SaveImagePolicy(t.Context(), "0", "stack", dto.UpdatePolicyInput{Mode: mode}, "example-actor", "")
+				if mode == "apply" && !full {
+					require.Error(t, err)
+				} else {
+					require.NoError(t, err)
+					require.Equal(t, mode, result.Mode)
+				}
+			})
+		}
+	}
 }

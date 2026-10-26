@@ -130,10 +130,7 @@ func (s *UpdaterService) imagePolicyActor(ctx context.Context, env, actor, key s
 	if err != nil {
 		return ctx, huma.Error403Forbidden("Policy actor unavailable")
 	}
-	required := []string{authz.PermJobsManage, authz.PermProjectsRead, authz.PermImageUpdatesCheck, authz.PermImageUpdatesRead}
-	if apply {
-		required = append(required, authz.PermProjectsDeploy, authz.PermProjectsUpdate, authz.PermImagesPull, authz.PermActivitiesRead)
-	}
+	required := imagePolicyGrants(apply)
 	for _, right := range required {
 		if !ps.Allows(right, env) {
 			return ctx, huma.Error403Forbidden("Policy actor grants required")
@@ -166,7 +163,7 @@ func (s *UpdaterService) GetImagePolicy(ctx context.Context, env, target string)
 	if err != nil {
 		return dto.AutoUpdatePolicy{}, err
 	}
-	out := dto.AutoUpdatePolicy{Mode: row.Mode, Revision: row.Revision, EnvironmentID: env, RegistrationID: reg, TargetKind: "project", TargetID: target, TargetIdentity: row.TargetIdentity, JobID: "auto-update", CheckedAt: row.CheckedAt, Code: row.Code, Candidates: []dto.UpdateCandidate{}}
+	out := dto.AutoUpdatePolicy{Mode: row.Mode, Revision: row.Revision, EnvironmentID: env, RegistrationID: reg, TargetKind: "project", TargetID: target, TargetIdentity: row.TargetIdentity, JobID: "auto-update", CheckedAt: row.CheckedAt, Code: row.Code, ApplyCheckedAt: row.ApplyCheckedAt, ApplyCode: row.ApplyCode, BookkeepingAt: row.BookkeepingAt, BookkeepingCode: row.BookkeepingCode, Candidates: []dto.UpdateCandidate{}}
 	if row.Mode == "notify" {
 		out.JobID = "image-polling"
 	}
@@ -193,7 +190,7 @@ func (s *UpdaterService) SaveImagePolicy(ctx context.Context, env, target string
 	if in.Mode != "off" && in.Mode != "notify" && in.Mode != "apply" {
 		return dto.AutoUpdatePolicy{}, imageDTO.Failure("update.invalid-policy", 400)
 	}
-	if _, err = p.ports.actor(ctx, env, actor, key, true); err != nil {
+	if _, err = p.ports.actor(ctx, env, actor, key, in.Mode == "apply"); err != nil {
 		return dto.AutoUpdatePolicy{}, err
 	}
 	reg, err := p.ports.host(ctx, env)
@@ -221,6 +218,10 @@ func (s *UpdaterService) SaveImagePolicy(ctx context.Context, env, target string
 	row.ActorKeyID = key
 	row.CheckedAt = nil
 	row.Code = ""
+	row.ApplyCheckedAt = nil
+	row.ApplyCode = ""
+	row.BookkeepingAt = nil
+	row.BookkeepingCode = ""
 	if err = p.store.SavePolicy(ctx, row, in.ExpectedRevision); err != nil {
 		return dto.AutoUpdatePolicy{}, err
 	}
@@ -305,15 +306,21 @@ func (s *UpdaterService) RefreshImagePolicySchedules(ctx context.Context) error 
 func policyCode(err error, fallback string) string {
 	var problem *imageDTO.OperationError
 	if errors.As(err, &problem) {
-		return problem.Problem.Code
+		if imageDTO.ValidReason(problem.Problem.Code) {
+			return problem.Problem.Code
+		}
+		return fallback
 	}
 	var gate *activity.GateConflict
 	if errors.As(err, &gate) {
-		return string(gate.Code)
+		if imageDTO.ValidReason(gate.Code) {
+			return gate.Code
+		}
+		return fallback
 	}
 	var status huma.StatusError
 	if errors.As(err, &status) && (status.GetStatus() == 403 || status.GetStatus() == 401) {
-		return "FORBIDDEN"
+		return "update.permission-denied"
 	}
 	return fallback
 }
@@ -337,4 +344,12 @@ func (s *UpdaterService) ImagePolicyHosts(ctx context.Context) ([]string, error)
 		}
 	}
 	return out, nil
+}
+
+func imagePolicyGrants(apply bool) []string {
+	required := []string{authz.PermProjectsRead, authz.PermImageUpdatesCheck, authz.PermImageUpdatesRead}
+	if apply {
+		required = append(required, authz.PermJobsManage, authz.PermProjectsDeploy, authz.PermProjectsUpdate, authz.PermImagesPull, authz.PermActivitiesRead)
+	}
+	return required
 }

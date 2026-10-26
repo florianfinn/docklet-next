@@ -7,6 +7,17 @@
 import { enBackend } from "@/data/messages/en";
 
 export const enImageErrors = {
+  "update_permission-denied": enBackend.errors.update["permission-denied"],
+  "update_schedule-owner-unset": enBackend.errors.update["schedule-owner-unset"],
+  "job_skipped": enBackend.errors.job["skipped"],
+  "run_busy": enBackend.errors.run["busy"],
+  "run_cancelling": enBackend.errors.run["cancelling"],
+  "runtime_target-changed": enBackend.errors.runtime["target-changed"],
+  "runtime_target-unavailable": enBackend.errors.runtime["target-unavailable"],
+  "runtime_parent-unresolved": enBackend.errors.runtime["parent-unresolved"],
+  "runtime_outcome-unknown": enBackend.errors.runtime["outcome-unknown"],
+  "runtime_interrupted": enBackend.errors.runtime["interrupted"],
+
   "update_agent-local-job-disabled": enBackend.errors.update["agent-local-job-disabled"],
   "update_auto-excluded": enBackend.errors.update["auto-excluded"],
   "update_invalid-policy": enBackend.errors.update["invalid-policy"],

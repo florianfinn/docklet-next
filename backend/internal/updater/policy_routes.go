@@ -24,17 +24,18 @@ type policyWriteInput struct {
 }
 
 func registerImagePolicyRoutes(api huma.API, s *UpdaterService) {
-	access := func(ctx context.Context, in PointInput, write bool) error {
+	access := func(ctx context.Context, in PointInput, write bool, mode string) error {
 		if in.Kind != "project" {
 			return imageDTO.Failure("update.invalid-target", 400)
 		}
-		if _, err := pointAccess(ctx, in.EnvironmentID, write, false); err != nil {
-			return err
-		}
+		ps, _ := middleware.PermissionsFromContext(ctx)
+		required := []string{authz.PermProjectsRead, authz.PermImageUpdatesRead}
 		if write {
-			ps, _ := middleware.PermissionsFromContext(ctx)
-			if !ps.Allows(authz.PermJobsManage, in.EnvironmentID) {
-				return huma.Error403Forbidden("Policy job grants required")
+			required = imagePolicyGrants(mode == "apply")
+		}
+		for _, right := range required {
+			if ps == nil || !ps.Allows(right, in.EnvironmentID) {
+				return huma.Error403Forbidden("Policy grants required")
 			}
 		}
 		_, err := s.hubPolicies()
@@ -42,14 +43,14 @@ func registerImagePolicyRoutes(api huma.API, s *UpdaterService) {
 	}
 	path := "/environments/{id}/updater/policies/{kind}/{targetId}"
 	middleware.RegisterWithPermission(api, huma.Operation{OperationID: "get-auto-update-policy", Method: http.MethodGet, Path: path, Tags: []string{"Updater"}, Summary: "Read hub-owned stack update policy and candidate status"}, authz.PermProjectsRead, func(ctx context.Context, in *PointInput) (*handlerutil.Out[dto.AutoUpdatePolicy], error) {
-		if err := access(ctx, *in, false); err != nil {
+		if err := access(ctx, *in, false, ""); err != nil {
 			return nil, err
 		}
 		result, err := s.GetImagePolicy(ctx, in.EnvironmentID, in.TargetID)
 		return &handlerutil.Out[dto.AutoUpdatePolicy]{Body: base.ApiResponse[dto.AutoUpdatePolicy]{Success: err == nil, Data: result}}, err
 	})
-	middleware.RegisterWithPermission(api, huma.Operation{OperationID: "set-auto-update-policy", Method: http.MethodPut, Path: path, Tags: []string{"Updater"}, Summary: "Set a registration-bound stack policy with expected revision"}, authz.PermJobsManage, func(ctx context.Context, in *policyWriteInput) (*handlerutil.Out[dto.AutoUpdatePolicy], error) {
-		if err := access(ctx, in.PointInput, true); err != nil {
+	middleware.RegisterWithPermission(api, huma.Operation{OperationID: "set-auto-update-policy", Method: http.MethodPut, Path: path, Tags: []string{"Updater"}, Summary: "Set a registration-bound stack policy with expected revision"}, authz.PermImageUpdatesCheck, func(ctx context.Context, in *policyWriteInput) (*handlerutil.Out[dto.AutoUpdatePolicy], error) {
+		if err := access(ctx, in.PointInput, true, in.Body.Mode); err != nil {
 			return nil, err
 		}
 		actor, _ := middleware.GetUserIDFromContext(ctx)

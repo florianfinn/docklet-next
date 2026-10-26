@@ -46,4 +46,7 @@
 ["constraint","image_policy_children","CHECK (revision > 0)"],
 ["constraint","image_policy_children","CHECK (status IN ('prepared','admitted','refused','settled'))"],
 ["constraint","image_update_notifications","CHECK (status IN ('pending','sending','sent','unconfigured','failed'))"],
-["constraint","image_update_notifications","CHECK (delivered >= 0)"]]
+["constraint","image_update_notifications","CHECK (delivered >= 0)"],
+["notnull","stack_update_policies","apply_code"],
+["notnull","stack_update_policies","bookkeeping_code"]
+]

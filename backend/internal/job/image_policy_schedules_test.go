@@ -74,6 +74,9 @@ func TestImagePolicyOfflineSchedulesUseHubZoneAndControls(t *testing.T) {
 	require.Equal(t, "Europe/Berlin", before.TimeZone)
 	require.Len(t, before.Jobs, 2)
 	require.False(t, before.Jobs[0].Enabled)
+	for _, job := range before.Jobs {
+		require.Equal(t, "update.schedule-owner-unset", job.Code)
+	}
 	require.Nil(t, before.Jobs[0].NextRun)
 	input := dto.UpdateScheduleInput{PollingInterval: "0  30  2 * * *", AutoUpdateInterval: "0 0 0 * * *", PollingEnabled: true, AutoUpdateEnabled: true}
 	require.NoError(t, owner.SaveImagePolicySchedule(t.Context(), "example-offline", input, "example-actor", ""))

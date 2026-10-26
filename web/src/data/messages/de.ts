@@ -2,6 +2,20 @@ import type { enBackend } from "./en";
 
 export const deBackend: typeof enBackend = {
   errors: {
+    "runtime": {
+      "target-changed": "Die Zielidentität hat sich geändert. Aktualisiere die Ansicht vor einem neuen Versuch.",
+      "target-unavailable": "Das Ziel ist nicht verfügbar. Prüfe die Verbindung zum Host.",
+      "parent-unresolved": "Kläre den vorherigen Vorgang, bevor du einen weiteren startest.",
+      "outcome-unknown": "Der Vorgang läuft möglicherweise noch. Prüfe seinen Ausführungsnachweis vor einem neuen Versuch.",
+      "interrupted": "Dieser unterbrochene Job wurde abgeglichen, ohne seine Änderungen erneut auszuführen.",
+    },
+    "run": {
+      "busy": "Ein anderer Lauf belegt dieses Ziel. Prüfe seinen Status, bevor du es erneut versuchst.",
+      "cancelling": "Der vorherige Lauf wird noch abgebrochen.",
+    },
+    "job": {
+      "skipped": "Dieser Job ist deaktiviert oder gilt nicht für diese Richtlinie.",
+    },
     "image": {
       "active-update-protected": "Ein aktiver oder ungeklärter Lauf schützt dieses Image.",
       "busy": "Ein anderer Image-Vorgang läuft. Bitte erneut versuchen.",
@@ -43,6 +57,9 @@ export const deBackend: typeof enBackend = {
       "deploy-failed": "Die Bereitstellung zur Wiederherstellung ist fehlgeschlagen. Das Teilergebnis vor einem weiteren Wiederherstellungsversuch prüfen."
     },
     "update": {
+      "permission-denied": "Die gespeicherte Identität hat nicht mehr die erforderlichen Berechtigungen.",
+      "schedule-owner-unset": "Speichere den Host-Zeitplan mit einer berechtigten Identität, bevor du die Jobs aktivierst.",
+
       "agent-local-job-disabled": "Update-Jobs werden vom Hub verwaltet und können auf einem Agent nicht eigenständig laufen.",
       "auto-excluded": "Dieser Stack enthält einen Dienst, der von automatischen Updates ausgeschlossen ist.",
       "invalid-policy": "Eine gültige Stack-Richtlinie oder einen Update-Zeitplan mit sechs Feldern wählen.",

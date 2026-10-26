@@ -1,5 +1,19 @@
 export const enBackend = {
   errors: {
+    "runtime": {
+      "target-changed": "The target identity changed. Refresh before trying again.",
+      "target-unavailable": "The target is unavailable. Check the host connection.",
+      "parent-unresolved": "Resolve the previous operation before starting another one.",
+      "outcome-unknown": "The operation may still be running. Inspect its receipt before retrying.",
+      "interrupted": "This interrupted job was reconciled without replaying its effects.",
+    },
+    "run": {
+      "busy": "Another run holds this target. Inspect its status before trying again.",
+      "cancelling": "The previous run is still being cancelled.",
+    },
+    "job": {
+      "skipped": "This job is disabled or does not apply to this policy.",
+    },
     "image": {
       "active-update-protected": "An active or unresolved run retains this image.",
       "busy": "Another image operation is running. Try again.",
@@ -41,6 +55,9 @@ export const enBackend = {
       "deploy-failed": "The restore deployment failed. Inspect its partial result before another recovery attempt."
     },
     "update": {
+      "permission-denied": "The recorded actor no longer has the required permissions.",
+      "schedule-owner-unset": "Save the host schedule with an authorised owner before enabling its jobs.",
+
       "agent-local-job-disabled": "Update jobs are owned by the hub and cannot run independently on an agent.",
       "auto-excluded": "This stack contains a service excluded from automatic updates.",
       "invalid-policy": "Choose a valid stack policy or six-field update schedule.",

@@ -9,18 +9,22 @@ package policies
 import "time"
 
 type Policy struct {
-	ID             string `gorm:"primaryKey;not null"`
-	EnvironmentID  string `gorm:"not null;index"`
-	RegistrationID string `gorm:"not null"`
-	TargetID       string `gorm:"not null"`
-	TargetIdentity string `gorm:"not null"`
-	Mode           string `gorm:"not null;check:chk_stack_policy_mode,mode IN ('off','notify','apply')"`
-	Revision       uint64 `gorm:"not null;check:revision > 0"`
-	ActorID        string `gorm:"not null"`
-	ActorKeyID     string `gorm:"not null"`
-	CheckedAt      *time.Time
-	Code           string `gorm:"not null"`
-	Candidates     string `gorm:"not null"`
+	ID              string `gorm:"primaryKey;not null"`
+	EnvironmentID   string `gorm:"not null;index"`
+	RegistrationID  string `gorm:"not null"`
+	TargetID        string `gorm:"not null"`
+	TargetIdentity  string `gorm:"not null"`
+	Mode            string `gorm:"not null;check:chk_stack_policy_mode,mode IN ('off','notify','apply')"`
+	Revision        uint64 `gorm:"not null;check:revision > 0"`
+	ActorID         string `gorm:"not null"`
+	ActorKeyID      string `gorm:"not null"`
+	CheckedAt       *time.Time
+	Code            string `gorm:"not null"`
+	ApplyCheckedAt  *time.Time
+	ApplyCode       string `gorm:"not null"`
+	BookkeepingAt   *time.Time
+	BookkeepingCode string `gorm:"not null"`
+	Candidates      string `gorm:"not null"`
 }
 
 func (Policy) TableName() string { return "stack_update_policies" }

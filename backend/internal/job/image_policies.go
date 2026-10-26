@@ -226,7 +226,7 @@ func (s *JobService) ImagePolicySchedules(ctx context.Context, env string) (dto.
 		if !enabled {
 			status.Code = "job.skipped"
 			if row.ActorID == "" {
-				status.Code = "FORBIDDEN"
+				status.Code = "update.schedule-owner-unset"
 			}
 		}
 		out.Jobs = append(out.Jobs, status)

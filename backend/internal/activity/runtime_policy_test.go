@@ -151,3 +151,28 @@ func TestRuntimePolicyAdmissionRevisionAndAtomicChild(t *testing.T) {
 		})
 	}
 }
+
+func TestRuntimePolicyAdmissionChecksIdentityRegistrationActorAndApplyRevision(t *testing.T) {
+	for _, field := range []string{"target_identity", "registration_id", "actor_id", "revision"} {
+		t.Run(field, func(t *testing.T) {
+			f := b1Fixture(t)
+			c, p := policyCommand(t, f)
+			var value any = "replacement"
+			if field == "revision" {
+				value = uint64(2)
+			}
+			f.resolver.resolve = func(_ context.Context, target RuntimeTarget) (RuntimeResolvedTarget, error) {
+				require.NoError(t, f.store.svc.db.Model(&policy.Policy{}).Where("id = ?", p.ID).Update(field, value).Error)
+				return RuntimeResolvedTarget{Target: target}, nil
+			}
+			admitted, err := f.service.Admit(t.Context(), c)
+			require.Equal(t, "update.policy-changed", imageDTO.Neutral(err, "unexpected", 500).Problem.Code)
+			b1Zero(t, admitted)
+			var count int64
+			require.NoError(t, f.store.svc.db.Model(&RuntimeReceipt{}).Where("run_id = ?", c.ProposedRunID).Count(&count).Error)
+			require.Zero(t, count)
+			require.NoError(t, f.store.svc.db.Model(&Activity{}).Where("id = ?", c.ProposedRunID).Count(&count).Error)
+			require.Zero(t, count)
+		})
+	}
+}

@@ -153,5 +153,6 @@ func TestChildCheckpointIsIdempotentAndPolicyRevisionIsAdmissionBound(t *testing
 	stale.Revision++
 	require.Equal(t, "update.policy-changed", imageDTO.Neutral(ValidateAdmission(f.db.DB, &stale, p.EnvironmentID, p.RegistrationID, p.TargetID, p.TargetIdentity, p.ActorID), "unexpected", 500).Problem.Code)
 	require.NoError(t, AdmitChild(f.db.DB, &binding, first.ID))
+	require.Error(t, AdmitChild(f.db.DB, &binding, first.ID), "the prepared checkpoint is consumed exactly once")
 	require.Error(t, ValidateAdmission(f.db.DB, &binding, p.EnvironmentID, p.RegistrationID, p.TargetID, p.TargetIdentity, p.ActorID))
 }

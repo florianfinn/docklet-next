@@ -28,6 +28,9 @@ func policyTarget(id string, status st.RunStatus, code string) st.TargetOutcome 
 	return st.TargetOutcome{ID: id, ResourceType: "project", Status: status, Code: code, Message: code}
 }
 func policyResult(outcome st.Outcome) st.Outcome {
+	if outcome.Status == st.Failed {
+		return outcome
+	}
 	for _, target := range outcome.Targets {
 		if target.Status == st.Failed {
 			outcome.Status = st.Partial
@@ -58,7 +61,11 @@ func (s *UpdaterService) RunImagePolicyHost(ctx context.Context, env, job string
 		return st.Outcome{Status: st.Failed, Code: policyCode(err, "runtime.target-unavailable")}, nil
 	}
 	if !s.ImagePolicyEnabled(ctx, row, job) {
-		return st.Outcome{Status: st.Skipped, Code: "job.skipped"}, nil
+		code := "job.skipped"
+		if row.ActorID == "" {
+			code = "update.schedule-owner-unset"
+		}
+		return st.Outcome{Status: st.Skipped, Code: code}, nil
 	}
 	if job == "auto-update" {
 		blocked, err := s.imagePolicyHostHold(ctx, p, env, row.RegistrationID)
@@ -76,7 +83,7 @@ func (s *UpdaterService) RunImagePolicyHost(ctx context.Context, env, job string
 		actor, key = previous.RequestedBy, previous.RequestedWithKey
 	}
 	if p.ports.scheduleActor == nil || p.ports.scheduleActor(ctx, env, actor, key) != nil {
-		return st.Outcome{Status: st.Failed, Code: "FORBIDDEN"}, nil
+		return st.Outcome{Status: st.Failed, Code: "update.permission-denied"}, nil
 	}
 	var policies []policy.Policy
 	if err = p.store.DB.WithContext(ctx).Where("environment_id = ? AND registration_id = ?", env, row.RegistrationID).Order("target_id").Find(&policies).Error; err != nil {
@@ -88,7 +95,7 @@ func (s *UpdaterService) RunImagePolicyHost(ctx context.Context, env, job string
 			return policyResult(out), ctx.Err()
 		}
 		if p.ports.scheduleActor(ctx, env, actor, key) != nil {
-			out.Targets = append(out.Targets, policyTarget(one.TargetID, st.Failed, "FORBIDDEN"))
+			out.Targets = append(out.Targets, policyTarget(one.TargetID, st.Failed, "update.permission-denied"))
 			continue
 		}
 		target, uncertain := s.runImagePolicyTarget(ctx, p, one, previous.ID, job)
@@ -105,18 +112,34 @@ func (s *UpdaterService) RunImagePolicyHost(ctx context.Context, env, job string
 	return policyResult(out), nil
 }
 func (s *UpdaterService) runImagePolicyTarget(ctx context.Context, p *imagePolicyService, one policy.Policy, jobRun, job string) (st.TargetOutcome, bool) {
-	skip := func(code string) (st.TargetOutcome, bool) {
-		if err := p.store.DB.WithContext(ctx).Model(&policy.Policy{}).Where("id = ? AND revision = ?", one.ID, one.Revision).Update("code", code).Error; err != nil {
-			return policyTarget(one.TargetID, st.Failed, "update.persistence-failed"), false
-		}
-		return policyTarget(one.TargetID, st.Skipped, code), false
+	target, uncertain := s.executeImagePolicyTarget(ctx, p, one, jobRun, job)
+	if target.Code == "update.permission-denied" {
+		target.Status = st.Failed
 	}
+	if one.Mode == "off" || job == "auto-update" && one.Mode != "apply" {
+		return target, uncertain
+	}
+	changes := map[string]any{"code": target.Code}
+	if job == "auto-update" {
+		changes = map[string]any{"apply_code": target.Code, "apply_checked_at": policyNow()}
+	} else if target.Status == st.Succeeded {
+		changes["checked_at"] = policyNow()
+	}
+	if err := p.store.DB.WithContext(ctx).Model(&policy.Policy{}).Where("id = ? AND revision = ?", one.ID, one.Revision).Updates(changes).Error; err != nil {
+		target.Status = st.Failed
+		target.Code = "update.persistence-failed"
+		target.Message = target.Code
+	}
+	return target, uncertain
+}
+func (s *UpdaterService) executeImagePolicyTarget(ctx context.Context, p *imagePolicyService, one policy.Policy, jobRun, job string) (st.TargetOutcome, bool) {
+	skip := func(code string) (st.TargetOutcome, bool) { return policyTarget(one.TargetID, st.Skipped, code), false }
 	if one.Mode == "off" || job == "auto-update" && one.Mode != "apply" {
 		return skip("job.skipped")
 	}
 	actorCtx, err := p.ports.actor(ctx, one.EnvironmentID, one.ActorID, one.ActorKeyID, job == "auto-update")
 	if err != nil {
-		return policyTarget(one.TargetID, st.Failed, "FORBIDDEN"), false
+		return policyTarget(one.TargetID, st.Failed, "update.permission-denied"), false
 	}
 	reg, err := p.ports.host(actorCtx, one.EnvironmentID)
 	if err != nil || reg != one.RegistrationID {
@@ -150,7 +173,7 @@ func (s *UpdaterService) runImagePolicyTarget(ctx context.Context, p *imagePolic
 	// admissions must use the policy actor's current rights after that wait.
 	actorCtx, err = p.ports.actor(ctx, one.EnvironmentID, one.ActorID, one.ActorKeyID, job == "auto-update")
 	if err != nil {
-		return skip("FORBIDDEN")
+		return skip("update.permission-denied")
 	}
 	candidates, err := s.observeImagePolicy(actorCtx, p, one, check)
 	if err != nil {
@@ -162,7 +185,7 @@ func (s *UpdaterService) runImagePolicyTarget(ctx context.Context, p *imagePolic
 	// Revalidate before this child, independently of the earlier bounded check.
 	actorCtx, err = p.ports.actor(ctx, one.EnvironmentID, one.ActorID, one.ActorKeyID, true)
 	if err != nil {
-		return policyTarget(one.TargetID, st.Failed, "FORBIDDEN"), false
+		return policyTarget(one.TargetID, st.Failed, "update.permission-denied"), false
 	}
 	child, fresh, err := p.store.PrepareChild(actorCtx, one, jobRun)
 	if err != nil {
@@ -350,8 +373,14 @@ func (s *UpdaterService) observeImagePolicy(ctx context.Context, p *imagePolicyS
 	if err != nil {
 		return nil, err
 	}
-	changed := p.store.DB.WithContext(ctx).Model(&policy.Policy{}).Where("id = ? AND revision = ?", one.ID, one.Revision).Updates(map[string]any{"checked_at": policyNow(), "candidates": string(payload), "code": ""})
-	return candidates, changed.Error
+	changed := p.store.DB.WithContext(ctx).Model(&policy.Policy{}).Where("id = ? AND revision = ?", one.ID, one.Revision).Updates(map[string]any{"candidates": string(payload)})
+	if changed.Error != nil {
+		return nil, changed.Error
+	}
+	if changed.RowsAffected != 1 {
+		return nil, imageDTO.Failure("update.policy-changed", 409)
+	}
+	return candidates, nil
 }
 func (s *UpdaterService) deliverImagePolicyEntry(ctx context.Context, p *imagePolicyService, c dto.UpdateCandidate) (dto.UpdateCandidate, error) {
 	var notice policy.Notice
@@ -413,25 +442,48 @@ func (s *UpdaterService) CheckPolicyProject(ctx context.Context, env, target str
 	if check == nil || check.Status == "unknown" || check.Status == "error" || check.Status == "not_pulled" {
 		return check, imageDTO.Failure("update.check-unavailable", 503)
 	}
+	result := *check
+	result.PolicyCode = ""
+	if err := s.bookkeepManualPolicyCheck(ctx, p, env, target, check); err != nil {
+		result.PolicyCode = policyCode(err, "update.persistence-failed")
+	}
+	return &result, nil
+}
+
+func (s *UpdaterService) bookkeepManualPolicyCheck(ctx context.Context, p *imagePolicyService, env, target string, check *projectDTO.UpdateInfo) (err error) {
 	reg, err := p.ports.host(ctx, env)
 	if err != nil {
-		return nil, err
+		return err
 	}
 	one, err := p.store.Policy(ctx, env, reg, target)
 	if err != nil {
-		return nil, err
+		return err
 	}
 	if one.Mode == "off" {
-		return check, nil
+		return nil
 	}
+	defer func() {
+		code := ""
+		if err != nil {
+			code = policyCode(err, "update.persistence-failed")
+		}
+		// The observation succeeded independently of optional candidate bookkeeping.
+		changed := p.store.DB.WithContext(ctx).Model(&policy.Policy{}).Where("id = ? AND revision = ?", one.ID, one.Revision).Updates(map[string]any{"checked_at": policyNow(), "code": "", "bookkeeping_code": code, "bookkeeping_at": policyNow()})
+		if changed.Error != nil {
+			err = imageDTO.Failure("update.persistence-failed", 500)
+		}
+	}()
 	actorCtx, err := p.ports.actor(ctx, env, one.ActorID, one.ActorKeyID, false)
 	if err != nil {
-		return check, nil
+		return err
 	}
 	baseline, err := p.ports.baseline(actorCtx, env, target)
-	if err != nil || baseline.TargetIdentity != one.TargetIdentity {
-		return check, nil
+	if err != nil {
+		return err
+	}
+	if baseline.TargetIdentity != one.TargetIdentity {
+		return imageDTO.Failure("update.target-changed", 409)
 	}
 	_, err = s.observeImagePolicy(actorCtx, p, one, check)
-	return check, err
+	return err
 }

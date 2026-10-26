@@ -218,7 +218,7 @@ func TestImagePolicyAdmissionRefusals(t *testing.T) {
 		}},
 		{"excluded service", "update.auto-excluded", func(_ *testing.T, f *policyFixture) { f.baseline.AutoExcluded = true }},
 		{"replacement target", "update.target-changed", func(_ *testing.T, f *policyFixture) { f.baseline.TargetIdentity = strings.Repeat("d", 64) }},
-		{"revoked policy actor", "FORBIDDEN", func(_ *testing.T, f *policyFixture) { f.revoked = true }},
+		{"revoked policy actor", "update.permission-denied", func(_ *testing.T, f *policyFixture) { f.revoked = true }},
 		{"unknown observation", "update.check-unavailable", func(_ *testing.T, f *policyFixture) {
 			f.check.Status = "unknown"
 			f.check.ServiceUpdates = nil
@@ -253,7 +253,7 @@ func TestImagePolicyMasterAndScheduleActorGates(t *testing.T) {
 			require.Zero(t, f.checks)
 			require.Zero(t, f.admissions)
 			if gate == "actor" {
-				require.Equal(t, "FORBIDDEN", out.Code)
+				require.Equal(t, "update.permission-denied", out.Code)
 			} else {
 				require.Equal(t, st.Skipped, out.Status)
 			}
@@ -308,7 +308,7 @@ func TestImagePolicyRevalidatesBeforeEachChild(t *testing.T) {
 			out := f.run(t, "auto-update", st.Run{})
 			require.Equal(t, 1, f.admissions)
 			require.Len(t, out.Targets, 2)
-			require.Equal(t, "FORBIDDEN", out.Targets[1].Code)
+			require.Equal(t, "update.permission-denied", out.Targets[1].Code)
 		})
 	}
 }
@@ -428,7 +428,7 @@ func TestImagePolicyRevokedDuringCheckCannotNotify(t *testing.T) {
 		return result, err
 	}
 	out := f.run(t, "image-polling", st.Run{})
-	require.Equal(t, "FORBIDDEN", out.Targets[0].Code)
+	require.Equal(t, "update.permission-denied", out.Targets[0].Code)
 	require.Zero(t, f.notifications)
 	var count int64
 	require.NoError(t, f.db.Model(&policy.Notice{}).Count(&count).Error)

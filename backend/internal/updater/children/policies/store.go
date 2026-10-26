@@ -160,7 +160,7 @@ func (s Store) RecordCandidate(ctx context.Context, policy Policy, c dto.UpdateC
 	entry.Payload = string(payload)
 	err = s.DB.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		var current Policy
-		if tx.First(&current, "id = ?", policy.ID).Error != nil || current.Revision != policy.Revision || current.Mode != "notify" {
+		if tx.First(&current, "id = ?", policy.ID).Error != nil || current.Revision != policy.Revision {
 			return image.Failure("update.policy-changed", 409)
 		}
 		created := tx.Clauses(clause.OnConflict{DoNothing: true}).Create(&Candidate{ID: id, PolicyID: policy.ID, CreatedAt: entry.CreatedAt})

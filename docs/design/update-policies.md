@@ -29,8 +29,10 @@ Each registered host has two hub projections: `image-polling` and `auto-update`.
 The existing scheduler coordinator owns occurrences and run history; the same
 six-field cron parser and hub IANA zone drive execution and next-run projection.
 Stored actor/key attribution is revalidated at fire time and before every child.
-Schedules and policies bind the current registration so replacement hosts cannot
-inherit stale authority. Missed occurrences do not create a reconnect catch-up burst.
+For remote hosts the registration ID is the environment ID; deleting and
+recreating an environment gives it a new binding. Agent replacement within an
+existing environment is fenced by target identity and executor generation. The
+local host binds its persistent instance ID. Missed occurrences do not create a reconnect catch-up burst.
 
 Apply children are serial within a host. Before admitting a child, persist its
 identity and frozen policy revision; once admitted, existing runtime admission,
@@ -64,3 +66,18 @@ A host's default cron values are readable before configuration. Its jobs stay
 disabled until a schedule save records a current actor/key; no system actor is
 installed as default authority. Policy edits do not silently replace that schedule
 owner. The dependent UI must configure the host schedules as well as stack modes.
+
+Policy `code` and `checkedAt` describe checks only; `stale` depends on that check
+state. Apply attempts have separate `applyCode` and `applyCheckedAt` fields, so a
+poll cannot erase a drift refusal and an apply job cannot stale a notify check.
+Manual checks return their successful observations even if optional policy
+bookkeeping fails. A separate `policyCode` on the response and persisted
+`bookkeepingCode`/`bookkeepingAt` report that failure without changing check state;
+if persistence itself fails, the response still reports the bookkeeping reason.
+
+Off and notify policies require project read, image-update read and check rights.
+Apply additionally requires jobs manage, project update/deploy, image pull and
+activity read. Schedule owners independently require jobs manage at fire time.
+Permission refusals consistently fail the affected run/target with
+`update.permission-denied`; an unconfigured schedule reports
+`update.schedule-owner-unset` and remains disabled.

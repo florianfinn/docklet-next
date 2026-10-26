@@ -1,5 +1,7 @@
 {
   "columns": [
+    {"table":"stack_update_policies","column":"apply_code","notNull":true},
+    {"table":"stack_update_policies","column":"bookkeeping_code","notNull":true},
     {"table":"image_lifecycle_runs","column":"settled","notNull":true},
     {"table": "deployment_baselines", "column": "target_id", "notNull": true},
     {"table": "deployment_baselines", "column": "target_identity", "notNull": true},

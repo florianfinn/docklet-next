@@ -7,6 +7,7 @@
 package updater
 
 import (
+	"github.com/florianfinn/docklet-next/types/image"
 	"github.com/florianfinn/docklet-next/types/jobschedule"
 	"time"
 )
@@ -18,18 +19,22 @@ type PolicyBinding struct {
 	ChildID  string `json:"childId"`
 }
 type AutoUpdatePolicy struct {
-	Mode           string            `json:"mode" enum:"off,notify,apply"`
-	Revision       uint64            `json:"revision"`
-	EnvironmentID  string            `json:"environmentId"`
-	RegistrationID string            `json:"registrationId"`
-	TargetKind     string            `json:"targetKind" enum:"project"`
-	TargetID       string            `json:"targetId"`
-	TargetIdentity string            `json:"targetIdentity"`
-	JobID          string            `json:"jobId"`
-	CheckedAt      *time.Time        `json:"checkedAt,omitempty"`
-	Stale          bool              `json:"stale"`
-	Code           string            `json:"code,omitempty"`
-	Candidates     []UpdateCandidate `json:"candidates"`
+	Mode            string            `json:"mode" enum:"off,notify,apply"`
+	Revision        uint64            `json:"revision"`
+	EnvironmentID   string            `json:"environmentId"`
+	RegistrationID  string            `json:"registrationId"`
+	TargetKind      string            `json:"targetKind" enum:"project"`
+	TargetID        string            `json:"targetId"`
+	TargetIdentity  string            `json:"targetIdentity"`
+	JobID           string            `json:"jobId"`
+	CheckedAt       *time.Time        `json:"checkedAt,omitempty"`
+	Stale           bool              `json:"stale"`
+	Code            image.ReasonCode  `json:"code,omitempty" enum:"image.active-update-protected,image.busy,image.changed,image.in-use,image.invalid-archive,image.invalid-prune,image.invalid-reference,image.load-failed,image.not-found,image.prune-failed,image.pull-failed,image.remove-failed,image.reserved-reference,image.restore-point-protected,image.system-protected,image.tag-failed,image.usage-unavailable,job.skipped,registry.authentication-failed,registry.authentication-required,registry.credential-unavailable,registry.exists,registry.inline-credentials-not-allowed,registry.invalid-config,registry.not-found,registry.persistence-failed,registry.rate-limited,registry.sync-failed,registry.unavailable,restore.deploy-failed,restore.image-mismatch,restore.in-use,restore.not-found,restore.shared-reference,restore.unavailable,run.busy,run.cancelling,runtime.interrupted,runtime.outcome-unknown,runtime.parent-unresolved,runtime.target-changed,runtime.target-unavailable,update.agent-local-job-disabled,update.auto-excluded,update.baseline-unavailable,update.check-unavailable,update.config-drift,update.deploy-failed,update.image-binding-unsupported,update.invalid-policy,update.invalid-target,update.path-retired,update.permission-denied,update.persistence-failed,update.policy-changed,update.requires-hub-update,update.schedule-hub-owned,update.schedule-owner-unset,update.snapshot-unavailable,update.system-version-unknown,update.target-changed,update.target-not-found"`
+	ApplyCheckedAt  *time.Time        `json:"applyCheckedAt,omitempty"`
+	ApplyCode       image.ReasonCode  `json:"applyCode,omitempty" enum:"image.active-update-protected,image.busy,image.changed,image.in-use,image.invalid-archive,image.invalid-prune,image.invalid-reference,image.load-failed,image.not-found,image.prune-failed,image.pull-failed,image.remove-failed,image.reserved-reference,image.restore-point-protected,image.system-protected,image.tag-failed,image.usage-unavailable,job.skipped,registry.authentication-failed,registry.authentication-required,registry.credential-unavailable,registry.exists,registry.inline-credentials-not-allowed,registry.invalid-config,registry.not-found,registry.persistence-failed,registry.rate-limited,registry.sync-failed,registry.unavailable,restore.deploy-failed,restore.image-mismatch,restore.in-use,restore.not-found,restore.shared-reference,restore.unavailable,run.busy,run.cancelling,runtime.interrupted,runtime.outcome-unknown,runtime.parent-unresolved,runtime.target-changed,runtime.target-unavailable,update.agent-local-job-disabled,update.auto-excluded,update.baseline-unavailable,update.check-unavailable,update.config-drift,update.deploy-failed,update.image-binding-unsupported,update.invalid-policy,update.invalid-target,update.path-retired,update.permission-denied,update.persistence-failed,update.policy-changed,update.requires-hub-update,update.schedule-hub-owned,update.schedule-owner-unset,update.snapshot-unavailable,update.system-version-unknown,update.target-changed,update.target-not-found"`
+	BookkeepingAt   *time.Time        `json:"bookkeepingAt,omitempty"`
+	BookkeepingCode image.ReasonCode  `json:"bookkeepingCode,omitempty" enum:"image.active-update-protected,image.busy,image.changed,image.in-use,image.invalid-archive,image.invalid-prune,image.invalid-reference,image.load-failed,image.not-found,image.prune-failed,image.pull-failed,image.remove-failed,image.reserved-reference,image.restore-point-protected,image.system-protected,image.tag-failed,image.usage-unavailable,job.skipped,registry.authentication-failed,registry.authentication-required,registry.credential-unavailable,registry.exists,registry.inline-credentials-not-allowed,registry.invalid-config,registry.not-found,registry.persistence-failed,registry.rate-limited,registry.sync-failed,registry.unavailable,restore.deploy-failed,restore.image-mismatch,restore.in-use,restore.not-found,restore.shared-reference,restore.unavailable,run.busy,run.cancelling,runtime.interrupted,runtime.outcome-unknown,runtime.parent-unresolved,runtime.target-changed,runtime.target-unavailable,update.agent-local-job-disabled,update.auto-excluded,update.baseline-unavailable,update.check-unavailable,update.config-drift,update.deploy-failed,update.image-binding-unsupported,update.invalid-policy,update.invalid-target,update.path-retired,update.permission-denied,update.persistence-failed,update.policy-changed,update.requires-hub-update,update.schedule-hub-owned,update.schedule-owner-unset,update.snapshot-unavailable,update.system-version-unknown,update.target-changed,update.target-not-found"`
+	Candidates      []UpdateCandidate `json:"candidates"`
 }
 type UpdatePolicyInput struct {
 	Mode             string `json:"mode" enum:"off,notify,apply"`

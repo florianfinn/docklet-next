@@ -7,6 +7,17 @@
 import { deBackend } from "@/data/messages/de";
 
 export const deImageErrors = {
+  "update_permission-denied": deBackend.errors.update["permission-denied"],
+  "update_schedule-owner-unset": deBackend.errors.update["schedule-owner-unset"],
+  "job_skipped": deBackend.errors.job["skipped"],
+  "run_busy": deBackend.errors.run["busy"],
+  "run_cancelling": deBackend.errors.run["cancelling"],
+  "runtime_target-changed": deBackend.errors.runtime["target-changed"],
+  "runtime_target-unavailable": deBackend.errors.runtime["target-unavailable"],
+  "runtime_parent-unresolved": deBackend.errors.runtime["parent-unresolved"],
+  "runtime_outcome-unknown": deBackend.errors.runtime["outcome-unknown"],
+  "runtime_interrupted": deBackend.errors.runtime["interrupted"],
+
   "update_agent-local-job-disabled": deBackend.errors.update["agent-local-job-disabled"],
   "update_auto-excluded": deBackend.errors.update["auto-excluded"],
   "update_invalid-policy": deBackend.errors.update["invalid-policy"],

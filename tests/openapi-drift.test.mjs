@@ -64,17 +64,34 @@ test("v7 lifecycle manifest changes with executable DTOs and admission operation
   }
 });
 
-test("every lifecycle producer code is declared on the public error DTO", () => {
+test("every lifecycle and policy producer reason is declared and translated", () => {
   const spec = JSON.parse(readFileSync(new URL("../api/openapi.json", import.meta.url)));
-  const declared = new Set(spec.components.schemas.ImageProblem.properties.code.enum);
-  const directories = ["../backend/internal/project/", "../backend/internal/project/children/lifecycle/"];
+  const source = readFileSync(new URL("../types/image/reason.go", import.meta.url), "utf8");
+  const declared = new Set(source.match(/const ReasonEnum = "([^"]+)"/)[1].split(","));
+  for (const [name, fields] of Object.entries({
+    SchedulerOutcome: ["code"], SchedulerTargetOutcome: ["code"],
+    JobscheduleJobStatus: ["code"], UpdaterAutoUpdatePolicy: ["code", "applyCode", "bookkeepingCode"],
+    UpdaterSystemImageHint: ["code"], ProjectUpdateInfo: ["policyCode"],
+  })) {
+    for (const field of fields) assert.deepEqual(new Set(spec.components.schemas[name].properties[field].enum), declared, `${name}.${field}`);
+  }
+  for (const code of spec.components.schemas.ImageProblem.properties.code.enum) assert.ok(declared.has(code), code);
+  for (const locale of ["en", "de"]) {
+    const catalogue = readFileSync(new URL(`../web/src/features/images/messages/errors-${locale}.ts`, import.meta.url), "utf8");
+    for (const code of declared) assert.ok(catalogue.includes(`"${code.replaceAll(".", "_")}"`), `${locale}: missing reason ${code}`);
+  }
+  const directories = ["../backend/internal/project/", "../backend/internal/project/children/lifecycle/",
+    "../backend/internal/updater/", "../backend/internal/updater/children/policies/", "../backend/internal/job/"];
   for (const directory of directories) {
     for (const name of readdirSync(new URL(directory, import.meta.url))) {
       if (!name.endsWith(".go") || name.endsWith("_test.go") ||
           (directory.endsWith("project/") && !name.startsWith("lifecycle_"))) continue;
       const source = readFileSync(new URL(directory + name, import.meta.url), "utf8");
-      for (const [, code] of source.matchAll(/"((?:update|restore)\.[a-z-]+)"/g))
-        assert.ok(declared.has(code), `${name}: undeclared lifecycle code ${code}`);
+      const patterns = [ /"((?:image|registry|update|restore|runtime|run|job)\.[a-z_-]+)"/g,
+        /\bCode\s*:\s*"([^"]+)"/g, /\b(?:code|Code)\s*:?=\s*"([^"]+)"/g,
+        /(?:Failure|skip)\(\s*"([^"]+)"/g, /policyCode\([^,]+,\s*"([^"]+)"/g ];
+      for (const pattern of patterns) for (const [, code] of source.matchAll(pattern))
+        assert.ok(declared.has(code), `${directory}${name}: undeclared reason ${code}`);
     }
   }
 });

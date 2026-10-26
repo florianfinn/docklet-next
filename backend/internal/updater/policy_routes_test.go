@@ -76,3 +76,26 @@ func TestSystemImageHintHTTPUsesApprovedPathAndReadGrant(t *testing.T) {
 	require.Zero(t, f.admissions)
 	require.Zero(t, f.checks)
 }
+
+func TestPolicyHTTPNotifyOffNeedOnlyReadAndCheck(t *testing.T) {
+	for _, mode := range []string{"off", "notify", "apply"} {
+		t.Run(mode, func(t *testing.T) {
+			f := newPolicyFixture(t)
+			router := echo.New()
+			api := humaecho.New(router, huma.DefaultConfig("test", "test"))
+			registerImagePolicyRoutes(api, f.s)
+			grants := &authz.PermissionSet{Global: map[string]struct{}{authz.PermProjectsRead: {}, authz.PermImageUpdatesRead: {}, authz.PermImageUpdatesCheck: {}}}
+			req := httptest.NewRequest(http.MethodPut, "/environments/0/updater/policies/project/stack", strings.NewReader(`{"mode":"`+mode+`","expectedRevision":0}`))
+			req.Header.Set("Content-Type", "application/json")
+			ctx := context.WithValue(req.Context(), middleware.ContextKeyUserPermissions, grants)
+			ctx = context.WithValue(ctx, middleware.ContextKeyUserID, "example-actor")
+			response := httptest.NewRecorder()
+			router.ServeHTTP(response, req.WithContext(ctx))
+			expected := 200
+			if mode == "apply" {
+				expected = 403
+			}
+			require.Equal(t, expected, response.Code, response.Body.String())
+		})
+	}
+}
