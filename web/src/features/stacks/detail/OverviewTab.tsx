@@ -1,3 +1,5 @@
+import { useAdapter } from "@/data/use-adapter";
+import { LiveStackUpdates } from "@/shared/components/updates/live-stack-updates";
 import { CapabilityGate } from "@/shared/components/capability-gate";
 import { SegmentedToggle } from "@/shared/components/segmented-toggle";
 import { CalendarClock, HeartPulse, History, Info } from "lucide-react";
@@ -28,6 +30,7 @@ import { ServicesCard } from "./ServicesCard";
 
 export function OverviewTab({ stack, host }: { stack: StackDetail; host: Host | undefined }) {
   const t = useTranslations("stacks.overview");
+  const adapter = useAdapter();
   const th = useTranslations("common.host");
   const dt = useAdapterText();
   const timeZone = useHubTimeZone();
@@ -81,7 +84,7 @@ export function OverviewTab({ stack, host }: { stack: StackDetail; host: Host | 
               <CalendarClock className="size-4 text-muted-foreground" aria-hidden />
               {t("autoTitle")}
             </div>
-            <CapabilityGate operation="setAutoUpdate">
+            {adapter.kind === "http" ? <LiveStackUpdates key={stack.id} stackId={stack.id} /> : <CapabilityGate operation="setAutoUpdate">
             <SegmentedToggle
               value={stack.autoUpdate.mode}
               onChange={(v) => void cmd.setAutoUpdate(stack.id, v === "check" ? { mode: "check" } : { mode: "scheduled", schedule: DEFAULT_UPDATE_SCHEDULE })}
@@ -99,7 +102,7 @@ export function OverviewTab({ stack, host }: { stack: StackDetail; host: Host | 
               </div>
             )}
             <p className="text-xs text-muted-foreground">{t("autoHint")}</p>
-            </CapabilityGate>
+            </CapabilityGate>}
           </div>
         </Card>
 

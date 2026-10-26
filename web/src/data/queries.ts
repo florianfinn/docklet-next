@@ -73,9 +73,9 @@ export function useActionsQuery() {
   return useQuery({ queryKey: queryKeys.actions, queryFn: () => adapter.listActions() });
 }
 
-export function useSchedule() {
+export function useSchedule(hostIds?: readonly string[]) {
   const adapter = useAdapter();
-  return useQuery({ queryKey: queryKeys.schedule, queryFn: () => adapter.listSchedule(), select: useLocalized(localizeSchedule) });
+  return useQuery({ queryKey: [...queryKeys.schedule, ...(hostIds ? [[...hostIds].sort()] : [])], queryFn: () => adapter.listSchedule(hostIds), select: useLocalized(localizeSchedule) });
 }
 
 export function useVolumes() {

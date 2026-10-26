@@ -1,9 +1,13 @@
+import { useImageError } from "@/features/images/use-image-error";
+import { useAdapter } from "@/data/use-adapter";
+import { LiveRestorePoints } from "@/shared/components/updates/live-stack-updates";
 import { CapabilityGate } from "@/shared/components/capability-gate";
 import { ChevronRight, History, RotateCcw } from "lucide-react";
 import { useRef, useState } from "react";
 import { useTranslations } from "use-intl";
 
-import { useActionRuns } from "@/data/live";
+import { useActionsQuery } from "@/data/queries";
+import { useActionReadHealth, useActionRuns } from "@/data/live";
 import { formatDateTime, formatRelative } from "@/domain/format";
 import type { ActionRun, RestorePoint, StackDetail } from "@/domain/model";
 import { versionLabel } from "@/domain/updates";
@@ -32,6 +36,7 @@ const durationOf = (run: ActionRun) => (run.finishedAt ? Math.round((new Date(ru
 function RunCard({ run }: { run: ActionRun }) {
   const t = useTranslations("stacks.deployments");
   const now = useNow(run.status === "running");
+  const errorText = useImageError();
   return (
     <article data-tone={RUN_TONE[run.status]} data-slot="deployment-current" data-run={run.id} className={cn("rounded-xl border bg-card/60 p-4", run.status === "running" && "border-(--tone-edge)/50 shadow-lg shadow-primary/10")}>
       <div className="mb-4 flex flex-wrap items-center gap-2">
@@ -42,6 +47,8 @@ function RunCard({ run }: { run: ActionRun }) {
         </span>
       </div>
       <RunFocusView run={run} now={now} outputOpen />
+      {run.baselineCode && <p role="status">{errorText(run.baselineCode)}</p>}
+      {run.lifecycleCode && <p role="status">{errorText(run.lifecycleCode)}</p>}
       {run.status === "failed" && run.restorePointId && <p className="mt-3 text-xs text-muted-foreground">{t("failedHint")}</p>}
       <Collapsible className="mt-3">
         <CollapsibleTrigger className="group/steps flex items-center gap-1.5 rounded-md text-xs font-medium text-muted-foreground outline-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring">
@@ -143,6 +150,10 @@ export function DeploymentsTab({ stack }: { stack: StackDetail }) {
   const tc = useTranslations("common.actions");
   const cmd = useStackCommands();
   const live = useActionRuns();
+  const adapter = useAdapter();
+  const source = useActionsQuery();
+  const health = useActionReadHealth();
+  const historyUnavailable = source.isPending || source.isError || health.failures.some((failure) => !failure.hostId || failure.hostId === stack.hostId);
   const dt = useAdapterText();
   const [confirm, setConfirm] = useState<RestorePoint | null>(null);
   const [pick, setPick] = useState<HistoryPick | null>(null);
@@ -182,7 +193,7 @@ export function DeploymentsTab({ stack }: { stack: StackDetail }) {
             />
           </>
         ) : (
-          <EmptyState icon={<History />} title={t("empty")} />
+          <EmptyState icon={<History />} title={t(historyUnavailable ? "unavailable" : "empty")} />
         )}
       </section>
       {/* Same height as the history column, so both panels end on one line. */}
@@ -197,7 +208,7 @@ export function DeploymentsTab({ stack }: { stack: StackDetail }) {
           <CardDescription>{t("restoreHint")}</CardDescription>
         </CardHeader>
         <CardContent className="px-4">
-          <CapabilityGate operation="restoreRestorePoint">
+          {adapter.kind === "http" ? <LiveRestorePoints key={stack.id} stackId={stack.id} /> : <CapabilityGate operation="restoreRestorePoint">
           {points.length ? (
             <ul className="flex flex-col gap-2">
               {points.map((p) => (
@@ -207,7 +218,7 @@ export function DeploymentsTab({ stack }: { stack: StackDetail }) {
           ) : (
             <p className="text-sm text-muted-foreground">{t("restoreNone")}</p>
           )}
-          </CapabilityGate>
+          </CapabilityGate>}
         </CardContent>
       </Card>
       <AlertDialog open={!!confirm} onOpenChange={(o) => !o && setConfirm(null)}>

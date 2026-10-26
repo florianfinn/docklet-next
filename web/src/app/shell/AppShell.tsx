@@ -1,3 +1,4 @@
+import { StackUpdateDialogController } from "@/shared/components/updates/stack-update-dialog";
 import { Activity } from "lucide-react";
 import { Fragment, Suspense } from "react";
 import { Link, Outlet, useLocation } from "react-router";
@@ -126,6 +127,7 @@ export function AppShell({ navigation = NAV }: { navigation?: NavGroup[] }) {
             <BackendNotice />
             <Suspense fallback={<PageFallback />}>
               <Outlet />
+          <StackUpdateDialogController />
             </Suspense>
           </div>
         </div>

@@ -102,6 +102,7 @@ export const deStacks: typeof enStacks = {
     simulated: (import.meta.env.DEV ? "CPU und RAM simuliert" : ""),
   },
   deployments: {
+    unavailable: "Deploy-Verlauf ist nicht verfügbar.",
     title: "Deploy-Verlauf",
     empty: (import.meta.env.DEV ? "Noch keine Deployments in diesem Demo-Verlauf." : "Noch keine Deployments aufgezeichnet."),
     running: "Läuft gerade",

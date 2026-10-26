@@ -11,7 +11,7 @@ import { ScrollArea } from "@/shared/ui/scroll-area";
 
 import { useStackCommands } from "@/shared/hooks/use-stack-commands";
 
-const LANES: Exclude<UpdateVisual, "current" | "error" | "local" | "unchecked">[] = ["major", "minor", "patch", "rebuild"];
+const LANES: Exclude<UpdateVisual, "current" | "error" | "local" | "unchecked" | "unknown">[] = ["major", "minor", "patch", "rebuild"];
 
 /** Updates grouped by kind (major/minor/patch/new image state) with hover details. */
 export function UpdateRadarWidget({ stacks, hosts }: { stacks: Stack[]; hosts: Map<string, Host> }) {
@@ -24,7 +24,7 @@ export function UpdateRadarWidget({ stacks, hosts }: { stacks: Stack[]; hosts: M
   const total = items.length;
   const scheduled = stacks.filter((s) => s.autoUpdate.mode === "scheduled" && s.services.some((x) => x.update.state === "version" || x.update.state === "rebuild"));
 
-  if (!total) return <p className="text-sm text-muted-foreground">{t(stacks.some((s) => s.services.some((svc) => svc.update.state === "unchecked")) ? "unchecked" : "none")}</p>;
+  if (!total) return <p className="text-sm text-muted-foreground">{t(stacks.some((s) => s.services.some((svc) => ["unchecked", "unknown", "error"].includes(svc.update.state))) ? "unchecked" : "none")}</p>;
   return (
     <div className="flex h-full flex-col gap-3">
       <div className="flex h-2.5 overflow-hidden rounded-full bg-muted" aria-hidden>
@@ -56,7 +56,7 @@ export function UpdateRadarWidget({ stacks, hosts }: { stacks: Stack[]; hosts: M
                 name={`${stack.name} / ${svc.name}`}
                 update={svc.update}
                 side="left"
-                actions={{ updateOperation: "installStackUpdates", onUpdate: () => void cmd.installUpdates(stack.id, [svc.name]), onRecheck: () => void cmd.checkUpdates(stack.id), busy: !!stack.busyActionId, updateLabel: undefined }}
+                actions={{ updateOperation: "installStackUpdates", onUpdate: () => void cmd.installUpdates(stack.id), onRecheck: () => void cmd.checkUpdates(stack.id), busy: !!stack.busyActionId, updateLabel: undefined }}
               />
             </li>
           ))}

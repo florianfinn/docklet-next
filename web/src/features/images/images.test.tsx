@@ -61,7 +61,7 @@ describe("demo images adapter", () => {
     expect(jellyfin?.consumers.map((c) => c.name)).toEqual(["media-jellyfin-1"]);
     expect(images.filter((i) => i.consumers.some((c) => c.system)).length).toBeGreaterThan(0);
     // Installing the update moves the consumer to the new image; the old one stays as unused until pruned.
-    const run = await adapter.installStackUpdates("media", ["jellyfin"]);
+    const run = await adapter.installStackUpdates("media");
     await settle(adapter, run);
     const after = await adapter.listImages();
     const old = after.find((i) => i.id === jellyfin?.id);

@@ -58,8 +58,8 @@ export function useStackCommands() {
       if (failAt) queueDemoFailure(adapter, { operation: "runStackCommand", at: failAt });
       return adapter.runStackCommand(stackId, command);
     }),
-    installUpdates: (stackId: string, services?: string[]) => guard(() => adapter.installStackUpdates(stackId, services)),
-    checkUpdates: (stackId: string) => guard(() => adapter.checkUpdates({ stackId })),
+    installUpdates: (stackId: string) => adapter.kind === "http" ? Promise.resolve(window.dispatchEvent(new CustomEvent("docklet:stack-update", { detail: { stackId } }))).then(() => undefined) : guard(() => adapter.installStackUpdates(stackId)),
+    checkUpdates: (stackId: string) => adapter.kind === "http" ? guard(() => adapter.checkStackUpdates!(stackId)) : guard(() => adapter.checkUpdates({ stackId })),
     restartService: (stackId: string, service: string) => guard(() => adapter.restartService(stackId, service)),
     restore: (stackId: string, restorePointId: string) => guard(() => adapter.restoreRestorePoint(stackId, restorePointId)),
     setLabels: (stackId: string, labels: string[]) =>
