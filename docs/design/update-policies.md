@@ -123,86 +123,77 @@ Grant abbreviations (conjunction, never alternatives): `R` = `projects:read` AND
 | `saveUpdateSchedule` (new) | H | `set-update-schedules`: `jobs:manage`; `job/image_policy_routes.go:34`, actor revalidation at `updater/policy_service.go:250`. |
 | `listSystemComponents` | H | `get-system-image-hints`: `image-updates:read`; `updater/system_hints.go:124`. This is the protected agent/tools version-hint read, with no rollout action. |
 
-Use the full route/nested grant conjunction, never weaker. `capability.unavailable` covers invalid/scoped-denied refs.
-Container update/apply and host-wide/unscoped check requests stay unavailable.
-Availability describes discovery; calls recheck rights, identity/revision and holds.
-Policy descriptors preserve off/notify rights. For remote baseline and point reads/deletes, hub guards are
-`middleware/environment.go:186` through :203, plus the matcher at :204 and :325.
-Agents have sudo rights (:180); revocation tests mutate the hub proxy conjunction.
-IDs/grants match local/Direct/Edge. Read capabilities from the hub for caller E.
-Existing commands are `updater.project.{check,baseline}` and
-`updater.restore.{list,delete,host-list,host-delete}` (`backend/pkg/libarcane/edge/commands.go:18`).
-Admission, policy, schedules and hints stay hub-owned (`middleware/environment.go:556`).
-No new agent route, Edge fallback or route grant is introduced.
+Use the full route/nested grant conjunction, never weaker; invalid/scoped-denied refs use `capability.unavailable`.
+Container update/apply and host-wide/unscoped checks stay unavailable; calls recheck current rights and identity.
+Remote baseline/point guards are `middleware/environment.go:186` through :203, plus matcher :204/:325; agents use sudo (:180).
+IDs/grants match local/Direct/Edge; capabilities come from the hub for caller E. Policy descriptors preserve off/notify rights.
+Existing commands: `updater.project.{check,baseline}`, `updater.restore.{list,delete,host-list,host-delete}` (`backend/pkg/libarcane/edge/commands.go:18`).
+Admission/policy/schedules/hints stay hub-owned (`middleware/environment.go:556`); no new agent route, command, fallback or route grant.
 
-### Authoritative point projection
+### Point projection, evidence and safety
 
-Declare `RestorePointProtectionReason` with only `restore-target|healthy-baseline`.
-Required nullable `RestorePoint.protectionReason` uses null for no anchor; missing is invalid. `holdState: RestorePointHoldState` has required enum
-`none|active|unknown`. Required `failedAttempt: bool` exposes the stored flag as
-a neutral point kind; failure alone never confers protection or a protected label.
-There is no failed-slot protection value; replacement/count eviction still apply.
+`RestorePointProtectionReason` contains only `restore-target|healthy-baseline`; required nullable `protectionReason` uses explicit null for no anchor.
+Required `holdState: RestorePointHoldState` has enum `none|active|unknown`; required `failedAttempt: bool` is a neutral kind, never a protection by itself.
+One pure planner in `project/children/lifecycle/retention.go` supplies retention deletion IDs and projection reasons from stored `available = true` rows,
+per target in `created_at DESC,id DESC` order (`project/lifecycle_pins.go:281`). Display `available`/`code` are independent: registration mismatch or
+failed snapshot verification never filters planner inputs or erases reasons. Host lists plan each target separately. M6 keeps latest settled baseline,
+latest `LastRestoredAt` target and one failed slot, then evicts oldest others. Reason precedence is restore-target then healthy-baseline; anchors may overlap.
+Holds override eviction, including above five; unheld anchors remain explicitly deletable. Failed slots remain subject to replacement/count eviction.
 
-One pure planner in `project/children/lifecycle/retention.go` supplies reasons and
-deletion IDs to retention and projection. Both use stored `available = true` rows
-per target, ordered `created_at DESC,id DESC` (`project/lifecycle_pins.go:281`).
-Display `available`/`code` stay independent: registration mismatch or failed
-snapshot verification must not remove a planner input or erase its reason.
-Host lists plan each target separately. M6 keeps latest settled baseline, latest
-`LastRestoredAt` target, one failed-attempt slot, then evicts oldest other points.
-Reason precedence is restore-target then healthy-baseline; internal anchors may overlap. Holds override eviction, even above five. Unheld anchors remain explicitly
-deletable with the transactional recheck (`project/children/lifecycle/store.go:263`).
+Executor active evidence is `image_lifecycle_runs.settled = false` with matching `point_id` or `selected_point_id` (`project/children/lifecycle/store.go:247`).
+Hub evidence joins `runtime_image_intents.run_id` to `runtime_receipts.run_id`: payload `request.pointId`, receipt `environment_id`, `kind = receipt`,
+`settled_at IS NULL`. Do not filter by current registration: old-registration non-terminal/unknown receipts selecting the same point UUID still hold.
+Executor states pending/accepted/executing mean hub active; unknown with non-null `unknown_reason` means uncertain hub outcome. Dispatch
+pending/dispatching/accepted all hold; pending with null `dispatched_at` already holds. Unknown dominates active, then none when neither holds.
+Current declarations: `backend/resources/migrations/sqlite/007_image_lifecycle.sql:10` and :25. Executor holds survive hub settlement/release and restart.
+The hub overlays successful forwarded target/host lists for Direct and Edge: executor active OR hub active/unknown. This holdState is display only.
+Before forwarding either delete, an advisory, lock-free hub read refuses a visible non-terminal hold with declared `restore.in-use` (409).
+No admission/delete fence or new lock is added. Never hold `runningMu` or a DB transaction around remote calls; the advisory check may race.
+Inject an evidence-read port via `middleware/environment.go:842` (`EnvironmentProxySecurity`), wired at `bootstrap/router_bootstrap.go:309`; middleware never imports activity.
+Bound agent point-list bodies to 8 MiB before buffering (Direct reads and Edge assembly), and to 4,096 points. Validate the list envelope and required fields.
+Malformed/non-list/oversized/missing/undeclared agent values fail the whole list with declared fallback `update.check-unavailable` (503), never passthrough/defaults.
+Hub evidence DB failures use `update.persistence-failed` (500), including deletes before forwarding. These existing codes are in `types/image/reason.go:18`.
 
-Executor evidence is `image_lifecycle_runs.settled = false` with matching `point_id`
-or `selected_point_id` (`project/children/lifecycle/store.go:247`): it means active.
-Hub evidence joins `runtime_image_intents.run_id` to `runtime_receipts.run_id`;
-match payload `request.pointId`, receipt `environment_id`/`registration_id`,
-`kind = receipt` and `settled_at IS NULL`. Executor states pending/accepted/executing
-mean active; unknown with non-null `unknown_reason` means an uncertain hub receipt.
-Dispatch pending/dispatching/accepted all hold; pending with null `dispatched_at`
-already holds before send. Unknown dominates active, then none when neither holds.
-Columns obey `backend/resources/migrations/sqlite/003_runtime_receipts.sql:8`; unsettled executor ownership still holds after hub settlement/release. Invalid
-evidence or DB reads fail closed; restart/history cleanup cannot release a hold.
+Safety invariant: a restore never acts on a deleted or unavailable point. Only executor conditional selection plus executor `Held` enforce this invariant.
+`project/children/lifecycle/store.go:189` through :191 checks id, target, identity, registration and available=true; RowsAffected must equal one, before effects.
+Selection and creation of the executor run/hold share a transaction; delete rechecks `Held` transactionally (:264). Preserve `restore.unavailable` (409)
+through Prepare's outer error mapping (:208) and runtime result projection. Hub pre-check/overlay are advisory, never authority for proceeding with effects.
 
-The hub overlays its evidence on successful forwarded target/host point lists for
-both Direct and Edge, merging executor active with hub active/unknown. The agent
-cannot infer hub uncertainty. Before forwarding either delete route, the hub
-refuses any non-terminal admission hold with existing declared `restore.in-use`
-(409, `types/image/reason.go:18`); agent-local transactional guards remain.
-Serialize point selection/intent commit with hub delete check/forward under the same environment/point admission fence, without a DB transaction across remote I/O. If delete
-wins, admission revalidates point existence; if admission wins, delete never sends.
-This closes the pre-dispatch race, rather than merely reflecting it in the list.
-
-Go constants/schema enum tags own the vocabulary. `scripts/agent-contract.mjs:65`
-derives `retentionProtections` from the protection enum and `holdStates` from the
-hold enum through OpenAPI; remove the old latest-/active-or-unknown aliases.
-`failedAttemptPoints`/`failedAttemptScope` describe replacement only. Generate OpenAPI/DTO/v7 fingerprint/fixture/provenance via `pnpm run contract:generate`;
-the drift check enforces Go, manifest and wire enum equality and nullability.
-Catalogue owner #229 uses `web/src/shared/messages/{en,de}.ts`, under
-`common.restorePoints`: `protection.{restore-target,healthy-baseline}`, `unprotected`,
-`hold.{none,active,unknown}`, `kind.{point,failedAttempt}`. #231 treats this subtree
-as read-only; no keys go into its updates/settings catalogues. Existing translated
-`images.errors.restore_in-use` supplies the hub delete refusal. Both hub overlay
-and #231's real web decoder validate agent fields; invalid/missing values fail
-loading, never default to null/none or enable delete. Keep the Go contract test.
-
-### Break map, ownership and verification
-
-| Break boundary | Planned test | Red mutation (assertion failure required) |
+| Order: restore R on point P versus delete D | Executor result / data | Required outcome |
 | --- | --- | --- |
-| Scoped deny per host/environment | `TestUpdateCapabilitiesScopedGrants`: every descriptor/grant removed in turn, cross-host split grants, explicit denies, malformed refs and non-admin host lists/deletes; off/notify versus apply. | Replace E with another allowed environment, omit each conjunct, or drop G; affected descriptor incorrectly becomes available. |
-| Grant removed after capability read | `TestUpdateCapabilityReadThenRevokedCall`: local and remote E; revoke every grant, call real route, assert 403 and zero reads/effects/forwarding. | Bypass local admission or the hub proxy conjunction/matcher; forbidden call reaches spy. |
-| Descriptor/transport parity | `TestUpdateCapabilitiesTransportParity`: identical IDs/grants local/Direct/Edge; actual baseline/point commands; hub-only routes never forwarded. | Remove descriptor/Edge mapping or bypass hub proxy grant; parity/dispatch assertion fails. |
-| Direct holds and pre-dispatch delete | `TestDirectPointHoldOverlay`: barrier after restore intent/receipt commit, before send; target/host lists show active, then unknown after receipt uncertainty; both deletes return 409 restore.in-use and send zero requests. | Skip Direct overlay or hub delete guard; hold/effect assertion fails. |
-| Edge holds and pre-dispatch delete | `TestEdgePointHoldOverlay`: same barrier/states/target and host routes through actual Edge tunnel; retain agent local guard and restart evidence. | Skip Edge overlay or delete guard; wrong hold or a delete command is observed. |
-| Enum contract and translations | `TestRestorePointProjectionContract`: Go/OpenAPI/DTO/manifest/v7 fixture/fingerprint equality, required nullable reason, every EN/DE key/placeholder. | Restore old manifest alias, add failed-slot, drop enum/nullability/key; drift/assertion fails. |
-| Real web consumer | #231 `point-shapes`: malformed/missing protectionReason/holdState and neutral failedAttempt through real HTTP decoder; load error, zero delete writes; valid null accepted. | Default invalid values or skip decoder validation; load/control assertion fails. |
-| Projection equals M6 retention | `TestRestorePointProjectionRetentionParity`: registration mismatch and failed snapshot check preserve reasons; target/baseline/overlaps/holds, five failed restores, failed slot evicted by count, separate targets/restart; assert exact deletion IDs and neutral failure kind. | Filter planner by display availability, remove anchor/hold, or protect failed slot; reason/deletion assertions fail. |
-| Concurrent actor delete/admission/trim | `TestPointDeleteAdmissionRace`: deferred barriers force both orderings of actor B delete versus actor A selection/intent commit, and trim after target reclassification; admitted held point gets restore.in-use, deletion winner prevents restore effects, anchors survive trim. | Drop hub admission fence or transactional hold/existence recheck; effect or deletion assertion fails. |
+| D before R admission | P deleted; no restore effects | R refused at admission or executor select with restore.unavailable. |
+| R admitted, hub intent committed, not dispatched; D | Hub pre-check sees intent; P unchanged | D refused with restore.in-use, zero forwarded deletes. |
+| R admitted; pre-check misses, or unknown-outcome D lands late | Executor deletes P before R selects it | Dispatch R; conditional selection refuses with restore.unavailable, zero effects; run settles refused. |
+| R running on executor; D | Executor Held refuses D; P unchanged | D refused with restore.in-use. |
+| D times out at hub | D may have landed or may land later | UI shows delete outcome unknown and re-reads list; no restore effect on a deleted point. |
 
-Phase 2 owns `activity/capabilities*.go`, scoped `activity/runtime_image*.go`
-hold/fence helpers, `middleware/environment*.go` overlay/delete boundary and tests,
-`project/lifecycle_{points,pins}*.go`, `project/children/lifecycle/{retention,store}*.go`,
-`types/updater/` enums/tests, `scripts/agent-contract.mjs`, generated contracts and the named shared message subtree. Other web code/tests belong to #231; updater,
-job and Edge producers are read-only, migrations untouched. Focused checks and red
-mutations precede full lint/test under the load rule. Phase 1 uses text checks only.
+`TestPointDeleteOrders` runs all five orders with deferred barriers on hub-local and executor fakes through actual Direct and Edge transports.
+Mutations: M1 remove conditional selection/RowsAffected check (late-delete safety red); M2 remove hub pre-check (visible-intent refusal red, safety green);
+M3 remove executor Held check (running-delete refusal red). Assert errors/effect counts/settlement; never count compiler errors or timeouts as red proof.
+
+Go constants/schema enum tags own the vocabulary; `scripts/agent-contract.mjs:65` derives retentionProtections/holdStates through OpenAPI, removing old aliases.
+failedAttemptPoints/failedAttemptScope describe replacement only. `pnpm run contract:generate` updates OpenAPI/DTO/v7 fingerprint/fixture/provenance;
+drift checks enforce enum equality, nullable reason, and required protectionReason/holdState/failedAttempt in Go, wire, DTO and fixture.
+#229 owns `web/src/shared/messages/{en,de}.ts` subtree `common.restorePoints`: `protection.{restore-target,healthy-baseline}`, `noRetentionAnchor`,
+`hold.{none,active,unknown}`, `kind.{point,failedAttempt}`; #231 treats it read-only. Render hold label first when active/unknown; null anchor never says unprotected.
+Existing `images.errors.restore_in-use`, `images.errors.update_check-unavailable` and `images.errors.update_persistence-failed` cover refusals/fallbacks.
+#231's real HTTP decoder also rejects missing/malformed fields and unknown enums; list load fails, no delete writes, no invented null/none.
+
+### Break map and ownership
+
+| Boundary | Planned test | Red mutation (assertion failure required) |
+| --- | --- | --- |
+| Scoped rights/revocation | `TestUpdateCapabilitiesScopedGrants` and `TestUpdateCapabilityReadThenRevokedCall`: each grant, host/admin scope, split grants, refs/modes, local/remote E; real calls return 403 with zero forbidden reads/effects. | Omit conjunct/admin check; change E; bypass hub proxy conjunction/matcher. |
+| Descriptor/transport parity | `TestUpdateCapabilitiesTransportParity`: identical IDs/grants locally/Direct/Edge; actual baseline/point commands; hub-only routes never forwarded. | Remove descriptor/command mapping or bypass proxy grant. |
+| Advisory overlay and delete orders | `TestDirectPointHoldOverlay`, `TestEdgePointHoldOverlay` and `TestPointDeleteOrders`: target/host lists and both deletes, active/unknown, all five orders above. | Skip overlay; apply M1/M2/M3 independently with their distinct outcomes above. |
+| Hub ingress | `TestPointOverlayValidation` for Direct/Edge: malformed envelope, non-list, missing/invalid fields, undeclared enums, exactly/over 8 MiB or 4,096 points, DB failure; typed 503/500, no partial output or forwarded delete. | Pass through/default bad values; remove byte/count bound or DB-error refusal. |
+| Re-registration | `TestPointOverlayRegistrationChange`: old-registration unknown receipt selects same point after re-registration; hold stays visible and advisory delete refuses. | Filter by current registration only. |
+| Contract/catalogues | `TestRestorePointProjectionContract`: Go/OpenAPI/DTO/manifest/v7 fixture/fingerprint enum equality, reason nullability and all three fields required; complete EN/DE keys/placeholders. | Restore alias/failed-slot; omit required fields or add omitempty, including failedAttempt; drop key. |
+| Web consumer | #231 `point-shapes`: validate real decoder; valid null, invalid/missing enums/failedAttempt; null reason with active/unknown shows hold label; unknown delete reconciles list. | Default invalid values, skip validation, show unprotected for null+hold or turn unknown delete into success. |
+| M6/concurrent trim | `TestRestorePointProjectionRetentionParity`: registration mismatch/snapshot failure preserve reasons; targets/baselines/overlaps/holds, five failed restores, count-evicted failed slot, separate targets/restart; deferred trim after reclassification preserves anchors. | Filter by display availability; remove anchor/hold; protect failed slot; drop transactional recheck. |
+
+Phase 2 owns `activity/capabilities*.go`, evidence helpers/tests in `activity/runtime_image*.go`, `middleware/environment*.go` and its injected port;
+`bootstrap/router_bootstrap.go` wiring; `project/lifecycle_{points,pins}*.go`, `project/children/lifecycle/{retention,store}*.go`, `types/updater/` enums/tests;
+`backend/pkg/libarcane/edge/command_client*.go` only for bounded point-list response assembly/tests; `scripts/agent-contract.mjs`, generated contracts and named message subtree.
+No admission lock change or runtime_http_service.go edit is needed. Other web code/tests belong to #231; migrations and other producers stay read-only.
+Focused checks/red mutations precede full lint/test under the load rule. Phase 1 changes this design only and uses text checks.
