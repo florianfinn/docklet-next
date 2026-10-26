@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { readFileSync, readdirSync } from "node:fs";
 import test from "node:test";
 import { assertNoDrift } from "../scripts/openapi-contract.mjs";
+import { reasonLiterals } from "../scripts/reason-literals.mjs";
 import { agentFixture } from "../scripts/agent-contract.mjs";
 
 test("the v7 manifest records the merged activity discovery producer", () => {
@@ -88,6 +89,8 @@ test("every lifecycle and policy producer reason is declared and translated", ()
       if (!name.endsWith(".go") || name.endsWith("_test.go") ||
           (directory.endsWith("project/") && !name.startsWith("lifecycle_"))) continue;
       const source = readFileSync(new URL(directory + name, import.meta.url), "utf8");
+      for (const code of reasonLiterals(source))
+        assert.ok(declared.has(code), `${directory}${name}: undeclared reason ${code}`);
       const patterns = [ /"((?:image|registry|update|restore|runtime|run|job)\.[a-z_-]+)"/g,
         /\bCode\s*:\s*"([^"]+)"/g, /\b(?:code|Code)\s*:?=\s*"([^"]+)"/g,
         /(?:Failure|skip)\(\s*"([^"]+)"/g, /policyCode\([^,]+,\s*"([^"]+)"/g ];
@@ -126,4 +129,20 @@ test("v7 policy manifest binds hub schedules, frozen revisions and notification 
       assert.deepEqual(actual, expected, operation.operationId);
     }
   }
+});
+
+
+test("reason helper guard catches unprefixed arguments and returns", () => {
+  const source = `
+    policyTarget(one.TargetID, st.Failed, "BOGUS")
+    policyTargetWithActivity(one.TargetID, accepted.ID, st.Failed, "MISSING")
+    policyTarget(one.TargetID, st.Failed, policyCode(errors.New("Human message"), "FALLBACK"))
+    func policyCode(err error, fallback string) string {
+      if status.GetStatus() == 403 { return "FORBIDDEN" }
+      return fallback
+    }
+    func other() string { return "ordinary text" }
+    // policyTarget(id, status, "comment")
+  `;
+  assert.deepEqual(reasonLiterals(source), ["BOGUS", "MISSING", "FALLBACK", "FORBIDDEN"]);
 });

@@ -6,7 +6,10 @@
 
 package image
 
-import "strings"
+import (
+	"errors"
+	"strings"
+)
 
 // ReasonCode keeps existing string callers compatible. Every public reason field
 // exposes ReasonEnum; the contract guard rejects drift between those declarations.
@@ -21,4 +24,15 @@ func ValidReason(code string) bool {
 		}
 	}
 	return false
+}
+
+// ErrUndeclaredReason rejects values outside the shared wire vocabulary.
+var ErrUndeclaredReason = errors.New("undeclared reason code")
+
+// ValidateReason accepts an omitted optional reason or a declared enum value.
+func ValidateReason(code string) error {
+	if code != "" && !ValidReason(code) {
+		return ErrUndeclaredReason
+	}
+	return nil
 }

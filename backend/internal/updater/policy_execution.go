@@ -82,12 +82,22 @@ func (s *UpdaterService) RunImagePolicyHost(ctx context.Context, env, job string
 	if previous.RequestedBy != "" {
 		actor, key = previous.RequestedBy, previous.RequestedWithKey
 	}
-	if p.ports.scheduleActor == nil || p.ports.scheduleActor(ctx, env, actor, key) != nil {
-		return st.Outcome{Status: st.Failed, Code: "update.permission-denied"}, nil
-	}
 	var policies []policy.Policy
 	if err = p.store.DB.WithContext(ctx).Where("environment_id = ? AND registration_id = ?", env, row.RegistrationID).Order("target_id").Find(&policies).Error; err != nil {
 		return st.Outcome{Status: st.Failed, Code: "update.persistence-failed"}, nil
+	}
+	if p.ports.scheduleActor == nil || p.ports.scheduleActor(ctx, env, actor, key) != nil {
+		out := st.Outcome{Status: st.Failed, Code: "update.permission-denied"}
+		for _, one := range policies {
+			if job == "auto-update" && one.Mode == "apply" {
+				target := s.recordImagePolicyStatus(ctx, p, one, job, policyTarget(one.TargetID, st.Failed, "update.permission-denied"))
+				out.Targets = append(out.Targets, target)
+				if target.Code == "update.persistence-failed" {
+					out.Code = target.Code
+				}
+			}
+		}
+		return out, nil
 	}
 	out := st.Outcome{Status: st.Succeeded}
 	for _, one := range policies {
@@ -95,7 +105,7 @@ func (s *UpdaterService) RunImagePolicyHost(ctx context.Context, env, job string
 			return policyResult(out), ctx.Err()
 		}
 		if p.ports.scheduleActor(ctx, env, actor, key) != nil {
-			out.Targets = append(out.Targets, policyTarget(one.TargetID, st.Failed, "update.permission-denied"))
+			out.Targets = append(out.Targets, s.recordImagePolicyStatus(ctx, p, one, job, policyTarget(one.TargetID, st.Failed, "update.permission-denied")))
 			continue
 		}
 		target, uncertain := s.runImagePolicyTarget(ctx, p, one, previous.ID, job)
@@ -113,11 +123,14 @@ func (s *UpdaterService) RunImagePolicyHost(ctx context.Context, env, job string
 }
 func (s *UpdaterService) runImagePolicyTarget(ctx context.Context, p *imagePolicyService, one policy.Policy, jobRun, job string) (st.TargetOutcome, bool) {
 	target, uncertain := s.executeImagePolicyTarget(ctx, p, one, jobRun, job)
+	return s.recordImagePolicyStatus(ctx, p, one, job, target), uncertain
+}
+func (s *UpdaterService) recordImagePolicyStatus(ctx context.Context, p *imagePolicyService, one policy.Policy, job string, target st.TargetOutcome) st.TargetOutcome {
 	if target.Code == "update.permission-denied" {
 		target.Status = st.Failed
 	}
 	if one.Mode == "off" || job == "auto-update" && one.Mode != "apply" {
-		return target, uncertain
+		return target
 	}
 	changes := map[string]any{"code": target.Code}
 	if job == "auto-update" {
@@ -130,7 +143,7 @@ func (s *UpdaterService) runImagePolicyTarget(ctx context.Context, p *imagePolic
 		target.Code = "update.persistence-failed"
 		target.Message = target.Code
 	}
-	return target, uncertain
+	return target
 }
 func (s *UpdaterService) executeImagePolicyTarget(ctx context.Context, p *imagePolicyService, one policy.Policy, jobRun, job string) (st.TargetOutcome, bool) {
 	skip := func(code string) (st.TargetOutcome, bool) { return policyTarget(one.TargetID, st.Skipped, code), false }
