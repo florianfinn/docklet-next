@@ -4,7 +4,10 @@
 // License: Apache-2.0
 // Deviations: Producer-shaped HTTP fixtures and behavioural guards for issue #231.
 
+import { formatDateTime } from "@/domain/format";
+import { useQuery } from "@tanstack/react-query";
 import { useState } from "react";
+import { StackHeader } from "@/features/stacks/detail/StackHeader";
 import { StackUpdatePanel } from "./update-panel";
 import { act, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
@@ -60,7 +63,7 @@ it("policy mode gesture and revision refusal remain inside open dialog", async (
   await screen.findByText(catalogs.de.images.errors["update_policy-changed"]); expect(screen.queryByRole("dialog") !== null).toBe(true); expect(f.writes()).toHaveLength(1);
 });
 it("schedule current run and master-off survive owner claim; save clears owner-unset", async () => {
-  const f = await ready();
+  const f = await ready(); f.state.schedule.revision = 17;
   renderWithApp(<HostUpdateSettings hostId="direct" name="Example" />, f.adapter);
   await screen.findByText(catalogs.de.images.errors["update_schedule-owner-unset"]); expect(document.body.textContent).toContain(t.masterOff);
   await userEvent.click(screen.getByRole("button", { name: t.editSchedules }));
@@ -70,10 +73,11 @@ it("schedule current run and master-off survive owner claim; save clears owner-u
   await waitFor(() => expect(screen.queryByRole("dialog") === null).toBe(true)); await screen.findByText(/0 1 \* \* \* \*/);
   expect(screen.queryByText(catalogs.de.images.errors["update_schedule-owner-unset"]) === null).toBe(true);
   expect(document.body.textContent).toContain(t.masterOff); expect(document.body.textContent).toContain("1dd08eac");
+  expect(JSON.parse(String(f.writes()[0]!.init.body))).toMatchObject({ expectedRevision: 17, pollingInterval: "0 1 * * * *" });
 });
 it("point list exposes confirmed delete with server projection", async () => {
   const f = await ready(); renderWithApp(<LiveRestorePoints stackId="direct~project" />, f.adapter);
-  await screen.findByText(point.createdAt); expect(document.body.textContent).toContain(t.noData);
+  await screen.findByText(formatDateTime(point.createdAt)); expect(document.body.textContent).toContain(t.noData);
   expect(screen.getByRole("button", { name: t.deletePoint }).hasAttribute("disabled")).toBe(false); expect(document.body.textContent).toContain(catalogs.de.common.restorePoints.noRetentionAnchor); expect(f.writes()).toHaveLength(0);
 });
 it("closing before a delayed refusal prevents stale result publication", async () => {
@@ -188,4 +192,47 @@ it("an uncertain policy save stays inline after a fresh authoritative read", asy
   expect(alert?.textContent).toContain(catalogs.de.activity.runtime.ambiguous);
   expect(within(screen.getByRole("dialog")).getByRole("button", { name: t.save }).hasAttribute("disabled")).toBe(true);
   expect(f.writes()).toHaveLength(1);
+});
+
+
+it("initial missing baseline shows deploy-once guidance before any submit", async () => {
+  const f = await ready(); f.state.baseline.available = false; f.state.baseline.code = "update.baseline-unavailable";
+  const completed = deferred<void>(), original = f.adapter.getUpdateBaseline!;
+  f.adapter.getUpdateBaseline = async (id) => { const value = await original(id); completed.resolve(); return value; };
+  renderWithApp(<StackUpdateDialog stackId="direct~project" onClose={() => {}} />, f.adapter);
+  await act(async () => { await completed.promise; });
+  await waitFor(() => expect(screen.getByRole("button", { name: t.update }).hasAttribute("disabled")).toBe(false));
+  const status = screen.queryByText(catalogs.de.images.errors["update_baseline-unavailable"]);
+  expect(status?.getAttribute("role")).toBe("status");
+  expect(screen.queryByRole("dialog") !== null).toBe(true); expect(f.writes()).toHaveLength(0);
+});
+it("readable baseline cannot enable send without the write descriptor", async () => {
+  function ReadStatus() { const query = useQuery({ queryKey: ["stack", "direct~project", "update-baseline"], enabled: false }); return <span>{query.isSuccess ? "Baseline read settled" : "Baseline read pending"}</span>; }
+  const f = await ready(); f.state.denied.add("installStackUpdates");
+  const completed = deferred<void>(), original = f.adapter.getUpdateBaseline!;
+  f.adapter.getUpdateBaseline = async (id) => { const value = await original(id); completed.resolve(); return value; };
+  renderWithApp(<><StackUpdateDialog stackId="direct~project" onClose={() => {}} /><ReadStatus /></>, f.adapter);
+  await act(async () => { await completed.promise; });
+  await screen.findByText("Baseline read settled");
+  await screen.findByText(catalogs.de.activity.capability.unavailable);
+  const send = screen.getByRole("button", { name: t.update });
+  expect(send.hasAttribute("disabled")).toBe(true); await userEvent.click(send); expect(f.writes()).toHaveLength(0);
+});
+
+
+it("HTTP header check is enabled only by the stack-scoped descriptor", async () => {
+  const f = await ready(), original = f.fetcher.getMockImplementation()!;
+  f.fetcher.mockImplementation(async (input, init) => {
+    const response = await original(input, init), url = new URL(String(input), "https://hub.example.com");
+    if (!url.pathname.endsWith("/capabilities")) return response;
+    const body = await response.json();
+    body.data = body.data.map((d: { operationId: string }) => d.operationId === "checkUpdates" ? { ...d, available: url.searchParams.get("kind") === "stack" && url.searchParams.get("id") === "direct~project" } : d);
+    return new Response(JSON.stringify(body), { headers: response.headers });
+  });
+  renderWithApp(<StackHeader stack={{ id: "direct~project", hostId: "direct", name: "Example", labels: [], services: [], autoUpdate: { mode: "check" }, deployments: [], restorePoints: [], compose: "", env: "" }} host={undefined} />, f.adapter);
+  await userEvent.click(screen.getByRole("button", { name: catalogs.de.stacks.detail.redeployMenu }));
+  const item = await screen.findByRole("menuitem", { name: catalogs.de.stacks.detail.actions.check });
+  await waitFor(() => expect(item.getAttribute("aria-disabled") === "true").toBe(false));
+  await userEvent.click(item);
+  await waitFor(() => expect(f.writes().some((write) => write.path === "/api/environments/direct/updater/projects/project/check")).toBe(true));
 });

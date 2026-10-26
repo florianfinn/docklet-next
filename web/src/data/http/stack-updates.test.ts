@@ -9,7 +9,7 @@ import { readFileSync } from "node:fs";
 import { withRunGate, isRunBusy } from "../run-gate";
 const contract = JSON.parse(readFileSync("../api/openapi.json", "utf8")) as { components: { schemas: { UpdaterAutoUpdatePolicy: { properties: { applyCode: { enum: string[] } } } } } };
 import { createStackUpdates } from "./stack-updates";
-import { baseline, points, policy, schedules, hints, checkResult } from "./update-decoders";
+import { baseline, points, policy, schedules, hints, checkResult, compareVersion } from "./update-decoders";
 import { reason, updateReasons } from "./update-validation";
 import { updateFixture, base, point, storedPolicy, schedule, systemHints, revision } from "./stack-updates.test-support";
 import { deferred } from "./activity-reader.test-support";
@@ -161,4 +161,17 @@ it("a malformed lifecycle timestamp is not an accepted admission", async () => {
   const f = updateFixture();
   f.state.hold = (path, init) => path.endsWith("/update") && init.method === "POST" ? Promise.resolve(response({ success: true, data: { code: "run.started", activityId: f.run.id, activity: { ...f.run, startedAt: "not-a-timestamp" } } }, 202)) : undefined;
   await expect(f.adapter.installStackUpdates("direct~project", { expectedRevision: revision })).rejects.toHaveProperty("outcome.code", "runtime.admission-unknown");
+});
+
+
+it.each([{ targetId: "replacement" }, { targetKind: "container" }])("policy rejects a foreign target identity %j", (foreign) => {
+  expect(() => policy({ ...storedPolicy, ...foreign }, "direct", "project")).toThrow();
+});
+it("hints accept build metadata while retaining numeric ordering and the hub cap", () => {
+  const value = { ...systemHints, hubVersion: "v2.0.0+hub.7", images: [{ ...systemHints.images[0]!, currentVersion: "1.9.0+agent.3", candidateVersion: "2.0.0+agent.8" }] };
+  expect(() => hints(value)).not.toThrow();
+  expect(hints(value).images[0]!.candidateVersion).toBe("2.0.0+agent.8");
+  expect(compareVersion("v2.0.0+hub.7", "2.0.0+agent.8")).toBe(0);
+  expect(() => hints({ ...value, images: [{ ...value.images[0]!, candidateVersion: "2.0.1+agent.8" }] })).toThrow();
+  for (const invalid of ["01.2.3+build", "1.2.3-rc.1+build", "9007199254740992.0.0+build"]) expect(compareVersion(invalid, "2.0.0")).toBeUndefined();
 });

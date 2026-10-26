@@ -37,6 +37,7 @@ export function schedules(value: unknown, host: string): UpdateSchedules {
     jobs: list(o.jobs).map((v) => { const j = record(v); return { id: id(j.id), kind: text(j.kind), enabled: bool(j.enabled), schedule: text(j.schedule), timeZone: j.timeZone === undefined ? undefined : text(j.timeZone), nextRun: optionalDate(j.nextRun), code: reason(j.code), currentRun: run(j.currentRun), lastRun: run(j.lastRun), lastSuccess: optionalDate(j.lastSuccess) }; }) };
 }
 function version(v: string): number[] | undefined {
+  v = v.split("+", 1)[0]!;
   if (!/^v?(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/.test(v)) return undefined;
   const parts = v.replace(/^v/, "").split(".").map(Number);
   return parts.every(Number.isSafeInteger) ? parts : undefined;

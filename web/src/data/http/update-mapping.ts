@@ -7,6 +7,7 @@
 import type { components } from "@/api/generated/schema";
 import type { ImageVersion, UpdateInfo } from "@/domain/model";
 import { observation } from "./update-validation";
+import { compareVersion } from "./update-decoders";
 import { levelFromVersions } from "@/domain/updates";
 
 /** Observations belong to the exact configured reference; raw server errors are never UI copy. */
@@ -24,7 +25,7 @@ export function mapUpdateInfo(dto: components["schemas"]["ImageUpdateInfo"] | un
   const registry = dto.authRegistry || (reference.includes("/") && /[.:]/.test(first) ? first : "docker.io");
   if (dto.state === "current") return { ...metadata, state: "current", current: image, checkedAt, registry };
   if (dto.state === "rebuild") return { ...metadata, state: "rebuild", current: image, latest: { ...image, ...(dto.latestVersion ? { version: dto.latestVersion } : {}) }, checkedAt, registry };
-  if (dto.state === "version" && /^v?\d+\.\d+\.\d+$/.test(dto.currentVersion) && /^v?\d+\.\d+\.\d+$/.test(dto.latestVersion)) {
+  if (dto.state === "version" && compareVersion(dto.currentVersion, dto.latestVersion) !== undefined) {
     return { ...metadata, state: "version", current: image, latest: { ...image, tag: dto.latestVersion, version: dto.latestVersion }, level: levelFromVersions(dto.currentVersion, dto.latestVersion), checkedAt, registry };
   }
   return { ...metadata, state: "unknown", current: image, checkedAt };

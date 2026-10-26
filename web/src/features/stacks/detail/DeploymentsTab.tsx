@@ -170,6 +170,7 @@ export function DeploymentsTab({ stack }: { stack: StackDetail }) {
         <h2 id="dep-title" className="mb-3 text-sm font-medium text-muted-foreground">
           {t("title")}
         </h2>
+        {shown && historyUnavailable && <p role="status" className="mb-3 text-sm text-muted-foreground">{t("unavailable")}</p>}
         {shown && latest ? (
           <>
             <div className="mb-2 flex min-h-8 flex-wrap items-center gap-2">

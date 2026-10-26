@@ -18,6 +18,8 @@ import { Button } from "@/shared/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/shared/ui/dialog";
 import { RestorePointState } from "./restore-point-state";
 import { UpdateUnavailable } from "./live-state";
+import { formatDateTime } from "@/domain/format";
+
 import { useUpdateAction } from "./use-update-action";
 
 export function DeletePointDialog({ scope, point, latest, readError, refresh, close }: {
@@ -69,7 +71,7 @@ export function DeletePointDialog({ scope, point, latest, readError, refresh, cl
   return <Dialog open onOpenChange={(v) => { if (!v) close(); }}><DialogContent><DialogHeader>
     <DialogTitle>{t("deletePoint")}</DialogTitle><DialogDescription>{t("deleteHelp")}</DialogDescription>
   </DialogHeader>
-    <p>{t("point", { at: point.createdAt })}</p><p className="break-all">{point.targetId} · {point.id}</p><RestorePointState point={displayed} />
+    <p>{t("point", { at: formatDateTime(point.createdAt) })}</p><p className="break-all">{point.targetId} · {point.id}</p><RestorePointState point={displayed} />
     {deleted ? <p role="status">{t(uncertain ? "alreadyDeleted" : "deleted")}</p> : <>
       {(!read.available || !write.available) && <UpdateUnavailable reason={read.reason ?? write.reason} />}
       {uncertain && <p role="status">{t("deleteUnknown")}</p>}

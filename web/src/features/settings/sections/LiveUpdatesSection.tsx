@@ -4,6 +4,8 @@
 // License: Apache-2.0
 // Deviations: Original live update UI for issue #231.
 
+import { formatDateTime } from "@/domain/format";
+
 import { useUpdateAction } from "@/shared/components/updates/use-update-action";
 
 import { UPDATE_CHECK_ANCHOR, UPDATE_POLICIES_ANCHOR } from "@/domain/job-links";
@@ -51,12 +53,12 @@ export function HostUpdateSettings({ hostId, name }: { hostId: string; name: str
   const data = query.data;
   return <section className="flex flex-col gap-3 rounded-xl border p-4"><h3 className="font-semibold">{name}</h3>
     {!read.available ? <UpdateUnavailable reason={read.reason} /> : query.isError ? <p role="alert">{errorText(query.error)}</p> : data ? <>
-      <p>{t("cron", { zone: data.timeZone })}</p>{data.jobs.map((job) => <div key={job.id}><p>{t(job.kind === "auto-update" ? "applySchedule" : "polling")}: {job.schedule} · {t(job.enabled ? "enabled" : "disabled")}</p><p>{t("next")}: {job.nextRun ?? t("unknown")}</p>{job.currentRun && <p>{t("currentRun", { id: job.currentRun.id, status: t(`jobStatus.${job.currentRun.status}`) })}</p>}{job.code && <p>{errorText(job.code)}</p>}</div>)}
+      <p>{t("cron", { zone: data.timeZone })}</p>{data.jobs.map((job) => <div key={job.id}><p>{t(job.kind === "auto-update" ? "applySchedule" : "polling")}: {job.schedule} · {t(job.enabled ? "enabled" : "disabled")}</p><p>{t("next")}: {job.nextRun ? formatDateTime(job.nextRun) : t("unknown")}</p>{job.currentRun && <p>{t("currentRun", { id: job.currentRun.id, status: t(`jobStatus.${job.currentRun.status}`) })}</p>}{job.code && <p>{errorText(job.code)}</p>}</div>)}
       {(!data.masterPollingEnabled || !data.masterAutoUpdateEnabled) && <p>{t("masterOff")}</p>}
       <Button variant="outline" onClick={() => setEditing(data)}>{t("editSchedules")}</Button>
     </> : <p>{t("loading")}</p>}
     {!hintRead.available ? <UpdateUnavailable reason={hintRead.reason} /> : hints.isError ? <p role="alert">{errorText(hints.error)}</p> : hints.data && <div><h4>{t("hints")}</h4><p>{t("hubVersion", { version: hints.data.hubVersion })}</p>{hints.data.images.map((h) => <p key={h.kind}>{h.kind}: <code>{h.reference}</code> {h.compatibleReference && <code>{h.compatibleReference}</code>} {h.currentVersion ?? t("unknown")} · {t(`hint.${h.state}`)} {h.candidateVersion} {h.requiresHubUpdate && t("hubFirst")} {h.code && errorText(h.code)}</p>)}</div>}
-    <h4>{t("orphans")}</h4>{!orphanRead.available ? <UpdateUnavailable reason={orphanRead.reason} /> : orphans.isError ? <p role="alert">{errorText(orphans.error)}</p> : orphans.data?.filter((p) => p.orphaned).map((p) => <article key={p.id} className="rounded-lg border p-3"><p className="break-all">{p.targetId} · {p.targetIdentity} · {p.createdAt}</p><RestorePointState point={p} />{p.code && <p>{errorText(p.code)}</p>}<Button variant="outline" disabled={!orphanRead.available || !orphanDelete.available || p.holdState !== "none"} onClick={() => setDeleting({ hostId, point: p })}>{t("deletePoint")}</Button></article>)}
+    <h4>{t("orphans")}</h4>{!orphanRead.available ? <UpdateUnavailable reason={orphanRead.reason} /> : orphans.isError ? <p role="alert">{errorText(orphans.error)}</p> : orphans.data?.filter((p) => p.orphaned).map((p) => <article key={p.id} className="rounded-lg border p-3"><p className="break-all">{p.targetId} · {p.targetIdentity} · {formatDateTime(p.createdAt)}</p><RestorePointState point={p} />{p.code && <p>{errorText(p.code)}</p>}<Button variant="outline" disabled={!orphanRead.available || !orphanDelete.available || p.holdState !== "none"} onClick={() => setDeleting({ hostId, point: p })}>{t("deletePoint")}</Button></article>)}
     {deleting?.hostId === hostId && <DeletePointDialog key={`${hostId}:${deleting.point.id}:${deleting.point.targetIdentity}`} scope={{ kind: "host", id: hostId }} point={deleting.point} readError={orphans.isError ? orphans.error : undefined} latest={orphans.data?.find((p) => p.id === deleting.point.id)} refresh={refreshPoints} close={() => setDeleting(undefined)} />}
     {editing && data && editing.registrationId === data.registrationId && <ScheduleDialog key={`${hostId}:${editing.registrationId}:${editing.revision}`} hostId={hostId} value={editing} close={() => setEditing(undefined)} saved={() => { void query.refetch(); }} />}
   </section>;

@@ -72,12 +72,14 @@ export function mapActivityDetail(detail: Detail): CodedActionRun {
   const lifecycle = run.imageLifecycle;
   const m10 = run.type === "project_update" || run.type === "project_restore" || !!lifecycle;
   if (m10) { date(run.startedAt); optionalDate(run.endedAt); }
-  const coded = (code: string | undefined, source: string): MessageCode => {
+  const coded = (code: string | undefined, source: string, field: "progress" | "error" = "progress"): MessageCode => {
     if (!m10) return message(code, source);
     const safe = reason(code);
     if (safe && safe !== "http.error") return { code: `images.errors.${safe.replaceAll(".", "_")}`, params: {} };
     const keys: Record<string, string> = { "run.started": "activity.status.running", "run.joined": "activity.status.running", "runtime.cancelled": "activity.runtime.cancelledBody", "runtime.failed": "activity.runtime.failedBody" };
-    return { code: keys[code ?? ""] ?? "common.commandErrors.failed", params: {} };
+    const key = keys[code ?? ""];
+    if (key) return { code: key, params: {} };
+    return field === "error" ? { code: "common.commandErrors.failed", params: {} } : message(code, source);
   };
   if (lifecycle) { const l = record(lifecycle); id(l.runId); bool(l.verified); if (bool(l.volumeDataIncluded)) throw new Error("dto.invalid-lifecycle"); }
   const target = run.resourceName || run.resourceId || run.sourceEnvironmentName || run.type;
@@ -107,7 +109,7 @@ export function mapActivityDetail(detail: Detail): CodedActionRun {
     progress: run.progress ?? 0,
     startedAt: run.startedAt,
     finishedAt: run.endedAt,
-    error: run.error ? coded(lifecycle?.code ?? (run.messageCode?.startsWith("runtime.") ? run.messageCode : undefined), run.error) : undefined,
+    error: run.error ? coded(lifecycle?.code ?? (run.messageCode?.startsWith("runtime.") ? run.messageCode : undefined), run.error, "error") : undefined,
     steps: (detail.stepTrace ?? []).map((step) => ({
       key: stepKey(step.name), label: coded(step.code, step.name), state: stepState(step.status),
       startedAt: step.startedAt, finishedAt: step.endedAt,

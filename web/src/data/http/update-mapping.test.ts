@@ -45,3 +45,9 @@ it("incomplete project counts cannot turn known service observations into all-cu
   expect(mapped.services[0]!.update.state).toBe("current"); expect(summarizeUpdates(mapped.services).visual).toBe("unchecked");
   expect(() => mapStack({ ...row, updateInfo: { ...row.updateInfo!, imageCount: "two" } as never }, "host", [], { stale: false })).toThrow();
 });
+
+
+it("version observations accept release build metadata without changing update level", () => {
+  expect(mapUpdateInfo({ ...observation("version"), currentVersion: "v1.0.0+current.7", latestVersion: "1.1.0+candidate.9" }, image, "example:1.0.0")).toMatchObject({ state: "version", level: "minor", latest: { version: "1.1.0+candidate.9" } });
+  for (const currentVersion of ["01.0.0+build", "1.0.0-rc.1+build", "9007199254740992.0.0+build"]) expect(mapUpdateInfo({ ...observation("version"), currentVersion }, image, "example:1.0.0").state).toBe("unknown");
+});

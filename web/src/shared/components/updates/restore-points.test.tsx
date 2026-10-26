@@ -4,6 +4,7 @@
 // License: Apache-2.0
 // Deviations: Original projection, delete-dialog and reconciliation gestures for issue #231.
 
+import { formatDateTime } from "@/domain/format";
 import { useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { act, screen, waitFor, within } from "@testing-library/react";
@@ -31,7 +32,7 @@ async function openDelete() {
 it.each(["restore-target", "healthy-baseline"] as const)("unavailable %s anchor keeps its reason and is explicitly deletable", async (reason) => {
   const f = await ready(); f.state.points = [{ ...point, protectionReason: reason, failedAttempt: true, available: false }];
   renderWithApp(<LiveRestorePoints stackId="direct~project" />, f.adapter);
-  await screen.findByText(point.createdAt); expect(document.body.textContent).toContain(p.protection[reason]);
+  await screen.findByText(formatDateTime(point.createdAt)); expect(document.body.textContent).toContain(p.protection[reason]);
   expect(document.body.textContent).toContain(p.kind.failedAttempt);
   expect(screen.getByRole("button", { name: t.restore }).hasAttribute("disabled")).toBe(true);
   const dialog = await openDelete();
@@ -42,13 +43,13 @@ it.each(["restore-target", "healthy-baseline"] as const)("unavailable %s anchor 
 it.each([false, true])("reload Direct/Edge=%s holds dominate null anchor and block restore/delete", async (edge) => {
   const f = await ready(); f.state.isEdge = edge; f.state.points = [{ ...point, holdState: "active" }];
   const first = renderWithApp(<LiveRestorePoints stackId="direct~project" />, f.adapter);
-  await screen.findByText(point.createdAt); expect(document.body.textContent).toContain(p.hold.active);
+  await screen.findByText(formatDateTime(point.createdAt)); expect(document.body.textContent).toContain(p.hold.active);
   expect(screen.queryByText(p.noRetentionAnchor) === null).toBe(true);
   expect(screen.getByRole("button", { name: t.deletePoint }).hasAttribute("disabled")).toBe(true);
   expect(screen.getByRole("button", { name: t.restore }).hasAttribute("disabled")).toBe(true);
   first.unmount(); f.state.points[0]!.holdState = "unknown";
   renderWithApp(<LiveRestorePoints stackId="direct~project" />, f.adapter);
-  await screen.findByText(point.createdAt); expect(document.body.textContent).toContain(p.hold.unknown);
+  await screen.findByText(formatDateTime(point.createdAt)); expect(document.body.textContent).toContain(p.hold.unknown);
   expect(screen.queryByText(p.noRetentionAnchor) === null).toBe(true);
   expect(screen.getByRole("button", { name: t.deletePoint }).hasAttribute("disabled")).toBe(true);
   expect(f.writes()).toHaveLength(0);
@@ -56,7 +57,7 @@ it.each([false, true])("reload Direct/Edge=%s holds dominate null anchor and blo
 it("hold wins the first label while the independent anchor remains visible", async () => {
   const f = await ready(); f.state.points = [{ ...point, protectionReason: "restore-target", holdState: "unknown" }];
   renderWithApp(<LiveRestorePoints stackId="direct~project" />, f.adapter); await screen.findByText(p.hold.unknown);
-  const article = screen.getByText(point.createdAt).closest("article")!;
+  const article = screen.getByText(formatDateTime(point.createdAt)).closest("article")!;
   expect(article.textContent!.indexOf(p.hold.unknown)).toBeLessThan(article.textContent!.indexOf(p.protection["restore-target"]));
 });
 it("restore confirmation cannot reuse a point with uncertain hold", async () => {
@@ -73,8 +74,8 @@ it.each(["protectionReason", "holdState", "failedAttempt", "images"])("bad %s fa
 });
 it.each(["listRestorePoints", "deleteRestorePoint"])("point UI intersects %s instead of route presence", async (missing) => {
   const f = await ready(); f.state.denied.add(missing); renderWithApp(<LiveRestorePoints stackId="direct~project" />, f.adapter);
-  if (missing === "listRestorePoints") { await screen.findByText(catalogs.de.activity.capability.unavailable); expect(screen.queryByText(point.createdAt) === null).toBe(true); }
-  else { await screen.findByText(point.createdAt); expect(screen.getByRole("button", { name: t.deletePoint }).hasAttribute("disabled")).toBe(true); }
+  if (missing === "listRestorePoints") { await screen.findByText(catalogs.de.activity.capability.unavailable); expect(screen.queryByText(formatDateTime(point.createdAt)) === null).toBe(true); }
+  else { await screen.findByText(formatDateTime(point.createdAt)); expect(screen.getByRole("button", { name: t.deletePoint }).hasAttribute("disabled")).toBe(true); }
   expect(f.writes()).toHaveLength(0);
 });
 it("cancel and close send zero deletes; deliberate confirmation sends exactly one", async () => {

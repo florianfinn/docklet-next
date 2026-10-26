@@ -4,6 +4,8 @@
 // License: Apache-2.0
 // Deviations: Original live update UI for issue #231.
 
+import { formatDateTime } from "@/domain/format";
+
 import { useUpdateAction } from "./use-update-action";
 
 import { useEffect, useState } from "react";
@@ -37,7 +39,7 @@ export function StackUpdateDialog({ stackId, point, onClose }: { stackId: string
   return <Dialog open onOpenChange={(open) => { if (!open) close(); }}><DialogContent><DialogHeader><DialogTitle>{t(point ? "restore" : "update")}</DialogTitle><DialogDescription>{t("noData")}</DialogDescription></DialogHeader>
     {!read.available || !write.available || (point && !points.available) ? <UpdateUnavailable reason={read.reason ?? write.reason ?? points.reason} /> : baseline.isError ? <p role="alert">{errorText(baseline.error)}</p> : !data ? <p>{t("loading")}</p> : <>
       {!data.available && <p role="status">{errorText(data.code ?? "update.baseline-unavailable")}</p>}
-      {point && <><p>{t("point", { at: point.createdAt })}</p><p>{t(point.sourceState === "partial-source" ? "partial" : "snapshot")}</p><label className="flex items-center gap-2"><Checkbox checked={ack === data.savedRevision} onCheckedChange={(v) => setAck(v === true ? data.savedRevision : undefined)} />{t("replace", { revision: data.savedRevision })}</label></>}
+      {point && <><p>{t("point", { at: formatDateTime(point.createdAt) })}</p><p>{t(point.sourceState === "partial-source" ? "partial" : "snapshot")}</p><label className="flex items-center gap-2"><Checkbox checked={ack === data.savedRevision} onCheckedChange={(v) => setAck(v === true ? data.savedRevision : undefined)} />{t("replace", { revision: data.savedRevision })}</label></>}
     </>}
     {action.error && <p role="alert">{action.error}</p>}
     {runId && <p role="status">{t("accepted")} <Link to={`/stacks/${encodeURIComponent(stackId)}?tab=deployments`}>{t("openRun", { id: runId })}</Link></p>}

@@ -37,8 +37,8 @@ it("maps live stack and standalone observations and opens their real details", a
   view.unmount();
   renderWithApp(<ContainerInspector container={container} host={undefined} onClose={() => {}} />, f.adapter);
   await screen.findByText(catalogs.de.common.updates.titleRebuild);
-  expect(screen.queryByRole("button", { name: catalogs.de.common.updates.actionUpdateContainer })).toBeNull();
-  expect(screen.queryByRole("button", { name: catalogs.de.common.updates.actionUpdateStack })).toBeNull();
+  expect(screen.queryByRole("button", { name: catalogs.de.common.updates.actionUpdateContainer }) === null).toBe(true);
+  expect(screen.queryByRole("button", { name: catalogs.de.common.updates.actionUpdateStack }) === null).toBe(true);
 });
 
 it("renders a typed observation reason through the keyboard gesture without raw diagnostics", async () => {

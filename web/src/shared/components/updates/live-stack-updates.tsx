@@ -4,6 +4,8 @@
 // License: Apache-2.0
 // Deviations: Original live update UI for issue #231.
 
+import { formatDateTime } from "@/domain/format";
+
 import { useUpdateAction } from "./use-update-action";
 
 import { AUTO_UPDATE_ANCHOR } from "@/domain/job-links";
@@ -44,8 +46,8 @@ export function LiveStackUpdates({ stackId }: { stackId: string }) {
   return <section id={AUTO_UPDATE_ANCHOR} className="flex flex-col gap-3 rounded-xl border p-4"><h3>{t("policy")}</h3>
     {!read.available ? <UpdateUnavailable reason={read.reason} /> : policy.isError ? <p role="alert">{errorText(policy.error)}</p> : p ? <>
       <p>{t(p.mode)}{p.stale && ` · ${t("stale")}`}</p>
-      <p>{t("checked")}: {p.checkedAt ?? t("unknown")} {p.code && errorText(p.code)}</p>
-      <p>{t("applied")}: {p.applyCheckedAt ?? t("unknown")} {p.applyCode && errorText(p.applyCode)}</p>
+      <p>{t("checked")}: {p.checkedAt ? formatDateTime(p.checkedAt) : t("unknown")} {p.code && errorText(p.code)}</p>
+      <p>{t("applied")}: {p.applyCheckedAt ? formatDateTime(p.applyCheckedAt) : t("unknown")} {p.applyCode && errorText(p.applyCode)}</p>
       {p.bookkeepingCode && <p role="status">{errorText(p.bookkeepingCode)}</p>}
       {p.candidates.map((c) => <p key={`${c.service}:${c.digest}`}>{c.service}: {c.version || c.imageRef} · {t(`notification.${c.notificationState}`)}</p>)}
       <Button variant="outline" onClick={() => setEditing(p)}>{t("editPolicy")}</Button>
@@ -64,7 +66,7 @@ export function LiveRestorePoints({ stackId }: { stackId: string }) {
   const refresh = async () => { const result = await query.refetch(); if (result.isError) throw result.error; return result.data!; };
   const restore = useCapability("restoreRestorePoint", { kind: "stack", id: stackId }), baselineRead = useCapability("getUpdateBaseline", { kind: "stack", id: stackId });
   return <section className="flex flex-col gap-3"><p>{t("noData")}</p>{!read.available ? <UpdateUnavailable reason={read.reason} /> : query.isError ? <p role="alert">{errorText(query.error)}</p> : !query.data ? <p>{t("loading")}</p> : !query.data.length ? <p>{t("noPoints")}</p> : query.data.map((point) => <article className="rounded-lg border p-3" key={point.id}>
-    <time>{point.createdAt}</time><RestorePointState point={point} /><p>{t(point.sourceState === "partial-source" ? "partial" : "snapshot")}</p>{point.images.map((i) => <p key={i.service}>{i.service}: {i.reference} · {t(i.present ? i.running ? "running" : "stopped" : "absent")}</p>)}
+    <time dateTime={point.createdAt}>{formatDateTime(point.createdAt)}</time><RestorePointState point={point} /><p>{t(point.sourceState === "partial-source" ? "partial" : "snapshot")}</p>{point.images.map((i) => <p key={i.service}>{i.service}: {i.reference} · {t(i.present ? i.running ? "running" : "stopped" : "absent")}</p>)}
     {point.code && <p>{errorText(point.code)}</p>}<Button variant="outline" disabled={!read.available || !restore.available || !baselineRead.available || !point.available || point.orphaned || point.holdState !== "none"} title={restore.reason ?? baselineRead.reason} onClick={() => setSelected({ stackId, point })}>{t("restore")}</Button>
     <Button variant="outline" disabled={!read.available || !remove.available || point.holdState !== "none"} title={remove.reason ?? read.reason} onClick={() => setDeleting({ stackId, point })}>{t("deletePoint")}</Button>
   </article>)}{selected?.stackId === stackId && <StackUpdateDialog key={`${stackId}:${selected.point.id}`} stackId={stackId} point={selected.point} onClose={() => setSelected(undefined)} />}
