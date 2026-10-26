@@ -1,6 +1,6 @@
 // Source: docklet-next/docs/design/update-policies.md
-// Revision: c2a8b95f3eae4f7d561bfc48d5dfe97c63bab6db
-// Retrieved: 2026-10-25
+// Revision: cdfe93c3dd2557cb21586ae542ebc05cae9bc0af
+// Retrieved: 2026-10-26
 // License: Apache-2.0
 // Deviations: Hub-owned policy, schedule and durable notification projections.
 
@@ -47,7 +47,7 @@ type UpdateCandidate struct {
 	Digest            string `json:"digest"`
 	Platform          string `json:"platform"`
 	EntryID           string `json:"entryId,omitempty"`
-	NotificationState string `json:"notificationState" enum:"pending,sent,unconfigured,failed,not-requested"`
+	NotificationState string `json:"notificationState" enum:"pending,sending,sent,unconfigured,failed,not-requested"`
 }
 type UpdateScheduleInput struct {
 	ExpectedRevision   uint64 `json:"expectedRevision"`

@@ -44,7 +44,10 @@ Notification identity includes host registration, stack identity, repository,
 platform, release/tag and immutable candidate digest. A transaction commits that
 identity with its durable entry before existing channels are dispatched. Badge
 data remains visible without channels; an unconfigured or failed delivery is
-reported truthfully. This guarantees one entry, not exactly-once network delivery.
+reported truthfully. A durable `sending` claim means delivery is in flight or its
+outcome is unknown after interruption; observers never label it failed or resend
+it. Sent entry history remains visible after switching from notify to apply.
+This guarantees one entry, not exactly-once network delivery.
 
 System hints are explicit reads of the effective agent/tools references. The hub
 selects only an observed stable release at or below its running version and never
@@ -55,7 +58,9 @@ stays unknown. Hints cannot pull or replace containers. The existing release-fee
 source limitation is tracked separately in issue #235.
 
 Queued wrappers from an earlier hub process only reconcile receipts. An active or
-unknown admitted child also holds later batches for that host; another host can
+unknown admitted child also holds later batches for that host. An undeclared
+executor result code becomes `runtime.outcome-unknown` and requires receipt
+retry/reconciliation without replaying update effects; another host can
 continue. A known terminal receipt clears the checkpoint. An administrator's
 acknowledged runtime release clears it in the same transaction, without changing
 unknown effect knowledge into a successful result. Public version responses and

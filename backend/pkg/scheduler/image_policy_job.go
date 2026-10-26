@@ -1,6 +1,6 @@
 // Source: docklet-next/docs/design/update-policies.md
-// Revision: c2a8b95f3eae4f7d561bfc48d5dfe97c63bab6db
-// Retrieved: 2026-10-25
+// Revision: cdfe93c3dd2557cb21586ae542ebc05cae9bc0af
+// Retrieved: 2026-10-26
 // License: Apache-2.0
 // Deviations: Two hub coordinator jobs per registered host; no inherited local watcher.
 

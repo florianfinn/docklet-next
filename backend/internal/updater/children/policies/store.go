@@ -1,6 +1,6 @@
 // Source: docklet-next/docs/design/update-policies.md
-// Revision: c2a8b95f3eae4f7d561bfc48d5dfe97c63bab6db
-// Retrieved: 2026-10-25
+// Revision: cdfe93c3dd2557cb21586ae542ebc05cae9bc0af
+// Retrieved: 2026-10-26
 // License: Apache-2.0
 // Deviations: Atomic policy revisions, runtime admission guard and candidate entry dedup.
 
@@ -144,14 +144,23 @@ func AdmitChild(tx *gorm.DB, b *dto.PolicyBinding, run string) error {
 }
 func (s Store) RecordCandidate(ctx context.Context, policy Policy, c dto.UpdateCandidate, notice bool) (dto.UpdateCandidate, error) {
 	c.NotificationState = "not-requested"
-	if !notice {
-		return c, nil
-	}
 	repository := c.ImageRef
 	if named, err := reference.ParseNormalizedNamed(repository); err == nil {
 		repository = reference.TrimNamed(named).String()
 	}
 	id := Key(policy.EnvironmentID, policy.RegistrationID, policy.TargetIdentity, repository, c.Platform, c.Version, c.Digest)
+	if !notice {
+		var existing Notice
+		err := s.DB.WithContext(ctx).Where("candidate_id = ?", id).Take(&existing).Error
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return c, nil
+		}
+		if err != nil {
+			return c, err
+		}
+		c.EntryID, c.NotificationState = existing.ID, existing.Status
+		return c, nil
+	}
 	entry := Notice{ID: uuid.NewString(), CandidateID: id, EnvironmentID: policy.EnvironmentID, Status: "pending", CreatedAt: time.Now().UTC()}
 	payload, err := json.Marshal(c)
 	if err != nil {

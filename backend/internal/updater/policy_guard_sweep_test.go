@@ -184,7 +184,7 @@ func TestPolicyReadAndWriteFailuresAreVisible(t *testing.T) {
 				row, err := f.s.GetImagePolicy(t.Context(), "0", "stack")
 				require.NoError(t, err)
 				require.Len(t, row.Candidates, 1)
-				require.Equal(t, "failed", row.Candidates[0].NotificationState)
+				require.Equal(t, "sending", row.Candidates[0].NotificationState)
 			}
 		})
 	}

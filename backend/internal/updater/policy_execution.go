@@ -1,6 +1,6 @@
 // Source: docklet-next/docs/design/update-policies.md
-// Revision: c2a8b95f3eae4f7d561bfc48d5dfe97c63bab6db
-// Retrieved: 2026-10-25
+// Revision: cdfe93c3dd2557cb21586ae542ebc05cae9bc0af
+// Retrieved: 2026-10-26
 // License: Apache-2.0
 // Deviations: Serial policy children through runtime admission; receipt-only restart recovery.
 
@@ -273,6 +273,9 @@ func imagePolicySnapshotTarget(target, id string, snapshot activityDTO.RuntimeSn
 	code := ""
 	if snapshot.ImageLifecycle != nil {
 		code = snapshot.ImageLifecycle.Code
+		if imageDTO.ValidateReason(code) != nil {
+			return policyTargetWithActivity(target, id, st.Failed, "runtime.outcome-unknown"), true
+		}
 	}
 	if snapshot.OutcomeState == activityDTO.RuntimeOutcomeUnknown || snapshot.Status != activityDTO.StatusSuccess && snapshot.Status != activityDTO.StatusFailed && snapshot.Status != activityDTO.StatusCancelled {
 		return policyTargetWithActivity(target, id, st.Failed, "runtime.outcome-unknown"), true
@@ -374,7 +377,7 @@ func (s *UpdaterService) observeImagePolicy(ctx context.Context, p *imagePolicyS
 		if err != nil {
 			return nil, err
 		}
-		if c.EntryID != "" {
+		if c.EntryID != "" && one.Mode == "notify" {
 			c, err = s.deliverImagePolicyEntry(ctx, p, c)
 			if err != nil {
 				return nil, err
@@ -432,9 +435,6 @@ func (s *UpdaterService) deliverImagePolicyEntry(ctx context.Context, p *imagePo
 		notice.Status = status
 	}
 	c.NotificationState = notice.Status
-	if notice.Status == "sending" {
-		c.NotificationState = "failed"
-	}
 	return c, nil
 }
 

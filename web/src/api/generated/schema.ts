@@ -1,5 +1,5 @@
 // Source: api/openapi.json
-// Revision: 918ff3f7663651cbf4dd14732d09e4e7968cec46d947cdb74ea67ff3ac9a3420
+// Revision: 18efae1d42e94994b665577e10aac38361ffa5af07c390a2b31338630f7deb74
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
 // Deviations: Generated TypeScript declarations from the local Huma export.
@@ -10867,7 +10867,7 @@ export interface components {
             entryId?: string;
             imageRef: string;
             /** @enum {string} */
-            notificationState: "pending" | "sent" | "unconfigured" | "failed" | "not-requested";
+            notificationState: "pending" | "sending" | "sent" | "unconfigured" | "failed" | "not-requested";
             platform: string;
             service: string;
             version: string;
