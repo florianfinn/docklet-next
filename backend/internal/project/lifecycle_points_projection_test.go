@@ -74,9 +74,38 @@ func TestPointDeleteOrders(t *testing.T) {
 				return err
 			}
 			switch order {
-			case "delete-first", "late-delete", "unknown-delete":
+			case "delete-first":
 				require.NoError(t, store.Delete(t.Context(), point.ID))
+				_, _, err = store.Point(t.Context(), point.ID)
+				lifecycleCode(t, err, "restore.not-found")
 				err = selectPoint()
+				lifecycleCode(t, err, "restore.unavailable")
+				require.Zero(t, effects)
+			case "unknown-delete":
+				outcome := make(chan error, 1)
+				go func() {
+					if err := store.Delete(t.Context(), point.ID); err != nil {
+						outcome <- err
+						return
+					}
+					outcome <- context.DeadlineExceeded
+				}()
+				require.ErrorIs(t, <-outcome, context.DeadlineExceeded)
+				rows, readErr := f.service.ListImageRestorePoints(t.Context(), f.project.ID, true)
+				require.NoError(t, readErr)
+				require.Empty(t, rows)
+				err = selectPoint()
+				lifecycleCode(t, err, "restore.unavailable")
+				require.Zero(t, effects)
+			case "late-delete":
+				selected, resume := make(chan struct{}), make(chan struct{})
+				result := make(chan error, 1)
+				go func() { close(selected); <-resume; result <- selectPoint() }()
+				<-selected
+				require.NoError(t, store.Delete(t.Context(), point.ID))
+				close(resume)
+				err = <-result
+
 				var problem *imageDTO.OperationError
 				require.ErrorAs(t, err, &problem)
 				require.Equal(t, "restore.unavailable", problem.Problem.Code)
@@ -281,4 +310,31 @@ func TestRestorePointHostProjectionReopensStoredGroups(t *testing.T) {
 		}
 	}
 	require.Equal(t, map[string]int{f.project.ID: 1, "orphan-stack": 1}, anchors)
+}
+
+func TestRestorePointLocalUnknownHold(t *testing.T) {
+	f := newLifecycleFixture(t)
+	snapshot := f.establishBaseline()
+	store := f.service.lifecycleStore()
+	point, err := store.Prepare(t.Context(), snapshot, uuid.NewString(), "", "settled")
+	require.NoError(t, err)
+	require.NoError(t, store.Available(t.Context(), point.ID))
+	require.NoError(t, f.db.Model(&life.Run{}).Where("point_id = ?", point.ID).Update("settled", true).Error)
+	pointReceiptForTest(t, f, point.ID, "unknown")
+	rows, err := f.service.ListImageRestorePoints(t.Context(), f.project.ID, true)
+	require.NoError(t, err)
+	require.Len(t, rows, 1)
+	require.Equal(t, dto.HoldUnknown, rows[0].HoldState)
+}
+func pointReceiptForTest(t *testing.T, f *lifecycleFixture, point, state string) {
+	t.Helper()
+	now := time.Now().UTC()
+	receipt := activity.RuntimeReceipt{RunID: uuid.NewString(), Kind: "receipt", StoreGeneration: f.binding.StoreGeneration, ManagerID: f.binding.ManagerID, RegistrationID: f.binding.RegistrationID, EnvironmentID: "0", ExecutorGeneration: f.binding.ExecutorGeneration, RequestDigest: "synthetic-digest", CallerID: new("operator"), OperationID: new("restore-project"), TargetKind: new("stack"), TargetID: &f.project.ID, GateScope: new("stack:" + f.project.ID), GateKey: new("restore"), AdmittedAt: &now, DispatchState: new("pending"), ExecutorState: &state, FinalWriteAt: now}
+	if state == "unknown" {
+		receipt.UnknownReason = new("synthetic-transport-loss")
+	}
+	require.NoError(t, f.db.Create(&receipt).Error)
+	payload, err := json.Marshal(dto.LifecycleIntent{Request: dto.LifecycleRequest{PointID: point}})
+	require.NoError(t, err)
+	require.NoError(t, f.db.Create(&activity.RuntimeImageIntent{RunID: receipt.RunID, Payload: string(payload)}).Error)
 }

@@ -71,6 +71,7 @@ func TestPointDeleteOrdersTransport(t *testing.T) {
 				effects, deletes := 0, 0
 				hold := dto.HoldNone
 				lost := false
+				selected, resume := make(chan struct{}), make(chan struct{})
 				execute := func(w http.ResponseWriter, r *http.Request) {
 					w.Header().Set("Content-Type", "application/json")
 					var err error
@@ -79,6 +80,10 @@ func TestPointDeleteOrdersTransport(t *testing.T) {
 						deletes++
 						err = store.Delete(r.Context(), point.ID)
 					case r.Method == http.MethodPost:
+						if order == "late-delete" {
+							close(selected)
+							<-resume
+						}
 						_, err = store.Prepare(r.Context(), snapshot, uuid.NewString(), point.ID, "settled")
 						if err == nil {
 							effects++
@@ -169,15 +174,38 @@ func TestPointDeleteOrdersTransport(t *testing.T) {
 					require.Contains(t, rec.Body.String(), "restore.in-use")
 					return
 				}
+				if order == "late-delete" {
+					type reply struct {
+						status int
+						body   []byte
+					}
+					result := make(chan reply, 1)
+					go func() { status, body := selectPoint(); result <- reply{status, body} }()
+					<-selected
+					rec := deletePoint()
+					require.Equal(t, 200, rec.Code, rec.Body.String())
+					close(resume)
+					response := <-result
+					require.Equal(t, 409, response.status, string(response.body))
+					require.Contains(t, string(response.body), "restore.unavailable")
+					require.Zero(t, effects)
+					require.Equal(t, 1, deletes)
+					return
+				}
 				if order == "unknown-delete" {
 					lost = true
 				}
 				rec := deletePoint()
 				if lost {
 					require.GreaterOrEqual(t, rec.Code, 500)
+					list := httptest.NewRecorder()
+					router.ServeHTTP(list, httptest.NewRequest(http.MethodGet, "/api/environments/example/updater/restore-points", http.NoBody))
+					require.Equal(t, 200, list.Code)
+					require.Contains(t, list.Body.String(), `"data":[]`)
 				} else {
 					require.Equal(t, 200, rec.Code, rec.Body.String())
 				}
+
 				status, body := selectPoint()
 				require.Equal(t, 409, status, string(body))
 				require.Contains(t, string(body), "restore.unavailable")

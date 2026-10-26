@@ -152,6 +152,8 @@ No admission/delete fence or new lock is added. Never hold `runningMu` or a DB t
 Inject an evidence-read port via `middleware/environment.go:842` (`EnvironmentProxySecurity`), wired at `bootstrap/router_bootstrap.go:309`; middleware never imports activity.
 Bound agent point-list bodies to 8 MiB before buffering (Direct reads and Edge assembly), and to 4,096 points. Validate the list envelope and required fields.
 Malformed/non-list/oversized/missing/undeclared agent values fail the whole list with declared fallback `update.check-unavailable` (503), never passthrough/defaults.
+Declared typed agent errors preserve their code and HTTP status; malformed/undeclared errors use the fallback.
+Direct/Edge transport or tunnel failures use existing `agent.unavailable` (502); oversized evidence still uses the validation fallback.
 Hub evidence DB failures use `update.persistence-failed` (500), including deletes before forwarding. These existing codes are in `types/image/reason.go:18`.
 
 Safety invariant: a restore never acts on a deleted or unavailable point. Only executor conditional selection plus executor `Held` enforce this invariant.

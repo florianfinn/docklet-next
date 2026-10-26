@@ -196,13 +196,6 @@ func getCapabilities(ctx context.Context, input *GetCapabilitiesInput) (*handler
 			env, raw, scoped := strings.Cut(ref.ID, "~")
 			valid := ref.Kind == "volume" && scoped && env != "" && raw != "" && !strings.Contains(raw, "~") && !strings.HasPrefix(raw, "bind:") && permissions.Allows(authz.PermVolumesRead, env)
 			switch descriptors[i].OperationID {
-			case "checkUpdates", "installStackUpdates", "restoreRestorePoint", "getUpdateBaseline", "listRestorePoints", "deleteRestorePoint", "listHostRestorePoints", "deleteHostRestorePoint", "getAutoUpdatePolicy", "setAutoUpdate", "setAutoUpdateApply", "listSchedule", "saveUpdateSchedule", "listSystemComponents":
-				descriptors[i].Available = updateCapabilityAllowed(descriptors[i].OperationID, descriptors[i].ResourceRef, permissions)
-				if descriptors[i].Available {
-					descriptors[i].DisabledReasonCode = ""
-				} else {
-					descriptors[i].DisabledReasonCode = "capability.unavailable"
-				}
 			case "writeFile", "createEntry", "uploadFile":
 				valid = valid && permissions.Allows(authz.PermVolumesUpload, env)
 			case "renameEntry":

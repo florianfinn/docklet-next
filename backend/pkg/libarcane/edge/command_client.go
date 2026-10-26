@@ -27,6 +27,9 @@ const (
 	bodyTransferMetadataKey     = "body_transfer_id"
 )
 
+// ErrCommandResponseTooLarge distinguishes invalid agent evidence from transport loss.
+var ErrCommandResponseTooLarge = errors.New("runtime response too large")
+
 func NewCommandClient() *CommandClient {
 	return &CommandClient{}
 }

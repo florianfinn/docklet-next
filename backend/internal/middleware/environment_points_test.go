@@ -20,6 +20,7 @@ import (
 
 	"github.com/florianfinn/docklet-next/backend/pkg/authz"
 	"github.com/florianfinn/docklet-next/backend/pkg/libarcane/edge"
+	imageDTO "github.com/florianfinn/docklet-next/types/image"
 	dto "github.com/florianfinn/docklet-next/types/updater"
 	"github.com/florianfinn/docklet-next/types/user"
 	"github.com/labstack/echo/v5"
@@ -27,11 +28,15 @@ import (
 )
 
 type pointTestConn struct {
+	sendErr error
 	tunnel  *edge.AgentTunnel
 	handler http.Handler
 }
 
 func (p *pointTestConn) Send(msg *edge.TunnelMessage) error {
+	if p.sendErr != nil {
+		return p.sendErr
+	}
 	if msg.Type != edge.MessageTypeCommandRequest {
 		return nil
 	}
@@ -280,5 +285,68 @@ func TestPointOverlayErrorStatus(t *testing.T) {
 			require.NotContains(t, rec.Body.String(), "undeclared")
 			require.Zero(t, deletes)
 		}
+	}
+}
+
+func TestPointOverlayKeepsExecutorHold(t *testing.T) {
+	for _, isEdge := range []bool{false, true} {
+		t.Run(map[bool]string{false: "direct", true: "edge"}[isEdge], func(t *testing.T) {
+			for _, agentHold := range []dto.RestorePointHoldState{dto.HoldActive, dto.HoldUnknown} {
+				body := bytes.Replace(pointBody(t), []byte(`"holdState":"none"`), []byte(`"holdState":"`+string(agentHold)+`"`), 1)
+				hubHold := dto.HoldNone
+				dbErr := false
+				deletes := 0
+				router := pointProxy(t, isEdge, &body, &hubHold, &dbErr, &deletes)
+				for _, path := range []string{"/updater/project/stack/restore-points", "/updater/restore-points"} {
+					rec := pointCall(router, http.MethodGet, path)
+					require.Equal(t, 200, rec.Code)
+					require.Contains(t, rec.Body.String(), `"holdState":"`+string(agentHold)+`"`)
+				}
+			}
+		})
+	}
+}
+func TestPointOverlayTypedAgentErrors(t *testing.T) {
+	for _, isEdge := range []bool{false, true} {
+		t.Run(map[bool]string{false: "direct", true: "edge"}[isEdge], func(t *testing.T) {
+			for _, problem := range []*imageDTO.OperationError{imageDTO.Failure("update.persistence-failed", 500), imageDTO.Failure("restore.unavailable", 409), imageDTO.Failure("update.invalid-target", 400), imageDTO.Failure("update.permission-denied", 403)} {
+				body, err := json.Marshal(problem)
+				require.NoError(t, err)
+				hold := dto.HoldNone
+				dbErr := false
+				deletes := 0
+				rec := pointCall(pointProxy(t, isEdge, &body, &hold, &dbErr, &deletes, problem.Status), http.MethodGet, "/updater/restore-points")
+				require.Equal(t, problem.Status, rec.Code)
+				var got imageDTO.OperationError
+				require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &got))
+				require.Equal(t, problem.Problem, got.Problem)
+			}
+		})
+	}
+}
+
+type pointErrorTransport struct{ err error }
+
+func (p pointErrorTransport) RoundTrip(*http.Request) (*http.Response, error) { return nil, p.err }
+func TestPointOverlayTransportFailures(t *testing.T) {
+	for _, isEdge := range []bool{false, true} {
+		t.Run(map[bool]string{false: "direct", true: "edge"}[isEdge], func(t *testing.T) {
+			for _, failure := range []error{errors.New("synthetic connection failure"), context.DeadlineExceeded} {
+				mw := newTestEnvironmentMiddleware()
+				target := "https://example.com"
+				mw.httpClient = &http.Client{Transport: pointErrorTransport{failure}}
+				if isEdge {
+					target = "edge://example"
+					mw.registry.Register("example", edge.NewAgentTunnelWithConn("example", &pointTestConn{sendErr: failure}))
+				}
+				mw.resolver = func(context.Context, string) (string, *string, bool, error) { return target, nil, true, nil }
+				router := echo.New()
+				group := attachMiddleware(router, mw)
+				group.Any("/environments/:id/*", func(c *echo.Context) error { return c.NoContent(418) })
+				rec := pointCall(router, http.MethodGet, "/updater/restore-points")
+				require.Equal(t, 502, rec.Code)
+				require.Contains(t, rec.Body.String(), `"code":"agent.unavailable"`)
+			}
+		})
 	}
 }

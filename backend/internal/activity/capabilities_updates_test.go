@@ -14,8 +14,13 @@ import (
 	"github.com/florianfinn/docklet-next/backend/pkg/libarcane/edge"
 	"github.com/florianfinn/docklet-next/types/capability"
 	dto "github.com/florianfinn/docklet-next/types/updater"
+	"github.com/florianfinn/docklet-next/types/user"
+	"github.com/labstack/echo/v5"
 	"github.com/stretchr/testify/require"
+	"net/http"
+	"net/http/httptest"
 	"testing"
+	"time"
 )
 
 func TestUpdateCapabilitiesScopedGrants(t *testing.T) {
@@ -127,4 +132,33 @@ func TestUpdateCapabilitiesTransportParity(t *testing.T) {
 		require.True(t, ok, route.path)
 		require.Equal(t, route.command, command)
 	}
+}
+
+func TestPointOverlayIgnoresSettledReceipt(t *testing.T) {
+	f := b1Fixture(t)
+	c := imageCommand(f.command(), RuntimeRestoreProject)
+	admitted, err := f.service.Admit(t.Context(), c)
+	require.NoError(t, err)
+	point := c.Options.Lifecycle.Request.PointID
+	holds, err := f.store.svc.ReadPointHolds(t.Context(), "0", []string{point})
+	require.NoError(t, err)
+	require.Equal(t, dto.HoldActive, holds[point])
+	now := time.Now().UTC()
+	require.NoError(t, f.store.svc.db.Model(&RuntimeReceipt{}).Where("run_id = ?", admitted.ActivityID).Updates(map[string]any{"executor_state": "success", "executor_settled_at": now, "settled_at": now}).Error)
+	holds, err = f.store.svc.ReadPointHolds(t.Context(), "0", []string{point})
+	require.NoError(t, err)
+	require.Empty(t, holds)
+	deletes := 0
+	agent := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { deletes++; w.WriteHeader(204) }))
+	t.Cleanup(agent.Close)
+	router := echo.New()
+	group := router.Group("/api")
+	group.Use(middleware.NewEnvProxyMiddlewareWithParamAndRegistry("hub", "id", func(context.Context, string) (string, *string, bool, error) { return agent.URL, nil, true, nil }, func(context.Context, *echo.Context) (*authz.PermissionSet, *user.Actor, bool) {
+		return authz.SudoPermissionSet(), nil, true
+	}, nil, edge.NewTunnelRegistry(), nil, middleware.EnvironmentProxySecurity{PointHolds: f.store.svc.ReadPointHolds}))
+	group.Any("/environments/:id/*", func(c *echo.Context) error { return c.NoContent(418) })
+	response := httptest.NewRecorder()
+	router.ServeHTTP(response, httptest.NewRequest(http.MethodDelete, "/api/environments/0/updater/restore-points/"+point, http.NoBody))
+	require.Equal(t, 204, response.Code, response.Body.String())
+	require.Equal(t, 1, deletes)
 }

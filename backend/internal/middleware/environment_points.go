@@ -10,6 +10,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json/v2"
+	"errors"
 	"io"
 	"net/http"
 	"strings"
@@ -64,15 +65,26 @@ func (m *EnvironmentMiddleware) checkPointDelete(c *echo.Context, env, point str
 
 func (m *EnvironmentMiddleware) writePointList(c *echo.Context, env string, status int, headers http.Header, reader io.Reader) error {
 	body, err := io.ReadAll(io.LimitReader(reader, dto.MaxRestorePointResponseBytes+1))
-	if err != nil || len(body) > dto.MaxRestorePointResponseBytes {
-		return pointFailure(c, "update.check-unavailable", 503)
+	if err != nil {
+		return m.abortEdgeTunnelUnavailable(c)
 	}
-	if remenv.AgentAuthRejected(status) {
-		return c.JSON(http.StatusBadGateway, map[string]any{"success": false, "code": "agent.invalid-token"})
+	if len(body) > dto.MaxRestorePointResponseBytes {
+		return pointFailure(c, "update.check-unavailable", 503)
 	}
 	if status != http.StatusOK {
+		var failure struct {
+			Success *bool             `json:"success"`
+			Problem *imageDTO.Problem `json:"error"`
+		}
+		if status >= 400 && status <= 599 && json.Unmarshal(body, &failure) == nil && failure.Success != nil && !*failure.Success && failure.Problem != nil && imageDTO.ValidReason(failure.Problem.Code) && failure.Problem.Message != "" {
+			return c.JSON(status, &imageDTO.OperationError{Problem: *failure.Problem})
+		}
+		if remenv.AgentAuthRejected(status) {
+			return c.JSON(http.StatusBadGateway, map[string]any{"success": false, "code": "agent.invalid-token"})
+		}
 		return pointFailure(c, "update.check-unavailable", 503)
 	}
+
 	var envelope struct {
 		Success bool               `json:"success"`
 		Data    []dto.RestorePoint `json:"data"`
@@ -121,7 +133,10 @@ func (m *EnvironmentMiddleware) proxyPointList(c *echo.Context, tunnel *edge.Age
 	}
 	status, responseHeaders, body, err := edge.ProxyRequest(ctx, tunnel, c.Request().Method, m.buildProxyPath(c, env), c.Request().URL.RawQuery, headers, nil)
 	if err != nil {
-		return pointFailure(c, "update.check-unavailable", 503)
+		if errors.Is(err, edge.ErrCommandResponseTooLarge) {
+			return pointFailure(c, "update.check-unavailable", 503)
+		}
+		return m.abortEdgeTunnelUnavailable(c)
 	}
 	h := http.Header{}
 	for key, value := range responseHeaders {

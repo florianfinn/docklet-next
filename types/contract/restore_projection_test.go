@@ -33,6 +33,8 @@ func TestRestorePointProjectionContract(t *testing.T) {
 	require.NoError(t, json.Unmarshal(body, &spec))
 	schema := spec.Components.Schemas["UpdaterRestorePoint"]
 	require.NotEmpty(t, schema.Properties)
+	require.Equal(t, "array", schema.Properties["images"].Type)
+	require.Contains(t, schema.Required, "images")
 	require.Contains(t, schema.Properties["protectionReason"].Type, "null")
 	require.Equal(t, []any{string(dto.RestoreTarget), string(dto.HealthyBaseline), nil}, schema.Properties["protectionReason"].Enum)
 	require.Equal(t, []any{string(dto.HoldNone), string(dto.HoldActive), string(dto.HoldUnknown)}, schema.Properties["holdState"].Enum)
@@ -73,6 +75,7 @@ func TestRestorePointProjectionContract(t *testing.T) {
 	ts, err := os.ReadFile("../../web/src/api/generated/schema.ts")
 	require.NoError(t, err)
 	segment := strings.SplitN(strings.SplitN(string(ts), "\n        UpdaterRestorePoint: {", 2)[1], "};", 2)[0]
+	require.Contains(t, segment, "images: components[\"schemas\"][\"UpdaterPointImage\"][];")
 	for _, field := range []string{"protectionReason:", "holdState:", "failedAttempt:"} {
 		require.Contains(t, segment, field)
 	}

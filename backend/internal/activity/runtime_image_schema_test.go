@@ -19,5 +19,7 @@ func TestPointProjectionSchemaNullAnchor(t *testing.T) {
 	registerRestorePointSchema(api)
 	schema := api.OpenAPI().Components.Schemas.Schema(reflect.TypeFor[dto.RestorePoint](), false, "")
 	require.Contains(t, schema.Properties["protectionReason"].Enum, nil)
+	require.False(t, schema.Properties["images"].Nullable)
+	require.Equal(t, "array", schema.Properties["images"].Type)
 	require.Equal(t, []any{"restore-target", "healthy-baseline", nil}, schema.Properties["protectionReason"].Enum)
 }

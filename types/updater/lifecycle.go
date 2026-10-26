@@ -56,7 +56,7 @@ type RestorePoint struct {
 	ProtectionReason   *RestorePointProtectionReason `json:"protectionReason" nullable:"true" enum:"restore-target,healthy-baseline"`
 	HoldState          RestorePointHoldState         `json:"holdState" enum:"none,active,unknown"`
 	FailedAttempt      bool                          `json:"failedAttempt"`
-	Images             []PointImage                  `json:"images"`
+	Images             []PointImage                  `json:"images" nullable:"false"`
 	ID                 string                        `json:"id"`
 	RegistrationID     string                        `json:"registrationId"`
 	TargetID           string                        `json:"targetId"`
