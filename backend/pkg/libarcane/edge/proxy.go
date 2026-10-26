@@ -105,7 +105,7 @@ func collectCommandResponseBoundedInternal(ctx context.Context, tunnel *AgentTun
 				return 0, nil, nil, fmt.Errorf("edge tunnel response channel closed before a response was received: %w", ErrTunnelConnectionClosed)
 			}
 			if limit > 0 && incoming != nil && state.respBody.Len()+len(incoming.Body) > limit {
-				return 0, nil, nil, errors.New("runtime response too large")
+				return 0, nil, nil, ErrCommandResponseTooLarge
 			}
 			if done, status, headers, body, err := state.handleTunnelMessageInternal(method, incoming); done {
 				return status, headers, body, err
@@ -160,7 +160,7 @@ func (s *grpcResponseState) drainTerminalResponseBoundedInternal(respCh <-chan *
 				return true, 0, nil, nil, fmt.Errorf("edge tunnel response channel closed before a response was received: %w", ErrTunnelConnectionClosed)
 			}
 			if limit > 0 && incoming != nil && s.respBody.Len()+len(incoming.Body) > limit {
-				return true, 0, nil, nil, errors.New("runtime response too large")
+				return true, 0, nil, nil, ErrCommandResponseTooLarge
 			}
 			if done, status, headers, body, err := s.handleTunnelMessageInternal(method, incoming); done {
 				return true, status, headers, body, err

@@ -187,7 +187,10 @@ func (s Store) Prepare(ctx context.Context, snapshot *Snapshot, run, selected, s
 				used = recent[0].LastRestoredAt.Add(time.Microsecond)
 			}
 			updated := tx.Model(&Point{}).Where("id = ? AND target_id = ? AND target_identity = ? AND registration_id = ? AND available = ?", selected, snapshot.TargetID, snapshot.TargetIdentity, snapshot.RegistrationID, true).Update("last_restored_at", used)
-			if updated.Error != nil || updated.RowsAffected != 1 {
+			if updated.Error != nil {
+				return updated.Error
+			}
+			if updated.RowsAffected != 1 {
 				return imageDTO.Failure("restore.unavailable", 409)
 			}
 		}
@@ -206,7 +209,7 @@ func (s Store) Prepare(ctx context.Context, snapshot *Snapshot, run, selected, s
 		return tx.Create(&Run{ID: run, PointID: point.ID, SelectedPointID: selected}).Error
 	})
 	if err != nil {
-		return point, imageDTO.Failure("update.persistence-failed", 500)
+		return point, imageDTO.Neutral(err, "update.persistence-failed", 500)
 	}
 	return point, nil
 }
@@ -245,19 +248,39 @@ func (s Store) Effect(ctx context.Context, run string) error {
 }
 
 func (s Store) Held(ctx context.Context, id string) (bool, error) {
+	state, err := s.HoldState(ctx, id)
+	return state != dto.HoldNone, err
+}
+
+func (s Store) HoldState(ctx context.Context, id string) (dto.RestorePointHoldState, error) {
 	var n int64
 	if err := s.DB.WithContext(ctx).Model(&Run{}).Where("(point_id = ? OR selected_point_id = ?) AND settled = ?", id, id, false).Count(&n).Error; err != nil {
-		return false, err
+		return "", err
 	}
+	state := dto.HoldNone
 	if n > 0 {
-		return true, nil
+		state = dto.HoldActive
 	}
-	err := s.DB.WithContext(ctx).Table("runtime_image_intents AS i").Joins("JOIN runtime_receipts r ON r.run_id = i.run_id").Where("r.kind = 'receipt' AND r.settled_at IS NULL AND json_extract(i.payload, '$.request.pointId') = ?", id).Count(&n).Error
-	return n > 0, err
+	var receipts []struct{ ExecutorState string }
+	err := s.DB.WithContext(ctx).Table("runtime_image_intents AS i").Select("r.executor_state").Joins("JOIN runtime_receipts r ON r.run_id = i.run_id").Where("r.kind = 'receipt' AND r.settled_at IS NULL AND json_extract(i.payload, '$.request.pointId') = ?", id).Scan(&receipts).Error
+	if err != nil {
+		return "", err
+	}
+	for _, receipt := range receipts {
+		switch receipt.ExecutorState {
+		case "unknown":
+			state = dto.HoldUnknown
+		case "pending", "accepted", "executing":
+			state = dto.MergePointHold(state, dto.HoldActive)
+		default:
+			return "", errors.New("invalid point receipt")
+		}
+	}
+	return state, nil
 }
 
 func (p Point) DTO(orphaned bool) dto.RestorePoint {
-	return dto.RestorePoint{ID: p.ID, RegistrationID: p.RegistrationID, TargetID: p.TargetID, TargetIdentity: p.TargetIdentity, SourceRunID: p.SourceRunID, CreatedAt: p.CreatedAt, SourceState: p.SourceState, Available: p.Available, Orphaned: orphaned}
+	return dto.RestorePoint{ID: p.ID, RegistrationID: p.RegistrationID, TargetID: p.TargetID, TargetIdentity: p.TargetIdentity, SourceRunID: p.SourceRunID, CreatedAt: p.CreatedAt, HoldState: dto.HoldNone, FailedAttempt: p.FailedAttempt, SourceState: p.SourceState, Available: p.Available, Orphaned: orphaned}
 }
 
 // Delete serializes the active-run hold check and metadata deletion with runtime admission.
