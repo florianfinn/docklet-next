@@ -92,7 +92,7 @@ func (s *ImageUpdateService) NativeServiceObservation(ctx context.Context, ref, 
 		if e != nil {
 			return identity.NativeObservation{}, e
 		}
-		if current != nil && (current.ID != local.ID || current.Key != local.Key || current.Platform.String() != local.Platform.String()) {
+		if current != nil && (current.ID != local.ID || current.Key != local.Key || !current.Platform.Matches(local.Platform)) {
 			return identity.NativeObservation{}, imageDTO.Failure("update.check-unavailable", 503)
 		}
 		current = &local

@@ -9,6 +9,7 @@ package updater
 import (
 	"context"
 	"encoding/json"
+	"github.com/florianfinn/docklet-next/backend/internal/testfixtures"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -46,6 +47,7 @@ func TestUnsetPolicyRead(t *testing.T) {
 				if env == "0" {
 					fixture, e := os.ReadFile("../../../web/src/data/http/testdata/unset-policy.json")
 					require.NoError(t, e)
+					testfixtures.Read(t, "policy", envelope.Data)
 					actual, e := json.Marshal(envelope.Data)
 					require.NoError(t, e)
 					require.JSONEq(t, string(fixture), string(actual))

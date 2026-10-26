@@ -11,6 +11,7 @@ import (
 	"encoding/json"
 	"github.com/Masterminds/semver/v3"
 	"github.com/distribution/reference"
+	"github.com/florianfinn/docklet-next/backend/internal/imageupdate/children/identity"
 	policy "github.com/florianfinn/docklet-next/backend/internal/updater/children/policies"
 	"github.com/florianfinn/docklet-next/backend/pkg/scheduler/jobcontext"
 	activityDTO "github.com/florianfinn/docklet-next/types/activity"
@@ -18,7 +19,6 @@ import (
 	projectDTO "github.com/florianfinn/docklet-next/types/project"
 	st "github.com/florianfinn/docklet-next/types/scheduler"
 	dto "github.com/florianfinn/docklet-next/types/updater"
-	v1 "github.com/google/go-containerregistry/pkg/v1"
 	digest "github.com/opencontainers/go-digest"
 	"gorm.io/gorm"
 	"sort"
@@ -358,9 +358,9 @@ func (s *UpdaterService) observeImagePolicy(ctx context.Context, p *imagePolicyS
 			continue
 		}
 		named, err := reference.ParseNormalizedNamed(row.ImageRef)
-		platform, platformErr := v1.ParsePlatform(info.Platform)
+		platform, platformErr := identity.ParsePlatform(info.Platform)
 		candidateDigest, digestErr := digest.Parse(info.LatestDigest)
-		if err != nil || platformErr != nil || platform.OS == "" || platform.Architecture == "" || digestErr != nil || candidateDigest.Algorithm() != digest.SHA256 {
+		if err != nil || platformErr != nil || digestErr != nil || candidateDigest.Algorithm() != digest.SHA256 {
 			return nil, imageDTO.Failure("update.check-unavailable", 503)
 		}
 		version := info.LatestVersion

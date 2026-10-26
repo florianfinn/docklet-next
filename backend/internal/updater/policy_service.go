@@ -92,17 +92,7 @@ func (s *UpdaterService) ConfigureImagePolicies(envs *environment.EnvironmentSer
 		}
 		return nil
 	}
-	p.ports.baseline = func(ctx context.Context, env, target string) (dto.BaselineStatus, error) {
-		if env == "0" {
-			return s.deps.Projects.ImageBaselineStatus(ctx, target, s.deps.Projects.LifecycleRegistration(ctx))
-		}
-		var out base.ApiResponse[dto.BaselineStatus]
-		err := envs.ProxyJSONRequest(ctx, env, http.MethodGet, "/api/environments/0/updater/projects/"+url.PathEscape(target)+"/baseline", nil, &out)
-		if err != nil {
-			return dto.BaselineStatus{}, err
-		}
-		return checkedBaselineResponse(out)
-	}
+	p.ports.baseline = s.imagePolicyBaseline(envs)
 	p.ports.check = func(ctx context.Context, env, target string) (*projectDTO.UpdateInfo, error) {
 		if env == "0" {
 			return s.CheckProjectUpdates(ctx, target)
@@ -359,4 +349,22 @@ func imagePolicyGrants(apply bool) []string {
 		required = append(required, authz.PermJobsManage, authz.PermProjectsDeploy, authz.PermProjectsUpdate, authz.PermImagesPull, authz.PermActivitiesRead)
 	}
 	return required
+}
+
+type imagePolicyProxy interface {
+	ProxyJSONRequest(context.Context, string, string, string, []byte, any) error
+}
+
+func (s *UpdaterService) imagePolicyBaseline(envs imagePolicyProxy) func(context.Context, string, string) (dto.BaselineStatus, error) {
+	return func(ctx context.Context, env, target string) (dto.BaselineStatus, error) {
+		if env == "0" {
+			return s.deps.Projects.ImageBaselineStatus(ctx, target, s.deps.Projects.LifecycleRegistration(ctx))
+		}
+		var out base.ApiResponse[dto.BaselineStatus]
+		err := envs.ProxyJSONRequest(ctx, env, http.MethodGet, "/api/environments/0/updater/projects/"+url.PathEscape(target)+"/baseline", nil, &out)
+		if err != nil {
+			return dto.BaselineStatus{}, err
+		}
+		return checkedBaselineResponse(out)
+	}
 }

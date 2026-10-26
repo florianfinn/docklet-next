@@ -70,5 +70,7 @@ func lifecycleExecutableSelections(snap *life.Snapshot, selections []dto.ImageSe
 func lifecycleMatchesExpected(actual, expected life.ServiceImage) bool {
 	local, e := identity.ParseLocalID(actual.ImageID)
 	frozen, f := identity.ParseExpected(expected.ImageID)
-	return e == nil && f == nil && identity.MatchesExpected(local, frozen) && actual.Platform == expected.Platform && actual.Digest == expected.Digest
+	p, pe := identity.ParsePlatform(actual.Platform)
+	want, we := identity.ParsePlatform(expected.Platform)
+	return e == nil && f == nil && pe == nil && we == nil && identity.MatchesExpected(local, frozen) && p.Matches(want) && actual.Digest == expected.Digest
 }

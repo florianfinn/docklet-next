@@ -505,9 +505,9 @@ func (s *ImageUpdateService) StoredUpdateByImageID(ctx context.Context, imageID 
 		return nil, false, fmt.Errorf("get stored image update by image id: %w", err)
 	}
 
-	// This legacy version-reader port carries T only. Native keys (including
-	// classic config digests) must never escape as immutable pull references.
-	record.HasUpdate = false
+	// Version hints may reuse native eligibility, but the digest port carries T
+	// only. Native keys must never escape as immutable pull references.
+	record.HasUpdate = record.UpdateInfo().HasUpdate
 	record.LatestDigest = record.LegacyPullDigest()
 	return &record, true, nil
 }

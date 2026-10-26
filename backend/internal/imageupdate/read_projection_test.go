@@ -29,13 +29,13 @@ import (
 )
 
 func TestPR1ReadProjectionUsesRealPlatformProducer(t *testing.T) {
-	for _, scenario := range []struct{ version, want string }{{"1.0.0", "rebuild"}, {"1.0.1", "version"}, {"index-only", "current"}, {"tag-policy", "version"}, {"identity-mismatch", "rebuild"}, {"variant-mismatch", "error"}, {"tag-pattern", "version"}} {
+	for _, scenario := range []struct{ version, want string }{{"1.0.0", "rebuild"}, {"1.0.1", "version"}, {"index-only", "current"}, {"tag-policy", "version"}, {"identity-mismatch", "rebuild"}, {"variant-mismatch", "error"}, {"tag-pattern", "version"}, {"tag-same-config", "current"}} {
 		t.Run(scenario.want, func(t *testing.T) {
 			server := httptest.NewServer(registryServer.New())
 			defer server.Close()
 			host := strings.TrimPrefix(server.URL, "http://")
 			ref := host + "/app:stable"
-			if scenario.version == "tag-policy" || scenario.version == "tag-pattern" {
+			if scenario.version == "tag-policy" || scenario.version == "tag-pattern" || scenario.version == "tag-same-config" {
 				ref = host + "/app:1.0.0"
 				if scenario.version == "tag-pattern" {
 					ref = host + "/app:release-1.0.0"
@@ -51,7 +51,7 @@ func TestPR1ReadProjectionUsesRealPlatformProducer(t *testing.T) {
 			cfg.Architecture = "amd64"
 			if scenario.version == "variant-mismatch" {
 				cfg.Architecture = "arm64"
-				cfg.Variant = "v8"
+				cfg.Variant = "v9"
 			}
 			cfg.Config.Labels = map[string]string{"org.opencontainers.image.version": "1.0.0"}
 			original, err = mutate.ConfigFile(original, cfg)
@@ -64,8 +64,11 @@ func TestPR1ReadProjectionUsesRealPlatformProducer(t *testing.T) {
 			updatedConfig := *cfg
 			updatedConfig.Config.Labels = map[string]string{"org.opencontainers.image.version": scenario.version, "synthetic-generation": "next"}
 			updated, err := mutate.ConfigFile(original, &updatedConfig)
+			if scenario.version == "tag-same-config" {
+				updated = original
+			}
 			require.NoError(t, err)
-			if scenario.version == "tag-policy" || scenario.version == "tag-pattern" {
+			if scenario.version == "tag-policy" || scenario.version == "tag-pattern" || scenario.version == "tag-same-config" {
 				candidateTag, e := name.NewTag(func() string {
 					if scenario.version == "tag-pattern" {
 						return host + "/app:release-1.0.1"
@@ -102,7 +105,7 @@ func TestPR1ReadProjectionUsesRealPlatformProducer(t *testing.T) {
 					return
 				}
 				if strings.HasSuffix(r.URL.Path, "/containers/json") {
-					if scenario.version == "tag-policy" || scenario.version == "tag-pattern" {
+					if scenario.version == "tag-policy" || scenario.version == "tag-pattern" || scenario.version == "tag-same-config" {
 						_, _ = fmt.Fprintf(w, `[{"Id":"consumer","Image":%q,"ImageID":%q,"Labels":{"com.getarcaneapp.arcane.updater.strategy":"tag","com.getarcaneapp.arcane.updater.constraint":"~1.0","com.getarcaneapp.arcane.updater.tag-pattern":%q}}]`, ref, oldID.String(), func() string {
 							if scenario.version == "tag-pattern" {
 								return "release-(?P<version>.*)"
@@ -153,9 +156,13 @@ func TestPR1ReadProjectionUsesRealPlatformProducer(t *testing.T) {
 			require.Equal(t, oldID.String(), result.CurrentDigest, "classic compares config to config")
 			var record ImageUpdateRecord
 			require.NoError(t, db.First(&record, "id = ?", oldID.String()).Error)
-			if scenario.version == "tag-policy" || scenario.version == "tag-pattern" {
+			if scenario.version == "tag-policy" || scenario.version == "tag-pattern" || scenario.version == "tag-same-config" {
 				require.Equal(t, "current", result.ImageUpdate.State)
-				require.Equal(t, "version", result.ContainerUpdates["consumer"].State)
+				wantConsumer := "version"
+				if scenario.version == "tag-same-config" {
+					wantConsumer = "current"
+				}
+				require.Equal(t, wantConsumer, result.ContainerUpdates["consumer"].State)
 				require.Equal(t, "current", record.UpdateInfo().State)
 			} else {
 				require.Equal(t, scenario.want, record.UpdateInfo().State)

@@ -8,6 +8,7 @@ package identity
 
 import (
 	"context"
+	"github.com/florianfinn/docklet-next/backend/pkg/utils/platformmatch"
 	"strconv"
 	"strings"
 
@@ -58,13 +59,13 @@ func Resolve(ctx context.Context, c *client.Client, img image.InspectResponse, r
 		}
 		if requested == "" {
 			want, e := daemonPlatform(ctx, c, img)
-			if e != nil || want.String() != p.String() {
+			if e != nil || !want.Matches(p) {
 				return LocalImage{}, unavailable()
 			}
 		}
 		if requested != "" {
 			want, e := ParsePlatform(requested)
-			if e != nil || want.String() != p.String() {
+			if e != nil || !want.Matches(p) {
 				return LocalImage{}, unavailable()
 			}
 		}
@@ -89,7 +90,7 @@ func Resolve(ctx context.Context, c *client.Client, img image.InspectResponse, r
 	}
 	if requested != "" {
 		want, e := ParsePlatform(requested)
-		if e != nil || want.String() != p.String() {
+		if e != nil || !want.Matches(p) {
 			return LocalImage{}, unavailable()
 		}
 	}
@@ -108,7 +109,7 @@ func Resolve(ctx context.Context, c *client.Client, img image.InspectResponse, r
 			return LocalImage{}, unavailable()
 		}
 		qp, e := imagePlatform(qualified.InspectResponse)
-		if e != nil || qp.String() != p.String() {
+		if e != nil || !qp.Matches(p) {
 			return LocalImage{}, unavailable()
 		}
 		local.Key = NativeKey{qualified.Descriptor.Digest.String()}
@@ -125,7 +126,7 @@ func Resolve(ctx context.Context, c *client.Client, img image.InspectResponse, r
 		d := child.Descriptor
 		d.Platform = &child.ImageData.Platform
 		cp, e := descriptorPlatform(&d)
-		if e != nil || cp.String() != p.String() {
+		if e != nil || !cp.Matches(p) {
 			continue
 		}
 		if local.Key.value != "" || !manifestDescriptor(&d) || child.ID != d.Digest.String() {
@@ -148,8 +149,13 @@ func daemonPlatform(ctx context.Context, c *client.Client, img image.InspectResp
 	if err != nil {
 		return Platform{}, err
 	}
-	if ip, e := imagePlatform(img); e == nil && ip.value.OS == p.value.OS && ip.value.Architecture == p.value.Architecture {
-		p = ip
+	if ip, e := imagePlatform(img); e == nil {
+		// Info lacks the variant; use config evidence only for the same OS/arch.
+		candidate, host := ip.OCI(), p.OCI()
+		candidate.Variant, host.Variant = "", ""
+		if platformmatch.Equal(candidate, host) {
+			p = ip
+		}
 	}
 	return p, nil
 }

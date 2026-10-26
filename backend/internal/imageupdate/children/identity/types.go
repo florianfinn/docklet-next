@@ -7,6 +7,7 @@
 package identity
 
 import (
+	"github.com/florianfinn/docklet-next/backend/pkg/utils/platformmatch"
 	"regexp"
 	"strings"
 
@@ -70,19 +71,7 @@ func ParsePlatform(raw string) (Platform, error) {
 	if len(parts) == 3 {
 		p.Variant = parts[2]
 	}
-	switch p.Architecture {
-	case "x86_64":
-		p.Architecture = "amd64"
-	case "aarch64":
-		p.Architecture = "arm64"
-	case "armv7l":
-		p.Architecture = "arm"
-		p.Variant = "v7"
-	case "armv6l":
-		p.Architecture = "arm"
-		p.Variant = "v6"
-	}
-	return Platform{p}, nil
+	return Platform{platformmatch.Normalize(p)}, nil
 }
 func NewCandidate(manifest, config string, p Platform) (RegistryCandidate, error) {
 	if !digestPattern.MatchString(manifest) || !digestPattern.MatchString(config) || p.String() == "/" {
@@ -101,7 +90,8 @@ func (p Platform) String() string {
 	}
 	return s
 }
-func (p Platform) OCI() ocispec.Platform { return p.value }
+func (p Platform) Matches(other Platform) bool { return platformmatch.Equal(p.value, other.value) }
+func (p Platform) OCI() ocispec.Platform       { return p.value }
 func (p Platform) Registry() v1.Platform {
 	return v1.Platform{OS: p.value.OS, Architecture: p.value.Architecture, Variant: p.value.Variant}
 }
@@ -109,7 +99,7 @@ func MatchesExpected(local LocalID, expected ExpectedLocalID) bool {
 	return local.value != "" && local.value == expected.value
 }
 func (l LocalImage) CandidateKey(r RegistryCandidate) (NativeKey, error) {
-	if l.Platform.String() != r.platform.String() || l.Key.value == "" {
+	if !l.Platform.Matches(r.platform) || l.Key.value == "" {
 		return NativeKey{}, unavailable()
 	}
 	if l.containerd {

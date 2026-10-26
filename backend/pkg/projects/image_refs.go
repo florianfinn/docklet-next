@@ -16,6 +16,7 @@ import (
 	composetypes "github.com/compose-spec/compose-go/v2/types"
 	"github.com/containerd/platforms"
 	composeapi "github.com/docker/compose/v5/pkg/api"
+	"github.com/florianfinn/docklet-next/backend/pkg/utils/platformmatch"
 	projecttypes "github.com/florianfinn/docklet-next/types/project"
 	"github.com/moby/moby/api/types/image"
 	"github.com/moby/moby/client"
@@ -148,7 +149,7 @@ func RefreshComposeImageLabel(labels map[string]string, imageDigest string) {
 // localContentDigest). Writing any other value would make compose flag the
 // container as diverged and recreate it on the next up.
 func ComposeImageDigest(inspect client.ImageInspectResult) string {
-	matcher := platforms.Default()
+	host := platforms.DefaultSpec()
 	var available []image.ManifestSummary
 	for _, m := range inspect.Manifests {
 		if m.Kind == image.ManifestKindImage && m.Available {
@@ -156,7 +157,7 @@ func ComposeImageDigest(inspect client.ImageInspectResult) string {
 		}
 	}
 	for _, m := range available {
-		if m.ImageData != nil && matcher.Match(m.ImageData.Platform) {
+		if m.ImageData != nil && platformmatch.Compatible(host, m.ImageData.Platform) {
 			return m.ID
 		}
 	}

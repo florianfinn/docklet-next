@@ -227,7 +227,11 @@ func (f *lifecycleFixture) serve(w http.ResponseWriter, r *http.Request) {
 				tags = append(tags, tag)
 			}
 		}
-		row := map[string]any{"Id": id, "Os": "linux", "Architecture": "amd64", "RepoTags": tags, "RepoDigests": []string{}}
+		platform := f.manifestDescriptor(id)["platform"].(map[string]any)
+		row := map[string]any{"Id": id, "Os": "linux", "Architecture": platform["architecture"], "RepoTags": tags, "RepoDigests": []string{}}
+		if variant, ok := platform["variant"]; ok {
+			row["Variant"] = variant
+		}
 		if f.containerd {
 			row["Descriptor"] = map[string]any{"digest": id, "mediaType": "application/vnd.oci.image.index.v1+json"}
 			row["Manifests"] = []any{map[string]any{"ID": f.manifestDescriptor(id)["digest"], "Descriptor": f.manifestDescriptor(id), "Available": true, "Kind": "image", "ImageData": map[string]any{"Platform": f.manifestDescriptor(id)["platform"]}}}

@@ -128,11 +128,11 @@ func TestIdentityCheckStores(t *testing.T) {
 				var saved ImageUpdateRecord
 				require.NoError(t, db.First(&saved, "id = ?", localID).Error)
 				require.Equal(t, want, saved.UpdateInfo().State)
-				// The legacy version/pull-reference port cannot publish a native config as T.
+				// Version hints retain native eligibility; no native key escapes as T.
 				stored, found, e := svc.StoredUpdateByImageID(t.Context(), localID)
 				require.NoError(t, e)
 				require.True(t, found)
-				require.False(t, stored.HasUpdate)
+				require.Equal(t, got.HasUpdate, stored.HasUpdate)
 				require.Nil(t, stored.LatestDigest)
 			})
 		}

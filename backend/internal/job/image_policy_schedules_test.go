@@ -19,6 +19,7 @@ import (
 	"github.com/florianfinn/docklet-next/backend/internal/event"
 	"github.com/florianfinn/docklet-next/backend/internal/middleware"
 	"github.com/florianfinn/docklet-next/backend/internal/role"
+	"github.com/florianfinn/docklet-next/backend/internal/testfixtures"
 	"github.com/florianfinn/docklet-next/backend/internal/updater"
 	userdomain "github.com/florianfinn/docklet-next/backend/internal/user"
 	"github.com/florianfinn/docklet-next/backend/pkg/authz"
@@ -78,8 +79,36 @@ func TestImagePolicyOfflineSchedulesUseHubZoneAndControls(t *testing.T) {
 		require.Equal(t, "update.schedule-owner-unset", job.Code)
 	}
 	require.Nil(t, before.Jobs[0].NextRun)
+	routerUnset := echo.New()
+	apiUnset := humaecho.New(routerUnset, huma.DefaultConfig("test", "test"))
+	registerImagePolicyScheduleRoutes(apiUnset, svc)
+	reqUnset := httptest.NewRequest(http.MethodGet, "/environments/example-offline/updater/schedules", http.NoBody)
+	reqUnset = reqUnset.WithContext(context.WithValue(reqUnset.Context(), middleware.ContextKeyUserPermissions, &authz.PermissionSet{Sudo: true}))
+	responseUnset := httptest.NewRecorder()
+	routerUnset.ServeHTTP(responseUnset, reqUnset)
+	require.Equal(t, 200, responseUnset.Code, responseUnset.Body.String())
+	var unsetEnvelope struct{ Data dto.UpdateScheduleConfig }
+	require.NoError(t, json.Unmarshal(responseUnset.Body.Bytes(), &unsetEnvelope))
+	// Registration is a binding field; preserve every default schedule/job value.
+	require.Equal(t, "example-offline", unsetEnvelope.Data.RegistrationID)
+	unsetEnvelope.Data.RegistrationID = "example-registration"
+	testfixtures.Read(t, "schedule", unsetEnvelope.Data)
+	require.Zero(t, transport.calls)
 	input := dto.UpdateScheduleInput{PollingInterval: "0  30  2 * * *", AutoUpdateInterval: "0 0 0 * * *", PollingEnabled: true, AutoUpdateEnabled: true}
-	require.NoError(t, owner.SaveImagePolicySchedule(t.Context(), "example-offline", input, "example-actor", ""))
+	firstBody, e := json.Marshal(input)
+	require.NoError(t, e)
+	firstRequest := httptest.NewRequest(http.MethodPut, "/environments/example-offline/updater/schedules", strings.NewReader(string(firstBody)))
+	firstRequest.Header.Set("Content-Type", "application/json")
+	firstContext := context.WithValue(firstRequest.Context(), middleware.ContextKeyUserID, "example-actor")
+	firstContext = context.WithValue(firstContext, middleware.ContextKeyUserPermissions, &authz.PermissionSet{Sudo: true})
+	firstResponse := httptest.NewRecorder()
+	routerUnset.ServeHTTP(firstResponse, firstRequest.WithContext(firstContext))
+	require.Equal(t, 200, firstResponse.Code, firstResponse.Body.String())
+	var configuredEnvelope struct{ Data dto.UpdateScheduleConfig }
+	require.NoError(t, json.Unmarshal(firstResponse.Body.Bytes(), &configuredEnvelope))
+	require.Equal(t, "example-offline", configuredEnvelope.Data.RegistrationID)
+	configuredEnvelope.Data.RegistrationID = "example-registration"
+	testfixtures.Read(t, "configuredSchedule", configuredEnvelope.Data)
 	require.Equal(t, 1, refreshes)
 	require.Error(t, owner.SaveImagePolicySchedule(t.Context(), "example-offline", input, "example-actor", ""), "revision CAS prevents lost edits")
 	after, err := svc.ImagePolicySchedules(t.Context(), "example-offline")

@@ -22,8 +22,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/containerd/platforms"
 	"github.com/distribution/reference"
+	"github.com/florianfinn/docklet-next/backend/pkg/utils/platformmatch"
 	activitytypes "github.com/florianfinn/docklet-next/types/activity"
 	"github.com/florianfinn/docklet-next/types/features"
 	"github.com/florianfinn/docklet-next/types/imagepatch"
@@ -405,18 +405,9 @@ func platformPinnedRefInternal(ctx context.Context, imageRef string, target v1.P
 		return ""
 	}
 
-	want := platforms.Normalize(target)
 	for i := range manifest.Manifests {
 		m := &manifest.Manifests[i]
-		if m.Platform == nil {
-			continue
-		}
-		got := platforms.Normalize(v1.Platform{
-			OS:           m.Platform.OS,
-			Architecture: m.Platform.Architecture,
-			Variant:      m.Platform.Variant,
-		})
-		if got.OS == want.OS && got.Architecture == want.Architecture && got.Variant == want.Variant {
+		if m.Platform != nil && platformmatch.Equal(target, v1.Platform{OS: m.Platform.OS, Architecture: m.Platform.Architecture, Variant: m.Platform.Variant}) {
 			return ref.Context().Name() + "@" + m.Digest.String()
 		}
 	}

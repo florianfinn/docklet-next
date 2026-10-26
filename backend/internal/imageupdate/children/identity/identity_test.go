@@ -7,14 +7,19 @@
 package identity
 
 import (
+	"bytes"
 	"encoding/json"
+	"fmt"
 	"go/ast"
+	"go/importer"
 	"go/parser"
 	"go/token"
 	"go/types"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"os/exec"
 	"strings"
 	"testing"
 
@@ -148,28 +153,34 @@ func TestIdentityRebuildStores(t *testing.T) {
 	}
 }
 func TestIdentityNamedRoleTypes(t *testing.T) {
-	// Inspect the actual boundary declarations, then compile a comparison in a
-	// scratch package. The suite itself compiles even if roles become aliases.
-	f, e := parser.ParseFile(token.NewFileSet(), "types.go", nil, 0)
+	// Compile against the real package's export data, not duplicate role types.
+	command := exec.CommandContext(t.Context(), "go", "list", "-export", "-json", "-deps", ".")
+	output, e := command.Output()
 	require.NoError(t, e)
-	roles := map[string]bool{}
-	for _, decl := range f.Decls {
-		if g, ok := decl.(*ast.GenDecl); ok {
-			for _, spec := range g.Specs {
-				if s, ok := spec.(*ast.TypeSpec); ok {
-					roles[s.Name.Name] = !s.Assign.IsValid()
-				}
-			}
+	exports := map[string]string{}
+	decoder := json.NewDecoder(bytes.NewReader(output))
+	for {
+		var pkg struct{ ImportPath, Export string }
+		err := decoder.Decode(&pkg)
+		if err == io.EOF {
+			break
 		}
-	}
-	for _, name := range []string{"LocalID", "NativeKey", "Platform", "RegistryConfig", "RegistryManifest", "RegistryCandidate", "ExpectedLocalID", "TopLevelDigest"} {
-		require.True(t, roles[name], name)
+		require.NoError(t, err)
+		exports[pkg.ImportPath] = pkg.Export
 	}
 	fs := token.NewFileSet()
-	snippet, e := parser.ParseFile(fs, "roles.go", `package roles;type LocalID struct{v string};type ExpectedLocalID struct{v string};var l LocalID;var e ExpectedLocalID;var _ = l == e`, 0)
+	realImporter := importer.ForCompiler(fs, "gc", func(path string) (io.ReadCloser, error) { return os.Open(exports[path]) })
+	actual, e := realImporter.Import("github.com/florianfinn/docklet-next/backend/internal/imageupdate/children/identity")
 	require.NoError(t, e)
-	_, e = (&types.Config{}).Check("roles", fs, []*ast.File{snippet}, nil)
-	require.ErrorContains(t, e, "mismatched types")
+
+	for _, pair := range [][2]string{{"LocalID", "NativeKey"}, {"LocalID", "ExpectedLocalID"}, {"NativeKey", "RegistryManifest"}, {"NativeKey", "RegistryConfig"}, {"TopLevelDigest", "NativeKey"}, {"TopLevelDigest", "RegistryManifest"}, {"TopLevelDigest", "RegistryConfig"}} {
+		fs := token.NewFileSet()
+		source := fmt.Sprintf("package roles; import real %q; var a real.%s; var b real.%s; var _ = a == b", actual.Path(), pair[0], pair[1])
+		snippet, e := parser.ParseFile(fs, "roles.go", source, 0)
+		require.NoError(t, e)
+		_, e = (&types.Config{Importer: roleImporter{actual}}).Check("roles", fs, []*ast.File{snippet}, nil)
+		require.ErrorContains(t, e, "mismatched types", "%v", pair)
+	}
 }
 
 func TestIdentityImageOnlyDefault(t *testing.T) {
@@ -274,4 +285,13 @@ func TestIdentityRunningContainerProducer(t *testing.T) {
 	require.Equal(t, container.ImageManifestDescriptor.Digest.String(), current.Key.String())
 	require.NotEqual(t, current.ID.String(), current.Key.String())
 	require.Equal(t, "linux/amd64", current.Platform.String())
+}
+
+type roleImporter struct{ actual *types.Package }
+
+func (i roleImporter) Import(path string) (*types.Package, error) {
+	if path == i.actual.Path() {
+		return i.actual, nil
+	}
+	return nil, fmt.Errorf("unexpected import %s", path)
 }
