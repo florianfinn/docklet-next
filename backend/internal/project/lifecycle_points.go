@@ -32,6 +32,19 @@ func (s *ProjectService) ListImageRestorePoints(ctx context.Context, target stri
 	if err := q.Find(&rows).Error; err != nil {
 		return nil, lifecycleFailure("update.persistence-failed")
 	}
+	// Use stored availability, before verification can change the display DTO.
+	groups := map[string][]life.Point{}
+	for _, point := range rows {
+		if point.Available {
+			groups[point.TargetID] = append(groups[point.TargetID], point)
+		}
+	}
+	reasons := map[string]dto.RestorePointProtectionReason{}
+	for _, points := range groups {
+		for id, reason := range life.PlanRetention(points, nil).Reasons {
+			reasons[id] = reason
+		}
+	}
 	out := []dto.RestorePoint{}
 	registration := s.LifecycleRegistration(ctx)
 	for _, point := range rows {
@@ -42,6 +55,14 @@ func (s *ProjectService) ListImageRestorePoints(ctx context.Context, target stri
 			return nil, lifecycleFailure("update.invalid-target")
 		}
 		row := point.DTO(orphaned)
+		if reason, ok := reasons[point.ID]; ok {
+			row.ProtectionReason = &reason
+		}
+		hold, holdErr := s.lifecycleStore().HoldState(ctx, point.ID)
+		if holdErr != nil {
+			return nil, lifecycleFailure("update.persistence-failed")
+		}
+		row.HoldState = hold
 		row.Images = []dto.PointImage{}
 		if point.RegistrationID != registration {
 			row.Available = false

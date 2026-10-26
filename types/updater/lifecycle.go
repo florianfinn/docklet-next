@@ -53,18 +53,21 @@ type PointImage struct {
 	Running   bool   `json:"running"`
 }
 type RestorePoint struct {
-	Images             []PointImage `json:"images"`
-	ID                 string       `json:"id"`
-	RegistrationID     string       `json:"registrationId"`
-	TargetID           string       `json:"targetId"`
-	TargetIdentity     string       `json:"targetIdentity"`
-	SourceRunID        string       `json:"sourceRunId"`
-	CreatedAt          time.Time    `json:"createdAt"`
-	SourceState        string       `json:"sourceState" enum:"settled,partial-source"`
-	VolumeDataIncluded bool         `json:"volumeDataIncluded"`
-	Available          bool         `json:"available"`
-	Orphaned           bool         `json:"orphaned"`
-	Code               string       `json:"code,omitempty"`
+	ProtectionReason   *RestorePointProtectionReason `json:"protectionReason" nullable:"true" enum:"restore-target,healthy-baseline"`
+	HoldState          RestorePointHoldState         `json:"holdState" enum:"none,active,unknown"`
+	FailedAttempt      bool                          `json:"failedAttempt"`
+	Images             []PointImage                  `json:"images"`
+	ID                 string                        `json:"id"`
+	RegistrationID     string                        `json:"registrationId"`
+	TargetID           string                        `json:"targetId"`
+	TargetIdentity     string                        `json:"targetIdentity"`
+	SourceRunID        string                        `json:"sourceRunId"`
+	CreatedAt          time.Time                     `json:"createdAt"`
+	SourceState        string                        `json:"sourceState" enum:"settled,partial-source"`
+	VolumeDataIncluded bool                          `json:"volumeDataIncluded"`
+	Available          bool                          `json:"available"`
+	Orphaned           bool                          `json:"orphaned"`
+	Code               string                        `json:"code,omitempty"`
 }
 
 type BaselineStatus struct {

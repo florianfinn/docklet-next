@@ -90,7 +90,7 @@ Permission refusals consistently fail the affected run/target with
 ## Scoped update capabilities and restore-point protection (#229 addendum)
 
 This closes DG-01/DG-03. Guard citations use base `5c1c4dd77cbeb7b5f702e50937bfc64de3c3f9d8`;
-paths below are relative to `backend/internal/`. M2 requires points for update/restore and a baseline before update.
+Unqualified backend paths use `backend/internal/`; `types/` paths are always repo-root paths. M2 requires points for update/restore and a baseline before update.
 M5 is stacks only; M6 protects restore targets/baseline with one failed slot; D2 freezes policy revision at admission.
 
 ### Descriptor contract
@@ -157,7 +157,7 @@ Hub evidence DB failures use `update.persistence-failed` (500), including delete
 Safety invariant: a restore never acts on a deleted or unavailable point. Only executor conditional selection plus executor `Held` enforce this invariant.
 `project/children/lifecycle/store.go:189` through :191 checks id, target, identity, registration and available=true; RowsAffected must equal one, before effects.
 Selection and creation of the executor run/hold share a transaction; delete rechecks `Held` transactionally (:264). Preserve `restore.unavailable` (409)
-through Prepare's outer error mapping (:208) and runtime result projection. Hub pre-check/overlay are advisory, never authority for proceeding with effects.
+through Prepare's outer error mapping (:209) and runtime result projection. Hub pre-check/overlay are advisory, never authority for proceeding with effects.
 
 | Order: restore R on point P versus delete D | Executor result / data | Required outcome |
 | --- | --- | --- |

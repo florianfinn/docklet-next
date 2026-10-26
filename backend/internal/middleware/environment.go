@@ -92,6 +92,7 @@ type EnvironmentMiddleware struct {
 	snapshots           *hoststate.Store
 	inventoryPending    func(context.Context, string) (bool, error)
 	agentAccess         remenv.AgentAccessCheck
+	pointHolds          PointHoldReader
 }
 
 // NewEnvProxyMiddlewareWithParamAndRegistry creates middleware with an injected tunnel registry.
@@ -122,6 +123,7 @@ func NewEnvProxyMiddlewareWithParamAndRegistry(
 	if len(options) > 0 {
 		m.proxyIdentityHeader = options[0].ProxyIdentityHeader
 		m.agentAccess = options[0].AgentAccess
+		m.pointHolds = options[0].PointHolds
 		m.snapshots = options[0].Snapshots
 		m.inventoryPending = options[0].InventoryPending
 		if options[0].HTTPClient != nil {
@@ -206,6 +208,16 @@ func (m *EnvironmentMiddleware) Handle(c *echo.Context, next echo.HandlerFunc) e
 			"success": false,
 			"data":    map[string]any{"error": "You don't have permission to perform this action on this environment"},
 		})
+	}
+
+	if c.Request().Method == http.MethodDelete {
+		_, point := pointRoute(suffix)
+		if point != "" {
+			// This advisory read is outside runtime locks and remote I/O.
+			if handled, err := m.checkPointDelete(c, envID, point); handled {
+				return err
+			}
+		}
 	}
 
 	if err := InlineImageCredentials(c.Request().URL.Path, c.Request().Header, c.QueryParams()); err != nil {
@@ -541,6 +553,9 @@ func (m *EnvironmentMiddleware) proxyThroughTunnelInternal(c *echo.Context, tunn
 	if httpx.IsWebSocketUpgradeRequest(c.Request()) {
 		return edge.ProxyWebSocketRequest(c, tunnel, proxyPath, m.checkOrigin)
 	}
+	if list, _ := pointRoute(m.buildResourceSuffix(c.Request().URL.Path, envID)); list && c.Request().Method == http.MethodGet {
+		return m.proxyPointList(c, tunnel, envID)
+	}
 	return edge.ProxyHTTPRequest(c, tunnel, proxyPath)
 }
 
@@ -760,6 +775,9 @@ func (m *EnvironmentMiddleware) proxyHTTP(c *echo.Context, target string, access
 	}
 	defer func() { _ = resp.Body.Close() }()
 
+	if list, _ := pointRoute(m.buildResourceSuffix(c.Request().URL.Path, c.Param(m.paramName))); list && c.Request().Method == http.MethodGet {
+		return m.writePointList(c, c.Param(m.paramName), resp.StatusCode, resp.Header, resp.Body)
+	}
 	return m.writeProxyResponse(c, resp)
 }
 
@@ -840,6 +858,7 @@ func (m *EnvironmentMiddleware) writeProxyResponse(c *echo.Context, resp *http.R
 
 // EnvironmentProxySecurity supplies hub-owned identity and agent access boundaries.
 type EnvironmentProxySecurity struct {
+	PointHolds          PointHoldReader
 	Snapshots           *hoststate.Store
 	InventoryPending    func(context.Context, string) (bool, error)
 	HTTPClient          *http.Client
