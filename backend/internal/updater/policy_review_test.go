@@ -235,6 +235,9 @@ func TestPolicyEmissionReasonsAndPermissionStatus(t *testing.T) {
 			require.Equal(t, st.Failed, out.Targets[0].Status)
 			require.Equal(t, "update.permission-denied", out.Targets[0].Code)
 			require.Zero(t, f.admissions)
+			if boundary == "before-check" {
+				require.Zero(t, f.checks, "revoked actors cannot start even a bounded check")
+			}
 		})
 	}
 }

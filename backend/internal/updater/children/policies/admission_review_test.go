@@ -7,9 +7,11 @@
 package policies
 
 import (
+	"errors"
 	imageDTO "github.com/florianfinn/docklet-next/types/image"
 	dto "github.com/florianfinn/docklet-next/types/updater"
 	"github.com/stretchr/testify/require"
+	"gorm.io/gorm"
 	"testing"
 )
 
@@ -54,6 +56,30 @@ func TestEveryPolicyAdmissionBindingIsRequired(t *testing.T) {
 				require.NoError(t, f.DB.Model(&Child{}).Where("id = ?", child.ID).Update("status", "settled").Error)
 			}
 			require.Equal(t, "update.policy-changed", imageDTO.Neutral(validate(), "unexpected", 500).Problem.Code)
+		})
+	}
+}
+
+func TestAdmissionRejectsLookupErrorsAfterRowsWereRead(t *testing.T) {
+	for _, table := range []string{"stack_update_policies", "image_policy_children"} {
+		t.Run(table, func(t *testing.T) {
+			f := newStoreFixture(t)
+			p := f.policy(t, "apply")
+			child, _, err := f.PrepareChild(t.Context(), p, "wrapper")
+			require.NoError(t, err)
+			binding := &dto.PolicyBinding{PolicyID: p.ID, Revision: p.Revision, JobRunID: child.JobRunID, ChildID: child.ID}
+			require.NoError(t, ValidateAdmission(f.DB, binding, p.EnvironmentID, p.RegistrationID, p.TargetID, p.TargetIdentity, p.ActorID))
+			reads := 0
+			require.NoError(t, f.DB.Callback().Query().After("gorm:query").Register("synthetic_partial_read", func(tx *gorm.DB) {
+				if tx.Statement.Schema != nil && tx.Statement.Schema.Table == table && tx.RowsAffected == 1 {
+					reads++
+					tx.AddError(errors.New("synthetic error after reading row"))
+				}
+			}))
+			t.Cleanup(func() { f.DB.Callback().Query().Remove("synthetic_partial_read") })
+			err = ValidateAdmission(f.DB, binding, p.EnvironmentID, p.RegistrationID, p.TargetID, p.TargetIdentity, p.ActorID)
+			require.Equal(t, "update.policy-changed", imageDTO.Neutral(err, "unexpected", 500).Problem.Code)
+			require.Equal(t, 1, reads)
 		})
 	}
 }

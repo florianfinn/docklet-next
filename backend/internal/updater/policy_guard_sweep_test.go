@@ -98,12 +98,12 @@ func TestPolicyHostStopsOnProgressFailureOrCancellation(t *testing.T) {
 }
 
 func TestPolicyReadAndWriteFailuresAreVisible(t *testing.T) {
-	for _, boundary := range []string{"host-error", "registration", "baseline-error", "check-error", "nil-check", "unknown-check", "error-check", "not-pulled-check", "prepare-write", "refusal-write", "policy-status-write", "candidate-write", "notice-claim", "notice-read", "notice-settle"} {
+	for _, boundary := range []string{"host-error", "registration", "baseline-error", "check-error", "nil-check", "unknown-check", "error-check", "not-pulled-check", "prepare-write", "refusal-write", "policy-status-write", "candidate-write", "candidate-status-write", "notice-claim", "notice-read", "notice-settle"} {
 		t.Run(boundary, func(t *testing.T) {
 			f := newPolicyFixture(t)
 			mode := "apply"
 			job := "auto-update"
-			if boundary == "candidate-write" || boundary == "notice-claim" || boundary == "notice-read" || boundary == "notice-settle" {
+			if boundary == "candidate-write" || boundary == "candidate-status-write" || boundary == "notice-claim" || boundary == "notice-read" || boundary == "notice-settle" {
 				mode = "notify"
 				job = "image-polling"
 			}
@@ -138,7 +138,7 @@ func TestPolicyReadAndWriteFailuresAreVisible(t *testing.T) {
 			case "check-error":
 				expected = "update.check-unavailable"
 				f.p.ports.check = func(context.Context, string, string) (*projectDTO.UpdateInfo, error) {
-					return nil, errors.New("synthetic check read error")
+					return f.check, errors.New("synthetic check read error")
 				}
 			case "nil-check":
 				expected = "update.check-unavailable"
@@ -164,6 +164,8 @@ func TestPolicyReadAndWriteFailuresAreVisible(t *testing.T) {
 				require.NoError(t, f.db.Exec("CREATE TRIGGER synthetic_failure BEFORE UPDATE ON stack_update_policies WHEN NEW.apply_code != OLD.apply_code BEGIN SELECT RAISE(ABORT,'synthetic status failure'); END").Error)
 			case "candidate-write":
 				require.NoError(t, f.db.Exec("CREATE TRIGGER synthetic_failure BEFORE INSERT ON image_update_candidates BEGIN SELECT RAISE(ABORT,'synthetic candidate failure'); END").Error)
+			case "candidate-status-write":
+				require.NoError(t, f.db.Exec("CREATE TRIGGER synthetic_failure BEFORE UPDATE ON stack_update_policies WHEN NEW.candidates != OLD.candidates BEGIN SELECT RAISE(ABORT,'synthetic candidate status failure'); END").Error)
 			case "notice-claim":
 				require.NoError(t, f.db.Exec("CREATE TRIGGER synthetic_failure BEFORE UPDATE ON image_update_notifications WHEN NEW.status='sending' BEGIN SELECT RAISE(ABORT,'synthetic claim failure'); END").Error)
 			case "notice-read":
@@ -257,7 +259,7 @@ func TestPolicyReconcileReadFailureNeverDispatches(t *testing.T) {
 	require.NoError(t, err)
 	require.NoError(t, policy.AdmitChild(f.db.DB, &dto.PolicyBinding{ChildID: child.ID}, child.ID))
 	f.p.ports.snapshot = func(context.Context, string, string) (a.RuntimeSnapshot, bool, error) {
-		return a.RuntimeSnapshot{}, false, errors.New("synthetic receipt read failure")
+		return a.RuntimeSnapshot{Activity: a.Activity{Status: a.StatusSuccess}, RuntimeKnowledge: a.RuntimeKnowledge{OutcomeState: a.RuntimeOutcomeKnown}}, true, errors.New("synthetic receipt read failure")
 	}
 	out := f.run(t, "auto-update", st.Run{ID: "wrapper", AttemptCount: 2})
 	require.Len(t, out.Targets, 1)
