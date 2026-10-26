@@ -780,7 +780,8 @@ compatibility within this foundation. No consumer becomes a second runtime
 contract editor.
 
 Single ownership does not require one monolithic PR. The same owner and owning
-issue deliver bounded **sequential step PRs into the M6 feature branch**:
+issue deliver bounded **sequential step PRs into the M6 feature branch** (historical
+M6 delivery; current milestones follow the branch rules in AGENTS.md):
 
 | Foundation package | Scope and ready evidence |
 | --- | --- |
