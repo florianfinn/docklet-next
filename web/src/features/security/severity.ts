@@ -5,10 +5,11 @@ export const SEVERITIES: { key: Severity; tone: Tone; color: string }[] = [
   { key: "high", tone: "orange", color: "var(--orange)" },
   { key: "medium", tone: "warn", color: "var(--warning)" },
   { key: "low", tone: "lime", color: "var(--lime)" },
+  { key: "unknown", tone: "gray", color: "var(--muted-foreground)" },
 ];
 
 export function totalOf(i: ScannedImage): number {
-  return i.counts.critical + i.counts.high + i.counts.medium + i.counts.low;
+  return i.counts.critical + i.counts.high + i.counts.medium + i.counts.low + (i.counts.unknown ?? 0);
 }
 
 export function weightOf(i: ScannedImage): number {

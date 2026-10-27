@@ -6,9 +6,10 @@ import { useTranslations } from "use-intl";
 import { useAdapter } from "@/data/use-adapter";
 import { useCapability } from "@/data/use-capability";
 import { useActionRuns } from "@/data/live";
+import { useScanAction } from "./use-scan-action";
+import { ScanProgress } from "./ScanProgress";
 import { useSecurity, useStacks } from "@/data/queries";
 import { isHostVisible } from "@/domain/hosts";
-import { withPercent } from "@/domain/locale";
 import { useMotionEnabled } from "@/shared/theme/use-design-tokens";
 import { NAV_TAB, NAV_TABS_LIST } from "@/shared/components/nav-tabs";
 import { EmptyState, PageHeader, QueryError } from "@/shared/components/page";
@@ -18,7 +19,6 @@ import { cn } from "@/shared/lib/utils";
 import { Alert, AlertDescription } from "@/shared/ui/alert";
 import { Button } from "@/shared/ui/button";
 import { Card } from "@/shared/ui/card";
-import { Progress } from "@/shared/ui/progress";
 import { Skeleton } from "@/shared/ui/skeleton";
 import { Spinner } from "@/shared/ui/spinner";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/shared/ui/tabs";
@@ -55,7 +55,9 @@ function SecuritySkeleton() {
 export default function SecurityPage() {
   const t = useTranslations("security");
   const adapter = useAdapter();
+  const action = useScanAction();
   const scanCapability = useCapability("runScan");
+  const enableCapability = useCapability("setScanEnabled");
   const security = useSecurity();
   const stacks = useStacks();
   const hosts = useHostScope();
@@ -64,7 +66,7 @@ export default function SecurityPage() {
   const [params, setParams] = useSearchParams();
   const [highlight, setHighlight] = useState<string | null>(null);
   const tab = (["overview", "findings", "images"].includes(params.get("tab") ?? "") ? params.get("tab") : "overview") as "overview" | "findings" | "images";
-  const scan = runs.find((r) => r.kind === "scan" && r.status === "running");
+  const scan = runs.find((r) => r.kind === "scan" && r.status === "running" && isHostVisible(hosts.selection, r.hostId ?? "0"));
 
   const data = useMemo(() => {
     const s = security.data;
@@ -72,7 +74,7 @@ export default function SecurityPage() {
     return {
       images: s.images.filter((i) => isHostVisible(hosts.selection, i.hostId)).sort((a, b) => weightOf(b) - weightOf(a)),
       findings: s.findings.filter((f) => isHostVisible(hosts.selection, f.hostId)),
-      history: s.history,
+      history: s.history.filter((r) => !r.hostId || isHostVisible(hosts.selection, r.hostId)),
     };
   }, [security.data, hosts.selection]);
 
@@ -88,7 +90,7 @@ export default function SecurityPage() {
             {security.data && <ScanToggle enabled={security.data.enabled} />}
             {security.data?.enabled && <ScanScheduleLink schedule={security.data.schedule} enabled />}
             <HelpTarget topic="action.scan" side="bottom">
-              <Button disabled={!!scan || !scanCapability.available} title={scanCapability.reason} onClick={() => void adapter.runScan()} className="group">
+              <Button disabled={action.busy || !!scan || !security.data?.enabled || !scanCapability.available} title={scanCapability.reason} onClick={() => void action.start({ hostIds: hosts.selection })} className="group">
                 {scan ? <Spinner data-icon="inline-start" /> : <ScanSearch data-icon="inline-start" className="tilt" />}
                 {scan ? t("scanning") : t("scan")}
               </Button>
@@ -96,14 +98,10 @@ export default function SecurityPage() {
           </>
         }
       />
-      {scan && (
-        <div className="mb-4 flex items-center gap-3 rounded-xl border border-primary/30 bg-primary/8 px-4 py-2.5 text-sm">
-          <Activity className="size-4 text-primary-text" />
-          <span className="shrink-0">{scan.steps.find((s) => s.state === "running")?.label ?? t("scanning")}</span>
-          <Progress value={scan.progress} className="h-1.5 flex-1" />
-          <span className="text-xs text-muted-foreground tabular">{withPercent(scan.progress)}</span>
-        </div>
-      )}
+      <ScanProgress selection={hosts.selection} />
+      {action.error && <p role="alert" className="mb-3">{action.error}</p>}
+      {security.data?.unavailable?.filter((h) => isHostVisible(hosts.selection, h.hostId)).map((h) => <Alert key={h.hostId} className="mb-3"><AlertDescription>{t("hostUnavailable", { host: hosts.byId.get(h.hostId)?.name ?? h.hostId })}</AlertDescription></Alert>)}
+      {adapter.kind === "http" && <p className="mb-3 text-sm text-muted-foreground">{t("notCovered")}</p>}
       <Alert className="mb-5 border-info/25 bg-info/6">
         <AlertTriangle className="text-info" />
         <AlertDescription className="text-xs">{t("separate")}</AlertDescription>
@@ -117,7 +115,7 @@ export default function SecurityPage() {
           <Shield className="size-9 text-muted-foreground" />
           <h2 className="text-lg font-semibold">{t("off.title")}</h2>
           <p className="max-w-md text-sm text-muted-foreground">{t("off.body")}</p>
-          <Button disabled={!scanCapability.available} title={scanCapability.reason} onClick={() => void adapter.runScan()}>{t("off.enable")}</Button>
+          <Button disabled={action.busy || !enableCapability.available || !scanCapability.available} title={enableCapability.reason ?? scanCapability.reason} onClick={() => void action.enable({ hostIds: hosts.selection }, true)}>{t("off.enable")}</Button>
         </Card>
       ) : !data?.images.length ? (
         <EmptyState icon={<Shield />} title={t("empty.title")} description={t("empty.body")} />

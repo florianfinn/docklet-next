@@ -599,3 +599,10 @@ it("recognizes a global administrator wildcard permission", async () => {
   const adapter = createHttpAdapter({ fetch: vi.fn(async () => ok({ isGlobalAdmin: true, permissionsByEnv: { global: ["*"] } })) as typeof fetch });
   expect(await adapter.getHubBackupAccess()).toEqual({ read: true, manage: true, restore: true });
 });
+
+it.each(["getSecurity", "runScan", "getScanSettings", "saveScanSettings", "setScanEnabled", "cancelScan"])("enables the reviewed vulnerability mapping only with its matching descriptor: %s", async (operation) => {
+  const { securityFixture } = await import("./vulnerabilities.test-support");
+  const f = securityFixture();
+  const ref = operation === "runScan" ? { kind: "image", id: "first~sha256:user" } : { kind: "hub", id: "0" };
+  expect(await f.adapter.getCapability(operation, ref)).toEqual({ operationId: operation, resourceRef: ref, available: true });
+});

@@ -2,6 +2,26 @@
 import type { enSettings } from "./en";
 
 export const deSettings: typeof enSettings = {
+  liveScans: {
+    title: "Scans",
+    enabled: "Schwachstellenscans aktivieren",
+    automatic: "Automatische Scans",
+    schedule: "Zeitplan",
+    time: "Uhrzeit",
+    unscheduled: "Täglichen oder wöchentlichen Zeitplan wählen.",
+    zone: "Zeiten gelten in der Hub-Zeitzone ({zone}). Zeitlücken im Frühjahr werden übersprungen; doppelte Herbstzeiten laufen zweimal.",
+    nextUnavailable: "Nächste Ausführung nicht verfügbar.",
+    next: "Nächste Ausführung: {at}",
+    noNext: "Keine nächste Ausführung geplant.",
+    savedProjection: "Die nächste Ausführung bezieht sich auf die gespeicherte Konfiguration.",
+    ignoreUnfixed: "Befunde ohne Fehlerbehebung ignorieren",
+    notifications: "Benachrichtigungen geplanter Scans",
+    notifyCritical: "Neue kritische Befunde",
+    notifyHigh: "Neue hohe Befunde",
+    notifyFailed: "Fehlgeschlagene Scans",
+    notificationHint: "Nur geplante Scans. Zustellung über Kanäle, die Schwachstellenbefunde abonniert haben.",
+    loading: "Scan-Einstellungen werden geladen …",
+  },
   title: "Hub-Einstellungen",
   description: (import.meta.env.DEV ? "Gelten für den ganzen Hub – unabhängig vom Hostfilter. Speichern wirkt im Demo-Datenbestand dieses Tabs." : "Gilt für den ganzen Hub – unabhängig vom Hostfilter."),
   navLabel: "Bereiche der Hub-Einstellungen",

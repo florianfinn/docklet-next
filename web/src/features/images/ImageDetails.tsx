@@ -1,6 +1,8 @@
+import { ScanImageButton } from "./ImageSecurity";
+import { useImageSecurity } from "./use-image-security";
 import { ImageUpdate } from "./ImageUpdate";
 import { useCapability } from "@/data/use-capability";
-import { ArrowRight, Download, Package, ShieldAlert, Trash2 } from "lucide-react";
+import { ArrowRight, Download, Package, Trash2 } from "lucide-react";
 import type { ReactNode } from "react";
 import { Link } from "react-router";
 import { useTranslations } from "use-intl";
@@ -163,23 +165,7 @@ export function ImageDetails({ id, image, host, onClose, onPull, onRemove }: Ima
                 </Section>
                 <Separator />
                 <Section title={td("security")}>
-                  {image.vulnerabilities ? (
-                    <div className="flex flex-wrap items-center gap-2">
-                      {(["critical", "high", "medium", "low"] as const).map((k) => (
-                        <ToneBadge key={k} tone={k === "critical" ? "err" : k === "high" ? "orange" : k === "medium" ? "warn" : "gray"} className="tabular-nums">
-                          {k} {image.vulnerabilities?.[k]}
-                        </ToneBadge>
-                      ))}
-                      <Button asChild size="sm" variant="ghost" className="h-7 text-xs">
-                        <Link to="/security?tab=images" onClick={onClose}>
-                          <ShieldAlert data-icon="inline-start" />
-                          {td("securityOpen")}
-                        </Link>
-                      </Button>
-                    </div>
-                  ) : (
-                    <p className="text-sm text-muted-foreground">{td("securityNone")}</p>
-                  )}
+                  <SecurityDetails image={image} onClose={onClose} />
                 </Section>
                 <Separator />
                 <Section title={td("actions")}>
@@ -203,4 +189,13 @@ export function ImageDetails({ id, image, host, onClose, onPull, onRemove }: Ima
       </SheetContent>
     </Sheet>
   );
+}
+
+function SecurityDetails({ image, onClose }: { image: DockerImage; onClose: () => void }) {
+  const live = useImageSecurity(image), td = useTranslations("images.details"), ts = useTranslations("security");
+  return <div className="flex flex-col gap-2">
+    {live.unavailable ? <p>{ts("scanUnavailable")}</p> : live.counts ? <div className="flex flex-wrap gap-2">{(["critical", "high", "medium", "low", "unknown"] as const).map((k) => <ToneBadge key={k} tone={k === "critical" ? "err" : k === "high" ? "orange" : "gray"}>{ts(`severities.${k}`)} {live.counts?.[k] ?? 0}</ToneBadge>)}</div> : <p>{td("securityNone")}</p>}
+    {live.platform && <p className="text-xs">{live.platform}</p>}<p className="text-xs text-muted-foreground">{ts("notCovered")}</p>
+    <ScanImageButton image={image} /><Link to="/security?tab=images" onClick={onClose}>{td("securityOpen")}</Link>
+  </div>;
 }

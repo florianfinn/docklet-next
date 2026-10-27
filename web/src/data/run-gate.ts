@@ -264,6 +264,8 @@ export class RunGate {
     const check = () => { if (generation !== this.generation) throw new CancelledError(); };
     const ruleOf = GATE_RULES[method];
     const start = () => (this.inner[method] as (...a: Args) => Promise<unknown>).apply(this.inner, args as unknown[]);
+    // Live scan admission belongs to the host; each request re-scans or returns its busy activity.
+    if (this.inner.kind === "http" && method === "runScan") return start();
     if (this.inner.kind === "http" && !this.inner.mappedOperations?.has(method)) return start();
     if (!ruleOf) return start();
     this.prune();

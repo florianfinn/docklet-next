@@ -16,7 +16,7 @@ export function useNavCounts(): NavCounts {
   const { selection, all: hosts } = useHostScope();
   const volumes = useVolumes();
   const images = useImages();
-  const critical = (security.data?.images ?? []).filter((i) => isHostVisible(selection, i.hostId) && i.usage === "running").reduce((n, i) => n + i.counts.critical, 0);
+  const critical = (security.data?.images ?? []).filter((i) => !i.unavailable && isHostVisible(selection, i.hostId) && i.usage === "running").reduce((n, i) => n + i.counts.critical, 0);
   return {
     stacks: stacks.data ? { value: stacks.visible.length } : undefined,
     containers: containers.data ? { value: containers.visible.length } : undefined,

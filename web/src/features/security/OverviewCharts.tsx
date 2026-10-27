@@ -58,8 +58,9 @@ const trendConfig = Object.fromEntries(SEVERITIES.map((s) => [s.key, { label: s.
 
 export function TrendChart({ history, animate }: { history: ScanRun[]; animate: boolean }) {
   const t = useTranslations("security");
-  const data = history.map((h) => ({ when: formatDate(h.at), manual: h.trigger === "manual", ...h.counts }));
+  const data = history.toSorted((a, b) => Date.parse(a.at) - Date.parse(b.at)).filter((h) => h.sampled !== false).map((h) => ({ when: `${h.hostId ?? ""} ${formatDate(h.at)} ${h.status ? t(`historyStatus.${h.status}`) : ""}`, manual: h.trigger === "manual", ...h.counts }));
   const config = Object.fromEntries(SEVERITIES.map((s) => [s.key, { label: t(`severities.${s.key}`), color: s.color }])) satisfies ChartConfig;
+  if (!data.length) return <p className="text-sm text-muted-foreground">{t("historyEmpty")}</p>;
   return (
     <ChartContainer config={{ ...trendConfig, ...config }} className="aspect-auto h-44 w-full" aria-label={t("trend.label")}>
       <BarChart data={data} margin={{ left: -20, right: 0, top: 10 }}>

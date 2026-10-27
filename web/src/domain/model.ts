@@ -383,14 +383,20 @@ export interface MetricsSnapshot {
   containers: Record<string, ContainerMetrics>;
 }
 
-export type Severity = "critical" | "high" | "medium" | "low";
+export type Severity = "critical" | "high" | "medium" | "low" | "unknown";
+export type SecurityCounts = Record<Exclude<Severity, "unknown">, number> & { unknown?: number };
 
 export interface ScannedImage {
+  id?: string;
+  status?: "pending" | "scanning" | "completed" | "failed";
+  unavailable?: boolean;
+  code?: string;
+  platform?: string;
   ref: string;
   hostId: string;
   stackId?: string;
   usage: "running" | "stopped" | "unused";
-  counts: Record<Severity, number>;
+  counts: SecurityCounts;
   scannedAt: string;
 }
 
@@ -404,15 +410,26 @@ export interface Finding {
   hostId: string;
   cvss: number;
   title: string;
+  imageId?: string;
+  knownExploited?: boolean;
+  epss?: number;
+  risk?: number;
 }
 
 export interface ScanRun {
+  id?: string;
+  hostId?: string;
+  status?: "completed" | "partial" | "cancelled" | "failed" | "interrupted";
+  sampled?: boolean;
   at: string;
   trigger: "scheduled" | "manual";
-  counts: Record<Severity, number>;
+  counts: SecurityCounts;
 }
 
 export interface SecurityOverview {
+  unavailable?: { hostId: string; code: string }[];
+  nextRun?: string;
+  timeZone?: string;
   enabled: boolean;
   schedule: ScanSchedule;
   images: ScannedImage[];

@@ -97,7 +97,7 @@ export default function DashboardPage() {
   const [now] = useState(() => Date.now());
 
   const visibleIds = useMemo(() => new Set(hosts.visible.map((h) => h.id)), [hosts.visible]);
-  const images = useMemo(() => (security.data?.enabled ? security.data.images.filter((i) => isHostVisible(hosts.selection, i.hostId)) : []), [security.data, hosts.selection]);
+  const images = useMemo(() => (security.data?.enabled ? security.data.images.filter((i) => !i.unavailable && isHostVisible(hosts.selection, i.hostId)) : []), [security.data, hosts.selection]);
   // Metrics tick every 2 s; disk-based items only need a coarse refresh.
   const diskKey = metrics ? Math.round(Object.values(metrics).reduce((n, m) => n + m.disk, 0)) : 0;
   const attention = useMemo(
@@ -106,7 +106,7 @@ export default function DashboardPage() {
     [hosts.visible, stacks.visible, containers.visible, runs, images, now, diskKey],
   );
   const updates = stacks.visible.reduce((n, s) => n + s.services.filter((x) => hasUpdate(x.update)).length, 0) + containers.visible.filter((c) => c.origin !== "compose" && hasUpdate(c.update)).length;
-  const critical = security.data?.enabled ? images.filter((i) => i.usage === "running").reduce((n, i) => n + i.counts.critical, 0) : undefined;
+  const critical = security.data?.enabled && !security.data.unavailable?.some((h) => isHostVisible(hosts.selection, h.hostId)) && !security.data.images.some((i) => i.unavailable && isHostVisible(hosts.selection, i.hostId)) ? images.reduce((n, i) => n + i.counts.critical + i.counts.high, 0) : undefined;
 
   const coreLoading = hosts.isPending || stacks.isPending || containers.isPending;
   const visible = visibleWidgets(layout).filter((id) => import.meta.env.DEV || !isServiceWidget(id));

@@ -1,3 +1,4 @@
+import { useImageSecurity } from "./use-image-security";
 import { useCapability } from "@/data/use-capability";
 import { Download, Eye, Layers, ShieldAlert, Trash2 } from "lucide-react";
 import { useNavigate } from "react-router";
@@ -14,6 +15,7 @@ export const USAGE_TONE: Record<ImageUsage, Tone> = { "in-use": "ok", unused: "w
 export function useImageMenu(image: DockerImage, host: Host | undefined, open: { details: (id: string) => void; pull: (image: DockerImage) => void; remove: (image: DockerImage) => void }): MenuGroups {
   const t = useTranslations("images.menu");
   const navigate = useNavigate();
+  const security = useImageSecurity(image);
   const pull = useCapability("pullImage", { kind: "host", id: image.hostId });
   const remove = useCapability("removeImage", { kind: "image", id: image.id });
   const online = host?.status === "online";
@@ -23,7 +25,7 @@ export function useImageMenu(image: DockerImage, host: Host | undefined, open: {
     [
       { id: "pull", label: t("pullAgain"), icon: <Download />, disabled: !pull.available || !!image.inventory?.stale || !online || image.tag === null, title: pull.reason, onSelect: () => open.pull(image) },
       ...(image.update && hasUpdate(image.update) && stack ? [{ id: "update", label: t("openUpdate"), icon: <Layers />, onSelect: () => navigate(`/stacks/${stack}`) }] : []),
-      ...(image.vulnerabilities ? [{ id: "security", label: t("security"), icon: <ShieldAlert />, onSelect: () => navigate("/security?tab=images") }] : []),
+      ...(security.counts || security.unavailable ? [{ id: "security", label: t("security"), icon: <ShieldAlert />, onSelect: () => navigate("/security?tab=images") }] : []),
     ],
     [{ id: "remove", label: t("remove"), icon: <Trash2 />, disabled: !remove.available || !!image.inventory?.stale || !online || imageRemovalBlocked(image), title: remove.reason, onSelect: () => open.remove(image) }],
   ];

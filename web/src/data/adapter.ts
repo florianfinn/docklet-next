@@ -137,7 +137,10 @@ export interface DockletAdapter extends UpdatesApi, AuthApi, HostsApi, VolumesAp
   installContainerUpdate(containerId: string): Promise<string>;
 
   reconnectHost(hostId: string): Promise<string>;
-  runScan(): Promise<string>;
+  runScan(input?: { hostIds?: readonly string[]; imageId?: string }): Promise<string>;
+  getScanSettings?(): Promise<import("@/domain/security").ScanSettings>;
+  saveScanSettings?(value: import("@/domain/security").ScanSettingsInput): Promise<void>;
+  cancelScan?(hostId: string, activityId: string): Promise<void>;
   setScanEnabled(enabled: boolean): Promise<void>;
 
   subscribeActionReadHealth?(listener: (health: ActionReadHealth) => void): Unsubscribe;

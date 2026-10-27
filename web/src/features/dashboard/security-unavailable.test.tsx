@@ -29,3 +29,14 @@ it.each(["de", "en-US"] as const)("shows unavailable security capability in dash
   renderWithApp(<SecurityPage />, f.adapter);
   await waitFor(() => expect(screen.getByText(locale === "de" ? "Diese Funktion ist nicht verfügbar" : "This feature is unavailable").textContent).toBeDefined());
 });
+
+it.each(["de", "en-US"] as const)("keeps another host's live findings visible when one host is unavailable in %s", async (locale) => {
+  const { securityFixture } = await import("@/data/http/vulnerabilities.test-support");
+  setAppLocale(locale);
+  const f = securityFixture(); f.state.failureHost = "second";
+  renderWithApp(<SecurityPage />, f.adapter);
+  await waitFor(() => expect(screen.getByRole("button", { name: locale === "de" ? "Jetzt scannen" : "Scan now" }).hasAttribute("disabled")).toBe(false));
+  await waitFor(() => expect(document.body.textContent).toContain(locale === "de" ? "Scan-Daten für second nicht verfügbar" : "Scan data unavailable for second"));
+  expect(document.body.textContent).toContain("CVE-2026-0001");
+  expect(document.body.textContent).not.toContain(locale === "de" ? "synthetisch" : "synthetic");
+});
