@@ -164,3 +164,22 @@ test("vulnerability producers and Edge routes change the v8 fingerprint", () => 
  for(const command of ["vulnerability.scan","vulnerability.scan_host","vulnerability.run","vulnerability.runs","vulnerability.ignore.bulk","vulnerability.unignore.bulk"])
   assert.ok(manifest.vulnerability.edgeRoutes.some(route=>route.command===command),command);
 });
+
+
+test("vulnerability problem fields and shared routes are covered by the v8 fingerprint", () => {
+ const spec=readFileSync(new URL("../api/openapi.json",import.meta.url));
+ const fixture=readFileSync(new URL("../types/contract/testdata/agent-hub-v8.json",import.meta.url));
+ const original=agentFixture(spec,fixture);
+ const manifest=JSON.parse(original);
+ assert.ok(manifest.vulnerability.schemas.VulnerabilityProblem);
+ for (const field of ["code", "activityId", "status"]) {
+  const changed=JSON.parse(spec);
+  changed.components.schemas.VulnerabilityProblem.properties[field].description="changed failure field";
+  assert.notDeepEqual(agentFixture(Buffer.from(JSON.stringify(changed)),fixture),original,field);
+ }
+ const document=JSON.parse(spec);
+ assert.equal(manifest.vulnerability.edgeRoutes.length, manifest.vulnerability.routes.length);
+ for (const route of manifest.vulnerability.edgeRoutes) {
+  assert.ok(document.paths[route.path.slice(4)]?.[route.method.toLowerCase()]?.tags.includes("Vulnerabilities"),route.path);
+ }
+});

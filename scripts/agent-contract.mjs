@@ -147,13 +147,12 @@ export function agentFixture(spec, fixture) {
     }
   }
   for (const route of vulnerabilityRoutes) collectVulnerability(document.paths[route.path][route.method.toLowerCase()]);
-  const edgeSource = readFileSync(new URL("../backend/pkg/libarcane/edge/commands.go", import.meta.url), "utf8");
+  const edgeSource = readFileSync(new URL("../types/vulnerability/routes.go", import.meta.url), "utf8");
   manifest.vulnerability = {
     routes: vulnerabilityRoutes,
     schemas: vulnerabilitySchemas,
-    edgeRoutes: [...edgeSource.matchAll(/Method:\s*http\.Method(\w+),\s*PathPattern:\s*"([^"\n]+)",\s*CommandName:\s*"([^"\n]+)"/g)]
-      .filter(([, , path]) => path.includes("vulnerabilities"))
-      .map(([, method, path, command]) => ({method: method.toUpperCase(), path, command})),
+    edgeRoutes: [...edgeSource.matchAll(/Method:\s*"(\w+)",\s*Path:\s*"([^"\n]+)",\s*CommandName:\s*"([^"\n]+)"/g)]
+      .map(([, method, path, command]) => ({method: method.toUpperCase(), path: `/api${path}`, command})),
     responseLimit: 32 << 20, reportLimit: 64 << 20,
     admission: "one host operation; busy includes running activity ID",
     baseline: "last completed image findings survive failed attempts",

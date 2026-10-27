@@ -32,14 +32,15 @@ import (
 )
 
 var (
-	jsonOutput   bool
-	limitFlag    int
-	startFlag    int
-	allFlag      bool
-	forceFlag    bool
-	severityFlag string
-	imageFlag    string
-	summaryFlag  bool
+	ignoreUnfixed bool
+	jsonOutput    bool
+	limitFlag     int
+	startFlag     int
+	allFlag       bool
+	forceFlag     bool
+	severityFlag  string
+	imageFlag     string
+	summaryFlag   bool
 
 	ignoreImageFlag   string
 	ignorePkgFlag     string
@@ -171,7 +172,7 @@ var scanCmd = &cobra.Command{
 		// Scans can take a long time on large images.
 		c.SetTimeout(30 * time.Minute)
 
-		result, err := c.PostJSON[vulnerability.AcceptedScan](cmd.Context(), types.ImageVulnerabilitiesScan(c.EnvID(), imageID), vulnerability.ImageScanRequest{Origin: "manual", IgnoreUnfixed: true})
+		result, err := c.PostJSON[vulnerability.AcceptedScan](cmd.Context(), types.ImageVulnerabilitiesScan(c.EnvID(), imageID), vulnerability.ImageScanRequest{Origin: "manual", IgnoreUnfixed: ignoreUnfixed})
 		if err != nil {
 			return fmt.Errorf("failed to scan image: %w", err)
 		}
@@ -381,6 +382,7 @@ func init() {
 	listCmd.Flags().StringVar(&imageFlag, "image", "", "Filter by image name (substring)")
 	listCmd.Flags().BoolVar(&jsonOutput, "json", false, "Output in JSON format")
 
+	scanCmd.Flags().BoolVar(&ignoreUnfixed, "ignore-unfixed", false, "Ignore vulnerabilities without a fix")
 	scanCmd.Flags().BoolVar(&jsonOutput, "json", false, "Output in JSON format")
 
 	imageCmd.Flags().BoolVar(&summaryFlag, "summary", false, "Show the scan summary instead of the detailed list")

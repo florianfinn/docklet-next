@@ -49,6 +49,10 @@ func (c *CommandClient) Execute(ctx context.Context, tunnel *AgentTunnel, req *C
 		return nil, errors.New("command request is required")
 	}
 
+	if vulnerability.IsRoute(req.Method, req.Path) && len(req.Body) > vulnerability.RequestLimit {
+		return nil, vulnerability.Fail("vulnerability.request-too-large", 413)
+	}
+
 	commandName := req.Command
 	if commandName == "" {
 		resolved, ok := ResolveEdgeCommandName(req.Method, req.Path, false).Get()
@@ -93,7 +97,7 @@ func (c *CommandClient) Execute(ctx context.Context, tunnel *AgentTunnel, req *C
 	defer tunnel.Pending.Delete(requestID)
 	completed := false
 	defer func() {
-		if !completed && (runtimeRequestPathInternal(req.Path) || vulnerability.IsPath(req.Path)) {
+		if !completed && (runtimeRequestPathInternal(req.Path) || vulnerability.IsRoute(req.Method, req.Path)) {
 			_ = tunnel.Conn.Send(&TunnelMessage{ID: requestID, Type: MessageTypeCancelRequest})
 		}
 	}()
@@ -135,7 +139,7 @@ func (c *CommandClient) Execute(ctx context.Context, tunnel *AgentTunnel, req *C
 	if runtimeRequestPathInternal(req.Path) {
 		limit = runtimeRequestBodyLimit
 	}
-	if vulnerability.IsPath(req.Path) {
+	if vulnerability.IsRoute(req.Method, req.Path) {
 		limit = vulnerability.ResponseLimit
 	}
 	status, headers, body, err := collectCommandResponseBoundedInternal(ctx, tunnel, pending, req.Method, limit)

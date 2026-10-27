@@ -176,7 +176,7 @@ func (s *Service) Execute(
 		return nil, err
 	}
 
-	if vulnerability.IsPath(path) {
+	if vulnerability.IsRoute(method, path) {
 		request.ResponseLimit = vulnerability.ResponseLimit
 	}
 	resp, err := s.client.Do(ctx, request)
@@ -351,7 +351,7 @@ func doTunnelRequestInternal(
 
 	statusCode, respHeaders, respBody, err := edge.ProxyRequest(ctx, tunnel, method, path, "", headers, body)
 	if err != nil {
-		if vulnerability.IsPath(path) && errors.Is(err, edge.ErrCommandResponseTooLarge) {
+		if vulnerability.IsRoute(method, path) && errors.Is(err, edge.ErrCommandResponseTooLarge) {
 			return nil, vulnerability.Fail("vulnerability.response-too-large", 502)
 		}
 		if errors.Is(err, edge.ErrTunnelConnectionClosed) {

@@ -78,6 +78,7 @@ export const deSecurity: typeof enSecurity = {
     "vulnerability_platform-unavailable": deBackend.errors.vulnerability["platform-unavailable"],
     "vulnerability_report-invalid": deBackend.errors.vulnerability["report-invalid"],
     "vulnerability_response-too-large": deBackend.errors.vulnerability["response-too-large"],
+    "vulnerability_request-too-large": deBackend.errors.vulnerability["request-too-large"],
     "vulnerability_run-not-found": deBackend.errors.vulnerability["run-not-found"],
     "vulnerability_scan-cancelled": deBackend.errors.vulnerability["scan-cancelled"],
     "vulnerability_scan-failed": deBackend.errors.vulnerability["scan-failed"],

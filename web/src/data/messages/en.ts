@@ -15,6 +15,7 @@ export const enBackend = {
       "no-eligible-hosts": "No hosts are eligible for scanning.",
       "platform-unavailable": "The daemon platform is unavailable for this image.",
       "report-invalid": "The vulnerability report is invalid.",
+      "request-too-large": "The vulnerability request exceeds the size limit.",
       "response-too-large": "The vulnerability response exceeds the size limit.",
       "run-not-found": "The vulnerability scan run was not found.",
       "scan-cancelled": "The vulnerability scan was cancelled.",

@@ -77,6 +77,7 @@ export const enSecurity = {
     "vulnerability_platform-unavailable": enBackend.errors.vulnerability["platform-unavailable"],
     "vulnerability_report-invalid": enBackend.errors.vulnerability["report-invalid"],
     "vulnerability_response-too-large": enBackend.errors.vulnerability["response-too-large"],
+    "vulnerability_request-too-large": enBackend.errors.vulnerability["request-too-large"],
     "vulnerability_run-not-found": enBackend.errors.vulnerability["run-not-found"],
     "vulnerability_scan-cancelled": enBackend.errors.vulnerability["scan-cancelled"],
     "vulnerability_scan-failed": enBackend.errors.vulnerability["scan-failed"],

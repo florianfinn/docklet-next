@@ -28,7 +28,7 @@
     "backend/internal/volume/children/backup/service.go": 1029,
     "backend/internal/volume/children/workspace/service.go": 857,
     "backend/internal/volume/service.go": 585,
-    "backend/internal/vulnerability/children/scan/children/trivy/service.go": 332,
+    "backend/internal/vulnerability/children/scan/children/trivy/service.go": 307,
     "backend/pkg/libarcane/edge/client.go": 641,
     "backend/pkg/libarcane/edge/client_test.go": 772,
     "backend/pkg/libarcane/edge/tls.go": 1313,

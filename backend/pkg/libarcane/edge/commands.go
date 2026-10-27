@@ -7,6 +7,7 @@
 package edge
 
 import (
+	"github.com/florianfinn/docklet-next/types/vulnerability"
 	"net/http"
 	"strings"
 
@@ -14,7 +15,7 @@ import (
 	kit "go.getarcane.app/kit/pkg"
 )
 
-var commandRoutes = []commandRoute{
+var commandRoutes = withVulnerabilityRoutes([]commandRoute{
 	{Method: http.MethodPost, PathPattern: "/api/environments/{id}/updater/projects/{projectId}/check", CommandName: "updater.project.check"},
 	{Method: http.MethodGet, PathPattern: "/api/environments/{id}/updater/projects/{projectId}/baseline", CommandName: "updater.project.baseline"},
 	{Method: http.MethodGet, PathPattern: "/api/environments/{id}/updater/{kind}/{targetId}/restore-points", CommandName: "updater.restore.list"},
@@ -73,26 +74,6 @@ var commandRoutes = []commandRoute{
 	{Method: http.MethodGet, PathPattern: "/api/environments/{id}/activities/{activityId}", CommandName: "activity.inspect"},
 	{Method: http.MethodPost, PathPattern: "/api/environments/{id}/activities/{activityId}/cancel", CommandName: "activity.cancel"},
 	{Method: http.MethodDelete, PathPattern: "/api/environments/{id}/activities/history", CommandName: "activity.history.clear"},
-
-	{Method: http.MethodPost, PathPattern: "/api/environments/{id}/vulnerabilities/scan", CommandName: "vulnerability.scan_host"},
-	{Method: http.MethodGet, PathPattern: "/api/environments/{id}/vulnerabilities/runs/{activityId}", CommandName: "vulnerability.run"},
-	{Method: http.MethodGet, PathPattern: "/api/environments/{id}/vulnerabilities/runs", CommandName: "vulnerability.runs"},
-	{Method: http.MethodPost, PathPattern: "/api/environments/{id}/vulnerabilities/ignore/bulk", CommandName: "vulnerability.ignore.bulk"},
-	{Method: http.MethodPost, PathPattern: "/api/environments/{id}/vulnerabilities/unignore/bulk", CommandName: "vulnerability.unignore.bulk"},
-	{Method: http.MethodPost, PathPattern: "/api/environments/{id}/images/{imageId}/vulnerabilities/scan", CommandName: "vulnerability.scan"},
-	{Method: http.MethodGet, PathPattern: "/api/environments/{id}/images/{imageId}/vulnerabilities", CommandName: "vulnerability.list"},
-	{Method: http.MethodGet, PathPattern: "/api/environments/{id}/images/{imageId}/vulnerabilities/summary", CommandName: "vulnerability.summary"},
-	{Method: http.MethodPost, PathPattern: "/api/environments/{id}/images/vulnerabilities/summaries", CommandName: "vulnerability.summary"},
-	{Method: http.MethodGet, PathPattern: "/api/environments/{id}/images/{imageId}/vulnerabilities/list", CommandName: "vulnerability.list"},
-	{Method: http.MethodGet, PathPattern: "/api/environments/{id}/vulnerabilities/scanner-status", CommandName: "vulnerability.scanner_status"},
-	{Method: http.MethodGet, PathPattern: "/api/environments/{id}/vulnerabilities/summary", CommandName: "vulnerability.summary"},
-	{Method: http.MethodGet, PathPattern: "/api/environments/{id}/vulnerabilities/overview", CommandName: "vulnerability.overview"},
-	{Method: http.MethodGet, PathPattern: "/api/environments/{id}/vulnerabilities/all", CommandName: "vulnerability.all"},
-	{Method: http.MethodGet, PathPattern: "/api/environments/{id}/vulnerabilities/export", CommandName: "vulnerability.export"},
-	{Method: http.MethodGet, PathPattern: "/api/environments/{id}/vulnerabilities/image-options", CommandName: "vulnerability.image_options"},
-	{Method: http.MethodPost, PathPattern: "/api/environments/{id}/vulnerabilities/ignore", CommandName: "vulnerability.ignore.create"},
-	{Method: http.MethodDelete, PathPattern: "/api/environments/{id}/vulnerabilities/ignore/{ignoreId}", CommandName: "vulnerability.ignore.delete"},
-	{Method: http.MethodGet, PathPattern: "/api/environments/{id}/vulnerabilities/ignored", CommandName: "vulnerability.ignore.list"},
 
 	{Method: http.MethodGet, PathPattern: "/api/environments/{id}/projects", CommandName: "project.list"},
 	{Method: http.MethodGet, PathPattern: "/api/environments/{id}/projects/counts", CommandName: "project.counts"},
@@ -203,6 +184,13 @@ var commandRoutes = []commandRoute{
 	{PathPattern: "/api/environments/{id}/ws/containers/{containerId}/stats", CommandName: "container.stats.stream", Stream: true},
 	{PathPattern: "/api/environments/{id}/ws/containers/{containerId}/terminal", CommandName: "container.exec.stream", Stream: true},
 	{PathPattern: "/api/environments/{id}/ws/system/stats", CommandName: "system.stats.stream", Stream: true},
+})
+
+func withVulnerabilityRoutes(routes []commandRoute) []commandRoute {
+	for _, route := range vulnerability.Routes() {
+		routes = append(routes, commandRoute{Method: route.Method, PathPattern: "/api" + route.Path, CommandName: route.CommandName})
+	}
+	return routes
 }
 
 var commandRoutesIndex = buildCommandRouteIndexInternal(commandRoutes)

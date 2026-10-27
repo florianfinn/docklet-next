@@ -148,15 +148,8 @@ func NewEnvProxyMiddlewareWithParamAndRegistry(
 // Handle is the main middleware handler.
 func (m *EnvironmentMiddleware) Handle(c *echo.Context, next echo.HandlerFunc) error {
 	envID := m.extractEnvironmentID(c)
-	if vulnerability.IsPath(c.Request().URL.Path) && m.vulnerabilityEnabled != nil && !m.vulnerabilityEnabled(c.Request().Context()) {
-		return c.JSON(403, map[string]any{"code": "feature-disabled"})
-	}
-
-	if envID == "" || envID == m.localID {
-		return next(c)
-	}
-
-	if !m.hasResourcePath(c, envID) {
+	isVulnerability := vulnerability.IsRoute(c.Request().Method, c.Request().URL.Path)
+	if !isVulnerability && (envID == "" || envID == m.localID || !m.hasResourcePath(c, envID)) {
 		return next(c)
 	}
 
@@ -174,6 +167,18 @@ func (m *EnvironmentMiddleware) Handle(c *echo.Context, next echo.HandlerFunc) e
 		perms, user = ps, u
 		c.Set("pointHostAdmin", ps.IsGlobalAdmin())
 	}
+	if isVulnerability {
+		if m.proxyPermissionDenied(c, perms, envID) {
+			return echo.NewHTTPError(http.StatusForbidden, "permission denied")
+		}
+		if m.vulnerabilityEnabled != nil && !m.vulnerabilityEnabled(c.Request().Context()) {
+			return vulnerabilityProblem(c, vulnerability.Fail("feature-disabled", 403))
+		}
+		if envID == "" || envID == m.localID {
+			return next(c)
+		}
+	}
+
 	// Check client authority before Edge forwarding injects server-side agent tokens.
 	if httpx.IsWebSocketUpgradeRequest(c.Request()) && (m.checkOrigin == nil || !m.checkOrigin(c.Request())) {
 		return echo.NewHTTPError(http.StatusForbidden, "websocket origin not allowed")
@@ -196,9 +201,9 @@ func (m *EnvironmentMiddleware) Handle(c *echo.Context, next echo.HandlerFunc) e
 	// mirroring the per-operation RequirePermission checks used for the local
 	// environment.
 	suffix := m.buildResourceSuffix(c.Request().URL.Path, envID)
-	if vulnerability.IsPath(suffix) && c.Request().Method == http.MethodPost && strings.HasSuffix(suffix, "/scan") && m.vulnerabilityIgnoreUnfixed != nil {
-		if e := m.canonicalizeVulnerabilityScan(c); e != nil {
-			return e
+	if vulnerability.IsRoute(c.Request().Method, c.Request().URL.Path) && c.Request().Method == http.MethodPost && strings.HasSuffix(suffix, "/scan") && m.vulnerabilityIgnoreUnfixed != nil {
+		if handled, err := m.canonicalizeVulnerabilityScan(c); handled {
+			return err
 		}
 	}
 	if strings.HasPrefix(suffix, "/updater/") && (strings.Contains(suffix, "/restore-points") || strings.HasSuffix(suffix, "/baseline")) {
@@ -576,7 +581,7 @@ func (m *EnvironmentMiddleware) setProxyContextHeadersInternal(c *echo.Context, 
 
 func (m *EnvironmentMiddleware) proxyThroughTunnelInternal(c *echo.Context, tunnel *edge.AgentTunnel, envID string) error {
 	proxyPath := m.buildProxyPath(c, envID)
-	if vulnerability.IsPath(proxyPath) {
+	if vulnerability.IsRoute(c.Request().Method, proxyPath) {
 		return m.proxyVulnerability(c, tunnel, envID)
 	}
 	if httpx.IsWebSocketUpgradeRequest(c.Request()) {
@@ -749,6 +754,9 @@ func (m *EnvironmentMiddleware) waitForActiveEdgeTunnelInternal(ctx context.Cont
 }
 
 func (m *EnvironmentMiddleware) abortEdgeTunnelUnavailable(c *echo.Context) error {
+	if vulnerability.IsRoute(c.Request().Method, c.Request().URL.Path) {
+		return vulnerabilityProblem(c, vulnerability.Fail("agent.unavailable", 502))
+	}
 	return c.JSON(http.StatusBadGateway, map[string]any{
 		"success": false,
 		"code":    "agent.unavailable",
@@ -796,6 +804,9 @@ func (m *EnvironmentMiddleware) proxyHTTP(c *echo.Context, target string, access
 
 	resp, err := m.httpClient.Do(req)
 	if err != nil {
+		if vulnerability.IsRoute(c.Request().Method, c.Request().URL.Path) {
+			return vulnerabilityProblem(c, vulnerability.Fail("agent.unavailable", 502))
+		}
 		return c.JSON(http.StatusBadGateway, map[string]any{
 			"success": false,
 			"code":    "agent.unavailable",
@@ -803,7 +814,7 @@ func (m *EnvironmentMiddleware) proxyHTTP(c *echo.Context, target string, access
 		})
 	}
 	defer func() { _ = resp.Body.Close() }()
-	if vulnerability.IsPath(c.Request().URL.Path) {
+	if vulnerability.IsRoute(c.Request().Method, c.Request().URL.Path) {
 		return m.writeVulnerability(c, resp.StatusCode, resp.Header, resp.Body)
 	}
 

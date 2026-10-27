@@ -17,6 +17,7 @@ export const deBackend: typeof enBackend = {
       "no-eligible-hosts": "Keine Hosts sind für einen Scan verfügbar.",
       "platform-unavailable": "Die Daemon-Plattform ist für dieses Image nicht verfügbar.",
       "report-invalid": "Der Schwachstellenbericht ist ungültig.",
+      "request-too-large": "Die Schwachstellenanfrage überschreitet die Größenbegrenzung.",
       "response-too-large": "Die Schwachstellenantwort überschreitet die Größenbegrenzung.",
       "run-not-found": "Der Schwachstellenscanlauf wurde nicht gefunden.",
       "scan-cancelled": "Der Schwachstellenscan wurde abgebrochen.",
