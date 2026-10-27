@@ -228,17 +228,26 @@ func (m *EnvironmentMiddleware) Handle(c *echo.Context, next echo.HandlerFunc) e
 		}
 		if host {
 			if perms == nil || !perms.IsGlobalAdmin() {
+				if vulnerabilityShape {
+					return genericProblem(c, http.StatusForbidden, "Host administrator required")
+				}
 				return echo.NewHTTPError(http.StatusForbidden, "Host administrator required")
 			}
 			grants = []string{authz.PermImageUpdatesRead}
 		}
 		for _, grant := range grants {
 			if perms == nil || !perms.Allows(grant, envID) {
+				if vulnerabilityShape {
+					return genericProblem(c, http.StatusForbidden, "Restore point grants required")
+				}
 				return echo.NewHTTPError(http.StatusForbidden, "Restore point grants required")
 			}
 		}
 	}
 	if m.proxyPermissionDenied(c, perms, envID) {
+		if vulnerabilityShape {
+			return genericProblem(c, http.StatusForbidden, "permission denied")
+		}
 		return c.JSON(http.StatusForbidden, map[string]any{
 			"success": false,
 			"data":    map[string]any{"error": "You don't have permission to perform this action on this environment"},
@@ -248,9 +257,15 @@ func (m *EnvironmentMiddleware) Handle(c *echo.Context, next echo.HandlerFunc) e
 	if list, point := pointRoute(suffix); (list || point != "") && !perms.IsGlobalAdmin() {
 		parts := strings.Split(strings.Trim(suffix, "/"), "/")
 		if m.pointAccess == nil {
+			if vulnerabilityShape {
+				return genericProblem(c, http.StatusServiceUnavailable, "restore point access unavailable")
+			}
 			return pointFailure(c, "update.check-unavailable", 503)
 		}
 		if err := m.pointAccess(c.Request().Context(), envID, parts[2], point); err != nil {
+			if vulnerabilityShape {
+				return genericProblem(c, http.StatusServiceUnavailable, "restore point access unavailable")
+			}
 			problem := imageDTO.Neutral(err, "update.check-unavailable", 503)
 			return c.JSON(problem.Status, problem)
 		}
