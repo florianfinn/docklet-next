@@ -221,7 +221,8 @@ func (h *RuntimeHTTPService) wait(ctx context.Context, ref RuntimeRunReference, 
 func runtimeWaitFailure(snapshot activitytypes.RuntimeSnapshot, err error) (int, activitytypes.Code) {
 	switch {
 	case err == nil && snapshot.OutcomeState != activitytypes.RuntimeOutcomeUnknown && snapshot.Status == activitytypes.StatusFailed && snapshot.ImageLifecycle != nil && snapshot.ImageLifecycle.Code != "":
-		return snapshot.ImageLifecycle.HTTPStatus, activitytypes.Code(snapshot.ImageLifecycle.Code)
+		result := checkedLifecycleResult(*snapshot.ImageLifecycle)
+		return result.HTTPStatus, activitytypes.Code(result.Code)
 	case errors.Is(err, context.DeadlineExceeded):
 		return 504, activitytypes.CodeRuntimeWaitTimeout
 	case errors.Is(err, context.Canceled):

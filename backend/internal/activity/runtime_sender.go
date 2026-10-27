@@ -15,8 +15,6 @@ import (
 	"mime"
 	"net/http"
 	"net/url"
-	"reflect"
-	"slices"
 	"strings"
 	"time"
 
@@ -128,7 +126,7 @@ func (s *RuntimeSender) request(ctx context.Context, method, path, query string,
 	if activitytypes.DecodeRuntimeJSON(response, &result) != nil || activitytypes.ValidateRuntimeOutcome(result, id) != nil {
 		return empty, ErrRuntimeTransport
 	}
-	return result, nil
+	return checkedRemoteLifecycle(result), nil
 }
 
 // Metadata requests use the identical authenticated one-shot transport and Edge
@@ -210,6 +208,9 @@ func (s *RuntimeSender) roundTrip(ctx context.Context, method, path, query strin
 		status = resp.StatusCode
 		contentType = resp.Header.Get("Content-Type")
 	}
+	if remenv.AgentAuthRejected(status) {
+		return 0, nil, remenv.ErrAgentInvalidToken
+	}
 	media, _, mediaErr := mime.ParseMediaType(contentType)
 	if mediaErr != nil || media != "application/json" {
 		return 0, nil, ErrRuntimeTransport
@@ -249,8 +250,7 @@ func (s *RuntimeSender) metadata(ctx context.Context, path string, value, result
 	if status != 200 {
 		var problem imageDTO.OperationError
 		if status >= 400 && status <= 599 && activitytypes.DecodeRuntimeJSON(response, &problem) == nil && !problem.Success {
-			field, _ := reflect.TypeFor[imageDTO.Problem]().FieldByName("Code")
-			if slices.Contains(strings.Split(field.Tag.Get("enum"), ","), problem.Problem.Code) {
+			if imageDTO.ValidProblemCode(problem.Problem.Code) {
 				return imageDTO.Failure(problem.Problem.Code, status)
 			}
 		}

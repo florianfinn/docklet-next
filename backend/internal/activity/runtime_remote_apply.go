@@ -24,6 +24,7 @@ func (s *RuntimeService) applyRemoteInternal(ctx context.Context, ref RuntimeRun
 	if activitytypes.ValidateRuntimeOutcome(outcome, outcome.Identity) != nil || outcome.State == activitytypes.RuntimeAnswerNotReceived {
 		return activitytypes.RuntimeSnapshot{}, activitytypes.ErrRuntimeWire
 	}
+	outcome = checkedRemoteLifecycle(outcome)
 	s.activity.runningMu.Lock()
 	defer s.activity.runningMu.Unlock()
 	lock := s.activity.publishLockInternal(ref.RunID)

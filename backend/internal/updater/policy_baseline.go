@@ -16,5 +16,9 @@ func checkedBaselineResponse(out base.ApiResponse[dto.BaselineStatus]) (dto.Base
 	if !out.Success || !out.Data.Valid() {
 		return dto.BaselineStatus{}, imageDTO.Failure("update.check-unavailable", 503)
 	}
+	if imageDTO.ValidateReason(out.Data.Code) != nil {
+		out.Data.Code = "runtime.outcome-unknown"
+		out.Data.Available = false
+	}
 	return out.Data, nil
 }

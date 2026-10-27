@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; functional cut: removed GitOps, saved Git repositories and Swarm; validate original WebSocket client origin before forwarding credentials.
+// Deviations: Local module namespace; functional cut: removed GitOps, saved Git repositories and Swarm; validate original WebSocket client origin before forwarding credentials; enforce hub restore-point authority and lifecycle response contracts.
 
 package middleware
 
@@ -93,6 +93,7 @@ type EnvironmentMiddleware struct {
 	inventoryPending    func(context.Context, string) (bool, error)
 	agentAccess         remenv.AgentAccessCheck
 	pointHolds          PointHoldReader
+	pointAccess         PointAccessReader
 }
 
 // NewEnvProxyMiddlewareWithParamAndRegistry creates middleware with an injected tunnel registry.
@@ -124,6 +125,7 @@ func NewEnvProxyMiddlewareWithParamAndRegistry(
 		m.proxyIdentityHeader = options[0].ProxyIdentityHeader
 		m.agentAccess = options[0].AgentAccess
 		m.pointHolds = options[0].PointHolds
+		m.pointAccess = options[0].PointAccess
 		m.snapshots = options[0].Snapshots
 		m.inventoryPending = options[0].InventoryPending
 		if options[0].HTTPClient != nil {
@@ -162,6 +164,7 @@ func (m *EnvironmentMiddleware) Handle(c *echo.Context, next echo.HandlerFunc) e
 			})
 		}
 		perms, user = ps, u
+		c.Set("pointHostAdmin", ps.IsGlobalAdmin())
 	}
 	// Check client authority before Edge forwarding injects server-side agent tokens.
 	if httpx.IsWebSocketUpgradeRequest(c.Request()) && (m.checkOrigin == nil || !m.checkOrigin(c.Request())) {
@@ -210,6 +213,16 @@ func (m *EnvironmentMiddleware) Handle(c *echo.Context, next echo.HandlerFunc) e
 		})
 	}
 
+	if list, point := pointRoute(suffix); (list || point != "") && !perms.IsGlobalAdmin() {
+		parts := strings.Split(strings.Trim(suffix, "/"), "/")
+		if m.pointAccess == nil {
+			return pointFailure(c, "update.check-unavailable", 503)
+		}
+		if err := m.pointAccess(c.Request().Context(), envID, parts[2], point); err != nil {
+			problem := imageDTO.Neutral(err, "update.check-unavailable", 503)
+			return c.JSON(problem.Status, problem)
+		}
+	}
 	if c.Request().Method == http.MethodDelete {
 		_, point := pointRoute(suffix)
 		if point != "" {
@@ -553,8 +566,8 @@ func (m *EnvironmentMiddleware) proxyThroughTunnelInternal(c *echo.Context, tunn
 	if httpx.IsWebSocketUpgradeRequest(c.Request()) {
 		return edge.ProxyWebSocketRequest(c, tunnel, proxyPath, m.checkOrigin)
 	}
-	if list, _ := pointRoute(m.buildResourceSuffix(c.Request().URL.Path, envID)); list && c.Request().Method == http.MethodGet {
-		return m.proxyPointList(c, tunnel, envID)
+	if lifecycleProxyPath(c.Request().Method, m.buildResourceSuffix(c.Request().URL.Path, envID)) {
+		return m.proxyLifecycleResponse(c, tunnel, envID)
 	}
 	return edge.ProxyHTTPRequest(c, tunnel, proxyPath)
 }
@@ -778,6 +791,9 @@ func (m *EnvironmentMiddleware) proxyHTTP(c *echo.Context, target string, access
 	if list, _ := pointRoute(m.buildResourceSuffix(c.Request().URL.Path, c.Param(m.paramName))); list && c.Request().Method == http.MethodGet {
 		return m.writePointList(c, c.Param(m.paramName), resp.StatusCode, resp.Header, resp.Body)
 	}
+	if lifecycleProxyPath(c.Request().Method, m.buildResourceSuffix(c.Request().URL.Path, c.Param(m.paramName))) {
+		return m.writeLifecycleResponse(c, resp.StatusCode, resp.Header, resp.Body)
+	}
 	return m.writeProxyResponse(c, resp)
 }
 
@@ -859,6 +875,7 @@ func (m *EnvironmentMiddleware) writeProxyResponse(c *echo.Context, resp *http.R
 // EnvironmentProxySecurity supplies hub-owned identity and agent access boundaries.
 type EnvironmentProxySecurity struct {
 	PointHolds          PointHoldReader
+	PointAccess         PointAccessReader
 	Snapshots           *hoststate.Store
 	InventoryPending    func(context.Context, string) (bool, error)
 	HTTPClient          *http.Client

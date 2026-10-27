@@ -9,6 +9,7 @@ package activity_test
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"github.com/danielgtaylor/huma/v2"
 	"github.com/danielgtaylor/huma/v2/adapters/humaecho"
 	"github.com/florianfinn/docklet-next/backend/internal/activity"
@@ -30,11 +31,16 @@ import (
 
 type lifecycleRefusalProjects struct {
 	*project.ProjectService
-	code string
+	code   string
+	status int
 }
 
 func (p *lifecycleRefusalProjects) PrepareImageLifecycle(context.Context, string, string, dto.LifecycleRequest) (*dto.LifecycleIntent, error) {
-	problem := imageDTO.Failure(p.code, 409)
+	status := p.status
+	if status == 0 {
+		status = 409
+	}
+	problem := imageDTO.Failure(p.code, status)
 	problem.Problem.Message = "synthetic-private agent diagnostic"
 	return nil, problem
 }
@@ -45,10 +51,21 @@ func TestRuntimeImageTypedRefusalThroughDirectAndEdgeHTTP(t *testing.T) {
 		if isEdge {
 			mode = "edge"
 		}
-		for _, code := range []string{"update.config-drift", "restore.shared-reference"} {
-			t.Run(mode+"/"+code, func(t *testing.T) {
+		for _, tc := range []struct {
+			code               string
+			status, wantStatus int
+			want               string
+		}{
+			{"update.config-drift", 409, 409, "update.config-drift"},
+			{"restore.shared-reference", 409, 409, "restore.shared-reference"},
+			{"undeclared", 409, 503, "runtime.outcome-unknown"},
+			{"restore.unavailable", 401, 502, "agent.invalid-token"},
+			{"restore.unavailable", 403, 502, "agent.invalid-token"},
+		} {
+			code := tc.code
+			t.Run(mode+"/"+code+"/"+fmt.Sprint(tc.status), func(t *testing.T) {
 				f := newRemoteIntegration(t, isEdge, func(agent *runtimeServicesFixture) {
-					agent.adapter = activity.NewRuntimeServiceAdapter(&lifecycleRefusalProjects{ProjectService: agent.projects, code: code}, agent.containers)
+					agent.adapter = activity.NewRuntimeServiceAdapter(&lifecycleRefusalProjects{ProjectService: agent.projects, code: code, status: tc.status}, agent.containers)
 				})
 				target := activity.RuntimeTarget{Kind: "stack", ID: "example-project"}
 				f.agent.project(target.ID, target.ID, "services:\n  app:\n    image: registry.example.com/app:1\n")
@@ -82,10 +99,14 @@ func TestRuntimeImageTypedRefusalThroughDirectAndEdgeHTTP(t *testing.T) {
 				rec := httptest.NewRecorder()
 				router.ServeHTTP(rec, req)
 				require.Zero(t, f.executeCalls.Load(), "refusal must precede runtime execution")
-				require.Equal(t, 409, rec.Code, rec.Body.String())
-				var body imageDTO.OperationError
-				require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &body))
-				require.Equal(t, code, body.Problem.Code)
+				require.Equal(t, tc.wantStatus, rec.Code, rec.Body.String())
+				if tc.wantStatus == 409 {
+					var body imageDTO.OperationError
+					require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &body))
+					require.Equal(t, code, body.Problem.Code)
+				} else {
+					require.Contains(t, rec.Body.String(), tc.want)
+				}
 				require.NotContains(t, rec.Body.String(), "synthetic-private")
 				var count int64
 				require.NoError(t, f.db.Table("activities").Count(&count).Error)

@@ -10,6 +10,8 @@ import (
 	"encoding/json"
 	"errors"
 	"github.com/distribution/reference"
+	"reflect"
+	"slices"
 	"strings"
 )
 
@@ -22,6 +24,12 @@ type OperationError struct {
 type Problem struct {
 	Code    string `json:"code" enum:"image.active-update-protected,image.busy,image.changed,image.in-use,image.invalid-archive,image.invalid-prune,image.invalid-reference,image.load-failed,image.not-found,image.prune-failed,image.pull-failed,image.remove-failed,image.reserved-reference,image.restore-point-protected,image.system-protected,image.tag-failed,image.usage-unavailable,registry.authentication-failed,registry.authentication-required,registry.credential-unavailable,registry.exists,registry.inline-credentials-not-allowed,registry.invalid-config,registry.not-found,registry.persistence-failed,registry.rate-limited,registry.sync-failed,registry.unavailable,restore.deploy-failed,restore.image-mismatch,restore.in-use,restore.not-found,restore.shared-reference,restore.unavailable,update.permission-denied,update.schedule-owner-unset,update.agent-local-job-disabled,update.auto-excluded,update.invalid-policy,update.policy-changed,update.schedule-hub-owned,update.baseline-unavailable,update.check-unavailable,update.config-drift,update.deploy-failed,update.image-binding-unsupported,update.invalid-target,update.path-retired,update.persistence-failed,update.requires-hub-update,update.snapshot-unavailable,update.system-version-unknown,update.target-changed,update.target-not-found"`
 	Message string `json:"message"`
+}
+
+// ValidProblemCode uses the wire schema's narrower set, rather than run reasons.
+func ValidProblemCode(code string) bool {
+	field, _ := reflect.TypeFor[Problem]().FieldByName("Code")
+	return slices.Contains(strings.Split(field.Tag.Get("enum"), ","), code)
 }
 
 func (e *OperationError) Error() string  { return e.Problem.Message }
