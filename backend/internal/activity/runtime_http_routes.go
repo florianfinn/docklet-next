@@ -127,6 +127,10 @@ func runtimeLegacyResponse(ctx context.Context, service *ActivityService, enviro
 			return runtimeJSONResponse(409, activitytypes.RuntimeConflictResponse{Data: activitytypes.RuntimeConflict{Code: activitytypes.CodeRunRequestMismatch}}), nil
 		case errors.As(err, &targetErr):
 			return runtimeJSONResponse(409, activitytypes.RuntimeConflictResponse{Data: activitytypes.RuntimeConflict{Code: activitytypes.Code(targetErr.Code)}}), nil
+		case errors.Is(err, remenv.ErrAgentInvalidToken):
+			return runtimeJSONResponse(502, common.NewAPIError("Agent credential rejected", "agent.invalid-token", 502)), nil
+		case errors.Is(err, ErrRuntimeTransport):
+			return runtimeJSONResponse(503, common.NewAPIError("Remote runtime outcome unavailable", common.APIErrorCode(activitytypes.CodeRuntimeOutcomeUnknown), 503)), nil
 		case errors.Is(err, remenv.ErrAgentUpdateRequired):
 			return runtimeJSONResponse(503, common.NewAPIError("Agent update required", "agent.update-required", 503)), nil
 		case errors.Is(err, ErrRuntimeTargetRemoved):

@@ -230,6 +230,11 @@ func resolvedWebhookActionTypeInternal(targetType, actionType string) string {
 // CreateWebhook creates a new webhook targeting a stack, the environment-wide updater, .
 // It returns the webhook record with the raw token populated (only available at creation time).
 func (s *WebhookService) CreateWebhook(ctx context.Context, name, targetType, actionType, targetID, environmentID string, actor user.Actor) (*Webhook, string, error) {
+	// Creation requires the API's explicit action; legacy records retain their
+	// decode defaults and the retired-action trigger fence.
+	if strings.TrimSpace(actionType) == "" {
+		return nil, "", ErrWebhookInvalidAction
+	}
 	input := webhook.CreateInput{Name: name, TargetType: targetType, ActionType: actionType, TargetID: targetID}
 	if err := normalization.Normalize(&input); err != nil {
 		return nil, "", err

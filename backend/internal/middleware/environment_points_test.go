@@ -67,13 +67,21 @@ func pointBody(t *testing.T) []byte {
 }
 
 func pointProxy(t *testing.T, isEdge bool, body *[]byte, state *dto.RestorePointHoldState, dbErr *bool, deletes *int, agentStatus ...int) *echo.Echo {
+	return pointProxyAs(t, isEdge, body, state, dbErr, deletes, authz.SudoPermissionSet(), nil, agentStatus...)
+}
+
+func pointProxyAs(t *testing.T, isEdge bool, body *[]byte, state *dto.RestorePointHoldState, dbErr *bool, deletes *int, ps *authz.PermissionSet, access PointAccessReader, agentStatus ...int) *echo.Echo {
 	t.Helper()
 	mw := newTestEnvironmentMiddleware()
+	mw.authValidator = func(context.Context, *echo.Context) (*authz.PermissionSet, *user.Actor, bool) { return ps, nil, true }
+	mw.pointAccess = access
 	agent := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method == http.MethodDelete {
 			*deletes++
-			w.WriteHeader(204)
-			return
+			if len(agentStatus) == 0 {
+				w.WriteHeader(204)
+				return
+			}
 		}
 		w.Header().Set("Content-Type", "application/json")
 		if len(agentStatus) > 0 {
@@ -309,7 +317,7 @@ func TestPointOverlayKeepsExecutorHold(t *testing.T) {
 func TestPointOverlayTypedAgentErrors(t *testing.T) {
 	for _, isEdge := range []bool{false, true} {
 		t.Run(map[bool]string{false: "direct", true: "edge"}[isEdge], func(t *testing.T) {
-			for _, problem := range []*imageDTO.OperationError{imageDTO.Failure("update.persistence-failed", 500), imageDTO.Failure("restore.unavailable", 409), imageDTO.Failure("update.invalid-target", 400), imageDTO.Failure("update.permission-denied", 403)} {
+			for _, problem := range []*imageDTO.OperationError{imageDTO.Failure("update.persistence-failed", 500), imageDTO.Failure("restore.unavailable", 409), imageDTO.Failure("update.invalid-target", 400)} {
 				body, err := json.Marshal(problem)
 				require.NoError(t, err)
 				hold := dto.HoldNone

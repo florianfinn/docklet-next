@@ -9,6 +9,7 @@ package middleware
 import (
 	"bytes"
 	"context"
+	"encoding/json/jsontext"
 	"encoding/json/v2"
 	"errors"
 	"io"
@@ -21,6 +22,8 @@ import (
 	dto "github.com/florianfinn/docklet-next/types/updater"
 	"github.com/labstack/echo/v5"
 )
+
+type PointAccessReader func(context.Context, string, string, string) error
 
 type PointHoldReader func(context.Context, string, []string) (map[string]dto.RestorePointHoldState, error)
 
@@ -72,17 +75,7 @@ func (m *EnvironmentMiddleware) writePointList(c *echo.Context, env string, stat
 		return pointFailure(c, "update.check-unavailable", 503)
 	}
 	if status != http.StatusOK {
-		var failure struct {
-			Success *bool             `json:"success"`
-			Problem *imageDTO.Problem `json:"error"`
-		}
-		if status >= 400 && status <= 599 && json.Unmarshal(body, &failure) == nil && failure.Success != nil && !*failure.Success && failure.Problem != nil && imageDTO.ValidReason(failure.Problem.Code) && failure.Problem.Message != "" {
-			return c.JSON(status, &imageDTO.OperationError{Problem: *failure.Problem})
-		}
-		if remenv.AgentAuthRejected(status) {
-			return c.JSON(http.StatusBadGateway, map[string]any{"success": false, "code": "agent.invalid-token"})
-		}
-		return pointFailure(c, "update.check-unavailable", 503)
+		return writePointFailure(c, status, body)
 	}
 
 	var envelope struct {
@@ -95,6 +88,9 @@ func (m *EnvironmentMiddleware) writePointList(c *echo.Context, env string, stat
 	ids := make([]string, len(envelope.Data))
 	seen := map[string]bool{}
 	for i, point := range envelope.Data {
+		if point.Orphaned && c.Get("pointHostAdmin") != true {
+			return pointFailure(c, "update.invalid-target", 400)
+		}
 		// Each point ID binds one row before hub evidence is overlaid.
 		if seen[point.ID] {
 			return pointFailure(c, "update.check-unavailable", 503)
@@ -119,7 +115,7 @@ func (m *EnvironmentMiddleware) writePointList(c *echo.Context, env string, stat
 	return c.JSON(status, envelope)
 }
 
-func (m *EnvironmentMiddleware) proxyPointList(c *echo.Context, tunnel *edge.AgentTunnel, env string) error {
+func (m *EnvironmentMiddleware) proxyLifecycleResponse(c *echo.Context, tunnel *edge.AgentTunnel, env string) error {
 	ctx, cancel := context.WithTimeout(c.Request().Context(), edge.DefaultProxyTimeout)
 	defer cancel()
 	headers := map[string]string{}
@@ -142,5 +138,76 @@ func (m *EnvironmentMiddleware) proxyPointList(c *echo.Context, tunnel *edge.Age
 	for key, value := range responseHeaders {
 		h.Set(key, value)
 	}
+	if list, _ := pointRoute(m.buildResourceSuffix(c.Request().URL.Path, env)); !list || c.Request().Method != http.MethodGet {
+		return m.writeLifecycleResponse(c, status, h, bytes.NewReader(body))
+	}
 	return m.writePointList(c, env, status, h, bytes.NewReader(body))
+}
+
+// Only the ImageProblem schema may cross this boundary; executor auth failures
+// concern the agent credential, never the authenticated hub caller.
+func writePointFailure(c *echo.Context, status int, body []byte) error {
+	if remenv.AgentAuthRejected(status) {
+		return c.JSON(http.StatusBadGateway, map[string]any{"success": false, "code": "agent.invalid-token"})
+	}
+	var failure struct {
+		Success *bool             `json:"success"`
+		Problem *imageDTO.Problem `json:"error"`
+	}
+	validBody := json.Unmarshal(body, &failure) == nil && failure.Success != nil && !*failure.Success && failure.Problem != nil
+	if status >= 400 && status <= 599 && validBody && imageDTO.ValidProblemCode(failure.Problem.Code) {
+		return pointFailure(c, failure.Problem.Code, status)
+	}
+	if validBody {
+		return lifecycleOutcomeUnknown(c)
+	}
+	return pointFailure(c, "update.check-unavailable", 503)
+}
+
+func (m *EnvironmentMiddleware) writeLifecycleResponse(c *echo.Context, status int, headers http.Header, reader io.Reader) error {
+	body, err := io.ReadAll(io.LimitReader(reader, dto.MaxRestorePointResponseBytes+1))
+	if err != nil || len(body) > dto.MaxRestorePointResponseBytes {
+		return pointFailure(c, "update.check-unavailable", 503)
+	}
+	if status != 200 && status != 204 {
+		return writePointFailure(c, status, body)
+	}
+	if status == 200 {
+		var envelope struct {
+			Success *bool          `json:"success"`
+			Data    jsontext.Value `json:"data"`
+		}
+		if json.Unmarshal(body, &envelope) != nil || envelope.Success == nil || !*envelope.Success {
+			return writePointFailure(c, status, body)
+		}
+		if strings.HasSuffix(c.Request().URL.Path, "/baseline") {
+			var data struct {
+				Code string `json:"code"`
+			}
+			if json.Unmarshal(envelope.Data, &data) != nil || imageDTO.ValidateReason(data.Code) != nil {
+				return lifecycleOutcomeUnknown(c)
+			}
+		}
+	}
+	headers.Del("Content-Length")
+	headers.Del("Content-Encoding")
+	edge.CopyResponseHeaders(headers, c.Response().Header(), edge.BuildHopByHopHeaders(headers))
+	if status == 204 {
+		return c.NoContent(status)
+	}
+	return c.Blob(status, "application/json", body)
+}
+
+func lifecycleProxyPath(method, suffix string) bool {
+	list, point := pointRoute(suffix)
+	if method == http.MethodGet {
+		return list || strings.HasPrefix(suffix, "/updater/projects/") && strings.HasSuffix(suffix, "/baseline")
+	}
+	return method == http.MethodDelete && point != ""
+}
+
+// The outer transport envelope already admits runtime reasons; ImageProblem
+// remains restricted to its own schema, including on malformed executor replies.
+func lifecycleOutcomeUnknown(c *echo.Context) error {
+	return c.JSON(503, map[string]any{"success": false, "code": "runtime.outcome-unknown"})
 }

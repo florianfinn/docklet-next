@@ -275,7 +275,11 @@ func authoringAllowedInternal(operationID string, ref capability.ResourceRef, pe
 	return true
 }
 
-func RegisterCapabilities(api huma.API) {
+func RegisterCapabilities(api huma.API, readers ...middleware.PointAccessReader) {
+	var reader middleware.PointAccessReader
+	if len(readers) > 0 {
+		reader = readers[0]
+	}
 	huma.Register(api, huma.Operation{
 		OperationID: "get-capabilities",
 		Method:      http.MethodGet,
@@ -283,5 +287,32 @@ func RegisterCapabilities(api huma.API) {
 		Summary:     "Get adapter capability descriptors",
 		Tags:        []string{"Capabilities"},
 		Security:    handlerutil.DefaultOperationSecurity(),
-	}, getCapabilities)
+	}, func(ctx context.Context, in *GetCapabilitiesInput) (*handlerutil.Out[[]capability.Descriptor], error) {
+		return getCapabilitiesWithPoints(ctx, in, reader)
+	})
+}
+
+func getCapabilitiesWithPoints(ctx context.Context, in *GetCapabilitiesInput, reader middleware.PointAccessReader) (*handlerutil.Out[[]capability.Descriptor], error) {
+	out, err := getCapabilities(ctx, in)
+	if err != nil {
+		return out, err
+	}
+	ps, _ := middleware.PermissionsFromContext(ctx)
+	checked, allowed := false, false
+	for i := range out.Body.Data {
+		d := &out.Body.Data[i]
+		if (d.OperationID != "listRestorePoints" && d.OperationID != "deleteRestorePoint") || !d.Available || ps.IsGlobalAdmin() {
+			continue
+		}
+		if !checked {
+			env, target, _ := strings.Cut(in.ID, "~")
+			allowed = reader != nil && reader(ctx, env, target, "") == nil
+			checked = true
+		}
+		if !allowed {
+			d.Available = false
+			d.DisabledReasonCode = "capability.unavailable"
+		}
+	}
+	return out, nil
 }

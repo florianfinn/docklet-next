@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; explicit incomplete remote activity-list signal.
+// Deviations: Local module namespace; explicit incomplete remote activity-list signal; validate exported lifecycle evidence.
 
 package activity
 
@@ -496,6 +496,7 @@ func applyActivitySourceInternal(item *activity.Activity, sourceID, sourceName s
 	if item == nil {
 		return
 	}
+	checkedActivityLifecycle(item)
 	item.SourceEnvironmentID = sourceID
 	item.SourceEnvironmentName = sourceName
 	item.EnvironmentID = sourceID

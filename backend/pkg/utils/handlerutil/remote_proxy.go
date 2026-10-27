@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace
+// Deviations: Local module namespace; translate agent authentication failures independently of caller authorization.
 
 package handlerutil
 
@@ -10,7 +10,6 @@ import (
 	"context"
 	"encoding/json/v2"
 	"errors"
-	"net/http"
 
 	"github.com/danielgtaylor/huma/v2"
 
@@ -59,8 +58,11 @@ func TranslateRemoteProxyError(err error) error {
 	}
 
 	if statusErr, ok := errors.AsType[*remenv.StatusError](err); ok {
-		if statusErr.StatusCode == http.StatusUnauthorized {
+		if remenv.AgentAuthRejected(statusErr.StatusCode) {
 			return huma.Error502BadGateway("Remote environment rejected the manager's credentials")
+		}
+		if statusErr.StatusCode < 400 || statusErr.StatusCode > 599 {
+			return huma.Error502BadGateway("Remote environment response unavailable")
 		}
 		return huma.NewError(statusErr.StatusCode, "environment returned error: "+string(statusErr.Body), nil)
 	}

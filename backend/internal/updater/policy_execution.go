@@ -273,7 +273,7 @@ func imagePolicySnapshotTarget(target, id string, snapshot activityDTO.RuntimeSn
 	code := ""
 	if snapshot.ImageLifecycle != nil {
 		code = snapshot.ImageLifecycle.Code
-		if imageDTO.ValidateReason(code) != nil {
+		if imageDTO.ValidateReason(code) != nil || code == "runtime.outcome-unknown" {
 			return policyTargetWithActivity(target, id, st.Failed, "runtime.outcome-unknown"), true
 		}
 	}

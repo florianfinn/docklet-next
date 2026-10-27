@@ -69,7 +69,7 @@ func TestActivityListDirectHTTPFailures(t *testing.T) {
 			f.seed(t, activityListHost)
 			rec := f.request(t, activityListHost, "")
 			want := status
-			if status == 401 {
+			if status == 401 || status == 403 {
 				want = 502
 			}
 			require.Equal(t, want, rec.Code, rec.Body.String())
@@ -219,7 +219,7 @@ func TestActivityListLaterPageFailures(t *testing.T) {
 				page := assertActivityListPage(t, rec, "agent.unavailable", []activity.Activity{older})
 				require.Equal(t, int64(2), page.Pagination.TotalItems)
 			} else {
-				require.Equal(t, map[string]int{"authorization": 403, "invalid pagination": 500}[mode], rec.Code, rec.Body.String())
+				require.Equal(t, map[string]int{"authorization": 502, "invalid pagination": 500}[mode], rec.Code, rec.Body.String())
 				require.Empty(t, rec.Header().Get(activityListReason))
 			}
 		})
