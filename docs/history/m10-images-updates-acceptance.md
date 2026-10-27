@@ -43,8 +43,8 @@ that tests had missed. All were fixed before closing.
 | R2 | The German restore dialog overflowed at 390 px, and its action was unreachable. | #249 |
 | Review | The step review of #247 found that platform variants (`arm64` vs `arm64/v8`) were compared unnormalised. | #247 |
 
-R1 also found that an Edge agent stays offline after a frozen process. The
-cause is pre-existing and is tracked in #245.
+R1 also found that an Edge agent stays offline after its process was frozen.
+The cause is pre-existing and is tracked in #245.
 
 ## Accepted scope and method
 
@@ -85,29 +85,38 @@ used the expected local image IDs.
 
 ## Result
 
-All 48 matrix cells passed on the exact package, including Direct desktop
-restore and delete. One cell used a single harness correction. The run recorded
-no `ERR_FAILED` and no HTTP 429 responses.
+All 46 applicable matrix cells passed on the exact package, including Direct
+desktop restore and delete; one cell used a single harness correction. The two
+desktop dialog-bounds cells do not apply. No `ERR_FAILED` and no HTTP 429
+responses were recorded.
 
-The acceptance run marked two extra checks as not passed. Both have the same
-pre-existing cause, so they do not block M10:
+The acceptance run itself concluded "not accepted" because two additional
+Direct checks failed:
 
-- **Direct held-agent receipt budget.** The browser observed no activity
-  response while the Direct agent was paused for about 40 s.
-- **Busy orphan deletes after the hold.** Afterwards, orphan restore-point
-  deletes on Direct returned `image.busy` until the agent was restarted.
+- D1: the held-agent receipt budget was not observed while the Direct agent was
+  paused for about 40 s.
+- D2: afterwards, orphan restore-point deletes on Direct returned `image.busy`
+  until the agent was restarted.
 
-The Direct agent log shows the cause at the time of the pause:
-`Francis host failed: … host is not registered`. A pause of about 40 s expired
-the actor host registration, and the agent then kept serving HTTP without its
-background workers. This is the pre-existing defect #245. M10 did not change
-that code, and the activity budget code is identical to the code whose held-agent
-check passed in candidate runs R2 and R3:
+Acceptance of M10 was therefore a recorded coordinator decision. The evidence
+for it:
 
-| Run | Direct | Edge |
-| --- | --- | --- |
-| R2 | 10.6 s | 30.6 s |
-| R3 | 10.6 s | 30.6 s |
+- The Direct agent log contains one `Francis host failed: … host is not
+  registered` entry. It was written when the first pause ended.
+- Both failures are consistent with the pre-existing #245: after the actor host
+  registration expires, the process keeps serving HTTP without its background
+  workers.
+- The cause was not isolated. The threshold between the 36 s pauses that
+  recovered and the 40 s pause that did not was not measured.
+- Between main `1ceb389` and the package, the actor host and agent bootstrap
+  code is unchanged. The activity list budget code is unchanged since the
+  packages on which the held-agent check passed in candidate runs R2 and R3:
+  Direct 10.6 s, Edge 30.6 s.
+- In all three candidate runs, the Edge agent recovered from its held check
+  only after a restart, which matches the same #245 pattern.
+
+If the held-agent and orphan-delete checks fail again after #245 is fixed,
+#232 is reopened and the failures are handled as M10 follow-ups.
 
 ## Limits
 
