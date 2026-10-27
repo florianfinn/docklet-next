@@ -84,7 +84,7 @@ export function OverviewTab({ images: allImages, findings, history, stacks, host
           <h3 className="mb-3 text-sm font-medium">{t("top")}</h3>
           <ol>
             {top.map((f, i) => (
-              <li key={`${f.hostId}:${f.imageId ?? f.image}:${f.id}:${f.pkg}:${f.installed}`} className="border-t border-border/50 first:border-0">
+              <li key={`${f.hostId}:${f.imageId ?? f.image}:${f.id}:${f.pkg}:${f.installed}:${i}`} className="border-t border-border/50 first:border-0">
                 <button type="button" onClick={() => onFocus(f.id)} className="group flex w-full items-center gap-3 rounded-lg px-2 py-2.5 text-left transition-colors hover:bg-muted">
                   <span className="w-4 text-xs text-muted-foreground">{i + 1}</span>
                   <span className="min-w-0 flex-1">
@@ -237,10 +237,10 @@ export function FindingsTab({ findings, hosts, highlight }: Pick<Data, "findings
       summary={{ shown: rows.length, total: findings.length, noun: t("filters.findings"), nounOf: t("filters.findingsOf") }}
       empty={activeFilters(values) ? tf("empty") : t("noFindings")}
     >
-      {rows.map((f) => {
+      {rows.map((f, index) => {
         const sev = SEVERITIES.find((s) => s.key === f.severity);
         return (
-          <TableRow key={`${f.hostId}:${f.imageId ?? f.image}:${f.id}:${f.pkg}:${f.installed}`} data-state={highlight === f.id ? "selected" : undefined} style={edge(sev?.color ?? "var(--border)")} className={ROW}>
+          <TableRow key={`${f.hostId}:${f.imageId ?? f.image}:${f.id}:${f.pkg}:${f.installed}:${index}`} data-state={highlight === f.id ? "selected" : undefined} style={edge(sev?.color ?? "var(--border)")} className={ROW}>
             <TableCell className="font-mono text-xs" title={f.title}>
               {f.id}{f.knownExploited && <ToneBadge tone="err">{t("kev")}</ToneBadge>}
             </TableCell>

@@ -61,7 +61,7 @@ export function createVulnerabilities(o: Options): Pick<DockletAdapter, "getSecu
         code: s?.errorCode, platform: s?.scannedPlatform, counts: s?.summary ? counts(s.summary) : empty(), scannedAt: s?.completedAt ?? "" };
     });
     // One capped response avoids page cuts across changing exposure/intelligence scores.
-    const findings: Finding[] = [], seen = new Set<string>();
+    const findings: Finding[] = [];
     const localIds = new Set(ids);
     const page = object(await request(`${base}/vulnerabilities/all?limit=-1&sort=vulnerabilityId&order=asc`));
     const data = array(page.data), total = count(object(page.pagination).totalItems);
@@ -69,8 +69,7 @@ export function createVulnerabilities(o: Options): Pick<DockletAdapter, "getSecu
     for (const raw of data) {
       const f = finding(raw, host.id);
       if (object(raw).ignored === true || !localIds.has(f.imageId!)) continue;
-      const key = JSON.stringify([f.imageId, f.id, f.pkg, f.installed]);
-      if (!seen.has(key)) { seen.add(key); findings.push(f); }
+      findings.push(f);
     }
     // The full active finding list excludes ignores; raw batch summaries retain scan-time totals.
     for (const row of rows) if (!row.unavailable && row.scannedAt) {

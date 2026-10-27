@@ -540,9 +540,26 @@ export function createHttpAdapter(options: HttpAdapterOptions = {}): DockletAdap
       const offActions = adapter.subscribeActions(() => {});
       const owner = lifetimeGeneration;
       let active = true;
+      const pollUntil = Date.now() + 30 * 60_000;
+      let scanTimer: ReturnType<typeof setInterval> | undefined;
+      const stopPolling = () => { clearInterval(scanTimer); scanTimer = undefined; };
+      const pollScan = (run?: CodedActionRun) => {
+        if (run?.kind !== "scan" || !["running", "queued"].includes(run.status)) { stopPolling(); return; }
+        if (scanTimer || Date.now() >= pollUntil) return;
+        // Scan counters change without activity events. Share the existing owned detail read.
+        scanTimer = setInterval(() => {
+          const current = actions.runs().find((row) => row.hostId === host && row.id === id);
+          if (!active || owner !== lifetimeGeneration || Date.now() >= pollUntil || !current || !["running", "queued"].includes(current.status)) { stopPolling(); return; }
+          targets.refreshObserved(host, id);
+        }, 3_000);
+      };
       runtime.observeDetail(id, true);
-      const off = targets.observe(host, id, listener);
-      return () => { if (!active) return; active = false; off(); if (owner === lifetimeGeneration) runtime.observeDetail(id, false); offActions(); };
+      pollScan(actions.runs().find((run) => run.hostId === host && run.id === id));
+      const off = targets.observe(host, id, (state) => {
+        if (state.status === "ready") pollScan(state.run);
+        listener(state);
+      });
+      return () => { if (!active) return; active = false; stopPolling(); off(); if (owner === lifetimeGeneration) runtime.observeDetail(id, false); offActions(); };
     },
     subscribeActionReadHealth(listener) {
       healthListeners.add(listener);

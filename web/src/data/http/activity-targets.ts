@@ -97,6 +97,10 @@ export function createActivityTargets({ read, hasConsumer, terminal: terminalMem
       if (discoverOnTerminal) owner.membership();
       if (owner.terminal(terminal)) return; void owner.flight.notify().catch(() => undefined);
     },
+    refreshObserved(host: string, id: string) {
+      const owner = entries.get(key(host, id));
+      if (owner?.listeners.size) void owner.flight.request().catch(() => undefined);
+    },
     changed(previous: CodedActionRun[], current: CodedActionRun[], recovered: string[] = []) {
       const prior = new Map(previous.map((run) => [key(run.hostId!, run.id), run]));
       const remaining = new Set(current.map((run) => key(run.hostId!, run.id)));

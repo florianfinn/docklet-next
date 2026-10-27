@@ -588,7 +588,10 @@ separate severity. Host-run history keeps interrupted and failed labels while
 numeric chart samples require a completed run or a partial run with scanned
 images. Scan progress comes from the accepted run read as
 `(scanned + failed + skipped) / targets`; zero targets or an unavailable run read
-remain indeterminate. Progress and history labels resolve host names. Cancellation
+remain indeterminate. Progress and history labels resolve host names.
+Observed active scans refresh the owned detail read every three seconds for up to
+thirty minutes, stopping on terminal state or observer release. List refreshes
+retain the same host/run's last known progress. Cancellation
 uses the accepted activity; settlement and
 SSE recovery invalidate security and image reads. The generic browser run gate
 cannot join or reuse a live scan admission.
@@ -597,8 +600,9 @@ The v8 full findings DTO carries optional KEV/EPSS intelligence and current risk
 from the same finding-priority function as the overview. Missing intelligence
 remains unknown. The browser enumerates once per host with `limit=-1`, ordered by
 vulnerability ID, within the 32 MiB response and 100,000-row decoder limits. This
-avoids page cuts across changing live risk scores; the browser deduplicates by
-image/CVE/package/installed version and sorts the complete list by risk for display.
+avoids page cuts across changing live risk scores. The browser retains every
+producer finding, including equal rows from different Trivy targets, and sorts
+the complete list by risk for display.
 Server risk sorting remains available to API callers.
 
 Batch and per-image summaries carry the completed scan platform, independent of
@@ -614,6 +618,7 @@ notes while other refusals are errors, without losing accepted host activities.
 
 Security contract coverage in `web/src/data/http/vulnerabilities.test.tsx` and
 `web/src/data/http/vulnerability-fix1.test.tsx`,
+`web/src/data/http/vulnerability-fix2.test.tsx`,
 `web/src/data/http/vulnerability-enrichment.test.tsx`,
 `backend/internal/vulnerability/children/query/enrichment_test.go` and
 `backend/internal/activity/security_capabilities_test.go` includes:
@@ -631,6 +636,9 @@ Security contract coverage in `web/src/data/http/vulnerabilities.test.tsx` and
 | Completed-platform attribution survives a newer failed attempt. | Use the latest attempt platform. |
 | Unscheduled settings saves succeed against producer validation. | Send an empty schedule update. |
 | Never-scanned images remain neutral across all consumers. | Map no completed scan to unavailable. |
+| Scan counters advance without activity events; polling stops within thirty minutes. | Remove polling or its time cap. |
+| List summaries retain the same run's last known progress. | Discard progress on a list refresh. |
+| Equal findings from distinct Trivy targets retain producer totals and unique render keys. | Restore browser dedupe or duplicate render keys. |
 
 The same suite checks host/image command scope, retained delayed host batches,
 independent settings switches, backend next-run projection, interrupted history,

@@ -148,9 +148,16 @@ export function createActivityReader(reads: Reads) {
       });
       // Failed sources retain their observations in the shared full snapshot.
       const observed = new Map(current.map((run) => [run.id, run]));
+      const previousRuns = new Map(observed);
+      const summary = (run: CodedActionRun) => {
+        const previous = previousRuns.get(run.id);
+        // List summaries have no scan counters; retain only the same source/run observation.
+        return summaryOnly(run.kind === "scan" && previous?.kind === "scan" && previous.hostId === run.hostId
+          ? { ...run, scanProgress: run.scanProgress ?? previous.scanProgress } : run);
+      };
       for (const batch of batches) {
         if (!batch.failure) for (const [id, run] of observed) if (run.hostId === batch.hostId) observed.delete(id);
-        for (const run of batch.runs) observed.set(run.id, summaryOnly(run));
+        for (const run of batch.runs) observed.set(run.id, summary(run));
       }
       for (const [id, run] of observed) if (!hosts.has(run.hostId!)) observed.delete(id);
       const merged = new Map(current.map((run) => [run.id, run]));
@@ -166,7 +173,7 @@ export function createActivityReader(reads: Reads) {
         if (!knownHosts.has(batch.hostId) || observedAt <= (fullSequences.get(batch.hostId) ?? 0)) continue;
         const canApply = (id: string) => observedAt > (runSequences.get(id) ?? 0);
         const incoming = new Set(batch.runs.map((run) => run.id));
-        for (const run of batch.runs) if (canApply(run.id)) { merged.set(run.id, summaryOnly(reads.mergeSummary?.(run) ?? run)); runSequences.set(run.id, observedAt); }
+        for (const run of batch.runs) if (canApply(run.id)) { merged.set(run.id, summary(reads.mergeSummary?.(run) ?? run)); runSequences.set(run.id, observedAt); }
         if (!batch.failure) for (const [id, run] of merged) {
           if (run.hostId === batch.hostId && !incoming.has(id) && canApply(id)) { merged.delete(id); runSequences.set(id, observedAt); }
         }
