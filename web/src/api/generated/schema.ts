@@ -1,5 +1,5 @@
 // Source: api/openapi.json
-// Revision: 2bdb8299d5e6a4a693ca462f9c6c75d5194b03dd85f86e36aa926f92d8c8411a
+// Revision: 98c656ba57dfe701f0c70ddcb7600a1a95f7ccbc9c8162fe3a513033ec676253
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
 // Deviations: Generated TypeScript declarations from the local Huma export.
@@ -18103,31 +18103,85 @@ export interface operations {
                     "application/json": components["schemas"]["BaseApiResponseVulnerabilityScanSummariesResponse"];
                 };
             };
-            /** @description Typed vulnerability failure */
+            /** @description Typed vulnerability failure or framework problem */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["VulnerabilityProblem"] | components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Typed vulnerability failure or framework problem */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["VulnerabilityProblem"] | components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Typed vulnerability failure or framework problem */
             403: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/problem+json": components["schemas"]["VulnerabilityProblem"];
+                    "application/problem+json": components["schemas"]["VulnerabilityProblem"] | components["schemas"]["ErrorModel"];
                 };
             };
-            /** @description Typed vulnerability failure */
+            /** @description Typed vulnerability failure or framework problem */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["VulnerabilityProblem"] | components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Typed vulnerability failure or framework problem */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["VulnerabilityProblem"] | components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Typed vulnerability failure or framework problem */
             413: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/problem+json": components["schemas"]["VulnerabilityProblem"];
+                    "application/problem+json": components["schemas"]["VulnerabilityProblem"] | components["schemas"]["ErrorModel"];
                 };
             };
-            /** @description Typed vulnerability failure */
+            /** @description Typed vulnerability failure or framework problem */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["VulnerabilityProblem"] | components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Typed vulnerability failure or framework problem */
             502: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/problem+json": components["schemas"]["VulnerabilityProblem"];
+                    "application/problem+json": components["schemas"]["VulnerabilityProblem"] | components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Typed vulnerability failure or framework problem */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["VulnerabilityProblem"] | components["schemas"]["ErrorModel"];
                 };
             };
             /** @description Error */
@@ -18462,31 +18516,85 @@ export interface operations {
                     "application/json": components["schemas"]["BaseApiResponseVulnerabilityScanResult"];
                 };
             };
-            /** @description Typed vulnerability failure */
+            /** @description Typed vulnerability failure or framework problem */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["VulnerabilityProblem"] | components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Typed vulnerability failure or framework problem */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["VulnerabilityProblem"] | components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Typed vulnerability failure or framework problem */
             403: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/problem+json": components["schemas"]["VulnerabilityProblem"];
+                    "application/problem+json": components["schemas"]["VulnerabilityProblem"] | components["schemas"]["ErrorModel"];
                 };
             };
-            /** @description Typed vulnerability failure */
+            /** @description Typed vulnerability failure or framework problem */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["VulnerabilityProblem"] | components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Typed vulnerability failure or framework problem */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["VulnerabilityProblem"] | components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Typed vulnerability failure or framework problem */
             413: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/problem+json": components["schemas"]["VulnerabilityProblem"];
+                    "application/problem+json": components["schemas"]["VulnerabilityProblem"] | components["schemas"]["ErrorModel"];
                 };
             };
-            /** @description Typed vulnerability failure */
+            /** @description Typed vulnerability failure or framework problem */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["VulnerabilityProblem"] | components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Typed vulnerability failure or framework problem */
             502: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/problem+json": components["schemas"]["VulnerabilityProblem"];
+                    "application/problem+json": components["schemas"]["VulnerabilityProblem"] | components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Typed vulnerability failure or framework problem */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["VulnerabilityProblem"] | components["schemas"]["ErrorModel"];
                 };
             };
             /** @description Error */
@@ -18536,31 +18644,85 @@ export interface operations {
                     "application/json": components["schemas"]["BasePaginatedVulnerabilityVulnerability"];
                 };
             };
-            /** @description Typed vulnerability failure */
+            /** @description Typed vulnerability failure or framework problem */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["VulnerabilityProblem"] | components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Typed vulnerability failure or framework problem */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["VulnerabilityProblem"] | components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Typed vulnerability failure or framework problem */
             403: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/problem+json": components["schemas"]["VulnerabilityProblem"];
+                    "application/problem+json": components["schemas"]["VulnerabilityProblem"] | components["schemas"]["ErrorModel"];
                 };
             };
-            /** @description Typed vulnerability failure */
+            /** @description Typed vulnerability failure or framework problem */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["VulnerabilityProblem"] | components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Typed vulnerability failure or framework problem */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["VulnerabilityProblem"] | components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Typed vulnerability failure or framework problem */
             413: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/problem+json": components["schemas"]["VulnerabilityProblem"];
+                    "application/problem+json": components["schemas"]["VulnerabilityProblem"] | components["schemas"]["ErrorModel"];
                 };
             };
-            /** @description Typed vulnerability failure */
+            /** @description Typed vulnerability failure or framework problem */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["VulnerabilityProblem"] | components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Typed vulnerability failure or framework problem */
             502: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/problem+json": components["schemas"]["VulnerabilityProblem"];
+                    "application/problem+json": components["schemas"]["VulnerabilityProblem"] | components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Typed vulnerability failure or framework problem */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["VulnerabilityProblem"] | components["schemas"]["ErrorModel"];
                 };
             };
             /** @description Error */
@@ -18599,43 +18761,61 @@ export interface operations {
                     "application/json": components["schemas"]["BaseApiResponseVulnerabilityAcceptedScan"];
                 };
             };
-            /** @description Typed vulnerability failure */
+            /** @description Typed vulnerability failure or framework problem */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["VulnerabilityProblem"] | components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Typed vulnerability failure or framework problem */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["VulnerabilityProblem"] | components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Typed vulnerability failure or framework problem */
             403: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/problem+json": components["schemas"]["VulnerabilityProblem"];
+                    "application/problem+json": components["schemas"]["VulnerabilityProblem"] | components["schemas"]["ErrorModel"];
                 };
             };
-            /** @description Typed vulnerability failure */
+            /** @description Typed vulnerability failure or framework problem */
             404: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/problem+json": components["schemas"]["VulnerabilityProblem"];
+                    "application/problem+json": components["schemas"]["VulnerabilityProblem"] | components["schemas"]["ErrorModel"];
                 };
             };
-            /** @description Typed vulnerability failure */
+            /** @description Typed vulnerability failure or framework problem */
             409: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/problem+json": components["schemas"]["VulnerabilityProblem"];
+                    "application/problem+json": components["schemas"]["VulnerabilityProblem"] | components["schemas"]["ErrorModel"];
                 };
             };
-            /** @description Typed vulnerability failure */
+            /** @description Typed vulnerability failure or framework problem */
             413: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/problem+json": components["schemas"]["VulnerabilityProblem"];
+                    "application/problem+json": components["schemas"]["VulnerabilityProblem"] | components["schemas"]["ErrorModel"];
                 };
             };
-            /** @description Validation problem or typed platform failure */
+            /** @description Typed vulnerability failure or framework problem */
             422: {
                 headers: {
                     [name: string]: unknown;
@@ -18644,22 +18824,22 @@ export interface operations {
                     "application/problem+json": components["schemas"]["VulnerabilityProblem"] | components["schemas"]["ErrorModel"];
                 };
             };
-            /** @description Typed vulnerability failure */
+            /** @description Typed vulnerability failure or framework problem */
             502: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/problem+json": components["schemas"]["VulnerabilityProblem"];
+                    "application/problem+json": components["schemas"]["VulnerabilityProblem"] | components["schemas"]["ErrorModel"];
                 };
             };
-            /** @description Typed vulnerability failure */
+            /** @description Typed vulnerability failure or framework problem */
             503: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/problem+json": components["schemas"]["VulnerabilityProblem"];
+                    "application/problem+json": components["schemas"]["VulnerabilityProblem"] | components["schemas"]["ErrorModel"];
                 };
             };
             /** @description Error */
@@ -18696,31 +18876,85 @@ export interface operations {
                     "application/json": components["schemas"]["BaseApiResponseVulnerabilityScanSummary"];
                 };
             };
-            /** @description Typed vulnerability failure */
+            /** @description Typed vulnerability failure or framework problem */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["VulnerabilityProblem"] | components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Typed vulnerability failure or framework problem */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["VulnerabilityProblem"] | components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Typed vulnerability failure or framework problem */
             403: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/problem+json": components["schemas"]["VulnerabilityProblem"];
+                    "application/problem+json": components["schemas"]["VulnerabilityProblem"] | components["schemas"]["ErrorModel"];
                 };
             };
-            /** @description Typed vulnerability failure */
+            /** @description Typed vulnerability failure or framework problem */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["VulnerabilityProblem"] | components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Typed vulnerability failure or framework problem */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["VulnerabilityProblem"] | components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Typed vulnerability failure or framework problem */
             413: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/problem+json": components["schemas"]["VulnerabilityProblem"];
+                    "application/problem+json": components["schemas"]["VulnerabilityProblem"] | components["schemas"]["ErrorModel"];
                 };
             };
-            /** @description Typed vulnerability failure */
+            /** @description Typed vulnerability failure or framework problem */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["VulnerabilityProblem"] | components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Typed vulnerability failure or framework problem */
             502: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/problem+json": components["schemas"]["VulnerabilityProblem"];
+                    "application/problem+json": components["schemas"]["VulnerabilityProblem"] | components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Typed vulnerability failure or framework problem */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["VulnerabilityProblem"] | components["schemas"]["ErrorModel"];
                 };
             };
             /** @description Error */
@@ -25529,31 +25763,85 @@ export interface operations {
                     "application/json": components["schemas"]["BasePaginatedVulnerabilityVulnerabilityWithImage"];
                 };
             };
-            /** @description Typed vulnerability failure */
+            /** @description Typed vulnerability failure or framework problem */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["VulnerabilityProblem"] | components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Typed vulnerability failure or framework problem */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["VulnerabilityProblem"] | components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Typed vulnerability failure or framework problem */
             403: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/problem+json": components["schemas"]["VulnerabilityProblem"];
+                    "application/problem+json": components["schemas"]["VulnerabilityProblem"] | components["schemas"]["ErrorModel"];
                 };
             };
-            /** @description Typed vulnerability failure */
+            /** @description Typed vulnerability failure or framework problem */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["VulnerabilityProblem"] | components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Typed vulnerability failure or framework problem */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["VulnerabilityProblem"] | components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Typed vulnerability failure or framework problem */
             413: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/problem+json": components["schemas"]["VulnerabilityProblem"];
+                    "application/problem+json": components["schemas"]["VulnerabilityProblem"] | components["schemas"]["ErrorModel"];
                 };
             };
-            /** @description Typed vulnerability failure */
+            /** @description Typed vulnerability failure or framework problem */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["VulnerabilityProblem"] | components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Typed vulnerability failure or framework problem */
             502: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/problem+json": components["schemas"]["VulnerabilityProblem"];
+                    "application/problem+json": components["schemas"]["VulnerabilityProblem"] | components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Typed vulnerability failure or framework problem */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["VulnerabilityProblem"] | components["schemas"]["ErrorModel"];
                 };
             };
             /** @description Error */
@@ -25601,31 +25889,85 @@ export interface operations {
                 };
                 content?: never;
             };
-            /** @description Typed vulnerability failure */
+            /** @description Typed vulnerability failure or framework problem */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["VulnerabilityProblem"] | components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Typed vulnerability failure or framework problem */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["VulnerabilityProblem"] | components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Typed vulnerability failure or framework problem */
             403: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/problem+json": components["schemas"]["VulnerabilityProblem"];
+                    "application/problem+json": components["schemas"]["VulnerabilityProblem"] | components["schemas"]["ErrorModel"];
                 };
             };
-            /** @description Typed vulnerability failure */
+            /** @description Typed vulnerability failure or framework problem */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["VulnerabilityProblem"] | components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Typed vulnerability failure or framework problem */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["VulnerabilityProblem"] | components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Typed vulnerability failure or framework problem */
             413: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/problem+json": components["schemas"]["VulnerabilityProblem"];
+                    "application/problem+json": components["schemas"]["VulnerabilityProblem"] | components["schemas"]["ErrorModel"];
                 };
             };
-            /** @description Typed vulnerability failure */
+            /** @description Typed vulnerability failure or framework problem */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["VulnerabilityProblem"] | components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Typed vulnerability failure or framework problem */
             502: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/problem+json": components["schemas"]["VulnerabilityProblem"];
+                    "application/problem+json": components["schemas"]["VulnerabilityProblem"] | components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Typed vulnerability failure or framework problem */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["VulnerabilityProblem"] | components["schemas"]["ErrorModel"];
                 };
             };
             /** @description Error */
@@ -25664,31 +26006,85 @@ export interface operations {
                     "application/json": components["schemas"]["BaseApiResponseVulnerabilityIgnoredVulnerability"];
                 };
             };
-            /** @description Typed vulnerability failure */
+            /** @description Typed vulnerability failure or framework problem */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["VulnerabilityProblem"] | components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Typed vulnerability failure or framework problem */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["VulnerabilityProblem"] | components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Typed vulnerability failure or framework problem */
             403: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/problem+json": components["schemas"]["VulnerabilityProblem"];
+                    "application/problem+json": components["schemas"]["VulnerabilityProblem"] | components["schemas"]["ErrorModel"];
                 };
             };
-            /** @description Typed vulnerability failure */
+            /** @description Typed vulnerability failure or framework problem */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["VulnerabilityProblem"] | components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Typed vulnerability failure or framework problem */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["VulnerabilityProblem"] | components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Typed vulnerability failure or framework problem */
             413: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/problem+json": components["schemas"]["VulnerabilityProblem"];
+                    "application/problem+json": components["schemas"]["VulnerabilityProblem"] | components["schemas"]["ErrorModel"];
                 };
             };
-            /** @description Typed vulnerability failure */
+            /** @description Typed vulnerability failure or framework problem */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["VulnerabilityProblem"] | components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Typed vulnerability failure or framework problem */
             502: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/problem+json": components["schemas"]["VulnerabilityProblem"];
+                    "application/problem+json": components["schemas"]["VulnerabilityProblem"] | components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Typed vulnerability failure or framework problem */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["VulnerabilityProblem"] | components["schemas"]["ErrorModel"];
                 };
             };
             /** @description Error */
@@ -25727,31 +26123,85 @@ export interface operations {
                     "application/json": components["schemas"]["BaseApiResponseVulnerabilityBulkIgnoreResponse"];
                 };
             };
-            /** @description Typed vulnerability failure */
+            /** @description Typed vulnerability failure or framework problem */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["VulnerabilityProblem"] | components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Typed vulnerability failure or framework problem */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["VulnerabilityProblem"] | components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Typed vulnerability failure or framework problem */
             403: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/problem+json": components["schemas"]["VulnerabilityProblem"];
+                    "application/problem+json": components["schemas"]["VulnerabilityProblem"] | components["schemas"]["ErrorModel"];
                 };
             };
-            /** @description Typed vulnerability failure */
+            /** @description Typed vulnerability failure or framework problem */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["VulnerabilityProblem"] | components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Typed vulnerability failure or framework problem */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["VulnerabilityProblem"] | components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Typed vulnerability failure or framework problem */
             413: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/problem+json": components["schemas"]["VulnerabilityProblem"];
+                    "application/problem+json": components["schemas"]["VulnerabilityProblem"] | components["schemas"]["ErrorModel"];
                 };
             };
-            /** @description Typed vulnerability failure */
+            /** @description Typed vulnerability failure or framework problem */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["VulnerabilityProblem"] | components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Typed vulnerability failure or framework problem */
             502: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/problem+json": components["schemas"]["VulnerabilityProblem"];
+                    "application/problem+json": components["schemas"]["VulnerabilityProblem"] | components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Typed vulnerability failure or framework problem */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["VulnerabilityProblem"] | components["schemas"]["ErrorModel"];
                 };
             };
             /** @description Error */
@@ -25788,31 +26238,85 @@ export interface operations {
                     "application/json": components["schemas"]["BaseApiResponseStruct {}"];
                 };
             };
-            /** @description Typed vulnerability failure */
+            /** @description Typed vulnerability failure or framework problem */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["VulnerabilityProblem"] | components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Typed vulnerability failure or framework problem */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["VulnerabilityProblem"] | components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Typed vulnerability failure or framework problem */
             403: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/problem+json": components["schemas"]["VulnerabilityProblem"];
+                    "application/problem+json": components["schemas"]["VulnerabilityProblem"] | components["schemas"]["ErrorModel"];
                 };
             };
-            /** @description Typed vulnerability failure */
+            /** @description Typed vulnerability failure or framework problem */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["VulnerabilityProblem"] | components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Typed vulnerability failure or framework problem */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["VulnerabilityProblem"] | components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Typed vulnerability failure or framework problem */
             413: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/problem+json": components["schemas"]["VulnerabilityProblem"];
+                    "application/problem+json": components["schemas"]["VulnerabilityProblem"] | components["schemas"]["ErrorModel"];
                 };
             };
-            /** @description Typed vulnerability failure */
+            /** @description Typed vulnerability failure or framework problem */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["VulnerabilityProblem"] | components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Typed vulnerability failure or framework problem */
             502: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/problem+json": components["schemas"]["VulnerabilityProblem"];
+                    "application/problem+json": components["schemas"]["VulnerabilityProblem"] | components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Typed vulnerability failure or framework problem */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["VulnerabilityProblem"] | components["schemas"]["ErrorModel"];
                 };
             };
             /** @description Error */
@@ -25858,31 +26362,85 @@ export interface operations {
                     "application/json": components["schemas"]["BasePaginatedVulnerabilityIgnoredVulnerability"];
                 };
             };
-            /** @description Typed vulnerability failure */
+            /** @description Typed vulnerability failure or framework problem */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["VulnerabilityProblem"] | components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Typed vulnerability failure or framework problem */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["VulnerabilityProblem"] | components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Typed vulnerability failure or framework problem */
             403: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/problem+json": components["schemas"]["VulnerabilityProblem"];
+                    "application/problem+json": components["schemas"]["VulnerabilityProblem"] | components["schemas"]["ErrorModel"];
                 };
             };
-            /** @description Typed vulnerability failure */
+            /** @description Typed vulnerability failure or framework problem */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["VulnerabilityProblem"] | components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Typed vulnerability failure or framework problem */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["VulnerabilityProblem"] | components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Typed vulnerability failure or framework problem */
             413: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/problem+json": components["schemas"]["VulnerabilityProblem"];
+                    "application/problem+json": components["schemas"]["VulnerabilityProblem"] | components["schemas"]["ErrorModel"];
                 };
             };
-            /** @description Typed vulnerability failure */
+            /** @description Typed vulnerability failure or framework problem */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["VulnerabilityProblem"] | components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Typed vulnerability failure or framework problem */
             502: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/problem+json": components["schemas"]["VulnerabilityProblem"];
+                    "application/problem+json": components["schemas"]["VulnerabilityProblem"] | components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Typed vulnerability failure or framework problem */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["VulnerabilityProblem"] | components["schemas"]["ErrorModel"];
                 };
             };
             /** @description Error */
@@ -25920,31 +26478,85 @@ export interface operations {
                     "application/json": components["schemas"]["BaseApiResponseListString"];
                 };
             };
-            /** @description Typed vulnerability failure */
+            /** @description Typed vulnerability failure or framework problem */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["VulnerabilityProblem"] | components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Typed vulnerability failure or framework problem */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["VulnerabilityProblem"] | components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Typed vulnerability failure or framework problem */
             403: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/problem+json": components["schemas"]["VulnerabilityProblem"];
+                    "application/problem+json": components["schemas"]["VulnerabilityProblem"] | components["schemas"]["ErrorModel"];
                 };
             };
-            /** @description Typed vulnerability failure */
+            /** @description Typed vulnerability failure or framework problem */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["VulnerabilityProblem"] | components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Typed vulnerability failure or framework problem */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["VulnerabilityProblem"] | components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Typed vulnerability failure or framework problem */
             413: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/problem+json": components["schemas"]["VulnerabilityProblem"];
+                    "application/problem+json": components["schemas"]["VulnerabilityProblem"] | components["schemas"]["ErrorModel"];
                 };
             };
-            /** @description Typed vulnerability failure */
+            /** @description Typed vulnerability failure or framework problem */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["VulnerabilityProblem"] | components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Typed vulnerability failure or framework problem */
             502: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/problem+json": components["schemas"]["VulnerabilityProblem"];
+                    "application/problem+json": components["schemas"]["VulnerabilityProblem"] | components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Typed vulnerability failure or framework problem */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["VulnerabilityProblem"] | components["schemas"]["ErrorModel"];
                 };
             };
             /** @description Error */
@@ -25979,31 +26591,85 @@ export interface operations {
                     "application/json": components["schemas"]["BaseApiResponseVulnerabilityRiskOverview"];
                 };
             };
-            /** @description Typed vulnerability failure */
+            /** @description Typed vulnerability failure or framework problem */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["VulnerabilityProblem"] | components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Typed vulnerability failure or framework problem */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["VulnerabilityProblem"] | components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Typed vulnerability failure or framework problem */
             403: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/problem+json": components["schemas"]["VulnerabilityProblem"];
+                    "application/problem+json": components["schemas"]["VulnerabilityProblem"] | components["schemas"]["ErrorModel"];
                 };
             };
-            /** @description Typed vulnerability failure */
+            /** @description Typed vulnerability failure or framework problem */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["VulnerabilityProblem"] | components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Typed vulnerability failure or framework problem */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["VulnerabilityProblem"] | components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Typed vulnerability failure or framework problem */
             413: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/problem+json": components["schemas"]["VulnerabilityProblem"];
+                    "application/problem+json": components["schemas"]["VulnerabilityProblem"] | components["schemas"]["ErrorModel"];
                 };
             };
-            /** @description Typed vulnerability failure */
+            /** @description Typed vulnerability failure or framework problem */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["VulnerabilityProblem"] | components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Typed vulnerability failure or framework problem */
             502: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/problem+json": components["schemas"]["VulnerabilityProblem"];
+                    "application/problem+json": components["schemas"]["VulnerabilityProblem"] | components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Typed vulnerability failure or framework problem */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["VulnerabilityProblem"] | components["schemas"]["ErrorModel"];
                 };
             };
             /** @description Error */
@@ -26037,58 +26703,85 @@ export interface operations {
                     "application/json": components["schemas"]["BaseApiResponseListVulnerabilityScanRun"];
                 };
             };
-            /** @description Typed vulnerability failure */
+            /** @description Typed vulnerability failure or framework problem */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["VulnerabilityProblem"] | components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Typed vulnerability failure or framework problem */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["VulnerabilityProblem"] | components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Typed vulnerability failure or framework problem */
             403: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/problem+json": components["schemas"]["VulnerabilityProblem"];
+                    "application/problem+json": components["schemas"]["VulnerabilityProblem"] | components["schemas"]["ErrorModel"];
                 };
             };
-            /** @description Typed vulnerability failure */
+            /** @description Typed vulnerability failure or framework problem */
             404: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/problem+json": components["schemas"]["VulnerabilityProblem"];
+                    "application/problem+json": components["schemas"]["VulnerabilityProblem"] | components["schemas"]["ErrorModel"];
                 };
             };
-            /** @description Typed vulnerability failure */
+            /** @description Typed vulnerability failure or framework problem */
             409: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/problem+json": components["schemas"]["VulnerabilityProblem"];
+                    "application/problem+json": components["schemas"]["VulnerabilityProblem"] | components["schemas"]["ErrorModel"];
                 };
             };
-            /** @description Typed vulnerability failure */
+            /** @description Typed vulnerability failure or framework problem */
             413: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/problem+json": components["schemas"]["VulnerabilityProblem"];
+                    "application/problem+json": components["schemas"]["VulnerabilityProblem"] | components["schemas"]["ErrorModel"];
                 };
             };
-            /** @description Typed vulnerability failure */
+            /** @description Typed vulnerability failure or framework problem */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["VulnerabilityProblem"] | components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Typed vulnerability failure or framework problem */
             502: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/problem+json": components["schemas"]["VulnerabilityProblem"];
+                    "application/problem+json": components["schemas"]["VulnerabilityProblem"] | components["schemas"]["ErrorModel"];
                 };
             };
-            /** @description Typed vulnerability failure */
+            /** @description Typed vulnerability failure or framework problem */
             503: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/problem+json": components["schemas"]["VulnerabilityProblem"];
+                    "application/problem+json": components["schemas"]["VulnerabilityProblem"] | components["schemas"]["ErrorModel"];
                 };
             };
             /** @description Error */
@@ -26123,58 +26816,85 @@ export interface operations {
                     "application/json": components["schemas"]["BaseApiResponseVulnerabilityScanRun"];
                 };
             };
-            /** @description Typed vulnerability failure */
+            /** @description Typed vulnerability failure or framework problem */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["VulnerabilityProblem"] | components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Typed vulnerability failure or framework problem */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["VulnerabilityProblem"] | components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Typed vulnerability failure or framework problem */
             403: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/problem+json": components["schemas"]["VulnerabilityProblem"];
+                    "application/problem+json": components["schemas"]["VulnerabilityProblem"] | components["schemas"]["ErrorModel"];
                 };
             };
-            /** @description Typed vulnerability failure */
+            /** @description Typed vulnerability failure or framework problem */
             404: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/problem+json": components["schemas"]["VulnerabilityProblem"];
+                    "application/problem+json": components["schemas"]["VulnerabilityProblem"] | components["schemas"]["ErrorModel"];
                 };
             };
-            /** @description Typed vulnerability failure */
+            /** @description Typed vulnerability failure or framework problem */
             409: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/problem+json": components["schemas"]["VulnerabilityProblem"];
+                    "application/problem+json": components["schemas"]["VulnerabilityProblem"] | components["schemas"]["ErrorModel"];
                 };
             };
-            /** @description Typed vulnerability failure */
+            /** @description Typed vulnerability failure or framework problem */
             413: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/problem+json": components["schemas"]["VulnerabilityProblem"];
+                    "application/problem+json": components["schemas"]["VulnerabilityProblem"] | components["schemas"]["ErrorModel"];
                 };
             };
-            /** @description Typed vulnerability failure */
+            /** @description Typed vulnerability failure or framework problem */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["VulnerabilityProblem"] | components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Typed vulnerability failure or framework problem */
             502: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/problem+json": components["schemas"]["VulnerabilityProblem"];
+                    "application/problem+json": components["schemas"]["VulnerabilityProblem"] | components["schemas"]["ErrorModel"];
                 };
             };
-            /** @description Typed vulnerability failure */
+            /** @description Typed vulnerability failure or framework problem */
             503: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/problem+json": components["schemas"]["VulnerabilityProblem"];
+                    "application/problem+json": components["schemas"]["VulnerabilityProblem"] | components["schemas"]["ErrorModel"];
                 };
             };
             /** @description Error */
@@ -26212,43 +26932,61 @@ export interface operations {
                     "application/json": components["schemas"]["BaseApiResponseVulnerabilityAcceptedScan"];
                 };
             };
-            /** @description Typed vulnerability failure */
+            /** @description Typed vulnerability failure or framework problem */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["VulnerabilityProblem"] | components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Typed vulnerability failure or framework problem */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["VulnerabilityProblem"] | components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Typed vulnerability failure or framework problem */
             403: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/problem+json": components["schemas"]["VulnerabilityProblem"];
+                    "application/problem+json": components["schemas"]["VulnerabilityProblem"] | components["schemas"]["ErrorModel"];
                 };
             };
-            /** @description Typed vulnerability failure */
+            /** @description Typed vulnerability failure or framework problem */
             404: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/problem+json": components["schemas"]["VulnerabilityProblem"];
+                    "application/problem+json": components["schemas"]["VulnerabilityProblem"] | components["schemas"]["ErrorModel"];
                 };
             };
-            /** @description Typed vulnerability failure */
+            /** @description Typed vulnerability failure or framework problem */
             409: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/problem+json": components["schemas"]["VulnerabilityProblem"];
+                    "application/problem+json": components["schemas"]["VulnerabilityProblem"] | components["schemas"]["ErrorModel"];
                 };
             };
-            /** @description Typed vulnerability failure */
+            /** @description Typed vulnerability failure or framework problem */
             413: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/problem+json": components["schemas"]["VulnerabilityProblem"];
+                    "application/problem+json": components["schemas"]["VulnerabilityProblem"] | components["schemas"]["ErrorModel"];
                 };
             };
-            /** @description Validation problem or typed platform failure */
+            /** @description Typed vulnerability failure or framework problem */
             422: {
                 headers: {
                     [name: string]: unknown;
@@ -26257,22 +26995,22 @@ export interface operations {
                     "application/problem+json": components["schemas"]["VulnerabilityProblem"] | components["schemas"]["ErrorModel"];
                 };
             };
-            /** @description Typed vulnerability failure */
+            /** @description Typed vulnerability failure or framework problem */
             502: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/problem+json": components["schemas"]["VulnerabilityProblem"];
+                    "application/problem+json": components["schemas"]["VulnerabilityProblem"] | components["schemas"]["ErrorModel"];
                 };
             };
-            /** @description Typed vulnerability failure */
+            /** @description Typed vulnerability failure or framework problem */
             503: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/problem+json": components["schemas"]["VulnerabilityProblem"];
+                    "application/problem+json": components["schemas"]["VulnerabilityProblem"] | components["schemas"]["ErrorModel"];
                 };
             };
             /** @description Error */
@@ -26307,31 +27045,85 @@ export interface operations {
                     "application/json": components["schemas"]["BaseApiResponseScannerStatus"];
                 };
             };
-            /** @description Typed vulnerability failure */
+            /** @description Typed vulnerability failure or framework problem */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["VulnerabilityProblem"] | components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Typed vulnerability failure or framework problem */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["VulnerabilityProblem"] | components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Typed vulnerability failure or framework problem */
             403: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/problem+json": components["schemas"]["VulnerabilityProblem"];
+                    "application/problem+json": components["schemas"]["VulnerabilityProblem"] | components["schemas"]["ErrorModel"];
                 };
             };
-            /** @description Typed vulnerability failure */
+            /** @description Typed vulnerability failure or framework problem */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["VulnerabilityProblem"] | components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Typed vulnerability failure or framework problem */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["VulnerabilityProblem"] | components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Typed vulnerability failure or framework problem */
             413: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/problem+json": components["schemas"]["VulnerabilityProblem"];
+                    "application/problem+json": components["schemas"]["VulnerabilityProblem"] | components["schemas"]["ErrorModel"];
                 };
             };
-            /** @description Typed vulnerability failure */
+            /** @description Typed vulnerability failure or framework problem */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["VulnerabilityProblem"] | components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Typed vulnerability failure or framework problem */
             502: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/problem+json": components["schemas"]["VulnerabilityProblem"];
+                    "application/problem+json": components["schemas"]["VulnerabilityProblem"] | components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Typed vulnerability failure or framework problem */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["VulnerabilityProblem"] | components["schemas"]["ErrorModel"];
                 };
             };
             /** @description Error */
@@ -26366,31 +27158,85 @@ export interface operations {
                     "application/json": components["schemas"]["BaseApiResponseVulnerabilityEnvironmentVulnerabilitySummary"];
                 };
             };
-            /** @description Typed vulnerability failure */
+            /** @description Typed vulnerability failure or framework problem */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["VulnerabilityProblem"] | components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Typed vulnerability failure or framework problem */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["VulnerabilityProblem"] | components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Typed vulnerability failure or framework problem */
             403: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/problem+json": components["schemas"]["VulnerabilityProblem"];
+                    "application/problem+json": components["schemas"]["VulnerabilityProblem"] | components["schemas"]["ErrorModel"];
                 };
             };
-            /** @description Typed vulnerability failure */
+            /** @description Typed vulnerability failure or framework problem */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["VulnerabilityProblem"] | components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Typed vulnerability failure or framework problem */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["VulnerabilityProblem"] | components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Typed vulnerability failure or framework problem */
             413: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/problem+json": components["schemas"]["VulnerabilityProblem"];
+                    "application/problem+json": components["schemas"]["VulnerabilityProblem"] | components["schemas"]["ErrorModel"];
                 };
             };
-            /** @description Typed vulnerability failure */
+            /** @description Typed vulnerability failure or framework problem */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["VulnerabilityProblem"] | components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Typed vulnerability failure or framework problem */
             502: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/problem+json": components["schemas"]["VulnerabilityProblem"];
+                    "application/problem+json": components["schemas"]["VulnerabilityProblem"] | components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Typed vulnerability failure or framework problem */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["VulnerabilityProblem"] | components["schemas"]["ErrorModel"];
                 };
             };
             /** @description Error */
@@ -26429,31 +27275,85 @@ export interface operations {
                     "application/json": components["schemas"]["BaseApiResponseVulnerabilityBulkIgnoreResponse"];
                 };
             };
-            /** @description Typed vulnerability failure */
+            /** @description Typed vulnerability failure or framework problem */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["VulnerabilityProblem"] | components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Typed vulnerability failure or framework problem */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["VulnerabilityProblem"] | components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Typed vulnerability failure or framework problem */
             403: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/problem+json": components["schemas"]["VulnerabilityProblem"];
+                    "application/problem+json": components["schemas"]["VulnerabilityProblem"] | components["schemas"]["ErrorModel"];
                 };
             };
-            /** @description Typed vulnerability failure */
+            /** @description Typed vulnerability failure or framework problem */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["VulnerabilityProblem"] | components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Typed vulnerability failure or framework problem */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["VulnerabilityProblem"] | components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Typed vulnerability failure or framework problem */
             413: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/problem+json": components["schemas"]["VulnerabilityProblem"];
+                    "application/problem+json": components["schemas"]["VulnerabilityProblem"] | components["schemas"]["ErrorModel"];
                 };
             };
-            /** @description Typed vulnerability failure */
+            /** @description Typed vulnerability failure or framework problem */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["VulnerabilityProblem"] | components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Typed vulnerability failure or framework problem */
             502: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/problem+json": components["schemas"]["VulnerabilityProblem"];
+                    "application/problem+json": components["schemas"]["VulnerabilityProblem"] | components["schemas"]["ErrorModel"];
+                };
+            };
+            /** @description Typed vulnerability failure or framework problem */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["VulnerabilityProblem"] | components["schemas"]["ErrorModel"];
                 };
             };
             /** @description Error */

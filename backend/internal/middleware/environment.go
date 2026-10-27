@@ -148,8 +148,9 @@ func NewEnvProxyMiddlewareWithParamAndRegistry(
 // Handle is the main middleware handler.
 func (m *EnvironmentMiddleware) Handle(c *echo.Context, next echo.HandlerFunc) error {
 	envID := m.extractEnvironmentID(c)
-	isVulnerability := vulnerability.IsRoute(c.Request().Method, c.Request().URL.Path)
-	if !isVulnerability && (envID == "" || envID == m.localID || !m.hasResourcePath(c, envID)) {
+	isVulnerability := isVulnerabilityRequest(c)
+	// Local vulnerability requests keep the Huma order: auth, permission, then the feature veto.
+	if envID == "" || envID == m.localID || (!isVulnerability && !m.hasResourcePath(c, envID)) {
 		return next(c)
 	}
 
@@ -159,6 +160,9 @@ func (m *EnvironmentMiddleware) Handle(c *echo.Context, next echo.HandlerFunc) e
 	if m.authValidator != nil {
 		ps, u, ok := m.authValidator(c.Request().Context(), c)
 		if !ok {
+			if isVulnerability {
+				return genericProblem(c, http.StatusUnauthorized, "Authentication required to access remote environments")
+			}
 			return c.JSON(http.StatusUnauthorized, map[string]any{
 				"success": false,
 				"data":    map[string]any{"error": "Authentication required to access remote environments"},
@@ -169,13 +173,10 @@ func (m *EnvironmentMiddleware) Handle(c *echo.Context, next echo.HandlerFunc) e
 	}
 	if isVulnerability {
 		if m.proxyPermissionDenied(c, perms, envID) {
-			return echo.NewHTTPError(http.StatusForbidden, "permission denied")
+			return genericProblem(c, http.StatusForbidden, "permission denied")
 		}
 		if m.vulnerabilityEnabled != nil && !m.vulnerabilityEnabled(c.Request().Context()) {
 			return vulnerabilityProblem(c, vulnerability.Fail("feature-disabled", 403))
-		}
-		if envID == "" || envID == m.localID {
-			return next(c)
 		}
 	}
 
@@ -189,6 +190,9 @@ func (m *EnvironmentMiddleware) Handle(c *echo.Context, next echo.HandlerFunc) e
 
 	apiURL, accessToken, enabled, err := m.resolver(c.Request().Context(), envID)
 	if err != nil || apiURL == "" {
+		if isVulnerability {
+			return genericProblem(c, http.StatusNotFound, "Environment not found")
+		}
 		return c.JSON(http.StatusNotFound, map[string]any{
 			"success": false,
 			"data":    map[string]any{"error": "Environment not found"},
@@ -201,7 +205,7 @@ func (m *EnvironmentMiddleware) Handle(c *echo.Context, next echo.HandlerFunc) e
 	// mirroring the per-operation RequirePermission checks used for the local
 	// environment.
 	suffix := m.buildResourceSuffix(c.Request().URL.Path, envID)
-	if vulnerability.IsRoute(c.Request().Method, c.Request().URL.Path) && c.Request().Method == http.MethodPost && strings.HasSuffix(suffix, "/scan") && m.vulnerabilityIgnoreUnfixed != nil {
+	if isVulnerability && c.Request().Method == http.MethodPost && strings.HasSuffix(suffix, "/scan") && m.vulnerabilityIgnoreUnfixed != nil {
 		if handled, err := m.canonicalizeVulnerabilityScan(c); handled {
 			return err
 		}
@@ -261,6 +265,9 @@ func (m *EnvironmentMiddleware) Handle(c *echo.Context, next echo.HandlerFunc) e
 	}
 	return m.inventoryRead(c, envID, func() error {
 		if !enabled {
+			if isVulnerability {
+				return vulnerabilityProblem(c, vulnerability.Fail("agent.unavailable", 502))
+			}
 			return c.JSON(http.StatusBadRequest, map[string]any{"success": false, "code": "agent.unavailable"})
 		}
 		return m.forwardInventoryRequest(c, envID, apiURL, accessToken)
@@ -292,6 +299,9 @@ func (m *EnvironmentMiddleware) forwardInventoryRequest(c *echo.Context, envID, 
 		ctx, cancel, err := m.agentAccess(c.Request().Context(), envID, accessToken, c.Request().Method, m.buildProxyPath(c, envID))
 		if err != nil {
 			status, code := remenv.AgentAccessFailure(err)
+			if isVulnerabilityRequest(c) {
+				return vulnerabilityProblem(c, vulnerabilityAccessFailure(status, code))
+			}
 			return c.JSON(status, map[string]any{"success": false, "code": code})
 		}
 		defer cancel()
@@ -581,7 +591,7 @@ func (m *EnvironmentMiddleware) setProxyContextHeadersInternal(c *echo.Context, 
 
 func (m *EnvironmentMiddleware) proxyThroughTunnelInternal(c *echo.Context, tunnel *edge.AgentTunnel, envID string) error {
 	proxyPath := m.buildProxyPath(c, envID)
-	if vulnerability.IsRoute(c.Request().Method, proxyPath) {
+	if isVulnerabilityRequest(c) {
 		return m.proxyVulnerability(c, tunnel, envID)
 	}
 	if httpx.IsWebSocketUpgradeRequest(c.Request()) {
@@ -754,7 +764,7 @@ func (m *EnvironmentMiddleware) waitForActiveEdgeTunnelInternal(ctx context.Cont
 }
 
 func (m *EnvironmentMiddleware) abortEdgeTunnelUnavailable(c *echo.Context) error {
-	if vulnerability.IsRoute(c.Request().Method, c.Request().URL.Path) {
+	if isVulnerabilityRequest(c) {
 		return vulnerabilityProblem(c, vulnerability.Fail("agent.unavailable", 502))
 	}
 	return c.JSON(http.StatusBadGateway, map[string]any{
@@ -804,7 +814,7 @@ func (m *EnvironmentMiddleware) proxyHTTP(c *echo.Context, target string, access
 
 	resp, err := m.httpClient.Do(req)
 	if err != nil {
-		if vulnerability.IsRoute(c.Request().Method, c.Request().URL.Path) {
+		if isVulnerabilityRequest(c) {
 			return vulnerabilityProblem(c, vulnerability.Fail("agent.unavailable", 502))
 		}
 		return c.JSON(http.StatusBadGateway, map[string]any{
@@ -814,7 +824,7 @@ func (m *EnvironmentMiddleware) proxyHTTP(c *echo.Context, target string, access
 		})
 	}
 	defer func() { _ = resp.Body.Close() }()
-	if vulnerability.IsRoute(c.Request().Method, c.Request().URL.Path) {
+	if isVulnerabilityRequest(c) {
 		return m.writeVulnerability(c, resp.StatusCode, resp.Header, resp.Body)
 	}
 
