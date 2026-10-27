@@ -182,6 +182,9 @@ func (m *EnvironmentMiddleware) Handle(c *echo.Context, next echo.HandlerFunc) e
 
 	// Check client authority before Edge forwarding injects server-side agent tokens.
 	if httpx.IsWebSocketUpgradeRequest(c.Request()) && (m.checkOrigin == nil || !m.checkOrigin(c.Request())) {
+		if isVulnerability {
+			return genericProblem(c, http.StatusForbidden, "websocket origin not allowed")
+		}
 		return echo.NewHTTPError(http.StatusForbidden, "websocket origin not allowed")
 	}
 
@@ -706,7 +709,8 @@ func (m *EnvironmentMiddleware) buildResourceSuffix(requestPath, envID string) s
 // buildTargetURL constructs the full proxy target URL for a remote environment.
 func (m *EnvironmentMiddleware) buildTargetURL(c *echo.Context, envID, apiURL string) string {
 	req := c.Request()
-	suffix := m.buildResourceSuffix(req.URL.Path, envID)
+	// Forward the escaped path so an encoded slash keeps the route the hub classified.
+	suffix := m.buildResourceSuffix(req.URL.EscapedPath(), envID)
 	target := strings.TrimRight(apiURL, "/") + path.Join(apiEnvironmentsPrefix, m.localID) + suffix
 	if qs := req.URL.RawQuery; qs != "" {
 		target += "?" + qs
@@ -716,7 +720,7 @@ func (m *EnvironmentMiddleware) buildTargetURL(c *echo.Context, envID, apiURL st
 
 // buildProxyPath constructs the path sent through the edge tunnel.
 func (m *EnvironmentMiddleware) buildProxyPath(c *echo.Context, envID string) string {
-	return path.Join(apiEnvironmentsPrefix, m.localID) + m.buildResourceSuffix(c.Request().URL.Path, envID)
+	return path.Join(apiEnvironmentsPrefix, m.localID) + m.buildResourceSuffix(c.Request().URL.EscapedPath(), envID)
 }
 
 func isEdgeEnvironmentURLInternal(apiURL string) bool {
@@ -805,6 +809,9 @@ func (m *EnvironmentMiddleware) proxyHTTP(c *echo.Context, target string, access
 		errMessage := "Failed to create proxy request: " + err.Error()
 		if errors.Is(err, common.ErrEnvironmentInvalidProxyTarget) {
 			errMessage = err.Error()
+		}
+		if isVulnerabilityRequest(c) {
+			return vulnerabilityProblem(c, vulnerability.Fail("agent.unavailable", http.StatusBadGateway))
 		}
 		return c.JSON(http.StatusInternalServerError, map[string]any{
 			"success": false,
