@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace
+// Deviations: Local module namespace; upstream Trivy database defaults with an optional single mirror host; retired server mode.
 
 // Package vuln drives Trivy scans: building and parsing scanner invocations,
 // plus the container-level mechanics of running one — runtime/network
