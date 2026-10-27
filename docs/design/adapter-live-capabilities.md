@@ -586,7 +586,10 @@ response body. Hub capability, settings and host discovery share a separate
 image rows are unavailable and failed batches supply no findings or history.
 Identity and request generations fence late responses before the atomic merge.
 Inventory cancellation is opt-in for this path; other inventory readers retain
-their existing behavior. Pending and filtered hosts do not remove
+their existing behavior. Over HTTP/2 a held host therefore leaves the other hosts
+visible. Over HTTP/1.1 the shell's unbounded inventory reads to a held host can
+occupy every per-origin connection and queue the healthy hosts' reads as well
+(#271). Pending and filtered hosts do not remove
 retained inventory. Image identities include the host, independently of tags.
 
 The security page, dashboard widget, attention items, operations chip, navigation
