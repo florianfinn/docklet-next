@@ -35,7 +35,7 @@
     "backend/pkg/projects/env.go": 636,
     "backend/proto/tunnel/v1/tunnel.pb.go": 2285,
     "types/container/container.go": 1893,
-    "types/vulnerability/vulnerability.go": 870
+    "types/vulnerability/vulnerability.go": 811
   },
   "generated": [
     "backend/go.sum",

@@ -15,7 +15,7 @@ export function securityFixture() {
   const inventory = resourceFixture(), original = inventory.fetcher.getMockImplementation()!;
   const state = { failureHost: "", busy: false, active: false, finished: false, delay: undefined as Promise<void> | undefined,
     settings: { setupCompleted: "true", featureVulnerabilityManagementEnabled: "true", vulnerabilityScanEnabled: "false", vulnerabilityScanSchedule: '{"mode":"daily","time":"03:00"}', trivyIgnoreUnfixed: "true", vulnerabilityNotifyCritical: "false", vulnerabilityNotifyHigh: "false", vulnerabilityNotifyFailed: "false", effectiveTimeZone: "UTC" } as Record<string, string>,
-    runs: [terminalRun], unknownCode: false, ignoreCritical: false };
+    runs: [terminalRun], summaryStatus: "completed", scannedPlatform: "linux/amd64" as string | undefined, unknownCode: false, ignoreCritical: false };
   const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { "Content-Type": "application/json", "X-CSRF-Token": "example".padEnd(43, "x") } });
   const ok = (data: unknown) => json({ success: true, data });
   const page = (data: unknown[]) => json({ success: true, data, pagination: { totalItems: data.length } });
@@ -39,10 +39,10 @@ export function securityFixture() {
     if (path.includes("/vulnerabilities")) {
       if (host === "second" && state.delay) await state.delay;
       if (host === state.failureHost) return json({ status: 503, code: "vulnerability.storage-unavailable" }, 503);
-      if (path.endsWith("/summaries")) return ok({ summaries: { "sha256:user": { imageId: "sha256:user", scanTime: at, status: "completed", completedAt: at, platform: "linux/amd64", summary: counts }, unused: null, dangling: null } });
+      if (path.endsWith("/summaries")) return ok({ summaries: { "sha256:user": { imageId: "sha256:user", scanTime: at, status: state.summaryStatus, completedAt: at, platform: "linux/arm64", scannedPlatform: state.scannedPlatform, summary: counts }, unused: null, dangling: null } });
       if (path.endsWith("/runs")) return ok(state.runs);
       if (path.endsWith("/overview")) return ok({ riskiestFindings: [{ vulnerabilityId: "CVE-2026-0001", knownExploited: true, epss: 0.23, risk: 9.4 }], prevalentFindings: [] });
-      if (path.endsWith("/all")) return page(["UNKNOWN", "CRITICAL", "CRITICAL", "HIGH", "UNKNOWN", "UNKNOWN"].map((severity, index) => ({ imageId: "sha256:user", imageName: "example:1.0.0", vulnerabilityId: `CVE-2026-000${index + 1}`, pkgName: "example", installedVersion: "1.0", fixedVersion: "1.1", severity, cvss: { v3Score: 7.4 }, ignored: state.ignoreCritical && severity === "CRITICAL" })));
+      if (path.endsWith("/all")) return page(["UNKNOWN", "CRITICAL", "CRITICAL", "HIGH", "UNKNOWN", "UNKNOWN"].map((severity, index) => ({ imageId: "sha256:user", imageName: "example:1.0.0", vulnerabilityId: `CVE-2026-000${index + 1}`, pkgName: "example", installedVersion: "1.0", fixedVersion: "1.1", severity, kev: index === 0 ? true : undefined, epss: index === 0 ? 0.23 : undefined, risk: index === 0 ? 10 : 5.2, riskBand: index === 0 ? "critical" : "medium", cvss: { v3Score: 7.4 }, ignored: state.ignoreCritical && severity === "CRITICAL" })));
       if (path.endsWith("/scan")) {
         state.active = true;
         return state.busy ? json({ status: 409, code: state.unknownCode ? "vulnerability.undeclared" : "vulnerability.busy", activityId: `scan-active-${host}` }, 409) : json({ success: true, data: { activityId: `scan-active-${host}` } }, 202);

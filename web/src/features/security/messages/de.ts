@@ -10,6 +10,7 @@ export const deSecurity: typeof enSecurity = {
   epss: "EPSS",
   riskSort: "Risiko",
   hostUnavailable: "Scan-Daten für {host} nicht verfügbar. Ergebnisse anderer Hosts bleiben verfügbar.",
+  scannedPlatform: "Gescannte Plattform: {platform}",
   notCovered: "Gescannt wird nur die Standardplattform des Docker-Daemons. Container mit anderer Plattform sind nicht abgedeckt.",
   scanUnavailable: "Scan-Daten nicht verfügbar",
   notScanned: "Noch nicht gescannt",

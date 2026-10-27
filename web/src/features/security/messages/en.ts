@@ -9,6 +9,7 @@ export const enSecurity = {
   epss: "EPSS",
   riskSort: "Risk",
   hostUnavailable: "Scan data unavailable for {host}. Results from other hosts remain available.",
+  scannedPlatform: "Scanned platform: {platform}",
   notCovered: "Only the daemon-default platform is scanned. Containers using another platform are not covered.",
   scanUnavailable: "Scan data unavailable",
   notScanned: "Not scanned",

@@ -414,6 +414,7 @@ export interface Finding {
   knownExploited?: boolean;
   epss?: number;
   risk?: number;
+  riskBand?: "none" | "low" | "medium" | "high" | "critical";
 }
 
 export interface ScanRun {

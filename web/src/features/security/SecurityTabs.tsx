@@ -313,7 +313,7 @@ export function ImagesTab({ images, stacks, hosts }: Pick<Data, "images" | "stac
         const stack = stacks.find((s) => s.id === im.stackId);
         return (
           <TableRow key={`${im.hostId}:${im.id ?? im.ref}`} style={edge(worst(im))} className={ROW}>
-            <TableCell className="max-w-72 truncate font-mono text-xs">{im.ref}</TableCell>
+            <TableCell className="max-w-72 text-xs"><div className="truncate font-mono">{im.ref}</div>{im.platform && <div className="text-muted-foreground" title={t("notCovered")}>{t("scannedPlatform", { platform: im.platform })}</div>}</TableCell>
             <TableCell>{stack ? <Link to={`/stacks/${stack.id}`} className="text-primary-text hover:underline">{stack.name}</Link> : "–"}</TableCell>
             <TableCell>
               <HostChip host={hosts.get(im.hostId)} />

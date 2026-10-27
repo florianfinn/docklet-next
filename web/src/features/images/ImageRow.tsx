@@ -68,6 +68,7 @@ export function ConsumerLinks({ image, limit = 3 }: { image: DockerImage; limit?
 export function SecurityChip({ image }: { image: DockerImage }) {
   const t = useTranslations("images");
   const ts = useTranslations("security.severities");
+  const security = useTranslations("security");
   const live = useImageSecurity(image);
   const v = live.counts;
   if (!v) return <span className="text-xs text-muted-foreground">{live.unavailable ? t("securityUnavailable") : "–"}</span>;
@@ -75,10 +76,10 @@ export function SecurityChip({ image }: { image: DockerImage }) {
   const tone: Tone = top === "critical" ? "err" : top === "high" ? "orange" : top === "medium" ? "warn" : "ok";
   const all = (["critical", "high", "medium", "low", "unknown"] as const).map((k) => `${v[k] ?? 0} ${ts(k)}`).join(", ");
   return (
-    <Link to="/security?tab=images" data-tone={tone} aria-label={t("securityLabel", { all })} title={all} className="inline-flex items-center gap-1 rounded-md border border-(--tone)/30 bg-(--tone)/10 px-1.5 py-0.5 text-xs whitespace-nowrap text-(--tone) tabular-nums outline-none hover:bg-(--tone)/15 focus-visible:ring-2 focus-visible:ring-ring">
+    <span className="inline-flex flex-col items-start gap-1"><Link to="/security?tab=images" data-tone={tone} aria-label={t("securityLabel", { all })} title={all} className="inline-flex items-center gap-1 rounded-md border border-(--tone)/30 bg-(--tone)/10 px-1.5 py-0.5 text-xs whitespace-nowrap text-(--tone) tabular-nums outline-none hover:bg-(--tone)/15 focus-visible:ring-2 focus-visible:ring-ring">
       <ShieldAlert className="size-3" aria-hidden />
       {top ? `${v[top]} ${ts(top)}` : t("securityClean")}
-    </Link>
+    </Link>{live.platform && <span className="text-xs text-muted-foreground" title={security("notCovered")}>{security("scannedPlatform", { platform: live.platform })}</span>}</span>
   );
 }
 

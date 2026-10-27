@@ -12,7 +12,7 @@ import { imageReference } from "@/domain/images";
 import type { Finding, Host, ScannedImage, SecurityOverview } from "@/domain/model";
 import { ScanAdmissionError, type ScanAdmission } from "@/domain/security";
 import { splitInventoryId } from "./inventory-mapping";
-import { array, count, counts, finding, id, invalid, object, riskFindings, run, summaries } from "./vulnerability-decoders";
+import { array, count, counts, finding, id, invalid, object, run, summaries } from "./vulnerability-decoders";
 import { createSecuritySettings, settingsValues } from "./security-settings";
 import { vulnerabilityTransport, VulnerabilityFailure } from "./vulnerability-transport";
 import type { CsrfClient } from "./csrf-client";
@@ -34,18 +34,17 @@ export function createVulnerabilities(o: Options): Pick<DockletAdapter, "getSecu
     const local = images.filter((i) => i.hostId === host.id);
     const ids = local.map((i) => splitInventoryId(i.id)[1]);
     const base = `/environments/${encodeURIComponent(host.id)}`;
-    const [batch, history, risk] = await Promise.all([
+    const [batch, history] = await Promise.all([
       request(`${base}/images/vulnerabilities/summaries`, "POST", { imageIds: ids }),
       request(`${base}/vulnerabilities/runs`),
-      request(`${base}/vulnerabilities/overview`),
     ]);
-    const summary = summaries(object(batch).data), intel = riskFindings(object(risk).data);
+    const summary = summaries(object(batch).data);
     const rows: ScannedImage[] = local.map((im) => {
       const s = summary.get(splitInventoryId(im.id)[1]);
       const usage = im.consumers.some((c) => c.state === "running") ? "running" : im.consumers.length ? "stopped" : "unused";
       return { id: im.id, ref: imageReference(im), hostId: host.id, stackId: im.consumers.find((c) => c.stackId)?.stackId, usage,
         status: s?.status ?? "pending", unavailable: !!im.inventory?.stale || !s?.summary || !s.completedAt,
-        code: s?.errorCode, platform: s?.platform, counts: s?.summary ? counts(s.summary) : empty(), scannedAt: s?.completedAt ?? "" };
+        code: s?.errorCode, platform: s?.scannedPlatform, counts: s?.summary ? counts(s.summary) : empty(), scannedAt: s?.completedAt ?? "" };
     });
     const findings: Finding[] = [];
     for (let start = 0;;) {
@@ -55,7 +54,7 @@ export function createVulnerabilities(o: Options): Pick<DockletAdapter, "getSecu
         const f = finding(raw, host.id);
         if (object(raw).ignored === true) continue;
         if (!local.some((im) => splitInventoryId(im.id)[1] === f.imageId)) continue;
-        findings.push({ ...f, ...intel.get(f.id) });
+        findings.push(f);
       }
       start += data.length;
       if (start >= total) break;

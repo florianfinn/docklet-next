@@ -1,5 +1,5 @@
 // Source: api/openapi.json
-// Revision: 8df32cf678e78944385c142714a17aa68a055a2a50cbae4d391f0373d61fb205
+// Revision: a4eeb3a4fc785b0f699873268fe209090cad1eccdd9eb95b4e94b1a77a52b822
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
 // Deviations: Generated TypeScript declarations from the local Huma export.
@@ -11850,6 +11850,7 @@ export interface components {
             scanPhase?: string;
             /** Format: date-time */
             scanTime: string;
+            scannedPlatform?: string;
             /** @enum {string} */
             status: "pending" | "scanning" | "completed" | "failed";
             summary?: components["schemas"]["VulnerabilitySeveritySummary"];
@@ -11878,14 +11879,21 @@ export interface components {
             class?: string;
             cvss?: components["schemas"]["VulnerabilityCVSSInfo"];
             description?: string;
+            /** Format: double */
+            epss?: number;
             fixedVersion?: string;
             installedVersion: string;
+            kev?: boolean;
             /** Format: date-time */
             lastModifiedDate?: string;
             pkgName: string;
             /** Format: date-time */
             publishedDate?: string;
             references?: string[] | null;
+            /** Format: double */
+            risk?: number;
+            /** @enum {string} */
+            riskBand?: "none" | "low" | "medium" | "high" | "critical";
             /** @enum {string} */
             severity: "UNKNOWN" | "LOW" | "MEDIUM" | "HIGH" | "CRITICAL";
             title?: string;
@@ -11896,18 +11904,25 @@ export interface components {
             class?: string;
             cvss?: components["schemas"]["VulnerabilityCVSSInfo"];
             description?: string;
+            /** Format: double */
+            epss?: number;
             fixedVersion?: string;
             ignoreId?: string;
             ignored?: boolean;
             imageId: string;
             imageName: string;
             installedVersion: string;
+            kev?: boolean;
             /** Format: date-time */
             lastModifiedDate?: string;
             pkgName: string;
             /** Format: date-time */
             publishedDate?: string;
             references?: string[] | null;
+            /** Format: double */
+            risk?: number;
+            /** @enum {string} */
+            riskBand?: "none" | "low" | "medium" | "high" | "critical";
             /** @enum {string} */
             severity: "UNKNOWN" | "LOW" | "MEDIUM" | "HIGH" | "CRITICAL";
             title?: string;
