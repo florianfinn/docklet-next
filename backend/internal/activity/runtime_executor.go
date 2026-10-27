@@ -2,7 +2,7 @@
 // Revision: d4229b124f079376c959142b63235f6a739be2a9711e0228ec5a63ab552f8cf0
 // Retrieved: 2026-10-19
 // License: Apache-2.0
-// Deviations: Fixed seven-operation service adapter and fresh target preflight.
+// Deviations: Runtime service adapter with frozen stack image intent and fresh target preflight.
 
 package activity
 
@@ -10,6 +10,7 @@ import (
 	"context"
 	"encoding/hex"
 	"errors"
+	updaterDTO "github.com/florianfinn/docklet-next/types/updater"
 	"io"
 	"strings"
 
@@ -128,8 +129,16 @@ func (a *RuntimeServiceAdapter) ExecuteRuntime(ctx context.Context, command Runt
 	if err := ctx.Err(); err != nil {
 		return err
 	}
+	ctx = updaterDTO.WithExecutionIdentity(ctx, updaterDTO.ExecutionIdentity{RunID: command.ProposedRunID, RegistrationID: command.Store.RegistrationID})
 	ctx = context.WithValue(ctx, dockertypes.ProgressWriterKey{}, output)
 	switch command.Operation {
+	case RuntimeUpdateProject, RuntimeRestoreProject:
+		port, ok := a.projects.(runtimeImageLifecyclePort)
+		if !ok {
+			return &RuntimeTargetError{Code: "update.invalid-target"}
+		}
+		_, err := port.ExecuteImageLifecycle(ctx, command.Target.ID, command.ProposedRunID, command.Store.RegistrationID, command.Options.Lifecycle, command.Actor)
+		return err
 	case RuntimeDeployProject:
 		return a.projects.DeployProject(ctx, command.Target.ID, command.Actor, command.Options.Deploy)
 	case RuntimeDownProject:
@@ -146,5 +155,24 @@ func (a *RuntimeServiceAdapter) ExecuteRuntime(ctx context.Context, command Runt
 		return a.containers.RestartContainer(ctx, command.Target.ID, command.Actor)
 	default:
 		return &RuntimeTargetError{Code: "runtime.target-unavailable", Cause: errors.New("unsupported runtime operation")}
+	}
+}
+
+type runtimeImageLifecyclePort interface {
+	PrepareImageLifecycle(context.Context, string, string, updaterDTO.LifecycleRequest) (*updaterDTO.LifecycleIntent, error)
+	ExecuteImageLifecycle(context.Context, string, string, string, *updaterDTO.LifecycleIntent, usertypes.Actor) (*updaterDTO.LifecycleResult, error)
+	ReconcileImageLifecycle(context.Context) error
+}
+
+func (a *RuntimeServiceAdapter) PrepareImageLifecycle(ctx context.Context, id, registration string, request updaterDTO.LifecycleRequest) (*updaterDTO.LifecycleIntent, error) {
+	port, ok := a.projects.(runtimeImageLifecyclePort)
+	if !ok {
+		return nil, &RuntimeTargetError{Code: "update.invalid-target"}
+	}
+	return port.PrepareImageLifecycle(ctx, id, registration, request)
+}
+func (a *RuntimeServiceAdapter) RuntimeSettled(ctx context.Context) {
+	if port, ok := a.projects.(runtimeImageLifecyclePort); ok {
+		_ = port.ReconcileImageLifecycle(ctx)
 	}
 }

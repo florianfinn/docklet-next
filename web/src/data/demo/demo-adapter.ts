@@ -1,3 +1,5 @@
+import { sameImageReference } from "@/domain/docker-reference";
+import { createDemoRegistries } from "./demo-registries";
 import type { ActionKind, ContainerInfo, DeployStepKey, Service, Stack } from "@/domain/model";
 import { parseCompose } from "@/domain/compose/model";
 import { convertDockerRun } from "@/domain/compose/docker-run";
@@ -123,6 +125,7 @@ export function createDemoAdapter(options: DemoAdapterOptions = {}): DockletAdap
 
   const adapter: DockletAdapter = {
     kind: "demo",
+    ...createDemoRegistries(() => db.changed("registries")),
     getAuthMode: async () => db.settings.auth.mode,
     getCurrentUser: async () => ({ id: "demo-admin", username: db.settings.auth.local.username, requiresPasswordChange: false }),
     login: async (username) => ({ id: "demo-admin", username, requiresPasswordChange: false }),
@@ -135,7 +138,9 @@ export function createDemoAdapter(options: DemoAdapterOptions = {}): DockletAdap
         (resourceRef.kind === "host" && !!db.host(resourceRef.id)) ||
         (resourceRef.kind === "stack" && !!db.stack(resourceRef.id)) ||
         (resourceRef.kind === "container" && db.containers().some((item) => item.id === resourceRef.id)) ||
-        (resourceRef.kind === "network" && db.topology.networks.some((item) => item.id === resourceRef.id));
+        (resourceRef.kind === "network" && db.topology.networks.some((item) => item.id === resourceRef.id)) ||
+        (resourceRef.kind === "image" && (await adapter.listImages()).some((item) => item.id === resourceRef.id)) ||
+        (resourceRef.kind === "registry" && (await adapter.listContainerRegistries()).some((item) => item.id === resourceRef.id));
       const available = knownResource && supportedOperations.has(operationId);
       return { operationId, resourceRef, available, ...(available ? {} : { disabledReasonCode: GENERIC_REASON }) };
     },
@@ -218,9 +223,9 @@ export function createDemoAdapter(options: DemoAdapterOptions = {}): DockletAdap
       });
     },
 
-    async installStackUpdates(stackId, services) {
+    async installStackUpdates(stackId) {
       const stack = requireStack(stackId);
-      const pending = stack.services.filter((s) => hasUpdate(s.update) && (!services || services.includes(s.name)));
+      const pending = stack.services.filter((s) => hasUpdate(s.update));
       const rp = db.saveRestorePoint(stack, `Vor Update · ${stack.name}`);
       const fail = failStep(takeDemoFailure(adapter, "installStackUpdates")?.at);
       const latest = (s: Service) => (s.update.state === "version" || s.update.state === "rebuild" ? s.update.latest : s.image);
@@ -253,7 +258,7 @@ export function createDemoAdapter(options: DemoAdapterOptions = {}): DockletAdap
         setServices(id, (s) => {
           if (!names.has(s.name)) return s;
           const next = latest(s);
-          if (s.image.tag !== next.tag) compose = compose.replace(imageRef(s.image), imageRef(next));
+          if (!sameImageReference(imageRef(s.image), imageRef(next))) compose = compose.replace(imageRef(s.image), imageRef(next));
           return {
             ...s,
             image: next,
@@ -371,7 +376,7 @@ export function createDemoAdapter(options: DemoAdapterOptions = {}): DockletAdap
             syncStackNetworks(db, stackId);
             setServices(stackId, (s) => {
               const old = rp.images.find((i) => i.service === s.name)?.image;
-              if (!old || imageRef(old) === imageRef(s.image)) return s;
+              if (!old || sameImageReference(imageRef(old), imageRef(s.image))) return s;
               return {
                 ...s,
                 image: old,
@@ -496,7 +501,7 @@ export function createDemoAdapter(options: DemoAdapterOptions = {}): DockletAdap
 
     async installContainerUpdate(id) {
       const c = findContainer(id);
-      if (c.stackId && c.serviceName) return adapter.installStackUpdates(c.stackId, [c.serviceName]);
+      if (c.stackId && c.serviceName) return adapter.installStackUpdates(c.stackId);
       if (c.origin === "unraid") throw new DemoCommandError("managed-by-unraid");
       if (c.origin !== "standalone") throw new DemoCommandError("recreate-not-allowed");
       const next = c.update.state === "version" || c.update.state === "rebuild" ? c.update.latest : c.image;
@@ -581,6 +586,7 @@ export function createDemoAdapter(options: DemoAdapterOptions = {}): DockletAdap
   for (const [operationId, value] of Object.entries(adapter)) {
     if (operationId !== "getCapability" && typeof value === "function") supportedOperations.add(operationId);
   }
+  supportedOperations.add("clearContainerRegistryCredential");
   for (const operationId of options.missingCapabilities ?? []) supportedOperations.delete(operationId);
   registerDemoOptions(adapter, options);
   return adapter;

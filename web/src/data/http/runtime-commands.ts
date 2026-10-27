@@ -4,6 +4,7 @@
 // License: Apache-2.0
 // Deviations: Original guarded command and notification consumer for issues #126 and #110.
 
+import type { LifecycleInput } from "@/domain/stack-updates";
 import { CancelledError, isCancelledError } from "@tanstack/react-query";
 import type { ContainerCommand, RuntimeReleaseInput, StackCommand } from "../adapter";
 import { AdapterOutcomeError, unavailable } from "../capability";
@@ -35,7 +36,7 @@ interface Options {
   baseUrl: string;
   client: CsrfClient;
   capability: (operation: string, ref: ResourceRef) => Promise<CapabilityDescriptor>;
-  publish: (run: RuntimeRun) => void;
+  publish: (run: RuntimeRun, detailed?: boolean) => void;
   unauthorized?: () => void;
   now?: () => number;
   uuid?: () => string;
@@ -53,12 +54,16 @@ export function createRuntimeCommands({ baseUrl, client, capability, publish, un
   const runs = new Map<string, RuntimeRun>();
   const attempts = new Map<string, number>();
   const reads = new Map<string, Promise<RuntimeRun>>();
+  const signalKeys = new WeakMap<AbortSignal, number>();
+  const detailOwners = new Map<string, number>();
+  const explicitFollows = new Set<string>();
+  let signalKey = 0;
   const sequences = new Map<string, number>();
   let sequence = 0;
   const check = (version: number) => { if (version !== generation) throw new CancelledError(); };
   const route = (host: string, id: string) => `${baseUrl}/environments/${encodeURIComponent(host)}/runtime-runs/${encodeURIComponent(id)}`;
 
-  function remember(run: RuntimeRun, notify = true) {
+  function remember(run: RuntimeRun, notify = true, detailed = false) {
     const prior = runs.get(run.id);
     if (prior && prior.hostId !== run.hostId) throw runtimeError("runtime.invalid-response");
     run.runtime = { ...run.runtime, currentIntent: prior?.runtime?.currentIntent || run.runtime?.currentIntent,
@@ -66,17 +71,20 @@ export function createRuntimeCommands({ baseUrl, client, capability, publish, un
     if (!runs.has(run.id) && runs.size >= LIMIT) {
       const finished = [...runs.values()].find((row) => !active(row));
       if (finished) { runs.delete(finished.id); attempts.delete(finished.id); sequences.delete(finished.id); }
-      else { sequences.delete(run.id); attempts.delete(run.id); if (notify) publish(run); return run; }
+      else { sequences.delete(run.id); attempts.delete(run.id); if (notify) publish(run, detailed); return run; }
     }
     runs.set(run.id, run);
-    if (notify) publish(run);
+    if (notify) publish(run, detailed);
     schedule();
     return run;
   }
   async function request(url: string, init: RequestInit = {}): Promise<unknown> {
     const version = generation;
     const controller = new AbortController(); controllers.add(controller);
-    const timeout = setTimeout(() => controller.abort(), 15_000);
+    const abort = () => controller.abort();
+    init.signal?.addEventListener("abort", abort, { once: true });
+    if (init.signal?.aborted) abort();
+    const timeout = setTimeout(() => controller.abort(), url.includes("/runtime-runs/") && !init.method ? 40_000 : 15_000);
     try {
       const response = await client.fetch(url, { ...init, signal: controller.signal, headers: { Accept: "application/json", ...(init.body ? { "Content-Type": "application/json" } : {}), ...init.headers } });
       check(version);
@@ -91,7 +99,7 @@ export function createRuntimeCommands({ baseUrl, client, capability, publish, un
       if (error instanceof AdapterOutcomeError && error.outcome.kind === "error" && error.outcome.status === 401) { unauthorized(); throw error; }
       throw error instanceof AdapterOutcomeError ? error : runtimeError("http.error");
     }
-    finally { clearTimeout(timeout); controllers.delete(controller); }
+    finally { clearTimeout(timeout); init.signal?.removeEventListener("abort", abort); controllers.delete(controller); }
   }
   async function access(host: string) {
     const version = generation;
@@ -123,22 +131,24 @@ export function createRuntimeCommands({ baseUrl, client, capability, publish, un
     const canCancel = allowed("activities:read") && allowed("activities:cancel");
     return { canCancel, canRelease: canCancel && user.isGlobalAdmin === true };
   }
-  async function detail(host: string, id: string, refresh = false, notify = true): Promise<RuntimeRun> {
-    const key = `${host}~${id}:${refresh}:${notify}`;
+  async function detail(host: string, id: string, refresh = false, notify = true, signal?: AbortSignal): Promise<RuntimeRun> {
+    if (signal && !signalKeys.has(signal)) signalKeys.set(signal, ++signalKey);
+    const key = `${host}~${id}:${refresh}:${notify}:${signal ? signalKeys.get(signal) : "shared"}`;
     const existing = reads.get(key); if (existing) return existing;
     const version = generation, started = ++sequence;
     const task = (async () => {
-      const [data, grants] = await Promise.all([request(`${route(host, id)}${refresh ? "?refresh=true" : ""}`), access(host).catch((error: unknown) => {
+      const [data, grants] = await Promise.all([request(`${route(host, id)}${refresh ? "?refresh=true" : ""}`, { signal }), access(host).catch((error: unknown) => {
         if (error instanceof AdapterOutcomeError && error.outcome.kind === "error" && error.outcome.code === "runtime.permissions-unavailable") return { permissionsUnavailable: true };
         throw error;
       })]);
       check(version);
+      if (signal?.aborted) throw new CancelledError();
       const dto = data as RuntimeDetail;
       const run = mapRuntime(dto?.activity, host, id, dto, grants);
       if (runs.has(id) && runs.get(id)!.hostId !== host) throw runtimeError("runtime.invalid-response");
       if (started < (sequences.get(id) ?? 0)) return runs.get(id) ?? run;
       sequences.set(id, started);
-      return remember(run, notify);
+      return remember(run, notify, true);
     })();
     reads.set(key, task);
     try { return await task; } finally { if (reads.get(key) === task) reads.delete(key); }
@@ -159,14 +169,26 @@ export function createRuntimeCommands({ baseUrl, client, capability, publish, un
       return remember({ ...run, runtime: undefined } as RuntimeRun, false);
     }
   }
+  function mergeSummary(run: CodedActionRun): CodedActionRun {
+    const prior = runs.get(run.id);
+    if (!prior || prior.hostId !== run.hostId) return run;
+    if ((!active(prior) && active(run)) || (prior.outcomeState === "known" && run.outcomeState === "unknown")) return prior;
+    const incoming = run as RuntimeRun;
+    const same = prior.status === run.status && prior.outcomeState === run.outcomeState;
+    const merged = { ...prior, ...incoming, cancelRequested: run.cancelRequested || prior.cancelRequested,
+      runtime: { ...(same ? prior.runtime : {}), ...incoming.runtime, currentIntent: prior.runtime?.currentIntent } } as RuntimeRun;
+    if (same && !incoming.runtime?.unknownReason && prior.runtime?.unknownReason) merged.runtime!.unknownReason = prior.runtime.unknownReason;
+    runs.set(run.id, merged);
+    return merged;
+  }
   function schedule() {
     if (!observed || timer) return;
-    const watched = [...runs.values()].filter((run) => active(run) && !run.runtime?.unknownReason && (attempts.get(run.id) ?? 0) < 3);
+    const watched = [...runs.values()].filter((run) => active(run) && (run.runtime?.currentIntent || detailOwners.has(run.id) || explicitFollows.has(run.id)) && !run.runtime?.unknownReason && (attempts.get(run.id) ?? 0) < 3);
     if (!watched.length) return;
     const version = generation;
     timer = setTimeout(() => {
       timer = undefined;
-      void Promise.all(watched.map(async (run) => {
+      void Promise.all(watched.filter((run) => run.runtime?.currentIntent || detailOwners.has(run.id) || explicitFollows.has(run.id)).map(async (run) => {
         attempts.set(run.id, (attempts.get(run.id) ?? 0) + 1);
         try {
           const next = await detail(run.hostId!, run.id);
@@ -176,18 +198,23 @@ export function createRuntimeCommands({ baseUrl, client, capability, publish, un
       })).then(() => { if (version === generation) schedule(); });
     }, 2_000);
   }
-  function command(kind: "stack" | "container", target: string, command: StackCommand | ContainerCommand): Promise<string> {
+  function command(kind: "stack" | "container", target: string, command: StackCommand | ContainerCommand | "update" | "restore", lifecycle?: LifecycleInput): Promise<string> {
     let host: string, raw: string;
     try { [host, raw] = splitInventoryId(target); } catch { return Promise.reject(runtimeError("runtime.invalid-target")); }
-    const suffix = kind === "stack" ? stackRoutes[command as StackCommand] : ["start", "stop", "restart"].includes(command) ? command : undefined;
+    const imageOperation = command === "update" || command === "restore";
+    const suffix = imageOperation ? command : kind === "stack" ? stackRoutes[command as StackCommand] : ["start", "stop", "restart"].includes(command) ? command : undefined;
     if (!suffix) return Promise.reject(runtimeError("runtime.invalid-command"));
-    const scope = `${kind}:${target}`, key = `${scope}:${command}`;
+    const scope = `${kind}:${target}`, key = `${scope}:${command}:${imageOperation ? JSON.stringify(lifecycle) : ""}`;
     if (ambiguous.has(scope)) return Promise.reject(runtimeError("runtime.admission-unknown"));
     const existing = pending.get(key); if (existing) return existing;
     if (ambiguous.size + pending.size + [...runs.values()].filter(active).length >= LIMIT) return Promise.reject(runtimeError("runtime.pending-limit"));
     const version = generation;
     const task = (async () => {
-      const operation = kind === "stack" ? "runStackCommand" : "runContainerCommand";
+      const operation = imageOperation ? command === "update" ? "installStackUpdates" : "restoreRestorePoint" : kind === "stack" ? "runStackCommand" : "runContainerCommand";
+      if (imageOperation) {
+        if (!lifecycle || !/^[a-f0-9]{64}$/.test(lifecycle.expectedRevision) || (command === "restore" && !lifecycle.pointId)) throw runtimeError("runtime.invalid-target");
+        for (const read of command === "restore" ? ["getUpdateBaseline", "listRestorePoints"] : ["getUpdateBaseline"]) { const cap = await capability(read, { kind: "stack", id: target }); check(version); if (!cap.available) throw unavailable(read, cap.resourceRef, cap.disabledReasonCode); }
+      }
       const descriptor = await capability(operation, { kind, id: target }); check(version);
       if (!descriptor.available) throw unavailable(operation, descriptor.resourceRef, descriptor.disabledReasonCode);
       let idempotencyKey: string;
@@ -214,9 +241,11 @@ export function createRuntimeCommands({ baseUrl, client, capability, publish, un
           let response: Response;
           try {
             if (now() - began >= COMMAND_RETRY_MS) break;
-            response = await client.fetch(`${baseUrl}/environments/${encodeURIComponent(host)}/${kind === "stack" ? "projects" : "containers"}/${encodeURIComponent(raw)}/${suffix}`, {
+            const path = imageOperation ? command === "update" ? `updater/projects/${encodeURIComponent(raw)}/update` : `updater/project/${encodeURIComponent(raw)}/restore-points/${encodeURIComponent(lifecycle!.pointId!)}/restore` : `${kind === "stack" ? "projects" : "containers"}/${encodeURIComponent(raw)}/${suffix}`;
+            response = await client.fetch(`${baseUrl}/environments/${encodeURIComponent(host)}/${path}`, {
               method: "POST", signal: controller.signal,
-              headers: { Accept: "application/json", Prefer: "respond-async", "Idempotency-Key": idempotencyKey },
+              headers: { Accept: "application/json", Prefer: "respond-async", "Idempotency-Key": idempotencyKey, ...(imageOperation ? { "Content-Type": "application/json" } : {}) },
+              ...(imageOperation ? { body: JSON.stringify(lifecycle) } : {}),
             });
           } catch (error) {
             check(version);
@@ -236,6 +265,8 @@ export function createRuntimeCommands({ baseUrl, client, capability, publish, un
           check(version);
           if (!response.ok) {
             const error = runtimeResponseError(body, response.status);
+            if (imageOperation && error.outcome.kind === "error" && error.outcome.code === "runtime.outcome-unknown") { ambiguous.add(scope); const runId = object(object(body).data).activityId; if (typeof runId === "string" && runId.trim()) void detail(host, runId).catch(() => undefined); }
+            if (imageOperation && (response.status === 502 || response.status === 504) && error.outcome.kind === "error" && error.outcome.code === "agent.unavailable") { ambiguous.add(scope); throw runtimeError("runtime.admission-unknown"); }
             if (response.status === 401) { unauthorized(); throw error; }
             if (uncertainSend) { ambiguous.add(scope); throw runtimeError("runtime.admission-unknown"); }
             if (error.outcome.kind === "conflict" && error.outcome.activeRunId) void detail(host, error.outcome.activeRunId).catch(() => undefined);
@@ -245,6 +276,7 @@ export function createRuntimeCommands({ baseUrl, client, capability, publish, un
           try {
             if (object(body).success !== true || (response.status === 202 ? data.code !== "run.started" : response.status !== 200 || data.code !== "run.joined") || typeof data.activityId !== "string" || !data.activityId.trim()) throw runtimeError("runtime.invalid-response");
             let run = mapRuntime(data.activity, host, data.activityId);
+            if (imageOperation && (run.stackId !== target || run.kind !== (command === "restore" ? "restore" : "update"))) throw runtimeError("runtime.invalid-response");
             const retained = runs.get(run.id);
             // The admission snapshot can arrive after a newer targeted observation.
             if (retained?.hostId === host && started < (sequences.get(run.id) ?? 0)) run = retained;
@@ -282,18 +314,28 @@ export function createRuntimeCommands({ baseUrl, client, capability, publish, un
     return runs.get(id) ?? run;
   }
   return {
+    installStackUpdates: (id: string, input?: LifecycleInput) => command("stack", id, "update", input),
+    restoreRestorePoint: (id: string, point: string, input?: LifecycleInput) => command("stack", id, "restore", input ? { ...input, pointId: point } : undefined),
     runStackCommand: (id: string, action: StackCommand) => command("stack", id, action),
     runContainerCommand: (id: string, action: ContainerCommand) => command("container", id, action),
-    getRuntimeRun: (host: string, id: string) => { attempts.delete(id); return detail(host, id, true); },
+    getRuntimeRun: (host: string, id: string) => { explicitFollows.add(id); attempts.delete(id); return detail(host, id, true); },
     cancelRuntimeRun: (host: string, id: string) => mutate(host, id, "cancel"),
     releaseRuntimeRun: (host: string, id: string, input: RuntimeReleaseInput) => mutate(host, id, "release", input),
-    detail, project,
+    detail, project, mergeSummary,
+    observeDetail(id: string, value: boolean) {
+      const count = (detailOwners.get(id) ?? 0) + (value ? 1 : -1);
+      if (count > 0) detailOwners.set(id, count); else detailOwners.delete(id);
+      if (!value && ![...runs.values()].some((run) => active(run) && (run.runtime?.currentIntent || detailOwners.has(run.id) || explicitFollows.has(run.id)))) {
+        if (timer) clearTimeout(timer); timer = undefined;
+      }
+      schedule();
+    },
     retained: () => [...runs.values()],
     observe(value: boolean) { observed = value; if (!value && timer) { clearTimeout(timer); timer = undefined; } if (value) schedule(); },
-    reset() {
+    reset(retainOwners = false) {
       ++generation; for (const controller of controllers) controller.abort(); controllers.clear();
       if (timer) clearTimeout(timer); timer = undefined; rights = undefined;
-      runs.clear(); pending.clear(); ambiguous.clear(); reads.clear(); attempts.clear(); sequences.clear();
+      runs.clear(); pending.clear(); ambiguous.clear(); reads.clear(); attempts.clear(); sequences.clear(); if (!retainOwners) detailOwners.clear(); explicitFollows.clear();
     },
   };
 }

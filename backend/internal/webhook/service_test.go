@@ -306,18 +306,23 @@ func TestCreateWebhook_InvalidActionTypeRejected(t *testing.T) {
 	assert.ErrorIs(t, err, ErrWebhookInvalidAction)
 }
 
-func TestCreateWebhook_EmptyActionTypeDefaultsPerTarget(t *testing.T) {
-	ctx := t.Context()
+func TestCreateWebhook_EmptyActionRequiresExplicitChoice(t *testing.T) {
 	db := setupWebhookServiceTestDB(t)
 	svc := newTestWebhookService(db)
-
-	projectWebhook, _, err := svc.CreateWebhook(ctx, "project-hook", WebhookTargetTypeProject, "", "project-id", "env-1", user.Actor{})
+	for _, target := range []string{WebhookTargetTypeContainer, WebhookTargetTypeProject, WebhookTargetTypeUpdater} {
+		for _, action := range []string{"", "  "} {
+			wh, token, err := svc.CreateWebhook(t.Context(), "example-hook", target, action, "example-target", "example-env", user.Actor{})
+			require.ErrorIs(t, err, ErrWebhookInvalidAction)
+			require.Nil(t, wh)
+			require.Empty(t, token)
+		}
+	}
+	var count int64
+	require.NoError(t, db.Model(&Webhook{}).Count(&count).Error)
+	require.Zero(t, count)
+	wh, _, err := svc.CreateWebhook(t.Context(), "example-hook", WebhookTargetTypeProject, WebhookActionTypeRestart, "example-target", "example-env", user.Actor{})
 	require.NoError(t, err)
-	assert.Equal(t, WebhookActionTypeUpdate, projectWebhook.ActionType)
-
-	updaterWebhook, _, err := svc.CreateWebhook(ctx, "updater-hook", WebhookTargetTypeUpdater, "", "", "env-1", user.Actor{})
-	require.NoError(t, err)
-	assert.Equal(t, WebhookActionTypeRun, updaterWebhook.ActionType)
+	require.Equal(t, WebhookActionTypeRestart, wh.ActionType)
 }
 
 func TestCreateWebhook_EmptyTargetIDAcceptedForUpdaterType(t *testing.T) {
@@ -680,7 +685,7 @@ func TestTriggerByToken_AcceptsImmediatelyAndRecordsTriggerTime(t *testing.T) {
 	svc := newTestWebhookService(db) // action services are nil; the async action fails, acceptance must not
 
 	rawToken := "arc_wh_ccddeeff01020304aabbccdd0102030405060708090a0b0c0d0e0f1011121314"
-	wh := insertWebhookDirect(t, ctx, db, rawToken, WebhookTargetTypeContainer, WebhookActionTypeUpdate, "container-id", types.LocalDockerEnvironmentID)
+	wh := insertWebhookDirect(t, ctx, db, rawToken, WebhookTargetTypeContainer, WebhookActionTypeStart, "container-id", types.LocalDockerEnvironmentID)
 
 	// Valid token is accepted synchronously; the action itself runs (and here
 	// fails against nil services) in the background without surfacing.

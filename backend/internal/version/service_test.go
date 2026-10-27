@@ -328,7 +328,7 @@ func TestVersionService_GetAppVersionInfoNextChannelUsesImageLabelInternal(t *te
 	assert.False(t, githubHit, "next channel must not consult the GitHub stable release feed")
 }
 
-func TestVersionService_GetAppVersionInfoNextChannelLabelFailureFallsBackToDigestInternal(t *testing.T) {
+func TestVersionService_GetAppVersionInfoNextChannelLabelFailureKeepsLegacyDisplayOnlyInternal(t *testing.T) {
 	ctx := t.Context()
 	db := setupImageUpdateTestDB(t)
 
@@ -365,7 +365,7 @@ func TestVersionService_GetAppVersionInfoNextChannelLabelFailureFallsBackToDiges
 
 	require.NotNil(t, info)
 	assert.Empty(t, info.NewestVersion, "label failure must not fall back to a stable tag")
-	assert.True(t, info.UpdateAvailable, "digest change alone flags the update")
+	assert.False(t, info.UpdateAvailable, "legacy top-level digests supply display or pull references, not native eligibility")
 	assert.Equal(t, latestDigest, info.NewestDigest)
 }
 

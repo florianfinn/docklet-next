@@ -274,8 +274,11 @@ it("stale active generic snapshot cannot reopen a retained terminal run or repla
   let stale: ReturnType<typeof snapshot> | undefined;
   const reached = deferred<void>(), release = deferred<void>();
   f.state.activity = async (url) => {
-    if (url.pathname.endsWith("/activities")) return response({ success: true, data: url.pathname.includes("/edge/") ? [f.state.run] : [], pagination: { totalItems: url.pathname.includes("/edge/") ? 1 : 0 } });
-    if (stale) { const captured = stale; reached.resolve(); await release.promise; return envelope(runtimeDetail(captured)); }
+    if (url.pathname.endsWith("/activities")) {
+      const captured = stale ?? f.state.run;
+      if (stale && url.pathname.includes("/edge/")) { reached.resolve(); await release.promise; }
+      return response({ success: true, data: url.pathname.includes("/edge/") ? [captured] : [], pagination: { totalItems: url.pathname.includes("/edge/") ? 1 : 0 } });
+    }
     return envelope(runtimeDetail(f.state.run));
   };
   const adapter = withRunGate({ ...f.adapter, getConnectedSettings: async () => ({ activity: { actionPresentation: "toast" } }) as never });

@@ -101,6 +101,7 @@ export const enStacks = {
     simulated: (import.meta.env.DEV ? "CPU and RAM simulated" : ""),
   },
   deployments: {
+    unavailable: "Deployment history is unavailable.",
     title: "Deploy history",
     empty: (import.meta.env.DEV ? "No deployments in this demo history yet." : "No deployments recorded yet."),
     running: "Running now",

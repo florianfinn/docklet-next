@@ -46,6 +46,9 @@ func runtimePruneTxInternal(tx *gorm.DB, now time.Time, limit int) (int64, error
 	if err := tx.Where("run_id IN ?", ids).Delete(&RuntimeKeyBinding{}).Error; err != nil {
 		return 0, err
 	}
+	if err := tx.Where("run_id IN ?", ids).Delete(&RuntimeImageIntent{}).Error; err != nil {
+		return 0, err
+	}
 	result := tx.Where("run_id IN ?", ids).Delete(&RuntimeReceipt{})
 	return result.RowsAffected, result.Error
 }

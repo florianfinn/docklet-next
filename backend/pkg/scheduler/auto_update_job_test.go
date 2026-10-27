@@ -2,215 +2,44 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; functional cut: removed upstream analytics heartbeat; SQLite temp-file persistence fixture.
+// Deviations: Local module namespace; replace retired-trigger tests with zero-effect ownership guards; functional cut: removed upstream analytics heartbeat; SQLite temp-file persistence fixture.
 
 package scheduler
 
 import (
 	"context"
-	"sync/atomic"
-	"testing"
-	"time"
-
-	schedulertypes "github.com/florianfinn/docklet-next/types/scheduler"
-	"github.com/florianfinn/docklet-next/types/updater"
+	imageDTO "github.com/florianfinn/docklet-next/types/image"
+	st "github.com/florianfinn/docklet-next/types/scheduler"
+	dto "github.com/florianfinn/docklet-next/types/updater"
 	"github.com/stretchr/testify/require"
-
-	"github.com/florianfinn/docklet-next/backend/pkg/scheduler/jobcontext"
+	"testing"
 )
 
-func TestAutoUpdateJob_ShouldSchedule_RequiresAutoUpdateAndPolling(t *testing.T) {
-	ctx := t.Context()
-	_, settingsSvc, _ := setupSchedulerStateServicesInternal(t)
-	job, err := NewAutoUpdateJob(nil, settingsSvc, newTestAdmissionGateInternal(t))
-	require.NoError(t, err)
+type retiredApplier struct{ calls int }
 
-	require.False(t, job.ShouldSchedule(ctx))
-
-	require.NoError(t, settingsSvc.SetBoolSetting(ctx, "autoUpdate", true))
-	require.True(t, job.ShouldSchedule(ctx))
-
-	require.NoError(t, settingsSvc.SetBoolSetting(ctx, "pollingEnabled", false))
-	require.False(t, job.ShouldSchedule(ctx))
-
-	require.NoError(t, settingsSvc.SetBoolSetting(ctx, "autoUpdate", false))
-	require.False(t, job.ShouldSchedule(ctx))
+func (f *retiredApplier) ApplyPending(context.Context, dto.Options) (*dto.Result, error) {
+	f.calls++
+	return &dto.Result{}, nil
 }
-
-type blockingApplierFakeInternal struct {
-	calls   atomic.Int32
-	started chan struct{}
-	release chan struct{}
-}
-
-func (f *blockingApplierFakeInternal) ApplyPending(context.Context, updater.Options) (*updater.Result, error) {
-	f.calls.Add(1)
-	select {
-	case f.started <- struct{}{}:
-	default:
-	}
-	<-f.release
-	return &updater.Result{}, nil
-}
-
-func TestAutoUpdateJob_OverlappingRunIsSkippedInternal(t *testing.T) {
-	ctx := t.Context()
-	_, settingsSvc, _ := setupSchedulerStateServicesInternal(t)
-	require.NoError(t, settingsSvc.SetBoolSetting(ctx, "autoUpdate", true))
-
-	applier := &blockingApplierFakeInternal{
-		started: make(chan struct{}, 1),
-		release: make(chan struct{}),
-	}
-	job := &AutoUpdateJob{updaterService: applier, settingsService: settingsSvc, admissionGate: newTestAdmissionGateInternal(t)}
-
-	firstDone := make(chan struct{})
-	go func() {
-		_, runErr1 := job.Run(ctx)
-		if runErr1 != nil {
-			t.Errorf("first auto update job run failed: %v", runErr1)
-			close(firstDone)
-			return
+func TestLegacyAutoUpdateJobCannotExecute(t *testing.T) {
+	_, settings, _ := setupSchedulerStateServicesInternal(t)
+	require.NoError(t, settings.SetBoolSetting(t.Context(), "autoUpdate", true))
+	require.NoError(t, settings.SetBoolSetting(t.Context(), "pollingEnabled", true))
+	fake := &retiredApplier{}
+	job := &AutoUpdateJob{updaterService: fake, settingsService: settings}
+	require.False(t, job.ShouldSchedule(t.Context()))
+	for _, recovery := range []bool{false, true} {
+		var out st.Outcome
+		var err error
+		if recovery {
+			out, err = job.Reconcile(t.Context(), st.Run{JobID: "auto-update", AttemptCount: 2})
+		} else {
+			out, err = job.Run(t.Context())
 		}
-		close(firstDone)
-	}()
-	<-applier.started
-
-	// Overlapping tick returns immediately without a second ApplyPending.
-	_, runErr2 := job.Run(ctx)
-	require.NoError(t, runErr2)
-	require.Equal(t, int32(1), applier.calls.Load())
-
-	close(applier.release)
-	select {
-	case <-firstDone:
-	case <-time.After(time.Second):
-		require.FailNow(t, "first auto-update run did not finish")
+		require.NoError(t, err)
+		require.Equal(t, st.Skipped, out.Status)
+		require.Equal(t, "update.agent-local-job-disabled", out.Code)
 	}
-
-	// The guard resets once the run finishes.
-	_, runErr3 := job.Run(ctx)
-	require.NoError(t, runErr3)
-	require.Equal(t, int32(2), applier.calls.Load())
-	for _, tc := range []struct {
-		name       string
-		targets    []schedulertypes.TargetOutcome
-		retryIDs   []string
-		status     schedulertypes.RunStatus
-		unresolved bool
-	}{
-		{name: "missing progress", unresolved: true, status: schedulertypes.Failed},
-		{
-			name:       "image pull alone",
-			unresolved: true,
-			targets: []schedulertypes.TargetOutcome{{
-				ID:           "image",
-				ResourceType: "image",
-				Status:       schedulertypes.Succeeded,
-			}},
-			status: schedulertypes.Failed,
-		},
-		{
-			name:       "failed containers only",
-			unresolved: true,
-			targets: []schedulertypes.TargetOutcome{
-				{
-					ID:           "done",
-					ResourceType: "container",
-					Status:       schedulertypes.Succeeded,
-				},
-				{
-					ID:           "failed",
-					ResourceType: "container",
-					Status:       schedulertypes.Failed,
-				},
-				{
-					ID:           "image",
-					ResourceType: "image",
-					Status:       schedulertypes.Failed,
-				},
-			},
-			retryIDs: []string{"failed"},
-		},
-		{
-			name: "completed failed batch retry",
-			targets: []schedulertypes.TargetOutcome{
-				{
-					ID:           "auto-update",
-					ResourceType: "update-batch",
-					Status:       schedulertypes.Partial,
-				},
-				{
-					ID:           "failed",
-					ResourceType: "container",
-					Status:       schedulertypes.Failed,
-				},
-			},
-			retryIDs: []string{"failed"},
-		},
-		{
-			name: "scoped retry cannot confirm original batch",
-			targets: []schedulertypes.TargetOutcome{
-				{
-					ID:           "auto-update",
-					ResourceType: "update-retry",
-					Status:       schedulertypes.Succeeded,
-				},
-				{
-					ID:           "done",
-					ResourceType: "container",
-					Status:       schedulertypes.Succeeded,
-				},
-			},
-			status:     schedulertypes.Failed,
-			unresolved: true,
-		},
-		{
-			name: "completed batch",
-			targets: []schedulertypes.TargetOutcome{{
-				ID:           "auto-update",
-				ResourceType: "update-batch",
-				Status:       schedulertypes.Succeeded,
-			}},
-			status: schedulertypes.Succeeded,
-		},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			previous := schedulertypes.Run{AttemptCount: 2, Outcome: schedulertypes.Outcome{Targets: tc.targets}}
-			options, outcome, unresolved := autoUpdateRetryOptionsInternal(previous)
-			require.Equal(t, tc.unresolved, unresolved)
-			require.Equal(t, tc.retryIDs, options.ResourceIds)
-			require.Equal(t, tc.status, outcome.Status)
-			if len(tc.retryIDs) == 0 {
-				require.Error(t, job.ValidateRetry(ctx, previous))
-			} else {
-				require.NoError(t, job.ValidateRetry(ctx, previous))
-			}
-			reconciled, err := job.Reconcile(ctx, previous)
-			require.NoError(t, err)
-			if tc.status == schedulertypes.Succeeded {
-				require.Equal(t, schedulertypes.Succeeded, reconciled.Status)
-			} else {
-				require.Equal(t, schedulertypes.Failed, reconciled.Status)
-			}
-		})
-	}
-
-	require.NoError(t, settingsSvc.SetBoolSetting(ctx, "autoUpdate", false))
-	retryCtx := jobcontext.WithExecution(
-		ctx,
-		schedulertypes.Run{
-			AttemptCount: 2,
-			Outcome: schedulertypes.Outcome{Targets: []schedulertypes.TargetOutcome{{
-				ID:           "failed",
-				ResourceType: "container",
-				Status:       schedulertypes.Failed,
-			}}},
-		},
-		nil,
-	)
-	outcome, err := job.Run(retryCtx)
-	require.NoError(t, err)
-	require.Equal(t, schedulertypes.Failed, outcome.Status)
-	require.Equal(t, int32(2), applier.calls.Load())
+	require.Equal(t, "update.agent-local-job-disabled", imageDTO.Neutral(job.ValidateRetry(t.Context(), st.Run{}), "unexpected", 500).Problem.Code)
+	require.Zero(t, fake.calls, "inherited apply must never be an independent effect path")
 }

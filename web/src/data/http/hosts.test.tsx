@@ -21,7 +21,7 @@ const row: Environment = {
   id: "example-host", name: "Example host", apiUrl: "http://agent.example.com:3552", enabled: true, status: "online", isEdge: false, lastSeen: at,
 };
 const info: components["schemas"]["VersionInfo"] = {
-  agentContractVersion: 3, agentContractFingerprint: "example", minimumAgentContractVersion: 3,
+  agentContractVersion: 3, agentContractFingerprint: "example", minimumAgentContractVersion: 3, toolsImageOverride: false,
   currentVersion: "v0.1.0", displayVersion: "0.1.0", goVersion: "go1.27.2", nodeVersion: "24", revision: "example", shortRevision: "example", isSemverVersion: true, updateAvailable: false,
   onboardingChecks: { projectDirectory: "/srv/projects", ownerUid: 1000, ownerGid: 1000, writable: false, socketGroup: 998 },
 };

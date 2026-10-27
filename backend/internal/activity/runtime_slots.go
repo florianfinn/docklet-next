@@ -7,7 +7,7 @@
 package activity
 
 func runtimeQueuesInternal(operation RuntimeOperation) bool {
-	return operation == RuntimeDeployProject || operation == RuntimeRedeployProject
+	return operation == RuntimeDeployProject || operation == RuntimeRedeployProject || operation == RuntimeUpdateProject || operation == RuntimeRestoreProject
 }
 
 // Each phase checks durable intent and the owned context under runningMu. The

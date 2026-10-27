@@ -31,6 +31,7 @@ import { RunIconTile, StepList } from "./ActionSteps";
 import { keepOpenForCoordinatedLayers } from "./layer-coordination";
 import { RuntimeControls } from "./RuntimeControls";
 import { runtimeState } from "./runtime-presentation";
+import { ActionDetail } from "./ActionDetail";
 import { RunOutput } from "./RunOutput";
 
 /** Shared list tones; notifications.css turns the running "accent" into the brand run tone inside the action centre. */
@@ -49,7 +50,7 @@ function RunBody({ run, defaultOpen }: { run: ActionRun; defaultOpen: boolean })
         </Button>
       </CollapsibleTrigger>
       <CollapsibleContent className="min-w-0 data-[state=open]:animate-in data-[state=open]:fade-in-0">
-        <div className="mt-2 grid min-w-0 grid-cols-[minmax(0,1fr)] gap-3 rounded-xl border bg-background/50 p-3">
+        <ActionDetail run={run}>{(run) => <div className="mt-2 grid min-w-0 grid-cols-[minmax(0,1fr)] gap-3 rounded-xl border bg-background/50 p-3">
           <div className="flex min-w-0 flex-col items-start gap-3 sm:flex-row">
             <div className="min-w-0 flex-1 max-sm:w-full">
               <StepList run={run.outcomeState === "unknown" ? { ...run, steps: [] } : run} />
@@ -75,7 +76,7 @@ function RunBody({ run, defaultOpen }: { run: ActionRun; defaultOpen: boolean })
           )}
           <RuntimeControls key={run.id} run={run} />
           <RunOutput run={run} defaultOpen={defaultOpen} />
-        </div>
+        </div>}</ActionDetail>
       </CollapsibleContent>
     </Collapsible>
   );

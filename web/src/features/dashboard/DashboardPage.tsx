@@ -83,7 +83,7 @@ export default function DashboardPage() {
   const containers = useVisibleContainers();
   const security = useSecurity();
   const events = useEvents();
-  const schedule = useSchedule();
+  const schedule = useSchedule(hosts.visible.map((h) => h.id));
   const runs = useActionRuns();
   const metrics = useMetrics((s) => s?.hosts);
   const layout = useLayout();

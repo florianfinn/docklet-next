@@ -3,7 +3,7 @@
 
 import type { components } from "@/api/generated/schema";
 import type { DirListing, FileContent } from "@/domain/files";
-import type { DockerImage, PruneMode } from "@/domain/images";
+import type { DockerImage, ImagePullProgress, ImagePullResult, ImagePruneResult, PruneMode } from "@/domain/images";
 import type { HubDiscovery } from "@/domain/hub-discovery";
 import type { AutoUpdatePolicy, FileOwner, Host, HostConnection, NetworkAttachment, Topology, TopologyNetwork } from "@/domain/model";
 import type { NetworkDraft } from "@/domain/networks";
@@ -215,6 +215,7 @@ export interface HubApi {
 }
 
 export interface PullImageInput {
+  onProgress?: (progress: ImagePullProgress) => void;
   hostId: string;
   /** "repository[:tag]"; the tag defaults to latest. */
   reference: string;
@@ -223,12 +224,12 @@ export interface PullImageInput {
 export interface ImagesApi {
   /** Images of all connected and disconnected hosts with consumers derived from the containers. */
   listImages(onPartial?: (rows: DockerImage[]) => void): Promise<DockerImage[]>;
-  /** Pulls an image and returns the action id. */
-  pullImage(input: PullImageInput): Promise<string>;
+  /** Resolves after stream completion; the activity frame is optional. */
+  pullImage(input: PullImageInput): Promise<ImagePullResult>;
   /** Refused with "in-use" while any container (running or stopped) uses the image. */
-  removeImage(id: string): Promise<void>;
-  /** Removes dangling or all unused images of the given connected hosts; null when there is nothing to remove. */
-  pruneImages(input: { hostIds: string[]; mode: PruneMode }): Promise<string | null>;
+  removeImage(id: string, force?: boolean): Promise<void>;
+  /** Returns actual per-host results, preserving partial success. */
+  pruneImages(input: { hostIds: string[]; mode: PruneMode }): Promise<ImagePruneResult>;
 }
 
 export interface TestResult {

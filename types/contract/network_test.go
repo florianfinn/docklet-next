@@ -20,7 +20,7 @@ func TestAgentHubV6NetworkBoundary(t *testing.T) {
 	body, err := os.ReadFile("testdata/agent-hub-v6.json")
 	require.NoError(t, err)
 	digest := sha256.Sum256(body)
-	require.Equal(t, AgentHubFingerprint, hex.EncodeToString(digest[:]))
+	require.Equal(t, "be97c8565af13b50db70f2447a1aa47cddb38fff918ddf03c04a3670aa046e25", hex.EncodeToString(digest[:]))
 	var fixture struct {
 		Version      int
 		Minimum      int    `json:"minimumAgentContractVersion"`
@@ -32,16 +32,16 @@ func TestAgentHubV6NetworkBoundary(t *testing.T) {
 		}
 	}
 	require.NoError(t, json.Unmarshal(body, &fixture))
-	require.Equal(t, 6, AgentHubVersion)
-	require.Equal(t, 6, MinimumAgentVersion)
-	require.Equal(t, AgentHubVersion, fixture.Version)
-	require.Equal(t, MinimumAgentVersion, fixture.Minimum)
+	require.Equal(t, 6, fixture.Version)
+	require.Equal(t, 6, fixture.Minimum)
+	require.Less(t, fixture.Version, AgentHubVersion)
+	require.Less(t, fixture.Minimum, MinimumAgentVersion)
 	require.Equal(t, "tunnel/v1 (unchanged)", fixture.EdgeProtocol)
 	require.Len(t, fixture.Network.Routes, 9)
 	require.Contains(t, fixture.Network.Fields["NetworkCreateOptions"], "enableIPv4")
 	require.Equal(t, []string{"aliases", "containerId", "ipv4Address", "ipv6Address"}, fixture.Network.Fields["NetworkConnectContainerRequest"])
 	require.Contains(t, fixture.Network.ErrorCodes, "network.overlap")
 	require.False(t, AgentCompatible(5, "eed087ecf9125541a6dbb3208322578ce83c8c59bf864e97603fd632cca0fe65"))
-	require.True(t, AgentCompatible(6, AgentHubFingerprint))
+	require.False(t, AgentCompatible(6, "be97c8565af13b50db70f2447a1aa47cddb38fff918ddf03c04a3670aa046e25"))
 	require.False(t, AgentCompatible(6, "different"))
 }

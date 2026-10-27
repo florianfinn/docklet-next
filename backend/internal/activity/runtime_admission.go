@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/florianfinn/docklet-next/backend/internal/database"
+	"github.com/florianfinn/docklet-next/backend/internal/updater/children/policies"
 	activitytypes "github.com/florianfinn/docklet-next/types/activity"
 	"github.com/google/uuid"
 	"gorm.io/gorm"
@@ -101,6 +102,11 @@ func (s *RuntimeService) admissionPassInternal(ctx context.Context, c runtimeCan
 			} else if !fresh {
 				return nil
 			} else {
+				if c.command.Options.Lifecycle != nil {
+					if err := policies.ValidateAdmission(tx, c.command.Options.Lifecycle.Policy, c.command.Store.EnvironmentID, c.command.Store.RegistrationID, c.command.Target.ID, c.command.Options.Lifecycle.TargetIdentity, c.command.Actor.ID); err != nil {
+						return err
+					}
+				}
 				runID := c.command.ProposedRunID
 				if runID == "" {
 					runID = uuid.NewString()
@@ -111,6 +117,14 @@ func (s *RuntimeService) admissionPassInternal(ctx context.Context, c runtimeCan
 					TargetName: target.Name, ParentProjectID: target.ParentProjectID, GateScope: c.gateScope, GateKey: c.gateKey})
 				if err != nil {
 					return err
+				}
+				if err := runtimeSaveImageIntent(tx, row.RunID, c.command); err != nil {
+					return err
+				}
+				if c.command.Options.Lifecycle != nil {
+					if err := policies.AdmitChild(tx, c.command.Options.Lifecycle.Policy, row.RunID); err != nil {
+						return err
+					}
 				}
 				if s.localExecution != nil && c.command.Store == s.localExecution.Store && runtimeQueuesInternal(c.command.Operation) {
 					changed := tx.Model(&Activity{}).Where("id = ? AND environment_id = ?", row.RunID, row.EnvironmentID).

@@ -16,7 +16,7 @@ import { sourceFixture, toastCount, waitFor, type Fault } from "./source-notific
 
 afterEach(() => act(() => { toast.dismiss(); actionDialogStore.reset(); presentationStore.reset(); uiStyleStore.reset(); activityStore.reset(); vi.restoreAllMocks(); }));
 
-const faults: Fault[] = ["page502", "network", "page500", "page403", "detail404", "mapping", "partial", "marked-first", "marked-later"];
+const faults: Fault[] = ["page502", "network", "page500", "page403", "summary-missing", "summary-mapping", "partial", "marked-first", "marked-later"];
 it.each(faults.flatMap((fault) => [false, true].map((reverse) => ({ fault, reverse }))))("$fault initial bad plus partial Edge history, reverse=$reverse: recovery stays silent and genuine actions notify", async ({ fault, reverse }) => {
   const f = sourceFixture(reverse);
   f.put("good", "good-done", "success"); f.history("bad"); f.history("edge");

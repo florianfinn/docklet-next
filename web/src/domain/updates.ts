@@ -1,6 +1,6 @@
 import type { ImageVersion, Service, Tone, UpdateInfo, UpdateLevel } from "./model";
 
-export type UpdateVisual = "current" | "major" | "minor" | "patch" | "rebuild" | "error" | "local" | "unchecked";
+export type UpdateVisual = "current" | "major" | "minor" | "patch" | "rebuild" | "error" | "local" | "unknown" | "unchecked";
 
 /**
  * Collapses an update result into the visual category. Version levels come only
@@ -15,6 +15,8 @@ export function updateVisual(update: UpdateInfo): UpdateVisual {
       return "rebuild";
     case "current":
       return "current";
+    case "unknown":
+      return "unknown";
     case "error":
       return "error";
     case "local":
@@ -33,6 +35,7 @@ export const UPDATE_TONE: Record<UpdateVisual, Tone> = {
   error: "err",
   local: "gray",
   unchecked: "gray",
+  unknown: "gray",
 };
 
 const PRIORITY: Record<UpdateVisual, number> = {
@@ -42,7 +45,8 @@ const PRIORITY: Record<UpdateVisual, number> = {
   patch: 3,
   rebuild: 2,
   unchecked: 1,
-  local: 0,
+  unknown: 1,
+  local: 1,
   current: 0,
 };
 
@@ -58,16 +62,16 @@ export interface UpdateSummary {
 }
 
 export function summarizeUpdates(services: Pick<Service, "name" | "update">[]): UpdateSummary {
-  let visual: UpdateVisual = "current";
+  let visual: UpdateVisual = services.length ? "current" : "unchecked";
   let pending = 0;
   let errors = 0;
   for (const s of services) {
-    const v = updateVisual(s.update);
+    const observed = updateVisual(s.update);
+    const v = s.update.incomplete && observed === "current" ? "unchecked" : observed;
     if (hasUpdate(s.update)) pending++;
     if (v === "error") errors++;
     if (PRIORITY[v] > PRIORITY[visual]) visual = v;
   }
-  if (visual === "unchecked" && services.some((s) => s.update.state === "current")) visual = "current";
   return { pending, visual, errors, items: services.map((s) => ({ service: s.name, update: s.update })) };
 }
 

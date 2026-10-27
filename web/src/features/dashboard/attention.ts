@@ -1,3 +1,4 @@
+import { normalizeDockerReference } from "@/domain/docker-reference";
 import type { ActionRun, ContainerInfo, Host, HostMetrics, ScannedImage, Stack, Tone } from "@/domain/model";
 
 export type AttentionKind = "unhealthy" | "offline" | "failed" | "critical" | "major" | "disk" | "unknownOrigin";
@@ -76,11 +77,14 @@ export function attentionItems({ hosts, stacks, containers, runs, images, metric
       out.push({ id: `f-${r.id}`, kind: "failed", tone: "err", weight: 80, hostId: r.hostId, stackId: r.stackId, runId: r.id, restorePointId: r.restorePointId, values: { title: r.title } });
     }
   }
-  const byRef = new Map<string, number>();
-  for (const i of images) if (i.usage === "running" && i.counts.critical > 0) byRef.set(i.ref, (byRef.get(i.ref) ?? 0) + i.counts.critical);
-  for (const [ref, count] of byRef) {
-    const img = images.find((i) => i.ref === ref);
-    out.push({ id: `c-${ref}`, kind: "critical", tone: "err", weight: 60, hostId: img?.hostId, stackId: img?.stackId, values: { image: ref.split("/").pop() ?? ref, count } });
+  const byRef = new Map<string, { ref: string; count: number; image: ScannedImage }>();
+  for (const image of images) if (image.usage === "running" && image.counts.critical > 0) {
+    const key = normalizeDockerReference(image.ref) ?? `${image.hostId}:${image.ref}`;
+    const previous = byRef.get(key);
+    byRef.set(key, { ref: previous?.ref ?? image.ref, count: (previous?.count ?? 0) + image.counts.critical, image: previous?.image ?? image });
+  }
+  for (const [key, { ref, count, image }] of byRef) {
+    out.push({ id: `c-${key}`, kind: "critical", tone: "err", weight: 60, hostId: image.hostId, stackId: image.stackId, values: { image: ref.split("/").pop() ?? ref, count } });
   }
   for (const c of containers) {
     if (c.origin === "unknown" && !offline.has(c.hostId)) out.push({ id: `x-${c.id}`, kind: "unknownOrigin", tone: "info", weight: 20, hostId: c.hostId, containerId: c.id, values: { name: c.name } });

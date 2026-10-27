@@ -629,10 +629,7 @@ func (
 		// Image not found locally, need to pull it
 		pullOptions, authErr := s.imageService.PullOptionsWithAuth(ctx, config.Image, credentials)
 		if authErr != nil {
-			slog.WarnContext(ctx, "Failed to get registry authentication for container image; proceeding without auth",
-				"image", config.Image,
-				"error", authErr.Error())
-			pullOptions = client.ImagePullOptions{}
+			return nil, authErr
 		}
 
 		localSettings := s.settingsService.GetSettingsConfig()

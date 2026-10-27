@@ -61,7 +61,7 @@ describe("demo images adapter", () => {
     expect(jellyfin?.consumers.map((c) => c.name)).toEqual(["media-jellyfin-1"]);
     expect(images.filter((i) => i.consumers.some((c) => c.system)).length).toBeGreaterThan(0);
     // Installing the update moves the consumer to the new image; the old one stays as unused until pruned.
-    const run = await adapter.installStackUpdates("media", ["jellyfin"]);
+    const run = await adapter.installStackUpdates("media");
     await settle(adapter, run);
     const after = await adapter.listImages();
     const old = after.find((i) => i.id === jellyfin?.id);
@@ -85,7 +85,7 @@ describe("demo images adapter", () => {
     vi.useFakeTimers();
     const adapter = createDemoAdapter();
     expect(await adapter.pullImage({ hostId: "delta", reference: "NOT valid" }).catch(errorCode)).toBe("invalid-name");
-    const run = await settle(adapter, await adapter.pullImage({ hostId: "delta", reference: "ghcr.io/example/app:1.2.0" }));
+    const run = await settle(adapter, (await adapter.pullImage({ hostId: "delta", reference: "ghcr.io/example/app:1.2.0" })).actionId!);
     expect(run.status).toBe("succeeded");
     expect(run.output.some((l) => l.stream === "cmd" && l.text === "docker pull ghcr.io/example/app:1.2.0") && run.output.some((l) => /Pull complete/.test(l.text))).toBe(true);
     const pulled = (await adapter.listImages()).find((i) => i.hostId === "delta" && i.repository === "ghcr.io/example/app");
@@ -94,13 +94,13 @@ describe("demo images adapter", () => {
     const before = await adapter.listImages();
     const inUse = before.filter((i) => i.consumers.length).map((i) => i.id);
     const prune = await adapter.pruneImages({ hostIds: ["atlas", "boreal", "cedar", "delta"], mode: "unused" });
-    await settle(adapter, prune!);
+    expect(prune.hosts.some((h) => h.removed.length > 0)).toBe(true);
     const after = await adapter.listImages();
     // Every image with a consumer survives; unused ones on connected hosts are gone; the disconnected host is untouched.
     expect(inUse.every((id) => after.some((i) => i.id === id))).toBe(true);
     expect(after.filter((i) => i.hostId !== "cedar" && imageUsage(i) !== "in-use")).toEqual([]);
     expect(after.some((i) => i.hostId === "cedar" && imageUsage(i) === "unused")).toBe(true);
-    expect(await adapter.pruneImages({ hostIds: ["atlas"], mode: "dangling" })).toBe(null);
+    expect((await adapter.pruneImages({ hostIds: ["atlas"], mode: "dangling" })).hosts[0]?.removed).toEqual([]);
   });
 });
 

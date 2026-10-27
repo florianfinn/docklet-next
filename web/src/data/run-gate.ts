@@ -73,8 +73,8 @@ export const GATE_RULES: Partial<Record<keyof DockletAdapter, (args: Args) => Ga
   runScan: () => ({ key: "scan:all", freshMs: CHECK_FRESH_MS }),
   reconnectHost: ([hostId]) => ({ key: `reconnect:${str(hostId)}`, freshMs: CHECK_FRESH_MS }),
   runStackCommand: ([stackId, command]) => ({ key: `stack:${str(stackId)}:${str(command)}`, scope: `stack:${str(stackId)}` }),
-  installStackUpdates: ([stackId, services]) => ({ key: `stack:${str(stackId)}:update:${list(services)}`, scope: `stack:${str(stackId)}` }),
-  restoreRestorePoint: ([stackId, point]) => ({ key: `stack:${str(stackId)}:restore:${str(point)}`, scope: `stack:${str(stackId)}` }),
+  installStackUpdates: ([stackId, input]) => ({ key: `stack:${str(stackId)}:update:${contentHash(JSON.stringify(input ?? null))}`, scope: `stack:${str(stackId)}` }),
+  restoreRestorePoint: ([stackId, point, input]) => ({ key: `stack:${str(stackId)}:restore:${str(point)}:${contentHash(JSON.stringify(input ?? null))}`, scope: `stack:${str(stackId)}` }),
   restartService: ([stackId, service]) => ({ key: `stack:${str(stackId)}:restart:${str(service)}`, scope: `stack:${str(stackId)}` }),
   deployStack: ([input]) => {
     const d = (input ?? {}) as { stackId?: string | null; hostId?: string; name?: string; compose?: string; env?: string; labels?: string[] };
@@ -82,7 +82,7 @@ export const GATE_RULES: Partial<Record<keyof DockletAdapter, (args: Args) => Ga
     return { key: `deploy:${target}:${contentHash(JSON.stringify([d.compose, d.env, d.labels]))}`, scope: `stack:${target}` };
   },
   runContainerCommand: ([id, command]) => ({ key: `container:${str(id)}:${str(command)}`, scope: `container:${str(id)}` }),
-  recreateContainer: ([id, input]) => ({ key: `container:${str(id)}:recreate:${contentHash(JSON.stringify(input))}`, scope: `container:${str(id)}` }),
+  recreateContainer: ([id, input]) => ({ key: `container:${str(id)}:recreate:${contentHash(JSON.stringify(input ?? null))}`, scope: `container:${str(id)}` }),
   installContainerUpdate: ([id]) => ({ key: `container:${str(id)}:update`, scope: `container:${str(id)}` }),
   restartAgent: ([hostId]) => ({ key: `host:${str(hostId)}:agent-restart`, scope: `host:${str(hostId)}` }),
   connectHost: ([hostId]) => ({ key: `host:${str(hostId)}:connect`, scope: `host:${str(hostId)}` }),
@@ -292,7 +292,7 @@ export class RunGate {
     }
 
     // Registered before the start: a run list update during the start must not prune it.
-    const entry: Entry = { rule, parent, settled: false, promise: Promise.resolve(), durable: this.inner.kind === "http" && (method === "runStackCommand" || method === "runContainerCommand" || method === "deployStack") };
+    const entry: Entry = { rule, parent, settled: false, promise: Promise.resolve(), durable: this.inner.kind === "http" && (method === "runStackCommand" || method === "runContainerCommand" || method === "deployStack" || method === "installStackUpdates" || method === "restoreRestorePoint") };
     this.entries.set(rule.key, entry);
     entry.promise = new Promise<unknown>((resolve) => resolve(start())).then(
       (value) => {

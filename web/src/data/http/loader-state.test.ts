@@ -19,8 +19,8 @@ function fixture(kind: Kind) {
   const publish = vi.fn();
   const events = createEventReader(read, () => generation);
   const actions = createActivityReader({
-    hosts: async () => ["good"], page: async () => ({ items: [activity("good")], incomplete: false }),
-    detail: async () => { const status = await read(); const value = detail("good"); value.activity.status = status as typeof value.activity.status; return value; },
+    hosts: async () => ["good"], page: async () => { const status = await read(); return { items: [{ ...activity("good"), status: status as ReturnType<typeof activity>["status"] }], incomplete: false }; },
+    detail: async () => detail("good"),
     publish, unauthorized: vi.fn(),
   });
   return {

@@ -40,7 +40,7 @@ function controller() {
       return () => mounted && session === started && started.active;
     },
     failed: () => operation?.failed ?? false,
-    invoke<T>(fn: () => T, adapter: ReturnType<typeof useAdapter>, errorText: (error: unknown) => string): T | undefined {
+    invoke<T>(fn: () => T, adapter: ReturnType<typeof useAdapter>, errorText: (error: unknown) => string, onDetached?: (value: Awaited<T>) => void): T | undefined {
       clear();
       const attempt = { failed: false };
       operation = attempt;
@@ -56,13 +56,18 @@ function controller() {
         error: (message, options) => {
           if (!sameIdentity()) return;
           if (current()) { attempt.failed = true; publish({ message, options }); }
-          else if (started.closed) toast.error(message, options);
+          else if (started.closed || onDetached) toast.error(message, options);
         },
       };
       try {
         const result = withCommandFailure(receipt, fn);
         if (!result || typeof (result as unknown as Promise<unknown>).then !== "function") return result;
-        return Promise.resolve(result).then((value) => current() ? value : undefined, (error: unknown) => {
+        return Promise.resolve(result).then((value) => {
+          if (current()) return value;
+          // Long-running commands retain their outcome after close, navigation or target changes.
+          if (sameIdentity()) onDetached?.(value as Awaited<T>);
+          return undefined;
+        }, (error: unknown) => {
           if (!isCancelledError(error)) receipt.error(errorText(error));
           return undefined;
         }) as T;
@@ -88,7 +93,7 @@ export function useDialogCommand(open = true, owner?: unknown, formatError?: (er
       const lifetime = identityLifetime(adapter), version = lifetime.version();
       return () => current() && lifetime.active() && lifetime.version() === version;
     },
-    run: <T,>(fn: () => T) => feedback.invoke(fn, adapter, formatError ?? errorText),
+    run: <T,>(fn: () => T, onDetached?: (value: Awaited<T>) => void) => feedback.invoke(fn, adapter, formatError ?? errorText, onDetached),
     change: (next: boolean, notify: (open: boolean) => void) => { if (!next) feedback.dismiss(); notify(next); },
     bindings: {
       onChangeCapture: feedback.clear,

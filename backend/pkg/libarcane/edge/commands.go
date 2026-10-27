@@ -15,6 +15,12 @@ import (
 )
 
 var commandRoutes = []commandRoute{
+	{Method: http.MethodPost, PathPattern: "/api/environments/{id}/updater/projects/{projectId}/check", CommandName: "updater.project.check"},
+	{Method: http.MethodGet, PathPattern: "/api/environments/{id}/updater/projects/{projectId}/baseline", CommandName: "updater.project.baseline"},
+	{Method: http.MethodGet, PathPattern: "/api/environments/{id}/updater/{kind}/{targetId}/restore-points", CommandName: "updater.restore.list"},
+	{Method: http.MethodDelete, PathPattern: "/api/environments/{id}/updater/{kind}/{targetId}/restore-points/{pointId}", CommandName: "updater.restore.delete"},
+	{Method: http.MethodGet, PathPattern: "/api/environments/{id}/updater/restore-points", CommandName: "updater.restore.host-list"},
+	{Method: http.MethodDelete, PathPattern: "/api/environments/{id}/updater/restore-points/{pointId}", CommandName: "updater.restore.host-delete"},
 	{Method: http.MethodPost, PathPattern: "/api/environments/0/runtime-registration", CommandName: "runtime.register"},
 	{Method: http.MethodPost, PathPattern: "/api/environments/0/runtime-target", CommandName: "runtime.resolve"},
 	{Method: http.MethodPost, PathPattern: "/api/environments/0/runtime-runs", CommandName: "runtime.execute"},
@@ -48,6 +54,7 @@ var commandRoutes = []commandRoute{
 	{Method: http.MethodPost, PathPattern: "/api/environments/{id}/images/pull", CommandName: "image.pull"},
 	{Method: http.MethodPost, PathPattern: "/api/environments/{id}/images/prune", CommandName: "image.prune"},
 	{Method: http.MethodPost, PathPattern: "/api/environments/{id}/images/upload", CommandName: "image.upload"},
+	{Method: http.MethodPost, PathPattern: "/api/environments/{id}/images/{name}/tag", CommandName: "image.tag"},
 
 	{Method: http.MethodPost, PathPattern: "/api/environments/{id}/uploads/{kind}", CommandName: "upload.session.create"},
 	{Method: http.MethodGet, PathPattern: "/api/environments/{id}/uploads/{kind}/{uploadId}", CommandName: "upload.session.get"},

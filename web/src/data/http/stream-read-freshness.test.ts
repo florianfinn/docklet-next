@@ -26,12 +26,12 @@ const cases = [
   ["activity ID", { history: false, discovery: false, recovery: false }, (source: FakeSource) => source.send(notification("activities", { activity: { type: "updated", activityId: "run", environmentId: "0" } }))],
   ["activity without ID", { history: false, discovery: true, recovery: false }, (source: FakeSource) => source.send(notification("activities", { activity: { type: "updated" } }))],
   ["environments", { history: false, discovery: true, recovery: false }, (source: FakeSource) => source.send(notification("environments"))],
-  ["malformed JSON", { history: true, discovery: true, recovery: true }, (source: FakeSource) => source.raw("{")],
-  ["invalid envelope", { history: true, discovery: true, recovery: true }, (source: FakeSource) => source.send({})],
-  ["unknown channel", { history: true, discovery: true, recovery: true }, (source: FakeSource) => source.send(notification("unknown"))],
+  ["malformed JSON", { history: true, discovery: true, recovery: false }, (source: FakeSource) => source.raw("{")],
+  ["invalid envelope", { history: true, discovery: true, recovery: false }, (source: FakeSource) => source.send({})],
+  ["unknown channel", { history: true, discovery: true, recovery: false }, (source: FakeSource) => source.send(notification("unknown"))],
   // A heartbeat with a gap exercises recovery independently of channel invalidation.
-  ["sequence gap", { history: true, discovery: true, recovery: true }, (source: FakeSource) => source.send({ type: "heartbeat", timestamp: at }, "3")],
-  ["reopened source", { history: true, discovery: true, recovery: true }, (source: FakeSource) => source.open()],
+  ["sequence gap", { history: true, discovery: true, recovery: false }, (source: FakeSource) => source.send({ type: "heartbeat", timestamp: at }, "3")],
+  ["reopened source", { history: true, discovery: true, recovery: false }, (source: FakeSource) => source.open()],
   ["CLOSED reconnect", { history: true, discovery: true, recovery: true }, async (source: FakeSource, sources: FakeSource[]) => {
     vi.useFakeTimers();
     source.failClosed();
@@ -52,11 +52,16 @@ function fixture(kind: "events" | "activities") {
     const path = new URL(String(input), "https://example.test").pathname;
     if (path === "/api/capabilities") return json(["listEvents", "listActions", "subscribeChanges", "subscribeActions"].map((operationId) => ({ operationId, available: true, resourceRef: { kind: "hub", id: "0" } })));
     if (path === "/api/environments") return json([{ id: "0" }]);
+    if (path === "/api/auth/me") return json({ id: "operator" });
     const activity = { id: "run", environmentId: "0", type: "project_redeploy", status, startedAt: at, createdAt: at, resourceType: "project", resourceId: "example", resourceName: "Example", messageCode: "activity.running" };
-    if (path.endsWith("/activities")) return json([activity]);
+    if (path.endsWith("/activities")) {
+      const response = json([activity]);
+      if (kind === "activities") { reads++; if (hold) await new Promise<void>((resolve) => held.push(resolve)); }
+      return response;
+    }
     const event = { id: status, type: "project.deploy", messageCode: "project.deploy", severity: "success", title: "Example", timestamp: at, createdAt: at, environmentId: "0", resourceType: "project", resourceId: "example" };
     if (path === "/api/events" || path.endsWith("/activities/run")) {
-      const selected = kind === "events" ? path === "/api/events" : path.endsWith("/activities/run");
+      const selected = kind === "events" && path === "/api/events";
       const response = json(path === "/api/events" ? [event] : { activity, messages: [], stepTrace: [], output: [], outputTruncated: false });
       if (selected) {
         reads++;

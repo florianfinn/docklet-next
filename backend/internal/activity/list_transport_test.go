@@ -136,7 +136,7 @@ func TestActivityListHealthyEdgeAndErrors(t *testing.T) {
 					assertActivityListPage(t, rec, "", want)
 				} else {
 					expected := status
-					if status == 401 {
+					if status == 401 || status == 403 {
 						expected = 502
 					}
 					require.Equal(t, expected, rec.Code, rec.Body.String())

@@ -43,6 +43,7 @@ func (m *Module) RegisterRoutes(api huma.API) {
 }
 
 func RegisterJobSchedules(api huma.API, jobSvc *JobService, envSvc *environment.EnvironmentService) {
+	registerImagePolicyScheduleRoutes(api, jobSvc)
 	h := &JobSchedulesHandler{
 		jobService:      jobSvc,
 		proxyRemoteJSON: envSvc.ProxyJSONRequest,

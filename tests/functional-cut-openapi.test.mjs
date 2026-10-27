@@ -5,6 +5,18 @@ import { readFileSync } from "node:fs";
 const read = (name) => JSON.parse(readFileSync(new URL(`../api/${name}`, import.meta.url), "utf8"));
 const methods = new Set(["get", "post", "put", "patch", "delete", "head", "options", "trace"]);
 const laterOperations = new Map([
+  ["GET /environments/{id}/updater/policies/{kind}/{targetId}", "get-auto-update-policy"],
+  ["PUT /environments/{id}/updater/policies/{kind}/{targetId}", "set-auto-update-policy"],
+  ["GET /environments/{id}/updater/schedules", "get-update-schedules"],
+  ["PUT /environments/{id}/updater/schedules", "set-update-schedules"],
+  ["GET /environments/{id}/updater/system-image-hints", "get-system-image-hints"],
+  ["POST /environments/{id}/updater/projects/{projectId}/update", "update-project-images"],
+  ["POST /environments/{id}/updater/{kind}/{targetId}/restore-points/{pointId}/restore", "restore-update"],
+  ["GET /environments/{id}/updater/projects/{projectId}/baseline", "get-update-baseline"],
+  ["GET /environments/{id}/updater/{kind}/{targetId}/restore-points", "list-restore-points"],
+  ["DELETE /environments/{id}/updater/{kind}/{targetId}/restore-points/{pointId}", "delete-restore-point"],
+  ["GET /environments/{id}/updater/restore-points", "list-host-restore-points"],
+  ["DELETE /environments/{id}/updater/restore-points/{pointId}", "delete-host-restore-point"],
   ["GET /environments/{id}/volumes/prune", "plan-volume-prune"],
   ["GET /hub/discovery", "discoverHub"],
 	["GET /auth/mode", "get-sign-in-mode"],

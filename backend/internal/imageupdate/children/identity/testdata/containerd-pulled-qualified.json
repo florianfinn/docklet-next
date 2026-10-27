@@ -1,0 +1,11 @@
+{
+  "Id": "sha256:d54919441af6210c113cdf21f2946859e33b6c05533f7ef0942b28316961c382",
+  "Os": "linux",
+  "Architecture": "arm",
+  "Variant": "v7",
+  "Descriptor": {
+    "mediaType": "application/vnd.oci.image.manifest.v1+json",
+    "digest": "sha256:d54919441af6210c113cdf21f2946859e33b6c05533f7ef0942b28316961c382",
+    "size": 610
+  }
+}

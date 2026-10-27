@@ -8,6 +8,8 @@ DELETE /api/environments/:id/containers/:containerId
 DELETE /api/environments/:id/images/:imageId
 DELETE /api/environments/:id/networks/:networkId
 DELETE /api/environments/:id/projects/:projectId/destroy
+DELETE /api/environments/:id/updater/:kind/:targetId/restore-points/:pointId
+DELETE /api/environments/:id/updater/restore-points/:pointId
 DELETE /api/environments/:id/uploads/:kind/:uploadId
 DELETE /api/environments/:id/volumes/:volumeName
 DELETE /api/environments/:id/volumes/backups/:backupId
@@ -66,8 +68,14 @@ GET /api/environments/:id/settings
 GET /api/environments/:id/settings/public
 GET /api/environments/:id/system/docker/info
 GET /api/environments/:id/system/upgrade/check
+GET /api/environments/:id/updater/:kind/:targetId/restore-points
 GET /api/environments/:id/updater/history
+GET /api/environments/:id/updater/policies/:kind/:targetId
+GET /api/environments/:id/updater/projects/:projectId/baseline
+GET /api/environments/:id/updater/restore-points
+GET /api/environments/:id/updater/schedules
 GET /api/environments/:id/updater/status
+GET /api/environments/:id/updater/system-image-hints
 GET /api/environments/:id/uploads/:kind/:uploadId
 GET /api/environments/:id/volumes
 GET /api/environments/:id/volumes/:volumeName
@@ -156,7 +164,9 @@ POST /api/environments/:id/system/containers/stop-all
 POST /api/environments/:id/system/convert
 POST /api/environments/:id/system/prune
 POST /api/environments/:id/system/upgrade
+POST /api/environments/:id/updater/:kind/:targetId/restore-points/:pointId/restore
 POST /api/environments/:id/updater/projects/:projectId/check
+POST /api/environments/:id/updater/projects/:projectId/update
 POST /api/environments/:id/updater/run
 POST /api/environments/:id/uploads/:kind
 POST /api/environments/:id/volumes
@@ -175,6 +185,8 @@ PUT /api/environments/:id/job-schedules
 PUT /api/environments/:id/projects/:projectId
 PUT /api/environments/:id/projects/:projectId/workspace
 PUT /api/environments/:id/settings
+PUT /api/environments/:id/updater/policies/:kind/:targetId
+PUT /api/environments/:id/updater/schedules
 PUT /api/environments/:id/uploads/:kind/:uploadId/chunks/:index
 PUT /api/environments/:id/volumes/:volumeName/backup-policy
 PUT /api/environments/:id/volumes/:volumeName/workspace

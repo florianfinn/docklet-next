@@ -23,7 +23,7 @@ const cases: { failure: DemoFailure; start: (adapter: ReturnType<typeof createDe
   { failure: { operation: "recreateContainer", at: "start" }, start: (adapter) => adapter.recreateContainer("c-whoami-test", { image: "traefik/whoami:v1.11", ports: [], env: {}, restartPolicy: "no" }), step: "start" },
   { failure: { operation: "connectHost" }, start: (adapter) => adapter.connectHost("atlas"), step: "connect" },
   { failure: { operation: "connectHost" }, start: (adapter) => adapter.connectHost("cedar"), step: "wait" },
-  { failure: { operation: "pullImage" }, start: (adapter) => adapter.pullImage({ hostId: "atlas", reference: "example/missing:1.0" }), step: "pull" },
+  { failure: { operation: "pullImage" }, start: async (adapter) => (await adapter.pullImage({ hostId: "atlas", reference: "example/missing:1.0" })).actionId!, step: "pull" },
 ];
 
 describe("demo-only failure options", () => {
@@ -42,7 +42,7 @@ describe("demo-only failure options", () => {
     const requested = await adapter.pullImage({ hostId: "atlas", reference: "example/missing:1.0" });
     await vi.advanceTimersByTimeAsync(20000);
     const runs = await adapter.listActions();
-    expect([runs.find((run) => run.id === other)?.status, runs.find((run) => run.id === requested)?.status]).toEqual(["succeeded", "failed"]);
+    expect([runs.find((run) => run.id === other)?.status, runs.find((run) => run.id === requested.actionId)?.status]).toEqual(["succeeded", "failed"]);
   });
 
   it("applies options through the same run-gated adapter that UI hooks receive", async () => {

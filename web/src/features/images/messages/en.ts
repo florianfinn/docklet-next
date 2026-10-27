@@ -1,6 +1,10 @@
+import { enImageErrors } from "./errors-en";
 // American English texts of the image management (list, details, pull and cleanup).
 
 export const enImages = {
+  observation: { unchecked: "Not checked", current: "Current", version: "New version", rebuild: "Same-tag rebuild", local: "Local image", unknown: "Update unknown", error: "Check failed", currentVersion: "Current: {version}", candidateVersion: "Candidate: {version}", checkedAt: "Checked: {time}" },
+  notification: { pending: "Notification pending", sending: "Delivery in progress or outcome unknown", sent: "Notification sent", unconfigured: "No delivery channel configured", failed: "Notification delivery failed", "not-requested": "Notification not requested" },
+  protection: "Removal is protected or usage is unknown.",
   title: "Images",
   description: (import.meta.env.DEV ? "{scope} · Images per host with usage by stacks and containers. Pulling, removing and cleanup are simulated." : "{scope} · Images per host with usage by stacks and containers."),
   pull: "Pull image",
@@ -8,9 +12,10 @@ export const enImages = {
   strip: { images: "Images", size: "Used space", unused: "Unused", dangling: "Dangling", updates: "With update" },
   search: "Search repository, tag, version or container …",
   searchLabel: "Search images",
-  usageFilter: { label: "Usage", all: "All", "in-use": "In use", unused: "Unused", dangling: "Dangling" },
-  usage: { "in-use": "In use", unused: "Unused", dangling: "Dangling" },
+  usageFilter: { unknown: "Usage unknown", label: "Usage", all: "All", "in-use": "In use", unused: "Unused", dangling: "Dangling" },
+  usage: { unknown: "Usage unknown", "in-use": "In use", unused: "Unused", dangling: "Dangling" },
   usageHint: {
+    unknown: "Usage could not be verified; removal is unavailable.",
     "in-use": "At least one container uses this image; removal is locked.",
     unused: "No container uses this image. Cleanup only removes it on request.",
     dangling: "Without a tag – a newer pull took over the tag. Safe to remove.",
@@ -64,6 +69,14 @@ export const enImages = {
     notFound: "This image no longer exists (removed or cleaned up).",
   },
   pullDialog: {
+    progress: { pulling: "Pulling image layers", waiting: "Waiting for a layer", downloading: "Downloading layer", verifying: "Verifying layer", extracting: "Extracting layer", complete: "Layer complete" },
+    progressBytes: "{current} / {total}",
+    effectiveReference: "Will pull: {reference}",
+    completed: "Pulled {reference} on {host}",
+
+    registry: "Registry",
+    automaticRegistry: "Registry from image reference (saved credential lookup)",
+
     title: "Pull image",
     description: (import.meta.env.DEV ? "Downloads an image to a connected host (simulation: no registry is contacted). Containers only use a new image after a deploy or recreate." : "Downloads an image to a connected host. Containers use a new image after a deploy or recreate."),
     host: "Host",
@@ -87,18 +100,24 @@ export const enImages = {
     modeHint: { dangling: "Images without a tag – safe, the typical default.", unused: "Also tagged images without containers, e.g. older versions after updates. Switching back later downloads them again." },
     remove: "{count, plural, =0 {Nothing to remove} one {# image will be removed} other {# images will be removed}} · {size}",
     keep: "{count, plural, one {# image is} other {# images are}} kept (in use)",
+    skippedUnavailable: "Hosts without cleanup capability are skipped: {hosts}",
     skippedOffline: "Disconnected hosts are skipped: {hosts}",
     confirm: "Remove",
     cancel: "Cancel",
+    previewHint: "Preview only. The host rechecks usage and protection; the report shows actual results.",
+    report: "Cleanup report", removed: "Removed: {count}", skipped: "Skipped: {count}", failed: "Failed: {count}", space: "Reclaimed: {size}", spaceUnknown: "Reclaimed space unknown", close: "Close",
     nothing: "Nothing to remove.",
   },
   removeDialog: {
     title: "Remove {name}?",
     body: (import.meta.env.DEV ? "The image is deleted on {host}. A later deploy downloads it again if needed (demo: in memory only)." : "The image is deleted on {host}. A later deploy downloads it again if needed."),
+    force: "Request force (never bypasses use or protection)",
     confirm: "Remove image",
   },
+  followActivity: "Open activity",
   toast: { removed: "{name} removed", nothing: "No images to clean up" },
   errors: {
+    ...enImageErrors,
     "in-use": "The image is still in use and is kept.",
     "host-offline": "The host is not connected.",
     "invalid-name": "Invalid image reference.",

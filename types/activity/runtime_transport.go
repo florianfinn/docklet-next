@@ -6,13 +6,18 @@
 
 package activity
 
-import "github.com/florianfinn/docklet-next/types/project"
+import (
+	"github.com/florianfinn/docklet-next/types/project"
+	"github.com/florianfinn/docklet-next/types/updater"
+)
 
 // RuntimeOperation selects only an existing lifecycle operation, never a route
 // or arbitrary command. Receivers must validate the operation/target/options pair.
 type RuntimeOperation string
 
 const (
+	RuntimeUpdateProject    RuntimeOperation = "update-project"
+	RuntimeRestoreProject   RuntimeOperation = "restore-project"
 	RuntimeDeployProject    RuntimeOperation = "deploy-project"
 	RuntimeDownProject      RuntimeOperation = "down-project"
 	RuntimeRestartProject   RuntimeOperation = "restart-project"
@@ -36,8 +41,9 @@ type RuntimeTarget struct {
 // sorted unique set; nil/empty means whole stack for restart only. Keep null
 // versus [] on the wire so an unsupported supplied option is not hidden.
 type RuntimeOptions struct {
-	Deploy          *project.DeployOptions `json:"deploy"`
-	RestartServices []string               `json:"restartServices"`
+	Lifecycle       *updater.LifecycleIntent `json:"lifecycle,omitempty"`
+	Deploy          *project.DeployOptions   `json:"deploy"`
+	RestartServices []string                 `json:"restartServices"`
 }
 
 // RuntimeExecutorIdentity is bound by authenticated construction, never granted
@@ -73,7 +79,7 @@ type RuntimeAttribution struct {
 // These carriers alone enforce neither HTTP size limits nor unknown-field rules.
 type RuntimeExecutionEnvelope struct {
 	Identity    RuntimeRunIdentity `json:"identity"`
-	Operation   RuntimeOperation   `json:"operation"`
+	Operation   RuntimeOperation   `json:"operation" enum:"deploy-project,down-project,restart-project,redeploy-project,start-container,stop-container,restart-container,update-project,restore-project"`
 	Target      RuntimeTarget      `json:"target"`
 	Options     RuntimeOptions     `json:"options"`
 	Attribution RuntimeAttribution `json:"attribution"`

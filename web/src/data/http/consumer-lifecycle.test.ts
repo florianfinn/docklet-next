@@ -71,7 +71,7 @@ it("reader reset rejects held current and queued waiters immediately and clears 
   let oldError: unknown; let queuedError: unknown;
   const current = reader.load().catch((e: unknown) => { oldError = e; });
   const queued = reader.refresh().catch((e: unknown) => { queuedError = e; });
-  reader.reset(); await Promise.resolve();
+  vi.useFakeTimers(); reader.reset(); await vi.advanceTimersByTimeAsync(0); vi.useRealTimers();
   try {
     expect(oldError).toBeInstanceOf(CancelledError); expect(queuedError).toBeInstanceOf(CancelledError);
     expect(publish.mock.lastCall?.[0]).toEqual([]); expect(hosts).toHaveBeenCalledTimes(1);
@@ -92,12 +92,12 @@ it.each(["ordinary", "recovery"])("activity401 clears runs while an obsolete %s 
   const f = activityFixture(); await f.adapter.getCurrentUser(); await f.adapter.listActions();
   const runs = vi.fn(); const stop = f.adapter.subscribeActions(runs);
   const held = deferred<Response>(); const reached = deferred<Response>(); vi.useFakeTimers();
-  f.state.hold = async (path, response) => path.endsWith("/good/activities/run-good") ? (reached.resolve(response), held.promise) : response;
+  f.state.hold = async (path, response) => path.endsWith("/good/activities") ? (reached.resolve(response), held.promise) : response;
   if (kind === "recovery") f.sources[0]!.open();
   const old = f.adapter.listActions(); const rejected = old.catch((e: unknown) => e);
   const response = await reached.promise; f.state.hold = undefined;
   try {
-    f.state.failure = "page401"; f.sources[0]!.open(); await drain();
+    f.state.failure = "page401"; f.sources[0]!.onerror?.({} as Event); f.sources[0]!.open(); await drain();
     expect(runs.mock.lastCall?.[0]).toEqual([]);
     expect(await rejected).toMatchObject({ outcome: { status: 401 } });
     const publications = runs.mock.calls.length; const requests = f.requests.length;

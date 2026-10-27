@@ -7,6 +7,8 @@
 package imageupdate
 
 import (
+	"github.com/florianfinn/docklet-next/backend/internal/imageupdate/children/identity"
+	"strings"
 	"time"
 
 	"github.com/florianfinn/docklet-next/types/image"
@@ -31,7 +33,7 @@ type ImageUpdateRecord struct {
 	LatestDigest     *string   `json:"latestDigest,omitempty" gorm:"column:latest_digest"`
 	LastError        *string   `json:"lastError,omitempty" gorm:"column:last_error"`
 	AuthMethod       *string   `json:"authMethod,omitempty" gorm:"column:auth_method"`
-	AuthUsername     *string   `json:"authUsername,omitempty" gorm:"column:auth_username"`
+	AuthUsername     *string   `json:"-" gorm:"column:auth_username"`
 	AuthRegistry     *string   `json:"authRegistry,omitempty" gorm:"column:auth_registry"`
 	ID               string    `json:"id" gorm:"primaryKey;type:text"`
 	Repository       string    `json:"repository"`
@@ -42,6 +44,7 @@ type ImageUpdateRecord struct {
 	HasUpdate        bool      `json:"hasUpdate" gorm:"column:has_update"`
 	UsedCredential   bool      `json:"usedCredential,omitempty" gorm:"column:used_credential"`
 	NotificationSent bool      `json:"notificationSent" gorm:"column:notification_sent;default:false"`
+	Platform         *string   `json:"platform,omitempty"`
 }
 
 func (i *ImageUpdateRecord) TableName() string {
@@ -64,7 +67,7 @@ const (
 )
 
 func (i *ImageUpdateRecord) NeedsUpdate() bool {
-	return i.HasUpdate
+	return i.UpdateInfo().HasUpdate
 }
 
 func (i *ImageUpdateRecord) IsDigestUpdate() bool {
@@ -77,7 +80,9 @@ func (i *ImageUpdateRecord) IsTagUpdate() bool {
 
 // UpdateInfo returns the public status of this check.
 func (i *ImageUpdateRecord) UpdateInfo() *image.UpdateInfo {
-	return &image.UpdateInfo{
+	out := &image.UpdateInfo{
+		Platform:       mo.PointerToOption(i.Platform).OrEmpty(),
+		ImageRef:       i.Repository + ":" + i.Tag,
 		HasUpdate:      i.HasUpdate,
 		UpdateType:     i.UpdateType,
 		CurrentVersion: i.CurrentVersion,
@@ -92,4 +97,28 @@ func (i *ImageUpdateRecord) UpdateInfo() *image.UpdateInfo {
 		AuthRegistry:   mo.PointerToOption(i.AuthRegistry).OrEmpty(),
 		UsedCredential: i.UsedCredential,
 	}
+	if n, err := identity.DecodeObservation(out.Platform, out.CurrentDigest, out.LatestDigest); err == nil {
+		out.Platform = n.Platform()
+	} else {
+		out.Platform = ""
+		current, _ := identity.ParseTopLevel(out.CurrentDigest)
+		latest, _ := identity.ParseTopLevel(out.LatestDigest)
+		out.CurrentDigest = current.String()
+		out.LatestDigest = latest.String()
+	}
+	image.ProjectUpdate(out)
+	return out
+}
+
+// LegacyPullDigest carries only validated T for informational version readers.
+// A native observation's key can be a config digest, so it is never a pull ref.
+func (i *ImageUpdateRecord) LegacyPullDigest() *string {
+	if i.LatestDigest == nil || i.Platform != nil && strings.HasPrefix(*i.Platform, "native-v1:") {
+		return nil
+	}
+	top, err := identity.ParseTopLevel(*i.LatestDigest)
+	if err != nil {
+		return nil
+	}
+	return new(top.String())
 }

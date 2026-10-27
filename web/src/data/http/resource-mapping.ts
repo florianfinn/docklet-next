@@ -4,6 +4,7 @@
 // License: Apache-2.0
 // Deviations: Original Docker resource view-model mappings.
 
+import { mapImageObservation } from "./image-mapping";
 import type { components } from "@/api/generated/schema";
 import type { DockerImage } from "@/domain/images";
 import type { InventoryObservation, Topology, TopologyNetwork } from "@/domain/model";
@@ -28,7 +29,7 @@ export function mapImage(row: Schema["ImageSummary"], hostId: string, containers
     const id = usage.id;
     if (usage.type === "container" && id && !consumers.some((c) => c.containerId === inventoryId(hostId, id))) consumers.push({ containerId: inventoryId(hostId, id), name: usage.name ?? id, hostId, stackId: undefined, stackName: undefined, serviceName: undefined, state: "unknown", system: true });
   }
-  return { id: inventoryId(hostId, row.id), hostId, repository, tag: reference ? colon > reference.lastIndexOf("/") ? reference.slice(colon + 1) : "" : null, aliases: tags.slice(1), digest: row.repoDigests?.[0]?.split("@")[1] ?? row.id,
+  return { ...mapImageObservation(row), id: inventoryId(hostId, row.id), hostId, repository, tag: reference ? colon > reference.lastIndexOf("/") ? reference.slice(colon + 1) : "" : null, aliases: tags.slice(1), digest: row.repoDigests?.[0]?.split("@")[1] ?? row.id,
     sizeMb: row.size / 1024 ** 2, createdAt: new Date(row.created * 1000).toISOString(), architecture: "", os: "", layers: 0, metadataUnavailable: true, consumers, inventory };
 }
 

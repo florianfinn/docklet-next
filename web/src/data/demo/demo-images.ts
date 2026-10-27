@@ -1,3 +1,4 @@
+import { sameImageReference } from "@/domain/docker-reference";
 import { imageIdFor, imageReference, parseImageReference, pruneCandidates, type DockerImage, type ImageConsumer } from "@/domain/images";
 import type { ContainerInfo, Host } from "@/domain/model";
 import { isSystemWorkload } from "@/domain/system";
@@ -6,7 +7,7 @@ import { hasUpdate } from "@/domain/updates";
 import type { ImagesApi } from "../api";
 import { DemoError, failMessage, wait, type DemoContext } from "./demo-context";
 import { createdAt, EXTRA_IMAGES, IMAGE_SIZES_MB } from "./fixtures/images";
-import { fakeHex, pruneScript, pullScript } from "./run-output";
+import { fakeHex, pullScript } from "./run-output";
 import { simulateRead, simulationStore } from "./simulation";
 
 type StoredImage = Omit<DockerImage, "consumers" | "update" | "vulnerabilities">;
@@ -73,7 +74,7 @@ export function createImagesApi({ db, runner, forcedFailure, demoFailure }: Demo
   sync();
 
   const consumersOf = (img: StoredImage, containers: ContainerInfo[]): ContainerInfo[] =>
-    img.tag === null ? [] : containers.filter((c) => c.hostId === img.hostId && c.image.repository === img.repository && c.image.tag === img.tag);
+    img.tag === null ? [] : containers.filter((c) => c.hostId === img.hostId && sameImageReference(`${c.image.repository}:${c.image.tag}`, `${img.repository}:${img.tag}`));
 
   const project = (img: StoredImage, containers: ContainerInfo[]): DockerImage => {
     const users = consumersOf(img, containers);
@@ -81,7 +82,7 @@ export function createImagesApi({ db, runner, forcedFailure, demoFailure }: Demo
       (c): ImageConsumer => ({ containerId: c.id, name: c.name, hostId: c.hostId, stackId: c.stackId, serviceName: c.serviceName, state: c.state, system: isSystemWorkload(c) || undefined }),
     );
     const update = users.find((c) => !isSystemWorkload(c) && hasUpdate(c.update))?.update ?? users.find((c) => !isSystemWorkload(c))?.update;
-    const scanned = img.tag === null ? undefined : db.security.images.find((i) => i.hostId === img.hostId && i.ref === `${img.repository}:${img.tag}`);
+    const scanned = img.tag === null ? undefined : db.security.images.find((i) => i.hostId === img.hostId && sameImageReference(i.ref, `${img.repository}:${img.tag}`));
     return { ...img, consumers, update, vulnerabilities: scanned?.counts };
   };
 
@@ -111,7 +112,7 @@ export function createImagesApi({ db, runner, forcedFailure, demoFailure }: Demo
       const known = store.has(id);
       const requested = !!demoFailure("pullImage");
       const forced = forcedFailure();
-      return runner.start({
+      return { actionId: runner.start({
         kind: "pull",
         title: `Image ziehen · ${ref}`,
         target: `${ref} · ${host.name}`,
@@ -147,7 +148,7 @@ export function createImagesApi({ db, runner, forcedFailure, demoFailure }: Demo
           db.changed("images");
         },
         onFailure: () => db.pushEvent({ kind: "update", level: "error", title: `${ref}: Ziehen auf ${host.name} fehlgeschlagen`, hostId }),
-      });
+      }) };
     },
 
     async removeImage(id) {
@@ -162,41 +163,13 @@ export function createImagesApi({ db, runner, forcedFailure, demoFailure }: Demo
     },
 
     async pruneImages({ hostIds, mode }) {
-      const connected = hostIds.filter((h) => db.host(h)?.status === "online");
-      const candidates = pruneCandidates(
-        list().filter((i) => connected.includes(i.hostId)),
-        mode,
-      );
-      if (!candidates.length) return null;
-      const names = connected.map((h) => db.host(h)?.name ?? h).join(", ");
-      return runner.start({
-        kind: "prune",
-        title: mode === "dangling" ? "Dangling-Images entfernen" : "Ungenutzte Images entfernen",
-        target: names,
-        hostId: connected.length === 1 ? connected[0] : undefined,
-        services: candidates.map(imageReference),
-        steps: [
-          { key: "collect", label: "Kandidaten prüfen", detail: `${candidates.length} Images ohne Container` },
-          { key: "stop", label: "Images entfernen", detail: candidates.map(imageReference).join(", ") },
-          { key: "save", label: "Speicher freigeben" },
-        ],
-        output: pruneScript(
-          candidates.map((c) => ({ reference: imageReference(c), digest: c.digest, sizeMb: c.sizeMb })),
-          names,
-        ),
-        failAt: forcedFailure() ? "stop" : undefined,
-        failMessage,
-        onSuccess: () => {
-          // Recheck at the end: an image that got a consumer meanwhile stays.
-          const containers = db.discoveredContainers();
-          for (const c of candidates) {
-            const img = store.get(c.id);
-            if (img && !consumersOf(img, containers).length) store.delete(c.id);
-          }
-          db.pushEvent({ kind: "config", level: "ok", title: `${candidates.length} Images entfernt (${names})` });
-          db.changed("images");
-        },
+      const hosts = hostIds.filter((id) => db.host(id)?.status === "online").map((hostId) => {
+        const candidates = pruneCandidates(list().filter((i) => i.hostId === hostId), mode);
+        for (const image of candidates) store.delete(image.id);
+        return { hostId, removed: candidates.map((i) => i.id), skipped: [], failed: [], spaceReclaimed: candidates.reduce((sum, i) => sum + i.sizeMb * 1024 ** 2, 0) };
       });
+      db.changed("images");
+      return { hosts };
     },
   };
 }

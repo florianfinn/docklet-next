@@ -40,6 +40,9 @@ func runtimeReceiveTxInternal(tx *gorm.DB, now time.Time, c runtimeCanonicalComm
 	if err := runtimeReceiverCreateTxInternal(tx, row); err != nil {
 		return nil, runtimeWriteErrorInternal(err)
 	}
+	if err := runtimeSaveImageIntent(tx, row.RunID, c.command); err != nil {
+		return nil, err
+	}
 	kind, _ := runtimeActivityTypeInternal(string(c.command.Operation), target.Kind)
 	display := actor.Username
 	if actor.DisplayName != nil {

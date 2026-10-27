@@ -2,6 +2,7 @@
 import type { enActivity } from "./en";
 
 export const deActivity: typeof enActivity = {
+  detailLoading: "Aktivitätsdetails werden geladen…",
   message: "{message}",
   open: "Aktivitäten",
   openWithCount: "Aktivitäten, {count} aktiv",

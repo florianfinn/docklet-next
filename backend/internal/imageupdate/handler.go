@@ -8,13 +8,13 @@ package imageupdate
 
 import (
 	"context"
+	"go.getarcane.app/kit/pkg"
 	"strings"
 
 	"github.com/danielgtaylor/huma/v2"
 	"github.com/florianfinn/docklet-next/types/base"
 	"github.com/florianfinn/docklet-next/types/image"
 	"github.com/florianfinn/docklet-next/types/imageupdate"
-	"go.getarcane.app/kit/pkg"
 
 	"github.com/florianfinn/docklet-next/backend/pkg/utils"
 	"github.com/florianfinn/docklet-next/backend/pkg/utils/handlerutil"
@@ -61,9 +61,9 @@ func (h *ImageUpdateHandler) CheckImageUpdate(ctx context.Context, input *CheckI
 	}
 
 	runtimeCtx := utils.ActivityRuntimeContext(ctx, h.appCtx)
-	result, err := h.imageUpdateService.CheckImageUpdate(runtimeCtx, input.ImageRef)
+	result, err := h.imageUpdateService.ReadUpdateInfo(runtimeCtx, input.ImageRef)
 	if err != nil {
-		return nil, huma.Error500InternalServerError("Failed to check image update: " + err.Error())
+		return nil, image.Neutral(err, "update.check-unavailable", 503)
 	}
 
 	return &handlerutil.Out[imageupdate.Response]{
@@ -80,9 +80,9 @@ func (h *ImageUpdateHandler) CheckImageUpdateByID(ctx context.Context, input *Ch
 	}
 
 	runtimeCtx := utils.ActivityRuntimeContext(ctx, h.appCtx)
-	result, err := h.imageUpdateService.CheckImageUpdateByID(runtimeCtx, input.ImageID)
+	result, err := h.imageUpdateService.ReadUpdateByID(runtimeCtx, input.ImageID)
 	if err != nil {
-		return nil, huma.Error500InternalServerError("Failed to check image update: " + err.Error())
+		return nil, image.Neutral(err, "update.check-unavailable", 503)
 	}
 
 	return &handlerutil.Out[imageupdate.Response]{
@@ -94,6 +94,9 @@ func (h *ImageUpdateHandler) CheckImageUpdateByID(ctx context.Context, input *Ch
 }
 
 func (h *ImageUpdateHandler) CheckMultipleImages(ctx context.Context, input *CheckMultipleImagesInput) (*handlerutil.Out[imageupdate.BatchResponse], error) {
+	if input.Body.Credentials != nil || input.Body.InlineCredentialsProvided {
+		return nil, image.Failure("registry.inline-credentials-not-allowed", 400)
+	}
 	// Empty batch is valid - return empty results
 	if len(input.Body.ImageRefs) == 0 {
 		return &handlerutil.Out[imageupdate.BatchResponse]{
@@ -105,9 +108,9 @@ func (h *ImageUpdateHandler) CheckMultipleImages(ctx context.Context, input *Che
 	}
 
 	runtimeCtx := utils.ActivityRuntimeContext(ctx, h.appCtx)
-	results, err := h.imageUpdateService.CheckMultipleImages(runtimeCtx, input.Body.ImageRefs, input.Body.Credentials)
+	results, err := h.imageUpdateService.ReadMultiple(runtimeCtx, input.Body.ImageRefs)
 	if err != nil {
-		return nil, huma.Error500InternalServerError("Failed to check image updates: " + err.Error())
+		return nil, image.Neutral(err, "update.check-unavailable", 503)
 	}
 
 	return &handlerutil.Out[imageupdate.BatchResponse]{
@@ -119,10 +122,13 @@ func (h *ImageUpdateHandler) CheckMultipleImages(ctx context.Context, input *Che
 }
 
 func (h *ImageUpdateHandler) CheckAllImages(ctx context.Context, input *CheckAllImagesInput) (*handlerutil.Out[imageupdate.BatchResponse], error) {
+	if input.Body.Credentials != nil || input.Body.InlineCredentialsProvided {
+		return nil, image.Failure("registry.inline-credentials-not-allowed", 400)
+	}
 	runtimeCtx := utils.ActivityRuntimeContext(ctx, h.appCtx)
-	results, err := h.imageUpdateService.CheckAllImages(runtimeCtx, 0, input.Body.Credentials)
+	results, err := h.imageUpdateService.ReadAll(runtimeCtx)
 	if err != nil {
-		return nil, huma.Error500InternalServerError("Failed to check all images: " + err.Error())
+		return nil, image.Neutral(err, "update.check-unavailable", 503)
 	}
 
 	return &handlerutil.Out[imageupdate.BatchResponse]{
@@ -146,7 +152,7 @@ func (h *ImageUpdateHandler) GetUpdateInfoByRefs(ctx context.Context, input *Get
 
 	result, err := h.getUpdateInfoByImageRefs(ctx, imageRefs)
 	if err != nil {
-		return nil, huma.Error500InternalServerError("Failed to check image updates: " + err.Error())
+		return nil, image.Neutral(err, "update.check-unavailable", 503)
 	}
 
 	return &handlerutil.Out[map[string]*image.UpdateInfo]{
@@ -160,7 +166,7 @@ func (h *ImageUpdateHandler) GetUpdateInfoByRefs(ctx context.Context, input *Get
 func (h *ImageUpdateHandler) GetUpdateSummary(ctx context.Context, input *GetUpdateSummaryInput) (*handlerutil.Out[imageupdate.Summary], error) {
 	summary, err := h.imageUpdateService.GetUpdateSummary(ctx)
 	if err != nil {
-		return nil, huma.Error500InternalServerError("Failed to get update summary: " + err.Error())
+		return nil, image.Neutral(err, "update.check-unavailable", 503)
 	}
 
 	return &handlerutil.Out[imageupdate.Summary]{

@@ -52,7 +52,8 @@ it("connects login, dashboard, hosts, containers, stacks, volumes and files with
   await screen.findByRole("heading", { name: "Dashboard", level: 1 });
   await waitFor(() => {
     const schedule = document.querySelector('[data-widget="schedule"]');
-    expect(schedule?.textContent).toContain("Diese Funktion ist nicht verfügbar");
+    expect(schedule?.textContent).toContain("Zeitplan nicht verfügbar");
+    expect(schedule?.textContent).toContain("first");
     expect(schedule?.textContent).not.toContain("Daten konnten nicht geladen werden");
   });
   await userEvent.click(screen.getByRole("link", { name: "Hosts" }));
@@ -64,7 +65,7 @@ it("connects login, dashboard, hosts, containers, stacks, volumes and files with
   await userEvent.click(await screen.findByRole("link", { name: "Stack app öffnen" }));
   await screen.findByRole("heading", { name: "app", level: 1 });
   await userEvent.click(screen.getByRole("tab", { name: /Deployments/ }));
-  expect(await screen.findByText("Noch keine Deployments aufgezeichnet.")).toBeTruthy();
+  expect((await screen.findByText("Deploy-Verlauf ist nicht verfügbar.")) !== null).toBe(true);
   await userEvent.click(screen.getByRole("link", { name: "Volumes" }));
   await screen.findByRole("link", { name: "data öffnen" });
   await userEvent.click(screen.getByRole("button", { name: "Aktionen für data" }));

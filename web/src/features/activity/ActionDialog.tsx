@@ -17,9 +17,10 @@ import { activityStore, openActivity } from "./activity-store";
 import { RunBadge, RunIconTile, StepList, StepTrack } from "./ActionSteps";
 import { useOutputOpen } from "./output-view-store";
 import { elapsedSeconds, RUN_ICON, RUN_TONE, useNow } from "./run-phase";
-import { RunErrorBox, RunFacts, RunFocusView, RunStatusLine } from "./RunFocus";
+import { RunErrorBox, RunFacts, RunFocusBody, RunStatusLine } from "./RunFocus";
 import { RuntimeControls } from "./RuntimeControls";
 import { runtimeState } from "./runtime-presentation";
+import { ActionDetail } from "./ActionDetail";
 import { RunOutput } from "./RunOutput";
 
 /** Whether a design opens the raw output by itself. */
@@ -65,7 +66,7 @@ function ConsoleBody({ run, now }: { run: ActionRun; now: number }) {
 }
 
 function FocusBody({ run, now }: { run: ActionRun; now: number }) {
-  return <RunFocusView run={run} now={now} fill />;
+  return <RunFocusBody run={run} now={now} fill />;
 }
 
 const BODIES: Record<ActionDialogDesign, typeof FocusBody> = { focus: FocusBody, timeline: TimelineBody, console: ConsoleBody };
@@ -166,8 +167,10 @@ function ActionDialogContent({ run, waiting, feedback }: { run: ActionRun; waiti
       </header>
       <WaitingOffer waiting={waiting} />
       <div className="flex min-h-0 flex-1 flex-col overflow-y-auto p-4 sm:p-5" data-slot="dialog-body">
-        <RuntimeControls key={`controls-${run.id}`} run={run} feedback={feedback} />
-        <Body key={`body-${run.id}`} run={run.outcomeState === "unknown" ? { ...run, steps: [], progress: 0 } : run} now={now} />
+        <ActionDetail run={run}>{(detail) => <>
+          <RuntimeControls key={`controls-${detail.id}`} run={detail} feedback={feedback} />
+          <Body key={`body-${detail.id}`} run={detail.outcomeState === "unknown" ? { ...detail, steps: [], progress: 0 } : detail} now={now} />
+        </>}</ActionDetail>
       </div>
       <footer className="flex shrink-0 flex-wrap items-center gap-x-3 gap-y-2 border-t px-4 py-3">
         <p className="min-w-48 flex-1 text-[11px] text-muted-foreground">{t("dialog.closeHint")}</p>

@@ -39,6 +39,8 @@ adapter operation available: its mapping and server capability must both exist.
 | `subscribeLogs`, `subscribeContainerLogs` | Echo project/container log WebSockets (outside OpenAPI) | Scoped log/read grants, JSON source mapping, bounded arrival buffers and conditional reconnect tail replacement. |
 | `createVolume`, `deleteVolume`, `renameVolume`, `planVolumePrune`, `pruneVolumes` | Environment volume create/delete/rename and plan/prune operations | Connected mappings with host or volume descriptors; prune retains server planning and confirmation. |
 | `createNetwork`, `removeNetwork`, `connectNetwork`, `disconnectNetwork` | `create-network`, `delete-network`, `connect-network-container`, `disconnect-network-container` | Connected hub routes for Direct and Edge, generated DTOs, scoped descriptors and topology/container refresh. |
+| `pullImage`, `removeImage`, `pruneImages` | `pull-image`, `remove-image`, `prune-images` | Connected host/image descriptors; typed stream frames, optional activity identity and synchronous per-host prune reports. Upload remains unavailable. |
+| Registry list/create/update/delete/test | `listContainerRegistries`, `createContainerRegistry`, `updateContainerRegistry`, `deleteContainerRegistry`, `testContainerRegistry` | Hub-owned configuration with global registry grants; explicit public projection and write-only credentials. Clear checks its separate descriptor. |
 | Other `DockletAdapter` reads, writes and subscriptions | Existing operation where listed, otherwise no matching operation | Expose unavailable until the owning milestone supplies the complete mapping. Existing WebSockets carry connected logs and stats. |
 
 The HTTP boundary classifies an operation into these outcomes. Existing
@@ -100,13 +102,22 @@ attempts use the same abort lifetime. An aborted request, an HTTP status, a body
 or mapping failure, and POST/PUT/PATCH/DELETE never enter this read retry. The
 runtime command admission policy below remains owned by its command transport.
 
-Each activity discovery uses at most four concurrent detail reads per host; each
-host advances independently. Known activity notifications read their targeted
-detail without waiting for discovery workers. Concurrent full activity reads
-share work. Known-run log/progress messages refresh only their targeted detail;
-they never invalidate discovery or event history. Unknown activities and terminal
-state changes notify discovery; terminal `message` envelopes remain targeted.
-Reconnect or detected loss aborts obsolete discovery and transfers its waiters to a fresh read. A burst shares one scheduled restart; recovery during that fresh read can restart it too.
+Activity discovery maps the opt-in list-only summary projection, using one
+full-window (`limit=-1`) list read per host and zero generic or runtime detail
+reads. Snapshot/error envelopes invalidate only their host. Known progress and
+messages share a targeted per-run read, with a one-second trailing throttle when
+no detail view is open. Opened views share separately owned detail/history reads;
+summary rows never retain fetched output or message history.
+
+Malformed/gap recovery queues one trailing read without aborting. A stream reopen
+may interrupt a read that started before its preceding error exactly once per
+lineage, transferring unresolved callers to a protected replacement. Further
+reopen-only signals reuse it; genuine new signals can queue another sequential
+read. Activity HTTP reads have a 40-second deadline, above the dedicated
+30-second hub-to-agent forwarding budget and required merge margin; host lineages
+and aggregate callers have 80/90-second bounds. See
+[activity discovery](activity-discovery.md) for the state table, consumer/lifetime
+rules, partial evidence, precise request budgets and mutation matrix.
 
 Event history retains the complete history used by Dashboard and Activity Center.
 Pages request the effective size of 100 and run strictly sequentially. Event stream
@@ -115,7 +126,8 @@ Only events-channel messages and stream recovery invalidate history. HTTP and
 mapping failures remain visible and a deliberate retry can start a new load.
 
 Discovery, recovery and history share a generation-scoped single-flight policy: idle notifications start a read only with a mounted subscriber; cached rows are not demand, and the next explicit request always reads fresh.
-Each start clears pending, so bursts queue one read and notifications during any trailing read can queue one more; callers after a notification await the next result, earlier callers receive the current result unless recovery replaces it.
+Each start clears pending, so bursts queue one read and notifications during any trailing read can queue one more; callers after a notification await the next result, earlier callers receive the current result unless an eligible pre-error reopen
+transfers their unresolved waiters once.
 Every start and publication checks the identity generation; replacement, logout or 401 immediately clears old published runs and cancels old waiters and requests, preventing late publication and old trailing work.
 
 ## Runtime command mapping
@@ -450,7 +462,7 @@ are mapped explicitly. Host histories retain up to 60 observed samples in the
 adapter session; a disconnect preserves the last sample with its time and host
 reason. A new browser session has no retained metric samples. Unreported disk
 capacity, growth, image metadata and volume sizes remain explicitly unavailable.
-Image writes retain their unavailable mappings. Volume create, delete, rename,
+Image pull/remove/prune use scoped live mappings. Volume create, delete, rename,
 planned prune and file workspace writes are connected; volume backup and restore
 remain outside these mappings.
 
@@ -513,3 +525,29 @@ A socket close alone starts a bounded durable identity read before reconnect;
 credential-check form failures remain inline. Known same-user renewal retains
 its existing observation/notification policy. Server execution remains durable
 and does not depend on any viewer lifetime.
+
+## Images and registries (#230)
+
+Pull accepts only an image reference; selecting a saved enabled registry changes
+the reference host so the executor applies its saved-credential lookup. No inline
+credentials or registry ID are sent. The optional activity frame preserves its
+real identity; EOF without an error or done frame is an unknown outcome, with
+that activity available for inspection. Proxy 502/504 `agent.unavailable` writes
+are unknown outcomes too. Image/registry CRUD failures read `error.code`, while
+registry tests read the flat `ok`, `checkedAt`, `code` result. Message text never
+supplies a code or UI fallback.
+
+Prune returns the executor's synchronous report per host, retaining removed,
+skipped and failed IDs and explicitly unknown reclaimed bytes. Partial host
+failures do not erase successful reports. Force requests never bypass server
+protection. Missing usage proof and protected images cannot be removed locally.
+Image list/detail update badges preserve the supplied version/rebuild/unknown
+observation without starting an update or check.
+
+Registry reads whitelist public configuration and `hasCredential`; identities
+and secrets never enter the query cache or edit defaults. Blank replacement
+fields are omitted; explicit clear removes the complete credential. Saved tests
+report authentication failure, unreachable and rate-limited separately, without
+treating a registry failure as a hub identity rejection. Saves and deletions
+invalidate registry queries. Identity changes discard late read/write results;
+dialog ownership additionally discards results after close or target changes.

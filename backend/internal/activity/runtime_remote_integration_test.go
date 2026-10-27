@@ -37,6 +37,7 @@ type remoteIntegration struct {
 	agent         *runtimeServicesFixture
 	db            *database.DB
 	hub           *activity.RuntimeService
+	hubActivity   *activity.ActivityService
 	control       *activity.RuntimeRemoteCoordinator
 	sender        *activity.RuntimeSender
 	store         activity.RuntimeStoreBinding
@@ -58,9 +59,13 @@ func (w *remoteDiscardResponse) Write(p []byte) (int, error) { return len(p), ni
 func (w *remoteDiscardResponse) WriteHeader(int)             {}
 func (w *remoteDiscardResponse) Unwrap() http.ResponseWriter { return w.ResponseWriter }
 
-func newRemoteIntegration(t *testing.T, isEdge bool) *remoteIntegration {
+func newRemoteIntegration(t *testing.T, isEdge bool, customize ...func(*runtimeServicesFixture)) *remoteIntegration {
 	t.Helper()
-	agent := newRuntimeServicesFixture(t)
+	agent := newRuntimeServicesFixture(t, false)
+	if len(customize) > 0 {
+		customize[0](agent)
+	}
+	configureRuntimeServicesFixture(t, agent)
 	f := &remoteIntegration{agent: agent, token: uuid.NewString()}
 	receiver, err := activity.NewRuntimeReceiver(agent.runtime)
 	require.NoError(t, err)
@@ -94,7 +99,8 @@ func newRemoteIntegration(t *testing.T, isEdge bool) *remoteIntegration {
 	require.NoError(t, err)
 	f.db = db
 	t.Cleanup(func() { require.NoError(t, db.Close()) })
-	f.hub = activity.NewRuntimeService(activity.NewActivityService(db, nil), agent.adapter)
+	f.hubActivity = activity.NewActivityService(db, nil)
+	f.hub = activity.NewRuntimeService(f.hubActivity, agent.adapter)
 	generation, err := f.hub.InitializeGeneration(t.Context())
 	require.NoError(t, err)
 	f.store = activity.RuntimeStoreBinding{StoreGeneration: generation, ExecutorGeneration: agent.store.ExecutorGeneration, ManagerID: agent.store.ManagerID, RegistrationID: agent.store.RegistrationID, EnvironmentID: "example-remote"}

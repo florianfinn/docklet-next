@@ -1,3 +1,4 @@
+import { useAdapter } from "@/data/use-adapter";
 import { useCapability } from "@/data/use-capability";
 import { ArrowRight, Box, KeyRound, RefreshCw } from "lucide-react";
 import type { ReactNode } from "react";
@@ -119,6 +120,11 @@ function Footer({ actions, pending }: { actions: UpdateActions; pending: boolean
 }
 
 function ActionFooter({ actions, pending }: { actions: UpdateActions; pending: boolean }) {
+  const adapter = useAdapter(), t = useTranslations("common.updates");
+  if (adapter.kind === "http") return pending && actions.onUpdate ? <div className="p-3"><Button size="sm" onClick={actions.onUpdate}>{actions.updateLabel ?? t("actionUpdateStack")}</Button></div> : null;
+  return <DemoActionFooter actions={actions} pending={pending} />;
+}
+function DemoActionFooter({ actions, pending }: { actions: UpdateActions; pending: boolean }) {
   const install = useCapability(actions.updateOperation ?? "installContainerUpdate");
   const check = useCapability("checkUpdates");
   const t = useTranslations("common.updates");
@@ -127,7 +133,7 @@ function ActionFooter({ actions, pending }: { actions: UpdateActions; pending: b
       {pending && actions.onUpdate && !actions.blockedReason && (
         <Button size="sm" className="group w-full" onClick={actions.onUpdate} disabled={actions.busy || !install.available} title={install.reason}>
           {actions.busy ? <Spinner data-icon="inline-start" /> : <UPDATE_ICON.minor data-icon="inline-start" className="transition-transform group-hover:-translate-y-0.5" />}
-          {actions.updateLabel ?? t("actionUpdateContainer")}
+          {actions.updateLabel ?? t(actions.updateOperation === "installStackUpdates" ? "actionUpdateStack" : "actionUpdateContainer")}
         </Button>
       )}
       {actions.blockedReason && <p className="text-center text-xs text-muted-foreground">{actions.blockedReason}</p>}
@@ -180,6 +186,8 @@ export function UpdatePanel({ update, actions = {}, updatedAt }: { update: Updat
           </>
         )}
       </div>
+      {update.incomplete && <p className="px-4 pb-3 text-muted-foreground">{t("incomplete")}</p>}
+      {update.stale && <p className="px-4 pb-3 text-muted-foreground">{t("stale")}</p>}
       <TimesList times={{ ...checkTimes([update]), updatedAt: updatedAt ?? undefined }} local={update.state === "local"} showUpdated={updatedAt !== undefined} />
       <Footer actions={actions} pending={pending} />
     </div>
@@ -198,14 +206,14 @@ export function StackUpdatePanel({ services, actions = {}, times }: { services: 
   const Icon = UPDATE_ICON[summary.visual];
   const pending = summary.pending > 0;
   const affected = services.filter((s) => hasUpdate(s.update)).length;
-  const unchecked = services.filter((s) => s.update.state === "unchecked").length;
+  const unchecked = services.filter((s) => s.update.state === "unchecked" || s.update.state === "unknown" || s.update.incomplete).length || (services.length === 0 ? 1 : 0);
   return (
     <div className="text-xs">
       <Header
         tone={summary.errors && !pending ? "err" : tone}
         icon={<Icon />}
-        title={pending ? t("titleStackPending", { count: summary.pending }) : summary.errors ? t("titleError") : unchecked ? t("titleStackUnchecked") : t("titleStackCurrent")}
-        desc={pending ? t("descStackPending", { services: affected }) : unchecked ? t("descStackUnchecked", { count: unchecked }) : t("descStackCurrent", { count: services.length })}
+        title={pending ? t("titleStackPending", { count: summary.pending }) : summary.errors ? t("titleError") : unchecked ? t("titleStackUnchecked") : summary.visual === "local" ? t("titleLocal") : t("titleStackCurrent")}
+        desc={pending ? t("descStackPending", { services: affected }) : summary.errors ? t("descError") : unchecked ? services.some((s) => s.update.incomplete) ? t("incomplete") : t("descStackUnchecked", { count: unchecked }) : summary.visual === "local" ? t("descLocal") : t("descStackCurrent", { count: services.length })}
       />
       <ul className="flex flex-col divide-y divide-border/50 px-4 py-1">
         {services.map((s) => {
@@ -249,7 +257,7 @@ export function UpdateChip({ update }: { update: UpdateInfo }) {
   const Icon = UPDATE_ICON[v];
   const latest = latestOf(update);
   const text =
-    v === "current" ? t("chipCurrent") : v === "rebuild" ? (latest?.version ?? t("chipRebuild")) : v === "error" ? t("chipError") : v === "local" ? t("chipLocal") : v === "unchecked" ? t("chipUnchecked") : (latest?.version ?? "");
+    v === "current" ? t("chipCurrent") : v === "rebuild" ? (latest?.version ?? t("chipRebuild")) : v === "error" ? t("chipError") : v === "local" ? t("chipLocal") : v === "unknown" ? t("chipUnknown") : v === "unchecked" ? t("chipUnchecked") : (latest?.version ?? "");
   return (
     <ToneBadge tone={UPDATE_TONE[v]} className="cursor-pointer">
       <Icon aria-hidden />
@@ -262,7 +270,7 @@ export function StackUpdateChip({ services }: { services: Pick<Service, "name" |
   const t = useTranslations("common.updates");
   const s = summarizeUpdates(services);
   const Icon = UPDATE_ICON[s.visual];
-  const text = s.pending ? t("chipPending", { count: s.pending }) : s.errors ? t("chipError") : s.visual === "unchecked" ? t("chipUnchecked") : t("chipCurrent");
+  const text = s.pending ? t("chipPending", { count: s.pending }) : s.errors ? t("chipError") : s.visual === "unknown" ? t("chipUnknown") : s.visual === "unchecked" ? t("chipUnchecked") : s.visual === "local" ? t("chipLocal") : t("chipCurrent");
   return (
     <ToneBadge tone={UPDATE_TONE[s.visual]} className="cursor-pointer">
       <Icon aria-hidden />

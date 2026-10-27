@@ -1,3 +1,5 @@
+import { sameImageReference, imageReferenceValue } from "@/domain/docker-reference";
+import { checkResult } from "./update-decoders";
 // Source: docklet-next/issues/82
 // Revision: 579ca3a12d93da7c7a6e68686d20425a642423fc
 // Retrieved: 2026-10-17
@@ -7,6 +9,7 @@
 import type { components } from "@/api/generated/schema";
 import type { ContainerInfo, ContainerState, Health, ImageVersion, InventoryObservation, Service, Stack } from "@/domain/model";
 import { SYSTEM_LABEL } from "@/domain/system";
+import { mapUpdateInfo } from "./update-mapping";
 import { composeProjectOwner } from "./project-ownership";
 
 export type ProjectRow = components["schemas"]["ProjectDetails"];
@@ -61,13 +64,15 @@ export function mapContainer(row: ContainerRow, hostId: string, projects: Projec
     ports: (row.ports ?? []).filter((port, index, ports) => ports.findIndex((other) => other.publicPort === port.publicPort && other.privatePort === port.privatePort && other.type === port.type) === index).map((port) => ({ container: String(port.privatePort), ...(port.publicPort ? { host: String(port.publicPort) } : {}), ...(port.type === "tcp" || port.type === "udp" ? { protocol: port.type } : {}) })),
     networks: Object.keys(row.networkSettings?.networks ?? {}), mounts: (row.mounts ?? []).map((mount) => mount.name || mount.destination),
     env: {}, restartPolicy: row.hostConfig?.restartPolicy ?? "", memLimitMb: (row.hostConfig?.memory ?? 0) / 1024 / 1024,
-    update: { state: "unchecked", current: image }, dockerLabels: labels, inventory,
+    update: mapUpdateInfo(row.updateInfo, image, row.image, inventory.stale), dockerLabels: labels, inventory,
     restrictions: { recreate: row.redeployDisabled === true || origin !== "standalone", reason: row.redeployDisabled ? "protected" : origin },
   };
 }
 
 export function mapStack(row: ProjectRow, hostId: string, containers: ContainerInfo[], inventory: InventoryObservation): Stack {
   if (!row?.id || !row.name || typeof row.status !== "string") throw new Error("inventory.invalid-project");
+  if (row.updateInfo) checkResult(row.updateInfo);
+  const incomplete = !!row.updateInfo && (row.updateInfo.checkedImageCount < row.updateInfo.imageCount || row.updateInfo.errorCount > 0 || row.updateInfo.imagesNotPulled > 0);
   const members = containers.filter((item) => item.stackId === inventoryId(hostId, row.id));
   // Missing or unowned inventory cannot disprove explicit backend membership.
   // Only a concrete conflicting web owner excludes a runtime entry.
@@ -80,7 +85,7 @@ export function mapStack(row: ProjectRow, hostId: string, containers: ContainerI
     const image = imageVersion(runtime.image);
     return { name: runtime.name, image, state: state(runtime.status), health: runtime.health === "healthy" || runtime.health === "unhealthy" || runtime.health === "starting" ? runtime.health : container?.health ?? "none",
       ports: container?.ports ?? [], networks: container?.networks ?? [], restartPolicy: container?.restartPolicy ?? "", memLimitMb: container?.memLimitMb ?? 0, restarts24h: 0,
-      update: { state: "unchecked", current: image } };
+      update: { ...mapUpdateInfo(row.updateInfo?.serviceUpdates?.[runtime.name] ? (sameImageReference(row.updateInfo.serviceUpdates[runtime.name]!.imageRef, runtime.image) ? row.updateInfo.serviceUpdates[runtime.name]?.updateInfo : undefined) : imageReferenceValue(row.updateInfo?.updateInfoByRef, runtime.image), image, runtime.image, inventory.stale), incomplete } };
   });
   return { id: inventoryId(hostId, row.id), hostId, name: row.name, path: row.path, reportedStatus: row.status, serviceCount: row.serviceCount, runningCount: row.runningCount, deployHistoryUnavailable: true, labels: (row.tags ?? []).map((tag) => tag.name), services, autoUpdate: { mode: "check" }, inventory,
     ...(members.some((item) => item.dockerLabels?.[SYSTEM_LABEL] === "agent") ? { dockerLabels: { [SYSTEM_LABEL]: "agent" } } : {}) };

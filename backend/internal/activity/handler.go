@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; explicit incomplete remote activity-list signal.
+// Deviations: Local module namespace; explicit incomplete remote activity-list signal; validate exported lifecycle evidence.
 
 package activity
 
@@ -49,15 +49,16 @@ type EnvironmentDependencies struct {
 }
 
 type ListActivitiesInput struct {
-	EnvironmentID string `path:"id" doc:"Environment ID"`
-	Search        string `query:"search" doc:"Search query"`
-	Sort          string `query:"sort" doc:"Column to sort by"`
-	Order         string `query:"order" default:"desc" doc:"Sort direction"`
-	Start         int    `query:"start" default:"0" doc:"Start index"`
-	Limit         int    `query:"limit" default:"50" doc:"Limit"`
-	Status        string `query:"status" doc:"Filter by activity status"`
-	Type          string `query:"type" doc:"Filter by activity type"`
-	ResourceType  string `query:"resourceType" doc:"Filter by resource type"`
+	EnvironmentID  string `path:"id" doc:"Environment ID"`
+	Search         string `query:"search" doc:"Search query"`
+	Sort           string `query:"sort" doc:"Column to sort by"`
+	Order          string `query:"order" default:"desc" doc:"Sort direction"`
+	Start          int    `query:"start" default:"0" doc:"Start index"`
+	Limit          int    `query:"limit" default:"50" doc:"Limit"`
+	Status         string `query:"status" doc:"Filter by activity status"`
+	Type           string `query:"type" doc:"Filter by activity type"`
+	ResourceType   string `query:"resourceType" doc:"Filter by resource type"`
+	IncludeSummary bool   `query:"includeSummary" doc:"Include bounded steps and runtime presentation in list rows"`
 }
 
 type GetActivityInput struct {
@@ -79,6 +80,7 @@ const (
 	activityStreamRemotePollInterval   = 5 * time.Second
 	activityStreamEnvReconcileInterval = 30 * time.Second
 	activityStreamRemotePollTimeout    = 15 * time.Second
+	activityAgentReadBudget            = 30 * time.Second
 )
 
 type CancelActivityInput struct {
@@ -107,11 +109,15 @@ func (h *ActivityHandler) ListActivities(ctx context.Context, input *ListActivit
 		return nil, huma.Error500InternalServerError(err.Error())
 	}
 	h.applyActivitySourceLabelsInternal(ctx, input.EnvironmentID, activities)
+	summaries, err := h.activityService.listSummariesInternal(ctx, activities, input.IncludeSummary, nil)
+	if err != nil {
+		return nil, huma.Error500InternalServerError(err.Error())
+	}
 
 	return &ListActivitiesOutput{
-		Body: base.Paginated[activity.Activity]{
+		Body: base.Paginated[activity.ActivitySummary]{
 			Success:    true,
-			Data:       activities,
+			Data:       summaries,
 			Pagination: handlerutil.PaginationResponse(paginationResp),
 		},
 	}, nil
@@ -422,8 +428,10 @@ func (h *ActivityHandler) runRemoteActivityStreamPollerInternal(ctx context.Cont
 }
 
 func (h *ActivityHandler) proxyGetActivityInternal(ctx context.Context, input *GetActivityInput) (*handlerutil.Out[activity.Detail], error) {
+	agentCtx, cancel := context.WithTimeout(ctx, activityAgentReadBudget)
+	defer cancel()
 	path := fmt.Sprintf("/api/environments/0/activities/%s?limit=%d", url.PathEscape(input.ActivityID), input.Limit)
-	out, err := h.environment.ProxyJSONRequest.JSON[base.ApiResponse[activity.Detail]](ctx, input.EnvironmentID, http.MethodGet, path, nil)
+	out, err := h.environment.ProxyJSONRequest.JSON[base.ApiResponse[activity.Detail]](agentCtx, input.EnvironmentID, http.MethodGet, path, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -488,6 +496,7 @@ func applyActivitySourceInternal(item *activity.Activity, sourceID, sourceName s
 	if item == nil {
 		return
 	}
+	checkedActivityLifecycle(item)
 	item.SourceEnvironmentID = sourceID
 	item.SourceEnvironmentName = sourceName
 	item.EnvironmentID = sourceID
@@ -499,6 +508,9 @@ func applyActivitySourceInternal(item *activity.Activity, sourceID, sourceName s
 
 func activityListQueryInternal(input *ListActivitiesInput) url.Values {
 	values := url.Values{}
+	if input.IncludeSummary {
+		values.Set("includeSummary", "true")
+	}
 	values.Set("start", strconv.Itoa(input.Start))
 	values.Set("limit", strconv.Itoa(input.Limit))
 	if input.Search != "" {
@@ -539,15 +551,23 @@ func activityListParamsInternal(input *ListActivitiesInput) pagination.QueryPara
 
 func (h *ActivityHandler) proxyListActivitiesInternal(ctx context.Context, input *ListActivitiesInput) (*ListActivitiesOutput, error) {
 	unavailable := false
+	remoteSummaries := make(map[string]activity.ActivitySummary)
 	out, err := h.listRemoteActivitiesInternal(ctx, input, func(path string) (*base.Paginated[activity.Activity], error) {
-		var remote base.Paginated[activity.Activity]
-		if proxyErr := h.environment.ProxyJSONRequest(ctx, input.EnvironmentID, http.MethodGet, path, nil, &remote); proxyErr != nil {
+		agentCtx, cancel := context.WithTimeout(ctx, activityAgentReadBudget)
+		defer cancel()
+		var remote base.Paginated[activity.ActivitySummary]
+		if proxyErr := h.environment.ProxyJSONRequest(agentCtx, input.EnvironmentID, http.MethodGet, path, nil, &remote); proxyErr != nil {
 			var transportErr *remenv.TransportError
-			unavailable = errors.Is(proxyErr, remenv.ErrEnvironmentUnavailable) ||
+			unavailable = errors.Is(proxyErr, context.DeadlineExceeded) || errors.Is(agentCtx.Err(), context.DeadlineExceeded) || errors.Is(proxyErr, remenv.ErrEnvironmentUnavailable) ||
 				(errors.As(proxyErr, &transportErr) && transportErr.Unavailable())
 			return nil, handlerutil.TranslateRemoteProxyError(proxyErr)
 		}
-		return &remote, nil
+		baseRows := make([]activity.Activity, len(remote.Data))
+		for i, row := range remote.Data {
+			baseRows[i] = row.Activity
+			remoteSummaries[row.ID] = row
+		}
+		return &base.Paginated[activity.Activity]{Success: remote.Success, Data: baseRows, Pagination: remote.Pagination}, nil
 	})
 	if out == nil {
 		return nil, err
@@ -560,7 +580,11 @@ func (h *ActivityHandler) proxyListActivitiesInternal(ctx context.Context, input
 	}
 	// Keep hub summaries readable while explicitly marking an incomplete agent page.
 	// Stream pollers retain the proxy error from the shared listing path.
-	result := &ListActivitiesOutput{Body: out.Body}
+	summaries, projectionErr := h.activityService.listSummariesInternal(ctx, out.Body.Data, input.IncludeSummary, remoteSummaries)
+	if projectionErr != nil {
+		return nil, huma.Error500InternalServerError(projectionErr.Error())
+	}
+	result := &ListActivitiesOutput{Body: base.Paginated[activity.ActivitySummary]{Success: out.Body.Success, Data: summaries, Pagination: out.Body.Pagination}}
 	if unavailable {
 		result.HostReason = "agent.unavailable"
 	}

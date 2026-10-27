@@ -35,3 +35,17 @@ remain hub routes. Agent mode also omits the browser UI, API documentation,
 pprof profiling endpoints, test-only Playwright routes and manager Edge tunnel
 listener. An Edge agent
 connects outward; this allowlist does not open a public Edge listener.
+
+## M10 PR1 image boundary
+
+Contract 7/minimum 7 adds guarded pull/tag/load/remove/prune, persisted image
+protection, write-only registry projections and read-only update information.
+Interactive, system and scheduled image deletion share host admission and
+protection checks; normal Compose pulls remain outside that lease. Only fully
+validated Docker-save tar/gzip archives load; unsupported OCI archives refuse
+before Docker. Internal retention references never reach registry lookups.
+Registry management remains hub-only; only authenticated manager sync reaches
+agents, with local key validation and atomic replacement. Agent upgrade requests
+have an explicit target checked against the running hub on both forwarding paths;
+agents reject blank targets. No update/restore/policy/schedule capability is added
+by this PR1 boundary; PR2a/PR2b own that activation.

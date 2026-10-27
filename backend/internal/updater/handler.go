@@ -8,16 +8,13 @@ package updater
 
 import (
 	"context"
-	"errors"
-	"net/http"
+	imageDTO "github.com/florianfinn/docklet-next/types/image"
 
 	"github.com/danielgtaylor/huma/v2"
 	"github.com/florianfinn/docklet-next/types/base"
 	"github.com/florianfinn/docklet-next/types/project"
 	"github.com/florianfinn/docklet-next/types/updater"
 
-	"github.com/florianfinn/docklet-next/backend/internal/common"
-	"github.com/florianfinn/docklet-next/backend/pkg/utils"
 	"github.com/florianfinn/docklet-next/backend/pkg/utils/handlerutil"
 )
 
@@ -52,28 +49,9 @@ type GetUpdaterHistoryInput struct {
 	Limit         int    `query:"limit" default:"50" doc:"Number of history entries to return"`
 }
 
-// RunUpdater applies pending container updates.
+// RunUpdater refuses the retired updater apply path.
 func (h *UpdaterHandler) RunUpdater(ctx context.Context, input *RunUpdaterInput) (*handlerutil.Out[*updater.Result], error) {
-	options := updater.Options{}
-	if input.Body != nil {
-		options = *input.Body
-	}
-
-	runtimeCtx := utils.ActivityRuntimeContext(ctx, h.appCtx)
-	out, err := h.updaterService.ApplyPending(runtimeCtx, options)
-	if err != nil {
-		if errors.Is(err, common.ErrBadRequest) {
-			return nil, huma.Error400BadRequest("Failed to run updater: " + err.Error())
-		}
-		return nil, huma.Error500InternalServerError("Failed to run updater: " + err.Error())
-	}
-
-	return &handlerutil.Out[*updater.Result]{
-		Body: base.ApiResponse[*updater.Result]{
-			Success: true,
-			Data:    out,
-		},
-	}, nil
+	return nil, imageDTO.Failure("update.path-retired", 409)
 }
 
 // GetUpdaterStatus returns the current status of the updater.
@@ -109,34 +87,12 @@ func (h *UpdaterHandler) GetUpdaterHistory(ctx context.Context, input *GetUpdate
 }
 
 func (h *UpdaterHandler) updateContainerInternal(ctx context.Context, input *UpdateContainerInput) (*updateContainerOutput, error) {
-	runtimeCtx := utils.ActivityRuntimeContext(ctx, h.appCtx)
-	if input.Async {
-		acceptedActivity, err := h.updaterService.AcceptSingleContainerUpdate(runtimeCtx, input.ContainerID)
-		if err != nil {
-			return nil, huma.Error500InternalServerError("Failed to accept container update: " + err.Error())
-		}
-		return &updateContainerOutput{
-			Status: http.StatusAccepted,
-			Body:   base.ApiResponse[any]{Success: true, Data: acceptedActivity},
-		}, nil
-	}
-	out, err := h.updaterService.UpdateSingleContainer(runtimeCtx, input.ContainerID)
-	if err != nil {
-		return nil, huma.Error500InternalServerError("Failed to run updater: " + err.Error())
-	}
-
-	return &updateContainerOutput{
-		Status: http.StatusOK,
-		Body: base.ApiResponse[any]{
-			Success: true,
-			Data:    out,
-		},
-	}, nil
+	return nil, imageDTO.Failure("update.path-retired", 409)
 }
 
 // CheckProjectUpdates checks Compose policies through the updater service.
 func (h *UpdaterHandler) CheckProjectUpdates(ctx context.Context, input *updater.CheckProjectInput) (*handlerutil.Out[*project.UpdateInfo], error) {
-	result, err := h.updaterService.CheckProjectUpdates(ctx, input.ProjectID)
+	result, err := h.updaterService.CheckPolicyProject(ctx, input.EnvironmentID, input.ProjectID)
 	if err != nil {
 		return nil, err
 	}

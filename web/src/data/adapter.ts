@@ -12,9 +12,11 @@ import type {
   Stack,
 } from "@/domain/model";
 
+import type { UpdatesApi, LifecycleInput } from "@/domain/stack-updates";
 import type { AuthApi, HostsApi, HubApi, ImagesApi, NetworksApi, SettingsApi, VolumesApi } from "./api";
 import type { CodedActionRun, CodedEvent, CodedStackDetail } from "./message-code";
 import type { CapabilityDescriptor, ResourceRef } from "./capability";
+import type { RegistriesApi } from "@/domain/registries";
 import type { HubBackupApi } from "@/domain/hub-backup";
 
 export type StackCommand = "start" | "stop" | "restart" | "redeploy";
@@ -72,7 +74,7 @@ export interface ImportResult {
 }
 
 /** Query topics used to invalidate cached reads after server-side changes. */
-export type Topic = "hosts" | "stacks" | "containers" | "security" | "topology" | "events" | "schedule" | "volumes" | "settings" | "images";
+export type Topic = "hosts" | "stacks" | "containers" | "security" | "topology" | "events" | "schedule" | "volumes" | "settings" | "images" | "registries";
 
 export type Unsubscribe = () => void;
 
@@ -81,6 +83,7 @@ export interface ActionReadFailure {
   hostId?: string;
   reason: "unavailable" | "permission" | "authentication" | "invalid-data";
 }
+export type ActionDetailState = { status: "loading" } | { status: "ready"; run: CodedActionRun; refreshing?: boolean } | { status: "error"; error: unknown; run?: CodedActionRun };
 export interface ActionReadHealth { failures: readonly ActionReadFailure[] }
 
 export type CodedRuntimeActionRun = CodedActionRun & RuntimeKnowledge;
@@ -95,7 +98,7 @@ export interface RuntimeReleaseInput {
 /**
  * Transport-neutral boundary of the UI. Adapters implement this interface.
  */
-export interface DockletAdapter extends AuthApi, HostsApi, VolumesApi, SettingsApi, ImagesApi, NetworksApi, HubApi, HubBackupApi {
+export interface DockletAdapter extends UpdatesApi, AuthApi, HostsApi, VolumesApi, SettingsApi, ImagesApi, NetworksApi, HubApi, HubBackupApi, RegistriesApi {
   readonly kind: "demo" | "http" | "disconnected";
   readonly mappedOperations?: ReadonlySet<string>;
 
@@ -107,7 +110,7 @@ export interface DockletAdapter extends AuthApi, HostsApi, VolumesApi, SettingsA
   listContainers(onPartial?: (rows: ContainerInfo[]) => void): Promise<ContainerInfo[]>;
   getSecurity(): Promise<SecurityOverview>;
   listEvents(): Promise<CodedEvent[]>;
-  listSchedule(): Promise<ScheduledJob[]>;
+  listSchedule(hostIds?: readonly string[]): Promise<ScheduledJob[]>;
   listActions(): Promise<CodedActionRun[]>;
 
   /** Dormant boundaries; returning a snapshot never establishes verified Docker state. */
@@ -117,11 +120,11 @@ export interface DockletAdapter extends AuthApi, HostsApi, VolumesApi, SettingsA
   releaseRuntimeRun?(hostId: string, runId: string, input: RuntimeReleaseInput): Promise<CodedRuntimeActionRun>;
 
   runStackCommand(stackId: string, command: StackCommand): Promise<string>;
-  installStackUpdates(stackId: string, services?: string[]): Promise<string>;
+  installStackUpdates(stackId: string, input?: LifecycleInput): Promise<string>;
   checkUpdates(scope: { stackId?: string; containerId?: string }): Promise<string>;
   deployStack(input: DeployInput): Promise<{ actionId: string; stackId: string }>;
   saveStackFiles(stackId: string, compose: string, env: string): Promise<void>;
-  restoreRestorePoint(stackId: string, restorePointId: string): Promise<string>;
+  restoreRestorePoint(stackId: string, restorePointId: string, input?: LifecycleInput): Promise<string>;
   setStackLabels(stackId: string, labels: string[]): Promise<void>;
   setAutoUpdate(stackId: string, policy: AutoUpdatePolicy): Promise<void>;
   restartService(stackId: string, service: string): Promise<string>;
@@ -138,6 +141,7 @@ export interface DockletAdapter extends AuthApi, HostsApi, VolumesApi, SettingsA
   setScanEnabled(enabled: boolean): Promise<void>;
 
   subscribeActionReadHealth?(listener: (health: ActionReadHealth) => void): Unsubscribe;
+  observeActionDetail?(hostId: string, runId: string, listener: (state: ActionDetailState) => void): Unsubscribe;
   subscribeActions(listener: (runs: CodedActionRun[]) => void): Unsubscribe;
   subscribeMetrics(listener: (snapshot: MetricsSnapshot) => void): Unsubscribe;
   subscribeLogs(stackId: string, listener: (lines: LogLine[]) => void): Unsubscribe;

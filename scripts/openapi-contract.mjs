@@ -3,6 +3,7 @@ import { spawnSync } from "node:child_process";
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { updateAgentContract } from "./agent-contract.mjs";
 
 const root = resolve(fileURLToPath(new URL("..", import.meta.url)));
 const specPath = resolve(root, "api/openapi.json");
@@ -70,6 +71,7 @@ export function run(mode) {
       mkdirSync(resolve(typesPath, ".."), { recursive: true });
       writeFileSync(specPath, spec);
       writeFileSync(typesPath, types);
+      updateAgentContract(spec, mode);
       const provenancePath = resolve(root, "scripts/provenance.json");
       const provenance = readFileSync(provenancePath, "utf8");
       const digest = createHash("sha256").update(spec).digest("hex");
@@ -78,11 +80,18 @@ export function run(mode) {
       if (index < 0 || !/"sha256": "[a-f0-9]{64}"/.test(lines[index]))
         throw new Error("missing api/openapi.json provenance record");
       lines[index] = lines[index].replace(/("sha256": ")[a-f0-9]{64}"/, `$1${digest}"`);
+      for (const path of ["web/src/api/generated/schema.ts", "types/contract/testdata/agent-hub-v7.json"]) {
+        const sidecar = lines.findIndex((line) => line.includes(`"${path}":`));
+        if (sidecar < 0) throw new Error(`missing ${path} provenance record`);
+        const hash = createHash("sha256").update(readFileSync(resolve(root, path))).digest("hex");
+        lines[sidecar] = lines[sidecar].replace(/("sha256": ")[a-f0-9]{64}"/, `$1${hash}"`);
+      }
       writeFileSync(provenancePath, lines.join("\n"));
       console.log("Generated api/openapi.json and web/src/api/generated/schema.ts");
       return;
     }
     assertNoDrift(readFileSync(specPath), readFileSync(typesPath), spec, types);
+    updateAgentContract(spec, mode);
     console.log("API contract matches Huma export and generated TypeScript");
   } finally {
     rmSync(workdir, { recursive: true, force: true });

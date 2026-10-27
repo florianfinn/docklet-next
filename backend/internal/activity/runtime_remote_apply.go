@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/florianfinn/docklet-next/backend/internal/database"
+	policies "github.com/florianfinn/docklet-next/backend/internal/updater/children/policies"
 	activitytypes "github.com/florianfinn/docklet-next/types/activity"
 	"github.com/google/uuid"
 	"gorm.io/gorm"
@@ -23,6 +24,7 @@ func (s *RuntimeService) applyRemoteInternal(ctx context.Context, ref RuntimeRun
 	if activitytypes.ValidateRuntimeOutcome(outcome, outcome.Identity) != nil || outcome.State == activitytypes.RuntimeAnswerNotReceived {
 		return activitytypes.RuntimeSnapshot{}, activitytypes.ErrRuntimeWire
 	}
+	outcome = checkedRemoteLifecycle(outcome)
 	s.activity.runningMu.Lock()
 	defer s.activity.runningMu.Unlock()
 	lock := s.activity.publishLockInternal(ref.RunID)
@@ -212,6 +214,11 @@ func runtimeHubDispositionTxInternal(tx *gorm.DB, now time.Time, row *RuntimeRec
 	message := &ActivityMessage{BaseModel: database.BaseModel{ID: uuid.NewString(), CreatedAt: now, UpdatedAt: new(now)}, ActivityID: row.RunID, Level: activitytypes.MessageLevelWarning, Code: string(code), Message: disposition.Reason, Payload: database.JSON{"actorId": disposition.By, "disposition": disposition.Disposition, "releaseAcknowledged": disposition.ReleaseAcknowledged, "effectVerified": false}}
 	if err := runtimeReceiverCreateTxInternal(tx, message); err != nil {
 		return empty, nil, err
+	}
+	if disposition.Disposition == "released" && disposition.ReleaseAcknowledged {
+		if err := tx.Model(&policies.Child{}).Where("runtime_id = ? AND status = ?", row.RunID, "admitted").Update("status", "settled").Error; err != nil {
+			return empty, nil, err
+		}
 	}
 	snapshot, err := runtimeSnapshotTxInternal(tx, row)
 	return snapshot, message, err

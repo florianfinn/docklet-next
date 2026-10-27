@@ -66,6 +66,14 @@ func createDashboardTestAPIKey(t *testing.T, db *database.DB, key apikey.ApiKey)
 
 func createDashboardTestImageUpdateRecord(t *testing.T, db *database.DB, record imageupdate.ImageUpdateRecord) {
 	t.Helper()
+	if record.HasUpdate {
+		record.Platform = new("native-v1:classic:linux/amd64")
+		record.CurrentDigest = new("sha256:" + strings.Repeat("a", 64))
+		record.LatestDigest = new("sha256:" + strings.Repeat("b", 64))
+		if record.CheckTime.IsZero() {
+			record.CheckTime = time.Now().UTC()
+		}
+	}
 	require.NoError(t, db.WithContext(t.Context()).Create(&record).Error)
 }
 
@@ -463,7 +471,9 @@ func TestPendingContainerCountUsesScopedTagRecords(t *testing.T) {
 			UpdateType:  "tag",
 		},
 	}
-	require.NoError(t, db.Create(&records).Error)
+	for _, record := range records {
+		createDashboardTestImageUpdateRecord(t, db, record)
+	}
 	service := &DashboardService{db: db, imageService: image.NewImageService(db, nil, nil, nil, nil, nil, nil, nil)}
 	containers := []dockercontainer.Summary{
 		{ID: "first", Image: "app:1.2.3", ImageID: "shared", Labels: map[string]string{labels.LabelUpdateStrategy: "auto"}},

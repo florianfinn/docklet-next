@@ -1,0 +1,74 @@
+[
+  {
+    "path": "blobs/sha256/3bcf852aed06467cf075c6105892e4d5a6ebbbafa0ce22d35062db9e90ddef4c",
+    "json": true
+  },
+  {
+    "path": "blobs/sha256/453da7dbc73e7338c4e201ec3f3c4a5f7751adbf5a6f127792c1cd001a780721",
+    "json": false
+  },
+  {
+    "path": "blobs/sha256/4a8b0b2a5b1937755263ac7ac4ee26db2906c13a5d70f1fb1875ba8e370cdd8f",
+    "json": false
+  },
+  {
+    "path": "blobs/sha256/5616878291a2eed594aee8db4dade5878cf7edcb475e59193904b198d9b830de",
+    "json": true
+  },
+  {
+    "path": "blobs/sha256/583599bb7d382e9e986a9ff65204981307bfa71670a29f4190eedae93c4858be",
+    "json": false
+  },
+  {
+    "path": "blobs/sha256/59d8b13a8341bab827f6129be4bcf0c60e5a9b4e40896e75b14ae94158b44fc7",
+    "json": true
+  },
+  {
+    "path": "blobs/sha256/612c0c1df4c55a0bf145f84df03cb28de505e6a52fb8e49c9da7b143fc00ad2d",
+    "json": false
+  },
+  {
+    "path": "blobs/sha256/6192e1e6a438baeecf2424253a81ccc98380440e738685cd16c1b85939a5c800",
+    "json": false
+  },
+  {
+    "path": "blobs/sha256/6a0ac1617861a677b045b7ff88545213ec31c0ff08763195a70a4a5adda577bb",
+    "json": false
+  },
+  {
+    "path": "blobs/sha256/781ff50d2644f74714c0d5a4ffa3447bbfd4b293cfb1dc6a637722ae24c89241",
+    "json": false
+  },
+  {
+    "path": "blobs/sha256/812d47f806db497c53f9b47e76bdab38bcf5d724c69d3986df5ee4336c210559",
+    "json": true
+  },
+  {
+    "path": "blobs/sha256/82736a35d0e7f1309edc13d09115410b81542cf8b91afff80deeace02b6f2f26",
+    "json": false
+  },
+  {
+    "path": "blobs/sha256/aee4e54b3865ee4d98545b6b49f9e8ab3b9b6ed114a2eafedc7a22e984ea5a68",
+    "json": false
+  },
+  {
+    "path": "blobs/sha256/c0f3c10cd7d8e3379217cf7918baf93ae47b44be233d481dbfcf30d64826ee3f",
+    "json": true
+  },
+  {
+    "path": "blobs/sha256/e8fc446e336ca0efbc377f3cb31187048a0c4e7aef1184667f5ff1e65e8d9f6c",
+    "json": false
+  },
+  {
+    "path": "index.json",
+    "json": true
+  },
+  {
+    "path": "manifest.json",
+    "json": true
+  },
+  {
+    "path": "oci-layout",
+    "json": true
+  }
+]

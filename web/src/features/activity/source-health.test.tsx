@@ -60,7 +60,7 @@ it("retained rows still show a global refresh failure and reconnect clears it", 
   const f = activityFixture(); const view = mount(f, "en-US");
   await screen.findByText(/Example good/);
   act(() => f.sources[0]!.open());
-  await waitFor(() => expect(f.requests.filter((path) => path.includes("/activities/run-good")).length).toBeGreaterThan(1));
+  await waitFor(() => expect(f.requests.filter((path) => path.includes("/good/activities?")).length).toBeGreaterThan(1));
   f.state.hubStatus = 500;
   act(() => f.sources[0]!.open());
   await screen.findByRole("alert");

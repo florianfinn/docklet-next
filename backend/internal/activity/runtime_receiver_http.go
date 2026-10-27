@@ -25,6 +25,7 @@ import (
 	"github.com/florianfinn/docklet-next/backend/internal/middleware"
 	"github.com/florianfinn/docklet-next/backend/pkg/remenv"
 	activitytypes "github.com/florianfinn/docklet-next/types/activity"
+	imageDTO "github.com/florianfinn/docklet-next/types/image"
 )
 
 // NewRuntimeReceiverHTTP builds a standalone agent-only Huma adapter. Production
@@ -200,6 +201,11 @@ func RegisterRuntimeReceiverRoutes(api huma.API, receiver *RuntimeReceiver, pref
 		}
 		op.Responses["409"].Content = map[string]*huma.MediaType{"application/json": {Schema: &huma.Schema{OneOf: []*huma.Schema{api.OpenAPI().Components.Schemas.Schema(reflect.TypeFor[activitytypes.RuntimeExecutionRefusal](), true, ""), errorSchema}}}}
 
+		if route.operation == "resolve-runtime-target" {
+			for _, status := range []string{"400", "404", "409", "500", "502", "503"} {
+				op.Responses[status] = &huma.Response{Description: "Neutral frozen image preflight refusal or runtime metadata failure", Content: map[string]*huma.MediaType{"application/json": {Schema: &huma.Schema{OneOf: []*huma.Schema{errorSchema, api.OpenAPI().Components.Schemas.Schema(reflect.TypeFor[imageDTO.OperationError](), true, "")}}}}}
+			}
+		}
 		if strings.Contains(route.path, "{runId}") {
 			op.Parameters = append(op.Parameters, &huma.Param{Name: "runId", In: "path", Required: true, Schema: &huma.Schema{Type: "string", Format: "uuid"}})
 		}

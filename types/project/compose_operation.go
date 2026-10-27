@@ -44,6 +44,7 @@ type ComposeDeployment struct {
 	Progress          io.Writer
 	Load              func(context.Context) (*composetypes.Project, error)
 	ResolveImages     func(context.Context) (ComposeImageOperations, error)
+	BeforeCreate      func(context.Context) error
 	Recover           func(context.Context)
 }
 

@@ -9,7 +9,10 @@ package image
 import (
 	"cmp"
 	"context"
+	"encoding/json"
 	"fmt"
+	"github.com/florianfinn/docklet-next/backend/internal/image/guard"
+	"go.getarcane.app/kit/pkg"
 	"io"
 	"net/http"
 	"strings"
@@ -20,7 +23,6 @@ import (
 	"github.com/florianfinn/docklet-next/types/image"
 	"github.com/florianfinn/docklet-next/types/system"
 	uploadtypes "github.com/florianfinn/docklet-next/types/upload"
-	"go.getarcane.app/kit/pkg"
 
 	"github.com/florianfinn/docklet-next/backend/internal/activity"
 	"github.com/florianfinn/docklet-next/backend/internal/database"
@@ -90,10 +92,11 @@ type ExportImageInput struct {
 type RemoveImageInput struct {
 	EnvironmentID string `path:"id" doc:"Environment ID"`
 	ImageID       string `path:"imageId" doc:"Image ID"`
-	Force         bool   `query:"force" doc:"Force removal"`
+	Force         bool   `query:"force" doc:"Legacy flag; protected and in-use images are never force-removed"`
 }
 
 type PullImageInput struct {
+	RegistryAuth  string `header:"X-Registry-Auth"`
 	EnvironmentID string `path:"id" doc:"Environment ID"`
 	Body          image.PullOptions
 }
@@ -132,7 +135,7 @@ func (h *ImageHandler) ListImages(ctx context.Context, input *ListImagesInput) (
 
 	images, paginationResp, err := h.imageService.ListImagesPaginated(ctx, params)
 	if err != nil {
-		return nil, huma.Error500InternalServerError("Failed to list images: " + err.Error())
+		return nil, image.Neutral(err, "image.usage-unavailable", 503)
 	}
 
 	if images == nil {
@@ -153,7 +156,7 @@ func (h *ImageHandler) ListImages(ctx context.Context, input *ListImagesInput) (
 func (h *ImageHandler) GetImage(ctx context.Context, input *GetImageInput) (*handlerutil.Out[image.DetailSummary], error) {
 	out, err := h.imageService.GetImageDetail(ctx, input.ImageID)
 	if err != nil {
-		return nil, huma.Error404NotFound("Image not found: " + err.Error())
+		return nil, image.Neutral(err, "image.usage-unavailable", 503)
 	}
 
 	return &handlerutil.Out[image.DetailSummary]{
@@ -171,7 +174,7 @@ func (h *ImageHandler) TagImage(ctx context.Context, input *TagImageInput) (*han
 		return nil, err
 	}
 	if strings.TrimSpace(input.Body.Repository) == "" {
-		return nil, huma.Error400BadRequest("repository is required")
+		return nil, image.Failure("image.invalid-reference", 400)
 	}
 
 	user, err := handlerutil.RequireUser(ctx)
@@ -180,7 +183,7 @@ func (h *ImageHandler) TagImage(ctx context.Context, input *TagImageInput) (*han
 	}
 
 	if tagImageErr := h.imageService.TagImage(ctx, imageName, input.Body, *user); tagImageErr != nil {
-		return nil, huma.Error500InternalServerError(fmt.Sprintf("failed to tag image: %v", tagImageErr))
+		return nil, image.Neutral(tagImageErr, "image.tag-failed", 502)
 	}
 
 	return &handlerutil.Out[base.MessageResponse]{
@@ -200,7 +203,7 @@ func (h *ImageHandler) GetImageHistory(ctx context.Context, input *GetImageHisto
 
 	history, err := h.imageService.GetImageHistory(ctx, imageName)
 	if err != nil {
-		return nil, huma.Error500InternalServerError(fmt.Sprintf("failed to get image history: %v", err))
+		return nil, image.Neutral(err, "image.usage-unavailable", 503)
 	}
 	if history == nil {
 		history = []image.HistoryItem{}
@@ -218,10 +221,7 @@ func (h *ImageHandler) GetImageHistory(ctx context.Context, input *GetImageHisto
 func (h *ImageHandler) SearchImages(ctx context.Context, input *SearchImagesInput) (*handlerutil.Out[[]image.SearchResult], error) {
 	results, err := h.imageService.SearchImages(ctx, input.Term)
 	if err != nil {
-		if strings.Contains(err.Error(), "term is required") {
-			return nil, huma.Error400BadRequest(err.Error())
-		}
-		return nil, huma.Error500InternalServerError(fmt.Sprintf("failed to search images: %v", err))
+		return nil, image.Neutral(err, "image.usage-unavailable", 503)
 	}
 	if results == nil {
 		results = []image.SearchResult{}
@@ -244,7 +244,7 @@ func (h *ImageHandler) ExportImage(ctx context.Context, input *ExportImageInput)
 
 	reader, err := h.imageService.ExportImage(ctx, imageName)
 	if err != nil {
-		return nil, huma.Error500InternalServerError(fmt.Sprintf("failed to export image: %v", err))
+		return nil, image.Neutral(err, "image.usage-unavailable", 503)
 	}
 
 	return &huma.StreamResponse{
@@ -262,7 +262,7 @@ func (h *ImageHandler) ExportImage(ctx context.Context, input *ExportImageInput)
 func validateImageNameInternal(raw string) (string, error) {
 	imageName := strings.TrimSpace(raw)
 	if imageName == "" {
-		return "", huma.Error400BadRequest("image name is required")
+		return "", image.Failure("image.invalid-reference", 400)
 	}
 	return imageName, nil
 }
@@ -281,7 +281,7 @@ func (h *ImageHandler) RemoveImage(ctx context.Context, input *RemoveImageInput)
 	}
 
 	if removeImageErr := h.imageService.RemoveImage(ctx, input.ImageID, input.Force, *user); removeImageErr != nil {
-		return nil, huma.Error500InternalServerError("Failed to remove image: " + removeImageErr.Error())
+		return nil, image.Neutral(removeImageErr, "image.remove-failed", 502)
 	}
 
 	return &handlerutil.Out[base.MessageResponse]{
@@ -296,8 +296,14 @@ func (h *ImageHandler) RemoveImage(ctx context.Context, input *RemoveImageInput)
 
 // PullImage pulls a Docker image with streaming progress.
 func (h *ImageHandler) PullImage(ctx context.Context, input *PullImageInput) (*huma.StreamResponse, error) {
-	if input.Body.ImageName == "" {
-		return nil, huma.Error400BadRequest("image name is required")
+	if input.Body.Auth != nil || input.Body.Credentials != nil || input.Body.InlineCredentialsProvided || input.RegistryAuth != "" {
+		return nil, image.Failure("registry.inline-credentials-not-allowed", 400)
+	}
+	if err := input.Body.Validate(); err != nil {
+		return nil, err
+	}
+	if err := guard.ValidateReference(input.Body.GetFullImageName()); err != nil {
+		return nil, err
 	}
 
 	user, err := handlerutil.RequireUser(ctx)
@@ -329,6 +335,12 @@ func (h *ImageHandler) PullImage(ctx context.Context, input *PullImageInput) (*h
 				database.JSON{"imageName": fullImageName},
 				true,
 			)
+			if activityID == "" {
+				problem := image.Failure("image.pull-failed", http.StatusBadGateway)
+				_ = json.NewEncoder(rawWriter).Encode(image.PullErrorFrame{Error: problem.Problem})
+				activitylib.FlushWriter(rawWriter)
+				return
+			}
 			activitylib.WriteStartedLine(rawWriter, activityID)
 			if f, ok := rawWriter.(http.Flusher); ok {
 				f.Flush()
@@ -337,7 +349,8 @@ func (h *ImageHandler) PullImage(ctx context.Context, input *PullImageInput) (*h
 
 			writer := activitylib.NewWriter(runtimeCtx, h.activityService, activityID, rawWriter, "Pulling image")
 			if pullImageErr := h.imageService.PullImage(runtimeCtx, fullImageName, writer, *user, credentials); pullImageErr != nil {
-				_, _ = fmt.Fprintf(writer, "{\"error\":%q}\n", pullImageErr.Error())
+				problem := image.Neutral(pullImageErr, "image.pull-failed", 502)
+				_ = json.NewEncoder(writer).Encode(image.PullErrorFrame{Error: problem.Problem})
 				activitylib.FlushWriter(writer)
 				activitylib.CompleteHandlerActivity(runtimeCtx, h.activityService, activityID, "Image pull failed", pullImageErr)
 				return
@@ -359,10 +372,10 @@ func (h *ImageHandler) PruneImages(ctx context.Context, input *PruneImagesInput)
 		Until: until,
 	})
 	if err != nil {
-		return nil, huma.Error500InternalServerError("Failed to prune images: " + err.Error())
+		return nil, image.Neutral(err, "image.prune-failed", 502)
 	}
 
-	out := image.NewPruneReport(*report)
+	out := *report
 
 	return &handlerutil.Out[image.PruneReport]{
 		Body: base.ApiResponse[image.PruneReport]{
@@ -417,7 +430,7 @@ func resolvePruneImageUntilInternal(input *PruneImagesInput) string {
 func (h *ImageHandler) GetImageUsageCounts(ctx context.Context, input *GetImageUsageCountsInput) (*handlerutil.Out[image.UsageCounts], error) {
 	_, counts, err := h.dockerService.GetAllImages(ctx)
 	if err != nil {
-		return nil, huma.Error500InternalServerError("Failed to get image usage counts: " + err.Error())
+		return nil, image.Neutral(err, "image.usage-unavailable", 503)
 	}
 
 	return &handlerutil.Out[image.UsageCounts]{
@@ -437,10 +450,10 @@ func (h *ImageHandler) UploadImage(ctx context.Context, input *UploadImageInput)
 
 	file, session, cleanup, err := h.uploadService.Consume(ctx, uploadtypes.KindImage, input.Body.UploadID)
 	if err != nil {
-		if httpErr := upload.SessionHTTPError(err); httpErr != nil {
-			return nil, httpErr
+		if upload.SessionHTTPError(err) != nil {
+			return nil, image.Failure("image.invalid-archive", http.StatusBadRequest)
 		}
-		return nil, huma.Error500InternalServerError("Failed to open upload: " + err.Error())
+		return nil, image.Neutral(err, "image.load-failed", 502)
 	}
 	defer cleanup()
 
@@ -449,7 +462,7 @@ func (h *ImageHandler) UploadImage(ctx context.Context, input *UploadImageInput)
 
 	result, err := h.imageService.LoadImageFromReader(ctx, file, session.Filename, *user, maxSizeBytes)
 	if err != nil {
-		return nil, huma.Error500InternalServerError("Failed to load image: " + err.Error())
+		return nil, image.Neutral(err, "image.load-failed", 502)
 	}
 
 	return &handlerutil.Out[image.LoadResult]{

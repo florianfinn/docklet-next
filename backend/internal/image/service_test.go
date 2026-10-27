@@ -17,6 +17,7 @@ import (
 	"strings"
 	"testing"
 	"time"
+	"uuid"
 
 	"github.com/florianfinn/docklet-next/backend/internal/testsqlite"
 	"github.com/florianfinn/docklet-next/types/containerregistry"
@@ -288,10 +289,11 @@ func TestImageService_GetUpdateInfoByImageRefs_MatchesCanonicalAndFamiliarRepos(
 
 	records := []imageupdate.ImageUpdateRecord{
 		{
-			ID:             "sha256:nginx-latest",
-			Repository:     "docker.io/library/nginx",
-			Tag:            "latest",
-			HasUpdate:      true,
+			ID:         "sha256:nginx-latest",
+			Repository: "docker.io/library/nginx",
+			Tag:        "latest",
+			HasUpdate:  true,
+			Platform:   new("native-v1:classic:linux/amd64"), CurrentDigest: new("sha256:" + strings.Repeat("a", 64)), LatestDigest: new("sha256:" + strings.Repeat("b", 64)),
 			UpdateType:     "digest",
 			CurrentVersion: "latest",
 			CheckTime:      now,
@@ -394,52 +396,22 @@ func TestGetPullOptionsWithAuth_DBRegistryUsesValidCredentials(t *testing.T) {
 	assert.Equal(t, "https://index.docker.io/v1/", authCfg.ServerAddress)
 }
 
-func TestGetPullOptionsWithAuth_ExternalCredentialsOverrideDBRegistryInternal(t *testing.T) {
-	svc, db := setupImageServiceAuthTest(t)
-	createTestPullRegistry(t, db, "https://registry.example.com", "db-user", "db-token")
-
-	pullOptions, err := svc.PullOptionsWithAuth(t.Context(), "registry.example.com/team/app:latest", []containerregistry.Credential{
-		{URL: "https://registry.example.com", Username: "external-user", Token: "external-token", Enabled: true},
-	})
+func TestGetPullOptionsWithAuth_IgnoresExternalCredentialsInternal(t *testing.T) {
+	svc, _ := setupImageServiceAuthTest(t)
+	options, err := svc.PullOptionsWithAuth(t.Context(), "registry.example.com/app:1.0.0", []containerregistry.Credential{{URL: "registry.example.com", Username: "synthetic-user", Token: uuid.New().String(), Enabled: true}})
 	require.NoError(t, err)
-	require.NotEmpty(t, pullOptions.RegistryAuth)
-
-	authCfg := decodeRegistryAuthInternal(t, pullOptions.RegistryAuth)
-	assert.Equal(t, "external-user", authCfg.Username)
-	assert.Equal(t, "external-token", authCfg.Password)
-	assert.Equal(t, "registry.example.com", authCfg.ServerAddress)
+	require.Empty(t, options.RegistryAuth)
 }
 
-func TestImageServicePullImageRetriesAnonymouslyAfterAuthRejectedInternal(t *testing.T) {
+func TestImageServicePullImageRefusesInlineAuthBeforeDockerInternal(t *testing.T) {
 	db := setupImageProjectTestDBInternal(t)
-	eventService := event.NewEventService(db, nil, nil)
-	var authHeaders []string
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if !strings.HasSuffix(r.URL.Path, "/images/create") {
-			http.NotFound(w, r)
-			return
-		}
-		assert.True(t, eventService.ShouldSuppressDaemonEvent("image", "", "registry.example.com/team/app:latest", ""))
-		assert.False(t, eventService.ShouldSuppressDaemonEvent("image", "", "registry.example.com/team/other:latest", ""))
-		authHeaders = append(authHeaders, r.Header.Get(dockerregistry.AuthHeader))
-		if len(authHeaders) == 1 {
-			http.Error(w, "unauthorized", http.StatusUnauthorized)
-			return
-		}
-		_, _ = w.Write([]byte("{\"status\":\"Pulled anonymously\"}\n"))
-	}))
-	t.Cleanup(server.Close)
-
-	dockerService := &docker.DockerClientService{Client: newTestDockerClientInternal(t, server)}
-	imageSvc := NewImageService(db, dockerService, nil, nil, nil, eventService, nil, nil)
-
-	err := imageSvc.PullImage(t.Context(), "registry.example.com/team/app:latest", io.Discard, user.SystemUser, []containerregistry.Credential{
-		{URL: "https://registry.example.com", Username: "external-user", Token: "external-token", Enabled: true},
-	})
-	require.NoError(t, err)
-	require.Len(t, authHeaders, 2)
-	assert.NotEmpty(t, authHeaders[0])
-	assert.Empty(t, authHeaders[1])
+	calls := 0
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { calls++; w.WriteHeader(500) }))
+	defer server.Close()
+	svc := NewImageService(db, &docker.DockerClientService{Client: newTestDockerClientInternal(t, server)}, nil, nil, nil, nil, nil, nil)
+	err := svc.PullImage(t.Context(), "registry.example.com/app:1.0.0", io.Discard, user.SystemUser, []containerregistry.Credential{{URL: "registry.example.com", Username: "synthetic-user", Token: uuid.New().String(), Enabled: true}})
+	require.Error(t, err)
+	require.Zero(t, calls)
 }
 
 func TestImageServiceTagImageCallsDockerAPIInternal(t *testing.T) {
@@ -460,6 +432,7 @@ func TestImageServiceTagImageCallsDockerAPIInternal(t *testing.T) {
 
 	imageSvc := NewImageService(db, &docker.DockerClientService{Client: newTestDockerClientInternal(t, server)}, nil, nil, nil, eventService, nil, nil)
 
+	enableImageSafetyForTest(t, imageSvc)
 	err := imageSvc.TagImage(t.Context(), "source:latest", imagetypes.TagRequest{Repository: "registry.example.com/team/app", Tag: "v2"}, user.SystemUser)
 	require.NoError(t, err)
 	assert.Equal(t, "registry.example.com/team/app", gotRepo)
@@ -493,7 +466,7 @@ func TestImageServiceSearchImagesRequiresTermInternal(t *testing.T) {
 
 	_, err := imageSvc.SearchImages(t.Context(), " ")
 	require.Error(t, err)
-	assert.Contains(t, err.Error(), "search term is required")
+	assert.Equal(t, "image.invalid-reference", imagetypes.Neutral(err, "unexpected", 500).Problem.Code)
 }
 
 func TestImageServiceExportImageReturnsTarStreamInternal(t *testing.T) {
@@ -623,8 +596,9 @@ func TestImageServiceContainerTagUpdatesStayScoped(t *testing.T) {
 			CurrentVersion: "3.1.0",
 			LatestVersion:  &firstTarget,
 			HasUpdate:      true,
-			UpdateType:     "tag",
-			CheckTime:      now.Add(time.Second),
+			Platform:       new("native-v1:classic:linux/amd64"), CurrentDigest: new("sha256:" + strings.Repeat("a", 64)), LatestDigest: new("sha256:" + strings.Repeat("b", 64)),
+			UpdateType: "tag",
+			CheckTime:  now.Add(time.Second),
 		},
 		{
 			ID: "container::second",
@@ -639,8 +613,9 @@ func TestImageServiceContainerTagUpdatesStayScoped(t *testing.T) {
 			CurrentVersion: "3.1.0",
 			LatestVersion:  &secondTarget,
 			HasUpdate:      true,
-			UpdateType:     "tag",
-			CheckTime:      now.Add(2 * time.Second),
+			Platform:       new("native-v1:classic:linux/amd64"), CurrentDigest: new("sha256:" + strings.Repeat("a", 64)), LatestDigest: new("sha256:" + strings.Repeat("b", 64)),
+			UpdateType: "tag",
+			CheckTime:  now.Add(2 * time.Second),
 		},
 	}
 	require.NoError(t, db.Create(&records).Error)
@@ -728,8 +703,9 @@ func TestImageServiceContainerTagUpdatesStayScoped(t *testing.T) {
 			Tag:            "stable",
 			CurrentVersion: "stable",
 			HasUpdate:      true,
-			UpdateType:     "digest",
-			CheckTime:      now,
+			Platform:       new("native-v1:classic:linux/amd64"), CurrentDigest: new("sha256:" + strings.Repeat("a", 64)), LatestDigest: new("sha256:" + strings.Repeat("b", 64)),
+			UpdateType: "digest",
+			CheckTime:  now,
 		}).Error,
 	)
 	digestContainers := []container.Summary{

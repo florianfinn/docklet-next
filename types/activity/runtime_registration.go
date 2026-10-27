@@ -6,6 +6,8 @@
 
 package activity
 
+import "github.com/florianfinn/docklet-next/types/updater"
+
 // RuntimeRegistration is constructed from the hub's persisted instance and host
 // registration. Possession of these public identifiers grants no authority.
 type RuntimeRegistration struct {
@@ -14,11 +16,13 @@ type RuntimeRegistration struct {
 }
 
 type RuntimeTargetRequest struct {
-	Registration RuntimeExecutorIdentity `json:"registration"`
-	Target       RuntimeTarget           `json:"target"`
+	Lifecycle    *updater.LifecycleRequest `json:"lifecycle,omitempty"`
+	Registration RuntimeExecutorIdentity   `json:"registration"`
+	Target       RuntimeTarget             `json:"target"`
 }
 
 type RuntimeTargetMetadata struct {
-	Target         RuntimeTarget `json:"target"`
-	ComposeManaged bool          `json:"composeManaged"`
+	Lifecycle      *updater.LifecycleIntent `json:"lifecycle,omitempty"`
+	Target         RuntimeTarget            `json:"target"`
+	ComposeManaged bool                     `json:"composeManaged"`
 }

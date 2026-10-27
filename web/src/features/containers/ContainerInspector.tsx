@@ -14,7 +14,6 @@ import { Meter } from "@/shared/components/meter";
 import { SimulationBadge } from "@/shared/components/simulation-badge";
 import { IconTile, ToneBadge } from "@/shared/components/tone";
 import { UpdatePanel } from "@/shared/components/updates/update-panel";
-import { useContainerCommands } from "@/shared/hooks/use-container-commands";
 import { Button } from "@/shared/ui/button";
 import { ScrollArea } from "@/shared/ui/scroll-area";
 import { Separator } from "@/shared/ui/separator";
@@ -37,10 +36,7 @@ interface InspectorProps {
  */
 export function ContainerInspector({ container: c, host, onClose }: InspectorProps) {
   const t = useTranslations("containers.inspector");
-  const to = useTranslations("containers.origin");
   const ts = useTranslations("common.status");
-  const te = useTranslations("containers.errors");
-  const cmd = useContainerCommands();
   const m = useMetrics((s) => (c ? s?.containers[c.id] : undefined));
   const rt = c ? containerRuntime(c, host) : "unknown";
 
@@ -107,11 +103,7 @@ export function ContainerInspector({ container: c, host, onClose }: InspectorPro
                   <UpdatePanel
                     update={c.update}
                     actions={
-                      c.origin === "unraid"
-                        ? { onRecheck: () => void cmd.check(c.id), blockedReason: te("managed-by-unraid") }
-                        : c.origin === "unknown"
-                          ? { onRecheck: () => void cmd.check(c.id), blockedReason: to("unknownBody") }
-                          : { onUpdate: () => void cmd.update(c.id), onRecheck: () => void cmd.check(c.id) }
+                      {}
                     }
                   />
                 </section>

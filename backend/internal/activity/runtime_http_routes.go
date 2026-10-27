@@ -23,6 +23,7 @@ import (
 	"github.com/florianfinn/docklet-next/backend/pkg/remenv"
 	activitytypes "github.com/florianfinn/docklet-next/types/activity"
 	"github.com/florianfinn/docklet-next/types/base"
+	imageDTO "github.com/florianfinn/docklet-next/types/image"
 	projecttypes "github.com/florianfinn/docklet-next/types/project"
 )
 
@@ -113,16 +114,23 @@ func runtimeLegacyResponse(ctx context.Context, service *ActivityService, enviro
 	h := service.runtimeHTTP
 	admitted, ref, err := h.admit(ctx, environmentID, key, operation, target, options)
 	if err != nil {
+		var imageErr *imageDTO.OperationError
 		var gate *GateConflict
 		var mismatch *runtimeConflictInternal
 		var targetErr *RuntimeTargetError
 		switch {
+		case errors.As(err, &imageErr):
+			return runtimeJSONResponse(imageErr.Status, imageErr), nil
 		case errors.As(err, &gate):
 			return runtimeJSONResponse(409, activitytypes.RuntimeConflictResponse{Data: activitytypes.RuntimeConflict{Code: activitytypes.Code(gate.Code), ActiveRunID: gate.RunID}}), nil
 		case errors.As(err, &mismatch):
 			return runtimeJSONResponse(409, activitytypes.RuntimeConflictResponse{Data: activitytypes.RuntimeConflict{Code: activitytypes.CodeRunRequestMismatch}}), nil
 		case errors.As(err, &targetErr):
 			return runtimeJSONResponse(409, activitytypes.RuntimeConflictResponse{Data: activitytypes.RuntimeConflict{Code: activitytypes.Code(targetErr.Code)}}), nil
+		case errors.Is(err, remenv.ErrAgentInvalidToken):
+			return runtimeJSONResponse(502, common.NewAPIError("Agent credential rejected", "agent.invalid-token", 502)), nil
+		case errors.Is(err, ErrRuntimeTransport):
+			return runtimeJSONResponse(503, common.NewAPIError("Remote runtime outcome unavailable", common.APIErrorCode(activitytypes.CodeRuntimeOutcomeUnknown), 503)), nil
 		case errors.Is(err, remenv.ErrAgentUpdateRequired):
 			return runtimeJSONResponse(503, common.NewAPIError("Agent update required", "agent.update-required", 503)), nil
 		case errors.Is(err, ErrRuntimeTargetRemoved):

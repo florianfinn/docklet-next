@@ -17,6 +17,7 @@ import (
 
 	activitytypes "github.com/florianfinn/docklet-next/types/activity"
 	projecttypes "github.com/florianfinn/docklet-next/types/project"
+	updaterDTO "github.com/florianfinn/docklet-next/types/updater"
 	usertypes "github.com/florianfinn/docklet-next/types/user"
 )
 
@@ -24,6 +25,8 @@ import (
 type RuntimeOperation = activitytypes.RuntimeOperation
 
 const (
+	RuntimeUpdateProject    = activitytypes.RuntimeUpdateProject
+	RuntimeRestoreProject   = activitytypes.RuntimeRestoreProject
 	RuntimeDeployProject    = activitytypes.RuntimeDeployProject
 	RuntimeDownProject      = activitytypes.RuntimeDownProject
 	RuntimeRestartProject   = activitytypes.RuntimeRestartProject
@@ -130,7 +133,75 @@ func runtimeCanonicalizeSemanticInternal(command RuntimeCommand) (runtimeCanonic
 	command.Target.ParentProjectID = copyPtrInternal(command.Target.ParentProjectID)
 	command.Target.Name = copyPtrInternal(command.Target.Name)
 	command.Actor.DisplayName = copyPtrInternal(command.Actor.DisplayName)
+	if command.Operation != RuntimeUpdateProject && command.Operation != RuntimeRestoreProject && command.Options.Lifecycle != nil {
+		return invalid()
+	}
 	switch command.Operation {
+	case RuntimeUpdateProject, RuntimeRestoreProject:
+		if command.Options.Deploy != nil || command.Options.RestartServices != nil || command.Options.Lifecycle == nil {
+			return invalid()
+		}
+		payload, e := json.Marshal(command.Options.Lifecycle)
+		if e != nil || len(payload) > updaterDTO.MaxLifecycleIntentBytes {
+			return invalid()
+		}
+		if json.Unmarshal(payload, new(any)) != nil {
+			return invalid()
+		}
+		var owned = *command.Options.Lifecycle
+		if owned.Policy != nil {
+			binding := *owned.Policy
+			if binding.Revision == 0 || !runtimeTextInternal(binding.PolicyID, 64) || !runtimeTextInternal(binding.JobRunID, 256) {
+				return invalid()
+			}
+			if _, e := runtimeUUIDInternal(binding.ChildID); e != nil {
+				return invalid()
+			}
+			owned.Policy = &binding
+		}
+		owned.Selections = slices.Clone(owned.Selections)
+		for _, hash := range []string{owned.TargetIdentity, owned.SavedRevision, owned.ObservedRevision} {
+			b, e := hex.DecodeString(hash)
+			if e != nil || len(b) != 32 {
+				return invalid()
+			}
+		}
+		if owned.Request.ExpectedRevision != owned.SavedRevision || (command.Operation == RuntimeRestoreProject) != (owned.Request.PointID != "") {
+			return invalid()
+		}
+		revision := owned.BaselineRevision
+		if command.Operation == RuntimeRestoreProject {
+			revision = owned.PointRevision
+		}
+		if b, e := hex.DecodeString(revision); e != nil || len(b) != 32 {
+			return invalid()
+		}
+		if len(owned.Selections) > updaterDTO.MaxLifecycleServices {
+			return invalid()
+		}
+		names := map[string]bool{}
+		for _, sel := range owned.Selections {
+			image, e := hex.DecodeString(strings.TrimPrefix(sel.ImageID, "sha256:"))
+			platform := strings.Split(sel.Platform, "/")
+			if !runtimeTextInternal(sel.Service, 256) || names[sel.Service] || !runtimeTextInternal(sel.Reference, 1024) || !strings.HasPrefix(sel.ImageID, "sha256:") || e != nil || len(image) != 32 || len(platform) < 2 || len(platform) > 3 || platform[0] == "" || platform[1] == "" {
+				return invalid()
+			}
+			if command.Operation == RuntimeRestoreProject {
+				if sel.Kind != "restore" {
+					return invalid()
+				}
+			} else {
+				if sel.Kind != "version" && sel.Kind != "rebuild" {
+					return invalid()
+				}
+				digest, e := hex.DecodeString(strings.TrimPrefix(sel.Digest, "sha256:"))
+				if !strings.HasPrefix(sel.Digest, "sha256:") || e != nil || len(digest) != 32 {
+					return invalid()
+				}
+			}
+			names[sel.Service] = true
+		}
+		command.Options = RuntimeOptions{Lifecycle: &owned}
 	case RuntimeDeployProject, RuntimeRedeployProject:
 		if command.Options.RestartServices != nil {
 			return invalid()
@@ -174,7 +245,9 @@ func runtimeCanonicalizeSemanticInternal(command RuntimeCommand) (runtimeCanonic
 	// Text validation rejects invalid UTF-8 rather than allowing JSON replacement
 	// characters to collapse distinct byte strings into the same semantic intent.
 	var options any = [0]string{}
-	if deploy := command.Options.Deploy; deploy != nil {
+	if command.Options.Lifecycle != nil {
+		options = command.Options.Lifecycle
+	} else if deploy := command.Options.Deploy; deploy != nil {
 		options = [4]any{deploy.PullPolicy, deploy.ForceRecreate, deploy.RemoveOrphans, deploy.RecreateVolumes}
 	} else if command.Operation == RuntimeRestartProject {
 		services := command.Options.RestartServices

@@ -2,7 +2,7 @@
 // Revision: f0447218f504f481d9e941df04bb6a19716ed6d7203060744204c44c3cc7cda8
 // Retrieved: 2026-10-20
 // License: Apache-2.0
-// Deviations: Seven legacy routes share durable admission and application-owned execution.
+// Deviations: Legacy and stack image routes share durable admission and application-owned execution.
 
 package activity
 
@@ -17,6 +17,8 @@ import (
 	"github.com/florianfinn/docklet-next/backend/pkg/authz"
 	"github.com/florianfinn/docklet-next/backend/pkg/utils/userctx"
 	activitytypes "github.com/florianfinn/docklet-next/types/activity"
+	imageDTO "github.com/florianfinn/docklet-next/types/image"
+	updaterDTO "github.com/florianfinn/docklet-next/types/updater"
 	"github.com/google/uuid"
 )
 
@@ -26,6 +28,7 @@ type RuntimeHTTPPorts struct {
 	ApplicationContext context.Context
 	Agent              bool
 	Store              func(context.Context, string) (RuntimeStoreBinding, error)
+	PrepareLifecycle   func(context.Context, string, RuntimeTarget, RuntimeStoreBinding, updaterDTO.LifecycleRequest) (*updaterDTO.LifecycleIntent, error)
 	PrepareTarget      func(context.Context, string, RuntimeTarget) (RuntimeResolvedTarget, error)
 }
 
@@ -53,6 +56,8 @@ func (h *RuntimeHTTPService) SetReady(ready bool) { h.ready.Store(ready) }
 
 func runtimePermissionInternal(operation RuntimeOperation) string {
 	switch operation {
+	case RuntimeUpdateProject, RuntimeRestoreProject:
+		return authz.PermProjectsDeploy
 	case RuntimeDeployProject, RuntimeRedeployProject:
 		return authz.PermProjectsDeploy
 	case RuntimeDownProject:
@@ -83,22 +88,43 @@ func (h *RuntimeHTTPService) admit(ctx context.Context, environmentID, key strin
 	if !ps.Allows(runtimePermissionInternal(operation), environmentID) || !ps.Allows(authz.PermActivitiesRead, environmentID) {
 		return empty, noRef, huma.Error403Forbidden("Runtime operation and activity access required")
 	}
+	if runtimeImageOperation(operation) {
+		for _, right := range []string{authz.PermProjectsUpdate, authz.PermImagesPull, authz.PermImageUpdatesCheck} {
+			if !ps.Allows(right, environmentID) {
+				return empty, noRef, huma.Error403Forbidden("Stack update grants required")
+			}
+		}
+	}
 	actor, ok := userctx.CurrentUserFromContext(ctx)
 	if !ok || actor == nil {
 		return empty, noRef, huma.Error403Forbidden("Authenticated actor required")
 	}
-	if key == "" {
+	if runtimeImageOperation(operation) {
+		if _, err := uuid.Parse(key); err != nil {
+			return empty, noRef, imageDTO.Failure("update.invalid-target", 400)
+		}
+	} else if key == "" {
 		key = uuid.NewString()
 	}
 	// Validate semantic options before fresh I/O or admission. The placeholder
 	// tuple is used only by the pure validator and never persisted or dispatched.
 	command := RuntimeCommand{Store: RuntimeStoreBinding{EnvironmentID: environmentID, StoreGeneration: "validation", ExecutorGeneration: "validation", ManagerID: "validation", RegistrationID: "validation"},
 		Key: key, Actor: *actor, Operation: operation, Target: target, Options: options}
-	canonical, err := runtimeCanonicalizeInternal(command)
-	if err != nil {
-		return empty, noRef, huma.Error400BadRequest("Invalid runtime command or pull policy")
+	if options.Lifecycle != nil && options.Lifecycle.Policy != nil {
+		command.ProposedRunID = options.Lifecycle.Policy.ChildID
 	}
-	command.Options = canonical.command.Options
+	var err error
+	if runtimeImageOperation(operation) {
+		if target.Kind != "stack" || options.Lifecycle == nil || len(options.Lifecycle.Request.ExpectedRevision) != 64 || (operation == RuntimeRestoreProject) != (options.Lifecycle.Request.PointID != "") {
+			return empty, noRef, imageDTO.Failure("update.invalid-target", 400)
+		}
+	} else {
+		canonical, e := runtimeCanonicalizeInternal(command)
+		if e != nil {
+			return empty, noRef, huma.Error400BadRequest("Invalid runtime command or pull policy")
+		}
+		command.Options = canonical.command.Options
+	}
 	command, retained, err := h.service.RetainedCommand(ctx, command)
 	if err != nil {
 		return empty, noRef, err
@@ -125,6 +151,17 @@ func (h *RuntimeHTTPService) admit(ctx context.Context, environmentID, key strin
 			return empty, noRef, &RuntimeTargetError{Code: string(activitytypes.CodeRuntimeParentUnresolved)}
 		}
 		command.Target = resolved.Target
+		if runtimeImageOperation(operation) {
+			if h.ports.PrepareLifecycle == nil {
+				return empty, noRef, huma.Error503ServiceUnavailable("Image lifecycle unavailable")
+			}
+			policy := command.Options.Lifecycle.Policy
+			command.Options.Lifecycle, err = h.ports.PrepareLifecycle(ctx, environmentID, command.Target, command.Store, command.Options.Lifecycle.Request)
+			if err != nil {
+				return empty, noRef, err
+			}
+			command.Options.Lifecycle.Policy = policy
+		}
 	}
 	result, err := h.service.Admit(ctx, command)
 	if err != nil {
@@ -183,6 +220,9 @@ func (h *RuntimeHTTPService) wait(ctx context.Context, ref RuntimeRunReference, 
 
 func runtimeWaitFailure(snapshot activitytypes.RuntimeSnapshot, err error) (int, activitytypes.Code) {
 	switch {
+	case err == nil && snapshot.OutcomeState != activitytypes.RuntimeOutcomeUnknown && snapshot.Status == activitytypes.StatusFailed && snapshot.ImageLifecycle != nil && snapshot.ImageLifecycle.Code != "":
+		result := checkedLifecycleResult(*snapshot.ImageLifecycle)
+		return result.HTTPStatus, activitytypes.Code(result.Code)
 	case errors.Is(err, context.DeadlineExceeded):
 		return 504, activitytypes.CodeRuntimeWaitTimeout
 	case errors.Is(err, context.Canceled):

@@ -102,7 +102,7 @@ export interface ImageVersion {
 
 export type UpdateLevel = "major" | "minor" | "patch";
 
-export type UpdateInfo =
+export type UpdateInfo = { code?: string; authState?: string; stale?: boolean; incomplete?: boolean } & (
   | { state: "current"; current: ImageVersion; checkedAt: string; registry: string }
   | {
       state: "version";
@@ -122,7 +122,8 @@ export type UpdateInfo =
     }
   | { state: "local"; current: ImageVersion }
   | { state: "error"; current: ImageVersion; message: string; checkedAt: string }
-  | { state: "unchecked"; current: ImageVersion };
+  | { state: "unchecked"; current: ImageVersion }
+  | { state: "unknown"; current: ImageVersion; checkedAt?: string });
 
 export interface PortMapping {
   host?: string;
@@ -228,6 +229,9 @@ export interface RunOutputLine {
 }
 
 export interface ActionRun {
+  baselineCode?: string;
+  lifecycleCode?: string;
+  effectVerified?: boolean;
   id: string;
   kind: ActionKind;
   title: string;
@@ -343,7 +347,10 @@ export interface ScheduledJob {
   stackId?: string;
   /** Volume of a backup job; its link opens that volume's backups. */
   volumeId?: string;
-  nextRunAt: string;
+  nextRunAt?: string;
+  enabled?: boolean;
+  unavailable?: boolean;
+  code?: string;
   cadence: string;
 }
 

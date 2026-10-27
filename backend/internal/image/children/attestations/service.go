@@ -14,12 +14,14 @@ import (
 	"encoding/json/v2"
 	"errors"
 	"fmt"
+	"github.com/florianfinn/docklet-next/backend/internal/image/guard"
 	"io"
 	"log/slog"
 	"net/http"
 	"strings"
 
 	"github.com/containerd/platforms"
+	"github.com/florianfinn/docklet-next/backend/pkg/utils/platformmatch"
 	"github.com/florianfinn/docklet-next/types/image"
 	"github.com/google/go-containerregistry/pkg/authn"
 	"github.com/google/go-containerregistry/pkg/name"
@@ -67,6 +69,9 @@ type subjectInternal struct {
 
 // GetImageAttestations returns in-toto attestations attached to a local image or registry reference.
 func (s *Service) GetImageAttestations(ctx context.Context, imageName string, query Query) (*image.AttestationList, error) {
+	if err := guard.ValidateReference(imageName); err != nil {
+		return nil, err
+	}
 	resolution, err := s.resolveImageAttestationReferenceInternal(ctx, imageName)
 	if err != nil {
 		return nil, err
@@ -143,7 +148,7 @@ func (s *Service) resolveImageAttestationReferenceInternal(ctx context.Context, 
 		if err == nil {
 			inspect, inspectErr := dockerClient.ImageInspect(ctx, imageName)
 			if inspectErr == nil {
-				imageRef := firstUsableImageReferenceInternal(inspect.RepoDigests, inspect.RepoTags)
+				imageRef := firstUsableImageReferenceInternal(inspect.RepoDigests, guard.PublicTags(inspect.RepoTags))
 				if imageRef == "" {
 					return referenceInternal{ImageRef: imageName, Empty: true}, nil
 				}
@@ -582,7 +587,7 @@ func platformDescriptorMatchesInternal(platform *v1.Platform, wanted ocispec.Pla
 		OSFeatures:   platform.OSFeatures,
 		Variant:      platform.Variant,
 	}
-	return platforms.Only(wanted).Match(candidate)
+	return platformmatch.Compatible(wanted, candidate)
 }
 
 func parseAttestationPlatformInternal(value string) (ocispec.Platform, bool, error) {

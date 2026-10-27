@@ -81,16 +81,11 @@ func runtimeDetailSnapshotTxInternal(tx *gorm.DB, row *RuntimeReceipt, executorW
 	if row.EnvironmentID != "0" {
 		detail.StepTrace = append([]activitytypes.StepTraceEntry{}, model.RuntimeStepTrace...)
 	}
-	for len(detail.StepTrace) > 0 {
-		encoded, err := json.Marshal(detail.StepTrace)
-		if err != nil {
-			return nil, err
-		}
-		if len(encoded) <= 65536 {
-			break
-		}
-		detail.StepTrace = detail.StepTrace[1:]
+	detail.StepTrace, err = boundedSummaryTraceInternal(detail.StepTrace)
+	if err != nil {
+		return nil, err
 	}
+
 	for {
 		encoded, err := json.Marshal(detail)
 		if err != nil {

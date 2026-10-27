@@ -13,6 +13,7 @@ import (
 	"reflect"
 
 	"github.com/danielgtaylor/huma/v2"
+	runtimeActivity "github.com/florianfinn/docklet-next/backend/internal/activity"
 	"github.com/florianfinn/docklet-next/types/activity"
 	"github.com/florianfinn/docklet-next/types/base"
 	"github.com/florianfinn/docklet-next/types/updater"
@@ -53,6 +54,14 @@ func (m *Module) RegisterRoutes(api huma.API, appCtx handlerutil.ActivityAppCont
 
 // RegisterUpdater registers updater management routes using Huma.
 func RegisterUpdater(api huma.API, updaterService *UpdaterService, appCtx handlerutil.ActivityAppContext) {
+	var activities *runtimeActivity.ActivityService
+	if updaterService != nil {
+		activities = updaterService.deps.Activity
+	}
+	runtimeActivity.RegisterImageLifecycle(api, activities)
+	registerRestorePointRoutes(api, updaterService)
+	registerImagePolicyRoutes(api, updaterService)
+	registerSystemImageHintRoutes(api, updaterService)
 	h := &UpdaterHandler{
 		updaterService: updaterService,
 		appCtx:         appCtx.Context(),

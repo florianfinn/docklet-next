@@ -10,7 +10,7 @@ import type { ActionReadHealth } from "../adapter";
 import type { CodedActionRun } from "../message-code";
 import { activity, activityFixture, deferred, detail, json } from "./activity-reader.test-support";
 
-const failures = ["network", "page500", "page502", "page403", "detail404", "missing", "mapping", "wrong-host", "pagination"] as const;
+const failures = ["network", "page500", "page502", "page403", "summary-missing", "summary-mapping", "summary-wrong-host", "pagination"] as const;
 for (const isEdge of [false, true]) for (const reverse of [false, true]) {
   it.each(failures)(`isolates %s (Edge fixture=${isEdge}, reverse=${reverse})`, async (mode) => {
     const f = activityFixture(isEdge, reverse);
@@ -20,7 +20,7 @@ for (const isEdge of [false, true]) for (const reverse of [false, true]) {
     try {
       const runs = await f.adapter.listActions();
       expect(runs.map((r) => [r.id, r.hostId, r.status])).toEqual([["run-good", "good", "running"]]);
-      expect(health.mock.lastCall?.[0].failures).toEqual([{ hostId: "bad", reason: mode === "page403" ? "permission" : ["missing", "mapping", "wrong-host"].includes(mode) ? "invalid-data" : "unavailable" }]);
+      expect(health.mock.lastCall?.[0].failures).toEqual([{ hostId: "bad", reason: mode === "page403" ? "permission" : ["summary-missing", "summary-mapping", "summary-wrong-host", "pagination"].includes(mode) ? "invalid-data" : "unavailable" }]);
       expect(f.requests.length).toBeLessThanOrEqual(7);
     } finally { stop(); }
   });
@@ -57,11 +57,11 @@ it("retains unavailable observations without terminalizing; successful empty and
     await vi.waitFor(() => expect(runs.mock.lastCall?.[0]).toEqual([]));
   } finally { unsubscribe(); stop(); }
 });
-it("keeps valid details from an incomplete source and rejects colliding or misattributed identities", async () => {
+it("keeps valid summaries from an incomplete source and rejects colliding or misattributed identities", async () => {
   const f = activityFixture();
   f.state.lists.bad!.push(activity("bad", "valid-bad"));
   f.state.details["valid-bad"] = detail("bad", "valid-bad");
-  f.state.hold = async (path, response) => path.endsWith("/bad/activities/run-bad") ? json({}) : response;
+  f.state.hold = async (path, response) => path.endsWith("/bad/activities") ? json([{}, activity("bad", "valid-bad")]) : response;
   expect((await f.adapter.listActions()).map((r) => r.id).sort()).toEqual(["run-good", "valid-bad"]);
   f.state.hold = undefined;
   f.state.lists.bad = [activity("bad", "run-good")];
@@ -97,7 +97,7 @@ it("a slow old full read cannot overwrite a newer targeted detail while another 
     f.sources[0]!.open(); await vi.waitFor(() => expect(runs).toHaveBeenCalled());
     const held = deferred<Response>(); let captured: Response | undefined;
     f.state.hold = async (path, response) => {
-      if (path.endsWith("/good/activities/run-good")) { captured = response; return held.promise; }
+      if (path.endsWith("/good/activities")) { captured = response; return held.promise; }
       return response;
     };
     f.state.failure = "page502"; const older = f.adapter.listActions();
@@ -131,7 +131,7 @@ it.each(["logout", "unsubscribe"])("%s blocks late callbacks and query results f
   const oldSource = f.sources[0]!;
   const held = deferred<Response>(); let captured: Response | undefined;
   f.state.hold = async (path, response) => {
-    if (path.endsWith("/bad/activities/run-bad")) { captured = response; return held.promise; }
+    if (path.endsWith("/bad/activities")) { captured = response; return held.promise; }
     return response;
   };
   const pending = f.adapter.listActions(); await vi.waitFor(() => expect(captured !== undefined).toBe(true));
@@ -151,7 +151,7 @@ it.each(["logout", "unsubscribe"])("%s blocks late callbacks and query results f
 it("refreshes targeted hub detail while a remote source is unavailable and preserves host resource identity", async () => {
   const f = activityFixture();
   f.state.lists["0"] = [activity("0")]; f.state.details["run-0"] = detail("0");
-  for (const run of Object.values(f.state.details)) { run.activity.resourceType = "project"; run.activity.resourceId = "same-project"; }
+  for (const run of [...Object.values(f.state.details).map((row) => row.activity), ...Object.values(f.state.lists).flat()]) { run.resourceType = "project"; run.resourceId = "same-project"; }
   f.state.failure = "page502";
   const runs = vi.fn(); const stop = f.adapter.subscribeActions(runs);
   try {
@@ -175,9 +175,9 @@ it("authentication rejection clears observations before held discovery settles a
   try {
     await f.adapter.listActions();
     const held = deferred<Response>(); const reached = deferred<Response>();
-    f.state.hold = async (path, response) => path.endsWith("/bad/activities/run-bad") ? (reached.resolve(response), held.promise) : response;
+    f.state.hold = async (path, response) => path.endsWith("/bad/activities") ? (reached.resolve(response), held.promise) : response;
     const pending = f.adapter.listActions(); const rejected = pending.catch((e: unknown) => e); const captured = await reached.promise;
-    f.state.hold = undefined; f.state.failure = "page401"; f.sources[0]!.open();
+    f.state.hold = undefined; f.state.failure = "page401"; f.sources[0]!.onerror?.({} as Event); f.sources[0]!.open();
     const failure = f.adapter.listActions();
     await expect(failure).rejects.toMatchObject({ outcome: { status: 401 } });
     expect(runs.mock.lastCall?.[0]).toEqual([]);

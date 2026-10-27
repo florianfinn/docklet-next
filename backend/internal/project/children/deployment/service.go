@@ -71,7 +71,7 @@ func (s *Service) Pull(
 	pullCtx, pullCancel := context.WithTimeout(ctx, timeouts.GetDuration(cfg.DockerImagePullTimeout.AsInt(), timeouts.DefaultDockerImagePull))
 	defer pullCancel()
 
-	if err := s.imageService.PullImage(pullCtx, imageRef, progressWriter, user, credentials); err != nil {
+	if err := s.imageService.PullComposeImage(pullCtx, imageRef, progressWriter, user, credentials); err != nil {
 		if errors.Is(pullCtx.Err(), context.DeadlineExceeded) {
 			return fmt.Errorf("image pull timed out for %s (increase DOCKER_IMAGE_PULL_TIMEOUT or setting)", imageRef)
 		}

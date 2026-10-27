@@ -15,6 +15,7 @@ import (
 	"encoding/json/v2"
 	"github.com/danielgtaylor/huma/v2"
 	activitytypes "github.com/florianfinn/docklet-next/types/activity"
+	imageDTO "github.com/florianfinn/docklet-next/types/image"
 	"gorm.io/gorm"
 	"io"
 	"net/http"
@@ -136,6 +137,13 @@ func runtimeMetadataHTTPInternal(receiver *RuntimeReceiver, ctx huma.Context) {
 		result, err = receiver.Resolve(ctx.Context(), request)
 	}
 	if err != nil {
+		var problem *imageDTO.OperationError
+		if errors.As(err, &problem) {
+			ctx.SetHeader("Content-Type", "application/json")
+			ctx.SetStatus(problem.Status)
+			_ = json.MarshalWrite(ctx.BodyWriter(), problem)
+			return
+		}
 		var mismatch *runtimeConflictInternal
 		var busy *GateConflict
 		if errors.As(err, &mismatch) || errors.As(err, &busy) {
@@ -166,5 +174,13 @@ func (r *RuntimeReceiver) Resolve(ctx context.Context, request activitytypes.Run
 	if err != nil {
 		return activitytypes.RuntimeTargetMetadata{}, err
 	}
-	return activitytypes.RuntimeTargetMetadata{Target: resolved.Target, ComposeManaged: resolved.ComposeManaged}, nil
+	out := activitytypes.RuntimeTargetMetadata{Target: resolved.Target, ComposeManaged: resolved.ComposeManaged}
+	if request.Lifecycle != nil {
+		adapter, ok := r.service.localExecution.Executor.(*RuntimeServiceAdapter)
+		if !ok || resolved.Target.Kind != "stack" {
+			return out, errRuntimeInvalidInternal
+		}
+		out.Lifecycle, err = adapter.PrepareImageLifecycle(ctx, resolved.Target.ID, r.store.RegistrationID, *request.Lifecycle)
+	}
+	return out, err
 }

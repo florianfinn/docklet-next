@@ -64,3 +64,19 @@ test("checked-in OpenAPI excludes removed settings and webhook enum values", () 
     ["update", "start", "stop", "restart", "redeploy", "up", "down", "run"]);
   assert.equal(/gitOperationTimeout|GIT_OPERATION_TIMEOUT|GIT_WORK_DIR/.test(JSON.stringify(document)), false);
 });
+
+
+test("webhook enum search matches sync values without matching registry error codes", () => {
+  const query = manifest.queries.find(({ feature }) => feature === "GitOps webhook enum");
+  const positive = ["WebhookActionTypeSync", 'Action string `json:"action" enum:"sync"`', 'Action string `enum:"sync,update"`', 'Action string `enum:"update,sync"`', 'Action string `enum:"update,sync,redeploy"`'];
+  const negative = ['Code string `enum:"registry.sync-failed,update.check-unavailable"`', 'Code string `enum:"image.busy,registry.sync-failed"`', 'Code string `enum:"async"`'];
+  const directory = mkdtempSync(join(tmpdir(), "functional-cut-enum-"));
+  try {
+    writeFileSync(join(directory, "feature.go"), [...positive, ...negative].join("\n") + "\n");
+    const result = spawnSync("git", ["grep", "--no-index", "--no-color", "--extended-regexp", "-e", query.pattern, "--", "feature.go"], { cwd: directory, encoding: "utf8" });
+    assert.equal(result.status, 0, result.stderr);
+    assert.deepEqual(result.stdout.trim().split("\n").map((line) => line.slice("feature.go:".length)), positive);
+  } finally {
+    rmSync(directory, { recursive: true, force: true });
+  }
+});

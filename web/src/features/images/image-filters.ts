@@ -12,7 +12,7 @@ export const DEFAULT_IMAGE_SORT: ImageSort = { key: "host", dir: "asc" };
 
 export const imageSortDefaultDir = (key: ImageSortKey): SortDir => (key === "size" || key === "created" || key === "consumers" || key === "update" ? "desc" : "asc");
 
-const USAGE_RANK: Record<ImageUsage, number> = { "in-use": 0, unused: 1, dangling: 2 };
+const USAGE_RANK: Record<ImageUsage, number> = { "in-use": 0, unused: 1, dangling: 2, unknown: 3 };
 
 export function filterImages(images: readonly DockerImage[], f: { query: string; usage: UsageFilter }): DockerImage[] {
   const q = f.query.trim().toLowerCase();
@@ -45,7 +45,7 @@ export function sortImages(images: readonly DockerImage[], hosts: Map<string, Ho
         case "created":
           return new Date(i.createdAt).getTime();
         case "update":
-          return i.update && hasUpdate(i.update) ? 1 : 0;
+          return i.updateObservation ? ["version", "rebuild"].includes(i.updateObservation.state) ? 1 : 0 : i.update && hasUpdate(i.update) ? 1 : 0;
       }
     },
     (i) => ({ id: i.id, name: imageReference(i), hostName: hosts.get(i.hostId)?.name ?? i.hostId }),

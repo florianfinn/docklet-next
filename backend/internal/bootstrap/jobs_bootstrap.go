@@ -29,6 +29,7 @@ import (
 	"github.com/florianfinn/docklet-next/backend/internal/settings"
 	"github.com/florianfinn/docklet-next/backend/internal/system"
 	"github.com/florianfinn/docklet-next/backend/internal/updater"
+	"github.com/florianfinn/docklet-next/backend/internal/version"
 	"github.com/florianfinn/docklet-next/backend/internal/volume"
 	"github.com/florianfinn/docklet-next/backend/pkg/libarcane"
 	"github.com/florianfinn/docklet-next/backend/pkg/scheduler"
@@ -74,12 +75,6 @@ func newJobScheduler(
 			}
 			if reconcileCoordinatorStartupErr := reconcileCoordinatorStartupInternal(ctx, jobService, backupEngine, updaterService, volumes, systemService); reconcileCoordinatorStartupErr != nil {
 				return fmt.Errorf("reconcile scheduler startup: %w", reconcileCoordinatorStartupErr)
-			}
-			if imageUpdateWatcher != nil {
-				imageUpdateWatcher.SetCoordinator(jobService.Coordinator())
-				if registerBusWatcherErr := jobScheduler.RegisterBusWatcher(imageUpdateWatcher, true); registerBusWatcherErr != nil {
-					return registerBusWatcherErr
-				}
 			}
 			if startSchedulerErr := jobScheduler.StartScheduler(ctx); startSchedulerErr != nil {
 				return fmt.Errorf("start scheduler: %w", startSchedulerErr)
@@ -246,6 +241,8 @@ type registerJobsParams struct {
 	Volume      *volume.VolumeService
 	System      *system.SystemService
 	Admission   *runs.Admission
+	Updater     *updater.UpdaterService
+	Version     *version.VersionService
 
 	AutoUpdate             *scheduler.AutoUpdateJob
 	ImageUpdateWatcher     *scheduler.ImageUpdateWatcher
@@ -266,9 +263,11 @@ type registerJobsParams struct {
 
 func registerJobs(params registerJobsParams) error {
 	params.JobSchedule.SetScheduler(params.AppCtx, params.Scheduler)
+	if err := registerImagePolicyJobs(params); err != nil {
+		return err
+	}
 
 	for _, job := range []schedulertypes.Job{
-		params.AutoUpdate,
 		params.DockerClientRefresh,
 		params.EventCleanup,
 		params.PruningVolumeHelper,
@@ -326,6 +325,7 @@ func registerJobs(params registerJobsParams) error {
 		VulnerabilityRisk:  params.VulnerabilityRisk,
 		AutoPatch:          params.AutoPatch,
 		AutoHeal:           params.AutoHeal,
+		PolicyRefresh:      params.Updater.RefreshImagePolicySchedules,
 	}); err != nil {
 		return err
 	}
@@ -381,12 +381,13 @@ func registerDynamicJobs(params dynamicJobsParams) error {
 }
 
 type settingsSubscriptionsParams struct {
-	Lifecycle    fx.Lifecycle
-	LifecycleCtx context.Context
-	Config       *config.Config
-	Scheduler    settingsEffectsSchedulerInternal
-	Settings     settingsChangeSubscriberInternal
-	Environment  timeoutSettingsEnvironmentInternal
+	PolicyRefresh func(context.Context) error
+	Lifecycle     fx.Lifecycle
+	LifecycleCtx  context.Context
+	Config        *config.Config
+	Scheduler     settingsEffectsSchedulerInternal
+	Settings      settingsChangeSubscriberInternal
+	Environment   timeoutSettingsEnvironmentInternal
 
 	AutoUpdate         *scheduler.AutoUpdateJob
 	ImageUpdateWatcher *scheduler.ImageUpdateWatcher
@@ -426,16 +427,18 @@ func setupSettingsSubscriptionsInternal(params settingsSubscriptionsParams) erro
 	timeoutSyncExecutor, cancelTimeoutSync := setupTimeoutSettingsSubscriptionInternal(params, subscribe)
 
 	subscribe([]string{"pollingEnabled", "pollingInterval"}, func(_ []libarcane.SettingUpdate) {
-		if params.ImageUpdateWatcher != nil {
-			params.ImageUpdateWatcher.RefreshSchedule()
-			params.ImageUpdateWatcher.Trigger()
-		}
-		if err := params.Scheduler.RescheduleJob(params.LifecycleCtx, params.AutoUpdate); err != nil {
-			slog.WarnContext(params.LifecycleCtx, "Failed to reschedule auto-update job", "error", err)
+		if params.PolicyRefresh != nil && !params.Config.AgentMode {
+			if err := params.PolicyRefresh(params.LifecycleCtx); err != nil {
+				slog.WarnContext(params.LifecycleCtx, "Failed to refresh hub update schedules", "error", err)
+			}
 		}
 	})
 
-	rescheduleOn([]string{"autoUpdate", "autoUpdateInterval"}, params.AutoUpdate)
+	subscribe([]string{"autoUpdate", "autoUpdateInterval"}, func(_ []libarcane.SettingUpdate) {
+		if params.PolicyRefresh != nil && !params.Config.AgentMode {
+			_ = params.PolicyRefresh(params.LifecycleCtx)
+		}
+	})
 
 	subscribe([]string{"projectsDirectory", "followProjectSymlinks"}, func(_ []libarcane.SettingUpdate) {
 		if params.FilesystemWatcher != nil {

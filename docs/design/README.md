@@ -12,8 +12,13 @@ GitHub issues and milestones hold implementation and acceptance evidence.
 | [Core adoption](core-adoption.md) | One-time Go adoption, scope boundaries and evaluation gates |
 | [API contract and UI mapping](api-contract.md) | Reproducible OpenAPI export, generated types and owned DTO/UI gaps |
 | [HTTP adapter, live channel and capabilities](adapter-live-capabilities.md) | M3 adapter outcomes, server capabilities, run/event refresh and contract matrix |
+| [Activity discovery and bounded recovery](activity-discovery.md) | List projection, lazy detail demand, recovery state table and behavioural guards for #225 and #223 |
 | [Run gate and single-hub operation](run-gate.md) | Activity states, gated admission, cancellation, restart recovery and one hub per database |
 | [Runtime control and log lifecycle](runtime-control.md) | Opaque-key retries, bounded outcome evidence and unknown recovery, logs/session closure and staged v4 foundation activation |
+| [Images and updates](images-updates.md) | Host image guards, safe registry credentials, update policies, scheduled apply, restore points and lifecycle prerequisites |
+| [Image identity and initial update reads](images-updates-identity.md) | Classic/containerd identity, initial policy/schedule/baseline DTOs, producer fixtures and candidate regression proofs |
+| [Stack updates UI contract](updates-ui.md) | Production update/restore dialogs, policy and notification states, contract gaps and behavioural proofs |
+| [Hub-owned stack update policies](update-policies.md) | Policy trigger state table, scheduler authority, frozen runtime admission and durable candidate notifications |
 | [Network management](network-management.md) | Host-side validation, protected deletion, Direct/Edge writes and agent v6 |
 | [Storage and file workspace](storage-workspace.md) | Stateless prune selection and re-checks, helper image policy, workspace mapping and agent compatibility |
 | [Stack authoring and deployment](stack-authoring.md) | M7 create/save/label/deploy mapping, non-idempotent create, partial state and hub docker run conversion |

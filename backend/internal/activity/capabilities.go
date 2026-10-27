@@ -2,7 +2,7 @@
 // Revision: dfdfa084478d327818d8c57b0973d638f80861f6
 // Retrieved: 2026-10-15
 // License: Apache-2.0
-// Deviations: Original implementation for issue 38; scoped network write capabilities for #203.
+// Deviations: Original implementation for issue 38; scoped network write capabilities for #203; image and registry capabilities for #229.
 package activity
 
 import (
@@ -19,6 +19,9 @@ import (
 )
 
 var adapterOperationIDs = []string{
+	"listContainerRegistries", "getContainerRegistry", "createContainerRegistry", "updateContainerRegistry",
+	"clearContainerRegistryCredential", "testContainerRegistry", "deleteContainerRegistry",
+	"getUpdateBaseline", "listRestorePoints", "deleteRestorePoint", "listHostRestorePoints", "deleteHostRestorePoint", "getAutoUpdatePolicy", "setAutoUpdateApply", "saveUpdateSchedule",
 	"checkUpdates", "completeSetup", "connectHost", "connectNetwork", "convertDockerRun", "createEntry",
 	"createNetwork", "createVolume", "deleteEntry", "deleteVolume", "deployStack",
 	"disconnectNetwork", "discoverHub", "getSecurity", "getSettings", "getStack",
@@ -61,6 +64,13 @@ func getCapabilities(ctx context.Context, input *GetCapabilitiesInput) (*handler
 	permissions, _ := middleware.PermissionsFromContext(ctx)
 	for i := range descriptors {
 		switch descriptors[i].OperationID {
+		case "checkUpdates", "installStackUpdates", "restoreRestorePoint", "getUpdateBaseline", "listRestorePoints", "deleteRestorePoint", "listHostRestorePoints", "deleteHostRestorePoint", "getAutoUpdatePolicy", "setAutoUpdate", "setAutoUpdateApply", "listSchedule", "saveUpdateSchedule", "listSystemComponents":
+			descriptors[i].Available = updateCapabilityAllowed(descriptors[i].OperationID, descriptors[i].ResourceRef, permissions)
+			if descriptors[i].Available {
+				descriptors[i].DisabledReasonCode = ""
+			} else {
+				descriptors[i].DisabledReasonCode = "capability.unavailable"
+			}
 		case "runStackCommand", "runContainerCommand":
 			ref := descriptors[i].ResourceRef
 			kind := "stack"
@@ -97,6 +107,38 @@ func getCapabilities(ctx context.Context, input *GetCapabilitiesInput) (*handler
 		case "deployStack", "saveStackFiles", "setStackLabels", "convertDockerRun":
 			descriptors[i].Available = authoringAllowedInternal(descriptors[i].OperationID, descriptors[i].ResourceRef, permissions)
 			if descriptors[i].Available {
+				descriptors[i].DisabledReasonCode = ""
+			} else {
+				descriptors[i].DisabledReasonCode = "capability.unavailable"
+			}
+		case "listImages", "pullImage", "removeImage", "pruneImages":
+			grant := map[string]string{"listImages": authz.PermImagesList, "pullImage": authz.PermImagesPull, "removeImage": authz.PermImagesDelete, "pruneImages": authz.PermImagesPrune}[descriptors[i].OperationID]
+			ref := descriptors[i].ResourceRef
+			env, raw, scoped := strings.Cut(ref.ID, "~")
+			valid := descriptors[i].OperationID != "removeImage" && ref.Kind == "host" && ref.ID != "" && !scoped && permissions.Allows(grant, ref.ID)
+			if descriptors[i].OperationID == "removeImage" && ref.Kind == "image" && scoped && env != "" && raw != "" && !strings.Contains(raw, "~") {
+				valid = permissions.Allows(grant, env)
+			}
+			if ref.Kind == "hub" && ref.ID == "0" {
+				valid = permissions.AllowsAny(grant)
+			}
+			descriptors[i].Available = valid
+			if valid {
+				descriptors[i].DisabledReasonCode = ""
+			} else {
+				descriptors[i].DisabledReasonCode = "capability.unavailable"
+			}
+		case "listContainerRegistries", "getContainerRegistry", "createContainerRegistry", "updateContainerRegistry", "clearContainerRegistryCredential", "testContainerRegistry", "deleteContainerRegistry":
+			grant := map[string]string{"listContainerRegistries": authz.PermRegistriesList, "getContainerRegistry": authz.PermRegistriesRead, "createContainerRegistry": authz.PermRegistriesCreate, "updateContainerRegistry": authz.PermRegistriesUpdate, "clearContainerRegistryCredential": authz.PermRegistriesUpdate, "testContainerRegistry": authz.PermRegistriesTest, "deleteContainerRegistry": authz.PermRegistriesDelete}[descriptors[i].OperationID]
+			ref := descriptors[i].ResourceRef
+			valid := ref.Kind == "hub" && ref.ID == "0"
+			if descriptors[i].OperationID != "listContainerRegistries" && descriptors[i].OperationID != "createContainerRegistry" && ref.Kind == "registry" && ref.ID != "" && !strings.Contains(ref.ID, "~") {
+				valid = true
+			}
+			// Registry configuration is hub-owned; environment grants never apply.
+			valid = valid && permissions.Allows(grant, "")
+			descriptors[i].Available = valid
+			if valid {
 				descriptors[i].DisabledReasonCode = ""
 			} else {
 				descriptors[i].DisabledReasonCode = "capability.unavailable"
@@ -233,7 +275,11 @@ func authoringAllowedInternal(operationID string, ref capability.ResourceRef, pe
 	return true
 }
 
-func RegisterCapabilities(api huma.API) {
+func RegisterCapabilities(api huma.API, readers ...middleware.PointAccessReader) {
+	var reader middleware.PointAccessReader
+	if len(readers) > 0 {
+		reader = readers[0]
+	}
 	huma.Register(api, huma.Operation{
 		OperationID: "get-capabilities",
 		Method:      http.MethodGet,
@@ -241,5 +287,32 @@ func RegisterCapabilities(api huma.API) {
 		Summary:     "Get adapter capability descriptors",
 		Tags:        []string{"Capabilities"},
 		Security:    handlerutil.DefaultOperationSecurity(),
-	}, getCapabilities)
+	}, func(ctx context.Context, in *GetCapabilitiesInput) (*handlerutil.Out[[]capability.Descriptor], error) {
+		return getCapabilitiesWithPoints(ctx, in, reader)
+	})
+}
+
+func getCapabilitiesWithPoints(ctx context.Context, in *GetCapabilitiesInput, reader middleware.PointAccessReader) (*handlerutil.Out[[]capability.Descriptor], error) {
+	out, err := getCapabilities(ctx, in)
+	if err != nil {
+		return out, err
+	}
+	ps, _ := middleware.PermissionsFromContext(ctx)
+	checked, allowed := false, false
+	for i := range out.Body.Data {
+		d := &out.Body.Data[i]
+		if (d.OperationID != "listRestorePoints" && d.OperationID != "deleteRestorePoint") || !d.Available || ps.IsGlobalAdmin() {
+			continue
+		}
+		if !checked {
+			env, target, _ := strings.Cut(in.ID, "~")
+			allowed = reader != nil && reader(ctx, env, target, "") == nil
+			checked = true
+		}
+		if !allowed {
+			d.Available = false
+			d.DisabledReasonCode = "capability.unavailable"
+		}
+	}
+	return out, nil
 }

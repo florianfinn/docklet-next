@@ -80,7 +80,7 @@ func (a *coordinatorActorInternal) Invoke(ctx context.Context, method string, da
 			return false, nil
 		}
 		next.Revision++
-		if err := a.q.service.SetState(ctx, coordinatorTypeInternal, a.id, next, nil); err != nil {
+		if err := a.saveStateInternal(ctx, next); err != nil {
 			return nil, err
 		}
 		// Acceptance is persisted; dispatch failures are retried.
@@ -100,7 +100,7 @@ func (a *coordinatorActorInternal) Invoke(ctx context.Context, method string, da
 		}
 		delete(state.PendingActivitySync, command.RunID)
 		state.Revision++
-		return nil, a.q.service.SetState(ctx, coordinatorTypeInternal, a.id, state, nil)
+		return nil, a.saveStateInternal(ctx, state)
 	case "repair":
 		return nil, a.flushInternal(ctx, &state)
 	default:
@@ -178,7 +178,7 @@ func (a *coordinatorActorInternal) reconcileDispatchInternal(ctx context.Context
 		previous.JobID = id
 		state.Dispatches[key] = previous
 		state.Revision++
-		if setStateErr := a.q.service.SetState(ctx, coordinatorTypeInternal, a.id, *state, nil); setStateErr != nil {
+		if setStateErr := a.saveStateInternal(ctx, *state); setStateErr != nil {
 			return false, setStateErr
 		}
 	}
@@ -219,7 +219,7 @@ func (a *coordinatorActorInternal) dispatchRunInternal(ctx context.Context, stat
 	intent = st.DispatchIntent{RunID: run.ID, Attempt: attempt}
 	state.Dispatches[key] = intent
 	state.Revision++
-	if err := a.q.service.SetState(ctx, coordinatorTypeInternal, a.id, *state, nil); err != nil {
+	if err := a.saveStateInternal(ctx, *state); err != nil {
 		return err
 	}
 	options := []actor.JobOption{actor.WithIdempotencyKey(key)}
@@ -252,7 +252,7 @@ func (a *coordinatorActorInternal) dispatchRunInternal(ctx context.Context, stat
 	intent.JobID = id
 	state.Dispatches[key] = intent
 	state.Revision++
-	return a.q.service.SetState(ctx, coordinatorTypeInternal, a.id, *state, nil)
+	return a.saveStateInternal(ctx, *state)
 }
 
 func (a *coordinatorActorInternal) Alarm(ctx context.Context, name string, data actor.Envelope) error {
@@ -320,7 +320,7 @@ func (a *coordinatorActorInternal) Alarm(ctx context.Context, name string, data 
 	record.NextRun = schedule.Next(now.In(a.q.location))
 	record.Sequence++
 	state.Revision++
-	if setStateErr := a.q.service.SetState(ctx, coordinatorTypeInternal, a.id, state, nil); setStateErr != nil {
+	if setStateErr := a.saveStateInternal(ctx, state); setStateErr != nil {
 		return setStateErr
 	}
 	return a.flushInternal(ctx, &state)
@@ -452,4 +452,13 @@ func (q *Coordinator) claimExecutionInternal(ctx context.Context, command st.Exe
 		return nil
 	})
 	return claim, err
+}
+
+// Every coordinator write, including dispatch and alarm updates, validates nested
+// outcome evidence before handing the atomic state to the actor store.
+func (a *coordinatorActorInternal) saveStateInternal(ctx context.Context, state st.CoordinatorState) error {
+	if err := state.Record.ValidateReasons(); err != nil {
+		return err
+	}
+	return a.q.service.SetState(ctx, coordinatorTypeInternal, a.id, state, nil)
 }
