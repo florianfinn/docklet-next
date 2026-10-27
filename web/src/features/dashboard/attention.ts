@@ -78,7 +78,7 @@ export function attentionItems({ hosts, stacks, containers, runs, images, metric
     }
   }
   const byRef = new Map<string, { ref: string; count: number; image: ScannedImage }>();
-  for (const image of images) if (!image.unavailable && image.counts.critical + image.counts.high > 0) {
+  for (const image of images) if (!image.unavailable && !!image.scannedAt && image.counts.critical + image.counts.high > 0) {
     const key = normalizeDockerReference(image.ref) ?? `${image.hostId}:${image.ref}`;
     const previous = byRef.get(key);
     byRef.set(key, { ref: previous?.ref ?? image.ref, count: (previous?.count ?? 0) + image.counts.critical + image.counts.high, image: previous?.image ?? image });

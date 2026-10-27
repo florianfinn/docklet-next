@@ -84,7 +84,7 @@ it("reads host-wide terminal history with interrupted runs excluded from numeric
   expect(data.history.map((r) => [r.hostId, r.status, r.sampled])).toEqual([["first", "interrupted", false], ["second", "interrupted", false]]);
 });
 it("saves independent switches and notification choices and uses the backend next run", async () => {
-  const f = securityFixture(); setAppLocale("en-US");
+  const f = securityFixture(); f.state.settings.vulnerabilityScanSchedule = '{"mode":"daily","time":"03:00"}'; setAppLocale("en-US");
   renderRoutes([{ path: "/settings/:section", element: <SettingsPage /> }], ["/settings/security"], f.adapter);
   await screen.findByRole("switch", { name: "Automatic scans" });
   expect(screen.getByText(/Next run:/).textContent).toContain("2026");

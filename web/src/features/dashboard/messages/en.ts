@@ -265,6 +265,7 @@ export const enDashboard = {
     },
   },
   security: {
+    notScanned: "Not scanned",
     unavailable: "Scan data is unavailable for one or more hosts or images.",
     disabled: "Scans are disabled. They only run after activation and independently of update checks.",
     enable: "Enable & scan",

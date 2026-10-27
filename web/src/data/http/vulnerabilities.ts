@@ -6,7 +6,7 @@
 
 import { isCancelledError } from "@tanstack/react-query";
 import type { DockletAdapter } from "../adapter";
-import { unavailable, type CapabilityDescriptor, type ResourceRef } from "../capability";
+import { AdapterOutcomeError, unavailable, type CapabilityDescriptor, type ResourceRef } from "../capability";
 import type { DockerImage } from "@/domain/images";
 import { imageReference } from "@/domain/images";
 import type { Finding, Host, ScannedImage, SecurityOverview } from "@/domain/model";
@@ -24,7 +24,21 @@ interface Options {
   changed: () => void; accepted: (host: string, activity: string) => void;
 }
 const empty = () => ({ critical: 0, high: 0, medium: 0, low: 0, unknown: 0 });
-const errorCode = (e: unknown) => e instanceof VulnerabilityFailure ? e.code : "vulnerability.read-unavailable";
+function errorCode(error: unknown): string {
+  if (error instanceof VulnerabilityFailure) return error.code;
+  if (error instanceof AdapterOutcomeError) {
+    if (error.outcome.kind === "not-available") return error.outcome.reasonCode;
+    if ("code" in error.outcome) return error.outcome.code;
+  }
+  return "vulnerability.read-unavailable";
+}
+
+/** Durable run counters are the scan progress producer; activity progress is not populated. */
+export async function readScanProgress(request: ReturnType<typeof vulnerabilityTransport>, host: string, activity: string, signal?: AbortSignal) {
+  const r = run(object(await request(`/environments/${encodeURIComponent(host)}/vulnerabilities/runs/${encodeURIComponent(activity)}`, "GET", undefined, true, signal)).data);
+  if (r.activityId !== activity || r.environmentId !== "0") invalid();
+  return r.targets ? Math.min(100, Math.round(100 * (r.scanned + r.failed + r.skipped) / r.targets)) : undefined;
+}
 export function createVulnerabilities(o: Options): Pick<DockletAdapter, "getSecurity" | "runScan" | "setScanEnabled" | "getScanSettings" | "saveScanSettings" | "cancelScan"> {
   const request = vulnerabilityTransport(o.baseUrl, o.client, o.generation);
   const settings = createSecuritySettings(request, o.capability, o.changed);
@@ -43,25 +57,23 @@ export function createVulnerabilities(o: Options): Pick<DockletAdapter, "getSecu
       const s = summary.get(splitInventoryId(im.id)[1]);
       const usage = im.consumers.some((c) => c.state === "running") ? "running" : im.consumers.length ? "stopped" : "unused";
       return { id: im.id, ref: imageReference(im), hostId: host.id, stackId: im.consumers.find((c) => c.stackId)?.stackId, usage,
-        status: s?.status ?? "pending", unavailable: !!im.inventory?.stale || !s?.summary || !s.completedAt,
+        status: s?.status ?? "pending", unavailable: !!im.inventory?.stale,
         code: s?.errorCode, platform: s?.scannedPlatform, counts: s?.summary ? counts(s.summary) : empty(), scannedAt: s?.completedAt ?? "" };
     });
-    const findings: Finding[] = [];
-    for (let start = 0;;) {
-      const page = object(await request(`${base}/vulnerabilities/all?start=${start}&limit=100&sort=risk&order=desc`));
-      const data = array(page.data), total = count(object(page.pagination).totalItems);
-      for (const raw of data) {
-        const f = finding(raw, host.id);
-        if (object(raw).ignored === true) continue;
-        if (!local.some((im) => splitInventoryId(im.id)[1] === f.imageId)) continue;
-        findings.push(f);
-      }
-      start += data.length;
-      if (start >= total) break;
-      if (!data.length || start > 100000) invalid();
+    // One capped response avoids page cuts across changing exposure/intelligence scores.
+    const findings: Finding[] = [], seen = new Set<string>();
+    const localIds = new Set(ids);
+    const page = object(await request(`${base}/vulnerabilities/all?limit=-1&sort=vulnerabilityId&order=asc`));
+    const data = array(page.data), total = count(object(page.pagination).totalItems);
+    if (data.length !== total) invalid();
+    for (const raw of data) {
+      const f = finding(raw, host.id);
+      if (object(raw).ignored === true || !localIds.has(f.imageId!)) continue;
+      const key = JSON.stringify([f.imageId, f.id, f.pkg, f.installed]);
+      if (!seen.has(key)) { seen.add(key); findings.push(f); }
     }
     // The full active finding list excludes ignores; raw batch summaries retain scan-time totals.
-    for (const row of rows) if (!row.unavailable) {
+    for (const row of rows) if (!row.unavailable && row.scannedAt) {
       const active = empty();
       for (const f of findings) if (f.imageId === splitInventoryId(row.id!)[1]) active[f.severity]++;
       row.counts = active;
@@ -88,7 +100,7 @@ export function createVulnerabilities(o: Options): Pick<DockletAdapter, "getSecu
       const batches = await Promise.all(hosts.map(async (host) => {
         try {
           const batch = await hostImages(host, images);
-          if (host.inventory?.stale || batch.images.some((i) => i.unavailable && i.scannedAt)) result.unavailable!.push({ hostId: host.id, code: "vulnerability.read-unavailable" });
+          if (host.inventory?.stale || batch.images.some((i) => i.unavailable)) result.unavailable!.push({ hostId: host.id, code: "vulnerability.read-unavailable" });
           return batch;
         }
         catch (error) {

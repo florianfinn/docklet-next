@@ -28,6 +28,7 @@ export const deShell: typeof enShell = {
     setup: "Ersteinrichtung",
     newHost: "Host hinzufügen",
   },
+  partialSecurity: "Unvollständige Sicherheitssumme: Scan-Daten für mindestens einen Host sind nicht verfügbar.",
   preview: "Vorschau",
   hostFilter: {
     title: "Hostfilter",

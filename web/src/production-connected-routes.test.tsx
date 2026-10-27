@@ -136,7 +136,9 @@ it("opens product app links and omits unsafe protocols", async () => {
 
 it("connects the production security route and Scans settings to HTTP producers", async () => {
   const { securityFixture } = await import("./data/http/vulnerabilities.test-support");
-  const f = securityFixture(), adapter = createAdapter({ fetch: f.fetcher as typeof fetch, eventSource: () => f.source });
+  const f = securityFixture();
+  f.state.settings.vulnerabilityScanSchedule = '{"mode":"daily","time":"03:00"}';
+  const adapter = createAdapter({ fetch: f.fetcher as typeof fetch, eventSource: () => f.source });
   const { router } = renderRoutes(routes, ["/security?tab=images"], adapter);
   await screen.findByRole("table", { name: "Images" });
   expect(screen.getAllByText("example:1.0.0")).toHaveLength(2);

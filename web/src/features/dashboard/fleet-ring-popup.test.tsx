@@ -69,7 +69,7 @@ describe("fleet ring", () => {
 
   it("counts a disconnected host once as a problem and keeps vulnerabilities separate", () => {
     const containers = fleet();
-    const items = attentionItems({ hosts: [online!, offline!], stacks: [], containers, runs: [], images: [{ ref: "x/y", hostId: online!.id, usage: "running", counts: { critical: 2, high: 0, medium: 0, low: 0 }, scannedAt: "" }], metrics: undefined, now: Date.now() });
+    const items = attentionItems({ hosts: [online!, offline!], stacks: [], containers, runs: [], images: [{ ref: "x/y", hostId: online!.id, usage: "running", counts: { critical: 2, high: 0, medium: 0, low: 0 }, scannedAt: "2026-10-27T03:00:00Z" }], metrics: undefined, now: Date.now() });
     expect(problemCounts(items)).toEqual({ offline: 1 });
     expect(problemItems(items).length).toBe(1);
     expect(items.some((i) => i.kind === "critical")).toBe(true);

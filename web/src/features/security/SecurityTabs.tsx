@@ -32,13 +32,13 @@ const short = (ref: string) => ref.split("/").pop() ?? ref;
 
 export function OverviewTab({ images: allImages, findings, history, stacks, hosts, animate, onFocus }: Data & { animate: boolean; onFocus: (id: string) => void }) {
   const t = useTranslations("security");
-  const images = allImages.filter((i) => !i.unavailable);
+  const images = allImages.filter((i) => !i.unavailable && i.scannedAt);
   const top = useMemo(() => [...findings].sort((a, b) => (b.risk ?? b.cvss) - (a.risk ?? a.cvss)).slice(0, 6), [findings]);
   const totals = SEVERITIES.map((s) => ({ key: s.key, label: t(`severities.${s.key}`), color: s.color, n: images.reduce((n, i) => n + (i.counts[s.key] ?? 0), 0) }));
   const usage = (u: ScannedImage["usage"]) => images.filter((i) => i.usage === u).reduce((n, i) => n + totalOf(i), 0);
   const max = Math.max(1, ...images.map(totalOf));
   const stackName = (id?: string) => stacks.find((s) => s.id === id)?.name;
-  if (allImages.length && !images.length) return <p role="status">{t("scanUnavailable")}</p>;
+  if (allImages.length && !images.length) return <p role="status">{t(allImages.some((i) => i.unavailable) ? "scanUnavailable" : "notScanned")}</p>;
   return (
     <div className="flex flex-col gap-6">
       <section className="grid items-center gap-8 py-2 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.5fr)]">
@@ -48,7 +48,7 @@ export function OverviewTab({ images: allImages, findings, history, stacks, host
             <h3 className="text-sm font-medium">{t("trend.title")}</h3>
             <span className="text-xs text-muted-foreground">{t("trend.runs", { count: history.length })}</span>
           </div>
-          <TrendChart history={history} animate={animate} />
+          <TrendChart history={history} hosts={hosts} animate={animate} />
           <ul className="max-h-32 overflow-y-auto text-xs text-muted-foreground" aria-label={t("trend.label")}>
             {history.map((r, index) => <li key={`${r.hostId}:${r.id ?? index}`}>{hosts.get(r.hostId ?? "")?.name ?? r.hostId} · {formatRelative(r.at)} · {r.status ? t(`historyStatus.${r.status}`) : r.trigger}</li>)}
           </ul>
@@ -322,11 +322,11 @@ export function ImagesTab({ images, stacks, hosts }: Pick<Data, "images" | "stac
             {SEVERITIES.map((s) => (
               <TableCell key={s.key}>
                 <ToneBadge tone={im.counts[s.key] ? s.tone : "gray"} className="min-w-8 justify-center">
-                  {im.unavailable ? "–" : im.counts[s.key] ?? 0}
+                  {im.unavailable || !im.scannedAt ? "–" : im.counts[s.key] ?? 0}
                 </ToneBadge>
               </TableCell>
             ))}
-            <TableCell className="text-xs text-muted-foreground">{im.unavailable ? t(im.scannedAt ? "scanUnavailable" : "notScanned") : formatRelative(im.scannedAt)}</TableCell>
+            <TableCell className="text-xs text-muted-foreground">{im.unavailable ? t("scanUnavailable") : !im.scannedAt ? t("notScanned") : formatRelative(im.scannedAt)}</TableCell>
           </TableRow>
         );
       })}

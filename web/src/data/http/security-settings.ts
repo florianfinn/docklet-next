@@ -48,8 +48,9 @@ export function createSecuritySettings(request: Request, capability: (op: string
     },
     async saveScanSettings(v: ScanSettingsInput) {
       await require("saveScanSettings");
-      const schedule = v.schedule.mode === "manual" ? "" : JSON.stringify(scanSchedule(v.schedule));
-      await write({ featureVulnerabilityManagementEnabled: String(boolean(v.enabled)), vulnerabilityScanEnabled: String(boolean(v.automatic)), vulnerabilityScanSchedule: schedule, trivyIgnoreUnfixed: String(boolean(v.ignoreUnfixed)), vulnerabilityNotifyCritical: String(boolean(v.notifyCritical)), vulnerabilityNotifyHigh: String(boolean(v.notifyHigh)), vulnerabilityNotifyFailed: String(boolean(v.notifyFailed)) });
+      // The stored empty default is readable, but the producer rejects explicit empty updates.
+      const schedule: Record<string, string> = v.schedule.mode === "manual" ? {} : { vulnerabilityScanSchedule: JSON.stringify(scanSchedule(v.schedule)) };
+      await write({ featureVulnerabilityManagementEnabled: String(boolean(v.enabled)), vulnerabilityScanEnabled: String(boolean(v.automatic)), ...schedule, trivyIgnoreUnfixed: String(boolean(v.ignoreUnfixed)), vulnerabilityNotifyCritical: String(boolean(v.notifyCritical)), vulnerabilityNotifyHigh: String(boolean(v.notifyHigh)), vulnerabilityNotifyFailed: String(boolean(v.notifyFailed)) });
     },
     async setScanEnabled(enabled) { await require("setScanEnabled"); await write({ featureVulnerabilityManagementEnabled: String(boolean(enabled)) }); },
   };

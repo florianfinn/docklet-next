@@ -247,6 +247,8 @@ export interface ActionRun {
   /** Persisted intent, independent of settled cancellation or rollback. */
   cancelRequested?: boolean;
   progress: number;
+  /** Live vulnerability run counters; absent when the run read is unavailable. */
+  scanProgress?: number;
   startedAt: string;
   finishedAt?: string;
   error?: string;
@@ -389,6 +391,7 @@ export type SecurityCounts = Record<Exclude<Severity, "unknown">, number> & { un
 export interface ScannedImage {
   id?: string;
   status?: "pending" | "scanning" | "completed" | "failed";
+  /** Failed host/inventory read; an empty scannedAt instead means never scanned. */
   unavailable?: boolean;
   code?: string;
   platform?: string;

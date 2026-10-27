@@ -47,7 +47,7 @@ function NavEntry({ item, count, active, onNavigate, groupBadge }: { item: NavIt
         </NavLink>
       </SidebarMenuButton>
       {count && !item.preview ? (
-        <SidebarMenuBadge className={cn("font-normal tabular-nums", count.tone === "err" ? "text-destructive" : "text-muted-foreground")}>{count.value}</SidebarMenuBadge>
+        <SidebarMenuBadge title={count.partial ? t("partialSecurity") : undefined} aria-label={count.partial ? t("partialSecurity") : undefined} className={cn("font-normal tabular-nums", count.tone === "err" ? "text-destructive" : "text-muted-foreground")}>{count.value}{count.partial && count.value !== "?" ? "+" : ""}</SidebarMenuBadge>
       ) : item.preview && !groupBadge ? (
         <SidebarMenuBadge aria-hidden className="h-4 rounded-full border px-1.5 text-[10px] font-normal text-muted-foreground">
           {t("preview")}

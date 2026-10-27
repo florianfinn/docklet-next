@@ -266,6 +266,7 @@ export const deDashboard: typeof enDashboard = {
     },
   },
   security: {
+    notScanned: "Noch nicht gescannt",
     unavailable: "Scan-Daten für einen oder mehrere Hosts oder Images sind nicht verfügbar.",
     disabled: "Scans sind deaktiviert. Sie laufen nur nach Aktivierung und unabhängig von Update-Prüfungen.",
     enable: "Aktivieren & scannen",

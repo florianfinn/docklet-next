@@ -575,7 +575,10 @@ shown as unavailable and never replaced by browser recurrence calculations.
 Runtime decoders validate bounded identities, enum values, counts, dates and
 both `VulnerabilityProblem` and framework `ErrorModel` failures before mapping.
 Each vulnerability response is bounded to 32 MiB. Failed reads cannot establish
-zero findings. Host batches are merged together after all reads settle, retaining
+zero findings. Images with no completed scan are neutrally labelled not scanned,
+excluded from totals, and never create an unavailable warning. Navigation marks
+partial totals while a visible host is unavailable, including unknown totals when
+all visible hosts fail. Host batches are merged together after all reads settle, retaining
 the prior query snapshot during refetch. Pending and filtered hosts do not remove
 retained inventory. Image identities include the host, independently of tags.
 
@@ -583,19 +586,36 @@ The security page, dashboard widget, attention items, operations chip, navigatio
 badge and image column/details share the same live security query. UNKNOWN is a
 separate severity. Host-run history keeps interrupted and failed labels while
 numeric chart samples require a completed run or a partial run with scanned
-images. Scan progress and cancellation use the accepted activity; settlement and
+images. Scan progress comes from the accepted run read as
+`(scanned + failed + skipped) / targets`; zero targets or an unavailable run read
+remain indeterminate. Progress and history labels resolve host names. Cancellation
+uses the accepted activity; settlement and
 SSE recovery invalidate security and image reads. The generic browser run gate
 cannot join or reuse a live scan admission.
 
-The v8 full findings DTO lacks KEV/EPSS/risk fields. Its bounded top-risk and
-prevalence lists supply intelligence only for their included findings. Missing
-intelligence remains unknown in the UI. Inventory also lacks actual container
-platform attribution, so the UI states the daemon-default-only coverage rather
-than asserting coverage for individual containers on other platforms. Complete
-per-finding enrichment and per-container platform attribution require a contract
-foundation follow-up.
+The v8 full findings DTO carries optional KEV/EPSS intelligence and current risk
+from the same finding-priority function as the overview. Missing intelligence
+remains unknown. The browser enumerates once per host with `limit=-1`, ordered by
+vulnerability ID, within the 32 MiB response and 100,000-row decoder limits. This
+avoids page cuts across changing live risk scores; the browser deduplicates by
+image/CVE/package/installed version and sorts the complete list by risk for display.
+Server risk sorting remains available to API callers.
+
+Batch and per-image summaries carry the completed scan platform, independent of
+newer failed attempts. Inventory lacks actual container platform attribution, so
+the UI states daemon-default-only coverage rather than asserting coverage for
+individual containers on other platforms; per-container attribution is #265.
+
+An unscheduled settings draft omits the schedule update key: the stored empty
+default is readable, but the producer rejects an explicit empty update. Automatic
+off remains the UI off path once a daily/weekly schedule has been saved. Scan-now
+refusals name each host and its code; offline/pending refusals are informational
+notes while other refusals are errors, without losing accepted host activities.
 
 Security contract coverage in `web/src/data/http/vulnerabilities.test.tsx` and
+`web/src/data/http/vulnerability-fix1.test.tsx`,
+`web/src/data/http/vulnerability-enrichment.test.tsx`,
+`backend/internal/vulnerability/children/query/enrichment_test.go` and
 `backend/internal/activity/security_capabilities_test.go` includes:
 
 | Observation | Required mutation |
@@ -605,6 +625,12 @@ Security contract coverage in `web/src/data/http/vulnerabilities.test.tsx` and
 | Busy admission follows and displays the active activity. | Treat busy as an ordinary failed admission. |
 | Scan permission is required independently of read permission. | Substitute the read grant for the scan grant. |
 | Undeclared vulnerability codes fail runtime decoding. | Accept arbitrary problem codes. |
+| Per-finding risk equals overview priority. | Substitute a different finding priority. |
+| Missing intelligence remains absent. | Substitute false/zero intelligence. |
+| API risk sorting covers the full list. | Disable risk ordering before pagination. |
+| Completed-platform attribution survives a newer failed attempt. | Use the latest attempt platform. |
+| Unscheduled settings saves succeed against producer validation. | Send an empty schedule update. |
+| Never-scanned images remain neutral across all consumers. | Map no completed scan to unavailable. |
 
 The same suite checks host/image command scope, retained delayed host batches,
 independent settings switches, backend next-run projection, interrupted history,

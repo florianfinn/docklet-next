@@ -1,4 +1,5 @@
-import { createVulnerabilities } from "./vulnerabilities";
+import { vulnerabilityTransport } from "./vulnerability-transport";
+import { createVulnerabilities, readScanProgress } from "./vulnerabilities";
 import { createStackUpdates } from "./stack-updates";
 import { createImageCommands } from "./image-commands";
 import { createRegistryCommands } from "./registry-commands";
@@ -267,6 +268,7 @@ export function createHttpAdapter(options: HttpAdapterOptions = {}): DockletAdap
       return authenticated;
     },
   });
+  const scanRequest = vulnerabilityTransport(baseUrl, client, () => identityGeneration);
   const runtime = createRuntimeCommands({ baseUrl, client, capability: getCapability, unauthorized: () => { suspendIdentity(); actions.reset(true); }, publish: (run, detailed) => { actions.upsert(run); if (detailed) targets.accept(run); } });
   const actions = createActivityReader({
     hasConsumer: () => actionListeners.size > 0,
@@ -281,10 +283,17 @@ export function createHttpAdapter(options: HttpAdapterOptions = {}): DockletAdap
       const dto = (await read("get-activity", `/environments/${encodeURIComponent(host)}/activities/${encodeURIComponent(id)}`, { limit: 500 }, undefined, signal)).data!;
       try {
         const run = mapActivityDetail(dto);
+        if (run.kind === "scan") {
+          try {
+            const capability = await getCapability("getSecurity", { kind: "host", id: host });
+            if (!capability.available) throw unavailable("getSecurity", capability.resourceRef, capability.disabledReasonCode);
+            run.scanProgress = await readScanProgress(scanRequest, host, id, signal);
+          } catch (error) { if (isCancelledError(error)) throw error; }
+        }
         // Invalidate before publishing terminal status: progress consumers may unmount immediately.
         if (run.kind === "scan" && !["running", "queued"].includes(run.status)) securityChanged();
         return run;
-      } catch { throw classifiedError({ code: "activity.invalid-data" }); }
+      } catch (error) { if (isCancelledError(error)) throw error; throw classifiedError({ code: "activity.invalid-data" }); }
     },
     hosts: async () => {
       await requireCapability("listActions");

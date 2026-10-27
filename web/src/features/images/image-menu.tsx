@@ -25,7 +25,7 @@ export function useImageMenu(image: DockerImage, host: Host | undefined, open: {
     [
       { id: "pull", label: t("pullAgain"), icon: <Download />, disabled: !pull.available || !!image.inventory?.stale || !online || image.tag === null, title: pull.reason, onSelect: () => open.pull(image) },
       ...(image.update && hasUpdate(image.update) && stack ? [{ id: "update", label: t("openUpdate"), icon: <Layers />, onSelect: () => navigate(`/stacks/${stack}`) }] : []),
-      ...(security.counts || security.unavailable ? [{ id: "security", label: t("security"), icon: <ShieldAlert />, onSelect: () => navigate("/security?tab=images") }] : []),
+      ...(security.counts || security.unavailable || security.notScanned ? [{ id: "security", label: t("security"), icon: <ShieldAlert />, onSelect: () => navigate("/security?tab=images") }] : []),
     ],
     [{ id: "remove", label: t("remove"), icon: <Trash2 />, disabled: !remove.available || !!image.inventory?.stale || !online || imageRemovalBlocked(image), title: remove.reason, onSelect: () => open.remove(image) }],
   ];

@@ -14,6 +14,7 @@ export const enSecurity = {
   scanUnavailable: "Scan data unavailable",
   notScanned: "Not scanned",
   cancel: "Cancel scan",
+  hostRefused: "{host}: scan refused ({code})",
   scanFailed: "Scan could not be started. Inspect the activity for accepted hosts.",
   unknownIntel: "Threat intelligence unavailable for this finding",
   historyEmpty: "No completed scan samples yet.",

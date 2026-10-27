@@ -99,6 +99,7 @@ export default function SecurityPage() {
         }
       />
       <ScanProgress selection={hosts.selection} />
+      {action.note && <p role="status">{action.note}</p>}
       {action.error && <p role="alert" className="mb-3">{action.error}</p>}
       {security.data?.unavailable?.filter((h) => isHostVisible(hosts.selection, h.hostId)).map((h) => <Alert key={h.hostId} className="mb-3"><AlertDescription>{t("hostUnavailable", { host: hosts.byId.get(h.hostId)?.name ?? h.hostId })}</AlertDescription></Alert>)}
       {adapter.kind === "http" && <p className="mb-3 text-sm text-muted-foreground">{t("notCovered")}</p>}

@@ -71,7 +71,7 @@ export function SecurityChip({ image }: { image: DockerImage }) {
   const security = useTranslations("security");
   const live = useImageSecurity(image);
   const v = live.counts;
-  if (!v) return <span className="text-xs text-muted-foreground">{live.unavailable ? t("securityUnavailable") : "–"}</span>;
+  if (!v) return <span className="text-xs text-muted-foreground">{live.unavailable ? t("securityUnavailable") : live.notScanned ? security("notScanned") : "–"}</span>;
   const top = (["critical", "high", "medium", "low", "unknown"] as const).find((k) => (v[k] ?? 0) > 0);
   const tone: Tone = top === "critical" ? "err" : top === "high" ? "orange" : top === "medium" ? "warn" : "ok";
   const all = (["critical", "high", "medium", "low", "unknown"] as const).map((k) => `${v[k] ?? 0} ${ts(k)}`).join(", ");

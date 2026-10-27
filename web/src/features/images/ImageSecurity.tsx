@@ -12,5 +12,9 @@ import { Button } from "@/shared/ui/button";
 
 export function ScanImageButton({ image }: { image: DockerImage }) {
   const cap = useCapability("runScan", { kind: "image", id: image.id }), action = useScanAction(), t = useTranslations("security");
-  return <div className="flex flex-col gap-1"><Button size="sm" variant="outline" disabled={!cap.available || action.busy} title={cap.reason} onClick={() => void action.start({ imageId: image.id })}>{t("scan")}</Button>{action.error && <p role="alert">{action.error}</p>}</div>;
+  return <div className="flex flex-col gap-1">
+    <Button size="sm" variant="outline" disabled={!cap.available || action.busy} title={cap.reason} onClick={() => void action.start({ imageId: image.id })}>{t("scan")}</Button>
+    {action.note && <p role="status">{action.note}</p>}
+    {action.error && <p role="alert">{action.error}</p>}
+  </div>;
 }

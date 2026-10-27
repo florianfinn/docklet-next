@@ -15,6 +15,7 @@ export const deSecurity: typeof enSecurity = {
   scanUnavailable: "Scan-Daten nicht verfügbar",
   notScanned: "Noch nicht gescannt",
   cancel: "Scan abbrechen",
+  hostRefused: "{host}: Scan abgelehnt ({code})",
   scanFailed: "Scan konnte nicht gestartet werden. Angenommene Hosts sind in der Aktivität sichtbar.",
   unknownIntel: "Bedrohungsdaten für diesen Befund nicht verfügbar",
   historyEmpty: "Noch keine abgeschlossenen Scan-Messwerte.",
