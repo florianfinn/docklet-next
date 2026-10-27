@@ -138,7 +138,7 @@ func (m *EnvironmentMiddleware) proxyLifecycleResponse(c *echo.Context, tunnel *
 	for key, value := range responseHeaders {
 		h.Set(key, value)
 	}
-	if list, _ := pointRoute(m.buildResourceSuffix(c.Request().URL.EscapedPath(), env)); !list || c.Request().Method != http.MethodGet {
+	if list, _ := pointRoute(m.buildResourceSuffix(c.Request().URL.Path, env)); !list || c.Request().Method != http.MethodGet {
 		return m.writeLifecycleResponse(c, status, h, bytes.NewReader(body))
 	}
 	return m.writePointList(c, env, status, h, bytes.NewReader(body))
