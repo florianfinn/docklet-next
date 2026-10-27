@@ -217,7 +217,7 @@ export const deDashboard: typeof enDashboard = {
     failed: "{title}",
     failedSub: "Vorheriger Stand liegt zur manuellen Wiederherstellung bereit",
     critical: "Kritische/hohe Befunde in {image}",
-    criticalSub: "{count, plural, one {# kritischer Befund} other {# kritische Befunde}} · laufendes Image",
+    criticalSub: "{count, plural, one {# kritischer/hoher Befund} other {# kritische/hohe Befunde}}",
     major: "Hauptversion für {name}",
     majorSub: "{current} → {latest} · Versionshinweise vor dem Update lesen",
     disk: "Speicher auf {host} wird knapp",

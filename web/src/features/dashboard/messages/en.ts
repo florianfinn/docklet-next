@@ -216,7 +216,7 @@ export const enDashboard = {
     failed: "{title}",
     failedSub: "Previous state is ready for manual restore",
     critical: "Critical/high findings in {image}",
-    criticalSub: "{count, plural, one {# critical finding} other {# critical findings}} · running image",
+    criticalSub: "{count, plural, one {# critical/high finding} other {# critical/high findings}}",
     major: "Major version for {name}",
     majorSub: "{current} → {latest} · Read the release notes before updating",
     disk: "Storage on {host} is running low",

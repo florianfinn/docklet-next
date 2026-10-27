@@ -20,7 +20,7 @@ import { createDisconnectedAdapter } from "../disconnected-adapter";
 import type { CodedActionRun } from "../message-code";
 import type { InventoryObservation } from "@/domain/model";
 import { createMetricsReader, type MetricsSocket } from "./metrics";
-import { createResourceReader } from "./resources";
+import { createHostImageReader, createResourceReader } from "./resources";
 import { createInventoryReader } from "./inventory";
 import { mapHost } from "./hosts";
 import { createHostCommands } from "./host-commands";
@@ -283,7 +283,7 @@ export function createHttpAdapter(options: HttpAdapterOptions = {}): DockletAdap
       const dto = (await read("get-activity", `/environments/${encodeURIComponent(host)}/activities/${encodeURIComponent(id)}`, { limit: 500 }, undefined, signal)).data!;
       try {
         const run = mapActivityDetail(dto);
-        if (run.kind === "scan") {
+        if (run.kind === "scan" && dto.activity.resourceType === "environment") {
           try {
             const capability = await getCapability("getSecurity", { kind: "host", id: host });
             if (!capability.available) throw unavailable("getSecurity", capability.resourceRef, capability.disabledReasonCode);
@@ -514,7 +514,7 @@ export function createHttpAdapter(options: HttpAdapterOptions = {}): DockletAdap
     listHosts,
     ...inventory,
     ...resourceReads,
-    ...createVulnerabilities({ baseUrl, client, generation: () => identityGeneration, capability: getCapability, hosts: listHosts, images: resourceReads.listImages, changed: securityChanged, accepted: (host, id) => { refreshHost(host); targets.notify(host, id, undefined, true); } }),
+    ...createVulnerabilities({ baseUrl, client, generation: () => identityGeneration, capability: getCapability, hosts: listHosts, images: createHostImageReader(baseUrl, fetcher, () => {}), changed: securityChanged, accepted: (host, id) => { refreshHost(host); targets.notify(host, id, undefined, true); } }),
     ...volumeReads,
     ...createImageCommands({ baseUrl, client, capability: getCapability, generation: () => lifetimeGeneration, changed: () => { sharedReads.clear(); changeListeners.forEach((listener) => listener(["images"])); } }),
     ...createRegistryCommands({ baseUrl, client, capability: getCapability, generation: () => lifetimeGeneration, changed: () => { sharedReads.clear(); changeListeners.forEach((listener) => listener(["registries"])); } }),

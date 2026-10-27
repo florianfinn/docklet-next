@@ -579,16 +579,25 @@ zero findings. Images with no completed scan are neutrally labelled not scanned,
 excluded from totals, and never create an unavailable warning. Navigation marks
 partial totals while a visible host is unavailable, including unknown totals when
 all visible hosts fail. Host batches are merged together after all reads settle, retaining
-the prior query snapshot during refetch. Pending and filtered hosts do not remove
+the prior query snapshot during refetch. A security-owned 30-second budget per
+host covers capability, image/project/container inventory and every vulnerability
+response body. Hub capability, settings and host discovery share a separate
+30-second prerequisite budget. Timeout is `vulnerability.read-timeout`; retained
+image rows are unavailable and failed batches supply no findings or history.
+Identity and request generations fence late responses before the atomic merge.
+Inventory cancellation is opt-in for this path; other inventory readers retain
+their existing behavior. Pending and filtered hosts do not remove
 retained inventory. Image identities include the host, independently of tags.
 
 The security page, dashboard widget, attention items, operations chip, navigation
 badge and image column/details share the same live security query. UNKNOWN is a
 separate severity. Host-run history keeps interrupted and failed labels while
 numeric chart samples require a completed run or a partial run with scanned
-images. Scan progress comes from the accepted run read as
+images. Host-wide scan progress (activity resource type `environment`) comes
+from the accepted run read as
 `(scanned + failed + skipped) / targets`; zero targets or an unavailable run read
-remain indeterminate. Progress and history labels resolve host names.
+remain indeterminate. Per-image activities have no host-run read. Progress and
+history labels resolve host names.
 Observed active scans refresh the owned detail read every three seconds for up to
 thirty minutes, stopping on terminal state or observer release. List refreshes
 retain the same host/run's last known progress. Cancellation

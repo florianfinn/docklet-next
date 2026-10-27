@@ -15,15 +15,17 @@ const reasons = new Set(["agent.unavailable", "agent.invalid-token", "agent.upda
 
 export function createInventoryTransport(baseUrl: string, fetcher: typeof fetch, onState: (hostId: string, state: InventoryObservation) => void) {
   function fail(code: string, status?: number): never { throw new AdapterOutcomeError({ kind: "error", code, status }); }
-  async function read<I extends ReadOperation>(operation: I, hostId: string, suffix: string, start?: number, extra?: Record<string, string>): Promise<{ body: Body<I>; observation: InventoryObservation }> {
+  async function read<I extends ReadOperation>(operation: I, hostId: string, suffix: string, start?: number, extra?: Record<string, string>, signal?: AbortSignal): Promise<{ body: Body<I>; observation: InventoryObservation }> {
+    signal?.throwIfAborted();
     const params = new URLSearchParams(extra);
     if (start !== undefined) { params.set("start", String(start)); params.set("limit", "100"); params.set("order", "asc"); }
     const query = params.size ? `?${params}` : "";
     let response: Response;
-    try { response = await fetcher(`${baseUrl}/environments/${encodeURIComponent(hostId)}/${suffix}${query}`, { credentials: "same-origin", headers: { Accept: "application/json" } }); }
+    try { response = await fetcher(`${baseUrl}/environments/${encodeURIComponent(hostId)}/${suffix}${query}`, { credentials: "same-origin", headers: { Accept: "application/json" }, signal }); }
     catch { return fail("http.error"); }
     let body: Body<I> & { code?: string };
     try { body = await response.json(); } catch { return fail(`${operation}.invalid-response`, response.status); }
+    signal?.throwIfAborted();
     if (!response.ok) {
       if (body.code && reasons.has(body.code)) onState(hostId, { stale: true, reason: body.code as InventoryObservation["reason"] });
       return fail(body.code ?? "http.error", response.status);
@@ -35,11 +37,11 @@ export function createInventoryTransport(baseUrl: string, fetcher: typeof fetch,
     const observation: InventoryObservation = { observedAt, stale: !!reason, ...(reason ? { reason: reason as InventoryObservation["reason"] } : {}) };
     return { body, observation };
   }
-  async function list<I extends ListOperation>(operation: I, hostId: string, suffix: string, extra?: Record<string, string>) {
+  async function list<I extends ListOperation>(operation: I, hostId: string, suffix: string, extra?: Record<string, string>, signal?: AbortSignal) {
     const rows: unknown[] = [];
     let observation: InventoryObservation = { stale: false };
     for (;;) {
-      const result = await read(operation, hostId, suffix, rows.length, extra);
+      const result = await read(operation, hostId, suffix, rows.length, extra, signal);
       const { body } = result;
       if (!Array.isArray(body.data) || !body.pagination || !Number.isInteger(body.pagination.totalItems)) return fail(`${operation}.invalid-page`);
       rows.push(...body.data);

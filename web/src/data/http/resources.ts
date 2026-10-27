@@ -11,14 +11,32 @@ import { splitInventoryId } from "./inventory-mapping";
 import { createInventoryTransport, inventoryFailure } from "./inventory-transport";
 import { mapImage, mapTopology, mapVolumes } from "./resource-mapping";
 
+function combine(observations: InventoryObservation[]): InventoryObservation {
+  return { observedAt: observations.flatMap((o) => o.observedAt ? [o.observedAt] : []).sort()[0], stale: observations.some((o) => o.stale), reason: observations.find((o) => o.reason)?.reason };
+}
+
+/** Security can own one host's complete inventory lifetime without changing fleet readers. */
+export function createHostImageReader(baseUrl: string, fetcher: typeof fetch, onState: (hostId: string, state: InventoryObservation) => void) {
+  const { list } = createInventoryTransport(baseUrl, fetcher, onState);
+  return async (hostId: string, signal?: AbortSignal) => {
+    const [images, projects, containers] = await Promise.all([
+      list("list-images", hostId, "images", undefined, signal),
+      list("list-projects", hostId, "projects", undefined, signal),
+      list("list-containers", hostId, "containers", undefined, signal),
+    ]);
+    signal?.throwIfAborted();
+    const inventory = combine([projects.observation, containers.observation, images.observation]);
+    onState(hostId, inventory);
+    return images.rows.filter((i) => i.labels?.["io.docklet.system"] !== "agent").map((i) => mapImage(i, hostId, containers.rows, projects.rows, inventory));
+  };
+}
+
 export function createResourceReader(baseUrl: string, fetcher: typeof fetch, hosts: () => Promise<Host[]>, requireCapability: (operation: string) => Promise<void>, onState: (hostId: string, state: InventoryObservation) => void): Pick<DockletAdapter, "listImages" | "listVolumes" | "getVolume" | "getTopology"> {
   const { read, list } = createInventoryTransport(baseUrl, fetcher, onState);
+  const hostImages = createHostImageReader(baseUrl, fetcher, onState);
   async function context(hostId: string) {
     const [projects, containers] = await Promise.all([list("list-projects", hostId, "projects"), list("list-containers", hostId, "containers")]);
     return { projects: projects.rows, containers: containers.rows, observations: [projects.observation, containers.observation] };
-  }
-  function combine(observations: InventoryObservation[]): InventoryObservation {
-    return { observedAt: observations.flatMap((o) => o.observedAt ? [o.observedAt] : []).sort()[0], stale: observations.some((o) => o.stale), reason: observations.find((o) => o.reason)?.reason };
   }
   function observe(hostId: string, observations: InventoryObservation[]): InventoryObservation {
     const inventory = combine(observations);
@@ -50,11 +68,7 @@ export function createResourceReader(baseUrl: string, fetcher: typeof fetch, hos
       if (!volume) throw new AdapterOutcomeError({ kind: "error", code: "get-volume.not-found" });
       return { ...volume, backups: [] };
     },
-    listImages: (onPartial) => aggregate("listImages", async (h) => {
-      const [images, ctx] = await Promise.all([list("list-images", h.id, "images"), context(h.id)]);
-      const inventory = observe(h.id, [...ctx.observations, images.observation]);
-      return images.rows.filter((i) => i.labels?.["io.docklet.system"] !== "agent").map((i) => mapImage(i, h.id, ctx.containers, ctx.projects, inventory));
-    }, onPartial),
+    listImages: (onPartial) => aggregate("listImages", (h) => hostImages(h.id), onPartial),
     async getTopology(onPartial, retained) {
       await requireCapability("getTopology");
       const scope = await hosts();
