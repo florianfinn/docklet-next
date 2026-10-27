@@ -11,6 +11,7 @@ import (
 	"errors"
 	"fmt"
 	dto "github.com/florianfinn/docklet-next/types/updater"
+	"github.com/florianfinn/docklet-next/types/vulnerability"
 	"net/http"
 	"slices"
 	"time"
@@ -92,7 +93,7 @@ func (c *CommandClient) Execute(ctx context.Context, tunnel *AgentTunnel, req *C
 	defer tunnel.Pending.Delete(requestID)
 	completed := false
 	defer func() {
-		if !completed && runtimeRequestPathInternal(req.Path) {
+		if !completed && (runtimeRequestPathInternal(req.Path) || vulnerability.IsPath(req.Path)) {
 			_ = tunnel.Conn.Send(&TunnelMessage{ID: requestID, Type: MessageTypeCancelRequest})
 		}
 	}()
@@ -133,6 +134,9 @@ func (c *CommandClient) Execute(ctx context.Context, tunnel *AgentTunnel, req *C
 	}
 	if runtimeRequestPathInternal(req.Path) {
 		limit = runtimeRequestBodyLimit
+	}
+	if vulnerability.IsPath(req.Path) {
+		limit = vulnerability.ResponseLimit
 	}
 	status, headers, body, err := collectCommandResponseBoundedInternal(ctx, tunnel, pending, req.Method, limit)
 	if err != nil {

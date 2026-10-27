@@ -551,3 +551,9 @@ report authentication failure, unreachable and rate-limited separately, without
 treating a registry failure as a hub identity rejection. Saves and deletions
 invalidate registry queries. Identity changes discard late read/write results;
 dialog ownership additionally discards results after close or target changes.
+
+Vulnerability operations require agent contract v8 (minimum v8). Per-image and
+host-wide scan admission return an activity ID, and run reads return durable
+running or terminal host-run evidence. Both scan routes, run reads and bulk
+ignore/unignore have Edge commands. Vulnerability responses have a 32 MiB cap.
+See [vulnerability scanning](vulnerability-scanning.md).

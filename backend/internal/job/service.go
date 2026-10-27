@@ -640,6 +640,9 @@ func (s *JobService) authorizeRunInternal(ctx context.Context, run scheduler.Run
 }
 
 func (s *JobService) executeRunInternal(ctx context.Context, run scheduler.Run) (scheduler.Outcome, error) {
+	if (run.JobID == "vulnerability-scan" || run.JobID == "vulnerability-risk") && (run.EnvironmentID != "0" || s.cfg.AgentMode || s.cfg.EdgeAgent) {
+		return scheduler.Outcome{Status: scheduler.Failed, Code: "vulnerability.agent-job-retired"}, nil
+	}
 	if updater.IsImagePolicyJob(run.JobID) || (s.cfg.AgentMode || s.cfg.EdgeAgent) && strings.HasPrefix(run.JobID, "image-policy:") {
 		return scheduler.Outcome{Status: scheduler.Skipped, Code: "update.agent-local-job-disabled"}, nil
 	}
@@ -721,6 +724,9 @@ func safeJobInternal(jobID string) bool {
 }
 
 func (s *JobService) reconcileRunInternal(ctx context.Context, run scheduler.Run) (scheduler.Outcome, error) {
+	if (run.JobID == "vulnerability-scan" || run.JobID == "vulnerability-risk") && (run.EnvironmentID != "0" || s.cfg.AgentMode || s.cfg.EdgeAgent) {
+		return scheduler.Outcome{Status: scheduler.Failed, Code: "vulnerability.agent-job-retired"}, nil
+	}
 	if updater.IsImagePolicyJob(run.JobID) || (s.cfg.AgentMode || s.cfg.EdgeAgent) && strings.HasPrefix(run.JobID, "image-policy:") {
 		return scheduler.Outcome{Status: scheduler.Skipped, Code: "update.agent-local-job-disabled"}, nil
 	}

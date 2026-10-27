@@ -161,9 +161,9 @@ var jobMetadataRegistry = map[string]JobMetadata{
 		Name:           "Vulnerability Scan",
 		Description:    "Scans all Docker images for known vulnerabilities using Trivy",
 		Category:       "security",
-		SettingsKey:    "vulnerabilityScanInterval",
+		SettingsKey:    "",
 		EnabledKey:     "vulnerabilityScanEnabled",
-		ManagerOnly:    false,
+		ManagerOnly:    true,
 		IsContinuous:   false,
 		CanRunManually: true,
 		Prerequisites: []JobPrerequisiteMetadata{
@@ -174,10 +174,10 @@ var jobMetadataRegistry = map[string]JobMetadata{
 			},
 		},
 	},
-	"vulnerability-risk": {
-		ID:             "vulnerability-risk",
-		Name:           "Vulnerability Risk",
-		Description:    "Refreshes CISA KEV and FIRST EPSS threat intelligence and records the daily environment risk snapshot",
+	"vulnerability-intel": {
+		ID:             "vulnerability-intel",
+		Name:           "Vulnerability Intelligence",
+		Description:    "Refreshes cached CISA KEV and FIRST EPSS intelligence daily without scanning images",
 		Category:       "security",
 		SettingsKey:    "",
 		ManagerOnly:    false,

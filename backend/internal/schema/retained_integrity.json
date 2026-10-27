@@ -1,5 +1,24 @@
 {
   "columns": [
+    {"table":"vulnerability_scan_runs","column":"activity_id","notNull":true},
+    {"table":"vulnerability_scan_runs","column":"environment_id","notNull":true},
+    {"table":"vulnerability_scan_runs","column":"origin","notNull":true},
+    {"table":"vulnerability_scan_runs","column":"scope","notNull":true},
+    {"table":"vulnerability_scan_runs","column":"status","notNull":true},
+    {"table":"vulnerability_scan_runs","column":"started_at","notNull":true},
+    {"table":"vulnerability_scan_runs","column":"error_code","notNull":true,"default":"''"},
+    {"table":"vulnerability_scan_runs","column":"targets","notNull":true,"default":"0"},
+    {"table":"vulnerability_scan_runs","column":"scanned","notNull":true,"default":"0"},
+    {"table":"vulnerability_scan_runs","column":"failed","notNull":true,"default":"0"},
+    {"table":"vulnerability_scan_runs","column":"skipped","notNull":true,"default":"0"},
+    {"table":"vulnerability_scan_runs","column":"critical","notNull":true,"default":"0"},
+    {"table":"vulnerability_scan_runs","column":"high","notNull":true,"default":"0"},
+    {"table":"vulnerability_scan_runs","column":"medium","notNull":true,"default":"0"},
+    {"table":"vulnerability_scan_runs","column":"low","notNull":true,"default":"0"},
+    {"table":"vulnerability_scan_runs","column":"unknown","notNull":true,"default":"0"},
+    {"table":"vulnerability_scan_runs","column":"new_critical","notNull":true,"default":"0"},
+    {"table":"vulnerability_scan_runs","column":"new_high","notNull":true,"default":"0"},
+    {"table":"vulnerability_scan_runs","column":"new_findings","notNull":true,"default":"'[]'"},
     {"table":"stack_update_policies","column":"apply_code","notNull":true},
     {"table":"stack_update_policies","column":"bookkeeping_code","notNull":true},
     {"table":"image_lifecycle_runs","column":"settled","notNull":true},
@@ -256,6 +275,7 @@
     {"table": "webhooks", "column": "token_prefix", "notNull": true}
   ],
   "constraints": {
+    "vulnerability_scan_runs": ["CHECK (origin IN ('manual','scheduled'))", "CHECK (scope IN ('in-use','all'))", "CHECK (status IN ('running','completed','partial','cancelled','failed','interrupted'))", "CHECK (targets>=0)", "CHECK (scanned>=0)", "CHECK (failed>=0)", "CHECK (skipped>=0)", "CHECK (critical>=0)", "CHECK (high>=0)", "CHECK (medium>=0)", "CHECK (low>=0)", "CHECK (unknown>=0)", "CHECK (new_critical>=0)", "CHECK (new_high>=0)"],
     "stack_update_policies": ["CHECK (mode IN ('off','notify','apply'))", "CHECK (revision > 0)"],
     "image_update_schedules": ["CHECK (revision > 0)", "CHECK (polling_enabled IN (0,1))", "CHECK (auto_update_enabled IN (0,1))"],
     "image_policy_children": ["CHECK (revision > 0)", "CHECK (status IN ('prepared','admitted','refused','settled'))"],
@@ -290,6 +310,7 @@
     "system_backup_policies": ["CHECK (retention_count >= 1)"]
   },
   "indexes": [
+    "CREATE INDEX idx_vulnerability_scan_runs_environment_id ON vulnerability_scan_runs (environment_id,started_at);",
     "CREATE INDEX idx_restore_points_target_created ON restore_points (target_id, created_at);",
     "CREATE UNIQUE INDEX idx_runtime_receipts_environment_run ON runtime_receipts (environment_id,run_id);",
     "CREATE UNIQUE INDEX idx_runtime_receipts_active_scope ON runtime_receipts (environment_id,gate_scope) WHERE kind = 'receipt' AND settled_at IS NULL;",

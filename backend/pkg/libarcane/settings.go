@@ -52,7 +52,6 @@ var timeoutSettingKeys = []string{
 	"trivyResourceLimitsEnabled",
 	"trivyCpuLimit",
 	"trivyMemoryLimitMb",
-	"trivyConcurrentScanContainers",
 	"buildProvider",
 	"buildTimeout",
 	"depotProjectId",
@@ -66,7 +65,6 @@ var cronSettingKeys = []string{
 	"environmentHealthInterval",
 	"eventCleanupInterval",
 	"expiredSessionsCleanupInterval",
-	"vulnerabilityScanInterval",
 }
 
 var cronParser = cron.NewParser(cron.Second | cron.Minute | cron.Hour | cron.Dom | cron.Month | cron.Dow)

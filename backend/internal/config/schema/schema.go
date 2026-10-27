@@ -307,6 +307,10 @@ func collectSettingEnvOverridesInternal() ([]SettingOverrideEntry, error) {
 		}
 
 		key := tagParts[0]
+		switch key {
+		case "vulnerabilityScanInterval", "trivyConcurrentScanContainers", "trivyConfig", "trivyIgnore", "trivyServerEnabled", "trivyServerUrl", "trivyServerToken":
+			continue
+		}
 		attrs := tagParts[1:]
 		hasEnvOverride := slices.Contains(attrs, "envOverride")
 		isInternal := slices.Contains(attrs, "internal")

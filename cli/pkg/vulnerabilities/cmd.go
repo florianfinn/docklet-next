@@ -171,7 +171,7 @@ var scanCmd = &cobra.Command{
 		// Scans can take a long time on large images.
 		c.SetTimeout(30 * time.Minute)
 
-		result, err := c.PostJSON[vulnerability.ScanResult](cmd.Context(), types.ImageVulnerabilitiesScan(c.EnvID(), imageID), nil)
+		result, err := c.PostJSON[vulnerability.AcceptedScan](cmd.Context(), types.ImageVulnerabilitiesScan(c.EnvID(), imageID), vulnerability.ImageScanRequest{Origin: "manual", IgnoreUnfixed: true})
 		if err != nil {
 			return fmt.Errorf("failed to scan image: %w", err)
 		}
@@ -181,18 +181,7 @@ var scanCmd = &cobra.Command{
 		}
 
 		output.Header("Vulnerability Scan")
-		output.KeyValue("Image", result.Data.ImageName)
-		output.KeyValue("Status", string(result.Data.Status))
-		if result.Data.ScanPhase != "" {
-			output.KeyValue("Phase", string(result.Data.ScanPhase))
-		}
-		if result.Data.Error != "" {
-			output.KeyValue("Error", result.Data.Error)
-		}
-		if result.Data.ScannerVersion != "" {
-			output.KeyValue("Scanner", result.Data.ScannerVersion)
-		}
-		printSeveritySummary(result.Data.Summary)
+		output.KeyValue("Activity", result.Data.ActivityID)
 		return nil
 	},
 }

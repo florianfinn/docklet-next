@@ -94,6 +94,8 @@ GET /environments/{id}/vulnerabilities/export
 GET /environments/{id}/vulnerabilities/ignored
 GET /environments/{id}/vulnerabilities/image-options
 GET /environments/{id}/vulnerabilities/overview
+GET /environments/{id}/vulnerabilities/runs
+GET /environments/{id}/vulnerabilities/runs/{activityId}
 GET /environments/{id}/vulnerabilities/scanner-status
 GET /environments/{id}/vulnerabilities/summary
 GET /health
@@ -170,6 +172,7 @@ POST /environments/{id}/volumes/{volumeName}/backups/{backupId}/restore-files
 POST /environments/{id}/volumes/{volumeName}/rename
 POST /environments/{id}/vulnerabilities/ignore
 POST /environments/{id}/vulnerabilities/ignore/bulk
+POST /environments/{id}/vulnerabilities/scan
 POST /environments/{id}/vulnerabilities/unignore/bulk
 POST /settings/search
 PUT /environments/{id}/containers/{containerId}/auto-update

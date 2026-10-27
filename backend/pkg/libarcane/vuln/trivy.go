@@ -32,8 +32,8 @@ const (
 	DefaultDockerHostURI = "unix:///var/run/docker.sock"
 
 	// DBRepository / JavaDBRepository / ChecksBundleRepository are the Arcane-mirrored Trivy database paths without a registry host.
-	DBRepository           = "getarcaneapp/trivy-db:2"
-	JavaDBRepository       = "getarcaneapp/trivy-java-db:1"
+	DBRepository           = "aquasec/trivy-db:2"
+	JavaDBRepository       = "aquasec/trivy-java-db:1"
 	ChecksBundleRepository = "getarcaneapp/trivy-checks:1"
 )
 
@@ -140,39 +140,12 @@ func ScanCacheBackendArgs() []string {
 
 // RepositoryArgs returns the Trivy DB repository flags pointing at the Arcane-mirrored databases on the given registry.
 func RepositoryArgs(registry string) []string {
-	host := libarcane.ArcaneRegistryHost(registry)
-	return []string{
-		"--db-repository", host + "/" + DBRepository,
-		"--java-db-repository", host + "/" + JavaDBRepository,
-		"--checks-bundle-repository", host + "/" + ChecksBundleRepository,
-	}
-}
-
-// ScanSourceArgs returns the Trivy flags selecting where vulnerability data comes
-// from. In client/server mode (serverURL set) the client never opens the local
-// BoltDB, so --server replaces the cache-backend and DB-repository flags. This is
-// the supported path on 32-bit hosts (arm/v7) where the local DB cannot be
-// memory-mapped. With an empty serverURL it falls back to the standalone
-// local-database flags. The server token is passed via ServerTokenEnv rather than
-// a flag so it is not exposed in the process arguments.
-func ScanSourceArgs(serverURL, registry string) []string {
-	serverURL = strings.TrimSpace(serverURL)
-	if serverURL == "" {
-		return append(ScanCacheBackendArgs(), RepositoryArgs(registry)...)
-	}
-
-	return []string{"--server", serverURL}
-}
-
-// ServerTokenEnv returns the TRIVY_TOKEN environment entry for a non-empty Trivy
-// server token. Passing the token through the environment instead of a --token CLI
-// flag keeps it out of the container's process arguments (/proc/<pid>/cmdline, ps).
-func ServerTokenEnv(token string) []string {
-	token = strings.TrimSpace(token)
-	if token == "" {
+	host := strings.TrimSpace(registry)
+	if host == "" || host == "ghcr.io" || host == "docker.io" {
 		return nil
 	}
-	return []string{"TRIVY_TOKEN=" + token}
+	return []string{"--db-repository", host + "/" + DBRepository, "--java-db-repository", host + "/" + JavaDBRepository}
+
 }
 
 // IgnoreUnfixedArgs returns --ignore-unfixed when enabled so Trivy only reports

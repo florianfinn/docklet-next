@@ -1,5 +1,5 @@
 // Source: api/openapi.json
-// Revision: 56111f139be68ec78fbf95001e3e4f1473ca4fcc54f16ca95a9565666bd61ef9
+// Revision: 5d3200543d30cc73d35c2310e1d3b346faff6b64a18ed7c9d4d05ace4c241c3a
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
 // Deviations: Generated TypeScript declarations from the local Huma export.
@@ -4112,6 +4112,57 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/environments/{id}/vulnerabilities/runs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Read the newest 30 terminal host scan runs */
+        get: operations["list-vulnerability-scan-runs"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/environments/{id}/vulnerabilities/runs/{activityId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Read a host scan run */
+        get: operations["get-vulnerability-scan-run"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/environments/{id}/vulnerabilities/scan": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Scan host images */
+        post: operations["scan-host-vulnerabilities"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/environments/{id}/vulnerabilities/scanner-status": {
         parameters: {
             query?: never;
@@ -6151,6 +6202,18 @@ export interface components {
             /** @description Whether the request was successful */
             success: boolean;
         };
+        BaseApiResponseListVulnerabilityScanRun: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example /api/schemas/BaseApiResponseListVulnerabilityScanRun.json
+             */
+            readonly $schema?: string;
+            /** @description Response data */
+            data: components["schemas"]["VulnerabilityScanRun"][] | null;
+            /** @description Whether the request was successful */
+            success: boolean;
+        };
         BaseApiResponseListWebhookSummary: {
             /**
              * Format: uri
@@ -6597,6 +6660,18 @@ export interface components {
             /** @description Whether the request was successful */
             success: boolean;
         };
+        BaseApiResponseVulnerabilityAcceptedScan: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example /api/schemas/BaseApiResponseVulnerabilityAcceptedScan.json
+             */
+            readonly $schema?: string;
+            /** @description Response data */
+            data: components["schemas"]["VulnerabilityAcceptedScan"];
+            /** @description Whether the request was successful */
+            success: boolean;
+        };
         BaseApiResponseVulnerabilityBulkIgnoreResponse: {
             /**
              * Format: uri
@@ -6654,6 +6729,18 @@ export interface components {
             readonly $schema?: string;
             /** @description Response data */
             data: components["schemas"]["VulnerabilityScanResult"];
+            /** @description Whether the request was successful */
+            success: boolean;
+        };
+        BaseApiResponseVulnerabilityScanRun: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example /api/schemas/BaseApiResponseVulnerabilityScanRun.json
+             */
+            readonly $schema?: string;
+            /** @description Response data */
+            data: components["schemas"]["VulnerabilityScanRun"];
             /** @description Whether the request was successful */
             success: boolean;
         };
@@ -9228,7 +9315,7 @@ export interface components {
             category: string;
             children?: components["schemas"]["JobscheduleJobStatus"][] | null;
             /** @enum {string} */
-            code?: "image.active-update-protected" | "image.busy" | "image.changed" | "image.in-use" | "image.invalid-archive" | "image.invalid-prune" | "image.invalid-reference" | "image.load-failed" | "image.not-found" | "image.prune-failed" | "image.pull-failed" | "image.remove-failed" | "image.reserved-reference" | "image.restore-point-protected" | "image.system-protected" | "image.tag-failed" | "image.usage-unavailable" | "job.skipped" | "registry.authentication-failed" | "registry.authentication-required" | "registry.credential-unavailable" | "registry.exists" | "registry.inline-credentials-not-allowed" | "registry.invalid-config" | "registry.not-found" | "registry.persistence-failed" | "registry.rate-limited" | "registry.sync-failed" | "registry.unavailable" | "restore.deploy-failed" | "restore.image-mismatch" | "restore.in-use" | "restore.not-found" | "restore.shared-reference" | "restore.unavailable" | "run.busy" | "run.cancelling" | "runtime.interrupted" | "runtime.outcome-unknown" | "runtime.parent-unresolved" | "runtime.target-changed" | "runtime.target-unavailable" | "update.agent-local-job-disabled" | "update.auto-excluded" | "update.baseline-unavailable" | "update.check-unavailable" | "update.config-drift" | "update.deploy-failed" | "update.image-binding-unsupported" | "update.invalid-policy" | "update.invalid-target" | "update.path-retired" | "update.permission-denied" | "update.persistence-failed" | "update.policy-changed" | "update.requires-hub-update" | "update.schedule-hub-owned" | "update.schedule-owner-unset" | "update.snapshot-unavailable" | "update.system-version-unknown" | "update.target-changed" | "update.target-not-found";
+            code?: "feature-disabled" | "image.active-update-protected" | "image.busy" | "image.changed" | "image.in-use" | "image.invalid-archive" | "image.invalid-prune" | "image.invalid-reference" | "image.load-failed" | "image.not-found" | "image.prune-failed" | "image.pull-failed" | "image.remove-failed" | "image.reserved-reference" | "image.restore-point-protected" | "image.system-protected" | "image.tag-failed" | "image.usage-unavailable" | "job.skipped" | "registry.authentication-failed" | "registry.authentication-required" | "registry.credential-unavailable" | "registry.exists" | "registry.inline-credentials-not-allowed" | "registry.invalid-config" | "registry.not-found" | "registry.persistence-failed" | "registry.rate-limited" | "registry.sync-failed" | "registry.unavailable" | "restore.deploy-failed" | "restore.image-mismatch" | "restore.in-use" | "restore.not-found" | "restore.shared-reference" | "restore.unavailable" | "run.busy" | "run.cancelling" | "runtime.interrupted" | "runtime.outcome-unknown" | "runtime.parent-unresolved" | "runtime.target-changed" | "runtime.target-unavailable" | "update.agent-local-job-disabled" | "update.auto-excluded" | "update.baseline-unavailable" | "update.check-unavailable" | "update.config-drift" | "update.deploy-failed" | "update.image-binding-unsupported" | "update.invalid-policy" | "update.invalid-target" | "update.path-retired" | "update.permission-denied" | "update.persistence-failed" | "update.policy-changed" | "update.requires-hub-update" | "update.schedule-hub-owned" | "update.schedule-owner-unset" | "update.snapshot-unavailable" | "update.system-version-unknown" | "update.target-changed" | "update.target-not-found" | "vulnerability.agent-job-retired" | "vulnerability.busy" | "vulnerability.database-unavailable" | "vulnerability.dispatch-interrupted" | "vulnerability.dispatch-unknown" | "vulnerability.host-incompatible" | "vulnerability.host-offline" | "vulnerability.host-pending" | "vulnerability.image-not-found" | "vulnerability.image-removed" | "vulnerability.no-eligible-hosts" | "vulnerability.platform-unavailable" | "vulnerability.report-invalid" | "vulnerability.response-too-large" | "vulnerability.run-not-found" | "vulnerability.scan-cancelled" | "vulnerability.scan-failed" | "vulnerability.scan-interrupted" | "vulnerability.scan-timeout" | "vulnerability.scanner-unavailable" | "vulnerability.storage-full" | "vulnerability.storage-unavailable";
             currentRun?: components["schemas"]["SchedulerRun"];
             description: string;
             enabled: boolean;
@@ -9716,7 +9803,7 @@ export interface components {
             lastCheckedAt?: string;
             notPulledImageRefs?: string[] | null;
             /** @enum {string} */
-            policyCode?: "image.active-update-protected" | "image.busy" | "image.changed" | "image.in-use" | "image.invalid-archive" | "image.invalid-prune" | "image.invalid-reference" | "image.load-failed" | "image.not-found" | "image.prune-failed" | "image.pull-failed" | "image.remove-failed" | "image.reserved-reference" | "image.restore-point-protected" | "image.system-protected" | "image.tag-failed" | "image.usage-unavailable" | "job.skipped" | "registry.authentication-failed" | "registry.authentication-required" | "registry.credential-unavailable" | "registry.exists" | "registry.inline-credentials-not-allowed" | "registry.invalid-config" | "registry.not-found" | "registry.persistence-failed" | "registry.rate-limited" | "registry.sync-failed" | "registry.unavailable" | "restore.deploy-failed" | "restore.image-mismatch" | "restore.in-use" | "restore.not-found" | "restore.shared-reference" | "restore.unavailable" | "run.busy" | "run.cancelling" | "runtime.interrupted" | "runtime.outcome-unknown" | "runtime.parent-unresolved" | "runtime.target-changed" | "runtime.target-unavailable" | "update.agent-local-job-disabled" | "update.auto-excluded" | "update.baseline-unavailable" | "update.check-unavailable" | "update.config-drift" | "update.deploy-failed" | "update.image-binding-unsupported" | "update.invalid-policy" | "update.invalid-target" | "update.path-retired" | "update.permission-denied" | "update.persistence-failed" | "update.policy-changed" | "update.requires-hub-update" | "update.schedule-hub-owned" | "update.schedule-owner-unset" | "update.snapshot-unavailable" | "update.system-version-unknown" | "update.target-changed" | "update.target-not-found";
+            policyCode?: "feature-disabled" | "image.active-update-protected" | "image.busy" | "image.changed" | "image.in-use" | "image.invalid-archive" | "image.invalid-prune" | "image.invalid-reference" | "image.load-failed" | "image.not-found" | "image.prune-failed" | "image.pull-failed" | "image.remove-failed" | "image.reserved-reference" | "image.restore-point-protected" | "image.system-protected" | "image.tag-failed" | "image.usage-unavailable" | "job.skipped" | "registry.authentication-failed" | "registry.authentication-required" | "registry.credential-unavailable" | "registry.exists" | "registry.inline-credentials-not-allowed" | "registry.invalid-config" | "registry.not-found" | "registry.persistence-failed" | "registry.rate-limited" | "registry.sync-failed" | "registry.unavailable" | "restore.deploy-failed" | "restore.image-mismatch" | "restore.in-use" | "restore.not-found" | "restore.shared-reference" | "restore.unavailable" | "run.busy" | "run.cancelling" | "runtime.interrupted" | "runtime.outcome-unknown" | "runtime.parent-unresolved" | "runtime.target-changed" | "runtime.target-unavailable" | "update.agent-local-job-disabled" | "update.auto-excluded" | "update.baseline-unavailable" | "update.check-unavailable" | "update.config-drift" | "update.deploy-failed" | "update.image-binding-unsupported" | "update.invalid-policy" | "update.invalid-target" | "update.path-retired" | "update.permission-denied" | "update.persistence-failed" | "update.policy-changed" | "update.requires-hub-update" | "update.schedule-hub-owned" | "update.schedule-owner-unset" | "update.snapshot-unavailable" | "update.system-version-unknown" | "update.target-changed" | "update.target-not-found" | "vulnerability.agent-job-retired" | "vulnerability.busy" | "vulnerability.database-unavailable" | "vulnerability.dispatch-interrupted" | "vulnerability.dispatch-unknown" | "vulnerability.host-incompatible" | "vulnerability.host-offline" | "vulnerability.host-pending" | "vulnerability.image-not-found" | "vulnerability.image-removed" | "vulnerability.no-eligible-hosts" | "vulnerability.platform-unavailable" | "vulnerability.report-invalid" | "vulnerability.response-too-large" | "vulnerability.run-not-found" | "vulnerability.scan-cancelled" | "vulnerability.scan-failed" | "vulnerability.scan-interrupted" | "vulnerability.scan-timeout" | "vulnerability.scanner-unavailable" | "vulnerability.storage-full" | "vulnerability.storage-unavailable";
             serviceUpdates?: {
                 [key: string]: components["schemas"]["ProjectServiceUpdateInfo"];
             };
@@ -10037,7 +10124,7 @@ export interface components {
         SchedulerOutcome: {
             activityId?: string;
             /** @enum {string} */
-            code?: "image.active-update-protected" | "image.busy" | "image.changed" | "image.in-use" | "image.invalid-archive" | "image.invalid-prune" | "image.invalid-reference" | "image.load-failed" | "image.not-found" | "image.prune-failed" | "image.pull-failed" | "image.remove-failed" | "image.reserved-reference" | "image.restore-point-protected" | "image.system-protected" | "image.tag-failed" | "image.usage-unavailable" | "job.skipped" | "registry.authentication-failed" | "registry.authentication-required" | "registry.credential-unavailable" | "registry.exists" | "registry.inline-credentials-not-allowed" | "registry.invalid-config" | "registry.not-found" | "registry.persistence-failed" | "registry.rate-limited" | "registry.sync-failed" | "registry.unavailable" | "restore.deploy-failed" | "restore.image-mismatch" | "restore.in-use" | "restore.not-found" | "restore.shared-reference" | "restore.unavailable" | "run.busy" | "run.cancelling" | "runtime.interrupted" | "runtime.outcome-unknown" | "runtime.parent-unresolved" | "runtime.target-changed" | "runtime.target-unavailable" | "update.agent-local-job-disabled" | "update.auto-excluded" | "update.baseline-unavailable" | "update.check-unavailable" | "update.config-drift" | "update.deploy-failed" | "update.image-binding-unsupported" | "update.invalid-policy" | "update.invalid-target" | "update.path-retired" | "update.permission-denied" | "update.persistence-failed" | "update.policy-changed" | "update.requires-hub-update" | "update.schedule-hub-owned" | "update.schedule-owner-unset" | "update.snapshot-unavailable" | "update.system-version-unknown" | "update.target-changed" | "update.target-not-found";
+            code?: "feature-disabled" | "image.active-update-protected" | "image.busy" | "image.changed" | "image.in-use" | "image.invalid-archive" | "image.invalid-prune" | "image.invalid-reference" | "image.load-failed" | "image.not-found" | "image.prune-failed" | "image.pull-failed" | "image.remove-failed" | "image.reserved-reference" | "image.restore-point-protected" | "image.system-protected" | "image.tag-failed" | "image.usage-unavailable" | "job.skipped" | "registry.authentication-failed" | "registry.authentication-required" | "registry.credential-unavailable" | "registry.exists" | "registry.inline-credentials-not-allowed" | "registry.invalid-config" | "registry.not-found" | "registry.persistence-failed" | "registry.rate-limited" | "registry.sync-failed" | "registry.unavailable" | "restore.deploy-failed" | "restore.image-mismatch" | "restore.in-use" | "restore.not-found" | "restore.shared-reference" | "restore.unavailable" | "run.busy" | "run.cancelling" | "runtime.interrupted" | "runtime.outcome-unknown" | "runtime.parent-unresolved" | "runtime.target-changed" | "runtime.target-unavailable" | "update.agent-local-job-disabled" | "update.auto-excluded" | "update.baseline-unavailable" | "update.check-unavailable" | "update.config-drift" | "update.deploy-failed" | "update.image-binding-unsupported" | "update.invalid-policy" | "update.invalid-target" | "update.path-retired" | "update.permission-denied" | "update.persistence-failed" | "update.policy-changed" | "update.requires-hub-update" | "update.schedule-hub-owned" | "update.schedule-owner-unset" | "update.snapshot-unavailable" | "update.system-version-unknown" | "update.target-changed" | "update.target-not-found" | "vulnerability.agent-job-retired" | "vulnerability.busy" | "vulnerability.database-unavailable" | "vulnerability.dispatch-interrupted" | "vulnerability.dispatch-unknown" | "vulnerability.host-incompatible" | "vulnerability.host-offline" | "vulnerability.host-pending" | "vulnerability.image-not-found" | "vulnerability.image-removed" | "vulnerability.no-eligible-hosts" | "vulnerability.platform-unavailable" | "vulnerability.report-invalid" | "vulnerability.response-too-large" | "vulnerability.run-not-found" | "vulnerability.scan-cancelled" | "vulnerability.scan-failed" | "vulnerability.scan-interrupted" | "vulnerability.scan-timeout" | "vulnerability.scanner-unavailable" | "vulnerability.storage-full" | "vulnerability.storage-unavailable";
             message?: string;
             status: string;
             targets?: components["schemas"]["SchedulerTargetOutcome"][] | null;
@@ -10109,7 +10196,7 @@ export interface components {
         SchedulerTargetOutcome: {
             activityId?: string;
             /** @enum {string} */
-            code?: "image.active-update-protected" | "image.busy" | "image.changed" | "image.in-use" | "image.invalid-archive" | "image.invalid-prune" | "image.invalid-reference" | "image.load-failed" | "image.not-found" | "image.prune-failed" | "image.pull-failed" | "image.remove-failed" | "image.reserved-reference" | "image.restore-point-protected" | "image.system-protected" | "image.tag-failed" | "image.usage-unavailable" | "job.skipped" | "registry.authentication-failed" | "registry.authentication-required" | "registry.credential-unavailable" | "registry.exists" | "registry.inline-credentials-not-allowed" | "registry.invalid-config" | "registry.not-found" | "registry.persistence-failed" | "registry.rate-limited" | "registry.sync-failed" | "registry.unavailable" | "restore.deploy-failed" | "restore.image-mismatch" | "restore.in-use" | "restore.not-found" | "restore.shared-reference" | "restore.unavailable" | "run.busy" | "run.cancelling" | "runtime.interrupted" | "runtime.outcome-unknown" | "runtime.parent-unresolved" | "runtime.target-changed" | "runtime.target-unavailable" | "update.agent-local-job-disabled" | "update.auto-excluded" | "update.baseline-unavailable" | "update.check-unavailable" | "update.config-drift" | "update.deploy-failed" | "update.image-binding-unsupported" | "update.invalid-policy" | "update.invalid-target" | "update.path-retired" | "update.permission-denied" | "update.persistence-failed" | "update.policy-changed" | "update.requires-hub-update" | "update.schedule-hub-owned" | "update.schedule-owner-unset" | "update.snapshot-unavailable" | "update.system-version-unknown" | "update.target-changed" | "update.target-not-found";
+            code?: "feature-disabled" | "image.active-update-protected" | "image.busy" | "image.changed" | "image.in-use" | "image.invalid-archive" | "image.invalid-prune" | "image.invalid-reference" | "image.load-failed" | "image.not-found" | "image.prune-failed" | "image.pull-failed" | "image.remove-failed" | "image.reserved-reference" | "image.restore-point-protected" | "image.system-protected" | "image.tag-failed" | "image.usage-unavailable" | "job.skipped" | "registry.authentication-failed" | "registry.authentication-required" | "registry.credential-unavailable" | "registry.exists" | "registry.inline-credentials-not-allowed" | "registry.invalid-config" | "registry.not-found" | "registry.persistence-failed" | "registry.rate-limited" | "registry.sync-failed" | "registry.unavailable" | "restore.deploy-failed" | "restore.image-mismatch" | "restore.in-use" | "restore.not-found" | "restore.shared-reference" | "restore.unavailable" | "run.busy" | "run.cancelling" | "runtime.interrupted" | "runtime.outcome-unknown" | "runtime.parent-unresolved" | "runtime.target-changed" | "runtime.target-unavailable" | "update.agent-local-job-disabled" | "update.auto-excluded" | "update.baseline-unavailable" | "update.check-unavailable" | "update.config-drift" | "update.deploy-failed" | "update.image-binding-unsupported" | "update.invalid-policy" | "update.invalid-target" | "update.path-retired" | "update.permission-denied" | "update.persistence-failed" | "update.policy-changed" | "update.requires-hub-update" | "update.schedule-hub-owned" | "update.schedule-owner-unset" | "update.snapshot-unavailable" | "update.system-version-unknown" | "update.target-changed" | "update.target-not-found" | "vulnerability.agent-job-retired" | "vulnerability.busy" | "vulnerability.database-unavailable" | "vulnerability.dispatch-interrupted" | "vulnerability.dispatch-unknown" | "vulnerability.host-incompatible" | "vulnerability.host-offline" | "vulnerability.host-pending" | "vulnerability.image-not-found" | "vulnerability.image-removed" | "vulnerability.no-eligible-hosts" | "vulnerability.platform-unavailable" | "vulnerability.report-invalid" | "vulnerability.response-too-large" | "vulnerability.run-not-found" | "vulnerability.scan-cancelled" | "vulnerability.scan-failed" | "vulnerability.scan-interrupted" | "vulnerability.scan-timeout" | "vulnerability.scanner-unavailable" | "vulnerability.storage-full" | "vulnerability.storage-unavailable";
             id: string;
             message?: string;
             resourceType?: string;
@@ -10684,16 +10771,16 @@ export interface components {
             /** Format: date-time */
             applyCheckedAt?: string;
             /** @enum {string} */
-            applyCode?: "image.active-update-protected" | "image.busy" | "image.changed" | "image.in-use" | "image.invalid-archive" | "image.invalid-prune" | "image.invalid-reference" | "image.load-failed" | "image.not-found" | "image.prune-failed" | "image.pull-failed" | "image.remove-failed" | "image.reserved-reference" | "image.restore-point-protected" | "image.system-protected" | "image.tag-failed" | "image.usage-unavailable" | "job.skipped" | "registry.authentication-failed" | "registry.authentication-required" | "registry.credential-unavailable" | "registry.exists" | "registry.inline-credentials-not-allowed" | "registry.invalid-config" | "registry.not-found" | "registry.persistence-failed" | "registry.rate-limited" | "registry.sync-failed" | "registry.unavailable" | "restore.deploy-failed" | "restore.image-mismatch" | "restore.in-use" | "restore.not-found" | "restore.shared-reference" | "restore.unavailable" | "run.busy" | "run.cancelling" | "runtime.interrupted" | "runtime.outcome-unknown" | "runtime.parent-unresolved" | "runtime.target-changed" | "runtime.target-unavailable" | "update.agent-local-job-disabled" | "update.auto-excluded" | "update.baseline-unavailable" | "update.check-unavailable" | "update.config-drift" | "update.deploy-failed" | "update.image-binding-unsupported" | "update.invalid-policy" | "update.invalid-target" | "update.path-retired" | "update.permission-denied" | "update.persistence-failed" | "update.policy-changed" | "update.requires-hub-update" | "update.schedule-hub-owned" | "update.schedule-owner-unset" | "update.snapshot-unavailable" | "update.system-version-unknown" | "update.target-changed" | "update.target-not-found";
+            applyCode?: "feature-disabled" | "image.active-update-protected" | "image.busy" | "image.changed" | "image.in-use" | "image.invalid-archive" | "image.invalid-prune" | "image.invalid-reference" | "image.load-failed" | "image.not-found" | "image.prune-failed" | "image.pull-failed" | "image.remove-failed" | "image.reserved-reference" | "image.restore-point-protected" | "image.system-protected" | "image.tag-failed" | "image.usage-unavailable" | "job.skipped" | "registry.authentication-failed" | "registry.authentication-required" | "registry.credential-unavailable" | "registry.exists" | "registry.inline-credentials-not-allowed" | "registry.invalid-config" | "registry.not-found" | "registry.persistence-failed" | "registry.rate-limited" | "registry.sync-failed" | "registry.unavailable" | "restore.deploy-failed" | "restore.image-mismatch" | "restore.in-use" | "restore.not-found" | "restore.shared-reference" | "restore.unavailable" | "run.busy" | "run.cancelling" | "runtime.interrupted" | "runtime.outcome-unknown" | "runtime.parent-unresolved" | "runtime.target-changed" | "runtime.target-unavailable" | "update.agent-local-job-disabled" | "update.auto-excluded" | "update.baseline-unavailable" | "update.check-unavailable" | "update.config-drift" | "update.deploy-failed" | "update.image-binding-unsupported" | "update.invalid-policy" | "update.invalid-target" | "update.path-retired" | "update.permission-denied" | "update.persistence-failed" | "update.policy-changed" | "update.requires-hub-update" | "update.schedule-hub-owned" | "update.schedule-owner-unset" | "update.snapshot-unavailable" | "update.system-version-unknown" | "update.target-changed" | "update.target-not-found" | "vulnerability.agent-job-retired" | "vulnerability.busy" | "vulnerability.database-unavailable" | "vulnerability.dispatch-interrupted" | "vulnerability.dispatch-unknown" | "vulnerability.host-incompatible" | "vulnerability.host-offline" | "vulnerability.host-pending" | "vulnerability.image-not-found" | "vulnerability.image-removed" | "vulnerability.no-eligible-hosts" | "vulnerability.platform-unavailable" | "vulnerability.report-invalid" | "vulnerability.response-too-large" | "vulnerability.run-not-found" | "vulnerability.scan-cancelled" | "vulnerability.scan-failed" | "vulnerability.scan-interrupted" | "vulnerability.scan-timeout" | "vulnerability.scanner-unavailable" | "vulnerability.storage-full" | "vulnerability.storage-unavailable";
             /** Format: date-time */
             bookkeepingAt?: string;
             /** @enum {string} */
-            bookkeepingCode?: "image.active-update-protected" | "image.busy" | "image.changed" | "image.in-use" | "image.invalid-archive" | "image.invalid-prune" | "image.invalid-reference" | "image.load-failed" | "image.not-found" | "image.prune-failed" | "image.pull-failed" | "image.remove-failed" | "image.reserved-reference" | "image.restore-point-protected" | "image.system-protected" | "image.tag-failed" | "image.usage-unavailable" | "job.skipped" | "registry.authentication-failed" | "registry.authentication-required" | "registry.credential-unavailable" | "registry.exists" | "registry.inline-credentials-not-allowed" | "registry.invalid-config" | "registry.not-found" | "registry.persistence-failed" | "registry.rate-limited" | "registry.sync-failed" | "registry.unavailable" | "restore.deploy-failed" | "restore.image-mismatch" | "restore.in-use" | "restore.not-found" | "restore.shared-reference" | "restore.unavailable" | "run.busy" | "run.cancelling" | "runtime.interrupted" | "runtime.outcome-unknown" | "runtime.parent-unresolved" | "runtime.target-changed" | "runtime.target-unavailable" | "update.agent-local-job-disabled" | "update.auto-excluded" | "update.baseline-unavailable" | "update.check-unavailable" | "update.config-drift" | "update.deploy-failed" | "update.image-binding-unsupported" | "update.invalid-policy" | "update.invalid-target" | "update.path-retired" | "update.permission-denied" | "update.persistence-failed" | "update.policy-changed" | "update.requires-hub-update" | "update.schedule-hub-owned" | "update.schedule-owner-unset" | "update.snapshot-unavailable" | "update.system-version-unknown" | "update.target-changed" | "update.target-not-found";
+            bookkeepingCode?: "feature-disabled" | "image.active-update-protected" | "image.busy" | "image.changed" | "image.in-use" | "image.invalid-archive" | "image.invalid-prune" | "image.invalid-reference" | "image.load-failed" | "image.not-found" | "image.prune-failed" | "image.pull-failed" | "image.remove-failed" | "image.reserved-reference" | "image.restore-point-protected" | "image.system-protected" | "image.tag-failed" | "image.usage-unavailable" | "job.skipped" | "registry.authentication-failed" | "registry.authentication-required" | "registry.credential-unavailable" | "registry.exists" | "registry.inline-credentials-not-allowed" | "registry.invalid-config" | "registry.not-found" | "registry.persistence-failed" | "registry.rate-limited" | "registry.sync-failed" | "registry.unavailable" | "restore.deploy-failed" | "restore.image-mismatch" | "restore.in-use" | "restore.not-found" | "restore.shared-reference" | "restore.unavailable" | "run.busy" | "run.cancelling" | "runtime.interrupted" | "runtime.outcome-unknown" | "runtime.parent-unresolved" | "runtime.target-changed" | "runtime.target-unavailable" | "update.agent-local-job-disabled" | "update.auto-excluded" | "update.baseline-unavailable" | "update.check-unavailable" | "update.config-drift" | "update.deploy-failed" | "update.image-binding-unsupported" | "update.invalid-policy" | "update.invalid-target" | "update.path-retired" | "update.permission-denied" | "update.persistence-failed" | "update.policy-changed" | "update.requires-hub-update" | "update.schedule-hub-owned" | "update.schedule-owner-unset" | "update.snapshot-unavailable" | "update.system-version-unknown" | "update.target-changed" | "update.target-not-found" | "vulnerability.agent-job-retired" | "vulnerability.busy" | "vulnerability.database-unavailable" | "vulnerability.dispatch-interrupted" | "vulnerability.dispatch-unknown" | "vulnerability.host-incompatible" | "vulnerability.host-offline" | "vulnerability.host-pending" | "vulnerability.image-not-found" | "vulnerability.image-removed" | "vulnerability.no-eligible-hosts" | "vulnerability.platform-unavailable" | "vulnerability.report-invalid" | "vulnerability.response-too-large" | "vulnerability.run-not-found" | "vulnerability.scan-cancelled" | "vulnerability.scan-failed" | "vulnerability.scan-interrupted" | "vulnerability.scan-timeout" | "vulnerability.scanner-unavailable" | "vulnerability.storage-full" | "vulnerability.storage-unavailable";
             candidates: components["schemas"]["UpdaterUpdateCandidate"][] | null;
             /** Format: date-time */
             checkedAt?: string;
             /** @enum {string} */
-            code?: "image.active-update-protected" | "image.busy" | "image.changed" | "image.in-use" | "image.invalid-archive" | "image.invalid-prune" | "image.invalid-reference" | "image.load-failed" | "image.not-found" | "image.prune-failed" | "image.pull-failed" | "image.remove-failed" | "image.reserved-reference" | "image.restore-point-protected" | "image.system-protected" | "image.tag-failed" | "image.usage-unavailable" | "job.skipped" | "registry.authentication-failed" | "registry.authentication-required" | "registry.credential-unavailable" | "registry.exists" | "registry.inline-credentials-not-allowed" | "registry.invalid-config" | "registry.not-found" | "registry.persistence-failed" | "registry.rate-limited" | "registry.sync-failed" | "registry.unavailable" | "restore.deploy-failed" | "restore.image-mismatch" | "restore.in-use" | "restore.not-found" | "restore.shared-reference" | "restore.unavailable" | "run.busy" | "run.cancelling" | "runtime.interrupted" | "runtime.outcome-unknown" | "runtime.parent-unresolved" | "runtime.target-changed" | "runtime.target-unavailable" | "update.agent-local-job-disabled" | "update.auto-excluded" | "update.baseline-unavailable" | "update.check-unavailable" | "update.config-drift" | "update.deploy-failed" | "update.image-binding-unsupported" | "update.invalid-policy" | "update.invalid-target" | "update.path-retired" | "update.permission-denied" | "update.persistence-failed" | "update.policy-changed" | "update.requires-hub-update" | "update.schedule-hub-owned" | "update.schedule-owner-unset" | "update.snapshot-unavailable" | "update.system-version-unknown" | "update.target-changed" | "update.target-not-found";
+            code?: "feature-disabled" | "image.active-update-protected" | "image.busy" | "image.changed" | "image.in-use" | "image.invalid-archive" | "image.invalid-prune" | "image.invalid-reference" | "image.load-failed" | "image.not-found" | "image.prune-failed" | "image.pull-failed" | "image.remove-failed" | "image.reserved-reference" | "image.restore-point-protected" | "image.system-protected" | "image.tag-failed" | "image.usage-unavailable" | "job.skipped" | "registry.authentication-failed" | "registry.authentication-required" | "registry.credential-unavailable" | "registry.exists" | "registry.inline-credentials-not-allowed" | "registry.invalid-config" | "registry.not-found" | "registry.persistence-failed" | "registry.rate-limited" | "registry.sync-failed" | "registry.unavailable" | "restore.deploy-failed" | "restore.image-mismatch" | "restore.in-use" | "restore.not-found" | "restore.shared-reference" | "restore.unavailable" | "run.busy" | "run.cancelling" | "runtime.interrupted" | "runtime.outcome-unknown" | "runtime.parent-unresolved" | "runtime.target-changed" | "runtime.target-unavailable" | "update.agent-local-job-disabled" | "update.auto-excluded" | "update.baseline-unavailable" | "update.check-unavailable" | "update.config-drift" | "update.deploy-failed" | "update.image-binding-unsupported" | "update.invalid-policy" | "update.invalid-target" | "update.path-retired" | "update.permission-denied" | "update.persistence-failed" | "update.policy-changed" | "update.requires-hub-update" | "update.schedule-hub-owned" | "update.schedule-owner-unset" | "update.snapshot-unavailable" | "update.system-version-unknown" | "update.target-changed" | "update.target-not-found" | "vulnerability.agent-job-retired" | "vulnerability.busy" | "vulnerability.database-unavailable" | "vulnerability.dispatch-interrupted" | "vulnerability.dispatch-unknown" | "vulnerability.host-incompatible" | "vulnerability.host-offline" | "vulnerability.host-pending" | "vulnerability.image-not-found" | "vulnerability.image-removed" | "vulnerability.no-eligible-hosts" | "vulnerability.platform-unavailable" | "vulnerability.report-invalid" | "vulnerability.response-too-large" | "vulnerability.run-not-found" | "vulnerability.scan-cancelled" | "vulnerability.scan-failed" | "vulnerability.scan-interrupted" | "vulnerability.scan-timeout" | "vulnerability.scanner-unavailable" | "vulnerability.storage-full" | "vulnerability.storage-unavailable";
             environmentId: string;
             jobId: string;
             /** @enum {string} */
@@ -10852,7 +10939,7 @@ export interface components {
         UpdaterSystemImageHint: {
             candidateVersion?: string;
             /** @enum {string} */
-            code?: "image.active-update-protected" | "image.busy" | "image.changed" | "image.in-use" | "image.invalid-archive" | "image.invalid-prune" | "image.invalid-reference" | "image.load-failed" | "image.not-found" | "image.prune-failed" | "image.pull-failed" | "image.remove-failed" | "image.reserved-reference" | "image.restore-point-protected" | "image.system-protected" | "image.tag-failed" | "image.usage-unavailable" | "job.skipped" | "registry.authentication-failed" | "registry.authentication-required" | "registry.credential-unavailable" | "registry.exists" | "registry.inline-credentials-not-allowed" | "registry.invalid-config" | "registry.not-found" | "registry.persistence-failed" | "registry.rate-limited" | "registry.sync-failed" | "registry.unavailable" | "restore.deploy-failed" | "restore.image-mismatch" | "restore.in-use" | "restore.not-found" | "restore.shared-reference" | "restore.unavailable" | "run.busy" | "run.cancelling" | "runtime.interrupted" | "runtime.outcome-unknown" | "runtime.parent-unresolved" | "runtime.target-changed" | "runtime.target-unavailable" | "update.agent-local-job-disabled" | "update.auto-excluded" | "update.baseline-unavailable" | "update.check-unavailable" | "update.config-drift" | "update.deploy-failed" | "update.image-binding-unsupported" | "update.invalid-policy" | "update.invalid-target" | "update.path-retired" | "update.permission-denied" | "update.persistence-failed" | "update.policy-changed" | "update.requires-hub-update" | "update.schedule-hub-owned" | "update.schedule-owner-unset" | "update.snapshot-unavailable" | "update.system-version-unknown" | "update.target-changed" | "update.target-not-found";
+            code?: "feature-disabled" | "image.active-update-protected" | "image.busy" | "image.changed" | "image.in-use" | "image.invalid-archive" | "image.invalid-prune" | "image.invalid-reference" | "image.load-failed" | "image.not-found" | "image.prune-failed" | "image.pull-failed" | "image.remove-failed" | "image.reserved-reference" | "image.restore-point-protected" | "image.system-protected" | "image.tag-failed" | "image.usage-unavailable" | "job.skipped" | "registry.authentication-failed" | "registry.authentication-required" | "registry.credential-unavailable" | "registry.exists" | "registry.inline-credentials-not-allowed" | "registry.invalid-config" | "registry.not-found" | "registry.persistence-failed" | "registry.rate-limited" | "registry.sync-failed" | "registry.unavailable" | "restore.deploy-failed" | "restore.image-mismatch" | "restore.in-use" | "restore.not-found" | "restore.shared-reference" | "restore.unavailable" | "run.busy" | "run.cancelling" | "runtime.interrupted" | "runtime.outcome-unknown" | "runtime.parent-unresolved" | "runtime.target-changed" | "runtime.target-unavailable" | "update.agent-local-job-disabled" | "update.auto-excluded" | "update.baseline-unavailable" | "update.check-unavailable" | "update.config-drift" | "update.deploy-failed" | "update.image-binding-unsupported" | "update.invalid-policy" | "update.invalid-target" | "update.path-retired" | "update.permission-denied" | "update.persistence-failed" | "update.policy-changed" | "update.requires-hub-update" | "update.schedule-hub-owned" | "update.schedule-owner-unset" | "update.snapshot-unavailable" | "update.system-version-unknown" | "update.target-changed" | "update.target-not-found" | "vulnerability.agent-job-retired" | "vulnerability.busy" | "vulnerability.database-unavailable" | "vulnerability.dispatch-interrupted" | "vulnerability.dispatch-unknown" | "vulnerability.host-incompatible" | "vulnerability.host-offline" | "vulnerability.host-pending" | "vulnerability.image-not-found" | "vulnerability.image-removed" | "vulnerability.no-eligible-hosts" | "vulnerability.platform-unavailable" | "vulnerability.report-invalid" | "vulnerability.response-too-large" | "vulnerability.run-not-found" | "vulnerability.scan-cancelled" | "vulnerability.scan-failed" | "vulnerability.scan-interrupted" | "vulnerability.scan-timeout" | "vulnerability.scanner-unavailable" | "vulnerability.storage-full" | "vulnerability.storage-unavailable";
             compatibleReference?: string;
             currentVersion?: string;
             /** @enum {string} */
@@ -11416,6 +11503,9 @@ export interface components {
             size: number;
             usageData?: components["schemas"]["DockerVolumeUsageData"];
         };
+        VulnerabilityAcceptedScan: {
+            activityId: string;
+        };
         VulnerabilityBulkIgnoreResponse: {
             /** Format: int64 */
             affectedCount: number;
@@ -11481,13 +11571,30 @@ export interface components {
             reason?: string;
             vulnerabilityId: string;
         };
+        VulnerabilityImageScanRequest: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example /api/schemas/VulnerabilityImageScanRequest.json
+             */
+            readonly $schema?: string;
+            ignoreUnfixed: boolean;
+            /** @enum {string} */
+            origin?: "manual";
+        };
+        VulnerabilityNewFinding: {
+            imageId: string;
+            imageName: string;
+            vulnerabilityId: string;
+        };
         VulnerabilityPackageInsight: {
             /** Format: int64 */
             count: number;
             fixedVersion?: string;
             installedVersion: string;
             pkgName: string;
-            severity: string;
+            /** @enum {string} */
+            severity: "UNKNOWN" | "LOW" | "MEDIUM" | "HIGH" | "CRITICAL";
         };
         VulnerabilityRiskDrivers: {
             /** Format: int64 */
@@ -11535,7 +11642,8 @@ export interface components {
             risk: number;
             /** Format: int64 */
             runningImagesAffected: number;
-            severity: string;
+            /** @enum {string} */
+            severity: "UNKNOWN" | "LOW" | "MEDIUM" | "HIGH" | "CRITICAL";
             title?: string;
             vulnerabilityId: string;
         };
@@ -11610,22 +11718,85 @@ export interface components {
             scoreStatus: string;
             topPackages: components["schemas"]["VulnerabilityPackageInsight"][] | null;
         };
+        VulnerabilityScanRequest: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example /api/schemas/VulnerabilityScanRequest.json
+             */
+            readonly $schema?: string;
+            ignoreUnfixed: boolean;
+            /** @enum {string} */
+            origin: "manual" | "scheduled";
+            /** @enum {string} */
+            scope: "in-use" | "all";
+        };
         VulnerabilityScanResult: {
             activityId?: string;
+            attemptId?: string;
+            /** Format: date-time */
+            completedAt?: string;
+            completedAttemptId?: string;
+            completedPlatform?: string;
             /** Format: int64 */
             duration?: number;
             error?: string;
+            /** @enum {string} */
+            errorCode?: "vulnerability.busy" | "vulnerability.scan-failed" | "vulnerability.scan-timeout" | "vulnerability.scan-interrupted" | "vulnerability.scan-cancelled" | "vulnerability.storage-full" | "vulnerability.storage-unavailable" | "vulnerability.scanner-unavailable" | "vulnerability.database-unavailable" | "vulnerability.image-not-found" | "vulnerability.image-removed" | "vulnerability.platform-unavailable" | "vulnerability.report-invalid" | "vulnerability.response-too-large" | "vulnerability.run-not-found" | "vulnerability.agent-job-retired" | "vulnerability.host-offline" | "vulnerability.host-pending" | "vulnerability.host-incompatible" | "vulnerability.dispatch-unknown" | "vulnerability.dispatch-interrupted" | "vulnerability.no-eligible-hosts";
             hasReport?: boolean;
             imageId: string;
             imageName: string;
             insights?: components["schemas"]["VulnerabilityScanInsights"];
+            platform?: string;
             scanPhase?: string;
             /** Format: date-time */
             scanTime: string;
             scannerVersion?: string;
-            status: string;
+            /** Format: date-time */
+            startedAt?: string;
+            /** @enum {string} */
+            status: "pending" | "scanning" | "completed" | "failed";
             summary?: components["schemas"]["VulnerabilitySeveritySummary"];
             vulnerabilities?: components["schemas"]["VulnerabilityVulnerability"][] | null;
+        };
+        VulnerabilityScanRun: {
+            activityId: string;
+            /** Format: int64 */
+            critical: number;
+            environmentId: string;
+            /** @enum {string} */
+            errorCode?: "vulnerability.busy" | "vulnerability.scan-failed" | "vulnerability.scan-timeout" | "vulnerability.scan-interrupted" | "vulnerability.scan-cancelled" | "vulnerability.storage-full" | "vulnerability.storage-unavailable" | "vulnerability.scanner-unavailable" | "vulnerability.database-unavailable" | "vulnerability.image-not-found" | "vulnerability.image-removed" | "vulnerability.platform-unavailable" | "vulnerability.report-invalid" | "vulnerability.response-too-large" | "vulnerability.run-not-found" | "vulnerability.agent-job-retired" | "vulnerability.host-offline" | "vulnerability.host-pending" | "vulnerability.host-incompatible" | "vulnerability.dispatch-unknown" | "vulnerability.dispatch-interrupted" | "vulnerability.no-eligible-hosts";
+            /** Format: int64 */
+            failed: number;
+            /** Format: date-time */
+            finishedAt?: string;
+            /** Format: int64 */
+            high: number;
+            /** Format: int64 */
+            low: number;
+            /** Format: int64 */
+            medium: number;
+            /** Format: int64 */
+            newCritical: number;
+            newFindings: components["schemas"]["VulnerabilityNewFinding"][] | null;
+            /** Format: int64 */
+            newHigh: number;
+            /** @enum {string} */
+            origin: "manual" | "scheduled";
+            /** Format: int64 */
+            scanned: number;
+            /** @enum {string} */
+            scope: "in-use" | "all";
+            /** Format: int64 */
+            skipped: number;
+            /** Format: date-time */
+            startedAt: string;
+            /** @enum {string} */
+            status: "running" | "completed" | "partial" | "cancelled" | "failed" | "interrupted";
+            /** Format: int64 */
+            targets: number;
+            /** Format: int64 */
+            unknown: number;
         };
         VulnerabilityScanSummariesRequest: {
             /**
@@ -11642,12 +11813,19 @@ export interface components {
             };
         };
         VulnerabilityScanSummary: {
+            attemptId?: string;
+            /** Format: date-time */
+            completedAt?: string;
             error?: string;
+            /** @enum {string} */
+            errorCode?: "vulnerability.busy" | "vulnerability.scan-failed" | "vulnerability.scan-timeout" | "vulnerability.scan-interrupted" | "vulnerability.scan-cancelled" | "vulnerability.storage-full" | "vulnerability.storage-unavailable" | "vulnerability.scanner-unavailable" | "vulnerability.database-unavailable" | "vulnerability.image-not-found" | "vulnerability.image-removed" | "vulnerability.platform-unavailable" | "vulnerability.report-invalid" | "vulnerability.response-too-large" | "vulnerability.run-not-found" | "vulnerability.agent-job-retired" | "vulnerability.host-offline" | "vulnerability.host-pending" | "vulnerability.host-incompatible" | "vulnerability.dispatch-unknown" | "vulnerability.dispatch-interrupted" | "vulnerability.no-eligible-hosts";
             imageId: string;
+            platform?: string;
             scanPhase?: string;
             /** Format: date-time */
             scanTime: string;
-            status: string;
+            /** @enum {string} */
+            status: "pending" | "scanning" | "completed" | "failed";
             summary?: components["schemas"]["VulnerabilitySeveritySummary"];
         };
         VulnerabilitySeveritySummary: {
@@ -11682,7 +11860,8 @@ export interface components {
             /** Format: date-time */
             publishedDate?: string;
             references?: string[] | null;
-            severity: string;
+            /** @enum {string} */
+            severity: "UNKNOWN" | "LOW" | "MEDIUM" | "HIGH" | "CRITICAL";
             title?: string;
             type?: string;
             vulnerabilityId: string;
@@ -11703,7 +11882,8 @@ export interface components {
             /** Format: date-time */
             publishedDate?: string;
             references?: string[] | null;
-            severity: string;
+            /** @enum {string} */
+            severity: "UNKNOWN" | "LOW" | "MEDIUM" | "HIGH" | "CRITICAL";
             title?: string;
             type?: string;
             vulnerabilityId: string;
@@ -18311,22 +18491,24 @@ export interface operations {
             query?: never;
             header?: never;
             path: {
-                /** @description Environment ID */
                 id: string;
-                /** @description Image ID to scan */
                 imageId: string;
             };
             cookie?: never;
         };
-        requestBody?: never;
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["VulnerabilityImageScanRequest"];
+            };
+        };
         responses: {
-            /** @description OK */
-            200: {
+            /** @description Accepted */
+            202: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["BaseApiResponseVulnerabilityScanResult"];
+                    "application/json": components["schemas"]["BaseApiResponseVulnerabilityAcceptedScan"];
                 };
             };
             /** @description Error */
@@ -25428,6 +25610,104 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["BaseApiResponseVulnerabilityRiskOverview"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "list-vulnerability-scan-runs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BaseApiResponseListVulnerabilityScanRun"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "get-vulnerability-scan-run": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+                activityId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BaseApiResponseVulnerabilityScanRun"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    "scan-host-vulnerabilities": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["VulnerabilityScanRequest"];
+            };
+        };
+        responses: {
+            /** @description Accepted */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BaseApiResponseVulnerabilityAcceptedScan"];
                 };
             };
             /** @description Error */

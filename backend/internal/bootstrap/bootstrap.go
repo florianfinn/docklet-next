@@ -35,6 +35,7 @@ import (
 	"github.com/florianfinn/docklet-next/backend/internal/di"
 	"github.com/florianfinn/docklet-next/backend/internal/docker"
 	"github.com/florianfinn/docklet-next/backend/internal/environment"
+	"github.com/florianfinn/docklet-next/backend/internal/imageupdate"
 	"github.com/florianfinn/docklet-next/backend/internal/project"
 	"github.com/florianfinn/docklet-next/backend/internal/role"
 	"github.com/florianfinn/docklet-next/backend/internal/settings"
@@ -212,6 +213,7 @@ type initializeStartupStateParams struct {
 	ApiKey        *apikey.ApiKeyService
 	Auth          *auth.AuthService
 	Vulnerability *vulnerability.VulnerabilityService
+	ImageUpdate   *imageupdate.ImageUpdateService
 }
 
 func initializeStartupState(p initializeStartupStateParams) error {
@@ -257,8 +259,13 @@ func initializeStartupState(p initializeStartupStateParams) error {
 	if err := p.Environment.EnsureLocalEnvironment(appCtx, cfg.AppUrl); err != nil {
 		slog.WarnContext(appCtx, "Failed to ensure local environment", "error", err)
 	}
-	p.Vulnerability.ImportLegacyReportFiles(appCtx)
-	p.Vulnerability.BackfillScanItems(appCtx)
+	p.Vulnerability.SetPlatformResolver(func(ctx context.Context, id string) (string, error) {
+		local, e := p.ImageUpdate.ResolveLocal(ctx, id, "")
+		return local.Platform.String(), e
+	})
+	if err := p.Vulnerability.RepairScans(appCtx); err != nil {
+		return err
+	}
 	if p.Project != nil {
 		if err := p.Project.RecoverProjectRenameJournals(appCtx); err != nil {
 			slog.WarnContext(appCtx, "Failed to recover interrupted project rename operations on startup", "error", err)

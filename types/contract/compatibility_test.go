@@ -26,3 +26,7 @@ func TestAgentCompatibilityAndRecoveryRoutes(t *testing.T) {
 		require.False(t, AgentRecoveryRoute("GET", path))
 	}
 }
+
+func TestV8RejectsV7EvenWithCurrentFingerprint(t *testing.T) {
+	require.False(t, AgentCompatible(7, AgentHubFingerprint))
+}

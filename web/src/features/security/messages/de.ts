@@ -1,4 +1,6 @@
 // German texts of the security (vulnerability scan) page.
+
+import { deBackend } from "@/data/messages/de";
 import type { enSecurity } from "./en";
 
 export const deSecurity: typeof enSecurity = {
@@ -60,4 +62,29 @@ export const deSecurity: typeof enSecurity = {
   noFix: "–",
   noFindings: "Keine Befunde für diese Filter.",
   empty: { title: "Keine gescannten Images", body: "Für die gefilterten Hosts liegen keine Scan-Ergebnisse vor." },
+  errors: {
+    "feature-disabled": deBackend.errors["feature-disabled"],
+    "vulnerability_agent-job-retired": deBackend.errors.vulnerability["agent-job-retired"],
+    "vulnerability_busy": deBackend.errors.vulnerability["busy"],
+    "vulnerability_database-unavailable": deBackend.errors.vulnerability["database-unavailable"],
+    "vulnerability_dispatch-interrupted": deBackend.errors.vulnerability["dispatch-interrupted"],
+    "vulnerability_dispatch-unknown": deBackend.errors.vulnerability["dispatch-unknown"],
+    "vulnerability_host-incompatible": deBackend.errors.vulnerability["host-incompatible"],
+    "vulnerability_host-offline": deBackend.errors.vulnerability["host-offline"],
+    "vulnerability_host-pending": deBackend.errors.vulnerability["host-pending"],
+    "vulnerability_image-not-found": deBackend.errors.vulnerability["image-not-found"],
+    "vulnerability_image-removed": deBackend.errors.vulnerability["image-removed"],
+    "vulnerability_no-eligible-hosts": deBackend.errors.vulnerability["no-eligible-hosts"],
+    "vulnerability_platform-unavailable": deBackend.errors.vulnerability["platform-unavailable"],
+    "vulnerability_report-invalid": deBackend.errors.vulnerability["report-invalid"],
+    "vulnerability_response-too-large": deBackend.errors.vulnerability["response-too-large"],
+    "vulnerability_run-not-found": deBackend.errors.vulnerability["run-not-found"],
+    "vulnerability_scan-cancelled": deBackend.errors.vulnerability["scan-cancelled"],
+    "vulnerability_scan-failed": deBackend.errors.vulnerability["scan-failed"],
+    "vulnerability_scan-interrupted": deBackend.errors.vulnerability["scan-interrupted"],
+    "vulnerability_scan-timeout": deBackend.errors.vulnerability["scan-timeout"],
+    "vulnerability_scanner-unavailable": deBackend.errors.vulnerability["scanner-unavailable"],
+    "vulnerability_storage-full": deBackend.errors.vulnerability["storage-full"],
+    "vulnerability_storage-unavailable": deBackend.errors.vulnerability["storage-unavailable"],
+  },
 };

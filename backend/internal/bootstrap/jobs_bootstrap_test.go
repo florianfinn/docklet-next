@@ -148,3 +148,35 @@ func TestFeatureChangeReschedulesScanAndPatchJobsInternal(t *testing.T) {
 	defer cancel()
 	require.NoError(t, lifecycle.Stop(stopCtx))
 }
+
+func TestAgentsNeverRescheduleLocalVulnerabilityScan(t *testing.T) {
+	for _, edge := range []bool{false, true} {
+		lifecycle := fxtest.NewLifecycle(t)
+		settings := &settingsSubscriptionStubInternal{}
+		jobs := &settingsSubscriptionSchedulerStubInternal{rescheduled: make(chan struct{})}
+		require.NoError(t, setupSettingsSubscriptionsInternal(settingsSubscriptionsParams{Lifecycle: lifecycle, LifecycleCtx: t.Context(), Config: &config.Config{AgentMode: !edge, EdgeAgent: edge}, Scheduler: jobs, Settings: settings, VulnerabilityScan: scheduler.NewVulnerabilityScanJob(nil, nil), VulnerabilityRisk: scheduler.NewVulnerabilityRiskJob(nil, nil), AutoPatch: scheduler.NewAutoPatchJob(nil, nil)}))
+		for _, callback := range settings.featureCallbacks {
+			callback([]libarcane.SettingUpdate{{Key: features.VulnerabilityManagementSettingKey, Value: "true"}})
+		}
+		require.NotContains(t, jobs.jobs, scheduler.VulnerabilityScanJobName)
+		require.Contains(t, jobs.jobs, scheduler.VulnerabilityRiskJobName)
+		require.NoError(t, lifecycle.Stop(t.Context()))
+	}
+}
+
+func (s *settingsSubscriptionSchedulerStubInternal) RegisterJob(job schedulertypes.Job) error {
+	s.jobs = append(s.jobs, job.Name())
+	return nil
+}
+func TestVulnerabilityRegistrationIsIntelOnlyOnAgents(t *testing.T) {
+	for _, cfg := range []*config.Config{{}, {AgentMode: true}, {EdgeAgent: true}} {
+		controller := &settingsSubscriptionSchedulerStubInternal{}
+		require.NoError(t, registerVulnerabilityJobs(controller, cfg, scheduler.NewVulnerabilityScanJob(nil, nil), scheduler.NewVulnerabilityRiskJob(nil, nil)))
+		require.Contains(t, controller.jobs, scheduler.VulnerabilityRiskJobName)
+		if cfg.AgentMode || cfg.EdgeAgent {
+			require.NotContains(t, controller.jobs, scheduler.VulnerabilityScanJobName)
+		} else {
+			require.Contains(t, controller.jobs, scheduler.VulnerabilityScanJobName)
+		}
+	}
+}

@@ -5,9 +5,9 @@ import { assertNoDrift } from "../scripts/openapi-contract.mjs";
 import { reasonLiterals } from "../scripts/reason-literals.mjs";
 import { agentFixture } from "../scripts/agent-contract.mjs";
 
-test("the v7 manifest records the merged activity discovery producer", () => {
+test("the v8 manifest records the merged activity discovery producer", () => {
   const spec = readFileSync(new URL("../api/openapi.json", import.meta.url));
-  const fixture = readFileSync(new URL("../types/contract/testdata/agent-hub-v7.json", import.meta.url));
+  const fixture = readFileSync(new URL("../types/contract/testdata/agent-hub-v8.json", import.meta.url));
   assert.deepEqual(agentFixture(spec, fixture), fixture);
   const changed = JSON.parse(spec);
   const recoveryName = JSON.parse(fixture).activityDiscovery.recovery.$ref.split("/").at(-1);
@@ -40,7 +40,7 @@ test("the contract guard rejects a changed Huma operation", () => {
 
 test("v7 lifecycle manifest changes with executable DTOs and admission operations", () => {
   const spec = readFileSync(new URL("../api/openapi.json", import.meta.url));
-  const fixture = readFileSync(new URL("../types/contract/testdata/agent-hub-v7.json", import.meta.url));
+  const fixture = readFileSync(new URL("../types/contract/testdata/agent-hub-v8.json", import.meta.url));
   const manifest = JSON.parse(fixture);
   assert.equal(manifest.imageLifecycle.routes.length, 7);
   assert.equal(manifest.imageLifecycle.edgeRoutes.length, 6);
@@ -82,16 +82,16 @@ test("every lifecycle and policy producer reason is declared and translated", ()
     for (const code of declared) assert.ok(catalogue.includes(`"${code.replaceAll(".", "_")}"`), `${locale}: missing reason ${code}`);
   }
   const directories = ["../backend/internal/project/", "../backend/internal/project/children/lifecycle/",
-    "../backend/internal/updater/", "../backend/internal/job/"];
+    "../backend/internal/updater/", "../backend/internal/job/", "../backend/internal/vulnerability/"];
   for (const directory of directories) {
-    const recursive = directory.endsWith("updater/") || directory.endsWith("job/");
+    const recursive = directory.endsWith("updater/") || directory.endsWith("job/") || directory.endsWith("vulnerability/");
     for (const name of readdirSync(new URL(directory, import.meta.url), { recursive })) {
       if (!name.endsWith(".go") || name.endsWith("_test.go") ||
           (directory.endsWith("project/") && !name.startsWith("lifecycle_"))) continue;
       const source = readFileSync(new URL(directory + name, import.meta.url), "utf8");
       for (const code of reasonLiterals(source))
         assert.ok(declared.has(code), `${directory}${name}: undeclared reason ${code}`);
-      const patterns = [ /"((?:image|registry|update|restore|runtime|run|job)\.[a-z_-]+)"/g,
+      const patterns = [ /"((?:image|registry|update|restore|runtime|run|job|vulnerability)\.[a-z_-]+)"/g,
         /\bCode\s*:\s*"([^"]+)"/g, /\b(?:code|Code)\s*:?=\s*"([^"]+)"/g,
         /(?:Failure|skip)\(\s*"([^"]+)"/g, /policyCode\([^,]+,\s*"([^"]+)"/g ];
       for (const pattern of patterns) for (const [, code] of source.matchAll(pattern))
@@ -102,7 +102,7 @@ test("every lifecycle and policy producer reason is declared and translated", ()
 
 test("v7 policy manifest binds hub schedules, frozen revisions and notification producers", () => {
   const spec = readFileSync(new URL("../api/openapi.json", import.meta.url));
-  const fixture = readFileSync(new URL("../types/contract/testdata/agent-hub-v7.json", import.meta.url));
+  const fixture = readFileSync(new URL("../types/contract/testdata/agent-hub-v8.json", import.meta.url));
   const manifest = JSON.parse(fixture);
   assert.equal(manifest.imagePolicies.owner, "hub");
   assert.equal(manifest.imagePolicies.defaultMode, "off");
@@ -145,4 +145,22 @@ test("reason helper guard catches unprefixed arguments and returns", () => {
     // policyTarget(id, status, "comment")
   `;
   assert.deepEqual(reasonLiterals(source), ["BOGUS", "MISSING", "FALLBACK", "FORBIDDEN"]);
+});
+
+
+test("vulnerability producers and Edge routes change the v8 fingerprint", () => {
+ const spec=readFileSync(new URL("../api/openapi.json",import.meta.url));
+ const fixture=readFileSync(new URL("../types/contract/testdata/agent-hub-v8.json",import.meta.url));
+ const original=agentFixture(spec,fixture);
+ const changed=JSON.parse(spec);
+ const name=Object.keys(changed.components.schemas).find(name=>name.endsWith("ScanRun") && changed.components.schemas[name].properties.status);
+ assert.ok(name);changed.components.schemas[name].properties.status.enum.push("invalid-state");
+ assert.notDeepEqual(agentFixture(Buffer.from(JSON.stringify(changed)),fixture),original);
+ const manifest=JSON.parse(original);
+ assert.ok(manifest.vulnerability.routes.some(route=>route.path==="/environments/{id}/vulnerabilities/runs" && route.method==="GET"));
+ const listChanged=JSON.parse(spec);
+ delete listChanged.paths["/environments/{id}/vulnerabilities/runs"];
+ assert.notDeepEqual(agentFixture(Buffer.from(JSON.stringify(listChanged)),fixture),original);
+ for(const command of ["vulnerability.scan","vulnerability.scan_host","vulnerability.run","vulnerability.runs","vulnerability.ignore.bulk","vulnerability.unignore.bulk"])
+  assert.ok(manifest.vulnerability.edgeRoutes.some(route=>route.command===command),command);
 });

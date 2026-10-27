@@ -42,9 +42,15 @@ test(".env.example covers hub and agent runtime environment keys exactly", () =>
   const expected = new Set([...tags, ...direct]);
   const requiredActive = new Set(expected);
   const settings = readFileSync(new URL("backend/internal/settings/model.go", root), "utf8");
+  const retiredSource = readFileSync(new URL("backend/internal/settings/vulnerability.go", root), "utf8");
+  const retiredBody = retiredSource.match(/func retiredVulnerabilitySetting\([\s\S]*?\n\}/)?.[0];
+  assert.ok(retiredBody, "vulnerability retirement producer must exist");
+  const retired = new Set([...retiredBody.matchAll(/case\s+([^:\n]+):/g)]
+    .flatMap((match) => names(match[1], /"([^"]+)"/g)));
+  assert.equal(retired.size, 7, "reviewed vulnerability retirement vocabulary changed");
   const settingFields = names(settings, /`key:"([^"]+)"/g)
     .map((tag) => tag.split(","))
-    .filter((parts) => !parts.slice(1).includes("internal"));
+    .filter((parts) => !parts.slice(1).includes("internal") && !retired.has(parts[0]));
   const envOverrides = new Set();
   for (const [key, ...attributes] of settingFields) {
     const name = key.replace(/([a-z0-9])([A-Z])/g, "$1_$2").toUpperCase();

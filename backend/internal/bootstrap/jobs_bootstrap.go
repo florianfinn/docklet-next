@@ -273,8 +273,6 @@ func registerJobs(params registerJobsParams) error {
 		params.PruningVolumeHelper,
 		params.ExpiredSessionsCleanup,
 		params.ScheduledPrune,
-		params.VulnerabilityScan,
-		params.VulnerabilityRisk,
 		params.AutoPatch,
 		params.AutoHeal,
 		params.ActivitySweep,
@@ -285,6 +283,10 @@ func registerJobs(params registerJobsParams) error {
 			return err
 		}
 	}
+	if err := registerVulnerabilityJobs(params.Scheduler, params.Config, params.VulnerabilityScan, params.VulnerabilityRisk); err != nil {
+		return err
+	}
+
 	// FilesystemWatcher is intentionally not scheduler-registered; it watches inline
 	// and is only rebound on settings changes below.
 	// Internal self-healing sweep (managers and agents alike); intentionally
@@ -449,10 +451,9 @@ func setupSettingsSubscriptionsInternal(params settingsSubscriptionsParams) erro
 	})
 
 	rescheduleOn([]string{"scheduledPruneEnabled", "scheduledPruneInterval"}, params.ScheduledPrune)
-	rescheduleOn([]string{
-		features.VulnerabilityManagementSettingKey, "vulnerabilityScanEnabled", "vulnerabilityScanInterval", "trivyNetwork", "trivySecurityOpts", "trivyPrivileged",
-		"trivyResourceLimitsEnabled", "trivyCpuLimit", "trivyMemoryLimitMb", "trivyConcurrentScanContainers",
-	}, params.VulnerabilityScan)
+	if !params.Config.AgentMode && !params.Config.EdgeAgent {
+		rescheduleOn([]string{features.VulnerabilityManagementSettingKey, "vulnerabilityScanEnabled"}, params.VulnerabilityScan)
+	}
 	rescheduleOn([]string{features.VulnerabilityManagementSettingKey}, params.VulnerabilityRisk)
 	rescheduleOn([]string{features.VulnerabilityManagementSettingKey, "imageAutoPatchEnabled", "imageAutoPatchInterval"}, params.AutoPatch)
 	rescheduleOn([]string{"autoHealEnabled", "autoHealInterval", "autoHealExcludedContainers", "autoHealMaxRestarts", "autoHealRestartWindow"}, params.AutoHeal)
@@ -578,4 +579,17 @@ func syncTimeoutSettingsToAgentsInternal(ctx context.Context, localEnvironment t
 		}
 		slog.DebugContext(ctx, "Successfully synced timeout settings to environment", "environmentId", env.ID, "environmentName", env.Name)
 	}
+}
+
+// Intel refresh remains host-local; image scans are admitted by the hub dispatcher.
+func registerVulnerabilityJobs(controller interface {
+	RegisterJob(schedulertypes.Job) error
+}, cfg *config.Config, scan, intel schedulertypes.Job) error {
+	if err := controller.RegisterJob(intel); err != nil {
+		return err
+	}
+	if !cfg.AgentMode && !cfg.EdgeAgent {
+		return controller.RegisterJob(scan)
+	}
+	return nil
 }

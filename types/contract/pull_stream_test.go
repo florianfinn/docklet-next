@@ -17,7 +17,7 @@ import (
 )
 
 func TestV7PullFrameFixtureTracksPublicProducerTypes(t *testing.T) {
-	body, err := os.ReadFile("testdata/agent-hub-v7.json")
+	body, err := os.ReadFile("testdata/agent-hub-v8.json")
 	require.NoError(t, err)
 	var fixture struct {
 		ImageSafety struct {

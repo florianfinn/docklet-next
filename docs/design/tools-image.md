@@ -174,3 +174,10 @@ Before deployment, select the approved SemVer image and registry digest in the
 owning helper setting. Publication does not roll out images or update any running
 system. Scanner databases remain runtime downloads outside this image's build
 contract; the contract verifies Trivy execution without downloading a database.
+
+Vulnerability scanning mounts its persistent owner-specific cache at
+`/var/cache/docklet-tools` and uses `/var/cache/docklet-tools/trivy`. An anonymous
+`/work` volume holds temporary downloads and the report; `TMPDIR=/work/tmp` is
+necessary for large cold Java DB downloads. The scanner targets local Docker IDs
+through the daemon socket with `--image-src docker`, then removes its container
+and anonymous volumes. See [vulnerability scanning](vulnerability-scanning.md).

@@ -12,6 +12,7 @@ import (
 	"errors"
 	"fmt"
 	imageDTO "github.com/florianfinn/docklet-next/types/image"
+	"github.com/florianfinn/docklet-next/types/vulnerability"
 	"io"
 	"log/slog"
 	"mime"
@@ -87,13 +88,15 @@ type EnvironmentMiddleware struct {
 	registry      *edge.TunnelRegistry
 	matcher       *authz.PermissionMatcher
 	// checkOrigin shares the local WebSocket origin and credential policy.
-	checkOrigin         func(*http.Request) bool
-	proxyIdentityHeader string
-	snapshots           *hoststate.Store
-	inventoryPending    func(context.Context, string) (bool, error)
-	agentAccess         remenv.AgentAccessCheck
-	pointHolds          PointHoldReader
-	pointAccess         PointAccessReader
+	checkOrigin                func(*http.Request) bool
+	proxyIdentityHeader        string
+	snapshots                  *hoststate.Store
+	inventoryPending           func(context.Context, string) (bool, error)
+	agentAccess                remenv.AgentAccessCheck
+	pointHolds                 PointHoldReader
+	pointAccess                PointAccessReader
+	vulnerabilityEnabled       func(context.Context) bool
+	vulnerabilityIgnoreUnfixed func() bool
 }
 
 // NewEnvProxyMiddlewareWithParamAndRegistry creates middleware with an injected tunnel registry.
@@ -124,6 +127,8 @@ func NewEnvProxyMiddlewareWithParamAndRegistry(
 	if len(options) > 0 {
 		m.proxyIdentityHeader = options[0].ProxyIdentityHeader
 		m.agentAccess = options[0].AgentAccess
+		m.vulnerabilityEnabled = options[0].VulnerabilityEnabled
+		m.vulnerabilityIgnoreUnfixed = options[0].VulnerabilityIgnoreUnfixed
 		m.pointHolds = options[0].PointHolds
 		m.pointAccess = options[0].PointAccess
 		m.snapshots = options[0].Snapshots
@@ -143,6 +148,9 @@ func NewEnvProxyMiddlewareWithParamAndRegistry(
 // Handle is the main middleware handler.
 func (m *EnvironmentMiddleware) Handle(c *echo.Context, next echo.HandlerFunc) error {
 	envID := m.extractEnvironmentID(c)
+	if vulnerability.IsPath(c.Request().URL.Path) && m.vulnerabilityEnabled != nil && !m.vulnerabilityEnabled(c.Request().Context()) {
+		return c.JSON(403, map[string]any{"code": "feature-disabled"})
+	}
 
 	if envID == "" || envID == m.localID {
 		return next(c)
@@ -188,6 +196,11 @@ func (m *EnvironmentMiddleware) Handle(c *echo.Context, next echo.HandlerFunc) e
 	// mirroring the per-operation RequirePermission checks used for the local
 	// environment.
 	suffix := m.buildResourceSuffix(c.Request().URL.Path, envID)
+	if vulnerability.IsPath(suffix) && c.Request().Method == http.MethodPost && strings.HasSuffix(suffix, "/scan") && m.vulnerabilityIgnoreUnfixed != nil {
+		if e := m.canonicalizeVulnerabilityScan(c); e != nil {
+			return e
+		}
+	}
 	if strings.HasPrefix(suffix, "/updater/") && (strings.Contains(suffix, "/restore-points") || strings.HasSuffix(suffix, "/baseline")) {
 		host := strings.HasPrefix(suffix, "/updater/restore-points")
 		grants := []string{authz.PermProjectsRead, authz.PermImageUpdatesRead}
@@ -563,6 +576,9 @@ func (m *EnvironmentMiddleware) setProxyContextHeadersInternal(c *echo.Context, 
 
 func (m *EnvironmentMiddleware) proxyThroughTunnelInternal(c *echo.Context, tunnel *edge.AgentTunnel, envID string) error {
 	proxyPath := m.buildProxyPath(c, envID)
+	if vulnerability.IsPath(proxyPath) {
+		return m.proxyVulnerability(c, tunnel, envID)
+	}
 	if httpx.IsWebSocketUpgradeRequest(c.Request()) {
 		return edge.ProxyWebSocketRequest(c, tunnel, proxyPath, m.checkOrigin)
 	}
@@ -787,6 +803,9 @@ func (m *EnvironmentMiddleware) proxyHTTP(c *echo.Context, target string, access
 		})
 	}
 	defer func() { _ = resp.Body.Close() }()
+	if vulnerability.IsPath(c.Request().URL.Path) {
+		return m.writeVulnerability(c, resp.StatusCode, resp.Header, resp.Body)
+	}
 
 	if list, _ := pointRoute(m.buildResourceSuffix(c.Request().URL.Path, c.Param(m.paramName))); list && c.Request().Method == http.MethodGet {
 		return m.writePointList(c, c.Param(m.paramName), resp.StatusCode, resp.Header, resp.Body)
@@ -874,11 +893,13 @@ func (m *EnvironmentMiddleware) writeProxyResponse(c *echo.Context, resp *http.R
 
 // EnvironmentProxySecurity supplies hub-owned identity and agent access boundaries.
 type EnvironmentProxySecurity struct {
-	PointHolds          PointHoldReader
-	PointAccess         PointAccessReader
-	Snapshots           *hoststate.Store
-	InventoryPending    func(context.Context, string) (bool, error)
-	HTTPClient          *http.Client
-	ProxyIdentityHeader string
-	AgentAccess         remenv.AgentAccessCheck
+	VulnerabilityEnabled       func(context.Context) bool
+	VulnerabilityIgnoreUnfixed func() bool
+	PointHolds                 PointHoldReader
+	PointAccess                PointAccessReader
+	Snapshots                  *hoststate.Store
+	InventoryPending           func(context.Context, string) (bool, error)
+	HTTPClient                 *http.Client
+	ProxyIdentityHeader        string
+	AgentAccess                remenv.AgentAccessCheck
 }

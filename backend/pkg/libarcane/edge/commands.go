@@ -74,6 +74,11 @@ var commandRoutes = []commandRoute{
 	{Method: http.MethodPost, PathPattern: "/api/environments/{id}/activities/{activityId}/cancel", CommandName: "activity.cancel"},
 	{Method: http.MethodDelete, PathPattern: "/api/environments/{id}/activities/history", CommandName: "activity.history.clear"},
 
+	{Method: http.MethodPost, PathPattern: "/api/environments/{id}/vulnerabilities/scan", CommandName: "vulnerability.scan_host"},
+	{Method: http.MethodGet, PathPattern: "/api/environments/{id}/vulnerabilities/runs/{activityId}", CommandName: "vulnerability.run"},
+	{Method: http.MethodGet, PathPattern: "/api/environments/{id}/vulnerabilities/runs", CommandName: "vulnerability.runs"},
+	{Method: http.MethodPost, PathPattern: "/api/environments/{id}/vulnerabilities/ignore/bulk", CommandName: "vulnerability.ignore.bulk"},
+	{Method: http.MethodPost, PathPattern: "/api/environments/{id}/vulnerabilities/unignore/bulk", CommandName: "vulnerability.unignore.bulk"},
 	{Method: http.MethodPost, PathPattern: "/api/environments/{id}/images/{imageId}/vulnerabilities/scan", CommandName: "vulnerability.scan"},
 	{Method: http.MethodGet, PathPattern: "/api/environments/{id}/images/{imageId}/vulnerabilities", CommandName: "vulnerability.list"},
 	{Method: http.MethodGet, PathPattern: "/api/environments/{id}/images/{imageId}/vulnerabilities/summary", CommandName: "vulnerability.summary"},

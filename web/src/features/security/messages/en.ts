@@ -1,5 +1,7 @@
 // American English texts of the security (vulnerability scan) page.
 
+import { enBackend } from "@/data/messages/en";
+
 export const enSecurity = {
   title: "Security",
   description: "Vulnerabilities in images of the filtered hosts. Optional and independent of image updates. Findings are synthetic.",
@@ -59,4 +61,29 @@ export const enSecurity = {
   noFix: "–",
   noFindings: "No findings for these filters.",
   empty: { title: "No scanned images", body: "No scan results are available for the filtered hosts." },
+  errors: {
+    "feature-disabled": enBackend.errors["feature-disabled"],
+    "vulnerability_agent-job-retired": enBackend.errors.vulnerability["agent-job-retired"],
+    "vulnerability_busy": enBackend.errors.vulnerability["busy"],
+    "vulnerability_database-unavailable": enBackend.errors.vulnerability["database-unavailable"],
+    "vulnerability_dispatch-interrupted": enBackend.errors.vulnerability["dispatch-interrupted"],
+    "vulnerability_dispatch-unknown": enBackend.errors.vulnerability["dispatch-unknown"],
+    "vulnerability_host-incompatible": enBackend.errors.vulnerability["host-incompatible"],
+    "vulnerability_host-offline": enBackend.errors.vulnerability["host-offline"],
+    "vulnerability_host-pending": enBackend.errors.vulnerability["host-pending"],
+    "vulnerability_image-not-found": enBackend.errors.vulnerability["image-not-found"],
+    "vulnerability_image-removed": enBackend.errors.vulnerability["image-removed"],
+    "vulnerability_no-eligible-hosts": enBackend.errors.vulnerability["no-eligible-hosts"],
+    "vulnerability_platform-unavailable": enBackend.errors.vulnerability["platform-unavailable"],
+    "vulnerability_report-invalid": enBackend.errors.vulnerability["report-invalid"],
+    "vulnerability_response-too-large": enBackend.errors.vulnerability["response-too-large"],
+    "vulnerability_run-not-found": enBackend.errors.vulnerability["run-not-found"],
+    "vulnerability_scan-cancelled": enBackend.errors.vulnerability["scan-cancelled"],
+    "vulnerability_scan-failed": enBackend.errors.vulnerability["scan-failed"],
+    "vulnerability_scan-interrupted": enBackend.errors.vulnerability["scan-interrupted"],
+    "vulnerability_scan-timeout": enBackend.errors.vulnerability["scan-timeout"],
+    "vulnerability_scanner-unavailable": enBackend.errors.vulnerability["scanner-unavailable"],
+    "vulnerability_storage-full": enBackend.errors.vulnerability["storage-full"],
+    "vulnerability_storage-unavailable": enBackend.errors.vulnerability["storage-unavailable"],
+  },
 };

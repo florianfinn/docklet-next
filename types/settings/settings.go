@@ -274,7 +274,7 @@ type Update struct {
 	// TrivyDbRegistry is the container registry used to pull the Trivy vulnerability database artifacts.
 	//
 	// Required: false
-	TrivyDbRegistry *string `json:"trivyDbRegistry,omitzero" binding:"omitempty,oneof=ghcr.io docker.io"`
+	TrivyDbRegistry *string `json:"trivyDbRegistry,omitzero"`
 
 	// TrivyNetwork sets the Docker network mode/network name for Trivy scan containers.
 	// Leave empty to inherit Arcane's network automatically, with bridge as the final fallback.
