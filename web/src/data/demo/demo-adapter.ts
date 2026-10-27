@@ -1,3 +1,4 @@
+import { sameImageReference } from "@/domain/docker-reference";
 import { createDemoRegistries } from "./demo-registries";
 import type { ActionKind, ContainerInfo, DeployStepKey, Service, Stack } from "@/domain/model";
 import { parseCompose } from "@/domain/compose/model";
@@ -257,7 +258,7 @@ export function createDemoAdapter(options: DemoAdapterOptions = {}): DockletAdap
         setServices(id, (s) => {
           if (!names.has(s.name)) return s;
           const next = latest(s);
-          if (s.image.tag !== next.tag) compose = compose.replace(imageRef(s.image), imageRef(next));
+          if (!sameImageReference(imageRef(s.image), imageRef(next))) compose = compose.replace(imageRef(s.image), imageRef(next));
           return {
             ...s,
             image: next,
@@ -375,7 +376,7 @@ export function createDemoAdapter(options: DemoAdapterOptions = {}): DockletAdap
             syncStackNetworks(db, stackId);
             setServices(stackId, (s) => {
               const old = rp.images.find((i) => i.service === s.name)?.image;
-              if (!old || imageRef(old) === imageRef(s.image)) return s;
+              if (!old || sameImageReference(imageRef(old), imageRef(s.image))) return s;
               return {
                 ...s,
                 image: old,

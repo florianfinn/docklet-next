@@ -1,4 +1,6 @@
 export { PruneDialog } from "./PruneDialog";
+import { COMMAND_DIALOG_CONTENT } from "@/shared/components/dialog-layout";
+import { sameImageReference } from "@/domain/docker-reference";
 import { useCapability } from "@/data/use-capability";
 import { useRegistries } from "@/features/registries/use-registries";
 import { registryHost, registryReference } from "@/domain/registries";
@@ -58,7 +60,7 @@ export function PullDialog({ open, onOpenChange, hosts, images, initial }: { ope
   const capabilities = useImageHostCapabilities("pullImage", hosts.map((h) => h.id));
   const capability = useCapability("pullImage", { kind: "host", id: hostId });
   const parsed = parseImageReference(effectiveReference);
-  const known = parsed ? images.some((i) => i.hostId === hostId && i.repository === parsed.repository && i.tag === parsed.tag) : false;
+  const known = parsed ? images.some((i) => i.hostId === hostId && i.tag !== null && sameImageReference(`${i.repository}:${i.tag}`, effectiveReference)) : false;
   const host = hosts.find((h) => h.id === hostId);
   const valid = !!parsed && host?.status === "online" && capability.available && (registryId === "auto" || !!selectedRegistry);
 
@@ -76,7 +78,7 @@ export function PullDialog({ open, onOpenChange, hosts, images, initial }: { ope
 
   return (
     <Dialog open={open} onOpenChange={change}>
-      <DialogContent {...feedback.bindings} className="min-w-0 max-h-[calc(100dvh-2rem)] overflow-y-auto sm:max-w-lg [&>*]:min-w-0" data-surface="pull-dialog">
+      <DialogContent {...feedback.bindings} className={COMMAND_DIALOG_CONTENT} data-surface="pull-dialog">
         <DialogHeader>
           <DialogTitle>{t("title")}</DialogTitle>
           <DialogDescription>{t("description")}</DialogDescription>

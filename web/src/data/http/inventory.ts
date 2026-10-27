@@ -55,9 +55,11 @@ export function createInventoryReader(baseUrl: string, fetcher: typeof fetch, ho
         read("get-project-compose", hostId, `projects/${encodeURIComponent(projectId)}/compose`).then((result) => result.body.data, () => undefined),
       ]);
       if (!detail.body.data || detail.body.data.id !== projectId) return fail("get-project.invalid-detail");
-      if (!batch.stacks.some((item) => item.id === inventoryId(hostId, projectId))) return fail("get-project.not-found");
+      const listed = batch.stacks.find((item) => item.id === inventoryId(hostId, projectId));
+      if (!listed) return fail("get-project.not-found");
       const loaded = files?.id === projectId && typeof files.composeContent === "string" ? files : undefined;
-      return { ...mapStack(detail.body.data, hostId, batch.containers, detail.observation), compose: loaded?.composeContent ?? "", env: loaded?.envContent ?? "", ...(loaded ? {} : { filesUnavailable: true }), deployments: [], restorePoints: [] };
+      // Plain detail omits stored checks; the already-read list owns service/update projections.
+      return { ...mapStack(detail.body.data, hostId, batch.containers, detail.observation), services: listed.services, compose: loaded?.composeContent ?? "", env: loaded?.envContent ?? "", ...(loaded ? {} : { filesUnavailable: true }), deployments: [], restorePoints: [] };
     },
   };
 }

@@ -4,6 +4,7 @@
 // License: Apache-2.0
 // Deviations: Original stored-observation and deployment-history consumer for issue #231.
 
+import { sameImageReference } from "@/domain/docker-reference";
 import type { components } from "@/api/generated/schema";
 import type { ImageVersion, UpdateInfo } from "@/domain/model";
 import { observation } from "./update-validation";
@@ -13,7 +14,7 @@ import { levelFromVersions } from "@/domain/updates";
 /** Observations belong to the exact configured reference; raw server errors are never UI copy. */
 export function mapUpdateInfo(dto: components["schemas"]["ImageUpdateInfo"] | undefined, current: ImageVersion, reference: string, stale = false): UpdateInfo {
   if (dto) dto = observation(dto);
-  if (!dto || dto.imageRef !== reference) return { state: "unchecked", current };
+  if (!dto || !sameImageReference(dto.imageRef, reference)) return { state: "unchecked", current };
   const checkedAt = dto.checkedAt || undefined;
   const metadata = { ...(dto.code ? { code: dto.code } : {}), authState: dto.authState, stale };
   const image = { ...current, ...(dto.currentVersion ? { version: dto.currentVersion } : {}) };

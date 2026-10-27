@@ -1,3 +1,4 @@
+import { sameImageReference, imageReferenceValue } from "@/domain/docker-reference";
 import { checkResult } from "./update-decoders";
 // Source: docklet-next/issues/82
 // Revision: 579ca3a12d93da7c7a6e68686d20425a642423fc
@@ -84,7 +85,7 @@ export function mapStack(row: ProjectRow, hostId: string, containers: ContainerI
     const image = imageVersion(runtime.image);
     return { name: runtime.name, image, state: state(runtime.status), health: runtime.health === "healthy" || runtime.health === "unhealthy" || runtime.health === "starting" ? runtime.health : container?.health ?? "none",
       ports: container?.ports ?? [], networks: container?.networks ?? [], restartPolicy: container?.restartPolicy ?? "", memLimitMb: container?.memLimitMb ?? 0, restarts24h: 0,
-      update: { ...mapUpdateInfo(row.updateInfo?.serviceUpdates?.[runtime.name] ? (row.updateInfo.serviceUpdates[runtime.name]?.imageRef === runtime.image ? row.updateInfo.serviceUpdates[runtime.name]?.updateInfo : undefined) : row.updateInfo?.updateInfoByRef?.[runtime.image], image, runtime.image, inventory.stale), incomplete } };
+      update: { ...mapUpdateInfo(row.updateInfo?.serviceUpdates?.[runtime.name] ? (sameImageReference(row.updateInfo.serviceUpdates[runtime.name]!.imageRef, runtime.image) ? row.updateInfo.serviceUpdates[runtime.name]?.updateInfo : undefined) : imageReferenceValue(row.updateInfo?.updateInfoByRef, runtime.image), image, runtime.image, inventory.stale), incomplete } };
   });
   return { id: inventoryId(hostId, row.id), hostId, name: row.name, path: row.path, reportedStatus: row.status, serviceCount: row.serviceCount, runningCount: row.runningCount, deployHistoryUnavailable: true, labels: (row.tags ?? []).map((tag) => tag.name), services, autoUpdate: { mode: "check" }, inventory,
     ...(members.some((item) => item.dockerLabels?.[SYSTEM_LABEL] === "agent") ? { dockerLabels: { [SYSTEM_LABEL]: "agent" } } : {}) };

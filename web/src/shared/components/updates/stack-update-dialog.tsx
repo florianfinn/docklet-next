@@ -4,6 +4,7 @@
 // License: Apache-2.0
 // Deviations: Original live update UI for issue #231.
 
+import { COMMAND_DIALOG_CONTENT } from "@/shared/components/dialog-layout";
 import { formatDateTime } from "@/domain/format";
 
 import { useUpdateAction } from "./use-update-action";
@@ -36,14 +37,14 @@ export function StackUpdateDialog({ stackId, point, onClose }: { stackId: string
   const canSend = read.available && write.available && (!point || points.available) && !!data && validPoint && (!point || ack === data?.savedRevision) && !action.busy && !runId;
   const close = () => { action.reset(); onClose(); };
   useEffect(() => identityLifetime(adapter).listen(onClose), [adapter, onClose]);
-  return <Dialog open onOpenChange={(open) => { if (!open) close(); }}><DialogContent><DialogHeader><DialogTitle>{t(point ? "restore" : "update")}</DialogTitle><DialogDescription>{t("noData")}</DialogDescription></DialogHeader>
+  return <Dialog open onOpenChange={(open) => { if (!open) close(); }}><DialogContent className={COMMAND_DIALOG_CONTENT}><DialogHeader><DialogTitle>{t(point ? "restore" : "update")}</DialogTitle><DialogDescription>{t("noData")}</DialogDescription></DialogHeader>
     {!read.available || !write.available || (point && !points.available) ? <UpdateUnavailable reason={read.reason ?? write.reason ?? points.reason} /> : baseline.isError ? <p role="alert">{errorText(baseline.error)}</p> : !data ? <p>{t("loading")}</p> : <>
       {!data.available && <p role="status">{errorText(data.code ?? "update.baseline-unavailable")}</p>}
-      {point && <><p>{t("point", { at: formatDateTime(point.createdAt) })}</p><p>{t(point.sourceState === "partial-source" ? "partial" : "snapshot")}</p><label className="flex items-center gap-2"><Checkbox checked={ack === data.savedRevision} onCheckedChange={(v) => setAck(v === true ? data.savedRevision : undefined)} />{t("replace", { revision: data.savedRevision })}</label></>}
+      {point && <><p>{t("point", { at: formatDateTime(point.createdAt) })}</p><p>{t(point.sourceState === "partial-source" ? "partial" : "snapshot")}</p><label className="flex min-w-0 items-start gap-2"><Checkbox checked={ack === data.savedRevision} onCheckedChange={(v) => setAck(v === true ? data.savedRevision : undefined)} /><span className="min-w-0 flex-1 break-all">{t("replace", { revision: data.savedRevision })}</span></label></>}
     </>}
     {action.error && <p role="alert">{action.error}</p>}
     {runId && <p role="status">{t("accepted")} <Link to={`/stacks/${encodeURIComponent(stackId)}?tab=deployments`}>{t("openRun", { id: runId })}</Link></p>}
-    <div className="flex justify-end gap-2"><Button variant="outline" onClick={close}>{t("close")}</Button><Button disabled={!canSend} onClick={() => void action.run(() => point ? adapter.restoreRestorePoint(stackId, point.id, { expectedRevision: data!.savedRevision, replaceConfiguration: ack === data!.savedRevision }) : adapter.installStackUpdates(stackId, { expectedRevision: data!.savedRevision }), (id) => setReceipt({ id, identity: data!.targetIdentity }))}>{t(point ? "restore" : "update")}</Button></div>
+    <div className="flex min-w-0 flex-col-reverse gap-2 sm:flex-row sm:justify-end"><Button variant="outline" onClick={close}>{t("close")}</Button><Button disabled={!canSend} onClick={() => void action.run(() => point ? adapter.restoreRestorePoint(stackId, point.id, { expectedRevision: data!.savedRevision, replaceConfiguration: ack === data!.savedRevision }) : adapter.installStackUpdates(stackId, { expectedRevision: data!.savedRevision }), (id) => setReceipt({ id, identity: data!.targetIdentity }))}>{t(point ? "restore" : "update")}</Button></div>
   </DialogContent></Dialog>;
 }
 export function StackUpdateDialogController() {

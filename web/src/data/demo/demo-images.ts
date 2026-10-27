@@ -1,3 +1,4 @@
+import { sameImageReference } from "@/domain/docker-reference";
 import { imageIdFor, imageReference, parseImageReference, pruneCandidates, type DockerImage, type ImageConsumer } from "@/domain/images";
 import type { ContainerInfo, Host } from "@/domain/model";
 import { isSystemWorkload } from "@/domain/system";
@@ -73,7 +74,7 @@ export function createImagesApi({ db, runner, forcedFailure, demoFailure }: Demo
   sync();
 
   const consumersOf = (img: StoredImage, containers: ContainerInfo[]): ContainerInfo[] =>
-    img.tag === null ? [] : containers.filter((c) => c.hostId === img.hostId && c.image.repository === img.repository && c.image.tag === img.tag);
+    img.tag === null ? [] : containers.filter((c) => c.hostId === img.hostId && sameImageReference(`${c.image.repository}:${c.image.tag}`, `${img.repository}:${img.tag}`));
 
   const project = (img: StoredImage, containers: ContainerInfo[]): DockerImage => {
     const users = consumersOf(img, containers);
@@ -81,7 +82,7 @@ export function createImagesApi({ db, runner, forcedFailure, demoFailure }: Demo
       (c): ImageConsumer => ({ containerId: c.id, name: c.name, hostId: c.hostId, stackId: c.stackId, serviceName: c.serviceName, state: c.state, system: isSystemWorkload(c) || undefined }),
     );
     const update = users.find((c) => !isSystemWorkload(c) && hasUpdate(c.update))?.update ?? users.find((c) => !isSystemWorkload(c))?.update;
-    const scanned = img.tag === null ? undefined : db.security.images.find((i) => i.hostId === img.hostId && i.ref === `${img.repository}:${img.tag}`);
+    const scanned = img.tag === null ? undefined : db.security.images.find((i) => i.hostId === img.hostId && sameImageReference(i.ref, `${img.repository}:${img.tag}`));
     return { ...img, consumers, update, vulnerabilities: scanned?.counts };
   };
 

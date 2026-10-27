@@ -4,6 +4,7 @@
 // License: Apache-2.0
 // Deviations: Original live update UI for issue #231.
 
+import { COMMAND_DIALOG_CONTENT } from "@/shared/components/dialog-layout";
 import { formatDateTime } from "@/domain/format";
 
 import { useUpdateAction } from "./use-update-action";
@@ -31,7 +32,7 @@ function PolicyDialog({ stackId, policy, close, saved }: { stackId: string; poli
   useEffect(() => identityLifetime(adapter).listen(close), [adapter, close]);
   const read = useCapability("getAutoUpdatePolicy", { kind: "stack", id: stackId });
   const write = useCapability(mode === "apply" ? "setAutoUpdateApply" : "setAutoUpdate", { kind: "stack", id: stackId });
-  return <Dialog open onOpenChange={(v) => { if (!v) { action.reset(); close(); } }}><DialogContent><DialogHeader><DialogTitle>{t("policy")}</DialogTitle><DialogDescription>{t("policyHelp")}</DialogDescription></DialogHeader>
+  return <Dialog open onOpenChange={(v) => { if (!v) { action.reset(); close(); } }}><DialogContent className={COMMAND_DIALOG_CONTENT}><DialogHeader><DialogTitle>{t("policy")}</DialogTitle><DialogDescription>{t("policyHelp")}</DialogDescription></DialogHeader>
     <Select value={mode} onValueChange={(v) => setMode(v as PolicyMode)}><SelectTrigger aria-label={t("policy")}><SelectValue /></SelectTrigger><SelectContent>{(["off", "notify", "apply"] as const).map((m) => <SelectItem value={m} key={m}>{t(m)}</SelectItem>)}</SelectContent></Select>
     {(!read.available || !write.available) && <UpdateUnavailable reason={read.reason ?? write.reason} />}{action.error && <p role="alert">{action.error}</p>}
     <Button disabled={!read.available || !write.available || action.busy} onClick={() => void action.run(() => adapter.saveAutoUpdatePolicy!(stackId, mode, policy.revision), () => { saved(); close(); })}>{t("save")}</Button>
@@ -42,8 +43,11 @@ export function LiveStackUpdates({ stackId }: { stackId: string }) {
   const read = useCapability("getAutoUpdatePolicy", { kind: "stack", id: stackId }), check = useCapability("checkUpdates", { kind: "stack", id: stackId });
   const policy = useQuery({ queryKey: ["stack", stackId, "update-policy"], queryFn: () => adapter.getAutoUpdatePolicy!(stackId), enabled: read.available && !!adapter.getAutoUpdatePolicy });
   const action = useUpdateAction(), [editing, setEditing] = useState<StackUpdatePolicy>();
+  const baselineRead = useCapability("getUpdateBaseline", { kind: "stack", id: stackId });
+  const baseline = useQuery({ queryKey: ["stack", stackId, "update-baseline"], queryFn: () => adapter.getUpdateBaseline!(stackId), enabled: baselineRead.available && !!adapter.getUpdateBaseline });
   const p = policy.data;
   return <section id={AUTO_UPDATE_ANCHOR} className="flex flex-col gap-3 rounded-xl border p-4"><h3>{t("policy")}</h3>
+    {!baselineRead.available ? <UpdateUnavailable reason={baselineRead.reason} /> : baseline.isError ? <p role="alert">{errorText(baseline.error)}</p> : baseline.data && !baseline.data.available && <p role="status">{errorText(baseline.data.code ?? "update.baseline-unavailable")}</p>}
     {!read.available ? <UpdateUnavailable reason={read.reason} /> : policy.isError ? <p role="alert">{errorText(policy.error)}</p> : p ? <>
       <p>{t(p.mode)}{p.stale && ` · ${t("stale")}`}</p>
       <p>{t("checked")}: {p.checkedAt ? formatDateTime(p.checkedAt) : t("unknown")} {p.code && errorText(p.code)}</p>
