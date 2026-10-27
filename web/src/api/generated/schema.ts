@@ -1,5 +1,5 @@
 // Source: api/openapi.json
-// Revision: a4eeb3a4fc785b0f699873268fe209090cad1eccdd9eb95b4e94b1a77a52b822
+// Revision: 7e11694c04fdcc4de8df326de1f39cddb99b4a3d349944147e248c7a2b581d78
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
 // Deviations: Generated TypeScript declarations from the local Huma export.
@@ -11597,7 +11597,7 @@ export interface components {
              * @example /api/schemas/VulnerabilityImageScanRequest.json
              */
             readonly $schema?: string;
-            ignoreUnfixed: boolean;
+            ignoreUnfixed?: boolean;
             /** @enum {string} */
             origin?: "manual";
         };
@@ -11751,7 +11751,7 @@ export interface components {
              * @example /api/schemas/VulnerabilityScanRequest.json
              */
             readonly $schema?: string;
-            ignoreUnfixed: boolean;
+            ignoreUnfixed?: boolean;
             /** @enum {string} */
             origin: "manual" | "scheduled";
             /** @enum {string} */
