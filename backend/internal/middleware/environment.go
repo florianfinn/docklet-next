@@ -259,10 +259,16 @@ func (m *EnvironmentMiddleware) Handle(c *echo.Context, next echo.HandlerFunc) e
 	}
 
 	if err := InlineImageCredentials(c.Request().URL.Path, c.Request().Header, c.QueryParams()); err != nil {
+		if isVulnerability {
+			return genericProblem(c, http.StatusBadRequest, "inline registry credentials are not allowed")
+		}
 		problem := imageDTO.Neutral(err, "registry.inline-credentials-not-allowed", 400)
 		return c.JSON(problem.Status, problem)
 	}
 	if err := checkImageUpgrade(c); err != nil {
+		if isVulnerability {
+			return genericProblem(c, http.StatusBadRequest, "invalid image target")
+		}
 		problem := imageDTO.Neutral(err, "update.invalid-target", 400)
 		return c.JSON(problem.Status, problem)
 	}
