@@ -52,7 +52,7 @@ func Models() []any {
 		&updatepolicies.Policy{}, &updatepolicies.HostSchedule{}, &updatepolicies.Child{}, &updatepolicies.Candidate{}, &updatepolicies.Notice{},
 		&user.User{}, &user.UserAvatar{},
 		&volume.VolumeBackup{}, &policies.VolumeBackupPolicy{},
-		&vulnerabilityDTO.ScanRun{}, &vulnerability.VulnerabilityScanRecord{}, &vulnerability.VulnerabilityReportRecord{},
+		&vulnerability.ScanNotification{}, &vulnerabilityDTO.ScanRun{}, &vulnerability.VulnerabilityScanRecord{}, &vulnerability.VulnerabilityReportRecord{},
 		&vulnerability.VulnerabilityScanItem{}, &vulnerability.VulnerabilityThreatIntel{},
 		&vulnerability.VulnerabilityIgnore{}, &query.VulnerabilityRiskSnapshot{},
 		&webhook.Webhook{},

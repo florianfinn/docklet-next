@@ -238,6 +238,9 @@ func (s *NotificationService) dispatchNotificationToManagerInternal(ctx context.
 }
 
 func (s *NotificationService) DispatchNotification(ctx context.Context, accessToken string, payload notification.DispatchRequest) (notification.DispatchResponse, error) {
+	if payload.Kind == notification.DispatchKindVulnerabilityScan {
+		return notification.DispatchResponse{}, ErrUnauthorizedNotificationDispatch
+	}
 	if s.config != nil && s.config.AgentMode {
 		return notification.DispatchResponse{}, errors.New("notification dispatch is manager-only")
 	}
@@ -254,6 +257,9 @@ func (s *NotificationService) DispatchNotification(ctx context.Context, accessTo
 // identity was already established by its edge tunnel session, so no access
 // token is exchanged (#3002).
 func (s *NotificationService) DispatchNotificationForEnvironment(ctx context.Context, environmentID string, payload notification.DispatchRequest) (notification.DispatchResponse, error) {
+	if payload.Kind == notification.DispatchKindVulnerabilityScan {
+		return notification.DispatchResponse{}, ErrUnauthorizedNotificationDispatch
+	}
 	if s.config != nil && s.config.AgentMode {
 		return notification.DispatchResponse{}, errors.New("notification dispatch is manager-only")
 	}
@@ -319,19 +325,13 @@ func (s *NotificationService) dispatchForTargetInternal(ctx context.Context, tar
 		}
 		return dispatchResponse, s.sendBatchContainerUpdateNotificationForTargetInternal(ctx, target, entries)
 	case notification.DispatchKindVulnerabilityFound:
-		if payload.VulnerabilityFound == nil {
-			return notification.DispatchResponse{}, errors.New("vulnerability payload is required")
+		return notification.DispatchResponse{}, ErrUnsupportedDispatchKind
+	case notification.DispatchKindVulnerabilityScan:
+		if payload.VulnerabilityScan == nil {
+			return notification.DispatchResponse{}, errors.New("scan notification payload is required")
 		}
-		logManagerDispatchNotificationInternal(ctx, target, payload.Kind)
-		return dispatchResponse, s.sendVulnerabilityNotificationForTargetInternal(ctx, target, VulnerabilityNotificationPayload{
-			CVEID:            payload.VulnerabilityFound.CVEID,
-			CVELink:          payload.VulnerabilityFound.CVELink,
-			Severity:         payload.VulnerabilityFound.Severity,
-			ImageName:        payload.VulnerabilityFound.ImageName,
-			FixedVersion:     payload.VulnerabilityFound.FixedVersion,
-			PkgName:          payload.VulnerabilityFound.PkgName,
-			InstalledVersion: payload.VulnerabilityFound.InstalledVersion,
-		})
+		dispatchResponse.Delivered, err = s.sendVulnerabilityScanForTarget(ctx, target, *payload.VulnerabilityScan)
+		return dispatchResponse, err
 	case notification.DispatchKindPruneReport:
 		if payload.PruneReport == nil {
 			return notification.DispatchResponse{}, errors.New("prune report payload is required")
@@ -696,18 +696,6 @@ var supportedNotificationTestTypes = map[string]struct{}{
 	notificationTestTypeAutoHeal:         {},
 }
 
-// VulnerabilityNotificationPayload is the data sent to all providers for vulnerability_found events.
-// Only vulnerabilities with a fixed version should trigger this notification.
-type VulnerabilityNotificationPayload struct {
-	CVEID            string // e.g. CVE-2024-1234
-	CVELink          string // e.g. https://nvd.nist.gov/vuln/detail/CVE-2024-1234
-	Severity         string // CRITICAL, HIGH, MEDIUM, LOW, UNKNOWN
-	ImageName        string // e.g. nginx:latest
-	FixedVersion     string
-	PkgName          string // optional
-	InstalledVersion string // optional
-}
-
 // SendBatchContainerUpdateNotification dispatches a single batched
 // notification covering all containers updated in one auto-update run.
 func (s *NotificationService) SendBatchContainerUpdateNotification(ctx context.Context, entries []notifications.ContainerUpdateBatchEntry) error {
@@ -860,64 +848,6 @@ func (s *NotificationService) sendContainerUpdateNotificationForTargetInternal(c
 	content := s.templates.ContainerUpdate(target.EnvironmentName, containerName, imageRef, oldDigest, newDigest)
 	content.Vars = notifications.EventVars(target.EnvironmentName, target.EnvironmentID, notifications.NotificationEventContainerUpdate)
 	_, err := s.notifyEnabledProvidersInternal(ctx, target, notifications.NotificationEventContainerUpdate, imageRef, metadata, func(
-		ctx context.Context,
-		provider notifications.NotificationProvider,
-		config database.JSON,
-	) (
-		bool,
-		error,
-	) {
-		return notifications.Deliver(ctx, provider, config, content)
-	})
-	return err
-}
-
-func isVulnerabilitySummaryPayload(payload VulnerabilityNotificationPayload) bool {
-	return strings.HasPrefix(strings.ToUpper(strings.TrimSpace(payload.CVEID)), "DAILY SUMMARY")
-}
-
-// SendVulnerabilityNotification notifies all enabled providers that have vulnerability_found event enabled.
-// Only daily summary payloads are sent; legacy per-CVE payloads are ignored.
-func (s *NotificationService) SendVulnerabilityNotification(ctx context.Context, payload VulnerabilityNotificationPayload) error {
-	if !isVulnerabilitySummaryPayload(payload) {
-		slog.InfoContext(ctx, "skipping legacy individual vulnerability notification payload", "cve", payload.CVEID)
-		return nil
-	}
-
-	if s.config != nil && s.config.AgentMode {
-		_, err := s.dispatchNotificationToManagerInternal(ctx, notification.DispatchRequest{
-			Kind: notification.DispatchKindVulnerabilityFound,
-			VulnerabilityFound: &notification.DispatchVulnerabilityFound{
-				CVEID:            payload.CVEID,
-				CVELink:          payload.CVELink,
-				Severity:         payload.Severity,
-				ImageName:        payload.ImageName,
-				FixedVersion:     payload.FixedVersion,
-				PkgName:          payload.PkgName,
-				InstalledVersion: payload.InstalledVersion,
-			},
-		})
-		return err
-	}
-
-	target, err := s.resolveNotificationTargetInternal(ctx, "")
-	if err != nil {
-		return err
-	}
-
-	return s.sendVulnerabilityNotificationForTargetInternal(ctx, target, payload)
-}
-
-func (s *NotificationService) sendVulnerabilityNotificationForTargetInternal(ctx context.Context, target NotificationTarget, payload VulnerabilityNotificationPayload) error {
-	metadata := database.JSON{
-		"cveId":        payload.CVEID,
-		"severity":     payload.Severity,
-		"fixedVersion": payload.FixedVersion,
-		"eventType":    string(notifications.NotificationEventVulnerabilityFound),
-	}
-	content := s.templates.Vulnerability(target.EnvironmentName, notification.DispatchVulnerabilityFound(payload))
-	content.Vars = notifications.EventVars(target.EnvironmentName, target.EnvironmentID, notifications.NotificationEventVulnerabilityFound)
-	_, err := s.notifyEnabledProvidersInternal(ctx, target, notifications.NotificationEventVulnerabilityFound, payload.ImageName, metadata, func(
 		ctx context.Context,
 		provider notifications.NotificationProvider,
 		config database.JSON,

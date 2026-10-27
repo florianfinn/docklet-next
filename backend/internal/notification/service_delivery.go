@@ -15,6 +15,7 @@ import (
 	"github.com/florianfinn/docklet-next/types/imageupdate"
 	"github.com/florianfinn/docklet-next/types/notification"
 	"github.com/florianfinn/docklet-next/types/system"
+	"github.com/florianfinn/docklet-next/types/vulnerability"
 	"go.getarcane.app/kit/pkg"
 	"log/slog"
 	"maps"
@@ -252,13 +253,7 @@ func (s *NotificationService) testNotificationWarningInternal(setting *Notificat
 func (s *NotificationService) testNotificationContentInternal(environmentName, testType string) notifications.Content {
 	switch testType {
 	case notificationTestTypeVulnerability:
-		return s.templates.Vulnerability(environmentName, notification.DispatchVulnerabilityFound{
-			CVEID:        "Daily Summary - " + time.Now().UTC().Format("2006-01-02"),
-			Severity:     "Critical:1 High:3 Medium:2 Low:1 Unknown:0",
-			ImageName:    "5 image(s) scanned, 2 with fixable vulnerabilities",
-			FixedVersion: "7 fixable vulnerability record(s)",
-			PkgName:      "CVE-2025-1234, CVE-2025-5678, CVE-2026-0001",
-		})
+		return s.templates.VulnerabilityScan(notification.DispatchVulnerabilityScan{HostName: environmentName, Outcome: "partial", NewCritical: 1, NewHigh: 3, NewFindings: []vulnerability.NewFinding{{VulnerabilityID: "CVE-2026-1000", ImageName: "example.com/image:1"}}})
 	case notificationTestTypeAutoHeal:
 		return s.templates.AutoHeal(environmentName, "test-container")
 	case notificationTestTypePruneReport:

@@ -202,6 +202,11 @@ type Update struct {
 	// Required: false
 	VulnerabilityScanEnabled *string `json:"vulnerabilityScanEnabled,omitzero"`
 
+	VulnerabilityScanSchedule   *string `json:"vulnerabilityScanSchedule,omitzero" doc:"JSON daily/weekly wall-clock schedule in the hub time zone"`
+	VulnerabilityNotifyCritical *string `json:"vulnerabilityNotifyCritical,omitzero" enum:"true,false"`
+	VulnerabilityNotifyHigh     *string `json:"vulnerabilityNotifyHigh,omitzero" enum:"true,false"`
+	VulnerabilityNotifyFailed   *string `json:"vulnerabilityNotifyFailed,omitzero" enum:"true,false"`
+
 	// VulnerabilityScanInterval is the cron expression for scheduled vulnerability scans.
 	//
 	// Required: false

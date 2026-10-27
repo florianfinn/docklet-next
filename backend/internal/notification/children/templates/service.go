@@ -17,7 +17,6 @@ import (
 	"time"
 
 	"github.com/florianfinn/docklet-next/types/imageupdate"
-	"github.com/florianfinn/docklet-next/types/notification"
 	"github.com/florianfinn/docklet-next/types/system"
 	"go.getarcane.app/kit/pkg"
 
@@ -67,35 +66,6 @@ func (s *Service) ContainerUpdate(environmentName, containerName, imageRef, oldD
 				return "", "", fmt.Errorf("failed to render email template: %w", err)
 			}
 			subject := notifications.BuildEmailSubject(environmentName, "Container Updated: "+notifications.SanitizeForEmail(containerName))
-			return subject, htmlBody, nil
-		},
-		RequireNtfyTopic:     true,
-		ValidatePushoverUser: true,
-	}
-}
-
-func (s *Service) Vulnerability(environmentName string, payload notification.DispatchVulnerabilityFound) notifications.Content {
-	defaultTitle := notifications.BuildEmailSubject(environmentName, "Daily Vulnerability Summary")
-	return notifications.Content{
-		Text: notifications.TextByFormat(func(format notifications.MessageFormat) string {
-			return notifications.BuildVulnerabilitySummaryNotificationMessage(
-				format,
-				environmentName,
-				payload.CVEID,
-				payload.ImageName,
-				payload.FixedVersion,
-				payload.Severity,
-				payload.PkgName,
-			)
-		}),
-		Title:        defaultTitle,
-		DefaultTitle: defaultTitle,
-		RenderEmail: func() (string, string, error) {
-			htmlBody, _, err := s.renderVulnerabilitySummaryEmailTemplateInternal(environmentName, payload)
-			if err != nil {
-				return "", "", fmt.Errorf("failed to render summary email template: %w", err)
-			}
-			subject := notifications.BuildEmailSubject(environmentName, "Daily Vulnerability Summary: "+notifications.SanitizeForEmail(payload.CVEID))
 			return subject, htmlBody, nil
 		},
 		RequireNtfyTopic:     true,
@@ -290,23 +260,6 @@ func (s *Service) renderBatchEmailTemplateInternal(environmentName string, updat
 	}
 
 	return s.renderTemplatesInternal("batch-image-updates", data, true)
-}
-
-func (s *Service) renderVulnerabilitySummaryEmailTemplateInternal(environmentName string, payload notification.DispatchVulnerabilityFound) (string, string, error) {
-	appURL := s.appURL()
-	logoURL := appURL + logoURLPath
-	data := map[string]any{
-		"LogoURL":           logoURL,
-		"AppURL":            appURL,
-		"Environment":       environmentName,
-		"SummaryLabel":      payload.CVEID,
-		"Overview":          payload.ImageName,
-		"FixableCount":      payload.FixedVersion,
-		"SeverityBreakdown": payload.Severity,
-		"SampleCVEs":        payload.PkgName,
-	}
-
-	return s.renderTemplatesInternal("vulnerability-summary", data, true)
 }
 
 func (s *Service) renderPruneReportEmailTemplateInternal(environmentName string, result *system.PruneAllResult) (string, string, error) {

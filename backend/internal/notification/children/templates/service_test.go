@@ -11,7 +11,6 @@ import (
 	"time"
 
 	"github.com/florianfinn/docklet-next/types/imageupdate"
-	"github.com/florianfinn/docklet-next/types/notification"
 	"github.com/florianfinn/docklet-next/types/system"
 	"github.com/stretchr/testify/require"
 
@@ -75,21 +74,6 @@ func TestService_RenderBatchEmailTemplate_IncludesEnvironment(t *testing.T) {
 
 	subject := notifications.BuildEmailSubject("Edge Cluster A", "2 Container Image Updates Available")
 	require.Equal(t, "[Edge Cluster A] 2 Container Image Updates Available", subject)
-}
-
-func TestService_RenderVulnerabilitySummaryEmailTemplate_IncludesEnvironment(t *testing.T) {
-	svc := NewService(func() string { return "http://localhost:3000" })
-
-	htmlBody, textBody, err := svc.renderVulnerabilitySummaryEmailTemplateInternal("Remote Alpha", notification.DispatchVulnerabilityFound{
-		CVEID:        "Daily Summary - 2026-01-09",
-		ImageName:    "5 image(s) scanned, 2 with fixable vulnerabilities",
-		FixedVersion: "7 fixable vulnerability record(s)",
-		Severity:     "Critical:1 High:3 Medium:2 Low:1 Unknown:0",
-		PkgName:      "CVE-2025-1234",
-	})
-	require.NoError(t, err)
-	require.Contains(t, htmlBody, "Remote Alpha")
-	require.Contains(t, textBody, "Remote Alpha")
 }
 
 func TestService_RenderPruneReportEmailTemplate_IncludesEnvironment(t *testing.T) {

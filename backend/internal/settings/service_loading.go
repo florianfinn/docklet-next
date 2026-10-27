@@ -65,6 +65,7 @@ func (s *SettingsService) loadDatabaseSettingsInternal(ctx context.Context, db *
 	s.applyEnvOverrides(ctx, dest)
 
 	normalizeTrivyMirror(dest)
+	s.normalizeVulnerabilitySchedule(ctx, dest)
 	return dest, nil
 }
 
@@ -135,6 +136,7 @@ func (s *SettingsService) loadDatabaseConfigFromEnv(ctx context.Context, db *dat
 	slog.DebugContext(ctx, "loadDatabaseConfigFromEnv: completed env load", "loadedFields", count)
 
 	normalizeTrivyMirror(dest)
+	s.normalizeVulnerabilitySchedule(ctx, dest)
 	return dest, nil
 }
 

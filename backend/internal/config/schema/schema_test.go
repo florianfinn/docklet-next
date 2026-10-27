@@ -351,6 +351,10 @@ var expectedSettingOverrideKeys = []string{
 	"updateCheckRegistry",
 	"upgradeLogRetentionDays",
 	"volumeHelperIdleTimeout",
+	"vulnerabilityNotifyCritical",
+	"vulnerabilityNotifyFailed",
+	"vulnerabilityNotifyHigh",
 	"vulnerabilityScanEnabled",
+	"vulnerabilityScanSchedule",
 	"vulnerabilityThreatIntelEnabled",
 }

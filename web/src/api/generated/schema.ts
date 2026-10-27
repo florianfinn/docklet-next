@@ -1,5 +1,5 @@
 // Source: api/openapi.json
-// Revision: 98c656ba57dfe701f0c70ddcb7600a1a95f7ccbc9c8162fe3a513033ec676253
+// Revision: 8df32cf678e78944385c142714a17aa68a055a2a50cbae4d391f0373d61fb205
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
 // Deviations: Generated TypeScript declarations from the local Huma export.
@@ -9598,6 +9598,7 @@ export interface components {
             kind: string;
             pruneReport?: components["schemas"]["NotificationDispatchPruneReport"];
             vulnerabilityFound?: components["schemas"]["NotificationDispatchVulnerabilityFound"];
+            vulnerabilityScan?: components["schemas"]["NotificationDispatchVulnerabilityScan"];
         };
         NotificationDispatchResponse: {
             /** Format: int64 */
@@ -9612,6 +9613,16 @@ export interface components {
             installedVersion?: string;
             pkgName?: string;
             severity: string;
+        };
+        NotificationDispatchVulnerabilityScan: {
+            hostName: string;
+            /** Format: int64 */
+            newCritical: number;
+            newFindings: components["schemas"]["VulnerabilityNewFinding"][] | null;
+            /** Format: int64 */
+            newHigh: number;
+            /** @enum {string} */
+            outcome: "completed" | "partial" | "cancelled" | "failed" | "interrupted";
         };
         NotificationResponse: {
             /**
@@ -10541,8 +10552,16 @@ export interface components {
             updateCheckRegistry?: string | null;
             upgradeLogRetentionDays?: string | null;
             volumeHelperIdleTimeout?: string | null;
+            /** @enum {string|null} */
+            vulnerabilityNotifyCritical?: "true" | "false" | null;
+            /** @enum {string|null} */
+            vulnerabilityNotifyFailed?: "true" | "false" | null;
+            /** @enum {string|null} */
+            vulnerabilityNotifyHigh?: "true" | "false" | null;
             vulnerabilityScanEnabled?: string | null;
             vulnerabilityScanInterval?: string | null;
+            /** @description JSON daily/weekly wall-clock schedule in the hub time zone */
+            vulnerabilityScanSchedule?: string | null;
             vulnerabilityThreatIntelEnabled?: string | null;
         };
         StreamEvent: {

@@ -171,12 +171,14 @@ func (s *settingsSubscriptionSchedulerStubInternal) RegisterJob(job schedulertyp
 func TestVulnerabilityRegistrationIsIntelOnlyOnAgents(t *testing.T) {
 	for _, cfg := range []*config.Config{{}, {AgentMode: true}, {EdgeAgent: true}} {
 		controller := &settingsSubscriptionSchedulerStubInternal{}
-		require.NoError(t, registerVulnerabilityJobs(controller, cfg, scheduler.NewVulnerabilityScanJob(nil, nil), scheduler.NewVulnerabilityRiskJob(nil, nil)))
+		require.NoError(t, registerVulnerabilityJobs(controller, cfg, scheduler.NewVulnerabilityScanJob(nil, nil), scheduler.NewVulnerabilityRiskJob(nil, nil), &scheduler.VulnerabilityNotifyJob{}))
 		require.Contains(t, controller.jobs, scheduler.VulnerabilityRiskJobName)
 		if cfg.AgentMode || cfg.EdgeAgent {
 			require.NotContains(t, controller.jobs, scheduler.VulnerabilityScanJobName)
+			require.NotContains(t, controller.jobs, "vulnerability-notify")
 		} else {
 			require.Contains(t, controller.jobs, scheduler.VulnerabilityScanJobName)
+			require.Contains(t, controller.jobs, "vulnerability-notify")
 		}
 	}
 }
