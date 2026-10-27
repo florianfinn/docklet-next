@@ -20,7 +20,7 @@ independent review by a different provider than the implementation.
 | #238 | #229 | Image and registry capabilities and typed errors | Passed |
 | #239 | #230 | Images and registries web UI | R1 failed with 2 blockers, R2 passed |
 | #240 | #229 | Stack image update and restore lifecycle | R1 failed, R2 passed, retention fix verified |
-| #241 | #229 | Update policies, hub schedules, notifications | R1 failed with 3 blocker classes; fix verifications passed; blind control review passed |
+| #241 | #229 | Update policies, hub schedules, notifications | R1 failed with 3 blocker classes; first fix verification failed, second passed; blind control review passed |
 | #243 | #229 | Update capabilities and restore-point protection | Design R1 and R2 failed, then a root-cause plan; step review passed |
 | #244 | #231, #198 | Updates, restore points and policies web UI | Design R2 passed; step R1 failed with 1 blocker, fix verified |
 | #247 | #229 | Image identity per store, new-stack policy read | Design R1 and R2 failed, then a root-cause plan; step R1 failed with 1 blocker, fix verified |
@@ -29,8 +29,9 @@ independent review by a different provider than the implementation.
 
 ## Defects found in the sandbox
 
-Three candidate runs on the integrated feature head found eight product defects
-that tests had missed. All were fixed before closing.
+Candidate runs on the integrated feature head found seven product defects that
+tests had missed, and the #247 step review found one more. All eight were fixed
+before closing; candidate run R3 found no new product defect.
 
 | Run | Defect | Fixed in |
 | --- | --- | --- |
@@ -115,8 +116,9 @@ for it:
 - In all three candidate runs, the Edge agent recovered from its held check
   only after a restart, which matches the same #245 pattern.
 
-If the held-agent and orphan-delete checks fail again after #245 is fixed,
-#232 is reopened and the failures are handled as M10 follow-ups.
+After #245 is fixed, the held-agent and orphan-delete checks are rerun on
+Direct and Edge. If they fail, #232 is reopened and the failures are handled
+as M10 follow-ups.
 
 ## Limits
 
