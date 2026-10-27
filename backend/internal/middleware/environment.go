@@ -207,7 +207,7 @@ func (m *EnvironmentMiddleware) Handle(c *echo.Context, next echo.HandlerFunc) e
 	// of their own, so authorization for proxied requests must happen here,
 	// mirroring the per-operation RequirePermission checks used for the local
 	// environment.
-	suffix := m.buildResourceSuffix(c.Request().URL.Path, envID)
+	suffix := m.buildResourceSuffix(c.Request().URL.EscapedPath(), envID)
 	if isVulnerability && c.Request().Method == http.MethodPost && strings.HasSuffix(suffix, "/scan") && m.vulnerabilityIgnoreUnfixed != nil {
 		if handled, err := m.canonicalizeVulnerabilityScan(c); handled {
 			return err
@@ -284,7 +284,7 @@ func (m *EnvironmentMiddleware) hasActiveEdgeTunnelInternal(envID string) bool {
 
 func (m *EnvironmentMiddleware) forwardInventoryRequest(c *echo.Context, envID, apiURL string, accessToken *string) error {
 
-	suffix := m.buildResourceSuffix(c.Request().URL.Path, envID)
+	suffix := m.buildResourceSuffix(c.Request().URL.EscapedPath(), envID)
 	// Pending credentials retain snapshots without probing an unpaired agent.
 	inventory := m.snapshots != nil && c.Request().Method == http.MethodGet && inventorySuffix(suffix, strings.Split(strings.Trim(suffix, "/"), "/"))
 	if inventory && m.inventoryPending != nil {
@@ -387,7 +387,7 @@ func (m *EnvironmentMiddleware) proxyPermissionDenied(c *echo.Context, ps *authz
 	}
 
 	method := c.Request().Method
-	suffix := m.buildResourceSuffix(c.Request().URL.Path, envID)
+	suffix := m.buildResourceSuffix(c.Request().URL.EscapedPath(), envID)
 	if kind, ok := uploadSessionKindInternal(method, suffix); ok {
 		// Upload-session routes derive their permission from the {kind} path
 		// segment, so they carry no static mapping in the matcher; resolve the
@@ -600,7 +600,7 @@ func (m *EnvironmentMiddleware) proxyThroughTunnelInternal(c *echo.Context, tunn
 	if httpx.IsWebSocketUpgradeRequest(c.Request()) {
 		return edge.ProxyWebSocketRequest(c, tunnel, proxyPath, m.checkOrigin)
 	}
-	if lifecycleProxyPath(c.Request().Method, m.buildResourceSuffix(c.Request().URL.Path, envID)) {
+	if lifecycleProxyPath(c.Request().Method, m.buildResourceSuffix(c.Request().URL.EscapedPath(), envID)) {
 		return m.proxyLifecycleResponse(c, tunnel, envID)
 	}
 	return edge.ProxyHTTPRequest(c, tunnel, proxyPath)
@@ -608,8 +608,8 @@ func (m *EnvironmentMiddleware) proxyThroughTunnelInternal(c *echo.Context, tunn
 
 // hasResourcePath reports whether the request targets a proxiable resource path.
 func (m *EnvironmentMiddleware) hasResourcePath(c *echo.Context, envID string) bool {
-	suffix, ok := strings.CutPrefix(c.Request().URL.Path, apiEnvironmentsPrefix+envID)
-	if !ok || len(suffix) <= 1 || suffix[0] != '/' {
+	suffix := m.buildResourceSuffix(c.Request().URL.EscapedPath(), envID)
+	if len(suffix) <= 1 {
 		return false
 	}
 	return !isManagementPathInternal(c.Request().Method, suffix)
@@ -697,13 +697,18 @@ func (m *EnvironmentMiddleware) extractEnvironmentID(c *echo.Context) string {
 	return ""
 }
 
-// buildResourceSuffix extracts the resource path after stripping the environment ID prefix.
-func (m *EnvironmentMiddleware) buildResourceSuffix(requestPath, envID string) string {
-	suffix, _ := strings.CutPrefix(requestPath, apiEnvironmentsPrefix+envID)
-	if suffix != "" && suffix[0] != '/' {
-		suffix = "/" + suffix
+// buildResourceSuffix strips "/api/environments/<id>" by segment, so routing, permission
+// lookup and forwarding share one escaped route identity even for an encoded environment ID.
+// The decoded envID only selects the host; a path outside that prefix yields no suffix.
+func (m *EnvironmentMiddleware) buildResourceSuffix(requestPath, _ string) string {
+	rest, ok := strings.CutPrefix(requestPath, apiEnvironmentsPrefix)
+	if !ok {
+		return ""
 	}
-	return suffix
+	if _, suffix, found := strings.Cut(rest, "/"); found {
+		return "/" + suffix
+	}
+	return ""
 }
 
 // buildTargetURL constructs the full proxy target URL for a remote environment.
@@ -835,10 +840,10 @@ func (m *EnvironmentMiddleware) proxyHTTP(c *echo.Context, target string, access
 		return m.writeVulnerability(c, resp.StatusCode, resp.Header, resp.Body)
 	}
 
-	if list, _ := pointRoute(m.buildResourceSuffix(c.Request().URL.Path, c.Param(m.paramName))); list && c.Request().Method == http.MethodGet {
+	if list, _ := pointRoute(m.buildResourceSuffix(c.Request().URL.EscapedPath(), c.Param(m.paramName))); list && c.Request().Method == http.MethodGet {
 		return m.writePointList(c, c.Param(m.paramName), resp.StatusCode, resp.Header, resp.Body)
 	}
-	if lifecycleProxyPath(c.Request().Method, m.buildResourceSuffix(c.Request().URL.Path, c.Param(m.paramName))) {
+	if lifecycleProxyPath(c.Request().Method, m.buildResourceSuffix(c.Request().URL.EscapedPath(), c.Param(m.paramName))) {
 		return m.writeLifecycleResponse(c, resp.StatusCode, resp.Header, resp.Body)
 	}
 	return m.writeProxyResponse(c, resp)
