@@ -30,7 +30,7 @@ import (
 )
 
 func TestUploadRuntimeUsesScratchArchiveBridgeBeforeTargetEffects(t *testing.T) {
-	for _, fail := range []string{"", "docker-enospc", "tar-enospc"} {
+	for _, fail := range []string{"", "docker-enospc", "tar-enospc", "missing-target"} {
 		t.Run(fail, func(t *testing.T) {
 			l, run := lifecycleFixture(t)
 			run.Kind = "upload"
@@ -44,6 +44,7 @@ func TestUploadRuntimeUsesScratchArchiveBridgeBeforeTargetEffects(t *testing.T) 
 			var copied []string
 			removed := []string{}
 			targetEffects := 0
+			targetCreated := false
 			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				w.Header().Set("Content-Type", "application/json")
 				switch {
@@ -53,6 +54,15 @@ func TestUploadRuntimeUsesScratchArchiveBridgeBeforeTargetEffects(t *testing.T) 
 						Labels map[string]string
 					}
 					require.NoError(t, json.NewDecoder(r.Body).Decode(&body))
+					if body.Name == "app-data" {
+						require.Equal(t, "missing-target", fail)
+						var stored Run
+						require.NoError(t, l.DB.First(&stored, "id = ?", run.ID).Error)
+						require.True(t, stored.CreatedVolume)
+						targetCreated = true
+						require.NoError(t, json.NewEncoder(w).Encode(body))
+						return
+					}
 					require.Equal(t, "docklet-restore-current", body.Name)
 					require.Equal(t, "true", body.Labels[libarcane.InternalResourceLabel])
 					require.Equal(t, run.ID, body.Labels[RestoreLabel])
@@ -93,6 +103,11 @@ func TestUploadRuntimeUsesScratchArchiveBridgeBeforeTargetEffects(t *testing.T) 
 						w.WriteHeader(200)
 					}
 				case strings.HasSuffix(r.URL.Path, "/volumes/app-data") && r.Method == http.MethodGet:
+					if fail == "missing-target" && !targetCreated {
+						w.WriteHeader(404)
+						_, _ = w.Write([]byte(`{"message":"not found"}`))
+						return
+					}
 					_, _ = w.Write([]byte(`{"Name":"app-data"}`))
 				case r.Method == http.MethodDelete:
 					removed = append(removed, r.URL.Path)
@@ -125,13 +140,16 @@ func TestUploadRuntimeUsesScratchArchiveBridgeBeforeTargetEffects(t *testing.T) 
 			// This test uses real preparation/write plans; consumer and safety effects
 			// remain isolated and are forbidden after an upload preparation failure.
 			l.Effects.Consumers = func(context.Context, string) ([]volume.StoppedContainer, error) {
-				if fail != "" {
+				if fail == "docker-enospc" || fail == "tar-enospc" {
 					t.Error("consumers stopped after scratch failure")
 				}
 				return nil, nil
 			}
 			l.Effects.Safety = func(context.Context, string, user.Actor) (string, error) {
-				if fail != "" {
+				if fail == "missing-target" {
+					t.Error("missing upload target must not get a safety snapshot")
+				}
+				if fail == "docker-enospc" || fail == "tar-enospc" {
 					t.Error("safety attempted after scratch failure")
 				}
 				return "safety", nil
@@ -144,7 +162,7 @@ func TestUploadRuntimeUsesScratchArchiveBridgeBeforeTargetEffects(t *testing.T) 
 			require.Len(t, creates[0].Mounts, 1)
 			require.Equal(t, "/scratch", creates[0].Mounts[0].Target)
 			require.Equal(t, "docklet-restore-current", creates[0].Mounts[0].Source)
-			if fail != "" {
+			if fail == "docker-enospc" || fail == "tar-enospc" {
 				require.Error(t, err)
 				require.Zero(t, targetEffects)
 				require.Len(t, creates, 1)
@@ -152,6 +170,11 @@ func TestUploadRuntimeUsesScratchArchiveBridgeBeforeTargetEffects(t *testing.T) 
 				return
 			}
 			require.NoError(t, err)
+			if fail == "missing-target" {
+				require.True(t, targetCreated)
+				require.True(t, run.CreatedVolume)
+				require.Empty(t, run.SafetyBackupID)
+			}
 			require.Len(t, creates, 2)
 			require.Empty(t, creates[1].Binds)
 			require.True(t, creates[1].Mounts[0].ReadOnly)

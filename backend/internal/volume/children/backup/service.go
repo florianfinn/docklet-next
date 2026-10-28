@@ -12,7 +12,6 @@ import (
 	"encoding/json/v2"
 	"errors"
 	"fmt"
-	"io"
 	"log/slog"
 	"sync"
 	"time"
@@ -22,7 +21,6 @@ import (
 	"github.com/florianfinn/docklet-next/types/scheduler"
 	usertypes "github.com/florianfinn/docklet-next/types/user"
 	"github.com/florianfinn/docklet-next/types/volume"
-	"github.com/moby/moby/api/types/mount"
 	"github.com/moby/moby/client"
 	"gorm.io/gorm"
 
@@ -35,7 +33,6 @@ import (
 	"github.com/florianfinn/docklet-next/backend/internal/volume/children/backup/children/browser"
 	"github.com/florianfinn/docklet-next/backend/internal/volume/children/backup/children/policies"
 	"github.com/florianfinn/docklet-next/backend/internal/volume/children/backup/children/restore"
-	"github.com/florianfinn/docklet-next/backend/pkg/libarcane/volumehelper"
 	"github.com/florianfinn/docklet-next/backend/pkg/pagination"
 	"github.com/florianfinn/docklet-next/backend/pkg/scheduler/jobcontext"
 	"github.com/florianfinn/docklet-next/backend/pkg/scheduler/runs"
@@ -78,6 +75,7 @@ type Dependencies struct {
 // Service runs volume backups and owns their policies, file browser, and restores.
 type Service struct {
 	deps                   Dependencies
+	inputCleaner           func(context.Context, []string) error
 	targets                *backuptarget.Service
 	targetStore            *backuptarget.Store
 	rekeyed                sync.Map
@@ -160,23 +158,6 @@ func (s *Service) RemovePolicies(ctx context.Context, volumeName string) {
 // RenamePolicies moves a renamed volume's backup policies inside the caller's transaction.
 func (s *Service) RenamePolicies(tx *gorm.DB, oldName, newName string) error {
 	return s.policies.Rename(tx, oldName, newName)
-}
-
-func entryInternal(entry *volume.Backup) volume.BackupEntry {
-	return volume.BackupEntry{
-		ActivityID: entry.ActivityID, ID: entry.ID, VolumeName: entry.VolumeName, Size: entry.Size,
-		CreatedAt: entry.CreatedAt.Format(time.RFC3339), Status: entry.Status, Trigger: entry.Trigger,
-		Destination: entry.Destination, Format: entry.Format, LocalSnapshotID: entry.LocalSnapshotID,
-		PolicyID: entry.PolicyID, Error: entry.Error, ErrorCode: entry.ErrorCode, Type: entry.Type,
-	}
-}
-
-func (s *Service) latestRunInternal(ctx context.Context, policyID string) (*volume.BackupEntry, error) {
-	entry, err := s.deps.Store.Latest(ctx, policyID)
-	if err != nil || entry == nil {
-		return nil, err
-	}
-	return new(entryInternal(entry)), nil
 }
 
 func (s *Service) List(ctx context.Context, volumeName string, params pagination.QueryParams) ([]volume.Backup, pagination.Response, error) {
@@ -275,6 +256,10 @@ func (s *Service) completeBackupInternal(ctx context.Context, entry *volume.Back
 	if err != nil {
 		if entry.ErrorCode == "" {
 			entry.ErrorCode = "volume.backup.interrupted"
+			var problem *backuptypes.Problem
+			if errors.As(err, &problem) {
+				entry.ErrorCode = problem.Code
+			}
 		}
 		entry.Status = backuptypes.VolumeBackupStatusFailed
 		if entry.LocalSnapshotID != "" {
@@ -523,96 +508,6 @@ func (s *Service) logBackupDeleteEventInternal(ctx context.Context, volumeName, 
 	); logErr != nil {
 		slog.WarnContext(ctx, "could not log volume backup delete event", "volume", volumeName, "error", logErr)
 	}
-}
-
-// DownloadBackup prepares a Rustic snapshot in scratch and streams its archive.
-func (s *Service) DownloadBackup(ctx context.Context, backupID string, user *usertypes.Actor) (io.ReadCloser, int64, error) {
-	entry, err := s.deps.Store.Run(ctx, backupID)
-	if err != nil {
-		return nil, 0, err
-	}
-	var reader io.ReadCloser
-	var size int64
-	if entry.Format != volume.BackupFormatRustic {
-		return nil, 0, backuptypes.NewProblem(404, "volume.backup.snapshot-not-found", nil)
-	}
-	reader, size, err = s.downloadRusticBackupInternal(ctx, entry)
-	if err != nil {
-		return nil, 0, err
-	}
-	actingUser := user
-	if actingUser == nil {
-		actingUser = &usertypes.SystemUser
-	}
-	metadata := database.JSON{"action": "backup_download", "backup_id": backupID, "size": size}
-	if logErr := s.deps.Events.LogVolumeEvent(ctx, event.EventTypeVolumeBackupDownload, entry.VolumeName, entry.VolumeName, actingUser.ID, actingUser.Username, "0", metadata); logErr != nil {
-		slog.WarnContext(ctx, "could not log volume backup download event", "volume", entry.VolumeName, "error", logErr)
-	}
-	return reader, size, nil
-}
-
-func (s *Service) downloadRusticBackupInternal(ctx context.Context, entry *volume.Backup) (io.ReadCloser, int64, error) {
-	if entry.LocalSnapshotID == "" {
-		return nil, 0, errors.New("only local volume backups can be downloaded")
-	}
-	dockerClient, err := s.deps.Docker.GetClient(ctx)
-	if err != nil {
-		return nil, 0, err
-	}
-	repository, err := s.repositoryFor(ctx, dockerClient, string(entry.Destination), true)
-	if err != nil {
-		return nil, 0, err
-	}
-	password, err := s.volumeBackupPasswordInternal(ctx, dockerClient, repository)
-	if err != nil {
-		return nil, 0, err
-	}
-	scratchVolume := "arcane-rustic-download-" + uuid.New().String()
-	if _, volumeCreateErr := dockerClient.VolumeCreate(ctx, client.VolumeCreateOptions{Name: scratchVolume, Labels: volumehelper.Labels()}); volumeCreateErr != nil {
-		return nil, 0, fmt.Errorf("failed to create download scratch volume: %w", volumeCreateErr)
-	}
-	removeScratch := func() {
-		_, _ = dockerClient.VolumeRemove(context.WithoutCancel(ctx), scratchVolume, client.VolumeRemoveOptions{Force: true})
-	}
-	if restoreSnapshotErr := s.deps.Engine.RestoreSnapshot(
-		ctx,
-		dockerClient,
-		repository,
-		password,
-		entry.LocalSnapshotID,
-		mount.Mount{
-			Type:   mount.TypeVolume,
-			Source: scratchVolume,
-			Target: "/volume",
-		},
-		backup.RestoreOptions{
-			DeleteExtra: true,
-		},
-	); restoreSnapshotErr != nil {
-		removeScratch()
-		return nil, 0, fmt.Errorf("failed to restore Rustic snapshot for download: %w", restoreSnapshotErr)
-	}
-	helperImage, err := s.deps.HelperImage(ctx, dockerClient)
-	if err != nil {
-		removeScratch()
-		return nil, 0, err
-	}
-	archiveMount := mount.Mount{Type: mount.TypeVolume, Source: scratchVolume, Target: "/volume", ReadOnly: false}
-	containerID, removeContainer, err := s.createBackupTempContainerWithMountInternal(ctx, dockerClient, helperImage, archiveMount)
-	if err != nil {
-		removeScratch()
-		return nil, 0, err
-	}
-	cleanup := func() {
-		removeContainer()
-		removeScratch()
-	}
-	archivePath := "/tmp/" + entry.ID + ".tar.gz"
-	if _, _, execInContainerErr := s.deps.Exec(ctx, containerID, "", []string{"tar", "-czf", archivePath, "-C", "/volume", "."}); execInContainerErr != nil {
-		cleanup()
-		return nil, 0, fmt.Errorf("failed to package Rustic snapshot for download: %w", execInContainerErr)
-	}
-	return volumehelper.DownloadFileFromContainer(ctx, dockerClient, containerID, archivePath, cleanup)
 }
 
 func (s *Service) MigrateRepositoryPasswords(ctx context.Context) error {

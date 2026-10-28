@@ -77,7 +77,7 @@ func TestSyncAuthorityOrderingAndRetainedKeys(t *testing.T) {
 	require.Equal(t, target.RecoveryKey, held.RecoveryKey)
 	_, err = s.Apply(t.Context(), set)
 	code(t, err, "backup.target.stale-set")
-	// A restored hub starts a new authority at 1, independent of clocks/high water.
+	// A new authority accepts any restored counter, independent of the old high water.
 	_, err = s.Apply(t.Context(), envelope(t, "authority-b", "host-a", 1, target))
 	require.NoError(t, err)
 	_, err = s.Resolve(t.Context(), target.ID, "host-a", true)

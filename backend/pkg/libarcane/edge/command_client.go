@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; finite runtime responses, cancellation signaling and pending limits; M12 backup foundation.
+// Deviations: M12 synchronous volume-backup cancellation reuses the existing request registry;  Local module namespace; finite runtime responses, cancellation signaling and pending limits; M12 backup foundation.
 
 package edge
 
@@ -98,7 +98,7 @@ func (c *CommandClient) Execute(ctx context.Context, tunnel *AgentTunnel, req *C
 	defer tunnel.Pending.Delete(requestID)
 	completed := false
 	defer func() {
-		if !completed && (runtimeRequestPathInternal(req.Path) || vulnerability.IsRoute(req.Method, req.Path)) {
+		if !completed && (runtimeRequestPathInternal(req.Path) || vulnerability.IsRoute(req.Method, req.Path) || volumeBackupCancelableRequest(req.Method, req.Path)) {
 			_ = tunnel.Conn.Send(&TunnelMessage{ID: requestID, Type: MessageTypeCancelRequest})
 		}
 	}()

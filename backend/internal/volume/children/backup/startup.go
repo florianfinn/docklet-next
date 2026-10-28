@@ -8,7 +8,10 @@ package backup
 
 import (
 	"context"
+	"github.com/moby/moby/api/types/mount"
+	"strings"
 	"time"
+	"uuid"
 
 	"github.com/containerd/errdefs"
 	"github.com/florianfinn/docklet-next/backend/internal/volume/children/backup/children/restore"
@@ -22,9 +25,17 @@ import (
 func (s *Service) isWriterFenced(name string) bool {
 	s.fenceMu.Lock()
 	defer s.fenceMu.Unlock()
-	return s.writerDiscoveryPending || s.writerFences[name]
+	return s.writerDiscoveryPending || s.sweepStarted && !s.settledInitial || s.writerFences[name]
 }
 func (s *Service) WriterFenced(name string) bool { return s.isWriterFenced(name) }
+func (s *Service) hasWriterFence(name string) bool {
+	s.fenceMu.Lock()
+	defer s.fenceMu.Unlock()
+	return s.writerFences[name]
+}
+func (s *Service) SetInputCleaner(clean func(context.Context, []string) error) {
+	s.inputCleaner = clean
+}
 
 // SweepWriters keeps SQL recovery evidence until inspect confirms each writer
 // absent. A successful remove reply alone cannot authorize a consumer restart.
@@ -55,6 +66,16 @@ func (s *Service) SweepWriters(ctx context.Context) error {
 	}
 	for _, candidate := range containers.Items {
 		name := candidate.Labels[rustic.OperationVolumeLabel]
+		if name == "" && candidate.Labels[volumehelper.ContainerLabel] == "true" {
+			legacyEngine := candidate.Image == rustic.DefaultImage || strings.HasPrefix(candidate.Command, "/rustic ") || strings.HasPrefix(candidate.Command, "rustic ")
+			legacyArchive := strings.Contains(candidate.Command, "/backups/") && strings.Contains(candidate.Command, "tar ")
+			for _, mounted := range candidate.Mounts {
+				if mounted.Type == mount.TypeVolume && mounted.Destination == "/volume" && mounted.Name != "" && (legacyEngine || legacyArchive || legacyDownloadVolume(mounted.Name)) {
+					name = mounted.Name
+					break
+				}
+			}
+		}
 		if name == "" || (!initial && !recovering[name]) {
 			continue
 		}
@@ -104,10 +125,14 @@ func (s *Service) SweepWriters(ctx context.Context) error {
 		return err
 	}
 	for _, candidate := range volumes.Items {
-		if candidate.Labels[restore.RestoreLabel] == "" || candidate.Labels[volumehelper.ContainerLabel] != "true" {
+		legacyDownload := legacyDownloadVolume(candidate.Name)
+		if (candidate.Labels[restore.RestoreLabel] == "" && !legacyDownload) || candidate.Labels[volumehelper.ContainerLabel] != "true" {
 			continue
 		}
 		name := candidate.Labels[rustic.OperationVolumeLabel]
+		if legacyDownload {
+			name = candidate.Name
+		}
 		if blocked[name] || (!initial && !recovering[name]) {
 			continue
 		}
@@ -134,7 +159,7 @@ func (s *Service) SettleInterrupted(ctx context.Context, restored bool) error {
 		}
 	}
 	blocked := func(name string) bool {
-		return (!initial && !eligible[name]) || (s.isWriterFenced(name) && !eligible[name])
+		return (!initial && !eligible[name]) || (s.hasWriterFence(name) && !eligible[name])
 	}
 	s.fenceMu.Unlock()
 	var rows []volume.Backup
@@ -161,8 +186,16 @@ func (s *Service) SettleInterrupted(ctx context.Context, restored bool) error {
 	if err := s.lifecycle.Reconcile(ctx, restored, blocked); err != nil {
 		return err
 	}
+	if s.inputCleaner != nil {
+		var running []string
+		if err := s.deps.DB.WithContext(ctx).Model(&restore.Run{}).Where("status = ?", "running").Pluck("id", &running).Error; err != nil {
+			return err
+		}
+		if err := s.inputCleaner(ctx, running); err != nil {
+			return err
+		}
+	}
 	s.fenceMu.Lock()
-	defer s.fenceMu.Unlock()
 	s.settledInitial = true
 	for name := range eligible {
 		delete(s.writerFences, name)
@@ -172,6 +205,10 @@ func (s *Service) SettleInterrupted(ctx context.Context, restored bool) error {
 			release()
 			delete(s.writerFenceRelease, name)
 		}
+	}
+	s.fenceMu.Unlock()
+	if s.deps.Engine != nil {
+		return s.deps.Engine.SettleVolumeRuns(ctx, s.WriterFenced)
 	}
 	return nil
 }
@@ -188,7 +225,9 @@ func (s *Service) RetryFencedWriters(ctx context.Context) {
 	}
 }
 func (s *Service) ReconcileStartup(ctx context.Context, restored bool) error {
-	s.recoveryMu.Lock()
+	if !s.recoveryMu.TryLock() {
+		return nil
+	}
 	defer s.recoveryMu.Unlock()
 	if restored {
 		s.sweepStarted = false
@@ -196,11 +235,14 @@ func (s *Service) ReconcileStartup(ctx context.Context, restored bool) error {
 	if err := s.SweepWriters(ctx); err != nil {
 		return err
 	}
-	if err := s.SettleInterrupted(ctx, restored); err != nil {
-		return err
+	return s.SettleInterrupted(ctx, restored)
+}
+
+func legacyDownloadVolume(name string) bool {
+	suffix, ok := strings.CutPrefix(name, "arcane-rustic-download-")
+	if !ok {
+		return false
 	}
-	if s.deps.Engine != nil {
-		return s.deps.Engine.SettleVolumeRuns(ctx, s.WriterFenced)
-	}
-	return nil
+	_, err := uuid.Parse(suffix)
+	return err == nil
 }

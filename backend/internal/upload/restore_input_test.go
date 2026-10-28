@@ -58,3 +58,35 @@ func TestVolumeUploadCapAtCreationAndChunk(t *testing.T) {
 	require.ErrorAs(t, err, &problem)
 	require.Equal(t, "volume.backup.upload-too-large", problem.Code)
 }
+
+func TestStartupRestoreInputCleanupRetainsRunningAndNeverSweepsNewAdmissions(t *testing.T) {
+	s := &UploadService{root: t.TempDir()}
+	root := filepath.Join(s.root, "restore-inputs")
+	makeInput := func(id string) string {
+		file := filepath.Join(root, id, "input")
+		require.NoError(t, os.MkdirAll(filepath.Dir(file), 0700))
+		require.NoError(t, os.WriteFile(file, []byte("example"), 0600))
+		return file
+	}
+	orphan := makeInput("orphan")
+	terminal := makeInput("terminal")
+	running := makeInput("running")
+	outside := t.TempDir()
+	sentinel := filepath.Join(outside, "sentinel")
+	require.NoError(t, os.WriteFile(sentinel, []byte("outside"), 0600))
+	require.NoError(t, os.Symlink(outside, filepath.Join(root, "link")))
+	require.NoError(t, s.CleanupRestoreInputs(t.Context(), []string{"running"}))
+	require.NoFileExists(t, orphan)
+	require.NoFileExists(t, terminal)
+	require.FileExists(t, running)
+	require.FileExists(t, sentinel)
+	// This transfer is intentionally not in a DB row yet: startup retries may
+	// touch only directories observed before admissions opened.
+	live := makeInput("new-live-admission")
+	require.NoError(t, s.CleanupRestoreInputs(t.Context(), nil))
+	require.NoFileExists(t, running)
+	require.FileExists(t, live)
+	require.FileExists(t, sentinel)
+	require.NoError(t, s.CleanupRestoreInputs(t.Context(), nil))
+	require.FileExists(t, live)
+}

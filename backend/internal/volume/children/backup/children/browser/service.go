@@ -9,7 +9,6 @@ package browser
 import (
 	"context"
 	"fmt"
-	"strings"
 
 	backuptypes "github.com/florianfinn/docklet-next/types/backup"
 	"github.com/florianfinn/docklet-next/types/volume"
@@ -66,8 +65,9 @@ func (s *Service) ListBackupFiles(ctx context.Context, backupID string) ([]strin
 
 // BrowseBackupFiles returns one lazy-loaded page from a volume backup tree.
 func (s *Service) BrowseBackupFiles(ctx context.Context, backupID, requestedPath string, params pagination.QueryParams) ([]backuptypes.BackupFileEntry, pagination.Response, error) {
-	listPath, recursive, err := backupbrowser.ListScope(requestedPath, params)
-	if err != nil {
+	listPath, err := backupbrowser.NormalizePath(requestedPath, true)
+	recursive := false
+	if err != nil || params.Start < 0 {
 		return nil, pagination.Response{}, fmt.Errorf("%w: %w", common.ErrInvalidBackupSelection, err)
 	}
 	entry, err := s.deps.Run(ctx, backupID)
@@ -110,14 +110,25 @@ func (s *Service) BackupHasPath(ctx context.Context, backupID, filePath string) 
 	if err != nil {
 		return false, err
 	}
-	files, err := s.ListBackupFiles(ctx, backupID)
+
+	entry, err := s.deps.Run(ctx, backupID)
 	if err != nil {
 		return false, err
 	}
-	for _, candidate := range files {
-		if strings.TrimPrefix(candidate, "/") == cleaned {
-			return true, nil
-		}
+	if entry.Format != volume.BackupFormatRustic {
+		return false, backuptypes.NewProblem(404, "volume.backup.snapshot-not-found", nil)
 	}
-	return false, nil
+	cli, err := s.deps.Docker.GetClient(ctx)
+	if err != nil {
+		return false, err
+	}
+	repository, snapshot, err := s.deps.Repository(ctx, cli, entry)
+	if err != nil {
+		return false, err
+	}
+	password, err := s.deps.Password(ctx, cli, repository)
+	if err != nil {
+		return false, err
+	}
+	return s.deps.Engine.SnapshotHasPath(ctx, cli, repository, password, snapshot, cleaned)
 }

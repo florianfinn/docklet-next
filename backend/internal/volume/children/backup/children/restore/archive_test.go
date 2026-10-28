@@ -67,6 +67,7 @@ func TestArchiveValidationRulesLeaveTargetAndOutsideUnchanged(t *testing.T) {
 		{name: "duplicate-type", want: "duplicate", members: []member{{name: "dir", kind: tar.TypeDir}, {name: "./dir", kind: tar.TypeSymlink, link: "../outside"}}},
 		{name: "symlink-child", want: "link", members: []member{{name: "dir", kind: tar.TypeSymlink, link: "../outside"}, {name: "dir/file", kind: tar.TypeReg, body: "new"}}},
 		{name: "symlink-descendant", want: "link", members: []member{{name: "dir", kind: tar.TypeSymlink, link: "../outside"}, {name: "dir/sub/file", kind: tar.TypeReg, body: "new"}}},
+		{name: "symlink-after-child", want: "link", members: []member{{name: "dir/sub/file", kind: tar.TypeReg, body: "new"}, {name: "dir", kind: tar.TypeSymlink, link: "../outside"}}},
 		{name: "hardlink-symlink", want: "link", members: []member{{name: "link", kind: tar.TypeSymlink, link: "../outside"}, {name: "hard", kind: tar.TypeLink, link: "link"}}},
 		{name: "hardlink-forward", want: "link", members: []member{{name: "hard", kind: tar.TypeLink, link: "later"}, {name: "later", kind: tar.TypeReg, body: "new"}}},
 		{name: "character-device", want: "entry-type", members: []member{{name: "device", kind: tar.TypeChar}}},

@@ -32,6 +32,7 @@ import (
 	"github.com/florianfinn/docklet-next/backend/internal/settings"
 	"github.com/florianfinn/docklet-next/backend/internal/system"
 	"github.com/florianfinn/docklet-next/backend/internal/updater"
+	"github.com/florianfinn/docklet-next/backend/internal/upload"
 	"github.com/florianfinn/docklet-next/backend/internal/version"
 	"github.com/florianfinn/docklet-next/backend/internal/volume"
 	"github.com/florianfinn/docklet-next/backend/internal/vulnerability"
@@ -52,10 +53,14 @@ func newJobScheduler(
 	backupEngine *backup.Engine,
 	updaterService *updater.UpdaterService,
 	volumes *volume.VolumeService,
+	uploads *upload.UploadService,
 ) (
 	schedulertypes.JobScheduler,
 	error,
 ) {
+	if volumes != nil && uploads != nil {
+		volumes.SetBackupInputCleaner(uploads.CleanupRestoreInputs)
+	}
 	schedulerCtx, cancelScheduler := context.WithCancel(appCtx)
 	jobScheduler, err := scheduler.NewJobScheduler(schedulerCtx, jobService.Coordinator(), cfg.GetLocation())
 	if err != nil {
@@ -156,14 +161,14 @@ func reconcileCoordinatorStartupInternal(
 			return err
 		}
 	}
-	activities, backups, err := startupProtectionInternal(ctx, jobs, engine, updates)
-	if err != nil {
-		return err
-	}
 	if volumes != nil {
 		if reconcileInterruptedBackupsErr := volumes.ReconcileInterruptedBackups(ctx); reconcileInterruptedBackupsErr != nil {
 			return reconcileInterruptedBackupsErr
 		}
+	}
+	activities, backups, err := startupProtectionInternal(ctx, jobs, engine, updates)
+	if err != nil {
+		return err
 	}
 	if systemService != nil {
 		if reconcileSystemBackupsErr := systemService.ReconcileInterruptedBackups(ctx, backups...); reconcileSystemBackupsErr != nil {

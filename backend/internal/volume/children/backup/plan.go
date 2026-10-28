@@ -72,7 +72,7 @@ func (s *Service) prepareCapture(ctx context.Context, name, trigger string, requ
 			return
 		}
 		changed := false
-		err = s.targets.WithActive(ctx, string(hint.destination), func() error {
+		err = s.withActiveTarget(ctx, string(hint.destination), func(ctx context.Context) error {
 			s.policies.AdmissionLock()
 			defer s.policies.AdmissionUnlock()
 			var e error

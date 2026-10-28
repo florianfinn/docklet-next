@@ -6,7 +6,7 @@
 
 -- +goose Up
 ALTER TABLE volume_backups RENAME TO volume_backups_old;
-CREATE TABLE "volume_backups" ("id" TEXT NOT NULL,"created_at" datetime NOT NULL,"updated_at" datetime,"volume_name" TEXT NOT NULL,"size" INTEGER NOT NULL,"status" TEXT NOT NULL DEFAULT 'succeeded',"trigger" TEXT NOT NULL DEFAULT 'manual',"destination" TEXT NOT NULL DEFAULT 'local',"format" TEXT NOT NULL DEFAULT 'archive',"local_snapshot_id" TEXT,"policy_id" TEXT,"error" TEXT,"stop_containers" numeric NOT NULL DEFAULT false,"stopped_containers" TEXT,"error_code" TEXT,"activity_id" TEXT,PRIMARY KEY ("id"),CHECK (stopped_containers IS NULL OR json_valid(stopped_containers)));
+CREATE TABLE "volume_backups" ("id" TEXT NOT NULL,"created_at" datetime NOT NULL,"updated_at" datetime,"volume_name" TEXT NOT NULL,"size" INTEGER NOT NULL,"status" TEXT NOT NULL DEFAULT 'succeeded',"trigger" TEXT NOT NULL DEFAULT 'manual',"destination" TEXT NOT NULL DEFAULT 'local',"format" TEXT NOT NULL DEFAULT 'archive',"snapshot_unavailable_at" datetime,"local_snapshot_id" TEXT,"policy_id" TEXT,"error" TEXT,"stop_containers" numeric NOT NULL DEFAULT false,"stopped_containers" TEXT,"error_code" TEXT,"activity_id" TEXT,PRIMARY KEY ("id"),CHECK (stopped_containers IS NULL OR json_valid(stopped_containers)));
 INSERT INTO volume_backups ("id","created_at","updated_at","volume_name","size","status","trigger","destination","format","local_snapshot_id","policy_id","error") SELECT "id","created_at","updated_at","volume_name","size","status","trigger","destination","format","local_snapshot_id","policy_id","error" FROM volume_backups_old;
 DROP TABLE volume_backups_old;
 CREATE INDEX `idx_volume_backups_policy_id` ON `volume_backups`(`policy_id`);

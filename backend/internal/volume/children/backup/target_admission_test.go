@@ -10,6 +10,7 @@ import (
 	"context"
 	"net/http"
 	"testing"
+	"time"
 
 	"github.com/florianfinn/docklet-next/backend/internal/backuptarget"
 	"github.com/florianfinn/docklet-next/backend/internal/config"
@@ -70,4 +71,24 @@ func TestManualPlanUsesCurrentPolicyAndExplicitTargetBeforeAdmission(t *testing.
 	plan, err = s.resolveBackupPlanInternal(context.Background(), "data", dto.VolumeBackupTriggerSafety, volume.CreateBackupRequest{}, nil)
 	require.NoError(t, err)
 	require.Equal(t, volume.BackupDestinationLocal, plan.destination)
+}
+
+func TestAgentPolicyRoutesRefuseUnknownRetiredAndWrongHostTargets(t *testing.T) {
+	for _, cfg := range []*config.Config{{AgentMode: true}, {EdgeAgent: true}} {
+		s := targetAdmissionService(t)
+		require.NoError(t, s.deps.DB.Exec("INSERT INTO settings(key,value) VALUES ('backupTargetAuthority','authority'),('backupTargetSetVersion','7')").Error)
+		at := time.Now().UTC()
+		require.NoError(t, s.deps.DB.Create(&backuptarget.Target{ID: "retired", Name: "Retired", Kind: "local", HostID: new("0"), RetiredAt: &at}).Error)
+		require.NoError(t, s.deps.DB.Create(&backuptarget.Target{ID: "foreign", Name: "Foreign", Kind: "local", HostID: new("other-host")}).Error)
+		h := policies.NewHandler(s.policies, nil, nil, t.Context())
+		h.AroundUpdate = s.aroundPolicyUpdate(nil, cfg)
+		h.BeforeLocalUpdate = s.checkPolicySet
+		for _, tc := range []struct{ id, code string }{{"unknown", "backup.target.unknown"}, {"retired", "backup.target.retired"}, {"foreign", "backup.target.wrong-host"}} {
+			_, err := h.UpdateBackupPolicy(t.Context(), &policies.UpdateVolumeBackupPolicyInput{EnvironmentID: "0", VolumeName: "data", Body: volume.UpdateBackupPolicies{Authority: "authority", SetVersion: 7, Policies: []volume.UpdateBackupPolicy{{TargetID: tc.id, LocalEnabled: true, Schedule: "0 0 2 * * *", RetentionCount: 7}}}})
+			require.ErrorContains(t, err, tc.code)
+			var n int64
+			require.NoError(t, s.deps.DB.Model(&policies.VolumeBackupPolicy{}).Count(&n).Error)
+			require.Zero(t, n)
+		}
+	}
 }

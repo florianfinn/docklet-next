@@ -59,7 +59,7 @@ func TargetHandler(s *Service, environments *environment.EnvironmentService, cfg
 		if s.deps.Events == nil {
 			return fmt.Errorf("backup audit unavailable")
 		}
-		return s.deps.Events.LogVolumeEvent(ctx, event.EventType("volume.backup.target.key_viewed"), id, id, actor.ID, actor.Username, "0", database.JSON{"targetId": id})
+		return s.deps.Events.LogVolumeEvent(ctx, event.EventTypeVolumeBackupTargetKeyViewed, id, id, actor.ID, actor.Username, "0", database.JSON{"targetId": id})
 	}
 	h.Test = func(ctx context.Context, id, hostID string) (dto.TargetTestOperation, error) {
 		if hostID != "0" && hostID != "" && environments != nil {

@@ -58,3 +58,40 @@ func (s *UploadService) TakeRestoreInput(ctx context.Context, uploadID, restoreI
 	_ = os.RemoveAll(filepath.Join(s.root, uploadID))
 	return target, nil
 }
+
+// CleanupRestoreInputs snapshots startup-owned directories once. Later retries
+// cannot remove an input being transferred by a newly admitted live operation.
+func (s *UploadService) CleanupRestoreInputs(ctx context.Context, running []string) error {
+	s.restoreSweepMu.Lock()
+	defer s.restoreSweepMu.Unlock()
+	root := filepath.Join(s.root, "restore-inputs")
+	if !s.restoreSweepStarted {
+		entries, err := os.ReadDir(root)
+		if err != nil && !os.IsNotExist(err) {
+			return err
+		}
+		s.restoreSweepCandidates = map[string]bool{}
+		for _, entry := range entries {
+			s.restoreSweepCandidates[entry.Name()] = true
+		}
+		s.restoreSweepStarted = true
+	}
+	active := map[string]bool{}
+	for _, id := range running {
+		active[id] = true
+	}
+	for id := range s.restoreSweepCandidates {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
+		if active[id] {
+			continue
+		}
+		// RemoveAll removes a symlink itself; it never follows it outside this root.
+		if err := os.RemoveAll(filepath.Join(root, id)); err != nil {
+			return err
+		}
+		delete(s.restoreSweepCandidates, id)
+	}
+	return nil
+}

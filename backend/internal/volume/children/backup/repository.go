@@ -23,7 +23,8 @@ type admittedTargetKey struct{}
 
 func (s *Service) repositoryFor(ctx context.Context, dockerClient *client.Client, destination string, readOnly bool) (backup.Repository, error) {
 	if destination == "" || destination == "local" {
-		return s.localRusticRepositoryInternal(ctx, dockerClient, readOnly)
+		repository, err := s.localRusticRepositoryInternal(ctx, dockerClient, readOnly)
+		return s.observeRepository(repository, destination), err
 	}
 	hostID := "0"
 	var host struct{ Value string }
@@ -58,7 +59,7 @@ func (s *Service) repositoryFor(ctx context.Context, dockerClient *client.Client
 			if err != nil {
 				return dto.NewProblem(503, "backup.target.mount-failed", err)
 			}
-			defer dockerClient.ContainerRemove(context.WithoutCancel(ctx), created.ID, volumehelper.RemoveOptions())
+			defer waitForBackupHelperRemoval(ctx, dockerClient, created.ID)
 			if _, err = dockerClient.ContainerStart(ctx, created.ID, client.ContainerStartOptions{}); err != nil {
 				return dto.NewProblem(503, "backup.target.mount-failed", err)
 			}
@@ -69,5 +70,5 @@ func (s *Service) repositoryFor(ctx context.Context, dockerClient *client.Client
 			return backuptarget.CheckWitness(strings.TrimSpace(output))
 		}
 	}
-	return repository, nil
+	return s.observeRepository(repository, destination), nil
 }

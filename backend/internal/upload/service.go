@@ -21,6 +21,7 @@ import (
 	"regexp"
 	"slices"
 	"strings"
+	"sync"
 	"time"
 
 	dto "github.com/florianfinn/docklet-next/types/backup"
@@ -46,9 +47,12 @@ var uploadIDPattern = regexp.MustCompile(`^[0-9a-f]{16}$`)
 // instance, which holds for Arcane's single-instance-per-node deployment (for
 // remote environments the session lives on that environment's agent).
 type UploadService struct {
-	settingsService *settings.SettingsService
-	root            string
-	locks           utils.KeyedMutex
+	settingsService        *settings.SettingsService
+	root                   string
+	locks                  utils.KeyedMutex
+	restoreSweepMu         sync.Mutex
+	restoreSweepStarted    bool
+	restoreSweepCandidates map[string]bool
 }
 
 // NewUploadService builds the session service rooted in the system temp

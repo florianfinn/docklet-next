@@ -31,42 +31,44 @@ type BackupFormat string
 
 // Backup is one volume backup run.
 type Backup struct {
-	ID                string                `json:"id"`
-	UpdatedAt         *time.Time            `json:"updatedAt,omitempty"`
-	VolumeName        string                `json:"volumeName"`
-	Size              int64                 `json:"size"`
-	CreatedAt         time.Time             `json:"createdAt"`
-	Status            string                `json:"status" enum:"running,succeeded,failed,partial,unavailable"`
-	Trigger           string                `json:"trigger" enum:"manual,scheduled,safety"`
-	Destination       BackupDestination     `json:"destination"`
-	Format            BackupFormat          `json:"format"`
-	LocalSnapshotID   string                `json:"localSnapshotId,omitempty"`
-	PolicyID          string                `json:"policyId,omitempty"`
-	ErrorCode         string                `json:"errorCode,omitempty"`
-	StopContainers    bool                  `json:"stopContainers"`
-	StoppedContainers []StoppedContainer    `json:"-" gorm:"serializer:json;type:text"`
-	Error             string                `json:"error,omitempty"`
-	ActivityID        *string               `json:"activityId,omitempty"`
-	Type              backup.ManagementType `json:"type"`
+	ID                    string                `json:"id"`
+	UpdatedAt             *time.Time            `json:"updatedAt,omitempty"`
+	VolumeName            string                `json:"volumeName"`
+	Size                  int64                 `json:"size"`
+	CreatedAt             time.Time             `json:"createdAt"`
+	Status                string                `json:"status" enum:"running,succeeded,failed,partial,unavailable"`
+	Trigger               string                `json:"trigger" enum:"manual,scheduled,safety"`
+	Destination           BackupDestination     `json:"destination"`
+	Format                BackupFormat          `json:"format"`
+	SnapshotUnavailableAt *time.Time            `json:"snapshotUnavailableAt,omitempty"`
+	LocalSnapshotID       string                `json:"localSnapshotId,omitempty"`
+	PolicyID              string                `json:"policyId,omitempty"`
+	ErrorCode             string                `json:"errorCode,omitempty"`
+	StopContainers        bool                  `json:"stopContainers"`
+	StoppedContainers     []StoppedContainer    `json:"-" gorm:"serializer:json;type:text"`
+	Error                 string                `json:"error,omitempty"`
+	ActivityID            *string               `json:"activityId,omitempty"`
+	Type                  backup.ManagementType `json:"type"`
 }
 
 type BackupEntry struct {
-	ActivityID        *string               `json:"activityId,omitempty"`
-	ID                string                `json:"id" doc:"Unique identifier of the backup"`
-	VolumeName        string                `json:"volumeName" doc:"Name of the volume"`
-	Size              int64                 `json:"size" doc:"Total size of the backup contents"`
-	CreatedAt         string                `json:"createdAt" doc:"When the backup was created"`
-	Status            string                `json:"status" enum:"running,succeeded,failed,partial,unavailable" doc:"Backup result status"`
-	Trigger           string                `json:"trigger" enum:"manual,scheduled,safety" doc:"How the backup was started"`
-	Destination       BackupDestination     `json:"destination" doc:"Requested backup storage target"`
-	Format            BackupFormat          `json:"format" doc:"Storage format of the retained backup row"`
-	LocalSnapshotID   string                `json:"localSnapshotId,omitempty" doc:"Snapshot ID in the local Rustic repository"`
-	PolicyID          string                `json:"policyId,omitempty" doc:"Backup policy that created the backup"`
-	ErrorCode         string                `json:"errorCode,omitempty"`
-	StopContainers    bool                  `json:"stopContainers"`
-	StoppedContainers []StoppedContainer    `json:"-" gorm:"serializer:json;type:text"`
-	Error             string                `json:"error,omitempty" doc:"Backup error when the run failed"`
-	Type              backup.ManagementType `json:"type" doc:"Whether the backup was system-managed or volume-managed"`
+	ActivityID            *string               `json:"activityId,omitempty"`
+	ID                    string                `json:"id" doc:"Unique identifier of the backup"`
+	VolumeName            string                `json:"volumeName" doc:"Name of the volume"`
+	Size                  int64                 `json:"size" doc:"Total size of the backup contents"`
+	CreatedAt             string                `json:"createdAt" doc:"When the backup was created"`
+	Status                string                `json:"status" enum:"running,succeeded,failed,partial,unavailable" doc:"Backup result status"`
+	Trigger               string                `json:"trigger" enum:"manual,scheduled,safety" doc:"How the backup was started"`
+	Destination           BackupDestination     `json:"destination" doc:"Requested backup storage target"`
+	Format                BackupFormat          `json:"format" doc:"Storage format of the retained backup row"`
+	SnapshotUnavailableAt *time.Time            `json:"snapshotUnavailableAt,omitempty"`
+	LocalSnapshotID       string                `json:"localSnapshotId,omitempty" doc:"Snapshot ID in the local Rustic repository"`
+	PolicyID              string                `json:"policyId,omitempty" doc:"Backup policy that created the backup"`
+	ErrorCode             string                `json:"errorCode,omitempty"`
+	StopContainers        bool                  `json:"stopContainers"`
+	StoppedContainers     []StoppedContainer    `json:"-" gorm:"serializer:json;type:text"`
+	Error                 string                `json:"error,omitempty" doc:"Backup error when the run failed"`
+	Type                  backup.ManagementType `json:"type" doc:"Whether the backup was system-managed or volume-managed"`
 }
 
 type BackupPolicy struct {

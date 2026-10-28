@@ -174,6 +174,7 @@ func (h *Handler) HostAttach(ctx context.Context, in *HostAttachInput) (*handler
 }
 
 func RegisterHubRoutes(api huma.API, h *Handler) {
+	api = BudgetAPI(api)
 	defer RegisterProblemSchemas(api)
 	admin := middleware.RequireGlobalAdmin(api)
 	op := func(id, method, path string) huma.Operation {
@@ -193,6 +194,7 @@ func RegisterHubRoutes(api huma.API, h *Handler) {
 // RegisterHostRoutes is called by the allowlisted volume module in all modes;
 // the metadata receiver exists only on agents and is never a hub client route.
 func RegisterHostRoutes(api huma.API, h *Handler, agent bool) {
+	api = BudgetAPI(api)
 	defer RegisterProblemSchemas(api)
 	prefix := "/environments/{id}/volumes/backups/targets"
 	op := func(id, method, path string) huma.Operation {

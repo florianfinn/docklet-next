@@ -150,7 +150,19 @@ func (s *Service) PrepareRestore(ctx context.Context, run *Run, r StartRequest) 
 		labels[RestoreLabel] = run.ID
 	}
 	_, err = cli.VolumeCreate(ctx, client.VolumeCreateOptions{Name: target, Driver: "local", Labels: labels})
-	return cleanup, err
+	if err != nil {
+		return cleanup, err
+	}
+	if r.Mode == "new" {
+		created, inspectErr := cli.VolumeInspect(ctx, target, client.VolumeInspectOptions{})
+		if inspectErr != nil {
+			return cleanup, inspectErr
+		}
+		if created.Volume.Labels[RestoreLabel] != run.ID {
+			return cleanup, dto.NewProblem(409, "volume.backup.busy", nil)
+		}
+	}
+	return cleanup, nil
 }
 
 func (s *Service) prepareUpload(ctx context.Context, cli *client.Client, run *Run, r StartRequest, p *preparedRestore) error {

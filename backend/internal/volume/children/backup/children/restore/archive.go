@@ -34,7 +34,7 @@ func archiveProblem(reason string, cause error) error {
 }
 
 // ValidateArchive reads the complete gzip stream, including its checksum, and
-// never touches a destination. the expanded-byte cap is independent of daemon-host filesystem capacity.
+// never touches a destination. The expanded-byte cap is independent of daemon-host filesystem capacity.
 func ValidateArchive(input io.Reader, freeBytes int64) (ArchiveValidation, error) {
 	return archivePass(input, freeBytes, nil, "")
 }
@@ -64,6 +64,7 @@ func archivePass(input io.Reader, freeBytes int64, output io.Writer, expected st
 		tw = tar.NewWriter(output)
 	}
 	seen := map[string]byte{}
+	descendants := map[string]bool{}
 	for {
 		header, e := tr.Next()
 		if e == io.EOF {
@@ -83,7 +84,11 @@ func archivePass(input io.Reader, freeBytes int64, output io.Writer, expected st
 		if _, exists := seen[name]; exists {
 			return result, archiveProblem("duplicate", nil)
 		}
+		if header.Typeflag == tar.TypeSymlink && descendants[name] {
+			return result, archiveProblem("link", nil)
+		}
 		for ancestor := path.Dir(name); ancestor != "." && ancestor != "/"; ancestor = path.Dir(ancestor) {
+			descendants[ancestor] = true
 			if seen[ancestor] == tar.TypeSymlink {
 				return result, archiveProblem("link", nil)
 			}

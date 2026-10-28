@@ -23,6 +23,7 @@ import (
 // RegisterRoutes registers the volume backup endpoints, including policies,
 // file browsing, and restores.
 func RegisterRoutes(api huma.API, h *Handler) {
+	api = backuptarget.BudgetAPI(api)
 	defer backuptarget.RegisterProblemSchemas(api)
 	registerMetadataRoutes(api, h)
 	var policiesService *policies.Service

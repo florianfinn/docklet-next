@@ -37,3 +37,7 @@ func (s *VolumeService) ReconcileBackup(ctx context.Context, previous scheduler.
 func (s *VolumeService) MigrateRepositoryPasswords(ctx context.Context) error {
 	return s.backup.MigrateRepositoryPasswords(ctx)
 }
+
+func (s *VolumeService) SetBackupInputCleaner(clean func(context.Context, []string) error) {
+	s.backup.SetInputCleaner(clean)
+}

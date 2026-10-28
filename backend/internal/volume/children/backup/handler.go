@@ -99,6 +99,7 @@ func NewHandler(
 }
 
 func (h *Handler) DownloadBackup(ctx context.Context, input *DownloadBackupInput) (*huma.StreamResponse, error) {
+	ctx = context.WithValue(ctx, edgeDownloadKey{}, h.config != nil && h.config.EdgeAgent)
 	user, _ := userctx.CurrentUserFromContext(ctx)
 	reader, size, err := h.service.DownloadBackup(ctx, input.BackupID, user)
 	if err != nil {
@@ -144,7 +145,7 @@ func (h *Handler) ListBackups(ctx context.Context, input *ListBackupsInput) (*Li
 	}
 
 	for i := range backups {
-		if backups[i].Format != volume.BackupFormatRustic {
+		if backups[i].Format != volume.BackupFormatRustic || backups[i].SnapshotUnavailableAt != nil {
 			backups[i].Status = "unavailable"
 			backups[i].ErrorCode = "volume.backup.snapshot-not-found"
 		}
@@ -209,7 +210,8 @@ func (h *Handler) CreateBackup(ctx context.Context, input *CreateBackupInput) (*
 			}
 			request.TargetID = target
 		}
-		err = h.service.targets.WithActive(ctx, target, func() error {
+		err = h.service.withActiveTarget(ctx, target, func(fenced context.Context) error {
+			ctx = fenced
 			if input.EnvironmentID != "0" && h.environmentService != nil {
 				if _, e := backuptarget.SyncHost(ctx, h.service.deps.DB, input.EnvironmentID, h.environmentService.ProxyJSONRequest); e != nil {
 					return e
@@ -228,7 +230,12 @@ func (h *Handler) CreateBackup(ctx context.Context, input *CreateBackupInput) (*
 
 func (h *Handler) DeleteBackup(ctx context.Context, input *DeleteBackupInput) (*handlerutil.Out[base.MessageResponse], error) {
 	user, _ := userctx.CurrentUserFromContext(ctx)
-	runtimeCtx := utils.ActivityRuntimeContext(ctx, h.appCtx)
+	budget := 30 * time.Minute
+	if h.config != nil && h.config.EdgeAgent {
+		budget = 4 * time.Minute
+	}
+	runtimeCtx, cancel := context.WithTimeout(utils.ActivityRuntimeContext(ctx, h.appCtx), budget)
+	defer cancel()
 	activityID, err := activitylib.RunHandlerActivity(runtimeCtx, h.activityService, activitylib.HandlerOptions{
 		EnvironmentID:  input.EnvironmentID,
 		Type:           activitytypes.TypeResourceAction,

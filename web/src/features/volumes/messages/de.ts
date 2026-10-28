@@ -275,6 +275,7 @@ export const deVolumes: typeof enVolumes = {
     showUnprotected: "Ohne Backup anzeigen",
   },
   backupCodes: {
+    "volume.backup.target.key_viewed": "Backup-Wiederherstellungsschlüssel wurde angezeigt.",
     "volume.not-found": "Volume nicht gefunden.",
     "volume.backup.busy": "Ein anderer Vorgang belegt dieses Volume.",
     "volume.backup.interrupted": "Das Backup wurde unterbrochen.",

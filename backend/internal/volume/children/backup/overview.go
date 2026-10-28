@@ -23,7 +23,7 @@ import (
 // All SQL expressions are fixed identifiers owned here. No request value is
 // interpolated; one snapshot reads policies, history and safe target metadata.
 func overviewQuery() string {
-	fields := []string{"kind", "id", "volume_name", "created_at", "status", "trigger", "destination", "format", "local_snapshot_id", "policy_id", "activity_id", "error_code", "size", "schedule", "enabled", "retention_count", "stop_containers", "local_enabled", "target_id", "phase", "mode", "new_volume_name", "pending_restart", "stopped_containers", "safety_backup_id", "value", "host_id"}
+	fields := []string{"kind", "id", "volume_name", "created_at", "status", "trigger", "destination", "format", "snapshot_unavailable_at", "local_snapshot_id", "policy_id", "activity_id", "error_code", "size", "schedule", "enabled", "retention_count", "stop_containers", "local_enabled", "target_id", "phase", "mode", "new_volume_name", "pending_restart", "stopped_containers", "safety_backup_id", "value", "host_id"}
 	selectFrom := func(table, kind string, columns []string, overrides map[string]string) string {
 		selected := make(map[string]string, len(columns)+1)
 		for _, column := range columns {
@@ -44,7 +44,7 @@ func overviewQuery() string {
 		return "SELECT " + strings.Join(expressions, ",") + " FROM " + table
 	}
 	return strings.Join([]string{
-		selectFrom("volume_backups", "backup", []string{"id", "volume_name", "created_at", "status", "trigger", "destination", "format", "local_snapshot_id", "policy_id", "activity_id", "error_code", "size"}, nil),
+		selectFrom("volume_backups", "backup", []string{"id", "volume_name", "created_at", "status", "trigger", "destination", "format", "snapshot_unavailable_at", "local_snapshot_id", "policy_id", "activity_id", "error_code", "size"}, nil),
 		selectFrom("volume_backup_policies", "policy", []string{"id", "volume_name", "created_at", "schedule", "enabled", "retention_count", "stop_containers", "local_enabled", "target_id"}, nil),
 		selectFrom("volume_restore_runs", "restore", []string{"id", "volume_name", "status", "activity_id", "error_code", "phase", "mode", "new_volume_name", "pending_restart", "stopped_containers", "safety_backup_id"}, map[string]string{"created_at": "started_at", "trigger": "kind"}),
 		selectFrom("settings WHERE key IN ('volumeBackupRepositoryCheck','backup_target_authority','backup_target_set_version','backupTargetAuthority','backupTargetSetVersion','hubHostId')", "setting", []string{"value"}, map[string]string{"id": "key"}),
@@ -54,6 +54,7 @@ func overviewQuery() string {
 
 type overviewRecord struct {
 	Kind, ID, VolumeName, Status, Trigger, Destination, Format, LocalSnapshotID, PolicyID, ActivityID, ErrorCode string
+	SnapshotUnavailableAt                                                                                        *time.Time
 	CreatedAt                                                                                                    *time.Time
 	Size                                                                                                         int64
 	Schedule                                                                                                     string
@@ -134,7 +135,8 @@ func (s *Service) Overview(ctx context.Context) (volume.BackupOverview, error) {
 			item := get(r.VolumeName)
 			item.Count++
 			if item.LastBackup == nil {
-				item.LastBackup = &volume.BackupEntry{ID: r.ID, VolumeName: r.VolumeName, Status: r.Status, Trigger: r.Trigger, Destination: volume.BackupDestination(r.Destination), Format: volume.BackupFormat(r.Format), LocalSnapshotID: r.LocalSnapshotID, Size: r.Size, ErrorCode: r.ErrorCode, CreatedAt: r.CreatedAt.Format(time.RFC3339)}
+				status, code := observedBackupStatus(r.Status, r.ErrorCode, volume.BackupFormat(r.Format), r.SnapshotUnavailableAt)
+				item.LastBackup = &volume.BackupEntry{SnapshotUnavailableAt: r.SnapshotUnavailableAt, ID: r.ID, VolumeName: r.VolumeName, Status: status, Trigger: r.Trigger, Destination: volume.BackupDestination(r.Destination), Format: volume.BackupFormat(r.Format), LocalSnapshotID: r.LocalSnapshotID, Size: r.Size, ErrorCode: code, CreatedAt: r.CreatedAt.Format(time.RFC3339)}
 			}
 			if item.LastSuccessAt == nil && (r.Status == "succeeded" || r.Status == "partial") && r.LocalSnapshotID != "" {
 				item.LastSuccessAt = r.CreatedAt

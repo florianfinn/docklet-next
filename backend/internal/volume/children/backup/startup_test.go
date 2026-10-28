@@ -20,9 +20,11 @@ import (
 	"github.com/florianfinn/docklet-next/backend/internal/testsqlite"
 	"github.com/florianfinn/docklet-next/backend/internal/volume/children/backup/children/restore"
 	"github.com/florianfinn/docklet-next/backend/pkg/libarcane/rustic"
+	"github.com/florianfinn/docklet-next/backend/pkg/libarcane/volumehelper"
 	"github.com/florianfinn/docklet-next/types/user"
 	"github.com/florianfinn/docklet-next/types/volume"
 	"github.com/moby/moby/api/types/container"
+	"github.com/moby/moby/api/types/mount"
 	"github.com/moby/moby/client"
 	"github.com/stretchr/testify/require"
 	"gorm.io/gorm"
@@ -132,4 +134,79 @@ func TestStartupRestartsOnlyRecordedSameIDConsumers(t *testing.T) {
 	var live volume.Backup
 	require.NoError(t, s.deps.DB.Table("volume_backups").First(&live, "id = ?", "live").Error)
 	require.Equal(t, "running", live.Status)
+}
+
+func TestStartupAdmissionRemainsClosedUntilSQLAndInputsSettle(t *testing.T) {
+	restarted := []string{}
+	s := startupService(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if strings.HasSuffix(r.URL.Path, "/containers/json") {
+			_, _ = w.Write([]byte(`[]`))
+			return
+		}
+		if strings.HasSuffix(r.URL.Path, "/volumes") {
+			_, _ = w.Write([]byte(`{"Volumes":[]}`))
+			return
+		}
+		t.Errorf("unexpected effect %s", r.URL.Path)
+		w.WriteHeader(500)
+	}), &restarted)
+	entered, release := make(chan struct{}), make(chan struct{})
+	s.SetInputCleaner(func(context.Context, []string) error { close(entered); <-release; return nil })
+	done := make(chan error, 1)
+	go func() { done <- s.ReconcileStartup(t.Context(), false) }()
+	<-entered
+	require.True(t, s.WriterFenced("any-volume"), "successful Docker discovery is not completed recovery")
+	refused := make(chan error, 1)
+	go func() { refused <- s.checkWriterFence(t.Context(), "any-volume") }()
+	select {
+	case err := <-refused:
+		require.ErrorContains(t, err, "volume.backup.writer-unconfirmed")
+	case <-time.After(time.Second):
+		t.Error("admission waited on startup recovery instead of refusing")
+	}
+	close(release)
+	require.NoError(t, <-done)
+	require.False(t, s.WriterFenced("any-volume"))
+}
+
+func TestStartupSweepsLegacyBackupHelpersAndScratchWithoutTouchingWorkspace(t *testing.T) {
+	removed := []string{}
+	restarted := []string{}
+	scratch := "arcane-rustic-download-11111111-1111-4111-8111-111111111111"
+	s := startupService(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch {
+		case strings.HasSuffix(r.URL.Path, "/containers/json"):
+			_ = json.NewEncoder(w).Encode([]container.Summary{
+				{ID: "legacy-writer", Image: rustic.DefaultImage, Labels: volumehelper.Labels(), Mounts: []container.MountPoint{{Type: mount.TypeVolume, Name: "app-data", Destination: "/volume"}}},
+				{ID: "workspace", Labels: volumehelper.Labels(), Mounts: []container.MountPoint{{Type: mount.TypeVolume, Name: "unrelated-data", Destination: "/volume"}}},
+			})
+		case strings.HasSuffix(r.URL.Path, "/volumes"):
+			_ = json.NewEncoder(w).Encode(map[string]any{"Volumes": []map[string]any{
+				{"Name": scratch, "Labels": volumehelper.Labels()},
+				{"Name": "unrelated-data", "Labels": volumehelper.Labels()},
+				{"Name": "arcane-rustic-download-foreign", "Labels": volumehelper.Labels()},
+				{"Name": "foreign-download-11111111-1111-4111-8111-111111111111", "Labels": map[string]string{}},
+			}})
+		case r.Method == http.MethodDelete:
+			removed = append(removed, r.URL.Path)
+			w.WriteHeader(204)
+		case strings.HasSuffix(r.URL.Path, "/json"):
+			w.WriteHeader(404)
+			_, _ = w.Write([]byte(`{"message":"not found"}`))
+		default:
+			t.Errorf("unexpected request %s", r.URL.Path)
+			w.WriteHeader(500)
+		}
+	}), &restarted)
+	require.NoError(t, s.ReconcileStartup(t.Context(), false))
+	require.Len(t, removed, 2)
+	require.Contains(t, removed[0], "legacy-writer")
+	require.Contains(t, removed[1], scratch)
+	for _, path := range removed {
+		require.NotContains(t, path, "unrelated-data")
+		require.NotContains(t, path, "workspace")
+		require.NotContains(t, path, "foreign")
+	}
 }

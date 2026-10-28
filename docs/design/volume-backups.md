@@ -163,3 +163,13 @@ as failed with the typed `runtime.interrupted` reason. Terminal Francis receipts
 remain audit history and age out under existing retention. The application schema
 migration cannot delete these records because the scheduler stores them separately;
 no scheduler record deletion is required.
+
+Snapshot availability records the last successful repository observation. Backup
+lists, overview and repository metadata never mount a target or run the engine;
+remote filesystem delays therefore cannot turn page views into repository reads.
+An explicit snapshot read that reports its snapshot file missing persists an
+unavailable observation and its time. Missing paths inside an existing snapshot
+are separate. A repository check reconciles every retained row of its destination
+from one bounded snapshot inventory, clearing the observation for snapshots seen
+again. Execution outcomes remain intact so a later observation can restore their
+original meaning. Deleting an unavailable row remains idempotent.

@@ -274,6 +274,7 @@ export const enVolumes = {
     showUnprotected: "Show without backup",
   },
   backupCodes: {
+    "volume.backup.target.key_viewed": "Backup recovery key viewed.",
     "volume.not-found": "Volume not found.",
     "volume.backup.busy": "Another operation owns this volume.",
     "volume.backup.interrupted": "The backup was interrupted.",

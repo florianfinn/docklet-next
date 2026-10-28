@@ -12,15 +12,12 @@ package backup
 import (
 	"cmp"
 	"context"
-	"encoding/hex"
-	"encoding/json/jsontext"
 	"encoding/json/v2"
 	"errors"
 	"fmt"
 	"github.com/florianfinn/docklet-next/backend/internal/database"
 	"github.com/florianfinn/docklet-next/backend/internal/image"
 	"github.com/florianfinn/docklet-next/backend/pkg/libarcane"
-	"github.com/florianfinn/docklet-next/backend/pkg/libarcane/rustic"
 	"github.com/florianfinn/docklet-next/backend/pkg/libarcane/volumehelper"
 	"github.com/florianfinn/docklet-next/backend/pkg/scheduler/runs"
 	"github.com/florianfinn/docklet-next/types/backup"
@@ -46,11 +43,13 @@ const (
 )
 
 type Repository struct {
-	Password    string
-	BeforeRun   func(context.Context) error
-	ID          string
-	Environment []string
-	Mounts      []mount.Mount
+	ObserveSnapshot  func(context.Context, string, bool) error
+	ObserveInventory func(context.Context, []DiscoveredSnapshot) error
+	Password         string
+	BeforeRun        func(context.Context) error
+	ID               string
+	Environment      []string
+	Mounts           []mount.Mount
 }
 
 type Snapshot struct {
@@ -214,6 +213,9 @@ func (e *Engine) CreateSnapshot(ctx context.Context, dockerClient *client.Client
 	if err != nil {
 		return Snapshot{}, err
 	}
+	if isVolumeRepository(repository) {
+		return decodeVolumeSnapshot(output)
+	}
 	var decoded rusticSnapshotOutputInternal
 	if unmarshalErr := json.Unmarshal([]byte(output), &decoded); unmarshalErr != nil {
 		return Snapshot{}, fmt.Errorf("failed to decode Rustic snapshot: %w", unmarshalErr)
@@ -238,12 +240,17 @@ func (e *Engine) RestoreSnapshot(ctx context.Context, dockerClient *client.Clien
 	command = append(command, "--", source, destination)
 	mounts := append([]mount.Mount{target}, options.ExtraMounts...)
 	_, err := e.runInternal(ctx, dockerClient, repository, password, command, mounts...)
-	return err
+	return observeSnapshotResult(ctx, repository, snapshotID, err)
 }
 
 // ListSnapshotFiles lists a snapshot path and returns paths relative to the
 // snapshot root. A supplied path is nonrecursive unless recursive is true.
 func (e *Engine) ListSnapshotFiles(ctx context.Context, dockerClient *client.Client, repository Repository, password, snapshotID, filePath string, recursive bool) ([]string, error) {
+	if isVolumeRepository(repository) {
+		var cancel context.CancelFunc
+		ctx, cancel = context.WithTimeout(ctx, 60*time.Second)
+		defer cancel()
+	}
 	command := []string{"ls", "--json"}
 	if recursive {
 		command = append(command, "--recursive")
@@ -255,11 +262,17 @@ func (e *Engine) ListSnapshotFiles(ctx context.Context, dockerClient *client.Cli
 	}
 	command = append(command, "--", source)
 	output, err := e.runInternal(ctx, dockerClient, repository, password, command)
+	err = observeSnapshotResult(ctx, repository, snapshotID, err)
 	if err != nil {
 		return nil, fmt.Errorf("failed to list Rustic snapshot: %w", err)
 	}
 	var files []string
-	if unmarshalErr := json.Unmarshal([]byte(output), &files); unmarshalErr != nil {
+	if isVolumeRepository(repository) {
+		files, err = decodeVolumeFiles(output, recursive)
+		if err != nil {
+			return nil, err
+		}
+	} else if unmarshalErr := json.Unmarshal([]byte(output), &files); unmarshalErr != nil {
 		return nil, fmt.Errorf("failed to decode Rustic file list: %w", unmarshalErr)
 	}
 	if !recursive && len(files) > 0 {
@@ -267,6 +280,7 @@ func (e *Engine) ListSnapshotFiles(ctx context.Context, dockerClient *client.Cli
 		longCommand := slices.Clone(command)
 		longCommand[1] = "--long"
 		longOutput, runErr := e.runInternal(ctx, dockerClient, repository, password, longCommand)
+		runErr = observeSnapshotResult(ctx, repository, snapshotID, runErr)
 		if runErr != nil {
 			return nil, fmt.Errorf("failed to list Rustic snapshot metadata: %w", runErr)
 		}
@@ -391,95 +405,23 @@ func (e *Engine) FindRunSnapshot(ctx context.Context, dockerClient *client.Clien
 
 // ListSnapshots enumerates every snapshot in the repository.
 func (e *Engine) ListSnapshots(ctx context.Context, dockerClient *client.Client, repository Repository, password string) ([]DiscoveredSnapshot, error) {
+	if isVolumeRepository(repository) {
+		var cancel context.CancelFunc
+		ctx, cancel = context.WithTimeout(ctx, 60*time.Second)
+		defer cancel()
+	}
 	output, err := e.runInternal(ctx, dockerClient, repository, password, []string{"snapshots", "--json"})
 	if err != nil {
 		return nil, err
 	}
-	return decodeSnapshotsInternal(output)
-}
-
-func decodeSnapshotsInternal(output string) ([]DiscoveredSnapshot, error) {
-	trimmedOutput := strings.TrimSpace(output)
-	if trimmedOutput == "" || trimmedOutput[0] != '[' {
-		return nil, errors.New("invalid Rustic snapshot listing: expected an array")
+	snapshots, err := decodeSnapshotsInternal(output)
+	if isVolumeRepository(repository) && err != nil {
+		return nil, backup.NewProblem(502, "volume.backup.engine-output-invalid", err)
 	}
-	var entries []jsontext.Value
-	if err := json.Unmarshal([]byte(output), &entries); err != nil {
-		return nil, fmt.Errorf("failed to decode Rustic snapshots: %w", err)
+	if err == nil && repository.ObserveInventory != nil {
+		err = repository.ObserveInventory(ctx, snapshots)
 	}
-
-	snapshots := make([]DiscoveredSnapshot, 0, len(entries))
-	grouped := false
-	for index, entry := range entries {
-		if entry.Kind() != '{' {
-			return nil, fmt.Errorf("invalid Rustic snapshot listing entry %d: expected an object", index)
-		}
-		var fields map[string]jsontext.Value
-		if err := json.Unmarshal(entry, &fields); err != nil {
-			return nil, fmt.Errorf("failed to decode Rustic snapshot listing entry %d: %w", index, err)
-		}
-		_, hasID := fields["id"]
-		groupEntries, hasSnapshots := fields["snapshots"]
-		if hasID == hasSnapshots {
-			return nil, fmt.Errorf("invalid Rustic snapshot listing entry %d: expected an ID or snapshot group", index)
-		}
-		if index > 0 && grouped != hasSnapshots {
-			return nil, errors.New("invalid Rustic snapshot listing: mixed flat and grouped entries")
-		}
-		grouped = hasSnapshots
-		if !hasSnapshots {
-			snapshot, err := decodeSnapshotInternal(entry)
-			if err != nil {
-				return nil, fmt.Errorf("invalid Rustic snapshot listing entry %d: %w", index, err)
-			}
-			snapshots = append(snapshots, snapshot)
-			continue
-		}
-		if groupEntries.Kind() != '[' {
-			return nil, fmt.Errorf("invalid Rustic snapshot group %d: expected a snapshots array", index)
-		}
-		var members []jsontext.Value
-		if err := json.Unmarshal(groupEntries, &members); err != nil {
-			return nil, fmt.Errorf("failed to decode Rustic snapshot group %d: %w", index, err)
-		}
-		for memberIndex, member := range members {
-			snapshot, err := decodeSnapshotInternal(member)
-			if err != nil {
-				return nil, fmt.Errorf("invalid Rustic snapshot group %d entry %d: %w", index, memberIndex, err)
-			}
-			snapshots = append(snapshots, snapshot)
-		}
-	}
-	return snapshots, nil
-}
-
-func decodeSnapshotInternal(raw jsontext.Value) (DiscoveredSnapshot, error) {
-	if raw.Kind() != '{' {
-		return DiscoveredSnapshot{}, errors.New("expected a snapshot object")
-	}
-	var fields map[string]jsontext.Value
-	if err := json.Unmarshal(raw, &fields); err != nil {
-		return DiscoveredSnapshot{}, fmt.Errorf("failed to decode Rustic snapshot fields: %w", err)
-	}
-	if _, grouped := fields["snapshots"]; grouped {
-		return DiscoveredSnapshot{}, errors.New("expected a flat snapshot object")
-	}
-	var snapshot DiscoveredSnapshot
-	if err := json.Unmarshal(raw, &snapshot); err != nil {
-		return DiscoveredSnapshot{}, fmt.Errorf("failed to decode Rustic snapshot payload: %w", err)
-	}
-	if !fullSnapshotIDInternal(snapshot.ID) {
-		return DiscoveredSnapshot{}, errors.New("invalid full snapshot ID")
-	}
-	return snapshot, nil
-}
-
-func fullSnapshotIDInternal(id string) bool {
-	if len(id) != 64 {
-		return false
-	}
-	_, err := hex.DecodeString(id)
-	return err == nil
+	return snapshots, err
 }
 
 // ForgetSnapshots removes the snapshots from the repository and prunes their
@@ -513,6 +455,11 @@ func (e *Engine) ForgetSnapshots(ctx context.Context, dockerClient *client.Clien
 	snapshots, err := decodeSnapshotsInternal(output)
 	if err != nil {
 		return err
+	}
+	if repository.ObserveInventory != nil {
+		if err := repository.ObserveInventory(ctx, snapshots); err != nil {
+			return err
+		}
 	}
 	existing := make(map[string]string, len(snapshots))
 	for _, snapshot := range snapshots {
@@ -590,21 +537,6 @@ func arcaneNetworkModeInternal(ctx context.Context, dockerClient *client.Client)
 		return ""
 	}
 	return container.NetworkMode("container:" + arcane.ID)
-}
-
-func (e *Engine) runContainerInternal(ctx context.Context, dockerClient *client.Client, repository Repository, password string, command []string, extraMounts ...mount.Mount) (string, error) {
-	ctx = e.imageContext(ctx)
-	if repository.BeforeRun != nil {
-		if err := repository.BeforeRun(ctx); err != nil {
-			return "", err
-		}
-	}
-	if err := e.ensureImageInternal(ctx, dockerClient); err != nil {
-		return "", err
-	}
-	mounts := append([]mount.Mount{}, repository.Mounts...)
-	mounts = append(mounts, extraMounts...)
-	return rustic.Run(ctx, dockerClient, password, command, repository.Environment, mounts, arcaneNetworkModeInternal(ctx, dockerClient))
 }
 
 func (e *Engine) lockRepositoryInternal(id string) func() {
