@@ -123,12 +123,17 @@ func provideActorRuntimeInternal(
 		if configureIdentityErr := runtime.ConfigureIdentity(cfg.EncryptionKey, settingsService.GetSettingsConfig().InstanceID.Value); configureIdentityErr != nil {
 			return configureIdentityErr
 		}
-		return runtime.Start(ctx, appCtx, func(err error) {
-			slog.ErrorContext(appCtx, "Francis host failed", "code", "runtime.actor-host-lost", "error", err)
-			failApp(err)
-		})
+		return runtime.Start(ctx, appCtx, actorHostFailureHandler(appCtx, failApp))
 	}, OnStop: runtime.Stop})
 	return runtime, nil
+}
+
+// actorHostFailureHandler is the Francis host failure callback: it logs and ends the application.
+func actorHostFailureHandler(appCtx context.Context, failApp AppFailure) func(error) {
+	return func(err error) {
+		slog.ErrorContext(appCtx, "Francis host failed", "code", "runtime.actor-host-lost", "error", err)
+		failApp(err)
+	}
 }
 
 func provideRunCoordinatorInternal(runtime *francis.Runtime, cfg *config.Config) (*runs.Coordinator, error) {

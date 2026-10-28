@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; SQLite-only local persistence.
+// Deviations: Local module namespace; SQLite-only local persistence; fatal bootstrap errors map to exit code 1 through exitCode.
 
 package cli
 
@@ -26,12 +26,21 @@ var rootCmd = &cobra.Command{
 	Version: config.Version,
 	Run: func(cmd *cobra.Command, args []string) {
 		err := bootstrap.Bootstrap(cmd.Context())
-		if err != nil {
+		if code := exitCode(err); code != 0 {
 			slog.ErrorContext(cmd.Context(), "Failed to run Arcane", "error", err)
-			os.Exit(1)
+			os.Exit(code)
 		}
 	},
 	CompletionOptions: cobra.CompletionOptions{DisableDefaultCmd: true},
+}
+
+// exitCode maps the Bootstrap result to the process exit status: a fatal error such as an
+// actor-host loss exits non-zero so supervisors see the failure; clean shutdown exits 0.
+func exitCode(err error) int {
+	if err != nil {
+		return 1
+	}
+	return 0
 }
 
 func Execute() {

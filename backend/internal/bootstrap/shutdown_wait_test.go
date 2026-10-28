@@ -67,3 +67,14 @@ func TestWaitForShutdownOrdinaryAppCancelIsClean(t *testing.T) {
 		t.Fatalf("ordinary app cancel = %v, want nil", err)
 	}
 }
+
+// The production failure hook must reach waitForShutdown as a fatal, typed cause.
+func TestActorHostFailureEndsAppWithFatalCause(t *testing.T) {
+	appCtx, cancelCause := context.WithCancelCause(context.Background())
+	original := errors.New("host is not registered")
+	actorHostFailure(cancelCause)(original)
+	err := waitResult(t, func() error { return waitForShutdown(context.Background(), appCtx, make(chan os.Signal)) })
+	if !errors.Is(err, di.ErrActorHostLost) || !errors.Is(err, original) {
+		t.Fatalf("waitForShutdown = %v, want ErrActorHostLost wrapping the host error", err)
+	}
+}

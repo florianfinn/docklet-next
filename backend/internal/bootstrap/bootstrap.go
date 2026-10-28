@@ -81,7 +81,7 @@ func Bootstrap(ctx context.Context) error {
 
 	appCtx, cancelAppCause := context.WithCancelCause(ctx)
 	cancelApp := context.CancelFunc(func() { cancelAppCause(nil) })
-	failApp := di.AppFailure(func(err error) { cancelAppCause(fmt.Errorf("%w: %w", di.ErrActorHostLost, err)) })
+	failApp := actorHostFailure(cancelAppCause)
 	appCtx = utils.WithAppLifecycleContext(appCtx)
 
 	var db *database.DB
@@ -152,6 +152,11 @@ func waitForShutdown(ctx, appCtx context.Context, done <-chan os.Signal) error {
 		slog.InfoContext(context.WithoutCancel(appCtx), "Application context ended")
 	}
 	return nil
+}
+
+// actorHostFailure ends the application with a cause that waitForShutdown reports as fatal.
+func actorHostFailure(cancel context.CancelCauseFunc) di.AppFailure {
+	return func(err error) { cancel(fmt.Errorf("%w: %w", di.ErrActorHostLost, err)) }
 }
 
 func applicationOptions(appCtx context.Context, cfg *config.Config, db *database.DB, cancelApp context.CancelFunc, failApp di.AppFailure) fx.Option {
