@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; functional cut: removed S3 backup destinations; split inventory reads, hide dedicated agent volumes and fail on missing consumer reads.
+// Deviations: Local module namespace; functional cut: removed S3 backup destinations; split inventory reads, hide dedicated agent volumes and fail on missing consumer reads.; M12 target hiding, destination admission and transactional restore-history rename.
 
 package volume
 
@@ -20,7 +20,6 @@ import (
 	"github.com/florianfinn/docklet-next/backend/pkg/libarcane/timeouts"
 	"github.com/florianfinn/docklet-next/backend/pkg/libarcane/volumes"
 	"github.com/florianfinn/docklet-next/backend/pkg/pagination"
-	backuptypes "github.com/florianfinn/docklet-next/types/backup"
 	usertypes "github.com/florianfinn/docklet-next/types/user"
 	volumetypes "github.com/florianfinn/docklet-next/types/volume"
 	"github.com/moby/moby/api/types/container"
@@ -248,37 +247,6 @@ func mountedVolumeNamesInternal(mounts []container.MountPoint) map[string]struct
 	return names
 }
 
-// ListBackupVolumeOptions returns the current non-internal volumes used by centralized backup selection.
-func (s *VolumeService) ListBackupVolumeOptions(ctx context.Context) ([]backuptypes.SystemVolumeBackupOption, error) {
-	dockerClient, err := s.dockerService.GetClient(ctx)
-	if err != nil {
-		return nil, fmt.Errorf("failed to connect to Docker: %w", err)
-	}
-	result, err := dockerClient.VolumeList(ctx, client.VolumeListOptions{})
-	if err != nil {
-		return nil, fmt.Errorf("failed to list Docker volumes: %w", err)
-	}
-	arcaneVolumes := make(map[string]struct{})
-	if inspect, inspectErr := libarcane.InspectCurrentArcaneContainer(ctx, dockerClient); inspectErr == nil && inspect != nil {
-		arcaneVolumes = mountedVolumeNamesInternal(inspect.Mounts)
-	} else if inspectErr != nil {
-		slog.DebugContext(ctx, "volume service: could not identify Arcane-mounted volumes for centralized backups", "error", inspectErr)
-	}
-	options := make([]backuptypes.SystemVolumeBackupOption, 0, len(result.Items))
-	for _, item := range result.Items {
-		if s.isInternalVolumeInternal(volumetypes.NewSummary(item)) {
-			continue
-		}
-		if _, isArcaneVolume := arcaneVolumes[item.Name]; isArcaneVolume {
-			continue
-		}
-		options = append(options, backuptypes.SystemVolumeBackupOption{
-			Name: item.Name, Anonymous: isAnonymousVolumeInternal(item), Available: true,
-		})
-	}
-	return options, nil
-}
-
 func (s *VolumeService) ListVolumesPaginated(ctx context.Context, params pagination.QueryParams, includeInternal bool) ([]volumetypes.Volume, pagination.Response, volumetypes.UsageCounts, error) {
 	startedAt := time.Now()
 	slog.DebugContext(
@@ -364,7 +332,7 @@ func (s *VolumeService) ListVolumesPaginated(ctx context.Context, params paginat
 	items := make([]volumetypes.Volume, 0, len(enrichedVolumes))
 	for _, v := range enrichedVolumes {
 		volDto := volumeSummaryWithConsumersInternal(v, volumeContainerMap[v.Name])
-		if !includeInternal && s.isInternalVolumeInternal(volDto) {
+		if isBackupTargetVolume(v.Labels) || !includeInternal && s.isInternalVolumeInternal(volDto) {
 			continue
 		}
 		items = append(items, volDto)
@@ -421,6 +389,11 @@ func (s *VolumeService) RenameVolume(ctx context.Context, oldName, newName strin
 		return nil, &volumeWorkspaceBusyError{name: oldName}
 	}
 	defer unlock()
+	unlockTarget, targetAcquired := s.workspaceLocks.TryLock(newName)
+	if !targetAcquired {
+		return nil, &volumeWorkspaceBusyError{name: newName}
+	}
+	defer unlockTarget()
 
 	dockerClient, err := s.dockerService.GetClient(ctx)
 	if err != nil {
@@ -435,6 +408,9 @@ func (s *VolumeService) RenameVolume(ctx context.Context, oldName, newName strin
 		}
 		s.logVolumeRenameErrorInternal(ctx, oldName, newName, user, "inspect", err)
 		return nil, fmt.Errorf("inspect source volume: %w", err)
+	}
+	if isBackupTargetVolume(source.Volume.Labels) {
+		return nil, hiddenTargetVolumeError()
 	}
 	if s.isInternalVolumeInternal(volumetypes.NewSummary(source.Volume)) {
 		return nil, common.ErrVolumeRenameProtected
@@ -509,6 +485,12 @@ func (s *VolumeService) renameVolumeMetadataInternal(ctx context.Context, oldNam
 	return s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		if err := tx.Model(&VolumeBackup{}).Where("volume_name = ?", oldName).Update("volume_name", newName).Error; err != nil {
 			return fmt.Errorf("rename volume backup history: %w", err)
+		}
+		if err := tx.Table("volume_restore_runs").Where("volume_name = ?", oldName).Update("volume_name", newName).Error; err != nil {
+			return fmt.Errorf("rename volume restore history: %w", err)
+		}
+		if err := tx.Table("volume_restore_runs").Where("new_volume_name = ?", oldName).Update("new_volume_name", newName).Error; err != nil {
+			return fmt.Errorf("rename restore destination history: %w", err)
 		}
 		if err := s.backup.RenamePolicies(tx, oldName, newName); err != nil {
 			return fmt.Errorf("rename volume backup policies: %w", err)

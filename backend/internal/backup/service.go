@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; functional cut: removed S3 backup destinations.
+// Deviations: Local module namespace; removed S3 destinations; M12 scoped output, observed availability and strict volume parsing.
 
 // Package backup owns the shared Rustic backup engine used by volume and
 // system backups: typed repository operations, per-repository serialization
@@ -10,49 +10,27 @@
 package backup
 
 import (
-	"bytes"
 	"cmp"
 	"context"
-	"crypto/rand"
-	"encoding/base32"
-	"encoding/hex"
-	"encoding/json/jsontext"
 	"encoding/json/v2"
 	"errors"
 	"fmt"
-	"io"
-	"log/slog"
-	"maps"
+	"github.com/florianfinn/docklet-next/backend/internal/database"
+	"github.com/florianfinn/docklet-next/backend/internal/image"
+	"github.com/florianfinn/docklet-next/backend/pkg/libarcane/volumehelper"
+	"github.com/florianfinn/docklet-next/backend/pkg/scheduler/runs"
+	"github.com/florianfinn/docklet-next/types/backup"
+	"github.com/florianfinn/docklet-next/types/scheduler"
+	"github.com/italypaleale/francis/actor"
+	"github.com/moby/moby/api/types/mount"
+	"github.com/moby/moby/client"
+	kit "go.getarcane.app/kit/pkg"
 	"path"
-	"regexp"
 	"slices"
 	"strings"
 	"sync"
 	"time"
 	"uuid"
-
-	"github.com/florianfinn/docklet-next/types/backup"
-	"github.com/florianfinn/docklet-next/types/scheduler"
-	"github.com/florianfinn/docklet-next/types/user"
-	"github.com/italypaleale/francis/actor"
-	"github.com/italypaleale/francis/host/local"
-	"github.com/moby/moby/api/types/container"
-	"github.com/moby/moby/api/types/mount"
-	"github.com/moby/moby/client"
-	"go.getarcane.app/kit/pkg"
-	"go.getarcane.app/sys/crypto"
-	"gorm.io/gorm"
-
-	"github.com/florianfinn/docklet-next/backend/internal/database"
-	"github.com/florianfinn/docklet-next/backend/internal/image"
-	"github.com/florianfinn/docklet-next/backend/pkg/libarcane"
-	"github.com/florianfinn/docklet-next/backend/pkg/libarcane/rustic"
-	"github.com/florianfinn/docklet-next/backend/pkg/libarcane/volumehelper"
-	"github.com/florianfinn/docklet-next/backend/pkg/scheduler/jobcontext"
-	"github.com/florianfinn/docklet-next/backend/pkg/scheduler/runs"
-	"github.com/florianfinn/docklet-next/backend/pkg/scheduler/schedule"
-	"github.com/florianfinn/docklet-next/backend/pkg/utils"
-	"github.com/florianfinn/docklet-next/backend/pkg/utils/francis"
 )
 
 const (
@@ -62,9 +40,13 @@ const (
 )
 
 type Repository struct {
-	ID          string
-	Environment []string
-	Mounts      []mount.Mount
+	ObserveSnapshot  func(context.Context, string, bool) error
+	ObserveInventory func(context.Context, []DiscoveredSnapshot) error
+	Password         string
+	BeforeRun        func(context.Context) error
+	ID               string
+	Environment      []string
+	Mounts           []mount.Mount
 }
 
 type Snapshot struct {
@@ -131,6 +113,7 @@ func snapshotCommandInternal(label string, input CreateSnapshotInput) ([]string,
 
 // Engine owns repository serialization and application-owned backup workers.
 type Engine struct {
+	imageReference func() string
 	imageService   *image.ImageService
 	admission      *runs.Admission
 	lifecycleCtx   context.Context
@@ -227,6 +210,9 @@ func (e *Engine) CreateSnapshot(ctx context.Context, dockerClient *client.Client
 	if err != nil {
 		return Snapshot{}, err
 	}
+	if isVolumeRepository(repository) {
+		return decodeVolumeSnapshot(output)
+	}
 	var decoded rusticSnapshotOutputInternal
 	if unmarshalErr := json.Unmarshal([]byte(output), &decoded); unmarshalErr != nil {
 		return Snapshot{}, fmt.Errorf("failed to decode Rustic snapshot: %w", unmarshalErr)
@@ -251,12 +237,17 @@ func (e *Engine) RestoreSnapshot(ctx context.Context, dockerClient *client.Clien
 	command = append(command, "--", source, destination)
 	mounts := append([]mount.Mount{target}, options.ExtraMounts...)
 	_, err := e.runInternal(ctx, dockerClient, repository, password, command, mounts...)
-	return err
+	return observeSnapshotResult(ctx, repository, snapshotID, err)
 }
 
 // ListSnapshotFiles lists a snapshot path and returns paths relative to the
 // snapshot root. A supplied path is nonrecursive unless recursive is true.
 func (e *Engine) ListSnapshotFiles(ctx context.Context, dockerClient *client.Client, repository Repository, password, snapshotID, filePath string, recursive bool) ([]string, error) {
+	if isVolumeRepository(repository) {
+		var cancel context.CancelFunc
+		ctx, cancel = context.WithTimeout(ctx, 60*time.Second)
+		defer cancel()
+	}
 	command := []string{"ls", "--json"}
 	if recursive {
 		command = append(command, "--recursive")
@@ -268,11 +259,17 @@ func (e *Engine) ListSnapshotFiles(ctx context.Context, dockerClient *client.Cli
 	}
 	command = append(command, "--", source)
 	output, err := e.runInternal(ctx, dockerClient, repository, password, command)
+	err = observeSnapshotResult(ctx, repository, snapshotID, err)
 	if err != nil {
 		return nil, fmt.Errorf("failed to list Rustic snapshot: %w", err)
 	}
 	var files []string
-	if unmarshalErr := json.Unmarshal([]byte(output), &files); unmarshalErr != nil {
+	if isVolumeRepository(repository) {
+		files, err = decodeVolumeFiles(output, recursive)
+		if err != nil {
+			return nil, err
+		}
+	} else if unmarshalErr := json.Unmarshal([]byte(output), &files); unmarshalErr != nil {
 		return nil, fmt.Errorf("failed to decode Rustic file list: %w", unmarshalErr)
 	}
 	if !recursive && len(files) > 0 {
@@ -280,11 +277,15 @@ func (e *Engine) ListSnapshotFiles(ctx context.Context, dockerClient *client.Cli
 		longCommand := slices.Clone(command)
 		longCommand[1] = "--long"
 		longOutput, runErr := e.runInternal(ctx, dockerClient, repository, password, longCommand)
+		runErr = observeSnapshotResult(ctx, repository, snapshotID, runErr)
 		if runErr != nil {
 			return nil, fmt.Errorf("failed to list Rustic snapshot metadata: %w", runErr)
 		}
 		files, runErr = markSnapshotDirectoriesInternal(files, longOutput)
 		if runErr != nil {
+			if isVolumeRepository(repository) {
+				return nil, backup.NewProblem(502, "volume.backup.engine-output-invalid", runErr)
+			}
 			return nil, runErr
 		}
 	}
@@ -404,95 +405,23 @@ func (e *Engine) FindRunSnapshot(ctx context.Context, dockerClient *client.Clien
 
 // ListSnapshots enumerates every snapshot in the repository.
 func (e *Engine) ListSnapshots(ctx context.Context, dockerClient *client.Client, repository Repository, password string) ([]DiscoveredSnapshot, error) {
+	if isVolumeRepository(repository) {
+		var cancel context.CancelFunc
+		ctx, cancel = context.WithTimeout(ctx, 60*time.Second)
+		defer cancel()
+	}
 	output, err := e.runInternal(ctx, dockerClient, repository, password, []string{"snapshots", "--json"})
 	if err != nil {
 		return nil, err
 	}
-	return decodeSnapshotsInternal(output)
-}
-
-func decodeSnapshotsInternal(output string) ([]DiscoveredSnapshot, error) {
-	trimmedOutput := strings.TrimSpace(output)
-	if trimmedOutput == "" || trimmedOutput[0] != '[' {
-		return nil, errors.New("invalid Rustic snapshot listing: expected an array")
+	snapshots, err := decodeSnapshotsInternal(output)
+	if isVolumeRepository(repository) && err != nil {
+		return nil, backup.NewProblem(502, "volume.backup.engine-output-invalid", err)
 	}
-	var entries []jsontext.Value
-	if err := json.Unmarshal([]byte(output), &entries); err != nil {
-		return nil, fmt.Errorf("failed to decode Rustic snapshots: %w", err)
+	if err == nil && repository.ObserveInventory != nil {
+		err = repository.ObserveInventory(ctx, snapshots)
 	}
-
-	snapshots := make([]DiscoveredSnapshot, 0, len(entries))
-	grouped := false
-	for index, entry := range entries {
-		if entry.Kind() != '{' {
-			return nil, fmt.Errorf("invalid Rustic snapshot listing entry %d: expected an object", index)
-		}
-		var fields map[string]jsontext.Value
-		if err := json.Unmarshal(entry, &fields); err != nil {
-			return nil, fmt.Errorf("failed to decode Rustic snapshot listing entry %d: %w", index, err)
-		}
-		_, hasID := fields["id"]
-		groupEntries, hasSnapshots := fields["snapshots"]
-		if hasID == hasSnapshots {
-			return nil, fmt.Errorf("invalid Rustic snapshot listing entry %d: expected an ID or snapshot group", index)
-		}
-		if index > 0 && grouped != hasSnapshots {
-			return nil, errors.New("invalid Rustic snapshot listing: mixed flat and grouped entries")
-		}
-		grouped = hasSnapshots
-		if !hasSnapshots {
-			snapshot, err := decodeSnapshotInternal(entry)
-			if err != nil {
-				return nil, fmt.Errorf("invalid Rustic snapshot listing entry %d: %w", index, err)
-			}
-			snapshots = append(snapshots, snapshot)
-			continue
-		}
-		if groupEntries.Kind() != '[' {
-			return nil, fmt.Errorf("invalid Rustic snapshot group %d: expected a snapshots array", index)
-		}
-		var members []jsontext.Value
-		if err := json.Unmarshal(groupEntries, &members); err != nil {
-			return nil, fmt.Errorf("failed to decode Rustic snapshot group %d: %w", index, err)
-		}
-		for memberIndex, member := range members {
-			snapshot, err := decodeSnapshotInternal(member)
-			if err != nil {
-				return nil, fmt.Errorf("invalid Rustic snapshot group %d entry %d: %w", index, memberIndex, err)
-			}
-			snapshots = append(snapshots, snapshot)
-		}
-	}
-	return snapshots, nil
-}
-
-func decodeSnapshotInternal(raw jsontext.Value) (DiscoveredSnapshot, error) {
-	if raw.Kind() != '{' {
-		return DiscoveredSnapshot{}, errors.New("expected a snapshot object")
-	}
-	var fields map[string]jsontext.Value
-	if err := json.Unmarshal(raw, &fields); err != nil {
-		return DiscoveredSnapshot{}, fmt.Errorf("failed to decode Rustic snapshot fields: %w", err)
-	}
-	if _, grouped := fields["snapshots"]; grouped {
-		return DiscoveredSnapshot{}, errors.New("expected a flat snapshot object")
-	}
-	var snapshot DiscoveredSnapshot
-	if err := json.Unmarshal(raw, &snapshot); err != nil {
-		return DiscoveredSnapshot{}, fmt.Errorf("failed to decode Rustic snapshot payload: %w", err)
-	}
-	if !fullSnapshotIDInternal(snapshot.ID) {
-		return DiscoveredSnapshot{}, errors.New("invalid full snapshot ID")
-	}
-	return snapshot, nil
-}
-
-func fullSnapshotIDInternal(id string) bool {
-	if len(id) != 64 {
-		return false
-	}
-	_, err := hex.DecodeString(id)
-	return err == nil
+	return snapshots, err
 }
 
 // ForgetSnapshots removes the snapshots from the repository and prunes their
@@ -526,6 +455,11 @@ func (e *Engine) ForgetSnapshots(ctx context.Context, dockerClient *client.Clien
 	snapshots, err := decodeSnapshotsInternal(output)
 	if err != nil {
 		return err
+	}
+	if repository.ObserveInventory != nil {
+		if err := repository.ObserveInventory(ctx, snapshots); err != nil {
+			return err
+		}
 	}
 	existing := make(map[string]string, len(snapshots))
 	for _, snapshot := range snapshots {
@@ -596,115 +530,6 @@ func (e *Engine) runInternal(ctx context.Context, dockerClient *client.Client, r
 	return e.runContainerInternal(ctx, dockerClient, repository, password, command, extraMounts...)
 }
 
-func (e *Engine) ensureImageInternal(ctx context.Context, dockerClient *client.Client) error {
-	if _, err := dockerClient.ImageInspect(ctx, rustic.DefaultImage); err == nil {
-		return nil
-	}
-	if e.imageService == nil {
-		return errors.New("image service is unavailable")
-	}
-	if err := e.imageService.PullImage(ctx, rustic.DefaultImage, io.Discard, user.SystemUser, nil); err != nil {
-		return fmt.Errorf("failed to pull official Rustic image: %w", err)
-	}
-	return nil
-}
-
-func arcaneNetworkModeInternal(ctx context.Context, dockerClient *client.Client) container.NetworkMode {
-	arcane, err := libarcane.InspectCurrentArcaneContainer(ctx, dockerClient)
-	if err != nil || arcane == nil || arcane.ID == "" {
-		slog.DebugContext(ctx, "backup engine: running Rustic on the default network", "error", err)
-		return ""
-	}
-	return container.NetworkMode("container:" + arcane.ID)
-}
-
-func (e *Engine) runContainerInternal(ctx context.Context, dockerClient *client.Client, repository Repository, password string, command []string, extraMounts ...mount.Mount) (string, error) {
-	if err := e.ensureImageInternal(ctx, dockerClient); err != nil {
-		return "", err
-	}
-	mounts := append([]mount.Mount{}, repository.Mounts...)
-	mounts = append(mounts, extraMounts...)
-	return rustic.Run(ctx, dockerClient, password, command, repository.Environment, mounts, arcaneNetworkModeInternal(ctx, dockerClient))
-}
-
-var (
-	ErrRecoveryKeyNotConfigured = errors.New("recovery key is not configured")
-	ErrPolicyValidation         = errors.New("backup.invalid_policy")
-	// RecoveryKeyFormat is 8 hyphenated groups of 6 base32 characters, used verbatim as the Rustic password.
-	RecoveryKeyFormat = regexp.MustCompile(`^[A-Z2-7]{6}(-[A-Z2-7]{6}){7}$`)
-)
-
-func ValidateRecoveryKey(key string) error {
-	if !RecoveryKeyFormat.MatchString(strings.TrimSpace(key)) {
-		return errors.New("enter the generated recovery key (8 groups of 6 characters)")
-	}
-	return nil
-}
-
-func GenerateRecoveryKey() (string, error) {
-	raw := make([]byte, 30)
-	if _, err := rand.Read(raw); err != nil {
-		return "", fmt.Errorf("failed to generate recovery key: %w", err)
-	}
-	encoded := base32.StdEncoding.WithPadding(base32.NoPadding).EncodeToString(raw)
-	groups := make([]string, 0, len(encoded)/6)
-	for i := 0; i < len(encoded); i += 6 {
-		groups = append(groups, encoded[i:i+6])
-	}
-	return strings.Join(groups, "-"), nil
-}
-
-// RecoveryKeyStore persists the recovery key shared by the system and volume backup domains.
-type RecoveryKeyStore struct {
-	db *database.DB
-}
-
-func NewRecoveryKeyStore(db *database.DB) *RecoveryKeyStore {
-	return &RecoveryKeyStore{db: db}
-}
-
-func (s *RecoveryKeyStore) Configured(ctx context.Context) (bool, error) {
-	var count int64
-	if err := s.db.WithContext(ctx).Model(&SystemBackupRecoveryConfig{}).
-		Where("id = ? AND encrypted_recovery_key <> ''", RecoveryKeyConfigID).Count(&count).Error; err != nil {
-		return false, fmt.Errorf("failed to load recovery key status: %w", err)
-	}
-	return count > 0, nil
-}
-
-// Get returns the decrypted recovery key or ErrRecoveryKeyNotConfigured.
-func (s *RecoveryKeyStore) Get(ctx context.Context) (string, error) {
-	var config SystemBackupRecoveryConfig
-	if err := s.db.WithContext(ctx).
-		Where("id = ? AND encrypted_recovery_key <> ''", RecoveryKeyConfigID).
-		First(&config).Error; err != nil {
-		if errors.Is(err, gorm.ErrRecordNotFound) {
-			return "", ErrRecoveryKeyNotConfigured
-		}
-		return "", fmt.Errorf("failed to load recovery key: %w", err)
-	}
-	key, err := crypto.Decrypt(config.EncryptedRecoveryKey)
-	if err != nil {
-		return "", fmt.Errorf("failed to decrypt recovery key: %w", err)
-	}
-	return key, nil
-}
-
-func (s *RecoveryKeyStore) Set(ctx context.Context, recoveryKey string) error {
-	if err := ValidateRecoveryKey(recoveryKey); err != nil {
-		return err
-	}
-	encrypted, err := crypto.Encrypt(recoveryKey)
-	if err != nil {
-		return fmt.Errorf("failed to encrypt recovery key: %w", err)
-	}
-	config := SystemBackupRecoveryConfig{ID: RecoveryKeyConfigID, EncryptedRecoveryKey: encrypted}
-	if saveRecoveryKeyErr := s.db.WithContext(ctx).Save(&config).Error; saveRecoveryKeyErr != nil {
-		return fmt.Errorf("failed to save recovery key: %w", saveRecoveryKeyErr)
-	}
-	return nil
-}
-
 func (e *Engine) lockRepositoryInternal(id string) func() {
 	e.mu.Lock()
 	lock := e.repositories[id]
@@ -715,484 +540,6 @@ func (e *Engine) lockRepositoryInternal(id string) func() {
 	e.mu.Unlock()
 	lock.Lock()
 	return lock.Unlock
-}
-
-// PolicyReconciliation reconciles a full set of policy updates against the
-// existing policies of one backup domain, then swaps the scheduled jobs.
-type PolicyReconciliation[P, U any] struct {
-	// Domain names the backup flavor in validation errors ("volume", "system").
-	Domain string
-	DB     *database.DB
-	// Existing is every policy currently persisted for the reconciled scope.
-	Existing []P
-	ID       func(*P) string
-	UpdateID func(U) string
-	// New returns the blank policy for created entries, pre-scoped by the
-	// caller (e.g. with the volume name set).
-	New func() P
-	// Build validates an update and applies it to an existing or new policy.
-	Build func(ctx context.Context, policy *P, update U) error
-	// Persist overrides the default GORM transaction for settings-backed policies.
-	Persist    func(ctx context.Context, policies []P) error
-	Unregister func(ctx context.Context, policyID string)
-	Reschedule func(ctx context.Context, policy *P)
-}
-
-func (r PolicyReconciliation[P, U]) Run(ctx context.Context, updates []U) error {
-	policies, kept, err := r.buildInternal(ctx, updates)
-	if err != nil {
-		return err
-	}
-	if persistErr := r.persistInternal(ctx, policies, kept); persistErr != nil {
-		return fmt.Errorf("failed to save %s backup policies: %w", r.Domain, persistErr)
-	}
-	for i := range r.Existing {
-		if _, ok := kept[r.ID(&r.Existing[i])]; !ok {
-			r.Unregister(ctx, r.ID(&r.Existing[i]))
-		}
-	}
-	for i := range policies {
-		r.Reschedule(ctx, &policies[i])
-	}
-	return nil
-}
-
-func (r PolicyReconciliation[P, U]) persistInternal(ctx context.Context, policies []P, kept map[string]struct{}) error {
-	if r.Persist != nil {
-		return r.Persist(ctx, policies)
-	}
-	if r.DB == nil {
-		return errors.New("backup policy database is unavailable")
-	}
-	return r.DB.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
-		for i := range policies {
-			if saveErr := tx.Save(&policies[i]).Error; saveErr != nil {
-				return saveErr
-			}
-		}
-		for i := range r.Existing {
-			if _, ok := kept[r.ID(&r.Existing[i])]; !ok {
-				if deleteErr := tx.Delete(&r.Existing[i]).Error; deleteErr != nil {
-					return deleteErr
-				}
-			}
-		}
-		return nil
-	})
-}
-
-// ValidatePolicyUpdate applies the shared cron, retention, and destination rules used by backup policies.
-func ValidatePolicyUpdate(_ context.Context, domain string, update backup.UpdateBackupPolicy) (backup.UpdateBackupPolicy, error) {
-	normalized, err := schedule.NormalizeSixField(update.Schedule, domain+" backup")
-	if err != nil {
-		return update, err
-	}
-	update.Schedule = normalized
-	if update.RetentionCount < 0 || update.RetentionCount > 3650 {
-		return update, errors.New("retentionCount must be between 0 and 3650")
-	}
-	if !update.LocalEnabled {
-		return update, fmt.Errorf("select a local %s backup destination", domain)
-	}
-	return update, nil
-}
-
-// buildInternal maps the updates onto existing or new policy rows and reports
-// which existing IDs survive the reconciliation.
-func (r PolicyReconciliation[P, U]) buildInternal(ctx context.Context, updates []U) ([]P, map[string]struct{}, error) {
-	byID := make(map[string]P, len(r.Existing))
-	for i := range r.Existing {
-		byID[r.ID(&r.Existing[i])] = r.Existing[i]
-	}
-	policies := make([]P, 0, len(updates))
-	kept := make(map[string]struct{}, len(updates))
-	for _, update := range updates {
-		policy := r.New()
-		updateID := r.UpdateID(update)
-		if updateID != "" {
-			var ok bool
-			policy, ok = byID[updateID]
-			if !ok {
-				return nil, nil, fmt.Errorf("%w: %s backup policy not found", ErrPolicyValidation, r.Domain)
-			}
-			if _, duplicate := kept[updateID]; duplicate {
-				return nil, nil, fmt.Errorf("%w: duplicate %s backup policy", ErrPolicyValidation, r.Domain)
-			}
-		}
-		if err := r.Build(ctx, &policy, update); err != nil {
-			return nil, nil, fmt.Errorf("%w: %w", ErrPolicyValidation, err)
-		}
-		if policyID := r.ID(&policy); policyID != "" {
-			kept[policyID] = struct{}{}
-		}
-		policies = append(policies, policy)
-	}
-	return policies, kept, nil
-}
-
-const backupRunTypeInternal = "backup-run"
-
-type backupRunActorInternal struct {
-	id      string
-	engine  *Engine
-	service *actor.Service
-}
-
-// RegisterRunKind binds a domain handler before the actor host starts.
-func (e *Engine) RegisterRunKind(kind string, execute func(context.Context, string, []byte, bool) error, failures ...func(context.Context, string, []byte, error) error) {
-	e.mu.Lock()
-	defer e.mu.Unlock()
-	e.handlers[kind] = execute
-	if len(failures) > 0 {
-		e.failures[kind] = failures[0]
-	}
-}
-
-func (e *Engine) SetAuthorize(authorize func(context.Context, backup.DurableRunCommand) error) {
-	e.authorize = authorize
-}
-
-func (e *Engine) SetExecutionReady(ready func() bool) { e.executionReady = ready }
-
-func (e *Engine) Register(runtime *francis.Runtime) error {
-	e.service = runtime.Service()
-	return runtime.RegisterActor(backupRunTypeInternal, func(id string, service *actor.Service) actor.Actor {
-		return &backupRunActorInternal{id: id, engine: e, service: service}
-	}, local.WithCapacityGroup("jobs", 4), local.WithCompletedJobRetention(7*24*time.Hour))
-}
-
-// SubmitDurableRun persists the accepted command before dispatching its work.
-// A nil error means the run was accepted or its outcome is still unresolved;
-// an error means the intent was confirmed absent and admission is the caller's.
-func (e *Engine) SubmitDurableRun(ctx context.Context, command backup.DurableRunCommand, lease *runs.Lease) error {
-	if e == nil || e.service == nil {
-		return errors.New("backup actor host is unavailable")
-	}
-	if e.authorize != nil {
-		if err := e.authorize(ctx, command); err != nil {
-			return err
-		}
-	}
-	e.mu.Lock()
-	if e.stopping {
-		e.mu.Unlock()
-		return errors.New("backup engine is stopping")
-	}
-	e.leases[command.RunID] = lease
-	e.mu.Unlock()
-	ctx = context.WithoutCancel(ctx)
-	_, err := e.service.Invoke(ctx, backupRunTypeInternal, command.RunID, "submit", command)
-	if err == nil {
-		return nil
-	}
-	var state backup.DurableRunState
-	readErr := e.service.GetState(ctx, backupRunTypeInternal, command.RunID, &state)
-	switch {
-	case readErr == nil && sameDurableCommandInternal(state.Command, command):
-		slog.WarnContext(ctx, "backup run accepted after submit error", "runId", command.RunID, "error", err)
-		return nil
-	case readErr == nil || errors.Is(readErr, actor.ErrStateNotFound):
-		e.mu.Lock()
-		delete(e.leases, command.RunID)
-		e.mu.Unlock()
-		return err
-	default:
-		// Keep admission parked until reconciliation can read the intent back.
-		slog.WarnContext(ctx, "backup run outcome unresolved", "runId", command.RunID, "error", err, "readError", readErr)
-		e.mu.Lock()
-		e.unresolved[command.RunID] = command
-		e.mu.Unlock()
-		return nil
-	}
-}
-
-// AcquireDurableRun keeps the original admission, or reacquires it after a restart.
-func (e *Engine) AcquireDurableRun(ctx context.Context, runID, scope, resourceID string) (*runs.Lease, bool, error) {
-	e.mu.Lock()
-	lease := e.leases[runID]
-	delete(e.leases, runID)
-	e.mu.Unlock()
-	if lease != nil {
-		return lease, true, nil
-	}
-	return e.TryAcquireRun(ctx, scope, resourceID)
-}
-
-func (a *backupRunActorInternal) Invoke(ctx context.Context, _ string, data actor.Envelope) (any, error) {
-	var command backup.DurableRunCommand
-	if err := data.Decode(&command); err != nil {
-		return nil, err
-	}
-	var state backup.DurableRunState
-	err := a.service.GetState(ctx, backupRunTypeInternal, a.id, &state)
-	switch {
-	case errors.Is(err, actor.ErrStateNotFound):
-		state = backup.DurableRunState{Command: command, Status: scheduler.Queued}
-		if setStateErr := a.service.SetState(ctx, backupRunTypeInternal, a.id, state, nil); setStateErr != nil {
-			return nil, setStateErr
-		}
-	case err != nil:
-		return nil, err
-	case !sameDurableCommandInternal(state.Command, command):
-		return nil, errors.New("backup run already exists with a different command")
-	}
-	if state.Status == scheduler.Succeeded || state.Status == scheduler.Failed || state.Status == scheduler.NeedsAttention {
-		return nil, nil
-	}
-	// The intent is persisted, so ReconcileDispatches repairs a failed dispatch.
-	if _, _, dispatchErr := a.service.Dispatch(ctx, backupRunTypeInternal, a.id, "execute", nil, actor.WithIdempotencyKey(a.id)); dispatchErr != nil {
-		slog.WarnContext(ctx, "dispatch accepted backup run", "runId", a.id, "error", dispatchErr)
-	}
-	return nil, nil
-}
-
-func sameDurableCommandInternal(a, b backup.DurableRunCommand) bool {
-	return a.UserID == b.UserID &&
-		a.EnvironmentID == b.EnvironmentID &&
-		a.Permission == b.Permission &&
-		a.RequestedWithKey == b.RequestedWithKey &&
-		a.Kind == b.Kind &&
-		a.RunID == b.RunID &&
-		a.ActivityID == b.ActivityID &&
-		bytes.Equal(a.Payload, b.Payload)
-}
-
-func (a *backupRunActorInternal) Job(ctx context.Context, _ string, _ actor.Envelope) error {
-	if a.engine.executionReady != nil && !a.engine.executionReady() {
-		return actor.ErrJobRejected
-	}
-	a.engine.mu.Lock()
-	if a.engine.stopping {
-		a.engine.mu.Unlock()
-		return actor.ErrJobRejected
-	}
-	a.engine.workers.Add(1)
-	a.engine.mu.Unlock()
-	defer a.engine.workers.Done()
-	jobCtx, cancel := context.WithCancel(ctx)
-	stop := context.AfterFunc(a.engine.lifecycleCtx, cancel) //nolint:contextcheck // Cancels the inherited job context when the engine stops.
-	defer stop()
-	defer cancel()
-	ctx = jobCtx
-
-	var state backup.DurableRunState
-	if err := a.service.GetState(ctx, backupRunTypeInternal, a.id, &state); err != nil {
-		return err
-	}
-	if state.Status == scheduler.Succeeded || state.Status == scheduler.Failed || state.Status == scheduler.NeedsAttention {
-		return nil
-	}
-	a.engine.mu.Lock()
-	pendingLease := a.engine.leases[a.id]
-	a.engine.mu.Unlock()
-	defer pendingLease.Release(ctx)
-	interrupted := state.Started && len(state.Targets) > 0
-	state.Started = true
-	state.Status = scheduler.Running
-	if err := a.service.SetState(ctx, backupRunTypeInternal, a.id, state, nil); err != nil {
-		return err
-	}
-	var progressMu sync.Mutex
-	ctx = jobcontext.WithExecution(ctx, scheduler.Run{ID: a.id, EnvironmentID: "0", Outcome: scheduler.Outcome{Targets: state.Targets}}, func(target scheduler.TargetOutcome) error {
-		progressMu.Lock()
-		defer progressMu.Unlock()
-		updated := false
-		for i := range state.Targets {
-			if state.Targets[i].ID == target.ID {
-				if len(target.RecoveryData) == 0 {
-					target.RecoveryData = state.Targets[i].RecoveryData
-				}
-				state.Targets[i] = target
-				updated = true
-				break
-			}
-		}
-		if !updated {
-			state.Targets = append(state.Targets, target)
-		}
-		return a.service.SetState(ctx, backupRunTypeInternal, a.id, state, nil)
-	})
-	runErr := a.executeInternal(ctx, state.Command, interrupted)
-	if ctx.Err() != nil {
-		return ctx.Err()
-	}
-	state.Status = scheduler.Succeeded
-	if runErr != nil {
-		state.Status = scheduler.NeedsAttention
-		state.Error = runErr.Error()
-	}
-	if err := a.service.SetState(ctx, backupRunTypeInternal, a.id, state, nil); err != nil {
-		return err
-	}
-	if runErr != nil {
-		return fmt.Errorf("%s: %w", runErr.Error(), actor.ErrJobPermanentFailure)
-	}
-	return nil
-}
-
-func (a *backupRunActorInternal) executeInternal(ctx context.Context, command backup.DurableRunCommand, interrupted bool) (err error) {
-	defer utils.RecoverToError(&err, "durable backup")
-	a.engine.mu.Lock()
-	handler := a.engine.handlers[command.Kind]
-	failure := a.engine.failures[command.Kind]
-	a.engine.mu.Unlock()
-	if handler == nil {
-		return errors.New("backup run kind is unavailable")
-	}
-	if a.engine.authorize != nil {
-		if authorizeErr := a.engine.authorize(ctx, command); authorizeErr != nil {
-			a.engine.mu.Lock()
-			lease := a.engine.leases[a.id]
-			delete(a.engine.leases, a.id)
-			a.engine.mu.Unlock()
-			defer lease.Release(ctx)
-			if failure != nil {
-				authorizeErr = errors.Join(authorizeErr, failure(ctx, a.id, command.Payload, authorizeErr))
-			}
-			return authorizeErr
-		}
-	}
-	return handler(ctx, a.id, command.Payload, interrupted)
-}
-
-func (e *Engine) activeRunsInternal(ctx context.Context) ([]backup.DurableRunState, error) {
-	result := []backup.DurableRunState{}
-	for cursor := ""; ; {
-		page, err := e.service.ListStates(ctx, backupRunTypeInternal, &actor.ListStatesOpts{IncludeData: true, After: cursor, Limit: 100})
-		if err != nil {
-			return nil, err
-		}
-		for _, item := range page.States {
-			if item.Data == nil {
-				continue
-			}
-			var state backup.DurableRunState
-			if decodeErr := item.Data.Decode(&state); decodeErr != nil {
-				return nil, decodeErr
-			}
-			if state.Status == scheduler.Queued || state.Status == scheduler.Running || state.Status == scheduler.NeedsAttention {
-				result = append(result, state)
-			}
-		}
-		cursor = page.AfterID()
-		if cursor == "" {
-			break
-		}
-	}
-	return result, nil
-}
-
-func (e *Engine) ActiveRunIDs(ctx context.Context) ([]string, error) {
-	states, err := e.activeRunsInternal(ctx)
-	if err != nil {
-		return nil, err
-	}
-	ids := make([]string, 0, len(states))
-	for _, state := range states {
-		ids = append(ids, state.Command.RunID)
-		for _, target := range state.Targets {
-			var checkpoint struct {
-				BackupID string `json:"backupId"`
-			}
-			if len(target.RecoveryData) > 0 && json.Unmarshal(target.RecoveryData, &checkpoint) == nil && checkpoint.BackupID != "" {
-				ids = append(ids, checkpoint.BackupID)
-			}
-		}
-	}
-	return ids, nil
-}
-
-func (e *Engine) ActiveActivityIDs(ctx context.Context) ([]string, error) {
-	states, err := e.activeRunsInternal(ctx)
-	if err != nil {
-		return nil, err
-	}
-	ids := make([]string, 0, len(states))
-	for _, state := range states {
-		if state.Command.ActivityID != "" {
-			ids = append(ids, state.Command.ActivityID)
-		}
-	}
-	return ids, nil
-}
-
-// ReconcileDispatches resolves unresolved submissions and repairs accepted
-// commands whose dispatch was interrupted.
-func (e *Engine) ReconcileDispatches(ctx context.Context) error {
-	failures := e.resolveUnresolvedRunsInternal(ctx)
-	states, err := e.activeRunsInternal(ctx)
-	if err != nil {
-		return errors.Join(append(failures, err)...)
-	}
-	for _, state := range states {
-		if state.Status == scheduler.NeedsAttention {
-			continue
-		}
-		if repairErr := e.repairDispatchInternal(ctx, state.Command.RunID); repairErr != nil {
-			failures = append(failures, fmt.Errorf("repair backup run %s: %w", state.Command.RunID, repairErr))
-		}
-	}
-	return errors.Join(failures...)
-}
-
-func (e *Engine) repairDispatchInternal(ctx context.Context, runID string) error {
-	jobs, err := e.service.ListJobs(ctx, backupRunTypeInternal, runID)
-	if err != nil {
-		return err
-	}
-	for _, job := range jobs {
-		if !job.Status.IsTerminal() {
-			return nil
-		}
-		if job.Status == actor.JobStatusDeadLettered {
-			_, retryJobErr := e.service.RetryJob(ctx, job.JobID)
-			return retryJobErr
-		}
-		if deleteJobErr := e.service.DeleteJob(ctx, backupRunTypeInternal, runID, job.JobID); deleteJobErr != nil && !errors.Is(deleteJobErr, actor.ErrJobNotFound) {
-			return deleteJobErr
-		}
-	}
-	_, _, err = e.service.Dispatch(ctx, backupRunTypeInternal, runID, "execute", nil, actor.WithIdempotencyKey(runID))
-	return err
-}
-
-// resolveUnresolvedRunsInternal reads back submissions whose outcome was
-// unknown. Found intents continue as accepted; confirmed absence releases
-// admission and fails the run through its kind's failure handler.
-func (e *Engine) resolveUnresolvedRunsInternal(ctx context.Context) []error {
-	e.mu.Lock()
-	pending := maps.Clone(e.unresolved)
-	e.mu.Unlock()
-	var failures []error
-	for runID, command := range pending {
-		var state backup.DurableRunState
-		readErr := e.service.GetState(ctx, backupRunTypeInternal, runID, &state)
-		if readErr != nil && !errors.Is(readErr, actor.ErrStateNotFound) {
-			failures = append(failures, fmt.Errorf("read back backup run %s: %w", runID, readErr))
-			continue
-		}
-		e.mu.Lock()
-		lease := e.leases[runID]
-		failure := e.failures[command.Kind]
-		if readErr != nil {
-			delete(e.leases, runID)
-		}
-		e.mu.Unlock()
-		if readErr != nil {
-			lease.Release(ctx)
-			// Stay unresolved until the failure is recorded, so a later tick retries it.
-			if failure != nil {
-				if failErr := failure(ctx, runID, command.Payload, errors.New("backup run was not accepted")); failErr != nil {
-					failures = append(failures, fmt.Errorf("fail backup run %s: %w", runID, failErr))
-					continue
-				}
-			}
-		}
-		e.mu.Lock()
-		delete(e.unresolved, runID)
-		e.mu.Unlock()
-	}
-	return failures
 }
 
 // ExpiredRunIDs returns the IDs of succeeded runs with snapshots that fall

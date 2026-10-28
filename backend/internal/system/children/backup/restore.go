@@ -23,6 +23,7 @@ import (
 	"github.com/florianfinn/docklet-next/backend/internal/config"
 	"github.com/florianfinn/docklet-next/backend/internal/database"
 	"github.com/florianfinn/docklet-next/backend/internal/session"
+	volumebackup "github.com/florianfinn/docklet-next/backend/internal/volume/children/backup"
 	"github.com/florianfinn/docklet-next/backend/pkg/authz"
 	"github.com/florianfinn/docklet-next/backend/pkg/utils/francis"
 	"time"
@@ -272,6 +273,9 @@ func finalizeRestoredDatabase(ctx context.Context, db *database.DB, cfg *config.
 		return ErrRestoreRecoveryRequired
 	}
 	if err := activity.NewActivityService(db, nil).FailInterruptedAfterRestore(ctx); err != nil {
+		return ErrRestoreRecoveryRequired
+	}
+	if err := volumebackup.ResetRestoredHistory(ctx, db); err != nil {
 		return ErrRestoreRecoveryRequired
 	}
 	if err := revokeRestoredSessions(ctx, db); err != nil {

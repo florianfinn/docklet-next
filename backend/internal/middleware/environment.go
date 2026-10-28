@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; functional cut: removed GitOps, saved Git repositories and Swarm; validate original WebSocket client origin before forwarding credentials; enforce hub restore-point authority and lifecycle response contracts.
+// Deviations: Local module namespace; functional cut: removed GitOps, saved Git repositories and Swarm; validate original WebSocket client origin before forwarding credentials; enforce hub restore-point authority and lifecycle response contracts.; M12 backup upload requires both upload and backup permission before forwarding.
 
 package middleware
 
@@ -456,6 +456,12 @@ func (m *EnvironmentMiddleware) proxyPermissionDenied(c *echo.Context, ps *authz
 			"path", suffix, "environmentId", envID, "error", err)
 		return true
 	}
+	if method == http.MethodPost {
+		parts := strings.Split(strings.Trim(suffix, "/"), "/")
+		if len(parts) == 4 && parts[0] == "volumes" && parts[2] == "backups" && parts[3] == "upload" {
+			required = append(required, authz.PermVolumesBackup)
+		}
+	}
 	required = withContainerResourceSortPermissionsInternal(required, c.Request(), method, suffix)
 	for _, operationPermission := range required {
 		if !ps.Allows(operationPermission, envID) {
@@ -670,6 +676,12 @@ func isManagementPathInternal(method, suffix string) bool {
 
 	if suffix == "/jobs" || strings.HasPrefix(suffix, "/jobs/") {
 		return true
+	}
+	if method == http.MethodPost {
+		parts := strings.Split(strings.Trim(suffix, "/"), "/")
+		if len(parts) == 3 && parts[0] == "volumes" && parts[1] != "" && parts[2] == "backups" {
+			return true
+		}
 	}
 	if isCentralVolumeBackupPolicyPathInternal(method, suffix) {
 		return true

@@ -17,36 +17,43 @@ import (
 
 func TestStorageOperationsHaveEdgeCommandsAndAgentRoutes(t *testing.T) {
 	expectedCommands := map[string]string{
-		"get-project-workspace":           "project.workspace.list",
-		"update-project-workspace":        "project.workspace.update",
-		"get-project-workspace-file":      "project.workspace.read_file",
-		"download-project-workspace-file": "project.workspace.download",
-		"list-volumes":                    "volume.list",
-		"create-volume":                   "volume.create",
-		"delete-volume-backup":            "volume.backup.delete",
-		"download-volume-backup":          "volume.backup.download",
-		"list-backup-files":               "volume.backup.files",
-		"browse-volume-backup-files":      "volume.backup.files_browse",
-		"backup-has-path":                 "volume.backup.has_path",
-		"get-volume-usage-counts":         "volume.counts",
-		"plan-volume-prune":               "volume.prune.plan",
-		"prune-volumes":                   "volume.prune",
-		"get-volume-sizes":                "volume.sizes",
-		"remove-volume":                   "volume.delete",
-		"get-volume":                      "volume.inspect",
-		"get-volume-backup-policy":        "volume.backup_policy.get",
-		"update-volume-backup-policy":     "volume.backup_policy.update",
-		"list-volume-backups":             "volume.backup.list",
-		"create-volume-backup":            "volume.backup.create",
-		"upload-volume-backup":            "volume.backup.import",
-		"restore-volume-backup":           "volume.backup.restore",
-		"restore-volume-backup-files":     "volume.backup.restore_files",
-		"rename-volume":                   "volume.rename",
-		"get-volume-usage":                "volume.usage",
-		"get-volume-workspace":            "volume.workspace.list",
-		"update-volume-workspace":         "volume.workspace.update",
-		"get-volume-workspace-file":       "volume.workspace.read_file",
-		"download-volume-workspace-file":  "volume.workspace.download",
+		"get-volume-backup-overview":          "volume.backup.overview",
+		"get-volume-backup-repository":        "volume.backup.repository.get",
+		"check-volume-backup-repository":      "volume.backup.repository.check",
+		"test-host-backup-target":             "volume.backup.targets.test",
+		"get-volume-backup-target-references": "volume.backup.targets.references",
+		"get-local-backup-recovery-key":       "volume.backup.targets.key.get",
+		"attach-local-backup-recovery-key":    "volume.backup.targets.key.attach",
+		"get-project-workspace":               "project.workspace.list",
+		"update-project-workspace":            "project.workspace.update",
+		"get-project-workspace-file":          "project.workspace.read_file",
+		"download-project-workspace-file":     "project.workspace.download",
+		"list-volumes":                        "volume.list",
+		"create-volume":                       "volume.create",
+		"delete-volume-backup":                "volume.backup.delete",
+		"download-volume-backup":              "volume.backup.download",
+		"list-backup-files":                   "volume.backup.files",
+		"browse-volume-backup-files":          "volume.backup.files_browse",
+		"backup-has-path":                     "volume.backup.has_path",
+		"get-volume-usage-counts":             "volume.counts",
+		"plan-volume-prune":                   "volume.prune.plan",
+		"prune-volumes":                       "volume.prune",
+		"get-volume-sizes":                    "volume.sizes",
+		"remove-volume":                       "volume.delete",
+		"get-volume":                          "volume.inspect",
+		"get-volume-backup-policy":            "volume.backup_policy.get",
+		"update-volume-backup-policy":         "volume.backup_policy.update",
+		"list-volume-backups":                 "volume.backup.list",
+		"create-volume-backup":                "volume.backup.create",
+		"upload-volume-backup":                "volume.backup.import",
+		"restore-volume-backup":               "volume.backup.restore",
+		"restore-volume-backup-files":         "volume.backup.restore_files",
+		"rename-volume":                       "volume.rename",
+		"get-volume-usage":                    "volume.usage",
+		"get-volume-workspace":                "volume.workspace.list",
+		"update-volume-workspace":             "volume.workspace.update",
+		"get-volume-workspace-file":           "volume.workspace.read_file",
+		"download-volume-workspace-file":      "volume.workspace.download",
 	}
 	hub := SetupAPIForSpec()
 	for _, cfg := range []*config.Config{{AgentMode: true}, {EdgeAgent: true}} {
@@ -62,7 +69,7 @@ func TestStorageOperationsHaveEdgeCommandsAndAgentRoutes(t *testing.T) {
 				}
 				count++
 				actual := "/api" + path
-				for _, param := range []string{"id", "volumeName", "projectId", "backupId"} {
+				for _, param := range []string{"id", "volumeName", "projectId", "backupId", "targetId"} {
 					actual = strings.ReplaceAll(actual, "{"+param+"}", "example")
 				}
 				command, ok := edge.ResolveEdgeCommandName(method, actual, false).Get()
@@ -75,7 +82,7 @@ func TestStorageOperationsHaveEdgeCommandsAndAgentRoutes(t *testing.T) {
 				require.NotNil(t, storageOperations(agentItem)[method], op.OperationID)
 			}
 		}
-		require.Equal(t, 30, count, "every current volume and project workspace operation must be checked")
+		require.Equal(t, 37, count, "every current volume and project workspace operation must be checked")
 	}
 	require.False(t, edge.ValidateEdgeCommand("volume.backup.upload", "POST", "/api/environments/0/volumes/backups/example/upload", false))
 }

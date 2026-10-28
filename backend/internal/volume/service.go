@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; functional cut: removed S3 backup destinations; split inventory reads; Explicit candidate prune execution.
+// Deviations: Local module namespace; functional cut: removed S3 backup destinations; split inventory reads; Explicit candidate prune execution; M12 backup foundation; M12 persisted volume lifecycle and legacy restore cut.; M12 target hiding and non-waiting destination admission; remove retired centralized volume wrappers.
 
 package volume
 
@@ -23,23 +23,17 @@ import (
 	"github.com/florianfinn/docklet-next/backend/internal/volume/children/workspace"
 	"github.com/florianfinn/docklet-next/backend/pkg/libarcane"
 	"github.com/florianfinn/docklet-next/backend/pkg/libarcane/timeouts"
-	"github.com/florianfinn/docklet-next/backend/pkg/pagination"
-	"github.com/florianfinn/docklet-next/backend/pkg/scheduler/runs"
 	"github.com/florianfinn/docklet-next/backend/pkg/utils"
 	workspacepkg "github.com/florianfinn/docklet-next/backend/pkg/workspace"
-	backuptypes "github.com/florianfinn/docklet-next/types/backup"
-	"github.com/florianfinn/docklet-next/types/scheduler"
 	usertypes "github.com/florianfinn/docklet-next/types/user"
 	volumetypes "github.com/florianfinn/docklet-next/types/volume"
-	"github.com/moby/moby/api/types/mount"
 	"github.com/moby/moby/client"
 	"go.getarcane.app/docker"
-	"go.getarcane.app/kit/pkg"
 	"golang.org/x/sync/singleflight"
-	"gorm.io/gorm"
 	"log/slog"
 	"strings"
 	"sync"
+	"time"
 )
 
 type VolumeService struct {
@@ -116,226 +110,31 @@ func NewVolumeService(
 		Exec:             service.execInContainerInternal,
 		BackupVolumeName: backupVolumeName,
 		EncryptionKey:    encryptionKey,
+		Location: func() *time.Location {
+			if cfg != nil {
+				return cfg.GetLocation()
+			}
+			return time.UTC
+		}(),
 	}
 	if containerService != nil {
 		backupDeps.StopContainer, backupDeps.StartContainer = containerService.StopContainer, containerService.StartContainer
 	}
 	service.backup = volumebackup.NewService(backupDeps)
 	service.workspace = workspace.NewService(workspace.Dependencies{
-		Docker:                dockerService,
-		Events:                eventService,
-		Locks:                 &service.workspaceLocks,
-		AcquireHelper:         service.acquireVolumeHelperInternal,
-		RequireACFS:           service.requireVolumeHelperACFSInternal,
-		Exec:                  service.execInContainerInternal,
-		HelperImage:           service.getVolumeHelperImageInternal,
-		BackupStorageMount:    service.backup.StorageMount,
-		ArchiveFileTarget:     service.backup.ArchiveFileTarget,
-		RestoreArchiveMembers: service.backup.RestoreArchiveMembers,
-		MaxDepth:              workspaceMaxDepth,
-		MaxEntries:            workspaceMaxEntries,
-		MaxFileSizeBytes:      workspacepkg.MaxFileSizeBytes(workspaceMaxFileSizeMB),
+		Docker:           dockerService,
+		Events:           eventService,
+		Locks:            &service.workspaceLocks,
+		AcquireHelper:    service.acquireVolumeHelperInternal,
+		RequireACFS:      service.requireVolumeHelperACFSInternal,
+		Exec:             service.execInContainerInternal,
+		HelperImage:      service.getVolumeHelperImageInternal,
+		BusyError:        func(name string) error { return &volumeWorkspaceBusyError{name: name} },
+		MaxDepth:         workspaceMaxDepth,
+		MaxEntries:       workspaceMaxEntries,
+		MaxFileSizeBytes: workspacepkg.MaxFileSizeBytes(workspaceMaxFileSizeMB),
 	})
 	return service
-}
-
-// SetScheduler injects the dynamic scheduler and admission gate for per-policy
-// backup jobs. Agent mode passes them too: agents run their own volume backups.
-func (s *VolumeService) SetScheduler(ctx context.Context, dynamicScheduler scheduler.DynamicScheduler, admissionGate *runs.Admission) error {
-	return s.backup.SetScheduler(ctx, dynamicScheduler, admissionGate)
-}
-
-func (s *VolumeService) RegisterBackupJobsOnStartup(ctx context.Context) {
-	s.backup.RegisterJobsOnStartup(ctx)
-}
-
-// BackupStorageMount resolves the repository mount shared with system-backup operations.
-func (s *VolumeService) BackupStorageMount(ctx context.Context, dockerClient *client.Client, target string, readOnly bool) (mount.Mount, error) {
-	return s.backup.StorageMount(ctx, dockerClient, target, readOnly)
-}
-
-// HasEnabledBackupPolicy reports whether a volume-level schedule takes precedence over centralized backups.
-func (s *VolumeService) HasEnabledBackupPolicy(ctx context.Context, volumeName string) (bool, error) {
-	return s.backup.HasEnabledBackupPolicy(ctx, volumeName)
-}
-
-// CreateSystemManagedBackup runs the existing volume backup workflow with a transient centralized policy.
-func (
-	s *VolumeService,
-) CreateSystemManagedBackup(
-	ctx context.Context,
-	volumeName string,
-	user usertypes.Actor,
-	trigger VolumeBackupTrigger,
-	policyID string,
-	policy backuptypes.UpdateBackupPolicy,
-) (
-	*VolumeBackup,
-	error,
-) {
-	entry, err := s.backup.CreateSystemManagedBackup(ctx, volumeName, user, string(trigger), policyID, policy)
-	if entry == nil {
-		return nil, err
-	}
-	return volumeBackupFromRecordInternal(entry), err
-}
-
-func (s *VolumeService) ReconcileBackup(ctx context.Context, previous scheduler.Run, volumeName string) (scheduler.Outcome, error) {
-	return s.backup.ReconcileBackup(ctx, previous, volumeName)
-}
-
-// ReconcileInterruptedBackups runs before this process can accept backup work.
-func (s *VolumeService) ReconcileInterruptedBackups(ctx context.Context, protectedIDs ...string) error {
-	query := s.db.WithContext(ctx).Model(&VolumeBackup{}).Where("status = ?", VolumeBackupStatusRunning)
-	if len(protectedIDs) > 0 {
-		query = query.Where("id NOT IN ?", protectedIDs)
-	}
-	return query.Updates(map[string]any{"status": VolumeBackupStatusFailed, "error": "Backup interrupted by Arcane restart"}).Error
-}
-
-// MigrateRepositoryPasswords re-keys this instance's own volume backup repositories to the recovery key; other instances re-key their own roots.
-func (s *VolumeService) MigrateRepositoryPasswords(ctx context.Context) error {
-	return s.backup.MigrateRepositoryPasswords(ctx)
-}
-
-func (s *VolumeService) backupStoreInternal() volumebackup.Store {
-	return volumebackup.Store{
-		Create: func(ctx context.Context, record *volumetypes.Backup) error {
-			entry := volumeBackupFromRecordInternal(record)
-			if err := s.db.WithContext(ctx).Create(entry).Error; err != nil {
-				return err
-			}
-			record.ID, record.UpdatedAt = entry.ID, entry.UpdatedAt
-			return nil
-		},
-		Save: func(ctx context.Context, record *volumetypes.Backup) error {
-			entry := volumeBackupFromRecordInternal(record)
-			if err := s.db.WithContext(ctx).Save(entry).Error; err != nil {
-				return err
-			}
-			record.UpdatedAt = entry.UpdatedAt
-			return nil
-		},
-		Fail: func(ctx context.Context, backupID, message string) error {
-			return s.db.WithContext(ctx).Model(&VolumeBackup{}).Where("id = ?", backupID).Updates(map[string]any{"status": VolumeBackupStatusFailed, "error": message}).Error
-		},
-		Delete: func(ctx context.Context, backupID string) error {
-			return s.db.WithContext(ctx).Where("id = ?", backupID).Delete(&VolumeBackup{}).Error
-		},
-		Run: func(ctx context.Context, backupID string) (*volumetypes.Backup, error) {
-			var entry VolumeBackup
-			if err := s.db.WithContext(ctx).Where("id = ?", backupID).First(&entry).Error; err != nil {
-				return nil, err
-			}
-			return entry.recordInternal(), nil
-		},
-		Runs: func(ctx context.Context, backupIDs []string) ([]*volumetypes.Backup, error) {
-			var entries []VolumeBackup
-			if err := s.db.WithContext(ctx).Where("id IN ?", backupIDs).Find(&entries).Error; err != nil {
-				return nil, err
-			}
-			records := make([]*volumetypes.Backup, 0, len(entries))
-			for i := range entries {
-				records = append(records, entries[i].recordInternal())
-			}
-			return records, nil
-		},
-		Latest: func(ctx context.Context, policyID string) (*volumetypes.Backup, error) {
-			var entry VolumeBackup
-			err := s.db.WithContext(ctx).Where("policy_id = ?", policyID).Order("created_at DESC").First(&entry).Error
-			if errors.Is(err, gorm.ErrRecordNotFound) {
-				return nil, nil
-			}
-			if err != nil {
-				return nil, err
-			}
-			return entry.recordInternal(), nil
-		},
-		List: s.listBackupsInternal,
-	}
-}
-
-// listBackupsInternal pages one volume's backup history; both or neither management type selected means no type filter.
-func (s *VolumeService) listBackupsInternal(ctx context.Context, volumeName string, params pagination.QueryParams) ([]volumetypes.Backup, int64, error) {
-	query := s.db.WithContext(ctx).Model(&VolumeBackup{}).Where("volume_name = ?", volumeName)
-	var system, managed bool
-	for value := range strings.SplitSeq(params.Filters["type"], ",") {
-		switch backuptypes.ManagementType(strings.TrimSpace(value)) {
-		case backuptypes.ManagementTypeSystem:
-			system = true
-		case backuptypes.ManagementTypeVolume:
-			managed = true
-		}
-	}
-	if system != managed {
-		if system {
-			query = query.Where("policy_id LIKE ?", backuptypes.SystemVolumePolicyPrefix+"%")
-		} else {
-			query = query.Where("policy_id NOT LIKE ? OR policy_id IS NULL", backuptypes.SystemVolumePolicyPrefix+"%")
-		}
-	}
-
-	if params.Search != "" {
-		pattern := "%" + params.Search + "%"
-		query = query.Where(
-			"id LIKE ? OR status LIKE ? OR trigger LIKE ? OR destination LIKE ? OR COALESCE(local_snapshot_id, "+
-				"'') LIKE ? OR COALESCE(remote_snapshot_id, '') LIKE ? OR COALESCE(error, '') LIKE ?",
-			pattern,
-			pattern,
-			pattern,
-			pattern,
-			pattern,
-			pattern,
-			pattern,
-		)
-	}
-
-	var totalItems int64
-	if err := query.Count(&totalItems).Error; err != nil {
-		return nil, 0, err
-	}
-
-	sortCol := "created_at"
-	sortOrder := "DESC"
-	if params.Sort != "" {
-		switch params.Sort {
-		case "createdAt", "created_at":
-			sortCol = "created_at"
-		case "id":
-			sortCol = "id"
-		case "size":
-			sortCol = "size"
-		case "status":
-			sortCol = "status"
-		case "trigger":
-			sortCol = "trigger"
-		case "destination":
-			sortCol = "destination"
-		case "remoteSnapshotId", "remote_snapshot_id":
-			sortCol = "remote_snapshot_id"
-		default:
-			sortCol = "created_at"
-		}
-
-		sortOrder = kit.Ternary(params.Order == pagination.SortDesc, "DESC", "ASC")
-	}
-	query = query.Order(fmt.Sprintf("%s %s", sortCol, sortOrder))
-
-	if params.Limit > 0 {
-		query = query.Offset(params.Start).Limit(params.Limit)
-	}
-
-	var entries []VolumeBackup
-	if err := query.Find(&entries).Error; err != nil {
-		return nil, 0, err
-	}
-	records := make([]volumetypes.Backup, 0, len(entries))
-	for i := range entries {
-		record := entries[i].recordInternal()
-		record.Type = backuptypes.ManagementTypeForPolicy(record.PolicyID)
-		records = append(records, *record)
-	}
-	return records, totalItems, nil
 }
 
 func (s *VolumeService) GetVolumeByName(ctx context.Context, name string) (*volumetypes.Volume, error) {
@@ -350,6 +149,9 @@ func (s *VolumeService) GetVolumeByName(ctx context.Context, name string) (*volu
 		return nil, fmt.Errorf("volume not found: %w", err)
 	}
 	vol := volResult.Volume
+	if isBackupTargetVolume(vol.Labels) {
+		return nil, hiddenTargetVolumeError()
+	}
 
 	localSettings := s.settingsService.GetSettingsConfig()
 	usageCtx, usageCancel := context.WithTimeout(ctx, timeouts.GetDuration(localSettings.DockerAPITimeout.AsInt(), timeouts.DefaultDockerAPI))
@@ -373,6 +175,19 @@ func (s *VolumeService) GetVolumeByName(ctx context.Context, name string) (*volu
 }
 
 func (s *VolumeService) CreateVolume(ctx context.Context, options client.VolumeCreateOptions, user usertypes.Actor) (*volumetypes.Volume, error) {
+	unlock, ok := s.workspaceLocks.TryLock(options.Name)
+	if !ok {
+		return nil, &volumeWorkspaceBusyError{name: options.Name}
+	}
+	defer unlock()
+	return s.createVolumeOwned(ctx, options, user)
+}
+
+// The API path already owns the destination mutex while checking name absence.
+func (s *VolumeService) createVolumeOwned(ctx context.Context, options client.VolumeCreateOptions, user usertypes.Actor) (*volumetypes.Volume, error) {
+	if isBackupTargetVolume(options.Labels) {
+		return nil, hiddenTargetVolumeError()
+	}
 	slog.DebugContext(ctx, "volume service: create volume", "volume", options.Name, "driver", options.Driver, "user", user.ID)
 	dockerClient, err := s.dockerService.GetClient(ctx)
 	if err != nil {
@@ -380,6 +195,9 @@ func (s *VolumeService) CreateVolume(ctx context.Context, options client.VolumeC
 		return nil, fmt.Errorf("failed to connect to Docker: %w", err)
 	}
 
+	if err := refuseTargetVolumeName(ctx, dockerClient, options.Name); err != nil {
+		return nil, err
+	}
 	defer s.eventService.BeginDockerResourceSuppressionWindow("volume", options.Name, options.Name)()
 	created, err := dockerClient.VolumeCreate(ctx, options)
 	if err != nil {
@@ -434,6 +252,10 @@ func (s *VolumeService) DeleteVolume(ctx context.Context, name string, force boo
 	if err != nil {
 		s.eventService.LogErrorEvent(ctx, event.EventTypeVolumeError, "volume", name, name, user.ID, user.Username, "0", err, database.JSON{"action": "delete", "force": force})
 		return fmt.Errorf("failed to connect to Docker: %w", err)
+	}
+
+	if err := refuseTargetVolumeName(ctx, dockerClient, name); err != nil {
+		return err
 	}
 
 	// Stop any read-only browse helper first; a helper mounting the volume would
@@ -503,6 +325,9 @@ func (s *VolumeService) GetVolumeUsage(ctx context.Context, name string) (bool, 
 		return false, nil, fmt.Errorf("volume not found: %w", err)
 	}
 
+	if isBackupTargetVolume(vol.Volume.Labels) {
+		return false, nil, hiddenTargetVolumeError()
+	}
 	consumers, err := listVolumeConsumersInternal(ctx, dockerClient)
 	if err != nil {
 		return false, nil, fmt.Errorf("failed to get containers using volume: %w", err)
@@ -542,6 +367,9 @@ func (s *VolumeService) GetVolumeSizes(ctx context.Context) (map[string]VolumeSi
 	}
 	result := make(map[string]VolumeSizeData, len(usageVolumes))
 	for _, v := range usageVolumes {
+		if isBackupTargetVolume(v.Labels) {
+			continue
+		}
 		if v.UsageData != nil {
 			result[v.Name] = VolumeSizeData{
 				Size:     v.UsageData.Size,

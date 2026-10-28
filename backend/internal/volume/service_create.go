@@ -2,7 +2,7 @@
 // Revision: 75e73d5c4ffcd78b47ebaa166579079c02f70c8f
 // Retrieved: 2026-10-24
 // License: Apache-2.0
-// Deviations: Original API-only create refusal; internal Docker create stays idempotent.
+// Deviations: Original API-only create refusal; internal Docker create stays idempotent.; M12 destination admission and backup-target refusal before Docker create.
 
 package volume
 
@@ -19,14 +19,25 @@ import (
 // Only explicit API creates refuse occupied names; Compose and internal callers
 // retain Docker's idempotent create. External creation after inspect can still race.
 func (s *VolumeService) createVolumeForAPI(ctx context.Context, options client.VolumeCreateOptions, user usertypes.Actor) (*volumetypes.Volume, error) {
+	unlock, ok := s.workspaceLocks.TryLock(options.Name)
+	if !ok {
+		return nil, &volumeWorkspaceBusyError{name: options.Name}
+	}
+	defer unlock()
+	if isBackupTargetVolume(options.Labels) {
+		return nil, hiddenTargetVolumeError()
+	}
 	dockerClient, err := s.dockerService.GetClient(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("failed to connect to Docker: %w", err)
+	}
+	if err := refuseTargetVolumeName(ctx, dockerClient, options.Name); err != nil {
+		return nil, err
 	}
 	if options.Name != "" {
 		if err := volumeutils.EnsureRenameTargetAbsent(ctx, dockerClient, options.Name); err != nil {
 			return nil, err
 		}
 	}
-	return s.CreateVolume(ctx, options, user)
+	return s.createVolumeOwned(ctx, options, user)
 }

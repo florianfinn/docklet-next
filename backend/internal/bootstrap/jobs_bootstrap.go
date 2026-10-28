@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; functional cut: removed upstream analytics heartbeat and APNS mobile push; functional cut: removed template catalogue; functional cut: removed GitOps and saved Git repositories.
+// Deviations: Local module namespace; functional cut: removed upstream analytics heartbeat and APNS mobile push; functional cut: removed template catalogue; functional cut: removed GitOps and saved Git repositories; M12 persisted volume lifecycle and legacy restore cut.
 
 package bootstrap
 
@@ -14,6 +14,7 @@ import (
 	"log/slog"
 	"net/http"
 	"slices"
+	"strings"
 	"sync"
 	"time"
 
@@ -31,6 +32,7 @@ import (
 	"github.com/florianfinn/docklet-next/backend/internal/settings"
 	"github.com/florianfinn/docklet-next/backend/internal/system"
 	"github.com/florianfinn/docklet-next/backend/internal/updater"
+	"github.com/florianfinn/docklet-next/backend/internal/upload"
 	"github.com/florianfinn/docklet-next/backend/internal/version"
 	"github.com/florianfinn/docklet-next/backend/internal/volume"
 	"github.com/florianfinn/docklet-next/backend/internal/vulnerability"
@@ -51,10 +53,14 @@ func newJobScheduler(
 	backupEngine *backup.Engine,
 	updaterService *updater.UpdaterService,
 	volumes *volume.VolumeService,
+	uploads *upload.UploadService,
 ) (
 	schedulertypes.JobScheduler,
 	error,
 ) {
+	if volumes != nil && uploads != nil {
+		volumes.SetBackupInputCleaner(uploads.CleanupRestoreInputs)
+	}
 	schedulerCtx, cancelScheduler := context.WithCancel(appCtx)
 	jobScheduler, err := scheduler.NewJobScheduler(schedulerCtx, jobService.Coordinator(), cfg.GetLocation())
 	if err != nil {
@@ -81,6 +87,9 @@ func newJobScheduler(
 			}
 			if startSchedulerErr := jobScheduler.StartScheduler(ctx); startSchedulerErr != nil {
 				return fmt.Errorf("start scheduler: %w", startSchedulerErr)
+			}
+			if volumes != nil {
+				go volumes.RetryFencedBackupWriters(schedulerCtx)
 			}
 			jobService.Coordinator().Activate()
 			if backupEngine != nil {
@@ -135,14 +144,31 @@ func reconcileCoordinatorStartupInternal(
 	volumes *volume.VolumeService,
 	systemService *system.SystemService,
 ) error {
-	activities, backups, err := startupProtectionInternal(ctx, jobs, engine, updates)
-	if err != nil {
+	if err := retireSystemVolumeJobs(ctx, jobs.Coordinator()); err != nil {
 		return err
 	}
 	if volumes != nil {
-		if reconcileInterruptedBackupsErr := volumes.ReconcileInterruptedBackups(ctx, backups...); reconcileInterruptedBackupsErr != nil {
+		if err := volumes.SweepBackupWriters(ctx); err != nil {
+			return err
+		}
+	}
+	if engine != nil {
+		var fence func(string) bool
+		if volumes != nil {
+			fence = volumes.BackupWriterFenced
+		}
+		if err := engine.SettleVolumeRuns(ctx, fence); err != nil {
+			return err
+		}
+	}
+	if volumes != nil {
+		if reconcileInterruptedBackupsErr := volumes.ReconcileInterruptedBackups(ctx); reconcileInterruptedBackupsErr != nil {
 			return reconcileInterruptedBackupsErr
 		}
+	}
+	activities, backups, err := startupProtectionInternal(ctx, jobs, engine, updates)
+	if err != nil {
+		return err
 	}
 	if systemService != nil {
 		if reconcileSystemBackupsErr := systemService.ReconcileInterruptedBackups(ctx, backups...); reconcileSystemBackupsErr != nil {
@@ -191,6 +217,9 @@ func startupProtectionInternal(ctx context.Context, jobs *job.JobService, engine
 func scheduledBackupProtectionInternal(records []schedulertypes.QueueRecord) ([]string, error) {
 	ids := []string{}
 	for _, record := range records {
+		if strings.HasPrefix(record.JobID, "volume-backup:") {
+			continue
+		}
 		for _, run := range record.Runs {
 			if run.Status.Terminal() {
 				continue

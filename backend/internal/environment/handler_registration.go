@@ -445,6 +445,9 @@ func (h *EnvironmentHandler) triggerEnvironmentResourceSyncInternal(ctx context.
 		defer h.background.Done()
 		syncCtx, cancel := context.WithTimeout(syncCtx, edge.DefaultProxyTimeout)
 		defer cancel()
+		if err := h.environmentService.SyncBackupTargetsToEnvironment(syncCtx, envID); err != nil {
+			slog.WarnContext(syncCtx, "Failed to sync backup targets", "environmentId", envID, "code", "backup.target.sync-failed")
+		}
 		if err := h.environmentService.SyncRegistriesToEnvironment(syncCtx, envID); err != nil {
 			slog.WarnContext(syncCtx, "Failed to sync registries to environment",
 				"environmentId", envID,

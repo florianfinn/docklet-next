@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; functional cut: removed S3 backup destinations.
+// Deviations: Local module namespace; functional cut: removed S3 backup destinations; M12 backup foundation.
 
 package policies
 
@@ -21,6 +21,7 @@ type VolumeBackupPolicy struct {
 	RetentionCount int    `json:"retentionCount" gorm:"column:retention_count;not null;default:7"`
 	StopContainers bool   `json:"stopContainers" gorm:"column:stop_containers;not null;default:false"`
 	LocalEnabled   bool   `json:"localEnabled" gorm:"column:local_enabled;not null"`
+	TargetID       string `json:"targetId" gorm:"not null;default:local"`
 }
 
 func (VolumeBackupPolicy) TableName() string {
@@ -37,5 +38,6 @@ func (p VolumeBackupPolicy) ToDTO(lastRun *volume.BackupEntry) volume.BackupPoli
 		StopContainers: p.StopContainers,
 		LocalEnabled:   p.LocalEnabled,
 		LastRun:        lastRun,
+		TargetID:       p.TargetID,
 	}
 }

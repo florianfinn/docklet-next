@@ -96,6 +96,7 @@ type Config struct {
 	DirPerm           os.FileMode `env:"DIR_PERM" default:"0755"`
 	HTTPClientTimeout int         `env:"HTTP_CLIENT_TIMEOUT" default:"0"`
 	BackupVolumeName  string      `env:"ARCANE_BACKUP_VOLUME_NAME" default:"arcane-backups"`
+	BackupEngineImage string      `env:"DOCKLET_BACKUP_ENGINE_IMAGE" default:""`
 	BackupDir         string      `env:"DOCKLET_BACKUP_DIR" default:"/var/lib/docklet/backups"`
 	HTTPProxy         string      `env:"HTTP_PROXY" default:""`
 	HTTPSProxy        string      `env:"HTTPS_PROXY" default:""`

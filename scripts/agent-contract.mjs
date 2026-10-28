@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import { readFileSync, writeFileSync } from "node:fs";
 
-const fixtureURL = new URL("../types/contract/testdata/agent-hub-v8.json", import.meta.url);
+const fixtureURL = new URL("../types/contract/testdata/agent-hub-v9.json", import.meta.url);
 const agentURL = new URL("../types/contract/agent.go", import.meta.url);
 
 // Preserve the accepted runtime and image manifest; derive the optional HTTP
@@ -127,8 +127,8 @@ export function agentFixture(spec, fixture) {
     schemas: definitions,
     registryAuthenticationStatus: 502,
   };
-  manifest.version = 8;
-  manifest.minimumAgentContractVersion = 8;
+  manifest.version = 9;
+  manifest.minimumAgentContractVersion = 9;
   const vulnerabilityRoutes = Object.entries(document.paths).flatMap(([path, item]) => Object.entries(item)
     .filter(([, op]) => op?.tags?.includes("Vulnerabilities"))
     .map(([method, op]) => ({ method: method.toUpperCase(), path, operationId: op.operationId, sha256: createHash("sha256").update(JSON.stringify(op)).digest("hex") })));
@@ -156,6 +156,38 @@ export function agentFixture(spec, fixture) {
     responseLimit: 32 << 20, reportLimit: 64 << 20,
     admission: "one host operation; busy includes running activity ID",
     baseline: "last completed image findings survive failed attempts",
+  };
+  const volumeRoutes = Object.entries(document.paths).flatMap(([path, item]) => Object.entries(item)
+    .filter(([, op]) => op?.operationId && (/^\/backup-targets(?:\/|$)/.test(path) || /^\/environments\/\{id\}\/volumes\/(?:backups(?:\/|$)|\{volumeName\}\/(?:backups|backup-policy))/.test(path)))
+    .map(([method, op]) => ({ method: method.toUpperCase(), path, operationId: op.operationId, sha256: createHash("sha256").update(JSON.stringify(op)).digest("hex") })));
+  const volumeSchemas = {};
+  function collectVolume(value) {
+    if (!value || typeof value !== "object") return;
+    if (value.$ref) {
+      const name = value.$ref.split("/").at(-1);
+      if (!volumeSchemas[name]) {
+        if (!schemas[name]) throw new Error(`missing volume schema ${name}`);
+        volumeSchemas[name] = {sha256:createHash("sha256").update(JSON.stringify(schemas[name])).digest("hex")};
+        collectVolume(schemas[name]);
+      }
+    }
+    for (const child of Object.values(value)) {
+      if (Array.isArray(child)) child.forEach(collectVolume); else collectVolume(child);
+    }
+  }
+  for (const route of volumeRoutes) collectVolume(document.paths[route.path][route.method.toLowerCase()]);
+  for (const name of ["BackupTargetSet", "BackupTargetSetReceipt", "BackupProblem"]) collectVolume({$ref:`#/components/schemas/${name}`});
+  const commands = readFileSync(new URL("../backend/pkg/libarcane/edge/commands.go", import.meta.url), "utf8");
+  manifest.volumeBackups = {
+    routes:volumeRoutes, schemas:volumeSchemas,
+    edgeRoutes:[...commands.matchAll(/Method:\s*http.Method(\w+),\s*PathPattern:\s*"([^"]+)",\s*CommandName:\s*"([^"]+)"/g)]
+      .filter((match) => /^volume\.backup/.test(match[3]))
+      .map(([, method,path,command])=>({method:method.toUpperCase(),path,command})),
+    errorCodes:schemas.BackupProblem.properties.code.enum,
+    uploadReasons:schemas.BackupProblem.properties.reason.enum.filter((value)=>value!==null),
+    responseLimit:8<<20, edgeDownloadLimit:512<<20, uploadLimit:4*2**30, expandedUploadLimit:16*2**30, browseEntries:5000,
+    restoreStatus:202, policyLimit:1, targetAuthority:"UUID generation, preserved restored version counter", localRecovery:"verify before attach; never re-key",
+    retiredWorkspaceOperation:"restore_file", retiredRoutes:["/backups/volumes/config","/backups/volumes/options","/backups/volumes/run"],
   };
   return Buffer.from(`${formatFixture(manifest)}\n`);
 }

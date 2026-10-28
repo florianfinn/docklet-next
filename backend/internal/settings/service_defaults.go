@@ -125,8 +125,7 @@ func DefaultSettingsConfig() *Settings {
 		DepotProjectId:         SettingVariable{Value: ""},
 		DepotToken:             SettingVariable{Value: ""},
 
-		InstanceID:               SettingVariable{Value: ""},
-		SystemVolumeBackupConfig: SettingVariable{Value: `{"policies":[]}`},
+		InstanceID: SettingVariable{Value: ""},
 	}
 }
 

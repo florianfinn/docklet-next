@@ -15,7 +15,7 @@ invoke the host operations below, so additions require an explicit review.
 | container | Reads state, logs and processes and controls lifecycle and configuration. |
 | image | Pulls, removes, exports, patches and scans images; needed for image management. |
 | image-update | Checks and records available container image updates. |
-| volume | Reads, writes, backs up and restores Docker volumes and workspace files. |
+| volume | Reads and changes named volumes and workspace files; admits asynchronous backup/restore and repository checks, receives target metadata, reports references and verifies attached local recovery keys (contract v9). |
 | network | Reads topology; validates create, protected deletion and membership changes on the Docker host (agent contract v6). |
 | port | Reports host port use for deployment decisions. |
 | upload | Accepts bounded uploads used by image and restore operations. |
@@ -50,7 +50,7 @@ have an explicit target checked against the running hub on both forwarding paths
 agents reject blank targets. No update/restore/policy/schedule capability is added
 by this PR1 boundary; PR2a/PR2b own that activation.
 
-Vulnerability scanning uses agent contract v8, minimum v8. The hub feature veto
+Vulnerability scanning entered the agent contract at v8; the current minimum is v9. The hub feature veto
 covers local and remote vulnerability routes; agent feature-disabled and busy
 refusals remain typed. Host-wide runs are agent-owned evidence read through the
 run route. Agents refresh KEV/EPSS intelligence daily and register no local image
@@ -66,3 +66,31 @@ restarts with a fresh registration. `GET`/`HEAD /api/health` return 503 once the
 application lifecycle has ended, so the `health` command reports the state even
 before the process exits. Intentional actor-host stops, such as during a hub
 database restore, cancel the runtime context and are not treated as failures.
+
+## Volume backup contract v9
+
+The minimum agent contract is v9. Overview, repository metadata/check, restore
+admissions and target host routes are part of the allowlisted volume module in
+both agent modes. Hub-only target CRUD and administrative key export are absent
+from agent registration. The target-set receiver is agent-only and accepts the
+current pairing credential again inside its transaction. Target sync carries
+metadata and encrypted-at-rest credentials; it never mounts or tests a target.
+
+The hub uses the existing authenticated Direct or explicit Edge command transport.
+It sends a complete target set on changes, connect/pairing and before policy
+writes; a policy request must match the accepted authority and set version.
+Target tests return 202 before any mount and publish safe structured results with
+the admitted configuration version. Capacity values can be absent. Mount/helper
+failure diagnostics expose stable codes, with no passwords or daemon text.
+
+Upload restore needs upload and backup permissions at the hub before forwarding;
+local admissions apply both before staging. Recovery-key routes disable caching
+and record an audit event containing only target identity. Generic volume routes
+hide the credential-bearing target mount volumes.
+
+Synchronous backup reads, download preparation and deletion participate in request
+cancellation over Direct and the Edge command registry. Accepted backup, restore
+and check workers keep their independent activity lifetime. Downloads also stay
+registered with maintenance until streaming and helper cleanup finish. The agent
+bounds framed engine output before payload allocation and serialized JSON before
+response commitment; oversized responses never become truncated successes.

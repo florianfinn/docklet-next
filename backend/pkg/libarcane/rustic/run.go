@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace
+// Deviations: Local module namespace; M12 persisted volume lifecycle and legacy restore cut.
 
 package rustic
 
@@ -44,15 +44,20 @@ func Run(ctx context.Context, dockerClient *client.Client, password string, comm
 	)
 	allMounts := append([]mount.Mount{}, mounts...)
 	allMounts = append(allMounts, mount.Mount{Type: mount.TypeVolume, Source: CacheVolume, Target: "/cache"})
-	hostConfig := volumehelper.HostConfig(DefaultImage, nil, allMounts)
+	hostConfig := volumehelper.HostConfig(Image(ctx), nil, allMounts)
 	hostConfig.AutoRemove = false
 	hostConfig.NetworkMode = networkMode
+	if witness, ok := ctx.Value(beforeCreateKey{}).(func(context.Context) error); ok && witness != nil {
+		if err := witness(ctx); err != nil {
+			return "", err
+		}
+	}
 	created, err := dockerClient.ContainerCreate(ctx, client.ContainerCreateOptions{
 		Config: &container.Config{
-			Image:  DefaultImage,
+			Image:  Image(ctx),
 			Cmd:    command,
 			Env:    env,
-			Labels: volumehelper.Labels(),
+			Labels: OperationLabels(ctx),
 		},
 		HostConfig: hostConfig,
 	})
@@ -68,7 +73,13 @@ func Run(ctx context.Context, dockerClient *client.Client, password string, comm
 			_, containerRemoveErr := dockerClient.ContainerRemove(attemptCtx, created.ID, volumehelper.RemoveOptions())
 			cancel()
 			if containerRemoveErr == nil || cerrdefs.IsNotFound(containerRemoveErr) {
-				return
+				inspectCtx, inspectCancel := context.WithTimeout(cleanupCtx, timeouts.DefaultDockerAPI)
+				_, inspectErr := dockerClient.ContainerInspect(inspectCtx, created.ID, client.ContainerInspectOptions{})
+				inspectCancel()
+				if cerrdefs.IsNotFound(inspectErr) {
+					return
+				}
+				containerRemoveErr = inspectErr
 			}
 			slog.WarnContext(cleanupCtx, "failed to remove Rustic container, retrying", "containerId", created.ID, "error", containerRemoveErr)
 			time.Sleep(5 * time.Second)
@@ -91,14 +102,25 @@ func Run(ctx context.Context, dockerClient *client.Client, password string, comm
 		return "", fmt.Errorf("failed to read Rustic output: %w", err)
 	}
 	defer func() { _ = logs.Close() }()
-	var stdout bytes.Buffer
-	var stderr bytes.Buffer
-	if _, stdCopyErr := stdcopy.StdCopy(&stdout, &stderr, logs); stdCopyErr != nil {
-		return "", fmt.Errorf("failed to decode Rustic output: %w", stdCopyErr)
+	var stdout, stderr string
+	if limited, _ := ctx.Value(volumeOutputKey{}).(bool); limited {
+		stdout, stderr, err = readVolumeOutput(logs, len(command) > 0 && (command[0] == "ls" || command[0] == "snapshots"))
+		if err != nil {
+			return "", err
+		}
+	} else {
+		var output, diagnostics bytes.Buffer
+		if _, err := stdcopy.StdCopy(&output, &diagnostics, logs); err != nil {
+			return "", fmt.Errorf("failed to decode Rustic output: %w", err)
+		}
+		stdout, stderr = output.String(), diagnostics.String()
 	}
 	if status.StatusCode != 0 {
-		message := cmp.Or(strings.TrimSpace(stderr.String()), strings.TrimSpace(stdout.String()))
+		message := cmp.Or(strings.TrimSpace(stderr), strings.TrimSpace(stdout))
+		if limited, _ := ctx.Value(volumeOutputKey{}).(bool); limited {
+			return "", &CommandError{ExitCode: status.StatusCode, Diagnostic: message}
+		}
 		return "", fmt.Errorf("rustic exited with code %d: %s", status.StatusCode, message)
 	}
-	return strings.TrimSpace(stdout.String()), nil
+	return strings.TrimSpace(stdout), nil
 }

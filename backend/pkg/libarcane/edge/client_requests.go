@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; extracted request handling with bounded runtime ingress and cancellation.
+// Deviations: M12 synchronous volume-backup cancellation reuses the existing request registry;  Local module namespace; extracted request handling with bounded runtime ingress and cancellation.
 
 package edge
 
@@ -35,7 +35,7 @@ func (c *TunnelClient) messageLoop(ctx context.Context, conn TunnelConnection, w
 			case MessageTypeRequest:
 				c.scheduleRuntimeRequestInternal(ctx, conn, msg, workers, false)
 			case MessageTypeCommandRequest:
-				if runtimeRequestPathInternal(msg.Path) {
+				if runtimeRequestPathInternal(msg.Path) || volumeBackupCancelableRequest(msg.Method, msg.Path) {
 					c.scheduleRuntimeRequestInternal(ctx, conn, msg, workers, true)
 				} else if transferID := strings.TrimSpace(msg.Metadata[bodyTransferMetadataKey]); transferID != "" {
 					c.beginCommandRequestTransferInternal(ctx, conn, transferID, msg)
@@ -98,7 +98,7 @@ func (c *TunnelClient) beginCommandRequestTransferInternal(ctx context.Context, 
 	if loaded {
 		if previous, ok := previous.(*commandRequestTransfer); ok {
 			previous.stopInternal()
-			if runtimeRequestPathInternal(previous.request.Path) {
+			if runtimeRequestPathInternal(previous.request.Path) || volumeBackupCancelableRequest(previous.request.Method, previous.request.Path) {
 				c.cancelRuntimeRequestInternal(previous.conn, previous.request.ID)
 			}
 			c.sendCommandCompleteInternal(previous.conn, previous.request.ID, http.StatusBadRequest, "duplicate command body transfer ID")
@@ -125,7 +125,7 @@ func (c *TunnelClient) handleCommandRequestChunkInternal(ctx context.Context, ms
 	if msg.Sequence != transfer.nextSequence {
 		if c.requestTransfers.CompareAndDelete(msg.ID, transfer) {
 			transfer.stopInternal()
-			if runtimeRequestPathInternal(transfer.request.Path) {
+			if runtimeRequestPathInternal(transfer.request.Path) || volumeBackupCancelableRequest(transfer.request.Method, transfer.request.Path) {
 				c.cancelRuntimeRequestInternal(transfer.conn, transfer.request.ID)
 			}
 			c.sendCommandCompleteInternal(transfer.conn, transfer.request.ID, http.StatusBadRequest, "command body chunks arrived out of order")
@@ -133,7 +133,7 @@ func (c *TunnelClient) handleCommandRequestChunkInternal(ctx context.Context, ms
 		return
 	}
 
-	if runtimeRequestPathInternal(transfer.request.Path) && (transfer.ctx.Err() != nil || transfer.body.Len()+len(msg.Body) > runtimeRequestBodyLimit) {
+	if (runtimeRequestPathInternal(transfer.request.Path) || volumeBackupCancelableRequest(transfer.request.Method, transfer.request.Path)) && (transfer.ctx.Err() != nil || transfer.body.Len()+len(msg.Body) > runtimeRequestBodyLimit) {
 		if c.requestTransfers.CompareAndDelete(msg.ID, transfer) {
 			transfer.stopInternal()
 			c.cancelRuntimeRequestInternal(transfer.conn, transfer.request.ID)
@@ -150,7 +150,7 @@ func (c *TunnelClient) handleCommandRequestChunkInternal(ctx context.Context, ms
 	if c.requestTransfers.CompareAndDelete(msg.ID, transfer) {
 		transfer.stopInternal()
 		transfer.request.Body = append([]byte(nil), transfer.body.Bytes()...)
-		if runtimeRequestPathInternal(transfer.request.Path) {
+		if runtimeRequestPathInternal(transfer.request.Path) || volumeBackupCancelableRequest(transfer.request.Method, transfer.request.Path) {
 			c.startRuntimeHandlerInternal(transfer.ctx, transfer.conn, transfer.request, workers, true)
 		} else {
 			workers.Go(func() { c.handleCommandRequest(transfer.ctx, transfer.conn, transfer.request) })

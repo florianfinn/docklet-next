@@ -2,20 +2,17 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace
+// Deviations: Local module namespace; Rustic-only snapshot consumers; legacy rows refuse before repository effects.
 
 package browser
 
 import (
 	"context"
 	"fmt"
-	"path"
-	"strings"
 
 	backuptypes "github.com/florianfinn/docklet-next/types/backup"
 	"github.com/florianfinn/docklet-next/types/volume"
 	"github.com/moby/moby/client"
-	"go.getarcane.app/kit/pkg"
 
 	"github.com/florianfinn/docklet-next/backend/internal/backup"
 	"github.com/florianfinn/docklet-next/backend/internal/common"
@@ -26,15 +23,12 @@ import (
 
 // Dependencies are the backup storage and repository operations the browser reads through.
 type Dependencies struct {
-	Docker          *docker.DockerClientService
-	Engine          *backup.Engine
-	Run             func(ctx context.Context, backupID string) (*volume.Backup, error)
-	Repository      func(ctx context.Context, dockerClient *client.Client, entry *volume.Backup) (backup.Repository, string, error)
-	Password        func(ctx context.Context, dockerClient *client.Client, repositories ...backup.Repository) (string, error)
-	SanitizePath    func(input string) (string, error)
-	ArchiveFilename func(backupID string) (string, error)
-	TempContainer   func(ctx context.Context, dockerClient *client.Client, target string, readOnly bool) (string, func(), error)
-	Exec            func(ctx context.Context, containerID, execUser string, cmd []string) (string, string, error)
+	Docker       *docker.DockerClientService
+	Engine       *backup.Engine
+	Run          func(ctx context.Context, backupID string) (*volume.Backup, error)
+	Repository   func(ctx context.Context, dockerClient *client.Client, entry *volume.Backup) (backup.Repository, string, error)
+	Password     func(ctx context.Context, dockerClient *client.Client, repositories ...backup.Repository) (string, error)
+	SanitizePath func(input string) (string, error)
 }
 
 // Service lists and browses the files stored in volume backups.
@@ -51,8 +45,8 @@ func (s *Service) ListBackupFiles(ctx context.Context, backupID string) ([]strin
 	if err != nil {
 		return nil, err
 	}
-	if entry.Format == volume.BackupFormatArchive {
-		return s.listArchiveBackupFilesInternal(ctx, backupID)
+	if entry.Format != volume.BackupFormatRustic {
+		return nil, backuptypes.NewProblem(404, "volume.backup.snapshot-not-found", nil)
 	}
 	dockerClient, err := s.deps.Docker.GetClient(ctx)
 	if err != nil {
@@ -71,8 +65,9 @@ func (s *Service) ListBackupFiles(ctx context.Context, backupID string) ([]strin
 
 // BrowseBackupFiles returns one lazy-loaded page from a volume backup tree.
 func (s *Service) BrowseBackupFiles(ctx context.Context, backupID, requestedPath string, params pagination.QueryParams) ([]backuptypes.BackupFileEntry, pagination.Response, error) {
-	listPath, recursive, err := backupbrowser.ListScope(requestedPath, params)
-	if err != nil {
+	listPath, err := backupbrowser.NormalizePath(requestedPath, true)
+	recursive := false
+	if err != nil || params.Start < 0 {
 		return nil, pagination.Response{}, fmt.Errorf("%w: %w", common.ErrInvalidBackupSelection, err)
 	}
 	entry, err := s.deps.Run(ctx, backupID)
@@ -88,12 +83,8 @@ func (s *Service) BrowseBackupFiles(ctx context.Context, backupID, requestedPath
 }
 
 func (s *Service) backupFileEntriesInternal(ctx context.Context, entry *volume.Backup, browsePath string, recursive bool) ([]backuptypes.BackupFileEntry, error) {
-	if entry.Format == volume.BackupFormatArchive {
-		paths, err := s.ArchivePaths(ctx, entry.ID)
-		if err != nil {
-			return nil, err
-		}
-		return backupbrowser.BuildEntries(paths, browsePath, recursive), nil
+	if entry.Format != volume.BackupFormatRustic {
+		return nil, backuptypes.NewProblem(404, "volume.backup.snapshot-not-found", nil)
 	}
 	dockerClient, err := s.deps.Docker.GetClient(ctx)
 	if err != nil {
@@ -119,57 +110,25 @@ func (s *Service) BackupHasPath(ctx context.Context, backupID, filePath string) 
 	if err != nil {
 		return false, err
 	}
-	files, err := s.ListBackupFiles(ctx, backupID)
+
+	entry, err := s.deps.Run(ctx, backupID)
 	if err != nil {
 		return false, err
 	}
-	for _, candidate := range files {
-		if strings.TrimPrefix(candidate, "/") == cleaned {
-			return true, nil
-		}
+	if entry.Format != volume.BackupFormatRustic {
+		return false, backuptypes.NewProblem(404, "volume.backup.snapshot-not-found", nil)
 	}
-	return false, nil
-}
-
-func (s *Service) listArchiveBackupFilesInternal(ctx context.Context, backupID string) ([]string, error) {
-	paths, err := s.ArchivePaths(ctx, backupID)
+	cli, err := s.deps.Docker.GetClient(ctx)
 	if err != nil {
-		return nil, err
+		return false, err
 	}
-	files := make([]string, 0, len(paths))
-	for _, candidate := range paths {
-		if !strings.HasSuffix(candidate, "/") {
-			files = append(files, candidate)
-		}
-	}
-	return files, nil
-}
-
-// ArchivePaths lists every member of a legacy tar.gz volume backup.
-func (s *Service) ArchivePaths(ctx context.Context, backupID string) ([]string, error) {
-	filename, err := s.deps.ArchiveFilename(backupID)
+	repository, snapshot, err := s.deps.Repository(ctx, cli, entry)
 	if err != nil {
-		return nil, err
+		return false, err
 	}
-	dockerClient, err := s.deps.Docker.GetClient(ctx)
+	password, err := s.deps.Password(ctx, cli, repository)
 	if err != nil {
-		return nil, err
+		return false, err
 	}
-	containerID, cleanup, err := s.deps.TempContainer(ctx, dockerClient, "/volume", true)
-	if err != nil {
-		return nil, err
-	}
-	defer cleanup()
-	stdout, _, err := s.deps.Exec(ctx, containerID, "", []string{"tar", "-tzf", path.Join("/volume", filename)})
-	if err != nil {
-		return nil, err
-	}
-	lines := strings.Split(strings.TrimSpace(stdout), "\n")
-	files := make([]string, 0, len(lines))
-	for _, line := range lines {
-		if clean := strings.TrimPrefix(strings.TrimSpace(line), "./"); clean != "" {
-			files = append(files, clean)
-		}
-	}
-	return kit.Unique(files), nil
+	return s.deps.Engine.SnapshotHasPath(ctx, cli, repository, password, snapshot, cleaned)
 }

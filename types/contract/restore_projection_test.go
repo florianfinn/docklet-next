@@ -51,7 +51,7 @@ func TestRestorePointProjectionContract(t *testing.T) {
 	require.Equal(t, []string{string(dto.RestoreTarget), string(dto.HealthyBaseline)}, strings.Split(reasonField.Tag.Get("enum"), ","))
 	require.Equal(t, []string{string(dto.HoldNone), string(dto.HoldActive), string(dto.HoldUnknown)}, strings.Split(holdField.Tag.Get("enum"), ","))
 	require.Equal(t, "true", reasonField.Tag.Get("nullable"))
-	body, err = os.ReadFile("testdata/agent-hub-v8.json")
+	body, err = os.ReadFile("testdata/agent-hub-v9.json")
 	require.NoError(t, err)
 	var fixture struct {
 		ImageLifecycle struct{ RetentionProtections, HoldStates, PointRequiredFields []string }

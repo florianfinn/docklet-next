@@ -82,6 +82,7 @@ const (
 	CodeEventVolumeBackupRestore          Code = "volume.backup.restore"
 	CodeEventVolumeBackupRestoreFiles     Code = "volume.backup.restore_files"
 	CodeEventVolumeBackupDownload         Code = "volume.backup.download"
+	CodeEventVolumeBackupTargetKeyViewed  Code = "volume.backup.target.key_viewed"
 	CodeEventNetworkCreate                Code = "network.create"
 	CodeEventNetworkDelete                Code = "network.delete"
 	CodeEventNetworkConnect               Code = "network.connect"
@@ -196,6 +197,7 @@ func Values() []Code {
 		CodeEventVolumeBackupRestore,
 		CodeEventVolumeBackupRestoreFiles,
 		CodeEventVolumeBackupDownload,
+		CodeEventVolumeBackupTargetKeyViewed,
 		CodeEventNetworkCreate,
 		CodeEventNetworkDelete,
 		CodeEventNetworkConnect,

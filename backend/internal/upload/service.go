@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; functional cut: removed standalone build workshop.
+// Deviations: Local module namespace; functional cut: removed standalone build workshop; M12 persisted volume lifecycle and legacy restore cut.
 
 // Package upload owns chunked upload sessions: filesystem-backed staging for
 // large files that arrive as independently retryable chunks, consumed by the
@@ -21,8 +21,10 @@ import (
 	"regexp"
 	"slices"
 	"strings"
+	"sync"
 	"time"
 
+	dto "github.com/florianfinn/docklet-next/types/backup"
 	"github.com/florianfinn/docklet-next/types/upload"
 	"go.getarcane.app/acfs"
 
@@ -45,9 +47,12 @@ var uploadIDPattern = regexp.MustCompile(`^[0-9a-f]{16}$`)
 // instance, which holds for Arcane's single-instance-per-node deployment (for
 // remote environments the session lives on that environment's agent).
 type UploadService struct {
-	settingsService *settings.SettingsService
-	root            string
-	locks           utils.KeyedMutex
+	settingsService        *settings.SettingsService
+	root                   string
+	locks                  utils.KeyedMutex
+	restoreSweepMu         sync.Mutex
+	restoreSweepStarted    bool
+	restoreSweepCandidates map[string]bool
 }
 
 // NewUploadService builds the session service rooted in the system temp
@@ -83,6 +88,9 @@ func (s *UploadService) CreateSession(ctx context.Context, kind string, request 
 	}
 	if request.Size <= 0 {
 		return nil, fmt.Errorf("%w: size must be positive", common.ErrUploadSessionInvalid)
+	}
+	if kind == upload.KindVolumeBackup && request.Size > dto.MaxVolumeUploadBytes {
+		return nil, dto.NewProblem(413, "volume.backup.upload-too-large", nil)
 	}
 	if kind == upload.KindImage {
 		maxSizeMB := s.settingsService.GetIntSetting(ctx, "maxImageUploadSize", 500)
@@ -170,6 +178,9 @@ func (s *UploadService) WriteChunk(ctx context.Context, kind, uploadID string, i
 	session, err := s.loadMetaInternal(ctx, kind, uploadID)
 	if err != nil {
 		return nil, err
+	}
+	if kind == upload.KindVolumeBackup && session.Size > dto.MaxVolumeUploadBytes {
+		return nil, dto.NewProblem(413, "volume.backup.upload-too-large", nil)
 	}
 	if index < 0 || index >= session.TotalChunks {
 		return nil, fmt.Errorf("%w: chunk index %d out of range [0,%d)", common.ErrUploadChunkInvalid, index, session.TotalChunks)
@@ -297,7 +308,7 @@ func (s *UploadService) PurgeExpiredSessions(ctx context.Context, maxAge time.Du
 	cutoff := time.Now().Add(-maxAge)
 	removed := 0
 	for _, entry := range entries {
-		if !entry.IsDirectory {
+		if !entry.IsDirectory || entry.Name == "restore-inputs" {
 			continue
 		}
 		unlock := s.locks.Lock(entry.Name)

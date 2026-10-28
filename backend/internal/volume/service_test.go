@@ -37,6 +37,7 @@ import (
 	"github.com/florianfinn/docklet-next/backend/internal/database"
 	"github.com/florianfinn/docklet-next/backend/internal/docker"
 	"github.com/florianfinn/docklet-next/backend/internal/volume/children/backup/children/policies"
+	"github.com/florianfinn/docklet-next/backend/internal/volume/children/backup/children/restore"
 	"github.com/florianfinn/docklet-next/backend/pkg/pagination"
 )
 
@@ -115,7 +116,7 @@ func TestRenameVolumeRejectsInvalidAndProtectedNames(t *testing.T) {
 
 func applyVolumeBackupMigrationsInternal(t *testing.T, gormDB *gorm.DB) {
 	t.Helper()
-	require.NoError(t, gormDB.AutoMigrate(&policies.VolumeBackupPolicy{}, &VolumeBackup{}))
+	require.NoError(t, gormDB.AutoMigrate(&policies.VolumeBackupPolicy{}, &VolumeBackup{}, &restore.Run{}))
 }
 
 func TestRenameVolumeMetadataInternalPreservesPoliciesAndHistory(t *testing.T) {
@@ -125,6 +126,7 @@ func TestRenameVolumeMetadataInternalPreservesPoliciesAndHistory(t *testing.T) {
 	require.NoError(t, gormDB.Exec("INSERT INTO volume_backup_policies (id, volume_name, schedule, local_enabled) VALUES (?, ?, ?, ?)", "policy-1", "source-data", "0 0 2 * * *", true).Error)
 	require.NoError(t, gormDB.Create(&VolumeBackup{VolumeName: "source-data", PolicyID: "policy-1"}).Error)
 
+	require.NoError(t, gormDB.Create(&restore.Run{ID: "restore-history", VolumeName: "source-data", NewVolumeName: "source-data", StartedAt: time.Now().UTC()}).Error)
 	service := NewVolumeService(&database.DB{DB: gormDB}, nil, nil, nil, nil, nil, nil, nil, nil, nil)
 	require.NoError(t, service.renameVolumeMetadataInternal(t.Context(), "source-data", "renamed-data"))
 
@@ -135,6 +137,10 @@ func TestRenameVolumeMetadataInternalPreservesPoliciesAndHistory(t *testing.T) {
 	var backupEntry VolumeBackup
 	require.NoError(t, gormDB.Where("policy_id = ?", "policy-1").First(&backupEntry).Error)
 	require.Equal(t, "renamed-data", backupEntry.VolumeName)
+	var restored restore.Run
+	require.NoError(t, gormDB.First(&restored, "id = ?", "restore-history").Error)
+	require.Equal(t, "renamed-data", restored.VolumeName)
+	require.Equal(t, "renamed-data", restored.NewVolumeName)
 }
 
 func TestBuildVolumePruneMetadataInternal(t *testing.T) {

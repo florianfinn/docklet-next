@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: functional cut: removed GitOps and saved Git repositories; functional cut: removed Swarm; functional cut: removed S3 backup destinations; functional cut: removed standalone build workshop; added the project tag update command used by the stack editor (#152); Storage preview, rename and backup import coverage; removed retained S3 upload; network membership commands.
+// Deviations: functional cut: removed GitOps and saved Git repositories; functional cut: removed Swarm; functional cut: removed S3 backup destinations; functional cut: removed standalone build workshop; added the project tag update command used by the stack editor (#152); Storage preview, rename and backup import coverage; removed retained S3 upload; network membership commands; M12 backup foundation.
 
 package edge
 
@@ -113,6 +113,14 @@ var commandRoutes = withVulnerabilityRoutes([]commandRoute{
 	{Method: http.MethodGet, PathPattern: "/api/environments/{id}/volumes/{volumeName}/workspace/file", CommandName: "volume.workspace.read_file"},
 	{Method: http.MethodGet, PathPattern: "/api/environments/{id}/volumes/{volumeName}/workspace/file/download", CommandName: "volume.workspace.download"},
 	{Method: http.MethodPut, PathPattern: "/api/environments/{id}/volumes/{volumeName}/workspace", CommandName: "volume.workspace.update"},
+	{Method: http.MethodGet, PathPattern: "/api/environments/{id}/volumes/backups/overview", CommandName: "volume.backup.overview"},
+	{Method: http.MethodGet, PathPattern: "/api/environments/{id}/volumes/backups/repository", CommandName: "volume.backup.repository.get"},
+	{Method: http.MethodPost, PathPattern: "/api/environments/{id}/volumes/backups/repository/check", CommandName: "volume.backup.repository.check"},
+	{Method: http.MethodPut, PathPattern: "/api/environments/{id}/volumes/backups/targets", CommandName: "volume.backup.targets.sync"},
+	{Method: http.MethodPost, PathPattern: "/api/environments/{id}/volumes/backups/targets/{targetId}/test", CommandName: "volume.backup.targets.test"},
+	{Method: http.MethodGet, PathPattern: "/api/environments/{id}/volumes/backups/targets/{targetId}/references", CommandName: "volume.backup.targets.references"},
+	{Method: http.MethodGet, PathPattern: "/api/environments/{id}/volumes/backups/targets/local/recovery-key", CommandName: "volume.backup.targets.key.get"},
+	{Method: http.MethodPut, PathPattern: "/api/environments/{id}/volumes/backups/targets/local/recovery-key", CommandName: "volume.backup.targets.key.attach"},
 	{Method: http.MethodGet, PathPattern: "/api/environments/{id}/volumes/{volumeName}/backups", CommandName: "volume.backup.list"},
 	{Method: http.MethodPost, PathPattern: "/api/environments/{id}/volumes/{volumeName}/backups", CommandName: "volume.backup.create"},
 	{Method: http.MethodPost, PathPattern: "/api/environments/{id}/volumes/{volumeName}/backups/{backupId}/restore", CommandName: "volume.backup.restore"},

@@ -5,9 +5,9 @@ import { assertNoDrift } from "../scripts/openapi-contract.mjs";
 import { reasonLiterals } from "../scripts/reason-literals.mjs";
 import { agentFixture } from "../scripts/agent-contract.mjs";
 
-test("the v8 manifest records the merged activity discovery producer", () => {
+test("the v9 manifest records the merged activity discovery producer", () => {
   const spec = readFileSync(new URL("../api/openapi.json", import.meta.url));
-  const fixture = readFileSync(new URL("../types/contract/testdata/agent-hub-v8.json", import.meta.url));
+  const fixture = readFileSync(new URL("../types/contract/testdata/agent-hub-v9.json", import.meta.url));
   assert.deepEqual(agentFixture(spec, fixture), fixture);
   const changed = JSON.parse(spec);
   const recoveryName = JSON.parse(fixture).activityDiscovery.recovery.$ref.split("/").at(-1);
@@ -40,7 +40,7 @@ test("the contract guard rejects a changed Huma operation", () => {
 
 test("v7 lifecycle manifest changes with executable DTOs and admission operations", () => {
   const spec = readFileSync(new URL("../api/openapi.json", import.meta.url));
-  const fixture = readFileSync(new URL("../types/contract/testdata/agent-hub-v8.json", import.meta.url));
+  const fixture = readFileSync(new URL("../types/contract/testdata/agent-hub-v9.json", import.meta.url));
   const manifest = JSON.parse(fixture);
   assert.equal(manifest.imageLifecycle.routes.length, 7);
   assert.equal(manifest.imageLifecycle.edgeRoutes.length, 6);
@@ -102,7 +102,7 @@ test("every lifecycle and policy producer reason is declared and translated", ()
 
 test("v7 policy manifest binds hub schedules, frozen revisions and notification producers", () => {
   const spec = readFileSync(new URL("../api/openapi.json", import.meta.url));
-  const fixture = readFileSync(new URL("../types/contract/testdata/agent-hub-v8.json", import.meta.url));
+  const fixture = readFileSync(new URL("../types/contract/testdata/agent-hub-v9.json", import.meta.url));
   const manifest = JSON.parse(fixture);
   assert.equal(manifest.imagePolicies.owner, "hub");
   assert.equal(manifest.imagePolicies.defaultMode, "off");
@@ -150,7 +150,7 @@ test("reason helper guard catches unprefixed arguments and returns", () => {
 
 test("vulnerability producers and Edge routes change the v8 fingerprint", () => {
  const spec=readFileSync(new URL("../api/openapi.json",import.meta.url));
- const fixture=readFileSync(new URL("../types/contract/testdata/agent-hub-v8.json",import.meta.url));
+ const fixture=readFileSync(new URL("../types/contract/testdata/agent-hub-v9.json",import.meta.url));
  const original=agentFixture(spec,fixture);
  const changed=JSON.parse(spec);
  const name=Object.keys(changed.components.schemas).find(name=>name.endsWith("ScanRun") && changed.components.schemas[name].properties.status);
@@ -168,7 +168,7 @@ test("vulnerability producers and Edge routes change the v8 fingerprint", () => 
 
 test("vulnerability problem fields and shared routes are covered by the v8 fingerprint", () => {
  const spec=readFileSync(new URL("../api/openapi.json",import.meta.url));
- const fixture=readFileSync(new URL("../types/contract/testdata/agent-hub-v8.json",import.meta.url));
+ const fixture=readFileSync(new URL("../types/contract/testdata/agent-hub-v9.json",import.meta.url));
  const original=agentFixture(spec,fixture);
  const manifest=JSON.parse(original);
  assert.ok(manifest.vulnerability.schemas.VulnerabilityProblem);
