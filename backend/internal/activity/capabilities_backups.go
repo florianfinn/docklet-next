@@ -69,7 +69,12 @@ func backupCapabilityAllowed(operation string, ref capability.ResourceRef, ps *a
 		return false
 	}
 	for _, permission := range required {
-		if !ps.Allows(permission, env) {
+		// Org-level grants are checked without an environment, as RequirePermission does.
+		scope := env
+		if !authz.IsEnvScoped(permission) {
+			scope = ""
+		}
+		if !ps.Allows(permission, scope) {
 			return false
 		}
 	}

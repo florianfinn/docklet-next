@@ -43,13 +43,28 @@ func TestBackupCapabilitiesRequireRouteRights(t *testing.T) {
 			kind, id, foreign = "volume", "example~data", "other~data"
 		}
 		t.Run(operation, func(t *testing.T) {
-			full := authz.NewPermissionSet()
-			full.PerEnv["example"] = map[string]struct{}{}
-			for _, grant := range grants {
-				full.PerEnv["example"][grant] = struct{}{}
-			}
+			full := grantRouteRights(grants, "")
 			require.True(t, storageDescriptor(t, full, capability.ResourceRef{Kind: kind, ID: id}, operation))
-			for _, ref := range []capability.ResourceRef{{Kind: kind, ID: foreign}, {Kind: kind, ID: ""}, {Kind: kind, ID: "~data"}, {Kind: kind, ID: "example~"}, {Kind: "container", ID: id}} {
+			for _, grant := range grants {
+				if !authz.IsEnvScoped(grant) {
+					// An org-level grant held only on one environment does not pass the route.
+					envOnly := grantRouteRights(grants, grant)
+					envOnly.PerEnv["example"][grant] = struct{}{}
+					require.False(t, storageDescriptor(t, envOnly, capability.ResourceRef{Kind: kind, ID: id}, operation), grant)
+				}
+			}
+			refused := []capability.ResourceRef{{Kind: kind, ID: ""}, {Kind: kind, ID: "~data"}, {Kind: kind, ID: "example~"}, {Kind: "container", ID: id}}
+			orgOnly := true
+			for _, grant := range grants {
+				orgOnly = orgOnly && !authz.IsEnvScoped(grant)
+			}
+			if orgOnly {
+				// Org-level routes ignore the environment, so any well-formed host passes.
+				require.True(t, storageDescriptor(t, full, capability.ResourceRef{Kind: kind, ID: foreign}, operation))
+			} else {
+				refused = append(refused, capability.ResourceRef{Kind: kind, ID: foreign})
+			}
+			for _, ref := range refused {
 				require.False(t, storageDescriptor(t, full, ref, operation), fmt.Sprint(ref))
 			}
 			if onVolume {
@@ -57,17 +72,28 @@ func TestBackupCapabilitiesRequireRouteRights(t *testing.T) {
 				require.False(t, storageDescriptor(t, full, capability.ResourceRef{Kind: "volume", ID: "example~a~b"}, operation))
 			}
 			for _, missing := range grants {
-				partial := authz.NewPermissionSet()
-				partial.PerEnv["example"] = map[string]struct{}{}
-				for _, grant := range grants {
-					if grant != missing {
-						partial.PerEnv["example"][grant] = struct{}{}
-					}
-				}
+				partial := grantRouteRights(grants, missing)
 				require.False(t, storageDescriptor(t, partial, capability.ResourceRef{Kind: kind, ID: id}, operation), missing)
 			}
 		})
 	}
+}
+
+// grantRouteRights places env-scoped grants on environment example and
+// org-level grants globally, skipping one grant when named.
+func grantRouteRights(grants []string, skip string) *authz.PermissionSet {
+	ps := authz.NewPermissionSet()
+	ps.PerEnv["example"] = map[string]struct{}{}
+	for _, grant := range grants {
+		switch {
+		case grant == skip:
+		case authz.IsEnvScoped(grant):
+			ps.PerEnv["example"][grant] = struct{}{}
+		default:
+			ps.Global[grant] = struct{}{}
+		}
+	}
+	return ps
 }
 
 func TestBackupTargetCapabilitiesRequireGlobalAdminOnHub(t *testing.T) {

@@ -72,14 +72,20 @@ it("shows a typed refusal for a directory beyond the listing budget", async () =
 });
 it("rediscovers running restores on reload without a POST and shows pending restart safety context", async () => {
   const f = setup(); f.state.overview.volumes![0]!.running = { activityId: "rediscovered", kind: "restore" };
-  const older = { restoreId: "failed", activityId: "old", kind: "full", mode: "replace", status: "failed", phase: "writing", at: "2026-10-28T02:00:00Z", pendingRestart: true, safetyBackupId: "safety", stoppedContainers: [{ id: "consumer", name: "database" }] } as const;
   // A later upload refused before writing must not hide the earlier pending obligation.
   f.state.overview.volumes![0]!.lastRestore = { restoreId: "later", activityId: "upload", kind: "upload", mode: "replace", status: "failed", phase: "preparing", at: "2026-10-28T03:00:00Z", code: "volume.backup.upload-invalid", reason: "link", pendingRestart: false, stoppedContainers: [] };
-  f.state.overview.volumes![0]!.pendingRestores = [older];
+  // Server order is newest first; the alert offers the oldest safety snapshot and every stopped consumer.
+  f.state.overview.volumes![0]!.pendingRestores = [
+    { restoreId: "second", activityId: "retry", kind: "full", mode: "replace", status: "failed", phase: "writing", at: "2026-10-28T02:30:00Z", pendingRestart: true, safetyBackupId: "snapshot-late", stoppedContainers: [{ id: "worker", name: "cache" }] },
+    { restoreId: "failed", activityId: "old", kind: "full", mode: "replace", status: "failed", phase: "writing", at: "2026-10-28T02:00:00Z", pendingRestart: true, safetyBackupId: "snapshot-early", stoppedContainers: [{ id: "consumer", name: "database" }] },
+  ];
   const volume = (await f.api.getBackupOverview("first")).volumes[0]!;
   renderWithApp(<VolumeBackupsTab volume={{ ...volume, backups: [] }} hostOnline />, f.adapter);
   await waitFor(() => expect(f.adapter.observeActionDetail).toHaveBeenCalledWith("first", "rediscovered", expect.any(Function)));
-  expect(screen.queryByRole("alert")?.textContent).toContain("database"); expect(screen.queryByRole("alert")?.textContent).toContain("safety");
+  const alert = screen.queryByRole("alert")?.textContent ?? "";
+  expect(alert.includes("database") && alert.includes("cache")).toBe(true);
+  expect(alert.includes("snapshot-early")).toBe(true);
+  expect(alert.includes("snapshot-late")).toBe(false);
   expect(f.state.requests.some((r) => r.method === "POST")).toBe(false);
   expect((screen.getByRole("button", { name: "Jetzt sichern" }) as HTMLButtonElement).disabled).toBe(true);
 });
@@ -95,6 +101,15 @@ it("keeps another host populated when one overview is unavailable", async () => 
   await screen.findByRole("link", { name: "data" });
   expect(await screen.findByText(/Backupinformationen für diesen Host sind nicht verfügbar/) !== null).toBe(true);
   expect(screen.queryByText("Kein Backup") === null).toBe(true);
+});
+it("shows a disabled or manual plan as manual on /backups instead of its stored time", async () => {
+  const f = setup(); const plan = f.state.overview.volumes![0]!.policy!;
+  plan.enabled = false; delete plan.nextRunAt;
+  renderWithApp(<BackupsPage />, f.adapter);
+  // Both fixture hosts serve the same overview, so every row carries the disabled plan.
+  const row = (await screen.findAllByRole("link", { name: "data" }))[0]!.closest("tr") ?? document.body;
+  expect(row.textContent?.includes("manuell")).toBe(true);
+  expect(row.textContent?.includes("02:00")).toBe(false);
 });
 it("requires key confirmation and discards a late key after close", async () => {
   const f = setup(); let finish!: (response: Response) => void;

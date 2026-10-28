@@ -15,9 +15,12 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Field, FieldLabel } from "@/shared/ui/field";
 import { Input } from "@/shared/ui/input";
 
+// The suffix follows the operator's calendar day, not UTC.
+const localDay = (d: Date) => `${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, "0")}${String(d.getDate()).padStart(2, "0")}`;
+
 export function RestoreDialog({ volume, runId, file, onClose, accepted }: { volume: Volume; runId?: string; file?: File; onClose: () => void; accepted: (id: string) => void }) {
   const t = useTranslations("volumes.backups"), all = useTranslations(), adapter = useAdapter();
-  const [mode, setMode] = useState<"replace" | "new">("replace"), [name, setName] = useState(`${volume.name}-restore-${new Date().toISOString().slice(0, 10).replaceAll("-", "")}`);
+  const [mode, setMode] = useState<"replace" | "new">("replace"), [name, setName] = useState(`${volume.name}-restore-${localDay(new Date())}`);
   const [busy, setBusy] = useState(false), [error, setError] = useState<string>();
   return <Dialog open onOpenChange={(open) => !open && !busy && onClose()}><DialogContent className="max-h-[90dvh] overflow-y-auto sm:max-w-xl"><DialogHeader><DialogTitle>{file ? t("uploadRestore") : t("restore")}</DialogTitle><DialogDescription>{t("restoreBody")}</DialogDescription></DialogHeader>
     <ChoiceCards label={t("restore")} value={mode} onChange={setMode} columns={2} options={[{ value: "replace", title: t("restoreReplace"), description: volume.consumers.some((c) => c.running) ? t("restoreReplaceHint", { names: volume.consumers.filter((c) => c.running).map((c) => c.containerName).join(", ") }) : t("restoreReplaceHintIdle") }, { value: "new", title: t("restoreNew"), description: t("restoreNewHint") }]} />

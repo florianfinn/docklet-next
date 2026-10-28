@@ -42,7 +42,7 @@ function BackupOverview() {
           name: <div><Link className="break-all font-medium hover:underline" to={`/volumes/${encodeURIComponent(volume.id)}?tab=backups`}>{volumeLabel(volume)}</Link>{volume.volumeExists === false && <p className="text-xs">{t("volumeMissing")}</p>}</div>,
           host: <HostChip host={hosts.byId.get(volume.hostId)} />,
           target: <span className="text-xs">{overview.targets.find((target) => target.id === plan?.targetId)?.name ?? "–"}</span>,
-          schedule: <span className="text-xs">{plan?.schedule.mode === "custom" ? t("customSchedule") : plan ? text.summary(plan.schedule) : t("nextManual")}</span>,
+          schedule: <span className="text-xs">{!plan?.enabled ? t("nextManual") : plan.schedule.mode === "custom" ? t("customSchedule") : text.summary(plan.schedule)}</span>,
           next: <span className="text-xs">{plan?.nextRunAt ? `${new Intl.DateTimeFormat(locale, { dateStyle: "medium", timeStyle: "short", timeZone: overview.timeZone }).format(new Date(plan.nextRunAt))} · ${overview.timeZone}` : t("nextManual")}</span>,
           last: <BackupBadge volume={volume} />,
         }} />; })}
