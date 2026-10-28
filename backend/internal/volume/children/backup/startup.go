@@ -196,5 +196,11 @@ func (s *Service) ReconcileStartup(ctx context.Context, restored bool) error {
 	if err := s.SweepWriters(ctx); err != nil {
 		return err
 	}
-	return s.SettleInterrupted(ctx, restored)
+	if err := s.SettleInterrupted(ctx, restored); err != nil {
+		return err
+	}
+	if s.deps.Engine != nil {
+		return s.deps.Engine.SettleVolumeRuns(ctx, s.WriterFenced)
+	}
+	return nil
 }

@@ -156,3 +156,10 @@ repository data or the agent protocol.
 
 The external-image licence and digest resolution record is
 [`docs/provenance/runtime-images.json`](../provenance/runtime-images.json).
+
+System-managed volume policies are retired at startup before scheduler activation.
+Their `system-backup:volumes:*` schedules are cleared and non-terminal runs settle
+as failed with the typed `runtime.interrupted` reason. Terminal Francis receipts
+remain audit history and age out under existing retention. The application schema
+migration cannot delete these records because the scheduler stores them separately;
+no scheduler record deletion is required.

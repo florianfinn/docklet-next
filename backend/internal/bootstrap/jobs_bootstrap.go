@@ -139,6 +139,9 @@ func reconcileCoordinatorStartupInternal(
 	volumes *volume.VolumeService,
 	systemService *system.SystemService,
 ) error {
+	if err := retireSystemVolumeJobs(ctx, jobs.Coordinator()); err != nil {
+		return err
+	}
 	if volumes != nil {
 		if err := volumes.SweepBackupWriters(ctx); err != nil {
 			return err

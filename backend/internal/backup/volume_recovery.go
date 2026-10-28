@@ -23,16 +23,23 @@ func (e *Engine) SettleVolumeRuns(ctx context.Context, fenced func(string) bool)
 		return err
 	}
 	for _, state := range states {
-		if state.Command.Kind != "volume" {
+		if state.Command.Kind != "volume" && state.Command.Kind != "system-volumes" {
 			continue
 		}
 		var payload struct {
 			VolumeName string `json:"volumeName"`
+			Candidates []struct {
+				Name string `json:"name"`
+			} `json:"candidates"`
 		}
 		if err = json.Unmarshal(state.Command.Payload, &payload); err != nil {
 			return err
 		}
-		if fenced != nil && fenced(payload.VolumeName) {
+		blocked := fenced != nil && payload.VolumeName != "" && fenced(payload.VolumeName)
+		for _, candidate := range payload.Candidates {
+			blocked = blocked || (fenced != nil && fenced(candidate.Name))
+		}
+		if blocked {
 			continue
 		}
 		state.Status = scheduler.Failed

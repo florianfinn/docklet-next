@@ -324,7 +324,7 @@ func (e *Engine) ReconcileDispatches(ctx context.Context) error {
 		return errors.Join(append(failures, err)...)
 	}
 	for _, state := range states {
-		if state.Status == scheduler.NeedsAttention || state.Command.Kind == "volume" {
+		if state.Status == scheduler.NeedsAttention || (state.Command.Kind == "volume" || state.Command.Kind == "system-volumes") {
 			continue
 		}
 		if repairErr := e.repairDispatchInternal(ctx, state.Command.RunID); repairErr != nil {
