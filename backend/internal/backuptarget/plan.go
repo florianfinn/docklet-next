@@ -17,7 +17,7 @@ import (
 	"github.com/moby/moby/client"
 )
 
-const VolumeLabel = "docklet.backup-target"
+const VolumeLabel = dto.TargetVolumeLabel
 
 type MountPlan struct {
 	Mounts         []mount.Mount

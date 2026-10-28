@@ -27,8 +27,7 @@ const (
 	VolumeBackupTriggerScheduled VolumeBackupTrigger = backup.VolumeBackupTriggerScheduled
 	VolumeBackupTriggerSafety    VolumeBackupTrigger = backup.VolumeBackupTriggerSafety
 
-	VolumeBackupFormatArchive VolumeBackupFormat = VolumeBackupFormat(volume.BackupFormatArchive)
-	VolumeBackupFormatRustic  VolumeBackupFormat = VolumeBackupFormat(volume.BackupFormatRustic)
+	VolumeBackupFormatRustic VolumeBackupFormat = VolumeBackupFormat(volume.BackupFormatRustic)
 )
 
 type VolumeBackupTrigger string

@@ -1,669 +1,236 @@
-# HTTP adapter, live channel and capabilities
+# API contract and UI mapping
 
-## Boundary and reuse
+The registered Huma hub and agent routes produce `api/openapi.json`. Run
+`pnpm install --dir web` and `pnpm run contract:generate` at the repository root
+after changing a route or wire DTO. The command uses the Go `openapi` subcommand
+without starting a service, then runs pinned `openapi-typescript` 7.13.0 to write
+`web/src/api/generated/schema.ts`. It also refreshes the spec's provenance hash.
+`pnpm run contract:check` compares both committed files with fresh output. Root
+lint and test invoke this check, so CI rejects either kind of drift. Generated
+DTOs belong at the transport boundary; feature components use the view models
+in `web/src/domain/` and the adapter port in `web/src/data/`.
+The generated declaration header takes its retrieval date from the OpenAPI
+source's provenance record, so repeat generation produces identical bytes.
 
-The production UI selects the HTTP adapter in `web/src/runtime.ts`; development
-uses the demo adapter. The existing
-`DockletAdapter` port in `web/src/data/adapter.ts` and `api.ts` defines calls and
-`Topic` names. `live.ts` shares action, metric and log subscriptions;
-`AdapterProvider.tsx` maps `subscribeChanges` topics to query invalidation;
-`run-gate.ts` deduplicates local starts. The disconnected adapter rejects calls
-and returns no invented data. The HTTP adapter belongs in `web/src/data/http/`
-and keeps these boundaries rather than making features import wire DTOs.
+The generated declaration file has an exact size exemption because the current
+schema produces more than 19,000 lines. ESLint ignores only that exact file;
+TypeScript still compiles it as part of the web project. The generator is an
+MIT-licensed development dependency and adds no runtime client.
 
-Arcane v2.15.1 already has the multiplexed `GET /stream` SSE operation
-`streamClient` for `activities` and `events`. Activity envelopes carry run
-snapshots or messages; event envelopes signal a changed event query. The
-adopted `backend/api/handlers/stream.go` and `types/stream/` provide this path.
-Arcane's `backend/api/ws/` and `backend/pkg/libarcane/ws/` instead serve
-per-resource WebSocket logs and stats. Reuse those WebSocket routes when their
-adapter methods gain live domain mappings; do not duplicate them for M3 run
-invalidation. Their Echo routes are absent from OpenAPI.
+## Activity list source completeness
 
-## HTTP calls and outcomes
+`GET /api/environments/{id}/activities` adds the optional response header
+`X-Docklet-Host-Reason: agent.unavailable` only to HTTP 200 pages that fall back
+to hub-stored summaries because a remote transport is unavailable. The existing
+paginated body keeps `success: true`: the hub read succeeded, while the agent
+source is incomplete. Empty partial pages carry the same header. Stored summaries
+retain their status and timestamps and are attributed to the registered host ID;
+this metadata supplies no fresh observation time or execution-completion evidence.
 
-`api/openapi.json` and `web/src/api/generated/schema.ts` are the checked-in
-operation and DTO contract. There is no generated runtime client yet. A small
-HTTP caller in the adapter uses generated `paths`/`operations` types, then maps
-wire DTOs to the existing view models. Route presence alone does not make an
-adapter operation available: its mapping and server capability must both exist.
+The signal applies per page. Readers must inspect every page and treat the entire
+host read as incomplete if any page is marked. Such a read must preserve earlier
+agent observations instead of treating their absence as deletion. Only a complete
+successful host read can clear the incomplete-source condition. Healthy complete
+local/remote reads, including empty reads and recovery, omit the header.
 
-| Adapter call or family | Current OpenAPI operation | Current handling |
-| --- | --- | --- |
-| `listActions`, run refresh | `list-activities`, `get-activity` per environment | Map recorded activity, message, step and output DTOs; enable the full `CodedActionRun` projection only where required fields have wire sources. |
-| `listEvents` | `listEvents` or `getEventsByEnvironment` for the selected scope | Map `EventEvent` to `CodedEvent`; use recorded DTOs. |
-| `subscribeActions`, `subscribeChanges` | `streamClient` (`activities`, `events`) | Parse envelopes and re-read changed snapshots/queries. |
-| `listHosts`, `listStacks`, `getStack`, `listContainers` | `listEnvironments`, `list-projects`, `get-project`, `list-containers` | Read host identity and aggregate host-scoped projects and containers through the shared agent forwarding path. |
-| `getSecurity` | Image inventory, batch vulnerability summaries, enriched environment findings and host-run lists | Aggregate validated host-qualified rows, preserve unavailable host states, read terminal host history without inventing samples. |
-| `runScan`, `cancelScan` | Per-image or host-wide vulnerability scan; activity cancel | Every scan reaches host admission. `409 vulnerability.busy` follows the returned activity. Activity settlement refreshes security and images. |
-| `getScanSettings`, `saveScanSettings`, `setScanEnabled` | Hub settings; job list for next-run projection | Independent feature/automatic switches, daily/weekly schedule, ignore-unfixed and three notification causes. Next run comes exclusively from the backend. |
-| `listSchedule`, `getSettings` | Update schedule projection; settings | M10 maps update jobs; `getSettings` remains unavailable for unconnected sections. Connected sections use their dedicated ports. |
-| `runStackCommand`, `runContainerCommand` | `deploy-project`/`down-project`/`restart-project`/`redeploy-project`; `start-container`/`stop-container`/`restart-container` | Map the seven guarded operation routes with async admission, stable IDs and targeted hub detail. Enable only scoped stack/container descriptors with the complete operation family and activity-read grants; bulk hub controls remain unavailable. |
-| `subscribeLogs`, `subscribeContainerLogs` | Echo project/container log WebSockets (outside OpenAPI) | Scoped log/read grants, JSON source mapping, bounded arrival buffers and conditional reconnect tail replacement. |
-| `createVolume`, `deleteVolume`, `renameVolume`, `planVolumePrune`, `pruneVolumes` | Environment volume create/delete/rename and plan/prune operations | Connected mappings with host or volume descriptors; prune retains server planning and confirmation. |
-| `createNetwork`, `removeNetwork`, `connectNetwork`, `disconnectNetwork` | `create-network`, `delete-network`, `connect-network-container`, `disconnect-network-container` | Connected hub routes for Direct and Edge, generated DTOs, scoped descriptors and topology/container refresh. |
-| `pullImage`, `removeImage`, `pruneImages` | `pull-image`, `remove-image`, `prune-images` | Connected host/image descriptors; typed stream frames, optional activity identity and synchronous per-host prune reports. Upload remains unavailable. |
-| Registry list/create/update/delete/test | `listContainerRegistries`, `createContainerRegistry`, `updateContainerRegistry`, `deleteContainerRegistry`, `testContainerRegistry` | Hub-owned configuration with global registry grants; explicit public projection and write-only credentials. Clear checks its separate descriptor. |
-| Other `DockletAdapter` reads, writes and subscriptions | Existing operation where listed, otherwise no matching operation | Expose unavailable until the owning milestone supplies the complete mapping. Existing WebSockets carry connected logs and stats. |
+Only typed transport-unavailable errors (Direct dial/timeout or disconnected
+Edge transport) permit this fallback. Credential rejection, authorization,
+upstream HTTP errors, decode/mapping failures and caller cancellation keep their
+existing error behavior and do not become partial HTTP 200 responses. This
+endpoint-specific hub read metadata grants no runtime execution or negative
+authority. Agent compatibility is governed by the lifecycle contract below;
+`tunnel/v1` and inventory-read behavior are unchanged.
 
-The HTTP boundary classifies an operation into these outcomes. Existing
-`Promise<T>` port methods return the `ok` value or reject with the typed
-non-`ok` outcome; the UI can use the same shape for error rendering.
+## DTO to view-model gaps
 
-| Outcome | Required fields | Meaning |
-| --- | --- | --- |
-| `ok` | `kind`, `value` | Confirmed server result, including `run.joined` and `run.fresh` when returned by admission. |
-| `not-available` | `kind`, `operationId`, `reasonCode`, `resourceRef` | No request is executed; UI renders the action disabled with a localized reason. |
-| `conflict` | `kind`, `code: "run.busy" \| "run.cancelling"`, `activeRunId` | Server refused admission; keep the active run visible. |
-| `error` | `kind`, `code`, `status` when HTTP responded | Request or mapping failed; never turn it into an empty collection or successful action. |
+Each row names one mapping gap and exactly one accountable issue or planned
+milestone. Names refer to OpenAPI component schemas and current web types; where
+several DTOs share one transformation, they are grouped as one feature boundary.
+The planned milestones are not yet GitHub milestones. An owner must implement
+the mapping and its contract tests before that feature claims live data.
 
-`run.started`, `run.joined` and `run.fresh` are admission results. A cancelling
-run remains `running` until completion. The HTTP adapter never exposes the
-server's executable work context. The client-side `run-gate.ts` remains a UI
-deduplication aid; server admission decides cross-tab conflicts and freshness.
-Runtime controls use deliberate command admission without the generic freshness
-shortcut, as defined in the [runtime record](runtime-control.md).
-
-Raw run output is a retained debugging feature. The hub persists it per run in
-`activities`, separate from coded messages: `backend/pkg/libarcane/activity/writer.go`
-captures execution output before its message normalization, and
-`backend/internal/activity/service.go` writes the original lines in batches with
-their timestamp, stream, text and optional step/level. The stored output is
-capped at **256 KiB of UTF-8 serialized lines per run**; on overflow, discard
-the oldest complete lines (or the oldest UTF-8 characters of a single oversized
-line) and set `outputTruncated`. The activity detail returned by `get-activity`
-gains `output` (an array of these lines) and `outputTruncated` DTO fields.
-The adapter maps the lines into web `ActionRun.output`; `RunOutput` shows a
-localized truncation marker when `outputTruncated` is true. This requires a
-schema change for the activity row, matching Go and generated OpenAPI/TypeScript
-DTO changes, and an `ActionRun` truncation flag. The
-[SQLite baseline](sqlite-database.md#fresh-migration-baseline-and-schema-proof)
-includes the retained raw-output fields.
-Output disappears with its run under the fixed 100-finished-runs-per-environment
-retention; active runs remain. The detail response is also proxied from agents,
-so these additive fields change the agent/hub contract and require a contract
-version and minimum-agent-version review before release.
-
-The web run states map directly from the wire, except `success`:
-
-| Wire status | `ActionRun.status` | German label | English label |
+| DTO schemas or absent wire shape | Web view models and port | Mapping gap | Owner |
 | --- | --- | --- | --- |
-| `queued` | `queued` | Wartet | Queued |
-| `running` | `running` | Läuft | Running |
-| `success` | `succeeded` | Erfolgreich | Succeeded |
-| `failed` | `failed` | Fehlgeschlagen | Failed |
-| `cancelled` | `cancelled` | Abgebrochen | Cancelled |
+| `EnvironmentEnvironment`, `EnvironmentAgentPairResponse` | `Host`, `AgentReport`, `HostsApi` | Identity, connection state, last successful contact and nullable agent checks map through the host HTTP reader. Onboarding writes and installation metadata remain separate. | M5 #81 reads and state; #84 onboarding |
+| `SystemActorHostInfo`, `SystemActorInstance` | `SystemComponent`, `HostsApi` | Actor diagnostics need a host component projection and availability state. | Planned M5 Hosts, transport and read inventory |
+| `EnvironmentHubDiscovery` | `HubDiscovery`, `HubApi` | Admin-only inspection supplies a pinned agent image and configured-first URL candidates with unverified reachability hints. | M5 #84 onboarding |
+| `ProjectDetails`, `ProjectRuntimeService`, `ProjectTag` | `Stack`, `StackDetail`, `Service` | Host-scoped IDs, runtime service status/health/ports and project tags map into stack reads; retained observations accompany disconnected reads. | M5 #82 |
+| `ContainerDetails`, `ContainerSummary`, `ContainerComposeInfo` | `ContainerInfo`, `DockletAdapter` | Container summaries map host-scoped IDs, compose/run/unclear origin, protected recreation restrictions and display state. | M5 #82 |
+| `DashboardSnapshot`, `DashboardSnapshotContainers`, `DashboardSnapshotImages` | `HostMetrics`, `ContainerMetrics`, `MetricsSnapshot` | Aggregate dashboard payloads do not directly provide the per-host view and metric units. | Planned M5 Hosts, transport and read inventory |
+| `ActivityActivity`, `ActivityMessage`, `EventEvent` | `ActionRun`, `OpsEvent`, `CodedActionRun`, `CodedEvent` | Map persisted step traces, affected services and message codes into the HTTP adapter view models. | #38 |
+| `JobscheduleConfig`, `JobscheduleJobStatus`, `JobscheduleJobRunResponse` | `ScheduledJob`, `DockletAdapter` | Job state and next-run time need a common schedule projection using the M4 hub time zone. | Planned M10 Images and updates |
+| `StreamEvent`, `ActivityStreamEvent`, `EventStreamEvent` | `subscribeActions`, `subscribeChanges` | SSE channel envelopes need parsing, reconnect and query invalidation. | #38 |
+| `ProjectDeployOptions`, `ProjectCreateReponse`, `SystemConvertDockerRunResponse` | `DeployInput`, `ImportResult` | UI drafts need lossless Compose fields and action identity; one-time import stays demo-only. | [M7 stack authoring](stack-authoring.md) |
+| Single-container `MessageResponse`; bulk `ContainerActionResult` remains separate | `ActionRun`, `runContainerCommand` | Map single start/stop/restart admission IDs and outcome knowledge; bulk partial results do not prove a single run succeeded. Edit/health/recreation are outside this mapping. | [M6 runtime control](runtime-control.md) |
+| Project lifecycle NDJSON and message responses | `runStackCommand`, `StackCommand` | Map start→deploy/up, stop→down, restart and redeploy admission and outcomes; preserve legacy stream/message callers. | [M6 runtime control](runtime-control.md) |
+| Echo WS JSON `LogMessage` (outside OpenAPI) | `LogLine`, `subscribeLogs`, `subscribeContainerLogs` | Use subscription-attempt/seq identity and optional stream/truncation metadata; seq is arrival order, without cross-service chronology or durable replay. | [M6 runtime control](runtime-control.md) |
+| `WorkspaceFileEntry`, `WorkspaceFileContent` | `DirListing`, `FileContent`, `VolumesApi` | Wire file entries need tree, path and editable-content projections. | [M8 storage contract](storage-workspace.md) |
+| `VolumeVolume` | `Volume`, `VolumeDetail` | Storage kind and consumers need a host-aware projection. | [M8 storage contract](storage-workspace.md) |
+| `VolumePrunePlan`, `VolumePruneResult` | `VolumePrunePlan`, `VolumesApi` | Candidate reasons and execution re-check results need a server contract. | [M8 storage contract](storage-workspace.md) |
+| `NetworkInspect`, `NetworkTopology` | `Topology`, `TopologyNetwork` | Docker topology needs a graph projection across hosts. | Planned M5 Hosts, transport and read inventory |
+| `NetworkCreateRequest` | `NetworkDraft` | IPAM and validation fields need a writable form projection. | M9 host-side validation and IPv4/IPv6 wire mapping; see [network management](network-management.md) |
+| `NetworkConnectContainerRequest`, `NetworkDisconnectContainerRequest`, `NetworkContainerEndpoint` | `ConnectNetworkInput`, `NetworkAttachment`, `connectNetwork`, `disconnectNetwork` | Container attachments need host-aware validation and fixed IPv4/IPv6 address mapping. | M9 host-side validation and IPv4/IPv6 wire mapping; see [network management](network-management.md) |
+| `ImageSummary`, `ImageListResponse` | `DockerImage`, `ImagesApi` | Image records need consumers and UI usage state. | Planned M5 Hosts, transport and read inventory |
+| `ImagePullOptions`, `PruneImagesInputBody`, `ImagePruneReport` | `PullImageInput`, `pullImage`, `removeImage`, `pruneImages` | PR1 supplies host guards, typed partial reports and the v7 base; dependent action UI mapping follows. | M10 PR1 backend safety; see [images and updates](images-updates.md) |
+| `ContainerregistryContainerRegistry` | `ImagesApi` | PR1 supplies explicit write-only credentials and safe public metadata; management UI follows. | M10 PR1 backend projection |
+| `ImageUpdateInfo`, `ImageupdateResponse`, `ProjectServiceUpdateInfo` | `UpdateInfo`, `AutoUpdatePolicy` | PR1 supplies read-only comparable-platform states; policies/schedules require PR2b. | M10 PR1 reads; lifecycle PR2a and policy PR2b remain gated |
+| No restore-point DTO | `restoreRestorePoint` | A saved pre-update image and configuration need a selectable restore point and action identity. | Planned M10 Images and updates |
+| `VulnerabilityRiskOverview`, `VulnerabilityRiskFinding`, `VulnerabilityScanResult` | `SecurityOverview`, `Finding`, `ScanRun` | Scan risk and finding DTOs need host/image grouping and severity presentation. | Planned M11 Vulnerability scanning |
+| `BackupSystemBackupRun`, `BackupSystemBackupPolicy`, `BackupBackupFileEntry` | `BackupRun`, `BackupSettings` | Restore targets, history and file selection need one UI backup model. | Planned M12 Backups and restore |
+| `BackupTargetTestOperation`, `BackupTargetCheck`, `BackupProblem` | `testBackupTarget` | The accepted activity identifies asynchronous testing; results retain admitted settings and safe codes. | Contract v9; [volume backups](volume-backups.md) |
+| `VolumeBackupPolicy`, `VolumeBackupEntry`, `VolumeBackupOverview`, `VolumeRestoreOperation` | `BackupPolicy`, `BackupRun` | The owning host reports schedules, running IDs, restore phases and restart obligations. | Contract v9; [volume backups](volume-backups.md) |
+| `AuthAuthenticationResponse`, `AuthLogin`, `SettingsSettingDto` | `AuthSettings`, `HubSettings`, `SettingsApi` | Sign-in modes and settings categories need typed, server-backed UI preferences. | Planned M4 Identity, setup and hub settings |
+| `UserPreferences` | `HubSettings` | Personal preferences need a server-backed profile projection. | Planned M4 Identity, setup and hub settings |
+| `UserUser`, `UserRoleAssignmentSummary` | `HubUser` | User rights need the agreed simple access projection. | Planned M15 Simple users with resource rights |
+| `NotificationResponse`, `NotificationUpdate`, `NotificationTestResponse` | `NotificationChannel`, `SettingsApi` | Channel configuration and test results need UI channel kinds and safe status. | Planned M13 Notifications and Auto Heal |
+| No bounded Auto Heal DTO | `AutoHealSettings` | Restart limits and exceptions need a distinct persisted contract. | Planned M13 Notifications and Auto Heal |
+| No service-widget DTO | Dashboard widget view models | Service polling, credentials and failure states have no wire contract yet. | Planned M16 Service widgets with real data |
+
+The table records existing mismatches, not a promise that every listed API
+operation is ready for production use. Some schema types are nested Docker
+structures rather than separately callable operations. The owning milestone
+resolves each mapping when its endpoint and UI slice are implemented.
+
+## Runtime lifecycle contract
+
+[Runtime control](runtime-control.md) defines the seven lifecycle operations:
+project deploy/down/restart/redeploy and container start/stop/restart. They share
+one application-owned runtime with receipt-backed admission, exclusion,
+cancellation and settlement. Existing operation and activity-read permissions
+apply before admission, joins or conflict details. Generic activity writers
+cannot complete a runtime-owned run or release its execution slot.
+
+`Prefer: respond-async` returns HTTP 202 for a new admission and HTTP 200 for a
+retained or joined admission. Both carry `activityId`, `code` and `activity`;
+`activityId` equals `activity.id` and the executor's run UUID. Acceptance never
+proves successful execution. A retained `Idempotency-Key` resolves to its original
+run after ten minutes and without fresh Docker access. Another caller or changed
+digest receives `run.request-mismatch` without the bound ID. Removal retains a
+registration tombstone and returns HTTP 410 `runtime.target-removed`.
+
+Legacy project down/restart and container start/stop/restart return HTTP 200
+`MessageResponse` with the run ID only after confirmed workflow success. Admitted
+unknown, interrupted, cancelled, failed, waiter timeout and writable waiter
+cancellation return their coded non-2xx envelopes and the same ID. Project
+up/redeploy retain NDJSON activity-started and output frames. A successful stream
+ends with `done`; after flushing, non-success is an error frame with `code` and
+`activityId` on the existing HTTP 200 stream. Pre-flush admission failures retain
+their HTTP status. Disconnect detaches the waiter and cannot cancel execution.
+
+Runtime snapshots require the paired `outcomeState` and `cancelRequested` fields.
+Generic historical or unrelated activities may omit both.
+
+Remote admission also projects `outcomeState: unknown` while delivery is pending
+or in flight and no authoritative executor answer has arrived. This alone is not
+evidence of a lost outcome. Command consumers must read the existing targeted
+`RuntimeHubDetail.recovery.unknownReason`: absent means delivery remains
+unconfirmed without a recorded evidence-loss reason; present identifies actual
+uncertainty such as transport or executor continuity loss. Generic list/SSE
+knowledge alone must not trigger an outcome-loss warning on every remote Start.
+If targeted detail is unavailable, keep the outcome unconfirmed; do not infer
+success, progress, evidence loss or permission to replay. These semantics add no
+projection field or vocabulary and apply before command UI capabilities open.
+
+Manual recovery
+requires effective global administration plus activity read/cancel access,
+reason and acknowledgment that the executor stopped and Docker state was checked.
+Recovery details preserve executor evidence beside the immutable hub disposition;
+release cannot fabricate successful effects or replay execution.
+
+The trusted agent receiver registers execute/query/cancel and registration/target
+metadata routes with the existing manager credential. Ordinary bearer,
+administrator and bootstrap credentials cannot grant receiver authority. Direct
+and Edge requests recheck agent access and compatibility; Edge has no Direct
+fallback. Numeric agent contract version and minimum are both 9. The fingerprint
+hashes the exact `types/contract/testdata/agent-hub-v9.json` bytes, retaining the
+historical fixtures and the accepted runtime, image and vulnerability surfaces.
+It includes volume backup routes, schemas, codes, upload reasons and transport
+limits, plus agent-only target sync metadata.
+Runtime update/restore activation remains gated on PR2a; policy/schedule/notify
+activation remains gated on PR2b. See [images and updates](images-updates.md).
+The v3 and v4 fixtures are preserved. Runtime queries have no compatibility
+exception. Existing health/version/self-upgrade exceptions, `tunnel/v1`, historical OpenAPI and
+shipped migrations remain unchanged.
+
+The shared foundation owns runtime wire types, current exports and route
+snapshots. Command, log and session mappings retain their own consumer boundaries;
+UI capabilities stay unavailable until their complete mappings pass. Runtime JSON
+logs reuse Echo WS outside the Huma export. The CLI treats EOF before explicit
+`done` as interruption while preserving progress and terminal errors.
 
-The activity feature catalogues supply these labels; queued and cancelled
-render as distinct states throughout run surfaces, including the result view.
+## Stable message codes
 
-## Read resilience and request bounds
+`types/activity/code.go` owns the code catalogue. OpenAPI exposes these values as
+`messageCode` enums for activity and event responses. Display text is separate;
+callers creating events must send a listed code. A run status transition uses
+`activity.<status>`; admission results use `run.*`. The catalogue is:
 
-The shared identity-owned HTTP caller retries a GET exactly once when fetch
-rejects before receiving a response with a TypeError or NetworkError. Both
-attempts use the same abort lifetime. An aborted request, an HTTP status, a body
-or mapping failure, and POST/PUT/PATCH/DELETE never enter this read retry. The
-runtime command admission policy below remains owned by its command transport.
-
-Activity discovery maps the opt-in list-only summary projection, using one
-full-window (`limit=-1`) list read per host and zero generic or runtime detail
-reads. Snapshot/error envelopes invalidate only their host. Known progress and
-messages share a targeted per-run read, with a one-second trailing throttle when
-no detail view is open. Opened views share separately owned detail/history reads;
-summary rows never retain fetched output or message history.
-
-Malformed/gap recovery queues one trailing read without aborting. A stream reopen
-may interrupt a read that started before its preceding error exactly once per
-lineage, transferring unresolved callers to a protected replacement. Further
-reopen-only signals reuse it; genuine new signals can queue another sequential
-read. Activity HTTP reads have a 40-second deadline, above the dedicated
-30-second hub-to-agent forwarding budget and required merge margin; host lineages
-and aggregate callers have 80/90-second bounds. See
-[activity discovery](activity-discovery.md) for the state table, consumer/lifetime
-rules, partial evidence, precise request budgets and mutation matrix.
-
-Event history retains the complete history used by Dashboard and Activity Center.
-Pages request the effective size of 100 and run strictly sequentially. Event stream
-messages carry invalidation only, so they cannot supply incremental event rows.
-Only events-channel messages and stream recovery invalidate history. HTTP and
-mapping failures remain visible and a deliberate retry can start a new load.
-
-Discovery, recovery and history share a generation-scoped single-flight policy: idle notifications start a read only with a mounted subscriber; cached rows are not demand, and the next explicit request always reads fresh.
-Each start clears pending, so bursts queue one read and notifications during any trailing read can queue one more; callers after a notification await the next result, earlier callers receive the current result unless an eligible pre-error reopen
-transfers their unresolved waiters once.
-Every start and publication checks the identity generation; replacement, logout or 401 immediately clears old published runs and cancels old waiters and requests, preventing late publication and old trailing work.
-
-## Runtime command mapping
-
-The [runtime-control record](runtime-control.md) defines the M6 specialization,
-including the command specialization: command calls opt
-into admission JSON and resolve the same durable hub/agent ID, preserve coded
-conflicts (including request mismatch), and refresh targeted hub runtime detail.
-A command keeps one opaque UUID across CSRF and at most one network retry, bounded
-by ten minutes of local elapsed time. A final response discards that key. A lost
-or malformed final admission remains explicitly ambiguous and prevents automatic
-replacement, including after the browser gate's ordinary missing-run timeout.
-Known IDs are refreshed through hub detail; list absence cannot settle them.
-Detail reads while observed share in-flight work and a two-second cadence. Three
-unconfirmed or failed reads stop automatic observation until explicit refresh or
-an activity notification; confirmed active work stays observed until terminal.
-Identity changes abort this consumer's requests and reject late callbacks.
-
-Token preflight failures are pre-admission errors and allow a later deliberate
-intent. The consumer identifies raw token-read transport failures at their source;
-the existing CSRF client retains its header and retry policy. A definitive CSRF
-refusal followed by a failed token refresh also leaves no admission hold, unless
-an earlier command send already had an uncertain response. Such earlier uncertainty
-remains held with the original key; a later denial cannot prove it never ran.
-
-Remote unknown knowledge with no targeted recovery reason is unconfirmed delivery,
-not outcome loss. A present `recovery.unknownReason` shows blocked uncertainty;
-missing detail never manufactures either loss or completion. Cancel intent remains
-nonterminal. Administrator release uses existing effective global-admin and
-activity read/cancel permissions, explicit acknowledgment and a nonempty reason;
-its failed/unknown disposition and later executor evidence remain separate.
-Failed targeted detail during aggregate or single-run projection retains the
-same host/run's cached recovery evidence, cancellation knowledge and current-intent
-marker. A newer successful targeted answer replaces that observation under the
-existing sequence guard. Identity reset clears this consumer cache. A terminal
-unknown run without recovery detail says its outcome is not confirmed, without
-claiming confirmation is pending or that an already released target is blocked.
-
-Permission reads share in-flight work and cache validated successes for at most
-thirty seconds of local elapsed time. Failed reads are evicted for the next access;
-unknown grants are shown as unavailable rather than a fabricated server denial.
-A failed rights read does not discard readable run evidence. Cancellation and
-release still require the existing grants, and actual server denials remain
-authoritative. No grant or authentication policy changes at this boundary.
-
-Notification history seeds unseen rows of initially incomplete sources silently,
-while already observed transitions and identifiable current claims/admissions
-notify normally. The first complete recovery still seeds unseen history. No
-cross-device clock comparison is used: indistinguishable unseen history and new
-remote actions during initial incompleteness cannot reliably be separated.
-Unanswered/lost-continuity executor knowledge stays visibly blocked; settled
-local interruption fails with effect unverified and releases. Accepted admin
-recovery is a separate hub disposition, never inferred success. Legacy CLI
-NDJSON/message callers retain their response modes. Bulk `ContainerActionResult`
-is not the wire source for single-container admission.
-
-Runtime logs use the existing Echo WS routes. Subscription attempt plus seq
-identifies lines; seq orders arrival within that source, not timestamps across
-services or stdout/stderr. Resource changes clear hook state, reconnect establishes a tail
-boundary and bounded buffers expose loss/truncation. Runtime logs remain separate
-from retained run output. Local session revocation closes SSE and all viewer WS
-connections through explicit closers and bounded durable session revalidation,
-clears adapter/live caches and rejects late identity-generation callbacks;
-accepted Docker work continues. Other tabs observe server closure/identity
-rejection without a new broadcast mechanism.
-
-The cross-host action-load failure in #102 requires a bounded, separately owned
-projection prerequisite before M6 action UI activation: healthy runs plus explicit
-source failures, targeted detail availability and reconnect recovery. No failed
-source may become an empty successful read. Its owner controls shared partial-read
-fields before runtime consumers adopt them; this does not redesign inventory.
-The runtime foundation owns the other shared port/domain/capability additions
-and required v4 execution/outcome contract changes; optional additive log metadata
-belongs to the log owner. Opaque UUID retries use ten minutes of client-local elapsed time only. Hub
-first-seen time is audit attribution, never an age rejection or replacement rule;
-retained server bindings still return their original run. Compact outcome
-evidence lasts at least twenty-four hours independently of full output history.
-Supported delivery and receiver admission are bounded before acceptance; accepted
-work survives caller timeout. Only recent, continuous-generation negative proof
-may release a scope; old or uncertain absence stays unknown.
-Only complete scoped command and log mappings enable capabilities. Browser
-identity lifetime also governs every live consumer and query observation.
-
-## Bounded runtime log mapping
-
-The HTTP adapter subscribes to the existing hub-facing project/container Echo
-routes, with `format=json`, `follow=true`, `tail=100`, `timestamps=true` and
-`batched=false`. Direct and Edge selection remains behind the hub route. It sends
-no browser credential to an agent. Only the matching scoped log and resource-read
-grants enable each descriptor; the endpoint retains its existing log permission
-and Origin checks. Existing text/default clients and 50-entry JSON batches remain
-compatible. JSON arrays preserve received order; malformed mandatory fields stop
-mapping visibly. Optional stream/truncation omissions map to unknown/false.
-
-Docker frames are consumed in fixed chunks, with one bounded prefix per stream;
-excess is discarded through the newline. Follow and non-follow use the same
-incremental reader, without whole-output buffering. Completed lines serialize
-arrival, including non-follow stdout/stderr; neither timestamp nor stream implies
-chronology. Compose bounds both TTY and framed input before its own text writer.
-Its existing inspect metadata supplies service and TTY identity, without loading
-Compose/environment files. Structured viewers receive records before normalization;
-legacy text uses the existing stderr marker. Only recognized wire semantic levels
-become severity. Stderr alone stays informational and application text is retained.
-This changes older structured stderr severity to `info`; optional `stream` identifies stderr.
-Older agents remain accepted with unknown stream metadata and their recognized
-semantic levels. No in-repository external consumer requires the former levels.
-Compose v5.6.0 inspects the same full container ID before opening logs. Missing
-inspect Config or unknown TTY metadata now fails visibly before opening a log
-response, rather than passing an unbounded body into Compose. Recheck that ordering
-when upgrading Compose. Docker system-error frames retain at most 1,024 bytes of
-daemon diagnostic, stop without draining oversized frames, and never become
-application rows. A failed shared source emits one server warning with bounded
-kind/resource identity, omitting raw errors, credentials and request bodies.
-
-The browser shares one source per resource/options and identifies entries with
-resource, a monotonically increasing client connection attempt, and source seq.
-An observed seq gap produces a localized entry. Reconnect clears old rows,
-requests a tail and displays a boundary. The tail is supplied only when creating
-a new server source: a source already held by another tab/user sends future lines
-only, including on pause/resume or reconnect. The server does not retain a replay
-buffer. Local listeners sharing the browser channel receive its bounded snapshot.
-Equal text is retained. The log owner makes at most five delayed reconnect attempts
-(1, 2, 5, 10, 30 seconds) before explicit retry. Valid delivery followed by thirty
-seconds of continuous connection replenishes this budget; brief deliveries,
-open-only connections and empty batches do not. It pauses offline and after identity
-rejection. A stream close alone triggers a bounded identity read rather than
-assuming logout. Last unsubscribe closes its socket and cancels its frame,
-identity read and reconnect timer. The existing
-adapter identity reset also clears this log owner's channels and paused-hook views;
-the shared session registry supplies server closure, while adapter identity reset also clears metrics, actions and RunGate state.
-
-The complete browser resource budget is 2,000 entries and 1 MiB of serialized
-UTF-8 data. The published immutable snapshot and the mutable next-frame window
-each reserve half (1,000 entries / 512 KiB), so even a suspended animation frame
-cannot double that budget. Oldest complete entries are evicted visibly; each line
-is at most 64 KiB including JSON escaping. The source has no other pending array,
-and publishes at most once per animation frame. Pause retains only the current
-resource snapshot. Resource/adapter/identity changes clear it. Clear view records
-arrival IDs, so a later message with an older timestamp remains visible.
-
-Source queues remain raw/mapped 256, broadcast 1,024 and per-client 256. The shared
-hub keeps its drop and slow-client removal behavior. Seq is assigned before
-broadcast; a final dropped line without a later seq cannot be detected. Logs are
-ephemeral, with no durable cursor, content deduplication or lossless guarantee.
-The separate retained command-output cap remains unchanged.
-
-## Capability descriptor
-
-The server is the source of truth for each operation's descriptor:
-`{ operationId, available, disabledReasonCode?, resourceRef: { kind, id } }`.
-The demo adapter synthesizes the same descriptor from its in-memory supported
-operations and `DemoDb` fixture resources in `web/src/data/demo/demo-adapter.ts`.
-`operationId` names the adapter operation, and `resourceRef` identifies its hub
-or target resource without defining rights. An unavailable descriptor requires
-a reason code; an available one has no disabled reason. The checked-in
-`get-capabilities` operation serves descriptors for the requested resource ref.
-The HTTP adapter exposes the descriptor to the UI, merges it with its implemented mapping, and treats missing
-or unreadable entries as unavailable with a generic reason code. UI action controls read that result to set
-`disabled` and show a translated reason; direct calls still return
-`not-available`. Resource-right evaluation and policy remain M15's decision.
-
-## Live channel and recovery
-
-M3 subscribes only to `activities` (runs) and `events` (query invalidation)
-through Arcane's existing `streamClient` SSE transport. A start, progress,
-completion or completion message means “snapshot changed”, not guaranteed
-delivery. `subscribeActions` re-reads the affected run/list via
-`list-activities`/`get-activity`; `subscribeChanges` reports affected existing
-`Topic` values, at least `events`, to `AdapterProvider.tsx`. No event is treated
-as authoritative state or a replay log.
-
-On first connect, reconnect, malformed envelope or detected event loss, re-read
-the subscribed run and event topics, including the active run detail. This
-recovers a committed completion whose event was lost in a hub crash. Where an
-envelope names a narrower affected topic, invalidate that topic; otherwise
-refresh the subscribed M3 topics. Preserve WebSocket logs and stats as separate
-later streams. The deployment has one hub process per database, so no
-multi-hub fan-out protocol is needed.
-
-## Identity, settings and production routes (#27)
-
-The 2026-10-22 whole-app audit measured 262 `import.meta.env.DEV` matching
-lines across 47 non-test files, 59 empty production catalogue values per locale,
-and 32 `QueryError` call sites (30 without the source error). The production
-bundle guard already rejects demo, design-lab and test modules across the full
-module graph, including modules removed by tree shaking.
-
-M3 provides the HTTP adapter for events and activities. M4 connects `/auth/mode`,
-`/auth/me`, local login/logout, password changes, profile language and setup status
-through that adapter. Only `/auth/mode` selects the active policy; the legacy
-`authLocalEnabled` value is not a mode source. Production login/setup routes use
-complete catalogues. Route gates require sign-in and setup before the dashboard.
-Local first-run setup changes the initial password before completion. Switching
-an already configured hub to local also forces any outstanding password change.
-
-`getConnectedSettings` reads General and Activity through
-`GET /environments/0/settings`; section writes use `PUT` on the same path. Sign-in
-mode is read-only. The process `TZ` drives backend schedules and is projected as
-read-only `effectiveTimeZone` for `IntlProvider` and schedule display. General
-explains that operators change `TZ` in the startup environment and restart the
-hub. Setup stores agent-host project defaults under `agentProjectsDirectory`,
-separately from the hub's own `projectsDirectory`. Important-action presentation
-uses the stored Activity value. Profile language is stored per administrator via
-`PUT /auth/me/profile` and applied on load. Other settings sections retain their
-existing boundaries.
-
-The UI exposes no editable history limits. Retention stays at 500 events and
-100 finished runs per environment; active runs remain. Host onboarding and its
-installer use the connected M5 routes and catalogues.
-
-Unsupported reads preserve their typed error through `QueryError`: missing
-adapter mappings render a neutral unavailable state, while transport/mapping
-failures remain load errors. This includes the dashboard schedule (M10), security
-(M11) and unconnected settings sections. Volume backup plans, history and actions
-remain owned by M12. Their gates prevent unsupported reads and actions from
-mounting; list/detail/storage-card badges say that backup status is unavailable,
-counts stay unknown and backup navigation is disabled with a reason. A direct
-backup URL also renders that reason. Missing backup DTO fields never establish
-that a volume has no backup. Stack restore points retain the same M12 boundary.
-
-The host-management owner supplies the remaining host edit, reconnect and agent
-restart mappings; the runtime owner supplies per-service restarts. Until then,
-these controls stay disabled with capability reasons. Update installs/checks and
-automatic policies (M10), container origin assignment (inventory owner), source
-imports (stack-authoring owner), backup target tests (M12) and notification tests
-(notification owner) follow the same rule. Hub database backups keep their own
-implemented access/maintenance contract; they are separate from volume backups.
-
-Unchecked image results retain an incomplete update status instead of claiming
-that every image is current. Product CPU/RAM accessible values, deployment empty
-states, image confirmations
-and host messages have complete English and German production text. Dashboard
-app entries open HTTP/HTTPS links. Network query parameters cannot replace live
-inventory with benchmark data; enlarged topology fixtures belong only to isolated
-performance tests and the production graph guard rejects their module.
-
-The production catalogue test evaluates both catalogues with `DEV=false` before
-importing them. It rejects every empty string except the exact, reasoned list in
-`production-empty-exceptions.test-support.ts`, and rejects stale exceptions.
-The 2026-10-22 final audit has 51 such keys per locale, zero empty product values,
-and 33 `QueryError` call sites all carrying their source error. The 263 `DEV`
-matching lines in 48 non-test files retain these development-only categories:
-
-- Preview and design-lab routes/catalogues, shell live/lab controls and fixture
-  user identity; the production runtime removes those controls and uses sign-in.
-- Simulation badges, failure-injection buttons, simulated onboarding connection
-  controls and the development-only host installer sheet. Connected installation
-  remains available through onboarding.
-- Synthetic dashboard service widgets and their configuration. Product app links
-  and personal dashboard layout preferences remain available.
-- Demo run-text encoder messages and fixture-only report labels. HTTP activity
-  mappers use wire codes and raw output, and never synthesize simulation markers.
-- Explicit alternate development wording whose production branch is complete.
-  The lab override note itself cannot render outside development.
-
-The full production module graph guard rejects demo adapters, design-lab/dev/test
-modules and benchmark generators even when later tree shaking removes them.
-Its negative builds inject the demo adapter and design-lab modules to prove the
-boundary. Production runtime route tests cover login to dashboard, hosts,
-containers, stacks, volumes and file reads using HTTP DTO fixtures and the
-sanitised recorded workspace envelope. They also cover unavailable capabilities,
-backup deep links, blocked preview routes and ignored benchmark parameters.
-
-## Contract test matrix for #38
-
-Each numbered case runs against the demo adapter and HTTP adapter with the same
-scenario; HTTP responses and streams use recorded DTOs, while the demo supplies
-the equivalent view-model state. The last column names a mutation that must
-make the case fail.
-
-| # | Required observation | Red mutation |
-| --- | --- | --- |
-| 1 | Recorded activity and event DTOs produce the same coded run/event fields in both adapters, including steps, affected services and message codes. | Drop `affectedServices` or a message code in the HTTP mapper. |
-| 2 | An unsupported operation is disabled with the server reason and direct invocation returns `not-available` without a request or run; the demo descriptor comes from its in-memory supported operations and `DemoDb` fixtures. | Return a synthetic action ID or omit the disabled reason. |
-| 3 | A descriptor missing an entry or failing to load leaves that operation unavailable; the demo adapter uses its in-memory descriptor with an entry removed or a forced load failure. | Treat missing capability as available. |
-| 4 | `run.busy` and `run.cancelling` preserve their code and active run ID; neither starts another action. | Convert a conflict into `ok` or erase `activeRunId`. |
-| 5 | A transport or DTO mapping error renders as error, with no empty or successful fallback. | Catch the error and return `[]` or a fake ID. |
-| 6 | Start, progress, terminal and completion-message notifications re-read the affected run; event invalidation refreshes the event query. The fixture commits a newer run detail than the stream envelope carries, so content is stale at notification time. | Trust the stale stream payload as final state or drop the `events` invalidation. |
-| 7 | Reconnect and detected event loss re-read subscribed runs and events, revealing a committed completion that had no delivered event. | Remove reconnect refresh or omit active run detail. |
-| 8 | The production route uses the HTTP adapter for M3 data and offers no simulated success or empty simulation label. | Select the demo adapter or restore the empty `activity.output.simulated` value. |
-| 9 | Settings expose no editable history-limit fields. | Restore a numeric history-limit control. |
-| 10 | Recorded raw execution lines survive a detail re-read and appear in `ActionRun.output` with their timestamp, stream and text. | Drop output from `get-activity` or map it to an empty array. |
-| 11 | A run exceeding 256 KiB retains the newest output within the cap and displays a truncation marker. | Keep the oldest lines, exceed the cap or omit `outputTruncated`. |
-| 12 | Pruning a finished run removes its output while a retained active run keeps its output. | Store output without activity-row ownership or delete active output. |
-| 13 | Wire `queued` renders the distinct Wartet/Queued label and stays nonterminal. | Map `queued` to `running` or reuse its label. |
-| 14 | Wire `cancelled` renders the distinct Abgebrochen/Cancelled label and is terminal. | Map `cancelled` to `failed` or reuse its label. |
-
-## Host inventory observations
-
-The hub retains successful project and container JSON reads in its process-local
-hoststate store after caller authentication and resource authorization. Keys
-include host ID, resource suffix and the normalized pagination/filter query.
-`X-Docklet-Observed-At` carries the successful read time. On
-`agent.unavailable`, `agent.invalid-token` or `agent.update-required`, a retained
-response keeps that time and adds `X-Docklet-Host-Reason`. Fresh successful reads
-replace the retained value and omit the reason. Other failures, including caller
-authorization failures, never become cached successes. These headers are hub
-projections and do not change the agent contract or its compatibility boundary.
-
-The HTTP adapter gives inventory resources IDs of `<host-id>~<resource-id>` to
-prevent collisions across agents; raw IDs are restored at the HTTP boundary.
-Activity and event resource links use the same host-scoped IDs; events without
-a host identity expose no project link.
-The backend owns both IDs and neither contains the separator. The UI keeps
-retained rows visible and displays their timestamp and distinct host reason.
-Without a successful snapshot it shows the host reason and states explicitly
-that no retained values exist. A hub restart clears snapshots. Ordinary reads
-still pass through the compatibility check before either direct or Edge
-forwarding; an update-required host receives no ordinary agent request.
-
-Compose project tags map to stack labels; runtime containers supply service
-status, health and published ports. Complete Compose project/service labels
-identify Compose containers. Partial Compose metadata or evidence of an external
-manager leaves origin unclear. Containers without these labels map to Run.
-Recreation restrictions include Compose ownership, unclear origin and the
-server's protected-container flag. Agent-labeled workloads are excluded from
-both lists; the backend excludes their tracked Compose projects before pagination.
-The seven guarded lifecycle commands, stack authoring, volume workspace writes
-and network writes have connected mappings. Each write family checks its own
-scoped capability before dispatch.
-
-Images, volumes, network details/topology, published ports and dashboard reads
-use the same retained-response store and observation headers. Dedicated agent
-resources are hidden before pagination; shared resources and Docker's built-in
-networks remain visible. Image consumers include stopped containers. Network
-edges describe membership and configured Compose `depends_on`, never traffic.
-
-The HTTP adapter reads host resource measurements through the existing
-compatibility-gated `/ws/system/stats` forwarding route and collects container
-samples through resource-sorted container reads. Percentages and byte units
-are mapped explicitly. Host histories retain up to 60 observed samples in the
-adapter session; a disconnect preserves the last sample with its time and host
-reason. A new browser session has no retained metric samples. Unreported disk
-capacity, growth, image metadata and volume sizes remain explicitly unavailable.
-Image pull/remove/prune use scoped live mappings. Volume create, delete, rename,
-planned prune and file workspace writes are connected; volume backup and restore
-remain outside these mappings.
-
-Network writes use `/api/environments/{hostId}/networks` for both Direct and Edge.
-Create checks `createNetwork` at `{ kind: "host", id: hostId }`; remove, connect
-and disconnect check their operation at `{ kind: "network", id: inventoryId }`.
-The inventory ID contains the host and Docker network ID; transport restores the
-raw network/container IDs. A host-scoped descriptor does not grant those three
-network operations. Hub descriptors aggregate availability and do not authorize
-a specific target. The Create toolbar control is enabled when any online host
-permits create. It prefers the displayed host when permitted, otherwise another
-permitted online host. Row, detail and dialog controls use their target refs.
-
-Create maps enabled families, labels, driver options and auxiliary reservations
-with generated DTOs, including explicit `enableIPv4=false` for IPv6-only networks
-and the LAN parent under `options.parent`. The backend remains authoritative for
-validation and delete protection. Topology takes built-in state from the network
-summary's `isDefault` flag and keeps stopped endpoint IPAM reservations visible
-and unavailable to pool hints. Individual deletion includes unused networks;
-there is no network prune UI. See [network management](network-management.md).
-
-Network commands report the existing `topology` and `containers` change topics,
-which clear shared inventory reads and invalidate subscribed queries without
-polling. Known `network.*` errors become translated domain errors, including
-`network.overlap`; unknown codes retain the generic error path. A lost or
-malformed write response reports `network.outcome-unknown`, instructing the user
-to inspect state before retrying, without implying rollback or retrying the write
-automatically. Network and volume writes also classify HTTP 502/504 with
-`agent.unavailable` as outcome unknown and invalidate their inventories; these
-proxy responses cannot establish that the agent did not apply the write.
-Read failures keep their existing classification. Volume prune reports unknown
-outcomes per submitted candidate. HTTP 409 `volume.exists` maps to the existing
-translated volume name-conflict message for create and rename; unknown codes
-retain generic handling. Results and toasts from a closed dialog, a previous host
-or an expired browser identity are discarded.
-
-
-## Browser session lifetime
-
-The local browser session ID binds viewer handles through the process-shared
-`backend/pkg/sessionlife` registry. SessionService supplies durable session and
-user validation independently of token caches. Authentication contexts carry
-that validator to SSE, local WebSockets and the Direct/Edge viewer bridges.
-Registration precedes validation. Explicit service revokes close matching handles
-after persistence; transactional password/recovery writes, deletion, expiry and
-mode changes are detected by the existing 15-second SSE or 54-second viewer
-cadence. Direct forwarding owns its one cancellable 54-second check. Viewer
-closure releases both proxy legs and source references, preserving the host
-Edge tunnel and application-owned runtime execution. API-key streams without a
-session and proxy/none requests retain their existing credential/host lifetime.
-
-The adapter's identity generation aborts old requests, rejects late responses
-and captured callbacks, closes SSE/log/metric sockets and their timers, and
-clears private runs, histories and buffers. RunGate entries and listeners are
-reset on identity loss/replacement, including durable unresolved runs and
-ambiguous intents without a known ID. Mounted live/query observers reattach for
-a fresh identity; paused log views clear through the accepted log lifetime.
-The provider cancels old queries and records `currentUser` as null on loss.
-A socket close alone starts a bounded durable identity read before reconnect;
-credential-check form failures remain inline. Known same-user renewal retains
-its existing observation/notification policy. Server execution remains durable
-and does not depend on any viewer lifetime.
-
-## Images and registries (#230)
-
-Pull accepts only an image reference; selecting a saved enabled registry changes
-the reference host so the executor applies its saved-credential lookup. No inline
-credentials or registry ID are sent. The optional activity frame preserves its
-real identity; EOF without an error or done frame is an unknown outcome, with
-that activity available for inspection. Proxy 502/504 `agent.unavailable` writes
-are unknown outcomes too. Image/registry CRUD failures read `error.code`, while
-registry tests read the flat `ok`, `checkedAt`, `code` result. Message text never
-supplies a code or UI fallback.
-
-Prune returns the executor's synchronous report per host, retaining removed,
-skipped and failed IDs and explicitly unknown reclaimed bytes. Partial host
-failures do not erase successful reports. Force requests never bypass server
-protection. Missing usage proof and protected images cannot be removed locally.
-Image list/detail update badges preserve the supplied version/rebuild/unknown
-observation without starting an update or check.
-
-Registry reads whitelist public configuration and `hasCredential`; identities
-and secrets never enter the query cache or edit defaults. Blank replacement
-fields are omitted; explicit clear removes the complete credential. Saved tests
-report authentication failure, unreachable and rate-limited separately, without
-treating a registry failure as a hub identity rejection. Saves and deletions
-invalidate registry queries. Identity changes discard late read/write results;
-dialog ownership additionally discards results after close or target changes.
-
-Vulnerability operations require agent contract v8 (minimum v8). Per-image and
-host-wide scan admission return an activity ID, and run reads return durable
-running or terminal host-run evidence. Both scan routes, run reads and bulk
-ignore/unignore have Edge commands. Vulnerability responses have a 32 MiB cap.
-See [vulnerability scanning](vulnerability-scanning.md).
-
-
-## Live vulnerability consumers (#262)
-
-Security reads use `vulnerabilities:read`, scans use `vulnerabilities:scan`, and
-activity cancellation uses `activities:cancel`. Host descriptors scope the
-permission to that host; image scans use a `host~image` identity. Hub descriptors
-only gate the aggregate entry point. Scan settings are hub-owned and use the
-existing `settings:read` and `settings:write` grants for environment `0`. The job
-list has its existing separate permission; an unreadable next-run projection is
-shown as unavailable and never replaced by browser recurrence calculations.
-
-Runtime decoders validate bounded identities, enum values, counts, dates and
-both `VulnerabilityProblem` and framework `ErrorModel` failures before mapping.
-Each vulnerability response is bounded to 32 MiB. Failed reads cannot establish
-zero findings. Images with no completed scan are neutrally labelled not scanned,
-excluded from totals, and never create an unavailable warning. Navigation marks
-partial totals while a visible host is unavailable, including unknown totals when
-all visible hosts fail. Host batches are merged together after all reads settle, retaining
-the prior query snapshot during refetch. A security-owned 30-second budget per
-host covers capability, image/project/container inventory and every vulnerability
-response body. Hub capability, settings and host discovery share a separate
-30-second prerequisite budget. Timeout is `vulnerability.read-timeout`; retained
-image rows are unavailable and failed batches supply no findings or history.
-Identity and request generations fence late responses before the atomic merge.
-Inventory cancellation is opt-in for this path; other inventory readers retain
-their existing behavior. Over HTTP/2 a held host therefore leaves the other hosts
-visible. Over HTTP/1.1 the shell's unbounded inventory reads to a held host can
-occupy every per-origin connection and queue the healthy hosts' reads as well
-(#271). Pending and filtered hosts do not remove
-retained inventory. A host batch is judged by the inventory observation of its own
-security-owned reads, not by an older host-catalogue snapshot. Host failures are
-successful query data, so while a host is unavailable for a recoverable reason
-(agent, transport, timeout, offline, pending or storage) the mounted security query
-re-reads every 10 seconds and stops once no such host remains; other codes wait for
-a change event. Transport loss is classified at each producer:
-- The read-only summaries POST reports `agent.unavailable`, like the GET reads; only
-  writes report `dispatch-unknown`.
-- A lost inventory body stream is `http.error`; only an unparsable body is an invalid
-  response.
-- A failed capability descriptor read is `capability.read-unavailable`, distinct from
-  a missing or denied descriptor. Image identities include the host, independently of tags.
-
-The security page, dashboard widget, attention items, operations chip, navigation
-badge and image column/details share the same live security query. UNKNOWN is a
-separate severity. Host-run history keeps interrupted and failed labels while
-numeric chart samples require a completed run or a partial run with scanned
-images. Host-wide scan progress (activity resource type `environment`) comes
-from the accepted run read as
-`(scanned + failed + skipped) / targets`; zero targets or an unavailable run read
-remain indeterminate. Per-image activities have no host-run read. Progress and
-history labels resolve host names.
-Observed active scans refresh the owned detail read every three seconds for up to
-thirty minutes, stopping on terminal state or observer release. List refreshes
-retain the same host/run's last known progress. Cancellation
-uses the accepted activity; settlement and
-SSE recovery invalidate security and image reads. The generic browser run gate
-cannot join or reuse a live scan admission.
-
-The v8 full findings DTO carries optional KEV/EPSS intelligence and current risk
-from the same finding-priority function as the overview. Missing intelligence
-remains unknown. The browser enumerates once per host with `limit=-1`, ordered by
-vulnerability ID, within the 32 MiB response and 100,000-row decoder limits. This
-avoids page cuts across changing live risk scores. The browser retains every
-producer finding, including equal rows from different Trivy targets, and sorts
-the complete list by risk for display.
-Server risk sorting remains available to API callers.
-
-Batch and per-image summaries carry the completed scan platform, independent of
-newer failed attempts. Inventory lacks actual container platform attribution, so
-the UI states daemon-default-only coverage rather than asserting coverage for
-individual containers on other platforms; per-container attribution is #265.
-
-An unscheduled settings draft omits the schedule update key: the stored empty
-default is readable, but the producer rejects an explicit empty update. Automatic
-off remains the UI off path once a daily/weekly schedule has been saved. Scan-now
-refusals name each host and its code; offline/pending refusals are informational
-notes while other refusals are errors, without losing accepted host activities.
-
-Security contract coverage in `web/src/data/http/vulnerabilities.test.tsx` and
-`web/src/data/http/vulnerability-fix1.test.tsx`,
-`web/src/data/http/vulnerability-fix2.test.tsx`,
-`web/src/data/http/vulnerability-enrichment.test.tsx`,
-`backend/internal/vulnerability/children/query/enrichment_test.go` and
-`backend/internal/activity/security_capabilities_test.go` includes:
-
-| Observation | Required mutation |
+| Family | Codes |
 | --- | --- |
-| Unavailable host rows display unknown counts; another host remains populated. | Render unavailable counts as numeric zeros. |
-| Equal local image IDs on two hosts stay two rows. | Deduplicate by local ID without the host. |
-| Busy admission follows and displays the active activity. | Treat busy as an ordinary failed admission. |
-| Scan permission is required independently of read permission. | Substitute the read grant for the scan grant. |
-| Undeclared vulnerability codes fail runtime decoding. | Accept arbitrary problem codes. |
-| Per-finding risk equals overview priority. | Substitute a different finding priority. |
-| Missing intelligence remains absent. | Substitute false/zero intelligence. |
-| API risk sorting covers the full list. | Disable risk ordering before pagination. |
-| Completed-platform attribution survives a newer failed attempt. | Use the latest attempt platform. |
-| Unscheduled settings saves succeed against producer validation. | Send an empty schedule update. |
-| Never-scanned images remain neutral across all consumers. | Map no completed scan to unavailable. |
-| Scan counters advance without activity events; polling stops within thirty minutes. | Remove polling or its time cap. |
-| List summaries retain the same run's last known progress. | Discard progress on a list refresh. |
-| Equal findings from distinct Trivy targets retain producer totals and unique render keys. | Restore browser dedupe or duplicate render keys. |
+| `run` | `run.started`, `run.joined`, `run.fresh`, `run.busy`, `run.cancelling`, `run.request-mismatch` |
+| `runtime` | `runtime.outcome-unknown`, `runtime.interrupted`, `runtime.cancelled`, `runtime.failed`, `runtime.wait-timeout`, `runtime.waiter-disconnected`, `runtime.parent-unresolved`, `runtime.target-removed`, `runtime.target-changed`, `runtime.target-unavailable` |
+| `activity` | `activity.queued`, `activity.running`, `activity.success`, `activity.failed`, `activity.cancelled`, `activity.message` |
+| `deploy` | `deploy.pull` |
+| `job` | `job.queued`, `job.waiting`, `job.running`, `job.retrying`, `job.succeeded`, `job.partial`, `job.skipped`, `job.failed`, `job.needs_attention`, `job.canceled` |
+| `container` | `container.die`, `container.oom`, `container.rename`, `container.unhealthy`, `container.start`, `container.stop`, `container.restart`, `container.delete`, `container.create`, `container.scan`, `container.update`, `container.deploy`, `container.kill`, `container.pause`, `container.unpause`, `container.error` |
+| `image` | `image.untag`, `image.import`, `image.prune`, `image.pull`, `image.load`, `image.tag`, `image.commit`, `image.delete`, `image.scan`, `image.error`, `image.vulnerability_scan` |
+| `volume` | `volume.prune`, `volume.create`, `volume.rename`, `volume.delete`, `volume.error`, `volume.file.create`, `volume.file.delete`, `volume.file.upload`, `volume.file.update`, `volume.workspace.update`, `volume.backup.create`, `volume.backup.delete`, `volume.backup.restore`, `volume.backup.restore_files`, `volume.backup.download` |
+| `network` | `network.prune`, `network.create`, `network.delete`, `network.connect`, `network.disconnect`, `network.error` |
+| `project` | `project.deploy`, `project.delete`, `project.start`, `project.stop`, `project.create`, `project.update`, `project.error` |
+| `system` | `system.prune`, `system.auto_update`, `system.upgrade` |
+| `user` | `user.login`, `user.logout` |
+| `environment` | `environment.create`, `environment.connect`, `environment.disconnect`, `environment.update`, `environment.delete`, `environment.api_key.regenerated`, `environment.mtls.ca_generated`, `environment.mtls.cert_issued`, `environment.mtls.enroll`, `environment.mtls.download` |
+| `webhook` | `webhook.create`, `webhook.update`, `webhook.delete`, `webhook.trigger` |
+| `notification` | `notification.send` |
 
-The same suite checks host/image command scope, retained delayed host batches,
-independent settings switches, backend next-run projection, interrupted history,
-and narrow/wide viewports. Production boundary and connected-route tests retain
-HTTP behavior and never enable a simulation through the scan controls.
+## Run gate
+
+The agreed single-hub model, including admission, cancellation, restart
+recovery, operational error codes and adapter contract consequences, is in the
+[run-gate record](run-gate.md).
+
+Run detail returns the most recent 256 distinct step transitions. Repeated
+messages within one step do not consume this limit. A closed step before the
+last step is reported as `success` when the next step starts, even if that step
+logged warning or error messages; the last step inherits the run's terminal
+status. Clients should use message levels for per-step warnings and errors.
+
+Event history is capped at 500 entries. Completed activity history is capped
+at 100 entries per environment. Environment overrides follow Arcane settings
+initialization and do not fail startup on invalid values. Generic cancellation
+resolves runtime receipt ownership before falling back to a legacy worker signal.
+Receipt-backed cancellation and outcome knowledge do not introduce new terminal
+activity statuses.
+
+## Volume backup admissions and target metadata
+
+Backup create, the three restore kinds, repository check and target test return
+202 after admission; restore responses carry `activityId` and `restoreId`.
+Overview preserves running identifiers for clients that lost an admission response.
+A lost response never implies permission to repeat a POST. The owning host supplies
+`timeZone` and scheduler-derived `nextRunAt` without hub recomputation.
+
+`BackupProblem` advertises safe stable codes and upload reasons through OpenAPI,
+generated TypeScript, the v9 fingerprint and EN/DE catalogues. Ordinary target
+projections contain no secret or recovery key. Agent-only sync schemas are
+referenced by `x-agent-volume-target-sync` in the hub export, without registering
+a hub metadata receiver. Hub database archive routes retain their separate
+contract. The retired system-managed volume routes are absent.
+
+## Volume backup transport boundary
+
+Volume backup clients require agent contract v9 and the current fingerprint.
+The host overview supplies usable target choices, accepted target authority/set
+version, scheduler time zone, next run times, history and running operation IDs.
+Repository metadata reports the effective engine image read-only. Backup/restore
+admission success means accepted work; clients follow the returned activity and
+refresh host history on completion. A lost admission response is resolved through
+overview, never by automatically posting again.
+
+The adapter preserves typed repository/target errors and upload reasons rather
+than mapping failed reads to empty history. Unknown capacities remain absent.
+Host identity generation invalidates pending overview, policy, repository,
+history and activity results together. Sync receipts and target-check settings
+versions belong to the backend; the browser never sends repository passwords,
+mount options or engine image selections through writable host settings. See
+[volume backups and recovery](volume-backups.md) for lifecycle and key boundaries.

@@ -2,13 +2,14 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace
+// Deviations: Local module namespace; Bounded read deadlines and neutral typed repository diagnostics.
 
 package browser
 
 import (
 	"context"
 	"errors"
+	"time"
 
 	"github.com/danielgtaylor/huma/v2"
 	"github.com/florianfinn/docklet-next/types/backup"
@@ -51,13 +52,15 @@ func NewHandler(service *Service) *Handler {
 }
 
 func (h *Handler) BackupHasPath(ctx context.Context, input *BackupHasPathInput) (*handlerutil.Out[BackupHasPathResponse], error) {
+	ctx, cancel := context.WithTimeout(ctx, 60*time.Second)
+	defer cancel()
 	if input.Path == "" {
 		return nil, huma.Error400BadRequest("path is required")
 	}
 
 	exists, err := h.service.BackupHasPath(ctx, input.BackupID, input.Path)
 	if err != nil {
-		return nil, huma.Error500InternalServerError(err.Error())
+		return nil, neutralReadError(err)
 	}
 
 	return &handlerutil.Out[BackupHasPathResponse]{
@@ -69,9 +72,11 @@ func (h *Handler) BackupHasPath(ctx context.Context, input *BackupHasPathInput) 
 }
 
 func (h *Handler) ListBackupFiles(ctx context.Context, input *ListBackupFilesInput) (*handlerutil.Out[[]string], error) {
+	ctx, cancel := context.WithTimeout(ctx, 60*time.Second)
+	defer cancel()
 	files, err := h.service.ListBackupFiles(ctx, input.BackupID)
 	if err != nil {
-		return nil, huma.Error500InternalServerError(err.Error())
+		return nil, neutralReadError(err)
 	}
 
 	return &handlerutil.Out[[]string]{
@@ -83,15 +88,25 @@ func (h *Handler) ListBackupFiles(ctx context.Context, input *ListBackupFilesInp
 }
 
 func (h *Handler) BrowseBackupFiles(ctx context.Context, input *BrowseBackupFilesInput) (*handlerutil.Page[backup.BackupFileEntry], error) {
+	ctx, cancel := context.WithTimeout(ctx, 60*time.Second)
+	defer cancel()
 	params := handlerutil.PaginationParams(input.Start, input.Limit, "", "", input.Search)
 	items, page, err := h.service.BrowseBackupFiles(ctx, input.BackupID, input.Path, params)
 	if errors.Is(err, common.ErrBadRequest) {
 		return nil, huma.Error400BadRequest(err.Error())
 	}
 	if err != nil {
-		return nil, huma.Error500InternalServerError(err.Error())
+		return nil, neutralReadError(err)
 	}
 	return &handlerutil.Page[backup.BackupFileEntry]{Body: base.Paginated[backup.BackupFileEntry]{
 		Success: true, Data: items, Pagination: handlerutil.PaginationResponse(page),
 	}}, nil
+}
+
+func neutralReadError(err error) error {
+	var problem *backup.Problem
+	if errors.As(err, &problem) {
+		return problem
+	}
+	return backup.NewProblem(503, "volume.backup.repository-unavailable", err)
 }

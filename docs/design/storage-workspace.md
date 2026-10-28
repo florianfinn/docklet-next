@@ -105,18 +105,27 @@ first verify `acfs version`; incompatible helpers fail before accessing files.
 | Create file/folder, upload, update content | plus `volumes:upload` |
 | Rename or move entry | plus `volumes:upload` and `volumes:delete` |
 | Delete entry | plus `volumes:delete` |
-| Restore file (existing wire operation; M12 UI) | plus `volumes:backup` |
+| Snapshot file selection restore (separate backup route) | `volumes:backup` |
 | Project workspace reads | `projects:read` |
 | Project workspace manifest | `projects:update` |
 
 The hub enforces host-scoped rights before forwarding; the agent enforces the
 same workspace manifest contract. Direct uses authenticated HTTP, Edge the
 explicit command map with no Direct fallback. Hub and both agent modes register
-the same volume/workspace routes. This intentionally includes
-`volume.backup.import` (`POST /volumes/{volumeName}/backups/upload`) on Edge:
-all registered storage routes are reachable; backup/import functionality remains
-owned by M12. Route coverage tests include actual tunnel
-forwarding, not merely matching command names.
+the same volume/workspace routes. Snapshot file selection uses the separate
+asynchronous backup restore route; workspace manifests reject the removed
+`restore_file` operation. Upload restore requires both `volumes:upload` and
+`volumes:backup` before multipart staging or forwarding. The explicit
+`volume.backup.import` Edge command carries this admission.
+
+Workspace writes use the same non-waiting volume mutex as backup/restore and return
+409 while another operation owns it. Restore into a new volume owns its destination
+name before persisting intent; API create and rename also acquire that destination
+mutex. Rename moves policy, backup and restore metadata in one transaction.
+Target mount volumes are hidden even when internal volumes are requested; the DTO
+producer additionally removes their credential-bearing `o` option. See
+[volume backups and recovery](volume-backups.md). Route coverage tests include
+actual tunnel forwarding, not merely matching command names.
 
 ## File baselines and freshness
 

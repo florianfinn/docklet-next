@@ -51,6 +51,6 @@ func RegisterRoutes(api huma.API, h *Handler) {
 			"and will be removed in a future release.",
 		Tags:        []string{"Volume Backup"},
 		Security:    handlerutil.DefaultOperationSecurity(),
-		Middlewares: upload.LegacyMultipartMiddleware(api, h.uploadService, uploadtypes.KindVolumeBackup),
+		Middlewares: append(append(middleware.RequirePermission(api, authz.PermVolumesBackup), middleware.RequirePermission(api, authz.PermVolumesUpload)...), upload.LegacyMultipartMiddleware(api, h.uploadService, uploadtypes.KindVolumeBackup)...),
 	}, authz.PermVolumesUpload, h.UploadAndRestore)
 }

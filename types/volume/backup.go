@@ -17,8 +17,7 @@ type BackupDestination string
 const (
 	BackupDestinationLocal BackupDestination = "local"
 
-	BackupFormatArchive BackupFormat = "archive"
-	BackupFormatRustic  BackupFormat = "rustic"
+	BackupFormatRustic BackupFormat = "rustic"
 )
 
 type CreateBackupRequest struct {
@@ -60,7 +59,7 @@ type BackupEntry struct {
 	Status            string                `json:"status" enum:"running,succeeded,failed,partial,unavailable" doc:"Backup result status"`
 	Trigger           string                `json:"trigger" enum:"manual,scheduled,safety" doc:"How the backup was started"`
 	Destination       BackupDestination     `json:"destination" doc:"Requested backup storage target"`
-	Format            BackupFormat          `json:"format" doc:"Storage format of the backup: legacy tar.gz archive or Rustic snapshot"`
+	Format            BackupFormat          `json:"format" doc:"Storage format of the retained backup row"`
 	LocalSnapshotID   string                `json:"localSnapshotId,omitempty" doc:"Snapshot ID in the local Rustic repository"`
 	PolicyID          string                `json:"policyId,omitempty" doc:"Backup policy that created the backup"`
 	ErrorCode         string                `json:"errorCode,omitempty"`

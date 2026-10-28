@@ -8,6 +8,8 @@ package backup
 
 import "time"
 
+const TargetVolumeLabel = "docklet.backup-target"
+
 // TargetLocation is immutable: one target ID always names the same repository.
 type TargetLocation struct {
 	Kind   string  `json:"kind" enum:"local,mount,smb,nfs"`

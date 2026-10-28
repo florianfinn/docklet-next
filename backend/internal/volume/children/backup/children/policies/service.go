@@ -181,16 +181,6 @@ func (s *Service) UpdateBackupPoliciesChecked(ctx context.Context, volumeName st
 	return s.GetBackupPolicies(ctx, volumeName)
 }
 
-// HasEnabledBackupPolicy reports whether a volume-level schedule takes precedence over centralized backups.
-func (s *Service) HasEnabledBackupPolicy(ctx context.Context, volumeName string) (bool, error) {
-	var count int64
-	if err := s.deps.DB.WithContext(ctx).Model(&VolumeBackupPolicy{}).
-		Where("volume_name = ? AND enabled = ?", volumeName, true).Count(&count).Error; err != nil {
-		return false, fmt.Errorf("failed to load volume backup policy override: %w", err)
-	}
-	return count > 0, nil
-}
-
 func (s *Service) runScheduledBackupInternal(ctx context.Context, policyID string) (scheduler.Outcome, error) {
 	var policy VolumeBackupPolicy
 	if err := s.deps.DB.WithContext(ctx).Where("id = ? AND enabled = ?", policyID, true).First(&policy).Error; err != nil {

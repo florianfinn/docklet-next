@@ -1,5 +1,5 @@
 // Source: api/openapi.json
-// Revision: 3fe92335350bd8e457710cb563ecb26bab52998e9c55830364ba55c418dca5d2
+// Revision: 7fe359545585501d96a8880d0da26187128feab28b910abf015bd89c5722b682
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
 // Deviations: Generated TypeScript declarations from the local Huma export.
@@ -5422,7 +5422,7 @@ export interface components {
         BackupProblem: {
             activityId?: string;
             /** @enum {string} */
-            code: "volume.backup.busy" | "volume.backup.interrupted" | "volume.backup.restart-failed" | "volume.backup.retention-failed" | "volume.backup.policy-single" | "volume.backup.policy-invalid" | "volume.backup.repository-unavailable" | "volume.backup.engine-unavailable" | "volume.backup.engine-timeout" | "volume.backup.engine-output-invalid" | "volume.backup.repository-check-failed" | "volume.backup.upload-too-large" | "volume.backup.upload-invalid" | "volume.backup.download-too-large" | "volume.backup.listing-too-large" | "volume.backup.snapshot-not-found" | "volume.backup.safety-pinned" | "volume.backup.writer-unconfirmed" | "volume.restore.self-mounted" | "volume.restore.safety-failed" | "volume.restore.failed-partial" | "volume.restore.interrupted" | "volume.restore.interrupted-before-write" | "volume.restore.restart-failed" | "backup.target.path-missing" | "backup.target.not-mounted" | "backup.target.permission-denied" | "backup.target.mount-failed" | "backup.target.unreachable" | "backup.target.unknown" | "backup.target.wrong-host" | "backup.target.retired" | "backup.target.in-use" | "backup.target.hosts-unknown" | "backup.target.duplicate" | "backup.target.invalid" | "backup.target.name-exists" | "backup.target.stale-set" | "backup.target.key-mismatch" | "backup.target.sync-failed" | "backup.target.conflict" | "backup.target.immutable";
+            code: "volume.not-found" | "volume.backup.busy" | "volume.backup.interrupted" | "volume.backup.restart-failed" | "volume.backup.retention-failed" | "volume.backup.policy-single" | "volume.backup.policy-invalid" | "volume.backup.repository-unavailable" | "volume.backup.engine-unavailable" | "volume.backup.engine-timeout" | "volume.backup.engine-output-invalid" | "volume.backup.repository-check-failed" | "volume.backup.upload-too-large" | "volume.backup.upload-invalid" | "volume.backup.download-too-large" | "volume.backup.listing-too-large" | "volume.backup.snapshot-not-found" | "volume.backup.safety-pinned" | "volume.backup.writer-unconfirmed" | "volume.restore.self-mounted" | "volume.restore.safety-failed" | "volume.restore.failed-partial" | "volume.restore.interrupted" | "volume.restore.interrupted-before-write" | "volume.restore.restart-failed" | "backup.target.path-missing" | "backup.target.not-mounted" | "backup.target.permission-denied" | "backup.target.mount-failed" | "backup.target.unreachable" | "backup.target.unknown" | "backup.target.wrong-host" | "backup.target.retired" | "backup.target.in-use" | "backup.target.hosts-unknown" | "backup.target.duplicate" | "backup.target.invalid" | "backup.target.name-exists" | "backup.target.stale-set" | "backup.target.key-mismatch" | "backup.target.sync-failed" | "backup.target.conflict" | "backup.target.immutable";
             detail: string;
             hosts?: string[] | null;
             /** @enum {string} */
@@ -11589,7 +11589,7 @@ export interface components {
             /** @description Backup error when the run failed */
             error?: string;
             errorCode?: string;
-            /** @description Storage format of the backup: legacy tar.gz archive or Rustic snapshot */
+            /** @description Storage format of the retained backup row */
             format: string;
             /** @description Unique identifier of the backup */
             id: string;

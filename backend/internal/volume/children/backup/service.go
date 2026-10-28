@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; functional cut: removed S3 backup destinations; M12 backup foundation; M12 persisted volume lifecycle and legacy restore cut.
+// Deviations: Local module namespace; functional cut: removed S3 backup destinations; M12 backup foundation; M12 persisted volume lifecycle and legacy restore cut.; Remove legacy archive and centralized volume execution; preserve historical metadata deletion and safety pins.
 
 package backup
 
@@ -14,8 +14,6 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
-	"path"
-	"strings"
 	"sync"
 	"time"
 	"uuid"
@@ -127,15 +125,12 @@ func NewService(deps Dependencies) *Service {
 		Reconcile: s.ReconcileBackup,
 	})
 	s.browser = browser.NewService(browser.Dependencies{
-		Docker:          deps.Docker,
-		Engine:          deps.Engine,
-		Run:             deps.Store.Run,
-		Repository:      s.rusticRepositoryForBackupInternal,
-		Password:        s.volumeBackupPasswordInternal,
-		SanitizePath:    sanitizeBackupPathInternal,
-		ArchiveFilename: backupArchiveFilenameInternal,
-		TempContainer:   s.createBackupTempContainerInternal,
-		Exec:            deps.Exec,
+		Docker:       deps.Docker,
+		Engine:       deps.Engine,
+		Run:          deps.Store.Run,
+		Repository:   s.rusticRepositoryForBackupInternal,
+		Password:     s.volumeBackupPasswordInternal,
+		SanitizePath: sanitizeBackupPathInternal,
 	})
 	s.restore = restore.NewService(restore.Dependencies{
 		Docker: deps.Docker, Engine: deps.Engine, Run: deps.Store.Run, Repository: s.rusticRepositoryForBackupInternal, Password: s.volumeBackupPasswordInternal, HelperImage: deps.HelperImage, Exec: deps.Exec,
@@ -155,11 +150,6 @@ func (s *Service) SetScheduler(ctx context.Context, dynamicScheduler scheduler.D
 
 func (s *Service) RegisterJobsOnStartup(ctx context.Context) {
 	s.policies.RegisterJobsOnStartup(ctx)
-}
-
-// HasEnabledBackupPolicy reports whether a volume-level schedule takes precedence over centralized backups.
-func (s *Service) HasEnabledBackupPolicy(ctx context.Context, volumeName string) (bool, error) {
-	return s.policies.HasEnabledBackupPolicy(ctx, volumeName)
 }
 
 // RemovePolicies drops the backup schedules of a removed volume.
@@ -236,48 +226,6 @@ func (s *Service) safetyBackupInternal(ctx context.Context, volumeName string, u
 		return "", err
 	}
 	return entry.ID, nil
-}
-
-// CreateSystemManagedBackup runs the existing volume backup workflow with a transient centralized policy.
-func (
-	s *Service,
-) CreateSystemManagedBackup(
-	ctx context.Context,
-	volumeName string,
-	user usertypes.Actor,
-	trigger string,
-	policyID string,
-	policy backuptypes.UpdateBackupPolicy,
-) (
-	*volume.Backup,
-	error,
-) {
-	if !strings.HasPrefix(policyID, backuptypes.SystemVolumePolicyPrefix) {
-		return nil, errors.New("invalid system-managed volume backup policy id")
-	}
-	trigger = cmp.Or(trigger, backuptypes.VolumeBackupTriggerManual)
-	transient := &policies.VolumeBackupPolicy{
-		VolumeName: volumeName, Enabled: true, Schedule: policy.Schedule, RetentionCount: policy.RetentionCount,
-		StopContainers: policy.StopContainers, LocalEnabled: policy.LocalEnabled,
-	}
-	transient.ID = policyID
-	plan, err := s.resolveBackupPlanInternal(ctx, volumeName, trigger, volume.CreateBackupRequest{}, transient)
-	if err != nil {
-		return nil, err
-	}
-	return s.createBackupInternal(ctx, volumeName, user, trigger, policyID, plan)
-}
-
-func (s *Service) createBackupInternal(ctx context.Context, volumeName string, user usertypes.Actor, trigger, policyID string, plan backupPlanInternal) (*volume.Backup, error) {
-	entry, lease, err := s.prepareBackupInternal(ctx, volumeName, trigger, policyID, plan)
-	if err != nil {
-		return nil, err
-	}
-	defer lease.Release(ctx)
-	ctx = lease.ctx
-	err = s.executeBackupInternal(ctx, entry, user, plan)
-	err = s.completeBackupInternal(ctx, entry, err)
-	return entry, err
 }
 
 type volumeBackupRecoveryInternal struct {
@@ -477,8 +425,19 @@ func (s *Service) deleteBackupInternal(ctx context.Context, backupID string, use
 	if err != nil {
 		return err
 	}
-	if entry.Format == volume.BackupFormatArchive {
-		return s.deleteArchiveBackupInternal(ctx, entry, user)
+	var pins int64
+	if err := s.deps.DB.WithContext(ctx).Table("volume_restore_runs").Where("safety_backup_id = ? AND pending_restart = ?", entry.ID, true).Count(&pins).Error; err != nil {
+		return err
+	}
+	if pins > 0 {
+		return backuptypes.NewProblem(409, "volume.backup.safety-pinned", nil)
+	}
+	if entry.Format != volume.BackupFormatRustic {
+		if err := s.deps.Store.Delete(ctx, entry.ID); err != nil {
+			return err
+		}
+		s.logBackupDeleteEventInternal(ctx, entry.VolumeName, entry.ID, user)
+		return nil
 	}
 	return s.deleteRusticBackupsInternal(ctx, []*volume.Backup{entry}, user)
 }
@@ -566,9 +525,7 @@ func (s *Service) logBackupDeleteEventInternal(ctx context.Context, volumeName, 
 	}
 }
 
-// DownloadBackup streams a backup as a tar.gz archive. Legacy archive rows
-// stream their stored file; local Rustic rows are restored into a scratch
-// volume and packaged on the fly.
+// DownloadBackup prepares a Rustic snapshot in scratch and streams its archive.
 func (s *Service) DownloadBackup(ctx context.Context, backupID string, user *usertypes.Actor) (io.ReadCloser, int64, error) {
 	entry, err := s.deps.Store.Run(ctx, backupID)
 	if err != nil {
@@ -576,11 +533,10 @@ func (s *Service) DownloadBackup(ctx context.Context, backupID string, user *use
 	}
 	var reader io.ReadCloser
 	var size int64
-	if entry.Format == volume.BackupFormatArchive {
-		reader, size, err = s.downloadArchiveBackupInternal(ctx, backupID)
-	} else {
-		reader, size, err = s.downloadRusticBackupInternal(ctx, entry)
+	if entry.Format != volume.BackupFormatRustic {
+		return nil, 0, backuptypes.NewProblem(404, "volume.backup.snapshot-not-found", nil)
 	}
+	reader, size, err = s.downloadRusticBackupInternal(ctx, entry)
 	if err != nil {
 		return nil, 0, err
 	}
@@ -603,7 +559,7 @@ func (s *Service) downloadRusticBackupInternal(ctx context.Context, entry *volum
 	if err != nil {
 		return nil, 0, err
 	}
-	repository, err := s.localRusticRepositoryInternal(ctx, dockerClient, true)
+	repository, err := s.repositoryFor(ctx, dockerClient, string(entry.Destination), true)
 	if err != nil {
 		return nil, 0, err
 	}
@@ -657,47 +613,6 @@ func (s *Service) downloadRusticBackupInternal(ctx context.Context, entry *volum
 		return nil, 0, fmt.Errorf("failed to package Rustic snapshot for download: %w", execInContainerErr)
 	}
 	return volumehelper.DownloadFileFromContainer(ctx, dockerClient, containerID, archivePath, cleanup)
-}
-
-func (s *Service) downloadArchiveBackupInternal(ctx context.Context, backupID string) (io.ReadCloser, int64, error) {
-	filename, err := backupArchiveFilenameInternal(backupID)
-	if err != nil {
-		return nil, 0, err
-	}
-	dockerClient, err := s.deps.Docker.GetClient(ctx)
-	if err != nil {
-		return nil, 0, err
-	}
-	containerID, cleanup, err := s.createBackupTempContainerInternal(ctx, dockerClient, "/volume", true)
-	if err != nil {
-		return nil, 0, err
-	}
-	return volumehelper.DownloadFileFromContainer(ctx, dockerClient, containerID, path.Join("/volume", filename), cleanup)
-}
-
-func (s *Service) deleteArchiveBackupInternal(ctx context.Context, entry *volume.Backup, user *usertypes.Actor) error {
-	// Delete from DB first - if this fails, no changes are made. If file
-	// deletion fails afterward we just have an orphan file, easier to clean up
-	// than an orphan DB record pointing at a missing file.
-	volumeName := entry.VolumeName
-	backupID := entry.ID
-	if err := s.deps.Store.Delete(ctx, backupID); err != nil {
-		return err
-	}
-	containerID, cleanup, err := s.createBackupTempContainerInternal(ctx, nil, "/volume", false)
-	if err != nil {
-		slog.WarnContext(ctx, "failed to create container for backup file cleanup", "backupId", backupID, "error", err.Error())
-	} else {
-		defer cleanup()
-		filename, filenameErr := backupArchiveFilenameInternal(backupID)
-		if filenameErr != nil {
-			slog.WarnContext(ctx, "failed to sanitize backup id for file cleanup", "backupId", backupID, "error", filenameErr.Error())
-		} else if _, _, err = s.deps.Exec(ctx, containerID, "", []string{"rm", "-f", path.Join("/volume", filename)}); err != nil {
-			slog.WarnContext(ctx, "failed to delete backup file (orphan file may remain)", "backupId", backupID, "error", err.Error())
-		}
-	}
-	s.logBackupDeleteEventInternal(ctx, volumeName, backupID, user)
-	return nil
 }
 
 func (s *Service) MigrateRepositoryPasswords(ctx context.Context) error {

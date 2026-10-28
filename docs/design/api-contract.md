@@ -77,8 +77,8 @@ the mapping and its contract tests before that feature claims live data.
 | No restore-point DTO | `restoreRestorePoint` | A saved pre-update image and configuration need a selectable restore point and action identity. | Planned M10 Images and updates |
 | `VulnerabilityRiskOverview`, `VulnerabilityRiskFinding`, `VulnerabilityScanResult` | `SecurityOverview`, `Finding`, `ScanRun` | Scan risk and finding DTOs need host/image grouping and severity presentation. | Planned M11 Vulnerability scanning |
 | `BackupSystemBackupRun`, `BackupSystemBackupPolicy`, `BackupBackupFileEntry` | `BackupRun`, `BackupSettings` | Restore targets, history and file selection need one UI backup model. | Planned M12 Backups and restore |
-| No backup-target test DTO | `testBackupTarget` | Target connection checks need a typed result without exposing credentials. | Planned M12 Backups and restore |
-| `VolumeBackupPolicy`, `VolumeBackupEntry` | `BackupPolicy`, `BackupRun` | Volume backup schedules and histories need a common run projection. | Planned M12 Backups and restore |
+| `BackupTargetTestOperation`, `BackupTargetCheck`, `BackupProblem` | `testBackupTarget` | The accepted activity identifies asynchronous testing; results retain admitted settings and safe codes. | Contract v9; [volume backups](volume-backups.md) |
+| `VolumeBackupPolicy`, `VolumeBackupEntry`, `VolumeBackupOverview`, `VolumeRestoreOperation` | `BackupPolicy`, `BackupRun` | The owning host reports schedules, running IDs, restore phases and restart obligations. | Contract v9; [volume backups](volume-backups.md) |
 | `AuthAuthenticationResponse`, `AuthLogin`, `SettingsSettingDto` | `AuthSettings`, `HubSettings`, `SettingsApi` | Sign-in modes and settings categories need typed, server-backed UI preferences. | Planned M4 Identity, setup and hub settings |
 | `UserPreferences` | `HubSettings` | Personal preferences need a server-backed profile projection. | Planned M4 Identity, setup and hub settings |
 | `UserUser`, `UserRoleAssignmentSummary` | `HubUser` | User rights need the agreed simple access projection. | Planned M15 Simple users with resource rights |
@@ -141,9 +141,11 @@ The trusted agent receiver registers execute/query/cancel and registration/targe
 metadata routes with the existing manager credential. Ordinary bearer,
 administrator and bootstrap credentials cannot grant receiver authority. Direct
 and Edge requests recheck agent access and compatibility; Edge has no Direct
-fallback. Numeric agent contract version and minimum are both 7. The fingerprint
-hashes the exact `types/contract/testdata/agent-hub-v7.json` bytes, retaining the
-v3–v6 fixtures and adding PR1 image/registry safety and read-only update states.
+fallback. Numeric agent contract version and minimum are both 9. The fingerprint
+hashes the exact `types/contract/testdata/agent-hub-v9.json` bytes, retaining the
+historical fixtures and the accepted runtime, image and vulnerability surfaces.
+It includes volume backup routes, schemas, codes, upload reasons and transport
+limits, plus agent-only target sync metadata.
 Runtime update/restore activation remains gated on PR2a; policy/schedule/notify
 activation remains gated on PR2b. See [images and updates](images-updates.md).
 The v3 and v4 fixtures are preserved. Runtime queries have no compatibility
@@ -199,3 +201,18 @@ initialization and do not fail startup on invalid values. Generic cancellation
 resolves runtime receipt ownership before falling back to a legacy worker signal.
 Receipt-backed cancellation and outcome knowledge do not introduce new terminal
 activity statuses.
+
+## Volume backup admissions and target metadata
+
+Backup create, the three restore kinds, repository check and target test return
+202 after admission; restore responses carry `activityId` and `restoreId`.
+Overview preserves running identifiers for clients that lost an admission response.
+A lost response never implies permission to repeat a POST. The owning host supplies
+`timeZone` and scheduler-derived `nextRunAt` without hub recomputation.
+
+`BackupProblem` advertises safe stable codes and upload reasons through OpenAPI,
+generated TypeScript, the v9 fingerprint and EN/DE catalogues. Ordinary target
+projections contain no secret or recovery key. Agent-only sync schemas are
+referenced by `x-agent-volume-target-sync` in the hub export, without registering
+a hub metadata receiver. Hub database archive routes retain their separate
+contract. The retired system-managed volume routes are absent.

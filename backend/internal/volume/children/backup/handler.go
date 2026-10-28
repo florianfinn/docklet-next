@@ -16,6 +16,7 @@ import (
 	"net/url"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/danielgtaylor/huma/v2"
 	activitytypes "github.com/florianfinn/docklet-next/types/activity"
@@ -101,7 +102,7 @@ func (h *Handler) DownloadBackup(ctx context.Context, input *DownloadBackupInput
 	user, _ := userctx.CurrentUserFromContext(ctx)
 	reader, size, err := h.service.DownloadBackup(ctx, input.BackupID, user)
 	if err != nil {
-		return nil, huma.Error500InternalServerError(err.Error())
+		return nil, neutralBackupError(err, "volume.backup.repository-unavailable")
 	}
 
 	return &huma.StreamResponse{
@@ -119,6 +120,11 @@ func (h *Handler) DownloadBackup(ctx context.Context, input *DownloadBackupInput
 }
 
 func (h *Handler) ListBackups(ctx context.Context, input *ListBackupsInput) (*ListBackupsOutput, error) {
+	ctx, cancel := context.WithTimeout(ctx, 60*time.Second)
+	defer cancel()
+	if input.Limit > 100 {
+		return nil, backuptypes.NewProblem(422, "volume.backup.listing-too-large", nil)
+	}
 	params := pagination.QueryParams{
 		Search: input.Search,
 		Sort:   input.Sort,
@@ -134,9 +140,18 @@ func (h *Handler) ListBackups(ctx context.Context, input *ListBackupsInput) (*Li
 
 	backups, paginationResp, err := h.service.List(ctx, input.VolumeName, params)
 	if err != nil {
-		return nil, huma.Error500InternalServerError(err.Error())
+		return nil, neutralBackupError(err, "volume.backup.repository-unavailable")
 	}
 
+	for i := range backups {
+		if backups[i].Format != volume.BackupFormatRustic {
+			backups[i].Status = "unavailable"
+			backups[i].ErrorCode = "volume.backup.snapshot-not-found"
+		}
+		if backups[i].Error != "" || backups[i].ErrorCode != "" {
+			backups[i].Error = cmp.Or(backups[i].ErrorCode, "volume.backup.interrupted")
+		}
+	}
 	warning := h.service.backupMountWarningInternal(ctx)
 
 	return &ListBackupsOutput{
@@ -232,7 +247,7 @@ func (h *Handler) DeleteBackup(ctx context.Context, input *DeleteBackupInput) (*
 		return h.service.DeleteBackup(runtimeCtx, input.BackupID, user)
 	})
 	if err != nil {
-		return nil, huma.Error500InternalServerError(err.Error())
+		return nil, neutralBackupError(err, "volume.backup.repository-unavailable")
 	}
 	return &handlerutil.Out[base.MessageResponse]{
 		Body: base.ApiResponse[base.MessageResponse]{

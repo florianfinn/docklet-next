@@ -2,97 +2,21 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: functional cut: removed S3 backup destinations.
+// Deviations: functional cut: removed S3 backup destinations.; Retain historical management classification and shared archive/history DTOs; remove centralized volume policy and selection vocabulary.
 
 package backup
 
 import "time"
 
-// ManagementType identifies which Arcane configuration orchestrated a backup.
+// ManagementType identifies the historical owner of a retained backup row.
 type ManagementType string
 
 const (
 	ManagementTypeSystem ManagementType = "system"
 	ManagementTypeVolume ManagementType = "volume"
-
-	// SystemVolumePolicyPrefix marks volume-backup records created by the centralized system policy.
+	// SystemVolumePolicyPrefix classifies history from the removed centralized owner.
 	SystemVolumePolicyPrefix = "system-volume:"
-
-	SystemVolumeSelectionAll       SystemVolumeSelectionMode = "all"
-	SystemVolumeSelectionAllowlist SystemVolumeSelectionMode = "allowlist"
-	SystemVolumeSelectionBlocklist SystemVolumeSelectionMode = "blocklist"
 )
-
-// SystemVolumeSelectionMode controls how configured volume names affect live Docker volumes.
-type SystemVolumeSelectionMode string
-
-// SystemVolumeBackupPolicy is one manager-owned policy for local Docker volumes.
-type SystemVolumeBackupPolicy struct {
-	ID              string                    `json:"id"`
-	Enabled         bool                      `json:"enabled"`
-	Schedule        string                    `json:"schedule"`
-	RetentionCount  int                       `json:"retentionCount"`
-	StopContainers  bool                      `json:"stopContainers"`
-	LocalEnabled    bool                      `json:"localEnabled"`
-	SelectionMode   SystemVolumeSelectionMode `json:"selectionMode"`
-	VolumeNames     []string                  `json:"volumeNames"`
-	IgnoreAnonymous bool                      `json:"ignoreAnonymous"`
-	LastRun         *SystemBackupRun          `json:"lastRun,omitempty"`
-}
-
-// UpdateSystemVolumeBackupPolicy is the writable centralized policy shape.
-type UpdateSystemVolumeBackupPolicy struct {
-	UpdateBackupPolicy
-
-	SelectionMode   SystemVolumeSelectionMode `json:"selectionMode"`
-	VolumeNames     []string                  `json:"volumeNames"`
-	IgnoreAnonymous bool                      `json:"ignoreAnonymous"`
-}
-
-type SystemVolumeBackupPolicyCollection struct {
-	Policies []SystemVolumeBackupPolicy `json:"policies"`
-}
-
-type UpdateSystemVolumeBackupPolicies struct {
-	Policies []UpdateSystemVolumeBackupPolicy `json:"policies"`
-}
-
-// SystemVolumeBackupCustomRun is a transient policy used by Create -> Backup.
-type SystemVolumeBackupCustomRun struct {
-	Destination     SystemBackupDestination   `json:"destination"`
-	StopContainers  bool                      `json:"stopContainers"`
-	SelectionMode   SystemVolumeSelectionMode `json:"selectionMode"`
-	VolumeNames     []string                  `json:"volumeNames"`
-	IgnoreAnonymous bool                      `json:"ignoreAnonymous"`
-}
-
-// RunSystemVolumeBackupsRequest selects a saved policy or supplies a transient custom policy.
-type RunSystemVolumeBackupsRequest struct {
-	PolicyID string                       `json:"policyId,omitempty"`
-	Custom   *SystemVolumeBackupCustomRun `json:"custom,omitempty"`
-}
-
-// SystemVolumeBackupOption describes a selectable live or unavailable configured volume.
-type SystemVolumeBackupOption struct {
-	Name      string `json:"name"`
-	Anonymous bool   `json:"anonymous"`
-	Available bool   `json:"available"`
-}
-
-// SystemVolumeBackupFailure records one candidate that could not be backed up.
-type SystemVolumeBackupFailure struct {
-	VolumeName string `json:"volumeName"`
-	Error      string `json:"error"`
-}
-
-// SystemVolumeBackupRunResult summarizes a centralized multi-volume execution.
-type SystemVolumeBackupRunResult struct {
-	Matched   int                         `json:"matched"`
-	Succeeded int                         `json:"succeeded"`
-	Failed    int                         `json:"failed"`
-	Skipped   int                         `json:"skipped"`
-	Failures  []SystemVolumeBackupFailure `json:"failures"`
-}
 
 // HistoryEntry is a common view over Arcane recovery and volume backup records.
 type HistoryEntry struct {

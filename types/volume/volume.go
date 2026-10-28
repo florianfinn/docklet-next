@@ -2,11 +2,15 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: None
+// Deviations: None; Backup target driver option redaction without mutating daemon data.
 
 package volume
 
-import "github.com/moby/moby/api/types/volume"
+import (
+	"github.com/florianfinn/docklet-next/types/backup"
+	"github.com/moby/moby/api/types/volume"
+	"maps"
+)
 
 // Volume represents a Docker volume.
 type Volume struct {
@@ -165,6 +169,10 @@ func NewSummary(v volume.Volume) Volume {
 		Containers: make([]string, 0),
 	}
 
+	if _, target := v.Labels[backup.TargetVolumeLabel]; target {
+		dto.Options = maps.Clone(v.Options)
+		delete(dto.Options, "o")
+	}
 	if v.UsageData != nil {
 		dto.InUse = v.UsageData.RefCount >= 1
 		dto.UsageData = v.UsageData

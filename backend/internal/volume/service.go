@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; functional cut: removed S3 backup destinations; split inventory reads; Explicit candidate prune execution; M12 backup foundation; M12 persisted volume lifecycle and legacy restore cut.
+// Deviations: Local module namespace; functional cut: removed S3 backup destinations; split inventory reads; Explicit candidate prune execution; M12 backup foundation; M12 persisted volume lifecycle and legacy restore cut.; M12 target hiding and non-waiting destination admission; remove retired centralized volume wrappers.
 
 package volume
 
@@ -23,14 +23,10 @@ import (
 	"github.com/florianfinn/docklet-next/backend/internal/volume/children/workspace"
 	"github.com/florianfinn/docklet-next/backend/pkg/libarcane"
 	"github.com/florianfinn/docklet-next/backend/pkg/libarcane/timeouts"
-	"github.com/florianfinn/docklet-next/backend/pkg/scheduler/runs"
 	"github.com/florianfinn/docklet-next/backend/pkg/utils"
 	workspacepkg "github.com/florianfinn/docklet-next/backend/pkg/workspace"
-	backuptypes "github.com/florianfinn/docklet-next/types/backup"
-	"github.com/florianfinn/docklet-next/types/scheduler"
 	usertypes "github.com/florianfinn/docklet-next/types/user"
 	volumetypes "github.com/florianfinn/docklet-next/types/volume"
-	"github.com/moby/moby/api/types/mount"
 	"github.com/moby/moby/client"
 	"go.getarcane.app/docker"
 	"golang.org/x/sync/singleflight"
@@ -141,56 +137,6 @@ func NewVolumeService(
 	return service
 }
 
-// SetScheduler injects the dynamic scheduler and admission gate for per-policy
-// backup jobs. Agent mode passes them too: agents run their own volume backups.
-func (s *VolumeService) SetScheduler(ctx context.Context, dynamicScheduler scheduler.DynamicScheduler, admissionGate *runs.Admission) error {
-	return s.backup.SetScheduler(ctx, dynamicScheduler, admissionGate)
-}
-
-func (s *VolumeService) RegisterBackupJobsOnStartup(ctx context.Context) {
-	s.backup.RegisterJobsOnStartup(ctx)
-}
-
-// BackupStorageMount resolves the repository mount shared with system-backup operations.
-func (s *VolumeService) BackupStorageMount(ctx context.Context, dockerClient *client.Client, target string, readOnly bool) (mount.Mount, error) {
-	return s.backup.StorageMount(ctx, dockerClient, target, readOnly)
-}
-
-// HasEnabledBackupPolicy reports whether a volume-level schedule takes precedence over centralized backups.
-func (s *VolumeService) HasEnabledBackupPolicy(ctx context.Context, volumeName string) (bool, error) {
-	return s.backup.HasEnabledBackupPolicy(ctx, volumeName)
-}
-
-// CreateSystemManagedBackup runs the existing volume backup workflow with a transient centralized policy.
-func (
-	s *VolumeService,
-) CreateSystemManagedBackup(
-	ctx context.Context,
-	volumeName string,
-	user usertypes.Actor,
-	trigger VolumeBackupTrigger,
-	policyID string,
-	policy backuptypes.UpdateBackupPolicy,
-) (
-	*VolumeBackup,
-	error,
-) {
-	entry, err := s.backup.CreateSystemManagedBackup(ctx, volumeName, user, string(trigger), policyID, policy)
-	if entry == nil {
-		return nil, err
-	}
-	return volumeBackupFromRecordInternal(entry), err
-}
-
-func (s *VolumeService) ReconcileBackup(ctx context.Context, previous scheduler.Run, volumeName string) (scheduler.Outcome, error) {
-	return s.backup.ReconcileBackup(ctx, previous, volumeName)
-}
-
-// MigrateRepositoryPasswords re-keys this instance's own volume backup repositories to the recovery key; other instances re-key their own roots.
-func (s *VolumeService) MigrateRepositoryPasswords(ctx context.Context) error {
-	return s.backup.MigrateRepositoryPasswords(ctx)
-}
-
 func (s *VolumeService) GetVolumeByName(ctx context.Context, name string) (*volumetypes.Volume, error) {
 	slog.DebugContext(ctx, "volume service: get volume", "volume", name)
 	dockerClient, err := s.dockerService.GetClient(ctx)
@@ -203,6 +149,9 @@ func (s *VolumeService) GetVolumeByName(ctx context.Context, name string) (*volu
 		return nil, fmt.Errorf("volume not found: %w", err)
 	}
 	vol := volResult.Volume
+	if isBackupTargetVolume(vol.Labels) {
+		return nil, hiddenTargetVolumeError()
+	}
 
 	localSettings := s.settingsService.GetSettingsConfig()
 	usageCtx, usageCancel := context.WithTimeout(ctx, timeouts.GetDuration(localSettings.DockerAPITimeout.AsInt(), timeouts.DefaultDockerAPI))
@@ -226,6 +175,19 @@ func (s *VolumeService) GetVolumeByName(ctx context.Context, name string) (*volu
 }
 
 func (s *VolumeService) CreateVolume(ctx context.Context, options client.VolumeCreateOptions, user usertypes.Actor) (*volumetypes.Volume, error) {
+	unlock, ok := s.workspaceLocks.TryLock(options.Name)
+	if !ok {
+		return nil, &volumeWorkspaceBusyError{name: options.Name}
+	}
+	defer unlock()
+	return s.createVolumeOwned(ctx, options, user)
+}
+
+// The API path already owns the destination mutex while checking name absence.
+func (s *VolumeService) createVolumeOwned(ctx context.Context, options client.VolumeCreateOptions, user usertypes.Actor) (*volumetypes.Volume, error) {
+	if isBackupTargetVolume(options.Labels) {
+		return nil, hiddenTargetVolumeError()
+	}
 	slog.DebugContext(ctx, "volume service: create volume", "volume", options.Name, "driver", options.Driver, "user", user.ID)
 	dockerClient, err := s.dockerService.GetClient(ctx)
 	if err != nil {
@@ -233,6 +195,9 @@ func (s *VolumeService) CreateVolume(ctx context.Context, options client.VolumeC
 		return nil, fmt.Errorf("failed to connect to Docker: %w", err)
 	}
 
+	if err := refuseTargetVolumeName(ctx, dockerClient, options.Name); err != nil {
+		return nil, err
+	}
 	defer s.eventService.BeginDockerResourceSuppressionWindow("volume", options.Name, options.Name)()
 	created, err := dockerClient.VolumeCreate(ctx, options)
 	if err != nil {
@@ -287,6 +252,10 @@ func (s *VolumeService) DeleteVolume(ctx context.Context, name string, force boo
 	if err != nil {
 		s.eventService.LogErrorEvent(ctx, event.EventTypeVolumeError, "volume", name, name, user.ID, user.Username, "0", err, database.JSON{"action": "delete", "force": force})
 		return fmt.Errorf("failed to connect to Docker: %w", err)
+	}
+
+	if err := refuseTargetVolumeName(ctx, dockerClient, name); err != nil {
+		return err
 	}
 
 	// Stop any read-only browse helper first; a helper mounting the volume would
@@ -356,6 +325,9 @@ func (s *VolumeService) GetVolumeUsage(ctx context.Context, name string) (bool, 
 		return false, nil, fmt.Errorf("volume not found: %w", err)
 	}
 
+	if isBackupTargetVolume(vol.Volume.Labels) {
+		return false, nil, hiddenTargetVolumeError()
+	}
 	consumers, err := listVolumeConsumersInternal(ctx, dockerClient)
 	if err != nil {
 		return false, nil, fmt.Errorf("failed to get containers using volume: %w", err)
@@ -395,6 +367,9 @@ func (s *VolumeService) GetVolumeSizes(ctx context.Context) (map[string]VolumeSi
 	}
 	result := make(map[string]VolumeSizeData, len(usageVolumes))
 	for _, v := range usageVolumes {
+		if isBackupTargetVolume(v.Labels) {
+			continue
+		}
 		if v.UsageData != nil {
 			result[v.Name] = VolumeSizeData{
 				Size:     v.UsageData.Size,
