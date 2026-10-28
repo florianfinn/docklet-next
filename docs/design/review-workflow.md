@@ -60,8 +60,18 @@ reports or new evidence and explain why. Do not reopen accepted optional finding
 as blockers without new evidence.
 
 After at most two unsuccessful targeted rounds per finding class, document causes
-and a concrete correction/verification plan before continuing. Ask the maintainer
-only for unresolved product decisions. This limit is not merge permission.
+in a table over every producer, transport and consumer of the affected data,
+including code that predates the change, and decide the fix boundary: the whole
+class in this change, or the change's affected surfaces with demonstrably
+pre-existing, unrelated defects as tracked follow-ups. The boundary limits
+implementation scope, not the review or acceptance gates: verification checks the
+correction within the boundary and its consequences and regressions across the
+full target diff, and no unresolved blocker, introduced regression or binding
+acceptance failure may be deferred by narrowing it. A third failing round in the
+class rebuilds the fix from the table instead of patching the last finding.
+Ask the maintainer only for unresolved product decisions or acceptance-scope and
+exclusion decisions reserved to the maintainer by AGENTS.md. This limit is not
+merge permission.
 A target-branch change requires a full review and another push for checks. An
 unrelated conflict-free update of the same base does not invalidate review evidence.
 

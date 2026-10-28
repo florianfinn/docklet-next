@@ -70,19 +70,27 @@ in GitHub issues and milestones; rationale belongs in docs/design/ and its index
 ## Agent coordination
 
 - One main thread runs a milestone: it plans, writes design notes, implements,
-  fixes and integrates, and is the only writer of the feature branch. Subagents are
+  fixes and integrates, and is the only writer of the feature branch. Fix rounds
+  stay in the main thread, also for steps a tool built. Subagents are
   tools with one brief and one structured result: independent review, sandbox and
   acceptance runs, wide searches, and large bounded steps in their own worktree,
   which the main thread checks and integrates. Tools never decide product, scope or
   UX questions; they return them with options and a recommendation.
 - At milestone start, write the plan and the design notes of risky steps (with
-  their break map and design review), then ask the maintainer every open product,
-  scope and interface question at once, each with a recommendation. Read accepted
-  decisions first; handle routine implementation choices autonomously. A question
-  that appears later is decided by the main thread with the recommended, reversible
+  their break map) and run one bundled design review over them, then ask the
+  maintainer every open product, scope and interface question at once, each with a
+  recommendation, together with the acceptance matrix and its exclusion rule, and
+  obtain agreement to both before implementation. Each exclusion names the affected
+  behaviour and matrix cells, the baseline evidence or named environment limit, the
+  evidence the runner checks and its effect on the verdict. Code predating the
+  milestone is not by itself an exclusion; regressions and required milestone
+  behaviour remain subject to acceptance. Read accepted decisions first; handle
+  routine implementation choices autonomously. Except for unresolved
+  acceptance-scope or exclusion decisions, a question that appears later is decided by the main thread with the recommended, reversible
   and narrower option, recorded with how to reverse it and reported to the
-  maintainer without pausing; such a decision never widens scope, publishes, weakens
-  security or deploys.
+  maintainer without pausing, as a comment on the milestone closing issue; such a
+  decision never widens scope, publishes, weakens security, deploys or sets an
+  acceptance verdict.
 - Give each agent a self-contained brief: goal and acceptance, full base/head SHA,
   target branch, accepted decisions, prerequisites and contract owner, owned paths
   and read-only boundaries, known traps, checks and accessible evidence/report paths.
@@ -150,6 +158,12 @@ in GitHub issues and milestones; rationale belongs in docs/design/ and its index
   review. Record PR, merge SHA, review and check results in the issue. The milestone
   closing issue stays open until its closing PR merges to main. Practical and release
   acceptance have their own evidence; local tests or a demo do not replace them.
+  The acceptance runner applies the agreed matrix and exclusion rule from its brief,
+  and its verdict stands. Fix ordinary acceptance defects within the agreed scope
+  and rerun. If an unexpected failure needs a scope or exclusion decision the rule
+  does not determine, keep the failing verdict and ask the maintainer; only the
+  affected acceptance or completion step waits. A main-thread decision or issue
+  comment cannot waive a failure or replace the runner's verdict.
 
 ## Checks and boundaries
 
