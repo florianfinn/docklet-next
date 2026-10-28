@@ -26,9 +26,9 @@ export function KindBadge({ volume, className }: { volume: Pick<Volume, "kind" |
   );
 }
 
-export function BackupBadge({ volume }: { volume: Pick<Volume, "backup" | "lastBackup" | "backupUnavailable" | "kind"> }) {
+export function BackupBadge({ volume }: { volume: Pick<Volume, "backup" | "lastBackup" | "backupUnavailable" | "kind" | "hostId"> }) {
   const t = useTranslations("volumes.backupState");
-  const backup = useCapability("setBackupPolicy");
+  const backup = useCapability("getBackupOverview", { kind: "host", id: volume.hostId });
   if (volume.kind === "bind") return <span className="text-xs text-muted-foreground">{t("namedVolumesOnly")}</span>;
   if (volume.backupUnavailable || !backup.available) return <span className="text-xs text-muted-foreground" title={backup.reason}>{t("unavailable")}</span>;
   if (volume.lastBackup?.status === "partial") return <ToneBadge tone="warn">{t("partial")}</ToneBadge>;

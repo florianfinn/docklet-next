@@ -29,7 +29,7 @@ export function mapBackupPolicy(row: Schema["VolumeBackupPolicy"]): BackupPolicy
 }
 
 export function mapBackup(row: Schema["VolumeBackupEntry"], host: string): BackupRun {
-  return { id: row.id, volumeId: inventoryId(host, row.volumeName), targetId: row.destination, startedAt: row.createdAt, status: row.status, trigger: row.trigger, sizeBytes: row.localSnapshotId ? row.size : undefined, archive: row.localSnapshotId, errorCode: row.errorCode, actionId: row.activityId, stoppedContainers: row.stopContainers };
+  return { id: row.id, volumeId: inventoryId(host, row.volumeName), targetId: row.destination, startedAt: row.createdAt, status: row.status, trigger: row.trigger, sizeBytes: row.localSnapshotId && Number.isFinite(row.size) && row.size >= 0 ? row.size : undefined, archive: row.localSnapshotId, errorCode: row.errorCode, actionId: row.activityId, stoppedContainers: row.stopContainers };
 }
 
 export function mapBackupOverview(dto: Schema["VolumeBackupOverview"], host: string): BackupOverview {

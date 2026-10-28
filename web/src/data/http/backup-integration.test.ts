@@ -16,7 +16,7 @@ it("decorates actual volume inventory and exposes host backup next runs to the d
   const volumes = await adapter.listVolumes();
   expect(volumes[0]).toMatchObject({ id: "first~data", lastBackup: { status: "partial", trigger: "safety" }, backup: { retentionCount: 7 }, consumers: [{ target: "/data" }] });
   const jobs = await adapter.listSchedule(["first"]), backup = jobs.find((row) => row.kind === "backup")!;
-  expect(backup.nextRunAt).toBe("2026-11-01T01:00:00Z"); expect(jobHref(backup)).toBe("/volumes/first~data?tab=backups");
+  expect(backup?.nextRunAt).toBe("2026-11-01T01:00:00Z"); expect(jobHref(backup)).toBe("/volumes/first~data?tab=backups");
 });
 it("opens metadata and snapshot history for a removed volume through the real adapter", async () => {
   const f = connectedFixture(); f.state.signedIn = true; const original = f.fetcher.getMockImplementation()!;
@@ -28,5 +28,5 @@ it("opens metadata and snapshot history for a removed volume through the real ad
     return original(input, init);
   });
   const adapter = createHttpAdapter({ fetch: f.fetcher as typeof fetch });
-  expect(await adapter.getVolume("first~data")).toMatchObject({ volumeExists: false, backups: [{ id: "snapshot" }] });
+  await expect(adapter.getVolume("first~data")).resolves.toMatchObject({ volumeExists: false, backups: [{ id: "snapshot" }] });
 });

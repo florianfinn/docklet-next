@@ -22,7 +22,7 @@ function lastRank(v: Volume): number {
  * Header sort of the backups overview with the shared tie-breakers (host,
  * name, id). Plans without a next run (manual or paused) come last.
  */
-export function sortBackups(volumes: Volume[], hosts: Map<string, Host>, targets: BackupTarget[], sort: BackupSort, _now?: Date, _timeZone?: string): Volume[] {
+export function sortBackups(volumes: Volume[], hosts: Map<string, Host>, targets: readonly Pick<BackupTarget, "id" | "name">[], sort: BackupSort, _now?: Date, _timeZone?: string): Volume[] {
   return sortRows(
     volumes,
     sort,

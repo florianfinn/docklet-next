@@ -19,6 +19,8 @@ describe("live backup contract", () => {
   it("maps safety/partial/unavailable and preserves six-field custom cron", async () => {
     const f = backupFixture(); const ov = await f.api.getBackupOverview("first");
     expect(ov.volumes[0]?.lastBackup).toMatchObject({ status: "partial", trigger: "safety", errorCode: "volume.backup.restart-failed", sizeBytes: 42 });
+    f.state.overview.volumes![0]!.lastBackup!.size = -1;
+    expect((await f.api.getBackupOverview("first")).volumes[0]?.lastBackup?.sizeBytes).toBeUndefined();
     const custom = "0 0 2 1 * *";
     expect(backupSchedule(custom)).toEqual({ mode: "custom", cron: custom }); expect(backupCron(backupSchedule(custom))).toBe(custom);
     f.state.overview.volumes![0]!.lastBackup!.status = "unavailable";

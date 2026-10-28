@@ -17,6 +17,7 @@ import { BackupHistory } from "./BackupHistory";
 import { VolumeBackupsTab } from "./VolumeBackupsTab";
 import { RestoreDialog } from "./RestoreDialog";
 import { RestoreFilesSheet } from "./RestoreFilesSheet";
+import { BackupBadge } from "../storage-visuals";
 import BackupsPage from "../BackupsPage";
 import { RecoveryKeyDialog } from "@/features/settings/backups/RecoveryKeyDialog";
 import { BackupTargetsSection } from "@/features/settings/sections/BackupTargetsSection";
@@ -100,7 +101,8 @@ it("requires key confirmation and discards a late key after close", async () => 
 });
 it("shows earlier-settings checks and locks existing target locations", async () => {
   const f = setup(); renderWithApp(<BackupTargetsSection />, f.adapter);
-  await screen.findByText(/Mit früheren Einstellungen getestet/);
+  await screen.findByText("Archive");
+  expect(document.body.textContent).toContain("Mit früheren Einstellungen getestet");
   await userEvent.click(screen.getByRole("button", { name: "Bearbeiten" }));
   const dialog = await screen.findByRole("dialog");
   expect((within(dialog).getByLabelText("Server") as HTMLInputElement).disabled || (within(dialog).getByLabelText("Server").closest("fieldset") as HTMLFieldSetElement).disabled).toBe(true);
@@ -134,4 +136,20 @@ it("uses the backend next-run instant in the owning host time zone", async () =>
   await screen.findByRole("button", { name: "Plan speichern" });
   expect(screen.getByTestId("backup-next").textContent).toContain("Europe/Berlin");
   expect(screen.getByTestId("backup-next").textContent).toContain("02:00");
+});
+
+it("sorts overview targets using the host overview target names", async () => {
+  const f = setup();
+  f.state.overview.targets = [{ id: "local", kind: "local", name: "Zeta" }, { id: "alpha", kind: "smb", name: "Alpha" }];
+  f.state.overview.volumes!.push({ ...f.state.overview.volumes![0]!, name: "second", policy: { ...f.state.overview.volumes![0]!.policy!, targetId: "alpha" } });
+  renderWithApp(<BackupsPage />, f.adapter);
+  await screen.findByRole("button", { name: "Nach Ziel sortieren" });
+  await userEvent.click(screen.getByRole("button", { name: "Nach Ziel sortieren" }));
+  expect(screen.getAllByRole("link", { name: /^(data|second)$/ })[0]?.textContent).toBe("second");
+});
+it("shows a backup reader the status without requiring policy write permission", async () => {
+  const f = setup(), volume = (await f.api.getBackupOverview("first")).volumes[0]!;
+  f.adapter.getCapability = async (operationId, resourceRef = { kind: "hub", id: "0" }) => ({ operationId, resourceRef, available: operationId !== "setBackupPolicy", disabledReasonCode: "capability.unavailable" });
+  renderWithApp(<BackupBadge volume={volume} />, { ...f.adapter, kind: "http" });
+  await waitFor(() => expect(screen.queryByText("Teilweise") !== null).toBe(true));
 });

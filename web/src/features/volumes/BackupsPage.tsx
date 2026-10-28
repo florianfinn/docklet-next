@@ -30,7 +30,7 @@ function BackupOverview() {
   const [sort, setSort] = useState<BackupSort>(DEFAULT_BACKUP_SORT);
   const visible = overviews.data?.filter((row) => hosts.visible.some((host) => host.id === row.hostId)) ?? [];
   const volumes = visible.flatMap((row) => row.volumes).filter((v) => v.backup || v.lastBackup || v.volumeExists === false);
-  const rows = sortBackups(volumes, hosts.byId, [], sort);
+  const rows = sortBackups(volumes, hosts.byId, visible.flatMap((row) => row.targets), sort);
   const key = (k: BackupSortKey) => ({ key: k, label: t(`columns.${k === "name" ? "volume" : k}`) });
   return <><PageHeader title={t("title")} description={t("description")} actions={<Button asChild variant="outline"><Link to="/settings/backups">{t("manageTargets")}</Link></Button>} />
     <div className="mb-4 space-y-2">{hosts.visible.map((host) => { const observed = visible.find((row) => row.hostId === host.id); return !observed || observed.unavailable ? <p key={host.id} role="status" className="rounded-xl border p-3 text-sm">{host.name}: {observed ? t("hostUnavailable") : t("hostLoading")}</p> : null; })}</div>
