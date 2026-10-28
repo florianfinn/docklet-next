@@ -4,13 +4,13 @@ import { daysAgo, hoursAgo } from "./time";
 
 /** Backup policies keyed by volume id (see domain/volumes volumeId). */
 export const BACKUP_POLICIES: Record<string, BackupPolicy> = {
-  "vol-atlas-paperless_pg_data": { enabled: true, targetId: "t-smb-nas", schedule: { mode: "daily", time: "03:00" }, retention: { maxCount: 7, maxSizeGb: null }, stopContainers: true },
-  "vol-atlas-paperless_paperless_data": { enabled: true, targetId: "t-smb-nas", schedule: { mode: "daily", time: "03:15" }, retention: { maxCount: 7, maxSizeGb: 20 }, stopContainers: false },
-  "vol-atlas-home_ha_config": { enabled: true, targetId: "t-local-atlas", schedule: { mode: "daily", time: "02:30" }, retention: { maxCount: 14, maxSizeGb: null }, stopContainers: false },
-  "vol-boreal-cloud_cloud_data": { enabled: true, targetId: "t-mount-boreal", schedule: { mode: "weekly", day: "sun", time: "04:00" }, retention: { maxCount: null, maxSizeGb: 200 }, stopContainers: true },
-  "vol-boreal-cloud_cloud_pg": { enabled: true, targetId: "t-mount-boreal", schedule: { mode: "weekly", day: "sun", time: "04:10" }, retention: { maxCount: 4, maxSizeGb: null }, stopContainers: true },
-  "vol-boreal-craft_craft_world": { enabled: true, targetId: "t-nfs-archive", schedule: { mode: "daily", time: "05:00" }, retention: { maxCount: 5, maxSizeGb: 40 }, stopContainers: true },
-  "vol-delta-git_forgejo_data": { enabled: true, targetId: "t-smb-nas", schedule: { mode: "weekly", day: "sat", time: "23:30" }, retention: { maxCount: 6, maxSizeGb: null }, stopContainers: false },
+  "vol-atlas-paperless_pg_data": { enabled: true, targetId: "t-smb-nas", schedule: { mode: "daily", time: "03:00" }, retentionCount: 7, stopContainers: true },
+  "vol-atlas-paperless_paperless_data": { enabled: true, targetId: "t-smb-nas", schedule: { mode: "daily", time: "03:15" }, retentionCount: 7, stopContainers: false },
+  "vol-atlas-home_ha_config": { enabled: true, targetId: "t-local-atlas", schedule: { mode: "daily", time: "02:30" }, retentionCount: 14, stopContainers: false },
+  "vol-boreal-cloud_cloud_data": { enabled: true, targetId: "t-mount-boreal", schedule: { mode: "weekly", day: "sun", time: "04:00" }, retentionCount: 0, stopContainers: true },
+  "vol-boreal-cloud_cloud_pg": { enabled: true, targetId: "t-mount-boreal", schedule: { mode: "weekly", day: "sun", time: "04:10" }, retentionCount: 4, stopContainers: true },
+  "vol-boreal-craft_craft_world": { enabled: true, targetId: "t-nfs-archive", schedule: { mode: "daily", time: "05:00" }, retentionCount: 5, stopContainers: true },
+  "vol-delta-git_forgejo_data": { enabled: true, targetId: "t-smb-nas", schedule: { mode: "weekly", day: "sat", time: "23:30" }, retentionCount: 6, stopContainers: false },
 };
 
 const run = (id: string, volumeId: string, targetId: string, at: string, sizeMb: number, extra: Partial<BackupRun> = {}): BackupRun => ({
@@ -40,7 +40,7 @@ export const BACKUP_RUNS: BackupRun[] = [
     status: "failed",
     sizeBytes: undefined,
     archive: undefined,
-    error: "NFS-Ziel nicht erreichbar: Zeitüberschreitung beim Mounten",
+    errorCode: "backup.target.mount-failed",
     stoppedContainers: true,
   }),
   run("b-10", "vol-boreal-craft_craft_world", "t-nfs-archive", daysAgo(1.1), 14, { stoppedContainers: true }),

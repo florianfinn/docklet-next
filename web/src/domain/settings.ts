@@ -1,7 +1,7 @@
 // Hub settings. They are hub-wide and independent of the sidebar host filter.
 
 import type { HostConnection } from "./model";
-import type { Retention } from "./retention";
+import type { components } from "@/api/generated/schema";
 import type { ScanSchedule } from "./scan-schedule";
 import { hubAddressUrl } from "./validation";
 
@@ -60,26 +60,13 @@ export interface UpdateSettings {
 
 export type BackupTargetKind = "local" | "mount" | "smb" | "nfs";
 
-export interface BackupTarget {
-  id: string;
-  name: string;
-  kind: BackupTargetKind;
-  /** Host for local directories and existing mounts. */
-  hostId?: string;
-  path: string;
-  server?: string;
-  share?: string;
-  username?: string;
-  /** A password exists on the hub; the value itself is never sent back. */
-  secretSet?: boolean;
-  options?: string;
-  lastTest?: { ok: boolean; at: string; message: string };
-}
+export type BackupTarget = components["schemas"]["BackupTarget"];
+export type BackupTargetInput = components["schemas"]["BackupTargetInput"];
+export type BackupTargetReferences = components["schemas"]["BackupTargetReferences"];
 
 export interface BackupSettings {
   targets: BackupTarget[];
-  /** Starting point for new backup plans; existing plans keep their own. */
-  defaultRetention: Retention;
+  defaultRetentionCount: number;
 }
 
 export type ChannelKind = "email" | "discord" | "telegram" | "signal" | "slack" | "ntfy" | "pushover" | "gotify" | "matrix" | "googlechat" | "generic";

@@ -11,6 +11,7 @@ import type { CodedActionRun, CodedEvent, MessageCode } from "../message-code";
 import type { RuntimeView } from "@/features/activity/runtime-presentation";
 import { reason, record, bool, id, date, optionalDate } from "./update-validation";
 import { inventoryId } from "./inventory-mapping";
+import { backupCodeKey } from "../backup-error";
 import { VULNERABILITY_CODES } from "./vulnerability-decoders";
 
 type Activity = components["schemas"]["ActivityActivity"];
@@ -74,11 +75,18 @@ export function mapActivityDetail(detail: Detail): CodedActionRun {
   if (typeof detail.outputTruncated !== "boolean") throw new Error("dto.invalid-output-truncation");
   if ((run.outcomeState !== undefined || run.cancelRequested !== undefined) &&
       ((run.outcomeState !== "known" && run.outcomeState !== "unknown") || typeof run.cancelRequested !== "boolean")) throw new Error("dto.invalid-runtime-knowledge");
-  const kind = KINDS[run.type] ?? "activity";
+  const action = typeof run.metadata?.action === "string" ? run.metadata.action : "";
+  const backup = /volume_backup/.test(action) || run.resourceType === "backup_target" || run.resourceType === "volume_backup_download";
+  const kind: ActionKind = backup ? action.startsWith("restore_") ? "volume-restore" : "backup" : KINDS[run.type] ?? "activity";
   const lifecycle = run.imageLifecycle;
   const m10 = run.type === "project_update" || run.type === "project_restore" || !!lifecycle;
   if (m10) { date(run.startedAt); optionalDate(run.endedAt); }
   const coded = (code: string | undefined, source: string, field: "progress" | "error" = "progress"): MessageCode => {
+    if (backup) {
+      const key = backupCodeKey(code) ?? backupCodeKey(source);
+      if (key) return { code: key, params: {} };
+      return { code: field === "error" ? "common.commandErrors.failed" : `activity.runKind.${kind}`, params: {} };
+    }
     if (!m10) return message(code, source);
     const safe = reason(code);
     if (safe && safe !== "http.error") return { code: `images.errors.${safe.replaceAll(".", "_")}`, params: {} };
@@ -115,7 +123,7 @@ export function mapActivityDetail(detail: Detail): CodedActionRun {
     progress: run.progress ?? 0,
     startedAt: run.startedAt,
     finishedAt: run.endedAt,
-    error: run.error ? vulnerabilityError(run.error) ?? coded(lifecycle?.code ?? (run.messageCode?.startsWith("runtime.") ? run.messageCode : undefined), run.error, "error") : undefined,
+    error: run.error ? (backup ? coded(run.error, "", "error") : vulnerabilityError(run.error)) ?? coded(lifecycle?.code ?? (run.messageCode?.startsWith("runtime.") ? run.messageCode : undefined), run.error, "error") : undefined,
     steps: (detail.stepTrace ?? []).map((step) => ({
       key: stepKey(step.name), label: coded(step.code, step.name), state: stepState(step.status),
       startedAt: step.startedAt, finishedAt: step.endedAt,

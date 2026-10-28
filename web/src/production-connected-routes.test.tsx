@@ -82,14 +82,14 @@ it("connects login, dashboard, hosts, containers, stacks, volumes and files with
   expect(consumer.textContent).toContain("/data");
   expect(within(consumer).getByRole("link", { name: "Container öffnen" }).getAttribute("href")).toContain("first~web");
   expect(f.state.calls.some((path) => path.endsWith("/volumes/data/usage"))).toBe(false);
-  expect(screen.getByRole("tab", { name: "Backups" }).hasAttribute("disabled")).toBe(true);
+  expect(screen.getByRole("tab", { name: "Backups" }).hasAttribute("disabled")).toBe(false);
   expect(screen.queryByText("Kein Backup") === null).toBe(true);
-  expect(screen.getByText("Backup-Status nicht verfügbar") !== null).toBe(true);
+  expect(screen.queryByText("Backup-Status nicht verfügbar") === null).toBe(true);
   await act(() => router.navigate("/volumes/first~data?tab=backups"));
-  expect(await screen.findByText("Diese Funktion ist nicht verfügbar")).toBeTruthy();
-  expect(screen.queryByRole("button", { name: "Plan speichern" }) === null).toBe(true);
+  expect(await screen.findByRole("button", { name: "Plan speichern" }) !== null).toBe(true);
+  expect(await screen.findByText(/Sicherheitskopie ·/) !== null).toBe(true);
   await act(() => router.navigate("/backups"));
-  await screen.findByText("Diese Funktion ist nicht verfügbar");
+  await screen.findByRole("link", { name: "data" });
   expect(screen.queryByText(/ungeschützt/)).toBeNull();
   await act(() => router.navigate("/networks?bench=100"));
   await screen.findByRole("heading", { name: "Netzwerke", level: 1 });
@@ -100,16 +100,17 @@ it("connects login, dashboard, hosts, containers, stacks, volumes and files with
   expect(document.querySelector('[data-layer="design-lab"]') === null).toBe(true);
 }, 120_000);
 
-it.each(["policy", "history"] as const)("keeps unsupported backup %s controls unmounted despite an advertised server capability", async (kind) => {
+it.each(["policy", "history"] as const)("renders live backup %s controls when the server advertises the mapping", async (kind) => {
   const f = fixture(); f.state.signedIn = true;
   const adapter = createAdapter({ fetch: f.fetcher as typeof fetch });
   const volume = await adapter.getVolume("first~data");
   const write = vi.spyOn(adapter, "setBackupPolicy");
   const backup = vi.spyOn(adapter, "runBackup");
   const restore = vi.spyOn(adapter, "restoreBackup");
-  renderWithApp(kind === "policy" ? <BackupPolicyCard volume={volume} targets={[]} defaultRetention={{ maxCount: 7, maxSizeGb: null }} hostOnline /> : <BackupHistory volume={volume} targets={[]} hostOnline />, adapter);
-  expect(screen.queryAllByRole("button").length).toBe(0);
-  await screen.findByText("Diese Funktion ist nicht verfügbar");
+  renderWithApp(kind === "policy" ? <BackupPolicyCard volume={volume} targets={[]} defaultRetentionCount={7} hostOnline /> : <BackupHistory volume={volume} targets={[]} hostOnline />, adapter);
+  if (kind === "policy") await screen.findByRole("button", { name: "Plan speichern" });
+  else await screen.findByRole("button", { name: "Wiederherstellen" });
+  expect(screen.queryByText("Diese Funktion ist nicht verfügbar") === null).toBe(true);
   expect(write).not.toHaveBeenCalled(); expect(backup).not.toHaveBeenCalled(); expect(restore).not.toHaveBeenCalled();
 });
 

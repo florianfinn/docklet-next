@@ -23,8 +23,8 @@ const TOPIC_KEYS: Record<Topic, readonly (readonly unknown[])[]> = {
   topology: [queryKeys.topology],
   events: [queryKeys.events],
   schedule: [queryKeys.schedule],
-  volumes: [queryKeys.volumes, queryKeys.volumeRoot, queryKeys.fileRoot],
-  settings: [queryKeys.settings, queryKeys.connectedSettings],
+  volumes: [queryKeys.volumes, queryKeys.volumeRoot, queryKeys.fileRoot, ["backup-overviews"], ["backup-overview"], ["backup-repository"]],
+  settings: [queryKeys.settings, queryKeys.connectedSettings, ["backup-targets"], ["backup-repository"], ["backup-overviews"], ["backup-overview"]],
   images: [queryKeys.images],
   registries: [["registries"]],
 };

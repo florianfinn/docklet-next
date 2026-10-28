@@ -1,138 +1,47 @@
-import { CapabilityGate } from "@/shared/components/capability-gate";
-import { History, Loader2, RotateCcw } from "lucide-react";
+// Source: docklet-next/issues/284
+// Revision: 7ccefa10105544af6787161faaf8328e4a44b45f
+// Retrieved: 2026-10-28
+// License: Apache-2.0
+// Deviations: Original live snapshot actions and outcome presentation.
+
 import { useState } from "react";
 import { useTranslations } from "use-intl";
-
-import { formatBytes, formatDateTime, formatRelative } from "@/domain/format";
-import type { BackupTarget } from "@/domain/settings";
-import type { BackupRun, VolumeDetail } from "@/domain/volumes";
+import { useAdapter } from "@/data/use-adapter";
+import { backupCodeKey, backupErrorMessage } from "@/data/backup-error";
+import { formatBytes, formatDateTime } from "@/domain/format";
+import type { BackupRun, UsableBackupTarget, VolumeDetail } from "@/domain/volumes";
+import { captureCommandFailure } from "@/shared/components/command-failure";
 import { ConfirmDialog } from "@/shared/components/confirm-dialog";
-import { ChoiceCards } from "@/shared/components/form-field";
 import { ToneBadge } from "@/shared/components/tone";
-import { useAdapterText } from "@/data/use-adapter-text";
 import { Button } from "@/shared/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/shared/ui/card";
-import { OverviewRowView, OverviewTable } from "@/shared/components/overview/overview-table";
+import { RestoreDialog } from "./RestoreDialog";
+import { RestoreFilesSheet } from "./RestoreFilesSheet";
+import { useVolumeCapability } from "../use-volume-capability";
 
-import { useVolumeCommands } from "../use-volume-commands";
+const STATUS_TONE = { running: "accent", succeeded: "ok", failed: "err", partial: "warn", unavailable: "gray" } as const;
 
-const STATUS_TONE = { running: "accent", succeeded: "ok", failed: "err" } as const;
-
-export function BackupHistory(props: { volume: VolumeDetail; targets: BackupTarget[]; hostOnline: boolean }) {
-  return <CapabilityGate operation="restoreBackup"><ConnectedBackupHistory {...props} /></CapabilityGate>;
-}
-
-function ConnectedBackupHistory({ volume, targets, hostOnline }: { volume: VolumeDetail; targets: BackupTarget[]; hostOnline: boolean }) {
-  const t = useTranslations("volumes.backups");
-  const dt = useAdapterText();
-  const cmd = useVolumeCommands();
-  const [restore, setRestore] = useState<BackupRun | null>(null);
-  const [mode, setMode] = useState<"replace" | "new">("replace");
-  const running = volume.consumers.filter((c) => c.running).map((c) => c.containerName);
-  const targetName = (id: string) => targets.find((x) => x.id === id)?.name ?? id;
-
-  return (
-    <Card className="gap-3 py-4">
-      <CardHeader className="px-4">
-        <CardTitle className="flex items-center gap-2">
-          <History className="size-4 text-muted-foreground" aria-hidden />
-          {t("history")}
-        </CardTitle>
-      </CardHeader>
-      <CardContent className="px-2">
-        {volume.backups.length === 0 ? (
-          <p className="px-2 py-4 text-sm text-muted-foreground">{t("historyEmpty")}</p>
-        ) : (
-          <OverviewTable
-            fitKey={`history|${volume.backups.length}`}
-            columns={() => [
-              { id: "name", label: t("columns.at") },
-              { id: "status", label: t("columns.status") },
-              { id: "trigger", label: t("columns.trigger") },
-              { id: "size", label: t("columns.size") },
-              { id: "archive", label: t("columns.archive"), className: "max-w-60", wide: true },
-            ]}
-            selecting={false}
-            actionsLabel={t("columns.actions")}
-            dense
-            listLabel={t("history")}
-          >
-            {(view, cols) =>
-              volume.backups.map((r) => (
-                <OverviewRowView
-                  key={r.id}
-                  view={view}
-                  columns={cols}
-                  pad="py-2"
-                  className="cursor-default"
-                  cells={{
-                    name: (
-                      <span className="text-xs">
-                        <span title={formatDateTime(r.startedAt)}>{formatRelative(r.startedAt)}</span>
-                        <span className="block text-[11px] text-muted-foreground">{targetName(r.targetId)}</span>
-                      </span>
-                    ),
-                    status: (
-                      <>
-                        <ToneBadge tone={STATUS_TONE[r.status]}>
-                          {r.status === "running" && <Loader2 className="animate-spin" aria-hidden />}
-                          {t(`status.${r.status}`)}
-                        </ToneBadge>
-                        {r.error && <span className="mt-1 block max-w-64 text-[11px] text-destructive">{dt(r.error)}</span>}
-                      </>
-                    ),
-                    trigger: (
-                      <span className="text-xs">
-                        {t(`trigger.${r.trigger}`)}
-                        {r.stoppedContainers && <span className="block text-[11px] text-muted-foreground">{t("stopped")}</span>}
-                      </span>
-                    ),
-                    size: <span className="font-mono text-xs tabular">{r.sizeBytes !== undefined ? formatBytes(r.sizeBytes) : "–"}</span>,
-                    archive: <span className="font-mono text-[11.5px] text-muted-foreground [overflow-wrap:anywhere]">{r.archive ?? "–"}</span>,
-                  }}
-                  actions={
-                    r.status === "succeeded" ? (
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        disabled={!hostOnline}
-                        onClick={() => {
-                          setMode("replace");
-                          setRestore(r);
-                        }}
-                      >
-                        <RotateCcw data-icon="inline-start" />
-                        {t("restore")}
-                      </Button>
-                    ) : null
-                  }
-                />
-              ))
-            }
-          </OverviewTable>
-        )}
-      </CardContent>
-      <ConfirmDialog
-        open={!!restore}
-        onOpenChange={(o) => !o && setRestore(null)}
-        title={t("restoreTitle", { archive: restore?.archive ?? "" })}
-        description={t("restoreBody")}
-        confirmLabel={t("restoreConfirm")}
-        onConfirm={async () => !!restore && !!(await cmd.restore(volume.id, restore.id, mode))}
-      >
-        <ChoiceCards
-          label={t("restore")}
-          value={mode}
-          onChange={setMode}
-          columns={2}
-          options={[
-            { value: "replace", title: t("restoreReplace"), description: running.length ? t("restoreReplaceHint", { names: running.join(", ") }) : t("restoreReplaceHintIdle") },
-            ...(volume.kind === "volume" ? [{ value: "new" as const, title: t("restoreNew"), description: t("restoreNewHint") }] : []),
-          ]}
-        />
-        {volume.kind === "bind" && <p className="text-xs text-muted-foreground">{t("restoreNewBind")}</p>}
-        <p className="text-[11px] text-muted-foreground">{t("restoreDemo")}</p>
-      </ConfirmDialog>
-    </Card>
-  );
+export function BackupHistory({ volume, targets, hostOnline, accepted = () => {} }: { volume: VolumeDetail; targets: UsableBackupTarget[]; hostOnline: boolean; accepted?: (id: string) => void }) {
+  const t = useTranslations("volumes.backups"), all = useTranslations(), adapter = useAdapter();
+  const restoreCapability = useVolumeCapability("restoreBackup", volume.id), filesCapability = useVolumeCapability("restoreBackupFiles", volume.id), downloadCapability = useVolumeCapability("downloadBackup", volume.id), deleteCapability = useVolumeCapability("deleteBackup", volume.id);
+  const [restore, setRestore] = useState<BackupRun>(), [files, setFiles] = useState<BackupRun>(), [remove, setRemove] = useState<BackupRun>(), [error, setError] = useState<string>(), [busy, setBusy] = useState(false);
+  const disabled = !hostOnline || busy || !!volume.running;
+  return <Card className="gap-3 py-4"><CardHeader><CardTitle>{t("history")}</CardTitle></CardHeader><CardContent className="space-y-3">
+    {volume.backupUnavailable && <p role="status">{t("hostUnavailable")}</p>}{error && <p role="alert" className="text-sm text-destructive">{error}</p>}
+    {!volume.backups.length && !volume.backupUnavailable && <p className="text-sm text-muted-foreground">{t("historyEmpty")}</p>}
+    <ul className="space-y-3">{volume.backups.map((run) => <li key={run.id} className="space-y-2 rounded-xl border p-3" data-testid={`backup-${run.id}`}>
+      <div className="flex flex-wrap items-center justify-between gap-2"><span className="text-sm">{formatDateTime(run.startedAt)}</span><ToneBadge tone={STATUS_TONE[run.status]}>{t(`status.${run.status}`)}</ToneBadge></div>
+      <p className="text-xs text-muted-foreground">{t(`trigger.${run.trigger}`)} · {targets.find((target) => target.id === run.targetId)?.name ?? run.targetId} · {run.sizeBytes === undefined ? "–" : formatBytes(run.sizeBytes)}</p>
+      {run.errorCode && <p className="text-sm text-destructive">{all(backupCodeKey(run.errorCode) ?? "common.commandErrors.failed")}</p>}
+      {run.archive && <p className="break-all font-mono text-xs text-muted-foreground">{run.archive}</p>}
+      <div className="flex flex-wrap gap-2">
+        {(run.status === "succeeded" || run.status === "partial") && <><Button variant="outline" size="sm" disabled={disabled || !restoreCapability.available} title={restoreCapability.reason} onClick={() => setRestore(run)}>{t("restore")}</Button><Button variant="outline" size="sm" disabled={disabled || !filesCapability.available || volume.volumeExists === false} title={filesCapability.reason} onClick={() => setFiles(run)}>{t("restoreFiles")}</Button><Button variant="outline" size="sm" disabled={disabled || !downloadCapability.available} title={downloadCapability.reason} onClick={async () => { setBusy(true); setError(undefined); try { const blob = await adapter.downloadBackup(volume.id, run.id); const url = URL.createObjectURL(blob); const link = document.createElement("a"); link.href = url; link.download = `${volume.name}-${run.id}.tar.gz`; link.click(); URL.revokeObjectURL(url); } catch (cause) { setError(backupErrorMessage(cause, all)); } finally { setBusy(false); } }}>{t("download")}</Button></>}
+        {run.status !== "running" && <Button variant="outline" size="sm" disabled={disabled || !deleteCapability.available} title={deleteCapability.reason} onClick={() => setRemove(run)}>{t("delete")}</Button>}
+      </div>
+    </li>)}</ul>
+  </CardContent>
+    {restore && <RestoreDialog key={restore.id} volume={volume} runId={restore.id} onClose={() => setRestore(undefined)} accepted={accepted} />}
+    {files && <RestoreFilesSheet key={files.id} volumeId={volume.id} runId={files.id} onClose={() => setFiles(undefined)} accepted={accepted} />}
+    <ConfirmDialog open={!!remove} onOpenChange={(open) => !open && setRemove(undefined)} title={t("delete")} description={t("deleteHint")} confirmLabel={t("delete")} onConfirm={async () => { const feedback = captureCommandFailure(adapter); try { await adapter.deleteBackup(volume.id, remove!.id); } catch (cause) { const message = backupErrorMessage(cause, all); setError(message); feedback.error(message); return false; } }} />
+  </Card>;
 }
