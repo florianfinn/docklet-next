@@ -202,7 +202,10 @@ export function createHttpAdapter(options: HttpAdapterOptions = {}): DockletAdap
       descriptors = await pending;
     } catch (error) {
       if (operationId === "listActions" && error instanceof AdapterOutcomeError && error.outcome.kind === "error" && error.outcome.status === 401) throw error;
-      return fallback();
+      // Transport loss or a server failure can recover; a refusal or a missing or denied descriptor cannot.
+      const status = error instanceof AdapterOutcomeError && error.outcome.kind === "error" ? error.outcome.status : 0;
+      const lost = error instanceof AdapterOutcomeError && error.outcome.kind === "error" && error.outcome.code === "http.error" && (status === undefined || status < 400 || status >= 500);
+      return fallback(lost ? "capability.read-unavailable" : GENERIC_REASON);
     }
     if (!Array.isArray(descriptors)) return fallback();
     const found = descriptors.find((entry) => entry?.operationId === operationId && entry.resourceRef?.kind === resourceRef.kind && entry.resourceRef.id === resourceRef.id);

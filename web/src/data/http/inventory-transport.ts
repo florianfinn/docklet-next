@@ -23,8 +23,11 @@ export function createInventoryTransport(baseUrl: string, fetcher: typeof fetch,
     let response: Response;
     try { response = await fetcher(`${baseUrl}/environments/${encodeURIComponent(hostId)}/${suffix}${query}`, { credentials: "same-origin", headers: { Accept: "application/json" }, signal }); }
     catch { return fail("http.error"); }
+    // A lost body stream is a transport failure; only an unparsable body is an invalid response.
+    let text: string;
+    try { text = await response.text(); } catch { signal?.throwIfAborted(); return fail("http.error", response.status); }
     let body: Body<I> & { code?: string };
-    try { body = await response.json(); } catch { return fail(`${operation}.invalid-response`, response.status); }
+    try { body = JSON.parse(text); } catch { return fail(`${operation}.invalid-response`, response.status); }
     signal?.throwIfAborted();
     if (!response.ok) {
       if (body.code && reasons.has(body.code)) onState(hostId, { stale: true, reason: body.code as InventoryObservation["reason"] });

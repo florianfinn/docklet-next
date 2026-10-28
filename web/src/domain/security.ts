@@ -29,7 +29,7 @@ export class ScanAdmissionError extends Error {
 }
 
 /** Host read failures that recover without operator action; other codes wait for a change event. */
-const RECOVERABLE_READS = new Set(["agent.unavailable", "http.error", "vulnerability.read-unavailable", "vulnerability.read-timeout", "vulnerability.host-offline", "vulnerability.host-pending", "vulnerability.storage-unavailable"]);
+const RECOVERABLE_READS = new Set(["agent.unavailable", "http.error", "capability.read-unavailable", "vulnerability.read-unavailable", "vulnerability.read-timeout", "vulnerability.host-offline", "vulnerability.host-pending", "vulnerability.storage-unavailable"]);
 export const SECURITY_RECOVERY_MS = 10_000;
 /** A mounted security read re-reads while a host is transiently unavailable; host failures are successful query data. */
 export function securityRecoveryInterval(overview?: { unavailable?: { code: string }[] }): number | false {
