@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; functional cut: removed S3 backup destinations; M12 backup foundation.
+// Deviations: Local module namespace; functional cut: removed S3 backup destinations; M12 backup foundation; agent compatibility refusal on remote policy reads and writes.
 
 package policies
 
@@ -19,6 +19,7 @@ import (
 	"github.com/florianfinn/docklet-next/types/volume"
 
 	"github.com/florianfinn/docklet-next/backend/internal/activity"
+	"github.com/florianfinn/docklet-next/backend/internal/backuptarget"
 	"github.com/florianfinn/docklet-next/backend/internal/database"
 	"github.com/florianfinn/docklet-next/backend/internal/environment"
 	activitylib "github.com/florianfinn/docklet-next/backend/pkg/libarcane/activity"
@@ -57,10 +58,9 @@ func (h *Handler) GetBackupPolicy(ctx context.Context, input *GetVolumeBackupPol
 			return nil, huma.Error500InternalServerError("environment service not available")
 		}
 		remotePath := fmt.Sprintf("/api/environments/0/volumes/%s/backup-policy", url.PathEscape(input.VolumeName))
-		response, err := handlerutil.RemoteJSONProxy(
-			h.environmentService.ProxyJSONRequest,
-		).JSON[base.ApiResponse[volume.BackupPolicyCollection]](
+		response, err := backuptarget.RemoteJSON[base.ApiResponse[volume.BackupPolicyCollection]](
 			ctx,
+			h.environmentService.ProxyJSONRequest,
 			input.EnvironmentID,
 			http.MethodGet,
 			remotePath,
@@ -114,10 +114,9 @@ func (h *Handler) UpdateBackupPolicy(ctx context.Context, input *UpdateVolumeBac
 			}
 			remotePath := fmt.Sprintf("/api/environments/0/volumes/%s/backup-policy", url.PathEscape(input.VolumeName))
 			var proxyErr error
-			remoteResponse, proxyErr = handlerutil.RemoteJSONProxy(
-				h.environmentService.ProxyJSONRequest,
-			).JSON[base.ApiResponse[volume.BackupPolicyCollection]](
+			remoteResponse, proxyErr = backuptarget.RemoteJSON[base.ApiResponse[volume.BackupPolicyCollection]](
 				activityCtx,
+				h.environmentService.ProxyJSONRequest,
 				input.EnvironmentID,
 				http.MethodPut,
 				remotePath,

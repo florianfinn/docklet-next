@@ -32,6 +32,9 @@ func SyncHost(ctx context.Context, db *database.DB, hostID string, proxy JSONPro
 	}
 	var response base.ApiResponse[dto.TargetSetReceipt]
 	if err = proxy(ctx, hostID, http.MethodPut, "/api/environments/0/volumes/backups/targets", payload, &response); err != nil {
+		if access := AgentAccess(err); access != nil {
+			return dto.TargetSetReceipt{}, access
+		}
 		return dto.TargetSetReceipt{}, dto.NewProblem(502, "backup.target.sync-failed", err)
 	}
 	receipt := response.Data

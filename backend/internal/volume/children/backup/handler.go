@@ -186,7 +186,7 @@ func (h *Handler) CreateBackup(ctx context.Context, input *CreateBackupInput) (*
 			if h.environmentService == nil {
 				return backuptypes.NewProblem(503, "backup.target.sync-failed", nil)
 			}
-			response, err := remoteBackupJSON[base.ApiResponse[volume.BackupEntry]](ctx, h.environmentService.ProxyJSONRequest, input.EnvironmentID, http.MethodPost, "/api/environments/0/volumes/"+url.PathEscape(input.VolumeName)+"/backups", request)
+			response, err := backuptarget.RemoteJSON[base.ApiResponse[volume.BackupEntry]](ctx, h.environmentService.ProxyJSONRequest, input.EnvironmentID, http.MethodPost, "/api/environments/0/volumes/"+url.PathEscape(input.VolumeName)+"/backups", request)
 			if err != nil {
 				return err
 			}
@@ -201,7 +201,7 @@ func (h *Handler) CreateBackup(ctx context.Context, input *CreateBackupInput) (*
 	agent := h.config != nil && (h.config.AgentMode || h.config.EdgeAgent)
 	if !agent && input.EnvironmentID != "0" {
 		if target == "" {
-			response, e := remoteBackupJSON[base.ApiResponse[volume.BackupPolicyCollection]](ctx, h.environmentService.ProxyJSONRequest, input.EnvironmentID, http.MethodGet, "/api/environments/0/volumes/"+url.PathEscape(input.VolumeName)+"/backup-policy", nil)
+			response, e := backuptarget.RemoteJSON[base.ApiResponse[volume.BackupPolicyCollection]](ctx, h.environmentService.ProxyJSONRequest, input.EnvironmentID, http.MethodGet, "/api/environments/0/volumes/"+url.PathEscape(input.VolumeName)+"/backup-policy", nil)
 			if e != nil {
 				return nil, e
 			}

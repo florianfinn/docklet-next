@@ -13,10 +13,9 @@ import (
 	"sync"
 
 	"github.com/florianfinn/docklet-next/backend/internal/backup"
+	"github.com/florianfinn/docklet-next/backend/internal/backuptarget"
 	"github.com/florianfinn/docklet-next/backend/internal/volume/operationlock"
 	"github.com/florianfinn/docklet-next/backend/pkg/libarcane/rustic"
-	"github.com/florianfinn/docklet-next/backend/pkg/remenv"
-	"github.com/florianfinn/docklet-next/backend/pkg/utils/handlerutil"
 	dto "github.com/florianfinn/docklet-next/types/backup"
 	"uuid"
 )
@@ -106,7 +105,7 @@ func neutralBackupError(err error, code string) error {
 	if err == nil {
 		return nil
 	}
-	if access := agentAccessProblem(err); access != err {
+	if access := backuptarget.AgentAccess(err); access != nil {
 		return access
 	}
 	var p *dto.Problem
@@ -130,43 +129,4 @@ func (s *Service) retainWriterFence(ctx context.Context, name string) {
 		s.writerFenceRelease = map[string]func(){}
 	}
 	s.writerFenceRelease[name] = release
-}
-
-// agentAccessError carries the host compatibility envelope the environment
-// proxy sends for the same verdict, so central backup routes refuse alike.
-type agentAccessError struct {
-	Success bool   `json:"success"`
-	Code    string `json:"code"`
-	status  int
-	cause   error
-}
-
-func (e *agentAccessError) Error() string  { return e.Code }
-func (e *agentAccessError) Unwrap() error  { return e.cause }
-func (e *agentAccessError) GetStatus() int { return e.status }
-
-// agentAccessProblem maps an agent access verdict and returns other errors unchanged.
-func agentAccessProblem(err error) error {
-	if !errors.Is(err, remenv.ErrAgentUpdateRequired) && !errors.Is(err, remenv.ErrAgentInvalidToken) {
-		return err
-	}
-	status, code := remenv.AgentAccessFailure(err)
-	return &agentAccessError{Code: code, status: status, cause: err}
-}
-
-// remoteBackupJSON keeps the agent access verdict that the shared proxy
-// translation reports as an internal error.
-func remoteBackupJSON[T any](ctx context.Context, proxy handlerutil.RemoteJSONProxy, environmentID, method, path string, body any) (*T, error) {
-	var raw error
-	record := handlerutil.RemoteJSONProxy(func(ctx context.Context, id, m, p string, b []byte, out any) error {
-		raw = proxy(ctx, id, m, p, b, out)
-		return raw
-	})
-	output, err := record.JSON[T](ctx, environmentID, method, path, body)
-	if err != nil && raw != nil {
-		if access := agentAccessProblem(raw); access != raw {
-			return nil, access
-		}
-	}
-	return output, err
 }

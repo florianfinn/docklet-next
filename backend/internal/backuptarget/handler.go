@@ -68,6 +68,9 @@ func out[T any](data T) *handlerutil.Out[T] {
 	return &handlerutil.Out[T]{Body: base.ApiResponse[T]{Success: true, Data: data}}
 }
 func failure(err error) error {
+	if access := AgentAccess(err); access != nil {
+		return access
+	}
 	var problem *dto.Problem
 	if errors.As(err, &problem) {
 		return problem
