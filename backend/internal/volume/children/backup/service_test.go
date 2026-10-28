@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; functional cut: removed S3 backup destinations; SQLite temp-file persistence fixture.
+// Deviations: Local module namespace; functional cut: removed S3 backup destinations; SQLite temp-file persistence fixture; M12 backup foundation.
 
 package backup
 
@@ -159,10 +159,10 @@ func TestVolumeBackup_ValidationErrors(t *testing.T) {
 	ctx := t.Context()
 
 	_, err = service.policies.UpdateBackupPolicies(ctx, "app-data", []volume.UpdateBackupPolicy{{Schedule: "not a cron", LocalEnabled: true}})
-	require.ErrorContains(t, err, "invalid volume backup schedule")
+	require.ErrorContains(t, err, "volume.backup.policy-invalid")
 
 	_, err = service.policies.UpdateBackupPolicies(ctx, "app-data", []volume.UpdateBackupPolicy{{Schedule: "0 0 2 * * *", RetentionCount: 7}})
-	require.ErrorContains(t, err, "select a local volume backup destination")
+	require.ErrorContains(t, err, "volume.backup.policy-invalid")
 
 	_, err = service.StartBackup(ctx, "0", "app-data", user.Actor{}, volume.CreateBackupRequest{Destination: volume.BackupDestination("invalid")})
 	require.EqualError(t, err, "invalid volume backup destination")

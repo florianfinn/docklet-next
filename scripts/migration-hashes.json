@@ -9,5 +9,6 @@
   "sqlite/008_restore_retention.sql": "d727135fbd5e6419f195dcd8cd6ddbef486d0ac01afd0f584e1440d1334dcb1e",
   "sqlite/009_update_policies.sql": "b01863370bb14cf82b2865d4787531e28463afc9bae05c2d814c4c3e2e97ebc9",
   "sqlite/010_vulnerability_attempts.sql": "8e26fdcff420f772c29f423426e20fb3680c6263fcaa786a78f625566399cd9f",
-  "sqlite/011_vulnerability_notifications.sql": "a8c887b2e5254ddeea1fade74d401ca009cf3569e205f93e0328f9fa60536369"
+  "sqlite/011_vulnerability_notifications.sql": "a8c887b2e5254ddeea1fade74d401ca009cf3569e205f93e0328f9fa60536369",
+  "sqlite/012_volume_backup_lifecycle.sql": "6507e3a007a7a24f5b5fefe33641b0a0254a6e13de2ed989a1581e5034c5e2f6"
 }

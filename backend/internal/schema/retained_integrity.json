@@ -281,6 +281,10 @@
     {"table": "webhooks", "column": "token_prefix", "notNull": true}
   ],
   "constraints": {
+    "volume_restore_runs": ["CHECK (kind IN ('full','files','upload'))", "CHECK (phase IN ('preparing','writing','done'))", "CHECK (status IN ('running','succeeded','failed','partial'))", "CHECK (stopped_containers IS NULL OR json_valid(stopped_containers))", "CHECK (mode IN ('replace','new'))"],
+    "volume_backups": ["CHECK (stopped_containers IS NULL OR json_valid(stopped_containers))"],
+    "backup_targets": ["CHECK (kind IN ('local','mount','smb','nfs'))", "CHECK ((kind IN ('smb','nfs')) = (host_id IS NULL))"],
+
     "vulnerability_scan_notifications": ["CHECK (status IN ('pending','sending','sent','failed','expired','unconfigured'))", "CHECK (attempts >= 0)", "CHECK ((status = 'sending') = (lease_until IS NOT NULL))"],
     "vulnerability_scan_runs": ["CHECK (origin IN ('manual','scheduled'))", "CHECK (scope IN ('in-use','all'))", "CHECK (status IN ('running','completed','partial','cancelled','failed','interrupted'))", "CHECK (targets>=0)", "CHECK (scanned>=0)", "CHECK (failed>=0)", "CHECK (skipped>=0)", "CHECK (critical>=0)", "CHECK (high>=0)", "CHECK (medium>=0)", "CHECK (low>=0)", "CHECK (unknown>=0)", "CHECK (new_critical>=0)", "CHECK (new_high>=0)"],
     "stack_update_policies": ["CHECK (mode IN ('off','notify','apply'))", "CHECK (revision > 0)"],
@@ -317,6 +321,8 @@
     "system_backup_policies": ["CHECK (retention_count >= 1)"]
   },
   "indexes": [
+    "CREATE UNIQUE INDEX idx_volume_backup_policies_single_volume ON volume_backup_policies (volume_name)",
+    "CREATE UNIQUE INDEX idx_backup_targets_active_name ON backup_targets (name) WHERE retired_at IS NULL",
     "CREATE INDEX idx_vulnerability_scan_notifications_status ON vulnerability_scan_notifications (status,created_at);",
     "CREATE INDEX idx_vulnerability_scan_runs_environment_id ON vulnerability_scan_runs (environment_id,started_at);",
     "CREATE INDEX idx_restore_points_target_created ON restore_points (target_id, created_at);",

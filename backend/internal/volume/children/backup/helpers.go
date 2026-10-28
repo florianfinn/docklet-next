@@ -350,6 +350,9 @@ func backupArchiveFilenameInternal(backupID string) (string, error) {
 
 // volumeBackupPasswordInternal returns the recovery key once one is stored, re-keying the given repositories off the legacy derivation first.
 func (s *Service) volumeBackupPasswordInternal(ctx context.Context, dockerClient *client.Client, repositories ...backup.Repository) (string, error) {
+	if len(repositories) > 0 && repositories[0].Password != "" {
+		return repositories[0].Password, nil
+	}
 	if s.deps.RecoveryKeys == nil {
 		return kit.SHA256Hex(legacyVolumePasswordSaltInternal + s.deps.EncryptionKey), nil
 	}
@@ -360,9 +363,7 @@ func (s *Service) volumeBackupPasswordInternal(ctx context.Context, dockerClient
 	if err != nil {
 		return "", err
 	}
-	for _, repository := range repositories {
-		s.rekeyRepositoryInternal(ctx, dockerClient, repository, key)
-	}
+
 	return key, nil
 }
 
@@ -408,7 +409,7 @@ func (s *Service) localRusticRepositoryInternal(ctx context.Context, dockerClien
 
 func (s *Service) rusticRepositoryForBackupInternal(ctx context.Context, dockerClient *client.Client, entry *volume.Backup) (backup.Repository, string, error) {
 	if entry.LocalSnapshotID != "" {
-		repository, err := s.localRusticRepositoryInternal(ctx, dockerClient, true)
+		repository, err := s.repositoryFor(ctx, dockerClient, string(entry.Destination), true)
 		return repository, entry.LocalSnapshotID, err
 	}
 	return backup.Repository{}, "", errors.New("volume backup has no Rustic snapshot")

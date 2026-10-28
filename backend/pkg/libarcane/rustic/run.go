@@ -44,12 +44,12 @@ func Run(ctx context.Context, dockerClient *client.Client, password string, comm
 	)
 	allMounts := append([]mount.Mount{}, mounts...)
 	allMounts = append(allMounts, mount.Mount{Type: mount.TypeVolume, Source: CacheVolume, Target: "/cache"})
-	hostConfig := volumehelper.HostConfig(DefaultImage, nil, allMounts)
+	hostConfig := volumehelper.HostConfig(Image(ctx), nil, allMounts)
 	hostConfig.AutoRemove = false
 	hostConfig.NetworkMode = networkMode
 	created, err := dockerClient.ContainerCreate(ctx, client.ContainerCreateOptions{
 		Config: &container.Config{
-			Image:  DefaultImage,
+			Image:  Image(ctx),
 			Cmd:    command,
 			Env:    env,
 			Labels: volumehelper.Labels(),

@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; functional cut: removed S3 backup destinations.
+// Deviations: Local module namespace; single owning-host policy, target selection and scheduler-produced next-run metadata; M12 backup foundation.
 
 package policies
 
@@ -10,8 +10,11 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	backupdto "github.com/florianfinn/docklet-next/types/backup"
 	"log/slog"
 	"strings"
+	"sync"
+	"time"
 
 	activitytypes "github.com/florianfinn/docklet-next/types/activity"
 	"github.com/florianfinn/docklet-next/types/scheduler"
@@ -33,6 +36,7 @@ const defaultSchedule = "0 0 2 * * *"
 // Dependencies are the backup operations scheduled policies run through.
 type Dependencies struct {
 	DB             *database.DB
+	Location       *time.Location
 	Activity       *activity.ActivityService
 	AlreadyRunning error
 	LatestRun      func(ctx context.Context, policyID string) (*volume.BackupEntry, error)
@@ -42,8 +46,9 @@ type Dependencies struct {
 
 // Service owns per-volume backup policies and their scheduled jobs.
 type Service struct {
-	deps Dependencies
-	jobs *entityjobs.Registry
+	deps      Dependencies
+	jobs      *entityjobs.Registry
+	admission sync.Mutex
 }
 
 func NewService(deps Dependencies) *Service {
@@ -86,21 +91,47 @@ func (s *Service) GetBackupPolicies(ctx context.Context, volumeName string) (*vo
 	if err != nil {
 		return nil, err
 	}
-	result := &volume.BackupPolicyCollection{Policies: make([]volume.BackupPolicy, 0, len(policies))}
+	location := s.deps.Location
+	if location == nil {
+		location = time.UTC
+	}
+	result := &volume.BackupPolicyCollection{TimeZone: location.String(), Policies: make([]volume.BackupPolicy, 0, len(policies))}
 	for i := range policies {
 		lastRun, runErr := s.deps.LatestRun(ctx, policies[i].ID)
 		if runErr != nil {
 			return nil, fmt.Errorf("failed to load latest volume backup: %w", runErr)
 		}
-		result.Policies = append(result.Policies, policies[i].ToDTO(lastRun))
+		dto := policies[i].ToDTO(lastRun)
+		if scheduler, ok := s.jobs.Scheduler().(interface {
+			GetJobRuntimeState(string) (scheduler.JobRuntimeState, bool)
+		}); ok {
+			if state, found := scheduler.GetJobRuntimeState(s.jobs.JobName(policies[i].ID)); found && dto.Enabled {
+				dto.NextRunAt = state.NextRun
+			}
+		}
+		result.Policies = append(result.Policies, dto)
 	}
 	return result, nil
 }
 
 func (s *Service) UpdateBackupPolicies(ctx context.Context, volumeName string, updates []volume.UpdateBackupPolicy) (*volume.BackupPolicyCollection, error) {
+	s.admission.Lock()
+	defer s.admission.Unlock()
+	if len(updates) > 1 {
+		return nil, backupdto.NewProblem(422, "volume.backup.policy-single", nil)
+	}
+
 	existing, err := s.policiesInternal(ctx, volumeName)
 	if err != nil {
 		return nil, err
+	}
+	for _, update := range updates {
+		if update.ID != "" && (len(existing) == 0 || update.ID != existing[0].ID) {
+			return nil, backupdto.NewProblem(422, "volume.backup.policy-invalid", nil)
+		}
+		if _, e := backup.ValidatePolicyUpdate(ctx, "volume", update); e != nil {
+			return nil, backupdto.NewProblem(422, "volume.backup.policy-invalid", e)
+		}
 	}
 	reconcile := backup.PolicyReconciliation[VolumeBackupPolicy, volume.UpdateBackupPolicy]{
 		Domain:   "volume",
@@ -117,6 +148,10 @@ func (s *Service) UpdateBackupPolicies(ctx context.Context, volumeName string, u
 			update = normalized
 			policy.Enabled, policy.Schedule, policy.RetentionCount = update.Enabled, update.Schedule, update.RetentionCount
 			policy.StopContainers, policy.LocalEnabled = update.StopContainers, update.LocalEnabled
+			policy.TargetID = update.TargetID
+			if policy.TargetID == "" {
+				policy.TargetID = "local"
+			}
 			return nil
 		},
 		Unregister: s.jobs.Unregister,
@@ -248,3 +283,7 @@ func (s *Service) Remove(ctx context.Context, volumeName string) {
 func (s *Service) Rename(tx *gorm.DB, oldName, newName string) error {
 	return tx.Model(&VolumeBackupPolicy{}).Where("volume_name = ?", oldName).Update("volume_name", newName).Error
 }
+
+// AdmissionLock shares policy/reference admission with the owning-host backup service.
+func (s *Service) AdmissionLock()   { s.admission.Lock() }
+func (s *Service) AdmissionUnlock() { s.admission.Unlock() }

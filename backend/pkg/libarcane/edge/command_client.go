@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; finite runtime responses, cancellation signaling and pending limits.
+// Deviations: Local module namespace; finite runtime responses, cancellation signaling and pending limits; M12 backup foundation.
 
 package edge
 
@@ -10,6 +10,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	backuptypes "github.com/florianfinn/docklet-next/types/backup"
 	dto "github.com/florianfinn/docklet-next/types/updater"
 	"github.com/florianfinn/docklet-next/types/vulnerability"
 	"net/http"
@@ -142,8 +143,14 @@ func (c *CommandClient) Execute(ctx context.Context, tunnel *AgentTunnel, req *C
 	if vulnerability.IsRoute(req.Method, req.Path) {
 		limit = vulnerability.ResponseLimit
 	}
+	if backupLimit := backuptypes.VolumeRouteResponseLimit(req.Method, req.Path); backupLimit > 0 {
+		limit = backupLimit
+	}
 	status, headers, body, err := collectCommandResponseBoundedInternal(ctx, tunnel, pending, req.Method, limit)
 	if err != nil {
+		if errors.Is(err, ErrCommandResponseTooLarge) && backuptypes.VolumeRouteResponseLimit(req.Method, req.Path) > 0 {
+			return nil, backuptypes.NewProblem(413, "volume.backup.listing-too-large", err)
+		}
 		return nil, err
 	}
 

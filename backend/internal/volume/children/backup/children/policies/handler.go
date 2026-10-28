@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; functional cut: removed S3 backup destinations.
+// Deviations: Local module namespace; functional cut: removed S3 backup destinations; M12 backup foundation.
 
 package policies
 
@@ -124,6 +124,10 @@ func (h *Handler) UpdateBackupPolicy(ctx context.Context, input *UpdateVolumeBac
 		return updateErr
 	})
 	if err != nil {
+		var typed huma.StatusError
+		if errors.As(err, &typed) {
+			return nil, typed
+		}
 		if errorStatus == http.StatusInternalServerError {
 			return nil, huma.Error500InternalServerError(err.Error())
 		}

@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; prune preview registration; typed API create and rename conflict schemas.
+// Deviations: Local module namespace; prune preview registration; typed API create and rename conflict schemas; M12 backup foundation.
 
 // Package volume owns Docker volumes: CRUD and pruning, the helper-container
 // file browser, backup and restore, and the HTTP surface for all of it.
@@ -17,6 +17,8 @@ import (
 	"github.com/danielgtaylor/huma/v2"
 
 	"github.com/florianfinn/docklet-next/backend/internal/activity"
+	"github.com/florianfinn/docklet-next/backend/internal/backuptarget"
+	"github.com/florianfinn/docklet-next/backend/internal/config"
 	"github.com/florianfinn/docklet-next/backend/internal/docker"
 	"github.com/florianfinn/docklet-next/backend/internal/environment"
 	"github.com/florianfinn/docklet-next/backend/internal/middleware"
@@ -58,7 +60,7 @@ func (m *Module) Service() *VolumeService {
 
 // RegisterRoutes mounts the volume endpoints. A nil module still registers, so
 // OpenAPI spec generation can discover the routes without a service graph.
-func (m *Module) RegisterRoutes(api huma.API, appCtx handlerutil.ActivityAppContext) {
+func (m *Module) RegisterRoutes(api huma.API, appCtx handlerutil.ActivityAppContext, configs ...*config.Config) {
 	if m == nil {
 		m = &Module{}
 	}
@@ -70,6 +72,17 @@ func (m *Module) RegisterRoutes(api huma.API, appCtx handlerutil.ActivityAppCont
 	RegisterVolumes(api, m.dockerService, m.service, m.activityService, m.environmentService, appCtx)
 	workspace.RegisterRoutes(api, workspace.NewHandler(service.workspace, m.activityService, appCtx.Context()))
 	backup.RegisterRoutes(api, backup.NewHandler(service.backup, m.activityService, m.environmentService, m.uploadService, appCtx.Context()))
+	var cfg *config.Config
+	if len(configs) > 0 {
+		cfg = configs[0]
+	}
+	agent := cfg != nil && (cfg.AgentMode || cfg.EdgeAgent)
+	targetHandler := backup.TargetHandler(service.backup, m.environmentService, cfg)
+	if !agent {
+		backuptarget.RegisterHubRoutes(api, targetHandler)
+	}
+	backuptarget.RegisterHostRoutes(api, targetHandler, agent)
+
 }
 
 // RegisterVolumes registers volume management routes using Huma.

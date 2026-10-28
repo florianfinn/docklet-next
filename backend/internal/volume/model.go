@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; functional cut: removed S3 backup destinations.
+// Deviations: Local module namespace; functional cut: removed S3 backup destinations; persisted lifecycle responsibility; M12 backup foundation.
 
 package volume
 
@@ -37,18 +37,21 @@ type VolumeBackupFormat string
 type VolumeBackup struct {
 	database.BaseModel
 
-	VolumeName      string                   `json:"volumeName" gorm:"column:volume_name;index"`
-	Size            int64                    `json:"size" gorm:"column:size"`
-	CreatedAt       time.Time                `json:"createdAt" gorm:"column:created_at"`
-	Status          VolumeBackupStatus       `json:"status" gorm:"column:status;type:text;not null;default:succeeded"`
-	Trigger         VolumeBackupTrigger      `json:"trigger" gorm:"column:trigger;type:text;not null;default:manual"`
-	Destination     volume.BackupDestination `json:"destination" gorm:"column:destination;type:text;not null;default:local"`
-	Format          VolumeBackupFormat       `json:"format" gorm:"column:format;type:text;not null;default:archive"`
-	LocalSnapshotID string                   `json:"localSnapshotId,omitempty" gorm:"column:local_snapshot_id;type:text"`
-	PolicyID        string                   `json:"policyId,omitempty" gorm:"column:policy_id;type:text;index"`
-	Error           string                   `json:"error,omitempty" gorm:"column:error;type:text"`
-	ActivityID      *string                  `json:"activityId,omitempty" gorm:"-"`
-	Type            backup.ManagementType    `json:"type" gorm:"-"`
+	VolumeName        string                   `json:"volumeName" gorm:"column:volume_name;index"`
+	Size              int64                    `json:"size" gorm:"column:size"`
+	CreatedAt         time.Time                `json:"createdAt" gorm:"column:created_at"`
+	Status            VolumeBackupStatus       `json:"status" gorm:"column:status;type:text;not null;default:succeeded"`
+	Trigger           VolumeBackupTrigger      `json:"trigger" gorm:"column:trigger;type:text;not null;default:manual"`
+	Destination       volume.BackupDestination `json:"destination" gorm:"column:destination;type:text;not null;default:local"`
+	Format            VolumeBackupFormat       `json:"format" gorm:"column:format;type:text;not null;default:archive"`
+	LocalSnapshotID   string                   `json:"localSnapshotId,omitempty" gorm:"column:local_snapshot_id;type:text"`
+	PolicyID          string                   `json:"policyId,omitempty" gorm:"column:policy_id;type:text;index"`
+	Error             string                   `json:"error,omitempty" gorm:"column:error;type:text"`
+	StopContainers    bool                     `json:"stopContainers" gorm:"not null;default:false"`
+	StoppedContainers *string                  `json:"-"`
+	ErrorCode         string                   `json:"errorCode,omitempty"`
+	ActivityID        *string                  `json:"activityId,omitempty" gorm:"column:activity_id;type:text"`
+	Type              backup.ManagementType    `json:"type" gorm:"-"`
 }
 
 func (*VolumeBackup) TableName() string {

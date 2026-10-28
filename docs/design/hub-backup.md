@@ -15,6 +15,11 @@ credentials encrypted in the database requires the original external encryption
 key. The operator must protect archives: they are unencrypted and checksums prove
 internal consistency, not source authenticity. Restore only trusted archives.
 
+The archive is unencrypted. Target credentials, target keys and a configured local
+recovery key stored inside it require the original encryption key after restore.
+Export repository recovery keys separately; those exports neither encrypt the
+Hub archive nor replace the key needed to decrypt its stored fields.
+
 Local archives and downloads are the recovery path. Copying to mount/SMB
 volume-backup targets is a follow-up owned by the volume-backup transfer feature.
 That interface is not delivered; target IDs are rejected and target controls stay
