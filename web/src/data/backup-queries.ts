@@ -10,11 +10,25 @@ import type { BackupOverview } from "@/domain/volumes";
 
 export function useBackupOverview(host: string, enabled = true) {
   const adapter = useAdapter();
-  return useQuery({ queryKey: ["backup-overview", host], queryFn: () => adapter.getBackupOverview(host), enabled: enabled && !!host, refetchInterval: 5000 });
+  return useQuery({
+    queryKey: ["backup-overview", host],
+    queryFn: () => adapter.getBackupOverview(host),
+    enabled: enabled && !!host,
+    refetchInterval: 5000,
+  });
 }
 export function useBackupOverviews() {
-  const adapter = useAdapter(), client = useQueryClient();
-  return useQuery({ queryKey: ["backup-overviews"], queryFn: ({ signal }) => adapter.listBackupOverviews((rows) => { if (!signal.aborted && client.getQueryData<BackupOverview[]>(["backup-overviews"]) === undefined) client.setQueryData(["backup-overviews"], rows); }), refetchInterval: 10000 });
+  const adapter = useAdapter(),
+    client = useQueryClient();
+  return useQuery({
+    queryKey: ["backup-overviews"],
+    queryFn: ({ signal }) =>
+      adapter.listBackupOverviews((rows) => {
+        if (!signal.aborted && client.getQueryData<BackupOverview[]>(["backup-overviews"]) === undefined)
+          client.setQueryData(["backup-overviews"], rows);
+      }),
+    refetchInterval: 10000,
+  });
 }
 export function useBackupTargets(enabled = true) {
   const adapter = useAdapter();
@@ -22,5 +36,9 @@ export function useBackupTargets(enabled = true) {
 }
 export function useBackupRepository(host: string) {
   const adapter = useAdapter();
-  return useQuery({ queryKey: ["backup-repository", host], queryFn: () => adapter.getBackupRepository(host), refetchInterval: 5000 });
+  return useQuery({
+    queryKey: ["backup-repository", host],
+    queryFn: () => adapter.getBackupRepository(host),
+    refetchInterval: 5000,
+  });
 }

@@ -32,21 +32,91 @@ function BackupOverview() {
   const volumes = visible.flatMap((row) => row.volumes).filter((v) => v.backup || v.lastBackup || v.volumeExists === false);
   const rows = sortBackups(volumes, hosts.byId, visible.flatMap((row) => row.targets), sort);
   const key = (k: BackupSortKey) => ({ key: k, label: t(`columns.${k === "name" ? "volume" : k}`) });
-  return <><PageHeader title={t("title")} description={t("description")} actions={<Button asChild variant="outline"><Link to="/settings/backups">{t("manageTargets")}</Link></Button>} />
-    <div className="mb-4 space-y-2">{hosts.visible.map((host) => { const observed = visible.find((row) => row.hostId === host.id); return !observed || observed.unavailable ? <p key={host.id} role="status" className="rounded-xl border p-3 text-sm">{host.name}: {observed ? t("hostUnavailable") : t("hostLoading")}</p> : null; })}</div>
-    {overviews.isError ? <QueryError error={overviews.error} onRetry={() => void overviews.refetch()} /> : <Card className="py-4"><CardContent className="px-3">
-      {!rows.length ? !overviews.isPending && !visible.some((row) => row.unavailable) && <p>{t("overviewEmpty")}</p> : <OverviewTable fitKey={`backups|${rows.length}`} columns={() => [
-        { id: "name", label: t("columns.volume"), sorts: [key("name")] }, { id: "host", label: t("columns.host"), sorts: [key("host")] }, { id: "target", label: t("columns.target"), sorts: [key("target")] }, { id: "schedule", label: t("columns.schedule"), sorts: [key("schedule")] }, { id: "next", label: t("columns.next"), sorts: [key("next")] }, { id: "last", label: t("columns.last"), sorts: [key("last")] },
-      ]} sort={sort} onSort={(key) => setSort((old) => nextSort(old, key, backupSortDefaultDir))} sortLabel={(column) => t("sortBy", { column })} dense={false} selecting={false} actionsLabel={t("columns.actions")} listLabel={t("title")}>
-        {(view, columns) => rows.map((volume) => { const overview = visible.find((row) => row.hostId === volume.hostId)!; const plan = volume.backup; return <OverviewRowView key={volume.id} view={view} columns={columns} pad="py-3" actions={null} cells={{
-          name: <div><Link className="break-all font-medium hover:underline" to={`/volumes/${encodeURIComponent(volume.id)}?tab=backups`}>{volumeLabel(volume)}</Link>{volume.volumeExists === false && <p className="text-xs">{t("volumeMissing")}</p>}</div>,
-          host: <HostChip host={hosts.byId.get(volume.hostId)} />,
-          target: <span className="text-xs">{overview.targets.find((target) => target.id === plan?.targetId)?.name ?? "–"}</span>,
-          schedule: <span className="text-xs">{!plan?.enabled ? t("nextManual") : plan.schedule.mode === "custom" ? t("customSchedule") : text.summary(plan.schedule)}</span>,
-          next: <span className="text-xs">{plan?.nextRunAt ? `${new Intl.DateTimeFormat(locale, { dateStyle: "medium", timeStyle: "short", timeZone: overview.timeZone }).format(new Date(plan.nextRunAt))} · ${overview.timeZone}` : t("nextManual")}</span>,
-          last: <BackupBadge volume={volume} />,
-        }} />; })}
-      </OverviewTable>}
-    </CardContent></Card>}
+  return <>
+    <PageHeader
+      title={t("title")}
+      description={t("description")}
+      actions={<Button asChild variant="outline"><Link to="/settings/backups">{t("manageTargets")}</Link></Button>}
+    />
+    <div className="mb-4 space-y-2">
+      {hosts.visible.map((host) => {
+        const observed = visible.find((row) => row.hostId === host.id);
+        return !observed || observed.unavailable
+          ? <p key={host.id} role="status" className="rounded-xl border p-3 text-sm">
+              {host.name}: {observed ? t("hostUnavailable") : t("hostLoading")}
+            </p>
+          : null;
+      })}
+    </div>
+    {overviews.isError
+      ? <QueryError error={overviews.error} onRetry={() => void overviews.refetch()} />
+      : <Card className="py-4">
+          <CardContent className="px-3">
+            {!rows.length
+              ? !overviews.isPending && !visible.some((row) => row.unavailable) && <p>{t("overviewEmpty")}</p>
+              : <OverviewTable
+                  fitKey={`backups|${rows.length}`}
+                  columns={() => [
+                    { id: "name", label: t("columns.volume"), sorts: [key("name")] },
+                    { id: "host", label: t("columns.host"), sorts: [key("host")] },
+                    { id: "target", label: t("columns.target"), sorts: [key("target")] },
+                    { id: "schedule", label: t("columns.schedule"), sorts: [key("schedule")] },
+                    { id: "next", label: t("columns.next"), sorts: [key("next")] },
+                    { id: "last", label: t("columns.last"), sorts: [key("last")] },
+                  ]}
+                  sort={sort}
+                  onSort={(key) => setSort((old) => nextSort(old, key, backupSortDefaultDir))}
+                  sortLabel={(column) => t("sortBy", { column })}
+                  dense={false}
+                  selecting={false}
+                  actionsLabel={t("columns.actions")}
+                  listLabel={t("title")}
+                >
+                  {(view, columns) => rows.map((volume) => {
+                    const overview = visible.find((row) => row.hostId === volume.hostId)!;
+                    const plan = volume.backup;
+                    return <OverviewRowView
+                      key={volume.id}
+                      view={view}
+                      columns={columns}
+                      pad="py-3"
+                      actions={null}
+                      cells={{
+                        name: <div>
+                          <Link
+                            className="break-all font-medium hover:underline"
+                            to={`/volumes/${encodeURIComponent(volume.id)}?tab=backups`}
+                          >
+                            {volumeLabel(volume)}
+                          </Link>
+                          {volume.volumeExists === false && <p className="text-xs">{t("volumeMissing")}</p>}
+                        </div>,
+                        host: <HostChip host={hosts.byId.get(volume.hostId)} />,
+                        target: <span className="text-xs">
+                          {overview.targets.find((target) => target.id === plan?.targetId)?.name ?? "–"}
+                        </span>,
+                        schedule: <span className="text-xs">
+                          {!plan?.enabled
+                            ? t("nextManual")
+                            : plan.schedule.mode === "custom"
+                              ? t("customSchedule")
+                              : text.summary(plan.schedule)}
+                        </span>,
+                        next: <span className="text-xs">
+                          {plan?.nextRunAt
+                            ? `${new Intl.DateTimeFormat(locale, {
+                                dateStyle: "medium",
+                                timeStyle: "short",
+                                timeZone: overview.timeZone,
+                              }).format(new Date(plan.nextRunAt))} · ${overview.timeZone}`
+                            : t("nextManual")}
+                        </span>,
+                        last: <BackupBadge volume={volume} />,
+                      }}
+                    />;
+                  })}
+                </OverviewTable>}
+          </CardContent>
+        </Card>}
   </>;
 }

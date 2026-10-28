@@ -10,16 +10,26 @@ import { catalogs } from "@/app/i18n/catalog";
 import { AdapterOutcomeError } from "./capability";
 
 export class BackupError extends AdapterOutcomeError {
-  readonly problem: Pick<components["schemas"]["BackupProblem"], "code" | "activityId" | "reason" | "hosts" | "volumes">;
-  constructor(problem: Pick<components["schemas"]["BackupProblem"], "code" | "activityId" | "reason" | "hosts" | "volumes">, status?: number) {
+  readonly problem: Pick<
+    components["schemas"]["BackupProblem"],
+    "code" | "activityId" | "reason" | "hosts" | "volumes"
+  >;
+  constructor(
+    problem: Pick<components["schemas"]["BackupProblem"], "code" | "activityId" | "reason" | "hosts" | "volumes">,
+    status?: number,
+  ) {
     super({ kind: "error", code: problem.code, status });
     this.problem = problem;
   }
 }
 
-export function backupCodeKey(code?: string): `volumes.backupCodes.${keyof typeof catalogs["en-US"]["volumes"]["backupCodes"]}` | undefined {
+export function backupCodeKey(
+  code?: string,
+): `volumes.backupCodes.${keyof (typeof catalogs)["en-US"]["volumes"]["backupCodes"]}` | undefined {
   const key = code?.replaceAll(".", "_");
-  return key && Object.hasOwn(catalogs["en-US"].volumes.backupCodes, key) ? `volumes.backupCodes.${key as keyof typeof catalogs["en-US"]["volumes"]["backupCodes"]}` : undefined;
+  return key && Object.hasOwn(catalogs["en-US"].volumes.backupCodes, key)
+    ? `volumes.backupCodes.${key as keyof (typeof catalogs)["en-US"]["volumes"]["backupCodes"]}`
+    : undefined;
 }
 
 /** Server detail/title/error are deliberately never carried into user feedback. */
@@ -27,5 +37,12 @@ export function backupErrorMessage(error: unknown, translate: ReturnType<typeof 
   const code = error instanceof AdapterOutcomeError && error.outcome.kind === "error" ? error.outcome.code : undefined;
   const key = backupCodeKey(code) ?? (code === "volume.outcome-unknown" ? "volumes.errors.outcome-unknown" : undefined);
   const reason = error instanceof BackupError ? error.problem.reason : undefined;
-  return [translate(key ?? "common.commandErrors.failed"), reason && Object.hasOwn(catalogs["en-US"].volumes.uploadReasons, reason) ? translate(`volumes.uploadReasons.${reason}`) : undefined].filter(Boolean).join(" ");
+  return [
+    translate(key ?? "common.commandErrors.failed"),
+    reason && Object.hasOwn(catalogs["en-US"].volumes.uploadReasons, reason)
+      ? translate(`volumes.uploadReasons.${reason}`)
+      : undefined,
+  ]
+    .filter(Boolean)
+    .join(" ");
 }

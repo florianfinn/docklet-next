@@ -123,7 +123,14 @@ export function mapActivityDetail(detail: Detail): CodedActionRun {
     progress: run.progress ?? 0,
     startedAt: run.startedAt,
     finishedAt: run.endedAt,
-    error: run.error ? (backup ? coded(run.error, "", "error") : vulnerabilityError(run.error)) ?? coded(lifecycle?.code ?? (run.messageCode?.startsWith("runtime.") ? run.messageCode : undefined), run.error, "error") : undefined,
+    error: run.error
+      ? (backup ? coded(run.error, "", "error") : vulnerabilityError(run.error))
+        ?? coded(
+          lifecycle?.code ?? (run.messageCode?.startsWith("runtime.") ? run.messageCode : undefined),
+          run.error,
+          "error",
+        )
+      : undefined,
     steps: (detail.stepTrace ?? []).map((step) => ({
       key: stepKey(step.name), label: coded(step.code, step.name), state: stepState(step.status),
       startedAt: step.startedAt, finishedAt: step.endedAt,

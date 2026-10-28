@@ -4,13 +4,55 @@ import { daysAgo, hoursAgo } from "./time";
 
 /** Backup policies keyed by volume id (see domain/volumes volumeId). */
 export const BACKUP_POLICIES: Record<string, BackupPolicy> = {
-  "vol-atlas-paperless_pg_data": { enabled: true, targetId: "t-smb-nas", schedule: { mode: "daily", time: "03:00" }, retentionCount: 7, stopContainers: true },
-  "vol-atlas-paperless_paperless_data": { enabled: true, targetId: "t-smb-nas", schedule: { mode: "daily", time: "03:15" }, retentionCount: 7, stopContainers: false },
-  "vol-atlas-home_ha_config": { enabled: true, targetId: "t-local-atlas", schedule: { mode: "daily", time: "02:30" }, retentionCount: 14, stopContainers: false },
-  "vol-boreal-cloud_cloud_data": { enabled: true, targetId: "t-mount-boreal", schedule: { mode: "weekly", day: "sun", time: "04:00" }, retentionCount: 0, stopContainers: true },
-  "vol-boreal-cloud_cloud_pg": { enabled: true, targetId: "t-mount-boreal", schedule: { mode: "weekly", day: "sun", time: "04:10" }, retentionCount: 4, stopContainers: true },
-  "vol-boreal-craft_craft_world": { enabled: true, targetId: "t-nfs-archive", schedule: { mode: "daily", time: "05:00" }, retentionCount: 5, stopContainers: true },
-  "vol-delta-git_forgejo_data": { enabled: true, targetId: "t-smb-nas", schedule: { mode: "weekly", day: "sat", time: "23:30" }, retentionCount: 6, stopContainers: false },
+  "vol-atlas-paperless_pg_data": {
+    enabled: true,
+    targetId: "t-smb-nas",
+    schedule: { mode: "daily", time: "03:00" },
+    retentionCount: 7,
+    stopContainers: true,
+  },
+  "vol-atlas-paperless_paperless_data": {
+    enabled: true,
+    targetId: "t-smb-nas",
+    schedule: { mode: "daily", time: "03:15" },
+    retentionCount: 7,
+    stopContainers: false,
+  },
+  "vol-atlas-home_ha_config": {
+    enabled: true,
+    targetId: "t-local-atlas",
+    schedule: { mode: "daily", time: "02:30" },
+    retentionCount: 14,
+    stopContainers: false,
+  },
+  "vol-boreal-cloud_cloud_data": {
+    enabled: true,
+    targetId: "t-mount-boreal",
+    schedule: { mode: "weekly", day: "sun", time: "04:00" },
+    retentionCount: 0,
+    stopContainers: true,
+  },
+  "vol-boreal-cloud_cloud_pg": {
+    enabled: true,
+    targetId: "t-mount-boreal",
+    schedule: { mode: "weekly", day: "sun", time: "04:10" },
+    retentionCount: 4,
+    stopContainers: true,
+  },
+  "vol-boreal-craft_craft_world": {
+    enabled: true,
+    targetId: "t-nfs-archive",
+    schedule: { mode: "daily", time: "05:00" },
+    retentionCount: 5,
+    stopContainers: true,
+  },
+  "vol-delta-git_forgejo_data": {
+    enabled: true,
+    targetId: "t-smb-nas",
+    schedule: { mode: "weekly", day: "sat", time: "23:30" },
+    retentionCount: 6,
+    stopContainers: false,
+  },
 };
 
 const run = (id: string, volumeId: string, targetId: string, at: string, sizeMb: number, extra: Partial<BackupRun> = {}): BackupRun => ({

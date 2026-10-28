@@ -57,7 +57,8 @@ export function useVolumeCommands() {
       upload: (id: string, dir: string, file: { name: string; size: number; content?: string }) => guard(async () => (await adapter.uploadFile(id, dir, file), true)),
       setPolicy: (id: string, policy: BackupPolicy | null) => guard(async () => (await adapter.setBackupPolicy(id, policy), true)),
       backup: (id: string) => guard(() => adapter.runBackup(id)),
-      restore: (id: string, runId: string, mode: "replace" | "new", newVolumeName?: string) => guard(() => adapter.restoreBackup(id, runId, mode, newVolumeName)),
+      restore: (id: string, runId: string, mode: "replace" | "new", newVolumeName?: string) =>
+        guard(() => adapter.restoreBackup(id, runId, mode, newVolumeName)),
     }),
     [adapter, guard],
   );

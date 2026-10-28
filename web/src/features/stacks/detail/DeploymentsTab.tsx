@@ -169,7 +169,11 @@ export function DeploymentsTab({ stack }: { stack: StackDetail }) {
   return (
     <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(19rem,25rem)]" data-slot="deployments">
       <section aria-labelledby="dep-title">
-        <p className="mb-4 text-sm text-muted-foreground">{backupText("deploymentHint")} <Link to="/backups" className="text-primary-text hover:underline">{backupText("title")}</Link></p>
+        <p className="mb-4 text-sm text-muted-foreground">
+          {backupText("deploymentHint")} <Link to="/backups" className="text-primary-text hover:underline">
+            {backupText("title")}
+          </Link>
+        </p>
         <h2 id="dep-title" className="mb-3 text-sm font-medium text-muted-foreground">
           {t("title")}
         </h2>

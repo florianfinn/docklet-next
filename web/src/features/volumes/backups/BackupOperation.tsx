@@ -15,18 +15,51 @@ import { openActionDialog } from "@/features/activity/action-dialog-store";
 import { Button } from "@/shared/ui/button";
 
 export function BackupOperation({ hostId, activityId }: { hostId: string; activityId: string }) {
-  const adapter = useAdapter(), client = useQueryClient(), t = useTranslations("volumes.backups"), all = useTranslations();
+  const adapter = useAdapter(),
+    client = useQueryClient(),
+    t = useTranslations("volumes.backups"),
+    all = useTranslations();
   const [state, setState] = useState<ActionDetailState>();
-  useEffect(() => adapter.observeActionDetail?.(hostId, activityId, (next) => {
-    setState(next);
-    if (next.status === "ready" && !["queued", "running"].includes(next.run.status)) {
-      for (const key of [["volume"], ["volumes"], ["backup-overview"], ["backup-overviews"], ["backup-targets"], ["backup-repository"]]) void client.invalidateQueries({ queryKey: key });
-    }
-  }), [adapter, hostId, activityId, client]);
+  useEffect(
+    () =>
+      adapter.observeActionDetail?.(hostId, activityId, (next) => {
+        setState(next);
+        if (next.status === "ready" && !["queued", "running"].includes(next.run.status)) {
+          for (const key of [
+            ["volume"],
+            ["volumes"],
+            ["backup-overview"],
+            ["backup-overviews"],
+            ["backup-targets"],
+            ["backup-repository"],
+          ])
+            void client.invalidateQueries({ queryKey: key });
+        }
+      }),
+    [adapter, hostId, activityId, client],
+  );
   const run = state?.status === "ready" ? state.run : undefined;
   const code = backupCodeKey(run?.backupOutcome?.errorCode);
-  const reason = run?.backupOutcome?.reason, outcome = run?.backupOutcome?.status;
-  const detail = reason && Object.hasOwn(catalogs["en-US"].volumes.uploadReasons, reason) ? ` ${all(`volumes.uploadReasons.${reason as "link"}`)}` : "";
-  const status = outcome && ["succeeded", "failed", "partial", "unavailable", "running"].includes(outcome) ? t(`status.${outcome as "partial"}`) : undefined;
-  return <div role="status" className="flex flex-wrap items-center gap-3 rounded-xl border p-3 text-sm"><span>{t("operation")}: {code ? `${all(code)}${detail}` : status ?? (run ? `${Math.round(run.progress)}%` : t("following"))}</span><Button variant="outline" size="sm" onClick={() => openActionDialog(activityId)}>{t("openActivity")}</Button></div>;
+  const reason = run?.backupOutcome?.reason,
+    outcome = run?.backupOutcome?.status;
+  const detail =
+    reason && Object.hasOwn(catalogs["en-US"].volumes.uploadReasons, reason)
+      ? ` ${all(`volumes.uploadReasons.${reason as "link"}`)}`
+      : "";
+  const status =
+    outcome && ["succeeded", "failed", "partial", "unavailable", "running"].includes(outcome)
+      ? t(`status.${outcome as "partial"}`)
+      : undefined;
+  return (
+    <div role="status" className="flex flex-wrap items-center gap-3 rounded-xl border p-3 text-sm">
+      <span>
+        {t("operation")}: {code
+          ? `${all(code)}${detail}`
+          : (status ?? (run ? `${Math.round(run.progress)}%` : t("following")))}
+      </span>
+      <Button variant="outline" size="sm" onClick={() => openActionDialog(activityId)}>
+        {t("openActivity")}
+      </Button>
+    </div>
+  );
 }
