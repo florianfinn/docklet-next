@@ -146,3 +146,13 @@ was resolved on 2026-10-28 using the registry manifest response and independentl
 checked against the SHA-256 of the response bytes. Rustic is
 [Apache-2.0 OR MIT](https://github.com/rustic-rs/rustic/blob/v0.11.2/Cargo.toml).
 The upstream image is executed as supplied and is not republished by Docklet.
+
+The engine reference is overridden only through `DOCKLET_BACKUP_ENGINE_IMAGE`
+in this host process's configuration. It is reported read-only by repository
+metadata. Writable settings do not select an engine image; adding that path
+would require a separate product decision. This keeps engine selection under
+the operator's deployment configuration and can be reversed independently of
+repository data or the agent protocol.
+
+The external-image licence and digest resolution record is
+[`docs/provenance/runtime-images.json`](../provenance/runtime-images.json).

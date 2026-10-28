@@ -17,13 +17,14 @@ import (
 	"github.com/florianfinn/docklet-next/backend/internal/database"
 	"github.com/florianfinn/docklet-next/backend/internal/environment"
 	"github.com/florianfinn/docklet-next/backend/internal/event"
+	"github.com/florianfinn/docklet-next/backend/pkg/utils"
 	"github.com/florianfinn/docklet-next/backend/pkg/utils/handlerutil"
 	dto "github.com/florianfinn/docklet-next/types/backup"
 	"github.com/florianfinn/docklet-next/types/base"
 	"gorm.io/gorm"
 )
 
-func TargetHandler(s *Service, environments *environment.EnvironmentService, cfg *config.Config) *backuptarget.Handler {
+func TargetHandler(s *Service, environments *environment.EnvironmentService, cfg *config.Config, appCtx context.Context) *backuptarget.Handler {
 	h := &backuptarget.Handler{}
 	if s == nil {
 		return h
@@ -63,7 +64,7 @@ func TargetHandler(s *Service, environments *environment.EnvironmentService, cfg
 			}
 			return response.Data, nil
 		}
-		return dto.TargetTestOperation{}, dto.NewProblem(503, "volume.backup.repository-unavailable", nil)
+		return s.startRepositoryCheck(utils.ActivityRuntimeContext(ctx, appCtx), id)
 	}
 	h.AttachLocalKey = func(ctx context.Context, key string) error {
 		dockerClient, err := s.deps.Docker.GetClient(ctx)

@@ -25,13 +25,11 @@ import (
 	"github.com/florianfinn/docklet-next/backend/pkg/scheduler/runs"
 	"github.com/florianfinn/docklet-next/types/backup"
 	"github.com/florianfinn/docklet-next/types/scheduler"
-	"github.com/florianfinn/docklet-next/types/user"
 	"github.com/italypaleale/francis/actor"
 	"github.com/moby/moby/api/types/container"
 	"github.com/moby/moby/api/types/mount"
 	"github.com/moby/moby/client"
 	kit "go.getarcane.app/kit/pkg"
-	"io"
 	"log/slog"
 	"path"
 	"slices"
@@ -119,6 +117,7 @@ func snapshotCommandInternal(label string, input CreateSnapshotInput) ([]string,
 
 // Engine owns repository serialization and application-owned backup workers.
 type Engine struct {
+	imageReference func() string
 	imageService   *image.ImageService
 	admission      *runs.Admission
 	lifecycleCtx   context.Context
@@ -584,19 +583,6 @@ func (e *Engine) runInternal(ctx context.Context, dockerClient *client.Client, r
 	return e.runContainerInternal(ctx, dockerClient, repository, password, command, extraMounts...)
 }
 
-func (e *Engine) ensureImageInternal(ctx context.Context, dockerClient *client.Client) error {
-	if _, err := dockerClient.ImageInspect(ctx, rustic.Image(ctx)); err == nil {
-		return nil
-	}
-	if e.imageService == nil {
-		return errors.New("image service is unavailable")
-	}
-	if err := e.imageService.PullImage(ctx, rustic.Image(ctx), io.Discard, user.SystemUser, nil); err != nil {
-		return fmt.Errorf("failed to pull official Rustic image: %w", err)
-	}
-	return nil
-}
-
 func arcaneNetworkModeInternal(ctx context.Context, dockerClient *client.Client) container.NetworkMode {
 	arcane, err := libarcane.InspectCurrentArcaneContainer(ctx, dockerClient)
 	if err != nil || arcane == nil || arcane.ID == "" {
@@ -607,6 +593,7 @@ func arcaneNetworkModeInternal(ctx context.Context, dockerClient *client.Client)
 }
 
 func (e *Engine) runContainerInternal(ctx context.Context, dockerClient *client.Client, repository Repository, password string, command []string, extraMounts ...mount.Mount) (string, error) {
+	ctx = e.imageContext(ctx)
 	if repository.BeforeRun != nil {
 		if err := repository.BeforeRun(ctx); err != nil {
 			return "", err

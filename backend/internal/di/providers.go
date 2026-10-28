@@ -81,6 +81,7 @@ func provideBackupEngineInternal(
 	error,
 ) {
 	engine := backup.NewEngine(ctx, admission, imageService)
+	engine.SetImageReference(func() string { return cfg.BackupEngineImage })
 	if err := engine.Register(runtime); err != nil {
 		return nil, err
 	}

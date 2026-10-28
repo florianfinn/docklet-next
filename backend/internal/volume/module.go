@@ -77,7 +77,7 @@ func (m *Module) RegisterRoutes(api huma.API, appCtx handlerutil.ActivityAppCont
 		cfg = configs[0]
 	}
 	agent := cfg != nil && (cfg.AgentMode || cfg.EdgeAgent)
-	targetHandler := backup.TargetHandler(service.backup, m.environmentService, cfg)
+	targetHandler := backup.TargetHandler(service.backup, m.environmentService, cfg, appCtx.Context())
 	if !agent {
 		backuptarget.RegisterHubRoutes(api, targetHandler)
 	}
