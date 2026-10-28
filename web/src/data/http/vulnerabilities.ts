@@ -68,7 +68,7 @@ export function createVulnerabilities(o: Options): Pick<DockletAdapter, "getSecu
     const ids = local.map((i) => splitInventoryId(i.id)[1]);
     const base = `/environments/${encodeURIComponent(host.id)}`;
     const [batch, history] = await Promise.all([
-      request(`${base}/images/vulnerabilities/summaries`, "POST", { imageIds: ids }, true, signal),
+      request(`${base}/images/vulnerabilities/summaries`, "POST", { imageIds: ids }, true, signal, true),
       request(`${base}/vulnerabilities/runs`, "GET", undefined, true, signal),
     ]);
     const summary = summaries(object(batch).data);

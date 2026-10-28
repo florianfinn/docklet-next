@@ -30,6 +30,23 @@ it("re-reads a transiently unavailable host on the mounted page and stops after 
   expect(reads()).toBe(settled);
 });
 
+it("recovers a transport failure of the read-only summaries request on the mounted page", async () => {
+  vi.useFakeTimers(); setAppLocale("en-US");
+  const f = securityFixture(), original = f.fetcher.getMockImplementation()!;
+  let broken = true;
+  f.fetcher.mockImplementation(async (input, init) => {
+    if (broken && String(input).endsWith("/environments/second/images/vulnerabilities/summaries")) throw new TypeError("network failure");
+    return original(input, init);
+  });
+  renderWithApp(<SecurityPage />, f.adapter);
+  await act(() => vi.advanceTimersByTimeAsync(1_000));
+  expect(document.body.textContent).toContain("Scan data unavailable for second");
+  broken = false;
+  await act(() => vi.advanceTimersByTimeAsync(SECURITY_RECOVERY_MS + 1_000));
+  expect(document.body.textContent).not.toContain("Scan data unavailable for second");
+  expect(f.fetcher.mock.calls.some(([url]) => String(url).includes("/vulnerabilities/scan"))).toBe(false);
+});
+
 it("re-reads only for host failures that can recover without operator action", () => {
   expect(securityRecoveryInterval({ unavailable: [{ code: "agent.unavailable" }] })).toBe(SECURITY_RECOVERY_MS);
   expect(securityRecoveryInterval({ unavailable: [{ code: "vulnerability.read-timeout" }] })).toBe(SECURITY_RECOVERY_MS);

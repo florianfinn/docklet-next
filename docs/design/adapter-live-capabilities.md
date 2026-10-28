@@ -595,7 +595,8 @@ security-owned reads, not by an older host-catalogue snapshot. Host failures are
 successful query data, so while a host is unavailable for a recoverable reason
 (agent, transport, timeout, offline, pending or storage) the mounted security query
 re-reads every 10 seconds and stops once no such host remains; other codes wait for
-a change event. Image identities include the host, independently of tags.
+a change event. The read-only summaries POST reports transport loss as
+`agent.unavailable`, like the GET reads; only writes report `dispatch-unknown`. Image identities include the host, independently of tags.
 
 The security page, dashboard widget, attention items, operations chip, navigation
 badge and image column/details share the same live security query. UNKNOWN is a
