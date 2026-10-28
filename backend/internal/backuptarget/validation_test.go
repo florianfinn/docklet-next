@@ -9,6 +9,7 @@ package backuptarget
 import (
 	dto "github.com/florianfinn/docklet-next/types/backup"
 	"github.com/stretchr/testify/require"
+	"net/netip"
 	"strings"
 	"testing"
 )
@@ -40,6 +41,10 @@ func TestTargetInputGrammar(t *testing.T) {
 		{"remote-host", smb, func(i *dto.TargetInput) { i.HostID = new("0") }},
 		{"server", smb, func(i *dto.TargetInput) { i.Server = "invalid/server" }},
 		{"server-ipv6", smb, func(i *dto.TargetInput) { i.Server = "2001:db8::1" }},
+		// IPv4-mapped spelling of a documentation address; the publication guard knows only the plain forms.
+		{"server-mapped-ipv6", smb, func(i *dto.TargetInput) {
+			i.Server = netip.AddrFrom16(netip.MustParseAddr("192.0.2.10").As16()).String()
+		}},
 		{"share", smb, func(i *dto.TargetInput) { i.Share = "nested/share" }},
 		{"parent-remote", smb, func(i *dto.TargetInput) { i.Path = "snapshots/../other" }},
 		{"absolute-remote", smb, func(i *dto.TargetInput) { i.Path = "/snapshots" }},
