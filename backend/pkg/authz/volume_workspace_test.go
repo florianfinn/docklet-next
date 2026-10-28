@@ -3,7 +3,7 @@
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
 // Deviations: Local module namespace
-
+; M12 persisted volume lifecycle and legacy restore cut.
 package authz
 
 import (
@@ -17,12 +17,11 @@ func TestVolumeWorkspaceRequiredPermissions(t *testing.T) {
 	permissions, valid := VolumeWorkspaceRequiredPermissions([]volumetypes.WorkspaceFileChange{
 		{Operation: volumetypes.FileOpCreateFile},
 		{Operation: volumetypes.FileOpRename},
-		{Operation: volumetypes.FileOpRestoreFile},
 	})
 	require.True(t, valid)
-	require.Equal(t, []string{PermVolumesUpload, PermVolumesDelete, PermVolumesBackup}, permissions)
+	require.Equal(t, []string{PermVolumesUpload, PermVolumesDelete}, permissions)
 
-	permissions, valid = VolumeWorkspaceRequiredPermissions([]volumetypes.WorkspaceFileChange{{Operation: "unknown"}})
+	permissions, valid = VolumeWorkspaceRequiredPermissions([]volumetypes.WorkspaceFileChange{{Operation: "restore_file"}})
 	require.False(t, valid)
 	require.Nil(t, permissions)
 }

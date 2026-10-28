@@ -3,7 +3,7 @@
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
 // Deviations: Local module namespace; functional cut: removed S3 backup destinations.
-
+; M12 persisted volume lifecycle and legacy restore cut.
 // Package backup owns the shared Rustic backup engine used by volume and
 // system backups: typed repository operations, per-repository serialization
 // and durable run admission.
@@ -324,7 +324,7 @@ func (e *Engine) ReconcileDispatches(ctx context.Context) error {
 		return errors.Join(append(failures, err)...)
 	}
 	for _, state := range states {
-		if state.Status == scheduler.NeedsAttention {
+		if state.Status == scheduler.NeedsAttention || state.Command.Kind == "volume" {
 			continue
 		}
 		if repairErr := e.repairDispatchInternal(ctx, state.Command.RunID); repairErr != nil {

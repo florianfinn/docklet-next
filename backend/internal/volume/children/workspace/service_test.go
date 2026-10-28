@@ -3,7 +3,7 @@
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
 // Deviations: Local module namespace
-
+; M12 persisted volume lifecycle and legacy restore cut.
 package workspace
 
 import (
@@ -25,8 +25,6 @@ import (
 	usertypes "github.com/florianfinn/docklet-next/types/user"
 	volumetypes "github.com/florianfinn/docklet-next/types/volume"
 	"github.com/florianfinn/docklet-next/types/workspace"
-	"github.com/moby/moby/api/types/container"
-	"github.com/moby/moby/api/types/mount"
 	"github.com/moby/moby/api/types/volume"
 	"github.com/moby/moby/client"
 	"github.com/stretchr/testify/require"
@@ -129,7 +127,6 @@ func TestValidateVolumeWorkspaceFileChangeInternalOperationsAndMultipartMapping(
 		{Operation: volumetypes.FileOpRename, RelativePath: "old.txt", NewName: "new.txt"},
 		{Operation: volumetypes.FileOpMove, RelativePath: "new.txt", NewParentPath: "folder"},
 		{Operation: volumetypes.FileOpDelete, RelativePath: "folder", Recursive: true},
-		{Operation: volumetypes.FileOpRestoreFile, RelativePath: "restored.txt", BackupID: "backup-id"},
 	}
 	for _, change := range tests {
 		require.NoError(t, validateVolumeWorkspaceFileChangeInternal(change), change.Operation)
@@ -139,7 +136,7 @@ func TestValidateVolumeWorkspaceFileChangeInternalOperationsAndMultipartMapping(
 		Operation: volumetypes.FileOpUpdateFile, RelativePath: "missing.bin",
 	}))
 	require.Error(t, validateVolumeWorkspaceFileChangeInternal(volumetypes.WorkspaceFileChange{
-		Operation: volumetypes.FileOpRestoreFile, RelativePath: "file.txt",
+		Operation: "restore_file", RelativePath: "file.txt",
 	}))
 	require.Error(t, validateVolumeWorkspaceFileChangeInternal(volumetypes.WorkspaceFileChange{
 		Operation: "unknown", RelativePath: "file.txt",
@@ -394,65 +391,6 @@ func TestVolumeWorkspaceWritesUseRuntimeIdentity(t *testing.T) {
 		require.Equal(t, 1000, header.Uid)
 		require.Equal(t, 1000, header.Gid)
 	}
-}
-
-func TestCreateVolumeWorkspaceMutationContainerUsesDedicatedBackupHelper(t *testing.T) {
-	var createRequest struct {
-		HostConfig *container.HostConfig `json:"HostConfig"`
-	}
-	createCalls := 0
-	removeCalls := 0
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		switch {
-		case r.Method == http.MethodPost && strings.HasSuffix(r.URL.Path, "/containers/create"):
-			createCalls++
-			if err := json.NewDecoder(r.Body).Decode(&createRequest); err != nil {
-				t.Errorf("decode container create request: %v", err)
-				return
-			}
-			w.Header().Set("Content-Type", "application/json")
-			_ = json.NewEncoder(w).Encode(map[string]any{"Id": "restore-helper", "Warnings": []string{}})
-		case r.Method == http.MethodPost && strings.HasSuffix(r.URL.Path, "/containers/restore-helper/start"):
-			w.WriteHeader(http.StatusNoContent)
-		case r.Method == http.MethodDelete && strings.Contains(r.URL.Path, "/containers/restore-helper"):
-			removeCalls++
-			w.WriteHeader(http.StatusNoContent)
-		default:
-			http.Error(w, "unexpected Docker request: "+r.Method+" "+r.URL.Path, http.StatusInternalServerError)
-		}
-	}))
-	t.Cleanup(server.Close)
-
-	dockerClient := newVolumeWorkspaceTestDockerClientInternal(t, server)
-	acquireCalls := 0
-	service := NewService(Dependencies{
-		Docker: docker.NewDockerClientService(t.Context(), nil, nil, nil).WithClient(dockerClient),
-		AcquireHelper: func(context.Context, string) (string, func(), error) {
-			acquireCalls++
-			return "cached-helper", func() {}, nil
-		},
-		HelperImage: func(context.Context, *client.Client) (string, error) {
-			return volumehelper.ToolsImage(""), nil
-		},
-		BackupStorageMount: func(_ context.Context, _ *client.Client, target string, readOnly bool) (mount.Mount, error) {
-			return mount.Mount{Type: mount.TypeVolume, Source: "arcane-backups", Target: target, ReadOnly: readOnly}, nil
-		},
-	})
-
-	containerID, cleanup, err := service.createVolumeWorkspaceMutationContainerInternal(t.Context(), "workspace-volume", true)
-	require.NoError(t, err)
-	require.Equal(t, "restore-helper", containerID)
-	require.Equal(t, 1, createCalls)
-	require.Zero(t, acquireCalls, "the dedicated helper must not replace the shared one")
-	require.NotNil(t, createRequest.HostConfig)
-	require.Equal(t, []string{"workspace-volume:/volume"}, createRequest.HostConfig.Binds)
-	require.Len(t, createRequest.HostConfig.Mounts, 1)
-	require.Equal(t, "arcane-backups", createRequest.HostConfig.Mounts[0].Source)
-	require.Equal(t, "/backups", createRequest.HostConfig.Mounts[0].Target)
-	require.True(t, createRequest.HostConfig.Mounts[0].ReadOnly)
-
-	cleanup()
-	require.Equal(t, 1, removeCalls)
 }
 
 func TestVolumeWorkspaceScriptsAgainstToolsImage(t *testing.T) {

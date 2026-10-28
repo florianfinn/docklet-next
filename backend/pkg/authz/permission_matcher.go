@@ -3,7 +3,7 @@
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
 // Deviations: Local module namespace; functional cut: removed standalone build workshop.
-
+; M12 persisted volume lifecycle and legacy restore cut.
 package authz
 
 import (
@@ -167,8 +167,6 @@ func VolumeWorkspaceRequiredPermissions(changes []volumetypes.WorkspaceFileChang
 			required = append(required, PermVolumesDelete)
 		case volumetypes.FileOpDelete:
 			required = append(required, PermVolumesDelete)
-		case volumetypes.FileOpRestoreFile:
-			required = append(required, PermVolumesBackup)
 		default:
 			return nil, false
 		}

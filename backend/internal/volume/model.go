@@ -3,10 +3,11 @@
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
 // Deviations: Local module namespace; functional cut: removed S3 backup destinations; persisted lifecycle responsibility; M12 backup foundation.
-
+; M12 persisted volume lifecycle and legacy restore cut.
 package volume
 
 import (
+	"encoding/json"
 	"time"
 
 	"github.com/florianfinn/docklet-next/types/backup"
@@ -59,20 +60,29 @@ func (*VolumeBackup) TableName() string {
 }
 
 func (b *VolumeBackup) recordInternal() *volume.Backup {
+	var stopped []volume.StoppedContainer
+	if b.StoppedContainers != nil {
+		_ = json.Unmarshal([]byte(*b.StoppedContainers), &stopped)
+	}
 	return &volume.Backup{
 		ID: b.ID, UpdatedAt: b.UpdatedAt, VolumeName: b.VolumeName, Size: b.Size, CreatedAt: b.CreatedAt,
 		Status: string(b.Status), Trigger: string(b.Trigger), Destination: b.Destination, Format: volume.BackupFormat(b.Format),
 		LocalSnapshotID: b.LocalSnapshotID, PolicyID: b.PolicyID, Error: b.Error,
-		ActivityID: b.ActivityID, Type: b.Type,
+		ActivityID: b.ActivityID, Type: b.Type, StopContainers: b.StopContainers, StoppedContainers: stopped, ErrorCode: b.ErrorCode,
 	}
 }
 
 func volumeBackupFromRecordInternal(record *volume.Backup) *VolumeBackup {
+	var stopped *string
+	if record.StoppedContainers != nil {
+		value, _ := json.Marshal(record.StoppedContainers)
+		stopped = new(string(value))
+	}
 	entry := &VolumeBackup{
 		VolumeName: record.VolumeName, Size: record.Size, CreatedAt: record.CreatedAt, Status: VolumeBackupStatus(record.Status),
 		Trigger: VolumeBackupTrigger(record.Trigger), Destination: record.Destination, Format: VolumeBackupFormat(record.Format),
 		LocalSnapshotID: record.LocalSnapshotID, PolicyID: record.PolicyID,
-		Error: record.Error, ActivityID: record.ActivityID, Type: record.Type,
+		Error: record.Error, ActivityID: record.ActivityID, Type: record.Type, StopContainers: record.StopContainers, StoppedContainers: stopped, ErrorCode: record.ErrorCode,
 	}
 	entry.ID, entry.UpdatedAt = record.ID, record.UpdatedAt
 	return entry

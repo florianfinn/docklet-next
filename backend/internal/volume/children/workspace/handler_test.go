@@ -3,7 +3,7 @@
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
 // Deviations: Local module namespace
-
+; M12 persisted volume lifecycle and legacy restore cut.
 package workspace
 
 import (
@@ -46,7 +46,7 @@ func TestRequireVolumeWorkspacePermissionsInternal(t *testing.T) {
 	create := []volume.WorkspaceFileChange{{Operation: volume.FileOpCreateFile}}
 	rename := []volume.WorkspaceFileChange{{Operation: volume.FileOpRename}}
 	remove := []volume.WorkspaceFileChange{{Operation: volume.FileOpDelete}}
-	restore := []volume.WorkspaceFileChange{{Operation: volume.FileOpRestoreFile}}
+	restore := []volume.WorkspaceFileChange{{Operation: "restore_file"}}
 
 	require.Error(t, requireVolumeWorkspacePermissionsInternal(t.Context(), environmentID, create))
 	require.NoError(t, requireVolumeWorkspacePermissionsInternal(
@@ -61,7 +61,7 @@ func TestRequireVolumeWorkspacePermissionsInternal(t *testing.T) {
 	require.NoError(t, requireVolumeWorkspacePermissionsInternal(
 		volumeWorkspacePermissionContextInternal(t, environmentID, authz.PermVolumesDelete), environmentID, remove,
 	))
-	require.NoError(t, requireVolumeWorkspacePermissionsInternal(
+	require.Error(t, requireVolumeWorkspacePermissionsInternal(
 		volumeWorkspacePermissionContextInternal(t, environmentID, authz.PermVolumesBackup), environmentID, restore,
 	))
 	require.Error(t, requireVolumeWorkspacePermissionsInternal(

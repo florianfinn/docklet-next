@@ -12,6 +12,7 @@ import (
 
 	"github.com/florianfinn/docklet-next/backend/internal/backup"
 	"github.com/florianfinn/docklet-next/backend/internal/backuptarget"
+	"github.com/florianfinn/docklet-next/backend/pkg/libarcane/rustic"
 	"github.com/florianfinn/docklet-next/backend/pkg/libarcane/volumehelper"
 	dto "github.com/florianfinn/docklet-next/types/backup"
 	"github.com/moby/moby/api/types/container"
@@ -48,7 +49,7 @@ func (s *Service) repositoryFor(ctx context.Context, dockerClient *client.Client
 			if err != nil {
 				return err
 			}
-			created, err := dockerClient.ContainerCreate(ctx, client.ContainerCreateOptions{Config: &container.Config{Image: image, Cmd: []string{"sleep", "infinity"}, Labels: volumehelper.Labels()}, HostConfig: volumehelper.HostConfig(image, nil, plan.Mounts)})
+			created, err := dockerClient.ContainerCreate(ctx, client.ContainerCreateOptions{Config: &container.Config{Image: image, Cmd: []string{"sleep", "infinity"}, Labels: rustic.OperationLabels(ctx)}, HostConfig: volumehelper.HostConfig(image, nil, plan.Mounts)})
 			if err != nil {
 				return dto.NewProblem(503, "backup.target.mount-failed", err)
 			}

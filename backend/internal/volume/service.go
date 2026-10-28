@@ -3,7 +3,7 @@
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
 // Deviations: Local module namespace; functional cut: removed S3 backup destinations; split inventory reads; Explicit candidate prune execution; M12 backup foundation.
-
+; M12 persisted volume lifecycle and legacy restore cut.
 package volume
 
 import (
@@ -126,19 +126,17 @@ func NewVolumeService(
 	}
 	service.backup = volumebackup.NewService(backupDeps)
 	service.workspace = workspace.NewService(workspace.Dependencies{
-		Docker:                dockerService,
-		Events:                eventService,
-		Locks:                 &service.workspaceLocks,
-		AcquireHelper:         service.acquireVolumeHelperInternal,
-		RequireACFS:           service.requireVolumeHelperACFSInternal,
-		Exec:                  service.execInContainerInternal,
-		HelperImage:           service.getVolumeHelperImageInternal,
-		BackupStorageMount:    service.backup.StorageMount,
-		ArchiveFileTarget:     service.backup.ArchiveFileTarget,
-		RestoreArchiveMembers: service.backup.RestoreArchiveMembers,
-		MaxDepth:              workspaceMaxDepth,
-		MaxEntries:            workspaceMaxEntries,
-		MaxFileSizeBytes:      workspacepkg.MaxFileSizeBytes(workspaceMaxFileSizeMB),
+		Docker:           dockerService,
+		Events:           eventService,
+		Locks:            &service.workspaceLocks,
+		AcquireHelper:    service.acquireVolumeHelperInternal,
+		RequireACFS:      service.requireVolumeHelperACFSInternal,
+		Exec:             service.execInContainerInternal,
+		HelperImage:      service.getVolumeHelperImageInternal,
+		BusyError:        func(name string) error { return &volumeWorkspaceBusyError{name: name} },
+		MaxDepth:         workspaceMaxDepth,
+		MaxEntries:       workspaceMaxEntries,
+		MaxFileSizeBytes: workspacepkg.MaxFileSizeBytes(workspaceMaxFileSizeMB),
 	})
 	return service
 }
@@ -186,15 +184,6 @@ func (
 
 func (s *VolumeService) ReconcileBackup(ctx context.Context, previous scheduler.Run, volumeName string) (scheduler.Outcome, error) {
 	return s.backup.ReconcileBackup(ctx, previous, volumeName)
-}
-
-// ReconcileInterruptedBackups runs before this process can accept backup work.
-func (s *VolumeService) ReconcileInterruptedBackups(ctx context.Context, protectedIDs ...string) error {
-	query := s.db.WithContext(ctx).Model(&VolumeBackup{}).Where("status = ?", VolumeBackupStatusRunning)
-	if len(protectedIDs) > 0 {
-		query = query.Where("id NOT IN ?", protectedIDs)
-	}
-	return query.Updates(map[string]any{"status": VolumeBackupStatusFailed, "error": "Backup interrupted by Arcane restart"}).Error
 }
 
 // MigrateRepositoryPasswords re-keys this instance's own volume backup repositories to the recovery key; other instances re-key their own roots.

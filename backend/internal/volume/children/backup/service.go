@@ -3,7 +3,7 @@
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
 // Deviations: Local module namespace; functional cut: removed S3 backup destinations; M12 backup foundation.
-
+; M12 persisted volume lifecycle and legacy restore cut.
 package backup
 
 import (
@@ -24,7 +24,6 @@ import (
 	"github.com/florianfinn/docklet-next/types/scheduler"
 	usertypes "github.com/florianfinn/docklet-next/types/user"
 	"github.com/florianfinn/docklet-next/types/volume"
-	"github.com/moby/moby/api/types/container"
 	"github.com/moby/moby/api/types/mount"
 	"github.com/moby/moby/client"
 	"gorm.io/gorm"
@@ -32,7 +31,6 @@ import (
 	"github.com/florianfinn/docklet-next/backend/internal/activity"
 	"github.com/florianfinn/docklet-next/backend/internal/backup"
 	"github.com/florianfinn/docklet-next/backend/internal/backuptarget"
-	"github.com/florianfinn/docklet-next/backend/internal/common"
 	"github.com/florianfinn/docklet-next/backend/internal/database"
 	"github.com/florianfinn/docklet-next/backend/internal/docker"
 	"github.com/florianfinn/docklet-next/backend/internal/event"
@@ -81,13 +79,24 @@ type Dependencies struct {
 
 // Service runs volume backups and owns their policies, file browser, and restores.
 type Service struct {
-	deps        Dependencies
-	targets     *backuptarget.Service
-	targetStore *backuptarget.Store
-	rekeyed     sync.Map
-	policies    *policies.Service
-	browser     *browser.Service
-	restore     *restore.Service
+	deps                   Dependencies
+	targets                *backuptarget.Service
+	targetStore            *backuptarget.Store
+	rekeyed                sync.Map
+	recoveryMu             sync.Mutex
+	sweepMu                sync.Mutex
+	sweepStarted           bool
+	writerDiscoveryPending bool
+	settledInitial         bool
+	confirmedWriters       map[string]bool
+	fenceMu                sync.Mutex
+	writerFences           map[string]bool
+	writerIDs              map[string]map[string]bool
+	writerFenceRelease     map[string]func()
+	lifecycle              *restore.Lifecycle
+	policies               *policies.Service
+	browser                *browser.Service
+	restore                *restore.Service
 }
 
 // lockHeldInternal marks a context whose caller already holds the volume's workspace lock.
@@ -99,7 +108,10 @@ type lockHeldInternal struct {
 type lockHeldKeyInternal struct{}
 
 func NewService(deps Dependencies) *Service {
-	s := &Service{deps: deps}
+	if deps.Locks == nil {
+		deps.Locks = &utils.KeyedMutex{}
+	}
+	s := &Service{deps: deps, writerFences: map[string]bool{}}
 	s.targetStore = &backuptarget.Store{DB: deps.DB}
 	s.targets = backuptarget.NewService(backuptarget.Dependencies{Store: s.targetStore})
 	s.policies = policies.NewService(policies.Dependencies{
@@ -125,23 +137,9 @@ func NewService(deps Dependencies) *Service {
 		Exec:            deps.Exec,
 	})
 	s.restore = restore.NewService(restore.Dependencies{
-		Docker:          deps.Docker,
-		Engine:          deps.Engine,
-		Events:          deps.Events,
-		Locks:           deps.Locks,
-		Run:             deps.Store.Run,
-		Repository:      s.rusticRepositoryForBackupInternal,
-		Password:        s.volumeBackupPasswordInternal,
-		StopContainers:  s.stopRunningContainersForBackupInternal,
-		StartContainers: s.startContainersAfterBackupInternal,
-		SafetyBackup:    s.safetyBackupInternal,
-		ArchivePaths:    s.browser.ArchivePaths,
-		ArchiveFilename: backupArchiveFilenameInternal,
-		HelperImage:     deps.HelperImage,
-		StorageMount:    s.StorageMount,
-		AcquireHelper:   deps.AcquireHelper,
-		Exec:            deps.Exec,
+		Docker: deps.Docker, Engine: deps.Engine, Run: deps.Store.Run, Repository: s.rusticRepositoryForBackupInternal, Password: s.volumeBackupPasswordInternal, HelperImage: deps.HelperImage, Exec: deps.Exec,
 	})
+	s.configureRestoreLifecycle()
 	if deps.Engine != nil {
 		deps.Engine.RegisterRunKind("volume", s.executeDurableBackupInternal, s.failDurableBackupInternal)
 	}
@@ -178,7 +176,7 @@ func entryInternal(entry *volume.Backup) volume.BackupEntry {
 		ActivityID: entry.ActivityID, ID: entry.ID, VolumeName: entry.VolumeName, Size: entry.Size,
 		CreatedAt: entry.CreatedAt.Format(time.RFC3339), Status: entry.Status, Trigger: entry.Trigger,
 		Destination: entry.Destination, Format: entry.Format, LocalSnapshotID: entry.LocalSnapshotID,
-		PolicyID: entry.PolicyID, Error: entry.Error, Type: entry.Type,
+		PolicyID: entry.PolicyID, Error: entry.Error, ErrorCode: entry.ErrorCode, Type: entry.Type,
 	}
 }
 
@@ -217,9 +215,10 @@ func (s *Service) List(ctx context.Context, volumeName string, params pagination
 
 // backupPlanInternal selects the local repository for one backup run.
 type backupPlanInternal struct {
-	policy       *policies.VolumeBackupPolicy
-	localEnabled bool
-	destination  volume.BackupDestination
+	policy         *policies.VolumeBackupPolicy
+	localEnabled   bool
+	stopContainers bool
+	destination    volume.BackupDestination
 }
 
 func (s *Service) resolveBackupPlanInternal(ctx context.Context, volumeName, trigger string, request volume.CreateBackupRequest, suppliedPolicy *policies.VolumeBackupPolicy) (backupPlanInternal, error) {
@@ -240,7 +239,7 @@ func (s *Service) resolveBackupPlanInternal(ctx context.Context, volumeName, tri
 	if policy != nil && !policy.LocalEnabled && trigger != backuptypes.VolumeBackupTriggerSafety {
 		return backupPlanInternal{}, errors.New("local volume backups are disabled by policy")
 	}
-	return backupPlanInternal{policy: policy, localEnabled: true, destination: volume.BackupDestinationLocal}, nil
+	return backupPlanInternal{policy: policy, localEnabled: true, stopContainers: request.StopContainers || policy != nil && policy.StopContainers, destination: volume.BackupDestinationLocal}, nil
 }
 
 func (s *Service) CreateBackup(ctx context.Context, volumeName string, user usertypes.Actor, trigger string, request volume.CreateBackupRequest) (_ *volume.Backup, err error) {
@@ -254,9 +253,12 @@ func (s *Service) CreateBackup(ctx context.Context, volumeName string, user user
 
 // safetyBackupInternal takes the local pre-restore backup for a caller that already holds the volume's workspace lock.
 func (s *Service) safetyBackupInternal(ctx context.Context, volumeName string, user usertypes.Actor) (string, error) {
-	ctx = context.WithValue(ctx, lockHeldKeyInternal{}, lockHeldInternal{service: s, volumeName: volumeName})
-	entry, err := s.CreateBackup(ctx, volumeName, user, backuptypes.VolumeBackupTriggerSafety, volume.CreateBackupRequest{Destination: volume.BackupDestinationLocal})
-	if err != nil {
+	entry := &volume.Backup{ID: uuid.New().String(), VolumeName: volumeName, CreatedAt: time.Now().UTC(), Status: backuptypes.VolumeBackupStatusRunning, Trigger: backuptypes.VolumeBackupTriggerSafety, Destination: volume.BackupDestinationLocal, Format: volume.BackupFormatRustic}
+	if err := s.deps.Store.Create(ctx, entry); err != nil {
+		return "", err
+	}
+	err := s.executeBackupInternal(ctx, entry, user, backupPlanInternal{localEnabled: true, destination: volume.BackupDestinationLocal})
+	if err = s.completeBackupInternal(ctx, entry, err); err != nil {
 		return "", err
 	}
 	return entry.ID, nil
@@ -298,6 +300,7 @@ func (s *Service) createBackupInternal(ctx context.Context, volumeName string, u
 		return nil, err
 	}
 	defer lease.Release(ctx)
+	ctx = lease.ctx
 	err = s.executeBackupInternal(ctx, entry, user, plan)
 	err = s.completeBackupInternal(ctx, entry, err)
 	return entry, err
@@ -309,19 +312,17 @@ type volumeBackupRecoveryInternal struct {
 	Policy       *policies.VolumeBackupPolicy `json:"policy,omitempty"`
 }
 
-func (s *Service) prepareBackupInternal(ctx context.Context, volumeName, trigger, policyID string, plan backupPlanInternal) (*volume.Backup, *runs.Lease, error) {
-	lease, admitted, err := s.deps.Engine.TryAcquireRun(ctx, backup.VolumeAdmissionScope, volumeName)
+func (s *Service) prepareBackupInternal(ctx context.Context, volumeName, trigger, policyID string, plan backupPlanInternal) (*volume.Backup, *operationOwnership, error) {
+	_, lease, err := s.acquireOperation(ctx, volumeName, "")
 	if err != nil {
 		return nil, nil, err
-	}
-	if !admitted {
-		return nil, nil, s.deps.AlreadyRunning
 	}
 	entry := &volume.Backup{
 		VolumeName: volumeName, CreatedAt: time.Now(), Status: backuptypes.VolumeBackupStatusRunning,
 		Trigger: trigger, Destination: plan.destination, Format: volume.BackupFormatRustic,
-		PolicyID: policyID,
-		Type:     backuptypes.ManagementTypeForPolicy(policyID),
+		PolicyID:       policyID,
+		StopContainers: plan.stopContainers,
+		Type:           backuptypes.ManagementTypeForPolicy(policyID),
 	}
 	entry.ID = fmt.Sprintf("%s-%d-%s", volumeName, time.Now().UnixNano(), uuid.New().String()[:8])
 	if createBackupErr := s.deps.Store.Create(ctx, entry); createBackupErr != nil {
@@ -350,9 +351,18 @@ func (s *Service) completeBackupInternal(ctx context.Context, entry *volume.Back
 		err = ctx.Err()
 	}
 	if err != nil {
-		entry.Status, entry.Error = backuptypes.VolumeBackupStatusFailed, err.Error()
+		if entry.ErrorCode == "" {
+			entry.ErrorCode = "volume.backup.interrupted"
+		}
+		entry.Status = backuptypes.VolumeBackupStatusFailed
+		if entry.LocalSnapshotID != "" {
+			entry.Status = backuptypes.VolumeBackupStatusPartial
+		}
+		entry.Error = entry.ErrorCode
 	} else {
-		entry.Status, entry.Error = backuptypes.VolumeBackupStatusSucceeded, ""
+		entry.Status = backuptypes.VolumeBackupStatusSucceeded
+		entry.Error = ""
+		entry.ErrorCode = ""
 	}
 	if saveErr := s.deps.Store.Save(context.WithoutCancel(ctx), entry); saveErr != nil {
 		return errors.Join(err, fmt.Errorf("failed to save volume backup result: %w", saveErr))
@@ -366,10 +376,6 @@ func (s *Service) completeBackupInternal(ctx context.Context, entry *volume.Back
 func (s *Service) executeBackupInternal(ctx context.Context, entry *volume.Backup, user usertypes.Actor, plan backupPlanInternal) (err error) {
 	defer utils.RecoverToError(&err, "volume backup")
 	volumeName, trigger := entry.VolumeName, entry.Trigger
-	lockHeld, _ := ctx.Value(lockHeldKeyInternal{}).(lockHeldInternal)
-	if lockHeld.service != s || lockHeld.volumeName != volumeName {
-		defer s.deps.Locks.Lock(volumeName)()
-	}
 	if cancellationErr := ctx.Err(); cancellationErr != nil {
 		return cancellationErr
 	}
@@ -377,19 +383,30 @@ func (s *Service) executeBackupInternal(ctx context.Context, entry *volume.Backu
 	if err != nil {
 		return err
 	}
-	var stopped []container.Summary
-	containersStopped := false
-	if plan.policy != nil && plan.policy.StopContainers {
-		stopped, err = s.stopRunningContainersForBackupInternal(ctx, dockerClient, volumeName, user, false)
-		containersStopped = len(stopped) > 0
+	var stopped []volume.StoppedContainer
+	restarted := false
+	if entry.StopContainers {
+		stopped, err = s.listConsumers(ctx, volumeName, false)
+		if err != nil {
+			return err
+		}
+		entry.StoppedContainers = stopped
+		if err = s.deps.Store.Save(ctx, entry); err != nil {
+			return err
+		}
 		defer func() {
-			if containersStopped {
-				_, restartErr := s.startContainersAfterBackupInternal(context.WithoutCancel(ctx), dockerClient, stopped, user)
+			if restarted {
+				return
+			}
+			if restartErr := s.restartConsumers(context.WithoutCancel(ctx), stopped, user); restartErr != nil {
+				entry.ErrorCode = "volume.backup.restart-failed"
 				err = errors.Join(err, restartErr)
 			}
 		}()
-		if err != nil {
-			return err
+		for _, consumer := range stopped {
+			if err = s.deps.StopContainer(ctx, consumer.ID, user); err != nil {
+				return err
+			}
 		}
 	}
 	if plan.localEnabled && entry.LocalSnapshotID == "" {
@@ -397,26 +414,23 @@ func (s *Service) executeBackupInternal(ctx context.Context, entry *volume.Backu
 			return createLocalBackupSnapshotErr
 		}
 	}
-	if containersStopped {
-		stopped, err = s.startContainersAfterBackupInternal(context.WithoutCancel(ctx), dockerClient, stopped, user)
-		containersStopped = len(stopped) > 0
-		if err != nil {
-			return err
-		}
+	restarted = true
+	if restartErr := s.restartConsumers(context.WithoutCancel(ctx), stopped, user); restartErr != nil {
+		entry.ErrorCode = "volume.backup.restart-failed"
+		err = errors.Join(err, restartErr)
 	}
-	// Retention failures must not fail the run: the backup itself succeeded,
-	// and the deferred status-save would otherwise mark it failed and hide it
-	// from ExpiredRunIDs forever.
-	if trigger != backuptypes.VolumeBackupTriggerSafety && plan.policy != nil && plan.policy.RetentionCount > 0 {
-		if retentionErr := s.applyVolumeBackupRetentionInternal(ctx, plan.policy.ID, plan.policy.RetentionCount); retentionErr != nil {
-			slog.ErrorContext(ctx, "Volume backup retention failed", "volume", volumeName, "policy", plan.policy.ID, "error", retentionErr)
+
+	if trigger == backuptypes.VolumeBackupTriggerScheduled && plan.policy != nil && plan.policy.RetentionCount > 0 {
+		if retentionErr := s.applyVolumeBackupRetentionInternal(ctx, entry.VolumeName, entry.ID, plan.policy.RetentionCount); retentionErr != nil {
+			entry.ErrorCode = "volume.backup.retention-failed"
+			err = errors.Join(err, retentionErr)
 		}
 	}
 	metadata := database.JSON{"action": "backup_create", "backup_id": entry.ID, "size": entry.Size, "destination": entry.Destination}
 	if logErr := s.deps.Events.LogVolumeEvent(ctx, event.EventTypeVolumeBackupCreate, volumeName, volumeName, user.ID, user.Username, "0", metadata); logErr != nil {
 		slog.WarnContext(ctx, "could not log volume backup create event", "volume", volumeName, "error", logErr)
 	}
-	return ctx.Err()
+	return errors.Join(err, ctx.Err())
 }
 
 func (s *Service) createLocalBackupSnapshotInternal(ctx context.Context, dockerClient *client.Client, entry *volume.Backup) error {
@@ -476,14 +490,11 @@ func (s *Service) DeleteBackup(ctx context.Context, backupID string, user *usert
 	// Deletes contend with create/restore/upload on the volume's run lease so
 	// a slow operation cannot resurrect or double-forget snapshots. Retention
 	// deletes run under CreateBackup's lease and call the internal path.
-	lease, admitted, err := s.deps.Engine.TryAcquireRun(ctx, backup.VolumeAdmissionScope, entry.VolumeName)
+	ctx, owner, err := s.acquireOperation(ctx, entry.VolumeName, "")
 	if err != nil {
 		return err
 	}
-	if !admitted {
-		return s.deps.AlreadyRunning
-	}
-	defer lease.Release(ctx)
+	defer owner.Release(ctx)
 	return s.deleteBackupInternal(ctx, backupID, user)
 }
 
@@ -713,44 +724,6 @@ func (s *Service) deleteArchiveBackupInternal(ctx context.Context, entry *volume
 	}
 	s.logBackupDeleteEventInternal(ctx, volumeName, backupID, user)
 	return nil
-}
-
-// ArchiveFileTarget resolves a legacy archive backup of volumeName and the
-// sanitized member path for a single-file workspace restore.
-func (s *Service) ArchiveFileTarget(ctx context.Context, volumeName, backupID, rel string) (string, string, error) {
-	filename, err := backupArchiveFilenameInternal(backupID)
-	if err != nil {
-		return "", "", common.Classify(common.ErrVolumeWorkspaceNotFound, err)
-	}
-	entry, err := s.deps.Store.Run(ctx, backupID)
-	if err != nil {
-		return "", "", common.Classify(common.ErrVolumeWorkspaceNotFound, err)
-	}
-	if entry.VolumeName != volumeName {
-		return "", "", common.Classify(common.ErrVolumeWorkspaceForbidden, errors.New("backup does not belong to volume"))
-	}
-	cleaned, err := sanitizeBackupPathInternal(rel)
-	if err != nil {
-		return "", "", common.Classify(common.ErrVolumeWorkspaceBadRequest, err)
-	}
-	return filename, cleaned, nil
-}
-
-// RestoreArchiveMembers extracts members of a legacy archive into a helper that mounts backup storage at /backups.
-func (s *Service) RestoreArchiveMembers(ctx context.Context, containerID, filename string, cleanedPaths []string) (string, error) {
-	return s.restore.RestoreArchiveMembers(ctx, containerID, filename, cleanedPaths)
-}
-
-func (s *Service) applyVolumeBackupRetentionInternal(ctx context.Context, policyID string, retentionCount int) error {
-	expired, err := backup.ExpiredRunIDs(ctx, s.deps.DB, "volume_backups", policyID, retentionCount)
-	if err != nil || len(expired) == 0 {
-		return err
-	}
-	entries, err := s.deps.Store.Runs(ctx, expired)
-	if err != nil {
-		return err
-	}
-	return s.deleteRusticBackupsInternal(ctx, entries, nil)
 }
 
 func (s *Service) MigrateRepositoryPasswords(ctx context.Context) error {

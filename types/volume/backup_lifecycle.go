@@ -91,3 +91,9 @@ type UsableBackupTarget struct {
 	Name string `json:"name"`
 	Kind string `json:"kind" enum:"local,mount,smb,nfs"`
 }
+
+type UploadRestoreRequest struct {
+	UploadID      string `json:"uploadId"`
+	Mode          string `json:"mode,omitempty" enum:"replace,new" default:"replace"`
+	NewVolumeName string `json:"newVolumeName,omitempty"`
+}

@@ -26,15 +26,17 @@ import (
 
 // LifecycleEffects isolate Docker effects from durable phase transitions.
 type LifecycleEffects struct {
-	Validate   func(context.Context, StartRequest) error
-	Admit      func(context.Context, string, string) (context.Context, func(), error)
-	Prepare    func(context.Context, *Run, StartRequest) (func(), error)
-	Consumers  func(context.Context, string) ([]volume.StoppedContainer, error)
-	Stop       func(context.Context, volume.StoppedContainer, user.Actor) error
-	Restart    func(context.Context, []volume.StoppedContainer, user.Actor) error
-	Safety     func(context.Context, string, user.Actor) (string, error)
-	Write      func(context.Context, *Run, StartRequest) error
-	CleanupNew func(context.Context, *Run) error
+	Validate    func(context.Context, StartRequest) error
+	Admit       func(context.Context, string, string) (context.Context, func(), error)
+	Prepare     func(context.Context, *Run, StartRequest) (func() error, error)
+	Consumers   func(context.Context, string) ([]volume.StoppedContainer, error)
+	Stop        func(context.Context, volume.StoppedContainer, user.Actor) error
+	Restart     func(context.Context, []volume.StoppedContainer, user.Actor) error
+	Safety      func(context.Context, string, user.Actor) (string, error)
+	Write       func(context.Context, *Run, StartRequest) error
+	CleanupNew  func(context.Context, *Run) error
+	Fence       func(context.Context, string)
+	PruneSafety func(context.Context, string) error
 }
 type Lifecycle struct {
 	DB       *database.DB
@@ -109,21 +111,64 @@ func (l *Lifecycle) persist(ctx context.Context, run *Run) error {
 	return l.DB.WithContext(context.WithoutCancel(ctx)).Save(run).Error
 }
 func (l *Lifecycle) Execute(ctx context.Context, run *Run, request StartRequest) (err error) {
-	cleanup := func() {}
+	cleanup := func() error { return nil }
+	var inherited []Run
+	writeSucceeded := false
 	defer func() {
-		cleanup()
+		if recovered := recover(); recovered != nil {
+			err = dto.NewProblem(500, "volume.restore.interrupted", nil)
+		}
+		if cleanupErr := cleanup(); cleanupErr != nil {
+			if l.Effects.Fence != nil {
+				l.Effects.Fence(ctx, run.VolumeName)
+			}
+			err = dto.NewProblem(409, "volume.backup.writer-unconfirmed", cleanupErr)
+			return
+		}
 		if run.InputPath != "" {
 			_ = os.RemoveAll(filepath.Dir(run.InputPath))
 		}
 		settled := context.WithoutCancel(ctx)
-		if err != nil {
+		if writeSucceeded {
+			restart := ownContainers(run)
+			for i := range inherited {
+				restart = append(restart, ownContainers(&inherited[i])...)
+			}
+			if restartErr := l.Effects.Restart(settled, restart, request.User); restartErr != nil {
+				run.Status = "partial"
+				run.ErrorCode = "volume.restore.restart-failed"
+			} else {
+				run.Status = "succeeded"
+				run.ErrorCode = ""
+			}
+			if run.Mode != "new" {
+				if e := l.DB.WithContext(settled).Model(&Run{}).Where("volume_name = ? AND pending_restart = ?", run.VolumeName, true).Update("pending_restart", false).Error; e != nil {
+					err = e
+				}
+				if l.Effects.PruneSafety != nil {
+					if e := l.Effects.PruneSafety(settled, run.VolumeName); e != nil {
+						run.Status = "partial"
+						run.ErrorCode = "volume.backup.retention-failed"
+					}
+				}
+			}
+			run.Phase = "done"
+			run.PendingRestart = false
+		} else if err != nil {
 			run.Status = "failed"
 			if run.Phase == "writing" {
 				run.PendingRestart = true
 				run.ErrorCode = "volume.restore.failed-partial"
+				if ctx.Err() != nil {
+					run.ErrorCode = "volume.restore.interrupted"
+				}
 			} else {
 				if run.ErrorCode == "" {
 					run.ErrorCode = "volume.restore.interrupted-before-write"
+					var p *dto.Problem
+					if errors.As(err, &p) {
+						run.ErrorCode = p.Code
+					}
 				}
 				err = errors.Join(err, l.Effects.Restart(settled, ownContainers(run), request.User))
 			}
@@ -136,7 +181,16 @@ func (l *Lifecycle) Execute(ctx context.Context, run *Run, request StartRequest)
 			}
 		}
 		run.FinishedAt = new(time.Now().UTC())
-		err = errors.Join(err, l.persist(settled, run))
+		persistErr := l.persist(settled, run)
+		if err != nil {
+			var problem *dto.Problem
+			if errors.As(err, &problem) && problem.Code == run.ErrorCode {
+				err = problem
+			} else {
+				err = dto.NewProblem(500, run.ErrorCode, err)
+			}
+		}
+		err = errors.Join(err, persistErr)
 	}()
 	if err = ctx.Err(); err != nil {
 		return err
@@ -144,14 +198,13 @@ func (l *Lifecycle) Execute(ctx context.Context, run *Run, request StartRequest)
 	// Upload expansion and ENOSPC happen in scratch before consumer/data effects.
 	if cleanup, err = l.Effects.Prepare(ctx, run, request); err != nil {
 		if cleanup == nil {
-			cleanup = func() {}
+			cleanup = func() error { return nil }
 		}
 		return err
 	}
 	if cleanup == nil {
-		cleanup = func() {}
+		cleanup = func() error { return nil }
 	}
-	var inherited []Run
 	if run.Mode != "new" {
 		if err = l.DB.WithContext(ctx).Where("volume_name = ? AND pending_restart = ?", run.VolumeName, true).Find(&inherited).Error; err != nil {
 			return err
@@ -173,14 +226,19 @@ func (l *Lifecycle) Execute(ctx context.Context, run *Run, request StartRequest)
 				return err
 			}
 		}
-		run.SafetyBackupID, err = l.Effects.Safety(ctx, run.VolumeName, request.User)
-		if err != nil {
-			run.ErrorCode = "volume.restore.safety-failed"
-			return err
+		if !run.CreatedVolume {
+			run.SafetyBackupID, err = l.Effects.Safety(ctx, run.VolumeName, request.User)
+			if err != nil {
+				run.ErrorCode = "volume.restore.safety-failed"
+				return err
+			}
+			if err = l.persist(ctx, run); err != nil {
+				return err
+			}
 		}
-		if err = l.persist(ctx, run); err != nil {
-			return err
-		}
+	}
+	if err = ctx.Err(); err != nil {
+		return err
 	}
 	run.Phase = "writing"
 	if err = l.persist(ctx, run); err != nil {
@@ -190,23 +248,7 @@ func (l *Lifecycle) Execute(ctx context.Context, run *Run, request StartRequest)
 	if err = l.Effects.Write(ctx, run, request); err != nil {
 		return err
 	}
-	restart := ownContainers(run)
-	for i := range inherited {
-		restart = append(restart, ownContainers(&inherited[i])...)
-	}
-	if err = l.Effects.Restart(context.WithoutCancel(ctx), restart, request.User); err != nil {
-		run.Status = "partial"
-		run.ErrorCode = "volume.restore.restart-failed"
-	} else {
-		run.Status = "succeeded"
-		run.ErrorCode = ""
-	}
-	// The write succeeded: inherited obligations are settled even if a restart failed.
-	if e := l.DB.WithContext(context.WithoutCancel(ctx)).Model(&Run{}).Where("volume_name = ? AND pending_restart = ?", run.VolumeName, true).Update("pending_restart", false).Error; e != nil {
-		return errors.Join(err, e)
-	}
-	run.Phase = "done"
-	run.PendingRestart = false
+	writeSucceeded = true
 	return nil
 }
 
@@ -224,7 +266,7 @@ func (l *Lifecycle) Reconcile(ctx context.Context, restored bool, fenced func(st
 		if restored {
 			row.PendingRestart = false
 			row.CleanupPending = false
-		} else if row.Status == "running" && row.Mode == "new" {
+		} else if row.Mode == "new" && (row.Status == "running" || row.CleanupPending) {
 			row.CleanupPending = l.Effects.CleanupNew(ctx, row) != nil
 		} else if row.Status == "running" && row.Phase == "preparing" {
 			if err := l.Effects.Restart(ctx, ownContainers(row), user.SystemUser); err != nil {

@@ -3,7 +3,7 @@
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
 // Deviations: Local module namespace
-
+; M12 persisted volume lifecycle and legacy restore cut.
 package rustic
 
 import (
@@ -52,7 +52,7 @@ func Run(ctx context.Context, dockerClient *client.Client, password string, comm
 			Image:  Image(ctx),
 			Cmd:    command,
 			Env:    env,
-			Labels: volumehelper.Labels(),
+			Labels: OperationLabels(ctx),
 		},
 		HostConfig: hostConfig,
 	})
@@ -68,7 +68,13 @@ func Run(ctx context.Context, dockerClient *client.Client, password string, comm
 			_, containerRemoveErr := dockerClient.ContainerRemove(attemptCtx, created.ID, volumehelper.RemoveOptions())
 			cancel()
 			if containerRemoveErr == nil || cerrdefs.IsNotFound(containerRemoveErr) {
-				return
+				inspectCtx, inspectCancel := context.WithTimeout(cleanupCtx, timeouts.DefaultDockerAPI)
+				_, inspectErr := dockerClient.ContainerInspect(inspectCtx, created.ID, client.ContainerInspectOptions{})
+				inspectCancel()
+				if cerrdefs.IsNotFound(inspectErr) {
+					return
+				}
+				containerRemoveErr = inspectErr
 			}
 			slog.WarnContext(cleanupCtx, "failed to remove Rustic container, retrying", "containerId", created.ID, "error", containerRemoveErr)
 			time.Sleep(5 * time.Second)

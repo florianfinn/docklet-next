@@ -3,7 +3,7 @@
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
 // Deviations: Extracted mutation/rollback helpers; compare optional update baselines at ordered apply boundaries.
-
+; M12 persisted volume lifecycle and legacy restore cut.
 package workspace
 
 import (
@@ -13,13 +13,8 @@ import (
 	"encoding/json/v2"
 	"errors"
 	"fmt"
-	"github.com/containerd/errdefs"
 	"github.com/florianfinn/docklet-next/backend/internal/common"
-	"github.com/florianfinn/docklet-next/backend/pkg/libarcane/timeouts"
-	"github.com/florianfinn/docklet-next/backend/pkg/libarcane/volumehelper"
 	"github.com/florianfinn/docklet-next/types/volume"
-	"github.com/moby/moby/api/types/container"
-	"github.com/moby/moby/api/types/mount"
 	"github.com/moby/moby/client"
 	"go.getarcane.app/acfs"
 	"go.getarcane.app/acfs/types"
@@ -200,14 +195,6 @@ func (s *Service) applyVolumeWorkspaceChangesInternal(
 	}
 
 	for index := 0; index < len(changes); {
-		if changes[index].Operation == volume.FileOpRestoreFile {
-			rel, _ := kit.NormalizeRelativePath(changes[index].RelativePath)
-			if err := s.restoreVolumeWorkspaceFileInternal(ctx, containerID, volumeName, changes[index].BackupID, rel); err != nil {
-				return rollbackFailureInternal(err)
-			}
-			index++
-			continue
-		}
 
 		// Compare at the ordered update boundary, after any preceding rename,
 		// move or create has been applied. Any failure rolls back the manifest.
@@ -220,7 +207,7 @@ func (s *Service) applyVolumeWorkspaceChangesInternal(
 			}
 		}
 		end := index + 1
-		for end < len(changes) && changes[end].Operation != volume.FileOpRestoreFile && !(changes[end].Operation == volume.FileOpUpdateFile && stagedFiles[end].baselineSet) {
+		for end < len(changes) && !(changes[end].Operation == volume.FileOpUpdateFile && stagedFiles[end].baselineSet) {
 			end++
 		}
 		if err := s.executeVolumeWorkspaceACFSBatchInternal(ctx, dockerClient, containerID, changes[index:end], stagedFiles, index, identity); err != nil {
@@ -369,42 +356,6 @@ func (
 	return nil
 }
 
-func (s *Service) createVolumeWorkspaceMutationContainerInternal(ctx context.Context, volumeName string, withBackups bool) (string, func(), error) {
-	if !withBackups {
-		return s.deps.AcquireHelper(ctx, volumeName)
-	}
-	dockerClient, err := s.deps.Docker.GetClient(ctx)
-	if err != nil {
-		return "", nil, err
-	}
-	helperImage, err := s.deps.HelperImage(ctx, dockerClient)
-	if err != nil {
-		return "", nil, err
-	}
-	backupMount, err := s.deps.BackupStorageMount(ctx, dockerClient, "/backups", true)
-	if err != nil {
-		return "", nil, err
-	}
-	config := &container.Config{Image: helperImage, Cmd: []string{"sleep", "infinity"}, NetworkDisabled: true, Labels: volumehelper.Labels()}
-	hostConfig := volumehelper.HostConfig(helperImage, []string{volumeName + ":/volume"}, []mount.Mount{backupMount})
-	resp, err := dockerClient.ContainerCreate(ctx, client.ContainerCreateOptions{Config: config, HostConfig: hostConfig})
-	if err != nil {
-		return "", nil, fmt.Errorf("create volume workspace helper: %w", err)
-	}
-	if _, containerStartErr := dockerClient.ContainerStart(ctx, resp.ID, client.ContainerStartOptions{}); containerStartErr != nil {
-		startErr := fmt.Errorf("start volume workspace helper: %w", containerStartErr)
-		cleanupCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), timeouts.DefaultDockerAPI)
-		defer cancel()
-		if _, cleanupErr := dockerClient.ContainerRemove(cleanupCtx, resp.ID, volumehelper.RemoveOptions()); cleanupErr != nil && !errdefs.IsNotFound(cleanupErr) {
-			return "", nil, errors.Join(startErr, fmt.Errorf("remove volume workspace helper after start failure: %w", cleanupErr))
-		}
-		return "", nil, startErr
-	}
-	return resp.ID, func() {
-		_, _ = dockerClient.ContainerRemove(context.WithoutCancel(ctx), resp.ID, volumehelper.RemoveOptions())
-	}, nil
-}
-
 type volumeWorkspaceBackupArchiveInternal struct {
 	relativePath string
 	archivePath  string
@@ -482,24 +433,6 @@ for rel do rm -rf -- "/volume/$rel"; done`, "sh"}, removePaths...)
 		if _, stderr, err := s.deps.Exec(ctx, containerID, "", []string{"tar", "-xf", archive.archivePath, "-C", containerParent}); err != nil {
 			return classifyVolumeWorkspaceExecErrorInternal(err, stderr, "restore volume workspace backup")
 		}
-	}
-	return nil
-}
-
-func (s *Service) restoreVolumeWorkspaceFileInternal(ctx context.Context, containerID, volumeName, backupID, rel string) error {
-	if err := s.validateVolumeWorkspacePathInternal(ctx, containerID, rel, true); err != nil {
-		return err
-	}
-	filename, cleaned, err := s.deps.ArchiveFileTarget(ctx, volumeName, backupID, rel)
-	if err != nil {
-		return err
-	}
-	stderr, err := s.deps.RestoreArchiveMembers(ctx, containerID, filename, []string{cleaned})
-	if err != nil {
-		return classifyVolumeWorkspaceExecErrorInternal(err, stderr, "restore volume workspace file")
-	}
-	if strings.TrimSpace(stderr) != "" {
-		slog.DebugContext(ctx, "volume workspace change stderr", "operation", volume.FileOpRestoreFile, "path", rel, "stderr", strings.TrimSpace(stderr))
 	}
 	return nil
 }

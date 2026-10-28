@@ -3,7 +3,7 @@
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
 // Deviations: Local module namespace; Typed helper incompatibility responses.
-
+; M12 persisted volume lifecycle and legacy restore cut.
 package workspace
 
 import (
@@ -110,7 +110,10 @@ func requireVolumeWorkspacePermissionsInternal(ctx context.Context, environmentI
 	if !ok || permissions == nil {
 		return huma.Error403Forbidden("insufficient permissions")
 	}
-	required, _ := authz.VolumeWorkspaceRequiredPermissions(changes)
+	required, valid := authz.VolumeWorkspaceRequiredPermissions(changes)
+	if !valid {
+		return huma.Error422UnprocessableEntity("unsupported volume workspace operation")
+	}
 	for _, permission := range required {
 		if !permissions.Allows(permission, environmentID) {
 			return huma.Error403Forbidden("insufficient permissions for volume workspace operation")

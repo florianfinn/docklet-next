@@ -3,7 +3,7 @@
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
 // Deviations: Local module namespace; mutation and rollback helpers extracted to mutations.go.
-
+; M12 persisted volume lifecycle and legacy restore cut.
 package workspace
 
 import (
@@ -30,7 +30,6 @@ import (
 	usertypes "github.com/florianfinn/docklet-next/types/user"
 	"github.com/florianfinn/docklet-next/types/volume"
 	"github.com/florianfinn/docklet-next/types/workspace"
-	"github.com/moby/moby/api/types/mount"
 	"github.com/moby/moby/client"
 	"go.getarcane.app/acfs"
 	"go.getarcane.app/acfs/types"
@@ -48,19 +47,17 @@ import (
 
 // Dependencies are the helper-container, lock, and backup operations the workspace runs through.
 type Dependencies struct {
-	Docker                *dockerInternal.DockerClientService
-	Events                *event.EventService
-	Locks                 *utils.KeyedMutex
-	AcquireHelper         func(ctx context.Context, volumeName string) (string, func(), error)
-	RequireACFS           func(ctx context.Context, volumeName, containerID string) error
-	Exec                  func(ctx context.Context, containerID, execUser string, cmd []string) (string, string, error)
-	HelperImage           func(ctx context.Context, dockerClient *client.Client) (string, error)
-	BackupStorageMount    func(ctx context.Context, dockerClient *client.Client, target string, readOnly bool) (mount.Mount, error)
-	ArchiveFileTarget     func(ctx context.Context, volumeName, backupID, rel string) (string, string, error)
-	RestoreArchiveMembers func(ctx context.Context, containerID, filename string, cleanedPaths []string) (string, error)
-	MaxDepth              int
-	MaxEntries            int
-	MaxFileSizeBytes      int64
+	Docker           *dockerInternal.DockerClientService
+	Events           *event.EventService
+	Locks            *utils.KeyedMutex
+	BusyError        func(string) error
+	AcquireHelper    func(ctx context.Context, volumeName string) (string, func(), error)
+	RequireACFS      func(ctx context.Context, volumeName, containerID string) error
+	Exec             func(ctx context.Context, containerID, execUser string, cmd []string) (string, string, error)
+	HelperImage      func(ctx context.Context, dockerClient *client.Client) (string, error)
+	MaxDepth         int
+	MaxEntries       int
+	MaxFileSizeBytes int64
 }
 
 // Service browses and edits the files inside a volume through its helper container.
@@ -517,13 +514,18 @@ func (
 		return nil, classifyVolumeWorkspaceHelperSupportErrorInternal(err)
 	}
 	slog.DebugContext(ctx, "volume workspace inspection completed", "volume", volumeName, "duration", time.Since(inspectionStartedAt))
-	ctx, unlock := operationlock.WithContext(ctx, volumeName, s.deps.Locks.Lock(volumeName))
+	release, ok := s.deps.Locks.TryLock(volumeName)
+	if !ok {
+		var cause error
+		if s.deps.BusyError != nil {
+			cause = s.deps.BusyError(volumeName)
+		}
+		return nil, common.Classify(common.ErrVolumeWorkspaceConflict, cause)
+	}
+	ctx, unlock := operationlock.WithContext(ctx, volumeName, release)
 	defer unlock()
-	needsBackups := slices.ContainsFunc(manifest.FileChanges, func(change volume.WorkspaceFileChange) bool {
-		return change.Operation == volume.FileOpRestoreFile
-	})
 	helperStartedAt := time.Now()
-	containerID, cleanup, err := s.createVolumeWorkspaceMutationContainerInternal(ctx, volumeName, needsBackups)
+	containerID, cleanup, err := s.deps.AcquireHelper(ctx, volumeName)
 	if err != nil {
 		return nil, err
 	}
@@ -531,7 +533,7 @@ func (
 	if requireVolumeHelperACFSErr := s.deps.RequireACFS(ctx, volumeName, containerID); requireVolumeHelperACFSErr != nil {
 		return nil, requireVolumeHelperACFSErr
 	}
-	slog.DebugContext(ctx, "volume workspace mutation helper acquired", "volume", volumeName, "containerId", containerID, "dedicated", needsBackups, "duration", time.Since(helperStartedAt))
+	slog.DebugContext(ctx, "volume workspace mutation helper acquired", "volume", volumeName, "containerId", containerID, "duration", time.Since(helperStartedAt))
 
 	revisionScanStartedAt := time.Now()
 	current, err := s.readVolumeWorkspaceFromContainerInternal(ctx, containerID)
@@ -661,13 +663,6 @@ func validateVolumeWorkspaceFileChangeInternal(change volume.WorkspaceFileChange
 			if _, err := kit.NormalizeRelativePath(change.NewParentPath); err != nil {
 				return fmt.Errorf("invalid destination folder: %w", err)
 			}
-		}
-	case volume.FileOpRestoreFile:
-		if hasUpload {
-			return errors.New("restore_file does not accept file content")
-		}
-		if strings.TrimSpace(change.BackupID) == "" {
-			return errors.New("restore_file requires backupId")
 		}
 	default:
 		return fmt.Errorf("unsupported volume workspace operation %q", change.Operation)

@@ -10,9 +10,10 @@ import "time"
 
 // RestoreRun keeps this run's stopped set separate from inherited pending rows.
 type Run struct {
-	ID                string `gorm:"primaryKey;not null"`
-	VolumeName        string `gorm:"not null;index:idx_volume_restore_runs_volume_started,priority:1"`
-	Kind              string `gorm:"not null"`
+	Prepared          *preparedRestore `gorm:"-"`
+	ID                string           `gorm:"primaryKey;not null"`
+	VolumeName        string           `gorm:"not null;index:idx_volume_restore_runs_volume_started,priority:1"`
+	Kind              string           `gorm:"not null"`
 	BackupID          string
 	SafetyBackupID    string
 	InputPath         string

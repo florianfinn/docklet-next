@@ -3,7 +3,7 @@
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
 // Deviations: Local module namespace
-
+; M12 persisted volume lifecycle and legacy restore cut.
 package restore
 
 import (
@@ -12,8 +12,8 @@ import (
 	"testing"
 
 	"github.com/danielgtaylor/huma/v2"
-	uploadtypes "github.com/florianfinn/docklet-next/types/upload"
 	"github.com/florianfinn/docklet-next/types/user"
+	"github.com/florianfinn/docklet-next/types/volume"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -28,7 +28,7 @@ func TestUploadAndRestoreReturnsNotFoundForUnknownSession(t *testing.T) {
 	_, err := h.UploadAndRestore(ctx, &UploadAndRestoreInput{
 		EnvironmentID: "0",
 		VolumeName:    "vol-1",
-		Body:          uploadtypes.ConsumeRequest{UploadID: "missing"},
+		Body:          volume.UploadRestoreRequest{UploadID: "missing"},
 	})
 
 	require.Error(t, err)

@@ -3,7 +3,7 @@
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
 // Deviations: Local module namespace; functional cut: removed S3 backup destinations.
-
+; M12 persisted volume lifecycle and legacy restore cut.
 package volumes
 
 import (
@@ -428,7 +428,7 @@ and restored instead (no backup ID).`,
 			}
 		}
 
-		result, err := c.PostJSON[base.MessageResponse](cmd.Context(), types.VolumeBackupRestore(c.EnvID(), resolved.Name, backupID), nil)
+		result, err := c.PostJSON[volume.RestoreOperation](cmd.Context(), types.VolumeBackupRestore(c.EnvID(), resolved.Name, backupID), nil)
 		if err != nil {
 			return fmt.Errorf("failed to restore backup: %w", err)
 		}
@@ -437,7 +437,7 @@ and restored instead (no backup ID).`,
 			return cmdutil.PrintJSON(result.Data)
 		}
 
-		output.Success("Restore of volume %s from backup %s initiated", resolved.Name, backupID)
+		printRestoreAccepted(result.Data)
 		return nil
 	},
 }
@@ -458,7 +458,7 @@ func runRestorePaths(cmd *cobra.Command, c *client.Client, volumeName, backupID 
 		Paths []string `json:"paths"`
 	}{Paths: restorePaths}
 
-	result, err := c.PostJSON[base.MessageResponse](cmd.Context(), types.VolumeBackupRestoreFiles(c.EnvID(), volumeName, backupID), body)
+	result, err := c.PostJSON[volume.RestoreOperation](cmd.Context(), types.VolumeBackupRestoreFiles(c.EnvID(), volumeName, backupID), body)
 	if err != nil {
 		return fmt.Errorf("failed to restore backup files: %w", err)
 	}
@@ -467,7 +467,7 @@ func runRestorePaths(cmd *cobra.Command, c *client.Client, volumeName, backupID 
 		return cmdutil.PrintJSON(result.Data)
 	}
 
-	output.Success("Restore of %d path(s) into volume %s initiated", len(restorePaths), volumeName)
+	printRestoreAccepted(result.Data)
 	return nil
 }
 
@@ -491,18 +491,17 @@ func runUploadRestore(cmd *cobra.Command, c *client.Client, volumeName string) e
 		return err
 	}
 
-	respBody, err := c.DoRaw(cmd.Context(), http.MethodPost, types.VolumeBackupUploadRestore(c.EnvID(), volumeName), uploadtypes.ConsumeRequest{UploadID: sessionID})
+	result, err := c.PostJSON[volume.RestoreOperation](cmd.Context(), types.VolumeBackupUploadRestore(c.EnvID(), volumeName), volume.UploadRestoreRequest{UploadID: sessionID})
 	if err != nil {
 		cmdutil.AbortUploadSession(cmd.Context(), c, uploadtypes.KindVolumeBackup, sessionID)
 		return fmt.Errorf("failed to upload and restore backup: %w", err)
 	}
 
 	if jsonOutput {
-		_, _ = fmt.Fprintln(output.Stdout(), string(respBody))
-		return nil
+		return cmdutil.PrintJSON(result.Data)
 	}
 
-	output.Success("Backup uploaded and restored into volume %s successfully", volumeName)
+	printRestoreAccepted(result.Data)
 	return nil
 }
 
@@ -678,4 +677,8 @@ func init() {
 	backupsDeleteCmd.Flags().BoolVarP(&forceFlag, "force", "f", false, "Delete without confirmation")
 
 	backupsFilesCmd.Flags().BoolVar(&jsonOutput, "json", false, "Output in JSON format")
+}
+
+func printRestoreAccepted(result volume.RestoreOperation) {
+	output.Success("Restore accepted (activity %s, restore %s)", result.ActivityID, result.RestoreID)
 }

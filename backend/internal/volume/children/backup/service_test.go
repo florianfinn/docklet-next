@@ -3,7 +3,7 @@
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
 // Deviations: Local module namespace; functional cut: removed S3 backup destinations; SQLite temp-file persistence fixture; M12 backup foundation.
-
+; M12 persisted volume lifecycle and legacy restore cut.
 package backup
 
 import (
@@ -39,6 +39,7 @@ type volumeBackupTestRow struct {
 	PolicyID        string
 	Status          string
 	LocalSnapshotID string
+	Trigger         string `gorm:"default:scheduled"`
 }
 
 func (volumeBackupTestRow) TableName() string { return "volume_backups" }
@@ -95,7 +96,7 @@ func TestVolumeBackupPolicy_RetentionIgnoresFailedRuns(t *testing.T) {
 	).Error)
 
 	service := NewService(Dependencies{DB: &database.DB{DB: gormDB}})
-	require.NoError(t, service.applyVolumeBackupRetentionInternal(t.Context(), policyID, 1))
+	require.NoError(t, service.applyVolumeBackupRetentionInternal(t.Context(), "app-data", "", 1))
 
 	var backups []volume.Backup
 	require.NoError(t, gormDB.Table("volume_backups").Order("created_at ASC").Find(&backups).Error)

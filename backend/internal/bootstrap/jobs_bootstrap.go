@@ -3,7 +3,7 @@
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
 // Deviations: Local module namespace; functional cut: removed upstream analytics heartbeat and APNS mobile push; functional cut: removed template catalogue; functional cut: removed GitOps and saved Git repositories.
-
+; M12 persisted volume lifecycle and legacy restore cut.
 package bootstrap
 
 import (
@@ -14,6 +14,7 @@ import (
 	"log/slog"
 	"net/http"
 	"slices"
+	"strings"
 	"sync"
 	"time"
 
@@ -82,6 +83,9 @@ func newJobScheduler(
 			if startSchedulerErr := jobScheduler.StartScheduler(ctx); startSchedulerErr != nil {
 				return fmt.Errorf("start scheduler: %w", startSchedulerErr)
 			}
+			if volumes != nil {
+				go volumes.RetryFencedBackupWriters(schedulerCtx)
+			}
 			jobService.Coordinator().Activate()
 			if backupEngine != nil {
 				repairDone = make(chan struct{})
@@ -135,12 +139,26 @@ func reconcileCoordinatorStartupInternal(
 	volumes *volume.VolumeService,
 	systemService *system.SystemService,
 ) error {
+	if volumes != nil {
+		if err := volumes.SweepBackupWriters(ctx); err != nil {
+			return err
+		}
+	}
+	if engine != nil {
+		var fence func(string) bool
+		if volumes != nil {
+			fence = volumes.BackupWriterFenced
+		}
+		if err := engine.SettleVolumeRuns(ctx, fence); err != nil {
+			return err
+		}
+	}
 	activities, backups, err := startupProtectionInternal(ctx, jobs, engine, updates)
 	if err != nil {
 		return err
 	}
 	if volumes != nil {
-		if reconcileInterruptedBackupsErr := volumes.ReconcileInterruptedBackups(ctx, backups...); reconcileInterruptedBackupsErr != nil {
+		if reconcileInterruptedBackupsErr := volumes.ReconcileInterruptedBackups(ctx); reconcileInterruptedBackupsErr != nil {
 			return reconcileInterruptedBackupsErr
 		}
 	}
@@ -191,6 +209,9 @@ func startupProtectionInternal(ctx context.Context, jobs *job.JobService, engine
 func scheduledBackupProtectionInternal(records []schedulertypes.QueueRecord) ([]string, error) {
 	ids := []string{}
 	for _, record := range records {
+		if strings.HasPrefix(record.JobID, "volume-backup:") {
+			continue
+		}
 		for _, run := range record.Runs {
 			if run.Status.Terminal() {
 				continue
