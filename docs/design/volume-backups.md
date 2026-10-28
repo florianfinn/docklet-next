@@ -193,3 +193,9 @@ size observations remain unknown rather than becoming empty successful backups.
 An unavailable terminal database write does not release operation admission.
 The worker retries terminal persistence while retaining its activity and locks,
 so maintenance cannot pass a write whose final state has not committed.
+
+The web reads host overviews for next-run instants, usable targets and running
+activity IDs. It preserves custom cron without recomputing host schedules, follows
+accepted restores asynchronously and rediscovers lost admissions without repeating
+them. Recovery keys are requested only after confirmation and remain in the open
+dialog rather than query caches. These mappings retain the server capability gate.

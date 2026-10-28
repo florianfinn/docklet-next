@@ -96,15 +96,15 @@ describe("demo storage contract", () => {
     expect(await adapter.createVolume({ name: "x", hostId: "cedar", labels: {} }).catch((e: unknown) => errorCode(e))).toBe("host-offline");
   });
 
-  it("runs a manual backup, records it and keeps only the configured number of archives", async () => {
+  it("runs a manual backup, records it and keeps manual snapshots outside scheduled retention", async () => {
     const adapter = createDemoAdapter();
     const id = "vol-atlas-home_ha_config";
     const before = await adapter.getVolume(id);
-    await adapter.setBackupPolicy(id, { ...before.backup!, retention: { maxCount: 2, maxSizeGb: null } });
+    await adapter.setBackupPolicy(id, { ...before.backup!, retentionCount: 2 });
     await adapter.runBackup(id);
     await waitFor(async () => expect((await adapter.getVolume(id)).backups[0]?.status).toBe("succeeded"), { timeout: 6000 });
     const after = await adapter.getVolume(id);
-    expect(after.backups.filter((r) => r.status === "succeeded").length).toBe(2);
+    expect(after.backups.filter((r) => r.status === "succeeded").length).toBe(3);
     expect(after.backups[0]?.trigger).toBe("manual");
   });
 });

@@ -7,7 +7,6 @@ import { MINECRAFT, PLEX_STREAMS } from "@/features/dashboard/services/service-d
 import { createDemoAdapter } from "../demo-adapter";
 import { renderEvent, renderRun } from "../../message-code";
 import { queueDemoFailure } from "../options";
-import { BACKUP_RUNS } from "../fixtures/backups";
 import { STANDALONE } from "../fixtures/containers";
 import { EVENTS, SCHEDULE, SEED_RESTORE_POINTS, SEED_RUNS } from "../fixtures/events";
 import { HOSTS } from "../fixtures/hosts";
@@ -66,8 +65,6 @@ describe("demo texts in American English", () => {
       ...STACKS.flatMap((s) => [s.description, ...s.services.map((x) => (x.update.state === "error" ? x.update.message : undefined))]),
       ...STANDALONE.map((c) => c.originNote),
       ...HOSTS.flatMap((h) => [h.address, agentContainer(h).originNote]),
-      ...SETTINGS.backups.targets.map((t) => t.lastTest?.message),
-      ...BACKUP_RUNS.map((r) => r.error),
       ...PLEX_STREAMS.flatMap((s) => [s.subtitle, s.device]),
       ...runTexts(sampleRun(new Date(0).toISOString())),
       SIMULATED_NOTE,
@@ -122,7 +119,7 @@ describe("texts the demo backend writes while running actions", () => {
       adapter.runBackup("vol-atlas-paperless_pg_data"),
       adapter.runContainerCommand(STANDALONE[0]!.id, "restart"),
       adapter.saveSettings("general", settings.general),
-      adapter.testBackupTarget(settings.backups.targets[0]!),
+      adapter.testBackupTarget(settings.backups.targets[0]!.id, "atlas"),
       adapter.testNotification(settings.notifications[0]!),
     ]);
     expect(started.filter((s) => s.status === "fulfilled").length).toBeGreaterThan(14);

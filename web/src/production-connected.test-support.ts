@@ -1,3 +1,5 @@
+import { BACKUP_OPERATIONS } from "./data/http/backups";
+import { overview, entry } from "./data/http/backups.test-support";
 // Source: docklet-next/docs/design/adapter-live-capabilities.md
 // Revision: 3d2d4f27b524b3422d010d6a69a22fe57225a78f
 // Retrieved: 2026-10-22
@@ -36,14 +38,16 @@ export function connectedFixture() {
     if (path === "/api/auth/login") { state.signedIn = true; return json({ user }); }
     if (path === "/api/environments/0/settings") return Response.json([{ key: "setupCompleted", value: "true" }]);
     if (path === "/api/capabilities") return json([
-      "listHosts", "listStacks", "getStack", "listContainers", "listImages", "listVolumes", "getVolume", "getTopology", "subscribeMetrics", "listFiles", "readFile", "writeFile", "createEntry", "renameEntry", "deleteEntry", "uploadFile", "downloadFile",
-      // A server descriptor cannot enable an adapter mapping that does not exist.
+      ...BACKUP_OPERATIONS, "listHosts", "listStacks", "getStack", "listContainers", "listImages", "listVolumes", "getVolume", "getTopology", "subscribeMetrics", "listFiles", "readFile", "writeFile", "createEntry", "renameEntry", "deleteEntry", "uploadFile", "downloadFile",
+      // Other unwired operations stay behind their mapping boundary.
       "runBackup", "setBackupPolicy", "restoreBackup", "checkUpdates", "installStackUpdates", "installContainerUpdate", "reconnectHost", "restartAgent", "restartService", "setContainerOrigin", "importSource", "updateHost", "restoreRestorePoint",
     ].map((operationId) => {
       const resourceRef = { kind: url.searchParams.get("kind") ?? "hub", id: url.searchParams.get("id") ?? "0" };
       const available = availableForRef(operationId, resourceRef);
       return { operationId, available, resourceRef, disabledReasonCode: available ? undefined : "capability.unavailable" };
     }));
+    if (path.endsWith("/backups/overview")) return json(overview);
+    if (path.endsWith("/volumes/data/backups")) return Response.json({ success: true, data: [entry], pagination: { totalItems: 1, currentPage: 1, itemsPerPage: 100, totalPages: 1 } });
     if (state.failed && path.includes(state.failed)) return Response.json({ code: "http.error" }, { status: 500 });
     if (path.endsWith("/workspace")) return json(directWsCreate);
     if (path.endsWith("/workspace/file")) return json({ relativePath: "hello.txt", path: "/hello.txt", name: "hello.txt", content: "hello.txt", editable: true, size: 9, mimeType: "text/plain" });

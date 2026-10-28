@@ -19,12 +19,12 @@ export const SETTINGS: HubSettings = {
   hostDefaults: { projectDir: "/home/docker", installDir: "/home/docker/docklet-agent", connection: "direct", puid: "", pgid: "", detectSocketGroup: true },
   updates: { interval: "12h", notify: true },
   backups: {
-    defaultRetention: { maxCount: 7, maxSizeGb: null },
+    defaultRetentionCount: 7,
     targets: [
-      { id: "t-local-atlas", name: "Atlas · Backup-Share", kind: "local", hostId: "atlas", path: "/mnt/user/backups/docklet", lastTest: { ok: true, at: daysAgo(1), message: "Schreibbar, 3,1 TB frei" } },
-      { id: "t-smb-nas", name: "NAS (SMB)", kind: "smb", server: "nas.example.com", share: "backups", path: "/docklet", username: "docklet-backup", secretSet: true, options: "vers=3.1.1", lastTest: { ok: true, at: daysAgo(2), message: "Anmeldung erfolgreich, 820 GB frei" } },
-      { id: "t-nfs-archive", name: "Archiv (NFS)", kind: "nfs", server: "archive.example.com", path: "/export/docklet", options: "nfsvers=4.1", lastTest: { ok: false, at: daysAgo(1), message: "Zeitüberschreitung beim Mounten" } },
-      { id: "t-mount-boreal", name: "Boreal · Zusatzplatte", kind: "mount", hostId: "boreal", path: "/mnt/backup-disk/docklet" },
+      { id: "t-local-atlas", name: "Atlas · Backup-Share", kind: "local", hostId: "atlas", path: "/mnt/user/backups/docklet", hasSecret: false, createdAt: daysAgo(10), configVersion: 1, checks: [{ hostId: "atlas", activityId: "test", ok: true, at: daysAgo(1), configVersion: 1, setVersion: 1, earlierSettings: false }] },
+      { id: "t-smb-nas", name: "NAS (SMB)", kind: "smb", server: "nas.example.com", share: "backups", path: "docklet", username: "docklet-backup", options: "vers=3.1.1", hasSecret: true, createdAt: daysAgo(10), configVersion: 1, checks: [{ hostId: "atlas", activityId: "test", ok: true, at: daysAgo(2), configVersion: 1, setVersion: 1, earlierSettings: false }] },
+      { id: "t-nfs-archive", name: "Archiv (NFS)", kind: "nfs", server: "archive.example.com", share: "/export", path: "docklet", options: "nfsvers=4.1", hasSecret: false, createdAt: daysAgo(10), configVersion: 1, checks: [{ hostId: "atlas", activityId: "test", ok: false, at: daysAgo(1), configVersion: 1, setVersion: 1, earlierSettings: false }] },
+      { id: "t-mount-boreal", name: "Boreal · Zusatzplatte", kind: "mount", hostId: "boreal", path: "/mnt/backup-disk/docklet", hasSecret: false, configVersion: 1, createdAt: daysAgo(10), checks: [] },
     ],
   },
   notifications: [

@@ -363,3 +363,8 @@ DTO mapping and matrix-test files carry their own provenance headers. The
 adapter reads the checked-in generated OpenAPI types, retrieves run details and
 events, and uses the approved SSE channel to refresh snapshots. Its only new
 transport is browser HTTP and EventSource; no runtime package was added.
+
+M12 #284 replaces prototype volume backup plans, history, target settings and their
+fixtures with the live v9 backup domain and mappings. New transport and interaction
+files are original Apache-2.0 work; changed imported files retain exact sidecar
+hashes and deviation records. No dependencies or binary assets were added.

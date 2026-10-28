@@ -1,12 +1,10 @@
-import { collectMountUsage, holdsDatabase, volumeId, type BackupRun, type MountUsage, type Volume, type VolumeDetail } from "@/domain/volumes";
-import { applyRetention, validateRetention } from "@/domain/retention";
-import { validateSchedule } from "@/domain/schedule";
+import { createDemoBackups } from "./demo-backups";
+import { collectMountUsage, volumeId, type BackupRun, type MountUsage, type Volume, type VolumeDetail } from "@/domain/volumes";
 import { planVolumePrune, pruneBlock } from "@/domain/volume-prune";
 import { volumeName } from "@/domain/validation";
 
 import type { VolumePruneResult, VolumesApi } from "../api";
-import type { StepPlan } from "./action-runner";
-import { DemoError, failMessage, wait, type DemoContext } from "./demo-context";
+import { DemoError, wait, type DemoContext } from "./demo-context";
 import { FileStoreError } from "./file-store";
 import { UNUSED_VOLUMES } from "./fixtures/unused-volumes";
 import { seedFiles } from "./fixtures/volume-files";
@@ -21,7 +19,7 @@ function hash(s: string): number {
 const DAY = 86_400_000;
 
 export function createVolumesApi(ctx: DemoContext): VolumesApi {
-  const { db, runner } = ctx;
+  const { db } = ctx;
   const usageOf = (): MountUsage[] => collectMountUsage(db.containers(), (h) => db.host(h)?.projectDir);
   for (const u of UNUSED_VOLUMES) {
     const id = volumeId(u.hostId, "volume", u.name);
@@ -103,17 +101,6 @@ export function createVolumesApi(ctx: DemoContext): VolumesApi {
       if (e instanceof FileStoreError) throw new DemoError(e.code);
       throw e;
     }
-  }
-
-  function consumerImages(v: Volume): string[] {
-    return db
-      .containers()
-      .filter((c) => v.consumers.some((x) => x.containerId === c.id))
-      .map((c) => c.image.repository);
-  }
-
-  function consumerNames(v: Volume) {
-    return v.consumers.filter((c) => c.running).map((c) => c.containerName);
   }
 
   return {
@@ -229,100 +216,7 @@ export function createVolumesApi(ctx: DemoContext): VolumesApi {
       return new Blob([file.content], { type: "text/plain" });
     },
 
-    async setBackupPolicy(id, policy) {
-      await wait(300);
-      find(id);
-      if (policy && !db.settings.backups.targets.some((t) => t.id === policy.targetId)) throw new DemoError("target-missing");
-      // The adapter checks the plan itself instead of trusting the form.
-      if (policy && (validateRetention(policy.retention) || (policy.schedule.mode !== "manual" && validateSchedule(policy.schedule, new Date(), db.settings.general.timeZone)))) throw new DemoError("invalid-plan");
-      if (policy) db.backupPolicies.set(id, structuredClone(policy));
-      else db.backupPolicies.delete(id);
-      db.changed("volumes", "schedule");
-    },
-
-    async runBackup(id) {
-      const v = online(find(id));
-      const policy = db.backupPolicies.get(id);
-      if (!policy) throw new DemoError("no-policy");
-      const target = db.settings.backups.targets.find((t) => t.id === policy.targetId);
-      if (!target) throw new DemoError("target-missing");
-      const stop = policy.stopContainers ? consumerNames(v) : [];
-      const archive = `${v.composeName ?? v.name.split("/").pop()}-${new Date().toISOString().slice(0, 16).replace(/[:T]/g, "")}.tar.zst`;
-      const steps: StepPlan[] = [
-        { key: "validate", label: "Ziel prüfen", detail: target.name },
-        ...(stop.length ? [{ key: "stop" as const, label: "Container stoppen", detail: stop.join(", ") }] : []),
-        { key: "collect", label: "Archiv erstellen", detail: `${v.kind === "bind" ? "Bind-Mount" : "Volume"} ${v.name}` },
-        { key: "save", label: "Auf Ziel schreiben", detail: archive },
-        ...(stop.length ? [{ key: "start" as const, label: "Container starten", detail: stop.join(", ") }] : []),
-      ];
-      const unreachable = target.lastTest?.ok === false;
-      const forced = ctx.forcedFailure();
-      const runId = db.nextId("b");
-      const record: BackupRun = { id: runId, volumeId: id, targetId: target.id, startedAt: new Date().toISOString(), status: "running", trigger: "manual", stoppedContainers: stop.length > 0 };
-      db.backupRuns = [record, ...db.backupRuns];
-      const patch = (fn: (r: BackupRun) => BackupRun) => {
-        db.backupRuns = db.backupRuns.map((r) => (r.id === runId ? fn(r) : r));
-        db.changed("volumes");
-      };
-      const actionId = runner.start({
-        kind: "backup",
-        title: `Backup · ${v.composeName ?? v.name}`,
-        target: `${target.name} · ${db.host(v.hostId)?.name ?? v.hostId}`,
-        hostId: v.hostId,
-        stackId: v.stackId,
-        services: stop,
-        steps,
-        failAt: unreachable ? "validate" : forced ? "save" : undefined,
-        failMessage: unreachable ? `${target.name} nicht erreichbar (letzter Test: ${target.lastTest?.message})` : failMessage,
-        onSuccess: () => {
-          patch((r) => ({ ...r, status: "succeeded", finishedAt: new Date().toISOString(), sizeBytes: Math.round(db.files.size(id) * (holdsDatabase(consumerImages(v)) ? 0.32 : 0.6)), archive }));
-          const done = db.backupRuns.filter((r) => r.volumeId === id && r.status === "succeeded").toSorted((a, b) => b.startedAt.localeCompare(a.startedAt));
-          const drop = new Set(applyRetention(done, policy.retention).drop.map((r) => r.id));
-          if (drop.size) db.backupRuns = db.backupRuns.filter((r) => !drop.has(r.id));
-          db.pushEvent({ kind: "backup", level: "ok", title: `Backup von ${v.composeName ?? v.name} abgeschlossen${drop.size ? ` · ${drop.size} ältere(s) Archiv(e) gemäß Aufbewahrung entfernt` : ""}`, hostId: v.hostId, stackId: v.stackId, actionId });
-          db.changed("volumes", "events");
-        },
-        onFailure: (run) => {
-          patch((r) => ({ ...r, status: "failed", finishedAt: new Date().toISOString(), error: run.error }));
-          db.pushEvent({ kind: "backup", level: "error", title: `Backup von ${v.composeName ?? v.name} fehlgeschlagen`, hostId: v.hostId, stackId: v.stackId, actionId: run.id });
-        },
-      });
-      patch((r) => ({ ...r, actionId }));
-      return actionId;
-    },
-
-    async restoreBackup(id, runId, mode) {
-      const v = online(find(id));
-      const run = db.backupRuns.find((r) => r.id === runId && r.volumeId === id && r.status === "succeeded");
-      if (!run) throw new DemoError("not-found");
-      const stop = mode === "replace" ? consumerNames(v) : [];
-      const newName = `${v.name}-restore-${new Date().toISOString().slice(0, 10).replace(/-/g, "")}`;
-      return runner.start({
-        kind: "volume-restore",
-        title: `Wiederherstellung · ${v.composeName ?? v.name}`,
-        target: run.archive ?? runId,
-        hostId: v.hostId,
-        stackId: v.stackId,
-        services: stop,
-        steps: [
-          { key: "validate", label: "Archiv prüfen", detail: run.archive },
-          ...(stop.length ? [{ key: "stop" as const, label: "Container stoppen", detail: stop.join(", ") }] : []),
-          { key: "create", label: mode === "replace" ? "Inhalt ersetzen" : "Neues Volume anlegen", detail: mode === "replace" ? v.name : newName },
-          ...(stop.length ? [{ key: "start" as const, label: "Container starten", detail: stop.join(", ") }] : []),
-        ],
-        failAt: ctx.forcedFailure() ? "create" : undefined,
-        failMessage,
-        onSuccess: () => {
-          if (mode === "new" && v.kind === "volume") {
-            const nid = volumeId(v.hostId, "volume", newName);
-            db.createdVolumes.set(nid, { name: newName, hostId: v.hostId, createdAt: new Date().toISOString(), labels: { "docklet.restore-of": v.name } });
-            db.files.clone(id, nid);
-          }
-          db.pushEvent({ kind: "backup", level: "ok", title: `Archiv ${run.archive} wiederhergestellt${mode === "new" ? ` als ${newName}` : ""}`, hostId: v.hostId, stackId: v.stackId });
-          db.changed("volumes", "events");
-        },
-      });
-    },
+    ...createDemoBackups(ctx, all, find),
   };
 }
 
