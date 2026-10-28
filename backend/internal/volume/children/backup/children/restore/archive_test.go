@@ -15,6 +15,7 @@ import (
 	"os"
 	"path"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	dto "github.com/florianfinn/docklet-next/types/backup"
@@ -72,6 +73,7 @@ func TestArchiveValidationRulesLeaveTargetAndOutsideUnchanged(t *testing.T) {
 		{name: "hardlink-forward", want: "link", members: []member{{name: "hard", kind: tar.TypeLink, link: "later"}, {name: "later", kind: tar.TypeReg, body: "new"}}},
 		{name: "character-device", want: "entry-type", members: []member{{name: "device", kind: tar.TypeChar}}},
 		{name: "block-device", want: "entry-type", members: []member{{name: "device", kind: tar.TypeBlock}}},
+		{name: "sparse-pax", want: "entry-type", members: []member{{name: "sparse", kind: tar.TypeReg, body: "x", pax: map[string]string{"SCHILY.realsize": "100"}}}},
 		{name: "fifo", want: "entry-type", members: []member{{name: "pipe", kind: tar.TypeFifo}}},
 		{name: "unknown-type", want: "entry-type", members: []member{{name: "unknown", kind: 'Z'}}},
 		{name: "space-budget", want: "expanded-too-large", free: 10, members: []member{{name: "file", kind: tar.TypeReg, body: "12345678901"}}},
@@ -117,11 +119,12 @@ func TestArchiveNormalizedExtractionRoundTrip(t *testing.T) {
 		member{name: "dir/white space\nname", kind: tar.TypeReg, body: "payload with whitespace\n"},
 		member{name: "hard", kind: tar.TypeLink, link: "./dir/white space\nname"},
 		member{name: "sym", kind: tar.TypeSymlink, link: "dir/white space\nname"},
+		member{name: strings.Repeat("long", 40), kind: tar.TypeReg, body: "long-name-content"},
 		member{name: "external", kind: tar.TypeSymlink, link: "../outside"},
 	)
 	result, err := ValidateArchive(bytes.NewReader(raw), 1<<20)
 	require.NoError(t, err)
-	require.Equal(t, 6, result.Entries)
+	require.Equal(t, 7, result.Entries)
 	var normalized bytes.Buffer
 	require.NoError(t, NormalizeArchive(bytes.NewReader(raw), &normalized, 1<<20, result.SHA256))
 	parent := t.TempDir()
@@ -163,6 +166,9 @@ func TestArchiveNormalizedExtractionRoundTrip(t *testing.T) {
 		require.NoError(t, e)
 		require.Equal(t, "payload with whitespace\n", string(got))
 	}
+	long, err := root.ReadFile(strings.Repeat("long", 40))
+	require.NoError(t, err)
+	require.Equal(t, "long-name-content", string(long))
 	got, err := os.ReadFile(filepath.Join(parent, "outside"))
 	require.NoError(t, err)
 	require.Equal(t, "sentinel", string(got))

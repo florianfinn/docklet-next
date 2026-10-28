@@ -13,6 +13,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/florianfinn/docklet-next/backend/internal/activity"
 	"github.com/florianfinn/docklet-next/backend/internal/backuptarget"
 	"github.com/florianfinn/docklet-next/backend/internal/volume/children/backup/children/policies"
 	"github.com/florianfinn/docklet-next/backend/internal/volume/children/backup/children/restore"
@@ -31,6 +32,7 @@ func TestOverviewRediscoveryMissingVolumesAndHostMetadata(t *testing.T) {
 		require.NoError(t, json.NewEncoder(w).Encode(map[string]any{"Volumes": []mobyvolume.Volume{{Name: "live"}, {Name: "hidden", Labels: map[string]string{libarcane.InternalResourceLabel: "true"}}}}))
 	}), &started)
 	require.NoError(t, s.deps.DB.AutoMigrate(&checkSetting{}, &backuptarget.Target{}, &policies.VolumeBackupPolicy{}))
+	require.NoError(t, s.deps.DB.AutoMigrate(activity.Models()...))
 	s.deps.Location = time.FixedZone("Owning host", 3600)
 	now := time.Now().UTC().Truncate(time.Second)
 	require.NoError(t, s.deps.DB.Exec("INSERT INTO settings(key,value) VALUES ('hubHostId','host-a'),('backupTargetAuthority','authority'),('backupTargetSetVersion','42')").Error)

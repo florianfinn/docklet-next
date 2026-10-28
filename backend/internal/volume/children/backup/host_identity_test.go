@@ -61,121 +61,134 @@ func (c *backupIdentityConn) Transport() string { return edge.EdgeTransportWebSo
 
 func TestBackupRoutesDropHeldDirectAndEdgeResponsesOnHostRotation(t *testing.T) {
 	for _, mode := range []string{"direct", "edge"} {
-		for _, route := range []struct {
-			method, path string
-			status       int
-		}{{"GET", "/volumes/backups/overview", 200}, {"POST", "/volumes/data/backups", 202}} {
-			t.Run(mode+route.method, func(t *testing.T) {
-				ctx, cancel := context.WithTimeout(t.Context(), 3*time.Second)
-				defer cancel()
-				f := newRuntimePlan(t)
-				require.NoError(t, f.service.deps.DB.AutoMigrate(&environment.Environment{}, &backuptarget.Target{}))
-				entered := make(chan struct{}, 1)
-				release := make(chan struct{})
-				info, _ := json.Marshal(version.Info{AgentContractVersion: contract.AgentHubVersion, AgentContractFingerprint: contract.AgentHubFingerprint})
-				syncReply := func(body []byte) []byte {
-					var set dto.TargetSet
-					require.NoError(t, json.Unmarshal(body, &set))
-					encoded, e := json.Marshal(base.ApiResponse[dto.TargetSetReceipt]{Success: true, Data: dto.TargetSetReceipt{Authority: set.Authority, SetVersion: set.SetVersion, ContentHash: set.ContentHash, Conflicts: []string{}}})
-					require.NoError(t, e)
-					return encoded
-				}
-				oldBody := []byte(`{"success":true,"data":{"activityId":"old-session-admission"}}`)
-				remote := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-					if r.URL.Path == "/api/app-version" {
-						_, _ = w.Write(info)
-						return
-					}
-					if r.Method == "PUT" && strings.HasSuffix(r.URL.Path, "/backups/targets") {
-						payload, e := io.ReadAll(r.Body)
+		for _, change := range []string{"token", "remove", "re-pair"} {
+			for _, route := range []struct {
+				method, path string
+				status       int
+			}{{"GET", "/volumes/backups/overview", 200}, {"POST", "/volumes/data/backups", 202}} {
+				t.Run(mode+"/"+change+"/"+route.method, func(t *testing.T) {
+					ctx, cancel := context.WithTimeout(t.Context(), 3*time.Second)
+					defer cancel()
+					f := newRuntimePlan(t)
+					require.NoError(t, f.service.deps.DB.AutoMigrate(&environment.Environment{}, &backuptarget.Target{}))
+					entered := make(chan struct{}, 1)
+					release := make(chan struct{})
+					info, _ := json.Marshal(version.Info{AgentContractVersion: contract.AgentHubVersion, AgentContractFingerprint: contract.AgentHubFingerprint})
+					syncReply := func(body []byte) []byte {
+						var set dto.TargetSet
+						require.NoError(t, json.Unmarshal(body, &set))
+						encoded, e := json.Marshal(base.ApiResponse[dto.TargetSetReceipt]{Success: true, Data: dto.TargetSetReceipt{Authority: set.Authority, SetVersion: set.SetVersion, ContentHash: set.ContentHash, Conflicts: []string{}}})
 						require.NoError(t, e)
-						_, _ = w.Write(syncReply(payload))
-						return
+						return encoded
 					}
-					if r.Method == "HEAD" {
-						w.WriteHeader(204)
-						return
-					}
-					entered <- struct{}{}
-					<-release
-					w.WriteHeader(route.status)
-					_, _ = w.Write(oldBody)
-				}))
-				defer func() { close(release); remote.Close() }()
-				id := "identity-host"
-				token := strings.Repeat("o", 32)
-				endpoint := remote.URL
-				var tunnel *edge.AgentTunnel
-				if mode == "edge" {
-					endpoint = "edge://example"
-					conn := &backupIdentityConn{}
-					tunnel = edge.NewAgentTunnelWithConn(id, conn)
-					tunnel.TokenHash = edge.AgentTokenHash(token)
-					conn.send = func(m *edge.TunnelMessage) {
-						if m.Type != edge.MessageTypeCommandRequest {
+					oldBody := []byte(`{"success":true,"data":{"activityId":"old-session-admission"}}`)
+					remote := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+						if r.URL.Path == "/api/app-version" {
+							_, _ = w.Write(info)
 							return
 						}
-						pending, ok := tunnel.Pending.Load(m.ID)
-						require.True(t, ok)
-						body := []byte(`{"success":true}`)
-						if m.Path == "/api/app-version" {
-							body = info
-						} else if m.Method == "PUT" && strings.HasSuffix(m.Path, "/backups/targets") {
-							body = syncReply(m.Body)
-						} else if m.Method != "HEAD" {
-							entered <- struct{}{}
+						if r.Method == "PUT" && strings.HasSuffix(r.URL.Path, "/backups/targets") {
+							payload, e := io.ReadAll(r.Body)
+							require.NoError(t, e)
+							_, _ = w.Write(syncReply(payload))
 							return
 						}
-						pending.(*edge.PendingRequest).ResponseCh <- &edge.TunnelMessage{ID: m.ID, Type: edge.MessageTypeResponse, Status: 200, Body: body}
+						if r.Method == "HEAD" {
+							w.WriteHeader(204)
+							return
+						}
+						entered <- struct{}{}
+						<-release
+						w.WriteHeader(route.status)
+						_, _ = w.Write(oldBody)
+					}))
+					defer func() { close(release); remote.Close() }()
+					id := "identity-host"
+					token := strings.Repeat("o", 32)
+					endpoint := remote.URL
+					var tunnel *edge.AgentTunnel
+					if mode == "edge" {
+						endpoint = "edge://example"
+						conn := &backupIdentityConn{}
+						tunnel = edge.NewAgentTunnelWithConn(id, conn)
+						tunnel.TokenHash = edge.AgentTokenHash(token)
+						conn.send = func(m *edge.TunnelMessage) {
+							if m.Type != edge.MessageTypeCommandRequest {
+								return
+							}
+							pending, ok := tunnel.Pending.Load(m.ID)
+							require.True(t, ok)
+							body := []byte(`{"success":true}`)
+							if m.Path == "/api/app-version" {
+								body = info
+							} else if m.Method == "PUT" && strings.HasSuffix(m.Path, "/backups/targets") {
+								body = syncReply(m.Body)
+							} else if m.Method != "HEAD" {
+								entered <- struct{}{}
+								return
+							}
+							pending.(*edge.PendingRequest).ResponseCh <- &edge.TunnelMessage{ID: m.ID, Type: edge.MessageTypeResponse, Status: 200, Body: body}
+						}
+						edge.GetRegistry().Register(id, tunnel)
+						defer edge.GetRegistry().Unregister(id)
 					}
-					edge.GetRegistry().Register(id, tunnel)
-					defer edge.GetRegistry().Unregister(id)
-				}
-				require.NoError(t, f.service.deps.DB.Create(&environment.Environment{BaseModel: database.BaseModel{ID: id}, Name: "Example", Enabled: true, IsEdge: mode == "edge", ApiUrl: endpoint, AccessToken: &token}).Error)
-				environments := environment.NewEnvironmentService(f.service.deps.DB, remote.Client(), nil, nil, nil, nil)
-				router := echo.New()
-				resolver := func(ctx context.Context, id string) (string, *string, bool, error) {
-					e, err := environments.GetEnvironmentByID(ctx, id)
-					if err != nil {
-						return "", nil, false, err
+					require.NoError(t, f.service.deps.DB.Create(&environment.Environment{BaseModel: database.BaseModel{ID: id}, Name: "Example", Enabled: true, IsEdge: mode == "edge", ApiUrl: endpoint, AccessToken: &token}).Error)
+					environments := environment.NewEnvironmentService(f.service.deps.DB, remote.Client(), nil, nil, nil, nil)
+					router := echo.New()
+					resolver := func(ctx context.Context, id string) (string, *string, bool, error) {
+						e, err := environments.GetEnvironmentByID(ctx, id)
+						if err != nil {
+							return "", nil, false, err
+						}
+						return e.ApiUrl, e.AccessToken, e.Enabled, nil
 					}
-					return e.ApiUrl, e.AccessToken, e.Enabled, nil
-				}
-				router.Use(middleware.NewEnvProxyMiddlewareWithParamAndRegistry("0", "id", resolver, nil, nil, edge.GetRegistry(), nil, middleware.EnvironmentProxySecurity{AgentAccess: environments.AgentAccess, HTTPClient: remote.Client()}))
-				router.Add(route.method, "/api/environments/:id"+route.path, func(c *echo.Context) error {
-					handler := &Handler{service: f.service, environmentService: environments, appCtx: t.Context()}
-					requestCtx := context.WithValue(c.Request().Context(), user.CurrentUserContextKey{}, &user.SystemUser)
-					output, err := handler.CreateBackup(requestCtx, &CreateBackupInput{EnvironmentID: id, VolumeName: "data", Body: &volume.CreateBackupRequest{TargetID: "local"}})
-					if err != nil {
-						return c.JSON(502, map[string]string{"error": "revoked"})
+					router.Use(middleware.NewEnvProxyMiddlewareWithParamAndRegistry("0", "id", resolver, nil, nil, edge.GetRegistry(), nil, middleware.EnvironmentProxySecurity{AgentAccess: environments.AgentAccess, HTTPClient: remote.Client()}))
+					router.Add(route.method, "/api/environments/:id"+route.path, func(c *echo.Context) error {
+						handler := &Handler{service: f.service, environmentService: environments, appCtx: t.Context()}
+						requestCtx := context.WithValue(c.Request().Context(), user.CurrentUserContextKey{}, &user.SystemUser)
+						output, err := handler.CreateBackup(requestCtx, &CreateBackupInput{EnvironmentID: id, VolumeName: "data", Body: &volume.CreateBackupRequest{TargetID: "local"}})
+						if err != nil {
+							return c.JSON(502, map[string]string{"error": "revoked"})
+						}
+						return c.JSON(202, output.Body)
+					})
+					response := httptest.NewRecorder()
+					done := make(chan struct{})
+					go func() {
+						defer close(done)
+						router.ServeHTTP(response, httptest.NewRequest(route.method, "/api/environments/"+id+route.path, strings.NewReader(`{}`)).WithContext(ctx))
+					}()
+					select {
+					case <-entered:
+					case <-ctx.Done():
+						t.Fatal("route did not reach held remote response")
 					}
-					return c.JSON(202, output.Body)
+					switch change {
+					case "token":
+						_, err := environments.UpdateEnvironment(ctx, id, map[string]any{"access_token": strings.Repeat("n", 32)}, nil, nil)
+						require.NoError(t, err)
+					case "remove":
+						require.NoError(t, environments.DeleteEnvironment(ctx, id, nil, nil))
+					case "re-pair":
+						_, err := environments.UpdateEnvironment(ctx, id, map[string]any{"access_token": strings.Repeat("n", 32), "api_key_id": strings.Repeat("p", 32)}, nil, nil)
+						require.NoError(t, err)
+					}
+					require.Eventually(t, func() bool {
+						select {
+						case <-done:
+							return true
+						default:
+							return false
+						}
+					}, 500*time.Millisecond, 5*time.Millisecond, "old-session request was not revoked")
+					require.NotEqual(t, route.status, response.Code)
+					require.NotContains(t, response.Body.String(), "old-session-admission")
+					if tunnel != nil {
+						require.True(t, tunnel.Conn.IsClosed())
+						require.Zero(t, countBackupPending(tunnel))
+					}
 				})
-				response := httptest.NewRecorder()
-				done := make(chan struct{})
-				go func() {
-					defer close(done)
-					router.ServeHTTP(response, httptest.NewRequest(route.method, "/api/environments/"+id+route.path, strings.NewReader(`{}`)).WithContext(ctx))
-				}()
-				select {
-				case <-entered:
-				case <-ctx.Done():
-					t.Fatal("route did not reach held remote response")
-				}
-				_, err := environments.UpdateEnvironment(ctx, id, map[string]any{"access_token": strings.Repeat("n", 32)}, nil, nil)
-				require.NoError(t, err)
-				select {
-				case <-done:
-				case <-ctx.Done():
-					t.Fatal("old-session request was not revoked")
-				}
-				require.NotEqual(t, route.status, response.Code)
-				require.NotContains(t, response.Body.String(), "old-session-admission")
-				if tunnel != nil {
-					require.True(t, tunnel.Conn.IsClosed())
-					require.Zero(t, countBackupPending(tunnel))
-				}
-			})
+			}
 		}
 	}
 }

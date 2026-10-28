@@ -18,8 +18,10 @@ import (
 	"github.com/florianfinn/docklet-next/backend/internal/database"
 	"github.com/florianfinn/docklet-next/backend/internal/event"
 	"github.com/florianfinn/docklet-next/backend/internal/volume/children/backup/children/restore"
+	activitylib "github.com/florianfinn/docklet-next/backend/pkg/libarcane/activity"
 	"github.com/florianfinn/docklet-next/backend/pkg/libarcane/rustic"
 	"github.com/florianfinn/docklet-next/backend/pkg/libarcane/volumehelper"
+	activitytypes "github.com/florianfinn/docklet-next/types/activity"
 	dto "github.com/florianfinn/docklet-next/types/backup"
 	"github.com/florianfinn/docklet-next/types/user"
 	"github.com/florianfinn/docklet-next/types/volume"
@@ -46,12 +48,24 @@ func (s *Service) DownloadBackup(ctx context.Context, id string, actor *user.Act
 		return nil, 0, dto.NewProblem(404, "volume.backup.snapshot-not-found", nil)
 	}
 	edge, _ := ctx.Value(edgeDownloadKey{}).(bool)
-	if edge && (entry.Size <= 0 || entry.Size > dto.MaxEdgeDownloadBytes) {
+	if edge && (entry.Size < 0 || entry.Size > dto.MaxEdgeDownloadBytes) {
 		return nil, 0, dto.NewProblem(413, "volume.backup.download-too-large", nil)
 	}
 	ctx, owner, err := s.acquireOperation(ctx, entry.VolumeName, "")
 	if err != nil {
 		return nil, 0, err
+	}
+	if actor == nil {
+		actor = &user.SystemUser
+	}
+	activityID, workCtx := activitylib.StartHandlerActivity(ctx, s.deps.Activity, "0", activitytypes.TypeResourceAction, "volume_backup_download", entry.VolumeName, entry.VolumeName, actor, "Preparing backup download", "Preparing backup download", database.JSON{"action": "download_volume_backup", "backupId": entry.ID}, false)
+	if s.deps.Activity != nil && activityID == "" {
+		owner.Release(ctx)
+		return nil, 0, dto.NewProblem(503, "volume.backup.engine-unavailable", nil)
+	}
+	ctx = workCtx
+	finish := func(err error) {
+		activitylib.CompleteHandlerActivity(workCtx, s.deps.Activity, activityID, "Backup downloaded", neutralBackupError(err, "volume.backup.repository-unavailable"))
 	}
 	budget := 4 * time.Minute
 	if edge {
@@ -62,6 +76,7 @@ func (s *Service) DownloadBackup(ctx context.Context, id string, actor *user.Act
 	if err != nil {
 		cancel()
 		owner.Release(ctx)
+		finish(err)
 		if prepare.Err() == context.DeadlineExceeded {
 			return nil, 0, dto.NewProblem(504, "volume.backup.engine-timeout", err)
 		}
@@ -71,9 +86,18 @@ func (s *Service) DownloadBackup(ctx context.Context, id string, actor *user.Act
 		_ = reader.Close()
 		cancel()
 		owner.Release(ctx)
+		finish(dto.NewProblem(413, "volume.backup.download-too-large", nil))
 		return nil, 0, dto.NewProblem(413, "volume.backup.download-too-large", nil)
 	}
-	cleanup := sync.OnceFunc(func() { _ = reader.Close(); cancel(); owner.Release(ctx) })
+	cleanup := sync.OnceFunc(func() {
+		closeErr := reader.Close()
+		cancel()
+		owner.Release(ctx)
+		if closeErr == nil {
+			closeErr = workCtx.Err()
+		}
+		finish(closeErr)
+	})
 	context.AfterFunc(ctx, cleanup)
 	if actor == nil {
 		actor = &user.SystemUser

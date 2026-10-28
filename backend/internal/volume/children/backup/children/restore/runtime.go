@@ -58,7 +58,7 @@ func (s *Service) ValidateAdmission(ctx context.Context, r StartRequest) error {
 	target := restoreDestination(r)
 	_, err = cli.VolumeInspect(ctx, target, client.VolumeInspectOptions{})
 	if r.Mode == "new" && err == nil {
-		return dto.NewProblem(409, "volume.backup.busy", nil)
+		return dto.NewProblem(409, "volume.exists", nil)
 	}
 	if err != nil && !errdefs.IsNotFound(err) {
 		return dto.NewProblem(503, "volume.backup.engine-unavailable", err)
@@ -129,7 +129,7 @@ func (s *Service) PrepareRestore(ctx context.Context, run *Run, r StartRequest) 
 	_, err = cli.VolumeInspect(ctx, target, client.VolumeInspectOptions{})
 	if err == nil {
 		if r.Mode == "new" {
-			return cleanup, dto.NewProblem(409, "volume.backup.busy", nil)
+			return cleanup, dto.NewProblem(409, "volume.exists", nil)
 		}
 		return cleanup, nil
 	}
@@ -148,6 +148,7 @@ func (s *Service) PrepareRestore(ctx context.Context, run *Run, r StartRequest) 
 	labels := map[string]string{}
 	if r.Mode == "new" {
 		labels[RestoreLabel] = run.ID
+		labels["com.getarcaneapp.restored-from"] = r.BackupID
 	}
 	_, err = cli.VolumeCreate(ctx, client.VolumeCreateOptions{Name: target, Driver: "local", Labels: labels})
 	if err != nil {
@@ -159,7 +160,7 @@ func (s *Service) PrepareRestore(ctx context.Context, run *Run, r StartRequest) 
 			return cleanup, inspectErr
 		}
 		if created.Volume.Labels[RestoreLabel] != run.ID {
-			return cleanup, dto.NewProblem(409, "volume.backup.busy", nil)
+			return cleanup, dto.NewProblem(409, "volume.exists", nil)
 		}
 	}
 	return cleanup, nil
@@ -281,7 +282,7 @@ func (s *Service) CleanupNew(ctx context.Context, run *Run) error {
 		return err
 	}
 	if current.Volume.Labels[RestoreLabel] != run.ID {
-		return dto.NewProblem(409, "volume.backup.busy", nil)
+		return dto.NewProblem(409, "volume.exists", nil)
 	}
 	_, err = cli.VolumeRemove(ctx, run.NewVolumeName, client.VolumeRemoveOptions{})
 	return err

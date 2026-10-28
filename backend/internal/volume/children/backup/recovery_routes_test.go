@@ -10,7 +10,6 @@ import (
 	"context"
 	"encoding/json"
 	"net/http"
-	"net/http/httptest"
 	"strings"
 	"testing"
 	"time"
@@ -30,7 +29,7 @@ import (
 )
 
 func TestRecoveryKeyRoutesRequirePermissionAndRecordKeyFreeNoStoreAudit(t *testing.T) {
-	for _, mode := range []string{"hub-target", "hub-local", "agent-local"} {
+	for _, mode := range []string{"hub-target", "hub-local", "direct", "edge"} {
 		for _, grant := range []string{"none", "backup", "restore", "admin"} {
 			t.Run(mode+"/"+grant, func(t *testing.T) {
 				f := newRuntimePlan(t)
@@ -52,36 +51,42 @@ func TestRecoveryKeyRoutesRequirePermissionAndRecordKeyFreeNoStoreAudit(t *testi
 				case "admin":
 					ps = authz.SudoPermissionSet()
 				}
-				router, api := humatest.New(t)
+				router, rawAPI := humatest.New(t)
+				api := huma.NewGroup(rawAPI, "/api")
 				api.UseMiddleware(func(ctx huma.Context, next func(huma.Context)) {
 					request := context.WithValue(ctx.Context(), middleware.ContextKeyUserPermissions, ps)
 					request = context.WithValue(request, user.CurrentUserContextKey{}, &user.SystemUser)
 					next(huma.WithContext(ctx, request))
 				})
-				cfg := &config.Config{AgentMode: mode == "agent-local"}
+				cfg := &config.Config{AgentMode: mode == "direct", EdgeAgent: mode == "edge"}
+				agent := cfg.AgentMode || cfg.EdgeAgent
 				handler := TargetHandler(f.service, nil, cfg, t.Context())
-				path := "/environments/0/volumes/backups/targets/local/recovery-key"
-				allowed := grant == "admin" || (mode == "hub-local" && grant == "restore") || (mode == "agent-local" && grant == "backup")
+
+				path := "/api/environments/0/volumes/backups/targets/local/recovery-key"
+				allowed := grant == "admin" || (mode == "hub-local" && grant == "restore") || (agent && grant == "backup")
 				if mode == "hub-target" {
 					backuptarget.RegisterHubRoutes(api, handler)
-					path = "/backup-targets/archive/recovery-key"
+					path = "/api/backup-targets/archive/recovery-key"
 				} else {
-					backuptarget.RegisterHostRoutes(api, handler, cfg.AgentMode)
+					backuptarget.RegisterHostRoutes(api, handler, agent)
 					key = kit.SHA256Hex(legacyVolumePasswordSaltInternal + f.service.deps.EncryptionKey)
 				}
-				response := httptest.NewRecorder()
-				router.ServeHTTP(response, httptest.NewRequest(http.MethodGet, path, nil))
+				transport := mode
+				if !agent {
+					transport = "hub"
+				}
+				status, headers, body := backupRouteTransport(t, transport, router)(t.Context(), http.MethodGet, path, nil)
 				var events []event.Event
 				require.NoError(t, f.service.deps.DB.Find(&events).Error)
 				if !allowed {
-					require.Equal(t, 403, response.Code)
-					require.NotContains(t, response.Body.String(), key)
+					require.Equal(t, 403, status)
+					require.NotContains(t, string(body), key)
 					require.Empty(t, events)
 					return
 				}
-				require.Equal(t, 200, response.Code, response.Body.String())
-				require.Equal(t, "no-store", response.Header().Get("Cache-Control"))
-				require.Contains(t, response.Body.String(), key)
+				require.Equal(t, 200, status, string(body))
+				require.Equal(t, "no-store", headers.Get("Cache-Control"))
+				require.Contains(t, string(body), key)
 				require.Len(t, events, 1)
 				require.Equal(t, event.EventTypeVolumeBackupTargetKeyViewed, events[0].Type)
 				require.Equal(t, "volume.backup.target.key_viewed", events[0].MessageCode)

@@ -76,7 +76,7 @@ the mapping and its contract tests before that feature claims live data.
 | `ImageUpdateInfo`, `ImageupdateResponse`, `ProjectServiceUpdateInfo` | `UpdateInfo`, `AutoUpdatePolicy` | PR1 supplies read-only comparable-platform states; policies/schedules require PR2b. | M10 PR1 reads; lifecycle PR2a and policy PR2b remain gated |
 | No restore-point DTO | `restoreRestorePoint` | A saved pre-update image and configuration need a selectable restore point and action identity. | Planned M10 Images and updates |
 | `VulnerabilityRiskOverview`, `VulnerabilityRiskFinding`, `VulnerabilityScanResult` | `SecurityOverview`, `Finding`, `ScanRun` | Scan risk and finding DTOs need host/image grouping and severity presentation. | Planned M11 Vulnerability scanning |
-| `BackupSystemBackupRun`, `BackupSystemBackupPolicy`, `BackupBackupFileEntry` | `BackupRun`, `BackupSettings` | Restore targets, history and file selection need one UI backup model. | Planned M12 Backups and restore |
+| `BackupSystemBackupRun`, `BackupSystemBackupPolicy` | Hub archive settings and history | Hub database archives retain their own routes and scope; they do not describe volume snapshots. | [Hub database backup](hub-backup.md) |
 | `BackupTargetTestOperation`, `BackupTargetCheck`, `BackupProblem` | `testBackupTarget` | The accepted activity identifies asynchronous testing; results retain admitted settings and safe codes. | Contract v9; [volume backups](volume-backups.md) |
 | `VolumeBackupPolicy`, `VolumeBackupEntry`, `VolumeBackupOverview`, `VolumeRestoreOperation` | `BackupPolicy`, `BackupRun` | The owning host reports schedules, running IDs, restore phases and restart obligations. | Contract v9; [volume backups](volume-backups.md) |
 | `AuthAuthenticationResponse`, `AuthLogin`, `SettingsSettingDto` | `AuthSettings`, `HubSettings`, `SettingsApi` | Sign-in modes and settings categories need typed, server-backed UI preferences. | Planned M4 Identity, setup and hub settings |
@@ -216,3 +216,10 @@ projections contain no secret or recovery key. Agent-only sync schemas are
 referenced by `x-agent-volume-target-sync` in the hub export, without registering
 a hub metadata receiver. Hub database archive routes retain their separate
 contract. The retired system-managed volume routes are absent.
+
+Snapshot availability is a stored observation with an optional timestamp; execution
+outcomes remain separate. List, overview and repository GET perform metadata reads
+only. Explicit snapshot reads and repository checks reconcile observations. Download
+activities remain discoverable through overview until streaming and confirmed helper
+cleanup finish. The synchronous delete route propagates request cancellation to its
+worker; accepted create/restore/check workers retain their application lifetime.

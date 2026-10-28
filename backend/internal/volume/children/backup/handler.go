@@ -236,6 +236,9 @@ func (h *Handler) DeleteBackup(ctx context.Context, input *DeleteBackupInput) (*
 	}
 	runtimeCtx, cancel := context.WithTimeout(utils.ActivityRuntimeContext(ctx, h.appCtx), budget)
 	defer cancel()
+	// Delete is synchronous; its helpers must observe transport cancellation.
+	stopRequest := context.AfterFunc(ctx, cancel)
+	defer stopRequest()
 	activityID, err := activitylib.RunHandlerActivity(runtimeCtx, h.activityService, activitylib.HandlerOptions{
 		EnvironmentID:  input.EnvironmentID,
 		Type:           activitytypes.TypeResourceAction,

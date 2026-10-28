@@ -48,6 +48,7 @@ func overviewQuery() string {
 		selectFrom("volume_backup_policies", "policy", []string{"id", "volume_name", "created_at", "schedule", "enabled", "retention_count", "stop_containers", "local_enabled", "target_id"}, nil),
 		selectFrom("volume_restore_runs", "restore", []string{"id", "volume_name", "status", "activity_id", "error_code", "phase", "mode", "new_volume_name", "pending_restart", "stopped_containers", "safety_backup_id"}, map[string]string{"created_at": "started_at", "trigger": "kind"}),
 		selectFrom("settings WHERE key IN ('volumeBackupRepositoryCheck','backup_target_authority','backup_target_set_version','backupTargetAuthority','backupTargetSetVersion','hubHostId')", "setting", []string{"value"}, map[string]string{"id": "key"}),
+		selectFrom("activities WHERE resource_type = 'volume_backup_download' AND status IN ('queued','running')", "download", []string{"id", "created_at"}, map[string]string{"volume_name": "resource_id", "activity_id": "id"}),
 		selectFrom("backup_targets WHERE retired_at IS NULL", "target", []string{"id", "host_id"}, map[string]string{"volume_name": "name", "trigger": "kind"}),
 	}, " UNION ALL ")
 }
@@ -143,6 +144,11 @@ func (s *Service) Overview(ctx context.Context) (volume.BackupOverview, error) {
 			}
 			if r.Status == "running" && item.Running == nil {
 				item.Running = &volume.BackupRunning{Kind: "backup", ActivityID: r.ActivityID}
+			}
+		case "download":
+			item := get(r.VolumeName)
+			if item.Running == nil {
+				item.Running = &volume.BackupRunning{Kind: "download", ActivityID: r.ActivityID}
 			}
 		case "restore":
 			item := get(r.VolumeName)

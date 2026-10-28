@@ -66,8 +66,7 @@ admission hold the matching read fence through their response. All relevant host
 must answer online with no policy, backup or running references before retirement.
 A hub database restore regenerates only the authority before activation and keeps
 the restored set counter, so target and check configuration versions remain ordered.
-Newer agent
-copies absent from the restored hub set become retired, with keys retained.
+Newer agent copies absent from the restored hub set become retired, with keys retained.
 
 Volume operations acquire durable engine admission before the shared workspace
 mutex, using non-waiting acquisition. Safety capture and retention inherit the
@@ -164,7 +163,7 @@ remain audit history and age out under existing retention. The application schem
 migration cannot delete these records because the scheduler stores them separately;
 no scheduler record deletion is required.
 
-Snapshot availability records the last successful repository observation. Backup
+Snapshot availability records the last authoritative repository observation. Backup
 lists, overview and repository metadata never mount a target or run the engine;
 remote filesystem delays therefore cannot turn page views into repository reads.
 An explicit snapshot read that reports its snapshot file missing persists an
@@ -173,3 +172,21 @@ are separate. A repository check reconciles every retained row of its destinatio
 from one bounded snapshot inventory, clearing the observation for snapshots seen
 again. Execution outcomes remain intact so a later observation can restore their
 original meaning. Deleting an unavailable row remains idempotent.
+
+Downloads remain activity-owned through streaming and confirmed helper removal,
+so hub maintenance cancels and drains them. Overview exposes the download activity
+ID while it owns the volume. Delete remains synchronous and observes request
+cancellation; accepted capture, restore and check workers are application-owned.
+Direct preparation has a four-minute budget; Edge preparation has three minutes.
+After preparation, Direct streaming follows the request lifetime. Delete permits
+four minutes on Edge and thirty minutes on other transports.
+
+Rustic JSON parser fixtures were recorded from the pinned v0.11.2 binary against
+a synthetic repository. Only the command field, which includes generator-local
+paths, was omitted; the parser tests retain producer shapes and output hashes.
+Invalid identities or truncated output are typed failures. Unknown and negative
+size observations remain unknown rather than becoming empty successful backups.
+
+An unavailable terminal database write does not release operation admission.
+The worker retries terminal persistence while retaining its activity and locks,
+so maintenance cannot pass a write whose final state has not committed.

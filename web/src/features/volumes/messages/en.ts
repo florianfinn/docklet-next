@@ -275,6 +275,7 @@ export const enVolumes = {
   },
   backupCodes: {
     "volume.backup.target.key_viewed": "Backup recovery key viewed.",
+    "volume.exists": "A volume with this name already exists.",
     "volume.not-found": "Volume not found.",
     "volume.backup.busy": "Another operation owns this volume.",
     "volume.backup.interrupted": "The backup was interrupted.",

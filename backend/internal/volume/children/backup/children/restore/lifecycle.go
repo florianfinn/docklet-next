@@ -182,6 +182,11 @@ func (l *Lifecycle) Execute(ctx context.Context, run *Run, request StartRequest)
 		}
 		run.FinishedAt = new(time.Now().UTC())
 		persistErr := l.persist(settled, run)
+		// Keep worker admission and maintenance ownership until its terminal row commits.
+		for persistErr != nil {
+			time.Sleep(100 * time.Millisecond)
+			persistErr = l.persist(settled, run)
+		}
 		if err != nil {
 			var problem *dto.Problem
 			if errors.As(err, &problem) && problem.Code == run.ErrorCode {

@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: Local module namespace; functional cut: removed S3 backup destinations.
+// Deviations: Local module namespace; removed S3 destinations; M12 scoped output, observed availability and strict volume parsing.
 
 // Package backup owns the shared Rustic backup engine used by volume and
 // system backups: typed repository operations, per-repository serialization
@@ -17,17 +17,14 @@ import (
 	"fmt"
 	"github.com/florianfinn/docklet-next/backend/internal/database"
 	"github.com/florianfinn/docklet-next/backend/internal/image"
-	"github.com/florianfinn/docklet-next/backend/pkg/libarcane"
 	"github.com/florianfinn/docklet-next/backend/pkg/libarcane/volumehelper"
 	"github.com/florianfinn/docklet-next/backend/pkg/scheduler/runs"
 	"github.com/florianfinn/docklet-next/types/backup"
 	"github.com/florianfinn/docklet-next/types/scheduler"
 	"github.com/italypaleale/francis/actor"
-	"github.com/moby/moby/api/types/container"
 	"github.com/moby/moby/api/types/mount"
 	"github.com/moby/moby/client"
 	kit "go.getarcane.app/kit/pkg"
-	"log/slog"
 	"path"
 	"slices"
 	"strings"
@@ -286,6 +283,9 @@ func (e *Engine) ListSnapshotFiles(ctx context.Context, dockerClient *client.Cli
 		}
 		files, runErr = markSnapshotDirectoriesInternal(files, longOutput)
 		if runErr != nil {
+			if isVolumeRepository(repository) {
+				return nil, backup.NewProblem(502, "volume.backup.engine-output-invalid", runErr)
+			}
 			return nil, runErr
 		}
 	}
@@ -528,15 +528,6 @@ func (e *Engine) runInternal(ctx context.Context, dockerClient *client.Client, r
 		return "", err
 	}
 	return e.runContainerInternal(ctx, dockerClient, repository, password, command, extraMounts...)
-}
-
-func arcaneNetworkModeInternal(ctx context.Context, dockerClient *client.Client) container.NetworkMode {
-	arcane, err := libarcane.InspectCurrentArcaneContainer(ctx, dockerClient)
-	if err != nil || arcane == nil || arcane.ID == "" {
-		slog.DebugContext(ctx, "backup engine: running Rustic on the default network", "error", err)
-		return ""
-	}
-	return container.NetworkMode("container:" + arcane.ID)
 }
 
 func (e *Engine) lockRepositoryInternal(id string) func() {

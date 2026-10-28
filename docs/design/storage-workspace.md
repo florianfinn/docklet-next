@@ -2,8 +2,8 @@
 
 M8 shares one storage contract between hub, Direct agents, Edge agents and the
 web adapter. Volume CRUD and workspace access retain their existing permissions;
-backup/restore product features (M12), scanning (M11) and update watchers (M10)
-remain outside this contract.
+backup/restore lifecycle is specified in [volume backups](volume-backups.md).
+Scanning and update watchers retain their own module contracts.
 
 Explicit UI/API volume creation refuses an existing name on the target host with HTTP 409 `volume.exists`, while Compose deployments reuse existing volumes.
 
@@ -207,12 +207,12 @@ it carries no image-selection policy.
 
 ## Compatibility and Before deploy
 
-The changed prune request and new preview route require agent contract v5 and
-minimum v5. The v4 fixture remains historical; the new fingerprint covers the
-storage contract and inherited runtime contract. Upgrade hub and agents as one
+The prune request and preview route entered agent contract v5. Volume backup
+changes require the current contract v9 and minimum v9; historical fixtures stay
+unchanged. The current fingerprint retains the storage and runtime contracts. Upgrade hub and agents as one
 release. Older agents are incompatible before forwarding or settings sync.
 `tunnel/v1` is unchanged: only the command table and application contract change.
 Before deploy, configure any former registry override as a full `toolsImage`
-reference and ensure the published tools image is available. No database schema
-migration is required. Exact-package Direct/Edge practical acceptance remains a
+reference and ensure the published tools image is available. The volume backup lifecycle and targets use forward-only migration 012 on hub
+and agents. The earlier prune-only change required no schema migration. Exact-package Direct/Edge practical acceptance remains a
 milestone release gate.

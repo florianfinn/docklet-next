@@ -22,7 +22,6 @@ import (
 	usertypes "github.com/florianfinn/docklet-next/types/user"
 	"github.com/florianfinn/docklet-next/types/volume"
 	"github.com/moby/moby/client"
-	"gorm.io/gorm"
 
 	"github.com/florianfinn/docklet-next/backend/internal/activity"
 	"github.com/florianfinn/docklet-next/backend/internal/backup"
@@ -150,16 +149,6 @@ func (s *Service) RegisterJobsOnStartup(ctx context.Context) {
 	s.policies.RegisterJobsOnStartup(ctx)
 }
 
-// RemovePolicies drops the backup schedules of a removed volume.
-func (s *Service) RemovePolicies(ctx context.Context, volumeName string) {
-	s.policies.Remove(ctx, volumeName)
-}
-
-// RenamePolicies moves a renamed volume's backup policies inside the caller's transaction.
-func (s *Service) RenamePolicies(tx *gorm.DB, oldName, newName string) error {
-	return s.policies.Rename(tx, oldName, newName)
-}
-
 func (s *Service) List(ctx context.Context, volumeName string, params pagination.QueryParams) ([]volume.Backup, pagination.Response, error) {
 	slog.DebugContext(
 		ctx,
@@ -271,8 +260,9 @@ func (s *Service) completeBackupInternal(ctx context.Context, entry *volume.Back
 		entry.Error = ""
 		entry.ErrorCode = ""
 	}
-	if saveErr := s.deps.Store.Save(context.WithoutCancel(ctx), entry); saveErr != nil {
-		return errors.Join(err, fmt.Errorf("failed to save volume backup result: %w", saveErr))
+	// The owning worker remains admitted while terminal persistence is unavailable.
+	for saveErr := s.deps.Store.Save(context.WithoutCancel(ctx), entry); saveErr != nil; saveErr = s.deps.Store.Save(context.WithoutCancel(ctx), entry) {
+		time.Sleep(100 * time.Millisecond)
 	}
 	if err == nil {
 		err = jobcontext.Progress(ctx, scheduler.TargetOutcome{ResourceType: "volume_backup", ID: entry.VolumeName, Status: scheduler.Succeeded})

@@ -13,6 +13,7 @@ import (
 	"github.com/florianfinn/docklet-next/backend/internal/activity"
 	"os"
 	"path/filepath"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -348,4 +349,49 @@ func TestNewRestoreDoesNotSettleSourceRecoveryObligations(t *testing.T) {
 	var source Run
 	require.NoError(t, l.DB.First(&source, "id = ?", "source-pending").Error)
 	require.True(t, source.PendingRestart)
+}
+
+func TestRestoreTerminalPersistenceRetainsWorkerUntilCommit(t *testing.T) {
+	l, run := lifecycleFixture(t)
+	var unavailable atomic.Bool
+	unavailable.Store(true)
+	defer unavailable.Store(false)
+	attempted := make(chan struct{}, 1)
+	require.NoError(t, l.DB.Callback().Update().Before("gorm:update").Register("test:terminal-unavailable", func(tx *gorm.DB) {
+		row, ok := tx.Statement.Dest.(*Run)
+		if ok && row.FinishedAt != nil && unavailable.Load() {
+			select {
+			case attempted <- struct{}{}:
+			default:
+			}
+			tx.AddError(errors.New("synthetic terminal persistence unavailable"))
+		}
+	}))
+	finished := make(chan error, 1)
+	go func() { finished <- l.Execute(t.Context(), run, StartRequest{}) }()
+	select {
+	case <-attempted:
+	case <-time.After(time.Second):
+		t.Fatal("terminal commit was not attempted")
+	}
+	var stored Run
+	require.NoError(t, l.DB.First(&stored, "id = ?", run.ID).Error)
+	require.Equal(t, "running", stored.Status)
+	require.Never(t, func() bool {
+		select {
+		case <-finished:
+			return true
+		default:
+			return false
+		}
+	}, 150*time.Millisecond, 5*time.Millisecond, "worker cannot finish before terminal persistence")
+	unavailable.Store(false)
+	select {
+	case err := <-finished:
+		require.NoError(t, err)
+	case <-time.After(time.Second):
+		t.Fatal("worker did not finish after database recovery")
+	}
+	require.NoError(t, l.DB.First(&stored, "id = ?", run.ID).Error)
+	require.Equal(t, "succeeded", stored.Status)
 }

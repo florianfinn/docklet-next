@@ -9,6 +9,7 @@ package backuptarget
 import (
 	dto "github.com/florianfinn/docklet-next/types/backup"
 	"github.com/stretchr/testify/require"
+	"strings"
 	"testing"
 )
 
@@ -25,6 +26,10 @@ func TestTargetInputGrammar(t *testing.T) {
 		input  dto.TargetInput
 		change func(*dto.TargetInput)
 	}{
+		{"empty-name", local, func(i *dto.TargetInput) { i.Name = "" }},
+		{"long-name", local, func(i *dto.TargetInput) { i.Name = strings.Repeat("a", 65) }},
+		{"long-path", local, func(i *dto.TargetInput) { i.Path = "/" + strings.Repeat("a", 255) }},
+		{"unknown-kind", local, func(i *dto.TargetInput) { i.Kind = "s3" }},
 		{"root", local, func(i *dto.TargetInput) { i.Path = "/" }},
 		{"relative-local", local, func(i *dto.TargetInput) { i.Path = "srv/backups" }},
 		{"parent-local", local, func(i *dto.TargetInput) { i.Path = "/srv/../backups" }},

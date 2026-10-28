@@ -276,6 +276,7 @@ export const deVolumes: typeof enVolumes = {
   },
   backupCodes: {
     "volume.backup.target.key_viewed": "Backup-Wiederherstellungsschlüssel wurde angezeigt.",
+    "volume.exists": "Ein Volume mit diesem Namen ist bereits vorhanden.",
     "volume.not-found": "Volume nicht gefunden.",
     "volume.backup.busy": "Ein anderer Vorgang belegt dieses Volume.",
     "volume.backup.interrupted": "Das Backup wurde unterbrochen.",

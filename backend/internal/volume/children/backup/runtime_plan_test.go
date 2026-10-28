@@ -16,8 +16,10 @@ import (
 	"errors"
 	"fmt"
 	"github.com/florianfinn/docklet-next/backend/internal/event"
+	"io"
 	"net/http"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -42,19 +44,23 @@ type plannedContainer struct {
 	HostConfig container.HostConfig
 }
 type runtimePlan struct {
-	t             *testing.T
-	service       *Service
-	creates       []plannedContainer
-	steps         []string
-	scratch       map[string]string
-	removed       []string
-	packaged      int64
-	witness       string
-	stdout        string
-	stderr        string
-	exit          int64
-	execBudget    time.Duration
-	forgetEmpties bool
+	cleanupHeld    *atomic.Bool
+	cleanupInspect chan struct{}
+	volumeState    map[string]map[string]string
+	foreignCreate  bool
+	t              *testing.T
+	service        *Service
+	creates        []plannedContainer
+	steps          []string
+	scratch        map[string]string
+	removed        []string
+	packaged       int64
+	witness        string
+	stdout         string
+	stderr         string
+	exit           int64
+	execBudget     time.Duration
+	forgetEmpties  bool
 }
 
 func newRuntimePlan(t *testing.T) *runtimePlan {
@@ -83,6 +89,8 @@ func (f *runtimePlan) serve(w http.ResponseWriter, r *http.Request) {
 	switch {
 	case strings.Contains(path, "/images/") && strings.HasSuffix(path, "/json"):
 		_, _ = w.Write([]byte(`{"Id":"engine-image"}`))
+	case strings.HasSuffix(path, "/volumes"):
+		_, _ = w.Write([]byte(`{"Volumes":[{"Name":"data"}]}`))
 	case strings.HasSuffix(path, "/containers/json"):
 		_, _ = w.Write([]byte(`[]`))
 	case strings.HasSuffix(path, "/volumes/create"):
@@ -91,7 +99,25 @@ func (f *runtimePlan) serve(w http.ResponseWriter, r *http.Request) {
 		if strings.HasPrefix(input.Name, "docklet-backup-download-") {
 			f.scratch = input.Labels
 		}
+		if f.volumeState != nil {
+			labels := input.Labels
+			if f.foreignCreate && input.Name == "recovered-data" {
+				labels = map[string]string{restore.RestoreLabel: "foreign-operation"}
+			}
+			f.volumeState[input.Name] = labels
+			_ = json.NewEncoder(w).Encode(map[string]any{"Name": input.Name, "Labels": labels})
+			return
+		}
 		_ = json.NewEncoder(w).Encode(map[string]any{"Name": input.Name})
+	case strings.Contains(path, "/volumes/") && r.Method == http.MethodGet && f.volumeState != nil:
+		name := path[strings.LastIndex(path, "/")+1:]
+		labels, found := f.volumeState[name]
+		if !found {
+			w.WriteHeader(404)
+			_, _ = w.Write([]byte(`{"message":"not found"}`))
+			return
+		}
+		_ = json.NewEncoder(w).Encode(map[string]any{"Name": name, "Labels": labels})
 	case strings.Contains(path, "/volumes/") && r.Method == http.MethodDelete:
 		f.removed = append(f.removed, "scratch")
 		w.WriteHeader(204)
@@ -125,6 +151,10 @@ func (f *runtimePlan) serve(w http.ResponseWriter, r *http.Request) {
 				}
 			}
 		}
+	case strings.HasSuffix(path, "/archive") && r.Method == http.MethodPut:
+		_, err := io.Copy(io.Discard, r.Body)
+		require.NoError(f.t, err)
+		w.WriteHeader(200)
 	case strings.HasSuffix(path, "/archive"):
 		stat, _ := json.Marshal(map[string]any{"name": "download.tar.gz", "size": f.packaged, "mode": 420})
 		w.Header().Set("X-Docker-Container-Path-Stat", base64.StdEncoding.EncodeToString(stat))
@@ -141,6 +171,17 @@ func (f *runtimePlan) serve(w http.ResponseWriter, r *http.Request) {
 		f.removed = append(f.removed, "helper")
 		w.WriteHeader(204)
 	case strings.Contains(path, "/containers/") && strings.HasSuffix(path, "/json"):
+		if f.cleanupHeld != nil && f.cleanupHeld.Load() {
+			if f.cleanupInspect != nil {
+				select {
+				case f.cleanupInspect <- struct{}{}:
+				default:
+				}
+			}
+			w.WriteHeader(503)
+			_, _ = w.Write([]byte(`{"message":"helper removal unconfirmed"}`))
+			return
+		}
 		w.WriteHeader(404)
 		_, _ = w.Write([]byte(`{"message":"not found"}`))
 	default:
@@ -188,6 +229,11 @@ func TestMountWitnessImmediatelyPrecedesEngineWithIdenticalPrivateBinds(t *testi
 			}
 			require.Equal(t, []string{"create:" + volumehelper.DefaultToolsImage, "stat -c %d /target /parent", "create:" + rustic.DefaultImage}, f.steps)
 			require.Equal(t, []string{"helper", "helper"}, f.removed)
+			f.witness = "1\n1"
+			before := len(f.creates)
+			_, err = f.service.deps.Engine.ListSnapshots(ctx, cli, repository, "synthetic-key")
+			require.ErrorContains(t, err, "backup.target.not-mounted", "an earlier passing witness cannot authorize another use")
+			require.Len(t, f.creates, before+1, "only the failed witness helper can be created")
 		})
 	}
 }
@@ -198,7 +244,7 @@ func TestDownloadOwnsVolumeAndEnforcesEdgeBeforeAndAfterPackaging(t *testing.T) 
 		size, packaged            int64
 		refuseBefore, refuseAfter bool
 	}{
-		{"unknown", true, 0, 6, true, false}, {"snapshot-large", true, dto.MaxEdgeDownloadBytes + 1, 6, true, false},
+		{"unknown", true, -1, 6, true, false}, {"empty", true, 0, 6, false, false}, {"snapshot-large", true, dto.MaxEdgeDownloadBytes + 1, 6, true, false},
 		{"package-large", true, 1, dto.MaxEdgeDownloadBytes + 1, false, true}, {"edge", true, 1, 6, false, false},
 		{"direct-uncapped", false, dto.MaxEdgeDownloadBytes + 1, dto.MaxEdgeDownloadBytes + 1, false, false},
 	} {

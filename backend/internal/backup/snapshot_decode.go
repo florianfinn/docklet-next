@@ -13,9 +13,12 @@ import (
 	"encoding/json/v2"
 	"errors"
 	"fmt"
+	"github.com/florianfinn/docklet-next/backend/pkg/libarcane"
 	"github.com/florianfinn/docklet-next/backend/pkg/libarcane/rustic"
+	"github.com/moby/moby/api/types/container"
 	"github.com/moby/moby/api/types/mount"
 	"github.com/moby/moby/client"
+	"log/slog"
 	"strings"
 	"time"
 
@@ -186,4 +189,13 @@ func (e *Engine) runContainerInternal(ctx context.Context, dockerClient *client.
 		return "", dto.NewProblem(504, "volume.backup.engine-timeout", err)
 	}
 	return output, err
+}
+
+func arcaneNetworkModeInternal(ctx context.Context, dockerClient *client.Client) container.NetworkMode {
+	arcane, err := libarcane.InspectCurrentArcaneContainer(ctx, dockerClient)
+	if err != nil || arcane == nil || arcane.ID == "" {
+		slog.DebugContext(ctx, "backup engine: running Rustic on the default network", "error", err)
+		return ""
+	}
+	return container.NetworkMode("container:" + arcane.ID)
 }

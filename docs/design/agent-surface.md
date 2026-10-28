@@ -87,3 +87,10 @@ Upload restore needs upload and backup permissions at the hub before forwarding;
 local admissions apply both before staging. Recovery-key routes disable caching
 and record an audit event containing only target identity. Generic volume routes
 hide the credential-bearing target mount volumes.
+
+Synchronous backup reads, download preparation and deletion participate in request
+cancellation over Direct and the Edge command registry. Accepted backup, restore
+and check workers keep their independent activity lifetime. Downloads also stay
+registered with maintenance until streaming and helper cleanup finish. The agent
+bounds framed engine output before payload allocation and serialized JSON before
+response commitment; oversized responses never become truncated successes.

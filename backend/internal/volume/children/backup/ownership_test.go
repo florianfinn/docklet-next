@@ -7,12 +7,19 @@
 package backup
 
 import (
+	"context"
 	"errors"
 	"github.com/florianfinn/docklet-next/backend/internal/backup"
+	"github.com/florianfinn/docklet-next/backend/internal/event"
 	"github.com/florianfinn/docklet-next/backend/internal/volume/operationlock"
 	"github.com/florianfinn/docklet-next/backend/pkg/utils"
+	"github.com/florianfinn/docklet-next/types/user"
+	"github.com/florianfinn/docklet-next/types/volume"
 	"github.com/stretchr/testify/require"
+	"strings"
+	"sync/atomic"
 	"testing"
+	"time"
 )
 
 func TestOperationOwnershipRetainsBothNamesUntilDetachedEffectSettles(t *testing.T) {
@@ -64,4 +71,89 @@ func TestOperationOwnershipRefusesWorkspaceContentionAndReleasesAdmission(t *tes
 	_, owner, err := s.acquireOperation(t.Context(), "data", "")
 	require.NoError(t, err)
 	owner.Release(t.Context())
+}
+
+func TestSafetyCaptureUsesExistingOwnershipWithoutNestedAdmission(t *testing.T) {
+	f := newRuntimePlan(t)
+	db := f.service.deps.DB
+	require.NoError(t, db.AutoMigrate(&event.Event{}))
+	f.service.deps.Events = event.NewEventService(db, nil, nil)
+	f.service.deps.Store.Create = func(ctx context.Context, row *volume.Backup) error {
+		return db.WithContext(ctx).Table("volume_backups").Create(row).Error
+	}
+	f.stdout = `{"id":"` + strings.Repeat("a", 64) + `","summary":{"total_bytes_processed":0}}`
+	owned, owner, err := f.service.acquireOperation(t.Context(), "data", "")
+	require.NoError(t, err)
+	defer owner.Release(owned)
+	id, err := f.service.safetyBackupInternal(owned, "data", user.SystemUser)
+	require.NoError(t, err)
+	var row volume.Backup
+	require.NoError(t, db.Table("volume_backups").First(&row, "id = ?", id).Error)
+	require.Equal(t, "local", string(row.Destination))
+	require.Equal(t, "safety", row.Trigger)
+	unlock, ok := f.service.deps.Locks.TryLock("data")
+	if ok {
+		unlock()
+	}
+	require.False(t, ok, "safety completion cannot release outer workspace ownership")
+	lease, ok, err := f.service.deps.Engine.TryAcquireRun(t.Context(), backup.VolumeAdmissionScope, "data")
+	require.NoError(t, err)
+	if ok {
+		lease.Release(t.Context())
+	}
+	require.False(t, ok)
+}
+
+func TestBackupTerminalPersistenceRetainsVolumeOwnershipUntilCommit(t *testing.T) {
+	f := newRuntimePlan(t)
+	owned, owner, err := f.service.acquireOperation(t.Context(), "data", "")
+	require.NoError(t, err)
+	defer owner.Release(owned)
+	var unavailable atomic.Bool
+	unavailable.Store(true)
+	defer unavailable.Store(false)
+	attempted := make(chan struct{}, 1)
+	var commits atomic.Int64
+	f.service.deps.Store.Save = func(context.Context, *volume.Backup) error {
+		if unavailable.Load() {
+			select {
+			case attempted <- struct{}{}:
+			default:
+			}
+			return errors.New("synthetic terminal persistence unavailable")
+		}
+		commits.Add(1)
+		return nil
+	}
+	finished := make(chan error, 1)
+	go func() {
+		defer owner.Release(owned)
+		finished <- f.service.completeBackupInternal(owned, &volume.Backup{VolumeName: "data"}, nil)
+	}()
+	select {
+	case <-attempted:
+	case <-time.After(time.Second):
+		t.Fatal("terminal commit was not attempted")
+	}
+	require.Never(t, func() bool {
+		select {
+		case <-finished:
+			return true
+		default:
+			return false
+		}
+	}, 150*time.Millisecond, 5*time.Millisecond, "backup released ownership before terminal commit")
+	unlock, ok := f.service.deps.Locks.TryLock("data")
+	if ok {
+		unlock()
+	}
+	require.False(t, ok)
+	unavailable.Store(false)
+	select {
+	case err := <-finished:
+		require.NoError(t, err)
+	case <-time.After(time.Second):
+		t.Fatal("backup did not finish after database recovery")
+	}
+	require.EqualValues(t, 1, commits.Load())
 }

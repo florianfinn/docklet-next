@@ -23,8 +23,8 @@ Hub archive nor replace the key needed to decrypt its stored fields.
 Local archives and downloads are the recovery path. Copying to mount/SMB
 volume-backup targets is a follow-up owned by the volume-backup transfer feature.
 That interface is not delivered; target IDs are rejected and target controls stay
-hidden. No second destination model or credential store is introduced. The
-existing volume-backup repository and its recovery key remain separate.
+hidden. Hub archive creation does not use the volume target model or its credential
+store. Volume snapshot repositories and their recovery keys remain separate.
 
 ## Coordinated snapshot
 

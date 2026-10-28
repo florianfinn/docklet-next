@@ -9,6 +9,7 @@ package backup
 import (
 	"cmp"
 	"context"
+	"gorm.io/gorm"
 	"strings"
 
 	"github.com/florianfinn/docklet-next/backend/internal/backuptarget"
@@ -81,4 +82,14 @@ func (s *Service) checkPolicySet(ctx context.Context, input *policies.UpdateVolu
 		return dto.NewProblem(409, "backup.target.stale-set", nil)
 	}
 	return nil
+}
+
+// RemovePolicies drops the backup schedules of a removed volume.
+func (s *Service) RemovePolicies(ctx context.Context, volumeName string) {
+	s.policies.Remove(ctx, volumeName)
+}
+
+// RenamePolicies moves a renamed volume's backup policies inside the caller's transaction.
+func (s *Service) RenamePolicies(tx *gorm.DB, oldName, newName string) error {
+	return s.policies.Rename(tx, oldName, newName)
 }
