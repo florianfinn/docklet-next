@@ -28,13 +28,15 @@ func (s *Service) StartBackup(ctx context.Context, environmentID, volumeName str
 	}
 	activityID, workCtx := activitylib.StartHandlerActivity(owner.ctx, s.deps.Activity, environmentID, activitytypes.TypeResourceAction, "volume", volumeName, volumeName, &user, "Creating backup", "Creating volume backup", database.JSON{"action": "create_volume_backup", "backupId": entry.ID}, false)
 	if activityID == "" {
+		err = s.completeBackupInternal(owner.ctx, entry, errors.New("activity unavailable"))
 		owner.Release(ctx)
-		return volume.BackupEntry{}, s.completeBackupInternal(ctx, entry, errors.New("activity unavailable"))
+		return volume.BackupEntry{}, err
 	}
 	entry.ActivityID = &activityID
 	if err = s.deps.Store.Save(ctx, entry); err != nil {
-		activitylib.CompleteHandlerActivity(workCtx, s.deps.Activity, activityID, "", err)
+		err = s.completeBackupInternal(owner.ctx, entry, err)
 		owner.Release(ctx)
+		activitylib.CompleteHandlerActivity(workCtx, s.deps.Activity, activityID, "", neutralBackupError(err, "volume.backup.interrupted"))
 		return volume.BackupEntry{}, err
 	}
 	accepted := entryInternal(entry)
@@ -42,6 +44,7 @@ func (s *Service) StartBackup(ctx context.Context, environmentID, volumeName str
 		defer owner.Release(workCtx)
 		err := s.executeBackupInternal(workCtx, entry, user, plan)
 		err = s.completeBackupInternal(workCtx, entry, err)
+		owner.Release(workCtx)
 		activitylib.CompleteHandlerActivity(workCtx, s.deps.Activity, activityID, "Volume backup captured", neutralBackupError(err, "volume.backup.interrupted"))
 	}()
 	return accepted, nil

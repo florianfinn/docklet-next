@@ -12,6 +12,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"sync"
 	"time"
 	"uuid"
 
@@ -70,6 +71,7 @@ func (l *Lifecycle) Start(ctx context.Context, request StartRequest) (volume.Res
 	if err != nil {
 		return volume.RestoreOperation{}, err
 	}
+	release = sync.OnceFunc(release)
 	id := request.RestoreID
 	if id == "" {
 		id = uuid.New().String()
@@ -83,19 +85,25 @@ func (l *Lifecycle) Start(ctx context.Context, request StartRequest) (volume.Res
 	if activityID == "" {
 		run.Status = "failed"
 		run.ErrorCode = "volume.restore.interrupted-before-write"
-		_ = l.DB.WithContext(context.WithoutCancel(ctx)).Save(run).Error
+		run.FinishedAt = new(time.Now().UTC())
+		l.persistTerminal(ctx, run)
 		release()
 		return volume.RestoreOperation{}, dto.NewProblem(503, "volume.backup.engine-unavailable", nil)
 	}
 	run.ActivityID = activityID
 	if err = l.DB.WithContext(ctx).Save(run).Error; err != nil {
-		activitylib.CompleteHandlerActivity(workCtx, l.Activity, activityID, "", err)
+		run.Status = "failed"
+		run.ErrorCode = "volume.restore.interrupted-before-write"
+		run.FinishedAt = new(time.Now().UTC())
+		l.persistTerminal(ctx, run)
 		release()
+		activitylib.CompleteHandlerActivity(workCtx, l.Activity, activityID, "", dto.NewProblem(500, "volume.restore.interrupted-before-write", err))
 		return volume.RestoreOperation{}, err
 	}
 	go func() {
 		defer release()
 		err := l.Execute(workCtx, run, request)
+		release()
 		activitylib.CompleteHandlerActivity(workCtx, l.Activity, activityID, "Volume restored", err)
 	}()
 	return volume.RestoreOperation{ActivityID: activityID, RestoreID: id}, nil
@@ -109,6 +117,13 @@ func ownContainers(run *Run) []volume.StoppedContainer {
 }
 func (l *Lifecycle) persist(ctx context.Context, run *Run) error {
 	return l.DB.WithContext(context.WithoutCancel(ctx)).Save(run).Error
+}
+
+// Terminal persistence finishes before admission or activity ownership can end.
+func (l *Lifecycle) persistTerminal(ctx context.Context, run *Run) {
+	for err := l.persist(ctx, run); err != nil; err = l.persist(ctx, run) {
+		time.Sleep(100 * time.Millisecond)
+	}
 }
 func (l *Lifecycle) Execute(ctx context.Context, run *Run, request StartRequest) (err error) {
 	cleanup := func() error { return nil }
@@ -181,12 +196,7 @@ func (l *Lifecycle) Execute(ctx context.Context, run *Run, request StartRequest)
 			}
 		}
 		run.FinishedAt = new(time.Now().UTC())
-		persistErr := l.persist(settled, run)
-		// Keep worker admission and maintenance ownership until its terminal row commits.
-		for persistErr != nil {
-			time.Sleep(100 * time.Millisecond)
-			persistErr = l.persist(settled, run)
-		}
+		l.persistTerminal(settled, run)
 		if err != nil {
 			var problem *dto.Problem
 			if errors.As(err, &problem) && problem.Code == run.ErrorCode {
@@ -195,7 +205,6 @@ func (l *Lifecycle) Execute(ctx context.Context, run *Run, request StartRequest)
 				err = dto.NewProblem(500, run.ErrorCode, err)
 			}
 		}
-		err = errors.Join(err, persistErr)
 	}()
 	if err = ctx.Err(); err != nil {
 		return err

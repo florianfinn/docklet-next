@@ -13,6 +13,7 @@ import (
 	"github.com/florianfinn/docklet-next/backend/internal/activity"
 	"os"
 	"path/filepath"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -394,4 +395,74 @@ func TestRestoreTerminalPersistenceRetainsWorkerUntilCommit(t *testing.T) {
 	}
 	require.NoError(t, l.DB.First(&stored, "id = ?", run.ID).Error)
 	require.Equal(t, "succeeded", stored.Status)
+}
+
+func TestRestoreDrainWaitsForAdmissionReleaseBeforeActivityCompletion(t *testing.T) {
+	l, _ := lifecycleFixture(t)
+	require.NoError(t, l.DB.AutoMigrate(activity.Models()...))
+	l.Activity = activity.NewActivityService(l.DB, nil)
+	releasing, release := make(chan struct{}), make(chan struct{})
+	allowRelease := sync.OnceFunc(func() { close(release) })
+	defer allowRelease()
+	finishRelease := sync.OnceFunc(func() { close(releasing); <-release })
+	l.Effects.Validate = func(context.Context, StartRequest) error { return nil }
+	l.Effects.Admit = func(ctx context.Context, _, _ string) (context.Context, func(), error) {
+		return ctx, finishRelease, nil
+	}
+	l.Effects.Stop = func(context.Context, volume.StoppedContainer, user.Actor) error { return nil }
+	l.Effects.Write = func(context.Context, *Run, StartRequest) error { return nil }
+	accepted, err := l.Start(t.Context(), StartRequest{EnvironmentID: "0", VolumeName: "app-data", Kind: "full", User: user.SystemUser})
+	require.NoError(t, err)
+	select {
+	case <-releasing:
+	case <-time.After(time.Second):
+		t.Fatal("worker never released admission")
+	}
+	drained := make(chan error, 1)
+	go func() { drained <- l.Activity.CancelAndDrain(t.Context(), "") }()
+	require.Never(t, func() bool {
+		select {
+		case <-drained:
+			return true
+		default:
+			return false
+		}
+	}, 150*time.Millisecond, 5*time.Millisecond, "maintenance passed before admission release joined")
+	allowRelease()
+	select {
+	case err := <-drained:
+		require.NoError(t, err)
+	case <-time.After(time.Second):
+		t.Fatal("admission release did not settle drain")
+	}
+	var row Run
+	require.NoError(t, l.DB.First(&row, "id = ?", accepted.RestoreID).Error)
+	require.Equal(t, "succeeded", row.Status)
+}
+
+func TestRestoreAdmissionPersistenceFailureSettlesBeforeRelease(t *testing.T) {
+	l, _ := lifecycleFixture(t)
+	require.NoError(t, l.DB.AutoMigrate(activity.Models()...))
+	l.Activity = activity.NewActivityService(l.DB, nil)
+	l.Effects.Validate = func(context.Context, StartRequest) error { return nil }
+	released := false
+	l.Effects.Admit = func(ctx context.Context, _, _ string) (context.Context, func(), error) {
+		return ctx, func() { released = true }, nil
+	}
+	var failed atomic.Bool
+	require.NoError(t, l.DB.Callback().Update().Before("gorm:update").Register("test:link-unavailable", func(tx *gorm.DB) {
+		row, ok := tx.Statement.Dest.(*Run)
+		if ok && row.ActivityID != "" && row.Status == "running" && !failed.Swap(true) {
+			tx.AddError(errors.New("synthetic activity-link save failure"))
+		}
+	}))
+	_, err := l.Start(t.Context(), StartRequest{EnvironmentID: "0", VolumeName: "new-request", Kind: "full", User: user.SystemUser})
+	require.Error(t, err)
+	require.True(t, released)
+	var row Run
+	require.NoError(t, l.DB.First(&row, "volume_name = ?", "new-request").Error)
+	require.Equal(t, "failed", row.Status)
+	require.Equal(t, "volume.restore.interrupted-before-write", row.ErrorCode)
+	require.NotNil(t, row.FinishedAt)
+	require.NoError(t, l.Activity.CancelAndDrain(t.Context(), ""))
 }

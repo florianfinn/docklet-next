@@ -91,8 +91,8 @@ func (s *Service) startRepositoryCheck(ctx context.Context, id string) (dto.Targ
 	// must never make an older worker's successful test look current.
 	if id != "local" {
 		if err = s.deps.DB.WithContext(ctx).Clauses(clause.OnConflict{UpdateAll: true}).Create(&check).Error; err != nil {
-			activitylib.CompleteHandlerActivity(workCtx, s.deps.Activity, activityID, "", neutralBackupError(err, "volume.backup.repository-check-failed"))
 			lease.Release(ctx)
+			activitylib.CompleteHandlerActivity(workCtx, s.deps.Activity, activityID, "", neutralBackupError(err, "volume.backup.repository-check-failed"))
 			return dto.TargetTestOperation{}, err
 		}
 	}
@@ -121,6 +121,7 @@ func (s *Service) startRepositoryCheck(ctx context.Context, id string) (dto.Targ
 		}
 		projection := dto.TargetCheck{HostID: host, SetVersion: check.SetVersion, ConfigVersion: check.ConfigVersion, ActivityID: activityID, OK: check.OK, Code: check.Code, SnapshotCount: check.SnapshotCount, At: check.At}
 		err = errors.Join(err, s.deps.Activity.PatchActivityMetadata(workCtx, activityID, database.JSON{"backupTargetId": id, "backupTargetCheck": projection}))
+		lease.Release(context.WithoutCancel(workCtx))
 		activitylib.CompleteHandlerActivity(workCtx, s.deps.Activity, activityID, "Backup repository checked", neutralBackupError(err, cmp.Or(result.Code, "volume.backup.repository-check-failed")))
 	}()
 	return dto.TargetTestOperation{ActivityID: activityID}, nil

@@ -40,5 +40,5 @@ func TestEveryEventTypeHasMessageCode(t *testing.T) {
 		}
 		return true
 	})
-	require.Equal(t, 75, count)
+	require.Equal(t, 76, count)
 }

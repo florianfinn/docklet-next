@@ -9,8 +9,10 @@ package backup
 import (
 	"context"
 	"errors"
+	"github.com/florianfinn/docklet-next/backend/internal/activity"
 	"github.com/florianfinn/docklet-next/backend/internal/backup"
 	"github.com/florianfinn/docklet-next/backend/internal/event"
+	"github.com/florianfinn/docklet-next/backend/internal/volume/children/backup/children/policies"
 	"github.com/florianfinn/docklet-next/backend/internal/volume/operationlock"
 	"github.com/florianfinn/docklet-next/backend/pkg/utils"
 	"github.com/florianfinn/docklet-next/types/user"
@@ -156,4 +158,34 @@ func TestBackupTerminalPersistenceRetainsVolumeOwnershipUntilCommit(t *testing.T
 		t.Fatal("backup did not finish after database recovery")
 	}
 	require.EqualValues(t, 1, commits.Load())
+}
+
+func TestBackupAdmissionPersistenceFailureSettlesBeforeRelease(t *testing.T) {
+	f := newRuntimePlan(t)
+	db := f.service.deps.DB
+	require.NoError(t, db.AutoMigrate(activity.Models()...))
+	require.NoError(t, db.AutoMigrate(&policies.VolumeBackupPolicy{}))
+	f.service.deps.Activity = activity.NewActivityService(db, nil)
+	f.service.deps.Store.Create = func(ctx context.Context, row *volume.Backup) error {
+		return db.WithContext(ctx).Table("volume_backups").Create(row).Error
+	}
+	var failed atomic.Bool
+	f.service.deps.Store.Save = func(ctx context.Context, row *volume.Backup) error {
+		if row.ActivityID != nil && row.Status == "running" && !failed.Swap(true) {
+			return errors.New("synthetic activity-link save failure")
+		}
+		return db.WithContext(ctx).Table("volume_backups").Save(row).Error
+	}
+	f.service = NewService(f.service.deps)
+	defer f.service.deps.Activity.CancelAndDrain(t.Context(), "")
+	_, err := f.service.StartBackup(t.Context(), "0", "data", user.SystemUser, volume.CreateBackupRequest{})
+	require.Error(t, err)
+	var row volume.Backup
+	require.NoError(t, db.Table("volume_backups").First(&row).Error)
+	require.Equal(t, "failed", row.Status)
+	require.Equal(t, "volume.backup.interrupted", row.ErrorCode)
+	unlock, ok := f.service.deps.Locks.TryLock("data")
+	require.True(t, ok)
+	unlock()
+	require.Empty(t, f.creates)
 }
