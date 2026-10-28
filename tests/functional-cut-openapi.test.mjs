@@ -5,6 +5,21 @@ import { readFileSync } from "node:fs";
 const read = (name) => JSON.parse(readFileSync(new URL(`../api/${name}`, import.meta.url), "utf8"));
 const methods = new Set(["get", "post", "put", "patch", "delete", "head", "options", "trace"]);
 const laterOperations = new Map([
+  ["GET /backup-targets", "list-backup-targets"],
+  ["POST /backup-targets", "create-backup-target"],
+  ["DELETE /backup-targets/{id}", "retire-backup-target"],
+  ["GET /backup-targets/{id}", "get-backup-target"],
+  ["PUT /backup-targets/{id}", "update-backup-target"],
+  ["GET /backup-targets/{id}/recovery-key", "get-backup-target-recovery-key"],
+  ["POST /backup-targets/{id}/test", "test-backup-target"],
+  ["GET /environments/{id}/volumes/backups/overview", "get-volume-backup-overview"],
+  ["GET /environments/{id}/volumes/backups/repository", "get-volume-backup-repository"],
+  ["POST /environments/{id}/volumes/backups/repository/check", "check-volume-backup-repository"],
+  ["GET /environments/{id}/volumes/backups/targets/local/recovery-key", "get-local-backup-recovery-key"],
+  ["PUT /environments/{id}/volumes/backups/targets/local/recovery-key", "attach-local-backup-recovery-key"],
+  ["GET /environments/{id}/volumes/backups/targets/{targetId}/references", "get-volume-backup-target-references"],
+  ["POST /environments/{id}/volumes/backups/targets/{targetId}/test", "test-host-backup-target"],
+
   ["POST /environments/{id}/vulnerabilities/scan", "scan-host-vulnerabilities"],
   ["GET /environments/{id}/vulnerabilities/runs/{activityId}", "get-vulnerability-scan-run"],
   ["GET /environments/{id}/vulnerabilities/runs", "list-vulnerability-scan-runs"],
@@ -38,6 +53,11 @@ const laterOperations = new Map([
   ["POST /environments/{id}/runtime-runs/{runId}/release", "release-runtime-run"],
 ]);
 const retiredSystemRecovery = new Map([
+  ["GET /backups/volumes/config", "get-system-volume-backup-config"],
+  ["PUT /backups/volumes/config", "update-system-volume-backup-config"],
+  ["GET /backups/volumes/options", "list-system-volume-backup-options"],
+  ["POST /backups/volumes/run", "run-system-volume-backups"],
+
   ["PUT /backups/recovery-key", "set-system-backup-recovery-key"],
   ["POST /backups/recovery-key/generate", "generate-system-backup-recovery-key"],
   ["POST /backups/{id}/files/browse", "browse-system-backup-files"],

@@ -11,6 +11,7 @@ import (
 
 	"github.com/danielgtaylor/huma/v2"
 
+	"github.com/florianfinn/docklet-next/backend/internal/backuptarget"
 	"github.com/florianfinn/docklet-next/backend/internal/middleware"
 	"github.com/florianfinn/docklet-next/backend/internal/volume/children/backup/children/browser"
 	"github.com/florianfinn/docklet-next/backend/internal/volume/children/backup/children/policies"
@@ -22,6 +23,7 @@ import (
 // RegisterRoutes registers the volume backup endpoints, including policies,
 // file browsing, and restores.
 func RegisterRoutes(api huma.API, h *Handler) {
+	defer backuptarget.RegisterProblemSchemas(api)
 	registerMetadataRoutes(api, h)
 	var policiesService *policies.Service
 	var browserService *browser.Service

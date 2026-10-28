@@ -42,7 +42,9 @@ func TestHubBackupArchiveContract(t *testing.T) {
 	} {
 		require.Nil(t, spec.Paths[path])
 	}
-	require.NotNil(t, spec.Paths["/backups/volumes/run"])
+	for _, path := range []string{"/backups/volumes/config", "/backups/volumes/options", "/backups/volumes/run"} {
+		require.Nil(t, spec.Paths[path], "retired system-managed volume backup route")
+	}
 	download := spec.Paths["/backups/{id}/download"].Get.Responses["200"]
 	require.NotNil(t, download.Content["application/octet-stream"])
 	require.NotNil(t, download.Headers["Content-Disposition"])

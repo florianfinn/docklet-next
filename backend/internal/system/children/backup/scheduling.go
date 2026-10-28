@@ -55,7 +55,6 @@ func (s *Service) RegisterBackupJobOnStartup(ctx context.Context) {
 	for i := range policies {
 		s.reschedulePolicy(ctx, &policies[i])
 	}
-	s.volumes.RegisterJobsOnStartup(ctx)
 }
 func (s *Service) runScheduledBackup(ctx context.Context, id string) (scheduler.Outcome, error) {
 	policy, err := s.store.Policy(ctx, id)
