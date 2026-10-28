@@ -60,7 +60,12 @@ reports or new evidence and explain why. Do not reopen accepted optional finding
 as blockers without new evidence.
 
 After at most two unsuccessful targeted rounds per finding class, document causes
-and a concrete correction/verification plan before continuing. Ask the maintainer
+in a table over every producer, transport and consumer of the affected data,
+including code that predates the change, and decide the fix boundary: the whole
+class in this change, or the change's own surfaces with the pre-existing remainder
+as a tracked follow-up. Later verification judges only that boundary. A third
+failing round in the class rebuilds the fix from the table instead of patching
+the last finding. Ask the maintainer
 only for unresolved product decisions. This limit is not merge permission.
 A target-branch change requires a full review and another push for checks. An
 unrelated conflict-free update of the same base does not invalidate review evidence.
