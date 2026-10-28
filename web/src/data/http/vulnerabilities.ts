@@ -9,7 +9,7 @@ import type { DockletAdapter } from "../adapter";
 import { AdapterOutcomeError, unavailable, type CapabilityDescriptor, type ResourceRef } from "../capability";
 import type { DockerImage } from "@/domain/images";
 import { imageReference } from "@/domain/images";
-import type { Finding, Host, ScannedImage, SecurityOverview } from "@/domain/model";
+import type { Finding, Host, InventoryObservation, ScannedImage, SecurityOverview } from "@/domain/model";
 import { ScanAdmissionError, type ScanAdmission } from "@/domain/security";
 import { splitInventoryId } from "./inventory-mapping";
 import { array, count, counts, finding, id, invalid, object, run, summaries } from "./vulnerability-decoders";
@@ -20,7 +20,7 @@ import type { CsrfClient } from "./csrf-client";
 interface Options {
   baseUrl: string; client: CsrfClient; generation: () => number;
   capability: (op: string, ref: ResourceRef) => Promise<CapabilityDescriptor>;
-  hosts: () => Promise<Host[]>; images: (hostId: string, signal: AbortSignal) => Promise<DockerImage[]>;
+  hosts: () => Promise<Host[]>; images: (hostId: string, signal: AbortSignal) => Promise<{ images: DockerImage[]; inventory: InventoryObservation }>;
   changed: () => void; accepted: (host: string, activity: string) => void;
 }
 const empty = () => ({ critical: 0, high: 0, medium: 0, low: 0, unknown: 0 });
@@ -59,8 +59,8 @@ export function createVulnerabilities(o: Options): Pick<DockletAdapter, "getSecu
   let retainedIdentity = o.generation(), latest = 0;
   let retained = new Map<string, ScannedImage[]>();
   async function hostImages(host: Host, signal: AbortSignal, remember: (images: DockerImage[]) => void) {
-    const [images] = await Promise.all([
-      o.images(host.id, signal).then((rows) => { remember(rows); return rows; }),
+    const [{ images, inventory }] = await Promise.all([
+      o.images(host.id, signal).then((read) => { remember(read.images); return read; }),
       require("getSecurity", { kind: "host", id: host.id }),
     ]);
     signal.throwIfAborted();
@@ -68,7 +68,7 @@ export function createVulnerabilities(o: Options): Pick<DockletAdapter, "getSecu
     const ids = local.map((i) => splitInventoryId(i.id)[1]);
     const base = `/environments/${encodeURIComponent(host.id)}`;
     const [batch, history] = await Promise.all([
-      request(`${base}/images/vulnerabilities/summaries`, "POST", { imageIds: ids }, true, signal),
+      request(`${base}/images/vulnerabilities/summaries`, "POST", { imageIds: ids }, true, signal, true),
       request(`${base}/vulnerabilities/runs`, "GET", undefined, true, signal),
     ]);
     const summary = summaries(object(batch).data);
@@ -102,7 +102,7 @@ export function createVulnerabilities(o: Options): Pick<DockletAdapter, "getSecu
       return { id: r.activityId, hostId: host.id, at: r.startedAt, trigger: r.origin, status: r.status as Exclude<typeof r.status, "running">,
         sampled: r.status === "completed" || r.status === "partial" && r.scanned > 0, counts: counts(r) };
     });
-    return { images: rows, findings, history: historyRows };
+    return { images: rows, findings, history: historyRows, stale: inventory.stale };
   }
   return {
     ...settings,
@@ -125,9 +125,10 @@ export function createVulnerabilities(o: Options): Pick<DockletAdapter, "getSecu
       const batches = await Promise.all(hosts.map(async (host) => {
         let known: DockerImage[] = [];
         try {
-          const batch = await securityDeadline((signal) => hostImages(host, signal, (rows) => { known = rows; }));
+          const { stale, ...batch } = await securityDeadline((signal) => hostImages(host, signal, (rows) => { known = rows; }));
           check();
-          const unavailable = host.inventory?.stale || batch.images.some((i) => i.unavailable);
+          // This batch's own inventory decides; the host catalogue may carry an older observation.
+          const unavailable = stale || batch.images.some((i) => i.unavailable);
           return { hostId: host.id, ...batch, code: unavailable ? "vulnerability.read-unavailable" : undefined };
         }
         catch (error) {

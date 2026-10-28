@@ -15,8 +15,13 @@ function combine(observations: InventoryObservation[]): InventoryObservation {
   return { observedAt: observations.flatMap((o) => o.observedAt ? [o.observedAt] : []).sort()[0], stale: observations.some((o) => o.stale), reason: observations.find((o) => o.reason)?.reason };
 }
 
-/** Security can own one host's complete inventory lifetime without changing fleet readers. */
 export function createHostImageReader(baseUrl: string, fetcher: typeof fetch, onState: (hostId: string, state: InventoryObservation) => void) {
+  const read = createObservedHostImageReader(baseUrl, fetcher, onState);
+  return async (hostId: string, signal?: AbortSignal) => (await read(hostId, signal)).images;
+}
+
+/** Security can own one host's complete inventory lifetime; the observation belongs to this read, not the shared host snapshot. */
+export function createObservedHostImageReader(baseUrl: string, fetcher: typeof fetch, onState: (hostId: string, state: InventoryObservation) => void) {
   const { list } = createInventoryTransport(baseUrl, fetcher, onState);
   return async (hostId: string, signal?: AbortSignal) => {
     const [images, projects, containers] = await Promise.all([
@@ -27,7 +32,7 @@ export function createHostImageReader(baseUrl: string, fetcher: typeof fetch, on
     signal?.throwIfAborted();
     const inventory = combine([projects.observation, containers.observation, images.observation]);
     onState(hostId, inventory);
-    return images.rows.filter((i) => i.labels?.["io.docklet.system"] !== "agent").map((i) => mapImage(i, hostId, containers.rows, projects.rows, inventory));
+    return { inventory, images: images.rows.filter((i) => i.labels?.["io.docklet.system"] !== "agent").map((i) => mapImage(i, hostId, containers.rows, projects.rows, inventory)) };
   };
 }
 

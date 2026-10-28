@@ -3,6 +3,7 @@ import { useMemo } from "react";
 import { useLocale } from "use-intl";
 
 import type { AppLocale } from "@/domain/locale";
+import { securityRecoveryInterval } from "@/domain/security";
 
 import { localizeContainers, localizeSchedule, localizeSecurity } from "@/runtime";
 import { renderEvent, renderStackDetail, type CodedEvent, type CodedStackDetail } from "./message-code";
@@ -52,7 +53,7 @@ export function useContainers() {
 
 export function useSecurity() {
   const adapter = useAdapter();
-  return useQuery({ queryKey: queryKeys.security, queryFn: () => adapter.getSecurity(), select: useLocalized(localizeSecurity) });
+  return useQuery({ queryKey: queryKeys.security, queryFn: () => adapter.getSecurity(), select: useLocalized(localizeSecurity), refetchInterval: (query) => securityRecoveryInterval(query.state.data) });
 }
 
 export function useTopology() {
