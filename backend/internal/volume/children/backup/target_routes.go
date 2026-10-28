@@ -69,7 +69,7 @@ func TargetHandler(s *Service, environments *environment.EnvironmentService, cfg
 				if err != nil {
 					return err
 				}
-				response, err := handlerutil.RemoteJSONProxy(environments.ProxyJSONRequest).JSON[base.ApiResponse[dto.TargetTestOperation]](ctx, hostID, http.MethodPost, "/api/environments/0/volumes/backups/targets/"+url.PathEscape(id)+"/test", nil)
+				response, err := remoteBackupJSON[base.ApiResponse[dto.TargetTestOperation]](ctx, environments.ProxyJSONRequest, hostID, http.MethodPost, "/api/environments/0/volumes/backups/targets/"+url.PathEscape(id)+"/test", nil)
 				if err != nil {
 					return err
 				}

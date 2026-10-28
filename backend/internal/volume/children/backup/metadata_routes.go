@@ -41,7 +41,7 @@ func (h *Handler) Overview(ctx context.Context, in *HostBackupInput) (*handlerut
 	ctx, cancel := context.WithTimeout(ctx, 60*time.Second)
 	defer cancel()
 	if in.EnvironmentID != "0" {
-		response, err := handlerutil.RemoteJSONProxy(h.environmentService.ProxyJSONRequest).JSON[base.ApiResponse[volume.BackupOverview]](ctx, in.EnvironmentID, http.MethodGet, "/api/environments/0/volumes/backups/overview", nil)
+		response, err := remoteBackupJSON[base.ApiResponse[volume.BackupOverview]](ctx, h.environmentService.ProxyJSONRequest, in.EnvironmentID, http.MethodGet, "/api/environments/0/volumes/backups/overview", nil)
 		if err != nil {
 			return nil, err
 		}
@@ -57,7 +57,7 @@ func (h *Handler) Repository(ctx context.Context, in *HostBackupInput) (*handler
 	ctx, cancel := context.WithTimeout(ctx, 60*time.Second)
 	defer cancel()
 	if in.EnvironmentID != "0" {
-		response, err := handlerutil.RemoteJSONProxy(h.environmentService.ProxyJSONRequest).JSON[base.ApiResponse[volume.BackupRepository]](ctx, in.EnvironmentID, http.MethodGet, "/api/environments/0/volumes/backups/repository", nil)
+		response, err := remoteBackupJSON[base.ApiResponse[volume.BackupRepository]](ctx, h.environmentService.ProxyJSONRequest, in.EnvironmentID, http.MethodGet, "/api/environments/0/volumes/backups/repository", nil)
 		if err != nil {
 			return nil, err
 		}
@@ -95,7 +95,7 @@ func (h *Handler) Repository(ctx context.Context, in *HostBackupInput) (*handler
 }
 func (h *Handler) CheckRepository(ctx context.Context, in *HostBackupInput) (*handlerutil.Out[dto.TargetTestOperation], error) {
 	if in.EnvironmentID != "0" {
-		response, err := handlerutil.RemoteJSONProxy(h.environmentService.ProxyJSONRequest).JSON[base.ApiResponse[dto.TargetTestOperation]](ctx, in.EnvironmentID, http.MethodPost, "/api/environments/0/volumes/backups/repository/check", nil)
+		response, err := remoteBackupJSON[base.ApiResponse[dto.TargetTestOperation]](ctx, h.environmentService.ProxyJSONRequest, in.EnvironmentID, http.MethodPost, "/api/environments/0/volumes/backups/repository/check", nil)
 		if err != nil {
 			return nil, err
 		}

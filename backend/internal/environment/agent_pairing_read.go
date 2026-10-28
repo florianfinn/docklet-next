@@ -15,14 +15,16 @@ import (
 
 // AgentPairingTokenCurrent reads through the caller's transaction, so a sync
 // cannot commit against a token superseded by an already-committed pairing.
-// fallback is the startup-configured token before a pairing row exists.
+// fallback is the startup-configured token while no pairing has stored one;
+// default settings seed an empty row, which counts as "none stored".
 func AgentPairingTokenCurrent(tx *gorm.DB, presented, fallback string) error {
 	var row struct{ Value string }
 	err := tx.Table("settings").Where("key = ?", "agentToken").Take(&row).Error
-	if errors.Is(err, gorm.ErrRecordNotFound) {
-		row.Value = fallback
-	} else if err != nil {
+	if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
 		return err
+	}
+	if row.Value == "" {
+		row.Value = fallback
 	}
 	if presented == "" || row.Value == "" || subtle.ConstantTimeCompare([]byte(presented), []byte(row.Value)) != 1 {
 		return ErrInvalidEnvironmentAccessToken

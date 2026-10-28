@@ -271,6 +271,7 @@ export const deVolumes: typeof enVolumes = {
     removed: (import.meta.env.DEV ? "Backup-Plan entfernt (Demo)" : "Backup-Plan entfernt"),
     noPolicy: "Noch kein Backup-Plan. Lege einen an, um manuell oder geplant zu sichern.",
     createPolicy: "Plan anlegen",
+    stopFromPlan: "Der Backup-Plan stoppt die Container bei jedem Backup dieses Volumes.",
     runNow: "Jetzt sichern",
     history: "Verlauf",
     historyEmpty: "Noch keine Backups.",

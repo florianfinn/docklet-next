@@ -274,9 +274,11 @@ export function createBackups(options: Options) {
     async browseBackup(id, runId, folder = "/", start = 0) {
       const { host } = context(id);
       await require("browseBackup", { kind: "volume", id });
+      // The UI roots folders at "/"; the producer takes paths relative to the snapshot root.
+      const query = new URLSearchParams({ path: folder.replace(/^\/+/, ""), start: String(start), limit: "100" });
       const { result, check } = await response(
         host,
-        `${path(host)}/backups/${encodeURIComponent(runId)}/files/browse?${new URLSearchParams({ path: folder, start: String(start), limit: "100" })}`,
+        `${path(host)}/backups/${encodeURIComponent(runId)}/files/browse?${query}`,
       );
       const body = (await result.json()) as Schema["BasePaginatedBackupBackupFileEntry"];
       check();

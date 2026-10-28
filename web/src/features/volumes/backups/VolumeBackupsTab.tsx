@@ -55,6 +55,8 @@ function ConnectedTab({ volume, hostOnline }: { volume: VolumeDetail; hostOnline
     ...new Map(pending.flatMap((run) => run.stoppedContainers ?? []).map((c) => [c.id, c.name])).values(),
   ];
   const safetyId = pending.find((run) => run.safetyBackupId)?.safetyBackupId;
+  // A stored plan that stops containers applies to manual backups too (the backend merges both).
+  const planStops = !!current.backup?.stopContainers;
   return (
     <>
       {current.volumeExists === false && <p role="status">{t("volumeMissing")}</p>}
@@ -73,9 +75,20 @@ function ConnectedTab({ volume, hostOnline }: { volume: VolumeDetail; hostOnline
       )}
       <div className="flex flex-wrap items-end gap-3 rounded-xl border p-4">
         <Field orientation="horizontal" className="w-auto">
-          <Switch id="backup-now-stop" checked={stop} onCheckedChange={setStop} />
+          <Switch
+            id="backup-now-stop"
+            checked={stop || planStops}
+            disabled={planStops}
+            aria-describedby={planStops ? "backup-now-stop-plan" : undefined}
+            onCheckedChange={setStop}
+          />
           <FieldLabel htmlFor="backup-now-stop">{t("stop")}</FieldLabel>
         </Field>
+        {planStops && (
+          <p id="backup-now-stop-plan" className="w-full text-xs text-muted-foreground">
+            {t("stopFromPlan")}
+          </p>
+        )}
         <Button
           disabled={!hostOnline || busy || !!running || !backup.available}
           title={backup.reason}
@@ -83,7 +96,7 @@ function ConnectedTab({ volume, hostOnline }: { volume: VolumeDetail; hostOnline
             setBusy(true);
             setError(undefined);
             try {
-              setActivity(await adapter.runBackup(volume.id, { stopContainers: stop }));
+              setActivity(await adapter.runBackup(volume.id, { stopContainers: stop || planStops }));
             } catch (cause) {
               setError(backupErrorMessage(cause, all));
               if (cause instanceof BackupError && cause.problem.activityId) setActivity(cause.problem.activityId);

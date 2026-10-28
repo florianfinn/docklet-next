@@ -57,13 +57,16 @@ it("defaults to replace, prefills new name and displays existing-name refusal", 
 it("paginates the snapshot browser, keeps selected paths and confirms restore", async () => {
   const f = setup(); const accepted = vi.fn();
   renderWithApp(<RestoreFilesSheet volumeId="first~data" runId="snapshot" onClose={() => {}} accepted={accepted} />, f.adapter);
+  const browsed = () => f.fetcher.mock.calls.map(([url]) => new URL(String(url), "https://hub.example.com")).filter((url) => url.pathname.endsWith("/files/browse"));
+  await waitFor(() => expect(browsed().length).toBeGreaterThan(0));
+  expect(browsed()[0]!.searchParams.get("path")).toBe("");
   await userEvent.click(await screen.findByRole("checkbox", { name: "folder" }));
   await userEvent.click(screen.getByRole("button", { name: "Nächste Seite" }));
   await waitFor(() => expect(f.fetcher.mock.calls.some(([url]) => String(url).includes("start=100"))).toBe(true));
   await userEvent.click(screen.getByRole("button", { name: "Dateien wiederherstellen" }));
   await userEvent.click(screen.getByRole("button", { name: "Wiederherstellen" }));
   await waitFor(() => expect(accepted).toHaveBeenCalledWith("accepted"));
-  expect(f.state.requests.find((r) => r.path.endsWith("restore-files"))?.body).toEqual({ paths: ["/folder"] });
+  expect(f.state.requests.find((r) => r.path.endsWith("restore-files"))?.body).toEqual({ paths: ["folder"] });
 });
 it("shows a typed refusal for a directory beyond the listing budget", async () => {
   const f = setup(); f.state.fail = "/files/browse"; f.state.code = "volume.backup.listing-too-large";
@@ -88,6 +91,18 @@ it("rediscovers running restores on reload without a POST and shows pending rest
   expect(alert.includes("snapshot-late")).toBe(false);
   expect(f.state.requests.some((r) => r.method === "POST")).toBe(false);
   expect((screen.getByRole("button", { name: "Jetzt sichern" }) as HTMLButtonElement).disabled).toBe(true);
+});
+it("locks the manual stop switch on when the stored plan stops containers", async () => {
+  const f = setup(); f.state.overview.volumes![0]!.policy = { ...f.state.overview.volumes![0]!.policy!, enabled: false, stopContainers: true };
+  const volume = (await f.api.getBackupOverview("first")).volumes[0]!;
+  renderWithApp(<VolumeBackupsTab volume={{ ...volume, backups: [] }} hostOnline />, f.adapter);
+  // The plan form carries its own stop switch with the same label; this is the manual one.
+  const toggle = (await screen.findAllByRole("switch", { name: "Container während des Backups stoppen" })).find((s) => s.id === "backup-now-stop") as HTMLButtonElement;
+  expect(toggle.getAttribute("aria-checked") === "true" && toggle.disabled).toBe(true);
+  expect(document.body.textContent?.includes("Der Backup-Plan stoppt die Container")).toBe(true);
+  await userEvent.click(screen.getByRole("button", { name: "Jetzt sichern" }));
+  await waitFor(() => expect(f.state.requests.some((r) => r.method === "POST")).toBe(true));
+  expect(f.state.requests.find((r) => r.method === "POST")?.body).toEqual({ stopContainers: true });
 });
 it("shows the safe reason of an upload refused after admission", async () => {
   const f = setup(); const run = { status: "failed", progress: 100, backupOutcome: { status: "failed", errorCode: "volume.backup.upload-invalid", reason: "link" } };

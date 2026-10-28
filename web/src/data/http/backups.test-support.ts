@@ -32,7 +32,9 @@ export function backupFixture() {
     if (url.pathname.endsWith("/recovery-key")) return ok({ recoveryKey: state.key });
     if (url.pathname.endsWith("/repository")) return ok(repository);
     if (url.pathname === "/api/backup-targets") return ok(method === "GET" ? [target] : target);
-    if (url.pathname.endsWith("/files/browse")) return Response.json({ success: true, data: [{ name: "folder", path: "/folder", isDirectory: true }], pagination: { totalItems: 150, currentPage: 1, itemsPerPage: 100, totalPages: 2 } });
+    // The producer lists paths relative to the snapshot root and refuses absolute ones.
+    if (url.pathname.endsWith("/files/browse") && url.searchParams.get("path")?.startsWith("/")) return Response.json({ status: 400, detail: "PRIVATE SERVER TEXT" }, { status: 400 });
+    if (url.pathname.endsWith("/files/browse")) return Response.json({ success: true, data: [{ name: "folder", path: "folder", isDirectory: true }], pagination: { totalItems: 150, currentPage: 1, itemsPerPage: 100, totalPages: 2 } });
     if (url.pathname.endsWith("/backups") && method === "GET") return Response.json({ success: true, data: [entry], pagination: { totalItems: 1, currentPage: 1, itemsPerPage: 100, totalPages: 1 } });
     if (url.pathname.endsWith("/volume-backup") && method === "POST") return ok({ id: "upload", chunkSize: 2, totalChunks: 2, complete: false });
     if (url.pathname.includes("/chunks/")) return ok({ complete: true });

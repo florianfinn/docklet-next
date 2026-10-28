@@ -270,6 +270,7 @@ export const enVolumes = {
     removed: (import.meta.env.DEV ? "Backup plan removed (demo)" : "Backup plan removed"),
     noPolicy: "No backup plan yet. Create one to back up manually or on a schedule.",
     createPolicy: "Create plan",
+    stopFromPlan: "The backup plan stops the containers for every backup of this volume.",
     runNow: "Back up now",
     history: "History",
     historyEmpty: "No backups yet.",

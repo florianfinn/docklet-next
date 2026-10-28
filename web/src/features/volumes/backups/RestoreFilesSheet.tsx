@@ -60,7 +60,7 @@ export function RestoreFilesSheet({
             >
               {t("parentFolder")}
             </Button>
-            <code className="break-all text-xs">{path}</code>
+            <code className="break-all text-xs">{`/${path.replace(/^\/+/, "")}`}</code>
           </div>
           {listing.isError ? (
             <p role="alert">{backupErrorMessage(listing.error, all)}</p>
