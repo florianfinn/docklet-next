@@ -2,7 +2,7 @@
 // Revision: e5218d798f5302f7fa568a6059a70901bcc83219
 // Retrieved: 2026-10-28
 // License: Apache-2.0
-// Deviations: Original central backup-route refusal of an outdated or refused Direct or Edge agent.
+// Deviations: Original central backup-route refusal of an outdated or refused Direct or Edge agent and agent busy refusals.
 
 package backup
 
@@ -10,6 +10,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -40,14 +41,25 @@ type outdatedAgent struct {
 	forwarded    *int
 }
 
+// agentReply answers one forwarded request with a status and JSON body.
+type agentReply func(method, path string, body []byte) (int, []byte)
+
 // newOutdatedAgent registers a Direct or Edge host whose agent reports the
 // previous contract and counts every request beyond the version probe.
 func newOutdatedAgent(t *testing.T, mode string) outdatedAgent {
+	info, _ := json.Marshal(version.Info{AgentContractVersion: contract.AgentHubVersion - 1, AgentContractFingerprint: "previous", MinimumAgentContractVersion: contract.AgentHubVersion - 1})
+	return newScriptedAgent(t, mode, info, func(string, string, []byte) (int, []byte) {
+		return http.StatusOK, []byte(`{"success":true,"data":{}}`)
+	})
+}
+
+// newScriptedAgent registers a Direct or Edge host that reports info on the
+// version probe and answers every other request through reply.
+func newScriptedAgent(t *testing.T, mode string, info []byte, reply agentReply) outdatedAgent {
 	ctx, cancel := context.WithTimeout(t.Context(), 3*time.Second)
 	t.Cleanup(cancel)
 	f := newRuntimePlan(t)
 	require.NoError(t, f.service.deps.DB.AutoMigrate(&environment.Environment{}, &backuptarget.Target{}))
-	info, _ := json.Marshal(version.Info{AgentContractVersion: contract.AgentHubVersion - 1, AgentContractFingerprint: "previous", MinimumAgentContractVersion: contract.AgentHubVersion - 1})
 	forwarded := new(int)
 	remote := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path == "/api/app-version" {
@@ -59,7 +71,11 @@ func newOutdatedAgent(t *testing.T, mode string) outdatedAgent {
 			return
 		}
 		*forwarded++
-		_, _ = w.Write([]byte(`{"success":true,"data":{}}`))
+		body, _ := io.ReadAll(r.Body)
+		status, response := reply(r.Method, r.URL.Path, body)
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(status)
+		_, _ = w.Write(response)
 	}))
 	t.Cleanup(remote.Close)
 	id, token, endpoint := "outdated-host", strings.Repeat("o", 32), remote.URL
@@ -74,13 +90,12 @@ func newOutdatedAgent(t *testing.T, mode string) outdatedAgent {
 			}
 			pending, ok := tunnel.Pending.Load(m.ID)
 			require.True(t, ok)
-			body := []byte(`{"success":true,"data":{}}`)
-			if m.Path == "/api/app-version" {
-				body = info
-			} else {
+			status, body := http.StatusOK, info
+			if m.Path != "/api/app-version" {
 				*forwarded++
+				status, body = reply(m.Method, m.Path, m.Body)
 			}
-			pending.(*edge.PendingRequest).ResponseCh <- &edge.TunnelMessage{ID: m.ID, Type: edge.MessageTypeResponse, Status: 200, Body: body}
+			pending.(*edge.PendingRequest).ResponseCh <- &edge.TunnelMessage{ID: m.ID, Type: edge.MessageTypeResponse, Status: status, Body: body}
 		}
 		edge.GetRegistry().Register(id, tunnel)
 		t.Cleanup(func() { edge.GetRegistry().Unregister(id) })
@@ -156,4 +171,54 @@ func TestRemoteBackupJSONMapsUpstreamAuthenticationRefusal(t *testing.T) {
 	_, err := backuptarget.RemoteJSON[map[string]any](t.Context(), proxy, "host", http.MethodGet, "/api/environments/0/volumes/backups/overview", nil)
 	var access *backuptarget.AgentAccessError
 	require.False(t, errors.As(err, &access), "other upstream statuses keep their own translation")
+}
+
+// A busy agent refusal keeps its status, code and running activity through
+// the central create route on Direct and Edge instead of becoming interrupted.
+func TestCentralBackupCreateKeepsAgentBusyRefusal(t *testing.T) {
+	info, _ := json.Marshal(version.Info{AgentContractVersion: contract.AgentHubVersion, AgentContractFingerprint: contract.AgentHubFingerprint, MinimumAgentContractVersion: contract.MinimumAgentVersion})
+	const activityID = "0b4f6c1e-2d3a-4b5c-8d7e-9f0a1b2c3d4e"
+	for _, mode := range []string{"direct", "edge"} {
+		t.Run(mode, func(t *testing.T) {
+			a := newScriptedAgent(t, mode, info, func(method, path string, body []byte) (int, []byte) {
+				switch {
+				case method == http.MethodGet && strings.HasSuffix(path, "/backup-policy"):
+					return http.StatusOK, []byte(`{"success":true,"data":{"policies":[]}}`)
+				case method == http.MethodPut && strings.HasSuffix(path, "/volumes/backups/targets"):
+					var set dto.TargetSet
+					require.NoError(t, json.Unmarshal(body, &set))
+					receipt, _ := json.Marshal(map[string]any{"success": true, "data": dto.TargetSetReceipt{Authority: set.Authority, SetVersion: set.SetVersion, ContentHash: set.ContentHash}})
+					return http.StatusOK, receipt
+				case method == http.MethodPost && strings.HasSuffix(path, "/volumes/data/backups"):
+					busy := dto.NewProblem(http.StatusConflict, "volume.backup.busy", nil)
+					busy.ActivityID = activityID
+					refusal, _ := json.Marshal(busy)
+					return http.StatusConflict, refusal
+				}
+				t.Errorf("unexpected agent request %s %s", method, path)
+				return http.StatusNotFound, []byte(`{}`)
+			})
+			handler := &Handler{service: a.f.service, environmentService: a.environments, appCtx: t.Context()}
+			_, err := handler.CreateBackup(a.ctx, &CreateBackupInput{EnvironmentID: a.id, VolumeName: "data", Body: &volume.CreateBackupRequest{StopContainers: true}})
+			var problem *dto.Problem
+			require.True(t, errors.As(err, &problem), "busy refusal stays a typed backup problem: %v", err)
+			require.Equal(t, http.StatusConflict, problem.Status)
+			require.Equal(t, "volume.backup.busy", problem.Code)
+			require.Equal(t, activityID, problem.ActivityID)
+		})
+	}
+}
+
+func TestRemoteProblemAllowsOnlyTypedBackupRefusals(t *testing.T) {
+	upstream := func(status int, body string) error {
+		return &remenv.StatusError{StatusCode: status, Body: []byte(body)}
+	}
+	problem := backuptarget.RemoteProblem(upstream(http.StatusConflict, `{"status":409,"code":"volume.backup.busy","detail":"PRIVATE","activityId":"not-an-id","reason":"invented"}`))
+	require.NotNil(t, problem)
+	require.Equal(t, "volume.backup.busy", problem.Detail, "public detail comes from the code, never the agent text")
+	require.Empty(t, problem.ActivityID)
+	require.Empty(t, problem.Reason)
+	require.Nil(t, backuptarget.RemoteProblem(upstream(http.StatusConflict, `{"status":409,"code":"invented.code"}`)))
+	require.Nil(t, backuptarget.RemoteProblem(upstream(http.StatusConflict, `{"status":500,"code":"volume.backup.busy"}`)))
+	require.Nil(t, backuptarget.RemoteProblem(upstream(http.StatusConflict, `not json`)))
 }

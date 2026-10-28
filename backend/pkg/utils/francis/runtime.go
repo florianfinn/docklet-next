@@ -2,7 +2,7 @@
 // Revision: 095cb778daba1034e2a39961199e712a75d4ba29
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
-// Deviations: SQLite sidecar writer and separately owned read-only diagnostics.
+// Deviations: SQLite sidecar writer and separately owned read-only diagnostics; actor-host service failure reported before teardown.
 
 // Package francis owns the embedded Francis host lifecycle.
 package francis
@@ -18,6 +18,7 @@ import (
 	"net"
 	"strconv"
 	"sync"
+	"sync/atomic"
 	"syscall"
 	"time"
 
@@ -186,7 +187,7 @@ func (r *Runtime) Start(ctx, appCtx context.Context, onFailure func(error)) erro
 	bindRetries := 0
 
 	for {
-		host, errCh, runHostErr := r.runHost(runCtx)
+		host, errCh, failure, runHostErr := r.runHost(runCtx)
 		if runHostErr != nil {
 			cancel()
 			r.finish(runHostErr)
@@ -197,7 +198,7 @@ func (r *Runtime) Start(ctx, appCtx context.Context, onFailure func(error)) erro
 			select {
 			case runHostErr = <-errCh:
 			default:
-				r.publishReady(runCtx, host, errCh, onFailure)
+				r.publishReady(host, errCh, failure)
 				return nil
 			}
 		case runHostErr = <-errCh:
@@ -237,24 +238,26 @@ func (r *Runtime) Start(ctx, appCtx context.Context, onFailure func(error)) erro
 	}
 }
 
-func (r *Runtime) runHost(ctx context.Context) (*local.Host, chan error, error) {
+func (r *Runtime) runHost(ctx context.Context) (*local.Host, chan error, *hostFailureInternal, error) {
 	path, err := sqlitestore.Path(r.storeURL)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, nil, err
 	}
 	pool, err := sqlitestore.Open(ctx, path, false, false)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, nil, err
 	}
 	r.mu.Lock()
 	r.writer = pool
 	r.mu.Unlock()
 	options := []local.HostOption{local.WithSQLiteProvider(sqlite.SQLiteProviderOptions{DB: pool, TablePrefix: TablePrefix})}
 	options = append(options, r.options...)
+	failure := &hostFailureInternal{ctx: ctx, report: r.onFailure}
+	options = append(options, local.WithServiceFailureHandler(failure.fail))
 	host, err := local.NewHost(options...)
 	if err != nil {
 		_ = pool.Close()
-		return nil, nil, err
+		return nil, nil, nil, err
 	}
 	for _, registration := range r.registrations {
 		if registerActorErr := host.RegisterActor(registration.actorType, registration.factory, registration.options...); registerActorErr != nil {
@@ -263,29 +266,44 @@ func (r *Runtime) runHost(ctx context.Context) (*local.Host, chan error, error) 
 			cancel()
 			cleanupErr := errors.Join(host.Run(cleanupCtx), pool.Close())
 			if cleanupErr != nil {
-				return nil, nil, errors.Join(registerActorErr, fmt.Errorf("clean up unregistered actor host: %w", cleanupErr))
+				return nil, nil, nil, errors.Join(registerActorErr, fmt.Errorf("clean up unregistered actor host: %w", cleanupErr))
 			}
-			return nil, nil, registerActorErr
+			return nil, nil, nil, registerActorErr
 		}
 	}
 	localErrors := make(chan error, 1)
 	go func() { localErrors <- errors.Join(host.Run(ctx), pool.Close()) }()
-	return host, localErrors, nil
+	return host, localErrors, failure, nil
 }
 
-func (r *Runtime) publishReady(ctx context.Context, host *local.Host, runErrors <-chan error, onFailure func(error)) {
+// hostFailureInternal reports a published host's failure once: as soon as one
+// of its services fails, or when the host stops without cancellation. Actor
+// teardown can block, so the service report must not wait for host.Run.
+type hostFailureInternal struct {
+	ctx    context.Context
+	report func(error)
+	armed  atomic.Bool
+	once   sync.Once
+}
+
+func (f *hostFailureInternal) fail(err error) {
+	if !f.armed.Load() || f.ctx.Err() != nil || f.report == nil {
+		return
+	}
+	f.once.Do(func() { f.report(err) })
+}
+
+func (r *Runtime) publishReady(host *local.Host, runErrors <-chan error, failure *hostFailureInternal) {
 	*r.service = *host.Service()
+	failure.armed.Store(true)
 	close(r.ready)
 	go func() {
 		err := <-runErrors
 		r.finish(err)
-		if ctx.Err() != nil || onFailure == nil {
-			return
-		}
 		if err == nil {
 			err = errors.New("actor host stopped unexpectedly")
 		}
-		onFailure(err)
+		failure.fail(err)
 	}()
 }
 

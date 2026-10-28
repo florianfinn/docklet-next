@@ -78,6 +78,12 @@ func WithAlarmsFetchAheadBatchSize(n int) HostOption {
 	return func(o *newHostOptions) { o.AlarmsFetchAheadBatchSize = n }
 }
 
+// WithServiceFailureHandler reports a background service failure as soon as it happens,
+// before the host halts its actors and unregisters, which can block
+func WithServiceFailureHandler(fn func(error)) HostOption {
+	return func(o *newHostOptions) { o.ServiceFailureHandler = fn }
+}
+
 // WithShutdownGracePeriod sets the grace period for shutting down
 func WithShutdownGracePeriod(d time.Duration) HostOption {
 	return func(o *newHostOptions) { o.ShutdownGracePeriod = d }
@@ -124,6 +130,7 @@ type newHostOptions struct {
 	MaxInFlightRequests       int
 	MaxRequestBodySize        int64
 	MaxHosts                  int
+	ServiceFailureHandler     func(error)
 
 	// Allows setting a clock for testing
 	clock clock.WithTicker
