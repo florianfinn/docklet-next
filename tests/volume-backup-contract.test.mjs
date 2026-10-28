@@ -27,7 +27,9 @@ test("v9 backup vocabulary is fingerprinted and translated in both locales", () 
   assert.deepEqual(fixture.volumeBackups.uploadReasons, reasons);
   for (const locale of ["en", "de"]) {
     const catalogue = read(`web/src/features/volumes/messages/${locale}.ts`);
-    for (const key of [...codes, ...reasons]) assert.ok(catalogue.includes(`${JSON.stringify(key)}:`), `${locale}: ${key}`);
+    // Message keys cannot contain dots; codes map with code.replaceAll(".", "_").
+    const keys = new Set([...catalogue.matchAll(/^\s+"?([\w-]+)"?:/gm)].map((match) => match[1]));
+    for (const key of [...codes, ...reasons]) assert.ok(keys.has(key.replaceAll(".", "_")), `${locale}: ${key}`);
   }
   assert.deepEqual(agentFixture(Buffer.from(read("api/openapi.json")), Buffer.from(text)), Buffer.from(text));
 });
