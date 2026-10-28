@@ -12,3 +12,4 @@ The [design index](../design/README.md) holds the current contracts.
 | [M8 storage and file workspace acceptance](m8-storage-acceptance.md) | Merged package, sandbox-found defects, acceptance method and limits on 2026-10-23 |
 | [M9 network management acceptance](m9-network-acceptance.md) | Merged package, sandbox-found defects, acceptance method and limits on 2026-10-24 |
 | [M10 images and updates acceptance](m10-images-updates-acceptance.md) | Merged package, sandbox-found defects, acceptance method and limits on 2026-10-27 |
+| [M11 vulnerability scanning acceptance](m11-vulnerability-scanning-acceptance.md) | Merged package, sandbox-found defects, acceptance method and limits on 2026-10-28 |
