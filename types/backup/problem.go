@@ -6,6 +6,11 @@
 
 package backup
 
+import (
+	"reflect"
+	"strings"
+)
+
 // Problem carries stable codes and safe diagnostics; raw engine details stay server-side.
 type Problem struct {
 	Status     int      `json:"status"`
@@ -43,3 +48,14 @@ const MaxVolumeResponseBytes = 8 << 20
 const MaxBrowseEntries = 5000
 
 const MaxExpandedUploadBytes int64 = 16 << 30
+
+// IsProblemCode uses the wire enum as the only diagnostic allowlist.
+func IsProblemCode(code string) bool {
+	field, _ := reflect.TypeFor[Problem]().FieldByName("Code")
+	for _, allowed := range strings.Split(field.Tag.Get("enum"), ",") {
+		if code == allowed {
+			return true
+		}
+	}
+	return false
+}

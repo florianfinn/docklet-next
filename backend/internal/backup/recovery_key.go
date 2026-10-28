@@ -11,43 +11,23 @@ package backup
 
 import (
 	"context"
-	"crypto/rand"
-	"encoding/base32"
 	"errors"
 	"fmt"
+	"github.com/florianfinn/docklet-next/backend/internal/backup/keyformat"
 	"github.com/florianfinn/docklet-next/backend/internal/database"
 	"go.getarcane.app/sys/crypto"
 	"gorm.io/gorm"
-	"regexp"
-	"strings"
 )
 
 var (
 	ErrRecoveryKeyNotConfigured = errors.New("recovery key is not configured")
 	ErrPolicyValidation         = errors.New("backup.invalid_policy")
 	// RecoveryKeyFormat is 8 hyphenated groups of 6 base32 characters, used verbatim as the Rustic password.
-	RecoveryKeyFormat = regexp.MustCompile(`^[A-Z2-7]{6}(-[A-Z2-7]{6}){7}$`)
+	RecoveryKeyFormat = keyformat.RecoveryKeyFormat
 )
 
-func ValidateRecoveryKey(key string) error {
-	if !RecoveryKeyFormat.MatchString(strings.TrimSpace(key)) {
-		return errors.New("enter the generated recovery key (8 groups of 6 characters)")
-	}
-	return nil
-}
-
-func GenerateRecoveryKey() (string, error) {
-	raw := make([]byte, 30)
-	if _, err := rand.Read(raw); err != nil {
-		return "", fmt.Errorf("failed to generate recovery key: %w", err)
-	}
-	encoded := base32.StdEncoding.WithPadding(base32.NoPadding).EncodeToString(raw)
-	groups := make([]string, 0, len(encoded)/6)
-	for i := 0; i < len(encoded); i += 6 {
-		groups = append(groups, encoded[i:i+6])
-	}
-	return strings.Join(groups, "-"), nil
-}
+func ValidateRecoveryKey(key string) error { return keyformat.ValidateRecoveryKey(key) }
+func GenerateRecoveryKey() (string, error) { return keyformat.GenerateRecoveryKey() }
 
 // RecoveryKeyStore persists the recovery key shared by the system and volume backup domains.
 type RecoveryKeyStore struct {

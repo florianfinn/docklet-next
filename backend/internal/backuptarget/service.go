@@ -14,7 +14,7 @@ import (
 	"time"
 	"uuid"
 
-	"github.com/florianfinn/docklet-next/backend/internal/backup"
+	backup "github.com/florianfinn/docklet-next/backend/internal/backup/keyformat"
 	dto "github.com/florianfinn/docklet-next/types/backup"
 	"go.getarcane.app/sys/crypto"
 	"gorm.io/gorm"
@@ -27,9 +27,10 @@ type Dependencies struct {
 }
 
 type Service struct {
-	deps   Dependencies
-	mu     sync.Mutex
-	fences map[string]*sync.RWMutex
+	deps          Dependencies
+	mu            sync.Mutex
+	fences        map[string]*sync.RWMutex
+	refreshChecks func(context.Context) error
 }
 
 func NewService(deps Dependencies) *Service {
@@ -225,6 +226,11 @@ func (s *Service) Retire(ctx context.Context, id string) error {
 	return err
 }
 func (s *Service) List(ctx context.Context) ([]dto.Target, error) {
+	if s.refreshChecks != nil {
+		if err := s.refreshChecks(ctx); err != nil {
+			return nil, err
+		}
+	}
 	var rows []Target
 	if err := s.deps.Store.DB.WithContext(ctx).Order("name,id").Find(&rows).Error; err != nil {
 		return nil, err
@@ -271,4 +277,16 @@ func (s *Service) RecoveryKey(ctx context.Context, id string) (string, error) {
 		return "", errors.New("invalid stored recovery key")
 	}
 	return value, nil
+}
+
+// ConfigureDelivery runs during route construction, before serving requests.
+// It preserves the service's per-target fences across callback wiring.
+func (s *Service) ConfigureDelivery(references func(context.Context, Target) (dto.TargetReferences, []string, error), sync func(context.Context) error) {
+	s.deps.References = references
+	s.deps.Sync = sync
+}
+
+// ConfigureCheckRefresh installs the metadata-only remote result reader before serving.
+func (s *Service) ConfigureCheckRefresh(refresh func(context.Context) error) {
+	s.refreshChecks = refresh
 }

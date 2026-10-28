@@ -17,7 +17,7 @@ import (
 	"time"
 	"uuid"
 
-	"github.com/florianfinn/docklet-next/backend/internal/backup"
+	backup "github.com/florianfinn/docklet-next/backend/internal/backup/keyformat"
 	"github.com/florianfinn/docklet-next/backend/internal/database"
 	dto "github.com/florianfinn/docklet-next/types/backup"
 	"go.getarcane.app/sys/crypto"
@@ -314,6 +314,28 @@ func (s *Store) SetForHost(ctx context.Context, hostID string) (set dto.TargetSe
 			set.Targets = append(set.Targets, dto.SyncedTarget{TargetLocation: row.location(), ID: row.ID, Name: row.Name, Username: row.Username, Secret: secret, Options: row.Options, RecoveryKey: key, ConfigVersion: row.ConfigVersion})
 		}
 		set.ContentHash, e = ContentHash(set.Targets)
+		return e
+	})
+	return
+}
+
+// Metadata reads the owning host's accepted set without creating an authority
+// on agents. Only the hub can issue a new set authority.
+func (s *Store) Metadata(ctx context.Context, agent bool) (authority string, version int64, err error) {
+	if !agent {
+		return s.Authority(ctx)
+	}
+	err = s.DB.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		var e error
+		authority, e = readSetting(tx, "backupTargetAuthority")
+		if e != nil {
+			return e
+		}
+		value, e := readSetting(tx, "backupTargetSetVersion")
+		if e != nil {
+			return e
+		}
+		version, e = strconv.ParseInt(defaultString(value, "0"), 10, 64)
 		return e
 	})
 	return

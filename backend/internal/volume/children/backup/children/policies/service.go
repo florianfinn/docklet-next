@@ -35,6 +35,7 @@ const defaultSchedule = "0 0 2 * * *"
 
 // Dependencies are the backup operations scheduled policies run through.
 type Dependencies struct {
+	ValidateTarget func(context.Context, string) error
 	DB             *database.DB
 	Location       *time.Location
 	Activity       *activity.ActivityService
@@ -70,13 +71,14 @@ func (s *Service) policiesInternal(ctx context.Context, volumeName string) ([]Vo
 		nil
 }
 
-// Policy loads one policy of the volume; an empty or unknown ID returns nil.
+// Policy loads the volume's current policy when policyID is empty.
 func (s *Service) Policy(ctx context.Context, volumeName, policyID string) (*VolumeBackupPolicy, error) {
-	if strings.TrimSpace(policyID) == "" {
-		return nil, nil
-	}
 	var policy VolumeBackupPolicy
-	err := s.deps.DB.WithContext(ctx).Where("id = ? AND volume_name = ?", policyID, volumeName).First(&policy).Error
+	query := s.deps.DB.WithContext(ctx).Where("volume_name = ?", volumeName)
+	if strings.TrimSpace(policyID) != "" {
+		query = query.Where("id = ?", policyID)
+	}
+	err := query.First(&policy).Error
 	if errors.Is(err, gorm.ErrRecordNotFound) {
 		return nil, nil
 	}
@@ -115,8 +117,19 @@ func (s *Service) GetBackupPolicies(ctx context.Context, volumeName string) (*vo
 }
 
 func (s *Service) UpdateBackupPolicies(ctx context.Context, volumeName string, updates []volume.UpdateBackupPolicy) (*volume.BackupPolicyCollection, error) {
+	return s.UpdateBackupPoliciesChecked(ctx, volumeName, updates, nil)
+}
+
+// UpdateBackupPoliciesChecked validates the received target set while holding
+// the same admission mutex as target sync and reference collection.
+func (s *Service) UpdateBackupPoliciesChecked(ctx context.Context, volumeName string, updates []volume.UpdateBackupPolicy, check func() error) (*volume.BackupPolicyCollection, error) {
 	s.admission.Lock()
 	defer s.admission.Unlock()
+	if check != nil {
+		if err := check(); err != nil {
+			return nil, err
+		}
+	}
 	if len(updates) > 1 {
 		return nil, backupdto.NewProblem(422, "volume.backup.policy-single", nil)
 	}
@@ -126,6 +139,11 @@ func (s *Service) UpdateBackupPolicies(ctx context.Context, volumeName string, u
 		return nil, err
 	}
 	for _, update := range updates {
+		if s.deps.ValidateTarget != nil {
+			if err := s.deps.ValidateTarget(ctx, update.TargetID); err != nil {
+				return nil, err
+			}
+		}
 		if update.ID != "" && (len(existing) == 0 || update.ID != existing[0].ID) {
 			return nil, backupdto.NewProblem(422, "volume.backup.policy-invalid", nil)
 		}
@@ -287,3 +305,18 @@ func (s *Service) Rename(tx *gorm.DB, oldName, newName string) error {
 // AdmissionLock shares policy/reference admission with the owning-host backup service.
 func (s *Service) AdmissionLock()   { s.admission.Lock() }
 func (s *Service) AdmissionUnlock() { s.admission.Unlock() }
+
+// NextRun returns scheduler knowledge from the process that owns this policy.
+func (s *Service) NextRun(id string, enabled bool) *time.Time {
+	if !enabled {
+		return nil
+	}
+	if runtime, ok := s.jobs.Scheduler().(interface {
+		GetJobRuntimeState(string) (scheduler.JobRuntimeState, bool)
+	}); ok {
+		if state, found := runtime.GetJobRuntimeState(s.jobs.JobName(id)); found {
+			return state.NextRun
+		}
+	}
+	return nil
+}

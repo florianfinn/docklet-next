@@ -9,13 +9,17 @@ package backup
 import (
 	"cmp"
 	"context"
-	"errors"
+	"github.com/florianfinn/docklet-next/backend/internal/backuptarget"
+	"github.com/florianfinn/docklet-next/backend/internal/config"
 	"io"
+	"net/http"
+	"net/url"
 	"strconv"
 	"strings"
 
 	"github.com/danielgtaylor/huma/v2"
 	activitytypes "github.com/florianfinn/docklet-next/types/activity"
+	backuptypes "github.com/florianfinn/docklet-next/types/backup"
 	"github.com/florianfinn/docklet-next/types/base"
 	"github.com/florianfinn/docklet-next/types/volume"
 	"github.com/samber/mo"
@@ -32,6 +36,7 @@ import (
 )
 
 type Handler struct {
+	config             *config.Config
 	service            *Service
 	activityService    *activity.ActivityService
 	environmentService *environment.EnvironmentService
@@ -83,8 +88,13 @@ func NewHandler(
 	environmentService *environment.EnvironmentService,
 	uploadService *upload.UploadService,
 	appCtx context.Context,
+	configs ...*config.Config,
 ) *Handler {
-	return &Handler{service: service, activityService: activityService, environmentService: environmentService, uploadService: uploadService, appCtx: appCtx}
+	var cfg *config.Config
+	if len(configs) > 0 {
+		cfg = configs[0]
+	}
+	return &Handler{config: cfg, service: service, activityService: activityService, environmentService: environmentService, uploadService: uploadService, appCtx: appCtx}
 }
 
 func (h *Handler) DownloadBackup(ctx context.Context, input *DownloadBackupInput) (*huma.StreamResponse, error) {
@@ -153,16 +163,52 @@ func (h *Handler) CreateBackup(ctx context.Context, input *CreateBackupInput) (*
 	if input.Body != nil {
 		request = *input.Body
 	}
-	entry, err := h.service.StartBackup(utils.ActivityRuntimeContext(ctx, h.appCtx), input.EnvironmentID, input.VolumeName, *user, request)
-	if errors.Is(err, h.service.deps.AlreadyRunning) {
-		return nil, huma.Error409Conflict(err.Error())
+	var entry volume.BackupEntry
+	run := func() error {
+		if input.EnvironmentID != "0" {
+			if h.environmentService == nil {
+				return backuptypes.NewProblem(503, "backup.target.sync-failed", nil)
+			}
+			response, err := handlerutil.RemoteJSONProxy(h.environmentService.ProxyJSONRequest).JSON[base.ApiResponse[volume.BackupEntry]](ctx, input.EnvironmentID, http.MethodPost, "/api/environments/0/volumes/"+url.PathEscape(input.VolumeName)+"/backups", request)
+			if err != nil {
+				return err
+			}
+			entry = response.Data
+			return nil
+		}
+		var e error
+		entry, e = h.service.StartBackup(utils.ActivityRuntimeContext(ctx, h.appCtx), input.EnvironmentID, input.VolumeName, *user, request)
+		return e
+	}
+	target := cmp.Or(request.TargetID, string(request.Destination))
+	agent := h.config != nil && (h.config.AgentMode || h.config.EdgeAgent)
+	if !agent && input.EnvironmentID != "0" {
+		if target == "" {
+			response, e := handlerutil.RemoteJSONProxy(h.environmentService.ProxyJSONRequest).JSON[base.ApiResponse[volume.BackupPolicyCollection]](ctx, input.EnvironmentID, http.MethodGet, "/api/environments/0/volumes/"+url.PathEscape(input.VolumeName)+"/backup-policy", nil)
+			if e != nil {
+				return nil, e
+			}
+			target = "local"
+			if len(response.Data.Policies) > 0 {
+				target = cmp.Or(response.Data.Policies[0].TargetID, "local")
+			}
+			request.TargetID = target
+		}
+		err = h.service.targets.WithActive(ctx, target, func() error {
+			if input.EnvironmentID != "0" && h.environmentService != nil {
+				if _, e := backuptarget.SyncHost(ctx, h.service.deps.DB, input.EnvironmentID, h.environmentService.ProxyJSONRequest); e != nil {
+					return e
+				}
+			}
+			return run()
+		})
+	} else {
+		err = run()
 	}
 	if err != nil {
-		return nil, huma.Error500InternalServerError(err.Error())
+		return nil, neutralBackupError(err, "volume.backup.interrupted")
 	}
-	return &handlerutil.Out[volume.BackupEntry]{
-		Body: base.ApiResponse[volume.BackupEntry]{Success: true, Data: entry},
-	}, nil
+	return &handlerutil.Out[volume.BackupEntry]{Body: base.ApiResponse[volume.BackupEntry]{Success: true, Data: entry}}, nil
 }
 
 func (h *Handler) DeleteBackup(ctx context.Context, input *DeleteBackupInput) (*handlerutil.Out[base.MessageResponse], error) {

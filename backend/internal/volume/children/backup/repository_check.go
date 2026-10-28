@@ -7,6 +7,7 @@
 package backup
 
 import (
+	"cmp"
 	"context"
 	"encoding/json"
 	"errors"
@@ -56,6 +57,7 @@ func (s *Service) startRepositoryCheck(ctx context.Context, id string) (dto.Targ
 			return dto.TargetTestOperation{}, err
 		}
 		configVersion = target.ConfigVersion
+		ctx = context.WithValue(ctx, admittedTargetKey{}, target)
 	}
 	if host == "0" {
 		_, version, err = s.targetStore.Authority(ctx)
@@ -117,7 +119,9 @@ func (s *Service) startRepositoryCheck(ctx context.Context, id string) (dto.Targ
 		} else {
 			err = errors.Join(err, s.deps.DB.WithContext(context.WithoutCancel(worker)).Model(&backuptarget.Check{}).Where("target_id = ? AND host_id = ? AND activity_id = ?", id, host, activityID).Updates(map[string]any{"ok": check.OK, "code": check.Code, "at": check.At, "snapshot_count": check.SnapshotCount}).Error)
 		}
-		activitylib.CompleteHandlerActivity(workCtx, s.deps.Activity, activityID, "Backup repository checked", neutralBackupError(err, result.Code))
+		projection := dto.TargetCheck{HostID: host, SetVersion: check.SetVersion, ConfigVersion: check.ConfigVersion, ActivityID: activityID, OK: check.OK, Code: check.Code, SnapshotCount: check.SnapshotCount, At: check.At}
+		err = errors.Join(err, s.deps.Activity.PatchActivityMetadata(workCtx, activityID, database.JSON{"backupTargetId": id, "backupTargetCheck": projection}))
+		activitylib.CompleteHandlerActivity(workCtx, s.deps.Activity, activityID, "Backup repository checked", neutralBackupError(err, cmp.Or(result.Code, "volume.backup.repository-check-failed")))
 	}()
 	return dto.TargetTestOperation{ActivityID: activityID}, nil
 }

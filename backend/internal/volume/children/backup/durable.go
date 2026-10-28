@@ -22,11 +22,7 @@ import (
 
 // StartBackup persists a running backup and submits application-owned work.
 func (s *Service) StartBackup(ctx context.Context, environmentID, volumeName string, user usertypes.Actor, request volume.CreateBackupRequest) (volume.BackupEntry, error) {
-	plan, err := s.resolveBackupPlanInternal(ctx, volumeName, backuptypes.VolumeBackupTriggerManual, request, nil)
-	if err != nil {
-		return volume.BackupEntry{}, err
-	}
-	entry, owner, err := s.prepareBackupInternal(ctx, volumeName, backuptypes.VolumeBackupTriggerManual, request.PolicyID, plan)
+	entry, owner, plan, err := s.prepareCapture(ctx, volumeName, backuptypes.VolumeBackupTriggerManual, request)
 	if err != nil {
 		return volume.BackupEntry{}, err
 	}

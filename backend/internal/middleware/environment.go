@@ -671,6 +671,12 @@ func isManagementPathInternal(method, suffix string) bool {
 	if suffix == "/jobs" || strings.HasPrefix(suffix, "/jobs/") {
 		return true
 	}
+	if method == http.MethodPost {
+		parts := strings.Split(strings.Trim(suffix, "/"), "/")
+		if len(parts) == 3 && parts[0] == "volumes" && parts[1] != "" && parts[2] == "backups" {
+			return true
+		}
+	}
 	if isCentralVolumeBackupPolicyPathInternal(method, suffix) {
 		return true
 	}

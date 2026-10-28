@@ -71,11 +71,11 @@ func (m *Module) RegisterRoutes(api huma.API, appCtx handlerutil.ActivityAppCont
 
 	RegisterVolumes(api, m.dockerService, m.service, m.activityService, m.environmentService, appCtx)
 	workspace.RegisterRoutes(api, workspace.NewHandler(service.workspace, m.activityService, appCtx.Context()))
-	backup.RegisterRoutes(api, backup.NewHandler(service.backup, m.activityService, m.environmentService, m.uploadService, appCtx.Context()))
 	var cfg *config.Config
 	if len(configs) > 0 {
 		cfg = configs[0]
 	}
+	backup.RegisterRoutes(api, backup.NewHandler(service.backup, m.activityService, m.environmentService, m.uploadService, appCtx.Context(), cfg))
 	agent := cfg != nil && (cfg.AgentMode || cfg.EdgeAgent)
 	targetHandler := backup.TargetHandler(service.backup, m.environmentService, cfg, appCtx.Context())
 	if !agent {

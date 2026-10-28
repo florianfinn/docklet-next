@@ -14,7 +14,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/florianfinn/docklet-next/backend/internal/backup"
+	backup "github.com/florianfinn/docklet-next/backend/internal/backup/keyformat"
 	dto "github.com/florianfinn/docklet-next/types/backup"
 )
 

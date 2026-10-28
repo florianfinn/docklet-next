@@ -14,7 +14,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/florianfinn/docklet-next/backend/internal/backup"
+	backup "github.com/florianfinn/docklet-next/backend/internal/backup/keyformat"
 	"github.com/florianfinn/docklet-next/backend/internal/database"
 	"github.com/florianfinn/docklet-next/backend/internal/testsqlite"
 	dto "github.com/florianfinn/docklet-next/types/backup"

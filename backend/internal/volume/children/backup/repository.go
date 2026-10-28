@@ -19,6 +19,8 @@ import (
 	"github.com/moby/moby/client"
 )
 
+type admittedTargetKey struct{}
+
 func (s *Service) repositoryFor(ctx context.Context, dockerClient *client.Client, destination string, readOnly bool) (backup.Repository, error) {
 	if destination == "" || destination == "local" {
 		return s.localRusticRepositoryInternal(ctx, dockerClient, readOnly)
@@ -32,7 +34,10 @@ func (s *Service) repositoryFor(ctx context.Context, dockerClient *client.Client
 	if host.Value != "" {
 		hostID = host.Value
 	}
-	target, err := s.targetStore.Resolve(ctx, destination, hostID, false)
+	target, frozen := ctx.Value(admittedTargetKey{}).(dto.SyncedTarget)
+	if !frozen || target.ID != destination {
+		target, err = s.targetStore.Resolve(ctx, destination, hostID, false)
+	}
 	if err != nil {
 		return backup.Repository{}, err
 	}

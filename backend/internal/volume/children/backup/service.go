@@ -116,6 +116,7 @@ func NewService(deps Dependencies) *Service {
 	s.targets = backuptarget.NewService(backuptarget.Dependencies{Store: s.targetStore})
 	s.policies = policies.NewService(policies.Dependencies{
 		DB:             deps.DB,
+		ValidateTarget: s.validatePolicyTarget,
 		Location:       deps.Location,
 		Activity:       deps.Activity,
 		AlreadyRunning: deps.AlreadyRunning,
@@ -213,42 +214,15 @@ func (s *Service) List(ctx context.Context, volumeName string, params pagination
 	return backups, pagination.BuildResponse(totalItems, totalItems, params), nil
 }
 
-// backupPlanInternal selects the local repository for one backup run.
-type backupPlanInternal struct {
-	policy         *policies.VolumeBackupPolicy
-	localEnabled   bool
-	stopContainers bool
-	destination    volume.BackupDestination
-}
-
-func (s *Service) resolveBackupPlanInternal(ctx context.Context, volumeName, trigger string, request volume.CreateBackupRequest, suppliedPolicy *policies.VolumeBackupPolicy) (backupPlanInternal, error) {
-	if request.Destination != "" && request.Destination != volume.BackupDestinationLocal {
-		return backupPlanInternal{}, errors.New("invalid volume backup destination")
-	}
-	policy := suppliedPolicy
-	if trigger != backuptypes.VolumeBackupTriggerSafety && policy == nil {
-		var err error
-		policy, err = s.policies.Policy(ctx, volumeName, request.PolicyID)
-		if err != nil {
-			return backupPlanInternal{}, err
-		}
-		if request.PolicyID != "" && policy == nil {
-			return backupPlanInternal{}, errors.New("volume backup policy not found")
-		}
-	}
-	if policy != nil && !policy.LocalEnabled && trigger != backuptypes.VolumeBackupTriggerSafety {
-		return backupPlanInternal{}, errors.New("local volume backups are disabled by policy")
-	}
-	return backupPlanInternal{policy: policy, localEnabled: true, stopContainers: request.StopContainers || policy != nil && policy.StopContainers, destination: volume.BackupDestinationLocal}, nil
-}
-
 func (s *Service) CreateBackup(ctx context.Context, volumeName string, user usertypes.Actor, trigger string, request volume.CreateBackupRequest) (_ *volume.Backup, err error) {
 	trigger = cmp.Or(trigger, backuptypes.VolumeBackupTriggerManual)
-	plan, err := s.resolveBackupPlanInternal(ctx, volumeName, trigger, request, nil)
+	entry, owner, plan, err := s.prepareCapture(ctx, volumeName, trigger, request)
 	if err != nil {
 		return nil, err
 	}
-	return s.createBackupInternal(ctx, volumeName, user, trigger, request.PolicyID, plan)
+	defer owner.Release(ctx)
+	err = s.executeBackupInternal(owner.ctx, entry, user, plan)
+	return entry, s.completeBackupInternal(owner.ctx, entry, err)
 }
 
 // safetyBackupInternal takes the local pre-restore backup for a caller that already holds the volume's workspace lock.

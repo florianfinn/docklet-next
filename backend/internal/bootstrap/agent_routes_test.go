@@ -87,6 +87,9 @@ func TestBackupTargetRouteRegistrationByMode(t *testing.T) {
 			}
 			require.Equal(t, mode != "hub", routes["PUT /api/environments/:id/volumes/backups/targets"], "only agents receive target metadata")
 			for _, route := range []string{
+				"GET /api/environments/:id/volumes/backups/overview",
+				"GET /api/environments/:id/volumes/backups/repository",
+				"POST /api/environments/:id/volumes/backups/repository/check",
 				"POST /api/environments/:id/volumes/backups/targets/:targetId/test",
 				"GET /api/environments/:id/volumes/backups/targets/:targetId/references",
 				"GET /api/environments/:id/volumes/backups/targets/local/recovery-key",

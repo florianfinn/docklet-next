@@ -12,6 +12,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/florianfinn/docklet-next/backend/internal/backuptarget"
 	"github.com/florianfinn/docklet-next/backend/internal/testsqlite"
 	activitytypes "github.com/florianfinn/docklet-next/types/activity"
 	backuptypes "github.com/florianfinn/docklet-next/types/backup"
@@ -155,7 +156,7 @@ func TestVolumeBackupPolicy_ScheduledRunCreatesActivity(t *testing.T) {
 func TestVolumeBackup_ValidationErrors(t *testing.T) {
 	gormDB, err := gorm.Open(testsqlite.Dialector(t, "file:volume-backup-validation?mode=memory&cache=shared"), &gorm.Config{})
 	require.NoError(t, err)
-	require.NoError(t, gormDB.AutoMigrate(&policies.VolumeBackupPolicy{}))
+	require.NoError(t, gormDB.AutoMigrate(&policies.VolumeBackupPolicy{}, &checkSetting{}, &backuptarget.Target{}))
 	service := NewService(Dependencies{DB: &database.DB{DB: gormDB}})
 	ctx := t.Context()
 
@@ -166,7 +167,7 @@ func TestVolumeBackup_ValidationErrors(t *testing.T) {
 	require.ErrorContains(t, err, "volume.backup.policy-invalid")
 
 	_, err = service.StartBackup(ctx, "0", "app-data", user.Actor{}, volume.CreateBackupRequest{Destination: volume.BackupDestination("invalid")})
-	require.EqualError(t, err, "invalid volume backup destination")
+	require.ErrorContains(t, err, "backup.target.unknown")
 
 }
 

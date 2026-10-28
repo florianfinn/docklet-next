@@ -30,7 +30,12 @@ func TargetHandler(s *Service, environments *environment.EnvironmentService, cfg
 		return h
 	}
 	h.Service = s.targets
+	if (cfg == nil || !cfg.AgentMode && !cfg.EdgeAgent) && environments != nil {
+		s.configureTargetDelivery(environments)
+	}
 	h.Apply = func(ctx context.Context, set dto.TargetSet, token string) (dto.TargetSetReceipt, error) {
+		s.policies.AdmissionLock()
+		defer s.policies.AdmissionUnlock()
 		store := *s.targetStore
 		store.SessionCurrent = func(ctx context.Context, tx *gorm.DB) error {
 			if err := ctx.Err(); err != nil {
@@ -58,13 +63,28 @@ func TargetHandler(s *Service, environments *environment.EnvironmentService, cfg
 	}
 	h.Test = func(ctx context.Context, id, hostID string) (dto.TargetTestOperation, error) {
 		if hostID != "0" && hostID != "" && environments != nil {
-			response, err := handlerutil.RemoteJSONProxy(environments.ProxyJSONRequest).JSON[base.ApiResponse[dto.TargetTestOperation]](ctx, hostID, http.MethodPost, "/api/environments/0/volumes/backups/targets/"+url.PathEscape(id)+"/test", nil)
-			if err != nil {
-				return dto.TargetTestOperation{}, err
-			}
-			return response.Data, nil
+			var accepted dto.TargetTestOperation
+			err := s.targets.WithActive(ctx, id, func() error {
+				receipt, err := backuptarget.SyncHost(ctx, s.deps.DB, hostID, environments.ProxyJSONRequest)
+				if err != nil {
+					return err
+				}
+				response, err := handlerutil.RemoteJSONProxy(environments.ProxyJSONRequest).JSON[base.ApiResponse[dto.TargetTestOperation]](ctx, hostID, http.MethodPost, "/api/environments/0/volumes/backups/targets/"+url.PathEscape(id)+"/test", nil)
+				if err != nil {
+					return err
+				}
+				accepted = response.Data
+				return s.recordRemoteCheck(ctx, id, hostID, receipt.SetVersion, accepted.ActivityID)
+			})
+			return accepted, err
 		}
-		return s.startRepositoryCheck(utils.ActivityRuntimeContext(ctx, appCtx), id)
+		var accepted dto.TargetTestOperation
+		err := s.targets.WithActive(ctx, id, func() error {
+			var err error
+			accepted, err = s.startRepositoryCheck(utils.ActivityRuntimeContext(ctx, appCtx), id)
+			return err
+		})
+		return accepted, err
 	}
 	h.AttachLocalKey = func(ctx context.Context, key string) error {
 		dockerClient, err := s.deps.Docker.GetClient(ctx)

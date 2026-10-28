@@ -28,6 +28,8 @@ import (
 )
 
 type Handler struct {
+	BeforeLocalUpdate  func(context.Context, *UpdateVolumeBackupPolicyInput) error
+	AroundUpdate       func(context.Context, *UpdateVolumeBackupPolicyInput, func() error) error
 	service            *Service
 	activityService    *activity.ActivityService
 	environmentService *environment.EnvironmentService
@@ -78,6 +80,13 @@ func (h *Handler) GetBackupPolicy(ctx context.Context, input *GetVolumeBackupPol
 }
 
 func (h *Handler) UpdateBackupPolicy(ctx context.Context, input *UpdateVolumeBackupPolicyInput) (*handlerutil.Out[volume.BackupPolicyCollection], error) {
+	if h.AroundUpdate != nil {
+		cloned := *h
+		cloned.AroundUpdate = nil
+		var result *handlerutil.Out[volume.BackupPolicyCollection]
+		err := h.AroundUpdate(ctx, input, func() error { var err error; result, err = cloned.UpdateBackupPolicy(ctx, input); return err })
+		return result, err
+	}
 	user, _ := userctx.CurrentUserFromContext(ctx)
 	var policies *volume.BackupPolicyCollection
 	var remoteResponse *base.ApiResponse[volume.BackupPolicyCollection]
@@ -120,7 +129,12 @@ func (h *Handler) UpdateBackupPolicy(ctx context.Context, input *UpdateVolumeBac
 			return proxyErr
 		}
 		var updateErr error
-		policies, updateErr = h.service.UpdateBackupPolicies(activityCtx, input.VolumeName, input.Body.Policies)
+		policies, updateErr = h.service.UpdateBackupPoliciesChecked(activityCtx, input.VolumeName, input.Body.Policies, func() error {
+			if h.BeforeLocalUpdate != nil {
+				return h.BeforeLocalUpdate(activityCtx, input)
+			}
+			return nil
+		})
 		return updateErr
 	})
 	if err != nil {
