@@ -100,4 +100,11 @@ describe("live backup contract", () => {
     expect(f.state.requests.at(-1)).toMatchObject({ path: "/api/environments/first/volumes/backups/targets/local/recovery-key", method: "PUT", body: { recoveryKey: "SYNTHETIC-ATTACH" } });
     expect(policy.schedule).toBe("0 0 2 * * *");
   });
+  it("checks host-local key and test rights on the host and stored-target rights on the hub", async () => {
+    const f = backupFixture();
+    await f.api.getBackupRecoveryKey("local", "first"); await f.api.getBackupRecoveryKey("target");
+    await f.api.testBackupTarget("local", "first").catch(() => undefined); await f.api.testBackupTarget("target", "first").catch(() => undefined);
+    const refs = f.capability.mock.calls.filter(([operation]) => operation === "getBackupRecoveryKey" || operation === "testBackupTarget").map(([operation, ref]) => `${operation}:${ref.kind}:${ref.id}`);
+    expect(refs).toEqual(["getBackupRecoveryKey:host:first", "getBackupRecoveryKey:hub:0", "testBackupTarget:host:first", "testBackupTarget:hub:0"]);
+  });
 });

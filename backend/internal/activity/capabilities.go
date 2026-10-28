@@ -2,7 +2,7 @@
 // Revision: dfdfa084478d327818d8c57b0973d638f80861f6
 // Retrieved: 2026-10-15
 // License: Apache-2.0
-// Deviations: Original implementation for issue 38; scoped network write capabilities for #203; image and registry capabilities for #229.
+// Deviations: Original implementation for issue 38; scoped network write capabilities for #203; image and registry capabilities for #229; backup capabilities for #284.
 package activity
 
 import (
@@ -32,11 +32,11 @@ var adapterOperationIDs = []string{
 	"listVolumes", "planVolumePrune", "pruneImages", "pruneVolumes", "pullImage",
 	"readFile", "reconnectHost", "recreateContainer", "registerHost", "removeHost",
 	"removeImage", "removeNetwork", "renameEntry", "renameVolume", "restartAgent", "restartService",
-	"restoreBackup", "restoreRestorePoint", "runBackup", "runContainerCommand", "runScan",
-	"runStackCommand", "saveSettings", "saveStackFiles", "setAutoUpdate", "setBackupPolicy",
+	"restoreRestorePoint", "runContainerCommand", "runScan",
+	"runStackCommand", "saveSettings", "saveStackFiles", "setAutoUpdate",
 	"setContainerAutoUpdate", "setContainerOrigin", "setScanEnabled", "setStackLabels",
 	"subscribeActions", "subscribeChanges", "subscribeContainerLogs", "subscribeLogs",
-	"subscribeMetrics", "testBackupTarget", "testNotification", "updateHost", "uploadFile",
+	"subscribeMetrics", "testNotification", "updateHost", "uploadFile",
 	"writeFile", "downloadFile", "getProjectWorkspace", "readProjectFile", "downloadProjectFile", "updateProjectWorkspace",
 }
 
@@ -46,8 +46,8 @@ type GetCapabilitiesInput struct {
 }
 
 func capabilityDescriptorsInternal(ref capability.ResourceRef) []capability.Descriptor {
-	result := make([]capability.Descriptor, 0, len(adapterOperationIDs))
-	for _, operationID := range adapterOperationIDs {
+	result := make([]capability.Descriptor, 0, len(adapterOperationIDs)+len(backupOperationIDs))
+	for _, operationID := range append(append([]string(nil), adapterOperationIDs...), backupOperationIDs...) {
 		descriptor := capability.Descriptor{OperationID: operationID, ResourceRef: ref}
 		switch operationID {
 		case "listImages", "listVolumes", "getVolume", "getTopology", "subscribeMetrics", "listStacks", "getStack", "listContainers", "listHosts", "listActions", "listEvents", "subscribeActions", "subscribeChanges":
@@ -236,6 +236,13 @@ func getCapabilities(ctx context.Context, input *GetCapabilitiesInput) (*handler
 			}
 			descriptors[i].Available = valid
 			if valid {
+				descriptors[i].DisabledReasonCode = ""
+			} else {
+				descriptors[i].DisabledReasonCode = "capability.unavailable"
+			}
+		case "setBackupPolicy", "runBackup", "restoreBackup", "restoreBackupFiles", "browseBackup", "downloadBackup", "deleteBackup", "uploadRestore", "getBackupOverview", "listBackupOverviews", "getBackupRepository", "checkBackupRepository", "listBackupTargets", "createBackupTarget", "updateBackupTarget", "deleteBackupTarget", "testBackupTarget", "getBackupTargetReferences", "getBackupRecoveryKey", "attachLocalBackupRecoveryKey":
+			descriptors[i].Available = backupCapabilityAllowed(descriptors[i].OperationID, descriptors[i].ResourceRef, permissions)
+			if descriptors[i].Available {
 				descriptors[i].DisabledReasonCode = ""
 			} else {
 				descriptors[i].DisabledReasonCode = "capability.unavailable"
