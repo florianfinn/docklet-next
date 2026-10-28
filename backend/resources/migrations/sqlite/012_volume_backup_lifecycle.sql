@@ -2,7 +2,7 @@
 -- Revision: 7ccefa10105544af6787161faaf8328e4a44b45f
 -- Retrieved: 2026-10-28
 -- License: Apache-2.0
--- Deviations: Original volume backup lifecycle and target foundation.
+-- Deviations: Original volume backup lifecycle and target foundation. M12 #284 persisted restore error reason.
 
 -- +goose Up
 ALTER TABLE volume_backups RENAME TO volume_backups_old;
@@ -23,7 +23,7 @@ DELETE FROM volume_backup_policies WHERE id IN (
 CREATE UNIQUE INDEX idx_volume_backup_policies_single_volume ON volume_backup_policies (volume_name);
 ALTER TABLE volume_backup_policies ADD COLUMN "target_id" TEXT NOT NULL DEFAULT 'local';
 
-CREATE TABLE "volume_restore_runs" ("id" TEXT NOT NULL,"volume_name" TEXT NOT NULL,"kind" TEXT NOT NULL,"backup_id" TEXT,"safety_backup_id" TEXT,"input_path" TEXT,"input_sha256" TEXT,"phase" TEXT NOT NULL,"status" TEXT NOT NULL,"pending_restart" numeric NOT NULL DEFAULT false,"stopped_containers" TEXT,"error_code" TEXT,"activity_id" TEXT,"started_at" datetime NOT NULL,"finished_at" datetime,"mode" TEXT NOT NULL DEFAULT 'replace',"new_volume_name" TEXT,"created_volume" numeric NOT NULL DEFAULT false,"cleanup_pending" numeric NOT NULL DEFAULT false,PRIMARY KEY ("id"),CHECK (kind IN ('full','files','upload')),CHECK (phase IN ('preparing','writing','done')),CHECK (status IN ('running','succeeded','failed','partial')),CHECK (stopped_containers IS NULL OR json_valid(stopped_containers)),CHECK (mode IN ('replace','new')));
+CREATE TABLE "volume_restore_runs" ("id" TEXT NOT NULL,"volume_name" TEXT NOT NULL,"kind" TEXT NOT NULL,"backup_id" TEXT,"safety_backup_id" TEXT,"input_path" TEXT,"input_sha256" TEXT,"phase" TEXT NOT NULL,"status" TEXT NOT NULL,"pending_restart" numeric NOT NULL DEFAULT false,"stopped_containers" TEXT,"error_code" TEXT,"error_reason" TEXT,"activity_id" TEXT,"started_at" datetime NOT NULL,"finished_at" datetime,"mode" TEXT NOT NULL DEFAULT 'replace',"new_volume_name" TEXT,"created_volume" numeric NOT NULL DEFAULT false,"cleanup_pending" numeric NOT NULL DEFAULT false,PRIMARY KEY ("id"),CHECK (kind IN ('full','files','upload')),CHECK (phase IN ('preparing','writing','done')),CHECK (status IN ('running','succeeded','failed','partial')),CHECK (stopped_containers IS NULL OR json_valid(stopped_containers)),CHECK (mode IN ('replace','new')));
 CREATE INDEX `idx_volume_restore_runs_volume_started` ON `volume_restore_runs`(`volume_name`,`started_at`);
 
 CREATE TABLE "backup_targets" ("id" TEXT NOT NULL,"name" TEXT NOT NULL,"kind" TEXT NOT NULL,"host_id" TEXT,"path" TEXT NOT NULL,"server" TEXT NOT NULL,"share" TEXT NOT NULL,"username" TEXT NOT NULL,"secret_enc" TEXT NOT NULL,"options" TEXT NOT NULL,"recovery_key_enc" TEXT NOT NULL,"config_version" INTEGER NOT NULL,"created_at" datetime NOT NULL,"updated_at" datetime,"retired_at" datetime,PRIMARY KEY ("id"),CHECK (kind IN ('local','mount','smb','nfs')),CHECK ((kind IN ('smb','nfs')) = (host_id IS NULL)));

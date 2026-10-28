@@ -32,6 +32,7 @@ type RestoreRun struct {
 	Status            string             `json:"status" enum:"running,succeeded,failed,partial"`
 	Phase             string             `json:"phase" enum:"preparing,writing,done"`
 	Code              string             `json:"code,omitempty"`
+	Reason            string             `json:"reason,omitempty" enum:"format,path,duplicate,entry-type,link,too-many-entries,expanded-too-large,insufficient-space" doc:"Safe upload validation reason for volume.backup.upload-invalid"`
 	At                time.Time          `json:"at"`
 	SafetyBackupID    string             `json:"safetyBackupId,omitempty"`
 	StoppedContainers []StoppedContainer `json:"stoppedContainers"`
@@ -53,6 +54,8 @@ type BackupVolumeOverview struct {
 	Count         int            `json:"count"`
 	Running       *BackupRunning `json:"running,omitempty"`
 	LastRestore   *RestoreRun    `json:"lastRestore,omitempty"`
+	// PendingRestores lists every restore still owing stopped containers, newest first.
+	PendingRestores []RestoreRun `json:"pendingRestores,omitempty"`
 }
 
 type BackupRepositoryCheck struct {

@@ -85,7 +85,8 @@ before stopping them, takes a safety snapshot, writes the selected data, and
 restarts the still-matching IDs. Every outstanding pending restore of the volume
 contributes inherited restart responsibility. A failed preparing recovery restarts
 only consumers it stopped itself; earlier failed-write responsibilities stay in
-their original rows until a later restore succeeds.
+their original rows until a later restore succeeds. The overview lists every such
+row in `pendingRestores`, so a newer `lastRestore` cannot hide an older obligation.
 
 A failure after writing starts leaves consumers stopped and retains the safety pin.
 Restart reconciles interrupted work without replaying a data write. Unconfirmed
@@ -110,6 +111,8 @@ refer only to earlier regular members. The sum of regular-file sizes is capped a
 16 GiB (`expanded-too-large`); the serving process does not infer daemon-host free
 space. Scratch ENOSPC is `insufficient-space` during preparation, before target
 writes. Consumers remain untouched or are restarted after a preparing abort.
+Refusals after admission persist the safe reason with the restore row; the overview
+returns it as `lastRestore.reason` for clients that follow the activity.
 
 A second pass verifies the input hash while re-encoding only validated headers to
 an uncompressed tar stream sent through Docker's archive API into a separately

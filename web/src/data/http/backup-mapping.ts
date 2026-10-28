@@ -36,6 +36,6 @@ export function mapBackupOverview(dto: Schema["VolumeBackupOverview"], host: str
   if (typeof dto.timeZone !== "string" || typeof dto.backupTargetAuthority !== "string" || !Number.isInteger(dto.backupTargetSetVersion) || !dto.repository) throw new Error("backup.invalid-response");
   return { hostId: host, timeZone: dto.timeZone, authority: dto.backupTargetAuthority, setVersion: dto.backupTargetSetVersion, repository: dto.repository, targets: dto.targets ?? [], volumes: (dto.volumes ?? []).map((v) => ({
     id: inventoryId(host, v.name), name: v.name, hostId: host, kind: "volume", source: "", createdAt: "", sizeBytes: 0, sizeUnavailable: true, consumers: [], labels: {}, volumeExists: v.volumeExists,
-    backup: v.policy ? mapBackupPolicy(v.policy) : undefined, lastBackup: v.lastBackup ? mapBackup(v.lastBackup, host) : undefined, running: v.running, lastRestore: v.lastRestore, timeZone: dto.timeZone,
+    backup: v.policy ? mapBackupPolicy(v.policy) : undefined, lastBackup: v.lastBackup ? mapBackup(v.lastBackup, host) : undefined, running: v.running, lastRestore: v.lastRestore, pendingRestores: v.pendingRestores ?? [], timeZone: dto.timeZone,
   })) };
 }

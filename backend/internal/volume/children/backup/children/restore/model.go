@@ -23,6 +23,7 @@ type Run struct {
 	PendingRestart    bool   `gorm:"not null;default:false"`
 	StoppedContainers *string
 	ErrorCode         string
+	ErrorReason       string
 	ActivityID        string
 	StartedAt         time.Time `gorm:"not null;index:idx_volume_restore_runs_volume_started,priority:2"`
 	FinishedAt        *time.Time

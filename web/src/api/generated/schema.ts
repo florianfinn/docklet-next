@@ -1,5 +1,5 @@
 // Source: api/openapi.json
-// Revision: dea354e8ddb4765351749e1590b1f8ce953ed2d7a3c84e99ba217e5588033daa
+// Revision: 9ef9d86a031e19908dd8ba3f203e149b8e3dc7bbf0ff9592ca300f39d055030e
 // Retrieved: 2026-10-13
 // License: BSD-3-Clause
 // Deviations: Generated TypeScript declarations from the local Huma export.
@@ -11702,6 +11702,7 @@ export interface components {
             /** Format: date-time */
             lastSuccessAt?: string;
             name: string;
+            pendingRestores?: components["schemas"]["VolumeRestoreRun"][] | null;
             policy?: components["schemas"]["VolumeBackupPolicy"];
             running?: components["schemas"]["VolumeBackupRunning"];
             volumeExists: boolean;
@@ -11852,6 +11853,11 @@ export interface components {
             pendingRestart: boolean;
             /** @enum {string} */
             phase: "preparing" | "writing" | "done";
+            /**
+             * @description Safe upload validation reason for volume.backup.upload-invalid
+             * @enum {string}
+             */
+            reason?: "format" | "path" | "duplicate" | "entry-type" | "link" | "too-many-entries" | "expanded-too-large" | "insufficient-space";
             restoreId: string;
             safetyBackupId?: string;
             /** @enum {string} */

@@ -182,7 +182,7 @@ func (l *Lifecycle) Execute(ctx context.Context, run *Run, request StartRequest)
 					run.ErrorCode = "volume.restore.interrupted-before-write"
 					var p *dto.Problem
 					if errors.As(err, &p) {
-						run.ErrorCode = p.Code
+						run.ErrorCode, run.ErrorReason = p.Code, p.Reason
 					}
 				}
 				err = errors.Join(err, l.Effects.Restart(settled, ownContainers(run), request.User))

@@ -36,10 +36,13 @@ function ConnectedTab({ volume, hostOnline }: { volume: VolumeDetail; hostOnline
   const observed = overview.data.volumes.find((v) => v.id === volume.id);
   const current = { ...volume, ...observed, backups: volume.backups, consumers: volume.consumers };
   const running = observed?.running?.activityId;
-  const restore = observed?.lastRestore;
+  // Oldest first: its safety snapshot predates every failed write that is still pending.
+  const pending = [...(observed?.pendingRestores ?? [])].reverse();
+  const stopped = [...new Map(pending.flatMap((run) => run.stoppedContainers ?? []).map((c) => [c.id, c.name])).values()];
+  const safetyId = pending.find((run) => run.safetyBackupId)?.safetyBackupId;
   return <>
     {current.volumeExists === false && <p role="status">{t("volumeMissing")}</p>}
-    {restore?.pendingRestart && <div role="alert" className="space-y-2 rounded-xl border border-destructive p-4 text-sm"><p>{t("failedRestore", { names: (restore.stoppedContainers ?? []).map((c) => c.name).join(", ") || "–", safety: restore.safetyBackupId ?? "–" })}</p>{restore.safetyBackupId && <Button variant="outline" onClick={() => setSafety(restore.safetyBackupId)}>{t("restoreSafety")}</Button>}</div>}
+    {pending.length > 0 && <div role="alert" className="space-y-2 rounded-xl border border-destructive p-4 text-sm"><p>{t("failedRestore", { names: stopped.join(", ") || "–", safety: safetyId ?? "–" })}</p>{safetyId && <Button variant="outline" onClick={() => setSafety(safetyId)}>{t("restoreSafety")}</Button>}</div>}
     {(running || activity) && <BackupOperation key={running ?? activity} hostId={volume.hostId} activityId={(running ?? activity)!} />}
     <div className="flex flex-wrap items-end gap-3 rounded-xl border p-4"><Field orientation="horizontal" className="w-auto"><Switch id="backup-now-stop" checked={stop} onCheckedChange={setStop} /><FieldLabel htmlFor="backup-now-stop">{t("stop")}</FieldLabel></Field><Button disabled={!hostOnline || busy || !!running || !backup.available} title={backup.reason} onClick={async () => { setBusy(true); setError(undefined); try { setActivity(await adapter.runBackup(volume.id, { stopContainers: stop })); } catch (cause) { setError(backupErrorMessage(cause, all)); if (cause instanceof BackupError && cause.problem.activityId) setActivity(cause.problem.activityId); void overview.refetch(); } finally { setBusy(false); } }}>{t("runNow")}</Button><Field className="w-full sm:w-auto"><FieldLabel htmlFor="backup-upload">{t("uploadRestore")}</FieldLabel><Input id="backup-upload" type="file" accept=".tar.gz,.tgz" disabled={!hostOnline || busy || !!running || !upload.available} onChange={(event) => { setFile(event.target.files?.[0]); event.target.value = ""; }} /><p className="text-xs text-muted-foreground">{t("uploadHint")}</p></Field></div>
     {error && <p role="alert" className="text-sm text-destructive">{error}</p>}

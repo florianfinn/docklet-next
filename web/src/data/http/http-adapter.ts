@@ -295,7 +295,7 @@ export function createHttpAdapter(options: HttpAdapterOptions = {}): DockletAdap
             const overview = await backups.api.getBackupOverview(host);
             backupOwner();
             const row = overview.volumes.find((v) => v.lastBackup?.actionId === id || v.lastRestore?.activityId === id);
-            const outcome = row?.lastRestore?.activityId === id ? { status: row.lastRestore.status, errorCode: row.lastRestore.code } : row?.lastBackup ? { status: row.lastBackup.status, errorCode: row.lastBackup.errorCode } : undefined;
+            const outcome = row?.lastRestore?.activityId === id ? { status: row.lastRestore.status, errorCode: row.lastRestore.code, reason: row.lastRestore.reason } : row?.lastBackup ? { status: row.lastBackup.status, errorCode: row.lastBackup.errorCode } : undefined;
             if (outcome) run.backupOutcome = outcome;
           } catch (error) { if (isCancelledError(error)) throw error; }
           if (!["running", "queued"].includes(run.status)) backupChanged();

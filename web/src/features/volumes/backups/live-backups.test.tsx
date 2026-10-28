@@ -17,6 +17,8 @@ import { BackupHistory } from "./BackupHistory";
 import { VolumeBackupsTab } from "./VolumeBackupsTab";
 import { RestoreDialog } from "./RestoreDialog";
 import { RestoreFilesSheet } from "./RestoreFilesSheet";
+import { BackupOperation } from "./BackupOperation";
+import { catalogs } from "@/app/i18n/catalog";
 import { BackupBadge } from "../storage-visuals";
 import BackupsPage from "../BackupsPage";
 import { RecoveryKeyDialog } from "@/features/settings/backups/RecoveryKeyDialog";
@@ -70,13 +72,22 @@ it("shows a typed refusal for a directory beyond the listing budget", async () =
 });
 it("rediscovers running restores on reload without a POST and shows pending restart safety context", async () => {
   const f = setup(); f.state.overview.volumes![0]!.running = { activityId: "rediscovered", kind: "restore" };
-  f.state.overview.volumes![0]!.lastRestore = { restoreId: "failed", activityId: "old", kind: "full", mode: "replace", status: "failed", phase: "writing", at: "2026-10-28T02:00:00Z", pendingRestart: true, safetyBackupId: "safety", stoppedContainers: [{ id: "consumer", name: "database" }] };
+  const older = { restoreId: "failed", activityId: "old", kind: "full", mode: "replace", status: "failed", phase: "writing", at: "2026-10-28T02:00:00Z", pendingRestart: true, safetyBackupId: "safety", stoppedContainers: [{ id: "consumer", name: "database" }] } as const;
+  // A later upload refused before writing must not hide the earlier pending obligation.
+  f.state.overview.volumes![0]!.lastRestore = { restoreId: "later", activityId: "upload", kind: "upload", mode: "replace", status: "failed", phase: "preparing", at: "2026-10-28T03:00:00Z", code: "volume.backup.upload-invalid", reason: "link", pendingRestart: false, stoppedContainers: [] };
+  f.state.overview.volumes![0]!.pendingRestores = [older];
   const volume = (await f.api.getBackupOverview("first")).volumes[0]!;
   renderWithApp(<VolumeBackupsTab volume={{ ...volume, backups: [] }} hostOnline />, f.adapter);
   await waitFor(() => expect(f.adapter.observeActionDetail).toHaveBeenCalledWith("first", "rediscovered", expect.any(Function)));
   expect(screen.queryByRole("alert")?.textContent).toContain("database"); expect(screen.queryByRole("alert")?.textContent).toContain("safety");
   expect(f.state.requests.some((r) => r.method === "POST")).toBe(false);
   expect((screen.getByRole("button", { name: "Jetzt sichern" }) as HTMLButtonElement).disabled).toBe(true);
+});
+it("shows the safe reason of an upload refused after admission", async () => {
+  const f = setup(); const run = { status: "failed", progress: 100, backupOutcome: { status: "failed", errorCode: "volume.backup.upload-invalid", reason: "link" } };
+  f.adapter.observeActionDetail = vi.fn((_host: string, _id: string, next: (state: unknown) => void) => { next({ status: "ready", run }); return () => {}; }) as never;
+  renderWithApp(<BackupOperation hostId="first" activityId="upload" />, f.adapter);
+  expect((await screen.findByRole("status")).textContent).toContain(catalogs.de.volumes.uploadReasons.link);
 });
 it("keeps another host populated when one overview is unavailable", async () => {
   const f = setup(); f.intercept(async (url) => url.pathname.includes("/second/") ? Response.json({ code: "agent.unavailable" }, { status: 503 }) : undefined);

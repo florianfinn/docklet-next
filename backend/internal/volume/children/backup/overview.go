@@ -23,7 +23,7 @@ import (
 // All SQL expressions are fixed identifiers owned here. No request value is
 // interpolated; one snapshot reads policies, history and safe target metadata.
 func overviewQuery() string {
-	fields := []string{"kind", "id", "volume_name", "created_at", "status", "trigger", "destination", "format", "snapshot_unavailable_at", "local_snapshot_id", "policy_id", "activity_id", "error_code", "size", "schedule", "enabled", "retention_count", "stop_containers", "local_enabled", "target_id", "phase", "mode", "new_volume_name", "pending_restart", "stopped_containers", "safety_backup_id", "value", "host_id"}
+	fields := []string{"kind", "id", "volume_name", "created_at", "status", "trigger", "destination", "format", "snapshot_unavailable_at", "local_snapshot_id", "policy_id", "activity_id", "error_code", "size", "schedule", "enabled", "retention_count", "stop_containers", "local_enabled", "target_id", "phase", "mode", "new_volume_name", "pending_restart", "stopped_containers", "safety_backup_id", "value", "host_id", "error_reason"}
 	selectFrom := func(table, kind string, columns []string, overrides map[string]string) string {
 		selected := make(map[string]string, len(columns)+1)
 		for _, column := range columns {
@@ -46,7 +46,7 @@ func overviewQuery() string {
 	return strings.Join([]string{
 		selectFrom("volume_backups", "backup", []string{"id", "volume_name", "created_at", "status", "trigger", "destination", "format", "snapshot_unavailable_at", "local_snapshot_id", "policy_id", "activity_id", "error_code", "size"}, nil),
 		selectFrom("volume_backup_policies", "policy", []string{"id", "volume_name", "created_at", "schedule", "enabled", "retention_count", "stop_containers", "local_enabled", "target_id"}, nil),
-		selectFrom("volume_restore_runs", "restore", []string{"id", "volume_name", "status", "activity_id", "error_code", "phase", "mode", "new_volume_name", "pending_restart", "stopped_containers", "safety_backup_id"}, map[string]string{"created_at": "started_at", "trigger": "kind"}),
+		selectFrom("volume_restore_runs", "restore", []string{"id", "volume_name", "status", "activity_id", "error_code", "phase", "mode", "new_volume_name", "pending_restart", "stopped_containers", "safety_backup_id", "error_reason"}, map[string]string{"created_at": "started_at", "trigger": "kind"}),
 		selectFrom("settings WHERE key IN ('volumeBackupRepositoryCheck','backup_target_authority','backup_target_set_version','backupTargetAuthority','backupTargetSetVersion','hubHostId')", "setting", []string{"value"}, map[string]string{"id": "key"}),
 		selectFrom("activities WHERE resource_type = 'volume_backup_download' AND status IN ('queued','running')", "download", []string{"id", "created_at"}, map[string]string{"volume_name": "resource_id", "activity_id": "id"}),
 		selectFrom("backup_targets WHERE retired_at IS NULL", "target", []string{"id", "host_id"}, map[string]string{"volume_name": "name", "trigger": "kind"}),
@@ -64,7 +64,7 @@ type overviewRecord struct {
 	StopContainers, LocalEnabled                                                                                 bool
 	TargetID, Phase, Mode, NewVolumeName                                                                         string
 	PendingRestart                                                                                               bool
-	StoppedContainers, SafetyBackupID, Value                                                                     string
+	StoppedContainers, SafetyBackupID, Value, ErrorReason                                                        string
 	HostID                                                                                                       *string
 }
 
@@ -152,14 +152,21 @@ func (s *Service) Overview(ctx context.Context) (volume.BackupOverview, error) {
 			}
 		case "restore":
 			item := get(r.VolumeName)
-			if item.LastRestore == nil {
+			if item.LastRestore == nil || r.PendingRestart {
 				stopped := []volume.StoppedContainer{}
 				if r.StoppedContainers != "" {
 					if err := json.Unmarshal([]byte(r.StoppedContainers), &stopped); err != nil {
 						return result, dto.NewProblem(500, "volume.backup.engine-output-invalid", err)
 					}
 				}
-				item.LastRestore = &volume.RestoreRun{RestoreID: r.ID, ActivityID: r.ActivityID, Kind: r.Trigger, Mode: r.Mode, NewVolumeName: r.NewVolumeName, Status: r.Status, Phase: r.Phase, Code: r.ErrorCode, At: *r.CreatedAt, SafetyBackupID: r.SafetyBackupID, StoppedContainers: stopped, PendingRestart: r.PendingRestart}
+				run := volume.RestoreRun{RestoreID: r.ID, ActivityID: r.ActivityID, Kind: r.Trigger, Mode: r.Mode, NewVolumeName: r.NewVolumeName, Status: r.Status, Phase: r.Phase, Code: r.ErrorCode, Reason: r.ErrorReason, At: *r.CreatedAt, SafetyBackupID: r.SafetyBackupID, StoppedContainers: stopped, PendingRestart: r.PendingRestart}
+				if item.LastRestore == nil {
+					item.LastRestore = &run
+				}
+				// A later restore that failed before writing does not clear earlier stopped containers.
+				if r.PendingRestart {
+					item.PendingRestores = append(item.PendingRestores, run)
+				}
 			}
 			if r.Status == "running" && item.Running == nil {
 				item.Running = &volume.BackupRunning{Kind: "restore", ActivityID: r.ActivityID, RestoreID: r.ID}

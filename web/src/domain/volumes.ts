@@ -78,6 +78,8 @@ export interface Volume {
   volumeExists?: boolean;
   running?: BackupRunning;
   lastRestore?: RestoreRun;
+  /** Every restore still owing stopped containers, newest first. */
+  pendingRestores?: RestoreRun[];
   lastBackup?: BackupRun;
   /** Created in this demo session; can be deleted when unused. */
   demoCreated?: boolean;

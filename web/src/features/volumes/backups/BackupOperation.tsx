@@ -7,6 +7,7 @@
 import { useEffect, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { backupCodeKey } from "@/data/backup-error";
+import { catalogs } from "@/app/i18n/catalog";
 import { useTranslations } from "use-intl";
 import { useAdapter } from "@/data/use-adapter";
 import type { ActionDetailState } from "@/data/adapter";
@@ -24,7 +25,8 @@ export function BackupOperation({ hostId, activityId }: { hostId: string; activi
   }), [adapter, hostId, activityId, client]);
   const run = state?.status === "ready" ? state.run : undefined;
   const code = backupCodeKey(run?.backupOutcome?.errorCode);
-  const outcome = run?.backupOutcome?.status;
+  const reason = run?.backupOutcome?.reason, outcome = run?.backupOutcome?.status;
+  const detail = reason && Object.hasOwn(catalogs["en-US"].volumes.uploadReasons, reason) ? ` ${all(`volumes.uploadReasons.${reason as "link"}`)}` : "";
   const status = outcome && ["succeeded", "failed", "partial", "unavailable", "running"].includes(outcome) ? t(`status.${outcome as "partial"}`) : undefined;
-  return <div role="status" className="flex flex-wrap items-center gap-3 rounded-xl border p-3 text-sm"><span>{t("operation")}: {code ? all(code) : status ?? (run ? `${Math.round(run.progress)}%` : t("following"))}</span><Button variant="outline" size="sm" onClick={() => openActionDialog(activityId)}>{t("openActivity")}</Button></div>;
+  return <div role="status" className="flex flex-wrap items-center gap-3 rounded-xl border p-3 text-sm"><span>{t("operation")}: {code ? `${all(code)}${detail}` : status ?? (run ? `${Math.round(run.progress)}%` : t("following"))}</span><Button variant="outline" size="sm" onClick={() => openActionDialog(activityId)}>{t("openActivity")}</Button></div>;
 }

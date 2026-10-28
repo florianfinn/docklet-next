@@ -252,6 +252,11 @@ func TestScratchENOSPCKeepsTargetUntouched(t *testing.T) {
 	var executeProblem *dto.Problem
 	require.ErrorAs(t, err, &executeProblem)
 	require.Equal(t, "insufficient-space", executeProblem.Reason)
+	// The asynchronous outcome keeps the safe reason for following clients.
+	var stored Run
+	require.NoError(t, l.DB.First(&stored, "id = ?", r.ID).Error)
+	require.Equal(t, "volume.backup.upload-invalid", stored.ErrorCode)
+	require.Equal(t, "insufficient-space", stored.ErrorReason)
 	// The public refusal retains a safe reason at the preparation boundary.
 	var p *dto.Problem
 	require.ErrorAs(t, scratchProblem(errors.New("tar: no space left on device")), &p)
